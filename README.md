@@ -39,6 +39,9 @@ documents — it implements the wrong scope. ORC addresses each:
 npm i -g orc
 # or straight from GitHub — no registry needed
 npm i -g github:<you>/orc
+
+# or if installing is causing pain, try this:
+npm i -g https://github.com/azure-id/orc/archive/refs/heads/main.tar.gz
 ```
 
 Then, inside a project:
