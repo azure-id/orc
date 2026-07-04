@@ -38,7 +38,7 @@ documents — it implements the wrong scope. ORC addresses each:
 ```bash
 npm i -g orc
 # or straight from GitHub — no registry needed
-npm i -g github:azure-id/orc
+npm i -g github:<you>/orc
 ```
 
 Then, inside a project:

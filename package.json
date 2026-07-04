@@ -1,17 +1,19 @@
 {
   "name": "orc",
   "version": "0.1.0",
-  "description": "ORC — an orchestrator skill constellation for Claude Code: intake, planning, scored parallel subagents, review, verify, ship, plus a project knowledge-base wiki.",
+  "description": "ORC \u2014 an orchestrator skill constellation for Claude Code: intake, planning, scored parallel subagents, review, verify, ship, plus a project knowledge-base wiki.",
   "bin": {
     "orc": "bin/cli.js"
   },
   "files": [
+    "README.md",
     "bin/",
-    "templates/",
-    "README.md"
+    "templates/"
   ],
   "scripts": {
-    "postinstall": "node -e \"console.log('\\nORC installed. Run: orc init  (in a project) or  orc init --global\\n')\""
+    "postinstall": "node -e \"try{require('fs').accessSync(require('path').join(__dirname,'bin','cli.js'));console.log('\\nORC installed. Run: orc init  (or orc init --global)\\n')}catch(e){console.error('\\n[orc] WARNING: bin/cli.js missing from this install \u2014 the repo/publish was incomplete. Reinstall from a complete source.\\n')}\"",
+    "verify": "node bin/verify-package.js",
+    "prepack": "node bin/verify-package.js"
   },
   "keywords": [
     "claude",
@@ -24,5 +26,9 @@
   "license": "MIT",
   "engines": {
     "node": ">=16"
+  },
+  "repository": {
+    "type": "git",
+    "url": "github:azure-id/orc"
   }
 }
