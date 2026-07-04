@@ -1,0 +1,28 @@
+{
+  "name": "orc",
+  "version": "0.1.0",
+  "description": "ORC — an orchestrator skill constellation for Claude Code: intake, planning, scored parallel subagents, review, verify, ship, plus a project knowledge-base wiki.",
+  "bin": {
+    "orc": "bin/cli.js"
+  },
+  "files": [
+    "bin/",
+    "templates/",
+    "README.md"
+  ],
+  "scripts": {
+    "postinstall": "node -e \"console.log('\\nORC installed. Run: orc init  (in a project) or  orc init --global\\n')\""
+  },
+  "keywords": [
+    "claude",
+    "claude-code",
+    "orchestrator",
+    "skills",
+    "agents",
+    "ai"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=16"
+  }
+}
