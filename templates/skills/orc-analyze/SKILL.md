@@ -2,14 +2,17 @@
 name: orc-analyze
 description: >
   System Analyst for ORC. Use for "/orc-analyze",
-  "analyze this doc for scope X", or when a requirements/audit document (PDF by
-  path or pasted) must be turned into a precise, code-grounded requirement set
-  BEFORE any planning. Bounds scope to exactly what the user asked (recognizes
-  other scopes only to exclude them), maps each requirement to real files,
-  verifies the doc's claims against actual code, and challenges the user
-  interactively on scope and accuracy issues. Prevents scope-bleed and
-  building against stale doc claims. Also auto-triggers inside /orc
-  when a doc is present. The orchestrator dispatches this work to a subagent —
+  "analyze this doc for scope X", "analyze this requirement against the code", or
+  when a requirement — a document (PDF by path or pasted) OR a plain-language
+  request — must be turned into a precise, code-grounded requirement set BEFORE
+  any planning. Bounds scope to exactly what the user asked (recognizes other
+  scopes only to exclude them), maps each requirement to real files with file:line
+  evidence, verifies every claim against actual code, and challenges the user
+  interactively with recommended options. Offers an opt-in DEEP mode (wider code
+  sweep via scouts, verify-every-claim, more questions, alternatives + risks) that
+  costs more tokens/time. Prevents scope-bleed, stale-doc drift, and requirement
+  hallucination. Also auto-triggers inside /orc when a doc or ambiguous
+  requirement is present. The orchestrator dispatches this work to a subagent —
   it never analyzes itself.
 ---
 
@@ -17,65 +20,119 @@ description: >
 
 The orchestrator stays on top and **dispatches a System Analyst subagent
 (Opus 4.8, high)** to do this work — it never analyzes itself, keeping its own
-context lean. This skill defines what that subagent does and how the
-orchestrator relays its challenges and branches on its result.
+context lean. This skill defines what that subagent does, how the orchestrator
+runs the standard/deep gate + scout dispatch, and how it relays challenges and
+branches on the result.
 
-Purpose: turn "this document, scope X" into a confirmed, code-grounded
-requirement report + machine spec that a planner cannot misread — so
-implementation never bleeds into other scopes or builds against claims the code
-already contradicts.
+Purpose: turn "this requirement" — a document OR a bare request — into a
+confirmed, code-grounded requirement set that a planner cannot misread, so
+implementation never bleeds into other scopes, never builds against claims the
+code already contradicts, and never rests on an unstated assumption about what
+the user meant.
 
 ## Hard rules
 
 1. **Dispatched, not self-run.** The orchestrator coordinates; the Analyst
-   subagent (Opus 4.8 high) reads the doc, reads the code, and reconciles.
-2. **Recognize-to-exclude.** Other scopes (Y, Z) are recognized only to police
+   subagent (Opus 4.8 high) reads the source, reads the code, and reconciles.
+2. **Evidence-or-mark (never hallucinate).** Every requirement interpretation and
+   every code claim carries `file:line` evidence, OR an explicit `ASSUMPTION` /
+   `UNVERIFIED` tag — and every tagged item becomes a clarifying question. The
+   Analyst never silently assumes what the user meant or what the code does.
+3. **Recognize-to-exclude.** Other scopes (Y, Z) are recognized only to police
    the boundary. The written report contains ONLY the requested scope X.
-3. **Ground against real code.** Every in-scope requirement (or audit row) maps
-   to specific files/modules, verified to exist and match.
-4. **Challenge interactively, one issue at a time** — scope + accuracy only.
-   Never batch. Each answer is recorded in the report.
-5. **Two artifacts, spec derived from report.** The human `report.md` is the
+4. **Ground against real code.** Every in-scope requirement (or audit row) maps
+   to specific files/modules, verified to exist and match, with evidence.
+5. **Challenge with recommended options, one issue at a time.** Each challenge is
+   a small option-set (2–3 choices) with ONE flagged **recommended** option and a
+   one-line reason — not an open-ended question, not a batch. Each answer is
+   recorded in the report. Scope + accuracy only (task breakdown is the planner's).
+6. **Two artifacts, spec derived from report.** The human `report.md` is the
    source of truth you confirm; `requirement-spec.md` is DERIVED from it (a
    projection, so they can't drift).
-6. Usage: report dispatch + remind the user to run `/usage`. Never invoke it.
+7. Usage: report dispatch + remind the user to run `/usage`. Never invoke it.
 
-## Phase A — Ingest & detect mode
+## Phase A — Ingest & detect source mode
 
-Read the doc (PDF via path or pasted content, or other formats). **Auto-detect**
-whether it is:
-- **prose/spec** — narrative requirements, or
-- **audit/structured** — columns like expectation / notes / result.
+Read the source. **Auto-detect** which of three modes applies:
+- **prose/spec** — a document of narrative requirements, or
+- **audit/structured** — a document with columns like expectation / notes / result, or
+- **requirement** — NO document; the user's plain-language request is the source
+  of truth. Reconcile the request itself against the code (is it consistent with,
+  buildable on, or in conflict with what already exists?).
 
-**Confirm the detected mode with the user** ("This looks like an audit doc with
-result columns — analyze it in audit mode?") before proceeding.
+**Confirm the detected mode with the user** (e.g. "No doc here — I'll treat your
+request as the requirement and reconcile it against the code, in requirement
+mode. Good?"). For documents, confirm prose vs audit as before.
+
+## Phase A′ — Standard vs Deep gate (default STANDARD)
+
+Before reconciliation, offer the depth choice (config `default_analysis_depth`
+presets the default; the run still confirms):
+
+> "I can run a **deep analysis** — wider code sweep, verify every claim, more
+> clarifying questions, and implementation options with trade-offs. It costs
+> noticeably more tokens and time. **Standard** is faster and covers the
+> load-bearing cases. Deep or standard?"
+
+Deep requires explicit consent — it never auto-escalates. In deep mode the run is
+**two-pass with scouts** (Phase C-deep). Standard mode is single-pass.
 
 ## Phase B — Bound scope
 
-Take the user's scope instruction (X). Identify the doc's full scope structure
+Take the user's scope instruction (X). Identify the source's full scope structure
 internally (X, Y, Z…), isolate X, and set the rest aside — they will NOT appear
-in the output. If the user didn't name a scope, ask which scope(s) are in play.
+in the output. If the user didn't name a scope, ask (recommended-option form).
 
 ## Phase C — Reconcile against code (mode-specific)
 
 - **Prose mode:** for each in-scope requirement, find the files/modules it
-  touches, and confirm they exist / already implement / are missing / conflict.
+  touches (with `file:line` evidence) and confirm exists / already implements /
+  missing / conflict.
 - **Audit mode:** for each in-scope row, take its claim (result + notes) and
-  verify against the code. Surface divergences:
+  verify against the code with evidence. Surface divergences:
   - result PASS but notes suggest a change → challenge.
   - result FAIL citing a reason the code contradicts (e.g. a UUID check the
     code has renamed/removed/replaced) → challenge; the audit premise is stale.
+- **Requirement mode:** for each part of the request, find where in the code it
+  lands (with evidence), and classify: buildable-as-stated / already-exists /
+  conflicts-with-existing / underspecified. Anything you cannot ground →
+  `ASSUMPTION`/`UNVERIFIED` → clarifying question.
 
-## Phase D — Challenge (interactive, one at a time)
+Anything unground-able in ANY mode is tagged and becomes a question — never a
+silent guess.
 
-For every scope-bleed or doc-vs-code divergence, ask the user a single focused
-question, wait, record the answer, continue. Scope + accuracy only — not task
-breakdown (that's the planner's job). Relay each as a plain-language question.
+### Phase C-deep — two-pass reconciliation with scouts (DEEP mode only)
+
+1. **Pass 1 (scope + scout-plan).** After Phase B, instead of sweeping the repo
+   yourself, emit a **scout plan**: a short list of coverage areas, each with
+   concrete search queries (e.g. "all call sites of `authToken`", "tests touching
+   checkout", "config for rate limits"). Return the plan to the orchestrator. Do
+   NOT do the full reconciliation yet.
+2. **Scouts (orchestrator-dispatched).** The orchestrator dispatches ≤`max_scouts`
+   (config, default 3) parallel read-only `orc-scout-sonnet-4-6-high` agents, one
+   coverage area each. They return **code-evidence bundles** (file:line hits,
+   dependents, tests, config).
+3. **Pass 2 (reconcile).** You are re-dispatched WITH the bundles. Do the full
+   reconciliation using them: **verify every claim** (not just load-bearing),
+   evidence-or-mark discipline, and produce the deep-only **Alternatives & risks**
+   section (implementation-approach options, trade-offs, blast radius, edge
+   cases). The scout plan/areas decided coverage — the orchestrator only
+   dispatched; you own what got scouted and how the evidence is used.
+
+## Phase D — Challenge (interactive, recommended options, one at a time)
+
+For every scope-bleed, doc/requirement-vs-code divergence, and every
+`ASSUMPTION`/`UNVERIFIED` tag, ask the user a single focused question shaped as a
+2–3 option set with ONE **recommended** option + a one-line reason. Wait, record
+the answer, continue. Never batch. Scope + accuracy only — not task breakdown.
 
 ## Phase E — Write report, derive spec
 
-1. Write `report.md` in the mode-specific template (schemas/report-audit.md or
-   report-prose.md) into `.claude/skills/orc/analyzer/{analysis-name}/` (internal).
+1. Write `report.md` in the mode template (schemas/report-audit.md,
+   report-prose.md, or report-requirement.md) into
+   `.claude/skills/orc/analyzer/{analysis-name}/` (internal). Include the
+   Evidence column and the **Assumptions & Open Questions** section; in deep mode
+   also the **Alternatives & risks** section.
 2. Derive `requirement-spec.md` FROM the confirmed report
    (schemas/requirement-spec.md) in the same internal folder.
 
@@ -97,6 +154,7 @@ terms:
 
 ## Mini variant
 
-For the fast lane, `orc-analyze-mini` (Sonnet 5 high) does a
-shallower version of the same flow, used by orc-mini. Same artifacts, same
-output contract; trimmed depth. See that skill.
+For the fast lane, `orc-analyze-mini` (Sonnet 5 high) does a shallower version of
+the same flow: doc-optional intake, evidence-or-mark, and recommended-option
+questions — but **no deep mode and no scouts** (always single-pass). Used by
+orc-mini. Same artifacts, same output contract; trimmed depth. See that skill.

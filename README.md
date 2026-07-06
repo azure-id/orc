@@ -1,5 +1,8 @@
 # ORC
 
+# P0
+- Do not commit this CLAUDE.md
+
 **An orchestrator skill constellation for [Claude Code](https://claude.com/claude-code).**
 
 ORC takes a feature — or a requirements document — and drives it through a
@@ -81,15 +84,22 @@ fast (Sonnet-tier) agents. Still writes tests. Switchable to the full flow
 mid-run.
 
 ### `/orc-analyze` — the System Analyst
-Turns a document (PDF by path or pasted, prose **or** audit/structured) into a
-scope-bounded, code-grounded requirement report. It auto-detects the doc type,
-bounds strictly to the scope you asked for (recognizing other scopes only to
-exclude them), maps each requirement or audit row to real files, verifies the
-doc's claims against your actual code, and challenges you one issue at a time on
-scope and accuracy — for example, an audit row marked "fail: missing UUID check"
-when the code renamed that field. Prevents scope-bleed and building against stale
-claims. Outputs a human report plus a derived machine spec; you choose to keep it
-as a report or take it straight into a build.
+Turns a **requirement** — a document (PDF by path or pasted, prose **or**
+audit/structured) **or** a plain-language request with no doc at all — into a
+scope-bounded, code-grounded requirement report. It bounds strictly to the scope
+you asked for (recognizing other scopes only to exclude them), maps each
+requirement to real files, and **never hallucinates about what you meant**: every
+interpretation and every code claim carries `file:line` evidence, or gets tagged
+as an assumption and turned into a question. It challenges you one issue at a time
+with **recommended options** (it decides and recommends; you confirm) — for
+example, an audit row marked "fail: missing UUID check" when the code renamed that
+field. Prevents scope-bleed, stale-doc drift, and requirement hallucination.
+
+Opt into **deep analysis** when it's worth the extra tokens and time: a wider code
+sweep (the orchestrator fans out parallel read-only scouts on a plan the analyst
+draws up), verify-every-claim, more clarifying questions, and implementation
+options with trade-offs and risks. Outputs a human report plus a derived machine
+spec; you choose to keep it as a report or take it straight into a build.
 
 ### `/orc-plan` — the Requirement Planner
 Turns a detailed request or an analyst spec into a grounded, right-sized,
@@ -108,6 +118,17 @@ Expensive and opt-in: it warns before scanning, pauses periodically, and spans
 multiple sessions. `orc` and `orc-mini` consult the wiki when it exists,
 sharpening their planning and scoring; when it's absent they behave exactly as
 before.
+
+### `/orc-config` — reachable configuration
+Views and changes every ORC knob without hand-editing `config.md`. Run it with no
+arguments for a guided menu that shows each setting's current value (and whether
+it's a default or your override), explains it in plain language, and recommends a
+value — or use `/orc-config <key> <value>` directly and `/orc-config reset` to
+revert. Your choices are written to an update-safe `.claude/orc.config.yaml`
+override that `orc update` never clobbers; `config.md` stays the shipped defaults.
+Common knobs (wave size, pause cadence, scoring bands, scout count, default
+analysis depth) are offered first; risky ones (like the orchestrator model, which
+can break the model-tier ladder) sit behind a warning.
 
 ---
 
@@ -132,6 +153,22 @@ task actually ran on, expand the subagent's tool-call in the transcript.
 > tier. Run your main session on Opus, or the Opus-tier agents fall back to
 > Sonnet. This is the most common cause of "it used the wrong model."
 
+### The tier guard (installed automatically)
+
+Because that rule is so easy to trip, `orc init` installs a guard into your
+`.claude/settings.json`:
+
+- **Effort — hard block.** A `PreToolUse` hook (`hooks/orc-effort-guard.js`)
+  refuses to launch `/orc` unless the session is at **high** effort. This is the
+  one half Claude Code lets a hook enforce deterministically (`effort.level` /
+  `$CLAUDE_EFFORT` are exposed to blocking hooks).
+- **Model — warning.** Claude Code does **not** expose the model id to any
+  blocking hook, so the tier can't be hard-stopped. Instead a statusline
+  (`hooks/orc-statusline.js`, installed only if you don't already have one) shows
+  `⛔ ORC WILL DEGRADE` whenever the model isn't `claude-opus-4-8`, and the
+  orchestrator self-checks at startup. If you already run a statusline, `orc init`
+  leaves it alone and prints the snippet to merge.
+
 ---
 
 ## Configuration (`skills/orc/config.md`)
@@ -139,9 +176,13 @@ task actually ran on, expand the subagent's tool-call in the transcript.
 - `max_wave_tasks` — parallel tasks per wave (default 3; hard cap).
 - `batch_pause_every` — waves between stop-and-continue pauses (default 2).
 - `rubric_bands` — scoring granularity 2–8, selecting the narrow/wide preset.
+- `max_scouts` — parallel read-only scouts in deep analysis (default 3).
+- `default_analysis_depth` — the analyst depth gate's default (standard/deep).
 - artifact locations and the report-out target.
 
-Any value can be overridden for a single run without editing the file.
+Any value can be overridden for a single run without editing the file — or set
+persistently and safely with **`/orc-config`**, which writes a
+`.claude/orc.config.yaml` override that survives `orc update`.
 
 ---
 
@@ -154,10 +195,11 @@ templates/
 │   ├── orc-mini/      fast path
 │   ├── orc-verify/    standalone git-diff verify
 │   ├── orc-wiki/      project knowledge-base builder
-│   ├── orc-analyze/   System Analyst (+ report templates, spec schema)
-│   └── orc-analyze-mini/  fast-lane analyst
-├── commands/          /orc /orc-mini /orc-analyze /orc-plan /orc-verify /orc-wiki
-└── agents/            single-role, model-pinned subagents + MODEL-MAPPING.md
+│   ├── orc-analyze/   System Analyst — doc-optional, evidence-backed (+ report templates, spec schema)
+│   ├── orc-analyze-mini/  fast-lane analyst
+│   └── orc-config/    reachable config editor (writes update-safe override)
+├── commands/          /orc /orc-mini /orc-analyze /orc-plan /orc-verify /orc-wiki /orc-config
+└── agents/            single-role, model-pinned subagents (+ read-only scout) + MODEL-MAPPING.md
 bin/cli.js             installer (init / update / where)
 ```
 

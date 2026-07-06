@@ -18,6 +18,8 @@ const required = [
   "templates/skills/orc/SKILL.md",
   "templates/commands/orc.md",
   "templates/agents/MODEL-MAPPING.md",
+  "templates/hooks/orc-effort-guard.js",
+  "templates/hooks/orc-statusline.js",
 ];
 
 const missing = [];

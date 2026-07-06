@@ -24,6 +24,20 @@ fires — never preload. That is how this constellation stays token-cheap.
 Detect the project stack from the repo (package manager, language, test runner).
 Never ask what the repo can tell you.
 
+## Preflight gate (before Phase 0 — do this FIRST)
+
+Confirm you are running as **Opus 4.8 at high effort** before anything else.
+- **Effort** is guarded deterministically: a `PreToolUse` hook
+  (`hooks/orc-effort-guard.js`) hard-blocks `/orc` unless the session effort is
+  `high`. If you got here, effort passed — but if you have any signal it is not
+  high, STOP and tell the user to switch.
+- **Model** cannot be hard-blocked by a hook (Claude Code does not expose the
+  model id to blocking hooks). The statusline warns when it is not Opus 4.8. If
+  you can tell you are not Opus 4.8, **STOP immediately** and tell the user:
+  *"ORC must run on Opus 4.8 high — subagents cannot exceed the main tier, so the
+  Opus executors would silently downgrade. Switch the main session and re-run."*
+  Do not proceed with intake on a lower tier.
+
 ## Hard rules (never violate)
 
 1. **You NEVER implement. You coordinate.** All execution, review, and verify
@@ -58,9 +72,17 @@ Never ask what the repo can tell you.
 
 ## Analyst & planner (dispatched subagents; the orchestrator never does this work itself)
 
-- `orc-analyze` (System Analyst, Opus 4.8 high) — doc → scope-bounded,
-  code-grounded requirement report + spec. Own command; auto-triggers here on
-  doc input. Mini: `orc-analyze-mini` (Sonnet 5 high) for orc-mini.
+- `orc-analyze` (System Analyst, Opus 4.8 high) — a requirement (a doc OR a bare
+  request) → scope-bounded, code-grounded, evidence-backed requirement report +
+  spec. Own command; auto-triggers here on doc input or an ambiguous/underspecified
+  requirement. Standard (single-pass) or opt-in DEEP (two-pass with scouts, below).
+  Mini: `orc-analyze-mini` (Sonnet 5 high) for orc-mini.
+  - **Deep-mode scout dispatch is YOURS.** When the analyst is in deep mode it
+    returns a `scout_plan` (pass 1). You then dispatch ≤`config.max_scouts`
+    (default 3) parallel `orc-scout-sonnet-4-6-high` agents — one coverage area
+    each, read-only — and re-dispatch the analyst WITH their evidence bundles for
+    pass 2. Same "return a request → you re-slice → re-dispatch" shape as
+    `needs_context`. You never analyze; you only dispatch and relay.
 - `subskills/orc-planner` (Requirement Planner, Opus 4.8 medium) — request or
   analyst-spec → planning-output. A Phase 1 planner option; own command to plan
   only. Mini: `subskills/orc-planner-mini` (Sonnet 5 high) for orc-mini.
@@ -87,11 +109,15 @@ Sonnet (the original "wrong model" bug).
 
 ## Config (read at run start)
 
-Read `config.md` at the start of every run. It provides `max_wave_tasks`
-(default 3 — the hard cap on parallel tasks per wave), `batch_pause_every`
-(default 2), and the analyzer/planner artifact directories. The user may
-override any value for a single run. Apply these in Phase 2 (batch-pause) and
-Phase 3 (wave cap).
+Resolve config at the start of every run: read `config.md` defaults, then merge
+the user override `.claude/orc.config.yaml` on top (see config.md's "Config
+resolution" rule; the override is written by `/orc-config` and survives
+`orc update`). It provides `max_wave_tasks` (default 3 — hard cap on parallel
+tasks per wave), `batch_pause_every` (default 2), `max_scouts` (default 3 — cap
+on deep-analysis scouts), `default_analysis_depth` (default standard), and the
+analyzer/planner artifact directories. The user may also override any value for a
+single run. Apply these in Phase 0 (analyst depth gate + scout cap), Phase 2
+(batch-pause) and Phase 3 (wave cap).
 
 ## Sibling skills (separate top-level skills, own slash commands)
 
@@ -117,13 +143,18 @@ Phase 3 (wave cap).
 
 ## Phase 0 — Intake (load references/intake.md)
 
-**Doc auto-trigger:** if the user's input includes a document (PDF path, pasted
-doc, audit sheet) to be analyzed for a scope, FIRST dispatch the System Analyst
-(`orc-analyze`, Opus 4.8 high subagent) to produce a scope-bounded,
-code-grounded requirement report + spec, resolving scope/accuracy with the user.
-When it returns and the user chooses to build, continue here using the
-Requirement Planner in Phase 1. This prevents scope-bleed before any planning.
-The orchestrator dispatches the analysis — it never analyzes the doc itself.
+**Analyst auto-trigger:** if the user's input includes a document (PDF path,
+pasted doc, audit sheet) OR a requirement that is ambiguous/underspecified for a
+scope, FIRST dispatch the System Analyst (`orc-analyze`, Opus 4.8 high subagent)
+to produce a scope-bounded, code-grounded, evidence-backed requirement report +
+spec, resolving scope/accuracy with the user. The analyst is **doc-optional** —
+with no doc it runs in requirement mode (the request itself is the source of
+truth, reconciled against code). Offer the **standard/deep** choice before it
+reconciles (`config.default_analysis_depth` presets it); in deep mode dispatch
+the scouts as described above. When it returns and the user chooses to build,
+continue here using the Requirement Planner in Phase 1. This prevents scope-bleed
+and requirement hallucination before any planning. The orchestrator dispatches
+the analysis — it never analyzes itself.
 
 FIRST create the run folder `run/{run-slug}/` (slug from the intent). All run
 artifacts live there — never the project root. Then rough-size the task (quick question or repo-based guess) → pick the question

@@ -4,6 +4,13 @@ Goal: extract just enough that the intent-spec can't be misread, then get out of
 the way. A wrong understanding parallelized is worse than a wrong understanding
 done serially. Never interrogate; never ask what the repo can tell you.
 
+**Before intake questions — analyst auto-trigger (see SKILL.md Phase 0):** if the
+input includes a document OR the requirement is ambiguous/underspecified, dispatch
+the System Analyst FIRST (doc-optional; standard/deep gate; scouts in deep mode).
+It resolves scope + accuracy with evidence-or-mark and recommended-option
+questions before any intent-spec is drafted. When it hands back "take into build",
+its confirmed spec feeds Phase 1 planning.
+
 ## Step 0 — Create the run folder FIRST
 
 Before anything else, derive a `{run-slug}` from the user's request (short,

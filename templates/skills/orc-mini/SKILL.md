@@ -54,20 +54,26 @@ session ≥ Sonnet, always true). See `.claude/agents/MODEL-MAPPING.md`.
 
 ## Config
 
-Read `../orc/config.md` at run start for `max_wave_tasks` (default 3)
-and `batch_pause_every`. Mini also hands planning back to itself for the full
+Resolve config at run start: `../orc/config.md` defaults merged with the user
+override `.claude/orc.config.yaml` (written by `/orc-config`, survives
+`orc update`) — for `max_wave_tasks` (default 3) and `batch_pause_every`. (Mini
+is always single-pass analysis, so `max_scouts`/deep don't apply.) Mini also hands
+planning back to itself for the full
 Phase 2–8 (scoring, wave cap, pauses) — the mini analyst/planner never build
 directly; they produce artifacts and return control.
 
 ## Analyst & planner (mini lane)
 
-For doc analysis and planning, orc-mini dispatches the FAST variants as
+For requirement analysis and planning, orc-mini dispatches the FAST variants as
 subagents (Sonnet 5 high): `orc-analyze-mini` and
 `subskills/orc-planner-mini`. Same artifacts and output contracts as the full
-versions, trimmed depth. On doc input, the mini analyst runs first (scope-bound
-+ ground + challenge), then the mini planner. The orchestrator never analyzes or
-plans itself — it dispatches. If a task proves complex/high-risk, offer to
-switch to the full flow.
+versions, trimmed depth. The mini analyst is **doc-optional**: on doc input OR an
+ambiguous/underspecified requirement it runs first (mode-detect + scope-bound +
+evidence-or-mark ground + recommended-option challenges), then the mini planner.
+The mini analyst is always single-pass — **no deep mode, no scouts**; if the
+requirement clearly needs that depth, offer to switch to the full flow
+(`/orc-analyze` deep). The orchestrator never analyzes or plans itself — it
+dispatches. If a task proves complex/high-risk, offer to switch to the full flow.
 
 ## Wiki consult (if present)
 

@@ -23,6 +23,7 @@ const TEMPLATES = path.join(PKG_ROOT, "templates");
 const SRC_SKILLS = path.join(TEMPLATES, "skills");
 const SRC_COMMANDS = path.join(TEMPLATES, "commands");
 const SRC_AGENTS = path.join(TEMPLATES, "agents");
+const SRC_HOOKS = path.join(TEMPLATES, "hooks");
 
 const args = process.argv.slice(2);
 const cmd = args[0];
@@ -60,6 +61,85 @@ function listSkillNames() {
     .readdirSync(SRC_SKILLS, { withFileTypes: true })
     .filter((e) => e.isDirectory())
     .map((e) => e.name);
+}
+
+// node command string for a hook/statusline script at an absolute path.
+// Forward slashes work on every platform node runs on and dodge shell quoting.
+function nodeCmd(absPath) {
+  return `node "${absPath.replace(/\\/g, "/")}"`;
+}
+
+// Install the ORC guard scripts and MERGE their wiring into settings.json.
+// Non-destructive: never clobbers an existing statusLine, never duplicates the
+// PreToolUse hook, and refuses to touch an unparseable settings file.
+function installGuards(claudeDir) {
+  if (!fs.existsSync(SRC_HOOKS)) return;
+  const hooksDest = path.join(claudeDir, "hooks");
+  fs.mkdirSync(hooksDest, { recursive: true });
+  for (const file of fs.readdirSync(SRC_HOOKS)) {
+    fs.copyFileSync(path.join(SRC_HOOKS, file), path.join(hooksDest, file));
+    console.log(`  add   hooks/${file}`);
+  }
+
+  const guardCmd = nodeCmd(path.join(hooksDest, "orc-effort-guard.js"));
+  const statusCmd = nodeCmd(path.join(hooksDest, "orc-statusline.js"));
+  const settingsPath = path.join(claudeDir, "settings.json");
+
+  let settings = {};
+  if (fs.existsSync(settingsPath)) {
+    try {
+      settings = JSON.parse(fs.readFileSync(settingsPath, "utf8") || "{}");
+    } catch (_) {
+      console.log(
+        "\n  ⚠  settings.json exists but is not valid JSON — NOT modifying it."
+      );
+      console.log("     Add these manually so ORC is guarded:");
+      console.log(`       PreToolUse (matcher \"Skill\"): ${guardCmd}`);
+      console.log(`       statusLine: ${statusCmd}`);
+      return;
+    }
+  }
+
+  // 1) PreToolUse effort guard — add once, or refresh its path on update.
+  settings.hooks = settings.hooks || {};
+  settings.hooks.PreToolUse = settings.hooks.PreToolUse || [];
+  let guarded = false;
+  for (const entry of settings.hooks.PreToolUse) {
+    for (const h of entry.hooks || []) {
+      if (typeof h.command === "string" && h.command.includes("orc-effort-guard")) {
+        h.command = guardCmd; // keep the path current
+        guarded = true;
+      }
+    }
+  }
+  if (!guarded) {
+    settings.hooks.PreToolUse.push({
+      matcher: "Skill",
+      hooks: [{ type: "command", command: guardCmd }],
+    });
+    console.log("  add   settings.json → PreToolUse effort guard (hard-block)");
+  } else {
+    console.log("  upd   settings.json → PreToolUse effort guard path");
+  }
+
+  // 2) statusLine model warning — set ONLY if the user has none (never clobber).
+  if (!settings.statusLine) {
+    settings.statusLine = { type: "command", command: statusCmd };
+    console.log("  add   settings.json → statusLine model warning");
+  } else if (
+    settings.statusLine.command &&
+    settings.statusLine.command.includes("orc-statusline")
+  ) {
+    settings.statusLine.command = statusCmd;
+    console.log("  upd   settings.json → statusLine path");
+  } else {
+    console.log(
+      "  skip  settings.json → statusLine (you already have one; to warn on\n" +
+        `        non-Opus/high, add: ${statusCmd})`
+    );
+  }
+
+  fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + "\n");
 }
 
 function install({ overwrite }) {
@@ -104,8 +184,12 @@ function install({ overwrite }) {
     console.log(`  ${overwrite ? "upd " : "add "}  agents/${file}`);
   }
 
+  installGuards(claudeDir);
+
   console.log(`\nInstalled into ${claudeDir}`);
-  console.log("Slash commands: /orc  /orc-mini  /orc-verify  /orc-wiki");
+  console.log(
+    "Slash commands: /orc  /orc-mini  /orc-analyze  /orc-plan  /orc-verify  /orc-wiki  /orc-config"
+  );
   console.log("\nNext:");
   console.log("  • Paste your PR template into skills/orc/subskills/orc-pr/pr.md");
   console.log("  • Add to your .gitignore:  .claude/skills/orc/run/");
@@ -113,6 +197,8 @@ function install({ overwrite }) {
   console.log("    from a different folder — move the files in commands/ there.");
   console.log("  • Run /agents to confirm the agent model IDs your CLI accepts,");
   console.log("    and run your MAIN session on Opus (see agents/MODEL-MAPPING.md).");
+  console.log("  • A PreToolUse guard now HARD-BLOCKS /orc unless the session is at");
+  console.log("    high effort; the statusline warns when the model isn't Opus 4.8.");
 }
 
 function where() {
@@ -120,6 +206,13 @@ function where() {
   console.log("skills   →", path.join(claudeDir, "skills"));
   console.log("commands →", path.join(claudeDir, "commands"));
   console.log("agents   →", path.join(claudeDir, "agents"));
+  console.log("hooks    →", path.join(claudeDir, "hooks"));
+  console.log("settings →", path.join(claudeDir, "settings.json"), "(merged)");
+  console.log(
+    "config   →",
+    path.join(claudeDir, "orc.config.yaml"),
+    "(user overrides via /orc-config; update-safe)"
+  );
 }
 
 function help() {

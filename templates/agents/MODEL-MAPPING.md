@@ -26,8 +26,14 @@ Score→executor mapping lives in config.md (narrow vs wide preset).
 | orc-verifier-opus-4-8-high | claude-opus-4-8 | high | verify (+ /orc-verify) |
 | orc-mini-analyst-sonnet-5-high | claude-sonnet-5 | high | mini analysis |
 | orc-mini-planner-sonnet-5-high | claude-sonnet-5 | high | mini planning |
+| orc-scout-sonnet-4-6-high | claude-sonnet-4-6 | high | deep-analysis code scout (read-only) |
 
 Mini execution reuses orc-executor-sonnet-5-high.
+
+The scout is dispatched only in the System Analyst's DEEP mode: the orchestrator
+fans out ≤`config.max_scouts` (default 3) parallel scouts, one per coverage area
+from the analyst's scout plan, and feeds their evidence bundles back to the
+analyst for pass 2. Scouts are read-only and never analyze/plan/edit.
 
 The orchestrator (main session) is NOT an agent file.
 

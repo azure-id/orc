@@ -1,7 +1,19 @@
 # ORC — Config
 
-Central knobs the orchestrator reads at run start. Override any value for a
-single run without editing the file.
+This file is the **shipped defaults**. Central knobs the orchestrator reads at
+run start. Override any value for a single run without editing the file.
+
+## Config resolution (defaults ← override file)
+
+At run start, resolve every key as: **default (this file), then the user override
+on top.** The override lives at `.claude/orc.config.yaml` (project `.claude/`
+root), holds ONLY the keys the user changed, and is written exclusively by
+`/orc-config`. It sits OUTSIDE `templates/`, so `orc update` never clobbers it.
+If the override file is absent, use these defaults unchanged. A per-run inline
+override still wins over both.
+
+> Users should not hand-edit this file — run **`/orc-config`** for a guided,
+> validated editor that writes the override safely.
 
 ```yaml
 # --- Wave grouping ---
@@ -15,6 +27,10 @@ rubric_bands: 5            # how many scoring bands. Range 2–8.
                            #   2–5  → "narrow" preset
                            #   6–8  → "wide" preset
                            # Determines the score→model mapping below.
+
+# --- Analysis (System Analyst) ---
+max_scouts: 3              # max parallel read-only code scouts in DEEP analysis mode
+default_analysis_depth: standard   # standard | deep — depth gate default (run still confirms)
 
 # --- Artifact locations (internal by default) ---
 analyzer_dir: .claude/skills/orc/analyzer
@@ -63,8 +79,13 @@ list of `{min, max, agent}` rows; the orchestrator uses it instead of a preset.
 | Mini executor | orc-executor-sonnet-5-high (reused) |
 
 ## Rules
-- Read at run start; missing values use defaults (max_wave_tasks 3,
-  batch_pause_every 2, rubric_bands 5).
+- Read at run start via the resolution rule above (defaults ← `orc.config.yaml`
+  override). Missing values use defaults (max_wave_tasks 3, batch_pause_every 2,
+  rubric_bands 5, max_scouts 3, default_analysis_depth standard).
+- `max_scouts` caps the parallel scouts fanned out in the analyst's DEEP mode
+  (never exceeds it, same as max_wave_tasks caps a wave).
+- `default_analysis_depth` only presets the analyst's standard/deep gate — the
+  run still confirms; deep never auto-escalates without consent.
 - `rubric_bands` sets HOW MANY bands the rubric produces; the preset maps the
   resulting score to a model. More bands = finer score granularity, same model
   set — the preset boundaries define the mapping.
