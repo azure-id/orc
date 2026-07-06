@@ -72,10 +72,14 @@ presets the default; the run still confirms):
 > "I can run a **deep analysis** — wider code sweep, verify every claim, more
 > clarifying questions, and implementation options with trade-offs. It costs
 > noticeably more tokens and time. **Standard** is faster and covers the
-> load-bearing cases. Deep or standard?"
+> load-bearing cases. Deep or standard?
+> (Tip: to make deep the default and skip this prompt's default, run
+> `orc config set default_analysis_depth deep` — a zero-token CLI change.)"
 
 Deep requires explicit consent — it never auto-escalates. In deep mode the run is
-**two-pass with scouts** (Phase C-deep). Standard mode is single-pass.
+**two-pass with scouts** (Phase C-deep). Standard mode is single-pass. Presetting
+`default_analysis_depth` via `orc config` only changes which option is the
+default — the run still confirms.
 
 ## Phase B — Bound scope
 

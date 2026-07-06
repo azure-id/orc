@@ -372,12 +372,15 @@ const vPath = (raw) =>
   raw && raw.trim() ? { value: raw } : { err: "must be a non-empty path" };
 
 // Ordered, tiered metadata. Common first, then advanced.
+// `options` (common tier only) is the pick-list shown in the interactive menu —
+// a friendly enum. Typed values are still allowed and re-checked by `validate`,
+// so the list guides without locking power users out.
 const CONFIG_META = [
-  { key: "max_wave_tasks", def: 3, tier: "common", validate: vInt(1), desc: "Max parallel tasks per execution wave." },
-  { key: "batch_pause_every", def: 2, tier: "common", validate: vInt(1), desc: "Waves between stop-and-continue pauses." },
-  { key: "rubric_bands", def: 5, tier: "common", validate: vRange(2, 8), desc: "Scoring granularity (2-5 narrow, 6-8 wide)." },
-  { key: "max_scouts", def: 3, tier: "common", validate: vInt(1), desc: "Max parallel code scouts in deep analysis." },
-  { key: "default_analysis_depth", def: "standard", tier: "common", validate: vEnum("standard", "deep"), desc: "Analyst depth gate default (run still confirms)." },
+  { key: "max_wave_tasks", def: 3, tier: "common", validate: vInt(1), options: [2, 3, 4, 5], desc: "Max parallel tasks per execution wave (higher = more parallelism, more collision risk)." },
+  { key: "batch_pause_every", def: 2, tier: "common", validate: vInt(1), options: [1, 2, 3, 4, 5], desc: "Waves between stop-and-continue pauses (1 = pause every wave)." },
+  { key: "rubric_bands", def: 5, tier: "common", validate: vRange(2, 8), options: [2, 3, 4, 5, 6, 7, 8], desc: "Scoring granularity (2-5 narrow preset, 6-8 wide preset)." },
+  { key: "max_scouts", def: 3, tier: "common", validate: vInt(1), options: [1, 2, 3, 4, 5], desc: "Max parallel code scouts fanned out in deep analysis." },
+  { key: "default_analysis_depth", def: "standard", tier: "common", validate: vEnum("standard", "deep"), options: ["standard", "deep"], desc: "Analyst depth gate default — deep = wider sweep + scouts (run still confirms)." },
   { key: "analyzer_dir", def: ".claude/skills/orc/analyzer", tier: "advanced", validate: vPath, desc: "Internal analyst artifact dir." },
   { key: "planner_dir", def: ".claude/skills/orc/planner", tier: "advanced", validate: vPath, desc: "Internal planner artifact dir." },
   { key: "report_out_dir", def: "analyst_report", tier: "advanced", validate: vPath, desc: "Project-root copy target on report-only." },
@@ -442,7 +445,8 @@ function configList(claudeDir) {
       const has = Object.prototype.hasOwnProperty.call(map, m.key);
       const val = has ? map[m.key] : m.def;
       const src = has ? "overridden" : "default   ";
-      console.log(`  ${m.key.padEnd(pad)}  ${String(val).padEnd(30)} ${src}  ${m.desc}`);
+      const opts = m.options ? ` [options: ${m.options.join(" | ")}]` : "";
+      console.log(`  ${m.key.padEnd(pad)}  ${String(val).padEnd(30)} ${src}  ${m.desc}${opts}`);
     }
   }
   const extra = Object.keys(map).filter((k) => !metaFor(k));
@@ -538,7 +542,14 @@ function configInteractive(claudeDir) {
       const { map: cur } = readOverride(claudeDir);
       const has = Object.prototype.hasOwnProperty.call(cur, m.key);
       console.log(`  current: ${has ? cur[m.key] : m.def}   default: ${m.def}`);
-      const nv = (await ask(`  new value (blank = keep): `)).trim();
+      // Common keys carry an `options` list (a friendly enum). Show the allowed
+      // values inline and let the user type one directly — no index ambiguity.
+      // A raw value outside the list is still accepted if `validate` passes.
+      if (m.options) console.log(`  options: ${m.options.join(" | ")}`);
+      const prompt = m.options
+        ? `  type a value (blank = keep): `
+        : `  new value (blank = keep): `;
+      const nv = (await ask(prompt)).trim();
       if (!nv) {
         console.log("  (unchanged)");
         continue;

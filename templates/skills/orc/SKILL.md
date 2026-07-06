@@ -150,8 +150,9 @@ to produce a scope-bounded, code-grounded, evidence-backed requirement report +
 spec, resolving scope/accuracy with the user. The analyst is **doc-optional** —
 with no doc it runs in requirement mode (the request itself is the source of
 truth, reconciled against code). Offer the **standard/deep** choice before it
-reconciles (`config.default_analysis_depth` presets it); in deep mode dispatch
-the scouts as described above. When it returns and the user chooses to build,
+reconciles (`config.default_analysis_depth` presets it — tell the user they can
+change it with the zero-token CLI `orc config set default_analysis_depth deep`;
+the run still confirms); in deep mode dispatch the scouts as described above. When it returns and the user chooses to build,
 continue here using the Requirement Planner in Phase 1. This prevents scope-bleed
 and requirement hallucination before any planning. The orchestrator dispatches
 the analysis — it never analyzes itself.
