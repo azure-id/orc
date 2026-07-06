@@ -217,45 +217,83 @@ function targetFlags() {
   return [];
 }
 
+// Universal fallback: a plain tarball of the default branch. This dodges the
+// `npm i -g <github-spec>` path that can fail under NVM / restricted git (the
+// github: spec shells out to git; the tarball is a straight HTTPS download).
+const TARBALL_SPEC =
+  "https://github.com/azure-id/orc/archive/refs/heads/main.tar.gz";
+
+// Try `npm install -g <spec>`; return true on success. Inherits stdio so the
+// user sees npm's own output.
+function npmInstallGlobal(spec) {
+  console.log("  → npm install -g " + spec);
+  const r = spawnSync(`npm install -g ${spec}`, { stdio: "inherit", shell: true });
+  return r.status === 0;
+}
+
+// Resolve the freshly-installed cli.js via `npm root -g`, so step 2 runs the NEW
+// code regardless of how PATH resolves `orc` (important under NVM, where the
+// running shim and the global prefix can differ). Falls back to null if the path
+// can't be determined — the caller then spawns `orc` by name.
+function freshCliPath() {
+  const r = spawnSync("npm root -g", { shell: true, encoding: "utf8" });
+  if (r.status !== 0 || !r.stdout) return null;
+  const p = path.join(r.stdout.trim(), "orc", "bin", "cli.js");
+  return fs.existsSync(p) ? p : null;
+}
+
 // `orc upgrade` = fetch the latest package from the source, THEN apply it.
 // Two steps because `orc update` alone only re-copies whatever is already
 // installed — it never reaches the network. Step 1 refreshes the global package
-// (this is the part that pulls from GitHub/npm); step 2 spawns a FRESH `orc
-// update` so the newly-installed version does the copy (the running process
-// still holds the OLD templates). User overrides in .claude/orc.config.yaml are
-// untouched — update never writes there.
+// (this is the part that pulls from GitHub/npm); step 2 runs the FRESH cli so the
+// newly-installed version does the copy (the running process still holds the OLD
+// templates). User overrides in .claude/orc.config.yaml are untouched — update
+// never writes there.
 function upgrade() {
-  const spec =
-    typeof flag("--from") === "string" ? flag("--from") : DEFAULT_INSTALL_SPEC;
+  const fromFlag = typeof flag("--from") === "string" ? flag("--from") : null;
+  // Specs to try in order. When the user didn't pin --from, fall back from the
+  // default github: spec to the plain tarball (the NVM/git bypass).
+  const specs = fromFlag
+    ? [fromFlag]
+    : [...new Set([DEFAULT_INSTALL_SPEC, TARBALL_SPEC])];
 
-  console.log(`\norc upgrade — fetching latest from: ${spec}`);
-  console.log("  step 1/2: npm install -g " + spec);
-  const inst = spawnSync(`npm install -g ${spec}`, {
-    stdio: "inherit",
-    shell: true,
-  });
-  if (inst.status !== 0) {
+  console.log("\norc upgrade — fetching the latest package, then applying it.");
+  console.log("  step 1/2: refresh the global orc package");
+
+  let installed = false;
+  for (let i = 0; i < specs.length; i++) {
+    if (npmInstallGlobal(specs[i])) {
+      installed = true;
+      break;
+    }
+    if (i < specs.length - 1) {
+      console.log(`\n  ⚠  that source failed — trying a fallback…`);
+    }
+  }
+  if (!installed) {
+    const tflags = targetFlags();
     console.error(
       "\n❌ upgrade failed at step 1 (npm install). Nothing was changed in .claude/.\n" +
-        "   Check network/registry access, or pass --from <spec> (e.g. a fork or\n" +
-        "   tarball URL). You can also run the two steps manually:\n" +
-        `     npm install -g ${spec}\n` +
+        "   Try the tarball bypass directly, then apply:\n" +
+        `     npm i -g ${TARBALL_SPEC}\n` +
         "     orc update" +
-        (targetFlags().length ? " " + targetFlags().join(" ") : "") +
+        (tflags.length ? " " + tflags.join(" ") : "") +
         "\n"
     );
-    process.exit(inst.status || 1);
+    process.exit(1);
   }
 
   const tflags = targetFlags();
   console.log(
-    "\n  step 2/2: orc update" + (tflags.length ? " " + tflags.join(" ") : "")
+    "\n  step 2/2: apply it — orc update" +
+      (tflags.length ? " " + tflags.join(" ") : "")
   );
-  // Fresh process → resolves to the just-installed `orc` binary + new templates.
-  const upd = spawnSync(["orc", "update", ...tflags].join(" "), {
-    stdio: "inherit",
-    shell: true,
-  });
+  // Prefer the resolved fresh cli path; else spawn `orc` by name.
+  const cli = freshCliPath();
+  const applyCmd = cli
+    ? ["node", `"${cli}"`, "update", ...tflags].join(" ")
+    : ["orc", "update", ...tflags].join(" ");
+  const upd = spawnSync(applyCmd, { stdio: "inherit", shell: true });
   if (upd.status !== 0) {
     console.error(
       "\n⚠  Package upgraded, but applying it (orc update) failed. Re-run:\n" +

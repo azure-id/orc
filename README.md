@@ -68,9 +68,19 @@ orc upgrade --global         # ~/.claude   — fetch latest, then update all pro
 orc upgrade --from github:<you>/orc   # pull from a fork or any npm spec
 ```
 
-Equivalently, the two manual steps are `npm i -g github:azure-id/orc` followed by
-`orc update`. Either way, your `.claude/orc.config.yaml` overrides (set via
-`/orc-config`) are left untouched.
+If the GitHub spec fails to install (common under **NVM** or where npm's `github:`
+spec can't shell out to git), `orc upgrade` automatically retries with a plain
+tarball of the default branch — no action needed. You can also run that bypass
+manually:
+
+```bash
+npm i -g https://github.com/azure-id/orc/archive/refs/heads/main.tar.gz
+orc update
+```
+
+Equivalently, the normal two manual steps are `npm i -g github:azure-id/orc`
+followed by `orc update`. Either way, your `.claude/orc.config.yaml` overrides
+(set via `/orc-config`) are left untouched.
 
 This installs three things into `.claude/`: **skills/**, **commands/**, and
 **agents/**. After installing:
