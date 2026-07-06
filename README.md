@@ -1,8 +1,5 @@
 # ORC
 
-# P0
-- Do not commit this CLAUDE.md
-
 **An orchestrator skill constellation for [Claude Code](https://claude.com/claude-code).**
 
 ORC takes a feature — or a requirements document — and drives it through a
@@ -52,10 +49,28 @@ Then, inside a project:
 ```bash
 orc init            # install into ./.claude          (this project)
 orc init --global   # install into ~/.claude          (all projects)
-orc update          # overwrite existing orc files with this version
+orc update          # re-copy this package's files (offline; local only)
+orc upgrade         # fetch the LATEST package, then apply it (this pulls a new version)
 orc where           # print the target paths
 orc --help
 ```
+
+### Updating to a new version
+
+`orc update` only re-copies whatever is **already installed** — it never reaches
+the network, so on its own it can't bring in a newer release. To actually move to
+the latest, use **`orc upgrade`**, which refreshes the package from the source
+first and then applies it:
+
+```bash
+orc upgrade                  # ./.claude   — fetch latest, then update this project
+orc upgrade --global         # ~/.claude   — fetch latest, then update all projects
+orc upgrade --from github:<you>/orc   # pull from a fork or any npm spec
+```
+
+Equivalently, the two manual steps are `npm i -g github:azure-id/orc` followed by
+`orc update`. Either way, your `.claude/orc.config.yaml` overrides (set via
+`/orc-config`) are left untouched.
 
 This installs three things into `.claude/`: **skills/**, **commands/**, and
 **agents/**. After installing:
@@ -200,7 +215,7 @@ templates/
 │   └── orc-config/    reachable config editor (writes update-safe override)
 ├── commands/          /orc /orc-mini /orc-analyze /orc-plan /orc-verify /orc-wiki /orc-config
 └── agents/            single-role, model-pinned subagents (+ read-only scout) + MODEL-MAPPING.md
-bin/cli.js             installer (init / update / where)
+bin/cli.js             installer (init / update / upgrade / where)
 ```
 
 The `orc` skill is a thin **spine** that loads references and subskills only when

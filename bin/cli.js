@@ -17,6 +17,13 @@
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
+const { spawnSync } = require("child_process");
+
+// Where `orc upgrade` fetches a fresh package from. Override with --from <spec>
+// or ORC_INSTALL_SPEC (e.g. a fork, a tarball URL, or "orc" for the npm registry
+// once published). Default: the GitHub repo's default branch.
+const DEFAULT_INSTALL_SPEC =
+  process.env.ORC_INSTALL_SPEC || "github:azure-id/orc";
 
 const PKG_ROOT = path.join(__dirname, "..");
 const TEMPLATES = path.join(PKG_ROOT, "templates");
@@ -201,6 +208,66 @@ function install({ overwrite }) {
   console.log("    high effort; the statusline warns when the model isn't Opus 4.8.");
 }
 
+// Reconstruct the target flags (--global / --dir X) to pass through to the
+// fresh `orc update` process, so upgrade lands in the same place the user asked.
+function targetFlags() {
+  if (flag("--global")) return ["--global"];
+  const dir = flag("--dir");
+  if (typeof dir === "string") return ["--dir", dir];
+  return [];
+}
+
+// `orc upgrade` = fetch the latest package from the source, THEN apply it.
+// Two steps because `orc update` alone only re-copies whatever is already
+// installed — it never reaches the network. Step 1 refreshes the global package
+// (this is the part that pulls from GitHub/npm); step 2 spawns a FRESH `orc
+// update` so the newly-installed version does the copy (the running process
+// still holds the OLD templates). User overrides in .claude/orc.config.yaml are
+// untouched — update never writes there.
+function upgrade() {
+  const spec =
+    typeof flag("--from") === "string" ? flag("--from") : DEFAULT_INSTALL_SPEC;
+
+  console.log(`\norc upgrade — fetching latest from: ${spec}`);
+  console.log("  step 1/2: npm install -g " + spec);
+  const inst = spawnSync(`npm install -g ${spec}`, {
+    stdio: "inherit",
+    shell: true,
+  });
+  if (inst.status !== 0) {
+    console.error(
+      "\n❌ upgrade failed at step 1 (npm install). Nothing was changed in .claude/.\n" +
+        "   Check network/registry access, or pass --from <spec> (e.g. a fork or\n" +
+        "   tarball URL). You can also run the two steps manually:\n" +
+        `     npm install -g ${spec}\n` +
+        "     orc update" +
+        (targetFlags().length ? " " + targetFlags().join(" ") : "") +
+        "\n"
+    );
+    process.exit(inst.status || 1);
+  }
+
+  const tflags = targetFlags();
+  console.log(
+    "\n  step 2/2: orc update" + (tflags.length ? " " + tflags.join(" ") : "")
+  );
+  // Fresh process → resolves to the just-installed `orc` binary + new templates.
+  const upd = spawnSync(["orc", "update", ...tflags].join(" "), {
+    stdio: "inherit",
+    shell: true,
+  });
+  if (upd.status !== 0) {
+    console.error(
+      "\n⚠  Package upgraded, but applying it (orc update) failed. Re-run:\n" +
+        "     orc update" +
+        (tflags.length ? " " + tflags.join(" ") : "") +
+        "\n"
+    );
+    process.exit(upd.status || 1);
+  }
+  console.log("\n✅ orc upgraded to the latest and applied.");
+}
+
 function where() {
   const claudeDir = resolveClaudeDir();
   console.log("skills   →", path.join(claudeDir, "skills"));
@@ -219,15 +286,23 @@ function help() {
   console.log(`orc — install the ORC Claude Code skill constellation
 
 Usage:
-  orc init [--global | --dir <path>]     copy skills + commands (skips existing)
-  orc update [--global | --dir <path>]   overwrite existing orc files
-  orc where [--global | --dir <path>]    show target paths
+  orc init [--global | --dir <path>]      copy skills + commands (skips existing)
+  orc update [--global | --dir <path>]    overwrite existing orc files (local copy only)
+  orc upgrade [--global | --dir <path>]   fetch the LATEST package, then apply it
+                                          [--from <spec>]  (default: ${DEFAULT_INSTALL_SPEC})
+  orc where [--global | --dir <path>]     show target paths
   orc --help
 
 Targets:
   (default)      ./.claude            current project
   --global       ~/.claude            all projects
   --dir <path>   <path>/.claude       a specific project
+
+update vs upgrade:
+  update   re-copies the templates already installed in this package (offline).
+  upgrade  refreshes the package from the source first (network), THEN copies —
+           this is what actually pulls a new version. Your .claude/orc.config.yaml
+           overrides survive either way.
 
 Skills installed: ${listSkillNames().join(", ")}`);
 }
@@ -238,6 +313,9 @@ switch (cmd) {
     break;
   case "update":
     install({ overwrite: true });
+    break;
+  case "upgrade":
+    upgrade();
     break;
   case "where":
     where();
