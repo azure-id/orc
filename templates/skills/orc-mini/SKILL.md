@@ -55,7 +55,7 @@ session ≥ Sonnet, always true). See `.claude/agents/MODEL-MAPPING.md`.
 ## Config
 
 Resolve config at run start: `../orc/config.md` defaults merged with the user
-override `.claude/orc.config.yaml` (written by `/orc-config`, survives
+override `.claude/orc.config.yaml` (written by the `orc config` CLI, survives
 `orc update`) — for `max_wave_tasks` (default 3) and `batch_pause_every`. (Mini
 is always single-pass analysis, so `max_scouts`/deep don't apply.) Mini also hands
 planning back to itself for the full

@@ -43,6 +43,24 @@ function flag(name) {
   return val && !val.startsWith("-") ? val : true;
 }
 
+// Positional args with flags (and their values) stripped out, so
+// `orc config --global set max_scouts 5` and `orc config set max_scouts 5 --global`
+// both yield ["config","set","max_scouts","5"].
+function positionals() {
+  const out = [];
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a === "--global") continue;
+    if (a === "--dir" || a === "--from") {
+      i++; // skip the flag's value
+      continue;
+    }
+    if (a.startsWith("-")) continue;
+    out.push(a);
+  }
+  return out;
+}
+
 function resolveClaudeDir() {
   // --global  → ~/.claude    (available in every project)
   // --dir X   → X/.claude
@@ -195,8 +213,9 @@ function install({ overwrite }) {
 
   console.log(`\nInstalled into ${claudeDir}`);
   console.log(
-    "Slash commands: /orc  /orc-mini  /orc-analyze  /orc-plan  /orc-verify  /orc-wiki  /orc-config"
+    "Slash commands: /orc  /orc-mini  /orc-analyze  /orc-plan  /orc-verify  /orc-wiki"
   );
+  console.log("Config: run `orc config` (CLI, interactive) — not a slash command.");
   console.log("\nNext:");
   console.log("  • Paste your PR template into skills/orc/subskills/orc-pr/pr.md");
   console.log("  • Add to your .gitignore:  .claude/skills/orc/run/");
@@ -306,6 +325,262 @@ function upgrade() {
   console.log("\n✅ orc upgraded to the latest and applied.");
 }
 
+// ---------------------------------------------------------------------------
+// orc config — deterministic, zero-token config editing (no model in the loop).
+// Reads/writes the update-safe override .claude/orc.config.yaml. config.md stays
+// the shipped defaults + documentation; the defaults below MIRROR it — keep them
+// in sync when config.md's defaults change (a documented drift, like the agents).
+// ---------------------------------------------------------------------------
+
+const KNOWN_MODELS = [
+  "claude-opus-4-8",
+  "claude-opus-4-7",
+  "claude-sonnet-5",
+  "claude-sonnet-4-6",
+];
+
+const vInt = (min) => (raw) => {
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < min) return { err: `must be an integer >= ${min}` };
+  return { value: n };
+};
+const vRange = (min, max) => (raw) => {
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < min || n > max)
+    return { err: `must be an integer ${min}-${max}` };
+  return { value: n };
+};
+const vEnum = (...opts) => (raw) =>
+  opts.includes(raw) ? { value: raw } : { err: `must be one of: ${opts.join(", ")}` };
+const vModel = (raw) => {
+  if (!KNOWN_MODELS.includes(raw))
+    return { err: `unknown model id (expected one of: ${KNOWN_MODELS.join(", ")})` };
+  const warn = raw.startsWith("claude-opus")
+    ? null
+    : "⚠ below Opus — every opus-* agent silently falls back to Sonnet (model-tier ladder).";
+  return { value: raw, warn };
+};
+const vPath = (raw) =>
+  raw && raw.trim() ? { value: raw } : { err: "must be a non-empty path" };
+
+// Ordered, tiered metadata. Common first, then advanced.
+const CONFIG_META = [
+  { key: "max_wave_tasks", def: 3, tier: "common", validate: vInt(1), desc: "Max parallel tasks per execution wave." },
+  { key: "batch_pause_every", def: 2, tier: "common", validate: vInt(1), desc: "Waves between stop-and-continue pauses." },
+  { key: "rubric_bands", def: 5, tier: "common", validate: vRange(2, 8), desc: "Scoring granularity (2-5 narrow, 6-8 wide)." },
+  { key: "max_scouts", def: 3, tier: "common", validate: vInt(1), desc: "Max parallel code scouts in deep analysis." },
+  { key: "default_analysis_depth", def: "standard", tier: "common", validate: vEnum("standard", "deep"), desc: "Analyst depth gate default (run still confirms)." },
+  { key: "analyzer_dir", def: ".claude/skills/orc/analyzer", tier: "advanced", validate: vPath, desc: "Internal analyst artifact dir." },
+  { key: "planner_dir", def: ".claude/skills/orc/planner", tier: "advanced", validate: vPath, desc: "Internal planner artifact dir." },
+  { key: "report_out_dir", def: "analyst_report", tier: "advanced", validate: vPath, desc: "Project-root copy target on report-only." },
+  { key: "orchestrator_model", def: "claude-opus-4-8", tier: "advanced", validate: vModel, desc: "Main-session model (below Opus breaks the tier ladder)." },
+];
+const metaFor = (key) => CONFIG_META.find((m) => m.key === key);
+const overridePath = (claudeDir) => path.join(claudeDir, "orc.config.yaml");
+
+// Minimal flat `key: value` reader. Preserves unknown keys (e.g. an advanced
+// rubric_bands_override the user hand-edited) verbatim.
+function readOverride(claudeDir) {
+  const p = overridePath(claudeDir);
+  const map = {};
+  if (fs.existsSync(p)) {
+    for (const line of fs.readFileSync(p, "utf8").split(/\r?\n/)) {
+      const t = line.trim();
+      if (!t || t.startsWith("#")) continue;
+      const i = t.indexOf(":");
+      if (i === -1) continue;
+      const k = t.slice(0, i).trim();
+      let v = t.slice(i + 1).trim();
+      if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'")))
+        v = v.slice(1, -1);
+      map[k] = v;
+    }
+  }
+  return { path: p, map };
+}
+
+function serializeValue(value) {
+  if (typeof value === "number") return String(value);
+  const s = String(value);
+  if (s === "true" || s === "false") return s;
+  if (s.startsWith("[") || s.startsWith("{")) return s; // flow (JSON) — valid YAML
+  if (/^[A-Za-z0-9_./-]+$/.test(s)) return s;
+  return `"${s.replace(/"/g, '\\"')}"`;
+}
+
+function writeOverride(claudeDir, map) {
+  const p = overridePath(claudeDir);
+  fs.mkdirSync(path.dirname(p), { recursive: true });
+  const keys = Object.keys(map);
+  let out =
+    "# .claude/orc.config.yaml — ORC user overrides (managed by `orc config`).\n" +
+    "# Only changed keys appear here. Effective value = config.md default, then this.\n" +
+    "# `orc update` / `orc upgrade` never touch this file.\n";
+  if (!keys.length) out += "# (no overrides set)\n";
+  for (const k of keys) out += `${k}: ${serializeValue(map[k])}\n`;
+  fs.writeFileSync(p, out);
+  return p;
+}
+
+function configList(claudeDir) {
+  const { path: p, map } = readOverride(claudeDir);
+  console.log(
+    `\nORC config  (override: ${p}${fs.existsSync(p) ? "" : "  — not created yet"})\n`
+  );
+  const pad = Math.max(...CONFIG_META.map((m) => m.key.length));
+  for (const tier of ["common", "advanced"]) {
+    console.log(tier === "common" ? "Common" : "\nAdvanced");
+    for (const m of CONFIG_META.filter((x) => x.tier === tier)) {
+      const has = Object.prototype.hasOwnProperty.call(map, m.key);
+      const val = has ? map[m.key] : m.def;
+      const src = has ? "overridden" : "default   ";
+      console.log(`  ${m.key.padEnd(pad)}  ${String(val).padEnd(30)} ${src}  ${m.desc}`);
+    }
+  }
+  const extra = Object.keys(map).filter((k) => !metaFor(k));
+  if (extra.length) {
+    console.log("\nOther (hand-edited) overrides");
+    for (const k of extra) console.log(`  ${k}: ${map[k]}`);
+  }
+  console.log("");
+}
+
+function configSet(claudeDir, key, rawValue) {
+  const m = metaFor(key);
+  if (!m) {
+    console.error(
+      `Unknown config key: ${key}\nKnown keys: ${CONFIG_META.map((x) => x.key).join(", ")}` +
+        "\n(rubric_bands_override is advanced — hand-edit orc.config.yaml.)"
+    );
+    process.exit(1);
+  }
+  if (rawValue === undefined) {
+    console.error(`Usage: orc config set ${key} <value>`);
+    process.exit(1);
+  }
+  const res = m.validate(rawValue);
+  if (res.err) {
+    console.error(`Invalid value for ${key}: ${res.err}`);
+    process.exit(1);
+  }
+  if (res.warn) console.error(`  ${res.warn}`);
+  const { map } = readOverride(claudeDir);
+  map[key] = res.value;
+  const p = writeOverride(claudeDir, map);
+  console.log(`Set ${key} = ${res.value}  →  ${p}`);
+}
+
+function configReset(claudeDir, key) {
+  const { map } = readOverride(claudeDir);
+  if (!key) {
+    const p = writeOverride(claudeDir, {});
+    console.log(`Cleared all overrides  →  ${p}  (everything reverts to defaults)`);
+    return;
+  }
+  if (!(key in map)) {
+    console.log(`${key} has no override — already at default.`);
+    return;
+  }
+  delete map[key];
+  const p = writeOverride(claudeDir, map);
+  const m = metaFor(key);
+  console.log(`Reset ${key}${m ? ` → default (${m.def})` : ""}.  ${p}`);
+}
+
+// Interactive menu — humans only. If stdin isn't a TTY (e.g. Claude's Bash tool),
+// don't hang: print the table + a hint to use `set`.
+function configInteractive(claudeDir) {
+  if (!process.stdin.isTTY) {
+    console.log("(non-interactive shell — showing config; use `orc config set <key> <value>` to change)");
+    configList(claudeDir);
+    return;
+  }
+  const readline = require("readline");
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  const ask = (q) => new Promise((res) => rl.question(q, res));
+
+  (async () => {
+    for (;;) {
+      const { map } = readOverride(claudeDir);
+      console.log("\nORC config — pick a setting to change:\n");
+      const pad = Math.max(...CONFIG_META.map((m) => m.key.length));
+      CONFIG_META.forEach((m, i) => {
+        const has = Object.prototype.hasOwnProperty.call(map, m.key);
+        const val = has ? map[m.key] : m.def;
+        const tag = has ? "overridden" : "default";
+        const adv = m.tier === "advanced" ? " (adv)" : "";
+        console.log(
+          `  ${String(i + 1).padStart(2)}) ${m.key.padEnd(pad)}  ${String(val).padEnd(28)} ${tag}${adv}`
+        );
+      });
+      console.log("   r) reset a key     q) quit");
+      const choice = (await ask("\n> ")).trim().toLowerCase();
+      if (choice === "" || choice === "q") break;
+      if (choice === "r") {
+        const k = (await ask("reset which key (blank = all): ")).trim();
+        configReset(claudeDir, k || undefined);
+        continue;
+      }
+      const m = CONFIG_META[Number(choice) - 1];
+      if (!m) {
+        console.log("  ? not a valid choice");
+        continue;
+      }
+      console.log(`\n${m.key} — ${m.desc}`);
+      const { map: cur } = readOverride(claudeDir);
+      const has = Object.prototype.hasOwnProperty.call(cur, m.key);
+      console.log(`  current: ${has ? cur[m.key] : m.def}   default: ${m.def}`);
+      const nv = (await ask(`  new value (blank = keep): `)).trim();
+      if (!nv) {
+        console.log("  (unchanged)");
+        continue;
+      }
+      const res = m.validate(nv);
+      if (res.err) {
+        console.log(`  invalid: ${res.err}`);
+        continue;
+      }
+      if (res.warn) console.log(`  ${res.warn}`);
+      cur[m.key] = res.value;
+      writeOverride(claudeDir, cur);
+      console.log(`  ✓ ${m.key} = ${res.value}`);
+    }
+    rl.close();
+    console.log("done.");
+  })();
+}
+
+function config() {
+  const claudeDir = resolveClaudeDir();
+  const pos = positionals(); // ["config", <sub?>, <key?>, <value?>]
+  const sub = pos[1];
+  switch (sub) {
+    case undefined:
+      configInteractive(claudeDir);
+      break;
+    case "list":
+    case "get":
+      configList(claudeDir);
+      break;
+    case "path":
+      console.log(overridePath(claudeDir));
+      break;
+    case "set":
+      configSet(claudeDir, pos[2], pos[3]);
+      break;
+    case "reset":
+      configReset(claudeDir, pos[2]);
+      break;
+    default:
+      console.error(
+        `Unknown: orc config ${sub}\n` +
+          "Usage: orc config [list | set <key> <value> | reset [key] | path]\n" +
+          "       orc config            (interactive menu)"
+      );
+      process.exit(1);
+  }
+}
+
 function where() {
   const claudeDir = resolveClaudeDir();
   console.log("skills   →", path.join(claudeDir, "skills"));
@@ -328,6 +603,11 @@ Usage:
   orc update [--global | --dir <path>]    overwrite existing orc files (local copy only)
   orc upgrade [--global | --dir <path>]   fetch the LATEST package, then apply it
                                           [--from <spec>]  (default: ${DEFAULT_INSTALL_SPEC})
+  orc config [--global | --dir <path>]    view/change settings (interactive menu)
+    orc config list                       print effective config (default vs override)
+    orc config set <key> <value>          validate + write one setting
+    orc config reset [key]                revert one key (or all) to defaults
+    orc config path                       print the override file location
   orc where [--global | --dir <path>]     show target paths
   orc --help
 
@@ -354,6 +634,9 @@ switch (cmd) {
     break;
   case "upgrade":
     upgrade();
+    break;
+  case "config":
+    config();
     break;
   case "where":
     where();

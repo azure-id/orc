@@ -51,6 +51,7 @@ orc init            # install into ./.claude          (this project)
 orc init --global   # install into ~/.claude          (all projects)
 orc update          # re-copy this package's files (offline; local only)
 orc upgrade         # fetch the LATEST package, then apply it (this pulls a new version)
+orc config          # view/change settings (interactive; zero model tokens)
 orc where           # print the target paths
 orc --help
 ```
@@ -144,17 +145,6 @@ multiple sessions. `orc` and `orc-mini` consult the wiki when it exists,
 sharpening their planning and scoring; when it's absent they behave exactly as
 before.
 
-### `/orc-config` — reachable configuration
-Views and changes every ORC knob without hand-editing `config.md`. Run it with no
-arguments for a guided menu that shows each setting's current value (and whether
-it's a default or your override), explains it in plain language, and recommends a
-value — or use `/orc-config <key> <value>` directly and `/orc-config reset` to
-revert. Your choices are written to an update-safe `.claude/orc.config.yaml`
-override that `orc update` never clobbers; `config.md` stays the shipped defaults.
-Common knobs (wave size, pause cadence, scoring bands, scout count, default
-analysis depth) are offered first; risky ones (like the orchestrator model, which
-can break the model-tier ladder) sit behind a warning.
-
 ---
 
 ## How model selection works (and how to verify it)
@@ -196,7 +186,9 @@ Because that rule is so easy to trip, `orc init` installs a guard into your
 
 ---
 
-## Configuration (`skills/orc/config.md`)
+## Configuration (`orc config`)
+
+The knobs (shipped defaults in `skills/orc/config.md`):
 
 - `max_wave_tasks` — parallel tasks per wave (default 3; hard cap).
 - `batch_pause_every` — waves between stop-and-continue pauses (default 2).
@@ -205,9 +197,22 @@ Because that rule is so easy to trip, `orc init` installs a guard into your
 - `default_analysis_depth` — the analyst depth gate's default (standard/deep).
 - artifact locations and the report-out target.
 
-Any value can be overridden for a single run without editing the file — or set
-persistently and safely with **`/orc-config`**, which writes a
-`.claude/orc.config.yaml` override that survives `orc update`.
+Change them with the **`orc config`** CLI — deterministic terminal I/O, so editing
+costs **zero model tokens** (nothing is loaded into a Claude session):
+
+```bash
+orc config                    # interactive menu — shows each value + default/override
+orc config list               # print the effective config
+orc config set max_scouts 5   # validate + write one setting
+orc config reset max_scouts   # revert one key (omit key to reset all)
+orc config path               # where the override file lives
+```
+
+Your changes are written to an update-safe `.claude/orc.config.yaml` override that
+`orc update`/`orc upgrade` never clobber; `config.md` stays the shipped defaults.
+Common knobs are offered first; risky ones (like `orchestrator_model`, which can
+break the model-tier ladder) validate and warn. Add `--global` to edit `~/.claude`.
+Any value can also still be overridden for a single run in-session.
 
 ---
 
@@ -221,11 +226,10 @@ templates/
 │   ├── orc-verify/    standalone git-diff verify
 │   ├── orc-wiki/      project knowledge-base builder
 │   ├── orc-analyze/   System Analyst — doc-optional, evidence-backed (+ report templates, spec schema)
-│   ├── orc-analyze-mini/  fast-lane analyst
-│   └── orc-config/    reachable config editor (writes update-safe override)
-├── commands/          /orc /orc-mini /orc-analyze /orc-plan /orc-verify /orc-wiki /orc-config
+│   └── orc-analyze-mini/  fast-lane analyst
+├── commands/          /orc /orc-mini /orc-analyze /orc-plan /orc-verify /orc-wiki
 └── agents/            single-role, model-pinned subagents (+ read-only scout) + MODEL-MAPPING.md
-bin/cli.js             installer (init / update / upgrade / where)
+bin/cli.js             installer + config editor (init / update / upgrade / config / where)
 ```
 
 The `orc` skill is a thin **spine** that loads references and subskills only when

@@ -7,13 +7,15 @@ run start. Override any value for a single run without editing the file.
 
 At run start, resolve every key as: **default (this file), then the user override
 on top.** The override lives at `.claude/orc.config.yaml` (project `.claude/`
-root), holds ONLY the keys the user changed, and is written exclusively by
-`/orc-config`. It sits OUTSIDE `templates/`, so `orc update` never clobbers it.
-If the override file is absent, use these defaults unchanged. A per-run inline
+root), holds ONLY the keys the user changed, and is written exclusively by the
+**`orc config`** CLI. It sits OUTSIDE `templates/`, so `orc update` never clobbers
+it. If the override file is absent, use these defaults unchanged. A per-run inline
 override still wins over both.
 
-> Users should not hand-edit this file — run **`/orc-config`** for a guided,
-> validated editor that writes the override safely.
+> Config editing is a CLI concern, not a slash command — it's pure file I/O, so
+> it runs deterministically with zero model tokens. Users run **`orc config`**
+> (interactive menu) or `orc config set <key> <value>` in their terminal; this
+> skill only READS the resolved values at run start.
 
 ```yaml
 # --- Wave grouping ---

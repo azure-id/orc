@@ -111,7 +111,7 @@ Sonnet (the original "wrong model" bug).
 
 Resolve config at the start of every run: read `config.md` defaults, then merge
 the user override `.claude/orc.config.yaml` on top (see config.md's "Config
-resolution" rule; the override is written by `/orc-config` and survives
+resolution" rule; the override is written by the `orc config` CLI and survives
 `orc update`). It provides `max_wave_tasks` (default 3 — hard cap on parallel
 tasks per wave), `batch_pause_every` (default 2), `max_scouts` (default 3 — cap
 on deep-analysis scouts), `default_analysis_depth` (default standard), and the
