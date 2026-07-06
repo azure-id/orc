@@ -73,6 +73,20 @@ newer version exists, so you'll notice without asking. The check hits the source
 hammers the network), and is **fail-silent** offline. When it flags an update,
 `orc upgrade` pulls and applies it. Opt out entirely with `ORC_NO_UPDATE_CHECK=1`.
 
+**You don't even have to run a command.** The same nudge surfaces *inside Claude
+Code*, through ORC's hooks — with **zero model tokens**, since hooks are scripts
+Claude Code runs, not model turns:
+
+- When you invoke **`/orc`**, the `PreToolUse` guard checks the cache and shows a
+  `systemMessage` — "orc X available, run `orc upgrade`" — displayed to you, not
+  added to the model's context.
+- The **statusline** appends a `⬆ orc X` hint whenever a newer version is known
+  (read straight from the cache — no network on that path).
+
+`orc init`/`update`/`upgrade` stamp the installed version into
+`.claude/hooks/orc-version.json` so the hooks know what to compare against; the
+guard refreshes the shared 24h cache when you launch `/orc`.
+
 ### Updating to a new version
 
 `orc update` only re-copies whatever is **already installed** — it never reaches

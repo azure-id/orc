@@ -105,6 +105,14 @@ function installGuards(claudeDir) {
     fs.copyFileSync(path.join(SRC_HOOKS, file), path.join(hooksDest, file));
     console.log(`  add   hooks/${file}`);
   }
+  // Stamp the installed payload version so the hooks can nudge when a newer orc
+  // is available (compared against the cached latest). Regenerated every install.
+  try {
+    fs.writeFileSync(
+      path.join(hooksDest, "orc-version.json"),
+      JSON.stringify({ version: currentVersion() }) + "\n"
+    );
+  } catch (_) {}
 
   const guardCmd = nodeCmd(path.join(hooksDest, "orc-effort-guard.js"));
   const statusCmd = nodeCmd(path.join(hooksDest, "orc-statusline.js"));

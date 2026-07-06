@@ -18,7 +18,23 @@
  *
  * Contract: read PreToolUse JSON from stdin. Exit 0 = allow. Exit 2 = block
  * the tool call and show stderr to Claude, which relays it to the user.
+ *
+ * Also surfaces a "newer orc version available" nudge here — this hook fires
+ * exactly when /orc is invoked, so it's the natural place to tell the user
+ * without them running `orc version`. On allow it emits a `systemMessage`
+ * (shown to the user, NOT added to model context → zero tokens); on block it
+ * appends the nudge to the block reason. Version check is cached 24h and
+ * fail-silent. (systemMessage handling may vary by Claude Code version — verify
+ * with /doctor if you don't see it; the statusline shows it regardless.)
  */
+
+// Shared update-check helper (sibling file). Degrade gracefully if absent.
+let updater = null;
+try {
+  updater = require("./orc-update-lib.js");
+} catch (_) {
+  updater = null;
+}
 
 let raw = "";
 process.stdin.on("data", (c) => (raw += c));
@@ -42,15 +58,30 @@ process.stdin.on("end", () => {
   const effort = String(
     (data.effort && data.effort.level) || process.env.CLAUDE_EFFORT || ""
   ).toLowerCase();
+  const installed = updater ? updater.installedVersion(__dirname) : null;
 
-  if (effort === "high") process.exit(0); // requirement met
+  const decide = (nudge) => {
+    if (effort === "high") {
+      // Requirement met — allow. Surface a version nudge if one exists.
+      if (nudge) {
+        try {
+          process.stdout.write(JSON.stringify({ systemMessage: nudge }));
+        } catch (_) {}
+      }
+      process.exit(0);
+    }
 
-  process.stderr.write(
-    "\n⛔ ORC blocked — the orchestrator must run at HIGH effort" +
-      (effort ? ` (current effort: ${effort}).` : " (effort not detected).") +
-      "\n   Switch this session to Opus 4.8 at high effort, then re-run /orc." +
-      "\n   Run the MAIN session on Opus — subagents cannot exceed the main tier," +
-      "\n   so on a lower tier the Opus executors silently downgrade.\n"
-  );
-  process.exit(2);
+    process.stderr.write(
+      "\n⛔ ORC blocked — the orchestrator must run at HIGH effort" +
+        (effort ? ` (current effort: ${effort}).` : " (effort not detected).") +
+        "\n   Switch this session to Opus 4.8 at high effort, then re-run /orc." +
+        "\n   Run the MAIN session on Opus — subagents cannot exceed the main tier," +
+        "\n   so on a lower tier the Opus executors silently downgrade.\n" +
+        (nudge ? "\n" + nudge + "\n" : "")
+    );
+    process.exit(2);
+  };
+
+  if (updater) updater.refreshAndNudge(installed, decide);
+  else decide(null);
 });
