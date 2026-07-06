@@ -591,8 +591,149 @@ function where() {
   console.log(
     "config   →",
     path.join(claudeDir, "orc.config.yaml"),
-    "(user overrides via /orc-config; update-safe)"
+    "(user overrides via `orc config`; update-safe)"
   );
+}
+
+// ---------------------------------------------------------------------------
+// Version + update check. Current version = this package's package.json. Latest
+// = the raw package.json on the install source's default branch (that's what
+// `orc upgrade` would pull). Cached 24h in ~/.orc-update-check.json, fail-silent
+// offline, opt out with ORC_NO_UPDATE_CHECK=1.
+// ---------------------------------------------------------------------------
+
+const UPDATE_URL =
+  process.env.ORC_VERSION_URL ||
+  "https://raw.githubusercontent.com/azure-id/orc/main/package.json";
+const CACHE_FILE = path.join(os.homedir(), ".orc-update-check.json");
+const CHECK_TTL_MS = 24 * 60 * 60 * 1000;
+
+function currentVersion() {
+  try {
+    return require(path.join(PKG_ROOT, "package.json")).version || "0.0.0";
+  } catch (_) {
+    return "0.0.0";
+  }
+}
+
+function parseSemver(v) {
+  const m = String(v).trim().replace(/^v/, "").match(/^(\d+)\.(\d+)\.(\d+)/);
+  return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : null;
+}
+function semverGt(a, b) {
+  const x = parseSemver(a);
+  const y = parseSemver(b);
+  if (!x || !y) return false;
+  for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] > y[i];
+  return false;
+}
+
+// Zero-dep HTTPS GET → parsed JSON (or null). Bounded timeout, one redirect hop.
+function httpsGetJson(url, timeoutMs) {
+  return new Promise((resolve) => {
+    let settled = false;
+    const done = (v) => {
+      if (!settled) {
+        settled = true;
+        resolve(v);
+      }
+    };
+    try {
+      const https = require("https");
+      const req = https.get(
+        url,
+        { headers: { "User-Agent": "orc-cli" } },
+        (res) => {
+          if (
+            res.statusCode >= 300 &&
+            res.statusCode < 400 &&
+            res.headers.location
+          ) {
+            res.resume();
+            httpsGetJson(res.headers.location, timeoutMs).then(done);
+            return;
+          }
+          if (res.statusCode !== 200) {
+            res.resume();
+            return done(null);
+          }
+          let data = "";
+          res.on("data", (c) => (data += c));
+          res.on("end", () => {
+            try {
+              done(JSON.parse(data));
+            } catch (_) {
+              done(null);
+            }
+          });
+        }
+      );
+      req.on("error", () => done(null));
+      req.setTimeout(timeoutMs, () => {
+        req.destroy();
+        done(null);
+      });
+    } catch (_) {
+      done(null);
+    }
+  });
+}
+
+function readCache() {
+  try {
+    return JSON.parse(fs.readFileSync(CACHE_FILE, "utf8"));
+  } catch (_) {
+    return null;
+  }
+}
+function writeCache(obj) {
+  try {
+    fs.writeFileSync(CACHE_FILE, JSON.stringify(obj));
+  } catch (_) {}
+}
+
+const updateCheckDisabled = () =>
+  process.env.ORC_NO_UPDATE_CHECK === "1" || process.env.CI === "true";
+
+// Latest version, honoring the 24h cache. force=true ignores the TTL.
+async function getLatestVersion({ force }) {
+  const cache = readCache();
+  const fresh = cache && Date.now() - (cache.checkedAt || 0) < CHECK_TTL_MS;
+  if (!force && fresh) return cache.latest || null;
+  const pkg = await httpsGetJson(UPDATE_URL, 2000);
+  const latest = pkg && pkg.version ? pkg.version : cache ? cache.latest : null;
+  writeCache({ checkedAt: Date.now(), latest });
+  return latest;
+}
+
+// One-line nudge appended to normal commands. Uses the cache (refreshing at most
+// once/24h). Never throws, never blocks meaningfully when offline.
+async function maybeNudge() {
+  if (updateCheckDisabled()) return;
+  try {
+    const latest = await getLatestVersion({ force: false });
+    const cur = currentVersion();
+    if (latest && semverGt(latest, cur)) {
+      console.log(
+        `\n⬆  orc ${latest} is available (you have ${cur}). Run \`orc upgrade\` to update.`
+      );
+    }
+  } catch (_) {}
+}
+
+// `orc version` — always live-checks (bounded), so users can force a check.
+async function version() {
+  const cur = currentVersion();
+  console.log(`orc ${cur}`);
+  if (updateCheckDisabled()) return;
+  const latest = await getLatestVersion({ force: true });
+  if (!latest) {
+    console.log("(couldn't check for updates — offline or source unreachable)");
+  } else if (semverGt(latest, cur)) {
+    console.log(`⬆  newer version available: ${latest} — run \`orc upgrade\``);
+  } else {
+    console.log("✓ up to date");
+  }
 }
 
 function help() {
@@ -609,6 +750,7 @@ Usage:
     orc config reset [key]                revert one key (or all) to defaults
     orc config path                       print the override file location
   orc where [--global | --dir <path>]     show target paths
+  orc version                             print installed version + check for a newer one
   orc --help
 
 Targets:
@@ -625,30 +767,41 @@ update vs upgrade:
 Skills installed: ${listSkillNames().join(", ")}`);
 }
 
-switch (cmd) {
-  case "init":
-    install({ overwrite: false });
-    break;
-  case "update":
-    install({ overwrite: true });
-    break;
-  case "upgrade":
-    upgrade();
-    break;
-  case "config":
-    config();
-    break;
-  case "where":
-    where();
-    break;
-  case "--help":
-  case "-h":
-  case "help":
-  case undefined:
-    help();
-    break;
-  default:
-    console.error(`Unknown command: ${cmd}\n`);
-    help();
-    process.exit(1);
-}
+(async () => {
+  switch (cmd) {
+    case "init":
+      install({ overwrite: false });
+      await maybeNudge();
+      break;
+    case "update":
+      install({ overwrite: true });
+      await maybeNudge();
+      break;
+    case "upgrade":
+      upgrade(); // already fetching the latest — no nudge
+      break;
+    case "config":
+      config();
+      break;
+    case "where":
+      where();
+      await maybeNudge();
+      break;
+    case "version":
+    case "--version":
+    case "-v":
+      await version();
+      break;
+    case "--help":
+    case "-h":
+    case "help":
+    case undefined:
+      help();
+      await maybeNudge();
+      break;
+    default:
+      console.error(`Unknown command: ${cmd}\n`);
+      help();
+      process.exit(1);
+  }
+})();

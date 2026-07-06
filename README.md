@@ -52,9 +52,26 @@ orc init --global   # install into ~/.claude          (all projects)
 orc update          # re-copy this package's files (offline; local only)
 orc upgrade         # fetch the LATEST package, then apply it (this pulls a new version)
 orc config          # view/change settings (interactive; zero model tokens)
+orc version         # print installed version + check for a newer one
 orc where           # print the target paths
 orc --help
 ```
+
+### Staying up to date
+
+`orc version` prints what you have and checks the source for a newer release:
+
+```text
+$ orc version
+orc 0.2.1
+⬆  newer version available: 0.3.0 — run `orc upgrade`
+```
+
+Normal commands (`orc init`, `orc update`, …) also show a one-line nudge when a
+newer version exists, so you'll notice without asking. The check hits the source's
+`package.json` over HTTPS, is **cached for 24h** (so it never slows you down or
+hammers the network), and is **fail-silent** offline. When it flags an update,
+`orc upgrade` pulls and applies it. Opt out entirely with `ORC_NO_UPDATE_CHECK=1`.
 
 ### Updating to a new version
 
