@@ -35,10 +35,13 @@ does not implement, review, or verify. Output contract is orc's
 
 ## Config
 
-Read `config.md` for `max_wave_tasks` and `batch_pause_every` — NOT to apply them
-yourself (the orchestrator does, after hand-back), but so the plan you produce is
-sensible for that wave cap (e.g. don't design 8 mutually-independent tasks
-expecting all 8 to run at once when the cap is 3).
+Resolve `max_wave_tasks` and `batch_pause_every` the standard way — `config.md`
+defaults with the user override `.claude/orc.config.yaml` merged on top per key
+(see config.md's "Config resolution" rule); never read the `config.md` default
+when the override sets that key. NOT to apply them yourself (the orchestrator
+does, after hand-back), but so the plan you produce is sensible for that wave cap
+(e.g. don't design 8 mutually-independent tasks expecting all 8 to run at once
+when the cap is 3).
 
 ## Procedure (defend against bad plans)
 

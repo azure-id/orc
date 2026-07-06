@@ -5,11 +5,18 @@ run start. Override any value for a single run without editing the file.
 
 ## Config resolution (defaults ← override file)
 
-At run start, resolve every key as: **default (this file), then the user override
-on top.** The override lives at `.claude/orc.config.yaml` (project `.claude/`
-root), holds ONLY the keys the user changed, and is written exclusively by the
-**`orc config`** CLI. It sits OUTSIDE `templates/`, so `orc update` never clobbers
-it. If the override file is absent, use these defaults unchanged. A per-run inline
+At run start, resolve **each key independently** as: **default (this file), then
+the user override on top.** The override lives at `.claude/orc.config.yaml`
+(project `.claude/` root), holds ONLY the keys the user changed, and is written
+exclusively by the **`orc config`** CLI. It sits OUTSIDE `templates/`, so `orc
+update` never clobbers it.
+
+Per-key means: a key present in `orc.config.yaml` uses the override value; a key
+NOT present there falls back to this file's default — independently, key by key.
+Example: if the override contains only `max_wave_tasks: 5`, then `max_wave_tasks`
+is 5 and every other key (`batch_pause_every`, `rubric_bands`, `max_scouts`,
+`default_analysis_depth`, …) still comes from this file's defaults. If the
+override file is absent entirely, use these defaults unchanged. A per-run inline
 override still wins over both.
 
 > Config editing is a CLI concern, not a slash command — it's pure file I/O, so
