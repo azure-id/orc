@@ -3,3 +3,6 @@ node_modules/
 .DS_Store
 CLAUDE.md
 knowledge.md
+# Working-process docs / scratch — never committed (see CLAUDE.md commit rule)
+docs/
+.superpowers/
