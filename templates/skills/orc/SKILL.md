@@ -83,6 +83,18 @@ Confirm you are running as **Opus 4.8 at high effort** before anything else.
     each, read-only — and re-dispatch the analyst WITH their evidence bundles for
     pass 2. Same "return a request → you re-slice → re-dispatch" shape as
     `needs_context`. You never analyze; you only dispatch and relay.
+- `context-combiner` (Context Combiner, Opus 4.8 high) — merges 2+ RELATED,
+  already-confirmed analyses (same run) into ONE combined requirement-spec before
+  build. **Tracking the analysis set is YOURS.** Hold the confirmed spec paths of
+  every analysis this run in run state (survives checkpoint/resume). When the user
+  picks "pass to context-combiner" at orc-analyze's Phase F (only offered once 2+
+  analyses exist), dispatch `orc-context-combiner-opus-4-8-high` with that list.
+  It returns `combined_spec_path` + `handoff_ready` (or `combined: false` if the
+  user chose keep-separate at the combiner's relatedness challenge — then fall
+  back to per-analysis stop/build). Offer the build option ONLY when
+  `handoff_ready` is true; on build, continue at Phase 1 with the combined spec
+  exactly like a single requirement-spec. You never combine; you only track,
+  dispatch, and relay. Full lane only.
 - `subskills/orc-planner` (Requirement Planner, Opus 4.8 medium) — request or
   analyst-spec → planning-output. A Phase 1 planner option; own command to plan
   only. Mini: `subskills/orc-planner-mini` (Sonnet 5 high) for orc-mini.
@@ -98,9 +110,9 @@ the preset in `config.md` (chosen by `rubric_bands`: narrow 2–5 / wide 6–8).
   with the task slice. (e.g. score 82, narrow preset → orc-executor-opus-4-7-med;
   wide preset → orc-executor-opus-4-8-high.)
 - Fixed roles dispatch their named agent: analyst → orc-system-analyst-opus-4-8-high,
-  planner → orc-planner-opus-4-8-med, review → orc-reviewer-opus-4-8-high,
-  verify → orc-verifier-opus-4-8-high. Mini lane → orc-mini-analyst / orc-mini-planner
-  / orc-executor-sonnet-5-high.
+  combiner → orc-context-combiner-opus-4-8-high, planner → orc-planner-opus-4-8-med,
+  review → orc-reviewer-opus-4-8-high, verify → orc-verifier-opus-4-8-high.
+  Mini lane → orc-mini-analyst / orc-mini-planner / orc-executor-sonnet-5-high.
 
 See `.claude/agents/MODEL-MAPPING.md`. TWO caveats: model IDs/effort field are
 best-guess — verify with `/agents`; and a subagent's model can't exceed the MAIN
