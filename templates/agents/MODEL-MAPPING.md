@@ -27,6 +27,7 @@ Score→executor mapping lives in config.md (narrow vs wide preset).
 | orc-mini-analyst-sonnet-5-high | claude-sonnet-5 | high | mini analysis |
 | orc-mini-planner-sonnet-5-high | claude-sonnet-5 | high | mini planning |
 | orc-scout-sonnet-4-6-high | claude-sonnet-4-6 | high | deep-analysis code scout (read-only) |
+| orc-context-combiner-opus-4-8-high | claude-opus-4-8 | high | combine 2+ related analyses (full lane) |
 
 Mini execution reuses orc-executor-sonnet-5-high.
 
