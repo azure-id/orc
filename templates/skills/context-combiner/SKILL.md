@@ -59,7 +59,10 @@ Compute overlap across sources:
 If overlap is strong → proceed. If weak/empty → CHALLENGE (recommended-option):
 "These share {N} files / no overlapping requirements — combine anyway
 (recommended only if you're sure) or keep separate?" Record the verdict in the
-report's Relatedness check.
+report's Relatedness check. If the user chooses **keep separate**, STOP the run:
+do NOT proceed to Phase C or write any `combined-*` artifact — return to the
+orchestrator with `combined: false` (the analyses stay separate; the orchestrator
+falls back to per-analysis stop/build).
 
 ## Phase C — Reconcile sources against each other
 Detect and classify cross-source issues:
@@ -86,13 +89,19 @@ Wait, record, continue. Never batch. Keep going until nothing is unresolved.
 
 ## Phase F — Return & branch
 Return to the orchestrator: `combined_report_path`, `combined_spec_path`,
-`combined_from[]`, `conflicts_resolved[]`, `handoff_ready: bool`. The
-orchestrator then offers the user (plain language):
+`combined_from[]`, `conflicts_resolved[]`, `handoff_ready: bool` (open/unresolved
+items are NOT a return field — they live in the report's Open questions section,
+reachable via `combined_report_path`). The orchestrator then offers the user
+(plain language):
 - **Stop here** → COPY `combined-report.md` OUT to `{report_out_dir}/combined-{name}/`
   and stop.
 - **Pass to orc build** → hand `combined-requirement-spec.md` back to the
   orchestrator, which continues at Phase 1 (Requirement Planner) and runs the
   full pipeline. The combiner NEVER builds directly.
+
+**Gate the build option on `handoff_ready`:** if `handoff_ready` is false (an
+unresolved conflict remains, per Hard rule 6), the orchestrator offers ONLY
+**Stop here** — the build option is withheld until the open conflict is resolved.
 
 ## No mini variant
 Full lane only. `orc-analyze-mini` / `orc-mini` do not use the combiner.
