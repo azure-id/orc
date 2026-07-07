@@ -60,6 +60,9 @@ the code does.
 - If DEEP pass 1: `scout_plan` (list of {area, queries}), `phase: scout-plan`.
 - Otherwise: report_path, spec_path, mode, depth, scope,
   open_questions_resolved[], assumptions_resolved[], handoff_ready: bool.
-Then the orchestrator offers: report-only (copy report OUT to project root) or
-take-into-build (hand both files back to the orchestrator for Phase 1 planning).
-Never build directly. Never spawn subagents.
+Then the orchestrator offers a multi-analyze menu: report-only (copy report OUT
+to project root), take-into-build (hand both files back for Phase 1 planning), or
+analyze-another-RELATED-doc. Once 2+ related analyses exist, the menu adds
+"pass to context-combiner" — the orchestrator dispatches
+orc-context-combiner-opus-4-8-high to merge them before build. You NEVER build
+directly, NEVER combine, and NEVER spawn subagents.
