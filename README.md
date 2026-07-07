@@ -158,6 +158,17 @@ draws up), verify-every-claim, more clarifying questions, and implementation
 options with trade-offs and risks. Outputs a human report plus a derived machine
 spec; you choose to keep it as a report or take it straight into a build.
 
+**Multiple related docs → one build (context-combiner).** After an analysis you
+can analyze **another related doc** in the same scope instead of stopping. Once
+two or more related analyses exist, ORC offers **context-combiner** — a dispatched
+Opus 4.8 subagent that merges them into a single deduped, conflict-resolved
+requirement spec. It first **verifies the analyses actually overlap** (shared
+files, requirements, scope) and challenges you if they look unrelated, then
+resolves cross-scope conflicts and duplicates one issue at a time until the
+combined context is clear. The merged spec is a strict superset of a normal
+requirement spec, so it feeds the same build pipeline unchanged. You then keep the
+combined context as files or take it straight into a build.
+
 ### `/orc-plan` — the Requirement Planner
 Turns a detailed request or an analyst spec into a grounded, right-sized,
 dependency-checked task plan. Grounds file paths against the repo when run
@@ -257,7 +268,8 @@ templates/
 │   ├── orc-verify/    standalone git-diff verify
 │   ├── orc-wiki/      project knowledge-base builder
 │   ├── orc-analyze/   System Analyst — doc-optional, evidence-backed (+ report templates, spec schema)
-│   └── orc-analyze-mini/  fast-lane analyst
+│   ├── orc-analyze-mini/  fast-lane analyst
+│   └── context-combiner/  merges 2+ related analyses into one combined spec (+ schemas)
 ├── commands/          /orc /orc-mini /orc-analyze /orc-plan /orc-verify /orc-wiki
 └── agents/            single-role, model-pinned subagents (+ read-only scout) + MODEL-MAPPING.md
 bin/cli.js             installer + config editor (init / update / upgrade / config / where)
