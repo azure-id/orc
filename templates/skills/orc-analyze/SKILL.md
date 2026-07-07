@@ -140,21 +140,40 @@ the answer, continue. Never batch. Scope + accuracy only — not task breakdown.
 2. Derive `requirement-spec.md` FROM the confirmed report
    (schemas/requirement-spec.md) in the same internal folder.
 
-## Phase F — Branch (plain-language choice)
+## Phase F — Branch (plain-language choice, multi-analyze loop)
 
-Artifacts are written INTERNALLY to `orc/analyzer/{name}/`. Then ask, in natural
-terms:
-- **Report only** → COPY the human `report.md` OUT to the project root at
-  `{report_out_dir}/{name}/` (config, default `analyst_report/`) so the user can
-  read it, and stop. "Analysis complete — I've put the report in
-  `analyst_report/{name}/` for you. Leaving it as a report for now."
-- **Take into build** → hand BOTH internal files back to the ORCHESTRATOR, which
-  continues at Phase 1 with the Requirement Planner, and THEN runs the full
-  pipeline (Phase 2 scoring + effort table + batch-pause ask, Phase 3
-  wave-grouping capped at max_wave_tasks with checkpoints, through ship). The
-  analyst NEVER builds directly. "Scope is confirmed and grounded against your
-  code. I'll hand this to planning and take it through the full build — shall I
-  continue?"
+Artifacts are written INTERNALLY to `orc/analyzer/{name}/`. After EACH analysis
+completes, the orchestrator offers a plain-language menu. The options shown
+depend on how many analyses exist this run.
+
+### After the 1st analysis (one analysis exists)
+1. **Stop here** → COPY `report.md` OUT to `{report_out_dir}/{name}/` and stop.
+2. **Pass to build** → hand both internal files to the ORCHESTRATOR (Phase 1
+   planner → full pipeline). The analyst NEVER builds directly.
+3. **Analyze another RELATED doc** → the next analysis must be context-related to
+   this one so the two can be combined later. Go to the relatedness gate.
+
+### Relatedness gate (before the next analysis starts)
+Ask: "Is this related context (same scope, so it can be combined)?"
+- **Yes** → run the next analysis (a normal orc-analyze pass), then show the
+  "2+ analyses" menu below.
+- **No** → combining doesn't apply. Offer a small choice: (a) take the
+  already-completed analysis #1 into orc build, (b) analyze the new doc as a
+  STANDALONE analysis that goes to build on its own, or (c) stop.
+
+### After the 2nd+ analysis (2+ analyses exist)
+1. **Stop here** → COPY every report OUT and stop.
+2. **Pass to context-combiner** → the orchestrator dispatches
+   `orc-context-combiner-opus-4-8-high` with the list of confirmed spec paths for
+   ALL analyses this run. It verifies relatedness, resolves conflicts with the
+   user, and writes `combined-report.md` + `combined-requirement-spec.md`.
+3. **Analyze another related doc** → back to the relatedness gate (loop).
+
+### After the combiner returns
+The orchestrator offers:
+1. **Stop here** → the combined `.md` files are copied OUT for the user.
+2. **Pass to orc build** → the combined spec goes to Phase 1 planning and the
+   full pipeline.
 
 ## Mini variant
 
