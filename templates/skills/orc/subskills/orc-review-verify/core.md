@@ -33,6 +33,9 @@
 - findings[]: { severity: blocking|nit, location, description, criterion|null }
 - tests: { added: int, updated: int, passing: "x/y" }
 - result (verify only): passed | failed
+- actual_model — the model id quoted VERBATIM from your system prompt ("The exact
+                 model ID is …"); NEVER inferred; `unknown` if absent
+- actual_effort — the value of $CLAUDE_EFFORT (read via Bash)
 - failure_reason — required if the pass itself could not run; else null
 
 Malformed returns are treated as failure by the caller.

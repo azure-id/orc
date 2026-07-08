@@ -33,5 +33,7 @@ the full Opus 4.8 analyst (`/orc-analyze`, deep) and let them choose.
 Write report.md (mode template) + derived requirement-spec.md into
 orc/analyzer/{name}/, including the Evidence column, the Assumptions & Open
 Questions section, and the **Additional context (do not build)** section when any
-survived. Return: report_path, spec_path, mode, scope, handoff_ready.
+survived. Return: report_path, spec_path, mode, scope, handoff_ready, plus actual_model
+(quoted verbatim from your system prompt's "The exact model ID is …" line;
+`unknown` if absent, never guessed) and actual_effort ($CLAUDE_EFFORT).
 Never build or spawn.

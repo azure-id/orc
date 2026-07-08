@@ -49,6 +49,8 @@ conflict.
 ## Return
 - combined_report_path, combined_spec_path, combined_from[], conflicts_resolved[],
   handoff_ready: bool (or `combined: false` when the user chose keep-separate).
+- actual_model (quoted VERBATIM from your system prompt's "The exact model ID is …"
+  line; `unknown` if absent, never a guess), actual_effort ($CLAUDE_EFFORT).
 Then the orchestrator offers: stop-here (copy combined report OUT to project
 root) or pass-to-build (hand the combined spec back for Phase 1 planning) — but
 the build option is offered ONLY when handoff_ready is true. Never

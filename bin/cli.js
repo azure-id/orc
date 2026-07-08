@@ -172,6 +172,33 @@ function installGuards(claudeDir) {
     );
   }
 
+  // 3) Trace hook — PreToolUse(Task) SPAWN + SubagentStop RETURN skeleton.
+  //    Idempotent; non-destructive. The hook self-gates (writes ONLY when
+  //    logging:true AND a run pointer exists), so wiring it is always safe.
+  const traceCmd = nodeCmd(path.join(hooksDest, "orc-trace.js"));
+  const wireTrace = (arrName, matcher) => {
+    settings.hooks[arrName] = settings.hooks[arrName] || [];
+    let found = false;
+    for (const entry of settings.hooks[arrName]) {
+      for (const h of entry.hooks || []) {
+        if (typeof h.command === "string" && h.command.includes("orc-trace")) {
+          h.command = traceCmd; // keep the path current on update
+          found = true;
+        }
+      }
+    }
+    if (!found) {
+      const entry = { hooks: [{ type: "command", command: traceCmd }] };
+      if (matcher) entry.matcher = matcher;
+      settings.hooks[arrName].push(entry);
+      console.log(`  add   settings.json → ${arrName} trace hook`);
+    } else {
+      console.log(`  upd   settings.json → ${arrName} trace hook path`);
+    }
+  };
+  wireTrace("PreToolUse", "Task");
+  wireTrace("SubagentStop", null);
+
   fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + "\n");
 }
 
@@ -233,6 +260,8 @@ function install({ overwrite }) {
   console.log("    and run your MAIN session on Opus (see agents/MODEL-MAPPING.md).");
   console.log("  • A PreToolUse guard now HARD-BLOCKS /orc unless the session is at");
   console.log("    high effort; the statusline warns when the model isn't Opus 4.8.");
+  console.log("  • Behavior-trace logging is OFF by default. To capture run traces");
+  console.log("    for skill review: `orc config set logging true` (writes .claude/orc/logs/).");
 }
 
 // Reconstruct the target flags (--global / --dir X) to pass through to the
@@ -381,6 +410,8 @@ const CONFIG_META = [
   { key: "rubric_bands", def: 5, tier: "common", validate: vRange(2, 8), options: [2, 3, 4, 5, 6, 7, 8], desc: "Scoring granularity (2-5 narrow preset, 6-8 wide preset)." },
   { key: "max_scouts", def: 3, tier: "common", validate: vInt(1), options: [1, 2, 3, 4, 5], desc: "Max parallel code scouts fanned out in deep analysis." },
   { key: "default_analysis_depth", def: "standard", tier: "common", validate: vEnum("standard", "deep"), options: ["standard", "deep"], desc: "Analyst depth gate default — deep = wider sweep + scouts (run still confirms)." },
+  { key: "logging", def: false, tier: "common", validate: vEnum("true", "false"), options: ["true", "false"], desc: "Write a persistent behavior trace per run (OFF by default; for skill-improvement review)." },
+  { key: "log_dir", def: ".claude/orc/logs", tier: "advanced", validate: vPath, desc: "Persistent trace folder (never auto-deleted)." },
   { key: "analyzer_dir", def: ".claude/skills/orc/analyzer", tier: "advanced", validate: vPath, desc: "Internal analyst artifact dir." },
   { key: "planner_dir", def: ".claude/skills/orc/planner", tier: "advanced", validate: vPath, desc: "Internal planner artifact dir." },
   { key: "report_out_dir", def: "analyst_report", tier: "advanced", validate: vPath, desc: "Project-root copy target on report-only." },

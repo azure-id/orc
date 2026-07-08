@@ -19,6 +19,8 @@ Two files, two jobs:
   "source_branch": "feat/notifications",
   "intent_spec": "run/merchant-notifications/intent-spec.md",
   "batch_pause_every": 2,
+  "logging_enabled": false,        // config.logging — re-anchor the behavior trace on resume
+  "trace_path": null,              // "<log_dir>/<run-slug>-<DDMMYY>.txt" when logging_enabled
   "current_wave": 2,
   "paused": true,
   "pause_trigger": "batch_pause",  // batch_pause | token_limit | phase_transition | crash_guard
@@ -40,7 +42,11 @@ Two files, two jobs:
   "dispatch_log": [
     { "task_id": "T1", "computed_score": 72, "override_score": null,
       "override_reason": null, "model": "sonnet-5", "effort": "medium",
-      "spawned_at": "020726 14:24:01.100" },
+      "spawned_at": "020726 14:24:01.100",
+      // claimed-vs-actual (only when logging_enabled): what the worker reported
+      "actual_model": "claude-sonnet-5", "actual_effort": "medium",
+      "verify": "match" },      // match | downgrade
+
     { "task_id": "T6", "computed_score": 88, "override_score": 62,
       "override_reason": "rubric over-weighted file count; isolated leaf UI",
       "model": "sonnet-5", "effort": "high", "spawned_at": "020726 15:01:22.040" }

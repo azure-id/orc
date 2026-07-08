@@ -32,6 +32,9 @@ never spawn other agents, never work outside your task slice.
 
 ## Return EXACTLY this (orchestrator validates)
 - task_id
+- actual_model — the model id quoted VERBATIM from your system prompt ("The exact
+  model ID is …"); NEVER infer from priors; `unknown` if no such line exists
+- actual_effort — the value of $CLAUDE_EFFORT (read via Bash at start)
 - status: done | failed | partial | needs_context
 - actual_files[] — every file you actually touched (audited vs declared)
 - log_entries[] — cross-cutting decisions, tagged DECISION | CONSTRAINT | INTERFACE

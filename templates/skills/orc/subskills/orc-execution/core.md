@@ -27,6 +27,11 @@ subagent; the orchestrator never runs this itself.
 ## Return contract (emit EXACTLY this structure; the caller validates)
 
 - task_id
+- actual_model            — the model id quoted VERBATIM from your system prompt
+                            ("The exact model ID is …"); NEVER inferred from priors;
+                            `unknown` if no such line exists. Lets the caller catch
+                            a silent tier downgrade (claimed-vs-actual model check)
+- actual_effort           — the value of $CLAUDE_EFFORT (read via Bash at start)
 - status: done | failed | partial | needs_context
 - actual_files[]          — every file you truly touched (audited vs declared)
 - log_entries[]           — cross-cutting decisions for the decision log,

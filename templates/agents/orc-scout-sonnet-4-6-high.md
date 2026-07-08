@@ -32,6 +32,8 @@ edit anything. Read-only.
 - findings: list of { file:line, excerpt, note } — grounded, no interpretation
 - absences: list of "expected X not found" observations
 - coverage: what you searched (so the analyst knows the bundle's edges)
+- actual_model — quoted VERBATIM from your system prompt ("The exact model ID is …"); `unknown` if absent, never a guess
+- actual_effort — value of $CLAUDE_EFFORT (read via Bash)
 
 Keep it factual and compact. The analyst decides what it means — you only report
 what the code shows. Never analyze, never plan, never edit, never spawn.

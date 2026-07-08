@@ -20,6 +20,7 @@ const required = [
   "templates/agents/MODEL-MAPPING.md",
   "templates/hooks/orc-effort-guard.js",
   "templates/hooks/orc-statusline.js",
+  "templates/hooks/orc-trace.js",
 ];
 
 const missing = [];

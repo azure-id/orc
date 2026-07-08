@@ -47,6 +47,10 @@ planner_dir:  .claude/skills/orc/planner
 report_out_dir: analyst_report            # project-root copy target on report-only
 
 orchestrator_model: claude-opus-4-8       # main session; high effort (never downgraded)
+
+# --- Behavior trace logging (for skill improvement; OFF by default) ---
+logging: false                # when true, write a persistent behavior trace per run
+log_dir: .claude/orc/logs     # persistent trace folder — NEVER deleted on completion
 ```
 
 ## Score → model presets (executor agent dispatched by name)
@@ -90,7 +94,7 @@ list of `{min, max, agent}` rows; the orchestrator uses it instead of a preset.
 ## Rules
 - Read at run start via the resolution rule above (defaults ← `orc.config.yaml`
   override). Missing values use defaults (max_wave_tasks 3, batch_pause_every 2,
-  rubric_bands 5, max_scouts 3, default_analysis_depth standard).
+  rubric_bands 5, max_scouts 3, default_analysis_depth standard, logging false).
 - `max_scouts` caps the parallel scouts fanned out in the analyst's DEEP mode
   (never exceeds it, same as max_wave_tasks caps a wave).
 - `default_analysis_depth` only presets the analyst's standard/deep gate — the
@@ -99,3 +103,9 @@ list of `{min, max, agent}` rows; the orchestrator uses it instead of a preset.
   resulting score to a model. More bands = finer score granularity, same model
   set — the preset boundaries define the mapping.
 - max_wave_tasks is a hard cap in wave-grouping.
+- `logging` gates the behavior-trace subsystem (default OFF). When true, the
+  orchestrator follows `references/trace-protocol.md` and the `orc-trace.js` hook
+  writes a persistent `.txt` per run under `log_dir`. When false, the whole trace
+  subsystem is inert — the hook no-ops and the orchestrator emits no markers.
+- `log_dir` is the persistent trace folder; unlike the decision log (`run/…md`,
+  deleted on success) traces are NEVER auto-deleted — post-hoc review is the point.

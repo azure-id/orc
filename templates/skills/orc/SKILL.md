@@ -129,7 +129,34 @@ tasks per wave), `batch_pause_every` (default 2), `max_scouts` (default 3 — ca
 on deep-analysis scouts), `default_analysis_depth` (default standard), and the
 analyzer/planner artifact directories. The user may also override any value for a
 single run. Apply these in Phase 0 (analyst depth gate + scout cap), Phase 2
-(batch-pause) and Phase 3 (wave cap).
+(batch-pause) and Phase 3 (wave cap). It also provides `logging` (default
+`false`) and `log_dir` (default `.claude/orc/logs`) — see the behavior-trace
+section below.
+
+## Behavior trace (opt-in — only when config `logging: true`)
+
+Default OFF. When `logging: true`, follow `references/trace-protocol.md` and
+record the run's behavior to a persistent `.txt` under `log_dir` — for post-hoc
+skill improvement, separate from the decision log and NEVER deleted. When
+`logging: false`, do NONE of this.
+
+- **Run start:** create `log_dir`, write `log_dir/.current` =
+  `<run-slug>-<DDMMYY>.txt`, and store `logging_enabled: true` + `trace_path` in
+  the checkpoint so a resumed run re-anchors. Emit a `PHASE` line at each phase
+  transition. (The `orc-trace.js` hook independently writes `SPAWN`/`RETURN`
+  skeleton lines, immune to compaction.)
+- **Every dispatch:** announce the model to the user, derived from the agent
+  NAME (e.g. "→ claude-opus-4-7 / high"), and emit `SCORE …` + `DISPATCH <agent>
+  :: <task> expect=<model>/<effort>`. Derive the model from the NAME — never pass
+  the coarse `sonnet|opus|haiku` dispatch arg (it can't express 4-7 vs 4-8 and
+  would override the frontmatter pin).
+- **Every return:** read the worker's `actual_model` + `actual_effort`, compare
+  to the expected (name→model table in `config.md`), and emit `VERIFY <task>
+  actual=…/… ✅ MATCH` or `⛔ DOWNGRADE expected=…`. **Surface a downgrade to the
+  user** — it means the main tier capped a pin (the "wrong model" bug). Fold any
+  worker `QUESTION` / `CONTEXT-GAP` markers in as well.
+- **Review/verify:** emit `FINDING blocking=n nit=n` and `VERDICT pass|fail`.
+- **Run end (Phase 8 or abort):** emit `FINISH …` and delete `log_dir/.current`.
 
 ## Sibling skills (separate top-level skills, own slash commands)
 
@@ -150,6 +177,7 @@ single run. Apply these in Phase 0 (analyst depth gate + scout cap), Phase 2
 - Phase 8 → `subskills/orc-pr/SKILL.md` (template: `subskills/orc-pr/pr.md`)
 - Schemas (you own; pass slices only): `schemas/intent-spec.md`,
   `schemas/planning-output.md`, `schemas/checkpoint.md`
+- `logging: true` → `references/trace-protocol.md` (behavior trace; else skip)
 
 ---
 

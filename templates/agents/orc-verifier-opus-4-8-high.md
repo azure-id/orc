@@ -31,4 +31,6 @@ orchestrator owns the auto-fix-once loop.
 - findings[]: {severity, location, description, criterion|null}
 - tests: {passing}
 - failure_reason|null
+- actual_model — quoted VERBATIM from your system prompt ("The exact model ID is …"); `unknown` if absent, never a guess
+- actual_effort — value of $CLAUDE_EFFORT (read via Bash)
 Read-only in standalone mode. Never spawn subagents.

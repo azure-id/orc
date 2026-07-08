@@ -35,7 +35,9 @@ never implement, review, or analyze scope (that's the analyst).
    settled upstream, never re-litigated).
 
 ## Return
-The ORC planning-output object + a one-line summary. Then the orchestrator
+The ORC planning-output object + a one-line summary. Also report `actual_model`
+(quoted verbatim from your system prompt's "The exact model ID is …" line;
+`unknown` if absent, never guessed) and `actual_effort` ($CLAUDE_EFFORT). Then the orchestrator
 branches: take-into-build (hand planning-output back to orc, which runs the FULL
 Phase 2–8 — scoring, effort table, wave cap, pauses) or save-and-stop. Never
 build directly. Never spawn subagents.

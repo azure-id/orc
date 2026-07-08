@@ -239,7 +239,12 @@ The knobs (shipped defaults in `skills/orc/config.md`):
 - `rubric_bands` — scoring granularity 2–8, selecting the narrow/wide preset.
 - `max_scouts` — parallel read-only scouts in deep analysis (default 3).
 - `default_analysis_depth` — the analyst depth gate's default (standard/deep).
-- artifact locations and the report-out target.
+- `logging` — opt-in behavior trace (default OFF). When on, ORC writes a
+  persistent `.txt` per run under `log_dir` (`.claude/orc/logs/`) recording the
+  flow — phases, every spawn plus the model that actually answered
+  (claimed-vs-actual, catching a silent tier downgrade), scores, questions, and
+  review/verify outcomes — for reviewing and improving runs afterward.
+- artifact locations, the report-out target, and the trace `log_dir`.
 
 Change them with the **`orc config`** CLI — deterministic terminal I/O, so editing
 costs **zero model tokens** (nothing is loaded into a Claude session):

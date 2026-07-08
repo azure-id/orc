@@ -71,7 +71,9 @@ the code does.
 ## Return
 - If DEEP pass 1: `scout_plan` (list of {area, queries}), `phase: scout-plan`.
 - Otherwise: report_path, spec_path, mode, depth, scope,
-  open_questions_resolved[], assumptions_resolved[], handoff_ready: bool.
+  open_questions_resolved[], assumptions_resolved[], handoff_ready: bool,
+  actual_model (quoted verbatim from your system prompt's "The exact model ID is
+  …" line; `unknown` if absent, never guessed), actual_effort ($CLAUDE_EFFORT).
 Then the orchestrator offers a multi-analyze menu: report-only (copy report OUT
 to project root), take-into-build (hand both files back for Phase 1 planning), or
 analyze-another-RELATED-doc. Once 2+ related analyses exist, the menu adds
