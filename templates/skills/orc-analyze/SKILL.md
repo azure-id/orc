@@ -5,8 +5,10 @@ description: >
   "analyze this doc for scope X", "analyze this requirement against the code", or
   when a requirement — a document (PDF by path or pasted) OR a plain-language
   request — must be turned into a precise, code-grounded requirement set BEFORE
-  any planning. Bounds scope to exactly what the user asked (recognizes other
-  scopes only to exclude them), maps each requirement to real files with file:line
+  any planning. Bounds the DELIVERABLE to exactly what the user asked (other
+  scopes never become requirements or tasks) while pulling related adjacent scopes
+  in as anchored, non-actionable context so the build understands the scope
+  correctly, maps each requirement to real files with file:line
   evidence, verifies every claim against actual code, and challenges the user
   interactively with recommended options. Offers an opt-in DEEP mode (wider code
   sweep via scouts, verify-every-claim, more questions, alternatives + risks) that
@@ -38,8 +40,18 @@ the user meant.
    every code claim carries `file:line` evidence, OR an explicit `ASSUMPTION` /
    `UNVERIFIED` tag — and every tagged item becomes a clarifying question. The
    Analyst never silently assumes what the user meant or what the code does.
-3. **Recognize-to-exclude.** Other scopes (Y, Z) are recognized only to police
-   the boundary. The written report contains ONLY the requested scope X.
+3. **Recognize-to-exclude-from-build; include-related-as-context.** Two
+   perimeters, not one: the **scope perimeter** (what gets BUILT = X only — Y/Z
+   never become requirements or tasks) and the wider **context perimeter** (what
+   the Analyst READS to get X right). When an adjacent scope has a real dependency
+   on an in-scope requirement, gather it as **anchored, non-actionable context**
+   (rule 3a) — richer, code-grounded understanding downstream, zero scope-bleed.
+3a. **Anchored context (the anti-creep guard).** Every context item MUST name the
+   in-scope requirement it serves + the dependency type (consumes-output /
+   guards-invariant / shares-file / doc-references). No anchor → it's scope-bleed,
+   not context → dropped. Touchpoint-bounded (only the specific field/function/
+   invariant, never all of Y), carries `file:line` evidence, and is labeled
+   non-actionable: read for understanding, NEVER turned into a task.
 4. **Ground against real code.** Every in-scope requirement (or audit row) maps
    to specific files/modules, verified to exist and match, with evidence.
 5. **Challenge with recommended options, one issue at a time.** Each challenge is
@@ -84,8 +96,11 @@ default — the run still confirms.
 ## Phase B — Bound scope
 
 Take the user's scope instruction (X). Identify the source's full scope structure
-internally (X, Y, Z…), isolate X, and set the rest aside — they will NOT appear
-in the output. If the user didn't name a scope, ask (recommended-option form).
+internally (X, Y, Z…), isolate X, and set the rest aside from the **deliverable** —
+Y/Z never become requirements or tasks. If the user didn't name a scope, ask
+(recommended-option form). Adjacent scopes are NOT gone: they may re-enter in
+Phase C as anchored, non-actionable context wherever they have a real dependency
+on an in-scope requirement (rule 3a).
 
 ## Phase C — Reconcile against code (mode-specific)
 
@@ -102,6 +117,14 @@ in the output. If the user didn't name a scope, ask (recommended-option form).
   conflicts-with-existing / underspecified. Anything you cannot ground →
   `ASSUMPTION`/`UNVERIFIED` → clarifying question.
 
+**Anchored context sweep (all modes, both depths).** While reconciling, when an
+in-scope item depends on an adjacent scope (X consumes Y's output, Y's invariant
+guards X, they share a file, or the doc's X-claim references Y), capture the
+specific touchpoint as context: the field/function/invariant, its `file:line`
+evidence, the in-scope requirement it anchors to, and the dependency type. Stay
+touchpoint-bounded — never sweep all of Y. Pulling a context item in is offered as
+a Phase D challenge. Unanchored "context" is scope-bleed and is dropped in Phase E.
+
 Anything unground-able in ANY mode is tagged and becomes a question — never a
 silent guess.
 
@@ -110,8 +133,11 @@ silent guess.
 1. **Pass 1 (scope + scout-plan).** After Phase B, instead of sweeping the repo
    yourself, emit a **scout plan**: a short list of coverage areas, each with
    concrete search queries (e.g. "all call sites of `authToken`", "tests touching
-   checkout", "config for rate limits"). Return the plan to the orchestrator. Do
-   NOT do the full reconciliation yet.
+   checkout", "config for rate limits"). Coverage areas MAY include anchored
+   adjacent-scope touchpoints (each tied to an in-scope requirement per rule 3a)
+   so scouts fetch their evidence too — still touchpoint-bounded, never all of an
+   adjacent scope. Return the plan to the orchestrator. Do NOT do the full
+   reconciliation yet.
 2. **Scouts (orchestrator-dispatched).** The orchestrator dispatches ≤`max_scouts`
    (config, default 3) parallel read-only `orc-scout-sonnet-4-6-high` agents, one
    coverage area each. They return **code-evidence bundles** (file:line hits,
@@ -130,15 +156,27 @@ For every scope-bleed, doc/requirement-vs-code divergence, and every
 2–3 option set with ONE **recommended** option + a one-line reason. Wait, record
 the answer, continue. Never batch. Scope + accuracy only — not task breakdown.
 
+Adjacent context is also a challenge: when an in-scope requirement depends on an
+adjacent scope, offer to pull that touchpoint in as read-only context — e.g.
+"Checkout (R3) depends on pricing's rounding; pull it in as non-actionable
+context? (recommended: yes — R3's correctness can't be judged without it.)" It
+never proposes building the adjacent scope.
+
 ## Phase E — Write report, derive spec
 
+0. **Anchor-validation pass.** Before writing, drop every context item that does
+   not name the in-scope requirement it serves + a dependency type — unanchored
+   context is scope-bleed, not context.
 1. Write `report.md` in the mode template (schemas/report-audit.md,
    report-prose.md, or report-requirement.md) into
    `.claude/skills/orc/analyzer/{analysis-name}/` (internal). Include the
-   Evidence column and the **Assumptions & Open Questions** section; in deep mode
-   also the **Alternatives & risks** section.
+   Evidence column, the **Assumptions & Open Questions** section, and — when any
+   context survived step 0 — the **Additional context (do not build)** section;
+   in deep mode also the **Alternatives & risks** section.
 2. Derive `requirement-spec.md` FROM the confirmed report
-   (schemas/requirement-spec.md) in the same internal folder.
+   (schemas/requirement-spec.md) in the same internal folder. It carries the same
+   confirmed **Context & invariants (do not build)** block so the block reaches
+   the planner and executor as non-actionable guardrails, never as tasks.
 
 ## Phase F — Branch (plain-language choice, multi-analyze loop)
 

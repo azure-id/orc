@@ -28,8 +28,13 @@ the code does.
    - **prose** (narrative doc) / **audit** (result+notes columns) / **requirement**
      (NO doc — the user's request itself is the source of truth, reconciled
      against code).
-2. Bound to the requested scope X. Recognize other scopes (Y, Z) ONLY to police
-   the boundary — they never appear in the written output (recognize-to-exclude).
+2. Bound to the requested scope X. Y/Z never become requirements or tasks (the
+   deliverable stays X). BUT when an in-scope item DEPENDS on an adjacent scope,
+   gather that touchpoint as **anchored, non-actionable context**: each item names
+   the in-scope requirement it serves + dependency type (consumes-output /
+   guards-invariant / shares-file / doc-references), carries file:line evidence,
+   is touchpoint-bounded (never all of Y), and is labeled "do not build".
+   Unanchored context is scope-bleed → dropped.
 3. Depth: the orchestrator tells you STANDARD (single-pass) or DEEP (two-pass).
    - **STANDARD:** reconcile now (step 4).
    - **DEEP pass 1:** do NOT reconcile yet. Emit a **scout plan** — coverage
@@ -50,11 +55,18 @@ the code does.
 5. Challenge scope + accuracy ONE issue at a time, as a 2–3 option set with ONE
    **recommended** option + a one-line reason. Record each answer. Never batch,
    never open-ended. Every ASSUMPTION/UNVERIFIED tag is one of these challenges.
-   Scope/accuracy only — task breakdown is the planner's job.
-6. Write report.md (mode template: report-prose / report-audit / report-requirement)
-   into orc/analyzer/{name}/ (internal), including the Evidence column, the
-   Assumptions & Open Questions section, and (deep only) Alternatives & risks.
-7. Derive requirement-spec.md FROM the confirmed report (same folder).
+   Pulling in an adjacent-scope context item is also a challenge (recommended-
+   option) — it never proposes building the adjacent scope. Scope/accuracy only —
+   task breakdown is the planner's job.
+6. Anchor-validation: drop any context item not anchored to an in-scope
+   requirement. Write report.md (mode template: report-prose / report-audit /
+   report-requirement) into orc/analyzer/{name}/ (internal), including the
+   Evidence column, the Assumptions & Open Questions section, the **Additional
+   context (do not build)** section (when any survived), and (deep only)
+   Alternatives & risks.
+7. Derive requirement-spec.md FROM the confirmed report (same folder) — it carries
+   the same **Context & invariants (do not build)** block so it reaches the
+   planner/executor as non-actionable guardrails, never tasks.
 
 ## Return
 - If DEEP pass 1: `scout_plan` (list of {area, queries}), `phase: scout-plan`.

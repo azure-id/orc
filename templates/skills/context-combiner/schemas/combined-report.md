@@ -29,6 +29,14 @@ combiner trusts confirmed specs; it does not re-derive the code).
 | 1 | "add CSV export"     | A.R1 | HTML only    | web/reports/view.x:30 | web/reports/x | buildable |
 | 2 | "reuse report auth"  | A.R2, B.R3 (dedup) | guard present | web/reports/routes.x:12 | web/reports/x | exists |
 
+## Additional context (do not build)
+Anchored, non-actionable context merged from the sources — each item re-pointed at
+the merged requirement it serves, identical touchpoints deduped. Read for
+understanding; never a task. Omit this whole section if no source carried context.
+| Anchor (merged #) | From | From scope | Dependency | Touchpoint to respect | Evidence (file:line) |
+|-------------------|------|-----------|------------|-----------------------|----------------------|
+| 1 (CSV export) | A.ctx | reporting (Y) | consumes-output | report query already paginates; export must page too | web/reports/query.x:44 |
+
 ## Cross-scope conflicts & decisions
 Every conflict/duplicate/ordering issue found across sources, each raised as a
 recommended-option challenge and resolved.

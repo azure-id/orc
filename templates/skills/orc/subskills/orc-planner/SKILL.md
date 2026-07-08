@@ -33,6 +33,16 @@ does not implement, review, or verify. Output contract is orc's
   `files` mappings as the grounding source (SA already verified them). No
   provenance note needed — the spec is the record.
 
+## Context & invariants (non-actionable — carry, never build)
+
+If the requirement-spec carries a **Context & invariants (do not build)** block,
+it is anchored adjacent-scope context the Analyst gathered so the build respects
+it. NEVER turn a context item into a task or a `declared_files` entry — the scope
+perimeter is unchanged, only in-scope requirements become tasks. The block travels
+with the spec (executors read it via `spec_ref`); where a listed invariant is
+load-bearing for a specific task, name it in that task so it surfaces in the
+executor's `constraints[]` (hard rules to respect, not to reimplement).
+
 ## Config
 
 Resolve `max_wave_tasks` and `batch_pause_every` the standard way — `config.md`

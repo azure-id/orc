@@ -35,6 +35,16 @@ alternatives:                  # deep mode only; [] in standard
     options: [string]
     risk: string
 
+context:                       # anchored, NON-ACTIONABLE adjacent-scope context; [] if none
+  - anchor: R#                 # the in-scope requirement this serves (REQUIRED — no anchor, no entry)
+    from_scope: string         # the adjacent scope Y/Z it was pulled from
+    dependency: string         # consumes-output | guards-invariant | shares-file | doc-references
+    note: string               # the touchpoint (field/function/invariant) the build must respect
+    evidence: [string]         # file:line — touchpoint-bounded, never all of the adjacent scope
+# Read-for-understanding ONLY. The planner/executor honor these invariants but
+# NEVER turn a context item into a task or a declared_files entry. Every item is
+# anchored to an in-scope requirement or it was dropped (Phase E anchor-validation).
+
 # Everything here is confirmed. The planner does NOT re-question scope/accuracy;
 # it only turns these into tasks (breakdown/approach).
 scope_closed: true

@@ -37,7 +37,11 @@ for the formats; this skill does not duplicate them.
   never a silent guess.
 - **Recommended-option challenges:** each challenge is a 2–3 option set with one
   flagged recommended option + reason, one at a time.
-- Recognize-to-exclude: report contains ONLY the requested scope.
+- Two perimeters: the deliverable stays scope X (Y/Z never become tasks), but
+  anchored, non-actionable adjacent context is gathered when an in-scope item
+  depends on it — touchpoint-bounded, self-read (no scouts), each item anchored to
+  the requirement it serves + labeled "do not build". Same **Additional context
+  (do not build)** section in report + spec. Unanchored context is dropped.
 - Two artifacts, spec derived from the confirmed report, same folder
   `orc/analyzer/{analysis-name}/` (internal; copied out only on report-only),
   including the Evidence column and Assumptions & Open Questions section.

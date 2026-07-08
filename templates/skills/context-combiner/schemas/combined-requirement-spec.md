@@ -39,6 +39,15 @@ alternatives:                   # base field: merged from deep-mode sources ([] 
     options: [string]
     risk: string
 
+context:                        # base field: merged anchored, NON-ACTIONABLE context ([] if none)
+  - anchor: R#                  # remapped to the MERGED requirement id (still REQUIRED — no anchor, no entry)
+    from_scope: string
+    dependency: string          # consumes-output | guards-invariant | shares-file | doc-references
+    note: string
+    evidence: [string]
+# Same rule as the base spec: read-for-understanding, never a task. On merge,
+# dedupe identical touchpoints and re-point each anchor at the merged R id.
+
 cross_scope:                    # ADDED: combine-only audit block
   conflicts_resolved:
     - between: [A.R4, B.R2]

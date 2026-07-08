@@ -143,8 +143,10 @@ mid-run.
 ### `/orc-analyze` — the System Analyst
 Turns a **requirement** — a document (PDF by path or pasted, prose **or**
 audit/structured) **or** a plain-language request with no doc at all — into a
-scope-bounded, code-grounded requirement report. It bounds strictly to the scope
-you asked for (recognizing other scopes only to exclude them), maps each
+scope-bounded, code-grounded requirement report. It bounds the **deliverable** to
+the scope you asked for (other scopes never become tasks) while pulling **related**
+adjacent scopes in as anchored, non-actionable context — labeled "do not build" —
+so the build understands your scope correctly instead of guessing. It maps each
 requirement to real files, and **never hallucinates about what you meant**: every
 interpretation and every code claim carries `file:line` evidence, or gets tagged
 as an assumption and turned into a question. It challenges you one issue at a time

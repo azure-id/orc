@@ -30,6 +30,14 @@ recommended-option challenge and resolved (or is still open).
 - ASSUMPTION (resolved): "paginate" = cursor-based (recommended) — user confirmed.
 - UNVERIFIED (open): whether a rate-limit already exists — evidence not found.
 
+## Additional context (do not build)
+Anchored, non-actionable context pulled from an ADJACENT scope because an in-scope
+requirement depends on it. Read for understanding; never a task. Each item names
+the in-scope requirement it serves + why. Omit this whole section if none survived.
+| Anchor (in-scope #) | From scope | Dependency | Touchpoint to respect | Evidence (file:line) |
+|---------------------|-----------|------------|-----------------------|----------------------|
+| Req 1 (pagination) | listing (Y) | guards-invariant | shared list serializer caps a page at 100 | api/serializers/list.x:31 |
+
 ## Alternatives & risks   (DEEP mode only — omit in standard)
 - Approach A (recommended): reuse existing cursor helper — low blast radius, 3 files.
 - Approach B: new offset paginator — simpler read, breaks existing cursor clients.

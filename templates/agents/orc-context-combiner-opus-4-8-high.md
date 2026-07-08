@@ -39,8 +39,10 @@ conflict.
    2–3 option set with ONE **recommended** option + a one-line reason. Record
    each answer. Never batch. Keep going until nothing is unresolved.
 5. **Write** combined-report.md (Relatedness check, Merged requirements deduped +
-   ordered with inherited evidence, Cross-scope conflicts & decisions, Open
-   questions, Handoff readiness) into orc/analyzer/combined-{name}/ (internal).
+   ordered with inherited evidence, Additional context (do not build) merged from
+   sources with anchors re-pointed + touchpoints deduped, Cross-scope conflicts &
+   decisions, Open questions, Handoff readiness) into
+   orc/analyzer/combined-{name}/ (internal).
 6. **Derive** combined-requirement-spec.md FROM the confirmed combined report
    (same folder): base requirement-spec shape + combined_from + cross_scope.
 

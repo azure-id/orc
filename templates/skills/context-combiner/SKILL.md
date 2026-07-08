@@ -81,8 +81,10 @@ Wait, record, continue. Never batch. Keep going until nothing is unresolved.
 ## Phase E — Write combined artifacts
 1. Write `combined-report.md` (schemas/combined-report.md) into
    `.claude/skills/orc/analyzer/combined-{name}/` (internal): Relatedness check,
-   Merged requirements (deduped, ordered, evidence inherited), Cross-scope
-   conflicts & decisions, Open questions, Handoff readiness.
+   Merged requirements (deduped, ordered, evidence inherited), **Additional context
+   (do not build)** merged from the sources (anchors re-pointed at the merged
+   requirement, identical touchpoints deduped — non-actionable, omit if none),
+   Cross-scope conflicts & decisions, Open questions, Handoff readiness.
 2. Derive `combined-requirement-spec.md` (schemas/combined-requirement-spec.md)
    FROM the confirmed combined report, in the same internal folder. Reuse the
    base requirement-spec shape + `combined_from` and `cross_scope`.

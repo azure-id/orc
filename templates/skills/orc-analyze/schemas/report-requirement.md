@@ -42,6 +42,14 @@ recommended-option challenge and resolved (or still open).
   confirmed download.
 - UNVERIFIED (open): whether a reports permission gate exists — evidence not found.
 
+## Additional context (do not build)
+Anchored, non-actionable context pulled from an ADJACENT scope because an in-scope
+request part depends on it. Read for understanding; never a task. Each item names
+the in-scope part it serves + why. Omit this whole section if none survived.
+| Anchor (in-scope #) | From scope | Dependency | Touchpoint to respect | Evidence (file:line) |
+|---------------------|-----------|------------|-----------------------|----------------------|
+| Part 1 (CSV export) | reporting (Y) | consumes-output | report query already paginates; export must page too | web/reports/query.x:44 |
+
 ## Alternatives & risks   (DEEP mode only — omit in standard)
 - Approach A (recommended): stream CSV from the existing query — low blast radius.
 - Approach B: precompute + cache — faster reads, adds a cache dependency.

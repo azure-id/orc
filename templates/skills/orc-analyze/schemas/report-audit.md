@@ -35,6 +35,14 @@ Status: verified | diverged | resolved
 - UNVERIFIED (resolved): row 7 cited a "legacy flag" not found in code — user
   confirmed it was removed; row dropped.
 
+## Additional context (do not build)
+Anchored, non-actionable context pulled from an ADJACENT scope because an in-scope
+row depends on it. Read for understanding; never a task. Each item names the
+in-scope row it serves + why. Omit this whole section if none survived.
+| Anchor (in-scope #) | From scope | Dependency | Touchpoint to respect | Evidence (file:line) |
+|---------------------|-----------|------------|-----------------------|----------------------|
+| Row 3 (ref_id check) | models (Y) | consumes-output | ref_id is set by the user loader before validation | models/user.x:20 |
+
 ## Alternatives & risks   (DEEP mode only — omit in standard)
 - Row 3 fix: add ref_id check in the model (recommended) vs at the API edge —
   edge version duplicates validation across 3 handlers.
