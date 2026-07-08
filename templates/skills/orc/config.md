@@ -41,6 +41,9 @@ rubric_bands: 5            # how many scoring bands. Range 2–8.
 max_scouts: 3              # max parallel read-only code scouts in DEEP analysis mode
 default_analysis_depth: standard   # standard | deep — depth gate default (run still confirms)
 
+# --- Test authoring (opt-in Phase 6.5; ORC writes test cases, never runs them) ---
+generate_tests: false      # author test cases before ship? (run confirms at intake)
+
 # --- Artifact locations (internal by default) ---
 analyzer_dir: .claude/skills/orc/analyzer
 planner_dir:  .claude/skills/orc/planner
@@ -94,7 +97,12 @@ list of `{min, max, agent}` rows; the orchestrator uses it instead of a preset.
 ## Rules
 - Read at run start via the resolution rule above (defaults ← `orc.config.yaml`
   override). Missing values use defaults (max_wave_tasks 3, batch_pause_every 2,
-  rubric_bands 5, max_scouts 3, default_analysis_depth standard, logging false).
+  rubric_bands 5, max_scouts 3, default_analysis_depth standard,
+  generate_tests false, logging false).
+- `generate_tests` gates the opt-in Phase 6.5 (Test Authoring, default OFF). When
+  on, after Verify the orchestrator dispatches `orc-test-author-opus-4-8-high` to
+  WRITE test cases (automated files + `TEST-PLAN.md` + a curl bundle for HTTP
+  APIs) — it never runs them; the user tests manually. Full lane only.
 - `max_scouts` caps the parallel scouts fanned out in the analyst's DEEP mode
   (never exceeds it, same as max_wave_tasks caps a wave).
 - `default_analysis_depth` only presets the analyst's standard/deep gate — the

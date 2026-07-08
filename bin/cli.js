@@ -410,6 +410,7 @@ const CONFIG_META = [
   { key: "rubric_bands", def: 5, tier: "common", validate: vRange(2, 8), options: [2, 3, 4, 5, 6, 7, 8], desc: "Scoring granularity (2-5 narrow preset, 6-8 wide preset)." },
   { key: "max_scouts", def: 3, tier: "common", validate: vInt(1), options: [1, 2, 3, 4, 5], desc: "Max parallel code scouts fanned out in deep analysis." },
   { key: "default_analysis_depth", def: "standard", tier: "common", validate: vEnum("standard", "deep"), options: ["standard", "deep"], desc: "Analyst depth gate default — deep = wider sweep + scouts (run still confirms)." },
+  { key: "generate_tests", def: false, tier: "common", validate: vEnum("true", "false"), options: ["true", "false"], desc: "Opt-in Phase 6.5: author test cases before ship (writes tests, never runs them). OFF by default." },
   { key: "logging", def: false, tier: "common", validate: vEnum("true", "false"), options: ["true", "false"], desc: "Write a persistent behavior trace per run (OFF by default; for skill-improvement review)." },
   { key: "log_dir", def: ".claude/orc/logs", tier: "advanced", validate: vPath, desc: "Persistent trace folder (never auto-deleted)." },
   { key: "analyzer_dir", def: ".claude/skills/orc/analyzer", tier: "advanced", validate: vPath, desc: "Internal analyst artifact dir." },

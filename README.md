@@ -239,6 +239,11 @@ The knobs (shipped defaults in `skills/orc/config.md`):
 - `rubric_bands` — scoring granularity 2–8, selecting the narrow/wide preset.
 - `max_scouts` — parallel read-only scouts in deep analysis (default 3).
 - `default_analysis_depth` — the analyst depth gate's default (standard/deep).
+- `generate_tests` — opt-in Phase 6.5 (default OFF). When on, after Verify and
+  before Ship, ORC **writes** test cases as a deliverable — automated test files,
+  a manual `TEST-PLAN.md` (with the exact CLI run command plus separate "exercise
+  the real running service" steps), and a Postman-importable `test-cases.http`
+  curl bundle for HTTP APIs. It never runs them; you test manually.
 - `logging` — opt-in behavior trace (default OFF). When on, ORC writes a
   persistent `.txt` per run under `log_dir` (`.claude/orc/logs/`) recording the
   flow — phases, every spawn plus the model that actually answered

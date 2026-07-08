@@ -128,10 +128,11 @@ resolution" rule; the override is written by the `orc config` CLI and survives
 tasks per wave), `batch_pause_every` (default 2), `max_scouts` (default 3 — cap
 on deep-analysis scouts), `default_analysis_depth` (default standard), and the
 analyzer/planner artifact directories. The user may also override any value for a
-single run. Apply these in Phase 0 (analyst depth gate + scout cap), Phase 2
-(batch-pause) and Phase 3 (wave cap). It also provides `logging` (default
-`false`) and `log_dir` (default `.claude/orc/logs`) — see the behavior-trace
-section below.
+single run. Apply these in Phase 0 (analyst depth gate + scout cap; test-authoring
+opt-in), Phase 2 (batch-pause) and Phase 3 (wave cap). It also provides
+`generate_tests` (default `false` — the opt-in Phase 6.5 gate) and `logging`
+(default `false`) + `log_dir` (default `.claude/orc/logs`) — see the
+behavior-trace section below.
 
 ## Behavior trace (opt-in — only when config `logging: true`)
 
@@ -174,6 +175,7 @@ skill improvement, separate from the decision log and NEVER deleted. When
   - workers → `subskills/orc-execution/` (always spawned; subagent wrapper)
   - stops → `subskills/orc-checkpoint/SKILL.md` + `references/stop-and-resume.md`
 - Phase 5–6 → `subskills/orc-review-verify/` (always spawned; subagent wrapper)
+- Phase 6.5 (opt-in) → `subskills/orc-testgen/` (spawned; only when `generate_tests`)
 - Phase 8 → `subskills/orc-pr/SKILL.md` (template: `subskills/orc-pr/pr.md`)
 - Schemas (you own; pass slices only): `schemas/intent-spec.md`,
   `schemas/planning-output.md`, `schemas/checkpoint.md`
@@ -205,6 +207,11 @@ tier (2/4/6) → ask the tiered set in ONE batched round → draft the intent-sp
 
 The intent-spec's definition-of-done becomes Phase 6's acceptance criteria.
 Its constraints become hard rules in every worker slice.
+
+Also offer the opt-in **Test Authoring** (Phase 6.5) in the sign-off round —
+default from `config.generate_tests`; the run confirms. If on, note it now so the
+touched flows are captured for the test matrix later. ORC will WRITE test cases
+before ship, never run them (the user tests manually).
 
 ## Phase 1 — Planning
 
@@ -306,11 +313,28 @@ Verify worker (Opus 4.8, high) checks against the intent-spec's
 **definition-of-done** as acceptance criteria. Blocking issues → auto-fix once
 → re-verify once → second failure STOPS.
 
+## Phase 6.5 — Test Authoring (opt-in; load subskills/orc-testgen/)
+
+Only when `config.generate_tests` is on for this run (default OFF; confirmed at
+intake). ORC **writes** test cases as a deliverable and **runs nothing** — the
+user tests manually; this phase never gates the ship.
+
+Dispatch `orc-test-author-opus-4-8-high` (spawned subagent) with a slice: the
+run's `actual_files` (changed surface), the intent-spec's definition-of-done
+(acceptance criteria), the touched flows, constraints, and the detected stack
+(incl. whether it exposes an HTTP API). It returns automated test files + a
+manual `TEST-PLAN.md` (with the exact CLI run command AND a separate "exercise
+the real running service" section) + a Postman-importable `test-cases.http` curl
+bundle for HTTP APIs. Validate the return; relay what was authored (files, plan,
+curl, run command, advisory notes). Then continue to Phase 7. Full lane only —
+orc-mini skips this along with review/verify.
+
 ## Phase 7 — Summary
 
 Report: tasks/waves/dispatches (with scores + any overrides), escalations,
-needs_context events, review findings, verify result, repo state + branch,
-stale_review flags. Then ask: **"Fix the style nits too?"**
+needs_context events, review findings, verify result, **authored test cases
+(files + TEST-PLAN.md + curl bundle + run command) when Phase 6.5 ran**, repo
+state + branch, stale_review flags. Then ask: **"Fix the style nits too?"**
 
 ## Phase 8 — Ship (load subskills/orc-pr/SKILL.md)
 
