@@ -6,12 +6,13 @@
 
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
-![Version](https://img.shields.io/badge/version-0.4.1-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.4.5-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D16-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
 ![Dependencies](https://img.shields.io/badge/dependencies-zero-lightgrey.svg?style=for-the-badge)
 ![GitHub stars](https://img.shields.io/github/stars/azure-id/orc?style=for-the-badge&color=yellow)
+![Tessl review](https://img.shields.io/badge/Tessl_review-avg_84-8A2BE2.svg?style=for-the-badge)
 
 </div>
 
@@ -39,6 +40,7 @@ zero-dependency npm package installs those files into your `.claude/` directory.
 - [Why ORC exists](#why-orc-exists)
 - [Quick start](#quick-start)
 - [Commands](#commands)
+- [Skill quality (Tessl review)](#skill-quality-independently-reviewed)
 - [How model selection works](#how-model-selection-works-and-how-to-verify-it)
 - [The tier guard](#the-tier-guard-installed-automatically)
 - [Configuration](#configuration-orc-config)
@@ -235,6 +237,58 @@ Expensive and opt-in: it warns before scanning, pauses periodically, and spans
 multiple sessions. `orc` and `orc-mini` consult the wiki when it exists,
 sharpening their planning and scoring; when it's absent they behave exactly as
 before.
+
+---
+
+## Skill quality (independently reviewed)
+
+We don't grade our own homework. 🔬 Every skill in the constellation is scored by
+**[Tessl](https://tessl.io)'s skill review** — an independent LLM-as-judge that
+grades a Claude agent skill on three axes and returns a **0–100** score:
+
+- **Validation** — structure & format: valid frontmatter, required fields, a
+  description within the 1024-char limit, a present body, links that resolve.
+  Straight pass/fail — a skill that fails here can't even be scored.
+- **Activation** — how clearly the *description* signals **when** an agent should
+  load the skill: specificity, complete triggers, distinctiveness from siblings.
+  *A vague description is a skill that never fires at the right moment.*
+- **Implementation** — how concrete and usable the *body* is: conciseness,
+  actionability (worked examples, not just prose), workflow clarity, and
+  progressive disclosure.
+
+**Bands:** 🟢 **90–100** production-ready · 🟡 **70–89** good, ships · 🔴 **below 70** needs work.
+
+| Skill | Score | Tier |
+|-------|:-----:|:----:|
+| `orc-verify` | **100** | 🟢 |
+| `context-combiner` | **94** | 🟢 |
+| `orc-analyze` | **91** | 🟢 |
+| `orc-mini` | **91** | 🟢 |
+| `orc-wiki` | **90** | 🟢 |
+| `orc-planner` | **87** | 🟡 |
+| `orc` | **85** | 🟡 |
+| `orc-testgen` | **83** | 🟡 |
+| `orc-analyze-mini` | **79** | 🟡 |
+| `orc-execution` | **78** | 🟡 |
+| `orc-review-verify` | **73** | 🟡 |
+| `orc-checkpoint` | **71** | 🟡 |
+| `orc-planner-mini` | **65** | 🔴 |
+
+**12 of 13 skills clear the 70 bar and 5 are production-ready (90+).** Better yet,
+acting on the review's *own* findings is how several got there — `orc-execution`
+jumped **60 → 78** and `orc-planner` **78 → 87** once their descriptions stated
+concrete capability and their bodies inlined the return contract. The lone
+holdout, `orc-planner-mini` (65), is a *dispatched-only worker*: Tessl's
+trigger-quality axis rewards **natural user phrases**, which an internal worker a
+user never types legitimately doesn't have — an inherent ceiling, not a bug.
+*(The PR-templating subskill `orc-pr` wasn't part of this run.)*
+
+> [!NOTE]
+> **Reproduce it.** Install the [Tessl CLI](https://tessl.io), then point it at any
+> local skill directory — no publishing needed:
+> ```bash
+> tessl review run ./templates/skills/orc-mini --workspace <your-workspace>
+> ```
 
 ---
 
