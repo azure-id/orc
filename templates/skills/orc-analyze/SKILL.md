@@ -1,21 +1,19 @@
 ---
 name: orc-analyze
 description: >
-  System Analyst for ORC. Use for "/orc-analyze",
-  "analyze this doc for scope X", "analyze this requirement against the code", or
-  when a requirement — a document (PDF by path or pasted) OR a plain-language
-  request — must be turned into a precise, code-grounded requirement set BEFORE
-  any planning. Bounds the DELIVERABLE to exactly what the user asked (other
-  scopes never become requirements or tasks) while pulling related adjacent scopes
-  in as anchored, non-actionable context so the build understands the scope
-  correctly, maps each requirement to real files with file:line
-  evidence, verifies every claim against actual code, and challenges the user
-  interactively with recommended options. Offers an opt-in DEEP mode (wider code
-  sweep via scouts, verify-every-claim, more questions, alternatives + risks) that
-  costs more tokens/time. Prevents scope-bleed, stale-doc drift, and requirement
-  hallucination. Also auto-triggers inside /orc when a doc or ambiguous
-  requirement is present. The orchestrator dispatches this work to a subagent —
-  it never analyzes itself.
+  System Analyst for ORC. Use for "/orc-analyze", "analyze this doc for scope
+  X", or "analyze this requirement against the code" — turning a requirement (a
+  document, PDF by path or pasted, OR a plain-language request) into a precise,
+  code-grounded requirement set BEFORE any planning. Bounds the deliverable to
+  exactly the asked scope (other scopes never become tasks), pulls related
+  adjacent scopes in as anchored, non-actionable "do not build" context, maps
+  each requirement to real files with file:line evidence, verifies every claim
+  against actual code, and challenges the user with recommended options. Opt-in
+  DEEP mode adds a wider scout-driven code sweep, verify-every-claim, more
+  questions, and alternatives + risks. Prevents scope-bleed, stale-doc drift,
+  and requirement hallucination. Also auto-triggers inside /orc on a doc or
+  ambiguous requirement. The orchestrator dispatches this to a subagent — it
+  never analyzes itself.
 ---
 
 # ORC-ANALYZE (System Analyst)
