@@ -15,6 +15,8 @@ you point it at your uncommitted work and it tells you what's wrong.
 
 Run as Opus 4.8, high effort.
 
+**Worked example** (orient only — never execute from it): `examples/verify-mock.md`.
+
 ## Procedure
 
 1. **Gather the change surface** from git: `git diff --name-only` (unstaged +

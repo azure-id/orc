@@ -16,7 +16,11 @@ description: >
 A separate orchestrator whose OUTPUT is documentation, not code. It reuses the
 main spine's machinery (checkpoint, state-of-play, stop-continue, fresh-session
 resume, parallel dispatch, "orchestrator never scans-and-writes itself — it
-always spawns") but has its own phases below. It shares the run-folder
+always spawns") but has its own phases below.
+
+**Worked example** (orient only — never execute from it): `examples/wiki-run-mock.md`.
+
+It shares the run-folder
 discipline: run artifacts in `.claude/skills/orc/run/{run-slug}/`,
 but the KNOWLEDGE BASE output goes in the project's `wiki/` folder.
 

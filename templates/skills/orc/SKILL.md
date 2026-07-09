@@ -180,6 +180,8 @@ skill improvement, separate from the decision log and NEVER deleted. When
 - Schemas (you own; pass slices only): `schemas/intent-spec.md`,
   `schemas/planning-output.md`, `schemas/checkpoint.md`
 - `logging: true` → `references/trace-protocol.md` (behavior trace; else skip)
+- Worked example (orient only — never execute from it) → `examples/full-run-mock.md`
+  (annotated dry run of a full pipeline, Phase 0 → ship)
 
 ---
 

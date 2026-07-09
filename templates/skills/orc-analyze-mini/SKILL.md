@@ -1,11 +1,18 @@
 ---
 name: orc-analyze-mini
 description: >
-  Fast-lane System Analyst for ORC-MINI. Sonnet 5 high effort.
-  Same purpose and artifacts as orc-analyze but with trimmed depth
-  for speed and token savings. Use for "/orc-analyze-mini" or when
-  orc-mini needs doc analysis. The orchestrator dispatches this to a subagent —
-  it never analyzes itself.
+  Fast-lane System Analyst for ORC-MINI (Sonnet 5, high effort). Turns a
+  requirement — a document (PDF by path or pasted) OR a plain-language request —
+  into a scope-bounded, code-grounded requirement report + derived spec: bounds
+  the deliverable to exactly the asked scope (other scopes never become tasks),
+  maps each requirement to real files with file:line evidence — or marks it an
+  ASSUMPTION and turns it into a question — and challenges the user with
+  recommended options. Use for "/orc-analyze-mini", "quickly analyze this doc",
+  "fast requirement analysis", or when orc-mini meets a document or an ambiguous
+  requirement. Distinct from /orc-analyze: ALWAYS single-pass — NO deep mode, NO
+  scouts — trading depth for speed and tokens; switch to /orc-analyze (deep) when
+  you need a wider code sweep, verify-every-claim, or alternatives with trade-offs.
+  The orchestrator dispatches this to a subagent — it never analyzes itself.
 ---
 
 # ORC-ANALYZE-MINI
@@ -15,6 +22,8 @@ high subagent. Produces the SAME artifacts and follows the SAME output contract
 as the full analyst (`../orc-analyze/`) — read its schemas
 (report-audit.md, report-prose.md, report-requirement.md, requirement-spec.md)
 for the formats; this skill does not duplicate them.
+
+**Worked example** (orient only — never execute from it): `examples/quick-analysis-mock.md`.
 
 ## What's trimmed vs the full analyst
 

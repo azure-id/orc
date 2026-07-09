@@ -26,6 +26,8 @@ context lean. This skill defines what that subagent does, how the orchestrator
 runs the standard/deep gate + scout dispatch, and how it relays challenges and
 branches on the result.
 
+**Worked example** (orient only — never execute from it): `examples/analyze-mock.md`.
+
 Purpose: turn "this requirement" — a document OR a bare request — into a
 confirmed, code-grounded requirement set that a planner cannot misread, so
 implementation never bleeds into other scopes, never builds against claims the

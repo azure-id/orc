@@ -24,6 +24,8 @@ yourself). **You never implement — you spawn.** The one exception is the
 **smoke gate** below: running the project's build+test is a read-only ship gate,
 not implementation — you still never write code.
 
+**Worked example** (orient only — never execute from it): `examples/mini-run-mock.md`.
+
 ## Differences from the full orchestrator
 
 1. **Skip full Phase 5 (Review), Phase 6 (Verify), and Phase 7 (Summary).**
