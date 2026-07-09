@@ -112,7 +112,7 @@ the preset in `config.md` (chosen by `rubric_bands`: narrow 2–5 / wide 6–8).
 - Fixed roles dispatch their named agent: analyst → orc-system-analyst-opus-4-8-high,
   combiner → orc-context-combiner-opus-4-8-high, planner → orc-planner-opus-4-8-med,
   review → orc-reviewer-opus-4-8-high, verify → orc-verifier-opus-4-8-high.
-  Mini lane → orc-mini-analyst / orc-mini-planner / orc-executor-sonnet-5-high.
+  Mini lane → orc-analyze-mini / orc-planner-mini / orc-executor-sonnet-5-high.
 
 See `.claude/agents/MODEL-MAPPING.md`. TWO caveats: model IDs/effort field are
 best-guess — verify with `/agents`; and a subagent's model can't exceed the MAIN
@@ -326,8 +326,10 @@ run's `actual_files` (changed surface), the intent-spec's definition-of-done
 manual `TEST-PLAN.md` (with the exact CLI run command AND a separate "exercise
 the real running service" section) + a Postman-importable `test-cases.http` curl
 bundle for HTTP APIs. Validate the return; relay what was authored (files, plan,
-curl, run command, advisory notes). Then continue to Phase 7. Full lane only —
-orc-mini skips this along with review/verify.
+curl, run command, advisory notes). Then continue to Phase 7. The full lane runs
+this as Phase 6.5; orc-mini also offers the same test-authoring dispatch as an
+opt-in end-of-run ask (on a GREEN smoke gate) — orc-mini still skips full
+review/verify.
 
 ## Phase 7 — Summary
 

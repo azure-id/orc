@@ -41,3 +41,16 @@ mini planner never builds directly.
 
 If the plan proves genuinely complex (many interdependencies, high-risk areas),
 suggest the full `orc-planner` (Opus 4.8 medium) and let the user choose.
+
+## Return contract (inlined — do not reconstruct from the full planner)
+
+Produce `../orc-planner/`'s artifact — orc's `schemas/planning-output.md`: every
+task with `declared_files` (incl. tests), `depends_on`, `owns_area`, `spec_ref`.
+Checkpoint it into `orc/planner/{name}/` before branching. Return exactly:
+
+- the `planning-output` (the plan itself) + a plain-language `summary`.
+- `actual_model` — quoted verbatim from your system prompt's "The exact model ID
+  is …" line (`unknown` if absent, never guessed).
+- `actual_effort` — `$CLAUDE_EFFORT`.
+
+Never build or spawn.

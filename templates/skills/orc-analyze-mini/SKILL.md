@@ -47,3 +47,20 @@ for the formats; this skill does not duplicate them.
   including the Evidence column and Assumptions & Open Questions section.
 - Same branch: report-only, or take into build (hand both files to orc-mini,
   which continues with the mini planner).
+
+## Return contract (inlined — do not reconstruct from the full analyst)
+
+Write `report.md` (mode template) + derived `requirement-spec.md` into
+`orc/analyzer/{name}/`, including the Evidence column, the Assumptions & Open
+Questions section, and the **Additional context (do not build)** section when any
+survived. Return exactly:
+
+- `report_path`, `spec_path` — the two artifacts.
+- `mode` — prose | audit | requirement.
+- `scope` — the confirmed scope-X one-liner.
+- `handoff_ready` — true only when the report is confirmed and build-ready.
+- `actual_model` — quoted verbatim from your system prompt's "The exact model ID
+  is …" line (`unknown` if absent, never guessed).
+- `actual_effort` — `$CLAUDE_EFFORT`.
+
+Never build or spawn.

@@ -25,8 +25,8 @@ Score→executor mapping lives in config.md (narrow vs wide preset).
 | orc-reviewer-opus-4-8-high | claude-opus-4-8 | high | review |
 | orc-verifier-opus-4-8-high | claude-opus-4-8 | high | verify (+ /orc-verify) |
 | orc-test-author-opus-4-8-high | claude-opus-4-8 | high | test authoring (opt-in Phase 6.5; writes tests, never runs) |
-| orc-mini-analyst-sonnet-5-high | claude-sonnet-5 | high | mini analysis |
-| orc-mini-planner-sonnet-5-high | claude-sonnet-5 | high | mini planning |
+| orc-analyze-mini-sonnet-5-high | claude-sonnet-5 | high | mini analysis |
+| orc-planner-mini-sonnet-5-high | claude-sonnet-5 | high | mini planning |
 | orc-scout-sonnet-4-6-high | claude-sonnet-4-6 | high | deep-analysis code scout (read-only) |
 | orc-context-combiner-opus-4-8-high | claude-opus-4-8 | high | combine 2+ related analyses (full lane) |
 

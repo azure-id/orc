@@ -14,6 +14,9 @@ One entry point: spawned via the Task tool with `subagent.md` framing + the
 slice, which points to `core.md`. Return contract lives in core.md only.
 
 Fixed model: `orc-test-author-opus-4-8-high` (Opus 4.8 high — authoring good
-integration tests is a judgment task). Full ORC lane only — orc-mini skips it
-along with review/verify. Opt-in: the orchestrator dispatches this only when
-`config.generate_tests` is on for the run (confirmed at intake).
+integration tests is a judgment task). Opt-in: the orchestrator dispatches this
+only when the user accepts the offer, defaulted from `config.generate_tests`. The
+full lane runs it as Phase 6.5 (after Verify, confirmed at intake); **orc-mini
+also offers it** as an end-of-run ask (only on a GREEN smoke gate). Either lane,
+it never runs tests and never gates the ship. orc-mini still skips full
+review/verify.

@@ -1,5 +1,5 @@
 ---
-name: orc-mini-analyst-sonnet-5-high
+name: orc-analyze-mini-sonnet-5-high
 description: >
   ORC mini System Analyst — claude-sonnet-5, high effort. Fast-lane requirement
   analysis for ORC-MINI. Same artifacts/contract as the full analyst, trimmed

@@ -1,5 +1,5 @@
 ---
-name: orc-mini-planner-sonnet-5-high
+name: orc-planner-mini-sonnet-5-high
 description: >
   ORC mini Requirement Planner — claude-sonnet-5, high effort. Fast-lane planning
   for ORC-MINI. Same planning-output contract as the full planner, trimmed depth.
