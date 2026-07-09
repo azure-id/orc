@@ -11,8 +11,27 @@ description: >
 
 Fast variant of the Requirement Planner, dispatched by orc-mini as a Sonnet 5
 high subagent. Produces the SAME artifact (orc's `schemas/planning-output.md`)
-and follows the SAME input + grounding + branch rules as `../orc-planner/` —
-read that skill for the full procedure; this one does not duplicate it.
+and follows the SAME input + grounding + branch rules as `../orc-planner/`, which
+is AUTHORITATIVE for the full procedure; the summary below orients.
+
+## Procedure (summary)
+
+1. **Accept** a detailed request OR an analyst requirement-spec — push back on a
+   request too thin to plan against.
+2. **Ground** `declared_files[]` in real paths: standalone → read the repo (+ a
+   non-empty `wiki/`); from-SA → trust the spec's file map, no repo read.
+3. **Draft** right-sized tasks, each with `depends_on`, `owns_area`, `spec_ref`.
+4. **Self-check (always — cheap, prevents broken waves):**
+   - **cycle detection** — no `depends_on` chain loops back on itself;
+   - **same-file collision** — two tasks sharing a `declared_files` entry must be
+     merged, or serialized with a dependency.
+   On a failed check, FIX the plan (merge/split/add-dep) before presenting — never
+   emit a plan with a cycle or an unserialized collision. Deep dependency tracing
+   is trimmed here; if the graph is genuinely complex, escalate to the full
+   `../orc-planner/` (Opus 4.8 medium).
+5. **Present** the plan once → approve/edit (breakdown/approach only).
+6. **Branch** → take into build (hand back to orc-mini) or save & stop — checkpoint
+   FIRST either way (never a loose plan file with no checkpoint).
 
 ## What's trimmed vs the full planner
 

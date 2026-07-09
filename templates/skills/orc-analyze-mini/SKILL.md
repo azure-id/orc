@@ -57,6 +57,12 @@ for the formats; this skill does not duplicate them.
 - Same branch: report-only, or take into build (hand both files to orc-mini,
   which continues with the mini planner).
 
+## Workflow checkpoint (gate before deriving the spec)
+
+Confirm the report with the user — scope bounded, high-signal challenges resolved —
+BEFORE deriving requirement-spec.md. The spec is derived from the CONFIRMED report,
+never from an unconfirmed draft; only then set `handoff_ready: true`.
+
 ## Return contract (inlined — do not reconstruct from the full analyst)
 
 Write `report.md` (mode template) + derived `requirement-spec.md` into

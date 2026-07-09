@@ -12,9 +12,9 @@ description: >
 # orc-planner (Requirement Planner)
 
 The orchestrator stays on top and **dispatches a planner subagent (Opus 4.8,
-medium)** to produce the plan — it never plans itself. Strictly planning: it
-does not implement, review, or verify. Output contract is orc's
-`schemas/planning-output.md` (single-source; do not redefine it here).
+medium)** to produce the plan. Strictly planning: it does not implement, review,
+or verify. Output contract is orc's `schemas/planning-output.md` (single-source;
+do not redefine it here).
 
 ## Input (accepts either)
 
@@ -47,11 +47,10 @@ executor's `constraints[]` (hard rules to respect, not to reimplement).
 
 Resolve `max_wave_tasks` and `batch_pause_every` the standard way — `config.md`
 defaults with the user override `.claude/orc.config.yaml` merged on top per key
-(see config.md's "Config resolution" rule); never read the `config.md` default
-when the override sets that key. NOT to apply them yourself (the orchestrator
-does, after hand-back), but so the plan you produce is sensible for that wave cap
-(e.g. don't design 8 mutually-independent tasks expecting all 8 to run at once
-when the cap is 3).
+(see config.md's "Config resolution" rule). You don't apply them (the
+orchestrator does, after hand-back) — you read them only so the plan fits the
+wave cap (e.g. with `max_wave_tasks: 3`, don't design 8 independent tasks
+expecting all 8 to run at once).
 
 ## Procedure (defend against bad plans)
 
@@ -67,7 +66,7 @@ when the cap is 3).
    or edits (task breakdown/approach only; scope is settled upstream, never
    re-litigated here).
 
-## Checkpoint before branching (point 6 fix)
+## Checkpoint before branching
 
 Before the branch, WRITE A CHECKPOINT of the planning-output into
 `orc/planner/{name}/` (internal): the plan md + a checkpoint.json snapshot via

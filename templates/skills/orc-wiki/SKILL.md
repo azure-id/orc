@@ -80,7 +80,7 @@ doc-writing contract (schemas/wiki-doc.md). The agent reads the code and
 returns a structured overview; YOU write it to `wiki/` with staleness metadata.
 
 Every 5 completed scan-tasks → STOP SEQUENCE (reuse the main skill's
-references/stop-and-resume.md): checkpoint → state-of-play → dispatch report →
+`../orc/references/stop-and-resume.md`): checkpoint → state-of-play → dispatch report →
 "/usage" reminder → resume block → wait for continue. Multi-session resume is
 expected and normal.
 

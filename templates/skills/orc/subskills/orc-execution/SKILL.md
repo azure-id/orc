@@ -11,6 +11,23 @@ description: >
 
 One entry point: the orchestrator spawns a subagent via the Task tool,
 prepending `subagent.md` framing + the input slice, which points to `core.md`.
+`core.md` is the AUTHORITATIVE spec (full input slice, procedure, and return
+contract); the summary below orients — on any conflict, `core.md` wins.
 
-The RETURN CONTRACT lives in core.md ONLY. The wrapper adds framing but never
-redefines what is emitted.
+## What the worker does (summary)
+
+1. Absorb `log_digest` (prior DECISIONs/INTERFACEs/ANSWERs bind you); read `spec_ref`.
+2. Implement EXACTLY the task in the slice, touching only `declared_files[]`,
+   honoring every `constraints[]` hard rule; create/update tests for what you build.
+3. Emit milestone pings ({percent, files_written[], notes}) as you go.
+4. Stay in your slice — need outside context? emit `needs_context`, don't fetch it.
+
+## Return shape (summary — full contract in `core.md`)
+
+`{ task_id, actual_model, actual_effort, status: done|failed|partial|needs_context,
+actual_files[], log_entries[], failure_reason, progress, context_request }`
+
+**Validation checkpoint before returning:** `status=failed` REQUIRES a
+`failure_reason`; `needs_context` REQUIRES a `context_request` (capped at 2/task);
+`actual_model` is quoted VERBATIM from your system prompt, never inferred. A
+malformed return is treated as failure by the caller.

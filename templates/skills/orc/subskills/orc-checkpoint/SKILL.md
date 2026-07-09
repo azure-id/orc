@@ -18,13 +18,20 @@ description: >
 
 ## Write operation
 
-Input: run_state (the checkpoint fields per schemas/checkpoint.md),
+Input: run_state (the checkpoint fields per `../../schemas/checkpoint.md`),
        trigger (batch_pause | token_limit | phase_transition | crash_guard)
+
+Minimal `run_state` shape (see `../../schemas/checkpoint.md` for the full field set):
+```json
+{ "run_slug": "merchant-notifications", "phase": 3, "updated_at": "2026-07-10T09:00:00Z",
+  "tasks": [ { "id": "T1", "status": "done", "actual_files": ["services/notify.ts"] } ],
+  "resume_pointer": "wave 2 of 3", "logging_enabled": false }
+```
 Steps:
 1. Serialize run_state to JSON.
 2. Atomic write: temp file → rename to run/{run-slug}/checkpoint.json.
 3. Regenerate run/{run-slug}/state-of-play.md from the same state (10-line format per
-   schemas/checkpoint.md).
+   `../../schemas/checkpoint.md`).
 4. Read back and validate both writes.
 Return: { checkpoint_path, state_of_play_path, written_at, resume_pointer }
 
