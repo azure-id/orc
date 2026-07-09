@@ -1,10 +1,16 @@
 ---
 name: orc-execution
 description: >
-  Worker subskill for ORC. Performs exactly one task from a slice
-  and emits a strict return structure. ALWAYS invoked as a spawned subagent by
-  the orchestrator (the orchestrator never implements). Not for direct user
-  invocation.
+  Executor worker for ORC — the single-task implementer. Given one task slice
+  (task_id, declared_files, constraints, spec_ref, log_digest), it implements
+  EXACTLY that task within its declared files, honors every hard-rule constraint,
+  creates/updates tests, emits milestone progress pings, and returns a strict
+  contract (status done|failed|partial|needs_context, actual_files, log_entries,
+  and claimed-vs-actual model/effort so the caller can catch a silent tier
+  downgrade). Dispatched once per task in an execution wave, on the scored model
+  pinned by its executor agent. Distinct from the review/verify/test-author
+  workers — this one writes the implementation. ALWAYS a spawned subagent; the
+  orchestrator never implements. Not for direct user invocation.
 ---
 
 # orc-execution

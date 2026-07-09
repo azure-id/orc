@@ -1,11 +1,15 @@
 ---
 name: orc-review-verify
 description: >
-  Worker subskill for ORC Phases 5-6. Runs a code review pass
-  (blocking vs nit classification, test creation/update) or a verify pass
-  (acceptance criteria from the intent-spec's definition-of-done). ALWAYS
-  invoked as a spawned subagent by the orchestrator. Not for direct user
-  invocation.
+  Review/verify worker for ORC Phases 5–6 (Opus 4.8 high). Two modes: a REVIEW
+  pass — examine the changed files against the code pattern + constraints,
+  create/update tests, and classify EVERY finding blocking vs nit; or a VERIFY
+  pass — run the build + full test suite and check each intent-spec
+  definition-of-done criterion, reporting pass/fail. Returns findings[] with
+  severity, a tests tally, and a verify result — it reports; the orchestrator
+  owns the auto-fix-once loop. Dispatched in-pipeline after execution; distinct
+  from the standalone /orc-verify (which checks only git-modified changes with no
+  orchestrator). ALWAYS a spawned subagent — not for direct user invocation.
 ---
 
 # orc-review-verify

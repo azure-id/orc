@@ -1,10 +1,15 @@
 ---
 name: orc-checkpoint
 description: >
-  Stateless persistence service for ORC. Writes and reads the
-  durable checkpoint + state-of-play. It NEVER decides when to stop or resume —
-  the orchestrator owns those judgments and passes the trigger in. Coordination
-  skill: always runs inline (loaded by the orchestrator), never spawned.
+  Stateless persistence service for ORC — the checkpoint read/write engine. On a
+  trigger passed in by the orchestrator (batch_pause | token_limit |
+  phase_transition | crash_guard), it atomically writes
+  run/{slug}/checkpoint.json, regenerates the 10-line state-of-play.md, then reads
+  both back and validates; the read op locates the newest valid checkpoint for a
+  fresh-session resume. It makes NO judgment — it never decides WHEN to stop or
+  resume (the orchestrator owns that and passes the trigger in). Coordination
+  skill: always runs inline (loaded by the orchestrator), never spawned. Not for
+  direct user invocation.
 ---
 
 # orc-checkpoint

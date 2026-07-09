@@ -1,11 +1,14 @@
 ---
 name: orc-planner
 description: >
-  Requirement Planner subskill for ORC. Turns a detailed request or a
-  System Analyst requirement-spec into the orchestrator's planning-output
-  (right-sized tasks, grounded declared files, explicit dependencies). A planner
-  OPTION in orc Phase 1, and available standalone via its own command to plan
-  only. Opus 4.8 medium. The orchestrator dispatches this to a subagent — it
+  Requirement Planner for ORC (Opus 4.8 medium). Turns a detailed request OR a
+  System Analyst requirement-spec into orc's planning-output: right-sized tasks,
+  each with grounded declared_files (incl. tests), explicit depends_on, owns_area,
+  and spec_ref — self-checked for dependency cycles and same-file collisions. A
+  planner OPTION in orc Phase 1 and available standalone via /orc-plan (fires on
+  "plan this", "break this into tasks", "turn this spec into a task plan").
+  Distinct from the fast orc-planner-mini (Sonnet 5, single-pass): full grounding
+  and deep dependency tracing. The orchestrator dispatches this to a subagent — it
   never plans itself.
 ---
 

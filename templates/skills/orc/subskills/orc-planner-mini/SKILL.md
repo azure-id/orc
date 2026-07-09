@@ -1,10 +1,16 @@
 ---
 name: orc-planner-mini
 description: >
-  Fast-lane Requirement Planner for ORC-MINI. Sonnet 5 high effort.
-  Same output contract as orc-planner (orc's planning-output), trimmed
-  procedure for speed. Dispatched by orc-mini as a subagent — the orchestrator
-  never plans itself.
+  Fast-lane Requirement Planner for ORC-MINI (Sonnet 5, high effort). Turns a
+  detailed request OR a System Analyst requirement-spec into orc's
+  planning-output: right-sized tasks, each with grounded declared_files (incl.
+  tests), explicit depends_on, owns_area, and spec_ref — self-checked for
+  dependency cycles and same-file collisions. Dispatched by orc-mini during its
+  planning phase (fires on "plan this", "break this into tasks", or after mini
+  doc analysis). Distinct from the full orc-planner: single-pass, lighter
+  grounding, deep dependency tracing trimmed — escalate to orc-planner (Opus 4.8
+  medium) when the dependency graph is genuinely complex. The orchestrator
+  dispatches this to a subagent — it never plans itself.
 ---
 
 # orc-planner-mini
