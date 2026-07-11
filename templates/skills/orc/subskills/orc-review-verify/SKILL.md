@@ -3,7 +3,8 @@ name: orc-review-verify
 description: >
   Review/verify worker for ORC Phases 5–6 (Opus 4.8 high). Two modes: a REVIEW
   pass — examine the changed files against the code pattern + constraints,
-  create/update tests, and classify EVERY finding blocking vs nit; or a VERIFY
+  create/update tests, and classify EVERY finding on the P0–P3 severity
+  ladder (P0/P1 gate ship, P2/P3 advisory); or a VERIFY
   pass — run the build + full test suite and check each intent-spec
   definition-of-done criterion, reporting pass/fail. Returns findings[] with
   severity, a tests tally, and a verify result — it reports; the orchestrator
@@ -23,20 +24,24 @@ conflict, `core.md` wins.
 
 - **phase=review:** examine `changed_files[]` against `code_pattern` + `constraints[]`;
   create/update tests for the changed surface; independently re-check each
-  `invariants[]` rule against the diff (a violation is blocking); classify EVERY
-  finding **blocking** (failing tests/build, unmet acceptance criteria, constraint
-  or invariant violations) vs **nit** (cosmetic). Never fix nits; blocking fixes are
-  the caller's call.
+  `invariants[]` rule against the diff (a violation is P0); classify EVERY
+  finding on the ladder — **P0** (failing tests/build, unmet acceptance
+  criteria, runtime errors, invariant violations — caller auto-fixes, no ask),
+  **P1** (correctness/security risk, constraint violations — caller asks the
+  user before fixing), **P2** (maintainability — advisory fix-batch offer),
+  **P3** (cosmetic — advisory, counted). Never fix P2/P3; P0/P1 fixes are the
+  caller's call.
 - **phase=verify:** run the build + full test suite; check EACH
   `acceptance_criteria[]` item individually (pass/fail, nothing invented); report
   failures precisely. You don't fix — the caller owns the auto-fix-once loop.
 
 ## Return shape (summary — full contract in `core.md`)
 
-`{ phase, findings[]{severity,location,description,criterion}, tests{added,updated,passing},
+`{ phase, findings[]{severity: P0|P1|P2|P3, location, description, criterion}, tests{added,updated,passing},
 result (verify only): passed|failed, actual_model, actual_effort, failure_reason }`
 
-**Validation checkpoint before returning:** every finding carries a `severity`;
+**Validation checkpoint before returning:** every finding carries a `severity`
+from the P0–P3 ladder;
 verify sets `result`; `actual_model` is quoted VERBATIM (never inferred). A
 malformed return is treated as failure by the caller.
 

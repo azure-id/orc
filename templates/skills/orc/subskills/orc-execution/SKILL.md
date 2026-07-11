@@ -24,7 +24,9 @@ contract); the summary below orients — on any conflict, `core.md` wins.
 
 1. Absorb `log_digest` (prior DECISIONs/INTERFACEs/ANSWERs bind you); read `spec_ref`.
 2. Implement EXACTLY the task in the slice, touching only `declared_files[]`,
-   honoring every `constraints[]` hard rule; create/update tests for what you build.
+   honoring every `constraints[]` hard rule AND the standing `house_rules` card
+   (surgical changes, simplicity-first, no unrequested scope); create/update
+   tests for what you build.
 3. Emit milestone pings ({percent, files_written[], notes}) as you go.
 4. Stay in your slice — need outside context? emit `needs_context`, don't fetch it.
 

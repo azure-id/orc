@@ -48,13 +48,13 @@ O: [state-of-play → checkpoint → re-anchored] "Resuming: merchant notificati
 ▶ W3: spawn T5+T6 (Sonnet 5 med) → done. All 6 complete.
 
 ## Phase 5 — Review (spawned worker, Opus 4.8 high)
-O: Code pattern? U: none. Findings: BLOCKING T2 no pagination · NIT email_digest naming ×2 · 12 tests added.
+O: Code pattern? U: none. Findings (P0–P3 ladder): P1 T2 no pagination (correctness risk — asks user, U: fix it) · P3 email_digest naming ×2 · 12 tests added.
 
 ## Phase 6 — Verify (spawned worker, Opus 4.8 high; criteria = definition-of-done)
-   bell ✓ · both schedules ✗ (weekly cron missing) · prefs ✓ + pagination blocker → FAILED → auto-fix (single attempt) → re-verify → PASSED. 14/14.
+   bell ✓ · both schedules ✗ (weekly cron missing = P0, unmet criterion) · prefs ✓ → FAILED → P0 auto-fix (single attempt, no ask) → re-verify → PASSED. 14/14.
 
 ## Phase 7 — Summary
-O: 6 tasks/3 waves/6 spawns/1 pause/1 fresh-session resume · 1 needs_context · 1 escalation · verify fixed_then_passed · branch green. Fix 2 nits? U: no.
+O: 6 tasks/3 waves/6 spawns/1 pause/1 fresh-session resume · 1 needs_context · 1 escalation · verify fixed_then_passed · branch green. P2 fix-batch: none · Apply the 2 P3 cosmetics? U: no.
 
 ## Phase 8 — Ship (orc-pr, reads pr.md)
 O: Branch: feat/notifications. Commit? Push? PR? U: yes all.

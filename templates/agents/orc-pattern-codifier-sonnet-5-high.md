@@ -49,6 +49,11 @@ files, never write the cache (the caller does), never implement, never spawn.
 - invariants[] — the BLOCKING security/correctness rules (from the playbook)
 - conflicts[] — {rule, project_choice, playbook_choice, kept: project, why}
 - ambiguities[] — anything the user should resolve (empty if none)
+- validation_gate[] — the playbook's default acceptance checks, when its
+  "Validation gate" section defines them (reconcile like conventions: drop a
+  check only if the project demonstrably does it differently; keep
+  measurable-only — checks needing tooling the project lacks stay advisory).
+  Empty when the playbook defines none.
 - fingerprint — the structural signature for drift detection
 - pattern_version — `<YYYY-MM-DD>-<letter>` (letter increments on same-day refresh)
 - actual_model — the model id quoted VERBATIM from your system prompt ("The exact

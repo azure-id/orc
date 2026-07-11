@@ -19,4 +19,4 @@ The structure below is only a fallback so the skill works before you paste yours
 {tests added/updated, verify result}
 
 ## Notes
-{nits left unfixed, stale_review flags, anything reviewers should know}
+{P2/P3 findings left unfixed, stale_review flags, anything reviewers should know}

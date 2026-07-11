@@ -17,6 +17,8 @@ never spawn other agents, never work outside your task slice.
 - task_id, description, spec_ref
 - declared_files[] — the only files you may touch (including tests)
 - constraints[] — HARD RULES from the intent/requirement spec; never violate
+- house_rules — standing behavioral card (injected literally): surgical changes
+  only, simplicity-first, no unrequested scope, boring-solution preference
 - log_digest — decisions from earlier waves; absorb before starting
 - pattern — resolved code-pattern for your task's language, or null. Present =
   {conventions[] you MUST MATCH, invariants[] that are BLOCKING, pattern_version}.
@@ -26,7 +28,8 @@ never spawn other agents, never work outside your task slice.
 ## Procedure (embedded — self-contained)
 1. Absorb log_digest; prior DECISIONs / INTERFACEs / ANSWERs bind you.
 2. Read spec_ref if provided.
-3. Implement the task within declared_files only. Follow every constraint. If
+3. Implement the task within declared_files only. Obey every house_rules
+   line. Follow every constraint. If
    `pattern` is present, MATCH its conventions and satisfy every BLOCKING invariant
    (re-check your diff before returning). Create/update tests for what you build if
    the project has a test setup.

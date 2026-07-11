@@ -57,7 +57,9 @@ not implementation — you still never write code.
 Phase 0  intake (Q1–Q4, soft sign-off) + run folder + intent-spec
 Phase 1  planning (dispatch orc-planner-mini; analyst first only on real docs)
          → one-line complexity read (mini-ok? or recommend switch-to-full)
-Phase 3  dispatch ONE executor (orc-executor-sonnet-5-high), collect + validate return
+Phase 3  dispatch ONE executor (orc-executor-sonnet-5-high) — slice carries the
+         standing `house_rules` card (`../orc/references/house-rules.md`, card
+         lines injected literally, same as full) — collect + validate return
 Phase M  SMOKE GATE — run build+test → GREEN proceed · RED block ship + surface
 Phase T  TEST-AUTHORING ASK (opt-in) — offer to write test cases (never run them)
 Phase 8  ship (commit / push / PR)

@@ -6,7 +6,7 @@
 
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
-![Version](https://img.shields.io/badge/version-0.5.1-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.6.0-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D16-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
@@ -37,6 +37,35 @@ zero-dependency npm package installs those files into your `.claude/` directory.
 
 ## Changelog
 
+### v0.6.0 — P0–P3 severity ladder · house-rules card · deepened FastAPI playbook _(2026-07-11)_
+
+- **P0–P3 severity ladder** replaces binary blocking/nit on review + verify
+  findings — and each level drives DISTINCT handling: **P0** (broken
+  build/tests/criteria, invariant violations) auto-fixed once without asking ·
+  **P1** (correctness/security risk, constraint violations) gates ship, you're
+  asked before the fix · **P2** (maintainability) offered as an optional
+  fix-batch in the summary · **P3** (cosmetic) counted only. Applied everywhere
+  findings exist: reviewer, verifier, standalone `/orc-verify`, trace marker
+  (now `FINDING p0= p1= p2= p3=`), checkpoint (old checkpoints map
+  blocking→P1 / nits→P3 on resume).
+- **Standing house-rules card** (`orc/references/house-rules.md`) injected
+  literally into every executor slice, full **and** mini lanes: surgical changes
+  only, simplicity-first, no unrequested scope, prefer the boring solution.
+  Deliberately excludes anything the slice contract already enforces.
+- **`be-fastapi.md` playbook deepened** — a real minimal-complete worked example
+  (schema → router → CRUD → auth dependency), marked *shape reference: your
+  project's layout always wins*, plus a measurable-only **Validation gate**
+  (expected status codes, pagination, Pydantic-validated inputs; coverage/p95
+  stay advisory). The codifier can now return `validation_gate[]`, cached via an
+  optional pattern-doc section (carried in the cache — slice/verify wiring lands
+  in a later release; old cached patterns stay valid).
+- **Docs de-staled:** `knowledge.md` version banner + §7 status caught up from
+  v0.2.1 to the real feature set; agent/skill counts fixed (16 agents, 8 skills)
+  here and in `CLAUDE.md`.
+
+<details>
+<summary><b>Previous versions</b> (click to expand)</summary>
+
 ### v0.5.1 — Statusline false-degrade fix _(2026-07-11)_
 
 - **Fixed** the statusline false-firing `⛔ ORC WILL DEGRADE (model≠Opus4.8)` on a
@@ -46,9 +75,6 @@ zero-dependency npm package installs those files into your `.claude/` directory.
 - A **missing** effort field no longer counts as `effort≠high` (the PreToolUse
   guard already blocks a genuinely low-effort `/orc`).
 - The **context-window %** keeps rendering in every state — unchanged, always on.
-
-<details>
-<summary><b>Previous versions</b> (click to expand)</summary>
 
 ### v0.5.0 — Code-pattern findings
 `orc-pattern` skill + `/orc-pattern`: learns your project's real conventions per

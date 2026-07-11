@@ -16,15 +16,16 @@ V: [detects Python/poetry/pytest]
    $ poetry run mypy api/                     → clean
    Build/type/test: GREEN.
 
-## Diff sanity + findings (blocking vs nit)
+## Diff sanity + findings (P0–P3 ladder)
 V: Walks each hunk against intent inferred from the diff:
-   ⛔ BLOCKING  api/routes/orders.py:42 — new `/orders/{id}` route has no auth
-      decorator; every sibling route uses `@require_auth`. Likely unintended.
-   • nit  api/schemas.py:18 — field `createdAt` breaks the snake_case convention
+   ⛔ P1  api/routes/orders.py:42 — new `/orders/{id}` route has no auth
+      decorator; every sibling route uses `@require_auth`. Security risk —
+      likely unintended. (Not P0: build/tests are green.)
+   • P3  api/schemas.py:18 — field `createdAt` breaks the snake_case convention
       used elsewhere (`created_at`).
-   • nit  tests/test_orders.py — no negative-path test for a missing id.
+   • P2  tests/test_orders.py — no negative-path test for a missing id.
 
 ## Summary (read-only — no edits, no commit)
-V: 1 blocking, 2 nits. Tests green but the missing auth decorator should be fixed
-   before commit. I don't edit or commit — hand this to /orc or fix manually, then
-   re-run /orc-verify.
+V: 1 P1, 1 P2, 1 P3. Tests green but the missing auth decorator gates the
+   commit (P0/P1 = fix before commit; P2/P3 advisory). I don't edit or commit —
+   hand this to /orc or fix manually, then re-run /orc-verify.

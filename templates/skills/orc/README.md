@@ -97,7 +97,10 @@ orc/
 - **Strict contracts.** Workers receive slices, return fixed structures;
   malformed = failure. `needs_context` (cap 2) is the only way a worker asks
   for more.
-- **Auto-fix once** on blocking verify failures; nits reported then you're asked.
+- **P0–P3 severity ladder** on review/verify findings: P0 (objective breakage)
+  auto-fixed once without asking · P1 (correctness/security risk) gates ship,
+  you're asked before the fix · P2/P3 advisory, offered as an optional
+  fix-batch in the summary.
 
 ## Verify at first run (environment-dependent)
 

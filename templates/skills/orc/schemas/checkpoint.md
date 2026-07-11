@@ -62,7 +62,9 @@ Two files, two jobs:
       "affected_tasks": [], "downstream_flagged": [] }
   ],
 
-  "review":  { "ran": false },   // shape as in v1: blocking[], nits[], model, effort
+  "review":  { "ran": false },   // when ran: p0[], p1[], p2[], p3[], model, effort
+                                 // (v1 checkpoints used blocking[]/nits[] — on resume
+                                 //  map blocking→p1, nits→p3; never rewrite the old file)
   "verify":  { "ran": false },   // result, autofix_used, autofix_remaining (starts 1)
   "ship":    { "commit": null, "push": null, "create_pr": null,
                "ticket": null, "pr_title": null, "target_branch": null, "pr_file": null },

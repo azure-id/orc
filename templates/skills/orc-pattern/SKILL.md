@@ -77,9 +77,12 @@ For each language needing codification, dispatch the codifier with the slice:
   real files for that language (use `git log`/mtime; cap ~8 files).
 
 The codifier returns the reconciled pattern per `schemas/pattern-doc.md`
-(Conventions [project-won] + Invariants [always] + Conflicts flagged + a
+(Conventions [project-won] + Invariants [always] + Conflicts flagged + an
+optional `validation_gate[]` [when the playbook defines one] + a
 `fingerprint` + a `pattern_version` = `<date>-<letter>`). Validate the return, then
-YOU write `.claude/orc/patterns/<lang>-pattern.md`.
+YOU write `.claude/orc/patterns/<lang>-pattern.md` — include the Validation-gate
+section when the return carries one (it is cached but not yet wired into
+slices/verify; see the schema's measurability rule).
 
 ## Phase 2 — Report
 

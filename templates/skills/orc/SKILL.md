@@ -56,8 +56,12 @@ Confirm you are running as **Opus 4.8 at high effort** before anything else.
    to the project root, stop and redirect into the run subfolder.
 4. **No two tasks with overlapping `declared_files` share a wave.** Conflicts are
    prevented by scheduling. A task without declared files cannot be waved.
-5. **Auto-fix retries exactly once** (blocking issues only). Second failure →
-   STOP and surface. Nits are reported, never auto-fixed (user is asked).
+5. **Severity drives the fix path (P0–P3 ladder).** P0 (objective breakage:
+   failed build/tests/criteria, runtime errors, invariant violations) →
+   auto-fix ONCE without asking; second failure → STOP and surface. P1
+   (correctness/security risk, constraint violations) → gates ship, but ASK the
+   user before dispatching the fix (judgment call, never silent). P2/P3 →
+   advisory, never auto-fixed (offered in Phase 7).
 6. **You alone write the checkpoint and state-of-play.** Workers never touch them.
 7. **Validate every subskill return** against its contract. Malformed = failure
    (requeue with reason). This includes checkpoint and PR returns.
@@ -157,7 +161,7 @@ skill improvement, separate from the decision log and NEVER deleted. When
   actual=…/… ✅ MATCH` or `⛔ DOWNGRADE expected=…`. **Surface a downgrade to the
   user** — it means the main tier capped a pin (the "wrong model" bug). Fold any
   worker `QUESTION` / `CONTEXT-GAP` markers in as well.
-- **Review/verify:** emit `FINDING blocking=n nit=n` and `VERDICT pass|fail`.
+- **Review/verify:** emit `FINDING p0=n p1=n p2=n p3=n` and `VERDICT pass|fail`.
 - **Run end (Phase 8 or abort):** emit `FINISH …` and delete `log_dir/.current`.
 
 ## Code-pattern findings (executors match the project's house style)
@@ -196,6 +200,8 @@ the project; security/correctness invariants are always enforced.** See the
 - Phase 0 → `references/intake.md`
 - Phase 2 → `references/effort-and-mode.md` (mode gate + task scoring rubric)
 - Phase 3 → `references/wave-grouping.md` + `references/log-protocol.md`
+  + `references/house-rules.md` (the standing behavioral card injected into
+    every executor slice — read once per run)
   - workers → `subskills/orc-execution/` (always spawned; subagent wrapper)
   - code-pattern (FE/BE) → `../orc-pattern/SKILL.md` (dispatch the codifier on a
     cache miss per config `pattern_findings`; inject the resolved pattern into slices)
@@ -319,7 +325,10 @@ you inject it into each task's slice below and reuse it at Phase 5.
 Per wave:
 1. Dispatch EVERY task as a spawned subagent via the Task tool, with the
    subagent wrapper framing + the task's INPUT SLICE (see orc-execution/core.md
-   contract) + its scored model/effort. For an FE/BE task, INJECT the resolved
+   contract) + its scored model/effort. EVERY slice carries `house_rules`: the
+   card lines from `references/house-rules.md` (between its card markers),
+   injected LITERALLY — read the file once per run, never pass a pointer. For an
+   FE/BE task, INJECT the resolved
    `pattern` (conventions to MATCH + blocking invariants) LITERALLY into its slice
    — never a file pointer; agnostic tasks get the universal invariants only. You
    never do the task yourself, regardless of size (hard rule 1). Sequential style =
@@ -358,14 +367,16 @@ Superpowers path: its review skill incl. tests (Sonnet 4.6, medium).
 OpenSpec/self path: review worker (Opus 4.8, high). If this run resolved a
 code-pattern (from the Phase 3 gate), pass it as `code_pattern` AND pass its
 blocking `invariants[]` for the re-check — don't re-ask. Otherwise FIRST ask for a
-code pattern (paste text / md / none). Classify findings **blocking vs nit**; an
-invariant violation is BLOCKING.
+code pattern (paste text / md / none). Findings come back on the **P0–P3
+ladder**; an invariant violation is P0. Apply hard rule 5: P0 → auto-fix once
+(no ask) · P1 → ask the user, then fix once · P2/P3 → record for Phase 7.
 
 ## Phase 6 — Verify (same subskill, phase=verify)
 
 Verify worker (Opus 4.8, high) checks against the intent-spec's
-**definition-of-done** as acceptance criteria. Blocking issues → auto-fix once
-→ re-verify once → second failure STOPS.
+**definition-of-done** as acceptance criteria. P0 findings → auto-fix once
+→ re-verify once → second failure STOPS. P1 findings → ask before the one
+fix attempt, then re-verify (same single-retry cap).
 
 ## Phase 6.5 — Test Authoring (opt-in; load subskills/orc-testgen/)
 
@@ -388,9 +399,11 @@ review/verify.
 ## Phase 7 — Summary
 
 Report: tasks/waves/dispatches (with scores + any overrides), escalations,
-needs_context events, review findings, verify result, **authored test cases
+needs_context events, review findings by severity (P0/P1 resolved during
+review/verify; P2 itemized; P3 counted), verify result, **authored test cases
 (files + TEST-PLAN.md + curl bundle + run command) when Phase 6.5 ran**, repo
-state + branch, stale_review flags. Then ask: **"Fix the style nits too?"**
+state + branch, stale_review flags. Then ask: **"Apply the P2 fix-batch?
+The P3 cosmetics too?"** (one question, both levels — never fix unasked).
 
 ## Phase 8 — Ship (load subskills/orc-pr/SKILL.md)
 

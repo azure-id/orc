@@ -29,8 +29,10 @@ Run as Opus 4.8, high effort.
      isn't clean); capture failures.
    - Check the diff for obvious breakage: broken imports, references to removed
      symbols, unhandled errors introduced, type errors.
-4. **Classify findings** blocking vs nit (same rule as the full skill: blocking
-   = failing build/tests, broken references, runtime errors; nit = cosmetic).
+4. **Classify findings** on the P0–P3 severity ladder (same rule as the full
+   skill: P0 = failing build/tests, broken references, runtime errors ·
+   P1 = correctness/security risk · P2 = maintainability · P3 = cosmetic).
+   P0/P1 mean NOT ready to commit; P2/P3 are advisory.
 5. **Show a summary** and STOP. This skill does not fix, stage, or commit.
 
 ## Output (summary)
@@ -38,10 +40,10 @@ Run as Opus 4.8, high effort.
 ```
 ORC-VERIFY — <n> files changed
 Build: <pass/fail/none>   Tests: <x/y passing>
-Blocking:
-  - <file:loc> <issue>
-Nits:
-  - <file:loc> <issue>
+P0/P1 (gate — fix before commit):
+  - <P0|P1> <file:loc> <issue>
+P2/P3 (advisory):
+  - <P2|P3> <file:loc> <issue>
 Verdict: <READY / NEEDS FIXES>
 ```
 

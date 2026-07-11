@@ -45,7 +45,7 @@ Actors: `orc` (orchestrator), `hook`, or a role/agent short name
 | `QUESTION count=<n> :: <topic>` | subagent→orc | stopped to ask the user |
 | `CONTEXT-GAP :: <what was already known>` | subagent→orc | asked/re-derived something already in context |
 | `REPLAN wave=<n> :: <reason>` | orc | re-planned after a conflict/failure |
-| `FINDING blocking=<n> nit=<n>` | reviewer→orc | review outcome |
+| `FINDING p0=<n> p1=<n> p2=<n> p3=<n>` | reviewer→orc | review outcome (P0–P3 severity ladder) |
 | `VERDICT pass\|fail :: <detail>` | verifier→orc | verification outcome |
 | `FINISH :: <detail>` | orc | run ended |
 

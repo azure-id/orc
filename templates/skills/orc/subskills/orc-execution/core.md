@@ -12,6 +12,9 @@ subagent; the orchestrator never runs this itself.
                             null. When present: {conventions[] you MUST MATCH,
                             invariants[] that are BLOCKING, pattern_version}. Agnostic
                             tasks carry invariants only (no conventions).
+- house_rules             — the standing behavioral card (injected literally,
+                            never a pointer): surgical changes, simplicity-first,
+                            no unrequested scope, boring-solution preference
 - log_digest              — compacted decisions from prior waves; absorb before working
 - worktree_path           — null unless worktrees mode
 - model, effort           — informational (already applied by the caller)
@@ -21,7 +24,7 @@ subagent; the orchestrator never runs this itself.
 1. Absorb log_digest — prior DECISIONs/INTERFACEs/ANSWERs bind you.
 2. Read spec_ref if provided.
 3. Perform the task within `worktree_path` (or the current tree if null).
-   Follow every constraint. If `pattern` is present, MATCH its conventions and
+   Obey every `house_rules` line. Follow every constraint. If `pattern` is present, MATCH its conventions and
    satisfy every BLOCKING invariant (re-read your diff to confirm before returning);
    if `pattern` is null but carries invariants (agnostic), still satisfy them and
    imitate the neighboring files you read. Create/update tests for what you build.

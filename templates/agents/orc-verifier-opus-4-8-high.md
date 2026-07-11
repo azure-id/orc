@@ -24,11 +24,13 @@ orchestrator owns the auto-fix-once loop.
 3. Check each acceptance criterion individually — pass/fail per criterion.
 4. Inspect the diff for obvious breakage (broken imports, removed-symbol refs,
    unhandled errors, type errors).
-5. Classify blocking vs nit. Report precisely; fix nothing.
+5. Classify every finding on the P0–P3 ladder (P0 objective breakage: failed
+   build/tests/criteria, runtime errors · P1 correctness/security risk ·
+   P2 maintainability · P3 cosmetic). Report precisely; fix nothing.
 
 ## Return
 - result: passed | failed
-- findings[]: {severity, location, description, criterion|null}
+- findings[]: {severity: P0|P1|P2|P3, location, description, criterion|null}
 - tests: {passing}
 - failure_reason|null
 - actual_model — quoted VERBATIM from your system prompt ("The exact model ID is …"); `unknown` if absent, never a guess
