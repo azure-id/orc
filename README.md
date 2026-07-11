@@ -37,7 +37,7 @@ zero-dependency npm package installs those files into your `.claude/` directory.
 
 ## Changelog
 
-### v0.6.0 — P0–P3 severity ladder · house-rules card · deepened FastAPI playbook _(2026-07-11)_
+### v0.6.0 — P0–P3 ladder · house rules · deep playbooks + wired gates · 3 new languages · FE rule packs · security pass _(2026-07-11)_
 
 - **P0–P3 severity ladder** replaces binary blocking/nit on review + verify
   findings — and each level drives DISTINCT handling: **P0** (broken
@@ -52,13 +52,30 @@ zero-dependency npm package installs those files into your `.claude/` directory.
   literally into every executor slice, full **and** mini lanes: surgical changes
   only, simplicity-first, no unrequested scope, prefer the boring solution.
   Deliberately excludes anything the slice contract already enforces.
-- **`be-fastapi.md` playbook deepened** — a real minimal-complete worked example
-  (schema → router → CRUD → auth dependency), marked *shape reference: your
-  project's layout always wins*, plus a measurable-only **Validation gate**
-  (expected status codes, pagination, Pydantic-validated inputs; coverage/p95
-  stay advisory). The codifier can now return `validation_gate[]`, cached via an
-  optional pattern-doc section (carried in the cache — slice/verify wiring lands
-  in a later release; old cached patterns stay valid).
+- **All 9 playbooks deepened, validation gates wired end-to-end** — every
+  playbook (FastAPI, NestJS, Go, React, Next.js, Vue + the new three) now ships
+  a real minimal-complete worked example marked *shape reference: your project's
+  layout always wins*, plus a measurable-only **Validation gate**. The gate
+  flows the whole pipeline: codifier returns `validation_gate[]` → cached →
+  injected into the executor's `pattern` slice → reviewer re-checks it →
+  verifier folds it into the acceptance criteria (an unmet enforceable line is
+  P0). Enforceable-vs-advisory is decided once, at reconciliation: only checks
+  the project's own tooling can verify gate; coverage-%/latency bars stay
+  advisory. Old cached patterns without a gate stay valid.
+- **Three new languages:** `django`, `express`, `angular` playbooks + detection
+  rows (Nest wins over Express; FastAPI/Django win over generic Python).
+- **FE rule packs** — `fe-a11y.md` + `fe-perf.md`, capped at 15 impact-ordered
+  rules each, checked by the reviewer on FE diffs as `fe_rules[]` (file:line
+  findings, P1–P3 by impact, never auto-P0). Executors also read the
+  environment's `frontend-design` skill on UI tasks when it's installed.
+- **Opt-in security pass (Phase 5.5)** — config `security_review: off|ask|on`
+  (default **off**). Fires only on runs where a task scored **≥ 70** (the
+  existing risk floor — security/money/migrations/auth), reusing the reviewer
+  in security mode with a 12-item OWASP/STRIDE checklist scoped to the run's
+  changed files; wraps Semgrep when already installed, never installs tooling.
+- **`orc config` menu caught up:** `pattern_findings` + `orc_wiki_pattern_findings`
+  are now actually in the CLI mirror (missed in v0.5.0), alongside the new
+  `security_review`.
 - **Docs de-staled:** `knowledge.md` version banner + §7 status caught up from
   v0.2.1 to the real feature set; agent/skill counts fixed (16 agents, 8 skills)
   here and in `CLAUDE.md`.

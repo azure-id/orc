@@ -137,7 +137,9 @@ opt-in), Phase 2 (batch-pause) and Phase 3 (wave cap). It also provides
 `generate_tests` (default `false` — the opt-in Phase 6.5 gate) and `logging`
 (default `false`) + `log_dir` (default `.claude/orc/logs`) — see the
 behavior-trace section below. And `pattern_findings` (default `ask`) — the
-code-pattern gate applied at Phase 3 dispatch (see the code-pattern section).
+code-pattern gate applied at Phase 3 dispatch (see the code-pattern section) —
+and `security_review` (default `off`; `ask`/`on` enable the opt-in Phase 5.5
+security pass on runs containing a task scored ≥ 70).
 
 ## Behavior trace (opt-in — only when config `logging: true`)
 
@@ -207,6 +209,9 @@ the project; security/correctness invariants are always enforced.** See the
     cache miss per config `pattern_findings`; inject the resolved pattern into slices)
   - stops → `subskills/orc-checkpoint/SKILL.md` + `references/stop-and-resume.md`
 - Phase 5–6 → `subskills/orc-review-verify/` (always spawned; subagent wrapper)
+  - FE tasks in run → `../orc-pattern/references/fe-a11y.md` + `fe-perf.md`
+    (rule packs passed to the reviewer as `fe_rules[]`)
+- Phase 5.5 (opt-in, `security_review`) → `references/security-checklist.md`
 - Phase 6.5 (opt-in) → `subskills/orc-testgen/` (spawned; only when `generate_tests`)
 - Phase 8 → `subskills/orc-pr/SKILL.md` (template: `subskills/orc-pr/pr.md`)
 - Schemas (you own; pass slices only): `schemas/intent-spec.md`,
@@ -329,7 +334,8 @@ Per wave:
    card lines from `references/house-rules.md` (between its card markers),
    injected LITERALLY — read the file once per run, never pass a pointer. For an
    FE/BE task, INJECT the resolved
-   `pattern` (conventions to MATCH + blocking invariants) LITERALLY into its slice
+   `pattern` (conventions to MATCH + blocking invariants + the enforceable
+   `validation_gate[]` lines) LITERALLY into its slice
    — never a file pointer; agnostic tasks get the universal invariants only. You
    never do the task yourself, regardless of size (hard rule 1). Sequential style =
    one spawn at a time; parallel style = the wave's spawns together.
@@ -366,15 +372,36 @@ BOTH tasks' specs/intents, not just the diff. Record merge state in checkpoint.
 Superpowers path: its review skill incl. tests (Sonnet 4.6, medium).
 OpenSpec/self path: review worker (Opus 4.8, high). If this run resolved a
 code-pattern (from the Phase 3 gate), pass it as `code_pattern` AND pass its
-blocking `invariants[]` for the re-check — don't re-ask. Otherwise FIRST ask for a
-code pattern (paste text / md / none). Findings come back on the **P0–P3
-ladder**; an invariant violation is P0. Apply hard rule 5: P0 → auto-fix once
+blocking `invariants[]` + enforceable `validation_gate[]` lines for the re-check
+— don't re-ask. Otherwise FIRST ask for a
+code pattern (paste text / md / none). **FE rule packs:** if any task in the run
+was tagged FE, read `../orc-pattern/references/fe-a11y.md` + `fe-perf.md` and
+pass their rules as `fe_rules[]` (reviewer emits file:line findings, P1–P3 by
+impact, never auto-P0). Findings come back on the **P0–P3
+ladder**; an invariant violation or unmet gate line is P0. Apply hard rule 5:
+P0 → auto-fix once
 (no ask) · P1 → ask the user, then fix once · P2/P3 → record for Phase 7.
+
+## Phase 5.5 — Security pass (opt-in; config `security_review`)
+
+Runs ONLY when config `security_review` is `on`/`ask` (default `off`) AND at
+least one task in the run scored **≥ 70** (the risk floor already marks
+security/money/migration/auth work — the trigger reuses that signal, computing
+nothing new). `ask` → one P0 prompt after review ("High-risk tasks in this run —
+run the security pass?"); `on` → dispatch without asking; `off` → skip silently.
+
+Dispatch the reviewer (`orc-reviewer-opus-4-8-high`) with `phase=security` and a
+slice: the run's changed files + the checklist from
+`references/security-checklist.md` (load only now). Findings land on the same
+P0–P3 ladder and follow the same hard-rule-5 handling. Report-only worker;
+never gates on advisory levels.
 
 ## Phase 6 — Verify (same subskill, phase=verify)
 
 Verify worker (Opus 4.8, high) checks against the intent-spec's
-**definition-of-done** as acceptance criteria. P0 findings → auto-fix once
+**definition-of-done** as acceptance criteria PLUS the resolved pattern's
+enforceable `validation_gate[]` lines (pass them in the slice — each line is a
+criterion; an unmet line is P0). P0 findings → auto-fix once
 → re-verify once → second failure STOPS. P1 findings → ask before the one
 fix attempt, then re-verify (same single-retry cap).
 

@@ -4,9 +4,11 @@ description: >
   Review/verify worker for ORC Phases 5–6 (Opus 4.8 high). Two modes: a REVIEW
   pass — examine the changed files against the code pattern + constraints,
   create/update tests, and classify EVERY finding on the P0–P3 severity
-  ladder (P0/P1 gate ship, P2/P3 advisory); or a VERIFY
+  ladder (P0/P1 gate ship, P2/P3 advisory); a VERIFY
   pass — run the build + full test suite and check each intent-spec
-  definition-of-done criterion, reporting pass/fail. Returns findings[] with
+  definition-of-done criterion PLUS the pattern's enforceable validation-gate
+  lines, reporting pass/fail; or an opt-in SECURITY pass — sweep the changed
+  files against a supplied OWASP/STRIDE checklist. Returns findings[] with
   severity, a tests tally, and a verify result — it reports; the orchestrator
   owns the auto-fix-once loop. Dispatched in-pipeline after execution; distinct
   from the standalone /orc-verify (which checks only git-modified changes with no
@@ -24,16 +26,24 @@ conflict, `core.md` wins.
 
 - **phase=review:** examine `changed_files[]` against `code_pattern` + `constraints[]`;
   create/update tests for the changed surface; independently re-check each
-  `invariants[]` rule against the diff (a violation is P0); classify EVERY
+  `invariants[]` rule AND each enforceable `validation_gate[]` line against the
+  diff (a violation is P0), plus any `fe_rules[]` pack rules on FE diffs
+  (file:line findings, P1–P3 by impact, never auto-P0); classify EVERY
   finding on the ladder — **P0** (failing tests/build, unmet acceptance
   criteria, runtime errors, invariant violations — caller auto-fixes, no ask),
   **P1** (correctness/security risk, constraint violations — caller asks the
   user before fixing), **P2** (maintainability — advisory fix-batch offer),
   **P3** (cosmetic — advisory, counted). Never fix P2/P3; P0/P1 fixes are the
   caller's call.
-- **phase=verify:** run the build + full test suite; check EACH
-  `acceptance_criteria[]` item individually (pass/fail, nothing invented); report
-  failures precisely. You don't fix — the caller owns the auto-fix-once loop.
+- **phase=verify:** run the build + full test suite; fold the enforceable
+  `validation_gate[]` lines into the criteria set, then check EACH criterion
+  individually (pass/fail, nothing invented; an unmet gate line = unmet
+  criterion = P0); report failures precisely. You don't fix — the caller owns
+  the auto-fix-once loop.
+- **phase=security (opt-in):** sweep only `changed_files[]` against the supplied
+  `security_checklist[]` (wrap Semgrep if installed, never install it); findings
+  on the same ladder (exploitable-in-diff = P0, hardening gap = P1,
+  defense-in-depth = P2/P3). Report-only, no `result` verdict.
 
 ## Return shape (summary — full contract in `core.md`)
 

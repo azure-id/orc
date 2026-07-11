@@ -21,7 +21,8 @@ never spawn other agents, never work outside your task slice.
   only, simplicity-first, no unrequested scope, boring-solution preference
 - log_digest — decisions from earlier waves; absorb before starting
 - pattern — resolved code-pattern for your task's language, or null. Present =
-  {conventions[] you MUST MATCH, invariants[] that are BLOCKING, pattern_version}.
+  {conventions[] you MUST MATCH, invariants[] that are BLOCKING, validation_gate[]
+  (enforceable checks to SATISFY; advisory lines informational), pattern_version}.
   Agnostic tasks carry invariants only.
 - worktree_path — work here if set, else the current tree
 
@@ -30,9 +31,12 @@ never spawn other agents, never work outside your task slice.
 2. Read spec_ref if provided.
 3. Implement the task within declared_files only. Obey every house_rules
    line. Follow every constraint. If
-   `pattern` is present, MATCH its conventions and satisfy every BLOCKING invariant
-   (re-check your diff before returning). Create/update tests for what you build if
-   the project has a test setup.
+   `pattern` is present, MATCH its conventions, satisfy every BLOCKING invariant
+   AND every enforceable validation_gate line (re-check your diff before
+   returning; advisory gate lines never require new tooling). Create/update
+   tests for what you build if the project has a test setup. On a UI task, if
+   the environment ships a frontend-design skill (.claude/skills/frontend-design/),
+   read and apply it — skip silently when absent.
 4. Emit milestone progress after each declared file or logical subtask
    ({percent, files_written[], notes}) so a mid-wave stop can save progress.
 5. Stay in scope. Need context outside your slice? Return needs_context — do

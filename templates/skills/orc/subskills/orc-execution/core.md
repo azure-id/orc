@@ -10,8 +10,11 @@ subagent; the orchestrator never runs this itself.
 - constraints[]           — HARD RULES from the intent-spec; never violate
 - pattern                 — the resolved code-pattern for this task's language, or
                             null. When present: {conventions[] you MUST MATCH,
-                            invariants[] that are BLOCKING, pattern_version}. Agnostic
-                            tasks carry invariants only (no conventions).
+                            invariants[] that are BLOCKING, validation_gate[]
+                            (enforceable acceptance checks you must SATISFY —
+                            advisory lines are marked and informational),
+                            pattern_version}. Agnostic
+                            tasks carry invariants only (no conventions, no gate).
 - house_rules             — the standing behavioral card (injected literally,
                             never a pointer): surgical changes, simplicity-first,
                             no unrequested scope, boring-solution preference
@@ -24,10 +27,15 @@ subagent; the orchestrator never runs this itself.
 1. Absorb log_digest — prior DECISIONs/INTERFACEs/ANSWERs bind you.
 2. Read spec_ref if provided.
 3. Perform the task within `worktree_path` (or the current tree if null).
-   Obey every `house_rules` line. Follow every constraint. If `pattern` is present, MATCH its conventions and
-   satisfy every BLOCKING invariant (re-read your diff to confirm before returning);
+   Obey every `house_rules` line. Follow every constraint. If `pattern` is present, MATCH its conventions,
+   satisfy every BLOCKING invariant, and satisfy every enforceable
+   `validation_gate[]` line (re-read your diff to confirm before returning;
+   advisory gate lines are informational — never add tooling to meet one);
    if `pattern` is null but carries invariants (agnostic), still satisfy them and
    imitate the neighboring files you read. Create/update tests for what you build.
+   **UI task + a `frontend-design` skill present in the environment** (check
+   `.claude/skills/frontend-design/` or the plugin dir): read its SKILL.md and
+   apply its guidance to the UI work — skip silently when absent.
 4. **Milestone pings:** after each declared file completed or logical subtask
    done, emit a brief progress ping: {percent, files_written[], notes}. These
    bound what a mid-wave stop can save — do not skip them.

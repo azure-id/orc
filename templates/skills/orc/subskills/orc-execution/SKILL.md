@@ -36,9 +36,12 @@ contract); the summary below orients — on any conflict, `core.md` wins.
 actual_files[], log_entries[], failure_reason, progress, context_request,
 pattern_version, invariants_checked }`
 
-When the slice carries a `pattern`, MATCH its conventions and satisfy every BLOCKING
-invariant; echo the `pattern_version` and set `invariants_checked: true` only after
+When the slice carries a `pattern`, MATCH its conventions, satisfy every BLOCKING
+invariant AND every enforceable `validation_gate[]` line (advisory gate lines are
+informational); echo the `pattern_version` and set `invariants_checked: true` only after
 re-checking your diff. A pattern task that returns false/absent here is malformed.
+On a UI task, if the environment ships a `frontend-design` skill, read and apply
+it (skip silently when absent).
 
 **Validation checkpoint before returning:** `status=failed` REQUIRES a
 `failure_reason`; `needs_context` REQUIRES a `context_request` (capped at 2/task);

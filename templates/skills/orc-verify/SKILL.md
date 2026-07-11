@@ -23,6 +23,10 @@ Run as Opus 4.8, high effort.
    staged) and, if useful, `git diff` for the actual hunks. Scope is ONLY the
    modified/added files — do not review the whole repo.
 2. **Detect the stack** (package manager, test runner) from the repo.
+   If `.claude/orc/patterns/<lang>-pattern.md` exists for a changed file's
+   language, read its Invariants + Validation-gate sections and check the diff
+   against them too (an invariant violation or unmet enforceable gate line is
+   P0). No cached pattern → skip silently, never codify from here.
 3. **Verify the changes:**
    - Run the build if one exists; capture failures.
    - Run the tests that cover the changed files (or the full suite if scoping

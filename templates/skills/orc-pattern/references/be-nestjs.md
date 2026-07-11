@@ -23,14 +23,64 @@ DTO, guard, pipe, `@nestjs/swagger`.
 - No circular module deps; `forwardRef()` is a last resort, not a default.
 - No unjustified `any`.
 
-## Validation gate (concrete)
-- Endpoints return the EXPECTED HTTP status codes.
-- `nest build` + lint clean; dependency graph resolves (no circular-dep errors).
-- Swagger reflects the real contract.
+## Validation gate (default acceptance checks; measurable-only)
+Enforce only what is machine-checkable in the target repo; anything needing
+tooling the project lacks is advisory, never gating.
+- Every new endpoint returns the expected status codes: 200 read · 201 create ·
+  404 missing id · 409 conflict · 400 invalid body (ValidationPipe default).
+- `nest build` clean; dependency graph resolves (no circular-dep errors).
+- Every new DTO field carries a `class-validator` decorator (visible in diff).
+- Lint clean IF the project has a linter.
+- Swagger reflects the real contract IF the project uses `@nestjs/swagger`.
+- Advisory only (never gate; requires tooling the project may lack): coverage
+  target on the new surface, p95 latency budget.
 
-## Worked-example shape
-Complete feature: module + controller (Swagger) + service (typed errors) + DTOs
-(validators) + mocked unit test (`Test.createTestingModule`).
+## Worked example (SHAPE REFERENCE — the project's observed layout ALWAYS wins)
+A minimal-complete feature slice. Imitate the SHAPE (module → controller →
+service → DTO), never this exact layout/naming when the project differs.
+
+```ts
+// dto/create-order.dto.ts — validated input
+import { IsInt, IsPositive } from "class-validator";
+
+export class CreateOrderDto {
+  @IsInt() itemId: number;
+  @IsInt() @IsPositive() quantity: number;
+}
+
+// order.service.ts — typed errors, injected deps
+@Injectable()
+export class OrderService {
+  constructor(private readonly repo: OrderRepository) {}
+
+  async findOne(id: number): Promise<Order> {
+    const order = await this.repo.findById(id);
+    if (!order) throw new NotFoundException(`Order ${id} not found`);
+    return order;
+  }
+
+  async create(dto: CreateOrderDto): Promise<Order> {
+    return this.repo.create(dto);
+  }
+}
+
+// order.controller.ts — thin, status codes explicit
+@Controller("orders")
+export class OrderController {
+  constructor(private readonly orders: OrderService) {}
+
+  @Post()
+  @HttpCode(HttpStatus.CREATED)
+  create(@Body() dto: CreateOrderDto) { return this.orders.create(dto); }
+
+  @Get(":id")
+  findOne(@Param("id", ParseIntPipe) id: number) { return this.orders.findOne(id); }
+}
+
+// order.module.ts — feature module wiring
+@Module({ controllers: [OrderController], providers: [OrderService, OrderRepository] })
+export class OrderModule {}
+```
 
 ## Delivery order
 module → controller → service → DTOs → unit test.

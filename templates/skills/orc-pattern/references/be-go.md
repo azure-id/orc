@@ -45,16 +45,51 @@ Redis, database/sql, sqlx, pgx, generics, `go.mod`, microservices.
   normal path, not an error; never store secrets in plaintext cache values.
 - Config/secrets (DSNs, Redis URLs, tokens) via env — never hardcoded.
 
-## Validation gate (concrete)
+## Validation gate (default acceptance checks; measurable-only)
+Enforce only what is machine-checkable in the target repo; anything needing
+tooling the project lacks is advisory, never gating.
 - `go build ./...` and `go vet ./...` clean.
-- `golangci-lint run` clean (if the project uses it).
+- `golangci-lint run` clean IF the project uses it.
 - Tests pass under the **race detector** (`go test -race ./...`).
+- No bare `_` error discards and no un-wrapped propagated errors in the diff.
 - For gRPC changes: proto regenerated + committed; server starts and serves.
+- Advisory only (never gate; requires tooling the project may lack): coverage
+  target on the new surface, p95 latency budget.
 
-## Worked-example shape
-1. Interface (contract) + implementation with wrapped errors + `context.Context`.
-2. A worker goroutine using `select { case <-ctx.Done(): … }` for clean shutdown.
-3. A gRPC handler returning typed `status` codes; a Redis get-or-set with TTL.
+## Worked example (SHAPE REFERENCE — the project's observed layout ALWAYS wins)
+Imitate the SHAPE (consumer-defined interface → implementation with wrapped
+errors → ctx-aware worker), never this exact layout/naming when the project differs.
+
+```go
+// order/service.go — consumer-defined contract + implementation
+type OrderStore interface {
+    GetOrder(ctx context.Context, id int64) (*Order, error)
+}
+
+func (s *Service) OrderSummary(ctx context.Context, id int64) (*Summary, error) {
+    order, err := s.store.GetOrder(ctx, id)          // ctx threads down to I/O
+    if err != nil {
+        return nil, fmt.Errorf("order summary %d: %w", id, err)  // wrap, keep chain
+    }
+    return buildSummary(order), nil
+}
+
+// order/worker.go — goroutine with a clear lifecycle
+func (s *Service) RunDigest(ctx context.Context, every time.Duration) error {
+    t := time.NewTicker(every)
+    defer t.Stop()
+    for {
+        select {
+        case <-ctx.Done():
+            return ctx.Err()                          // clean shutdown path
+        case <-t.C:
+            if err := s.sendDigest(ctx); err != nil {
+                s.log.Error("digest", "err", err)     // handle, never discard
+            }
+        }
+    }
+}
+```
 
 ## Delivery order
 proto/interface (contract) → implementation → data/transport wiring →

@@ -39,11 +39,17 @@ future ORC run; refreshed only on drift or `--refresh`.
   proves which pattern was applied.
 - **fingerprint** → checked at pattern-resolve against current files to detect
   drift (cheap structural compare, not a re-scan).
-- **Validation gate** → carried in the cache but NOT yet wired into slices or
-  verify (planned for a later release). **Measurability rule when it is wired:**
-  a gate line is enforceable only if machine-checkable in the target repo
-  (status codes, validation present, typed errors); bars needing tooling the
-  project lacks (coverage %, latency) are auto-advisory, never ship-gating.
+- **Validation gate** → injected as part of the `pattern` slice field
+  (`validation_gate[]`): the executor must satisfy every enforceable line; the
+  VERIFIER folds the enforceable lines into `acceptance_criteria[]` (an unmet
+  line is an unmet criterion → P0). **Measurability rule (decided HERE, at
+  reconciliation — downstream consumers never re-litigate it):** a gate line is
+  enforceable only if machine-checkable in the target repo (status codes,
+  validation present, typed errors, the project's own build/lint/type tools);
+  bars needing tooling the project lacks (coverage %, latency) are
+  auto-advisory — carried under an "Advisory" sub-list, reported, never gating.
+  A cache file with no Validation-gate section simply contributes no gate
+  (`/orc-pattern --refresh` re-reconciles and picks one up).
 
 ## Rules
 - Invariants are never dropped, even when a conflicting convention is kept.

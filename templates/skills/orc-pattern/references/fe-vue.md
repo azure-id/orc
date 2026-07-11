@@ -22,14 +22,54 @@ computed, Pinia, defineProps, defineEmits, SFC.
 - Accessibility: semantic HTML + ARIA; label every input.
 - Validate user input client-side, but the server is the real gate.
 
-## Validation gate (concrete)
-- Type-check passes (`vue-tsc` if TS) — **zero errors**.
-- Lint passes; no unused refs/reactives on new code.
-- Component mounts without console warnings.
+## Validation gate (default acceptance checks; measurable-only)
+Enforce only what is machine-checkable in the target repo; anything needing
+tooling the project lacks is advisory, never gating.
+- Type-check passes with the project's own setup (`vue-tsc` IF TS) — **zero errors**.
+- Lint passes IF the project has a linter; no unused refs/reactives on new code.
+- Every new `v-for` uses a stable `:key` (visible in the diff).
+- Every new watcher/listener/interval has a teardown (visible in the diff).
+- Advisory only (never gate; requires tooling the project may lack):
+  mount-without-console-warnings check.
 
-## Worked-example shape
-1. A `<script setup>` component with typed props + a Pinia store read.
-2. A composable with an `onUnmounted` cleanup.
+## Worked example (SHAPE REFERENCE — the project's observed layout ALWAYS wins)
+Imitate the SHAPE (typed SFC + cleanup-safe composable), never this exact
+naming/store layout when the project differs — including Options-API projects.
+
+```vue
+<!-- OrderStatus.vue — <script setup>, typed props, store read, stable keys -->
+<script setup lang="ts">
+import { useOrderStore } from "@/stores/orders";
+import { useOrderPolling } from "@/composables/useOrderPolling";
+
+const props = defineProps<{ orderId: string }>();
+const store = useOrderStore();
+const order = useOrderPolling(props.orderId);
+</script>
+
+<template>
+  <section aria-label="Order status">
+    <p v-if="!order" role="status">Loading order…</p>
+    <ul v-else>
+      <li v-for="item in order.items" :key="item.id">{{ item.name }}</li>
+    </ul>
+  </section>
+</template>
+```
+
+```ts
+// composables/useOrderPolling.ts — composable with explicit teardown
+import { ref, onUnmounted } from "vue";
+
+export function useOrderPolling(orderId: string, intervalMs = 5000) {
+  const order = ref<Order | null>(null);
+  const tick = async () => { order.value = await fetchOrder(orderId); };
+  tick();
+  const id = setInterval(tick, intervalMs);
+  onUnmounted(() => clearInterval(id));   // teardown, always
+  return order;
+}
+```
 
 ## Delivery order
 component (SFC) → composable(s) → store → API/client util → test.

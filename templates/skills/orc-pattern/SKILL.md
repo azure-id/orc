@@ -81,8 +81,10 @@ The codifier returns the reconciled pattern per `schemas/pattern-doc.md`
 optional `validation_gate[]` [when the playbook defines one] + a
 `fingerprint` + a `pattern_version` = `<date>-<letter>`). Validate the return, then
 YOU write `.claude/orc/patterns/<lang>-pattern.md` — include the Validation-gate
-section when the return carries one (it is cached but not yet wired into
-slices/verify; see the schema's measurability rule).
+section when the return carries one. The gate flows downstream as part of the
+injected `pattern` (executors satisfy it; the verifier folds its enforceable
+lines into the acceptance criteria). Enforceable-vs-advisory is decided at
+reconciliation per the schema's measurability rule — never downstream.
 
 ## Phase 2 — Report
 

@@ -52,6 +52,13 @@ pattern_findings: ask      # ask | on | off — on an FE/BE cache miss during /o
 orc_wiki_pattern_findings: false  # orc-wiki also codifies ALL detected langs during
                                   #   its scan (rides under the wiki's scan-consent)
 
+# --- Security pass (opt-in Phase 5.5; OFF by default) ---
+security_review: off       # off | ask | on — fires only on runs where a task
+                           #   scored ≥ 70 (the existing risk floor):
+                           #   off → skip silently (default)
+                           #   ask → one prompt after review, user decides
+                           #   on  → dispatch the security pass without asking
+
 # --- Artifact locations (internal by default) ---
 analyzer_dir: .claude/skills/orc/analyzer
 planner_dir:  .claude/skills/orc/planner
@@ -107,7 +114,8 @@ list of `{min, max, agent}` rows; the orchestrator uses it instead of a preset.
 - Read at run start via the resolution rule above (defaults ← `orc.config.yaml`
   override). Missing values use defaults (max_wave_tasks 3, batch_pause_every 2,
   rubric_bands 5, max_scouts 3, default_analysis_depth standard,
-  generate_tests false, logging false).
+  generate_tests false, logging false, pattern_findings ask,
+  security_review off).
 - `generate_tests` gates the opt-in Phase 6.5 (Test Authoring, default OFF). When
   on, after Verify the orchestrator dispatches `orc-test-author-opus-4-8-high` to
   WRITE test cases (automated files + `TEST-PLAN.md` + a curl bundle for HTTP
@@ -138,3 +146,11 @@ list of `{min, max, agent}` rows; the orchestrator uses it instead of a preset.
   wiki's scan already has consent) makes `orc-wiki` codify ALL detected languages as
   a byproduct of its full scan, pre-warming the pattern cache so later `/orc` runs
   never hit the `pattern_findings` prompt.
+- `security_review` gates the opt-in Phase 5.5 security pass (default `off`).
+  The trigger is the EXISTING risk floor: it can only fire on a run where at
+  least one task scored ≥ 70 (security/money/migrations/auth). `ask` → one
+  prompt after review; `on` → dispatch without asking; `off` → skip silently.
+  The pass reuses the reviewer (`phase=security`) with the checklist from
+  `references/security-checklist.md`, sweeping only the run's changed files
+  (wraps Semgrep if installed, never installs tooling). Findings use the same
+  P0–P3 ladder + hard-rule-5 handling.
