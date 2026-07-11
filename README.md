@@ -6,7 +6,7 @@
 
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
-![Version](https://img.shields.io/badge/version-0.5.0-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.5.1-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D16-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
@@ -37,26 +37,28 @@ zero-dependency npm package installs those files into your `.claude/` directory.
 
 ## Changelog
 
-### v0.5.0 — Code-pattern findings _(2026-07-11)_
+### v0.5.1 — Statusline false-degrade fix _(2026-07-11)_
 
-Executors now write code that matches **your** codebase, not a generic template.
-
-- **New `orc-pattern` skill + `/orc-pattern` command** — learns your project's real
-  conventions per language and caches them to `.claude/orc/patterns/<lang>-pattern.md`.
-- **Reconcile, don't override** — a generic playbook is merged against your
-  most-recently-modified files: **conventions defer to your codebase**;
-  **security/correctness invariants are always enforced**.
-- **Languages:** frontend React · Next.js · Vue; backend FastAPI · NestJS · Go
-  (Go covers gRPC, Redis, SQL, concurrency & context/error invariants). Extensible
-  via `references/INDEX.md`.
-- **Config:** `pattern_findings` (`ask` default · `on` · `off`) gates the opt-in;
-  `orc_wiki_pattern_findings` lets `/orc-wiki` pre-warm the cache during its scan.
-- **Anti-skip enforcement:** the pattern is injected literally into each executor
-  slice; executors echo `pattern_version` + `invariants_checked`; the reviewer
-  independently re-checks invariants against the diff.
+- **Fixed** the statusline false-firing `⛔ ORC WILL DEGRADE (model≠Opus4.8)` on a
+  correct tier when Claude Code reports a dated/suffixed Opus 4.8 model id (e.g.
+  `claude-opus-4-8-YYYYMMDD`). The model is now matched tolerantly by id **or**
+  display name — real downgrades (Opus 4.7, Sonnet, low effort) still warn.
+- A **missing** effort field no longer counts as `effort≠high` (the PreToolUse
+  guard already blocks a genuinely low-effort `/orc`).
+- The **context-window %** keeps rendering in every state — unchanged, always on.
 
 <details>
 <summary><b>Previous versions</b> (click to expand)</summary>
+
+### v0.5.0 — Code-pattern findings
+`orc-pattern` skill + `/orc-pattern`: learns your project's real conventions per
+language (React · Next.js · Vue · FastAPI · NestJS · Go) and makes executors match
+your house style — **conventions defer to your codebase; security/correctness
+invariants are always enforced**. Pattern is reconciled from your
+most-recently-modified files, cached to `.claude/orc/patterns/<lang>-pattern.md`,
+and injected into executor slices (executors echo `pattern_version` +
+`invariants_checked`; the reviewer re-checks invariants). Config
+`pattern_findings` / `orc_wiki_pattern_findings`.
 
 ### v0.4.5 — Rewrite weak worker descriptions (the real score lever)
 ### v0.4.4 — Act on Tessl review: raise sub-70 workers, fix cross-spine paths

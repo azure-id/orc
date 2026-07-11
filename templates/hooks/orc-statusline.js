@@ -20,7 +20,8 @@
  * PreToolUse guard refreshes the cache when /orc is invoked).
  */
 
-const REQUIRED_MODEL = "claude-opus-4-8";
+// Opus 4.8 is matched by a tolerant regex below (accepts dated/suffixed ids and
+// the display name), not a strict string, so REQUIRED_MODEL is no longer a const.
 const REQUIRED_EFFORT = "high";
 
 // Shared update-check helper (sibling file). Degrade gracefully if absent.
@@ -49,17 +50,29 @@ process.stdin.on("end", () => {
       ? `${d.context_window.used_percentage}% ctx`
       : "";
 
-  const modelOk = model === REQUIRED_MODEL;
+  // Tolerant tier detection. A strict `model === "claude-opus-4-8"` false-fired
+  // "model≠Opus4.8" whenever Claude Code reported a dated/suffixed id (e.g.
+  // claude-opus-4-8-YYYYMMDD) or only a display name — even on the correct tier.
+  // Match Opus 4.8 by normalized id OR display name, accepting any variant; the
+  // trailing \b keeps 4.7 / 4.85 / Sonnet etc. correctly warning.
+  const hay = `${model} ${display}`.toLowerCase();
+  const modelOk = /opus[\s._-]?4[\s._-]?8\b/.test(hay);
+  const modelKnown = model !== "" || (display !== "" && display !== "unknown");
+  // Effort: only a POSITIVELY-read non-high effort is a downgrade. A missing/
+  // empty effort field is NOT proof of low effort — the PreToolUse guard already
+  // hard-blocks a real low-effort /orc — so don't false-warn when it's absent.
+  const effortKnown = effort !== "";
   const effortOk = effort === REQUIRED_EFFORT;
 
   const tier = `${display}${effort ? "/" + effort : ""}`;
+  const bad = [];
+  if (modelKnown && !modelOk) bad.push("model≠Opus4.8");
+  if (effortKnown && !effortOk) bad.push("effort≠high");
+
   let line;
-  if (modelOk && effortOk) {
+  if (bad.length === 0) {
     line = `✅ ORC-ready ${tier}${pct ? " · " + pct : ""}`;
   } else {
-    const bad = [];
-    if (!modelOk) bad.push("model≠Opus4.8");
-    if (!effortOk) bad.push("effort≠high");
     line = `⛔ ORC WILL DEGRADE (${bad.join(", ")}) — now: ${tier}${pct ? " · " + pct : ""}`;
   }
 
