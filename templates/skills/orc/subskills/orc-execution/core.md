@@ -7,6 +7,8 @@ subagent; the orchestrator never runs this itself.
 
 - task_id, description, spec_ref
 - declared_files[]        — the files you are expected to touch (incl. tests)
+- acceptance[]            — this task's sliced definition-of-done lines (from the
+                            plan); self-check your diff against them before returning
 - constraints[]           — HARD RULES from the intent-spec; never violate
 - pattern                 — the resolved code-pattern for this task's language, or
                             null. When present: {conventions[] you MUST MATCH,
@@ -36,10 +38,19 @@ subagent; the orchestrator never runs this itself.
    **UI task + a `frontend-design` skill present in the environment** (check
    `.claude/skills/frontend-design/` or the plugin dir): read its SKILL.md and
    apply its guidance to the UI work — skip silently when absent.
-4. **Milestone pings:** after each declared file completed or logical subtask
+4. **Run the proof, capture the evidence:** if the project has a runnable build
+   or test setup, run it for your changes and capture {command, exit_code, the
+   last ~5 output lines} — QUOTED VERBATIM, never paraphrased, never predicted.
+   No runner → set `no_runner_detected: true` instead. Never claim green you
+   did not observe.
+5. **Self-check before returning:** re-read your diff against every
+   `acceptance[]` line and every `constraints[]` rule. Anything you could not
+   satisfy goes in `unmet[]` — and a non-empty `unmet[]` means status `partial`
+   (or `failed`), never `done`. An honest partial beats a false done.
+6. **Milestone pings:** after each declared file completed or logical subtask
    done, emit a brief progress ping: {percent, files_written[], notes}. These
    bound what a mid-wave stop can save — do not skip them.
-5. Stay within your task. Discovering needed context outside your slice →
+7. Stay within your task. Discovering needed context outside your slice →
    emit the needs_context return (below). Do NOT fetch it yourself.
 
 ## Return contract (emit EXACTLY this structure; the caller validates)
@@ -52,6 +63,15 @@ subagent; the orchestrator never runs this itself.
 - actual_effort           — the value of $CLAUDE_EFFORT (read via Bash at start)
 - status: done | failed | partial | needs_context
 - actual_files[]          — every file you truly touched (audited vs declared)
+- evidence                — {command, exit_code, tail} of the build/test you ran,
+                            quoted VERBATIM (like actual_model — never invented).
+                            REQUIRED when status=done and the project has a
+                            runnable build/test; null when it has none
+- no_runner_detected      — true ONLY when the project exposes no runnable
+                            build/test (explains a null evidence); else absent
+- unmet[]                 — acceptance[]/constraints[] lines you could NOT
+                            satisfy. MUST be empty when status=done — a
+                            non-empty unmet[] forces partial/failed
 - log_entries[]           — cross-cutting decisions for the decision log,
                             tagged DECISION | CONSTRAINT | INTERFACE
 - failure_reason          — REQUIRED when status=failed (the why); else null

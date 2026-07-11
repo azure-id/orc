@@ -14,6 +14,20 @@ skills can be improved from real traces. This is NOT the decision log
 Everything here is conditional on `logging: true` (resolved defaults ←
 `.claude/orc.config.yaml`). Default is `false` → the trace subsystem is inert.
 
+## Applies to EVERY ORC entry point (not just /orc)
+
+When `logging: true`, EVERY skill that starts an ORC run owns this protocol
+from its FIRST action: `orc`, `orc-mini`, `orc-wiki`, and the standalone lanes
+`/orc-analyze` (+ mini), `/orc-plan`, `/orc-pattern`, `/orc-verify`. Whichever
+skill is orchestrating the session resolves `logging` at start; when true it
+writes the run pointer, emits the markers for its own phase set, and closes the
+trace at the end. Without the pointer the `orc-trace.js` hook writes NOTHING —
+a lane that skips this section produces no `.txt` at all (this was the
+orc-wiki bug fixed in v0.7.0). Skills dispatched INSIDE a run (executors,
+reviewer, analyst-as-subagent, codifier, combiner, test-author, scouts) do not
+start traces — they only return `actual_model`/`actual_effort` markers that the
+orchestrating skill folds in.
+
 ## Files & lifecycle
 
 - Folder: `log_dir` (default `.claude/orc/logs/`). Persistent — **never deleted**

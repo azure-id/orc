@@ -15,7 +15,8 @@ U: gate → approved
 
 ## Phase 1 — Planning
 O: Planner? U: OpenSpec
-O: [6 tasks with declared_files incl. tests, depends_on, spec_ref] ⚠ T1/T2 share models/notification.ts → scheduling separates them.
+O: [6 tasks with declared_files incl. tests + per-file grounding attestations + sliced acceptance[], depends_on, spec_ref] ⚠ T1/T2 share models/notification.ts → scheduling separates them.
+   Grounding spot-check (Phase 1 exit): globs all `exists` paths — 13/14 present, models/notifcation.ts MISSING (typo) → plan bounced to planner with the miss list → corrected to models/notification.ts ✓.
 
 ## Phase 2 — Effort, dispatch style, scoring
 O: Refined: medium, partially dependent. Recommend PARALLEL waves. Confirm? U: yes. Batch pause? U: every 2 waves.
@@ -30,7 +31,7 @@ O: Scoring (base + adjusters → final → ladder):
 
 ## Phase 3 — Execution (ALL spawned; orchestrator coordinates only)
 O: [checkpoint + state-of-play written into run/merchant-notifications/ BEFORE dispatch]
-▶ W1: spawn Agent-A(T1, Opus 4.8 med) — milestones 40%→100% — return validated ✓ — log: DECISION type enum.
+▶ W1: spawn Agent-A(T1, Opus 4.8 med) — milestones 40%→100% — return validated ✓ (evidence: `yarn jest models/` exit 0, tail quoted; unmet[] empty) — log: DECISION type enum.
 ▶ W2: spawn 3 agents (Sonnet 5 med each).
    Agent-C needs_context (1/2): "needs T1's enum interface" → O adjudicates in-scope → re-slices → resumes. (User never bothered.)
    Agent-C user escalation: "digest send time?" → U: 07:00 fixed → ANSWER broadcast to log.
@@ -48,10 +49,12 @@ O: [state-of-play → checkpoint → re-anchored] "Resuming: merchant notificati
 ▶ W3: spawn T5+T6 (Sonnet 5 med) → done. All 6 complete.
 
 ## Phase 5 — Review (spawned worker, Opus 4.8 high)
-O: Code pattern? U: none. Findings (P0–P3 ladder): P1 T2 no pagination (correctness risk — asks user, U: fix it) · P3 email_digest naming ×2 · 12 tests added.
+O: Code pattern? U: none. Findings (P0–P3 ladder, each P0–P2 anchored file:line + verbatim quote):
+   P1 T2 no pagination — services/notification_list.ts:88 — O spot-checks: Reads line 88, quote matches ✓ → asks user, U: fix it
+   · P3 email_digest naming ×2 · 12 tests added. (An unanchored finding would be auto-P3 — never fixed unasked.)
 
 ## Phase 6 — Verify (spawned worker, Opus 4.8 high; criteria = definition-of-done)
-   bell ✓ · both schedules ✗ (weekly cron missing = P0, unmet criterion) · prefs ✓ → FAILED → P0 auto-fix (single attempt, no ask) → re-verify → PASSED. 14/14.
+   criteria[] with per-line evidence: bell ✓ (test name) · both schedules ✗ (weekly cron missing = P0, unmet criterion, evidence: no cron entry in scheduler.ts) · prefs ✓ → FAILED → quote spot-check ✓ → P0 auto-fix (single attempt, no ask) → re-verify → PASSED. 14/14.
 
 ## Phase 7 — Summary
 O: 6 tasks/3 waves/6 spawns/1 pause/1 fresh-session resume · 1 needs_context · 1 escalation · verify fixed_then_passed · branch green. P2 fix-batch: none · Apply the 2 P3 cosmetics? U: no.
@@ -65,4 +68,6 @@ O: ✓ committed → pushed → run/merchant-notifications/DRP-482-add-merchant-
 ## What this exercises
 always-spawn (even cheap tasks get a subagent) · base+adjuster scoring · 3-band ladder ·
 per-run folder run/merchant-notifications/ · usage reminder (no programmatic /usage) ·
+planner grounding spot-check catching a hallucinated path · executor evidence (verbatim
+build/test proof) · reviewer quote spot-check before any P0/P1 action ·
 definition-of-done catching the weekly-cron gap · needs_context resolved internally · fresh-session resume.

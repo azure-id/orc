@@ -6,7 +6,7 @@
 
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
-![Version](https://img.shields.io/badge/version-0.6.0-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.7.0-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D16-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
@@ -36,6 +36,55 @@ zero-dependency npm package installs those files into your `.claude/` directory.
 ```
 
 ## Changelog
+
+### v0.7.0 — Evidence everywhere: grounded plans · verbatim proof · anchored findings · contract lint · trace fixes _(2026-07-12)_
+
+Anti-hallucination release: ORC's proven pattern (instruction → contract →
+attestation → independent spot-check) extended from the analyst/trace/pattern
+systems to every remaining role.
+
+- **Grounded planner (per-file attestation).** Every plan task now carries
+  `grounding[]` — `{path, disposition: exists|new, evidence}` per declared file
+  (from an analyst spec, its file:line evidence is copied through) — plus a
+  sliced per-task `acceptance[]` from the definition-of-done. The orchestrator
+  **Globs every `exists` path at Phase 1 exit** and bounces a plan with misses
+  back to the planner (one retry, then escalate) — a hallucinated path can no
+  longer corrupt the wave/conflict graph. Old checkpoints resume without the
+  spot-check.
+- **Evidenced execution (no more unproven "done").** Executor returns gain
+  `evidence` — the build/test `{command, exit_code, tail}` quoted VERBATIM
+  (like `actual_model`; `no_runner_detected: true` when the stack has no
+  runner) — and `unmet[]` (acceptance/constraint lines it couldn't satisfy;
+  non-empty forces `partial`, never `done`). `done` without evidence on a
+  runnable stack is a malformed return. The house-rules card adds two lines:
+  never claim what you haven't observed; an honest partial beats a false done.
+  orc-mini validates the same fields and treats its smoke gate as the
+  independent check of the executor's claim.
+- **Anchored findings (a phantom P0 can't edit your code).** Every P0–P2
+  review/verify/security finding must carry `file:line` **plus the offending
+  line quoted verbatim**; an unanchored finding is AUTO-P3 — advisory, never
+  gates, never triggers a fix. Before acting on any P0/P1 the orchestrator
+  **reads the cited line and confirms the quote matches** — protecting the one
+  path where ORC edits code without asking. The verifier now returns
+  per-criterion `criteria[]` `{criterion, pass|fail, evidence}`. Standalone
+  `/orc-verify` applies the same rule.
+- **Contract drift lint (`bin/verify-contracts.js`).** ORC's by-design
+  maintenance drift (shared contracts duplicated across up to 31 files) is now
+  machine-checked: 10 contract tokens each pinned to their exact expected file
+  set; a skipped copy OR an unregistered new copy fails `npm run verify` and
+  `prepack`. The count-only integrity guard could never catch this.
+- **Behavior-trace fixes — every entry point now actually logs.** Fixed:
+  running `orc-wiki` with `logging: true` produced **no trace .txt at all**
+  (the wiki never wrote the `log_dir/.current` run-pointer, so the
+  `orc-trace.js` hook stayed inert). The trace protocol is now declared
+  universal — `orc`, `orc-mini`, `orc-wiki`, and standalone `/orc-analyze`,
+  `/orc-analyze-mini`, `/orc-plan`, `/orc-pattern`, `/orc-verify` each own the
+  run-pointer + markers for their phase set (wiki keeps `.current` across its
+  5-task pauses so multi-session scans append to one trace; lanes inside a
+  bigger run never open a second trace).
+
+<details>
+<summary><b>Previous versions</b> (click to expand)</summary>
 
 ### v0.6.0 — P0–P3 ladder · house rules · deep playbooks + wired gates · 3 new languages · FE rule packs · security pass _(2026-07-11)_
 
@@ -84,9 +133,6 @@ zero-dependency npm package installs those files into your `.claude/` directory.
   the installed payload README (`skills/orc/README.md`) was rewritten from its
   stale "v2.2 / unzip three skills / 3-band ladder" era to the real install
   flow, layout, and behavior set.
-
-<details>
-<summary><b>Previous versions</b> (click to expand)</summary>
 
 ### v0.5.1 — Statusline false-degrade fix _(2026-07-11)_
 

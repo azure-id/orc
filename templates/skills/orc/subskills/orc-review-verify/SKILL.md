@@ -34,12 +34,16 @@ conflict, `core.md` wins.
   **P1** (correctness/security risk, constraint violations — caller asks the
   user before fixing), **P2** (maintainability — advisory fix-batch offer),
   **P3** (cosmetic — advisory, counted). Never fix P2/P3; P0/P1 fixes are the
-  caller's call.
+  caller's call. **Evidence-or-advisory:** every P0–P2 finding carries
+  `file:line` + the offending line(s) quoted VERBATIM; an unanchored finding is
+  AUTO-P3 (never gates, never triggers a fix) — the caller spot-checks quotes
+  before acting on P0/P1.
 - **phase=verify:** run the build + full test suite; fold the enforceable
   `validation_gate[]` lines into the criteria set, then check EACH criterion
   individually (pass/fail, nothing invented; an unmet gate line = unmet
-  criterion = P0); report failures precisely. You don't fix — the caller owns
-  the auto-fix-once loop.
+  criterion = P0), each with per-criterion `evidence` (the test/output line or
+  file:line that proves it); report failures precisely. You don't fix — the
+  caller owns the auto-fix-once loop.
 - **phase=security (opt-in):** sweep only `changed_files[]` against the supplied
   `security_checklist[]` (wrap Semgrep if installed, never install it); findings
   on the same ladder (exploitable-in-diff = P0, hardening gap = P1,
@@ -47,12 +51,16 @@ conflict, `core.md` wins.
 
 ## Return shape (summary — full contract in `core.md`)
 
-`{ phase, findings[]{severity: P0|P1|P2|P3, location, description, criterion}, tests{added,updated,passing},
+`{ phase, findings[]{severity: P0|P1|P2|P3, location "file:line", quote (verbatim,
+required P0–P2; unanchored ⇒ AUTO-P3), description, criterion},
+criteria[] (verify only){criterion, result, evidence}, tests{added,updated,passing},
 result (verify only): passed|failed, actual_model, actual_effort, failure_reason }`
 
 **Validation checkpoint before returning:** every finding carries a `severity`
-from the P0–P3 ladder;
-verify sets `result`; `actual_model` is quoted VERBATIM (never inferred). A
+from the P0–P3 ladder; every P0–P2 finding carries `file:line` + a VERBATIM
+`quote` (else downgrade it to P3 yourself);
+verify sets `result` + per-criterion `evidence`; `actual_model` is quoted
+VERBATIM (never inferred). A
 malformed return is treated as failure by the caller.
 
 Fixed models (from `../../references/effort-and-mode.md`): review on the OpenSpec/self

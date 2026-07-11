@@ -69,10 +69,14 @@ review/verify/summary.)
 
 ## Phase M — Smoke gate (build + test; blocks ship on red)
 
-After the executor returns and its contract validates, the orchestrator itself
+After the executor returns and its contract validates (mini validates the same
+evidence rules as full: `status=done` on a stack with a runnable build/test
+REQUIRES `evidence` {command, exit_code, tail}; `done` with a non-empty
+`unmet[]` is malformed — treat as partial), the orchestrator itself
 runs the detected stack's **build and test** commands once, as a **read-only ship
 gate** (this is the "never commit on a red build" rule made enforceable — nothing
-else in the mini flow establishes build color).
+else in the mini flow establishes build color). The executor's `evidence` is a
+claim; YOUR smoke run is the independent check — if they disagree, say so.
 
 - **GREEN** (build + tests pass) → proceed to the test-authoring ask, then ship.
 - **RED** (build or tests fail) → **do NOT offer commit/ship.** Surface the

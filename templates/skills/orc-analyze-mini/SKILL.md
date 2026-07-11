@@ -57,6 +57,16 @@ for the formats; this skill does not duplicate them.
 - Same branch: report-only, or take into build (hand both files to orc-mini,
   which continues with the mini planner).
 
+## Behavior trace (config `logging` — every ORC entry point traces)
+
+Same rule as the full analyst: standalone `/orc-analyze-mini` resolves
+`logging` + `log_dir` at start; when true, follow
+`../orc/references/trace-protocol.md` — write `log_dir/.current` before the
+first dispatch, emit `PHASE`/`DISPATCH`/`VERIFY` lines, `FINISH` + delete
+`.current` at the end. Inside an orc-mini run, the mini orchestrator's trace
+already covers this — never open a second one. When `logging: false`, do none
+of this.
+
 ## Workflow checkpoint (gate before deriving the spec)
 
 Confirm the report with the user — scope bounded, high-signal challenges resolved —

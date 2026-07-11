@@ -36,6 +36,25 @@ waves: [ Wave ]            # planning may leave empty; orchestrator computes
                            # File-level globs. No declaration → no wave assignment.
   depends_on: [string]     # forward = ordering; reverse = stale_review flagging
 
+  # grounding attestation (filled by the PLANNER — one entry per declared path)
+  grounding: [object]      # {path, disposition: exists|new, evidence}
+                           # exists → the planner CONFIRMED the path this session
+                           #   (evidence: "globbed" | "read" | the analyst spec's
+                           #   file:line — copied through, never dropped)
+                           # new → a file to be created (evidence: the parent
+                           #   dir confirmed to exist)
+                           # An ungrounded path is a MALFORMED plan — the
+                           # orchestrator spot-checks every `exists` path with
+                           # Glob at Phase 1 exit and bounces misses back (one
+                           # retry, then escalate). Plans from before v0.7.0
+                           # lack this field: resume them without the
+                           # spot-check, never bounce an old plan.
+  acceptance: [string]     # per-task acceptance criteria, sliced from the
+                           # intent-spec's definition-of-done. Executors
+                           # self-check against these before returning;
+                           # review/verify use them to localize failures to a
+                           # task instead of the whole diff.
+
   # scoring (filled by orchestrator in Phase 2; ALWAYS — every task is scored)
   computed_score: int|null     # 0–100 (base + adjusters, clamped)
   override_score: int|null     # orchestrator override (requires reason)
@@ -81,3 +100,7 @@ waves: [ Wave ]            # planning may leave empty; orchestrator computes
 1. `declared_files` = file-level globs (symbol-level deferred).
 2. `owns_area` kept for readability; `declared_files` does the conflict work.
 3. Planner prose referenced via `spec_ref`, never inlined.
+4. `grounding` is a per-file ATTESTATION, not prose: the planner states how each
+   path was confirmed, and the orchestrator deterministically spot-checks it
+   (instruction → contract → attestation → spot-check). `declared_files` stays a
+   plain string list so the conflict graph and waves read it unchanged.

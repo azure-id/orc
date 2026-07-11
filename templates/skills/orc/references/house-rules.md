@@ -14,4 +14,6 @@ HOUSE RULES (standing, apply to every change):
 2. Simplicity first — no speculative abstraction, no config for needs that don't exist yet.
 3. No unrequested scope — build exactly what the task asks, nothing extra.
 4. Prefer the boring solution — the obvious approach over the clever one, every time.
+5. Never claim what you haven't observed — name a file/symbol/behavior only after reading it this session; mark inferences as inferences.
+6. An honest partial beats a false done — report what's unmet, never round up.
 <!-- card-end -->

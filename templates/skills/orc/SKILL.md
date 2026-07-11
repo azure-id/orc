@@ -61,7 +61,12 @@ Confirm you are running as **Opus 4.8 at high effort** before anything else.
    auto-fix ONCE without asking; second failure → STOP and surface. P1
    (correctness/security risk, constraint violations) → gates ship, but ASK the
    user before dispatching the fix (judgment call, never silent). P2/P3 →
-   advisory, never auto-fixed (offered in Phase 7).
+   advisory, never auto-fixed (offered in Phase 7). **Quote spot-check before
+   acting on any P0/P1:** Read the finding's cited `file:line` and confirm its
+   VERBATIM `quote` matches (exact or trivially moved). Mismatch or missing
+   quote → treat the finding as P3 and tell the user the worker cited a line
+   that doesn't match — never dispatch a fix (or block ship) on an unverified
+   finding. This protects the ONLY path where ORC edits code without asking.
 6. **You alone write the checkpoint and state-of-play.** Workers never touch them.
 7. **Validate every subskill return** against its contract. Malformed = failure
    (requeue with reason). This includes checkpoint and PR returns.
@@ -280,9 +285,17 @@ and pauses) → Phases 4–8. Never jump from a plan straight to implementation;
 every plan flows through scoring, wave-grouping, and checkpointing like any
 other run.
 The planner consumes the approved intent-spec and must emit the planning-output
-schema: every task with `declared_files` (incl. tests), `depends_on`,
-`owns_area`, `spec_ref`. If the planner doesn't emit declared files, extract and
-confirm them before leaving this phase.
+schema: every task with `declared_files` (incl. tests), `grounding[]` (per-file
+`exists|new` attestation with evidence), `acceptance[]` (sliced
+definition-of-done lines), `depends_on`, `owns_area`, `spec_ref`. If the planner
+doesn't emit declared files, extract and confirm them before leaving this phase.
+
+**Grounding spot-check (Phase 1 exit gate — deterministic, before scoring).**
+Glob every path the plan marks `disposition: exists`. Any miss → the plan is
+malformed: bounce it back to the planner WITH the miss list (one retry), then
+escalate to the user. A task whose declared paths lack `grounding[]` entries
+counts as a miss. Exception: a pre-v0.7.0 plan resumed from an old checkpoint
+has no `grounding[]` — resume it without the spot-check, never bounce it.
 
 ## Phase 2 — Refined effort, dispatch style, and scoring (load references/effort-and-mode.md)
 
@@ -330,7 +343,9 @@ you inject it into each task's slice below and reuse it at Phase 5.
 Per wave:
 1. Dispatch EVERY task as a spawned subagent via the Task tool, with the
    subagent wrapper framing + the task's INPUT SLICE (see orc-execution/core.md
-   contract) + its scored model/effort. EVERY slice carries `house_rules`: the
+   contract) + its scored model/effort. EVERY slice carries the task's
+   `acceptance[]` (from the plan — the sliced definition-of-done lines the
+   executor self-checks against) and `house_rules`: the
    card lines from `references/house-rules.md` (between its card markers),
    injected LITERALLY — read the file once per run, never pass a pointer. For an
    FE/BE task, INJECT the resolved
@@ -347,6 +362,12 @@ Per wave:
    given a `pattern`, require `invariants_checked: true` + a `pattern_version`
    matching what you injected — a missing/false attestation is a malformed return
    (requeue). With `logging: true`, record the applied `pattern_version`.
+   **Evidence check:** `status=done` on a project with a runnable build/test
+   REQUIRES `evidence` {command, exit_code, tail} — you detected the stack at
+   intake, so you KNOW whether a runner exists; a missing evidence block or a
+   false `no_runner_detected` is a malformed return (requeue). `status=done`
+   with a non-empty `unmet[]` is malformed too — a return that admits unmet
+   acceptance lines is `partial`, handled like any partial.
 4. Post-wave collision audit: `actual_files` vs declarations. Overlap →
    `failure_reason: "file-collision:<file> with <agent>"`, requeue later wave.
 5. Append worker `log_entries` to the decision log; regenerate the digest.
@@ -378,7 +399,10 @@ code pattern (paste text / md / none). **FE rule packs:** if any task in the run
 was tagged FE, read `../orc-pattern/references/fe-a11y.md` + `fe-perf.md` and
 pass their rules as `fe_rules[]` (reviewer emits file:line findings, P1–P3 by
 impact, never auto-P0). Findings come back on the **P0–P3
-ladder**; an invariant violation or unmet gate line is P0. Apply hard rule 5:
+ladder**; an invariant violation or unmet gate line is P0. Every P0–P2 finding
+carries `file:line` + a VERBATIM `quote` (the worker downgrades unanchored
+findings to P3 itself — if one slips through, downgrade it here). Apply hard
+rule 5 INCLUDING the quote spot-check: Read each P0/P1's cited line first; then
 P0 → auto-fix once
 (no ask) · P1 → ask the user, then fix once · P2/P3 → record for Phase 7.
 
@@ -401,7 +425,10 @@ never gates on advisory levels.
 Verify worker (Opus 4.8, high) checks against the intent-spec's
 **definition-of-done** as acceptance criteria PLUS the resolved pattern's
 enforceable `validation_gate[]` lines (pass them in the slice — each line is a
-criterion; an unmet line is P0). P0 findings → auto-fix once
+criterion; an unmet line is P0). The return carries per-criterion `criteria[]`
+{criterion, pass|fail, evidence} — validate that every criterion has evidence
+(a test/output line or file:line), and apply the hard-rule-5 quote spot-check
+to P0/P1 findings before any fix. P0 findings → auto-fix once
 → re-verify once → second failure STOPS. P1 findings → ask before the one
 fix attempt, then re-verify (same single-retry cap).
 

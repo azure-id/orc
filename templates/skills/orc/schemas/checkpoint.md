@@ -64,7 +64,10 @@ Two files, two jobs:
 
   "review":  { "ran": false },   // when ran: p0[], p1[], p2[], p3[], model, effort
                                  // (v1 checkpoints used blocking[]/nits[] — on resume
-                                 //  map blocking→p1, nits→p3; never rewrite the old file)
+                                 //  map blocking→p1, nits→p3; never rewrite the old file.
+                                 //  v0.7.0+: each recorded P0–P2 finding keeps its
+                                 //  file:line + verbatim quote so a resumed run can
+                                 //  re-run the quote spot-check before acting)
   "verify":  { "ran": false },   // result, autofix_used, autofix_remaining (starts 1)
   "ship":    { "commit": null, "push": null, "create_pr": null,
                "ticket": null, "pr_title": null, "target_branch": null, "pr_file": null },

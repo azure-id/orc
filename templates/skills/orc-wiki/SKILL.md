@@ -45,6 +45,34 @@ gate mandatory.
 7. Usage: report the dispatch log + remind the user to run `/usage`. Never
    invoke `/usage` programmatically.
 
+## Behavior trace (logging — same rule as orc/orc-mini; wiki runs trace too)
+
+Resolve config at run start (`../orc/config.md` defaults + the
+`.claude/orc.config.yaml` override): read `logging` + `log_dir`. When
+`logging: true`, follow `../orc/references/trace-protocol.md` for the wiki's
+phase set — WITHOUT this section the `orc-trace.js` hook has no run-pointer and
+writes nothing, so a wiki run would produce no `.txt` at all:
+
+- **Run start (after consent, before any dispatch):** create `log_dir`, write
+  `log_dir/.current` = `<run-slug>-<DDMMYY>.txt`, and store
+  `logging_enabled: true` + `trace_path` in the wiki checkpoint so a resumed
+  session re-anchors to the SAME file. Emit a `PHASE` line at each wiki phase
+  transition (entry → area-planning → scan → assemble).
+- **Each scan/codifier dispatch:** announce the model derived from the agent
+  NAME and emit `DISPATCH <agent> :: <area> expect=<model>/<effort>`. The hook
+  writes the `SPAWN`/`RETURN` skeleton independently once `.current` exists.
+- **Each return:** read `actual_model` + `actual_effort`, compare to expected,
+  emit `VERIFY <area> actual=…/… ✅ MATCH` or `⛔ DOWNGRADE expected=…` and
+  surface any downgrade to the user.
+- **Stop sequence (5-task pause):** the trace file persists and `.current`
+  STAYS in place across the pause — a resumed session appends to the same
+  trace via the checkpoint's `trace_path` (re-write `.current` from it if
+  missing).
+- **Run end (Phase 3 done or abort):** emit `FINISH …` and delete
+  `log_dir/.current`.
+
+When `logging: false`, do NONE of this (the hook no-ops).
+
 ## Phase 0 — Entry & auto-branch (on /orc-wiki)
 
 Detect state and branch:

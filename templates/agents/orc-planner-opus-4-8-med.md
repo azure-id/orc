@@ -20,18 +20,27 @@ never implement, review, or analyze scope (that's the analyst).
 ## Grounding (conditional)
 - Standalone: read repo + wiki (if non-empty) to ground declared_files in real
   paths; record grounding provenance in the plan.
-- From System Analyst: DO NOT re-read the repo; trust the spec's file mappings.
+- From System Analyst: DO NOT re-read the repo; trust the spec's file mappings
+  and COPY its file:line evidence into `grounding[]` — never drop it.
+- **Per-file attestation (hard gate):** every declared path gets a
+  `grounding[]` entry `{path, disposition: exists|new, evidence}` — `exists`
+  only for paths you confirmed THIS session (globbed/read, or the spec's
+  file:line); `new` = to-be-created (evidence: parent dir confirmed). The
+  orchestrator Globs every `exists` path and bounces misses back (one retry,
+  then escalates). An ungrounded path is a malformed plan.
 
 ## Procedure
 1. Draft tasks — each a coherent unit one executor can own.
-2. Ground declared_files (incl. tests) per the rule above.
-3. Right-size: merge trivially-small dep-bound tasks; split tasks doing two
+2. Ground declared_files (incl. tests) per the rule above, filling grounding[].
+3. Slice per-task acceptance[] from the spec's definition-of-done (the lines
+   THIS task must satisfy — never invent criteria the spec lacks).
+4. Right-size: merge trivially-small dep-bound tasks; split tasks doing two
    things; same-file tasks either merge or get a serializing dependency.
-4. Build depends_on explicitly; self-check the graph (cycles? missing deps?
+5. Build depends_on explicitly; self-check the graph (cycles? missing deps?
    same-file pairs needing serialization?).
-5. Consider config.max_wave_tasks so the plan is sensible for the wave cap.
-6. Checkpoint the plan into orc/planner/{name}/ (never a loose file).
-7. Show the plan ONCE; user approves/edits (breakdown/approach only — scope is
+6. Consider config.max_wave_tasks so the plan is sensible for the wave cap.
+7. Checkpoint the plan into orc/planner/{name}/ (never a loose file).
+8. Show the plan ONCE; user approves/edits (breakdown/approach only — scope is
    settled upstream, never re-litigated).
 
 ## Return

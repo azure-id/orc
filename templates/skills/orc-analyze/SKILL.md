@@ -63,6 +63,18 @@ the user meant.
    projection, so they can't drift).
 7. Usage: report dispatch + remind the user to run `/usage`. Never invoke it.
 
+## Behavior trace (config `logging` — every ORC entry point traces)
+
+When run standalone (`/orc-analyze`, not inside an /orc run that already owns a
+trace), resolve `logging` + `log_dir` (`../orc/config.md` defaults +
+`.claude/orc.config.yaml`) at start. When `logging: true`, follow
+`../orc/references/trace-protocol.md`: write `log_dir/.current` =
+`<slug>-<DDMMYY>.txt` BEFORE the first dispatch, emit `PHASE` lines per phase
+(A→F), `DISPATCH`/`VERIFY` (claimed-vs-actual) per analyst/scout spawn, then
+`FINISH` + delete `.current` at the end. Without the pointer the trace hook
+writes nothing. When `logging: false`, do none of this. Inside a full /orc run,
+the orchestrator's trace already covers this — never open a second one.
+
 ## Phase A — Ingest & detect source mode
 
 Read the source. **Auto-detect** which of three modes applies:

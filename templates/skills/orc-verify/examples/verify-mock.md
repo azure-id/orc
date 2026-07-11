@@ -17,10 +17,12 @@ V: [detects Python/poetry/pytest]
    Build/type/test: GREEN.
 
 ## Diff sanity + findings (P0–P3 ladder)
-V: Walks each hunk against intent inferred from the diff:
-   ⛔ P1  api/routes/orders.py:42 — new `/orders/{id}` route has no auth
-      decorator; every sibling route uses `@require_auth`. Security risk —
-      likely unintended. (Not P0: build/tests are green.)
+V: Walks each hunk against intent inferred from the diff (every P0–P2 finding
+   anchored: file:line + the offending line quoted VERBATIM, else auto-P3):
+   ⛔ P1  api/routes/orders.py:42 — quote: `async def get_order(order_id: str):`
+      — new `/orders/{id}` route has no auth decorator; every sibling route
+      uses `@require_auth`. Security risk — likely unintended.
+      (Not P0: build/tests are green.)
    • P3  api/schemas.py:18 — field `createdAt` breaks the snake_case convention
       used elsewhere (`created_at`).
    • P2  tests/test_orders.py — no negative-path test for a missing id.

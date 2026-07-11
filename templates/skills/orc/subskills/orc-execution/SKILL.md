@@ -25,15 +25,21 @@ contract); the summary below orients — on any conflict, `core.md` wins.
 1. Absorb `log_digest` (prior DECISIONs/INTERFACEs/ANSWERs bind you); read `spec_ref`.
 2. Implement EXACTLY the task in the slice, touching only `declared_files[]`,
    honoring every `constraints[]` hard rule AND the standing `house_rules` card
-   (surgical changes, simplicity-first, no unrequested scope); create/update
+   (surgical changes, simplicity-first, no unrequested scope, never claim
+   unobserved results, honest partial over false done); create/update
    tests for what you build.
-3. Emit milestone pings ({percent, files_written[], notes}) as you go.
-4. Stay in your slice — need outside context? emit `needs_context`, don't fetch it.
+3. Run the proof: build/test for your changes, capturing `evidence`
+   {command, exit_code, tail} VERBATIM (no runner → `no_runner_detected: true`);
+   self-check the diff against the slice's `acceptance[]` + `constraints[]` —
+   anything unsatisfied goes in `unmet[]` (non-empty = partial/failed, never done).
+4. Emit milestone pings ({percent, files_written[], notes}) as you go.
+5. Stay in your slice — need outside context? emit `needs_context`, don't fetch it.
 
 ## Return shape (summary — full contract in `core.md`)
 
 `{ task_id, actual_model, actual_effort, status: done|failed|partial|needs_context,
-actual_files[], log_entries[], failure_reason, progress, context_request,
+actual_files[], evidence, no_runner_detected, unmet[], log_entries[],
+failure_reason, progress, context_request,
 pattern_version, invariants_checked }`
 
 When the slice carries a `pattern`, MATCH its conventions, satisfy every BLOCKING
@@ -45,5 +51,7 @@ it (skip silently when absent).
 
 **Validation checkpoint before returning:** `status=failed` REQUIRES a
 `failure_reason`; `needs_context` REQUIRES a `context_request` (capped at 2/task);
-`actual_model` is quoted VERBATIM from your system prompt, never inferred. A
+`actual_model` is quoted VERBATIM from your system prompt, never inferred;
+`status=done` REQUIRES `evidence` when a runner exists (else
+`no_runner_detected: true`) and an EMPTY `unmet[]`. A
 malformed return is treated as failure by the caller.

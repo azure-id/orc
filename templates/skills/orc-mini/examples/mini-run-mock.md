@@ -17,14 +17,16 @@ O: [drafts intent-spec.md] Sign-off defaults to SOFT — proceeding unless you o
 
 ## Phase 1 — Planning + complexity read
 O: [dispatches orc-planner-mini] → 1 task, declared_files: cli/report.py,
-   tests/test_report.py.
+   tests/test_report.py — both grounded `exists` (globbed) + acceptance sliced
+   from the intent-spec. O spot-checks: both paths present ✓.
 O: Complexity read (one line, no scoring table): single coherent area, low blast
    radius → mini-appropriate. (If it read complex/high-risk → I'd recommend /orc.)
 
 ## Phase 3 — Execute (ONE subagent)
 O: → claude-sonnet-5 / high :: DISPATCH orc-executor-sonnet-5-high :: add --json flag
-   [executor edits cli/report.py + updates tests, returns actual_files + actual_model]
-O: VERIFY actual=claude-sonnet-5/high ✅ MATCH
+   [executor edits cli/report.py + updates tests, returns actual_files + actual_model
+   + evidence {`pytest tests/test_report.py`, exit 0, tail quoted} + empty unmet[]]
+O: VERIFY actual=claude-sonnet-5/high ✅ MATCH · evidence present ✓
 
 ## Phase M — Smoke gate (build + test; blocks ship on red)
 O: [runs `pytest tests/test_report.py`]  ⛔ RED — 1 failure: JSON missing trailing key.

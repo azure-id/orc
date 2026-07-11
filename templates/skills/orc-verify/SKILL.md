@@ -36,7 +36,10 @@ Run as Opus 4.8, high effort.
 4. **Classify findings** on the P0–P3 severity ladder (same rule as the full
    skill: P0 = failing build/tests, broken references, runtime errors ·
    P1 = correctness/security risk · P2 = maintainability · P3 = cosmetic).
-   P0/P1 mean NOT ready to commit; P2/P3 are advisory.
+   P0/P1 mean NOT ready to commit; P2/P3 are advisory. **Evidence-or-advisory
+   (same rule as the full pipeline):** every P0–P2 finding carries `file:line`
+   + the offending line(s) quoted VERBATIM from a file read this session; a
+   finding that can't be anchored is AUTO-P3 and never gates the verdict.
 5. **Show a summary** and STOP. This skill does not fix, stage, or commit.
 
 ## Output (summary)
@@ -50,6 +53,15 @@ P2/P3 (advisory):
   - <P2|P3> <file:loc> <issue>
 Verdict: <READY / NEEDS FIXES>
 ```
+
+## Behavior trace (config `logging` — every ORC entry point traces)
+
+Standalone verify traces too. Resolve `logging` + `log_dir`
+(`../orc/config.md` defaults + `.claude/orc.config.yaml`) at start. When
+`logging: true`, follow `../orc/references/trace-protocol.md`: write
+`log_dir/.current` = `<slug>-<DDMMYY>.txt` first, emit `PHASE` lines, `FINDING
+p0=… p1=… p2=… p3=…` and `VERDICT pass|fail` for the result, then `FINISH` +
+delete `.current`. When `logging: false`, do none of this.
 
 ## Boundaries
 

@@ -33,8 +33,18 @@ do not redefine it here).
   detect what already exists. **Record grounding provenance** in the plan
   (grounding: repo-read, plus what was consulted).
 - **From System Analyst:** DO NOT re-read the repo. Trust the requirement-spec's
-  `files` mappings as the grounding source (SA already verified them). No
-  provenance note needed — the spec is the record.
+  `files` mappings as the grounding source (SA already verified them). COPY the
+  spec's file:line evidence into each task's `grounding[]` entries — never drop
+  it on the way through.
+
+**Per-file attestation (hard gate — never prose).** Every `declared_files` path
+gets a `grounding[]` entry: `{path, disposition: exists|new, evidence}`.
+`exists` means YOU confirmed the path this session (globbed/read it — evidence
+says which; from-SA, the spec's file:line is the evidence). `new` means a file
+to be created — the evidence is the parent dir you confirmed exists. Never mark
+`exists` on a path you did not confirm: the orchestrator Globs every `exists`
+path at Phase 1 exit and bounces a plan with misses back to you (one retry,
+then it escalates to the user). An ungrounded path is a malformed plan.
 
 ## Context & invariants (non-actionable — carry, never build)
 
@@ -58,16 +68,31 @@ expecting all 8 to run at once).
 ## Procedure (defend against bad plans)
 
 1. **Draft tasks** from the input, each a coherent unit one subagent can own.
-2. **Ground declared_files** per the rule above (incl. test files).
-3. **Right-size:** merge trivially-small dependency-bound tasks; split tasks
+2. **Ground declared_files** per the rule above (incl. test files), filling
+   each task's `grounding[]` attestation as you go.
+3. **Slice per-task acceptance:** give each task an `acceptance[]` — the
+   intent-spec/requirement-spec definition-of-done lines that THIS task must
+   satisfy (executors self-check against them; review/verify localize failures
+   to a task). Derive from the spec; never invent criteria the spec lacks.
+4. **Right-size:** merge trivially-small dependency-bound tasks; split tasks
    doing two unrelated things; if two tasks share files, either merge or add a
    dependency so they serialize.
-4. **Build depends_on explicitly**, then self-check the graph: any cycle? any
+5. **Build depends_on explicitly**, then self-check the graph: any cycle? any
    task consuming another's output without a declared dep? any same-file pair
    missing a serializing dep?
-5. **Show the plan ONCE** — tasks, files, deps — in plain terms. User approves
+6. **Show the plan ONCE** — tasks, files, deps — in plain terms. User approves
    or edits (task breakdown/approach only; scope is settled upstream, never
    re-litigated here).
+
+## Behavior trace (config `logging` — every ORC entry point traces)
+
+Standalone `/orc-plan` traces too: the orchestrator resolves `logging` +
+`log_dir` at start; when true, follow `../../references/trace-protocol.md` —
+write `log_dir/.current` before dispatching the planner, emit
+`PHASE`/`DISPATCH`/`VERIFY` lines, `FINISH` + delete `.current` at the end
+(on take-into-build the trace stays open and the full run continues it).
+Inside an /orc run, the run's trace already covers planning — never open a
+second one. When `logging: false`, do none of this.
 
 ## Checkpoint before branching
 

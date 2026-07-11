@@ -96,15 +96,23 @@ codifier: 9 language playbooks + a11y/perf rule packs), `context-combiner`
   even for tiny tasks.** Orchestrator (Opus 4.8 high) only coordinates; each
   task's 0–100 score maps to a named executor agent via the preset in
   `config.md` (`rubric_bands` narrow/wide), Sonnet 4.6 med → Opus 4.8 high.
-- **Every executor slice carries** the intent-spec constraints, the standing
+- **Every executor slice carries** the intent-spec constraints, the task's
+  sliced acceptance criteria, the standing
   house-rules card, and — when a code-pattern is resolved — your project's
   conventions + blocking invariants + the playbook's measurable validation
   gate. Executors echo `actual_model`/`actual_effort` (claimed-vs-actual tier
-  check) and `pattern_version`/`invariants_checked`.
+  check), `pattern_version`/`invariants_checked`, plus verbatim build/test
+  `evidence` and an `unmet[]` honesty field — a `done` without proof (or with
+  admitted unmet lines) is a malformed return.
+- **Plans are grounded, not trusted:** every declared file carries an
+  `exists|new` attestation the orchestrator spot-checks with Glob before
+  scoring — hallucinated paths bounce the plan back to the planner.
 - **P0–P3 severity ladder** on review/verify findings: P0 (objective breakage)
   auto-fixed once without asking · P1 (correctness/security risk) gates ship,
   you're asked before the fix · P2/P3 advisory, offered as an optional
-  fix-batch in the summary.
+  fix-batch in the summary. Every P0–P2 finding must be anchored (file:line +
+  verbatim quote — spot-checked before any fix); unanchored findings are
+  auto-P3 and never gate.
 - **Opt-in phases** (all default OFF, via `orc config`): security pass
   (`security_review`, fires only on runs with a task scored ≥ 70), test
   authoring (`generate_tests`, writes tests + TEST-PLAN.md + curl bundle,

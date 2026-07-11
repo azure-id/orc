@@ -25,8 +25,13 @@ is AUTHORITATIVE for the full procedure; the summary below orients.
 1. **Accept** a detailed request OR an analyst requirement-spec — push back on a
    request too thin to plan against.
 2. **Ground** `declared_files[]` in real paths: standalone → read the repo (+ a
-   non-empty `wiki/`); from-SA → trust the spec's file map, no repo read.
-3. **Draft** right-sized tasks, each with `depends_on`, `owns_area`, `spec_ref`.
+   non-empty `wiki/`); from-SA → trust the spec's file map, no repo read. Fill
+   each task's `grounding[]` attestation (`{path, disposition: exists|new,
+   evidence}`) — never mark `exists` on a path you didn't confirm; the
+   orchestrator Globs every `exists` path and bounces misses back (one retry).
+3. **Draft** right-sized tasks, each with `depends_on`, `owns_area`, `spec_ref`,
+   and a sliced `acceptance[]` (the definition-of-done lines THIS task must
+   satisfy — from the spec, never invented).
 4. **Self-check (always — cheap, prevents broken waves):**
    - **cycle detection** — no `depends_on` chain loops back on itself;
    - **same-file collision** — two tasks sharing a `declared_files` entry must be
@@ -70,7 +75,9 @@ suggest the full `orc-planner` (Opus 4.8 medium) and let the user choose.
 ## Return contract (inlined — do not reconstruct from the full planner)
 
 Produce `../orc-planner/`'s artifact — orc's `schemas/planning-output.md`: every
-task with `declared_files` (incl. tests), `depends_on`, `owns_area`, `spec_ref`.
+task with `declared_files` (incl. tests), `grounding[]` (per-file
+exists|new attestation with evidence), `acceptance[]` (sliced
+definition-of-done lines), `depends_on`, `owns_area`, `spec_ref`.
 Checkpoint it into `orc/planner/{name}/` before branching. Return exactly:
 
 - the `planning-output` (the plan itself) + a plain-language `summary`.
