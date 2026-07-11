@@ -78,7 +78,12 @@ zero-dependency npm package installs those files into your `.claude/` directory.
   `security_review`.
 - **Docs de-staled:** `knowledge.md` version banner + §7 status caught up from
   v0.2.1 to the real feature set; agent/skill counts fixed (16 agents, 8 skills)
-  here and in `CLAUDE.md`.
+  here and in `CLAUDE.md`. Both READMEs brought into full compliance: this one
+  gained the P0–P3/house-rules/gates/security-pass/test-authoring pipeline
+  detail, the `security_review` config row, and the 9-language pattern list;
+  the installed payload README (`skills/orc/README.md`) was rewritten from its
+  stale "v2.2 / unzip three skills / 3-band ladder" era to the real install
+  flow, layout, and behavior set.
 
 <details>
 <summary><b>Previous versions</b> (click to expand)</summary>
@@ -248,13 +253,35 @@ needed. Either way, your `.claude/orc.config.yaml` overrides are left untouched.
 | **`/orc-plan`** | The Requirement Planner: a detailed request or analyst spec → a grounded, right-sized, dependency-checked task plan. |
 | **`/orc-verify`** | Standalone verification of your git-modified changes (build + tests + diff sanity). Read-only. |
 | **`/orc-wiki`** | Builds a persistent project knowledge base into `wiki/` and points `CLAUDE.md` at it. Expensive, opt-in. |
-| **`/orc-pattern`** | Learns your project's real code conventions per language and caches them so executors match your house style. Reconciles a generic playbook against your actual files — conventions defer to your codebase, security/correctness invariants always enforced. `--refresh` to relearn. |
+| **`/orc-pattern`** | Learns your project's real code conventions per language and caches them so executors match your house style. Reconciles a generic playbook (9 languages: React · Next.js · Vue · Angular · FastAPI · Django · NestJS · Express · Go) against your actual files — conventions defer to your codebase; security/correctness invariants and measurable validation gates always carry through to review + verify. `--refresh` to relearn. |
 
 ### `/orc` — the full orchestrator
 
 Feature or spec → shipped code, through: intake (with a signed-off intent-spec),
 planning, per-task scoring, conflict-free parallel waves, review, verify, and
 ship. Checkpoints eagerly; resumes in a fresh session at any pause.
+
+The quality pipeline in detail:
+
+- **Every executor slice carries a standing house-rules card** (surgical changes
+  only, simplicity-first, no unrequested scope, boring solution first) plus the
+  intent-spec's hard constraints — and, when a code-pattern is resolved, your
+  project's conventions, blocking invariants, and the playbook's **validation
+  gate** (default acceptance checks, enforced only when your own tooling can
+  verify them).
+- **Review + verify findings land on a P0–P3 severity ladder**, each level with
+  distinct handling: **P0** (broken build/tests/criteria, invariant violations)
+  is auto-fixed once without asking · **P1** (correctness/security risk) gates
+  the ship and asks you before the fix · **P2** (maintainability) is offered as
+  an optional fix-batch · **P3** (cosmetic) is counted. On frontend work the
+  reviewer also checks two capped, impact-ordered **a11y/perf rule packs**
+  (file:line findings, never auto-P0).
+- **Two opt-in extra phases:** a **security pass** (Phase 5.5, config
+  `security_review`) that fires only on runs containing a task scored ≥ 70 —
+  the risk floor for security/money/migrations/auth — sweeping the changed
+  files against a 12-item OWASP/STRIDE checklist; and **test authoring**
+  (Phase 6.5, config `generate_tests`) that writes test cases + `TEST-PLAN.md`
+  + a curl bundle, never runs them.
 
 ### `/orc-mini` — the fast path
 
@@ -312,7 +339,10 @@ approval, then takes it into a build or saves it as a plan file.
 ### `/orc-verify` — standalone verification
 
 Verifies only your git-modified changes (build + tests + diff sanity), classifies
-findings blocking vs nit, prints a summary. Read-only — never edits or commits.
+findings on the **P0–P3 severity ladder** (P0/P1 = fix before commit, P2/P3 =
+advisory), prints a summary. If `/orc-pattern` has cached a pattern for a changed
+file's language, its invariants and validation gate are checked too. Read-only —
+never edits or commits.
 
 ### `/orc-wiki` — the project knowledge base
 
@@ -431,6 +461,7 @@ The knobs (shipped defaults in `skills/orc/config.md`):
 | `generate_tests` | `false` | Opt-in test authoring. When on, ORC **writes** test cases (automated files, a manual `TEST-PLAN.md`, and a Postman-importable `test-cases.http` curl bundle for HTTP APIs). It never runs them; you test manually. |
 | `logging` | `false` | Opt-in behavior trace. Writes a persistent `.txt` per run under `log_dir` recording phases, every spawn plus the model that actually answered (claimed-vs-actual, catching a silent tier downgrade), scores, and outcomes. |
 | `pattern_findings` | `ask` | Code-pattern matching (`ask`/`on`/`off`). On an FE/BE cache miss, `ask` prompts to learn the project's conventions via `orc-pattern` (or go language-agnostic), `on` auto-learns, `off` stays agnostic. A learned pattern makes executors match your house style; security/correctness invariants are always enforced. |
+| `security_review` | `off` | Opt-in security pass (Phase 5.5, `off`/`ask`/`on`). Fires only on runs where a task scored ≥ 70 (the risk floor: security/money/migrations/auth). Sweeps the run's changed files against a 12-item OWASP/STRIDE checklist — wraps Semgrep if you have it installed, never installs anything. |
 | `orc_wiki_pattern_findings` | `false` | When on, `orc-wiki` also learns code-patterns for every detected language during its scan, pre-warming the cache so later runs skip the prompt. |
 
 Change them with the **`orc config`** CLI — deterministic terminal I/O, so editing
@@ -462,7 +493,7 @@ templates/
 │   ├── orc-wiki/            project knowledge-base builder
 │   ├── orc-analyze/         System Analyst — doc-optional, evidence-backed (+ report templates, spec schema)
 │   ├── orc-analyze-mini/    fast-lane analyst
-│   ├── orc-pattern/         code-pattern codifier — per-language playbooks + reconcile (opt-in)
+│   ├── orc-pattern/         code-pattern codifier — 9 language playbooks + a11y/perf rule packs + reconcile (opt-in)
 │   └── context-combiner/    merges 2+ related analyses into one combined spec (+ schemas)
 ├── commands/                /orc /orc-mini /orc-analyze /orc-plan /orc-verify /orc-wiki /orc-pattern
 ├── hooks/                   effort guard (PreToolUse) · statusline warning · behavior trace
@@ -485,6 +516,9 @@ a phase runs — so a small task never pays for the machinery of a big one.
   clean resume point, including in a fresh session.
 - **Pinned, inspectable models.** Named agents with models in frontmatter — not
   prose requests — so what ran is verifiable.
+- **Your codebase wins.** Learned patterns defer conventions to your project;
+  only security/correctness invariants are non-negotiable, and quality bars
+  gate only when your own tooling can measure them.
 - **Additive knowledge.** The wiki improves planning when present and costs
   nothing when absent.
 
