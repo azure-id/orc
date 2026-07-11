@@ -64,6 +64,27 @@ without a reason is invalid.
 Show the user the full scoring table (task, base, adjusters, final,
 override+reason if any, dispatched model) BEFORE dispatching.
 
+## Worked scoring examples (anchor to these — never score from vibes)
+
+Score by ANALOGY to the nearest example, then adjust for the differences. These
+are calibration anchors, not templates to copy blindly.
+
+| Task | Base | Adjusters | Final | Why |
+|---|---|---|---|---|
+| Rename a config key across 4 files + its test | 12 (4 files, no logic, small test surface) | −10 mechanical, −5 isolated | **0** | pure find-replace, leaf code |
+| Add a `--json` flag to one CLI command | 18 (2 files, light logic, 1 test file) | −5 isolated leaf | **13** | one coherent area, no consumers |
+| New CRUD endpoint following an existing sibling route | 28 (3 files incl. test, CRUD logic) | +5 dependency on shared schema, −5 mechanical (sibling to imitate) | **28** | pattern exists; mid-low band |
+| Notification model + type enum other tasks consume | 32 (3 files, moderate logic) | +25 core/shared (every later task imports it), +8 blast radius | **65** | the run's keystone — errors cascade |
+| Add role check to payment-refund endpoint | 24 (2 files + test) | +25 risk (money+auth), +10 core | **70** (risk floor also forces ≥70) | small diff, catastrophic if wrong |
+| Migrate orders table to split-name columns + backfill | 38 (migration + model + callers + tests) | +25 risk (migration), +15 dependency load, +10 blast radius | **88** | irreversible data change, wide surface |
+
+Two disciplines the examples encode: (1) base is INTRINSIC size only — risk
+and centrality live in the adjusters, never double-counted into base; (2) a
+small diff is NOT a low score when the blast radius or risk class is high (the
+refund example), and a big-looking task IS low when it's mechanical (the
+rename). If your score diverges >20 points from the nearest analog, re-derive
+it or write an override reason.
+
 ## Model ladder → config presets
 
 The score→model mapping is NO LONGER hardcoded here. It lives in `config.md`,

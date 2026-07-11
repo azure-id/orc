@@ -30,6 +30,7 @@ Score→executor mapping lives in config.md (narrow vs wide preset).
 | orc-scout-sonnet-4-6-high | claude-sonnet-4-6 | high | deep-analysis code scout (read-only) |
 | orc-context-combiner-opus-4-8-high | claude-opus-4-8 | high | combine 2+ related analyses (full lane) |
 | orc-pattern-codifier-sonnet-5-high | claude-sonnet-5 | high | reconcile per-language playbook vs. project files → cached code-pattern (opt-in) |
+| orc-retro-sonnet-5-high | claude-sonnet-5 | high | mine behavior traces → calibration report (/orc-retro; read-only) |
 
 Mini execution reuses orc-executor-sonnet-5-high.
 

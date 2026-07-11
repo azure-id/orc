@@ -34,4 +34,9 @@ Rules:
   (low-tier intake)" rather than inventing content.
 - `Definition of done` items must be observable/checkable — if it can't be
   verified in Phase 6, rewrite it until it can.
+- **Evidence-or-mark (intake Step 3.5):** any file/module/command/behavior the
+  spec names is either confirmed against the repo (Glob/Grep) or carries an
+  explicit `UNVERIFIED` tag; tags are resolved as ONE batched question at
+  sign-off, and >3 tags recommends routing to `orc-analyze` instead. A spec
+  reaching the planner must have zero unresolved `UNVERIFIED` tags.
 - On fresh-session resume, the one-line reconfirm quotes `Scope in`.

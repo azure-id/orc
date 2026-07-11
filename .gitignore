@@ -5,4 +5,5 @@ CLAUDE.md
 knowledge.md
 # Working-process docs / scratch — never committed (see CLAUDE.md commit rule)
 docs/
-.superpowers/
+.superpowers/# Eval harness — scenario specs + fixture (process artifact, never shipped)
+eval/

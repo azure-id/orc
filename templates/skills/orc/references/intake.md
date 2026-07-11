@@ -54,6 +54,26 @@ Only intent, scope, and priorities are askable.
 Write `run/{run-slug}/intent-spec.md` per `schemas/intent-spec.md`. Restate the
 user's intent in YOUR words — restating is what surfaces misreadings.
 
+## Step 3.5 — Repo cross-check of the draft (evidence-or-mark, proportional)
+
+Before showing the spec, cross-check its claims against the repo — the direct
+path (no analyst) is the only lane where a spec can reach planning ungrounded.
+Same vocabulary as the analyst: confirm or tag `UNVERIFIED`, never silently
+assume.
+
+- **What to check:** every file, module, command, or existing behavior the
+  draft NAMES — in Definition of done, Constraints, and Integration surface.
+  A quick Glob/Grep per item; you are confirming the noun exists as described,
+  not analyzing it.
+- **Proportional to the tier:** 2-question tier → check named files/modules
+  only. 4/6-question tiers → full pass over the three sections above.
+- **Anything unconfirmable gets an `UNVERIFIED` tag in the spec** and the tags
+  become ONE batched question in the sign-off round ("These I could not confirm
+  in the repo: … — confirm, correct, or drop?"). Never more than one round.
+- **Escalation valve:** more than 3 tags means the request is under-grounded
+  for a direct intake — RECOMMEND routing through `orc-analyze` (requirement
+  mode) instead of stretching intake into a second analyst. The user chooses.
+
 ## Step 4 — Sign-off
 
 Ask: hard gate (nothing proceeds until explicit approval) or soft (proceed

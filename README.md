@@ -6,7 +6,7 @@
 
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
-![Version](https://img.shields.io/badge/version-0.7.0-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.8.0-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D16-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
@@ -36,6 +36,49 @@ zero-dependency npm package installs those files into your `.claude/` directory.
 ```
 
 ## Changelog
+
+### v0.8.0 — Close the loop: grounded intake · scoring anchors · /orc-retro trace miner _(2026-07-12)_
+
+Completes the accuracy program v0.7.0 started: the last ungrounded entry path
+gets evidence discipline, and the behavior-trace flywheel finally gets its
+return spoke.
+
+- **Grounded intake (Step 3.5 repo cross-check).** The direct path (no
+  analyst) was the only lane where a spec could reach planning ungrounded.
+  Before sign-off, the orchestrator now Glob/Grep-confirms every file, module,
+  and behavior the draft intent-spec names — unconfirmable items get an
+  explicit `UNVERIFIED` tag, tags are resolved in ONE batched sign-off
+  question, and more than 3 tags recommends routing through `orc-analyze`
+  instead. Proportional: 2-question intakes check named files only; orc-mini
+  runs the names-only depth. A spec reaching the planner has zero unresolved
+  tags.
+- **Scoring is anchored, not vibes.** `effort-and-mode.md` gains six worked
+  scoring examples (rename → 0 up to a table migration → 88) encoding the two
+  disciplines the rubric implied but never showed: risk/centrality never
+  double-counts into base, and a small diff is not a low score (the
+  payment-refund example). Scores diverging >20 points from the nearest analog
+  need re-derivation or a written override.
+- **`OUTCOME` trace marker.** At every task close the orchestrator emits one
+  line linking the scoring band to what the task actually took: `OUTCOME
+  task= score= band= model= retries= requeues= needs_context= unmet=` (mini
+  emits it with `band=mini`). This is the raw material for calibration.
+- **New `/orc-retro` — the flywheel's return spoke.** New sibling skill +
+  `orc-retro-sonnet-5-high` agent (17 subagents now): mines the persistent
+  traces into a calibration report — per-band outcome stats, every `⛔
+  DOWNGRADE`, question/context-gap clusters, unfinished runs, trace hygiene —
+  written to `log_dir/retro/`, every claim backed by trace line references,
+  small samples labeled weak. Strictly read-only/report-only: it never edits
+  the rubric or skills; a human applies its recommendations. It writes no
+  trace of its own (never pollutes the data it mines).
+- **Eval harness (repo-side, git-ignored).** Three scripted end-to-end
+  scenarios + a 7-file Express fixture under `eval/`: clean 3-task parallel
+  run, analyst-vs-planted-false-doc-claim, and planner-phantom-path (the
+  grounding spot-check must bounce it) — each with a pass/fail checklist to
+  grade after every payload bump. Closes the long-open "first real runs never
+  exercised" item with a repeatable procedure.
+
+<details>
+<summary><b>Previous versions</b> (click to expand)</summary>
 
 ### v0.7.0 — Evidence everywhere: grounded plans · verbatim proof · anchored findings · contract lint · trace fixes _(2026-07-12)_
 
@@ -82,9 +125,6 @@ systems to every remaining role.
   run-pointer + markers for their phase set (wiki keeps `.current` across its
   5-task pauses so multi-session scans append to one trace; lanes inside a
   bigger run never open a second trace).
-
-<details>
-<summary><b>Previous versions</b> (click to expand)</summary>
 
 ### v0.6.0 — P0–P3 ladder · house rules · deep playbooks + wired gates · 3 new languages · FE rule packs · security pass _(2026-07-11)_
 
@@ -300,6 +340,7 @@ needed. Either way, your `.claude/orc.config.yaml` overrides are left untouched.
 | **`/orc-verify`** | Standalone verification of your git-modified changes (build + tests + diff sanity). Read-only. |
 | **`/orc-wiki`** | Builds a persistent project knowledge base into `wiki/` and points `CLAUDE.md` at it. Expensive, opt-in. |
 | **`/orc-pattern`** | Learns your project's real code conventions per language and caches them so executors match your house style. Reconciles a generic playbook (9 languages: React · Next.js · Vue · Angular · FastAPI · Django · NestJS · Express · Go) against your actual files — conventions defer to your codebase; security/correctness invariants and measurable validation gates always carry through to review + verify. `--refresh` to relearn. |
+| **`/orc-retro`** | Mines the behavior traces (`logging: true` runs) into a calibration report: per-band outcomes, tier downgrades, pipeline leaks. Read-only — recommendations are yours to apply. |
 
 ### `/orc` — the full orchestrator
 
@@ -540,8 +581,9 @@ templates/
 │   ├── orc-analyze/         System Analyst — doc-optional, evidence-backed (+ report templates, spec schema)
 │   ├── orc-analyze-mini/    fast-lane analyst
 │   ├── orc-pattern/         code-pattern codifier — 9 language playbooks + a11y/perf rule packs + reconcile (opt-in)
+│   ├── orc-retro/           trace miner — per-band calibration report from logged runs (read-only)
 │   └── context-combiner/    merges 2+ related analyses into one combined spec (+ schemas)
-├── commands/                /orc /orc-mini /orc-analyze /orc-plan /orc-verify /orc-wiki /orc-pattern
+├── commands/                /orc /orc-mini /orc-analyze /orc-plan /orc-verify /orc-wiki /orc-pattern /orc-retro
 ├── hooks/                   effort guard (PreToolUse) · statusline warning · behavior trace
 └── agents/                  single-role, model-pinned subagents (+ read-only scout) + MODEL-MAPPING.md
 bin/cli.js                   installer + config editor (init / update / upgrade / config / where)

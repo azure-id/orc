@@ -43,8 +43,11 @@ not implementation — you still never write code.
 4. **Lighter intake.** Ask only the intake **Always + medium tier** (Q1–Q4 in
    `../orc/references/intake.md`): what should exist, what's out of scope, how
    we'll know it's done, and constraints/patterns/libs/files-not-to-touch. **Skip
-   the high tier (Q5 "what must not break", Q6 "what might change").** Sign-off
-   **defaults to SOFT** (proceed unless the user objects), not GATE.
+   the high tier (Q5 "what must not break", Q6 "what might change").** Run the
+   Step 3.5 repo cross-check at the NAMES-ONLY depth (Glob/Grep-confirm the
+   files/modules the draft names, tag the rest `UNVERIFIED`, resolve tags in
+   the sign-off line; >3 tags → recommend the full flow or `orc-analyze`).
+   Sign-off **defaults to SOFT** (proceed unless the user objects), not GATE.
 5. **Still write tests** if the project has a test setup (the execution subagent
    creates/updates them as part of its task).
 6. **Everything else is identical:** Phase 0 run folder + intent-spec, Phase 1
@@ -118,6 +121,9 @@ mini's phase set:
 - **Each return:** read `actual_model` + `actual_effort`, compare to expected,
   emit `VERIFY <task> actual=…/… ✅ MATCH` or `⛔ DOWNGRADE expected=…` and
   surface a downgrade to the user.
+- **Task close:** emit `OUTCOME task=… score=n/a band=mini model=… retries=…
+  requeues=… needs_context=… unmet=…` (mini has no score — band is `mini`; the
+  counters still feed `/orc-retro`).
 - **Smoke gate:** emit `VERDICT pass|fail` for the build+test result.
 - **Run end (ship or abort):** emit `FINISH …` and delete `log_dir/.current`.
 

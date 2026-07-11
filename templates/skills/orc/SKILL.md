@@ -168,6 +168,11 @@ skill improvement, separate from the decision log and NEVER deleted. When
   actual=…/… ✅ MATCH` or `⛔ DOWNGRADE expected=…`. **Surface a downgrade to the
   user** — it means the main tier capped a pin (the "wrong model" bug). Fold any
   worker `QUESTION` / `CONTEXT-GAP` markers in as well.
+- **Every task close** (final validated return — done, or terminally
+  failed/escalated): emit `OUTCOME task=… score=… band=… model=… retries=…
+  requeues=… needs_context=… unmet=…` — one line linking the scoring band to
+  what the task actually took. This is the raw material `/orc-retro` mines to
+  calibrate the rubric; without it a trace shows dispatches but not costs.
 - **Review/verify:** emit `FINDING p0=n p1=n p2=n p3=n` and `VERDICT pass|fail`.
 - **Run end (Phase 8 or abort):** emit `FINISH …` and delete `log_dir/.current`.
 
@@ -201,6 +206,10 @@ the project; security/correctness invariants are always enforced.** See the
   to full flow mid-run.
 - `orc-verify` — standalone; verifies only git-modified changes,
   Opus 4.8 high, read-only. Runs without this orchestrator.
+- `orc-retro` — mines the behavior traces (`logging: true` runs) into a
+  calibration report: per-band outcomes, downgrades, pipeline leaks.
+  Read-only/report-only; it never edits the rubric — a human applies its
+  recommendations. The `OUTCOME` trace marker is its raw material.
 
 ## Constellation map (load on demand only)
 
@@ -246,8 +255,12 @@ the analysis — it never analyzes itself.
 FIRST create the run folder `run/{run-slug}/` (slug from the intent). All run
 artifacts live there — never the project root. Then rough-size the task (quick question or repo-based guess) → pick the question
 tier (2/4/6) → ask the tiered set in ONE batched round → draft the intent-spec
-(`schemas/intent-spec.md`) → ask sign-off preference (gate/soft; DEFAULT GATE)
-→ show spec → approval or edits. **No planning until approved (gate mode).**
+(`schemas/intent-spec.md`) → **repo cross-check the draft** (intake Step 3.5:
+Glob/Grep-confirm every file/module/behavior the spec names, or tag it
+`UNVERIFIED`; tags become ONE batched sign-off question; >3 tags → recommend
+`orc-analyze` instead) → ask sign-off preference (gate/soft; DEFAULT GATE)
+→ show spec → approval or edits. **No planning until approved (gate mode) and
+no unresolved `UNVERIFIED` tags either way.**
 
 The intent-spec's definition-of-done becomes Phase 6's acceptance criteria.
 Its constraints become hard rules in every worker slice.
