@@ -22,9 +22,11 @@ conflict, `core.md` wins.
 ## What the worker does (summary)
 
 - **phase=review:** examine `changed_files[]` against `code_pattern` + `constraints[]`;
-  create/update tests for the changed surface; classify EVERY finding **blocking**
-  (failing tests/build, unmet acceptance criteria, constraint violations) vs **nit**
-  (cosmetic). Never fix nits; blocking fixes are the caller's call.
+  create/update tests for the changed surface; independently re-check each
+  `invariants[]` rule against the diff (a violation is blocking); classify EVERY
+  finding **blocking** (failing tests/build, unmet acceptance criteria, constraint
+  or invariant violations) vs **nit** (cosmetic). Never fix nits; blocking fixes are
+  the caller's call.
 - **phase=verify:** run the build + full test suite; check EACH
   `acceptance_criteria[]` item individually (pass/fail, nothing invented); report
   failures precisely. You don't fix — the caller owns the auto-fix-once loop.

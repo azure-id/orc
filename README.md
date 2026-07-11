@@ -6,7 +6,7 @@
 
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
-![Version](https://img.shields.io/badge/version-0.4.5-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.5.0-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D16-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
@@ -28,6 +28,13 @@ project that makes every future run smarter.
 ORC is **not a runtime.** It's a set of markdown **skills**, **slash commands**,
 and **subagent definitions** that Claude Code reads and follows. This
 zero-dependency npm package installs those files into your `.claude/` directory.
+
+> **Latest: v0.5.0 (updated 2026-07-11)** — new **code-pattern findings**: the
+> `orc-pattern` skill learns your project's real conventions per language and
+> makes executors match your house style (frontend: React, Next.js, Vue;
+> backend: FastAPI, NestJS, Go). Conventions defer to your codebase;
+> security/correctness invariants are always enforced. See
+> [Configuration](#configuration-orc-config).
 
 ```text
                     ┌──────────────── you own scope + sign-off ────────────────┐
@@ -164,6 +171,7 @@ needed. Either way, your `.claude/orc.config.yaml` overrides are left untouched.
 | **`/orc-plan`** | The Requirement Planner: a detailed request or analyst spec → a grounded, right-sized, dependency-checked task plan. |
 | **`/orc-verify`** | Standalone verification of your git-modified changes (build + tests + diff sanity). Read-only. |
 | **`/orc-wiki`** | Builds a persistent project knowledge base into `wiki/` and points `CLAUDE.md` at it. Expensive, opt-in. |
+| **`/orc-pattern`** | Learns your project's real code conventions per language and caches them so executors match your house style. Reconciles a generic playbook against your actual files — conventions defer to your codebase, security/correctness invariants always enforced. `--refresh` to relearn. |
 
 ### `/orc` — the full orchestrator
 
@@ -345,6 +353,8 @@ The knobs (shipped defaults in `skills/orc/config.md`):
 | `default_analysis_depth` | `standard` | The analyst depth gate's default (standard/deep). |
 | `generate_tests` | `false` | Opt-in test authoring. When on, ORC **writes** test cases (automated files, a manual `TEST-PLAN.md`, and a Postman-importable `test-cases.http` curl bundle for HTTP APIs). It never runs them; you test manually. |
 | `logging` | `false` | Opt-in behavior trace. Writes a persistent `.txt` per run under `log_dir` recording phases, every spawn plus the model that actually answered (claimed-vs-actual, catching a silent tier downgrade), scores, and outcomes. |
+| `pattern_findings` | `ask` | Code-pattern matching (`ask`/`on`/`off`). On an FE/BE cache miss, `ask` prompts to learn the project's conventions via `orc-pattern` (or go language-agnostic), `on` auto-learns, `off` stays agnostic. A learned pattern makes executors match your house style; security/correctness invariants are always enforced. |
+| `orc_wiki_pattern_findings` | `false` | When on, `orc-wiki` also learns code-patterns for every detected language during its scan, pre-warming the cache so later runs skip the prompt. |
 
 Change them with the **`orc config`** CLI — deterministic terminal I/O, so editing
 costs **zero model tokens** (nothing is loaded into a Claude session):
@@ -375,8 +385,9 @@ templates/
 │   ├── orc-wiki/            project knowledge-base builder
 │   ├── orc-analyze/         System Analyst — doc-optional, evidence-backed (+ report templates, spec schema)
 │   ├── orc-analyze-mini/    fast-lane analyst
+│   ├── orc-pattern/         code-pattern codifier — per-language playbooks + reconcile (opt-in)
 │   └── context-combiner/    merges 2+ related analyses into one combined spec (+ schemas)
-├── commands/                /orc /orc-mini /orc-analyze /orc-plan /orc-verify /orc-wiki
+├── commands/                /orc /orc-mini /orc-analyze /orc-plan /orc-verify /orc-wiki /orc-pattern
 ├── hooks/                   effort guard (PreToolUse) · statusline warning · behavior trace
 └── agents/                  single-role, model-pinned subagents (+ read-only scout) + MODEL-MAPPING.md
 bin/cli.js                   installer + config editor (init / update / upgrade / config / where)

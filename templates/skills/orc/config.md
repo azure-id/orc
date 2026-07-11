@@ -44,6 +44,14 @@ default_analysis_depth: standard   # standard | deep — depth gate default (run
 # --- Test authoring (opt-in Phase 6.5; ORC writes test cases, never runs them) ---
 generate_tests: false      # author test cases before ship? (run confirms at intake)
 
+# --- Code-pattern findings (make executors match the project's house style) ---
+pattern_findings: ask      # ask | on | off — on an FE/BE cache miss during /orc:
+                           #   ask → P0 prompt (learn via orc-pattern, or agnostic)
+                           #   on  → auto-codify on miss, no prompt
+                           #   off → always agnostic (invariants only), never ask
+orc_wiki_pattern_findings: false  # orc-wiki also codifies ALL detected langs during
+                                  #   its scan (rides under the wiki's scan-consent)
+
 # --- Artifact locations (internal by default) ---
 analyzer_dir: .claude/skills/orc/analyzer
 planner_dir:  .claude/skills/orc/planner
@@ -93,6 +101,7 @@ list of `{min, max, agent}` rows; the orchestrator uses it instead of a preset.
 | Mini analyst | orc-analyze-mini-sonnet-5-high |
 | Mini planner | orc-planner-mini-sonnet-5-high |
 | Mini executor | orc-executor-sonnet-5-high (reused) |
+| Pattern codifier | orc-pattern-codifier-sonnet-5-high |
 
 ## Rules
 - Read at run start via the resolution rule above (defaults ← `orc.config.yaml`
@@ -118,3 +127,14 @@ list of `{min, max, agent}` rows; the orchestrator uses it instead of a preset.
   subsystem is inert — the hook no-ops and the orchestrator emits no markers.
 - `log_dir` is the persistent trace folder; unlike the decision log (`run/…md`,
   deleted on success) traces are NEVER auto-deleted — post-hoc review is the point.
+- `pattern_findings` gates the code-pattern subsystem (default `ask`). On an FE/BE
+  cache MISS during Phase 3 dispatch: `ask` → P0 prompt (learn conventions via the
+  `orc-pattern` skill, or proceed language-agnostic); `on` → auto-codify, no prompt;
+  `off` → always agnostic (invariants enforced, conventions imitate neighbor files),
+  never ask. A cache HIT is used silently regardless. The codifier
+  (`orc-pattern-codifier-sonnet-5-high`) writes `.claude/orc/patterns/<lang>-pattern.md`,
+  reused by future runs. See the `orc-pattern` skill.
+- `orc_wiki_pattern_findings` (default `false`, on/off only — no `ask`, because the
+  wiki's scan already has consent) makes `orc-wiki` codify ALL detected languages as
+  a byproduct of its full scan, pre-warming the pattern cache so later `/orc` runs
+  never hit the `pattern_findings` prompt.

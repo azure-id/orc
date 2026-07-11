@@ -8,6 +8,10 @@ subagent; the orchestrator never runs this itself.
 - task_id, description, spec_ref
 - declared_files[]        — the files you are expected to touch (incl. tests)
 - constraints[]           — HARD RULES from the intent-spec; never violate
+- pattern                 — the resolved code-pattern for this task's language, or
+                            null. When present: {conventions[] you MUST MATCH,
+                            invariants[] that are BLOCKING, pattern_version}. Agnostic
+                            tasks carry invariants only (no conventions).
 - log_digest              — compacted decisions from prior waves; absorb before working
 - worktree_path           — null unless worktrees mode
 - model, effort           — informational (already applied by the caller)
@@ -17,7 +21,10 @@ subagent; the orchestrator never runs this itself.
 1. Absorb log_digest — prior DECISIONs/INTERFACEs/ANSWERs bind you.
 2. Read spec_ref if provided.
 3. Perform the task within `worktree_path` (or the current tree if null).
-   Follow every constraint. Create/update tests for what you build.
+   Follow every constraint. If `pattern` is present, MATCH its conventions and
+   satisfy every BLOCKING invariant (re-read your diff to confirm before returning);
+   if `pattern` is null but carries invariants (agnostic), still satisfy them and
+   imitate the neighboring files you read. Create/update tests for what you build.
 4. **Milestone pings:** after each declared file completed or logical subtask
    done, emit a brief progress ping: {percent, files_written[], notes}. These
    bound what a mid-wave stop can save — do not skip them.
@@ -41,6 +48,12 @@ subagent; the orchestrator never runs this itself.
 - context_request         — REQUIRED when status=needs_context: what you need
                             and why (e.g. "needs T1's type enum interface");
                             else null
+- pattern_version         — the `pattern.pattern_version` you applied; null if no
+                            pattern was supplied
+- invariants_checked      — true ONLY if you verified every BLOCKING invariant in
+                            `pattern` against your diff; false/null if no invariants
+                            were supplied. A pattern task returning false/absent here
+                            is a malformed return
 
 Malformed returns are treated as failure by the caller. needs_context is
 capped at 2 per task — a third means the slice or plan is wrong and escalates

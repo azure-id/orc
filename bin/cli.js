@@ -248,7 +248,7 @@ function install({ overwrite }) {
 
   console.log(`\nInstalled into ${claudeDir}`);
   console.log(
-    "Slash commands: /orc  /orc-mini  /orc-analyze  /orc-plan  /orc-verify  /orc-wiki"
+    "Slash commands: /orc  /orc-mini  /orc-analyze  /orc-plan  /orc-verify  /orc-wiki  /orc-pattern"
   );
   console.log("Config: run `orc config` (CLI, interactive) — not a slash command.");
   console.log("\nNext:");

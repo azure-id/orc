@@ -31,7 +31,12 @@ contract); the summary below orients — on any conflict, `core.md` wins.
 ## Return shape (summary — full contract in `core.md`)
 
 `{ task_id, actual_model, actual_effort, status: done|failed|partial|needs_context,
-actual_files[], log_entries[], failure_reason, progress, context_request }`
+actual_files[], log_entries[], failure_reason, progress, context_request,
+pattern_version, invariants_checked }`
+
+When the slice carries a `pattern`, MATCH its conventions and satisfy every BLOCKING
+invariant; echo the `pattern_version` and set `invariants_checked: true` only after
+re-checking your diff. A pattern task that returns false/absent here is malformed.
 
 **Validation checkpoint before returning:** `status=failed` REQUIRES a
 `failure_reason`; `needs_context` REQUIRES a `context_request` (capped at 2/task);

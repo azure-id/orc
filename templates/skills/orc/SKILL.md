@@ -132,7 +132,8 @@ single run. Apply these in Phase 0 (analyst depth gate + scout cap; test-authori
 opt-in), Phase 2 (batch-pause) and Phase 3 (wave cap). It also provides
 `generate_tests` (default `false` — the opt-in Phase 6.5 gate) and `logging`
 (default `false`) + `log_dir` (default `.claude/orc/logs`) — see the
-behavior-trace section below.
+behavior-trace section below. And `pattern_findings` (default `ask`) — the
+code-pattern gate applied at Phase 3 dispatch (see the code-pattern section).
 
 ## Behavior trace (opt-in — only when config `logging: true`)
 
@@ -159,6 +160,29 @@ skill improvement, separate from the decision log and NEVER deleted. When
 - **Review/verify:** emit `FINDING blocking=n nit=n` and `VERDICT pass|fail`.
 - **Run end (Phase 8 or abort):** emit `FINISH …` and delete `log_dir/.current`.
 
+## Code-pattern findings (executors match the project's house style)
+
+So executors write code that matches the EXISTING codebase (not a generic
+template), the run resolves a per-language code-pattern at dispatch. A generic
+playbook is reconciled against the project's real files: **conventions defer to
+the project; security/correctness invariants are always enforced.** See the
+`orc-pattern` sibling skill; the codifier is `orc-pattern-codifier-sonnet-5-high`.
+
+- **Cache:** `.claude/orc/patterns/<lang>-pattern.md` (project `.claude/`, one per
+  language, reused across runs, refreshed only on drift or `/orc-pattern --refresh`).
+- **Gate (config `pattern_findings`, default `ask`):** applied at Phase 3 on an
+  FE/BE **cache miss**. `ask` → P0 prompt (learn via `orc-pattern`, or go
+  agnostic); `on` → auto-codify; `off` → always agnostic. A cache **hit** is used
+  silently. Batch the ask ONCE per run across all missing languages.
+- **Agnostic fallback** (declined/off, or no playbook for the language): no
+  codifier, no scan — the executor enforces the universal invariants and imitates
+  the neighbor files it already reads. ~Zero added cost.
+- **Anti-skip (3 layers):** (1) the resolved conventions + blocking invariants are
+  INJECTED LITERALLY into each executor's task slice (`pattern` field) — never a
+  file pointer; (2) the executor return echoes `pattern_version` + `invariants_checked`
+  (validated like `actual_model`); (3) the Reviewer re-checks the invariants against
+  the diff. With `logging: true`, record the applied `pattern_version`.
+
 ## Sibling skills (separate top-level skills, own slash commands)
 
 - `orc-mini` — fast path: one Sonnet 5 high subagent, skips
@@ -173,6 +197,8 @@ skill improvement, separate from the decision log and NEVER deleted. When
 - Phase 2 → `references/effort-and-mode.md` (mode gate + task scoring rubric)
 - Phase 3 → `references/wave-grouping.md` + `references/log-protocol.md`
   - workers → `subskills/orc-execution/` (always spawned; subagent wrapper)
+  - code-pattern (FE/BE) → `../orc-pattern/SKILL.md` (dispatch the codifier on a
+    cache miss per config `pattern_findings`; inject the resolved pattern into slices)
   - stops → `subskills/orc-checkpoint/SKILL.md` + `references/stop-and-resume.md`
 - Phase 5–6 → `subskills/orc-review-verify/` (always spawned; subagent wrapper)
 - Phase 6.5 (opt-in) → `subskills/orc-testgen/` (spawned; only when `generate_tests`)
@@ -265,6 +291,11 @@ and risk factors — the wiki makes these scores sharper than inference alone. S
 scoring table before dispatch. The ladder ALWAYS applies — a "small task" means
 a cheap subagent (Sonnet 4.6 medium), never you doing it yourself.
 
+**Tag each task's code-pattern domain+language** while you score (from its
+`declared_files` extensions + repo deps; see `../orc-pattern/references/INDEX.md`):
+`{domain: FE|BE|null, lang: react|nextjs|vue|fastapi|nestjs|go|…|null}`. This drives
+the Phase 3 pattern-resolve gate. Tasks with no FE/BE language need no pattern.
+
 Ask: "Any anticipated escalations or changes, or run straight through?"
 
 ## Phase 3 — Execution (load wave-grouping.md + log-protocol.md)
@@ -272,17 +303,35 @@ Ask: "Any anticipated escalations or changes, or run straight through?"
 Build conflict graph from `declared_files` → group waves → write checkpoint +
 state-of-play BEFORE dispatching.
 
+**Pattern-resolve gate (once, before the first wave — FE/BE tasks only).** For the
+distinct languages tagged in Phase 2, resolve each against
+`.claude/orc/patterns/<lang>-pattern.md`:
+- **Cache hit, no drift** → use it silently (no ask, no cost).
+- **Cache miss** → apply config `pattern_findings`: `ask` → P0 prompt, batched ONCE
+  for ALL missing langs ("Learn conventions for {…} via orc-pattern, or proceed
+  language-agnostic?"); `on` → codify without asking; `off` → agnostic.
+- **On "learn"/`on`** → dispatch `orc-pattern-codifier-sonnet-5-high` per missing
+  lang (slice per `../orc-pattern/SKILL.md` Phase 1), then write the returned
+  pattern to the cache. **On "no"/`off`/no-playbook** → agnostic (invariants only).
+Hold the resolved pattern per language in run state (survives checkpoint/resume) so
+you inject it into each task's slice below and reuse it at Phase 5.
+
 Per wave:
 1. Dispatch EVERY task as a spawned subagent via the Task tool, with the
    subagent wrapper framing + the task's INPUT SLICE (see orc-execution/core.md
-   contract) + its scored model/effort. You never do the task yourself,
-   regardless of size (hard rule 1). Sequential style = one spawn at a time;
-   parallel style = the wave's spawns together.
+   contract) + its scored model/effort. For an FE/BE task, INJECT the resolved
+   `pattern` (conventions to MATCH + blocking invariants) LITERALLY into its slice
+   — never a file pointer; agnostic tasks get the universal invariants only. You
+   never do the task yourself, regardless of size (hard rule 1). Sequential style =
+   one spawn at a time; parallel style = the wave's spawns together.
 2. Workers emit milestone progress pings; record them (they bound what a
    mid-wave stop can save).
 3. Collect returns; VALIDATE each against the contract. `needs_context` →
    adjudicate (in-scope for its area?) → re-slice and resume, or treat as a
-   planning correction. Cap 2 per task, then escalate to user.
+   planning correction. Cap 2 per task, then escalate to user. For a task that was
+   given a `pattern`, require `invariants_checked: true` + a `pattern_version`
+   matching what you injected — a missing/false attestation is a malformed return
+   (requeue). With `logging: true`, record the applied `pattern_version`.
 4. Post-wave collision audit: `actual_files` vs declarations. Overlap →
    `failure_reason: "file-collision:<file> with <agent>"`, requeue later wave.
 5. Append worker `log_entries` to the decision log; regenerate the digest.
@@ -306,8 +355,11 @@ BOTH tasks' specs/intents, not just the diff. Record merge state in checkpoint.
 ## Phase 5 — Review (load subskills/orc-review-verify/, spawned subagent)
 
 Superpowers path: its review skill incl. tests (Sonnet 4.6, medium).
-OpenSpec/self path: review worker (Opus 4.8, high); FIRST ask for a code
-pattern (paste text / md / none). Classify findings **blocking vs nit**.
+OpenSpec/self path: review worker (Opus 4.8, high). If this run resolved a
+code-pattern (from the Phase 3 gate), pass it as `code_pattern` AND pass its
+blocking `invariants[]` for the re-check — don't re-ask. Otherwise FIRST ask for a
+code pattern (paste text / md / none). Classify findings **blocking vs nit**; an
+invariant violation is BLOCKING.
 
 ## Phase 6 — Verify (same subskill, phase=verify)
 

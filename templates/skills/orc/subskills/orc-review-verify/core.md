@@ -5,7 +5,8 @@
 - phase: review | verify
 - acceptance_criteria[]   — the intent-spec's definition-of-done, verbatim
                             (verify checks EXACTLY these; nothing invented)
-- code_pattern            — user-provided style guide, or null (review bare)
+- code_pattern            — resolved/user-provided style guide, or null (review bare)
+- invariants[]            — blocking code-pattern rules to re-check, or empty
 - changed_files[]         — the surface to examine
 - constraints[]           — intent-spec hard rules (violations are BLOCKING)
 - model, effort           — informational
@@ -14,11 +15,13 @@
 
 1. Examine changed_files against code_pattern (if given) and constraints.
 2. Create/update test files and test cases for the changed surface.
-3. Classify EVERY finding:
+3. Re-check each `invariants[]` rule against the diff independently (don't trust the
+   executor's self-attestation) — any violation is BLOCKING.
+4. Classify EVERY finding:
    - blocking: failing tests, broken build, unmet acceptance criteria,
-     runtime errors, constraint violations
+     runtime errors, constraint violations, invariant violations
    - nit: naming, formatting, length, style — anything cosmetic
-4. Never fix nits. Blocking fixes are the caller's decision, not yours.
+5. Never fix nits. Blocking fixes are the caller's decision, not yours.
 
 ## Verify procedure (phase=verify)
 

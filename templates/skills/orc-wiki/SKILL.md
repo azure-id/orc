@@ -92,6 +92,20 @@ expected and normal.
    (see references/claude-md-injection.md). Pointer only — no summaries.
 3. Final dispatch report + "/usage" reminder. Keep the checkpoint for audit.
 
+## Code-pattern pre-warm (opt-in — only when config `orc_wiki_pattern_findings: on`)
+
+Default OFF. When on, after Phase 3 also **codify the project's code-pattern for
+every detected FE/BE language** as a byproduct of this scan — pre-warming
+`.claude/orc/patterns/<lang>-pattern.md` so later `/orc` runs never hit the
+`pattern_findings` prompt. This rides under the wiki's existing scan-consent, so
+there is NO separate ask (that is why the config is on/off only, no `ask`).
+
+Per detected language (see `../orc-pattern/references/INDEX.md`): dispatch
+`orc-pattern-codifier-sonnet-5-high` with the generic playbook + the
+most-recently-modified real files for that language; YOU write the returned pattern
+to the cache. Never run tests or change project code. Skip languages already cached
+and un-drifted. This reuses the `orc-pattern` engine — you never codify yourself.
+
 ## Refresh & staleness (references/staleness.md)
 
 - Each doc records the git hash of the files it covers at scan time. Stale =
