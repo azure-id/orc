@@ -29,21 +29,53 @@ ORC is **not a runtime.** It's a set of markdown **skills**, **slash commands**,
 and **subagent definitions** that Claude Code reads and follows. This
 zero-dependency npm package installs those files into your `.claude/` directory.
 
-> **Latest: v0.5.0 (updated 2026-07-11)** — new **code-pattern findings**: the
-> `orc-pattern` skill learns your project's real conventions per language and
-> makes executors match your house style (frontend: React, Next.js, Vue;
-> backend: FastAPI, NestJS, Go). Conventions defer to your codebase;
-> security/correctness invariants are always enforced. See
-> [Configuration](#configuration-orc-config).
-
 ```text
                     ┌──────────────── you own scope + sign-off ────────────────┐
   feature / doc ──▶ intake ─▶ analyze ─▶ plan ─▶ score ─▶ ⇉ parallel waves ⇉ ─▶ review ─▶ verify ─▶ ship
                               (grounded)         (per task)   (cheapest capable model)     (checkpointed to disk)
 ```
 
+## Changelog
+
+### v0.5.0 — Code-pattern findings _(2026-07-11)_
+
+Executors now write code that matches **your** codebase, not a generic template.
+
+- **New `orc-pattern` skill + `/orc-pattern` command** — learns your project's real
+  conventions per language and caches them to `.claude/orc/patterns/<lang>-pattern.md`.
+- **Reconcile, don't override** — a generic playbook is merged against your
+  most-recently-modified files: **conventions defer to your codebase**;
+  **security/correctness invariants are always enforced**.
+- **Languages:** frontend React · Next.js · Vue; backend FastAPI · NestJS · Go
+  (Go covers gRPC, Redis, SQL, concurrency & context/error invariants). Extensible
+  via `references/INDEX.md`.
+- **Config:** `pattern_findings` (`ask` default · `on` · `off`) gates the opt-in;
+  `orc_wiki_pattern_findings` lets `/orc-wiki` pre-warm the cache during its scan.
+- **Anti-skip enforcement:** the pattern is injected literally into each executor
+  slice; executors echo `pattern_version` + `invariants_checked`; the reviewer
+  independently re-checks invariants against the diff.
+
+<details>
+<summary><b>Previous versions</b> (click to expand)</summary>
+
+### v0.4.5 — Rewrite weak worker descriptions (the real score lever)
+### v0.4.4 — Act on Tessl review: raise sub-70 workers, fix cross-spine paths
+### v0.4.3 — `orc-analyze`: trim description under the 1024-char skill-spec limit
+### v0.4.2 — Tessl-rubric pass: worked examples + sharper mini-analyst activation
+### v0.4.1 — `orc-mini`: faster, safer fast-lane — smoke gate, opt-in tests, trimmed ceremony
+### v0.4.0 — Opt-in Phase 6.5 Test Authoring (writes test cases, never runs them)
+### v0.3.0 — Opt-in behavior-trace logging + claimed-vs-actual model verification
+### v0.2.4 — `orc-analyze`: gather anchored adjacent-scope context (non-actionable)
+### v0.2.3 — Context Combiner: merge 2+ related analyses into one combined spec
+### v0.2.2 — Config: enforce per-key override-first resolution
+### v0.2.1 — Move config editing into the `orc config` CLI (zero-token); drop `/orc-config`
+### v0.2.0 — Doc-optional evidence-backed analyst + deep mode
+
+</details>
+
 ## Contents
 
+- [Changelog](#changelog)
 - [Why ORC exists](#why-orc-exists)
 - [Quick start](#quick-start)
 - [Commands](#commands)
