@@ -106,12 +106,15 @@ Confirm you are running as **Opus 4.8 at high effort** before anything else.
   every analysis this run in run state (survives checkpoint/resume). When the user
   picks "pass to context-combiner" at orc-analyze's Phase F (only offered once 2+
   analyses exist), dispatch `orc-context-combiner-opus-4-8-high` with that list.
-  It returns `combined_spec_path` + `handoff_ready` (or `combined: false` if the
-  user chose keep-separate at the combiner's relatedness challenge — then fall
-  back to per-analysis stop/build). Offer the build option ONLY when
-  `handoff_ready` is true; on build, continue at Phase 1 with the combined spec
-  exactly like a single requirement-spec. You never combine; you only track,
-  dispatch, and relay. Full lane only.
+  It returns `combined_spec_path` + `coverage_pct` (conservation proof — every
+  source requirement accounted for; must be 100) + `dropped[]` +
+  `stale_evidence[]` + `handoff_ready` (or `combined: false` if the user chose
+  keep-separate at the combiner's relatedness challenge — then fall back to
+  per-analysis stop/build). Offer the build option ONLY when `handoff_ready` is
+  true (the combiner sets it false when `coverage_pct` < 100 OR a conflict is
+  open); on build, continue at Phase 1 with the combined spec exactly like a
+  single requirement-spec. You never combine; you only track, dispatch, and
+  relay. Full lane only.
 - `subskills/orc-planner` (Requirement Planner, Opus 4.8 medium) — request or
   analyst-spec → planning-output. A Phase 1 planner option; own command to plan
   only. Mini: `subskills/orc-planner-mini` (Sonnet 5 high) for orc-mini.

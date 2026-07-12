@@ -361,6 +361,36 @@ const CONTRACTS = [
     token: "FALLBACK-FROM",
     files: ["skills/orc-fast/SKILL.md", "skills/orc-mini/SKILL.md"],
   },
+  {
+    name: "combiner conservation gate (v0.12.0 — coverage must be 100 before handoff)",
+    token: "coverage_pct",
+    files: [
+      "agents/orc-context-combiner-opus-4-8-high.md",
+      "skills/context-combiner/SKILL.md",
+      "skills/context-combiner/schemas/combined-report.md",
+      "skills/context-combiner/schemas/combined-requirement-spec.md",
+      "skills/orc/SKILL.md",
+      "skills/orc-analyze/references/branching.md",
+    ],
+  },
+  {
+    name: "combiner overlap taxonomy (v0.12.0 — partial overlaps split, never collapsed)",
+    token: "PARTIAL-OVERLAP",
+    files: [
+      "agents/orc-context-combiner-opus-4-8-high.md",
+      "skills/context-combiner/SKILL.md",
+      "skills/context-combiner/schemas/combined-report.md",
+    ],
+  },
+  {
+    name: "combiner eager decision checkpoint (v0.12.0 — verdicts survive compaction)",
+    token: "combine-decisions.md",
+    files: [
+      "agents/orc-context-combiner-opus-4-8-high.md",
+      "skills/context-combiner/SKILL.md",
+      "skills/context-combiner/schemas/combined-report.md",
+    ],
+  },
 ];
 
 function walk(dir, out) {

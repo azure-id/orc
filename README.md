@@ -6,7 +6,7 @@
 
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
-![Version](https://img.shields.io/badge/version-0.11.0-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.12.0-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D16-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
@@ -37,25 +37,28 @@ zero-dependency npm package installs those files into your `.claude/` directory.
 
 ## Changelog
 
-### v0.11.0 — `/orc-fast`: knowledge-gated speed lane + wiki freshness infrastructure _(2026-07-12)_
+### v0.12.0 — Lossless context-combiner: conservation gate · overlap taxonomy · evidence freshness _(2026-07-12)_
 
-A new fastest lane and the wiki upgrade that makes it trustworthy. **`/orc-fast`**
-skips the analyst AND the planner by requiring two prerequisites — a fresh
-project wiki and a cached code-pattern for the request's language — and
-dispatches ONE Sonnet 4.6 high executor (wiki page pointers + literal pattern
-injection), then a build+test smoke gate with one repair round. Either
-prerequisite missing → it **falls back to orc-mini** carrying the intake, never
-stopping the chat. The orchestrator itself runs fine at Sonnet medium.
-Supporting wiki infrastructure: a `wiki-meta.json` freshness manifest (written
-only by orc-wiki; staleness is **computed on read** — FRESH/AGING/STALE tiers
-from commit distance, zero stored status), `wiki/INDEX.md` one-line page index,
-an **incremental refresh** mode (diff since last scan, re-scan only affected
-docs), a post-ship "refresh wiki now?" ask after BIG full/ultra runs, and a
-zero-token wiki tier segment in the statusline.
+The context-combiner now **proves nothing was lost** when merging 2+ related
+analyses. A **source coverage matrix** gives every source requirement exactly
+one recorded outcome (merged / deduped / split / conflict-resolved / dropped —
+dropping requires an explicit user decision), and a **conservation gate** blocks
+build handoff below 100% coverage. Reconciliation is **pooled, never pairwise**
+(scales past 2 sources; >4 triggers a staged-combining offer), with a richer
+overlap taxonomy: semantic duplicates quote both statements, **partial overlaps
+are split into shared + residue rows instead of collapsed**. Inherited
+`file:line` evidence gets a bounded **freshness spot-check** against the current
+git HEAD (`combined_against`) — stale anchors are flagged and challenged, never
+silently carried. Contradictory resolved assumptions across sources are now
+detected as conflicts; ordering is structured (`before`/`after`) so the planner
+consumes it as real dependencies; challenge verdicts checkpoint eagerly to
+`combine-decisions.md` and survive compaction. Three new contract-lint tokens
+(26 total).
 
 <details>
 <summary><b>Previous versions</b> (click to expand)</summary>
 
+### v0.11.0 — `/orc-fast`: knowledge-gated speed lane + wiki freshness infrastructure _(2026-07-12)_
 ### v0.10.1 — README: a fuller "Why ORC exists" _(2026-07-12)_
 ### v0.10.0 — `/orc-ultra`: max-effort advisor + three judgment gates for ultra-complex work _(2026-07-12)_
 ### v0.9.0 — Trust-but-verify the analyst→planner chain: quote-anchored evidence · coverage gate · anchored judgment _(2026-07-12)_
@@ -349,9 +352,16 @@ can analyze **another related doc** in the same scope. Once two or more related
 analyses exist, ORC offers **context-combiner** — a dispatched Opus 4.8 subagent
 that merges them into a single deduped, conflict-resolved requirement spec. It
 first **verifies the analyses actually overlap** and challenges you if they look
-unrelated, then resolves cross-scope conflicts one issue at a time. The merged
-spec is a strict superset of a normal requirement spec, so it feeds the same build
-pipeline unchanged.
+unrelated, then pools all source requirements (never pairwise, so it scales past
+2 sources) and resolves cross-scope conflicts one issue at a time — semantic
+duplicates keep both original statements, partial overlaps are **split, never
+collapsed**. A **conservation gate proves nothing was lost**: every source
+requirement gets exactly one recorded outcome in a source coverage matrix, and
+build handoff is blocked below 100% coverage (dropping anything requires your
+explicit decision). Inherited evidence is spot-checked against the current git
+HEAD — stale anchors are flagged and challenged, never silently carried. The
+merged spec is a strict superset of a normal requirement spec, so it feeds the
+same build pipeline unchanged.
 
 ### `/orc-plan` — the Requirement Planner
 

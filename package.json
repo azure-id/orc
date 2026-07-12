@@ -1,7 +1,7 @@
 {
   "name": "orc",
-  "version": "0.11.0",
-  "description": "ORC \u2014 an orchestrator skill constellation for Claude Code: intake, planning, scored parallel subagents, code-pattern matching, review, verify, ship, plus a project knowledge-base wiki.",
+  "version": "0.12.0",
+  "description": "ORC — an orchestrator skill constellation for Claude Code: intake, planning, scored parallel subagents, code-pattern matching, review, verify, ship, plus a project knowledge-base wiki.",
   "bin": {
     "orc": "bin/cli.js"
   },
@@ -11,7 +11,7 @@
     "templates/"
   ],
   "scripts": {
-    "postinstall": "node -e \"try{require('fs').accessSync(require('path').join(__dirname,'bin','cli.js'));console.log('\\nORC installed. Run: orc init  (or orc init --global)\\n')}catch(e){console.error('\\n[orc] WARNING: bin/cli.js missing from this install \u2014 the repo/publish was incomplete. Reinstall from a complete source.\\n')}\"",
+    "postinstall": "node -e \"try{require('fs').accessSync(require('path').join(__dirname,'bin','cli.js'));console.log('\\nORC installed. Run: orc init  (or orc init --global)\\n')}catch(e){console.error('\\n[orc] WARNING: bin/cli.js missing from this install — the repo/publish was incomplete. Reinstall from a complete source.\\n')}\"",
     "verify": "node bin/verify-package.js && node bin/verify-contracts.js",
     "prepack": "node bin/verify-package.js && node bin/verify-contracts.js"
   },

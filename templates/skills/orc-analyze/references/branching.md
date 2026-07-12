@@ -27,7 +27,9 @@ Ask: "Is this related context (same scope, so it can be combined)?"
 2. **Pass to context-combiner** → the orchestrator dispatches
    `orc-context-combiner-opus-4-8-high` with the list of confirmed spec paths for
    all RELATED analyses this run. It verifies relatedness, resolves conflicts with
-   the user, and writes `combined-report.md` + `combined-requirement-spec.md`.
+   the user, proves conservation (a source coverage matrix — every source
+   requirement accounted for, `coverage_pct` must be 100), and writes
+   `combined-report.md` + `combined-requirement-spec.md`.
 3. **Analyze another related doc** → back to the relatedness gate (loop).
 
 ## After the combiner returns
@@ -36,9 +38,10 @@ The orchestrator offers (gating on the combiner's `handoff_ready`):
 2. **Pass to orc build** → the combined spec goes to Phase 1 planning and the
    full pipeline.
 
-If the combiner returned `handoff_ready: false` (an unresolved conflict remains),
-offer ONLY **Stop here** — the build option is withheld until the conflict is
-resolved. If the combiner returned `combined: false` (user chose keep-separate at
+If the combiner returned `handoff_ready: false` (an unresolved conflict remains,
+or its coverage gate found source requirements unaccounted for), offer ONLY
+**Stop here** — the build option is withheld until the conflict is resolved and
+coverage is complete. If the combiner returned `combined: false` (user chose keep-separate at
 the relatedness challenge), the analyses stay separate — fall back to the
 per-analysis stop/build choice above, where each spec builds as its OWN pipeline
 (uncombined specs are never handed to a single planner run).
