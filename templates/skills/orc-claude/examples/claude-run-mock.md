@@ -40,3 +40,23 @@ W: Recomputes fingerprints: only `commands` differs (e3f1a2 → 8c04b1). Writes
 U: /orc-claude
 W: All fingerprints match →
    `CLAUDE.md up to date (v0.0.2, 03-08-2026)` — no write, no bump, no bak.
+
+## Run 4 — with `logging: true` (behavior trace)
+
+Same dispatch as any run, plus the minimal one-dispatch trace. The skill writes
+the run pointer (the `orc-claude-<DDMMYY>.txt` name into `log_dir`) FIRST, then
+these markers around the single writer spawn (`SPAWN`/`RETURN` come from the
+`orc-trace.js` hook):
+
+```
+[120726 09:14:02.110] orc      DISPATCH orc-claude-writer :: refresh expect=opus-4-8/high
+[120726 09:14:02.230] hook     SPAWN orc-claude-writer-opus-4-8-high
+[120726 09:15:47.900] hook     RETURN
+[120726 09:15:48.010] orc      VERIFY writer actual=claude-opus-4-8/high ✅ MATCH
+[120726 09:15:48.120] orc      FINISH :: refresh CLAUDE.md v0.0.3
+```
+
+Then the run pointer is deleted. A noop refresh traces the same shape, ending
+`FINISH :: noop`. No phase/score/gate/finding/verdict markers — orc-claude
+runs none of those phases (they live inside the writer). `logging: false` →
+none of this is written.

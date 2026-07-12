@@ -269,7 +269,6 @@ const CONTRACTS = [
       "agents/orc-retro-sonnet-5-high.md",
       "skills/orc-analyze-mini/SKILL.md",
       "skills/orc-analyze/SKILL.md",
-      "skills/orc-claude/SKILL.md",
       "skills/orc-fast/SKILL.md",
       "skills/orc-mini/SKILL.md",
       "skills/orc-retro/SKILL.md",

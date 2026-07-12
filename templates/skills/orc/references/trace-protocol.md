@@ -19,16 +19,20 @@ Everything here is conditional on `logging: true` (resolved defaults ←
 When `logging: true`, EVERY skill that starts an ORC run owns this protocol
 from its FIRST action: `orc`, `orc-mini`, `orc-fast`, `orc-wiki`, and the
 standalone lanes
-`/orc-analyze` (+ mini), `/orc-plan`, `/orc-pattern`, `/orc-verify`. Whichever
-skill is orchestrating the session resolves `logging` at start; when true it
-writes the run pointer, emits the markers for its own phase set, and closes the
-trace at the end. Without the pointer the `orc-trace.js` hook writes NOTHING —
+`/orc-analyze` (+ mini), `/orc-plan`, `/orc-pattern`, `/orc-verify`,
+`/orc-claude`. Whichever skill is orchestrating the session resolves `logging`
+at start; when true it writes the run pointer, emits the markers for its own
+phase set, and closes the trace at the end. A lane emits only the markers its
+own shape produces — e.g. `/orc-claude` is a single-dispatch lane, so it emits
+just `DISPATCH`/`VERIFY`/`FINISH` (+ the hook's `SPAWN`/`RETURN`), never
+`PHASE`/`SCORE`/`FINDING`/`VERDICT`. Without the pointer the `orc-trace.js` hook writes NOTHING —
 a lane that skips this section produces no `.txt` at all (this was the
 orc-wiki bug fixed in v0.7.0). `/orc-ultra` is the `orc` skill with
 `ultra_mode: true` — the orc trace ownership covers it. Skills dispatched
 INSIDE a run (executors, reviewer, analyst-as-subagent, codifier, combiner,
-test-author, scouts, advisor, judge) do not start traces — they only return
-`actual_model`/`actual_effort` markers that the orchestrating skill folds in.
+test-author, scouts, advisor, judge, the orc-claude writer) do not start
+traces — they only return `actual_model`/`actual_effort` markers that the
+orchestrating skill folds in.
 
 ## Files & lifecycle
 
