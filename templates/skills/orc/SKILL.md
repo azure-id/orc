@@ -316,8 +316,14 @@ before ship, never run them (the user tests manually).
 ## Phase 1 — Planning
 
 **Wiki consult (if present):** check whether `wiki/` exists AND has > 0 files.
-If yes, read the relevant `wiki/orc-feature-*`, `wiki/orc-reference-*`, and
-`wiki/orc-architecture-overview.md` for the areas in play — they give you
+If yes, FIRST compute the freshness tier from `.claude/orc/wiki-meta.json`
+(`git rev-list --count <scan_commit>..HEAD` → FRESH / AGING / STALE per
+`../orc-wiki/references/staleness.md`; manifest absent with docs present =
+STALE-with-notice): FRESH → silent; AGING → one-line notice; STALE → prominent
+warning but continue (this lane self-grounds). Then read the relevant
+`wiki/orc-feature-*`, `wiki/orc-reference-*`, and
+`wiki/orc-architecture-overview.md` for the areas in play — select pages via
+`wiki/INDEX.md` when it exists — they give you
 accurate core-vs-isolated, dependency, and risk context. Prefer `status: fresh`
 docs; treat `stale` ones as hints to verify against code. If `wiki/` is empty or
 absent, ignore it and plan as normal (the wiki is purely additive).
@@ -540,6 +546,16 @@ If PR: ask ticket + title + target branch together; generate the PR file from
 the checkpoint + dispatch log for audit. **Wiki stale-flag hook:** if `wiki/`
 exists and has > 0 files, flag (do NOT re-scan) any wiki docs whose covered
 files this run changed, and tell the user they can refresh via
-`/orc-wiki`. On an empty/absent wiki, skip silently. Then ALWAYS show the completion usage
+`/orc-wiki`. On an empty/absent wiki, skip silently.
+**Post-ship refresh ask (BIG runs only — applies to /orc and /orc-ultra; full
+rules in `../orc-wiki/references/staleness.md`):** if the wiki exists and the
+run was BIG by FINAL counts (tasks ≥ config `wiki_refresh_ask_tasks`, or
+touched files > `wiki_refresh_ask_files`, or waves > 1) AND the touched files
+intersect at least one doc's `covers`, upgrade that passive note to an ask:
+**"Refresh wiki now?"** with refresh-now *(recommended — incremental, scoped to
+the docs this run staled)* vs later. On "later", print the prominent "big
+change — N docs stale, refresh ASAP or orc-fast and future runs degrade" note
+and stamp `wiki_refresh_declined` in the checkpoint (feeds /orc-retro). Small
+runs keep the passive note only. Then ALWAYS show the completion usage
 report — /usage limits (5h + weekly remaining) + the full dispatch log (every
 subagent's model/effort/score). The user must always know what the run cost.

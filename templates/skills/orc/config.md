@@ -74,6 +74,12 @@ retro_repo: azure-id/orc      # GitHub owner/repo that receives retro reports.
 # --- Behavior trace logging (for skill improvement; OFF by default) ---
 logging: false                # when true, write a persistent behavior trace per run
 log_dir: .claude/orc/logs     # persistent trace folder — NEVER deleted on completion
+
+# --- Wiki freshness (computed on read from .claude/orc/wiki-meta.json) ---
+wiki_fresh_max: 10            # commit distance < this → FRESH (silent)
+wiki_aging_max: 30            # distance ≤ this → AGING (notice); beyond → STALE
+wiki_refresh_ask_tasks: 3     # post-ship refresh ask fires when tasks ≥ this…
+wiki_refresh_ask_files: 10    # …or the run's touched files exceed this (full/ultra lanes)
 ```
 
 ## Score → model presets (executor agent dispatched by name)
@@ -161,6 +167,14 @@ list of `{min, max, agent}` rows; the orchestrator uses it instead of a preset.
   run-scoped (deep analyze, `pattern_findings` on, `generate_tests` on,
   `security_review` on, executor tier floor) and NEVER writes them to
   `orc.config.yaml`. See the orc skill's `references/ultra-mode.md`.
+- `wiki_fresh_max` / `wiki_aging_max` set the wiki freshness tier edges. The
+  tier is ALWAYS computed on read (`git rev-list --count <scan_commit>..HEAD`
+  against `.claude/orc/wiki-meta.json` — written only by orc-wiki): FRESH →
+  silent, AGING → notice, STALE → warn (full/mini lanes) or the orc-fast user
+  gate. See `../orc-wiki/references/staleness.md`.
+- `wiki_refresh_ask_tasks` / `wiki_refresh_ask_files` set the BIG-run trigger
+  for the post-ship wiki refresh ask (full + ultra lanes only; guarded on a
+  non-empty wiki). Judged by FINAL counts at ship time.
 - `security_review` gates the opt-in Phase 5.5 security pass (default `off`).
   The trigger is the EXISTING risk floor: it can only fire on a run where at
   least one task scored ≥ 70 (security/money/migrations/auth). `ask` → one

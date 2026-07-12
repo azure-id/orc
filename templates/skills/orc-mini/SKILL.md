@@ -137,6 +137,26 @@ in one line and log it. If it reads as complex/high-risk (many interdependencies
 core/shared surface, security-sensitive), **recommend switching to the full flow**
 rather than pushing a fixed single-Sonnet build through it — let the user choose.
 
+## Fallback intake (arriving from orc-fast)
+
+orc-fast falls back HERE whenever its prerequisites fail (no/stale wiki, no
+pattern cache, oversized request, smoke-gate escalation) — never by stopping
+the chat. The handoff is a block in the shared run folder:
+
+```
+FALLBACK-FROM: orc-fast
+REASON: <why fast bailed>
+INTENT-SPEC: <path or "none — raw request follows">
+REQUEST: <the raw user request>
+```
+
+On entry with this block: acknowledge the fallback + reason in one line, then
+run the normal mini lane — but SKIP re-deriving anything carried over (an
+attached intent-spec replaces the Phase 0 intake draft; still do the soft
+sign-off). The run folder is already in the shared format — reuse it, no new
+run-slug. Treat `REASON: smoke-red-escalation` as arriving with code already
+written: start from the failing state, not from scratch.
+
 ## Switching to full flow mid-run
 
 If the user says "switch to full" (or the complexity read / a mid-run surprise
@@ -201,11 +221,17 @@ task's `spec_invariants` to the slice's `constraints[]` verbatim.
 
 ## Wiki consult (if present)
 
-Same rule as the full skill: if `wiki/` exists and has > 0 files, consult the
-relevant overviews during planning/complexity-read for better core/isolated/risk
+Same rule as the full skill: if `wiki/` exists and has > 0 files, FIRST compute
+the freshness tier from `.claude/orc/wiki-meta.json` (commit distance from
+`scan_commit` → FRESH / AGING / STALE; rules in
+`../orc-wiki/references/staleness.md`): FRESH → silent, AGING → one-line
+notice, STALE → prominent warning but continue (mini self-grounds). Then
+consult the relevant overviews (select via `wiki/INDEX.md` when present) during
+planning/complexity-read for better core/isolated/risk
 judgment; if empty or absent, ignore it. Mini never generates the wiki. After a
 mini run that changed code, apply the same guarded stale-flag hook (flag only,
-never auto-scan).
+never auto-scan — mini keeps the passive note; the post-ship refresh ASK is a
+full-lane/ultra behavior only).
 
 ## Shared artifacts
 

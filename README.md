@@ -6,7 +6,7 @@
 
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
-![Version](https://img.shields.io/badge/version-0.10.1-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.11.0-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D16-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
@@ -37,19 +37,26 @@ zero-dependency npm package installs those files into your `.claude/` directory.
 
 ## Changelog
 
-### v0.10.1 — README: a fuller "Why ORC exists" _(2026-07-12)_
+### v0.11.0 — `/orc-fast`: knowledge-gated speed lane + wiki freshness infrastructure _(2026-07-12)_
 
-Docs-only. The "Why ORC exists" section now tells the whole story: the
-recurring single-agent failure modes (silent interpretation, flat top-model
-cost, compaction amnesia, unwritten "done", unverified claims, style drift,
-nothing to inspect), and how each ORC mechanism — role separation, scored
-dispatch, signed-off intent, evidence-attested hand-offs, disk-first state,
-the mini/full/ultra rigor dial, and the pattern/wiki/retro learning loop —
-answers one of them.
+A new fastest lane and the wiki upgrade that makes it trustworthy. **`/orc-fast`**
+skips the analyst AND the planner by requiring two prerequisites — a fresh
+project wiki and a cached code-pattern for the request's language — and
+dispatches ONE Sonnet 4.6 high executor (wiki page pointers + literal pattern
+injection), then a build+test smoke gate with one repair round. Either
+prerequisite missing → it **falls back to orc-mini** carrying the intake, never
+stopping the chat. The orchestrator itself runs fine at Sonnet medium.
+Supporting wiki infrastructure: a `wiki-meta.json` freshness manifest (written
+only by orc-wiki; staleness is **computed on read** — FRESH/AGING/STALE tiers
+from commit distance, zero stored status), `wiki/INDEX.md` one-line page index,
+an **incremental refresh** mode (diff since last scan, re-scan only affected
+docs), a post-ship "refresh wiki now?" ask after BIG full/ultra runs, and a
+zero-token wiki tier segment in the statusline.
 
 <details>
 <summary><b>Previous versions</b> (click to expand)</summary>
 
+### v0.10.1 — README: a fuller "Why ORC exists" _(2026-07-12)_
 ### v0.10.0 — `/orc-ultra`: max-effort advisor + three judgment gates for ultra-complex work _(2026-07-12)_
 ### v0.9.0 — Trust-but-verify the analyst→planner chain: quote-anchored evidence · coverage gate · anchored judgment _(2026-07-12)_
 ### v0.8.1 — /orc-retro delivers upstream: PR/issue to the ORC repo, channel-gated _(2026-07-12)_
@@ -237,6 +244,7 @@ needed. Either way, your `.claude/orc.config.yaml` overrides are left untouched.
 | **`/orc`** | The full orchestrator: intake → planning → per-task scoring → conflict-free parallel waves → review → verify → ship. Checkpoints eagerly; resumes in a fresh session at any pause. |
 | **`/orc-ultra`** | The maximum-rigor lane for complex/ultra-complex work: the full pipeline plus an Opus 4.8 **max** advisor (code-grounded brief + rubric + one batched clarification round) and three judgment gates — after analysis, after planning, and after verify (implementation fidelity + ultra-strict quality: security, smells, simplification, placement). Deep analyze, pattern/testgen/security forced on, executor tier floor. Costly by design. |
 | **`/orc-mini`** | The fast path — see below. |
+| **`/orc-fast`** | The fastest lane — knowledge-gated: requires a fresh wiki + a cached code-pattern, skips analyst/planner entirely, one Sonnet 4.6 high executor + smoke gate. Falls back to `orc-mini` when a prerequisite is missing. See below. |
 | **`/orc-analyze`** | The System Analyst: turns a requirement or document into a scope-bounded, code-grounded, evidence-backed spec. |
 | **`/orc-plan`** | The Requirement Planner: a detailed request or analyst spec → a grounded, right-sized, dependency-checked task plan. |
 | **`/orc-verify`** | Standalone verification of your git-modified changes (build + tests + diff sanity). Read-only. |
@@ -290,6 +298,33 @@ full review/verify/summary passes, but still:
 - **switches to the full flow mid-run** on request — the run folder and checkpoint
   are shared, so nothing is lost.
 
+### `/orc-fast` — the fastest lane (knowledge-gated)
+
+```text
+preflight (fresh wiki? pattern cache?) ─▶ fit gate + micro-intake (ONE ask)
+   ─▶ ONE Sonnet-4.6-high executor (wiki pointers + literal pattern)
+   ─▶ build + test smoke gate (one repair round, red blocks ship) ─▶ ship
+```
+
+Where `orc-mini` pays for an analyst-lite and planner-lite because it has no
+project knowledge, `orc-fast` pays for **neither** — the wiki supplies
+grounding, the pattern cache supplies house style. That trade is enforced by
+two hard prerequisites checked at preflight:
+
+- **A fresh wiki.** Freshness is computed live from the `wiki-meta.json`
+  manifest (commit distance since last scan → FRESH / AGING / STALE). On STALE
+  you choose: **refresh then continue** (recommended — incremental, cheap),
+  **drop to orc-mini**, or continue anyway (not recommended).
+- **A cached code-pattern** for the request's language
+  (`.claude/orc/patterns/<lang>-pattern.md`).
+
+Either missing → **automatic fallback to `orc-mini`** with the request (and any
+completed intake) carried over — the chat never stops. A fit gate also bounces
+anything that decomposes into multiple tasks or spans many files. Because there
+is no scoring or planning judgment, the orchestrator itself runs fine at
+**Sonnet medium** — no Opus session required. `/orc-fast` is the recurring
+payoff for having run `/orc-wiki` and `/orc-pattern`.
+
 ### `/orc-analyze` — the System Analyst
 
 Turns a **requirement** — a document (PDF by path or pasted, prose **or**
@@ -336,11 +371,21 @@ never edits or commits.
 ### `/orc-wiki` — the project knowledge base
 
 Scans your codebase and writes a persistent knowledge base into `wiki/` — feature
-overviews, reference docs, an architecture map — and points `CLAUDE.md` at it.
+overviews, reference docs, an architecture map, a one-line-per-page `INDEX.md` —
+and points `CLAUDE.md` at it.
 Expensive and opt-in: it warns before scanning, pauses periodically, and spans
 multiple sessions. `orc` and `orc-mini` consult the wiki when it exists,
 sharpening their planning and scoring; when it's absent they behave exactly as
-before.
+before. `orc-fast` requires it.
+
+**Freshness is computed, never stored.** Every scan ends by writing a
+`wiki-meta.json` manifest (timestamp, the commit scanned, the project's
+build/test commands). Consumers measure commit distance against it on read —
+FRESH / AGING / STALE — so the status is always current with zero writes; the
+statusline shows it live (`wiki: STALE (41c)`). Refreshing is cheap: the
+**incremental** mode diffs since the last scan and re-scans only the affected
+docs. After a BIG `/orc` or `/orc-ultra` run, ORC asks right at ship whether to
+refresh now (recommended) — declining prints a refresh-ASAP note.
 
 ---
 
@@ -452,6 +497,8 @@ The knobs (shipped defaults in `skills/orc/config.md`):
 | `pattern_findings` | `ask` | Code-pattern matching (`ask`/`on`/`off`). On an FE/BE cache miss, `ask` prompts to learn the project's conventions via `orc-pattern` (or go language-agnostic), `on` auto-learns, `off` stays agnostic. A learned pattern makes executors match your house style; security/correctness invariants are always enforced. |
 | `security_review` | `off` | Opt-in security pass (Phase 5.5, `off`/`ask`/`on`). Fires only on runs where a task scored ≥ 70 (the risk floor: security/money/migrations/auth). Sweeps the run's changed files against a 12-item OWASP/STRIDE checklist — wraps Semgrep if you have it installed, never installs anything. |
 | `orc_wiki_pattern_findings` | `false` | When on, `orc-wiki` also learns code-patterns for every detected language during its scan, pre-warming the cache so later runs skip the prompt. |
+| `wiki_fresh_max` / `wiki_aging_max` | `10` / `30` | Wiki freshness tier edges (commit distance since the last scan → FRESH / AGING / STALE). Computed on read from the `wiki-meta.json` manifest — never stored. |
+| `wiki_refresh_ask_tasks` / `wiki_refresh_ask_files` | `3` / `10` | BIG-run trigger for the post-ship "refresh wiki now?" ask (full + ultra lanes, only when the run touched wiki-covered files). |
 
 Change them with the **`orc config`** CLI — deterministic terminal I/O, so editing
 costs **zero model tokens** (nothing is loaded into a Claude session):
@@ -478,6 +525,7 @@ templates/
 ├── skills/
 │   ├── orc/                 full orchestrator — spine, schemas, references, subskills, config
 │   ├── orc-mini/            fast path (smoke gate + opt-in test authoring)
+│   ├── orc-fast/            fastest lane — knowledge-gated, falls back to orc-mini
 │   ├── orc-verify/          standalone git-diff verify
 │   ├── orc-wiki/            project knowledge-base builder
 │   ├── orc-analyze/         System Analyst — doc-optional, evidence-backed (+ report templates, spec schema)
@@ -487,7 +535,7 @@ templates/
 │   ├── orc-advisor/         ultra-lane advisory brief + rubric + clarification round (/orc-ultra only)
 │   ├── orc-judge/           ultra-lane judgment gates — analysis / plan / implementation (/orc-ultra only)
 │   └── context-combiner/    merges 2+ related analyses into one combined spec (+ schemas)
-├── commands/                /orc /orc-ultra /orc-mini /orc-analyze /orc-plan /orc-verify /orc-wiki /orc-pattern /orc-retro
+├── commands/                /orc /orc-ultra /orc-mini /orc-fast /orc-analyze /orc-plan /orc-verify /orc-wiki /orc-pattern /orc-retro
 ├── hooks/                   effort guard (PreToolUse) · statusline warning · behavior trace
 └── agents/                  single-role, model-pinned subagents (+ read-only scout) + MODEL-MAPPING.md
 bin/cli.js                   installer + config editor (init / update / upgrade / config / where)

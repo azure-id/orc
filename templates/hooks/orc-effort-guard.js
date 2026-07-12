@@ -51,7 +51,9 @@ process.stdin.on("end", () => {
   const input = data.tool_input || {};
   const skill = String(input.skill || input.name || "");
 
-  // Only gate the full orchestrator. orc-mini / orc-analyze / subskills pass.
+  // Only gate the full orchestrator. orc-mini / orc-fast / orc-analyze /
+  // subskills pass — orc-fast is DESIGNED to run at Sonnet medium; never
+  // widen this match to include it.
   const isOrc = tool === "Skill" && /^orc$/i.test(skill);
   if (!isOrc) process.exit(0);
 

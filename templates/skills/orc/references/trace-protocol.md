@@ -17,7 +17,8 @@ Everything here is conditional on `logging: true` (resolved defaults ←
 ## Applies to EVERY ORC entry point (not just /orc)
 
 When `logging: true`, EVERY skill that starts an ORC run owns this protocol
-from its FIRST action: `orc`, `orc-mini`, `orc-wiki`, and the standalone lanes
+from its FIRST action: `orc`, `orc-mini`, `orc-fast`, `orc-wiki`, and the
+standalone lanes
 `/orc-analyze` (+ mini), `/orc-plan`, `/orc-pattern`, `/orc-verify`. Whichever
 skill is orchestrating the session resolves `logging` at start; when true it
 writes the run pointer, emits the markers for its own phase set, and closes the

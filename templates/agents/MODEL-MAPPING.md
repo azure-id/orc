@@ -34,7 +34,8 @@ Score→executor mapping lives in config.md (narrow vs wide preset).
 | orc-advisor-opus-4-8-max | claude-opus-4-8 | max | ultra Phase U0 advisory brief + rubric + clarification questions (read-only; /orc-ultra only) |
 | orc-judge-opus-4-8-max | claude-opus-4-8 | max | ultra judgment gates — analysis / plan / implementation (read-only; /orc-ultra only) |
 
-Mini execution reuses orc-executor-sonnet-5-high.
+Mini execution reuses orc-executor-sonnet-5-high. Fast-lane (orc-fast)
+execution reuses orc-executor-sonnet-4-6-high — no dedicated agent.
 
 The scout is dispatched only in the System Analyst's DEEP mode: the orchestrator
 fans out ≤`config.max_scouts` (default 3) parallel scouts, one per coverage area

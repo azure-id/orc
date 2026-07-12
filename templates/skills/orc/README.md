@@ -23,7 +23,8 @@ orc upgrade         # fetch the latest package, then apply it
 orc config          # view/change settings — zero model tokens
 ```
 
-`orc init` installs **skills/**, **commands/** (`/orc` `/orc-mini` `/orc-analyze`
+`orc init` installs **skills/**, **commands/** (`/orc` `/orc-mini` `/orc-fast`
+`/orc-analyze`
 `/orc-plan` `/orc-verify` `/orc-wiki` `/orc-pattern`), **agents/** (single-role,
 model-pinned subagents + `MODEL-MAPPING.md`), and **hooks/** (effort hard-block,
 statusline tier warning, behavior trace), merging the hook wiring
@@ -84,7 +85,9 @@ orc/
 └── run/                         # gitignored — all run artifacts live here
 ```
 
-Sibling skills installed alongside: `orc-mini` (fast path), `orc-verify`
+Sibling skills installed alongside: `orc-mini` (fast path), `orc-fast`
+(fastest lane — knowledge-gated on a fresh wiki + pattern cache, falls back to
+orc-mini), `orc-verify`
 (standalone git-diff verify), `orc-analyze` + `orc-analyze-mini` (System
 Analyst), `orc-wiki` (project knowledge base), `orc-pattern` (code-pattern
 codifier: 9 language playbooks + a11y/perf rule packs), `context-combiner`

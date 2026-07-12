@@ -44,6 +44,12 @@ gate mandatory.
    (keeps CLAUDE.md small; it loads into every context).
 7. Usage: report the dispatch log + remind the user to run `/usage`. Never
    invoke `/usage` programmatically.
+8. **Every scan/refresh ends by writing the freshness manifest + index.**
+   Rewrite `.claude/orc/wiki-meta.json` (last_scan, scan_commit, branch, pages,
+   discovered build/test `commands` — see references/staleness.md for the
+   schema) and `wiki/INDEX.md` (one line per doc: `- <file> — <one-line
+   description>`). ONLY orc-wiki ever writes these two files — consumers
+   compute freshness on read, never store it.
 
 ## Behavior trace (logging — same rule as orc/orc-mini; wiki runs trace too)
 
@@ -86,6 +92,8 @@ Detect state and branch:
   + checkpoint. Show "Resuming wiki scan: X of Y areas done, ~Z remaining."
   Light cost note, no full warning. Continue where it stopped.
 - **Complete wiki, no active checkpoint** → REFRESH. Offer modes:
+  **incremental (recommended when `wiki-meta.json` exists** — diff since
+  `scan_commit`, re-scan only affected docs; a cheap delta pass) ·
   full regenerate · selective refresh of stale-flagged docs · pre-push
   git-diff scan · nothing. Each with its own cost note. Only scan on consent.
 
@@ -116,9 +124,14 @@ expected and normal.
 
 1. After all areas are scanned (or the user stops), write/update
    `wiki/orc-architecture-overview.md` linking the feature + reference docs.
-2. Inject/update the managed pointer block in `CLAUDE.md`
+2. Write/update `wiki/INDEX.md` — one line per doc (`- <file> — <one-line
+   description>`), so consumers select pages by reading ONE small file.
+3. Rewrite `.claude/orc/wiki-meta.json` (hard rule 8): fresh `last_scan` +
+   `scan_commit` = current HEAD, page count, and the project's discovered
+   build/test `commands` (schema in references/staleness.md).
+4. Inject/update the managed pointer block in `CLAUDE.md`
    (see references/claude-md-injection.md). Pointer only — no summaries.
-3. Final dispatch report + "/usage" reminder. Keep the checkpoint for audit.
+5. Final dispatch report + "/usage" reminder. Keep the checkpoint for audit.
 
 ## Code-pattern pre-warm (opt-in — only when config `orc_wiki_pattern_findings: on`)
 
@@ -134,12 +147,19 @@ most-recently-modified real files for that language; YOU write the returned patt
 to the cache. Never run tests or change project code. Skip languages already cached
 and un-drifted. This reuses the `orc-pattern` engine — you never codify yourself.
 
-## Refresh & staleness (references/staleness.md)
+## Refresh & staleness (references/staleness.md — THE canonical freshness reference)
 
-- Each doc records the git hash of the files it covers at scan time. Stale =
-  recorded hash ≠ current state of those files.
+- **Freshness is computed on read, never stored:** consumers measure
+  `scan_commit` (from `wiki-meta.json`) against HEAD and get a tier —
+  FRESH / AGING / STALE — with per-skill reactions. Only orc-wiki writes the
+  manifest; nobody persists a status.
+- Each doc also records the git hash of the files it covers at scan time
+  (advisory per-doc signal). Stale = recorded hash ≠ current state.
+- **Incremental refresh** (recommended): diff since `scan_commit`, re-scan only
+  the docs whose `covers` the drift touches, rewrite the manifest.
 - Selective refresh: re-scan only stale-flagged docs the user picks.
 - Pre-push: scan the git diff, refresh docs for changed areas before commit.
 - Auto-flag hook: after an orc/orc-mini run, flag (do NOT auto-scan) the wiki
   docs whose covered files changed — ONLY if `wiki/` exists and is non-empty.
-  User confirms any re-scan.
+  User confirms any re-scan. On BIG full-lane runs the post-ship refresh ask
+  (see staleness.md) replaces the passive note.

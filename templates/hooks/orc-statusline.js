@@ -76,6 +76,41 @@ process.stdin.on("end", () => {
     line = `⛔ ORC WILL DEGRADE (${bad.join(", ")}) — now: ${tier}${pct ? " · " + pct : ""}`;
   }
 
+  // Wiki freshness tier (computed on read from wiki-meta.json — zero model
+  // tokens; the manifest is written only by orc-wiki). Fail-silent: no
+  // manifest / no git / any error → no segment. Thresholds mirror the config
+  // defaults (wiki_fresh_max 10 / wiki_aging_max 30); the hook can't read the
+  // resolved config, so a user override shifts skill behavior, not this label.
+  try {
+    const fs = require("fs");
+    const path = require("path");
+    const { execSync } = require("child_process");
+    const projectDir =
+      (d.workspace && d.workspace.project_dir) || d.cwd || process.cwd();
+    const metaPath = path.join(projectDir, ".claude", "orc", "wiki-meta.json");
+    if (fs.existsSync(metaPath)) {
+      const meta = JSON.parse(fs.readFileSync(metaPath, "utf8"));
+      if (meta && meta.scan_commit) {
+        const distance = parseInt(
+          execSync(`git rev-list --count ${meta.scan_commit}..HEAD`, {
+            cwd: projectDir,
+            timeout: 3000,
+            stdio: ["ignore", "pipe", "ignore"],
+          })
+            .toString()
+            .trim(),
+          10
+        );
+        if (Number.isFinite(distance)) {
+          if (distance >= 10 && distance <= 30)
+            line += ` · wiki: AGING (${distance}c)`;
+          else if (distance > 30) line += ` · wiki: STALE (${distance}c)`;
+          else line += " · wiki: fresh";
+        }
+      }
+    }
+  } catch (_) {}
+
   // Append an update hint from the cache (instant, no network here).
   if (updater) {
     try {
