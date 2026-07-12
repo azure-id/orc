@@ -73,6 +73,8 @@ assume.
 - **Escalation valve:** more than 3 tags means the request is under-grounded
   for a direct intake — RECOMMEND routing through `orc-analyze` (requirement
   mode) instead of stretching intake into a second analyst. The user chooses.
+  (The standalone planner has the same valve: a request below its plannable
+  floor routes to the analyst instead of being planned thin — no side door.)
 
 ## Step 4 — Sign-off
 

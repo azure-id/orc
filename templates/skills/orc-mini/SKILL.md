@@ -184,9 +184,20 @@ input it runs first (mode-detect + scope-bound + evidence-or-mark ground +
 recommended-option challenges), then the mini planner; on a merely
 ambiguous/underspecified request, prefer one inline clarifying question over a
 cold analyst spawn. The mini analyst is always single-pass — **no deep mode, no
-scouts**; if the requirement clearly needs that depth, offer to switch to the full
-flow (`/orc-analyze` deep). The orchestrator never analyzes or plans itself — it
-dispatches.
+scouts**; it escalates to the full flow (`/orc-analyze` deep) on its concrete
+thresholds and the user chooses. The orchestrator never analyzes or plans
+itself — it dispatches.
+
+**Mini-lane gates (yours, deterministic — same as the full lane; emit `GATE`
+trace lines when logging).** On mini-analyst return: evidence spot-check (Glob
+the spec's `files[]`; Grep-verify quotes on `status: exists|conflict`) +
+derivation lint (report↔spec R# ids/statuses/anchors match); refuse
+take-into-build on open `UNVERIFIED` or missing `scope_closed: true`; if the
+spec's `git_head` ≠ current HEAD at plan time, re-run the evidence spot-check
+first. On mini-planner return: Glob every `disposition: exists` path, recompute
+`coverage` (orphan requirements), and run cycle + same-file collision checks.
+Any miss → bounce back (one retry, then escalate). At dispatch, append the
+task's `spec_invariants` to the slice's `constraints[]` verbatim.
 
 ## Wiki consult (if present)
 

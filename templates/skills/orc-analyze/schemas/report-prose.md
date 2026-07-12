@@ -14,13 +14,16 @@ grounding: repo-read | repo-read+scouts   # scouts only in deep mode
 
 ## In-scope requirements (X only)
 
-Every "Code reality" cell carries file:line evidence, OR the row is tagged
-ASSUMPTION/UNVERIFIED (and appears below as an open question).
+Every "Code reality" cell carries quote-anchored file:line evidence
+(`file:line — "verbatim snippet"`, never paraphrased; a ref with no quote
+auto-downgrades to UNVERIFIED), OR the row is tagged ASSUMPTION/UNVERIFIED (and
+appears below as an open question). Absence claims (status missing) instead
+carry `searched:` — the concrete globs/greps run.
 
-| # | Requirement (from doc) | Code reality | Evidence (file:line) | Files/modules | Status | Resolution |
-|---|------------------------|--------------|----------------------|---------------|--------|------------|
-| 1 | "notifications must paginate" | list is unbounded | api/notifications/list.x:42 | api/notifications/x | missing | implement pagination |
-| 2 | "respect existing auth" | auth middleware present | auth/mw.x:10 | auth/mw.x | exists | reuse, no change |
+| # | Requirement (from doc) | Code reality | Evidence (file:line + quote / searched:) | Files/modules | Status | Resolution |
+|---|------------------------|--------------|------------------------------------------|---------------|--------|------------|
+| 1 | "notifications must paginate" | list is unbounded | searched: `paginate`, `cursor`, `limit` in api/notifications — no hits | api/notifications/x | missing | implement pagination |
+| 2 | "respect existing auth" | auth middleware present | auth/mw.x:10 — "app.use(requireAuth)" | auth/mw.x | exists | reuse, no change |
 
 Status: exists | missing | conflict | resolved
 
@@ -50,6 +53,10 @@ the in-scope requirement it serves + why. Omit this whole section if none surviv
 ## Excluded scopes (recognized, not detailed)
 - Recognized Y, Z; excluded per scope = X.
 
-## Handoff readiness
-- complete: yes/no   (all challenges resolved, no open UNVERIFIED blocking scope?)
+## Handoff readiness (checklist — all five or handoff_ready is false)
+- [ ] all BLOCKING challenges resolved
+- [ ] zero open UNVERIFIED on any in-scope requirement
+- [ ] every requirement has status + evidence-or-resolution
+- [ ] spec derived AFTER the user confirmed this report
+- [ ] scope_closed: true written into the spec
 ```

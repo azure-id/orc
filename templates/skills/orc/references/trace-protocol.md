@@ -59,6 +59,7 @@ Actors: `orc` (orchestrator), `hook`, or a role/agent short name
 | `QUESTION count=<n> :: <topic>` | subagent→orc | stopped to ask the user |
 | `CONTEXT-GAP :: <what was already known>` | subagent→orc | asked/re-derived something already in context |
 | `REPLAN wave=<n> :: <reason>` | orc | re-planned after a conflict/failure |
+| `GATE <name> pass\|bounce :: <detail>` | orc | deterministic exit-gate result — name ∈ grounding \| coverage \| graph \| evidence \| derivation. Bounce detail lists the misses (feeds `/orc-retro` gate-bounce rates) |
 | `OUTCOME task=<id> score=<n> band=<range> model=<m> retries=<n> requeues=<n> needs_context=<n> unmet=<n>` | orc | task closed — links the scoring band to what it actually took (feeds `/orc-retro` calibration) |
 | `FINDING p0=<n> p1=<n> p2=<n> p3=<n>` | reviewer→orc | review outcome (P0–P3 severity ladder) |
 | `VERDICT pass\|fail :: <detail>` | verifier→orc | verification outcome |

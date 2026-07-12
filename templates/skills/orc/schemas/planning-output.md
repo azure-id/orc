@@ -50,10 +50,25 @@ waves: [ Wave ]            # planning may leave empty; orchestrator computes
                            # lack this field: resume them without the
                            # spot-check, never bounce an old plan.
   acceptance: [string]     # per-task acceptance criteria, sliced from the
-                           # intent-spec's definition-of-done. Executors
-                           # self-check against these before returning;
-                           # review/verify use them to localize failures to a
-                           # task instead of the whole diff.
+                           # intent-spec's definition-of-done. Each line CITES
+                           # its source ("R3" / "DoD#2") — a line with no
+                           # source is invented by definition and bounces.
+                           # Executors self-check against these before
+                           # returning; review/verify use them to localize
+                           # failures to a task instead of the whole diff.
+
+  requirements: [string]   # WHICH spec requirements this task implements —
+                           # R# ids (from-SA) or DoD line ids (direct intake).
+                           # [] allowed ONLY for pure-infra tasks WITH a stated
+                           # reason in description. Feeds the coverage gate:
+                           # every in-scope R#/DoD line must appear in ≥1
+                           # task's requirements[] — an orphan requirement is
+                           # a MALFORMED plan (bounced, one retry).
+  spec_invariants: [string]# load-bearing lines copied VERBATIM from the spec's
+                           # Context & invariants (do not build) block into the
+                           # task(s) they guard. The orchestrator appends them
+                           # to the executor slice's constraints[] — hard rules
+                           # to respect, never tasks to build.
 
   # scoring (filled by orchestrator in Phase 2; ALWAYS — every task is scored)
   computed_score: int|null     # 0–100 (base + adjusters, clamped)
@@ -104,3 +119,13 @@ waves: [ Wave ]            # planning may leave empty; orchestrator computes
    path was confirmed, and the orchestrator deterministically spot-checks it
    (instruction → contract → attestation → spot-check). `declared_files` stays a
    plain string list so the conflict graph and waves read it unchanged.
+5. `requirements` + the coverage echo make plan COMPLETENESS checkable the same
+   way `grounding` made paths checkable. The planner returns `coverage:
+   {requirements: N, tasks: M, orphans: []}` (self-attested); the orchestrator
+   independently recomputes it at Phase 1 exit — spec R# set vs the union of
+   task `requirements[]` — and bounces orphans. Cycle detection + same-file
+   collision re-run at the same gate (deterministic, trivial at ≤20 tasks)
+   instead of being trusted to the planner's self-check.
+6. `spec_invariants` paves the last mile of the analyst's do-not-build context:
+   an invariant that reaches a task field demonstrably reaches the executor's
+   `constraints[]`; one that lives only in the spec's prose may not.

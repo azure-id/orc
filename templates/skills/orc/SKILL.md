@@ -92,6 +92,14 @@ Confirm you are running as **Opus 4.8 at high effort** before anything else.
     each, read-only — and re-dispatch the analyst WITH their evidence bundles for
     pass 2. Same "return a request → you re-slice → re-dispatch" shape as
     `needs_context`. You never analyze; you only dispatch and relay.
+  - **Analyst-return gates are YOURS (deterministic, before any build option).**
+    (1) Evidence spot-check: Glob every `files[]` path in the spec +
+    Grep-verify the quoted snippet on every `status: exists|conflict` entry;
+    (2) derivation lint: R# ids, statuses, and context-anchor set must match
+    between report.md and requirement-spec.md. Any miss → bounce to the analyst
+    with the miss list (one retry, then escalate). Refuse take-into-build when
+    the spec has open `UNVERIFIED` or lacks `scope_closed: true`. Emit `GATE`
+    trace lines (pass|bounce) when logging.
 - `context-combiner` (Context Combiner, Opus 4.8 high) — merges 2+ RELATED,
   already-confirmed analyses (same run) into ONE combined requirement-spec before
   build. **Tracking the analysis set is YOURS.** Hold the confirmed spec paths of
@@ -263,7 +271,11 @@ Glob/Grep-confirm every file/module/behavior the spec names, or tag it
 no unresolved `UNVERIFIED` tags either way.**
 
 The intent-spec's definition-of-done becomes Phase 6's acceptance criteria.
-Its constraints become hard rules in every worker slice.
+Its constraints become hard rules in every worker slice — and at slice-assembly
+time each task's `spec_invariants[]` (the analyst's do-not-build invariants the
+planner copied onto the task) is appended VERBATIM to that slice's
+`constraints[]`, so an invariant that reached the plan demonstrably reaches the
+executor.
 
 Also offer the opt-in **Test Authoring** (Phase 6.5) in the sign-off round —
 default from `config.generate_tests`; the run confirms. If on, note it now so the
@@ -284,8 +296,11 @@ Ask which planner: **Superpowers / OpenSpec / Requirement Planner
 requirement-spec is present (from /orc-analyze or the doc
 auto-trigger below), the **Requirement Planner** is the natural choice — it
 consumes the spec and does NOT re-question scope (already settled); it only asks
-about task breakdown/approach. Dispatch the planner as a subagent (Opus 4.8
-medium) — never plan yourself.
+about task breakdown/approach. **Staleness valve:** if the spec's `git_head` ≠
+current HEAD (analysis and build in different sessions), re-run the analyst
+evidence spot-check (paths + quotes) BEFORE dispatching the planner; on misses
+offer re-analyze vs proceed-with-flagged. Dispatch the planner as a subagent
+(Opus 4.8 medium) — never plan yourself.
 
 **CRITICAL — planning always hands back here.** The analyst and planner are
 subagents that produce artifacts, NOT a separate flow that builds on its own.
@@ -299,16 +314,30 @@ every plan flows through scoring, wave-grouping, and checkpointing like any
 other run.
 The planner consumes the approved intent-spec and must emit the planning-output
 schema: every task with `declared_files` (incl. tests), `grounding[]` (per-file
-`exists|new` attestation with evidence), `acceptance[]` (sliced
-definition-of-done lines), `depends_on`, `owns_area`, `spec_ref`. If the planner
-doesn't emit declared files, extract and confirm them before leaving this phase.
+`exists|new` attestation with evidence), `acceptance[]` (sliced, source-cited
+definition-of-done lines), `requirements[]` (the R#/DoD ids it implements),
+`spec_invariants[]` (verbatim do-not-build lines), `depends_on`, `owns_area`,
+`spec_ref` — plus a `coverage: {requirements, tasks, orphans}` echo. If the
+planner doesn't emit declared files, extract and confirm them before leaving
+this phase.
 
-**Grounding spot-check (Phase 1 exit gate — deterministic, before scoring).**
-Glob every path the plan marks `disposition: exists`. Any miss → the plan is
-malformed: bounce it back to the planner WITH the miss list (one retry), then
-escalate to the user. A task whose declared paths lack `grounding[]` entries
-counts as a miss. Exception: a pre-v0.7.0 plan resumed from an old checkpoint
-has no `grounding[]` — resume it without the spot-check, never bounce it.
+**Phase 1 exit gate (deterministic, before scoring — emit a `GATE` trace line
+per check when logging).**
+1. **Grounding spot-check:** Glob every path the plan marks `disposition:
+   exists`. A task whose declared paths lack `grounding[]` entries counts as a
+   miss.
+2. **Coverage check:** recompute the planner's coverage echo — every in-scope
+   spec R# / intent-spec DoD line must appear in ≥1 task's `requirements[]`;
+   an orphan requirement is a miss (the user may explicitly descope instead).
+3. **Graph checks:** cycle detection over `depends_on` + same-file collision
+   over `declared_files` (two tasks sharing a file need a serializing dep or a
+   merge). Both trivial at ≤20 tasks — never trust the planner's self-check
+   alone.
+Any miss → the plan is malformed: bounce it back to the planner WITH the miss
+list (one retry), then escalate to the user. Exception: a pre-v0.7.0 plan
+resumed from an old checkpoint has no `grounding[]` (pre-v0.9.0: no
+`requirements[]`/`spec_invariants[]`) — resume it without the missing checks,
+never bounce an old plan.
 
 ## Phase 2 — Refined effort, dispatch style, and scoring (load references/effort-and-mode.md)
 

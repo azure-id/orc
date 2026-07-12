@@ -10,9 +10,12 @@ never auto-escalated. Tell the user they can preset the default with the
 zero-token CLI `orc config set default_analysis_depth deep` (the run still
 confirms). Then bound to the requested scope only (recognize other scopes only
 to exclude them), map each requirement/row to real files and verify against
-code, and challenge scope + accuracy issues one at a time. Write the human
-report + derived requirement spec into `analyst_report/{name}/`, then offer to
-take it into a build or leave it as a report. The orchestrator dispatches the
-analysis to a subagent.
+code with quote-anchored file:line evidence (absence claims carry the searches
+run), and challenge scope + accuracy issues — blocking ones one at a time,
+advisory ones in one batched round, all recorded. Write the human report +
+derived requirement spec into `analyst_report/{name}/`; the orchestrator
+spot-checks the evidence and lints the report↔spec derivation before offering
+to take it into a build or leave it as a report. The orchestrator dispatches
+the analysis to a subagent.
 
 Document / scope: $ARGUMENTS

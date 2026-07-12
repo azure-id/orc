@@ -21,13 +21,16 @@ misreadings. If the restatement rests on any assumption, tag it and ask.
 ## In-scope requirement parts (X only)
 
 Each part of the request, reconciled against code. Every "Code reality" cell
-carries file:line evidence, OR the part is tagged ASSUMPTION/UNVERIFIED (and
-appears below as an open question). In deep mode EVERY part is verified.
+carries quote-anchored file:line evidence (`file:line — "verbatim snippet"`,
+never paraphrased; a ref with no quote auto-downgrades to UNVERIFIED), OR the
+part is tagged ASSUMPTION/UNVERIFIED (and appears below as an open question).
+Absence claims (status missing/buildable) instead carry `searched:` — the
+concrete globs/greps run. In deep mode EVERY part is verified.
 
-| # | Requirement part (from request) | Code reality | Evidence (file:line) | Files/modules | Status | Resolution |
-|---|---------------------------------|--------------|----------------------|---------------|--------|------------|
-| 1 | "add CSV export to reports" | reports render HTML only | web/reports/view.x:30 | web/reports/x | missing | new export path |
-| 2 | "reuse current auth" | auth guard on report routes | web/reports/routes.x:12 | web/reports/x | exists | reuse, no change |
+| # | Requirement part (from request) | Code reality | Evidence (file:line + quote / searched:) | Files/modules | Status | Resolution |
+|---|---------------------------------|--------------|------------------------------------------|---------------|--------|------------|
+| 1 | "add CSV export to reports" | reports render HTML only | searched: `export*`, `csv`, `download` — no hits | web/reports/x | missing | new export path |
+| 2 | "reuse current auth" | auth guard on report routes | web/reports/routes.x:12 — "requireAuth(" | web/reports/x | exists | reuse, no change |
 
 Status: buildable | exists | conflict | resolved
 - buildable: not present, but consistent with the code — safe to build.
@@ -61,6 +64,10 @@ the in-scope part it serves + why. Omit this whole section if none survived.
 ## Excluded scopes (recognized, not detailed)
 - Recognized Y, Z implied by the request; excluded per scope = X.
 
-## Handoff readiness
-- complete: yes/no   (all challenges resolved, no open UNVERIFIED blocking scope?)
+## Handoff readiness (checklist — all five or handoff_ready is false)
+- [ ] all BLOCKING challenges resolved
+- [ ] zero open UNVERIFIED on any in-scope part
+- [ ] every part has status + evidence-or-resolution
+- [ ] spec derived AFTER the user confirmed this report
+- [ ] scope_closed: true written into the spec
 ```

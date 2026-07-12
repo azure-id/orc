@@ -73,6 +73,10 @@ Run as Opus 4.8 high (orchestrator). The mining itself is dispatched to
      over-tiered (cost leak).
    - **Tier integrity** (from `VERIFY` lines): every `⛔ DOWNGRADE`, grouped by
      agent — the "main session below Opus" bug leaves this exact fingerprint.
+   - **Gate bounce rates** (from `GATE` lines): per gate name (grounding /
+     coverage / graph / evidence / derivation) — pass vs bounce counts. A high
+     bounce rate on one gate localizes which role's instructions leak (e.g.
+     planner orphans → planner coverage discipline needs tuning).
    - **Pipeline leaks:** `QUESTION`/`CONTEXT-GAP` clusters (over-asking, slices
      missing context), `REPLAN` reasons, `FINDING p0..p3` and `VERDICT fail`
      rates per run, runs with `SPAWN`s but no `FINISH` (aborted/never closed).

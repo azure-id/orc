@@ -25,6 +25,8 @@ never spawn subagents.
    - `OUTCOME` lines → per-band stats (tasks, avg retries/requeues/
      needs_context/unmet).
    - `VERIFY` lines → every `⛔ DOWNGRADE` {agent, expected, actual, run}.
+   - `GATE` lines → pass/bounce counts per gate name (grounding / coverage /
+     graph / evidence / derivation) — a hot gate localizes the leaking role.
    - `QUESTION` / `CONTEXT-GAP` / `REPLAN` / `FINDING` / `VERDICT` → leak
      clusters with counts.
    - Runs with `SPAWN`s but no `FINISH`; `SPAWN`/`RETURN` pairs missing

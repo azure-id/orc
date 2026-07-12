@@ -9,7 +9,9 @@ subagent; the orchestrator never runs this itself.
 - declared_files[]        — the files you are expected to touch (incl. tests)
 - acceptance[]            — this task's sliced definition-of-done lines (from the
                             plan); self-check your diff against them before returning
-- constraints[]           — HARD RULES from the intent-spec; never violate
+- constraints[]           — HARD RULES from the intent-spec, plus the task's
+                            `spec_invariants` (analyst do-not-build invariants)
+                            appended verbatim at slice assembly; never violate
 - pattern                 — the resolved code-pattern for this task's language, or
                             null. When present: {conventions[] you MUST MATCH,
                             invariants[] that are BLOCKING, validation_gate[]

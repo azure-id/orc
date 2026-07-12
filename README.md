@@ -6,7 +6,7 @@
 
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
-![Version](https://img.shields.io/badge/version-0.8.1-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.9.0-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D16-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
@@ -37,33 +37,48 @@ zero-dependency npm package installs those files into your `.claude/` directory.
 
 ## Changelog
 
-### v0.8.1 — /orc-retro delivers upstream: PR/issue to the ORC repo, channel-gated _(2026-07-12)_
+### v0.9.0 — Trust-but-verify the analyst→planner chain: quote-anchored evidence · coverage gate · anchored judgment _(2026-07-12)_
 
-The retro report no longer dead-ends on local disk — it must land where it can
-be acted on.
+The last unverified links in the pipeline get the same
+instruction → contract → attestation → spot-check treatment as everything else.
 
-- **P0 preflight — no delivery channel, no retro.** Before resolving traces or
-  spawning anything, `/orc-retro` probes for an authed **gh CLI**
-  (`gh --version` + `gh auth status`) and falls back to a **GitHub MCP**
-  server. If NEITHER exists it refuses to run entirely — a calibration report
-  nobody can act on is pointless.
-- **Upstream delivery step.** After writing the local copy to
-  `log_dir/retro/`, the report is filed to the ORC repo — new config key
-  **`retro_repo`** (default `azure-id/orc`) — as a **PR** (branch
-  `retro/<DDMMYY>`, report at `retro/incoming/`, shallow-clone when run from
-  another project) with an **issue fallback** when push/PR access is missing.
-  The run ends by showing the created PR/issue URL, and never claims delivery
-  it didn't observe.
-- **AI-readable report format (`orc-retro/v1`).** YAML frontmatter mirrors the
-  retro return contract verbatim (band_stats, downgrades, leaks,
-  recommendations, n's) so a maintainer OR an AI session reading the repo can
-  act without parsing prose; short human sections follow.
-- **Contract lint:** `retro_repo` registered as the 11th linted contract
-  (config.md + orc-retro skill + command pinned together).
+- **Quote-anchored analyst evidence.** Every code claim in report + spec is
+  `file:line — "verbatim snippet"` (a ref with no quote auto-downgrades to
+  UNVERIFIED); **absence claims** (missing/buildable) carry `searched:` — the
+  concrete globs/greps run. The orchestrator now **spot-checks the evidence on
+  return** (Globs `files[]`, Grep-verifies quotes on exists/conflict) and
+  bounces misses — one hallucinated citation can no longer ride the
+  "trust the spec" chain into an executor slice.
+- **Spec staleness stamp.** Specs record `git_head` + `dirty` at analysis time;
+  a HEAD mismatch at plan time re-runs the evidence spot-check before the
+  planner is dispatched.
+- **Coverage-gated planning.** Tasks carry `requirements[]` (the R#/DoD ids
+  they implement) + source-cited `acceptance[]`; the planner returns a
+  `coverage` echo the orchestrator **recomputes at Phase 1 exit** — an orphan
+  requirement bounces the plan. Cycle + same-file collision checks join the
+  same gate.
+- **Invariants reach the executor provably.** New `spec_invariants[]` task
+  field: the analyst's do-not-build lines are copied verbatim onto tasks and
+  appended to the executor slice's `constraints[]` at assembly.
+- **Anchors replace adjectives.** Standard-mode analyst coverage floor;
+  blocking-vs-advisory challenge triage (advisory batched, all recorded);
+  planner task-sizing anchors (1–5 files, one area, deviation-with-reason);
+  a defined "plannable" floor with an escalation valve on `/orc-plan`;
+  numeric mini-lane escalation thresholds. `handoff_ready` is now a 5-point
+  checklist the orchestrator can refuse, plus a deterministic report↔spec
+  **derivation lint**.
+- **Leaner analyst skill.** Rule 3a stated once; deep-mode + Phase F branching
+  extracted to `references/deep-mode.md` / `references/branching.md` (loaded
+  only when used). Mini frontmatters gain natural trigger phrases.
+- **`GATE` trace verb.** Every deterministic gate emits pass|bounce lines;
+  `/orc-retro` mines per-gate bounce rates to localize which role leaks.
+- **Contract lint:** 5 new linted contracts (`searched:`, `git_head`, `orphan`,
+  `spec_invariants`, `` `GATE ``) — 16 total.
 
 <details>
 <summary><b>Previous versions</b> (click to expand)</summary>
 
+### v0.8.1 — /orc-retro delivers upstream: PR/issue to the ORC repo, channel-gated _(2026-07-12)_
 ### v0.8.0 — Close the loop: grounded intake · scoring anchors · OUTCOME marker · /orc-retro trace miner · eval harness _(2026-07-12)_
 ### v0.7.0 — Evidence everywhere: grounded plans · verbatim proof · anchored findings · contract lint · trace fixes _(2026-07-12)_
 ### v0.6.0 — P0–P3 ladder · house rules · deep playbooks + wired gates · 3 new languages · FE rule packs · security pass _(2026-07-11)_
