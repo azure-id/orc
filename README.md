@@ -6,7 +6,7 @@
 
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
-![Version](https://img.shields.io/badge/version-0.12.0-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.13.0-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D16-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
@@ -37,27 +37,29 @@ zero-dependency npm package installs those files into your `.claude/` directory.
 
 ## Changelog
 
-### v0.12.0 — Lossless context-combiner: conservation gate · overlap taxonomy · evidence freshness _(2026-07-12)_
+### v0.13.0 — `/orc-claude`: local CLAUDE.md builder — fenced sections, fingerprint refresh, zero questions _(2026-07-12)_
 
-The context-combiner now **proves nothing was lost** when merging 2+ related
-analyses. A **source coverage matrix** gives every source requirement exactly
-one recorded outcome (merged / deduped / split / conflict-resolved / dropped —
-dropping requires an explicit user decision), and a **conservation gate** blocks
-build handoff below 100% coverage. Reconciliation is **pooled, never pairwise**
-(scales past 2 sources; >4 triggers a staged-combining offer), with a richer
-overlap taxonomy: semantic duplicates quote both statements, **partial overlaps
-are split into shared + residue rows instead of collapsed**. Inherited
-`file:line` evidence gets a bounded **freshness spot-check** against the current
-git HEAD (`combined_against`) — stale anchors are flagged and challenged, never
-silently carried. Contradictory resolved assumptions across sources are now
-detected as conflicts; ordering is structured (`before`/`after`) so the planner
-consumes it as real dependencies; challenge verdicts checkpoint eagerly to
-`combine-decisions.md` and survive compaction. Three new contract-lint tokens
-(26 total).
+New standalone skill + command that builds, updates, or refreshes the **local
+project's** `CLAUDE.md` from verified repo facts (commands that provably exist,
+layout, convention deviations, boundaries, environment) — even when ORC is
+installed globally. The skill only picks the mode and dispatches the new pinned
+**`orc-claude-writer-opus-4-8-high`** agent (20 agents now), so the scan +
+writing run at Opus 4.8 high whatever tier the calling chat is on. Generated content is stamped with an `orc-claude:meta`
+header (version starting 0.0.1, bumped by exactly 0.0.1 per content-changing
+run; DD-MM-YYYY date; persisted line budget, default 400) and every generated
+section sits in `orc-claude:section` fences, so **refresh regenerates only the
+sections whose input fingerprints changed** — small drift, small diff. Fully
+non-interactive: P0 / Gotchas / Glossary are placeholders the user fills
+themself. A foreign hand-written CLAUDE.md is backed up to `CLAUDE.md.bak` and
+merged **without trimming a single user line** (the budget covers generated
+content only — an oversized total just gets a trim-it-yourself note). The
+orc-wiki pointer block is byte-preserved. Three new contract-lint tokens
+(29 total).
 
 <details>
 <summary><b>Previous versions</b> (click to expand)</summary>
 
+### v0.12.0 — Lossless context-combiner: conservation gate · overlap taxonomy · evidence freshness _(2026-07-12)_
 ### v0.11.0 — `/orc-fast`: knowledge-gated speed lane + wiki freshness infrastructure _(2026-07-12)_
 ### v0.10.1 — README: a fuller "Why ORC exists" _(2026-07-12)_
 ### v0.10.0 — `/orc-ultra`: max-effort advisor + three judgment gates for ultra-complex work _(2026-07-12)_
@@ -253,6 +255,7 @@ needed. Either way, your `.claude/orc.config.yaml` overrides are left untouched.
 | **`/orc-verify`** | Standalone verification of your git-modified changes (build + tests + diff sanity). Read-only. |
 | **`/orc-wiki`** | Builds a persistent project knowledge base into `wiki/` and points `CLAUDE.md` at it. Expensive, opt-in. |
 | **`/orc-pattern`** | Learns your project's real code conventions per language and caches them so executors match your house style. Reconciles a generic playbook (9 languages: React · Next.js · Vue · Angular · FastAPI · Django · NestJS · Express · Go) against your actual files — conventions defer to your codebase; security/correctness invariants and measurable validation gates always carry through to review + verify. `--refresh` to relearn. |
+| **`/orc-claude`** | Builds/updates/refreshes the **local repo's** `CLAUDE.md` from verified facts (real commands, layout, convention deviations, boundaries). Version-stamped (`0.0.1`, +0.0.1 per change, DD-MM-YYYY) with fenced sections — refresh regenerates only sections whose input fingerprints changed. Zero questions: P0/Gotchas/Glossary are fill-yourself placeholders. Foreign files backed up to `CLAUDE.md.bak`, user content never trimmed, wiki block byte-preserved. |
 | **`/orc-retro`** | Mines the behavior traces (`logging: true` runs) into an AI-readable calibration report — per-band outcomes, tier downgrades, pipeline leaks — and files it to the ORC repo (`retro_repo`, default azure-id/orc) as a PR (issue fallback). Hard-gates on an authed gh CLI or GitHub MCP: neither → refuses to run. |
 
 ### `/orc` — the full orchestrator
@@ -541,11 +544,12 @@ templates/
 │   ├── orc-analyze/         System Analyst — doc-optional, evidence-backed (+ report templates, spec schema)
 │   ├── orc-analyze-mini/    fast-lane analyst
 │   ├── orc-pattern/         code-pattern codifier — 9 language playbooks + a11y/perf rule packs + reconcile (opt-in)
+│   ├── orc-claude/          local CLAUDE.md builder — fenced sections, fingerprint refresh, zero questions
 │   ├── orc-retro/           trace miner — calibration report PR'd to retro_repo (gh/MCP gated)
 │   ├── orc-advisor/         ultra-lane advisory brief + rubric + clarification round (/orc-ultra only)
 │   ├── orc-judge/           ultra-lane judgment gates — analysis / plan / implementation (/orc-ultra only)
 │   └── context-combiner/    merges 2+ related analyses into one combined spec (+ schemas)
-├── commands/                /orc /orc-ultra /orc-mini /orc-fast /orc-analyze /orc-plan /orc-verify /orc-wiki /orc-pattern /orc-retro
+├── commands/                /orc /orc-ultra /orc-mini /orc-fast /orc-analyze /orc-plan /orc-verify /orc-wiki /orc-pattern /orc-retro /orc-claude
 ├── hooks/                   effort guard (PreToolUse) · statusline warning · behavior trace
 └── agents/                  single-role, model-pinned subagents (+ read-only scout) + MODEL-MAPPING.md
 bin/cli.js                   installer + config editor (init / update / upgrade / config / where)

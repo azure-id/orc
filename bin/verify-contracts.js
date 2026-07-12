@@ -28,6 +28,7 @@ const CONTRACTS = [
     files: [
       "agents/orc-advisor-opus-4-8-max.md",
       "agents/orc-analyze-mini-sonnet-5-high.md",
+      "agents/orc-claude-writer-opus-4-8-high.md",
       "agents/orc-context-combiner-opus-4-8-high.md",
       "agents/orc-executor-opus-4-7-high.md",
       "agents/orc-executor-opus-4-7-med.md",
@@ -58,6 +59,8 @@ const CONTRACTS = [
       "skills/orc/subskills/orc-testgen/core.md",
       "skills/orc-advisor/SKILL.md",
       "skills/orc-analyze-mini/SKILL.md",
+      "skills/orc-claude/SKILL.md",
+      "skills/orc-claude/examples/claude-run-mock.md",
       "skills/orc-fast/SKILL.md",
       "skills/orc-judge/SKILL.md",
       "skills/orc-mini/SKILL.md",
@@ -266,6 +269,7 @@ const CONTRACTS = [
       "agents/orc-retro-sonnet-5-high.md",
       "skills/orc-analyze-mini/SKILL.md",
       "skills/orc-analyze/SKILL.md",
+      "skills/orc-claude/SKILL.md",
       "skills/orc-fast/SKILL.md",
       "skills/orc-mini/SKILL.md",
       "skills/orc-retro/SKILL.md",
@@ -314,6 +318,7 @@ const CONTRACTS = [
       "skills/orc/subskills/orc-planner/SKILL.md",
       "skills/orc-analyze/SKILL.md",
       "skills/orc-analyze-mini/SKILL.md",
+      "skills/orc-claude/SKILL.md",
       "skills/orc-fast/SKILL.md",
       "skills/orc-mini/SKILL.md",
       "skills/orc-pattern/SKILL.md",
@@ -360,6 +365,35 @@ const CONTRACTS = [
     name: "fast->mini fallback handoff (v0.11.0 — orc-fast never stops the chat)",
     token: "FALLBACK-FROM",
     files: ["skills/orc-fast/SKILL.md", "skills/orc-mini/SKILL.md"],
+  },
+  {
+    name: "orc-claude generated-file meta header (v0.13.0 — version/date/budget/fingerprints)",
+    token: "orc-claude:meta",
+    files: [
+      "skills/orc-claude/SKILL.md",
+      "skills/orc-claude/examples/claude-run-mock.md",
+      "skills/orc-claude/references/refresh.md",
+      "skills/orc-claude/references/template.md",
+    ],
+  },
+  {
+    name: "orc-claude section fence grammar (v0.13.0 — surgical section-scoped refresh)",
+    token: "orc-claude:section",
+    files: [
+      "skills/orc-claude/SKILL.md",
+      "skills/orc-claude/references/refresh.md",
+      "skills/orc-claude/references/template.md",
+    ],
+  },
+  {
+    name: "wiki pointer-block marker (owned by orc-wiki; orc-claude byte-preserves it)",
+    token: "ORC-WIKI:START",
+    files: [
+      "agents/orc-claude-writer-opus-4-8-high.md",
+      "skills/orc-claude/SKILL.md",
+      "skills/orc-claude/references/refresh.md",
+      "skills/orc-wiki/references/claude-md-injection.md",
+    ],
   },
   {
     name: "combiner conservation gate (v0.12.0 — coverage must be 100 before handoff)",

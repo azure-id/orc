@@ -353,9 +353,10 @@ function upgrade() {
   if (upd.status !== 0) {
     console.error(
       "\n⚠  Package upgraded, but applying it (orc update) failed. Re-run:\n" +
-        "     orc update" +
+        "     orc update. But if still fails copy this then run manually in terminal: \n" + 
+        "     npm i -g https://github.com/azure-id/orc/archive/refs/heads/main.tar.gz" +
         (tflags.length ? " " + tflags.join(" ") : "") +
-        "\n"
+        "\n",
     );
     process.exit(upd.status || 1);
   }

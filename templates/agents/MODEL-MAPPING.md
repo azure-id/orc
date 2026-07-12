@@ -33,6 +33,7 @@ Score→executor mapping lives in config.md (narrow vs wide preset).
 | orc-retro-sonnet-5-high | claude-sonnet-5 | high | mine behavior traces → calibration report (/orc-retro; read-only) |
 | orc-advisor-opus-4-8-max | claude-opus-4-8 | max | ultra Phase U0 advisory brief + rubric + clarification questions (read-only; /orc-ultra only) |
 | orc-judge-opus-4-8-max | claude-opus-4-8 | max | ultra judgment gates — analysis / plan / implementation (read-only; /orc-ultra only) |
+| orc-claude-writer-opus-4-8-high | claude-opus-4-8 | high | scan repo → write/refresh the local CLAUDE.md (/orc-claude only; zero questions) |
 
 Mini execution reuses orc-executor-sonnet-5-high. Fast-lane (orc-fast)
 execution reuses orc-executor-sonnet-4-6-high — no dedicated agent.
