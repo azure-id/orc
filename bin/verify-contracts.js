@@ -184,6 +184,15 @@ const CONTRACTS = [
     ],
   },
   {
+    name: "retro delivery target (v0.8.1 — PR/issue to retro_repo, channel-gated)",
+    token: "retro_repo",
+    files: [
+      "commands/orc-retro.md",
+      "skills/orc/config.md",
+      "skills/orc-retro/SKILL.md",
+    ],
+  },
+  {
     name: "behavior-trace run pointer (every ORC entry point writes .current)",
     token: ".current",
     files: [

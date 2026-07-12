@@ -66,6 +66,11 @@ report_out_dir: analyst_report            # project-root copy target on report-o
 
 orchestrator_model: claude-opus-4-8       # main session; high effort (never downgraded)
 
+# --- Retro delivery (/orc-retro files its report upstream; PR preferred, issue fallback) ---
+retro_repo: azure-id/orc      # GitHub owner/repo that receives retro reports.
+                              # /orc-retro REQUIRES a delivery channel (authed gh
+                              # CLI or a GitHub MCP) and refuses to run without one.
+
 # --- Behavior trace logging (for skill improvement; OFF by default) ---
 logging: false                # when true, write a persistent behavior trace per run
 log_dir: .claude/orc/logs     # persistent trace folder — NEVER deleted on completion
@@ -135,6 +140,10 @@ list of `{min, max, agent}` rows; the orchestrator uses it instead of a preset.
   subsystem is inert — the hook no-ops and the orchestrator emits no markers.
 - `log_dir` is the persistent trace folder; unlike the decision log (`run/…md`,
   deleted on success) traces are NEVER auto-deleted — post-hoc review is the point.
+- `retro_repo` is where `/orc-retro` files its calibration report (PR preferred,
+  issue fallback, AI-readable markdown). The retro hard-gates on a delivery
+  channel — an authed gh CLI or a GitHub MCP server — and does not run at all
+  when neither exists. See the `orc-retro` skill.
 - `pattern_findings` gates the code-pattern subsystem (default `ask`). On an FE/BE
   cache MISS during Phase 3 dispatch: `ask` → P0 prompt (learn conventions via the
   `orc-pattern` skill, or proceed language-agnostic); `on` → auto-codify, no prompt;

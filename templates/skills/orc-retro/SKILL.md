@@ -7,9 +7,12 @@ description: >
   in log_dir (written when config `logging: true`), aggregates per-band
   outcomes (retries, requeues, needs_context, unmet, downgrades, findings),
   and produces a calibration report with recommendations. READ-ONLY and
-  REPORT-ONLY: it never edits the rubric, the skills, or project code — a
-  human applies (or ignores) its recommendations. The orchestrator dispatches
-  the mining to a subagent — it never mines itself.
+  REPORT-ONLY against the local system: it never edits the rubric, the skills,
+  or project code. The report is DELIVERED upstream — filed as a PR (issue
+  fallback) to the ORC repo (`retro_repo` config, default azure-id/orc) in
+  AI-readable markdown, via the gh CLI or a GitHub MCP. P0 preflight: if
+  NEITHER delivery channel exists, the retro does not run at all. The
+  orchestrator dispatches the mining to a subagent — it never mines itself.
 ---
 
 # ORC-RETRO (trace miner)
@@ -24,9 +27,23 @@ Run as Opus 4.8 high (orchestrator). The mining itself is dispatched to
 
 ## Hard rules
 
-1. **Read-only, report-only.** Never edit `effort-and-mode.md`, any skill,
-   config, or project code. Recommendations are phrased for a HUMAN to apply;
-   the retro never self-tunes the system it measures.
+0. **P0 preflight — a delivery channel or no retro at all.** The report exists
+   to land in the ORC repo's PRs/issues where the maintainer (or an AI reading
+   the repo) can act on it; a retro that can't deliver is pointless. BEFORE
+   resolving traces or dispatching anything, probe in order:
+   - **gh CLI:** `gh --version` succeeds AND `gh auth status` reports a logged-in
+     account → channel is `gh`.
+   - **GitHub MCP:** otherwise, check the session's available tools for a GitHub
+     MCP server (tool names like `mcp__github__*` / create_pull_request /
+     create_issue) → channel is `mcp`.
+   - **Neither → STOP.** Do not mine, do not spawn, do not write a local report.
+     Tell the user: install + auth the gh CLI (`gh auth login`) or connect a
+     GitHub MCP server, then re-run `/orc-retro`.
+1. **Read-only, report-only against the local system.** Never edit
+   `effort-and-mode.md`, any skill, config, or project code. Recommendations
+   are phrased for a HUMAN (or the ORC repo's AI) to apply; the retro never
+   self-tunes the system it measures. Its ONLY write outside `log_dir` is the
+   upstream PR/issue delivery below.
 2. **You never mine yourself — you spawn.** Dispatch the retro agent with the
    trace file list; you validate the return and write the report.
 3. **No traces → say so and stop.** Requires `logging: true` runs to have
@@ -43,6 +60,8 @@ Run as Opus 4.8 high (orchestrator). The mining itself is dispatched to
 
 ## Procedure
 
+0. **Preflight (hard rule 0):** establish the delivery channel (`gh` or `mcp`).
+   No channel → stop here. Resolve `retro_repo` with the other config keys.
 1. Resolve `log_dir`; collect `*.txt` traces (all, or the user-named subset /
    date range from `$ARGUMENTS`). Show the count and ask nothing else.
 2. Dispatch `orc-retro-sonnet-5-high` with the slice: trace file paths + the
@@ -61,9 +80,50 @@ Run as Opus 4.8 high (orchestrator). The mining itself is dispatched to
      `DISPATCH`/`VERIFY` around them (rich markers being forgotten).
 3. Validate the return (contract below). Write the report to
    `log_dir/retro/<DDMMYY>-report.md` (the `retro/` subfolder keeps the
-   trace folder's top level `.txt`-only) and show the user the summary:
-   verdict per question, the per-band table, and each recommendation with its
-   evidence line counts + n.
+   trace folder's top level `.txt`-only) in the AI-readable format below, and
+   show the user the summary: verdict per question, the per-band table, and
+   each recommendation with its evidence line counts + n.
+4. **Deliver upstream (the point of the retro).** File the report to
+   `retro_repo` (config, default `azure-id/orc`) — **PR preferred, issue
+   fallback**, over the channel from step 0:
+   - **`gh` channel:** if the cwd's `git remote` already IS `retro_repo`,
+     branch `retro/<DDMMYY>` from the default branch, add the report as
+     `retro/incoming/<DDMMYY>-<project>-report.md`, push, `gh pr create`.
+     Otherwise shallow-clone `retro_repo` into a temp dir and do the same
+     there. If push or PR creation fails (e.g. no write access), fall back to
+     `gh issue create -R <retro_repo>` with the full report as the body.
+   - **`mcp` channel:** same shape with the MCP's branch/file/PR tools;
+     fallback its create-issue tool.
+   - PR/issue title: `orc-retro: <DDMMYY> — <n> runs, <k> recommendations`.
+   - Either way, end by showing the user the created PR/issue URL. If delivery
+     itself errors after the preflight passed, surface the error verbatim and
+     point at the local report copy — never claim it was filed.
+
+## Report format (AI-readable — the PR/issue payload)
+
+The report is written so the ORC repo's maintainer OR an AI session reading
+the repo can act on it without parsing prose. YAML frontmatter mirrors the
+return contract EXACTLY (machine layer), followed by short human sections:
+
+```markdown
+---
+schema: orc-retro/v1
+generated: <ISO date>
+project: <cwd project name>
+orc_version: <installed ORC version if known, else unknown>
+runs_analyzed: <n>
+tasks_analyzed: <n>
+band_stats: [...]        # verbatim from the return contract
+downgrades: [...]
+leaks: [...]
+recommendations: [...]   # each with finding, suggested_change, confidence
+actual_model: <...>
+actual_effort: <...>
+---
+## Verdicts        (the three questions, one line each)
+## Per-band table
+## Recommendations (one subsection each: evidence lines, suggested edit, confidence + n)
+```
 
 ## Return contract (the agent emits EXACTLY this; you validate)
 

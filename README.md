@@ -6,7 +6,7 @@
 
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
-![Version](https://img.shields.io/badge/version-0.8.0-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.8.1-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D16-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
@@ -37,163 +37,38 @@ zero-dependency npm package installs those files into your `.claude/` directory.
 
 ## Changelog
 
-### v0.8.0 — Close the loop: grounded intake · scoring anchors · /orc-retro trace miner _(2026-07-12)_
+### v0.8.1 — /orc-retro delivers upstream: PR/issue to the ORC repo, channel-gated _(2026-07-12)_
 
-Completes the accuracy program v0.7.0 started: the last ungrounded entry path
-gets evidence discipline, and the behavior-trace flywheel finally gets its
-return spoke.
+The retro report no longer dead-ends on local disk — it must land where it can
+be acted on.
 
-- **Grounded intake (Step 3.5 repo cross-check).** The direct path (no
-  analyst) was the only lane where a spec could reach planning ungrounded.
-  Before sign-off, the orchestrator now Glob/Grep-confirms every file, module,
-  and behavior the draft intent-spec names — unconfirmable items get an
-  explicit `UNVERIFIED` tag, tags are resolved in ONE batched sign-off
-  question, and more than 3 tags recommends routing through `orc-analyze`
-  instead. Proportional: 2-question intakes check named files only; orc-mini
-  runs the names-only depth. A spec reaching the planner has zero unresolved
-  tags.
-- **Scoring is anchored, not vibes.** `effort-and-mode.md` gains six worked
-  scoring examples (rename → 0 up to a table migration → 88) encoding the two
-  disciplines the rubric implied but never showed: risk/centrality never
-  double-counts into base, and a small diff is not a low score (the
-  payment-refund example). Scores diverging >20 points from the nearest analog
-  need re-derivation or a written override.
-- **`OUTCOME` trace marker.** At every task close the orchestrator emits one
-  line linking the scoring band to what the task actually took: `OUTCOME
-  task= score= band= model= retries= requeues= needs_context= unmet=` (mini
-  emits it with `band=mini`). This is the raw material for calibration.
-- **New `/orc-retro` — the flywheel's return spoke.** New sibling skill +
-  `orc-retro-sonnet-5-high` agent (17 subagents now): mines the persistent
-  traces into a calibration report — per-band outcome stats, every `⛔
-  DOWNGRADE`, question/context-gap clusters, unfinished runs, trace hygiene —
-  written to `log_dir/retro/`, every claim backed by trace line references,
-  small samples labeled weak. Strictly read-only/report-only: it never edits
-  the rubric or skills; a human applies its recommendations. It writes no
-  trace of its own (never pollutes the data it mines).
-- **Eval harness (repo-side, git-ignored).** Three scripted end-to-end
-  scenarios + a 7-file Express fixture under `eval/`: clean 3-task parallel
-  run, analyst-vs-planted-false-doc-claim, and planner-phantom-path (the
-  grounding spot-check must bounce it) — each with a pass/fail checklist to
-  grade after every payload bump. Closes the long-open "first real runs never
-  exercised" item with a repeatable procedure.
+- **P0 preflight — no delivery channel, no retro.** Before resolving traces or
+  spawning anything, `/orc-retro` probes for an authed **gh CLI**
+  (`gh --version` + `gh auth status`) and falls back to a **GitHub MCP**
+  server. If NEITHER exists it refuses to run entirely — a calibration report
+  nobody can act on is pointless.
+- **Upstream delivery step.** After writing the local copy to
+  `log_dir/retro/`, the report is filed to the ORC repo — new config key
+  **`retro_repo`** (default `azure-id/orc`) — as a **PR** (branch
+  `retro/<DDMMYY>`, report at `retro/incoming/`, shallow-clone when run from
+  another project) with an **issue fallback** when push/PR access is missing.
+  The run ends by showing the created PR/issue URL, and never claims delivery
+  it didn't observe.
+- **AI-readable report format (`orc-retro/v1`).** YAML frontmatter mirrors the
+  retro return contract verbatim (band_stats, downgrades, leaks,
+  recommendations, n's) so a maintainer OR an AI session reading the repo can
+  act without parsing prose; short human sections follow.
+- **Contract lint:** `retro_repo` registered as the 11th linted contract
+  (config.md + orc-retro skill + command pinned together).
 
 <details>
 <summary><b>Previous versions</b> (click to expand)</summary>
 
+### v0.8.0 — Close the loop: grounded intake · scoring anchors · OUTCOME marker · /orc-retro trace miner · eval harness _(2026-07-12)_
 ### v0.7.0 — Evidence everywhere: grounded plans · verbatim proof · anchored findings · contract lint · trace fixes _(2026-07-12)_
-
-Anti-hallucination release: ORC's proven pattern (instruction → contract →
-attestation → independent spot-check) extended from the analyst/trace/pattern
-systems to every remaining role.
-
-- **Grounded planner (per-file attestation).** Every plan task now carries
-  `grounding[]` — `{path, disposition: exists|new, evidence}` per declared file
-  (from an analyst spec, its file:line evidence is copied through) — plus a
-  sliced per-task `acceptance[]` from the definition-of-done. The orchestrator
-  **Globs every `exists` path at Phase 1 exit** and bounces a plan with misses
-  back to the planner (one retry, then escalate) — a hallucinated path can no
-  longer corrupt the wave/conflict graph. Old checkpoints resume without the
-  spot-check.
-- **Evidenced execution (no more unproven "done").** Executor returns gain
-  `evidence` — the build/test `{command, exit_code, tail}` quoted VERBATIM
-  (like `actual_model`; `no_runner_detected: true` when the stack has no
-  runner) — and `unmet[]` (acceptance/constraint lines it couldn't satisfy;
-  non-empty forces `partial`, never `done`). `done` without evidence on a
-  runnable stack is a malformed return. The house-rules card adds two lines:
-  never claim what you haven't observed; an honest partial beats a false done.
-  orc-mini validates the same fields and treats its smoke gate as the
-  independent check of the executor's claim.
-- **Anchored findings (a phantom P0 can't edit your code).** Every P0–P2
-  review/verify/security finding must carry `file:line` **plus the offending
-  line quoted verbatim**; an unanchored finding is AUTO-P3 — advisory, never
-  gates, never triggers a fix. Before acting on any P0/P1 the orchestrator
-  **reads the cited line and confirms the quote matches** — protecting the one
-  path where ORC edits code without asking. The verifier now returns
-  per-criterion `criteria[]` `{criterion, pass|fail, evidence}`. Standalone
-  `/orc-verify` applies the same rule.
-- **Contract drift lint (`bin/verify-contracts.js`).** ORC's by-design
-  maintenance drift (shared contracts duplicated across up to 31 files) is now
-  machine-checked: 10 contract tokens each pinned to their exact expected file
-  set; a skipped copy OR an unregistered new copy fails `npm run verify` and
-  `prepack`. The count-only integrity guard could never catch this.
-- **Behavior-trace fixes — every entry point now actually logs.** Fixed:
-  running `orc-wiki` with `logging: true` produced **no trace .txt at all**
-  (the wiki never wrote the `log_dir/.current` run-pointer, so the
-  `orc-trace.js` hook stayed inert). The trace protocol is now declared
-  universal — `orc`, `orc-mini`, `orc-wiki`, and standalone `/orc-analyze`,
-  `/orc-analyze-mini`, `/orc-plan`, `/orc-pattern`, `/orc-verify` each own the
-  run-pointer + markers for their phase set (wiki keeps `.current` across its
-  5-task pauses so multi-session scans append to one trace; lanes inside a
-  bigger run never open a second trace).
-
 ### v0.6.0 — P0–P3 ladder · house rules · deep playbooks + wired gates · 3 new languages · FE rule packs · security pass _(2026-07-11)_
-
-- **P0–P3 severity ladder** replaces binary blocking/nit on review + verify
-  findings — and each level drives DISTINCT handling: **P0** (broken
-  build/tests/criteria, invariant violations) auto-fixed once without asking ·
-  **P1** (correctness/security risk, constraint violations) gates ship, you're
-  asked before the fix · **P2** (maintainability) offered as an optional
-  fix-batch in the summary · **P3** (cosmetic) counted only. Applied everywhere
-  findings exist: reviewer, verifier, standalone `/orc-verify`, trace marker
-  (now `FINDING p0= p1= p2= p3=`), checkpoint (old checkpoints map
-  blocking→P1 / nits→P3 on resume).
-- **Standing house-rules card** (`orc/references/house-rules.md`) injected
-  literally into every executor slice, full **and** mini lanes: surgical changes
-  only, simplicity-first, no unrequested scope, prefer the boring solution.
-  Deliberately excludes anything the slice contract already enforces.
-- **All 9 playbooks deepened, validation gates wired end-to-end** — every
-  playbook (FastAPI, NestJS, Go, React, Next.js, Vue + the new three) now ships
-  a real minimal-complete worked example marked *shape reference: your project's
-  layout always wins*, plus a measurable-only **Validation gate**. The gate
-  flows the whole pipeline: codifier returns `validation_gate[]` → cached →
-  injected into the executor's `pattern` slice → reviewer re-checks it →
-  verifier folds it into the acceptance criteria (an unmet enforceable line is
-  P0). Enforceable-vs-advisory is decided once, at reconciliation: only checks
-  the project's own tooling can verify gate; coverage-%/latency bars stay
-  advisory. Old cached patterns without a gate stay valid.
-- **Three new languages:** `django`, `express`, `angular` playbooks + detection
-  rows (Nest wins over Express; FastAPI/Django win over generic Python).
-- **FE rule packs** — `fe-a11y.md` + `fe-perf.md`, capped at 15 impact-ordered
-  rules each, checked by the reviewer on FE diffs as `fe_rules[]` (file:line
-  findings, P1–P3 by impact, never auto-P0). Executors also read the
-  environment's `frontend-design` skill on UI tasks when it's installed.
-- **Opt-in security pass (Phase 5.5)** — config `security_review: off|ask|on`
-  (default **off**). Fires only on runs where a task scored **≥ 70** (the
-  existing risk floor — security/money/migrations/auth), reusing the reviewer
-  in security mode with a 12-item OWASP/STRIDE checklist scoped to the run's
-  changed files; wraps Semgrep when already installed, never installs tooling.
-- **`orc config` menu caught up:** `pattern_findings` + `orc_wiki_pattern_findings`
-  are now actually in the CLI mirror (missed in v0.5.0), alongside the new
-  `security_review`.
-- **Docs de-staled:** `knowledge.md` version banner + §7 status caught up from
-  v0.2.1 to the real feature set; agent/skill counts fixed (16 agents, 8 skills)
-  here and in `CLAUDE.md`. Both READMEs brought into full compliance: this one
-  gained the P0–P3/house-rules/gates/security-pass/test-authoring pipeline
-  detail, the `security_review` config row, and the 9-language pattern list;
-  the installed payload README (`skills/orc/README.md`) was rewritten from its
-  stale "v2.2 / unzip three skills / 3-band ladder" era to the real install
-  flow, layout, and behavior set.
-
 ### v0.5.1 — Statusline false-degrade fix _(2026-07-11)_
-
-- **Fixed** the statusline false-firing `⛔ ORC WILL DEGRADE (model≠Opus4.8)` on a
-  correct tier when Claude Code reports a dated/suffixed Opus 4.8 model id (e.g.
-  `claude-opus-4-8-YYYYMMDD`). The model is now matched tolerantly by id **or**
-  display name — real downgrades (Opus 4.7, Sonnet, low effort) still warn.
-- A **missing** effort field no longer counts as `effort≠high` (the PreToolUse
-  guard already blocks a genuinely low-effort `/orc`).
-- The **context-window %** keeps rendering in every state — unchanged, always on.
-
-### v0.5.0 — Code-pattern findings
-`orc-pattern` skill + `/orc-pattern`: learns your project's real conventions per
-language (React · Next.js · Vue · FastAPI · NestJS · Go) and makes executors match
-your house style — **conventions defer to your codebase; security/correctness
-invariants are always enforced**. Pattern is reconciled from your
-most-recently-modified files, cached to `.claude/orc/patterns/<lang>-pattern.md`,
-and injected into executor slices (executors echo `pattern_version` +
-`invariants_checked`; the reviewer re-checks invariants). Config
-`pattern_findings` / `orc_wiki_pattern_findings`.
-
+### v0.5.0 — Code-pattern findings: executors match your house style, invariants always enforced
 ### v0.4.5 — Rewrite weak worker descriptions (the real score lever)
 ### v0.4.4 — Act on Tessl review: raise sub-70 workers, fix cross-spine paths
 ### v0.4.3 — `orc-analyze`: trim description under the 1024-char skill-spec limit
@@ -340,7 +215,7 @@ needed. Either way, your `.claude/orc.config.yaml` overrides are left untouched.
 | **`/orc-verify`** | Standalone verification of your git-modified changes (build + tests + diff sanity). Read-only. |
 | **`/orc-wiki`** | Builds a persistent project knowledge base into `wiki/` and points `CLAUDE.md` at it. Expensive, opt-in. |
 | **`/orc-pattern`** | Learns your project's real code conventions per language and caches them so executors match your house style. Reconciles a generic playbook (9 languages: React · Next.js · Vue · Angular · FastAPI · Django · NestJS · Express · Go) against your actual files — conventions defer to your codebase; security/correctness invariants and measurable validation gates always carry through to review + verify. `--refresh` to relearn. |
-| **`/orc-retro`** | Mines the behavior traces (`logging: true` runs) into a calibration report: per-band outcomes, tier downgrades, pipeline leaks. Read-only — recommendations are yours to apply. |
+| **`/orc-retro`** | Mines the behavior traces (`logging: true` runs) into an AI-readable calibration report — per-band outcomes, tier downgrades, pipeline leaks — and files it to the ORC repo (`retro_repo`, default azure-id/orc) as a PR (issue fallback). Hard-gates on an authed gh CLI or GitHub MCP: neither → refuses to run. |
 
 ### `/orc` — the full orchestrator
 
@@ -581,7 +456,7 @@ templates/
 │   ├── orc-analyze/         System Analyst — doc-optional, evidence-backed (+ report templates, spec schema)
 │   ├── orc-analyze-mini/    fast-lane analyst
 │   ├── orc-pattern/         code-pattern codifier — 9 language playbooks + a11y/perf rule packs + reconcile (opt-in)
-│   ├── orc-retro/           trace miner — per-band calibration report from logged runs (read-only)
+│   ├── orc-retro/           trace miner — calibration report PR'd to retro_repo (gh/MCP gated)
 │   └── context-combiner/    merges 2+ related analyses into one combined spec (+ schemas)
 ├── commands/                /orc /orc-mini /orc-analyze /orc-plan /orc-verify /orc-wiki /orc-pattern /orc-retro
 ├── hooks/                   effort guard (PreToolUse) · statusline warning · behavior trace
