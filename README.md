@@ -6,7 +6,7 @@
 
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
-![Version](https://img.shields.io/badge/version-0.10.0-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.10.1-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D16-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
@@ -37,48 +37,20 @@ zero-dependency npm package installs those files into your `.claude/` directory.
 
 ## Changelog
 
-### v0.10.0 — `/orc-ultra`: max-effort advisor + three judgment gates for ultra-complex work _(2026-07-12)_
+### v0.10.1 — README: a fuller "Why ORC exists" _(2026-07-12)_
 
-A third lane above `orc-mini` and `/orc`: maximum rigor for complex and
-ultra-complex requests, built to minimize wrong interpretation, silent
-assumptions, dropped requirements, and quality slips.
-
-- **New `/orc-ultra` command** — the full pipeline with `ultra_mode: true`
-  forced on (run-scoped, never persisted): deep analyze, pattern findings on,
-  test authoring on, security review on, and an executor **tier floor**
-  (nothing below Sonnet 5 high; top bands → Opus 4.8 high). Not a separate
-  spine — the orc skill + `references/ultra-mode.md`.
-- **New `orc-advisor` skill + `orc-advisor-opus-4-8-max` agent** (Phase U0,
-  read-only): a code-grounded advisory brief — risks, alternatives, a
-  mandatory security section, a request-specific **rubric** the judges score
-  against — plus `open_questions[]` relayed to you in ONE batch and the seed
-  of the run's **assumption ledger** (UNCONFIRMED entries become automatic
-  judge findings).
-- **New `orc-judge` skill + `orc-judge-opus-4-8-max` agent**: one judge, three
-  gates — after analysis, after planning (fed a deterministic **blast-radius
-  map**), and after verify: implementation **fidelity** (nothing missing,
-  nothing invented) + **ultra-strict quality** (security, SonarQube-class
-  smells, simplification, wrong placement — blocking when justified).
-  Structured verdicts (APPROVE | REVISE | ESCALATE); blocking findings need a
-  verbatim anchor + a failure consequence (or category + concrete
-  alternative) or they auto-downgrade; security findings never downgrade.
-  REVISE loops the author (cap 2, anti-moving-goalposts convergence rule),
-  then an explicit ESCALATE menu. Judge gates add to your sign-offs, never
-  replace them.
-- **Deterministic anti-miss core:** a `R# → task → diff hunks → verify
-  evidence` **traceability matrix** built with grep/diff before gate 3 — an
-  empty diff column is a caught missing implementation with no model call;
-  the project's own static analysis (linter/sonar/type-checker, never
-  installed) feeds the judge as blocking input to triage.
-- **Plumbing:** `ADVISE`/`JUDGE` trace verbs + `judgment` GATE name; checkpoint
-  `ultra` block (per-gate loop counters, brief/ledger/matrix paths — resumes
-  mid-loop); MODEL-MAPPING + config fixed-role rows; 3 new linted contracts
-  (`ultra_mode`, `brief_path`, `failure_consequence`) — 19 total. Ultra never
-  activates in `/orc` or `orc-mini`.
+Docs-only. The "Why ORC exists" section now tells the whole story: the
+recurring single-agent failure modes (silent interpretation, flat top-model
+cost, compaction amnesia, unwritten "done", unverified claims, style drift,
+nothing to inspect), and how each ORC mechanism — role separation, scored
+dispatch, signed-off intent, evidence-attested hand-offs, disk-first state,
+the mini/full/ultra rigor dial, and the pattern/wiki/retro learning loop —
+answers one of them.
 
 <details>
 <summary><b>Previous versions</b> (click to expand)</summary>
 
+### v0.10.0 — `/orc-ultra`: max-effort advisor + three judgment gates for ultra-complex work _(2026-07-12)_
 ### v0.9.0 — Trust-but-verify the analyst→planner chain: quote-anchored evidence · coverage gate · anchored judgment _(2026-07-12)_
 ### v0.8.1 — /orc-retro delivers upstream: PR/issue to the ORC repo, channel-gated _(2026-07-12)_
 ### v0.8.0 — Close the loop: grounded intake · scoring anchors · OUTCOME marker · /orc-retro trace miner · eval harness _(2026-07-12)_
@@ -119,19 +91,56 @@ assumptions, dropped requirements, and quality slips.
 
 ## Why ORC exists
 
-Handing a big task to one agent tends to fail in specific ways: it burns tokens
-doing everything at the top model, it loses the thread when context compacts, it
-builds the wrong thing because "done" was never pinned down, and — with
-documents — it implements the wrong scope. ORC addresses each:
+Hand a real feature to a single agent and watch how it fails. Not randomly —
+the same ways, every time. It reads your requirements once, silently picks an
+interpretation, and builds *that* instead of what you meant. It runs the top
+model on everything, so a one-line rename costs the same as an architecture
+change. Twenty minutes in, context compacts and it forgets decisions it made
+ten minutes ago. It says "done" against a definition of done that was never
+written down. It cites code that doesn't exist, claims tests passed that never
+ran, and writes code in a style your codebase has never seen. And when it goes
+wrong, you have nothing to inspect — no plan, no state, no record of what was
+dispatched where.
 
-- **The orchestrator never implements — it dispatches scored subagents,** even
-  for a one-line change. Each task is scored and routed to the cheapest capable
-  model, so the expensive models are reserved for genuinely hard work.
-- **Disk is the source of truth.** Every run checkpoints its state, so any pause
-  — planned, token-limit, or crash — resumes cleanly, and you can continue in a
-  fresh session via a paste-block instead of dragging a compacted conversation.
-- **Intake and document analysis happen before any parallel work,** so scope is
-  bounded and confirmed before it's parallelized across agents.
+None of these are model problems. They are **process problems** — the same
+ones software teams solved decades ago with roles, reviews, and written
+agreements. ORC is that discipline, encoded as skills the model must follow:
+
+- **Coordination and labor are separate jobs.** The orchestrator never
+  implements — even a one-line change goes to a spawned subagent. This keeps
+  the coordinator's context lean for the entire run and turns every task into
+  a routable unit of work.
+- **Every task is scored, and the score picks the model.** Small tasks get
+  cheap models; the expensive ones are reserved for work that genuinely needs
+  them. You see the scoring table before anything dispatches — and named,
+  model-pinned agents mean what ran is verifiable, not a prose request.
+- **"Done" is written down before work starts.** Intake produces a signed-off
+  intent-spec; its definition-of-done becomes the verification criteria at the
+  end. With documents, the analyst grounds every requirement in your actual
+  code first — so scope bleed and stale doc claims die before they're
+  parallelized across five agents.
+- **Nothing is trusted, everything is attested.** Every claim carries
+  evidence — `file:line` quotes from the analyst, grounding attestations from
+  the planner, verbatim build output from executors, anchored findings from
+  reviewers — and the orchestrator spot-checks it deterministically on every
+  return. A hallucinated citation bounces; it doesn't ride into an executor
+  slice.
+- **Disk is the source of truth, not the conversation.** Every run checkpoints
+  eagerly, so a pause — planned, token-limit, or crash — resumes cleanly, even
+  in a fresh session. Compaction stops being fatal.
+- **Rigor is a dial, not a constant.** The same spine runs as `orc-mini` (one
+  subagent, no ceremony) for small work, `/orc` for real features, and
+  `/orc-ultra` (a max-effort advisor plus judgment gates after analysis,
+  planning, and implementation) when a miss is expensive.
+- **The system learns your project — and itself.** Learned code patterns make
+  executors match your house style; the optional wiki makes every future plan
+  sharper; behavior traces feed `/orc-retro`, which mines real runs to
+  recalibrate how tasks are scored.
+
+The through-line: **an agent's judgment is only as good as the structure
+around it.** ORC supplies the structure — bounded scope, matched cost,
+durable state, and evidence at every hand-off — so the models can be good at
+the part they're actually good at: the work.
 
 ---
 
