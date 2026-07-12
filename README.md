@@ -6,7 +6,7 @@
 
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
-![Version](https://img.shields.io/badge/version-0.9.0-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.10.0-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D16-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
@@ -37,47 +37,49 @@ zero-dependency npm package installs those files into your `.claude/` directory.
 
 ## Changelog
 
-### v0.9.0 — Trust-but-verify the analyst→planner chain: quote-anchored evidence · coverage gate · anchored judgment _(2026-07-12)_
+### v0.10.0 — `/orc-ultra`: max-effort advisor + three judgment gates for ultra-complex work _(2026-07-12)_
 
-The last unverified links in the pipeline get the same
-instruction → contract → attestation → spot-check treatment as everything else.
+A third lane above `orc-mini` and `/orc`: maximum rigor for complex and
+ultra-complex requests, built to minimize wrong interpretation, silent
+assumptions, dropped requirements, and quality slips.
 
-- **Quote-anchored analyst evidence.** Every code claim in report + spec is
-  `file:line — "verbatim snippet"` (a ref with no quote auto-downgrades to
-  UNVERIFIED); **absence claims** (missing/buildable) carry `searched:` — the
-  concrete globs/greps run. The orchestrator now **spot-checks the evidence on
-  return** (Globs `files[]`, Grep-verifies quotes on exists/conflict) and
-  bounces misses — one hallucinated citation can no longer ride the
-  "trust the spec" chain into an executor slice.
-- **Spec staleness stamp.** Specs record `git_head` + `dirty` at analysis time;
-  a HEAD mismatch at plan time re-runs the evidence spot-check before the
-  planner is dispatched.
-- **Coverage-gated planning.** Tasks carry `requirements[]` (the R#/DoD ids
-  they implement) + source-cited `acceptance[]`; the planner returns a
-  `coverage` echo the orchestrator **recomputes at Phase 1 exit** — an orphan
-  requirement bounces the plan. Cycle + same-file collision checks join the
-  same gate.
-- **Invariants reach the executor provably.** New `spec_invariants[]` task
-  field: the analyst's do-not-build lines are copied verbatim onto tasks and
-  appended to the executor slice's `constraints[]` at assembly.
-- **Anchors replace adjectives.** Standard-mode analyst coverage floor;
-  blocking-vs-advisory challenge triage (advisory batched, all recorded);
-  planner task-sizing anchors (1–5 files, one area, deviation-with-reason);
-  a defined "plannable" floor with an escalation valve on `/orc-plan`;
-  numeric mini-lane escalation thresholds. `handoff_ready` is now a 5-point
-  checklist the orchestrator can refuse, plus a deterministic report↔spec
-  **derivation lint**.
-- **Leaner analyst skill.** Rule 3a stated once; deep-mode + Phase F branching
-  extracted to `references/deep-mode.md` / `references/branching.md` (loaded
-  only when used). Mini frontmatters gain natural trigger phrases.
-- **`GATE` trace verb.** Every deterministic gate emits pass|bounce lines;
-  `/orc-retro` mines per-gate bounce rates to localize which role leaks.
-- **Contract lint:** 5 new linted contracts (`searched:`, `git_head`, `orphan`,
-  `spec_invariants`, `` `GATE ``) — 16 total.
+- **New `/orc-ultra` command** — the full pipeline with `ultra_mode: true`
+  forced on (run-scoped, never persisted): deep analyze, pattern findings on,
+  test authoring on, security review on, and an executor **tier floor**
+  (nothing below Sonnet 5 high; top bands → Opus 4.8 high). Not a separate
+  spine — the orc skill + `references/ultra-mode.md`.
+- **New `orc-advisor` skill + `orc-advisor-opus-4-8-max` agent** (Phase U0,
+  read-only): a code-grounded advisory brief — risks, alternatives, a
+  mandatory security section, a request-specific **rubric** the judges score
+  against — plus `open_questions[]` relayed to you in ONE batch and the seed
+  of the run's **assumption ledger** (UNCONFIRMED entries become automatic
+  judge findings).
+- **New `orc-judge` skill + `orc-judge-opus-4-8-max` agent**: one judge, three
+  gates — after analysis, after planning (fed a deterministic **blast-radius
+  map**), and after verify: implementation **fidelity** (nothing missing,
+  nothing invented) + **ultra-strict quality** (security, SonarQube-class
+  smells, simplification, wrong placement — blocking when justified).
+  Structured verdicts (APPROVE | REVISE | ESCALATE); blocking findings need a
+  verbatim anchor + a failure consequence (or category + concrete
+  alternative) or they auto-downgrade; security findings never downgrade.
+  REVISE loops the author (cap 2, anti-moving-goalposts convergence rule),
+  then an explicit ESCALATE menu. Judge gates add to your sign-offs, never
+  replace them.
+- **Deterministic anti-miss core:** a `R# → task → diff hunks → verify
+  evidence` **traceability matrix** built with grep/diff before gate 3 — an
+  empty diff column is a caught missing implementation with no model call;
+  the project's own static analysis (linter/sonar/type-checker, never
+  installed) feeds the judge as blocking input to triage.
+- **Plumbing:** `ADVISE`/`JUDGE` trace verbs + `judgment` GATE name; checkpoint
+  `ultra` block (per-gate loop counters, brief/ledger/matrix paths — resumes
+  mid-loop); MODEL-MAPPING + config fixed-role rows; 3 new linted contracts
+  (`ultra_mode`, `brief_path`, `failure_consequence`) — 19 total. Ultra never
+  activates in `/orc` or `orc-mini`.
 
 <details>
 <summary><b>Previous versions</b> (click to expand)</summary>
 
+### v0.9.0 — Trust-but-verify the analyst→planner chain: quote-anchored evidence · coverage gate · anchored judgment _(2026-07-12)_
 ### v0.8.1 — /orc-retro delivers upstream: PR/issue to the ORC repo, channel-gated _(2026-07-12)_
 ### v0.8.0 — Close the loop: grounded intake · scoring anchors · OUTCOME marker · /orc-retro trace miner · eval harness _(2026-07-12)_
 ### v0.7.0 — Evidence everywhere: grounded plans · verbatim proof · anchored findings · contract lint · trace fixes _(2026-07-12)_
@@ -224,6 +226,7 @@ needed. Either way, your `.claude/orc.config.yaml` overrides are left untouched.
 | Command | What it does |
 |---------|--------------|
 | **`/orc`** | The full orchestrator: intake → planning → per-task scoring → conflict-free parallel waves → review → verify → ship. Checkpoints eagerly; resumes in a fresh session at any pause. |
+| **`/orc-ultra`** | The maximum-rigor lane for complex/ultra-complex work: the full pipeline plus an Opus 4.8 **max** advisor (code-grounded brief + rubric + one batched clarification round) and three judgment gates — after analysis, after planning, and after verify (implementation fidelity + ultra-strict quality: security, smells, simplification, placement). Deep analyze, pattern/testgen/security forced on, executor tier floor. Costly by design. |
 | **`/orc-mini`** | The fast path — see below. |
 | **`/orc-analyze`** | The System Analyst: turns a requirement or document into a scope-bounded, code-grounded, evidence-backed spec. |
 | **`/orc-plan`** | The Requirement Planner: a detailed request or analyst spec → a grounded, right-sized, dependency-checked task plan. |
@@ -472,8 +475,10 @@ templates/
 │   ├── orc-analyze-mini/    fast-lane analyst
 │   ├── orc-pattern/         code-pattern codifier — 9 language playbooks + a11y/perf rule packs + reconcile (opt-in)
 │   ├── orc-retro/           trace miner — calibration report PR'd to retro_repo (gh/MCP gated)
+│   ├── orc-advisor/         ultra-lane advisory brief + rubric + clarification round (/orc-ultra only)
+│   ├── orc-judge/           ultra-lane judgment gates — analysis / plan / implementation (/orc-ultra only)
 │   └── context-combiner/    merges 2+ related analyses into one combined spec (+ schemas)
-├── commands/                /orc /orc-mini /orc-analyze /orc-plan /orc-verify /orc-wiki /orc-pattern /orc-retro
+├── commands/                /orc /orc-ultra /orc-mini /orc-analyze /orc-plan /orc-verify /orc-wiki /orc-pattern /orc-retro
 ├── hooks/                   effort guard (PreToolUse) · statusline warning · behavior trace
 └── agents/                  single-role, model-pinned subagents (+ read-only scout) + MODEL-MAPPING.md
 bin/cli.js                   installer + config editor (init / update / upgrade / config / where)

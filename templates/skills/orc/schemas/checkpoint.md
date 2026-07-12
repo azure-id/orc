@@ -21,6 +21,15 @@ Two files, two jobs:
   "batch_pause_every": 2,
   "logging_enabled": false,        // config.logging — re-anchor the behavior trace on resume
   "trace_path": null,              // "<log_dir>/<run-slug>-<DDMMYY>.txt" when logging_enabled
+  "ultra_mode": false,             // true only on /orc-ultra runs; gates the "ultra" block below
+  "ultra": null,                   /* when ultra_mode — a resumed run continues mid-gate/mid-loop:
+    { "brief_path": "run/…/ultra/advisory-brief.md",
+      "ledger_path": "run/…/ultra/assumption-ledger.md",
+      "matrix_path": null,                    // set before gate 3
+      "gates": {                              // per-gate judgment state
+        "analysis":       { "verdict": "approve", "round": 1, "loops_used": 0 },
+        "plan":           { "verdict": "revise",  "round": 2, "loops_used": 1 },
+        "implementation": { "verdict": null,      "round": 0, "loops_used": 0 } } } */
   "current_wave": 2,
   "paused": true,
   "pause_trigger": "batch_pause",  // batch_pause | token_limit | phase_transition | crash_guard

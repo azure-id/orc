@@ -114,6 +114,8 @@ list of `{min, max, agent}` rows; the orchestrator uses it instead of a preset.
 | Mini planner | orc-planner-mini-sonnet-5-high |
 | Mini executor | orc-executor-sonnet-5-high (reused) |
 | Pattern codifier | orc-pattern-codifier-sonnet-5-high |
+| Ultra advisor (/orc-ultra only) | orc-advisor-opus-4-8-max |
+| Ultra judge (/orc-ultra only) | orc-judge-opus-4-8-max |
 
 ## Rules
 - Read at run start via the resolution rule above (defaults ← `orc.config.yaml`
@@ -155,6 +157,10 @@ list of `{min, max, agent}` rows; the orchestrator uses it instead of a preset.
   wiki's scan already has consent) makes `orc-wiki` codify ALL detected languages as
   a byproduct of its full scan, pre-warming the pattern cache so later `/orc` runs
   never hit the `pattern_findings` prompt.
+- **Ultra lane has no config key** — `/orc-ultra` forces its overrides
+  run-scoped (deep analyze, `pattern_findings` on, `generate_tests` on,
+  `security_review` on, executor tier floor) and NEVER writes them to
+  `orc.config.yaml`. See the orc skill's `references/ultra-mode.md`.
 - `security_review` gates the opt-in Phase 5.5 security pass (default `off`).
   The trigger is the EXISTING risk floor: it can only fire on a run where at
   least one task scored ≥ 70 (security/money/migrations/auth). `ask` → one

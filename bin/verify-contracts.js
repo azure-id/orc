@@ -26,6 +26,7 @@ const CONTRACTS = [
     name: "actual_model / actual_effort return (claimed-vs-actual model check)",
     token: "actual_model",
     files: [
+      "agents/orc-advisor-opus-4-8-max.md",
       "agents/orc-analyze-mini-sonnet-5-high.md",
       "agents/orc-context-combiner-opus-4-8-high.md",
       "agents/orc-executor-opus-4-7-high.md",
@@ -34,6 +35,7 @@ const CONTRACTS = [
       "agents/orc-executor-sonnet-4-6-high.md",
       "agents/orc-executor-sonnet-4-6-med.md",
       "agents/orc-executor-sonnet-5-high.md",
+      "agents/orc-judge-opus-4-8-max.md",
       "agents/orc-pattern-codifier-sonnet-5-high.md",
       "agents/orc-planner-mini-sonnet-5-high.md",
       "agents/orc-planner-opus-4-8-med.md",
@@ -54,7 +56,9 @@ const CONTRACTS = [
       "skills/orc/subskills/orc-review-verify/SKILL.md",
       "skills/orc/subskills/orc-review-verify/core.md",
       "skills/orc/subskills/orc-testgen/core.md",
+      "skills/orc-advisor/SKILL.md",
       "skills/orc-analyze-mini/SKILL.md",
+      "skills/orc-judge/SKILL.md",
       "skills/orc-mini/SKILL.md",
       "skills/orc-mini/examples/mini-run-mock.md",
       "skills/orc-retro/SKILL.md",
@@ -262,6 +266,37 @@ const CONTRACTS = [
       "skills/orc-retro/SKILL.md",
       "skills/orc/SKILL.md",
       "skills/orc/references/trace-protocol.md",
+      "skills/orc/references/ultra-mode.md",
+    ],
+  },
+  {
+    name: "ultra lane trigger (v0.10.0 — /orc-ultra forces ultra_mode run-scoped)",
+    token: "ultra_mode",
+    files: [
+      "commands/orc-ultra.md",
+      "skills/orc/SKILL.md",
+      "skills/orc/references/trace-protocol.md",
+      "skills/orc/references/ultra-mode.md",
+      "skills/orc/schemas/checkpoint.md",
+    ],
+  },
+  {
+    name: "ultra advisor brief handoff (v0.10.0 — brief_path return -> slice injection)",
+    token: "brief_path",
+    files: [
+      "agents/orc-advisor-opus-4-8-max.md",
+      "skills/orc-advisor/SKILL.md",
+      "skills/orc/references/ultra-mode.md",
+      "skills/orc/schemas/checkpoint.md",
+    ],
+  },
+  {
+    name: "ultra verdict discipline (v0.10.0 — blocking needs anchor + failure_consequence)",
+    token: "failure_consequence",
+    files: [
+      "agents/orc-judge-opus-4-8-max.md",
+      "skills/orc-judge/SKILL.md",
+      "skills/orc/references/ultra-mode.md",
     ],
   },
   {

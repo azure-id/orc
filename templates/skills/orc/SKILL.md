@@ -207,6 +207,32 @@ the project; security/correctness invariants are always enforced.** See the
   (validated like `actual_model`); (3) the Reviewer re-checks the invariants against
   the diff. With `logging: true`, record the applied `pattern_version`.
 
+## Ultra lane (`/orc-ultra` — load references/ultra-mode.md)
+
+`/orc-ultra` sets `ultra_mode: true` for the run: the FULL pipeline plus an
+Opus 4.8 **max** Advisor and three judgment gates, for complex/ultra-complex
+requests. Not a separate spine — this skill, with deltas from
+`references/ultra-mode.md` (load it at Phase 0 when ultra_mode). Never active
+on plain `/orc` or orc-mini. In brief:
+
+- **Forced overrides (run-scoped, never persisted):** deep analyze (depth gate
+  bypassed), `pattern_findings` on, `generate_tests` on, `security_review` on,
+  and an executor tier floor (nothing below Sonnet 5 high; top bands →
+  Opus 4.8 high).
+- **Phase U0 (after intake sign-off):** dispatch `orc-advisor-opus-4-8-max`
+  (sibling skill `orc-advisor`) → advisory brief + rubric + ONE batched
+  clarification round with the user + the run's assumption ledger. Brief is
+  injected verbatim into analyst/planner/judge/executor slices.
+- **Three judge gates** (sibling skill `orc-judge`, agent
+  `orc-judge-opus-4-8-max`): gate 1 after the analyst-return gates; gate 2
+  after the Phase 1 exit gate (+ your deterministic blast-radius map); gate 3
+  after Phase 6/6.5 (+ your traceability matrix + the project's own static
+  analysis) — implementation fidelity + ultra-strict quality. Deterministic
+  checks always run BEFORE a judge. Verdicts: APPROVE | REVISE (author loops,
+  cap 2, convergence rule) | ESCALATE (menu). Judge gates add to user
+  sign-offs, never replace them. Emit `ADVISE`/`JUDGE`/`GATE judgment` trace
+  lines when logging.
+
 ## Sibling skills (separate top-level skills, own slash commands)
 
 - `orc-mini` — fast path: one Sonnet 5 high subagent, skips
@@ -218,6 +244,8 @@ the project; security/correctness invariants are always enforced.** See the
   calibration report: per-band outcomes, downgrades, pipeline leaks.
   Read-only/report-only; it never edits the rubric — a human applies its
   recommendations. The `OUTCOME` trace marker is its raw material.
+- `orc-advisor` / `orc-judge` — ultra-lane roles (no slash commands of their
+  own; dispatched only when `ultra_mode` is true — see the Ultra lane section).
 
 ## Constellation map (load on demand only)
 
@@ -236,6 +264,9 @@ the project; security/correctness invariants are always enforced.** See the
 - Phase 5.5 (opt-in, `security_review`) → `references/security-checklist.md`
 - Phase 6.5 (opt-in) → `subskills/orc-testgen/` (spawned; only when `generate_tests`)
 - Phase 8 → `subskills/orc-pr/SKILL.md` (template: `subskills/orc-pr/pr.md`)
+- `ultra_mode: true` (`/orc-ultra`) → `references/ultra-mode.md` (Phase U0
+  advisor, judge gates, forced overrides, tier floor; else skip) +
+  `../orc-advisor/SKILL.md` / `../orc-judge/SKILL.md` at their dispatch points
 - Schemas (you own; pass slices only): `schemas/intent-spec.md`,
   `schemas/planning-output.md`, `schemas/checkpoint.md`
 - `logging: true` → `references/trace-protocol.md` (behavior trace; else skip)
