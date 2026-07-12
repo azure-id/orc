@@ -25,6 +25,8 @@ where does the pipeline leak?**
 Run as Opus 4.8 high (orchestrator). The mining itself is dispatched to
 `orc-retro-sonnet-5-high` — cheap, because it reads trace text, not code.
 
+**Worked example** (orient only — never execute from it): `examples/retro-mock.md`.
+
 ## Hard rules
 
 0. **P0 preflight — a delivery channel or no retro at all.** The report exists

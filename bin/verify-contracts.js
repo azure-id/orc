@@ -66,6 +66,7 @@ const CONTRACTS = [
       "skills/orc-mini/SKILL.md",
       "skills/orc-mini/examples/mini-run-mock.md",
       "skills/orc-retro/SKILL.md",
+      "skills/orc-retro/examples/retro-mock.md",
       "skills/orc-wiki/SKILL.md",
     ],
   },
@@ -202,6 +203,7 @@ const CONTRACTS = [
       "commands/orc-retro.md",
       "skills/orc/config.md",
       "skills/orc-retro/SKILL.md",
+      "skills/orc-retro/examples/retro-mock.md",
     ],
   },
   {
