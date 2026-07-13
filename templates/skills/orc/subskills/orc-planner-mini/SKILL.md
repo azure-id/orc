@@ -29,7 +29,9 @@ is AUTHORITATIVE for the full procedure; the summary below orients.
    outcome AND (b) an identifiable repo area it lands in — failing either, do
    NOT plan; recommend `orc-analyze-mini` (requirement mode) instead.
 2. **Ground** `declared_files[]` in real paths: standalone → read the repo (+ a
-   non-empty `wiki/`); from-SA → trust the spec's file map, no repo re-read —
+   non-empty `wiki/` — select via `wiki/INDEX.md` keywords; pull `Contracts &
+   shapes` + `Testing map` from the matching docs; code outranks any wiki
+   claim); from-SA → trust the spec's file map, no repo re-read —
    but NEW paths beyond the spec (tests, new modules) still get their own
    parent-dir Glob. Fill each task's `grounding[]` attestation (`{path,
    disposition: exists|new, evidence}`) — never mark `exists` on a path you

@@ -86,9 +86,17 @@ pinned in the agent file):
 
 - the task (intent spec) + acceptance bullets as definition-of-done
 - **wiki pointers, not content:** the PATHS of 1–3 relevant wiki pages,
-  selected from `wiki/INDEX.md` by title/description match — instruct the
-  executor to READ them first. You never paste wiki bodies into the slice
-  (a Sonnet-medium orchestrator curating wiki prose defeats the lane).
+  selected from `wiki/INDEX.md` by title/description/keyword match (v2 INDEX
+  lines carry doc type, status, and keywords — keywords are the strongest
+  signal). When the request's domain matches, prefer the cross-cutting maps as
+  one of the pointers: `orc-reference-api-surface` for API work, data-model
+  for schema work, glossary for jargon-heavy requests, config-env for
+  config/env work. Instruct the executor to READ them first — TL;DR for
+  orientation, `Contracts & shapes` for the file-anchored specifics — and
+  include the precedence line verbatim: `code > fresh wiki > stale wiki
+  (hints) > model priors` (on any wiki-vs-code conflict, the code wins). You
+  never paste wiki bodies into the slice (a Sonnet-medium orchestrator
+  curating wiki prose defeats the lane).
 - the cached pattern injected LITERALLY (same `pattern` slice contract as the
   full lane; the pattern file is small by design)
 - **`db:postgres` bonus:** if the task touches the data-access layer

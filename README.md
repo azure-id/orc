@@ -6,7 +6,7 @@
 
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
-![Version](https://img.shields.io/badge/version-0.14.0-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.15.0-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D16-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
@@ -37,28 +37,32 @@ zero-dependency npm package installs those files into your `.claude/` directory.
 
 ## Changelog
 
-### v0.14.0 — Postgres data-access playbook: cross-cutting query grounding _(2026-07-13)_
+### v0.15.0 — Wiki v2: evidence-anchored docs · per-file staleness registry · integrity gate _(2026-07-14)_
 
-New `be-postgres.md` code-pattern playbook that grounds the query layer (the
-`getDataUser` code) in **your repo's real data-access style** — statically, never
-a live DB. It's **cross-cutting**: on a Postgres project (driver/ORM in deps) any
-task that touches the data-access layer (repositories/dao/queries, `*.sql`, ORM
-entities/migrations) is tagged `db:postgres` and gets the reconciled Postgres
-pattern MERGED into its executor slice ON TOP of the framework pattern
-(Express/FastAPI/NestJS/…). Its query **invariants always hold** — bound
-parameters only (no SQL string-interpolation), pooled connections, transactional
-multi-writes, no inline DDL, no leaked driver errors — while **conventions defer
-to the codebase** (which client/ORM, where queries live, column-selection style).
-It rides the existing `pattern` / `invariants_checked` anti-skip path (executor
-injection + return attestation + Reviewer re-check), so there is **no new
-contract token** — a pure data-driven `INDEX.md` extension. All three lanes
-co-inject it on a cached data-access task — full (codify + merge), `orc-mini`
-(inject-if-cached), and `orc-fast` (**bonus-only, never a gate prerequisite**, so
-it can't cause a fast→mini fallback).
+The knowledge base graduates to a real second source of truth. **Doc schema v2**
+(`wiki_schema: 2`): every claim in the contract sections must cite the file it
+comes from ("a claim you can't anchor is omitted, not guessed"), plus three new
+sections — a 60-second **TL;DR** brief, **Contracts & shapes** (routes, tables,
+events, env keys — one anchor per row), and a **Testing map**. The manifest
+gains a per-doc **`docs` registry** (covers + per-file `covered_files` hashes),
+so every staleness question is answerable from one JSON read + two git commands;
+incremental refresh now also runs a **coverage-gap sweep** (changed files no doc
+covers → propose new areas) and a **dead-doc sweep** (covers match nothing →
+archive/delete). Four standard cross-cutting reference docs join Phase 1
+planning: `orc-reference-api-surface`, `-data-model`, `-glossary`, `-config-env`.
+Every scan/refresh ends with a **scan-end integrity self-check** (docs ↔
+INDEX ↔ registry ↔ CLAUDE.md block must agree; `WIKI-CHECK` trace lines).
+`wiki/INDEX.md` lines are now structured (type · status · description ·
+keywords) for retrieval-grade page selection, and the **precedence rule** is
+explicit everywhere the wiki is consumed: `code > fresh wiki > stale wiki
+(hints) > model priors`. All consumers (orc, orc-mini, orc-fast, both planners)
+updated to pull the new surfaces; v1 wikis keep working and upgrade lazily on
+refresh. Five new linted contracts (34 total).
 
 <details>
 <summary><b>Previous versions</b> (click to expand)</summary>
 
+### v0.14.0 — Postgres data-access playbook: cross-cutting query grounding _(2026-07-13)_
 ### v0.13.0 — `/orc-claude`: local CLAUDE.md builder — fenced sections, fingerprint refresh, zero questions _(2026-07-12)_
 
 ### v0.12.0 — Lossless context-combiner: conservation gate · overlap taxonomy · evidence freshness _(2026-07-12)_
@@ -386,20 +390,32 @@ never edits or commits.
 ### `/orc-wiki` — the project knowledge base
 
 Scans your codebase and writes a persistent knowledge base into `wiki/` — feature
-overviews, reference docs, an architecture map, a one-line-per-page `INDEX.md` —
-and points `CLAUDE.md` at it.
+overviews, cross-cutting reference maps (API surface, data model, glossary,
+config/env), an architecture map, a structured `INDEX.md` (type · status ·
+description · keywords per doc) — and points `CLAUDE.md` at it.
 Expensive and opt-in: it warns before scanning, pauses periodically, and spans
 multiple sessions. `orc` and `orc-mini` consult the wiki when it exists,
 sharpening their planning and scoring; when it's absent they behave exactly as
 before. `orc-fast` requires it.
 
+**Evidence-anchored by contract (v2).** Every doc opens with a 60-second TL;DR,
+and every claim in its contract sections (routes, tables, events, config keys,
+testing map) cites the file it comes from — a claim the scan agent can't anchor
+is omitted, not guessed. Every run ends with an integrity self-check (docs,
+`INDEX.md`, manifest registry, and the `CLAUDE.md` block must agree), and the
+precedence rule is explicit: **code > fresh wiki > stale wiki (hints) > model
+priors** — on any conflict, the code wins.
+
 **Freshness is computed, never stored.** Every scan ends by writing a
 `wiki-meta.json` manifest (timestamp, the commit scanned, the project's
-build/test commands). Consumers measure commit distance against it on read —
+build/test commands, and a per-doc registry with per-file content hashes).
+Consumers measure commit distance against it on read —
 FRESH / AGING / STALE — so the status is always current with zero writes; the
 statusline shows it live (`wiki: STALE (41c)`). Refreshing is cheap: the
 **incremental** mode diffs since the last scan and re-scans only the affected
-docs. After a BIG `/orc` or `/orc-ultra` run, ORC asks right at ship whether to
+docs, sweeping for coverage gaps (changed files no doc covers → proposes new
+areas) and dead docs (covered files gone → archive/delete) as it goes. After a
+BIG `/orc` or `/orc-ultra` run, ORC asks right at ship whether to
 refresh now (recommended) — declining prints a refresh-ASAP note.
 
 ---

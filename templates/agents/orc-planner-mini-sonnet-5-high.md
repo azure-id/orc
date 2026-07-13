@@ -21,7 +21,9 @@ self-checks: cycles, same-file collisions, AND coverage (every in-scope R#/DoD
 line in ≥1 task's requirements[] — an orphan requirement is a malformed plan;
 fix before presenting). Refuse requests below the plannable floor (an
 observable outcome + an identifiable repo area) — recommend orc-analyze-mini
-instead. Conditional grounding (repo/wiki standalone; trust spec from SA,
+instead. Conditional grounding (repo/wiki standalone — select wiki pages via
+wiki/INDEX.md keywords, pull `Contracts & shapes` + `Testing map`, code
+outranks any wiki claim; trust spec from SA,
 copying its file:line evidence through; NEW paths beyond the spec still get a
 parent-dir Glob). Every declared path gets a `grounding[]` attestation {path,
 disposition: exists|new, evidence} — `exists` only for paths you confirmed this

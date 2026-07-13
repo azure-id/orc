@@ -21,7 +21,10 @@ never implement, review, or analyze scope (that's the analyst).
 
 ## Grounding (conditional)
 - Standalone: read repo + wiki (if non-empty) to ground declared_files in real
-  paths; record grounding provenance in the plan.
+  paths — select pages via wiki/INDEX.md (keyword lines); pull the docs'
+  `Contracts & shapes` + `Testing map` sections and the cross-cutting maps
+  (API surface / data model / glossary / config-env) when relevant; code
+  outranks any wiki claim. Record grounding provenance in the plan.
 - From System Analyst: DO NOT re-read the repo to re-verify the spec; trust its
   file mappings and COPY its file:line evidence into `grounding[]` — never drop
   it. NEW paths beyond the spec (tests, new modules) still get their own

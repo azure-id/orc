@@ -236,9 +236,15 @@ the freshness tier from `.claude/orc/wiki-meta.json` (commit distance from
 `scan_commit` → FRESH / AGING / STALE; rules in
 `../orc-wiki/references/staleness.md`): FRESH → silent, AGING → one-line
 notice, STALE → prominent warning but continue (mini self-grounds). Then
-consult the relevant overviews (select via `wiki/INDEX.md` when present) during
-planning/complexity-read for better core/isolated/risk
-judgment; if empty or absent, ignore it. Mini never generates the wiki. After a
+consult the relevant overviews (select via `wiki/INDEX.md` when present —
+its lines carry doc type, status, and keywords; match on keywords) during
+planning/complexity-read for better core/isolated/risk judgment. On v2 wikis
+pull each doc's `TL;DR` + `Contracts & shapes` (file-anchored specifics) and,
+when the task's domain matches, the cross-cutting maps
+(`orc-reference-api-surface` / data-model / glossary / config-env).
+Precedence: `code > fresh wiki > stale wiki (hints) > model priors` — on any
+wiki-vs-code conflict the code wins. If empty or absent, ignore it. Mini
+never generates the wiki. After a
 mini run that changed code, apply the same guarded stale-flag hook (flag only,
 never auto-scan — mini keeps the passive note; the post-ship refresh ASK is a
 full-lane/ultra behavior only).

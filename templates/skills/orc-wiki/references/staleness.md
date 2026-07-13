@@ -3,7 +3,15 @@
 THE canonical freshness reference for the whole constellation. Every skill that
 consults the wiki (orc, /orc-ultra, orc-mini, orc-fast, planners) follows the
 rules here; this file is the single source of truth for the manifest format,
-the tier thresholds, and the refresh modes.
+the tier thresholds, the refresh modes, and the precedence rule.
+
+## Precedence (source-of-truth contract)
+
+**code > fresh wiki > stale wiki (hints) > model priors.** The wiki is a
+DERIVED source of truth: on any conflict between a wiki claim and the actual
+code, the code wins and the doc gets stale-flagged. Never let a confident wiki
+claim override what a file actually shows; never let a model prior override a
+fresh, evidence-anchored wiki claim without reading the code.
 
 ## The manifest — `.claude/orc/wiki-meta.json`
 
@@ -23,7 +31,17 @@ pattern cache, so `orc update` never clobbers it.
     "build": "npm run build",
     "test_fast": "npm test",
     "lint": "npm run lint"
-  }
+  },
+  "docs": [
+    {
+      "file": "wiki/orc-feature-orders.md",
+      "area": "orders",
+      "doc_type": "feature",
+      "covers": ["src/orders/**"],
+      "covered_files": { "src/orders/service.ts": "a1b2c3d" },
+      "scanned_commit": "<git hash>"
+    }
+  ]
 }
 ```
 
@@ -33,6 +51,11 @@ pattern cache, so `orc update` never clobbers it.
   the scan. Consumers (especially orc-fast's smoke gate) run these directly
   instead of rediscovering the project's tooling every run. Omit keys the
   project doesn't have; never guess.
+- `docs` (v2 registry): one entry per wiki doc mirroring its header's
+  `covers` + `covered_files` (`wiki_schema: 2` docs). Purpose: ALL staleness
+  questions become answerable from ONE small JSON read + two git commands —
+  no doc opens. A manifest without `docs` is v1: consumers fall back to
+  doc-header reads; the next refresh writes the registry.
 
 ## Computing freshness (on read — never stored)
 
@@ -50,9 +73,10 @@ drift    = git diff --name-only <scan_commit>..HEAD    (pass 2, only when needed
 | STALE | distance > `wiki_aging_max`, OR pass-2 drift intersects the `covers` globs of the docs being consulted |
 
 Pass 2 runs only when pass 1 lands AGING or worse: intersect `drift` with the
-relevant docs' `covers`. Drift touching covered files upgrades severity; drift
-entirely elsewhere may be read as "old but still accurate for this area".
-Thresholds come from config (`wiki_fresh_max`, `wiki_aging_max`).
+relevant docs' `covers` (from the manifest's `docs` registry when present —
+no doc opens; else from doc headers). Drift touching covered files upgrades
+severity; drift entirely elsewhere may be read as "old but still accurate for
+this area". Thresholds come from config (`wiki_fresh_max`, `wiki_aging_max`).
 
 If `wiki-meta.json` is ABSENT but `wiki/` has docs (a pre-manifest wiki),
 treat as STALE with the notice: "wiki predates the freshness manifest — run
@@ -68,20 +92,22 @@ treat as STALE with the notice: "wiki predates the freshness manifest — run
 
 ## Per-doc staleness (advisory second signal)
 
-Each doc records `scanned_commit` and `covered_hash` (a hash of the covered
-files' contents at scan time). A doc is stale when the current state of its
-`covers` globs differs from `covered_hash`. Cheap to check, no re-scan needed.
-The doc-header `status: fresh|stale` flag is ADVISORY only — it is flipped by
-the auto-flag hook below, which fires only on ORC runs, so commits made outside
-ORC never flip it. The computed tier above is always the authoritative check.
+Each doc records `scanned_commit` and per-file `covered_files` hashes (v1 docs:
+a single `covered_hash`). A doc is stale when the current state of any file in
+`covered_files` differs from its recorded hash. Cheap to check via the manifest
+registry, no re-scan needed. The doc-header `status: fresh|stale` flag is
+ADVISORY only — it is flipped by the auto-flag hook below, which fires only on
+ORC runs, so commits made outside ORC never flip it. The computed tier above is
+always the authoritative check.
 
 ## Refresh modes
 
 1. **Incremental (recommended default when a manifest exists)** —
-   `git diff --name-only <scan_commit>..HEAD`, match changed files against each
-   doc's `covers` globs, re-scan ONLY the affected docs, then rewrite
-   `wiki-meta.json` with the new `scan_commit` + timestamp. A delta pass, not a
-   full re-scan — this is what makes "refresh first" cheap enough to recommend.
+   `git diff --name-only <scan_commit>..HEAD`, match changed files against the
+   registry's `covers`/`covered_files`, re-scan ONLY the affected docs, then
+   rewrite `wiki-meta.json` with the new `scan_commit` + timestamp. A delta
+   pass, not a full re-scan — this is what makes "refresh first" cheap enough
+   to recommend. The delta pass also runs the two sweeps below.
 2. **Full regenerate** — re-scan every area. Full cost warning. Timestamps all
    docs fresh.
 3. **Selective refresh** — list stale-flagged docs; user picks which to
@@ -89,6 +115,16 @@ ORC never flip it. The computed tier above is always the authoritative check.
 4. **Pre-push diff-scan** — `git diff --name-only` against the push target;
    find docs whose `covers` intersect the changed files; offer to refresh those
    before commit.
+
+**Coverage-gap sweep (incremental refresh + integrity check):** changed files
+matched by NO doc's `covers` = uncovered drift — the silent way a wiki becomes
+a partial map while still reading FRESH. Report them grouped by directory and
+propose new areas/docs; the user consents per new area (rides the refresh
+consent, no separate warning). Never silently ignore uncovered drift.
+
+**Dead-doc sweep:** registry entries whose `covers` match ZERO existing files
+(area deleted/moved) → offer per doc: archive to `wiki/archive/` (kept out of
+INDEX.md) or delete. Never silent, never automatic.
 
 ## Post-ship refresh ask (big runs — full orc + /orc-ultra ship phase)
 
@@ -131,6 +167,14 @@ Before consulting the wiki during planning/scoring: check `wiki/` exists and has
 > 0 files. If yes, compute the freshness tier (above) and react per the
 per-skill table, then read the relevant `orc-feature-*` / `orc-reference-*` /
 `orc-architecture-overview.md` for the area being planned — selecting pages via
-`wiki/INDEX.md` (one line per doc) instead of globbing and skimming headers.
-If empty/absent, ignore entirely and plan as normal. The wiki is purely
-additive.
+`wiki/INDEX.md` (one line per doc: type, status, description, keywords)
+instead of globbing and skimming headers. Pull the cross-cutting reference
+maps when they exist and the task touches their domain:
+`orc-reference-api-surface` (route/endpoint inventory — the best planning
+input for API work), `orc-reference-data-model` (tables/entities + owners),
+`orc-reference-glossary` (domain terms — read it whenever the request uses
+project jargon), `orc-reference-config-env` (env/config keys). In each doc the
+`TL;DR` section is the cheap read; `Contracts & shapes` and `Testing map`
+carry the file-anchored specifics. Apply the precedence rule above. If
+`wiki/` is empty/absent, ignore entirely and plan as normal. The wiki is
+purely additive.

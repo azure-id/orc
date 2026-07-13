@@ -46,10 +46,21 @@ gate mandatory.
    invoke `/usage` programmatically.
 8. **Every scan/refresh ends by writing the freshness manifest + index.**
    Rewrite `.claude/orc/wiki-meta.json` (last_scan, scan_commit, branch, pages,
-   discovered build/test `commands` — see references/staleness.md for the
-   schema) and `wiki/INDEX.md` (one line per doc: `- <file> — <one-line
-   description>`). ONLY orc-wiki ever writes these two files — consumers
-   compute freshness on read, never store it.
+   discovered build/test `commands`, and the per-doc `docs` registry with each
+   doc's `covers` + `covered_files` hashes — see references/staleness.md for
+   the schema) and `wiki/INDEX.md` (one structured line per doc:
+   `- <file> · <doc_type> · <status> — <one-line description> · kw: <k1, k2, k3>`).
+   ONLY orc-wiki ever writes these two files — consumers compute freshness on
+   read, never store it.
+9. **Every scan/refresh passes the integrity self-check before it is done**
+   (references/integrity-check.md): docs ↔ INDEX ↔ manifest registry ↔
+   CLAUDE.md block must agree, `covers` must resolve, evidence anchors
+   spot-verified. Emit `WIKI-CHECK` trace lines when logging is on.
+10. **Docs are evidence-anchored (schema v2 — schemas/wiki-doc.md).** Contract
+   sections cite the files they come from; a claim the scan agent can't anchor
+   is omitted, not guessed. This is what makes the wiki a legitimate second
+   source of truth (precedence: `code > fresh wiki > stale wiki (hints) >
+   model priors` — staleness.md).
 
 ## Behavior trace (logging — same rule as orc/orc-mini; wiki runs trace too)
 
@@ -108,12 +119,27 @@ each = one area/topic to document, with the files it covers. Show the plan
 - `wiki/orc-reference-{topic}.md` — cross-cutting reference/convention
 - `wiki/orc-architecture-overview.md` — the top-level map tying them together
 
+**Standard cross-cutting reference docs** — plan these four as scan-tasks
+whenever the project has the surface (they count toward the 5-task pause
+cadence; SKIP any that don't apply — never fabricate one):
+- `wiki/orc-reference-api-surface.md` — full route/endpoint inventory: method,
+  path, handler file, owning area (the single best planning input for API work)
+- `wiki/orc-reference-data-model.md` — cross-area DB/entity map: every
+  table/model, owning area, key relations
+- `wiki/orc-reference-glossary.md` — domain terms → meaning → where defined in
+  code (kills the #1 cause of AI misreads: project jargon)
+- `wiki/orc-reference-config-env.md` — every env var/config key: where read,
+  default, effect
+
 ## Phase 2 — Scan (spawned agents, 5-task pauses)
 
 Write checkpoint + state-of-play into the run subfolder BEFORE dispatching.
 Per scan-task: spawn an Opus 4.8 high agent with the area's file list + the
-doc-writing contract (schemas/wiki-doc.md). The agent reads the code and
-returns a structured overview; YOU write it to `wiki/` with staleness metadata.
+doc-writing contract (schemas/wiki-doc.md — v2: evidence anchors mandatory in
+contract sections, `keywords[]` + per-file `covered_files` hashes in the
+return). The agent reads the code and returns a structured overview; YOU write
+it to `wiki/` with staleness metadata. A return missing keywords/covered_files
+or with unanchored contract sections is malformed (requeue).
 
 Every 5 completed scan-tasks → STOP SEQUENCE (reuse the main skill's
 `../orc/references/stop-and-resume.md`): checkpoint → state-of-play → dispatch report →
@@ -124,14 +150,21 @@ expected and normal.
 
 1. After all areas are scanned (or the user stops), write/update
    `wiki/orc-architecture-overview.md` linking the feature + reference docs.
-2. Write/update `wiki/INDEX.md` — one line per doc (`- <file> — <one-line
-   description>`), so consumers select pages by reading ONE small file.
-3. Rewrite `.claude/orc/wiki-meta.json` (hard rule 8): fresh `last_scan` +
-   `scan_commit` = current HEAD, page count, and the project's discovered
-   build/test `commands` (schema in references/staleness.md).
-4. Inject/update the managed pointer block in `CLAUDE.md`
+2. Write/update `wiki/INDEX.md` — one structured line per doc
+   (`- <file> · <doc_type> · <status> — <one-line description> · kw: <k1, k2, k3>`,
+   keywords from the doc header), so consumers select pages by reading ONE
+   small file and matching on type + keywords, not just titles.
+3. **Run the integrity self-check** (hard rule 9 — references/
+   integrity-check.md): index-sync, registry-sync, covers-resolve, coverage
+   report, counts-match, anchor spot-check. Fix failures before proceeding;
+   emit `WIKI-CHECK` trace lines when logging.
+4. Rewrite `.claude/orc/wiki-meta.json` (hard rule 8): fresh `last_scan` +
+   `scan_commit` = current HEAD, page count, the project's discovered
+   build/test `commands`, and the per-doc `docs` registry (schema in
+   references/staleness.md).
+5. Inject/update the managed pointer block in `CLAUDE.md`
    (see references/claude-md-injection.md). Pointer only — no summaries.
-5. Final dispatch report + "/usage" reminder. Keep the checkpoint for audit.
+6. Final dispatch report + "/usage" reminder. Keep the checkpoint for audit.
 
 ## Code-pattern pre-warm (opt-in — only when config `orc_wiki_pattern_findings: on`)
 
@@ -155,9 +188,15 @@ and un-drifted. This reuses the `orc-pattern` engine — you never codify yourse
   manifest; nobody persists a status.
 - Each doc also records the git hash of the files it covers at scan time
   (advisory per-doc signal). Stale = recorded hash ≠ current state.
-- **Incremental refresh** (recommended): diff since `scan_commit`, re-scan only
-  the docs whose `covers` the drift touches, rewrite the manifest.
+- **Incremental refresh** (recommended): diff since `scan_commit`, match the
+  drift against the manifest's `docs` registry, re-scan only the affected
+  docs, rewrite the manifest. Includes the **coverage-gap sweep** (changed
+  files no doc covers → propose new areas) and the **dead-doc sweep** (registry
+  entries whose `covers` match nothing → archive/delete, user decides) — see
+  staleness.md.
 - Selective refresh: re-scan only stale-flagged docs the user picks.
+- Refresh touching a v1 doc (no `wiki_schema: 2` header) upgrades it to
+  schema v2 in place — lazy migration, never a forced full re-scan.
 - Pre-push: scan the git diff, refresh docs for changed areas before commit.
 - Auto-flag hook: after an orc/orc-mini run, flag (do NOT auto-scan) the wiki
   docs whose covered files changed — ONLY if `wiki/` exists and is non-empty.

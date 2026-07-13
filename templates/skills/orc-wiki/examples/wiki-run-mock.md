@@ -12,13 +12,17 @@ W: Building the knowledge base scans the whole codebase with Opus 4.8 high. That
 U: yes
 
 ## Scan + write (checkpointed; resumable)
-W: [maps the repo: 4 feature areas, 2 shared libs, 1 service boundary]
+W: [maps the repo: 4 feature areas, 2 shared libs, 1 service boundary, plus the
+    standard cross-cutting reference docs (API surface, data model, glossary,
+    config/env — skipped when the project lacks the surface)]
    Writes into wiki/:
      wiki/orc-feature-orders.md         (orders domain: flows, entry points, risks)
      wiki/orc-feature-billing.md
      wiki/orc-reference-http-clients.md (shared HTTP client conventions)
      wiki/orc-architecture-overview.md  (service map + "Notes for planning")
-   Each doc carries status: fresh.
+   Each doc: schema v2 — TL;DR brief, file-anchored claims, keywords, per-file
+   hashes, status: fresh. Run ends with the integrity self-check (docs ↔ INDEX ↔
+   manifest agree) before the manifest + INDEX.md are rewritten.
 W: [batch boundary] Paused after 2 feature docs — checkpoint written. Continue?
 U: continue   → [finishes remaining docs]
 

@@ -12,10 +12,12 @@ content between the markers — never touch anything outside them.
 <!-- ORC-WIKI:START (managed by orc-wiki — do not edit by hand) -->
 This project has an orc-wiki knowledge base in `/wiki`.
 Before planning or reasoning about a feature/area, consult the relevant
-overview: start from `wiki/INDEX.md` (one line per doc), then read the matching
+overview: start from `wiki/INDEX.md` (one line per doc: type, status,
+description, keywords), then read the matching
 `wiki/orc-feature-*-overview.md`, `wiki/orc-reference-*.md`, and
-`wiki/orc-architecture-overview.md`. Docs carry a `status: fresh|stale` header —
-prefer fresh docs; treat stale ones as hints, verify against code.
+`wiki/orc-architecture-overview.md`. Each doc opens with a TL;DR brief;
+claims are anchored to real files. Precedence: code > fresh wiki >
+stale wiki (hints) > model priors — on conflict, the code wins.
 Last updated: DDMMYY HH:MM:SS · N docs.
 <!-- ORC-WIKI:END -->
 ```

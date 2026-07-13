@@ -331,9 +331,18 @@ STALE-with-notice): FRESH → silent; AGING → one-line notice; STALE → promi
 warning but continue (this lane self-grounds). Then read the relevant
 `wiki/orc-feature-*`, `wiki/orc-reference-*`, and
 `wiki/orc-architecture-overview.md` for the areas in play — select pages via
-`wiki/INDEX.md` when it exists — they give you
-accurate core-vs-isolated, dependency, and risk context. Prefer `status: fresh`
-docs; treat `stale` ones as hints to verify against code. If `wiki/` is empty or
+`wiki/INDEX.md` when it exists (one line per doc: type, status, description,
+keywords — match the request against keywords, not just titles) — they give you
+accurate core-vs-isolated, dependency, and risk context. **What to pull (v2
+wikis):** each doc's `TL;DR` for cheap orientation, `Contracts & shapes` for
+file-anchored routes/tables/events/config, `Testing map` for where the area's
+tests live; plus the cross-cutting maps when the task touches their domain —
+`orc-reference-api-surface` (endpoint inventory) for API work,
+`orc-reference-data-model` for schema work, `orc-reference-glossary` whenever
+the request uses project jargon, `orc-reference-config-env` for config/env
+work. Precedence: `code > fresh wiki > stale wiki (hints) > model priors` —
+prefer `status: fresh` docs; treat `stale` ones as hints to verify against
+code; on any wiki-vs-code conflict the code wins. If `wiki/` is empty or
 absent, ignore it and plan as normal (the wiki is purely additive).
 
 Ask which planner: **Superpowers / OpenSpec / Requirement Planner

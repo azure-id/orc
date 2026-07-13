@@ -337,6 +337,7 @@ const CONTRACTS = [
       "skills/orc-fast/SKILL.md",
       "skills/orc-mini/SKILL.md",
       "skills/orc-wiki/SKILL.md",
+      "skills/orc-wiki/references/integrity-check.md",
       "skills/orc-wiki/references/staleness.md",
     ],
   },
@@ -424,6 +425,57 @@ const CONTRACTS = [
       "agents/orc-context-combiner-opus-4-8-high.md",
       "skills/context-combiner/SKILL.md",
       "skills/context-combiner/schemas/combined-report.md",
+    ],
+  },
+  {
+    name: "wiki per-file hash map (v0.15.0 — doc header + manifest docs registry)",
+    token: "covered_files",
+    files: [
+      "skills/orc-wiki/SKILL.md",
+      "skills/orc-wiki/schemas/wiki-doc.md",
+      "skills/orc-wiki/references/integrity-check.md",
+      "skills/orc-wiki/references/staleness.md",
+    ],
+  },
+  {
+    name: "wiki doc schema version marker (v0.15.0 — v1 docs upgrade lazily)",
+    token: "wiki_schema",
+    files: [
+      "skills/orc-wiki/SKILL.md",
+      "skills/orc-wiki/schemas/wiki-doc.md",
+      "skills/orc-wiki/references/integrity-check.md",
+      "skills/orc-wiki/references/staleness.md",
+    ],
+  },
+  {
+    name: "wiki scan-end integrity gate trace verb (v0.15.0)",
+    token: "WIKI-CHECK",
+    files: [
+      "skills/orc-wiki/SKILL.md",
+      "skills/orc-wiki/references/integrity-check.md",
+    ],
+  },
+  {
+    name: "wiki cross-cutting reference maps (v0.15.0 — consumers pull by name)",
+    token: "orc-reference-api-surface",
+    files: [
+      "skills/orc/SKILL.md",
+      "skills/orc-fast/SKILL.md",
+      "skills/orc-mini/SKILL.md",
+      "skills/orc-wiki/SKILL.md",
+      "skills/orc-wiki/references/staleness.md",
+    ],
+  },
+  {
+    name: "wiki precedence rule (v0.15.0 — code > fresh wiki > stale wiki > priors)",
+    token: "code > fresh wiki",
+    files: [
+      "skills/orc/SKILL.md",
+      "skills/orc-fast/SKILL.md",
+      "skills/orc-mini/SKILL.md",
+      "skills/orc-wiki/SKILL.md",
+      "skills/orc-wiki/references/claude-md-injection.md",
+      "skills/orc-wiki/references/staleness.md",
     ],
   },
 ];

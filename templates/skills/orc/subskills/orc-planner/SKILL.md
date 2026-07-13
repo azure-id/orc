@@ -36,8 +36,14 @@ do not redefine it here).
 
 - **Standalone** (not chained from SA): read the repo and, if present and
   non-empty, the `wiki/` overviews, to ground `declared_files` in real paths and
-  detect what already exists. **Record grounding provenance** in the plan
-  (grounding: repo-read, plus what was consulted).
+  detect what already exists. Select pages via `wiki/INDEX.md` (lines carry doc
+  type, status, keywords); on v2 wikis pull each doc's `Contracts & shapes`
+  (file-anchored routes/tables/config) and `Testing map` (where the area's
+  tests live — feeds declared test files), plus the cross-cutting reference
+  maps (API surface / data model / glossary / config-env) when the plan
+  touches their domain. Wiki claims never outrank the code — on conflict,
+  ground in the file and treat the doc as stale. **Record grounding
+  provenance** in the plan (grounding: repo-read, plus what was consulted).
 - **From System Analyst:** DO NOT re-read the repo to re-verify the spec's
   claims. Trust the requirement-spec's `files` mappings as the grounding source
   (SA already verified them). COPY the spec's file:line evidence into each
