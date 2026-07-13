@@ -72,7 +72,10 @@ second one. When `logging: false`, do none of this.
 ## Phase 0 — Entry & auto-branch (on /orc-pattern)
 
 Detect the project's frontend/backend languages from deps + file extensions
-(`references/INDEX.md` has the detection map). Then branch **per language**:
+(`references/INDEX.md` has the detection map). `postgres` is a **cross-cutting**
+key: detected from a Postgres driver/ORM in deps, it co-applies with the
+framework lang (its own `postgres-pattern.md` cache) rather than replacing it —
+codify it like any other detected key. Then branch **per language**:
 - **Cache miss** (no `patterns/<lang>-pattern.md`) → codify (Phase 1).
 - **Cache hit, no drift** → report "already learned (pattern_version …)"; skip
   unless `--refresh`.

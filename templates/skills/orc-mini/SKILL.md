@@ -62,13 +62,23 @@ Phase 1  planning (dispatch orc-planner-mini; analyst first only on real docs)
          → one-line complexity read (mini-ok? or recommend switch-to-full)
 Phase 3  dispatch ONE executor (orc-executor-sonnet-5-high) — slice carries the
          standing `house_rules` card (`../orc/references/house-rules.md`, card
-         lines injected literally, same as full) — collect + validate return
+         lines injected literally, same as full) + the cached `postgres` pattern
+         when the task touches the data-access layer (cache HIT only) — collect
+         + validate return
 Phase M  SMOKE GATE — run build+test → GREEN proceed · RED block ship + surface
 Phase T  TEST-AUTHORING ASK (opt-in) — offer to write test cases (never run them)
 Phase 8  ship (commit / push / PR)
 ```
 (No Phase 2 scoring table, no dispatch-style/batch-pause asks, no full
 review/verify/summary.)
+
+**Postgres query grounding.** On a Postgres project (driver/ORM in deps), if the
+task touches the data-access layer (repositories/dao/queries, `*.sql`, ORM
+entities/migrations) AND `.claude/orc/patterns/postgres-pattern.md` is cached,
+inject it LITERALLY into the slice — conventions to MATCH + the blocking query
+invariants (bound params only, pooled connections, transactional multi-writes, no
+inline DDL). Cache MISS → skip (mini never codifies — that's the full lane /
+`/orc-pattern`); the universal invariants + neighbor imitation still cover it.
 
 ## Phase M — Smoke gate (build + test; blocks ship on red)
 

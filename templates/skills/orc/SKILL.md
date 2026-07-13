@@ -197,6 +197,11 @@ the project; security/correctness invariants are always enforced.** See the
 
 - **Cache:** `.claude/orc/patterns/<lang>-pattern.md` (project `.claude/`, one per
   language, reused across runs, refreshed only on drift or `/orc-pattern --refresh`).
+- **Cross-cutting `postgres` pattern:** a Postgres project also resolves
+  `postgres-pattern.md`; any task tagged `db:postgres` (touches the data-access
+  layer) gets it MERGED into its slice ON TOP of the framework pattern — query
+  invariants (bound params only, pooled connections, transactional multi-writes)
+  ride the same anti-skip path. See `../orc-pattern/references/INDEX.md`.
 - **Gate (config `pattern_findings`, default `ask`):** applied at Phase 3 on an
   FE/BE **cache miss**. `ask` → P0 prompt (learn via `orc-pattern`, or go
   agnostic); `on` → auto-codify; `off` → always agnostic. A cache **hit** is used
@@ -401,6 +406,12 @@ a cheap subagent (Sonnet 4.6 medium), never you doing it yourself.
 `declared_files` extensions + repo deps; see `../orc-pattern/references/INDEX.md`):
 `{domain: FE|BE|null, lang: react|nextjs|vue|fastapi|nestjs|go|…|null}`. This drives
 the Phase 3 pattern-resolve gate. Tasks with no FE/BE language need no pattern.
+Additionally, on a Postgres project (`pg`/`psycopg`/`asyncpg`/`pgx`/`lib/pq`/
+`Npgsql`/Prisma `postgresql`/`postgrex` in deps), add a SECONDARY `db: postgres`
+tag to any task whose `declared_files` touch the data-access layer
+(repositories/dao/models/queries, `*.sql`, ORM entities/migrations). `db`
+co-applies WITH the framework `lang`, never instead of it — it pulls the
+cross-cutting `postgres` playbook into the same pattern-resolve gate.
 
 Ask: "Any anticipated escalations or changes, or run straight through?"
 
@@ -409,8 +420,9 @@ Ask: "Any anticipated escalations or changes, or run straight through?"
 Build conflict graph from `declared_files` → group waves → write checkpoint +
 state-of-play BEFORE dispatching.
 
-**Pattern-resolve gate (once, before the first wave — FE/BE tasks only).** For the
-distinct languages tagged in Phase 2, resolve each against
+**Pattern-resolve gate (once, before the first wave — FE/BE tasks, plus any
+`db:postgres`-tagged task).** For the distinct languages tagged in Phase 2
+(including `postgres` when any task is `db`-tagged), resolve each against
 `.claude/orc/patterns/<lang>-pattern.md`:
 - **Cache hit, no drift** → use it silently (no ask, no cost).
 - **Cache miss** → apply config `pattern_findings`: `ask` → P0 prompt, batched ONCE
@@ -433,7 +445,12 @@ Per wave:
    FE/BE task, INJECT the resolved
    `pattern` (conventions to MATCH + blocking invariants + the enforceable
    `validation_gate[]` lines) LITERALLY into its slice
-   — never a file pointer; agnostic tasks get the universal invariants only. You
+   — never a file pointer; agnostic tasks get the universal invariants only. For a
+   `db:postgres`-tagged task, ALSO merge the resolved `postgres` pattern's
+   Conventions + Invariants + gate lines into the SAME `pattern` block (appended to
+   the framework pattern, or standalone if the task has no framework lang); the
+   executor's single `invariants_checked` attestation + `pattern_version` echo cover
+   the merged block — record the postgres `pattern_version` in run state/log. You
    never do the task yourself, regardless of size (hard rule 1). Sequential style =
    one spawn at a time; parallel style = the wave's spawns together.
 2. Workers emit milestone progress pings; record them (they bound what a

@@ -17,12 +17,21 @@ codifier token-cheap).
 | `nestjs`  | BE | `@nestjs/core` in package.json, `*.module.ts` | `be-nestjs.md` |
 | `express` | BE | `express` in package.json w/o `@nestjs/core` | `be-express.md` |
 | `go`      | BE | `go.mod` present, `.go` files | `be-go.md` |
+| `postgres` | BE (cross-cutting) | `pg`/`psycopg`/`asyncpg`/`pgx`/`lib/pq`/`Npgsql`/Prisma `postgresql`/`postgrex` in deps | `be-postgres.md` |
 
 Precedence: a Next.js project matches `nextjs`, not `react`, even though React is
 present (the more specific framework wins). Same rule for `nestjs` over
 `express` (Nest sits on Express) and `fastapi`/`django` over generic Python. A repo can match several keys
 (monorepo: `react` FE + `fastapi` BE) → codify each independently, one cache file
 each.
+
+**`postgres` is CROSS-CUTTING, not an exclusive framework match.** It co-applies
+with the task's framework `lang` (Express/FastAPI/NestJS/Django/Go/…), never
+instead of it: an Express+Postgres repo codifies BOTH `express-pattern.md` and
+`postgres-pattern.md`, and a task that touches the data-access layer
+(repositories/dao/queries, `*.sql`, ORM entities/migrations) receives BOTH
+patterns merged into its slice. It gets the `postgres` pattern alone only when a
+task is pure data-access with no framework lang (e.g. a bare `.sql` migration).
 
 ## Playbook anatomy (every file follows this — harvested from the source repo)
 

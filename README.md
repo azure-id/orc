@@ -6,7 +6,7 @@
 
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
-![Version](https://img.shields.io/badge/version-0.13.0-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.14.0-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D16-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
@@ -37,27 +37,29 @@ zero-dependency npm package installs those files into your `.claude/` directory.
 
 ## Changelog
 
-### v0.13.0 — `/orc-claude`: local CLAUDE.md builder — fenced sections, fingerprint refresh, zero questions _(2026-07-12)_
+### v0.14.0 — Postgres data-access playbook: cross-cutting query grounding _(2026-07-13)_
 
-New standalone skill + command that builds, updates, or refreshes the **local
-project's** `CLAUDE.md` from verified repo facts (commands that provably exist,
-layout, convention deviations, boundaries, environment) — even when ORC is
-installed globally. The skill only picks the mode and dispatches the new pinned
-**`orc-claude-writer-opus-4-8-high`** agent (20 agents now), so the scan +
-writing run at Opus 4.8 high whatever tier the calling chat is on. Generated content is stamped with an `orc-claude:meta`
-header (version starting 0.0.1, bumped by exactly 0.0.1 per content-changing
-run; DD-MM-YYYY date; persisted line budget, default 400) and every generated
-section sits in `orc-claude:section` fences, so **refresh regenerates only the
-sections whose input fingerprints changed** — small drift, small diff. Fully
-non-interactive: P0 / Gotchas / Glossary are placeholders the user fills
-themself. A foreign hand-written CLAUDE.md is backed up to `CLAUDE.md.bak` and
-merged **without trimming a single user line** (the budget covers generated
-content only — an oversized total just gets a trim-it-yourself note). The
-orc-wiki pointer block is byte-preserved. Three new contract-lint tokens
-(29 total).
+New `be-postgres.md` code-pattern playbook that grounds the query layer (the
+`getDataUser` code) in **your repo's real data-access style** — statically, never
+a live DB. It's **cross-cutting**: on a Postgres project (driver/ORM in deps) any
+task that touches the data-access layer (repositories/dao/queries, `*.sql`, ORM
+entities/migrations) is tagged `db:postgres` and gets the reconciled Postgres
+pattern MERGED into its executor slice ON TOP of the framework pattern
+(Express/FastAPI/NestJS/…). Its query **invariants always hold** — bound
+parameters only (no SQL string-interpolation), pooled connections, transactional
+multi-writes, no inline DDL, no leaked driver errors — while **conventions defer
+to the codebase** (which client/ORM, where queries live, column-selection style).
+It rides the existing `pattern` / `invariants_checked` anti-skip path (executor
+injection + return attestation + Reviewer re-check), so there is **no new
+contract token** — a pure data-driven `INDEX.md` extension. All three lanes
+co-inject it on a cached data-access task — full (codify + merge), `orc-mini`
+(inject-if-cached), and `orc-fast` (**bonus-only, never a gate prerequisite**, so
+it can't cause a fast→mini fallback).
 
 <details>
 <summary><b>Previous versions</b> (click to expand)</summary>
+
+### v0.13.0 — `/orc-claude`: local CLAUDE.md builder — fenced sections, fingerprint refresh, zero questions _(2026-07-12)_
 
 ### v0.12.0 — Lossless context-combiner: conservation gate · overlap taxonomy · evidence freshness _(2026-07-12)_
 ### v0.11.0 — `/orc-fast`: knowledge-gated speed lane + wiki freshness infrastructure _(2026-07-12)_

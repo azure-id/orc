@@ -55,7 +55,9 @@ absent but docs present = STALE; wiki absent/empty = gate FAILED → fallback).
 deps, same signals as the full lane's tagging) and require
 `.claude/orc/patterns/<lang>-pattern.md`. Missing for the language in play →
 gate FAILED → fallback. (A request touching no FE/BE language — pure docs/
-config — passes this gate as N/A.)
+config — passes this gate as N/A.) The cross-cutting `postgres` pattern is
+NEVER a gate prerequisite — it is bonus-only (injected at F2 on a cache HIT),
+so a missing `postgres-pattern.md` never fails the gate or forces a fallback.
 
 **Any gate FAILED** → announce which prerequisite failed in one line, then
 hand off to orc-mini via the fallback contract below. Never stop the chat.
@@ -89,6 +91,12 @@ pinned in the agent file):
   (a Sonnet-medium orchestrator curating wiki prose defeats the lane).
 - the cached pattern injected LITERALLY (same `pattern` slice contract as the
   full lane; the pattern file is small by design)
+- **`db:postgres` bonus:** if the task touches the data-access layer
+  (repositories/dao/queries, `*.sql`, ORM entities) AND
+  `.claude/orc/patterns/postgres-pattern.md` is CACHED, merge it into the same
+  `pattern` slice (bound-params-only + pooled-connection + transactional-multi-write
+  query invariants). Cache MISS → skip silently — fast never codifies and never
+  falls back on this; the framework pattern's parameterized-query invariant still holds.
 - the standing `house_rules` card (`../orc/references/house-rules.md`, card
   lines injected literally, same as full/mini)
 - constraints from the intent spec
