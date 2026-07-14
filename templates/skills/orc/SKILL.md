@@ -345,7 +345,11 @@ the request uses project jargon, `orc-reference-config-env` for config/env
 work. Precedence: `code > fresh wiki > stale wiki (hints) > model priors` —
 prefer `status: fresh` docs; treat `stale` ones as hints to verify against
 code; on any wiki-vs-code conflict the code wins. If `wiki/` is empty or
-absent, ignore it and plan as normal (the wiki is purely additive).
+absent, ignore it and plan as normal (the wiki is purely additive). **Emit
+`WIKI-CONSULT <tier> :: docs=<pages pulled, comma list>`** — one line recording
+the freshness tier (`fresh`/`aging`/`stale`, or `absent`/`empty` with
+`docs=none`) and which wiki pages grounded this plan, so a trace shows whether
+the run grounded in the wiki and whether it was stale.
 **Crosslink (cross-repo, advisory):** if `.claude/orc/crosslink/needs.json`
 exists and a task's declared files touch a matching boundary call site, inject
 the cached linked contract into that task's slice as `crosslink` (labeled with

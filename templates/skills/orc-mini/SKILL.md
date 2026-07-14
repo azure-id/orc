@@ -244,7 +244,10 @@ pull each doc's `TL;DR` + `Contracts & shapes` (file-anchored specifics) and,
 when the task's domain matches, the cross-cutting maps
 (`orc-reference-api-surface` / data-model / glossary / config-env).
 Precedence: `code > fresh wiki > stale wiki (hints) > model priors` — on any
-wiki-vs-code conflict the code wins. If empty or absent, ignore it.
+wiki-vs-code conflict the code wins. If empty or absent, ignore it. **Emit
+`WIKI-CONSULT <tier> :: docs=<pages pulled>`** (tier `fresh`/`aging`/`stale`, or
+`absent`/`empty` with `docs=none`) so the trace records whether mini grounded in
+the wiki and whether it was stale.
 **Crosslink (cross-repo, advisory):** if `.claude/orc/crosslink/needs.json`
 exists and the task touches a matching boundary call site, inject the cached
 linked contract as `crosslink` (labeled with its effective cross-repo tier +

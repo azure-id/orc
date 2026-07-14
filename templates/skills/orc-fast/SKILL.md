@@ -96,7 +96,10 @@ pinned in the agent file):
   include the precedence line verbatim: `code > fresh wiki > stale wiki
   (hints) > model priors` (on any wiki-vs-code conflict, the code wins). You
   never paste wiki bodies into the slice (a Sonnet-medium orchestrator
-  curating wiki prose defeats the lane).
+  curating wiki prose defeats the lane). **Emit `WIKI-CONSULT <tier> :: docs=<the
+  selected pointer paths>`** (tier from the F0 gate; `docs=none` if no pages fit)
+  — the same grounding record as the full/mini lanes. The F0 `GATE` line captured
+  the freshness gate *decision*; this captures which pages actually grounded the run.
 - the cached pattern injected LITERALLY (same `pattern` slice contract as the
   full lane; the pattern file is small by design)
 - **crosslink (cross-repo, advisory):** if `.claude/orc/crosslink/needs.json`

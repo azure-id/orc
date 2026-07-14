@@ -37,21 +37,22 @@ zero-dependency npm package installs those files into your `.claude/` directory.
 
 ## Changelog
 
-### v0.17.2 — Behavior-trace logging is permanent + the trace folder is now created deterministically _(2026-07-14)_
+### v0.17.3 — Trace the wiki consult: Phase 1 now logs whether the run grounded in the wiki (and if it was stale) _(2026-07-14)_
 
-**Bugfix.** Behavior-trace logging used to be an opt-in config key, and even when
-turned on it produced **nothing** — no `.claude/orc/logs/` folder, no `.txt` —
-because the folder and run pointer were created only if the orchestrator model
-remembered to make them, which it often didn't (and never did after a
-compaction). Logging is now **permanent (always on)** with no config toggle, and
-the `orc-trace.js` hook is the **deterministic writer**: on the first ORC-agent
-dispatch it creates the folder + run pointer itself, so every run is guaranteed a
-trace. The `logging` config key is removed; only `log_dir` (where the trace
-lives) remains configurable.
+The behavior trace gains a **`WIKI-CONSULT`** verb. Every lane that grounds in
+the project wiki now writes one line — `WIKI-CONSULT <tier> :: docs=<pages
+pulled>` — recording the freshness tier (`fresh`/`aging`/`stale`, or
+`absent`/`empty`) and which wiki pages grounded the run: `/orc` and `/orc-ultra`
+(shared Phase 1 planning), `orc-mini` (planning), and `/orc-fast` (slice-build,
+in addition to its existing F0 freshness `GATE` line). Previously a wiki consult
+left no trace at all, so a log couldn't answer "did this run ground itself, and
+was the wiki stale?" — now it can. (Lanes that don't read the wiki — analyze,
+pattern, claude, verify — emit nothing, correctly.)
 
 <details>
 <summary><b>Previous versions</b> (click to expand)</summary>
 
+### v0.17.2 — Behavior-trace logging is permanent + the trace folder is now created deterministically _(2026-07-14)_
 ### v0.17.1 — Complete cross-repo crosslink setup guide in the orc-wiki README _(2026-07-14)_
 ### v0.17.0 — `orc crosslink`: cross-repo wiki references — advisory boundary contracts _(2026-07-14)_
 ### v0.16.1 — Interactive `orc diy` composer + numbered picks in `orc config` _(2026-07-14)_

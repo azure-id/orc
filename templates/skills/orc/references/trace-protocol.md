@@ -63,6 +63,7 @@ Actors: `orc` (orchestrator), `hook`, or a role/agent short name
 | Verb | Emitted by | Meaning |
 |------|-----------|---------|
 | `PHASE <name> start\|end` | orc | phase transition |
+| `WIKI-CONSULT <tier> :: docs=<list>` | orc | project wiki consulted for grounding (full/mini at planning; fast at slice-build) — tier ∈ `fresh` \| `aging` \| `stale` \| `absent` \| `empty`; `docs=` the pages pulled/handed to the executor (comma list) or `none`. Records whether the run grounded in the wiki and whether it was stale (surfaces grounding + staleness for later audit) |
 | `SPAWN <agent>` | hook | an agent dispatch was observed (skeleton) |
 | `RETURN` | hook | a subagent finished (skeleton) |
 | `DISPATCH <agent> :: <task> expect=<model>/<effort>` | orc | orchestrator dispatched a named agent (the claim) |

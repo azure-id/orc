@@ -460,6 +460,16 @@ const CONTRACTS = [
     ],
   },
   {
+    name: "wiki-consult grounding trace verb (v0.17.3 — every lane that grounds in the wiki)",
+    token: "WIKI-CONSULT",
+    files: [
+      "skills/orc/SKILL.md",
+      "skills/orc/references/trace-protocol.md",
+      "skills/orc-fast/SKILL.md",
+      "skills/orc-mini/SKILL.md",
+    ],
+  },
+  {
     name: "wiki cross-cutting reference maps (v0.15.0 — consumers pull by name)",
     token: "orc-reference-api-surface",
     files: [
