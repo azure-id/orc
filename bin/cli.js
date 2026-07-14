@@ -588,19 +588,28 @@ function configInteractive(claudeDir) {
       const { map: cur } = readOverride(claudeDir);
       const has = Object.prototype.hasOwnProperty.call(cur, m.key);
       console.log(`  current: ${has ? cur[m.key] : m.def}   default: ${m.def}`);
-      // Common keys carry an `options` list (a friendly enum). Show the allowed
-      // values inline and let the user type one directly — no index ambiguity.
+      // Common keys carry an `options` list (a friendly enum). String enums
+      // get a numbered pick-list (type the number OR the value); numeric
+      // options stay type-the-value — a digit would be ambiguous as an index.
       // A raw value outside the list is still accepted if `validate` passes.
-      if (m.options) console.log(`  options: ${m.options.join(" | ")}`);
-      const prompt = m.options
-        ? `  type a value (blank = keep): `
-        : `  new value (blank = keep): `;
+      const numericOpts = m.options && m.options.every((o) => typeof o === "number");
+      let prompt = "  new value (blank = keep): ";
+      if (m.options && !numericOpts) {
+        m.options.forEach((o, i) => console.log(`    ${i + 1}) ${o}`));
+        prompt = "  pick a number or type a value (blank = keep): ";
+      } else if (m.options) {
+        console.log(`  options: ${m.options.join(" | ")}`);
+        prompt = "  type a value (blank = keep): ";
+      }
       const nv = (await ask(prompt)).trim();
       if (!nv) {
         console.log("  (unchanged)");
         continue;
       }
-      const res = m.validate(nv);
+      let picked = nv;
+      if (m.options && !numericOpts && /^\d+$/.test(nv) && m.options[Number(nv) - 1] !== undefined)
+        picked = String(m.options[Number(nv) - 1]);
+      const res = m.validate(picked);
       if (res.err) {
         console.log(`  invalid: ${res.err}`);
         continue;
@@ -682,24 +691,24 @@ const vSlug = (raw) =>
     : { err: "must be a lowercase slug (a-z, 0-9, dashes)" };
 
 const DIY_META = [
-  { key: "analyze", def: "auto", validate: vEnum("auto", "off", "mini", "full"), desc: "Doc-intake analyst: auto (full-lane routing) | off | mini | full." },
-  { key: "planning", def: "auto", validate: vEnum("auto", "own-planner", "superpowers", "openspec"), desc: "Planning route." },
-  { key: "pattern", def: "ask", validate: vEnum("ask", "off", "on"), desc: "Code-pattern gate on a cache miss: ask | off | on." },
-  { key: "scoring", def: "on", validate: vEnum("on", "off"), desc: "Rubric scoring; off sends every task to fixed_executor." },
-  { key: "fixed_executor", def: "", validate: vEnum(...Object.keys(DIY_EXECUTORS)), desc: "Executor used for every task when scoring is off." },
-  { key: "review", def: "on", validate: vEnum("on", "off", "blocking-only"), desc: "Review phase: on | off | blocking-only (P2/P3 listed once, never re-offered)." },
-  { key: "security", def: "off", validate: vEnum("off", "ask", "on", "always"), desc: "Security pass; always = every run (drops the risk-floor trigger)." },
-  { key: "verify", def: "full", validate: vEnum("full", "off", "smoke"), desc: "Verify depth: full DoD sweep | off | smoke (build+tests only)." },
-  { key: "testgen", def: "off", validate: vEnum("off", "ask", "on"), desc: "Test-authoring phase (writes tests, never runs them)." },
-  { key: "wiki_gate", def: "notice", validate: vEnum("notice", "off", "hard"), desc: "Wiki freshness at preflight: notice | off | hard (stale blocks with an ask)." },
-  { key: "post_ship_wiki_ask", def: "on", validate: vEnum("on", "off"), desc: "Offer a wiki refresh after big shipped runs." },
-  { key: "summary", def: "full", validate: vEnum("full", "off", "short"), desc: "Summary depth." },
-  { key: "autonomy", def: "interactive", validate: vEnum("interactive", "semi", "hands-off"), desc: "Who answers routine asks: interactive | semi | hands-off." },
-  { key: "ship_mode", def: "ask", validate: vEnum("ask", "commit", "pr", "report-only"), desc: "Terminal ship behavior." },
-  { key: "session_tier", def: "opus-4-8-high", validate: vEnum(...Object.keys(DIY_TIERS)), desc: "Required main-session model+effort (guard-enforced effort, statusline-warned model)." },
-  { key: "max_wave_tasks", def: 3, validate: vInt(1), desc: "Max parallel tasks per wave." },
-  { key: "batch_pause_every", def: 2, validate: vInt(1), desc: "Waves between stop-and-continue pauses." },
-  { key: "rubric_bands", def: 5, validate: vRange(2, 8), desc: "Scoring granularity (scoring on only)." },
+  { key: "analyze", def: "auto", options: ["auto", "off", "mini", "full"], validate: vEnum("auto", "off", "mini", "full"), desc: "Doc-intake analyst: auto (full-lane routing) | off | mini | full." },
+  { key: "planning", def: "auto", options: ["auto", "own-planner", "superpowers", "openspec"], validate: vEnum("auto", "own-planner", "superpowers", "openspec"), desc: "Planning route." },
+  { key: "pattern", def: "ask", options: ["ask", "off", "on"], validate: vEnum("ask", "off", "on"), desc: "Code-pattern gate on a cache miss: ask | off | on." },
+  { key: "scoring", def: "on", options: ["on", "off"], validate: vEnum("on", "off"), desc: "Rubric scoring; off sends every task to fixed_executor." },
+  { key: "fixed_executor", def: "", options: Object.keys(DIY_EXECUTORS), validate: vEnum(...Object.keys(DIY_EXECUTORS)), desc: "Executor used for every task when scoring is off." },
+  { key: "review", def: "on", options: ["on", "off", "blocking-only"], validate: vEnum("on", "off", "blocking-only"), desc: "Review phase: on | off | blocking-only (P2/P3 listed once, never re-offered)." },
+  { key: "security", def: "off", options: ["off", "ask", "on", "always"], validate: vEnum("off", "ask", "on", "always"), desc: "Security pass; always = every run (drops the risk-floor trigger)." },
+  { key: "verify", def: "full", options: ["full", "off", "smoke"], validate: vEnum("full", "off", "smoke"), desc: "Verify depth: full DoD sweep | off | smoke (build+tests only)." },
+  { key: "testgen", def: "off", options: ["off", "ask", "on"], validate: vEnum("off", "ask", "on"), desc: "Test-authoring phase (writes tests, never runs them)." },
+  { key: "wiki_gate", def: "notice", options: ["notice", "off", "hard"], validate: vEnum("notice", "off", "hard"), desc: "Wiki freshness at preflight: notice | off | hard (stale blocks with an ask)." },
+  { key: "post_ship_wiki_ask", def: "on", options: ["on", "off"], validate: vEnum("on", "off"), desc: "Offer a wiki refresh after big shipped runs." },
+  { key: "summary", def: "full", options: ["full", "off", "short"], validate: vEnum("full", "off", "short"), desc: "Summary depth." },
+  { key: "autonomy", def: "interactive", options: ["interactive", "semi", "hands-off"], validate: vEnum("interactive", "semi", "hands-off"), desc: "Who answers routine asks: interactive | semi | hands-off." },
+  { key: "ship_mode", def: "ask", options: ["ask", "commit", "pr", "report-only"], validate: vEnum("ask", "commit", "pr", "report-only"), desc: "Terminal ship behavior." },
+  { key: "session_tier", def: "opus-4-8-high", options: Object.keys(DIY_TIERS), validate: vEnum(...Object.keys(DIY_TIERS)), desc: "Required main-session model+effort (guard-enforced effort, statusline-warned model)." },
+  { key: "max_wave_tasks", def: 3, options: [2, 3, 4, 5], validate: vInt(1), desc: "Max parallel tasks per wave." },
+  { key: "batch_pause_every", def: 2, options: [1, 2, 3, 4, 5], validate: vInt(1), desc: "Waves between stop-and-continue pauses." },
+  { key: "rubric_bands", def: 5, options: [2, 3, 4, 5, 6, 7, 8], validate: vRange(2, 8), desc: "Scoring granularity (scoring on only)." },
   { key: "flow_name", def: "my-flow", validate: vSlug, desc: "Display label for this flow (slug)." },
 ];
 const diyMetaFor = (key) => DIY_META.find((m) => m.key === key);
@@ -913,12 +922,15 @@ function diyApplyVariants(text, cfg) {
   );
 }
 
+// Returns true on success, false on any abort — callable from the interactive
+// menu (which must survive a failed compile) and from `orc diy compile` (which
+// exits non-zero on false).
 function diyCompile(claudeDir) {
   const p = diyPaths(claudeDir);
   const map = readDiyConfig(claudeDir);
   if (!map) {
     console.error("❌ no flow config — run `orc diy init` first.");
-    process.exit(1);
+    return false;
   }
   const cfg = diyResolve(map);
   const { errors, warnings } = diyValidate(cfg);
@@ -926,15 +938,16 @@ function diyCompile(claudeDir) {
   if (errors.length) {
     for (const e of errors) console.error("  ❌ " + e);
     console.error("\n❌ compile aborted — fix the config with `orc diy set`, then retry.");
-    process.exit(1);
+    return false;
   }
 
   const refDir = diyBlocksDir(claudeDir);
+  let missingBlock = null;
   const readBlock = (name) => {
     const f = path.join(refDir, "blocks", name + ".md");
     if (!fs.existsSync(f)) {
-      console.error(`❌ block template missing: ${f} — reinstall with \`orc update\`.`);
-      process.exit(1);
+      missingBlock = f;
+      return "";
     }
     return fs.readFileSync(f, "utf8");
   };
@@ -958,6 +971,10 @@ function diyCompile(claudeDir) {
     .map((name) => (name === null ? locked : diyApplyVariants(readBlock(name), cfg)))
     .join("\n")
     .replace(/\{\{([a-z_]+)\}\}/g, (_, k) => String(subs[k] !== undefined ? subs[k] : `{{${k}}}`));
+  if (missingBlock) {
+    console.error(`❌ block template missing: ${missingBlock} — reinstall with \`orc update\`.`);
+    return false;
+  }
 
   // Cherry-pick check: every orc file the chosen variants reference must
   // exist — project install first, global (~/.claude) fallback.
@@ -972,7 +989,7 @@ function diyCompile(claudeDir) {
     console.error("❌ compile aborted — this flow cherry-picks orc files that are not installed:");
     for (const f of [...new Set(missing)]) console.error("   - " + f);
     console.error("   Install/refresh orc here first: `orc init` (or `orc update`).");
-    process.exit(1);
+    return false;
   }
 
   fs.mkdirSync(p.dir, { recursive: true });
@@ -990,6 +1007,7 @@ function diyCompile(claudeDir) {
   console.log(`\n✅ compiled → ${p.compiled}`);
   console.log(`   gate: ${st.state} — ${st.reason}`);
   console.log("   Run it with /orc-diy <request>.");
+  return true;
 }
 
 function diyShow(claudeDir) {
@@ -1011,6 +1029,138 @@ function diyShow(claudeDir) {
   for (const e of errors) console.log("  ❌ " + e);
   for (const w of warnings) console.log("  ⚠ " + w);
   console.log("");
+}
+
+// Interactive flow composer — humans only (mirrors configInteractive). If
+// stdin isn't a TTY (e.g. Claude's Bash tool), don't hang: show the table.
+function diyInteractive(claudeDir) {
+  if (!process.stdin.isTTY) {
+    console.log("(non-interactive shell — showing the flow; use `orc diy set <key> <value>` to change)");
+    diyShow(claudeDir);
+    return;
+  }
+  const readline = require("readline");
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  const ask = (q) => new Promise((res) => rl.question(q, res));
+
+  (async () => {
+    // Bootstrap wizard when nothing exists yet.
+    if (!readDiyConfig(claudeDir)) {
+      console.log("\nORC-DIY — no flow in this project yet. Start from:\n");
+      const presetNames = Object.keys(DIY_PRESETS);
+      console.log("   1) full-lane defaults (everything on, like /orc)");
+      presetNames.forEach((n, i) => {
+        const changed = Object.entries(DIY_PRESETS[n])
+          .filter(([k]) => k !== "flow_name")
+          .map(([k, v]) => `${k}=${v}`)
+          .join(", ");
+        console.log(`   ${i + 2}) preset: ${n}  (${changed})`);
+      });
+      console.log("   q) cancel");
+      const c = (await ask("\n> ")).trim().toLowerCase();
+      if (c === "q" || c === "") {
+        rl.close();
+        return;
+      }
+      const idx = Number(c);
+      if (idx === 1) diyWriteConfig(claudeDir, {});
+      else if (presetNames[idx - 2]) diyWriteConfig(claudeDir, { ...DIY_PRESETS[presetNames[idx - 2]] });
+      else {
+        console.log("  ? not a valid choice");
+        rl.close();
+        return;
+      }
+      console.log("  ✓ flow config created — now shape it below.");
+    }
+
+    for (;;) {
+      const map = readDiyConfig(claudeDir);
+      const cfg = diyResolve(map);
+      const st = diyStatus(claudeDir);
+      console.log(
+        `\nORC-DIY flow composer — gate: ${st.state}` +
+          (st.state === "READY" ? "" : `  (${st.reason})`) +
+          "\n"
+      );
+      const pad = Math.max(...DIY_META.map((m) => m.key.length));
+      DIY_META.forEach((m, i) => {
+        const has = m.key in map;
+        const val = cfg[m.key] === "" ? "(unset)" : cfg[m.key];
+        console.log(
+          `  ${String(i + 1).padStart(2)}) ${m.key.padEnd(pad)}  ${String(val).padEnd(28)} ${has ? "set" : "default"}`
+        );
+      });
+      const { errors, warnings } = diyValidate(cfg);
+      for (const e of errors) console.log("\n  ❌ " + e);
+      for (const w of warnings) console.log("  ⚠ " + w);
+      console.log("\n   c) compile now    v) validate    x) reset a key    q) quit");
+      const choice = (await ask("\n> ")).trim().toLowerCase();
+      if (choice === "" || choice === "q") break;
+      if (choice === "c") {
+        diyCompile(claudeDir);
+        continue;
+      }
+      if (choice === "v") {
+        if (!errors.length) console.log("  ✅ flow config valid" + (warnings.length ? " (with warnings above)" : ""));
+        else console.log("  ❌ fix the errors above before compiling");
+        continue;
+      }
+      if (choice === "x") {
+        const k = (await ask("  reset which key (blank = cancel): ")).trim();
+        if (!k) continue;
+        if (!(k in map)) {
+          console.log(`  ${k} has no explicit value — already at default.`);
+          continue;
+        }
+        delete map[k];
+        diyWriteConfig(claudeDir, map);
+        console.log(`  ✓ ${k} back to default`);
+        continue;
+      }
+      const m = DIY_META[Number(choice) - 1];
+      if (!m) {
+        console.log("  ? not a valid choice");
+        continue;
+      }
+      console.log(`\n${m.key} — ${m.desc}`);
+      console.log(`  current: ${cfg[m.key] === "" ? "(unset)" : cfg[m.key]}   default: ${m.def === "" ? "(unset)" : m.def}`);
+      // String enums get a numbered pick-list (type the number OR the value);
+      // numeric keys just take a value (numbers would be ambiguous as indexes).
+      const numericOpts = m.options && m.options.every((o) => typeof o === "number");
+      let prompt = "  new value (blank = keep): ";
+      if (m.options && !numericOpts) {
+        m.options.forEach((o, i) => console.log(`    ${i + 1}) ${o}`));
+        prompt = "  pick a number or type a value (blank = keep): ";
+      } else if (m.options) {
+        console.log(`  common values: ${m.options.join(" | ")}`);
+      }
+      const nv = (await ask(prompt)).trim();
+      if (!nv) {
+        console.log("  (unchanged)");
+        continue;
+      }
+      let candidate = nv;
+      if (m.options && !numericOpts && /^\d+$/.test(nv) && m.options[Number(nv) - 1] !== undefined)
+        candidate = String(m.options[Number(nv) - 1]);
+      const res = m.validate(candidate);
+      if (res.err) {
+        console.log(`  invalid: ${res.err}`);
+        continue;
+      }
+      map[m.key] = res.value;
+      diyWriteConfig(claudeDir, map);
+      console.log(`  ✓ ${m.key} = ${res.value}`);
+    }
+
+    // Leaving with an uncompiled change is the #1 footgun — offer the fix.
+    if (diyStatus(claudeDir).state !== "READY") {
+      const a = (await ask("\nGate is not READY — compile now so /orc-diy can run? (y/n) ")).trim();
+      if (/^y/i.test(a)) diyCompile(claudeDir);
+      else console.log("Skipped — /orc-diy stays gated until you run `orc diy compile`.");
+    }
+    rl.close();
+    console.log("done.");
+  })();
 }
 
 function diy() {
@@ -1089,7 +1239,7 @@ function diy() {
       break;
     }
     case "compile":
-      diyCompile(claudeDir);
+      if (!diyCompile(claudeDir)) process.exit(1);
       break;
     case "status": {
       const st = diyStatus(claudeDir);
@@ -1098,8 +1248,10 @@ function diy() {
       break;
     }
     case "show":
-    case undefined:
       diyShow(claudeDir);
+      break;
+    case undefined:
+      diyInteractive(claudeDir); // TTY menu; falls back to the table when piped
       break;
     case "reset": {
       const p = diyPaths(claudeDir);
@@ -1115,7 +1267,8 @@ function diy() {
     default:
       console.error(
         `Unknown: orc diy ${sub}\n` +
-          "Usage: orc diy [show | init [--preset <name>] [--force] | set <key> <value> |\n" +
+          "Usage: orc diy                      (interactive flow composer)\n" +
+          "       orc diy [show | init [--preset <name>] [--force] | set <key> <value> |\n" +
           "               validate | compile | status [--json] | reset]"
       );
       process.exit(1);
@@ -1290,7 +1443,7 @@ Usage:
     orc config set <key> <value>          validate + write one setting
     orc config reset [key]                revert one key (or all) to defaults
     orc config path                       print the override file location
-  orc diy [--dir <path>]                  compose your own flow (project-scoped; no --global)
+  orc diy [--dir <path>]                  compose your own flow — INTERACTIVE menu (project-scoped; no --global)
     orc diy init [--preset <name>]        create the flow config (presets: lean, paranoid, solo-fast)
     orc diy set <key> <value>             change one flow key (requires recompile)
     orc diy show | validate | status      inspect the flow + gate state

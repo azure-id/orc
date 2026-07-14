@@ -17,8 +17,15 @@ orc diy init          →  orc diy set … (repeat)  →  orc diy compile  →  
 
 ## 1. Bootstrap
 
+**Easiest path — the interactive composer.** Run bare `orc diy` in a real
+terminal: it creates the flow if none exists (pick full-lane defaults or a
+preset from a numbered list), then lets you shape every key with numbered
+pick-lists, shows the live gate status and validation issues as you go, and
+offers to compile on exit. Everything below is the same thing, non-interactive:
+
 ```bash
-orc diy init                    # create the default config (the full-lane shape)
+orc diy                         # interactive composer (create + shape + compile)
+orc diy init                    # scriptable: create the default config (full-lane shape)
 orc diy init --preset lean      # or start from a preset: lean | paranoid | solo-fast
 ```
 
@@ -105,6 +112,7 @@ Presets are just config bundles — inspect with `orc diy show`, tweak with
 ## Command reference
 
 ```
+orc diy                                    INTERACTIVE composer (create/shape/compile in one menu)
 orc diy init [--preset <name>] [--force]   create (or overwrite) the config
 orc diy show                               flow table + gate status
 orc diy status [--json]                    gate status only (used by the skill/hooks)

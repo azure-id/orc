@@ -6,7 +6,7 @@
 
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
-![Version](https://img.shields.io/badge/version-0.16.0-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.16.1-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D16-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
@@ -37,31 +37,25 @@ zero-dependency npm package installs those files into your `.claude/` directory.
 
 ## Changelog
 
-### v0.16.0 — `/orc-diy`: build your own lane — CLI-composed flow, compiled, hard-gated _(2026-07-14)_
+### v0.16.1 — Interactive `orc diy` composer + numbered picks in `orc config` _(2026-07-14)_
 
-Compose your **own** ORC pipeline and run it as `/orc-diy`. The flow shape —
-analyze/review/security/verify/testgen presence + strictness, scoring **or** a
-single fixed executor, autonomy profile (interactive/semi/hands-off), ship mode
-(ask/commit/pr/report-only), and the required **session tier**
-(`opus-4-8-high` / `opus-4-7-med` / `sonnet-4-6-high`) — is configured entirely
-through the new **`orc diy` CLI family** (init/set/show/validate/compile/
-status/reset + `lean`/`paranoid`/`solo-fast` presets; deterministic, zero model
-tokens, project-scoped only). `orc diy compile` stitches a runnable
-`FLOW-COMPILED.md` that cherry-picks references and locked boundaries from
-your installed orc skill — score tables are clipped to the session tier at
-compile time, and a set of **locked rules** (never-implement, checkpoint
-discipline, wave conflict rules, severity ladder, red-build ship block) is
-compiled into every flow verbatim. `/orc-diy` is **hard-gated**: no config or
-a stale compile (config changed, orc updated, artifact edited) → it never runs
-the custom flow — it names the fix and offers plain `/orc` instead; the effort
-guard enforces the compiled tier deterministically (fail-closed without a
-lock) and the statusline shows `diy:<flow> READY/STALE`. How-to lives in its
-own guide: [`templates/skills/orc-diy/README.md`](templates/skills/orc-diy/README.md).
-Four new linted contracts (38 total).
+Bare **`orc diy`** now opens an interactive **flow composer** (TTY only —
+piped shells still get the table): when no flow exists it bootstraps one from
+a numbered start list (full-lane defaults or the `lean`/`paranoid`/`solo-fast`
+presets, each shown with exactly what it changes), then presents every key
+with its current value + set/default marker, live gate status, and inline
+validation errors/warnings. String-enum keys are set by **numbered pick-list**
+(type `2` or the value — both work), menu actions cover compile (`c`),
+validate (`v`), and reset-a-key (`x`), a failed compile no longer exits the
+menu, and quitting with a non-READY gate offers to compile on the way out —
+the "changed but forgot to recompile" footgun. The **`orc config`**
+interactive menu gains the same numbered pick-lists for its string-enum keys
+(numeric keys stay type-the-value to avoid index/value ambiguity).
 
 <details>
 <summary><b>Previous versions</b> (click to expand)</summary>
 
+### v0.16.0 — `/orc-diy`: build your own lane — CLI-composed flow, compiled, hard-gated _(2026-07-14)_
 ### v0.15.0 — Wiki v2: evidence-anchored docs · per-file staleness registry · integrity gate _(2026-07-14)_
 ### v0.14.0 — Postgres data-access playbook: cross-cutting query grounding _(2026-07-13)_
 ### v0.13.0 — `/orc-claude`: local CLAUDE.md builder — fenced sections, fingerprint refresh, zero questions _(2026-07-12)_
