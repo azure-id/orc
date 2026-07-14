@@ -344,6 +344,12 @@ work. Precedence: `code > fresh wiki > stale wiki (hints) > model priors` —
 prefer `status: fresh` docs; treat `stale` ones as hints to verify against
 code; on any wiki-vs-code conflict the code wins. If `wiki/` is empty or
 absent, ignore it and plan as normal (the wiki is purely additive).
+**Crosslink (cross-repo, advisory):** if `.claude/orc/crosslink/needs.json`
+exists and a task's declared files touch a matching boundary call site, inject
+the cached linked contract into that task's slice as `crosslink` (labeled with
+its effective cross-repo tier + "hints, not verified") — same slice mechanism as
+`pattern`. Precedence extends the local rule (cross-repo can never outrank local
+hints); it never blocks. Absent needs file or no boundary → nothing extra.
 
 Ask which planner: **Superpowers / OpenSpec / Requirement Planner
 (subskills/orc-planner) / ORC (self)**. If a System Analyst

@@ -261,6 +261,7 @@ function install({ overwrite }) {
   );
   console.log("Config: run `orc config` (CLI, interactive) — not a slash command.");
   console.log("Custom flow: /orc-diy stays gated until you run `orc diy init` + `orc diy compile`.");
+  console.log("Cross-repo: `orc crosslink` links sibling repos' wikis (advisory; orc-wiki resolves the rest).");
   console.log("\nNext:");
   console.log("  • Paste your PR template into skills/orc/subskills/orc-pr/pr.md");
   console.log("  • Add to your .gitignore:  .claude/skills/orc/run/");
@@ -426,6 +427,8 @@ const CONFIG_META = [
   { key: "security_review", def: "off", tier: "common", validate: vEnum("off", "ask", "on"), options: ["off", "ask", "on"], desc: "Opt-in Phase 5.5 security pass on runs with a task scored >= 70 (risk floor). OFF by default." },
   { key: "logging", def: false, tier: "common", validate: vEnum("true", "false"), options: ["true", "false"], desc: "Write a persistent behavior trace per run (OFF by default; for skill-improvement review)." },
   { key: "orc_wiki_pattern_findings", def: false, tier: "advanced", validate: vEnum("true", "false"), desc: "orc-wiki also codifies ALL detected languages during its scan (pre-warms the pattern cache)." },
+  { key: "crosslink_fresh_days", def: 10, tier: "advanced", validate: vInt(1), desc: "Cross-repo crosslink snapshot: days since sync ≤ this → FRESH hint (Signal B; advisory)." },
+  { key: "crosslink_aging_days", def: 15, tier: "advanced", validate: vInt(1), desc: "Cross-repo crosslink snapshot: days since sync ≤ this → AGING; beyond → STALE (advisory, never blocks)." },
   { key: "log_dir", def: ".claude/orc/logs", tier: "advanced", validate: vPath, desc: "Persistent trace folder (never auto-deleted)." },
   { key: "analyzer_dir", def: ".claude/skills/orc/analyzer", tier: "advanced", validate: vPath, desc: "Internal analyst artifact dir." },
   { key: "planner_dir", def: ".claude/skills/orc/planner", tier: "advanced", validate: vPath, desc: "Internal planner artifact dir." },
@@ -1275,6 +1278,374 @@ function diy() {
   }
 }
 
+// ---------------------------------------------------------------------------
+// orc crosslink — CLI-composed cross-repo wiki graph. The CLI is the ONLY writer
+// of .claude/orc-crosslink.config.yaml (nodes + directed edges); orc-wiki only
+// READS it (to publish this repo's boundary + resolve what it consumes from
+// linked repos' wikis). Foreign footprint is read-only (wiki-meta.json + git),
+// never source, never a write. Mirrors the orc-diy CLI-composes/skill-reads
+// precedent. See templates/skills/orc-wiki/references/crosslink.md.
+// ---------------------------------------------------------------------------
+
+// Kinds catalog — MIRRORS templates/skills/orc-wiki/references/crosslink-kinds.md
+// (documented drift, like DIY_PRESETS mirrors config.md). "Other" is always
+// allowed at the prompt, so this list guides without gating.
+const CROSSLINK_KINDS = [
+  "grpc", "rest-endpoint", "graphql", "websocket", "message-queue", "webhook",
+  "shared-db", "cache", "object-storage", "repository", "auth/oidc", "cron",
+  "api-client", "graphql-client", "component-api", "state-store",
+  "websocket-client", "sdk",
+];
+
+function crosslinkPaths(claudeDir) {
+  const dir = path.join(claudeDir, "orc", "crosslink");
+  return {
+    config: path.join(claudeDir, "orc-crosslink.config.yaml"),
+    dir,
+    needs: path.join(dir, "needs.json"),
+    cacheDir: path.join(dir, "cache"),
+  };
+}
+
+// Repo ROOT = parent of the .claude dir.
+const repoRootOf = (claudeDir) => path.dirname(claudeDir);
+
+// self name: package.json name (scope stripped) → repo dir name.
+function crosslinkSelfName(claudeDir) {
+  const root = repoRootOf(claudeDir);
+  try {
+    const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
+    if (pkg && pkg.name) return String(pkg.name).replace(/^@[^/]+\//, "");
+  } catch (_) {}
+  return path.basename(root) || "this-repo";
+}
+
+// Parse one `{ key: val, kinds: [a, b] }` flow map (our on-disk item form).
+function parseCrosslinkFlow(inner) {
+  const out = {};
+  const km = inner.match(/kinds:\s*\[([^\]]*)\]/);
+  if (km) {
+    out.kinds = km[1].split(",").map((x) => x.trim()).filter(Boolean);
+    inner = inner.replace(km[0], "");
+  }
+  for (const part of inner.split(",")) {
+    const i = part.indexOf(":");
+    if (i === -1) continue;
+    const k = part.slice(0, i).trim();
+    const v = part.slice(i + 1).trim().replace(/^["']|["']$/g, "");
+    if (k) out[k] = v;
+  }
+  return out;
+}
+
+// Read a crosslink config from an ARBITRARY claude dir (used for self AND for
+// the bulk-add peek into a linked repo). Returns {version, self, nodes, links}.
+function readCrosslinkConfigAt(configPath) {
+  if (!fs.existsSync(configPath)) return null;
+  const cfg = { version: 1, self: null, nodes: [], links: [] };
+  let section = null;
+  for (const raw of fs.readFileSync(configPath, "utf8").replace(/^﻿/, "").split(/\r?\n/)) {
+    const t = raw.trim();
+    if (!t || t.startsWith("#")) continue;
+    if (/^version:/.test(t)) { cfg.version = Number(t.slice(8).trim()) || 1; continue; }
+    if (/^self:/.test(t)) { cfg.self = t.slice(5).trim().replace(/^["']|["']$/g, ""); continue; }
+    if (t === "nodes:") { section = "nodes"; continue; }
+    if (t === "links:") { section = "links"; continue; }
+    const fm = t.match(/^-\s*\{(.*)\}\s*$/);
+    if (!fm) continue;
+    if (section === "nodes") cfg.nodes.push(parseCrosslinkFlow(fm[1]));
+    else if (section === "links") cfg.links.push(parseCrosslinkFlow(fm[1]));
+  }
+  return cfg;
+}
+const readCrosslinkConfig = (claudeDir) => readCrosslinkConfigAt(crosslinkPaths(claudeDir).config);
+
+function writeCrosslinkConfig(claudeDir, cfg) {
+  const p = crosslinkPaths(claudeDir);
+  fs.mkdirSync(path.dirname(p.config), { recursive: true });
+  let out =
+    "# .claude/orc-crosslink.config.yaml — cross-repo wiki links (managed by `orc crosslink`).\n" +
+    "# Never hand-edit — orc-wiki READS this to publish this repo's boundary and\n" +
+    "# resolve the contracts it consumes from linked repos. Foreign reads only.\n" +
+    `version: ${cfg.version || 1}\n` +
+    `self: ${serializeValue(cfg.self)}\n` +
+    "nodes:\n";
+  for (const n of cfg.nodes)
+    out += `  - {name: ${n.name}, repo_path: ${n.repo_path}, kinds: [${(n.kinds || []).join(", ")}]}\n`;
+  out += "links:\n";
+  for (const l of cfg.links) out += `  - {from: ${l.from}, to: ${l.to}, via: ${l.via}}\n`;
+  fs.writeFileSync(p.config, out);
+  return p.config;
+}
+
+// Two paths point at the same repo? Compare realpaths, fall back to normalized.
+function sameRepo(a, b) {
+  const norm = (p) => {
+    try { return fs.realpathSync(p); } catch (_) { return path.resolve(p); }
+  };
+  return norm(a) === norm(b);
+}
+
+// Provider info for a linked repo ROOT: does it have a wiki, its last_scan, its
+// git-distance tier (read-only), and how many crosslink tags it publishes.
+function crosslinkProviderInfo(repoRoot) {
+  if (!fs.existsSync(repoRoot)) return { state: "missing" };
+  const metaPath = path.join(repoRoot, ".claude", "orc", "wiki-meta.json");
+  if (!fs.existsSync(metaPath)) return { state: "no-wiki" };
+  let meta;
+  try { meta = JSON.parse(fs.readFileSync(metaPath, "utf8").replace(/^﻿/, "")); }
+  catch (_) { return { state: "no-wiki" }; }
+  const info = {
+    state: "wiki",
+    last_scan: meta.last_scan || null,
+    tier: null,
+    tags: Array.isArray(meta.crosslink_provided) ? meta.crosslink_provided.length : 0,
+  };
+  if (meta.scan_commit) {
+    const r = spawnSync("git", ["rev-list", "--count", `${meta.scan_commit}..HEAD`], {
+      cwd: repoRoot, encoding: "utf8",
+    });
+    if (r.status === 0 && r.stdout && /^\d+$/.test(r.stdout.trim())) {
+      const d = Number(r.stdout.trim());
+      info.tier = d < 10 ? "FRESH" : d <= 30 ? "AGING" : "STALE"; // default edges
+    }
+  }
+  return info;
+}
+
+// One-line freshness report for a pasted/added repo path.
+function crosslinkProviderLine(claudeDir, repoPath) {
+  const root = path.resolve(repoRootOf(claudeDir), repoPath);
+  const info = crosslinkProviderInfo(root);
+  if (info.state === "missing") return "  ✗ path not found — will be saved as a PENDING edge (resolves when the path appears)";
+  if (info.state === "no-wiki") return "  ⚠ no wiki-meta.json there — run `orc-wiki` in that repo first (edge saved, inert until then)";
+  const tier = info.tier ? info.tier : "tier unknown (git unavailable there — using date only)";
+  const tags = info.tags ? `${info.tags} tags` : "no crosslink tags yet (coarse hints only)";
+  return `  ✓ wiki found · last_scan ${info.last_scan || "?"} · ${tier} · ${tags}`;
+}
+
+// Bulk-add peek: edges in the linked repo's OWN config that touch us, expressed
+// in THIS repo's namespace. `nodeName` is what we call the linked repo here.
+function crosslinkPeek(claudeDir, nodeName, repoPath) {
+  const ourRoot = repoRootOf(claudeDir);
+  const theirRoot = path.resolve(ourRoot, repoPath);
+  const theirCfg = readCrosslinkConfigAt(path.join(theirRoot, ".claude", "orc-crosslink.config.yaml"));
+  if (!theirCfg) return { has: false, mirrors: [] };
+  const nodeByName = (c, n) => c.nodes.find((x) => x.name === n) || (c.self === n ? { name: n, repo_path: "." } : null);
+  const mirrors = [];
+  for (const l of theirCfg.links) {
+    const fromNode = nodeByName(theirCfg, l.from);
+    const toNode = nodeByName(theirCfg, l.to);
+    if (!fromNode || !toNode || !l.via) continue;
+    // Which end is US (resolves to ourRoot), which is THEM (their self)?
+    const fromIsUs = fromNode.repo_path && sameRepo(path.resolve(theirRoot, fromNode.repo_path), ourRoot);
+    const toIsUs = toNode.repo_path && sameRepo(path.resolve(theirRoot, toNode.repo_path), ourRoot);
+    if (toIsUs && l.from === theirCfg.self) mirrors.push({ from: nodeName, to: "self", via: l.via }); // they call us
+    else if (fromIsUs && l.to === theirCfg.self) mirrors.push({ from: "self", to: nodeName, via: l.via }); // we call them
+  }
+  return { has: true, mirrors };
+}
+
+// Offer once to gitignore the derived cache dir. Never edits silently.
+async function crosslinkGitignoreOffer(claudeDir, ask) {
+  const root = repoRootOf(claudeDir);
+  const giPath = path.join(root, ".gitignore");
+  const line = ".claude/orc/crosslink/cache/";
+  let body = "";
+  try { body = fs.readFileSync(giPath, "utf8"); } catch (_) {}
+  if (body.split(/\r?\n/).some((l) => l.trim() === line)) return;
+  const a = (await ask(`\nAdd derived cache to .gitignore (${line})? (y/n) `)).trim();
+  if (/^y/i.test(a)) {
+    fs.writeFileSync(giPath, (body && !body.endsWith("\n") ? body + "\n" : body) + line + "\n");
+    console.log("  ✓ appended to .gitignore");
+  } else {
+    console.log(`  skipped — add it yourself so the derived cache isn't committed: ${line}`);
+  }
+}
+
+function crosslinkEnsureSelf(claudeDir) {
+  let cfg = readCrosslinkConfig(claudeDir);
+  if (!cfg) cfg = { version: 1, self: crosslinkSelfName(claudeDir), nodes: [], links: [] };
+  if (!cfg.self) cfg.self = crosslinkSelfName(claudeDir);
+  return cfg;
+}
+
+function crosslinkList(claudeDir) {
+  const cfg = readCrosslinkConfig(claudeDir);
+  if (!cfg || !cfg.nodes.length) {
+    console.log("\nNo cross-repo links yet. Add one with `orc crosslink` (interactive).\n");
+    return;
+  }
+  console.log(`\nCrosslink graph — self: ${cfg.self}\n\nLinked repos:`);
+  for (const n of cfg.nodes) {
+    console.log(`  • ${n.name}  (${n.repo_path})  kinds: ${(n.kinds || []).join(", ") || "—"}`);
+    console.log("   " + crosslinkProviderLine(claudeDir, n.repo_path));
+  }
+  console.log("\nEdges:");
+  for (const l of cfg.links) {
+    const arrow = l.from === "self" || l.from === cfg.self ? "we CALL" : l.to === "self" || l.to === cfg.self ? "they CALL us" : "";
+    console.log(`  ${l.from} ──${l.via}──▶ ${l.to}   (${arrow}${(l.from === "self" || l.from === cfg.self) ? " → drift-checked" : ""})`);
+  }
+  console.log("");
+}
+
+function crosslinkStatus(claudeDir) {
+  const cfg = readCrosslinkConfig(claudeDir);
+  if (!cfg) { console.log("UNCONFIGURED — no cross-repo links. Run `orc crosslink`."); return; }
+  console.log(`\nCrosslink status — self: ${cfg.self}, ${cfg.nodes.length} linked repo(s), ${cfg.links.length} edge(s)\n`);
+  for (const n of cfg.nodes) console.log(`  ${n.name}:\n  ${crosslinkProviderLine(claudeDir, n.repo_path)}`);
+  const needs = crosslinkPaths(claudeDir).needs;
+  console.log(fs.existsSync(needs)
+    ? `\n  needs baseline: ${needs} (per-point tags orc-wiki resolved)`
+    : "\n  needs baseline: not built yet — run `/orc-wiki` here to resolve per-point tags + cache.");
+  console.log("");
+}
+
+function crosslinkRemove(claudeDir, name) {
+  const cfg = readCrosslinkConfig(claudeDir);
+  if (!cfg) { console.error("No crosslink config."); process.exit(1); }
+  if (!cfg.nodes.some((n) => n.name === name)) { console.error(`No linked repo named "${name}".`); process.exit(1); }
+  cfg.nodes = cfg.nodes.filter((n) => n.name !== name);
+  cfg.links = cfg.links.filter((l) => l.from !== name && l.to !== name);
+  writeCrosslinkConfig(claudeDir, cfg);
+  console.log(`Removed ${name} and its edges.`);
+}
+
+function crosslinkInteractive(claudeDir) {
+  if (!process.stdin.isTTY) {
+    console.log("(non-interactive shell — showing the graph; add links from a real terminal with `orc crosslink`)");
+    crosslinkList(claudeDir);
+    return;
+  }
+  const readline = require("readline");
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  const ask = (q) => new Promise((res) => rl.question(q, res));
+
+  (async () => {
+    const firstTime = !fs.existsSync(crosslinkPaths(claudeDir).config);
+    let cfg = crosslinkEnsureSelf(claudeDir);
+    for (;;) {
+      console.log(`\nORC crosslink — self: ${cfg.self}  ·  ${cfg.nodes.length} linked repo(s), ${cfg.links.length} edge(s)`);
+      console.log("  [1] add linked repo   [2] list   [3] remove   [4] done");
+      const choice = (await ask("\n> ")).trim().toLowerCase();
+      if (choice === "" || choice === "4" || choice === "q") break;
+      if (choice === "2") { crosslinkList(claudeDir); continue; }
+      if (choice === "3") {
+        if (!cfg.nodes.length) { console.log("  nothing to remove"); continue; }
+        cfg.nodes.forEach((n, i) => console.log(`   ${i + 1}) ${n.name}`));
+        const r = (await ask("  remove which (number, blank = cancel): ")).trim();
+        const n = cfg.nodes[Number(r) - 1];
+        if (!n) continue;
+        cfg.nodes = cfg.nodes.filter((x) => x !== n);
+        cfg.links = cfg.links.filter((l) => l.from !== n.name && l.to !== n.name);
+        writeCrosslinkConfig(claudeDir, cfg);
+        console.log(`  ✓ removed ${n.name}`);
+        continue;
+      }
+      if (choice !== "1") { console.log("  ? not a valid choice"); continue; }
+
+      // --- add flow ---
+      const name = (await ask("\n  name for the linked repo (slug): ")).trim();
+      if (!name || !/^[a-z0-9][a-z0-9-]*$/.test(name)) { console.log("  invalid slug — a-z, 0-9, dashes"); continue; }
+      if (cfg.nodes.some((n) => n.name === name) || name === cfg.self) { console.log("  that name is taken (or is self)"); continue; }
+      const repoPath = (await ask("  repo path (repo ROOT, relative to this repo, e.g. ../service-z): ")).trim();
+      if (!repoPath) { console.log("  a path is required"); continue; }
+      console.log(crosslinkProviderLine(claudeDir, repoPath));
+
+      // kinds multi-pick
+      console.log("\n  kinds this repo exposes/consumes (catalog):");
+      CROSSLINK_KINDS.forEach((k, i) => process.stdout.write(`   ${String(i + 1).padStart(2)}) ${k}${(i % 3 === 2) ? "\n" : "\t"}`));
+      console.log("\n   or type your own (comma-separated), e.g. `1,3,grpc-stream`");
+      const rawKinds = (await ask("  pick (numbers and/or names, comma-separated): ")).trim();
+      const kinds = [...new Set(rawKinds.split(",").map((x) => x.trim()).filter(Boolean).map((tok) =>
+        /^\d+$/.test(tok) && CROSSLINK_KINDS[Number(tok) - 1] ? CROSSLINK_KINDS[Number(tok) - 1] : tok.toLowerCase()
+      ))];
+      if (!kinds.length) { console.log("  at least one kind is required"); continue; }
+
+      // direction
+      const dir = (await ask("\n  direction?  [1] this repo CALLS them   [2] they CALL this repo\n  > ")).trim();
+      const weCall = dir === "1";
+      if (dir !== "1" && dir !== "2") { console.log("  pick 1 or 2"); continue; }
+
+      // target (option 1 = self, always)
+      const targets = [cfg.self, ...cfg.nodes.map((n) => n.name)];
+      console.log("\n  linked to which repo?");
+      console.log(`   1) this repo (${cfg.self})`);
+      cfg.nodes.forEach((n, i) => console.log(`   ${i + 2}) ${n.name}`));
+      const tRaw = (await ask("  > ")).trim();
+      const tIdx = Number(tRaw) - 1;
+      const target = targets[tIdx];
+      if (!target) { console.log("  invalid target"); continue; }
+      const targetKey = tIdx === 0 ? "self" : target;
+
+      // which kind carries this edge
+      const via = kinds.length === 1 ? kinds[0] : (await ask(`  which kind carries this edge? (${kinds.join(", ")}): `)).trim().toLowerCase();
+      if (!kinds.includes(via)) { console.log("  edge kind must be one of the picked kinds"); continue; }
+
+      cfg.nodes.push({ name, repo_path: repoPath, kinds });
+      // Direction [1] "this repo CALLS them": target (default self) → new node.
+      // Direction [2] "they CALL this repo": new node → target. Drift runs only
+      // on edges whose `from` is self (self is the consumer).
+      const finalEdge = weCall
+        ? { from: targetKey, to: name, via }
+        : { from: name, to: targetKey, via };
+      cfg.links.push(finalEdge);
+      writeCrosslinkConfig(claudeDir, cfg);
+      console.log(`  ✓ added ${name}  ·  edge ${finalEdge.from} ──${via}──▶ ${finalEdge.to}${finalEdge.from === "self" ? "  (we consume → drift-checked)" : ""}`);
+
+      // bulk-add peek
+      const peek = crosslinkPeek(claudeDir, name, repoPath);
+      if (peek.has && peek.mirrors.length) {
+        for (const m of peek.mirrors) {
+          if (cfg.links.some((l) => l.from === m.from && l.to === m.to && l.via === m.via)) continue;
+          const a = (await ask(`  ${name} also declares ${m.from} ──${m.via}──▶ ${m.to} — mirror it into your config? (y/n) `)).trim();
+          if (/^y/i.test(a)) { cfg.links.push(m); writeCrosslinkConfig(claudeDir, cfg); console.log("   ✓ mirrored"); }
+        }
+      } else if (peek.has) {
+        // topology check: we declared an edge but they don't reciprocate
+        console.log("   (peeked their config — no reciprocal edge to mirror)");
+      } else {
+        console.log("   (no crosslink config in that repo yet — link stands; it gets richer when they adopt crosslink)");
+      }
+    }
+
+    if (firstTime && fs.existsSync(crosslinkPaths(claudeDir).config)) await crosslinkGitignoreOffer(claudeDir, ask);
+    rl.close();
+    console.log("\ndone. Run `/orc-wiki` here to resolve per-point tags + cache (and to publish this repo's own boundary).");
+  })();
+}
+
+function crosslink() {
+  if (flag("--global")) {
+    console.error("❌ orc crosslink is project-scoped — it never uses ~/.claude. Run it from the project (or with --dir <path>).");
+    process.exit(1);
+  }
+  const claudeDir = resolveClaudeDir();
+  const pos = positionals(); // ["crosslink", <sub?>, ...]
+  switch (pos[1]) {
+    case undefined:
+      crosslinkInteractive(claudeDir);
+      break;
+    case "list":
+    case "show":
+      crosslinkList(claudeDir);
+      break;
+    case "status":
+      crosslinkStatus(claudeDir);
+      break;
+    case "remove":
+      crosslinkRemove(claudeDir, pos[2]);
+      break;
+    default:
+      console.error(
+        `Unknown: orc crosslink ${pos[1]}\n` +
+          "Usage: orc crosslink                 (interactive: add/list/remove/done)\n" +
+          "       orc crosslink [list | status | remove <name>]"
+      );
+      process.exit(1);
+  }
+}
+
 function where() {
   const claudeDir = resolveClaudeDir();
   console.log("skills   →", path.join(claudeDir, "skills"));
@@ -1449,6 +1820,9 @@ Usage:
     orc diy show | validate | status      inspect the flow + gate state
     orc diy compile                       build the runnable flow for /orc-diy
     orc diy reset                         delete the flow (back to UNCONFIGURED)
+  orc crosslink [--dir <path>]            compose cross-repo wiki links — INTERACTIVE (project-scoped; no --global)
+    orc crosslink list | status           inspect the graph + per-repo freshness (read-only)
+    orc crosslink remove <name>           drop a linked repo and its edges
   orc where [--global | --dir <path>]     show target paths
   orc version                             print installed version + check for a newer one
   orc --help
@@ -1485,6 +1859,9 @@ Skills installed: ${listSkillNames().join(", ")}`);
       break;
     case "diy":
       diy();
+      break;
+    case "crosslink":
+      crosslink();
       break;
     case "where":
       where();

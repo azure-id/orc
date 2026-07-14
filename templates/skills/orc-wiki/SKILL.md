@@ -61,6 +61,14 @@ gate mandatory.
    is omitted, not guessed. This is what makes the wiki a legitimate second
    source of truth (precedence: `code > fresh wiki > stale wiki (hints) >
    model priors` — staleness.md).
+11. **Crosslink is advisory, never blocking, and reads foreign WIKI only.** The
+   cross-repo subsystem (references/crosslink.md) emits this repo's boundary as
+   per-point tag files and resolves what it consumes from linked repos' wikis.
+   It NEVER reads a linked repo's source and NEVER writes anything in it — the
+   only foreign footprint is read-only wiki files + read-only git queries. Every
+   cross-repo failure (missing repo, no wiki, drift, breaking change) degrades to
+   a warning, never a gate. Inert unless `.claude/orc-crosslink.config.yaml`
+   exists or this repo has an outward boundary to publish.
 
 ## Behavior trace (logging — same rule as orc/orc-mini; wiki runs trace too)
 
@@ -158,13 +166,18 @@ expected and normal.
    integrity-check.md): index-sync, registry-sync, covers-resolve, coverage
    report, counts-match, anchor spot-check. Fix failures before proceeding;
    emit `WIKI-CHECK` trace lines when logging.
-4. Rewrite `.claude/orc/wiki-meta.json` (hard rule 8): fresh `last_scan` +
+4. **Crosslink publish + resolve** (references/crosslink.md — Phase 3 add-on):
+   emit this repo's `wiki/crosslink/**` tag files, and if
+   `.claude/orc-crosslink.config.yaml` exists, resolve needs +
+   `.claude/orc/crosslink/cache/` and warn on per-point drift.
+5. Rewrite `.claude/orc/wiki-meta.json` (hard rule 8): fresh `last_scan` +
    `scan_commit` = current HEAD, page count, the project's discovered
-   build/test `commands`, and the per-doc `docs` registry (schema in
-   references/staleness.md).
-5. Inject/update the managed pointer block in `CLAUDE.md`
+   build/test `commands`, the per-doc `docs` registry, and the
+   `crosslink_provided` registry when this repo published tags (schemas in
+   references/staleness.md + schemas/crosslink-tag.md).
+6. Inject/update the managed pointer block in `CLAUDE.md`
    (see references/claude-md-injection.md). Pointer only — no summaries.
-6. Final dispatch report + "/usage" reminder. Keep the checkpoint for audit.
+7. Final dispatch report + "/usage" reminder. Keep the checkpoint for audit.
 
 ## Code-pattern pre-warm (opt-in — only when config `orc_wiki_pattern_findings: on`)
 
@@ -179,6 +192,30 @@ Per detected language (see `../orc-pattern/references/INDEX.md`): dispatch
 most-recently-modified real files for that language; YOU write the returned pattern
 to the cache. Never run tests or change project code. Skip languages already cached
 and un-drifted. This reuses the `orc-pattern` engine — you never codify yourself.
+
+## Crosslink — cross-repo boundary publish + resolve (references/crosslink.md)
+
+Runs as a Phase 3 add-on, after the normal docs/manifest, riding the same scan
+consent — no separate ask. Two halves, both advisory and never-blocking; skip the
+consume half entirely when `.claude/orc-crosslink.config.yaml` is absent.
+
+- **Publish (always, when this repo has an outward boundary):** from the
+  `Contracts & shapes` rows already scanned, emit one per-point tag file per
+  integration point under `wiki/crosslink/<kind>/<slug>.md` (schema
+  schemas/crosslink-tag.md — Windows-safe reversible slug), and register each in
+  `wiki-meta.json`'s `crosslink_provided` array (NOT `wiki/INDEX.md` or `docs` —
+  tags are a machine index; keeping them out preserves the human index + `pages`
+  count). Then run the crosslink integrity rule (integrity-check.md).
+- **Resolve (only with a config):** read `.claude/orc-crosslink.config.yaml`
+  (linked nodes + `repo_path`s + directed edges), walk THIS repo's call sites,
+  and for each boundary matching an edge's `via: <kind>` toward a linked node,
+  resolve that node's tag under `<repo_path>/wiki/crosslink/`. Record the
+  dependency in `.claude/orc/crosslink/needs.json` (the drift baseline; the human
+  never hand-lists tags) and sync a stamped snapshot into
+  `.claude/orc/crosslink/cache/` (gitignored). Compute per-point drift against
+  the needs baseline — a changed/vanished contract is a **warn only**, never a
+  gate. Freshness = `min(Signal-A commit-distance, Signal-B day-age)` computed on
+  read (crosslink.md). Emit `WIKI-CHECK crosslink …` trace lines when logging.
 
 ## Refresh & staleness (references/staleness.md — THE canonical freshness reference)
 

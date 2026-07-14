@@ -6,7 +6,7 @@
 
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
-![Version](https://img.shields.io/badge/version-0.16.1-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.17.0-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D16-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
@@ -37,24 +37,31 @@ zero-dependency npm package installs those files into your `.claude/` directory.
 
 ## Changelog
 
-### v0.16.1 — Interactive `orc diy` composer + numbered picks in `orc config` _(2026-07-14)_
+### v0.17.0 — `orc crosslink`: cross-repo wiki references — advisory boundary contracts _(2026-07-14)_
 
-Bare **`orc diy`** now opens an interactive **flow composer** (TTY only —
-piped shells still get the table): when no flow exists it bootstraps one from
-a numbered start list (full-lane defaults or the `lean`/`paranoid`/`solo-fast`
-presets, each shown with exactly what it changes), then presents every key
-with its current value + set/default marker, live gate status, and inline
-validation errors/warnings. String-enum keys are set by **numbered pick-list**
-(type `2` or the value — both work), menu actions cover compile (`c`),
-validate (`v`), and reset-a-key (`x`), a failed compile no longer exits the
-menu, and quitting with a non-READY gate offers to compile on the way out —
-the "changed but forgot to recompile" footgun. The **`orc config`**
-interactive menu gains the same numbered pick-lists for its string-enum keys
-(numeric keys stay type-the-value to avoid index/value ambiguity).
+A new **crosslink** subsystem of orc-wiki lets one repo's wiki reference
+**another repo's** wiki at integration boundaries (BE↔FE, BE→gRPC service, …),
+so executors build against real cross-repo contracts instead of guessing. Each
+`/orc-wiki` scan now **publishes** this repo's boundary as per-point,
+evidence-anchored tag files under `wiki/crosslink/<kind>/` (registered in a new
+`crosslink_provided` manifest registry, integrity-gated). The new **`orc
+crosslink`** CLI composes the graph — nodes + directed edges, `self` as node 1,
+an extensible **kinds** catalog, explicit direction (which side gets
+drift-checked), paste-time freshness reporting via read-only git queries in the
+linked repo, and a **bulk-add** peek that mirrors a reciprocal edge from the
+other repo's config. orc-wiki then discovers the precise per-point tags you
+depend on into `.claude/orc/crosslink/needs.json` and syncs a snapshot cache;
+`/orc`, `/orc-fast`, and `/orc-mini` inject the linked contract into a task's
+slice only when it touches a boundary. Freshness is dual-signal
+(`min(provider-wiki-tier, snapshot-age)`, computed on read) and everything is
+**advisory, never blocking** — read foreign wiki only, never foreign source,
+never a foreign write; per-point drift and vanished-contract breaks warn, never
+gate; version skew degrades to coarse hints and upgrades for free.
 
 <details>
 <summary><b>Previous versions</b> (click to expand)</summary>
 
+### v0.16.1 — Interactive `orc diy` composer + numbered picks in `orc config` _(2026-07-14)_
 ### v0.16.0 — `/orc-diy`: build your own lane — CLI-composed flow, compiled, hard-gated _(2026-07-14)_
 ### v0.15.0 — Wiki v2: evidence-anchored docs · per-file staleness registry · integrity gate _(2026-07-14)_
 ### v0.14.0 — Postgres data-access playbook: cross-cutting query grounding _(2026-07-13)_

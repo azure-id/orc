@@ -46,6 +46,15 @@ When the slice carries a `pattern`, MATCH its conventions, satisfy every BLOCKIN
 invariant AND every enforceable `validation_gate[]` line (advisory gate lines are
 informational); echo the `pattern_version` and set `invariants_checked: true` only after
 re-checking your diff. A pattern task that returns false/absent here is malformed.
+
+**Crosslink injection (orchestrator-side, advisory).** At slice assembly, if a
+task's declared files include a call site that matches an entry in
+`.claude/orc/crosslink/needs.json`, prepend the cached tag contract (from
+`.claude/orc/crosslink/cache/`) to the slice as `crosslink`, labeled with its
+effective cross-repo tier + "hints, not verified". The executor MATCHES the
+stated field names/types but never lets it override local code — it is advisory,
+so there is NO return field and nothing to attest (unlike `pattern`). A task with
+no boundary carries no `crosslink`.
 On a UI task, if the environment ships a `frontend-design` skill, read and apply
 it (skip silently when absent).
 

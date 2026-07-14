@@ -33,6 +33,14 @@ fixes a final `WIKI-CHECK all ✅` before the manifest write.
    anchors from its contract sections and confirm the cited files exist
    (existence only — cheap). A missing file = the agent cited something it
    didn't read → re-queue that doc's scan.
+7. **crosslink-sync** (only when this repo published a boundary this run) —
+   every file under `wiki/crosslink/` has exactly one `crosslink_provided`
+   entry in `wiki-meta.json` and every `crosslink_provided` entry points at an
+   existing file (no extras either way); each entry's `anchor` file exists.
+   Tag files must NOT appear in `wiki/INDEX.md` or the `docs` registry — a tag
+   found there is a leak (remove it; tags live only in `crosslink_provided`).
+   Emit `WIKI-CHECK crosslink …` when logging. Consume-side needs/cache are
+   advisory and NOT gated here (a stale cache is a warning, never a failure).
 
 ## Why it exists
 

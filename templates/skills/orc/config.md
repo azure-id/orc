@@ -80,6 +80,10 @@ wiki_fresh_max: 10            # commit distance < this → FRESH (silent)
 wiki_aging_max: 30            # distance ≤ this → AGING (notice); beyond → STALE
 wiki_refresh_ask_tasks: 3     # post-ship refresh ask fires when tasks ≥ this…
 wiki_refresh_ask_files: 10    # …or the run's touched files exceed this (full/ultra lanes)
+
+# --- Cross-repo crosslink snapshot freshness (Signal-B; DAY-based, computed on read) ---
+crosslink_fresh_days: 10      # days since sync ≤ this → FRESH cross-repo hint
+crosslink_aging_days: 15      # ≤ this → AGING; beyond → STALE (advisory only, never blocks)
 ```
 
 ## Score → model presets (executor agent dispatched by name)
@@ -175,6 +179,12 @@ list of `{min, max, agent}` rows; the orchestrator uses it instead of a preset.
 - `wiki_refresh_ask_tasks` / `wiki_refresh_ask_files` set the BIG-run trigger
   for the post-ship wiki refresh ask (full + ultra lanes only; guarded on a
   non-empty wiki). Judged by FINAL counts at ship time.
+- `crosslink_fresh_days` / `crosslink_aging_days` set the day edges for the
+  cross-repo crosslink snapshot age (Signal B — the only day-based tier in the
+  constellation; two repos share no commit axis). The effective cross-repo tier
+  is `min(Signal-A provider-wiki-tier, Signal-B snapshot-age)`, computed on read,
+  advisory only — a stale crosslink warns, never blocks. See
+  `../orc-wiki/references/crosslink.md` + `../orc-wiki/references/staleness.md`.
 - `security_review` gates the opt-in Phase 5.5 security pass (default `off`).
   The trigger is the EXISTING risk floor: it can only fire on a run where at
   least one task scored ≥ 70 (security/money/migrations/auth). `ask` → one

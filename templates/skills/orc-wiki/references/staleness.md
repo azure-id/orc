@@ -161,6 +161,29 @@ If guarded in:
    /orc-wiki to refresh when ready." Never auto-scan. (On a BIG full-lane run
    the post-ship refresh ask above replaces this passive note.)
 
+## Cross-repo crosslink freshness (references/crosslink.md — advisory only)
+
+A crosslink hint is trustworthy only if BOTH signals hold; the weakest wins,
+`effective = min(Signal-A, Signal-B)`. Both are computed on read; the cache
+stamp is a fallback INPUT, never a stored status.
+
+- **Signal A — provider wiki tier.** The SAME git-commit-distance compute above,
+  run read-only in the linked repo's checkout (`git rev-list --count
+  <scan_commit>..HEAD` in `<repo_path>`), using the DEFAULT edges
+  (`wiki_fresh_max` 10 / `wiki_aging_max` 30) — we do not read the provider's
+  overrides. Provider not checked out or git fails → fall back to the
+  `source_tier` stamped in `.claude/orc/crosslink/cache/` at sync, "as of last
+  sync".
+- **Signal B — snapshot age.** The ONLY day-based tier in the constellation
+  (two repos share no commit axis): `days = today − synced_at`, against
+  `crosslink_fresh_days` (default 10 → FRESH) and `crosslink_aging_days`
+  (default 15 → AGING; beyond → STALE).
+
+Reaction is always advisory: label the injected surface with the effective tier
++ "cross-repo hints, not verified", and warn on per-point drift — never block.
+Precedence extends the local rule: `local code > local fresh wiki > cross-repo
+fresh wiki (hints) > cross-repo stale wiki (weak hints) > model priors`.
+
 ## Consume rule (main orc + orc-mini)
 
 Before consulting the wiki during planning/scoring: check `wiki/` exists and has

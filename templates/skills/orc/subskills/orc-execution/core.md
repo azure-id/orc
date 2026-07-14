@@ -19,6 +19,15 @@ subagent; the orchestrator never runs this itself.
                             advisory lines are marked and informational),
                             pattern_version}. Agnostic
                             tasks carry invariants only (no conventions, no gate).
+- crosslink               — the cross-repo boundary contract for a call site in
+                            this task, or null. Present ONLY when a declared file
+                            touches a boundary the orchestrator resolved from
+                            `.claude/orc/crosslink/needs.json` + cache. It is
+                            ADVISORY hints ("cross-repo fresh/aging/stale wiki")
+                            labeled with an effective tier — MATCH the field
+                            names/types/errors it states, but it never overrides
+                            local code and there is nothing to attest (no return
+                            field). Absent on any task with no boundary.
 - house_rules             — the standing behavioral card (injected literally,
                             never a pointer): surgical changes, simplicity-first,
                             no unrequested scope, boring-solution preference

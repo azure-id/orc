@@ -99,6 +99,11 @@ pinned in the agent file):
   curating wiki prose defeats the lane).
 - the cached pattern injected LITERALLY (same `pattern` slice contract as the
   full lane; the pattern file is small by design)
+- **crosslink (cross-repo, advisory):** if `.claude/orc/crosslink/needs.json`
+  exists and the task touches a matching boundary call site, inject the cached
+  linked contract as `crosslink` (labeled with its effective cross-repo tier +
+  "hints, not verified") — advisory, never blocks, never outranks local code. No
+  needs file or no boundary → nothing extra.
 - **`db:postgres` bonus:** if the task touches the data-access layer
   (repositories/dao/queries, `*.sql`, ORM entities) AND
   `.claude/orc/patterns/postgres-pattern.md` is CACHED, merge it into the same
