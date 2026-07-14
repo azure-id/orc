@@ -6,7 +6,7 @@
 
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
-![Version](https://img.shields.io/badge/version-0.17.0-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.17.1-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D16-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
@@ -37,30 +37,19 @@ zero-dependency npm package installs those files into your `.claude/` directory.
 
 ## Changelog
 
-### v0.17.0 — `orc crosslink`: cross-repo wiki references — advisory boundary contracts _(2026-07-14)_
+### v0.17.1 — Complete cross-repo crosslink setup guide in the orc-wiki README _(2026-07-14)_
 
-A new **crosslink** subsystem of orc-wiki lets one repo's wiki reference
-**another repo's** wiki at integration boundaries (BE↔FE, BE→gRPC service, …),
-so executors build against real cross-repo contracts instead of guessing. Each
-`/orc-wiki` scan now **publishes** this repo's boundary as per-point,
-evidence-anchored tag files under `wiki/crosslink/<kind>/` (registered in a new
-`crosslink_provided` manifest registry, integrity-gated). The new **`orc
-crosslink`** CLI composes the graph — nodes + directed edges, `self` as node 1,
-an extensible **kinds** catalog, explicit direction (which side gets
-drift-checked), paste-time freshness reporting via read-only git queries in the
-linked repo, and a **bulk-add** peek that mirrors a reciprocal edge from the
-other repo's config. orc-wiki then discovers the precise per-point tags you
-depend on into `.claude/orc/crosslink/needs.json` and syncs a snapshot cache;
-`/orc`, `/orc-fast`, and `/orc-mini` inject the linked contract into a task's
-slice only when it touches a boundary. Freshness is dual-signal
-(`min(provider-wiki-tier, snapshot-age)`, computed on read) and everything is
-**advisory, never blocking** — read foreign wiki only, never foreign source,
-never a foreign write; per-point drift and vanished-contract breaks warn, never
-gate; version skew degrades to coarse hints and upgrades for free.
+The orc-wiki README now carries a **complete, beginner-friendly step-by-step
+guide** to setting up cross-repo crosslink: a worked CLI walkthrough (the actual
+prompts and freshness output), a "what lives where" file map, a troubleshooting
+table, and the safety guarantees — following the DIY-docs rule (the how-to lives
+in the skill's own README; the root README only links to it). The root README's
+`/orc-wiki` section and Commands row now point at it.
 
 <details>
 <summary><b>Previous versions</b> (click to expand)</summary>
 
+### v0.17.0 — `orc crosslink`: cross-repo wiki references — advisory boundary contracts _(2026-07-14)_
 ### v0.16.1 — Interactive `orc diy` composer + numbered picks in `orc config` _(2026-07-14)_
 ### v0.16.0 — `/orc-diy`: build your own lane — CLI-composed flow, compiled, hard-gated _(2026-07-14)_
 ### v0.15.0 — Wiki v2: evidence-anchored docs · per-file staleness registry · integrity gate _(2026-07-14)_
@@ -262,7 +251,7 @@ needed. Either way, your `.claude/orc.config.yaml` overrides are left untouched.
 | **`/orc-analyze`** | The System Analyst: turns a requirement or document into a scope-bounded, code-grounded, evidence-backed spec. |
 | **`/orc-plan`** | The Requirement Planner: a detailed request or analyst spec → a grounded, right-sized, dependency-checked task plan. |
 | **`/orc-verify`** | Standalone verification of your git-modified changes (build + tests + diff sanity). Read-only. |
-| **`/orc-wiki`** | Builds a persistent project knowledge base into `wiki/` and points `CLAUDE.md` at it. Expensive, opt-in. |
+| **`/orc-wiki`** | Builds a persistent project knowledge base into `wiki/` and points `CLAUDE.md` at it. Expensive, opt-in. Also powers **cross-repo crosslink** (link a BE/FE/service's wiki so ORC builds against real cross-repo contracts) — full setup guide: [ORC-WIKI README](templates/skills/orc-wiki/README.md). |
 | **`/orc-pattern`** | Learns your project's real code conventions per language and caches them so executors match your house style. Reconciles a generic playbook (9 languages: React · Next.js · Vue · Angular · FastAPI · Django · NestJS · Express · Go) against your actual files — conventions defer to your codebase; security/correctness invariants and measurable validation gates always carry through to review + verify. `--refresh` to relearn. |
 | **`/orc-claude`** | Builds/updates/refreshes the **local repo's** `CLAUDE.md` from verified facts (real commands, layout, convention deviations, boundaries). Version-stamped (`0.0.1`, +0.0.1 per change, DD-MM-YYYY) with fenced sections — refresh regenerates only sections whose input fingerprints changed. Zero questions: P0/Gotchas/Glossary are fill-yourself placeholders. Foreign files backed up to `CLAUDE.md.bak`, user content never trimmed, wiki block byte-preserved. |
 | **`/orc-retro`** | Mines the behavior traces (`logging: true` runs) into an AI-readable calibration report — per-band outcomes, tier downgrades, pipeline leaks — and files it to the ORC repo (`retro_repo`, default azure-id/orc) as a PR (issue fallback). Hard-gates on an authed gh CLI or GitHub MCP: neither → refuses to run. |
@@ -445,6 +434,19 @@ docs, sweeping for coverage gaps (changed files no doc covers → proposes new
 areas) and dead docs (covered files gone → archive/delete) as it goes. After a
 BIG `/orc` or `/orc-ultra` run, ORC asks right at ship whether to
 refresh now (recommended) — declining prints a refresh-ASAP note.
+
+**Cross-repo crosslink.** In a multi-repo setup — a backend a frontend calls, a
+backend that calls other services over gRPC — each repo's wiki only knows its own
+code. Crosslink lets one repo reference another's wiki *at the integration
+boundary* so executors build against the real cross-repo contract instead of
+guessing. Every scan publishes this repo's boundary as per-point tag files; the
+`orc crosslink` CLI draws the graph (which repos, which way); `/orc`, `/orc-fast`,
+and `/orc-mini` inject the linked contract into a task's slice only when it
+touches a boundary. It's **advisory, never blocking**, reads foreign *wiki* only
+(never source, never a foreign write), and degrades gracefully across version
+skew. **Complete step-by-step setup guide:**
+[`templates/skills/orc-wiki/README.md`](templates/skills/orc-wiki/README.md)
+(installed at `.claude/skills/orc-wiki/README.md`).
 
 ---
 
