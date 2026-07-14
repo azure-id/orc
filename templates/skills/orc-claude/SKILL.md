@@ -22,8 +22,9 @@ never `~/.claude/CLAUDE.md`, even if ORC is installed globally.
 **Dispatch, don't do.** Whatever model this chat runs on, the skill itself only
 selects the mode and spawns `orc-claude-writer-opus-4-8-high` (the pinned
 engine) — so the scan + writing always run at Opus 4.8 high regardless of the
-caller's tier. The one exception: when `logging: true` the skill also writes the
-trace pointer + a few markers around that spawn (see "Behavior trace"); that
+caller's tier. The one exception: the skill also writes the
+trace pointer + a few markers around that spawn (behavior-trace logging is
+permanent; see "Behavior trace"); that
 tracing is its ONLY self-write — the `CLAUDE.md` write is always the writer's.
 **Fully non-interactive: ask the user NOTHING.** No AskUserQuestion, no
 confirmation prompts. Dispatch, relay the report, stop.
@@ -56,10 +57,9 @@ Not inside a git repo / no project root findable → say so and stop.
 
 ## Dispatch (the skill's only real job)
 
-**Resolve `logging` first** (`../orc/config.md` default + `.claude/orc.config.yaml`
-override). When `logging: true`, weave the trace steps below into the procedure —
-this skill owns a minimal one-dispatch trace (full marker set in "Behavior
-trace"). When `logging: false`, skip every **Trace:** step.
+Behavior-trace logging is permanent (always on). Weave the **Trace:** steps below
+into the procedure — this skill owns a minimal one-dispatch trace (full marker
+set in "Behavior trace").
 
 1. Detect the repo root and pick the mode (REFRESH / UPDATE / CREATE above —
    header sniff only; the writer re-verifies). **Trace:** open the run now —
@@ -145,21 +145,20 @@ Fill in the P0 / Gotchas / Glossary placeholders yourself — orc-claude never
 writes them for you.
 ```
 
-## Behavior trace (config `logging` — a minimal one-dispatch orchestrator)
+## Behavior trace (PERMANENT — a minimal one-dispatch orchestrator; always on)
 
-When `logging: true`, orc-claude owns the trace protocol for its run exactly
+orc-claude owns the trace protocol for its run exactly
 like the full orchestrator — but it is a SINGLE-DISPATCH lane, so it emits ONLY
 the markers it can truthfully witness. It does **not** emit `PHASE`/`SCORE`/
 `FINDING`/`VERDICT`: the scan/generate/report phases run INSIDE the writer
 sub-agent (which self-traces nothing — it only returns `actual_model`/
 `actual_effort`), and there is no scoring or review in this lane. Resolve
-`logging` + `log_dir` (`../orc/config.md` defaults + `.claude/orc.config.yaml`)
+`log_dir` (`../orc/config.md` default + `.claude/orc.config.yaml`)
 at start and follow `../orc/references/trace-protocol.md`. The marker set, in
 order (all under actor `orc`, plus the hook's `SPAWN`/`RETURN`):
 
-1. `log_dir/.current` = `orc-claude-<DDMMYY>.txt` — written FIRST. Without the
-   pointer the `orc-trace.js` hook no-ops, so nothing is traced (this is the
-   v0.7.0 orc-wiki bug pattern — do not reintroduce it).
+1. `log_dir/.current` = `orc-claude-<DDMMYY>.txt` — written FIRST (the hook also
+   bootstraps it on the writer dispatch, so the skeleton is never lost).
 2. `DISPATCH orc-claude-writer :: <mode> expect=opus-4-8/high` — before the
    spawn. The hook then appends `SPAWN`/`RETURN` around the dispatch. The mode
    rides in this line's tail (and in `FINISH`), so no separate mode marker.
@@ -171,7 +170,7 @@ order (all under actor `orc`, plus the hook's `SPAWN`/`RETURN`):
    delete `.current`.
 
 A noop refresh still traces the full cycle (ending `FINISH :: noop`) and still
-deletes `.current`. When `logging: false`, do none of this.
+deletes `.current`.
 
 ## Boundaries
 

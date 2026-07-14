@@ -4,7 +4,7 @@ description: >
   Retro miner for ORC — closes the behavior-trace flywheel. Use for
   "/orc-retro", "analyze the orc traces", "how well is orc scoring", or "what
   should we tune from the logged runs". Reads the persistent behavior traces
-  in log_dir (written when config `logging: true`), aggregates per-band
+  in log_dir (behavior-trace logging is permanent — every run writes one), aggregates per-band
   outcomes (retries, requeues, needs_context, unmet, downgrades, findings),
   and produces a calibration report with recommendations. READ-ONLY and
   REPORT-ONLY against the local system: it never edits the rubric, the skills,
@@ -48,10 +48,10 @@ Run as Opus 4.8 high (orchestrator). The mining itself is dispatched to
    upstream PR/issue delivery below.
 2. **You never mine yourself — you spawn.** Dispatch the retro agent with the
    trace file list; you validate the return and write the report.
-3. **No traces → say so and stop.** Requires `logging: true` runs to have
-   happened: resolve `log_dir` (`../orc/config.md` defaults +
-   `.claude/orc.config.yaml`) and list its `*.txt`. Empty → tell the user how
-   to enable logging (`orc config set logging true`) and stop. Never invent
+3. **No traces → say so and stop.** Requires ORC runs to have happened (logging
+   is permanent, so any past run left a trace): resolve `log_dir`
+   (`../orc/config.md` default + `.claude/orc.config.yaml`) and list its `*.txt`.
+   Empty → tell the user no runs have been traced yet and stop. Never invent
    findings from zero data.
 4. **This lane does NOT write a trace of its own.** It is the reader of the
    trace system, not a run — it writes no run pointer and emits no markers

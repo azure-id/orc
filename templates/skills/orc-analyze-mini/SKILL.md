@@ -69,15 +69,15 @@ for the formats; this skill does not duplicate them.
   which continues with the mini planner) — orc-mini runs the same evidence
   spot-check + derivation lint gates as the full lane before building.
 
-## Behavior trace (config `logging` — every ORC entry point traces)
+## Behavior trace (PERMANENT — every ORC entry point traces; always on)
 
 Same rule as the full analyst: standalone `/orc-analyze-mini` resolves
-`logging` + `log_dir` at start; when true, follow
+`log_dir` at start and follows
 `../orc/references/trace-protocol.md` — write `log_dir/.current` before the
 first dispatch, emit `PHASE`/`DISPATCH`/`VERIFY`/`GATE` lines, `FINISH` +
-delete `.current` at the end. Inside an orc-mini run, the mini orchestrator's
-trace already covers this — never open a second one. When `logging: false`, do
-none of this.
+delete `.current` at the end (the hook bootstraps `.current` on the first
+dispatch regardless). Inside an orc-mini run, the mini orchestrator's
+trace already covers this — never open a second one.
 
 ## Workflow checkpoint (gate before deriving the spec)
 

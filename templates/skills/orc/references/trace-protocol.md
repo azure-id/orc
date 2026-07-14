@@ -1,7 +1,7 @@
 # Reference — Behavior-Trace Protocol
 
-How ORC records its own behavior for later review. **Load only when
-`logging: true`** (config key). When logging is off, do NONE of this.
+How ORC records its own behavior for later review. **Behavior-trace logging is
+PERMANENT (always on) — there is no config toggle.** Every ORC run traces.
 
 Purpose: capture the flow of a run — phases, spawns, the model that actually
 answered, scoring decisions, user questions, review/verify outcomes — so the
@@ -9,25 +9,29 @@ skills can be improved from real traces. This is NOT the decision log
 (`run/…md`, agent knowledge, deleted on success). The trace is a separate,
 **persistent** artifact and the two never mix.
 
-## Gate
+## Always on
 
-Everything here is conditional on `logging: true` (resolved defaults ←
-`.claude/orc.config.yaml`). Default is `false` → the trace subsystem is inert.
+There is no gate. Behavior-trace logging is PERMANENT — every run traces. The
+`orc-trace.js` hook is the deterministic guarantee: on the first ORC-agent
+dispatch it bootstraps `log_dir` + the run pointer itself, so a `.txt` is created
+for every run even if the orchestrator never writes a rich marker. Only
+`log_dir` (default `.claude/orc/logs`) is configurable.
 
 ## Applies to EVERY ORC entry point (not just /orc)
 
-When `logging: true`, EVERY skill that starts an ORC run owns this protocol
+EVERY skill that starts an ORC run owns this protocol
 from its FIRST action: `orc`, `orc-mini`, `orc-fast`, `orc-wiki`, and the
 standalone lanes
 `/orc-analyze` (+ mini), `/orc-plan`, `/orc-pattern`, `/orc-verify`,
-`/orc-claude`. Whichever skill is orchestrating the session resolves `logging`
-at start; when true it writes the run pointer, emits the markers for its own
-phase set, and closes the trace at the end. A lane emits only the markers its
+`/orc-claude`. Whichever skill is orchestrating the session writes the run
+pointer at start, emits the markers for its own phase set, and closes the trace
+at the end. A lane emits only the markers its
 own shape produces — e.g. `/orc-claude` is a single-dispatch lane, so it emits
 just `DISPATCH`/`VERIFY`/`FINISH` (+ the hook's `SPAWN`/`RETURN`), never
-`PHASE`/`SCORE`/`FINDING`/`VERDICT`. Without the pointer the `orc-trace.js` hook writes NOTHING —
-a lane that skips this section produces no `.txt` at all (this was the
-orc-wiki bug fixed in v0.7.0). `/orc-ultra` is the `orc` skill with
+`PHASE`/`SCORE`/`FINDING`/`VERDICT`. Even a lane that skips this section still
+produces a `.txt` — the hook bootstraps the pointer on the first dispatch, so
+the SPAWN/RETURN skeleton is always captured (only the rich markers are lost).
+`/orc-ultra` is the `orc` skill with
 `ultra_mode: true` — the orc trace ownership covers it. Skills dispatched
 INSIDE a run (executors, reviewer, analyst-as-subagent, codifier, combiner,
 test-author, scouts, advisor, judge, the orc-claude writer) do not start
@@ -41,8 +45,10 @@ orchestrating skill folds in.
 - One file per run: `<run-slug>-<DDMMYY>.txt`, append-only, `.txt` only.
 - Run pointer: at run start, write `log_dir/.current` containing just the trace
   filename. Delete it at run end (success or abort). The `orc-trace.js` hook
-  reads this to know a run is active and which file to append to — without it,
-  the hook no-ops, so non-ORC Tasks are never traced.
+  reads this to know which file to append to; if it is missing when the first
+  ORC-agent dispatch fires, the hook creates the folder + pointer itself (a
+  generic `run-<DDMMYY-HHMMSS>.txt` slug). Non-ORC Tasks never trace — the hook
+  only bootstraps for agent names starting with `orc`.
 
 ## Line format
 

@@ -76,17 +76,17 @@ the user meant.
    gate) — R# ids, statuses, and context anchors must match exactly.
 7. Usage: report dispatch + remind the user to run `/usage`. Never invoke it.
 
-## Behavior trace (config `logging` — every ORC entry point traces)
+## Behavior trace (PERMANENT — every ORC entry point traces; always on)
 
 When run standalone (`/orc-analyze`, not inside an /orc run that already owns a
-trace), resolve `logging` + `log_dir` (`../orc/config.md` defaults +
-`.claude/orc.config.yaml`) at start. When `logging: true`, follow
+trace), resolve `log_dir` (`../orc/config.md` default +
+`.claude/orc.config.yaml`) at start and follow
 `../orc/references/trace-protocol.md`: write `log_dir/.current` =
 `<slug>-<DDMMYY>.txt` BEFORE the first dispatch, emit `PHASE` lines per phase
 (A→F), `DISPATCH`/`VERIFY` (claimed-vs-actual) per analyst/scout spawn, `GATE`
 lines for the evidence/derivation gates, then `FINISH` + delete `.current` at
-the end. Without the pointer the trace hook writes nothing. When
-`logging: false`, do none of this. Inside a full /orc run, the orchestrator's
+the end. (The hook bootstraps `.current` on the first dispatch anyway, so the
+skeleton is never lost.) Inside a full /orc run, the orchestrator's
 trace already covers this — never open a second one.
 
 ## Phase A — Ingest & detect source mode

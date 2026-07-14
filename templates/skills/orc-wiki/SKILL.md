@@ -70,13 +70,14 @@ gate mandatory.
    a warning, never a gate. Inert unless `.claude/orc-crosslink.config.yaml`
    exists or this repo has an outward boundary to publish.
 
-## Behavior trace (logging — same rule as orc/orc-mini; wiki runs trace too)
+## Behavior trace (PERMANENT — same rule as orc/orc-mini; wiki runs trace too)
 
-Resolve config at run start (`../orc/config.md` defaults + the
-`.claude/orc.config.yaml` override): read `logging` + `log_dir`. When
-`logging: true`, follow `../orc/references/trace-protocol.md` for the wiki's
-phase set — WITHOUT this section the `orc-trace.js` hook has no run-pointer and
-writes nothing, so a wiki run would produce no `.txt` at all:
+Behavior-trace logging is always on (no toggle). Resolve `log_dir` at run start
+(`../orc/config.md` default + the `.claude/orc.config.yaml` override) and follow
+`../orc/references/trace-protocol.md` for the wiki's phase set. The `orc-trace.js`
+hook bootstraps `log_dir` + the run-pointer on the first scan/codifier dispatch,
+so a `.txt` exists even if the run-start step below is skipped — but still do it
+so the file carries the rich markers, not just SPAWN/RETURN:
 
 - **Run start (after consent, before any dispatch):** create `log_dir`, write
   `log_dir/.current` = `<run-slug>-<DDMMYY>.txt`, and store
@@ -95,8 +96,6 @@ writes nothing, so a wiki run would produce no `.txt` at all:
   missing).
 - **Run end (Phase 3 done or abort):** emit `FINISH …` and delete
   `log_dir/.current`.
-
-When `logging: false`, do NONE of this (the hook no-ops).
 
 ## Phase 0 — Entry & auto-branch (on /orc-wiki)
 

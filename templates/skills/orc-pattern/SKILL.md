@@ -58,16 +58,16 @@ Reconciliation is therefore cheap: you only ever override the *soft* half.
 3. **Manual** — `/orc-pattern` (all detected langs, or a named one),
    `/orc-pattern --refresh` to force-regenerate.
 
-## Behavior trace (config `logging` — every ORC entry point traces)
+## Behavior trace (PERMANENT — every ORC entry point traces; always on)
 
 When run standalone (`/orc-pattern`, not inside an /orc or orc-wiki run that
-already owns a trace), resolve `logging` + `log_dir` (`../orc/config.md`
-defaults + `.claude/orc.config.yaml`) at start. When `logging: true`, follow
+already owns a trace), resolve `log_dir` (`../orc/config.md`
+default + `.claude/orc.config.yaml`) at start and follow
 `../orc/references/trace-protocol.md`: write `log_dir/.current` =
 `<slug>-<DDMMYY>.txt` BEFORE dispatching the codifier, emit
 `PHASE`/`DISPATCH`/`VERIFY` (claimed-vs-actual) lines, then `FINISH` + delete
-`.current`. Inside another ORC run, that run's trace covers this — never open a
-second one. When `logging: false`, do none of this.
+`.current` (the hook bootstraps `.current` on dispatch regardless). Inside
+another ORC run, that run's trace covers this — never open a second one.
 
 ## Phase 0 — Entry & auto-branch (on /orc-pattern)
 

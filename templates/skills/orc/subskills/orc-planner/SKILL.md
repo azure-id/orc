@@ -123,15 +123,16 @@ orphans: []}` — self-attested, then independently recomputed by the
 orchestrator's Phase 1 exit gate (spec R# set vs union of task
 `requirements[]`), the same attestation + spot-check pairing as `grounding[]`.
 
-## Behavior trace (config `logging` — every ORC entry point traces)
+## Behavior trace (PERMANENT — every ORC entry point traces; always on)
 
-Standalone `/orc-plan` traces too: the orchestrator resolves `logging` +
-`log_dir` at start; when true, follow `../../references/trace-protocol.md` —
+Standalone `/orc-plan` traces too: the orchestrator resolves `log_dir` at start
+and follows `../../references/trace-protocol.md` —
 write `log_dir/.current` before dispatching the planner, emit
 `PHASE`/`DISPATCH`/`VERIFY` lines, `FINISH` + delete `.current` at the end
-(on take-into-build the trace stays open and the full run continues it).
+(on take-into-build the trace stays open and the full run continues it; the hook
+bootstraps `.current` on dispatch regardless).
 Inside an /orc run, the run's trace already covers planning — never open a
-second one. When `logging: false`, do none of this.
+second one.
 
 ## Checkpoint before branching
 

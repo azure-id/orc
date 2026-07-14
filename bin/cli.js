@@ -173,8 +173,9 @@ function installGuards(claudeDir) {
   }
 
   // 3) Trace hook — PreToolUse(Task) SPAWN + SubagentStop RETURN skeleton.
-  //    Idempotent; non-destructive. The hook self-gates (writes ONLY when
-  //    logging:true AND a run pointer exists), so wiring it is always safe.
+  //    Idempotent; non-destructive. Behavior-trace logging is PERMANENT (always
+  //    on); the hook bootstraps log_dir + the run pointer itself, so wiring it
+  //    is always safe and a trace is guaranteed for every ORC run.
   const traceCmd = nodeCmd(path.join(hooksDest, "orc-trace.js"));
   const wireTrace = (arrName, matcher) => {
     settings.hooks[arrName] = settings.hooks[arrName] || [];
@@ -271,8 +272,8 @@ function install({ overwrite }) {
   console.log("    and run your MAIN session on Opus (see agents/MODEL-MAPPING.md).");
   console.log("  • A PreToolUse guard now HARD-BLOCKS /orc unless the session is at");
   console.log("    high effort; the statusline warns when the model isn't Opus 4.8.");
-  console.log("  • Behavior-trace logging is OFF by default. To capture run traces");
-  console.log("    for skill review: `orc config set logging true` (writes .claude/orc/logs/).");
+  console.log("  • Behavior-trace logging is ALWAYS ON (permanent) — every ORC run");
+  console.log("    writes a persistent trace under .claude/orc/logs/ (set log_dir to move it).");
 }
 
 // Reconstruct the target flags (--global / --dir X) to pass through to the
@@ -425,7 +426,9 @@ const CONFIG_META = [
   { key: "generate_tests", def: false, tier: "common", validate: vEnum("true", "false"), options: ["true", "false"], desc: "Opt-in Phase 6.5: author test cases before ship (writes tests, never runs them). OFF by default." },
   { key: "pattern_findings", def: "ask", tier: "common", validate: vEnum("ask", "on", "off"), options: ["ask", "on", "off"], desc: "Code-pattern gate on an FE/BE cache miss: ask = prompt, on = auto-codify, off = always agnostic." },
   { key: "security_review", def: "off", tier: "common", validate: vEnum("off", "ask", "on"), options: ["off", "ask", "on"], desc: "Opt-in Phase 5.5 security pass on runs with a task scored >= 70 (risk floor). OFF by default." },
-  { key: "logging", def: false, tier: "common", validate: vEnum("true", "false"), options: ["true", "false"], desc: "Write a persistent behavior trace per run (OFF by default; for skill-improvement review)." },
+  // NOTE: behavior-trace logging is PERMANENT (always on) and intentionally NOT
+  // a config key — the orc-trace.js hook always writes a persistent trace per
+  // run under log_dir. Only the folder location (log_dir) is configurable.
   { key: "orc_wiki_pattern_findings", def: false, tier: "advanced", validate: vEnum("true", "false"), desc: "orc-wiki also codifies ALL detected languages during its scan (pre-warms the pattern cache)." },
   { key: "crosslink_fresh_days", def: 10, tier: "advanced", validate: vInt(1), desc: "Cross-repo crosslink snapshot: days since sync ≤ this → FRESH hint (Signal B; advisory)." },
   { key: "crosslink_aging_days", def: 15, tier: "advanced", validate: vInt(1), desc: "Cross-repo crosslink snapshot: days since sync ≤ this → AGING; beyond → STALE (advisory, never blocks)." },

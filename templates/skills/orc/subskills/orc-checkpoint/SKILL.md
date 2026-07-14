@@ -30,7 +30,7 @@ Minimal `run_state` shape (see `../../schemas/checkpoint.md` for the full field 
 ```json
 { "run_slug": "merchant-notifications", "phase": 3, "updated_at": "2026-07-10T09:00:00Z",
   "tasks": [ { "id": "T1", "status": "done", "actual_files": ["services/notify.ts"] } ],
-  "resume_pointer": "wave 2 of 3", "logging_enabled": false }
+  "resume_pointer": "wave 2 of 3", "logging_enabled": true }
 ```
 Steps:
 1. Serialize run_state to JSON.

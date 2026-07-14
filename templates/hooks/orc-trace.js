@@ -15,11 +15,17 @@
  * subagent's own system prompt). The claimed-vs-actual model check is done by
  * the orchestrator from each agent's `actual_model` return field, NOT here.
  *
- * Gating (the "default off / else do nothing" requirement, enforced in code):
- *   no-op UNLESS  logging:true in .claude/orc.config.yaml  AND  a run pointer
- *   .claude/orc/logs/.current exists (written by the orchestrator at run start).
- *   The pointer means "an ORC run is active and wants tracing" — so Tasks from
- *   non-ORC work are never logged.
+ * Logging is PERMANENT (always on) — no config toggle. This hook is the
+ * DETERMINISTIC guarantee that a trace exists: on the first ORC-agent dispatch
+ * it BOOTSTRAPS the log folder + run pointer itself, so a `.txt` is created for
+ * every run even if the orchestrator never writes a single rich marker. That
+ * removes the old failure where nothing was ever created because the folder /
+ * pointer depended entirely on the model remembering to make them.
+ *
+ * Gating (so non-ORC Tasks are never logged, enforced in code):
+ *   - a SPAWN is written (and the folder+pointer bootstrapped if missing) only
+ *     when the dispatched agent name starts with `orc` — a real ORC run.
+ *   - a RETURN is written only when a run pointer already exists.
  *
  * Wiring (installed by `orc init` into .claude/settings.json):
  *   hooks.PreToolUse[]   { matcher:"Task",  hooks:[{command:"node <..>/orc-trace.js"}] }
@@ -52,10 +58,6 @@ function readConfigScalar(key) {
   return m[1].replace(/^['"]|['"]$/g, "").trim();
 }
 
-function loggingEnabled() {
-  return String(readConfigScalar("logging") || "").toLowerCase() === "true";
-}
-
 function logDir() {
   const override = readConfigScalar("log_dir");
   const rel = override || ".claude/orc/logs";
@@ -75,6 +77,9 @@ function stamp(d) {
 }
 
 function appendLine(dir, file, actor, verb, tail) {
+  // Ensure the folder exists — the hook is the deterministic writer, so it
+  // must never depend on the orchestrator having created log_dir first.
+  fs.mkdirSync(dir, { recursive: true });
   // One complete line per append keeps concurrent SubagentStop writes (a wave
   // of N parallel agents) from interleaving mid-line.
   const line =
@@ -83,20 +88,31 @@ function appendLine(dir, file, actor, verb, tail) {
   fs.appendFileSync(path.join(dir, file), line);
 }
 
+// Generic run slug used only when the hook bootstraps a trace before the
+// orchestrator wrote its own pointer (e.g. the model skipped run-start).
+function bootstrapSlug(d) {
+  const p = (n) => String(n).padStart(2, "0");
+  const dd = p(d.getDate()), mm = p(d.getMonth() + 1), yy = p(d.getFullYear() % 100);
+  const t = p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds());
+  return `run-${dd}${mm}${yy}-${t}.txt`;
+}
+
+// Read the active run pointer, or null. Never throws.
+function readPointer(dir) {
+  try {
+    const cur = fs.readFileSync(path.join(dir, ".current"), "utf8").trim();
+    return cur || null;
+  } catch (_) {
+    return null;
+  }
+}
+
 let raw = "";
 process.stdin.on("data", (c) => (raw += c));
 process.stdin.on("end", () => {
   try {
-    if (!loggingEnabled()) return; // default off
-
+    // Logging is PERMANENT (always on) — no config gate.
     const dir = logDir();
-    let current;
-    try {
-      current = fs.readFileSync(path.join(dir, ".current"), "utf8").trim();
-    } catch (_) {
-      return; // no active ORC run → nothing to trace
-    }
-    if (!current) return;
 
     let data = {};
     try {
@@ -113,9 +129,24 @@ process.stdin.on("end", () => {
       // orchestrator's DISPATCH/VERIFY lines carry the authoritative detail.
       const input = data.tool_input || {};
       const agent = input.subagent_type || input.subagentType || "agent";
+      // Only ORC-agent dispatches start/extend a trace — non-ORC Tasks (Explore,
+      // general-purpose, superpowers, …) are never logged.
+      if (!/^orc/i.test(String(agent))) return;
+      let current = readPointer(dir);
+      if (!current) {
+        // Bootstrap: the orchestrator hasn't written a pointer yet (or skipped
+        // run-start). Create the folder + pointer so a trace exists regardless.
+        current = bootstrapSlug(new Date());
+        fs.mkdirSync(dir, { recursive: true });
+        fs.writeFileSync(path.join(dir, ".current"), current + "\n");
+      }
       const desc = (input.description || "").toString().slice(0, 80);
       appendLine(dir, current, "hook", `SPAWN ${agent}`, desc);
     } else if (event === "SubagentStop" || event === "Stop") {
+      // A RETURN only makes sense inside an active run — don't manufacture a
+      // trace from a stray subagent stop that had no matching ORC dispatch.
+      const current = readPointer(dir);
+      if (!current) return;
       appendLine(dir, current, "hook", "RETURN", "");
     }
   } catch (_) {

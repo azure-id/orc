@@ -162,19 +162,21 @@ orc-mini accepts the handoff (see its "Fallback intake" section): it skips
 re-deriving whatever is carried and runs its normal lane otherwise. The run
 folder is already in the shared format — no migration.
 
-## Behavior trace (logging — same rule as every lane)
+## Behavior trace (PERMANENT — same rule as every lane; always on)
 
-When config `logging: true`, follow `../orc/references/trace-protocol.md` for
+Follow `../orc/references/trace-protocol.md` for
 fast's phase set: run start → write `log_dir/.current` + store `trace_path` in
 the checkpoint; `PHASE` lines at F0–F4 transitions; `GATE` lines for the
 preflight/fit/smoke verdicts; `DISPATCH`/`VERIFY` around the executor;
-`OUTCOME` + `FINISH` at close, then delete `log_dir/.current`. When
-`logging: false`, do NONE of this.
+`OUTCOME` + `FINISH` at close, then delete `log_dir/.current`. The
+`orc-trace.js` hook bootstraps `log_dir` + `.current` on the first dispatch, so
+a trace exists even if the run-start step is skipped.
 
 ## Config
 
 Resolve at run start (`../orc/config.md` defaults ← `.claude/orc.config.yaml`):
-`wiki_fresh_max` / `wiki_aging_max` (tier edges), `logging` + `log_dir`. Fast
+`wiki_fresh_max` / `wiki_aging_max` (tier edges) + `log_dir` (logging is
+permanent — always on). Fast
 has no config key of its own — it is command-entry only. Wave/scoring/review
 keys never apply; never render or ask them.
 

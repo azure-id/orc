@@ -71,8 +71,8 @@ retro_repo: azure-id/orc      # GitHub owner/repo that receives retro reports.
                               # /orc-retro REQUIRES a delivery channel (authed gh
                               # CLI or a GitHub MCP) and refuses to run without one.
 
-# --- Behavior trace logging (for skill improvement; OFF by default) ---
-logging: false                # when true, write a persistent behavior trace per run
+# --- Behavior trace logging (PERMANENT — always on, not a toggle) ---
+# Every ORC run writes a persistent behavior trace; there is no on/off key.
 log_dir: .claude/orc/logs     # persistent trace folder — NEVER deleted on completion
 
 # --- Wiki freshness (computed on read from .claude/orc/wiki-meta.json) ---
@@ -131,8 +131,8 @@ list of `{min, max, agent}` rows; the orchestrator uses it instead of a preset.
 - Read at run start via the resolution rule above (defaults ← `orc.config.yaml`
   override). Missing values use defaults (max_wave_tasks 3, batch_pause_every 2,
   rubric_bands 5, max_scouts 3, default_analysis_depth standard,
-  generate_tests false, logging false, pattern_findings ask,
-  security_review off).
+  generate_tests false, pattern_findings ask, security_review off).
+  Behavior-trace logging is not listed here — it is PERMANENT (always on).
 - `generate_tests` gates the opt-in Phase 6.5 (Test Authoring, default OFF). When
   on, after Verify the orchestrator dispatches `orc-test-author-opus-4-8-high` to
   WRITE test cases (automated files + `TEST-PLAN.md` + a curl bundle for HTTP
@@ -146,10 +146,11 @@ list of `{min, max, agent}` rows; the orchestrator uses it instead of a preset.
   resulting score to a model. More bands = finer score granularity, same model
   set — the preset boundaries define the mapping.
 - max_wave_tasks is a hard cap in wave-grouping.
-- `logging` gates the behavior-trace subsystem (default OFF). When true, the
-  orchestrator follows `references/trace-protocol.md` and the `orc-trace.js` hook
-  writes a persistent `.txt` per run under `log_dir`. When false, the whole trace
-  subsystem is inert — the hook no-ops and the orchestrator emits no markers.
+- Behavior-trace logging is PERMANENT (always on) — there is no `logging` key.
+  Every run, the orchestrator follows `references/trace-protocol.md` and the
+  `orc-trace.js` hook writes a persistent `.txt` under `log_dir`. The hook is the
+  deterministic guarantee: it bootstraps `log_dir` + the run pointer itself, so a
+  trace exists even if the orchestrator never writes a marker.
 - `log_dir` is the persistent trace folder; unlike the decision log (`run/…md`,
   deleted on success) traces are NEVER auto-deleted — post-hoc review is the point.
 - `retro_repo` is where `/orc-retro` files its calibration report (PR preferred,

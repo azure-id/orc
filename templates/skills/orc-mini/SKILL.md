@@ -117,11 +117,11 @@ a curl bundle for HTTP APIs — but never run them; you test manually.)"*
 - **No** → skip and continue to ship.
 - Either way this NEVER runs tests and NEVER gates the ship.
 
-## Behavior trace (logging — same rule as full; keep it running)
+## Behavior trace (PERMANENT — same rule as full; always on)
 
-Mini does NOT drop the trace. When config `logging: true`, follow
-`../orc/references/trace-protocol.md` exactly as the full orchestrator does, for
-mini's phase set:
+Mini does NOT drop the trace. Behavior-trace logging is always on (no toggle);
+follow `../orc/references/trace-protocol.md` exactly as the full orchestrator
+does, for mini's phase set:
 - **Run start:** create `log_dir`, write `.current`, store `logging_enabled` +
   `trace_path` in the checkpoint. Emit a `PHASE` line at each mini phase
   transition (intake → planning → execute → smoke → test-ask → ship).
@@ -137,7 +137,8 @@ mini's phase set:
 - **Smoke gate:** emit `VERDICT pass|fail` for the build+test result.
 - **Run end (ship or abort):** emit `FINISH …` and delete `log_dir/.current`.
 
-When `logging: false`, do NONE of this (the hook no-ops).
+The `orc-trace.js` hook bootstraps `log_dir` + `.current` on the first dispatch,
+so a trace exists even if you skip the run-start step above.
 
 ## Complexity read (replaces the scoring table)
 
@@ -198,8 +199,8 @@ session Opus 4.8 ≥ every dispatched agent, always true). See
 
 Resolve config at run start: `../orc/config.md` defaults merged with the user
 override `.claude/orc.config.yaml` (written by the `orc config` CLI, survives
-`orc update`) — read `generate_tests` (default OFF — the Phase T offer default),
-`logging` (default OFF) + `log_dir`. (Mini is single-subagent with no waves, so
+`orc update`) — read `generate_tests` (default OFF — the Phase T offer default)
+and `log_dir` (logging itself is permanent — always on). (Mini is single-subagent with no waves, so
 `max_wave_tasks` / `batch_pause_every` / the scoring presets do not apply — never
 render or ask them.) Mini is always single-pass analysis, so `max_scouts` / deep
 mode don't apply either.

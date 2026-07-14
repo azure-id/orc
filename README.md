@@ -37,18 +37,22 @@ zero-dependency npm package installs those files into your `.claude/` directory.
 
 ## Changelog
 
-### v0.17.1 — Complete cross-repo crosslink setup guide in the orc-wiki README _(2026-07-14)_
+### v0.17.2 — Behavior-trace logging is permanent + the trace folder is now created deterministically _(2026-07-14)_
 
-The orc-wiki README now carries a **complete, beginner-friendly step-by-step
-guide** to setting up cross-repo crosslink: a worked CLI walkthrough (the actual
-prompts and freshness output), a "what lives where" file map, a troubleshooting
-table, and the safety guarantees — following the DIY-docs rule (the how-to lives
-in the skill's own README; the root README only links to it). The root README's
-`/orc-wiki` section and Commands row now point at it.
+**Bugfix.** Behavior-trace logging used to be an opt-in config key, and even when
+turned on it produced **nothing** — no `.claude/orc/logs/` folder, no `.txt` —
+because the folder and run pointer were created only if the orchestrator model
+remembered to make them, which it often didn't (and never did after a
+compaction). Logging is now **permanent (always on)** with no config toggle, and
+the `orc-trace.js` hook is the **deterministic writer**: on the first ORC-agent
+dispatch it creates the folder + run pointer itself, so every run is guaranteed a
+trace. The `logging` config key is removed; only `log_dir` (where the trace
+lives) remains configurable.
 
 <details>
 <summary><b>Previous versions</b> (click to expand)</summary>
 
+### v0.17.1 — Complete cross-repo crosslink setup guide in the orc-wiki README _(2026-07-14)_
 ### v0.17.0 — `orc crosslink`: cross-repo wiki references — advisory boundary contracts _(2026-07-14)_
 ### v0.16.1 — Interactive `orc diy` composer + numbered picks in `orc config` _(2026-07-14)_
 ### v0.16.0 — `/orc-diy`: build your own lane — CLI-composed flow, compiled, hard-gated _(2026-07-14)_
@@ -554,12 +558,17 @@ The knobs (shipped defaults in `skills/orc/config.md`):
 | `max_scouts` | `3` | Parallel read-only scouts in deep analysis. |
 | `default_analysis_depth` | `standard` | The analyst depth gate's default (standard/deep). |
 | `generate_tests` | `false` | Opt-in test authoring. When on, ORC **writes** test cases (automated files, a manual `TEST-PLAN.md`, and a Postman-importable `test-cases.http` curl bundle for HTTP APIs). It never runs them; you test manually. |
-| `logging` | `false` | Opt-in behavior trace. Writes a persistent `.txt` per run under `log_dir` recording phases, every spawn plus the model that actually answered (claimed-vs-actual, catching a silent tier downgrade), scores, and outcomes. |
 | `pattern_findings` | `ask` | Code-pattern matching (`ask`/`on`/`off`). On an FE/BE cache miss, `ask` prompts to learn the project's conventions via `orc-pattern` (or go language-agnostic), `on` auto-learns, `off` stays agnostic. A learned pattern makes executors match your house style; security/correctness invariants are always enforced. |
 | `security_review` | `off` | Opt-in security pass (Phase 5.5, `off`/`ask`/`on`). Fires only on runs where a task scored ≥ 70 (the risk floor: security/money/migrations/auth). Sweeps the run's changed files against a 12-item OWASP/STRIDE checklist — wraps Semgrep if you have it installed, never installs anything. |
 | `orc_wiki_pattern_findings` | `false` | When on, `orc-wiki` also learns code-patterns for every detected language during its scan, pre-warming the cache so later runs skip the prompt. |
 | `wiki_fresh_max` / `wiki_aging_max` | `10` / `30` | Wiki freshness tier edges (commit distance since the last scan → FRESH / AGING / STALE). Computed on read from the `wiki-meta.json` manifest — never stored. |
 | `wiki_refresh_ask_tasks` / `wiki_refresh_ask_files` | `3` / `10` | BIG-run trigger for the post-ship "refresh wiki now?" ask (full + ultra lanes, only when the run touched wiki-covered files). |
+
+**Behavior-trace logging is permanent (always on)** — every run writes a
+persistent `.txt` under `log_dir` (default `.claude/orc/logs/`) recording phases,
+every spawn plus the model that actually answered (claimed-vs-actual, catching a
+silent tier downgrade), scores, and outcomes. There is no on/off key; only
+`log_dir` (advanced) relocates it.
 
 Change them with the **`orc config`** CLI — deterministic terminal I/O, so editing
 costs **zero model tokens** (nothing is loaded into a Claude session):

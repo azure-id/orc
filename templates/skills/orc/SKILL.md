@@ -150,19 +150,21 @@ on deep-analysis scouts), `default_analysis_depth` (default standard), and the
 analyzer/planner artifact directories. The user may also override any value for a
 single run. Apply these in Phase 0 (analyst depth gate + scout cap; test-authoring
 opt-in), Phase 2 (batch-pause) and Phase 3 (wave cap). It also provides
-`generate_tests` (default `false` — the opt-in Phase 6.5 gate) and `logging`
-(default `false`) + `log_dir` (default `.claude/orc/logs`) — see the
-behavior-trace section below. And `pattern_findings` (default `ask`) — the
+`generate_tests` (default `false` — the opt-in Phase 6.5 gate) and `log_dir`
+(default `.claude/orc/logs`) — behavior-trace logging is PERMANENT (always on),
+see the behavior-trace section below. And `pattern_findings` (default `ask`) — the
 code-pattern gate applied at Phase 3 dispatch (see the code-pattern section) —
 and `security_review` (default `off`; `ask`/`on` enable the opt-in Phase 5.5
 security pass on runs containing a task scored ≥ 70).
 
-## Behavior trace (opt-in — only when config `logging: true`)
+## Behavior trace (PERMANENT — always on, no config toggle)
 
-Default OFF. When `logging: true`, follow `references/trace-protocol.md` and
-record the run's behavior to a persistent `.txt` under `log_dir` — for post-hoc
-skill improvement, separate from the decision log and NEVER deleted. When
-`logging: false`, do NONE of this.
+Always on. Follow `references/trace-protocol.md` and record the run's behavior to
+a persistent `.txt` under `log_dir` — for post-hoc skill improvement, separate
+from the decision log and NEVER deleted. The `orc-trace.js` hook is the
+deterministic backbone: it bootstraps `log_dir` + the run pointer on the first
+dispatch, so a trace exists even if you skip the run-start step below — but still
+do it, so the file carries the rich markers, not just the SPAWN/RETURN skeleton.
 
 - **Run start:** create `log_dir`, write `log_dir/.current` =
   `<run-slug>-<DDMMYY>.txt`, and store `logging_enabled: true` + `trace_path` in
@@ -213,7 +215,7 @@ the project; security/correctness invariants are always enforced.** See the
   INJECTED LITERALLY into each executor's task slice (`pattern` field) — never a
   file pointer; (2) the executor return echoes `pattern_version` + `invariants_checked`
   (validated like `actual_model`); (3) the Reviewer re-checks the invariants against
-  the diff. With `logging: true`, record the applied `pattern_version`.
+  the diff. Record the applied `pattern_version` in the trace.
 
 ## Ultra lane (`/orc-ultra` — load references/ultra-mode.md)
 
@@ -248,7 +250,7 @@ on plain `/orc` or orc-mini. In brief:
   to full flow mid-run.
 - `orc-verify` — standalone; verifies only git-modified changes,
   Opus 4.8 high, read-only. Runs without this orchestrator.
-- `orc-retro` — mines the behavior traces (`logging: true` runs) into a
+- `orc-retro` — mines the behavior traces (every run writes one) into a
   calibration report: per-band outcomes, downgrades, pipeline leaks.
   Read-only/report-only; it never edits the rubric — a human applies its
   recommendations. The `OUTCOME` trace marker is its raw material.
@@ -277,7 +279,7 @@ on plain `/orc` or orc-mini. In brief:
   `../orc-advisor/SKILL.md` / `../orc-judge/SKILL.md` at their dispatch points
 - Schemas (you own; pass slices only): `schemas/intent-spec.md`,
   `schemas/planning-output.md`, `schemas/checkpoint.md`
-- `logging: true` → `references/trace-protocol.md` (behavior trace; else skip)
+- `references/trace-protocol.md` — behavior trace (PERMANENT; always load)
 - Worked example (orient only — never execute from it) → `examples/full-run-mock.md`
   (annotated dry run of a full pipeline, Phase 0 → ship)
 
@@ -475,7 +477,7 @@ Per wave:
    planning correction. Cap 2 per task, then escalate to user. For a task that was
    given a `pattern`, require `invariants_checked: true` + a `pattern_version`
    matching what you injected — a missing/false attestation is a malformed return
-   (requeue). With `logging: true`, record the applied `pattern_version`.
+   (requeue). Record the applied `pattern_version` in the trace.
    **Evidence check:** `status=done` on a project with a runnable build/test
    REQUIRES `evidence` {command, exit_code, tail} — you detected the stack at
    intake, so you KNOW whether a runner exists; a missing evidence block or a

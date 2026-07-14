@@ -19,8 +19,8 @@ Two files, two jobs:
   "source_branch": "feat/notifications",
   "intent_spec": "run/merchant-notifications/intent-spec.md",
   "batch_pause_every": 2,
-  "logging_enabled": false,        // config.logging — re-anchor the behavior trace on resume
-  "trace_path": null,              // "<log_dir>/<run-slug>-<DDMMYY>.txt" when logging_enabled
+  "logging_enabled": true,         // logging is PERMANENT (always on) — re-anchor the behavior trace on resume
+  "trace_path": null,              // "<log_dir>/<run-slug>-<DDMMYY>.txt" — the run's trace file
   "ultra_mode": false,             // true only on /orc-ultra runs; gates the "ultra" block below
   "ultra": null,                   /* when ultra_mode — a resumed run continues mid-gate/mid-loop:
     { "brief_path": "run/…/ultra/advisory-brief.md",

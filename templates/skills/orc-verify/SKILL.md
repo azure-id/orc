@@ -54,14 +54,14 @@ P2/P3 (advisory):
 Verdict: <READY / NEEDS FIXES>
 ```
 
-## Behavior trace (config `logging` — every ORC entry point traces)
+## Behavior trace (PERMANENT — every ORC entry point traces; always on)
 
-Standalone verify traces too. Resolve `logging` + `log_dir`
-(`../orc/config.md` defaults + `.claude/orc.config.yaml`) at start. When
-`logging: true`, follow `../orc/references/trace-protocol.md`: write
+Standalone verify traces too. Resolve `log_dir`
+(`../orc/config.md` default + `.claude/orc.config.yaml`) at start and follow
+`../orc/references/trace-protocol.md`: write
 `log_dir/.current` = `<slug>-<DDMMYY>.txt` first, emit `PHASE` lines, `FINDING
 p0=… p1=… p2=… p3=…` and `VERDICT pass|fail` for the result, then `FINISH` +
-delete `.current`. When `logging: false`, do none of this.
+delete `.current` (the hook bootstraps `.current` on dispatch regardless).
 
 ## Boundaries
 

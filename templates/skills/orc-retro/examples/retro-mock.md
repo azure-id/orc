@@ -1,7 +1,7 @@
 # Worked example — /orc-retro run (mock; orient only, never execute from this)
 
 The retro is the READER end of the behavior-trace flywheel: it mines the `.txt`
-traces (written only when config `logging: true`), aggregates the CLOSED verb
+traces (logging is permanent — every run writes one), aggregates the CLOSED verb
 set, and files a calibration report UPSTREAM to the ORC repo. It never tunes
 your project, never self-tunes, and writes no trace of its own.
 
@@ -147,12 +147,12 @@ C: gh not authed, no GitHub MCP in this session.
    GitHub MCP), then re-run. Mining nothing until then.
 ```
 
-No traces (logging was never on):
+No traces yet (no ORC runs have happened):
 ```
 U: /orc-retro
 C: Channel OK. log_dir has 0 *.txt files.
-   Nothing to mine — enable logging first (`orc config set logging true`), run
-   some ORC work, then come back. Never invents findings from zero data.
+   Nothing to mine — no ORC runs have been traced yet. Run some ORC work, then
+   come back. Never invents findings from zero data.
 ```
 
 ## What each lane contributes to the mine
