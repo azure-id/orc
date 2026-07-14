@@ -51,7 +51,7 @@ function positionals() {
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
     if (a === "--global") continue;
-    if (a === "--dir" || a === "--from") {
+    if (a === "--dir" || a === "--from" || a === "--preset") {
       i++; // skip the flag's value
       continue;
     }
@@ -246,11 +246,21 @@ function install({ overwrite }) {
 
   installGuards(claudeDir);
 
+  // A compiled orc-diy flow is version-stamped — installing a different orc
+  // makes it stale. Nudge here so the user recompiles before the gate bites.
+  try {
+    const diyLock = readDiyLock(claudeDir);
+    if (diyLock && diyLock.compiled_hash && diyLock.orc_version !== currentVersion()) {
+      console.log("\n  ⚠  your orc-diy compiled flow is now STALE (orc changed) — run `orc diy compile`.");
+    }
+  } catch (_) {}
+
   console.log(`\nInstalled into ${claudeDir}`);
   console.log(
-    "Slash commands: /orc  /orc-ultra  /orc-mini  /orc-analyze  /orc-plan  /orc-verify  /orc-wiki  /orc-pattern  /orc-retro"
+    "Slash commands: /orc  /orc-ultra  /orc-mini  /orc-diy  /orc-analyze  /orc-plan  /orc-verify  /orc-wiki  /orc-pattern  /orc-retro"
   );
   console.log("Config: run `orc config` (CLI, interactive) — not a slash command.");
+  console.log("Custom flow: /orc-diy stays gated until you run `orc diy init` + `orc diy compile`.");
   console.log("\nNext:");
   console.log("  • Paste your PR template into skills/orc/subskills/orc-pr/pr.md");
   console.log("  • Add to your .gitignore:  .claude/skills/orc/run/");
@@ -636,6 +646,482 @@ function config() {
   }
 }
 
+// ---------------------------------------------------------------------------
+// orc diy — user-composable flow. The CLI is the ONLY writer of the config
+// (.claude/orc-diy.config.yaml), the flow spec (.claude/orc/diy/flow.md), the
+// lock (.claude/orc/diy/flow.lock.json) and the compiled artifact
+// (.claude/orc/diy/FLOW-COMPILED.md). The orc-diy skill only gates + dispatches.
+// Project-scoped only: --global is rejected for the whole family.
+// ---------------------------------------------------------------------------
+
+const crypto = require("crypto");
+const sha256 = (s) => crypto.createHash("sha256").update(s).digest("hex");
+
+// Executor catalog with tier ranks (model rank, effort rank). Subagents cannot
+// exceed the main-session tier — validation + score-table clipping use this.
+const DIY_EXECUTORS = {
+  "orc-executor-sonnet-4-6-med": { model: 1, effort: 1 },
+  "orc-executor-sonnet-4-6-high": { model: 1, effort: 2 },
+  "orc-executor-sonnet-5-high": { model: 2, effort: 2 },
+  "orc-executor-opus-4-7-med": { model: 3, effort: 1 },
+  "orc-executor-opus-4-7-high": { model: 3, effort: 2 },
+  "orc-executor-opus-4-8-high": { model: 4, effort: 2 },
+};
+const DIY_TIERS = {
+  "sonnet-4-6-high": { model: 1, effort: 2, modelId: "claude-sonnet-4-6", effortName: "high" },
+  "opus-4-7-med": { model: 3, effort: 1, modelId: "claude-opus-4-7", effortName: "medium" },
+  "opus-4-8-high": { model: 4, effort: 2, modelId: "claude-opus-4-8", effortName: "high" },
+};
+// allowed under a tier: lower model always; same model only at <= effort.
+const agentFitsTier = (a, t) =>
+  a.model < t.model || (a.model === t.model && a.effort <= t.effort);
+
+const vSlug = (raw) =>
+  /^[a-z0-9][a-z0-9-]*$/.test(raw)
+    ? { value: raw }
+    : { err: "must be a lowercase slug (a-z, 0-9, dashes)" };
+
+const DIY_META = [
+  { key: "analyze", def: "auto", validate: vEnum("auto", "off", "mini", "full"), desc: "Doc-intake analyst: auto (full-lane routing) | off | mini | full." },
+  { key: "planning", def: "auto", validate: vEnum("auto", "own-planner", "superpowers", "openspec"), desc: "Planning route." },
+  { key: "pattern", def: "ask", validate: vEnum("ask", "off", "on"), desc: "Code-pattern gate on a cache miss: ask | off | on." },
+  { key: "scoring", def: "on", validate: vEnum("on", "off"), desc: "Rubric scoring; off sends every task to fixed_executor." },
+  { key: "fixed_executor", def: "", validate: vEnum(...Object.keys(DIY_EXECUTORS)), desc: "Executor used for every task when scoring is off." },
+  { key: "review", def: "on", validate: vEnum("on", "off", "blocking-only"), desc: "Review phase: on | off | blocking-only (P2/P3 listed once, never re-offered)." },
+  { key: "security", def: "off", validate: vEnum("off", "ask", "on", "always"), desc: "Security pass; always = every run (drops the risk-floor trigger)." },
+  { key: "verify", def: "full", validate: vEnum("full", "off", "smoke"), desc: "Verify depth: full DoD sweep | off | smoke (build+tests only)." },
+  { key: "testgen", def: "off", validate: vEnum("off", "ask", "on"), desc: "Test-authoring phase (writes tests, never runs them)." },
+  { key: "wiki_gate", def: "notice", validate: vEnum("notice", "off", "hard"), desc: "Wiki freshness at preflight: notice | off | hard (stale blocks with an ask)." },
+  { key: "post_ship_wiki_ask", def: "on", validate: vEnum("on", "off"), desc: "Offer a wiki refresh after big shipped runs." },
+  { key: "summary", def: "full", validate: vEnum("full", "off", "short"), desc: "Summary depth." },
+  { key: "autonomy", def: "interactive", validate: vEnum("interactive", "semi", "hands-off"), desc: "Who answers routine asks: interactive | semi | hands-off." },
+  { key: "ship_mode", def: "ask", validate: vEnum("ask", "commit", "pr", "report-only"), desc: "Terminal ship behavior." },
+  { key: "session_tier", def: "opus-4-8-high", validate: vEnum(...Object.keys(DIY_TIERS)), desc: "Required main-session model+effort (guard-enforced effort, statusline-warned model)." },
+  { key: "max_wave_tasks", def: 3, validate: vInt(1), desc: "Max parallel tasks per wave." },
+  { key: "batch_pause_every", def: 2, validate: vInt(1), desc: "Waves between stop-and-continue pauses." },
+  { key: "rubric_bands", def: 5, validate: vRange(2, 8), desc: "Scoring granularity (scoring on only)." },
+  { key: "flow_name", def: "my-flow", validate: vSlug, desc: "Display label for this flow (slug)." },
+];
+const diyMetaFor = (key) => DIY_META.find((m) => m.key === key);
+
+const DIY_PRESETS = {
+  lean: { analyze: "off", review: "blocking-only", verify: "smoke", summary: "short", flow_name: "lean" },
+  paranoid: { analyze: "full", security: "always", testgen: "on", verify: "full", flow_name: "paranoid" },
+  "solo-fast": { scoring: "off", fixed_executor: "orc-executor-sonnet-5-high", review: "off", verify: "smoke", autonomy: "semi", flow_name: "solo-fast" },
+};
+
+function diyPaths(claudeDir) {
+  const dir = path.join(claudeDir, "orc", "diy");
+  return {
+    config: path.join(claudeDir, "orc-diy.config.yaml"),
+    dir,
+    flow: path.join(dir, "flow.md"),
+    lock: path.join(dir, "flow.lock.json"),
+    compiled: path.join(dir, "FLOW-COMPILED.md"),
+  };
+}
+
+// Flat `key: value` YAML, same dialect as orc.config.yaml.
+function readDiyConfig(claudeDir) {
+  const p = diyPaths(claudeDir).config;
+  if (!fs.existsSync(p)) return null;
+  const map = {};
+  for (const line of fs.readFileSync(p, "utf8").split(/\r?\n/)) {
+    const t = line.trim();
+    if (!t || t.startsWith("#")) continue;
+    const i = t.indexOf(":");
+    if (i === -1) continue;
+    map[t.slice(0, i).trim()] = t.slice(i + 1).trim().replace(/^["']|["']$/g, "");
+  }
+  return Object.keys(map).length ? map : null;
+}
+
+// Resolved view: defaults <- stored keys (per-key, like orc.config.yaml).
+function diyResolve(map) {
+  const out = {};
+  for (const m of DIY_META) out[m.key] = map && m.key in map ? map[m.key] : m.def;
+  return out;
+}
+
+function diyValidate(cfg) {
+  const errors = [];
+  const warnings = [];
+  const tier = DIY_TIERS[cfg.session_tier];
+  if (!tier) errors.push(`session_tier "${cfg.session_tier}" is not a known tier`);
+  if (cfg.scoring === "off") {
+    if (!cfg.fixed_executor) {
+      errors.push("scoring is off but fixed_executor is not set (required — every task needs an executor)");
+    } else if (tier && !agentFitsTier(DIY_EXECUTORS[cfg.fixed_executor], tier)) {
+      errors.push(`fixed_executor ${cfg.fixed_executor} exceeds session_tier ${cfg.session_tier} (subagents cannot exceed the main session)`);
+    }
+    if (String(cfg.rubric_bands) !== "5") warnings.push("rubric_bands is set but scoring is off — it will be ignored");
+  }
+  if (cfg.review === "off" && cfg.security !== "off") {
+    errors.push("security pass requires review on (it reuses the reviewer) — set review on/blocking-only or security off");
+  }
+  if (cfg.testgen !== "off" && cfg.verify === "off") {
+    warnings.push("testgen without verify: test cases will be authored against an unverified build");
+  }
+  if (cfg.autonomy === "hands-off" && (cfg.ship_mode === "commit" || cfg.ship_mode === "pr")) {
+    warnings.push(`hands-off + ship_mode ${cfg.ship_mode}: git actions will run fully unattended`);
+  }
+  if (tier && tier.model < 4 && (cfg.review !== "off" || cfg.verify !== "off")) {
+    warnings.push(`session_tier ${cfg.session_tier}: the pinned Opus reviewer/verifier agents will silently run at the session's model (tier-honesty rule reports it)`);
+  }
+  return { errors, warnings };
+}
+
+// Score->model presets (mirror skills/orc/config.md — documented drift).
+const DIY_PRESET_NARROW = [
+  [0, 30, "orc-executor-sonnet-4-6-med"],
+  [30, 50, "orc-executor-sonnet-4-6-high"],
+  [50, 65, "orc-executor-sonnet-5-high"],
+  [65, 85, "orc-executor-opus-4-7-med"],
+  [85, 101, "orc-executor-opus-4-8-high"],
+];
+const DIY_PRESET_WIDE = [
+  [0, 40, "orc-executor-sonnet-4-6-med"],
+  [40, 50, "orc-executor-sonnet-4-6-high"],
+  [50, 70, "orc-executor-sonnet-5-high"],
+  [70, 80, "orc-executor-opus-4-7-high"],
+  [80, 101, "orc-executor-opus-4-8-high"],
+];
+
+// Clip a preset to the session tier: an over-tier agent collapses into the
+// highest executor the tier allows. Done at COMPILE time, never at runtime.
+function diyScoreTable(cfg) {
+  const tier = DIY_TIERS[cfg.session_tier];
+  const rows = Number(cfg.rubric_bands) >= 6 ? DIY_PRESET_WIDE : DIY_PRESET_NARROW;
+  const highestAllowed = Object.keys(DIY_EXECUTORS)
+    .filter((a) => agentFitsTier(DIY_EXECUTORS[a], tier))
+    .sort((a, b) => DIY_EXECUTORS[a].model - DIY_EXECUTORS[b].model || DIY_EXECUTORS[a].effort - DIY_EXECUTORS[b].effort)
+    .pop();
+  const lines = ["| Score | Executor agent |", "|-------|----------------|"];
+  for (const [lo, hi, agent] of rows) {
+    const use = agentFitsTier(DIY_EXECUTORS[agent], tier) ? agent : highestAllowed;
+    lines.push(`| [${lo},${hi === 101 ? "100]" : hi + ")"} | ${use} |`);
+  }
+  return lines.join("\n");
+}
+
+function diyGenFlowMd(cfg) {
+  const lines = [
+    `# ORC-DIY flow spec — ${cfg.flow_name}`,
+    "",
+    "> Generated by `orc diy` from `.claude/orc-diy.config.yaml` — review it,",
+    "> change it with `orc diy set <key> <value>`, then `orc diy compile`.",
+    "",
+    "| Key | Value |",
+    "|---|---|",
+  ];
+  for (const m of DIY_META) lines.push(`| ${m.key} | ${cfg[m.key] === "" ? "(unset)" : cfg[m.key]} |`);
+  lines.push(
+    "",
+    "Phase order (fixed): wiki gate → analyze → planning → pattern → scoring →",
+    "execution → review → security → verify → testgen → ship → summary.",
+    "Locked rules (skills/orc-diy/references/locked-blocks.md) apply to every flow.",
+    ""
+  );
+  return lines.join("\n");
+}
+
+function readDiyLock(claudeDir) {
+  try {
+    // strip a BOM — Windows tools that touch the file often add one
+    return JSON.parse(
+      fs.readFileSync(diyPaths(claudeDir).lock, "utf8").replace(/^\uFEFF/, "")
+    );
+  } catch (_) {
+    return null;
+  }
+}
+
+// Installed payload version: the stamp `orc init/update` writes next to hooks.
+function installedPayloadVersion(claudeDir) {
+  try {
+    const v = JSON.parse(
+      fs.readFileSync(path.join(claudeDir, "hooks", "orc-version.json"), "utf8")
+    ).version;
+    if (v) return v;
+  } catch (_) {}
+  return currentVersion();
+}
+
+// Regenerate flow.md + refresh the lock's config/flow hashes. Compiled fields
+// are preserved as-is — a hash mismatch is exactly how status reports STALE.
+function diyWriteConfig(claudeDir, map) {
+  const p = diyPaths(claudeDir);
+  fs.mkdirSync(p.dir, { recursive: true });
+  // Always persist flow_name: a bootstrapped config must never be key-empty
+  // (an empty/comment-only file reads as UNCONFIGURED — the hard gate).
+  if (!map.flow_name) map.flow_name = diyMetaFor("flow_name").def;
+  let out =
+    "# .claude/orc-diy.config.yaml — ORC-DIY flow config (managed by `orc diy`).\n" +
+    "# Never hand-edit: the compile gate hashes this file. Change via `orc diy set`.\n";
+  for (const k of Object.keys(map)) out += `${k}: ${serializeValue(map[k])}\n`;
+  fs.writeFileSync(p.config, out);
+  const cfg = diyResolve(map);
+  const flowMd = diyGenFlowMd(cfg);
+  fs.writeFileSync(p.flow, flowMd);
+  const lock = readDiyLock(claudeDir) || {};
+  const next = {
+    flow_name: cfg.flow_name,
+    session_tier: cfg.session_tier,
+    // config_hash is COMPILE-owned: it stays at the compile-time value so a
+    // config change (this very write) reads as STALE until the next compile.
+    config_hash: lock.config_hash || null,
+    flow_hash: sha256(flowMd),
+    compiled_hash: lock.compiled_hash || null,
+    compiled_at: lock.compiled_at || null,
+    orc_version: lock.orc_version || null,
+  };
+  fs.writeFileSync(p.lock, JSON.stringify(next, null, 2) + "\n");
+  return cfg;
+}
+
+// Gate status. Consumed by `orc diy status`, the orc-diy stub skill, the
+// effort guard, and the statusline — one computation, everywhere the same.
+function diyStatus(claudeDir) {
+  const p = diyPaths(claudeDir);
+  if (!fs.existsSync(p.config) || !readDiyConfig(claudeDir))
+    return { state: "UNCONFIGURED", reason: "no flow config — run `orc diy init`" };
+  const lock = readDiyLock(claudeDir);
+  if (!lock) return { state: "STALE", reason: "lock missing — run `orc diy init` again, then `orc diy compile`" };
+  if (!lock.compiled_hash) return { state: "STALE", reason: "never compiled — run `orc diy compile`" };
+  if (lock.config_hash !== sha256(fs.readFileSync(p.config, "utf8")))
+    return { state: "STALE", reason: "config changed since the last compile — run `orc diy compile`" };
+  if (lock.orc_version !== installedPayloadVersion(claudeDir))
+    return { state: "STALE", reason: `compiled against orc ${lock.orc_version}, installed is ${installedPayloadVersion(claudeDir)} — run \`orc diy compile\`` };
+  if (!fs.existsSync(p.compiled) || sha256(fs.readFileSync(p.compiled, "utf8")) !== lock.compiled_hash)
+    return { state: "STALE", reason: "compiled flow modified or missing — run `orc diy compile`" };
+  return { state: "READY", reason: `flow "${lock.flow_name}" compiled for ${lock.session_tier}` };
+}
+
+// Block templates: prefer the INSTALLED stub (matches the payload version the
+// lock stamps), fall back to this package's templates.
+function diyBlocksDir(claudeDir) {
+  const installed = path.join(claudeDir, "skills", "orc-diy", "references");
+  return fs.existsSync(path.join(installed, "blocks")) ? installed : path.join(SRC_SKILLS, "orc-diy", "references");
+}
+
+// Keep text outside markers; keep a `<!-- diy:when key=a|b -->` section only
+// when the config value matches.
+function diyApplyVariants(text, cfg) {
+  return text.replace(
+    /<!-- diy:when ([a-z_]+)=([^ ]+) -->\r?\n([\s\S]*?)<!-- \/diy:when -->\r?\n?/g,
+    (_, key, values, body) => (values.split("|").includes(String(cfg[key])) ? body : "")
+  );
+}
+
+function diyCompile(claudeDir) {
+  const p = diyPaths(claudeDir);
+  const map = readDiyConfig(claudeDir);
+  if (!map) {
+    console.error("❌ no flow config — run `orc diy init` first.");
+    process.exit(1);
+  }
+  const cfg = diyResolve(map);
+  const { errors, warnings } = diyValidate(cfg);
+  for (const w of warnings) console.log("  ⚠ " + w);
+  if (errors.length) {
+    for (const e of errors) console.error("  ❌ " + e);
+    console.error("\n❌ compile aborted — fix the config with `orc diy set`, then retry.");
+    process.exit(1);
+  }
+
+  const refDir = diyBlocksDir(claudeDir);
+  const readBlock = (name) => {
+    const f = path.join(refDir, "blocks", name + ".md");
+    if (!fs.existsSync(f)) {
+      console.error(`❌ block template missing: ${f} — reinstall with \`orc update\`.`);
+      process.exit(1);
+    }
+    return fs.readFileSync(f, "utf8");
+  };
+  const locked = fs.readFileSync(path.join(refDir, "locked-blocks.md"), "utf8");
+
+  const order = ["header", null, "wiki", "analyze", "planning", "pattern", "scoring", "execution", "review", "security", "verify", "testgen", "ship", "summary"];
+  const tier = DIY_TIERS[cfg.session_tier];
+  const subs = {
+    flow_name: cfg.flow_name,
+    config_hash: sha256(fs.readFileSync(p.config, "utf8")),
+    orc_version: installedPayloadVersion(claudeDir),
+    compiled_at: new Date().toISOString(),
+    tier_model: tier.modelId,
+    tier_effort: tier.effortName,
+    max_wave_tasks: cfg.max_wave_tasks,
+    batch_pause_every: cfg.batch_pause_every,
+    fixed_executor: cfg.fixed_executor || "(unset)",
+    score_table: diyScoreTable(cfg),
+  };
+  let out = order
+    .map((name) => (name === null ? locked : diyApplyVariants(readBlock(name), cfg)))
+    .join("\n")
+    .replace(/\{\{([a-z_]+)\}\}/g, (_, k) => String(subs[k] !== undefined ? subs[k] : `{{${k}}}`));
+
+  // Cherry-pick check: every orc file the chosen variants reference must
+  // exist — project install first, global (~/.claude) fallback.
+  const missing = [];
+  for (const m of out.matchAll(/\.claude\/skills\/[A-Za-z0-9_/.-]+\.md/g)) {
+    const rel = m[0];
+    const inProject = path.join(path.dirname(claudeDir), rel);
+    const inGlobal = path.join(os.homedir(), rel);
+    if (!fs.existsSync(inProject) && !fs.existsSync(inGlobal)) missing.push(rel);
+  }
+  if (missing.length) {
+    console.error("❌ compile aborted — this flow cherry-picks orc files that are not installed:");
+    for (const f of [...new Set(missing)]) console.error("   - " + f);
+    console.error("   Install/refresh orc here first: `orc init` (or `orc update`).");
+    process.exit(1);
+  }
+
+  fs.mkdirSync(p.dir, { recursive: true });
+  fs.writeFileSync(p.compiled, out);
+  const lock = readDiyLock(claudeDir) || {};
+  lock.flow_name = cfg.flow_name;
+  lock.session_tier = cfg.session_tier;
+  lock.config_hash = subs.config_hash;
+  lock.flow_hash = sha256(fs.readFileSync(p.flow, "utf8"));
+  lock.compiled_hash = sha256(out);
+  lock.compiled_at = subs.compiled_at;
+  lock.orc_version = subs.orc_version;
+  fs.writeFileSync(p.lock, JSON.stringify(lock, null, 2) + "\n");
+  const st = diyStatus(claudeDir);
+  console.log(`\n✅ compiled → ${p.compiled}`);
+  console.log(`   gate: ${st.state} — ${st.reason}`);
+  console.log("   Run it with /orc-diy <request>.");
+}
+
+function diyShow(claudeDir) {
+  const map = readDiyConfig(claudeDir);
+  const st = diyStatus(claudeDir);
+  console.log(`\nORC-DIY  gate: ${st.state} — ${st.reason}\n`);
+  if (!map) {
+    console.log("Bootstrap:  orc diy init [--preset lean|paranoid|solo-fast]");
+    console.log("Guide:      .claude/skills/orc-diy/README.md\n");
+    return;
+  }
+  const cfg = diyResolve(map);
+  const pad = Math.max(...DIY_META.map((m) => m.key.length));
+  for (const m of DIY_META) {
+    const overridden = m.key in map ? "set    " : "default";
+    console.log(`  ${m.key.padEnd(pad)}  ${String(cfg[m.key] === "" ? "(unset)" : cfg[m.key]).padEnd(28)} ${overridden}  ${m.desc}`);
+  }
+  const { errors, warnings } = diyValidate(cfg);
+  for (const e of errors) console.log("  ❌ " + e);
+  for (const w of warnings) console.log("  ⚠ " + w);
+  console.log("");
+}
+
+function diy() {
+  if (flag("--global")) {
+    console.error(
+      "❌ orc diy is project-scoped — it never uses ~/.claude. Run it from the\n" +
+        "   project (or with --dir <path>); one flow per project."
+    );
+    process.exit(1);
+  }
+  const claudeDir = resolveClaudeDir();
+  const pos = positionals(); // ["diy", <sub?>, ...]
+  const sub = pos[1];
+  switch (sub) {
+    case "init": {
+      const p = diyPaths(claudeDir);
+      if (fs.existsSync(p.config) && !flag("--force")) {
+        console.error("A flow config already exists. Use `orc diy show` / `orc diy set`, or `orc diy init --force` to start over.");
+        process.exit(1);
+      }
+      const presetName = typeof flag("--preset") === "string" ? flag("--preset") : null;
+      if (presetName && !DIY_PRESETS[presetName]) {
+        console.error(`Unknown preset: ${presetName}. Presets: ${Object.keys(DIY_PRESETS).join(", ")}`);
+        process.exit(1);
+      }
+      const cfg = diyWriteConfig(claudeDir, presetName ? { ...DIY_PRESETS[presetName] } : {});
+      console.log(`Created ${p.config}${presetName ? ` (preset: ${presetName})` : " (full-lane defaults)"}`);
+      console.log(`Flow spec: ${p.flow}`);
+      const { warnings } = diyValidate(cfg);
+      for (const w of warnings) console.log("  ⚠ " + w);
+      console.log("\nNext: shape it with `orc diy set <key> <value>`, then `orc diy compile`.");
+      console.log("Guide: .claude/skills/orc-diy/README.md");
+      break;
+    }
+    case "set": {
+      const [, , key, rawValue] = pos;
+      const m = diyMetaFor(key);
+      if (!m) {
+        console.error(`Unknown flow key: ${key}\nKnown keys: ${DIY_META.map((x) => x.key).join(", ")}`);
+        process.exit(1);
+      }
+      if (rawValue === undefined) {
+        console.error(`Usage: orc diy set ${key} <value>`);
+        process.exit(1);
+      }
+      const res = m.validate(String(rawValue));
+      if (res.err) {
+        console.error(`Invalid value for ${key}: ${res.err}`);
+        process.exit(1);
+      }
+      const map = readDiyConfig(claudeDir);
+      if (!map) {
+        console.error("No flow config yet — run `orc diy init` first.");
+        process.exit(1);
+      }
+      map[key] = res.value;
+      const cfg = diyWriteConfig(claudeDir, map);
+      console.log(`Set ${key} = ${res.value}`);
+      const { errors, warnings } = diyValidate(cfg);
+      for (const e of errors) console.log("  ❌ " + e);
+      for (const w of warnings) console.log("  ⚠ " + w);
+      console.log("Flow changed → recompile before running: `orc diy compile`.");
+      break;
+    }
+    case "validate": {
+      const map = readDiyConfig(claudeDir);
+      if (!map) {
+        console.error("No flow config — run `orc diy init` first.");
+        process.exit(1);
+      }
+      const { errors, warnings } = diyValidate(diyResolve(map));
+      for (const e of errors) console.log("  ❌ " + e);
+      for (const w of warnings) console.log("  ⚠ " + w);
+      if (!errors.length) console.log("✅ flow config valid" + (warnings.length ? " (with warnings)" : ""));
+      process.exit(errors.length ? 1 : 0);
+      break;
+    }
+    case "compile":
+      diyCompile(claudeDir);
+      break;
+    case "status": {
+      const st = diyStatus(claudeDir);
+      if (args.includes("--json")) console.log(JSON.stringify(st));
+      else console.log(`${st.state} — ${st.reason}`);
+      break;
+    }
+    case "show":
+    case undefined:
+      diyShow(claudeDir);
+      break;
+    case "reset": {
+      const p = diyPaths(claudeDir);
+      for (const f of [p.config, p.flow, p.lock, p.compiled]) {
+        if (fs.existsSync(f)) {
+          fs.rmSync(f);
+          console.log("  del  " + f);
+        }
+      }
+      console.log("orc-diy reset — /orc-diy is UNCONFIGURED again.");
+      break;
+    }
+    default:
+      console.error(
+        `Unknown: orc diy ${sub}\n` +
+          "Usage: orc diy [show | init [--preset <name>] [--force] | set <key> <value> |\n" +
+          "               validate | compile | status [--json] | reset]"
+      );
+      process.exit(1);
+  }
+}
+
 function where() {
   const claudeDir = resolveClaudeDir();
   console.log("skills   →", path.join(claudeDir, "skills"));
@@ -804,6 +1290,12 @@ Usage:
     orc config set <key> <value>          validate + write one setting
     orc config reset [key]                revert one key (or all) to defaults
     orc config path                       print the override file location
+  orc diy [--dir <path>]                  compose your own flow (project-scoped; no --global)
+    orc diy init [--preset <name>]        create the flow config (presets: lean, paranoid, solo-fast)
+    orc diy set <key> <value>             change one flow key (requires recompile)
+    orc diy show | validate | status      inspect the flow + gate state
+    orc diy compile                       build the runnable flow for /orc-diy
+    orc diy reset                         delete the flow (back to UNCONFIGURED)
   orc where [--global | --dir <path>]     show target paths
   orc version                             print installed version + check for a newer one
   orc --help
@@ -837,6 +1329,9 @@ Skills installed: ${listSkillNames().join(", ")}`);
       break;
     case "config":
       config();
+      break;
+    case "diy":
+      diy();
       break;
     case "where":
       where();

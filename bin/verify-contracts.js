@@ -478,6 +478,63 @@ const CONTRACTS = [
       "skills/orc-wiki/references/staleness.md",
     ],
   },
+  {
+    name: "orc-diy gate lock (v0.16.0 — CLI-written; stub/guard/statusline all read it)",
+    token: "flow.lock.json",
+    files: [
+      "hooks/orc-effort-guard.js",
+      "hooks/orc-statusline.js",
+      "skills/orc-diy/README.md",
+      "skills/orc-diy/SKILL.md",
+      "skills/orc-diy/references/compile.md",
+      "skills/orc-diy/references/flow-schema.md",
+    ],
+  },
+  {
+    name: "orc-diy compiled artifact path (v0.16.0 — build output, never hand-edited)",
+    token: "FLOW-COMPILED.md",
+    files: [
+      "commands/orc-diy.md",
+      "hooks/orc-statusline.js",
+      "skills/orc-diy/README.md",
+      "skills/orc-diy/SKILL.md",
+      "skills/orc-diy/references/compile.md",
+      "skills/orc-diy/references/flow-schema.md",
+    ],
+  },
+  {
+    name: "orc-diy flow config file (v0.16.0 — written ONLY by the `orc diy` CLI)",
+    token: "orc-diy.config.yaml",
+    files: [
+      "hooks/orc-statusline.js",
+      "skills/orc-diy/README.md",
+      "skills/orc-diy/SKILL.md",
+      "skills/orc-diy/references/compile.md",
+      "skills/orc-diy/references/flow-schema.md",
+    ],
+  },
+  {
+    // The marker grammar's OTHER half is the compiler in bin/cli.js
+    // (diyApplyVariants) — outside templates/, so this lint can't see it.
+    // Changing the marker syntax means changing cli.js in the same commit.
+    name: "orc-diy variant marker grammar (v0.16.0 — blocks stitched by the CLI compiler)",
+    token: "diy:when",
+    files: [
+      "skills/orc-diy/references/blocks/analyze.md",
+      "skills/orc-diy/references/blocks/header.md",
+      "skills/orc-diy/references/blocks/pattern.md",
+      "skills/orc-diy/references/blocks/planning.md",
+      "skills/orc-diy/references/blocks/review.md",
+      "skills/orc-diy/references/blocks/scoring.md",
+      "skills/orc-diy/references/blocks/security.md",
+      "skills/orc-diy/references/blocks/ship.md",
+      "skills/orc-diy/references/blocks/summary.md",
+      "skills/orc-diy/references/blocks/testgen.md",
+      "skills/orc-diy/references/blocks/verify.md",
+      "skills/orc-diy/references/blocks/wiki.md",
+      "skills/orc-diy/references/compile.md",
+    ],
+  },
 ];
 
 function walk(dir, out) {

@@ -6,7 +6,7 @@
 
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
-![Version](https://img.shields.io/badge/version-0.15.0-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.16.0-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D16-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
@@ -37,31 +37,32 @@ zero-dependency npm package installs those files into your `.claude/` directory.
 
 ## Changelog
 
-### v0.15.0 — Wiki v2: evidence-anchored docs · per-file staleness registry · integrity gate _(2026-07-14)_
+### v0.16.0 — `/orc-diy`: build your own lane — CLI-composed flow, compiled, hard-gated _(2026-07-14)_
 
-The knowledge base graduates to a real second source of truth. **Doc schema v2**
-(`wiki_schema: 2`): every claim in the contract sections must cite the file it
-comes from ("a claim you can't anchor is omitted, not guessed"), plus three new
-sections — a 60-second **TL;DR** brief, **Contracts & shapes** (routes, tables,
-events, env keys — one anchor per row), and a **Testing map**. The manifest
-gains a per-doc **`docs` registry** (covers + per-file `covered_files` hashes),
-so every staleness question is answerable from one JSON read + two git commands;
-incremental refresh now also runs a **coverage-gap sweep** (changed files no doc
-covers → propose new areas) and a **dead-doc sweep** (covers match nothing →
-archive/delete). Four standard cross-cutting reference docs join Phase 1
-planning: `orc-reference-api-surface`, `-data-model`, `-glossary`, `-config-env`.
-Every scan/refresh ends with a **scan-end integrity self-check** (docs ↔
-INDEX ↔ registry ↔ CLAUDE.md block must agree; `WIKI-CHECK` trace lines).
-`wiki/INDEX.md` lines are now structured (type · status · description ·
-keywords) for retrieval-grade page selection, and the **precedence rule** is
-explicit everywhere the wiki is consumed: `code > fresh wiki > stale wiki
-(hints) > model priors`. All consumers (orc, orc-mini, orc-fast, both planners)
-updated to pull the new surfaces; v1 wikis keep working and upgrade lazily on
-refresh. Five new linted contracts (34 total).
+Compose your **own** ORC pipeline and run it as `/orc-diy`. The flow shape —
+analyze/review/security/verify/testgen presence + strictness, scoring **or** a
+single fixed executor, autonomy profile (interactive/semi/hands-off), ship mode
+(ask/commit/pr/report-only), and the required **session tier**
+(`opus-4-8-high` / `opus-4-7-med` / `sonnet-4-6-high`) — is configured entirely
+through the new **`orc diy` CLI family** (init/set/show/validate/compile/
+status/reset + `lean`/`paranoid`/`solo-fast` presets; deterministic, zero model
+tokens, project-scoped only). `orc diy compile` stitches a runnable
+`FLOW-COMPILED.md` that cherry-picks references and locked boundaries from
+your installed orc skill — score tables are clipped to the session tier at
+compile time, and a set of **locked rules** (never-implement, checkpoint
+discipline, wave conflict rules, severity ladder, red-build ship block) is
+compiled into every flow verbatim. `/orc-diy` is **hard-gated**: no config or
+a stale compile (config changed, orc updated, artifact edited) → it never runs
+the custom flow — it names the fix and offers plain `/orc` instead; the effort
+guard enforces the compiled tier deterministically (fail-closed without a
+lock) and the statusline shows `diy:<flow> READY/STALE`. How-to lives in its
+own guide: [`templates/skills/orc-diy/README.md`](templates/skills/orc-diy/README.md).
+Four new linted contracts (38 total).
 
 <details>
 <summary><b>Previous versions</b> (click to expand)</summary>
 
+### v0.15.0 — Wiki v2: evidence-anchored docs · per-file staleness registry · integrity gate _(2026-07-14)_
 ### v0.14.0 — Postgres data-access playbook: cross-cutting query grounding _(2026-07-13)_
 ### v0.13.0 — `/orc-claude`: local CLAUDE.md builder — fenced sections, fingerprint refresh, zero questions _(2026-07-12)_
 
@@ -256,6 +257,7 @@ needed. Either way, your `.claude/orc.config.yaml` overrides are left untouched.
 | **`/orc-ultra`** | The maximum-rigor lane for complex/ultra-complex work: the full pipeline plus an Opus 4.8 **max** advisor (code-grounded brief + rubric + one batched clarification round) and three judgment gates — after analysis, after planning, and after verify (implementation fidelity + ultra-strict quality: security, smells, simplification, placement). Deep analyze, pattern/testgen/security forced on, executor tier floor. Costly by design. |
 | **`/orc-mini`** | The fast path — see below. |
 | **`/orc-fast`** | The fastest lane — knowledge-gated: requires a fresh wiki + a cached code-pattern, skips analyst/planner entirely, one Sonnet 4.6 high executor + smoke gate. Falls back to `orc-mini` when a prerequisite is missing. See below. |
+| **`/orc-diy`** | **Your own lane.** Runs the flow you composed with the `orc diy` CLI and compiled with `orc diy compile`. Hard-gated: unconfigured or stale → never runs, offers plain `/orc` instead. Full guide: [ORC-DIY README](templates/skills/orc-diy/README.md). |
 | **`/orc-analyze`** | The System Analyst: turns a requirement or document into a scope-bounded, code-grounded, evidence-backed spec. |
 | **`/orc-plan`** | The Requirement Planner: a detailed request or analyst spec → a grounded, right-sized, dependency-checked task plan. |
 | **`/orc-verify`** | Standalone verification of your git-modified changes (build + tests + diff sanity). Read-only. |
@@ -336,6 +338,31 @@ anything that decomposes into multiple tasks or spans many files. Because there
 is no scoring or planning judgment, the orchestrator itself runs fine at
 **Sonnet medium** — no Opus session required. `/orc-fast` is the recurring
 payoff for having run `/orc-wiki` and `/orc-pattern`.
+
+### `/orc-diy` — build your own lane
+
+```text
+orc diy init ─▶ orc diy set … ─▶ orc diy compile        (terminal, zero tokens)
+                                       │
+/orc-diy <request>  ─▶ hard gate ─▶ runs YOUR compiled flow
+```
+
+The shipped lanes trade rigor for speed in fixed steps; `orc-diy` lets you pick
+the trade yourself — which phases run and how strict, rubric scoring or one
+fixed executor, how autonomous, how it ships, and which session tier it
+requires. Everything is composed in the **terminal** with the `orc diy` CLI and
+compiled into a flow file; Claude never invents or edits the flow in-session.
+Unconfigured or stale (config changed, orc updated, artifact touched) →
+`/orc-diy` refuses and offers plain `/orc` — it never runs a flow that doesn't
+match what you compiled. Safety boundaries (never-implement, checkpoints, wave
+conflict rules, severity ladder, red-build ship block) are locked into every
+flow and can't be configured away.
+
+> [!IMPORTANT]
+> **The how-to lives in its own guide, not in this README:**
+> [`templates/skills/orc-diy/README.md`](templates/skills/orc-diy/README.md)
+> (installed at `.claude/skills/orc-diy/README.md`). Read that for the key
+> reference, presets, tier rules, and the compile workflow.
 
 ### `/orc-analyze` — the System Analyst
 
@@ -547,6 +574,10 @@ Your changes are written to an update-safe `.claude/orc.config.yaml` override th
 Add `--global` to edit `~/.claude`. Any value can also be overridden for a single
 run in-session.
 
+> The custom lane has its **own** CLI family (`orc diy …`) and its own config
+> file — see the separate [ORC-DIY README](templates/skills/orc-diy/README.md);
+> it is not part of `orc config`.
+
 ---
 
 ## What's inside the package
@@ -557,6 +588,7 @@ templates/
 │   ├── orc/                 full orchestrator — spine, schemas, references, subskills, config
 │   ├── orc-mini/            fast path (smoke gate + opt-in test authoring)
 │   ├── orc-fast/            fastest lane — knowledge-gated, falls back to orc-mini
+│   ├── orc-diy/             build-your-own lane — CLI-composed, compiled, hard-gated (see its own README)
 │   ├── orc-verify/          standalone git-diff verify
 │   ├── orc-wiki/            project knowledge-base builder
 │   ├── orc-analyze/         System Analyst — doc-optional, evidence-backed (+ report templates, spec schema)
@@ -567,10 +599,10 @@ templates/
 │   ├── orc-advisor/         ultra-lane advisory brief + rubric + clarification round (/orc-ultra only)
 │   ├── orc-judge/           ultra-lane judgment gates — analysis / plan / implementation (/orc-ultra only)
 │   └── context-combiner/    merges 2+ related analyses into one combined spec (+ schemas)
-├── commands/                /orc /orc-ultra /orc-mini /orc-fast /orc-analyze /orc-plan /orc-verify /orc-wiki /orc-pattern /orc-retro /orc-claude
+├── commands/                /orc /orc-ultra /orc-mini /orc-fast /orc-diy /orc-analyze /orc-plan /orc-verify /orc-wiki /orc-pattern /orc-retro /orc-claude
 ├── hooks/                   effort guard (PreToolUse) · statusline warning · behavior trace
 └── agents/                  single-role, model-pinned subagents (+ read-only scout) + MODEL-MAPPING.md
-bin/cli.js                   installer + config editor (init / update / upgrade / config / where)
+bin/cli.js                   installer + config editor + flow composer (init / update / upgrade / config / diy / where)
 ```
 
 The `orc` skill is a thin **spine** that loads references and subskills only when

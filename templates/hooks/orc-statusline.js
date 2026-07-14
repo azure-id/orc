@@ -111,6 +111,51 @@ process.stdin.on("end", () => {
     }
   } catch (_) {}
 
+  // orc-diy gate segment (only when a flow exists). Recomputes the same
+  // staleness checks as `orc diy status` from flow.lock.json — written only
+  // by the `orc diy` CLI. Fail-silent: any error → no segment.
+  try {
+    const fs = require("fs");
+    const path = require("path");
+    const crypto = require("crypto");
+    const projectDir =
+      (d.workspace && d.workspace.project_dir) || d.cwd || process.cwd();
+    const lockPath = path.join(projectDir, ".claude", "orc", "diy", "flow.lock.json");
+    if (fs.existsSync(lockPath)) {
+      const lock = JSON.parse(
+        fs.readFileSync(lockPath, "utf8").replace(/^\uFEFF/, "")
+      );
+      const sha = (p) =>
+        crypto.createHash("sha256").update(fs.readFileSync(p, "utf8")).digest("hex");
+      const cfgPath = path.join(projectDir, ".claude", "orc-diy.config.yaml");
+      const compiledPath = path.join(projectDir, ".claude", "orc", "diy", "FLOW-COMPILED.md");
+      let installedV = null;
+      try {
+        installedV = JSON.parse(
+          fs.readFileSync(path.join(__dirname, "orc-version.json"), "utf8")
+        ).version;
+      } catch (_) {}
+      const ready =
+        lock.compiled_hash &&
+        fs.existsSync(cfgPath) &&
+        lock.config_hash === sha(cfgPath) &&
+        fs.existsSync(compiledPath) &&
+        lock.compiled_hash === sha(compiledPath) &&
+        (!installedV || lock.orc_version === installedV);
+      let seg = `diy:${lock.flow_name || "flow"} ${ready ? "READY" : "STALE→recompile"}`;
+      // Model half of the compiled session_tier — warn-only (hooks can't block on model).
+      if (ready && modelKnown && lock.session_tier) {
+        const want = {
+          "sonnet-4-6-high": /sonnet[\s._-]?4[\s._-]?6\b/,
+          "opus-4-7-med": /opus[\s._-]?4[\s._-]?7\b/,
+          "opus-4-8-high": /opus[\s._-]?4[\s._-]?8\b/,
+        }[lock.session_tier];
+        if (want && !want.test(hay)) seg += ` ⛔model≠${lock.session_tier}`;
+      }
+      line += " · " + seg;
+    }
+  } catch (_) {}
+
   // Append an update hint from the cache (instant, no network here).
   if (updater) {
     try {
