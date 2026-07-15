@@ -77,8 +77,8 @@ process.stdin.on("end", () => {
   }
 
   // Wiki freshness tier (computed on read from wiki-meta.json — zero model
-  // tokens; the manifest is written only by orc-wiki). Fail-silent: no
-  // manifest / no git / any error → no segment. Thresholds mirror the config
+  // tokens; the manifest is written only by `orc wiki sync`). Fail-silent: no
+  // wiki / no git / any error → no segment. Thresholds mirror the config
   // defaults (wiki_fresh_max 10 / wiki_aging_max 30); the hook can't read the
   // resolved config, so a user override shifts skill behavior, not this label.
   try {
@@ -88,7 +88,17 @@ process.stdin.on("end", () => {
     const projectDir =
       (d.workspace && d.workspace.project_dir) || d.cwd || process.cwd();
     const metaPath = path.join(projectDir, ".claude", "orc", "wiki-meta.json");
-    if (fs.existsSync(metaPath)) {
+    if (!fs.existsSync(metaPath)) {
+      // Docs but no manifest = UNREGISTERED: a real wiki nothing has indexed
+      // (usually a scan stopped at a 5-area pause). It is otherwise invisible —
+      // consumers and `orc crosslink` read the manifest — so surface it here,
+      // with the free fix. Never say "no wiki": these docs are already paid for.
+      const wikiDir = path.join(projectDir, "wiki");
+      const docs =
+        fs.existsSync(wikiDir) &&
+        fs.readdirSync(wikiDir).some((f) => f.startsWith("orc-") && f.endsWith(".md"));
+      if (docs) line += " · wiki: UNREGISTERED (run `orc wiki sync`)";
+    } else {
       const meta = JSON.parse(fs.readFileSync(metaPath, "utf8"));
       if (meta && meta.scan_commit) {
         const distance = parseInt(

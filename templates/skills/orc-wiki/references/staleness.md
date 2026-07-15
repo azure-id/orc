@@ -15,11 +15,22 @@ fresh, evidence-anchored wiki claim without reading the code.
 
 ## The manifest — `.claude/orc/wiki-meta.json`
 
-Written **ONLY by orc-wiki**, at the end of every scan/refresh (full,
-selective, or incremental). No other skill ever writes it — a stored freshness
-status goes stale the moment anyone commits, so consumers never persist a
-status; they compute it (below). Lives outside `templates/` next to the
-pattern cache, so `orc update` never clobbers it.
+Written **ONLY by the `orc wiki sync` CLI** — never by a model, never by a
+consumer. The manifest is DERIVED data: every field it carries already lives in
+the docs' own headers (schemas/wiki-doc.md), so deriving it is deterministic and
+free, while authoring it from memory is neither. orc-wiki runs `orc wiki sync`
+after every scan-task, at every pause, and at Phase 3; consumers only ever READ
+it, and never persist the freshness status they compute from it (below) — that
+status goes stale the moment anyone commits. Lives outside `templates/` next to
+the pattern cache, so `orc update` never clobbers it.
+
+> **Why the CLI owns this.** Registration was once the model's job at the end of
+> orc-wiki's Phase 3 — the last step of a lane that pauses every 5 scan-tasks by
+> design. Every run stopped at a pause left real docs on disk that nothing had
+> indexed, invisible to every consumer and to `orc crosslink`. The one field no
+> header carries is `commands` (discovered during the scan): sync preserves it
+> across rebuilds and falls back to `package.json` scripts, and it is the only
+> key a model may hand-edit.
 
 ```json
 {
@@ -78,9 +89,26 @@ no doc opens; else from doc headers). Drift touching covered files upgrades
 severity; drift entirely elsewhere may be read as "old but still accurate for
 this area". Thresholds come from config (`wiki_fresh_max`, `wiki_aging_max`).
 
-If `wiki-meta.json` is ABSENT but `wiki/` has docs (a pre-manifest wiki),
-treat as STALE with the notice: "wiki predates the freshness manifest — run
-/orc-wiki refresh to enable freshness tracking."
+## UNREGISTERED — docs without a manifest
+
+If `wiki-meta.json` is ABSENT but `wiki/` has docs, the wiki is **UNREGISTERED**,
+not missing and not stale. The docs may be perfectly current; nothing has indexed
+them. Never treat this as a reason to re-scan — the fix is derived and free:
+
+> "This wiki has {N} docs but no manifest, so nothing can read it. Run
+>  `orc wiki sync` — instant, no re-scan."
+
+Consumers treat an unregistered wiki as STALE for precedence purposes (they
+cannot prove freshness without an anchor) but must surface the sync fix, never a
+refresh. `orc wiki status` names the state; `orc wiki sync --check` is the
+read-only test. The same applies to a manifest that exists but won't parse
+(CORRUPT) or that has drifted from the docs on disk (OUT OF SYNC) — one command
+fixes all three.
+
+**Do not conflate incomplete coverage with unregistered.** A scan stopped at a
+pause has both: partial coverage (real, fix by resuming — costs money) and no
+registration (fix with sync — free). Diagnose them separately; only the first
+is worth spending on.
 
 ## Per-skill reactions
 
@@ -102,10 +130,15 @@ always the authoritative check.
 
 ## Refresh modes
 
+0. **Register-only (`orc wiki sync`)** — not a refresh at all, but it is the
+   right answer whenever the complaint is "ORC can't see my wiki". Re-derives
+   the manifest + INDEX from the doc headers. No scan, no cost, no doc changes.
+   Always try this BEFORE offering any mode below: a wiki that is merely
+   unregistered needs no re-scan, and re-scanning it wastes real money.
 1. **Incremental (recommended default when a manifest exists)** —
    `git diff --name-only <scan_commit>..HEAD`, match changed files against the
-   registry's `covers`/`covered_files`, re-scan ONLY the affected docs, then
-   rewrite `wiki-meta.json` with the new `scan_commit` + timestamp. A delta
+   registry's `covers`/`covered_files`, re-scan ONLY the affected docs, then run
+   `orc wiki sync` to re-derive the manifest from the updated headers. A delta
    pass, not a full re-scan — this is what makes "refresh first" cheap enough
    to recommend. The delta pass also runs the two sweeps below.
 2. **Full regenerate** — re-scan every area. Full cost warning. Timestamps all

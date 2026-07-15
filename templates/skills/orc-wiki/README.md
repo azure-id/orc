@@ -15,6 +15,29 @@ precedence `code > fresh wiki > stale wiki (hints) > model priors`. Freshness is
 computed on read (git commit distance), never stored. Expensive and often
 multi-session — it always warns and gets consent before scanning.
 
+## Two halves: docs and registration
+
+- **Docs** (`wiki/*.md`) — prose. Written by the skill's scan agents, because it
+  takes a model to read code and summarize it. This is the expensive half.
+- **Registration** (`wiki/INDEX.md` + `.claude/orc/wiki-meta.json`) — the index
+  and manifest that make the docs *findable*. Every field is derived from the
+  docs' own headers, so the **`orc wiki sync` CLI** writes it: instant, free,
+  deterministic. No model is ever involved.
+
+```bash
+orc wiki                 # registration state: registered / UNREGISTERED / corrupt / out of sync
+orc wiki sync            # (re)build INDEX.md + wiki-meta.json from the docs on disk
+orc wiki sync --check    # read-only; exit 1 if registration doesn't match the docs
+```
+
+**If ORC or `orc crosslink` says it can't see your wiki, run `orc wiki sync` —
+not a re-scan.** A wiki with docs but no manifest is UNREGISTERED, not missing:
+the docs are fine, nothing indexed them. This is common and expected, because
+`/orc-wiki` pauses every 5 areas by design, and a run stopped at a pause never
+reached its assemble phase. Sync fixes it in a second, for free; re-scanning
+buys you docs you already have. `/orc-wiki` also detects this on entry and
+offers the repair without any scan.
+
 ---
 
 # Cross-repo crosslink — the complete guide
@@ -72,6 +95,31 @@ publishes its surface whether or not anyone links to it yet, so you never have t
 coordinate timing between teams.
 
 > A repo with no outward boundary simply publishes nothing. That's fine.
+
+### Already have a wiki but no tags? Don't re-scan.
+
+Publishing happens at the END of a scan, so two very common cases have docs but
+no `wiki/crosslink/` folder: a scan that stopped at one of the 5-area pauses,
+and any wiki built before crosslink existed. The boundary is already described
+in your docs' evidence-anchored `Contracts & shapes` rows, so recovering it
+needs no repo scan:
+
+```
+/orc-wiki crosslink
+```
+
+This is the **CROSSLINK-ONLY** branch. It reads those rows, opens *only* the
+files they anchor to, writes the tag files, resolves what you consume, and
+indexes it all with `orc wiki sync`. It never re-scans an area, never rewrites a
+doc, and never touches coverage. **"No crosslink tags" is never a reason to pay
+for a refresh.**
+
+> **Run it in the repo being CALLED.** Tags are published by the *provider*, so
+> `no crosslink tags yet` about your backend is fixed in the **backend**, not in
+> the frontend you're standing in. Running it in the caller publishes the
+> caller's *own* surface — which for a typical frontend is nothing at all, since
+> a pure consumer exposes no API and correctly publishes zero tags. If both repos
+> call each other (e.g. backend webhooks into the frontend), run it in both.
 
 ## Step 2 — draw the graph (in the consuming repo)
 
@@ -204,9 +252,13 @@ handed to it as a hint — no more guessed field names.
 
 | You see | What it means | Fix |
 |---------|---------------|-----|
-| `⚠ no wiki-meta.json there` | that repo hasn't been scanned | run `/orc-wiki` in the linked repo |
+| `⚠ wiki found (N docs) but UNREGISTERED` | that repo's wiki is real and possibly complete — nothing ever indexed it (usually a scan stopped at a 5-area pause) | `orc wiki sync` in the linked repo — instant, free, **do not re-scan** |
+| `⚠ wiki-meta.json there is unreadable` | the manifest is corrupt JSON | `orc wiki sync` in the linked repo rebuilds it from the docs |
+| `⚠ no wiki there` | that repo genuinely has no docs | run `/orc-wiki` in the linked repo |
+| `✓ inbound only (they call us)` | that repo only *consumes* your API — you read nothing from it | nothing to do; its tags/freshness are irrelevant on your side |
+| `⚠ linked, but no edge yet` | you added the repo but never drew an edge | `orc crosslink` → add the edge; a node alone does nothing |
 | `✗ path not found — PENDING` | the repo path is wrong or not checked out | fix the path with `orc crosslink` (remove + re-add), or check the repo out |
-| `no crosslink tags yet (coarse hints only)` | linked repo is on an older wiki | it upgrades for free the next time that repo scans — nothing to do |
+| `no crosslink tags yet (coarse hints only)` | that repo has wiki docs but never published its boundary — its scan stopped before the publish step, or its wiki predates crosslink | run **`/orc-wiki crosslink`** in that repo: publishes the tags from the docs it already has, no re-scan. (It also upgrades on that repo's next full scan — but don't pay for a scan just for this.) |
 | `tier unknown (git unavailable there)` | linked folder isn't a git checkout | freshness falls back to the snapshot date — still works |
 | executor didn't get a contract | the task didn't touch a linked boundary, or `needs.json` isn't built | run `/orc-wiki` in this repo to build the needs baseline |
 

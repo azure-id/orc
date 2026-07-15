@@ -328,7 +328,42 @@ const CONTRACTS = [
     ],
   },
   {
-    name: "wiki freshness manifest (v0.11.0 — written ONLY by orc-wiki, computed on read)",
+    name: "wiki registration writer (v0.18.0 — manifest+INDEX derived by the CLI, never hand-written)",
+    token: "orc wiki sync",
+    files: [
+      "commands/orc-wiki.md",
+      "hooks/orc-statusline.js",
+      "skills/orc-wiki/README.md",
+      "skills/orc-wiki/SKILL.md",
+      "skills/orc-wiki/references/crosslink.md",
+      "skills/orc-wiki/references/integrity-check.md",
+      "skills/orc-wiki/references/staleness.md",
+      "skills/orc-wiki/schemas/crosslink-tag.md",
+    ],
+  },
+  {
+    name: "wiki CROSSLINK-ONLY branch (v0.18.0 — publish tags from existing docs; never a re-scan)",
+    token: "CROSSLINK-ONLY",
+    files: [
+      "commands/orc-wiki.md",
+      "skills/orc-wiki/README.md",
+      "skills/orc-wiki/SKILL.md",
+      "skills/orc-wiki/references/crosslink.md",
+    ],
+  },
+  {
+    name: "wiki UNREGISTERED state (v0.18.0 — docs without a manifest ≠ no wiki; sync, never re-scan)",
+    token: "UNREGISTERED",
+    files: [
+      "hooks/orc-statusline.js",
+      "skills/orc-wiki/README.md",
+      "skills/orc-wiki/SKILL.md",
+      "skills/orc-wiki/references/crosslink.md",
+      "skills/orc-wiki/references/staleness.md",
+    ],
+  },
+  {
+    name: "wiki freshness manifest (v0.11.0 — written ONLY by `orc wiki sync`, computed on read)",
     token: "wiki-meta.json",
     files: [
       "hooks/orc-statusline.js",

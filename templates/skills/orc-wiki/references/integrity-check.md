@@ -1,50 +1,72 @@
 # Reference — Scan-End Integrity Self-Check (anti-drift gate)
 
 Runs at the END of every scan/refresh (full, incremental, selective), AFTER
-all docs are written and BEFORE the manifest is rewritten. The orchestrator
-runs it itself — it is checklist work (file existence + cross-referencing),
-not scanning, so it needs no agent. Any failed item is FIXED before the run
-is declared done; if a fix needs a re-scan, that re-scan rides the current
-run's consent (no new warning).
+all docs are written and AFTER the closing `orc wiki sync` — it VALIDATES the
+derived registration rather than racing it. The orchestrator runs it itself —
+it is checklist work (file existence + cross-referencing), not scanning, so it
+needs no agent. Any failed item is FIXED before the run is declared done; if a
+fix needs a re-scan, that re-scan rides the current run's consent (no new
+warning).
 
 When logging is on, emit ONE trace line per item:
 `WIKI-CHECK <item> ✅ PASS` or `WIKI-CHECK <item> ⛔ FAIL <what>` — and after
-fixes a final `WIKI-CHECK all ✅` before the manifest write.
+fixes a final `WIKI-CHECK all ✅`.
+
+## Items 1, 2, 5 and 7 — now structural
+
+index-sync, registry-sync, counts-match and crosslink-sync used to compare four
+hand-maintained artifacts against each other. Since `orc wiki sync` DERIVES
+`wiki/INDEX.md` and `.claude/orc/wiki-meta.json` — the `docs` registry with each
+doc's `covers` + `covered_files`, the `pages` count, and the
+`crosslink_provided` index of `wiki/crosslink/` — from the one source those
+artifacts were supposed to agree with (the doc headers), they cannot disagree
+unless registration was never run. So the four collapse into one command:
+
+```bash
+orc wiki sync --check     # exit 0 = registration matches the docs on disk
+```
+
+Exit 0 → emit `WIKI-CHECK registration ✅ PASS`. Non-zero → sync was skipped or
+a doc changed after it; run `orc wiki sync` and re-check. Never fix these by
+hand-editing INDEX.md or the manifest: that re-creates the very drift the
+derivation removes. Only the manifest's `commands` key is hand-maintained, and
+only per staleness.md.
 
 ## The checklist
 
-1. **index-sync** — every doc file on disk under `wiki/` (excluding
-   `wiki/archive/`) has exactly one INDEX.md line, and every INDEX.md line
-   points at an existing file. No extras either way.
-2. **registry-sync** — the manifest's `docs` registry lists exactly the docs
-   on disk; each entry's `covers` + `covered_files` mirror that doc's header.
-   Headers still on v1 (no `wiki_schema: 2`) are noted for lazy upgrade, not
-   failed.
-3. **covers-resolve** — every doc's `covers` globs match ≥ 1 real file. Zero
+1. **covers-resolve** — every doc's `covers` globs match ≥ 1 real file. Zero
    matches → route into the dead-doc sweep (staleness.md), never leave a dead
    doc indexed as live.
-4. **coverage-report** — union of all docs' `covers` vs the repo's source
+2. **coverage-report** — union of all docs' `covers` vs the repo's source
    tree: print coverage % and the top uncovered directories. Informational
    (feeds the coverage-gap sweep) — uncovered dirs are REPORTED with a
    proposed-area suggestion, never auto-scanned.
-5. **counts-match** — `wiki-meta.json` `pages` == real doc count; the
-   CLAUDE.md pointer block's doc count + "Last updated" match the manifest.
-6. **anchor-spot-check** — for each doc written THIS run, pick 2 evidence
+3. **claudemd-match** — the CLAUDE.md pointer block's doc count + "Last
+   updated" match the manifest. (The manifest's own `pages` is derived, so it
+   cannot drift; the pointer block is hand-injected, so it can.)
+4. **schema-upgrade-note** — list docs whose headers are still v1 (no
+   `wiki_schema: 2`: no `keywords`, a single `covered_hash` instead of per-file
+   `covered_files`). Derivation keeps them usable and indexed, so this is a
+   NOTE for lazy upgrade on the next refresh, never a failure — the one thing
+   the derived registration can't tell you, since a v1 entry looks merely
+   sparse rather than wrong.
+5. **anchor-spot-check** — for each doc written THIS run, pick 2 evidence
    anchors from its contract sections and confirm the cited files exist
    (existence only — cheap). A missing file = the agent cited something it
    didn't read → re-queue that doc's scan.
-7. **crosslink-sync** (only when this repo published a boundary this run) —
-   every file under `wiki/crosslink/` has exactly one `crosslink_provided`
-   entry in `wiki-meta.json` and every `crosslink_provided` entry points at an
-   existing file (no extras either way); each entry's `anchor` file exists.
-   Tag files must NOT appear in `wiki/INDEX.md` or the `docs` registry — a tag
-   found there is a leak (remove it; tags live only in `crosslink_provided`).
-   Emit `WIKI-CHECK crosslink …` when logging. Consume-side needs/cache are
-   advisory and NOT gated here (a stale cache is a warning, never a failure).
+6. **crosslink-anchors** (only when this repo published a boundary this run) —
+   each `crosslink_provided` entry's `anchor` file exists. (Tag ↔ registry
+   agreement is structural — sync derives the array from `wiki/crosslink/`
+   itself — but an anchor pointing at a deleted file is real drift no
+   derivation can see.) Emit `WIKI-CHECK crosslink …` when logging.
+   Consume-side needs/cache are advisory and NOT gated here (a stale cache is a
+   warning, never a failure).
 
 ## Why it exists
 
-The wiki's own artifacts (docs, INDEX.md, manifest registry, CLAUDE.md block)
-are four places that can silently disagree — and a wiki that disagrees with
-itself cannot be a source of truth. This gate makes internal consistency a
-shipped property of every run, not a hope.
+A wiki that disagrees with itself cannot be a source of truth. Deriving the
+index and manifest from the docs removes one whole class of that disagreement
+by construction; this gate covers what derivation cannot see — claims pointing
+at files that don't exist, docs covering nothing, and the hand-injected
+CLAUDE.md block — so internal consistency is a shipped property of every run,
+not a hope.

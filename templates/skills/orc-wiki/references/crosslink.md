@@ -72,14 +72,24 @@ exists:
    handlers, produced events — the same `Contracts & shapes` rows the feature
    docs anchor). Each becomes a tag under `wiki/crosslink/<kind>/<slug>.md`
    (schema §1; slug rule is Windows-safe + reversible).
-2. Register every tag in `wiki-meta.json`'s `crosslink_provided` array
-   (schema §2). This registry — NOT `wiki/INDEX.md` or `docs` — is where tags
-   live, so the human index and `pages` count stay clean.
-3. Run the crosslink integrity rule (integrity-check.md): `wiki/crosslink/`
-   files ↔ `crosslink_provided` entries agree 1:1; each `anchor` exists.
+2. Run `orc wiki sync` — it derives `wiki-meta.json`'s `crosslink_provided`
+   array from the tag files you just wrote (schema §2). This registry — NOT
+   `wiki/INDEX.md` or `docs` — is where tags live, so the human index and
+   `pages` count stay clean. Never hand-maintain the array.
+3. Run the crosslink integrity rule (integrity-check.md): each `anchor` exists.
+   (Tag ↔ registry agreement is structural once sync derives it.)
 
 Emission rides the wiki's existing scan consent — no separate ask. A repo with
 no outward boundary simply emits nothing (`crosslink_provided` absent).
+
+**Standalone: `/orc-wiki crosslink` (CROSSLINK-ONLY, SKILL.md Phase 3c).**
+Emission is a Phase 3 add-on, so a wiki whose Phase 3 never ran — and every wiki
+built before crosslink existed — has docs but no tags. Those docs already carry
+the boundary in their evidence-anchored `Contracts & shapes` rows, so recovering
+it needs no repo scan: read the rows, open ONLY the files they anchor, emit the
+tags, `orc wiki sync` to index. **Never answer "no crosslink tags" with a
+refresh or a re-scan** — the material is already on disk, and an incremental
+refresh with no drift may never reach Phase 3 anyway.
 
 ---
 
@@ -100,6 +110,15 @@ Also at scan/refresh, when `orc-crosslink.config.yaml` exists:
 
 Discovery runs only the **consume** side of edges. Provider-only edges
 (`from: fe to: self`) create no needs here.
+
+**So every report is direction-scoped.** A linked repo's tags/freshness matter
+ONLY on edges where we CALL them. On an inbound-only edge we read nothing from
+that repo, so "no crosslink tags" there is both irrelevant and unfixable — a
+pure consumer (a frontend `api-client`) has no API of its own and will never
+grow tags. `orc crosslink list`/`status` therefore report inbound-only nodes as
+"inbound only (they call us)" and never send anyone to publish a boundary that
+legitimately does not exist. **The graph is drawn in the CONSUMER**: the repo
+that calls is the one that needs the config, the edge, and the resolved cache.
 
 ---
 
@@ -146,10 +165,18 @@ note it — warn only.
 | Provider state | What you get | Warn |
 |---|---|---|
 | v2 wiki + crosslink tags | per-point tags → precise drift | — |
-| v2 wiki, no crosslink tags | api-surface prose → coarse hints, no per-point drift | "no crosslink tags — coarse" |
+| v2 wiki, no crosslink tags | api-surface prose → coarse hints, no per-point drift | "no crosslink tags — coarse; `/orc-wiki crosslink` there publishes them without a re-scan" |
 | v1 wiki | api-surface only → coarse hints, no per-point drift | "older schema — coarse" |
-| no wiki | edge inert until provider scanned | "run orc-wiki there" |
+| wiki UNREGISTERED (docs, no manifest) | edge inert until registered — **but nothing needs scanning** | "run `orc wiki sync` there — instant, no re-scan" |
+| manifest CORRUPT (unparseable) | edge inert until rebuilt | "run `orc wiki sync` there to rebuild it" |
+| no wiki | edge inert until provider scanned | "run `/orc-wiki` there" |
 | path missing | pending edge, resolves when path appears | "path not found — pending" |
+
+Never collapse UNREGISTERED into "no wiki": a repo whose docs are complete but
+unindexed looks identical to an unscanned one from the manifest alone, and
+telling that team to scan sends them to re-buy a wiki they already own. `orc
+crosslink` distinguishes the two by looking for docs under `<repo_path>/wiki/`
+before it concludes anything from a missing manifest.
 
 Version skew is expected: a crosslink to a v1/tagless repo gets richer for free
 the day that repo re-scans with crosslink. No cross-team coordination needed.

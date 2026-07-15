@@ -1391,13 +1391,19 @@ function sameRepo(a, b) {
 
 // Provider info for a linked repo ROOT: does it have a wiki, its last_scan, its
 // git-distance tier (read-only), and how many crosslink tags it publishes.
+//
+// A missing manifest is NOT the same as a missing wiki (references/staleness.md:
+// docs without a manifest = a real wiki that nothing has registered). Collapsing
+// the two sent people off to re-scan repos that were already fully scanned, so
+// the three failure states stay distinct: no-wiki / unregistered / corrupt.
 function crosslinkProviderInfo(repoRoot) {
   if (!fs.existsSync(repoRoot)) return { state: "missing" };
   const metaPath = path.join(repoRoot, ".claude", "orc", "wiki-meta.json");
-  if (!fs.existsSync(metaPath)) return { state: "no-wiki" };
+  const docs = readWikiDocs(path.join(repoRoot, "wiki")).docs.length;
+  if (!fs.existsSync(metaPath)) return docs ? { state: "unregistered", docs } : { state: "no-wiki" };
   let meta;
   try { meta = JSON.parse(fs.readFileSync(metaPath, "utf8").replace(/^﻿/, "")); }
-  catch (_) { return { state: "no-wiki" }; }
+  catch (_) { return { state: "corrupt", docs }; }
   const info = {
     state: "wiki",
     last_scan: meta.last_scan || null,
@@ -1416,15 +1422,56 @@ function crosslinkProviderInfo(repoRoot) {
   return info;
 }
 
-// One-line freshness report for a pasted/added repo path.
-function crosslinkProviderLine(claudeDir, repoPath) {
+// Which way does a node relate to us? We RESOLVE tags only from repos we CALL;
+// a repo that only calls US is a consumer (references/crosslink.md: "Discovery
+// runs only the consume side of edges. Provider-only edges create no needs").
+function crosslinkDirection(cfg, nodeName) {
+  const isSelf = (x) => x === "self" || x === cfg.self;
+  let consume = false;
+  let provide = false;
+  for (const l of cfg.links) {
+    if (isSelf(l.from) && l.to === nodeName) consume = true;
+    if (isSelf(l.to) && l.from === nodeName) provide = true;
+  }
+  return consume ? "consume" : provide ? "provide" : "none";
+}
+
+// One-line freshness report for a pasted/added repo path. `dir` is the edge
+// direction from crosslinkDirection (omit at paste time, when no edge exists
+// yet and the report is just "what is this repo?").
+function crosslinkProviderLine(claudeDir, repoPath, dir) {
   const root = path.resolve(repoRootOf(claudeDir), repoPath);
   const info = crosslinkProviderInfo(root);
   if (info.state === "missing") return "  ✗ path not found — will be saved as a PENDING edge (resolves when the path appears)";
-  if (info.state === "no-wiki") return "  ⚠ no wiki-meta.json there — run `orc-wiki` in that repo first (edge saved, inert until then)";
+  // Their tags only matter if WE call THEM. For an inbound-only edge we read
+  // nothing from that repo, so reporting "no crosslink tags" states a fact that
+  // is both irrelevant and unfixable: a pure client (a frontend api-client) has
+  // no API of its own to publish, so it would never grow tags and the warning
+  // would never clear.
+  if (dir === "provide")
+    return (
+      "  ✓ inbound only (they call us) — we resolve nothing from them, so their tags and freshness don't matter here.\n" +
+      "     Nothing to do in that repo. For THEM to use OUR contracts, they run `orc crosslink` in THEIR repo and link us."
+    );
+  if (dir === "none")
+    return "  ⚠ linked, but no edge yet — add one with `orc crosslink`; a node without an edge does nothing";
+  if (info.state === "no-wiki") return "  ⚠ no wiki there — run `/orc-wiki` in that repo first (edge saved, inert until then)";
+  if (info.state === "unregistered")
+    return `  ⚠ wiki found (${plural(info.docs, "doc")}) but UNREGISTERED — no wiki-meta.json, so nothing can read it.\n` +
+      "     Fix in that repo: `orc wiki sync` — instant, no re-scan (edge saved, inert until then)";
+  if (info.state === "corrupt")
+    return "  ⚠ wiki-meta.json there is unreadable (corrupt JSON) — run `orc wiki sync` in that repo to rebuild it";
   const tier = info.tier ? info.tier : "tier unknown (git unavailable there — using date only)";
-  const tags = info.tags ? `${info.tags} tags` : "no crosslink tags yet (coarse hints only)";
-  return `  ✓ wiki found · last_scan ${info.last_scan || "?"} · ${tier} · ${tags}`;
+  const head = `  ✓ wiki found · last_scan ${info.last_scan || "?"} · ${tier} · `;
+  if (info.tags) return head + plural(info.tags, "crosslink tag");
+  // Tags are published BY the provider — the repo being CALLED — so this is
+  // never fixable from here. Say where, or the reader reasonably tries to fix
+  // it in the repo they're standing in (the consumer), which changes nothing.
+  return (
+    head + "no crosslink tags yet (coarse hints only)\n" +
+    `     Tags are published by the repo being called: run \`/orc-wiki crosslink\` IN ${repoPath}\n` +
+    "     — publishes from its existing docs, no re-scan. Running it here publishes OUR surface, not theirs."
+  );
 }
 
 // Bulk-add peek: edges in the linked repo's OWN config that touch us, expressed
@@ -1482,7 +1529,7 @@ function crosslinkList(claudeDir) {
   console.log(`\nCrosslink graph — self: ${cfg.self}\n\nLinked repos:`);
   for (const n of cfg.nodes) {
     console.log(`  • ${n.name}  (${n.repo_path})  kinds: ${(n.kinds || []).join(", ") || "—"}`);
-    console.log("   " + crosslinkProviderLine(claudeDir, n.repo_path));
+    console.log("   " + crosslinkProviderLine(claudeDir, n.repo_path, crosslinkDirection(cfg, n.name)));
   }
   console.log("\nEdges:");
   for (const l of cfg.links) {
@@ -1496,7 +1543,8 @@ function crosslinkStatus(claudeDir) {
   const cfg = readCrosslinkConfig(claudeDir);
   if (!cfg) { console.log("UNCONFIGURED — no cross-repo links. Run `orc crosslink`."); return; }
   console.log(`\nCrosslink status — self: ${cfg.self}, ${cfg.nodes.length} linked repo(s), ${cfg.links.length} edge(s)\n`);
-  for (const n of cfg.nodes) console.log(`  ${n.name}:\n  ${crosslinkProviderLine(claudeDir, n.repo_path)}`);
+  for (const n of cfg.nodes)
+    console.log(`  ${n.name}:\n  ${crosslinkProviderLine(claudeDir, n.repo_path, crosslinkDirection(cfg, n.name))}`);
   const needs = crosslinkPaths(claudeDir).needs;
   console.log(fs.existsSync(needs)
     ? `\n  needs baseline: ${needs} (per-point tags orc-wiki resolved)`
@@ -1644,6 +1692,395 @@ function crosslink() {
         `Unknown: orc crosslink ${pos[1]}\n` +
           "Usage: orc crosslink                 (interactive: add/list/remove/done)\n" +
           "       orc crosslink [list | status | remove <name>]"
+      );
+      process.exit(1);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// orc wiki — REGISTRATION of the knowledge base (wiki-meta.json + wiki/INDEX.md).
+//
+// Split of duties: the orc-wiki skill writes the DOCS (prose — it takes a model
+// to read code and summarize it). Registration is DERIVED data: every field the
+// manifest needs already lives in the docs' own headers (schemas/wiki-doc.md).
+// So the CLI owns registration outright — deterministic, instant, no model, no
+// re-scan, and repairable at any time.
+//
+// Why this exists: registration used to be Phase 3 step 5 of the skill — the
+// LAST step of a lane that pauses every 5 scan-tasks by design. A run stopped at
+// a pause left real docs on disk that nothing had indexed: invisible to every
+// consumer, and `orc crosslink` reported the repo as having no wiki at all.
+// Deriving registration from the docs makes a paused wiki a VALID wiki with
+// partial coverage. See templates/skills/orc-wiki/references/staleness.md.
+// ---------------------------------------------------------------------------
+
+function wikiPaths(claudeDir) {
+  const root = repoRootOf(claudeDir);
+  const wikiDir = path.join(root, "wiki");
+  return {
+    root,
+    wikiDir,
+    index: path.join(wikiDir, "INDEX.md"),
+    crosslinkDir: path.join(wikiDir, "crosslink"),
+    meta: path.join(claudeDir, "orc", "wiki-meta.json"),
+  };
+}
+
+const unquote = (s) => String(s == null ? "" : s).trim().replace(/^["']|["']$/g, "");
+const plural = (n, word, many) => `${n} ${n === 1 ? word : many || word + "s"}`;
+
+// Minimal frontmatter reader — the exact subset schemas/wiki-doc.md uses:
+// scalars, inline arrays (`covers: [a, b]`), and one nested map level
+// (`covered_files:` + indented `path: hash`). No YAML dep, by house rule.
+function parseDocHeader(text) {
+  const m = text.replace(/^﻿/, "").match(/^---\r?\n([\s\S]*?)\r?\n---/);
+  if (!m) return null;
+  const h = {};
+  let mapKey = null;
+  for (const raw of m[1].split(/\r?\n/)) {
+    if (!raw.trim() || raw.trim().startsWith("#")) continue;
+    if (/^\s+\S/.test(raw) && mapKey) {
+      const kv = raw.trim().replace(/\s+#.*$/, "").match(/^(.+?):\s*(.*)$/);
+      if (kv) h[mapKey][unquote(kv[1])] = unquote(kv[2]);
+      continue;
+    }
+    const kv = raw.match(/^([A-Za-z0-9_]+):\s*(.*)$/);
+    if (!kv) continue;
+    mapKey = null;
+    const key = kv[1];
+    const val = kv[2].replace(/\s+#.*$/, "").trim();
+    if (val === "") { h[key] = {}; mapKey = key; continue; }
+    if (val.startsWith("[")) {
+      h[key] = val.replace(/^\[|\]$/g, "").split(",").map((s) => unquote(s)).filter(Boolean);
+      continue;
+    }
+    h[key] = unquote(val);
+  }
+  return h;
+}
+
+// Every wiki doc under wiki/, skipping the machine index (crosslink/), the
+// archive, and INDEX.md itself. A .md without a doc_type header is not a wiki
+// doc — reported, never silently folded into the registry.
+function readWikiDocs(wikiDir) {
+  const docs = [];
+  const skipped = [];
+  if (!fs.existsSync(wikiDir)) return { docs, skipped };
+  const walk = (dir) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const abs = path.join(dir, e.name);
+      if (e.isDirectory()) {
+        if (e.name === "crosslink" || e.name === "archive") continue;
+        walk(abs);
+        continue;
+      }
+      if (!e.name.endsWith(".md") || e.name === "INDEX.md") continue;
+      const rel = path.relative(path.dirname(wikiDir), abs).split(path.sep).join("/");
+      const text = fs.readFileSync(abs, "utf8");
+      const header = parseDocHeader(text);
+      if (!header || !header.doc_type) { skipped.push(rel); continue; }
+      docs.push({ abs, rel, header, text });
+    }
+  };
+  walk(wikiDir);
+  docs.sort((a, b) => a.rel.localeCompare(b.rel));
+  return { docs, skipped };
+}
+
+// INDEX.md needs a one-line description, which is the one thing NO header field
+// carries. Derive it: first TL;DR bullet, else the first prose line under the
+// H1. Never invent one — an underivable description is left blank.
+function docDescription(text) {
+  const body = text.replace(/^﻿/, "").replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, "");
+  const tldr = body.match(/^##\s+TL;DR[^\n]*\n([\s\S]*?)(?=\n##\s|$)/m);
+  const pick = (chunk) => {
+    for (const line of chunk.split(/\r?\n/)) {
+      const t = line.replace(/^[-*]\s+/, "").trim();
+      if (!t || t.startsWith("#") || t.startsWith("<")) continue;
+      return t.replace(/\s+/g, " ").replace(/[.\s]+$/, "");
+    }
+    return "";
+  };
+  let d = tldr ? pick(tldr[1]) : "";
+  if (!d) d = pick(body.replace(/^#[^\n]*\n/, ""));
+  return d.length > 120 ? d.slice(0, 117).trimEnd() + "…" : d;
+}
+
+function gitIn(root, argv) {
+  const r = spawnSync("git", argv, { cwd: root, encoding: "utf8" });
+  if (r.status !== 0 || !r.stdout) return null;
+  return r.stdout.trim();
+}
+
+// The wiki as a whole is only as fresh as its OLDEST doc — anything committed
+// after that point may be undocumented. So the manifest anchor is the oldest
+// resolvable scanned_commit (greatest distance from HEAD), never the newest:
+// overstating freshness is the one error a freshness anchor must not make.
+function oldestCommit(root, commits) {
+  let best = null;
+  for (const c of commits) {
+    const out = gitIn(root, ["rev-list", "--count", `${c}..HEAD`]);
+    if (out === null || !/^\d+$/.test(out)) continue;
+    const d = Number(out);
+    if (!best || d > best.distance) best = { commit: c, distance: d };
+  }
+  return best;
+}
+
+const two = (n) => String(n).padStart(2, "0");
+const fmtStamp = (d) =>
+  `${two(d.getDate())}-${two(d.getMonth() + 1)}-${d.getFullYear()} ` +
+  `${two(d.getHours())}:${two(d.getMinutes())}:${two(d.getSeconds())}`;
+
+// Doc headers stamp `scanned_at: DDMMYY HH:MM:SS`; the manifest wants
+// dd-mm-yyyy hh:mm:ss. Convert, else fall back to the file's mtime.
+function parseScannedAt(v) {
+  const m = String(v || "").match(/^(\d{2})(\d{2})(\d{2})\s+(\d{2}):(\d{2}):(\d{2})$/);
+  if (!m) return null;
+  const d = new Date(2000 + +m[3], +m[2] - 1, +m[1], +m[4], +m[5], +m[6]);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+// build/test/lint are discovered during the scan and live in NO doc header, so
+// they cannot be derived. Preserve what a previous manifest knew; else read
+// package.json scripts. Never guess a command the project doesn't declare.
+function detectCommands(root, prev) {
+  if (prev && typeof prev === "object" && Object.keys(prev).length) return prev;
+  const pkgPath = path.join(root, "package.json");
+  if (!fs.existsSync(pkgPath)) return null;
+  let scripts;
+  try { scripts = (JSON.parse(fs.readFileSync(pkgPath, "utf8")) || {}).scripts || {}; }
+  catch (_) { return null; }
+  const out = {};
+  if (scripts.build) out.build = "npm run build";
+  if (scripts.test) out.test_fast = "npm test";
+  if (scripts.lint) out.lint = "npm run lint";
+  return Object.keys(out).length ? out : null;
+}
+
+// crosslink_provided is an INDEX of the tag files, so it is derived like the
+// rest of registration. The tag FILES stay model-written (they carry scanned
+// contract prose + evidence anchors); this only re-indexes them.
+function readCrosslinkProvided(paths) {
+  if (!fs.existsSync(paths.crosslinkDir)) return [];
+  const out = [];
+  for (const kind of fs.readdirSync(paths.crosslinkDir, { withFileTypes: true })) {
+    if (!kind.isDirectory()) continue;
+    const kindDir = path.join(paths.crosslinkDir, kind.name);
+    for (const f of fs.readdirSync(kindDir)) {
+      if (!f.endsWith(".md")) continue;
+      const abs = path.join(kindDir, f);
+      const h = parseDocHeader(fs.readFileSync(abs, "utf8"));
+      if (!h || !h.tag) continue;
+      out.push({
+        tag: h.tag,
+        kind: h.kind || kind.name,
+        file: path.relative(paths.root, abs).split(path.sep).join("/"),
+        anchor: h.anchor || null,
+        content_hash: h.content_hash || null,
+      });
+    }
+  }
+  out.sort((a, b) => a.tag.localeCompare(b.tag));
+  return out;
+}
+
+function readMetaAt(metaPath) {
+  if (!fs.existsSync(metaPath)) return { state: "absent", meta: null };
+  try {
+    return { state: "ok", meta: JSON.parse(fs.readFileSync(metaPath, "utf8").replace(/^﻿/, "")) };
+  } catch (_) {
+    return { state: "corrupt", meta: null };
+  }
+}
+
+// Derive the full registration for whatever docs exist right now.
+function buildRegistration(claudeDir) {
+  const paths = wikiPaths(claudeDir);
+  const { docs, skipped } = readWikiDocs(paths.wikiDir);
+  const prev = readMetaAt(paths.meta);
+
+  const registry = docs.map((d) => {
+    const e = {
+      file: d.rel,
+      area: d.header.area || path.basename(d.rel, ".md"),
+      doc_type: d.header.doc_type,
+      covers: Array.isArray(d.header.covers) ? d.header.covers : [],
+      // v1 docs carry a single covered_hash and no per-file map — keep them
+      // usable rather than forcing a re-scan; the next refresh upgrades them.
+      covered_files:
+        d.header.covered_files && typeof d.header.covered_files === "object"
+          ? d.header.covered_files
+          : {},
+      scanned_commit: d.header.scanned_commit || null,
+    };
+    if (!Object.keys(e.covered_files).length && d.header.covered_hash) {
+      e.covered_hash = d.header.covered_hash;
+    }
+    return e;
+  });
+
+  const anchor = oldestCommit(paths.root, [
+    ...new Set(registry.map((e) => e.scanned_commit).filter(Boolean)),
+  ]);
+
+  let stamp = null;
+  for (const d of docs) {
+    const at = parseScannedAt(d.header.scanned_at) || fs.statSync(d.abs).mtime;
+    if (!stamp || at < stamp) stamp = at; // oldest, matching the commit anchor
+  }
+
+  const meta = Object.assign({}, prev.meta || {}, {
+    last_scan: stamp ? fmtStamp(stamp) : fmtStamp(new Date()),
+    branch: gitIn(paths.root, ["rev-parse", "--abbrev-ref", "HEAD"]) || null,
+    pages: registry.length,
+    docs: registry,
+  });
+  if (anchor) meta.scan_commit = anchor.commit;
+  else delete meta.scan_commit; // unresolvable → consumers treat as pre-manifest
+
+  const commands = detectCommands(paths.root, (prev.meta || {}).commands);
+  if (commands) meta.commands = commands;
+  else delete meta.commands;
+
+  const provided = readCrosslinkProvided(paths);
+  if (provided.length) meta.crosslink_provided = provided;
+  else delete meta.crosslink_provided;
+
+  const lines = docs.map((d) => {
+    const e = registry.find((r) => r.file === d.rel);
+    const kw = Array.isArray(d.header.keywords) ? d.header.keywords : [];
+    const desc = docDescription(d.text);
+    return (
+      `- ${d.rel} · ${e.doc_type} · ${d.header.status || "fresh"}` +
+      (desc ? ` — ${desc}` : "") +
+      (kw.length ? ` · kw: ${kw.join(", ")}` : "")
+    );
+  });
+  const index =
+    "# Wiki Index\n\n" +
+    "<!-- Derived by `orc wiki sync` from the docs' headers. Do not hand-edit —\n" +
+    "     edit a doc's header and re-run sync. -->\n\n" +
+    (lines.length ? lines.join("\n") + "\n" : "_No wiki docs yet._\n");
+
+  return { paths, docs, skipped, registry, meta, index, prev, anchor, provided };
+}
+
+// The registration state of THIS repo's wiki — the vocabulary every consumer
+// and message uses. "unregistered" is the state that used to masquerade as
+// "no wiki at all".
+function wikiState(claudeDir) {
+  const paths = wikiPaths(claudeDir);
+  const { docs } = readWikiDocs(paths.wikiDir);
+  const prev = readMetaAt(paths.meta);
+  if (!docs.length && prev.state !== "ok") return { state: "none", docs: 0 };
+  if (prev.state === "corrupt") return { state: "corrupt", docs: docs.length };
+  if (prev.state === "absent") return { state: "unregistered", docs: docs.length };
+  const known = new Set(((prev.meta || {}).docs || []).map((d) => d.file));
+  const have = new Set(docs.map((d) => d.rel));
+  const added = [...have].filter((f) => !known.has(f));
+  const dropped = [...known].filter((f) => !have.has(f));
+  if (added.length || dropped.length)
+    return { state: "drifted", docs: docs.length, added, dropped };
+  return { state: "registered", docs: docs.length, meta: prev.meta };
+}
+
+function wikiSync(claudeDir, { check } = {}) {
+  const r = buildRegistration(claudeDir);
+  if (!fs.existsSync(r.paths.wikiDir) || !r.docs.length) {
+    console.error(
+      "❌ no wiki docs found at " + r.paths.wikiDir + "\n" +
+        "   `orc wiki sync` registers docs that already exist — it never scans.\n" +
+        "   Run `/orc-wiki` in Claude Code to build the knowledge base first."
+    );
+    process.exit(1);
+  }
+
+  const before = wikiState(claudeDir);
+  const nextMeta = JSON.stringify(r.meta, null, 2) + "\n";
+  const curMeta = fs.existsSync(r.paths.meta) ? fs.readFileSync(r.paths.meta, "utf8") : null;
+  const curIndex = fs.existsSync(r.paths.index) ? fs.readFileSync(r.paths.index, "utf8") : null;
+  const changed = curMeta !== nextMeta || curIndex !== r.index;
+
+  if (check) {
+    console.log(changed ? `⚠ out of sync (${before.state}) — run \`orc wiki sync\`` : "✓ wiki registration in sync");
+    process.exit(changed ? 1 : 0);
+  }
+
+  fs.mkdirSync(path.dirname(r.paths.meta), { recursive: true });
+  fs.writeFileSync(r.paths.meta, nextMeta);
+  fs.writeFileSync(r.paths.index, r.index);
+
+  console.log(changed ? "✅ wiki registered" : "✅ wiki registration already in sync");
+  console.log(`   ${plural(r.registry.length, "doc")} indexed → ${path.relative(r.paths.root, r.paths.index).split(path.sep).join("/")}`);
+  console.log(`   manifest → ${path.relative(r.paths.root, r.paths.meta).split(path.sep).join("/")}`);
+  if (r.anchor)
+    console.log(`   scan_commit ${r.anchor.commit.slice(0, 8)} (oldest doc — ${r.anchor.distance} commits behind HEAD)`);
+  else
+    console.log("   ⚠ no resolvable scanned_commit in any doc — freshness tracking stays off until the next /orc-wiki refresh");
+  if (r.provided.length) console.log(`   ${plural(r.provided.length, "crosslink tag")} indexed`);
+  if (!r.meta.commands)
+    console.log("   ⚠ no build/test commands recorded — orc-fast's smoke gate will rediscover them (a /orc-wiki refresh fills this in)");
+  if (r.skipped.length)
+    console.log(`   ⚠ skipped (no doc_type header): ${r.skipped.join(", ")}`);
+  console.log("\n   Registration only — nothing was scanned and no doc was changed.");
+}
+
+function wikiStatus(claudeDir) {
+  const s = wikiState(claudeDir);
+  const paths = wikiPaths(claudeDir);
+  switch (s.state) {
+    case "none":
+      console.log("no wiki — run `/orc-wiki` in Claude Code to build one");
+      break;
+    case "unregistered":
+      console.log(
+        `⚠ UNREGISTERED — ${plural(s.docs, "doc")} at ${paths.wikiDir}, but no wiki-meta.json.\n` +
+          "  Nothing can see this wiki (consumers and `orc crosslink` read the manifest).\n" +
+          "  Fix: `orc wiki sync` — instant, derived from the docs, no re-scan."
+      );
+      break;
+    case "corrupt":
+      console.log("⚠ CORRUPT — wiki-meta.json exists but is not valid JSON.\n  Fix: `orc wiki sync` rebuilds it from the docs.");
+      break;
+    case "drifted":
+      console.log(
+        `⚠ OUT OF SYNC — ${plural(s.added.length, "doc")} not in the manifest, ${plural(s.dropped.length, "stale entry", "stale entries")}.\n` +
+          (s.added.length ? `  new:     ${s.added.join(", ")}\n` : "") +
+          (s.dropped.length ? `  missing: ${s.dropped.join(", ")}\n` : "") +
+          "  Fix: `orc wiki sync`."
+      );
+      break;
+    default: {
+      const d = s.meta.scan_commit
+        ? gitIn(paths.root, ["rev-list", "--count", `${s.meta.scan_commit}..HEAD`])
+        : null;
+      const tier = d === null ? "tier unknown" : Number(d) < 10 ? "FRESH" : Number(d) <= 30 ? "AGING" : "STALE";
+      console.log(`✓ registered — ${s.docs} docs · last_scan ${s.meta.last_scan || "?"} · ${tier}${d === null ? "" : ` (${d}c)`}`);
+    }
+  }
+}
+
+function wiki() {
+  if (flag("--global")) {
+    console.error("❌ orc wiki is project-scoped — the wiki lives in the repo. Run it from the project (or with --dir <path>).");
+    process.exit(1);
+  }
+  const claudeDir = resolveClaudeDir();
+  const pos = positionals(); // ["wiki", <sub?>, ...]
+  switch (pos[1]) {
+    case "sync":
+      wikiSync(claudeDir, { check: flag("--check") });
+      break;
+    case undefined:
+    case "status":
+      wikiStatus(claudeDir);
+      break;
+    default:
+      console.error(
+        `Unknown: orc wiki ${pos[1]}\n` +
+          "Usage: orc wiki status               registration state of the wiki\n" +
+          "       orc wiki sync [--check]       rebuild wiki-meta.json + INDEX.md from the docs"
       );
       process.exit(1);
   }
@@ -1826,6 +2263,10 @@ Usage:
   orc crosslink [--dir <path>]            compose cross-repo wiki links — INTERACTIVE (project-scoped; no --global)
     orc crosslink list | status           inspect the graph + per-repo freshness (read-only)
     orc crosslink remove <name>           drop a linked repo and its edges
+  orc wiki [--dir <path>]                 registration state of the wiki (project-scoped; no --global)
+    orc wiki sync [--check]               rebuild wiki-meta.json + INDEX.md from the docs on disk
+                                          (instant, no re-scan — this is the repair for an
+                                           unregistered wiki, e.g. a scan stopped at a pause)
   orc where [--global | --dir <path>]     show target paths
   orc version                             print installed version + check for a newer one
   orc --help
@@ -1865,6 +2306,9 @@ Skills installed: ${listSkillNames().join(", ")}`);
       break;
     case "crosslink":
       crosslink();
+      break;
+    case "wiki":
+      wiki();
       break;
     case "where":
       where();

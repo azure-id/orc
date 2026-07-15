@@ -2,9 +2,15 @@
 
 The machine-resolvable half of the wiki. Where `wiki/orc-*.md` docs are the
 human narrative, crosslink files are a per-integration-point index that another
-repo resolves **by tag**. All four artifacts below are written by `orc-wiki`
-(never by a model in a chat, never by the CLI). See `references/crosslink.md`
-for the mechanics; this file pins the shapes.
+repo resolves **by tag**. See `references/crosslink.md` for the mechanics; this
+file pins the shapes.
+
+**Who writes what.** The tag FILES, needs, and cache are written by `orc-wiki`
+(never by a model in a chat, never by the CLI) — they carry scanned contract
+prose and evidence anchors, which takes a model. The `crosslink_provided`
+registry in the manifest is the exception: it is a derived INDEX of those tag
+files, so `orc wiki sync` builds it from their headers and nothing else ever
+writes it (staleness.md).
 
 ---
 
@@ -56,9 +62,12 @@ current one — equal = clean, different = drifted, file gone = breaking change.
 
 ## 2. Provider registry — `crosslink_provided` in `wiki-meta.json`
 
-A NEW sibling array in the manifest, alongside `docs`. Per-point tag files are a
+A sibling array in the manifest, alongside `docs`, derived by `orc wiki sync`
+from the tag-file headers — never hand-maintained. Per-point tag files are a
 machine index, NOT prose docs — they must NOT enter `wiki/INDEX.md` or the `docs`
-registry (that would corrupt the human index and the `pages` count). Instead:
+registry (that would corrupt the human index and the `pages` count); sync
+enforces that by construction, since it only ever reads `wiki/crosslink/` into
+this array. Shape:
 
 ```json
 {
