@@ -169,8 +169,10 @@ order (all under actor `orc`, plus the hook's `SPAWN`/`RETURN`):
 4. `FINISH :: <mode_ran> CLAUDE.md v<X.Y.Z>` (mode_ran may be `noop`), then
    delete `.current`.
 
-A noop refresh still traces the full cycle (ending `FINISH :: noop`) and still
-deletes `.current`.
+Append each marker as its event happens (before announcing that step), never
+batched at the end — the timestamps are the run's timeline, and a step that
+ends with zero new trace lines is a protocol violation. A noop refresh still
+traces the full cycle (ending `FINISH :: noop`) and still deletes `.current`.
 
 ## Boundaries
 

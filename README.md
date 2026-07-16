@@ -6,7 +6,7 @@
 
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
-![Version](https://img.shields.io/badge/version-0.18.0-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.19.0-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D16-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
@@ -37,50 +37,46 @@ zero-dependency npm package installs those files into your `.claude/` directory.
 
 ## Changelog
 
-### v0.18.0 — `orc wiki sync`: the wiki registers itself — a paused scan is no longer an invisible wiki _(2026-07-15)_
+### v0.19.0 — Thin spines: skill compaction, budget lint, and a trace that logs every phase _(2026-07-16)_
 
-**The bug:** `/orc-wiki` pauses every 5 areas *by design*, and a pause looked
-exactly like a finish (both ended in a dispatch report + `/usage` reminder). But
-everything that *registers* the wiki — `wiki/INDEX.md`, the `wiki-meta.json`
-manifest, the crosslink tags — was back-loaded into the final assemble phase. So
-the normal outcome of scanning any repo with more than 5 areas was: real docs on
-disk, nothing indexing them, and `orc crosslink` reporting "no wiki-meta.json —
-run orc-wiki", sending you to re-buy a wiki you already owned.
+**The bug:** a run's behavior trace often ended up with a *single line*. The hook
+was fine — it bootstraps the folder and pointer on the first dispatch — but no
+lane ever said *when* to write the rich markers. So the orchestrator treated the
+trace as a report to write at the end, and by `FINISH` the run's context was
+compacted and the detail was gone.
 
-**The fix:** registration is *derived* data — every field already lives in the
-docs' own headers — so the **CLI now owns it** and a model never writes it again:
+**The fix:** every trace-owning lane now states an explicit **write cadence** —
+the trace is a running record, appended at the moment each event happens, before
+the step is announced to the user. Plus a self-check the model can't argue with:
+*a phase that ends with zero new trace lines is a protocol violation.* It's
+lint-pinned across all eight lanes.
 
-```bash
-orc wiki                 # registered / UNREGISTERED / corrupt / out of sync
-orc wiki sync            # rebuild INDEX.md + wiki-meta.json from the docs — instant, free, no re-scan
-orc wiki sync --check    # read-only; exit 1 if registration doesn't match disk
-```
+**Also: the spines got thin again.** `skills/orc/SKILL.md` declared itself a
+"thin spine — load references only when their phase fires", then inlined every
+feature added since v0.10 (trace, pattern gate, ultra, wiki consult, crosslink,
+testgen) — 602 lines, several of them duplicating references that already
+existed. Contract-critical lines sat buried in narrative, which is exactly how a
+model under context pressure paraphrases the story and drops the contract. The
+detail moved into load-on-demand references (`wiki-consult.md`, `pattern-gate.md`,
+`analyst-gates.md`) that cost nothing until their phase fires:
 
-`/orc-wiki` now runs sync **after every scan-task**, so a paused wiki is a valid
-wiki with partial coverage — *incomplete coverage* and *unregistered* are
-different states, and only one costs money to fix. New **REPAIR** branch on entry
-detects an unregistered wiki and offers the free repair instead of a re-scan;
-pauses now lead with `⏸ PAUSED — not finished ({N} of {M} areas)`, impossible to
-mistake for `✅ Wiki complete`. `orc crosslink` distinguishes *unregistered* from
-*no wiki* and points at the one-second fix; the statusline shows
-`wiki: UNREGISTERED` so it can never be silent again. Integrity's index/registry/
-counts/crosslink checks collapse into `orc wiki sync --check` — they cannot drift
-once derived. Existing broken wikis repair in place: **`orc wiki sync`, no
-re-scan.**
+| spine | before | after |
+|---|---|---|
+| `orc` | 602 | 325 |
+| `orc-wiki` | 360 | 299 |
+| `orc-mini` | 274 | 212 |
+| `orc-analyze` | 221 | 190 |
+| `orc-fast` | 199 | 176 |
 
-**Also: `/orc-wiki crosslink` — publish boundary tags without a re-scan.** Tags
-are Phase 3 artifacts too, so the same paused scans left repos with docs but no
-`wiki/crosslink/` — as does *every* wiki built before v0.17.0. The boundary is
-already described in the docs' evidence-anchored `Contracts & shapes` rows, so
-the new **CROSSLINK-ONLY** branch reads those rows, opens only the files they
-anchor to, publishes the tags, resolves what you consume, and indexes it — never
-re-scanning an area or rewriting a doc. Previously the only route to tags was a
-full scan (and an incremental refresh with no drift could finish without ever
-reaching Phase 3, leaving tags unpublished after you paid). **"No crosslink
-tags" is never a reason to re-scan.**
+No behavior changed — every contract token, gate, and phase survives. To keep it
+that way, `npm run verify` now enforces a **per-spine line budget**: a new
+feature that would blow the budget lands as a reference plus a pointer, not as
+more spine prose.
 
 <details>
 <summary><b>Previous versions</b> (click to expand)</summary>
+
+### v0.18.0 — `orc wiki sync`: the wiki registers itself — a paused scan is no longer an invisible wiki _(2026-07-15)_
 
 ### v0.17.3 — Trace the wiki consult: Phase 1 now logs whether the run grounded in the wiki (and if it was stale) _(2026-07-14)_
 ### v0.17.2 — Behavior-trace logging is permanent + the trace folder is now created deterministically _(2026-07-14)_

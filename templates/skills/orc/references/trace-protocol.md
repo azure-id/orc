@@ -50,6 +50,30 @@ orchestrating skill folds in.
   generic `run-<DDMMYY-HHMMSS>.txt` slug). Non-ORC Tasks never trace — the hook
   only bootstraps for agent names starting with `orc`.
 
+## Write cadence — append AS THE RUN GOES, never in one batch at the end
+
+The trace is a **running record**, not an end-of-run report. Append each line
+at the moment the event happens, BEFORE announcing that step to the user:
+
+| Moment | Append before you… |
+|--------|--------------------|
+| entering a phase | announce the phase / ask its questions |
+| dispatching an agent | show the dispatch line to the user |
+| a return validates | act on the return |
+| a task closes | move to the next task |
+| review/verify verdict | relay the verdict |
+| run end | print the final report |
+
+**Self-check:** a phase that ends with
+`zero new trace lines is a protocol violation`.
+If you notice a phase went by unlogged, append the missing lines
+NOW (with the events' real order) rather than skipping them; a trace with one
+line and a fully-executed run behind it is the failure this cadence exists to
+prevent. The most common cause is treating the trace as a summary to write at
+`FINISH` — by then the run's context is compacted and the detail is gone.
+Batched-at-the-end lines lose their timestamps' meaning too: the stamps are
+the run's timeline, so a line written late is a false record, not a late one.
+
 ## Line format
 
 `[DDMMYY HH:MM:SS.mmm] <actor>  <VERB> :: <free tail>`

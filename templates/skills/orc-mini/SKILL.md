@@ -14,45 +14,36 @@ description: >
 
 A trimmed orchestrator for when you want speed over the full quality pipeline.
 Everything in the main spine (`../orc/SKILL.md`) applies EXCEPT the
-differences below. Load the main skill's references and schemas by path — this
-mini skill does not duplicate them, but the HOT-PATH essentials (dispatch names,
-return-contract fields, artifact path) are inlined here so nothing has to be
-reconstructed from "full minus deltas."
+differences below. Load the main skill's references and schemas by path — the
+HOT-PATH essentials (dispatch names, return-contract fields, artifact path)
+are inlined here so nothing is reconstructed from "full minus deltas."
 
-Run as **Opus 4.8 high** (orchestrator — unchanged from full; do not downgrade
-yourself). **You never implement — you spawn.** The one exception is the
-**smoke gate** below: running the project's build+test is a read-only ship gate,
-not implementation — you still never write code.
+Run as **Opus 4.8 high** (unchanged from full; never downgrade yourself).
+**You never implement — you spawn.** The one exception is the **smoke gate**:
+a read-only build+test run, not implementation — you still never write code.
 
 **Worked example** (orient only — never execute from it): `examples/mini-run-mock.md`.
 
 ## Differences from the full orchestrator
 
 1. **Skip full Phase 5 (Review), Phase 6 (Verify), and Phase 7 (Summary).**
-   Instead run the lightweight **smoke gate** (below) after execution, then the
-   opt-in **test-authoring ask**, then ship.
-2. **Implementation is ONE subagent, Sonnet 5, high effort.** Do not fan out into
-   parallel waves. **No scoring table** — execution is fixed at Sonnet 5 high, so
-   a score→model table would be computed-then-discarded. Replace it with a
-   **one-line complexity read**: state in one line whether the task is
-   mini-appropriate, or recommend switching to the full flow (see below). Log that
-   one-line read; do not render the full scoring matrix.
-3. **No dispatch-style and no batch-pause questions.** A single subagent with no
-   waves makes both meaningless — never ask them, and never reason about wave caps
-   or pauses in the mini lane.
-4. **Lighter intake.** Ask only the intake **Always + medium tier** (Q1–Q4 in
-   `../orc/references/intake.md`): what should exist, what's out of scope, how
-   we'll know it's done, and constraints/patterns/libs/files-not-to-touch. **Skip
-   the high tier (Q5 "what must not break", Q6 "what might change").** Run the
-   Step 3.5 repo cross-check at the NAMES-ONLY depth (Glob/Grep-confirm the
-   files/modules the draft names, tag the rest `UNVERIFIED`, resolve tags in
-   the sign-off line; >3 tags → recommend the full flow or `orc-analyze`).
-   Sign-off **defaults to SOFT** (proceed unless the user objects), not GATE.
-5. **Still write tests** if the project has a test setup (the execution subagent
-   creates/updates them as part of its task).
-6. **Everything else is identical:** Phase 0 run folder + intent-spec, Phase 1
-   planning, checkpoint/state-of-play in `run/{run-slug}/`, stop sequence, usage
-   reminder, ship flow.
+   Instead: the **smoke gate** after execution, then the opt-in
+   **test-authoring ask**, then ship.
+2. **Implementation is ONE subagent, Sonnet 5, high effort.** No waves. **No
+   scoring table** — replace it with a **one-line complexity read** (mini-ok?
+   or recommend switching to full); log that line, never render the matrix.
+3. **No dispatch-style and no batch-pause questions** — a single subagent
+   makes both meaningless; never ask them.
+4. **Lighter intake.** Ask only the **Always + medium tier** (Q1–Q4 in
+   `../orc/references/intake.md`); skip the high tier (Q5/Q6). Run the Step
+   3.5 repo cross-check at NAMES-ONLY depth (Glob/Grep-confirm what the draft
+   names, tag the rest `UNVERIFIED`, resolve tags in the sign-off line; >3
+   tags → recommend the full flow or `orc-analyze`). Sign-off **defaults to
+   SOFT**, not GATE.
+5. **Still write tests** if the project has a test setup (the executor
+   creates/updates them in its task).
+6. **Everything else is identical:** run folder + intent-spec, planning,
+   checkpoint/state-of-play, stop sequence, usage reminder, ship flow.
 
 ## Mini flow (the phase set)
 
@@ -60,11 +51,10 @@ not implementation — you still never write code.
 Phase 0  intake (Q1–Q4, soft sign-off) + run folder + intent-spec
 Phase 1  planning (dispatch orc-planner-mini; analyst first only on real docs)
          → one-line complexity read (mini-ok? or recommend switch-to-full)
-Phase 3  dispatch ONE executor (orc-executor-sonnet-5-high) — slice carries the
-         standing `house_rules` card (`../orc/references/house-rules.md`, card
-         lines injected literally, same as full) + the cached `postgres` pattern
-         when the task touches the data-access layer (cache HIT only) — collect
-         + validate return
+Phase 3  dispatch ONE executor (orc-executor-sonnet-5-high) — slice carries
+         the standing `house_rules` card (../orc/references/house-rules.md,
+         injected literally) + the cached `postgres` pattern on a data-access
+         task (cache HIT only) — collect + validate return
 Phase M  SMOKE GATE — run build+test → GREEN proceed · RED block ship + surface
 Phase T  TEST-AUTHORING ASK (opt-in) — offer to write test cases (never run them)
 Phase 8  ship (commit / push / PR)
@@ -72,87 +62,68 @@ Phase 8  ship (commit / push / PR)
 (No Phase 2 scoring table, no dispatch-style/batch-pause asks, no full
 review/verify/summary.)
 
-**Postgres query grounding.** On a Postgres project (driver/ORM in deps), if the
-task touches the data-access layer (repositories/dao/queries, `*.sql`, ORM
-entities/migrations) AND `.claude/orc/patterns/postgres-pattern.md` is cached,
-inject it LITERALLY into the slice — conventions to MATCH + the blocking query
-invariants (bound params only, pooled connections, transactional multi-writes, no
-inline DDL). Cache MISS → skip (mini never codifies — that's the full lane /
-`/orc-pattern`); the universal invariants + neighbor imitation still cover it.
+**Postgres query grounding.** On a Postgres project, if the task touches the
+data-access layer AND `.claude/orc/patterns/postgres-pattern.md` is cached,
+inject it LITERALLY into the slice (conventions + blocking query invariants).
+Cache MISS → skip — mini never codifies (that's the full lane /
+`/orc-pattern`); universal invariants + neighbor imitation still cover it.
 
 ## Phase M — Smoke gate (build + test; blocks ship on red)
 
-After the executor returns and its contract validates (mini validates the same
-evidence rules as full: `status=done` on a stack with a runnable build/test
-REQUIRES `evidence` {command, exit_code, tail}; `done` with a non-empty
-`unmet[]` is malformed — treat as partial), the orchestrator itself
-runs the detected stack's **build and test** commands once, as a **read-only ship
-gate** (this is the "never commit on a red build" rule made enforceable — nothing
-else in the mini flow establishes build color). The executor's `evidence` is a
-claim; YOUR smoke run is the independent check — if they disagree, say so.
+After the executor return validates (same evidence rules as full:
+`status=done` on a runnable stack REQUIRES `evidence` {command, exit_code,
+tail}; `done` with non-empty `unmet[]` is partial), YOU run the detected
+stack's **build and test** once as a **read-only ship gate** — the executor's
+`evidence` is a claim; your smoke run is the independent check (disagree →
+say so).
 
-- **GREEN** (build + tests pass) → proceed to the test-authoring ask, then ship.
-- **RED** (build or tests fail) → **do NOT offer commit/ship.** Surface the
-  failure output, then auto-fix ONCE: re-dispatch the executor with the failing
-  output as `failure_reason`, re-run the smoke gate. Second red → STOP and surface
-  (same cap as the full auto-fix rule). Never commit on red.
-- This is a smoke gate, not full verification: no findings classification, no
-  acceptance-criteria matrix. For that depth, switch to the full flow.
-- If the stack exposes no runnable build/test (e.g. docs-only change), say so
-  explicitly and treat the gate as N/A — never silently skip it.
+- **GREEN** → test-authoring ask, then ship.
+- **RED** → **never offer commit/ship.** Surface the failure, auto-fix ONCE
+  (re-dispatch the executor with the failing output as `failure_reason`),
+  re-run the gate. Second red → STOP and surface.
+- Smoke, not verification: no findings classification, no criteria matrix —
+  for that depth switch to full.
+- No runnable build/test (docs-only) → say so explicitly; gate is N/A — never
+  silently skip.
 
 ## Phase T — Test-authoring ask (opt-in; writes tests, never runs them)
 
-Same opt-in as the full orchestrator's Phase 6.5 — mini offers it too, but **only
-asks** (it does not gate the ship). Default the offer from
-`config.generate_tests`; the run confirms. At the end of a GREEN run, ask: *"Write
-test cases for these changes? (I'll author them — automated files + TEST-PLAN.md +
-a curl bundle for HTTP APIs — but never run them; you test manually.)"*
-
-- **Yes** → dispatch `orc-test-author-opus-4-8-high` (subskill `../orc/subskills/orc-testgen/`)
-  with a slice: the run's `actual_files`, the intent-spec's definition-of-done,
-  the touched flows, constraints, and the detected stack (incl. whether it exposes
-  an HTTP API). Validate the return; relay what was authored. Tier-OK: the mini
-  orchestrator is Opus 4.8 high, so this Opus 4.8 high author does not exceed it.
-- **No** → skip and continue to ship.
-- Either way this NEVER runs tests and NEVER gates the ship.
+Same opt-in as full Phase 6.5 — mini **only asks** (never gates the ship).
+Default from `config.generate_tests`; at the end of a GREEN run ask: *"Write
+test cases for these changes? (I'll author them — automated files +
+TEST-PLAN.md + a curl bundle for HTTP APIs — but never run them; you test
+manually.)"* Yes → dispatch `orc-test-author-opus-4-8-high` (subskill
+`../orc/subskills/orc-testgen/`) with the run's `actual_files`,
+definition-of-done, touched flows, constraints, detected stack; validate the
+return; relay what was authored. No → ship. Either way this NEVER runs tests.
 
 ## Behavior trace (PERMANENT — same rule as full; always on)
 
-Mini does NOT drop the trace. Behavior-trace logging is always on (no toggle);
-follow `../orc/references/trace-protocol.md` exactly as the full orchestrator
-does, for mini's phase set:
-- **Run start:** create `log_dir`, write `.current`, store `logging_enabled` +
-  `trace_path` in the checkpoint. Emit a `PHASE` line at each mini phase
-  transition (intake → planning → execute → smoke → test-ask → ship).
-- **Each dispatch:** announce the model derived from the agent NAME, emit
-  `DISPATCH <agent> :: <task> expect=<model>/<effort>`. The `orc-trace.js` hook
-  writes the `SPAWN`/`RETURN` skeleton independently.
-- **Each return:** read `actual_model` + `actual_effort`, compare to expected,
-  emit `VERIFY <task> actual=…/… ✅ MATCH` or `⛔ DOWNGRADE expected=…` and
-  surface a downgrade to the user.
-- **Task close:** emit `OUTCOME task=… score=n/a band=mini model=… retries=…
-  requeues=… needs_context=… unmet=…` (mini has no score — band is `mini`; the
-  counters still feed `/orc-retro`).
-- **Smoke gate:** emit `VERDICT pass|fail` for the build+test result.
-- **Run end (ship or abort):** emit `FINISH …` and delete `log_dir/.current`.
-
-The `orc-trace.js` hook bootstraps `log_dir` + `.current` on the first dispatch,
-so a trace exists even if you skip the run-start step above.
+Mini does NOT drop the trace. Follow `../orc/references/trace-protocol.md`
+(load at run start) for mini's phase set. Run start: create `log_dir`, write
+`.current`, store `trace_path` in the checkpoint. **Cadence — written AS THE
+RUN GOES, not once:** each mini phase transition (intake → planning → execute
+→ smoke → test-ask → ship) appends its `PHASE` line BEFORE you announce that
+phase; each dispatch appends `DISPATCH` (model derived from the agent NAME);
+each return appends `VERIFY` (`actual_model`/`actual_effort` vs expected —
+surface any ⛔ DOWNGRADE); task close appends `OUTCOME … band=mini` (no score;
+the counters still feed `/orc-retro`); the smoke gate appends `VERDICT
+pass|fail`. A phase with zero new trace lines is a protocol violation — go
+append them now. Run end (ship or abort): `FINISH …`, delete
+`log_dir/.current`. (The hook bootstraps `.current` on the first dispatch, so
+the SPAWN/RETURN skeleton is never lost.)
 
 ## Complexity read (replaces the scoring table)
 
-Instead of scoring, make ONE judgment before dispatch: is this genuinely
-mini-sized (single coherent area, low interdependency, low blast radius)? State it
-in one line and log it. If it reads as complex/high-risk (many interdependencies,
-core/shared surface, security-sensitive), **recommend switching to the full flow**
-rather than pushing a fixed single-Sonnet build through it — let the user choose.
+ONE judgment before dispatch: is this genuinely mini-sized (single coherent
+area, low interdependency, low blast radius)? State it in one line and log it.
+Complex/high-risk (many interdependencies, core/shared surface,
+security-sensitive) → **recommend switching to full** — let the user choose.
 
 ## Fallback intake (arriving from orc-fast)
 
-orc-fast falls back HERE whenever its prerequisites fail (no/stale wiki, no
-pattern cache, oversized request, smoke-gate escalation) — never by stopping
-the chat. The handoff is a block in the shared run folder:
+orc-fast falls back HERE whenever its prerequisites fail — never by stopping
+the chat. The handoff block (in the shared run folder):
 
 ```
 FALLBACK-FROM: orc-fast
@@ -161,114 +132,81 @@ INTENT-SPEC: <path or "none — raw request follows">
 REQUEST: <the raw user request>
 ```
 
-On entry with this block: acknowledge the fallback + reason in one line, then
-run the normal mini lane — but SKIP re-deriving anything carried over (an
-attached intent-spec replaces the Phase 0 intake draft; still do the soft
-sign-off). The run folder is already in the shared format — reuse it, no new
-run-slug. Treat `REASON: smoke-red-escalation` as arriving with code already
-written: start from the failing state, not from scratch.
+On entry: acknowledge fallback + reason in one line, then run the normal mini
+lane — but SKIP re-deriving anything carried over (an attached intent-spec
+replaces the Phase 0 draft; still do the soft sign-off). Reuse the run folder,
+no new slug. `REASON: smoke-red-escalation` = code already written — start
+from the failing state, not from scratch.
 
 ## Switching to full flow mid-run
 
-If the user says "switch to full" (or the complexity read / a mid-run surprise
-clearly needs review/verify), hand off to the full orchestrator: the run folder,
-checkpoint, and intent-spec already live in the shared
-`../orc/run/{run-slug}/` format, so the full flow resumes from the current
-checkpoint and adds the review → verify → summary phases it skipped. Record the
-switch in the decision log. State carries over cleanly — both skills share the
-same schemas.
+On "switch to full" (or when the complexity read / a mid-run surprise clearly
+needs review/verify): the run folder, checkpoint, and intent-spec already live
+in the shared `../orc/run/{run-slug}/` format, so the full flow resumes from
+the current checkpoint and adds the phases mini skipped. Record the switch in
+the decision log.
 
 ## Dispatch via named agents (canonical name-map — dispatch BY these names)
 
-ORC-MINI dispatches these named agents (`.claude/agents/`, models pinned).
-Note the naming rule: **agent = skill-name + model-effort suffix** (drop the
-suffix to get the skill name). Look up here; never reconstruct a name.
+Models pinned in `.claude/agents/`; look up here, never reconstruct a name
+(agent = skill-name + model-effort suffix). See `.claude/agents/MODEL-MAPPING.md`.
 
-| Role | Skill | Agent (dispatch this) | Model / effort |
-|------|-------|-----------------------|----------------|
-| mini analysis (docs only) | `orc-analyze-mini` | `orc-analyze-mini-sonnet-5-high` | claude-sonnet-5 / high |
-| mini planning | `orc-planner-mini` | `orc-planner-mini-sonnet-5-high` | claude-sonnet-5 / high |
-| mini execution | (reused) | `orc-executor-sonnet-5-high` | claude-sonnet-5 / high |
-| test authoring (opt-in) | `orc-testgen` | `orc-test-author-opus-4-8-high` | claude-opus-4-8 / high |
-
-Each agent is single-role and self-contained. Cost-tier rule still applies (main
-session Opus 4.8 ≥ every dispatched agent, always true). See
-`.claude/agents/MODEL-MAPPING.md`.
+| Role | Agent (dispatch this) | Model / effort |
+|------|-----------------------|----------------|
+| mini analysis (docs only) | `orc-analyze-mini-sonnet-5-high` | claude-sonnet-5 / high |
+| mini planning | `orc-planner-mini-sonnet-5-high` | claude-sonnet-5 / high |
+| mini execution | `orc-executor-sonnet-5-high` | claude-sonnet-5 / high |
+| test authoring (opt-in) | `orc-test-author-opus-4-8-high` | claude-opus-4-8 / high |
 
 ## Config
 
-Resolve config at run start: `../orc/config.md` defaults merged with the user
-override `.claude/orc.config.yaml` (written by the `orc config` CLI, survives
-`orc update`) — read `generate_tests` (default OFF — the Phase T offer default)
-and `log_dir` (logging itself is permanent — always on). (Mini is single-subagent with no waves, so
-`max_wave_tasks` / `batch_pause_every` / the scoring presets do not apply — never
-render or ask them.) Mini is always single-pass analysis, so `max_scouts` / deep
-mode don't apply either.
+Resolve at run start: `../orc/config.md` defaults merged with
+`.claude/orc.config.yaml` — read `generate_tests` (the Phase T offer default)
+and `log_dir`. Wave/scoring/scout keys never apply to mini — never render or
+ask them.
 
 ## Analyst & planner (mini lane)
 
-For requirement analysis and planning, orc-mini dispatches the FAST variants as
-subagents (Sonnet 5 high): `orc-analyze-mini` and `orc-planner-mini` (subskill
-`../orc/subskills/orc-planner-mini/`). Same artifacts and output contracts as the
-full versions, trimmed depth. The mini analyst is **doc-optional**: on real doc
-input it runs first (mode-detect + scope-bound + evidence-or-mark ground +
-recommended-option challenges), then the mini planner; on a merely
-ambiguous/underspecified request, prefer one inline clarifying question over a
-cold analyst spawn. The mini analyst is always single-pass — **no deep mode, no
-scouts**; it escalates to the full flow (`/orc-analyze` deep) on its concrete
-thresholds and the user chooses. The orchestrator never analyzes or plans
-itself — it dispatches.
+orc-mini dispatches the FAST variants (Sonnet 5 high): `orc-analyze-mini` and
+`orc-planner-mini` — same artifacts and output contracts as full, trimmed
+depth. The mini analyst is **doc-optional**: on real doc input it runs first,
+then the mini planner; on a merely ambiguous request, prefer one inline
+clarifying question over a cold analyst spawn. Always single-pass — **no deep
+mode, no scouts**; it escalates to `/orc-analyze` deep on its concrete
+thresholds and the user chooses. You never analyze or plan yourself.
 
-**Mini-lane gates (yours, deterministic — same as the full lane; emit `GATE`
-trace lines when logging).** On mini-analyst return: evidence spot-check (Glob
-the spec's `files[]`; Grep-verify quotes on `status: exists|conflict`) +
-derivation lint (report↔spec R# ids/statuses/anchors match); refuse
-take-into-build on open `UNVERIFIED` or missing `scope_closed: true`; if the
-spec's `git_head` ≠ current HEAD at plan time, re-run the evidence spot-check
-first. On mini-planner return: Glob every `disposition: exists` path, recompute
-`coverage` (orphan requirements), and run cycle + same-file collision checks.
-Any miss → bounce back (one retry, then escalate). At dispatch, append the
-task's `spec_invariants` to the slice's `constraints[]` verbatim.
+**Mini-lane gates (yours, deterministic — same as full; full detail in
+`../orc/references/analyst-gates.md`; emit `GATE` trace lines).** On
+mini-analyst return: evidence spot-check + derivation lint; refuse
+take-into-build on open `UNVERIFIED`/missing `scope_closed`; `git_head` ≠
+HEAD at plan time → re-run the spot-check first. On mini-planner return: Glob
+every `disposition: exists` path, recompute coverage (no orphan
+requirements), cycle + collision checks. Any miss → bounce (one retry, then
+escalate). At dispatch, append the task's `spec_invariants` to the slice's
+`constraints[]` verbatim.
 
 ## Wiki consult (if present)
 
-Same rule as the full skill: if `wiki/` exists and has > 0 files, FIRST compute
-the freshness tier from `.claude/orc/wiki-meta.json` (commit distance from
-`scan_commit` → FRESH / AGING / STALE; rules in
-`../orc-wiki/references/staleness.md`): FRESH → silent, AGING → one-line
-notice, STALE → prominent warning but continue (mini self-grounds). Then
-consult the relevant overviews (select via `wiki/INDEX.md` when present —
-its lines carry doc type, status, and keywords; match on keywords) during
-planning/complexity-read for better core/isolated/risk judgment. On v2 wikis
-pull each doc's `TL;DR` + `Contracts & shapes` (file-anchored specifics) and,
-when the task's domain matches, the cross-cutting maps
-(`orc-reference-api-surface` / data-model / glossary / config-env).
-Precedence: `code > fresh wiki > stale wiki (hints) > model priors` — on any
-wiki-vs-code conflict the code wins. If empty or absent, ignore it. **Emit
-`WIKI-CONSULT <tier> :: docs=<pages pulled>`** (tier `fresh`/`aging`/`stale`, or
-`absent`/`empty` with `docs=none`) so the trace records whether mini grounded in
-the wiki and whether it was stale.
-**Crosslink (cross-repo, advisory):** if `.claude/orc/crosslink/needs.json`
-exists and the task touches a matching boundary call site, inject the cached
-linked contract as `crosslink` (labeled with its effective cross-repo tier +
-"hints, not verified") — advisory, never blocks, never outranks local code. Mini
-never generates the wiki. After a
-mini run that changed code, apply the same guarded stale-flag hook (flag only,
-never auto-scan — mini keeps the passive note; the post-ship refresh ASK is a
-full-lane/ultra behavior only).
+Same rule as the full skill — load `../orc/references/wiki-consult.md` at the
+planning/complexity-read step: compute the FRESH / AGING / STALE tier from
+`.claude/orc/wiki-meta.json`, pull the relevant pages (incl. cross-cutting
+maps like `orc-reference-api-surface` when their domain applies), apply
+`code > fresh wiki > stale wiki (hints) > model priors`, and **emit
+`WIKI-CONSULT <tier> :: docs=<pages pulled>`**. Crosslink: a task touching a
+boundary in `.claude/orc/crosslink/needs.json` gets the cached contract
+injected per that reference — advisory, never blocking. Mini never generates
+the wiki; after a code-changing run apply the passive stale-flag note only
+(the post-ship refresh ASK is full-lane/ultra behavior).
 
 ## Shared artifacts
 
-Writes to the SAME location as the full skill:
-`.claude/skills/orc/run/{run-slug}/` — so a switch needs no
-migration. (Mini does not keep its own separate run/ tree.)
+Writes to the SAME location as the full skill
+(`.claude/skills/orc/run/{run-slug}/`) — a switch needs no migration.
 
 ## What mini still enforces (from the main hard rules)
 
-- Never implement yourself; always spawn (the smoke gate is a read-only build+test
-  run, not implementation).
-- All artifacts in the run subfolder; never project root.
-- Validate the subagent return; malformed = failure.
-- Usage: report dispatch log + remind the user to run `/usage`. Never invoke
-  `/usage` programmatically.
-- **Never offer commit on a red build** — enforced by the Phase M smoke gate.
+Never implement yourself (the smoke gate is read-only, not implementation) ·
+all artifacts in the run subfolder, never project root · validate every
+subagent return (malformed = failure) · report the dispatch log + remind the
+user to run `/usage` (never invoke it programmatically) · **never offer commit
+on a red build** (enforced by Phase M).

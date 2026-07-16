@@ -56,7 +56,9 @@ Verdict: <READY / NEEDS FIXES>
 
 ## Behavior trace (PERMANENT — every ORC entry point traces; always on)
 
-Standalone verify traces too. Resolve `log_dir`
+Standalone verify traces too — appended as each event happens, never batched
+at the end (a phase ending with
+`zero new trace lines is a protocol violation`). Resolve `log_dir`
 (`../orc/config.md` default + `.claude/orc.config.yaml`) at start and follow
 `../orc/references/trace-protocol.md`: write
 `log_dir/.current` = `<slug>-<DDMMYY>.txt` first, emit `PHASE` lines, `FINDING

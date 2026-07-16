@@ -82,6 +82,7 @@ const CONTRACTS = [
       "agents/orc-executor-sonnet-5-high.md",
       "skills/orc/README.md",
       "skills/orc/SKILL.md",
+      "skills/orc/references/pattern-gate.md",
       "skills/orc/subskills/orc-execution/SKILL.md",
       "skills/orc/subskills/orc-execution/core.md",
       "skills/orc-fast/SKILL.md",
@@ -119,6 +120,7 @@ const CONTRACTS = [
       "agents/orc-reviewer-opus-4-8-high.md",
       "agents/orc-verifier-opus-4-8-high.md",
       "skills/orc/SKILL.md",
+      "skills/orc/references/pattern-gate.md",
       "skills/orc/subskills/orc-execution/SKILL.md",
       "skills/orc/subskills/orc-execution/core.md",
       "skills/orc/subskills/orc-review-verify/SKILL.md",
@@ -170,6 +172,7 @@ const CONTRACTS = [
       "agents/orc-planner-opus-4-8-med.md",
       "skills/orc-mini/SKILL.md",
       "skills/orc/SKILL.md",
+      "skills/orc/references/analyst-gates.md",
       "skills/orc/schemas/planning-output.md",
       "skills/orc/subskills/orc-planner/SKILL.md",
       "skills/orc/subskills/orc-planner-mini/SKILL.md",
@@ -232,6 +235,7 @@ const CONTRACTS = [
       "skills/orc-analyze/schemas/requirement-spec.md",
       "skills/orc-mini/SKILL.md",
       "skills/orc/SKILL.md",
+      "skills/orc/references/analyst-gates.md",
       "skills/orc/subskills/orc-planner/SKILL.md",
     ],
   },
@@ -245,6 +249,7 @@ const CONTRACTS = [
       "skills/orc-mini/SKILL.md",
       "skills/orc-retro/SKILL.md",
       "skills/orc/SKILL.md",
+      "skills/orc/references/analyst-gates.md",
       "skills/orc/schemas/planning-output.md",
       "skills/orc/subskills/orc-planner-mini/SKILL.md",
       "skills/orc/subskills/orc-planner/SKILL.md",
@@ -258,6 +263,7 @@ const CONTRACTS = [
       "agents/orc-planner-opus-4-8-med.md",
       "skills/orc-mini/SKILL.md",
       "skills/orc/SKILL.md",
+      "skills/orc/references/analyst-gates.md",
       "skills/orc/schemas/planning-output.md",
       "skills/orc/subskills/orc-execution/core.md",
       "skills/orc/subskills/orc-planner-mini/SKILL.md",
@@ -275,6 +281,7 @@ const CONTRACTS = [
       "skills/orc-mini/SKILL.md",
       "skills/orc-retro/SKILL.md",
       "skills/orc/SKILL.md",
+      "skills/orc/references/analyst-gates.md",
       "skills/orc/references/trace-protocol.md",
       "skills/orc/references/ultra-mode.md",
     ],
@@ -307,6 +314,23 @@ const CONTRACTS = [
       "agents/orc-judge-opus-4-8-max.md",
       "skills/orc-judge/SKILL.md",
       "skills/orc/references/ultra-mode.md",
+    ],
+  },
+  {
+    // The v0.19.0 fix for "the trace only got one line": every trace-owning
+    // lane states the running-record cadence + this self-check inline, so a
+    // lane cannot quietly treat the trace as an end-of-run summary.
+    name: "behavior-trace write cadence (v0.19.0 — append per event, never batched at the end)",
+    token: "zero new trace lines is a protocol violation",
+    files: [
+      "skills/orc/SKILL.md",
+      "skills/orc/references/trace-protocol.md",
+      "skills/orc-analyze/SKILL.md",
+      "skills/orc-claude/SKILL.md",
+      "skills/orc-fast/SKILL.md",
+      "skills/orc-mini/SKILL.md",
+      "skills/orc-verify/SKILL.md",
+      "skills/orc-wiki/SKILL.md",
     ],
   },
   {
@@ -369,6 +393,7 @@ const CONTRACTS = [
       "hooks/orc-statusline.js",
       "skills/orc/SKILL.md",
       "skills/orc/config.md",
+      "skills/orc/references/wiki-consult.md",
       "skills/orc-fast/SKILL.md",
       "skills/orc-mini/SKILL.md",
       "skills/orc-wiki/README.md",
@@ -386,6 +411,7 @@ const CONTRACTS = [
       "hooks/orc-statusline.js",
       "skills/orc/SKILL.md",
       "skills/orc/config.md",
+      "skills/orc/references/wiki-consult.md",
       "skills/orc-fast/SKILL.md",
       "skills/orc-mini/SKILL.md",
       "skills/orc-wiki/SKILL.md",
@@ -445,6 +471,7 @@ const CONTRACTS = [
       "skills/context-combiner/schemas/combined-report.md",
       "skills/context-combiner/schemas/combined-requirement-spec.md",
       "skills/orc/SKILL.md",
+      "skills/orc/references/analyst-gates.md",
       "skills/orc-analyze/references/branching.md",
     ],
   },
@@ -500,6 +527,7 @@ const CONTRACTS = [
     files: [
       "skills/orc/SKILL.md",
       "skills/orc/references/trace-protocol.md",
+      "skills/orc/references/wiki-consult.md",
       "skills/orc-fast/SKILL.md",
       "skills/orc-mini/SKILL.md",
     ],
@@ -509,6 +537,7 @@ const CONTRACTS = [
     token: "orc-reference-api-surface",
     files: [
       "skills/orc/SKILL.md",
+      "skills/orc/references/wiki-consult.md",
       "skills/orc-fast/SKILL.md",
       "skills/orc-mini/SKILL.md",
       "skills/orc-wiki/SKILL.md",
@@ -521,6 +550,7 @@ const CONTRACTS = [
     token: "code > fresh wiki",
     files: [
       "skills/orc/SKILL.md",
+      "skills/orc/references/wiki-consult.md",
       "skills/orc-fast/SKILL.md",
       "skills/orc-mini/SKILL.md",
       "skills/orc-wiki/README.md",
@@ -609,6 +639,7 @@ const CONTRACTS = [
       "skills/orc-wiki/references/crosslink.md",
       "skills/orc-wiki/schemas/crosslink-tag.md",
       "skills/orc/SKILL.md",
+      "skills/orc/references/wiki-consult.md",
       "skills/orc/subskills/orc-execution/SKILL.md",
       "skills/orc/subskills/orc-execution/core.md",
     ],
@@ -660,6 +691,20 @@ const CONTRACTS = [
   },
 ];
 
+// Spine size budgets (v0.19.0). These SKILL.md files are ALWAYS loaded when
+// their skill runs — every line here is paid on every run, and oversized
+// spines are what make the model drift from the contract lines buried inside
+// them. Detail belongs in load-on-demand references/ (free until the phase
+// fires). A new feature that would blow a budget lands as a reference + a
+// pointer, not as spine prose. Raising a budget is a deliberate, reviewed act.
+const BUDGETS = [
+  { file: "skills/orc/SKILL.md", maxLines: 330 },
+  { file: "skills/orc-wiki/SKILL.md", maxLines: 305 },
+  { file: "skills/orc-mini/SKILL.md", maxLines: 215 },
+  { file: "skills/orc-analyze/SKILL.md", maxLines: 195 },
+  { file: "skills/orc-fast/SKILL.md", maxLines: 180 },
+];
+
 function walk(dir, out) {
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
     const p = path.join(dir, e.name);
@@ -692,6 +737,27 @@ for (const c of CONTRACTS) {
       console.error(
         `   - UNREGISTERED copy (add to bin/verify-contracts.js): templates/${f}`
       );
+  }
+}
+
+for (const b of BUDGETS) {
+  const p = path.join(ROOT, b.file);
+  let lines;
+  try {
+    lines = fs.readFileSync(p, "utf8").split("\n").length;
+  } catch (_) {
+    failures++;
+    console.error(`\n❌ spine budget: templates/${b.file} is missing.`);
+    continue;
+  }
+  if (lines > b.maxLines) {
+    failures++;
+    console.error(
+      `\n❌ spine budget exceeded: templates/${b.file} is ${lines} lines ` +
+        `(budget ${b.maxLines}).\n   Spines stay thin by design — move the ` +
+        `new detail into a references/ file loaded at its phase, keep only ` +
+        `the trigger + contract tokens + pointer in the spine.`
+    );
   }
 }
 
