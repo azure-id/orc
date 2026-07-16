@@ -6,7 +6,7 @@
 
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
-![Version](https://img.shields.io/badge/version-0.19.0-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.20.0-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D16-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
@@ -37,44 +37,42 @@ zero-dependency npm package installs those files into your `.claude/` directory.
 
 ## Changelog
 
-### v0.19.0 — Thin spines: skill compaction, budget lint, and a trace that logs every phase _(2026-07-16)_
+### v0.20.0 — One source of truth: generated executor agents + shared cross-lane contracts _(2026-07-16)_
 
-**The bug:** a run's behavior trace often ended up with a *single line*. The hook
-was fine — it bootstraps the folder and pointer on the first dispatch — but no
-lane ever said *when* to write the rich markers. So the orchestrator treated the
-trace as a report to write at the end, and by `FINISH` the run's context was
-compacted and the detail was gone.
+The project's "maintenance drift is by design" era ends where it can: the
+duplicated copies that existed only because nothing generated them are now
+generated or pointed, not hand-synced.
 
-**The fix:** every trace-owning lane now states an explicit **write cadence** —
-the trace is a running record, appended at the moment each event happens, before
-the step is announced to the user. Plus a self-check the model can't argue with:
-*a phase that ends with zero new trace lines is a protocol violation.* It's
-lint-pinned across all eight lanes.
+**Executor agents are generated.** The 6 `orc-executor-*` files were 78 lines
+each with 73 of them byte-identical — only the frontmatter (name/model/effort/
+score band) differed. They are now stamped from a single source
+(`agents-src/executor.template.md` + a variants table in `bin/build-agents.js`,
+run via `npm run build:agents`). The shipped files are byte-for-byte what they
+were, so nothing changes at runtime — but editing executor logic is now a
+one-file edit, and `npm run verify` fails on any hand-edited generated copy.
 
-**Also: the spines got thin again.** `skills/orc/SKILL.md` declared itself a
-"thin spine — load references only when their phase fires", then inlined every
-feature added since v0.10 (trace, pattern gate, ultra, wiki consult, crosslink,
-testgen) — 602 lines, several of them duplicating references that already
-existed. Contract-critical lines sat buried in narrative, which is exactly how a
-model under context pressure paraphrases the story and drops the contract. The
-detail moved into load-on-demand references (`wiki-consult.md`, `pattern-gate.md`,
-`analyst-gates.md`) that cost nothing until their phase fires:
+**Cross-lane contracts have ONE canonical file.** New
+`templates/skills/_shared/` (installed alongside skills, but not a skill) holds
+the single copy of prose that orc-mini and orc-fast used to restate:
+`return-validation.md` (claimed-vs-actual model check, evidence rules, unmet[]
+honesty, pattern attestation), `smoke-gate.md` (the read-only build+test ship
+gate), and `fallback-handoff.md` (the fast→mini `FALLBACK-FROM` block, writer
+and reader sides). Lane spines keep only the contract token + a pointer.
 
-| spine | before | after |
-|---|---|---|
-| `orc` | 602 | 325 |
-| `orc-wiki` | 360 | 299 |
-| `orc-mini` | 274 | 212 |
-| `orc-analyze` | 221 | 190 |
-| `orc-fast` | 199 | 176 |
+**The spines and docs got thinner again** (budgets tightened to match):
+`orc-wiki` 299→255 (crosslink/staleness/pre-warm prose demoted to
+references, including a new `references/pattern-prewarm.md`), `orc-mini`
+212→187, `orc-fast` 176→165, and `CLAUDE.md` 254→176 — the drift-surface
+enumerations are gone from prose because `bin/verify-contracts.js` *is* the
+authoritative registry.
 
-No behavior changed — every contract token, gate, and phase survives. To keep it
-that way, `npm run verify` now enforces a **per-spine line budget**: a new
-feature that would blow the budget lands as a reference plus a pointer, not as
-more spine prose.
+No behavior changed: every contract token, gate, phase, and freshness rule
+survives, and the contract lint still pins all 49 contracts.
 
 <details>
 <summary><b>Previous versions</b> (click to expand)</summary>
+
+### v0.19.0 — Thin spines: skill compaction, budget lint, and a trace that logs every phase _(2026-07-16)_
 
 ### v0.18.0 — `orc wiki sync`: the wiki registers itself — a paused scan is no longer an invisible wiki _(2026-07-15)_
 

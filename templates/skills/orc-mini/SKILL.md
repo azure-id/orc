@@ -70,21 +70,11 @@ Cache MISS → skip — mini never codifies (that's the full lane /
 
 ## Phase M — Smoke gate (build + test; blocks ship on red)
 
-After the executor return validates (same evidence rules as full:
-`status=done` on a runnable stack REQUIRES `evidence` {command, exit_code,
-tail}; `done` with non-empty `unmet[]` is partial), YOU run the detected
-stack's **build and test** once as a **read-only ship gate** — the executor's
-`evidence` is a claim; your smoke run is the independent check (disagree →
-say so).
-
-- **GREEN** → test-authoring ask, then ship.
-- **RED** → **never offer commit/ship.** Surface the failure, auto-fix ONCE
-  (re-dispatch the executor with the failing output as `failure_reason`),
-  re-run the gate. Second red → STOP and surface.
-- Smoke, not verification: no findings classification, no criteria matrix —
-  for that depth switch to full.
-- No runnable build/test (docs-only) → say so explicitly; gate is N/A — never
-  silently skip.
+After the executor return validates (`../_shared/return-validation.md` —
+including `done` with non-empty `unmet[]` = partial), YOU run the smoke gate
+per `../_shared/smoke-gate.md`: read-only build+test. **GREEN** →
+test-authoring ask, then ship. **RED** → never offer commit/ship; one repair
+re-dispatch, second red → STOP and surface. Docs-only → gate N/A, say so.
 
 ## Phase T — Test-authoring ask (opt-in; writes tests, never runs them)
 
@@ -100,18 +90,14 @@ return; relay what was authored. No → ship. Either way this NEVER runs tests.
 ## Behavior trace (PERMANENT — same rule as full; always on)
 
 Mini does NOT drop the trace. Follow `../orc/references/trace-protocol.md`
-(load at run start) for mini's phase set. Run start: create `log_dir`, write
-`.current`, store `trace_path` in the checkpoint. **Cadence — written AS THE
-RUN GOES, not once:** each mini phase transition (intake → planning → execute
-→ smoke → test-ask → ship) appends its `PHASE` line BEFORE you announce that
-phase; each dispatch appends `DISPATCH` (model derived from the agent NAME);
-each return appends `VERIFY` (`actual_model`/`actual_effort` vs expected —
-surface any ⛔ DOWNGRADE); task close appends `OUTCOME … band=mini` (no score;
-the counters still feed `/orc-retro`); the smoke gate appends `VERDICT
-pass|fail`. A phase with zero new trace lines is a protocol violation — go
-append them now. Run end (ship or abort): `FINISH …`, delete
-`log_dir/.current`. (The hook bootstraps `.current` on the first dispatch, so
-the SPAWN/RETURN skeleton is never lost.)
+(load at run start) for mini's phase set: run start create `log_dir` + write
+`.current` + store `trace_path` in the checkpoint; append the lines AS THE RUN
+GOES — each phase's `PHASE` line BEFORE announcing it, `DISPATCH` per spawn,
+`VERIFY` per return (`actual_model`/`actual_effort` vs expected — surface any
+⛔ DOWNGRADE), `OUTCOME … band=mini` per task close, `VERDICT pass|fail` at the
+smoke gate. A phase with zero new trace lines is a protocol violation — go
+append them now. Run end: `FINISH …`, delete `log_dir/.current`. (The hook
+bootstraps `.current` on the first dispatch, so the skeleton is never lost.)
 
 ## Complexity read (replaces the scoring table)
 
@@ -123,20 +109,9 @@ security-sensitive) → **recommend switching to full** — let the user choose.
 ## Fallback intake (arriving from orc-fast)
 
 orc-fast falls back HERE whenever its prerequisites fail — never by stopping
-the chat. The handoff block (in the shared run folder):
-
-```
-FALLBACK-FROM: orc-fast
-REASON: <why fast bailed>
-INTENT-SPEC: <path or "none — raw request follows">
-REQUEST: <the raw user request>
-```
-
-On entry: acknowledge fallback + reason in one line, then run the normal mini
-lane — but SKIP re-deriving anything carried over (an attached intent-spec
-replaces the Phase 0 draft; still do the soft sign-off). Reuse the run folder,
-no new slug. `REASON: smoke-red-escalation` = code already written — start
-from the failing state, not from scratch.
+the chat. Follow the reader side of `../_shared/fallback-handoff.md`: the
+`FALLBACK-FROM` block in the shared run folder names the reason; acknowledge
+it in one line, skip re-deriving whatever is carried, reuse the run folder.
 
 ## Switching to full flow mid-run
 

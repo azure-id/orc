@@ -68,20 +68,15 @@ makes the consent gate mandatory.
 
 ## Behavior trace (PERMANENT — same rule as orc/orc-mini; wiki runs trace too)
 
-Follow `../orc/references/trace-protocol.md` for the wiki's phase set. Run
-start (after consent, before any dispatch): create `log_dir`, write
-`log_dir/.current` = `<run-slug>-<DDMMYY>.txt`, store `trace_path` in the wiki
-checkpoint so a resumed session re-anchors to the SAME file. **Cadence —
-written AS THE RUN GOES:** each phase transition (entry → area-planning → scan
-→ assemble) appends its `PHASE` line BEFORE you announce that phase; each
-scan/codifier dispatch appends `DISPATCH <agent> :: <area>` (model derived
-from the agent NAME); each return appends `VERIFY` (`actual_model` /
-`actual_effort` vs expected — surface any ⛔ DOWNGRADE). A phase or scan-task
-that ends with zero new trace lines is a protocol violation — go append them
-now. **Stop sequence (5-task pause):** the trace persists and `.current`
-STAYS in place across the pause (re-write it from the checkpoint's
-`trace_path` if missing). Run end (Phase 3 done or abort): `FINISH …`, delete
-`log_dir/.current`.
+Follow `../orc/references/trace-protocol.md` for the wiki's phase set: run
+start (after consent) create `log_dir` + write `log_dir/.current` + store
+`trace_path` in the wiki checkpoint (a resumed session re-anchors to the SAME
+file); append AS THE RUN GOES — each phase's `PHASE` line BEFORE announcing
+it, `DISPATCH <agent> :: <area>` per spawn, `VERIFY` per return
+(`actual_model`/`actual_effort` vs expected — surface any ⛔ DOWNGRADE). A
+phase or scan-task ending with
+zero new trace lines is a protocol violation — go append them now. `.current` STAYS in place across the 5-task
+pauses. Run end (Phase 3 done or abort): `FINISH …`, delete `log_dir/.current`.
 
 ## Phase 0 — Entry & auto-branch (on /orc-wiki)
 
@@ -206,94 +201,55 @@ are already registered and this phase simply hasn't run yet.
 ## Phase 3c — CROSSLINK-ONLY (standalone: publish/resolve with NO area scan)
 
 Entry: `/orc-wiki crosslink`, or the Phase 0 CROSSLINK-ONLY branch. Runs the
-Phase 3 crosslink add-on and nothing else. Tags are Phase 3 artifacts, so
-paused scans and every pre-crosslink wiki have docs but no tags — the raw
-material (evidence-anchored `Contracts & shapes` rows) is already on disk.
-**"No crosslink tags" is never a reason to re-scan.** Direction: publish
-happens in the PROVIDER — this branch publishes THIS repo's surface and cannot
-give a linked repo tags (say so plainly when that's the user's goal; a pure
-consumer correctly publishes zero tags — a valid no-op, not a bug). Full
-rationale + examples: references/crosslink.md.
+Phase 3 crosslink add-on and nothing else — tags are Phase 3 artifacts, so
+paused scans and pre-crosslink wikis have docs but no tags; the raw material
+(evidence-anchored `Contracts & shapes` rows) is already on disk. **"No
+crosslink tags" is never a reason to re-scan.** Publish happens in the
+PROVIDER — this branch cannot give a linked repo tags (say so plainly; a pure
+consumer publishing zero tags is a valid no-op, not a bug).
 
-**Prerequisites** (check, never assume): `wiki/` has docs (else refuse — "run
-`/orc-wiki` first"; never invent a boundary), and some doc has a non-empty
-`Contracts & shapes` section (else "no outward boundary found; nothing to
-publish" — a valid result; name the likely cause so the no-op never reads as
-a failure).
+**Prerequisites** (check, never assume): `wiki/` has docs, and some doc has a
+non-empty `Contracts & shapes` section — else say why nothing can publish (a
+valid result, never presented as a failure). **Consent** is small and honest,
+NOT the scan warning: "reads existing docs' rows, opens only the {N} anchored
+files, no repo scan, no doc changes. Proceed?"
 
-**Consent** — small and honest, NOT the scan warning: "reads your existing
-docs' `Contracts & shapes` rows, opens only the {N} anchored files, no repo
-scan, no doc changes — far cheaper than a refresh. Proceed?"
-
-**Steps:**
-1. Collect boundary points from the docs' `Contracts & shapes` rows + their
-   evidence anchors (read DOCS, not source).
-2. Dispatch Opus 4.8 high agents over **the anchored files only** (hard
-   rule 2). Each returns a tag contract body per schemas/crosslink-tag.md; a
-   field the agent cannot see is OMITTED, an unanchorable row is SKIPPED and
-   reported — never publish a contract on a guess.
-3. Write the tag files to `wiki/crosslink/<kind>/<slug>.md`.
-4. **Consume half** (only when `.claude/orc-crosslink.config.yaml` exists):
-   resolve needs + cache per references/crosslink.md.
-5. Run `orc wiki sync` — indexes the tags into `crosslink_provided`.
-6. Integrity: crosslink-anchors (integrity-check.md); emit `WIKI-CHECK
-   crosslink …` when logging.
-7. Report tags published per kind + every skipped row and why.
-
-**Never** re-scan an area, rewrite a doc, change coverage, or touch `pages` —
-coverage is a scan question; this is a boundary question.
+**Steps:** collect boundary points from the docs' rows (read DOCS, not
+source) → dispatch Opus 4.8 high agents over the anchored files ONLY (tag
+bodies per schemas/crosslink-tag.md; an unanchorable row is SKIPPED and
+reported — never publish on a guess) → write `wiki/crosslink/<kind>/<slug>.md`
+→ resolve the consume half when `.claude/orc-crosslink.config.yaml` exists →
+run `orc wiki sync` (indexes the tags into `crosslink_provided`) → crosslink
+integrity check (emit `WIKI-CHECK crosslink …`) → report per kind + every
+skipped row and why. **Never** re-scan an area, rewrite a doc, change
+coverage, or touch `pages` — coverage is a scan question; this is a boundary
+question. Full rationale + examples: references/crosslink.md.
 
 ## Code-pattern pre-warm (opt-in — only when config `orc_wiki_pattern_findings: on`)
 
-Default OFF. When on, after Phase 3 also **codify the code-pattern for every
-detected FE/BE language** as a scan byproduct — pre-warming
-`.claude/orc/patterns/<lang>-pattern.md` so later `/orc` runs never hit the
-`pattern_findings` prompt. Rides the wiki's existing scan-consent, so there is
-NO separate ask (hence on/off only, no `ask`). Per detected language
-(`../orc-pattern/references/INDEX.md`): dispatch
-`orc-pattern-codifier-sonnet-5-high` with the generic playbook + the
-most-recently-modified real files; YOU write the returned pattern to the cache.
-Never run tests or change project code; skip languages already cached and
-un-drifted. Reuses the `orc-pattern` engine — you never codify yourself.
+Default OFF. When on, after Phase 3 codify the code-pattern for every detected
+FE/BE language as a scan byproduct (no separate ask — rides the scan consent).
+Load `references/pattern-prewarm.md` when the flag is on.
 
 ## Crosslink — cross-repo boundary publish + resolve (references/crosslink.md)
 
 A Phase 3 add-on after the docs and BEFORE the closing `orc wiki sync` (so the
-tags get indexed by that sync), riding the same scan consent — no separate ask.
-Two halves, both advisory; skip the consume half when
-`.claude/orc-crosslink.config.yaml` is absent.
-
-- **Publish (when this repo has an outward boundary):** from the already-scanned
-  `Contracts & shapes` rows, emit one tag file per integration point under
-  `wiki/crosslink/<kind>/<slug>.md` (schemas/crosslink-tag.md — Windows-safe
-  reversible slug). You write the tag FILES; `orc wiki sync` derives
-  `wiki-meta.json`'s `crosslink_provided` from their headers — never
-  hand-maintain that array. Tags stay OUT of `wiki/INDEX.md` and `docs` (sync
-  enforces this, keeping the human index + `pages` count clean). Then run the
-  crosslink integrity rule (integrity-check.md).
-- **Resolve (only with a config):** read the config (linked nodes +
-  `repo_path`s + directed edges), walk THIS repo's call sites, and for each
-  boundary matching an edge's `via: <kind>`, resolve that node's tag under
-  `<repo_path>/wiki/crosslink/`. Record the dependency in
-  `.claude/orc/crosslink/needs.json` (the drift baseline) and snapshot into the
-  gitignored `.claude/orc/crosslink/cache/`. Per-point drift is a **warn
-  only**, never a gate. Freshness = `min(Signal-A commit-distance, Signal-B
-  day-age)`, computed on read. Emit `WIKI-CHECK crosslink …` when logging.
+tags get indexed by that sync), riding the same scan consent. Two halves, both
+advisory — full procedure in references/crosslink.md, loaded at this step:
+**publish** emits one tag file per boundary point under
+`wiki/crosslink/<kind>/<slug>.md` (sync derives `crosslink_provided` from
+their headers — never hand-maintain it; tags stay OUT of `wiki/INDEX.md`);
+**resolve** (only when `.claude/orc-crosslink.config.yaml` exists) records
+consumed dependencies in `.claude/orc/crosslink/needs.json` + the gitignored
+`.claude/orc/crosslink/cache/`. Per-point drift is a warn only, never a gate;
+freshness is computed on read. Emit `WIKI-CHECK crosslink …` when logging.
 
 ## Refresh & staleness (references/staleness.md — THE canonical freshness reference)
 
-- **Freshness is computed on read, never stored:** consumers measure
-  `scan_commit` (from `wiki-meta.json`) against HEAD → FRESH / AGING / STALE,
-  with per-skill reactions. Only orc-wiki writes the manifest (via `orc wiki
-  sync`); nobody persists a status. Each doc also records the git hash of its
-  covered files at scan time (advisory per-doc signal; stale = hash ≠ current).
-- **Incremental refresh** (recommended): diff since `scan_commit`, match drift
-  against the manifest's `docs` registry, re-scan only affected docs, re-sync.
-  Includes the **coverage-gap sweep** and the **dead-doc sweep** (staleness.md).
-- Selective: re-scan only stale-flagged docs the user picks. Pre-push: scan the
-  git diff before commit. A refresh touching a v1 doc (no `wiki_schema: 2`
-  header) upgrades it in place — lazy migration, never a forced full re-scan.
-- Auto-flag hook: after an orc/orc-mini run, flag (never auto-scan) docs whose
-  covered files changed — only on a non-empty `wiki/`; the user confirms any
-  re-scan. BIG full-lane runs upgrade that passive note to the post-ship
-  refresh ask (staleness.md).
+Freshness is computed on read, never stored: consumers measure `scan_commit`
+(from `wiki-meta.json`) against HEAD → FRESH / AGING / STALE. Only orc-wiki
+writes the manifest (via `orc wiki sync`). The refresh modes (incremental with
+the coverage-gap + dead-doc sweeps · selective · pre-push), the per-doc
+`covered_files` signal, lazy `wiki_schema: 2` upgrades, and the auto-flag /
+post-ship refresh-ask rules all live in staleness.md — load it at any refresh
+branch, never act from memory of it.

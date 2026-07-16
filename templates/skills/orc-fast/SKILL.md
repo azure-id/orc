@@ -104,22 +104,19 @@ pinned in the agent file):
 - **terse-return rule:** standard contract fields, NO narrative prose — files
   changed, one-line diff summary, smoke-relevant notes only.
 
-Validate the return like every lane: `status`, `actual_files`, `unmet[]`
-(`done` with non-empty `unmet[]` is malformed — treat as partial),
-`pattern_version` + `invariants_checked` attestation, and `actual_model` +
-`actual_effort` — compare claimed-vs-actual and surface any downgrade
-(emit the `VERIFY … MATCH/DOWNGRADE` trace line when logging). Malformed
+Validate the return per `../_shared/return-validation.md` — `unmet[]`
+honesty, `pattern_version` + `invariants_checked` attestation, `actual_model`
+/ `actual_effort` downgrade check (emit the `VERIFY` trace line). Malformed
 return = failure (one re-dispatch, then fallback offer).
 
 ## Phase F3 — Smoke gate (build + test; blocks ship on red)
 
-Run build + fast-test **from `wiki-meta.json`'s `commands` block** (recorded
-at wiki scan — don't rediscover tooling; manifest lacks them → detect once and
-say so). Read-only ship gate: **GREEN** → ship. **RED** → do NOT offer commit;
-ONE repair round (re-dispatch the SAME executor with the failing output as
-`failure_reason`), re-run the gate; second red → STOP and offer: escalate to
-orc-mini (reason `smoke-red-escalation`) / switch to full `/orc` / stop. No
-runnable build/test (docs-only) → say so explicitly, gate is N/A.
+Run the gate per `../_shared/smoke-gate.md`, sourcing commands **from
+`wiki-meta.json`'s `commands` block** (recorded at wiki scan — don't
+rediscover tooling; manifest lacks them → detect once and say so). **GREEN**
+→ ship. **RED** → one repair round; second red → STOP and offer: escalate to
+orc-mini (reason `smoke-red-escalation`) / switch to full `/orc` / stop.
+Docs-only → gate N/A, say so.
 
 ## Phase F4 — Ship
 
@@ -131,29 +128,21 @@ way in) — the passive stale-flag note still applies to touched covered files.
 
 ## Fallback contract (orc-fast → orc-mini)
 
-Write this block into the run folder and invoke orc-mini pointing at it:
-
-```
-FALLBACK-FROM: orc-fast
-REASON: wiki-absent | wiki-stale-user-choice | pattern-absent | fit-gate | smoke-red-escalation
-INTENT-SPEC: <path to the intent-spec if Phase F1 completed, else "none — raw request follows">
-REQUEST: <the raw user request, verbatim>
-```
-
-orc-mini accepts the handoff (see its "Fallback intake" section): it skips
-re-deriving whatever is carried and runs its normal lane otherwise. The run
-folder is already in the shared format — no migration.
+Follow the writer side of `../_shared/fallback-handoff.md`: announce the
+failed gate in one line, write the `FALLBACK-FROM` block into the run folder
+(REASON: wiki-absent | wiki-stale-user-choice | pattern-absent | fit-gate |
+smoke-red-escalation), and invoke orc-mini pointing at it. The run folder is
+already in the shared format — no migration.
 
 ## Behavior trace (PERMANENT — same rule as every lane; always on)
 
-Follow `../orc/references/trace-protocol.md` for fast's phase set. Run start →
-write `log_dir/.current` + store `trace_path` in the checkpoint. **Cadence —
-written AS THE RUN GOES:** each F0–F4 transition appends its `PHASE` line
-BEFORE you announce that phase; `GATE` lines at the preflight/fit/smoke
-verdicts; `DISPATCH`/`VERIFY` around the executor; `OUTCOME` + `FINISH` at
-close, then delete `log_dir/.current`. A phase ending with
-`zero new trace lines is a protocol violation` — go append them now. (The hook
-bootstraps `.current` on the first dispatch, so the skeleton is never lost.)
+Follow `../orc/references/trace-protocol.md` for fast's phase set: run start
+write `log_dir/.current` + store `trace_path` in the checkpoint; append AS THE
+RUN GOES — each F0–F4 `PHASE` line BEFORE announcing it, `GATE` at the
+preflight/fit/smoke verdicts, `DISPATCH`/`VERIFY` around the executor,
+`OUTCOME` + `FINISH` at close, then delete `log_dir/.current`. A phase ending
+with zero new trace lines is a protocol violation — go append them now. (The
+hook bootstraps `.current` on the first dispatch.)
 
 ## Config
 

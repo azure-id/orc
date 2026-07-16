@@ -47,6 +47,7 @@ const CONTRACTS = [
       "agents/orc-test-author-opus-4-8-high.md",
       "agents/orc-verifier-opus-4-8-high.md",
       "hooks/orc-trace.js",
+      "skills/_shared/return-validation.md",
       "skills/orc/README.md",
       "skills/orc/SKILL.md",
       "skills/orc/references/trace-protocol.md",
@@ -80,6 +81,7 @@ const CONTRACTS = [
       "agents/orc-executor-sonnet-4-6-high.md",
       "agents/orc-executor-sonnet-4-6-med.md",
       "agents/orc-executor-sonnet-5-high.md",
+      "skills/_shared/return-validation.md",
       "skills/orc/README.md",
       "skills/orc/SKILL.md",
       "skills/orc/references/pattern-gate.md",
@@ -139,6 +141,7 @@ const CONTRACTS = [
       "agents/orc-executor-sonnet-4-6-high.md",
       "agents/orc-executor-sonnet-4-6-med.md",
       "agents/orc-executor-sonnet-5-high.md",
+      "skills/_shared/return-validation.md",
       "skills/orc/SKILL.md",
       "skills/orc/subskills/orc-execution/SKILL.md",
       "skills/orc/subskills/orc-execution/core.md",
@@ -154,6 +157,7 @@ const CONTRACTS = [
       "agents/orc-executor-sonnet-4-6-high.md",
       "agents/orc-executor-sonnet-4-6-med.md",
       "agents/orc-executor-sonnet-5-high.md",
+      "skills/_shared/return-validation.md",
       "skills/orc/README.md",
       "skills/orc/SKILL.md",
       "skills/orc/examples/full-run-mock.md",
@@ -431,7 +435,11 @@ const CONTRACTS = [
   {
     name: "fast->mini fallback handoff (v0.11.0 — orc-fast never stops the chat)",
     token: "FALLBACK-FROM",
-    files: ["skills/orc-fast/SKILL.md", "skills/orc-mini/SKILL.md"],
+    files: [
+      "skills/_shared/fallback-handoff.md",
+      "skills/orc-fast/SKILL.md",
+      "skills/orc-mini/SKILL.md",
+    ],
   },
   {
     name: "orc-claude generated-file meta header (v0.13.0 — version/date/budget/fingerprints)",
@@ -699,10 +707,10 @@ const CONTRACTS = [
 // pointer, not as spine prose. Raising a budget is a deliberate, reviewed act.
 const BUDGETS = [
   { file: "skills/orc/SKILL.md", maxLines: 330 },
-  { file: "skills/orc-wiki/SKILL.md", maxLines: 305 },
-  { file: "skills/orc-mini/SKILL.md", maxLines: 215 },
+  { file: "skills/orc-wiki/SKILL.md", maxLines: 260 },
+  { file: "skills/orc-mini/SKILL.md", maxLines: 195 },
   { file: "skills/orc-analyze/SKILL.md", maxLines: 195 },
-  { file: "skills/orc-fast/SKILL.md", maxLines: 180 },
+  { file: "skills/orc-fast/SKILL.md", maxLines: 170 },
 ];
 
 function walk(dir, out) {
