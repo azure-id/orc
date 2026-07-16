@@ -6,7 +6,7 @@
 
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
-![Version](https://img.shields.io/badge/version-0.21.0-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.22.0-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D16-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
@@ -37,22 +37,25 @@ zero-dependency npm package installs those files into your `.claude/` directory.
 
 ## Changelog
 
-### v0.21.0 — Statusline shows live subscription usage: 5h ↔ weekly, official numbers _(2026-07-16)_
+### v0.22.0 — `/orc-learn`: per-feature onboarding docs — learning.md + knowledge.md, wiki-deep, git-ignored _(2026-07-17)_
 
-The ORC statusline now surfaces your real subscription usage next to the
-context meter. On Claude Code v2.1.80+, the 5-hour and 7-day (weekly) percentages
-are handed to `statusLine` commands straight from Anthropic's API headers — so
-these are the **official** figures `/usage` shows, not a local estimate.
+New standalone lane for the "dev A needs to extend dev D's feature" moment.
+`/orc-learn` picks ONE feature (topics offered from a fresh wiki, else a
+targeted scan of the files you point at), then a pinned Opus 4.8 writer goes
+one level deeper than the wiki — every function anchored `file:line`, one real
+flow traced entry→exit — and writes `learning-docs/<feature>/learning.md`
+(mental model, guided walkthrough, change recipes, gotchas, required FAQ) +
+`knowledge.md` (anchored functions & flow, contracts, fingerprint header).
 
-The line reads `✅ ORC-ready Opus 4.8/high · 42% ctx · 5h 63% (2h11m) ↔ wk 28%`:
-context %, then 5h usage with a reset countdown, then weekly usage. A window at
-≥75% gets a `⚠`; at ≥90% it turns `⛔` **and folds into the DEGRADE verdict** —
-because running low on quota mid-run is a real degradation risk, not just a tier
-mismatch. Everything is fail-silent: on older Claude Code that doesn't surface
-`rate_limits`, the usage segment simply doesn't appear — no `undefined`, no noise.
+The docs are **local and git-ignored** — each dev regenerates their own, so
+nothing rots in the repo. `/orc-learn refresh` lists every generated feature
+with a freshness tier computed on read (same git-distance recipe as the wiki,
+no new config keys) and regenerates only what you pick.
 
 <details>
 <summary><b>Previous versions</b> (click to expand)</summary>
+
+### v0.21.0 — Statusline shows live subscription usage: 5h ↔ weekly, official numbers _(2026-07-16)_
 
 ### v0.20.0 — One source of truth: generated executor agents + shared cross-lane contracts _(2026-07-16)_
 
@@ -275,6 +278,7 @@ needed. Either way, your `.claude/orc.config.yaml` overrides are left untouched.
 | **`/orc-wiki`** | Builds a persistent project knowledge base into `wiki/` and points `CLAUDE.md` at it. Expensive, opt-in. Also powers **cross-repo crosslink** (link a BE/FE/service's wiki so ORC builds against real cross-repo contracts) — full setup guide: [ORC-WIKI README](templates/skills/orc-wiki/README.md). |
 | **`/orc-pattern`** | Learns your project's real code conventions per language and caches them so executors match your house style. Reconciles a generic playbook (9 languages: React · Next.js · Vue · Angular · FastAPI · Django · NestJS · Express · Go) against your actual files — conventions defer to your codebase; security/correctness invariants and measurable validation gates always carry through to review + verify. `--refresh` to relearn. |
 | **`/orc-claude`** | Builds/updates/refreshes the **local repo's** `CLAUDE.md` from verified facts (real commands, layout, convention deviations, boundaries). Version-stamped (`0.0.1`, +0.0.1 per change, DD-MM-YYYY) with fenced sections — refresh regenerates only sections whose input fingerprints changed. Zero questions: P0/Gotchas/Glossary are fill-yourself placeholders. Foreign files backed up to `CLAUDE.md.bak`, user content never trimmed, wiki block byte-preserved. |
+| **`/orc-learn`** | Per-feature **onboarding docs** for humans — pick one feature (wiki topics first, else point at the files) and get `learning-docs/<feature>/learning.md` (mental model, guided walkthrough, change recipes, required FAQ) + `knowledge.md` (`file:line`-anchored functions & full flow, contracts, fingerprints). Local and git-ignored — each dev regenerates their own. `refresh` lists every feature with computed freshness and regenerates only what you pick. |
 | **`/orc-retro`** | Mines the behavior traces (`logging: true` runs) into an AI-readable calibration report — per-band outcomes, tier downgrades, pipeline leaks — and files it to the ORC repo (`retro_repo`, default azure-id/orc) as a PR (issue fallback). Hard-gates on an authed gh CLI or GitHub MCP: neither → refuses to run. |
 
 ### `/orc` — the full orchestrator
@@ -624,11 +628,12 @@ templates/
 │   ├── orc-analyze-mini/    fast-lane analyst
 │   ├── orc-pattern/         code-pattern codifier — 9 language playbooks + a11y/perf rule packs + reconcile (opt-in)
 │   ├── orc-claude/          local CLAUDE.md builder — fenced sections, fingerprint refresh, zero questions
+│   ├── orc-learn/           per-feature onboarding docs — wiki-deep, git-ignored learning-docs/
 │   ├── orc-retro/           trace miner — calibration report PR'd to retro_repo (gh/MCP gated)
 │   ├── orc-advisor/         ultra-lane advisory brief + rubric + clarification round (/orc-ultra only)
 │   ├── orc-judge/           ultra-lane judgment gates — analysis / plan / implementation (/orc-ultra only)
 │   └── context-combiner/    merges 2+ related analyses into one combined spec (+ schemas)
-├── commands/                /orc /orc-ultra /orc-mini /orc-fast /orc-diy /orc-analyze /orc-plan /orc-verify /orc-wiki /orc-pattern /orc-retro /orc-claude
+├── commands/                /orc /orc-ultra /orc-mini /orc-fast /orc-diy /orc-analyze /orc-plan /orc-verify /orc-wiki /orc-pattern /orc-retro /orc-claude /orc-learn
 ├── hooks/                   effort guard (PreToolUse) · statusline warning · behavior trace
 └── agents/                  single-role, model-pinned subagents (+ read-only scout) + MODEL-MAPPING.md
 bin/cli.js                   installer + config editor + flow composer (init / update / upgrade / config / diy / where)
