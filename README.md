@@ -6,7 +6,7 @@
 
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
-![Version](https://img.shields.io/badge/version-0.20.0-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.21.0-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D16-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
@@ -37,40 +37,24 @@ zero-dependency npm package installs those files into your `.claude/` directory.
 
 ## Changelog
 
-### v0.20.0 — One source of truth: generated executor agents + shared cross-lane contracts _(2026-07-16)_
+### v0.21.0 — Statusline shows live subscription usage: 5h ↔ weekly, official numbers _(2026-07-16)_
 
-The project's "maintenance drift is by design" era ends where it can: the
-duplicated copies that existed only because nothing generated them are now
-generated or pointed, not hand-synced.
+The ORC statusline now surfaces your real subscription usage next to the
+context meter. On Claude Code v2.1.80+, the 5-hour and 7-day (weekly) percentages
+are handed to `statusLine` commands straight from Anthropic's API headers — so
+these are the **official** figures `/usage` shows, not a local estimate.
 
-**Executor agents are generated.** The 6 `orc-executor-*` files were 78 lines
-each with 73 of them byte-identical — only the frontmatter (name/model/effort/
-score band) differed. They are now stamped from a single source
-(`agents-src/executor.template.md` + a variants table in `bin/build-agents.js`,
-run via `npm run build:agents`). The shipped files are byte-for-byte what they
-were, so nothing changes at runtime — but editing executor logic is now a
-one-file edit, and `npm run verify` fails on any hand-edited generated copy.
-
-**Cross-lane contracts have ONE canonical file.** New
-`templates/skills/_shared/` (installed alongside skills, but not a skill) holds
-the single copy of prose that orc-mini and orc-fast used to restate:
-`return-validation.md` (claimed-vs-actual model check, evidence rules, unmet[]
-honesty, pattern attestation), `smoke-gate.md` (the read-only build+test ship
-gate), and `fallback-handoff.md` (the fast→mini `FALLBACK-FROM` block, writer
-and reader sides). Lane spines keep only the contract token + a pointer.
-
-**The spines and docs got thinner again** (budgets tightened to match):
-`orc-wiki` 299→255 (crosslink/staleness/pre-warm prose demoted to
-references, including a new `references/pattern-prewarm.md`), `orc-mini`
-212→187, `orc-fast` 176→165, and `CLAUDE.md` 254→176 — the drift-surface
-enumerations are gone from prose because `bin/verify-contracts.js` *is* the
-authoritative registry.
-
-No behavior changed: every contract token, gate, phase, and freshness rule
-survives, and the contract lint still pins all 49 contracts.
+The line reads `✅ ORC-ready Opus 4.8/high · 42% ctx · 5h 63% (2h11m) ↔ wk 28%`:
+context %, then 5h usage with a reset countdown, then weekly usage. A window at
+≥75% gets a `⚠`; at ≥90% it turns `⛔` **and folds into the DEGRADE verdict** —
+because running low on quota mid-run is a real degradation risk, not just a tier
+mismatch. Everything is fail-silent: on older Claude Code that doesn't surface
+`rate_limits`, the usage segment simply doesn't appear — no `undefined`, no noise.
 
 <details>
 <summary><b>Previous versions</b> (click to expand)</summary>
+
+### v0.20.0 — One source of truth: generated executor agents + shared cross-lane contracts _(2026-07-16)_
 
 ### v0.19.0 — Thin spines: skill compaction, budget lint, and a trace that logs every phase _(2026-07-16)_
 
