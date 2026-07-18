@@ -372,6 +372,7 @@ const CONTRACTS = [
       "skills/orc-wiki/references/integrity-check.md",
       "skills/orc-wiki/references/staleness.md",
       "skills/orc-wiki/schemas/crosslink-tag.md",
+      "skills/orc-wiki/schemas/wiki-doc.md",
     ],
   },
   {
@@ -683,10 +684,12 @@ const CONTRACTS = [
     name: "crosslink provider tag dir (v0.17.0 — per-point boundary tags, project-root wiki/)",
     token: "wiki/crosslink/",
     files: [
+      "commands/orc-wiki.md",
       "skills/orc-wiki/README.md",
       "skills/orc-wiki/SKILL.md",
       "skills/orc-wiki/references/crosslink.md",
       "skills/orc-wiki/references/integrity-check.md",
+      "skills/orc-wiki/references/staleness.md",
       "skills/orc-wiki/schemas/crosslink-tag.md",
     ],
   },
@@ -699,6 +702,21 @@ const CONTRACTS = [
       "skills/orc-wiki/references/crosslink.md",
       "skills/orc-wiki/references/integrity-check.md",
       "skills/orc-wiki/schemas/crosslink-tag.md",
+    ],
+  },
+  {
+    // The CLI half (bin/cli.js `countBoundaryRows` boundary detector + the
+    // sync boundary/N→0 guards) is documented drift — the lint's ROOT is
+    // templates/ and cannot see cli.js.
+    name: "crosslink per-scan-task emission (v0.24.0 — always-on; scan agent returns crosslink_tags | none)",
+    token: "crosslink_tags",
+    files: [
+      "skills/orc-wiki/SKILL.md",
+      "skills/orc-wiki/references/crosslink.md",
+      "skills/orc-wiki/references/integrity-check.md",
+      "skills/orc-wiki/references/staleness.md",
+      "skills/orc-wiki/schemas/crosslink-tag.md",
+      "skills/orc-wiki/schemas/wiki-doc.md",
     ],
   },
   {

@@ -62,34 +62,60 @@ edges in both directions/kinds (x→z gRPC AND z→x webhook).
 
 ---
 
-## Provider emission (this repo publishes its surface — Phase 3 add-on)
+## Provider emission (this repo publishes its surface — ALWAYS ON, per scan-task)
 
-At the end of a scan/refresh, after the normal docs, orc-wiki emits this repo's
-own boundary as per-point tag files — proactively, whether or not any consumer
-exists:
+Publish is **not** a Phase-3 add-on and has **no enable switch** (v0.24.0). It is
+a per-scan-task byproduct of reading the code, the same pattern registration
+follows — so it can never be skipped by a run that pauses (every 5 tasks, by
+design) or by an incremental refresh with no drift.
 
-1. From the areas already scanned, collect boundary points (routes, gRPC
-   handlers, produced events — the same `Contracts & shapes` rows the feature
-   docs anchor). Each becomes a tag under `wiki/crosslink/<kind>/<slug>.md`
+Each scan agent, having already read the area's files to write the `Contracts &
+shapes` rows, returns a REQUIRED `crosslink_tags` field alongside its `doc_body`
+(schemas/wiki-doc.md): either **one tag body per OUTWARD boundary point** it
+found (routes, gRPC handlers, produced events — pulled from source, NOT from the
+doc prose, which is what kills the "thin docs starve the publish" failure), or
+the token **`none` + a one-line reason**. A return missing `crosslink_tags`
+entirely is MALFORMED → requeue.
+
+The orchestrator then, in the SAME pass:
+
+1. Writes the doc to `wiki/` AND each tag to `wiki/crosslink/<kind>/<slug>.md`
    (schema §1; slug rule is Windows-safe + reversible).
-2. Run `orc wiki sync` — it derives `wiki-meta.json`'s `crosslink_provided`
-   array from the tag files you just wrote (schema §2). This registry — NOT
+2. Runs `orc wiki sync` — derives `wiki-meta.json`'s `crosslink_provided` array
+   from the tag files just written (schema §2). This registry — NOT
    `wiki/INDEX.md` or `docs` — is where tags live, so the human index and
-   `pages` count stay clean. Never hand-maintain the array.
-3. Run the crosslink integrity rule (integrity-check.md): each `anchor` exists.
-   (Tag ↔ registry agreement is structural once sync derives it.)
+   `pages` count stay clean. Never hand-maintain the array. Sync's boundary
+   detector flags a documented boundary with zero tags (`--check` exit 1).
+3. Traces the scan-task's `DISPATCH`/`VERIFY` with a `tags:N` (or `tags:none`)
+   count so the boundary is visibly accumulating.
 
-Emission rides the wiki's existing scan consent — no separate ask. A repo with
-no outward boundary simply emits nothing (`crosslink_provided` absent).
+So the boundary accumulates from the FIRST scan-task, however the run ends — a
+paused run has a live partial boundary matching its live partial docs.
+`crosslink_tags: none` is an auditable claim, never silence; a zero-tag
+completion additionally states "crosslink: no outward boundary ({reason})" in
+the final report.
 
-**Standalone: `/orc-wiki crosslink` (CROSSLINK-ONLY, SKILL.md Phase 3c).**
-Emission is a Phase 3 add-on, so a wiki whose Phase 3 never ran — and every wiki
-built before crosslink existed — has docs but no tags. Those docs already carry
-the boundary in their evidence-anchored `Contracts & shapes` rows, so recovering
-it needs no repo scan: read the rows, open ONLY the files they anchor, emit the
-tags, `orc wiki sync` to index. **Never answer "no crosslink tags" with a
-refresh or a re-scan** — the material is already on disk, and an incremental
-refresh with no drift may never reach Phase 3 anyway.
+## Preservation — replace per-point, never bulk-delete
+
+A refresh (including full regenerate) NEVER clears `wiki/crosslink/` first; each
+tag is overwritten per-point as its owning area re-scans. A tag whose boundary
+genuinely disappeared is retired ONLY by the **dead-tag sweep** (staleness.md,
+beside the dead-doc sweep): a tag whose `anchor` file no longer exists, or whose
+re-scanned area returned `crosslink_tags` without it → offer archive/delete per
+tag, never silent, never automatic. A whole-surface vanish trips the `orc wiki
+sync` N→0 tripwire (loud warning + `--check` exit 1) — a regenerate can no
+longer wipe the boundary the way it once did.
+
+## Legacy backfill — `/orc-wiki crosslink` (CROSSLINK-ONLY, SKILL.md Phase 3c)
+
+For wikis whose docs predate v0.24.0 (docs exist, `wiki/crosslink/` absent), the
+boundary is already on disk in the evidence-anchored `Contracts & shapes` rows,
+so recovering it needs no repo scan: read the rows, open ONLY the files they
+anchor, emit the tags, `orc wiki sync` to index. On a ≥v0.24.0 wiki, missing
+tags are NOT a backfill case — the sync boundary guard fired and names the fix.
+**Never answer "no crosslink tags" with a re-scan.** When the rows are genuinely
+too thin to tag, SAY so and recommend an incremental refresh of just those areas
+(an honest cost, stated as such) — the one case where a refresh IS the answer.
 
 ---
 
@@ -165,7 +191,8 @@ note it — warn only.
 | Provider state | What you get | Warn |
 |---|---|---|
 | v2 wiki + crosslink tags | per-point tags → precise drift | — |
-| v2 wiki, no crosslink tags | api-surface prose → coarse hints, no per-point drift | "no crosslink tags — coarse; `/orc-wiki crosslink` there publishes them without a re-scan" |
+| v2 wiki, boundary documented but tags unpublished (legacy pre-v0.24.0, or a fired sync guard) | api-surface prose → coarse hints, no per-point drift | "boundary documented, tags unpublished — `orc wiki sync --check` there names it; `/orc-wiki crosslink` backfills from the docs, no re-scan" |
+| v2 wiki, no boundary at all | nothing to resolve (they expose no API) | — (valid; not a fixable gap) |
 | v1 wiki | api-surface only → coarse hints, no per-point drift | "older schema — coarse" |
 | wiki UNREGISTERED (docs, no manifest) | edge inert until registered — **but nothing needs scanning** | "run `orc wiki sync` there — instant, no re-scan" |
 | manifest CORRUPT (unparseable) | edge inert until rebuilt | "run `orc wiki sync` there to rebuild it" |

@@ -90,10 +90,22 @@ A doc whose contract sections carry no anchors is malformed (requeue).
 - covered_files          — map of {path: short-hash} for every file actually
                            read (the orchestrator writes it into the header
                            AND the manifest's per-doc registry)
+- crosslink_tags         — REQUIRED. Either a list of tag bodies (one per
+                           OUTWARD boundary point the agent found in this area's
+                           files, each per schemas/crosslink-tag.md §1 — the SAME
+                           knowledge as the `Contracts & shapes` rows, captured
+                           from source at the same moment), OR the literal token
+                           `none` + a one-line reason ("area has no outward
+                           boundary"). Publish is a per-scan-task byproduct of
+                           reading the code — NOT a Phase-3 add-on reading doc
+                           prose. The orchestrator writes the doc AND its tags
+                           together, then runs `orc wiki sync`.
 - planning_notes         — the core/isolated/risk hints, surfaced for scoring
 - failure_reason         — required if failed; else null
 - progress               — {percent, notes} if partial; else null
 
 Malformed return = failure (requeue) — including missing `keywords[]`/
-`covered_files`, or contract sections with no evidence anchors.
-needs_context cap 2 per area.
+`covered_files`, a missing `crosslink_tags` field (either tags or `none`+reason
+is mandatory — "found boundaries but wrote no tags" is structurally impossible;
+"no boundary" is an auditable claim, never silence), or contract sections with
+no evidence anchors. needs_context cap 2 per area.

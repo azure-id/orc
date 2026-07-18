@@ -134,7 +134,11 @@ always the authoritative check.
    right answer whenever the complaint is "ORC can't see my wiki". Re-derives
    the manifest + INDEX from the doc headers. No scan, no cost, no doc changes.
    Always try this BEFORE offering any mode below: a wiki that is merely
-   unregistered needs no re-scan, and re-scanning it wastes real money.
+   unregistered needs no re-scan, and re-scanning it wastes real money. Sync
+   also runs the **boundary detector** (references/crosslink.md): a non-empty
+   `## Contracts & shapes` table with zero `wiki/crosslink/` tags → prominent
+   warning + `--check` exit 1 (a documented boundary that never published), and
+   an N→0 tripwire when the manifest listed tags but the folder is now empty.
 1. **Incremental (recommended default when a manifest exists)** —
    `git diff --name-only <scan_commit>..HEAD`, match changed files against the
    registry's `covers`/`covered_files`, re-scan ONLY the affected docs, then run
@@ -142,7 +146,10 @@ always the authoritative check.
    pass, not a full re-scan — this is what makes "refresh first" cheap enough
    to recommend. The delta pass also runs the two sweeps below.
 2. **Full regenerate** — re-scan every area. Full cost warning. Timestamps all
-   docs fresh.
+   docs fresh. Does NOT clear `wiki/` or `wiki/crosslink/` first: docs and tags
+   are overwritten per-area/per-point as each re-scan lands, so the crosslink
+   surface is never momentarily wiped (a full regenerate must never destroy the
+   boundary — hard rule 12).
 3. **Selective refresh** — list stale-flagged docs; user picks which to
    re-scan. Only those spawn agents.
 4. **Pre-push diff-scan** — `git diff --name-only` against the push target;
@@ -158,6 +165,12 @@ consent, no separate warning). Never silently ignore uncovered drift.
 **Dead-doc sweep:** registry entries whose `covers` match ZERO existing files
 (area deleted/moved) → offer per doc: archive to `wiki/archive/` (kept out of
 INDEX.md) or delete. Never silent, never automatic.
+
+**Dead-tag sweep (crosslink, beside the dead-doc sweep):** a `wiki/crosslink/`
+tag whose `anchor` file no longer exists, or whose owning area was re-scanned
+this pass and returned `crosslink_tags` WITHOUT it → offer archive/delete per
+tag. This is the ONLY way a tag is retired — a refresh never bulk-deletes the
+folder (references/crosslink.md preservation rule). Never silent, never automatic.
 
 ## Post-ship refresh ask (big runs — full orc + /orc-ultra ship phase)
 

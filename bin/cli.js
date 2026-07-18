@@ -1890,6 +1890,27 @@ function readCrosslinkProvided(paths) {
   return out;
 }
 
+// Cheap boundary detector (plan v0.24.0 §B1). A non-empty `## Contracts & shapes`
+// table means the repo DOCUMENTS an outward boundary, so it MUST have published
+// crosslink tags. Counting rows here lets sync catch "boundary documented but
+// nothing published" without a model — the reader already has each doc's text.
+// Counts data rows only (header + separator excluded); sums across docs.
+function countBoundaryRows(docs) {
+  let rows = 0;
+  for (const d of docs) {
+    const m = d.text.match(/(?:^|\r?\n)##\s+Contracts?\s*&\s*shapes[^\n]*\r?\n([\s\S]*?)(?=\r?\n##\s|$)/i);
+    if (!m) continue;
+    const pipeLines = m[1]
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter((l) => l.startsWith("|"));
+    // Drop markdown separator rows (`|---|:--:|`); what's left is header + data.
+    const content = pipeLines.filter((l) => !/^\|[\s|:-]+$/.test(l));
+    if (content.length >= 2) rows += content.length - 1; // minus the header row
+  }
+  return rows;
+}
+
 function readMetaAt(metaPath) {
   if (!fs.existsSync(metaPath)) return { state: "absent", meta: null };
   try {
@@ -1952,6 +1973,14 @@ function buildRegistration(claudeDir) {
   if (provided.length) meta.crosslink_provided = provided;
   else delete meta.crosslink_provided;
 
+  // Guard signals (plan v0.24.0 §B): boundary_rows lets sync flag a documented
+  // boundary with no published tags; prevProvided drives the N→0 tripwire. Sync
+  // stays a truthful deriver — these only WARN + fail `--check`, never rewrite.
+  const boundaryRows = countBoundaryRows(docs);
+  const prevProvided = Array.isArray((prev.meta || {}).crosslink_provided)
+    ? prev.meta.crosslink_provided.length
+    : 0;
+
   const lines = docs.map((d) => {
     const e = registry.find((r) => r.file === d.rel);
     const kw = Array.isArray(d.header.keywords) ? d.header.keywords : [];
@@ -1968,7 +1997,7 @@ function buildRegistration(claudeDir) {
     "     edit a doc's header and re-run sync. -->\n\n" +
     (lines.length ? lines.join("\n") + "\n" : "_No wiki docs yet._\n");
 
-  return { paths, docs, skipped, registry, meta, index, prev, anchor, provided };
+  return { paths, docs, skipped, registry, meta, index, prev, anchor, provided, boundaryRows, prevProvided };
 }
 
 // The registration state of THIS repo's wiki — the vocabulary every consumer
@@ -2007,9 +2036,33 @@ function wikiSync(claudeDir, { check } = {}) {
   const curIndex = fs.existsSync(r.paths.index) ? fs.readFileSync(r.paths.index, "utf8") : null;
   const changed = curMeta !== nextMeta || curIndex !== r.index;
 
+  // Crosslink publish guards (plan v0.24.0 §B). Both are LOCAL-artifact integrity
+  // (our own tags vs our own docs) — always gateable, they just never were.
+  //   boundaryUnpublished: docs describe a boundary but zero tags on disk.
+  //   n0trip: the manifest listed tags, now the folder is empty (a wipe).
+  const boundaryUnpublished = r.boundaryRows > 0 && r.provided.length === 0;
+  const n0trip = r.prevProvided > 0 && r.provided.length === 0;
+  const crosslinkAlarm = boundaryUnpublished || n0trip;
+  const alarmLines = () => {
+    if (n0trip)
+      console.error(
+        `⚠ crosslink tags VANISHED — the manifest listed ${plural(r.prevProvided, "tag")}, now wiki/crosslink/ is empty.\n` +
+          "   A wiki regenerate must never wipe the boundary. Restore from the docs (no re-scan):\n" +
+          "     `/orc-wiki crosslink`\n" +
+          "   If the boundary genuinely went away, re-run `orc wiki sync` to accept the removal."
+      );
+    else if (boundaryUnpublished)
+      console.error(
+        `⚠ boundary documented but NO crosslink tags published — ${plural(r.boundaryRows, "Contracts & shapes row")} on disk, wiki/crosslink/ is empty.\n` +
+          "   Backfill from the docs the repo already has (no re-scan): `/orc-wiki crosslink`."
+      );
+  };
+
   if (check) {
-    console.log(changed ? `⚠ out of sync (${before.state}) — run \`orc wiki sync\`` : "✓ wiki registration in sync");
-    process.exit(changed ? 1 : 0);
+    if (changed) console.log(`⚠ out of sync (${before.state}) — run \`orc wiki sync\``);
+    else if (!crosslinkAlarm) console.log("✓ wiki registration in sync");
+    if (crosslinkAlarm) alarmLines();
+    process.exit(changed || crosslinkAlarm ? 1 : 0);
   }
 
   fs.mkdirSync(path.dirname(r.paths.meta), { recursive: true });
@@ -2024,6 +2077,7 @@ function wikiSync(claudeDir, { check } = {}) {
   else
     console.log("   ⚠ no resolvable scanned_commit in any doc — freshness tracking stays off until the next /orc-wiki refresh");
   if (r.provided.length) console.log(`   ${plural(r.provided.length, "crosslink tag")} indexed`);
+  if (crosslinkAlarm) { console.log(""); alarmLines(); }
   if (!r.meta.commands)
     console.log("   ⚠ no build/test commands recorded — orc-fast's smoke gate will rediscover them (a /orc-wiki refresh fills this in)");
   if (r.skipped.length)
@@ -2061,7 +2115,17 @@ function wikiStatus(claudeDir) {
         ? gitIn(paths.root, ["rev-list", "--count", `${s.meta.scan_commit}..HEAD`])
         : null;
       const tier = d === null ? "tier unknown" : Number(d) < 10 ? "FRESH" : Number(d) <= 30 ? "AGING" : "STALE";
-      console.log(`✓ registered — ${s.docs} docs · last_scan ${s.meta.last_scan || "?"} · ${tier}${d === null ? "" : ` (${d}c)`}`);
+      // Crosslink surface — tags reported alongside docs (plan v0.24.0 §B4). A
+      // documented boundary with zero tags is the user's exact symptom, so name
+      // it here rather than let it read as a clean wiki.
+      const provided = readCrosslinkProvided(paths).length;
+      const { docs } = readWikiDocs(paths.wikiDir);
+      const crossline = provided
+        ? ` · crosslink tags: ${provided}`
+        : countBoundaryRows(docs) > 0
+          ? " · crosslink: UNPUBLISHED boundary (run `/orc-wiki crosslink`)"
+          : "";
+      console.log(`✓ registered — ${s.docs} docs · last_scan ${s.meta.last_scan || "?"} · ${tier}${d === null ? "" : ` (${d}c)`}${crossline}`);
     }
   }
 }

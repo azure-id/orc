@@ -87,32 +87,41 @@ In **each** repo, run:
 /orc-wiki
 ```
 
-Besides the normal knowledge base, a scan now also **publishes that repo's
+Besides the normal knowledge base, a scan also **publishes that repo's
 boundary**: one small per-point tag file per endpoint / gRPC method under
 `wiki/crosslink/<kind>/<slug>.md`, plus a `crosslink_provided` list in that
-repo's `.claude/orc/wiki-meta.json`. This happens **proactively** — a repo
-publishes its surface whether or not anyone links to it yet, so you never have to
-coordinate timing between teams.
+repo's `.claude/orc/wiki-meta.json`. This is **always on and happens per
+scan-task**, in the same pass as the docs — whether or not anyone links to you
+yet, so you never coordinate timing between teams. Every later scan/refresh
+re-publishes in the same pass, and a refresh **never deletes** your tags
+(a vanished endpoint is retired one-at-a-time, and only with your say-so).
 
-> A repo with no outward boundary simply publishes nothing. That's fine.
+> A repo with no outward boundary simply publishes nothing (each scan-task
+> records that explicitly). That's fine.
 
-### Already have a wiki but no tags? Don't re-scan.
+### Old wiki with no tags? Backfill — don't re-scan.
 
-Publishing happens at the END of a scan, so two very common cases have docs but
-no `wiki/crosslink/` folder: a scan that stopped at one of the 5-area pauses,
-and any wiki built before crosslink existed. The boundary is already described
-in your docs' evidence-anchored `Contracts & shapes` rows, so recovering it
-needs no repo scan:
+A wiki built **before v0.24.0** has docs but no `wiki/crosslink/` folder, because
+publishing used to happen only at the end of a scan (so a run that stopped at one
+of the 5-area pauses never reached it). The boundary is already described in your
+docs' evidence-anchored `Contracts & shapes` rows, so recovering it needs no repo
+scan:
 
 ```
 /orc-wiki crosslink
 ```
 
-This is the **CROSSLINK-ONLY** branch. It reads those rows, opens *only* the
-files they anchor to, writes the tag files, resolves what you consume, and
-indexes it all with `orc wiki sync`. It never re-scans an area, never rewrites a
-doc, and never touches coverage. **"No crosslink tags" is never a reason to pay
+This is the **CROSSLINK-ONLY** legacy-backfill branch. It reads those rows, opens
+*only* the files they anchor to, writes the tag files, resolves what you consume,
+and indexes it all with `orc wiki sync`. It never re-scans an area, never rewrites
+a doc, and never touches coverage. **"No crosslink tags" is never a reason to pay
 for a refresh.**
+
+> On a wiki scanned at **v0.24.0 or later** you should never land here: tags
+> publish on every scan/refresh automatically. If `orc wiki status` says
+> `crosslink: UNPUBLISHED boundary` or `orc wiki sync --check` fails with
+> "boundary documented but no crosslink tags", run the backfill above — that's
+> the guard catching a gap, not a re-scan request.
 
 > **Run it in the repo being CALLED.** Tags are published by the *provider*, so
 > `no crosslink tags yet` about your backend is fixed in the **backend**, not in

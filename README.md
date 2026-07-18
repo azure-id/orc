@@ -6,7 +6,7 @@
 
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
-![Version](https://img.shields.io/badge/version-0.23.0-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.24.0-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D16-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
@@ -37,23 +37,28 @@ zero-dependency npm package installs those files into your `.claude/` directory.
 
 ## Changelog
 
-### v0.23.0 — Trace fix: SPAWN restored on the `Agent` tool, stale runs rotate to fresh files _(2026-07-18)_
+### v0.24.0 — Crosslink fused into wiki generation: always-on, per-scan-task, never wiped _(2026-07-18)_
 
-The behavior trace had degenerated into one endless file of bare `RETURN`
-lines spanning days. Two root causes, both fixed: the installed `PreToolUse`
-matcher was `Task`, but newer Claude Code dispatches subagents via the
-**`Agent`** tool, so the SPAWN branch never fired; and the `.current` run
-pointer never expired, so every later session's `SubagentStop` kept appending
-into the same old file.
-
-The matcher is now `Task|Agent` (`orc update` repairs existing installs in
-place), a trace idle >6h counts as a finished run — the next ORC dispatch
-rotates to a fresh `.txt` — and a `RETURN` is only written while the live file
-has fewer hook `RETURN`s than `SPAWN`s, so unrelated subagent stops can never
-bleed into an ORC trace again.
+Two real-repo bugs, one disease: crosslink tags were a Phase-3 model-promise
+with no deterministic writer or verifier, so regenerating a stale wiki could
+**delete** the tags, and `/orc-wiki crosslink` could silently publish
+**nothing**. Crosslink is now permanently enabled and default — every scan,
+resume, incremental, or full regenerate publishes/updates the boundary tags in
+the **same pass as the docs** (each scan agent returns a required
+`crosslink_tags` field — tag bodies from the source it just read, or `none` +
+reason). A refresh **never bulk-deletes** `wiki/crosslink/`; a tag is retired
+only by the per-point dead-tag sweep. Three deterministic guards make a silent
+zero impossible: `orc wiki sync` warns + fails `--check` when a documented
+boundary has no tags, an N→0 tripwire fires when a listed surface vanishes, and
+the integrity check is now unconditional. `orc wiki status` reports the tag
+count (or `UNPUBLISHED boundary`). CROSSLINK-ONLY is demoted to a legacy
+backfill for pre-v0.24.0 wikis. The only crosslink config remains the graph
+(`orc crosslink`), for the consume half.
 
 <details>
 <summary><b>Previous versions</b> (click to expand)</summary>
+
+### v0.23.0 — Trace fix: SPAWN restored on the `Agent` tool, stale runs rotate to fresh files _(2026-07-18)_
 
 ### v0.22.0 — `/orc-learn`: per-feature onboarding docs — learning.md + knowledge.md, wiki-deep, git-ignored _(2026-07-17)_
 

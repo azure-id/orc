@@ -7,19 +7,30 @@ file pins the shapes.
 
 **Who writes what.** The tag FILES, needs, and cache are written by `orc-wiki`
 (never by a model in a chat, never by the CLI) — they carry scanned contract
-prose and evidence anchors, which takes a model. The `crosslink_provided`
-registry in the manifest is the exception: it is a derived INDEX of those tag
-files, so `orc wiki sync` builds it from their headers and nothing else ever
-writes it (staleness.md).
+prose and evidence anchors, which takes a model. Tag files are emitted
+**per-scan-task, together with the doc** (v0.24.0): each scan agent returns
+`crosslink_tags` alongside its `doc_body` (schemas/wiki-doc.md) — either one tag
+body per outward boundary point it found in the area's files, or the token
+`none` + a one-line reason. The orchestrator writes the doc AND its tags, then
+runs `orc wiki sync`. So the boundary accumulates from the FIRST scan-task,
+however the run ends — a paused run has a live partial boundary matching its
+live partial docs. `none` is an auditable claim ("area has no outward boundary"),
+never silence. The `crosslink_provided` registry in the manifest is the
+exception to model-authorship: it is a derived INDEX of those tag files, so
+`orc wiki sync` builds it from their headers and nothing else ever writes it
+(staleness.md).
 
 ---
 
 ## 1. Provider tag file — `wiki/crosslink/<kind>/<slug>.md`
 
-One file per integration point this repo **provides**, emitted proactively at
-scan time (whether or not any consumer exists). Committed — a consumer reads it
-from a plain sibling checkout. Lives under project-root `wiki/crosslink/`, NOT
-`.claude/orc/` (that holds only machine state).
+One file per integration point this repo **provides**, emitted proactively as a
+per-scan-task byproduct (whether or not any consumer exists) — from the source
+the agent just read, not from doc prose. Committed — a consumer reads it from a
+plain sibling checkout. Lives under project-root `wiki/crosslink/`, NOT
+`.claude/orc/` (that holds only machine state). Overwritten per-point on
+re-scan; a refresh NEVER bulk-deletes this folder (a vanished point is retired
+only by the dead-tag sweep — references/staleness.md).
 
 **Slug rule (Windows-safe, reversible):** the tag *identity* string uses `:` as
 its separator (`service-c:grpc:billing.v1.CreateInvoice`) but a filename MUST
@@ -86,9 +97,14 @@ this array. Shape:
 
 The integrity self-check gains one crosslink rule (integrity-check.md): every
 file under `wiki/crosslink/` has exactly one `crosslink_provided` entry and vice
-versa; each entry's `anchor` file exists. `crosslink_provided` absent = this repo
-publishes no boundary (fine — most repos do until the first scan after adopting
-crosslink).
+versa; each entry's `anchor` file exists. `crosslink_provided` absent is no
+longer assumed benign: it means EITHER the repo has no outward boundary (valid —
+every scan-task returned `crosslink_tags: none`, and the final report says so)
+OR a boundary is documented but unpublished (the bug). `orc wiki sync`
+disambiguates deterministically by scanning doc bodies for a non-empty
+`## Contracts & shapes` table (`boundary_rows`): rows present + zero tags →
+prominent warning + `--check` exit 1 (references/integrity-check.md item 6,
+references/staleness.md).
 
 ---
 

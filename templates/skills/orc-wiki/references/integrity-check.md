@@ -54,13 +54,20 @@ only per staleness.md.
    anchors from its contract sections and confirm the cited files exist
    (existence only — cheap). A missing file = the agent cited something it
    didn't read → re-queue that doc's scan.
-6. **crosslink-anchors** (only when this repo published a boundary this run) —
-   each `crosslink_provided` entry's `anchor` file exists. (Tag ↔ registry
-   agreement is structural — sync derives the array from `wiki/crosslink/`
-   itself — but an anchor pointing at a deleted file is real drift no
-   derivation can see.) Emit `WIKI-CHECK crosslink …` when logging.
-   Consume-side needs/cache are advisory and NOT gated here (a stale cache is a
-   warning, never a failure).
+6. **crosslink-anchors** (UNCONDITIONAL as of v0.24.0 — this is the guard that
+   catches "boundary exists but no tags", the exact silent-zero the old
+   "only when this repo published a boundary this run" clause allowed). Trigger:
+   if ANY doc written this run reported boundaries (`crosslink_tags` ≠ `none`)
+   OR carries a non-empty `## Contracts & shapes` table, then `wiki/crosslink/`
+   MUST exist and every reported tag must be on disk AND registered in
+   `crosslink_provided` — else FAIL and fix before the run is declared done (the
+   fix is publishing the tags, NOT a re-scan). Each `crosslink_provided` entry's
+   `anchor` file must also exist (an anchor pointing at a deleted file is real
+   drift no derivation can see). A ZERO-tag completion is allowed ONLY when the
+   final report carries the explicit line
+   "crosslink: no outward boundary ({reason})" — a bare zero-tag finish FAILS.
+   Emit `WIKI-CHECK crosslink …` when logging. Consume-side needs/cache stay
+   advisory and are NOT gated (a stale cache warns, never fails).
 
 ## Why it exists
 
