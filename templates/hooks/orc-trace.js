@@ -6,7 +6,8 @@
  *
  * ORC is not a runtime; the orchestrator (a Claude session following the orc
  * skill) writes the RICH markers. This hook writes the compaction-proof
- * SKELETON: a `SPAWN` line when an agent is dispatched (PreToolUse:Task) and a
+ * SKELETON: a `SPAWN` line when an agent is dispatched (PreToolUse on the
+ * Task/Agent tool) and a
  * `RETURN` line when a subagent finishes (SubagentStop). Even if the model
  * forgets to narrate after a compaction, the flow shape survives here.
  *
@@ -25,11 +26,21 @@
  * Gating (so non-ORC Tasks are never logged, enforced in code):
  *   - a SPAWN is written (and the folder+pointer bootstrapped if missing) only
  *     when the dispatched agent name starts with `orc` — a real ORC run.
- *   - a RETURN is written only when a run pointer already exists.
+ *   - a RETURN is written only when a run pointer already exists, the run is
+ *     not STALE, and the file has fewer RETURNs than SPAWNs (a RETURN can never
+ *     exist without a matching observed dispatch — this is what stops stray
+ *     SubagentStops from unrelated sessions bleeding into an old trace).
+ *
+ * Run rotation (v0.23.0): `.current` is a POINTER, not a lifetime lease. A run
+ * whose trace file has been idle longer than STALE_MS is considered ENDED — the
+ * next ORC dispatch rotates to a fresh `.txt` instead of appending days of
+ * unrelated sessions into one merged file.
  *
  * Wiring (installed by `orc init` into .claude/settings.json):
- *   hooks.PreToolUse[]   { matcher:"Task",  hooks:[{command:"node <..>/orc-trace.js"}] }
- *   hooks.SubagentStop[] {                  hooks:[{command:"node <..>/orc-trace.js"}] }
+ *   hooks.PreToolUse[]   { matcher:"Task|Agent", hooks:[{command:"node <..>/orc-trace.js"}] }
+ *   hooks.SubagentStop[] {                       hooks:[{command:"node <..>/orc-trace.js"}] }
+ *   (matcher covers both names — newer Claude Code dispatches subagents via the
+ *   `Agent` tool, older via `Task`; matching only `Task` silently kills SPAWN.)
  *
  * Contract: read hook JSON from stdin. ALWAYS exit 0 (never block a tool call —
  * tracing must never affect a run). Fail-silent on any error.
@@ -107,6 +118,26 @@ function readPointer(dir) {
   }
 }
 
+// A trace file idle longer than this is a FINISHED run — never append to it.
+const STALE_MS = 6 * 60 * 60 * 1000;
+
+// Stats for the pointed-at trace file: idle age + hook SPAWN/RETURN balance.
+// Returns null when the pointer is dangling (file missing/unreadable).
+function traceStats(dir, file) {
+  try {
+    const full = path.join(dir, file);
+    const st = fs.statSync(full);
+    const text = fs.readFileSync(full, "utf8");
+    // Count only the hook's own skeleton lines (actor column = "hook") — the
+    // orchestrator's rich verbs (DISPATCH/VERIFY/…) never collide with these.
+    const spawns = (text.match(/\] hook\s+SPAWN /g) || []).length;
+    const returns = (text.match(/\] hook\s+RETURN/g) || []).length;
+    return { idleMs: Date.now() - st.mtimeMs, spawns, returns };
+  } catch (_) {
+    return null;
+  }
+}
+
 let raw = "";
 process.stdin.on("data", (c) => (raw += c));
 process.stdin.on("end", () => {
@@ -133,9 +164,16 @@ process.stdin.on("end", () => {
       // general-purpose, superpowers, …) are never logged.
       if (!/^orc/i.test(String(agent))) return;
       let current = readPointer(dir);
+      // Rotate away from a finished run: a dangling pointer or a trace file
+      // idle past STALE_MS means the old run ended — start a fresh `.txt`
+      // instead of merging a new day's run into it.
+      if (current) {
+        const stats = traceStats(dir, current);
+        if (!stats || stats.idleMs > STALE_MS) current = null;
+      }
       if (!current) {
-        // Bootstrap: the orchestrator hasn't written a pointer yet (or skipped
-        // run-start). Create the folder + pointer so a trace exists regardless.
+        // Bootstrap: no live run pointer (never written, dangling, or stale).
+        // Create the folder + pointer so a trace exists regardless.
         current = bootstrapSlug(new Date());
         fs.mkdirSync(dir, { recursive: true });
         fs.writeFileSync(path.join(dir, ".current"), current + "\n");
@@ -147,6 +185,12 @@ process.stdin.on("end", () => {
       // trace from a stray subagent stop that had no matching ORC dispatch.
       const current = readPointer(dir);
       if (!current) return;
+      const stats = traceStats(dir, current);
+      // Drop the RETURN when the run is over (stale/dangling) or when every
+      // observed SPAWN already has its RETURN — unrelated sessions' subagents
+      // must never bleed into an ORC trace.
+      if (!stats || stats.idleMs > STALE_MS) return;
+      if (stats.returns >= stats.spawns) return;
       appendLine(dir, current, "hook", "RETURN", "");
     }
   } catch (_) {

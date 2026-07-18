@@ -6,7 +6,7 @@
 
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
-![Version](https://img.shields.io/badge/version-0.22.0-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.23.0-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D16-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
@@ -37,23 +37,25 @@ zero-dependency npm package installs those files into your `.claude/` directory.
 
 ## Changelog
 
-### v0.22.0 — `/orc-learn`: per-feature onboarding docs — learning.md + knowledge.md, wiki-deep, git-ignored _(2026-07-17)_
+### v0.23.0 — Trace fix: SPAWN restored on the `Agent` tool, stale runs rotate to fresh files _(2026-07-18)_
 
-New standalone lane for the "dev A needs to extend dev D's feature" moment.
-`/orc-learn` picks ONE feature (topics offered from a fresh wiki, else a
-targeted scan of the files you point at), then a pinned Opus 4.8 writer goes
-one level deeper than the wiki — every function anchored `file:line`, one real
-flow traced entry→exit — and writes `learning-docs/<feature>/learning.md`
-(mental model, guided walkthrough, change recipes, gotchas, required FAQ) +
-`knowledge.md` (anchored functions & flow, contracts, fingerprint header).
+The behavior trace had degenerated into one endless file of bare `RETURN`
+lines spanning days. Two root causes, both fixed: the installed `PreToolUse`
+matcher was `Task`, but newer Claude Code dispatches subagents via the
+**`Agent`** tool, so the SPAWN branch never fired; and the `.current` run
+pointer never expired, so every later session's `SubagentStop` kept appending
+into the same old file.
 
-The docs are **local and git-ignored** — each dev regenerates their own, so
-nothing rots in the repo. `/orc-learn refresh` lists every generated feature
-with a freshness tier computed on read (same git-distance recipe as the wiki,
-no new config keys) and regenerates only what you pick.
+The matcher is now `Task|Agent` (`orc update` repairs existing installs in
+place), a trace idle >6h counts as a finished run — the next ORC dispatch
+rotates to a fresh `.txt` — and a `RETURN` is only written while the live file
+has fewer hook `RETURN`s than `SPAWN`s, so unrelated subagent stops can never
+bleed into an ORC trace again.
 
 <details>
 <summary><b>Previous versions</b> (click to expand)</summary>
+
+### v0.22.0 — `/orc-learn`: per-feature onboarding docs — learning.md + knowledge.md, wiki-deep, git-ignored _(2026-07-17)_
 
 ### v0.21.0 — Statusline shows live subscription usage: 5h ↔ weekly, official numbers _(2026-07-16)_
 

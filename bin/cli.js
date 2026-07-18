@@ -172,10 +172,13 @@ function installGuards(claudeDir) {
     );
   }
 
-  // 3) Trace hook — PreToolUse(Task) SPAWN + SubagentStop RETURN skeleton.
-  //    Idempotent; non-destructive. Behavior-trace logging is PERMANENT (always
-  //    on); the hook bootstraps log_dir + the run pointer itself, so wiring it
-  //    is always safe and a trace is guaranteed for every ORC run.
+  // 3) Trace hook — PreToolUse(Task|Agent) SPAWN + SubagentStop RETURN
+  //    skeleton. Idempotent; non-destructive. Behavior-trace logging is
+  //    PERMANENT (always on); the hook bootstraps log_dir + the run pointer
+  //    itself, so wiring it is always safe and a trace is guaranteed for every
+  //    ORC run. The matcher MUST cover both tool names — newer Claude Code
+  //    dispatches subagents via `Agent`, older via `Task`; a Task-only matcher
+  //    silently stops SPAWN lines (and run-file rotation) forever.
   const traceCmd = nodeCmd(path.join(hooksDest, "orc-trace.js"));
   const wireTrace = (arrName, matcher) => {
     settings.hooks[arrName] = settings.hooks[arrName] || [];
@@ -184,6 +187,8 @@ function installGuards(claudeDir) {
       for (const h of entry.hooks || []) {
         if (typeof h.command === "string" && h.command.includes("orc-trace")) {
           h.command = traceCmd; // keep the path current on update
+          // Repair a stale matcher too (pre-v0.23.0 installs wired "Task").
+          if (matcher) entry.matcher = matcher;
           found = true;
         }
       }
@@ -194,10 +199,10 @@ function installGuards(claudeDir) {
       settings.hooks[arrName].push(entry);
       console.log(`  add   settings.json → ${arrName} trace hook`);
     } else {
-      console.log(`  upd   settings.json → ${arrName} trace hook path`);
+      console.log(`  upd   settings.json → ${arrName} trace hook path+matcher`);
     }
   };
-  wireTrace("PreToolUse", "Task");
+  wireTrace("PreToolUse", "Task|Agent");
   wireTrace("SubagentStop", null);
 
   fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + "\n");
