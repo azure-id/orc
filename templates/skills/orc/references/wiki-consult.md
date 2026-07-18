@@ -7,9 +7,12 @@ the `WIKI-CONSULT` emit rule — this file is the mechanism.
 
 ## Trigger
 
-If `wiki/` exists AND has > 0 files. Empty or absent → ignore it and proceed
-as normal (the wiki is purely additive); emit `WIKI-CONSULT absent :: docs=none`
-(or `empty`) and move on.
+Does a wiki exist? Decide with the deterministic probe in
+`../../_shared/detecting-artifacts.md` — run `orc wiki status`, never an ad-hoc
+`find` (`.claude` is hidden, so a raw search false-negatives a generated wiki).
+`none` → ignore it and proceed as normal (the wiki is purely additive); emit
+`WIKI-CONSULT absent :: docs=none` (or `empty`) and move on. Any other state =
+wiki present → continue below.
 
 ## Step 1 — Compute the freshness tier (never stored, always computed)
 

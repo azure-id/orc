@@ -63,8 +63,10 @@ Phase 8  ship (commit / push / PR)
 review/verify/summary.)
 
 **Postgres query grounding.** On a Postgres project, if the task touches the
-data-access layer AND `.claude/orc/patterns/postgres-pattern.md` is cached,
-inject it LITERALLY into the slice (conventions + blocking query invariants).
+data-access layer AND `orc pattern status postgres` reports cached (the
+deterministic probe in `../_shared/detecting-artifacts.md`, never an ad-hoc
+`find` for `.claude/orc/patterns/postgres-pattern.md`), inject it LITERALLY into
+the slice (conventions + blocking query invariants).
 Cache MISS → skip — mini never codifies (that's the full lane /
 `/orc-pattern`); universal invariants + neighbor imitation still cover it.
 

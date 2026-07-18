@@ -2130,6 +2130,70 @@ function wikiStatus(claudeDir) {
   }
 }
 
+// ── Pattern cache (deterministic existence probe) ───────────────────────────
+// The pattern cache lives at <claude>/orc/patterns/<lang>-pattern.md, written by
+// orc-pattern's codifier. Like the wiki manifest it sits under the HIDDEN
+// .claude dir, so a model's ad-hoc find/glob — which may skip dot-dirs or run
+// from a subfolder/sandbox CWD — can wrongly report a generated pattern as
+// missing. This probe resolves .claude exactly like every other command and is
+// the SOURCE OF TRUTH for "does a cached pattern exist", never a fs guess. This
+// is the pattern half of skills/_shared/detecting-artifacts.md (wiki half:
+// `orc wiki status`).
+function patternsDir(claudeDir) {
+  return path.join(claudeDir, "orc", "patterns");
+}
+
+function listPatternLangs(claudeDir) {
+  const dir = patternsDir(claudeDir);
+  if (!fs.existsSync(dir)) return [];
+  return fs
+    .readdirSync(dir)
+    .map((f) => (f.endsWith("-pattern.md") ? f.slice(0, -"-pattern.md".length) : null))
+    .filter(Boolean)
+    .sort();
+}
+
+function patternStatus(claudeDir, lang) {
+  const langs = listPatternLangs(claudeDir);
+  if (lang) {
+    const hit = langs.includes(lang);
+    // Exit code IS the contract: 0 = cached, 1 = absent — so a gate can branch
+    // on it deterministically without parsing prose.
+    console.log(
+      hit
+        ? `✓ cached — ${path.join(patternsDir(claudeDir), lang + "-pattern.md")}`
+        : `✗ absent — no ${lang}-pattern.md (run \`/orc-pattern\` in Claude Code to codify it)`
+    );
+    process.exit(hit ? 0 : 1);
+  }
+  if (!langs.length) {
+    console.log("no cached patterns — run `/orc-pattern` in Claude Code to codify your conventions");
+    return;
+  }
+  console.log(`✓ ${plural(langs.length, "cached pattern")}: ${langs.join(", ")}`);
+}
+
+function pattern() {
+  if (flag("--global")) {
+    console.error("❌ orc pattern is project-scoped — the cache lives in the repo. Run it from the project (or with --dir <path>).");
+    process.exit(1);
+  }
+  const claudeDir = resolveClaudeDir();
+  const pos = positionals(); // ["pattern", <sub?>, <lang?>]
+  switch (pos[1]) {
+    case undefined:
+    case "status":
+      patternStatus(claudeDir, pos[2]);
+      break;
+    default:
+      console.error(
+        `Unknown: orc pattern ${pos[1]}\n` +
+          "Usage: orc pattern status [<lang>]   whether a cached code-pattern exists (exit 1 when <lang> absent)"
+      );
+      process.exit(1);
+  }
+}
+
 function wiki() {
   if (flag("--global")) {
     console.error("❌ orc wiki is project-scoped — the wiki lives in the repo. Run it from the project (or with --dir <path>).");
@@ -2336,6 +2400,10 @@ Usage:
     orc wiki sync [--check]               rebuild wiki-meta.json + INDEX.md from the docs on disk
                                           (instant, no re-scan — this is the repair for an
                                            unregistered wiki, e.g. a scan stopped at a pause)
+  orc pattern [--dir <path>]              cached code-patterns (project-scoped; no --global)
+    orc pattern status [<lang>]           whether a cached pattern exists — the deterministic
+                                          existence probe every knowledge-gated lane runs first
+                                          (exit 1 when <lang> absent; no arg lists all cached)
   orc where [--global | --dir <path>]     show target paths
   orc version                             print installed version + check for a newer one
   orc --help
@@ -2378,6 +2446,9 @@ Skills installed: ${listSkillNames().join(", ")}`);
       break;
     case "wiki":
       wiki();
+      break;
+    case "pattern":
+      pattern();
       break;
     case "where":
       where();

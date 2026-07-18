@@ -7,3 +7,4 @@ knowledge.md
 docs/
 .superpowers/# Eval harness — scenario specs + fixture (process artifact, never shipped)
 eval/
+.claude

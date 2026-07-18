@@ -41,6 +41,9 @@ Reconciliation is therefore cheap: you only ever override the *soft* half.
    reads and returns the reconciled pattern; YOU write it to the cache.
 2. **Cache lives at `.claude/orc/patterns/<lang>-pattern.md`** (project `.claude/`,
    OUTSIDE `templates/` — `orc update` never clobbers it). One file per language.
+   Consumers detect it with the deterministic probe `orc pattern status <lang>`
+   (exit 0 = cached), never an ad-hoc `find` — the hidden `.claude/` dir
+   false-negatives a raw search.
 3. **Canonical pattern on inconsistency = most-recently-modified files win.** They
    show where the codebase is heading (correct for future refactor use). Flag any
    real ambiguity to the user ONCE, don't guess silently.

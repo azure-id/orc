@@ -401,6 +401,7 @@ const CONTRACTS = [
     token: "wiki-meta.json",
     files: [
       "hooks/orc-statusline.js",
+      "skills/_shared/detecting-artifacts.md",
       "skills/orc/SKILL.md",
       "skills/orc/config.md",
       "skills/orc/references/wiki-consult.md",
@@ -413,6 +414,24 @@ const CONTRACTS = [
       "skills/orc-wiki/references/integrity-check.md",
       "skills/orc-wiki/references/staleness.md",
       "skills/orc-wiki/schemas/crosslink-tag.md",
+    ],
+  },
+  {
+    // v0.25.0: existence detection is a shared contract so a generated wiki /
+    // pattern is never missed by an ad-hoc find/glob against the hidden .claude
+    // dir. Canonical prose: skills/_shared/detecting-artifacts.md; the
+    // deterministic probes are `orc wiki status` + `orc pattern status` in
+    // bin/cli.js (CLI half — documented drift the lint's templates/ root can't
+    // see). Token = the pointer every knowledge-gated consumer carries.
+    name: "artifact existence probe (v0.25.0 — deterministic CLI, never ad-hoc find)",
+    token: "detecting-artifacts.md",
+    files: [
+      "skills/orc-fast/SKILL.md",
+      "skills/orc-mini/SKILL.md",
+      "skills/orc-verify/SKILL.md",
+      "skills/orc-wiki/references/staleness.md",
+      "skills/orc/references/pattern-gate.md",
+      "skills/orc/references/wiki-consult.md",
     ],
   },
   {

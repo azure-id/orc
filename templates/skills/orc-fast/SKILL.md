@@ -34,9 +34,10 @@ fit gate hands it to orc-mini.
 
 Emit a `GATE` trace line per check when logging.
 
-**a. Wiki gate.** `wiki/` must exist with > 0 docs, and be acceptably fresh.
-Compute the tier from `.claude/orc/wiki-meta.json` per
-`../orc-wiki/references/staleness.md` (the canonical freshness reference):
+**a. Wiki gate.** Decide existence with `orc wiki status` — the deterministic
+probe in `../_shared/detecting-artifacts.md`, never an ad-hoc `find` (`.claude`
+is hidden). `none` = gate FAILED → fallback; else wiki present → compute the
+tier from `.claude/orc/wiki-meta.json` per `../orc-wiki/references/staleness.md`:
 `git rev-list --count <scan_commit>..HEAD` → FRESH / AGING / STALE (manifest
 absent but docs present = STALE; wiki absent/empty = gate FAILED → fallback).
 - **FRESH** → proceed silently. **AGING** → one-line notice, proceed.
@@ -50,9 +51,10 @@ absent but docs present = STALE; wiki absent/empty = gate FAILED → fallback).
      checkpoint so /orc-retro can correlate outcomes with overrides.
 
 **b. Pattern gate.** Detect the request's language (file extensions / repo
-deps, same signals as the full lane's tagging) and require
-`.claude/orc/patterns/<lang>-pattern.md`. Missing for the language in play →
-gate FAILED → fallback. (A request touching no FE/BE language — pure docs/
+deps, same signals as the full lane's tagging) and confirm the cache with
+`orc pattern status <lang>` (exit 0 = cached — the deterministic probe in
+`../_shared/detecting-artifacts.md`, never an ad-hoc `find`). Absent for the
+language in play → gate FAILED → fallback. (A request touching no FE/BE language — pure docs/
 config — passes this gate as N/A.) The cross-cutting `postgres` pattern is
 NEVER a gate prerequisite — it is bonus-only (injected at F2 on a cache HIT),
 so a missing `postgres-pattern.md` never fails the gate or forces a fallback.

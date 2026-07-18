@@ -26,7 +26,10 @@ cross-cutting `postgres` playbook into the same resolve gate.
 ## Phase 3 — Resolve gate (once, before the first wave)
 
 For each distinct tagged language (including `postgres` when any task is
-`db`-tagged), resolve against the cache `.claude/orc/patterns/<lang>-pattern.md`:
+`db`-tagged), resolve against the cache `.claude/orc/patterns/<lang>-pattern.md`
+— test existence with the deterministic probe `orc pattern status <lang>`
+(exit 0 = cached; see `../../_shared/detecting-artifacts.md`), never an ad-hoc
+`find`, so a codified pattern is never missed:
 
 - **Cache hit, no drift** → use silently (no ask, no cost).
 - **Cache miss** → apply config `pattern_findings` (default `ask`):

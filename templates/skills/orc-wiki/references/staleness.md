@@ -232,8 +232,10 @@ fresh wiki (hints) > cross-repo stale wiki (weak hints) > model priors`.
 
 ## Consume rule (main orc + orc-mini)
 
-Before consulting the wiki during planning/scoring: check `wiki/` exists and has
-> 0 files. If yes, compute the freshness tier (above) and react per the
+Before consulting the wiki during planning/scoring: determine existence with the
+deterministic probe `orc wiki status` (per `../../_shared/detecting-artifacts.md`
+— never an ad-hoc `find`; `.claude` is hidden). If present, compute the freshness
+tier (above) and react per the
 per-skill table, then read the relevant `orc-feature-*` / `orc-reference-*` /
 `orc-architecture-overview.md` for the area being planned — selecting pages via
 `wiki/INDEX.md` (one line per doc: type, status, description, keywords)
