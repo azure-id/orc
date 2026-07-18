@@ -6,7 +6,7 @@
 
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
-![Version](https://img.shields.io/badge/version-0.24.0-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.25.1-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D16-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
@@ -37,27 +37,24 @@ zero-dependency npm package installs those files into your `.claude/` directory.
 
 ## Changelog
 
-### v0.24.0 — Crosslink fused into wiki generation: always-on, per-scan-task, never wiped _(2026-07-18)_
+### v0.25.1 — Eval report: the full 17-lane suite graded against the v0.25.0 payload _(2026-07-18)_
 
-Two real-repo bugs, one disease: crosslink tags were a Phase-3 model-promise
-with no deterministic writer or verifier, so regenerating a stale wiki could
-**delete** the tags, and `/orc-wiki crosslink` could silently publish
-**nothing**. Crosslink is now permanently enabled and default — every scan,
-resume, incremental, or full regenerate publishes/updates the boundary tags in
-the **same pass as the docs** (each scan agent returns a required
-`crosslink_tags` field — tag bodies from the source it just read, or `none` +
-reason). A refresh **never bulk-deletes** `wiki/crosslink/`; a tag is retired
-only by the per-point dead-tag sweep. Three deterministic guards make a silent
-zero impossible: `orc wiki sync` warns + fails `--check` when a documented
-boundary has no tags, an N→0 tripwire fires when a listed surface vanishes, and
-the integrity check is now unconditional. `orc wiki status` reports the tag
-count (or `UNPUBLISHED boundary`). CROSSLINK-ONLY is demoted to a legacy
-backfill for pre-v0.24.0 wikis. The only crosslink config remains the graph
-(`orc crosslink`), for the consume half.
+The whole eval suite (`evals/01…17` in the sandbox) was executed against the
+current payload and graded from on-disk evidence — traces, run folders,
+artifacts. The results now live in **[EVAL-REPORT.md](EVAL-REPORT.md)**:
+per-lane duration, task complexity, dispatch/step counts, and
+accuracy-vs-design findings. Headline: 13/13 evidenced lanes passed their core
+contract with zero model downgrades — but Phase 6.5 test authoring writes its
+`TEST-PLAN.md` into the hidden run folder (ultra) or an unpinned location
+(mini), so the user's self-QA deliverable is effectively invisible. A fix is
+planned: a canonical `test-generator/<change-slug>/` output folder at the
+project root.
 
 <details>
 <summary><b>Previous versions</b> (click to expand)</summary>
 
+### v0.25.0 — Deterministic artifact detection: a generated wiki/pattern is never missed _(2026-07-18)_
+### v0.24.0 — Crosslink fused into wiki generation: always-on, per-scan-task, never wiped _(2026-07-18)_
 ### v0.23.0 — Trace fix: SPAWN restored on the `Agent` tool, stale runs rotate to fresh files _(2026-07-18)_
 
 ### v0.22.0 — `/orc-learn`: per-feature onboarding docs — learning.md + knowledge.md, wiki-deep, git-ignored _(2026-07-17)_
@@ -113,6 +110,7 @@ backfill for pre-v0.24.0 wikis. The only crosslink config remains the graph
 - [Quick start](#quick-start)
 - [Commands](#commands)
 - [Skill quality (Tessl review)](#skill-quality-independently-reviewed)
+- [Eval status](#eval-status)
 - [How model selection works](#how-model-selection-works-and-how-to-verify-it)
 - [The tier guard](#the-tier-guard-installed-automatically)
 - [Configuration](#configuration-orc-config)
@@ -198,6 +196,7 @@ orc upgrade         # fetch the LATEST package, then apply it (pulls a new versi
 orc config          # view/change settings (interactive; zero model tokens)
 orc wiki            # wiki registration state (registered / UNREGISTERED / out of sync)
 orc wiki sync       # rebuild the wiki index + manifest from the docs (instant, no re-scan)
+orc pattern status  # deterministic "does a cached code-pattern exist" probe (exit 1 when absent)
 orc version         # print installed version + check for a newer one
 orc where           # print the target paths
 orc --help
@@ -531,6 +530,23 @@ user never types legitimately doesn't have — an inherent ceiling, not a bug.
 > ```bash
 > tessl review run ./templates/skills/orc-mini --workspace <your-workspace>
 > ```
+
+---
+
+## Eval status
+
+The constellation is also graded **end-to-end**, not just per-file: a 17-lane
+executable eval suite runs every lane against a sandboxed Express fixture and
+grades the run from on-disk evidence (behavior traces, run folders, artifacts).
+The full graded results for the current payload — per-lane duration, task
+complexity, dispatch/step counts, accuracy-vs-design findings, and known
+drift — live in **[EVAL-REPORT.md](EVAL-REPORT.md)**.
+
+Headline for v0.25.0: **13/13 evidenced lanes passed their core contract, with
+zero silent model downgrades across ~35 subagent dispatches**. Known drift
+being fixed: test authoring (Phase 6.5) writes `TEST-PLAN.md` where the user
+can't find it — a canonical `test-generator/<change-slug>/` output folder is
+planned.
 
 ---
 
