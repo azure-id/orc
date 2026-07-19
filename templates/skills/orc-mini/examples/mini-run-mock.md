@@ -36,8 +36,12 @@ O: [runs `pytest tests/test_report.py`]  ⛔ RED — 1 failure: JSON missing tra
 ## Phase T — Test-authoring ask (opt-in; writes, never runs)
 O: Write test cases for these changes? (I author them — files + TEST-PLAN.md — but
    never run them; you test manually.)  [default from config.generate_tests]
-U: no
-O: Skipping test authoring.
+U: yes
+O: [dispatches orc-test-author-opus-4-8-high] → automated tests in
+   tests/test_report.py; manual deliverable at test-generator/report-json-flag/TEST-PLAN.md
+   (non-API project → curl_bundle_path null). Validate: path under
+   test-generator/report-json-flag/ ✓.
+O: Self-QA plan: test-generator/report-json-flag/TEST-PLAN.md (committed on ship).
 
 ## Phase 8 — Ship
 O: Current branch: feat/report-json. Commit? Push? PR?

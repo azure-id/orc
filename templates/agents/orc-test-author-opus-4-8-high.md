@@ -32,17 +32,22 @@ your job is to make manual testing as easy as possible.
    asserts, external_deps}. Bound regression to the diff's blast radius (the
    existing contracts of touched surfaces) — do not test the whole app.
 3. **Author automated test files** in the project's own framework/conventions
-   where feasible (unit + integration level). Follow existing test style.
-4. **Write `TEST-PLAN.md`** — the manual test-case doc. Per case: scenario,
-   setup, steps, expected result. It MUST contain two CLEARLY SEPARATED sections,
-   never conflated:
+   where feasible (unit + integration level). Follow existing test style. These
+   stay in the project's own test layout (`output_conventions`) — do NOT move them.
+4. **Write `test-generator/<change-slug>/TEST-PLAN.md`** — the manual test-case
+   doc. Pin it to a `test-generator/<change-slug>/` folder at the PROJECT ROOT
+   (create it if absent; `<change-slug>` = the run's kebab-case run-folder slug,
+   e.g. `post-users`). NEVER write it inside `.claude/` or the run folder — a
+   hidden path is invisible for self-QA. Per case: scenario, setup, steps,
+   expected result. It MUST contain two CLEARLY SEPARATED sections, never conflated:
    - **"Run the automated test suite"** — paste the EXACT CLI command(s) to run
      the tests you authored (e.g. `npm test`, or a scoped `npx jest path/…`).
    - **"Exercise the real running service"** — manual steps (and curl, if API)
      to drive the actual running app.
-5. **If is_http_api:** write `test-cases.http` — one `curl` per endpoint/flow,
-   Postman-importable (headers, method, body, a placeholder base URL + auth env
-   var; NEVER hard-code real secrets). Reference it from TEST-PLAN.md.
+5. **If is_http_api:** write `test-generator/<change-slug>/test-cases.http` (same
+   pinned folder) — one `curl` per endpoint/flow, Postman-importable (headers,
+   method, body, a placeholder base URL + auth env var; NEVER hard-code real
+   secrets). Reference it from TEST-PLAN.md.
 6. You may NOTE (advisory, non-blocking) any case where you can reason the code
    likely won't satisfy the assertion — put it in `notes[]`. Do NOT weaken a test
    to match the code, and do NOT block: the user decides.
@@ -52,8 +57,10 @@ Write real files. Never inline secrets (use env-var placeholders). Run nothing.
 ## Return EXACTLY this (orchestrator validates)
 - test_matrix[] — the rows above (or counts by type)
 - files_authored[] — automated test files you created/updated
-- test_plan_path — path to TEST-PLAN.md
-- curl_bundle_path — path to test-cases.http, or null (non-API projects)
+- test_plan_path — path to TEST-PLAN.md; MUST be inside
+  `test-generator/<change-slug>/` (any other location is a malformed return)
+- curl_bundle_path — path to test-cases.http (also inside
+  `test-generator/<change-slug>/`), or null (non-API projects)
 - run_command — the exact CLI command(s) to run the authored automated tests
 - notes[] — advisory gaps noticed while authoring (non-blocking); else []
 - actual_model — the model id quoted VERBATIM from your system prompt ("The exact

@@ -6,7 +6,7 @@
 
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
-![Version](https://img.shields.io/badge/version-0.25.1-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.26.0-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D16-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
@@ -15,6 +15,16 @@
 ![Tessl review](https://img.shields.io/badge/Tessl_review-avg_84-8A2BE2.svg?style=for-the-badge)
 
 </div>
+
+---
+
+> [!IMPORTANT]
+> **🚀 `orc-open` is released — ORC for non-Claude agents.**
+> A provider-agnostic port of the ORC pipeline for use outside Claude Code is now
+> available: **[github.com/azure-id/orc-open](https://github.com/azure-id/orc-open)**.
+> If you run a different coding agent (or want ORC's orchestration decoupled from
+> Claude Code), start there. This repository remains the Claude Code–native
+> constellation.
 
 ---
 
@@ -37,22 +47,23 @@ zero-dependency npm package installs those files into your `.claude/` directory.
 
 ## Changelog
 
-### v0.25.1 — Eval report: the full 17-lane suite graded against the v0.25.0 payload _(2026-07-18)_
+### v0.26.0 — Test-gen output pinned to a visible `test-generator/<change-slug>/` deliverable _(2026-07-19)_
 
-The whole eval suite (`evals/01…17` in the sandbox) was executed against the
-current payload and graded from on-disk evidence — traces, run folders,
-artifacts. The results now live in **[EVAL-REPORT.md](EVAL-REPORT.md)**:
-per-lane duration, task complexity, dispatch/step counts, and
-accuracy-vs-design findings. Headline: 13/13 evidenced lanes passed their core
-contract with zero model downgrades — but Phase 6.5 test authoring writes its
-`TEST-PLAN.md` into the hidden run folder (ultra) or an unpinned location
-(mini), so the user's self-QA deliverable is effectively invisible. A fix is
-planned: a canonical `test-generator/<change-slug>/` output folder at the
-project root.
+Phase 6.5 test authoring now writes its self-QA deliverables (`TEST-PLAN.md`,
+and `test-cases.http` for HTTP/API backends) to a stable, visible
+`test-generator/<change-slug>/` folder at the **project root** — never inside
+`.claude/` and never inside the run folder. This fixes EVAL-REPORT F1/F2, where
+the ultra run buried `TEST-PLAN.md` in a hidden dot-dir and the mini run's copies
+didn't survive on disk. The returned `test_plan_path`/`curl_bundle_path` must now
+point inside that folder (any other location is a malformed return), the folder
+is a shipped deliverable (committed on ship, not gitignored), and the end-of-run
+summary states the exact path so self-QA is discoverable. The location is
+registered in the contract lint so it can't drift again.
 
 <details>
 <summary><b>Previous versions</b> (click to expand)</summary>
 
+### v0.25.1 — Eval report: the full 17-lane suite graded against the v0.25.0 payload _(2026-07-18)_
 ### v0.25.0 — Deterministic artifact detection: a generated wiki/pattern is never missed _(2026-07-18)_
 ### v0.24.0 — Crosslink fused into wiki generation: always-on, per-scan-task, never wiped _(2026-07-18)_
 ### v0.23.0 — Trace fix: SPAWN restored on the `Agent` tool, stale runs rotate to fresh files _(2026-07-18)_

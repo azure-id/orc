@@ -739,6 +739,24 @@ const CONTRACTS = [
     ],
   },
   {
+    // v0.26.0: the manual-QA deliverables are pinned to a visible project-root
+    // folder (EVAL-REPORT F1/F2 fix). Registering the location sentence keeps
+    // the pin from drifting across the contract copy (core.md), its mirrors
+    // (testgen SKILL.md, the agent), and the two caller lanes + their docs.
+    name: "testgen output location (v0.26.0 — pinned to test-generator/<change-slug>/ at project root)",
+    token: "test-generator/",
+    files: [
+      "agents/orc-test-author-opus-4-8-high.md",
+      "skills/orc-mini/SKILL.md",
+      "skills/orc-mini/examples/mini-run-mock.md",
+      "skills/orc/README.md",
+      "skills/orc/SKILL.md",
+      "skills/orc/config.md",
+      "skills/orc/subskills/orc-testgen/SKILL.md",
+      "skills/orc/subskills/orc-testgen/core.md",
+    ],
+  },
+  {
     // Both keys also register in bin/cli.js's CONFIG_META (documented drift).
     name: "crosslink snapshot-age config keys (v0.17.0 — Signal-B day tiers)",
     token: "crosslink_fresh_days",

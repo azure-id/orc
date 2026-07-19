@@ -118,8 +118,9 @@ codifier: 9 language playbooks + a11y/perf rule packs), `context-combiner`
   auto-P3 and never gate.
 - **Opt-in phases** (all default OFF, via `orc config`): security pass
   (`security_review`, fires only on runs with a task scored ≥ 70), test
-  authoring (`generate_tests`, writes tests + TEST-PLAN.md + curl bundle,
-  never runs them), behavior trace (PERMANENT — persistent per-run `.txt`).
+  authoring (`generate_tests`, writes tests + a TEST-PLAN.md + curl bundle to a
+  visible `test-generator/<change-slug>/` folder at the project root, never runs
+  them), behavior trace (PERMANENT — persistent per-run `.txt`).
 - **Usage is reported at every pause AND at run completion** — limits reminder
   plus the full per-task dispatch table (score, model, effort).
 - **Disk is truth.** Every pause emits a resume block; paste it into a fresh
