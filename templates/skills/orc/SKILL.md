@@ -297,10 +297,13 @@ then re-verify (same single-retry cap).
 
 Only when `config.generate_tests` is on (confirmed at intake). ORC **writes**
 test cases and **runs nothing** — never gates the ship. Dispatch
-`orc-test-author-opus-4-8-high` with the run's `actual_files`,
-definition-of-done, touched flows, constraints, detected stack; it returns
-test files + `TEST-PLAN.md` + a Postman-importable `test-cases.http` curl
-bundle for HTTP APIs. Validate; relay what was authored.
+`orc-test-author-opus-4-8-high` (run's `actual_files`, definition-of-done,
+touched flows, constraints, stack); it returns test files + a `TEST-PLAN.md` + a
+Postman-importable `test-cases.http` (HTTP APIs), the two manual deliverables
+written to **`test-generator/<change-slug>/` at the project root**. Validate the
+returned `test_plan_path`/`curl_bundle_path` are under that folder (else
+malformed → re-dispatch); state the exact path in the summary — discoverability
+is the point.
 
 ## Phase 7 — Summary · Trace: `PHASE summary`
 
@@ -313,8 +316,9 @@ cosmetics too?"** — never fix unasked.
 ## Phase 8 — Ship (load subskills/orc-pr/SKILL.md) · Trace: `FINISH`
 
 Show current branch. Ask together: **commit? push? create PR?** (PR: ticket +
-title + target branch together; generate from `subskills/orc-pr/pr.md`). On
-success: delete the ephemeral decision log; KEEP checkpoint + dispatch log.
+title + target branch; generate from `subskills/orc-pr/pr.md`). If Phase 6.5 ran,
+commit `test-generator/<change-slug>/` too (a user deliverable, never gitignored).
+On success: delete the ephemeral decision log; KEEP checkpoint + dispatch log.
 **Wiki stale-flag:** flag (never re-scan) wiki docs whose covered files this
 run changed; point at `/orc-wiki`. **Post-ship refresh ask** (BIG runs, /orc +
 /orc-ultra — the `wiki_refresh_ask_tasks`/`_files` triggers and full rules in

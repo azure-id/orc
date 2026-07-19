@@ -27,9 +27,14 @@ the summary below orients.
    (env-var placeholders — never real secrets).
 5. Run NOTHING. Advisory `notes[]` may flag a case the code likely won't satisfy.
 
+The manual deliverables (TEST-PLAN.md + test-cases.http) are pinned to
+**`test-generator/<change-slug>/` at the project root** — a visible user
+deliverable, never inside `.claude/` or the run folder (see `core.md`).
+
 **Validation checkpoint before returning:** confirm each promised deliverable
-actually exists on disk (test files, TEST-PLAN.md, and test-cases.http when the
-stack exposes HTTP) before emitting the return contract in `core.md`.
+actually exists on disk **at the pinned path** (test files in the project's
+conventions; TEST-PLAN.md and — when the stack exposes HTTP — test-cases.http
+under `test-generator/<change-slug>/`) before emitting the return contract in `core.md`.
 
 Fixed model: `orc-test-author-opus-4-8-high` (Opus 4.8 high — authoring good
 integration tests is a judgment task). Opt-in: the orchestrator dispatches this

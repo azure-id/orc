@@ -22,21 +22,32 @@ itself. **Authoring only — RUN NOTHING, GATE NOTHING.** The user tests manuall
    one row per case {id, type, target, asserts, external_deps}. Bound regression
    to the diff's blast radius; never test the whole app.
 3. Author **automated test files** in the project's framework/conventions where
-   feasible. Match existing test style.
-4. Write **`TEST-PLAN.md`** (manual cases: scenario, setup, steps, expected) with
-   two CLEARLY SEPARATED sections:
+   feasible. Match existing test style. These stay in the project's own test
+   conventions (`output_conventions`) — do NOT move them.
+4. **Pin the manual-QA output folder.** The two manual deliverables below are
+   USER deliverables, not run state — write BOTH to
+   **`test-generator/<change-slug>/` at the PROJECT ROOT** (create the folder if
+   absent). `<change-slug>` = the run's existing kebab-case run-folder slug (e.g.
+   `post-users`). NEVER write them inside `.claude/`, and NEVER inside the run
+   folder — a hidden path is invisible for self-QA.
+5. Write **`test-generator/<change-slug>/TEST-PLAN.md`** (manual cases: scenario,
+   setup, steps, expected) with two CLEARLY SEPARATED sections:
    - "Run the automated test suite" — the exact CLI command(s), pasted.
    - "Exercise the real running service" — manual steps / curl.
-5. If `is_http_api`: write **`test-cases.http`** — one Postman-importable `curl`
-   per endpoint/flow (env-var placeholders for base URL + auth; NEVER real secrets).
-6. Advisory only: note (do not gate) any case the code likely won't satisfy.
+6. If `is_http_api`: write **`test-generator/<change-slug>/test-cases.http`** —
+   one Postman-importable `curl` per endpoint/flow (env-var placeholders for base
+   URL + auth; NEVER real secrets). Reference it from TEST-PLAN.md.
+7. Advisory only: note (do not gate) any case the code likely won't satisfy.
 
 ## Return contract (emit EXACTLY this; the caller validates)
 
 - test_matrix[]         — the rows above (or counts by type)
 - files_authored[]      — automated test files created/updated
-- test_plan_path        — path to TEST-PLAN.md
-- curl_bundle_path      — path to test-cases.http, or null (non-API projects)
+- test_plan_path        — path to TEST-PLAN.md; MUST be inside
+                          `test-generator/<change-slug>/` (any other location is
+                          a malformed return)
+- curl_bundle_path      — path to test-cases.http (also inside
+                          `test-generator/<change-slug>/`), or null (non-API projects)
 - run_command           — exact CLI command(s) to run the authored tests
 - notes[]               — advisory gaps noticed while authoring (non-blocking); else []
 - actual_model          — model id quoted VERBATIM from your system prompt ("The

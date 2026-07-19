@@ -136,8 +136,11 @@ list of `{min, max, agent}` rows; the orchestrator uses it instead of a preset.
 - `generate_tests` gates the opt-in Phase 6.5 (Test Authoring, default OFF). When
   on, after Verify the orchestrator dispatches `orc-test-author-opus-4-8-high` to
   WRITE test cases (automated files + `TEST-PLAN.md` + a curl bundle for HTTP
-  APIs) — it never runs them; the user tests manually. Full lane runs it as
-  Phase 6.5; orc-mini also offers it (opt-in end-of-run ask on a GREEN smoke gate).
+  APIs) — it never runs them; the user tests manually. The manual deliverables
+  are pinned to a visible **`test-generator/<change-slug>/`** folder at the
+  project root (not `.claude/`, not the run folder) and are committed on ship.
+  Full lane runs it as Phase 6.5; orc-mini also offers it (opt-in end-of-run ask
+  on a GREEN smoke gate).
 - `max_scouts` caps the parallel scouts fanned out in the analyst's DEEP mode
   (never exceeds it, same as max_wave_tasks caps a wave).
 - `default_analysis_depth` only presets the analyst's standard/deep gate — the

@@ -86,8 +86,11 @@ test cases for these changes? (I'll author them — automated files +
 TEST-PLAN.md + a curl bundle for HTTP APIs — but never run them; you test
 manually.)"* Yes → dispatch `orc-test-author-opus-4-8-high` (subskill
 `../orc/subskills/orc-testgen/`) with the run's `actual_files`,
-definition-of-done, touched flows, constraints, detected stack; validate the
-return; relay what was authored. No → ship. Either way this NEVER runs tests.
+definition-of-done, touched flows, constraints, stack; the two manual
+deliverables land in **`test-generator/<change-slug>/` at the project root**.
+Validate the returned `test_plan_path`/`curl_bundle_path` are under that folder
+(else malformed → re-dispatch); relay + state the exact path (committed on ship,
+not gitignored). No → ship. Either way this NEVER runs tests.
 
 ## Behavior trace (PERMANENT — same rule as full; always on)
 
@@ -183,7 +186,9 @@ Writes to the SAME location as the full skill
 ## What mini still enforces (from the main hard rules)
 
 Never implement yourself (the smoke gate is read-only, not implementation) ·
-all artifacts in the run subfolder, never project root · validate every
+all RUN-STATE artifacts in the run subfolder, never project root (the one
+exception is the opt-in `test-generator/<change-slug>/` self-QA deliverable,
+which lands at the project root by design) · validate every
 subagent return (malformed = failure) · report the dispatch log + remind the
 user to run `/usage` (never invoke it programmatically) · **never offer commit
 on a red build** (enforced by Phase M).
