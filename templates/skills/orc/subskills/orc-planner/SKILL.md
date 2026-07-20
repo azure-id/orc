@@ -31,6 +31,31 @@ do not redefine it here).
   Already scope-bounded and code-grounded. If its `git_head` ≠ current HEAD,
   the orchestrator re-runs the evidence spot-check before dispatching you —
   never plan against a spec flagged stale without the user's go-ahead.
+- **An orc-poly `poly-spec.md`** (first line marker `orc-poly:spec`, from
+  `/orc-poly`). Switch to **Poly-repo split mode** below.
+
+## Poly-repo split mode (only on the `orc-poly:spec` marker)
+
+The spec has a `repos[]` block (each: name, role, absolute `path`,
+`in_scope[]`, `requirements[]`) and points at a frozen `interface-contract.md`.
+Produce **one planning-output per `repos[]` entry** — never a merged plan:
+
+- Scope each plan to that repo's `in_scope[]` and ground those paths against
+  THAT repo's files (a peer lives outside CWD — Glob/read via absolute paths).
+- Embed the frozen `interface-contract.md` **verbatim** as a `Frozen contract`
+  section in every plan and copy each requirement's `contract_ref` into the
+  guarded task's `spec_invariants[]`, so the later per-repo `/orc` build cannot
+  drift from the boundary. Never paraphrase the contract — it is immutable.
+- Write the HOST plan to
+  `poly-repo-implementation/<slug>/<host>-implementation-plan.md` in the HOST
+  repo; write each PEER plan **into that peer repo** at the same relative path
+  (Write to the absolute peer path — a plan file only, never peer source).
+- Run coverage/grounding/cycle self-checks PER plan; carry the spec's
+  `git_head` staleness stamp into each. Scope and the contract are settled
+  upstream by orc-poly — never re-litigate them.
+- **This is a split-and-STOP branch** — present the per-repo plans + the
+  per-repo build handoff and stop. A poly-spec NEVER takes into build here (the
+  build runs later, per repo, in its own session). See "Branch" below.
 
 ## Grounding (conditional — the token-saving rule)
 
@@ -155,6 +180,11 @@ straight to a loose `plan-{name}.md` with no checkpoint.
 - **Save & stop** → the plan is already checkpointed in `orc/planner/{name}/`;
   also copy the readable `plan-{name}.md` out to the project root if the user
   wants it. "Saved the plan (checkpointed) — stopping here."
+- **Poly split & stop** (poly-spec input only) → the per-repo plans are written
+  (HOST here, each PEER into its repo). Present them and the handoff — "open
+  each repo in its own session and run `/orc` on its plan; every plan pins the
+  same frozen contract, so nothing drifts" — then STOP. Never take a poly-spec
+  into build; there is no scoring/wave phase for it here.
 
 ## Mini
 

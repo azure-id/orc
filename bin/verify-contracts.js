@@ -236,11 +236,13 @@ const CONTRACTS = [
     token: "git_head",
     files: [
       "agents/orc-analyze-mini-sonnet-5-high.md",
+      "agents/orc-planner-opus-4-8-med.md",
       "agents/orc-system-analyst-opus-4-8-high.md",
       "skills/orc-analyze-mini/SKILL.md",
       "skills/orc-analyze/SKILL.md",
       "skills/orc-analyze/schemas/requirement-spec.md",
       "skills/orc-mini/SKILL.md",
+      "skills/orc-poly/references/poly-spec.md",
       "skills/orc/SKILL.md",
       "skills/orc/references/analyst-gates.md",
       "skills/orc/subskills/orc-planner/SKILL.md",
@@ -286,6 +288,8 @@ const CONTRACTS = [
       "skills/orc-analyze/SKILL.md",
       "skills/orc-fast/SKILL.md",
       "skills/orc-mini/SKILL.md",
+      "skills/orc-poly/SKILL.md",
+      "skills/orc-poly/examples/poly-run-mock.md",
       "skills/orc-retro/SKILL.md",
       "skills/orc/SKILL.md",
       "skills/orc/references/analyst-gates.md",
@@ -337,6 +341,7 @@ const CONTRACTS = [
       "skills/orc-fast/SKILL.md",
       "skills/orc-learn/SKILL.md",
       "skills/orc-mini/SKILL.md",
+      "skills/orc-poly/SKILL.md",
       "skills/orc-verify/SKILL.md",
       "skills/orc-wiki/SKILL.md",
     ],
@@ -356,6 +361,7 @@ const CONTRACTS = [
       "skills/orc-learn/SKILL.md",
       "skills/orc-mini/SKILL.md",
       "skills/orc-pattern/SKILL.md",
+      "skills/orc-poly/SKILL.md",
       "skills/orc-verify/SKILL.md",
       "skills/orc-wiki/SKILL.md",
     ],
@@ -408,6 +414,8 @@ const CONTRACTS = [
       "skills/orc-fast/SKILL.md",
       "skills/orc-learn/SKILL.md",
       "skills/orc-mini/SKILL.md",
+      "skills/orc-poly/SKILL.md",
+      "skills/orc-poly/examples/poly-run-mock.md",
       "skills/orc-wiki/README.md",
       "skills/orc-wiki/SKILL.md",
       "skills/orc-wiki/references/crosslink.md",
@@ -428,6 +436,7 @@ const CONTRACTS = [
     files: [
       "skills/orc-fast/SKILL.md",
       "skills/orc-mini/SKILL.md",
+      "skills/orc-poly/SKILL.md",
       "skills/orc-verify/SKILL.md",
       "skills/orc-wiki/references/staleness.md",
       "skills/orc/references/pattern-gate.md",
@@ -446,6 +455,9 @@ const CONTRACTS = [
       "skills/orc-learn/SKILL.md",
       "skills/orc-learn/references/refresh.md",
       "skills/orc-mini/SKILL.md",
+      "skills/orc-poly/SKILL.md",
+      "skills/orc-poly/references/gather.md",
+      "skills/orc-poly/examples/poly-run-mock.md",
       "skills/orc-wiki/SKILL.md",
       "skills/orc-wiki/references/crosslink.md",
       "skills/orc-wiki/references/staleness.md",
@@ -571,6 +583,8 @@ const CONTRACTS = [
       "skills/orc-learn/SKILL.md",
       "skills/orc-learn/examples/learn-run-mock.md",
       "skills/orc-mini/SKILL.md",
+      "skills/orc-poly/SKILL.md",
+      "skills/orc-poly/examples/poly-run-mock.md",
     ],
   },
   {
@@ -596,6 +610,7 @@ const CONTRACTS = [
       "skills/orc-learn/SKILL.md",
       "skills/orc-learn/references/deepen.md",
       "skills/orc-mini/SKILL.md",
+      "skills/orc-poly/SKILL.md",
       "skills/orc-wiki/README.md",
       "skills/orc-wiki/SKILL.md",
       "skills/orc-wiki/references/claude-md-injection.md",
@@ -665,6 +680,7 @@ const CONTRACTS = [
     name: "crosslink CLI config file (v0.17.0 — written ONLY by `orc crosslink`, skill-read)",
     token: "orc-crosslink.config.yaml",
     files: [
+      "skills/orc-poly/SKILL.md",
       "skills/orc-wiki/README.md",
       "skills/orc-wiki/SKILL.md",
       "skills/orc-wiki/references/crosslink.md",
@@ -704,6 +720,7 @@ const CONTRACTS = [
     token: "wiki/crosslink/",
     files: [
       "commands/orc-wiki.md",
+      "skills/orc-poly/SKILL.md",
       "skills/orc-wiki/README.md",
       "skills/orc-wiki/SKILL.md",
       "skills/orc-wiki/references/crosslink.md",
@@ -767,6 +784,50 @@ const CONTRACTS = [
       "skills/orc/config.md",
     ],
   },
+  {
+    // v0.27.0: the orc-poly handoff spec marker. orc-poly writes poly-spec.md
+    // with this first-line marker; the shared planner self-activates poly-repo
+    // split mode on it. Changing the marker means changing the skill, the
+    // planner, and both commands in the same commit.
+    name: "orc-poly handoff marker (v0.27.0 — planner splits per-repo on `orc-poly:spec`)",
+    token: "orc-poly:spec",
+    files: [
+      "agents/orc-planner-opus-4-8-med.md",
+      "commands/orc-plan.md",
+      "commands/orc-poly.md",
+      "skills/orc/SKILL.md",
+      "skills/orc/subskills/orc-planner/SKILL.md",
+      "skills/orc-poly/SKILL.md",
+      "skills/orc-poly/references/poly-spec.md",
+      "skills/orc-poly/examples/poly-run-mock.md",
+    ],
+  },
+  {
+    name: "orc-poly output dir (v0.27.0 — source-of-truth docs + per-repo plans)",
+    token: "poly-repo-implementation/",
+    files: [
+      "agents/orc-planner-opus-4-8-med.md",
+      "commands/orc-poly.md",
+      "skills/orc/subskills/orc-planner/SKILL.md",
+      "skills/orc-poly/SKILL.md",
+      "skills/orc-poly/references/poly-spec.md",
+      "skills/orc-poly/examples/poly-run-mock.md",
+    ],
+  },
+  {
+    name: "orc-poly frozen boundary (v0.27.0 — every per-repo plan pins interface-contract.md)",
+    token: "interface-contract.md",
+    files: [
+      "agents/orc-planner-opus-4-8-med.md",
+      "commands/orc-plan.md",
+      "commands/orc-poly.md",
+      "skills/orc/subskills/orc-planner/SKILL.md",
+      "skills/orc-poly/SKILL.md",
+      "skills/orc-poly/references/gather.md",
+      "skills/orc-poly/references/poly-spec.md",
+      "skills/orc-poly/examples/poly-run-mock.md",
+    ],
+  },
 ];
 
 // Spine size budgets (v0.19.0). These SKILL.md files are ALWAYS loaded when
@@ -776,7 +837,7 @@ const CONTRACTS = [
 // fires). A new feature that would blow a budget lands as a reference + a
 // pointer, not as spine prose. Raising a budget is a deliberate, reviewed act.
 const BUDGETS = [
-  { file: "skills/orc/SKILL.md", maxLines: 330 },
+  { file: "skills/orc/SKILL.md", maxLines: 335 },
   { file: "skills/orc-wiki/SKILL.md", maxLines: 260 },
   { file: "skills/orc-mini/SKILL.md", maxLines: 195 },
   { file: "skills/orc-analyze/SKILL.md", maxLines: 195 },

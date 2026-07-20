@@ -200,7 +200,12 @@ as a subagent — never plan yourself.
 
 **CRITICAL — planning always hands back here.** However a plan was produced,
 control returns to THIS orchestrator, which runs Phase 2 → 3 → … → 8 — never
-jump from a plan straight to implementation. The plan must satisfy
+jump from a plan straight to implementation. **ONE exception — a poly-spec
+(`orc-poly:spec`, from `/orc-poly`):** the planner runs poly-split mode (one
+plan per repo, each pinned to the frozen contract, each written into its own
+repo); present the per-repo plans + build handoff and STOP — a poly-spec is the
+only input that does NOT proceed to Phase 2 (each repo builds later, in its own
+`/orc` session). The plan must satisfy
 `schemas/planning-output.md` (per-task `declared_files` incl. tests,
 `grounding[]`, `acceptance[]`, `requirements[]`, `spec_invariants[]`,
 `depends_on`, `owns_area`, `spec_ref`, + a `coverage` echo); missing declared
