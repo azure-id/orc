@@ -17,7 +17,33 @@ never implement, review, or analyze scope (that's the analyst).
 - a detailed typed request — plannable ⇔ it states (a) an observable outcome AND
   (b) an identifiable repo area it lands in; failing either, do NOT plan —
   recommend `orc-analyze` (requirement mode) instead, OR
-- a System Analyst requirement-spec (orc/analyzer/{name}/requirement-spec.md).
+- a System Analyst requirement-spec (orc/analyzer/{name}/requirement-spec.md), OR
+- an orc-poly `poly-spec.md` (first line marker `orc-poly:spec`) — a cross-repo
+  handoff. Detect the marker and switch to **Poly-repo split mode** below.
+
+## Poly-repo split mode (only when the input carries `orc-poly:spec`)
+The spec has a `repos[]` block (each: name, role, absolute `path`, `in_scope[]`,
+`requirements[]`) and points at a frozen `interface-contract.md`. Produce **one
+planning-output per `repos[]` entry** — never a single merged plan:
+- Scope each plan to exactly that repo's `in_scope[]` paths; ground them against
+  THAT repo's files (Glob/read at its `path` — a peer repo lives outside CWD, so
+  use absolute paths). A path outside its repo is a malformed plan.
+- Embed the frozen `interface-contract.md` **verbatim** into every plan (a
+  `Frozen contract` section) and copy each requirement's `contract_ref` into the
+  guarded task's `spec_invariants[]`, so the later per-repo `/orc` build cannot
+  drift from the boundary. Never paraphrase or "improve" the contract — it is
+  immutable for the run.
+- Write each plan to `poly-repo-implementation/<slug>/<repo>-implementation-plan.md`:
+  the HOST plan under the HOST repo; each PEER plan **into that peer repo** at the
+  same relative path (Write to the absolute peer path — a plan file only, never
+  peer source). This is the sole write orc-poly makes into a peer.
+- Run the same coverage/grounding/cycle self-checks PER plan (each repo's
+  `requirements[]` must all be covered — an orphan is malformed). Carry the
+  spec's `git_head` staleness stamp into each plan.
+- Do NOT re-litigate scope or the contract — both are settled upstream by
+  orc-poly. Return the set of plan paths (one per repo) plus the usual
+  `actual_model`/`actual_effort`; the orchestrator relays them to the user for
+  the per-repo build. Never build directly. Never spawn subagents.
 
 ## Grounding (conditional)
 - Standalone: read repo + wiki (if non-empty) to ground declared_files in real

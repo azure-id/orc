@@ -6,7 +6,7 @@
 
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
-![Version](https://img.shields.io/badge/version-0.26.0-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.27.0-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D16-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
@@ -47,21 +47,34 @@ zero-dependency npm package installs those files into your `.claude/` directory.
 
 ## Changelog
 
-### v0.26.0 — Test-gen output pinned to a visible `test-generator/<change-slug>/` deliverable _(2026-07-19)_
+### v0.27.0 — `/orc-poly`: plan one change across two-or-more repos without drift _(2026-07-20)_
 
-Phase 6.5 test authoring now writes its self-QA deliverables (`TEST-PLAN.md`,
-and `test-cases.http` for HTTP/API backends) to a stable, visible
-`test-generator/<change-slug>/` folder at the **project root** — never inside
-`.claude/` and never inside the run folder. This fixes EVAL-REPORT F1/F2, where
-the ultra run buried `TEST-PLAN.md` in a hidden dot-dir and the mini run's copies
-didn't survive on disk. The returned `test_plan_path`/`curl_bundle_path` must now
-point inside that folder (any other location is a malformed return), the folder
-is a shipped deliverable (committed on ship, not gitignored), and the end-of-run
-summary states the exact path so self-QA is discoverable. The location is
-registered in the contract lint so it can't drift again.
+A new planning lane for changes that span repos — a new backend endpoint and
+the frontend screen that calls it, a service and its downstream gRPC consumer.
+Run `/orc-poly` in the **HOST** repo and give each **PEER** as a filesystem path
+**or a crosslink node-name slug** (resolved from the HOST's `orc crosslink`
+graph — the slug yields the peer path *and* the host↔peer relation for free; an
+unrecognized slug lists the available names). orc-poly peeks at every repo's
+wiki + crosslink read-only (or, when a wiki is
+missing, asks you which folders/files to dig — never a blind scan), gathers the
+cross-repo context by asking questions until the shared boundary is pinned with
+no guesses, then writes a source-of-truth doc set — `poly-context.md`, a frozen
+`interface-contract.md`, and a machine-readable `poly-spec.md` — into
+`poly-repo-implementation/<slug>/`. Each iteration offers three choices: pass to
+orc-plan · stop & chat · add more context (another repo path or pasted
+knowledge). On "pass to orc-plan" the shared planner self-activates **poly-repo
+split mode** on the `orc-poly:spec` marker and produces **one plan per repo** —
+the HOST plan in this repo, each PEER plan written into its own repo — every
+plan pinning the same frozen contract. The `/orc` orchestrator itself honors the
+one exception to "planning always builds": a poly-spec is split-and-stop, so you
+then build each repo later, in its own session, with plain `/orc`, and no repo
+drifts. PEER source is READ-ONLY (the only peer write is its plan file); orc-poly
+never builds.
 
 <details>
 <summary><b>Previous versions</b> (click to expand)</summary>
+
+### v0.26.0 — Test-gen output pinned to a visible `test-generator/<change-slug>/` deliverable _(2026-07-19)_
 
 ### v0.25.1 — Eval report: the full 17-lane suite graded against the v0.25.0 payload _(2026-07-18)_
 ### v0.25.0 — Deterministic artifact detection: a generated wiki/pattern is never missed _(2026-07-18)_
@@ -290,7 +303,8 @@ needed. Either way, your `.claude/orc.config.yaml` overrides are left untouched.
 | **`/orc-fast`** | The fastest lane — knowledge-gated: requires a fresh wiki + a cached code-pattern, skips analyst/planner entirely, one Sonnet 4.6 high executor + smoke gate. Falls back to `orc-mini` when a prerequisite is missing. See below. |
 | **`/orc-diy`** | **Your own lane.** Runs the flow you composed with the `orc diy` CLI and compiled with `orc diy compile`. Hard-gated: unconfigured or stale → never runs, offers plain `/orc` instead. Full guide: [ORC-DIY README](templates/skills/orc-diy/README.md). |
 | **`/orc-analyze`** | The System Analyst: turns a requirement or document into a scope-bounded, code-grounded, evidence-backed spec. |
-| **`/orc-plan`** | The Requirement Planner: a detailed request or analyst spec → a grounded, right-sized, dependency-checked task plan. |
+| **`/orc-plan`** | The Requirement Planner: a detailed request or analyst spec → a grounded, right-sized, dependency-checked task plan. Detects an orc-poly `poly-spec.md` and splits it into one plan per repo. |
+| **`/orc-poly`** | **Poly-repo planning.** Plan ONE change that spans 2+ repos (backend endpoint + frontend UI, service + its gRPC consumer) without drift. Run it in the HOST repo, paste each PEER repo path; it peeks at every repo's wiki + crosslink (or asks which files to dig), pins the shared boundary into a frozen `interface-contract.md`, and — on your go-ahead — splits into one plan per repo (each written into its repo, all pinned to the contract) so each repo's later plain `/orc` build stays on contract. PEER source is read-only; never builds. |
 | **`/orc-verify`** | Standalone verification of your git-modified changes (build + tests + diff sanity). Read-only. |
 | **`/orc-wiki`** | Builds a persistent project knowledge base into `wiki/` and points `CLAUDE.md` at it. Expensive, opt-in. Also powers **cross-repo crosslink** (link a BE/FE/service's wiki so ORC builds against real cross-repo contracts) — full setup guide: [ORC-WIKI README](templates/skills/orc-wiki/README.md). |
 | **`/orc-pattern`** | Learns your project's real code conventions per language and caches them so executors match your house style. Reconciles a generic playbook (9 languages: React · Next.js · Vue · Angular · FastAPI · Django · NestJS · Express · Go) against your actual files — conventions defer to your codebase; security/correctness invariants and measurable validation gates always carry through to review + verify. `--refresh` to relearn. |
@@ -663,11 +677,12 @@ templates/
 │   ├── orc-pattern/         code-pattern codifier — 9 language playbooks + a11y/perf rule packs + reconcile (opt-in)
 │   ├── orc-claude/          local CLAUDE.md builder — fenced sections, fingerprint refresh, zero questions
 │   ├── orc-learn/           per-feature onboarding docs — wiki-deep, git-ignored learning-docs/
+│   ├── orc-poly/            poly-repo planning — frozen interface contract + one plan per repo
 │   ├── orc-retro/           trace miner — calibration report PR'd to retro_repo (gh/MCP gated)
 │   ├── orc-advisor/         ultra-lane advisory brief + rubric + clarification round (/orc-ultra only)
 │   ├── orc-judge/           ultra-lane judgment gates — analysis / plan / implementation (/orc-ultra only)
 │   └── context-combiner/    merges 2+ related analyses into one combined spec (+ schemas)
-├── commands/                /orc /orc-ultra /orc-mini /orc-fast /orc-diy /orc-analyze /orc-plan /orc-verify /orc-wiki /orc-pattern /orc-retro /orc-claude /orc-learn
+├── commands/                /orc /orc-ultra /orc-mini /orc-fast /orc-diy /orc-analyze /orc-plan /orc-poly /orc-verify /orc-wiki /orc-pattern /orc-retro /orc-claude /orc-learn
 ├── hooks/                   effort guard (PreToolUse) · statusline warning · behavior trace
 └── agents/                  single-role, model-pinned subagents (+ read-only scout) + MODEL-MAPPING.md
 bin/cli.js                   installer + config editor + flow composer (init / update / upgrade / config / diy / where)
