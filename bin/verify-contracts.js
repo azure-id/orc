@@ -293,6 +293,7 @@ const CONTRACTS = [
       "skills/orc-retro/SKILL.md",
       "skills/orc/SKILL.md",
       "skills/orc/references/analyst-gates.md",
+      "skills/orc/references/stop-and-resume.md",
       "skills/orc/references/trace-protocol.md",
       "skills/orc/references/ultra-mode.md",
     ],
@@ -588,6 +589,19 @@ const CONTRACTS = [
     ],
   },
   {
+    // v0.28.0: full orc now surfaces cross-repo peer-knowledge state (the
+    // consult-point report + a CROSSLINK trace verb) so a user can tell whether
+    // peer contracts were injected. Token = the trace verb, pinned to the spine
+    // + the closed verb table + the canonical consult mechanism.
+    name: "crosslink trace verb + run-time report (v0.28.0 — peer-knowledge visibility)",
+    token: "`CROSSLINK ",
+    files: [
+      "skills/orc/SKILL.md",
+      "skills/orc/references/trace-protocol.md",
+      "skills/orc/references/wiki-consult.md",
+    ],
+  },
+  {
     name: "wiki cross-cutting reference maps (v0.15.0 — consumers pull by name)",
     token: "orc-reference-api-surface",
     files: [
@@ -685,6 +699,7 @@ const CONTRACTS = [
       "skills/orc-wiki/SKILL.md",
       "skills/orc-wiki/references/crosslink.md",
       "skills/orc-wiki/schemas/crosslink-tag.md",
+      "skills/orc/references/wiki-consult.md",
     ],
   },
   {
@@ -712,6 +727,7 @@ const CONTRACTS = [
       "skills/orc-wiki/references/crosslink.md",
       "skills/orc-wiki/references/staleness.md",
       "skills/orc-wiki/schemas/crosslink-tag.md",
+      "skills/orc/references/wiki-consult.md",
       "skills/orc/subskills/orc-execution/SKILL.md",
     ],
   },
@@ -837,7 +853,12 @@ const CONTRACTS = [
 // fires). A new feature that would blow a budget lands as a reference + a
 // pointer, not as spine prose. Raising a budget is a deliberate, reviewed act.
 const BUDGETS = [
-  { file: "skills/orc/SKILL.md", maxLines: 335 },
+  // v0.28.0: deliberate raise 335→350 — the run-integrity work adds inline
+  // trace imperatives to every phase body (fix for SPAWN/RETURN-only traces),
+  // the deterministic wave-stop gate, and the always-on wiki/pattern/crosslink
+  // visibility reports. Compressed the now-redundant trace-cadence enumeration
+  // and duplicated fixed-role/config prose to hold the raise to +15.
+  { file: "skills/orc/SKILL.md", maxLines: 350 },
   { file: "skills/orc-wiki/SKILL.md", maxLines: 260 },
   { file: "skills/orc-mini/SKILL.md", maxLines: 195 },
   { file: "skills/orc-analyze/SKILL.md", maxLines: 195 },

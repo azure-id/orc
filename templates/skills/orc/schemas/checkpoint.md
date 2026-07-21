@@ -19,6 +19,9 @@ Two files, two jobs:
   "source_branch": "feat/notifications",
   "intent_spec": "run/merchant-notifications/intent-spec.md",
   "batch_pause_every": 2,
+  "pause_schedule": [2],           // wave indices where a MANDATORY batch stop fires
+                                   // (computed from the Phase 2 answer; last wave never included) —
+                                   // a resumed session enforces the same hard boundaries
   "logging_enabled": true,         // logging is PERMANENT (always on) — re-anchor the behavior trace on resume
   "trace_path": null,              // "<log_dir>/<run-slug>-<DDMMYY>.txt" — the run's trace file
   "ultra_mode": false,             // true only on /orc-ultra runs; gates the "ultra" block below

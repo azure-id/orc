@@ -20,7 +20,12 @@ negotiated at runtime.
 4. **Cap concurrency at `config.max_wave_tasks`** (default 3): a wave NEVER
    exceeds this many tasks, even if more are conflict-free. Overflow moves to the
    next wave. This is the efficiency cap — 3 parallel subagents by default.
-5. **Mark batch pauses:** `is_batch_pause: true` every Nth wave (user's choice).
+5. **Mark batch pauses:** compute the pause schedule from the user's Phase 2
+   answer — mark `is_batch_pause: true` on wave W when `W % N == 0` AND a later
+   wave exists (`W < total_waves`); the last wave is NEVER a pause (nothing
+   remains to gate). The resulting wave indices are the `pause_schedule` stored
+   in the checkpoint. A pause so marked is a HARD gate (stop-and-resume.md), not
+   an orchestrator judgment call.
 
 ## Same-feature collision
 

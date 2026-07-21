@@ -98,7 +98,10 @@ waves: [ Wave ]            # planning may leave empty; orchestrator computes
 - number: int
   task_ids: [string]       # zero declared_files overlap within a wave
   agents: int
-  is_batch_pause: bool     # true every Nth wave per user's batch choice
+  is_batch_pause: bool     # recomputed from the Phase 2 pause schedule: true
+                           # when wave.number % N == 0 AND a later wave exists
+                           # (last wave is never a pause). A true here is a HARD
+                           # stop gate (stop-and-resume.md), not a hint.
 ```
 
 ## Status semantics

@@ -29,7 +29,12 @@ override still wins over both.
 max_wave_tasks: 3          # max parallel tasks per wave (hard cap; overflow → next wave)
 
 # --- Batch pausing ---
-batch_pause_every: 2       # default waves between stop-and-continue pauses
+batch_pause_every: 2       # waves between MANDATORY stop-and-continue pauses.
+                           # After wave W, if W % N == 0 AND a later wave exists,
+                           # the stop is a HARD gate (not orchestrator judgment) —
+                           # see references/stop-and-resume.md. The exact schedule
+                           # is confirmed at intake (Phase 2) and stored as
+                           # pause_schedule in the checkpoint.
 
 # --- Rubric width (the "metrix") ---
 rubric_bands: 5            # how many scoring bands. Range 2–8.
@@ -149,6 +154,10 @@ list of `{min, max, agent}` rows; the orchestrator uses it instead of a preset.
   resulting score to a model. More bands = finer score granularity, same model
   set — the preset boundaries define the mapping.
 - max_wave_tasks is a hard cap in wave-grouping.
+- `batch_pause_every` is a DETERMINISTIC hard gate, not a cadence hint: after
+  wave W, `W % N == 0` with a later wave remaining forces the stop sequence
+  (references/stop-and-resume.md). The schedule is computed and confirmed at
+  Phase 2 intake and persisted as `pause_schedule` so resumes enforce it too.
 - Behavior-trace logging is PERMANENT (always on) — there is no `logging` key.
   Every run, the orchestrator follows `references/trace-protocol.md` and the
   `orc-trace.js` hook writes a persistent `.txt` under `log_dir`. The hook is the
