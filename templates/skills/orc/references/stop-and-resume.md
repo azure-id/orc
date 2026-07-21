@@ -3,9 +3,24 @@
 The token-saving heart of ORC. Load whenever a stop fires (batch
 boundary, token pressure, phase transition worth guarding, or user request).
 
+## When a stop is MANDATORY vs a judgment call
+
+Most stops are yours to judge (token pressure, a phase worth guarding, a user
+request). **The batch boundary is NOT a judgment call — it is a hard gate.**
+After completing wave W, if `W % batch_pause_every == 0` **and at least one wave
+remains** (`W < total_waves`), the stop sequence below is MANDATORY and
+deterministic: **never dispatch wave W+1 past an unacknowledged boundary.** The
+boundary is computed from the answered pause schedule at intake (Phase 2) and
+stored as `pause_schedule` in the checkpoint, so a resumed session enforces the
+same boundaries. Emit `GATE wave-boundary :: wave=W of K → STOP (batch_pause_every=N)`
+before the stop. Token pressure and user request remain judgment; the batch
+boundary is not.
+
 ## The stop sequence (order is mandatory)
 
-1. **Decide** to stop (you own this judgment; the checkpoint skill never decides).
+1. **Decide** to stop (your judgment for token/phase/user stops; the batch
+   boundary above is not a decision but a hard gate). The checkpoint skill
+   never decides.
 2. **Write the checkpoint** into the run subfolder via
    `subskills/orc-checkpoint/SKILL.md`. VALIDATE the
    return. If the write fails → DO NOT STOP; surface the write failure instead.

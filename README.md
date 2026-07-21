@@ -6,7 +6,7 @@
 
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
-![Version](https://img.shields.io/badge/version-0.27.0-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.28.0-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D16-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
@@ -47,32 +47,31 @@ zero-dependency npm package installs those files into your `.claude/` directory.
 
 ## Changelog
 
-### v0.27.0 — `/orc-poly`: plan one change across two-or-more repos without drift _(2026-07-20)_
+### v0.28.0 — Run integrity: rich full-lane traces, deterministic wave stop, visible knowledge gates _(2026-07-21)_
 
-A new planning lane for changes that span repos — a new backend endpoint and
-the frontend screen that calls it, a service and its downstream gRPC consumer.
-Run `/orc-poly` in the **HOST** repo and give each **PEER** as a filesystem path
-**or a crosslink node-name slug** (resolved from the HOST's `orc crosslink`
-graph — the slug yields the peer path *and* the host↔peer relation for free; an
-unrecognized slug lists the available names). orc-poly peeks at every repo's
-wiki + crosslink read-only (or, when a wiki is
-missing, asks you which folders/files to dig — never a blind scan), gathers the
-cross-repo context by asking questions until the shared boundary is pinned with
-no guesses, then writes a source-of-truth doc set — `poly-context.md`, a frozen
-`interface-contract.md`, and a machine-readable `poly-spec.md` — into
-`poly-repo-implementation/<slug>/`. Each iteration offers three choices: pass to
-orc-plan · stop & chat · add more context (another repo path or pasted
-knowledge). On "pass to orc-plan" the shared planner self-activates **poly-repo
-split mode** on the `orc-poly:spec` marker and produces **one plan per repo** —
-the HOST plan in this repo, each PEER plan written into its own repo — every
-plan pinning the same frozen contract. The `/orc` orchestrator itself honors the
-one exception to "planning always builds": a poly-spec is split-and-stop, so you
-then build each repo later, in its own session, with plain `/orc`, and no repo
-drifts. PEER source is READ-ONLY (the only peer write is its plan file); orc-poly
-never builds.
+Three fixes for what a real `/orc` run wasn't telling you. **Rich traces on the
+full lane:** the behavior trace used to capture only the hook's `SPAWN`/`RETURN`
+skeleton because the emit imperative lived in a header annotation, not the phase
+body. Every Phase 0–8 body now carries its own inline `emit …` step — the same
+pattern that already makes `/orc-fast` traces rich — so a run records its
+`PHASE`/`SCORE`/`DISPATCH`/`VERIFY`/`OUTCOME`/`GATE`/`FINISH` timeline as it
+goes. **Deterministic wave stop:** `batch_pause_every` is now a hard gate, not
+an orchestrator judgment call — Phase 2 shows the computed pause schedule and
+lets you confirm it, so a two-wave run can actually pause after wave 1 (the old
+modulo cadence landed the only boundary after the last wave and never stopped).
+The schedule persists as `pause_schedule` so a resumed session enforces the same
+boundaries. **Visible knowledge gates:** wiki freshness, the resolved code
+pattern, and cross-repo crosslink state each print exactly one line at Phase 1 —
+gathered into a compact preflight block — instead of staying silent on the happy
+path. A new `CROSSLINK` trace verb records whether peer contracts were injected,
+and a run that has an `orc-crosslink.config.yaml` but no built cache now warns
+that peer wikis are **not** being read (full orc consumes only the pre-built
+crosslink cache, never peer source live). Spine budget raised 335→350.
 
 <details>
 <summary><b>Previous versions</b> (click to expand)</summary>
+
+### v0.27.0 — `/orc-poly`: plan one change across two-or-more repos without drift _(2026-07-20)_
 
 ### v0.26.0 — Test-gen output pinned to a visible `test-generator/<change-slug>/` deliverable _(2026-07-19)_
 

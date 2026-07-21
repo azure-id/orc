@@ -11,8 +11,9 @@ Does a wiki exist? Decide with the deterministic probe in
 `../../_shared/detecting-artifacts.md` — run `orc wiki status`, never an ad-hoc
 `find` (`.claude` is hidden, so a raw search false-negatives a generated wiki).
 `none` → ignore it and proceed as normal (the wiki is purely additive); emit
-`WIKI-CONSULT absent :: docs=none` (or `empty`) and move on. Any other state =
-wiki present → continue below.
+`WIKI-CONSULT absent :: docs=none` (or `empty`) AND print the one user-visible
+line `wiki: absent — running without knowledge base (build one with /orc-wiki)`,
+then move on. Any other state = wiki present → continue below.
 
 ## Step 1 — Compute the freshness tier (never stored, always computed)
 
@@ -20,12 +21,16 @@ Read `.claude/orc/wiki-meta.json` and compute
 `git rev-list --count <scan_commit>..HEAD` → **FRESH / AGING / STALE** per
 `../../orc-wiki/references/staleness.md` (the canonical tier rules; tier edges
 come from config `wiki_fresh_max` / `wiki_aging_max`). Manifest absent while
-docs are present = STALE-with-notice. Reactions:
+docs are present = STALE-with-notice. **Every tier prints exactly ONE
+user-visible line at the consult point** (no tier is silent — the user must
+always know whether the run is grounded and how fresh):
 
-- **FRESH** → consult silently.
-- **AGING** → one-line notice, then consult.
-- **STALE** → prominent warning but continue (full/mini self-ground against
-  code; orc-fast instead gates on this — see its F0 preflight).
+- **FRESH** → `wiki: FRESH — N docs consulted`, then consult.
+- **AGING** → `wiki: AGING — consulted with caution (refresh recommended)`,
+  then consult.
+- **STALE** → `wiki: STALE — hints only; code wins (run /orc-wiki refresh)`,
+  then continue (full/mini self-ground against code; orc-fast instead gates on
+  this — see its F0 preflight).
 
 ## Step 2 — Select and pull pages
 
@@ -72,12 +77,29 @@ sharper than inference alone.
 
 ## Crosslink injection (cross-repo, advisory — same consult point)
 
-If `.claude/orc/crosslink/needs.json` exists and a task's declared files touch
-a matching boundary call site, inject the cached linked contract into that
-task's slice as `crosslink` — labeled with its effective cross-repo tier +
-"hints, not verified" — the same slice mechanism as `pattern`. Precedence
-extends the local rule: cross-repo can NEVER outrank local code or local wiki
-hints; it never blocks. Absent needs file or no boundary → nothing extra.
+**What full orc reads at run time:** ONLY the pre-built
+`.claude/orc/crosslink/needs.json` + `.claude/orc/crosslink/cache/` artifacts,
+written by a prior `/orc-wiki` crosslink run. It NEVER reads
+`.claude/orc-crosslink.config.yaml` at run time and NEVER reads peer source —
+a stale or absent cache means **no peer knowledge this run**, full stop.
+
+**Report + trace (at the consult point, alongside the wiki line):**
+- `needs.json` present → print
+  `crosslink: N boundaries cached (peers: <names>) — advisory contracts will be injected`
+  and emit `CROSSLINK cached :: boundaries=N peers=<names>`.
+- `orc-crosslink.config.yaml` present but `needs.json` absent → print
+  `crosslink: configured but cache not built — run /orc-wiki to resolve peers (peer wikis are NOT being read this run)`
+  and emit `CROSSLINK configured-no-cache :: boundaries=0 peers=<names>`.
+- neither present → say nothing to the user; emit
+  `CROSSLINK none :: boundaries=0 peers=none` only if any crosslink probe ran.
+
+**Injection:** if `needs.json` exists and a task's declared files touch a
+matching boundary call site, inject the cached linked contract into that task's
+slice as `crosslink` — labeled with its effective cross-repo tier + "hints, not
+verified" — the same slice mechanism as `pattern`, and emit
+`CROSSLINK inject task=<id> :: <boundary>`. Precedence extends the local rule:
+cross-repo can NEVER outrank local code or local wiki hints; it never blocks.
+Absent needs file or no boundary → no injection.
 
 ## Post-run stale-flag (all lanes that changed code)
 

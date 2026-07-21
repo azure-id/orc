@@ -31,12 +31,16 @@ For each distinct tagged language (including `postgres` when any task is
 (exit 0 = cached; see `../../_shared/detecting-artifacts.md`), never an ad-hoc
 `find`, so a codified pattern is never missed:
 
-- **Cache hit, no drift** → use silently (no ask, no cost).
+Every resolved language prints exactly ONE user-visible line (no cost, no ask —
+visibility only, so the user always knows which house style is in force):
+
+- **Cache hit, no drift** → no ask, no cost, but print
+  `pattern: <lang>-pattern.md applied (cached)`.
 - **Cache miss** → apply config `pattern_findings` (default `ask`):
   - `ask` → ONE P0 prompt batched across ALL missing languages ("Learn
     conventions for {…} via orc-pattern, or proceed language-agnostic?");
-  - `on` → codify without asking;
-  - `off` → agnostic.
+  - `on` → codify without asking; print `pattern: <lang> — codifying (cache miss)`;
+  - `off` → agnostic; print `pattern: <lang> — running language-agnostic (no cached pattern)`.
 - **On learn/`on`** → dispatch `orc-pattern-codifier-sonnet-5-high` per missing
   language (slice per `../../orc-pattern/SKILL.md` Phase 1); YOU write the
   returned pattern to the cache.

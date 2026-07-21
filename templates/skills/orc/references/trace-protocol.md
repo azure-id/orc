@@ -64,6 +64,12 @@ at the moment the event happens, BEFORE announcing that step to the user:
 | review/verify verdict | relay the verdict |
 | run end | print the final report |
 
+**Inline-imperative rule:** every phase body in a lane spine carries its OWN
+emit steps as WORK, not as a header decoration. The `· Trace:` annotation on a
+phase heading is a summary of what that phase emits — the instruction is the
+inline "emit `<VERB> …`" step inside the phase body. Follow the inline steps;
+never treat the header list as the whole obligation.
+
 **Self-check:** a phase that ends with
 `zero new trace lines is a protocol violation`.
 If you notice a phase went by unlogged, append the missing lines
@@ -88,6 +94,7 @@ Actors: `orc` (orchestrator), `hook`, or a role/agent short name
 |------|-----------|---------|
 | `PHASE <name> start\|end` | orc | phase transition |
 | `WIKI-CONSULT <tier> :: docs=<list>` | orc | project wiki consulted for grounding (full/mini at planning; fast at slice-build) — tier ∈ `fresh` \| `aging` \| `stale` \| `absent` \| `empty`; `docs=` the pages pulled/handed to the executor (comma list) or `none`. Records whether the run grounded in the wiki and whether it was stale (surfaces grounding + staleness for later audit) |
+| `CROSSLINK <state> :: boundaries=<n> peers=<names>` | orc | cross-repo peer-knowledge state at the consult point — state ∈ `cached` (peer cache present) \| `configured-no-cache` (crosslink configured but the cache is not built) \| `none`. Per-task `CROSSLINK inject task=<id> :: <boundary>` when a slice receives a linked contract. Records whether peer contracts were injected this run (full orc consumes only the pre-built crosslink cache — it never reads peer source live; mechanism in `references/wiki-consult.md`) |
 | `SPAWN <agent>` | hook | an agent dispatch was observed (skeleton) |
 | `RETURN` | hook | a subagent finished (skeleton) |
 | `DISPATCH <agent> :: <task> expect=<model>/<effort>` | orc | orchestrator dispatched a named agent (the claim) |
