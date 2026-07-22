@@ -370,6 +370,7 @@ const CONTRACTS = [
   {
     name: "wiki registration writer (v0.18.0 — manifest+INDEX derived by the CLI, never hand-written)",
     token: "orc wiki sync",
+    binFiles: ["bin/cli.js"],
     files: [
       "commands/orc-wiki.md",
       "hooks/orc-statusline.js",
@@ -406,6 +407,7 @@ const CONTRACTS = [
   {
     name: "wiki freshness manifest (v0.11.0 — written ONLY by `orc wiki sync`, computed on read)",
     token: "wiki-meta.json",
+    binFiles: ["bin/cli.js"],
     files: [
       "hooks/orc-statusline.js",
       "skills/_shared/detecting-artifacts.md",
@@ -634,6 +636,7 @@ const CONTRACTS = [
   {
     name: "orc-diy gate lock (v0.16.0 — CLI-written; stub/guard/statusline all read it)",
     token: "flow.lock.json",
+    binFiles: ["bin/cli.js"],
     files: [
       "hooks/orc-effort-guard.js",
       "hooks/orc-statusline.js",
@@ -646,6 +649,7 @@ const CONTRACTS = [
   {
     name: "orc-diy compiled artifact path (v0.16.0 — build output, never hand-edited)",
     token: "FLOW-COMPILED.md",
+    binFiles: ["bin/cli.js"],
     files: [
       "commands/orc-diy.md",
       "hooks/orc-statusline.js",
@@ -658,6 +662,7 @@ const CONTRACTS = [
   {
     name: "orc-diy flow config file (v0.16.0 — written ONLY by the `orc diy` CLI)",
     token: "orc-diy.config.yaml",
+    binFiles: ["bin/cli.js"],
     files: [
       "hooks/orc-statusline.js",
       "skills/orc-diy/README.md",
@@ -693,6 +698,7 @@ const CONTRACTS = [
     // the lint's ROOT is templates/ and cannot see cli.js (like the DIY compiler).
     name: "crosslink CLI config file (v0.17.0 — written ONLY by `orc crosslink`, skill-read)",
     token: "orc-crosslink.config.yaml",
+    binFiles: ["bin/cli.js"],
     files: [
       "skills/orc-poly/SKILL.md",
       "skills/orc-wiki/README.md",
@@ -721,6 +727,7 @@ const CONTRACTS = [
   {
     name: "crosslink consumer cache dir (v0.17.0 — gitignored snapshot mirror)",
     token: "crosslink/cache/",
+    binFiles: ["bin/cli.js"],
     files: [
       "skills/orc-wiki/README.md",
       "skills/orc-wiki/SKILL.md",
@@ -734,6 +741,7 @@ const CONTRACTS = [
   {
     name: "crosslink provider tag dir (v0.17.0 — per-point boundary tags, project-root wiki/)",
     token: "wiki/crosslink/",
+    binFiles: ["bin/cli.js"],
     files: [
       "commands/orc-wiki.md",
       "skills/orc-poly/SKILL.md",
@@ -748,6 +756,7 @@ const CONTRACTS = [
   {
     name: "crosslink provider registry (v0.17.0 — wiki-meta sibling, integrity-gated)",
     token: "crosslink_provided",
+    binFiles: ["bin/cli.js"],
     files: [
       "skills/orc-wiki/README.md",
       "skills/orc-wiki/SKILL.md",
@@ -793,6 +802,7 @@ const CONTRACTS = [
     // Both keys also register in bin/cli.js's CONFIG_META (documented drift).
     name: "crosslink snapshot-age config keys (v0.17.0 — Signal-B day tiers)",
     token: "crosslink_fresh_days",
+    binFiles: ["bin/cli.js"],
     files: [
       "skills/orc-wiki/references/crosslink.md",
       "skills/orc-wiki/references/staleness.md",
@@ -878,6 +888,8 @@ const allFiles = walk(ROOT, []).map((p) =>
   path.relative(ROOT, p).split(path.sep).join("/")
 );
 
+const REPO_ROOT = path.join(__dirname, "..");
+
 let failures = 0;
 for (const c of CONTRACTS) {
   const expected = new Set(c.files);
@@ -888,7 +900,20 @@ for (const c of CONTRACTS) {
   );
   const missing = c.files.filter((f) => !actual.has(f));
   const unregistered = [...actual].filter((f) => !expected.has(f)).sort();
-  if (missing.length || unregistered.length) {
+  // B2: some contract tokens are ALSO mirrored into CLI code (bin/cli.js) —
+  // config keys the CLI reads/writes, artifact filenames it owns, etc. Those
+  // paths live OUTSIDE templates/ so the walk above can't see them; `binFiles`
+  // pins the token into repo-root files as a presence-only assertion, so a
+  // rename on the CLI side (or the skill side) fails the lint. No unregistered
+  // scan for bin files — the CLI legitimately mentions many tokens in passing.
+  const binMissing = (c.binFiles || []).filter((bf) => {
+    try {
+      return !fs.readFileSync(path.join(REPO_ROOT, bf), "utf8").includes(c.token);
+    } catch (_) {
+      return true;
+    }
+  });
+  if (missing.length || unregistered.length || binMissing.length) {
     failures++;
     console.error(`\n❌ contract drift: ${c.name}  (token: "${c.token}")`);
     for (const f of missing)
@@ -897,6 +922,8 @@ for (const c of CONTRACTS) {
       console.error(
         `   - UNREGISTERED copy (add to bin/verify-contracts.js): templates/${f}`
       );
+    for (const f of binMissing)
+      console.error(`   - MISSING from registered bin mirror: ${f}`);
   }
 }
 

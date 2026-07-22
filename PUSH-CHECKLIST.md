@@ -11,7 +11,8 @@ folder (OneDrive/iCloud) corrupts the commit. Follow this every time.
 ## Before every push
 ```
 # from the repo root
-npm run verify          # must print: ✅ ORC package OK — ...
+npm run verify          # must print: ✅ ORC package OK — ... AND ✅ ORC contracts OK
+npm test                # must print: # pass N  # fail 0  (deterministic suite; also runs on prepack)
 git add -A
 git status              # confirm bin/cli.js AND templates/** are staged
 git commit -m "..."
@@ -20,7 +21,7 @@ git push --force        # (first corrected push only; normal push after)
 
 ## After push — verify on GitHub in the browser
 - Open the repo, click into `bin/` → confirm `cli.js` is present and non-empty.
-- Click into `templates/agents/` → confirm ~13 files.
+- Click into `templates/agents/` → confirm the agent files are present.
 If the browser shows them, installs will work.
 
 ## Consumer install sanity

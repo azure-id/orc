@@ -47,6 +47,18 @@ const required = [
   "templates/agents/orc-judge-opus-4-8-max.md",
   "templates/agents/orc-claude-writer-opus-4-8-high.md",
   "templates/agents/orc-learn-writer-opus-4-8-high.md",
+  // Core non-generated agents — named explicitly so a dropped file is REPORTED
+  // by name, not merely absorbed by the count floor. (The 6 executor agents are
+  // checked separately by `build-agents.js --check`.)
+  "templates/agents/orc-system-analyst-opus-4-8-high.md",
+  "templates/agents/orc-planner-opus-4-8-med.md",
+  "templates/agents/orc-reviewer-opus-4-8-high.md",
+  "templates/agents/orc-verifier-opus-4-8-high.md",
+  "templates/agents/orc-scout-sonnet-4-6-high.md",
+  "templates/agents/orc-test-author-opus-4-8-high.md",
+  "templates/agents/orc-pattern-codifier-sonnet-5-high.md",
+  "templates/agents/orc-retro-sonnet-5-high.md",
+  "templates/agents/orc-context-combiner-opus-4-8-high.md",
   "templates/hooks/orc-effort-guard.js",
   "templates/hooks/orc-statusline.js",
   "templates/hooks/orc-trace.js",
@@ -71,8 +83,47 @@ function walkCount(dir, ext) {
 
 const skillCount = walkCount(path.join(ROOT, "templates/skills"), "SKILL.md");
 const agentCount = walkCount(path.join(ROOT, "templates/agents"), ".md");
-if (skillCount < 6) missing.push(`templates/skills (expected >=6 SKILL.md, found ${skillCount})`);
-if (agentCount < 12) missing.push(`templates/agents (expected >=12 .md, found ${agentCount})`);
+// Floors sit just below current reality (23 skills / 22 agent files) so a tree
+// missing a chunk of the payload fails the count check instead of sliding under
+// an ancient >=6/>=12 floor.
+if (skillCount < 22) missing.push(`templates/skills (expected >=22 SKILL.md, found ${skillCount})`);
+if (agentCount < 21) missing.push(`templates/agents (expected >=21 .md, found ${agentCount})`);
+
+// B4 — encoding/mojibake guard. The OneDrive corruption rule becomes a gate:
+// scan every shipped text file for the U+FFFD replacement char (invalid UTF-8
+// decodes to it) and for a whitespace-flanked run of three-or-more question
+// marks — the shape a mangled em/en-dash or curly quote collapses into (a
+// space-flanked dash becoming space-Q-Q-Q-space). A genuine "What???" has no
+// leading space, so it is not flagged.
+const MOJIBAKE = /(^|\s)\?{3,}(\s|$)/;
+// U+FFFD needle built from its code point so this scanner never flags its own source.
+const REPL = String.fromCharCode(0xfffd);
+function scanEncoding(dir, hits) {
+  if (!fs.existsSync(dir)) return;
+  const st = fs.statSync(dir);
+  if (st.isFile()) {
+    let text;
+    try {
+      text = fs.readFileSync(dir, "utf8");
+    } catch (_) {
+      return; // unreadable → not our concern here
+    }
+    const rel = path.relative(ROOT, dir).replace(/\\/g, "/");
+    // Reference U+FFFD via escape, never as a literal, so this scanner does not
+    // flag its own source.
+    if (text.includes(REPL)) hits.push(`${rel} (U+FFFD replacement char — corrupted bytes)`);
+    else if (MOJIBAKE.test(text)) hits.push(`${rel} (whitespace-flanked "???" — likely mangled dash/quote)`);
+    return;
+  }
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    scanEncoding(path.join(dir, e.name), hits);
+  }
+}
+const encodingHits = [];
+scanEncoding(path.join(ROOT, "package.json"), encodingHits);
+scanEncoding(path.join(ROOT, "bin"), encodingHits);
+scanEncoding(path.join(ROOT, "templates"), encodingHits);
+for (const h of encodingHits) missing.push("encoding: " + h);
 
 if (missing.length) {
   console.error("\n❌ ORC package integrity check FAILED. Missing / incomplete:");

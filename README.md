@@ -6,7 +6,7 @@
 
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
-![Version](https://img.shields.io/badge/version-0.28.1-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.29.0-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D16-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
@@ -47,26 +47,37 @@ zero-dependency npm package installs those files into your `.claude/` directory.
 
 ## Changelog
 
-### v0.28.1 — Defect fixes: package encoding, trace event routing, count/doc drift _(2026-07-22)_
+### v0.29.0 — Drift-prevention hardening: install manifest + prune, `orc doctor`, a real test suite _(2026-07-22)_
 
-A patch pass over the shipping side. **Package encoding:** `package.json`'s
-description and postinstall message carried committed mojibake (literal `???`
-where an em-dash belonged) — the exact corruption class the OneDrive rule warns
-about, and what npm displays for the package; both are restored. **Trace event
-routing:** the `orc-trace.js` dispatch branch tested `event === "PreToolUse" ||
-tool === "Task"`, so any future `SubagentStop` payload that also carries a
-`tool_name` would be misrouted into the SPAWN branch and silently drop every
-`RETURN` line; it now requires `PreToolUse && (Task|Agent)`. **Config-reader
-anchoring:** the trace hook's `log_dir` reader and the effort guard's
-`/orc-diy compile|status` bypass both matched too loosely (an indented nested
-`log_dir:`, or the word "status" anywhere in args); both are anchored. **Doc
-drift:** the agent-count line and the hardcoded contract totals in
-`knowledge.md` now defer to `npm run verify` as authoritative. The install
-banner's slash-command list is generated from `templates/commands/` instead of a
-hardcoded string that had drifted out of date.
+The installer now owns its footprint and the package has an executable safety
+net. **Install manifest + orphan prune:** every `orc init`/`update` records the
+exact set of files ORC ships in `.claude/orc/install-manifest.json`; on update,
+files that left the payload (a renamed agent, a removed skill) are pruned —
+bounded to paths a previous manifest proves ORC owned, so your own files,
+patterns, wiki, configs, and run folders are never touched. A pre-manifest
+install never auto-deletes: it warns and offers `orc update --prune`. This is
+the root-cause fix for stale forks where a rename left both the old and new file
+installed forever. **`orc doctor`:** a read-only health report over a target
+`.claude/` — payload-vs-CLI version skew, orphaned/missing payload files,
+`settings.json` wiring (effort guard, the `Task|Agent` trace matcher, statusline),
+a dangling trace pointer, a stale DIY lock; `orc doctor --fix` = update + prune +
+settings re-merge. **A deterministic test suite (`npm test`):** a zero-dep
+`node:test` suite under `test/` drives the real CLI and the three hooks in
+throwaway dirs (config roundtrip + validators, prune both paths, doctor, trace
+SPAWN/RETURN, effort-guard block/allow, statusline never-`undefined`), and runs
+on `prepack`. **Two new verify gates:** an encoding/mojibake scanner (fails on
+U+FFFD or a whitespace-flanked `???` across `package.json`/`bin`/`templates`,
+turning the OneDrive-corruption rule into a gate) and raised file-count floors
+that name each core agent, so a dropped file is reported by name. The contract
+lint can now pin a token into `bin/cli.js` too (`binFiles`), so single-token CLI
+mirrors — config keys, artifact filenames, the `orc wiki sync` command — fail the
+lint if renamed on either side. `engines` bumped to Node ≥18 (needed for
+`node:test`).
 
 <details>
 <summary><b>Previous versions</b> (click to expand)</summary>
+
+### v0.28.1 — Defect fixes: package encoding, trace event routing, count/doc drift _(2026-07-22)_
 
 ### v0.28.0 — Run integrity: rich full-lane traces, deterministic wave stop, visible knowledge gates _(2026-07-21)_
 
