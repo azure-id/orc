@@ -37,10 +37,10 @@ batch_pause_every: 2       # waves between MANDATORY stop-and-continue pauses.
                            # pause_schedule in the checkpoint.
 
 # --- Rubric width (the "metrix") ---
-rubric_bands: 5            # how many scoring bands. Range 2–8.
-                           #   2–5  → "narrow" preset
-                           #   6–8  → "wide" preset
-                           # Determines the score→model mapping below.
+rubric_bands: 5            # how many scoring bands the rubric REPORTS. Range 2–8.
+                           # Granularity only — it no longer selects a preset.
+                           # The score→model mapping is the SINGLE 8-band table
+                           # below, used regardless of this value.
 
 # --- Analysis (System Analyst) ---
 max_scouts: 3              # max parallel read-only code scouts in DEEP analysis mode
@@ -63,6 +63,15 @@ security_review: off       # off | ask | on — fires only on runs where a task
                            #   off → skip silently (default)
                            #   ask → one prompt after review, user decides
                            #   on  → dispatch the security pass without asking
+
+# --- Fable 5 role override (HARD-GATED — nothing changes unless enabled) ---
+fable5_enabled: false      # master gate. false = inert (this whole block does nothing).
+fable5_effort: medium      # medium | high | xhigh | max — effort for the Fable 5 role agents.
+                           #   The `orc config set fable5_effort` CLI rewrites the effort:
+                           #   line in the installed orc-<role>-fable-5 agents.
+fable5_roles: []           # subset of [analyze, plan, advisor, judge, review]. Each listed
+                           #   role dispatches its orc-<role>-fable-5 variant instead of the
+                           #   default. advisor/judge are ultra-lane only. Empty = no effect.
 
 # --- Artifact locations (internal by default) ---
 analyzer_dir: .claude/skills/orc/analyzer
@@ -91,32 +100,30 @@ crosslink_fresh_days: 10      # days since sync ≤ this → FRESH cross-repo hi
 crosslink_aging_days: 15      # ≤ this → AGING; beyond → STALE (advisory only, never blocks)
 ```
 
-## Score → model presets (executor agent dispatched by name)
+## Score → model table (executor agent dispatched by name)
 
-The orchestrator scores each task 0–100, then maps to a model via the preset
-selected by `rubric_bands`, and dispatches the matching **executor agent**.
+The orchestrator scores each task 0–100, then maps to a model via this SINGLE
+canonical 8-band table, and dispatches the matching **executor agent**. There is
+no longer a narrow/wide preset choice — `rubric_bands` sets scoring granularity
+only, never which table is used.
 
-### NARROW preset (rubric_bands 2–5)
 | Score | Model | Effort | Executor agent |
 |-------|-------|--------|----------------|
-| [0,30)   | claude-sonnet-4-6 | medium | orc-executor-sonnet-4-6-med |
-| [30,50)  | claude-sonnet-4-6 | high   | orc-executor-sonnet-4-6-high |
-| [50,65)  | claude-sonnet-5   | high   | orc-executor-sonnet-5-high |
-| [65,85)  | claude-opus-4-7   | medium | orc-executor-opus-4-7-med |
+| [0,30)   | claude-haiku-4-5  | —      | orc-executor-haiku-4-5 |
+| [30,40)  | claude-sonnet-4-6 | medium | orc-executor-sonnet-4-6-med |
+| [40,55)  | claude-sonnet-4-6 | high   | orc-executor-sonnet-4-6-high |
+| [55,65)  | claude-sonnet-5   | high   | orc-executor-sonnet-5-high |
+| [65,70)  | claude-opus-4-7   | medium | orc-executor-opus-4-7-med |
+| [70,80)  | claude-opus-4-7   | high   | orc-executor-opus-4-7-high |
+| [80,85)  | claude-opus-4-8   | medium | orc-executor-opus-4-8-med |
 | [85,100] | claude-opus-4-8   | high   | orc-executor-opus-4-8-high |
 
-### WIDE preset (rubric_bands 6–8)
-| Score | Model | Effort | Executor agent |
-|-------|-------|--------|----------------|
-| [0,40)   | claude-sonnet-4-6 | medium | orc-executor-sonnet-4-6-med |
-| [40,50)  | claude-sonnet-4-6 | high   | orc-executor-sonnet-4-6-high |
-| [50,70)  | claude-sonnet-5   | high   | orc-executor-sonnet-5-high |
-| [70,80)  | claude-opus-4-7   | high   | orc-executor-opus-4-7-high |
-| [80,100] | claude-opus-4-8   | high   | orc-executor-opus-4-8-high |
+(Haiku has no effort ladder — that agent carries no `effort:` field.) The risk
+floor (≥70) now lands `orc-executor-opus-4-7-high` at minimum — intended.
 
 ### Override
 To use custom band edges/models, set `rubric_bands_override:` with your own
-list of `{min, max, agent}` rows; the orchestrator uses it instead of a preset.
+list of `{min, max, agent}` rows; the orchestrator uses it instead of the table.
 
 ## Fixed-role agents (not score-mapped)
 | Role | Agent |
@@ -131,6 +138,13 @@ list of `{min, max, agent}` rows; the orchestrator uses it instead of a preset.
 | Pattern codifier | orc-pattern-codifier-sonnet-5-high |
 | Ultra advisor (/orc-ultra only) | orc-advisor-opus-4-8-max |
 | Ultra judge (/orc-ultra only) | orc-judge-opus-4-8-max |
+
+**Fable 5 role override:** when `fable5_enabled: true`, each role in
+`fable5_roles` dispatches its `orc-<role>-fable-5` variant INSTEAD of the default
+above (`analyze`→`orc-analyst-fable-5`, `plan`→`orc-planner-fable-5`,
+`advisor`→`orc-advisor-fable-5`, `judge`→`orc-judge-fable-5`,
+`review`→`orc-reviewer-fable-5`). Same slice, same contract. See
+`../_shared/fable5-override.md`.
 
 ## Rules
 - Read at run start via the resolution rule above (defaults ← `orc.config.yaml`
@@ -150,9 +164,9 @@ list of `{min, max, agent}` rows; the orchestrator uses it instead of a preset.
   (never exceeds it, same as max_wave_tasks caps a wave).
 - `default_analysis_depth` only presets the analyst's standard/deep gate — the
   run still confirms; deep never auto-escalates without consent.
-- `rubric_bands` sets HOW MANY bands the rubric produces; the preset maps the
-  resulting score to a model. More bands = finer score granularity, same model
-  set — the preset boundaries define the mapping.
+- `rubric_bands` sets HOW MANY bands the rubric REPORTS (finer or coarser score
+  granularity) — it no longer selects a preset. The score→model mapping is the
+  single 8-band table above, used regardless of `rubric_bands`.
 - max_wave_tasks is a hard cap in wave-grouping.
 - `batch_pause_every` is a DETERMINISTIC hard gate, not a cadence hint: after
   wave W, `W % N == 0` with a later wave remaining forces the stop sequence
@@ -180,6 +194,14 @@ list of `{min, max, agent}` rows; the orchestrator uses it instead of a preset.
   wiki's scan already has consent) makes `orc-wiki` codify ALL detected languages as
   a byproduct of its full scan, pre-warming the pattern cache so later `/orc` runs
   never hit the `pattern_findings` prompt.
+- `fable5_enabled` / `fable5_effort` / `fable5_roles` gate the **Fable 5 role
+  override** (default OFF — a hard P0 gate). Nothing changes unless
+  `fable5_enabled: true`. Then each role in `fable5_roles` (subset of
+  `analyze, plan, advisor, judge, review`) dispatches its `orc-<role>-fable-5`
+  agent instead of the default; `advisor`/`judge` apply only under `/orc-ultra`.
+  `fable5_effort` (medium default) sets those agents' effort — the CLI rewrites
+  their frontmatter on set. Enabled with empty `fable5_roles` = no effect (the
+  CLI warns). See `../_shared/fable5-override.md`.
 - **Ultra lane has no config key** — `/orc-ultra` forces its overrides
   run-scoped (deep analyze, `pattern_findings` on, `generate_tests` on,
   `security_review` on, executor tier floor) and NEVER writes them to

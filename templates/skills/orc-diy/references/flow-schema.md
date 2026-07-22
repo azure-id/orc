@@ -28,7 +28,7 @@ selector.
 | `summary` | `full` / `off` / `short` | Summary depth |
 | `autonomy` | `interactive` / `semi` / `hands-off` | Who answers routine asks |
 | `ship_mode` | `ask` / `commit` / `pr` / `report-only` | Terminal ship behavior |
-| `session_tier` | `opus-4-8-high` / `opus-4-7-med` / `sonnet-4-6-high` | Required main-session model+effort |
+| `session_tier` | `sonnet-4-6-{med,high}` / `opus-4-7-{med,high}` / `opus-4-8-{med,high,xhigh,max}` / `fable-5-{med,high,xhigh,max}` | Required main-session model+effort (default `opus-4-8-high`) |
 | `max_wave_tasks` | `3` (integer ≥ 1) | Wave hard cap |
 | `batch_pause_every` | `2` (integer ≥ 1) | Waves between pauses |
 | `rubric_bands` | `5` (2–8) | Scoring granularity (`scoring: on` only) |
@@ -39,8 +39,8 @@ selector.
 Hard errors (config not written):
 - `scoring: off` without a `fixed_executor`.
 - `fixed_executor` or any agent choice above `session_tier` (tier order:
-  sonnet-4-6 < sonnet-5 < opus-4-7 < opus-4-8 — subagents cannot exceed the
-  main session).
+  haiku-4-5 < sonnet-4-6 < sonnet-5 < opus-4-7 < opus-4-8 < fable-5 — subagents
+  cannot exceed the main session; effort medium < high < xhigh < max).
 - `review: off` with `security` not `off` (the security pass reuses the
   reviewer).
 - Anything that would disable a locked rule (see `locked-blocks.md`).

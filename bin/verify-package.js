@@ -83,11 +83,12 @@ function walkCount(dir, ext) {
 
 const skillCount = walkCount(path.join(ROOT, "templates/skills"), "SKILL.md");
 const agentCount = walkCount(path.join(ROOT, "templates/agents"), ".md");
-// Floors sit just below current reality (23 skills / 22 agent files) so a tree
-// missing a chunk of the payload fails the count check instead of sliding under
-// an ancient >=6/>=12 floor.
+// Floors sit just below current reality (23 skills / 29 agent files: +2 new
+// executors haiku-4-5 & opus-4-8-med, +5 fable-5 role agents) so a tree missing
+// a chunk of the payload fails the count check instead of sliding under an
+// ancient floor.
 if (skillCount < 22) missing.push(`templates/skills (expected >=22 SKILL.md, found ${skillCount})`);
-if (agentCount < 21) missing.push(`templates/agents (expected >=21 .md, found ${agentCount})`);
+if (agentCount < 28) missing.push(`templates/agents (expected >=28 .md, found ${agentCount})`);
 
 // B4 — encoding/mojibake guard. The OneDrive corruption rule becomes a gate:
 // scan every shipped text file for the U+FFFD replacement char (invalid UTF-8

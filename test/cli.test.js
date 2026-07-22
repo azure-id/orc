@@ -51,6 +51,45 @@ test("config set → override → reset roundtrip, with validator", () => {
   }
 });
 
+test("config: fable5_roles subset validator + fable5_effort rewrites the agents", () => {
+  const { root, claudeDir } = freshInstall();
+  try {
+    const ovr = path.join(claudeDir, "orc.config.yaml");
+
+    // valid CSV subset persists as a flow array
+    const ok = cli(["config", "set", "fable5_roles", "analyze,review", "--dir", root]);
+    assert.strictEqual(ok.status, 0);
+    assert.match(fs.readFileSync(ovr, "utf8"), /fable5_roles:\s*\[analyze, review\]/);
+
+    // an unknown role is rejected
+    const bad = cli(["config", "set", "fable5_roles", "analyze,bogus", "--dir", root]);
+    assert.notStrictEqual(bad.status, 0, "unknown role rejected");
+
+    // fable5_effort set rewrites the effort: line of every fable agent
+    const setEff = cli(["config", "set", "fable5_effort", "xhigh", "--dir", root]);
+    assert.strictEqual(setEff.status, 0);
+    const agent = fs.readFileSync(path.join(claudeDir, "agents", "orc-analyst-fable-5.md"), "utf8");
+    assert.match(agent, /^effort: xhigh$/m, "installed fable agent effort rewritten");
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("diy: compile roundtrip with a fable-5 session_tier (all executors fit)", () => {
+  const { root, claudeDir } = freshInstall();
+  try {
+    assert.strictEqual(cli(["diy", "init", "--dir", root]).status, 0);
+    assert.strictEqual(cli(["diy", "set", "session_tier", "fable-5-xhigh", "--dir", root]).status, 0);
+    const comp = cli(["diy", "compile", "--dir", root]);
+    assert.strictEqual(comp.status, 0, "fable-5 tier compiles");
+    const flow = fs.readFileSync(path.join(claudeDir, "orc", "diy", "FLOW-COMPILED.md"), "utf8");
+    assert.match(flow, /orc-executor-haiku-4-5/, "haiku band present under a fable-5 tier");
+    assert.match(flow, /orc-executor-opus-4-8-high/, "top band unclipped under a fable-5 tier");
+  } finally {
+    rmrf(root);
+  }
+});
+
 test("orc pattern status <lang> exits 1 when no pattern is cached", () => {
   const { root } = freshInstall();
   try {
@@ -58,6 +97,25 @@ test("orc pattern status <lang> exits 1 when no pattern is cached", () => {
     assert.strictEqual(r.status, 1, "absent pattern → exit 1");
   } finally {
     rmrf(root);
+  }
+});
+
+test("orc onboarding prints all sections when piped, and jumps to a topic", () => {
+  const dir = tmpdir();
+  try {
+    const all = cli(["onboarding"]);
+    assert.strictEqual(all.status, 0);
+    assert.match(all.stdout, /What ORC is/, "prints the overview section");
+    assert.match(all.stdout, /Troubleshooting/, "prints the last section");
+
+    const topic = cli(["onboarding", "upgrade"]);
+    assert.strictEqual(topic.status, 0);
+    assert.match(topic.stdout, /Upgrade & after-upgrade/);
+
+    const bad = cli(["onboarding", "nosuchtopic"]);
+    assert.notStrictEqual(bad.status, 0, "unknown topic exits non-zero");
+  } finally {
+    rmrf(dir);
   }
 });
 

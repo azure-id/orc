@@ -74,6 +74,9 @@ are calibration anchors, not templates to copy blindly.
 | Rename a config key across 4 files + its test | 12 (4 files, no logic, small test surface) | −10 mechanical, −5 isolated | **0** | pure find-replace, leaf code |
 | Add a `--json` flag to one CLI command | 18 (2 files, light logic, 1 test file) | −5 isolated leaf | **13** | one coherent area, no consumers |
 | New CRUD endpoint following an existing sibling route | 28 (3 files incl. test, CRUD logic) | +5 dependency on shared schema, −5 mechanical (sibling to imitate) | **28** | pattern exists; mid-low band |
+| Bug fix across 2 files with a repro test | 20 (2 files, some logic, 1 test) | +15 correctness-critical path | **35** | small diff but the repro must prove it; not haiku work |
+| New isolated component from the existing design system | 35 (3 files incl. test, moderate UI logic) | +10 new surface, −0 isolated leaf (no consumers yet) | **45** | pattern to imitate, but net-new code |
+| Service-layer refactor behind a stable interface | 40 (several files, refactor logic, tests) | +18 dependency load (callers), −0 interface frozen | **58** | internals move, contract unchanged — Sonnet 5 band |
 | Notification model + type enum other tasks consume | 32 (3 files, moderate logic) | +25 core/shared (every later task imports it), +8 blast radius | **65** | the run's keystone — errors cascade |
 | Add role check to payment-refund endpoint | 24 (2 files + test) | +25 risk (money+auth), +10 core | **70** (risk floor also forces ≥70) | small diff, catastrophic if wrong |
 | Migrate orders table to split-name columns + backfill | 38 (migration + model + callers + tests) | +25 risk (migration), +15 dependency load, +10 blast radius | **88** | irreversible data change, wide surface |
@@ -85,17 +88,34 @@ refund example), and a big-looking task IS low when it's mechanical (the
 rename). If your score diverges >20 points from the nearest analog, re-derive
 it or write an override reason.
 
-## Model ladder → config presets
+**Anti-inflation / anti-deflation (do NOT blindly score 60):**
+- Show the arithmetic. The dispatch table you present to the user MUST carry
+  `base + adjusters = final` columns per task, not just the final number — an
+  un-shown number is not a scored number.
+- A final score in **[55,70)** must CITE which adjuster moved it out of the base
+  range. No cited adjuster → clamp back to the base band. This is the specific
+  fix for the reflexive "everything is a 60".
+- Mirror the rule for the **risk floor**: a security/money/migration/auth task
+  clamped to ≥70 must name the risk adjuster that put it there; the floor is
+  never applied silently.
+- **Haiku band [0,30):** mechanical + isolated + a tested pattern to imitate =
+  haiku work. Don't spend Sonnet on a pure find-replace or a codegen-shaped
+  task. Conversely, never drop a correctness- or contract-critical task into the
+  haiku band just because the diff is small — cite the adjuster and let it rise.
 
-The score→model mapping is NO LONGER hardcoded here. It lives in `config.md`,
-selected by `rubric_bands` (narrow preset for 2–5 bands, wide for 6–8), and maps
-each score to a named EXECUTOR AGENT. Read config at run start and use its
-preset (or `rubric_bands_override`). The orchestrator dispatches the executor
-agent by name; it does not request a raw model.
+## Model ladder → the single score→model table
 
-`rubric_bands` controls how many bands the rubric produces (finer or coarser
-score granularity); the preset boundaries in config map the resulting score to a
-model/agent.
+The score→model mapping is NOT hardcoded here — it lives in `config.md` as ONE
+canonical 8-band table (there is no longer a narrow/wide preset). Read config at
+run start and map each task's final score through that table (or
+`rubric_bands_override`). The orchestrator dispatches the executor agent BY NAME;
+it does not request a raw model. `rubric_bands` sets only how many bands the
+rubric REPORTS (score granularity), never which table is used.
+
+The 8 bands (see config.md for the exact edges): `haiku-4-5` [0,30) ·
+`sonnet-4-6-med` [30,40) · `sonnet-4-6-high` [40,55) · `sonnet-5-high` [55,65) ·
+`opus-4-7-med` [65,70) · `opus-4-7-high` [70,80) · `opus-4-8-med` [80,85) ·
+`opus-4-8-high` [85,100]. Effort tiers rank `low < medium < high < xhigh < max`.
 
 ## Fixed model assignments (not scored)
 
@@ -105,8 +125,8 @@ model/agent.
 - **Verify:** Opus 4.8, high.
 - **Merge-conflict resolver:** Opus 4.8, medium.
 
-Note: Opus 4.7 is NOT a dispatch target — the ladder uses only Sonnet 5 and
-Opus 4.8. If a model tier is unavailable in the environment, fall back UP to the
+Note: every band in the table above is a real dispatch target (haiku through
+opus-4-8). If a model tier is unavailable in the environment, fall back UP to the
 next capable tier (never silently substitute a different family/effort).
 
 ## Dispatch log (lives in the checkpoint)

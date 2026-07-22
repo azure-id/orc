@@ -1,6 +1,6 @@
 {
   "name": "orc",
-  "version": "0.29.0",
+  "version": "0.30.0",
   "description": "ORC — an orchestrator skill constellation for Claude Code: intake, planning, scored parallel subagents, code-pattern matching, review, verify, ship, plus a project knowledge-base wiki.",
   "bin": {
     "orc": "bin/cli.js"

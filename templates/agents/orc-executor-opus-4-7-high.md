@@ -2,7 +2,7 @@
 name: orc-executor-opus-4-7-high
 description: >
   ORC executor — claude-opus-4-7, high effort. Dispatched by the ORC orchestrator to implement
-  a single task whose score falls in the upper-mid-complexity (wide preset) band. Single-role: execution only.
+  a single task whose score falls in the high-complexity [70,80) band. Single-role: execution only.
   Takes a task slice and implements exactly that task.
 model: claude-opus-4-7
 effort: high

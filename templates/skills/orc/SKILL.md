@@ -75,10 +75,15 @@ trigger points; emit `GATE` trace lines.
 ## Dispatch via named agents (not prose)
 
 Workers are model-pinned SUBAGENTS in `.claude/agents/` — the model is enforced,
-not requested in prose. Score every task and SHOW the table; the score selects
-the executor agent per the `config.md` preset (`rubric_bands`: narrow 2–5 / wide
-6–8). Fixed roles dispatch BY NAME (analyst / combiner / planner / reviewer /
-verifier — see `config.md`'s fixed-role table + `.claude/agents/MODEL-MAPPING.md`).
+not requested in prose. Score every task and SHOW the table with `base +
+adjusters = final` columns (an un-shown number is not scored); map the final score
+via the SINGLE 8-band table in `config.md` (`rubric_bands` = granularity only,
+never a preset), and a [55,70) score must cite the adjuster that moved it (see
+`references/effort-and-mode.md`). Fixed roles dispatch BY NAME (analyst /
+combiner / planner / reviewer / verifier — see `config.md`'s fixed-role table +
+`.claude/agents/MODEL-MAPPING.md`). If `fable5_enabled`, roles in `fable5_roles`
+dispatch their `orc-<role>-fable-5` variant instead — see
+`_shared/fable5-override.md`.
 Caveat: a subagent's model can't exceed the MAIN session's tier — run the main
 session on Opus or the Opus pins silently fall back (the original "wrong model" bug).
 
@@ -172,9 +177,12 @@ task's `spec_invariants[]` is appended VERBATIM to that slice's
 `constraints[]`. Offer the opt-in **Test Authoring** (Phase 6.5; default
 `config.generate_tests`) in the sign-off round.
 
-## Phase 1 — Planning · Trace: `PHASE planning`, `WIKI-CONSULT`, `CROSSLINK`, `GATE`
+## Phase 1 — Planning · Trace: `PHASE planning`, `CONFIG`, `WIKI-CONSULT`, `CROSSLINK`, `GATE`
 
-Emit `PHASE planning start`. **Wiki consult (load `references/wiki-consult.md`;
+Emit `PHASE planning start`, then emit ONE `CONFIG <key=value …>` line with the
+resolved values of every config key this run will consume (incl. `fable5_*` when
+enabled) — the runtime proof `/orc-retro` audits that the run honored the config.
+**Wiki consult (load `references/wiki-consult.md`;
 always report — no tier is silent):** compute the FRESH/AGING/STALE tier from
 `.claude/orc/wiki-meta.json`, pull the relevant pages (incl. cross-cutting maps
 like `orc-reference-api-surface`), apply

@@ -2,7 +2,7 @@
 name: orc-executor-opus-4-8-high
 description: >
   ORC executor — claude-opus-4-8, high effort. Dispatched by the ORC orchestrator to implement
-  a single task whose score falls in the highest-complexity band. Single-role: execution only.
+  a single task whose score falls in the highest-complexity [85,100] band. Single-role: execution only.
   Takes a task slice and implements exactly that task.
 model: claude-opus-4-8
 effort: high

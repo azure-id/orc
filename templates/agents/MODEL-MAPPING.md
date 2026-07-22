@@ -3,18 +3,21 @@
 Single-role, model-specific agents. The orchestrator dispatches BY AGENT NAME —
 model is pinned in frontmatter, not requested in prose. No agent is multi-role.
 
-## Executors (score-mapped; preset chosen by config.rubric_bands)
+## Executors (score-mapped by the single 8-band table in config.md)
 
-| Agent | Model | Effort |
-|-------|-------|--------|
-| orc-executor-sonnet-4-6-med  | claude-sonnet-4-6 | medium |
-| orc-executor-sonnet-4-6-high | claude-sonnet-4-6 | high |
-| orc-executor-sonnet-5-high   | claude-sonnet-5   | high |
-| orc-executor-opus-4-7-med    | claude-opus-4-7   | medium (narrow preset) |
-| orc-executor-opus-4-7-high   | claude-opus-4-7   | high (wide preset) |
-| orc-executor-opus-4-8-high   | claude-opus-4-8   | high |
+| Score band | Agent | Model | Effort |
+|-----------|-------|-------|--------|
+| [0,30)   | orc-executor-haiku-4-5       | claude-haiku-4-5  | — (no ladder) |
+| [30,40)  | orc-executor-sonnet-4-6-med  | claude-sonnet-4-6 | medium |
+| [40,55)  | orc-executor-sonnet-4-6-high | claude-sonnet-4-6 | high |
+| [55,65)  | orc-executor-sonnet-5-high   | claude-sonnet-5   | high |
+| [65,70)  | orc-executor-opus-4-7-med    | claude-opus-4-7   | medium |
+| [70,80)  | orc-executor-opus-4-7-high   | claude-opus-4-7   | high |
+| [80,85)  | orc-executor-opus-4-8-med    | claude-opus-4-8   | medium |
+| [85,100] | orc-executor-opus-4-8-high   | claude-opus-4-8   | high |
 
-Score→executor mapping lives in config.md (narrow vs wide preset).
+Score→executor mapping lives in config.md (one canonical 8-band table;
+`rubric_bands` is granularity only, not a preset selector).
 
 ## Fixed-role agents
 
@@ -35,6 +38,20 @@ Score→executor mapping lives in config.md (narrow vs wide preset).
 | orc-judge-opus-4-8-max | claude-opus-4-8 | max | ultra judgment gates — analysis / plan / implementation (read-only; /orc-ultra only) |
 | orc-claude-writer-opus-4-8-high | claude-opus-4-8 | high | scan repo → write/refresh the local CLAUDE.md (/orc-claude only; zero questions) |
 
+## Fable 5 role-override agents (hard-gated; dispatched only when configured)
+
+Used ONLY when `fable5_enabled: true` and the role is in `fable5_roles` — each
+replaces its default role agent with the same slice/contract. Effort defaults to
+`medium` and is rewritten in-place by `orc config set fable5_effort <v>`.
+
+| Agent | Model | Effort | Replaces |
+|-------|-------|--------|----------|
+| orc-analyst-fable-5 | claude-fable-5 | fable5_effort | orc-system-analyst-opus-4-8-high |
+| orc-planner-fable-5 | claude-fable-5 | fable5_effort | orc-planner-opus-4-8-med |
+| orc-advisor-fable-5 | claude-fable-5 | fable5_effort | orc-advisor-opus-4-8-max (ultra) |
+| orc-judge-fable-5 | claude-fable-5 | fable5_effort | orc-judge-opus-4-8-max (ultra) |
+| orc-reviewer-fable-5 | claude-fable-5 | fable5_effort | orc-reviewer-opus-4-8-high |
+
 Mini execution reuses orc-executor-sonnet-5-high. Fast-lane (orc-fast)
 execution reuses orc-executor-sonnet-4-6-high — no dedicated agent.
 
@@ -49,12 +66,14 @@ The orchestrator (main session) is NOT an agent file.
 
 Model IDs use the Platform/API dateless format (confirmed at
 platform.claude.com/docs/en/about-claude/models/model-ids-and-versions):
-claude-sonnet-4-6, claude-sonnet-5, claude-opus-4-7, claude-opus-4-8.
+claude-haiku-4-5, claude-sonnet-4-6, claude-sonnet-5, claude-opus-4-7,
+claude-opus-4-8, and claude-fable-5 (the Fable 5 role-override agents).
 
 1. **Run `/agents`** to confirm Claude Code accepts these full IDs in agent
-   frontmatter. If it wants short aliases (opus/sonnet) or dated IDs, adjust each
-   `model:` field. The full IDs are valid at the API level but Claude Code may
-   normalize differently.
+   frontmatter — in particular `claude-haiku-4-5` and `claude-fable-5`, the two
+   newest ids. If it wants short aliases (opus/sonnet/haiku) or dated IDs, adjust
+   each `model:` field. The full IDs are valid at the API level but Claude Code
+   may normalize differently.
 2. **Confirm `effort:` is a valid CLI frontmatter field.** If the CLI ignores
    it, effort must be conveyed in the dispatched prompt instead.
 3. **Run `/doctor`** for duplicate-name or load errors after any edit.

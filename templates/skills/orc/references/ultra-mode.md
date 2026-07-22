@@ -20,6 +20,11 @@ Apply at Phase 0, on top of the normal config resolution:
   opus boundary shift to `orc-executor-opus-4-8-high`. Show the remapped
   table with the Phase 2 scoring table.
 
+> Fable 5 role override: if `fable5_enabled` and `advisor` / `judge` are in
+> `fable5_roles`, dispatch the `orc-advisor-fable-5` / `orc-judge-fable-5`
+> variant instead of the Opus 4.8 max default — same slice, same contract. See
+> `../../_shared/fable5-override.md`.
+
 ## Phase U0 — Advisor (after intake sign-off, before the analyst)
 
 Dispatch `orc-advisor-opus-4-8-max` (see `../../orc-advisor/SKILL.md`) with

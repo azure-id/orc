@@ -59,10 +59,13 @@ The full key table lives in `references/flow-schema.md`. Highlights:
 - **Scoring** — `scoring on` keeps the per-task rubric; `scoring off` skips
   it and sends every task to your `fixed_executor`.
 - **Session tier** — `session_tier` is the model+effort the compiled flow
-  requires (`opus-4-8-high`, `opus-4-7-med`, or `sonnet-4-6-high`). The
-  effort guard enforces the effort half deterministically; the statusline
-  warns on the model half. Executor choices above the tier are rejected at
-  validate time; the score table is clipped to the tier at compile time.
+  requires. DIY is SEPARATE from the baseline /orc rule — pick any tier from the
+  full grid: `sonnet-4-6-{med,high}`, `opus-4-7-{med,high}`,
+  `opus-4-8-{med,high,xhigh,max}`, `fable-5-{med,high,xhigh,max}` (default
+  `opus-4-8-high`). The effort guard enforces the effort half deterministically
+  (the compiled effort OR higher on the ladder); the statusline warns on the
+  model half. Executor choices above the tier are rejected at validate time; the
+  score table is clipped to the tier at compile time.
 - **Autonomy** — `interactive` (all asks), `semi` (routine asks
   auto-accepted), `hands-off` (only hard stops + ship). Locked safety rules
   are never overridden — see `references/locked-blocks.md` for what you can
