@@ -262,9 +262,20 @@ function install({ overwrite }) {
   } catch (_) {}
 
   console.log(`\nInstalled into ${claudeDir}`);
-  console.log(
-    "Slash commands: /orc  /orc-ultra  /orc-mini  /orc-diy  /orc-analyze  /orc-plan  /orc-verify  /orc-wiki  /orc-pattern  /orc-retro"
-  );
+  // Derive the command list from what actually shipped so it never drifts from
+  // templates/commands/. /orc leads; the rest follow in sorted order.
+  let slashList;
+  try {
+    const cmds = fs
+      .readdirSync(SRC_COMMANDS)
+      .filter((f) => f.endsWith(".md"))
+      .map((f) => "/" + f.replace(/\.md$/, ""))
+      .sort((a, b) => (a === "/orc" ? -1 : b === "/orc" ? 1 : a.localeCompare(b)));
+    slashList = cmds.join("  ");
+  } catch (_) {
+    slashList = "/orc";
+  }
+  console.log("Slash commands: " + slashList);
   console.log("Config: run `orc config` (CLI, interactive) — not a slash command.");
   console.log("Custom flow: /orc-diy stays gated until you run `orc diy init` + `orc diy compile`.");
   console.log("Cross-repo: `orc crosslink` links sibling repos' wikis (advisory; orc-wiki resolves the rest).");

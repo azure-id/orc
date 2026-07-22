@@ -63,7 +63,10 @@ function readConfigScalar(key) {
   } catch (_) {
     return null; // no override file → key absent (caller applies default)
   }
-  const re = new RegExp("^\\s*" + key + "\\s*:\\s*(.+?)\\s*(?:#.*)?$", "m");
+  // Anchor to column 0 — a top-level key only, matching how the CLI reads
+  // top-level scalars. Prevents an indented `log_dir:` nested under another map
+  // from being read as the global override.
+  const re = new RegExp("^" + key + "\\s*:\\s*(.+?)\\s*(?:#.*)?$", "m");
   const m = text.match(re);
   if (!m) return null;
   return m[1].replace(/^['"]|['"]$/g, "").trim();
@@ -155,7 +158,7 @@ process.stdin.on("end", () => {
     const event = data.hook_event_name || "";
     const tool = data.tool_name || "";
 
-    if (event === "PreToolUse" || tool === "Task" || tool === "Agent") {
+    if (event === "PreToolUse" && (tool === "Task" || tool === "Agent")) {
       // Agent dispatch — record the REQUESTED agent name (the claim). The
       // orchestrator's DISPATCH/VERIFY lines carry the authoritative detail.
       const input = data.tool_input || {};

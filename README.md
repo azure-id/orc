@@ -6,7 +6,7 @@
 
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
-![Version](https://img.shields.io/badge/version-0.28.0-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.28.1-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D16-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
@@ -47,29 +47,28 @@ zero-dependency npm package installs those files into your `.claude/` directory.
 
 ## Changelog
 
-### v0.28.0 — Run integrity: rich full-lane traces, deterministic wave stop, visible knowledge gates _(2026-07-21)_
+### v0.28.1 — Defect fixes: package encoding, trace event routing, count/doc drift _(2026-07-22)_
 
-Three fixes for what a real `/orc` run wasn't telling you. **Rich traces on the
-full lane:** the behavior trace used to capture only the hook's `SPAWN`/`RETURN`
-skeleton because the emit imperative lived in a header annotation, not the phase
-body. Every Phase 0–8 body now carries its own inline `emit …` step — the same
-pattern that already makes `/orc-fast` traces rich — so a run records its
-`PHASE`/`SCORE`/`DISPATCH`/`VERIFY`/`OUTCOME`/`GATE`/`FINISH` timeline as it
-goes. **Deterministic wave stop:** `batch_pause_every` is now a hard gate, not
-an orchestrator judgment call — Phase 2 shows the computed pause schedule and
-lets you confirm it, so a two-wave run can actually pause after wave 1 (the old
-modulo cadence landed the only boundary after the last wave and never stopped).
-The schedule persists as `pause_schedule` so a resumed session enforces the same
-boundaries. **Visible knowledge gates:** wiki freshness, the resolved code
-pattern, and cross-repo crosslink state each print exactly one line at Phase 1 —
-gathered into a compact preflight block — instead of staying silent on the happy
-path. A new `CROSSLINK` trace verb records whether peer contracts were injected,
-and a run that has an `orc-crosslink.config.yaml` but no built cache now warns
-that peer wikis are **not** being read (full orc consumes only the pre-built
-crosslink cache, never peer source live). Spine budget raised 335→350.
+A patch pass over the shipping side. **Package encoding:** `package.json`'s
+description and postinstall message carried committed mojibake (literal `???`
+where an em-dash belonged) — the exact corruption class the OneDrive rule warns
+about, and what npm displays for the package; both are restored. **Trace event
+routing:** the `orc-trace.js` dispatch branch tested `event === "PreToolUse" ||
+tool === "Task"`, so any future `SubagentStop` payload that also carries a
+`tool_name` would be misrouted into the SPAWN branch and silently drop every
+`RETURN` line; it now requires `PreToolUse && (Task|Agent)`. **Config-reader
+anchoring:** the trace hook's `log_dir` reader and the effort guard's
+`/orc-diy compile|status` bypass both matched too loosely (an indented nested
+`log_dir:`, or the word "status" anywhere in args); both are anchored. **Doc
+drift:** the agent-count line and the hardcoded contract totals in
+`knowledge.md` now defer to `npm run verify` as authoritative. The install
+banner's slash-command list is generated from `templates/commands/` instead of a
+hardcoded string that had drifted out of date.
 
 <details>
 <summary><b>Previous versions</b> (click to expand)</summary>
+
+### v0.28.0 — Run integrity: rich full-lane traces, deterministic wave stop, visible knowledge gates _(2026-07-21)_
 
 ### v0.27.0 — `/orc-poly`: plan one change across two-or-more repos without drift _(2026-07-20)_
 

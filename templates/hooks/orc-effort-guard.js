@@ -70,7 +70,7 @@ process.stdin.on("end", () => {
   let requiredEfforts = ["high"];
   let requiredLabel = "Opus 4.8 at high effort";
   if (isDiy) {
-    if (/\b(compile|status)\b/i.test(String(input.args || ""))) process.exit(0);
+    if (/^\s*(compile|status)\b/i.test(String(input.args || ""))) process.exit(0);
     const fs = require("fs");
     const path = require("path");
     let lock = null;
