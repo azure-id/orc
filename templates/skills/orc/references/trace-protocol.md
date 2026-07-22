@@ -93,6 +93,7 @@ Actors: `orc` (orchestrator), `hook`, or a role/agent short name
 | Verb | Emitted by | Meaning |
 |------|-----------|---------|
 | `PHASE <name> start\|end` | orc | phase transition |
+| `CONFIG <key=value …>` | orc | Phase 1 — the resolved config values this run will consume (incl. `fable5_*` when enabled). Runtime proof that the run honored the config; `/orc-retro` audits it against behavior |
 | `WIKI-CONSULT <tier> :: docs=<list>` | orc | project wiki consulted for grounding (full/mini at planning; fast at slice-build) — tier ∈ `fresh` \| `aging` \| `stale` \| `absent` \| `empty`; `docs=` the pages pulled/handed to the executor (comma list) or `none`. Records whether the run grounded in the wiki and whether it was stale (surfaces grounding + staleness for later audit) |
 | `CROSSLINK <state> :: boundaries=<n> peers=<names>` | orc | cross-repo peer-knowledge state at the consult point — state ∈ `cached` (peer cache present) \| `configured-no-cache` (crosslink configured but the cache is not built) \| `none`. Per-task `CROSSLINK inject task=<id> :: <boundary>` when a slice receives a linked contract. Records whether peer contracts were injected this run (full orc consumes only the pre-built crosslink cache — it never reads peer source live; mechanism in `references/wiki-consult.md`) |
 | `SPAWN <agent>` | hook | an agent dispatch was observed (skeleton) |

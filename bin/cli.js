@@ -18,12 +18,16 @@ const fs = require("fs");
 const path = require("path");
 const os = require("os");
 const { spawnSync } = require("child_process");
+const ui = require("./ui.js");
+const { SECTIONS: ONBOARDING } = require("./onboarding-content.js");
 
 // Where `orc upgrade` fetches a fresh package from. Override with --from <spec>
 // or ORC_INSTALL_SPEC (e.g. a fork, a tarball URL, or "orc" for the npm registry
-// once published). Default: the GitHub repo's default branch.
-const DEFAULT_INSTALL_SPEC =
-  process.env.ORC_INSTALL_SPEC || "github:azure-id/orc";
+// once published). By default the tarball is tried FIRST (straight HTTPS, works
+// everywhere), the github: spec second — the github: spec shells out to git and
+// fails on machines with restricted git / NVM quirks, so leading with it burnt a
+// guaranteed failure + npm error wall on every upgrade.
+const GITHUB_SPEC = "github:azure-id/orc";
 
 const PKG_ROOT = path.join(__dirname, "..");
 const TEMPLATES = path.join(PKG_ROOT, "templates");
@@ -453,6 +457,7 @@ function install({ overwrite, forcePrune }) {
   console.log("    high effort; the statusline warns when the model isn't Opus 4.8.");
   console.log("  • Behavior-trace logging is ALWAYS ON (permanent) — every ORC run");
   console.log("    writes a persistent trace under .claude/orc/logs/ (set log_dir to move it).");
+  console.log("\n" + ui.color.bold("New to ORC? Run `orc onboarding`") + " — the full walkthrough, no GitHub README needed.");
 }
 
 // Reconstruct the target flags (--global / --dir X) to pass through to the
@@ -470,12 +475,33 @@ function targetFlags() {
 const TARBALL_SPEC =
   "https://github.com/azure-id/orc/archive/refs/heads/main.tar.gz";
 
-// Try `npm install -g <spec>`; return true on success. Inherits stdio so the
-// user sees npm's own output.
+// Try `npm install -g <spec>`; return { ok, output }. Captures stdio (pipe)
+// instead of inheriting it, so a failed probe with a remaining fallback stays
+// quiet — the loud npm error wall is only shown if EVERY spec fails.
 function npmInstallGlobal(spec) {
   console.log("  → npm install -g " + spec);
-  const r = spawnSync(`npm install -g ${spec}`, { stdio: "inherit", shell: true });
-  return r.status === 0;
+  const r = spawnSync(`npm install -g ${spec}`, { shell: true, encoding: "utf8" });
+  return { ok: r.status === 0, output: (r.stdout || "") + (r.stderr || "") };
+}
+
+// last_good_spec — remember which source actually installed, in the same 24h
+// update-cache file orc-update-lib.js owns (~/.orc-update-check.json). The next
+// upgrade tries it first. Fail-silent: an unreadable/absent cache just means no
+// remembered spec (we fall back to the tarball-first default order).
+function readLastGoodSpec() {
+  try {
+    const c = readCache();
+    return c && typeof c.last_good_spec === "string" ? c.last_good_spec : null;
+  } catch (_) {
+    return null;
+  }
+}
+function writeLastGoodSpec(spec) {
+  try {
+    const c = readCache() || {};
+    c.last_good_spec = spec;
+    writeCache(c);
+  } catch (_) {}
 }
 
 // Resolve the freshly-installed cli.js via `npm root -g`, so step 2 runs the NEW
@@ -498,27 +524,42 @@ function freshCliPath() {
 // never writes there.
 function upgrade() {
   const fromFlag = typeof flag("--from") === "string" ? flag("--from") : null;
-  // Specs to try in order. When the user didn't pin --from, fall back from the
-  // default github: spec to the plain tarball (the NVM/git bypass).
-  const specs = fromFlag
-    ? [fromFlag]
-    : [...new Set([DEFAULT_INSTALL_SPEC, TARBALL_SPEC])];
+  // Specs to try in order. `--from` and ORC_INSTALL_SPEC still win OUTRIGHT
+  // (single spec, no fallback). Otherwise: the remembered last_good_spec first
+  // (if any), then the tarball (straight HTTPS — works everywhere), then the
+  // github: spec last. Deduped so a remembered tarball doesn't retry twice.
+  let specs;
+  if (fromFlag) specs = [fromFlag];
+  else if (process.env.ORC_INSTALL_SPEC) specs = [process.env.ORC_INSTALL_SPEC];
+  else {
+    const remembered = readLastGoodSpec();
+    specs = [...new Set([...(remembered ? [remembered] : []), TARBALL_SPEC, GITHUB_SPEC])];
+  }
 
   console.log("\norc upgrade — fetching the latest package, then applying it.");
   console.log("  step 1/2: refresh the global orc package");
 
   let installed = false;
+  let lastOutput = "";
   for (let i = 0; i < specs.length; i++) {
-    if (npmInstallGlobal(specs[i])) {
+    const res = npmInstallGlobal(specs[i]);
+    if (res.ok) {
       installed = true;
+      writeLastGoodSpec(specs[i]);
       break;
     }
+    lastOutput = res.output;
     if (i < specs.length - 1) {
-      console.log(`\n  ⚠  that source failed — trying a fallback…`);
+      console.log("  ⚠  that source failed — trying the next source…");
     }
   }
   if (!installed) {
     const tflags = targetFlags();
+    // Every spec failed — NOW show npm's captured output (from the last attempt)
+    // so the user has the real error, without the wall on every intermediate try.
+    if (lastOutput.trim()) {
+      console.error("\n  npm output from the final attempt:\n" + lastOutput.trim());
+    }
     console.error(
       "\n❌ upgrade failed at step 1 (npm install). Nothing was changed in .claude/.\n" +
         "   Try the tarball bypass directly, then apply:\n" +
@@ -544,10 +585,12 @@ function upgrade() {
   if (upd.status !== 0) {
     console.error(
       "\n⚠  Package upgraded, but applying it (orc update) failed. Re-run:\n" +
-        "     orc update. But if still fails copy this then run manually in terminal: \n" + 
-        "     npm i -g https://github.com/azure-id/orc/archive/refs/heads/main.tar.gz" +
+        "     orc update" +
         (tflags.length ? " " + tflags.join(" ") : "") +
-        "\n",
+        "\n   If it still fails, install directly then apply:\n" +
+        `     npm i -g ${TARBALL_SPEC}  &&  orc update` +
+        (tflags.length ? " " + tflags.join(" ") : "") +
+        "\n"
     );
     process.exit(upd.status || 1);
   }
@@ -566,6 +609,8 @@ const KNOWN_MODELS = [
   "claude-opus-4-7",
   "claude-sonnet-5",
   "claude-sonnet-4-6",
+  "claude-haiku-4-5",
+  "claude-fable-5",
 ];
 
 const vInt = (min) => (raw) => {
@@ -584,13 +629,32 @@ const vEnum = (...opts) => (raw) =>
 const vModel = (raw) => {
   if (!KNOWN_MODELS.includes(raw))
     return { err: `unknown model id (expected one of: ${KNOWN_MODELS.join(", ")})` };
-  const warn = raw.startsWith("claude-opus")
-    ? null
-    : "⚠ below Opus — every opus-* agent silently falls back to Sonnet (model-tier ladder).";
+  // Opus 4.8 is the baseline; Fable 5 is strictly capable (never downgrades a
+  // subagent). Anything else is below the tier ladder and warns.
+  const warn =
+    raw.startsWith("claude-opus") || raw === "claude-fable-5"
+      ? null
+      : "⚠ below Opus/Fable — every opus-* agent silently falls back to a smaller model (tier ladder).";
   return { value: raw, warn };
 };
 const vPath = (raw) =>
   raw && raw.trim() ? { value: raw } : { err: "must be a non-empty path" };
+
+// Fable 5 role override (C.1). Roles that MAY be handed to a Fable 5 agent.
+const FABLE5_ROLES = ["analyze", "plan", "advisor", "judge", "review"];
+// CSV (or bracketed) subset validator → a normalized flow-array string
+// (`[analyze, plan]`), which serializeValue passes through as valid YAML.
+const vSubset = (allowed) => (raw) => {
+  const items = String(raw)
+    .replace(/^\[|\]$/g, "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const bad = items.filter((x) => !allowed.includes(x));
+  if (bad.length)
+    return { err: `unknown role(s): ${bad.join(", ")} (allowed: ${allowed.join(", ")})` };
+  return { value: `[${[...new Set(items)].join(", ")}]` };
+};
 
 // Ordered, tiered metadata. Common first, then advanced.
 // `options` (common tier only) is the pick-list shown in the interactive menu —
@@ -605,6 +669,10 @@ const CONFIG_META = [
   { key: "generate_tests", def: false, tier: "common", validate: vEnum("true", "false"), options: ["true", "false"], desc: "Opt-in Phase 6.5: author test cases before ship (writes tests, never runs them). OFF by default." },
   { key: "pattern_findings", def: "ask", tier: "common", validate: vEnum("ask", "on", "off"), options: ["ask", "on", "off"], desc: "Code-pattern gate on an FE/BE cache miss: ask = prompt, on = auto-codify, off = always agnostic." },
   { key: "security_review", def: "off", tier: "common", validate: vEnum("off", "ask", "on"), options: ["off", "ask", "on"], desc: "Opt-in Phase 5.5 security pass on runs with a task scored >= 70 (risk floor). OFF by default." },
+  // --- Fable 5 role override (HARD-GATED: nothing changes unless enabled: true) ---
+  { key: "fable5_enabled", def: false, tier: "fable5", validate: vEnum("true", "false"), options: ["true", "false"], desc: "Master gate — route selected roles to Fable 5 agents. Nothing changes unless true." },
+  { key: "fable5_effort", def: "medium", tier: "fable5", validate: vEnum("medium", "high", "xhigh", "max"), options: ["medium", "high", "xhigh", "max"], desc: "Effort for the Fable 5 role agents (the CLI rewrites their effort: frontmatter on set)." },
+  { key: "fable5_roles", def: "[]", tier: "fable5", validate: vSubset(FABLE5_ROLES), options: FABLE5_ROLES, desc: "Which roles use Fable 5 (CSV): analyze, plan, advisor, judge, review. Empty = no effect." },
   // NOTE: behavior-trace logging is PERMANENT (always on) and intentionally NOT
   // a config key — the orc-trace.js hook always writes a persistent trace per
   // run under log_dir. Only the folder location (log_dir) is configurable.
@@ -664,20 +732,64 @@ function writeOverride(claudeDir, map) {
   return p;
 }
 
+// The 5 Fable 5 role-override agents. Effort is written by the CLI (not
+// build-agents): `orc config set fable5_effort X` rewrites the `effort:`
+// frontmatter line in each INSTALLED copy, deterministically.
+const FABLE5_AGENTS = [
+  "orc-analyst-fable-5",
+  "orc-planner-fable-5",
+  "orc-advisor-fable-5",
+  "orc-judge-fable-5",
+  "orc-reviewer-fable-5",
+];
+function applyFable5Effort(claudeDir, effort) {
+  const dir = path.join(claudeDir, "agents");
+  let n = 0;
+  for (const name of FABLE5_AGENTS) {
+    const f = path.join(dir, name + ".md");
+    if (!fs.existsSync(f)) continue;
+    try {
+      const text = fs.readFileSync(f, "utf8");
+      const next = text.replace(/^effort:.*$/m, `effort: ${effort}`);
+      if (next !== text) {
+        fs.writeFileSync(f, next);
+        n++;
+      }
+    } catch (_) {}
+  }
+  return n;
+}
+// Cross-field sanity: enabled but no roles selected does nothing.
+function fable5Warn(claudeDir) {
+  const { map } = readOverride(claudeDir);
+  const enabled = String(map.fable5_enabled) === "true";
+  const roles = String(map.fable5_roles || metaFor("fable5_roles").def)
+    .replace(/^\[|\]$/g, "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (enabled && !roles.length)
+    console.error(
+      "  ⚠ fable5_enabled is true but fable5_roles is empty — no effect until you\n" +
+        "    select roles (e.g. `orc config set fable5_roles analyze,plan`)."
+    );
+}
+
 function configList(claudeDir) {
   const { path: p, map } = readOverride(claudeDir);
   console.log(
     `\nORC config  (override: ${p}${fs.existsSync(p) ? "" : "  — not created yet"})\n`
   );
   const pad = Math.max(...CONFIG_META.map((m) => m.key.length));
-  for (const tier of ["common", "advanced"]) {
-    console.log(tier === "common" ? "Common" : "\nAdvanced");
+  const tierLabel = { common: "Common", fable5: "Fable 5 role override", advanced: "Advanced" };
+  for (const tier of ["common", "fable5", "advanced"]) {
+    console.log(ui.header(tierLabel[tier]));
     for (const m of CONFIG_META.filter((x) => x.tier === tier)) {
       const has = Object.prototype.hasOwnProperty.call(map, m.key);
       const val = has ? map[m.key] : m.def;
-      const src = has ? "overridden" : "default   ";
-      const opts = m.options ? ` [options: ${m.options.join(" | ")}]` : "";
-      console.log(`  ${m.key.padEnd(pad)}  ${String(val).padEnd(30)} ${src}  ${m.desc}${opts}`);
+      const src = has ? ui.color.green("overridden") : ui.color.gray("default   ");
+      const opts = m.options ? ` ${ui.color.gray("[options: " + m.options.join(" | ") + "]")}` : "";
+      console.log(`  ${ui.color.cyan(m.key.padEnd(pad))}  ${String(val).padEnd(30)} ${src}  ${ui.color.gray(m.desc)}${opts}`);
     }
   }
   const extra = Object.keys(map).filter((k) => !metaFor(k));
@@ -711,6 +823,11 @@ function configSet(claudeDir, key, rawValue) {
   map[key] = res.value;
   const p = writeOverride(claudeDir, map);
   console.log(`Set ${key} = ${res.value}  →  ${p}`);
+  if (key === "fable5_effort") {
+    const n = applyFable5Effort(claudeDir, res.value);
+    if (n) console.log(`  ↳ rewrote effort: ${res.value} in ${n} Fable 5 agent file(s).`);
+  }
+  if (key.startsWith("fable5")) fable5Warn(claudeDir);
 }
 
 function configReset(claudeDir, key) {
@@ -751,7 +868,7 @@ function configInteractive(claudeDir) {
         const has = Object.prototype.hasOwnProperty.call(map, m.key);
         const val = has ? map[m.key] : m.def;
         const tag = has ? "overridden" : "default";
-        const adv = m.tier === "advanced" ? " (adv)" : "";
+        const adv = m.tier === "advanced" ? " (adv)" : m.tier === "fable5" ? " (fable5)" : "";
         console.log(
           `  ${String(i + 1).padStart(2)}) ${m.key.padEnd(pad)}  ${String(val).padEnd(28)} ${tag}${adv}`
         );
@@ -803,6 +920,11 @@ function configInteractive(claudeDir) {
       cur[m.key] = res.value;
       writeOverride(claudeDir, cur);
       console.log(`  ✓ ${m.key} = ${res.value}`);
+      if (m.key === "fable5_effort") {
+        const n = applyFable5Effort(claudeDir, res.value);
+        if (n) console.log(`  ↳ rewrote effort in ${n} Fable 5 agent file(s).`);
+      }
+      if (m.key.startsWith("fable5")) fable5Warn(claudeDir);
     }
     rl.close();
     console.log("done.");
@@ -853,18 +975,35 @@ const sha256 = (s) => crypto.createHash("sha256").update(s).digest("hex");
 
 // Executor catalog with tier ranks (model rank, effort rank). Subagents cannot
 // exceed the main-session tier — validation + score-table clipping use this.
+// Model ranks: haiku 1 < sonnet-4-6 2 < sonnet-5 3 < opus-4-7 4 < opus-4-8 5
+// (fable-5 sits at 6 as a session tier, above every executor). Effort ranks:
+// medium 1 < high 2 < xhigh 3 < max 4 (executors only ship medium/high).
 const DIY_EXECUTORS = {
-  "orc-executor-sonnet-4-6-med": { model: 1, effort: 1 },
-  "orc-executor-sonnet-4-6-high": { model: 1, effort: 2 },
-  "orc-executor-sonnet-5-high": { model: 2, effort: 2 },
-  "orc-executor-opus-4-7-med": { model: 3, effort: 1 },
-  "orc-executor-opus-4-7-high": { model: 3, effort: 2 },
-  "orc-executor-opus-4-8-high": { model: 4, effort: 2 },
+  "orc-executor-haiku-4-5": { model: 1, effort: 1 },
+  "orc-executor-sonnet-4-6-med": { model: 2, effort: 1 },
+  "orc-executor-sonnet-4-6-high": { model: 2, effort: 2 },
+  "orc-executor-sonnet-5-high": { model: 3, effort: 2 },
+  "orc-executor-opus-4-7-med": { model: 4, effort: 1 },
+  "orc-executor-opus-4-7-high": { model: 4, effort: 2 },
+  "orc-executor-opus-4-8-med": { model: 5, effort: 1 },
+  "orc-executor-opus-4-8-high": { model: 5, effort: 2 },
 };
+// Session-tier grid (C.5) — the user composes whatever tier they want; DIY is
+// SEPARATE from the baseline /orc rule. Effort half is guard-enforced, model
+// half is statusline-warned. Fable 5 (model rank 6) sits above every executor.
 const DIY_TIERS = {
-  "sonnet-4-6-high": { model: 1, effort: 2, modelId: "claude-sonnet-4-6", effortName: "high" },
-  "opus-4-7-med": { model: 3, effort: 1, modelId: "claude-opus-4-7", effortName: "medium" },
-  "opus-4-8-high": { model: 4, effort: 2, modelId: "claude-opus-4-8", effortName: "high" },
+  "sonnet-4-6-med": { model: 2, effort: 1, modelId: "claude-sonnet-4-6", effortName: "medium" },
+  "sonnet-4-6-high": { model: 2, effort: 2, modelId: "claude-sonnet-4-6", effortName: "high" },
+  "opus-4-7-med": { model: 4, effort: 1, modelId: "claude-opus-4-7", effortName: "medium" },
+  "opus-4-7-high": { model: 4, effort: 2, modelId: "claude-opus-4-7", effortName: "high" },
+  "opus-4-8-med": { model: 5, effort: 1, modelId: "claude-opus-4-8", effortName: "medium" },
+  "opus-4-8-high": { model: 5, effort: 2, modelId: "claude-opus-4-8", effortName: "high" },
+  "opus-4-8-xhigh": { model: 5, effort: 3, modelId: "claude-opus-4-8", effortName: "xhigh" },
+  "opus-4-8-max": { model: 5, effort: 4, modelId: "claude-opus-4-8", effortName: "max" },
+  "fable-5-med": { model: 6, effort: 1, modelId: "claude-fable-5", effortName: "medium" },
+  "fable-5-high": { model: 6, effort: 2, modelId: "claude-fable-5", effortName: "high" },
+  "fable-5-xhigh": { model: 6, effort: 3, modelId: "claude-fable-5", effortName: "xhigh" },
+  "fable-5-max": { model: 6, effort: 4, modelId: "claude-fable-5", effortName: "max" },
 };
 // allowed under a tier: lower model always; same model only at <= effort.
 const agentFitsTier = (a, t) =>
@@ -959,33 +1098,31 @@ function diyValidate(cfg) {
   if (cfg.autonomy === "hands-off" && (cfg.ship_mode === "commit" || cfg.ship_mode === "pr")) {
     warnings.push(`hands-off + ship_mode ${cfg.ship_mode}: git actions will run fully unattended`);
   }
-  if (tier && tier.model < 4 && (cfg.review !== "off" || cfg.verify !== "off")) {
-    warnings.push(`session_tier ${cfg.session_tier}: the pinned Opus reviewer/verifier agents will silently run at the session's model (tier-honesty rule reports it)`);
+  if (tier && tier.model < 5 && (cfg.review !== "off" || cfg.verify !== "off")) {
+    warnings.push(`session_tier ${cfg.session_tier}: the pinned Opus 4.8 reviewer/verifier agents will silently run at the session's model (tier-honesty rule reports it)`);
   }
   return { errors, warnings };
 }
 
-// Score->model presets (mirror skills/orc/config.md — documented drift).
-const DIY_PRESET_NARROW = [
-  [0, 30, "orc-executor-sonnet-4-6-med"],
-  [30, 50, "orc-executor-sonnet-4-6-high"],
-  [50, 65, "orc-executor-sonnet-5-high"],
-  [65, 85, "orc-executor-opus-4-7-med"],
+// The single canonical 8-band score->model table (mirrors skills/orc/config.md
+// — documented drift). No more narrow/wide preset: rubric_bands is granularity
+// only, and this one table maps every score.
+const DIY_SCORE_TABLE = [
+  [0, 30, "orc-executor-haiku-4-5"],
+  [30, 40, "orc-executor-sonnet-4-6-med"],
+  [40, 55, "orc-executor-sonnet-4-6-high"],
+  [55, 65, "orc-executor-sonnet-5-high"],
+  [65, 70, "orc-executor-opus-4-7-med"],
+  [70, 80, "orc-executor-opus-4-7-high"],
+  [80, 85, "orc-executor-opus-4-8-med"],
   [85, 101, "orc-executor-opus-4-8-high"],
 ];
-const DIY_PRESET_WIDE = [
-  [0, 40, "orc-executor-sonnet-4-6-med"],
-  [40, 50, "orc-executor-sonnet-4-6-high"],
-  [50, 70, "orc-executor-sonnet-5-high"],
-  [70, 80, "orc-executor-opus-4-7-high"],
-  [80, 101, "orc-executor-opus-4-8-high"],
-];
 
-// Clip a preset to the session tier: an over-tier agent collapses into the
+// Clip the table to the session tier: an over-tier agent collapses into the
 // highest executor the tier allows. Done at COMPILE time, never at runtime.
 function diyScoreTable(cfg) {
   const tier = DIY_TIERS[cfg.session_tier];
-  const rows = Number(cfg.rubric_bands) >= 6 ? DIY_PRESET_WIDE : DIY_PRESET_NARROW;
+  const rows = DIY_SCORE_TABLE;
   const highestAllowed = Object.keys(DIY_EXECUTORS)
     .filter((a) => agentFitsTier(DIY_EXECUTORS[a], tier))
     .sort((a, b) => DIY_EXECUTORS[a].model - DIY_EXECUTORS[b].model || DIY_EXECUTORS[a].effort - DIY_EXECUTORS[b].effort)
@@ -2419,11 +2556,11 @@ function doctor() {
     return;
   }
 
-  console.log(`orc doctor — ${claudeDir}\n`);
+  console.log(ui.color.bold(`orc doctor`) + ` — ${claudeDir}\n`);
   const problems = [];
-  const ok = (s) => console.log("  ✔ " + s);
+  const ok = (s) => console.log("  " + ui.mark.ok(s));
   const warn = (s) => {
-    console.log("  ⚠ " + s);
+    console.log("  " + ui.mark.warn(s));
     problems.push(s);
   };
 
@@ -2506,10 +2643,13 @@ function doctor() {
 
   console.log("");
   if (problems.length) {
-    console.log(`  ${problems.length} issue(s) found. Fix automatically with:  orc doctor --fix`);
+    console.log(
+      "  " + ui.mark.warn(ui.color.bold(`${problems.length} issue(s) found.`)) +
+        " Fix automatically with:  orc doctor --fix"
+    );
     process.exit(1);
   }
-  console.log("  ✅ ORC install looks healthy.");
+  console.log("  " + ui.color.green("✅ ORC install looks healthy."));
 }
 
 // ---------------------------------------------------------------------------
@@ -2619,7 +2759,8 @@ async function getLatestVersion({ force }) {
   if (!force && fresh) return cache.latest || null;
   const pkg = await httpsGetJson(UPDATE_URL, 2000);
   const latest = pkg && pkg.version ? pkg.version : cache ? cache.latest : null;
-  writeCache({ checkedAt: Date.now(), latest });
+  // Preserve any remembered last_good_spec — writeCache overwrites the whole file.
+  writeCache({ ...(cache || {}), checkedAt: Date.now(), latest });
   return latest;
 }
 
@@ -2653,8 +2794,74 @@ async function version() {
   }
 }
 
+// ── orc onboarding (D.2) — the "never need the GitHub README" walkthrough ────
+function renderOnboardingSection(s) {
+  console.log(ui.header(s.title));
+  for (const line of s.lines) {
+    // style a leading command token / slash command in cyan for scannability
+    console.log("  " + line.replace(/(\/orc[\w-]*|orc [a-z][\w -]*?)(?=\s{2,}|$)/, (m) => ui.color.cyan(m)));
+  }
+}
+
+function onboarding() {
+  const pos = positionals(); // ["onboarding", <topic?>]
+  const topic = pos[1];
+
+  if (topic) {
+    const s = ONBOARDING.find((x) => x.id === topic || x.id.startsWith(topic));
+    if (!s) {
+      console.error(
+        `Unknown onboarding topic: ${topic}\n` +
+          "Topics: " + ONBOARDING.map((x) => x.id).join(", ")
+      );
+      process.exit(1);
+    }
+    renderOnboardingSection(s);
+    console.log("");
+    return;
+  }
+
+  // Non-TTY (a model/agent, a pipe): print everything in one shot.
+  if (!process.stdin.isTTY) {
+    console.log(ui.color.bold("\norc onboarding — the full ORC walkthrough\n"));
+    for (const s of ONBOARDING) renderOnboardingSection(s);
+    console.log("\n" + ui.color.gray("Jump to one topic later with: orc onboarding <topic>"));
+    return;
+  }
+
+  // TTY: a numbered section menu.
+  const readline = require("readline");
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  const ask = (q) => new Promise((res) => rl.question(q, res));
+  (async () => {
+    for (;;) {
+      console.log(ui.header("orc onboarding — pick a topic"));
+      ONBOARDING.forEach((s, i) =>
+        console.log(`  ${String(i + 1).padStart(2)}) ${s.title}`)
+      );
+      console.log("   a) show all      q) quit");
+      const choice = (await ask("\n> ")).trim().toLowerCase();
+      if (choice === "" || choice === "q") break;
+      if (choice === "a") {
+        for (const s of ONBOARDING) renderOnboardingSection(s);
+        continue;
+      }
+      const s = ONBOARDING[Number(choice) - 1];
+      if (!s) {
+        console.log("  ? not a valid choice");
+        continue;
+      }
+      renderOnboardingSection(s);
+    }
+    rl.close();
+    console.log("done.");
+  })();
+}
+
 function help() {
   console.log(`orc — install the ORC Claude Code skill constellation
+
+New? Run \`orc onboarding\` for the full walkthrough (no GitHub README needed).
 
 Usage:
   orc init [--global | --dir <path>]      copy skills + commands (skips existing)
@@ -2662,7 +2869,8 @@ Usage:
                                           [--prune]  also delete ORC-named orphans from a
                                                      pre-manifest install (renamed/removed files)
   orc upgrade [--global | --dir <path>]   fetch the LATEST package, then apply it
-                                          [--from <spec>]  (default: ${DEFAULT_INSTALL_SPEC})
+                                          [--from <spec>]  (default order: last-good,
+                                          then the tarball, then ${GITHUB_SPEC})
   orc config [--global | --dir <path>]    view/change settings (interactive menu)
     orc config list                       print effective config (default vs override)
     orc config set <key> <value>          validate + write one setting
@@ -2685,6 +2893,9 @@ Usage:
     orc pattern status [<lang>]           whether a cached pattern exists — the deterministic
                                           existence probe every knowledge-gated lane runs first
                                           (exit 1 when <lang> absent; no arg lists all cached)
+  orc onboarding [<topic>]                guided walkthrough (menu on a TTY; prints all when piped)
+                                          topics: overview, install, first-run, lanes,
+                                          config, knowledge, upgrade, troubleshooting
   orc where [--global | --dir <path>]     show target paths
   orc doctor [--global | --dir <path>]    read-only health report: version skew, orphaned/missing
                                           payload files, settings.json wiring, trace pointer, diy lock
@@ -2737,6 +2948,9 @@ Skills installed: ${listSkillNames().join(", ")}`);
     case "where":
       where();
       await maybeNudge();
+      break;
+    case "onboarding":
+      onboarding();
       break;
     case "doctor":
       doctor();

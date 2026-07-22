@@ -20,14 +20,25 @@
  * `rate_limits.{five_hour,seven_day}` (Anthropic API headers, not estimated).
  * A window ≥90% folds into the DEGRADE verdict; fail-silent when absent.
  *
+ * Three-tier verdict (the "ORC-ready" acceptance matrix):
+ *   ✅ ORC-ready       Opus 4.8 high (the baseline)
+ *   🚀 ORC-boosted     Opus 4.8 xhigh/max, or Fable 5 medium…max (will do better)
+ *   ⛔ ORC WILL DEGRADE everything below (wrong model, sub-baseline effort, quota)
+ *
+ * This is the ONLY place Claude Code exposes the live model id, so it also
+ * writes a fail-silent session-model bridge (.claude/orc/session-model.json)
+ * that the PreToolUse effort guard reads — the guard can't see the model id
+ * on its own, so the bridge is how Fable 5's medium-effort allowance reaches it.
+ *
  * Also appends a "newer orc version available" hint from the 24h update cache
  * (cache-only here — never a network call in the statusline hot path; the
  * PreToolUse guard refreshes the cache when /orc is invoked).
  */
 
-// Opus 4.8 is matched by a tolerant regex below (accepts dated/suffixed ids and
-// the display name), not a strict string, so REQUIRED_MODEL is no longer a const.
-const REQUIRED_EFFORT = "high";
+// Opus 4.8 / Fable 5 are matched by tolerant regexes below (accept dated/
+// suffixed ids and the display name), not strict strings. Effort ranks give the
+// acceptance-matrix tiers (0 = unknown, never treated as a positive downgrade).
+const EFFORT_RANK = { low: 1, medium: 2, high: 3, xhigh: 4, max: 5 };
 
 // Shared update-check helper (sibling file). Degrade gracefully if absent.
 let updater = null;
@@ -54,6 +65,29 @@ process.stdin.on("end", () => {
     d.context_window && typeof d.context_window.used_percentage === "number"
       ? `${d.context_window.used_percentage}% ctx`
       : "";
+
+  // ── Session-model bridge (fail-silent) ─────────────────────────────────────
+  // The PreToolUse effort guard cannot see the model id; it can only read
+  // effort. Persist {model_id, effort, written_at} here so the guard can grant
+  // Fable 5's medium-effort allowance. The statusline re-renders constantly
+  // while a session is active, so written_at stays fresh; the guard treats a
+  // stale file (older than its freshness window) as absent and never blocks on
+  // it. Any error (no dir, read-only fs) is swallowed — this is a nicety, not a
+  // guarantee, and must never break the statusline render.
+  try {
+    if (model || effort) {
+      const fs = require("fs");
+      const path = require("path");
+      const projectDir =
+        (d.workspace && d.workspace.project_dir) || d.cwd || process.cwd();
+      const orcDir = path.join(projectDir, ".claude", "orc");
+      fs.mkdirSync(orcDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(orcDir, "session-model.json"),
+        JSON.stringify({ model_id: model, effort, written_at: Date.now() }) + "\n"
+      );
+    }
+  } catch (_) {}
 
   // ── Subscription usage (Claude Code v2.1.80+) ──────────────────────────────
   // Official 5-hour + 7-day usage, surfaced by Claude Code straight from
@@ -103,30 +137,55 @@ process.stdin.on("end", () => {
   }
 
   // Tolerant tier detection. A strict `model === "claude-opus-4-8"` false-fired
-  // "model≠Opus4.8" whenever Claude Code reported a dated/suffixed id (e.g.
-  // claude-opus-4-8-YYYYMMDD) or only a display name — even on the correct tier.
-  // Match Opus 4.8 by normalized id OR display name, accepting any variant; the
+  // whenever Claude Code reported a dated/suffixed id (e.g. claude-opus-4-8-
+  // YYYYMMDD) or only a display name — even on the correct tier. Match Opus 4.8
+  // and Fable 5 by normalized id OR display name, accepting any variant; the
   // trailing \b keeps 4.7 / 4.85 / Sonnet etc. correctly warning.
   const hay = `${model} ${display}`.toLowerCase();
-  const modelOk = /opus[\s._-]?4[\s._-]?8\b/.test(hay);
+  const isOpus48 = /opus[\s._-]?4[\s._-]?8\b/.test(hay);
+  const isFable5 = /fable[\s._-]?5\b/.test(hay);
   const modelKnown = model !== "" || (display !== "" && display !== "unknown");
-  // Effort: only a POSITIVELY-read non-high effort is a downgrade. A missing/
-  // empty effort field is NOT proof of low effort — the PreToolUse guard already
-  // hard-blocks a real low-effort /orc — so don't false-warn when it's absent.
-  const effortKnown = effort !== "";
-  const effortOk = effort === REQUIRED_EFFORT;
+  // Effort rank; 0 = unknown. A missing/empty effort field is NOT proof of a
+  // downgrade — the PreToolUse guard already hard-blocks a real low-effort /orc
+  // — so an unknown effort never forces DEGRADE on effort grounds here.
+  const er = EFFORT_RANK[effort] || 0;
 
   const tier = `${display}${effort ? "/" + effort : ""}`;
-  const bad = [];
-  if (modelKnown && !modelOk) bad.push("model≠Opus4.8");
-  if (effortKnown && !effortOk) bad.push("effort≠high");
-  for (const u of usageBad) bad.push(u);
+
+  // Verdict per the acceptance matrix. Only a POSITIVELY-known bad tier degrades.
+  let verdict = "ready";
+  const reasons = [];
+  if (isOpus48) {
+    if (er >= 4) verdict = "boosted"; // xhigh / max
+    else if (er === 3 || er === 0) verdict = "ready"; // high (or unknown → lenient)
+    else {
+      verdict = "degrade"; // opus 4.8 below high
+      reasons.push("effort≠high");
+    }
+  } else if (isFable5) {
+    if (er >= 2 || er === 0) verdict = "boosted"; // medium…max (or unknown → lenient)
+    else {
+      verdict = "degrade"; // fable 5 below medium
+      reasons.push("Fable-5 effort<medium");
+    }
+  } else if (modelKnown) {
+    verdict = "degrade";
+    reasons.push("model≠Opus4.8/Fable5");
+  } // else model unknown → stay lenient (the guard enforces effort)
+
+  // A quota window at/above the crit threshold folds into DEGRADE regardless.
+  if (usageBad.length) {
+    verdict = "degrade";
+    for (const u of usageBad) reasons.push(u);
+  }
 
   let line;
-  if (bad.length === 0) {
+  if (verdict === "ready") {
     line = `✅ ORC-ready ${tier}${pct ? " · " + pct : ""}`;
+  } else if (verdict === "boosted") {
+    line = `🚀 ORC-boosted ${tier}${pct ? " · " + pct : ""}`;
   } else {
-    line = `⛔ ORC WILL DEGRADE (${bad.join(", ")}) — now: ${tier}${pct ? " · " + pct : ""}`;
+    line = `⛔ ORC WILL DEGRADE (${reasons.join(", ")}) — now: ${tier}${pct ? " · " + pct : ""}`;
   }
 
   // Subscription-usage segment (rendered after ctx, before wiki). Empty on
@@ -210,13 +269,18 @@ process.stdin.on("end", () => {
         lock.compiled_hash === sha(compiledPath) &&
         (!installedV || lock.orc_version === installedV);
       let seg = `diy:${lock.flow_name || "flow"} ${ready ? "READY" : "STALE→recompile"}`;
-      // Model half of the compiled session_tier — warn-only (hooks can't block on model).
+      // Model half of the compiled session_tier — warn-only (hooks can't block on
+      // model). Keyed by the slug's MODEL part, so the full tier grid (sonnet-4-6,
+      // opus-4-7, opus-4-8, fable-5 at any effort) is covered without enumerating
+      // every effort slug.
       if (ready && modelKnown && lock.session_tier) {
+        const modelPart = String(lock.session_tier).replace(/-(med|high|xhigh|max)$/, "");
         const want = {
-          "sonnet-4-6-high": /sonnet[\s._-]?4[\s._-]?6\b/,
-          "opus-4-7-med": /opus[\s._-]?4[\s._-]?7\b/,
-          "opus-4-8-high": /opus[\s._-]?4[\s._-]?8\b/,
-        }[lock.session_tier];
+          "sonnet-4-6": /sonnet[\s._-]?4[\s._-]?6\b/,
+          "opus-4-7": /opus[\s._-]?4[\s._-]?7\b/,
+          "opus-4-8": /opus[\s._-]?4[\s._-]?8\b/,
+          "fable-5": /fable[\s._-]?5\b/,
+        }[modelPart];
         if (want && !want.test(hay)) seg += ` ⛔model≠${lock.session_tier}`;
       }
       line += " · " + seg;

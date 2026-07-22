@@ -21,28 +21,35 @@ const ROOT = path.join(__dirname, "..");
 const TEMPLATE = path.join(ROOT, "agents-src", "executor.template.md");
 const OUT_DIR = path.join(ROOT, "templates", "agents");
 
-// Score→model bands mirror templates/agents/MODEL-MAPPING.md and
-// skills/orc/config.md presets (documented drift — change together).
+// Score→model bands mirror templates/agents/MODEL-MAPPING.md and the single
+// 8-band score→model table in skills/orc/config.md (documented drift — change
+// together). `effort: null` = a model with NO effort ladder (haiku): the
+// generator omits the `effort:` frontmatter line entirely.
 const VARIANTS = [
-  { name: "orc-executor-opus-4-8-high",  model: "claude-opus-4-8",  effort: "high",   band: "highest-complexity" },
-  { name: "orc-executor-opus-4-7-high",  model: "claude-opus-4-7",  effort: "high",   band: "upper-mid-complexity (wide preset)" },
-  { name: "orc-executor-opus-4-7-med",   model: "claude-opus-4-7",  effort: "medium", band: "upper-mid-complexity (narrow preset)" },
-  { name: "orc-executor-sonnet-5-high",  model: "claude-sonnet-5",  effort: "high",   band: "mid-complexity" },
-  { name: "orc-executor-sonnet-4-6-high", model: "claude-sonnet-4-6", effort: "high",  band: "low-complexity" },
-  { name: "orc-executor-sonnet-4-6-med", model: "claude-sonnet-4-6", effort: "medium", band: "lowest-complexity" },
+  { name: "orc-executor-opus-4-8-high",  model: "claude-opus-4-8",  effort: "high",   band: "highest-complexity [85,100]" },
+  { name: "orc-executor-opus-4-8-med",   model: "claude-opus-4-8",  effort: "medium", band: "very-high-complexity [80,85)" },
+  { name: "orc-executor-opus-4-7-high",  model: "claude-opus-4-7",  effort: "high",   band: "high-complexity [70,80)" },
+  { name: "orc-executor-opus-4-7-med",   model: "claude-opus-4-7",  effort: "medium", band: "upper-mid-complexity [65,70)" },
+  { name: "orc-executor-sonnet-5-high",  model: "claude-sonnet-5",  effort: "high",   band: "mid-complexity [55,65)" },
+  { name: "orc-executor-sonnet-4-6-high", model: "claude-sonnet-4-6", effort: "high",  band: "low-mid-complexity [40,55)" },
+  { name: "orc-executor-sonnet-4-6-med", model: "claude-sonnet-4-6", effort: "medium", band: "low-complexity [30,40)" },
+  { name: "orc-executor-haiku-4-5",      model: "claude-haiku-4-5",  effort: null,     band: "lowest-complexity [0,30)" },
 ];
 
 function render(template, v) {
+  const effortDesc = v.effort ? `, ${v.effort} effort` : " (no effort ladder)";
+  const effortFm = v.effort ? `effort: ${v.effort}\n` : "";
   return template
     .replace(/\{\{NAME\}\}/g, v.name)
     .replace(/\{\{MODEL\}\}/g, v.model)
-    .replace(/\{\{EFFORT\}\}/g, v.effort)
+    .replace(/\{\{EFFORT_DESC\}\}/g, effortDesc)
+    .replace(/\{\{EFFORT_FM\}\}/g, effortFm)
     .replace(/\{\{BAND\}\}/g, v.band);
 }
 
 const checkMode = process.argv.includes("--check");
 const template = fs.readFileSync(TEMPLATE, "utf8");
-if (/\{\{(?!NAME|MODEL|EFFORT|BAND)/.test(template)) {
+if (/\{\{(?!NAME|MODEL|EFFORT_DESC|EFFORT_FM|BAND)\w/.test(template)) {
   console.error("❌ build-agents: unknown {{placeholder}} in executor.template.md");
   process.exit(1);
 }

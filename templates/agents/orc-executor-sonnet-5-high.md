@@ -2,7 +2,7 @@
 name: orc-executor-sonnet-5-high
 description: >
   ORC executor — claude-sonnet-5, high effort. Dispatched by the ORC orchestrator to implement
-  a single task whose score falls in the mid-complexity band. Single-role: execution only.
+  a single task whose score falls in the mid-complexity [55,65) band. Single-role: execution only.
   Takes a task slice and implements exactly that task.
 model: claude-sonnet-5
 effort: high

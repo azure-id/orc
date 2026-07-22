@@ -6,13 +6,12 @@
 
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
-![Version](https://img.shields.io/badge/version-0.29.0-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.30.0-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D16-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
 ![Dependencies](https://img.shields.io/badge/dependencies-zero-lightgrey.svg?style=for-the-badge)
 ![GitHub stars](https://img.shields.io/github/stars/azure-id/orc?style=for-the-badge&color=yellow)
-![Tessl review](https://img.shields.io/badge/Tessl_review-avg_84-8A2BE2.svg?style=for-the-badge)
 
 </div>
 
@@ -47,35 +46,35 @@ zero-dependency npm package installs those files into your `.claude/` directory.
 
 ## Changelog
 
-### v0.29.0 — Drift-prevention hardening: install manifest + prune, `orc doctor`, a real test suite _(2026-07-22)_
+### v0.30.0 — Scoring revamp, Fable 5 role override, tier-aware guards, `orc onboarding` _(2026-07-23)_
 
-The installer now owns its footprint and the package has an executable safety
-net. **Install manifest + orphan prune:** every `orc init`/`update` records the
-exact set of files ORC ships in `.claude/orc/install-manifest.json`; on update,
-files that left the payload (a renamed agent, a removed skill) are pruned —
-bounded to paths a previous manifest proves ORC owned, so your own files,
-patterns, wiki, configs, and run folders are never touched. A pre-manifest
-install never auto-deletes: it warns and offers `orc update --prune`. This is
-the root-cause fix for stale forks where a rename left both the old and new file
-installed forever. **`orc doctor`:** a read-only health report over a target
-`.claude/` — payload-vs-CLI version skew, orphaned/missing payload files,
-`settings.json` wiring (effort guard, the `Task|Agent` trace matcher, statusline),
-a dangling trace pointer, a stale DIY lock; `orc doctor --fix` = update + prune +
-settings re-merge. **A deterministic test suite (`npm test`):** a zero-dep
-`node:test` suite under `test/` drives the real CLI and the three hooks in
-throwaway dirs (config roundtrip + validators, prune both paths, doctor, trace
-SPAWN/RETURN, effort-guard block/allow, statusline never-`undefined`), and runs
-on `prepack`. **Two new verify gates:** an encoding/mojibake scanner (fails on
-U+FFFD or a whitespace-flanked `???` across `package.json`/`bin`/`templates`,
-turning the OneDrive-corruption rule into a gate) and raised file-count floors
-that name each core agent, so a dropped file is reported by name. The contract
-lint can now pin a token into `bin/cli.js` too (`binFiles`), so single-token CLI
-mirrors — config keys, artifact filenames, the `orc wiki sync` command — fail the
-lint if renamed on either side. `engines` bumped to Node ≥18 (needed for
-`node:test`).
+A quality-of-life release across the guards, scoring, config, and CLI.
+**Tier-aware guards:** the effort guard now accepts `high`, `xhigh`, AND `max`
+(an xhigh/max session was wrongly blocked); the statusline is a three-tier
+verdict — ✔ ORC-ready (Opus 4.8 high), 🚀 ORC-boosted (Opus 4.8 xhigh/max or
+Fable 5 medium…max), ✖ WILL DEGRADE below — and writes a session-model bridge so
+the guard can grant Fable 5's medium-effort allowance (the guard can't see the
+model id on its own). **Single 8-band scoring table:** the narrow/wide presets
+are gone — one canonical score→model table adds a `haiku-4-5` [0,30) floor and an
+`opus-4-8-med` [80,85) band (8 executors now), `rubric_bands` is granularity
+only, and the rubric demands a visible `base + adjusters = final` with an
+anti-inflation cite so the model stops reflexively scoring 60. **Fable 5 role
+override (hard-gated):** `fable5_enabled`/`fable5_effort`/`fable5_roles` route
+analyze/plan/advisor/judge/review to pinned `orc-<role>-fable-5` agents — nothing
+changes unless enabled and roles are selected; the CLI rewrites the agents'
+effort frontmatter on set. **Config that really works:** a config-key coverage
+lint fails the build on a decorative key, and a Phase-1 `CONFIG` trace line
+records the resolved values `/orc-retro` can audit. **DIY:** a full session-tier
+grid (sonnet-4-6 · opus-4-7 · opus-4-8 · fable-5, medium…max). **`orc
+upgrade`** tries the tarball first (the github: spec fails on restricted git) and
+remembers what worked. **`orc onboarding`** — a full in-terminal walkthrough
+(menu on a TTY, prints all when piped) so you never need the GitHub README — plus
+a shared zero-dep terminal UI kit (`bin/ui.js`).
 
 <details>
 <summary><b>Previous versions</b> (click to expand)</summary>
+
+### v0.29.0 — Drift-prevention hardening: install manifest + prune, `orc doctor`, a real test suite _(2026-07-22)_
 
 ### v0.28.1 — Defect fixes: package encoding, trace event routing, count/doc drift _(2026-07-22)_
 
@@ -122,9 +121,9 @@ lint if renamed on either side. `engines` bumped to Node ≥18 (needed for
 ### v0.5.1 — Statusline false-degrade fix _(2026-07-11)_
 ### v0.5.0 — Code-pattern findings: executors match your house style, invariants always enforced
 ### v0.4.5 — Rewrite weak worker descriptions (the real score lever)
-### v0.4.4 — Act on Tessl review: raise sub-70 workers, fix cross-spine paths
+### v0.4.4 — Act on external review: raise sub-70 workers, fix cross-spine paths
 ### v0.4.3 — `orc-analyze`: trim description under the 1024-char skill-spec limit
-### v0.4.2 — Tessl-rubric pass: worked examples + sharper mini-analyst activation
+### v0.4.2 — External-review pass: worked examples + sharper mini-analyst activation
 ### v0.4.1 — `orc-mini`: faster, safer fast-lane — smoke gate, opt-in tests, trimmed ceremony
 ### v0.4.0 — Opt-in Phase 6.5 Test Authoring (writes test cases, never runs them)
 ### v0.3.0 — Opt-in behavior-trace logging + claimed-vs-actual model verification
@@ -142,7 +141,6 @@ lint if renamed on either side. `engines` bumped to Node ≥18 (needed for
 - [Why ORC exists](#why-orc-exists)
 - [Quick start](#quick-start)
 - [Commands](#commands)
-- [Skill quality (Tessl review)](#skill-quality-independently-reviewed)
 - [Eval status](#eval-status)
 - [How model selection works](#how-model-selection-works-and-how-to-verify-it)
 - [The tier guard](#the-tier-guard-installed-automatically)
@@ -512,58 +510,6 @@ touches a boundary. It's **advisory, never blocking**, reads foreign *wiki* only
 skew. **Complete step-by-step setup guide:**
 [`templates/skills/orc-wiki/README.md`](templates/skills/orc-wiki/README.md)
 (installed at `.claude/skills/orc-wiki/README.md`).
-
----
-
-## Skill quality (independently reviewed)
-
-We don't grade our own homework. 🔬 Every skill in the constellation is scored by
-**[Tessl](https://tessl.io)'s skill review** — an independent LLM-as-judge that
-grades a Claude agent skill on three axes and returns a **0–100** score:
-
-- **Validation** — structure & format: valid frontmatter, required fields, a
-  description within the 1024-char limit, a present body, links that resolve.
-  Straight pass/fail — a skill that fails here can't even be scored.
-- **Activation** — how clearly the *description* signals **when** an agent should
-  load the skill: specificity, complete triggers, distinctiveness from siblings.
-  *A vague description is a skill that never fires at the right moment.*
-- **Implementation** — how concrete and usable the *body* is: conciseness,
-  actionability (worked examples, not just prose), workflow clarity, and
-  progressive disclosure.
-
-**Bands:** 🟢 **90–100** production-ready · 🟡 **70–89** good, ships · 🔴 **below 70** needs work.
-
-| Skill | Score | Tier |
-|-------|:-----:|:----:|
-| `orc-verify` | **100** | 🟢 |
-| `context-combiner` | **94** | 🟢 |
-| `orc-analyze` | **91** | 🟢 |
-| `orc-mini` | **91** | 🟢 |
-| `orc-wiki` | **90** | 🟢 |
-| `orc-planner` | **87** | 🟡 |
-| `orc` | **85** | 🟡 |
-| `orc-testgen` | **83** | 🟡 |
-| `orc-analyze-mini` | **79** | 🟡 |
-| `orc-execution` | **78** | 🟡 |
-| `orc-review-verify` | **73** | 🟡 |
-| `orc-checkpoint` | **71** | 🟡 |
-| `orc-planner-mini` | **65** | 🔴 |
-
-**12 of 13 skills clear the 70 bar and 5 are production-ready (90+).** Better yet,
-acting on the review's *own* findings is how several got there — `orc-execution`
-jumped **60 → 78** and `orc-planner` **78 → 87** once their descriptions stated
-concrete capability and their bodies inlined the return contract. The lone
-holdout, `orc-planner-mini` (65), is a *dispatched-only worker*: Tessl's
-trigger-quality axis rewards **natural user phrases**, which an internal worker a
-user never types legitimately doesn't have — an inherent ceiling, not a bug.
-*(The PR-templating subskill `orc-pr` wasn't part of this run.)*
-
-> [!NOTE]
-> **Reproduce it.** Install the [Tessl CLI](https://tessl.io), then point it at any
-> local skill directory — no publishing needed:
-> ```bash
-> tessl review run ./templates/skills/orc-mini --workspace <your-workspace>
-> ```
 
 ---
 

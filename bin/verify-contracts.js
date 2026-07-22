@@ -26,22 +26,29 @@ const CONTRACTS = [
     name: "actual_model / actual_effort return (claimed-vs-actual model check)",
     token: "actual_model",
     files: [
+      "agents/orc-advisor-fable-5.md",
       "agents/orc-advisor-opus-4-8-max.md",
+      "agents/orc-analyst-fable-5.md",
       "agents/orc-analyze-mini-sonnet-5-high.md",
       "agents/orc-claude-writer-opus-4-8-high.md",
       "agents/orc-context-combiner-opus-4-8-high.md",
+      "agents/orc-executor-haiku-4-5.md",
       "agents/orc-executor-opus-4-7-high.md",
       "agents/orc-executor-opus-4-7-med.md",
       "agents/orc-executor-opus-4-8-high.md",
+      "agents/orc-executor-opus-4-8-med.md",
       "agents/orc-executor-sonnet-4-6-high.md",
       "agents/orc-executor-sonnet-4-6-med.md",
       "agents/orc-executor-sonnet-5-high.md",
+      "agents/orc-judge-fable-5.md",
       "agents/orc-judge-opus-4-8-max.md",
       "agents/orc-learn-writer-opus-4-8-high.md",
       "agents/orc-pattern-codifier-sonnet-5-high.md",
+      "agents/orc-planner-fable-5.md",
       "agents/orc-planner-mini-sonnet-5-high.md",
       "agents/orc-planner-opus-4-8-med.md",
       "agents/orc-retro-sonnet-5-high.md",
+      "agents/orc-reviewer-fable-5.md",
       "agents/orc-reviewer-opus-4-8-high.md",
       "agents/orc-scout-sonnet-4-6-high.md",
       "agents/orc-system-analyst-opus-4-8-high.md",
@@ -78,9 +85,11 @@ const CONTRACTS = [
     name: "pattern invariants_checked attestation (executor return)",
     token: "invariants_checked",
     files: [
+      "agents/orc-executor-haiku-4-5.md",
       "agents/orc-executor-opus-4-7-high.md",
       "agents/orc-executor-opus-4-7-med.md",
       "agents/orc-executor-opus-4-8-high.md",
+      "agents/orc-executor-opus-4-8-med.md",
       "agents/orc-executor-sonnet-4-6-high.md",
       "agents/orc-executor-sonnet-4-6-med.md",
       "agents/orc-executor-sonnet-5-high.md",
@@ -97,9 +106,11 @@ const CONTRACTS = [
     name: "house_rules standing card (slice injection)",
     token: "house_rules",
     files: [
+      "agents/orc-executor-haiku-4-5.md",
       "agents/orc-executor-opus-4-7-high.md",
       "agents/orc-executor-opus-4-7-med.md",
       "agents/orc-executor-opus-4-8-high.md",
+      "agents/orc-executor-opus-4-8-med.md",
       "agents/orc-executor-sonnet-4-6-high.md",
       "agents/orc-executor-sonnet-4-6-med.md",
       "agents/orc-executor-sonnet-5-high.md",
@@ -115,9 +126,12 @@ const CONTRACTS = [
     name: "validation_gate[] flow (codify -> slice -> review -> verify)",
     token: "validation_gate",
     files: [
+      "agents/orc-reviewer-fable-5.md",
+      "agents/orc-executor-haiku-4-5.md",
       "agents/orc-executor-opus-4-7-high.md",
       "agents/orc-executor-opus-4-7-med.md",
       "agents/orc-executor-opus-4-8-high.md",
+      "agents/orc-executor-opus-4-8-med.md",
       "agents/orc-executor-sonnet-4-6-high.md",
       "agents/orc-executor-sonnet-4-6-med.md",
       "agents/orc-executor-sonnet-5-high.md",
@@ -138,9 +152,11 @@ const CONTRACTS = [
     name: "executor evidence contract (v0.7.0 — verbatim build/test proof)",
     token: "no_runner_detected",
     files: [
+      "agents/orc-executor-haiku-4-5.md",
       "agents/orc-executor-opus-4-7-high.md",
       "agents/orc-executor-opus-4-7-med.md",
       "agents/orc-executor-opus-4-8-high.md",
+      "agents/orc-executor-opus-4-8-med.md",
       "agents/orc-executor-sonnet-4-6-high.md",
       "agents/orc-executor-sonnet-4-6-med.md",
       "agents/orc-executor-sonnet-5-high.md",
@@ -154,9 +170,11 @@ const CONTRACTS = [
     name: "executor unmet[] honest-status contract (v0.7.0)",
     token: "unmet[]",
     files: [
+      "agents/orc-executor-haiku-4-5.md",
       "agents/orc-executor-opus-4-7-high.md",
       "agents/orc-executor-opus-4-7-med.md",
       "agents/orc-executor-opus-4-8-high.md",
+      "agents/orc-executor-opus-4-8-med.md",
       "agents/orc-executor-sonnet-4-6-high.md",
       "agents/orc-executor-sonnet-4-6-med.md",
       "agents/orc-executor-sonnet-5-high.md",
@@ -175,6 +193,7 @@ const CONTRACTS = [
     name: "planner grounding attestation (v0.7.0 — disposition: exists|new)",
     token: "disposition",
     files: [
+      "agents/orc-planner-fable-5.md",
       "agents/orc-planner-mini-sonnet-5-high.md",
       "agents/orc-planner-opus-4-8-med.md",
       "skills/orc-mini/SKILL.md",
@@ -189,6 +208,7 @@ const CONTRACTS = [
     name: "findings evidence-or-advisory rule (v0.7.0 — unanchored => AUTO-P3)",
     token: "AUTO-P3",
     files: [
+      "agents/orc-reviewer-fable-5.md",
       "agents/orc-reviewer-opus-4-8-high.md",
       "agents/orc-verifier-opus-4-8-high.md",
       "skills/orc/subskills/orc-review-verify/SKILL.md",
@@ -200,6 +220,7 @@ const CONTRACTS = [
     name: "P0-P3 severity enum (findings shape)",
     token: "P0|P1|P2|P3",
     files: [
+      "agents/orc-reviewer-fable-5.md",
       "agents/orc-reviewer-opus-4-8-high.md",
       "agents/orc-verifier-opus-4-8-high.md",
       "skills/orc/subskills/orc-review-verify/SKILL.md",
@@ -220,6 +241,7 @@ const CONTRACTS = [
     name: "analyst absence attestation (v0.9.0 — searched: notes on missing/buildable)",
     token: "searched:",
     files: [
+      "agents/orc-analyst-fable-5.md",
       "agents/orc-analyze-mini-sonnet-5-high.md",
       "agents/orc-system-analyst-opus-4-8-high.md",
       "skills/orc-analyze-mini/SKILL.md",
@@ -235,7 +257,9 @@ const CONTRACTS = [
     name: "spec staleness stamp (v0.9.0 — git_head recorded at analysis time)",
     token: "git_head",
     files: [
+      "agents/orc-analyst-fable-5.md",
       "agents/orc-analyze-mini-sonnet-5-high.md",
+      "agents/orc-planner-fable-5.md",
       "agents/orc-planner-opus-4-8-med.md",
       "agents/orc-system-analyst-opus-4-8-high.md",
       "skills/orc-analyze-mini/SKILL.md",
@@ -252,6 +276,7 @@ const CONTRACTS = [
     name: "plan coverage gate (v0.9.0 — orphan requirement = malformed plan)",
     token: "orphan",
     files: [
+      "agents/orc-planner-fable-5.md",
       "agents/orc-planner-mini-sonnet-5-high.md",
       "agents/orc-planner-opus-4-8-med.md",
       "commands/orc-plan.md",
@@ -268,6 +293,7 @@ const CONTRACTS = [
     name: "spec invariants last-mile wiring (v0.9.0 — task field -> slice constraints[])",
     token: "spec_invariants",
     files: [
+      "agents/orc-planner-fable-5.md",
       "agents/orc-planner-mini-sonnet-5-high.md",
       "agents/orc-planner-opus-4-8-med.md",
       "skills/orc-mini/SKILL.md",
@@ -313,6 +339,7 @@ const CONTRACTS = [
     name: "ultra advisor brief handoff (v0.10.0 — brief_path return -> slice injection)",
     token: "brief_path",
     files: [
+      "agents/orc-advisor-fable-5.md",
       "agents/orc-advisor-opus-4-8-max.md",
       "skills/orc-advisor/SKILL.md",
       "skills/orc/references/ultra-mode.md",
@@ -323,6 +350,7 @@ const CONTRACTS = [
     name: "ultra verdict discipline (v0.10.0 — blocking needs anchor + failure_consequence)",
     token: "failure_consequence",
     files: [
+      "agents/orc-judge-fable-5.md",
       "agents/orc-judge-opus-4-8-max.md",
       "skills/orc-judge/SKILL.md",
       "skills/orc/references/ultra-mode.md",
@@ -604,6 +632,27 @@ const CONTRACTS = [
     ],
   },
   {
+    // v0.30.0: the Fable 5 role override. The shared paragraph is canonical
+    // under _shared/; the lint pins its pointer into every lane that honors it.
+    // The config keys themselves are pinned by the config-key coverage lint.
+    name: "fable5 role override (v0.30.0 — hard-gated role→fable-5 dispatch)",
+    token: "fable5-override.md",
+    files: [
+      "skills/_shared/fable5-override.md",
+      "skills/orc/SKILL.md",
+      "skills/orc/config.md",
+      "skills/orc/references/ultra-mode.md",
+    ],
+  },
+  {
+    name: "CONFIG trace verb (v0.30.0 — Phase 1 resolved-config runtime proof)",
+    token: "`CONFIG ",
+    files: [
+      "skills/orc/SKILL.md",
+      "skills/orc/references/trace-protocol.md",
+    ],
+  },
+  {
     name: "wiki cross-cutting reference maps (v0.15.0 — consumers pull by name)",
     token: "orc-reference-api-surface",
     files: [
@@ -818,6 +867,7 @@ const CONTRACTS = [
     name: "orc-poly handoff marker (v0.27.0 — planner splits per-repo on `orc-poly:spec`)",
     token: "orc-poly:spec",
     files: [
+      "agents/orc-planner-fable-5.md",
       "agents/orc-planner-opus-4-8-med.md",
       "commands/orc-plan.md",
       "commands/orc-poly.md",
@@ -832,6 +882,7 @@ const CONTRACTS = [
     name: "orc-poly output dir (v0.27.0 — source-of-truth docs + per-repo plans)",
     token: "poly-repo-implementation/",
     files: [
+      "agents/orc-planner-fable-5.md",
       "agents/orc-planner-opus-4-8-med.md",
       "commands/orc-poly.md",
       "skills/orc/subskills/orc-planner/SKILL.md",
@@ -844,6 +895,7 @@ const CONTRACTS = [
     name: "orc-poly frozen boundary (v0.27.0 — every per-repo plan pins interface-contract.md)",
     token: "interface-contract.md",
     files: [
+      "agents/orc-planner-fable-5.md",
       "agents/orc-planner-opus-4-8-med.md",
       "commands/orc-plan.md",
       "commands/orc-poly.md",
@@ -866,9 +918,11 @@ const BUDGETS = [
   // v0.28.0: deliberate raise 335→350 — the run-integrity work adds inline
   // trace imperatives to every phase body (fix for SPAWN/RETURN-only traces),
   // the deterministic wave-stop gate, and the always-on wiki/pattern/crosslink
-  // visibility reports. Compressed the now-redundant trace-cadence enumeration
-  // and duplicated fixed-role/config prose to hold the raise to +15.
-  { file: "skills/orc/SKILL.md", maxLines: 350 },
+  // visibility reports.
+  // v0.30.0: deliberate raise 350→360 — the scoring revamp adds the visible
+  // `base+adjusters=final` demand + anti-inflation cite, the Fable 5 role-
+  // override dispatch pointer, and the Phase-1 CONFIG runtime-proof trace line.
+  { file: "skills/orc/SKILL.md", maxLines: 360 },
   { file: "skills/orc-wiki/SKILL.md", maxLines: 260 },
   { file: "skills/orc-mini/SKILL.md", maxLines: 195 },
   { file: "skills/orc-analyze/SKILL.md", maxLines: 195 },
@@ -945,6 +999,50 @@ for (const b of BUDGETS) {
         `new detail into a references/ file loaded at its phase, keep only ` +
         `the trigger + contract tokens + pointer in the spine.`
     );
+  }
+}
+
+// ── Config-key coverage (C.3) ──────────────────────────────────────────────
+// Every key in bin/cli.js's CONFIG_META must be referenced somewhere under
+// templates/skills/**, and every `config.<key>` a skill references must be a
+// real CLI key. Catches a decorative config key (nothing reads it) and a skill
+// referencing a key the CLI can't actually write.
+{
+  const cliText = fs.readFileSync(path.join(REPO_ROOT, "bin", "cli.js"), "utf8");
+  const block = cliText.match(/const CONFIG_META = \[([\s\S]*?)\n\];/);
+  const cliKeys = block
+    ? [...block[1].matchAll(/\{\s*key:\s*"([a-z0-9_]+)"/g)].map((m) => m[1])
+    : [];
+  const skillFiles = allFiles.filter((f) => f.startsWith("skills/"));
+  const skillText = skillFiles
+    .map((f) => fs.readFileSync(path.join(ROOT, f), "utf8"))
+    .join("\n");
+  const orphanKeys = cliKeys.filter(
+    (k) => !new RegExp("\\b" + k + "\\b").test(skillText)
+  );
+  const EXT = new Set(["md", "yaml", "yml", "json", "js", "txt"]);
+  const ALLOW = new Set(["rubric_bands_override"]); // hand-edit-only advanced key
+  const referenced = new Set();
+  for (const m of skillText.matchAll(/config\.([a-z][a-z0-9_]+)/g))
+    referenced.add(m[1]);
+  const unknownRefs = [...referenced].filter(
+    (k) => !cliKeys.includes(k) && !EXT.has(k) && !ALLOW.has(k)
+  );
+  if (!cliKeys.length) {
+    failures++;
+    console.error("\n❌ config-key coverage: could not parse CONFIG_META from bin/cli.js.");
+  }
+  if (orphanKeys.length || unknownRefs.length) {
+    failures++;
+    console.error("\n❌ config-key coverage drift:");
+    for (const k of orphanKeys)
+      console.error(
+        `   - CLI key "${k}" is never referenced under templates/skills/ (decorative — wire it or drop it)`
+      );
+    for (const k of unknownRefs)
+      console.error(
+        `   - templates reference config.${k} but no such CLI CONFIG_META key`
+      );
   }
 }
 

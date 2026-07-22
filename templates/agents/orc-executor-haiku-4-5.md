@@ -1,11 +1,10 @@
 ---
-name: orc-executor-opus-4-7-med
+name: orc-executor-haiku-4-5
 description: >
-  ORC executor — claude-opus-4-7, medium effort. Dispatched by the ORC orchestrator to implement
-  a single task whose score falls in the upper-mid-complexity [65,70) band. Single-role: execution only.
+  ORC executor — claude-haiku-4-5 (no effort ladder). Dispatched by the ORC orchestrator to implement
+  a single task whose score falls in the lowest-complexity [0,30) band. Single-role: execution only.
   Takes a task slice and implements exactly that task.
-model: claude-opus-4-7
-effort: medium
+model: claude-haiku-4-5
 tools: Read, Write, Edit, Bash, Glob, Grep
 ---
 

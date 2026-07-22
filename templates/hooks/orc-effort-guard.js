@@ -36,6 +36,37 @@ try {
   updater = null;
 }
 
+// Effort ladder: low < medium < high < xhigh < max. A tier that meets the bar
+// meets it at that rung OR anything stronger — so "requires high" allows xhigh
+// and max too (the bug this fixes: an xhigh/max session was hard-blocked).
+const EFFORT_LADDER = ["low", "medium", "high", "xhigh", "max"];
+const effortsAtOrAbove = (e) => {
+  const i = EFFORT_LADDER.indexOf(String(e).toLowerCase());
+  return i === -1 ? ["high", "xhigh", "max"] : EFFORT_LADDER.slice(i);
+};
+
+// Session-model bridge (written by orc-statusline.js). The guard can't see the
+// model id itself, so it reads it here to grant Fable 5's medium-effort
+// allowance. Fail-OPEN: missing / unreadable / stale → null, and the guard
+// behaves exactly as it would without a bridge (never blocks on our own error).
+// Stale = older than this window; a live session re-renders the statusline far
+// more often, so a fresh file always exists during active use.
+const BRIDGE_MAX_AGE_MS = 30 * 60 * 1000;
+function readSessionModel(projectDir) {
+  try {
+    const fs = require("fs");
+    const path = require("path");
+    const p = path.join(projectDir, ".claude", "orc", "session-model.json");
+    const j = JSON.parse(fs.readFileSync(p, "utf8").replace(/^﻿/, ""));
+    if (!j || typeof j.written_at !== "number") return null;
+    if (Date.now() - j.written_at > BRIDGE_MAX_AGE_MS) return null;
+    return String(j.model_id || "");
+  } catch (_) {
+    return null;
+  }
+}
+const isFable5Model = (id) => /fable[\s._-]?5\b/.test(String(id || "").toLowerCase());
+
 let raw = "";
 process.stdin.on("data", (c) => (raw += c));
 process.stdin.on("end", () => {
@@ -62,20 +93,28 @@ process.stdin.on("end", () => {
     (data.effort && data.effort.level) || process.env.CLAUDE_EFFORT || ""
   ).toLowerCase();
   const installed = updater ? updater.installedVersion(__dirname) : null;
+  const projectDir = data.cwd || process.cwd();
+
+  // Baseline /orc: the session must be at high effort OR stronger (xhigh/max).
+  // Fable 5 additionally clears at medium — a strictly-capable model — detected
+  // through the session-model bridge (the guard can't see the model id itself;
+  // fail-open when the bridge is missing/stale, i.e. medium stays blocked).
+  let requiredEfforts = effortsAtOrAbove("high");
+  let requiredLabel = "Opus 4.8 at high effort (Fable 5 also clears at medium+)";
+  if (!isDiy && isFable5Model(readSessionModel(projectDir))) {
+    requiredEfforts = ["medium", ...requiredEfforts];
+  }
 
   // /orc-diy: the required tier is whatever the flow was COMPILED for — read
   // it from flow.lock.json (written only by the `orc diy` CLI). Fail closed:
   // no lock = no compiled flow = deterministic onboarding block. `compile` /
   // `status` invocations pass at any effort (they just shell out to the CLI).
-  let requiredEfforts = ["high"];
-  let requiredLabel = "Opus 4.8 at high effort";
   if (isDiy) {
     if (/^\s*(compile|status)\b/i.test(String(input.args || ""))) process.exit(0);
     const fs = require("fs");
     const path = require("path");
     let lock = null;
     try {
-      const projectDir = data.cwd || process.cwd();
       lock = JSON.parse(
         fs
           .readFileSync(
@@ -95,14 +134,14 @@ process.stdin.on("end", () => {
       );
       process.exit(2);
     }
-    if (lock.session_tier === "opus-4-7-med") {
-      requiredEfforts = ["medium", "high"];
-      requiredLabel = "Opus 4.7 at medium effort (this flow's compiled session_tier)";
-    } else if (lock.session_tier === "sonnet-4-6-high") {
-      requiredLabel = "Sonnet 4.6 at high effort (this flow's compiled session_tier)";
-    } else {
-      requiredLabel = "Opus 4.8 at high effort (this flow's compiled session_tier)";
-    }
+    // Effort half is DETERMINISTIC from the compiled slug's suffix (allow that
+    // effort or anything stronger); the model half is warn-only on the
+    // statusline (hooks can't block on model). Covers the full tier grid —
+    // sonnet-4-6 / opus-4-7 / opus-4-8 / fable-5 at med|high|xhigh|max.
+    const m = String(lock.session_tier).match(/-(med|high|xhigh|max)$/);
+    const slugEffort = m ? (m[1] === "med" ? "medium" : m[1]) : "high";
+    requiredEfforts = effortsAtOrAbove(slugEffort);
+    requiredLabel = `${lock.session_tier} (compiled session_tier — needs effort ${slugEffort}+)`;
   }
 
   const decide = (nudge) => {

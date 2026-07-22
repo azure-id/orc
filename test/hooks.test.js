@@ -110,6 +110,87 @@ test("effort-guard: a non-orc skill is never gated, garbage never blocks", () =>
   }
 });
 
+test("effort-guard: xhigh and max clear the /orc baseline (exit 0)", () => {
+  const { root, claudeDir } = freshInstall();
+  try {
+    for (const level of ["xhigh", "max"]) {
+      const r = runHook(claudeDir, "orc-effort-guard.js", {
+        tool_name: "Skill",
+        tool_input: { skill: "orc" },
+        effort: { level },
+      });
+      assert.strictEqual(r.status, 0, `${level} effort must clear the baseline`);
+    }
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("effort-guard: medium /orc blocked without bridge, allowed with a fresh Fable 5 bridge", () => {
+  const { root, claudeDir } = freshInstall();
+  try {
+    const payload = {
+      tool_name: "Skill",
+      tool_input: { skill: "orc" },
+      effort: { level: "medium" },
+      cwd: root,
+    };
+    // No bridge → medium is below the Opus baseline → blocked.
+    assert.strictEqual(runHook(claudeDir, "orc-effort-guard.js", payload).status, 2);
+
+    // Fresh Fable 5 bridge → medium clears (Fable 5's allowance).
+    const bridge = path.join(claudeDir, "orc", "session-model.json");
+    fs.mkdirSync(path.dirname(bridge), { recursive: true });
+    fs.writeFileSync(bridge, JSON.stringify({ model_id: "claude-fable-5", effort: "medium", written_at: Date.now() }));
+    assert.strictEqual(runHook(claudeDir, "orc-effort-guard.js", payload).status, 0, "fable-5 medium clears with a fresh bridge");
+
+    // Stale bridge (old written_at) → treated as absent → blocked again.
+    fs.writeFileSync(bridge, JSON.stringify({ model_id: "claude-fable-5", effort: "medium", written_at: Date.now() - 60 * 60 * 1000 }));
+    assert.strictEqual(runHook(claudeDir, "orc-effort-guard.js", payload).status, 2, "a stale bridge never unblocks");
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("statusline: verdict matrix — boosted for opus-4.8 xhigh/max and fable-5 medium+, degrade for fable-5 low", () => {
+  const { root, claudeDir } = freshInstall();
+  const render = (model, effort) =>
+    runHook(claudeDir, "orc-statusline.js", {
+      cwd: root,
+      model: { id: model, display_name: model },
+      effort: { level: effort },
+    }).stdout;
+  try {
+    assert.match(render("claude-opus-4-8", "high"), /ORC-ready/, "opus-4.8/high = ready");
+    assert.match(render("claude-opus-4-8", "xhigh"), /ORC-boosted/, "opus-4.8/xhigh = boosted");
+    assert.match(render("claude-opus-4-8", "max"), /ORC-boosted/, "opus-4.8/max = boosted");
+    assert.match(render("claude-fable-5", "medium"), /ORC-boosted/, "fable-5/medium = boosted");
+    assert.match(render("claude-fable-5", "max"), /ORC-boosted/, "fable-5/max = boosted");
+    assert.match(render("claude-fable-5", "low"), /DEGRADE/, "fable-5/low = degrade");
+    assert.match(render("claude-sonnet-5", "high"), /DEGRADE/, "sonnet-5/high = degrade");
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("statusline: writes the session-model bridge the guard reads", () => {
+  const { root, claudeDir } = freshInstall();
+  try {
+    runHook(claudeDir, "orc-statusline.js", {
+      cwd: root,
+      model: { id: "claude-fable-5", display_name: "Fable 5" },
+      effort: { level: "medium" },
+    });
+    const bridge = path.join(claudeDir, "orc", "session-model.json");
+    assert.ok(fs.existsSync(bridge), "bridge file written");
+    const j = JSON.parse(fs.readFileSync(bridge, "utf8"));
+    assert.strictEqual(j.model_id, "claude-fable-5");
+    assert.ok(typeof j.written_at === "number", "written_at stamped");
+  } finally {
+    rmrf(root);
+  }
+});
+
 test("statusline: never prints 'undefined'; renders a rate-limit segment", () => {
   const { root, claudeDir } = freshInstall();
   try {

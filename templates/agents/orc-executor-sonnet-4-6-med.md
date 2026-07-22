@@ -2,7 +2,7 @@
 name: orc-executor-sonnet-4-6-med
 description: >
   ORC executor — claude-sonnet-4-6, medium effort. Dispatched by the ORC orchestrator to implement
-  a single task whose score falls in the lowest-complexity band. Single-role: execution only.
+  a single task whose score falls in the low-complexity [30,40) band. Single-role: execution only.
   Takes a task slice and implements exactly that task.
 model: claude-sonnet-4-6
 effort: medium
