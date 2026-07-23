@@ -44,8 +44,11 @@ is AUTHORITATIVE for the full procedure; the summary below orients.
    `requirements[]` (the R#/DoD ids it implements — `[]` only for pure-infra
    with a stated reason), `spec_invariants[]` (load-bearing Context & invariants
    lines copied verbatim — the orchestrator appends them to the executor
-   slice's constraints[]), and a sliced `acceptance[]` where each line cites
-   its source (`R3` / `DoD#2` — a line with no source is invented).
+   slice's constraints[]), a `facets` block (breadth = `len(declared_files)`,
+   novelty/logic/test_surface/uncertainty, cited `risk[]` — the orchestrator
+   scores from these; you never compute the score), and a sliced `acceptance[]`
+   where each line cites its source (`R3` / `DoD#2` — a line with no source is
+   invented).
 4. **Self-check (always — cheap, prevents broken waves):**
    - **cycle detection** — no `depends_on` chain loops back on itself;
    - **same-file collision** — two tasks sharing a `declared_files` entry must be
@@ -56,8 +59,13 @@ is AUTHORITATIVE for the full procedure; the summary below orients.
    presenting — never emit a plan with a cycle, an unserialized collision, or
    an orphan. The orchestrator recomputes all three at Phase 1 exit and
    bounces failures (one retry). Deep dependency tracing is trimmed here.
-5. **Present** the plan once → approve/edit (breakdown/approach only).
-6. **Branch** → take into build (hand back to orc-mini) or save & stop — checkpoint
+5. **Ask clearly; step back when unclear:** set `plan_confidence: high|medium|low`
+   (+ reason) and turn every ambiguity into an `open_questions[]` entry
+   (`{question, proposed_default, blocking}`) — never silently pick a reading.
+   `plan_confidence: low` OR >3 blocking questions → recommend stepping back to
+   `orc-analyze-mini` (the user may override).
+6. **Present** the plan once → approve/edit (breakdown/approach only).
+7. **Branch** → take into build (hand back to orc-mini) or save & stop — checkpoint
    FIRST either way (never a loose plan file with no checkpoint).
 
 ## What's trimmed vs the full planner
@@ -94,9 +102,11 @@ mini planner never builds directly.
 Produce `../orc-planner/`'s artifact — orc's `schemas/planning-output.md`: every
 task with `declared_files` (incl. tests), `grounding[]` (per-file
 exists|new attestation with evidence), `acceptance[]` (sliced, source-cited
-definition-of-done lines), `requirements[]`, `spec_invariants[]`, `depends_on`,
-`owns_area`, `spec_ref`. Checkpoint it into `orc/planner/{name}/` before
-branching. Return exactly:
+definition-of-done lines), `requirements[]`, `spec_invariants[]`, `facets`
+(breadth/novelty/logic/test_surface/uncertainty + cited `risk[]`), `depends_on`,
+`owns_area`, `spec_ref`; and at the top level `plan_head`, `plan_confidence`, and
+`open_questions[]`. Checkpoint it into `orc/planner/{name}/` before branching.
+Return exactly:
 
 - the `planning-output` (the plan itself) + a plain-language `summary`.
 - `coverage: {requirements: N, tasks: M, orphans: []}` — self-attested; the

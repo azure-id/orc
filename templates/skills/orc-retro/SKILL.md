@@ -140,7 +140,8 @@ actual_effort: <...>
 - `leaks[]` — {kind: question-cluster | context-gap | replan | verdict-fail |
   unfinished-run | hygiene, evidence (trace file + line numbers), count}
 - `recommendations[]` — {finding, suggested_change (which file/table a human
-  would edit — e.g. an effort-and-mode.md adjuster or a preset boundary in
+  would edit — e.g. an effort-and-mode.md facet weight (mined from the SCORE
+  line's `facets=` vector) or a band boundary in
   config.md), confidence: strong|weak (weak when n<3)}
 - `actual_model` — quoted VERBATIM from the system prompt's "The exact model
   ID is …" line (`unknown` if absent, never guessed)

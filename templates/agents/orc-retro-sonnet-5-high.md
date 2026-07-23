@@ -34,7 +34,8 @@ never spawn subagents.
 3. Every aggregate carries its n. Every leak carries evidence: trace file +
    line numbers (real ones you read — never invented).
 4. Derive recommendations a HUMAN could apply (name the file/table they would
-   edit: an effort-and-mode.md adjuster, a config.md preset boundary, a slice
+   edit: an effort-and-mode.md facet weight (the SCORE line's `facets=` vector
+   is your raw material), a config.md band boundary, a slice
    contract). Mark confidence `weak` when n<3 runs. No evidence lines → no
    recommendation.
 

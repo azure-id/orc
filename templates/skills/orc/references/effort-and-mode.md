@@ -7,101 +7,137 @@ Spawning keeps orchestrator context lean so runs last longer before any pause.
 
 Two INDEPENDENT axes. Never conflate them:
 - **Run-level effort** (low/medium/high) → picks the **dispatch style**
-  (sequential vs parallel), never WHO does the work.
+  (sequential vs parallel), which controls only **intra-wave concurrency** —
+  never WHO does the work, and never WHETHER waves exist.
 - **Per-task score** (0–100) → picks each **worker's model**. Always applies.
 
 A medium run can contain a 30-score task and a 95-score task in the same wave.
 
+## Waves always exist; dispatch style is intra-wave only
+
+**Wave computation runs for every run with ≥2 tasks, sequential included**
+(dependency layers + conflict graph + `max_wave_tasks` cap — see
+`wave-grouping.md`). Dispatch style does NOT decide whether there are waves; it
+decides how a wave's tasks fire:
+
+- **sequential** → a wave's tasks dispatch one at a time, in order; the wave
+  closes when all its tasks close;
+- **parallel** → a wave's non-conflicting tasks dispatch at once (up to
+  `max_wave_tasks`).
+
+The **wave-boundary batch pause binds to wave numbers, identically in both
+styles** — a sequential run is NOT "no waves / per-task pauses". Show the wave
+plan (wave → tasks → pause marks) to the user BEFORE wave 1 in both styles.
+
 ## Run-level effort → dispatch style (recommend, user confirms)
 
 - **Low**, or heavy shared data/code → **sequential**: one scored subagent at a
-  time, in dependency order. Even a single trivial task = one cheap subagent
-  (typically Sonnet 4.6 medium), never the orchestrator itself.
-- **Medium** → sequential by default; **parallel waves** if 3+ genuinely
+  time, in dependency order (still grouped into waves). Even a single trivial
+  task = one cheap subagent (typically Sonnet 4.6 medium), never the
+  orchestrator itself.
+- **Medium** → sequential by default; **parallel** intra-wave if 3+ genuinely
   independent areas.
-- **High** with independent areas → **parallel waves**; consider worktrees for
+- **High** with independent areas → **parallel** waves; consider worktrees for
   isolation (merge at end).
 
 Always RECOMMEND with a one-line why, and let the user pick. Tell them the
 agent/task/wave counts, each task's scored model, and where batch pauses fall
 BEFORE dispatching.
 
-## Per-task scoring rubric (default; override with written reason)
+## Per-task scoring — facet-scored, arithmetic, two-writer
 
-Every task is scored — including tiny ones. The score is a **base** from
-intrinsic size, then ADJUSTED up or down by contextual factors, so a nominally
-"small" task (base 20) can end at 40 if it's risky or central, and a "medium"
-task (base 60) can drop to 20 if it's isolated and mechanical. Look wide before
-settling the number.
+The score is **not judged** from a task title. The **planner** — the one party
+that globbed and read every declared file — emits per-task `facets` (facts). The
+**orchestrator** — who never read the code — computes the number arithmetically
+and audits the facts. No vibes anywhere. Every task is scored, including tiny ones.
 
-**Base (intrinsic size), 0–40:**
+**1. Planner-emitted facets** (`planning-output.md` `facets` block, filled during
+grounding — zero extra passes):
 
-| Signal | Read from | Range |
-|---|---|---|
-| File count / breadth | `declared_files[]` | 0–15 |
-| Algorithmic complexity | task `description` (logic-heavy vs CRUD) | 0–15 |
-| Test surface | tests implied by declared_files | 0–10 |
+| Facet | Values |
+|---|---|
+| `breadth` | `len(declared_files)` — computed, not judged |
+| `novelty` | mechanical · imitate · new-surface · novel-algorithm |
+| `logic` | none · branching · stateful · algorithmic |
+| `test_surface` | none · update-existing · new-tests |
+| `risk` | `[]` or `[{class, cite}]` — class ∈ auth·money·migration·security·concurrency·data-integrity; **each entry MUST cite the file/requirement** |
+| `uncertainty` | low · medium · high (+ one-line reason if not low) |
 
-**Adjusters (context), each can push the score up or down:**
+`fan_in`/`fan_out` are NOT emitted — the orchestrator computes them from
+`depends_on` (forward = fan_in, reverse = fan_out).
 
-| Factor | Effect | Read from |
-|---|---|---|
-| Core vs isolated code | +0..+25 core/shared; −0..−15 isolated leaf | `owns_area`, integration surface |
-| Dependency load | +0..+15 per upstream contract to honor | `depends_on[]` |
-| Risk class | +0..+25 security/money/migrations/auth | intent-spec constraints |
-| Blast radius | +0..+10 many consumers depend on this | reverse `depends_on` |
-| Mechanical/repetitive | −0..−15 boilerplate, codegen-like | task `description` |
+**2. Orchestrator validation gate (Phase 2, deterministic — same bounce
+mechanics as grounding):** recompute `breadth` (= `len(declared_files)`) and
+`fan_in`/`fan_out` from the plan itself; a mismatch, or a `risk` entry with no
+`cite`, **bounces the plan** back to the planner (one retry, then escalate). A
+plan with no `facets` at all (pre-v0.31.0) resumes on the legacy path — never
+bounced for the missing block.
 
-Final score = clamp(base + adjusters, 0, 100).
+**3. The fixed formula (the ONLY scoring text — this replaces base+adjusters):**
 
-**Risk floor:** anything touching security, money, data migrations, or auth
-cannot end below 70 regardless of other factors.
+```
+score = B(breadth) + N(novelty) + L(logic) + T(test_surface)
+        + 5*min(fan_in,3) + 3*min(fan_out,3) + U(uncertainty)
 
-**Override protocol:** you may override the computed score. Record
+B: 1f=2   2-3f=6   4-5f=10   6+f=15
+N: mechanical=0   imitate=8   new-surface=18   novel-algorithm=30
+L: none=0   branching=8   stateful=16   algorithmic=24
+T: none=0   update-existing=4   new-tests=8
+U: low=0   medium=6   high=12
+
+risk ≠ [] → floor 70 (DERIVED from a cited risk facet, never remembered).
+clamp 0..100 → the SAME 8-band table (config.md unchanged).
+```
+
+Show the user the full table (task, the facet vector, the arithmetic
+`B+N+L+T+fan+U = raw`, any risk floor, final, override+reason if any, dispatched
+model) BEFORE dispatching — an un-shown number is not a scored number.
+
+**4. Consistency check:** two tasks whose facet vectors differ in **≤1 facet must
+land in the same band** — or the SCORE line for the outlier **cites the one
+differing facet**. This is the specific fix for sibling tasks in the same domain
+drifting into three different bands.
+
+**5. Override protocol** (unchanged): you may override the computed score. Record
 `{computed_score, override_score, reason}` in the dispatch log. An override
 without a reason is invalid.
 
-Show the user the full scoring table (task, base, adjusters, final,
-override+reason if any, dispatched model) BEFORE dispatching.
+## EVERY dispatch is scored — the fix-cycle rule
 
-## Worked scoring examples (anchor to these — never score from vibes)
+Fix-cycle dispatches — review-fix, verify-fix, the Phase-7 P2-batch, and any
+requeue — are scored through the **same formula**, with two floors that stop a
+fix in a risk area from silently dropping to a cheap model:
 
-Score by ANALOGY to the nearest example, then adjust for the differences. These
-are calibration anchors, not templates to copy blindly.
+- **Inherit the ORIGINAL task's `risk` facets** when the fix touches its files —
+  a fix in a risk-floor area keeps the ≥70 floor (a userID/context-key fix can
+  never dispatch below `opus-4-7-high` again);
+- a **P0/P1 fix never dispatches below the band of the task that produced the
+  finding.**
 
-| Task | Base | Adjusters | Final | Why |
-|---|---|---|---|---|
-| Rename a config key across 4 files + its test | 12 (4 files, no logic, small test surface) | −10 mechanical, −5 isolated | **0** | pure find-replace, leaf code |
-| Add a `--json` flag to one CLI command | 18 (2 files, light logic, 1 test file) | −5 isolated leaf | **13** | one coherent area, no consumers |
-| New CRUD endpoint following an existing sibling route | 28 (3 files incl. test, CRUD logic) | +5 dependency on shared schema, −5 mechanical (sibling to imitate) | **28** | pattern exists; mid-low band |
-| Bug fix across 2 files with a repro test | 20 (2 files, some logic, 1 test) | +15 correctness-critical path | **35** | small diff but the repro must prove it; not haiku work |
-| New isolated component from the existing design system | 35 (3 files incl. test, moderate UI logic) | +10 new surface, −0 isolated leaf (no consumers yet) | **45** | pattern to imitate, but net-new code |
-| Service-layer refactor behind a stable interface | 40 (several files, refactor logic, tests) | +18 dependency load (callers), −0 interface frozen | **58** | internals move, contract unchanged — Sonnet 5 band |
-| Notification model + type enum other tasks consume | 32 (3 files, moderate logic) | +25 core/shared (every later task imports it), +8 blast radius | **65** | the run's keystone — errors cascade |
-| Add role check to payment-refund endpoint | 24 (2 files + test) | +25 risk (money+auth), +10 core | **70** (risk floor also forces ≥70) | small diff, catastrophic if wrong |
-| Migrate orders table to split-name columns + backfill | 38 (migration + model + callers + tests) | +25 risk (migration), +15 dependency load, +10 blast radius | **88** | irreversible data change, wide surface |
+Emit a `SCORE task=fix-<n> …` line for each (they appear in the dispatch log and
+the completion table like any task).
 
-Two disciplines the examples encode: (1) base is INTRINSIC size only — risk
-and centrality live in the adjusters, never double-counted into base; (2) a
-small diff is NOT a low score when the blast radius or risk class is high (the
-refund example), and a big-looking task IS low when it's mechanical (the
-rename). If your score diverges >20 points from the nearest analog, re-derive
-it or write an override reason.
+## Worked scoring examples (facet vectors — compare facet-by-facet, not by vibes)
 
-**Anti-inflation / anti-deflation (do NOT blindly score 60):**
-- Show the arithmetic. The dispatch table you present to the user MUST carry
-  `base + adjusters = final` columns per task, not just the final number — an
-  un-shown number is not a scored number.
-- A final score in **[55,70)** must CITE which adjuster moved it out of the base
-  range. No cited adjuster → clamp back to the base band. This is the specific
-  fix for the reflexive "everything is a 60".
-- Mirror the rule for the **risk floor**: a security/money/migration/auth task
-  clamped to ≥70 must name the risk adjuster that put it there; the floor is
-  never applied silently.
-- **Haiku band [0,30):** mechanical + isolated + a tested pattern to imitate =
-  haiku work. Don't spend Sonnet on a pure find-replace or a codegen-shaped
-  task. Conversely, never drop a correctness- or contract-critical task into the
-  haiku band just because the diff is small — cite the adjuster and let it rise.
+Each row is the facet vector run through the formula. The number is arithmetic;
+the band is what matters. Compare a new task to these facet-by-facet.
+
+| Task | breadth·novelty·logic·test · fan_in/out · unc | Arithmetic | Band |
+|---|---|---|---|
+| Rename a config key across 4 files + its test | 5·mechanical·none·update-existing · 0/0 · low | 10+0+0+4 = **14** | haiku [0,30) |
+| New CRUD endpoint following a sibling route | 3·imitate·branching·new-tests · 1/0 · low | 6+8+8+8+5 = **35** | sonnet-4-6-med [30,40) |
+| Bug fix across 2 files with a repro test | 3·imitate·branching·new-tests · 0/0 · medium | 6+8+8+8+6 = **36** | sonnet-4-6-med [30,40) |
+| Isolated component from the design system | 3·new-surface·branching·new-tests · 0/0 · low | 6+18+8+8 = **40** | sonnet-4-6-high [40,55) |
+| Notification model + enum other tasks consume | 3·new-surface·stateful·new-tests · 0/3 · low | 6+18+16+8+9 = **57** | sonnet-5-high [55,65) |
+| Service-layer refactor behind a stable interface | 5·imitate·stateful·update-existing · 0/3 · medium | 10+8+16+4+9+6 = **53** | sonnet-4-6-high [40,55) |
+| Add role check to payment-refund endpoint | 3·imitate·branching·new-tests · 0/0 · low · **risk=[auth,money]** | 30 raw → **floor 70** | opus-4-7-high [70,80) |
+| Migrate orders table to split-name + backfill | 6·new-surface·stateful·new-tests · 1/3 · high · **risk=[migration,data-integrity]** | 15+18+16+8+5+9+12 = 83 (floor 70) → **83** | opus-4-8-med [80,85) |
+
+Two disciplines the vectors encode: (1) a small diff is NOT a low score when a
+cited `risk` facet forces the floor (the refund row — 30 raw, floored to 70); (2)
+a big-looking task IS low when its facets are mechanical (the rename). The risk
+floor is always DERIVED from a cited facet — the SCORE line names it, never
+applies it silently.
 
 ## Model ladder → the single score→model table
 

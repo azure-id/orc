@@ -45,6 +45,94 @@ test("trace: SPAWN written for an orc agent on PreToolUse+Task, RETURN survives 
   }
 });
 
+test("trace: RETURN carries agent name + desc + dur + model when agent_type is present", () => {
+  const { root, claudeDir } = freshInstall();
+  try {
+    runHook(claudeDir, "orc-trace.js", {
+      hook_event_name: "PreToolUse",
+      tool_name: "Agent",
+      tool_input: { subagent_type: "orc-executor-opus-4-8-high", description: "build auth" },
+    });
+    runHook(claudeDir, "orc-trace.js", {
+      hook_event_name: "PreToolUse",
+      tool_name: "Agent",
+      tool_input: { subagent_type: "orc-executor-sonnet-5-high", description: "wire ui" },
+    });
+    const ret = runHook(claudeDir, "orc-trace.js", {
+      hook_event_name: "SubagentStop",
+      agent_type: "orc-executor-sonnet-5-high",
+      last_assistant_message: 'done. actual_model: "claude-sonnet-5", actual_effort: high',
+    });
+    assert.strictEqual(ret.status, 0);
+    const { texts } = traceFiles(claudeDir);
+    assert.match(texts, /RETURN orc-executor-sonnet-5-high :: wire ui/, "RETURN attributed with its desc");
+    assert.match(texts, /dur=\d+m\d+s/, "wall-clock duration appended");
+    assert.match(texts, /model=claude-sonnet-5/, "actual_model captured from last_assistant_message");
+    assert.doesNotMatch(texts, /RETURN ~/, "an exact agent_type match is never marked approximate");
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("trace: without agent_type, RETURN falls back to FIFO and marks it approximate (~)", () => {
+  const { root, claudeDir } = freshInstall();
+  try {
+    runHook(claudeDir, "orc-trace.js", {
+      hook_event_name: "PreToolUse",
+      tool_name: "Agent",
+      tool_input: { subagent_type: "orc-executor-haiku-4-5", description: "tiny task" },
+    });
+    runHook(claudeDir, "orc-trace.js", { hook_event_name: "SubagentStop" });
+    const { texts } = traceFiles(claudeDir);
+    assert.match(texts, /RETURN ~orc-executor-haiku-4-5 :: tiny task/, "FIFO fallback attributes + marks ~");
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("trace: a missing sidecar still writes a (bare) RETURN", () => {
+  const { root, claudeDir } = freshInstall();
+  try {
+    runHook(claudeDir, "orc-trace.js", {
+      hook_event_name: "PreToolUse",
+      tool_name: "Agent",
+      tool_input: { subagent_type: "orc-executor-opus-4-8-high", description: "build auth" },
+    });
+    // Simulate a lost/corrupt sidecar: delete every .pending.json in the log dir.
+    const logDir = path.join(claudeDir, "orc", "logs");
+    for (const f of fs.readdirSync(logDir).filter((f) => f.endsWith(".pending.json")))
+      fs.unlinkSync(path.join(logDir, f));
+    const ret = runHook(claudeDir, "orc-trace.js", {
+      hook_event_name: "SubagentStop",
+      agent_type: "orc-executor-opus-4-8-high",
+    });
+    assert.strictEqual(ret.status, 0);
+    const { texts } = traceFiles(claudeDir);
+    assert.match(texts, /RETURN orc-executor-opus-4-8-high/, "RETURN still written without the sidecar");
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("trace: a SubagentStop with a non-ORC agent_type is dropped", () => {
+  const { root, claudeDir } = freshInstall();
+  try {
+    runHook(claudeDir, "orc-trace.js", {
+      hook_event_name: "PreToolUse",
+      tool_name: "Agent",
+      tool_input: { subagent_type: "orc-executor-sonnet-5-high", description: "do a thing" },
+    });
+    runHook(claudeDir, "orc-trace.js", {
+      hook_event_name: "SubagentStop",
+      agent_type: "Explore",
+    });
+    const { texts } = traceFiles(claudeDir);
+    assert.doesNotMatch(texts, /hook\s+RETURN/, "a non-ORC subagent never claims an ORC RETURN");
+  } finally {
+    rmrf(root);
+  }
+});
+
 test("trace: a non-ORC agent dispatch is never logged", () => {
   const { root, claudeDir } = freshInstall();
   try {

@@ -6,9 +6,9 @@
 
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
-![Version](https://img.shields.io/badge/version-0.30.0-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.31.0-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
-![Node](https://img.shields.io/badge/node-%3E%3D16-brightgreen.svg?style=for-the-badge)
+![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
 ![Dependencies](https://img.shields.io/badge/dependencies-zero-lightgrey.svg?style=for-the-badge)
 ![GitHub stars](https://img.shields.io/github/stars/azure-id/orc?style=for-the-badge&color=yellow)
@@ -46,33 +46,37 @@ zero-dependency npm package installs those files into your `.claude/` directory.
 
 ## Changelog
 
-### v0.30.0 — Scoring revamp, Fable 5 role override, tier-aware guards, `orc onboarding` _(2026-07-23)_
+### v0.31.0 — Execution-integrity revamp: plan handoff, attributable traces, facet scoring _(2026-07-23)_
 
-A quality-of-life release across the guards, scoring, config, and CLI.
-**Tier-aware guards:** the effort guard now accepts `high`, `xhigh`, AND `max`
-(an xhigh/max session was wrongly blocked); the statusline is a three-tier
-verdict — ✔ ORC-ready (Opus 4.8 high), 🚀 ORC-boosted (Opus 4.8 xhigh/max or
-Fable 5 medium…max), ✖ WILL DEGRADE below — and writes a session-model bridge so
-the guard can grant Fable 5's medium-effort allowance (the guard can't see the
-model id on its own). **Single 8-band scoring table:** the narrow/wide presets
-are gone — one canonical score→model table adds a `haiku-4-5` [0,30) floor and an
-`opus-4-8-med` [80,85) band (8 executors now), `rubric_bands` is granularity
-only, and the rubric demands a visible `base + adjusters = final` with an
-anti-inflation cite so the model stops reflexively scoring 60. **Fable 5 role
-override (hard-gated):** `fable5_enabled`/`fable5_effort`/`fable5_roles` route
-analyze/plan/advisor/judge/review to pinned `orc-<role>-fable-5` agents — nothing
-changes unless enabled and roles are selected; the CLI rewrites the agents'
-effort frontmatter on set. **Config that really works:** a config-key coverage
-lint fails the build on a decorative key, and a Phase-1 `CONFIG` trace line
-records the resolved values `/orc-retro` can audit. **DIY:** a full session-tier
-grid (sonnet-4-6 · opus-4-7 · opus-4-8 · fable-5, medium…max). **`orc
-upgrade`** tries the tarball first (the github: spec fails on restricted git) and
-remembers what worked. **`orc onboarding`** — a full in-terminal walkthrough
-(menu on a TTY, prints all when piped) so you never need the GitHub README — plus
-a shared zero-dep terminal UI kit (`bin/ui.js`).
+Driven by a real cross-session run trace where a plan built in one session was
+executed in another and drifted. Five fixes, verifier untouched (it performed
+well). **Plan handoff is a real entry contract:** when the run input IS a plan
+(pasted planning-output, a `plan-{name}.md` path, or a saved planner checkpoint),
+ORC no longer improvises task-by-task — it bootstraps the trace, schema-validates,
+applies a `plan_head` staleness valve, RE-RUNS the full Phase 1 exit gate in the
+executing session (the deterministic catch for the phantom-file drift that
+started this), relays the plan's open questions, then runs the normal Phase 2–8.
+**Attributable RETURN traces:** the trace hook now writes
+`RETURN <agent> :: <desc> dur=<m>m<s>s [model=<id>]` — it attributes each finish
+to its agent (from the SubagentStop payload, FIFO `~`-marked on older Claude
+Code), echoes the dispatch's description + wall-clock duration, and captures the
+`actual_model` when it is visible, so a bare `SPAWN`/`RETURN` skeleton is no
+longer unattributable. **Waves always exist:** wave grouping now runs for every
+run with ≥2 tasks, sequential included — dispatch style controls only intra-wave
+concurrency, so the batch pause always binds to wave numbers instead of
+degenerating to per-task stops. **Facet-scored rubric:** the planner (the party
+that read the code) emits per-task `facets` — breadth, novelty, logic,
+test-surface, cited risk, uncertainty — and the orchestrator computes the score
+with a fixed published formula and re-validates the facts; no number is judged
+from a task title, and **every** fix-cycle dispatch is scored too (a fix in a
+risk area can never silently drop to a cheap model). **Planner clarity:** plans
+return `plan_confidence` + `open_questions[]`, with a step-back valve to
+`orc-analyze` when confidence is low.
 
 <details>
 <summary><b>Previous versions</b> (click to expand)</summary>
+
+### v0.30.0 — Scoring revamp, Fable 5 role override, tier-aware guards, `orc onboarding` _(2026-07-23)_
 
 ### v0.29.0 — Drift-prevention hardening: install manifest + prune, `orc doctor`, a real test suite _(2026-07-22)_
 
@@ -153,56 +157,34 @@ a shared zero-dep terminal UI kit (`bin/ui.js`).
 
 ## Why ORC exists
 
-Hand a real feature to a single agent and watch how it fails. Not randomly —
-the same ways, every time. It reads your requirements once, silently picks an
-interpretation, and builds *that* instead of what you meant. It runs the top
-model on everything, so a one-line rename costs the same as an architecture
-change. Twenty minutes in, context compacts and it forgets decisions it made
-ten minutes ago. It says "done" against a definition of done that was never
-written down. It cites code that doesn't exist, claims tests passed that never
-ran, and writes code in a style your codebase has never seen. And when it goes
-wrong, you have nothing to inspect — no plan, no state, no record of what was
-dispatched where.
-
-None of these are model problems. They are **process problems** — the same
-ones software teams solved decades ago with roles, reviews, and written
-agreements. ORC is that discipline, encoded as skills the model must follow:
+Hand a real feature to a single agent and it fails the same ways every time: it
+picks one reading of your requirements silently, runs the top model on
+everything, forgets decisions when context compacts, says "done" against a
+definition of done nobody wrote, cites code that doesn't exist, and leaves
+nothing to inspect. These are **process problems** — the ones teams solved with
+roles, reviews, and written agreements. ORC encodes that discipline as skills:
 
 - **Coordination and labor are separate jobs.** The orchestrator never
-  implements — even a one-line change goes to a spawned subagent. This keeps
-  the coordinator's context lean for the entire run and turns every task into
-  a routable unit of work.
-- **Every task is scored, and the score picks the model.** Small tasks get
-  cheap models; the expensive ones are reserved for work that genuinely needs
-  them. You see the scoring table before anything dispatches — and named,
-  model-pinned agents mean what ran is verifiable, not a prose request.
-- **"Done" is written down before work starts.** Intake produces a signed-off
-  intent-spec; its definition-of-done becomes the verification criteria at the
-  end. With documents, the analyst grounds every requirement in your actual
-  code first — so scope bleed and stale doc claims die before they're
-  parallelized across five agents.
-- **Nothing is trusted, everything is attested.** Every claim carries
-  evidence — `file:line` quotes from the analyst, grounding attestations from
-  the planner, verbatim build output from executors, anchored findings from
-  reviewers — and the orchestrator spot-checks it deterministically on every
-  return. A hallucinated citation bounces; it doesn't ride into an executor
-  slice.
-- **Disk is the source of truth, not the conversation.** Every run checkpoints
-  eagerly, so a pause — planned, token-limit, or crash — resumes cleanly, even
-  in a fresh session. Compaction stops being fatal.
-- **Rigor is a dial, not a constant.** The same spine runs as `orc-mini` (one
-  subagent, no ceremony) for small work, `/orc` for real features, and
-  `/orc-ultra` (a max-effort advisor plus judgment gates after analysis,
-  planning, and implementation) when a miss is expensive.
-- **The system learns your project — and itself.** Learned code patterns make
-  executors match your house style; the optional wiki makes every future plan
-  sharper; behavior traces feed `/orc-retro`, which mines real runs to
-  recalibrate how tasks are scored.
-
-The through-line: **an agent's judgment is only as good as the structure
-around it.** ORC supplies the structure — bounded scope, matched cost,
-durable state, and evidence at every hand-off — so the models can be good at
-the part they're actually good at: the work.
+  implements — even a one-line change goes to a spawned subagent — keeping its
+  context lean for the whole run.
+- **Every task is scored, and the score picks the model.** You see the table
+  before anything dispatches; named, model-pinned agents make what ran
+  verifiable, not a prose request.
+- **"Done" is written before work starts.** Intake produces a signed-off
+  intent-spec whose definition-of-done becomes the end verification; with
+  documents, the analyst grounds every requirement in real code first.
+- **Nothing is trusted, everything is attested.** `file:line` quotes, grounding
+  attestations, verbatim build output, anchored findings — the orchestrator
+  spot-checks each on return, so a hallucinated citation bounces instead of
+  riding into a slice.
+- **Disk is the source of truth.** Eager checkpoints make every pause — planned,
+  token-limit, or crash — a clean resume, even in a fresh session.
+- **Rigor is a dial.** The same spine runs as `orc-mini` (one subagent), `/orc`
+  (real features), and `/orc-ultra` (max-effort advisor + judgment gates) when a
+  miss is expensive.
+- **The system learns.** Code patterns make executors match your house style,
+  the optional wiki sharpens every future plan, and behavior traces feed
+  `/orc-retro`, which recalibrates scoring from real runs.
 
 ---
 
@@ -305,47 +287,40 @@ needed. Either way, your `.claude/orc.config.yaml` overrides are left untouched.
 | Command | What it does |
 |---------|--------------|
 | **`/orc`** | The full orchestrator: intake → planning → per-task scoring → conflict-free parallel waves → review → verify → ship. Checkpoints eagerly; resumes in a fresh session at any pause. |
-| **`/orc-ultra`** | The maximum-rigor lane for complex/ultra-complex work: the full pipeline plus an Opus 4.8 **max** advisor (code-grounded brief + rubric + one batched clarification round) and three judgment gates — after analysis, after planning, and after verify (implementation fidelity + ultra-strict quality: security, smells, simplification, placement). Deep analyze, pattern/testgen/security forced on, executor tier floor. Costly by design. |
+| **`/orc-ultra`** | Maximum-rigor lane: the full pipeline plus an Opus 4.8 **max** advisor (brief + rubric + one clarification round) and three judgment gates (after analysis, planning, and verify). Deep analyze, pattern/testgen/security forced on, executor tier floor. Costly by design. |
 | **`/orc-mini`** | The fast path — see below. |
-| **`/orc-fast`** | The fastest lane — knowledge-gated: requires a fresh wiki + a cached code-pattern, skips analyst/planner entirely, one Sonnet 4.6 high executor + smoke gate. Falls back to `orc-mini` when a prerequisite is missing. See below. |
-| **`/orc-diy`** | **Your own lane.** Runs the flow you composed with the `orc diy` CLI and compiled with `orc diy compile`. Hard-gated: unconfigured or stale → never runs, offers plain `/orc` instead. Full guide: [ORC-DIY README](templates/skills/orc-diy/README.md). |
-| **`/orc-analyze`** | The System Analyst: turns a requirement or document into a scope-bounded, code-grounded, evidence-backed spec. |
-| **`/orc-plan`** | The Requirement Planner: a detailed request or analyst spec → a grounded, right-sized, dependency-checked task plan. Detects an orc-poly `poly-spec.md` and splits it into one plan per repo. |
-| **`/orc-poly`** | **Poly-repo planning.** Plan ONE change that spans 2+ repos (backend endpoint + frontend UI, service + its gRPC consumer) without drift. Run it in the HOST repo, paste each PEER repo path; it peeks at every repo's wiki + crosslink (or asks which files to dig), pins the shared boundary into a frozen `interface-contract.md`, and — on your go-ahead — splits into one plan per repo (each written into its repo, all pinned to the contract) so each repo's later plain `/orc` build stays on contract. PEER source is read-only; never builds. |
-| **`/orc-verify`** | Standalone verification of your git-modified changes (build + tests + diff sanity). Read-only. |
-| **`/orc-wiki`** | Builds a persistent project knowledge base into `wiki/` and points `CLAUDE.md` at it. Expensive, opt-in. Also powers **cross-repo crosslink** (link a BE/FE/service's wiki so ORC builds against real cross-repo contracts) — full setup guide: [ORC-WIKI README](templates/skills/orc-wiki/README.md). |
-| **`/orc-pattern`** | Learns your project's real code conventions per language and caches them so executors match your house style. Reconciles a generic playbook (9 languages: React · Next.js · Vue · Angular · FastAPI · Django · NestJS · Express · Go) against your actual files — conventions defer to your codebase; security/correctness invariants and measurable validation gates always carry through to review + verify. `--refresh` to relearn. |
-| **`/orc-claude`** | Builds/updates/refreshes the **local repo's** `CLAUDE.md` from verified facts (real commands, layout, convention deviations, boundaries). Version-stamped (`0.0.1`, +0.0.1 per change, DD-MM-YYYY) with fenced sections — refresh regenerates only sections whose input fingerprints changed. Zero questions: P0/Gotchas/Glossary are fill-yourself placeholders. Foreign files backed up to `CLAUDE.md.bak`, user content never trimmed, wiki block byte-preserved. |
-| **`/orc-learn`** | Per-feature **onboarding docs** for humans — pick one feature (wiki topics first, else point at the files) and get `learning-docs/<feature>/learning.md` (mental model, guided walkthrough, change recipes, required FAQ) + `knowledge.md` (`file:line`-anchored functions & full flow, contracts, fingerprints). Local and git-ignored — each dev regenerates their own. `refresh` lists every feature with computed freshness and regenerates only what you pick. |
-| **`/orc-retro`** | Mines the behavior traces (`logging: true` runs) into an AI-readable calibration report — per-band outcomes, tier downgrades, pipeline leaks — and files it to the ORC repo (`retro_repo`, default azure-id/orc) as a PR (issue fallback). Hard-gates on an authed gh CLI or GitHub MCP: neither → refuses to run. |
+| **`/orc-fast`** | Fastest lane — knowledge-gated: needs a fresh wiki + cached code-pattern, skips analyst/planner, one Sonnet 4.6 high executor + smoke gate. Falls back to `orc-mini` when a prerequisite is missing. See below. |
+| **`/orc-diy`** | **Your own lane** — runs the flow you composed with the `orc diy` CLI. Hard-gated: unconfigured/stale → offers plain `/orc`. Guide: [ORC-DIY README](templates/skills/orc-diy/README.md). |
+| **`/orc-analyze`** | System Analyst: a requirement or document → a scope-bounded, code-grounded, evidence-backed spec. |
+| **`/orc-plan`** | Requirement Planner: a request or analyst spec → a grounded, right-sized, dependency-checked task plan. Splits an orc-poly `poly-spec.md` into one plan per repo. |
+| **`/orc-poly`** | **Poly-repo planning.** Plan ONE change spanning 2+ repos (BE endpoint + FE UI, service + gRPC consumer) without drift. Run in the HOST repo, paste each PEER path; it reads every repo's wiki + crosslink, pins the shared boundary into a frozen `interface-contract.md`, and splits into one plan per repo. PEER source read-only; never builds. |
+| **`/orc-verify`** | Standalone verification of git-modified changes (build + tests + diff sanity). Read-only. |
+| **`/orc-wiki`** | Builds a persistent knowledge base into `wiki/` and points `CLAUDE.md` at it. Expensive, opt-in. Powers **cross-repo crosslink** — guide: [ORC-WIKI README](templates/skills/orc-wiki/README.md). |
+| **`/orc-pattern`** | Learns and caches your real code conventions per language so executors match your house style. Reconciles a generic playbook (9 languages) against your files — conventions defer to your codebase; security/correctness invariants always carry through. `--refresh` to relearn. |
+| **`/orc-claude`** | Builds/refreshes the **local repo's** `CLAUDE.md` from verified facts — fenced, version-stamped sections, fingerprint-scoped refresh. Zero questions; user content never trimmed, wiki block byte-preserved. |
+| **`/orc-learn`** | Per-feature **onboarding docs** for humans — `learning-docs/<feature>/learning.md` (mental model, walkthrough, recipes, FAQ) + `knowledge.md` (`file:line`-anchored). Local, git-ignored; `refresh` regenerates only what you pick. |
+| **`/orc-retro`** | Mines behavior traces into an AI-readable calibration report (per-band outcomes, downgrades, pipeline leaks) and files it to the ORC repo (`retro_repo`) as a PR (issue fallback). Hard-gates on an authed gh CLI or GitHub MCP. |
 
 ### `/orc` — the full orchestrator
 
-Feature or spec → shipped code, through: intake (with a signed-off intent-spec),
-planning, per-task scoring, conflict-free parallel waves, review, verify, and
-ship. Checkpoints eagerly; resumes in a fresh session at any pause.
+Feature or spec → shipped code: intake (signed-off intent-spec) → planning →
+per-task scoring → conflict-free parallel waves → review → verify → ship.
+Checkpoints eagerly; resumes in a fresh session at any pause. Also accepts a
+**handed-off plan** (pasted planning-output or a saved plan file) — it re-grounds
+and re-scores the plan in the executing session before building.
 
-The quality pipeline in detail:
-
-- **Every executor slice carries a standing house-rules card** (surgical changes
-  only, simplicity-first, no unrequested scope, boring solution first) plus the
-  intent-spec's hard constraints — and, when a code-pattern is resolved, your
-  project's conventions, blocking invariants, and the playbook's **validation
-  gate** (default acceptance checks, enforced only when your own tooling can
-  verify them).
-- **Review + verify findings land on a P0–P3 severity ladder**, each level with
-  distinct handling: **P0** (broken build/tests/criteria, invariant violations)
-  is auto-fixed once without asking · **P1** (correctness/security risk) gates
-  the ship and asks you before the fix · **P2** (maintainability) is offered as
-  an optional fix-batch · **P3** (cosmetic) is counted. On frontend work the
-  reviewer also checks two capped, impact-ordered **a11y/perf rule packs**
-  (file:line findings, never auto-P0).
-- **Two opt-in extra phases:** a **security pass** (Phase 5.5, config
-  `security_review`) that fires only on runs containing a task scored ≥ 70 —
-  the risk floor for security/money/migrations/auth — sweeping the changed
-  files against a 12-item OWASP/STRIDE checklist; and **test authoring**
-  (Phase 6.5, config `generate_tests`) that writes test cases + `TEST-PLAN.md`
-  + a curl bundle, never runs them.
+- **Every executor slice carries a house-rules card** (surgical, simplicity-first,
+  no scope creep) plus the intent-spec's constraints and — when a code-pattern is
+  resolved — your conventions, blocking invariants, and the playbook's
+  **validation gate** (checked only when your own tooling can verify it).
+- **Review + verify findings land on a P0–P3 ladder:** P0 (broken
+  build/tests/invariants) auto-fixed once · P1 (correctness/security) gates ship,
+  asks first · P2 optional fix-batch · P3 counted. Frontend work also gets capped
+  a11y/perf rule packs.
+- **Two opt-in phases:** a **security pass** (`security_review`, fires only when a
+  task scored ≥ 70) sweeping changed files against a 12-item OWASP/STRIDE
+  checklist, and **test authoring** (`generate_tests`) that writes test cases +
+  `TEST-PLAN.md` + a curl bundle but never runs them.
 
 ### `/orc-mini` — the fast path
 
@@ -354,16 +329,12 @@ intake (Q1–Q4, soft sign-off) ─▶ plan ─▶ ONE Sonnet-5-high subagent
    ─▶ build + test smoke gate (red blocks ship) ─▶ opt-in "write test cases?" ─▶ ship
 ```
 
-Same spine as `/orc` but leaner: **lighter intake** (fewer questions, soft
-sign-off), a **one-line complexity read** instead of a full scoring table, and
-**one Sonnet-tier subagent** for implementation (no parallel waves). It skips the
-full review/verify/summary passes, but still:
-
-- runs a **build + test smoke gate** after implementation — a red build **blocks
-  the ship** (auto-fixed once), so "never commit on a red build" actually holds;
-- **offers opt-in test authoring** at the end (writes test cases, never runs them);
-- **switches to the full flow mid-run** on request — the run folder and checkpoint
-  are shared, so nothing is lost.
+Same spine as `/orc`, leaner: lighter intake, a one-line complexity read (no
+scoring table), and one Sonnet-tier subagent (no parallel waves). It skips the
+full review/verify/summary passes but still runs a **build + test smoke gate**
+(a red build blocks the ship, auto-fixed once), **offers opt-in test authoring**,
+and **switches to the full flow mid-run** on request (shared run folder +
+checkpoint, so nothing is lost).
 
 ### `/orc-fast` — the fastest lane (knowledge-gated)
 
@@ -373,24 +344,15 @@ preflight (fresh wiki? pattern cache?) ─▶ fit gate + micro-intake (ONE ask)
    ─▶ build + test smoke gate (one repair round, red blocks ship) ─▶ ship
 ```
 
-Where `orc-mini` pays for an analyst-lite and planner-lite because it has no
-project knowledge, `orc-fast` pays for **neither** — the wiki supplies
-grounding, the pattern cache supplies house style. That trade is enforced by
-two hard prerequisites checked at preflight:
-
-- **A fresh wiki.** Freshness is computed live from the `wiki-meta.json`
-  manifest (commit distance since last scan → FRESH / AGING / STALE). On STALE
-  you choose: **refresh then continue** (recommended — incremental, cheap),
-  **drop to orc-mini**, or continue anyway (not recommended).
-- **A cached code-pattern** for the request's language
-  (`.claude/orc/patterns/<lang>-pattern.md`).
-
-Either missing → **automatic fallback to `orc-mini`** with the request (and any
-completed intake) carried over — the chat never stops. A fit gate also bounces
-anything that decomposes into multiple tasks or spans many files. Because there
-is no scoring or planning judgment, the orchestrator itself runs fine at
-**Sonnet medium** — no Opus session required. `/orc-fast` is the recurring
-payoff for having run `/orc-wiki` and `/orc-pattern`.
+Where `orc-mini` pays for an analyst-lite and planner-lite, `orc-fast` pays for
+**neither** — the wiki supplies grounding, the pattern cache supplies house
+style. Two hard preflight prerequisites: a **fresh wiki** (freshness computed
+live from `wiki-meta.json`; on STALE you refresh, drop to orc-mini, or continue)
+and a **cached code-pattern** for the request's language. Either missing →
+**automatic fallback to `orc-mini`**, request carried over — the chat never
+stops. With no scoring or planning judgment, the orchestrator runs fine at
+**Sonnet medium**. `/orc-fast` is the payoff for having run `/orc-wiki` and
+`/orc-pattern`.
 
 ### `/orc-diy` — build your own lane
 
@@ -400,16 +362,13 @@ orc diy init ─▶ orc diy set … ─▶ orc diy compile        (terminal, zer
 /orc-diy <request>  ─▶ hard gate ─▶ runs YOUR compiled flow
 ```
 
-The shipped lanes trade rigor for speed in fixed steps; `orc-diy` lets you pick
-the trade yourself — which phases run and how strict, rubric scoring or one
-fixed executor, how autonomous, how it ships, and which session tier it
-requires. Everything is composed in the **terminal** with the `orc diy` CLI and
-compiled into a flow file; Claude never invents or edits the flow in-session.
-Unconfigured or stale (config changed, orc updated, artifact touched) →
-`/orc-diy` refuses and offers plain `/orc` — it never runs a flow that doesn't
-match what you compiled. Safety boundaries (never-implement, checkpoints, wave
-conflict rules, severity ladder, red-build ship block) are locked into every
-flow and can't be configured away.
+The shipped lanes fix the rigor/speed trade; `orc-diy` lets you pick it — which
+phases run and how strict, rubric scoring or one fixed executor, autonomy, ship
+mode, session tier. Everything is composed in the **terminal** with the `orc diy`
+CLI and compiled into a flow file; Claude never invents or edits it in-session.
+Unconfigured or stale → `/orc-diy` refuses and offers plain `/orc`. Safety
+boundaries (never-implement, checkpoints, wave conflict rules, severity ladder,
+red-build ship block) are locked into every flow.
 
 > [!IMPORTANT]
 > **The how-to lives in its own guide, not in this README:**
@@ -419,38 +378,23 @@ flow and can't be configured away.
 
 ### `/orc-analyze` — the System Analyst
 
-Turns a **requirement** — a document (PDF by path or pasted, prose **or**
-audit/structured) **or** a plain-language request with no doc at all — into a
-scope-bounded, code-grounded requirement report. It bounds the **deliverable** to
-the scope you asked for (other scopes never become tasks) while pulling **related**
-adjacent scopes in as anchored, non-actionable context — labeled "do not build" —
-so the build understands your scope correctly instead of guessing. It maps each
-requirement to real files, and **never hallucinates about what you meant**: every
-interpretation and every code claim carries `file:line` evidence, or gets tagged
-as an assumption and turned into a question. It challenges you one issue at a time
-with **recommended options** (it decides and recommends; you confirm).
+Turns a **requirement** — a document (PDF by path or pasted, prose or
+audit/structured) or a plain-language request with no doc — into a scope-bounded,
+code-grounded report. It bounds the **deliverable** to the scope you asked for
+while pulling related adjacent scopes in as anchored "do not build" context. It
+maps each requirement to real files and **never hallucinates about what you
+meant**: every interpretation and code claim carries `file:line` evidence or
+becomes a question. It challenges you one issue at a time with **recommended
+options**. Opt into **deep analysis** for a wider sweep (parallel read-only
+scouts), verify-every-claim, and implementation options with trade-offs.
 
-> [!NOTE]
-> Opt into **deep analysis** when it's worth the extra tokens and time: a wider
-> code sweep (the orchestrator fans out parallel read-only scouts on a plan the
-> analyst draws up), verify-every-claim, more clarifying questions, and
-> implementation options with trade-offs and risks.
-
-**Multiple related docs → one build (context-combiner).** After an analysis you
-can analyze **another related doc** in the same scope. Once two or more related
-analyses exist, ORC offers **context-combiner** — a dispatched Opus 4.8 subagent
-that merges them into a single deduped, conflict-resolved requirement spec. It
-first **verifies the analyses actually overlap** and challenges you if they look
-unrelated, then pools all source requirements (never pairwise, so it scales past
-2 sources) and resolves cross-scope conflicts one issue at a time — semantic
-duplicates keep both original statements, partial overlaps are **split, never
-collapsed**. A **conservation gate proves nothing was lost**: every source
-requirement gets exactly one recorded outcome in a source coverage matrix, and
-build handoff is blocked below 100% coverage (dropping anything requires your
-explicit decision). Inherited evidence is spot-checked against the current git
-HEAD — stale anchors are flagged and challenged, never silently carried. The
-merged spec is a strict superset of a normal requirement spec, so it feeds the
-same build pipeline unchanged.
+**Multiple related docs → one build (context-combiner).** Once 2+ related
+analyses exist, a dispatched Opus 4.8 subagent merges them into one deduped,
+conflict-resolved spec: it verifies real overlap, pools all source requirements
+(never pairwise), splits partial overlaps rather than collapsing them, and a
+**conservation gate blocks handoff below 100% coverage** (dropping anything needs
+your call). Inherited evidence is re-checked against HEAD. The merged spec is a
+superset of a normal spec, so it feeds the build pipeline unchanged.
 
 ### `/orc-plan` — the Requirement Planner
 
@@ -469,83 +413,64 @@ never edits or commits.
 
 ### `/orc-wiki` — the project knowledge base
 
-Scans your codebase and writes a persistent knowledge base into `wiki/` — feature
-overviews, cross-cutting reference maps (API surface, data model, glossary,
-config/env), an architecture map, a structured `INDEX.md` (type · status ·
-description · keywords per doc) — and points `CLAUDE.md` at it.
-Expensive and opt-in: it warns before scanning, pauses periodically, and spans
-multiple sessions. `orc` and `orc-mini` consult the wiki when it exists,
-sharpening their planning and scoring; when it's absent they behave exactly as
-before. `orc-fast` requires it.
+Scans your codebase into a persistent `wiki/` — feature overviews, cross-cutting
+reference maps (API surface, data model, glossary, config/env), an architecture
+map, a structured `INDEX.md` — and points `CLAUDE.md` at it. Expensive and
+opt-in: it warns before scanning, pauses periodically, spans sessions. `orc` and
+`orc-mini` consult it when present (sharper planning/scoring) and behave as
+before when absent; `orc-fast` requires it.
 
-**Evidence-anchored by contract (v2).** Every doc opens with a 60-second TL;DR,
-and every claim in its contract sections (routes, tables, events, config keys,
-testing map) cites the file it comes from — a claim the scan agent can't anchor
-is omitted, not guessed. Every run ends with an integrity self-check (docs,
-`INDEX.md`, manifest registry, and the `CLAUDE.md` block must agree), and the
-precedence rule is explicit: **code > fresh wiki > stale wiki (hints) > model
-priors** — on any conflict, the code wins.
+- **Evidence-anchored (v2).** Every contract claim (routes, tables, events,
+  config, testing map) cites its file — unanchored claims are omitted, not
+  guessed. Every run ends with an integrity self-check, and precedence is
+  explicit: **code > fresh wiki > stale wiki > model priors**.
+- **Freshness is computed, never stored.** Each scan writes a `wiki-meta.json`
+  manifest; consumers measure commit distance on read (FRESH / AGING / STALE),
+  shown live in the statusline. Refresh is **incremental** — it re-scans only the
+  docs affected since the last scan and sweeps for coverage gaps + dead docs.
+- **Cross-repo crosslink.** In a multi-repo setup, crosslink lets one repo
+  reference another's wiki *at the integration boundary* so executors build
+  against the real contract. Every scan publishes this repo's boundary as tag
+  files; the `orc crosslink` CLI draws the graph; `/orc`/`/orc-fast`/`/orc-mini`
+  inject the linked contract only where a slice touches a boundary. **Advisory,
+  never blocking**, reads foreign *wiki* only.
 
-**Freshness is computed, never stored.** Every scan ends by writing a
-`wiki-meta.json` manifest (timestamp, the commit scanned, the project's
-build/test commands, and a per-doc registry with per-file content hashes).
-Consumers measure commit distance against it on read —
-FRESH / AGING / STALE — so the status is always current with zero writes; the
-statusline shows it live (`wiki: STALE (41c)`). Refreshing is cheap: the
-**incremental** mode diffs since the last scan and re-scans only the affected
-docs, sweeping for coverage gaps (changed files no doc covers → proposes new
-areas) and dead docs (covered files gone → archive/delete) as it goes. After a
-BIG `/orc` or `/orc-ultra` run, ORC asks right at ship whether to
-refresh now (recommended) — declining prints a refresh-ASAP note.
-
-**Cross-repo crosslink.** In a multi-repo setup — a backend a frontend calls, a
-backend that calls other services over gRPC — each repo's wiki only knows its own
-code. Crosslink lets one repo reference another's wiki *at the integration
-boundary* so executors build against the real cross-repo contract instead of
-guessing. Every scan publishes this repo's boundary as per-point tag files; the
-`orc crosslink` CLI draws the graph (which repos, which way); `/orc`, `/orc-fast`,
-and `/orc-mini` inject the linked contract into a task's slice only when it
-touches a boundary. It's **advisory, never blocking**, reads foreign *wiki* only
-(never source, never a foreign write), and degrades gracefully across version
-skew. **Complete step-by-step setup guide:**
-[`templates/skills/orc-wiki/README.md`](templates/skills/orc-wiki/README.md)
-(installed at `.claude/skills/orc-wiki/README.md`).
+**Full setup guide:**
+[`templates/skills/orc-wiki/README.md`](templates/skills/orc-wiki/README.md).
 
 ---
 
 ## Eval status
 
-The constellation is also graded **end-to-end**, not just per-file: a 17-lane
+The constellation is graded **end-to-end**, not just per-file: a 17-lane
 executable eval suite runs every lane against a sandboxed Express fixture and
-grades the run from on-disk evidence (behavior traces, run folders, artifacts).
-The full graded results for the current payload — per-lane duration, task
-complexity, dispatch/step counts, accuracy-vs-design findings, and known
-drift — live in **[EVAL-REPORT.md](EVAL-REPORT.md)**.
-
-Headline for v0.25.0: **13/13 evidenced lanes passed their core contract, with
-zero silent model downgrades across ~35 subagent dispatches**. Known drift
-being fixed: test authoring (Phase 6.5) writes `TEST-PLAN.md` where the user
-can't find it — a canonical `test-generator/<change-slug>/` output folder is
-planned.
+grades from on-disk evidence (behavior traces, run folders, artifacts). Headline:
+**13/13 evidenced lanes passed their core contract, with zero silent model
+downgrades across ~35 subagent dispatches.** Full graded results —
+[EVAL-REPORT.md](EVAL-REPORT.md).
 
 ---
 
 ## How model selection works (and how to verify it)
 
-Each task is scored 0–100. The score is a base (intrinsic size) adjusted up or
-down by context — core-vs-isolated, risk, blast radius, mechanical/boilerplate.
-The score maps to a model via a **configurable rubric** in `skills/orc/config.md`:
+Each task is scored 0–100 by **arithmetic, not judgment**: the planner (the party
+that read every file) emits per-task **facets** — breadth, novelty, logic,
+test-surface, cited risk, uncertainty — and the orchestrator runs a fixed
+published formula over them, so no number is guessed from a task title. A cited
+risk facet (auth/money/migration/…) forces a ≥70 floor; **every** fix-cycle
+dispatch is scored the same way. The score maps through a **single 8-band
+score→model table** in `skills/orc/config.md`:
 
-- `rubric_bands` (2–8) sets the scoring granularity and picks a preset:
-  **narrow** (2–5 bands) or **wide** (6–8), each with its own score→model map.
-- Models span `claude-sonnet-4-6`, `claude-sonnet-5`, `claude-opus-4-7`, and
-  `claude-opus-4-8`, at medium or high effort.
-- You can override the band edges and model assignments entirely.
+- Bands span `claude-haiku-4-5` → `claude-sonnet-4-6` → `claude-sonnet-5` →
+  `claude-opus-4-7` → `claude-opus-4-8`, at medium/high effort (`claude-fable-5`
+  via the opt-in role override).
+- `rubric_bands` (2–8) sets **report granularity only** — the table is always the
+  same; override the band edges/models entirely if you want.
 
 Dispatch uses **named subagents** in `.claude/agents/`, one per role and model
-(e.g. `orc-executor-sonnet-5-high`, `orc-system-analyst-opus-4-8-high`), so the
-model is **pinned and inspectable**, not requested in prose. To confirm what a
-task actually ran on, expand the subagent's tool-call in the transcript.
+(e.g. `orc-executor-sonnet-5-high`), so the model is **pinned and inspectable**,
+not requested in prose. To confirm what a task ran on, expand its tool-call — or
+read the behavior trace, where each `RETURN` now records the actual model.
 
 > [!IMPORTANT]
 > **The cost-tier rule:** a subagent's model cannot exceed the main session's
@@ -578,7 +503,7 @@ The knobs (shipped defaults in `skills/orc/config.md`):
 |-----|---------|---------|
 | `max_wave_tasks` | `3` | Parallel tasks per wave (hard cap). |
 | `batch_pause_every` | `2` | Waves between stop-and-continue pauses. |
-| `rubric_bands` | `5` | Scoring granularity 2–8, selecting the narrow/wide preset. |
+| `rubric_bands` | `5` | Scoring **report** granularity 2–8 (the score→model table is always the single 8-band one). |
 | `max_scouts` | `3` | Parallel read-only scouts in deep analysis. |
 | `default_analysis_depth` | `standard` | The analyst depth gate's default (standard/deep). |
 | `generate_tests` | `false` | Opt-in test authoring. When on, ORC **writes** test cases (automated files, a manual `TEST-PLAN.md`, and a Postman-importable `test-cases.http` curl bundle for HTTP APIs). It never runs them; you test manually. |
@@ -669,7 +594,7 @@ a phase runs — so a small task never pays for the machinery of a big one.
 ## Requirements
 
 - **Claude Code** (reads the skills, commands, and agents).
-- **Node 16+** (installer only — the skills themselves have zero dependencies).
+- **Node 18+** (installer only — the skills themselves have zero dependencies).
 
 ## License
 

@@ -75,11 +75,15 @@ trigger points; emit `GATE` trace lines.
 ## Dispatch via named agents (not prose)
 
 Workers are model-pinned SUBAGENTS in `.claude/agents/` — the model is enforced,
-not requested in prose. Score every task and SHOW the table with `base +
-adjusters = final` columns (an un-shown number is not scored); map the final score
-via the SINGLE 8-band table in `config.md` (`rubric_bands` = granularity only,
-never a preset), and a [55,70) score must cite the adjuster that moved it (see
-`references/effort-and-mode.md`). Fixed roles dispatch BY NAME (analyst /
+not requested in prose. Score every task from the planner-emitted `facets` via
+the fixed arithmetic formula and SHOW the table with the facet vector + the
+arithmetic (`B+N+L+T+fan+U = raw`; an un-shown number is not scored); map the
+final score via the SINGLE 8-band table in `config.md` (`rubric_bands` =
+granularity only, never a preset); sibling tasks differing in ≤1 facet share a
+band or cite the differing facet (see `references/effort-and-mode.md`). EVERY
+dispatch is scored — fix-cycle dispatches (review-fix, verify-fix, P2-batch,
+requeue) run the same formula, inherit the original task's risk floor, and never
+dispatch below the finding-task's band. Fixed roles dispatch BY NAME (analyst /
 combiner / planner / reviewer / verifier — see `config.md`'s fixed-role table +
 `.claude/agents/MODEL-MAPPING.md`). If `fable5_enabled`, roles in `fable5_roles`
 dispatch their `orc-<role>-fable-5` variant instead — see
@@ -134,7 +138,8 @@ material) · `orc-advisor`/`orc-judge` (ultra-lane, only under ultra_mode).
 ## Constellation map (load on demand only)
 
 - Run start → `references/trace-protocol.md` (always)
-- Phase 0 → `references/intake.md`; ultra_mode → `references/ultra-mode.md`
+- Phase 0 → `references/intake.md`; **plan input → `references/plan-handoff.md`**;
+  ultra_mode → `references/ultra-mode.md`
 - Phase 0/1 analyst-planner gates → `references/analyst-gates.md`
 - Phase 1 wiki grounding → `references/wiki-consult.md` + `references/preflight-report.md`
 - Phase 2 → `references/effort-and-mode.md`; tagging → `references/pattern-gate.md`
@@ -152,6 +157,14 @@ material) · `orc-advisor`/`orc-judge` (ultra-lane, only under ultra_mode).
 ---
 
 ## Phase 0 — Intake (load references/intake.md) · Trace: `PHASE intake`
+
+**Plan-input trigger (check FIRST — load `references/plan-handoff.md`):** if the
+run input IS a plan (pasted planning-output, a `plan-{name}.md` path, or an
+`orc/planner/{name}/` checkpoint), follow that reference: bootstrap the trace,
+schema-validate, apply the `plan_head` staleness valve, RE-RUN the full Phase 1
+exit gate here (the deterministic catch for phantom-file drift), relay
+`open_questions[]`, then continue at Phase 2. A plan input never skips Phase 2/3
+nor executes task-by-task ad hoc.
 
 **Analyst auto-trigger:** on a document (PDF path, pasted doc, audit sheet)
 OR an ambiguous/underspecified requirement, FIRST dispatch the System Analyst
@@ -217,21 +230,30 @@ files → extract and confirm before leaving this phase.
 **Phase 1 exit gate** (deterministic — full checks in analyst-gates.md; emit
 `GATE` lines): Glob every `disposition: exists` path, recompute coverage (no
 `orphan` requirements), cycle + same-file collision checks. Any miss →
-bounce to the planner (one retry), then escalate. On pass, emit
-`PHASE planning end`.
+bounce to the planner (one retry), then escalate. **After the gate passes,
+relay the plan's `open_questions[]` in ONE batch:** blocking questions must be
+answered before Phase 2; non-blocking show their `proposed_default` for tacit
+approval. **Step-back valve:** `plan_confidence: low` OR >3 blocking questions →
+recommend stepping back to `orc-analyze` (user may override and proceed). On
+pass, emit `PHASE planning end`.
 
 ## Phase 2 — Effort, dispatch style, scoring (load references/effort-and-mode.md) · Trace: `PHASE scoring`, `SCORE`
 
 Emit `PHASE scoring start`. Refine effort; recommend **sequential** vs
-**parallel waves** (worktrees for high-effort independent features) — user
-confirms. **Batch-pause schedule (deterministic, not a cadence hint):** the plan
+**parallel** dispatch (worktrees for high-effort independent features) — user
+confirms. Dispatch style is **intra-wave concurrency only**: waves are computed
+regardless of style (sequential runs have waves too, see wave-grouping.md), so
+the batch pause always binds to wave numbers. **Batch-pause schedule (deterministic, not a cadence hint):** the plan
 has K waves — ask "pause after every wave / every 2nd / run straight through?"
 and SHOW the resulting stop list ("will pause after waves [list]"); a 2-wave
 plan plainly offers "pause after wave 1". Store it as `pause_schedule`, recompute
-each wave's `is_batch_pause` (last wave never pauses). **Score every task
-0–100**, map to the model ladder, show the table, and emit `SCORE task=<id>
-score=<n> band=<band> model=<m> :: <reason>` per task; a score override needs a
-written reason (logged). Use the wiki's "Notes for planning" to sharpen
+each wave's `is_batch_pause` (last wave never pauses). **Facet-validation gate
+(deterministic):** recompute `breadth` + `fan_in`/`fan_out` from the plan; a
+mismatch or an uncited `risk` entry bounces the plan (grounding mechanics).
+**Score every task** from its `facets` via the fixed formula, map to the model
+ladder, show the facet vector + arithmetic table, and emit `SCORE task=<id>
+score=<n> band=<band> model=<m> facets=<vector> :: <reason>` per task; a score
+override needs a written reason (logged). Use the wiki's "Notes for planning" to sharpen
 core/isolated + risk factors. **Tag each task's pattern domain+language**
 (+ secondary `db: postgres`) per `references/pattern-gate.md`. Ask: "Any
 anticipated escalations, or run straight through?" Emit `PHASE scoring end`.
@@ -239,8 +261,11 @@ anticipated escalations, or run straight through?" Emit `PHASE scoring end`.
 ## Phase 3 — Execution (load wave-grouping.md + log-protocol.md) · Trace: `PHASE execution`, `DISPATCH`/`VERIFY`/`OUTCOME` per task
 
 Emit `PHASE execution start`. Build the conflict graph from `declared_files` →
-group waves (cap `max_wave_tasks`, mark `is_batch_pause` from `pause_schedule`)
-→ write checkpoint + state-of-play BEFORE dispatching. **Pattern-resolve gate
+group waves (cap `max_wave_tasks`, mark `is_batch_pause` from `pause_schedule`;
+waves are computed for BOTH dispatch styles — sequential fires a wave's tasks
+one at a time, parallel fires them together) → SHOW the wave plan (wave → tasks →
+pause marks) to the user BEFORE wave 1 → write checkpoint + state-of-play BEFORE
+dispatching. **Pattern-resolve gate
 (once, before the first wave):** resolve each tagged language per
 `references/pattern-gate.md` and report ONE user line per language (cache hit →
 apply cached; miss → codify/agnostic per `pattern_findings`; learn → dispatch

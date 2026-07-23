@@ -30,6 +30,20 @@
  *     not STALE, and the file has fewer RETURNs than SPAWNs (a RETURN can never
  *     exist without a matching observed dispatch — this is what stops stray
  *     SubagentStops from unrelated sessions bleeding into an old trace).
+ *   - a SubagentStop that carries a non-ORC `agent_type` is dropped, mirroring
+ *     the SPAWN gate (an unrelated subagent must never claim an ORC RETURN).
+ *
+ * Attributable RETURN (v0.31.0): the bare `RETURN` skeleton is unattributable
+ * once ≥2 agents are in flight. Each SPAWN now also pushes a pending record into
+ * a sidecar next to the trace (`<trace>.pending.json` — `[{agent, desc, ts}]`).
+ * On SubagentStop the hook resolves the finishing agent from `data.agent_type`
+ * (Claude Code's SubagentStop payload) — or, on older Claude Code that omits it,
+ * pops the oldest pending record FIFO and marks the attribution approximate
+ * (`~`). It emits `RETURN <agent> :: <desc> dur=<m>m<s>s` and, when
+ * `last_assistant_message` carries the agent's `actual_model`, appends
+ * ` model=<id>` — so the claimed-vs-actual check is deterministic even if the
+ * orchestrator forgets its VERIFY line. The sidecar is best-effort: a missing or
+ * corrupt sidecar degrades to a bare RETURN (never throws, always exit 0).
  *
  * Run rotation (v0.23.0): `.current` is a POINTER, not a lifetime lease. A run
  * whose trace file has been idle longer than STALE_MS is considered ENDED — the
@@ -121,6 +135,30 @@ function readPointer(dir) {
   }
 }
 
+// Sidecar of pending SPAWN records, next to the trace file. Best-effort — every
+// accessor swallows errors so a missing/corrupt sidecar never affects the run.
+function sidecarPath(dir, file) {
+  return path.join(dir, file + ".pending.json");
+}
+function readPending(dir, file) {
+  try {
+    const arr = JSON.parse(fs.readFileSync(sidecarPath(dir, file), "utf8"));
+    return Array.isArray(arr) ? arr : [];
+  } catch (_) {
+    return [];
+  }
+}
+function writePending(dir, file, arr) {
+  try {
+    fs.writeFileSync(sidecarPath(dir, file), JSON.stringify(arr));
+  } catch (_) {}
+}
+function dropPending(dir, file) {
+  try {
+    fs.unlinkSync(sidecarPath(dir, file));
+  } catch (_) {}
+}
+
 // A trace file idle longer than this is a FINISHED run — never append to it.
 const STALE_MS = 6 * 60 * 60 * 1000;
 
@@ -172,7 +210,12 @@ process.stdin.on("end", () => {
       // instead of merging a new day's run into it.
       if (current) {
         const stats = traceStats(dir, current);
-        if (!stats || stats.idleMs > STALE_MS) current = null;
+        if (!stats || stats.idleMs > STALE_MS) {
+          // The old run is over — clean up its pending sidecar so a new run
+          // never inherits stale in-flight records.
+          dropPending(dir, current);
+          current = null;
+        }
       }
       if (!current) {
         // Bootstrap: no live run pointer (never written, dangling, or stale).
@@ -183,6 +226,12 @@ process.stdin.on("end", () => {
       }
       const desc = (input.description || "").toString().slice(0, 80);
       appendLine(dir, current, "hook", `SPAWN ${agent}`, desc);
+      // Push a pending record so the matching RETURN can be attributed (agent +
+      // desc + start time). Best-effort — a write failure degrades to a bare
+      // RETURN, never affects the run.
+      const pend = readPending(dir, current);
+      pend.push({ agent: String(agent), desc, ts: Date.now() });
+      writePending(dir, current, pend);
     } else if (event === "SubagentStop" || event === "Stop") {
       // A RETURN only makes sense inside an active run — don't manufacture a
       // trace from a stray subagent stop that had no matching ORC dispatch.
@@ -194,7 +243,47 @@ process.stdin.on("end", () => {
       // must never bleed into an ORC trace.
       if (!stats || stats.idleMs > STALE_MS) return;
       if (stats.returns >= stats.spawns) return;
-      appendLine(dir, current, "hook", "RETURN", "");
+
+      // Resolve WHICH agent finished. Claude Code's SubagentStop carries
+      // agent_type today; older builds omit it.
+      const agentType = (data.agent_type || data.agentType || "").toString();
+      // Non-ORC agent_type → drop, mirroring the SPAWN gate.
+      if (agentType && !/^orc/i.test(agentType)) return;
+
+      const pend = readPending(dir, current);
+      let rec = null;
+      let name;
+      let approx = false;
+      if (agentType) {
+        // Match the OLDEST pending record for this agent type (FIFO within name).
+        const idx = pend.findIndex((p) => p && p.agent === agentType);
+        if (idx >= 0) rec = pend.splice(idx, 1)[0];
+        name = agentType;
+      } else {
+        // Older Claude Code: no agent_type — pop the oldest pending record and
+        // mark the attribution approximate (`~`).
+        if (pend.length) rec = pend.shift();
+        name = rec ? rec.agent : "agent";
+        approx = true;
+      }
+
+      const parts = [];
+      if (rec && rec.desc) parts.push(String(rec.desc));
+      if (rec && typeof rec.ts === "number") {
+        const s = Math.max(0, Math.round((Date.now() - rec.ts) / 1000));
+        parts.push(`dur=${Math.floor(s / 60)}m${s % 60}s`);
+      }
+      // Opportunistic model capture from the finishing agent's last message —
+      // makes the downgrade check deterministic even without the VERIFY line.
+      const msg = (data.last_assistant_message || "").toString();
+      const mm =
+        msg.match(/actual_model["'\s:=]*["']?(claude-[a-z0-9-]+)/i) ||
+        msg.match(/\b(claude-[a-z0-9-]+)\b/);
+      if (mm) parts.push(`model=${mm[1]}`);
+
+      const label = approx ? `RETURN ~${name}` : `RETURN ${name}`;
+      appendLine(dir, current, "hook", label, parts.join(" "));
+      writePending(dir, current, pend);
     }
   } catch (_) {
     // Tracing must never affect a run.

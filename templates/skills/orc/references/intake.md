@@ -4,6 +4,14 @@ Goal: extract just enough that the intent-spec can't be misread, then get out of
 the way. A wrong understanding parallelized is worse than a wrong understanding
 done serially. Never interrogate; never ask what the repo can tell you.
 
+**Before anything — plan-input trigger (see `plan-handoff.md`):** if the run
+input IS a plan (pasted planning-output, a `plan-{name}.md` path, or an
+`orc/planner/{name}/` checkpoint), do NOT run intake — switch to the plan-handoff
+entry contract (`references/plan-handoff.md`): bootstrap the trace, schema-
+validate, apply the `plan_head` staleness valve, re-run the full Phase 1 exit
+gate in this session, relay `open_questions[]`, then continue at Phase 2. A plain
+prose request is not a plan — run intake normally.
+
 **Before intake questions — analyst auto-trigger (see SKILL.md Phase 0):** if the
 input includes a document OR the requirement is ambiguous/underspecified, dispatch
 the System Analyst FIRST (doc-optional; standard/deep gate; scouts in deep mode).

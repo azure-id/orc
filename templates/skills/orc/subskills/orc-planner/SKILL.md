@@ -115,6 +115,14 @@ expecting all 8 to run at once).
 2. **Ground declared_files** per the rule above (incl. test files), filling
    each task's `grounding[]` attestation as you go. Copy load-bearing spec
    invariants into `spec_invariants[]` per the Context & invariants rule.
+   **Fill each task's `facets` block in the same pass** (you are already reading
+   every declared file — zero extra passes): `breadth` = `len(declared_files)`,
+   plus `novelty` / `logic` / `test_surface` / `uncertainty`, and any `risk`
+   entries — **each risk entry MUST cite** the file/requirement that makes it so
+   (an uncited risk bounces at the orchestrator's Phase 2 facet gate). You do
+   NOT emit `fan_in`/`fan_out` (the orchestrator computes them from `depends_on`)
+   and you do NOT compute the score — the orchestrator does, arithmetically, from
+   your facets. See `../../references/effort-and-mode.md`.
 3. **Slice per-task acceptance:** give each task an `acceptance[]` — the
    intent-spec/requirement-spec definition-of-done lines that THIS task must
    satisfy (executors self-check against them; review/verify localize failures
@@ -137,7 +145,15 @@ expecting all 8 to run at once).
    task, extend one, or ask the user to explicitly descope) before presenting.
    The orchestrator independently recomputes this at Phase 1 exit and bounces
    orphans (one retry, then escalate).
-7. **Show the plan ONCE** — tasks, files, deps — in plain terms. User approves
+7. **Ask clearly; step back when unclear.** Set `plan_confidence: high|medium|low`
+   (+ a one-line reason). Every ambiguity you met while planning becomes an
+   `open_questions[]` entry — `{question, proposed_default, blocking: bool}`;
+   never silently pick a reading of an ambiguous requirement. `blocking: true`
+   means the plan can't be safely built until it's answered. If
+   `plan_confidence: low` OR you raised **>3 blocking questions**, recommend
+   stepping back to `orc-analyze` rather than forcing the plan through — the
+   orchestrator relays this and the user may override.
+8. **Show the plan ONCE** — tasks, files, deps — in plain terms. User approves
    or edits (task breakdown/approach only; scope is settled upstream, never
    re-litigated here).
 
@@ -147,6 +163,12 @@ Alongside the planning-output, return `coverage: {requirements: N, tasks: M,
 orphans: []}` — self-attested, then independently recomputed by the
 orchestrator's Phase 1 exit gate (spec R# set vs union of task
 `requirements[]`), the same attestation + spot-check pairing as `grounding[]`.
+The planning-output also carries, per task, the `facets` block (breadth =
+`len(declared_files)`, novelty/logic/test_surface/uncertainty, cited `risk[]`)
+the orchestrator scores from and re-validates (breadth + fan recompute, risk
+citation); and at the top level `plan_confidence` + `open_questions[]` (Part E),
+which the orchestrator relays in one batch. Record the plan's `plan_head` (HEAD
+at plan time) so the executing session can detect cross-session drift.
 
 ## Behavior trace (PERMANENT — every ORC entry point traces; always on)
 

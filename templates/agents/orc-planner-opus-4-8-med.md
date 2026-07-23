@@ -70,7 +70,11 @@ planning-output per `repos[]` entry** — never a single merged plan:
    Copy load-bearing Context & invariants lines VERBATIM into the guarded
    task's `spec_invariants[]` — the orchestrator appends them to the executor
    slice's constraints[]; never turn a context item into a task or a declared
-   file.
+   file. In the SAME pass fill each task's `facets` block (breadth =
+   len(declared_files), novelty/logic/test_surface/uncertainty, and any `risk`
+   entries — each risk entry MUST cite the file/requirement that makes it so).
+   You never compute the score and never emit fan_in/fan_out — the orchestrator
+   scores arithmetically from your facets and computes fan from depends_on.
 3. Slice per-task acceptance[] from the spec's definition-of-done — each line
    CITES its source (R3 / DoD#2); a line with no source is invented by
    definition. Never invent criteria the spec lacks.
@@ -83,16 +87,25 @@ planning-output per `repos[]` entry** — never a single merged plan:
 6. Coverage self-check: every in-scope R#/DoD line appears in ≥1 task's
    requirements[] — an orphan requirement is a MALFORMED plan; fix before
    presenting (add/extend a task, or ask the user to explicitly descope).
-7. Consider config.max_wave_tasks so the plan is sensible for the wave cap.
-8. Checkpoint the plan into orc/planner/{name}/ (never a loose file).
-9. Show the plan ONCE; user approves/edits (breakdown/approach only — scope is
-   settled upstream, never re-litigated).
+7. Ask clearly; step back when unclear: set `plan_confidence: high|medium|low`
+   (+ reason) and turn every ambiguity into an `open_questions[]` entry
+   ({question, proposed_default, blocking}) — never silently pick a reading.
+   plan_confidence low OR >3 blocking questions → recommend stepping back to
+   `orc-analyze` (the orchestrator relays this; the user may override).
+8. Consider config.max_wave_tasks so the plan is sensible for the wave cap.
+9. Checkpoint the plan into orc/planner/{name}/ (never a loose file). Record
+   `plan_head` (HEAD at plan time) so the executing session can detect drift.
+10. Show the plan ONCE; user approves/edits (breakdown/approach only — scope is
+    settled upstream, never re-litigated).
 
 ## Return
 The ORC planning-output object + a one-line summary + `coverage:
 {requirements: N, tasks: M, orphans: []}` (self-attested — the orchestrator
 recomputes it at Phase 1 exit alongside the grounding Glob, cycle, and
-same-file collision checks, and bounces failures back to you, one retry). Also
+same-file collision checks, and bounces failures back to you, one retry). Every
+task carries its `facets` block (the orchestrator scores from it and re-validates
+breadth + fan + risk citation); the top level carries `plan_head`,
+`plan_confidence`, and `open_questions[]`. Also
 report `actual_model` (quoted verbatim from your system prompt's "The exact
 model ID is …" line; `unknown` if absent, never guessed) and `actual_effort`
 ($CLAUDE_EFFORT). Then the orchestrator branches: take-into-build (hand

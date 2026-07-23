@@ -199,6 +199,7 @@ const CONTRACTS = [
       "skills/orc-mini/SKILL.md",
       "skills/orc/SKILL.md",
       "skills/orc/references/analyst-gates.md",
+      "skills/orc/references/plan-handoff.md",
       "skills/orc/schemas/planning-output.md",
       "skills/orc/subskills/orc-planner/SKILL.md",
       "skills/orc/subskills/orc-planner-mini/SKILL.md",
@@ -269,6 +270,8 @@ const CONTRACTS = [
       "skills/orc-poly/references/poly-spec.md",
       "skills/orc/SKILL.md",
       "skills/orc/references/analyst-gates.md",
+      "skills/orc/references/plan-handoff.md",
+      "skills/orc/schemas/planning-output.md",
       "skills/orc/subskills/orc-planner/SKILL.md",
     ],
   },
@@ -284,6 +287,7 @@ const CONTRACTS = [
       "skills/orc-retro/SKILL.md",
       "skills/orc/SKILL.md",
       "skills/orc/references/analyst-gates.md",
+      "skills/orc/references/plan-handoff.md",
       "skills/orc/schemas/planning-output.md",
       "skills/orc/subskills/orc-planner-mini/SKILL.md",
       "skills/orc/subskills/orc-planner/SKILL.md",
@@ -319,6 +323,7 @@ const CONTRACTS = [
       "skills/orc-retro/SKILL.md",
       "skills/orc/SKILL.md",
       "skills/orc/references/analyst-gates.md",
+      "skills/orc/references/plan-handoff.md",
       "skills/orc/references/stop-and-resume.md",
       "skills/orc/references/trace-protocol.md",
       "skills/orc/references/ultra-mode.md",
@@ -381,6 +386,7 @@ const CONTRACTS = [
     files: [
       "hooks/orc-trace.js",
       "skills/orc/SKILL.md",
+      "skills/orc/references/plan-handoff.md",
       "skills/orc/references/trace-protocol.md",
       "skills/orc/subskills/orc-planner/SKILL.md",
       "skills/orc-analyze/SKILL.md",
@@ -653,6 +659,61 @@ const CONTRACTS = [
     ],
   },
   {
+    // v0.31.0: the plan-handoff entry contract. Recognising a plan INPUT (vs a
+    // request) and re-grounding/re-scoring it in the executing session is pinned
+    // to the reference + the two triggers (spine Phase 0, intake) + the command.
+    name: "plan-handoff entry contract (v0.31.0 — execute a plan from another session)",
+    token: "plan-handoff.md",
+    files: [
+      "commands/orc.md",
+      "skills/orc/SKILL.md",
+      "skills/orc/references/intake.md",
+      "skills/orc/references/plan-handoff.md",
+      "skills/orc/schemas/planning-output.md",
+    ],
+  },
+  {
+    // v0.31.0: the scoring revamp. The planner emits per-task `facets` (facts);
+    // the orchestrator computes the score arithmetically and re-validates them.
+    // The facet block is copied across the schema, the formula, the spine, the
+    // trace verb, and all three planner agents — pin them together.
+    name: "facet-scored rubric (v0.31.0 — planner-emitted facets, orchestrator arithmetic)",
+    token: "facets",
+    files: [
+      "agents/orc-planner-fable-5.md",
+      "agents/orc-planner-mini-sonnet-5-high.md",
+      "agents/orc-planner-opus-4-8-med.md",
+      "agents/orc-retro-sonnet-5-high.md",
+      "skills/orc-retro/SKILL.md",
+      "skills/orc/README.md",
+      "skills/orc/SKILL.md",
+      "skills/orc/examples/full-run-mock.md",
+      "skills/orc/references/effort-and-mode.md",
+      "skills/orc/references/plan-handoff.md",
+      "skills/orc/references/trace-protocol.md",
+      "skills/orc/schemas/planning-output.md",
+      "skills/orc/subskills/orc-planner/SKILL.md",
+      "skills/orc/subskills/orc-planner-mini/SKILL.md",
+    ],
+  },
+  {
+    // v0.31.0: HEAD-at-plan-time staleness stamp — the plan-handoff entry
+    // contract's mirror of the requirement-spec's git_head.
+    name: "plan staleness stamp (v0.31.0 — plan_head drives the plan-handoff grounding re-check)",
+    token: "plan_head",
+    files: [
+      "agents/orc-planner-fable-5.md",
+      "agents/orc-planner-mini-sonnet-5-high.md",
+      "agents/orc-planner-opus-4-8-med.md",
+      "skills/orc/SKILL.md",
+      "skills/orc/references/intake.md",
+      "skills/orc/references/plan-handoff.md",
+      "skills/orc/schemas/planning-output.md",
+      "skills/orc/subskills/orc-planner/SKILL.md",
+      "skills/orc/subskills/orc-planner-mini/SKILL.md",
+    ],
+  },
+  {
     name: "wiki cross-cutting reference maps (v0.15.0 — consumers pull by name)",
     token: "orc-reference-api-surface",
     files: [
@@ -872,6 +933,7 @@ const CONTRACTS = [
       "commands/orc-plan.md",
       "commands/orc-poly.md",
       "skills/orc/SKILL.md",
+      "skills/orc/references/plan-handoff.md",
       "skills/orc/subskills/orc-planner/SKILL.md",
       "skills/orc-poly/SKILL.md",
       "skills/orc-poly/references/poly-spec.md",
@@ -922,7 +984,13 @@ const BUDGETS = [
   // v0.30.0: deliberate raise 350→360 — the scoring revamp adds the visible
   // `base+adjusters=final` demand + anti-inflation cite, the Fable 5 role-
   // override dispatch pointer, and the Phase-1 CONFIG runtime-proof trace line.
-  { file: "skills/orc/SKILL.md", maxLines: 360 },
+  // v0.31.0: deliberate raise 360→385 — the execution-integrity revamp wires
+  // four of five parts into the spine: the Phase-0 plan-input trigger
+  // (plan-handoff entry contract), waves-always-computed (Part C), the
+  // facet-scored formula + fix-cycle scoring rule (Part D), and the Phase-1
+  // open_questions relay + step-back valve (Part E). Detail lives in the
+  // references; the spine keeps only triggers + contract tokens + pointers.
+  { file: "skills/orc/SKILL.md", maxLines: 385 },
   { file: "skills/orc-wiki/SKILL.md", maxLines: 260 },
   { file: "skills/orc-mini/SKILL.md", maxLines: 195 },
   { file: "skills/orc-analyze/SKILL.md", maxLines: 195 },

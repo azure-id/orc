@@ -20,19 +20,19 @@ O: [6 tasks with declared_files incl. tests + per-file grounding attestations + 
 
 ## Phase 2 — Effort, dispatch style, scoring
 O: Refined: medium, partially dependent. Recommend PARALLEL waves. Confirm? U: yes. Batch pause? U: every 2 waves.
-O: Scoring (base + adjusters → final → ladder):
-   T1 base32 +25 core = 57 → Opus 4.8 med
-   T2 base30 +18 core/dep = 48 → Sonnet 5 med
-   T3 base34 +12 = 46 → Sonnet 5 med
-   T4 base28 +10 = 38 → Sonnet 5 med
-   T5 base22 −8 isolated = 14 → Sonnet 5 med
-   T6 base26 −10 leaf = 16 → Sonnet 5 med
+O: Facet scoring (planner facets → formula → band; facet gate: breadth + fan recomputed, risk cites checked):
+   T1 3·new-surface·stateful·new-tests·fan0/3·low = 6+18+16+8+9 = 57 → sonnet-5-high (keystone — every later task imports its enum)
+   T2 3·imitate·branching·new-tests·fan1/0·low = 6+8+8+8+5 = 35 → sonnet-4-6-med
+   T3 3·imitate·branching·update-existing·fan1/0·low = 6+8+8+4+5 = 31 → sonnet-4-6-med
+   T4 2·imitate·branching·update-existing·fan1/0·low = 6+8+8+4+5 = 31 → sonnet-4-6-med
+   T5 1·mechanical·none·update-existing·fan0/0·low = 2+0+0+4 = 6 → haiku-4-5
+   T6 1·mechanical·none·none·fan0/0·low = 2+0+0+0 = 2 → haiku-4-5
    Plan: 6 tasks, 3 waves W1{T1} W2{T2,T3,T4} W3{T5,T6}, all spawned. Anticipated escalations? U: none, go.
 
 ## Phase 3 — Execution (ALL spawned; orchestrator coordinates only)
 O: [checkpoint + state-of-play written into run/merchant-notifications/ BEFORE dispatch]
-▶ W1: spawn Agent-A(T1, Opus 4.8 med) — milestones 40%→100% — return validated ✓ (evidence: `yarn jest models/` exit 0, tail quoted; unmet[] empty) — log: DECISION type enum.
-▶ W2: spawn 3 agents (Sonnet 5 med each).
+▶ W1: spawn Agent-A(T1, sonnet-5-high) — milestones 40%→100% — return validated ✓ (evidence: `yarn jest models/` exit 0, tail quoted; unmet[] empty) — log: DECISION type enum.
+▶ W2: spawn 3 agents (sonnet-4-6-med each).
    Agent-C needs_context (1/2): "needs T1's enum interface" → O adjudicates in-scope → re-slices → resumes. (User never bothered.)
    Agent-C user escalation: "digest send time?" → U: 07:00 fixed → ANSWER broadcast to log.
    Returns validated ✓ · collision audit clean.
@@ -46,7 +46,7 @@ O: [checkpoint + state-of-play written into run/merchant-notifications/ BEFORE d
 
 U: [next day, FRESH session, pastes block]
 O: [state-of-play → checkpoint → re-anchored] "Resuming: merchant notifications (in-app+digest+prefs). Still correct?" U: yes.
-▶ W3: spawn T5+T6 (Sonnet 5 med) → done. All 6 complete.
+▶ W3: spawn T5+T6 (haiku-4-5) → done. All 6 complete.
 
 ## Phase 5 — Review (spawned worker, Opus 4.8 high)
 O: Code pattern? U: none. Findings (P0–P3 ladder, each P0–P2 anchored file:line + verbatim quote):
@@ -66,7 +66,7 @@ O: ✓ committed → pushed → run/merchant-notifications/DRP-482-add-merchant-
    Log deleted · checkpoint + dispatch log KEPT · completion dispatch report shown → "Run /usage to see your remaining limits."
 
 ## What this exercises
-always-spawn (even cheap tasks get a subagent) · base+adjuster scoring · 3-band ladder ·
+always-spawn (even cheap tasks get a subagent) · facet-scored arithmetic · 8-band ladder ·
 per-run folder run/merchant-notifications/ · usage reminder (no programmatic /usage) ·
 planner grounding spot-check catching a hallucinated path · executor evidence (verbatim
 build/test proof) · reviewer quote spot-check before any P0/P1 action ·

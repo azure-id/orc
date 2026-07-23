@@ -18,9 +18,24 @@ run:
   source_branch: string
   intent_spec: string      # path: run/{run-slug}/intent-spec.md
   created_at: timestamp    # DDMMYY HH:MM:SS.mmm
+  plan_head: string        # HEAD sha at plan time (mirror of the requirement-
+                           #   spec's git_head). The plan-handoff entry contract
+                           #   (references/plan-handoff.md) compares it to the
+                           #   executing session's HEAD: a mismatch (or an absent
+                           #   field, a pre-v0.31.0 plan) makes the Phase 1 exit
+                           #   gate grounding spot-check COMPULSORY.
+  plan_confidence: enum    # high | medium | low (+ reason). Filled by the planner
+                           #   (Part E). low → the orchestrator recommends
+                           #   stepping back to orc-analyze before Phase 2.
 
 tasks: [ Task ]
 waves: [ Wave ]            # planning may leave empty; orchestrator computes
+open_questions: [object]   # [] or [{question, proposed_default, blocking: bool}]
+                           #   — every ambiguity the planner met (Part E). The
+                           #   orchestrator relays them in ONE batch after the
+                           #   Phase 1 exit gate: blocking ones must be answered
+                           #   before Phase 2; non-blocking show their default for
+                           #   tacit approval.
 ```
 
 ## Task
@@ -70,8 +85,30 @@ waves: [ Wave ]            # planning may leave empty; orchestrator computes
                            # to the executor slice's constraints[] — hard rules
                            # to respect, never tasks to build.
 
+  # scoring facets (filled by the PLANNER during grounding — the party that read
+  # every declared file produces the FACTS; the orchestrator computes the score
+  # arithmetically from them, so no number is judged from a task title. See
+  # references/effort-and-mode.md for the fixed formula. The orchestrator
+  # RECOMPUTES breadth + fan_in/fan_out from the plan and bounces a mismatch or
+  # an uncited risk — same bounce mechanics as grounding.)
+  facets:                  # object; absent ONLY on pre-v0.31.0 plans (resume
+                           #   without the facet gate, score via the legacy path)
+    breadth: int           # = len(declared_files) — computed by the planner, not judged
+    novelty: enum          # mechanical | imitate | new-surface | novel-algorithm
+    logic: enum            # none | branching | stateful | algorithmic
+    test_surface: enum     # none | update-existing | new-tests
+    risk: [object]         # [] or [{class, cite}] — class ∈
+                           #   auth|money|migration|security|concurrency|data-integrity;
+                           #   cite = the file/requirement that makes it so (an
+                           #   uncited risk entry is a MALFORMED plan → bounced).
+                           #   risk ≠ [] forces the score floor of 70 (now DERIVED
+                           #   from a cited facet, never remembered).
+    uncertainty: enum      # low | medium | high (+ one-line reason if not low)
+    # fan_in / fan_out are NOT emitted here — the orchestrator computes them from
+    # depends_on (forward = fan_in, reverse = fan_out) at Phase 2.
+
   # scoring (filled by orchestrator in Phase 2; ALWAYS — every task is scored)
-  computed_score: int|null     # 0–100 (base + adjusters, clamped)
+  computed_score: int|null     # 0–100 (facet formula, clamped)
   override_score: int|null     # orchestrator override (requires reason)
   override_reason: string|null
   model: string|null           # from the ladder — never null at dispatch time

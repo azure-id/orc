@@ -7,9 +7,11 @@ boundary, token pressure, phase transition worth guarding, or user request).
 
 Most stops are yours to judge (token pressure, a phase worth guarding, a user
 request). **The batch boundary is NOT a judgment call — it is a hard gate.**
-After completing wave W, if `W % batch_pause_every == 0` **and at least one wave
-remains** (`W < total_waves`), the stop sequence below is MANDATORY and
-deterministic: **never dispatch wave W+1 past an unacknowledged boundary.** The
+Waves are computed for every run regardless of dispatch style (sequential runs
+have waves too — see `wave-grouping.md`), so the boundary binds to wave numbers
+in both styles. After completing wave W, if `W % batch_pause_every == 0` **and at
+least one wave remains** (`W < total_waves`), the stop sequence below is MANDATORY
+and deterministic: **never dispatch wave W+1 past an unacknowledged boundary.** The
 boundary is computed from the answered pause schedule at intake (Phase 2) and
 stored as `pause_schedule` in the checkpoint, so a resumed session enforces the
 same boundaries. Emit `GATE wave-boundary :: wave=W of K → STOP (batch_pause_every=N)`

@@ -60,7 +60,7 @@ summary → commit/push/PR.
 ```
 orc/
 ├── SKILL.md                     # thin orchestrator spine (progressive disclosure)
-├── config.md                    # shipped defaults + score→model presets
+├── config.md                    # shipped defaults + the single score→model table
 ├── schemas/                     # orchestrator-owned; workers get slices
 │   ├── intent-spec.md
 │   ├── planning-output.md
@@ -97,8 +97,9 @@ codifier: 9 language playbooks + a11y/perf rule packs), `context-combiner`
 
 - **The orchestrator NEVER implements — it always spawns scored subagents,
   even for tiny tasks.** Orchestrator (Opus 4.8 high) only coordinates; each
-  task's 0–100 score maps to a named executor agent via the preset in
-  `config.md` (`rubric_bands` narrow/wide), Sonnet 4.6 med → Opus 4.8 high.
+  task's 0–100 score (computed arithmetically from the planner's per-task
+  `facets`) maps to a named executor agent via the single 8-band table in
+  `config.md` (`rubric_bands` = report granularity only), Haiku 4.5 → Opus 4.8 high.
 - **Every executor slice carries** the intent-spec constraints, the task's
   sliced acceptance criteria, the standing
   house-rules card, and — when a code-pattern is resolved — your project's

@@ -26,7 +26,9 @@ override still wins over both.
 
 ```yaml
 # --- Wave grouping ---
-max_wave_tasks: 3          # max parallel tasks per wave (hard cap; overflow → next wave)
+max_wave_tasks: 3          # max parallel tasks per wave (hard cap; overflow → next wave).
+                           # Waves are computed for EVERY run (sequential too) —
+                           # dispatch style is intra-wave concurrency only.
 
 # --- Batch pausing ---
 batch_pause_every: 2       # waves between MANDATORY stop-and-continue pauses.

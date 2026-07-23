@@ -2,6 +2,23 @@
 
 Turn the tagged task list into conflict-free waves. Load during Phase 3.
 
+## Waves are computed for EVERY run — dispatch style is intra-wave only
+
+Wave computation is NOT a parallel-mode concern. It runs for **every run with ≥2
+tasks, sequential included** (dependency layers + conflict graph +
+`max_wave_tasks` cap). **Dispatch style controls only INTRA-WAVE concurrency:**
+
+- **parallel** → a wave's non-conflicting tasks dispatch at once (up to
+  `max_wave_tasks`);
+- **sequential** → the SAME waves, but a wave's tasks dispatch one at a time, in
+  order; the wave still closes only when all its tasks close.
+
+Either way the **wave-boundary gate fires identically** (the deterministic batch
+pause below binds to wave numbers, not to a dispatch style). A sequential run
+therefore never degenerates to "no waves / per-task pauses" — a 5-task plan
+becomes e.g. `[T1] [T2 T3 T4] [T5]`, not five ad-hoc stops. **Show the wave plan
+(wave → tasks → pause marks) to the user BEFORE wave 1 in BOTH styles.**
+
 ## The principle
 
 Two tasks may share a wave ONLY if their `declared_files` don't overlap AND
