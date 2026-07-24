@@ -91,9 +91,11 @@ dispatch the trace writer ONCE at run end with that event list plus `decisions`
   need to ask. Confirm the resolved path exists.
 - **Slug doesn't match / no config** → do NOT guess. Say which input was
   unrecognized, then **list every available `nodes[].name`** from the config
-  (or "no crosslink config found") and offer two ways forward: pick a correct
-  slug from the list, or paste the peer's filesystem path (then answer its
-  relation to the HOST). Loop until every PEER is resolved.
+  (or "no crosslink config found") — and when `wiki/crosslink/atlas.md`
+  exists, also list the TRANSITIVE nodes its Federation map knows (repos
+  discovered via peer atlases, v0.33.0) — and offer two ways forward: pick a
+  correct slug from the list, or paste the peer's filesystem path (then answer
+  its relation to the HOST). Loop until every PEER is resolved.
 
 ## Phase P1 — Knowledge gate (per repo; NON-blocking)
 

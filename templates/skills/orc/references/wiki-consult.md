@@ -32,12 +32,17 @@ always know whether the run is grounded and how fresh):
   then continue (full/mini self-ground against code; orc-fast instead gates on
   this — see its F0 preflight).
 
-## Step 2 — Select and pull pages
+## Step 2 — Select and pull pages (orientation FIRST)
 
-Select pages via `wiki/INDEX.md` when it exists — one line per doc: type,
-status, description, keywords; match the request against **keywords**, not just
-titles. Read the relevant `wiki/orc-feature-*`, `wiki/orc-reference-*`, and
-`wiki/orc-architecture-overview.md` for the areas in play.
+**When `wiki/orc-orientation.md` exists, read it FIRST** (v0.33.0 — the wiki's
+front door): its `Repo identity` orients, its `Reading order` says which docs
+to dive into and why, its `Journeys` trace the end-to-end flows, and its
+`Neighbors` section flags cross-repo context. Then dive into the docs it
+points at. Without an orientation doc, select pages via `wiki/INDEX.md` — one
+line per doc: type, status, description, keywords; match the request against
+**keywords**, not just titles. Read the relevant `wiki/orc-feature-*`,
+`wiki/orc-reference-*`, and `wiki/orc-architecture-overview.md` for the areas
+in play.
 
 **What to pull (v2 wikis):**
 - each doc's `TL;DR` — cheap orientation;
@@ -82,6 +87,14 @@ sharper than inference alone.
 written by a prior `/orc-wiki` crosslink run. It NEVER reads
 `.claude/orc-crosslink.config.yaml` at run time and NEVER reads peer source —
 a stale or absent cache means **no peer knowledge this run**, full stop.
+
+**Atlas first (v0.33.0):** when `wiki/crosslink/atlas.md` exists, read it
+BEFORE any peer-wiki peek — its per-node profiles + peek hints say WHICH peer
+doc answers which question, so peeks are targeted, never a foreign-wiki crawl.
+Newest-wins: trust the copy with the newer `generated` timestamp. Atlas
+missing/stale while the cache exists → a build lane may cheaply regenerate it
+from `needs.json` + `cache/` (and propagate it to peers per the sanctioned
+file-write in `../../orc-wiki/references/crosslink.md`) — never a scan.
 
 **Report + trace (at the consult point, alongside the wiki line):**
 - `needs.json` present → print

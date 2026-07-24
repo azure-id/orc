@@ -56,8 +56,9 @@ Phase 3  dispatch ONE executor (orc-executor-sonnet-5-high) — slice carries
          injected literally) + the cached `postgres` pattern on a data-access
          task (cache HIT only) — collect + validate return
 Phase M  SMOKE GATE — run build+test → GREEN proceed · RED block ship + surface
+Phase X  MOCK EXAMPLE (config mock_example) — offer/build after a GREEN gate
 Phase T  TEST-AUTHORING ASK (opt-in) — offer to write test cases (never run them)
-Phase 8  ship (commit / push / PR)
+Phase 8  ship (commit / push / PR — never stages mock-examples/)
 ```
 (No Phase 2 scoring table, no dispatch-style/batch-pause asks, no full
 review/verify/summary.)
@@ -77,6 +78,18 @@ including `done` with non-empty `unmet[]` = partial), YOU run the smoke gate
 per `../_shared/smoke-gate.md`: read-only build+test. **GREEN** →
 test-authoring ask, then ship. **RED** → never offer commit/ship; one repair
 re-dispatch, second red → STOP and surface. Docs-only → gate N/A, say so.
+
+## Phase X — Mock example + drift recovery (config `mock_example`, default ask)
+
+Canonical: `../_shared/drift-recovery.md` — load it when the phase fires. After
+a GREEN Phase M, before ship: `ask` → MANDATORY offer (never silently
+skipped/run) · `on` → build · `off` → skip. Deliverable
+`mock-examples/<change-slug>/` at project root (EXAMPLE.md + one runnable
+mocked artifact) — **never committed, never staged** (no `.gitignore` edit).
+One question after the user runs it: matches expectation? [yes / drift:
+<describe>]. Drift → `DRIFT-FROM` handoff (gap analysis → patch plan → dispatch
+→ re-gate → re-offer), hard cap 2 loops, then an honest unresolved report.
+Trace: `PHASE mock-example`, `DRIFT loop=<n>`.
 
 ## Phase T — Test-authoring ask (opt-in; writes tests, never runs them)
 
@@ -143,9 +156,18 @@ Models pinned in `.claude/agents/`; look up here, never reconstruct a name
 ## Config
 
 Resolve at run start: `../orc/config.md` defaults merged with
-`.claude/orc.config.yaml` — read `generate_tests` (the Phase T offer default)
-and `log_dir`. Wave/scoring/scout keys never apply to mini — never render or
-ask them.
+`.claude/orc.config.yaml` — read `generate_tests` (the Phase T offer default),
+`mock_example`, `tdd_loop_max`, and `log_dir`. Wave/scoring/scout keys never
+apply to mini — never render or ask them.
+
+**TDD (ONE intake question — mini's whole TDD policy):** at intake ask once:
+*"Anchor this in plan-time acceptance tests (TDD — red tests first, implement
+to green)? [yes/no]"*. Yes → the planner slice carries `tdd: on` (the mini
+planner authors `tdd_spec` per requirement); the executor slice carries the
+`tdd_spec` — it materializes the failing tests FIRST, then implements to green
+(implement→test→repair, cap `tdd_loop_max`; emit `TDD-RED`/`TDD-GREEN` per
+iteration; cap hit → STOP + honest red report), and Phase M's smoke gate runs
+the TDD suite as part of build+test. No → skip entirely; never re-ask.
 
 ## Analyst & planner (mini lane)
 

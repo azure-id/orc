@@ -40,12 +40,18 @@ contract); the summary below orients — on any conflict, `core.md` wins.
 `{ task_id, actual_model, actual_effort, status: done|failed|partial|needs_context,
 actual_files[], evidence, no_runner_detected, unmet[], log_entries[],
 failure_reason, progress, context_request,
-pattern_version, invariants_checked }`
+pattern_version, invariants_checked, tdd_state }`
 
 When the slice carries a `pattern`, MATCH its conventions, satisfy every BLOCKING
 invariant AND every enforceable `validation_gate[]` line (advisory gate lines are
 informational); echo the `pattern_version` and set `invariants_checked: true` only after
 re-checking your diff. A pattern task that returns false/absent here is malformed.
+
+When the slice carries a `tdd_spec` (v0.33.0), run its materialized tests and
+implement to green — implement→test→repair, capped at the slice's
+`tdd_loop_max`; never edit a TDD test to make it pass (a wrong-looking test is
+a spec bug — return it). Return `tdd_state: green|red` (green needs the passing
+run in `evidence`; `done` with red is malformed).
 
 **Crosslink injection (orchestrator-side, advisory).** At slice assembly, if a
 task's declared files include a call site that matches an entry in

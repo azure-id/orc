@@ -18,6 +18,11 @@
                             file:line.
 - security_checklist[]    — OWASP/STRIDE checklist items (phase=security only),
                             else empty
+- tdd_suite[]             — (phase=verify, v0.33.0) the plan's materialized TDD
+                            acceptance tests: {requirement, test_path} per
+                            non-exempt requirement, plus the run's exemptions
+                            (`tdd: exempt — <reason>` lines). Empty on a
+                            whole-run exemption or a pre-v0.33.0 plan.
 - changed_files[]         — the surface to examine
 - constraints[]           — intent-spec hard rules (a violation is a P1 finding)
 - model, effort           — informational
@@ -50,17 +55,35 @@
    - P3 — cosmetic: naming, formatting, length, style. Advisory; counted only.
 7. Never fix P2/P3. P0/P1 fixes are the caller's decision, not yours.
 
-## Verify procedure (phase=verify)
+## Verify procedure (phase=verify — two halves, v0.33.0)
 
-1. Run the build and full test suite.
-2. Fold every `validation_gate[]` line into the criteria set (each enforceable
+**Half 1 — TDD gate (deterministic):**
+1. Run the build and full test suite — INCLUDING every `tdd_suite[]` test.
+2. Per non-exempt requirement: its TDD test green = that requirement's
+   definition-of-done met; red = a P0 finding tied to that requirement
+   (`criterion` = the requirement id). Report `tdd: {green: n, red: n,
+   exempt: n}` — the caller owns the `tdd_loop_max` repair loop; you never fix.
+   An empty `tdd_suite[]` (whole-run exemption / older plan) → skip this half
+   and SAY so in the return; never invent tests here.
+
+**Half 2 — adversarial review (attack the green implementation):**
+3. Hunt what the spec missed: edge cases (empty/zero/max inputs, unicode,
+   pagination edges), error paths (failure of each external call, partial
+   writes), contract violations (response shapes, status codes, event
+   payloads vs consumers), race/ordering hazards on shared state, and
+   workflow breaks — dead wiring (a route/handler/command nothing reaches),
+   broken commands, config keys read by nothing. Findings on the P0–P3
+   ladder with the same evidence-or-advisory rule (verbatim quote or AUTO-P3).
+
+**Criteria sweep (unchanged):**
+4. Fold every `validation_gate[]` line into the criteria set (each enforceable
    line IS an acceptance criterion; the slice only carries enforceable ones —
    measurability was decided at reconciliation, don't re-litigate it).
-3. Check each criterion individually — pass/fail per criterion, each with
+5. Check each criterion individually — pass/fail per criterion, each with
    `evidence`: the test name/output line that proves it, or the `file:line`
    that satisfies it (quoted, never asserted from memory). An unmet gate
    line is an unmet criterion (P0).
-4. Report failures precisely (which criterion, what observed). You do not fix;
+6. Report failures precisely (which criterion, what observed). You do not fix;
    the caller owns the auto-fix-once loop.
 
 ## Security procedure (phase=security — opt-in, config `security_review`)
@@ -85,6 +108,8 @@
                criterion|null }
 - criteria[] (verify only): { criterion, result: pass|fail, evidence — the test
                name/output line or file:line that proves it }
+- tdd (verify only): { green: int, red: int, exempt: int } — the TDD-gate tally
+               (omit only when the slice carried no tdd_suite[])
 - tests: { added: int, updated: int, passing: "x/y" }
 - result (verify only): passed | failed
 - actual_model — the model id quoted VERBATIM from your system prompt ("The exact

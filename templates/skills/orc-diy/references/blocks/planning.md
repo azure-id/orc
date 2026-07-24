@@ -25,3 +25,10 @@ to produce one if absent), then convert it to ORC planning output validated
 against `.claude/skills/orc/schemas/planning-output.md` — same conversion the
 full lane applies on its OpenSpec route.
 <!-- /diy:when -->
+<!-- diy:when tdd=on -->
+TDD is ON for this flow: the plan must carry a `tdd_spec` per requirement
+(given/when/then + a runnable skeleton in the project's test framework, or
+`tdd: exempt — <reason>`; schema in
+`.claude/skills/orc/schemas/planning-output.md`). No test runner in the
+project → whole-run exemption, stated once at preflight.
+<!-- /diy:when -->

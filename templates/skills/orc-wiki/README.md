@@ -213,6 +213,38 @@ Now that the graph exists, orc-wiki walks your call sites and:
 
 That's it. You're set up.
 
+### One-shot alternative: `/orc-wiki crosslink compile`
+
+Once the graph exists (Step 2), `/orc-wiki crosslink compile` does the whole
+connect-the-dots pass in one command (v0.33.0): resolve/consume from the graph
+(refresh `needs.json` + `cache/`) → generate the federation **ATLAS** (below) →
+write the atlas into each linked repo → inject/update the CLAUDE.md pointer
+block locally **and in each linked repo** (in-place block update, user content
+byte-preserved; a peer with no CLAUDE.md gets a minimal file with only the
+block). Every step is warn-only on failure, never a re-scan, never a doc
+rewrite, and it ends with one summary line per repo touched. Hard
+precondition: `.claude/orc-crosslink.config.yaml` with ≥1 edge — missing/empty
+means it explains the `orc crosslink` CLI steps and stops.
+
+## The ATLAS — federation super-context (v0.33.0)
+
+`wiki/crosslink/atlas.md` is ONE repo-agnostic document describing the whole
+federation — every node, every edge (including transitive repos learned from
+peer atlases), what each repo provides/consumes, and **peek hints** (which of a
+repo's wiki docs answer which questions). The same document lives in EACH
+linked repo; a header records `generated_from`, the `generated` timestamp, and
+per-peer peek freshness. Freshness on read = `min(own wiki tier, oldest peek
+age)` — computed on read, never stored; across copies, **newest wins** (trust
+the newer `generated` stamp).
+
+It is regenerated at the end of every scan/refresh (derived + cheap — never a
+scan), and after writing the local copy the session **writes the same file into
+each linked repo** — this is a sanctioned peer FILE write (exception #2 in
+`references/crosslink.md`, next to orc-poly's handoff plan): never a commit,
+never a push, never any other peer path, and any failure warns and continues.
+`orc wiki sync` treats it as derived — never a registered doc, never
+bulk-deleted by a refresh.
+
 ## Step 4 — check it worked
 
 ```
@@ -242,6 +274,7 @@ handed to it as a hint — no more guessed field names.
 | `wiki/crosslink/**` | `/orc-wiki` | yes | this repo's own published boundary tags |
 | `.claude/orc/crosslink/needs.json` | `/orc-wiki` | yes | the exact contracts you depend on (drift baseline) |
 | `.claude/orc/crosslink/cache/**` | `/orc-wiki` | **no** (gitignored) | mirrored snapshots of linked contracts |
+| `wiki/crosslink/atlas.md` | `/orc-wiki` (derived; also written into each linked repo) | yes | the federation atlas — repo-agnostic super-context |
 
 `orc update` never touches any of these.
 
@@ -275,9 +308,11 @@ handed to it as a hint — no more guessed field names.
 
 - **Advisory, never blocking** — every failure degrades to a warning; your build
   never stops on a cross-repo issue.
-- **Reads foreign *wiki* only** — never another repo's source, never a write to
-  another repo. The whole footprint is a few read-only wiki files + read-only git
-  queries.
+- **Reads foreign *wiki* only** — never another repo's source. The whole
+  footprint is a few read-only wiki files + read-only git queries. The ONLY
+  writes into a peer are the two sanctioned file writes (the atlas +, via
+  `crosslink compile`, the CLAUDE.md pointer block) — file writes only, never
+  a commit or push, warn-only on failure.
 - **No cross-team coordination** — publish and consume are independent; a repo on
   an older wiki gives you coarse hints today and precise ones for free the day it
   re-scans.

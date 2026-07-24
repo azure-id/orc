@@ -107,6 +107,13 @@ Then detect state and branch:
   **Never bundle a scan into repair.** REPAIR can coexist with RESUME (a
   paused scan is the usual cause): register first, THEN offer the resume as a
   separate, clearly-priced choice.
+- **`/orc-wiki crosslink compile` (explicit)** → **CROSSLINK COMPILE**
+  (references/crosslink-compile.md) — one-shot: resolve/consume → generate the
+  LOCAL atlas → write it into each linked repo → inject the CLAUDE.md pointer
+  block locally AND in each peer (in-place, byte-preserving). Hard
+  precondition: a crosslink config with ≥1 edge (else explain `orc crosslink`
+  and stop). Each step warn-only; never a re-scan, never a doc rewrite; one
+  end-of-run trace packet.
 - **`/orc-wiki crosslink` (explicit), OR a LEGACY wiki (docs predate v0.24.0,
   `wiki/crosslink/` absent) whose docs show an outward boundary** →
   **CROSSLINK-ONLY** (Phase 3c) — a legacy BACKFILL: publish/resolve the
@@ -121,14 +128,17 @@ Then detect state and branch:
 - **Wiki checkpoint exists (mid-scan)** → RESUME. Re-anchor from
   state-of-play + checkpoint; show "X of Y areas done, ~Z remaining"; light
   cost note; continue where it stopped.
-- **Complete wiki, no active checkpoint** → REFRESH. Offer: **incremental
-  (recommended when `wiki-meta.json` exists** — diff since `scan_commit`,
-  re-scan only affected docs) · full regenerate · selective (stale-flagged
-  docs) · pre-push git-diff scan · nothing — each with a cost note; scan only
-  on consent. Every mode re-publishes crosslink tags in the same pass (hard
-  rule 11) and preserves the folder (rule 12) — a refresh never loses tags. A
-  LEGACY wiki with unpublished tags is a backfill, not a refresh — route to
-  CROSSLINK-ONLY.
+- **Complete wiki, no active checkpoint** → REFRESH. **Run `orc wiki impact`
+  FIRST** (deterministic probe — exit 0 clean / 2 delta / 3 full recommended;
+  staleness.md mode 1). **Delta is the default path**: on exit 2, offer to
+  re-scan only the TOUCHED docs; on exit 3, present the impact table and let
+  the user choose (never silently full). Other modes on request: full
+  regenerate · selective (stale-flagged docs) · pre-push git-diff scan ·
+  nothing — each with a cost note; scan only on consent. Every mode
+  re-publishes crosslink tags in the same pass (hard rule 11), preserves the
+  folder (rule 12), and ends by regenerating the orientation doc + atlas
+  (derived, cheap). A LEGACY wiki with unpublished tags is a backfill, not a
+  refresh — route to CROSSLINK-ONLY.
 
 ## Phase 1 — Area planning (after consent)
 
@@ -191,25 +201,40 @@ the docs + tags are already registered and this phase simply hasn't run yet.
 
 1. After all areas are scanned, write/update
    `wiki/orc-architecture-overview.md` linking the feature + reference docs.
-2. **Crosslink resolve + dead-tag sweep** (references/crosslink.md): publish
-   already happened per scan-task (hard rule 11) — here only, if
+2. **Derive `wiki/orc-orientation.md`** (references/orientation.md) from the
+   already-written docs + overview — NEVER a new scan area; one assemble-time
+   write. Sections: Repo identity · Reading order · Journeys (each step
+   anchored `file:line`; unanchored = omitted) · Neighbors (only when
+   crosslink is configured AND the cache/atlas exists; else the explicit
+   "no outward boundary"-style line). Standard doc header → registered by sync.
+   Regenerate it (free, derived) whenever any doc it points to refreshes.
+3. **Crosslink resolve + dead-tag sweep + ATLAS** (references/crosslink.md):
+   publish already happened per scan-task (hard rule 11) — here only, if
    `.claude/orc-crosslink.config.yaml` exists, resolve consumed needs +
-   `.claude/orc/crosslink/cache/` (warn on per-point drift), then run the
+   `.claude/orc/crosslink/cache/` (warn on per-point drift), run the
    dead-tag sweep (references/staleness.md) — retire per-point ONLY tags whose
-   anchor vanished; never bulk-delete `wiki/crosslink/`.
-3. **Run `orc wiki sync`** (hard rule 8) — re-derives `wiki/INDEX.md` +
+   anchor vanished; never bulk-delete `wiki/crosslink/` — then generate the
+   federation atlas (`wiki/crosslink/atlas.md`) and write the SAME file into
+   each linked repo (sanctioned peer FILE write — never commit/push, warn-only
+   on failure; crosslink.md ATLAS section).
+4. **Run `orc wiki sync`** (hard rule 8) — re-derives `wiki/INDEX.md` +
    `.claude/orc/wiki-meta.json` from every doc header, including the
-   architecture doc from step 1 and the `crosslink_provided` index of the
-   per-scan-task tags. The build/test `commands` you discovered during the scan are the
+   architecture + orientation docs and the `crosslink_provided` index of the
+   per-scan-task tags (`atlas.md` is derived — sync never registers it). The
+   build/test `commands` you discovered during the scan are the
    ONE thing no header carries: if the manifest's `commands` is absent or wrong,
    fix that key by hand — it is the only part of the manifest you ever touch.
-4. **Run the integrity self-check** (hard rule 9 — references/
+5. **Run the integrity self-check** (hard rule 9 — references/
    integrity-check.md): registration (`sync --check`), covers-resolve,
-   coverage, anchor + crosslink spot-checks. Runs AFTER sync (validates the
-   derivation). Fix failures first; emit `WIKI-CHECK` when logging.
-5. Inject/update the managed pointer block in `CLAUDE.md`
-   (see references/claude-md-injection.md). Pointer only — no summaries.
-6. Final report: lead with **✅ Wiki complete — all {M} areas scanned**
+   coverage, anchor + crosslink spot-checks, orientation pointers resolve.
+   Runs AFTER sync (validates the derivation). Fix failures first; emit
+   `WIKI-CHECK` when logging.
+6. Inject/update the managed pointer block in `CLAUDE.md`
+   (see references/claude-md-injection.md) — includes the orientation
+   "read this first" pointer and, when crosslink is configured, the atlas
+   pointer. Pointer only — no summaries; in-place block update, never
+   duplicated.
+7. Final report: lead with **✅ Wiki complete — all {M} areas scanned**
    (unmistakably distinct from a pause), then the dispatch log + "/usage"
    reminder. Keep the checkpoint for audit.
 

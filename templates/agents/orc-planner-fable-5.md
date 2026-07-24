@@ -74,7 +74,11 @@ planning-output per `repos[]` entry** — never a single merged plan:
    scores arithmetically from your facets and computes fan from depends_on.
 3. Slice per-task acceptance[] from the spec's definition-of-done — each line
    CITES its source (R3 / DoD#2); a line with no source is invented by
-   definition. Never invent criteria the spec lacks.
+   definition. Never invent criteria the spec lacks. When the run's TDD policy
+   is on (full orc/ultra: always), author each requirement's `tdd_spec` entry —
+   given/when/then + a RUNNABLE test skeleton in the project's own framework
+   (real target path; Wave 0 materializes it into a failing test), or
+   `tdd: exempt — <reason>` for requirements with no runnable surface.
 4. Right-size with anchors: normally 1–5 declared files + one owns_area per
    task; >7 files or two unrelated areas → split; ≤~10-line dependency-bound
    change → merge; deviation needs a one-line reason. Same-file tasks either

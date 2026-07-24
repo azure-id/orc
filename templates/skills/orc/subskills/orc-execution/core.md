@@ -28,6 +28,13 @@ subagent; the orchestrator never runs this itself.
                             names/types/errors it states, but it never overrides
                             local code and there is nothing to attest (no return
                             field). Absent on any task with no boundary.
+- tdd_spec                — this task's plan-time acceptance tests, or null
+                            (TDD off / requirement exempt). Present = the
+                            Wave-0-materialized failing tests your work must
+                            turn GREEN, plus `tdd_loop_max` (the repair cap).
+                            Never edit a TDD test to make it pass — a test
+                            that looks wrong is a spec bug: return it, don't
+                            fix it.
 - house_rules             — the standing behavioral card (injected literally,
                             never a pointer): surgical changes, simplicity-first,
                             no unrequested scope, boring-solution preference
@@ -53,7 +60,9 @@ subagent; the orchestrator never runs this itself.
    or test setup, run it for your changes and capture {command, exit_code, the
    last ~5 output lines} — QUOTED VERBATIM, never paraphrased, never predicted.
    No runner → set `no_runner_detected: true` instead. Never claim green you
-   did not observe.
+   did not observe. With a `tdd_spec`: run ITS tests too — implement → test →
+   repair up to `tdd_loop_max` iterations; still red at the cap → stop and
+   return `tdd_state: red` honestly (the failing tests listed in unmet[]).
 5. **Self-check before returning:** re-read your diff against every
    `acceptance[]` line and every `constraints[]` rule. Anything you could not
    satisfy goes in `unmet[]` — and a non-empty `unmet[]` means status `partial`
@@ -96,6 +105,11 @@ subagent; the orchestrator never runs this itself.
                             `pattern` against your diff; false/null if no invariants
                             were supplied. A pattern task returning false/absent here
                             is a malformed return
+- tdd_state               — green | red | null. REQUIRED when the slice carried a
+                            `tdd_spec`: green ONLY after its tests pass (run quoted
+                            in `evidence`); red = cap hit/unresolved (failing tests
+                            in unmet[]); null only without a tdd_spec. status=done
+                            with red is malformed
 
 Malformed returns are treated as failure by the caller. needs_context is
 capped at 2 per task — a third means the slice or plan is wrong and escalates

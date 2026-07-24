@@ -59,6 +59,21 @@ pattern_findings: ask      # ask | on | off — on an FE/BE cache miss during /o
 orc_wiki_pattern_findings: false  # orc-wiki also codifies ALL detected langs during
                                   #   its scan (rides under the wiki's scan-consent)
 
+# --- Mock example + drift recovery (Phase 6.7 — implementation lanes only) ---
+mock_example: ask          # ask | on | off — post-verify mocked runnable example
+                           #   (mock-examples/<change-slug>/ at project root; NEVER
+                           #   committed — ship never stages it, no .gitignore edit):
+                           #   ask → MANDATORY offer after a green verify/smoke gate
+                           #   on  → always build; off → never. Drift answer →
+                           #   DRIFT-FROM recovery (_shared/drift-recovery.md, cap 2).
+
+# --- TDD anchor (plan-time acceptance tests; full orc + ultra ALWAYS on) ---
+tdd_loop_max: 3            # max implement→test→repair iterations per task in the
+                           #   TDD gate; cap hit → STOP SEQUENCE + honest red report.
+                           #   Lane policy (fixed, not configurable): full orc +
+                           #   ultra always on · orc-mini ONE intake question ·
+                           #   orc-fast off (no planner) · orc-diy `tdd` flow key.
+
 # --- Security pass (opt-in Phase 5.5; OFF by default) ---
 security_review: off       # off | ask | on — fires only on runs where a task
                            #   scored ≥ 70 (the existing risk floor):
@@ -100,6 +115,11 @@ wiki_refresh_ask_files: 10    # …or the run's touched files exceed this (full/
 # --- Cross-repo crosslink snapshot freshness (Signal-B; DAY-based, computed on read) ---
 crosslink_fresh_days: 10      # days since sync ≤ this → FRESH cross-repo hint
 crosslink_aging_days: 15      # ≤ this → AGING; beyond → STALE (advisory only, never blocks)
+
+# --- Wiki delta refresh (`orc wiki impact` — the default refresh path) ---
+wiki_delta_full_threshold: 30 # TOUCHED docs above this % of registered docs →
+                              #   impact recommends a FULL refresh (user decides;
+                              #   never silently full)
 ```
 
 ## Score → model table (executor agent dispatched by name)

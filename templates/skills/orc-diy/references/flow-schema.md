@@ -23,6 +23,8 @@ selector.
 | `security` | `off` / `ask` / `on` / `always` | Security pass; `always` drops the risk-floor trigger |
 | `verify` | `full` / `off` / `smoke` | Verify depth |
 | `testgen` | `off` / `ask` / `on` | Test-authoring phase |
+| `mock_example` | `ask` / `on` / `off` | Post-verify mocked example + drift recovery (`mock-examples/<slug>/`, never committed) |
+| `tdd` | `on` / `off` | TDD-anchored planning: plan-time `tdd_spec`, Wave-0 red tests, TDD gate in the verify slot |
 | `wiki_gate` | `notice` / `off` / `hard` | Wiki freshness handling at preflight |
 | `post_ship_wiki_ask` | `on` / `off` | Post-ship wiki refresh offer on big runs |
 | `summary` | `full` / `off` / `short` | Summary depth |
@@ -48,6 +50,8 @@ Hard errors (config not written):
 Warnings (written, reported):
 - `scoring: off` with `rubric_bands` overridden (ignored).
 - `testgen` on/ask with `verify: off` (testgen normally follows verify).
+- `tdd: on` with `verify: off` (the TDD gate runs in the verify slot; plan-time
+  tests are authored but never gate the ship).
 - `autonomy: hands-off` with `ship_mode: commit` or `pr` (fully unattended
   git actions).
 - `session_tier` below `opus-4-8-high` with `review`/`verify` on: the pinned

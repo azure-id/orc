@@ -669,6 +669,8 @@ const CONFIG_META = [
   { key: "generate_tests", def: false, tier: "common", validate: vEnum("true", "false"), options: ["true", "false"], desc: "Opt-in Phase 6.5: author test cases before ship (writes tests, never runs them). OFF by default." },
   { key: "pattern_findings", def: "ask", tier: "common", validate: vEnum("ask", "on", "off"), options: ["ask", "on", "off"], desc: "Code-pattern gate on an FE/BE cache miss: ask = prompt, on = auto-codify, off = always agnostic." },
   { key: "security_review", def: "off", tier: "common", validate: vEnum("off", "ask", "on"), options: ["off", "ask", "on"], desc: "Opt-in Phase 5.5 security pass on runs with a task scored >= 70 (risk floor). OFF by default." },
+  { key: "mock_example", def: "ask", tier: "common", validate: vEnum("ask", "on", "off"), options: ["ask", "on", "off"], desc: "Post-verify mocked runnable example (mock-examples/<slug>/, never committed): ask = offer after a green verify, on = always, off = never." },
+  { key: "tdd_loop_max", def: 3, tier: "common", validate: vInt(1), options: [1, 2, 3, 4, 5], desc: "Max implement→test→repair iterations per task in the TDD gate; cap hit → STOP SEQUENCE + honest red report." },
   // --- Fable 5 role override (HARD-GATED: nothing changes unless enabled: true) ---
   { key: "fable5_enabled", def: false, tier: "fable5", validate: vEnum("true", "false"), options: ["true", "false"], desc: "Master gate — route selected roles to Fable 5 agents. Nothing changes unless true." },
   { key: "fable5_effort", def: "medium", tier: "fable5", validate: vEnum("medium", "high", "xhigh", "max"), options: ["medium", "high", "xhigh", "max"], desc: "Effort for the Fable 5 role agents (the CLI rewrites their effort: frontmatter on set)." },
@@ -679,6 +681,7 @@ const CONFIG_META = [
   { key: "orc_wiki_pattern_findings", def: false, tier: "advanced", validate: vEnum("true", "false"), desc: "orc-wiki also codifies ALL detected languages during its scan (pre-warms the pattern cache)." },
   { key: "crosslink_fresh_days", def: 10, tier: "advanced", validate: vInt(1), desc: "Cross-repo crosslink snapshot: days since sync ≤ this → FRESH hint (Signal B; advisory)." },
   { key: "crosslink_aging_days", def: 15, tier: "advanced", validate: vInt(1), desc: "Cross-repo crosslink snapshot: days since sync ≤ this → AGING; beyond → STALE (advisory, never blocks)." },
+  { key: "wiki_delta_full_threshold", def: 30, tier: "advanced", validate: vRange(1, 100), desc: "Wiki delta refresh: TOUCHED docs above this percent of registered docs → `orc wiki impact` recommends a FULL refresh (user decides)." },
   { key: "log_dir", def: ".claude/orc/logs", tier: "advanced", validate: vPath, desc: "Persistent trace folder (never auto-deleted)." },
   { key: "analyzer_dir", def: ".claude/skills/orc/analyzer", tier: "advanced", validate: vPath, desc: "Internal analyst artifact dir." },
   { key: "planner_dir", def: ".claude/skills/orc/planner", tier: "advanced", validate: vPath, desc: "Internal planner artifact dir." },
@@ -1024,6 +1027,8 @@ const DIY_META = [
   { key: "security", def: "off", options: ["off", "ask", "on", "always"], validate: vEnum("off", "ask", "on", "always"), desc: "Security pass; always = every run (drops the risk-floor trigger)." },
   { key: "verify", def: "full", options: ["full", "off", "smoke"], validate: vEnum("full", "off", "smoke"), desc: "Verify depth: full DoD sweep | off | smoke (build+tests only)." },
   { key: "testgen", def: "off", options: ["off", "ask", "on"], validate: vEnum("off", "ask", "on"), desc: "Test-authoring phase (writes tests, never runs them)." },
+  { key: "mock_example", def: "ask", options: ["ask", "on", "off"], validate: vEnum("ask", "on", "off"), desc: "Post-verify mocked example + drift recovery (mock-examples/<slug>/, never committed)." },
+  { key: "tdd", def: "on", options: ["on", "off"], validate: vEnum("on", "off"), desc: "TDD-anchored planning: plan-time tdd_spec, Wave-0 red tests, TDD gate in the verify slot." },
   { key: "wiki_gate", def: "notice", options: ["notice", "off", "hard"], validate: vEnum("notice", "off", "hard"), desc: "Wiki freshness at preflight: notice | off | hard (stale blocks with an ask)." },
   { key: "post_ship_wiki_ask", def: "on", options: ["on", "off"], validate: vEnum("on", "off"), desc: "Offer a wiki refresh after big shipped runs." },
   { key: "summary", def: "full", options: ["full", "off", "short"], validate: vEnum("full", "off", "short"), desc: "Summary depth." },
@@ -1095,6 +1100,9 @@ function diyValidate(cfg) {
   if (cfg.testgen !== "off" && cfg.verify === "off") {
     warnings.push("testgen without verify: test cases will be authored against an unverified build");
   }
+  if (cfg.tdd === "on" && cfg.verify === "off") {
+    warnings.push("tdd is on but verify is off — the TDD gate runs in the verify slot; plan-time tests will be authored but never gate the ship");
+  }
   if (cfg.autonomy === "hands-off" && (cfg.ship_mode === "commit" || cfg.ship_mode === "pr")) {
     warnings.push(`hands-off + ship_mode ${cfg.ship_mode}: git actions will run fully unattended`);
   }
@@ -1149,7 +1157,8 @@ function diyGenFlowMd(cfg) {
   lines.push(
     "",
     "Phase order (fixed): wiki gate → analyze → planning → pattern → scoring →",
-    "execution → review → security → verify → testgen → ship → summary.",
+    "execution → review → security → verify → testgen → mock-example → ship →",
+    "summary. TDD (when on) rides planning/execution/verify — not a phase slot.",
     "Locked rules (skills/orc-diy/references/locked-blocks.md) apply to every flow.",
     ""
   );
@@ -1275,7 +1284,7 @@ function diyCompile(claudeDir) {
   };
   const locked = fs.readFileSync(path.join(refDir, "locked-blocks.md"), "utf8");
 
-  const order = ["header", null, "wiki", "analyze", "planning", "pattern", "scoring", "execution", "review", "security", "verify", "testgen", "ship", "summary"];
+  const order = ["header", null, "wiki", "analyze", "planning", "pattern", "scoring", "execution", "review", "security", "verify", "testgen", "mock-example", "ship", "summary"];
   const tier = DIY_TIERS[cfg.session_tier];
   const subs = {
     flow_name: cfg.flow_name,
@@ -2075,9 +2084,12 @@ function parseDocHeader(text) {
   return h;
 }
 
-// Every wiki doc under wiki/, skipping the machine index (crosslink/), the
-// archive, and INDEX.md itself. A .md without a doc_type header is not a wiki
-// doc — reported, never silently folded into the registry.
+// Every wiki doc under wiki/, skipping the machine index (crosslink/ — which
+// also holds the DERIVED federation atlas.md; never an unregistered doc, never
+// bulk-deleted by a refresh), the archive, and INDEX.md itself. A .md without
+// a doc_type header is not a wiki doc — reported, never silently folded into
+// the registry. (The derived orientation doc — wiki/orc-orientation.md — DOES
+// carry a standard header, so it registers here like any doc.)
 function readWikiDocs(wikiDir) {
   const docs = [];
   const skipped = [];
@@ -2441,6 +2453,128 @@ function wikiStatus(claudeDir) {
   }
 }
 
+// ── orc wiki impact (v0.33.0) — commit-scoped delta probe ───────────────────
+// Deterministic ground for the DELTA refresh path: `git diff --name-only
+// <scan_commit>..HEAD` mapped against each registered doc's coverage (the
+// covered_files hash map + covers globs the header parser already registers).
+// Prints per-doc CLEAN | TOUCHED (n) | STRUCTURAL + a summary, and exits with
+// a branchable code (like `orc pattern status`):
+//   0 = CLEAN            nothing a registered doc covers changed
+//   1 = cannot compute   no wiki / unregistered / no scan_commit / git failed
+//   2 = DELTA            touched docs; a targeted per-doc refresh suffices
+//   3 = FULL recommended threshold exceeded, STRUCTURAL blind spot, or aging
+// The recommendation is advisory — the skill presents the table and the USER
+// decides (never silently full).
+
+// covers entries are dirs/globs; covered_files keys are exact paths.
+function impactGlobRe(g) {
+  const esc = g
+    .replace(/[.+^${}()|[\]\\]/g, "\\$&")
+    .replace(/\*\*/g, "__GLOBSTAR__")
+    .replace(/\*/g, "[^/]*")
+    .replace(/__GLOBSTAR__/g, ".*");
+  return new RegExp("^" + esc + "(/|$)");
+}
+function docCovers(entry, file) {
+  if (entry.covered_files && entry.covered_files[file] !== undefined) return true;
+  for (const c of entry.covers || []) {
+    const cc = String(c).replace(/\/$/, "");
+    if (/[*?]/.test(cc)) {
+      if (impactGlobRe(cc).test(file)) return true;
+    } else if (file === cc || file.startsWith(cc + "/")) return true;
+  }
+  return false;
+}
+
+// ORC's own on-disk artifacts are covered by no wiki doc BY DESIGN — changes
+// there must never read as a documentation blind spot.
+const IMPACT_NOISE = /^(wiki\/|\.claude\/|learning-docs\/|mock-examples\/|test-generator\/|poly-repo-implementation\/|\.gitignore$)/;
+
+function wikiImpact(claudeDir) {
+  const paths = wikiPaths(claudeDir);
+  const s = wikiState(claudeDir);
+  if (s.state === "none") {
+    console.log("no wiki — nothing to diff against. Run `/orc-wiki` to build one.");
+    process.exit(1);
+  }
+  if (s.state !== "registered") {
+    console.log(`⚠ wiki is ${s.state.toUpperCase()} — run \`orc wiki sync\` first, then re-run \`orc wiki impact\`.`);
+    process.exit(1);
+  }
+  const meta = s.meta;
+  if (!meta.scan_commit) {
+    console.log("⚠ no scan_commit in the manifest — impact needs a commit anchor; a /orc-wiki refresh restores it.");
+    process.exit(1);
+  }
+  const diff = spawnSync("git", ["diff", "--name-only", `${meta.scan_commit}..HEAD`], {
+    cwd: paths.root,
+    encoding: "utf8",
+  });
+  if (diff.status !== 0) {
+    console.log(`⚠ git diff failed (is scan_commit ${String(meta.scan_commit).slice(0, 8)} still resolvable here?)`);
+    process.exit(1);
+  }
+  const changed = (diff.stdout || "").split(/\r?\n/).map((x) => x.trim()).filter(Boolean);
+
+  const docs = Array.isArray(meta.docs) ? meta.docs : [];
+  let touchedDocs = 0;
+  let structuralDocs = 0;
+  const pad = Math.max(12, ...docs.map((d) => d.file.length));
+  console.log(`\norc wiki impact — ${changed.length} changed file(s) since scan_commit ${String(meta.scan_commit).slice(0, 8)}\n`);
+  for (const d of docs) {
+    const hits = changed.filter((f) => docCovers(d, f));
+    // A covered file that no longer exists = the doc's anchor is gone
+    // (deleted/renamed) — a targeted refresh can't re-anchor blind.
+    const gone = Object.keys(d.covered_files || {}).filter(
+      (f) => !fs.existsSync(path.join(paths.root, f))
+    );
+    if (gone.length) {
+      structuralDocs++;
+      console.log(`  STRUCTURAL   ${d.file.padEnd(pad)}  covered file(s) gone: ${gone.join(", ")}`);
+    } else if (hits.length) {
+      touchedDocs++;
+      console.log(`  TOUCHED (${hits.length})  ${d.file.padEnd(pad)}  ${hits.slice(0, 4).join(", ")}${hits.length > 4 ? " …" : ""}`);
+    } else {
+      console.log(`  CLEAN        ${d.file}`);
+    }
+  }
+
+  // Blind spot: changed files no doc covers (ORC's own artifacts excluded).
+  const blind = changed.filter(
+    (f) => !IMPACT_NOISE.test(f) && !docs.some((d) => docCovers(d, f))
+  );
+  if (blind.length) {
+    console.log(`\n  STRUCTURAL blind spot — ${plural(blind.length, "changed file")} no doc covers:`);
+    for (const f of blind.slice(0, 10)) console.log("    " + f);
+    if (blind.length > 10) console.log(`    … and ${blind.length - 10} more`);
+  }
+
+  const map = readOverride(claudeDir).map;
+  const threshold = Number(map.wiki_delta_full_threshold) || 30;
+  const agingMax = Number(map.wiki_aging_max) || 30;
+  const dist = gitIn(paths.root, ["rev-list", "--count", `${meta.scan_commit}..HEAD`]);
+  const aging = dist !== null && /^\d+$/.test(dist) && Number(dist) > agingMax;
+  const pct = docs.length ? Math.round(((touchedDocs + structuralDocs) / docs.length) * 100) : 0;
+
+  console.log(`\n  summary: ${docs.length} registered · ${touchedDocs} touched · ${structuralDocs} structural · ${pct}% (threshold ${threshold}%)` + (dist !== null ? ` · ${dist} commits behind` : ""));
+  const fullReasons = [];
+  if (pct > threshold) fullReasons.push(`touched ${pct}% > wiki_delta_full_threshold ${threshold}%`);
+  if (structuralDocs || blind.length) fullReasons.push("STRUCTURAL change (gone anchors / blind spot)");
+  if (aging) fullReasons.push(`scan_commit ${dist} commits behind HEAD > wiki_aging_max ${agingMax}`);
+
+  if (!touchedDocs && !structuralDocs && !blind.length && !aging) {
+    console.log("  → CLEAN — the wiki still covers HEAD; no refresh needed.");
+    process.exit(0);
+  }
+  if (fullReasons.length) {
+    console.log("  → FULL refresh recommended: " + fullReasons.join("; "));
+    console.log("    (advisory — a delta refresh of the touched docs is still possible)");
+    process.exit(3);
+  }
+  console.log("  → DELTA — regenerate only the touched docs, then `orc wiki sync`.");
+  process.exit(2);
+}
+
 // ── Pattern cache (deterministic existence probe) ───────────────────────────
 // The pattern cache lives at <claude>/orc/patterns/<lang>-pattern.md, written by
 // orc-pattern's codifier. Like the wiki manifest it sits under the HIDDEN
@@ -2516,6 +2650,9 @@ function wiki() {
     case "sync":
       wikiSync(claudeDir, { check: flag("--check") });
       break;
+    case "impact":
+      wikiImpact(claudeDir);
+      break;
     case undefined:
     case "status":
       wikiStatus(claudeDir);
@@ -2524,7 +2661,9 @@ function wiki() {
       console.error(
         `Unknown: orc wiki ${pos[1]}\n` +
           "Usage: orc wiki status               registration state of the wiki\n" +
-          "       orc wiki sync [--check]       rebuild wiki-meta.json + INDEX.md from the docs"
+          "       orc wiki sync [--check]       rebuild wiki-meta.json + INDEX.md from the docs\n" +
+          "       orc wiki impact               commit-scoped delta probe: per-doc CLEAN | TOUCHED |\n" +
+          "                                     STRUCTURAL vs scan_commit (exit 0 clean / 2 delta / 3 full)"
       );
       process.exit(1);
   }
@@ -2889,6 +3028,9 @@ Usage:
     orc wiki sync [--check]               rebuild wiki-meta.json + INDEX.md from the docs on disk
                                           (instant, no re-scan — this is the repair for an
                                            unregistered wiki, e.g. a scan stopped at a pause)
+    orc wiki impact                       commit-scoped delta probe — per registered doc
+                                          CLEAN | TOUCHED (n) | STRUCTURAL vs scan_commit
+                                          (exit 0 clean / 1 can't compute / 2 delta / 3 full)
   orc pattern [--dir <path>]              cached code-patterns (project-scoped; no --global)
     orc pattern status [<lang>]           whether a cached pattern exists — the deterministic
                                           existence probe every knowledge-gated lane runs first

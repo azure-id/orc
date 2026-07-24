@@ -85,6 +85,24 @@ open_questions: [object]   # [] or [{question, proposed_default, blocking: bool}
                            # to the executor slice's constraints[] — hard rules
                            # to respect, never tasks to build.
 
+  # TDD anchor (v0.33.0 — filled by the PLANNER when the run's TDD policy is on:
+  # full orc + ultra ALWAYS; orc-mini per its one intake question; orc-fast
+  # never; orc-diy per its `tdd` flow key)
+  tdd_spec:                # per-requirement end-to-end acceptance tests,
+                           # authored AT PLAN TIME — before any implementation
+    - requirement: string  # the R#/DoD line this test proves
+      given_when_then: str # the scenario, given/when/then form
+      skeleton: string     # runnable test skeleton in the PROJECT'S OWN test
+                           #   framework (target file path + code) — Wave 0
+                           #   materializes it into a real FAILING test
+      exempt: string|null  # instead of a skeleton: `tdd: exempt — <reason>`
+                           #   for requirements with no runnable surface
+                           #   (docs/config/markdown payloads). No test runner
+                           #   in the project at all → WHOLE-RUN exemption,
+                           #   stated once at preflight (nothing silent);
+                           #   smoke gate + adversarial review carry
+                           #   verification.
+
   # scoring facets (filled by the PLANNER during grounding — the party that read
   # every declared file produces the FACTS; the orchestrator computes the score
   # arithmetically from them, so no number is judged from a task title. See
@@ -169,3 +187,11 @@ open_questions: [object]   # [] or [{question, proposed_default, blocking: bool}
 6. `spec_invariants` paves the last mile of the analyst's do-not-build context:
    an invariant that reaches a task field demonstrably reaches the executor's
    `constraints[]`; one that lives only in the spec's prose may not.
+7. `tdd_spec` (v0.33.0) anchors the definition-of-done in RUNNABLE tests before
+   implementation. **Wave 0 of execution is a dedicated task that materializes
+   every non-exempt `tdd_spec` into real FAILING tests — red proven before the
+   implementation waves; a test that PASSES pre-implementation is a spec bug
+   and blocks dispatch of that requirement** until resolved. TDD tests are
+   pipeline-internal, DO run, and live in the project's normal test tree (they
+   ship with the code) — distinct from Phase 6.5's `test-generator/`
+   deliverables, which are a separate opt-in that never runs.

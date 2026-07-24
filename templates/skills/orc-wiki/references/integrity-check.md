@@ -68,6 +68,13 @@ only per staleness.md.
    "crosslink: no outward boundary ({reason})" — a bare zero-tag finish FAILS.
    Emit `WIKI-CHECK crosslink …` when logging. Consume-side needs/cache stay
    advisory and are NOT gated (a stale cache warns, never fails).
+7. **orientation-check** (v0.33.0) — `wiki/orc-orientation.md` exists (it is a
+   derived assemble-step output, so a scan/refresh that ends without one
+   skipped a step), every `Reading order` pointer resolves to a REGISTERED doc,
+   and one spot-checked `Journeys` anchor's file exists. Neighbors section
+   present only when crosslink cache/atlas exists; otherwise the explicit
+   "no outward crosslink configured" line. A failed item is fixed by
+   re-deriving the orientation doc (free) — never a re-scan.
 
 ## Why it exists
 

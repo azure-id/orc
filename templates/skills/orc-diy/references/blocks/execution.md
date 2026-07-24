@@ -13,3 +13,12 @@ validated against the contract) with these compiled overrides:
   `.claude/skills/orc/references/stop-and-resume.md`).
 - Executor selection comes from this flow's scoring section above — never
   from the shipped presets.
+
+<!-- diy:when tdd=on -->
+TDD execution: Wave 0 materializes every non-exempt `tdd_spec` into real
+FAILING tests (red proven before implementation; a pre-implementation pass is
+a spec bug → block that requirement). Each implementation slice carries its
+`tdd_spec`; executors implement to green (implement→test→repair, cap
+`tdd_loop_max`; `TDD-RED`/`TDD-GREEN` per iteration) and return `tdd_state`
+per `.claude/skills/_shared/return-validation.md`.
+<!-- /diy:when -->

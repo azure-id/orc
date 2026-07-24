@@ -38,7 +38,14 @@ conflict, `core.md` wins.
   `file:line` + the offending line(s) quoted VERBATIM; an unanchored finding is
   AUTO-P3 (never gates, never triggers a fix) — the caller spot-checks quotes
   before acting on P0/P1.
-- **phase=verify:** run the build + full test suite; fold the enforceable
+- **phase=verify (two halves, v0.33.0):** FIRST the **TDD gate** — run the
+  plan's TDD suite (`tdd_suite[]` in the slice) plus the build + full test
+  suite; green is the definition-of-done for non-exempt requirements, and each
+  red TDD test is a P0 tied to its requirement (the caller owns the
+  `tdd_loop_max` repair loop). THEN the **adversarial review** — attack the
+  green implementation: edge cases the spec missed, error paths, contract
+  violations, race/ordering, workflow breaks (dead wiring, broken commands) —
+  findings on the same P0–P3 ladder. Also fold the enforceable
   `validation_gate[]` lines into the criteria set, then check EACH criterion
   individually (pass/fail, nothing invented; an unmet gate line = unmet
   criterion = P0), each with per-criterion `evidence` (the test/output line or

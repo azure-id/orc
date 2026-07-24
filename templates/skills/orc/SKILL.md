@@ -232,7 +232,10 @@ only input that does NOT proceed to Phase 2 (each repo builds later, in its own
 `/orc` session). The plan must satisfy
 `schemas/planning-output.md` (per-task `declared_files` incl. tests,
 `grounding[]`, `acceptance[]`, `requirements[]`, `spec_invariants[]`,
-`depends_on`, `owns_area`, `spec_ref`, + a `coverage` echo); missing declared
+`depends_on`, `owns_area`, `spec_ref`, + a `coverage` echo, + `tdd_spec` —
+TDD is ALWAYS ON in full orc/ultra: per-requirement given/when/then + runnable
+skeletons, or `tdd: exempt — <reason>` per requirement; no test runner in the
+project → whole-run exemption, ONE preflight line says so); missing declared
 files → extract and confirm before leaving this phase.
 
 **Phase 1 exit gate** (deterministic — full checks in analyst-gates.md; emit
@@ -279,11 +282,19 @@ dispatching. **Pattern-resolve gate
 apply cached; miss → codify/agnostic per `pattern_findings`; learn → dispatch
 the codifier); hold resolved patterns in run state.
 
-Per wave:
+**Wave 0 — TDD red proof (before the implementation waves; skip only on a
+whole-run exemption):** dispatch ONE task that materializes every non-exempt
+`tdd_spec` skeleton into real FAILING tests in the project's test tree, runs
+them, and returns the red evidence. Emit `TDD-RED task=<id> iter=0` per
+requirement. A test that PASSES pre-implementation is a spec bug → block that
+requirement's dispatch and surface it. Then per implementation wave:
 1. Dispatch EVERY task as a spawned subagent (emit `DISPATCH <agent> :: <task>
    expect=<model>/<effort>` BEFORE the Task call; subagent wrapper framing + the
    task's INPUT SLICE per orc-execution/core.md + its scored model). Every
-   slice carries the task's `acceptance[]` and the `house_rules` card lines
+   slice carries the task's `acceptance[]`, its `tdd_spec` tests (the executor
+   implements to green: implement→test→repair, cap `tdd_loop_max`, emitting
+   `TDD-RED`/`TDD-GREEN` per iteration; cap hit → STOP SEQUENCE + honest red
+   report) and the `house_rules` card lines
    (`references/house-rules.md`, injected LITERALLY — read once per run, never
    a pointer); FE/BE and `db:postgres` tasks get the resolved `pattern`
    injected literally (pattern-gate.md).
@@ -343,9 +354,17 @@ silent. Dispatch the reviewer with `phase=security` + changed files +
 `references/security-checklist.md` (load only now). Same ladder, same
 hard-rule-5 handling; report-only.
 
-## Phase 6 — Verify (same subskill, phase=verify) · Trace: `PHASE verify`, `VERDICT`
+## Phase 6 — Verify: TDD gate + adversarial review (same subskill, phase=verify) · Trace: `PHASE verify`, `VERDICT`, `TDD-RED`/`TDD-GREEN`
 
-Emit `PHASE verify start`. Verify worker (Opus 4.8 high) checks the intent-spec's
+Emit `PHASE verify start`. TWO halves in the SAME dispatched verifier slot
+(subskills/orc-review-verify/ — Phase 5's reviewer stays separate):
+**1) TDD gate (deterministic):** run the plan's TDD suite — green IS the
+definition-of-done for non-exempt requirements; red → repair loop (implement→
+test→repair, cap `tdd_loop_max`; cap hit → STOP SEQUENCE + honest red report).
+**2) Adversarial review:** attack the green implementation — edge cases the
+spec missed, error paths, contract violations, race/ordering, workflow breaks
+(dead wiring, broken commands) — findings on the existing P0–P3 ladder. The
+verifier also checks the intent-spec's
 definition-of-done PLUS the pattern's `validation_gate[]` lines (each a
 criterion; unmet = P0). The return carries `criteria[]` {criterion, pass|fail,
 evidence} — every criterion needs evidence. Quote spot-check P0/P1 first, then:
@@ -365,6 +384,18 @@ returned `test_plan_path`/`curl_bundle_path` are under that folder (else
 malformed → re-dispatch); state the exact path in the summary — discoverability
 is the point.
 
+## Phase 6.7 — Mock example + drift recovery (config `mock_example`) · Trace: `PHASE mock-example`, `DRIFT`
+
+Load `../_shared/drift-recovery.md` (canonical). Only after a GREEN Phase 6,
+before ship: `ask` (default) → the offer is MANDATORY (never silently skipped,
+never silently run); `on` → build; `off` → skip. Deliverable:
+`mock-examples/<change-slug>/` at the project root (`EXAMPLE.md` + one minimal
+runnable artifact; mocked inputs only) — **NEVER committed**. After the user
+runs it, ONE question: matches expectation? [yes / drift: <describe>]. On
+drift → `DRIFT-FROM` handoff → analyze-mini gap analysis → mini planner patch
+plan → scored dispatch → re-verify → re-offer; **hard cap 2 loops**, then an
+honest unresolved report. Emit `DRIFT loop=<n>` per loop; end-of-phase packet.
+
 ## Phase 7 — Summary · Trace: `PHASE summary`
 
 Emit `PHASE summary start`. Report: tasks/waves/dispatches (scores + overrides), escalations,
@@ -378,6 +409,8 @@ cosmetics too?"** — never fix unasked. Emit `PHASE summary end`.
 Show current branch. Ask together: **commit? push? create PR?** (PR: ticket +
 title + target branch; generate from `subskills/orc-pr/pr.md`). If Phase 6.5 ran,
 commit `test-generator/<change-slug>/` too (a user deliverable, never gitignored).
+**`mock-examples/` is NEVER staged** (drift-recovery.md; no `.gitignore` edit —
+just never `git add` it).
 On success: delete the ephemeral decision log; KEEP checkpoint + dispatch log.
 **Wiki stale-flag:** flag (never re-scan) wiki docs whose covered files this
 run changed; point at `/orc-wiki`. **Post-ship refresh ask** (BIG runs, /orc +
