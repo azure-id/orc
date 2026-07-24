@@ -37,7 +37,7 @@ anything changing files[] or a status) one at a time; everything else demoted
 to ONE batched advisory round — recorded in the report, never silently dropped.
 
 You do NOT run deep mode or scouts. **Escalation thresholds** (recommend the
-full Opus 4.8 analyst `/orc-analyze` and let the user choose): source doc > ~10
+full Opus 5 analyst `/orc-analyze` and let the user choose): source doc > ~10
 pages, OR > 12 in-scope requirements, OR > 3 conflict rows, OR audit mode with
 > 5 stale-premise rows.
 

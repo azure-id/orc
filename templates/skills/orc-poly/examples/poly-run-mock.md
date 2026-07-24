@@ -43,7 +43,7 @@ response pagination? (yes, cursor) · empty state? (FE shows "No saved carts")
   (written INTO the peer — the only peer write)
 
 both embedding the frozen `interface-contract.md`. `VERIFY planner
-actual=opus-4-8/medium ✅ MATCH`. `FINISH`.
+actual=opus-5/medium ✅ MATCH`. `FINISH`.
 
 **Handoff.** orc-poly tells the user: open `shop-api` and run `/orc` on its
 plan; separately open `shop-web` in a fresh session and run `/orc` on its plan.

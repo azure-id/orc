@@ -131,7 +131,7 @@ the band is what matters. Compare a new task to these facet-by-facet.
 | Notification model + enum other tasks consume | 3·new-surface·stateful·new-tests · 0/3 · low | 6+18+16+8+9 = **57** | sonnet-5-high [55,65) |
 | Service-layer refactor behind a stable interface | 5·imitate·stateful·update-existing · 0/3 · medium | 10+8+16+4+9+6 = **53** | sonnet-4-6-high [40,55) |
 | Add role check to payment-refund endpoint | 3·imitate·branching·new-tests · 0/0 · low · **risk=[auth,money]** | 30 raw → **floor 70** | opus-4-7-high [70,80) |
-| Migrate orders table to split-name + backfill | 6·new-surface·stateful·new-tests · 1/3 · high · **risk=[migration,data-integrity]** | 15+18+16+8+5+9+12 = 83 (floor 70) → **83** | opus-4-8-med [80,85) |
+| Migrate orders table to split-name + backfill | 6·new-surface·stateful·new-tests · 1/3 · high · **risk=[migration,data-integrity]** | 15+18+16+8+5+9+12 = 83 (floor 70) → **83** | opus-4-8-high [80,90) |
 
 Two disciplines the vectors encode: (1) a small diff is NOT a low score when a
 cited `risk` facet forces the floor (the refund row — 30 raw, floored to 70); (2)
@@ -150,19 +150,23 @@ rubric REPORTS (score granularity), never which table is used.
 
 The 8 bands (see config.md for the exact edges): `haiku-4-5` [0,30) ·
 `sonnet-4-6-med` [30,40) · `sonnet-4-6-high` [40,55) · `sonnet-5-high` [55,65) ·
-`opus-4-7-med` [65,70) · `opus-4-7-high` [70,80) · `opus-4-8-med` [80,85) ·
-`opus-4-8-high` [85,100]. Effort tiers rank `low < medium < high < xhigh < max`.
+`opus-4-7-med` [65,70) · `opus-4-7-high` [70,80) · `opus-4-8-high` [80,90) ·
+`opus-5-high` [90,100]. Effort tiers rank `low < medium < high < xhigh < max`.
 
 ## Fixed model assignments (not scored)
 
-- **Orchestrator (you):** Opus 4.8, high — always.
+- **Orchestrator (you):** Opus 4.8 high — or Opus 5 / Fable 5 at medium+, the
+  two models that clear the guard from medium up. Never downgrade yourself.
 - **Review** — Superpowers path: Sonnet 4.6, medium. OpenSpec/self path:
-  Opus 4.8, high.
-- **Verify:** Opus 4.8, high.
+  Opus 5, medium (`orc-reviewer-opus-5-med`).
+- **Verify:** Opus 5, medium (`orc-verifier-opus-5-med`).
+- **Analyst:** Opus 5, high. **Planner:** Opus 5, medium. **Test author:**
+  Opus 5, medium. **Combiner:** Opus 5, high. **Ultra advisor/judge:** Opus 5,
+  xhigh — every core fixed role is pinned to Opus 5 as of v0.34.0.
 - **Merge-conflict resolver:** Opus 4.8, medium.
 
 Note: every band in the table above is a real dispatch target (haiku through
-opus-4-8). If a model tier is unavailable in the environment, fall back UP to the
+opus-5). If a model tier is unavailable in the environment, fall back UP to the
 next capable tier (never silently substitute a different family/effort).
 
 ## Dispatch log (lives in the checkpoint)

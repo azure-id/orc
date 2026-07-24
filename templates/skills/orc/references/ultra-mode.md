@@ -6,7 +6,7 @@ the ultra deltas. Ultra exists ONLY here — never in orc-mini, never on a plain
 `/orc` run.
 
 Cost stance: ultra is costly by definition. State it once at intake
-("ultra adds an Opus 4.8 max advisor + up to 3 judge dispatches + revision
+("ultra adds an Opus 5 xhigh advisor + up to 3 judge dispatches + revision
 loops"), then never prompt about cost again.
 
 ## Forced overrides (run-scoped — NEVER written to the user's config file)
@@ -17,17 +17,18 @@ Apply at Phase 0, on top of the normal config resolution:
 - `pattern_findings` = on · `generate_tests` = on · `security_review` = on.
 - Executor **tier floor**: remap the resolved score→model preset so no task
   dispatches below `orc-executor-sonnet-5-high`; bands at/above the preset's
-  opus boundary shift to `orc-executor-opus-4-8-high`. Show the remapped
-  table with the Phase 2 scoring table.
+  opus boundary rise to at least `orc-executor-opus-4-8-high` — the floor only
+  ever raises a band, so the top `[90,100]` band keeps `orc-executor-opus-5-high`.
+  Show the remapped table with the Phase 2 scoring table.
 
 > Fable 5 role override: if `fable5_enabled` and `advisor` / `judge` are in
 > `fable5_roles`, dispatch the `orc-advisor-fable-5` / `orc-judge-fable-5`
-> variant instead of the Opus 4.8 max default — same slice, same contract. See
+> variant instead of the Opus 5 xhigh default — same slice, same contract. See
 > `../../_shared/fable5-override.md`.
 
 ## Phase U0 — Advisor (after intake sign-off, before the analyst)
 
-Dispatch `orc-advisor-opus-4-8-max` (see `../../orc-advisor/SKILL.md`) with
+Dispatch `orc-advisor-opus-5-xhigh` (see `../../orc-advisor/SKILL.md`) with
 the request, the run-folder path, and the detected stack. Validate the return
 (`brief_path`, `open_questions[]`, `assumptions[]`, actual model/effort
 fields). Then:
@@ -48,7 +49,7 @@ packet — ultra adds ONE writer packet for U0 and one per judge gate on top of
 orc's phase packets (`../references/trace-protocol.md`), so the advisory brief,
 the questions relayed, and each verdict round are narrated like any other phase.
 
-## The three judgment gates (dispatch `orc-judge-opus-4-8-max`)
+## The three judgment gates (dispatch `orc-judge-opus-5-xhigh`)
 
 Shared mechanics — verdict validation, blocking-finding downgrade enforcement,
 REVISE loops (author echo `finding_id → resolution`, re-judge convergence

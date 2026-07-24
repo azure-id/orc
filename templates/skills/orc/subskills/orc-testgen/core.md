@@ -1,7 +1,7 @@
 # orc-testgen — Core (mode-neutral)
 
 A procedure specification: inputs, steps, outputs. Executed by a spawned
-`orc-test-author-opus-4-8-high` subagent; the orchestrator never runs this
+`orc-test-author-opus-5-med` subagent; the orchestrator never runs this
 itself. **Authoring only — RUN NOTHING, GATE NOTHING.** The user tests manually.
 
 ## Input slice (you receive exactly this)

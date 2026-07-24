@@ -10,7 +10,7 @@ description: >
   fingerprints). Output is LOCAL and git-ignored — each dev regenerates their
   own. Refresh lists every generated feature with a computed freshness flag
   and regenerates only what the user picks. The skill dispatches the pinned
-  orc-learn-writer-opus-4-8-high agent — it never writes the docs itself.
+  orc-learn-writer-opus-5-low agent — it never writes the docs itself.
 ---
 
 # ORC-LEARN (standalone)
@@ -22,8 +22,8 @@ it — the human-onboarding lane. It is NOT the wiki: the wiki grounds the
 `<repo root>/learning-docs/<feature-slug>/` (git-ignored, local per dev).
 
 **Dispatch, don't do.** Whatever model this chat runs on, the skill only picks
-the topic/mode and spawns `orc-learn-writer-opus-4-8-high` (the pinned
-engine) — the deepening scan + all writes run at Opus 4.8 high regardless of
+the topic/mode and spawns `orc-learn-writer-opus-5-low` (the pinned
+engine) — the deepening scan + all writes run at Opus 5 low regardless of
 the caller's tier. The skill's only self-writes are the behavior-trace
 markers around the spawn. Interactivity is DELIBERATELY minimal but non-zero
 (unlike orc-claude): exactly one question per mode — "which feature?" (INIT)
@@ -70,17 +70,17 @@ below. Weave the **Trace:** steps in as each event happens.
 2. **Trace:** write `log_dir/.current` = `run-learn-<slug>-<DDMMYY>-<HHMMSS>.txt` BEFORE the
    spawn (the `orc-trace.js` hook also bootstraps it on the dispatch, so the
    skeleton is never lost).
-3. Spawn `orc-learn-writer-opus-4-8-high` with: `mode=init`, `repo_root`,
+3. Spawn `orc-learn-writer-opus-5-low` with: `mode=init`, `repo_root`,
    `feature_slug`, `topic_area`, `covers[]` (from wiki or user pointer),
    `wiki_tier`, `focus_hint|null`, and the paths to
    `references/deepen.md`, `references/template-learning.md`,
    `references/template-knowledge.md`. **Trace:**
-   `DISPATCH orc-learn-writer :: init <slug> expect=opus-4-8/high` just
+   `DISPATCH orc-learn-writer :: init <slug> expect=opus-5/low` just
    before the spawn (the hook adds `SPAWN`/`RETURN` on its own).
 4. On return, check `actual_model`/`actual_effort` against the pinned tier —
    mismatch → prepend a tier-downgrade warning to the report. **Trace:**
    `VERIFY writer actual=<model>/<effort> ✅ MATCH` (or
-   `⛔ DOWNGRADE expected=opus-4-8/high`).
+   `⛔ DOWNGRADE expected=opus-5/low`).
 5. Relay the writer's report verbatim. If `learning-docs/` is not in
    `.gitignore`, offer the line (`learning-docs/`) — append only on an
    explicit yes; never edit silently. **Trace:** `FINISH :: init <slug>`,
@@ -120,10 +120,10 @@ writer, which self-traces nothing and only returns `actual_model`/
    (orc-learn is a wiki-grounding lane; the consult is always traced, absent
    wiki included).
 2. `log_dir/.current` = `run-learn-<slug>-<DDMMYY>-<HHMMSS>.txt` — before the first spawn.
-3. `DISPATCH orc-learn-writer :: <mode> <slug> expect=opus-4-8/high` — one
+3. `DISPATCH orc-learn-writer :: <mode> <slug> expect=opus-5/low` — one
    per spawn; REFRESH runs one per selected feature.
 4. `VERIFY writer actual=<model>/<effort> ✅ MATCH` or
-   `⛔ DOWNGRADE expected=opus-4-8/high` — from the returned
+   `⛔ DOWNGRADE expected=opus-5/low` — from the returned
    `actual_model`/`actual_effort` (this lane's honesty signal for
    `/orc-retro`).
 5. `FINISH :: <init <slug>|refresh <n> features>`, then delete `.current`.

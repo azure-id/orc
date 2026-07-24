@@ -1,7 +1,7 @@
 ---
 name: orc-review-verify
 description: >
-  Review/verify worker for ORC Phases 5–6 (Opus 4.8 high). Two modes: a REVIEW
+  Review/verify worker for ORC Phases 5–6 (Opus 5 medium). Two modes: a REVIEW
   pass — examine the changed files against the code pattern + constraints,
   create/update tests, and classify EVERY finding on the P0–P3 severity
   ladder (P0/P1 gate ship, P2/P3 advisory); a VERIFY
@@ -71,6 +71,6 @@ VERBATIM (never inferred). A
 malformed return is treated as failure by the caller.
 
 Fixed models (from `../../references/effort-and-mode.md`): review on the OpenSpec/self
-path = Opus 4.8 high; review on the Superpowers path is delegated to the
-Superpowers review skill instead (Sonnet 4.6 medium). Verify = Opus 4.8 high,
+path = Opus 5 medium; review on the Superpowers path is delegated to the
+Superpowers review skill instead (Sonnet 4.6 medium). Verify = Opus 5 medium,
 always this subskill.

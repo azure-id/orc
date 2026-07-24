@@ -5,7 +5,7 @@ description: >
   "/orc-verify", or "check the modified files". Runs INDEPENDENTLY —
   no orchestrator, no planning, no run folder required. Verifies only the
   git-modified changes in the working tree and shows a summary of results. Uses
-  Opus 4.8 high effort. Read-only: it reports, it does not fix or commit.
+  Opus 5 medium effort. Read-only: it reports, it does not fix or commit.
 ---
 
 # ORC-VERIFY (standalone)
@@ -13,7 +13,7 @@ description: >
 A focused, dependency-free verify pass. No intake, no planning, no checkpoint —
 you point it at your uncommitted work and it tells you what's wrong.
 
-Run as Opus 4.8, high effort.
+Run as Opus 5, medium effort.
 
 **Worked example** (orient only — never execute from it): `examples/verify-mock.md`.
 

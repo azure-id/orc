@@ -1,6 +1,6 @@
 # Example — Annotated Standalone Verify (dry run)
 
-V: = verifier (Opus 4.8 high) · U: = user. Nothing real. Runs INDEPENDENTLY — no
+V: = verifier (Opus 5 medium) · U: = user. Nothing real. Runs INDEPENDENTLY — no
 orchestrator, no planning, no run folder. Read-only: it reports, never fixes or commits.
 
 U: /orc-verify

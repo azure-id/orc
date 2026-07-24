@@ -18,7 +18,7 @@ differences below. Load the main skill's references and schemas by path — the
 HOT-PATH essentials (dispatch names, return-contract fields, artifact path)
 are inlined here so nothing is reconstructed from "full minus deltas."
 
-Run as **Opus 4.8 high** (unchanged from full; never downgrade yourself).
+Run as **Opus 4.8 high**, or Opus 5 / Fable 5 at medium+ (as full; never downgrade).
 **You never implement — you spawn.** The one exception is the **smoke gate**:
 a read-only build+test run, not implementation — you still never write code.
 
@@ -97,7 +97,7 @@ Same opt-in as full Phase 6.5 — mini **only asks** (never gates the ship).
 Default from `config.generate_tests`; at the end of a GREEN run ask: *"Write
 test cases for these changes? (I'll author them — automated files +
 TEST-PLAN.md + a curl bundle for HTTP APIs — but never run them; you test
-manually.)"* Yes → dispatch `orc-test-author-opus-4-8-high` (subskill
+manually.)"* Yes → dispatch `orc-test-author-opus-5-med` (subskill
 `../orc/subskills/orc-testgen/`) with the run's `actual_files`,
 definition-of-done, touched flows, constraints, stack; the two manual
 deliverables land in **`test-generator/<change-slug>/` at the project root**.
@@ -151,7 +151,7 @@ Models pinned in `.claude/agents/`; look up here, never reconstruct a name
 | mini analysis (docs only) | `orc-analyze-mini-sonnet-5-high` | claude-sonnet-5 / high |
 | mini planning | `orc-planner-mini-sonnet-5-high` | claude-sonnet-5 / high |
 | mini execution | `orc-executor-sonnet-5-high` | claude-sonnet-5 / high |
-| test authoring (opt-in) | `orc-test-author-opus-4-8-high` | claude-opus-4-8 / high |
+| test authoring (opt-in) | `orc-test-author-opus-5-med` | claude-opus-5 / medium |
 
 ## Config
 

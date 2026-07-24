@@ -43,23 +43,23 @@ const required = [
   "templates/commands/orc-learn.md",
   "templates/commands/orc-poly.md",
   "templates/agents/MODEL-MAPPING.md",
-  "templates/agents/orc-advisor-opus-4-8-max.md",
-  "templates/agents/orc-judge-opus-4-8-max.md",
+  "templates/agents/orc-advisor-opus-5-xhigh.md",
+  "templates/agents/orc-judge-opus-5-xhigh.md",
   "templates/agents/orc-claude-writer-opus-4-8-high.md",
-  "templates/agents/orc-learn-writer-opus-4-8-high.md",
+  "templates/agents/orc-learn-writer-opus-5-low.md",
   "templates/agents/orc-trace-writer-haiku-4-5.md",
   // Core non-generated agents — named explicitly so a dropped file is REPORTED
-  // by name, not merely absorbed by the count floor. (The 6 executor agents are
+  // by name, not merely absorbed by the count floor. (The 8 executor agents are
   // checked separately by `build-agents.js --check`.)
-  "templates/agents/orc-system-analyst-opus-4-8-high.md",
-  "templates/agents/orc-planner-opus-4-8-med.md",
-  "templates/agents/orc-reviewer-opus-4-8-high.md",
-  "templates/agents/orc-verifier-opus-4-8-high.md",
+  "templates/agents/orc-system-analyst-opus-5-high.md",
+  "templates/agents/orc-planner-opus-5-med.md",
+  "templates/agents/orc-reviewer-opus-5-med.md",
+  "templates/agents/orc-verifier-opus-5-med.md",
   "templates/agents/orc-scout-sonnet-4-6-high.md",
-  "templates/agents/orc-test-author-opus-4-8-high.md",
+  "templates/agents/orc-test-author-opus-5-med.md",
   "templates/agents/orc-pattern-codifier-sonnet-5-high.md",
   "templates/agents/orc-retro-sonnet-5-high.md",
-  "templates/agents/orc-context-combiner-opus-4-8-high.md",
+  "templates/agents/orc-context-combiner-opus-5-high.md",
   "templates/hooks/orc-effort-guard.js",
   "templates/hooks/orc-statusline.js",
   "templates/hooks/orc-trace.js",
@@ -85,7 +85,7 @@ function walkCount(dir, ext) {
 const skillCount = walkCount(path.join(ROOT, "templates/skills"), "SKILL.md");
 const agentCount = walkCount(path.join(ROOT, "templates/agents"), ".md");
 // Floors sit just below current reality (23 skills / 30 agent files: +2 new
-// executors haiku-4-5 & opus-4-8-med, +5 fable-5 role agents, +1 trace writer)
+// executors haiku-4-5 & opus-5-high, +5 fable-5 role agents, +1 trace writer)
 // so a tree missing a chunk of the payload fails the count check instead of
 // sliding under an ancient floor.
 if (skillCount < 22) missing.push(`templates/skills (expected >=22 SKILL.md, found ${skillCount})`);

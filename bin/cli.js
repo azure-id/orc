@@ -605,6 +605,7 @@ function upgrade() {
 // ---------------------------------------------------------------------------
 
 const KNOWN_MODELS = [
+  "claude-opus-5",
   "claude-opus-4-8",
   "claude-opus-4-7",
   "claude-sonnet-5",
@@ -978,9 +979,9 @@ const sha256 = (s) => crypto.createHash("sha256").update(s).digest("hex");
 
 // Executor catalog with tier ranks (model rank, effort rank). Subagents cannot
 // exceed the main-session tier — validation + score-table clipping use this.
-// Model ranks: haiku 1 < sonnet-4-6 2 < sonnet-5 3 < opus-4-7 4 < opus-4-8 5
-// (fable-5 sits at 6 as a session tier, above every executor). Effort ranks:
-// medium 1 < high 2 < xhigh 3 < max 4 (executors only ship medium/high).
+// Model ranks: haiku 1 < sonnet-4-6 2 < sonnet-5 3 < opus-4-7 4 < opus-4-8 5 <
+// opus-5 6 (fable-5 sits at 7 as a session tier, above every executor). Effort
+// ranks: medium 1 < high 2 < xhigh 3 < max 4 (executors only ship medium/high).
 const DIY_EXECUTORS = {
   "orc-executor-haiku-4-5": { model: 1, effort: 1 },
   "orc-executor-sonnet-4-6-med": { model: 2, effort: 1 },
@@ -988,12 +989,12 @@ const DIY_EXECUTORS = {
   "orc-executor-sonnet-5-high": { model: 3, effort: 2 },
   "orc-executor-opus-4-7-med": { model: 4, effort: 1 },
   "orc-executor-opus-4-7-high": { model: 4, effort: 2 },
-  "orc-executor-opus-4-8-med": { model: 5, effort: 1 },
   "orc-executor-opus-4-8-high": { model: 5, effort: 2 },
+  "orc-executor-opus-5-high": { model: 6, effort: 2 },
 };
 // Session-tier grid (C.5) — the user composes whatever tier they want; DIY is
 // SEPARATE from the baseline /orc rule. Effort half is guard-enforced, model
-// half is statusline-warned. Fable 5 (model rank 6) sits above every executor.
+// half is statusline-warned. Fable 5 (model rank 7) sits above every executor.
 const DIY_TIERS = {
   "sonnet-4-6-med": { model: 2, effort: 1, modelId: "claude-sonnet-4-6", effortName: "medium" },
   "sonnet-4-6-high": { model: 2, effort: 2, modelId: "claude-sonnet-4-6", effortName: "high" },
@@ -1003,10 +1004,14 @@ const DIY_TIERS = {
   "opus-4-8-high": { model: 5, effort: 2, modelId: "claude-opus-4-8", effortName: "high" },
   "opus-4-8-xhigh": { model: 5, effort: 3, modelId: "claude-opus-4-8", effortName: "xhigh" },
   "opus-4-8-max": { model: 5, effort: 4, modelId: "claude-opus-4-8", effortName: "max" },
-  "fable-5-med": { model: 6, effort: 1, modelId: "claude-fable-5", effortName: "medium" },
-  "fable-5-high": { model: 6, effort: 2, modelId: "claude-fable-5", effortName: "high" },
-  "fable-5-xhigh": { model: 6, effort: 3, modelId: "claude-fable-5", effortName: "xhigh" },
-  "fable-5-max": { model: 6, effort: 4, modelId: "claude-fable-5", effortName: "max" },
+  "opus-5-med": { model: 6, effort: 1, modelId: "claude-opus-5", effortName: "medium" },
+  "opus-5-high": { model: 6, effort: 2, modelId: "claude-opus-5", effortName: "high" },
+  "opus-5-xhigh": { model: 6, effort: 3, modelId: "claude-opus-5", effortName: "xhigh" },
+  "opus-5-max": { model: 6, effort: 4, modelId: "claude-opus-5", effortName: "max" },
+  "fable-5-med": { model: 7, effort: 1, modelId: "claude-fable-5", effortName: "medium" },
+  "fable-5-high": { model: 7, effort: 2, modelId: "claude-fable-5", effortName: "high" },
+  "fable-5-xhigh": { model: 7, effort: 3, modelId: "claude-fable-5", effortName: "xhigh" },
+  "fable-5-max": { model: 7, effort: 4, modelId: "claude-fable-5", effortName: "max" },
 };
 // allowed under a tier: lower model always; same model only at <= effort.
 const agentFitsTier = (a, t) =>
@@ -1106,8 +1111,10 @@ function diyValidate(cfg) {
   if (cfg.autonomy === "hands-off" && (cfg.ship_mode === "commit" || cfg.ship_mode === "pr")) {
     warnings.push(`hands-off + ship_mode ${cfg.ship_mode}: git actions will run fully unattended`);
   }
-  if (tier && tier.model < 5 && (cfg.review !== "off" || cfg.verify !== "off")) {
-    warnings.push(`session_tier ${cfg.session_tier}: the pinned Opus 4.8 reviewer/verifier agents will silently run at the session's model (tier-honesty rule reports it)`);
+  // The pinned reviewer/verifier moved to claude-opus-5 (model rank 6) in
+  // v0.34.0 — anything below that tier silently runs them at the session model.
+  if (tier && tier.model < 6 && (cfg.review !== "off" || cfg.verify !== "off")) {
+    warnings.push(`session_tier ${cfg.session_tier}: the pinned Opus 5 reviewer/verifier agents will silently run at the session's model (tier-honesty rule reports it)`);
   }
   return { errors, warnings };
 }
@@ -1122,8 +1129,8 @@ const DIY_SCORE_TABLE = [
   [55, 65, "orc-executor-sonnet-5-high"],
   [65, 70, "orc-executor-opus-4-7-med"],
   [70, 80, "orc-executor-opus-4-7-high"],
-  [80, 85, "orc-executor-opus-4-8-med"],
-  [85, 101, "orc-executor-opus-4-8-high"],
+  [80, 90, "orc-executor-opus-4-8-high"],
+  [90, 101, "orc-executor-opus-5-high"],
 ];
 
 // Clip the table to the session tier: an over-tier agent collapses into the

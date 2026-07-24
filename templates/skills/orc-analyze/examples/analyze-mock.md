@@ -1,6 +1,6 @@
 # Example — Annotated System Analysis (dry run)
 
-A: = analyst (Opus 4.8 high) · U: = user. Nothing real. Bounds the DELIVERABLE to
+A: = analyst (Opus 5 high) · U: = user. Nothing real. Bounds the DELIVERABLE to
 the asked scope; every claim is grounded with file:line evidence OR marked an
 assumption and turned into a question. The orchestrator dispatches this — it never
 analyzes itself.

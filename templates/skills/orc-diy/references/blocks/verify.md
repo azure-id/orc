@@ -7,7 +7,7 @@ config" in the summary. Never claim criteria were verified.
 <!-- /diy:when -->
 <!-- diy:when verify=smoke -->
 Run a SMOKE verify only: dispatch the verifier
-(`orc-verifier-opus-4-8-high`) with an explicitly narrowed scope — build +
+(`orc-verifier-opus-5-med`) with an explicitly narrowed scope — build +
 full test suite, red/green verdict, NO per-criterion definition-of-done
 sweep. Red blocks ship exactly as a full verify would.
 <!-- /diy:when -->

@@ -216,15 +216,15 @@ test("trace: PHASE-EDGE on a role change, suppressed within a role and for the w
         tool_name: "Agent",
         tool_input: { subagent_type: agent, description: "d" },
       });
-    spawn("orc-planner-opus-4-8-med");
+    spawn("orc-planner-opus-5-med");
     spawn("orc-trace-writer-haiku-4-5"); // narration — never an edge
     spawn("orc-executor-sonnet-5-high");
     spawn("orc-executor-haiku-4-5"); // same family — no second edge
-    spawn("orc-reviewer-opus-4-8-high");
+    spawn("orc-reviewer-opus-5-med");
     const { texts } = traceFiles(claudeDir);
-    assert.match(texts, /PHASE-EDGE planning :: first=orc-planner-opus-4-8-med/);
+    assert.match(texts, /PHASE-EDGE planning :: first=orc-planner-opus-5-med/);
     assert.match(texts, /PHASE-EDGE execution :: first=orc-executor-sonnet-5-high/);
-    assert.match(texts, /PHASE-EDGE review :: first=orc-reviewer-opus-4-8-high/);
+    assert.match(texts, /PHASE-EDGE review :: first=orc-reviewer-opus-5-med/);
     assert.doesNotMatch(texts, /PHASE-EDGE \S+ :: first=orc-trace-writer/, "the writer never opens a phase");
     assert.strictEqual((texts.match(/PHASE-EDGE execution/g) || []).length, 1, "same-family spawns emit one edge");
     assert.strictEqual((texts.match(/PHASE-EDGE /g) || []).length, 3, "exactly one edge per role change");
@@ -239,7 +239,7 @@ test("trace: after the writer's rename repair, the hook appends to the rich file
     runHook(claudeDir, "orc-trace.js", {
       hook_event_name: "PreToolUse",
       tool_name: "Agent",
-      tool_input: { subagent_type: "orc-planner-opus-4-8-med", description: "plan it" },
+      tool_input: { subagent_type: "orc-planner-opus-5-med", description: "plan it" },
     });
     const dir = path.join(claudeDir, "orc", "logs");
     const boot = fs.readFileSync(path.join(dir, ".current"), "utf8").trim();
@@ -262,7 +262,7 @@ test("trace: after the writer's rename repair, the hook appends to the rich file
     });
     assert.ok(!fs.existsSync(path.join(dir, boot)), "no orphan bootstrap file left behind");
     const text = fs.readFileSync(path.join(dir, rich), "utf8");
-    assert.match(text, /SPAWN orc-planner-opus-4-8-med/, "pre-rename lines survive");
+    assert.match(text, /SPAWN orc-planner-opus-5-med/, "pre-rename lines survive");
     assert.match(text, /SPAWN orc-executor-sonnet-5-high/, "post-rename SPAWN lands in the rich file");
     assert.match(text, /RETURN orc-executor-sonnet-5-high :: build it/, "attribution survives the rename");
   } finally {
@@ -370,7 +370,7 @@ test("effort-guard: xhigh and max clear the /orc baseline (exit 0)", () => {
   }
 });
 
-test("effort-guard: medium /orc blocked without bridge, allowed with a fresh Fable 5 bridge", () => {
+test("effort-guard: medium /orc blocked without bridge, allowed with a fresh Fable 5 / Opus 5 bridge", () => {
   const { root, claudeDir } = freshInstall();
   try {
     const payload = {
@@ -388,6 +388,14 @@ test("effort-guard: medium /orc blocked without bridge, allowed with a fresh Fab
     fs.writeFileSync(bridge, JSON.stringify({ model_id: "claude-fable-5", effort: "medium", written_at: Date.now() }));
     assert.strictEqual(runHook(claudeDir, "orc-effort-guard.js", payload).status, 0, "fable-5 medium clears with a fresh bridge");
 
+    // Fresh Opus 5 bridge → medium clears too (v0.34.0).
+    fs.writeFileSync(bridge, JSON.stringify({ model_id: "claude-opus-5", effort: "medium", written_at: Date.now() }));
+    assert.strictEqual(runHook(claudeDir, "orc-effort-guard.js", payload).status, 0, "opus-5 medium clears with a fresh bridge");
+
+    // Opus 4.8 is NOT in the allowance — medium stays blocked on the baseline model.
+    fs.writeFileSync(bridge, JSON.stringify({ model_id: "claude-opus-4-8", effort: "medium", written_at: Date.now() }));
+    assert.strictEqual(runHook(claudeDir, "orc-effort-guard.js", payload).status, 2, "opus-4.8 medium is still blocked");
+
     // Stale bridge (old written_at) → treated as absent → blocked again.
     fs.writeFileSync(bridge, JSON.stringify({ model_id: "claude-fable-5", effort: "medium", written_at: Date.now() - 60 * 60 * 1000 }));
     assert.strictEqual(runHook(claudeDir, "orc-effort-guard.js", payload).status, 2, "a stale bridge never unblocks");
@@ -396,7 +404,7 @@ test("effort-guard: medium /orc blocked without bridge, allowed with a fresh Fab
   }
 });
 
-test("statusline: verdict matrix — boosted for opus-4.8 xhigh/max and fable-5 medium+, degrade for fable-5 low", () => {
+test("statusline: verdict matrix — boosted for opus-4.8 xhigh/max and opus-5/fable-5 medium+, degrade below", () => {
   const { root, claudeDir } = freshInstall();
   const render = (model, effort) =>
     runHook(claudeDir, "orc-statusline.js", {
@@ -411,7 +419,11 @@ test("statusline: verdict matrix — boosted for opus-4.8 xhigh/max and fable-5 
     assert.match(render("claude-fable-5", "medium"), /ORC-boosted/, "fable-5/medium = boosted");
     assert.match(render("claude-fable-5", "max"), /ORC-boosted/, "fable-5/max = boosted");
     assert.match(render("claude-fable-5", "low"), /DEGRADE/, "fable-5/low = degrade");
+    assert.match(render("claude-opus-5", "medium"), /ORC-boosted/, "opus-5/medium = boosted");
+    assert.match(render("claude-opus-5", "max"), /ORC-boosted/, "opus-5/max = boosted");
+    assert.match(render("claude-opus-5", "low"), /DEGRADE/, "opus-5/low = degrade");
     assert.match(render("claude-sonnet-5", "high"), /DEGRADE/, "sonnet-5/high = degrade");
+    assert.match(render("claude-opus-4-7", "high"), /DEGRADE/, "opus-4.7 never reads as opus-5");
   } finally {
     rmrf(root);
   }

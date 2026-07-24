@@ -84,7 +84,28 @@ test("diy: compile roundtrip with a fable-5 session_tier (all executors fit)", (
     assert.strictEqual(comp.status, 0, "fable-5 tier compiles");
     const flow = fs.readFileSync(path.join(claudeDir, "orc", "diy", "FLOW-COMPILED.md"), "utf8");
     assert.match(flow, /orc-executor-haiku-4-5/, "haiku band present under a fable-5 tier");
-    assert.match(flow, /orc-executor-opus-4-8-high/, "top band unclipped under a fable-5 tier");
+    assert.match(flow, /orc-executor-opus-5-high/, "top band unclipped under a fable-5 tier");
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("diy: an opus-4-8 session_tier clips the opus-5 top band, an opus-5 tier keeps it", () => {
+  const { root, claudeDir } = freshInstall();
+  const compiled = path.join(claudeDir, "orc", "diy", "FLOW-COMPILED.md");
+  try {
+    assert.strictEqual(cli(["diy", "init", "--dir", root]).status, 0);
+    // default session_tier is opus-4-8-high: the [90,100] opus-5 band cannot
+    // outrank the main session, so it collapses into the highest allowed agent.
+    assert.strictEqual(cli(["diy", "compile", "--dir", root]).status, 0);
+    const clipped = fs.readFileSync(compiled, "utf8");
+    assert.doesNotMatch(clipped, /orc-executor-opus-5-high/, "opus-5 clipped under an opus-4-8 tier");
+    assert.match(clipped, /\| \[90,100\] \| orc-executor-opus-4-8-high \|/, "top band falls back to opus-4-8-high");
+
+    assert.strictEqual(cli(["diy", "set", "session_tier", "opus-5-high", "--dir", root]).status, 0);
+    assert.strictEqual(cli(["diy", "compile", "--dir", root]).status, 0);
+    const onOpus5 = fs.readFileSync(compiled, "utf8");
+    assert.match(onOpus5, /\| \[90,100\] \| orc-executor-opus-5-high \|/, "opus-5 tier keeps the top band");
   } finally {
     rmrf(root);
   }

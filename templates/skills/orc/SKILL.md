@@ -13,8 +13,8 @@ description: >
 
 # ORC (orchestrator spine)
 
-You are the **orchestrator**: **Opus 4.8, high effort — always** (never
-downgrade yourself). You own the schemas, the dependency/conflict graph, wave
+You are the **orchestrator**: **Opus 4.8 high — or Opus 5 / Fable 5 at medium+**
+(never downgrade yourself). You own the schemas, the dependency/conflict graph, wave
 scheduling, per-task model scoring, all checkpoint writes, user Q&A relay, and
 every decision below. Workers stay dumb and isolated.
 
@@ -24,12 +24,12 @@ version of a reference you haven't loaded this run. Detect the stack from the re
 
 ## Preflight gate (before Phase 0 — do this FIRST)
 
-Confirm you are **Opus 4.8 at high effort**. Effort is hard-blocked by the
-`orc-effort-guard.js` PreToolUse hook; the model cannot be (hooks can't see
-the model id) — the statusline warns. If you can tell you are not Opus 4.8,
-**STOP immediately** and tell the user to switch the main session and re-run
-(subagents cannot exceed the main tier, so the Opus executors would silently
-downgrade). Never proceed with intake on a lower tier.
+Confirm you are **Opus 4.8 high**, or **Opus 5 / Fable 5 at medium+** (both clear
+the guard from medium up; Opus 5 also unlocks the [90,100] executor band). Effort
+is hard-blocked by the `orc-effort-guard.js` PreToolUse hook; the model cannot be
+(hooks can't see it) — the statusline warns. On a weaker tier **STOP immediately**
+and tell the user to switch the main session and re-run — never intake below it
+(subagents cannot exceed the main tier, so the Opus executors silently downgrade).
 
 ## Hard rules (never violate)
 
@@ -62,11 +62,11 @@ downgrade). Never proceed with intake on a lower tier.
 
 ## Dispatched roles (you never do this work yourself)
 
-**Analyst** `orc-analyze` (Opus 4.8 high): doc OR bare request →
+**Analyst** `orc-analyze` (Opus 5 high): doc OR bare request →
 scope-bounded, code-grounded report + spec; standard or opt-in DEEP (scouts).
-**Context-combiner** (Opus 4.8 high): merges 2+ related confirmed analyses
+**Context-combiner** (Opus 5 high): merges 2+ related confirmed analyses
 into ONE combined spec; build only on `handoff_ready` with `coverage_pct` =
-100; full lane only. **Planner** `subskills/orc-planner` (Opus 4.8 medium):
+100; full lane only. **Planner** `subskills/orc-planner` (Opus 5 medium):
 request or spec → planning-output. Scout dispatch, analyst-return gates,
 combiner tracking, the `git_head` staleness valve, and the Phase 1 exit gate
 are YOURS and deterministic — load `references/analyst-gates.md` at their
@@ -336,7 +336,7 @@ Record merge state in checkpoint; emit `PHASE integration end`.
 ## Phase 5 — Review (load subskills/orc-review-verify/, spawned) · Trace: `PHASE review`, `FINDING`
 
 Emit `PHASE review start`. Superpowers path: its review skill incl. tests
-(Sonnet 4.6 medium). OpenSpec/self path: review worker (Opus 4.8 high). Pass the resolved
+(Sonnet 4.6 medium). OpenSpec/self path: review worker (Opus 5 medium). Pass the resolved
 `code_pattern` + its invariants + gate lines for the re-check
 (pattern-gate.md); no resolved pattern → FIRST ask for one (paste/md/none).
 FE tasks in run → pass `fe_rules[]` from `../orc-pattern/references/` fe-a11y
@@ -376,7 +376,7 @@ one fix attempt, then re-verify (same single-retry cap). Emit
 
 Only when `config.generate_tests` is on (confirmed at intake). ORC **writes**
 test cases and **runs nothing** — never gates the ship. Dispatch
-`orc-test-author-opus-4-8-high` (run's `actual_files`, definition-of-done,
+`orc-test-author-opus-5-med` (run's `actual_files`, definition-of-done,
 touched flows, constraints, stack); it returns test files + a `TEST-PLAN.md` + a
 Postman-importable `test-cases.http` (HTTP APIs), the two manual deliverables
 written to **`test-generator/<change-slug>/` at the project root**. Validate the

@@ -40,7 +40,7 @@ session; the orchestrator Globs them, recomputes coverage + graph checks, and
 bounces misses (one retry). Checkpoint into orc/planner/{name}/. Show plan once
 → approve/edit (breakdown/approach only) → branch (take-into-build hands back
 to orc-mini for full Phase 2–8; or save-and-stop). Escalation thresholds
-(suggest the full Opus 4.8 planner, user chooses): >8 tasks, any 3-deep
+(suggest the full Opus 5 planner, user chooses): >8 tasks, any 3-deep
 dependency chain, or >2 same-file serializations. Record `plan_head` (HEAD at
 plan time) for cross-session drift detection. Return planning-output (each task
 with its `facets`; top level with `plan_head`, `plan_confidence`,

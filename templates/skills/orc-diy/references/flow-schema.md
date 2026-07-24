@@ -30,7 +30,7 @@ selector.
 | `summary` | `full` / `off` / `short` | Summary depth |
 | `autonomy` | `interactive` / `semi` / `hands-off` | Who answers routine asks |
 | `ship_mode` | `ask` / `commit` / `pr` / `report-only` | Terminal ship behavior |
-| `session_tier` | `sonnet-4-6-{med,high}` / `opus-4-7-{med,high}` / `opus-4-8-{med,high,xhigh,max}` / `fable-5-{med,high,xhigh,max}` | Required main-session model+effort (default `opus-4-8-high`) |
+| `session_tier` | `sonnet-4-6-{med,high}` / `opus-4-7-{med,high}` / `opus-4-8-{med,high,xhigh,max}` / `opus-5-{med,high,xhigh,max}` / `fable-5-{med,high,xhigh,max}` | Required main-session model+effort (default `opus-4-8-high`) |
 | `max_wave_tasks` | `3` (integer ≥ 1) | Wave hard cap |
 | `batch_pause_every` | `2` (integer ≥ 1) | Waves between pauses |
 | `rubric_bands` | `5` (2–8) | Scoring granularity (`scoring: on` only) |
@@ -41,8 +41,10 @@ selector.
 Hard errors (config not written):
 - `scoring: off` without a `fixed_executor`.
 - `fixed_executor` or any agent choice above `session_tier` (tier order:
-  haiku-4-5 < sonnet-4-6 < sonnet-5 < opus-4-7 < opus-4-8 < fable-5 — subagents
-  cannot exceed the main session; effort medium < high < xhigh < max).
+  haiku-4-5 < sonnet-4-6 < sonnet-5 < opus-4-7 < opus-4-8 < opus-5 < fable-5 —
+  subagents cannot exceed the main session; effort medium < high < xhigh < max).
+  A tier below `opus-5-high` clips the `[90,100]` band to the highest agent it
+  allows, at compile time.
 - `review: off` with `security` not `off` (the security pass reuses the
   reviewer).
 - Anything that would disable a locked rule (see `locked-blocks.md`).
@@ -54,8 +56,8 @@ Warnings (written, reported):
   tests are authored but never gate the ship).
 - `autonomy: hands-off` with `ship_mode: commit` or `pr` (fully unattended
   git actions).
-- `session_tier` below `opus-4-8-high` with `review`/`verify` on: the pinned
-  Opus reviewer/verifier agents will silently run at the session's model —
+- `session_tier` below `opus-5-med` with `review`/`verify` on: the pinned
+  Opus 5 reviewer/verifier agents will silently run at the session's model —
   the flow still works, honesty-checked by the tier-honesty locked rule.
 
 ## `flow.lock.json` (machine state — written by the CLI only)

@@ -1,5 +1,5 @@
 ---
-description: Ultra lane — full orchestrator + Opus 4.8 max advisor and three judgment gates, for ultra-complex work (maximum rigor, cost accepted)
+description: Ultra lane — full orchestrator + Opus 5 xhigh advisor and three judgment gates, for ultra-complex work (maximum rigor, cost accepted)
 ---
 
 Use the **orc** skill with `ultra_mode: true` forced on for this run. Ultra is

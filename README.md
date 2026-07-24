@@ -6,7 +6,7 @@
 
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
-![Version](https://img.shields.io/badge/version-0.33.0-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.34.0-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
@@ -46,36 +46,53 @@ zero-dependency npm package installs those files into your `.claude/` directory.
 
 ## Changelog
 
-**Latest: v0.33.0 — updated 2026-07-25.**
+**Latest: v0.34.0 — updated 2026-07-25.**
 
-### v0.33.0 — Knowledge deepening + verification revamp _(2026-07-25)_
+### v0.34.0 — Opus 5: top scoring band, every core role, medium-effort session tier _(2026-07-25)_
 
-Six features, one release. **The wiki gets a front door and a federation:**
-`wiki/orc-orientation.md` (derived at assemble — repo identity, reading order,
-anchored journeys) is now read FIRST by every consumer, and the **ATLAS**
-(`wiki/crosslink/atlas.md`) gives every linked repo the same repo-agnostic map
-of the whole federation — who provides what, which peer doc answers which
-question, transitive nodes included. Writing the atlas (and, via the new
-one-shot **`/orc-wiki crosslink compile`**, the CLAUDE.md pointer block) into a
-linked repo is the second sanctioned peer FILE write — never a commit, never a
-push, warn-only. **Refreshes go delta-first:** the new deterministic
-`orc wiki impact` probe (exit 0/2/3) maps commits since `scan_commit` against
-each doc's coverage — per-doc `CLEAN | TOUCHED | STRUCTURAL` — so the default
-refresh regenerates only touched docs, and a FULL refresh is recommended
-(threshold/structural/aging), never silently run. **Verification gets teeth:**
-plans now carry a required `tdd_spec` (per-requirement given/when/then +
-runnable skeletons, authored BEFORE implementation; full orc + ultra always,
-mini one question, fast off); Wave 0 proves the tests RED, executors implement
-to green under a `tdd_loop_max` repair cap with an honest red report on cap,
-and Phase 6 becomes a deterministic TDD gate + an adversarial review that
-attacks edge cases, error paths, contracts, and dead wiring. And after a green
-verify, ORC can build a **runnable mocked example** (`mock-examples/<slug>/`,
-never committed) and run a bounded `DRIFT-FROM` recovery loop when what you
-see isn't what you meant. New config: `mock_example` (ask), `tdd_loop_max`
-(3), `wiki_delta_full_threshold` (30); new DIY keys `tdd` + `mock_example`.
+**Claude Opus 5 lands across all three halves of the tier system.**
+
+**Scoring.** The canonical 8-band score→model table gets a new ceiling —
+`[90,100]` dispatches the new `orc-executor-opus-5-high` (claude-opus-5, high
+effort) and `[80,90)` is now a single Opus 4.8 **high** band (the old `[80,85)`
+Opus 4.8 medium executor is gone; `orc update` prunes it).
+
+**Role agents.** Every core fixed role is re-pinned to `claude-opus-5`, each at
+the effort its job actually needs — and the agent files are renamed to match,
+because ORC derives the expected model from the agent NAME:
+
+| Role | Was | Now |
+|------|-----|-----|
+| System Analyst | `orc-system-analyst-opus-4-8-high` | `orc-system-analyst-opus-5-high` |
+| Requirement Planner | `orc-planner-opus-4-8-med` | `orc-planner-opus-5-med` |
+| Reviewer | `orc-reviewer-opus-4-8-high` | `orc-reviewer-opus-5-med` |
+| Verifier | `orc-verifier-opus-4-8-high` | `orc-verifier-opus-5-med` |
+| Test Author | `orc-test-author-opus-4-8-high` | `orc-test-author-opus-5-med` |
+| Context Combiner | `orc-context-combiner-opus-4-8-high` | `orc-context-combiner-opus-5-high` |
+| Learning-Docs Writer | `orc-learn-writer-opus-4-8-high` | `orc-learn-writer-opus-5-low` |
+| Ultra Advisor | `orc-advisor-opus-4-8-max` | `orc-advisor-opus-5-xhigh` |
+| Ultra Judge | `orc-judge-opus-4-8-max` | `orc-judge-opus-5-xhigh` |
+
+Unchanged: the mini agents (Sonnet 5 high), the scout (Sonnet 4.6 high), the
+pattern codifier and retro miner (Sonnet 5 high), the trace writer (Haiku 4.5),
+and the CLAUDE.md writer (Opus 4.8 high). `orc update` prunes the old filenames
+through the install manifest.
+
+**Session tier.** Opus 5 joins Fable 5 in the medium-effort allowance — the
+`orc-effort-guard.js` PreToolUse hook clears `/orc` from **medium up** on Opus 5
+(read through the statusline's session-model bridge), and the statusline reads
+Opus 5 medium…max as `🚀 ORC-boosted` instead of a degraded tier. The DIY tier
+grid gains `opus-5-med|high|xhigh|max`.
+
+**The cost-tier rule is now louder, on purpose.** A subagent can never outrank
+the main session, so on an Opus 4.8 session the Opus-5 roles and the `[90,100]`
+band quietly run at 4.8 — reported by the tier-honesty rule at runtime, and
+clipped deterministically at DIY compile time. **Run the main session on Opus 5.**
 
 <details>
 <summary><b>Previous versions</b> (click to expand)</summary>
+
+### v0.33.0 — Knowledge deepening + verification revamp _(2026-07-25)_
 
 ### v0.32.0 — Trace revamp: narration is dispatched, not remembered _(2026-07-24)_
 
@@ -231,9 +248,12 @@ orc --help
 1. Paste your team's PR template into `skills/orc/subskills/orc-pr/pr.md`.
 2. Add `.claude/skills/orc/run/` to your project `.gitignore`.
 3. **Run `/agents`** to confirm the agent model IDs your Claude Code accepts.
-4. **Run your main Claude Code session on Opus** — a subagent's model can't
-   exceed the main session's tier, so on a Sonnet session the Opus agents
-   silently downgrade (see `agents/MODEL-MAPPING.md`).
+4. **Run your main Claude Code session on Opus 5** — a subagent's model can't
+   exceed the main session's tier, and as of v0.34.0 every core role agent
+   (analyst, planner, reviewer, verifier, test author, combiner, ultra
+   advisor/judge) plus the top executor band is pinned to `claude-opus-5`. On an
+   Opus 4.8 session they all quietly run at 4.8; on Sonnet, at Sonnet (see
+   `agents/MODEL-MAPPING.md`).
 5. If a `/command` doesn't appear, your Claude Code may read commands from a
    different folder — move the files in `commands/` there.
 
@@ -292,7 +312,7 @@ needed. Either way, your `.claude/orc.config.yaml` overrides are left untouched.
 | Command | What it does |
 |---------|--------------|
 | **`/orc`** | The full orchestrator: intake → planning → per-task scoring → conflict-free parallel waves → review → verify → ship. Checkpoints eagerly; resumes in a fresh session at any pause. |
-| **`/orc-ultra`** | Maximum-rigor lane: the full pipeline plus an Opus 4.8 **max** advisor (brief + rubric + one clarification round) and three judgment gates (after analysis, planning, and verify). Deep analyze, pattern/testgen/security forced on, executor tier floor. Costly by design. |
+| **`/orc-ultra`** | Maximum-rigor lane: the full pipeline plus an Opus 5 **xhigh** advisor (brief + rubric + one clarification round) and three judgment gates (after analysis, planning, and verify). Deep analyze, pattern/testgen/security forced on, executor tier floor. Costly by design. |
 | **`/orc-mini`** | The fast path — see below. |
 | **`/orc-fast`** | Fastest lane — knowledge-gated: needs a fresh wiki + cached code-pattern, skips analyst/planner, one Sonnet 4.6 high executor + smoke gate. Falls back to `orc-mini` when a prerequisite is missing. See below. |
 | **`/orc-diy`** | **Your own lane** — runs the flow you composed with the `orc diy` CLI. Hard-gated: unconfigured/stale → offers plain `/orc`. Guide: [ORC-DIY README](templates/skills/orc-diy/README.md). |
@@ -394,7 +414,7 @@ options**. Opt into **deep analysis** for a wider sweep (parallel read-only
 scouts), verify-every-claim, and implementation options with trade-offs.
 
 **Multiple related docs → one build (context-combiner).** Once 2+ related
-analyses exist, a dispatched Opus 4.8 subagent merges them into one deduped,
+analyses exist, a dispatched Opus 5 high subagent merges them into one deduped,
 conflict-resolved spec: it verifies real overlap, pools all source requirements
 (never pairwise), splits partial overlaps rather than collapsing them, and a
 **conservation gate blocks handoff below 100% coverage** (dropping anything needs
@@ -467,8 +487,9 @@ dispatch is scored the same way. The score maps through a **single 8-band
 score→model table** in `skills/orc/config.md`:
 
 - Bands span `claude-haiku-4-5` → `claude-sonnet-4-6` → `claude-sonnet-5` →
-  `claude-opus-4-7` → `claude-opus-4-8`, at medium/high effort (`claude-fable-5`
-  via the opt-in role override).
+  `claude-opus-4-7` → `claude-opus-4-8` → `claude-opus-5`, at medium/high effort
+  (`claude-fable-5` via the opt-in role override). The top band `[90,100]`
+  dispatches **Opus 5 high**; `[80,90)` is Opus 4.8 high.
 - `rubric_bands` (2–8) sets **report granularity only** — the table is always the
   same; override the band edges/models entirely if you want.
 
@@ -479,8 +500,9 @@ read the behavior trace, where each `RETURN` now records the actual model.
 
 > [!IMPORTANT]
 > **The cost-tier rule:** a subagent's model cannot exceed the main session's
-> tier. Run your main session on Opus, or the Opus-tier agents fall back to
-> Sonnet. This is the most common cause of "it used the wrong model."
+> tier. Run your main session on Opus 5, or the Opus-5-pinned role agents and the
+> `[90,100]` executor band fall back to whatever the session runs. This is the
+> most common cause of "it used the wrong model."
 
 ### The tier guard (installed automatically)
 
@@ -488,15 +510,18 @@ Because that rule is so easy to trip, `orc init` installs a guard into your
 `.claude/settings.json`:
 
 - **Effort — hard block.** A `PreToolUse` hook (`hooks/orc-effort-guard.js`)
-  refuses to launch `/orc` unless the session is at **high** effort. This is the
-  one half Claude Code lets a hook enforce deterministically (`effort.level` /
-  `$CLAUDE_EFFORT` are exposed to blocking hooks).
+  refuses to launch `/orc` unless the session is at **high** effort (xhigh/max
+  pass too; **`claude-opus-5` and `claude-fable-5` clear from medium up** — both
+  outrank the Opus 4.8 baseline, detected via the statusline's session-model
+  bridge). This is the one half Claude Code lets a hook enforce deterministically
+  (`effort.level` / `$CLAUDE_EFFORT` are exposed to blocking hooks).
 - **Model — warning.** Claude Code does **not** expose the model id to any
   blocking hook, so the tier can't be hard-stopped. Instead a statusline
   (`hooks/orc-statusline.js`, installed only if you don't already have one) shows
-  `⛔ ORC WILL DEGRADE` whenever the model isn't `claude-opus-4-8`, and the
-  orchestrator self-checks at startup. If you already run a statusline, `orc init`
-  leaves it alone and prints the snippet to merge.
+  `✅ ORC-ready` on Opus 4.8 high, `🚀 ORC-boosted` on Opus 4.8 xhigh/max or
+  Opus 5 / Fable 5 at medium…max, and `⛔ ORC WILL DEGRADE` on anything below —
+  and the orchestrator self-checks at startup. If you already run a statusline,
+  `orc init` leaves it alone and prints the snippet to merge.
 
 ---
 
