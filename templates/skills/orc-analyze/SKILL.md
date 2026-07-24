@@ -76,12 +76,16 @@ the user meant.
 When run standalone (`/orc-analyze`, not inside an /orc run that already owns
 a trace — never open a second one), follow
 `../orc/references/trace-protocol.md`: write `log_dir/.current` =
-`<slug>-<DDMMYY>.txt` BEFORE the first dispatch. **Cadence — written AS THE
-RUN GOES:** each phase A→F appends its `PHASE` line BEFORE you announce that
-phase; `DISPATCH`/`VERIFY` per analyst/scout spawn; `GATE` lines at the
-evidence/derivation gates; then `FINISH` + delete `.current`. A phase with
-zero new trace lines is a protocol violation — go append them now. (The hook
-bootstraps `.current` on the first dispatch, so the skeleton is never lost.)
+`run-analyze-<slug>-<DDMMYY>-<HHMMSS>.txt` BEFORE the first dispatch. Narration
+is **dispatched, never remembered** — as a single-dispatch lane you owe exactly
+ONE end-of-run packet (that reference's canonical section): collect every event
+with its REAL timestamp (each phase A→F `PHASE` line, `DISPATCH`/`VERIFY` per
+analyst/scout spawn, `GATE` at the evidence/derivation gates, `FINISH`) plus
+`decisions` (the WHY, incl. the user's answers verbatim), dispatch the trace
+writer SOLO after the analyst return validates, and delete `.current` only once
+it returns. A run ending with
+zero new trace lines is a protocol violation. (The hook bootstraps `.current` +
+the skeleton on the first dispatch, so the flow shape is never lost.)
 
 ## Phase A — Ingest & detect source mode
 

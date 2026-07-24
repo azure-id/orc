@@ -138,13 +138,16 @@ already in the shared format — no migration.
 
 ## Behavior trace (PERMANENT — same rule as every lane; always on)
 
-Follow `../orc/references/trace-protocol.md` for fast's phase set: run start
-write `log_dir/.current` + store `trace_path` in the checkpoint; append AS THE
-RUN GOES — each F0–F4 `PHASE` line BEFORE announcing it, `GATE` at the
-preflight/fit/smoke verdicts, `DISPATCH`/`VERIFY` around the executor,
-`OUTCOME` + `FINISH` at close, then delete `log_dir/.current`. A phase ending
-with zero new trace lines is a protocol violation — go append them now. (The
-hook bootstraps `.current` on the first dispatch.)
+Follow `../orc/references/trace-protocol.md`: at run start write
+`log_dir/.current` = `run-fast-<slug>-<DDMMYY>-<HHMMSS>.txt` + store
+`trace_path`. Narration is **dispatched, never remembered**: record each event
+with its REAL timestamp into a packet (F0–F4 `PHASE`, `GATE` at the preflight/
+fit/smoke verdicts, `DISPATCH`/`VERIFY` — `actual_model`/`actual_effort` vs
+expected — `OUTCOME`, `FINISH`, plus `decisions` = the WHY), then dispatch
+`orc-trace-writer-haiku-4-5` PAIRED with the next dispatch; fast batches to
+**2 packets** (preflight+dispatch, gate+ship). A phase ending with
+zero new trace lines is a protocol violation — dispatch its packet NOW. The
+`FINISH` packet returns BEFORE you delete `log_dir/.current`.
 
 ## Config
 

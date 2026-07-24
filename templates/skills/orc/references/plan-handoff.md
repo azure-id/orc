@@ -36,8 +36,9 @@ Do these IN ORDER before any dispatch. Skipping any step is a protocol
 violation.
 
 1. **This IS a run — bootstrap it.** Load the spine (`orc/SKILL.md`) and
-   `references/trace-protocol.md`; create `log_dir`, write `log_dir/.current`,
-   store `trace_path` in the checkpoint. Emit `PHASE intake start`.
+   `references/trace-protocol.md`; create `log_dir`, write `log_dir/.current` =
+   `run-orc-<slug>-<DDMMYY>-<HHMMSS>.txt`, store `trace_path` in the checkpoint.
+   Record `PHASE intake start` into this phase's packet.
 2. **Schema-validate against `schemas/planning-output.md`.** Every task needs
    `declared_files`, `grounding[]`, `depends_on`, `requirements[]`,
    `acceptance[]`, `owns_area`, `spec_ref`, and the `facets` block (Part D). A

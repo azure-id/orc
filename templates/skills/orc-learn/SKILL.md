@@ -67,7 +67,7 @@ below. Weave the **Trace:** steps in as each event happens.
      doc may still ride along as hints (precedence above).
    - Ask which feature as ONE question (one feature per invoke). Derive
      `feature_slug` (kebab-case) from the chosen topic/area.
-2. **Trace:** write `log_dir/.current` = `orc-learn-<DDMMYY>.txt` BEFORE the
+2. **Trace:** write `log_dir/.current` = `run-learn-<slug>-<DDMMYY>-<HHMMSS>.txt` BEFORE the
    spawn (the `orc-trace.js` hook also bootstraps it on the dispatch, so the
    skeleton is never lost).
 3. Spawn `orc-learn-writer-opus-4-8-high` with: `mode=init`, `repo_root`,
@@ -98,7 +98,7 @@ below. Weave the **Trace:** steps in as each event happens.
 3. Present the FULL list, each with its computed flag; the user
    multi-selects which to regenerate (one question, multi-select). Nothing
    selected → stop, no writes.
-4. **Trace:** write `log_dir/.current` = `orc-learn-<DDMMYY>.txt`. For each
+4. **Trace:** write `log_dir/.current` = `run-learn-<slug>-<DDMMYY>-<HHMMSS>.txt`. For each
    selected feature, spawn the writer with `mode=refresh` and that feature's
    slice (re-deepen just that feature; a FRESH/AGING wiki may again seed the
    boundary — emit one `WIKI-CONSULT tier=<tier> :: refresh` when the wiki is
@@ -119,7 +119,7 @@ writer, which self-traces nothing and only returns `actual_model`/
 1. `WIKI-CONSULT tier=<tier> :: <topic-pick|refresh>` — at every wiki read
    (orc-learn is a wiki-grounding lane; the consult is always traced, absent
    wiki included).
-2. `log_dir/.current` = `orc-learn-<DDMMYY>.txt` — before the first spawn.
+2. `log_dir/.current` = `run-learn-<slug>-<DDMMYY>-<HHMMSS>.txt` — before the first spawn.
 3. `DISPATCH orc-learn-writer :: <mode> <slug> expect=opus-4-8/high` — one
    per spawn; REFRESH runs one per selected feature.
 4. `VERIFY writer actual=<model>/<effort> ✅ MATCH` or
@@ -128,8 +128,12 @@ writer, which self-traces nothing and only returns `actual_model`/
    `/orc-retro`).
 5. `FINISH :: <init <slug>|refresh <n> features>`, then delete `.current`.
 
-Append each marker as its event happens (before announcing that step), never
-batched at the end — the timestamps are the run's timeline, and a step that
+Narration is **dispatched, never remembered**: record each marker with its REAL
+timestamp as its event happens, then — as a single-dispatch lane — dispatch the
+trace writer ONCE with the whole event list plus `decisions` (the WHY: which
+feature was picked and why, the user's answer verbatim) after the writer return
+validates and BEFORE you delete `.current`. Stamps are the run's timeline, never
+the write time, and a run that
 ends with zero new trace lines is a protocol violation.
 
 ## Boundaries

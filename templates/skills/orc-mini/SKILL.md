@@ -94,15 +94,17 @@ not gitignored). No → ship. Either way this NEVER runs tests.
 
 ## Behavior trace (PERMANENT — same rule as full; always on)
 
-Mini does NOT drop the trace. Follow `../orc/references/trace-protocol.md`
-(load at run start) for mini's phase set: run start create `log_dir` + write
-`.current` + store `trace_path` in the checkpoint; append the lines AS THE RUN
-GOES — each phase's `PHASE` line BEFORE announcing it, `DISPATCH` per spawn,
-`VERIFY` per return (`actual_model`/`actual_effort` vs expected — surface any
-⛔ DOWNGRADE), `OUTCOME … band=mini` per task close, `VERDICT pass|fail` at the
-smoke gate. A phase with zero new trace lines is a protocol violation — go
-append them now. Run end: `FINISH …`, delete `log_dir/.current`. (The hook
-bootstraps `.current` on the first dispatch, so the skeleton is never lost.)
+Mini does NOT drop the trace. Follow `../orc/references/trace-protocol.md` (load
+at run start): create `log_dir`, write `.current` =
+`run-mini-<slug>-<DDMMYY>-<HHMMSS>.txt`, store `trace_path`. Narration is
+**dispatched, never remembered**: record each event with its REAL timestamp into
+a packet (`PHASE`, `DISPATCH`, `VERIFY` per return — `actual_model`/
+`actual_effort` vs expected, surface any ⛔ DOWNGRADE — `OUTCOME … band=mini`,
+`VERDICT`, plus `decisions` = the WHY), then dispatch
+`orc-trace-writer-haiku-4-5` PAIRED with the next dispatch; mini batches to
+**3 packets** (intake+plan, execution, ship). A phase with
+zero new trace lines is a protocol violation — dispatch its packet NOW.
+Run end: the `FINISH` packet returns, then delete `log_dir/.current`.
 
 ## Complexity read (replaces the scoring table)
 

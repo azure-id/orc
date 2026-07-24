@@ -177,10 +177,14 @@ above (`analyze`→`orc-analyst-fable-5`, `plan`→`orc-planner-fable-5`,
 - Behavior-trace logging is PERMANENT (always on) — there is no `logging` key.
   Every run, the orchestrator follows `references/trace-protocol.md` and the
   `orc-trace.js` hook writes a persistent `.txt` under `log_dir`. The hook is the
-  deterministic guarantee: it bootstraps `log_dir` + the run pointer itself, so a
-  trace exists even if the orchestrator never writes a marker.
-- `log_dir` is the persistent trace folder; unlike the decision log (`run/…md`,
-  deleted on success) traces are NEVER auto-deleted — post-hoc review is the point.
+  deterministic guarantee: it bootstraps `log_dir` + the run pointer itself and
+  segments the run with `PHASE-EDGE` lines, so a usable trace exists even if the
+  orchestrator never narrates. The RICH narration is dispatched per phase to the
+  pinned Haiku trace writer — never appended from memory.
+- `log_dir` is the persistent trace folder; its top level holds the run `.txt`
+  plus its sidecars (`.pending.json`, `.jsonl`). Unlike the decision log
+  (`run/…md`, deleted on success) traces are NEVER auto-deleted — post-hoc
+  review is the point.
 - `retro_repo` is where `/orc-retro` files its calibration report (PR preferred,
   issue fallback, AI-readable markdown). The retro hard-gates on a delivery
   channel — an authed gh CLI or a GitHub MCP server — and does not run at all

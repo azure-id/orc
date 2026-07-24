@@ -67,10 +67,13 @@ When run standalone (`/orc-pattern`, not inside an /orc or orc-wiki run that
 already owns a trace), resolve `log_dir` (`../orc/config.md`
 default + `.claude/orc.config.yaml`) at start and follow
 `../orc/references/trace-protocol.md`: write `log_dir/.current` =
-`<slug>-<DDMMYY>.txt` BEFORE dispatching the codifier, emit
-`PHASE`/`DISPATCH`/`VERIFY` (claimed-vs-actual) lines, then `FINISH` + delete
-`.current` (the hook bootstraps `.current` on dispatch regardless). Inside
-another ORC run, that run's trace covers this — never open a second one.
+`run-pattern-<slug>-<DDMMYY>-<HHMMSS>.txt` BEFORE dispatching the codifier.
+Narration is dispatched, not remembered: collect `PHASE`/`DISPATCH`/`VERIFY`
+(claimed-vs-actual)/`FINISH` events with their REAL timestamps plus `decisions`
+(the WHY), dispatch the trace writer ONCE at run end (the single-dispatch-lane
+packet), then delete `.current` (the hook bootstraps `.current` + the skeleton on
+dispatch regardless). Inside another ORC run, that run's trace covers this —
+never open a second one.
 
 ## Phase 0 — Entry & auto-branch (on /orc-pattern)
 

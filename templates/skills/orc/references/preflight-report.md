@@ -19,7 +19,7 @@ whose house style is in force (pattern), whether peer contracts are in play
 wiki:      FRESH — 12 docs consulted
 pattern:   js cached · ts cached
 crosslink: 2 boundaries (payments-api) — advisory
-trace:     .claude/orc/logs/210726-1545-....txt
+trace:     .claude/orc/logs/run-orc-<slug>-210726-154500.txt
 waves:     3 planned — will pause after wave 2 (batch_pause_every=2)
 ```
 

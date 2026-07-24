@@ -41,19 +41,21 @@ C: Reads each learning-docs/*/knowledge.md header; computes tiers on read:
 
 ## Run 4 — behavior trace (permanent, always on)
 
-The skill writes the run pointer (the `orc-learn-<DDMMYY>.txt` name into
-`log_dir`) before the spawn, then these markers (`SPAWN`/`RETURN` come from
-the `orc-trace.js` hook):
+The skill writes the run pointer (`run-learn-<slug>-<DDMMYY>-<HHMMSS>.txt` into
+`log_dir`) before the spawn, records these events as they happen, and — as a
+single-dispatch lane — dispatches the trace writer ONCE at run end to append
+them (`SPAWN`/`RETURN` come from the `orc-trace.js` hook as they occur):
 
 ```
-[170726 10:02:01.050] orc      WIKI-CONSULT tier=FRESH :: topic-pick
-[170726 10:02:44.310] orc      DISPATCH orc-learn-writer :: init orders expect=opus-4-8/high
+[170726 10:02:01.050] writer   WIKI-CONSULT tier=FRESH :: topic-pick
+[170726 10:02:44.310] writer   DISPATCH orc-learn-writer :: init orders expect=opus-4-8/high
 [170726 10:02:44.420] hook     SPAWN orc-learn-writer-opus-4-8-high
 [170726 10:06:12.900] hook     RETURN
-[170726 10:06:13.010] orc      VERIFY writer actual=claude-opus-4-8/high ✅ MATCH
-[170726 10:06:13.120] orc      FINISH :: init orders
+[170726 10:06:13.010] writer   VERIFY writer actual=claude-opus-4-8/high ✅ MATCH
+[170726 10:06:13.120] writer   FINISH :: init orders
 ```
 
-Then the run pointer is deleted. REFRESH traces one DISPATCH/VERIFY pair per
+Then the writer packet returns and the run pointer is deleted (in that order).
+REFRESH traces one DISPATCH/VERIFY pair per
 selected feature, ending `FINISH :: refresh <n> features`. No phase/score/
 finding/verdict markers — this lane runs none of those phases.

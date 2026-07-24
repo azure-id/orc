@@ -6,7 +6,7 @@
 
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
-![Version](https://img.shields.io/badge/version-0.31.0-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.32.0-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
@@ -46,35 +46,40 @@ zero-dependency npm package installs those files into your `.claude/` directory.
 
 ## Changelog
 
-### v0.31.0 — Execution-integrity revamp: plan handoff, attributable traces, facet scoring _(2026-07-23)_
+**Latest: v0.32.0 — updated 2026-07-24.**
 
-Driven by a real cross-session run trace where a plan built in one session was
-executed in another and drifted. Five fixes, verifier untouched (it performed
-well). **Plan handoff is a real entry contract:** when the run input IS a plan
-(pasted planning-output, a `plan-{name}.md` path, or a saved planner checkpoint),
-ORC no longer improvises task-by-task — it bootstraps the trace, schema-validates,
-applies a `plan_head` staleness valve, RE-RUNS the full Phase 1 exit gate in the
-executing session (the deterministic catch for the phantom-file drift that
-started this), relays the plan's open questions, then runs the normal Phase 2–8.
-**Attributable RETURN traces:** the trace hook now writes
-`RETURN <agent> :: <desc> dur=<m>m<s>s [model=<id>]` — it attributes each finish
-to its agent (from the SubagentStop payload, FIFO `~`-marked on older Claude
-Code), echoes the dispatch's description + wall-clock duration, and captures the
-`actual_model` when it is visible, so a bare `SPAWN`/`RETURN` skeleton is no
-longer unattributable. **Waves always exist:** wave grouping now runs for every
-run with ≥2 tasks, sequential included — dispatch style controls only intra-wave
-concurrency, so the batch pause always binds to wave numbers instead of
-degenerating to per-task stops. **Facet-scored rubric:** the planner (the party
-that read the code) emits per-task `facets` — breadth, novelty, logic,
-test-surface, cited risk, uncertainty — and the orchestrator computes the score
-with a fixed published formula and re-validates the facts; no number is judged
-from a task title, and **every** fix-cycle dispatch is scored too (a fix in a
-risk area can never silently drop to a cheap model). **Planner clarity:** plans
-return `plan_confidence` + `open_questions[]`, with a step-back valve to
-`orc-analyze` when confidence is low.
+### v0.32.0 — Trace revamp: narration is dispatched, not remembered _(2026-07-24)_
+
+Driven by a real 8-task `/orc` run whose trace contained **only** `SPAWN`/`RETURN`
+lines — despite two earlier fixes that both bet on the orchestrator remembering
+to append rich lines. Under real load (long runs, compaction, parallel waves) it
+never does; the one thing a run performs reliably is **dispatching agents**. So
+the pen moved onto that behavior. **A new pinned writer** —
+`orc-trace-writer-haiku-4-5` — appends one phase block per dispatch from a
+**phase packet** the orchestrator hands it: the events with their REAL
+timestamps plus a free-text `decisions` field, so the trace finally records the
+**why** (scoring rationale, your answers verbatim, what was rejected) and not
+just the what. The writer dispatch for phase N is issued in the same tool block
+as phase N+1's first dispatch, so logging piggybacks on the action that always
+happens. **Every trace-owning lane narrates:** build lanes per phase, orc-wiki
+per scan batch, and every single-dispatch lane (`/orc-plan`, `/orc-analyze`,
+`/orc-claude`, `/orc-verify`, `/orc-learn`, `/orc-poly`, `/orc-pattern`) exactly
+once at run end. **Traces are named for their run:**
+`run-<lane>-<slug>-<DDMMYY>-<HHMMSS>.txt` — and if a lane forgets its pointer,
+the first writer dispatch renames the hook's bootstrap file. **The hook got
+harder too:** a duplicate `SubagentStop` no longer writes a second, desc-less
+RETURN; a stop without an `agent_type` no longer steals another agent's slot (the
+bug that left one task with no RETURN at all); `/orc-retro` — the lane that mines
+traces — no longer generates them; and a new hook-written `PHASE-EDGE` line
+segments any run into analysis → planning → execution → review → verify from
+agent names alone, so even a fully amnesiac run is readable and `/orc-retro` can
+measure **narration coverage** deterministically. A `.jsonl` companion makes that
+mining structural instead of regex over prose.
 
 <details>
 <summary><b>Previous versions</b> (click to expand)</summary>
+
+### v0.31.0 — Execution-integrity revamp: plan handoff, attributable traces, facet scoring _(2026-07-23)_
 
 ### v0.30.0 — Scoring revamp, Fable 5 role override, tier-aware guards, `orc onboarding` _(2026-07-23)_
 

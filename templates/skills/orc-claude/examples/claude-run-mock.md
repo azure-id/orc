@@ -44,19 +44,21 @@ W: All fingerprints match →
 ## Run 4 — behavior trace (permanent, always on)
 
 Same dispatch as any run, plus the minimal one-dispatch trace. The skill writes
-the run pointer (the `orc-claude-<DDMMYY>.txt` name into `log_dir`) FIRST, then
-these markers around the single writer spawn (`SPAWN`/`RETURN` come from the
-`orc-trace.js` hook):
+the run pointer (`run-claude-<slug>-<DDMMYY>-<HHMMSS>.txt` into `log_dir`)
+FIRST, records these events as they happen, and — as a single-dispatch lane —
+dispatches the trace writer ONCE at run end to append them (`SPAWN`/`RETURN`
+come from the `orc-trace.js` hook as they occur):
 
 ```
-[120726 09:14:02.110] orc      DISPATCH orc-claude-writer :: refresh expect=opus-4-8/high
+[120726 09:14:02.110] writer   DISPATCH orc-claude-writer :: refresh expect=opus-4-8/high
 [120726 09:14:02.230] hook     SPAWN orc-claude-writer-opus-4-8-high
 [120726 09:15:47.900] hook     RETURN
-[120726 09:15:48.010] orc      VERIFY writer actual=claude-opus-4-8/high ✅ MATCH
-[120726 09:15:48.120] orc      FINISH :: refresh CLAUDE.md v0.0.3
+[120726 09:15:48.010] writer   VERIFY writer actual=claude-opus-4-8/high ✅ MATCH
+[120726 09:15:48.120] writer   FINISH :: refresh CLAUDE.md v0.0.3
 ```
 
-Then the run pointer is deleted. A noop refresh traces the same shape, ending
+Then the writer packet returns and the run pointer is deleted (in that order).
+A noop refresh traces the same shape, ending
 `FINISH :: noop`. No phase/score/gate/finding/verdict markers — orc-claude
 runs none of those phases (they live inside the writer). The `orc-trace.js` hook
 bootstraps the pointer on the writer dispatch, so the SPAWN/RETURN skeleton is

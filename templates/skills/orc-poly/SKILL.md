@@ -55,13 +55,15 @@ Cross-repo reasoning is better at Opus high; it is correct at any tier.
 
 Resolve `log_dir` (`../orc/config.md` default ← `.claude/orc.config.yaml`) at
 start and follow `../orc/references/trace-protocol.md`. Write
-`log_dir/.current` = `orc-poly-<DDMMYY>.txt` before the first sub-dispatch (the
-`orc-trace.js` hook also bootstraps it). Append each marker AS ITS EVENT
-HAPPENS, before announcing the step; a step ending with
+`log_dir/.current` = `run-poly-<slug>-<DDMMYY>-<HHMMSS>.txt` before the first
+sub-dispatch (the `orc-trace.js` hook also bootstraps it). Record each marker
+with its REAL timestamp AS ITS EVENT HAPPENS; a step ending with
 **zero new trace lines is a protocol violation**. Marker set (actor `orc`): `PHASE P0..P5`,
 `GATE` (per-repo knowledge probe verdict), `WIKI-CONSULT tier=<tier> ::
 <repo>` (every wiki read), `DISPATCH`/`VERIFY` (around the planner in P5),
-`FINISH`. Delete `.current` at close.
+`FINISH`. Narration is dispatched, not remembered — as a single-dispatch lane,
+dispatch the trace writer ONCE at run end with that event list plus `decisions`
+(the WHY: peers resolved, what the contract froze), then delete `.current`.
 
 ## Phase P0 — Intake (identify HOST + PEERs + the change)
 

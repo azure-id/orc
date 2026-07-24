@@ -53,6 +53,7 @@ const CONTRACTS = [
       "agents/orc-scout-sonnet-4-6-high.md",
       "agents/orc-system-analyst-opus-4-8-high.md",
       "agents/orc-test-author-opus-4-8-high.md",
+      "agents/orc-trace-writer-haiku-4-5.md",
       "agents/orc-verifier-opus-4-8-high.md",
       "hooks/orc-trace.js",
       "skills/_shared/return-validation.md",
@@ -364,10 +365,14 @@ const CONTRACTS = [
   {
     // The v0.19.0 fix for "the trace only got one line": every trace-owning
     // lane states the running-record cadence + this self-check inline, so a
-    // lane cannot quietly treat the trace as an end-of-run summary.
+    // lane cannot quietly treat the trace as an end-of-run summary. v0.32.0
+    // moved the PEN to orc-trace-writer-haiku-4-5, so the writer's own
+    // self-check carries the token too — the cadence is now a dispatch
+    // obligation, not a memory one.
     name: "behavior-trace write cadence (v0.19.0 — append per event, never batched at the end)",
     token: "zero new trace lines is a protocol violation",
     files: [
+      "agents/orc-trace-writer-haiku-4-5.md",
       "skills/orc/SKILL.md",
       "skills/orc/references/trace-protocol.md",
       "skills/orc-analyze/SKILL.md",
@@ -384,6 +389,7 @@ const CONTRACTS = [
     name: "behavior-trace run pointer (every ORC entry point writes .current)",
     token: ".current",
     files: [
+      "agents/orc-trace-writer-haiku-4-5.md",
       "hooks/orc-trace.js",
       "skills/orc/SKILL.md",
       "skills/orc/references/plan-handoff.md",
@@ -399,6 +405,57 @@ const CONTRACTS = [
       "skills/orc-poly/SKILL.md",
       "skills/orc-verify/SKILL.md",
       "skills/orc-wiki/SKILL.md",
+    ],
+  },
+  {
+    // v0.32.0: narration is DISPATCHED, not remembered. The pen moved from the
+    // orchestrator's memory to a pinned Haiku writer dispatched at every phase
+    // close. Pinned to the canonical protocol + the three build-lane spines +
+    // orc-wiki's (the multi-dispatch lane) + the roster. Single-dispatch lanes
+    // (orc-claude/plan/analyze/pattern/verify/learn/poly/combiner) inherit the
+    // one-packet obligation from trace-protocol.md's canonical section, so they
+    // are DELIBERATELY not in this set — do not add them.
+    name: "trace narration writer (v0.32.0 — every phase close dispatches the writer)",
+    token: "orc-trace-writer-haiku-4-5",
+    files: [
+      "agents/MODEL-MAPPING.md",
+      "agents/orc-trace-writer-haiku-4-5.md",
+      "hooks/orc-trace.js",
+      "skills/orc/SKILL.md",
+      "skills/orc/references/trace-protocol.md",
+      "skills/orc-fast/SKILL.md",
+      "skills/orc-mini/SKILL.md",
+      "skills/orc-wiki/SKILL.md",
+    ],
+  },
+  {
+    // v0.32.0: the hook's zero-model-dependence phase segmentation. Producer
+    // (the hook) and both consumers (retro skill + its miner) must agree on the
+    // verb and its role families.
+    name: "deterministic phase inference (v0.32.0 — hook-emitted PHASE-EDGE)",
+    token: "PHASE-EDGE",
+    files: [
+      "agents/orc-retro-sonnet-5-high.md",
+      "hooks/orc-trace.js",
+      "skills/orc-retro/SKILL.md",
+      "skills/orc/SKILL.md",
+      "skills/orc/config.md",
+      "skills/orc/references/trace-protocol.md",
+    ],
+  },
+  {
+    // v0.32.0: the rich run filename. The hook documents it (and bootstraps the
+    // generic name the writer renames); the protocol defines the grammar; retro
+    // aggregates per lane straight from it.
+    name: "rich trace filename (v0.32.0 — run-<lane>-<slug>-<DDMMYY>-<HHMMSS>.txt)",
+    token: "run-<lane>-<slug>-",
+    files: [
+      "agents/orc-retro-sonnet-5-high.md",
+      "agents/orc-trace-writer-haiku-4-5.md",
+      "hooks/orc-trace.js",
+      "skills/orc-retro/SKILL.md",
+      "skills/orc/references/trace-protocol.md",
+      "skills/orc/schemas/checkpoint.md",
     ],
   },
   {
@@ -990,11 +1047,22 @@ const BUDGETS = [
   // facet-scored formula + fix-cycle scoring rule (Part D), and the Phase-1
   // open_questions relay + step-back valve (Part E). Detail lives in the
   // references; the spine keeps only triggers + contract tokens + pointers.
-  { file: "skills/orc/SKILL.md", maxLines: 385 },
-  { file: "skills/orc-wiki/SKILL.md", maxLines: 260 },
-  { file: "skills/orc-mini/SKILL.md", maxLines: 195 },
+  // v0.32.0: deliberate raise 385→392 — the trace revamp replaces the v0.28.0
+  // inline emit prose with the packet + writer-dispatch protocol (packet fields,
+  // the pairing rule, the solo first/last packet). Net +7: the narration
+  // contract is the one thing that must survive compaction in the spine itself,
+  // and the packet SCHEMA + per-lane packet counts live in trace-protocol.md.
+  { file: "skills/orc/SKILL.md", maxLines: 392 },
+  // v0.32.0: deliberate raises 260→264 / 195→197 / 170→171 — each lane's trace
+  // section now states the writer-dispatch obligation (packet + pinned agent +
+  // that lane's packet count) instead of "append the lines yourself". The packet
+  // SCHEMA, the per-lane packet table, and the rename repair live ONCE in
+  // trace-protocol.md, which every trace-owning lane already loads; what stays
+  // in each spine is the trigger + the contract tokens, already compressed twice.
+  { file: "skills/orc-wiki/SKILL.md", maxLines: 264 },
+  { file: "skills/orc-mini/SKILL.md", maxLines: 197 },
   { file: "skills/orc-analyze/SKILL.md", maxLines: 195 },
-  { file: "skills/orc-fast/SKILL.md", maxLines: 170 },
+  { file: "skills/orc-fast/SKILL.md", maxLines: 171 },
 ];
 
 function walk(dir, out) {
