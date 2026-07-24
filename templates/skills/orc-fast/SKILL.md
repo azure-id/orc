@@ -120,9 +120,17 @@ rediscover tooling; manifest lacks them → detect once and say so). **GREEN**
 orc-mini (reason `smoke-red-escalation`) / switch to full `/orc` / stop.
 Docs-only → gate N/A, say so.
 
+## Phase F3.5 — Mock example (config `mock_example`, default ask)
+
+Canonical: `../_shared/drift-recovery.md` — load on fire. Only after a GREEN
+F3, before ship: `ask` → MANDATORY offer · `on` → build · `off` → skip.
+Deliverable `mock-examples/<change-slug>/` at project root — **never
+committed/staged**. Drift answer → `DRIFT-FROM` recovery (cap 2 loops, honest
+report on cap). Trace: `PHASE mock-example`, `DRIFT loop=<n>`.
+
 ## Phase F4 — Ship
 
-Offer commit (push if asked). Append the final markers to the checkpoint, emit
+Offer commit (push if asked; never stage `mock-examples/`). Append the final markers to the checkpoint, emit
 `OUTCOME task=… band=fast model=… retries=… unmet=…` + `FINISH`, show the
 dispatch line (model/effort actually used) + the `/usage` reminder. Fast never
 triggers the post-ship wiki refresh ask (preflight polices freshness on the

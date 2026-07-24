@@ -29,6 +29,21 @@ Never read the linked repo's *source*, never write anything in it. The only
 writes are inside THIS repo: `.claude/orc/crosslink/needs.json`,
 `.claude/orc/crosslink/cache/**`, and this repo's own `wiki/crosslink/**`.
 
+**Exactly TWO sanctioned exceptions to never-write-foreign — both file writes
+only, NEVER a commit, NEVER a push, never any other peer path:**
+
+1. **The orc-poly handoff plan** — orc-poly writes each peer repo's plan file
+   into that repo at its Phase 5 (the orc-poly skill owns that rule).
+2. **The ATLAS + the CLAUDE.md pointer block (v0.33.0)** — after generating the
+   local atlas, the session writes the SAME `wiki/crosslink/atlas.md` into each
+   linked repo, and `/orc-wiki crosslink compile` additionally updates each
+   linked repo's CLAUDE.md pointer block (in-place block update, user content
+   byte-preserved). Any peer-write failure (missing path, permissions, repo
+   gone) WARNS and continues — advisory, never blocking.
+
+Everything else in a peer stays untouchable, and even these two never run
+`git add`/`git commit`/`git push` in the peer.
+
 ## Two surfaces, one direction rule
 
 - **Provided (inbound)** — what a repo exposes (gRPC handlers, routers). Read by
@@ -145,6 +160,47 @@ grow tags. `orc crosslink list`/`status` therefore report inbound-only nodes as
 "inbound only (they call us)" and never send anyone to publish a boundary that
 legitimately does not exist. **The graph is drawn in the CONSUMER**: the repo
 that calls is the one that needs the config, the edge, and the resolved cache.
+
+---
+
+## ATLAS — the federation super-context (`wiki/crosslink/atlas.md`, v0.33.0)
+
+ONE federation-scoped document, present in EACH linked repo at
+`wiki/crosslink/atlas.md`. Content is **repo-agnostic** — the same document
+serves every node — with a header recording `generated_from` (which repo built
+it), the `generated` timestamp, and per-peer peek freshness. Sections:
+
+- **Federation map** — every known node + the `links[]` edges (including
+  TRANSITIVE nodes learned from peer atlases), with relation kinds. This is how
+  a repo discovers a repo it never linked directly.
+- **Per-node profile** — what each repo provides, what it needs/consumes from
+  whom (from boundary rows + peer atlas), and **peek hints**: which of that
+  repo's wiki docs answer which questions (so a consumer peeks ONE doc, not a
+  wiki).
+- **Freshness ledger** — per-peek age. Freshness on READ =
+  `min(own wiki tier, oldest peek age)` — computed on read, NEVER stored as a
+  status (the constellation-wide rule).
+
+**Generation + propagation (the sanctioned write — exception #2 above):**
+
+- Generated at: the end of every orc-wiki scan/refresh (Phase 3, and the delta
+  refresh's derived-regenerate step); during CROSSLINK resolve in build lanes
+  when the atlas is missing/stale (a cheap regenerate from `needs.json` +
+  `cache/` — never a scan); and by `/orc-wiki crosslink compile`.
+- After writing the LOCAL atlas, the session writes the SAME file into each
+  linked repo's `wiki/crosslink/atlas.md` (repo paths from the config's
+  `links[]`/nodes). File write ONLY — never commit, never push, never any
+  other peer path. Any peer-write failure WARNS and continues.
+- **Newest-wins on read:** if a peer session regenerated its copy later, the
+  local consumer trusts the newer `generated` timestamp when peeking.
+- `orc wiki sync` treats `atlas.md` as a DERIVED crosslink artifact — never an
+  unregistered doc, never counted in `pages`, never bulk-deleted by a refresh
+  (same preservation rule as the tags).
+
+**Consumption:** the `wiki-consult.md` CROSSLINK step reads the atlas FIRST,
+then makes targeted peer-wiki peeks the atlas' peek hints point at. orc-poly's
+context gathering reads it, and its slug resolution lists transitive nodes
+discovered via the atlas (paste-a-path fallback unchanged).
 
 ---
 

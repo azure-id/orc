@@ -172,6 +172,127 @@ test("update prunes a manifest orphan but keeps user files", () => {
   }
 });
 
+test("config: v0.33.0 keys validate (mock_example, tdd_loop_max, wiki_delta_full_threshold)", () => {
+  const { root, claudeDir } = freshInstall();
+  try {
+    const ovr = path.join(claudeDir, "orc.config.yaml");
+
+    assert.strictEqual(cli(["config", "set", "mock_example", "on", "--dir", root]).status, 0);
+    assert.match(fs.readFileSync(ovr, "utf8"), /mock_example:\s*on/);
+    assert.notStrictEqual(cli(["config", "set", "mock_example", "sometimes", "--dir", root]).status, 0, "bad enum rejected");
+
+    assert.strictEqual(cli(["config", "set", "tdd_loop_max", "2", "--dir", root]).status, 0);
+    assert.notStrictEqual(cli(["config", "set", "tdd_loop_max", "0", "--dir", root]).status, 0, "0 rejected (>=1)");
+
+    assert.strictEqual(cli(["config", "set", "wiki_delta_full_threshold", "50", "--dir", root]).status, 0);
+    assert.notStrictEqual(cli(["config", "set", "wiki_delta_full_threshold", "101", "--dir", root]).status, 0, ">100 rejected");
+  } finally {
+    rmrf(root);
+  }
+});
+
+// ── orc wiki impact golden fixture ──────────────────────────────────────────
+// A tiny git repo with one registered doc covering src/a.js. Impact must read
+// CLEAN before any commit, DELTA (exit 2) after a covered-file commit, and
+// FULL-recommended (exit 3) when an uncovered file lands (STRUCTURAL blind spot).
+function impactFixture() {
+  const { root, claudeDir } = freshInstall();
+  const git = (args) =>
+    require("child_process").spawnSync("git", args, { cwd: root, encoding: "utf8" });
+  git(["init", "-q"]);
+  git(["config", "user.email", "t@t"]);
+  git(["config", "user.name", "t"]);
+  fs.mkdirSync(path.join(root, "src"), { recursive: true });
+  for (const n of ["a", "b", "c", "d"])
+    fs.writeFileSync(path.join(root, "src", n + ".js"), "module.exports = 1;\n");
+  git(["add", "-A"]);
+  git(["commit", "-q", "-m", "base"]);
+  const head = git(["rev-parse", "HEAD"]).stdout.trim();
+  fs.mkdirSync(path.join(root, "wiki"), { recursive: true });
+  // 4 docs, one covered file each — one touched doc = 25%, under the 30% default
+  // threshold, so a single covered-file commit reads DELTA rather than FULL.
+  for (const n of ["a", "b", "c", "d"])
+    fs.writeFileSync(
+      path.join(root, "wiki", `orc-feature-${n}.md`),
+      [
+        "---",
+        "wiki_schema: 2",
+        "doc_type: feature",
+        `area: ${n}`,
+        `covers: [src/${n}.js]`,
+        `keywords: [${n}]`,
+        "scanned_at: 010126 00:00:00",
+        `scanned_commit: ${head}`,
+        "covered_files:",
+        `  src/${n}.js: abc123`,
+        "status: fresh",
+        "---",
+        "",
+        `# ${n.toUpperCase()} Overview`,
+        "",
+        "## TL;DR",
+        `- covers src/${n}.js`,
+        "",
+      ].join("\n")
+    );
+  const sync = cli(["wiki", "sync", "--dir", root]);
+  assert.strictEqual(sync.status, 0, "sync registers the fixture doc: " + sync.stdout + sync.stderr);
+  return { root, claudeDir, git };
+}
+
+test("orc wiki impact: CLEAN → DELTA (exit 2) → STRUCTURAL/FULL (exit 3)", () => {
+  const { root, git } = impactFixture();
+  try {
+    const clean = cli(["wiki", "impact", "--dir", root]);
+    assert.strictEqual(clean.status, 0, "no commits since scan → CLEAN: " + clean.stdout);
+    assert.match(clean.stdout, /CLEAN/);
+
+    fs.writeFileSync(path.join(root, "src", "a.js"), "module.exports = 2;\n");
+    git(["add", "-A"]);
+    git(["commit", "-q", "-m", "touch covered file"]);
+    const delta = cli(["wiki", "impact", "--dir", root]);
+    assert.strictEqual(delta.status, 2, "covered-file commit → DELTA: " + delta.stdout);
+    assert.match(delta.stdout, /TOUCHED \(1\)/);
+
+    fs.writeFileSync(path.join(root, "lib.py"), "x = 1\n");
+    git(["add", "-A"]);
+    git(["commit", "-q", "-m", "uncovered file"]);
+    const full = cli(["wiki", "impact", "--dir", root]);
+    assert.strictEqual(full.status, 3, "blind-spot file → FULL recommended: " + full.stdout);
+    assert.match(full.stdout, /STRUCTURAL blind spot/);
+    assert.match(full.stdout, /FULL refresh recommended/);
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("orc wiki impact: exit 1 when the wiki is absent", () => {
+  const { root } = freshInstall();
+  try {
+    const r = cli(["wiki", "impact", "--dir", root]);
+    assert.strictEqual(r.status, 1);
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("orc wiki sync: crosslink/atlas.md is derived — never indexed, never skipped-reported, never deleted", () => {
+  const { root } = impactFixture();
+  try {
+    const atlas = path.join(root, "wiki", "crosslink", "atlas.md");
+    fs.mkdirSync(path.dirname(atlas), { recursive: true });
+    fs.writeFileSync(atlas, "# Federation atlas\ngenerated_from: fixture\n");
+    const r = cli(["wiki", "sync", "--dir", root]);
+    assert.strictEqual(r.status, 0, r.stdout + r.stderr);
+    assert.ok(fs.existsSync(atlas), "atlas survives sync");
+    const index = fs.readFileSync(path.join(root, "wiki", "INDEX.md"), "utf8");
+    assert.doesNotMatch(index, /atlas\.md/, "atlas never registered as a doc");
+    assert.doesNotMatch(r.stdout, /atlas\.md/, "atlas never reported as a skipped doc");
+  } finally {
+    rmrf(root);
+  }
+});
+
 test("pre-manifest install warns, and only deletes with --prune", () => {
   const { root, claudeDir } = freshInstall();
   try {

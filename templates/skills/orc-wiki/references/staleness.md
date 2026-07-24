@@ -139,26 +139,43 @@ always the authoritative check.
    `## Contracts & shapes` table with zero `wiki/crosslink/` tags → prominent
    warning + `--check` exit 1 (a documented boundary that never published), and
    an N→0 tripwire when the manifest listed tags but the folder is now empty.
-1. **Incremental (recommended default when a manifest exists)** —
-   `git diff --name-only <scan_commit>..HEAD`, match changed files against the
-   registry's `covers`/`covered_files`, re-scan ONLY the affected docs, then run
-   `orc wiki sync` to re-derive the manifest from the updated headers. A delta
-   pass, not a full re-scan — this is what makes "refresh first" cheap enough
-   to recommend. The delta pass also runs the two sweeps below.
+1. **Delta (THE DEFAULT refresh path when a manifest exists — v0.33.0)** —
+   commit-scoped, probe-first. Step 1 is always the deterministic CLI probe
+   **`orc wiki impact`** (never an ad-hoc diff): it runs `git diff --name-only
+   <scan_commit>..HEAD` against the registry's `covers`/`covered_files` and
+   prints per-doc `CLEAN | TOUCHED (n) | STRUCTURAL` + a summary, with a
+   branchable exit code (0 clean · 1 can't compute · 2 delta · 3 full
+   recommended).
+   - **Exit 0 (CLEAN):** say so; nothing to refresh.
+   - **Exit 2 (small delta):** re-scan ONLY the touched docs → `orc wiki sync`
+     → regenerate the orientation doc (+ the atlas when crosslink is
+     configured) — both DERIVED and cheap, no new scan area. The delta pass
+     also runs the sweeps below.
+   - **Exit 3 (FULL recommended):** present the impact table and let the USER
+     decide — **never silently full**. The probe recommends full when ANY of:
+     TOUCHED docs > `wiki_delta_full_threshold` % of registered docs (config,
+     default 30) · STRUCTURAL (a doc's covered file is gone, or changed files
+     match NO doc's coverage — a blind spot a targeted refresh can't fix) ·
+     `scan_commit` more than `wiki_aging_max` commits behind HEAD. A delta
+     refresh of just the touched docs remains a valid, cheaper choice.
+   - **Exit 1 (can't compute):** the probe names the fix (sync / re-anchor);
+     fall back to offering full/selective with an honest cost note.
 2. **Full regenerate** — re-scan every area. Full cost warning. Timestamps all
    docs fresh. Does NOT clear `wiki/` or `wiki/crosslink/` first: docs and tags
    are overwritten per-area/per-point as each re-scan lands, so the crosslink
    surface is never momentarily wiped (a full regenerate must never destroy the
-   boundary — hard rule 12).
+   boundary — hard rule 12). `wiki/crosslink/atlas.md` is likewise preserved
+   and regenerated at the end, never bulk-deleted.
 3. **Selective refresh** — list stale-flagged docs; user picks which to
    re-scan. Only those spawn agents.
 4. **Pre-push diff-scan** — `git diff --name-only` against the push target;
    find docs whose `covers` intersect the changed files; offer to refresh those
    before commit.
 
-**Coverage-gap sweep (incremental refresh + integrity check):** changed files
+**Coverage-gap sweep (delta refresh + integrity check):** changed files
 matched by NO doc's `covers` = uncovered drift — the silent way a wiki becomes
-a partial map while still reading FRESH. Report them grouped by directory and
+a partial map while still reading FRESH. `orc wiki impact` surfaces these as
+the STRUCTURAL blind spot; report them grouped by directory and
 propose new areas/docs; the user consents per new area (rides the refresh
 consent, no separate warning). Never silently ignore uncovered drift.
 

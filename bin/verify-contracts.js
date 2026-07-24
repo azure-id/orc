@@ -469,6 +469,7 @@ const CONTRACTS = [
       "skills/orc-wiki/SKILL.md",
       "skills/orc-wiki/references/crosslink.md",
       "skills/orc-wiki/references/integrity-check.md",
+      "skills/orc-wiki/references/orientation.md",
       "skills/orc-wiki/references/staleness.md",
       "skills/orc-wiki/schemas/crosslink-tag.md",
       "skills/orc-wiki/schemas/wiki-doc.md",
@@ -846,7 +847,9 @@ const CONTRACTS = [
     token: "diy:when",
     files: [
       "skills/orc-diy/references/blocks/analyze.md",
+      "skills/orc-diy/references/blocks/execution.md",
       "skills/orc-diy/references/blocks/header.md",
+      "skills/orc-diy/references/blocks/mock-example.md",
       "skills/orc-diy/references/blocks/pattern.md",
       "skills/orc-diy/references/blocks/planning.md",
       "skills/orc-diy/references/blocks/review.md",
@@ -870,6 +873,8 @@ const CONTRACTS = [
       "skills/orc-poly/SKILL.md",
       "skills/orc-wiki/README.md",
       "skills/orc-wiki/SKILL.md",
+      "skills/orc-wiki/references/claude-md-injection.md",
+      "skills/orc-wiki/references/crosslink-compile.md",
       "skills/orc-wiki/references/crosslink.md",
       "skills/orc-wiki/schemas/crosslink-tag.md",
       "skills/orc/references/wiki-consult.md",
@@ -883,6 +888,7 @@ const CONTRACTS = [
       "skills/orc-mini/SKILL.md",
       "skills/orc-wiki/README.md",
       "skills/orc-wiki/SKILL.md",
+      "skills/orc-wiki/references/crosslink-compile.md",
       "skills/orc-wiki/references/crosslink.md",
       "skills/orc-wiki/schemas/crosslink-tag.md",
       "skills/orc/SKILL.md",
@@ -899,6 +905,7 @@ const CONTRACTS = [
       "skills/orc-wiki/README.md",
       "skills/orc-wiki/SKILL.md",
       "skills/orc-wiki/references/crosslink.md",
+      "skills/orc-wiki/references/orientation.md",
       "skills/orc-wiki/references/staleness.md",
       "skills/orc-wiki/schemas/crosslink-tag.md",
       "skills/orc/references/wiki-consult.md",
@@ -912,12 +919,17 @@ const CONTRACTS = [
     files: [
       "commands/orc-wiki.md",
       "skills/orc-poly/SKILL.md",
+      "skills/orc-poly/references/gather.md",
       "skills/orc-wiki/README.md",
       "skills/orc-wiki/SKILL.md",
+      "skills/orc-wiki/references/claude-md-injection.md",
+      "skills/orc-wiki/references/crosslink-compile.md",
       "skills/orc-wiki/references/crosslink.md",
       "skills/orc-wiki/references/integrity-check.md",
+      "skills/orc-wiki/references/orientation.md",
       "skills/orc-wiki/references/staleness.md",
       "skills/orc-wiki/schemas/crosslink-tag.md",
+      "skills/orc/references/wiki-consult.md",
     ],
   },
   {
@@ -961,6 +973,7 @@ const CONTRACTS = [
       "skills/orc/README.md",
       "skills/orc/SKILL.md",
       "skills/orc/config.md",
+      "skills/orc/schemas/planning-output.md",
       "skills/orc/subskills/orc-testgen/SKILL.md",
       "skills/orc/subskills/orc-testgen/core.md",
     ],
@@ -1025,6 +1038,236 @@ const CONTRACTS = [
       "skills/orc-poly/examples/poly-run-mock.md",
     ],
   },
+  {
+    // v0.33.0: the commit-scoped delta probe — the DEFAULT refresh path. The
+    // probe itself lives in bin/cli.js (exit 0/1/2/3 contract).
+    name: "wiki delta probe (v0.33.0 — `orc wiki impact` drives the default refresh)",
+    token: "orc wiki impact",
+    binFiles: ["bin/cli.js"],
+    files: [
+      "skills/orc-wiki/SKILL.md",
+      "skills/orc-wiki/references/staleness.md",
+      "skills/orc/config.md",
+    ],
+  },
+  {
+    // v0.33.0: the federation atlas. The derived-artifact handling (never a
+    // registered doc, never bulk-deleted) is mirrored in bin/cli.js.
+    name: "crosslink ATLAS (v0.33.0 — wiki/crosslink/atlas.md, sanctioned peer file write)",
+    token: "atlas.md",
+    binFiles: ["bin/cli.js"],
+    files: [
+      "commands/orc-wiki.md",
+      "skills/orc-poly/SKILL.md",
+      "skills/orc-poly/references/gather.md",
+      "skills/orc-wiki/README.md",
+      "skills/orc-wiki/SKILL.md",
+      "skills/orc-wiki/references/claude-md-injection.md",
+      "skills/orc-wiki/references/crosslink-compile.md",
+      "skills/orc-wiki/references/crosslink.md",
+      "skills/orc-wiki/references/orientation.md",
+      "skills/orc-wiki/references/staleness.md",
+      "skills/orc/references/wiki-consult.md",
+    ],
+  },
+  {
+    // v0.33.0: the one-shot crosslink+atlas+injection entry branch.
+    name: "crosslink compile branch (v0.33.0 — /orc-wiki crosslink compile, one-shot)",
+    token: "crosslink compile",
+    files: [
+      "commands/orc-wiki.md",
+      "skills/orc-wiki/README.md",
+      "skills/orc-wiki/SKILL.md",
+      "skills/orc-wiki/references/claude-md-injection.md",
+      "skills/orc-wiki/references/crosslink-compile.md",
+      "skills/orc-wiki/references/crosslink.md",
+    ],
+  },
+  {
+    // v0.33.0: the wiki's front door — derived at assemble, consumed first.
+    // bin/cli.js notes it registers via its header like any doc.
+    name: "wiki orientation doc (v0.33.0 — wiki/orc-orientation.md, derived + read-first)",
+    token: "orc-orientation.md",
+    binFiles: ["bin/cli.js"],
+    files: [
+      "skills/orc-wiki/SKILL.md",
+      "skills/orc-wiki/references/claude-md-injection.md",
+      "skills/orc-wiki/references/integrity-check.md",
+      "skills/orc-wiki/references/orientation.md",
+      "skills/orc/references/wiki-consult.md",
+    ],
+  },
+  {
+    // v0.33.0: the mock-example deliverable folder — visible at project root,
+    // NEVER committed (ship excludes it from staging; no .gitignore edit).
+    // bin/cli.js excludes it from the impact blind-spot sweep.
+    name: "mock-example deliverable (v0.33.0 — mock-examples/<slug>/, never committed)",
+    token: "mock-examples/",
+    binFiles: ["bin/cli.js"],
+    files: [
+      "skills/_shared/drift-recovery.md",
+      "skills/orc-diy/references/blocks/mock-example.md",
+      "skills/orc-diy/references/flow-schema.md",
+      "skills/orc-fast/SKILL.md",
+      "skills/orc-mini/SKILL.md",
+      "skills/orc/SKILL.md",
+      "skills/orc/config.md",
+    ],
+  },
+  {
+    // v0.33.0: the drift-recovery canonical (sibling of fallback-handoff).
+    name: "drift-recovery canonical pointer (v0.33.0 — _shared/drift-recovery.md)",
+    token: "drift-recovery.md",
+    files: [
+      "skills/orc-diy/references/blocks/mock-example.md",
+      "skills/orc-fast/SKILL.md",
+      "skills/orc-mini/SKILL.md",
+      "skills/orc/SKILL.md",
+      "skills/orc/config.md",
+      "skills/orc/references/trace-protocol.md",
+      "skills/orc/references/ultra-mode.md",
+    ],
+  },
+  {
+    // v0.33.0: the drift handoff block (writer: the lane; readers: analyze-mini
+    // gap analysis + mini planner patch plan).
+    name: "drift handoff block (v0.33.0 — DRIFT-FROM, cap 2 recovery loops)",
+    token: "DRIFT-FROM",
+    files: [
+      "skills/_shared/drift-recovery.md",
+      "skills/orc-diy/references/blocks/mock-example.md",
+      "skills/orc-fast/SKILL.md",
+      "skills/orc-mini/SKILL.md",
+      "skills/orc/SKILL.md",
+      "skills/orc/config.md",
+    ],
+  },
+  {
+    // v0.33.0: TDD-anchored planning — the plan-time acceptance-test contract.
+    name: "TDD plan anchor (v0.33.0 — tdd_spec authored at plan time, Wave-0 red proof)",
+    token: "tdd_spec",
+    files: [
+      "agents/orc-executor-haiku-4-5.md",
+      "agents/orc-executor-opus-4-7-high.md",
+      "agents/orc-executor-opus-4-7-med.md",
+      "agents/orc-executor-opus-4-8-high.md",
+      "agents/orc-executor-opus-4-8-med.md",
+      "agents/orc-executor-sonnet-4-6-high.md",
+      "agents/orc-executor-sonnet-4-6-med.md",
+      "agents/orc-executor-sonnet-5-high.md",
+      "agents/orc-planner-fable-5.md",
+      "agents/orc-planner-mini-sonnet-5-high.md",
+      "agents/orc-planner-opus-4-8-med.md",
+      "skills/_shared/return-validation.md",
+      "skills/orc-diy/references/blocks/execution.md",
+      "skills/orc-diy/references/blocks/planning.md",
+      "skills/orc-diy/references/flow-schema.md",
+      "skills/orc-mini/SKILL.md",
+      "skills/orc/SKILL.md",
+      "skills/orc/schemas/planning-output.md",
+      "skills/orc/subskills/orc-execution/SKILL.md",
+      "skills/orc/subskills/orc-execution/core.md",
+      "skills/orc/subskills/orc-planner-mini/SKILL.md",
+      "skills/orc/subskills/orc-planner/SKILL.md",
+    ],
+  },
+  {
+    // v0.33.0: the TDD repair-loop cap — config key mirrored in bin/cli.js.
+    name: "TDD repair cap (v0.33.0 — tdd_loop_max, STOP + honest red report on cap)",
+    token: "tdd_loop_max",
+    binFiles: ["bin/cli.js"],
+    files: [
+      "agents/orc-executor-haiku-4-5.md",
+      "agents/orc-executor-opus-4-7-high.md",
+      "agents/orc-executor-opus-4-7-med.md",
+      "agents/orc-executor-opus-4-8-high.md",
+      "agents/orc-executor-opus-4-8-med.md",
+      "agents/orc-executor-sonnet-4-6-high.md",
+      "agents/orc-executor-sonnet-4-6-med.md",
+      "agents/orc-executor-sonnet-5-high.md",
+      "agents/orc-verifier-opus-4-8-high.md",
+      "skills/_shared/return-validation.md",
+      "skills/orc-diy/references/blocks/execution.md",
+      "skills/orc-diy/references/blocks/verify.md",
+      "skills/orc-mini/SKILL.md",
+      "skills/orc/SKILL.md",
+      "skills/orc/config.md",
+      "skills/orc/references/trace-protocol.md",
+      "skills/orc/subskills/orc-execution/SKILL.md",
+      "skills/orc/subskills/orc-execution/core.md",
+      "skills/orc/subskills/orc-review-verify/SKILL.md",
+      "skills/orc/subskills/orc-review-verify/core.md",
+    ],
+  },
+  {
+    // v0.33.0: the executor TDD attestation (green needs quoted evidence).
+    name: "TDD executor attestation (v0.33.0 — tdd_state green|red on tdd_spec slices)",
+    token: "tdd_state",
+    files: [
+      "agents/orc-executor-haiku-4-5.md",
+      "agents/orc-executor-opus-4-7-high.md",
+      "agents/orc-executor-opus-4-7-med.md",
+      "agents/orc-executor-opus-4-8-high.md",
+      "agents/orc-executor-opus-4-8-med.md",
+      "agents/orc-executor-sonnet-4-6-high.md",
+      "agents/orc-executor-sonnet-4-6-med.md",
+      "agents/orc-executor-sonnet-5-high.md",
+      "skills/_shared/return-validation.md",
+      "skills/orc-diy/references/blocks/execution.md",
+      "skills/orc/subskills/orc-execution/SKILL.md",
+      "skills/orc/subskills/orc-execution/core.md",
+    ],
+  },
+  {
+    // v0.33.0: the verify-slot TDD gate input (Phase 6 half 1).
+    name: "TDD verify-gate slice (v0.33.0 — tdd_suite[] in the verifier slot)",
+    token: "tdd_suite",
+    files: [
+      "agents/orc-verifier-opus-4-8-high.md",
+      "skills/orc-diy/references/blocks/verify.md",
+      "skills/orc/subskills/orc-review-verify/SKILL.md",
+      "skills/orc/subskills/orc-review-verify/core.md",
+    ],
+  },
+  {
+    // v0.33.0: the TDD trace verbs (closed-set additions; TDD-GREEN rides the
+    // same rows).
+    name: "TDD trace verbs (v0.33.0 — TDD-RED/TDD-GREEN per iteration)",
+    token: "TDD-RED",
+    files: [
+      "skills/orc-diy/references/blocks/execution.md",
+      "skills/orc-mini/SKILL.md",
+      "skills/orc/SKILL.md",
+      "skills/orc/references/trace-protocol.md",
+    ],
+  },
+  {
+    // v0.33.0: mock_example config key (also in bin/cli.js CONFIG_META + the
+    // DIY flow key).
+    name: "mock-example gate key (v0.33.0 — mock_example ask|on|off)",
+    token: "mock_example",
+    binFiles: ["bin/cli.js"],
+    files: [
+      "skills/_shared/drift-recovery.md",
+      "skills/orc-diy/references/blocks/mock-example.md",
+      "skills/orc-diy/references/flow-schema.md",
+      "skills/orc-fast/SKILL.md",
+      "skills/orc-mini/SKILL.md",
+      "skills/orc/SKILL.md",
+      "skills/orc/config.md",
+      "skills/orc/references/ultra-mode.md",
+    ],
+  },
+  {
+    // v0.33.0: the delta→full recommendation threshold (config + CLI mirror).
+    name: "delta full-refresh threshold (v0.33.0 — wiki_delta_full_threshold, default 30)",
+    token: "wiki_delta_full_threshold",
+    binFiles: ["bin/cli.js"],
+    files: [
+      "skills/orc-wiki/references/staleness.md",
+      "skills/orc/config.md",
+    ],
+  },
 ];
 
 // Spine size budgets (v0.19.0). These SKILL.md files are ALWAYS loaded when
@@ -1052,17 +1295,22 @@ const BUDGETS = [
   // the pairing rule, the solo first/last packet). Net +7: the narration
   // contract is the one thing that must survive compaction in the spine itself,
   // and the packet SCHEMA + per-lane packet counts live in trace-protocol.md.
-  { file: "skills/orc/SKILL.md", maxLines: 392 },
-  // v0.32.0: deliberate raises 260→264 / 195→197 / 170→171 — each lane's trace
-  // section now states the writer-dispatch obligation (packet + pinned agent +
-  // that lane's packet count) instead of "append the lines yourself". The packet
-  // SCHEMA, the per-lane packet table, and the rename repair live ONCE in
-  // trace-protocol.md, which every trace-owning lane already loads; what stays
-  // in each spine is the trigger + the contract tokens, already compressed twice.
-  { file: "skills/orc-wiki/SKILL.md", maxLines: 264 },
-  { file: "skills/orc-mini/SKILL.md", maxLines: 197 },
+  // v0.33.0: deliberate raise 392→424 — the knowledge-deepening + verification
+  // revamp adds three spine-level contracts that must survive compaction: the
+  // TDD anchor (tdd_spec in the plan gate, Wave-0 red proof, the tdd_loop_max
+  // repair loop, the two-half Phase 6), the mock-example phase (6.7) + its
+  // never-staged ship rule, and the plan-gate tdd wording. Detail lives in
+  // _shared/drift-recovery.md, planning-output.md, and orc-review-verify.
+  { file: "skills/orc/SKILL.md", maxLines: 424 },
+  // v0.33.0: deliberate raises 264→289 / 197→219 / 171→179 — orc-wiki gains the
+  // crosslink-compile entry branch, the delta-refresh default (impact probe),
+  // and the orientation/atlas assemble steps (detail in references/); mini
+  // gains the one-question TDD policy + the mock-example phase; fast gains the
+  // mock-example phase only. Mechanisms live in the shared/canonical refs.
+  { file: "skills/orc-wiki/SKILL.md", maxLines: 289 },
+  { file: "skills/orc-mini/SKILL.md", maxLines: 219 },
   { file: "skills/orc-analyze/SKILL.md", maxLines: 195 },
-  { file: "skills/orc-fast/SKILL.md", maxLines: 171 },
+  { file: "skills/orc-fast/SKILL.md", maxLines: 179 },
 ];
 
 function walk(dir, out) {

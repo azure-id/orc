@@ -19,7 +19,10 @@ the executor slice's constraints[]) + a `facets` block (breadth =
 len(declared_files), novelty/logic/test_surface/uncertainty, cited `risk[]` —
 the orchestrator scores from these arithmetically; you never compute the score
 or emit fan_in/fan_out) + sliced per-task acceptance[] where each
-line cites its source (R3 / DoD#2 — no source = invented). ALWAYS run the cheap
+line cites its source (R3 / DoD#2 — no source = invented) + (when the caller's
+slice says `tdd: on` — orc-mini's one intake question) each requirement's
+`tdd_spec` entry: given/when/then + a runnable skeleton in the project's own
+test framework, or `tdd: exempt — <reason>`. ALWAYS run the cheap
 self-checks: cycles, same-file collisions, AND coverage (every in-scope R#/DoD
 line in ≥1 task's requirements[] — an orphan requirement is a malformed plan;
 fix before presenting). Set `plan_confidence: high|medium|low` (+ reason) and

@@ -99,7 +99,13 @@ rubric lines · `unconfirmed_assumptions_touched[]` present. Malformed →
 requeue the judge once, then escalate. Security findings with a concrete
 consequence are always blocking. APPROVE with zero findings is legitimate.
 
-## Phase 7/8 deltas
+## Phase 6.7 / 7 / 8 deltas
+
+The mock-example phase (spine Phase 6.7, `../../_shared/drift-recovery.md`)
+runs in ultra too — AFTER Gate 3 approves (an example of an unapproved
+implementation would demo drift the judge already caught); same `mock_example`
+config, same never-committed rule, same 2-loop drift cap. A drift-recovery
+patch wave re-enters Gate 3 (a changed implementation is re-judged).
 
 The summary additionally reports: per-gate verdicts + rounds, findings by
 severity and class, auto-downgrades, the assumption ledger's final state

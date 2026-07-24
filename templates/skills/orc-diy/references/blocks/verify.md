@@ -16,3 +16,10 @@ Dispatch verification exactly as the full lane does — follow the verify half
 of `.claude/skills/orc/subskills/orc-review-verify/SKILL.md` (build + tests +
 every acceptance criterion checked against the definition of done).
 <!-- /diy:when -->
+<!-- diy:when tdd=on -->
+TDD gate (rides the verify slot): the verifier slice carries the plan's
+`tdd_suite[]`; green is the definition-of-done for non-exempt requirements,
+red → the repair loop capped at `tdd_loop_max` (cap hit → STOP + honest red
+report). The adversarial half of the verify pass applies as the full lane
+defines it.
+<!-- /diy:when -->

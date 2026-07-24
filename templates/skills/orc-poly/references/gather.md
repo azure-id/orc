@@ -13,6 +13,11 @@ open source files:
   keyword lines match the change, and pull their `Contracts & shapes` +
   `Testing map` sections and the cross-cutting maps (API surface / data model)
   when relevant.
+- Read the federation **ATLAS first** when it exists (`wiki/crosslink/atlas.md`
+  — `../orc-wiki/references/crosslink.md` ATLAS section, v0.33.0): its
+  Federation map + per-node profiles say what each repo provides/consumes and
+  which peer wiki docs answer which questions, so every subsequent peek is
+  targeted. Newest-wins across copies (trust the newer `generated` stamp).
 - Read the **crosslink boundary tags** each repo publishes (the orc-wiki
   cross-repo subsystem). These describe the *existing* seam between the repos —
   the endpoints one repo exposes and the other consumes. They are the single

@@ -25,4 +25,18 @@ docs predate v0.24.0 and so have no `wiki/crosslink/` yet. No area is re-scanned
 no doc rewritten. On a wiki scanned at ≥v0.24.0, missing tags are not this
 branch — `orc wiki sync --check` names the real fix. Never a refresh.
 
-Optional focus (or `crosslink`): $ARGUMENTS
+**`/orc-wiki crosslink compile`** → the one-shot CROSSLINK COMPILE branch
+(v0.33.0 — references/crosslink-compile.md): resolve/consume from the graph →
+generate the federation atlas (`wiki/crosslink/atlas.md`) → write it into each
+linked repo → inject/update the CLAUDE.md pointer block locally and in each
+linked repo (in-place, user content byte-preserved). Requires a crosslink
+config with ≥1 edge; every step warn-only; never a re-scan. Peer writes are
+FILE writes only — never a commit or push.
+
+| Argument | Branch |
+|---|---|
+| *(none)* | Phase 0 auto-branch: repair / fresh / resume / refresh (delta default) |
+| `crosslink` | Phase 3c legacy backfill (publish tags from existing docs) |
+| `crosslink compile` | one-shot resolve + atlas + CLAUDE.md injection (local + peers) |
+
+Optional focus (or `crosslink` / `crosslink compile`): $ARGUMENTS

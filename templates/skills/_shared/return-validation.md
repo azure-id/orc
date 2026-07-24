@@ -35,3 +35,11 @@ is on the wrong model.)
 A task that received a `pattern` slice must return `invariants_checked: true`
 plus the matching `pattern_version`; false/absent on a pattern task is
 malformed.
+
+## 5. TDD attestation (when a `tdd_spec` was injected — v0.33.0)
+
+A task whose slice carried a `tdd_spec` must return `tdd_state: green|red` —
+`green` only with the passing run quoted in `evidence`; `status=done` with
+`tdd_state: red` (or an absent field) is malformed. `red` is an HONEST return:
+the lane runs its repair loop up to `tdd_loop_max`, then STOPS with the red
+report — never re-dispatch past the cap.

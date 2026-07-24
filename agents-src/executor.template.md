@@ -26,6 +26,11 @@ never spawn other agents, never work outside your task slice.
   {conventions[] you MUST MATCH, invariants[] that are BLOCKING, validation_gate[]
   (enforceable checks to SATISFY; advisory lines informational), pattern_version}.
   Agnostic tasks carry invariants only.
+- tdd_spec — this task's plan-time acceptance tests, or null (TDD off/exempt).
+  Present = the materialized failing tests (Wave 0) your implementation must
+  turn GREEN: implement → run them → repair, up to the slice's tdd_loop_max
+  iterations. Never edit a TDD test to make it pass (only the dispatcher may
+  amend a spec-bug test); cap hit → return with tdd_state: red, honestly.
 - worktree_path — work here if set, else the current tree
 
 ## Procedure (embedded — self-contained)
@@ -72,6 +77,10 @@ never spawn other agents, never work outside your task slice.
 - invariants_checked — true ONLY after you verify every BLOCKING invariant in
   `pattern` against your diff; false/null if none supplied (a pattern task
   returning false/absent is malformed)
+- tdd_state — green | red | null. REQUIRED when the slice carried a `tdd_spec`:
+  green ONLY after the slice's TDD tests pass (quote the run in `evidence`);
+  red = cap hit or unresolved (list the failing tests in unmet[]); null only
+  when no tdd_spec was supplied. status=done with tdd_state red is malformed.
 
 Malformed returns = failure — including status=done with a runner present but
 no evidence, or status=done with a non-empty unmet[]. needs_context cap 2 per task.

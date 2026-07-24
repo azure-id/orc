@@ -36,6 +36,11 @@ Run as Opus 4.8, high effort.
      isn't clean); capture failures.
    - Check the diff for obvious breakage: broken imports, references to removed
      symbols, unhandled errors introduced, type errors.
+   - **Adversarial pass (v0.33.0):** attack the diff the way the pipeline's
+     Phase 6 does — edge cases the change ignores (empty/zero/max, unicode),
+     error paths (each external call's failure), contract violations (response
+     shapes/status codes vs consumers), race/ordering on shared state, and
+     workflow breaks (dead wiring, broken commands). Same evidence rule.
 4. **Classify findings** on the P0–P3 severity ladder (same rule as the full
    skill: P0 = failing build/tests, broken references, runtime errors ·
    P1 = correctness/security risk · P2 = maintainability · P3 = cosmetic).

@@ -6,7 +6,7 @@
 
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
-![Version](https://img.shields.io/badge/version-0.32.0-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.33.0-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
@@ -46,38 +46,38 @@ zero-dependency npm package installs those files into your `.claude/` directory.
 
 ## Changelog
 
-**Latest: v0.32.0 — updated 2026-07-24.**
+**Latest: v0.33.0 — updated 2026-07-25.**
 
-### v0.32.0 — Trace revamp: narration is dispatched, not remembered _(2026-07-24)_
+### v0.33.0 — Knowledge deepening + verification revamp _(2026-07-25)_
 
-Driven by a real 8-task `/orc` run whose trace contained **only** `SPAWN`/`RETURN`
-lines — despite two earlier fixes that both bet on the orchestrator remembering
-to append rich lines. Under real load (long runs, compaction, parallel waves) it
-never does; the one thing a run performs reliably is **dispatching agents**. So
-the pen moved onto that behavior. **A new pinned writer** —
-`orc-trace-writer-haiku-4-5` — appends one phase block per dispatch from a
-**phase packet** the orchestrator hands it: the events with their REAL
-timestamps plus a free-text `decisions` field, so the trace finally records the
-**why** (scoring rationale, your answers verbatim, what was rejected) and not
-just the what. The writer dispatch for phase N is issued in the same tool block
-as phase N+1's first dispatch, so logging piggybacks on the action that always
-happens. **Every trace-owning lane narrates:** build lanes per phase, orc-wiki
-per scan batch, and every single-dispatch lane (`/orc-plan`, `/orc-analyze`,
-`/orc-claude`, `/orc-verify`, `/orc-learn`, `/orc-poly`, `/orc-pattern`) exactly
-once at run end. **Traces are named for their run:**
-`run-<lane>-<slug>-<DDMMYY>-<HHMMSS>.txt` — and if a lane forgets its pointer,
-the first writer dispatch renames the hook's bootstrap file. **The hook got
-harder too:** a duplicate `SubagentStop` no longer writes a second, desc-less
-RETURN; a stop without an `agent_type` no longer steals another agent's slot (the
-bug that left one task with no RETURN at all); `/orc-retro` — the lane that mines
-traces — no longer generates them; and a new hook-written `PHASE-EDGE` line
-segments any run into analysis → planning → execution → review → verify from
-agent names alone, so even a fully amnesiac run is readable and `/orc-retro` can
-measure **narration coverage** deterministically. A `.jsonl` companion makes that
-mining structural instead of regex over prose.
+Six features, one release. **The wiki gets a front door and a federation:**
+`wiki/orc-orientation.md` (derived at assemble — repo identity, reading order,
+anchored journeys) is now read FIRST by every consumer, and the **ATLAS**
+(`wiki/crosslink/atlas.md`) gives every linked repo the same repo-agnostic map
+of the whole federation — who provides what, which peer doc answers which
+question, transitive nodes included. Writing the atlas (and, via the new
+one-shot **`/orc-wiki crosslink compile`**, the CLAUDE.md pointer block) into a
+linked repo is the second sanctioned peer FILE write — never a commit, never a
+push, warn-only. **Refreshes go delta-first:** the new deterministic
+`orc wiki impact` probe (exit 0/2/3) maps commits since `scan_commit` against
+each doc's coverage — per-doc `CLEAN | TOUCHED | STRUCTURAL` — so the default
+refresh regenerates only touched docs, and a FULL refresh is recommended
+(threshold/structural/aging), never silently run. **Verification gets teeth:**
+plans now carry a required `tdd_spec` (per-requirement given/when/then +
+runnable skeletons, authored BEFORE implementation; full orc + ultra always,
+mini one question, fast off); Wave 0 proves the tests RED, executors implement
+to green under a `tdd_loop_max` repair cap with an honest red report on cap,
+and Phase 6 becomes a deterministic TDD gate + an adversarial review that
+attacks edge cases, error paths, contracts, and dead wiring. And after a green
+verify, ORC can build a **runnable mocked example** (`mock-examples/<slug>/`,
+never committed) and run a bounded `DRIFT-FROM` recovery loop when what you
+see isn't what you meant. New config: `mock_example` (ask), `tdd_loop_max`
+(3), `wiki_delta_full_threshold` (30); new DIY keys `tdd` + `mock_example`.
 
 <details>
 <summary><b>Previous versions</b> (click to expand)</summary>
+
+### v0.32.0 — Trace revamp: narration is dispatched, not remembered _(2026-07-24)_
 
 ### v0.31.0 — Execution-integrity revamp: plan handoff, attributable traces, facet scoring _(2026-07-23)_
 

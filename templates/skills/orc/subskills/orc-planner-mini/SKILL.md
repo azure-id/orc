@@ -48,7 +48,10 @@ is AUTHORITATIVE for the full procedure; the summary below orients.
    novelty/logic/test_surface/uncertainty, cited `risk[]` — the orchestrator
    scores from these; you never compute the score), and a sliced `acceptance[]`
    where each line cites its source (`R3` / `DoD#2` — a line with no source is
-   invented).
+   invented). **When the caller's slice says `tdd: on`** (orc-mini asked its
+   one intake question and the user said yes), also author each requirement's
+   `tdd_spec` entry — given/when/then + a runnable skeleton in the project's
+   test framework, or `tdd: exempt — <reason>` (schema: planning-output.md).
 4. **Self-check (always — cheap, prevents broken waves):**
    - **cycle detection** — no `depends_on` chain loops back on itself;
    - **same-file collision** — two tasks sharing a `declared_files` entry must be
