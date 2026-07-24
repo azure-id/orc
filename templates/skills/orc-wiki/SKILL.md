@@ -75,15 +75,19 @@ makes the consent gate mandatory.
 
 ## Behavior trace (PERMANENT — same rule as orc/orc-mini; wiki runs trace too)
 
-Follow `../orc/references/trace-protocol.md` for the wiki's phase set: run
-start (after consent) create `log_dir` + write `log_dir/.current` + store
-`trace_path` in the wiki checkpoint (a resumed session re-anchors to the SAME
-file); append AS THE RUN GOES — each phase's `PHASE` line BEFORE announcing
-it, `DISPATCH <agent> :: <area>` per spawn, `VERIFY` per return
-(`actual_model`/`actual_effort` vs expected — surface any ⛔ DOWNGRADE). A
-phase or scan-task ending with
-zero new trace lines is a protocol violation — go append them now. `.current` STAYS in place across the 5-task
-pauses. Run end (Phase 3 done or abort): `FINISH …`, delete `log_dir/.current`.
+Follow `../orc/references/trace-protocol.md`: after consent create `log_dir`,
+write `log_dir/.current` = `run-wiki-<slug>-<DDMMYY>-<HHMMSS>.txt`, store
+`trace_path` in the wiki checkpoint (a resume re-anchors to the SAME file).
+Narration is **dispatched, never remembered**: record each event with its REAL
+timestamp into a packet (`PHASE`, `DISPATCH <agent> :: <area>`, `VERIFY` per
+return — `actual_model`/`actual_effort` vs expected, surface any ⛔ DOWNGRADE —
+plus `decisions` = the WHY), then dispatch `orc-trace-writer-haiku-4-5` with it
+at every SCAN-BATCH BOUNDARY (where you already sync + offer the pause) and at
+run end, so a multi-session scan narrates its consent and coverage choices too.
+A phase or scan-task ending with
+zero new trace lines is a protocol violation — dispatch its packet NOW.
+`.current` STAYS in place across the 5-task pauses. Run end (Phase 3 done or
+abort): the `FINISH` packet returns, then delete `log_dir/.current`.
 
 ## Phase 0 — Entry & auto-branch (on /orc-wiki)
 

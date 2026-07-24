@@ -43,7 +43,10 @@ fields). Then:
    planner slice, every judge slice, and — as advisory notes — every executor
    slice. The rubric section is what the judges score against.
 
-The advisor runs once; it is never re-dispatched. Emit `ADVISE` when logging.
+The advisor runs once; it is never re-dispatched. Record `ADVISE` into the U0
+packet — ultra adds ONE writer packet for U0 and one per judge gate on top of
+orc's phase packets (`../references/trace-protocol.md`), so the advisory brief,
+the questions relayed, and each verdict round are narrated like any other phase.
 
 ## The three judgment gates (dispatch `orc-judge-opus-4-8-max`)
 
@@ -51,7 +54,8 @@ Shared mechanics — verdict validation, blocking-finding downgrade enforcement,
 REVISE loops (author echo `finding_id → resolution`, re-judge convergence
 rule, hard cap 2 per gate), the ESCALATE menu, advisory carry-forward, verdict
 persistence (`run/{run-slug}/ultra/verdict-<gate>-<round>.md`), and the
-`JUDGE` / `GATE judgment` trace lines — live in `../../orc-judge/SKILL.md`.
+`JUDGE` / `GATE judgment` trace events (packet-carried) — live in
+`../../orc-judge/SKILL.md`.
 Load it at the first gate. Loop counters + the ultra artifact paths go in the
 checkpoint (`ultra` block) so a resumed run continues mid-loop.
 

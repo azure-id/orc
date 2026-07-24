@@ -45,6 +45,38 @@
  * orchestrator forgets its VERIFY line. The sidecar is best-effort: a missing or
  * corrupt sidecar degrades to a bare RETURN (never throws, always exit 0).
  *
+ * Attribution hardening (v0.32.0) — three bugs a real 8-task run proved:
+ *   1. DOUBLE RETURN. A stop that carried no `agent_type` FIFO-popped another
+ *      agent's pending record; the REAL `agent_type` stop then found no record
+ *      and wrote a second, desc-less RETURN for the same agent. Now: an
+ *      `agent_type` stop with NO matching record while OTHER records are still
+ *      in flight is a DUPLICATE (its slot was already consumed) and is dropped.
+ *      An empty sidecar is NOT a duplicate signal — it still degrades to a bare
+ *      RETURN, and the `returns >= spawns` guard covers the empty-list repeat.
+ *   2. MISSING RETURN. The blind FIFO pop above starved the agent whose record
+ *      was stolen. Now an `agent_type`-less stop only CONSUMES a record when
+ *      exactly ONE is in flight; with ≥2 it writes `RETURN ~agent :: unattributed`
+ *      WITHOUT consuming, so the real `agent_type` stop can still claim its own.
+ *   3. RETRO SELF-POLLUTION. `/orc-retro` dispatches `orc-retro-*`, which matched
+ *      the `/^orc/` gate — the trace miner was generating trace data. `orc-retro`
+ *      is now on an explicit ignore-list: never bootstraps, never SPAWN/RETURN.
+ *
+ * Deterministic phase inference (v0.32.0): ORC agent NAMES encode their role, so
+ * the hook can segment a run into phases with zero model cooperation. When a
+ * SPAWN's role family differs from the previous SPAWN's, the hook writes one
+ * extra line first — `PHASE-EDGE <role-family> :: first=<agent>` — so even a run
+ * where every narration dispatch was forgotten still reads as
+ * planning → execution → review → verify. `/orc-retro` reads these to compute
+ * NARRATION COVERAGE (phase edges with a trace-writer SPAWN between them).
+ *
+ * Rich run filenames (v0.32.0): the canonical trace name is
+ * `run-<lane>-<slug>-<DDMMYY>-<HHMMSS>.txt`, written by the orchestrating lane at
+ * run start. The hook still bootstraps its own generic `run-<DDMMYY>-<HHMMSS>.txt`
+ * when the pointer is missing; the first `orc-trace-writer-haiku-4-5` dispatch
+ * RENAMES that bootstrap file (+ sidecars) and rewrites `.current`. The hook is
+ * name-agnostic (rotation/STALE logic is pointer-based) and holds no open
+ * handles, so a rename between two hook events is safe.
+ *
  * Run rotation (v0.23.0): `.current` is a POINTER, not a lifetime lease. A run
  * whose trace file has been idle longer than STALE_MS is considered ENDED — the
  * next ORC dispatch rotates to a fresh `.txt` instead of appending days of
@@ -125,6 +157,46 @@ function bootstrapSlug(d) {
   return `run-${dd}${mm}${yy}-${t}.txt`;
 }
 
+// Lanes whose agents must NEVER be traced. `/orc-retro` MINES the traces — its
+// hard rule 4 says it writes no trace of its own, so an `orc-retro-*` dispatch
+// must not bootstrap a run or emit SPAWN/RETURN (that would pollute the very
+// data it reads). Matched on the agent name, before every other gate.
+const IGNORED_AGENTS = /^orc-retro\b/i;
+
+// Role families for deterministic phase inference. ORC agent names encode the
+// role, so a change of family between consecutive SPAWNs IS a phase edge.
+// A name that maps to null never opens an edge (and never closes the previous
+// one) — including the trace writer, whose whole job is narration.
+function roleFamily(agent) {
+  const a = String(agent).toLowerCase();
+  if (/trace-writer/.test(a)) return null;
+  if (/analyst|analyze|scout/.test(a)) return "analysis";
+  if (/planner/.test(a)) return "planning";
+  if (/executor/.test(a)) return "execution";
+  if (/reviewer/.test(a)) return "review";
+  if (/verifier/.test(a)) return "verify";
+  if (/test-author/.test(a)) return "testgen";
+  if (/advisor|judge/.test(a)) return "ultra-gate";
+  return null;
+}
+
+// The role family of the LAST classified SPAWN in a trace. Derived from the file
+// itself so phase inference needs no extra state file (and survives a rename).
+function lastSpawnRole(dir, file) {
+  let text;
+  try {
+    text = fs.readFileSync(path.join(dir, file), "utf8");
+  } catch (_) {
+    return null; // new/unreadable trace → the next SPAWN opens the first edge
+  }
+  let last = null;
+  for (const m of text.matchAll(/\] hook\s+SPAWN (\S+)/g)) {
+    const fam = roleFamily(m[1]);
+    if (fam) last = fam;
+  }
+  return last;
+}
+
 // Read the active run pointer, or null. Never throws.
 function readPointer(dir) {
   try {
@@ -172,8 +244,12 @@ function traceStats(dir, file) {
     // Count only the hook's own skeleton lines (actor column = "hook") — the
     // orchestrator's rich verbs (DISPATCH/VERIFY/…) never collide with these.
     const spawns = (text.match(/\] hook\s+SPAWN /g) || []).length;
-    const returns = (text.match(/\] hook\s+RETURN/g) || []).length;
-    return { idleMs: Date.now() - st.mtimeMs, spawns, returns };
+    // `RETURN ~agent :: unattributed` claims no pending record (the ≥2-in-flight
+    // restraint above), so it must not count toward the balance either — if it
+    // did, it would starve the very RETURN it deliberately declined to steal.
+    const all = (text.match(/\] hook\s+RETURN/g) || []).length;
+    const loose = (text.match(/\] hook\s+RETURN ~agent :: unattributed/g) || []).length;
+    return { idleMs: Date.now() - st.mtimeMs, spawns, returns: all - loose };
   } catch (_) {
     return null;
   }
@@ -204,6 +280,8 @@ process.stdin.on("end", () => {
       // Only ORC-agent dispatches start/extend a trace — non-ORC Tasks (Explore,
       // general-purpose, superpowers, …) are never logged.
       if (!/^orc/i.test(String(agent))) return;
+      // …and the trace miner is exempt from its own instrument.
+      if (IGNORED_AGENTS.test(String(agent))) return;
       let current = readPointer(dir);
       // Rotate away from a finished run: a dangling pointer or a trace file
       // idle past STALE_MS means the old run ended — start a fresh `.txt`
@@ -225,6 +303,12 @@ process.stdin.on("end", () => {
         fs.writeFileSync(path.join(dir, ".current"), current + "\n");
       }
       const desc = (input.description || "").toString().slice(0, 80);
+      // Deterministic phase inference: a change of role family (or the first
+      // classified dispatch of the run) opens a phase edge. Written BEFORE the
+      // SPAWN so the edge reads as the header of the phase it opens.
+      const fam = roleFamily(agent);
+      if (fam && fam !== lastSpawnRole(dir, current))
+        appendLine(dir, current, "hook", `PHASE-EDGE ${fam}`, `first=${agent}`);
       appendLine(dir, current, "hook", `SPAWN ${agent}`, desc);
       // Push a pending record so the matching RETURN can be attributed (agent +
       // desc + start time). Best-effort — a write failure degrades to a bare
@@ -249,25 +333,47 @@ process.stdin.on("end", () => {
       const agentType = (data.agent_type || data.agentType || "").toString();
       // Non-ORC agent_type → drop, mirroring the SPAWN gate.
       if (agentType && !/^orc/i.test(agentType)) return;
+      // The trace miner never returns into a trace either (hard rule 4).
+      if (agentType && IGNORED_AGENTS.test(agentType)) return;
 
       const pend = readPending(dir, current);
       let rec = null;
       let name;
       let approx = false;
+      let unattributed = false;
       if (agentType) {
         // Match the OLDEST pending record for this agent type (FIFO within name).
         const idx = pend.findIndex((p) => p && p.agent === agentType);
         if (idx >= 0) rec = pend.splice(idx, 1)[0];
+        // DUPLICATE STOP: no record for this agent, but others are still in
+        // flight → this agent's slot was already consumed (the classic
+        // approximate-pop-then-real-stop double fire). Drop it rather than
+        // write a second, desc-less RETURN for the same agent. An EMPTY sidecar
+        // is a lost/corrupt sidecar, not a duplicate — that case still degrades
+        // to a bare RETURN (and a genuine repeat is caught by returns>=spawns).
+        else if (pend.length) return;
         name = agentType;
+      } else if (pend.length === 1) {
+        // Older Claude Code: no agent_type, and exactly ONE agent in flight —
+        // the FIFO pop is unambiguous. Mark it approximate (`~`) all the same.
+        rec = pend.shift();
+        name = rec.agent;
+        approx = true;
+      } else if (pend.length > 1) {
+        // ≥2 in flight and no agent_type: a blind FIFO pop would hand this stop
+        // another agent's record and STARVE that agent's real RETURN. Record
+        // that something finished, but consume NOTHING.
+        name = "agent";
+        approx = true;
+        unattributed = true;
       } else {
-        // Older Claude Code: no agent_type — pop the oldest pending record and
-        // mark the attribution approximate (`~`).
-        if (pend.length) rec = pend.shift();
-        name = rec ? rec.agent : "agent";
+        // No pending records at all (missing/corrupt sidecar) — bare RETURN.
+        name = "agent";
         approx = true;
       }
 
       const parts = [];
+      if (unattributed) parts.push("unattributed");
       if (rec && rec.desc) parts.push(String(rec.desc));
       if (rec && typeof rec.ts === "number") {
         const s = Math.max(0, Math.round((Date.now() - rec.ts) / 1000));

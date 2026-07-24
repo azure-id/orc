@@ -63,9 +63,9 @@ set in "Behavior trace").
 
 1. Detect the repo root and pick the mode (REFRESH / UPDATE / CREATE above —
    header sniff only; the writer re-verifies). **Trace:** open the run now —
-   write `log_dir/.current` = `orc-claude-<DDMMYY>.txt` BEFORE the spawn
-   (without the pointer the `orc-trace.js` hook stays inert and nothing is
-   logged).
+   write `log_dir/.current` = `run-claude-<slug>-<DDMMYY>-<HHMMSS>.txt` BEFORE
+   the spawn (without the pointer the `orc-trace.js` hook stays inert and
+   nothing is logged).
 2. Spawn `orc-claude-writer-opus-4-8-high` with: `mode`, `repo_root`,
    `budget` (from a `budget=N` argument, else null), and the paths to
    `references/template.md` + `references/refresh.md`. **Trace:** emit
@@ -157,8 +157,9 @@ sub-agent (which self-traces nothing — it only returns `actual_model`/
 at start and follow `../orc/references/trace-protocol.md`. The marker set, in
 order (all under actor `orc`, plus the hook's `SPAWN`/`RETURN`):
 
-1. `log_dir/.current` = `orc-claude-<DDMMYY>.txt` — written FIRST (the hook also
-   bootstraps it on the writer dispatch, so the skeleton is never lost).
+1. `log_dir/.current` = `run-claude-<slug>-<DDMMYY>-<HHMMSS>.txt` — written FIRST
+   (the hook also bootstraps it on the writer dispatch, so the skeleton is never
+   lost, and the end-of-run packet renames a bootstrapped file).
 2. `DISPATCH orc-claude-writer :: <mode> expect=opus-4-8/high` — before the
    spawn. The hook then appends `SPAWN`/`RETURN` around the dispatch. The mode
    rides in this line's tail (and in `FINISH`), so no separate mode marker.
@@ -169,9 +170,12 @@ order (all under actor `orc`, plus the hook's `SPAWN`/`RETURN`):
 4. `FINISH :: <mode_ran> CLAUDE.md v<X.Y.Z>` (mode_ran may be `noop`), then
    delete `.current`.
 
-Append each marker as its event happens (before announcing that step), never
-batched at the end — the timestamps are the run's timeline, and a step that
-ends with zero new trace lines is a protocol violation. A noop refresh still
+Narration is **dispatched, never remembered**: record each marker with its REAL
+timestamp as its event happens, then — as a single-dispatch lane — dispatch the
+trace writer ONCE with the whole event list plus `decisions` (the WHY: mode
+choice, what the user asked) after the writer return validates and BEFORE you
+delete `.current`. Stamps are the run's timeline, never the write time, and a run
+that ends with zero new trace lines is a protocol violation. A noop refresh still
 traces the full cycle (ending `FINISH :: noop`) and still deletes `.current`.
 
 ## Boundaries

@@ -67,8 +67,11 @@ Run as Opus 4.8 high (orchestrator). The mining itself is dispatched to
 1. Resolve `log_dir`; collect `*.txt` traces (all, or the user-named subset /
    date range from `$ARGUMENTS`). Show the count and ask nothing else.
 2. Dispatch `orc-retro-sonnet-5-high` with the slice: trace file paths + the
-   verb reference (`../orc/references/trace-protocol.md`). The agent parses
-   the CLOSED verb set and aggregates:
+   verb reference (`../orc/references/trace-protocol.md`). The agent mines the
+   `<trace>.jsonl` sidecar first when present (structured — no regex over free
+   text) and falls back to `.txt` parsing for pre-v0.32.0 traces, merging the
+   hook's `.txt`-only skeleton lines by timestamp. It parses the CLOSED verb set
+   and aggregates:
    - **Band calibration** (from `OUTCOME` lines): per band — task count, avg
      retries/requeues/needs_context/unmet. High retries in a band = the band's
      model is too weak (or slices too big); all-zeros in a high band = maybe
@@ -79,14 +82,22 @@ Run as Opus 4.8 high (orchestrator). The mining itself is dispatched to
      coverage / graph / evidence / derivation) — pass vs bounce counts. A high
      bounce rate on one gate localizes which role's instructions leak (e.g.
      planner orphans → planner coverage discipline needs tuning).
+   - **Per-lane aggregation** (free, from the filename grammar
+     `run-<lane>-<slug>-<DDMMYY>-<HHMMSS>.txt`): runs/tasks/unfinished per lane,
+     so an orc run is never averaged together with a mini or fast one.
    - **Pipeline leaks:** `QUESTION`/`CONTEXT-GAP` clusters (over-asking, slices
      missing context), `REPLAN` reasons, `FINDING p0..p3` and `VERDICT fail`
      rates per run, runs with `SPAWN`s but no `FINISH` (aborted/never closed).
-   - **Trace hygiene:** skeleton `SPAWN`/`RETURN` pairs with no orchestrator
-     `DISPATCH`/`VERIFY` around them (rich markers being forgotten).
+   - **Trace hygiene → narration coverage:** the hook's `PHASE-EDGE` lines
+     segment every run with zero model cooperation, so a missing narration is
+     now DETERMINISTICALLY visible: count the phases whose edge-interval
+     contains no trace-writer `SPAWN`. Report `covered/total` + the unnarrated
+     phases. The question is no longer "were rich markers forgotten?" but
+     "which phases never dispatched their writer?" — a run with edges and zero
+     writer spawns is a total narration failure and is named as such.
 3. Validate the return (contract below). Write the report to
-   `log_dir/retro/<DDMMYY>-report.md` (the `retro/` subfolder keeps the
-   trace folder's top level `.txt`-only) in the AI-readable format below, and
+   `log_dir/retro/<DDMMYY>-report.md` (the `retro/` subfolder keeps the trace
+   folder's top level to run traces + their sidecars) in the format below, and
    show the user the summary: verdict per question, the per-band table, and
    each recommendation with its evidence line counts + n.
 4. **Deliver upstream (the point of the retro).** File the report to
@@ -119,7 +130,9 @@ project: <cwd project name>
 orc_version: <installed ORC version if known, else unknown>
 runs_analyzed: <n>
 tasks_analyzed: <n>
-band_stats: [...]        # verbatim from the return contract
+lane_stats: [...]        # verbatim from the return contract
+narration_coverage: {...}
+band_stats: [...]
 downgrades: [...]
 leaks: [...]
 recommendations: [...]   # each with finding, suggested_change, confidence
@@ -134,6 +147,9 @@ actual_effort: <...>
 ## Return contract (the agent emits EXACTLY this; you validate)
 
 - `runs_analyzed`, `tasks_analyzed` — the n behind everything
+- `lane_stats[]` — {lane, runs, tasks, unfinished} (lane from the filename)
+- `narration_coverage` — {phases_total, phases_narrated, pct, unnarrated[]:
+  {run, role_family, first_agent}} — from the hook's `PHASE-EDGE` segmentation
 - `band_stats[]` — {band, model, tasks, avg_retries, avg_requeues,
   avg_needs_context, avg_unmet}
 - `downgrades[]` — {agent, expected, actual, run}

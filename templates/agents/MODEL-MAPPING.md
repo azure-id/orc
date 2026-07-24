@@ -37,6 +37,7 @@ Score→executor mapping lives in config.md (one canonical 8-band table;
 | orc-advisor-opus-4-8-max | claude-opus-4-8 | max | ultra Phase U0 advisory brief + rubric + clarification questions (read-only; /orc-ultra only) |
 | orc-judge-opus-4-8-max | claude-opus-4-8 | max | ultra judgment gates — analysis / plan / implementation (read-only; /orc-ultra only) |
 | orc-claude-writer-opus-4-8-high | claude-opus-4-8 | high | scan repo → write/refresh the local CLAUDE.md (/orc-claude only; zero questions) |
+| orc-trace-writer-haiku-4-5 | claude-haiku-4-5 | — (no ladder) | append one phase block of behavior-trace narration from an orchestrator packet (every trace-owning lane; append-only, never reads source) |
 
 ## Fable 5 role-override agents (hard-gated; dispatched only when configured)
 

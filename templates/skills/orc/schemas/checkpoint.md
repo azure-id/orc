@@ -23,7 +23,7 @@ Two files, two jobs:
                                    // (computed from the Phase 2 answer; last wave never included) —
                                    // a resumed session enforces the same hard boundaries
   "logging_enabled": true,         // logging is PERMANENT (always on) — re-anchor the behavior trace on resume
-  "trace_path": null,              // "<log_dir>/<run-slug>-<DDMMYY>.txt" — the run's trace file
+  "trace_path": null,              // "<log_dir>/run-<lane>-<slug>-<DDMMYY>-<HHMMSS>.txt" — the run's trace file
   "ultra_mode": false,             // true only on /orc-ultra runs; gates the "ultra" block below
   "ultra": null,                   /* when ultra_mode — a resumed run continues mid-gate/mid-loop:
     { "brief_path": "run/…/ultra/advisory-brief.md",

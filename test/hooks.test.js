@@ -114,6 +114,162 @@ test("trace: a missing sidecar still writes a (bare) RETURN", () => {
   }
 });
 
+test("trace: a duplicate agent_type stop is dropped, not written as a desc-less RETURN", () => {
+  const { root, claudeDir } = freshInstall();
+  try {
+    const spawn = (agent, desc) =>
+      runHook(claudeDir, "orc-trace.js", {
+        hook_event_name: "PreToolUse",
+        tool_name: "Agent",
+        tool_input: { subagent_type: agent, description: desc },
+      });
+    spawn("orc-executor-sonnet-4-6-high", "T2 pairs");
+    spawn("orc-executor-sonnet-5-high", "T5 providers");
+    // Real stop for T2 → consumes T2's record.
+    runHook(claudeDir, "orc-trace.js", {
+      hook_event_name: "SubagentStop",
+      agent_type: "orc-executor-sonnet-4-6-high",
+    });
+    // The SAME stop fires again (the observed double-fire). T5 is still in
+    // flight, so T2 has no record left → duplicate → dropped.
+    runHook(claudeDir, "orc-trace.js", {
+      hook_event_name: "SubagentStop",
+      agent_type: "orc-executor-sonnet-4-6-high",
+    });
+    const { texts } = traceFiles(claudeDir);
+    const t2Returns = (texts.match(/RETURN orc-executor-sonnet-4-6-high/g) || []).length;
+    assert.strictEqual(t2Returns, 1, "the duplicate stop writes no second RETURN");
+
+    // …and T5's own RETURN is still available (it was never starved).
+    runHook(claudeDir, "orc-trace.js", {
+      hook_event_name: "SubagentStop",
+      agent_type: "orc-executor-sonnet-5-high",
+    });
+    assert.match(traceFiles(claudeDir).texts, /RETURN orc-executor-sonnet-5-high :: T5 providers/);
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("trace: with >=2 in flight, an agent_type-less stop consumes no record (no starved RETURN)", () => {
+  const { root, claudeDir } = freshInstall();
+  try {
+    const spawn = (agent, desc) =>
+      runHook(claudeDir, "orc-trace.js", {
+        hook_event_name: "PreToolUse",
+        tool_name: "Agent",
+        tool_input: { subagent_type: agent, description: desc },
+      });
+    spawn("orc-executor-sonnet-4-6-high", "T2 pairs");
+    spawn("orc-executor-sonnet-5-high", "T5 providers");
+    // Blind stop (older Claude Code shape) — must NOT pop T2's record.
+    runHook(claudeDir, "orc-trace.js", { hook_event_name: "SubagentStop" });
+    const mid = traceFiles(claudeDir).texts;
+    assert.match(mid, /RETURN ~agent :: unattributed/, "records the stop without claiming an agent");
+    assert.doesNotMatch(mid, /RETURN ~orc-executor-sonnet-4-6-high/, "no blind FIFO pop with >=2 in flight");
+
+    // Both real stops can still claim their own records.
+    for (const a of ["orc-executor-sonnet-4-6-high", "orc-executor-sonnet-5-high"])
+      runHook(claudeDir, "orc-trace.js", { hook_event_name: "SubagentStop", agent_type: a });
+    const texts = traceFiles(claudeDir).texts;
+    assert.match(texts, /RETURN orc-executor-sonnet-4-6-high :: T2 pairs/, "T2 keeps its RETURN");
+    assert.match(texts, /RETURN orc-executor-sonnet-5-high :: T5 providers/, "T5 is not starved");
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("trace: orc-retro is never traced (the miner must not pollute its own data)", () => {
+  const { root, claudeDir } = freshInstall();
+  try {
+    runHook(claudeDir, "orc-trace.js", {
+      hook_event_name: "PreToolUse",
+      tool_name: "Agent",
+      tool_input: { subagent_type: "orc-retro-sonnet-5-high", description: "mine traces" },
+    });
+    const dir = path.join(claudeDir, "orc", "logs");
+    assert.ok(!fs.existsSync(path.join(dir, ".current")), "no run pointer bootstrapped for the miner");
+    assert.doesNotMatch(traceFiles(claudeDir).texts, /orc-retro/, "no SPAWN for orc-retro");
+
+    // A live run must not absorb a retro RETURN either.
+    runHook(claudeDir, "orc-trace.js", {
+      hook_event_name: "PreToolUse",
+      tool_name: "Agent",
+      tool_input: { subagent_type: "orc-executor-haiku-4-5", description: "tiny" },
+    });
+    runHook(claudeDir, "orc-trace.js", {
+      hook_event_name: "SubagentStop",
+      agent_type: "orc-retro-sonnet-5-high",
+    });
+    assert.doesNotMatch(traceFiles(claudeDir).texts, /RETURN/, "a retro stop never claims an ORC RETURN");
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("trace: PHASE-EDGE on a role change, suppressed within a role and for the writer", () => {
+  const { root, claudeDir } = freshInstall();
+  try {
+    const spawn = (agent) =>
+      runHook(claudeDir, "orc-trace.js", {
+        hook_event_name: "PreToolUse",
+        tool_name: "Agent",
+        tool_input: { subagent_type: agent, description: "d" },
+      });
+    spawn("orc-planner-opus-4-8-med");
+    spawn("orc-trace-writer-haiku-4-5"); // narration — never an edge
+    spawn("orc-executor-sonnet-5-high");
+    spawn("orc-executor-haiku-4-5"); // same family — no second edge
+    spawn("orc-reviewer-opus-4-8-high");
+    const { texts } = traceFiles(claudeDir);
+    assert.match(texts, /PHASE-EDGE planning :: first=orc-planner-opus-4-8-med/);
+    assert.match(texts, /PHASE-EDGE execution :: first=orc-executor-sonnet-5-high/);
+    assert.match(texts, /PHASE-EDGE review :: first=orc-reviewer-opus-4-8-high/);
+    assert.doesNotMatch(texts, /PHASE-EDGE \S+ :: first=orc-trace-writer/, "the writer never opens a phase");
+    assert.strictEqual((texts.match(/PHASE-EDGE execution/g) || []).length, 1, "same-family spawns emit one edge");
+    assert.strictEqual((texts.match(/PHASE-EDGE /g) || []).length, 3, "exactly one edge per role change");
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("trace: after the writer's rename repair, the hook appends to the rich filename", () => {
+  const { root, claudeDir } = freshInstall();
+  try {
+    runHook(claudeDir, "orc-trace.js", {
+      hook_event_name: "PreToolUse",
+      tool_name: "Agent",
+      tool_input: { subagent_type: "orc-planner-opus-4-8-med", description: "plan it" },
+    });
+    const dir = path.join(claudeDir, "orc", "logs");
+    const boot = fs.readFileSync(path.join(dir, ".current"), "utf8").trim();
+    assert.match(boot, /^run-\d{6}-\d{6}\.txt$/, "hook bootstraps its generic slug");
+
+    // Simulate the first orc-trace-writer dispatch's rename duty.
+    const rich = "run-orc-cas-multi-exchange-withdrawal-240726-002352.txt";
+    fs.renameSync(path.join(dir, boot), path.join(dir, rich));
+    fs.renameSync(path.join(dir, boot + ".pending.json"), path.join(dir, rich + ".pending.json"));
+    fs.writeFileSync(path.join(dir, ".current"), rich + "\n");
+
+    runHook(claudeDir, "orc-trace.js", {
+      hook_event_name: "PreToolUse",
+      tool_name: "Agent",
+      tool_input: { subagent_type: "orc-executor-sonnet-5-high", description: "build it" },
+    });
+    runHook(claudeDir, "orc-trace.js", {
+      hook_event_name: "SubagentStop",
+      agent_type: "orc-executor-sonnet-5-high",
+    });
+    assert.ok(!fs.existsSync(path.join(dir, boot)), "no orphan bootstrap file left behind");
+    const text = fs.readFileSync(path.join(dir, rich), "utf8");
+    assert.match(text, /SPAWN orc-planner-opus-4-8-med/, "pre-rename lines survive");
+    assert.match(text, /SPAWN orc-executor-sonnet-5-high/, "post-rename SPAWN lands in the rich file");
+    assert.match(text, /RETURN orc-executor-sonnet-5-high :: build it/, "attribution survives the rename");
+  } finally {
+    rmrf(root);
+  }
+});
+
 test("trace: a SubagentStop with a non-ORC agent_type is dropped", () => {
   const { root, claudeDir } = freshInstall();
   try {

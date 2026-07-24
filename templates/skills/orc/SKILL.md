@@ -101,16 +101,24 @@ allowed). Keys: `max_wave_tasks`, `batch_pause_every`, `max_scouts`,
 ## Behavior trace (PERMANENT — always on, no config toggle)
 
 Follow `references/trace-protocol.md` (ALWAYS load it at run start). The
-`orc-trace.js` hook writes the `SPAWN`/`RETURN` skeleton deterministically —
-but YOU write the rich markers. Run start: create `log_dir`, write
-`log_dir/.current` = `<run-slug>-<DDMMYY>.txt`, store `trace_path` in the
-checkpoint. **Cadence — written AS THE RUN GOES, not once:** each phase body
-below carries its OWN inline `emit …` steps (the imperative — the `· Trace:`
-header tag is only a summary), appended BEFORE you announce that step to the
-user; the `DISPATCH`/`VERIFY` model is derived from the agent NAME + checked vs
-each return's `actual_model`/`actual_effort` (surface any ⛔ DOWNGRADE). A phase
-ending with `zero new trace lines is a protocol violation` — append them now.
-Run end (Phase 8 or abort): `FINISH …`, delete `log_dir/.current`.
+`orc-trace.js` hook writes the `SPAWN`/`RETURN`/`PHASE-EDGE` skeleton
+deterministically; the rich narrative is **dispatched, never remembered** — every
+`emit <VERB>` step below means RECORD that event, with its REAL timestamp, into
+the current **phase packet**; you never append a trace line yourself. Run start:
+create `log_dir`, write `log_dir/.current` =
+`run-orc-<slug>-<DDMMYY>-<HHMMSS>.txt`, store `trace_path` in the checkpoint.
+**Phase close = dispatch `orc-trace-writer-haiku-4-5`** with that packet
+(`phase`, `events[]`, and `decisions` — the WHY: scoring rationale, the user's
+answers VERBATIM, what you rejected; `run_meta` on the FIRST packet only).
+**Pairing rule:** issue phase N's writer dispatch in the SAME tool block as phase
+N+1's first dispatch (a phase with no next dispatch sends it solo, before its
+user-facing output); the first packet is solo + synchronous — it repairs a
+hook-bootstrapped filename. `DISPATCH`/`VERIFY` models are derived from the agent
+NAME and checked against each return's `actual_model`/`actual_effort` — surface
+any ⛔ DOWNGRADE to the user, not just into the packet. A phase ending with
+`zero new trace lines is a protocol violation` — build and dispatch its packet
+NOW, with the events' real stamps. Run end (Phase 8 or abort): the `FINISH`
+packet goes out and RETURNS, then delete `log_dir/.current`.
 
 ## Code-pattern gate (executors match the house style)
 

@@ -64,9 +64,12 @@ at the end (a phase ending with
 `zero new trace lines is a protocol violation`). Resolve `log_dir`
 (`../orc/config.md` default + `.claude/orc.config.yaml`) at start and follow
 `../orc/references/trace-protocol.md`: write
-`log_dir/.current` = `<slug>-<DDMMYY>.txt` first, emit `PHASE` lines, `FINDING
-p0=… p1=… p2=… p3=…` and `VERDICT pass|fail` for the result, then `FINISH` +
-delete `.current` (the hook bootstraps `.current` on dispatch regardless).
+`log_dir/.current` = `run-verify-<slug>-<DDMMYY>-<HHMMSS>.txt` first. Narration
+is dispatched, not remembered: collect `PHASE` lines, `FINDING p0=… p1=… p2=…
+p3=…`, `VERDICT pass|fail` and `FINISH` with their REAL timestamps plus
+`decisions` (the WHY), dispatch the trace writer ONCE at run end (the
+single-dispatch-lane packet), then delete `.current` (the hook bootstraps
+`.current` + the skeleton on dispatch regardless).
 
 ## Boundaries
 
