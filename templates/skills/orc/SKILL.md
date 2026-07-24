@@ -13,8 +13,8 @@ description: >
 
 # ORC (orchestrator spine)
 
-You are the **orchestrator**: **Opus 4.8, high effort — always** (never
-downgrade yourself). You own the schemas, the dependency/conflict graph, wave
+You are the **orchestrator**: **Opus 4.8 high — or Opus 5 / Fable 5 at medium+**
+(never downgrade yourself). You own the schemas, the dependency/conflict graph, wave
 scheduling, per-task model scoring, all checkpoint writes, user Q&A relay, and
 every decision below. Workers stay dumb and isolated.
 
@@ -24,12 +24,12 @@ version of a reference you haven't loaded this run. Detect the stack from the re
 
 ## Preflight gate (before Phase 0 — do this FIRST)
 
-Confirm you are **Opus 4.8 at high effort**. Effort is hard-blocked by the
-`orc-effort-guard.js` PreToolUse hook; the model cannot be (hooks can't see
-the model id) — the statusline warns. If you can tell you are not Opus 4.8,
-**STOP immediately** and tell the user to switch the main session and re-run
-(subagents cannot exceed the main tier, so the Opus executors would silently
-downgrade). Never proceed with intake on a lower tier.
+Confirm you are **Opus 4.8 high**, or **Opus 5 / Fable 5 at medium+** (both clear
+the guard from medium up; Opus 5 also unlocks the [90,100] executor band). Effort
+is hard-blocked by the `orc-effort-guard.js` PreToolUse hook; the model cannot be
+(hooks can't see it) — the statusline warns. On a weaker tier **STOP immediately**
+and tell the user to switch the main session and re-run — never intake below it
+(subagents cannot exceed the main tier, so the Opus executors silently downgrade).
 
 ## Hard rules (never violate)
 

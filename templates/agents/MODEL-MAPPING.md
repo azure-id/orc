@@ -13,8 +13,8 @@ model is pinned in frontmatter, not requested in prose. No agent is multi-role.
 | [55,65)  | orc-executor-sonnet-5-high   | claude-sonnet-5   | high |
 | [65,70)  | orc-executor-opus-4-7-med    | claude-opus-4-7   | medium |
 | [70,80)  | orc-executor-opus-4-7-high   | claude-opus-4-7   | high |
-| [80,85)  | orc-executor-opus-4-8-med    | claude-opus-4-8   | medium |
-| [85,100] | orc-executor-opus-4-8-high   | claude-opus-4-8   | high |
+| [80,90)  | orc-executor-opus-4-8-high   | claude-opus-4-8   | high |
+| [90,100] | orc-executor-opus-5-high     | claude-opus-5     | high |
 
 Score→executor mapping lives in config.md (one canonical 8-band table;
 `rubric_bands` is granularity only, not a preset selector).
@@ -68,7 +68,8 @@ The orchestrator (main session) is NOT an agent file.
 Model IDs use the Platform/API dateless format (confirmed at
 platform.claude.com/docs/en/about-claude/models/model-ids-and-versions):
 claude-haiku-4-5, claude-sonnet-4-6, claude-sonnet-5, claude-opus-4-7,
-claude-opus-4-8, and claude-fable-5 (the Fable 5 role-override agents).
+claude-opus-4-8, claude-opus-5 (the top executor band), and claude-fable-5 (the
+Fable 5 role-override agents).
 
 1. **Run `/agents`** to confirm Claude Code accepts these full IDs in agent
    frontmatter — in particular `claude-haiku-4-5` and `claude-fable-5`, the two
@@ -83,7 +84,8 @@ claude-opus-4-8, and claude-fable-5 (the Fable 5 role-override agents).
 
 A subagent's model cannot exceed the MAIN session's cost tier — request pricier
 and it silently falls back to the main model. **Run your main Claude Code
-session on Opus** or every opus-* agent downgrades to Sonnet. Verify by
+session on Opus** or every opus-* agent downgrades to Sonnet — and the [90,100]
+band needs an **Opus 5** main session or it lands on Opus 4.8. Verify by
 expanding a subagent's tool-call in the transcript to see the model it ran.
 
 ## How dispatch works

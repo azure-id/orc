@@ -5,8 +5,9 @@
  * ORC effort guard — a Claude Code PreToolUse hook.
  *
  * Blocks invocation of the full `orc` orchestrator skill unless the MAIN
- * session is running at HIGH reasoning effort. This is the one half of the
- * "run ORC on Opus 4.8 high" rule that hooks can enforce deterministically:
+ * session is running at HIGH reasoning effort (Opus 5 / Fable 5 clear at
+ * medium+ — see the session-model bridge below). This is the one half of the
+ * "run ORC on Opus 4.8 high or better" rule hooks can enforce deterministically:
  * Claude Code exposes `effort.level` (and $CLAUDE_EFFORT) to PreToolUse, but
  * NOT the model id (only SessionStart may see the model, and cannot block).
  * The model tier is surfaced separately by the statusline warning + the
@@ -46,8 +47,9 @@ const effortsAtOrAbove = (e) => {
 };
 
 // Session-model bridge (written by orc-statusline.js). The guard can't see the
-// model id itself, so it reads it here to grant Fable 5's medium-effort
-// allowance. Fail-OPEN: missing / unreadable / stale → null, and the guard
+// model id itself, so it reads it here to grant the medium-effort allowance of
+// the models that are strictly stronger than the Opus 4.8 baseline (Opus 5 and
+// Fable 5). Fail-OPEN: missing / unreadable / stale → null, and the guard
 // behaves exactly as it would without a bridge (never blocks on our own error).
 // Stale = older than this window; a live session re-renders the statusline far
 // more often, so a fresh file always exists during active use.
@@ -65,7 +67,11 @@ function readSessionModel(projectDir) {
     return null;
   }
 }
-const isFable5Model = (id) => /fable[\s._-]?5\b/.test(String(id || "").toLowerCase());
+// Models that clear /orc at medium effort — strictly stronger than the Opus 4.8
+// baseline, so medium on them beats high on it. Opus 5 (v0.34.0) joins Fable 5.
+// The `\b` after the 5 keeps 4.8 / 4.7 / 5-something-else correctly gated.
+const isMediumOkModel = (id) =>
+  /(opus|fable)[\s._-]?5\b/.test(String(id || "").toLowerCase());
 
 let raw = "";
 process.stdin.on("data", (c) => (raw += c));
@@ -96,12 +102,13 @@ process.stdin.on("end", () => {
   const projectDir = data.cwd || process.cwd();
 
   // Baseline /orc: the session must be at high effort OR stronger (xhigh/max).
-  // Fable 5 additionally clears at medium — a strictly-capable model — detected
-  // through the session-model bridge (the guard can't see the model id itself;
-  // fail-open when the bridge is missing/stale, i.e. medium stays blocked).
+  // Opus 5 and Fable 5 additionally clear at medium — strictly-capable models —
+  // detected through the session-model bridge (the guard can't see the model id
+  // itself; fail-open when the bridge is missing/stale, i.e. medium stays blocked).
   let requiredEfforts = effortsAtOrAbove("high");
-  let requiredLabel = "Opus 4.8 at high effort (Fable 5 also clears at medium+)";
-  if (!isDiy && isFable5Model(readSessionModel(projectDir))) {
+  let requiredLabel =
+    "Opus 4.8 at high effort (Opus 5 / Fable 5 also clear at medium+)";
+  if (!isDiy && isMediumOkModel(readSessionModel(projectDir))) {
     requiredEfforts = ["medium", ...requiredEfforts];
   }
 

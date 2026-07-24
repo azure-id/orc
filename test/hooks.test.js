@@ -370,7 +370,7 @@ test("effort-guard: xhigh and max clear the /orc baseline (exit 0)", () => {
   }
 });
 
-test("effort-guard: medium /orc blocked without bridge, allowed with a fresh Fable 5 bridge", () => {
+test("effort-guard: medium /orc blocked without bridge, allowed with a fresh Fable 5 / Opus 5 bridge", () => {
   const { root, claudeDir } = freshInstall();
   try {
     const payload = {
@@ -388,6 +388,14 @@ test("effort-guard: medium /orc blocked without bridge, allowed with a fresh Fab
     fs.writeFileSync(bridge, JSON.stringify({ model_id: "claude-fable-5", effort: "medium", written_at: Date.now() }));
     assert.strictEqual(runHook(claudeDir, "orc-effort-guard.js", payload).status, 0, "fable-5 medium clears with a fresh bridge");
 
+    // Fresh Opus 5 bridge → medium clears too (v0.34.0).
+    fs.writeFileSync(bridge, JSON.stringify({ model_id: "claude-opus-5", effort: "medium", written_at: Date.now() }));
+    assert.strictEqual(runHook(claudeDir, "orc-effort-guard.js", payload).status, 0, "opus-5 medium clears with a fresh bridge");
+
+    // Opus 4.8 is NOT in the allowance — medium stays blocked on the baseline model.
+    fs.writeFileSync(bridge, JSON.stringify({ model_id: "claude-opus-4-8", effort: "medium", written_at: Date.now() }));
+    assert.strictEqual(runHook(claudeDir, "orc-effort-guard.js", payload).status, 2, "opus-4.8 medium is still blocked");
+
     // Stale bridge (old written_at) → treated as absent → blocked again.
     fs.writeFileSync(bridge, JSON.stringify({ model_id: "claude-fable-5", effort: "medium", written_at: Date.now() - 60 * 60 * 1000 }));
     assert.strictEqual(runHook(claudeDir, "orc-effort-guard.js", payload).status, 2, "a stale bridge never unblocks");
@@ -396,7 +404,7 @@ test("effort-guard: medium /orc blocked without bridge, allowed with a fresh Fab
   }
 });
 
-test("statusline: verdict matrix — boosted for opus-4.8 xhigh/max and fable-5 medium+, degrade for fable-5 low", () => {
+test("statusline: verdict matrix — boosted for opus-4.8 xhigh/max and opus-5/fable-5 medium+, degrade below", () => {
   const { root, claudeDir } = freshInstall();
   const render = (model, effort) =>
     runHook(claudeDir, "orc-statusline.js", {
@@ -411,7 +419,11 @@ test("statusline: verdict matrix — boosted for opus-4.8 xhigh/max and fable-5 
     assert.match(render("claude-fable-5", "medium"), /ORC-boosted/, "fable-5/medium = boosted");
     assert.match(render("claude-fable-5", "max"), /ORC-boosted/, "fable-5/max = boosted");
     assert.match(render("claude-fable-5", "low"), /DEGRADE/, "fable-5/low = degrade");
+    assert.match(render("claude-opus-5", "medium"), /ORC-boosted/, "opus-5/medium = boosted");
+    assert.match(render("claude-opus-5", "max"), /ORC-boosted/, "opus-5/max = boosted");
+    assert.match(render("claude-opus-5", "low"), /DEGRADE/, "opus-5/low = degrade");
     assert.match(render("claude-sonnet-5", "high"), /DEGRADE/, "sonnet-5/high = degrade");
+    assert.match(render("claude-opus-4-7", "high"), /DEGRADE/, "opus-4.7 never reads as opus-5");
   } finally {
     rmrf(root);
   }

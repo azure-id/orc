@@ -26,8 +26,8 @@ const OUT_DIR = path.join(ROOT, "templates", "agents");
 // together). `effort: null` = a model with NO effort ladder (haiku): the
 // generator omits the `effort:` frontmatter line entirely.
 const VARIANTS = [
-  { name: "orc-executor-opus-4-8-high",  model: "claude-opus-4-8",  effort: "high",   band: "highest-complexity [85,100]" },
-  { name: "orc-executor-opus-4-8-med",   model: "claude-opus-4-8",  effort: "medium", band: "very-high-complexity [80,85)" },
+  { name: "orc-executor-opus-5-high",    model: "claude-opus-5",    effort: "high",   band: "highest-complexity [90,100]" },
+  { name: "orc-executor-opus-4-8-high",  model: "claude-opus-4-8",  effort: "high",   band: "very-high-complexity [80,90)" },
   { name: "orc-executor-opus-4-7-high",  model: "claude-opus-4-7",  effort: "high",   band: "high-complexity [70,80)" },
   { name: "orc-executor-opus-4-7-med",   model: "claude-opus-4-7",  effort: "medium", band: "upper-mid-complexity [65,70)" },
   { name: "orc-executor-sonnet-5-high",  model: "claude-sonnet-5",  effort: "high",   band: "mid-complexity [55,65)" },
