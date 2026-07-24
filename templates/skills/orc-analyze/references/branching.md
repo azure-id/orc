@@ -25,7 +25,7 @@ Ask: "Is this related context (same scope, so it can be combined)?"
 ## After the 2nd+ analysis (2+ analyses exist)
 1. **Stop here** → COPY every report OUT and stop.
 2. **Pass to context-combiner** → the orchestrator dispatches
-   `orc-context-combiner-opus-4-8-high` with the list of confirmed spec paths for
+   `orc-context-combiner-opus-5-high` with the list of confirmed spec paths for
    all RELATED analyses this run. It verifies relatedness, resolves conflicts with
    the user, proves conservation (a source coverage matrix — every source
    requirement accounted for, `coverage_pct` must be 100), and writes

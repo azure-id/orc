@@ -216,15 +216,15 @@ test("trace: PHASE-EDGE on a role change, suppressed within a role and for the w
         tool_name: "Agent",
         tool_input: { subagent_type: agent, description: "d" },
       });
-    spawn("orc-planner-opus-4-8-med");
+    spawn("orc-planner-opus-5-med");
     spawn("orc-trace-writer-haiku-4-5"); // narration — never an edge
     spawn("orc-executor-sonnet-5-high");
     spawn("orc-executor-haiku-4-5"); // same family — no second edge
-    spawn("orc-reviewer-opus-4-8-high");
+    spawn("orc-reviewer-opus-5-med");
     const { texts } = traceFiles(claudeDir);
-    assert.match(texts, /PHASE-EDGE planning :: first=orc-planner-opus-4-8-med/);
+    assert.match(texts, /PHASE-EDGE planning :: first=orc-planner-opus-5-med/);
     assert.match(texts, /PHASE-EDGE execution :: first=orc-executor-sonnet-5-high/);
-    assert.match(texts, /PHASE-EDGE review :: first=orc-reviewer-opus-4-8-high/);
+    assert.match(texts, /PHASE-EDGE review :: first=orc-reviewer-opus-5-med/);
     assert.doesNotMatch(texts, /PHASE-EDGE \S+ :: first=orc-trace-writer/, "the writer never opens a phase");
     assert.strictEqual((texts.match(/PHASE-EDGE execution/g) || []).length, 1, "same-family spawns emit one edge");
     assert.strictEqual((texts.match(/PHASE-EDGE /g) || []).length, 3, "exactly one edge per role change");
@@ -239,7 +239,7 @@ test("trace: after the writer's rename repair, the hook appends to the rich file
     runHook(claudeDir, "orc-trace.js", {
       hook_event_name: "PreToolUse",
       tool_name: "Agent",
-      tool_input: { subagent_type: "orc-planner-opus-4-8-med", description: "plan it" },
+      tool_input: { subagent_type: "orc-planner-opus-5-med", description: "plan it" },
     });
     const dir = path.join(claudeDir, "orc", "logs");
     const boot = fs.readFileSync(path.join(dir, ".current"), "utf8").trim();
@@ -262,7 +262,7 @@ test("trace: after the writer's rename repair, the hook appends to the rich file
     });
     assert.ok(!fs.existsSync(path.join(dir, boot)), "no orphan bootstrap file left behind");
     const text = fs.readFileSync(path.join(dir, rich), "utf8");
-    assert.match(text, /SPAWN orc-planner-opus-4-8-med/, "pre-rename lines survive");
+    assert.match(text, /SPAWN orc-planner-opus-5-med/, "pre-rename lines survive");
     assert.match(text, /SPAWN orc-executor-sonnet-5-high/, "post-rename SPAWN lands in the rich file");
     assert.match(text, /RETURN orc-executor-sonnet-5-high :: build it/, "attribution survives the rename");
   } finally {

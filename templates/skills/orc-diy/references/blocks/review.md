@@ -7,7 +7,7 @@ skipped by flow config") — never imply the work was reviewed.
 <!-- diy:when review=on -->
 Dispatch the reviewer exactly as the full lane does — follow the review half
 of `.claude/skills/orc/subskills/orc-review-verify/SKILL.md` (reviewer agent
-`orc-reviewer-opus-4-8-high`; findings ride the severity ladder from the
+`orc-reviewer-opus-5-med`; findings ride the severity ladder from the
 locked rules, blocking and advisory findings both surfaced).
 <!-- /diy:when -->
 <!-- diy:when review=blocking-only -->

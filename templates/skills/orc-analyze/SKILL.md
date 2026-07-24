@@ -17,7 +17,7 @@ description: >
 # ORC-ANALYZE (System Analyst)
 
 The orchestrator stays on top and **dispatches a System Analyst subagent
-(Opus 4.8, high)** to do this work — it never analyzes itself, keeping its own
+(Opus 5, high)** to do this work — it never analyzes itself, keeping its own
 context lean. This skill defines what that subagent does, how the orchestrator
 runs the standard/deep gate + scout dispatch, and how it relays challenges and
 branches on the result.
@@ -33,7 +33,7 @@ the user meant.
 ## Hard rules
 
 1. **Dispatched, not self-run.** The orchestrator coordinates; the Analyst
-   subagent (Opus 4.8 high) reads the source, reads the code, and reconciles.
+   subagent (Opus 5 high) reads the source, reads the code, and reconciles.
 2. **Evidence-or-mark (never hallucinate) — quote-anchored.** Every
    requirement interpretation and code claim carries `file:line — "verbatim
    snippet"` evidence (≤1 line, quoted not paraphrased; no quote →

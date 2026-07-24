@@ -23,19 +23,20 @@ Score→executor mapping lives in config.md (one canonical 8-band table;
 
 | Agent | Model | Effort | Role |
 |-------|-------|--------|------|
-| orc-system-analyst-opus-4-8-high | claude-opus-4-8 | high | doc analysis |
-| orc-planner-opus-4-8-med | claude-opus-4-8 | medium | planning |
-| orc-reviewer-opus-4-8-high | claude-opus-4-8 | high | review |
-| orc-verifier-opus-4-8-high | claude-opus-4-8 | high | verify (+ /orc-verify) |
-| orc-test-author-opus-4-8-high | claude-opus-4-8 | high | test authoring (opt-in Phase 6.5; writes tests, never runs) |
+| orc-system-analyst-opus-5-high | claude-opus-5 | high | doc analysis |
+| orc-planner-opus-5-med | claude-opus-5 | medium | planning |
+| orc-reviewer-opus-5-med | claude-opus-5 | medium | review |
+| orc-verifier-opus-5-med | claude-opus-5 | medium | verify (+ /orc-verify) |
+| orc-test-author-opus-5-med | claude-opus-5 | medium | test authoring (opt-in Phase 6.5; writes tests, never runs) |
 | orc-analyze-mini-sonnet-5-high | claude-sonnet-5 | high | mini analysis |
 | orc-planner-mini-sonnet-5-high | claude-sonnet-5 | high | mini planning |
 | orc-scout-sonnet-4-6-high | claude-sonnet-4-6 | high | deep-analysis code scout (read-only) |
-| orc-context-combiner-opus-4-8-high | claude-opus-4-8 | high | combine 2+ related analyses (full lane) |
+| orc-context-combiner-opus-5-high | claude-opus-5 | high | combine 2+ related analyses (full lane) |
 | orc-pattern-codifier-sonnet-5-high | claude-sonnet-5 | high | reconcile per-language playbook vs. project files → cached code-pattern (opt-in) |
 | orc-retro-sonnet-5-high | claude-sonnet-5 | high | mine behavior traces → calibration report (/orc-retro; read-only) |
-| orc-advisor-opus-4-8-max | claude-opus-4-8 | max | ultra Phase U0 advisory brief + rubric + clarification questions (read-only; /orc-ultra only) |
-| orc-judge-opus-4-8-max | claude-opus-4-8 | max | ultra judgment gates — analysis / plan / implementation (read-only; /orc-ultra only) |
+| orc-advisor-opus-5-xhigh | claude-opus-5 | xhigh | ultra Phase U0 advisory brief + rubric + clarification questions (read-only; /orc-ultra only) |
+| orc-judge-opus-5-xhigh | claude-opus-5 | xhigh | ultra judgment gates — analysis / plan / implementation (read-only; /orc-ultra only) |
+| orc-learn-writer-opus-5-low | claude-opus-5 | low | deepen ONE feature → learning-docs/<slug>/ (/orc-learn only; git-ignored output) |
 | orc-claude-writer-opus-4-8-high | claude-opus-4-8 | high | scan repo → write/refresh the local CLAUDE.md (/orc-claude only; zero questions) |
 | orc-trace-writer-haiku-4-5 | claude-haiku-4-5 | — (no ladder) | append one phase block of behavior-trace narration from an orchestrator packet (every trace-owning lane; append-only, never reads source) |
 
@@ -47,11 +48,11 @@ replaces its default role agent with the same slice/contract. Effort defaults to
 
 | Agent | Model | Effort | Replaces |
 |-------|-------|--------|----------|
-| orc-analyst-fable-5 | claude-fable-5 | fable5_effort | orc-system-analyst-opus-4-8-high |
-| orc-planner-fable-5 | claude-fable-5 | fable5_effort | orc-planner-opus-4-8-med |
-| orc-advisor-fable-5 | claude-fable-5 | fable5_effort | orc-advisor-opus-4-8-max (ultra) |
-| orc-judge-fable-5 | claude-fable-5 | fable5_effort | orc-judge-opus-4-8-max (ultra) |
-| orc-reviewer-fable-5 | claude-fable-5 | fable5_effort | orc-reviewer-opus-4-8-high |
+| orc-analyst-fable-5 | claude-fable-5 | fable5_effort | orc-system-analyst-opus-5-high |
+| orc-planner-fable-5 | claude-fable-5 | fable5_effort | orc-planner-opus-5-med |
+| orc-advisor-fable-5 | claude-fable-5 | fable5_effort | orc-advisor-opus-5-xhigh (ultra) |
+| orc-judge-fable-5 | claude-fable-5 | fable5_effort | orc-judge-opus-5-xhigh (ultra) |
+| orc-reviewer-fable-5 | claude-fable-5 | fable5_effort | orc-reviewer-opus-5-med |
 
 Mini execution reuses orc-executor-sonnet-5-high. Fast-lane (orc-fast)
 execution reuses orc-executor-sonnet-4-6-high — no dedicated agent.
@@ -68,8 +69,8 @@ The orchestrator (main session) is NOT an agent file.
 Model IDs use the Platform/API dateless format (confirmed at
 platform.claude.com/docs/en/about-claude/models/model-ids-and-versions):
 claude-haiku-4-5, claude-sonnet-4-6, claude-sonnet-5, claude-opus-4-7,
-claude-opus-4-8, claude-opus-5 (the top executor band), and claude-fable-5 (the
-Fable 5 role-override agents).
+claude-opus-4-8, claude-opus-5 (the top executor band + the core fixed roles),
+and claude-fable-5 (the Fable 5 role-override agents).
 
 1. **Run `/agents`** to confirm Claude Code accepts these full IDs in agent
    frontmatter — in particular `claude-haiku-4-5` and `claude-fable-5`, the two
@@ -84,8 +85,10 @@ Fable 5 role-override agents).
 
 A subagent's model cannot exceed the MAIN session's cost tier — request pricier
 and it silently falls back to the main model. **Run your main Claude Code
-session on Opus** or every opus-* agent downgrades to Sonnet — and the [90,100]
-band needs an **Opus 5** main session or it lands on Opus 4.8. Verify by
+session on Opus** or every opus-* agent downgrades to Sonnet. As of v0.34.0 the
+[90,100] executor band AND every core fixed role (analyst, planner, reviewer,
+verifier, test author, combiner, learn writer, ultra advisor/judge) are pinned
+to **claude-opus-5** — on an Opus 4.8 session they all land on Opus 4.8. Verify by
 expanding a subagent's tool-call in the transcript to see the model it ran.
 
 ## How dispatch works

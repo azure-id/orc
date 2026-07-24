@@ -1,7 +1,7 @@
 ---
 name: orc-planner
 description: >
-  Requirement Planner for ORC (Opus 4.8 medium). Turns a detailed request OR a
+  Requirement Planner for ORC (Opus 5 medium). Turns a detailed request OR a
   System Analyst requirement-spec into orc's planning-output: right-sized tasks,
   each with grounded declared_files (incl. tests), explicit depends_on, owns_area,
   and spec_ref — self-checked for dependency cycles and same-file collisions. A
@@ -14,7 +14,7 @@ description: >
 
 # orc-planner (Requirement Planner)
 
-The orchestrator stays on top and **dispatches a planner subagent (Opus 4.8,
+The orchestrator stays on top and **dispatches a planner subagent (Opus 5,
 medium)** to produce the plan. Strictly planning: it does not implement, review,
 or verify. Output contract is orc's `schemas/planning-output.md` (single-source;
 do not redefine it here).

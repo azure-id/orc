@@ -1,16 +1,16 @@
 ---
-name: orc-verifier-opus-4-8-high
+name: orc-verifier-opus-5-med
 description: >
-  ORC Verifier — claude-opus-4-8, high effort. Single-role: verification against
+  ORC Verifier — claude-opus-5, medium effort. Single-role: verification against
   the definition-of-done. Runs build + tests, checks each acceptance criterion,
   reports pass/fail. Dispatched by the orchestrator in Phase 6. Also the engine
   behind standalone /orc-verify (git-diff verification).
-model: claude-opus-4-8
-effort: high
+model: claude-opus-5
+effort: medium
 tools: Read, Write, Edit, Bash, Glob, Grep
 ---
 
-You are the ORC Verifier (Opus 4.8, high). You verify; you do NOT fix — the
+You are the ORC Verifier (Opus 5, medium). You verify; you do NOT fix — the
 orchestrator owns the auto-fix-once loop.
 
 ## Input

@@ -5,7 +5,7 @@
 U: /orc-learn
 C: Repo root found. Reads wiki/INDEX.md + the wiki manifest → tier FRESH.
    Presents the wiki's feature areas; user picks "orders". Slug: `orders`.
-   Spawns orc-learn-writer-opus-4-8-high with mode=init, covers from the
+   Spawns orc-learn-writer-opus-5-low with mode=init, covers from the
    orders doc's globs (the skill never writes the docs itself).
 W: Reads the orders wiki doc for boundary + contracts, re-verifies against
    code. Deepens: maps 14 functions (file:line), traces one real flow —
@@ -17,8 +17,8 @@ W: Writes learning-docs/orders/knowledge.md (fingerprint header:
    commands from the wiki manifest's `commands`) and learning.md (mental
    model, walkthrough of the SAME flow, 3 change recipes, gotchas, FAQ ×6).
    Derives learning-docs/INDEX.md. Returns functions_mapped=14,
-   flow_traced=true, faq_count=6, actual_model=claude-opus-4-8,
-   actual_effort=high.
+   flow_traced=true, faq_count=6, actual_model=claude-opus-5,
+   actual_effort=low.
 C: Relays the report. `learning-docs/` not in .gitignore → offers the line;
    user accepts → appended.
 
@@ -48,10 +48,10 @@ them (`SPAWN`/`RETURN` come from the `orc-trace.js` hook as they occur):
 
 ```
 [170726 10:02:01.050] writer   WIKI-CONSULT tier=FRESH :: topic-pick
-[170726 10:02:44.310] writer   DISPATCH orc-learn-writer :: init orders expect=opus-4-8/high
-[170726 10:02:44.420] hook     SPAWN orc-learn-writer-opus-4-8-high
+[170726 10:02:44.310] writer   DISPATCH orc-learn-writer :: init orders expect=opus-5/low
+[170726 10:02:44.420] hook     SPAWN orc-learn-writer-opus-5-low
 [170726 10:06:12.900] hook     RETURN
-[170726 10:06:13.010] writer   VERIFY writer actual=claude-opus-4-8/high ✅ MATCH
+[170726 10:06:13.010] writer   VERIFY writer actual=claude-opus-5/low ✅ MATCH
 [170726 10:06:13.120] writer   FINISH :: init orders
 ```
 

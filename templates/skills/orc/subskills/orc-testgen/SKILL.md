@@ -36,7 +36,7 @@ actually exists on disk **at the pinned path** (test files in the project's
 conventions; TEST-PLAN.md and — when the stack exposes HTTP — test-cases.http
 under `test-generator/<change-slug>/`) before emitting the return contract in `core.md`.
 
-Fixed model: `orc-test-author-opus-4-8-high` (Opus 4.8 high — authoring good
+Fixed model: `orc-test-author-opus-5-med` (Opus 5 medium — authoring good
 integration tests is a judgment task). Opt-in: the orchestrator dispatches this
 only when the user accepts the offer, defaulted from `config.generate_tests`. The
 full lane runs it as Phase 6.5 (after Verify, confirmed at intake); **orc-mini

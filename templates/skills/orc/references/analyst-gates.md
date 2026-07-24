@@ -37,7 +37,7 @@ analyses from the same run into ONE combined requirement-spec before build.
   this run in run state (survives checkpoint/resume).
 - When the user picks "pass to context-combiner" at orc-analyze's Phase F
   branch menu (offered only once 2+ analyses exist), dispatch
-  `orc-context-combiner-opus-4-8-high` with that list.
+  `orc-context-combiner-opus-5-high` with that list.
 - The return carries `combined_spec_path` + `coverage_pct` (conservation
   proof — every source requirement accounted for; must be 100) + `dropped[]` +
   `stale_evidence[]` + `handoff_ready` — or `combined: false` if the user chose

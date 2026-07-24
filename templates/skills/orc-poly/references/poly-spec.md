@@ -75,7 +75,7 @@ Rules:
 
 ## How the planner consumes it (P5)
 
-The shared planner (`orc-planner-opus-4-8-med`), on seeing `orc-poly:spec`,
+The shared planner (`orc-planner-opus-5-med`), on seeing `orc-poly:spec`,
 produces **one planning-output per `repos[]` entry**, each scoped to that
 repo's `in_scope[]` and each embedding the frozen `interface-contract.md`
 verbatim so the later per-repo `/orc` build cannot drift from the boundary. The

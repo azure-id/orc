@@ -8,7 +8,7 @@ description: >
   dependency cycles, same-file collisions, and requirement coverage. Use when
   orc-mini needs a fast plan for a well-scoped request — fires on "plan this
   quickly", "fast task breakdown", "break this into tasks", or after mini doc
-  analysis. Distinct from the full orc-planner (Opus 4.8 medium — pick that one
+  analysis. Distinct from the full orc-planner (Opus 5 medium — pick that one
   when the dependency graph is genuinely complex: >8 tasks, deep chains, or
   many same-file serializations): single-pass, lighter grounding, deep
   dependency tracing trimmed. The orchestrator dispatches this to a subagent —

@@ -1111,8 +1111,10 @@ function diyValidate(cfg) {
   if (cfg.autonomy === "hands-off" && (cfg.ship_mode === "commit" || cfg.ship_mode === "pr")) {
     warnings.push(`hands-off + ship_mode ${cfg.ship_mode}: git actions will run fully unattended`);
   }
-  if (tier && tier.model < 5 && (cfg.review !== "off" || cfg.verify !== "off")) {
-    warnings.push(`session_tier ${cfg.session_tier}: the pinned Opus 4.8 reviewer/verifier agents will silently run at the session's model (tier-honesty rule reports it)`);
+  // The pinned reviewer/verifier moved to claude-opus-5 (model rank 6) in
+  // v0.34.0 — anything below that tier silently runs them at the session model.
+  if (tier && tier.model < 6 && (cfg.review !== "off" || cfg.verify !== "off")) {
+    warnings.push(`session_tier ${cfg.session_tier}: the pinned Opus 5 reviewer/verifier agents will silently run at the session's model (tier-honesty rule reports it)`);
   }
   return { errors, warnings };
 }

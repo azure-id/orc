@@ -6,7 +6,7 @@ the ultra deltas. Ultra exists ONLY here — never in orc-mini, never on a plain
 `/orc` run.
 
 Cost stance: ultra is costly by definition. State it once at intake
-("ultra adds an Opus 4.8 max advisor + up to 3 judge dispatches + revision
+("ultra adds an Opus 5 xhigh advisor + up to 3 judge dispatches + revision
 loops"), then never prompt about cost again.
 
 ## Forced overrides (run-scoped — NEVER written to the user's config file)
@@ -23,12 +23,12 @@ Apply at Phase 0, on top of the normal config resolution:
 
 > Fable 5 role override: if `fable5_enabled` and `advisor` / `judge` are in
 > `fable5_roles`, dispatch the `orc-advisor-fable-5` / `orc-judge-fable-5`
-> variant instead of the Opus 4.8 max default — same slice, same contract. See
+> variant instead of the Opus 5 xhigh default — same slice, same contract. See
 > `../../_shared/fable5-override.md`.
 
 ## Phase U0 — Advisor (after intake sign-off, before the analyst)
 
-Dispatch `orc-advisor-opus-4-8-max` (see `../../orc-advisor/SKILL.md`) with
+Dispatch `orc-advisor-opus-5-xhigh` (see `../../orc-advisor/SKILL.md`) with
 the request, the run-folder path, and the detected stack. Validate the return
 (`brief_path`, `open_questions[]`, `assumptions[]`, actual model/effort
 fields). Then:
@@ -49,7 +49,7 @@ packet — ultra adds ONE writer packet for U0 and one per judge gate on top of
 orc's phase packets (`../references/trace-protocol.md`), so the advisory brief,
 the questions relayed, and each verdict round are narrated like any other phase.
 
-## The three judgment gates (dispatch `orc-judge-opus-4-8-max`)
+## The three judgment gates (dispatch `orc-judge-opus-5-xhigh`)
 
 Shared mechanics — verdict validation, blocking-finding downgrade enforcement,
 REVISE loops (author echo `finding_id → resolution`, re-judge convergence

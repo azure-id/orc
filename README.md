@@ -48,20 +48,46 @@ zero-dependency npm package installs those files into your `.claude/` directory.
 
 **Latest: v0.34.0 — updated 2026-07-25.**
 
-### v0.34.0 — Opus 5: top scoring band + medium-effort session tier _(2026-07-25)_
+### v0.34.0 — Opus 5: top scoring band, every core role, medium-effort session tier _(2026-07-25)_
 
-ORC now knows about **Claude Opus 5**, on both halves of the tier system.
-**Scoring:** the canonical 8-band score→model table gets a new ceiling — `[90,100]`
-dispatches the new `orc-executor-opus-5-high` (claude-opus-5, high effort) and
-`[80,90)` is now a single Opus 4.8 **high** band (the old `[80,85)` Opus 4.8
-medium executor is gone; `orc update` prunes it). **Session tier:** Opus 5 joins
-Fable 5 in the medium-effort allowance — the `orc-effort-guard.js` PreToolUse
-hook clears `/orc` from **medium up** on Opus 5 (read through the statusline's
-session-model bridge), and the statusline reads Opus 5 medium…max as
-`🚀 ORC-boosted` instead of a degraded tier. The DIY tier grid gains
-`opus-5-med|high|xhigh|max`, and the compile-time band clip is unchanged: on an
-Opus 4.8 session the top band honestly collapses to Opus 4.8 high, because a
-subagent can never outrank the main session.
+**Claude Opus 5 lands across all three halves of the tier system.**
+
+**Scoring.** The canonical 8-band score→model table gets a new ceiling —
+`[90,100]` dispatches the new `orc-executor-opus-5-high` (claude-opus-5, high
+effort) and `[80,90)` is now a single Opus 4.8 **high** band (the old `[80,85)`
+Opus 4.8 medium executor is gone; `orc update` prunes it).
+
+**Role agents.** Every core fixed role is re-pinned to `claude-opus-5`, each at
+the effort its job actually needs — and the agent files are renamed to match,
+because ORC derives the expected model from the agent NAME:
+
+| Role | Was | Now |
+|------|-----|-----|
+| System Analyst | `orc-system-analyst-opus-4-8-high` | `orc-system-analyst-opus-5-high` |
+| Requirement Planner | `orc-planner-opus-4-8-med` | `orc-planner-opus-5-med` |
+| Reviewer | `orc-reviewer-opus-4-8-high` | `orc-reviewer-opus-5-med` |
+| Verifier | `orc-verifier-opus-4-8-high` | `orc-verifier-opus-5-med` |
+| Test Author | `orc-test-author-opus-4-8-high` | `orc-test-author-opus-5-med` |
+| Context Combiner | `orc-context-combiner-opus-4-8-high` | `orc-context-combiner-opus-5-high` |
+| Learning-Docs Writer | `orc-learn-writer-opus-4-8-high` | `orc-learn-writer-opus-5-low` |
+| Ultra Advisor | `orc-advisor-opus-4-8-max` | `orc-advisor-opus-5-xhigh` |
+| Ultra Judge | `orc-judge-opus-4-8-max` | `orc-judge-opus-5-xhigh` |
+
+Unchanged: the mini agents (Sonnet 5 high), the scout (Sonnet 4.6 high), the
+pattern codifier and retro miner (Sonnet 5 high), the trace writer (Haiku 4.5),
+and the CLAUDE.md writer (Opus 4.8 high). `orc update` prunes the old filenames
+through the install manifest.
+
+**Session tier.** Opus 5 joins Fable 5 in the medium-effort allowance — the
+`orc-effort-guard.js` PreToolUse hook clears `/orc` from **medium up** on Opus 5
+(read through the statusline's session-model bridge), and the statusline reads
+Opus 5 medium…max as `🚀 ORC-boosted` instead of a degraded tier. The DIY tier
+grid gains `opus-5-med|high|xhigh|max`.
+
+**The cost-tier rule is now louder, on purpose.** A subagent can never outrank
+the main session, so on an Opus 4.8 session the Opus-5 roles and the `[90,100]`
+band quietly run at 4.8 — reported by the tier-honesty rule at runtime, and
+clipped deterministically at DIY compile time. **Run the main session on Opus 5.**
 
 <details>
 <summary><b>Previous versions</b> (click to expand)</summary>
@@ -222,9 +248,12 @@ orc --help
 1. Paste your team's PR template into `skills/orc/subskills/orc-pr/pr.md`.
 2. Add `.claude/skills/orc/run/` to your project `.gitignore`.
 3. **Run `/agents`** to confirm the agent model IDs your Claude Code accepts.
-4. **Run your main Claude Code session on Opus** — a subagent's model can't
-   exceed the main session's tier, so on a Sonnet session the Opus agents
-   silently downgrade (see `agents/MODEL-MAPPING.md`).
+4. **Run your main Claude Code session on Opus 5** — a subagent's model can't
+   exceed the main session's tier, and as of v0.34.0 every core role agent
+   (analyst, planner, reviewer, verifier, test author, combiner, ultra
+   advisor/judge) plus the top executor band is pinned to `claude-opus-5`. On an
+   Opus 4.8 session they all quietly run at 4.8; on Sonnet, at Sonnet (see
+   `agents/MODEL-MAPPING.md`).
 5. If a `/command` doesn't appear, your Claude Code may read commands from a
    different folder — move the files in `commands/` there.
 
@@ -283,7 +312,7 @@ needed. Either way, your `.claude/orc.config.yaml` overrides are left untouched.
 | Command | What it does |
 |---------|--------------|
 | **`/orc`** | The full orchestrator: intake → planning → per-task scoring → conflict-free parallel waves → review → verify → ship. Checkpoints eagerly; resumes in a fresh session at any pause. |
-| **`/orc-ultra`** | Maximum-rigor lane: the full pipeline plus an Opus 4.8 **max** advisor (brief + rubric + one clarification round) and three judgment gates (after analysis, planning, and verify). Deep analyze, pattern/testgen/security forced on, executor tier floor. Costly by design. |
+| **`/orc-ultra`** | Maximum-rigor lane: the full pipeline plus an Opus 5 **xhigh** advisor (brief + rubric + one clarification round) and three judgment gates (after analysis, planning, and verify). Deep analyze, pattern/testgen/security forced on, executor tier floor. Costly by design. |
 | **`/orc-mini`** | The fast path — see below. |
 | **`/orc-fast`** | Fastest lane — knowledge-gated: needs a fresh wiki + cached code-pattern, skips analyst/planner, one Sonnet 4.6 high executor + smoke gate. Falls back to `orc-mini` when a prerequisite is missing. See below. |
 | **`/orc-diy`** | **Your own lane** — runs the flow you composed with the `orc diy` CLI. Hard-gated: unconfigured/stale → offers plain `/orc`. Guide: [ORC-DIY README](templates/skills/orc-diy/README.md). |
@@ -385,7 +414,7 @@ options**. Opt into **deep analysis** for a wider sweep (parallel read-only
 scouts), verify-every-claim, and implementation options with trade-offs.
 
 **Multiple related docs → one build (context-combiner).** Once 2+ related
-analyses exist, a dispatched Opus 4.8 subagent merges them into one deduped,
+analyses exist, a dispatched Opus 5 high subagent merges them into one deduped,
 conflict-resolved spec: it verifies real overlap, pools all source requirements
 (never pairwise), splits partial overlaps rather than collapsing them, and a
 **conservation gate blocks handoff below 100% coverage** (dropping anything needs
@@ -471,8 +500,9 @@ read the behavior trace, where each `RETURN` now records the actual model.
 
 > [!IMPORTANT]
 > **The cost-tier rule:** a subagent's model cannot exceed the main session's
-> tier. Run your main session on Opus, or the Opus-tier agents fall back to
-> Sonnet. This is the most common cause of "it used the wrong model."
+> tier. Run your main session on Opus 5, or the Opus-5-pinned role agents and the
+> `[90,100]` executor band fall back to whatever the session runs. This is the
+> most common cause of "it used the wrong model."
 
 ### The tier guard (installed automatically)
 

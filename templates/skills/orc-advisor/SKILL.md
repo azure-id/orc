@@ -19,13 +19,13 @@ that frames the request against the REAL codebase and hands every downstream
 role — analyst, planner, judges, executors — the same request-specific brief.
 
 Ultra lane ONLY. There is no `/orc-advisor` command; the orchestrator
-dispatches `orc-advisor-opus-4-8-max` at Phase U0 of an `/orc-ultra` run.
+dispatches `orc-advisor-opus-5-xhigh` at Phase U0 of an `/orc-ultra` run.
 Cost is accepted by definition of the lane — no consent prompt.
 
 ## Hard rules
 
 1. **The orchestrator never advises — it spawns.** Dispatch
-   `orc-advisor-opus-4-8-max` with the slice below; the advisor writes the
+   `orc-advisor-opus-5-xhigh` with the slice below; the advisor writes the
    brief; the orchestrator relays and injects.
 2. **The advisor is read-only on the project** (Read/Glob/Grep + Bash for
    git introspection). It never edits code, never spawns subagents.

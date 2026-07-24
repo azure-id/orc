@@ -152,16 +152,16 @@ list of `{min, max, agent}` rows; the orchestrator uses it instead of the table.
 ## Fixed-role agents (not score-mapped)
 | Role | Agent |
 |------|-------|
-| System Analyst | orc-system-analyst-opus-4-8-high |
-| Requirement Planner | orc-planner-opus-4-8-med |
-| Reviewer | orc-reviewer-opus-4-8-high |
-| Verifier | orc-verifier-opus-4-8-high |
+| System Analyst | orc-system-analyst-opus-5-high |
+| Requirement Planner | orc-planner-opus-5-med |
+| Reviewer | orc-reviewer-opus-5-med |
+| Verifier | orc-verifier-opus-5-med |
 | Mini analyst | orc-analyze-mini-sonnet-5-high |
 | Mini planner | orc-planner-mini-sonnet-5-high |
 | Mini executor | orc-executor-sonnet-5-high (reused) |
 | Pattern codifier | orc-pattern-codifier-sonnet-5-high |
-| Ultra advisor (/orc-ultra only) | orc-advisor-opus-4-8-max |
-| Ultra judge (/orc-ultra only) | orc-judge-opus-4-8-max |
+| Ultra advisor (/orc-ultra only) | orc-advisor-opus-5-xhigh |
+| Ultra judge (/orc-ultra only) | orc-judge-opus-5-xhigh |
 
 **Fable 5 role override:** when `fable5_enabled: true`, each role in
 `fable5_roles` dispatches its `orc-<role>-fable-5` variant INSTEAD of the default
@@ -177,7 +177,7 @@ above (`analyze`→`orc-analyst-fable-5`, `plan`→`orc-planner-fable-5`,
   generate_tests false, pattern_findings ask, security_review off).
   Behavior-trace logging is not listed here — it is PERMANENT (always on).
 - `generate_tests` gates the opt-in Phase 6.5 (Test Authoring, default OFF). When
-  on, after Verify the orchestrator dispatches `orc-test-author-opus-4-8-high` to
+  on, after Verify the orchestrator dispatches `orc-test-author-opus-5-med` to
   WRITE test cases (automated files + `TEST-PLAN.md` + a curl bundle for HTTP
   APIs) — it never runs them; the user tests manually. The manual deliverables
   are pinned to a visible **`test-generator/<change-slug>/`** folder at the

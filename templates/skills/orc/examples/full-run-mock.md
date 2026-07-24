@@ -48,12 +48,12 @@ U: [next day, FRESH session, pastes block]
 O: [state-of-play → checkpoint → re-anchored] "Resuming: merchant notifications (in-app+digest+prefs). Still correct?" U: yes.
 ▶ W3: spawn T5+T6 (haiku-4-5) → done. All 6 complete.
 
-## Phase 5 — Review (spawned worker, Opus 4.8 high)
+## Phase 5 — Review (spawned worker, Opus 5 medium)
 O: Code pattern? U: none. Findings (P0–P3 ladder, each P0–P2 anchored file:line + verbatim quote):
    P1 T2 no pagination — services/notification_list.ts:88 — O spot-checks: Reads line 88, quote matches ✓ → asks user, U: fix it
    · P3 email_digest naming ×2 · 12 tests added. (An unanchored finding would be auto-P3 — never fixed unasked.)
 
-## Phase 6 — Verify (spawned worker, Opus 4.8 high; criteria = definition-of-done)
+## Phase 6 — Verify (spawned worker, Opus 5 medium; criteria = definition-of-done)
    criteria[] with per-line evidence: bell ✓ (test name) · both schedules ✗ (weekly cron missing = P0, unmet criterion, evidence: no cron entry in scheduler.ts) · prefs ✓ → FAILED → quote spot-check ✓ → P0 auto-fix (single attempt, no ask) → re-verify → PASSED. 14/14.
 
 ## Phase 7 — Summary

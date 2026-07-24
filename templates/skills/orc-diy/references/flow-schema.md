@@ -56,8 +56,8 @@ Warnings (written, reported):
   tests are authored but never gate the ship).
 - `autonomy: hands-off` with `ship_mode: commit` or `pr` (fully unattended
   git actions).
-- `session_tier` below `opus-4-8-high` with `review`/`verify` on: the pinned
-  Opus reviewer/verifier agents will silently run at the session's model —
+- `session_tier` below `opus-5-med` with `review`/`verify` on: the pinned
+  Opus 5 reviewer/verifier agents will silently run at the session's model —
   the flow still works, honesty-checked by the tier-honesty locked rule.
 
 ## `flow.lock.json` (machine state — written by the CLI only)

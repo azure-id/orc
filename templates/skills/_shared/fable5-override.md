@@ -20,11 +20,11 @@ same phase:
 
 | Role token | Default agent | Fable 5 variant |
 |-----------|---------------|-----------------|
-| `analyze` | `orc-system-analyst-opus-4-8-high` | `orc-analyst-fable-5` |
-| `plan`    | `orc-planner-opus-4-8-med`         | `orc-planner-fable-5` |
-| `advisor` | `orc-advisor-opus-4-8-max`         | `orc-advisor-fable-5` |
-| `judge`   | `orc-judge-opus-4-8-max`           | `orc-judge-fable-5` |
-| `review`  | `orc-reviewer-opus-4-8-high`       | `orc-reviewer-fable-5` |
+| `analyze` | `orc-system-analyst-opus-5-high` | `orc-analyst-fable-5` |
+| `plan`    | `orc-planner-opus-5-med`         | `orc-planner-fable-5` |
+| `advisor` | `orc-advisor-opus-5-xhigh`         | `orc-advisor-fable-5` |
+| `judge`   | `orc-judge-opus-5-xhigh`           | `orc-judge-fable-5` |
+| `review`  | `orc-reviewer-opus-5-med`       | `orc-reviewer-fable-5` |
 
 A role NOT in `fable5_roles` keeps its default agent. `advisor` and `judge` are
 ultra-lane only — they take effect solely under `/orc-ultra`, and only when

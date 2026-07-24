@@ -158,8 +158,11 @@ The 8 bands (see config.md for the exact edges): `haiku-4-5` [0,30) ·
 - **Orchestrator (you):** Opus 4.8 high — or Opus 5 / Fable 5 at medium+, the
   two models that clear the guard from medium up. Never downgrade yourself.
 - **Review** — Superpowers path: Sonnet 4.6, medium. OpenSpec/self path:
-  Opus 4.8, high.
-- **Verify:** Opus 4.8, high.
+  Opus 5, medium (`orc-reviewer-opus-5-med`).
+- **Verify:** Opus 5, medium (`orc-verifier-opus-5-med`).
+- **Analyst:** Opus 5, high. **Planner:** Opus 5, medium. **Test author:**
+  Opus 5, medium. **Combiner:** Opus 5, high. **Ultra advisor/judge:** Opus 5,
+  xhigh — every core fixed role is pinned to Opus 5 as of v0.34.0.
 - **Merge-conflict resolver:** Opus 4.8, medium.
 
 Note: every band in the table above is a real dispatch target (haiku through

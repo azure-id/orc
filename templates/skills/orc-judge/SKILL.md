@@ -2,7 +2,7 @@
 name: orc-judge
 description: >
   Judgment gates for the ORC ultra lane. One judge skill, one agent
-  (orc-judge-opus-4-8-max), three dispatch contexts: gate=analysis (after the
+  (orc-judge-opus-5-xhigh), three dispatch contexts: gate=analysis (after the
   analyst), gate=plan (after the planner), gate=implementation (after verify —
   the anti-miss-implementation fidelity + strict-quality gate). Returns a
   structured verdict (APPROVE | REVISE | ESCALATE) with anchored,
@@ -21,7 +21,7 @@ code quality. Deterministic gates ALWAYS run first; the judge never re-checks
 what a string-compare catches.
 
 Ultra lane ONLY. No `/orc-judge` command; the orchestrator dispatches
-`orc-judge-opus-4-8-max` at the three ultra gates.
+`orc-judge-opus-5-xhigh` at the three ultra gates.
 
 ## Hard rules
 

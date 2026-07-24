@@ -13,14 +13,14 @@ description: >
   spot-checks inherited evidence and marks stale anchors; writes
   combined-report.md + combined-requirement-spec.md (the merged spec reuses the
   requirement-spec schema, so the planner/build pipeline is unchanged). Full
-  lane only (Opus 4.8 high). The orchestrator DISPATCHES this to a subagent —
+  lane only (Opus 5 high). The orchestrator DISPATCHES this to a subagent —
   it never combines itself, and the combiner never builds or spawns subagents.
 ---
 
 # CONTEXT-COMBINER
 
 The orchestrator stays on top and **dispatches a Context Combiner subagent
-(orc-context-combiner-opus-4-8-high)** with a list of 2+ confirmed analysis
+(orc-context-combiner-opus-5-high)** with a list of 2+ confirmed analysis
 spec paths. It never combines itself. The combiner merges related, ALREADY
 code-grounded analyses — it does not re-analyze the repo from scratch.
 
@@ -31,7 +31,7 @@ it were a single analysis — with PROOF that no source requirement was lost.
 ## Hard rules
 
 1. **Dispatched, not self-run.** The orchestrator coordinates; the Combiner
-   subagent (Opus 4.8 high) reads the specs and reconciles them against each
+   subagent (Opus 5 high) reads the specs and reconciles them against each
    other. The combiner NEVER builds and NEVER spawns subagents.
 2. **Related only — verify + challenge.** The user asserted relatedness at the
    Phase F gate, but the combiner MUST verify real overlap (shared files,
