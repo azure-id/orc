@@ -49,7 +49,7 @@ const required = [
   "templates/agents/orc-learn-writer-opus-4-8-high.md",
   "templates/agents/orc-trace-writer-haiku-4-5.md",
   // Core non-generated agents — named explicitly so a dropped file is REPORTED
-  // by name, not merely absorbed by the count floor. (The 6 executor agents are
+  // by name, not merely absorbed by the count floor. (The 8 executor agents are
   // checked separately by `build-agents.js --check`.)
   "templates/agents/orc-system-analyst-opus-4-8-high.md",
   "templates/agents/orc-planner-opus-4-8-med.md",
@@ -85,7 +85,7 @@ function walkCount(dir, ext) {
 const skillCount = walkCount(path.join(ROOT, "templates/skills"), "SKILL.md");
 const agentCount = walkCount(path.join(ROOT, "templates/agents"), ".md");
 // Floors sit just below current reality (23 skills / 30 agent files: +2 new
-// executors haiku-4-5 & opus-4-8-med, +5 fable-5 role agents, +1 trace writer)
+// executors haiku-4-5 & opus-5-high, +5 fable-5 role agents, +1 trace writer)
 // so a tree missing a chunk of the payload fails the count check instead of
 // sliding under an ancient floor.
 if (skillCount < 22) missing.push(`templates/skills (expected >=22 SKILL.md, found ${skillCount})`);

@@ -61,7 +61,8 @@ The full key table lives in `references/flow-schema.md`. Highlights:
 - **Session tier** — `session_tier` is the model+effort the compiled flow
   requires. DIY is SEPARATE from the baseline /orc rule — pick any tier from the
   full grid: `sonnet-4-6-{med,high}`, `opus-4-7-{med,high}`,
-  `opus-4-8-{med,high,xhigh,max}`, `fable-5-{med,high,xhigh,max}` (default
+  `opus-4-8-{med,high,xhigh,max}`, `opus-5-{med,high,xhigh,max}`,
+  `fable-5-{med,high,xhigh,max}` (default
   `opus-4-8-high`). The effort guard enforces the effort half deterministically
   (the compiled effort OR higher on the ladder); the statusline warns on the
   model half. Executor choices above the tier are rejected at validate time; the

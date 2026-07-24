@@ -17,8 +17,9 @@ Apply at Phase 0, on top of the normal config resolution:
 - `pattern_findings` = on · `generate_tests` = on · `security_review` = on.
 - Executor **tier floor**: remap the resolved score→model preset so no task
   dispatches below `orc-executor-sonnet-5-high`; bands at/above the preset's
-  opus boundary shift to `orc-executor-opus-4-8-high`. Show the remapped
-  table with the Phase 2 scoring table.
+  opus boundary rise to at least `orc-executor-opus-4-8-high` — the floor only
+  ever raises a band, so the top `[90,100]` band keeps `orc-executor-opus-5-high`.
+  Show the remapped table with the Phase 2 scoring table.
 
 > Fable 5 role override: if `fable5_enabled` and `advisor` / `judge` are in
 > `fable5_roles`, dispatch the `orc-advisor-fable-5` / `orc-judge-fable-5`

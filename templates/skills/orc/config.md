@@ -137,11 +137,13 @@ only, never which table is used.
 | [55,65)  | claude-sonnet-5   | high   | orc-executor-sonnet-5-high |
 | [65,70)  | claude-opus-4-7   | medium | orc-executor-opus-4-7-med |
 | [70,80)  | claude-opus-4-7   | high   | orc-executor-opus-4-7-high |
-| [80,85)  | claude-opus-4-8   | medium | orc-executor-opus-4-8-med |
-| [85,100] | claude-opus-4-8   | high   | orc-executor-opus-4-8-high |
+| [80,90)  | claude-opus-4-8   | high   | orc-executor-opus-4-8-high |
+| [90,100] | claude-opus-5     | high   | orc-executor-opus-5-high |
 
 (Haiku has no effort ladder — that agent carries no `effort:` field.) The risk
-floor (≥70) now lands `orc-executor-opus-4-7-high` at minimum — intended.
+floor (≥70) now lands `orc-executor-opus-4-7-high` at minimum — intended. The top
+band dispatches **Opus 5 high** — it needs an Opus 5 MAIN session or it silently
+falls back to the session model (the tier-honesty rule reports the downgrade).
 
 ### Override
 To use custom band edges/models, set `rubric_bands_override:` with your own
