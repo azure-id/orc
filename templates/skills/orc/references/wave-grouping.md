@@ -50,12 +50,26 @@ If two tasks own the same feature/files with no dependency between them, the
 graph auto-serializes them — but that's a planning smell. Surface it: suggest
 merging them into one task rather than silently serializing duplicate work.
 
-## Post-wave collision backstop
+## Post-wave worktree audit (a GATE, not a report)
 
-Declarations can be wrong. After each wave, compare each worker's returned
-`actual_files` against declarations:
+Declarations can be wrong, and a return can be honest and still miss what
+happened. Capture `git status --short` BEFORE the wave dispatches and again
+after every task returns, then diff the two:
+- **Any path whose state changed and is in NO task's `declared_files`** → name
+  the path and the likely task, and get an explicit user decision BEFORE the
+  wave closes. A wave never closes over an unexplained worktree delta.
+- **A file that became LESS modified is as much a violation as one that became
+  more modified.** That is the revert signature — an executor made an
+  unsatisfiable assertion true by `git checkout`-ing another task's completed
+  work, returned a literally-true report, and left a CLEAN tree. Nothing that
+  reads returns can see it.
+- **Stray files count** — a path that appears at the repo root (a stdout dump, a
+  mangled-path artifact) is undeclared output, not noise to ignore.
 - Two agents in one wave touched the same undeclared file → record
   `failure_reason: "file-collision:<file> with <agent>"`, set the
   later-finishing task to `requeued`, re-dispatch in a later wave so it sees
   the other's committed changes.
-- Declarations are the plan; `actual_files` is the audit.
+- Declarations are the plan, `actual_files` is the ATTESTATION, and
+  `git status` is the AUDIT — same instruction → contract → attestation →
+  spot-check pattern the plan applies to `grounding[]`.
+- Canonical cross-lane wording: `_shared/return-validation.md` §6.

@@ -108,7 +108,7 @@ pinned in the agent file):
 
 Validate the return per `../_shared/return-validation.md` — `unmet[]`
 honesty, `pattern_version` + `invariants_checked` attestation, `actual_model`
-/ `actual_effort` downgrade check (emit the `VERIFY` trace line). Malformed
+/ `actual_effort` downgrade check (emit the `VERIFY` trace line), and §6's worktree delta (`git status --short` before/after; a path changed outside `declared_files` is a violation whatever the return said). Malformed
 return = failure (one re-dispatch, then fallback offer).
 
 ## Phase F3 — Smoke gate (build + test; blocks ship on red)

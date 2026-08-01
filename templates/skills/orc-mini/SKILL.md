@@ -74,7 +74,7 @@ Cache MISS → skip — mini never codifies (that's the full lane /
 ## Phase M — Smoke gate (build + test; blocks ship on red)
 
 After the executor return validates (`../_shared/return-validation.md` —
-including `done` with non-empty `unmet[]` = partial), YOU run the smoke gate
+including `done` with non-empty `unmet[]` = partial, and §6's worktree delta: a path changed outside `declared_files` is a violation whatever the return said), YOU run the smoke gate
 per `../_shared/smoke-gate.md`: read-only build+test. **GREEN** →
 test-authoring ask, then ship. **RED** → never offer commit/ship; one repair
 re-dispatch, second red → STOP and surface. Docs-only → gate N/A, say so.

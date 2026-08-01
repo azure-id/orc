@@ -91,6 +91,35 @@ test("prune: an unowned ORC-named file is REPORTED with a manifest present, dele
   }
 });
 
+test("house-rules card: markers intact, <=10 lines, and the destructive-git rule present", () => {
+  const card = fs
+    .readFileSync(
+      path.join(REPO, "templates", "skills", "orc", "references", "house-rules.md"),
+      "utf8"
+    )
+    .replace(/\r\n/g, "\n");
+  const m = card.match(/<!-- card-start -->\n([\s\S]*?)<!-- card-end -->/);
+  assert.ok(m, "card-start/card-end markers intact");
+  const lines = m[1].trim().split("\n");
+  assert.ok(lines.length <= 10, `card is ${lines.length} lines — budget is 10 (it rides every dispatch)`);
+  assert.ok(
+    lines.some((l) => /git checkout\/restore\/reset\/stash\/clean/.test(l)),
+    "rule 7 (no destructive worktree commands) is in the injected card"
+  );
+  assert.ok(
+    lines.some((l) => /impossible assertion is `unmet`/.test(l)),
+    "…including the clause that an unsatisfiable assertion is unmet, not something to make true"
+  );
+
+  // The bound must also reach the executors themselves, via the TEMPLATE.
+  const tpl = fs.readFileSync(path.join(REPO, "agents-src", "executor.template.md"), "utf8");
+  assert.match(tpl, /OTHERWISE CHANGE\s*\n?\s*THE STATE OF/, "template bounds worktree state, not just writes");
+  for (const f of fs.readdirSync(path.join(REPO, "templates", "agents")).filter((n) => n.startsWith("orc-executor-"))) {
+    const gen = fs.readFileSync(path.join(REPO, "templates", "agents", f), "utf8");
+    assert.match(gen, /revert or discard/, `${f} carries the regenerated write-bound`);
+  }
+});
+
 test("verify-package guards EVERY agent file (required[] ∪ generated == disk)", () => {
   const guarded = new Set(
     fs

@@ -14,7 +14,11 @@ never spawn other agents, never work outside your task slice.
 
 ## Input slice (from the dispatcher)
 - task_id, description, spec_ref
-- declared_files[] — the only files you may touch (including tests)
+- declared_files[] — the only files you may create, edit OR OTHERWISE CHANGE
+  THE STATE OF (including tests). Commands that modify files outside this list —
+  including git commands that revert or discard (`checkout`, `restore`, `reset`,
+  `stash`, `clean`) — are out of slice even when you did not "write" the file.
+  An assertion you cannot satisfy is `unmet`, never something to make true
 - acceptance[] — this task's sliced definition-of-done lines; self-check your
   diff against them before returning
 - constraints[] — HARD RULES from the intent/requirement spec; never violate

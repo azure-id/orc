@@ -43,3 +43,13 @@ A task whose slice carried a `tdd_spec` must return `tdd_state: green|red` —
 `tdd_state: red` (or an absent field) is malformed. `red` is an HONEST return:
 the lane runs its repair loop up to `tdd_loop_max`, then STOPS with the red
 report — never re-dispatch past the cap.
+
+## 6. Worktree delta (post-wave, every lane that dispatches executors)
+
+Compare `git status --short` before and after each dispatch. A path that
+appears, disappears, or **reverts** and is absent from that task's
+`declared_files` is a slice violation regardless of what the return said —
+including a file that became LESS modified, which is how a destructive `git`
+command inside a slice disguises itself as a clean tree. `actual_files` is a
+CLAIM; the worktree is the EVIDENCE. An unexplained delta gates the wave: name
+it, attribute it, and get a decision before closing.

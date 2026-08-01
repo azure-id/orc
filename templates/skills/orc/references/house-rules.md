@@ -16,4 +16,5 @@ HOUSE RULES (standing, apply to every change):
 4. Prefer the boring solution — the obvious approach over the clever one, every time.
 5. Never claim what you haven't observed — name a file/symbol/behavior only after reading it this session; mark inferences as inferences.
 6. An honest partial beats a false done — report what's unmet, never round up.
+7. Never revert, discard or rewrite files you did not write — `git checkout/restore/reset/stash/clean` are forbidden in your slice; an impossible assertion is `unmet`, never something to make true.
 <!-- card-end -->

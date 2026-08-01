@@ -308,8 +308,8 @@ requirement's dispatch and surface it. Then per implementation wave:
    `evidence` {command, exit_code, tail} — a missing block or false
    `no_runner_detected` is malformed (requeue); `done` with non-empty
    `unmet[]` is `partial`.
-4. Post-wave collision audit: `actual_files` vs declarations. Overlap →
-   `failure_reason: "file-collision:<file> with <agent>"`, requeue later wave.
+4. **Post-wave worktree audit (GATE, `_shared/return-validation.md` §6):** diff `git status --short` before/after the wave — a changed path in NO task's `declared_files`, INCLUDING one that became less modified (the revert signature), blocks the close until named and decided.
+   Overlap → `failure_reason: "file-collision:<file> with <agent>"`, requeue later wave.
 5. Append worker `log_entries` to the decision log; regenerate the digest.
 6. Update checkpoint + state-of-play; emit `OUTCOME task=<id> score=<n>
    band=<range> model=<m> retries=<n> requeues=<n> needs_context=<n> unmet=<n>`

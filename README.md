@@ -6,7 +6,7 @@
 
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
-![Version](https://img.shields.io/badge/version-0.34.2-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.34.3-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
@@ -46,58 +46,46 @@ zero-dependency npm package installs those files into your `.claude/` directory.
 
 ## Changelog
 
-**Latest: v0.34.2 — updated 2026-08-01.**
+**Latest: v0.34.3 — updated 2026-08-01.**
 
-### v0.34.2 — Trace subsystem: the pointer clobber, and a writer contract that holds _(2026-08-01)_
+### v0.34.3 — Slice boundary: the worktree, not the editor _(2026-08-01)_
 
-**A run's own start step split its trace in two.** The hook cannot tell a pointer
-written two seconds ago (file not created yet) from a dangling one left by a
-finished run — `stat` fails identically — and it rotated on both. So every run
-produced a generic bootstrap file holding the hook skeleton *plus* a rich file
-holding every narrated line, each looking correct on its own. Across the graded
-corpus: 9 lane-less trace files, 15 runs affected.
+**An executor destroyed a completed task's work and returned a true statement
+about it.** Handed `declared_files: [tests/summary.test.js]` and an instruction
+to confirm `git diff --stat src/` was empty, it made that true — by reverting two
+files it had never written, wiping a finished, green, reviewed implementation.
+The suite fell from 19 tests to 3 and `git status` showed a **clean tree**, which
+is the most convincing disguise destroyed work can have.
 
-Two independent fixes, neither relying on the other:
+Nothing in ORC caught it, for three separate reasons: no rule forbade destructive
+git commands (a `git checkout` is not a change to a *file* — it is a change to
+the whole worktree); return validation passed, because `actual_files` was an
+honest subset of the declarations; and the post-wave audit compared declarations
+to a **self-report**, so a write nobody reported was invisible.
 
-- **Lanes `touch` the trace file in the same step that writes `.current`** — one
-  filesystem call that makes the hook's existence check true by construction. A
-  new contract token pins it to every lane, so a lane added later cannot omit it.
-- **The hook honors a FRESH pointer** whose file does not exist yet (the
-  pointer's own mtime decides); only a genuinely idle pointer rotates. This also
-  restores the first narration agent's `RETURN`, which the rotation dropped as
-  unmatched and left as an unconsumable pending record on every run.
+- **House rules gain a 7th line** (injected literally into every executor slice,
+  so it reaches all 8 bands + mini + fast at once):
+  `git checkout/restore/reset/stash/clean` are forbidden in a slice, and **an
+  impossible assertion is `unmet`, never something to make true**.
+- **The post-wave audit now reads disk** — `git status --short` before the wave,
+  diffed after every return, as a **gate**: an undeclared changed path blocks the
+  wave from closing until it is named and decided. A file that became *less*
+  modified counts as much as one that became more — that is the revert signature,
+  and the only thing that catches it.
+- **`return-validation.md` §6** makes the worktree delta a standard validation
+  step for every lane that dispatches executors: `actual_files` is a claim, the
+  worktree is the evidence.
+- **The executor contract** now bounds files you "create, edit or otherwise
+  change the state of", naming git reverts explicitly.
 
-**The trace writer's contract stopped being ambiguous.**
-
-- Rename repair triggers on a **disk comparison** — `.current` disagreeing with
-  the packet's `run_meta.trace_path` — not on "the pointer is missing", a state
-  the hook never actually leaves. And it is a **move**, never a fresh create
-  beside the bootstrap file (that split a run's evidence in the worst way: each
-  half looks correct alone).
-- `lines_written` / `jsonl_written` are **measured** (`wc -l` before/after), not
-  intended. They were wrong in both directions, and a mismatched count is
-  "malformed" by the writer's own contract.
-- The actor column is **per event**; `writer` means the writer speaking for
-  itself. The `.txt` and `.jsonl` no longer disagree about the same event.
-- The `decisions` NOTE **mirrors** to `.jsonl` (it was silently dropped, losing
-  the WHY layer for whole phases), and the sidecar path is
-  `trace_path + ".jsonl"` — appended, never `splitext` (one stripped `.txt`
-  hid an entire review phase, `FINDING` counts and all).
-
-**Also**
-
-- **`/orc-diy` had no trace protocol at all** — the only lane that never
-  referenced it, and the one lane that clips the band table. `orc diy compile`
-  now stitches a trace block into **every** compiled flow (lane token `diy`,
-  one packet per enabled phase group, minimum 2).
-- `GATE` gains `facet` and `schema`; `PHASE ship` now closes; `context-combiner`
-  gains the `combine` lane name and its own `PHASE-EDGE` family.
-- **Unbounded `RETURN` fix:** an `unattributed` return claims no record, so the
-  balance guard could never stop it — every subagent stop past the first wrote
-  another line forever. Now bounded by the records actually in flight.
+Two stray-file cases from earlier runs (a 4.3K `test_output.txt` and a 0-byte
+mangled-path file, both left at the repo root, both committable) were the same
+blindness in a milder form, and the disk-based audit catches those too.
 
 <details>
 <summary><b>Previous versions</b> (click to expand)</summary>
+
+### v0.34.2 — Trace subsystem: the pointer clobber, and a writer contract that holds _(2026-08-01)_
 
 ### v0.34.1 — Install integrity: run state survives `orc update` _(2026-08-01)_
 

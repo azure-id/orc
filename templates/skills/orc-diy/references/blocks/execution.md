@@ -20,5 +20,7 @@ FAILING tests (red proven before implementation; a pre-implementation pass is
 a spec bug → block that requirement). Each implementation slice carries its
 `tdd_spec`; executors implement to green (implement→test→repair, cap
 `tdd_loop_max`; `TDD-RED`/`TDD-GREEN` per iteration) and return `tdd_state`
-per `.claude/skills/_shared/return-validation.md`.
+per `.claude/skills/_shared/return-validation.md` — including §6's worktree
+delta: `git status --short` before/after each dispatch, any changed path
+outside `declared_files` (a revert included) gates the wave close.
 <!-- /diy:when -->
