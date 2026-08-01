@@ -12,7 +12,7 @@ including hands-off autonomy — ever overrides a locked rule.
 2. **Disk is truth; conversation is a cache.** On any resume, fresh session,
    or suspected compaction: re-read the run's `state-of-play.md` then the
    checkpoint BEFORE acting. All run artifacts live in
-   `.claude/skills/orc/run/{run-slug}/` — never the project root.
+   `.claude/orc/run/{run-slug}/` — never the project root.
 3. **No two tasks with overlapping `declared_files` share a wave.** A task
    without declared files cannot be waved.
 4. **Severity ladder (P0–P3).** P0 (objective breakage) → auto-fix ONCE;

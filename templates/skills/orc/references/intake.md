@@ -23,7 +23,7 @@ its confirmed spec feeds Phase 1 planning.
 
 Before anything else, derive a `{run-slug}` from the user's request (short,
 lowercased, hyphenated intent name, e.g. "merchant-notifications") and create
-`.claude/skills/orc/run/{run-slug}/`. ALL run artifacts
+`.claude/orc/run/{run-slug}/` (config `run_dir`). ALL run artifacts
 (intent-spec, checkpoint, state-of-play, decision log) live here — never in the
 project root, never loose in run/. If a folder with that slug exists, append a
 short timestamp.

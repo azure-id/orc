@@ -137,7 +137,7 @@ it in one line, skip re-deriving whatever is carried, reuse the run folder.
 
 On "switch to full" (or when the complexity read / a mid-run surprise clearly
 needs review/verify): the run folder, checkpoint, and intent-spec already live
-in the shared `../orc/run/{run-slug}/` format, so the full flow resumes from
+in the shared `.claude/orc/run/{run-slug}/` format, so the full flow resumes from
 the current checkpoint and adds the phases mini skipped. Record the switch in
 the decision log.
 
@@ -205,7 +205,7 @@ the wiki; after a code-changing run apply the passive stale-flag note only
 ## Shared artifacts
 
 Writes to the SAME location as the full skill
-(`.claude/skills/orc/run/{run-slug}/`) — a switch needs no migration.
+(`.claude/orc/run/{run-slug}/`) — a switch needs no migration.
 
 ## What mini still enforces (from the main hard rules)
 

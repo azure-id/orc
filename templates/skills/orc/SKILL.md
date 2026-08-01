@@ -38,8 +38,8 @@ and tell the user to switch the main session and re-run — never intake below i
    task gets a cheap subagent (Sonnet 4.6 medium), never you.
 2. **Disk is truth; conversation is a cache.** On any resume or suspected
    compaction: re-read `state-of-play.md` then the checkpoint BEFORE acting.
-3. **All run artifacts go in `.claude/skills/orc/run/{run-slug}/`** — never
-   the project root. Create the run subfolder FIRST, before any other write.
+3. **All run artifacts go in `.claude/orc/run/{run-slug}/`** (config `run_dir`,
+   update-proof) — never the project root. Create it FIRST, before any write.
 4. **No two tasks with overlapping `declared_files` share a wave.** A task
    without declared files cannot be waved.
 5. **Severity drives the fix path (P0–P3 ladder).** P0 (objective breakage) →

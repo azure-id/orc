@@ -272,6 +272,74 @@ function isPrunable(rel) {
   return /^(skills|commands|agents|hooks)\//.test(rel);
 }
 
+// ── Run state (C1) ─────────────────────────────────────────────────────────
+// Mutable run state must NOT live under a payload tree the installer replaces.
+// It lives beside the other update-surviving artifacts (patterns/, logs/,
+// wiki-meta.json, install-manifest.json) in .claude/orc/ — which `isPrunable`
+// can never match. Pre-v0.34.1 installs kept it at .claude/skills/orc/run/,
+// where every `orc update` (and `orc doctor --fix`) destroyed it.
+const RUN_DIR_DEFAULT = ".claude/orc/run";
+const LEGACY_RUN_REL = "skills/orc/run";
+const RUN_GITIGNORE = "# ORC run artifacts — never commit\n*\n!.gitignore\n";
+
+// Absolute run root for this install. `run_dir` is project-relative (like
+// log_dir), so it resolves against the project root — claudeDir's parent.
+function resolveRunDir(claudeDir) {
+  let rel = RUN_DIR_DEFAULT;
+  try {
+    rel = readOverride(claudeDir).map.run_dir || RUN_DIR_DEFAULT;
+  } catch (_) {}
+  return path.isAbsolute(rel) ? rel : path.join(claudeDir, "..", rel);
+}
+
+function ensureRunDir(claudeDir) {
+  const dir = resolveRunDir(claudeDir);
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+    const gi = path.join(dir, ".gitignore");
+    if (!fs.existsSync(gi)) fs.writeFileSync(gi, RUN_GITIGNORE);
+  } catch (_) {}
+  return dir;
+}
+
+// Move run state out of the legacy location BEFORE the skill copy runs, so the
+// very update that fixes this bug is not the one that loses a mid-run
+// checkpoint. Never overwrites state already migrated; leaves the marker files.
+function migrateRunState(claudeDir) {
+  const legacy = path.join(claudeDir, LEGACY_RUN_REL);
+  if (!fs.existsSync(legacy)) return;
+  let entries;
+  try {
+    entries = fs.readdirSync(legacy).filter((n) => n !== ".gitignore" && n !== ".npmignore");
+  } catch (_) {
+    return;
+  }
+  if (!entries.length) return;
+  const dest = ensureRunDir(claudeDir);
+  let moved = 0;
+  for (const name of entries) {
+    const from = path.join(legacy, name);
+    const to = path.join(dest, name);
+    if (fs.existsSync(to)) continue; // already migrated — never clobber
+    try {
+      fs.renameSync(from, to);
+      moved++;
+    } catch (_) {
+      // cross-device or locked: copy then remove
+      try {
+        if (fs.statSync(from).isDirectory()) copyDir(from, to);
+        else fs.copyFileSync(from, to);
+        fs.rmSync(from, { recursive: true, force: true });
+        moved++;
+      } catch (_) {}
+    }
+  }
+  if (moved)
+    console.log(
+      `  move  ${moved} run folder(s) skills/orc/run/ → ${RUN_DIR_DEFAULT.replace(/^\.claude\//, "")}/ (run state now survives updates)`
+    );
+}
+
 // Remove now-empty directories left behind by pruned files, deepest-first,
 // never touching the four top-level payload roots themselves.
 function removeEmptyDirs(claudeDir, rels) {
@@ -350,14 +418,18 @@ function pruneOrphans(claudeDir, footprint, prevManifest, forcePrune) {
         `that left ORC's payload since ${prevManifest.version || "the last install"}`
       );
     }
-    return;
+    // NO early return (C3). Never DELETING an unowned file is correct — but the
+    // old `return` also suppressed the candidate REPORT, so after the first
+    // manifested install a user was never told a file looks orphaned and
+    // `orc update --prune`'s documented purpose became unreachable. Fall
+    // through: always report, still delete only under --prune.
   }
   const candidates = detectPreManifestOrphans(claudeDir, current);
   if (!candidates.length) return;
   if (forcePrune || flag("--prune") === true) {
     deletePaths(claudeDir, candidates, "(ORC-named files absent from this payload)");
   } else {
-    console.log("\n  ⚠  possible orphaned ORC files (this install predates the install manifest):");
+    console.log("\n  ⚠  possible orphaned ORC files (no manifest proves ORC owns them):");
     for (const rel of candidates) console.log("       " + rel);
     console.log("     They are ORC-named but not in the current payload. Remove with:");
     console.log("       orc update --prune");
@@ -374,6 +446,10 @@ function install({ overwrite, forcePrune }) {
   // diff it against the new payload and prune what left.
   const prevManifest = readManifest(claudeDir);
 
+  // C1 — relocate mutable run state BEFORE any skill directory is touched.
+  migrateRunState(claudeDir);
+  ensureRunDir(claudeDir);
+
   fs.mkdirSync(skillsDest, { recursive: true });
   fs.mkdirSync(commandsDest, { recursive: true });
   fs.mkdirSync(agentsDest, { recursive: true });
@@ -385,7 +461,11 @@ function install({ overwrite, forcePrune }) {
       console.log(`  skip  skills/${name} (exists — use 'orc update' to overwrite)`);
       continue;
     }
-    if (fs.existsSync(dest) && overwrite) fs.rmSync(dest, { recursive: true, force: true });
+    // C2 — child-by-child overwrite, never a recursive rm of a user-writable
+    // tree. C1 moved the state we know about; this makes the installer safe for
+    // the state a future feature might write into a skill folder. Removing a
+    // file that LEFT the payload stays the manifest prune's job (below), which
+    // deletes only paths a previous manifest proves ORC owned.
     copyDir(path.join(SRC_SKILLS, name), dest);
     console.log(`  ${overwrite ? "upd " : "add "}  skills/${name}`);
   }
@@ -448,7 +528,7 @@ function install({ overwrite, forcePrune }) {
   console.log("Cross-repo: `orc crosslink` links sibling repos' wikis (advisory; orc-wiki resolves the rest).");
   console.log("\nNext:");
   console.log("  • Paste your PR template into skills/orc/subskills/orc-pr/pr.md");
-  console.log("  • Add to your .gitignore:  .claude/skills/orc/run/");
+  console.log("  • Add to your .gitignore:  .claude/orc/run/");
   console.log("  • If a /command doesn't appear, your Claude Code may read commands");
   console.log("    from a different folder — move the files in commands/ there.");
   console.log("  • Run /agents to confirm the agent model IDs your CLI accepts,");
@@ -640,6 +720,11 @@ const vModel = (raw) => {
 };
 const vPath = (raw) =>
   raw && raw.trim() ? { value: raw } : { err: "must be a non-empty path" };
+// GitHub delivery target for /orc-retro — owner/repo, nothing else.
+const vRepo = (raw) =>
+  /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/.test(String(raw).trim())
+    ? { value: String(raw).trim() }
+    : { err: "must be a GitHub owner/repo (e.g. azure-id/orc)" };
 
 // Fable 5 role override (C.1). Roles that MAY be handed to a Fable 5 agent.
 const FABLE5_ROLES = ["analyze", "plan", "advisor", "judge", "review"];
@@ -683,7 +768,13 @@ const CONFIG_META = [
   { key: "crosslink_fresh_days", def: 10, tier: "advanced", validate: vInt(1), desc: "Cross-repo crosslink snapshot: days since sync ≤ this → FRESH hint (Signal B; advisory)." },
   { key: "crosslink_aging_days", def: 15, tier: "advanced", validate: vInt(1), desc: "Cross-repo crosslink snapshot: days since sync ≤ this → AGING; beyond → STALE (advisory, never blocks)." },
   { key: "wiki_delta_full_threshold", def: 30, tier: "advanced", validate: vRange(1, 100), desc: "Wiki delta refresh: TOUCHED docs above this percent of registered docs → `orc wiki impact` recommends a FULL refresh (user decides)." },
+  { key: "wiki_fresh_max", def: 10, tier: "advanced", validate: vInt(1), desc: "Wiki freshness: commit distance < this → FRESH (computed on read, never stored)." },
+  { key: "wiki_aging_max", def: 30, tier: "advanced", validate: vInt(1), desc: "Wiki freshness: commit distance <= this → AGING; beyond → STALE." },
+  { key: "wiki_refresh_ask_tasks", def: 3, tier: "advanced", validate: vInt(1), desc: "Post-ship wiki refresh ask fires when the run's task count >= this." },
+  { key: "wiki_refresh_ask_files", def: 10, tier: "advanced", validate: vInt(1), desc: "…or when the run's touched-file count exceeds this (full/ultra lanes)." },
+  { key: "retro_repo", def: "azure-id/orc", tier: "advanced", validate: vRepo, desc: "GitHub owner/repo that receives /orc-retro reports (PR preferred, issue fallback)." },
   { key: "log_dir", def: ".claude/orc/logs", tier: "advanced", validate: vPath, desc: "Persistent trace folder (never auto-deleted)." },
+  { key: "run_dir", def: RUN_DIR_DEFAULT, tier: "advanced", validate: vPath, desc: "Run artifact root (checkpoints/state-of-play) — outside the installer's blast radius." },
   { key: "analyzer_dir", def: ".claude/skills/orc/analyzer", tier: "advanced", validate: vPath, desc: "Internal analyst artifact dir." },
   { key: "planner_dir", def: ".claude/skills/orc/planner", tier: "advanced", validate: vPath, desc: "Internal planner artifact dir." },
   { key: "report_out_dir", def: "analyst_report", tier: "advanced", validate: vPath, desc: "Project-root copy target on report-only." },
@@ -2718,6 +2809,42 @@ function doctor() {
     const cliV = currentVersion();
     if (payloadV === cliV) ok(`payload version ${payloadV} matches this CLI`);
     else warn(`payload version ${payloadV} != CLI ${cliV} — run \`orc update\``);
+  }
+
+  // 1b) GLOBAL install skew (C5). Claude Code resolves a skill by NAME, and a
+  // stale ~/.claude copy can win over this project's — so a report of "payload
+  // matches" is worthless if the file that actually loads is three versions
+  // old. Warn, never delete: a global install is not this project's to prune.
+  const globalDir = path.join(os.homedir(), ".claude");
+  if (path.resolve(globalDir) !== path.resolve(claudeDir)) {
+    if (!fs.existsSync(path.join(globalDir, "hooks"))) {
+      ok("no global ORC install (~/.claude) — nothing can shadow this one");
+    } else {
+      const globalV = installedPayloadVersion(globalDir);
+      const localV = installedPayloadVersion(claudeDir);
+      if (globalV !== localV)
+        warn(
+          `GLOBAL install ~/.claude is ${globalV} but this project is ${localV} — ` +
+            "the global copy can win skill resolution; run `orc update --global`"
+        );
+      else ok(`global install ~/.claude matches (${globalV})`);
+      // Agent files the global install still carries that this payload no
+      // longer ships: a dispatch by a retired name resolves there instead of
+      // failing loudly — the exact silent downgrade a rename must prevent.
+      try {
+        const shipped = new Set(shippedFootprint());
+        const shadows = fs
+          .readdirSync(path.join(globalDir, "agents"))
+          .filter((f) => /^orc-.*\.md$/i.test(f) && !shipped.has("agents/" + f));
+        if (shadows.length)
+          warn(
+            `${shadows.length} retired agent name(s) still live in ~/.claude/agents: ` +
+              shadows.slice(0, 5).join(", ") + (shadows.length > 5 ? " …" : "") +
+              " — run `orc update --global` (never deleted from here)"
+          );
+        else ok("no retired agent names shadowing from ~/.claude/agents");
+      } catch (_) {}
+    }
   }
 
   // 2) manifest vs the shipped footprint (orphans + missing files)

@@ -34,7 +34,7 @@ After installing:
 
 1. **Paste your PR template** into `orc/subskills/orc-pr/pr.md` (replaces the
    placeholder).
-2. Add `.claude/skills/orc/run/` to your project `.gitignore` (a local
+2. Add `.claude/orc/run/` to your project `.gitignore` (a local
    .gitignore inside run/ is included, but confirm).
 3. Run `/agents` to confirm the model IDs your Claude Code accepts, and **run
    your main session on Opus** — a subagent's model can't exceed the main

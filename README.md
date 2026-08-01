@@ -6,7 +6,7 @@
 
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
-![Version](https://img.shields.io/badge/version-0.34.0-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.34.1-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
@@ -46,51 +46,53 @@ zero-dependency npm package installs those files into your `.claude/` directory.
 
 ## Changelog
 
-**Latest: v0.34.0 — updated 2026-07-25.**
+**Latest: v0.34.1 — updated 2026-08-01.**
 
-### v0.34.0 — Opus 5: top scoring band, every core role, medium-effort session tier _(2026-07-25)_
+### v0.34.1 — Install integrity: run state survives `orc update` _(2026-08-01)_
 
-**Claude Opus 5 lands across all three halves of the tier system.**
+**P0 — `orc update` (and the advertised repair path `orc doctor --fix`) destroyed
+every run folder.** Run state lived at `.claude/skills/orc/run/`, inside a tree
+the installer recursively deleted and re-copied on every update, so a mid-run
+checkpoint — the one artifact the resume contract reads from disk — was
+unrecoverably lost by the command users are told to run when anything is wrong.
 
-**Scoring.** The canonical 8-band score→model table gets a new ceiling —
-`[90,100]` dispatches the new `orc-executor-opus-5-high` (claude-opus-5, high
-effort) and `[80,90)` is now a single Opus 4.8 **high** band (the old `[80,85)`
-Opus 4.8 medium executor is gone; `orc update` prunes it).
+**Run artifacts now live at `.claude/orc/run/{run-slug}/`** (new config key
+`run_dir`), beside the other update-surviving artifacts (`patterns/`, `logs/`,
+`wiki-meta.json`, `install-manifest.json`) — a location the prune logic can
+never match. Pre-0.34.1 state is **migrated once**, before any skill directory
+is touched, so the update that fixes this is not the one that loses your
+checkpoint. Gitignore `.claude/orc/run/` instead of the old path.
 
-**Role agents.** Every core fixed role is re-pinned to `claude-opus-5`, each at
-the effort its job actually needs — and the agent files are renamed to match,
-because ORC derives the expected model from the agent NAME:
+**The installer no longer recursively deletes a user-writable tree.** Skill dirs
+are overwritten child-by-child; removing a file that LEFT the payload stays the
+install manifest's job, which deletes only paths a previous manifest proves ORC
+owned.
 
-| Role | Was | Now |
-|------|-----|-----|
-| System Analyst | `orc-system-analyst-opus-4-8-high` | `orc-system-analyst-opus-5-high` |
-| Requirement Planner | `orc-planner-opus-4-8-med` | `orc-planner-opus-5-med` |
-| Reviewer | `orc-reviewer-opus-4-8-high` | `orc-reviewer-opus-5-med` |
-| Verifier | `orc-verifier-opus-4-8-high` | `orc-verifier-opus-5-med` |
-| Test Author | `orc-test-author-opus-4-8-high` | `orc-test-author-opus-5-med` |
-| Context Combiner | `orc-context-combiner-opus-4-8-high` | `orc-context-combiner-opus-5-high` |
-| Learning-Docs Writer | `orc-learn-writer-opus-4-8-high` | `orc-learn-writer-opus-5-low` |
-| Ultra Advisor | `orc-advisor-opus-4-8-max` | `orc-advisor-opus-5-xhigh` |
-| Ultra Judge | `orc-judge-opus-4-8-max` | `orc-judge-opus-5-xhigh` |
+**Also in this release**
 
-Unchanged: the mini agents (Sonnet 5 high), the scout (Sonnet 4.6 high), the
-pattern codifier and retro miner (Sonnet 5 high), the trace writer (Haiku 4.5),
-and the CLAUDE.md writer (Opus 4.8 high). `orc update` prunes the old filenames
-through the install manifest.
-
-**Session tier.** Opus 5 joins Fable 5 in the medium-effort allowance — the
-`orc-effort-guard.js` PreToolUse hook clears `/orc` from **medium up** on Opus 5
-(read through the statusline's session-model bridge), and the statusline reads
-Opus 5 medium…max as `🚀 ORC-boosted` instead of a degraded tier. The DIY tier
-grid gains `opus-5-med|high|xhigh|max`.
-
-**The cost-tier rule is now louder, on purpose.** A subagent can never outrank
-the main session, so on an Opus 4.8 session the Opus-5 roles and the `[90,100]`
-band quietly run at 4.8 — reported by the tier-honesty rule at runtime, and
-clipped deterministically at DIY compile time. **Run the main session on Opus 5.**
+- `orc update` again **reports** possible orphans on a manifested install — the
+  candidate scan used to be unreachable after the first successful update, which
+  made `orc update --prune`'s documented purpose unreachable with it. Deletion
+  is still gated behind an explicit `--prune`.
+- `orc doctor` now sees a **stale global install**: a `~/.claude` payload at a
+  different version can win skill resolution over this project's, and retired
+  agent names still sitting in `~/.claude/agents/` resolve a dispatch against a
+  stale definition instead of failing loudly. Both warn; neither is ever deleted
+  from a project-scoped doctor run.
+- **Five phantom config keys are real keys.** `retro_repo`, `wiki_fresh_max`,
+  `wiki_aging_max`, `wiki_refresh_ask_tasks`, and `wiki_refresh_ask_files` were
+  documented and read at runtime while `orc config` had never heard of them
+  (a fork could not redirect its retro reports at all). A new test asserts every
+  key documented in `config.md` resolves through the CLI registry.
+- **`verify-package.js` guards all 30 agent files.** The orc-mini agent pair and
+  all five Fable 5 role agents were covered by nothing but a count floor with a
+  file of slack — each was droppable with `npm run verify` still green. A
+  set-equality test now makes an unguarded agent file impossible to add.
 
 <details>
 <summary><b>Previous versions</b> (click to expand)</summary>
+
+### v0.34.0 — Opus 5: top scoring band, every core role, medium-effort session tier _(2026-07-25)_
 
 ### v0.33.0 — Knowledge deepening + verification revamp _(2026-07-25)_
 
@@ -246,7 +248,7 @@ orc --help
 **agents/**. After installing:
 
 1. Paste your team's PR template into `skills/orc/subskills/orc-pr/pr.md`.
-2. Add `.claude/skills/orc/run/` to your project `.gitignore`.
+2. Add `.claude/orc/run/` to your project `.gitignore`.
 3. **Run `/agents`** to confirm the agent model IDs your Claude Code accepts.
 4. **Run your main Claude Code session on Opus 5** — a subagent's model can't
    exceed the main session's tier, and as of v0.34.0 every core role agent

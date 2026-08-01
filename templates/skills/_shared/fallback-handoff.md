@@ -16,7 +16,7 @@ REQUEST: <the raw user request, verbatim>
 
 Announce which prerequisite/gate failed in one line, write the block, invoke
 orc-mini pointing at it. The run folder is already in the shared
-`.claude/skills/orc/run/{run-slug}/` format — no migration, no new slug.
+`.claude/orc/run/{run-slug}/` format — no migration, no new slug.
 
 ## Reader side (orc-mini)
 

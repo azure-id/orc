@@ -70,7 +70,7 @@ orc-mini WITH the intent spec attached (no rework); emit a `GATE` line for the
 verdict. Then the lane's ONLY pre-spawn ask — one combined confirmation:
 preflight result + intent spec + acceptance bullets + "proceed?" (soft
 sign-off; never split into multiple questions). Create the run folder
-(`.claude/skills/orc/run/{run-slug}/` — shared format, so fallback needs no
+(`.claude/orc/run/{run-slug}/` — shared format, so fallback needs no
 migration) and write the intent-spec + a minimal checkpoint.
 
 ## Phase F2 — Slice build + dispatch (ONE executor)

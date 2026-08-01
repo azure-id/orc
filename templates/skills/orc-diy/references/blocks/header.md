@@ -16,9 +16,10 @@ every pinned agent below would silently downgrade.
 report `READY`, STOP — tell the user the flow is stale and to run
 `orc diy compile`, then end. Never orchestrate from a stale compile.
 
-This flow reuses the full orchestrator's machinery by reference — run folder,
-checkpoint, schemas, and subskills all live under `.claude/skills/orc/`.
-Create the run folder first (`.claude/skills/orc/run/{run-slug}/`), checkpoint
+This flow reuses the full orchestrator's machinery by reference — schemas and
+subskills live under `.claude/skills/orc/`, the run folder + checkpoint under
+`.claude/orc/run/` (outside the installer's blast radius).
+Create the run folder first (`.claude/orc/run/{run-slug}/`), checkpoint
 eagerly, and treat disk as truth exactly as the locked rules below demand.
 
 <!-- diy:when autonomy=interactive -->

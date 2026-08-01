@@ -17,7 +17,7 @@ A separate orchestrator whose OUTPUT is documentation, not code. It reuses the
 main spine's machinery (checkpoint, state-of-play, stop-continue, fresh-session
 resume, parallel dispatch, "never scans-and-writes itself — it always spawns")
 with its own phases below, and shares the run-folder discipline: run artifacts
-in `.claude/skills/orc/run/{run-slug}/`, KNOWLEDGE BASE output in the project's
+in `.claude/orc/run/{run-slug}/`, KNOWLEDGE BASE output in the project's
 `wiki/` folder. Run as Opus 4.8 high — orchestrator AND scanning agents; cost
 is accepted by design (the trade is knowledge-base QUALITY), which is what
 makes the consent gate mandatory.

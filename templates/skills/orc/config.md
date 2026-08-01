@@ -91,6 +91,12 @@ fable5_roles: []           # subset of [analyze, plan, advisor, judge, review]. 
                            #   default. advisor/judge are ultra-lane only. Empty = no effect.
 
 # --- Artifact locations (internal by default) ---
+run_dir: .claude/orc/run                  # run folders (checkpoint, state-of-play,
+                                          #   intent-spec). Lives OUTSIDE the payload
+                                          #   trees `orc update` replaces, so an
+                                          #   update/doctor --fix can never destroy a
+                                          #   mid-run checkpoint. Pre-0.34.1 state at
+                                          #   .claude/skills/orc/run/ is migrated once.
 analyzer_dir: .claude/skills/orc/analyzer
 planner_dir:  .claude/skills/orc/planner
 report_out_dir: analyst_report            # project-root copy target on report-only

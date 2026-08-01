@@ -230,8 +230,12 @@ const CONTRACTS = [
     ],
   },
   {
+    // v0.34.1: binFiles pins it to the CLI registry too — the key was
+    // documented, read, and linted here while `orc config` had never heard of
+    // it (a phantom key nothing could set).
     name: "retro delivery target (v0.8.1 — PR/issue to retro_repo, channel-gated)",
     token: "retro_repo",
+    binFiles: ["bin/cli.js"],
     files: [
       "commands/orc-retro.md",
       "skills/orc/config.md",
@@ -1266,6 +1270,27 @@ const CONTRACTS = [
     files: [
       "skills/orc-wiki/references/staleness.md",
       "skills/orc/config.md",
+    ],
+  },
+  {
+    // v0.34.1: run state moved OUT of the installer's blast radius
+    // (.claude/skills/orc/run/ → .claude/orc/run/, config key run_dir). The
+    // path is prose in six lanes; without this pin the next rename drifts and
+    // half the lanes checkpoint somewhere the resume contract can't find.
+    name: "run artifact root (v0.34.1 — .claude/orc/run/, survives orc update)",
+    token: ".claude/orc/run",
+    binFiles: ["bin/cli.js"],
+    files: [
+      "skills/_shared/fallback-handoff.md",
+      "skills/orc-diy/references/blocks/header.md",
+      "skills/orc-diy/references/locked-blocks.md",
+      "skills/orc-fast/SKILL.md",
+      "skills/orc-mini/SKILL.md",
+      "skills/orc-wiki/SKILL.md",
+      "skills/orc/README.md",
+      "skills/orc/SKILL.md",
+      "skills/orc/config.md",
+      "skills/orc/references/intake.md",
     ],
   },
 ];

@@ -3,7 +3,159 @@ const { test } = require("node:test");
 const assert = require("node:assert");
 const fs = require("fs");
 const path = require("path");
-const { cli, rmrf, freshInstall, tmpdir } = require("./_helpers");
+const { cli, rmrf, freshInstall, tmpdir, REPO, FAKE_HOME } = require("./_helpers");
+
+// ── v0.34.1 install integrity (P0: `orc update` destroyed all run state) ────
+
+test("update preserves run state (the P0) and never re-copies it", () => {
+  const { root, claudeDir } = freshInstall();
+  try {
+    const runDir = path.join(claudeDir, "orc", "run", "probe");
+    fs.mkdirSync(runDir, { recursive: true });
+    const cp = path.join(runDir, "checkpoint.json");
+    const bytes = '{"paused":true,"wave":2}\n';
+    fs.writeFileSync(cp, bytes);
+
+    assert.strictEqual(cli(["update", "--dir", root]).status, 0);
+    assert.ok(fs.existsSync(cp), "checkpoint survives an update");
+    assert.strictEqual(fs.readFileSync(cp, "utf8"), bytes, "checkpoint bytes unchanged");
+
+    // doctor --fix is the ADVERTISED repair path — the one users run mid-run.
+    cli(["doctor", "--fix", "--dir", root]);
+    assert.strictEqual(fs.readFileSync(cp, "utf8"), bytes, "checkpoint survives doctor --fix");
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("update migrates pre-0.34.1 run state out of the payload tree, exactly once", () => {
+  const { root, claudeDir } = freshInstall();
+  try {
+    const legacy = path.join(claudeDir, "skills", "orc", "run", "old-run");
+    fs.mkdirSync(legacy, { recursive: true });
+    fs.writeFileSync(path.join(legacy, "checkpoint.json"), '{"wave":1}');
+
+    assert.strictEqual(cli(["update", "--dir", root]).status, 0);
+    const moved = path.join(claudeDir, "orc", "run", "old-run", "checkpoint.json");
+    assert.ok(fs.existsSync(moved), "legacy run state lands at the new path");
+    assert.ok(!fs.existsSync(legacy), "legacy copy is gone (moved, not duplicated)");
+
+    // A second update must be a no-op, not a re-migration or a clobber.
+    fs.writeFileSync(moved, '{"wave":9}');
+    assert.strictEqual(cli(["update", "--dir", root]).status, 0);
+    assert.strictEqual(fs.readFileSync(moved, "utf8"), '{"wave":9}', "no re-migration clobber");
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("update leaves the installed payload byte-identical to the shipped one", () => {
+  const { root, claudeDir } = freshInstall();
+  try {
+    assert.strictEqual(cli(["update", "--dir", root]).status, 0);
+    const src = path.join(REPO, "templates", "agents");
+    for (const f of fs.readdirSync(src)) {
+      const a = fs.readFileSync(path.join(src, f));
+      const b = fs.readFileSync(path.join(claudeDir, "agents", f));
+      assert.ok(a.equals(b), `agents/${f} installed byte-identical`);
+    }
+    const spine = path.join("skills", "orc", "SKILL.md");
+    assert.ok(
+      fs.readFileSync(path.join(REPO, "templates", spine)).equals(
+        fs.readFileSync(path.join(claudeDir, spine))
+      ),
+      "the orc spine is installed byte-identical"
+    );
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("prune: an unowned ORC-named file is REPORTED with a manifest present, deleted only with --prune", () => {
+  const { root, claudeDir } = freshInstall();
+  try {
+    // manifest intact (the case the old early-return silenced entirely)
+    const ghost = path.join(claudeDir, "agents", "orc-retired-opus-4-8-high.md");
+    fs.writeFileSync(ghost, "retired");
+
+    const rep = cli(["update", "--dir", root]);
+    assert.strictEqual(rep.status, 0);
+    assert.match(rep.stdout, /orc-retired-opus-4-8-high\.md/, "candidate is reported");
+    assert.match(rep.stdout, /--prune/, "the fix is named");
+    assert.ok(fs.existsSync(ghost), "never deleted without --prune");
+
+    assert.strictEqual(cli(["update", "--dir", root, "--prune"]).status, 0);
+    assert.ok(!fs.existsSync(ghost), "--prune removes it");
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("verify-package guards EVERY agent file (required[] ∪ generated == disk)", () => {
+  const guarded = new Set(
+    fs
+      .readFileSync(path.join(REPO, "bin", "verify-package.js"), "utf8")
+      .split("\n")
+      .map((l) => (l.match(/"(templates\/agents\/[^"]+)"/) || [])[1])
+      .filter(Boolean)
+      .map((p) => p.replace("templates/agents/", ""))
+  );
+  const generated = fs
+    .readFileSync(path.join(REPO, "bin", "build-agents.js"), "utf8")
+    .matchAll(/name:\s*"(orc-executor-[a-z0-9-]+)"/g);
+  for (const m of generated) guarded.add(m[1] + ".md");
+
+  const onDisk = fs.readdirSync(path.join(REPO, "templates", "agents"));
+  const unguarded = onDisk.filter((f) => !guarded.has(f));
+  assert.deepStrictEqual(unguarded, [], "every shipped agent file is named by a guard");
+});
+
+test("doctor warns about a stale GLOBAL install that can win skill resolution", () => {
+  const { root } = freshInstall();
+  const globalRoot = path.join(FAKE_HOME, "global-probe");
+  try {
+    // ~/.claude is the fake HOME: install there, then skew its stamp + plant a
+    // retired agent name that a dispatch would silently resolve against.
+    assert.strictEqual(cli(["init", "--dir", FAKE_HOME]).status, 0);
+    const gClaude = path.join(FAKE_HOME, ".claude");
+    fs.writeFileSync(
+      path.join(gClaude, "hooks", "orc-version.json"),
+      JSON.stringify({ version: "0.9.9" })
+    );
+    fs.writeFileSync(path.join(gClaude, "agents", "orc-executor-opus-4-8-med.md"), "retired");
+
+    const r = cli(["doctor", "--dir", root]);
+    assert.strictEqual(r.status, 1, "skew is an issue, not a pass");
+    assert.match(r.stdout, /GLOBAL install/, "names the global skew");
+    assert.match(r.stdout, /0\.9\.9/, "names the global version");
+    assert.match(r.stdout, /orc-executor-opus-4-8-med\.md/, "names the shadowing agent");
+  } finally {
+    rmrf(root);
+    rmrf(globalRoot);
+    rmrf(path.join(FAKE_HOME, ".claude"));
+  }
+});
+
+test("every config key documented in config.md resolves through the CLI registry", () => {
+  const cliKeys = new Set(
+    [
+      ...fs
+        .readFileSync(path.join(REPO, "bin", "cli.js"), "utf8")
+        .matchAll(/\{\s*key:\s*"([a-z0-9_]+)"/g),
+    ].map((m) => m[1])
+  );
+  const md = fs
+    .readFileSync(path.join(REPO, "templates", "skills", "orc", "config.md"), "utf8")
+    .replace(/\r\n/g, "\n");
+  // the documented defaults block: `key: value` lines inside the yaml fence
+  const fence = (md.match(/```yaml\n([\s\S]*?)```/) || [])[1] || "";
+  const ALLOW = new Set(["rubric_bands_override"]); // hand-edit-only advanced key
+  const documented = [...fence.matchAll(/^([a-z][a-z0-9_]+):/gm)].map((m) => m[1]);
+  assert.ok(documented.length > 10, "parsed the documented config block");
+  const phantom = documented.filter((k) => !cliKeys.has(k) && !ALLOW.has(k));
+  assert.deepStrictEqual(phantom, [], "no documented key is unsettable via `orc config`");
+});
+
 
 test("where prints the four payload target paths", () => {
   const dir = tmpdir();

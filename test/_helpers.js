@@ -9,8 +9,18 @@ const REPO = path.join(__dirname, "..");
 const CLI = path.join(REPO, "bin", "cli.js");
 const HOOK_SRC = path.join(REPO, "templates", "hooks");
 
-// Deterministic env: never let the update-check touch the network in tests.
-const BASE_ENV = { ...process.env, ORC_NO_UPDATE_CHECK: "1", CI: "true" };
+// Deterministic env: never let the update-check touch the network in tests,
+// and never let the DEVELOPER's real ~/.claude decide a result — `orc doctor`
+// reads the global install to detect skew, so a stale global ORC on the
+// machine running the suite would otherwise flip a "healthy" assertion.
+const FAKE_HOME = fs.mkdtempSync(path.join(os.tmpdir(), "orc-test-home-"));
+const BASE_ENV = {
+  ...process.env,
+  ORC_NO_UPDATE_CHECK: "1",
+  CI: "true",
+  HOME: FAKE_HOME,
+  USERPROFILE: FAKE_HOME,
+};
 
 function tmpdir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), "orc-test-"));
@@ -50,4 +60,4 @@ function freshInstall() {
   return { root, claudeDir: path.join(root, ".claude") };
 }
 
-module.exports = { REPO, CLI, HOOK_SRC, tmpdir, rmrf, cli, runHook, freshInstall };
+module.exports = { REPO, CLI, HOOK_SRC, FAKE_HOME, tmpdir, rmrf, cli, runHook, freshInstall };
