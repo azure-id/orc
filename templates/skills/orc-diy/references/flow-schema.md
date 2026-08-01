@@ -74,10 +74,25 @@ Warnings (written, reported):
 }
 ```
 
-Gate status (computed by `orc diy status`, consumed by the stub skill, the
-effort guard, and the statusline):
-- **UNCONFIGURED** — no config file (or empty).
-- **STALE** — no lock / never compiled / `config_hash` mismatch (config
-  changed since compile) / `orc_version` mismatch (orc was updated) /
-  compiled file missing or `compiled_hash` mismatch (artifact modified).
-- **READY** — everything matches; `/orc-diy` may run the compiled flow.
+Gate status (computed by `orc diy status`, consumed by the stub skill and
+`orc doctor`; the effort guard does NOT read it — it keys on `flow.lock.json` +
+`session_tier` directly, and the statusline reads the lock, not this verb):
+
+**The exit code IS the contract** (v0.34.7), same convention as the sibling
+`orc pattern status <lang>` in `_shared/detecting-artifacts.md`:
+
+| Exit | State | Meaning |
+|---|---|---|
+| 0 | READY | everything matches; `/orc-diy` may run the compiled flow |
+| 1 | STALE | see the triggers below — the flow must be recompiled first |
+| 1 | UNCONFIGURED | no config file (or empty) |
+
+It used to exit 0 in all three states, so anything branching on it treated a
+hard-blocked flow as runnable — the direct inverse of its own sibling.
+
+STALE triggers (**all live ones are reported, joined by `;`** — not just the
+first): no lock / never compiled / `config_hash` mismatch (config changed since
+compile) / `orc_version` mismatch (orc was updated) / compiled file missing or
+`compiled_hash` mismatch (artifact modified). Reporting only the first meant a
+flow stale ONLY because `orc update` bumped the payload said "config changed",
+which contradicts a user who knows they never touched their config.

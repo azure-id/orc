@@ -6,7 +6,7 @@
 
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
-![Version](https://img.shields.io/badge/version-0.34.6-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.34.7-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
@@ -46,53 +46,46 @@ zero-dependency npm package installs those files into your `.claude/` directory.
 
 ## Changelog
 
-**Latest: v0.34.6 — updated 2026-08-01.**
+**Latest: v0.34.7 — updated 2026-08-01.**
 
-### v0.34.6 — Analyze: the evidence gate now covers the rows a good analysis produces _(2026-08-01)_
+### v0.34.7 — DIY: a usable status contract, and compile docs that match the compiler _(2026-08-01)_
 
-**The one mechanical defence against a wrong line number reaching the planner
-was checking the wrong rows.** The analyst-return gate Grep-verified quoted
-snippets only on `status: exists|conflict` entries — but the two statuses a good
-audit most often produces are `resolved` (a challenged row the user decided) and
-`buildable` (the actual work). A real spec had *no* `exists|conflict` row, so the
-mandated verification covered **zero of five refs**, and a citation pointing at
-`src/auth.js:5` for a quote that lives at line 4 went through. It was caught only
-because a reviewer verified every ref rather than the required floor.
+**`orc diy status` exited 0 in all three states** — UNCONFIGURED, STALE and
+READY alike — so the exit code carried no information and anything branching on
+it treated a hard-blocked flow as runnable. That is the direct inverse of its own
+sibling: `orc pattern status <lang>` documents "the exit code **is** the
+contract", and orc-fast's knowledge gate relies on exactly that.
 
-The shape of that error is worth stating: the ref started as a line *range* with
-no quote, which the schema auto-downgrades to UNVERIFIED. Narrowing it to a
-single line plus a verbatim quote was the **correct** fix — and is what
-introduced the off-by-one. Tightening evidence granularity is itself an error
-surface, so the gate has to be what catches it.
+- **0 = READY, 1 = STALE or UNCONFIGURED**, documented in `flow-schema.md` at
+  the call site. The no-argument `orc pattern status` now exits 1 on an empty
+  cache too — the same gap, mirrored.
+- **STALE reports every live trigger, not just the first.** A flow stale *only*
+  because `orc update` bumped the payload used to say "config changed" — which
+  flatly contradicts a user who knows they never touched their config, and
+  invites suspicion of the tool instead of a recompile. Now:
+  `STALE — config changed since the last compile; orc updated 0.24.0 → 0.34.7`.
 
-- **The gate now verifies every quote-anchored ref, whatever its status.** One
-  grep per ref; it enforces the rule the schema already states rather than a
-  subset of it. The `files[]` glob half is unchanged.
+**The compile spec had lost a phase.** `compile.md` documented the stitch order
+without `mock-example`, which v0.33.0 added to the compiler — so a maintainer
+reconciling implementation to spec would "fix" it by **deleting a working
+phase**. The doc now matches the compiler, notes that `tdd` is not a block (it
+composes via `diy:when` markers), and a golden test compares the two lists so the
+drift cannot recur.
 
-**Also**
-
-- **The report's handoff checklist can be read honestly.** Two of its five items
-  can only become true *after* the report is confirmed and frozen, so every
-  correct run shipped a report with two unticked boxes that looked like a failed
-  checklist. They are now labelled as satisfied post-confirmation, with the
-  reason stated.
-- **Corrected shipped literals** — the combiner's model pin (Opus 4.8 → Opus 5,
-  in the gates prose *and* in the report template, which is the dangerous one
-  because it gets copied), and the analyst report's stated write target
-  (`analyzer_dir`, with `report_out_dir` as the copy-out on the stop-here
-  branch). A new test ties every schema template's model literal to the agent
-  that actually fills it, so a role re-pin cannot leave a stale template behind.
-- **`R#` is reserved for the spec.** A report row labelled `R1` collides with
-  the spec's own id space, and the derivation lint compares the two sets — it
-  would false-pass or false-bounce. Report rows are "row N".
-- **Analyst returns lead with their structured fields.** A 41k-token analyst
-  return has been observed arriving as a single line; leading with status,
-  `actual_model`/`actual_effort` and the verdicts means a truncation costs prose
-  instead of the answer (and an early `actual_model` is what lets the trace hook
-  attach `model=` to the RETURN line at all).
+**The self-gate now reconciles the tier in both directions.** The compile-time
+band clip is correct and frozen in the artifact — but the pinned role agents are
+named verbatim and are never clipped, so on a session *above* the compiled tier
+you get a full-pin reviewer and verifier alongside executors still clipped to the
+old tier, with `orc diy status` reporting READY because the session model is in
+no hash. The compiled flow now says so once and names the fix. (Related: the
+`diy validate` warning claimed the pinned Opus 5 agents "will silently run at the
+session's model" — on a higher session they demonstrably do not; the warning now
+reasons about what the declared tier can and cannot guarantee.)
 
 <details>
 <summary><b>Previous versions</b> (click to expand)</summary>
+
+### v0.34.6 — Analyze: the evidence gate now covers the rows a good analysis produces _(2026-08-01)_
 
 ### v0.34.5 — Wiki: stop losing tags silently, let a delta clear its own delta _(2026-08-01)_
 

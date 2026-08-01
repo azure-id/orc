@@ -17,12 +17,22 @@ second implementation, and the skill never stitches the flow itself.
    `.claude/skills/` (project first, `~/.claude/skills/` fallback for a
    global orc install) and aborts naming the missing file if orc is absent
    or incomplete.
-3. **Stitch.** Concatenate in fixed order: `header` → `locked-blocks.md`
-   (verbatim) → `trace` → `wiki` → `analyze` → `planning` → `pattern` →
-   `scoring` → `execution` → `review` → `security` → `verify` → `testgen` →
-   `mock-example` → `ship` → `summary`. `trace` is UNCONDITIONAL — behavior
-   tracing is permanent and is not a flow key, so every compiled flow carries
-   the protocol (lane token `diy`) whatever the user composed. Inside each block, keep text outside markers, and keep a
+3. **Stitch.** Concatenate in fixed order — this list and the `order` array in
+   `bin/cli.js` are ONE contract; change them together (a golden test compares
+   them, because the drift is grammar-shaped and the contract lint cannot see
+   it, which is how `mock-example` went missing here for a whole release):
+
+   `header` → `locked-blocks.md` (verbatim) → `trace` → `wiki` → `analyze` →
+   `planning` → `pattern` → `scoring` → `execution` → `review` → `security` →
+   `verify` → `testgen` → `mock-example` → `ship` → `summary`.
+
+   `trace` is UNCONDITIONAL — behavior tracing is permanent and is not a flow
+   key, so every compiled flow carries the protocol (lane token `diy`) whatever
+   the user composed. **`tdd` is NOT a block** — it composes into `planning`,
+   `execution` and `verify` through `diy:when tdd=on` markers, so there is no
+   `tdd.md` to stitch and none should be added.
+
+   Inside each block, keep text outside markers, and keep a
    `<!-- diy:when key=value -->…<!-- /diy:when -->` section only when the
    config's `key` equals one of the listed values (`|`-separated).
 4. **Substitute placeholders.** `{{flow_name}}`, `{{config_hash}}`,

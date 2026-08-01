@@ -307,6 +307,64 @@ test("diy: every compiled flow carries the trace protocol (tracing is not compos
   }
 });
 
+test("diy status: the exit code IS the contract (0 READY, 1 STALE, 1 UNCONFIGURED)", () => {
+  const { root, claudeDir } = freshInstall();
+  try {
+    const unconf = cli(["diy", "status", "--dir", root]);
+    assert.strictEqual(unconf.status, 1, "UNCONFIGURED must not read as runnable");
+    assert.match(unconf.stdout, /UNCONFIGURED/);
+
+    assert.strictEqual(cli(["diy", "init", "--dir", root]).status, 0);
+    assert.strictEqual(cli(["diy", "status", "--dir", root]).status, 1, "never compiled → STALE → 1");
+
+    assert.strictEqual(cli(["diy", "compile", "--dir", root]).status, 0);
+    const ready = cli(["diy", "status", "--dir", root]);
+    assert.strictEqual(ready.status, 0, "READY → 0");
+    assert.match(ready.stdout, /READY/);
+
+    // Two live triggers at once: the config changed AND orc was updated.
+    fs.appendFileSync(path.join(claudeDir, "orc-diy.config.yaml"), "\n# touched\n");
+    const lockPath = path.join(claudeDir, "orc", "diy", "flow.lock.json");
+    const lock = JSON.parse(fs.readFileSync(lockPath, "utf8"));
+    lock.orc_version = "0.24.0";
+    fs.writeFileSync(lockPath, JSON.stringify(lock, null, 2));
+
+    const stale = cli(["diy", "status", "--dir", root]);
+    assert.strictEqual(stale.status, 1);
+    assert.match(stale.stdout, /config changed/, "names the config trigger");
+    assert.match(stale.stdout, /orc updated 0\.24\.0/, "AND the version trigger — not just the first");
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("diy compile: the documented stitch order equals the compiler's order array", () => {
+  const cliSrc = fs.readFileSync(path.join(REPO, "bin", "cli.js"), "utf8");
+  const arr = cliSrc.match(/const order = \[([^\]]+)\]/);
+  assert.ok(arr, "found the compiler's order array");
+  const code = arr[1]
+    .split(",")
+    .map((x) => x.trim().replace(/^"|"$/g, ""))
+    .map((x) => (x === "null" ? "locked-blocks.md" : x));
+
+  const doc = fs
+    .readFileSync(path.join(REPO, "templates", "skills", "orc-diy", "references", "compile.md"), "utf8")
+    .replace(/\r\n/g, "\n");
+  // The order list itself — from the first `header` to `summary`; the prose
+  // around it legitimately names blocks out of order.
+  const step = doc.slice(doc.indexOf("3. **Stitch.**"), doc.indexOf("4. **Substitute"));
+  const stitch = step.slice(step.indexOf("`header`"), step.indexOf("`summary`") + "`summary`".length);
+  const documented = [...stitch.matchAll(/`([a-z-]+(?:\.md)?)`/g)]
+    .map((m) => m[1])
+    .filter((n) => code.includes(n) || n === "locked-blocks.md");
+  // de-dupe while keeping first-seen order (the prose mentions some twice)
+  const seen = [];
+  for (const n of documented) if (!seen.includes(n)) seen.push(n);
+
+  assert.deepStrictEqual(seen, code, "compile.md and bin/cli.js must stitch the same blocks in the same order");
+  assert.ok(code.includes("mock-example"), "the phase that went missing from the doc is in both");
+});
+
 test("orc pattern status <lang> exits 1 when no pattern is cached", () => {
   const { root } = freshInstall();
   try {

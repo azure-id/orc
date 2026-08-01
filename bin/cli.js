@@ -1205,7 +1205,12 @@ function diyValidate(cfg) {
   // The pinned reviewer/verifier moved to claude-opus-5 (model rank 6) in
   // v0.34.0 — anything below that tier silently runs them at the session model.
   if (tier && tier.model < 6 && (cfg.review !== "off" || cfg.verify !== "off")) {
-    warnings.push(`session_tier ${cfg.session_tier}: the pinned Opus 5 reviewer/verifier agents will silently run at the session's model (tier-honesty rule reports it)`);
+    // Careful wording (v0.34.7): `session_tier` is a DECLARATION, not the real
+    // session model — a hook cannot read the model, only the effort. On a
+    // session that actually outranks the declared tier the pinned Opus 5 roles
+    // run at FULL pin (observed), so asserting they "will" downgrade is a false
+    // alarm; what is certain is only that a LOWER real session caps them.
+    warnings.push(`session_tier ${cfg.session_tier} is below the pinned Opus 5 reviewer/verifier: if the REAL session is also below Opus 5 they run capped at it (the tier-honesty rule reports the actual model). A session above this tier runs them at full pin — but your executor table stays clipped to ${cfg.session_tier}; recompile to use the full ladder`);
   }
   return { errors, warnings };
 }
@@ -1319,6 +1324,16 @@ function diyWriteConfig(claudeDir, map) {
 
 // Gate status. Consumed by `orc diy status`, the orc-diy stub skill, the
 // effort guard, and the statusline — one computation, everywhere the same.
+// The three states are also an EXIT-CODE contract (v0.34.7): 0 = READY,
+// 1 = STALE | UNCONFIGURED. It used to exit 0 in all three, so anything
+// branching on it treated a hard-blocked flow as runnable — the direct inverse
+// of its sibling `orc pattern status`, where "the exit code IS the contract".
+// Two status verbs in one CLI with opposite conventions is the bug.
+//
+// STALE also collects EVERY live trigger, not just the first. A flow stale ONLY
+// because `orc update` bumped the payload used to report "config changed" —
+// which flatly contradicts a user who knows they never touched their config,
+// and invites suspicion of the tool rather than a recompile.
 function diyStatus(claudeDir) {
   const p = diyPaths(claudeDir);
   if (!fs.existsSync(p.config) || !readDiyConfig(claudeDir))
@@ -1326,12 +1341,16 @@ function diyStatus(claudeDir) {
   const lock = readDiyLock(claudeDir);
   if (!lock) return { state: "STALE", reason: "lock missing — run `orc diy init` again, then `orc diy compile`" };
   if (!lock.compiled_hash) return { state: "STALE", reason: "never compiled — run `orc diy compile`" };
+  const triggers = [];
   if (lock.config_hash !== sha256(fs.readFileSync(p.config, "utf8")))
-    return { state: "STALE", reason: "config changed since the last compile — run `orc diy compile`" };
-  if (lock.orc_version !== installedPayloadVersion(claudeDir))
-    return { state: "STALE", reason: `compiled against orc ${lock.orc_version}, installed is ${installedPayloadVersion(claudeDir)} — run \`orc diy compile\`` };
+    triggers.push("config changed since the last compile");
+  const installedV = installedPayloadVersion(claudeDir);
+  if (lock.orc_version !== installedV)
+    triggers.push(`orc updated ${lock.orc_version} → ${installedV}`);
   if (!fs.existsSync(p.compiled) || sha256(fs.readFileSync(p.compiled, "utf8")) !== lock.compiled_hash)
-    return { state: "STALE", reason: "compiled flow modified or missing — run `orc diy compile`" };
+    triggers.push("compiled flow modified or missing");
+  if (triggers.length)
+    return { state: "STALE", reason: triggers.join("; ") + " — run `orc diy compile`", triggers };
   return { state: "READY", reason: `flow "${lock.flow_name}" compiled for ${lock.session_tier}` };
 }
 
@@ -1674,10 +1693,12 @@ function diy() {
       if (!diyCompile(claudeDir)) process.exit(1);
       break;
     case "status": {
+      // Exit code IS the contract, mirroring `orc pattern status <lang>`:
+      // 0 = READY (the flow can run), 1 = STALE | UNCONFIGURED (it cannot).
       const st = diyStatus(claudeDir);
       if (args.includes("--json")) console.log(JSON.stringify(st));
       else console.log(`${st.state} — ${st.reason}`);
-      break;
+      process.exit(st.state === "READY" ? 0 : 1);
     }
     case "show":
       diyShow(claudeDir);
@@ -2781,9 +2802,12 @@ function patternStatus(claudeDir, lang) {
     );
     process.exit(hit ? 0 : 1);
   }
+  // No-argument form obeys the same contract (v0.34.7): an EMPTY cache is the
+  // absent state, so it exits 1 too — it used to exit 0, which is the mirror
+  // image of the `orc diy status` bug and equally unbranchable.
   if (!langs.length) {
     console.log("no cached patterns — run `/orc-pattern` in Claude Code to codify your conventions");
-    return;
+    process.exit(1);
   }
   console.log(`✓ ${plural(langs.length, "cached pattern")}: ${langs.join(", ")}`);
 }

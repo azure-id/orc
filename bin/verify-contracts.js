@@ -569,6 +569,7 @@ const CONTRACTS = [
     name: "artifact existence probe (v0.25.0 — deterministic CLI, never ad-hoc find)",
     token: "detecting-artifacts.md",
     files: [
+      "skills/orc-diy/references/flow-schema.md",
       "skills/orc-fast/SKILL.md",
       "skills/orc-mini/SKILL.md",
       "skills/orc-poly/SKILL.md",

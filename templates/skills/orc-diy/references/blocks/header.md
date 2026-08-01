@@ -12,9 +12,24 @@ for. If you can tell you are on a LOWER model than {{tier_model}}, STOP and
 tell the user to switch: subagents cannot exceed the main-session tier, so
 every pinned agent below would silently downgrade.
 
-**Self-gate (run FIRST):** run `orc diy status` via Bash. If it does not
-report `READY`, STOP — tell the user the flow is stale and to run
-`orc diy compile`, then end. Never orchestrate from a stale compile.
+**Self-gate (run FIRST):** run `orc diy status` via Bash. **Exit 0 = READY;
+any non-zero means STOP** — tell the user the reported reason (it names every
+live trigger) and to run `orc diy compile`, then end. Never orchestrate from a
+stale compile.
+
+**Tier reconciliation (both directions).** Compare the session you are actually
+running as against `{{tier_model}}`:
+- **BELOW it** → STOP as stated above; every pinned agent would silently
+  downgrade.
+- **ABOVE it** → do NOT stop, but say so once: the executor table was CLIPPED
+  to `{{tier_model}}` at compile time and is frozen in this artifact, while the
+  pinned role agents (reviewer/verifier) are named verbatim and run at their
+  FULL pin — so a better session buys you better roles and the same clipped
+  executors, with nothing else telling you. Line to print:
+  *"compiled for {{tier_model}}, running higher — executors are clipped below
+  what this session supports; `orc diy set session_tier <tier> && orc diy
+  compile` to use the full ladder."* The session model is not part of any hash,
+  so `orc diy status` still reports READY — this line is the only signal.
 
 This flow reuses the full orchestrator's machinery by reference — schemas and
 subskills live under `.claude/skills/orc/`, the run folder + checkpoint under
