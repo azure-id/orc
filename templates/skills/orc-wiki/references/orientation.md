@@ -27,10 +27,20 @@ into the docs it points at.
 ## Rules
 
 - **Registered like any doc:** standard wiki-doc header (schemas/wiki-doc.md —
-  `doc_type: reference`, `area: orientation`, `covers` = the wiki docs it
-  points at is WRONG; `covers` lists the entry-point source files its Repo
-  identity anchors) → `orc wiki sync` registers it. Freshness: computed on
-  read, existing tiers, NO new config keys.
+  `doc_type: reference`, `area: orientation`) → `orc wiki sync` registers it;
+  freshness computed on read, existing tiers, NO new config keys. `covers` lists the entry-point
+  source files its Repo identity anchors — **plus every source file the docs it
+  summarizes cover** (the union of their `covers`). Its CONTENT derives from
+  those docs, so anchoring staleness only to `src/app.js` + `package.json` let
+  it read CLEAN in the same impact table where three docs it points at were
+  TOUCHED, while its Journeys described a handler that had changed. This is the
+  doc every consuming lane reads FIRST, so it is the highest-leverage stale doc
+  in the wiki — it needs a machine backstop, not only an obligation.
+- **`derived_from` (v0.34.5):** the header also records
+  `derived_from: {<doc file>: <content_hash>}` for every doc it summarizes. A
+  hash that no longer matches means orientation is stale even when no source
+  file moved (e.g. a doc was rewritten from the same code) — the Phase 3
+  integrity check reads it.
 - **Regenerated (free, derived) whenever any doc it points to is refreshed** —
   including the delta refresh (staleness.md mode 1) and after an atlas
   regeneration. Regeneration is an assemble step, never a scan.

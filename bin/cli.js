@@ -2290,28 +2290,43 @@ function detectCommands(root, prev) {
 // crosslink_provided is an INDEX of the tag files, so it is derived like the
 // rest of registration. The tag FILES stay model-written (they carry scanned
 // contract prose + evidence anchors); this only re-indexes them.
+// RECURSIVE (v0.34.5). The old single-level walk silently dropped every tag
+// whose `kind` contains a `/` — and the payload's own catalog ships one
+// (`auth/oidc`), so a well-formed, published tag was invisible while
+// `sync --check` still exited 0. `kind` comes from the HEADER, so a sanitized
+// one-level directory (`auth-oidc/`) and a legacy two-level one (`auth/oidc/`)
+// both round-trip to the same identity; reading both is the migration.
+// Returns { list, filesFound } so sync can assert found == written: "6 indexed"
+// while 7 exist must never pass, whatever the cause.
 function readCrosslinkProvided(paths) {
-  if (!fs.existsSync(paths.crosslinkDir)) return [];
+  if (!fs.existsSync(paths.crosslinkDir)) return { list: [], filesFound: 0 };
   const out = [];
-  for (const kind of fs.readdirSync(paths.crosslinkDir, { withFileTypes: true })) {
-    if (!kind.isDirectory()) continue;
-    const kindDir = path.join(paths.crosslinkDir, kind.name);
-    for (const f of fs.readdirSync(kindDir)) {
-      if (!f.endsWith(".md")) continue;
-      const abs = path.join(kindDir, f);
+  let filesFound = 0;
+  const walk = (dir, kindParts) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const abs = path.join(dir, e.name);
+      if (e.isDirectory()) {
+        walk(abs, kindParts.concat(e.name));
+        continue;
+      }
+      if (!e.name.endsWith(".md")) continue;
+      // atlas.md is DERIVED (the federation view) — never a tag, never counted.
+      if (!kindParts.length && e.name === "atlas.md") continue;
+      filesFound++;
       const h = parseDocHeader(fs.readFileSync(abs, "utf8"));
       if (!h || !h.tag) continue;
       out.push({
         tag: h.tag,
-        kind: h.kind || kind.name,
+        kind: h.kind || kindParts.join("/") || null,
         file: path.relative(paths.root, abs).split(path.sep).join("/"),
         anchor: h.anchor || null,
         content_hash: h.content_hash || null,
       });
     }
-  }
+  };
+  walk(paths.crosslinkDir, []);
   out.sort((a, b) => a.tag.localeCompare(b.tag));
-  return out;
+  return { list: out, filesFound };
 }
 
 // Cheap boundary detector (plan v0.24.0 §B1). A non-empty `## Contracts & shapes`
@@ -2374,10 +2389,16 @@ function buildRegistration(claudeDir) {
     ...new Set(registry.map((e) => e.scanned_commit).filter(Boolean)),
   ]);
 
+  // last_scan answers "when was this wiki last updated", so it is the NEWEST
+  // doc's stamp (v0.34.5). It used to take the oldest to match the commit
+  // anchor — which reported a delta refresh's own start time while summarizing
+  // docs written 20 minutes later, contradicting `orc wiki impact`.
+  // `scan_commit` below stays the OLDEST doc's anchor deliberately: it is the
+  // conservative floor for "everything since this commit may be undocumented".
   let stamp = null;
   for (const d of docs) {
     const at = parseScannedAt(d.header.scanned_at) || fs.statSync(d.abs).mtime;
-    if (!stamp || at < stamp) stamp = at; // oldest, matching the commit anchor
+    if (!stamp || at > stamp) stamp = at;
   }
 
   const meta = Object.assign({}, prev.meta || {}, {
@@ -2393,7 +2414,7 @@ function buildRegistration(claudeDir) {
   if (commands) meta.commands = commands;
   else delete meta.commands;
 
-  const provided = readCrosslinkProvided(paths);
+  const { list: provided, filesFound: crosslinkFiles } = readCrosslinkProvided(paths);
   if (provided.length) meta.crosslink_provided = provided;
   else delete meta.crosslink_provided;
 
@@ -2421,7 +2442,7 @@ function buildRegistration(claudeDir) {
     "     edit a doc's header and re-run sync. -->\n\n" +
     (lines.length ? lines.join("\n") + "\n" : "_No wiki docs yet._\n");
 
-  return { paths, docs, skipped, registry, meta, index, prev, anchor, provided, boundaryRows, prevProvided };
+  return { paths, docs, skipped, registry, meta, index, prev, anchor, provided, crosslinkFiles, boundaryRows, prevProvided };
 }
 
 // The registration state of THIS repo's wiki — the vocabulary every consumer
@@ -2458,7 +2479,23 @@ function wikiSync(claudeDir, { check } = {}) {
   const nextMeta = JSON.stringify(r.meta, null, 2) + "\n";
   const curMeta = fs.existsSync(r.paths.meta) ? fs.readFileSync(r.paths.meta, "utf8") : null;
   const curIndex = fs.existsSync(r.paths.index) ? fs.readFileSync(r.paths.index, "utf8") : null;
-  const changed = curMeta !== nextMeta || curIndex !== r.index;
+  // v0.34.5: compare the manifest MINUS volatile fields. `branch` is recorded
+  // for information, so a plain feature-branch checkout used to make
+  // `sync --check` exit 1 with nothing unindexed — and REPAIR takes precedence
+  // over REFRESH, so every run on a branch was routed into a repair it did not
+  // need. The INDEX is still compared byte-for-byte.
+  const VOLATILE = ["branch"];
+  const stable = (text) => {
+    if (text === null) return null;
+    try {
+      const o = JSON.parse(text);
+      for (const k of VOLATILE) delete o[k];
+      return JSON.stringify(o, null, 2) + "\n";
+    } catch (_) {
+      return text;
+    }
+  };
+  const changed = stable(curMeta) !== stable(nextMeta) || curIndex !== r.index;
 
   // Crosslink publish guards (plan v0.24.0 §B). Both are LOCAL-artifact integrity
   // (our own tags vs our own docs) — always gateable, they just never were.
@@ -2466,8 +2503,19 @@ function wikiSync(claudeDir, { check } = {}) {
   //   n0trip: the manifest listed tags, now the folder is empty (a wipe).
   const boundaryUnpublished = r.boundaryRows > 0 && r.provided.length === 0;
   const n0trip = r.prevProvided > 0 && r.provided.length === 0;
-  const crosslinkAlarm = boundaryUnpublished || n0trip;
+  // v0.34.5: files on disk vs entries written. A tag file that exists and does
+  // not reach the registry is a SILENT boundary loss — the failure `--check`
+  // exists to catch, and the one it used to walk straight past.
+  const tagsLost = r.crosslinkFiles - r.provided.length;
+  const crosslinkAlarm = boundaryUnpublished || n0trip || tagsLost > 0;
   const alarmLines = () => {
+    if (tagsLost > 0)
+      console.error(
+        `⚠ ${plural(tagsLost, "crosslink tag file")} on disk did NOT reach the registry ` +
+          `(${r.crosslinkFiles} found, ${r.provided.length} indexed).\n` +
+          "   A published boundary nothing can resolve is worse than none. Check each file's\n" +
+          "   `tag:` header (`<kind>:<name>` is required — a nameless tag has no identity)."
+      );
     if (n0trip)
       console.error(
         `⚠ crosslink tags VANISHED — the manifest listed ${plural(r.prevProvided, "tag")}, now wiki/crosslink/ is empty.\n` +
@@ -2542,7 +2590,7 @@ function wikiStatus(claudeDir) {
       // Crosslink surface — tags reported alongside docs (plan v0.24.0 §B4). A
       // documented boundary with zero tags is the user's exact symptom, so name
       // it here rather than let it read as a clean wiki.
-      const provided = readCrosslinkProvided(paths).length;
+      const provided = readCrosslinkProvided(paths).list.length;
       const { docs } = readWikiDocs(paths.wikiDir);
       const crossline = provided
         ? ` · crosslink tags: ${provided}`
@@ -2617,13 +2665,31 @@ function wikiImpact(claudeDir) {
   }
   const changed = (diff.stdout || "").split(/\r?\n/).map((x) => x.trim()).filter(Boolean);
 
+  // Per-doc changed-file sets from each doc's OWN `scanned_commit` (v0.34.5).
+  // `meta.scan_commit` is the OLDEST doc's anchor by design, and a delta refresh
+  // leaves untouched docs untouched — so the anchor never moves and a correct,
+  // complete delta refresh re-reported the identical delta forever, telling the
+  // user to run the expensive FULL refresh the feature exists to avoid. The
+  // global diff stays the input to the blind-spot sweep, which genuinely needs
+  // a repo-wide view.
+  const perDocChanged = (d) => {
+    const anchorC = d.scanned_commit || meta.scan_commit;
+    if (anchorC === meta.scan_commit) return changed;
+    const r2 = spawnSync("git", ["diff", "--name-only", `${anchorC}..HEAD`], {
+      cwd: paths.root,
+      encoding: "utf8",
+    });
+    if (r2.status !== 0) return changed; // unresolvable anchor → global view
+    return (r2.stdout || "").split(/\r?\n/).map((x) => x.trim()).filter(Boolean);
+  };
+
   const docs = Array.isArray(meta.docs) ? meta.docs : [];
   let touchedDocs = 0;
   let structuralDocs = 0;
   const pad = Math.max(12, ...docs.map((d) => d.file.length));
   console.log(`\norc wiki impact — ${changed.length} changed file(s) since scan_commit ${String(meta.scan_commit).slice(0, 8)}\n`);
   for (const d of docs) {
-    const hits = changed.filter((f) => docCovers(d, f));
+    const hits = perDocChanged(d).filter((f) => docCovers(d, f));
     // A covered file that no longer exists = the doc's anchor is gone
     // (deleted/renamed) — a targeted refresh can't re-anchor blind.
     const gone = Object.keys(d.covered_files || {}).filter(
@@ -2657,9 +2723,12 @@ function wikiImpact(claudeDir) {
   const aging = dist !== null && /^\d+$/.test(dist) && Number(dist) > agingMax;
   const pct = docs.length ? Math.round(((touchedDocs + structuralDocs) / docs.length) * 100) : 0;
 
-  console.log(`\n  summary: ${docs.length} registered · ${touchedDocs} touched · ${structuralDocs} structural · ${pct}% (threshold ${threshold}%)` + (dist !== null ? ` · ${dist} commits behind` : ""));
+  // `pct` counts touched + structural, so it measures REFRESH SCOPE, not
+  // "touched" — and it is the number users tune wiki_delta_full_threshold
+  // against, so the label has to say what it counts.
+  console.log(`\n  summary: ${docs.length} registered · ${touchedDocs} touched · ${structuralDocs} structural · ${pct}% affected (threshold ${threshold}%)` + (dist !== null ? ` · ${dist} commits behind` : ""));
   const fullReasons = [];
-  if (pct > threshold) fullReasons.push(`touched ${pct}% > wiki_delta_full_threshold ${threshold}%`);
+  if (pct > threshold) fullReasons.push(`affected ${pct}% > wiki_delta_full_threshold ${threshold}%`);
   if (structuralDocs || blind.length) fullReasons.push("STRUCTURAL change (gone anchors / blind spot)");
   if (aging) fullReasons.push(`scan_commit ${dist} commits behind HEAD > wiki_aging_max ${agingMax}`);
 

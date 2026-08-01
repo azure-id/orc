@@ -16,8 +16,8 @@ This project has an orc-wiki knowledge base in `/wiki`.
 **Read `wiki/orc-orientation.md` first** — repo identity, reading order,
 traced journeys; it says which doc answers what. Then consult the relevant
 overview: `wiki/INDEX.md` (one line per doc: type, status, description,
-keywords) → the matching `wiki/orc-feature-*-overview.md`,
-`wiki/orc-reference-*.md`, and `wiki/orc-architecture-overview.md`. Each doc
+keywords) → the matching `wiki/orc-feature-*-overview.md` and
+`wiki/orc-reference-*.md`. Each doc
 opens with a TL;DR brief; claims are anchored to real files. Precedence:
 code > fresh wiki > stale wiki (hints) > model priors — on conflict, the
 code wins.
@@ -31,6 +31,11 @@ Last updated: DDMMYY HH:MM:SS · N docs · block: v2.
 Conditional lines:
 - The orientation line appears only when `wiki/orc-orientation.md` exists
   (pre-v0.33.0 wikis keep the INDEX-first wording until their next refresh).
+- The architecture-overview line — ` and \`wiki/orc-architecture-overview.md\``,
+  appended to the doc list — appears ONLY when that file exists. It is optional
+  output (a small wiki may legitimately have none), and a wiki without one has
+  been reporting `✓ registered` without complaint since v0.18.0 — so pointing
+  every session at it unconditionally is a pointer to a file that is not there.
 - The crosslink/atlas line appears only when crosslink is configured
   (`.claude/orc-crosslink.config.yaml` with ≥1 edge) — otherwise omit it
   entirely; never point a session at an atlas that can't exist.

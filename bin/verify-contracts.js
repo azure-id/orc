@@ -26,6 +26,7 @@ const CONTRACTS = [
     name: "actual_model / actual_effort return (claimed-vs-actual model check)",
     token: "actual_model",
     files: [
+      "agents/orc-wiki-scanner-opus-4-8-high.md",
       "agents/orc-advisor-fable-5.md",
       "agents/orc-advisor-opus-5-xhigh.md",
       "agents/orc-analyst-fable-5.md",
@@ -501,6 +502,7 @@ const CONTRACTS = [
     token: "orc wiki sync",
     binFiles: ["bin/cli.js"],
     files: [
+      "agents/orc-wiki-scanner-opus-4-8-high.md",
       "commands/orc-wiki.md",
       "hooks/orc-statusline.js",
       "skills/orc-wiki/README.md",
@@ -678,6 +680,7 @@ const CONTRACTS = [
     name: "wiki per-file hash map (v0.15.0 — doc header + manifest docs registry)",
     token: "covered_files",
     files: [
+      "agents/orc-wiki-scanner-opus-4-8-high.md",
       "agents/orc-learn-writer-opus-5-low.md",
       "skills/orc-learn/references/refresh.md",
       "skills/orc-learn/references/template-knowledge.md",
@@ -977,6 +980,7 @@ const CONTRACTS = [
     token: "crosslink_provided",
     binFiles: ["bin/cli.js"],
     files: [
+      "agents/orc-wiki-scanner-opus-4-8-high.md",
       "skills/orc-wiki/README.md",
       "skills/orc-wiki/SKILL.md",
       "skills/orc-wiki/references/crosslink.md",
@@ -991,6 +995,7 @@ const CONTRACTS = [
     name: "crosslink per-scan-task emission (v0.24.0 — always-on; scan agent returns crosslink_tags | none)",
     token: "crosslink_tags",
     files: [
+      "agents/orc-wiki-scanner-opus-4-8-high.md",
       "skills/orc-wiki/SKILL.md",
       "skills/orc-wiki/references/crosslink.md",
       "skills/orc-wiki/references/integrity-check.md",
@@ -1373,7 +1378,13 @@ const BUDGETS = [
   // and the orientation/atlas assemble steps (detail in references/); mini
   // gains the one-question TDD policy + the mock-example phase; fast gains the
   // mock-example phase only. Mechanisms live in the shared/canonical refs.
-  { file: "skills/orc-wiki/SKILL.md", maxLines: 289 },
+  // v0.34.5: deliberate raise 289→290 — the scan agent is now dispatched BY
+  // NAME (the pin is unenforceable otherwise, and an un-`orc`-named dispatch is
+  // invisible to the trace hook) and the scan slice must carry the kind catalog
+  // (an agent never shown it cannot "prefer an existing kind", and a synonym
+  // kind is a PERMANENT duplicate). Both are dispatch-time facts; neither can
+  // live in a reference loaded after the dispatch.
+  { file: "skills/orc-wiki/SKILL.md", maxLines: 290 },
   // v0.34.2: deliberate raise 219→220 — the run-start `touch the trace file`
   // step. It is one line, it is the fix for the corpus's largest defect family,
   // and it has to sit in the spine because it happens before any reference loads.

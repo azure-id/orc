@@ -39,6 +39,16 @@ NOT contain `:`. The on-disk slug replaces every path/separator character:
 The header carries the original `tag` verbatim, so the identity round-trips
 without parsing the filename.
 
+**The KIND DIRECTORY is sanitized the same way (v0.34.5):** `/` → `-`, so the
+catalog kind `auth/oidc` writes to `wiki/crosslink/auth-oidc/`. **The header
+stays the identity** — `kind: auth/oidc` and `tag: auth/oidc:<name>` are kept
+VERBATIM, and `orc wiki sync` reads `kind` from the header, never from the
+directory name. A kind containing a raw `/` used to produce a nested path the
+registry walk never saw: the tag was published, well-formed, on disk — and
+invisible, with `orc wiki sync --check` still exiting 0. Sync now reads nested
+directories too (so a pre-v0.34.5 wiki keeps its tag) and FAILS `--check` when
+any tag file on disk does not reach the registry.
+
 ```markdown
 ---
 crosslink_schema: 1

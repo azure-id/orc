@@ -59,6 +59,7 @@ const required = [
   "templates/agents/orc-test-author-opus-5-med.md",
   "templates/agents/orc-pattern-codifier-sonnet-5-high.md",
   "templates/agents/orc-retro-sonnet-5-high.md",
+  "templates/agents/orc-wiki-scanner-opus-4-8-high.md",
   "templates/agents/orc-context-combiner-opus-5-high.md",
   // The orc-mini lane's agent pair and the whole Fable 5 role-override feature
   // were guarded by nothing but the count floor — a publish missing any of them
@@ -94,11 +95,11 @@ function walkCount(dir, ext) {
 
 const skillCount = walkCount(path.join(ROOT, "templates/skills"), "SKILL.md");
 const agentCount = walkCount(path.join(ROOT, "templates/agents"), ".md");
-// Floors sit AT current reality (23 skills / 30 agent files: 29 agents +
+// Floors sit AT current reality (23 skills / 31 agent files: 30 agents +
 // MODEL-MAPPING.md) so a dropped file fails the count check instead of sliding
 // into the slack an under-set floor grants. Raise them with the payload.
 if (skillCount < 22) missing.push(`templates/skills (expected >=22 SKILL.md, found ${skillCount})`);
-if (agentCount < 30) missing.push(`templates/agents (expected >=30 .md, found ${agentCount})`);
+if (agentCount < 31) missing.push(`templates/agents (expected >=31 .md, found ${agentCount})`);
 
 // B4 — encoding/mojibake guard. The OneDrive corruption rule becomes a gate:
 // scan every shipped text file for the U+FFFD replacement char (invalid UTF-8

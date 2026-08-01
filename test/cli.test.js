@@ -483,6 +483,109 @@ test("orc wiki impact: CLEAN → DELTA (exit 2) → STRUCTURAL/FULL (exit 3)", (
   }
 });
 
+// ── v0.34.5 wiki: silent tag loss, and a delta that cannot clear itself ─────
+
+function writeTag(root, dirParts, name, tag, kind) {
+  const dir = path.join(root, "wiki", "crosslink", ...dirParts);
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(
+    path.join(dir, name),
+    [
+      "---",
+      "crosslink_schema: 1",
+      `tag: ${tag}`,
+      `kind: ${kind}`,
+      "surface: provided",
+      "anchor: src/a.js:1",
+      "content_hash: abc123",
+      "---",
+      "",
+      "## Contract",
+      "- shape",
+      "",
+    ].join("\n")
+  );
+}
+
+test("wiki sync: a kind containing '/' is indexed, not silently dropped", () => {
+  const { root } = impactFixture();
+  try {
+    writeTag(root, ["rest-endpoint"], "GET__orders.md", "rest-endpoint:GET /orders", "rest-endpoint");
+    // The payload's own catalog ships `auth/oidc`. Legacy wikis wrote it as a
+    // NESTED directory, which the old single-level walk never saw.
+    writeTag(root, ["auth", "oidc"], "fixture-bearer-token.md", "auth/oidc:fixture-bearer-token", "auth/oidc");
+
+    const r = cli(["wiki", "sync", "--dir", root]);
+    assert.strictEqual(r.status, 0, r.stdout + r.stderr);
+    assert.match(r.stdout, /2 crosslink tags indexed/, "both tags reach the registry: " + r.stdout);
+
+    const meta = JSON.parse(fs.readFileSync(path.join(root, ".claude", "orc", "wiki-meta.json"), "utf8"));
+    const kinds = meta.crosslink_provided.map((p) => p.kind).sort();
+    assert.deepStrictEqual(kinds, ["auth/oidc", "rest-endpoint"], "kind comes from the HEADER, verbatim");
+    assert.strictEqual(cli(["wiki", "sync", "--check", "--dir", root]).status, 0, "in sync → exit 0");
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("wiki sync --check: a tag file that does not reach the registry FAILS (exit 1)", () => {
+  const { root } = impactFixture();
+  try {
+    writeTag(root, ["rest-endpoint"], "GET__orders.md", "rest-endpoint:GET /orders", "rest-endpoint");
+    assert.strictEqual(cli(["wiki", "sync", "--dir", root]).status, 0);
+
+    // A tag file with no `tag:` header — published, on disk, unresolvable.
+    const dir = path.join(root, "wiki", "crosslink", "rest-endpoint");
+    fs.writeFileSync(path.join(dir, "broken.md"), "---\nkind: rest-endpoint\n---\n\nno tag header\n");
+
+    const chk = cli(["wiki", "sync", "--check", "--dir", root]);
+    assert.strictEqual(chk.status, 1, "found != indexed must never exit 0");
+    assert.match(chk.stdout + chk.stderr, /did NOT reach the registry/);
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("wiki sync --check: a branch switch alone is NOT out of sync (exit 0)", () => {
+  const { root, git } = impactFixture();
+  try {
+    assert.strictEqual(cli(["wiki", "sync", "--dir", root]).status, 0);
+    git(["checkout", "-q", "-b", "feature/some-work"]);
+    const chk = cli(["wiki", "sync", "--check", "--dir", root]);
+    assert.strictEqual(chk.status, 0, "only `branch` changed — nothing is unindexed: " + chk.stdout);
+    assert.match(chk.stdout, /in sync/);
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("wiki impact: a doc refreshed at HEAD reads CLEAN even when the global anchor is behind", () => {
+  const { root, git } = impactFixture();
+  try {
+    fs.writeFileSync(path.join(root, "src", "a.js"), "module.exports = 2;\n");
+    git(["add", "-A"]);
+    git(["commit", "-q", "-m", "touch a"]);
+    assert.strictEqual(cli(["wiki", "impact", "--dir", root]).status, 2, "DELTA before the refresh");
+
+    // Simulate the delta refresh: doc a is re-scanned at HEAD; b/c/d are
+    // untouched, so they keep the OLD anchor — which is what pins scan_commit.
+    const head = git(["rev-parse", "HEAD"]).stdout.trim();
+    const docPath = path.join(root, "wiki", "orc-feature-a.md");
+    fs.writeFileSync(
+      docPath,
+      fs.readFileSync(docPath, "utf8").replace(/scanned_commit: .*/, `scanned_commit: ${head}`)
+    );
+    assert.strictEqual(cli(["wiki", "sync", "--dir", root]).status, 0);
+
+    const after = cli(["wiki", "impact", "--dir", root]);
+    assert.strictEqual(after.status, 0, "a correct delta refresh can now clear its own delta: " + after.stdout);
+    assert.match(after.stdout, /CLEAN\s+wiki\/orc-feature-a\.md/, "the refreshed doc reads CLEAN");
+    assert.match(after.stdout, /affected/, "the percentage is labelled by what it counts");
+  } finally {
+    rmrf(root);
+  }
+});
+
 test("orc wiki impact: exit 1 when the wiki is absent", () => {
   const { root } = freshInstall();
   try {

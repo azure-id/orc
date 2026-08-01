@@ -90,7 +90,16 @@ A doc whose contract sections carry no anchors is malformed (requeue).
 - covered_files          — map of {path: short-hash} for every file actually
                            read (the orchestrator writes it into the header
                            AND the manifest's per-doc registry)
-- crosslink_tags         — REQUIRED. Either a list of tag bodies (one per
+- crosslink_tags         — REQUIRED. **Kinds come from the catalog the slice
+                           carries (references/crosslink-kinds.md) — REUSE an
+                           existing kind unless the boundary is genuinely a new
+                           sort; prefer it over a near-synonym (`rest-endpoint`,
+                           not `route`). `tag` is ALWAYS `<kind>:<name>` — a
+                           nameless tag has no slug and therefore no file, and
+                           a synonym kind creates a SECOND file for one boundary
+                           point that a refresh may never bulk-delete, so the
+                           duplicate is permanent.** Either a list of tag bodies
+                           (one per
                            OUTWARD boundary point the agent found in this area's
                            files, each per schemas/crosslink-tag.md §1 — the SAME
                            knowledge as the `Contracts & shapes` rows, captured

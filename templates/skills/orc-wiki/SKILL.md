@@ -29,8 +29,8 @@ makes the consent gate mandatory.
 1. **Never scan before explicit consent.** On a fresh run, show the generic
    cost warning and do NOTHING to the repo until the user says ok/continue/
    proceed. No pre-scan, not even to estimate area count.
-2. **You never scan-and-write yourself — you spawn.** Scanning agents (Opus
-   4.8 high) read/summarize; you plan, dispatch, assemble.
+2. **You never scan-and-write yourself — you spawn.** Dispatch scans BY NAME — `orc-wiki-scanner-opus-4-8-high`
+   (pinned in the agent file: the model is enforced, and the trace hook can see it); you plan, dispatch, assemble.
 3. **Fixed pause every 5 scan-tasks** — not user-configurable; multi-session
    resume via the inherited checkpoint.
 4. **Wiki docs are persistent** in `wiki/` (project root); run artifacts stay
@@ -166,12 +166,13 @@ cadence; SKIP any that don't apply — never fabricate one):
 ## Phase 2 — Scan (spawned agents, 5-task pauses)
 
 Write checkpoint + state-of-play into the run subfolder BEFORE dispatching.
-Per scan-task: spawn an Opus 4.8 high agent with the area's file list + the
+Per scan-task: spawn `orc-wiki-scanner-opus-4-8-high` BY NAME with the area's file list + the
 doc-writing contract (schemas/wiki-doc.md — v2: evidence anchors in contract
 sections, `keywords[]` + per-file `covered_files` hashes, AND `crosslink_tags`
-= one tag body per OUTWARD boundary point in the area's files, or `none`+reason).
+= one tag body per OUTWARD boundary point in the area's files, or `none`+reason)
+**+ the kind catalog** (references/crosslink-kinds.md — an agent never shown it cannot "prefer an existing kind", and a near-synonym like `route` beside `rest-endpoint` is a PERMANENT duplicate: refresh never bulk-deletes).
 YOU write BOTH the doc (to `wiki/`, staleness metadata) AND its tags (to
-`wiki/crosslink/<kind>/<slug>.md`, schemas/crosslink-tag.md), then run
+`wiki/crosslink/<kind>/<slug>.md` — the kind DIRECTORY sanitizes `/`→`-`, the header keeps it verbatim; schemas/crosslink-tag.md), then run
 **`orc wiki sync`** (hard rule 8) — docs and boundary are indexed from the first
 scan-task on, however the run ends; the boundary accumulates in the SAME pass as
 the docs (hard rule 11), so a paused run has a live partial boundary. A return
@@ -200,10 +201,10 @@ happen (both ran per scan-task — hard rules 8, 11). If the user stopped early,
 the docs + tags are already registered and this phase simply hasn't run yet.
 
 1. After all areas are scanned, write/update
-   `wiki/orc-architecture-overview.md` linking the feature + reference docs.
+   `wiki/orc-architecture-overview.md` linking the feature + reference docs. **OPTIONAL** — a wiki without one registers cleanly, and its CLAUDE.md pointer is conditional on the file existing.
 2. **Derive `wiki/orc-orientation.md`** (references/orientation.md) from the
-   already-written docs + overview — NEVER a new scan area; one assemble-time
-   write. Sections: Repo identity · Reading order · Journeys (each step
+   already-written docs + the overview WHEN IT EXISTS (absent → say so in the doc; degrade explicitly, never silently) — NEVER a new scan
+   area; one assemble-time write. Sections: Repo identity · Reading order · Journeys (each step
    anchored `file:line`; unanchored = omitted) · Neighbors (only when
    crosslink is configured AND the cache/atlas exists; else the explicit
    "no outward boundary"-style line). Standard doc header → registered by sync.

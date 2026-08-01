@@ -6,7 +6,7 @@
 
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
-![Version](https://img.shields.io/badge/version-0.34.4-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.34.5-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
@@ -46,60 +46,66 @@ zero-dependency npm package installs those files into your `.claude/` directory.
 
 ## Changelog
 
-**Latest: v0.34.4 — updated 2026-08-01.**
+**Latest: v0.34.5 — updated 2026-08-01.**
 
-### v0.34.4 — Planner: scorable facets, and TDD rules scoped to reality _(2026-08-01)_
+### v0.34.5 — Wiki: stop losing tags silently, let a delta clear its own delta _(2026-08-01)_
 
-**A plan could pass the scoring gate and still be unscorable.** The Phase 2 gate
-recomputed the two facets it *could* recompute (`breadth`, fan-in/out) and
-trusted the four it could not — so a planner that never opened the schema
-invented a `low / medium / high` scale and shipped a plan with no `N("low")` to
-compute. The cheaper failure is a bounce; the expensive one is an orchestrator
-applying "a non-empty `risk` floors the score to 70" to seven bare prose strings
-and **flooring every task in the run** — a ~15-line constants module that belongs
-on Sonnet 4.6 medium dispatched to Opus 4.7 high, a two-band overshoot caused by
-the shape of a field rather than by the work.
+**A published crosslink tag could be invisible while the integrity gate reported
+green.** `orc wiki sync` walked exactly one directory level, so any tag whose
+`kind` contains a `/` — and the payload's own catalog ships `auth/oidc` — landed
+at a nested path the registry never saw. With 7 well-formed tag files on disk,
+sync reported "6 indexed", the manifest held 6, and `sync --check` **exited 0**.
+A consumer resolving that boundary finds nothing and concludes, wrongly, that
+this repo publishes no identity boundary.
 
-- **The gate now checks enum membership** — `novelty`, `logic`, `test_surface`,
-  `uncertainty` and every `risk[].class` must be members of their closed sets. A
-  set lookup, as deterministic as the grounding glob.
-- **The vocabularies are inline in each planner's own step.** The defect is
-  intermittent for a diagnosable reason: runs that pointed the planner at the
-  schema never reproduced it. The values used to live one hop away from the
-  instruction.
-- A vocabulary miss is a **field-shape bounce** — the planner fixes the `facets`
-  blocks and is explicitly told *not* to re-plan.
+- Tag enumeration is **recursive**, so a pre-0.34.5 wiki keeps the tag it
+  already has. The `kind` directory is now sanitized (`/` → `-`) on write, and
+  the **header stays the identity** — `kind: auth/oidc` round-trips verbatim.
+- The durable half: sync compares **files found vs entries written** and fails
+  `--check` on any mismatch. "6 indexed" while 7 exist can never exit 0 again,
+  whatever the cause.
 
-**TDD's pre-passing rule was mis-scoped, not wrong.** "A test that passes before
-implementation is a spec bug" is right on greenfield surface and wrong on delta
-work — one run materialized 7 tests of which **5 passed beforehand**, because the
-routes already shipped and only the guard was missing. Applied literally it
-blocks 5 of 7 requirements on a change that adds one middleware argument, and a
-regression guard's passing is the entire point.
+**A correct delta refresh could not report its own success.** `orc wiki impact`
+diffed every doc against one global anchor — and that anchor is the *oldest*
+doc's commit, which a delta refresh leaves untouched by definition. So after a
+complete, correct delta refresh the report was byte-identical to the one before
+it: same 3 touched, same 60%, same "FULL refresh recommended" — forever, until
+the user gave up and ran the expensive full refresh the feature exists to avoid.
 
-- Every `tdd_spec` entry now carries a **`kind`**: `new-surface` (must be red;
-  green is still a hard block) or `regression-guard` (expected green — that
-  passing *is* the assertion, and it blocks nothing). The planner authors it,
-  because the planner is the only party that knows which is which.
+- Each doc is now measured against **its own `scanned_commit`**. The global
+  anchor stays where it belongs: the blind-spot sweep, which genuinely needs a
+  repo-wide view.
+- `last_scan` is the **newest** doc's stamp (it reported a delta's start time
+  while summarizing docs written twenty minutes later); `scan_commit` stays the
+  oldest doc's anchor deliberately.
+- The summary percentage is labelled **`affected`** — it counts touched *and*
+  structural, and it is the number people tune `wiki_delta_full_threshold`
+  against.
+
+**A branch switch no longer fakes an out-of-sync wiki.** `sync --check` compared
+the serialized manifest, `branch` included, so any feature-branch checkout
+exited 1 with nothing unindexed — and REPAIR takes precedence over REFRESH, so
+every run on a branch was routed into a repair it did not need.
 
 **Also**
 
-- **Orchestrator-synthesized tasks get one scoring rule.** Wave 0 and the mock
-  example appear in no `tasks[]`, so the one party that never read the code was
-  inventing their facet vector. Their vector is now *derived*, and Wave 0 does
-  **not** inherit the risk floor of the tasks whose tests it writes.
-- The mock example is explicitly **dispatched**, not written by the
-  orchestrator, and the previous `EXAMPLE.md` is deleted on regeneration — a
-  stale example documents the superseded contract as fact and re-seeds the very
-  drift the recovery loop exists to remove.
-- **`/orc-plan` joins the TDD policy table** (a saved plan's only consumers are
-  the TDD-always build lanes), and the preflight block finally **defines its TDD
-  line** — both branches, not only the exemption.
-- A `tdd_spec` target file that collides with a test-authoring task now bounces
-  at the Phase 1 gate.
+- **`orc-wiki-scanner-opus-4-8-high` ships.** The skill's own hard rule says
+  scans are dispatched to an Opus 4.8 high agent, but no such agent existed — so
+  the pin was unenforceable (five scans came back as MISMATCH) and, because the
+  trace hook only sees `orc`-prefixed names, a wiki run's trace showed a run
+  that dispatched nothing but its own logger.
+- **The scan slice carries the kind catalog.** Agents were asked to "prefer an
+  existing kind" while never being shown the list, and duly invented `route`
+  beside `rest-endpoint` — two files for one boundary point, permanently, since
+  a refresh may never bulk-delete the folder.
+- **Orientation staleness tracks its real inputs** (the docs it summarizes, not
+  just `src/app.js`), and the architecture overview is explicitly optional — its
+  CLAUDE.md pointer is now conditional on the file existing.
 
 <details>
 <summary><b>Previous versions</b> (click to expand)</summary>
+
+### v0.34.4 — Planner: scorable facets, and TDD rules scoped to reality _(2026-08-01)_
 
 ### v0.34.3 — Slice boundary: the worktree, not the editor _(2026-08-01)_
 
