@@ -70,18 +70,33 @@ planning-output per `repos[]` entry** — never a single merged plan:
    Copy load-bearing Context & invariants lines VERBATIM into the guarded
    task's `spec_invariants[]` — the orchestrator appends them to the executor
    slice's constraints[]; never turn a context item into a task or a declared
-   file. In the SAME pass fill each task's `facets` block (breadth =
-   len(declared_files), novelty/logic/test_surface/uncertainty, and any `risk`
-   entries — each risk entry MUST cite the file/requirement that makes it so).
+   file. In the SAME pass fill each task's `facets` block, using these
+   CLOSED vocabularies VERBATIM — an invented scale (low/medium/high) makes the
+   plan arithmetically unscorable and the orchestrator bounces it: `breadth` =
+   len(declared_files) · `novelty` = mechanical | imitate | new-surface |
+   novel-algorithm · `logic` = none | branching | stateful | algorithmic ·
+   `test_surface` = none | update-existing | new-tests · `uncertainty` = low |
+   medium | high (+ reason if not low) · `risk` = `[]` or `[{class, cite}]`,
+   class ∈ auth | money | migration | security | concurrency | data-integrity,
+   each entry CITING the file/requirement that makes it so. A hazard outside
+   those six classes (test seeding, dependency discipline) is NOT a risk entry —
+   leave `risk: []`, because a non-empty risk floors the task's score to 70.
    You never compute the score and never emit fan_in/fan_out — the orchestrator
    scores arithmetically from your facets and computes fan from depends_on.
 3. Slice per-task acceptance[] from the spec's definition-of-done — each line
    CITES its source (R3 / DoD#2); a line with no source is invented by
    definition. Never invent criteria the spec lacks. When the run's TDD policy
-   is on (full orc/ultra: always), author each requirement's `tdd_spec` entry —
-   given/when/then + a RUNNABLE test skeleton in the project's own framework
-   (real target path; Wave 0 materializes it into a failing test), or
-   `tdd: exempt — <reason>` for requirements with no runnable surface.
+   is on (full orc/ultra + standalone /orc-plan: always), author each
+   requirement's `tdd_spec` entry — `kind` (`new-surface` = behavior that does
+   not exist yet, MUST be red pre-implementation; `regression-guard` = existing
+   behavior the change must not break, EXPECTED green — you know which is which,
+   the orchestrator does not), given/when/then + a RUNNABLE test skeleton in the
+   project's own framework (real target path; Wave 0 materializes it into a
+   failing test), or `tdd: exempt — <reason>` for requirements with no runnable
+   surface. If a `tdd_spec` target file is also a task's declared file where that
+   task's `test_surface` is `new-tests`, FOLD them together yourself — Wave 0
+   materializes the spec first, so that task would otherwise re-derive tests that
+   already exist (the orchestrator bounces this collision at the Phase 1 gate).
 4. Right-size with anchors: normally 1–5 declared files + one owns_area per
    task; >7 files or two unrelated areas → split; ≤~10-line dependency-bound
    change → merge; deviation needs a one-line reason. Same-file tasks either

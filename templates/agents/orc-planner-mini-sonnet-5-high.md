@@ -15,13 +15,22 @@ change → merge; deviation needs a one-line reason) with grounded declared_file
 + explicit deps + `requirements[]` (the R#/DoD ids each task implements — `[]`
 only for pure-infra with a stated reason) + `spec_invariants[]` (load-bearing
 Context & invariants lines copied verbatim; the orchestrator appends them to
-the executor slice's constraints[]) + a `facets` block (breadth =
-len(declared_files), novelty/logic/test_surface/uncertainty, cited `risk[]` —
-the orchestrator scores from these arithmetically; you never compute the score
-or emit fan_in/fan_out) + sliced per-task acceptance[] where each
+the executor slice's constraints[]) + a `facets` block using these CLOSED
+vocabularies VERBATIM (an invented low/medium/high scale makes the plan
+arithmetically unscorable and it gets bounced): `breadth` = len(declared_files) ·
+`novelty` = mechanical | imitate | new-surface | novel-algorithm · `logic` =
+none | branching | stateful | algorithmic · `test_surface` = none |
+update-existing | new-tests · `uncertainty` = low | medium | high · `risk` =
+`[]` or `[{class, cite}]`, class ∈ auth | money | migration | security |
+concurrency | data-integrity, each entry CITING its file/requirement (a hazard
+outside those six classes is NOT a risk entry — a non-empty risk floors the task
+to 70) — the orchestrator scores from these arithmetically; you never compute
+the score or emit fan_in/fan_out) + sliced per-task acceptance[] where each
 line cites its source (R3 / DoD#2 — no source = invented) + (when the caller's
 slice says `tdd: on` — orc-mini's one intake question) each requirement's
-`tdd_spec` entry: given/when/then + a runnable skeleton in the project's own
+`tdd_spec` entry: `kind` (`new-surface` = must be red pre-implementation |
+`regression-guard` = expected green, that IS its assertion) + given/when/then +
+a runnable skeleton in the project's own
 test framework, or `tdd: exempt — <reason>`. ALWAYS run the cheap
 self-checks: cycles, same-file collisions, AND coverage (every in-scope R#/DoD
 line in ≥1 task's requirements[] — an orphan requirement is a malformed plan;

@@ -129,10 +129,15 @@ expecting all 8 to run at once).
    to a task). Each line CITES its source (`R3` / `DoD#2`) — a line with no
    source is invented by definition. Never invent criteria the spec lacks.
 3b. **Author the `tdd_spec` (v0.33.0 — when the run's TDD policy is on; full
-   orc/ultra always):** per requirement, an end-to-end acceptance test —
-   given/when/then + a RUNNABLE skeleton in the project's own test framework
-   (real target path; Wave 0 materializes it into a failing test BEFORE
-   implementation). A requirement with no runnable surface (docs/config/
+   orc/ultra AND standalone `/orc-plan` always — a saved plan's only consumers
+   are the TDD-always build lanes):** per requirement, an end-to-end acceptance
+   test — `kind` (`new-surface` = behavior that does not exist yet, MUST be red
+   pre-implementation | `regression-guard` = existing behavior this change must
+   not break, EXPECTED green — that passing IS its assertion) + given/when/then
+   + a RUNNABLE skeleton in the project's own test framework (real target path;
+   Wave 0 materializes it into a failing test BEFORE implementation). A
+   `tdd_spec` target file that is also a `new-tests` task's declared file is a
+   collision the Phase 1 gate bounces — fold them yourself. A requirement with no runnable surface (docs/config/
    markdown payloads) gets `tdd: exempt — <reason>` instead — never silence.
    No test runner in the project → state the whole-run exemption once.
 4. **Right-size — with anchors, not adjectives:** a task normally owns **1–5

@@ -19,6 +19,7 @@ whose house style is in force (pattern), whether peer contracts are in play
 wiki:      FRESH — 12 docs consulted
 pattern:   js cached · ts cached
 crosslink: 2 boundaries (payments-api) — advisory
+tdd:       ON — 6 requirements with skeletons, 1 exempt (docs-only)
 trace:     .claude/orc/logs/run-orc-<slug>-210726-154500.txt
 waves:     3 planned — will pause after wave 2 (batch_pause_every=2)
 ```
@@ -33,6 +34,15 @@ waves:     3 planned — will pause after wave 2 (batch_pause_every=2)
 - **crosslink:** the crosslink line from `wiki-consult.md` when a probe hit
   (`cached` or `configured-no-cache`); omit the whole line when crosslink is
   not in play (state `none`).
+- **tdd:** ALWAYS printed on a lane whose TDD policy is on — BOTH branches, not
+  only the exemption. `ON — <n> requirements with skeletons, <m> exempt
+  (<reasons>)`, counted straight from the plan's `tdd_spec`; or
+  `EXEMPT (whole run) — no test runner detected in this project`, which is the
+  ONE line `SKILL.md` mandates for that case. A lane whose policy is off
+  (orc-fast, or orc-mini when the user declined) prints `off (<lane> policy)`.
+  This line is the producer the mandate previously lacked — without it an
+  orchestrator that prints only what the payload compels prints nothing at all
+  about TDD on a normal run.
 - **trace:** the run's `trace_path`.
 - **waves:** `K planned — will pause after wave(s) [list] (batch_pause_every=N)`,
   or `K planned — no pause (run straight through)` when the user chose to run

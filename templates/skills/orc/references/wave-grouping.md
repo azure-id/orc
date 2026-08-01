@@ -50,6 +50,32 @@ If two tasks own the same feature/files with no dependency between them, the
 graph auto-serializes them — but that's a planning smell. Surface it: suggest
 merging them into one task rather than silently serializing duplicate work.
 
+## Orchestrator-synthesized tasks (Wave 0, the mock example, any future one)
+
+Some dispatched tasks appear in no `tasks[]` because the ORCHESTRATOR synthesized
+them — Wave 0's TDD red proof (from `tdd_spec`) and the mock example
+(`_shared/drift-recovery.md`). They still obey hard rule 1: **dispatched like any
+other task, never done by you.** But they have no planner-emitted `facets`, and
+the orchestrator is by definition the party that did NOT read the code — inventing
+a vector for them is judgment wearing arithmetic's clothes, the exact thing the
+facet redesign removed.
+
+So their vector is **DERIVED, never judged**:
+
+| Facet | Value |
+|---|---|
+| `breadth` | `len(files the synthesized task will touch)` |
+| `novelty` | `mechanical` — it transcribes planner-authored material |
+| `logic` | `none` |
+| `test_surface` | per the task (Wave 0 = `new-tests`) |
+| `risk` | `[]` — unless the synthesized task itself inherits a CITED risk |
+
+**Wave 0 does NOT inherit the risk floor** of the tasks whose tests it writes:
+it transcribes planner-authored skeletons, writes no production code, and its
+output is asserted RED before anything is believed. Stated here so it is not
+re-litigated per run — the alternative is a Haiku-sized transcription job
+dispatched at floor 70 because the requirement it proves is auth-flavoured.
+
 ## Post-wave worktree audit (a GATE, not a report)
 
 Declarations can be wrong, and a return can be honest and still miss what

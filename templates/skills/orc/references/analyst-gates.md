@@ -68,6 +68,14 @@ proceed-with-flagged.
    over `declared_files` (two tasks sharing a file need a serializing dep or a
    merge). Both trivial at ≤ 20 tasks — never trust the planner's self-check
    alone.
+4. **TDD/test-task collision (v0.34.4):** a `tdd_spec` entry whose target file
+   is in the `declared_files` of a task whose `facets.test_surface` is
+   `new-tests` is a miss. Wave 0 materializes `tdd_spec` BEFORE the
+   implementation waves, so that task's planned work is already on disk and
+   green by the time its wave opens — leaving only bad options (dispatch a
+   no-op, silently drop promised coverage, or re-slice mid-run). The planner
+   authored both mechanisms and folds them together itself: extend the
+   materialized file, never re-author it.
 
 Any miss → the plan is malformed: bounce it back to the planner WITH the miss
 list (one retry), then escalate to the user. **Legacy exception:** a

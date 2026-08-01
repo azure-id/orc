@@ -286,8 +286,8 @@ the codifier); hold resolved patterns in run state.
 whole-run exemption):** dispatch ONE task that materializes every non-exempt
 `tdd_spec` skeleton into real FAILING tests in the project's test tree, runs
 them, and returns the red evidence. Emit `TDD-RED task=<id> iter=0` per
-requirement. A test that PASSES pre-implementation is a spec bug → block that
-requirement's dispatch and surface it. Then per implementation wave:
+requirement. **Pre-implementation green is read per entry `kind`:** a `new-surface` entry that PASSES is a spec bug → block that requirement's dispatch and surface it; a `regression-guard` entry passing is EXPECTED and blocks nothing; anything else → adjudicate with the user, recorded in `decisions`.
+Wave 0 is orchestrator-SYNTHESIZED: dispatched like any task, scored from the DERIVED vector in `wave-grouping.md` (no inherited risk floor). Then per implementation wave:
 1. Dispatch EVERY task as a spawned subagent (emit `DISPATCH <agent> :: <task>
    expect=<model>/<effort>` BEFORE the Task call; subagent wrapper framing + the
    task's INPUT SLICE per orc-execution/core.md + its scored model). Every

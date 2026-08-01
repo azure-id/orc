@@ -67,11 +67,28 @@ grounding — zero extra passes):
 `depends_on` (forward = fan_in, reverse = fan_out).
 
 **2. Orchestrator validation gate (Phase 2, deterministic — same bounce
-mechanics as grounding):** recompute `breadth` (= `len(declared_files)`) and
-`fan_in`/`fan_out` from the plan itself; a mismatch, or a `risk` entry with no
-`cite`, **bounces the plan** back to the planner (one retry, then escalate). A
-plan with no `facets` at all (pre-v0.31.0) resumes on the legacy path — never
-bounced for the missing block.
+mechanics as grounding):** emit `GATE facet pass|bounce`. Three checks:
+
+- **Recompute** `breadth` (= `len(declared_files)`) and `fan_in`/`fan_out` from
+  the plan itself — a mismatch bounces.
+- **MEMBERSHIP (v0.34.4):** `novelty`, `logic`, `test_surface` and `uncertainty`
+  must each be a member of their CLOSED set above, and every `risk[].class` must
+  be one of the six risk classes. A set lookup, as deterministic as the grounding
+  Glob. This is the check that was missing: the gate validated only the two
+  facets it could recompute and TRUSTED the four it could not, so a planner that
+  invented a `low|medium|high` scale produced an **arithmetically unscorable**
+  plan that passed the stated gate. There is no `N("low")` — and an orchestrator
+  applying `risk != [] -> floor 70` to prose risk strings floors EVERY task, a
+  two-band overshoot caused by a field's shape rather than by the work.
+- **Cite check:** a `risk` entry with no `cite` bounces (unchanged).
+
+A facet-vocabulary miss is a **FIELD-SHAPE bounce**: hand back the miss list and
+say *do not re-plan* — the planner corrects only the offending `facets` blocks.
+(It may also legitimately DROP a risk entry on the correction pass: implementation
+hazards like test seeding or dependency discipline are not risk CLASSES. That
+judgment is the planner's to make and is worth accepting.) Without this clause a
+shape bounce risks costing a correct plan. A plan with no `facets` at all
+(pre-v0.31.0) resumes on the legacy path — never bounced for the missing block.
 
 **3. The fixed formula (the ONLY scoring text — this replaces base+adjusters):**
 

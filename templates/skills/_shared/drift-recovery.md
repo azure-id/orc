@@ -26,6 +26,12 @@ never in `.claude/`, never in the run folder):
   snippet). **Mocked inputs/stubs only — never real services, never prod
   data.**
 
+**Who builds it: NOT you.** The example is DISPATCHED like any task (orc hard
+rule 1 — the orchestrator never implements, not even the smallest task). It is
+an orchestrator-SYNTHESIZED task, so it is scored from a DERIVED vector, never a
+judged one — see `orc/references/wave-grouping.md` "Orchestrator-synthesized
+tasks".
+
 **Git: NEVER committed.** The ship phase explicitly excludes `mock-examples/`
 from staging — and does NOT edit `.gitignore` (it's a new untracked folder;
 simply never `git add` it). A ship that staged it is malformed.
@@ -57,7 +63,13 @@ INTENT-SPEC: <path to the run's original intent-spec>
    (`orc-planner-mini-sonnet-5-high`) on the gap spec.
 3. **Scored dispatch** of the patch tasks (the lane's normal executor path).
 4. **Re-verify** — the lane's verify/smoke gate again.
-5. **Re-offer** — regenerate the example, ask the drift question again.
+5. **Re-offer** — regenerate the example, then ask the drift question again.
+   **DELETE or overwrite the previous `EXAMPLE.md` first.** After a patch the old
+   example does not merely look dated — it documents the SUPERSEDED contract as
+   fact (one asserted "case-insensitive substring matching" and cited a
+   `String.includes()` call that had become `.startsWith()`). Leaving it in the
+   tree re-seeds the exact drift this loop exists to remove, and re-showing it at
+   the re-offer burns a capped loop on our own artifact.
 
 **Cap hit (2 loops) → STOP with an honest unresolved report**: what still
 drifts, what was tried, and the recommendation (usually a full `/orc` run on

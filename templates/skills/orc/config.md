@@ -72,7 +72,10 @@ tdd_loop_max: 3            # max implement→test→repair iterations per task i
                            #   TDD gate; cap hit → STOP SEQUENCE + honest red report.
                            #   Lane policy (fixed, not configurable): full orc +
                            #   ultra always on · orc-mini ONE intake question ·
-                           #   orc-fast off (no planner) · orc-diy `tdd` flow key.
+                           #   orc-fast off (no planner) · orc-diy `tdd` flow key ·
+                           #   standalone /orc-plan ON (a saved plan's only consumers
+                           #   are the TDD-always build lanes, so a plan with no
+                           #   tdd_spec is unusable by the lane that runs it).
 
 # --- Security pass (opt-in Phase 5.5; OFF by default) ---
 security_review: off       # off | ask | on — fires only on runs where a task

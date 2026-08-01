@@ -91,6 +91,17 @@ open_questions: [object]   # [] or [{question, proposed_default, blocking: bool}
   tdd_spec:                # per-requirement end-to-end acceptance tests,
                            # authored AT PLAN TIME — before any implementation
     - requirement: string  # the R#/DoD line this test proves
+      kind: enum           # new-surface | regression-guard (v0.34.4) — authored
+                           #   by the PLANNER, who knows which is which; the
+                           #   orchestrator does not.
+                           #   new-surface   = the behavior does not exist yet.
+                           #     It MUST be red pre-implementation; passing is a
+                           #     spec bug and blocks that requirement's dispatch.
+                           #   regression-guard = existing behavior this change
+                           #     must NOT break. It is EXPECTED green before any
+                           #     implementation — that passing IS the assertion,
+                           #     and it blocks nothing.
+                           #   Absent (pre-v0.34.4 plan) → treat as new-surface.
       given_when_then: str # the scenario, given/when/then form
       skeleton: string     # runnable test skeleton in the PROJECT'S OWN test
                            #   framework (target file path + code) — Wave 0

@@ -6,7 +6,7 @@
 
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
-![Version](https://img.shields.io/badge/version-0.34.3-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.34.4-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
@@ -46,44 +46,62 @@ zero-dependency npm package installs those files into your `.claude/` directory.
 
 ## Changelog
 
-**Latest: v0.34.3 — updated 2026-08-01.**
+**Latest: v0.34.4 — updated 2026-08-01.**
 
-### v0.34.3 — Slice boundary: the worktree, not the editor _(2026-08-01)_
+### v0.34.4 — Planner: scorable facets, and TDD rules scoped to reality _(2026-08-01)_
 
-**An executor destroyed a completed task's work and returned a true statement
-about it.** Handed `declared_files: [tests/summary.test.js]` and an instruction
-to confirm `git diff --stat src/` was empty, it made that true — by reverting two
-files it had never written, wiping a finished, green, reviewed implementation.
-The suite fell from 19 tests to 3 and `git status` showed a **clean tree**, which
-is the most convincing disguise destroyed work can have.
+**A plan could pass the scoring gate and still be unscorable.** The Phase 2 gate
+recomputed the two facets it *could* recompute (`breadth`, fan-in/out) and
+trusted the four it could not — so a planner that never opened the schema
+invented a `low / medium / high` scale and shipped a plan with no `N("low")` to
+compute. The cheaper failure is a bounce; the expensive one is an orchestrator
+applying "a non-empty `risk` floors the score to 70" to seven bare prose strings
+and **flooring every task in the run** — a ~15-line constants module that belongs
+on Sonnet 4.6 medium dispatched to Opus 4.7 high, a two-band overshoot caused by
+the shape of a field rather than by the work.
 
-Nothing in ORC caught it, for three separate reasons: no rule forbade destructive
-git commands (a `git checkout` is not a change to a *file* — it is a change to
-the whole worktree); return validation passed, because `actual_files` was an
-honest subset of the declarations; and the post-wave audit compared declarations
-to a **self-report**, so a write nobody reported was invisible.
+- **The gate now checks enum membership** — `novelty`, `logic`, `test_surface`,
+  `uncertainty` and every `risk[].class` must be members of their closed sets. A
+  set lookup, as deterministic as the grounding glob.
+- **The vocabularies are inline in each planner's own step.** The defect is
+  intermittent for a diagnosable reason: runs that pointed the planner at the
+  schema never reproduced it. The values used to live one hop away from the
+  instruction.
+- A vocabulary miss is a **field-shape bounce** — the planner fixes the `facets`
+  blocks and is explicitly told *not* to re-plan.
 
-- **House rules gain a 7th line** (injected literally into every executor slice,
-  so it reaches all 8 bands + mini + fast at once):
-  `git checkout/restore/reset/stash/clean` are forbidden in a slice, and **an
-  impossible assertion is `unmet`, never something to make true**.
-- **The post-wave audit now reads disk** — `git status --short` before the wave,
-  diffed after every return, as a **gate**: an undeclared changed path blocks the
-  wave from closing until it is named and decided. A file that became *less*
-  modified counts as much as one that became more — that is the revert signature,
-  and the only thing that catches it.
-- **`return-validation.md` §6** makes the worktree delta a standard validation
-  step for every lane that dispatches executors: `actual_files` is a claim, the
-  worktree is the evidence.
-- **The executor contract** now bounds files you "create, edit or otherwise
-  change the state of", naming git reverts explicitly.
+**TDD's pre-passing rule was mis-scoped, not wrong.** "A test that passes before
+implementation is a spec bug" is right on greenfield surface and wrong on delta
+work — one run materialized 7 tests of which **5 passed beforehand**, because the
+routes already shipped and only the guard was missing. Applied literally it
+blocks 5 of 7 requirements on a change that adds one middleware argument, and a
+regression guard's passing is the entire point.
 
-Two stray-file cases from earlier runs (a 4.3K `test_output.txt` and a 0-byte
-mangled-path file, both left at the repo root, both committable) were the same
-blindness in a milder form, and the disk-based audit catches those too.
+- Every `tdd_spec` entry now carries a **`kind`**: `new-surface` (must be red;
+  green is still a hard block) or `regression-guard` (expected green — that
+  passing *is* the assertion, and it blocks nothing). The planner authors it,
+  because the planner is the only party that knows which is which.
+
+**Also**
+
+- **Orchestrator-synthesized tasks get one scoring rule.** Wave 0 and the mock
+  example appear in no `tasks[]`, so the one party that never read the code was
+  inventing their facet vector. Their vector is now *derived*, and Wave 0 does
+  **not** inherit the risk floor of the tasks whose tests it writes.
+- The mock example is explicitly **dispatched**, not written by the
+  orchestrator, and the previous `EXAMPLE.md` is deleted on regeneration — a
+  stale example documents the superseded contract as fact and re-seeds the very
+  drift the recovery loop exists to remove.
+- **`/orc-plan` joins the TDD policy table** (a saved plan's only consumers are
+  the TDD-always build lanes), and the preflight block finally **defines its TDD
+  line** — both branches, not only the exemption.
+- A `tdd_spec` target file that collides with a test-authoring task now bounces
+  at the Phase 1 gate.
 
 <details>
 <summary><b>Previous versions</b> (click to expand)</summary>
+
+### v0.34.3 — Slice boundary: the worktree, not the editor _(2026-08-01)_
 
 ### v0.34.2 — Trace subsystem: the pointer clobber, and a writer contract that holds _(2026-08-01)_
 

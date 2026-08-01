@@ -319,6 +319,7 @@ const CONTRACTS = [
     name: "GATE trace verb (v0.9.0 — deterministic exit-gate pass/bounce lines)",
     token: "`GATE",
     files: [
+      "skills/orc/references/effort-and-mode.md",
       "skills/orc-diy/references/blocks/trace.md",
       "agents/orc-retro-sonnet-5-high.md",
       "skills/orc-analyze-mini/SKILL.md",
@@ -775,6 +776,8 @@ const CONTRACTS = [
     name: "facet-scored rubric (v0.31.0 — planner-emitted facets, orchestrator arithmetic)",
     token: "facets",
     files: [
+      "skills/orc/references/analyst-gates.md",
+      "skills/orc/references/wave-grouping.md",
       "agents/orc-planner-fable-5.md",
       "agents/orc-planner-mini-sonnet-5-high.md",
       "agents/orc-planner-opus-5-med.md",
@@ -1156,6 +1159,7 @@ const CONTRACTS = [
     name: "drift-recovery canonical pointer (v0.33.0 — _shared/drift-recovery.md)",
     token: "drift-recovery.md",
     files: [
+      "skills/orc/references/wave-grouping.md",
       "skills/orc-diy/references/blocks/mock-example.md",
       "skills/orc-fast/SKILL.md",
       "skills/orc-mini/SKILL.md",
@@ -1184,6 +1188,10 @@ const CONTRACTS = [
     name: "TDD plan anchor (v0.33.0 — tdd_spec authored at plan time, Wave-0 red proof)",
     token: "tdd_spec",
     files: [
+      "skills/orc/config.md",
+      "skills/orc/references/analyst-gates.md",
+      "skills/orc/references/preflight-report.md",
+      "skills/orc/references/wave-grouping.md",
       "agents/orc-executor-haiku-4-5.md",
       "agents/orc-executor-opus-4-7-high.md",
       "agents/orc-executor-opus-4-7-med.md",
