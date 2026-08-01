@@ -19,6 +19,7 @@ whose house style is in force (pattern), whether peer contracts are in play
 wiki:      FRESH — 12 docs consulted
 pattern:   js cached · ts cached
 crosslink: 2 boundaries (payments-api) — advisory
+scoring:   8-band default table
 tdd:       ON — 6 requirements with skeletons, 1 exempt (docs-only)
 trace:     .claude/orc/logs/run-orc-<slug>-210726-154500.txt
 waves:     3 planned — will pause after wave 2 (batch_pause_every=2)
@@ -34,6 +35,12 @@ waves:     3 planned — will pause after wave 2 (batch_pause_every=2)
 - **crosslink:** the crosslink line from `wiki-consult.md` when a probe hit
   (`cached` or `configured-no-cache`); omit the whole line when crosslink is
   not in play (state `none`).
+- **scoring:** which executor table RESOLVED for this run — `8-band default
+  table` · `Opus-5-only ladder (opus5_executor_only)` · `custom
+  (rubric_bands_override, <n> rows)`. An un-shown table is as unaccountable as
+  an un-shown number, and the Opus-5-only ladder in particular means EVERY
+  dispatch needs an Opus 5 main session — the user should see that before the
+  first dispatch, not in a trace full of downgrades.
 - **tdd:** ALWAYS printed on a lane whose TDD policy is on — BOTH branches, not
   only the exemption. `ON — <n> requirements with skeletons, <m> exempt
   (<reasons>)`, counted straight from the plan's `tdd_spec`; or

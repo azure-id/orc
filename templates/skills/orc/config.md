@@ -150,9 +150,42 @@ only, never which table is used.
 | [90,100] | claude-opus-5     | high   | orc-executor-opus-5-high |
 
 (Haiku has no effort ladder — that agent carries no `effort:` field.) The risk
-floor (≥70) now lands `orc-executor-opus-4-7-high` at minimum — intended. The top
+floor (≥70) lands `orc-executor-opus-4-7-high` at minimum in THIS table — under
+the Opus-5-only preset below it lands `orc-executor-opus-5-med` instead. The top
 band dispatches **Opus 5 high** — it needs an Opus 5 MAIN session or it silently
 falls back to the session model (the tier-honesty rule reports the downgrade).
+
+### The Opus-5-only ladder (`opus5_executor_only`, default **false**)
+
+One model, EFFORT as the cost dial. Off by default; nothing changes until set.
+
+| Score | Model | Effort | Executor agent |
+|-------|-------|--------|----------------|
+| [0,40)   | claude-opus-5 | low    | orc-executor-opus-5-low |
+| [40,80)  | claude-opus-5 | medium | orc-executor-opus-5-med |
+| [80,100] | claude-opus-5 | high   | orc-executor-opus-5-high |
+
+Rationale (why the key exists): deep SWE-benchmark work on cost vs efficiency
+across Claude models finds a single Opus 5 executor with the effort ladder the
+most efficient setup for coding tasks — model-class variety traded for effort
+variety. **Tier cost:** today ONE band in eight needs an Opus 5 main session;
+with this on, EVERY dispatch does, so a lower session downgrades every task
+(warn-only — a hook can gate effort, never model). **Scope:** the lanes that
+SCORE — full `/orc` + `/orc-ultra`. orc-mini and orc-fast dispatch fixed
+executors and never score, so they are unchanged by design; orc-diy's table is
+compile-owned and reads only `orc-diy.config.yaml`, never this file.
+
+### Resolution — highest wins
+
+1. `rubric_bands_override` — hand-written `{min, max, agent}` rows. The user's
+   explicit table ALWAYS wins (hand-edit only; deliberately not a CLI key).
+2. `opus5_executor_only: true` — the named 3-band preset above.
+3. the default 8-band table.
+
+`rubric_bands` sets scoring GRANULARITY only, in every case — it never selects a
+table. Whichever table resolves, **show it** with the Phase 2 scoring table and
+record the mode in the `CONFIG` trace line: an un-shown table is as unaccountable
+as an un-shown number.
 
 ### Override
 To use custom band edges/models, set `rubric_bands_override:` with your own

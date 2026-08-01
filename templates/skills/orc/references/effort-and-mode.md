@@ -103,12 +103,28 @@ T: none=0   update-existing=4   new-tests=8
 U: low=0   medium=6   high=12
 
 risk ≠ [] → floor 70 (DERIVED from a cited risk facet, never remembered).
-clamp 0..100 → the SAME 8-band table (config.md unchanged).
+clamp 0..100 → the RESOLVED table (below).
 ```
+
+**Which table (highest wins):** `rubric_bands_override` (hand-written rows) →
+`opus5_executor_only: true` (the 3-band Opus-5-only preset: `[0,40)` low ·
+`[40,80)` medium · `[80,100]` high) → the default 8-band table. All three are in
+`config.md`. The formula, the facets and the risk floor are IDENTICAL in every
+case — only the score→agent mapping changes. Two consequences worth stating so
+nobody re-derives them per run:
+
+- **The risk floor still applies** — it raises the SCORE, then the resolved table
+  maps it. Under the Opus-5-only preset a floored task lands `opus-5-med`, not
+  `opus-4-7-high`.
+- **`fable5_roles` never covers executors** (analyze/plan/advisor/judge/review
+  only), so the two features are orthogonal and cannot disagree.
 
 Show the user the full table (task, the facet vector, the arithmetic
 `B+N+L+T+fan+U = raw`, any risk floor, final, override+reason if any, dispatched
-model) BEFORE dispatching — an un-shown number is not a scored number.
+model) BEFORE dispatching — an un-shown number is not a scored number. **Head it
+with the RESOLVED table's name** (`8-band default` / `Opus-5-only ladder
+(opus5_executor_only)` / `custom (rubric_bands_override)`): the same logic
+applies to the mapping as to the number.
 
 **4. Consistency check:** two tasks whose facet vectors differ in **≤1 facet must
 land in the same band** — or the SCORE line for the outlier **cites the one

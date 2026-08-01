@@ -122,6 +122,109 @@ test("orchestrator-synthesized tasks have ONE derived scoring rule, referenced f
   assert.match(drift, /DELETE or overwrite the previous `EXAMPLE\.md`/, "the stale example is removed on re-offer");
 });
 
+// ── v0.35.0 the opus5_executor_only ladder ────────────────────────────────
+
+// Parse a `| [lo,hi) | … | <agent> |` band table out of ONE markdown section —
+// bounded at the next heading, or the tables run into each other.
+function bandTable(md, heading) {
+  const from = md.indexOf(heading);
+  assert.ok(from >= 0, `section "${heading}" exists`);
+  const after = md.slice(from + heading.length);
+  const end = after.search(/\n#{2,3} /);
+  const sec = end === -1 ? after : after.slice(0, end);
+  const rows = [...sec.matchAll(/^\|\s*\[(\d+),(\d+)([)\]])\s*\|.*\|\s*(orc-executor-[a-z0-9-]+)\s*\|\s*$/gm)];
+  return rows.map((m) => ({ lo: +m[1], hi: +m[2], closed: m[3] === "]", agent: m[4] }));
+}
+
+test("the Opus-5-only ladder is 3 contiguous bands covering 0..100 with no gap or overlap", () => {
+  const cfg = read("skills/orc/config.md");
+  const rows = bandTable(cfg, "### The Opus-5-only ladder");
+  assert.strictEqual(rows.length, 3, "three bands");
+  assert.deepStrictEqual(
+    rows.map((r) => [r.lo, r.hi, r.agent]),
+    [
+      [0, 40, "orc-executor-opus-5-low"],
+      [40, 80, "orc-executor-opus-5-med"],
+      [80, 100, "orc-executor-opus-5-high"],
+    ],
+    "the resolved 3-band table"
+  );
+  // Contiguity is the property the requested edges got wrong (a 30–40 gap and a
+  // doubly-owned 80): each band starts where the previous ended, top is closed.
+  assert.strictEqual(rows[0].lo, 0, "starts at 0");
+  for (let i = 1; i < rows.length; i++)
+    assert.strictEqual(rows[i].lo, rows[i - 1].hi, `band ${i} starts where band ${i - 1} ends`);
+  assert.ok(rows[2].closed, "the top band is CLOSED at 100");
+
+  // Band-edge exactness, stated as the resolution a scorer must perform.
+  const resolve = (score) => {
+    const hit = rows.find((r) => score >= r.lo && (r.closed ? score <= r.hi : score < r.hi));
+    return hit && hit.agent;
+  };
+  for (const [score, want] of [
+    [0, "orc-executor-opus-5-low"],
+    [39, "orc-executor-opus-5-low"],
+    [40, "orc-executor-opus-5-med"],
+    [79, "orc-executor-opus-5-med"],
+    [80, "orc-executor-opus-5-high"],
+    [100, "orc-executor-opus-5-high"],
+    // the risk floor raises the SCORE, then the table maps it
+    [70, "orc-executor-opus-5-med"],
+  ])
+    assert.strictEqual(resolve(score), want, `score ${score}`);
+});
+
+test("the default 8-band table is untouched by the preset", () => {
+  const cfg = read("skills/orc/config.md");
+  const rows = bandTable(cfg, "## Score → model table");
+  assert.strictEqual(rows.length, 8, "still eight default bands");
+  assert.strictEqual(rows[0].agent, "orc-executor-haiku-4-5");
+  assert.strictEqual(rows[7].agent, "orc-executor-opus-5-high");
+  assert.ok(rows[7].closed, "top band closed at 100");
+});
+
+test("table resolution states its precedence, and the pinned interactions", () => {
+  const cfg = read("skills/orc/config.md");
+  const res = cfg.slice(cfg.indexOf("### Resolution — highest wins"), cfg.indexOf("### Override"));
+  const order = ["rubric_bands_override", "opus5_executor_only", "default 8-band"];
+  let at = -1;
+  for (const t of order) {
+    const i = res.indexOf(t);
+    assert.ok(i > at, `${t} appears, after the higher-precedence entry`);
+    at = i;
+  }
+
+  // Each interaction the preset could silently contradict.
+  const eam = read("skills/orc/references/effort-and-mode.md");
+  assert.match(eam, /risk floor still applies/i, "the risk floor still applies");
+  assert.match(eam, /opus-5-med.*not.*opus-4-7-high|not\s+`?opus-4-7-high/s, "…and where a floored task lands");
+  assert.match(eam, /fable5_roles` never covers executors/, "fable5 is orthogonal");
+
+  const ultra = read("skills/orc/references/ultra-mode.md");
+  assert.match(ultra, /raises EFFORT, not model/, "ultra's floor is defined under the preset");
+
+  // Scope: the lanes that score. mini/fast dispatch fixed executors.
+  assert.match(cfg, /orc-mini and orc-fast dispatch fixed\s*\n?executors and never score/, "scope stated");
+});
+
+test("both opus5-only executors are generated from the template and documented", () => {
+  const build = fs.readFileSync(path.join(__dirname, "..", "bin", "build-agents.js"), "utf8");
+  const variants = [...build.matchAll(/name:\s*"(orc-executor-[a-z0-9-]+)"/g)].map((m) => m[1]);
+  for (const n of ["orc-executor-opus-5-low", "orc-executor-opus-5-med"])
+    assert.ok(variants.includes(n), `${n} is a VARIANTS row`);
+
+  // set equality: every variant has a file, every executor file is a variant
+  const onDisk = fs
+    .readdirSync(path.join(T, "agents"))
+    .filter((f) => f.startsWith("orc-executor-"))
+    .map((f) => f.replace(/\.md$/, ""));
+  assert.deepStrictEqual(onDisk.slice().sort(), variants.slice().sort(), "VARIANTS == executor files");
+
+  const mapping = read("agents/MODEL-MAPPING.md");
+  for (const n of ["orc-executor-opus-5-low", "orc-executor-opus-5-med"])
+    assert.ok(mapping.includes(n), `${n} is in MODEL-MAPPING`);
+});
+
 // ── v0.34.6 analyze: gate coverage + shipped model literals ────────────────
 
 test("no shipped schema template names a model/effort pair that no agent has", () => {

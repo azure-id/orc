@@ -35,6 +35,8 @@ Score→executor mapping lives in config.md (one canonical 8-band table;
 | orc-pattern-codifier-sonnet-5-high | claude-sonnet-5 | high | reconcile per-language playbook vs. project files → cached code-pattern (opt-in) |
 | orc-retro-sonnet-5-high | claude-sonnet-5 | high | mine behavior traces → calibration report (/orc-retro; read-only) |
 | orc-wiki-scanner-opus-4-8-high | claude-opus-4-8 | high | scan ONE wiki coverage area → evidence-anchored doc body + crosslink tags (/orc-wiki only; read-only against the project) |
+| orc-executor-opus-5-med | claude-opus-5 | medium | `opus5_executor_only` ladder ONLY — the [40,80) band (never dispatched by the default 8-band table) |
+| orc-executor-opus-5-low | claude-opus-5 | low | `opus5_executor_only` ladder ONLY — the [0,40) band (never dispatched by the default 8-band table) |
 | orc-advisor-opus-5-xhigh | claude-opus-5 | xhigh | ultra Phase U0 advisory brief + rubric + clarification questions (read-only; /orc-ultra only) |
 | orc-judge-opus-5-xhigh | claude-opus-5 | xhigh | ultra judgment gates — analysis / plan / implementation (read-only; /orc-ultra only) |
 | orc-learn-writer-opus-5-low | claude-opus-5 | low | deepen ONE feature → learning-docs/<slug>/ (/orc-learn only; git-ignored output) |

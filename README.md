@@ -6,7 +6,7 @@
 
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
-![Version](https://img.shields.io/badge/version-0.34.8-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.35.0-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
@@ -46,25 +46,59 @@ zero-dependency npm package installs those files into your `.claude/` directory.
 
 ## Changelog
 
-**Latest: v0.34.8 — updated 2026-08-01.**
+**Latest: v0.35.0 — updated 2026-08-02.**
 
-### v0.34.8 — `orc pattern status` rejects a language key the payload has never heard of _(2026-08-01)_
+### v0.35.0 — `opus5_executor_only`: one model, effort as the cost dial _(2026-08-02)_
 
-The probe globbed `<lang>-pattern.md` and answered for **any** string, so asking
-about `js` — a file extension, not one of the framework keys in
-`orc-pattern/references/INDEX.md` — got a clean "absent". The knowledge gate then
-fell back **correctly**, which is the problem: the caller's bug looked exactly
-like a lane defect, and it took two graded runs to trace it back to the question
-rather than the answer.
+**A new opt-in executor ladder, off by default.** Set
+`orc config set opus5_executor_only true` and the 8-band mixed-model table is
+replaced by three Opus 5 bands where **effort** is the cost dial instead of model
+class:
 
-- **Exit 2 = unknown language key**, and the message lists the real ones. 0 and 1
-  keep their meanings (cached / absent), so every existing gate is unaffected.
-- The no-argument form exits 1 on an empty cache, matching the same
-  absent contract.
-- `_shared/detecting-artifacts.md` documents all three codes at the call site.
+| Score | Executor agent |
+|-------|----------------|
+| `[0,40)` | `orc-executor-opus-5-low` |
+| `[40,80)` | `orc-executor-opus-5-med` |
+| `[80,100]` | `orc-executor-opus-5-high` |
+
+**Why it exists:** deep SWE-benchmark work on cost vs efficiency across Claude
+models finds a single Opus 5 executor with the effort ladder to be the most
+efficient configuration for coding tasks. You trade model-class variety for
+effort variety.
+
+**Read the tier cost before enabling it.** Today exactly one band in eight needs
+an Opus 5 main session. With this on, **every dispatch does** — and a subagent can
+never outrank the main session, so on a lower session all three bands quietly
+fall back and the tier-honesty rule reports a downgrade on *every* task instead
+of occasionally. A hook can gate effort but never model, so this is warn-only by
+construction; `orc config set` prints the full notice, the resolved table and
+that warning at set-time, which is the one place you reliably see it.
+
+**How it resolves, highest wins:** a hand-written `rubric_bands_override` →
+`opus5_executor_only` → the default 8-band table. The formula, the facets and the
+risk floor are identical in every case — only the score→agent mapping changes (a
+floored task lands `opus-5-med` rather than `opus-4-7-high`). `rubric_bands`
+still sets granularity only, never which table is used.
+
+**Scope is the lanes that score** — full `/orc` and `/orc-ultra`. orc-mini and
+orc-fast dispatch fixed executors and never score, so they are unchanged by
+design; forcing Opus 5 into orc-fast would contradict that lane's whole reason to
+exist. orc-diy's table stays compile-owned and reads only its own config.
+
+Ultra's executor tier floor is defined under the preset too: with every band
+already Opus 5 there is no model left to raise, so it **raises effort** (the
+`[0,40)` band goes low → medium) and never lowers a band.
+
+**Visible, not implicit:** the resolved table is named in the Phase 2 scoring
+table and the Phase 1 preflight block, and `opus5_executor_only` is always
+recorded in the `CONFIG` trace line — so `/orc-retro` can segment per-band
+outcomes by scoring mode and eventually *measure* the efficiency claim on real
+runs rather than take it on faith.
 
 <details>
 <summary><b>Previous versions</b> (click to expand)</summary>
+
+### v0.34.8 — `orc pattern status` rejects a language key the payload has never heard of _(2026-08-01)_
 
 ### v0.34.7 — DIY: a usable status contract, and compile docs that match the compiler _(2026-08-01)_
 

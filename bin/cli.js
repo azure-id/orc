@@ -757,6 +757,7 @@ const CONFIG_META = [
   { key: "security_review", def: "off", tier: "common", validate: vEnum("off", "ask", "on"), options: ["off", "ask", "on"], desc: "Opt-in Phase 5.5 security pass on runs with a task scored >= 70 (risk floor). OFF by default." },
   { key: "mock_example", def: "ask", tier: "common", validate: vEnum("ask", "on", "off"), options: ["ask", "on", "off"], desc: "Post-verify mocked runnable example (mock-examples/<slug>/, never committed): ask = offer after a green verify, on = always, off = never." },
   { key: "tdd_loop_max", def: 3, tier: "common", validate: vInt(1), options: [1, 2, 3, 4, 5], desc: "Max implement→test→repair iterations per task in the TDD gate; cap hit → STOP SEQUENCE + honest red report." },
+  { key: "opus5_executor_only", def: false, tier: "common", validate: vEnum("true", "false"), options: ["true", "false"], desc: "Executor dispatch uses ONE model — Opus 5 — with EFFORT as the cost dial: [0,40) low · [40,80) medium · [80,100] high, replacing the 8-band mixed-model table. Deep SWE-benchmark work on cost vs efficiency across Claude models finds a single Opus 5 executor with the effort ladder the most efficient setup for coding tasks. Needs an Opus 5 main session or EVERY executor silently downgrades. Full orc + ultra only (mini/fast dispatch fixed executors and never score)." },
   // --- Fable 5 role override (HARD-GATED: nothing changes unless enabled: true) ---
   { key: "fable5_enabled", def: false, tier: "fable5", validate: vEnum("true", "false"), options: ["true", "false"], desc: "Master gate — route selected roles to Fable 5 agents. Nothing changes unless true." },
   { key: "fable5_effort", def: "medium", tier: "fable5", validate: vEnum("medium", "high", "xhigh", "max"), options: ["medium", "high", "xhigh", "max"], desc: "Effort for the Fable 5 role agents (the CLI rewrites their effort: frontmatter on set)." },
@@ -923,6 +924,39 @@ function configSet(claudeDir, key, rawValue) {
     if (n) console.log(`  ↳ rewrote effort: ${res.value} in ${n} Fable 5 agent file(s).`);
   }
   if (key.startsWith("fable5")) fable5Warn(claudeDir);
+  if (key === "opus5_executor_only") opus5Notice(String(res.value) === "true");
+}
+
+// A `desc` string is only read by someone who runs `config list`, and this key
+// changes what EVERY task dispatches — so say the three things that matter at
+// SET time: why it exists, what it actually resolves to, and the tier it needs.
+function opus5Notice(on) {
+  if (!on) {
+    console.log("\n  Executor dispatch is back to the default 8-band mixed-model table.");
+    return;
+  }
+  console.log(
+    "\n  " + ui.color.bold("Opus-5-only executor ladder is now ACTIVE.") + "\n" +
+      "\n  Why: deep SWE-benchmark work on cost vs efficiency across Claude models finds a\n" +
+      "  single Opus 5 executor, with the EFFORT ladder as the cost dial, the most efficient\n" +
+      "  configuration for coding tasks. You trade model-class variety for effort variety.\n" +
+      "\n  What every scored task now dispatches:\n" +
+      "\n    | Score     | Executor agent            |\n" +
+      "    |-----------|---------------------------|\n" +
+      "    | [0,40)    | orc-executor-opus-5-low   |\n" +
+      "    | [40,80)   | orc-executor-opus-5-med   |\n" +
+      "    | [80,100]  | orc-executor-opus-5-high  |\n" +
+      "\n  " + ui.mark.warn("Tier requirement — read this one:") + "\n" +
+      "  Today only the [90,100] band needs an Opus 5 main session. With this ON, EVERY\n" +
+      "  dispatch does. A subagent can never outrank the main session, so on a lower session\n" +
+      "  all three bands silently fall back to the session model and the tier-honesty rule\n" +
+      "  reports a downgrade on EVERY task instead of occasionally. Hooks cannot block on\n" +
+      "  model (only on effort), so this notice is the only place you learn it up front.\n" +
+      "\n  Scope: full /orc + /orc-ultra (the lanes that score). orc-mini and orc-fast\n" +
+      "  dispatch fixed executors and never score, so they are unchanged by design.\n" +
+      "  A hand-written `rubric_bands_override` still WINS over this preset.\n" +
+      "  Turn it off with: orc config reset opus5_executor_only\n"
+  );
 }
 
 function configReset(claudeDir, key) {

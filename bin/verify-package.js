@@ -95,11 +95,11 @@ function walkCount(dir, ext) {
 
 const skillCount = walkCount(path.join(ROOT, "templates/skills"), "SKILL.md");
 const agentCount = walkCount(path.join(ROOT, "templates/agents"), ".md");
-// Floors sit AT current reality (23 skills / 31 agent files: 30 agents +
-// MODEL-MAPPING.md) so a dropped file fails the count check instead of sliding
+// Floors sit AT current reality (23 skills / 33 agent files: 32 agents +
+// MODEL-MAPPING.md — +2 opus-5 executors for the opus5_executor_only ladder) so a dropped file fails the count check instead of sliding
 // into the slack an under-set floor grants. Raise them with the payload.
 if (skillCount < 22) missing.push(`templates/skills (expected >=22 SKILL.md, found ${skillCount})`);
-if (agentCount < 31) missing.push(`templates/agents (expected >=31 .md, found ${agentCount})`);
+if (agentCount < 33) missing.push(`templates/agents (expected >=33 .md, found ${agentCount})`);
 
 // B4 — encoding/mojibake guard. The OneDrive corruption rule becomes a gate:
 // scan every shipped text file for the U+FFFD replacement char (invalid UTF-8

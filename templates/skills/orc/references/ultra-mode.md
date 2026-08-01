@@ -15,10 +15,14 @@ Apply at Phase 0, on top of the normal config resolution:
 - analysis depth = **deep**, no ask (the analyst's standard/deep gate is
   bypassed; `default_analysis_depth` is ignored; scouts dispatch as usual).
 - `pattern_findings` = on · `generate_tests` = on · `security_review` = on.
-- Executor **tier floor**: remap the resolved score→model preset so no task
+- Executor **tier floor**: remap the resolved score→model table so no task
   dispatches below `orc-executor-sonnet-5-high`; bands at/above the preset's
   opus boundary rise to at least `orc-executor-opus-4-8-high` — the floor only
   ever raises a band, so the top `[90,100]` band keeps `orc-executor-opus-5-high`.
+  **Under `opus5_executor_only` the floor raises EFFORT, not model** (every band
+  is already Opus 5, so there is no model left to raise): the `[0,40)` band rises
+  low → medium, and the other two are already at/above it. It is still a floor —
+  it never lowers a band, and it never raises `[80,100]` past high.
   Show the remapped table with the Phase 2 scoring table.
 
 > Fable 5 role override: if `fable5_enabled` and `advisor` / `judge` are in

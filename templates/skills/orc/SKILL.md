@@ -78,8 +78,7 @@ Workers are model-pinned SUBAGENTS in `.claude/agents/` — the model is enforce
 not requested in prose. Score every task from the planner-emitted `facets` via
 the fixed arithmetic formula and SHOW the table with the facet vector + the
 arithmetic (`B+N+L+T+fan+U = raw`; an un-shown number is not scored); map the
-final score via the SINGLE 8-band table in `config.md` (`rubric_bands` =
-granularity only, never a preset); sibling tasks differing in ≤1 facet share a
+final score via the RESOLVED table in `config.md` — `rubric_bands_override` > `opus5_executor_only` (3-band Opus-5-only) > the default 8-band (`rubric_bands` = granularity only, never a preset); NAME it when you show scores; sibling tasks differing in ≤1 facet share a
 band or cite the differing facet (see `references/effort-and-mode.md`). EVERY
 dispatch is scored — fix-cycle dispatches (review-fix, verify-fix, P2-batch,
 requeue) run the same formula, inherit the original task's risk floor, and never
@@ -201,8 +200,8 @@ task's `spec_invariants[]` is appended VERBATIM to that slice's
 ## Phase 1 — Planning · Trace: `PHASE planning`, `CONFIG`, `WIKI-CONSULT`, `CROSSLINK`, `GATE`
 
 Emit `PHASE planning start`, then emit ONE `CONFIG <key=value …>` line with the
-resolved values of every config key this run will consume (incl. `fable5_*` when
-enabled) — the runtime proof `/orc-retro` audits that the run honored the config.
+resolved values of every config key this run will consume (incl. `fable5_*` when enabled, and ALWAYS `opus5_executor_only` — it selects the executor table, so retro can segment per-band outcomes BY scoring mode) — the runtime
+proof `/orc-retro` audits that the run honored the config.
 **Wiki consult (load `references/wiki-consult.md`;
 always report — no tier is silent):** compute the FRESH/AGING/STALE tier from
 `.claude/orc/wiki-meta.json`, pull the relevant pages (incl. cross-cutting maps
