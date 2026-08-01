@@ -757,7 +757,7 @@ const CONFIG_META = [
   { key: "security_review", def: "off", tier: "common", validate: vEnum("off", "ask", "on"), options: ["off", "ask", "on"], desc: "Opt-in Phase 5.5 security pass on runs with a task scored >= 70 (risk floor). OFF by default." },
   { key: "mock_example", def: "ask", tier: "common", validate: vEnum("ask", "on", "off"), options: ["ask", "on", "off"], desc: "Post-verify mocked runnable example (mock-examples/<slug>/, never committed): ask = offer after a green verify, on = always, off = never." },
   { key: "tdd_loop_max", def: 3, tier: "common", validate: vInt(1), options: [1, 2, 3, 4, 5], desc: "Max implement→test→repair iterations per task in the TDD gate; cap hit → STOP SEQUENCE + honest red report." },
-  { key: "opus5_executor_only", def: false, tier: "common", validate: vEnum("true", "false"), options: ["true", "false"], desc: "Executor dispatch uses ONE model — Opus 5 — with EFFORT as the cost dial: [0,40) low · [40,80) medium · [80,100] high, replacing the 8-band mixed-model table. Deep SWE-benchmark work on cost vs efficiency across Claude models finds a single Opus 5 executor with the effort ladder the most efficient setup for coding tasks. Needs an Opus 5 main session or EVERY executor silently downgrades. Full orc + ultra only (mini/fast dispatch fixed executors and never score)." },
+  { key: "opus5_only", def: false, tier: "common", validate: vEnum("true", "false"), options: ["true", "false"], desc: "EVERY dispatched role uses ONE model — Opus 5 — with EFFORT as the cost dial (executors: [0,40) low · [40,80) medium · [80,100] high; each fixed role its own pinned effort). Deep SWE-benchmark work on cost vs efficiency across Claude models finds a single Opus 5 agent with the effort ladder the most efficient setup. It FORCES: while on it outranks fable5_* and a hand-written rubric_bands_override. Needs an Opus 5 main session or EVERY dispatch silently downgrades. Excludes the Haiku trace writer and orc-diy (compile-owned)." },
   // --- Fable 5 role override (HARD-GATED: nothing changes unless enabled: true) ---
   { key: "fable5_enabled", def: false, tier: "fable5", validate: vEnum("true", "false"), options: ["true", "false"], desc: "Master gate — route selected roles to Fable 5 agents. Nothing changes unless true." },
   { key: "fable5_effort", def: "medium", tier: "fable5", validate: vEnum("medium", "high", "xhigh", "max"), options: ["medium", "high", "xhigh", "max"], desc: "Effort for the Fable 5 role agents (the CLI rewrites their effort: frontmatter on set)." },
@@ -784,6 +784,16 @@ const CONFIG_META = [
 const metaFor = (key) => CONFIG_META.find((m) => m.key === key);
 const overridePath = (claudeDir) => path.join(claudeDir, "orc.config.yaml");
 
+// Renamed keys. A key that changes NAME between releases would otherwise revert
+// a user's setting silently on upgrade (the old line stays in the file and
+// nothing reads it), so an old name is resolved to the new one on read and on
+// set. Deliberately NOT in CONFIG_META — the config-key coverage lint requires
+// every CONFIG_META key to be referenced under templates/skills/, and a retired
+// name is referenced nowhere by design.
+const LEGACY_KEYS = {
+  opus5_executor_only: "opus5_only", // v0.36.0 — widened from executors to every role
+};
+
 // Minimal flat `key: value` reader. Preserves unknown keys (e.g. an advanced
 // rubric_bands_override the user hand-edited) verbatim.
 function readOverride(claudeDir) {
@@ -795,10 +805,13 @@ function readOverride(claudeDir) {
       if (!t || t.startsWith("#")) continue;
       const i = t.indexOf(":");
       if (i === -1) continue;
-      const k = t.slice(0, i).trim();
+      const k0 = t.slice(0, i).trim();
+      const k = LEGACY_KEYS[k0] || k0;
       let v = t.slice(i + 1).trim();
       if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'")))
         v = v.slice(1, -1);
+      // A retired name never overwrites an explicit new-name line.
+      if (k !== k0 && Object.prototype.hasOwnProperty.call(map, k)) continue;
       map[k] = v;
     }
   }
@@ -869,6 +882,13 @@ function fable5Warn(claudeDir) {
       "  ⚠ fable5_enabled is true but fable5_roles is empty — no effect until you\n" +
         "    select roles (e.g. `orc config set fable5_roles analyze,plan`)."
     );
+  // opus5_only FORCES every role to Opus 5, so the whole Fable 5 block is inert
+  // while it is on. Saying nothing here leaves a user tuning a dead setting.
+  if (String(map.opus5_only) === "true")
+    console.error(
+      "  ⚠ opus5_only is true — the Fable 5 role override is INERT (every role\n" +
+        "    dispatches its Opus 5 agent). Reset opus5_only to use it."
+    );
 }
 
 function configList(claudeDir) {
@@ -877,9 +897,12 @@ function configList(claudeDir) {
     `\nORC config  (override: ${p}${fs.existsSync(p) ? "" : "  — not created yet"})\n`
   );
   const pad = Math.max(...CONFIG_META.map((m) => m.key.length));
+  const forced = String(map.opus5_only) === "true";
   const tierLabel = { common: "Common", fable5: "Fable 5 role override", advanced: "Advanced" };
   for (const tier of ["common", "fable5", "advanced"]) {
-    console.log(ui.header(tierLabel[tier]));
+    console.log(
+      ui.header(tierLabel[tier] + (tier === "fable5" && forced ? "  (INERT — opus5_only is true)" : ""))
+    );
     for (const m of CONFIG_META.filter((x) => x.tier === tier)) {
       const has = Object.prototype.hasOwnProperty.call(map, m.key);
       const val = has ? map[m.key] : m.def;
@@ -891,12 +914,25 @@ function configList(claudeDir) {
   const extra = Object.keys(map).filter((k) => !metaFor(k));
   if (extra.length) {
     console.log("\nOther (hand-edited) overrides");
-    for (const k of extra) console.log(`  ${k}: ${map[k]}`);
+    for (const k of extra)
+      console.log(
+        `  ${k}: ${map[k]}` +
+          (forced && k === "rubric_bands_override"
+            ? ui.color.gray("   (INERT — opus5_only is true)")
+            : "")
+      );
   }
   console.log("");
 }
 
 function configSet(claudeDir, key, rawValue) {
+  if (LEGACY_KEYS[key]) {
+    console.error(
+      `  ⚠ ${key} was renamed to ${LEGACY_KEYS[key]} in v0.36.0 (it now forces every\n` +
+        `    dispatched role, not just executors) — writing ${LEGACY_KEYS[key]}.`
+    );
+    key = LEGACY_KEYS[key];
+  }
   const m = metaFor(key);
   if (!m) {
     console.error(
@@ -924,42 +960,90 @@ function configSet(claudeDir, key, rawValue) {
     if (n) console.log(`  ↳ rewrote effort: ${res.value} in ${n} Fable 5 agent file(s).`);
   }
   if (key.startsWith("fable5")) fable5Warn(claudeDir);
-  if (key === "opus5_executor_only") opus5Notice(String(res.value) === "true");
+  if (key === "opus5_only") opus5Notice(String(res.value) === "true", claudeDir);
 }
 
+// The role→agent table this mode forces. Mirrors the mapping in
+// templates/skills/_shared/opus5-only.md (documented drift — change together;
+// a golden test asserts every agent named here exists in templates/agents/).
+const OPUS5_ONLY_ROLES = [
+  ["mini executor", "orc-executor-sonnet-5-high", "orc-executor-opus-5-low"],
+  ["fast executor", "orc-executor-sonnet-4-6-high", "orc-executor-opus-5-low"],
+  ["mini analyze", "orc-analyze-mini-sonnet-5-high", "orc-analyze-mini-opus-5-med"],
+  ["mini plan", "orc-planner-mini-sonnet-5-high", "orc-planner-mini-opus-5-med"],
+  ["scout", "orc-scout-sonnet-4-6-high", "orc-scout-opus-5-low"],
+  ["pattern codify", "orc-pattern-codifier-sonnet-5-high", "orc-pattern-codifier-opus-5-med"],
+  ["wiki scan", "orc-wiki-scanner-opus-4-8-high", "orc-wiki-scanner-opus-5-med"],
+  ["claude write", "orc-claude-writer-opus-4-8-high", "orc-claude-writer-opus-5-med"],
+  ["retro mine", "orc-retro-sonnet-5-high", "orc-retro-opus-5-med"],
+];
+
 // A `desc` string is only read by someone who runs `config list`, and this key
-// changes what EVERY task dispatches — so say the three things that matter at
-// SET time: why it exists, what it actually resolves to, and the tier it needs.
-function opus5Notice(on) {
+// changes what EVERY dispatch resolves to — so say the four things that matter
+// at SET time: why it exists, what it actually resolves to, the tier it needs,
+// and what it silently overrides.
+function opus5Notice(on, claudeDir) {
   if (!on) {
-    console.log("\n  Executor dispatch is back to the default 8-band mixed-model table.");
+    console.log(
+      "\n  Every role is back to its default pin (executors → the 8-band mixed-model\n" +
+        "  table). Any fable5_* / rubric_bands_override settings are live again."
+    );
     return;
   }
+  const pad = Math.max(...OPUS5_ONLY_ROLES.map((r) => r[0].length));
+  const roleRows = OPUS5_ONLY_ROLES.map(
+    (r) => `    ${r[0].padEnd(pad)}  →  ${r[2]}`
+  ).join("\n");
   console.log(
-    "\n  " + ui.color.bold("Opus-5-only executor ladder is now ACTIVE.") + "\n" +
+    "\n  " + ui.color.bold("Opus-5-only dispatch is now ACTIVE — for EVERY role, not just executors.") + "\n" +
       "\n  Why: deep SWE-benchmark work on cost vs efficiency across Claude models finds a\n" +
-      "  single Opus 5 executor, with the EFFORT ladder as the cost dial, the most efficient\n" +
-      "  configuration for coding tasks. You trade model-class variety for effort variety.\n" +
-      "\n  What every scored task now dispatches:\n" +
+      "  single Opus 5 agent, with the EFFORT ladder as the cost dial, the most efficient\n" +
+      "  configuration. You trade model-class variety for effort variety.\n" +
+      "\n  Scored executors (/orc + /orc-ultra):\n" +
       "\n    | Score     | Executor agent            |\n" +
       "    |-----------|---------------------------|\n" +
       "    | [0,40)    | orc-executor-opus-5-low   |\n" +
       "    | [40,80)   | orc-executor-opus-5-med   |\n" +
       "    | [80,100]  | orc-executor-opus-5-high  |\n" +
+      "\n  Fixed roles now dispatched instead of their defaults:\n\n" + roleRows + "\n" +
+      "\n  Already Opus 5, unchanged: analyst · planner · reviewer · verifier · test-author\n" +
+      "  · combiner · learn-writer · advisor · judge.\n" +
+      "  NEVER forced: orc-trace-writer-haiku-4-5 (it transcribes a packet, no reasoning)\n" +
+      "  and orc-diy (its table is compile-owned — re-run `orc diy compile` to change it).\n" +
       "\n  " + ui.mark.warn("Tier requirement — read this one:") + "\n" +
-      "  Today only the [90,100] band needs an Opus 5 main session. With this ON, EVERY\n" +
-      "  dispatch does. A subagent can never outrank the main session, so on a lower session\n" +
-      "  all three bands silently fall back to the session model and the tier-honesty rule\n" +
-      "  reports a downgrade on EVERY task instead of occasionally. Hooks cannot block on\n" +
-      "  model (only on effort), so this notice is the only place you learn it up front.\n" +
-      "\n  Scope: full /orc + /orc-ultra (the lanes that score). orc-mini and orc-fast\n" +
-      "  dispatch fixed executors and never score, so they are unchanged by design.\n" +
-      "  A hand-written `rubric_bands_override` still WINS over this preset.\n" +
-      "  Turn it off with: orc config reset opus5_executor_only\n"
+      "  Today only the [90,100] executor band needs an Opus 5 main session. With this ON,\n" +
+      "  EVERY dispatch does. A subagent can never outrank the main session, so on a lower\n" +
+      "  session every role silently falls back to the session model and the tier-honesty\n" +
+      "  rule reports a downgrade on EVERY return instead of occasionally. Hooks cannot\n" +
+      "  block on model (only on effort), so this notice is the only up-front warning.\n" +
+      "  This also ends orc-fast's \"runs fine at Sonnet medium\" — while ON it needs Opus 5.\n" +
+      "\n  " + ui.color.bold("It FORCES.") + " While ON it outranks each role's default pin, the Fable 5\n" +
+      "  role override, and a hand-written rubric_bands_override.\n" +
+      "  Turn it off with: orc config reset opus5_only\n"
+  );
+  opus5ConflictWarn(claudeDir);
+}
+
+// Setting a key that another key now shadows is invisible unless we say so.
+function opus5ConflictWarn(claudeDir) {
+  if (!claudeDir) return;
+  const { map } = readOverride(claudeDir);
+  const shadowed = [];
+  if (String(map.fable5_enabled) === "true")
+    shadowed.push("fable5_enabled (+ fable5_roles / fable5_effort)");
+  if (Object.prototype.hasOwnProperty.call(map, "rubric_bands_override"))
+    shadowed.push("rubric_bands_override (hand-written executor table)");
+  if (!shadowed.length) return;
+  console.error(
+    "  ⚠ INERT while opus5_only is true — these stay in your config but no run\n" +
+      "    reads them:\n" +
+      shadowed.map((s) => `      · ${s}`).join("\n") +
+      "\n"
   );
 }
 
 function configReset(claudeDir, key) {
+  if (key && LEGACY_KEYS[key]) key = LEGACY_KEYS[key];
   const { map } = readOverride(claudeDir);
   if (!key) {
     const p = writeOverride(claudeDir, {});

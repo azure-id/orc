@@ -78,15 +78,16 @@ Workers are model-pinned SUBAGENTS in `.claude/agents/` — the model is enforce
 not requested in prose. Score every task from the planner-emitted `facets` via
 the fixed arithmetic formula and SHOW the table with the facet vector + the
 arithmetic (`B+N+L+T+fan+U = raw`; an un-shown number is not scored); map the
-final score via the RESOLVED table in `config.md` — `rubric_bands_override` > `opus5_executor_only` (3-band Opus-5-only) > the default 8-band (`rubric_bands` = granularity only, never a preset); NAME it when you show scores; sibling tasks differing in ≤1 facet share a
+final score via the RESOLVED table in `config.md` — `opus5_only` (3-band Opus-5-only, FORCING) > `rubric_bands_override` > the default 8-band (`rubric_bands` = granularity only, never a preset); NAME it when you show scores; sibling tasks differing in ≤1 facet share a
 band or cite the differing facet (see `references/effort-and-mode.md`). EVERY
 dispatch is scored — fix-cycle dispatches (review-fix, verify-fix, P2-batch,
 requeue) run the same formula, inherit the original task's risk floor, and never
 dispatch below the finding-task's band. Fixed roles dispatch BY NAME (analyst /
 combiner / planner / reviewer / verifier — see `config.md`'s fixed-role table +
-`.claude/agents/MODEL-MAPPING.md`). If `fable5_enabled`, roles in `fable5_roles`
-dispatch their `orc-<role>-fable-5` variant instead — see
-`_shared/fable5-override.md`.
+`.claude/agents/MODEL-MAPPING.md`). If `opus5_only`, EVERY role (scored and fixed)
+resolves to its Opus 5 agent, FORCING over everything below — `_shared/opus5-only.md`;
+else if `fable5_enabled`, roles in `fable5_roles` dispatch their
+`orc-<role>-fable-5` variant — `_shared/fable5-override.md`.
 Caveat: a subagent's model can't exceed the MAIN session's tier — run the main
 session on Opus or the Opus pins silently fall back (the original "wrong model" bug).
 
@@ -200,7 +201,7 @@ task's `spec_invariants[]` is appended VERBATIM to that slice's
 ## Phase 1 — Planning · Trace: `PHASE planning`, `CONFIG`, `WIKI-CONSULT`, `CROSSLINK`, `GATE`
 
 Emit `PHASE planning start`, then emit ONE `CONFIG <key=value …>` line with the
-resolved values of every config key this run will consume (incl. `fable5_*` when enabled, and ALWAYS `opus5_executor_only` — it selects the executor table, so retro can segment per-band outcomes BY scoring mode) — the runtime
+resolved values of every config key this run will consume (incl. `fable5_*` when enabled, and ALWAYS `opus5_only` — it selects the executor table AND every fixed role, so retro can segment per-band outcomes BY dispatch mode) — the runtime
 proof `/orc-retro` audits that the run honored the config.
 **Wiki consult (load `references/wiki-consult.md`;
 always report — no tier is silent):** compute the FRESH/AGING/STALE tier from

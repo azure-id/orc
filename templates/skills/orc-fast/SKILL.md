@@ -76,7 +76,7 @@ migration) and write the intent-spec + a minimal checkpoint.
 ## Phase F2 — Slice build + dispatch (ONE executor)
 
 Build one slice for `orc-executor-sonnet-4-6-high` (dispatch BY NAME; model
-pinned in the agent file):
+pinned in the agent file). **Under `opus5_only` it is `orc-executor-opus-5-low`** — forced, and while that mode is on this lane needs an Opus 5 main session, so the "runs fine at Sonnet medium" premise applies only with it off (`../_shared/opus5-only.md`).
 
 - the task (intent spec) + acceptance bullets as definition-of-done
 - **wiki pointers, not content** (fast's lane-delta in

@@ -30,7 +30,7 @@ makes the consent gate mandatory.
    cost warning and do NOTHING to the repo until the user says ok/continue/
    proceed. No pre-scan, not even to estimate area count.
 2. **You never scan-and-write yourself — you spawn.** Dispatch scans BY NAME — `orc-wiki-scanner-opus-4-8-high`
-   (pinned in the agent file: the model is enforced, and the trace hook can see it); you plan, dispatch, assemble.
+   (pinned in the agent file: the model is enforced, and the trace hook can see it); you plan, dispatch, assemble. Under `opus5_only` the scanner is `orc-wiki-scanner-opus-5-med` — forced, and a full scan is many batches, so it is the costliest place that mode lands (`../_shared/opus5-only.md`).
 3. **Fixed pause every 5 scan-tasks** — not user-configurable; multi-session
    resume via the inherited checkpoint.
 4. **Wiki docs are persistent** in `wiki/` (project root); run artifacts stay
@@ -166,7 +166,7 @@ cadence; SKIP any that don't apply — never fabricate one):
 ## Phase 2 — Scan (spawned agents, 5-task pauses)
 
 Write checkpoint + state-of-play into the run subfolder BEFORE dispatching.
-Per scan-task: spawn `orc-wiki-scanner-opus-4-8-high` BY NAME with the area's file list + the
+Per scan-task: spawn `orc-wiki-scanner-opus-4-8-high` BY NAME (`orc-wiki-scanner-opus-5-med` under `opus5_only`) with the area's file list + the
 doc-writing contract (schemas/wiki-doc.md — v2: evidence anchors in contract
 sections, `keywords[]` + per-file `covered_files` hashes, AND `crosslink_tags`
 = one tag body per OUTWARD boundary point in the area's files, or `none`+reason)

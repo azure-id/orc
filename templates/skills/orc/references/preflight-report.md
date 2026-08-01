@@ -36,11 +36,14 @@ waves:     3 planned — will pause after wave 2 (batch_pause_every=2)
   (`cached` or `configured-no-cache`); omit the whole line when crosslink is
   not in play (state `none`).
 - **scoring:** which executor table RESOLVED for this run — `8-band default
-  table` · `Opus-5-only ladder (opus5_executor_only)` · `custom
+  table` · `Opus-5-only ladder (opus5_only)` · `custom
   (rubric_bands_override, <n> rows)`. An un-shown table is as unaccountable as
   an un-shown number, and the Opus-5-only ladder in particular means EVERY
   dispatch needs an Opus 5 main session — the user should see that before the
-  first dispatch, not in a trace full of downgrades.
+  first dispatch, not in a trace full of downgrades. When `opus5_only` is on,
+  append ` · all fixed roles forced to Opus 5` and name any selector it
+  shadowed (`rubric_bands_override` / `fable5_*` present but INERT) — a setting
+  the user tuned and the run then ignored has to be said out loud.
 - **tdd:** ALWAYS printed on a lane whose TDD policy is on — BOTH branches, not
   only the exemption. `ON — <n> requirements with skeletons, <m> exempt
   (<reasons>)`, counted straight from the plan's `tdd_spec`; or

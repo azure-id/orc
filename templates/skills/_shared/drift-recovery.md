@@ -61,6 +61,9 @@ INTENT-SPEC: <path to the run's original intent-spec>
    the intent-spec promised), never a re-analysis of the whole request.
 2. **Patch plan** — dispatch the orc-mini planner
    (`orc-planner-mini-sonnet-5-high`) on the gap spec.
+
+   Both steps use their `opus5_only` variants (`orc-analyze-mini-opus-5-med` /
+   `orc-planner-mini-opus-5-med`) when that mode is on — see `opus5-only.md`.
 3. **Scored dispatch** of the patch tasks (the lane's normal executor path).
 4. **Re-verify** — the lane's verify/smoke gate again.
 5. **Re-offer** — regenerate the example, then ask the drift question again.

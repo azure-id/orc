@@ -84,7 +84,16 @@ security_review: off       # off | ask | on — fires only on runs where a task
                            #   ask → one prompt after review, user decides
                            #   on  → dispatch the security pass without asking
 
+# --- Opus-5-only dispatch (HARD-GATED, FORCING — default off) ---
+opus5_only: false          # true → EVERY dispatched role resolves to a claude-opus-5
+                           #   agent, effort as the only cost dial. Outranks BOTH
+                           #   rubric_bands_override and the whole fable5_* block.
+                           #   Never forced: the Haiku trace writer, orc-diy (compile-
+                           #   owned). Needs an Opus 5 main session or every dispatch
+                           #   downgrades. See _shared/opus5-only.md.
+
 # --- Fable 5 role override (HARD-GATED — nothing changes unless enabled) ---
+#     (entirely INERT while opus5_only: true)
 fable5_enabled: false      # master gate. false = inert (this whole block does nothing).
 fable5_effort: medium      # medium | high | xhigh | max — effort for the Fable 5 role agents.
                            #   The `orc config set fable5_effort` CLI rewrites the effort:
@@ -155,7 +164,7 @@ the Opus-5-only preset below it lands `orc-executor-opus-5-med` instead. The top
 band dispatches **Opus 5 high** — it needs an Opus 5 MAIN session or it silently
 falls back to the session model (the tier-honesty rule reports the downgrade).
 
-### The Opus-5-only ladder (`opus5_executor_only`, default **false**)
+### The Opus-5-only ladder (`opus5_only`, default **false**)
 
 One model, EFFORT as the cost dial. Off by default; nothing changes until set.
 
@@ -166,20 +175,21 @@ One model, EFFORT as the cost dial. Off by default; nothing changes until set.
 | [80,100] | claude-opus-5 | high   | orc-executor-opus-5-high |
 
 Rationale (why the key exists): deep SWE-benchmark work on cost vs efficiency
-across Claude models finds a single Opus 5 executor with the effort ladder the
-most efficient setup for coding tasks — model-class variety traded for effort
-variety. **Tier cost:** today ONE band in eight needs an Opus 5 main session;
-with this on, EVERY dispatch does, so a lower session downgrades every task
-(warn-only — a hook can gate effort, never model). **Scope:** the lanes that
-SCORE — full `/orc` + `/orc-ultra`. orc-mini and orc-fast dispatch fixed
-executors and never score, so they are unchanged by design; orc-diy's table is
-compile-owned and reads only `orc-diy.config.yaml`, never this file.
+across Claude models finds a single Opus 5 agent with the effort ladder the
+most efficient setup — model-class variety traded for effort variety.
+**Tier cost:** today ONE band in eight needs an Opus 5 main session; with this
+on, EVERY dispatch does, so a lower session downgrades every task (warn-only —
+a hook can gate effort, never model). **Scope:** this key is NOT executor-only.
+It also forces every fixed role (see below) across every lane. orc-diy's table
+stays compile-owned and reads only `orc-diy.config.yaml`, never this file.
 
 ### Resolution — highest wins
 
-1. `rubric_bands_override` — hand-written `{min, max, agent}` rows. The user's
-   explicit table ALWAYS wins (hand-edit only; deliberately not a CLI key).
-2. `opus5_executor_only: true` — the named 3-band preset above.
+1. `opus5_only: true` — the 3-band preset above, and every fixed role forced to
+   its Opus 5 variant. It FORCES: while on, it outranks BOTH a hand-written
+   `rubric_bands_override` and the whole Fable 5 role override.
+2. `rubric_bands_override` — hand-written `{min, max, agent}` rows (hand-edit
+   only; deliberately not a CLI key). Wins over the default table.
 3. the default 8-band table.
 
 `rubric_bands` sets scoring GRANULARITY only, in every case — it never selects a
@@ -205,7 +215,18 @@ list of `{min, max, agent}` rows; the orchestrator uses it instead of the table.
 | Ultra advisor (/orc-ultra only) | orc-advisor-opus-5-xhigh |
 | Ultra judge (/orc-ultra only) | orc-judge-opus-5-xhigh |
 
-**Fable 5 role override:** when `fable5_enabled: true`, each role in
+**Opus-5-only override (forcing):** when `opus5_only: true`, every role above
+that is not already `claude-opus-5` dispatches its Opus 5 variant instead —
+mini analyst → `orc-analyze-mini-opus-5-med`, mini planner →
+`orc-planner-mini-opus-5-med`, mini executor → `orc-executor-opus-5-low`,
+pattern codifier → `orc-pattern-codifier-opus-5-med` — plus the roles owned by
+other lanes (scout, wiki scanner, CLAUDE.md writer, retro miner, fast
+executor). The full mapping, the two exclusions (the Haiku trace writer and
+orc-diy) and the tier consequence are in `../_shared/opus5-only.md`. It
+outranks the Fable 5 override below.
+
+**Fable 5 role override:** (INERT while `opus5_only: true`) when
+`fable5_enabled: true`, each role in
 `fable5_roles` dispatches its `orc-<role>-fable-5` variant INSTEAD of the default
 above (`analyze`→`orc-analyst-fable-5`, `plan`→`orc-planner-fable-5`,
 `advisor`→`orc-advisor-fable-5`, `judge`→`orc-judge-fable-5`,
@@ -271,7 +292,15 @@ above (`analyze`→`orc-analyst-fable-5`, `plan`→`orc-planner-fable-5`,
   agent instead of the default; `advisor`/`judge` apply only under `/orc-ultra`.
   `fable5_effort` (medium default) sets those agents' effort — the CLI rewrites
   their frontmatter on set. Enabled with empty `fable5_roles` = no effect (the
-  CLI warns). See `../_shared/fable5-override.md`.
+  CLI warns). The whole block is INERT while `opus5_only: true`. See
+  `../_shared/fable5-override.md`.
+- `opus5_only` (default `false`) is a **forcing** dispatch mode: every scored
+  executor AND every fixed role resolves to a `claude-opus-5` agent, with effort
+  as the only cost dial. While on it outranks `rubric_bands_override` and the
+  entire `fable5_*` block. Two things are never forced: the pinned Haiku trace
+  writer, and orc-diy (compile-owned). Every dispatch then needs an Opus 5 main
+  session — including `/orc-fast`, whose Sonnet-medium session premise holds
+  only while this is off. See `../_shared/opus5-only.md`.
 - **Ultra lane has no config key** — `/orc-ultra` forces its overrides
   run-scoped (deep analyze, `pattern_findings` on, `generate_tests` on,
   `security_review` on, executor tier floor) and NEVER writes them to

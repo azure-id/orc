@@ -232,6 +232,50 @@ test("config set → override → reset roundtrip, with validator", () => {
   }
 });
 
+test("config: opus5_only forces, warns about what it shadows, and honors the retired name", () => {
+  const { root, claudeDir } = freshInstall();
+  try {
+    const ovr = path.join(claudeDir, "orc.config.yaml");
+
+    const bad = cli(["config", "set", "opus5_only", "yes", "--dir", root]);
+    assert.notStrictEqual(bad.status, 0, "non-boolean rejected");
+
+    // A key that changed NAME must not silently revert a user's setting: the
+    // retired name is accepted, deprecation-warned, and WRITTEN as the new key.
+    const legacy = cli(["config", "set", "opus5_executor_only", "true", "--dir", root]);
+    assert.strictEqual(legacy.status, 0, "retired name still accepted");
+    assert.match(legacy.stderr, /renamed to opus5_only/, "deprecation is stated");
+    const text = fs.readFileSync(ovr, "utf8");
+    assert.match(text, /^opus5_only:\s*true$/m, "written under the new name");
+    assert.doesNotMatch(text, /^opus5_executor_only:/m, "retired name is not persisted");
+
+    // Set-time notice: the roster + the tier cost, not just an "ok".
+    const on = cli(["config", "set", "opus5_only", "true", "--dir", root]);
+    assert.strictEqual(on.status, 0);
+    assert.match(on.stdout, /orc-executor-opus-5-low/, "the executor ladder is shown");
+    assert.match(on.stdout, /orc-wiki-scanner-opus-5-med/, "the fixed-role roster is shown");
+    assert.match(on.stdout, /trace-writer-haiku-4-5/, "the excluded role is named");
+    assert.match(on.stdout, /EVERY dispatch does/, "the tier cost is stated");
+
+    // A setting the run will now ignore has to be called out, not left to rot.
+    fs.appendFileSync(ovr, "rubric_bands_override: [{min: 0, max: 100}]\n");
+    cli(["config", "set", "fable5_enabled", "true", "--dir", root]);
+    const again = cli(["config", "set", "opus5_only", "true", "--dir", root]);
+    assert.match(again.stderr, /INERT while opus5_only/, "shadowed keys are reported");
+    assert.match(again.stderr, /fable5_enabled/, "fable5 named as shadowed");
+    assert.match(again.stderr, /rubric_bands_override/, "hand-written table named as shadowed");
+
+    const list = cli(["config", "list", "--dir", root]);
+    assert.match(list.stdout, /INERT — opus5_only is true/, "config list marks the inert block");
+
+    const off = cli(["config", "reset", "opus5_only", "--dir", root]);
+    assert.strictEqual(off.status, 0);
+    assert.doesNotMatch(fs.readFileSync(ovr, "utf8"), /^opus5_only:/m, "reset removes it");
+  } finally {
+    rmrf(root);
+  }
+});
+
 test("config: fable5_roles subset validator + fable5_effort rewrites the agents", () => {
   const { root, claudeDir } = freshInstall();
   try {

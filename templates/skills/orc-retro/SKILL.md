@@ -23,7 +23,9 @@ three questions: **is the scoring rubric calibrated? are the workers honest?
 where does the pipeline leak?**
 
 Run as Opus 4.8 high (orchestrator). The mining itself is dispatched to
-`orc-retro-sonnet-5-high` — cheap, because it reads trace text, not code.
+`orc-retro-sonnet-5-high` — cheap, because it reads trace text, not code — or
+to `orc-retro-opus-5-med` when `opus5_only: true` forces it
+(`../_shared/opus5-only.md`).
 
 **Worked example** (orient only — never execute from it): `examples/retro-mock.md`.
 
@@ -66,7 +68,8 @@ Run as Opus 4.8 high (orchestrator). The mining itself is dispatched to
    No channel → stop here. Resolve `retro_repo` with the other config keys.
 1. Resolve `log_dir`; collect `*.txt` traces (all, or the user-named subset /
    date range from `$ARGUMENTS`). Show the count and ask nothing else.
-2. Dispatch `orc-retro-sonnet-5-high` with the slice: trace file paths + the
+2. Dispatch `orc-retro-sonnet-5-high` (or `orc-retro-opus-5-med` under
+   `opus5_only`) with the slice: trace file paths + the
    verb reference (`../orc/references/trace-protocol.md`). The agent mines the
    `<trace>.jsonl` sidecar first when present (structured — no regex over free
    text) and falls back to `.txt` parsing for pre-v0.32.0 traces, merging the

@@ -6,7 +6,7 @@
 
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
-![Version](https://img.shields.io/badge/version-0.35.0-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.36.0-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
@@ -46,57 +46,59 @@ zero-dependency npm package installs those files into your `.claude/` directory.
 
 ## Changelog
 
-**Latest: v0.35.0 — updated 2026-08-02.**
+**Latest: v0.36.0 — updated 2026-08-02.**
 
-### v0.35.0 — `opus5_executor_only`: one model, effort as the cost dial _(2026-08-02)_
+### v0.36.0 — `opus5_only`: one model for every role, not just executors _(2026-08-02)_
 
-**A new opt-in executor ladder, off by default.** Set
-`orc config set opus5_executor_only true` and the 8-band mixed-model table is
-replaced by three Opus 5 bands where **effort** is the cost dial instead of model
-class:
+**v0.35.0's `opus5_executor_only` is renamed `opus5_only` and now forces EVERY
+dispatched role onto Opus 5** — still off by default, still effort as the only
+cost dial. The old key is read as a deprecated alias for one release, so an
+existing config does not silently revert to mixed-model dispatch.
 
-| Score | Executor agent |
-|-------|----------------|
-| `[0,40)` | `orc-executor-opus-5-low` |
-| `[40,80)` | `orc-executor-opus-5-med` |
-| `[80,100]` | `orc-executor-opus-5-high` |
+The scored executor ladder is unchanged (`[0,40)` low · `[40,80)` medium ·
+`[80,100]` high). What is new is that nine fixed roles flip with it:
 
-**Why it exists:** deep SWE-benchmark work on cost vs efficiency across Claude
-models finds a single Opus 5 executor with the effort ladder to be the most
-efficient configuration for coding tasks. You trade model-class variety for
-effort variety.
+| Role | Default | Under `opus5_only` |
+|------|---------|--------------------|
+| orc-mini executor | `orc-executor-sonnet-5-high` | `orc-executor-opus-5-low` |
+| orc-fast executor | `orc-executor-sonnet-4-6-high` | `orc-executor-opus-5-low` |
+| mini analyst | `orc-analyze-mini-sonnet-5-high` | `orc-analyze-mini-opus-5-med` |
+| mini planner | `orc-planner-mini-sonnet-5-high` | `orc-planner-mini-opus-5-med` |
+| deep-mode scout | `orc-scout-sonnet-4-6-high` | `orc-scout-opus-5-low` |
+| pattern codifier | `orc-pattern-codifier-sonnet-5-high` | `orc-pattern-codifier-opus-5-med` |
+| wiki scanner | `orc-wiki-scanner-opus-4-8-high` | `orc-wiki-scanner-opus-5-med` |
+| CLAUDE.md writer | `orc-claude-writer-opus-4-8-high` | `orc-claude-writer-opus-5-med` |
+| retro miner | `orc-retro-sonnet-5-high` | `orc-retro-opus-5-med` |
 
-**Read the tier cost before enabling it.** Today exactly one band in eight needs
-an Opus 5 main session. With this on, **every dispatch does** — and a subagent can
-never outrank the main session, so on a lower session all three bands quietly
-fall back and the tier-honesty rule reports a downgrade on *every* task instead
-of occasionally. A hook can gate effort but never model, so this is warn-only by
-construction; `orc config set` prints the full notice, the resolved table and
-that warning at set-time, which is the one place you reliably see it.
+The nine roles already pinned to Opus 5 — analyst, planner, reviewer, verifier,
+test-author, combiner, learn-writer, advisor, judge — dispatch unchanged.
 
-**How it resolves, highest wins:** a hand-written `rubric_bands_override` →
-`opus5_executor_only` → the default 8-band table. The formula, the facets and the
-risk floor are identical in every case — only the score→agent mapping changes (a
-floored task lands `opus-5-med` rather than `opus-4-7-high`). `rubric_bands`
-still sets granularity only, never which table is used.
+**It forces.** While on it outranks a hand-written `rubric_bands_override` *and*
+the entire Fable 5 role override. Both stay in your config and neither is read —
+so `orc config set` names every key it shadows, and `orc config list` marks them
+`INERT`. Turning the mode off restores them.
 
-**Scope is the lanes that score** — full `/orc` and `/orc-ultra`. orc-mini and
-orc-fast dispatch fixed executors and never score, so they are unchanged by
-design; forcing Opus 5 into orc-fast would contradict that lane's whole reason to
-exist. orc-diy's table stays compile-owned and reads only its own config.
+**Two things are never forced.** `orc-trace-writer-haiku-4-5` stays on Haiku (it
+transcribes a packet the orchestrator hands it — no reasoning, no source reads),
+and `/orc-diy` is untouched: its executors come from `flow.lock.json`, which only
+`orc diy compile` writes.
 
-Ultra's executor tier floor is defined under the preset too: with every band
-already Opus 5 there is no model left to raise, so it **raises effort** (the
-`[0,40)` band goes low → medium) and never lowers a band.
+**Where the cost lands.** Scouts fan out up to `max_scouts` in parallel per deep
+analysis, and the wiki scanner runs one dispatch per scan-task across a whole
+repo — those two dominate; everything else is a single dispatch per run.
 
-**Visible, not implicit:** the resolved table is named in the Phase 2 scoring
-table and the Phase 1 preflight block, and `opus5_executor_only` is always
-recorded in the `CONFIG` trace line — so `/orc-retro` can segment per-band
-outcomes by scoring mode and eventually *measure* the efficiency claim on real
-runs rather than take it on faith.
+**Read the tier cost before enabling it.** Today one executor band in eight needs
+an Opus 5 main session; with this on, every dispatch does, and a subagent can
+never outrank the session — so on a lower session every role quietly falls back
+and the tier-honesty rule reports a downgrade on *every* return. A hook can gate
+effort but never model, so the set-time notice is the one place you reliably see
+it. This also ends orc-fast's "runs fine at Sonnet medium" premise while the mode
+is on (the effort guard itself is unchanged — it still matches only `orc`).
 
 <details>
 <summary><b>Previous versions</b> (click to expand)</summary>
+
+### v0.35.0 — `opus5_executor_only`: one model, effort as the cost dial _(2026-08-02)_
 
 ### v0.34.8 — `orc pattern status` rejects a language key the payload has never heard of _(2026-08-01)_
 

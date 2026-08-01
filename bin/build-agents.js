@@ -34,7 +34,7 @@ const VARIANTS = [
   { name: "orc-executor-sonnet-4-6-high", model: "claude-sonnet-4-6", effort: "high",  band: "low-mid-complexity [40,55)" },
   { name: "orc-executor-sonnet-4-6-med", model: "claude-sonnet-4-6", effort: "medium", band: "low-complexity [30,40)" },
   { name: "orc-executor-haiku-4-5",      model: "claude-haiku-4-5",  effort: null,     band: "lowest-complexity [0,30)" },
-  // v0.35.0 — the `opus5_executor_only` ladder ONLY (default off). Same model,
+  // v0.35.0, widened v0.36.0 — the `opus5_only` ladder ONLY (default off). Same model,
   // effort as the cost dial: [0,40) low · [40,80) medium · [80,100] high (the
   // existing opus-5-high covers the top band in BOTH tables). These two are
   // never dispatched by the default 8-band table.

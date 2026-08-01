@@ -186,13 +186,16 @@ test("the default 8-band table is untouched by the preset", () => {
 test("table resolution states its precedence, and the pinned interactions", () => {
   const cfg = read("skills/orc/config.md");
   const res = cfg.slice(cfg.indexOf("### Resolution — highest wins"), cfg.indexOf("### Override"));
-  const order = ["rubric_bands_override", "opus5_executor_only", "default 8-band"];
+  // v0.36.0 inverted the top two: opus5_only FORCES, so it outranks a
+  // hand-written table instead of yielding to it.
+  const order = ["opus5_only", "rubric_bands_override", "default 8-band"];
   let at = -1;
   for (const t of order) {
     const i = res.indexOf(t);
     assert.ok(i > at, `${t} appears, after the higher-precedence entry`);
     at = i;
   }
+  assert.match(res, /FORCES/, "the resolution section says the mode forces");
 
   // Each interaction the preset could silently contradict.
   const eam = read("skills/orc/references/effort-and-mode.md");
@@ -203,8 +206,70 @@ test("table resolution states its precedence, and the pinned interactions", () =
   const ultra = read("skills/orc/references/ultra-mode.md");
   assert.match(ultra, /raises EFFORT, not model/, "ultra's floor is defined under the preset");
 
-  // Scope: the lanes that score. mini/fast dispatch fixed executors.
-  assert.match(cfg, /orc-mini and orc-fast dispatch fixed\s*\n?executors and never score/, "scope stated");
+  // Scope (v0.36.0): NOT executor-only — it reaches every fixed role too, and
+  // the two exclusions are named where a maintainer would look for them.
+  assert.match(cfg, /NOT executor-only/, "scope stated as wider than executors");
+  assert.match(cfg, /orc-diy.s table\s*\n?stays compile-owned/, "orc-diy excluded");
+});
+
+// ── v0.36.0 opus5_only: one forcing mode across every dispatched role ──────
+
+test("the opus5-only mapping names only agents that exist, and never the trace writer", () => {
+  const shared = read("skills/_shared/opus5-only.md");
+  const onDisk = new Set(
+    fs.readdirSync(path.join(T, "agents")).map((f) => f.replace(/\.md$/, ""))
+  );
+  // Every agent the contract promises to dispatch must ship — a typo'd rename
+  // here dispatches a nonexistent agent for that role the moment the mode is on.
+  // Agent names only — a bare lane name like `orc-diy` is prose, not a dispatch.
+  const named = [...shared.matchAll(/`(orc-[a-z0-9-]+-(?:opus|sonnet|haiku)-[0-9-]+(?:low|med|high)?)`/g)]
+    .map((m) => m[1])
+    .filter((n) => !/-$/.test(n));
+  assert.ok(named.length >= 18, "both columns of the mapping are present");
+  for (const n of named) assert.ok(onDisk.has(n), `${n} is a shipped agent file`);
+
+  // Every right-hand (forced) agent is actually an Opus 5 agent.
+  const forced = [...shared.matchAll(/\|\s*`?(orc-[a-z0-9-]+)`?\s*\|\s*$/gm)].map((m) => m[1]);
+  for (const n of forced.filter((x) => x.startsWith("orc-")))
+    assert.ok(/-opus-5-(low|med|high)$/.test(n), `${n} is an opus-5 variant`);
+
+  // The one role the mode must never touch.
+  assert.match(shared, /orc-trace-writer-haiku-4-5` stays Haiku/, "trace writer excluded");
+  assert.ok(!/orc-trace-writer-opus/.test(shared), "no opus trace-writer variant is promised");
+});
+
+test("every opus5-only variant is pinned to claude-opus-5 and NAMED for its effort", () => {
+  // A trace derives expect=<model>/<effort> from the agent NAME, so a file whose
+  // name disagrees with its frontmatter breaks the downgrade check.
+  const variants = fs
+    .readdirSync(path.join(T, "agents"))
+    .filter((f) => /-opus-5-(low|med|high)\.md$/.test(f));
+  assert.ok(variants.length >= 10, "the full opus-5 roster ships");
+  for (const f of variants) {
+    const text = read("agents/" + f);
+    const base = f.replace(/\.md$/, "");
+    assert.match(text, /^model: claude-opus-5$/m, `${f} is pinned to claude-opus-5`);
+    assert.match(text, new RegExp("^name: " + base + "$", "m"), `${f} name matches its filename`);
+    const effort = base.match(/-(low|med|high)$/)[1];
+    const want = { low: "low", med: "medium", high: "high" }[effort];
+    assert.match(text, new RegExp("^effort: " + want + "$", "m"), `${f} effort matches its name`);
+  }
+});
+
+test("the CLI role table and the shared contract agree on every forced agent", () => {
+  // Documented drift the token lint cannot see: cli.js prints the roster at
+  // set-time, the contract is what a run reads. A disagreement means the notice
+  // promises an agent the run never dispatches.
+  const cli = fs.readFileSync(path.join(__dirname, "..", "bin", "cli.js"), "utf8");
+  const block = cli.match(/const OPUS5_ONLY_ROLES = \[([\s\S]*?)\n\];/);
+  assert.ok(block, "OPUS5_ONLY_ROLES is parseable");
+  const rows = [...block[1].matchAll(/\["([^"]+)",\s*"([^"]+)",\s*"([^"]+)"\]/g)];
+  assert.strictEqual(rows.length, 9, "nine fixed roles are forced");
+  const shared = read("skills/_shared/opus5-only.md");
+  for (const [role, def, forced] of rows) {
+    assert.ok(shared.includes(def), `${role}: default ${def} is in the contract`);
+    assert.ok(shared.includes(forced), `${role}: forced ${forced} is in the contract`);
+  }
 });
 
 test("both opus5-only executors are generated from the template and documented", () => {

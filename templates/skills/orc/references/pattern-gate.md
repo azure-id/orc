@@ -42,8 +42,9 @@ visibility only, so the user always knows which house style is in force):
   - `on` → codify without asking; print `pattern: <lang> — codifying (cache miss)`;
   - `off` → agnostic; print `pattern: <lang> — running language-agnostic (no cached pattern)`.
 - **On learn/`on`** → dispatch `orc-pattern-codifier-sonnet-5-high` per missing
-  language (slice per `../../orc-pattern/SKILL.md` Phase 1); YOU write the
-  returned pattern to the cache.
+  language (`orc-pattern-codifier-opus-5-med` when `opus5_only` — see
+  `../../_shared/opus5-only.md`; slice per `../../orc-pattern/SKILL.md`
+  Phase 1); YOU write the returned pattern to the cache.
 - **Agnostic fallback** (declined / `off` / no playbook for the language): no
   codifier, no scan — the executor enforces the universal invariants and
   imitates the neighbor files it already reads. ~Zero added cost.

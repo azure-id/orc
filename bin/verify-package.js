@@ -66,6 +66,16 @@ const required = [
   // ships a lane that dispatches a nonexistent agent.
   "templates/agents/orc-analyze-mini-sonnet-5-high.md",
   "templates/agents/orc-planner-mini-sonnet-5-high.md",
+  // The Opus-5-only mode roster (v0.36.0). Both halves of every pair must ship:
+  // the mode is a runtime toggle, so a missing variant makes `opus5_only: true`
+  // dispatch a nonexistent agent for that role.
+  "templates/agents/orc-analyze-mini-opus-5-med.md",
+  "templates/agents/orc-planner-mini-opus-5-med.md",
+  "templates/agents/orc-scout-opus-5-low.md",
+  "templates/agents/orc-pattern-codifier-opus-5-med.md",
+  "templates/agents/orc-wiki-scanner-opus-5-med.md",
+  "templates/agents/orc-claude-writer-opus-5-med.md",
+  "templates/agents/orc-retro-opus-5-med.md",
   "templates/agents/orc-analyst-fable-5.md",
   "templates/agents/orc-planner-fable-5.md",
   "templates/agents/orc-advisor-fable-5.md",
@@ -95,11 +105,12 @@ function walkCount(dir, ext) {
 
 const skillCount = walkCount(path.join(ROOT, "templates/skills"), "SKILL.md");
 const agentCount = walkCount(path.join(ROOT, "templates/agents"), ".md");
-// Floors sit AT current reality (23 skills / 33 agent files: 32 agents +
-// MODEL-MAPPING.md — +2 opus-5 executors for the opus5_executor_only ladder) so a dropped file fails the count check instead of sliding
+// Floors sit AT current reality (23 skills / 40 agent files: 39 agents +
+// MODEL-MAPPING.md — +7 fixed-role variants for the opus5_only mode) so a
+// dropped file fails the count check instead of sliding
 // into the slack an under-set floor grants. Raise them with the payload.
 if (skillCount < 22) missing.push(`templates/skills (expected >=22 SKILL.md, found ${skillCount})`);
-if (agentCount < 33) missing.push(`templates/agents (expected >=33 .md, found ${agentCount})`);
+if (agentCount < 40) missing.push(`templates/agents (expected >=40 .md, found ${agentCount})`);
 
 // B4 — encoding/mojibake guard. The OneDrive corruption rule becomes a gate:
 // scan every shipped text file for the U+FFFD replacement char (invalid UTF-8

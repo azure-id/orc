@@ -10,7 +10,8 @@ Rules:
 - Rides the wiki's existing scan-consent, so there is NO separate ask (hence
   on/off only, no `ask` value).
 - Per detected language (`../../orc-pattern/references/INDEX.md`): dispatch
-  `orc-pattern-codifier-sonnet-5-high` with the generic playbook + the
+  `orc-pattern-codifier-sonnet-5-high` (`orc-pattern-codifier-opus-5-med` when
+  `opus5_only` — `../../_shared/opus5-only.md`) with the generic playbook + the
   most-recently-modified real files; YOU write the returned pattern to the
   cache.
 - Never run tests or change project code; skip languages already cached and

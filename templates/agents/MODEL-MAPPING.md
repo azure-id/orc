@@ -35,15 +35,43 @@ Score→executor mapping lives in config.md (one canonical 8-band table;
 | orc-pattern-codifier-sonnet-5-high | claude-sonnet-5 | high | reconcile per-language playbook vs. project files → cached code-pattern (opt-in) |
 | orc-retro-sonnet-5-high | claude-sonnet-5 | high | mine behavior traces → calibration report (/orc-retro; read-only) |
 | orc-wiki-scanner-opus-4-8-high | claude-opus-4-8 | high | scan ONE wiki coverage area → evidence-anchored doc body + crosslink tags (/orc-wiki only; read-only against the project) |
-| orc-executor-opus-5-med | claude-opus-5 | medium | `opus5_executor_only` ladder ONLY — the [40,80) band (never dispatched by the default 8-band table) |
-| orc-executor-opus-5-low | claude-opus-5 | low | `opus5_executor_only` ladder ONLY — the [0,40) band (never dispatched by the default 8-band table) |
+| orc-executor-opus-5-med | claude-opus-5 | medium | `opus5_only` ladder ONLY — the [40,80) band (never dispatched by the default 8-band table) |
+| orc-executor-opus-5-low | claude-opus-5 | low | `opus5_only` ladder ONLY — the [0,40) band, and the forced mini/fast executor (never dispatched by the default 8-band table) |
 | orc-advisor-opus-5-xhigh | claude-opus-5 | xhigh | ultra Phase U0 advisory brief + rubric + clarification questions (read-only; /orc-ultra only) |
 | orc-judge-opus-5-xhigh | claude-opus-5 | xhigh | ultra judgment gates — analysis / plan / implementation (read-only; /orc-ultra only) |
 | orc-learn-writer-opus-5-low | claude-opus-5 | low | deepen ONE feature → learning-docs/<slug>/ (/orc-learn only; git-ignored output) |
 | orc-claude-writer-opus-4-8-high | claude-opus-4-8 | high | scan repo → write/refresh the local CLAUDE.md (/orc-claude only; zero questions) |
 | orc-trace-writer-haiku-4-5 | claude-haiku-4-5 | — (no ladder) | append one phase block of behavior-trace narration from an orchestrator packet (every trace-owning lane; append-only, never reads source) |
 
+## Opus-5-only mode agents (hard-gated; dispatched only when `opus5_only: true`)
+
+`opus5_only` FORCES every dispatched role onto `claude-opus-5`, with effort as
+the only cost dial. Each agent below replaces its default with the same slice
+and the same return contract. Effort is PINNED per role (unlike `fable5_effort`,
+no CLI rewrites these). Full mapping + precedence:
+`../skills/_shared/opus5-only.md`.
+
+| Agent | Model | Effort | Replaces |
+|-------|-------|--------|----------|
+| orc-executor-opus-5-low | claude-opus-5 | low | the `[0,40)` band · orc-mini's and orc-fast's fixed executor |
+| orc-executor-opus-5-med | claude-opus-5 | medium | the `[40,80)` band |
+| orc-executor-opus-5-high | claude-opus-5 | high | the `[80,100]` band |
+| orc-analyze-mini-opus-5-med | claude-opus-5 | medium | orc-analyze-mini-sonnet-5-high |
+| orc-planner-mini-opus-5-med | claude-opus-5 | medium | orc-planner-mini-sonnet-5-high |
+| orc-scout-opus-5-low | claude-opus-5 | low | orc-scout-sonnet-4-6-high |
+| orc-pattern-codifier-opus-5-med | claude-opus-5 | medium | orc-pattern-codifier-sonnet-5-high |
+| orc-wiki-scanner-opus-5-med | claude-opus-5 | medium | orc-wiki-scanner-opus-4-8-high |
+| orc-claude-writer-opus-5-med | claude-opus-5 | medium | orc-claude-writer-opus-4-8-high |
+| orc-retro-opus-5-med | claude-opus-5 | medium | orc-retro-sonnet-5-high |
+
+The nine roles already on `claude-opus-5` — analyst, planner, reviewer,
+verifier, test-author, combiner, learn-writer, advisor, judge — dispatch
+unchanged under this mode. **Never forced:** `orc-trace-writer-haiku-4-5` (it
+transcribes a packet, no reasoning) and orc-diy (its table is compile-owned).
+
 ## Fable 5 role-override agents (hard-gated; dispatched only when configured)
+
+*(Entirely INERT while `opus5_only: true` — that mode outranks this one.)*
 
 Used ONLY when `fable5_enabled: true` and the role is in `fable5_roles` — each
 replaces its default role agent with the same slice/contract. Effort defaults to
@@ -58,7 +86,8 @@ replaces its default role agent with the same slice/contract. Effort defaults to
 | orc-reviewer-fable-5 | claude-fable-5 | fable5_effort | orc-reviewer-opus-5-med |
 
 Mini execution reuses orc-executor-sonnet-5-high. Fast-lane (orc-fast)
-execution reuses orc-executor-sonnet-4-6-high — no dedicated agent.
+execution reuses orc-executor-sonnet-4-6-high — no dedicated agent. Under
+`opus5_only` both reuse orc-executor-opus-5-low.
 
 The scout is dispatched only in the System Analyst's DEEP mode: the orchestrator
 fans out ≤`config.max_scouts` (default 3) parallel scouts, one per coverage area

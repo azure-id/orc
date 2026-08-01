@@ -37,7 +37,9 @@ Reconciliation is therefore cheap: you only ever override the *soft* half.
 ## Hard rules
 
 1. **You never codify yourself — you spawn.** Dispatch
-   `orc-pattern-codifier-sonnet-5-high` (Opus for large/messy repos). The codifier
+   `orc-pattern-codifier-sonnet-5-high` (Opus for large/messy repos), or
+   `orc-pattern-codifier-opus-5-med` when `opus5_only: true` — that mode FORCES
+   it, see `../_shared/opus5-only.md`. The codifier
    reads and returns the reconciled pattern; YOU write it to the cache.
 2. **Cache lives at `.claude/orc/patterns/<lang>-pattern.md`** (project `.claude/`,
    OUTSIDE `templates/` — `orc update` never clobbers it). One file per language.

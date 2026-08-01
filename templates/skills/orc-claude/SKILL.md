@@ -22,7 +22,10 @@ never `~/.claude/CLAUDE.md`, even if ORC is installed globally.
 **Dispatch, don't do.** Whatever model this chat runs on, the skill itself only
 selects the mode and spawns `orc-claude-writer-opus-4-8-high` (the pinned
 engine) — so the scan + writing always run at Opus 4.8 high regardless of the
-caller's tier. The one exception: the skill also writes the
+caller's tier. When `opus5_only: true` the engine is
+`orc-claude-writer-opus-5-med` instead (that mode FORCES it — see
+`../_shared/opus5-only.md`), and it then needs an Opus 5 main session.
+The one exception: the skill also writes the
 trace pointer + a few markers around that spawn (behavior-trace logging is
 permanent; see "Behavior trace"); that
 tracing is its ONLY self-write — the `CLAUDE.md` write is always the writer's.
@@ -67,11 +70,14 @@ set in "Behavior trace").
    `touch the trace file` of that name in the SAME step, BEFORE the spawn (a
    pointer to a file that does not exist reads as dangling — the hook rotates
    away from it and the run splits across two files).
-2. Spawn `orc-claude-writer-opus-4-8-high` with: `mode`, `repo_root`,
+2. Spawn `orc-claude-writer-opus-4-8-high` — or `orc-claude-writer-opus-5-med`
+   when `opus5_only` — with: `mode`, `repo_root`,
    `budget` (from a `budget=N` argument, else null), and the paths to
    `references/template.md` + `references/refresh.md`. **Trace:** emit
    `DISPATCH orc-claude-writer :: <mode> expect=opus-4-8/high` just before the
-   spawn (the hook then adds `SPAWN`/`RETURN` on its own).
+   spawn (`expect=opus-5/medium` under `opus5_only` — the expectation is
+   derived from the agent NAME you actually dispatched, never from this line's
+   default; the hook then adds `SPAWN`/`RETURN` on its own).
 3. On return, check `actual_model`/`actual_effort` against the pinned tier —
    mismatch → prepend a tier-downgrade warning to the report. **Trace:** emit
    `VERIFY writer actual=<model>/<effort> ✅ MATCH` (or

@@ -51,6 +51,11 @@ orc diy set autonomy semi
 orc diy validate                # re-check cross-key rules any time
 ```
 
+**`opus5_only` does not reach this lane.** That config forces every other
+lane's roles to Opus 5, but a DIY flow's executors come from `flow.lock.json`,
+which only `orc diy compile` writes. To run this lane on Opus 5, set
+`fixed_executor`/`session_tier` here and re-compile.
+
 The full key table lives in `references/flow-schema.md`. Highlights:
 
 - **Phases** — `analyze`, `review`, `security`, `verify`, `testgen`,

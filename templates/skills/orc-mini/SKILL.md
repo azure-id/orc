@@ -144,15 +144,14 @@ the decision log.
 
 ## Dispatch via named agents (canonical name-map — dispatch BY these names)
 
-Models pinned in `.claude/agents/`; look up here, never reconstruct a name
-(agent = skill-name + model-effort suffix). See `.claude/agents/MODEL-MAPPING.md`.
+Models pinned in `.claude/agents/`; look up here, never reconstruct a name (agent = skill-name + model-effort suffix). See `.claude/agents/MODEL-MAPPING.md`. `opus5_only: true` FORCES the right column and needs an Opus 5 main session — mini's cheap-lane premise is off while it is on (`../_shared/opus5-only.md`).
 
-| Role | Agent (dispatch this) | Model / effort |
-|------|-----------------------|----------------|
-| mini analysis (docs only) | `orc-analyze-mini-sonnet-5-high` | claude-sonnet-5 / high |
-| mini planning | `orc-planner-mini-sonnet-5-high` | claude-sonnet-5 / high |
-| mini execution | `orc-executor-sonnet-5-high` | claude-sonnet-5 / high |
-| test authoring (opt-in) | `orc-test-author-opus-5-med` | claude-opus-5 / medium |
+| Role | Agent (dispatch this) | Model / effort | When `opus5_only` |
+|------|-----------------------|----------------|-------------------|
+| mini analysis (docs only) | `orc-analyze-mini-sonnet-5-high` | claude-sonnet-5 / high | `orc-analyze-mini-opus-5-med` |
+| mini planning | `orc-planner-mini-sonnet-5-high` | claude-sonnet-5 / high | `orc-planner-mini-opus-5-med` |
+| mini execution | `orc-executor-sonnet-5-high` | claude-sonnet-5 / high | `orc-executor-opus-5-low` |
+| test authoring (opt-in) | `orc-test-author-opus-5-med` | claude-opus-5 / medium | unchanged |
 
 ## Config
 

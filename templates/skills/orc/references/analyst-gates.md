@@ -12,7 +12,9 @@ logging.
 
 When the analyst runs in deep mode it returns a `scout_plan` (pass 1). You then
 dispatch ≤ `config.max_scouts` (default 3) parallel
-`orc-scout-sonnet-4-6-high` agents — one coverage area each, read-only — and
+`orc-scout-sonnet-4-6-high` agents (`orc-scout-opus-5-low` when `opus5_only`
+— `../../_shared/opus5-only.md`; scouts fan out in PARALLEL, so this is the
+mode's largest single cost multiplier) — one coverage area each, read-only — and
 re-dispatch the analyst WITH their evidence bundles for pass 2. Same "return a
 request → you re-slice → re-dispatch" shape as `needs_context`. You never
 analyze; you only dispatch and relay.

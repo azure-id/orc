@@ -13,7 +13,9 @@ consent — it never auto-escalates. Presetting `default_analysis_depth` via
    never all of an adjacent scope. Return the plan to the orchestrator. Do NOT
    do the full reconciliation yet.
 2. **Scouts (orchestrator-dispatched).** The orchestrator dispatches ≤`max_scouts`
-   (config, default 3) parallel read-only `orc-scout-sonnet-4-6-high` agents, one
+   (config, default 3) parallel read-only `orc-scout-sonnet-4-6-high` agents
+   (`orc-scout-opus-5-low` when `opus5_only` — see
+   `../../_shared/opus5-only.md`), one
    coverage area each. They return **code-evidence bundles** (file:line hits,
    dependents, tests, config).
 3. **Pass 2 (reconcile).** The analyst is re-dispatched WITH the bundles. Do the
