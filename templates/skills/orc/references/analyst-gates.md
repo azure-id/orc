@@ -20,7 +20,19 @@ analyze; you only dispatch and relay.
 ## Analyst-return gates (deterministic, before any build option)
 
 1. **Evidence spot-check:** Glob every `files[]` path in the spec +
-   Grep-verify the quoted snippet on every `status: exists|conflict` entry.
+   Grep-verify the quoted snippet on **EVERY quote-anchored ref, whatever its
+   `status`** (v0.34.6). It used to check only `exists|conflict` — but the two
+   statuses a GOOD audit most often produces are `resolved` (a challenged row
+   the user decided) and `buildable` (the actual work), so a correctly-triaged
+   analysis was the one the gate barely checked: a real spec had zero
+   `exists|conflict` rows, so the mandated verification covered 0 of 5 refs and
+   a `file:5` citing a quote that lives at `file:4` went through. It is one
+   Grep per ref, and it is the ONLY mechanical defence against a wrong line
+   number reaching the planner. Note the causal shape: that ref started as a
+   line RANGE with no quote (auto-UNVERIFIED per hard rule 2); narrowing it to
+   one line + quote was the CORRECT fix and is what introduced the off-by-one —
+   tightening evidence granularity is itself an error surface, so the gate has
+   to be what catches it.
 2. **Derivation lint:** R# ids, statuses, and context-anchor set must match
    between report.md and requirement-spec.md.
 
@@ -30,7 +42,8 @@ lacks `scope_closed: true` (a one-Grep check).
 
 ## Combiner tracking (yours; full lane only)
 
-`context-combiner` (Opus 4.8 high) merges 2+ RELATED, already-confirmed
+`context-combiner` (`orc-context-combiner-opus-5-high` — Opus 5 high, v0.34.0)
+merges 2+ RELATED, already-confirmed
 analyses from the same run into ONE combined requirement-spec before build.
 
 - **Track the analysis set:** hold the confirmed spec paths of every analysis

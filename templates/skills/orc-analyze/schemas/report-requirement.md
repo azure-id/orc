@@ -2,7 +2,11 @@
 
 Used when there is NO source document: the user's plain-language request IS the
 requirement, reconciled against the existing code. Human-readable source of
-truth. Written to analyst_report/{analysis-name}/report.md.
+truth. Written to `<analyzer_dir>/{analysis-name}/report.md` (config
+`analyzer_dir` — the internal artifact dir); it is COPIED to
+`<report_out_dir>/{analysis-name}/report.md` only on the report-only /
+stop-here branch. The old "written to analyst_report/…" wording described the
+copy target as if it were the write target.
 
 ```markdown
 # Analysis Report — {analysis-name}
@@ -11,7 +15,8 @@ depth: standard | deep
 source: "pasted request"        # the user's own words, verbatim
 scope: <X — the requested scope only>
 analyzed_at: DDMMYY HH:MM:SS
-model: opus-4.8-high
+model: opus-5-high        # the RESOLVED model of the agent that produced this
+                          #   (mini writes sonnet-5-high) — never copied from here
 grounding: repo-read | repo-read+scouts   # scouts only in deep mode
 
 ## Restated requirement (analyst's words)

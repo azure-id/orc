@@ -45,10 +45,14 @@ Write report.md (mode template) + derived requirement-spec.md into
 orc/analyzer/{name}/ — spec derived only AFTER the user confirms the report,
 stamped with `git_head` (git rev-parse HEAD) + `dirty` — including the Evidence
 column, the Assumptions & Open Questions section, and the **Additional context
-(do not build)** section when any survived. Return: report_path, spec_path,
-mode, scope, handoff_ready (a CHECKLIST — true only when: all blocking
+(do not build)** section when any survived. **Return the STRUCTURED fields
+FIRST, prose last** — an analyst return has been observed arriving TRUNCATED, so
+leading with the fields costs prose instead of the verdicts (and an early
+actual_model is what lets the trace hook attach `model=` to the RETURN line):
+mode + scope, then actual_model (quoted verbatim from your system prompt's "The
+exact model ID is …" line; `unknown` if absent, never guessed) + actual_effort
+($CLAUDE_EFFORT), then handoff_ready (a CHECKLIST — true only when: all blocking
 challenges resolved, zero open UNVERIFIED on in-scope items, every requirement
 has status + evidence-or-resolution, spec derived after confirmation,
-scope_closed: true written), plus actual_model (quoted verbatim from your
-system prompt's "The exact model ID is …" line; `unknown` if absent, never
-guessed) and actual_effort ($CLAUDE_EFFORT). Never build or spawn.
+scope_closed: true written) + report_path + spec_path, then everything else.
+Never build or spawn.

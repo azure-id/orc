@@ -122,6 +122,95 @@ test("orchestrator-synthesized tasks have ONE derived scoring rule, referenced f
   assert.match(drift, /DELETE or overwrite the previous `EXAMPLE\.md`/, "the stale example is removed on re-offer");
 });
 
+// ── v0.34.6 analyze: gate coverage + shipped model literals ────────────────
+
+test("no shipped schema template names a model/effort pair that no agent has", () => {
+  // Generalizes past the two instances that shipped stale: a template literal
+  // is copied by whoever fills the template, so a wrong one propagates. This is
+  // the same class as the score->model table drift the token lint cannot see.
+  const agentDir = path.join(T, "agents");
+  const pairs = new Set();
+  for (const f of fs.readdirSync(agentDir).filter((n) => n.endsWith(".md") && n.startsWith("orc-"))) {
+    const md = fs.readFileSync(path.join(agentDir, f), "utf8");
+    const model = (md.match(/^model:\s*claude-([a-z0-9-]+)\s*$/m) || [])[1];
+    const effort = (md.match(/^effort:\s*([a-z]+)\s*$/m) || [])[1];
+    if (!model) continue;
+    pairs.add(effort ? `${model}-${effort}` : model);
+  }
+  assert.ok(pairs.size > 5, "parsed the agent roster");
+
+  const schemas = [];
+  const walk = (dir) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) walk(p);
+      else if (e.name.endsWith(".md") && /[\\/]schemas[\\/]/.test(p)) schemas.push(p);
+    }
+  };
+  walk(path.join(T, "skills"));
+  assert.ok(schemas.length, "found schema templates");
+
+  // A template whose literal is merely SOME valid pair is not enough — the
+  // shipped defect was `opus-4.8-high` (a real pair, wrong agent) sitting in
+  // the analyst's own report template after the role was re-pinned to Opus 5.
+  // So schemas with a knowable producer are checked against THAT agent.
+  const PRODUCER = {
+    "skills/orc-analyze/schemas/report-audit.md": "orc-system-analyst-opus-5-high",
+    "skills/orc-analyze/schemas/report-prose.md": "orc-system-analyst-opus-5-high",
+    "skills/orc-analyze/schemas/report-requirement.md": "orc-system-analyst-opus-5-high",
+    "skills/context-combiner/schemas/combined-report.md": "orc-context-combiner-opus-5-high",
+  };
+  const slugOf = (agent) => {
+    const md = fs.readFileSync(path.join(agentDir, agent + ".md"), "utf8");
+    const model = (md.match(/^model:\s*claude-([a-z0-9-]+)\s*$/m) || [])[1];
+    const effort = (md.match(/^effort:\s*([a-z]+)\s*$/m) || [])[1];
+    assert.ok(model, `${agent} exists and declares a model`);
+    return effort ? `${model}-${effort}` : model;
+  };
+
+  const bad = [];
+  for (const p of schemas) {
+    const rel = path.relative(T, p).split(path.sep).join("/");
+    const md = fs.readFileSync(p, "utf8").replace(/\r\n/g, "\n");
+    for (const m of md.matchAll(/^model:\s*([a-z0-9.\-]+)\s*(?:#.*)?$/gm)) {
+      const lit = m[1].replace(/\./g, "-").replace(/^claude-/, "");
+      // `<...>` placeholders and enum lines are not literals.
+      if (!/^[a-z]/.test(lit) || lit.includes("|")) continue;
+      if (PRODUCER[rel]) {
+        const want = slugOf(PRODUCER[rel]);
+        if (lit !== want) bad.push(`${rel} → model: ${m[1]} (its producer ${PRODUCER[rel]} is ${want})`);
+      } else if (!pairs.has(lit)) {
+        bad.push(`${rel} → model: ${m[1]} (no shipped agent has that model/effort)`);
+      }
+    }
+  }
+  assert.deepStrictEqual(bad, [], "every schema model literal matches the agent that fills it");
+});
+
+test("the analyst evidence gate verifies EVERY quote-anchored ref, not one status pair", () => {
+  const gates = read("skills/orc/references/analyst-gates.md");
+  const spot = gates.slice(gates.indexOf("1. **Evidence spot-check:"), gates.indexOf("2. **Derivation lint:"));
+  assert.match(spot, /EVERY quote-anchored ref/, "coverage is status-independent");
+  // The old restriction must not survive as the operative rule.
+  assert.doesNotMatch(
+    spot.split("(v0.34.6)")[0],
+    /Grep-verify the quoted snippet on every `status: exists\|conflict` entry/,
+    "the exists|conflict-only rule is gone"
+  );
+  for (const s of ["resolved", "buildable"])
+    assert.ok(spot.includes(s), `names ${s} — the statuses a good audit actually produces`);
+});
+
+test("the report handoff checklist marks its post-confirmation items", () => {
+  const md = read("skills/orc-analyze/schemas/report-audit.md");
+  const list = md.slice(md.indexOf("## Handoff readiness"));
+  const post = list.split("\n").filter((l) => l.includes("satisfied\n") || l.includes("satisfied post-confirmation"));
+  assert.ok(post.length >= 1, "post-confirmation items are labelled, so a correct run does not read as a failed checklist");
+  assert.match(list, /can only become true\s*\nAFTER/, "the reason is stated, not just the label");
+  // R# stays the spec's namespace.
+  assert.match(md, /`R#` is the SPEC's namespace/, "report rows are 'row N', never R#");
+});
+
 test("every lane has a TDD policy row, and the preflight block defines a rule per printed key", () => {
   const cfg = read("skills/orc/config.md");
   const policy = cfg.slice(cfg.indexOf("Lane policy (fixed"), cfg.indexOf("# --- Security pass"));

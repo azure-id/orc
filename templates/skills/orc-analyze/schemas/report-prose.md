@@ -9,7 +9,8 @@ depth: standard | deep
 source_doc: <path or "pasted">
 scope: <X — the requested scope only>
 analyzed_at: DDMMYY HH:MM:SS
-model: opus-4.8-high
+model: opus-5-high        # the RESOLVED model of the agent that produced this
+                          #   (mini writes sonnet-5-high) — never copied from here
 grounding: repo-read | repo-read+scouts   # scouts only in deep mode
 
 ## In-scope requirements (X only)

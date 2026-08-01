@@ -10,7 +10,8 @@ depth: standard | deep
 source_doc: <path or "pasted">
 scope: <X — the requested scope only>
 analyzed_at: DDMMYY HH:MM:SS
-model: opus-4.8-high
+model: opus-5-high        # the RESOLVED model of the agent that produced this
+                          #   (mini writes sonnet-5-high) — never copied from here
 grounding: repo-read | repo-read+scouts   # scouts only in deep mode
 
 ## In-scope rows (X only)
@@ -56,13 +57,27 @@ in-scope row it serves + why. Omit this whole section if none survived.
 - Row 3: audit says missing UUID check, code renamed field to ref_id — user
   confirmed implement the check against ref_id.
 
+## Row numbering — `R#` is the SPEC's namespace, never the report's
+Refer to report rows as **"row N"** only. Labelling a report row `R1` collides
+with the spec's own `R#` ids, and the derivation lint compares the two id sets:
+report-`R1` (a build item) vs spec-`R1` (audit row 1) either false-passes or
+false-bounces. A row that legitimately duplicates another's `files[]` (e.g. a
+doc's closing `Recommendation:` line) carries `yields_build_work: false` in the
+spec rather than a prose qualifier.
+
 ## Excluded scopes (recognized, not detailed)
 - Recognized Y, Z in the source doc; excluded from this report per scope = X.
 
 ## Handoff readiness (checklist — all five or handoff_ready is false)
+The first three are checkable IN this report. The last two can only become true
+AFTER this report is confirmed and frozen, so on a correct run they stay
+unticked here and are satisfied in the spec — a reader of report.md alone must
+not read that as a failed checklist.
 - [ ] all BLOCKING challenges resolved (every diverged row decided)
 - [ ] zero open UNVERIFIED on any in-scope row
 - [ ] every row has status + evidence-or-resolution
-- [ ] spec derived AFTER the user confirmed this report
-- [ ] scope_closed: true written into the spec
+- [ ] spec derived AFTER the user confirmed this report  (satisfied
+      post-confirmation — see the spec)
+- [ ] scope_closed: true written into the spec  (satisfied post-confirmation —
+      see the spec)
 ```

@@ -81,6 +81,22 @@ tagged instead of verified. Deep mode verifies EVERY claim.
    anchors) — the orchestrator lints the derivation and bounces mismatches.
 
 ## Return
+
+**Order matters: emit the STRUCTURED fields FIRST, prose last.** A long analyst
+return is the longest payload in the pipeline and returns have been observed
+arriving TRUNCATED (a 41k-token pass-1 return reached the orchestrator as a
+single line). Leading with the fields means a truncation costs prose, not the
+verdicts — and `actual_model` early is also what lets the trace hook attach
+`model=` to the RETURN line at all.
+
+1. `status`, `mode`, `depth`, `scope`
+2. `actual_model` (quoted verbatim from your system prompt's "The exact model ID
+   is …" line; `unknown` if absent, never guessed) + `actual_effort`
+   ($CLAUDE_EFFORT)
+3. `handoff_ready` + `report_path`, `spec_path`
+4. `open_questions_resolved[]`, `assumptions_resolved[]`
+5. everything else (narrative, notes)
+
 - If DEEP pass 1: `scout_plan` (list of {area, queries}), `phase: scout-plan`.
 - Otherwise: report_path, spec_path, mode, depth, scope,
   open_questions_resolved[], assumptions_resolved[], handoff_ready (a CHECKLIST,

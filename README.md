@@ -6,7 +6,7 @@
 
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
-![Version](https://img.shields.io/badge/version-0.34.5-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.34.6-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
@@ -46,64 +46,55 @@ zero-dependency npm package installs those files into your `.claude/` directory.
 
 ## Changelog
 
-**Latest: v0.34.5 — updated 2026-08-01.**
+**Latest: v0.34.6 — updated 2026-08-01.**
 
-### v0.34.5 — Wiki: stop losing tags silently, let a delta clear its own delta _(2026-08-01)_
+### v0.34.6 — Analyze: the evidence gate now covers the rows a good analysis produces _(2026-08-01)_
 
-**A published crosslink tag could be invisible while the integrity gate reported
-green.** `orc wiki sync` walked exactly one directory level, so any tag whose
-`kind` contains a `/` — and the payload's own catalog ships `auth/oidc` — landed
-at a nested path the registry never saw. With 7 well-formed tag files on disk,
-sync reported "6 indexed", the manifest held 6, and `sync --check` **exited 0**.
-A consumer resolving that boundary finds nothing and concludes, wrongly, that
-this repo publishes no identity boundary.
+**The one mechanical defence against a wrong line number reaching the planner
+was checking the wrong rows.** The analyst-return gate Grep-verified quoted
+snippets only on `status: exists|conflict` entries — but the two statuses a good
+audit most often produces are `resolved` (a challenged row the user decided) and
+`buildable` (the actual work). A real spec had *no* `exists|conflict` row, so the
+mandated verification covered **zero of five refs**, and a citation pointing at
+`src/auth.js:5` for a quote that lives at line 4 went through. It was caught only
+because a reviewer verified every ref rather than the required floor.
 
-- Tag enumeration is **recursive**, so a pre-0.34.5 wiki keeps the tag it
-  already has. The `kind` directory is now sanitized (`/` → `-`) on write, and
-  the **header stays the identity** — `kind: auth/oidc` round-trips verbatim.
-- The durable half: sync compares **files found vs entries written** and fails
-  `--check` on any mismatch. "6 indexed" while 7 exist can never exit 0 again,
-  whatever the cause.
+The shape of that error is worth stating: the ref started as a line *range* with
+no quote, which the schema auto-downgrades to UNVERIFIED. Narrowing it to a
+single line plus a verbatim quote was the **correct** fix — and is what
+introduced the off-by-one. Tightening evidence granularity is itself an error
+surface, so the gate has to be what catches it.
 
-**A correct delta refresh could not report its own success.** `orc wiki impact`
-diffed every doc against one global anchor — and that anchor is the *oldest*
-doc's commit, which a delta refresh leaves untouched by definition. So after a
-complete, correct delta refresh the report was byte-identical to the one before
-it: same 3 touched, same 60%, same "FULL refresh recommended" — forever, until
-the user gave up and ran the expensive full refresh the feature exists to avoid.
-
-- Each doc is now measured against **its own `scanned_commit`**. The global
-  anchor stays where it belongs: the blind-spot sweep, which genuinely needs a
-  repo-wide view.
-- `last_scan` is the **newest** doc's stamp (it reported a delta's start time
-  while summarizing docs written twenty minutes later); `scan_commit` stays the
-  oldest doc's anchor deliberately.
-- The summary percentage is labelled **`affected`** — it counts touched *and*
-  structural, and it is the number people tune `wiki_delta_full_threshold`
-  against.
-
-**A branch switch no longer fakes an out-of-sync wiki.** `sync --check` compared
-the serialized manifest, `branch` included, so any feature-branch checkout
-exited 1 with nothing unindexed — and REPAIR takes precedence over REFRESH, so
-every run on a branch was routed into a repair it did not need.
+- **The gate now verifies every quote-anchored ref, whatever its status.** One
+  grep per ref; it enforces the rule the schema already states rather than a
+  subset of it. The `files[]` glob half is unchanged.
 
 **Also**
 
-- **`orc-wiki-scanner-opus-4-8-high` ships.** The skill's own hard rule says
-  scans are dispatched to an Opus 4.8 high agent, but no such agent existed — so
-  the pin was unenforceable (five scans came back as MISMATCH) and, because the
-  trace hook only sees `orc`-prefixed names, a wiki run's trace showed a run
-  that dispatched nothing but its own logger.
-- **The scan slice carries the kind catalog.** Agents were asked to "prefer an
-  existing kind" while never being shown the list, and duly invented `route`
-  beside `rest-endpoint` — two files for one boundary point, permanently, since
-  a refresh may never bulk-delete the folder.
-- **Orientation staleness tracks its real inputs** (the docs it summarizes, not
-  just `src/app.js`), and the architecture overview is explicitly optional — its
-  CLAUDE.md pointer is now conditional on the file existing.
+- **The report's handoff checklist can be read honestly.** Two of its five items
+  can only become true *after* the report is confirmed and frozen, so every
+  correct run shipped a report with two unticked boxes that looked like a failed
+  checklist. They are now labelled as satisfied post-confirmation, with the
+  reason stated.
+- **Corrected shipped literals** — the combiner's model pin (Opus 4.8 → Opus 5,
+  in the gates prose *and* in the report template, which is the dangerous one
+  because it gets copied), and the analyst report's stated write target
+  (`analyzer_dir`, with `report_out_dir` as the copy-out on the stop-here
+  branch). A new test ties every schema template's model literal to the agent
+  that actually fills it, so a role re-pin cannot leave a stale template behind.
+- **`R#` is reserved for the spec.** A report row labelled `R1` collides with
+  the spec's own id space, and the derivation lint compares the two sets — it
+  would false-pass or false-bounce. Report rows are "row N".
+- **Analyst returns lead with their structured fields.** A 41k-token analyst
+  return has been observed arriving as a single line; leading with status,
+  `actual_model`/`actual_effort` and the verdicts means a truncation costs prose
+  instead of the answer (and an early `actual_model` is what lets the trace hook
+  attach `model=` to the RETURN line at all).
 
 <details>
 <summary><b>Previous versions</b> (click to expand)</summary>
+
+### v0.34.5 — Wiki: stop losing tags silently, let a delta clear its own delta _(2026-08-01)_
 
 ### v0.34.4 — Planner: scorable facets, and TDD rules scoped to reality _(2026-08-01)_
 
