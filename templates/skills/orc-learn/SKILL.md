@@ -67,9 +67,9 @@ below. Weave the **Trace:** steps in as each event happens.
      doc may still ride along as hints (precedence above).
    - Ask which feature as ONE question (one feature per invoke). Derive
      `feature_slug` (kebab-case) from the chosen topic/area.
-2. **Trace:** write `log_dir/.current` = `run-learn-<slug>-<DDMMYY>-<HHMMSS>.txt` BEFORE the
-   spawn (the `orc-trace.js` hook also bootstraps it on the dispatch, so the
-   skeleton is never lost).
+2. **Trace:** write `log_dir/.current` = `run-learn-<slug>-<DDMMYY>-<HHMMSS>.txt` and
+   `touch the trace file` of that name in the SAME step, BEFORE the spawn (a
+   pointer to a missing file reads as dangling and the hook rotates away).
 3. Spawn `orc-learn-writer-opus-5-low` with: `mode=init`, `repo_root`,
    `feature_slug`, `topic_area`, `covers[]` (from wiki or user pointer),
    `wiki_tier`, `focus_hint|null`, and the paths to

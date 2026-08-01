@@ -263,6 +263,21 @@ test("diy: an opus-4-8 session_tier clips the opus-5 top band, an opus-5 tier ke
   }
 });
 
+test("diy: every compiled flow carries the trace protocol (tracing is not composable)", () => {
+  const { root, claudeDir } = freshInstall();
+  try {
+    assert.strictEqual(cli(["diy", "init", "--dir", root]).status, 0);
+    assert.strictEqual(cli(["diy", "compile", "--dir", root]).status, 0);
+    const flow = fs.readFileSync(path.join(claudeDir, "orc", "diy", "FLOW-COMPILED.md"), "utf8");
+    assert.match(flow, /Behavior trace \(PERMANENT/, "the trace block is stitched in");
+    assert.match(flow, /run-diy-<slug>-/, "the diy lane token is named");
+    assert.match(flow, /touch the trace file/, "run-start pointer+file rule present");
+    assert.match(flow, /orc-trace-writer-haiku-4-5/, "narration dispatch present");
+  } finally {
+    rmrf(root);
+  }
+});
+
 test("orc pattern status <lang> exits 1 when no pattern is cached", () => {
   const { root } = freshInstall();
   try {

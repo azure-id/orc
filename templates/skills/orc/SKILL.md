@@ -105,8 +105,8 @@ Follow `references/trace-protocol.md` (ALWAYS load it at run start). The
 deterministically; the rich narrative is **dispatched, never remembered** — every
 `emit <VERB>` step below means RECORD that event, with its REAL timestamp, into
 the current **phase packet**; you never append a trace line yourself. Run start:
-create `log_dir`, write `log_dir/.current` =
-`run-orc-<slug>-<DDMMYY>-<HHMMSS>.txt`, store `trace_path` in the checkpoint.
+create `log_dir`, write `log_dir/.current` = `run-orc-<slug>-<DDMMYY>-<HHMMSS>.txt`
+AND `touch the trace file` of that name in the SAME step; store `trace_path`.
 **Phase close = dispatch `orc-trace-writer-haiku-4-5`** with that packet
 (`phase`, `events[]`, and `decisions` — the WHY: scoring rationale, the user's
 answers VERBATIM, what you rejected; `run_meta` on the FIRST packet only).
@@ -404,9 +404,9 @@ counted), verify result, authored tests when 6.5 ran, repo state + branch,
 stale_review flags. Then ONE question: **"Apply the P2 fix-batch? The P3
 cosmetics too?"** — never fix unasked. Emit `PHASE summary end`.
 
-## Phase 8 — Ship (load subskills/orc-pr/SKILL.md) · Trace: `FINISH`
+## Phase 8 — Ship (load subskills/orc-pr/SKILL.md) · Trace: `PHASE ship`, `FINISH`
 
-Show current branch. Ask together: **commit? push? create PR?** (PR: ticket +
+Emit `PHASE ship start`. Show current branch. Ask together: **commit? push? create PR?** (PR: ticket +
 title + target branch; generate from `subskills/orc-pr/pr.md`). If Phase 6.5 ran,
 commit `test-generator/<change-slug>/` too (a user deliverable, never gitignored).
 **`mock-examples/` is NEVER staged** (drift-recovery.md; no `.gitignore` edit —
@@ -420,4 +420,4 @@ wiki now?"**; on "later" print the prominent stale warning and stamp
 `wiki_refresh_declined` in the checkpoint. Then ALWAYS show the completion
 usage report — /usage limits + the full dispatch log (model/effort/score per
 subagent). The user must always know what the run cost. Finally emit
-`FINISH :: <detail>` and delete `log_dir/.current`.
+`PHASE ship end`, then `FINISH :: <detail>`, and delete `log_dir/.current`.

@@ -69,6 +69,11 @@
  * planning → execution → review → verify. `/orc-retro` reads these to compute
  * NARRATION COVERAGE (phase edges with a trace-writer SPAWN between them).
  *
+ * Caveat a retro must read this metric with (v0.34.2): CONTINUING an existing
+ * agent emits no PreToolUse/SubagentStop pair, so the hook cannot see it. A lane
+ * driven by continuing one agent under-counts real dispatch volume — the
+ * skeleton is a floor on what happened, never a census.
+ *
  * Rich run filenames (v0.32.0): the canonical trace name is
  * `run-<lane>-<slug>-<DDMMYY>-<HHMMSS>.txt`, written by the orchestrating lane at
  * run start. The hook still bootstraps its own generic `run-<DDMMYY>-<HHMMSS>.txt`
@@ -76,6 +81,23 @@
  * RENAMES that bootstrap file (+ sidecars) and rewrites `.current`. The hook is
  * name-agnostic (rotation/STALE logic is pointer-based) and holds no open
  * handles, so a rename between two hook events is safe.
+ *
+ * Pointer clobber fix (v0.34.2) — the single largest defect in the trace corpus
+ * (9 lane-less stray files across 15 graded runs).
+ * `traceStats` returns null both for "pointer written two seconds ago, the lane
+ * has not created the file yet" and for "dangling pointer, run long over", and
+ * the hook rotated on both — so the lane's own run-start step reliably caused a
+ * SPLIT run: a generic bootstrap file holding the hook skeleton, plus a rich
+ * file holding every narrated line. Now the POINTER's own mtime decides: fresh
+ * (< STALE_MS) → honor the registered name and create the file under it; only a
+ * genuinely idle pointer rotates. The lanes also `touch` the trace file in the
+ * same step as `.current`, so both halves are fixed independently.
+ *
+ * Unbounded RETURN fix (v0.34.2): an `unattributed` RETURN claims no pending
+ * record, so it is excluded from the `returns` balance and the
+ * `returns >= spawns` guard could never stop it — every stop past the first
+ * wrote another line forever. The count is now bounded by the number of records
+ * actually in flight.
  *
  * Run rotation (v0.23.0): `.current` is a POINTER, not a lifetime lease. A run
  * whose trace file has been idle longer than STALE_MS is considered ENDED — the
@@ -170,6 +192,10 @@ const IGNORED_AGENTS = /^orc-retro\b/i;
 function roleFamily(agent) {
   const a = String(agent).toLowerCase();
   if (/trace-writer/.test(a)) return null;
+  // context-combiner FIRST: it is its own phase (merging confirmed analyses),
+  // not analysis — without this the combine lane has no edge at all and is
+  // structurally invisible to /orc-retro.
+  if (/context-combiner/.test(a)) return "combine";
   if (/analyst|analyze|scout/.test(a)) return "analysis";
   if (/planner/.test(a)) return "planning";
   if (/executor/.test(a)) return "execution";
@@ -202,6 +228,19 @@ function readPointer(dir) {
   try {
     const cur = fs.readFileSync(path.join(dir, ".current"), "utf8").trim();
     return cur || null;
+  } catch (_) {
+    return null;
+  }
+}
+
+// Age of the POINTER itself (not the file it names), or null when absent.
+// This is what tells a FRESH lane-registered pointer ("run start wrote
+// `.current` seconds ago; the trace file is about to exist") apart from a
+// DANGLING one left behind by a finished run — `traceStats` returns null for
+// both, which is exactly how a run used to get split across two files.
+function pointerAgeMs(dir) {
+  try {
+    return Date.now() - fs.statSync(path.join(dir, ".current")).mtimeMs;
   } catch (_) {
     return null;
   }
@@ -249,7 +288,7 @@ function traceStats(dir, file) {
     // did, it would starve the very RETURN it deliberately declined to steal.
     const all = (text.match(/\] hook\s+RETURN/g) || []).length;
     const loose = (text.match(/\] hook\s+RETURN ~agent :: unattributed/g) || []).length;
-    return { idleMs: Date.now() - st.mtimeMs, spawns, returns: all - loose };
+    return { idleMs: Date.now() - st.mtimeMs, spawns, returns: all - loose, loose };
   } catch (_) {
     return null;
   }
@@ -288,7 +327,19 @@ process.stdin.on("end", () => {
       // instead of merging a new day's run into it.
       if (current) {
         const stats = traceStats(dir, current);
-        if (!stats || stats.idleMs > STALE_MS) {
+        if (!stats) {
+          // Pointer names a file that does not exist. TWO different states —
+          // and rotating on both is what produced the split trace pairs:
+          //   fresh pointer  → the lane just registered its rich filename and
+          //                    has not written into it yet. HONOR it: append
+          //                    under that name, leave `.current` alone.
+          //   stale/dangling → the run really is over. Rotate.
+          const age = pointerAgeMs(dir);
+          if (age === null || age > STALE_MS) {
+            dropPending(dir, current);
+            current = null;
+          }
+        } else if (stats.idleMs > STALE_MS) {
           // The old run is over — clean up its pending sidecar so a new run
           // never inherits stale in-flight records.
           dropPending(dir, current);
@@ -363,6 +414,13 @@ process.stdin.on("end", () => {
         // ≥2 in flight and no agent_type: a blind FIFO pop would hand this stop
         // another agent's record and STARVE that agent's real RETURN. Record
         // that something finished, but consume NOTHING.
+        //
+        // BOUND them (v0.34.2). Because an `unattributed` line claims no record
+        // it is also excluded from `returns`, so the `returns >= spawns` guard
+        // can never stop it — on a wave of N the hook wrote a line for EVERY
+        // stop, forever. At most one unattributed line per in-flight record:
+        // a stray stop past that writes nothing.
+        if ((stats.loose || 0) >= pend.length) return;
         name = "agent";
         approx = true;
         unattributed = true;

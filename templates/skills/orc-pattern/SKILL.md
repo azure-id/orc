@@ -67,7 +67,8 @@ When run standalone (`/orc-pattern`, not inside an /orc or orc-wiki run that
 already owns a trace), resolve `log_dir` (`../orc/config.md`
 default + `.claude/orc.config.yaml`) at start and follow
 `../orc/references/trace-protocol.md`: write `log_dir/.current` =
-`run-pattern-<slug>-<DDMMYY>-<HHMMSS>.txt` BEFORE dispatching the codifier.
+`run-pattern-<slug>-<DDMMYY>-<HHMMSS>.txt` and `touch the trace file` of that
+name in the SAME step, BEFORE dispatching the codifier.
 Narration is dispatched, not remembered: collect `PHASE`/`DISPATCH`/`VERIFY`
 (claimed-vs-actual)/`FINISH` events with their REAL timestamps plus `decisions`
 (the WHY), dispatch the trace writer ONCE at run end (the single-dispatch-lane

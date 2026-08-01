@@ -181,8 +181,9 @@ at plan time) so the executing session can detect cross-session drift.
 
 Standalone `/orc-plan` traces too: the orchestrator resolves `log_dir` at start
 and follows `../../references/trace-protocol.md` —
-write `log_dir/.current` = `run-plan-<slug>-<DDMMYY>-<HHMMSS>.txt` before
-dispatching the planner; collect `PHASE`/`DISPATCH`/`VERIFY`/`FINISH` events with
+write `log_dir/.current` = `run-plan-<slug>-<DDMMYY>-<HHMMSS>.txt` and
+`touch the trace file` of that name in the SAME step, before dispatching the
+planner (a pointer to a missing file reads as dangling and the hook rotates); collect `PHASE`/`DISPATCH`/`VERIFY`/`FINISH` events with
 their REAL timestamps plus `decisions` (the WHY), dispatch the trace writer ONCE
 at run end (the single-dispatch-lane packet), then delete `.current`
 (on take-into-build the trace stays open and the full run continues it; the hook

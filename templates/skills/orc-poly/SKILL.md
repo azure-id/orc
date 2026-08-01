@@ -55,8 +55,10 @@ Cross-repo reasoning is better at Opus high; it is correct at any tier.
 
 Resolve `log_dir` (`../orc/config.md` default ← `.claude/orc.config.yaml`) at
 start and follow `../orc/references/trace-protocol.md`. Write
-`log_dir/.current` = `run-poly-<slug>-<DDMMYY>-<HHMMSS>.txt` before the first
-sub-dispatch (the `orc-trace.js` hook also bootstraps it). Record each marker
+`log_dir/.current` = `run-poly-<slug>-<DDMMYY>-<HHMMSS>.txt` and
+`touch the trace file` of that name in the SAME step, before the first
+sub-dispatch (a pointer to a missing file reads as dangling and the hook
+rotates away). Record each marker
 with its REAL timestamp AS ITS EVENT HAPPENS; a step ending with
 **zero new trace lines is a protocol violation**. Marker set (actor `orc`): `PHASE P0..P5`,
 `GATE` (per-repo knowledge probe verdict), `WIKI-CONSULT tier=<tier> ::

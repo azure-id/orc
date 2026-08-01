@@ -63,9 +63,10 @@ set in "Behavior trace").
 
 1. Detect the repo root and pick the mode (REFRESH / UPDATE / CREATE above —
    header sniff only; the writer re-verifies). **Trace:** open the run now —
-   write `log_dir/.current` = `run-claude-<slug>-<DDMMYY>-<HHMMSS>.txt` BEFORE
-   the spawn (without the pointer the `orc-trace.js` hook stays inert and
-   nothing is logged).
+   write `log_dir/.current` = `run-claude-<slug>-<DDMMYY>-<HHMMSS>.txt` and
+   `touch the trace file` of that name in the SAME step, BEFORE the spawn (a
+   pointer to a file that does not exist reads as dangling — the hook rotates
+   away from it and the run splits across two files).
 2. Spawn `orc-claude-writer-opus-4-8-high` with: `mode`, `repo_root`,
    `budget` (from a `budget=N` argument, else null), and the paths to
    `references/template.md` + `references/refresh.md`. **Trace:** emit

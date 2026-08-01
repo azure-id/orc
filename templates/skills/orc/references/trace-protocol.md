@@ -49,8 +49,9 @@ and that is exactly what `/orc-retro` audits (narration coverage).
 ```yaml
 phase: execution wave 2
 run_meta:                 # FIRST packet of the run ONLY; omit thereafter
-  lane: orc               # orc | ultra | mini | fast | wiki | analyze | plan |
-                          # claude | poly | learn | verify | pattern
+  lane: orc               # orc | ultra | mini | fast | diy | wiki | analyze |
+                          # plan | claude | poly | learn | verify | pattern |
+                          # combine
   slug: cas-multi-exchange-withdrawal
   trace_path: .claude/orc/logs/run-orc-cas-multi-exchange-withdrawal-240726-002352.txt
 events:                   # each {ts, verb, tail}; verb from the CLOSED set below
@@ -79,7 +80,8 @@ decisions: >              # free text — the WHY layer
 |------|-------|---------|
 | Build lanes | `orc` (incl. ultra), `orc-mini`, `orc-fast` | per phase — full orc ≈ 7–9 (ultra adds U0 + judge packets); orc-mini batches to 3 (intake+plan, execution, ship); orc-fast to 2 (preflight+dispatch, gate+ship) |
 | Multi-dispatch | `orc-wiki` | one per scan-batch boundary (the points that already run the registration sync / offer the pause) + the end-of-run packet |
-| Single-dispatch | `orc-claude`, `orc-plan`, `orc-analyze` (+ mini), `orc-pattern`, `orc-verify`, `orc-learn`, `orc-poly`, context-combiner | **exactly ONE mandatory end-of-run packet** |
+| Composed | `orc-diy` | one packet per ENABLED phase group, **minimum 2** — the flow shape is user-composed, so the count is too (the compiled flow carries this block automatically) |
+| Single-dispatch | `orc-claude`, `orc-plan`, `orc-analyze` (+ mini), `orc-pattern`, `orc-verify`, `orc-learn`, `orc-poly`, `context-combiner` (lane `combine`) | **exactly ONE mandatory end-of-run packet** |
 
 **The single-packet obligation is defined HERE, once** (every trace-owning lane
 already loads this reference) — micro-lane spines keep only their existing trace
@@ -102,7 +104,8 @@ trace and never emit `SPAWN`/`RETURN`.
   subfolders (`retro/`).
 - One file per run: **`run-<lane>-<slug>-<DDMMYY>-<HHMMSS>.txt`**, append-only.
   - `lane` — the trace-owning skill's short name (`orc`, `ultra`, `mini`, `fast`,
-    `wiki`, `analyze`, `plan`, `claude`, `poly`, `learn`, `verify`, `pattern`).
+    `diy`, `wiki`, `analyze`, `plan`, `claude`, `poly`, `learn`, `verify`,
+    `pattern`, `combine`).
   - `slug` — kebab-cased short user context from the intent (`[a-z0-9-]`, ≤32
     chars, filesystem-safe, no trailing hyphen) — same derivation as the
     run-folder slug.
@@ -111,14 +114,27 @@ trace and never emit `SPAWN`/`RETURN`.
   - The name is DATA: `/orc-retro` aggregates per lane straight from it, without
     parsing content.
 - Run pointer: at run start, write `log_dir/.current` containing just the trace
-  filename. Delete it at run end (success or abort). The `orc-trace.js` hook
-  reads this to know which file to append to.
-- **Rename repair (deterministic-with-repair, not memory-only).** If the pointer
-  is missing when the first ORC-agent dispatch fires, the hook creates the folder
-  + a generic `run-<DDMMYY>-<HHMMSS>.txt` pointer itself — and the FIRST writer
-  dispatch renames that file (plus its `.pending.json` / `.jsonl` siblings) to
-  the rich name and rewrites `.current`. Non-ORC Tasks never trace — the hook
-  only bootstraps for agent names starting with `orc`.
+  filename **and `touch the trace file` of that name in the SAME step**. Both, or
+  neither — a pointer naming a file that does not exist yet is indistinguishable
+  from a dangling one by content alone, and that is what used to split a run
+  across two files (a generic bootstrap holding the hook skeleton + a rich file
+  holding every narrated line, each looking correct alone). Delete the pointer at
+  run end (success or abort). The `orc-trace.js` hook reads it to know which file
+  to append to, and since v0.34.2 it also honors a POINTER whose mtime is fresh
+  even when the file is not there yet — the two fixes are independent on purpose.
+- **Rename repair (deterministic-with-repair, not memory-only).** When no usable
+  pointer exists as the first ORC-agent dispatch fires, the hook creates the
+  folder + a generic `run-<DDMMYY>-<HHMMSS>.txt` and points at it. The FIRST
+  writer dispatch repairs that. **The trigger is a DISK COMPARISON, not a
+  remembered state:** repair when `.current` on disk DISAGREES with the packet's
+  `run_meta.trace_path` — a rich packet name beside a generic pointer IS the
+  clobber signature, every time — regardless of whether the pointer was ever
+  missing. (Stated the old way — "if the pointer is missing" — writers correctly
+  declined to repair, because that is not the state the hook actually leaves.)
+  The repair is a **MOVE** of the `.txt` plus its `.pending.json` / `.jsonl`
+  siblings, then a rewrite of `.current` — never a fresh create beside the
+  bootstrap file, which splits the run's evidence in two. Non-ORC Tasks never
+  trace — the hook only bootstraps for agent names starting with `orc`.
 
 ## Structured companion (`<trace>.jsonl`)
 
@@ -156,9 +172,13 @@ the classic failure: by then the run's context is compacted and the detail is go
 `[DDMMYY HH:MM:SS.mmm] <actor>  <VERB> :: <free tail>`
 
 Fixed columns → human-skimmable now, column-parseable by a future mining tool.
-Actors: `writer` (the narration agent), `hook`, `orc` (legacy orchestrator-written
-lines in pre-v0.32.0 traces), or a role/agent short name (`analyst`, `planner`,
-`reviewer`, `verifier`, or `T<n>` for an executor task) inside a packet event.
+Actors: `hook`, `orc` (the default for a packet event with no actor), a role/agent
+short name (`analyst`, `planner`, `reviewer`, `verifier`, `T<n>` for an executor
+task), or `writer` — which means the narration agent speaking for ITSELF (its
+`NOTE` line), never a blanket stamp on events it was handed. **The actor is
+per-EVENT.** The writer copies `events[].actor` into both the `.txt` column and
+the `.jsonl` `actor` field, so the pair can never disagree about the same event
+(they did, and retro reads the `.jsonl` first).
 
 ## Verb set (CLOSED — never invent new verbs)
 
@@ -181,7 +201,7 @@ supplies the fact in a packet, the writer writes the line. `SPAWN`, `RETURN` and
 | `QUESTION count=<n> :: <topic>` | subagent→orc → writer | stopped to ask the user |
 | `CONTEXT-GAP :: <what was already known>` | subagent→orc → writer | asked/re-derived something already in context |
 | `REPLAN wave=<n> :: <reason>` | orc → writer | re-planned after a conflict/failure |
-| `GATE <name> pass\|bounce\|escalate :: <detail>` | orc → writer | exit-gate result — name ∈ grounding \| coverage \| graph \| evidence \| derivation \| judgment (ultra; `escalate` is judgment-only) \| wave-boundary. Bounce detail lists the misses (feeds `/orc-retro` gate-bounce rates) |
+| `GATE <name> pass\|bounce\|escalate :: <detail>` | orc → writer | exit-gate result — name ∈ grounding \| coverage \| graph \| evidence \| derivation \| facet (the plan's facet-vocabulary check, `effort-and-mode.md`) \| schema (the plan-handoff schema check) \| judgment (ultra; `escalate` is judgment-only) \| wave-boundary. The shared-band SIBLING-CONSISTENCY determination is NOT a gate name — carry it in the packet's `decisions`, never as an invented verb. Bounce detail lists the misses (feeds `/orc-retro` gate-bounce rates) |
 | `ADVISE :: brief=<path> questions=<n>` | orc → writer | ultra Phase U0 — advisor brief received, clarification round relayed |
 | `JUDGE <gate> <verdict> round=<n> blocking=<n> advisory=<n> downgraded=<n>` | orc → writer | ultra judgment verdict (gate ∈ analysis \| plan \| implementation) |
 | `OUTCOME task=<id> score=<n> band=<range> model=<m> retries=<n> requeues=<n> needs_context=<n> unmet=<n>` | orc → writer | task closed — links the scoring band to what it actually took (feeds `/orc-retro` calibration) |
@@ -195,6 +215,12 @@ supplies the fact in a packet, the writer writes the line. `SPAWN`, `RETURN` and
 
 `SPAWN`/`RETURN`/`PHASE-EDGE` come from the hook automatically. Every other verb
 reaches the file through a packet — you never append lines by hand.
+
+**Skeleton caveat (read every retro metric with it):** the hook only sees a NEW
+dispatch. CONTINUING an already-running agent fires no PreToolUse/SubagentStop
+pair, so a lane driven by continuing one agent produces fewer `SPAWN`/`RETURN`
+lines than it did real work. The skeleton is a FLOOR on dispatch volume, never a
+census — narration coverage computed from it reads low, not wrong.
 
 ## Model source of truth — the claimed-vs-actual check
 

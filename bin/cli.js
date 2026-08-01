@@ -1382,7 +1382,10 @@ function diyCompile(claudeDir) {
   };
   const locked = fs.readFileSync(path.join(refDir, "locked-blocks.md"), "utf8");
 
-  const order = ["header", null, "wiki", "analyze", "planning", "pattern", "scoring", "execution", "review", "security", "verify", "testgen", "mock-example", "ship", "summary"];
+  // `trace` sits right after the locked rules and is UNCONDITIONAL — behavior
+  // tracing is permanent, not a flow key, so stitching it here is what stops a
+  // user-composed pipeline from being the one lane that runs blind (it was).
+  const order = ["header", null, "trace", "wiki", "analyze", "planning", "pattern", "scoring", "execution", "review", "security", "verify", "testgen", "mock-example", "ship", "summary"];
   const tier = DIY_TIERS[cfg.session_tier];
   const subs = {
     flow_name: cfg.flow_name,

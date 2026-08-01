@@ -76,8 +76,8 @@ makes the consent gate mandatory.
 ## Behavior trace (PERMANENT — same rule as orc/orc-mini; wiki runs trace too)
 
 Follow `../orc/references/trace-protocol.md`: after consent create `log_dir`,
-write `log_dir/.current` = `run-wiki-<slug>-<DDMMYY>-<HHMMSS>.txt`, store
-`trace_path` in the wiki checkpoint (a resume re-anchors to the SAME file).
+write `.current` = `run-wiki-<slug>-<DDMMYY>-<HHMMSS>.txt` AND `touch the trace file`
+of that name in the SAME step; store `trace_path` in the checkpoint (a resume re-anchors).
 Narration is **dispatched, never remembered**: record each event with its REAL
 timestamp into a packet (`PHASE`, `DISPATCH <agent> :: <area>`, `VERIFY` per
 return — `actual_model`/`actual_effort` vs expected, surface any ⛔ DOWNGRADE —

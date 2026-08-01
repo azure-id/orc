@@ -71,6 +71,7 @@ const CONTRACTS = [
       "skills/orc-analyze-mini/SKILL.md",
       "skills/orc-claude/SKILL.md",
       "skills/orc-claude/examples/claude-run-mock.md",
+      "skills/orc-diy/references/blocks/trace.md",
       "skills/orc-fast/SKILL.md",
       "skills/orc-judge/SKILL.md",
       "skills/orc-learn/SKILL.md",
@@ -318,6 +319,7 @@ const CONTRACTS = [
     name: "GATE trace verb (v0.9.0 — deterministic exit-gate pass/bounce lines)",
     token: "`GATE",
     files: [
+      "skills/orc-diy/references/blocks/trace.md",
       "agents/orc-retro-sonnet-5-high.md",
       "skills/orc-analyze-mini/SKILL.md",
       "skills/orc-analyze/SKILL.md",
@@ -376,6 +378,7 @@ const CONTRACTS = [
     name: "behavior-trace write cadence (v0.19.0 — append per event, never batched at the end)",
     token: "zero new trace lines is a protocol violation",
     files: [
+      "skills/orc-diy/references/blocks/trace.md",
       "agents/orc-trace-writer-haiku-4-5.md",
       "skills/orc/SKILL.md",
       "skills/orc/references/trace-protocol.md",
@@ -390,9 +393,38 @@ const CONTRACTS = [
     ],
   },
   {
+    // v0.34.2: the pointer alone was never enough. `traceStats` cannot tell a
+    // pointer written two seconds ago (file not created yet) from a dangling
+    // one, so every lane's own run-start step split its run across two files —
+    // 9 orphan traces across 15 evals, the largest defect family in the corpus.
+    // Creating the file in the SAME step makes the hook's existence check true
+    // by construction. Pinned to every lane that writes a pointer, so the next
+    // lane added cannot quietly omit it (the hook fix is independent, on
+    // purpose — neither half relies on the other).
+    name: "trace file created with the pointer (v0.34.2 — kills the .current clobber)",
+    token: "touch the trace file",
+    files: [
+      "skills/orc-analyze-mini/SKILL.md",
+      "skills/orc-analyze/SKILL.md",
+      "skills/orc-claude/SKILL.md",
+      "skills/orc-diy/references/blocks/trace.md",
+      "skills/orc-fast/SKILL.md",
+      "skills/orc-learn/SKILL.md",
+      "skills/orc-mini/SKILL.md",
+      "skills/orc-pattern/SKILL.md",
+      "skills/orc-poly/SKILL.md",
+      "skills/orc-verify/SKILL.md",
+      "skills/orc-wiki/SKILL.md",
+      "skills/orc/SKILL.md",
+      "skills/orc/references/trace-protocol.md",
+      "skills/orc/subskills/orc-planner/SKILL.md",
+    ],
+  },
+  {
     name: "behavior-trace run pointer (every ORC entry point writes .current)",
     token: ".current",
     files: [
+      "skills/orc-diy/references/blocks/trace.md",
       "agents/orc-trace-writer-haiku-4-5.md",
       "hooks/orc-trace.js",
       "skills/orc/SKILL.md",
@@ -422,6 +454,7 @@ const CONTRACTS = [
     name: "trace narration writer (v0.32.0 — every phase close dispatches the writer)",
     token: "orc-trace-writer-haiku-4-5",
     files: [
+      "skills/orc-diy/references/blocks/trace.md",
       "agents/MODEL-MAPPING.md",
       "agents/orc-trace-writer-haiku-4-5.md",
       "hooks/orc-trace.js",
@@ -1333,7 +1366,10 @@ const BUDGETS = [
   // gains the one-question TDD policy + the mock-example phase; fast gains the
   // mock-example phase only. Mechanisms live in the shared/canonical refs.
   { file: "skills/orc-wiki/SKILL.md", maxLines: 289 },
-  { file: "skills/orc-mini/SKILL.md", maxLines: 219 },
+  // v0.34.2: deliberate raise 219→220 — the run-start `touch the trace file`
+  // step. It is one line, it is the fix for the corpus's largest defect family,
+  // and it has to sit in the spine because it happens before any reference loads.
+  { file: "skills/orc-mini/SKILL.md", maxLines: 220 },
   { file: "skills/orc-analyze/SKILL.md", maxLines: 195 },
   { file: "skills/orc-fast/SKILL.md", maxLines: 179 },
 ];

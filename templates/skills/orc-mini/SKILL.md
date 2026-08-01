@@ -109,7 +109,8 @@ not gitignored). No → ship. Either way this NEVER runs tests.
 
 Mini does NOT drop the trace. Follow `../orc/references/trace-protocol.md` (load
 at run start): create `log_dir`, write `.current` =
-`run-mini-<slug>-<DDMMYY>-<HHMMSS>.txt`, store `trace_path`. Narration is
+`run-mini-<slug>-<DDMMYY>-<HHMMSS>.txt` AND `touch the trace file` of that name
+in the SAME step, store `trace_path`. Narration is
 **dispatched, never remembered**: record each event with its REAL timestamp into
 a packet (`PHASE`, `DISPATCH`, `VERIFY` per return — `actual_model`/
 `actual_effort` vs expected, surface any ⛔ DOWNGRADE — `OUTCOME … band=mini`,

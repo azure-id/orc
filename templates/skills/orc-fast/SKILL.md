@@ -147,8 +147,8 @@ already in the shared format — no migration.
 ## Behavior trace (PERMANENT — same rule as every lane; always on)
 
 Follow `../orc/references/trace-protocol.md`: at run start write
-`log_dir/.current` = `run-fast-<slug>-<DDMMYY>-<HHMMSS>.txt` + store
-`trace_path`. Narration is **dispatched, never remembered**: record each event
+`log_dir/.current` = `run-fast-<slug>-<DDMMYY>-<HHMMSS>.txt`, `touch the trace file`
+of that name in the SAME step, + store `trace_path`. Narration is **dispatched, never remembered**: record each event
 with its REAL timestamp into a packet (F0–F4 `PHASE`, `GATE` at the preflight/
 fit/smoke verdicts, `DISPATCH`/`VERIFY` — `actual_model`/`actual_effort` vs
 expected — `OUTCOME`, `FINISH`, plus `decisions` = the WHY), then dispatch

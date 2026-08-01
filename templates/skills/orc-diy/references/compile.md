@@ -18,9 +18,11 @@ second implementation, and the skill never stitches the flow itself.
    global orc install) and aborts naming the missing file if orc is absent
    or incomplete.
 3. **Stitch.** Concatenate in fixed order: `header` → `locked-blocks.md`
-   (verbatim) → `wiki` → `analyze` → `planning` → `pattern` → `scoring` →
-   `execution` → `review` → `security` → `verify` → `testgen` → `ship` →
-   `summary`. Inside each block, keep text outside markers, and keep a
+   (verbatim) → `trace` → `wiki` → `analyze` → `planning` → `pattern` →
+   `scoring` → `execution` → `review` → `security` → `verify` → `testgen` →
+   `mock-example` → `ship` → `summary`. `trace` is UNCONDITIONAL — behavior
+   tracing is permanent and is not a flow key, so every compiled flow carries
+   the protocol (lane token `diy`) whatever the user composed. Inside each block, keep text outside markers, and keep a
    `<!-- diy:when key=value -->…<!-- /diy:when -->` section only when the
    config's `key` equals one of the listed values (`|`-separated).
 4. **Substitute placeholders.** `{{flow_name}}`, `{{config_hash}}`,

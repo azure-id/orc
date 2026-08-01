@@ -6,7 +6,7 @@
 
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
-![Version](https://img.shields.io/badge/version-0.34.1-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.34.2-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
@@ -46,51 +46,60 @@ zero-dependency npm package installs those files into your `.claude/` directory.
 
 ## Changelog
 
-**Latest: v0.34.1 — updated 2026-08-01.**
+**Latest: v0.34.2 — updated 2026-08-01.**
 
-### v0.34.1 — Install integrity: run state survives `orc update` _(2026-08-01)_
+### v0.34.2 — Trace subsystem: the pointer clobber, and a writer contract that holds _(2026-08-01)_
 
-**P0 — `orc update` (and the advertised repair path `orc doctor --fix`) destroyed
-every run folder.** Run state lived at `.claude/skills/orc/run/`, inside a tree
-the installer recursively deleted and re-copied on every update, so a mid-run
-checkpoint — the one artifact the resume contract reads from disk — was
-unrecoverably lost by the command users are told to run when anything is wrong.
+**A run's own start step split its trace in two.** The hook cannot tell a pointer
+written two seconds ago (file not created yet) from a dangling one left by a
+finished run — `stat` fails identically — and it rotated on both. So every run
+produced a generic bootstrap file holding the hook skeleton *plus* a rich file
+holding every narrated line, each looking correct on its own. Across the graded
+corpus: 9 lane-less trace files, 15 runs affected.
 
-**Run artifacts now live at `.claude/orc/run/{run-slug}/`** (new config key
-`run_dir`), beside the other update-surviving artifacts (`patterns/`, `logs/`,
-`wiki-meta.json`, `install-manifest.json`) — a location the prune logic can
-never match. Pre-0.34.1 state is **migrated once**, before any skill directory
-is touched, so the update that fixes this is not the one that loses your
-checkpoint. Gitignore `.claude/orc/run/` instead of the old path.
+Two independent fixes, neither relying on the other:
 
-**The installer no longer recursively deletes a user-writable tree.** Skill dirs
-are overwritten child-by-child; removing a file that LEFT the payload stays the
-install manifest's job, which deletes only paths a previous manifest proves ORC
-owned.
+- **Lanes `touch` the trace file in the same step that writes `.current`** — one
+  filesystem call that makes the hook's existence check true by construction. A
+  new contract token pins it to every lane, so a lane added later cannot omit it.
+- **The hook honors a FRESH pointer** whose file does not exist yet (the
+  pointer's own mtime decides); only a genuinely idle pointer rotates. This also
+  restores the first narration agent's `RETURN`, which the rotation dropped as
+  unmatched and left as an unconsumable pending record on every run.
 
-**Also in this release**
+**The trace writer's contract stopped being ambiguous.**
 
-- `orc update` again **reports** possible orphans on a manifested install — the
-  candidate scan used to be unreachable after the first successful update, which
-  made `orc update --prune`'s documented purpose unreachable with it. Deletion
-  is still gated behind an explicit `--prune`.
-- `orc doctor` now sees a **stale global install**: a `~/.claude` payload at a
-  different version can win skill resolution over this project's, and retired
-  agent names still sitting in `~/.claude/agents/` resolve a dispatch against a
-  stale definition instead of failing loudly. Both warn; neither is ever deleted
-  from a project-scoped doctor run.
-- **Five phantom config keys are real keys.** `retro_repo`, `wiki_fresh_max`,
-  `wiki_aging_max`, `wiki_refresh_ask_tasks`, and `wiki_refresh_ask_files` were
-  documented and read at runtime while `orc config` had never heard of them
-  (a fork could not redirect its retro reports at all). A new test asserts every
-  key documented in `config.md` resolves through the CLI registry.
-- **`verify-package.js` guards all 30 agent files.** The orc-mini agent pair and
-  all five Fable 5 role agents were covered by nothing but a count floor with a
-  file of slack — each was droppable with `npm run verify` still green. A
-  set-equality test now makes an unguarded agent file impossible to add.
+- Rename repair triggers on a **disk comparison** — `.current` disagreeing with
+  the packet's `run_meta.trace_path` — not on "the pointer is missing", a state
+  the hook never actually leaves. And it is a **move**, never a fresh create
+  beside the bootstrap file (that split a run's evidence in the worst way: each
+  half looks correct alone).
+- `lines_written` / `jsonl_written` are **measured** (`wc -l` before/after), not
+  intended. They were wrong in both directions, and a mismatched count is
+  "malformed" by the writer's own contract.
+- The actor column is **per event**; `writer` means the writer speaking for
+  itself. The `.txt` and `.jsonl` no longer disagree about the same event.
+- The `decisions` NOTE **mirrors** to `.jsonl` (it was silently dropped, losing
+  the WHY layer for whole phases), and the sidecar path is
+  `trace_path + ".jsonl"` — appended, never `splitext` (one stripped `.txt`
+  hid an entire review phase, `FINDING` counts and all).
+
+**Also**
+
+- **`/orc-diy` had no trace protocol at all** — the only lane that never
+  referenced it, and the one lane that clips the band table. `orc diy compile`
+  now stitches a trace block into **every** compiled flow (lane token `diy`,
+  one packet per enabled phase group, minimum 2).
+- `GATE` gains `facet` and `schema`; `PHASE ship` now closes; `context-combiner`
+  gains the `combine` lane name and its own `PHASE-EDGE` family.
+- **Unbounded `RETURN` fix:** an `unattributed` return claims no record, so the
+  balance guard could never stop it — every subagent stop past the first wrote
+  another line forever. Now bounded by the records actually in flight.
 
 <details>
 <summary><b>Previous versions</b> (click to expand)</summary>
+
+### v0.34.1 — Install integrity: run state survives `orc update` _(2026-08-01)_
 
 ### v0.34.0 — Opus 5: top scoring band, every core role, medium-effort session tier _(2026-07-25)_
 

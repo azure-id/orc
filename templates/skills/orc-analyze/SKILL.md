@@ -84,8 +84,8 @@ analyst/scout spawn, `GATE` at the evidence/derivation gates, `FINISH`) plus
 `decisions` (the WHY, incl. the user's answers verbatim), dispatch the trace
 writer SOLO after the analyst return validates, and delete `.current` only once
 it returns. A run ending with
-zero new trace lines is a protocol violation. (The hook bootstraps `.current` +
-the skeleton on the first dispatch, so the flow shape is never lost.)
+zero new trace lines is a protocol violation. At run start write `.current` =
+`run-analyze-<slug>-….txt` AND `touch the trace file` of that name in ONE step.
 
 ## Phase A — Ingest & detect source mode
 

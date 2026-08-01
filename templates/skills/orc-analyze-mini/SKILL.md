@@ -74,7 +74,8 @@ for the formats; this skill does not duplicate them.
 Same rule as the full analyst: standalone `/orc-analyze-mini` resolves
 `log_dir` at start and follows
 `../orc/references/trace-protocol.md` — write `log_dir/.current` =
-`run-analyze-<slug>-<DDMMYY>-<HHMMSS>.txt` before the first dispatch; collect
+`run-analyze-<slug>-<DDMMYY>-<HHMMSS>.txt` and `touch the trace file` of that
+name in the SAME step, before the first dispatch; collect
 `PHASE`/`DISPATCH`/`VERIFY`/`GATE`/`FINISH` events with their REAL timestamps
 plus `decisions` (the WHY) and dispatch the trace writer ONCE at run end (the
 single-dispatch-lane packet), then delete `.current` (the hook bootstraps

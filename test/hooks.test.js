@@ -179,6 +179,150 @@ test("trace: with >=2 in flight, an agent_type-less stop consumes no record (no 
   }
 });
 
+// ── v0.34.2: the .current clobber, and the unbounded unattributed RETURN ────
+
+test("trace: a FRESH pointer to a not-yet-created file is HONORED, not rotated", () => {
+  const { root, claudeDir } = freshInstall();
+  try {
+    const dir = path.join(claudeDir, "orc", "logs");
+    fs.mkdirSync(dir, { recursive: true });
+    const rich = "run-orc-my-feature-010126-101010.txt";
+    // Exactly the state a lane's run-start step creates one instant before it
+    // touches the file — and the state that used to split every run in two.
+    fs.writeFileSync(path.join(dir, ".current"), rich + "\n");
+
+    runHook(claudeDir, "orc-trace.js", {
+      hook_event_name: "PreToolUse",
+      tool_name: "Agent",
+      tool_input: { subagent_type: "orc-trace-writer-haiku-4-5", description: "packet 1" },
+    });
+
+    assert.strictEqual(
+      fs.readFileSync(path.join(dir, ".current"), "utf8").trim(),
+      rich,
+      "the pointer is left alone"
+    );
+    assert.ok(fs.existsSync(path.join(dir, rich)), "the SPAWN lands in the registered name");
+    const strays = fs.readdirSync(dir).filter((f) => /^run-\d{6}-\d{6}\.txt$/.test(f));
+    assert.deepStrictEqual(strays, [], "no generic bootstrap file is created alongside");
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("trace: a STALE pointer to a missing file still rotates to a fresh bootstrap", () => {
+  const { root, claudeDir } = freshInstall();
+  try {
+    const dir = path.join(claudeDir, "orc", "logs");
+    fs.mkdirSync(dir, { recursive: true });
+    const cur = path.join(dir, ".current");
+    fs.writeFileSync(cur, "run-orc-yesterday-311225-090000.txt\n");
+    // Age the POINTER past STALE_MS (6h) — a genuinely dangling leftover.
+    const old = Date.now() - 8 * 60 * 60 * 1000;
+    fs.utimesSync(cur, old / 1000, old / 1000);
+
+    runHook(claudeDir, "orc-trace.js", {
+      hook_event_name: "PreToolUse",
+      tool_name: "Agent",
+      tool_input: { subagent_type: "orc-executor-haiku-4-5", description: "new run" },
+    });
+
+    assert.notStrictEqual(
+      fs.readFileSync(cur, "utf8").trim(),
+      "run-orc-yesterday-311225-090000.txt",
+      "a dangling pointer rotates"
+    );
+    const strays = fs.readdirSync(dir).filter((f) => /^run-\d{6}-\d{6}\.txt$/.test(f));
+    assert.strictEqual(strays.length, 1, "exactly one fresh bootstrap file");
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("trace: the first writer dispatch's SPAWN and RETURN both land in the registered file", () => {
+  const { root, claudeDir } = freshInstall();
+  try {
+    const dir = path.join(claudeDir, "orc", "logs");
+    fs.mkdirSync(dir, { recursive: true });
+    const rich = "run-orc-first-packet-010126-111111.txt";
+    fs.writeFileSync(path.join(dir, ".current"), rich + "\n");
+
+    runHook(claudeDir, "orc-trace.js", {
+      hook_event_name: "PreToolUse",
+      tool_name: "Agent",
+      tool_input: { subagent_type: "orc-trace-writer-haiku-4-5", description: "run_meta packet" },
+    });
+    runHook(claudeDir, "orc-trace.js", {
+      hook_event_name: "SubagentStop",
+      agent_type: "orc-trace-writer-haiku-4-5",
+    });
+
+    const text = fs.readFileSync(path.join(dir, rich), "utf8");
+    assert.match(text, /SPAWN orc-trace-writer-haiku-4-5/, "SPAWN in the rich file");
+    assert.match(text, /RETURN orc-trace-writer-haiku-4-5/, "RETURN in the SAME file (was dropped)");
+    const pend = JSON.parse(fs.readFileSync(path.join(dir, rich + ".pending.json"), "utf8"));
+    assert.deepStrictEqual(pend, [], "no unconsumable pending record left behind");
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("trace: unattributed RETURNs are bounded by the records in flight", () => {
+  const { root, claudeDir } = freshInstall();
+  try {
+    const spawn = (agent, desc) =>
+      runHook(claudeDir, "orc-trace.js", {
+        hook_event_name: "PreToolUse",
+        tool_name: "Agent",
+        tool_input: { subagent_type: agent, description: desc },
+      });
+    spawn("orc-executor-sonnet-4-6-high", "T1");
+    spawn("orc-executor-sonnet-5-high", "T2");
+    // Three blind stops (no agent_type) against a 2-agent wave.
+    for (let i = 0; i < 3; i++)
+      runHook(claudeDir, "orc-trace.js", { hook_event_name: "SubagentStop" });
+
+    const texts = traceFiles(claudeDir).texts;
+    const loose = (texts.match(/RETURN ~agent :: unattributed/g) || []).length;
+    assert.strictEqual(loose, 2, "2 spawns → at most 2 unattributed RETURNs; the stray writes nothing");
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("trace: context-combiner opens its own PHASE-EDGE (combine), not analysis", () => {
+  const { root, claudeDir } = freshInstall();
+  try {
+    runHook(claudeDir, "orc-trace.js", {
+      hook_event_name: "PreToolUse",
+      tool_name: "Agent",
+      tool_input: { subagent_type: "orc-context-combiner-opus-5-high", description: "merge 2 specs" },
+    });
+    assert.match(traceFiles(claudeDir).texts, /PHASE-EDGE combine/, "combine is its own family");
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("payload: every GATE name and lane token used in the payload is a declared member", () => {
+  const proto = fs
+    .readFileSync(
+      path.join(__dirname, "..", "templates", "skills", "orc", "references", "trace-protocol.md"),
+      "utf8"
+    )
+    .replace(/\r\n/g, "\n");
+
+  const gateRow = proto.split("\n").find((l) => l.includes("| `GATE <name>"));
+  assert.ok(gateRow, "found the GATE verb row");
+  for (const name of ["grounding", "coverage", "graph", "evidence", "derivation", "facet", "schema", "judgment", "wave-boundary"])
+    assert.ok(gateRow.includes(name), `GATE name "${name}" is declared`);
+
+  const laneRow = proto.match(/lane: orc {2,}#([\s\S]*?)\n\S/);
+  assert.ok(laneRow, "found the lane enum");
+  for (const lane of ["diy", "combine", "orc", "mini", "fast", "wiki"])
+    assert.ok(laneRow[1].includes(lane), `lane "${lane}" is declared`);
+});
+
 test("trace: orc-retro is never traced (the miner must not pollute its own data)", () => {
   const { root, claudeDir } = freshInstall();
   try {
