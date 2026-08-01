@@ -6,7 +6,7 @@
 
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
-![Version](https://img.shields.io/badge/version-0.34.7-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.34.8-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
@@ -46,44 +46,27 @@ zero-dependency npm package installs those files into your `.claude/` directory.
 
 ## Changelog
 
-**Latest: v0.34.7 — updated 2026-08-01.**
+**Latest: v0.34.8 — updated 2026-08-01.**
 
-### v0.34.7 — DIY: a usable status contract, and compile docs that match the compiler _(2026-08-01)_
+### v0.34.8 — `orc pattern status` rejects a language key the payload has never heard of _(2026-08-01)_
 
-**`orc diy status` exited 0 in all three states** — UNCONFIGURED, STALE and
-READY alike — so the exit code carried no information and anything branching on
-it treated a hard-blocked flow as runnable. That is the direct inverse of its own
-sibling: `orc pattern status <lang>` documents "the exit code **is** the
-contract", and orc-fast's knowledge gate relies on exactly that.
+The probe globbed `<lang>-pattern.md` and answered for **any** string, so asking
+about `js` — a file extension, not one of the framework keys in
+`orc-pattern/references/INDEX.md` — got a clean "absent". The knowledge gate then
+fell back **correctly**, which is the problem: the caller's bug looked exactly
+like a lane defect, and it took two graded runs to trace it back to the question
+rather than the answer.
 
-- **0 = READY, 1 = STALE or UNCONFIGURED**, documented in `flow-schema.md` at
-  the call site. The no-argument `orc pattern status` now exits 1 on an empty
-  cache too — the same gap, mirrored.
-- **STALE reports every live trigger, not just the first.** A flow stale *only*
-  because `orc update` bumped the payload used to say "config changed" — which
-  flatly contradicts a user who knows they never touched their config, and
-  invites suspicion of the tool instead of a recompile. Now:
-  `STALE — config changed since the last compile; orc updated 0.24.0 → 0.34.7`.
-
-**The compile spec had lost a phase.** `compile.md` documented the stitch order
-without `mock-example`, which v0.33.0 added to the compiler — so a maintainer
-reconciling implementation to spec would "fix" it by **deleting a working
-phase**. The doc now matches the compiler, notes that `tdd` is not a block (it
-composes via `diy:when` markers), and a golden test compares the two lists so the
-drift cannot recur.
-
-**The self-gate now reconciles the tier in both directions.** The compile-time
-band clip is correct and frozen in the artifact — but the pinned role agents are
-named verbatim and are never clipped, so on a session *above* the compiled tier
-you get a full-pin reviewer and verifier alongside executors still clipped to the
-old tier, with `orc diy status` reporting READY because the session model is in
-no hash. The compiled flow now says so once and names the fix. (Related: the
-`diy validate` warning claimed the pinned Opus 5 agents "will silently run at the
-session's model" — on a higher session they demonstrably do not; the warning now
-reasons about what the declared tier can and cannot guarantee.)
+- **Exit 2 = unknown language key**, and the message lists the real ones. 0 and 1
+  keep their meanings (cached / absent), so every existing gate is unaffected.
+- The no-argument form exits 1 on an empty cache, matching the same
+  absent contract.
+- `_shared/detecting-artifacts.md` documents all three codes at the call site.
 
 <details>
 <summary><b>Previous versions</b> (click to expand)</summary>
+
+### v0.34.7 — DIY: a usable status contract, and compile docs that match the compiler _(2026-08-01)_
 
 ### v0.34.6 — Analyze: the evidence gate now covers the rows a good analysis produces _(2026-08-01)_
 

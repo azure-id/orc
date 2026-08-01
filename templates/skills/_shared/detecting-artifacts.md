@@ -32,9 +32,15 @@ wiki/pattern is never missed:
   registered` (plus a freshness tier when registered). Only `none` means the
   wiki is truly ABSENT; every other state means it EXISTS (registration/parse
   issues are a cheap re-registration fix, never a reason to conclude "no wiki").
-- **Pattern:** `orc pattern status <lang>` → exit 0 = cached, exit 1 = absent
-  (the exit code is the contract). `orc pattern status` with no arg lists every
-  cached language.
+- **Pattern:** `orc pattern status <lang>` → exit 0 = cached, exit 1 = absent,
+  **exit 2 = unknown language key** (the exit code is the contract). `<lang>` is
+  a FRAMEWORK key from `orc-pattern/references/INDEX.md` (`express`, `react`,
+  `fastapi`, …) — never a file extension: probing `js` used to answer a clean
+  "absent" for a key the payload has never heard of, so the gate fell back
+  correctly and the CALLER's bug read as a lane defect. Exit 2 says "you asked
+  the wrong question" and lists the real keys. `orc pattern status` with no arg
+  lists every cached language (exit 1 when the cache is empty — the same absent
+  contract).
 
 Use `npx --no-install orc …` when `orc` is not on PATH. Record both results in
 run state so the lane ALREADY KNOWS the wiki and pattern exist — do not re-probe

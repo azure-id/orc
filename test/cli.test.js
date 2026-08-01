@@ -365,11 +365,29 @@ test("diy compile: the documented stitch order equals the compiler's order array
   assert.ok(code.includes("mock-example"), "the phase that went missing from the doc is in both");
 });
 
-test("orc pattern status <lang> exits 1 when no pattern is cached", () => {
-  const { root } = freshInstall();
+test("orc pattern status: 0 cached, 1 absent, 2 unknown key", () => {
+  const { root, claudeDir } = freshInstall();
   try {
-    const r = cli(["pattern", "status", "python", "--dir", root]);
-    assert.strictEqual(r.status, 1, "absent pattern → exit 1");
+    // A real INDEX.md key with nothing cached → absent.
+    assert.strictEqual(cli(["pattern", "status", "express", "--dir", root]).status, 1, "absent → 1");
+
+    // A key the payload has never heard of is a CALLER bug, not an absent
+    // cache: probing `js` (a file extension) used to answer a clean "absent",
+    // so the gate fell back correctly and the caller's bug read as a lane
+    // defect for two whole evals.
+    const unknown = cli(["pattern", "status", "js", "--dir", root]);
+    assert.strictEqual(unknown.status, 2, "unknown language key → 2");
+    assert.match(unknown.stdout, /unknown language key/);
+    assert.match(unknown.stdout, /express/, "lists the real keys");
+
+    // No argument, empty cache → the same absent contract.
+    assert.strictEqual(cli(["pattern", "status", "--dir", root]).status, 1, "empty cache → 1");
+
+    const dir = path.join(claudeDir, "orc", "patterns");
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, "express-pattern.md"), "# express pattern\n");
+    assert.strictEqual(cli(["pattern", "status", "express", "--dir", root]).status, 0, "cached → 0");
+    assert.strictEqual(cli(["pattern", "status", "--dir", root]).status, 0, "non-empty cache → 0");
   } finally {
     rmrf(root);
   }

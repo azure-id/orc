@@ -2789,8 +2789,39 @@ function listPatternLangs(claudeDir) {
     .sort();
 }
 
+// The language keys the payload actually knows, parsed from the codifier's
+// detection table (`orc-pattern/references/INDEX.md`). Project install first,
+// package templates as the fallback — the same resolution `orc diy` uses.
+function knownPatternLangs(claudeDir) {
+  for (const base of [
+    path.join(claudeDir, "skills", "orc-pattern", "references"),
+    path.join(SRC_SKILLS, "orc-pattern", "references"),
+  ]) {
+    const f = path.join(base, "INDEX.md");
+    try {
+      const rows = [...fs.readFileSync(f, "utf8").matchAll(/^\|\s*`([a-z0-9-]+)`\s*\|/gm)].map((m) => m[1]);
+      if (rows.length) return rows;
+    } catch (_) {}
+  }
+  return [];
+}
+
 function patternStatus(claudeDir, lang) {
   const langs = listPatternLangs(claudeDir);
+  // A key the payload has never heard of is a CALLER bug, not an absent cache
+  // (v0.34.8). The probe used to glob `<lang>-pattern.md` and answer for any
+  // string, so a gate asking about `js` — a file extension, not one of the
+  // FRAMEWORK keys in INDEX.md — got a clean "absent", fell back correctly, and
+  // looked like a lane defect. Exit 2 keeps 0/1 meaning cached/absent.
+  const known = knownPatternLangs(claudeDir);
+  if (lang && known.length && !known.includes(lang)) {
+    console.log(
+      `✗ unknown language key "${lang}" — not a row in orc-pattern/references/INDEX.md.\n` +
+        `  Keys are FRAMEWORK names, not file extensions: ${known.join(", ")}.\n` +
+        "  (Register a new language by adding its row + playbook, then re-run.)"
+    );
+    process.exit(2);
+  }
   if (lang) {
     const hit = langs.includes(lang);
     // Exit code IS the contract: 0 = cached, 1 = absent — so a gate can branch
