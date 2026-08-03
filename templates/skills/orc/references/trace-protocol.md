@@ -51,7 +51,7 @@ phase: execution wave 2
 run_meta:                 # FIRST packet of the run ONLY; omit thereafter
   lane: orc               # orc | ultra | mini | fast | diy | wiki | analyze |
                           # plan | claude | poly | learn | verify | pattern |
-                          # combine
+                          # combine | prsetup | prdriver
   slug: cas-multi-exchange-withdrawal
   trace_path: .claude/orc/logs/run-orc-cas-multi-exchange-withdrawal-240726-002352.txt
 events:                   # each {ts, verb, tail}; verb from the CLOSED set below
@@ -79,9 +79,9 @@ decisions: >              # free text — the WHY layer
 | Tier | Lanes | Packets |
 |------|-------|---------|
 | Build lanes | `orc` (incl. ultra), `orc-mini`, `orc-fast` | per phase — full orc ≈ 7–9 (ultra adds U0 + judge packets); orc-mini batches to 3 (intake+plan, execution, ship); orc-fast to 2 (preflight+dispatch, gate+ship) |
-| Multi-dispatch | `orc-wiki` | one per scan-batch boundary (the points that already run the registration sync / offer the pause) + the end-of-run packet |
+| Multi-dispatch | `orc-wiki`, `orc-pr-driver` (lane `prdriver`) | orc-wiki: one per scan-batch boundary (the points that already run the registration sync / offer the pause) + the end-of-run packet. orc-pr-driver: one per LAYER boundary (each layer's green gate closes) + the end-of-run packet |
 | Composed | `orc-diy` | one packet per ENABLED phase group, **minimum 2** — the flow shape is user-composed, so the count is too (the compiled flow carries this block automatically) |
-| Single-dispatch | `orc-claude`, `orc-plan`, `orc-analyze` (+ mini), `orc-pattern`, `orc-verify`, `orc-learn`, `orc-poly`, `context-combiner` (lane `combine`) | **exactly ONE mandatory end-of-run packet** |
+| Single-dispatch | `orc-claude`, `orc-plan`, `orc-analyze` (+ mini), `orc-pattern`, `orc-verify`, `orc-learn`, `orc-poly`, `orc-pr-setup` (lane `prsetup`), `context-combiner` (lane `combine`) | **exactly ONE mandatory end-of-run packet** |
 
 **The single-packet obligation is defined HERE, once** (every trace-owning lane
 already loads this reference) — micro-lane spines keep only their existing trace
@@ -105,7 +105,7 @@ trace and never emit `SPAWN`/`RETURN`.
 - One file per run: **`run-<lane>-<slug>-<DDMMYY>-<HHMMSS>.txt`**, append-only.
   - `lane` — the trace-owning skill's short name (`orc`, `ultra`, `mini`, `fast`,
     `diy`, `wiki`, `analyze`, `plan`, `claude`, `poly`, `learn`, `verify`,
-    `pattern`, `combine`).
+    `pattern`, `combine`, `prsetup`, `prdriver`).
   - `slug` — kebab-cased short user context from the intent (`[a-z0-9-]`, ≤32
     chars, filesystem-safe, no trailing hyphen) — same derivation as the
     run-folder slug.
@@ -201,7 +201,7 @@ supplies the fact in a packet, the writer writes the line. `SPAWN`, `RETURN` and
 | `QUESTION count=<n> :: <topic>` | subagent→orc → writer | stopped to ask the user |
 | `CONTEXT-GAP :: <what was already known>` | subagent→orc → writer | asked/re-derived something already in context |
 | `REPLAN wave=<n> :: <reason>` | orc → writer | re-planned after a conflict/failure |
-| `GATE <name> pass\|bounce\|escalate :: <detail>` | orc → writer | exit-gate result — name ∈ grounding \| coverage \| graph \| evidence \| derivation \| facet (the plan's facet-vocabulary check, `effort-and-mode.md`) \| schema (the plan-handoff schema check) \| judgment (ultra; `escalate` is judgment-only) \| wave-boundary. The shared-band SIBLING-CONSISTENCY determination is NOT a gate name — carry it in the packet's `decisions`, never as an invented verb. Bounce detail lists the misses (feeds `/orc-retro` gate-bounce rates) |
+| `GATE <name> pass\|bounce\|escalate :: <detail>` | orc → writer | exit-gate result — name ∈ grounding \| coverage \| graph \| evidence \| derivation \| facet (the plan's facet-vocabulary check, `effort-and-mode.md`) \| schema (the plan-handoff schema check) \| judgment (ultra; `escalate` is judgment-only) \| wave-boundary \| stack-gate (Phase 8 stacked-PR threshold + handoff) \| stack-certainty (a stacked-PR seam decision) \| layer-green (one layer's green-gate ladder). The shared-band SIBLING-CONSISTENCY determination is NOT a gate name — carry it in the packet's `decisions`, never as an invented verb. Bounce detail lists the misses (feeds `/orc-retro` gate-bounce rates) |
 | `ADVISE :: brief=<path> questions=<n>` | orc → writer | ultra Phase U0 — advisor brief received, clarification round relayed |
 | `JUDGE <gate> <verdict> round=<n> blocking=<n> advisory=<n> downgraded=<n>` | orc → writer | ultra judgment verdict (gate ∈ analysis \| plan \| implementation) |
 | `OUTCOME task=<id> score=<n> band=<range> model=<m> retries=<n> requeues=<n> needs_context=<n> unmet=<n>` | orc → writer | task closed — links the scoring band to what it actually took (feeds `/orc-retro` calibration) |

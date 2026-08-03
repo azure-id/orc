@@ -56,7 +56,7 @@ const SECTIONS = [
   },
   {
     id: "lanes",
-    title: "④ Lanes cheat-sheet (14 commands)",
+    title: "④ Lanes cheat-sheet (16 commands)",
     lines: [
       "  /orc           full orchestrated pipeline",
       "  /orc-mini      lightweight single-subagent build",
@@ -66,6 +66,8 @@ const SECTIONS = [
       "  /orc-analyze   turn a doc/requirement into a code-grounded spec",
       "  /orc-plan      turn a spec/request into a grounded task plan",
       "  /orc-poly      cross-repo PLANNER (host + peers; never builds)",
+      "  /orc-pr-setup  stacked-PR planner — where the PR cut lines go (plans only)",
+      "  /orc-pr-driver stacked-PR driver — layer branches, per-layer green gate, submit",
       "  /orc-verify    verify the git-modified changes (read-only)",
       "  /orc-wiki      build/maintain the project knowledge base",
       "  /orc-pattern   learn & cache your code conventions per language",
@@ -84,7 +86,7 @@ const SECTIONS = [
       "",
       "Groups:",
       "  Common   waves, pauses, scoring granularity, analysis depth, tests,",
-      "           pattern gate, security pass",
+      "           pattern gate, security pass, stacked PRs (stacked_pr + thresholds)",
       "  Fable 5  fable5_enabled / fable5_effort / fable5_roles — HARD-GATED role",
       "           override: route analyze/plan/advisor/judge/review to Fable 5 agents",
       "           (nothing happens unless fable5_enabled: true AND roles are selected)",
