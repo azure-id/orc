@@ -141,7 +141,9 @@ orc-advisor / orc-judge load at their dispatch points.
 `orc-mini` (one Sonnet 5 high subagent, skips review/verify/summary; shares this
 run folder + schemas; switchable mid-run) · `orc-verify` (standalone git-diff
 verify, read-only) · `orc-retro` (mines the traces; `OUTCOME` lines are its raw
-material) · `orc-advisor`/`orc-judge` (ultra-lane, only under ultra_mode).
+material) · `orc-advisor`/`orc-judge` (ultra-lane, only under ultra_mode) ·
+**`orc-pr-setup`/`orc-pr-driver`** (stacked PRs — the Phase 8 gate hands off to
+them; they are never dispatched as subagents).
 
 ## Constellation map (load on demand only)
 
@@ -157,7 +159,8 @@ material) · `orc-advisor`/`orc-judge` (ultra-lane, only under ultra_mode).
 - Phase 5–6 → `subskills/orc-review-verify/`; FE tasks →
   `../orc-pattern/references/fe-a11y.md` + `fe-perf.md` (as `fe_rules[]`)
 - Phase 5.5 → `references/security-checklist.md`; 6.5 → `subskills/orc-testgen/`
-- Phase 8 → `subskills/orc-pr/SKILL.md` (template `subskills/orc-pr/pr.md`)
+- Phase 8 → `subskills/orc-pr/SKILL.md` (template `subskills/orc-pr/pr.md`);
+  stack gate → `subskills/orc-pr/stack-gate.md` + `_shared/pr-templates.md`
 - Schemas (you own; pass slices only): `schemas/intent-spec.md`,
   `schemas/planning-output.md`, `schemas/checkpoint.md`
 - Worked example (orient only — never execute from it) → `examples/full-run-mock.md`
@@ -406,7 +409,22 @@ cosmetics too?"** — never fix unasked. Emit `PHASE summary end`.
 
 ## Phase 8 — Ship (load subskills/orc-pr/SKILL.md) · Trace: `PHASE ship`, `FINISH`
 
-Emit `PHASE ship start`. Show current branch. Ask together: **commit? push? create PR?** (PR: ticket +
+Emit `PHASE ship start`. Show current branch.
+
+**Stacked-PR gate FIRST (deterministic; full `/orc` + `/orc-ultra` only — load
+`subskills/orc-pr/stack-gate.md`; never mini/fast/diy).** Measure the change
+(`git diff --numstat`, exclusions applied) vs config `stacked_pr_loc`/
+`stacked_pr_files`. Under threshold or `stacked_pr: off` → silent, ship normally
+(`GATE stack-gate pass :: under-threshold`). Tripped → surface report + ONE P0
+question (stack into layers? or one regular PR?) in the SAME round as its two
+prerequisites — **a ticket** and a resolved PR template
+(`_shared/pr-templates.md`; none found → recommend three options). No ticket, no
+template, or "no" → **one regular PR, never re-asked**. "Yes" → commit on the
+current branch (the driver's snapshot), write `stacked-pr/<slug>/STACK-FROM.md`
+(`_shared/stack-plan.md`, `ENTRY-MODE: orc-run`, this run's `RUN-DIR`), then hand
+off **`/orc-pr-setup`** → **`/orc-pr-driver`**. ORC never cuts layers itself.
+
+Then ask together: **commit? push? create PR?** (PR: ticket +
 title + target branch; generate from `subskills/orc-pr/pr.md`). If Phase 6.5 ran,
 commit `test-generator/<change-slug>/` too (a user deliverable, never gitignored).
 **`mock-examples/` is NEVER staged** (drift-recovery.md; no `.gitignore` edit —

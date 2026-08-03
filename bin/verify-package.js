@@ -29,6 +29,22 @@ const required = [
   "templates/skills/orc-poly/SKILL.md",
   "templates/skills/orc-poly/references/poly-spec.md",
   "templates/skills/orc-poly/references/gather.md",
+  // Stacked pull requests (v0.37.0) — two standalone lanes plus the three
+  // canonical shared contracts they and ORC's ship gate all read. A missing
+  // shared file makes the ship gate hand off to a lane that cannot preflight.
+  "templates/skills/orc-pr-setup/SKILL.md",
+  "templates/skills/orc-pr-setup/README.md",
+  "templates/skills/orc-pr-setup/references/layer-taxonomy.md",
+  "templates/skills/orc-pr-setup/references/certainty-gate.md",
+  "templates/skills/orc-pr-driver/SKILL.md",
+  "templates/skills/orc-pr-driver/README.md",
+  "templates/skills/orc-pr-driver/references/green-gate.md",
+  "templates/skills/orc-pr-driver/references/orc-run-split.md",
+  "templates/skills/orc-pr-driver/references/conflict-playbook.md",
+  "templates/skills/_shared/stack-plan.md",
+  "templates/skills/_shared/gh-stack-commands.md",
+  "templates/skills/_shared/pr-templates.md",
+  "templates/skills/orc/subskills/orc-pr/stack-gate.md",
   "templates/skills/orc-diy/SKILL.md",
   "templates/skills/orc-diy/README.md",
   "templates/skills/orc-diy/references/compile.md",
@@ -42,6 +58,8 @@ const required = [
   "templates/commands/orc-claude.md",
   "templates/commands/orc-learn.md",
   "templates/commands/orc-poly.md",
+  "templates/commands/orc-pr-setup.md",
+  "templates/commands/orc-pr-driver.md",
   "templates/agents/MODEL-MAPPING.md",
   "templates/agents/orc-advisor-opus-5-xhigh.md",
   "templates/agents/orc-judge-opus-5-xhigh.md",
@@ -105,11 +123,11 @@ function walkCount(dir, ext) {
 
 const skillCount = walkCount(path.join(ROOT, "templates/skills"), "SKILL.md");
 const agentCount = walkCount(path.join(ROOT, "templates/agents"), ".md");
-// Floors sit AT current reality (23 skills / 40 agent files: 39 agents +
+// Floors sit AT current reality (25 skills / 40 agent files: 39 agents +
 // MODEL-MAPPING.md — +7 fixed-role variants for the opus5_only mode) so a
 // dropped file fails the count check instead of sliding
 // into the slack an under-set floor grants. Raise them with the payload.
-if (skillCount < 22) missing.push(`templates/skills (expected >=22 SKILL.md, found ${skillCount})`);
+if (skillCount < 25) missing.push(`templates/skills (expected >=25 SKILL.md, found ${skillCount})`);
 if (agentCount < 40) missing.push(`templates/agents (expected >=40 .md, found ${agentCount})`);
 
 // B4 — encoding/mojibake guard. The OneDrive corruption rule becomes a gate:

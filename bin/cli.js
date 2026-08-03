@@ -757,6 +757,10 @@ const CONFIG_META = [
   { key: "security_review", def: "off", tier: "common", validate: vEnum("off", "ask", "on"), options: ["off", "ask", "on"], desc: "Opt-in Phase 5.5 security pass on runs with a task scored >= 70 (risk floor). OFF by default." },
   { key: "mock_example", def: "ask", tier: "common", validate: vEnum("ask", "on", "off"), options: ["ask", "on", "off"], desc: "Post-verify mocked runnable example (mock-examples/<slug>/, never committed): ask = offer after a green verify, on = always, off = never." },
   { key: "tdd_loop_max", def: 3, tier: "common", validate: vInt(1), options: [1, 2, 3, 4, 5], desc: "Max implement→test→repair iterations per task in the TDD gate; cap hit → STOP SEQUENCE + honest red report." },
+  { key: "stacked_pr", def: "ask", tier: "common", validate: vEnum("ask", "on", "off"), options: ["ask", "on", "off"], desc: "Phase 8 stacked-PR gate (full /orc + /orc-ultra only): ask = ONE P0 question when the change trips the threshold below, on = take yes without asking, off = always one regular PR. Yes needs a ticket AND a resolved PR template, else it degrades to a regular PR. Hands off to /orc-pr-setup → /orc-pr-driver; never fires in orc-mini/orc-fast/orc-diy." },
+  { key: "stacked_pr_loc", def: 1000, tier: "common", validate: vInt(1), options: [500, 800, 1000, 1500, 2000], desc: "Change LoC (additions+deletions, exclusions applied) >= this trips the stacked-PR gate — and is ALSO the per-layer LoC ceiling: a change that cannot fit in one layer's budget is what is worth stacking." },
+  { key: "stacked_pr_files", def: 20, tier: "common", validate: vInt(1), options: [10, 15, 20, 30, 40], desc: "Changed-file count >= this trips the stacked-PR gate; also the per-layer hard max (soft target = half of it)." },
+  { key: "stacked_pr_max_layers", def: 6, tier: "common", validate: vInt(2), options: [4, 5, 6, 8, 10], desc: "Soft cap on layers per stack: <= cap proceed, cap+1..cap+2 warn + explicit override, beyond → STOP (multiple stacks or a phased release). N layers = N full CI runs." },
   { key: "opus5_only", def: false, tier: "common", validate: vEnum("true", "false"), options: ["true", "false"], desc: "EVERY dispatched role uses ONE model — Opus 5 — with EFFORT as the cost dial (executors: [0,40) low · [40,80) medium · [80,100] high; each fixed role its own pinned effort). Deep SWE-benchmark work on cost vs efficiency across Claude models finds a single Opus 5 agent with the effort ladder the most efficient setup. It FORCES: while on it outranks fable5_* and a hand-written rubric_bands_override. Needs an Opus 5 main session or EVERY dispatch silently downgrades. Excludes the Haiku trace writer and orc-diy (compile-owned)." },
   // --- Fable 5 role override (HARD-GATED: nothing changes unless enabled: true) ---
   { key: "fable5_enabled", def: false, tier: "fable5", validate: vEnum("true", "false"), options: ["true", "false"], desc: "Master gate — route selected roles to Fable 5 agents. Nothing changes unless true." },
@@ -2982,6 +2986,209 @@ function pattern() {
   }
 }
 
+// ── Stacked PRs (`orc pr stack …`) ─────────────────────────────────────────
+// The skeleton generator + the existence probe for stacked-pr/<slug>/stack-plan.md.
+// WHY a CLI command and not a skill step: the plan is the CONTRACT between
+// orc-pr-setup (planner) and orc-pr-driver (driver), and a user must be able to
+// start at the DRIVER with a hand-written plan — no planner run, no model call.
+// Deterministic file + deterministic probe, same as `orc pattern status`.
+const STACK_DIR = "stacked-pr";
+const STACK_PLAN_FILE = "stack-plan.md";
+
+function stackPaths(claudeDir, slug) {
+  const root = path.join(repoRootOf(claudeDir), STACK_DIR);
+  return { root, dir: path.join(root, slug), plan: path.join(root, slug, STACK_PLAN_FILE) };
+}
+
+// Every slug under stacked-pr/ that actually holds a plan file.
+function listStackSlugs(claudeDir) {
+  const root = path.join(repoRootOf(claudeDir), STACK_DIR);
+  if (!fs.existsSync(root)) return [];
+  return fs
+    .readdirSync(root, { withFileTypes: true })
+    .filter((e) => e.isDirectory() && fs.existsSync(path.join(root, e.name, STACK_PLAN_FILE)))
+    .map((e) => e.name)
+    .sort();
+}
+
+function stackTemplateBody(slug) {
+  return `# Stack plan: <feature>
+
+<!--
+  SKELETON — fill every <...> in, then run \`/orc-pr-driver\` (no planner run needed).
+  Unsure where a cut line goes? Run \`/orc-pr-setup\` instead: it asks you, one
+  decision at a time, and writes this file for you.
+  Contract + budget rules: .claude/skills/_shared/stack-plan.md
+  A remaining <...> placeholder means \`orc pr stack status\` reports NOT READY.
+-->
+
+- ticket: <TICKET-123>
+- repo: <owner/name>
+- trunk: <main>
+- entry mode: <greenfield | orc-run>
+- pr template: <orc | project:.github/pull_request_template.md | claude.md | picked:context-first>
+- totals: <n> LoC · <n> files · <n> layers
+
+## Layers
+
+| # | branch | purpose (1 line) | value class | files | LoC | depends on | build-alone? |
+|---|--------|------------------|-------------|-------|-----|------------|--------------|
+| 1 | <ticket>-<slug>-<layer> | <why this layer exists> | <FOUNDATION> | <n> | <n> | — | <yes> |
+| 2 | <ticket>-<slug>-<layer> | <why this layer exists> | <CONTRACT> | <n> | <n> | 1 | <yes> |
+
+## Layer 1 — <title>
+
+- Purpose: <one line — no purpose means it is not a layer>
+- Value class: <USER | OPERATOR | CONTRACT | FOUNDATION — FOUNDATION must name its consumer layer>
+- Files: <explicit list, one path per entry, no globs>
+- Excluded-from-budget files: <generated/lockfiles/vendored — listed, uncounted>
+- Deliberately NOT here: <what a reviewer might expect> → layer <m>
+- Green-gate commands: build \`<cmd>\` · tests \`<cmd>\` · lint \`<cmd> --new-from-rev <this layer's base>\`
+- Gate status: NOT RUN
+- Risk / rollback: <one line>
+
+## Layer 2 — <title>
+
+- Purpose: <one line>
+- Value class: <class>
+- Files: <explicit list>
+- Excluded-from-budget files: <none>
+- Deliberately NOT here: <...> → layer <m>
+- Green-gate commands: build \`<cmd>\` · tests \`<cmd>\` · lint \`<cmd> --new-from-rev <this layer's base>\`
+- Gate status: NOT RUN
+- Risk / rollback: <one line>
+
+## Decisions
+
+<every boundary you were unsure about: the options, what you chose, why. The
+driver refuses to run while an UNCERTAIN here has no answer.>
+
+## Accepted exceptions
+
+<over-budget layers, oversize atoms, FOUNDATION chains, layer-cap overrides — or "none">
+`;
+}
+
+function stackTemplate(claudeDir, slugArg) {
+  const raw = slugArg || "stack";
+  const v = vSlug(raw);
+  if (v.err) {
+    console.error(`❌ slug ${v.err}`);
+    process.exit(1);
+  }
+  const slug = v.value;
+  const p = stackPaths(claudeDir, slug);
+  if (fs.existsSync(p.plan) && !flag("--force")) {
+    console.error(
+      `❌ ${STACK_DIR}/${slug}/${STACK_PLAN_FILE} already exists — refusing to overwrite a plan.\n` +
+        `   Edit it, pick another slug (\`orc pr stack template <slug>\`), or pass --force.`
+    );
+    process.exit(1);
+  }
+  fs.mkdirSync(p.dir, { recursive: true });
+  fs.writeFileSync(p.plan, stackTemplateBody(slug));
+  console.log(
+    `✓ wrote ${STACK_DIR}/${slug}/${STACK_PLAN_FILE}\n\n` +
+      "Next:\n" +
+      "  1. fill in every <...> (2+ layers, a ticket, a purpose + value class per layer)\n" +
+      `  2. \`orc pr stack status ${slug}\`   → exit 0 when it is READY\n` +
+      "  3. `/orc-pr-driver`                → branches, per-layer green gate, gh stack submit\n\n" +
+      "Unsure where the cut lines go? Run `/orc-pr-setup` — it asks you and writes this file."
+  );
+}
+
+// Exit code IS the contract (same convention as `orc pattern status` /
+// `orc diy status`): 0 = READY, 1 = absent | unfilled. A driver branches on it
+// without parsing prose.
+function stackStatus(claudeDir, slugArg) {
+  const slugs = listStackSlugs(claudeDir);
+  let slug = slugArg;
+  if (!slug) {
+    if (!slugs.length) {
+      console.log(
+        `✗ no stack plan — no ${STACK_DIR}/<slug>/${STACK_PLAN_FILE}\n` +
+          "  `orc pr stack template <slug>` writes a skeleton to fill in, or run `/orc-pr-setup`."
+      );
+      process.exit(1);
+    }
+    if (slugs.length > 1) {
+      console.log(
+        `✗ ${slugs.length} stack plans — name one: ${slugs.join(", ")}\n` +
+          "  e.g. `orc pr stack status " + slugs[0] + "`"
+      );
+      process.exit(1);
+    }
+    slug = slugs[0];
+  }
+  const p = stackPaths(claudeDir, slug);
+  if (!fs.existsSync(p.plan)) {
+    console.log(
+      `✗ absent — no ${STACK_DIR}/${slug}/${STACK_PLAN_FILE}` +
+        (slugs.length ? `\n  known plans: ${slugs.join(", ")}` : "")
+    );
+    process.exit(1);
+  }
+  const text = fs.readFileSync(p.plan, "utf8");
+  const problems = [];
+  // Unfilled placeholders — the whole reason a hand-filled plan needs a probe.
+  const holes = [...text.matchAll(/<[^<>\n]{2,60}>/g)].map((m) => m[0]);
+  if (holes.length) {
+    const uniq = [...new Set(holes)].slice(0, 5);
+    problems.push(`${plural(holes.length, "unfilled placeholder")} (e.g. ${uniq.join(" ")})`);
+  }
+  const ticket = /^-\s*ticket:\s*(.+)$/m.exec(text);
+  if (!ticket || !ticket[1].trim()) problems.push("no ticket");
+  // Layer sections: `## Layer <n> — <title>` (the schema's own heading shape).
+  const layers = [...text.matchAll(/^##\s+Layer\s+\d+\b/gm)].length;
+  if (layers < 2) problems.push(`${layers} layer section(s) — a stack needs 2+`);
+  if (!/^##\s+Decisions\s*$/m.test(text)) problems.push("no `## Decisions` section");
+  if (problems.length) {
+    console.log(
+      `✗ NOT READY — ${STACK_DIR}/${slug}/${STACK_PLAN_FILE}\n` +
+        problems.map((x) => "  - " + x).join("\n") +
+        "\n  Fill it in, or run `/orc-pr-setup` to have the layers planned for you."
+    );
+    process.exit(1);
+  }
+  console.log(
+    `✓ READY — ${STACK_DIR}/${slug}/${STACK_PLAN_FILE} (${plural(layers, "layer")}, ticket ${ticket[1].trim()})\n` +
+      "  Run `/orc-pr-driver` to build + submit the stack."
+  );
+}
+
+function pr(alias) {
+  if (flag("--global")) {
+    console.error("❌ orc pr is project-scoped — the stack plan lives in the repo. Run it from the project (or with --dir <path>).");
+    process.exit(1);
+  }
+  const claudeDir = resolveClaudeDir();
+  const pos = positionals();
+  // Two spellings, one behavior: `orc pr stack template [<slug>]` and the flat
+  // alias `orc pr-stack-template [<slug>]`.
+  if (alias === "pr-stack-template") return stackTemplate(claudeDir, pos[1]);
+  if (alias === "pr-stack-status") return stackStatus(claudeDir, pos[1]);
+  const usage =
+    "Usage: orc pr stack template [<slug>]   write a fill-in stack-plan skeleton\n" +
+    "       orc pr stack status [<slug>]     is a plan READY? (exit 0 ready / 1 absent-or-unfilled)\n" +
+    "       (aliases: orc pr-stack-template, orc pr-stack-status)";
+  if (pos[1] !== "stack") {
+    console.error(`Unknown: orc ${pos.slice(1).join(" ") || ""}\n${usage}`);
+    process.exit(1);
+  }
+  switch (pos[2]) {
+    case "template":
+      stackTemplate(claudeDir, pos[3]);
+      break;
+    case undefined:
+    case "status":
+      stackStatus(claudeDir, pos[3]);
+      break;
+    default:
+      console.error(`Unknown: orc pr stack ${pos[2]}\n${usage}`);
+      process.exit(1);
+  }
+}
+
 function wiki() {
   if (flag("--global")) {
     console.error("❌ orc wiki is project-scoped — the wiki lives in the repo. Run it from the project (or with --dir <path>).");
@@ -3414,6 +3621,13 @@ Usage:
     orc pattern status [<lang>]           whether a cached pattern exists — the deterministic
                                           existence probe every knowledge-gated lane runs first
                                           (exit 1 when <lang> absent; no arg lists all cached)
+  orc pr [--dir <path>]                   stacked pull requests (project-scoped; no --global)
+    orc pr stack template [<slug>]        write a fill-in stack-plan skeleton to
+                                          stacked-pr/<slug>/stack-plan.md — fill it in and start
+                                          straight at /orc-pr-driver (no planner run needed)
+    orc pr stack status [<slug>]          is a stack plan READY? (exit 0 ready /
+                                          1 absent-or-unfilled) — the probe the driver runs first
+                                          (aliases: orc pr-stack-template, orc pr-stack-status)
   orc onboarding [<topic>]                guided walkthrough (menu on a TTY; prints all when piped)
                                           topics: overview, install, first-run, lanes,
                                           config, knowledge, upgrade, troubleshooting
@@ -3465,6 +3679,11 @@ Skills installed: ${listSkillNames().join(", ")}`);
       break;
     case "pattern":
       pattern();
+      break;
+    case "pr":
+    case "pr-stack-template":
+    case "pr-stack-status":
+      pr(cmd);
       break;
     case "where":
       where();

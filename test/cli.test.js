@@ -755,3 +755,111 @@ test("pre-manifest install warns, and only deletes with --prune", () => {
     rmrf(root);
   }
 });
+
+// ── v0.37.0 stacked PRs: the template generator + the exit-code probe ───────
+
+// A FILLED plan, mirroring the schema in _shared/stack-plan.md. The driver's
+// hard gate branches on `orc pr stack status`, so READY must be reachable.
+const FILLED_PLAN = `# Stack plan: refund adapter
+
+- ticket: PAY-4211
+- repo: acme/payment_service
+- trunk: main
+- entry mode: orc-run
+- pr template: project:.github/pull_request_template.md
+- totals: 850 LoC · 13 files · 2 layers
+
+## Layers
+
+| # | branch | purpose | value class | files | LoC | depends on | build-alone? |
+|---|--------|---------|-------------|-------|-----|------------|--------------|
+| 1 | PAY-4211-schema | refund tables | FOUNDATION (consumer: 2) | 4 | 210 | — | yes |
+| 2 | PAY-4211-handler | POST refunds | CONTRACT | 9 | 640 | 1 | yes |
+
+## Layer 1 — refund schema
+
+- Purpose: land reversible DDL ahead of code
+- Value class: FOUNDATION (consumer: layer 2)
+- Files: migrations/0042_refunds.up.sql
+- Gate status: NOT RUN
+
+## Layer 2 — refund handler
+
+- Purpose: expose the refund endpoint
+- Value class: CONTRACT
+- Files: internal/http/refund_handler.go
+- Gate status: NOT RUN
+
+## Decisions
+
+Schema vs handler seam: user chose two layers; review owners differ.
+
+## Accepted exceptions
+
+none
+`;
+
+test("pr stack template: writes the skeleton, refuses to clobber a plan, alias agrees", () => {
+  const root = tmpdir();
+  try {
+    const plan = path.join(root, "stacked-pr", "demo", "stack-plan.md");
+    const first = cli(["pr", "stack", "template", "demo", "--dir", root]);
+    assert.strictEqual(first.status, 0);
+    assert.ok(fs.existsSync(plan), "skeleton lands at stacked-pr/<slug>/stack-plan.md");
+    const body = fs.readFileSync(plan, "utf8");
+    assert.match(body, /## Decisions/, "skeleton carries the Decisions section");
+    assert.match(body, /## Layer 2 —/, "skeleton is a 2+ layer shape");
+
+    // A plan is user-authored work — an overwrite would destroy it silently.
+    fs.writeFileSync(plan, FILLED_PLAN);
+    const again = cli(["pr", "stack", "template", "demo", "--dir", root]);
+    assert.strictEqual(again.status, 1, "refuses to overwrite");
+    assert.strictEqual(fs.readFileSync(plan, "utf8"), FILLED_PLAN, "bytes untouched");
+    assert.strictEqual(cli(["pr", "stack", "template", "demo", "--dir", root, "--force"]).status, 0);
+
+    // the flat alias is the same command
+    const alias = cli(["pr-stack-template", "other", "--dir", root]);
+    assert.strictEqual(alias.status, 0);
+    assert.ok(fs.existsSync(path.join(root, "stacked-pr", "other", "stack-plan.md")));
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("pr stack status: the exit code IS the contract (0 READY, 1 absent | unfilled | ambiguous)", () => {
+  const root = tmpdir();
+  try {
+    // absent
+    const none = cli(["pr", "stack", "status", "--dir", root]);
+    assert.strictEqual(none.status, 1);
+    assert.match(none.stdout, /no stack plan/);
+
+    // generated but unfilled — the whole reason a hand-filled plan needs a probe
+    assert.strictEqual(cli(["pr", "stack", "template", "demo", "--dir", root]).status, 0);
+    const unfilled = cli(["pr", "stack", "status", "--dir", root]);
+    assert.strictEqual(unfilled.status, 1, "placeholders left = NOT READY");
+    assert.match(unfilled.stdout, /unfilled placeholder/);
+
+    // filled → READY
+    fs.writeFileSync(path.join(root, "stacked-pr", "demo", "stack-plan.md"), FILLED_PLAN);
+    const ready = cli(["pr", "stack", "status", "demo", "--dir", root]);
+    assert.strictEqual(ready.status, 0, "a filled plan is READY");
+    assert.match(ready.stdout, /READY/);
+    assert.match(ready.stdout, /PAY-4211/, "names the ticket it found");
+
+    // a single-layer plan is not a stack
+    const oneLayer = FILLED_PLAN.replace(/## Layer 2 —[\s\S]*?(?=## Decisions)/, "");
+    fs.writeFileSync(path.join(root, "stacked-pr", "demo", "stack-plan.md"), oneLayer);
+    assert.strictEqual(cli(["pr", "stack", "status", "demo", "--dir", root]).status, 1);
+
+    // two plans and no slug → ambiguous, never a coin flip
+    fs.writeFileSync(path.join(root, "stacked-pr", "demo", "stack-plan.md"), FILLED_PLAN);
+    fs.mkdirSync(path.join(root, "stacked-pr", "second"), { recursive: true });
+    fs.writeFileSync(path.join(root, "stacked-pr", "second", "stack-plan.md"), FILLED_PLAN);
+    const ambiguous = cli(["pr", "stack", "status", "--dir", root]);
+    assert.strictEqual(ambiguous.status, 1);
+    assert.match(ambiguous.stdout, /name one: demo, second/);
+  } finally {
+    rmrf(root);
+  }
+});

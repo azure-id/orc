@@ -362,6 +362,9 @@ const CONTRACTS = [
       "skills/orc/references/stop-and-resume.md",
       "skills/orc/references/trace-protocol.md",
       "skills/orc/references/ultra-mode.md",
+      "skills/orc-pr-driver/SKILL.md",
+      "skills/orc-pr-setup/SKILL.md",
+      "skills/orc/subskills/orc-pr/stack-gate.md",
     ],
   },
   {
@@ -418,6 +421,8 @@ const CONTRACTS = [
       "skills/orc-poly/SKILL.md",
       "skills/orc-verify/SKILL.md",
       "skills/orc-wiki/SKILL.md",
+      "skills/orc-pr-driver/SKILL.md",
+      "skills/orc-pr-setup/SKILL.md",
     ],
   },
   {
@@ -446,6 +451,8 @@ const CONTRACTS = [
       "skills/orc/SKILL.md",
       "skills/orc/references/trace-protocol.md",
       "skills/orc/subskills/orc-planner/SKILL.md",
+      "skills/orc-pr-driver/SKILL.md",
+      "skills/orc-pr-setup/SKILL.md",
     ],
   },
   {
@@ -469,6 +476,8 @@ const CONTRACTS = [
       "skills/orc-poly/SKILL.md",
       "skills/orc-verify/SKILL.md",
       "skills/orc-wiki/SKILL.md",
+      "skills/orc-pr-driver/SKILL.md",
+      "skills/orc-pr-setup/SKILL.md",
     ],
   },
   {
@@ -806,6 +815,7 @@ const CONTRACTS = [
       "skills/orc/references/analyst-gates.md",
       "skills/orc/references/pattern-gate.md",
       "skills/orc/references/ultra-mode.md",
+      "skills/_shared/README.md",
     ],
   },
   {
@@ -1124,6 +1134,8 @@ const CONTRACTS = [
       "skills/orc/schemas/planning-output.md",
       "skills/orc/subskills/orc-testgen/SKILL.md",
       "skills/orc/subskills/orc-testgen/core.md",
+      "skills/_shared/stack-plan.md",
+      "skills/orc/subskills/orc-pr/stack-gate.md",
     ],
   },
   {
@@ -1169,6 +1181,7 @@ const CONTRACTS = [
       "skills/orc-poly/SKILL.md",
       "skills/orc-poly/references/poly-spec.md",
       "skills/orc-poly/examples/poly-run-mock.md",
+      "skills/_shared/stack-plan.md",
     ],
   },
   {
@@ -1260,6 +1273,7 @@ const CONTRACTS = [
       "skills/orc-mini/SKILL.md",
       "skills/orc/SKILL.md",
       "skills/orc/config.md",
+      "skills/orc/subskills/orc-pr/stack-gate.md",
     ],
   },
   {
@@ -1275,6 +1289,7 @@ const CONTRACTS = [
       "skills/orc/config.md",
       "skills/orc/references/trace-protocol.md",
       "skills/orc/references/ultra-mode.md",
+      "skills/_shared/README.md",
     ],
   },
   {
@@ -1289,6 +1304,7 @@ const CONTRACTS = [
       "skills/orc-mini/SKILL.md",
       "skills/orc/SKILL.md",
       "skills/orc/config.md",
+      "skills/_shared/README.md",
     ],
   },
   {
@@ -1447,6 +1463,119 @@ const CONTRACTS = [
       "skills/orc/SKILL.md",
       "skills/orc/config.md",
       "skills/orc/references/intake.md",
+      "skills/_shared/stack-plan.md",
+    ],
+  },
+  // ── Stacked pull requests (v0.37.0) ──────────────────────────────────────
+  {
+    // The deliverable folder. Visible at the project root and COMMITTED (same
+    // class as poly-repo-implementation/ and test-generator/) — never inside
+    // .claude/, which the installer replaces. bin/cli.js owns the path too
+    // (`orc pr stack template` writes it, `orc pr stack status` probes it), so a
+    // rename on either side fails the lint.
+    name: "stacked-PR deliverable folder (v0.37.0 — stacked-pr/<slug>/, committed)",
+    token: "stacked-pr/",
+    binFiles: ["bin/cli.js"],
+    files: [
+      "commands/orc-pr-driver.md",
+      "commands/orc-pr-setup.md",
+      "skills/_shared/stack-plan.md",
+      "skills/orc-pr-driver/SKILL.md",
+      "skills/orc-pr-setup/SKILL.md",
+      "skills/orc/SKILL.md",
+      "skills/orc/subskills/orc-pr/SKILL.md",
+      "skills/orc/subskills/orc-pr/stack-gate.md",
+      "skills/orc-pr-driver/README.md",
+      "skills/orc-pr-setup/README.md",
+    ],
+  },
+  {
+    // The plan file IS the contract between the planner lane and the driver
+    // lane — and it is equally the contract with a HAND-FILLED plan (the CLI
+    // skeleton path), which is why the filename is pinned on both sides.
+    name: "stack plan contract file (v0.37.0 — stack-plan.md, planner ↔ driver ↔ CLI)",
+    token: "stack-plan.md",
+    binFiles: ["bin/cli.js"],
+    files: [
+      "commands/orc-pr-driver.md",
+      "commands/orc-pr-setup.md",
+      "skills/_shared/gh-stack-commands.md",
+      "skills/_shared/stack-plan.md",
+      "skills/orc-pr-driver/SKILL.md",
+      "skills/orc-pr-driver/references/orc-run-split.md",
+      "skills/orc-pr-setup/SKILL.md",
+      "skills/orc/SKILL.md",
+      "skills/orc/subskills/orc-pr/stack-gate.md",
+      "skills/orc-pr-driver/README.md",
+      "skills/orc-pr-setup/README.md",
+      "skills/_shared/README.md",
+    ],
+  },
+  {
+    // The handoff block — third member of the family (FALLBACK-FROM,
+    // DRIFT-FROM, STACK-FROM). Written by ORC's ship gate or by orc-pr-setup,
+    // read by the next lane; a forked shape strands a run mid-handoff.
+    name: "STACK-FROM handoff block (v0.37.0 — ship gate / planner → driver)",
+    token: "STACK-FROM",
+    files: [
+      "commands/orc-pr-driver.md",
+      "skills/_shared/stack-plan.md",
+      "skills/orc-pr-driver/SKILL.md",
+      "skills/orc-pr-setup/SKILL.md",
+      "skills/orc/SKILL.md",
+      "skills/orc/subskills/orc-pr/SKILL.md",
+      "skills/orc/subskills/orc-pr/stack-gate.md",
+      "skills/_shared/README.md",
+    ],
+  },
+  {
+    // The deterministic existence probe (exit 0 READY / 1 absent-or-unfilled),
+    // same convention as `orc pattern status <lang>` and `orc diy status`. The
+    // probe lives in bin/cli.js; every consumer must name it, never an ad-hoc
+    // find — stacked-pr/ is a normal visible folder, but an UNFILLED plan is
+    // indistinguishable from a ready one without the probe.
+    name: "stack plan probe (v0.37.0 — `orc pr stack status`, exit-code contract)",
+    token: "orc pr stack status",
+    binFiles: ["bin/cli.js"],
+    files: [
+      "commands/orc-pr-driver.md",
+      "skills/_shared/stack-plan.md",
+      "skills/orc-pr-driver/SKILL.md",
+      "skills/orc-pr-driver/README.md",
+      "skills/orc-pr-setup/README.md",
+    ],
+  },
+  {
+    // Canonical cross-lane prose (sibling of drift-recovery.md /
+    // fallback-handoff.md): WHERE a PR body comes from. Shared by the ship gate
+    // and both stacked-PR lanes — never forked back into a spine.
+    name: "PR-template resolution canonical pointer (v0.37.0 — _shared/pr-templates.md)",
+    token: "pr-templates.md",
+    files: [
+      "skills/orc-pr-driver/SKILL.md",
+      "skills/orc-pr-setup/SKILL.md",
+      "skills/orc/SKILL.md",
+      "skills/orc/subskills/orc-pr/SKILL.md",
+      "skills/orc/subskills/orc-pr/stack-gate.md",
+      "skills/orc-pr-driver/README.md",
+      "skills/orc-pr-setup/README.md",
+      "skills/_shared/README.md",
+    ],
+  },
+  {
+    // Canonical cross-lane prose: the `gh stack` command surface. Stacked PRs
+    // are a GitHub PUBLIC PREVIEW, so a breaking rename must be a ONE-FILE fix
+    // — that is the whole reason this pointer is pinned instead of copied.
+    name: "gh stack command surface canonical pointer (v0.37.0 — _shared/gh-stack-commands.md)",
+    token: "gh-stack-commands.md",
+    files: [
+      "skills/orc-pr-driver/SKILL.md",
+      "skills/orc-pr-driver/references/conflict-playbook.md",
+      "skills/orc-pr-setup/SKILL.md",
+      "skills/orc/subskills/orc-pr/stack-gate.md",
+      "skills/orc-pr-driver/README.md",
+      "skills/orc-pr-setup/README.md",
+      "skills/_shared/README.md",
     ],
   },
 ];
@@ -1482,7 +1611,14 @@ const BUDGETS = [
   // repair loop, the two-half Phase 6), the mock-example phase (6.7) + its
   // never-staged ship rule, and the plan-gate tdd wording. Detail lives in
   // _shared/drift-recovery.md, planning-output.md, and orc-review-verify.
-  { file: "skills/orc/SKILL.md", maxLines: 424 },
+  // v0.37.0: deliberate raise 424→442 — the Phase 8 stacked-PR gate. It has to
+  // sit in the spine because it is a SHIP-TIME decision the run must not forget
+  // after compaction: the measured threshold, the ONE P0 question, its two
+  // degrade-to-a-regular-PR prerequisites (ticket + template), and the handoff
+  // to the two standalone lanes. The mechanism (measurement, template
+  // resolution, the STACK-FROM block) lives in subskills/orc-pr/stack-gate.md
+  // and _shared/{stack-plan,pr-templates}.md.
+  { file: "skills/orc/SKILL.md", maxLines: 442 },
   // v0.33.0: deliberate raises 264→289 / 197→219 / 171→179 — orc-wiki gains the
   // crosslink-compile entry branch, the delta-refresh default (impact probe),
   // and the orientation/atlas assemble steps (detail in references/); mini
