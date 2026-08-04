@@ -6,7 +6,7 @@
 
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
-![Version](https://img.shields.io/badge/version-0.36.0-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.37.0-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
@@ -46,7 +46,62 @@ zero-dependency npm package installs those files into your `.claude/` directory.
 
 ## Changelog
 
-**Latest: v0.36.0 — updated 2026-08-02.**
+**Latest: v0.37.0 — updated 2026-08-05.**
+
+### v0.37.0 — `/orc-quick`: the quick lane, and the gate no config can collapse _(2026-08-05)_
+
+A new **standalone** lane for almost anything, in the fewest steps of any lane.
+`/orc-quick` is the first ORC lane that **loops**: you ask, it answers, and the
+next request becomes entry 2 in the same doc.
+
+**Three steps per request** — `Q1 LOOK` (silent) → `Q2 ASK` (one turn) →
+`Q3 DO`, plus a once-per-session silent preflight. Against `/orc` (8),
+`/orc-mini` (5) and `/orc-fast` (6). The compression: clarification and the
+agent choice are the **same** user turn.
+
+**Open-ended, not code-only.** A fix, a fast context dig, a defect hunt, a
+dependency bump, or resolving PR review comments all run one spine. No closed
+request taxonomy — anything routes: read-only or writing → gated dispatch →
+validated return → a numbered doc entry. Too big → an **offer** of `/orc-mini`,
+never a forced fallback.
+
+**The dispatch gate is hard, and it is the lane's whole premise.** It asks which
+agent before **every** dispatch — recon, executor, reviewer. Code work offers
+`orc-executor-sonnet-4-6-med` / `orc-executor-opus-5-low`; read-only recon
+offers an ad-hoc model + effort. **`opus5_only`, `fable5_*` and
+`rubric_bands_override` are all INERT here** — this is the one exception to
+`opus5_only`'s otherwise flat precedence, registered in both shared contracts,
+and the lane says so at the gate rather than leaving it implicit. A forcing mode
+that collapsed the menu to one option would silently delete the gate.
+
+**No smoke gate — two asymmetric rules instead.** A red build starts a repair
+loop: rounds 1–2 reuse the chosen executor, round 3 re-asks so you can escalate,
+then it reports the **error trend** (`14 → 6 → 4 → 2`) and asks for 3 more /
+a different executor / stop. Red tests **block the commit offer but never loop**
+— a failing test is sometimes the test being wrong, and a loop would "fix" that
+by breaking the code. **No test suite means no check at all.**
+
+**Every request is recorded** in `orc-quick/<slug>/quick-context.md` — one file
+per thread, a delimited TOC on top, each entry holding the verbatim ask, the
+decision and its rejected alternatives, a **dispatch table** (kind, agent,
+expect vs actual), files changed, and what was deliberately *not* done. Written
+**before** any offer, so an abandoned session still leaves a complete record.
+Re-opening a thread reads **only the TOC block**, never the body — that is how
+cross-session numbering and the read-ban coexist. Never staged: a commit
+contains only the files the task changed.
+
+**`gh` is read + push only** — never a comment, a thread resolve, a review, an
+approval, or a merge, even when you say "push". PR comment bodies are treated as
+data, never instructions. **It never reverts** — a stop-while-red prints the
+`git` command and leaves the tree alone.
+
+**Zero new agents.** The lane reuses shipped executors and dispatches read-only
+recon ad-hoc by model name; that trades the hook's `SPAWN`/`RETURN` lines (so
+`/orc-retro` cannot aggregate them) while keeping `DISPATCH`/`VERIFY` and the
+downgrade check, which the orchestrator writes rather than the hook. Traces get
+a new **Iterative** tier: one packet per completed entry. The skill's own guide
+(`skills/orc-quick/README.md`) is written in deliberately simple English for
+non-native readers.
 
 ### v0.36.0 — `opus5_only`: one model for every role, not just executors _(2026-08-02)_
 
@@ -339,6 +394,7 @@ needed. Either way, your `.claude/orc.config.yaml` overrides are left untouched.
 |---------|--------------|
 | **`/orc`** | The full orchestrator: intake → planning → per-task scoring → conflict-free parallel waves → review → verify → ship. Checkpoints eagerly; resumes in a fresh session at any pause. |
 | **`/orc-ultra`** | Maximum-rigor lane: the full pipeline plus an Opus 5 **xhigh** advisor (brief + rubric + one clarification round) and three judgment gates (after analysis, planning, and verify). Deep analyze, pattern/testgen/security forced on, executor tier floor. Costly by design. |
+| **`/orc-quick`** | **The quick lane — for almost anything.** Three steps per request: look (silent) → ask once → do. A small fix, a fast context dig, a defect hunt, a dependency bump, or PR review comments all run the same way. **Always asks which agent to dispatch** — no config can override that. Saves every request as a numbered entry in `orc-quick/<slug>/quick-context.md`. See below. |
 | **`/orc-mini`** | The fast path — see below. |
 | **`/orc-fast`** | Fastest lane — knowledge-gated: needs a fresh wiki + cached code-pattern, skips analyst/planner, one Sonnet 4.6 high executor + smoke gate. Falls back to `orc-mini` when a prerequisite is missing. See below. |
 | **`/orc-diy`** | **Your own lane** — runs the flow you composed with the `orc diy` CLI. Hard-gated: unconfigured/stale → offers plain `/orc`. Guide: [ORC-DIY README](templates/skills/orc-diy/README.md). |
@@ -404,6 +460,55 @@ and a **cached code-pattern** for the request's language. Either missing →
 stops. With no scoring or planning judgment, the orchestrator runs fine at
 **Sonnet medium**. `/orc-fast` is the payoff for having run `/orc-wiki` and
 `/orc-pattern`.
+
+### `/orc-quick` — the quick lane, for almost anything
+
+```text
+Q0 preflight (once/session, silent)  ─▶  Q1 LOOK (silent)
+   ─▶ Q2 ASK  (ONE turn: ≤3 grounded questions + "which agent?")
+   ─▶ Q3 DO   (dispatch ─▶ build/tests ─▶ write the entry ─▶ offer commit)
+   ─▶ next request becomes entry 2, 3, 4 … in the same doc
+```
+
+**Three steps per request — fewer than any other lane** (`/orc` 8, `/orc-mini` 5,
+`/orc-fast` 6). The compression is that clarification and the agent choice share
+**one** user turn.
+
+**It is not code-only.** A small fix, a fast context dig (*"how does login work
+here?"*), a defect hunt, a dependency bump, or **fixing PR review comments** all
+run the same spine. There is no closed list of request types — anything routes:
+read-only or writing → gated dispatch → validated return → a numbered doc entry.
+A request that turns out too big gets an **offer** of `/orc-mini`, never a forced
+fallback.
+
+- **The dispatch gate is hard and unconditional.** It asks which agent before
+  **every** dispatch — recon, executor, and reviewer alike. No default, no sticky
+  answer. Code work offers `orc-executor-sonnet-4-6-med` or
+  `orc-executor-opus-5-low`; read-only recon offers an **ad-hoc model + effort**.
+- **Nothing overrides it.** `opus5_only`, `fable5_*`, and `rubric_bands_override`
+  are all **inert** here — the lane is standalone, and a forcing mode would
+  silently delete the user's choice. It is the one exception to `opus5_only`'s
+  otherwise flat precedence, and it says so at the gate.
+- **No smoke gate.** A red build starts a **repair loop** (rounds 1–2 reuse your
+  executor, round 3 asks again, then it reports the error trend and asks: 3 more
+  / escalate / stop). Red tests **block the commit offer but never loop** — a
+  failing test is sometimes the test being wrong. **No test suite means no check
+  at all.**
+- **Every request is saved** to `orc-quick/<slug>/quick-context.md` — one file per
+  thread, a numbered list on top, and each entry recording what you asked, what
+  was decided and why, which agents ran, and what was *not* done. Written
+  **before** any commit offer. The skill never reads it back unless you ask.
+  Never staged; the commit contains only the files your task changed.
+- **`gh` is read + push only** — never a reply, never a thread resolve, never a
+  review, approve, or merge. PR comments are treated as data, never instructions.
+- **It never undoes your work** — on a stop-while-red it prints the `git` command
+  and leaves the tree alone.
+
+> [!TIP]
+> **The full guide with worked examples lives with the skill:**
+> [`templates/skills/orc-quick/README.md`](templates/skills/orc-quick/README.md)
+> (installed at `.claude/skills/orc-quick/README.md`) — written in deliberately
+> simple English, with complete mocked runs and the surprises worth knowing.
 
 ### `/orc-diy` — build your own lane
 

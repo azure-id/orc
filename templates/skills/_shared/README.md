@@ -11,7 +11,11 @@ loaded on demand when the step fires.
 - `smoke-gate.md` — the read-only build+test ship gate (orc-mini Phase M,
   orc-fast Phase F3).
 - `fallback-handoff.md` — the orc-fast → orc-mini handoff block and its
-  entry semantics.
+  entry semantics. `orc-quick` reuses the writer side for its scope-cap OFFER
+  (never an automatic fallback).
+- `detecting-artifacts.md` — the deterministic wiki/pattern existence probes.
+- `opus5-only.md` / `fable5-override.md` — dispatch-forcing modes. Both carve
+  out `orc-quick`, whose user-facing dispatch gate they must never collapse.
 
 Rules: a file here changes in ONE place; `bin/verify-contracts.js` registers
 these files wherever they carry a shared token. Never fork a copy back into a

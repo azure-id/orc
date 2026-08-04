@@ -47,6 +47,10 @@ const SECTIONS = [
       "  /orc <request>       full pipeline: analyze · plan · score · review · verify · ship",
       "  /orc-mini <request>  fast lane: one Sonnet 5 subagent, no review/verify",
       "  /orc-fast <request>  fastest: needs a fresh wiki + cached pattern (else falls to mini)",
+      "  /orc-quick <request> fewest steps: look · ask once · do. Works for a fix, a",
+      "                       quick question, a defect hunt, or PR review comments.",
+      "                       ALWAYS asks which agent to dispatch; saves every request",
+      "                       to orc-quick/<slug>/quick-context.md. No config overrides it.",
       "",
       "Session-tier acceptance (the statusline verdict):",
       "  ✔ ORC-ready     Opus 4.8 high            (the baseline)",
@@ -56,9 +60,10 @@ const SECTIONS = [
   },
   {
     id: "lanes",
-    title: "④ Lanes cheat-sheet (14 commands)",
+    title: "④ Lanes cheat-sheet (15 commands)",
     lines: [
       "  /orc           full orchestrated pipeline",
+      "  /orc-quick     ask for almost anything — 3 steps, always asks which agent",
       "  /orc-mini      lightweight single-subagent build",
       "  /orc-fast      knowledge-gated single-executor build (wiki + pattern)",
       "  /orc-ultra     max rigor: + advisor + 3 judgment gates",

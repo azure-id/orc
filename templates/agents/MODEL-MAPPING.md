@@ -89,6 +89,30 @@ Mini execution reuses orc-executor-sonnet-5-high. Fast-lane (orc-fast)
 execution reuses orc-executor-sonnet-4-6-high — no dedicated agent. Under
 `opus5_only` both reuse orc-executor-opus-5-low.
 
+## orc-quick — the user picks, and no config can override it
+
+`/orc-quick` has NO dedicated agent and NO score table. It asks the USER which
+agent to spawn before EVERY dispatch, and reuses shipped agents:
+
+| Dispatch kind | Offered | Hook-traced |
+|---|---|---|
+| writes code | orc-executor-sonnet-4-6-med · orc-executor-opus-5-low | yes |
+| read-only recon | an **ad-hoc model + effort** (e.g. claude-sonnet-4-6 / medium) — no agent file | no |
+| review | orc-reviewer-opus-5-med · or ad-hoc | yes / no |
+
+The only dispatch it does not re-ask is build-repair rounds 1–2, which reuse the
+executor the user already chose for that entry; round 3 asks again.
+
+**`opus5_only`, `fable5_enabled`/`fable5_roles`, and `rubric_bands_override` are
+all INERT in this lane** — they would silently collapse the user's choice. It is
+the one exception to `opus5_only`'s otherwise flat precedence. See
+`skills/_shared/opus5-only.md` and `skills/orc-quick/references/dispatch-gate.md`.
+
+Ad-hoc recon is dispatched by model name, not by an `orc-*` agent file, so the
+trace hook emits no SPAWN/RETURN for it. The lane still writes its own
+`DISPATCH … adhoc=true` / `VERIFY` lines and still runs the downgrade check from
+the agent's self-reported `actual_model`; only `/orc-retro` aggregation misses it.
+
 The scout is dispatched only in the System Analyst's DEEP mode: the orchestrator
 fans out ≤`config.max_scouts` (default 3) parallel scouts, one per coverage area
 from the analyst's scout plan, and feeds their evidence bundles back to the

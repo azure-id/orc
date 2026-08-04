@@ -31,6 +31,16 @@ ultra-lane only — they take effect solely under `/orc-ultra`, and only when
 explicitly selected. `fable5_enabled: true` with an empty `fable5_roles` does
 nothing (the CLI warns on set).
 
+## Out of scope — never overridden
+
+- **`orc-quick`.** The lane asks the USER which agent to spawn before every
+  dispatch; a role override that silently swapped the answer would defeat that
+  hard gate. `fable5_enabled` / `fable5_roles` are neither read nor honored
+  there, in addition to `opus5_only` (`opus5-only.md`) and
+  `rubric_bands_override`. See `orc-quick/references/dispatch-gate.md`.
+- **`orc-trace-writer-haiku-4-5`** and **`orc-diy`** — same carve-outs as
+  `opus5-only.md`.
+
 ## Effort
 
 The Fable 5 agents' effort is `fable5_effort` (enum `medium | high | xhigh |

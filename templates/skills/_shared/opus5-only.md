@@ -49,6 +49,14 @@ compliant and dispatch unchanged (their efforts are NOT rewritten by this mode).
 - **`orc-diy`.** Its score table is compile-owned (`orc diy compile` →
   `flow.lock.json`); a DIY flow dispatches whatever its lock says. Re-compile to
   change it.
+- **`orc-quick` — the ONE exception to the flat precedence below.** Its dispatch
+  gate asks the USER which agent to spawn before every single dispatch, and that
+  hard gate is the lane's entire premise. A forcing mode that collapsed the menu
+  to one option would silently delete it, so the mode is fully INERT there:
+  `opus5_only` is neither read nor honored by `orc-quick`. When the mode is on,
+  the lane SAYS so at the gate (`orc-quick ignores opus5_only — both options are
+  live`), because a shadowed setting must never be silent in either direction.
+  See `orc-quick/references/dispatch-gate.md`.
 
 ## It FORCES — precedence is flat while ON
 
@@ -62,6 +70,9 @@ compliant and dispatch unchanged (their efforts are NOT rewritten by this mode).
 
 Turning the mode off restores all three. `rubric_bands` remains granularity
 only, never a preset selector, in both modes.
+
+The forcing is flat across every lane that HONORS the mode — `orc-quick` does
+not, per "Out of scope" above.
 
 ## Tier honesty
 

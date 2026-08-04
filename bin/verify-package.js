@@ -35,7 +35,13 @@ const required = [
   "templates/skills/orc-diy/references/flow-schema.md",
   "templates/skills/orc-diy/references/locked-blocks.md",
   "templates/skills/orc-diy/references/blocks/header.md",
+  "templates/skills/orc-quick/SKILL.md",
+  "templates/skills/orc-quick/README.md",
+  "templates/skills/orc-quick/references/context-doc.md",
+  "templates/skills/orc-quick/references/dispatch-gate.md",
+  "templates/skills/orc-quick/references/gh-mode.md",
   "templates/commands/orc.md",
+  "templates/commands/orc-quick.md",
   "templates/commands/orc-diy.md",
   "templates/commands/orc-ultra.md",
   "templates/commands/orc-fast.md",
@@ -105,11 +111,13 @@ function walkCount(dir, ext) {
 
 const skillCount = walkCount(path.join(ROOT, "templates/skills"), "SKILL.md");
 const agentCount = walkCount(path.join(ROOT, "templates/agents"), ".md");
-// Floors sit AT current reality (23 skills / 40 agent files: 39 agents +
+// Floors sit AT current reality (24 skills / 40 agent files: 39 agents +
 // MODEL-MAPPING.md — +7 fixed-role variants for the opus5_only mode) so a
 // dropped file fails the count check instead of sliding
 // into the slack an under-set floor grants. Raise them with the payload.
-if (skillCount < 22) missing.push(`templates/skills (expected >=22 SKILL.md, found ${skillCount})`);
+// v0.37.0: +1 skill (orc-quick) and NO new agent — the quick lane reuses
+// shipped executors and dispatches read-only recon ad-hoc by model name.
+if (skillCount < 24) missing.push(`templates/skills (expected >=24 SKILL.md, found ${skillCount})`);
 if (agentCount < 40) missing.push(`templates/agents (expected >=40 .md, found ${agentCount})`);
 
 // B4 — encoding/mojibake guard. The OneDrive corruption rule becomes a gate:

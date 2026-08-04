@@ -81,6 +81,7 @@ decisions: >              # free text — the WHY layer
 | Build lanes | `orc` (incl. ultra), `orc-mini`, `orc-fast` | per phase — full orc ≈ 7–9 (ultra adds U0 + judge packets); orc-mini batches to 3 (intake+plan, execution, ship); orc-fast to 2 (preflight+dispatch, gate+ship) |
 | Multi-dispatch | `orc-wiki` | one per scan-batch boundary (the points that already run the registration sync / offer the pause) + the end-of-run packet |
 | Composed | `orc-diy` | one packet per ENABLED phase group, **minimum 2** — the flow shape is user-composed, so the count is too (the compiled flow carries this block automatically) |
+| Iterative | `orc-quick` | **one packet per completed numbered entry** + the end-of-run `FINISH` packet — the lane loops on user requests, so the count follows entries, not phases |
 | Single-dispatch | `orc-claude`, `orc-plan`, `orc-analyze` (+ mini), `orc-pattern`, `orc-verify`, `orc-learn`, `orc-poly`, `context-combiner` (lane `combine`) | **exactly ONE mandatory end-of-run packet** |
 
 **The single-packet obligation is defined HERE, once** (every trace-owning lane
@@ -105,7 +106,7 @@ trace and never emit `SPAWN`/`RETURN`.
 - One file per run: **`run-<lane>-<slug>-<DDMMYY>-<HHMMSS>.txt`**, append-only.
   - `lane` — the trace-owning skill's short name (`orc`, `ultra`, `mini`, `fast`,
     `diy`, `wiki`, `analyze`, `plan`, `claude`, `poly`, `learn`, `verify`,
-    `pattern`, `combine`).
+    `pattern`, `combine`, `quick`).
   - `slug` — kebab-cased short user context from the intent (`[a-z0-9-]`, ≤32
     chars, filesystem-safe, no trailing hyphen) — same derivation as the
     run-folder slug.
