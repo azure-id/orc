@@ -399,3 +399,69 @@ test("every lane has a TDD policy row, and the preflight block defines a rule pe
   assert.match(tddRule, /EXEMPT \(whole run\)/, "the exemption branch is defined");
   assert.match(tddRule, /ON —/, "the normal branch is defined too");
 });
+
+// ── v0.37.0 stacked PRs ────────────────────────────────────────────────────
+
+test("the stacked-PR config defaults agree between the CLI and the documented config", () => {
+  // Documented drift the token lint cannot see: it asserts a key is REFERENCED,
+  // never that the two sides agree on its VALUE. A CLI default of 1000 beside a
+  // documented 2000 makes the ship gate fire at a threshold nobody expects.
+  const cli = fs.readFileSync(path.join(__dirname, "..", "bin", "cli.js"), "utf8");
+  const cfg = read("skills/orc/config.md");
+  const defs = { stacked_pr: "ask", stacked_pr_loc: "1000", stacked_pr_files: "20", stacked_pr_max_layers: "6" };
+  for (const [key, want] of Object.entries(defs)) {
+    const m = new RegExp('\\{\\s*key:\\s*"' + key + '",\\s*def:\\s*"?([^",]+)"?,').exec(cli);
+    assert.ok(m, `${key} is a CONFIG_META row`);
+    assert.strictEqual(m[1].trim(), want, `${key} CLI default`);
+    const doc = new RegExp("^" + key + ":\\s*(\\S+)", "m").exec(cfg);
+    assert.ok(doc, `${key} is documented in config.md`);
+    assert.strictEqual(doc[1], want, `${key} documented default matches the CLI`);
+  }
+});
+
+test("the ship gate is an OR of two thresholds, degrades to a regular PR, and never lives in a speed lane", () => {
+  const gate = read("skills/orc/subskills/orc-pr/stack-gate.md");
+  const spine = read("skills/orc/SKILL.md");
+  // The trigger is OR, not AND: a 40-file / 300-LoC change is just as unreviewable.
+  assert.match(gate, /LoC >= stacked_pr_loc`? OR `?files >= stacked_pr_files/);
+  // Both prerequisites degrade to one regular PR — neither is a failure.
+  for (const md of [gate, spine]) {
+    assert.match(md, /ticket/i);
+    assert.match(md, /regular PR/);
+  }
+  assert.match(gate, /three options/, "no template found → recommend three");
+  // Scope: the fast lane never stops the chat; diy's shape is compile-owned.
+  assert.match(gate, /never in orc-mini/i);
+  for (const lane of ["skills/orc-mini/SKILL.md", "skills/orc-fast/SKILL.md"])
+    assert.doesNotMatch(read(lane), /stacked_pr/, `${lane} does not run the stack gate`);
+});
+
+test("the driver's hard gate and the plan contract name the same refusal conditions", () => {
+  const driver = read("skills/orc-pr-driver/SKILL.md");
+  const contract = read("skills/_shared/stack-plan.md");
+  for (const cond of ["UNCERTAIN", "ticket", "value class", "consumer", "2 layers"]) {
+    assert.ok(driver.includes(cond), `driver names "${cond}"`);
+    assert.ok(contract.includes(cond), `the contract names "${cond}"`);
+  }
+  // The gate is per-layer at its OWN base — the rule the whole lane exists for.
+  assert.match(read("skills/orc-pr-driver/references/green-gate.md"), /own base/);
+  assert.match(driver, /--no-verify/, "the forbidden bypass is named in the spine");
+});
+
+test("both stacked-PR lanes ship a human guide, and each spine points at its own", () => {
+  // The guides are the user-facing half of the feature: a lane whose spine does
+  // not name its README leaves a user with a contract file and no walkthrough.
+  for (const lane of ["orc-pr-setup", "orc-pr-driver"]) {
+    const guide = read(`skills/${lane}/README.md`);
+    assert.ok(guide.length > 4000, `${lane}/README.md is a real guide, not a stub`);
+    assert.match(guide, /^## 1\./m, "starts with a numbered walkthrough");
+    assert.match(guide, /FAQ/i, "answers the common questions");
+    const spine = read(`skills/${lane}/SKILL.md`);
+    assert.match(spine, /README\.md/, `${lane} spine points the user at its guide`);
+    // …and never loads it to drive the run (it is prose for humans, not contract).
+    assert.match(spine, /never load it to drive the run/);
+  }
+  // Each guide links the other, so a user landing on either finds the whole flow.
+  assert.match(read("skills/orc-pr-setup/README.md"), /orc-pr-driver\/README\.md/);
+  assert.match(read("skills/orc-pr-driver/README.md"), /orc-pr-setup\/README\.md/);
+});

@@ -77,6 +77,24 @@ tdd_loop_max: 3            # max implement→test→repair iterations per task i
                            #   are the TDD-always build lanes, so a plan with no
                            #   tdd_spec is unusable by the lane that runs it).
 
+# --- Stacked PRs (Phase 8 gate; full /orc + /orc-ultra only) ---
+stacked_pr: ask             # ask | on | off — what happens when the change is too
+                            #   big for one PR (threshold below):
+                            #   ask → ONE P0 question (stack it, or one regular PR)
+                            #   on  → take "yes" without asking
+                            #   off → never offer; always one regular PR
+                            #   Never fires in orc-mini / orc-fast (the fast lane
+                            #   never stops the chat) or orc-diy (compile-owned).
+stacked_pr_loc: 1000        # change LoC (additions+deletions, exclusions applied)
+                            #   >= this → stack candidate. SAME number is the
+                            #   per-layer LoC ceiling: a change that cannot fit in
+                            #   one layer's budget is what is worth stacking.
+stacked_pr_files: 20        # changed files >= this → stack candidate; also the
+                            #   per-layer hard max (soft target = half of it).
+stacked_pr_max_layers: 6    # soft layer cap: <= cap proceed · cap+1..cap+2 warn +
+                            #   explicit override · beyond → STOP (multiple stacks
+                            #   or a phased release). N layers = N full CI runs.
+
 # --- Security pass (opt-in Phase 5.5; OFF by default) ---
 security_review: off       # off | ask | on — fires only on runs where a task
                            #   scored ≥ 70 (the existing risk floor):

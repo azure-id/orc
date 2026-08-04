@@ -6,7 +6,7 @@
 
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
-![Version](https://img.shields.io/badge/version-0.37.0-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.38.0-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
@@ -46,9 +46,9 @@ zero-dependency npm package installs those files into your `.claude/` directory.
 
 ## Changelog
 
-**Latest: v0.37.0 — updated 2026-08-05.**
+**Latest: v0.38.0 — updated 2026-08-05.**
 
-### v0.37.0 — `/orc-quick`: the quick lane, and the gate no config can collapse _(2026-08-05)_
+### v0.38.0 — `/orc-quick`: the quick lane, and the gate no config can collapse _(2026-08-05)_
 
 A new **standalone** lane for almost anything, in the fewest steps of any lane.
 `/orc-quick` is the first ORC lane that **loops**: you ask, it answers, and the
@@ -103,55 +103,76 @@ a new **Iterative** tier: one packet per completed entry. The skill's own guide
 (`skills/orc-quick/README.md`) is written in deliberately simple English for
 non-native readers.
 
-### v0.36.0 — `opus5_only`: one model for every role, not just executors _(2026-08-02)_
+### v0.37.0 — Stacked pull requests: a measured ship gate + two standalone lanes _(2026-08-03)_
 
-**v0.35.0's `opus5_executor_only` is renamed `opus5_only` and now forces EVERY
-dispatched role onto Opus 5** — still off by default, still effort as the only
-cost dial. The old key is read as a deprecated alias for one release, so an
-existing config does not silently revert to mixed-model dispatch.
+A 2k-LoC / 40-file PR is not reviewed, it is rubber-stamped. GitHub's **stacked
+pull requests** (public preview) fix the mechanics; the hard part — **where the
+cut lines go** — is now a skill.
 
-The scored executor ladder is unchanged (`[0,40)` low · `[40,80)` medium ·
-`[80,100]` high). What is new is that nine fixed roles flip with it:
+**Ship-phase gate (full `/orc` + `/orc-ultra`).** Phase 8 measures the change
+(`git diff --numstat`, generated code / lockfiles / vendored trees excluded) and
+compares it against config: `stacked_pr_loc` (1000) OR `stacked_pr_files` (20).
+Under threshold → silent, ship as usual. Over it → **one P0 question**, asked in
+the same round as its two prerequisites:
 
-| Role | Default | Under `opus5_only` |
-|------|---------|--------------------|
-| orc-mini executor | `orc-executor-sonnet-5-high` | `orc-executor-opus-5-low` |
-| orc-fast executor | `orc-executor-sonnet-4-6-high` | `orc-executor-opus-5-low` |
-| mini analyst | `orc-analyze-mini-sonnet-5-high` | `orc-analyze-mini-opus-5-med` |
-| mini planner | `orc-planner-mini-sonnet-5-high` | `orc-planner-mini-opus-5-med` |
-| deep-mode scout | `orc-scout-sonnet-4-6-high` | `orc-scout-opus-5-low` |
-| pattern codifier | `orc-pattern-codifier-sonnet-5-high` | `orc-pattern-codifier-opus-5-med` |
-| wiki scanner | `orc-wiki-scanner-opus-4-8-high` | `orc-wiki-scanner-opus-5-med` |
-| CLAUDE.md writer | `orc-claude-writer-opus-4-8-high` | `orc-claude-writer-opus-5-med` |
-| retro miner | `orc-retro-sonnet-5-high` | `orc-retro-opus-5-med` |
+- a **ticket number** (layer branches and titles derive from it), and
+- a **resolved PR template** — the ORC `pr.md` if your team replaced it, else a
+  project template (`.github/`, `docs/`), else a PR-template section in
+  `CLAUDE.md`, else **three recommended options** to pick from.
 
-The nine roles already pinned to Opus 5 — analyst, planner, reviewer, verifier,
-test-author, combiner, learn-writer, advisor, judge — dispatch unchanged.
+Missing either, or "no" → the stack is skipped and the change ships as **one
+regular PR**, never re-asked. `stacked_pr: ask | on | off` (default `ask`).
 
-**It forces.** While on it outranks a hand-written `rubric_bands_override` *and*
-the entire Fable 5 role override. Both stay in your config and neither is read —
-so `orc config set` names every key it shadows, and `orc config list` marks them
-`INERT`. Turning the mode off restores them.
+**Two standalone lanes, either as an entry point.**
 
-**Two things are never forced.** `orc-trace-writer-haiku-4-5` stays on Haiku (it
-transcribes a packet the orchestrator hands it — no reasoning, no source reads),
-and `/orc-diy` is untouched: its executors come from `flow.lock.json`, which only
-`orc diy compile` writes.
+| Lane | Owns | Never does |
+|------|------|-----------|
+| **`/orc-pr-setup`** (planner) | ordered layers, each with a purpose, a value class (`USER \| OPERATOR \| CONTRACT \| FOUNDATION`), an explicit file list, measured budgets, a dependency reason → `stacked-pr/<slug>/stack-plan.md` | touch git history |
+| **`/orc-pr-driver`** (driver) | branch per layer, only that layer's files, the **per-layer green gate**, `gh stack submit`, sync/rebase/bottom-up merge | invent a plan, bypass a gate |
 
-**Where the cost lands.** Scouts fan out up to `max_scouts` in parallel per deep
-analysis, and the wiki scanner runs one dispatch per scan-task across a whole
-repo — those two dominate; everything else is a single dispatch per run.
+**P0 hard gate on uncertainty.** Same-tier files, a shared helper, a refactor
+mixed with a behavior change, ordering ambiguity, an oversize atom — all
+UNCERTAIN by definition. The planner **stops and asks**, one decision at a time,
+with the LoC/file/CI cost of each option, and records the answer under
+`## Decisions`. It never guesses a seam.
 
-**Read the tier cost before enabling it.** Today one executor band in eight needs
-an Opus 5 main session; with this on, every dispatch does, and a subagent can
-never outrank the session — so on a lower session every role quietly falls back
-and the tier-honesty rule reports a downgrade on *every* return. A hook can gate
-effort but never model, so the set-time notice is the one place you reliably see
-it. This also ends orc-fast's "runs fine at Sonnet medium" premise while the mode
-is on (the effort guard itself is unchanged — it still matches only `orc`).
+**Per-layer green gate (the rule people get wrong).** Build → tests → lint
+attributed to **that layer's own base** (not the trunk) → the repo's own
+pre-commit hooks, unbypassed — `--no-verify` is forbidden, and no red layer is
+pushed, submitted or merged. Amending a lower layer rewrites every branch above
+it, so the ladder re-runs at every tip above the change, bottom-up. A
+FOUNDATION layer that goes red on `unused` is a **seam question**, never a
+silent `//nolint`.
+
+**Start from the driver with your own plan.** New CLI:
+
+```bash
+orc pr stack template [<slug>]   # fill-in skeleton → stacked-pr/<slug>/stack-plan.md
+orc pr stack status  [<slug>]    # exit 0 READY / 1 absent-or-unfilled (the driver's probe)
+```
+
+Fill it in by hand and run `/orc-pr-driver` — no planner run, no model call.
+
+**Two full how-to guides ship with the skills**, written for readers who want the
+whole workflow in plain language — what a stack is, what each skill asks you,
+what the plan file means field by field, the green gate per language, merge order,
+and a troubleshooting table:
+**[ORC-PR-SETUP README](templates/skills/orc-pr-setup/README.md)** (plan the
+layers) and
+**[ORC-PR-DRIVER README](templates/skills/orc-pr-driver/README.md)** (build,
+submit, merge them).
+
+**Scope.** Never in `orc-mini` / `orc-fast` (the fast lane never stops the chat)
+or `/orc-diy` (flow shape is compile-owned). Same-repo only — cross-fork stacks
+are unsupported by GitHub, and a fork is a hard preflight stop. When the change
+already exists in the worktree (the normal ORC hand-off), the split is
+**file-granular** from a snapshot branch with a completeness gate — never hunk
+surgery.
 
 <details>
 <summary><b>Previous versions</b> (click to expand)</summary>
+
+### v0.36.0 — `opus5_only`: one model for every role, not just executors _(2026-08-02)_
 
 ### v0.35.0 — `opus5_executor_only`: one model, effort as the cost dial _(2026-08-02)_
 
@@ -253,6 +274,7 @@ is on (the effort guard itself is unchanged — it still matches only `orc`).
 - [The tier guard](#the-tier-guard-installed-automatically)
 - [Configuration](#configuration-orc-config)
 - [What's inside the package](#whats-inside-the-package)
+- [In-depth guides](#in-depth-guides)
 - [Design principles](#design-principles)
 - [Requirements](#requirements)
 
@@ -313,6 +335,8 @@ orc config          # view/change settings (interactive; zero model tokens)
 orc wiki            # wiki registration state (registered / UNREGISTERED / out of sync)
 orc wiki sync       # rebuild the wiki index + manifest from the docs (instant, no re-scan)
 orc pattern status  # deterministic "does a cached code-pattern exist" probe (exit 1 when absent)
+orc pr stack template  # fill-in stacked-PR plan skeleton → stacked-pr/<slug>/stack-plan.md
+orc pr stack status    # is a stack plan READY? (exit 0 ready / 1 absent-or-unfilled)
 orc version         # print installed version + check for a newer one
 orc where           # print the target paths
 orc --help
@@ -401,6 +425,8 @@ needed. Either way, your `.claude/orc.config.yaml` overrides are left untouched.
 | **`/orc-analyze`** | System Analyst: a requirement or document → a scope-bounded, code-grounded, evidence-backed spec. |
 | **`/orc-plan`** | Requirement Planner: a request or analyst spec → a grounded, right-sized, dependency-checked task plan. Splits an orc-poly `poly-spec.md` into one plan per repo. |
 | **`/orc-poly`** | **Poly-repo planning.** Plan ONE change spanning 2+ repos (BE endpoint + FE UI, service + gRPC consumer) without drift. Run in the HOST repo, paste each PEER path; it reads every repo's wiki + crosslink, pins the shared boundary into a frozen `interface-contract.md`, and splits into one plan per repo. PEER source read-only; never builds. |
+| **`/orc-pr-setup`** | **Stacked-PR planner.** Guide: [ORC-PR-SETUP README](templates/skills/orc-pr-setup/README.md). Decides where the PR cut lines go: ordered layers, each with a purpose, a value class, an explicit file list and measured LoC/file budgets → `stacked-pr/<slug>/stack-plan.md`. Stops and asks on every uncertain seam. Plans only — never touches git. |
+| **`/orc-pr-driver`** | **Stacked-PR driver.** Guide: [ORC-PR-DRIVER README](templates/skills/orc-pr-driver/README.md). Executes a stack plan: branch per layer, only that layer's files, a mandatory per-layer green gate (build + tests + lint at *that layer's own base* + the repo's hooks, never `--no-verify`), `gh stack submit`, then sync/rebase/bottom-up merge. Start here with a hand-filled plan (`orc pr stack template`). |
 | **`/orc-verify`** | Standalone verification of git-modified changes (build + tests + diff sanity). Read-only. |
 | **`/orc-wiki`** | Builds a persistent knowledge base into `wiki/` and points `CLAUDE.md` at it. Expensive, opt-in. Powers **cross-repo crosslink** — guide: [ORC-WIKI README](templates/skills/orc-wiki/README.md). |
 | **`/orc-pattern`** | Learns and caches your real code conventions per language so executors match your house style. Reconciles a generic playbook (9 languages) against your files — conventions defer to your codebase; security/correctness invariants always carry through. `--refresh` to relearn. |
@@ -700,6 +726,13 @@ run in-session.
 > file — see the separate [ORC-DIY README](templates/skills/orc-diy/README.md);
 > it is not part of `orc config`.
 
+> **Stacked pull requests** add four keys — `stacked_pr` (`ask` | `on` | `off`),
+> `stacked_pr_loc`, `stacked_pr_files`, `stacked_pr_max_layers` — plus their own
+> CLI family (`orc pr stack template|status`). Full walkthroughs:
+> [ORC-PR-SETUP README](templates/skills/orc-pr-setup/README.md) (plan the layers)
+> and [ORC-PR-DRIVER README](templates/skills/orc-pr-driver/README.md) (build,
+> submit, merge them).
+
 ---
 
 ## What's inside the package
@@ -719,11 +752,13 @@ templates/
 │   ├── orc-claude/          local CLAUDE.md builder — fenced sections, fingerprint refresh, zero questions
 │   ├── orc-learn/           per-feature onboarding docs — wiki-deep, git-ignored learning-docs/
 │   ├── orc-poly/            poly-repo planning — frozen interface contract + one plan per repo
+│   ├── orc-pr-setup/        stacked-PR planner — layer taxonomy + the P0 certainty gate (see its own README)
+│   ├── orc-pr-driver/       stacked-PR driver — per-layer green gate, submit, restack, merge (see its own README)
 │   ├── orc-retro/           trace miner — calibration report PR'd to retro_repo (gh/MCP gated)
 │   ├── orc-advisor/         ultra-lane advisory brief + rubric + clarification round (/orc-ultra only)
 │   ├── orc-judge/           ultra-lane judgment gates — analysis / plan / implementation (/orc-ultra only)
 │   └── context-combiner/    merges 2+ related analyses into one combined spec (+ schemas)
-├── commands/                /orc /orc-ultra /orc-mini /orc-fast /orc-diy /orc-analyze /orc-plan /orc-poly /orc-verify /orc-wiki /orc-pattern /orc-retro /orc-claude /orc-learn
+├── commands/                /orc /orc-ultra /orc-mini /orc-fast /orc-diy /orc-analyze /orc-plan /orc-poly /orc-pr-setup /orc-pr-driver /orc-verify /orc-wiki /orc-pattern /orc-retro /orc-claude /orc-learn
 ├── hooks/                   effort guard (PreToolUse) · statusline warning · behavior trace
 └── agents/                  single-role, model-pinned subagents (+ read-only scout) + MODEL-MAPPING.md
 bin/cli.js                   installer + config editor + flow composer (init / update / upgrade / config / diy / where)
@@ -731,6 +766,23 @@ bin/cli.js                   installer + config editor + flow composer (init / u
 
 The `orc` skill is a thin **spine** that loads references and subskills only when
 a phase runs — so a small task never pays for the machinery of a big one.
+
+---
+
+## In-depth guides
+
+Some lanes ship a full how-to guide next to the skill, written in plain language
+for readers who want the whole workflow — not just the trigger:
+
+| Guide | Read it when |
+|---|---|
+| [ORC-PR-SETUP README](templates/skills/orc-pr-setup/README.md) | you want to split a big change into **stacked pull requests** — what a stack is, where the cut lines go, what the skill asks you, the plan file field by field |
+| [ORC-PR-DRIVER README](templates/skills/orc-pr-driver/README.md) | you have a stack plan and want to **build, submit and merge** it — the per-layer green gate per language, the snapshot safety net, rebase/merge order, troubleshooting table |
+| [ORC-DIY README](templates/skills/orc-diy/README.md) | you want to **compose your own lane** with the `orc diy` CLI |
+| [ORC-WIKI README](templates/skills/orc-wiki/README.md) | you want the **project knowledge base** and cross-repo crosslink setup |
+
+Every skill also has its own `SKILL.md` and `references/` — the guides above are
+the human-facing versions.
 
 ---
 

@@ -14,8 +14,21 @@ loaded on demand when the step fires.
   entry semantics. `orc-quick` reuses the writer side for its scope-cap OFFER
   (never an automatic fallback).
 - `detecting-artifacts.md` — the deterministic wiki/pattern existence probes.
-- `opus5-only.md` / `fable5-override.md` — dispatch-forcing modes. Both carve
-  out `orc-quick`, whose user-facing dispatch gate they must never collapse.
+- `drift-recovery.md` — the mock-example drift loop (`DRIFT-FROM`, cap 2).
+- `opus5-only.md` / `fable5-override.md` — dispatch-forcing modes and their role
+  tables. Both carve out `orc-quick`, whose user-facing dispatch gate they must
+  never collapse.
+- `stack-plan.md` — stacked PRs: the plan location + schema, the size rules, the
+  `STACK-FROM` handoff, and the two entry modes.
+- `gh-stack-commands.md` — the pinned `gh stack` command surface (a GitHub public
+  preview, so a rename must be a one-file fix) + the preflight probes.
+- `pr-templates.md` — where a PR description comes from (ORC template → project
+  → CLAUDE.md → three recommended options), shared by the stacked and regular
+  ship paths.
+
+Human guides live in the skills themselves: `../orc-pr-setup/README.md` (plan the
+layers), `../orc-pr-driver/README.md` (build, submit, merge them), and
+`../orc-quick/README.md` (the quick lane, in simple English).
 
 Rules: a file here changes in ONE place; `bin/verify-contracts.js` registers
 these files wherever they carry a shared token. Never fork a copy back into a
