@@ -54,6 +54,9 @@ for the formats; this skill does not duplicate them.
   auto-downgrades to `UNVERIFIED`), OR tagged `ASSUMPTION`/`UNVERIFIED` and
   turned into a question — never a silent guess. **Absence claims**
   (missing/buildable) carry `searched:` — the concrete globs/greps run.
+- **The read ladder:** locate → outline → range → full, escalating only as far as
+  the question needs (`../_shared/read-ladder.md`). Trimmed depth is not a lower
+  evidence floor — it is fewer wasted full reads reaching the same anchors.
 - **Recommended-option challenges:** each challenge is a 2–3 option set with one
   flagged recommended option + reason (blocking one at a time, advisory batched).
 - Two perimeters: the deliverable stays scope X (Y/Z never become tasks), but

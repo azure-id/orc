@@ -46,6 +46,12 @@ subagent; the orchestrator never runs this itself.
 
 1. Absorb log_digest — prior DECISIONs/INTERFACEs/ANSWERs bind you.
 2. Read spec_ref if provided.
+2a. **Read on the ladder** (`../../../_shared/read-ladder.md`): locate
+   (Grep/Glob) → outline → the ±40 lines around the anchor → full. Stop at the
+   step that answers the question; two full reads with no answer is
+   `needs_context`, not a third. TWO EXCEPTIONS — every `declared_files` path is
+   a FULL read before you edit it (an `old_string` rebuilt from an outline is a
+   corruption bug), and build/test output is always read whole.
 3. Perform the task within `worktree_path` (or the current tree if null).
    Obey every `house_rules` line. Follow every constraint. If `pattern` is present, MATCH its conventions,
    satisfy every BLOCKING invariant, and satisfy every enforceable

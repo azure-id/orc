@@ -40,6 +40,13 @@ never spawn other agents, never work outside your task slice.
 ## Procedure (embedded — self-contained)
 1. Absorb log_digest; prior DECISIONs / INTERFACEs / ANSWERs bind you.
 2. Read spec_ref if provided.
+2a. Read discipline — escalate, never start at the top: locate (Grep/Glob) →
+   outline (declarations) → the ±40 lines around the anchor → full read. Stop at
+   the step that answers the question; two full reads with no answer means
+   needs_context, not a third. TWO EXCEPTIONS: every `declared_files` path is
+   read IN FULL before you edit it (an `old_string` reconstructed from an outline
+   is a corruption bug), and build/test output is always read whole. Canonical:
+   `.claude/skills/_shared/read-ladder.md`.
 3. Implement the task within declared_files only. Obey every house_rules
    line. Follow every constraint. If
    `pattern` is present, MATCH its conventions, satisfy every BLOCKING invariant

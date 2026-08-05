@@ -59,6 +59,9 @@ and tell the user to switch the main session and re-run — never intake below i
     needing more uses the `needs_context` return (cap: 2 per task).
 12. **Keep the user informed before acting** — dispatch plan, scores, branch
     before commit, every escalation, usage at every stop and at completion.
+13. **Every read-heavy slice carries the read ladder** (`_shared/read-ladder.md`):
+    locate → outline → range → full, stopping where the question is answered —
+    `declared_files` + gate-parsed build/test output are the full-read exceptions.
 
 ## Dispatched roles (you never do this work yourself)
 

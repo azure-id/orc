@@ -100,6 +100,9 @@ pinned in the agent file). **Under `opus5_only` it is `orc-executor-opus-5-low`*
   `.claude/orc/patterns/postgres-pattern.md` CACHED merges it into the same
   `pattern` slice (query invariants). Cache MISS → skip silently — fast never
   codifies and never falls back on this.
+- **the read ladder** (`../_shared/read-ladder.md`): read only as far up as the
+  question needs — a file the task will EDIT is read in full first. Precomputed
+  knowledge REPLACING exploration is this lane; a directory sweep is not.
 - the standing `house_rules` card (`../orc/references/house-rules.md`,
   injected literally, same as full/mini)
 - constraints from the intent spec

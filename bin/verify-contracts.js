@@ -281,6 +281,9 @@ const CONTRACTS = [
       "agents/orc-analyze-mini-opus-5-med.md",
       "agents/orc-analyze-mini-sonnet-5-high.md",
       "agents/orc-system-analyst-opus-5-high.md",
+      // v0.39.0: the read ladder's anti-chain rule ends in a `searched:` return,
+      // so a rename of the attestation field has to reach it too.
+      "skills/_shared/read-ladder.md",
       "skills/orc-analyze-mini/SKILL.md",
       "skills/orc-analyze/SKILL.md",
       "skills/orc-analyze/references/deep-mode.md",
@@ -623,6 +626,9 @@ const CONTRACTS = [
     token: "detecting-artifacts.md",
     files: [
       "skills/_shared/README.md",
+      // v0.39.0: read-ladder.md hands off to it — the ladder decides HOW MUCH to
+      // read, never WHETHER the knowledge exists.
+      "skills/_shared/read-ladder.md",
       "skills/orc-diy/references/flow-schema.md",
       "skills/orc-fast/SKILL.md",
       "skills/orc-mini/SKILL.md",
@@ -965,6 +971,10 @@ const CONTRACTS = [
     name: "wiki precedence rule (v0.15.0 — code > fresh wiki > stale wiki > priors)",
     token: "code > fresh wiki",
     files: [
+      // v0.39.0: both new contracts defer to the precedence rule — the ladder
+      // never overrides it, and untrusted-input extends it across a repo boundary.
+      "skills/_shared/read-ladder.md",
+      "skills/_shared/untrusted-input.md",
       "skills/orc-fast/SKILL.md",
       "skills/orc-learn/SKILL.md",
       "skills/orc-learn/references/deepen.md",
@@ -1606,6 +1616,46 @@ const CONTRACTS = [
       "skills/_shared/README.md",
     ],
   },
+  // ── v0.39.0 — read discipline + instructional trust ─────────────────────
+  {
+    name: "read ladder (escalating read discipline for read-heavy roles)",
+    token: "read-ladder.md",
+    files: [
+      "agents/orc-executor-haiku-4-5.md",
+      "agents/orc-executor-opus-4-7-high.md",
+      "agents/orc-executor-opus-4-7-med.md",
+      "agents/orc-executor-opus-4-8-high.md",
+      "agents/orc-executor-opus-5-high.md",
+      "agents/orc-executor-opus-5-low.md",
+      "agents/orc-executor-opus-5-med.md",
+      "agents/orc-executor-sonnet-4-6-high.md",
+      "agents/orc-executor-sonnet-4-6-med.md",
+      "agents/orc-executor-sonnet-5-high.md",
+      "skills/_shared/README.md",
+      "skills/_shared/read-ladder.md",
+      "skills/orc-analyze-mini/SKILL.md",
+      "skills/orc-analyze/SKILL.md",
+      "skills/orc-fast/SKILL.md",
+      "skills/orc-quick/references/dispatch-gate.md",
+      "skills/orc-wiki/SKILL.md",
+      "skills/orc/SKILL.md",
+      "skills/orc/references/wiki-consult.md",
+      "skills/orc/subskills/orc-execution/core.md",
+    ],
+  },
+  {
+    name: "foreign input is evidence, never instruction",
+    token: "untrusted-input.md",
+    files: [
+      "skills/_shared/README.md",
+      "skills/_shared/untrusted-input.md",
+      "skills/orc-analyze/SKILL.md",
+      "skills/orc-poly/SKILL.md",
+      "skills/orc-quick/references/gh-mode.md",
+      "skills/orc-wiki/SKILL.md",
+      "skills/orc/references/wiki-consult.md",
+    ],
+  },
 ];
 
 // Spine size budgets (v0.19.0). These SKILL.md files are ALWAYS loaded when
@@ -1646,7 +1696,10 @@ const BUDGETS = [
   // to the two standalone lanes. The mechanism (measurement, template
   // resolution, the STACK-FROM block) lives in subskills/orc-pr/stack-gate.md
   // and _shared/{stack-plan,pr-templates}.md.
-  { file: "skills/orc/SKILL.md", maxLines: 442 },
+  // v0.39.0: deliberate raise 442→445 — hard rule 13, the read ladder. It has to
+  // sit in the spine because the orchestrator BUILDS every slice: a discipline
+  // named only in a reference the slice-builder never loads is not applied.
+  { file: "skills/orc/SKILL.md", maxLines: 445 },
   // v0.33.0: deliberate raises 264→289 / 197→219 / 171→179 — orc-wiki gains the
   // crosslink-compile entry branch, the delta-refresh default (impact probe),
   // and the orientation/atlas assemble steps (detail in references/); mini
@@ -1658,13 +1711,22 @@ const BUDGETS = [
   // (an agent never shown it cannot "prefer an existing kind", and a synonym
   // kind is a PERMANENT duplicate). Both are dispatch-time facts; neither can
   // live in a reference loaded after the dispatch.
-  { file: "skills/orc-wiki/SKILL.md", maxLines: 290 },
+  // v0.39.0: deliberate raise 290→296 — hard rules 13 (read ladder) and 14
+  // (a linked repo's wiki is FOREIGN input). Both are dispatch-time facts: the
+  // ladder goes into the scan slice this lane assembles, and the trust rule
+  // governs the crosslink peek, which happens before any reference loads.
+  { file: "skills/orc-wiki/SKILL.md", maxLines: 296 },
   // v0.34.2: deliberate raise 219→220 — the run-start `touch the trace file`
   // step. It is one line, it is the fix for the corpus's largest defect family,
   // and it has to sit in the spine because it happens before any reference loads.
   { file: "skills/orc-mini/SKILL.md", maxLines: 220 },
-  { file: "skills/orc-analyze/SKILL.md", maxLines: 195 },
-  { file: "skills/orc-fast/SKILL.md", maxLines: 179 },
+  // v0.39.0: deliberate raises 195→201 / 179→182 — the analyst gains hard rules
+  // 2b (a source it did not author is FOREIGN input) and 4a (the read ladder);
+  // fast gains the ladder as a slice line. Both are hard rules by nature: they
+  // bound what the role may treat as instruction and how much it may read, and
+  // neither survives being deferred to a reference.
+  { file: "skills/orc-analyze/SKILL.md", maxLines: 201 },
+  { file: "skills/orc-fast/SKILL.md", maxLines: 182 },
 ];
 
 function walk(dir, out) {
