@@ -6,7 +6,7 @@
 
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
-![Version](https://img.shields.io/badge/version-0.38.0-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.38.1-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
@@ -46,131 +46,35 @@ zero-dependency npm package installs those files into your `.claude/` directory.
 
 ## Changelog
 
-**Latest: v0.38.0 — updated 2026-08-05.**
+**Latest: v0.38.1 — updated 2026-08-06.**
 
-### v0.38.0 — `/orc-quick`: the quick lane, and the gate no config can collapse _(2026-08-05)_
+### v0.38.1 — `orc doctor --json` + handoff carry-over that says what is re-derived _(2026-08-06)_
 
-A new **standalone** lane for almost anything, in the fewest steps of any lane.
-`/orc-quick` is the first ORC lane that **loops**: you ask, it answers, and the
-next request becomes entry 2 in the same doc.
+**`orc doctor --json`** renders the findings `orc doctor` already computes as
+exactly one JSON object on stdout — no banner, no colour, no update nudge — so a
+script or a CI step can branch on an install's health without parsing prose. Each
+finding carries a **stable id** (`version-skew`, `orphan`, `missing-files`,
+`global-skew`, `trace-hook-unwired`, …), a `fixable` flag saying whether
+`orc doctor --fix` would address it, and — unlike the human report, which
+truncates to five — the **full** path list. The **exit code is unchanged** (0
+healthy / 1 issues found): the flag changes the rendering, never the semantics.
+`--json --fix` is refused rather than silently handing a script human output.
 
-**Three steps per request** — `Q1 LOOK` (silent) → `Q2 ASK` (one turn) →
-`Q3 DO`, plus a once-per-session silent preflight. Against `/orc` (8),
-`/orc-mini` (5) and `/orc-fast` (6). The compression: clarification and the
-agent choice are the **same** user turn.
-
-**Open-ended, not code-only.** A fix, a fast context dig, a defect hunt, a
-dependency bump, or resolving PR review comments all run one spine. No closed
-request taxonomy — anything routes: read-only or writing → gated dispatch →
-validated return → a numbered doc entry. Too big → an **offer** of `/orc-mini`,
-never a forced fallback.
-
-**The dispatch gate is hard, and it is the lane's whole premise.** It asks which
-agent before **every** dispatch — recon, executor, reviewer. Code work offers
-`orc-executor-sonnet-4-6-med` / `orc-executor-opus-5-low`; read-only recon
-offers an ad-hoc model + effort. **`opus5_only`, `fable5_*` and
-`rubric_bands_override` are all INERT here** — this is the one exception to
-`opus5_only`'s otherwise flat precedence, registered in both shared contracts,
-and the lane says so at the gate rather than leaving it implicit. A forcing mode
-that collapsed the menu to one option would silently delete the gate.
-
-**No smoke gate — two asymmetric rules instead.** A red build starts a repair
-loop: rounds 1–2 reuse the chosen executor, round 3 re-asks so you can escalate,
-then it reports the **error trend** (`14 → 6 → 4 → 2`) and asks for 3 more /
-a different executor / stop. Red tests **block the commit offer but never loop**
-— a failing test is sometimes the test being wrong, and a loop would "fix" that
-by breaking the code. **No test suite means no check at all.**
-
-**Every request is recorded** in `orc-quick/<slug>/quick-context.md` — one file
-per thread, a delimited TOC on top, each entry holding the verbatim ask, the
-decision and its rejected alternatives, a **dispatch table** (kind, agent,
-expect vs actual), files changed, and what was deliberately *not* done. Written
-**before** any offer, so an abandoned session still leaves a complete record.
-Re-opening a thread reads **only the TOC block**, never the body — that is how
-cross-session numbering and the read-ban coexist. Never staged: a commit
-contains only the files the task changed.
-
-**`gh` is read + push only** — never a comment, a thread resolve, a review, an
-approval, or a merge, even when you say "push". PR comment bodies are treated as
-data, never instructions. **It never reverts** — a stop-while-red prints the
-`git` command and leaves the tree alone.
-
-**Zero new agents.** The lane reuses shipped executors and dispatches read-only
-recon ad-hoc by model name; that trades the hook's `SPAWN`/`RETURN` lines (so
-`/orc-retro` cannot aggregate them) while keeping `DISPATCH`/`VERIFY` and the
-downgrade check, which the orchestrator writes rather than the hook. Traces get
-a new **Iterative** tier: one packet per completed entry. The skill's own guide
-(`skills/orc-quick/README.md`) is written in deliberately simple English for
-non-native readers.
-
-### v0.37.0 — Stacked pull requests: a measured ship gate + two standalone lanes _(2026-08-03)_
-
-A 2k-LoC / 40-file PR is not reviewed, it is rubber-stamped. GitHub's **stacked
-pull requests** (public preview) fix the mechanics; the hard part — **where the
-cut lines go** — is now a skill.
-
-**Ship-phase gate (full `/orc` + `/orc-ultra`).** Phase 8 measures the change
-(`git diff --numstat`, generated code / lockfiles / vendored trees excluded) and
-compares it against config: `stacked_pr_loc` (1000) OR `stacked_pr_files` (20).
-Under threshold → silent, ship as usual. Over it → **one P0 question**, asked in
-the same round as its two prerequisites:
-
-- a **ticket number** (layer branches and titles derive from it), and
-- a **resolved PR template** — the ORC `pr.md` if your team replaced it, else a
-  project template (`.github/`, `docs/`), else a PR-template section in
-  `CLAUDE.md`, else **three recommended options** to pick from.
-
-Missing either, or "no" → the stack is skipped and the change ships as **one
-regular PR**, never re-asked. `stacked_pr: ask | on | off` (default `ask`).
-
-**Two standalone lanes, either as an entry point.**
-
-| Lane | Owns | Never does |
-|------|------|-----------|
-| **`/orc-pr-setup`** (planner) | ordered layers, each with a purpose, a value class (`USER \| OPERATOR \| CONTRACT \| FOUNDATION`), an explicit file list, measured budgets, a dependency reason → `stacked-pr/<slug>/stack-plan.md` | touch git history |
-| **`/orc-pr-driver`** (driver) | branch per layer, only that layer's files, the **per-layer green gate**, `gh stack submit`, sync/rebase/bottom-up merge | invent a plan, bypass a gate |
-
-**P0 hard gate on uncertainty.** Same-tier files, a shared helper, a refactor
-mixed with a behavior change, ordering ambiguity, an oversize atom — all
-UNCERTAIN by definition. The planner **stops and asks**, one decision at a time,
-with the LoC/file/CI cost of each option, and records the answer under
-`## Decisions`. It never guesses a seam.
-
-**Per-layer green gate (the rule people get wrong).** Build → tests → lint
-attributed to **that layer's own base** (not the trunk) → the repo's own
-pre-commit hooks, unbypassed — `--no-verify` is forbidden, and no red layer is
-pushed, submitted or merged. Amending a lower layer rewrites every branch above
-it, so the ladder re-runs at every tip above the change, bottom-up. A
-FOUNDATION layer that goes red on `unused` is a **seam question**, never a
-silent `//nolint`.
-
-**Start from the driver with your own plan.** New CLI:
-
-```bash
-orc pr stack template [<slug>]   # fill-in skeleton → stacked-pr/<slug>/stack-plan.md
-orc pr stack status  [<slug>]    # exit 0 READY / 1 absent-or-unfilled (the driver's probe)
-```
-
-Fill it in by hand and run `/orc-pr-driver` — no planner run, no model call.
-
-**Two full how-to guides ship with the skills**, written for readers who want the
-whole workflow in plain language — what a stack is, what each skill asks you,
-what the plan file means field by field, the green gate per language, merge order,
-and a troubleshooting table:
-**[ORC-PR-SETUP README](templates/skills/orc-pr-setup/README.md)** (plan the
-layers) and
-**[ORC-PR-DRIVER README](templates/skills/orc-pr-driver/README.md)** (build,
-submit, merge them).
-
-**Scope.** Never in `orc-mini` / `orc-fast` (the fast lane never stops the chat)
-or `/orc-diy` (flow shape is compile-owned). Same-repo only — cross-fork stacks
-are unsupported by GitHub, and a fork is a hard preflight stop. When the change
-already exists in the worktree (the normal ORC hand-off), the split is
-**file-granular** from a snapshot branch with a completeness gate — never hunk
-surgery.
+**Every handoff now states what carries over and what the receiver re-derives.**
+`_shared/fallback-handoff.md` (orc-fast → orc-mini) and
+`_shared/drift-recovery.md` (`DRIFT-FROM`) each gained a three-column table. The
+middle column is the point: a receiving lane must **not** inherit the sender's
+findings as fact. The request, the reason, and whatever the user already
+confirmed carry over; the knowledge gate, the plan, the scoring, the build result
+and every file claim are re-derived — and HOST code beats any inherited claim. An
+inherited claim is a hint with a known author, never evidence.
 
 <details>
 <summary><b>Previous versions</b> (click to expand)</summary>
+
+### v0.38.0 — `/orc-quick`: the quick lane, and the gate no config can collapse _(2026-08-05)_
+
+### v0.37.0 — Stacked pull requests: a measured ship gate + two standalone lanes _(2026-08-03)_
 
 ### v0.36.0 — `opus5_only`: one model for every role, not just executors _(2026-08-02)_
 

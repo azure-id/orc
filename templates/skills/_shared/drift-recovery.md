@@ -54,6 +54,19 @@ USER-DRIFT: <the user's description, verbatim>
 INTENT-SPEC: <path to the run's original intent-spec>
 ```
 
+## What carries over
+
+| Carries over | The recovery round RE-DERIVES | On conflict |
+|---|---|---|
+| `USER-DRIFT` — the user's description, verbatim | The current worktree state (what the code actually does NOW) | The worktree wins |
+| The failing expectation: what the example promised vs what it showed | The build + test result, run fresh | The fresh result wins |
+| `INTENT-SPEC` (the run's original intent) + `LOOP` (loops already spent) | Every file claim in the superseded `EXAMPLE.md` | The worktree wins |
+
+An inherited claim is a HINT with a known author, never evidence. The previous
+`EXAMPLE.md` in particular documents the SUPERSEDED contract as fact — that is
+exactly why step 5 deletes it. Re-anchor an inherited claim against the worktree
+or drop it.
+
 ## The recovery loop (hard cap: 2)
 
 1. **Gap analysis** — dispatch `orc-analyze-mini-sonnet-5-high` with the

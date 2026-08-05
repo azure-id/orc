@@ -28,3 +28,15 @@ mini lane — but SKIP re-deriving anything carried over:
 - Reuse the run folder and slug.
 - `REASON: smoke-red-escalation` means code was already written — start from
   the failing state, not from scratch.
+
+## What carries over
+
+| Carries over | The receiver RE-DERIVES | On conflict |
+|---|---|---|
+| The user's original request, verbatim | The knowledge gate (wiki tier, pattern, and its own probes) | The receiver's own probe wins |
+| Why the handoff fired — the exact failed prerequisite | The plan, the scoring, the waves | — |
+| Anything the user already confirmed in this session | Every file claim the sender made | HOST code wins |
+
+The middle column is the point: a receiving lane must not inherit the sender's
+findings as fact. An inherited claim is a HINT with a known author, never
+evidence — re-anchor it or drop it.

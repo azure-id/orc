@@ -3236,31 +3236,53 @@ function where() {
 // ── orc doctor (B6) — installed-side drift detector ────────────────────────
 // Read-only health report over a target .claude/ (respects --global / --dir).
 // `orc doctor --fix` = update + prune + settings re-merge (install overwrite).
+// `orc doctor --json` renders the SAME findings as one JSON object on stdout —
+// nothing else, no banner, no colour, no nudge — for a script or a CI step. The
+// EXIT CODE is identical either way (0 healthy / 1 issues found): the flag
+// changes the rendering only, never the semantics.
 function doctor() {
   const claudeDir = resolveClaudeDir();
+  const asJson = flag("--json") === true;
   if (flag("--fix") === true) {
+    // A mutation and a machine-readable read-only report are two different
+    // commands. Refusing beats silently handing a script the human output.
+    if (asJson) {
+      console.error("❌ orc doctor --json is read-only — drop --fix (or run the two separately).");
+      process.exit(1);
+    }
     console.log(`Applying fixes to ${claudeDir} (update + prune + settings re-merge)…\n`);
     install({ overwrite: true, forcePrune: true });
     console.log("\nRe-run `orc doctor` to confirm a clean report.");
     return;
   }
 
-  console.log(ui.color.bold(`orc doctor`) + ` — ${claudeDir}\n`);
+  const say = asJson ? () => {} : (s) => console.log(s);
+  say(ui.color.bold(`orc doctor`) + ` — ${claudeDir}\n`);
   const problems = [];
-  const ok = (s) => console.log("  " + ui.mark.ok(s));
-  const warn = (s) => {
-    console.log("  " + ui.mark.warn(s));
+  const findings = [];
+  const ok = (s) => say("  " + ui.mark.ok(s));
+  // id: stable machine key. fixable: would `orc doctor --fix` address it?
+  const warn = (id, s, extra) => {
+    say("  " + ui.mark.warn(s));
     problems.push(s);
+    findings.push(Object.assign({ id, severity: "warn", message: s, fixable: false }, extra || {}));
   };
 
   // 1) payload version vs this CLI's version
+  const cliVersion = currentVersion();
+  let installedVersion = null;
   if (!fs.existsSync(path.join(claudeDir, "hooks"))) {
-    warn("no ORC payload here (hooks/ missing) — run `orc init`.");
+    warn("no-payload", "no ORC payload here (hooks/ missing) — run `orc init`.", { fixable: true });
   } else {
-    const payloadV = installedPayloadVersion(claudeDir);
-    const cliV = currentVersion();
+    const payloadV = (installedVersion = installedPayloadVersion(claudeDir));
+    const cliV = cliVersion;
     if (payloadV === cliV) ok(`payload version ${payloadV} matches this CLI`);
-    else warn(`payload version ${payloadV} != CLI ${cliV} — run \`orc update\``);
+    else
+      warn("version-skew", `payload version ${payloadV} != CLI ${cliV} — run \`orc update\``, {
+        fixable: true,
+        installed_version: payloadV,
+        package_version: cliV,
+      });
   }
 
   // 1b) GLOBAL install skew (C5). Claude Code resolves a skill by NAME, and a
@@ -3268,18 +3290,24 @@ function doctor() {
   // matches" is worthless if the file that actually loads is three versions
   // old. Warn, never delete: a global install is not this project's to prune.
   const globalDir = path.join(os.homedir(), ".claude");
+  const globalInfo = { present: false, version: null, shadows: false };
   if (path.resolve(globalDir) !== path.resolve(claudeDir)) {
     if (!fs.existsSync(path.join(globalDir, "hooks"))) {
       ok("no global ORC install (~/.claude) — nothing can shadow this one");
     } else {
       const globalV = installedPayloadVersion(globalDir);
       const localV = installedPayloadVersion(claudeDir);
-      if (globalV !== localV)
+      globalInfo.present = true;
+      globalInfo.version = globalV;
+      if (globalV !== localV) {
+        globalInfo.shadows = true;
         warn(
+          "global-skew",
           `GLOBAL install ~/.claude is ${globalV} but this project is ${localV} — ` +
-            "the global copy can win skill resolution; run `orc update --global`"
+            "the global copy can win skill resolution; run `orc update --global`",
+          { global_version: globalV, local_version: localV }
         );
-      else ok(`global install ~/.claude matches (${globalV})`);
+      } else ok(`global install ~/.claude matches (${globalV})`);
       // Agent files the global install still carries that this payload no
       // longer ships: a dispatch by a retired name resolves there instead of
       // failing loudly — the exact silent downgrade a rename must prevent.
@@ -3288,13 +3316,16 @@ function doctor() {
         const shadows = fs
           .readdirSync(path.join(globalDir, "agents"))
           .filter((f) => /^orc-.*\.md$/i.test(f) && !shipped.has("agents/" + f));
-        if (shadows.length)
+        if (shadows.length) {
+          globalInfo.shadows = true;
           warn(
+            "global-retired-agents",
             `${shadows.length} retired agent name(s) still live in ~/.claude/agents: ` +
               shadows.slice(0, 5).join(", ") + (shadows.length > 5 ? " …" : "") +
-              " — run `orc update --global` (never deleted from here)"
+              " — run `orc update --global` (never deleted from here)",
+            { paths: shadows.map((f) => "agents/" + f) }
           );
-        else ok("no retired agent names shadowing from ~/.claude/agents");
+        } else ok("no retired agent names shadowing from ~/.claude/agents");
       } catch (_) {}
     }
   }
@@ -3307,16 +3338,29 @@ function doctor() {
   const missing = footprint.filter((f) => !fs.existsSync(path.join(claudeDir, f)));
   if (!manifest) {
     const cand = detectPreManifestOrphans(claudeDir, current);
-    if (cand.length) warn(`${cand.length} possible orphan(s), no install manifest: ${trunc(cand)} — \`orc update --prune\``);
+    if (cand.length)
+      warn(
+        "orphan-candidates",
+        `${cand.length} possible orphan(s), no install manifest: ${trunc(cand)} — \`orc update --prune\``,
+        { fixable: true, paths: cand }
+      );
     else ok("no install manifest yet; no ORC-named orphans detected");
   } else {
     const orphans = manifest.files.filter(
       (f) => !current.has(f) && isPrunable(f) && fs.existsSync(path.join(claudeDir, f))
     );
-    if (orphans.length) warn(`${orphans.length} orphan(s) from a prior payload: ${trunc(orphans)} — \`orc update\``);
+    if (orphans.length)
+      warn("orphan", `${orphans.length} orphan(s) from a prior payload: ${trunc(orphans)} — \`orc update\``, {
+        fixable: true,
+        paths: orphans,
+      });
     else ok("no orphaned files from prior payloads");
   }
-  if (missing.length) warn(`${missing.length} shipped file(s) missing on disk: ${trunc(missing)} — \`orc update\``);
+  if (missing.length)
+    warn("missing-files", `${missing.length} shipped file(s) missing on disk: ${trunc(missing)} — \`orc update\``, {
+      fixable: true,
+      paths: missing,
+    });
   else ok("all shipped files present on disk");
 
   // 3) settings.json wiring
@@ -3325,26 +3369,36 @@ function doctor() {
     settings = JSON.parse(fs.readFileSync(path.join(claudeDir, "settings.json"), "utf8"));
   } catch (_) {}
   if (!settings) {
-    warn("settings.json missing or unparseable — run `orc update` to re-merge the guards.");
+    warn("settings-missing", "settings.json missing or unparseable — run `orc update` to re-merge the guards.", {
+      fixable: true,
+    });
   } else {
     const hooks = settings.hooks || {};
     const hasCmd = (arr, needle) =>
       (arr || []).some((e) => (e.hooks || []).some((h) => typeof h.command === "string" && h.command.includes(needle)));
     if (hasCmd(hooks.PreToolUse, "orc-effort-guard")) ok("effort guard wired (PreToolUse)");
-    else warn("effort guard NOT wired — /orc won't be effort-gated; run `orc update`");
+    else warn("effort-guard-unwired", "effort guard NOT wired — /orc won't be effort-gated; run `orc update`", { fixable: true });
     const traceEntry = (hooks.PreToolUse || []).find((e) =>
       (e.hooks || []).some((h) => typeof h.command === "string" && h.command.includes("orc-trace"))
     );
-    if (!traceEntry) warn("trace hook NOT wired on PreToolUse — SPAWN lines lost; run `orc update`");
+    if (!traceEntry)
+      warn("trace-hook-unwired", "trace hook NOT wired on PreToolUse — SPAWN lines lost; run `orc update`", { fixable: true });
     else if (!/Task/.test(traceEntry.matcher || "") || !/Agent/.test(traceEntry.matcher || ""))
-      warn('trace PreToolUse matcher is "' + (traceEntry.matcher || "") + '" — needs "Task|Agent"; run `orc update`');
+      warn(
+        "trace-hook-matcher",
+        'trace PreToolUse matcher is "' + (traceEntry.matcher || "") + '" — needs "Task|Agent"; run `orc update`',
+        { fixable: true }
+      );
     else ok('trace hook wired with a Task|Agent matcher');
     if (hasCmd(hooks.SubagentStop, "orc-trace")) ok("trace RETURN wired (SubagentStop)");
-    else warn("trace RETURN hook NOT wired (SubagentStop) — run `orc update`");
+    else warn("trace-return-unwired", "trace RETURN hook NOT wired (SubagentStop) — run `orc update`", { fixable: true });
     if (settings.statusLine && typeof settings.statusLine.command === "string") {
       if (settings.statusLine.command.includes("orc-statusline")) ok("statusline is ORC's model warning");
       else ok("statusline present (yours — ORC left it untouched)");
-    } else warn("no statusLine — the non-Opus/high model warning won't show; run `orc update`");
+    } else
+      warn("statusline-missing", "no statusLine — the non-Opus/high model warning won't show; run `orc update`", {
+        fixable: true,
+      });
   }
 
   // 4) dangling trace .current pointer
@@ -3355,7 +3409,11 @@ function doctor() {
     if (fs.existsSync(curFile)) {
       const cur = fs.readFileSync(curFile, "utf8").trim();
       if (cur && !fs.existsSync(path.join(logDir, cur)))
-        warn(`trace .current points to a missing file "${cur}" (a fresh run rotates past it — harmless)`);
+        warn(
+          "trace-pointer-dangling",
+          `trace .current points to a missing file "${cur}" (a fresh run rotates past it — harmless)`,
+          { trace_current: cur }
+        );
       else ok("trace pointer resolves (or no active run)");
     } else ok("no trace pointer yet (no run recorded)");
   } catch (_) {}
@@ -3363,8 +3421,28 @@ function doctor() {
   // 5) stale DIY lock (only meaningful once configured)
   const dstat = diyStatus(claudeDir);
   if (dstat.state === "UNCONFIGURED") ok("orc-diy not configured (fine — /orc-diy stays gated)");
-  else if (dstat.state === "STALE") warn(`orc-diy flow STALE: ${dstat.reason}`);
+  else if (dstat.state === "STALE") warn("diy-stale", `orc-diy flow STALE: ${dstat.reason}`, { reason: dstat.reason });
   else ok(`orc-diy flow READY (${dstat.reason})`);
+
+  if (asJson) {
+    // Exactly one object, then the same exit code the human path would use.
+    process.stdout.write(
+      JSON.stringify(
+        {
+          ok: problems.length === 0,
+          claude_dir: claudeDir,
+          installed_version: installedVersion,
+          package_version: cliVersion,
+          global_install: globalInfo,
+          findings,
+          fixable: findings.some((f) => f.fixable),
+        },
+        null,
+        2
+      ) + "\n"
+    );
+    process.exit(problems.length ? 1 : 0);
+  }
 
   console.log("");
   if (problems.length) {
@@ -3635,6 +3713,8 @@ Usage:
   orc doctor [--global | --dir <path>]    read-only health report: version skew, orphaned/missing
                                           payload files, settings.json wiring, trace pointer, diy lock
     orc doctor --fix                      apply the fixes (= update + prune + settings re-merge)
+    orc doctor --json                     the same findings as ONE JSON object on stdout (no banner,
+                                          no colour) — same exit code as the human report (0/1)
   orc version                             print installed version + check for a newer one
   orc --help
 

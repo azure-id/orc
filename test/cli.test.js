@@ -462,6 +462,24 @@ test("orc doctor reports healthy on a clean install (exit 0)", () => {
     const r = cli(["doctor", "--dir", root]);
     assert.strictEqual(r.status, 0, "clean install is healthy");
     assert.match(r.stdout, /healthy/i);
+
+    // --json renders the SAME verdict, machine-readably: exactly one object on
+    // stdout (no banner, no colour) and the SAME exit code — the flag changes
+    // the rendering, never the semantics.
+    const j = cli(["doctor", "--json", "--dir", root]);
+    assert.strictEqual(j.status, 0, "--json keeps the human exit code");
+    const rep = JSON.parse(j.stdout); // throws if anything else was printed
+    assert.strictEqual(rep.ok, true, "healthy install reports ok:true");
+    assert.deepStrictEqual(rep.findings, [], "no findings on a clean install");
+    assert.strictEqual(rep.fixable, false, "nothing to fix");
+    assert.strictEqual(rep.package_version, rep.installed_version, "versions agree");
+    assert.ok(rep.claude_dir.includes(".claude"), "names the target dir");
+    assert.strictEqual(rep.global_install.present, false, "fake HOME has no global install");
+
+    // A mutation is not a read-only report — mixing them is refused, not guessed.
+    const mixed = cli(["doctor", "--json", "--fix", "--dir", root]);
+    assert.strictEqual(mixed.status, 1, "--json --fix is refused");
+    assert.match(mixed.stderr, /read-only/, "says why");
   } finally {
     rmrf(root);
   }
@@ -483,6 +501,22 @@ test("orc doctor detects an orphan and a version skew (exit 1)", () => {
     assert.strictEqual(r.status, 1, "issues → exit 1");
     assert.match(r.stdout, /orphan/i);
     assert.match(r.stdout, /payload version 0\.1\.0/);
+
+    const j = cli(["doctor", "--json", "--dir", root]);
+    assert.strictEqual(j.status, 1, "--json keeps the failing exit code");
+    const rep = JSON.parse(j.stdout);
+    assert.strictEqual(rep.ok, false);
+    assert.ok(rep.findings.length >= 2, "both findings are reported");
+    const ids = rep.findings.map((f) => f.id);
+    assert.ok(ids.includes("version-skew"), "skew has a stable id");
+    assert.ok(ids.includes("orphan"), "orphan has a stable id");
+    assert.strictEqual(rep.installed_version, "0.1.0", "reports what is on disk");
+    assert.strictEqual(rep.fixable, true, "`doctor --fix` would address these");
+    const orphan_f = rep.findings.find((f) => f.id === "orphan");
+    assert.ok(
+      orphan_f.paths.includes("agents/orc-ghost-opus-4-8-high.md"),
+      "the JSON path carries the FULL orphan list (the human one truncates)"
+    );
   } finally {
     rmrf(root);
   }
