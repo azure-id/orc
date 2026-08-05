@@ -71,6 +71,12 @@ the slice (conventions + blocking query invariants).
 Cache MISS → skip — mini never codifies (that's the full lane /
 `/orc-pattern`); universal invariants + neighbor imitation still cover it.
 
+**Gotchas (repair memory; config `gotchas`) — mini READS and WRITES.** Probe at
+Phase 1 (`orc gotcha status`, one row, never silent), inject the SCOPE-MATCHING
+entries into the Phase 3 slice (cap 3; zero matches = no block, never
+unfiltered), and append a returned `gotcha_recorded` YOURSELF after the return.
+Trimmed mechanics + `.claude/orc/gotchas.md`: `../_shared/gotchas.md` §10.
+
 ## Phase M — Smoke gate (build + test; blocks ship on red)
 
 After the executor return validates (`../_shared/return-validation.md` —

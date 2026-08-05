@@ -24,3 +24,15 @@ per `.claude/skills/_shared/return-validation.md` — including §6's worktree
 delta: `git status --short` before/after each dispatch, any changed path
 outside `declared_files` (a revert included) gates the wave close.
 <!-- /diy:when -->
+
+<!-- diy:when gotchas=on -->
+Repair memory: probe `orc gotcha status` once at preflight (exit 0 = entries,
+1 = none — never a `find`) and print one line either way. Inject the
+SCOPE-MATCHING entries into each slice beside `pattern` — glob vs that task's
+`declared_files`, cap 3, highest `hits` first; zero matches = NO block, never an
+empty one, and NEVER unfiltered. A return that CLOSED a repair loop carries
+`gotcha_recorded`; dedupe it on `symptom`+`scope` (a match bumps `hits` and
+`last_seen`) and append it to `.claude/orc/gotchas.md` YOURSELF — a subagent never
+writes that file, and a loop that hit its cap and stopped records nothing. Full
+contract: `.claude/skills/_shared/gotchas.md`.
+<!-- /diy:when -->

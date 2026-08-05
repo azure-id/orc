@@ -58,6 +58,12 @@ orchestrator owns the auto-fix-once loop.
 - tdd: {green, red, exempt} — omit only when no tdd_suite[] was supplied
 - tests: {passing}
 - failure_reason|null
+- gotcha_recorded — REQUIRED only when this run CLOSED a repair loop you can
+  attest to (a criterion that was unmet and is now met, a tdd red→green): the
+  entry body {trigger, symptom, cause, fix, scope}, or `none` + a one-line
+  reason. Absent on a repair-closing return is malformed; not required otherwise.
+  An unresolved failure returns `none` — it is an open problem, not a gotcha. You
+  RETURN it; the orchestrator writes the file.
 - actual_model — quoted VERBATIM from your system prompt ("The exact model ID is …"); `unknown` if absent, never a guess
 - actual_effort — value of $CLAUDE_EFFORT (read via Bash)
 Read-only in standalone mode. Never spawn subagents.

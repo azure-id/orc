@@ -219,7 +219,9 @@ user (every tier, `absent` included). **Crosslink:** per wiki-consult.md, inject
 the cached `.claude/orc/crosslink/needs.json` contract into any boundary-touching
 task (advisory) and print + emit `CROSSLINK <state> :: boundaries=<n> peers=<names>`
 — `configured-no-cache` prints the "cache not built" warning (full orc reads
-only pre-built needs/cache, never peer source live). **Preflight:** print the compact block per
+only pre-built needs/cache, never peer source live). **Gotchas (repair memory,
+config `gotchas`):** probe ONCE with `orc gotcha status` (exit 0 = entries exist,
+1 = none — never a `find`); canonical `_shared/gotchas.md`. **Preflight:** print the compact block per
 `references/preflight-report.md` once wiki + crosslink (+ pattern/waves) resolve.
 
 Ask which planner: **Superpowers / OpenSpec / Requirement Planner / ORC
@@ -303,7 +305,10 @@ Wave 0 is orchestrator-SYNTHESIZED: dispatched like any task, scored from the DE
    report) and the `house_rules` card lines
    (`references/house-rules.md`, injected LITERALLY — read once per run, never
    a pointer); FE/BE and `db:postgres` tasks get the resolved `pattern`
-   injected literally (pattern-gate.md).
+   injected literally (pattern-gate.md), and — with `gotchas: on` — the
+   SCOPE-MATCHING gotchas beside it (glob vs this task's `declared_files`, cap 3,
+   highest `hits` first; zero matches = NO block, never an empty one — NEVER
+   inject unfiltered: `_shared/gotchas.md` §7).
 2. Record worker milestone pings (they bound what a mid-wave stop can save).
 3. Collect returns; VALIDATE each (emit `VERIFY <task> actual=<model>/<effort>`
    ✅ MATCH / ⛔ DOWNGRADE per return — surface any downgrade to the user).
@@ -317,6 +322,11 @@ Wave 0 is orchestrator-SYNTHESIZED: dispatched like any task, scored from the DE
 4. **Post-wave worktree audit (GATE, `_shared/return-validation.md` §6):** diff `git status --short` before/after the wave — a changed path in NO task's `declared_files`, INCLUDING one that became less modified (the revert signature), blocks the close until named and decided.
    Overlap → `failure_reason: "file-collision:<file> with <agent>"`, requeue later wave.
 5. Append worker `log_entries` to the decision log; regenerate the digest.
+   **Gotcha capture (`gotchas: on`):** a return that CLOSED a repair loop carries
+   `gotcha_recorded` (`_shared/return-validation.md` §7) — dedupe on
+   `symptom`+`scope` (a match bumps `hits`/`last_seen` and appends nothing), else
+   append the block to `.claude/orc/gotchas.md`. YOU write it, never a subagent;
+   a capped-and-stopped loop records NOTHING.
 6. Update checkpoint + state-of-play; emit `OUTCOME task=<id> score=<n>
    band=<range> model=<m> retries=<n> requeues=<n> needs_context=<n> unmet=<n>`
    as each task closes.

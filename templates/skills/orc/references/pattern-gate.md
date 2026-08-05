@@ -58,6 +58,14 @@ Inject the resolved conventions + blocking invariants + the enforceable
 `validation_gate[]` lines LITERALLY into each FE/BE task's slice as `pattern` —
 never a file pointer. Agnostic tasks get the universal invariants only.
 
+**Gotchas ride BESIDE the pattern block, never inside it** (config `gotchas`;
+canonical `../../_shared/gotchas.md`). Same slice, same literal injection, one
+hard difference: the pattern applies to a LANGUAGE, so it goes to every task
+tagged with that language — a gotcha applies to a `scope` GLOB, so it goes only to
+tasks whose `declared_files` match it, capped at 3, highest `hits` first. Zero
+matches = no gotcha block at all. Never inject unfiltered: a pattern is what this
+project always does, a gotcha is what it got wrong ONCE, somewhere specific.
+
 For a `db:postgres`-tagged task, ALSO merge the resolved `postgres` pattern's
 Conventions + Invariants + gate lines into the SAME `pattern` block (appended
 to the framework pattern, or standalone if the task has no framework lang) —

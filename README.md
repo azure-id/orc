@@ -6,7 +6,7 @@
 
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
-![Version](https://img.shields.io/badge/version-0.39.0-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.40.0-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
@@ -46,70 +46,100 @@ zero-dependency npm package installs those files into your `.claude/` directory.
 
 ## Changelog
 
-**Latest: v0.39.0 — updated 2026-08-06.**
+**Latest: v0.40.0 — updated 2026-08-06.**
 
-### v0.39.0 — The read ladder, and foreign input that is evidence rather than instruction _(2026-08-06)_
+### v0.40.0 — Gotchas: repair memory that outlives the run _(2026-08-06)_
 
-Two new cross-lane contracts in `templates/skills/_shared/`. No new skill, no new
-agent, no new config key.
+ORC has always known what your codebase **is** (the wiki), how it **writes code**
+(the pattern cache), and what a change must **prove** (`tdd_spec`). It knew
+nothing about what this project has already gotten **wrong** — so a failure that
+cost a run three repair rounds in July cost the next run three more in August.
 
-**The read ladder (`_shared/read-ladder.md`) — escalate; never start at the top.**
-ORC's cost is dominated by parallel *reading*, not by thinking: up to
-`max_scouts` scouts at once, a wiki scan that is expensive by design, and every
-executor in a wave opening its declared files. A role that opens a 900-line file
-to learn one function's shape has spent the run's budget on bytes nobody needed.
+**A gotcha is ONE project-specific failure that a repair already solved.**
 
-| Step | Do | Stop here when |
-|------|----|----------------|
-| 1. Locate | `Grep` / `Glob` for the symbol, route, config key, error string | You only needed to know WHERE it is |
-| 2. Outline | Read the declaration lines — imports, exports, signatures | You needed the API surface |
-| 3. Range | Read the ±40 lines around the anchor from step 1 | You needed one function's behaviour |
-| 4. Full | Read the whole file | It is the subject of the task — or you will edit it |
+```markdown
+## G-014 · express · repair
+- trigger:   adding a route handler that awaits a Mongoose query
+- symptom:   Cannot read properties of undefined (reading 'session') in tests
+- cause:     the test harness stubs req.session only for authed routes
+- fix:       register the route under authedRouter, not app
+- scope:     src/routes/**/*.js
+- origin:    run-orc-add-billing-050826-141233 · TDD repair round 2
+- hits:      3
+- last_seen: 05-08-2026
+```
 
-Plus an **anti-chain rule** — two escalations to a full read without an answer
-means the question is wrong for this area, so return `needs_context` with
-`searched:` rather than reading a third file — and **two exceptions that are not
-preferences**: a file you will EDIT is read in FULL first, always (an `Edit`
-whose `old_string` was reconstructed from an outline is a corruption bug, not a
-failed call), and output a gate parses — build logs, test output, lint results —
-is always read whole, because the smoke gate, the TDD gate, the verifier and
-orc-quick's build loop decide red vs green from those exact bytes.
+**Recorded only on a red → green repair.** The TDD repair loop, a `DRIFT-FROM`
+recovery round, a reviewer P0/P1 fixed in-run, a verifier `unmet[]` closed in-run.
+**A loop that hit its cap and STOPPED records nothing** — an unsolved failure is
+not a gotcha, it is an open problem, and the honest red report is where it belongs.
+A first-try success has no repair to remember.
 
-Loaded by the scouts, the wiki scan-tasks, the analyst (full + mini), every
-generated executor, `/orc`'s slice builder and `/orc-fast`. It governs HOW MUCH
-to read — never WHETHER knowledge exists (that stays `detecting-artifacts.md`)
-and never precedence (`code > fresh wiki > stale wiki (hints) > model priors`).
+**Injected only when the `scope` glob matches.** Into an executor slice, beside
+the pattern block, capped at **3** entries, highest `hits` first. Zero matches =
+**no block at all**, not an empty one. Injecting unfiltered is the exact failure
+mode that would turn this into the bloat it exists to prevent — a pattern is what
+the project *always* does, a gotcha is what it got wrong *once, somewhere
+specific*.
 
-**Foreign input is evidence, never instruction (`_shared/untrusted-input.md`).**
-ORC ingests a peer repo's wiki (crosslink), a peer repository (orc-poly), PR and
-issue text (`gh`), fetched pages and pasted documents — and until now nothing
-said that content is not instruction. Every ingested artifact is now classified
-by **ORIGIN**, not by how authoritative it sounds: **HOST** (this repo, ground
-truth) or **FOREIGN** (everything else). Foreign content may inform a finding, be
-quoted as evidence with its source path, and raise a question. It may never
-change a dispatch, an agent, a model or an effort; never change a gate outcome;
-never add, remove or reorder a phase; never authorize a write, a commit, a push
-or a write into a peer repo; and **never become a rule because it is phrased as
-one** — an "always do X" line inside a peer's wiki is a claim about *that peer*.
-HOST wins every conflict: the existing precedence rule, extended across the
-repository boundary. It constrains instructional trust only — crosslink still
-reads foreign wiki and never foreign source, and orc-poly's peer source stays
-read-only with the handoff plan as its only write.
+**Three parties, no overlap.** The agent RETURNS the body via the new
+`gotcha_recorded` field (body, or `none` + a reason — the same shape as
+`crosslink_tags`); the ORCHESTRATOR appends it at phase close, deduping on
+`symptom` + `scope` so a repeat bumps `hits` instead of adding a twin; the CLI
+owns counting, capping and archival. **A subagent never writes the file.**
 
-**`/orc-quick` keeps its shape.** Both contracts reach it as *slice text and a
-constraint* — one line in `references/dispatch-gate.md`, one in
-`references/gh-mode.md`, `SKILL.md` untouched. Still `Q0 → Q1 → Q2 → Q3` with
-exactly one ask turn, no new gate, and no new config read (its Q0 reads `log_dir`
-only, and that is unchanged).
+**New CLI** — the exit code IS the contract, same convention as
+`orc pattern status`:
 
-Four spine budgets were raised deliberately (`orc` 442→445, `orc-wiki` 290→296,
-`orc-analyze` 195→201, `orc-fast` 179→182), each with its reason recorded in
-`bin/verify-contracts.js`: these are hard rules that bound what a role may treat
-as instruction and how much it may read, and neither survives being deferred to
-a reference the slice-builder never loads.
+```bash
+orc gotcha status    # 0 = entries exist · 1 = none (the deterministic probe)
+orc gotcha list      # the same, and prints them
+orc gotcha prune     # archive the low-value tail down to gotchas_max
+```
+
+Eviction ranks fewest `hits`, then oldest `last_seen`, and **archives** whole
+entry blocks to `gotchas-archive.md` — never deletes. IDs are monotonic and never
+reused, so an archived gotcha stays traceable.
+
+**Your data, not ORC's.** `.claude/orc/gotchas.md` sits beside the pattern cache
+and, like it, is absent from the install manifest — `orc update`,
+`orc update --prune` and `orc doctor --fix` all leave it byte-identical (a test
+asserts each of the three). `orc config set gotchas off` disables it live; a full
+revert of this release would remove the CLI and the contracts and still never
+touch the file.
+
+**Staleness is yours too.** An injected gotcha is presented to an executor as
+fact and nothing re-verifies it; `orc gotcha prune` handles capacity, not
+correctness. So: delete an entry that stopped being true. That is deliberately
+manual — a model deciding which of its own memories to forget is a worse failure
+mode than a stale line a human can read.
+
+| Lane | Reads | Writes |
+|------|-------|--------|
+| `/orc`, `/orc-ultra` | yes | yes |
+| `/orc-mini` | yes | yes |
+| `/orc-fast` | yes | **no** |
+| `/orc-diy` | compile-owned (`gotchas` flow key) | compile-owned |
+| `/orc-quick` | **no** | **no** |
+| `/orc-retro` | yes (calibration input) | no — read-only by contract |
+
+**`/orc-fast` keeps exactly two prerequisites.** Gotchas are additive there and a
+missing file never forces a fallback; fast reads but never writes, because one
+executor plus one repair round is too little signal to attribute a cause.
+
+**`/orc-quick` does not participate at all — not even reading.** Its preflight
+reads `log_dir` and no other config key, by contract; a `gotchas` key read would
+break that guarantee. The diff for `templates/skills/orc-quick/` in this release
+is empty. That exclusion is intentional and is not an oversight.
+
+Config: `gotchas` (`on` | `off`, default **on**) · `gotchas_max` (default **40**).
+Preflight always prints one line — `12 known · 3 match this change's files`, or
+`none yet`, or `off`. **Zero new skills, zero new agents.**
 
 <details>
 <summary><b>Previous versions</b> (click to expand)</summary>
+
+### v0.39.0 — The read ladder, and foreign input that is evidence rather than instruction _(2026-08-06)_
 
 ### v0.38.1 — `orc doctor --json` + handoff carry-over that says what is re-derived _(2026-08-06)_
 

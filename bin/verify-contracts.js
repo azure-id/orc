@@ -196,6 +196,8 @@ const CONTRACTS = [
     name: "executor unmet[] honest-status contract (v0.7.0)",
     token: "unmet[]",
     files: [
+      // v0.40.0: a verifier unmet[] the same run CLOSED is a recordable gotcha.
+      "skills/_shared/gotchas.md",
       "agents/orc-executor-haiku-4-5.md",
       "agents/orc-executor-opus-4-7-high.md",
       "agents/orc-executor-opus-4-7-med.md",
@@ -625,6 +627,8 @@ const CONTRACTS = [
     name: "artifact existence probe (v0.25.0 — deterministic CLI, never ad-hoc find)",
     token: "detecting-artifacts.md",
     files: [
+      // v0.40.0: the gotcha existence probe follows the same never-a-find rule.
+      "skills/_shared/gotchas.md",
       "skills/_shared/README.md",
       // v0.39.0: read-ladder.md hands off to it — the ladder decides HOW MUCH to
       // read, never WHETHER the knowledge exists.
@@ -644,6 +648,9 @@ const CONTRACTS = [
     name: "wiki freshness tier enum (v0.11.0 — FRESH/AGING/STALE, computed on read)",
     token: "AGING",
     files: [
+      // v0.40.0: names the fast lane FRESH/AGING gate when explaining why gotchas
+      // are NOT a third prerequisite there.
+      "skills/_shared/gotchas.md",
       "hooks/orc-statusline.js",
       "skills/orc/SKILL.md",
       "skills/orc/config.md",
@@ -1335,6 +1342,8 @@ const CONTRACTS = [
     name: "drift handoff block (v0.33.0 — DRIFT-FROM, cap 2 recovery loops)",
     token: "DRIFT-FROM",
     files: [
+      // v0.40.0: a resolved DRIFT-FROM round is one of the four record triggers.
+      "skills/_shared/gotchas.md",
       "skills/_shared/drift-recovery.md",
       "skills/orc-diy/references/blocks/mock-example.md",
       "skills/orc-fast/SKILL.md",
@@ -1349,6 +1358,8 @@ const CONTRACTS = [
     name: "TDD plan anchor (v0.33.0 — tdd_spec authored at plan time, Wave-0 red proof)",
     token: "tdd_spec",
     files: [
+      // v0.40.0: a tdd_spec test driven red -> green is the primary record trigger.
+      "skills/_shared/gotchas.md",
       "agents/orc-executor-haiku-4-5.md",
       "agents/orc-executor-opus-4-7-high.md",
       "agents/orc-executor-opus-4-7-med.md",
@@ -1656,6 +1667,49 @@ const CONTRACTS = [
       "skills/orc/references/wiki-consult.md",
     ],
   },
+  // ── v0.40.0 — gotchas (repair memory) ───────────────────────────────────
+  {
+    name: "gotchas artifact location (repair memory)",
+    token: ".claude/orc/gotchas.md",
+    files: [
+      "skills/_shared/README.md",
+      "skills/_shared/gotchas.md",
+      "skills/orc-diy/references/blocks/execution.md",
+      "skills/orc-fast/SKILL.md",
+      "skills/orc-mini/SKILL.md",
+      "skills/orc-retro/SKILL.md",
+      "skills/orc/SKILL.md",
+      "skills/orc/config.md",
+      "skills/orc/references/preflight-report.md",
+    ],
+    binFiles: ["bin/cli.js"],
+  },
+  {
+    name: "gotcha_recorded return field (repair-loop capture)",
+    token: "gotcha_recorded",
+    files: [
+      "agents/orc-executor-haiku-4-5.md",
+      "agents/orc-executor-opus-4-7-high.md",
+      "agents/orc-executor-opus-4-7-med.md",
+      "agents/orc-executor-opus-4-8-high.md",
+      "agents/orc-executor-opus-5-high.md",
+      "agents/orc-executor-opus-5-low.md",
+      "agents/orc-executor-opus-5-med.md",
+      "agents/orc-executor-sonnet-4-6-high.md",
+      "agents/orc-executor-sonnet-4-6-med.md",
+      "agents/orc-executor-sonnet-5-high.md",
+      "agents/orc-reviewer-fable-5.md",
+      "agents/orc-reviewer-opus-5-med.md",
+      "agents/orc-verifier-opus-5-med.md",
+      "skills/_shared/gotchas.md",
+      "skills/_shared/return-validation.md",
+      "skills/orc-diy/references/blocks/execution.md",
+      "skills/orc-mini/SKILL.md",
+      "skills/orc/SKILL.md",
+      "skills/orc/subskills/orc-execution/core.md",
+      "skills/orc/subskills/orc-review-verify/core.md",
+    ],
+  },
 ];
 
 // Spine size budgets (v0.19.0). These SKILL.md files are ALWAYS loaded when
@@ -1699,7 +1753,12 @@ const BUDGETS = [
   // v0.39.0: deliberate raise 442→445 — hard rule 13, the read ladder. It has to
   // sit in the spine because the orchestrator BUILDS every slice: a discipline
   // named only in a reference the slice-builder never loads is not applied.
-  { file: "skills/orc/SKILL.md", maxLines: 445 },
+  // v0.40.0: deliberate raise 445→455 — the three gotcha touchpoints. All three
+  // are decision points the spine owns and no reference can hold: the Phase-1
+  // probe (before any reference loads), the slice-build injection rule (the
+  // scope filter + cap 3 IS the anti-bloat guard), and the phase-close capture
+  // (only the orchestrator may write the file). See _shared/gotchas.md.
+  { file: "skills/orc/SKILL.md", maxLines: 455 },
   // v0.33.0: deliberate raises 264→289 / 197→219 / 171→179 — orc-wiki gains the
   // crosslink-compile entry branch, the delta-refresh default (impact probe),
   // and the orientation/atlas assemble steps (detail in references/); mini
@@ -1719,14 +1778,20 @@ const BUDGETS = [
   // v0.34.2: deliberate raise 219→220 — the run-start `touch the trace file`
   // step. It is one line, it is the fix for the corpus's largest defect family,
   // and it has to sit in the spine because it happens before any reference loads.
-  { file: "skills/orc-mini/SKILL.md", maxLines: 220 },
+  // v0.40.0: deliberate raise 220→225 — the gotchas trigger (probe, inject,
+  // append). Mini reads AND writes repair memory, and the write is the
+  // orchestrator's alone; the trimmed mechanics live in _shared/gotchas.md §10.
+  { file: "skills/orc-mini/SKILL.md", maxLines: 225 },
   // v0.39.0: deliberate raises 195→201 / 179→182 — the analyst gains hard rules
   // 2b (a source it did not author is FOREIGN input) and 4a (the read ladder);
   // fast gains the ladder as a slice line. Both are hard rules by nature: they
   // bound what the role may treat as instruction and how much it may read, and
   // neither survives being deferred to a reference.
   { file: "skills/orc-analyze/SKILL.md", maxLines: 201 },
-  { file: "skills/orc-fast/SKILL.md", maxLines: 182 },
+  // v0.40.0: deliberate raise 182→187 — gotchas as an explicit NON-gate. It has
+  // to be stated where the two prerequisites are stated, or a later reader adds
+  // a third gate and breaks the lane's entire premise.
+  { file: "skills/orc-fast/SKILL.md", maxLines: 187 },
 ];
 
 function walk(dir, out) {

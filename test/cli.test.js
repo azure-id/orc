@@ -562,6 +562,168 @@ test("config: v0.33.0 keys validate (mock_example, tdd_loop_max, wiki_delta_full
   }
 });
 
+// ── v0.40.0 gotchas (repair memory) ─────────────────────────────────────────
+
+// One well-formed entry, per the format _shared/gotchas.md pins.
+function gotchaEntry(n, opts) {
+  const o = opts || {};
+  return [
+    `## G-${String(n).padStart(3, "0")} · ${o.area || "express"} · ${o.kind || "repair"}`,
+    `- trigger:   trigger ${n}`,
+    `- symptom:   symptom ${n}`,
+    `- cause:     cause ${n}`,
+    `- fix:       fix ${n}`,
+    "- scope:     src/routes/**/*.js",
+    "- origin:    run-orc-probe-050826-141233 · TDD repair round 2",
+    `- hits:      ${o.hits === undefined ? 1 : o.hits}`,
+    `- last_seen: ${o.last_seen || "05-08-2026"}`,
+    "",
+  ].join("\n");
+}
+
+function writeGotchas(claudeDir, body) {
+  const f = path.join(claudeDir, "orc", "gotchas.md");
+  fs.mkdirSync(path.dirname(f), { recursive: true });
+  fs.writeFileSync(f, "# Gotchas — repair memory\n\n" + body);
+  return f;
+}
+
+test("orc gotcha status: 1 when empty, 0 with an entry", () => {
+  const { root, claudeDir } = freshInstall();
+  try {
+    // A fresh install ships NO gotchas file — absence is the normal state, and
+    // the exit code IS the contract (same convention as `orc pattern status`).
+    assert.ok(!fs.existsSync(path.join(claudeDir, "orc", "gotchas.md")), "fresh install has no gotchas file");
+    const empty = cli(["gotcha", "status", "--dir", root]);
+    assert.strictEqual(empty.status, 1, "no entries → 1");
+    assert.match(empty.stdout, /no gotchas recorded yet/);
+
+    const f = writeGotchas(claudeDir, gotchaEntry(1));
+    const hit = cli(["gotcha", "status", "--dir", root]);
+    assert.strictEqual(hit.status, 0, "one entry → 0");
+    assert.ok(hit.stdout.includes(f), "names the file the entries live in");
+
+    // `list` obeys the same contract and prints the rows.
+    const list = cli(["gotcha", "list", "--dir", root]);
+    assert.strictEqual(list.status, 0);
+    assert.match(list.stdout, /G-001 · express · repair/);
+    assert.match(list.stdout, /trigger 1/, "prints the trigger, not just the id");
+
+    // A file with a heading but zero parsable entries is the ABSENT state.
+    fs.writeFileSync(path.join(claudeDir, "orc", "gotchas.md"), "# Gotchas — repair memory\n\nnothing yet\n");
+    assert.strictEqual(cli(["gotcha", "status", "--dir", root]).status, 1, "no parsable entry → 1");
+
+    // Project-scoped: the memory is this repo's.
+    assert.notStrictEqual(cli(["gotcha", "status", "--global"]).status, 0, "--global is refused");
+    assert.notStrictEqual(cli(["gotcha", "nosuchsub", "--dir", root]).status, 0, "unknown subcommand exits non-zero");
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("orc gotcha prune archives the tail and never deletes", () => {
+  const { root, claudeDir } = freshInstall();
+  try {
+    assert.strictEqual(cli(["config", "set", "gotchas_max", "5", "--dir", root]).status, 0);
+
+    // 8 entries: hits vary 0..3, last_seen varies — so the ranking (fewest hits,
+    // then oldest last_seen) has something to actually rank.
+    let body = "";
+    const all = [];
+    for (let i = 1; i <= 8; i++) {
+      all.push(`G-${String(i).padStart(3, "0")}`);
+      body += gotchaEntry(i, { hits: i % 4, last_seen: `0${(i % 9) + 1}-08-2026` }) + "\n";
+    }
+    const live = writeGotchas(claudeDir, body);
+    const archive = path.join(claudeDir, "orc", "gotchas-archive.md");
+
+    const r = cli(["gotcha", "prune", "--dir", root]);
+    assert.strictEqual(r.status, 0);
+
+    const ids = (f) => [...fs.readFileSync(f, "utf8").matchAll(/^## (G-\d{3})/gm)].map((m) => m[1]);
+    const kept = ids(live);
+    const evicted = ids(archive);
+    assert.strictEqual(kept.length, 5, "live file holds exactly gotchas_max");
+    assert.strictEqual(evicted.length, 3, "the overflow was archived");
+    assert.deepStrictEqual(
+      [...kept, ...evicted].sort(),
+      all.sort(),
+      "the union of ids is unchanged — an eviction is an ARCHIVE, never a delete"
+    );
+    // Lowest value goes first: hits 0 (G-004, G-008) before any hits 1, and
+    // among hits 1 the oldest last_seen (G-001, 02-08) before G-005 (06-08).
+    assert.deepStrictEqual(evicted.sort(), ["G-001", "G-004", "G-008"], "ranked fewest hits, then oldest");
+    assert.match(fs.readFileSync(live, "utf8"), /^# Gotchas/, "the file preamble survives");
+
+    // Already within the cap → nothing moves.
+    const again = cli(["gotcha", "prune", "--dir", root]);
+    assert.strictEqual(again.status, 0);
+    assert.match(again.stdout, /nothing archived/);
+    assert.strictEqual(ids(live).length, 5, "a second prune is a no-op");
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("config: gotchas + gotchas_max roundtrip through set/list/reset", () => {
+  const { root, claudeDir } = freshInstall();
+  try {
+    const ovr = path.join(claudeDir, "orc.config.yaml");
+
+    assert.strictEqual(cli(["config", "set", "gotchas", "off", "--dir", root]).status, 0);
+    assert.match(fs.readFileSync(ovr, "utf8"), /gotchas:\s*off/);
+    assert.notStrictEqual(cli(["config", "set", "gotchas", "sometimes", "--dir", root]).status, 0, "bad enum rejected");
+
+    assert.strictEqual(cli(["config", "set", "gotchas_max", "60", "--dir", root]).status, 0);
+    assert.notStrictEqual(cli(["config", "set", "gotchas_max", "4", "--dir", root]).status, 0, "<5 rejected");
+    assert.notStrictEqual(cli(["config", "set", "gotchas_max", "lots", "--dir", root]).status, 0, "non-integer rejected");
+
+    const list = cli(["config", "list", "--dir", root]);
+    assert.match(list.stdout, /gotchas\s+off/, "list shows the override");
+    assert.match(list.stdout, /gotchas_max\s+60/);
+
+    assert.strictEqual(cli(["config", "reset", "gotchas", "--dir", root]).status, 0);
+    assert.strictEqual(cli(["config", "reset", "gotchas_max", "--dir", root]).status, 0);
+    const after = fs.readFileSync(ovr, "utf8");
+    assert.doesNotMatch(after, /^gotchas:/m, "reset removes gotchas");
+    assert.doesNotMatch(after, /^gotchas_max:/m, "reset removes gotchas_max");
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("orc update never touches a gotchas file", () => {
+  const { root, claudeDir } = freshInstall();
+  try {
+    const live = writeGotchas(claudeDir, gotchaEntry(1) + "\n" + gotchaEntry(2));
+    const archive = path.join(claudeDir, "orc", "gotchas-archive.md");
+    fs.writeFileSync(archive, "# Gotchas — archive\n\n" + gotchaEntry(3));
+    const before = { live: fs.readFileSync(live), archive: fs.readFileSync(archive) };
+
+    assert.strictEqual(cli(["update", "--dir", root]).status, 0);
+    assert.ok(before.live.equals(fs.readFileSync(live)), "gotchas.md byte-identical after update");
+    assert.ok(before.archive.equals(fs.readFileSync(archive)), "gotchas-archive.md byte-identical");
+
+    // --prune is the destructive path, and doctor --fix is what users actually
+    // run mid-project. Neither may reach user data under .claude/orc/.
+    assert.strictEqual(cli(["update", "--prune", "--dir", root]).status, 0);
+    assert.ok(before.live.equals(fs.readFileSync(live)), "survives update --prune");
+    cli(["doctor", "--fix", "--dir", root]);
+    assert.ok(before.live.equals(fs.readFileSync(live)), "survives doctor --fix");
+    assert.ok(before.archive.equals(fs.readFileSync(archive)), "archive survives doctor --fix");
+
+    // And the DATA files are never claimed as ORC's own — which is exactly why
+    // the prune can never reach them. (The CONTRACT, skills/_shared/gotchas.md,
+    // does ship and IS in the manifest; that distinction is the whole point.)
+    const m = JSON.parse(fs.readFileSync(path.join(claudeDir, "orc", "install-manifest.json"), "utf8"));
+    assert.ok(!m.files.includes("orc/gotchas.md"), "the live file is not in the install manifest");
+    assert.ok(!m.files.includes("orc/gotchas-archive.md"), "the archive is not in the install manifest");
+    assert.ok(m.files.includes("skills/_shared/gotchas.md"), "the shipped CONTRACT is in the manifest");
+  } finally {
+    rmrf(root);
+  }
+});
+
 // ── orc wiki impact golden fixture ──────────────────────────────────────────
 // A tiny git repo with one registered doc covering src/a.js. Impact must read
 // CLEAN before any commit, DELTA (exit 2) after a covered-file commit, and

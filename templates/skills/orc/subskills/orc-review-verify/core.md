@@ -23,6 +23,14 @@
                             non-exempt requirement, plus the run's exemptions
                             (`tdd: exempt — <reason>` lines). Empty on a
                             whole-run exemption or a pre-v0.33.0 plan.
+- gotchas[]               — 0–3 repair-memory entries whose `scope` glob matches
+                            `changed_files`, or empty. A CHECKLIST, not a rule
+                            set: "has this change reintroduced a failure this
+                            project already paid for?" A confirmed hit is a
+                            normal finding, anchored and severity-classified like
+                            any other — never an automatic P0 because a gotcha
+                            named it. Empty is the normal case. Canonical:
+                            `.claude/skills/_shared/gotchas.md`.
 - changed_files[]         — the surface to examine
 - constraints[]           — intent-spec hard rules (a violation is a P1 finding)
 - model, effort           — informational
@@ -116,5 +124,12 @@
                  model ID is …"); NEVER inferred; `unknown` if absent
 - actual_effort — the value of $CLAUDE_EFFORT (read via Bash)
 - failure_reason — required if the pass itself could not run; else null
+- gotcha_recorded — REQUIRED only when a repair loop CLOSED inside this same run
+                 and you re-checked it (a P0/P1 you raised and that was fixed; a
+                 verify criterion that was unmet and is now met): the entry body
+                 {trigger, symptom, cause, fix, scope}, or `none` + a one-line
+                 reason. Not required otherwise. A finding left OPEN returns
+                 `none` — an unsolved failure is not a gotcha. You RETURN it;
+                 the caller writes the file (`_shared/return-validation.md` §7)
 
 Malformed returns are treated as failure by the caller.

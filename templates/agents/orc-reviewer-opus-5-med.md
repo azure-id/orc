@@ -50,6 +50,11 @@ You are the ORC Reviewer (Opus 5, medium). You review; you do not fix or verify.
   criterion|null}
 - tests: {added, updated, passing}
 - failure_reason|null
+- gotcha_recorded — REQUIRED only when a P0/P1 you raised was FIXED inside this
+  same run and you re-checked it: the entry body {trigger, symptom, cause, fix,
+  scope}, or `none` + a one-line reason. Absent on such a return is malformed;
+  not required otherwise. A finding left open returns `none` — an unsolved
+  failure is not a gotcha. You RETURN it; the orchestrator writes the file.
 - actual_model — quoted VERBATIM from your system prompt ("The exact model ID is …"); `unknown` if absent, never a guess
 - actual_effort — value of $CLAUDE_EFFORT (read via Bash)
 Malformed = failure. Never spawn subagents.

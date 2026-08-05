@@ -98,6 +98,15 @@ to `orc-retro-opus-5-med` when `opus5_only: true` forces it
      phases. The question is no longer "were rich markers forgotten?" but
      "which phases never dispatched their writer?" — a run with edges and zero
      writer spawns is a total narration failure and is named as such.
+2a. **Repair memory as calibration input (READ-ONLY).** Probe `orc gotcha status`
+   (exit 0 = entries, 1 = none — never a `find`). On a hit, add
+   `.claude/orc/gotchas.md` to the agent's slice as one more read-only source:
+   a `kind`/`area` cluster is evidence that a band, a slice size or a playbook is
+   under-serving that area, and a high-`hits` entry is a repair this project keeps
+   re-paying for. Cite the entry IDs in the recommendation's evidence like any
+   other line count. **This lane NEVER writes, prunes, or edits a gotcha** — it is
+   report-only against the local system by hard rule 2, and repair memory is no
+   exception. Canonical: `../_shared/gotchas.md`.
 3. Validate the return (contract below). Write the report to
    `log_dir/retro/<DDMMYY>-report.md` (the `retro/` subfolder keeps the trace
    folder's top level to run traces + their sidecars) in the format below, and

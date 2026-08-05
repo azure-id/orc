@@ -18,6 +18,7 @@ whose house style is in force (pattern), whether peer contracts are in play
 ── run preflight ──
 wiki:      FRESH — 12 docs consulted
 pattern:   js cached · ts cached
+gotchas:   12 known · 3 match this change's files
 crosslink: 2 boundaries (payments-api) — advisory
 scoring:   8-band default table
 tdd:       ON — 6 requirements with skeletons, 1 exempt (docs-only)
@@ -32,6 +33,14 @@ waves:     3 planned — will pause after wave 2 (batch_pause_every=2)
 - **pattern:** one token per resolved language (`<lang> cached` /
   `<lang> codifying` / `<lang> agnostic`), joined by ` · `. No FE/BE language
   in the run → `none (no FE/BE work)`.
+- **gotchas:** ALWAYS printed — repair memory is knowledge like the wiki and the
+  pattern, and a silent one is the same defect. Exactly one of
+  `<n> known · <m> match this change's files` (from `orc gotcha status` +
+  the scope-glob count against the plan's `declared_files`) ·
+  `none yet` · `off`. `off` still prints: a user who turned it off should see
+  that the run is not learning from its own repairs, and a user who did not should
+  see that it is. Canonical: `../../_shared/gotchas.md`. `.claude/orc/gotchas.md`
+  is where the entries live.
 - **crosslink:** the crosslink line from `wiki-consult.md` when a probe hit
   (`cached` or `configured-no-cache`); omit the whole line when crosslink is
   not in play (state `none`).

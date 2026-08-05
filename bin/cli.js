@@ -754,6 +754,8 @@ const CONFIG_META = [
   { key: "default_analysis_depth", def: "standard", tier: "common", validate: vEnum("standard", "deep"), options: ["standard", "deep"], desc: "Analyst depth gate default — deep = wider sweep + scouts (run still confirms)." },
   { key: "generate_tests", def: false, tier: "common", validate: vEnum("true", "false"), options: ["true", "false"], desc: "Opt-in Phase 6.5: author test cases before ship (writes tests, never runs them). OFF by default." },
   { key: "pattern_findings", def: "ask", tier: "common", validate: vEnum("ask", "on", "off"), options: ["ask", "on", "off"], desc: "Code-pattern gate on an FE/BE cache miss: ask = prompt, on = auto-codify, off = always agnostic." },
+  { key: "gotchas", def: "on", tier: "common", validate: vEnum("on", "off"), options: ["on", "off"], desc: "Repair memory: record a gotcha when a repair loop goes red → green, and inject the scope-matching ones into executor slices. Never injected unfiltered; see .claude/orc/gotchas.md." },
+  { key: "gotchas_max", def: 40, tier: "common", validate: vInt(5), options: [20, 40, 60, 100], desc: "Live gotcha entries kept before the lowest-value tail is archived to gotchas-archive.md (never deleted)." },
   { key: "security_review", def: "off", tier: "common", validate: vEnum("off", "ask", "on"), options: ["off", "ask", "on"], desc: "Opt-in Phase 5.5 security pass on runs with a task scored >= 70 (risk floor). OFF by default." },
   { key: "mock_example", def: "ask", tier: "common", validate: vEnum("ask", "on", "off"), options: ["ask", "on", "off"], desc: "Post-verify mocked runnable example (mock-examples/<slug>/, never committed): ask = offer after a green verify, on = always, off = never." },
   { key: "tdd_loop_max", def: 3, tier: "common", validate: vInt(1), options: [1, 2, 3, 4, 5], desc: "Max implement→test→repair iterations per task in the TDD gate; cap hit → STOP SEQUENCE + honest red report." },
@@ -1247,6 +1249,7 @@ const DIY_META = [
   { key: "testgen", def: "off", options: ["off", "ask", "on"], validate: vEnum("off", "ask", "on"), desc: "Test-authoring phase (writes tests, never runs them)." },
   { key: "mock_example", def: "ask", options: ["ask", "on", "off"], validate: vEnum("ask", "on", "off"), desc: "Post-verify mocked example + drift recovery (mock-examples/<slug>/, never committed)." },
   { key: "tdd", def: "on", options: ["on", "off"], validate: vEnum("on", "off"), desc: "TDD-anchored planning: plan-time tdd_spec, Wave-0 red tests, TDD gate in the verify slot." },
+  { key: "gotchas", def: "on", options: ["on", "off"], validate: vEnum("on", "off"), desc: "Repair memory: inject scope-matching gotchas into executor slices and record one when a repair loop goes red → green." },
   { key: "wiki_gate", def: "notice", options: ["notice", "off", "hard"], validate: vEnum("notice", "off", "hard"), desc: "Wiki freshness at preflight: notice | off | hard (stale blocks with an ask)." },
   { key: "post_ship_wiki_ask", def: "on", options: ["on", "off"], validate: vEnum("on", "off"), desc: "Offer a wiki refresh after big shipped runs." },
   { key: "summary", def: "full", options: ["full", "off", "short"], validate: vEnum("full", "off", "short"), desc: "Summary depth." },
@@ -2986,6 +2989,154 @@ function pattern() {
   }
 }
 
+// ── Gotchas (repair memory — v0.40.0) ──────────────────────────────────────
+// A gotcha is ONE project-specific failure a repair already solved. The live
+// file sits BESIDE the pattern cache (a sibling of orc/patterns/, never inside
+// it, so listPatternLangs() can never see it) and — like every other file ORC
+// generates under .claude/orc/ — is absent from the install manifest, so
+// `orc update --prune` can never delete it and `orc update` never overwrites it.
+//
+// Division of labour: the MODEL returns an entry body via `gotcha_recorded`, the
+// ORCHESTRATOR appends it, and this CLI owns counting, capping and archival.
+// Eviction is an ARCHIVE, never a delete — a gotcha that stopped being true is
+// the user's to remove, and capacity is not correctness.
+function gotchasPath(claudeDir) {
+  return path.join(claudeDir, "orc", "gotchas.md");
+}
+function gotchasArchivePath(claudeDir) {
+  return path.join(claudeDir, "orc", "gotchas-archive.md");
+}
+
+// Split a gotchas file into whole entry BLOCKS. The heading is the identity:
+// `## G-<3-digit id> · <lang-or-area> · <kind>`; every field line follows it
+// until the next heading. Anything before the first heading is a file preamble
+// and is preserved separately.
+const GOTCHA_HEAD = /^##\s+(G-\d{3})\s+·\s+([^·]+?)\s+·\s+(repair|drift|review|verify)\s*$/;
+
+function parseGotchas(file) {
+  if (!fs.existsSync(file)) return { preamble: "", entries: [] };
+  const lines = fs.readFileSync(file, "utf8").replace(/\r\n/g, "\n").split("\n");
+  const entries = [];
+  const pre = [];
+  let cur = null;
+  for (const line of lines) {
+    const m = line.match(GOTCHA_HEAD);
+    if (m) {
+      if (cur) entries.push(cur);
+      cur = { id: m[1], area: m[2].trim(), kind: m[3], lines: [line], fields: {} };
+      continue;
+    }
+    if (!cur) {
+      pre.push(line);
+      continue;
+    }
+    cur.lines.push(line);
+    const f = line.match(/^-\s+([a-z_]+):\s*(.*)$/);
+    if (f) cur.fields[f[1]] = f[2].trim();
+  }
+  if (cur) entries.push(cur);
+  for (const e of entries) {
+    e.hits = Number.parseInt(e.fields.hits, 10);
+    if (!Number.isFinite(e.hits)) e.hits = 0;
+    // DD-MM-YYYY (the repo's convention) → a sortable number. Unparseable
+    // reads as the OLDEST possible date, so a malformed entry is evicted before
+    // a well-formed one rather than outliving it.
+    const d = /^(\d{2})-(\d{2})-(\d{4})$/.exec(e.fields.last_seen || "");
+    e.seen = d ? Number(d[3] + d[2] + d[1]) : 0;
+    e.text = e.lines.join("\n").replace(/\n+$/, "");
+  }
+  return { preamble: pre.join("\n").replace(/\n+$/, ""), entries };
+}
+
+function gotchaRow(e) {
+  const trig = e.fields.trigger || "(no trigger recorded)";
+  return `  ${e.id} · ${e.area} · ${e.kind} · hits ${e.hits} · ${e.fields.last_seen || "?"}\n      ${trig}`;
+}
+
+// Exit code IS the contract, same convention as `orc pattern status <lang>` and
+// `orc diy status`: 0 = one or more live entries, 1 = none. A gate branches on
+// the code without parsing prose.
+function gotchaStatus(claudeDir, verbose) {
+  const file = gotchasPath(claudeDir);
+  const { entries } = parseGotchas(file);
+  if (!entries.length) {
+    console.log("no gotchas recorded yet — nothing to inject (a repair loop that goes red → green writes the first one)");
+    process.exit(1);
+  }
+  console.log(`✓ ${plural(entries.length, "gotcha")} — ${file}`);
+  if (verbose) for (const e of entries) console.log(gotchaRow(e));
+  process.exit(0);
+}
+
+// Archive the LOW-VALUE tail down to gotchas_max: fewest hits first, then
+// oldest last_seen. Whole blocks are APPENDED to gotchas-archive.md — never
+// dropped, so an eviction is always recoverable.
+function gotchaPrune(claudeDir) {
+  const file = gotchasPath(claudeDir);
+  const { preamble, entries } = parseGotchas(file);
+  // Same resolution every other command uses: the CONFIG_META default, with the
+  // user override on top.
+  const ovr = readOverride(claudeDir).map;
+  const max =
+    Number(
+      Object.prototype.hasOwnProperty.call(ovr, "gotchas_max")
+        ? ovr.gotchas_max
+        : metaFor("gotchas_max").def
+    ) || 40;
+  if (!entries.length) {
+    console.log("no gotchas recorded yet — nothing to prune");
+    return;
+  }
+  if (entries.length <= max) {
+    console.log(`✓ ${plural(entries.length, "gotcha")} — within gotchas_max (${max}); nothing archived`);
+    return;
+  }
+  const ranked = [...entries].sort((a, b) => a.hits - b.hits || a.seen - b.seen);
+  const evictIds = new Set(ranked.slice(0, entries.length - max).map((e) => e.id));
+  const evicted = entries.filter((e) => evictIds.has(e.id));
+  const kept = entries.filter((e) => !evictIds.has(e.id));
+
+  const archive = gotchasArchivePath(claudeDir);
+  const head = fs.existsSync(archive)
+    ? ""
+    : "# Gotchas — archive\n\nEntries evicted from `gotchas.md` by `orc gotcha prune`. Archived, never\ndeleted: IDs are monotonic and never reused, so an archived gotcha stays\ntraceable. Nothing reads this file at run time.\n";
+  fs.mkdirSync(path.dirname(archive), { recursive: true });
+  fs.appendFileSync(archive, head + "\n" + evicted.map((e) => e.text).join("\n\n") + "\n");
+  fs.writeFileSync(file, (preamble ? preamble + "\n\n" : "") + kept.map((e) => e.text).join("\n\n") + "\n");
+  console.log(
+    `✓ archived ${plural(evicted.length, "gotcha")} (${[...evictIds].join(", ")}) → ${archive}\n` +
+      `  ${plural(kept.length, "live gotcha")} remain (gotchas_max=${max}). Archived, never deleted.`
+  );
+}
+
+function gotcha() {
+  if (flag("--global")) {
+    console.error("❌ orc gotcha is project-scoped — the memory is this repo's. Run it from the project (or with --dir <path>).");
+    process.exit(1);
+  }
+  const claudeDir = resolveClaudeDir();
+  const pos = positionals(); // ["gotcha", <sub?>]
+  switch (pos[1]) {
+    case undefined:
+    case "status":
+      gotchaStatus(claudeDir, false);
+      break;
+    case "list":
+      gotchaStatus(claudeDir, true);
+      break;
+    case "prune":
+      gotchaPrune(claudeDir);
+      break;
+    default:
+      console.error(
+        `Unknown: orc gotcha ${pos[1]}\n` +
+          "Usage: orc gotcha status | list   whether repair memory exists (exit 0 = entries, 1 = none)\n" +
+          "       orc gotcha prune           archive the low-value tail down to gotchas_max"
+      );
+      process.exit(1);
+  }
+}
+
 // ── Stacked PRs (`orc pr stack …`) ─────────────────────────────────────────
 // The skeleton generator + the existence probe for stacked-pr/<slug>/stack-plan.md.
 // WHY a CLI command and not a skill step: the plan is the CONTRACT between
@@ -3699,6 +3850,12 @@ Usage:
     orc pattern status [<lang>]           whether a cached pattern exists — the deterministic
                                           existence probe every knowledge-gated lane runs first
                                           (exit 1 when <lang> absent; no arg lists all cached)
+  orc gotcha [--dir <path>]               repair memory — what this project already got wrong
+                                          (project-scoped; no --global)
+    orc gotcha status | list              whether any live entry exists — the deterministic probe
+                                          (exit 0 = entries, 1 = none); list also prints them
+    orc gotcha prune                      archive the low-value tail (fewest hits, then oldest)
+                                          down to gotchas_max → gotchas-archive.md; never deletes
   orc pr [--dir <path>]                   stacked pull requests (project-scoped; no --global)
     orc pr stack template [<slug>]        write a fill-in stack-plan skeleton to
                                           stacked-pr/<slug>/stack-plan.md — fill it in and start
@@ -3759,6 +3916,9 @@ Skills installed: ${listSkillNames().join(", ")}`);
       break;
     case "pattern":
       pattern();
+      break;
+    case "gotcha":
+      gotcha();
       break;
     case "pr":
     case "pr-stack-template":

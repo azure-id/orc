@@ -53,3 +53,14 @@ including a file that became LESS modified, which is how a destructive `git`
 command inside a slice disguises itself as a clean tree. `actual_files` is a
 CLAIM; the worktree is the EVIDENCE. An unexplained delta gates the wave: name
 it, attribute it, and get a decision before closing.
+
+## 7. Gotcha capture (repair loops only — v0.40.0)
+
+A return that closes a repair loop (`tdd_state` went red → green, a drift
+round resolved, a reviewer P0/P1 was fixed in-run) carries
+`gotcha_recorded` — either the entry body (`trigger`, `symptom`, `cause`,
+`fix`, `scope`) or `none` with a one-line reason. Absent on a repair-closing
+return is malformed. It is NOT required on a return that never repaired
+anything, and a loop that hit its cap and STOPPED must return `none` — an
+unsolved failure is not a gotcha. The agent RETURNS the body; the
+orchestrator writes the file. See `gotchas.md`.

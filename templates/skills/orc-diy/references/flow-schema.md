@@ -25,6 +25,7 @@ selector.
 | `testgen` | `off` / `ask` / `on` | Test-authoring phase |
 | `mock_example` | `ask` / `on` / `off` | Post-verify mocked example + drift recovery (`mock-examples/<slug>/`, never committed) |
 | `tdd` | `on` / `off` | TDD-anchored planning: plan-time `tdd_spec`, Wave-0 red tests, TDD gate in the verify slot |
+| `gotchas` | `on` / `off` | Repair memory: inject scope-matching gotchas into slices, record one when a repair loop goes red → green (`_shared/gotchas.md`) |
 | `wiki_gate` | `notice` / `off` / `hard` | Wiki freshness handling at preflight |
 | `post_ship_wiki_ask` | `on` / `off` | Post-ship wiki refresh offer on big runs |
 | `summary` | `full` / `off` / `short` | Summary depth |

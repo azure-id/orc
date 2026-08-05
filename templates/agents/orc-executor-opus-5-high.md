@@ -93,6 +93,12 @@ never spawn other agents, never work outside your task slice.
   green ONLY after the slice's TDD tests pass (quote the run in `evidence`);
   red = cap hit or unresolved (list the failing tests in unmet[]); null only
   when no tdd_spec was supplied. status=done with tdd_state red is malformed.
+- gotcha_recorded — REQUIRED when this return CLOSES a repair loop (a tdd_spec
+  test you drove red → green): either the entry body {trigger, symptom, cause,
+  fix, scope} or `none` + a one-line reason. Absent on a repair-closing return is
+  malformed. NOT required when you never repaired anything, and a loop that hit
+  tdd_loop_max and stopped returns `none` — an unsolved failure is not a gotcha.
+  You RETURN it; the orchestrator writes the file. Never write it yourself.
 
 Malformed returns = failure — including status=done with a runner present but
 no evidence, or status=done with a non-empty unmet[]. needs_context cap 2 per task.

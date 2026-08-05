@@ -28,6 +28,15 @@ subagent; the orchestrator never runs this itself.
                             names/types/errors it states, but it never overrides
                             local code and there is nothing to attest (no return
                             field). Absent on any task with no boundary.
+- gotchas                 — 0–3 repair-memory entries whose `scope` glob matches
+                            this task's declared_files, or absent. Each is one
+                            failure THIS PROJECT already hit and fixed
+                            {trigger, symptom, cause, fix}. Read them as a
+                            "don't re-pay for this" list, not as requirements:
+                            they never override `acceptance[]`, `constraints[]`
+                            or the pattern's invariants. Absent = no match, which
+                            is the normal case — never treat absence as a signal.
+                            Canonical: `.claude/skills/_shared/gotchas.md`.
 - tdd_spec                — this task's plan-time acceptance tests, or null
                             (TDD off / requirement exempt). Present = the
                             Wave-0-materialized failing tests your work must
@@ -116,6 +125,14 @@ subagent; the orchestrator never runs this itself.
                             in `evidence`); red = cap hit/unresolved (failing tests
                             in unmet[]); null only without a tdd_spec. status=done
                             with red is malformed
+- gotcha_recorded         — REQUIRED when this return CLOSES a repair loop (you
+                            drove a tdd_spec test red → green): the entry body
+                            {trigger, symptom, cause, fix, scope}, or `none` + a
+                            one-line reason. Absent on a repair-closing return is
+                            malformed; not required when nothing was repaired. A
+                            loop that hit `tdd_loop_max` and STOPPED returns
+                            `none` — an unsolved failure is not a gotcha. You
+                            RETURN it; the caller writes the file
 
 Malformed returns are treated as failure by the caller. needs_context is
 capped at 2 per task — a third means the slice or plan is wrong and escalates

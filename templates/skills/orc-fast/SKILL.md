@@ -62,6 +62,11 @@ so a missing `postgres-pattern.md` never fails the gate or forces a fallback.
 **Any gate FAILED** → announce which prerequisite failed in one line, then
 hand off to orc-mini via the fallback contract below. Never stop the chat.
 
+**c. Gotchas — NOT a gate.** Two prerequisites stay two: a missing
+`.claude/orc/gotchas.md` never forces a fallback. Fast READS repair memory
+(`orc gotcha status`, then inject the SCOPE-MATCHING entries into the F2 slice,
+cap 3) and never WRITES it — `../_shared/gotchas.md` §10.
+
 ## Phase F1 — Fit gate + micro-intake (one pass, ONE user round-trip)
 
 Draft a 3–5 line intent spec + 2–3 acceptance bullets. Judge fit: more than

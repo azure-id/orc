@@ -59,6 +59,16 @@ pattern_findings: ask      # ask | on | off — on an FE/BE cache miss during /o
 orc_wiki_pattern_findings: false  # orc-wiki also codifies ALL detected langs during
                                   #   its scan (rides under the wiki's scan-consent)
 
+# --- Repair memory (gotchas — what this project has already gotten wrong) ---
+gotchas: on                # on | off — record a gotcha when a repair loop goes
+                           #   red → green, and inject the SCOPE-MATCHING ones
+                           #   into executor slices. Lives at
+                           #   .claude/orc/gotchas.md — outside templates/, never
+                           #   in the install manifest, so update/prune can never
+                           #   touch it. NEVER injected unfiltered.
+gotchas_max: 40            # live entries before the lowest-value tail is archived
+                           #   to gotchas-archive.md (archived, never deleted).
+
 # --- Mock example + drift recovery (Phase 6.7 — implementation lanes only) ---
 mock_example: ask          # ask | on | off — post-verify mocked runnable example
                            #   (mock-examples/<change-slug>/ at project root; NEVER
