@@ -88,31 +88,88 @@ open_questions: [object]   # [] or [{question, proposed_default, blocking: bool}
   # TDD anchor (v0.33.0 — filled by the PLANNER when the run's TDD policy is on:
   # full orc + ultra ALWAYS; orc-mini per its one intake question; orc-fast
   # never; orc-diy per its `tdd` flow key)
-  tdd_spec:                # per-requirement end-to-end acceptance tests,
-                           # authored AT PLAN TIME — before any implementation
+  #
+  # v0.41.0 — TDD IS SCOPED TO WHAT CAN ACTUALLY FAIL. Every requirement used to
+  # get a test unless it had "no runnable surface" (docs/config/markdown). A
+  # translation map and a constant DO have a runnable surface, so the planner
+  # correctly authored tests that only restated their own assignment: a
+  # tautology that costs plan tokens, red-proof tokens and executor tokens and
+  # asserts nothing. A pure file split was worse — it got brand-new tests when
+  # the existing suite already proved the behavior was unchanged.
+  tdd_spec:                # per-requirement acceptance tests, authored AT PLAN
+                           # TIME — before any implementation
     - requirement: string  # the R#/DoD line this test proves
-      kind: enum           # new-surface | regression-guard (v0.34.4) — authored
-                           #   by the PLANNER, who knows which is which; the
-                           #   orchestrator does not.
-                           #   new-surface   = the behavior does not exist yet.
-                           #     It MUST be red pre-implementation; passing is a
-                           #     spec bug and blocks that requirement's dispatch.
-                           #   regression-guard = existing behavior this change
-                           #     must NOT break. It is EXPECTED green before any
-                           #     implementation — that passing IS the assertion,
-                           #     and it blocks nothing.
-                           #   Absent (pre-v0.34.4 plan) → treat as new-surface.
-      given_when_then: str # the scenario, given/when/then form
+      task: string         # the implementation task id this entry belongs to
+                           #   (v0.41.0) — TDD is materialized by a task PAIRED
+                           #   with this one, so the entry must name its owner.
+      disposition: enum    # v0.41.0 — the CLOSED set below. Replaces the old
+                           #   `exempt: string|null`, which had exactly one
+                           #   escape and could not express the two cases that
+                           #   actually matter. `kind` (v0.34.4) is retained as
+                           #   the first two values, so no meaning is lost.
+                           #
+                           #   TESTS ARE AUTHORED:
+                           #   new-surface      = the behavior does not exist
+                           #     yet. MUST be red pre-implementation; passing is
+                           #     a spec bug and blocks that requirement.
+                           #   behavior-change  = existing behavior intentionally
+                           #     changes. Pairs a regression-guard (EXPECTED
+                           #     green — its passing IS the assertion, blocks
+                           #     nothing) with the new assertion (red first).
+                           #
+                           #   NO TEST IS AUTHORED:
+                           #   covered-by-existing = pure refactor/move/split.
+                           #     The behavior is unchanged and an EXISTING test
+                           #     already asserts it. REQUIRES `covered_by` — an
+                           #     unverifiable claim here silently deletes
+                           #     coverage, so the Phase-1 gate resolves the path
+                           #     and bounces the plan if it does not exist.
+                           #   no-behavior      = declarative value only, where
+                           #     a test could only restate the assignment:
+                           #     constants, i18n/translation strings, docs,
+                           #     config, markdown payloads. REQUIRES
+                           #     facets.test_surface == none.
+                           #   no-runner        = the project has no test runner
+                           #     at all → WHOLE-RUN exemption, stated once at
+                           #     preflight (nothing silent); the smoke gate and
+                           #     adversarial review carry verification.
+                           #
+                           #   Absent (pre-v0.41.0 plan) → derive from `kind`;
+                           #   absent `kind` too → new-surface.
+                           #
+                           #   DEFAULT DERIVATION — the planner already produces
+                           #   the facts this needs, so the disposition is
+                           #   DERIVED, not judged, and a deviation is what needs
+                           #   the reason:
+                           #     test_surface: none + novelty: mechanical
+                           #        -> no-behavior
+                           #     test_surface: update-existing + novelty: mechanical
+                           #        -> covered-by-existing
+                           #     otherwise
+                           #        -> new-surface | behavior-change
+                           #
+                           #   SAFETY FLOOR (non-negotiable): a task whose
+                           #   facets.risk[] is non-empty — auth, money,
+                           #   migration, security, concurrency, data-integrity —
+                           #   can NEVER be covered-by-existing or no-behavior.
+                           #   A security invariant does not ride on another
+                           #   test's coincidence.
+      given_when_then: str # the scenario, given/when/then form. Required for
+                           #   new-surface and behavior-change; omit otherwise.
       skeleton: string     # runnable test skeleton in the PROJECT'S OWN test
-                           #   framework (target file path + code) — Wave 0
-                           #   materializes it into a real FAILING test
-      exempt: string|null  # instead of a skeleton: `tdd: exempt — <reason>`
-                           #   for requirements with no runnable surface
-                           #   (docs/config/markdown payloads). No test runner
-                           #   in the project at all → WHOLE-RUN exemption,
-                           #   stated once at preflight (nothing silent);
-                           #   smoke gate + adversarial review carry
-                           #   verification.
+                           #   framework (target file path + code) — the paired
+                           #   TDD task materializes it into a real FAILING test.
+                           #   Required for new-surface and behavior-change.
+      covered_by: string   # REQUIRED for covered-by-existing: `path:line` (or
+                           #   `path::test name`) of the existing test that
+                           #   already asserts this behavior. Must resolve — the
+                           #   Phase-1 gate Globs it exactly as it does a
+                           #   `disposition: exists` file.
+      reason: string       # REQUIRED for no-behavior and no-runner, and for any
+                           #   disposition that DEVIATES from the derivation
+                           #   table above. One line, plain language — it is
+                           #   printed at preflight, so the user always sees what
+                           #   was skipped and why.
 
   # scoring facets (filled by the PLANNER during grounding — the party that read
   # every declared file produces the FACTS; the orchestrator computes the score
@@ -199,10 +256,24 @@ open_questions: [object]   # [] or [{question, proposed_default, blocking: bool}
    an invariant that reaches a task field demonstrably reaches the executor's
    `constraints[]`; one that lives only in the spec's prose may not.
 7. `tdd_spec` (v0.33.0) anchors the definition-of-done in RUNNABLE tests before
-   implementation. **Wave 0 of execution is a dedicated task that materializes
-   every non-exempt `tdd_spec` into real FAILING tests — red proven before the
-   implementation waves; a test that PASSES pre-implementation is a spec bug
-   and blocks dispatch of that requirement** until resolved. TDD tests are
-   pipeline-internal, DO run, and live in the project's normal test tree (they
-   ship with the code) — distinct from Phase 6.5's `test-generator/`
-   deliverables, which are a separate opt-in that never runs.
+   implementation. **A test that PASSES pre-implementation is a spec bug and
+   blocks dispatch of that requirement** until resolved — for `new-surface`
+   entries only; a `behavior-change` entry's regression-guard half is EXPECTED
+   green. TDD tests are pipeline-internal, DO run, and live in the project's
+   normal test tree (they ship with the code) — distinct from Phase 6.5's
+   `test-generator/` deliverables, which are a separate opt-in that never runs.
+8. **TDD is a PAIRED TASK, not a Wave 0 (v0.41.0).** The single synthesized
+   Wave-0 task that materialized every skeleton at once is gone. For each
+   implementation task carrying `new-surface` or `behavior-change` entries, the
+   planner emits a SEPARATE task — `id`, `title` (`TDD: <what it proves>`),
+   `declared_files` = just that task's test files, `owns_area` = the impl task's
+   area — and the implementation task lists it in `depends_on`.
+
+   These are ORDINARY tasks: they flow through the normal conflict graph and
+   wave grouping, they are scored from their own facets, and `max_wave_tasks` /
+   `is_batch_pause` / `pause_schedule` bind to them unchanged. So **independent
+   TDD tasks share a wave and run in parallel**, while `depends_on` guarantees
+   **a red proof never lands in the same wave as the code it proves**.
+
+   **If no task needs TDD, no TDD task is emitted at all** — a plan of pure
+   constants, translations and file moves runs with zero red-proof cost.

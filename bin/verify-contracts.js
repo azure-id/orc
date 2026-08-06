@@ -230,8 +230,15 @@ const CONTRACTS = [
       "agents/orc-planner-opus-5-med.md",
       "skills/orc-mini/SKILL.md",
       "skills/orc/SKILL.md",
+      // v0.41.0: `disposition` is also the TDD scoping field (new-surface |
+      // behavior-change | covered-by-existing | no-behavior | no-runner), so
+      // these three carry the token for that reason, not for grounding.
+      "skills/orc-diy/references/blocks/execution.md",
+      "skills/orc-diy/references/flow-schema.md",
+      "skills/orc/config.md",
       "skills/orc/references/analyst-gates.md",
       "skills/orc/references/plan-handoff.md",
+      "skills/orc/references/preflight-report.md",
       "skills/orc/schemas/planning-output.md",
       "skills/orc/subskills/orc-planner-mini/SKILL.md",
       "skills/orc/subskills/orc-planner/SKILL.md",
@@ -929,9 +936,11 @@ const CONTRACTS = [
       "agents/orc-planner-opus-5-med.md",
       "agents/orc-retro-opus-5-med.md",
       "agents/orc-retro-sonnet-5-high.md",
+      "skills/orc-mini/SKILL.md",
       "skills/orc-retro/SKILL.md",
       "skills/orc/README.md",
       "skills/orc/SKILL.md",
+      "skills/orc/config.md",
       "skills/orc/examples/full-run-mock.md",
       "skills/orc/references/analyst-gates.md",
       "skills/orc/references/effort-and-mode.md",
@@ -994,6 +1003,8 @@ const CONTRACTS = [
       "skills/orc-wiki/references/staleness.md",
       "skills/orc/SKILL.md",
       "skills/orc/references/wiki-consult.md",
+      // v0.41.0: the `wiki` slice field states the precedence to the executor.
+      "skills/orc/subskills/orc-execution/core.md",
     ],
   },
   {
@@ -1355,7 +1366,7 @@ const CONTRACTS = [
   },
   {
     // v0.33.0: TDD-anchored planning — the plan-time acceptance-test contract.
-    name: "TDD plan anchor (v0.33.0 — tdd_spec authored at plan time, Wave-0 red proof)",
+    name: "TDD plan anchor (v0.33.0 — tdd_spec at plan time; v0.41.0 — scoped by disposition, paired TDD task)",
     token: "tdd_spec",
     files: [
       // v0.40.0: a tdd_spec test driven red -> green is the primary record trigger.

@@ -1983,12 +1983,14 @@ function crosslinkProviderInfo(repoRoot) {
     tags: Array.isArray(meta.crosslink_provided) ? meta.crosslink_provided.length : 0,
   };
   if (meta.scan_commit) {
-    const r = spawnSync("git", ["rev-list", "--count", `${meta.scan_commit}..HEAD`], {
-      cwd: repoRoot, encoding: "utf8",
-    });
-    if (r.status === 0 && r.stdout && /^\d+$/.test(r.stdout.trim())) {
-      const d = Number(r.stdout.trim());
-      info.tier = d < 10 ? "FRESH" : d <= 30 ? "AGING" : "STALE"; // default edges
+    // Coverage-relative, exactly like our own wiki (v0.41.0) — a peer running
+    // delta refreshes was reported permanently STALE by the frozen oldest-doc
+    // anchor too. Edges stay the DEFAULTS on purpose: the thresholds are a
+    // local preference and a peer repo's config is not ours to read.
+    const f = computeWikiFreshness(repoRoot, meta, { freshMax: 10, agingMax: 30 });
+    if (f.tier !== "unknown") {
+      info.tier = f.tier;
+      info.distance = f.distance;
     }
   }
   return info;
@@ -2033,7 +2035,9 @@ function crosslinkProviderLine(claudeDir, repoPath, dir) {
       "     Fix in that repo: `orc wiki sync` — instant, no re-scan (edge saved, inert until then)";
   if (info.state === "corrupt")
     return "  ⚠ wiki-meta.json there is unreadable (corrupt JSON) — run `orc wiki sync` in that repo to rebuild it";
-  const tier = info.tier ? info.tier : "tier unknown (git unavailable there — using date only)";
+  const tier = info.tier
+    ? `${info.tier}${info.distance === null || info.distance === undefined ? "" : ` (${info.distance}c)`} [peer defaults 10/30]`
+    : "tier unknown (git unavailable there — using date only)";
   const head = `  ✓ wiki found · last_scan ${info.last_scan || "?"} · ${tier} · `;
   if (info.tags) return head + plural(info.tags, "crosslink tag");
   // Tags are published BY the provider — the repo being CALLED — so this is
@@ -2402,6 +2406,152 @@ function oldestCommit(root, commits) {
   return best;
 }
 
+// ── Wiki freshness (v0.41.0) — COVERAGE-RELATIVE, one shared engine ─────────
+// The tier used to be `git rev-list --count <meta.scan_commit>..HEAD` against
+// hardcoded 10/30 edges. Both halves were wrong:
+//
+//   1. `meta.scan_commit` is the OLDEST doc's anchor (oldestCommit above) and a
+//      DELTA refresh — the default path since v0.33.0 — only re-scans TOUCHED
+//      docs, so untouched docs keep their old `scanned_commit` and the anchor
+//      CAN NEVER MOVE. Every refresh reported the same hash and a distance that
+//      only ever grew: permanently STALE, exactly the state a refresh exists to
+//      clear. (`wikiImpact` fixed this for its per-doc classification in
+//      v0.34.5; the four other consumers were left on the frozen anchor.)
+//   2. The edges ignored `wiki_fresh_max`/`wiki_aging_max`, so a user raising
+//      the thresholds to quiet the STALE spam saw no change at all.
+//
+// The fix is semantic, not cosmetic: a doc is stale when commits since ITS OWN
+// anchor touched files IT covers. A doc about auth does not rot because the
+// README changed forty times. The wiki's tier is its WORST doc — overstating
+// freshness stays the one error a freshness signal must not make — and a
+// STRUCTURAL blind spot (changed files no doc covers) degrades it to STALE.
+//
+// Read-side only: `meta.scan_commit` keeps its meaning on disk (the
+// conservative blind-spot floor), so no manifest migration and no re-scan.
+function freshnessTier(distance, edges) {
+  if (distance === null) return "unknown";
+  if (distance < edges.freshMax) return "FRESH";
+  if (distance <= edges.agingMax) return "AGING";
+  return "STALE";
+}
+
+const TIER_RANK = { FRESH: 0, AGING: 1, STALE: 2, unknown: 3 };
+
+// Git pathspecs for one registered doc's coverage. `covers` globs become
+// `:(glob)` magic so git applies the same `**` semantics impactGlobRe does;
+// `covered_files` keys are literal paths. A doc with neither cannot be measured
+// against its own surface — the caller falls back to the plain distance.
+function coveragePathspecs(entry) {
+  const specs = [];
+  for (const c of entry.covers || []) {
+    const cc = String(c).replace(/\/$/, "");
+    if (!cc) continue;
+    specs.push(/[*?]/.test(cc) ? ":(glob)" + cc : cc);
+  }
+  for (const f of Object.keys(entry.covered_files || {})) {
+    if (f) specs.push(f);
+  }
+  // A doc listing hundreds of covered files would blow the command line; the
+  // globs alone are a faithful superset of that doc's surface.
+  const uniq = [...new Set(specs)];
+  return uniq.length > 200 ? uniq.filter((s) => s.startsWith(":(glob)")) : uniq;
+}
+
+function wikiFreshnessEdges(claudeDir) {
+  const map = readOverride(claudeDir).map;
+  return {
+    freshMax: Number(map.wiki_fresh_max) || 10,
+    agingMax: Number(map.wiki_aging_max) || 30,
+  };
+}
+
+// The single source of tier truth for `wiki status`, `wiki sync`, `wiki impact`
+// and (with foreign defaults) crosslink provider lines.
+function computeWikiFreshness(root, meta, edges) {
+  const out = {
+    tier: "unknown",
+    distance: null,
+    anchor: null,
+    perDoc: [],
+    blind: [],
+    reasons: [],
+    edges,
+  };
+  const docs = Array.isArray(meta && meta.docs) ? meta.docs : [];
+  const globalAnchor = meta && meta.scan_commit ? meta.scan_commit : null;
+
+  for (const d of docs) {
+    const anchor = d.scanned_commit || globalAnchor;
+    const row = { file: d.file, anchor: anchor || null, distance: null, tier: "unknown", scoped: false };
+    if (anchor) {
+      const specs = coveragePathspecs(d);
+      const argv = ["rev-list", "--count", `${anchor}..HEAD`];
+      if (specs.length) argv.push("--", ...specs);
+      let n = gitIn(root, argv);
+      if (n !== null && /^\d+$/.test(n)) {
+        row.distance = Number(n);
+        row.scoped = specs.length > 0;
+      } else if (specs.length) {
+        // Unresolvable pathspec (a covers glob git rejects) — fall back to the
+        // doc's plain distance rather than silently dropping the doc.
+        n = gitIn(root, ["rev-list", "--count", `${anchor}..HEAD`]);
+        if (n !== null && /^\d+$/.test(n)) row.distance = Number(n);
+      }
+    }
+    row.tier = freshnessTier(row.distance, edges);
+    out.perDoc.push(row);
+  }
+
+  // Worst doc wins. `unknown` only survives when NOTHING could be measured;
+  // a single unmeasurable doc among measurable ones is reported per-doc but
+  // must not mask a real STALE.
+  const measured = out.perDoc.filter((r) => r.distance !== null);
+  if (measured.length) {
+    let worst = measured[0];
+    for (const r of measured) if (r.distance > worst.distance) worst = r;
+    out.tier = freshnessTier(worst.distance, edges);
+    out.distance = worst.distance;
+    out.anchor = worst.anchor;
+    if (out.tier !== "FRESH")
+      out.reasons.push(
+        `${worst.file} is ${worst.distance} commit(s) behind on its own covered files ` +
+          `(fresh < ${edges.freshMax}, aging <= ${edges.agingMax})`
+      );
+  } else {
+    out.reasons.push("no doc carries a resolvable scanned_commit — freshness cannot be computed");
+  }
+
+  // STRUCTURAL blind spot: files changed since the conservative floor that NO
+  // doc covers. This is a COVERAGE gap, not doc rot — the docs that exist are
+  // still accurate, they just don't cover everything. So it degrades the tier by
+  // exactly ONE step and never past AGING.
+  //
+  // Forcing STALE here would recreate the very bug this rewrite fixes from the
+  // other direction: every repo grows a README edit or a new helper no doc
+  // covers, so a permanent blind spot would mean a permanent STALE and refresh
+  // would once again look like it changed nothing. STALE means "do not trust
+  // these docs"; a blind spot does not say that. `orc wiki impact` still
+  // escalates a blind spot to a FULL-refresh recommendation — that is the right
+  // place for that signal, and double-counting it here only hides doc rot.
+  if (globalAnchor) {
+    const diff = gitIn(root, ["diff", "--name-only", `${globalAnchor}..HEAD`]);
+    if (diff !== null) {
+      const changed = diff.split(/\r?\n/).map((x) => x.trim()).filter(Boolean);
+      out.blind = changed.filter((f) => !IMPACT_NOISE.test(f) && !docs.some((d) => docCovers(d, f)));
+      if (out.blind.length && out.tier === "FRESH") {
+        out.tier = "AGING";
+        out.reasons.push(
+          `${out.blind.length} changed file(s) no doc covers (STRUCTURAL blind spot) — ` +
+            "docs on disk are current; coverage is incomplete"
+        );
+      } else if (out.blind.length) {
+        out.reasons.push(`${out.blind.length} changed file(s) no doc covers (STRUCTURAL blind spot)`);
+      }
+    }
+  }
+  return out;
+}
+
 const two = (n) => String(n).padStart(2, "0");
 const fmtStamp = (d) =>
   `${two(d.getDate())}-${two(d.getMonth() + 1)}-${d.getFullYear()} ` +
@@ -2690,10 +2840,24 @@ function wikiSync(claudeDir, { check } = {}) {
   console.log(changed ? "✅ wiki registered" : "✅ wiki registration already in sync");
   console.log(`   ${plural(r.registry.length, "doc")} indexed → ${path.relative(r.paths.root, r.paths.index).split(path.sep).join("/")}`);
   console.log(`   manifest → ${path.relative(r.paths.root, r.paths.meta).split(path.sep).join("/")}`);
-  if (r.anchor)
-    console.log(`   scan_commit ${r.anchor.commit.slice(0, 8)} (oldest doc — ${r.anchor.distance} commits behind HEAD)`);
-  else
+  if (r.anchor) {
+    // TWO different numbers, and conflating them is what made a successful
+    // refresh look like a no-op (v0.41.0). `scan_commit` is the conservative
+    // BLIND-SPOT FLOOR — the oldest doc, deliberately frozen by a delta refresh.
+    // The TIER is coverage-relative and is what actually answers "is my wiki
+    // fresh". Printing only the floor, labelled as freshness, meant the same
+    // hash and a growing distance after every successful refresh.
+    console.log(`   coverage floor ${r.anchor.commit.slice(0, 8)} (oldest doc — ${r.anchor.distance} commits behind HEAD; blind-spot anchor, not the tier)`);
+    const edges = wikiFreshnessEdges(claudeDir);
+    const f = computeWikiFreshness(r.paths.root, r.meta, edges);
+    console.log(
+      `   freshness ${f.tier === "unknown" ? "tier unknown" : f.tier}` +
+        (f.distance === null ? "" : ` (${f.distance}c on the worst doc's own covered files)`) +
+        ` — \`orc wiki status\` for the breakdown`
+    );
+  } else {
     console.log("   ⚠ no resolvable scanned_commit in any doc — freshness tracking stays off until the next /orc-wiki refresh");
+  }
   if (r.provided.length) console.log(`   ${plural(r.provided.length, "crosslink tag")} indexed`);
   if (crosslinkAlarm) { console.log(""); alarmLines(); }
   if (!r.meta.commands)
@@ -2703,9 +2867,30 @@ function wikiSync(claudeDir, { check } = {}) {
   console.log("\n   Registration only — nothing was scanned and no doc was changed.");
 }
 
-function wikiStatus(claudeDir) {
+function wikiStatus(claudeDir, { json } = {}) {
   const s = wikiState(claudeDir);
   const paths = wikiPaths(claudeDir);
+  // --json (v0.41.0) mirrors `orc doctor --json`: machine-readable freshness so
+  // hooks/CI — and skills — branch on a field instead of parsing human prose.
+  if (json) {
+    const out = { state: s.state, docs: s.docs || 0, tier: null, distance: null, anchor: null, last_scan: null, reasons: [], blind: 0, edges: wikiFreshnessEdges(claudeDir) };
+    if (s.state === "registered") {
+      const f = computeWikiFreshness(paths.root, s.meta, out.edges);
+      out.tier = f.tier;
+      out.distance = f.distance;
+      out.anchor = f.anchor;
+      out.reasons = f.reasons;
+      out.blind = f.blind.length;
+      out.last_scan = s.meta.last_scan || null;
+      out.crosslink_tags = readCrosslinkProvided(paths).list.length;
+    }
+    // Always exit 0: the `state`/`tier` fields ARE the branch. Overloading the
+    // exit code here would collide with the existence contract in
+    // `_shared/detecting-artifacts.md`, where a non-zero wiki probe would read
+    // as "absent" — and `unregistered` means the wiki very much exists.
+    console.log(JSON.stringify(out, null, 2));
+    return;
+  }
   switch (s.state) {
     case "none":
       console.log("no wiki — run `/orc-wiki` in Claude Code to build one");
@@ -2729,10 +2914,9 @@ function wikiStatus(claudeDir) {
       );
       break;
     default: {
-      const d = s.meta.scan_commit
-        ? gitIn(paths.root, ["rev-list", "--count", `${s.meta.scan_commit}..HEAD`])
-        : null;
-      const tier = d === null ? "tier unknown" : Number(d) < 10 ? "FRESH" : Number(d) <= 30 ? "AGING" : "STALE";
+      const edges = wikiFreshnessEdges(claudeDir);
+      const f = computeWikiFreshness(paths.root, s.meta, edges);
+      const tier = f.tier === "unknown" ? "tier unknown" : f.tier;
       // Crosslink surface — tags reported alongside docs (plan v0.24.0 §B4). A
       // documented boundary with zero tags is the user's exact symptom, so name
       // it here rather than let it read as a clean wiki.
@@ -2743,7 +2927,40 @@ function wikiStatus(claudeDir) {
         : countBoundaryRows(docs) > 0
           ? " · crosslink: UNPUBLISHED boundary (run `/orc-wiki crosslink`)"
           : "";
-      console.log(`✓ registered — ${s.docs} docs · last_scan ${s.meta.last_scan || "?"} · ${tier}${d === null ? "" : ` (${d}c)`}${crossline}`);
+      console.log(
+        `✓ registered — ${s.docs} docs · last_scan ${s.meta.last_scan || "?"} · ${tier}` +
+          (f.distance === null ? "" : ` (${f.distance}c)`) +
+          crossline
+      );
+      // The anchor that ACTUALLY pins the tier — the worst-covered doc, not the
+      // manifest's frozen oldest-doc floor. This is the hash that moves when a
+      // refresh does its job; printing the floor here is what made every
+      // refresh look like it had changed nothing.
+      if (f.anchor) {
+        const worst = f.perDoc.find((r) => r.distance === f.distance && r.anchor === f.anchor);
+        console.log(
+          `  freshness anchor ${String(f.anchor).slice(0, 8)}` +
+            (worst ? ` (${worst.file})` : "") +
+            ` · edges: fresh < ${edges.freshMax}c, aging <= ${edges.agingMax}c` +
+            " (config wiki_fresh_max / wiki_aging_max)"
+        );
+      }
+      const counts = { FRESH: 0, AGING: 0, STALE: 0, unknown: 0 };
+      for (const r of f.perDoc) counts[r.tier]++;
+      console.log(
+        `  per-doc: ${counts.FRESH} fresh · ${counts.AGING} aging · ${counts.STALE} stale` +
+          (counts.unknown ? ` · ${counts.unknown} unmeasurable` : "")
+      );
+      if (f.tier === "AGING" || f.tier === "STALE") {
+        const stale = f.perDoc
+          .filter((r) => r.tier === "AGING" || r.tier === "STALE")
+          .sort((a, b) => TIER_RANK[b.tier] - TIER_RANK[a.tier] || b.distance - a.distance)
+          .slice(0, 5);
+        for (const r of stale) console.log(`    ${r.tier.padEnd(5)} ${r.file} (${r.distance}c on its covered files)`);
+      }
+      for (const why of f.reasons) console.log(`  why: ${why}`);
+      if (f.tier === "STALE" || f.tier === "AGING")
+        console.log("  Fix: `/orc-wiki` refresh (delta by default — `orc wiki impact` shows the scope first).");
     }
   }
 }
@@ -2864,19 +3081,26 @@ function wikiImpact(claudeDir) {
 
   const map = readOverride(claudeDir).map;
   const threshold = Number(map.wiki_delta_full_threshold) || 30;
-  const agingMax = Number(map.wiki_aging_max) || 30;
-  const dist = gitIn(paths.root, ["rev-list", "--count", `${meta.scan_commit}..HEAD`]);
-  const aging = dist !== null && /^\d+$/.test(dist) && Number(dist) > agingMax;
+  const edges = wikiFreshnessEdges(claudeDir);
+  const agingMax = edges.agingMax;
+  // v0.41.0: the aging reason reads the COVERAGE-RELATIVE distance, not
+  // `meta.scan_commit`. The frozen oldest-doc anchor made `aging` permanently
+  // true once the repo passed wiki_aging_max commits, so a wiki whose every doc
+  // read CLEAN still exited 3 "FULL refresh recommended" forever — recommending
+  // the expensive re-scan this whole delta path exists to avoid.
+  const fresh = computeWikiFreshness(paths.root, meta, edges);
+  const dist = fresh.distance === null ? null : String(fresh.distance);
+  const aging = fresh.distance !== null && fresh.distance > agingMax;
   const pct = docs.length ? Math.round(((touchedDocs + structuralDocs) / docs.length) * 100) : 0;
 
   // `pct` counts touched + structural, so it measures REFRESH SCOPE, not
   // "touched" — and it is the number users tune wiki_delta_full_threshold
   // against, so the label has to say what it counts.
-  console.log(`\n  summary: ${docs.length} registered · ${touchedDocs} touched · ${structuralDocs} structural · ${pct}% affected (threshold ${threshold}%)` + (dist !== null ? ` · ${dist} commits behind` : ""));
+  console.log(`\n  summary: ${docs.length} registered · ${touchedDocs} touched · ${structuralDocs} structural · ${pct}% affected (threshold ${threshold}%)` + (dist !== null ? ` · freshness ${fresh.tier}, ${dist} commits behind on the worst doc's covered files` : ""));
   const fullReasons = [];
   if (pct > threshold) fullReasons.push(`affected ${pct}% > wiki_delta_full_threshold ${threshold}%`);
   if (structuralDocs || blind.length) fullReasons.push("STRUCTURAL change (gone anchors / blind spot)");
-  if (aging) fullReasons.push(`scan_commit ${dist} commits behind HEAD > wiki_aging_max ${agingMax}`);
+  if (aging) fullReasons.push(`worst doc ${dist} commits behind on its own covered files > wiki_aging_max ${agingMax}`);
 
   if (!touchedDocs && !structuralDocs && !blind.length && !aging) {
     console.log("  → CLEAN — the wiki still covers HEAD; no refresh needed.");
@@ -3356,12 +3580,12 @@ function wiki() {
       break;
     case undefined:
     case "status":
-      wikiStatus(claudeDir);
+      wikiStatus(claudeDir, { json: flag("--json") });
       break;
     default:
       console.error(
         `Unknown: orc wiki ${pos[1]}\n` +
-          "Usage: orc wiki status               registration state of the wiki\n" +
+          "Usage: orc wiki status [--json]      registration state + computed freshness tier\n" +
           "       orc wiki sync [--check]       rebuild wiki-meta.json + INDEX.md from the docs\n" +
           "       orc wiki impact               commit-scoped delta probe: per-doc CLEAN | TOUCHED |\n" +
           "                                     STRUCTURAL vs scan_commit (exit 0 clean / 2 delta / 3 full)"
@@ -3840,6 +4064,9 @@ Usage:
     orc crosslink list | status           inspect the graph + per-repo freshness (read-only)
     orc crosslink remove <name>           drop a linked repo and its edges
   orc wiki [--dir <path>]                 registration state of the wiki (project-scoped; no --global)
+    orc wiki status [--json]              registration state + COMPUTED freshness tier — a doc is
+                                          stale only when its OWN covered files changed; edges from
+                                          config wiki_fresh_max / wiki_aging_max
     orc wiki sync [--check]               rebuild wiki-meta.json + INDEX.md from the docs on disk
                                           (instant, no re-scan — this is the repair for an
                                            unregistered wiki, e.g. a scan stopped at a pause)

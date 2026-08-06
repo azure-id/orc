@@ -209,7 +209,7 @@ supplies the fact in a packet, the writer writes the line. `SPAWN`, `RETURN` and
 | `FINDING p0=<n> p1=<n> p2=<n> p3=<n>` | reviewer→orc → writer | review outcome (P0–P3 severity ladder) |
 | `VERDICT pass\|fail :: <detail>` | verifier→orc → writer | verification outcome |
 | `DRIFT loop=<n> :: <user description, compressed>` | orc → writer | mock-example drift-recovery loop opened (`PHASE mock-example`; canonical `_shared/drift-recovery.md`; hard cap 2 loops) |
-| `TDD-RED task=<id> iter=<n> :: <failing tests>` | executor→orc → writer | TDD repair-loop iteration — the plan's acceptance tests still red (cap `tdd_loop_max`; Wave-0 red proof also emits iter=0) |
+| `TDD-RED task=<id> iter=<n> :: <failing tests>` | executor→orc → writer | TDD repair-loop iteration — the plan's acceptance tests still red (cap `tdd_loop_max`; a paired TDD task's red proof also emits iter=0) |
 | `TDD-GREEN task=<id> iter=<n>` | executor→orc → writer | the task's TDD acceptance tests pass (the non-exempt definition-of-done) |
 | `NOTE :: <decisions>` | writer | the packet's `decisions` field — the WHY layer (scoring rationale, user answers verbatim, what was rejected). One line per packet, only when `decisions` is non-empty |
 | `FINISH :: <detail>` | orc → writer | run ended |

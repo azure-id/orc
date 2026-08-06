@@ -85,15 +85,40 @@ proceed-with-flagged.
    alone.
 4. **TDD/test-task collision (v0.34.4):** a `tdd_spec` entry whose target file
    is in the `declared_files` of a task whose `facets.test_surface` is
-   `new-tests` is a miss. Wave 0 materializes `tdd_spec` BEFORE the
-   implementation waves, so that task's planned work is already on disk and
+   `new-tests` is a miss. The paired TDD task materializes `tdd_spec` BEFORE the
+   task it guards, so that task's planned work is already on disk and
    green by the time its wave opens — leaving only bad options (dispatch a
    no-op, silently drop promised coverage, or re-slice mid-run). The planner
    authored both mechanisms and folds them together itself: extend the
    materialized file, never re-author it.
+5. **TDD disposition gate (v0.41.0)** — this gate is what lets TDD be skipped
+   safely. Skipping a test is cheap to claim and expensive to get wrong, so
+   every skip must be checkable, and it is checked in BOTH directions: a rule
+   that only ever prevents tests is a rule that deletes coverage.
+   - `disposition` outside the closed set
+     `new-surface | behavior-change | covered-by-existing | no-behavior | no-runner`
+     → miss. (Absent on a pre-v0.41.0 plan → derive from `kind`; never bounce an
+     old plan — see the legacy exception below.)
+   - `covered-by-existing` **without a resolvable `covered_by`** → miss. Glob the
+     cited `path` exactly as check 1 does for `disposition: exists`. "A test
+     already covers this" is the one claim that, if false, silently removes
+     coverage the run promised.
+   - `no-behavior` whose task has `facets.test_surface != none` → miss
+     (self-contradiction: the planner said the surface is testable and that it
+     isn't).
+   - **Safety floor:** any entry that is `covered-by-existing` or `no-behavior`
+     on a task with non-empty `facets.risk[]` → miss, no exceptions. Auth,
+     money, migration, security, concurrency and data-integrity requirements do
+     not ride on another test's coincidence.
+   - `new-surface` / `behavior-change` missing `skeleton` or `given_when_then`
+     → miss.
+   - A disposition that DEVIATES from the derivation table in
+     `../schemas/planning-output.md` without a `reason` → miss. The derivation
+     is the default; departing from it is the thing that needs justifying.
 
 Any miss → the plan is malformed: bounce it back to the planner WITH the miss
 list (one retry), then escalate to the user. **Legacy exception:** a
 pre-v0.7.0 plan resumed from an old checkpoint has no `grounding[]`
-(pre-v0.9.0: no `requirements[]`/`spec_invariants[]`) — resume it without the
+(pre-v0.9.0: no `requirements[]`/`spec_invariants[]`; pre-v0.41.0: no
+`disposition`) — resume it without the
 missing checks; never bounce an old plan.

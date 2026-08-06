@@ -15,9 +15,13 @@ validated against the contract) with these compiled overrides:
   from the shipped presets.
 
 <!-- diy:when tdd=on -->
-TDD execution: Wave 0 materializes every non-exempt `tdd_spec` into real
-FAILING tests (red proven before implementation; a pre-implementation pass is
-a spec bug → block that requirement). Each implementation slice carries its
+TDD execution: `tdd_spec` is SCOPED by each entry's `disposition` — only
+`new-surface` and `behavior-change` get tests; `covered-by-existing` (cited
+existing test) and `no-behavior` (constants, translation strings, docs, config)
+get none, and a task with cited `risk[]` is never scoped out. A PAIRED TDD task
+(never a Wave 0) materializes the remaining skeletons into real
+FAILING tests (red proven before implementation; a `new-surface` pre-implementation
+pass is a spec bug → block that requirement). Each implementation slice carries its
 `tdd_spec`; executors implement to green (implement→test→repair, cap
 `tdd_loop_max`; `TDD-RED`/`TDD-GREEN` per iteration) and return `tdd_state`
 per `.claude/skills/_shared/return-validation.md` — including §6's worktree

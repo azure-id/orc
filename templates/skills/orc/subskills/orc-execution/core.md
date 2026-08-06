@@ -19,6 +19,15 @@ subagent; the orchestrator never runs this itself.
                             advisory lines are marked and informational),
                             pattern_version}. Agnostic
                             tasks carry invariants only (no conventions, no gate).
+- wiki                    — project-wiki grounding for this task, or absent:
+                            page CONTENT (full/mini) or page PATHS to read first
+                            (fast), plus the freshness tier in force. Precedence
+                            is always `code > fresh wiki > stale wiki (hints) >
+                            model priors` — on any wiki-vs-code conflict the code
+                            wins. You MUST return `wiki_used` naming the pages
+                            you actually read, or `none`; see the return
+                            contract. Absent on a task the orchestrator grounded
+                            without the wiki.
 - crosslink               — the cross-repo boundary contract for a call site in
                             this task, or null. Present ONLY when a declared file
                             touches a boundary the orchestrator resolved from
@@ -38,8 +47,11 @@ subagent; the orchestrator never runs this itself.
                             is the normal case — never treat absence as a signal.
                             Canonical: `.claude/skills/_shared/gotchas.md`.
 - tdd_spec                — this task's plan-time acceptance tests, or null
-                            (TDD off / requirement exempt). Present = the
-                            Wave-0-materialized failing tests your work must
+                            (TDD off, or every entry scoped out as
+                            covered-by-existing / no-behavior / no-runner —
+                            null is NOT "untested"). Present = the failing tests
+                            a PAIRED TDD task already materialized, which your
+                            work must
                             turn GREEN, plus `tdd_loop_max` (the repair cap).
                             Never edit a TDD test to make it pass — a test
                             that looks wrong is a spec bug: return it, don't

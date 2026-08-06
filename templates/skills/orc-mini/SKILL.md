@@ -169,11 +169,11 @@ apply to mini — never render or ask them.
 **TDD (ONE intake question — mini's whole TDD policy):** at intake ask once:
 *"Anchor this in plan-time acceptance tests (TDD — red tests first, implement
 to green)? [yes/no]"*. Yes → the planner slice carries `tdd: on` (the mini
-planner authors `tdd_spec` per requirement); the executor slice carries the
-`tdd_spec` — it materializes the failing tests FIRST, then implements to green
+planner authors `tdd_spec` per requirement, **scoped by the same `disposition` set the full lane uses** — `new-surface | behavior-change | covered-by-existing | no-behavior | no-runner`, derived from the `facets`, same safety floor: a cited `risk[]` is never scoped out, so a constant or a translation string gets no test but an auth change always does). Mini keeps its SINGLE executor — no paired TDD task; that executor materializes the failing tests FIRST, then implements to green
 (implement→test→repair, cap `tdd_loop_max`; emit `TDD-RED`/`TDD-GREEN` per
 iteration; cap hit → STOP + honest red report), and Phase M's smoke gate runs
-the TDD suite as part of build+test. No → skip entirely; never re-ask.
+the TDD suite as part of build+test. Scoped-out requirements are named with their
+reason at preflight — never silent. No → skip entirely; never re-ask.
 
 ## Analyst & planner (mini lane)
 

@@ -83,20 +83,25 @@ test("the planners carry the vocabularies INLINE (values must not live one hop a
   }
 });
 
-test("tdd_spec entries carry a kind, and both branches of pre-implementation green are defined", () => {
+test("tdd_spec entries carry a disposition, and both branches of pre-implementation green are defined", () => {
   const schema = read("skills/orc/schemas/planning-output.md");
-  const spec = schema.slice(schema.indexOf("tdd_spec:"), schema.indexOf("facets:"));
-  assert.match(spec, /kind:\s*enum/, "tdd_spec entries carry a kind");
-  assert.match(spec, /new-surface/, "new-surface kind defined");
-  assert.match(spec, /regression-guard/, "regression-guard kind defined");
+  // Collapse the YAML comment continuations: a phrase that wraps across `#`
+  // lines is the same contract, and the test must not pin the line breaks.
+  const raw = schema.slice(schema.indexOf("tdd_spec:"), schema.indexOf("facets:"));
+  const spec = raw.replace(/\n\s*#\s*/g, " ");
+  assert.match(spec, /disposition:\s*enum/, "tdd_spec entries carry a disposition (v0.41.0, replacing `kind`)");
+  assert.match(spec, /new-surface/, "new-surface disposition defined");
+  assert.match(spec, /behavior-change/, "behavior-change disposition defined");
   assert.match(spec, /MUST be red/, "new-surface must be red pre-implementation");
-  assert.match(spec, /EXPECTED green/, "regression-guard is expected green");
+  assert.match(spec, /EXPECTED green/, "a regression guard is expected green");
+  // The retained meaning of the old `kind` field must not be silently dropped.
+  assert.match(spec, /regression-guard/, "the regression-guard half of behavior-change survives the rename");
 
-  // …and the orchestrator's Wave 0 step must READ the kind, not blanket-block.
+  // …and the orchestrator's red-proof step must READ the disposition, not blanket-block.
   const spine = read("skills/orc/SKILL.md");
-  const wave0 = spine.slice(spine.indexOf("Wave 0 — TDD red proof"), spine.indexOf("1. Dispatch EVERY task"));
-  assert.match(wave0, /per entry `kind`/, "Wave 0 reads the entry kind");
-  assert.match(wave0, /regression-guard.*EXPECTED|EXPECTED.*regression-guard/s, "a regression guard passing blocks nothing");
+  const proof = spine.slice(spine.indexOf("TDD red proof"), spine.indexOf("1. Dispatch EVERY task"));
+  assert.match(proof, /per `disposition`/, "the red proof reads the entry disposition");
+  assert.match(proof, /regression-guard.*EXPECTED|EXPECTED.*regression-guard/s, "a regression guard passing blocks nothing");
 });
 
 test("the Phase 1 exit gate bounces a tdd_spec / new-tests task collision", () => {
@@ -112,10 +117,12 @@ test("orchestrator-synthesized tasks have ONE derived scoring rule, referenced f
   assert.ok(sec, "the general rule exists");
   assert.match(sec, /DERIVED, never judged/, "the vector is derived");
   assert.match(sec, /mechanical/, "novelty is pinned to mechanical");
-  assert.match(sec, /does NOT inherit the risk floor/, "Wave 0's risk-floor question is answered");
+  // v0.41.0: the TDD red proof is no longer synthesized (it is a planner-emitted
+  // paired task), so the mock example is the remaining instance. The risk-floor
+  // answer moved with it, into the TDD-tasks section of the same file.
+  assert.match(wg, /does NOT inherit the risk floor/, "the risk-floor question is still answered");
+  assert.match(wg, /## TDD tasks are ORDINARY tasks/, "…in the section that now owns it");
 
-  // Both instances must point at it rather than re-deciding locally.
-  assert.match(read("skills/orc/SKILL.md"), /orchestrator-SYNTHESIZED/i, "Wave 0 points at the rule");
   const drift = read("skills/_shared/drift-recovery.md");
   assert.match(drift, /DISPATCHED like any task/, "the mock example names its actor");
   assert.match(drift, /wave-grouping\.md/, "…and points at the same scoring rule");
@@ -397,7 +404,13 @@ test("every lane has a TDD policy row, and the preflight block defines a rule pe
   assert.ok(printed.includes("tdd"), "the TDD line is part of the block");
   const tddRule = pf.slice(pf.indexOf("- **tdd:**"), pf.indexOf("- **trace:**"));
   assert.match(tddRule, /EXEMPT \(whole run\)/, "the exemption branch is defined");
-  assert.match(tddRule, /ON —/, "the normal branch is defined too");
+  assert.match(tddRule, /tasks with tests/, "the normal branch is defined too");
+  // v0.41.0: scoping TDD down is only safe if the scoping is visible. A silently
+  // skipped test is indistinguishable from a forgotten one.
+  assert.match(tddRule, /skipped:/, "the skipped breakdown is part of the line");
+  assert.match(tddRule, /REQUIRED whenever/, "…and it is mandatory, not optional decoration");
+  for (const d of ["covered-by-existing", "no-behavior"])
+    assert.ok(tddRule.includes(d), `the rule names the ${d} branch it must report`);
 });
 
 // ── v0.37.0 stacked PRs ────────────────────────────────────────────────────
@@ -464,4 +477,149 @@ test("both stacked-PR lanes ship a human guide, and each spine points at its own
   // Each guide links the other, so a user landing on either finds the whole flow.
   assert.match(read("skills/orc-pr-setup/README.md"), /orc-pr-driver\/README\.md/);
   assert.match(read("skills/orc-pr-driver/README.md"), /orc-pr-setup\/README\.md/);
+});
+
+// ── TDD scoping (v0.41.0) ───────────────────────────────────────────────────
+// The disposition set is a CLOSED vocabulary spread across the schema, the
+// Phase-1 gate, four planner agents and two lane spines. The token lint pins
+// the word `disposition`; only a golden comparison catches a value added in one
+// place and missing in another — which would silently let a plan skip a test
+// the gate never learned to check.
+const TDD_DISPOSITIONS = [
+  "new-surface",
+  "behavior-change",
+  "covered-by-existing",
+  "no-behavior",
+  "no-runner",
+];
+
+test("the TDD disposition vocabulary is identical everywhere it is stated", () => {
+  const schema = read("skills/orc/schemas/planning-output.md");
+  for (const d of TDD_DISPOSITIONS)
+    assert.ok(schema.includes(d), `schema declares ${d}`);
+
+  // Every file that decides or enforces the disposition must know all five.
+  for (const rel of [
+    "skills/orc/references/analyst-gates.md",
+    "skills/orc/subskills/orc-planner/SKILL.md",
+    "agents/orc-planner-opus-5-med.md",
+    "agents/orc-planner-fable-5.md",
+    "agents/orc-planner-mini-sonnet-5-high.md",
+    "agents/orc-planner-mini-opus-5-med.md",
+    "skills/orc/SKILL.md",
+    "skills/orc-mini/SKILL.md",
+  ]) {
+    const md = read(rel);
+    for (const d of TDD_DISPOSITIONS)
+      assert.ok(md.includes(d), `${rel} names the ${d} disposition`);
+  }
+});
+
+test("the facet -> disposition derivation is stated identically wherever it is derived", () => {
+  // The whole saving rests on this table: `mechanical` + `none` means a constant
+  // or a translation string, `mechanical` + `update-existing` means a pure
+  // refactor. A file that states one pairing and not the other would author
+  // tests for exactly the cases the fix exists to skip.
+  for (const rel of [
+    "skills/orc/schemas/planning-output.md",
+    "skills/orc/subskills/orc-planner/SKILL.md",
+    "agents/orc-planner-opus-5-med.md",
+    "agents/orc-planner-fable-5.md",
+    "agents/orc-planner-mini-sonnet-5-high.md",
+    "agents/orc-planner-mini-opus-5-med.md",
+  ]) {
+    const md = read(rel);
+    assert.match(md, /test_surface: none/, `${rel} states the no-behavior antecedent`);
+    assert.match(md, /test_surface: update-existing/, `${rel} states the covered-by-existing antecedent`);
+    assert.match(md, /novelty: mechanical/, `${rel} states the shared novelty antecedent`);
+  }
+});
+
+test("every place that can skip a test also states the risk safety floor", () => {
+  // A skip rule without its floor is a coverage hole: an auth or money
+  // requirement must never ride on another test's coincidence.
+  for (const rel of [
+    "skills/orc/schemas/planning-output.md",
+    "skills/orc/references/analyst-gates.md",
+    "skills/orc/subskills/orc-planner/SKILL.md",
+    "agents/orc-planner-opus-5-med.md",
+    "agents/orc-planner-fable-5.md",
+    "agents/orc-planner-mini-sonnet-5-high.md",
+    "agents/orc-planner-mini-opus-5-med.md",
+    "skills/orc/SKILL.md",
+    "skills/orc-mini/SKILL.md",
+  ]) {
+    const md = read(rel);
+    assert.match(md, /risk\[\]/, `${rel} names the risk facet in its skip rule`);
+  }
+  // The gate is the only party that ENFORCES it, so it must say so in full.
+  const gate = read("skills/orc/references/analyst-gates.md");
+  assert.match(gate, /covered_by/, "the gate resolves the cited existing test");
+  assert.match(gate.replace(/\s+/g, " "),
+    /Auth, money, migration, security, concurrency and data-integrity/i,
+    "the gate enumerates the protected risk classes");
+});
+
+test("the monolithic Wave-0 red proof is gone from every lane that had one", () => {
+  // A leftover "Wave 0 materializes every tdd_spec" instruction would re-create
+  // the up-front cost this release removed, and would contradict the paired-task
+  // dependency the planner now emits.
+  for (const rel of [
+    "skills/orc/SKILL.md",
+    "skills/orc/schemas/planning-output.md",
+    "skills/orc/references/wave-grouping.md",
+    "skills/orc/subskills/orc-planner/SKILL.md",
+    "skills/orc/subskills/orc-execution/core.md",
+    "skills/orc-diy/references/blocks/execution.md",
+  ]) {
+    const md = read(rel);
+    assert.doesNotMatch(md, /Wave 0 materializes/, `${rel} no longer dispatches a monolithic Wave 0`);
+    assert.doesNotMatch(md, /Wave-0-materialized/, `${rel} no longer refers to Wave-0 materialization`);
+  }
+  // …and the replacement is stated where the waves are actually computed.
+  const waves = read("skills/orc/references/wave-grouping.md");
+  assert.match(waves, /depends_on/, "the ordering guarantee is the dependency, not a special wave");
+  assert.match(waves, /share a wave/, "independent red proofs are allowed to parallelize");
+});
+
+// ── Wiki visibility (v0.41.0) ───────────────────────────────────────────────
+
+test("the freshness tier is read from the CLI probe, never hand-computed", () => {
+  // A model-computed tier is one that gets skipped under load or measured from
+  // the wrong anchor — the failure this release fixed on the CLI side.
+  for (const rel of [
+    "skills/orc/references/wiki-consult.md",
+    "skills/_shared/detecting-artifacts.md",
+    "skills/orc-wiki/references/staleness.md",
+    "skills/orc/SKILL.md",
+  ]) {
+    const md = read(rel);
+    assert.match(md, /orc wiki status/, `${rel} names the probe`);
+  }
+  const consult = read("skills/orc/references/wiki-consult.md");
+  assert.match(consult, /never/i, "the consult forbids the hand-computed path");
+  assert.doesNotMatch(
+    consult,
+    /compute\s+\n?`git rev-list --count <scan_commit>\.\.HEAD`/,
+    "the old hand-run rev-list instruction is gone"
+  );
+});
+
+test("wiki use is attested per dispatch, not assumed from the Phase-1 line", () => {
+  const consult = read("skills/orc/references/wiki-consult.md");
+  assert.match(consult, /wiki_used/, "the consult names the return field");
+  assert.match(consult, /DISPATCH/, "attribution rides the dispatch line");
+
+  const ret = read("skills/_shared/return-validation.md");
+  assert.match(ret, /wiki_used/, "the return contract defines the field");
+  assert.match(ret, /`none` is a valid and INFORMATIVE return/,
+    "a wiki nobody reads must stay visible, so `none` is never dropped");
+
+  // Every executor must be able to produce it.
+  for (const f of fs.readdirSync(path.join(T, "agents")).filter((x) => x.startsWith("orc-executor-")))
+    assert.match(read(`agents/${f}`), /wiki_used/, `${f} returns wiki_used`);
+
+  // …and the slice contract has to actually carry the wiki for that to mean anything.
+  assert.match(read("skills/orc/subskills/orc-execution/core.md"), /^- wiki\s/m,
+    "the slice contract declares the wiki field");
 });

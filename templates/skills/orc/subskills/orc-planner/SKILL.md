@@ -130,16 +130,45 @@ expecting all 8 to run at once).
    source is invented by definition. Never invent criteria the spec lacks.
 3b. **Author the `tdd_spec` (v0.33.0 — when the run's TDD policy is on; full
    orc/ultra AND standalone `/orc-plan` always — a saved plan's only consumers
-   are the TDD-always build lanes):** per requirement, an end-to-end acceptance
-   test — `kind` (`new-surface` = behavior that does not exist yet, MUST be red
-   pre-implementation | `regression-guard` = existing behavior this change must
-   not break, EXPECTED green — that passing IS its assertion) + given/when/then
-   + a RUNNABLE skeleton in the project's own test framework (real target path;
-   Wave 0 materializes it into a failing test BEFORE implementation). A
-   `tdd_spec` target file that is also a `new-tests` task's declared file is a
-   collision the Phase 1 gate bounces — fold them yourself. A requirement with no runnable surface (docs/config/
-   markdown payloads) gets `tdd: exempt — <reason>` instead — never silence.
-   No test runner in the project → state the whole-run exemption once.
+   are the TDD-always build lanes). TDD IS SCOPED TO WHAT CAN ACTUALLY FAIL
+   (v0.41.0):** every entry carries a `disposition` from the closed set, DERIVED
+   from the facets you already produced — you are not judging this fresh:
+
+   | facets | disposition | test? |
+   |---|---|---|
+   | `test_surface: none` + `novelty: mechanical` | `no-behavior` (+`reason`) | **no** |
+   | `test_surface: update-existing` + `novelty: mechanical` | `covered-by-existing` (+`covered_by: path:line`) | **no** |
+   | otherwise | `new-surface` or `behavior-change` | yes |
+   | project has no test runner | `no-runner` (whole-run) | no |
+
+   `no-behavior` is the constant / i18n-string / docs / config case: a test there
+   could only restate its own assignment, so it costs plan, red-proof and
+   executor tokens while asserting nothing. `covered-by-existing` is the pure
+   refactor / move / file-split case — the behavior is unchanged and an existing
+   test already proves it; **the cited path MUST resolve**, because an
+   unverifiable claim here silently deletes coverage, and the Phase 1 gate Globs
+   it. `new-surface` MUST be red pre-implementation; `behavior-change` pairs a
+   regression-guard (EXPECTED green — that passing IS its assertion) with the new
+   assertion. Both need given/when/then + a RUNNABLE skeleton in the project's
+   own test framework (real target path).
+
+   **Safety floor:** a task with non-empty `facets.risk[]` — auth, money,
+   migration, security, concurrency, data-integrity — is NEVER
+   `covered-by-existing` or `no-behavior`. Deviating from the table needs a
+   one-line `reason`; the derivation is the default, and departing from it is
+   what needs justifying. Never silence: every scoped-out requirement is named
+   with its reason at preflight.
+
+   **Emit a PAIRED TDD TASK, never a Wave 0.** For each implementation task
+   carrying `new-surface`/`behavior-change` entries, emit a separate task
+   (`TDD: <what it proves>`, `declared_files` = just its test files); the
+   implementation task lists it in `depends_on`, and each entry's `task` names
+   its owner. TDD tasks are ORDINARY tasks — same conflict graph, same waves,
+   scored from their own facets — so independent red proofs share a wave and run
+   in parallel, while `depends_on` keeps every proof in an earlier wave than the
+   code it proves. **If no task needs one, emit none.** A `tdd_spec` target file
+   that is also a `new-tests` task's declared file is a collision the Phase 1
+   gate bounces — fold them yourself.
 4. **Right-size — with anchors, not adjectives:** a task normally owns **1–5
    declared files and one `owns_area`**; >7 files or two unrelated areas →
    split candidate; a whole change of ≤~10 lines in 1 file and

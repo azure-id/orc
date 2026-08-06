@@ -15,13 +15,23 @@ Does a wiki exist? Decide with the deterministic probe in
 line `wiki: absent — running without knowledge base (build one with /orc-wiki)`,
 then move on. Any other state = wiki present → continue below.
 
-## Step 1 — Compute the freshness tier (never stored, always computed)
+## Step 1 — Read the freshness tier from the CLI (never compute it by hand)
 
-Read `.claude/orc/wiki-meta.json` and compute
-`git rev-list --count <scan_commit>..HEAD` → **FRESH / AGING / STALE** per
-`../../orc-wiki/references/staleness.md` (the canonical tier rules; tier edges
-come from config `wiki_fresh_max` / `wiki_aging_max`). Manifest absent while
-docs are present = STALE-with-notice. **Every tier prints exactly ONE
+**`orc wiki status` IS the tier (v0.41.0).** Do not read
+`.claude/orc/wiki-meta.json` and do not run `git rev-list` yourself — the probe
+already did, coverage-relative (a doc is stale only when ITS OWN covered files
+changed) and against the user's configured `wiki_fresh_max` / `wiki_aging_max`
+edges. Use `orc wiki status --json` when you want to branch on a field
+(`.tier`, `.distance`, `.blind`) rather than parse prose.
+
+This extends the deterministic-probe rule in
+`../../_shared/detecting-artifacts.md` from EXISTENCE to FRESHNESS, and it
+exists for the same reason: a hand-computed tier is a tier that gets skipped
+under load or computed from the wrong anchor. The canonical tier RULES stay in
+`../../orc-wiki/references/staleness.md`; the CLI is their only executor.
+Manifest absent while docs are present (`unregistered`) = STALE-with-notice.
+
+**Every tier prints exactly ONE
 user-visible line at the consult point** (no tier is silent — the user must
 always know whether the run is grounded and how fresh):
 
@@ -84,6 +94,40 @@ the same precedence rule extended across the repository boundary.
 **Emit `WIKI-CONSULT <tier> :: docs=<pages pulled, comma list>`** — one trace
 line recording the freshness tier (`fresh`/`aging`/`stale`, or
 `absent`/`empty` with `docs=none`) and which wiki pages grounded this run.
+
+## Step 5 — Attribute the wiki AT THE POINT OF USE (v0.41.0)
+
+A run-level line at Phase 1 says the wiki was consulted. It does NOT say the
+wiki did anything — and "is this knowledge base actually working?" is the
+question a user is really asking. So wiki content is attributed **per dispatch,
+where it is used**, not only where it was selected.
+
+**When a slice carries wiki content or wiki page pointers, the `DISPATCH` line
+gets a wiki continuation naming the docs and the tier AT TIME OF USE:**
+
+```
+DISPATCH orc-executor-sonnet-5-high :: T4 modify health API expect=sonnet-5/high
+  wiki: FRESH — 2 docs → orc-feature-health.md, orc-reference-api-surface.md
+```
+
+Rules:
+- **Only when the slice actually carried wiki material.** A task that received
+  none prints nothing — a line on every dispatch would be decoration, and the
+  signal has to stay honest to be worth anything.
+- **The tier is the one in force NOW**, re-read from `orc wiki status` if the
+  run has committed since Phase 1 (its own commits can age the wiki mid-run).
+  Never re-label a later dispatch with a FRESH verdict minted at Phase 1 — the
+  tier travels with the use, not with the run.
+- The same pair (`tier`, `docs`) goes into the phase packet's `events[]` so the
+  trace carries it and `/orc-retro` can aggregate consult rates against repair
+  rounds.
+
+**Proof of use comes back from the agent, not from assumption.** Every executor
+return carries `wiki_used` (`_shared/return-validation.md`) — the doc paths it
+actually read, or `none`. `none` on a slice that carried docs is a REAL signal
+(the pages were not useful, or were ignored): record it, never quietly drop it.
+It is the only thing that distinguishes a wiki that is working from one that is
+merely being shipped.
 
 ## Scoring bonus (full lane, Phase 2)
 

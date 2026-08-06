@@ -59,7 +59,13 @@ test -f "$root/.claude/orc/patterns/<lang>-pattern.md"     # pattern cached
 
 ## Handoff
 
-Existence decides only "is the knowledge THERE." Once present, hand off to
-`../orc-wiki/references/staleness.md` for the freshness tier and the precedence
-rule. Absent routes per each lane's own gate: orc-fast → fallback to orc-mini;
+Existence decides only "is the knowledge THERE." Once present, the freshness
+tier comes from **the same probe** — `orc wiki status` prints it, and
+`orc wiki status --json` exposes `.tier` / `.distance` / `.blind` for branching
+(v0.41.0). The tier RULES and the precedence rule stay canonical in
+`../orc-wiki/references/staleness.md`, but the CLI is their only executor:
+never re-derive a tier by reading `wiki-meta.json` and running `git rev-list`
+yourself. A hand-computed tier is one that gets skipped under load or measured
+from the wrong anchor — the same reason existence became a probe in the first
+place. Absent routes per each lane's own gate: orc-fast → fallback to orc-mini;
 orc / orc-mini → proceed without it (the wiki/pattern are purely additive).

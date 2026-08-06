@@ -50,15 +50,41 @@ If two tasks own the same feature/files with no dependency between them, the
 graph auto-serializes them — but that's a planning smell. Surface it: suggest
 merging them into one task rather than silently serializing duplicate work.
 
-## Orchestrator-synthesized tasks (Wave 0, the mock example, any future one)
+## TDD tasks are ORDINARY tasks (v0.41.0)
+
+TDD red proofs are **planner-emitted tasks**, not an orchestrator-synthesized
+Wave 0. Each one materializes the `tdd_spec` entries of the implementation task
+it guards, and that task lists it in `depends_on`. Nothing here special-cases
+them:
+
+- they enter the same conflict graph via their `declared_files` (their test
+  files), so **independent TDD tasks share a wave and run in parallel** — the
+  red proofs for two unrelated features are one wave, not two;
+- `depends_on` guarantees **a red proof is always in an earlier wave than the
+  code it proves** — a proof can never land beside its implementation;
+- they are scored from **their own planner-emitted `facets`**, like any task, so
+  no derived-vector rule is needed;
+- `max_wave_tasks`, `is_batch_pause` and `pause_schedule` bind to them unchanged.
+
+**A TDD task does NOT inherit the risk floor** of the task it guards: it
+transcribes planner-authored skeletons, writes no production code, and its output
+is asserted RED before anything is believed. The planner reflects that in the
+task's own facets (`novelty: mechanical`, `logic: none`, `risk: []`). Stated here
+so it is not re-litigated per run — the alternative is a Haiku-sized
+transcription job dispatched at floor 70 because the requirement it proves is
+auth-flavoured.
+
+**If no task carries `new-surface` or `behavior-change` entries, no TDD task
+exists and no extra wave is created.**
+
+## Orchestrator-synthesized tasks (the mock example, any future one)
 
 Some dispatched tasks appear in no `tasks[]` because the ORCHESTRATOR synthesized
-them — Wave 0's TDD red proof (from `tdd_spec`) and the mock example
-(`_shared/drift-recovery.md`). They still obey hard rule 1: **dispatched like any
-other task, never done by you.** But they have no planner-emitted `facets`, and
-the orchestrator is by definition the party that did NOT read the code — inventing
-a vector for them is judgment wearing arithmetic's clothes, the exact thing the
-facet redesign removed.
+them — the mock example (`_shared/drift-recovery.md`). They still obey hard rule
+1: **dispatched like any other task, never done by you.** But they have no
+planner-emitted `facets`, and the orchestrator is by definition the party that
+did NOT read the code — inventing a vector for them is judgment wearing
+arithmetic's clothes, the exact thing the facet redesign removed.
 
 So their vector is **DERIVED, never judged**:
 
@@ -67,14 +93,8 @@ So their vector is **DERIVED, never judged**:
 | `breadth` | `len(files the synthesized task will touch)` |
 | `novelty` | `mechanical` — it transcribes planner-authored material |
 | `logic` | `none` |
-| `test_surface` | per the task (Wave 0 = `new-tests`) |
+| `test_surface` | per the task |
 | `risk` | `[]` — unless the synthesized task itself inherits a CITED risk |
-
-**Wave 0 does NOT inherit the risk floor** of the tasks whose tests it writes:
-it transcribes planner-authored skeletons, writes no production code, and its
-output is asserted RED before anything is believed. Stated here so it is not
-re-litigated per run — the alternative is a Haiku-sized transcription job
-dispatched at floor 70 because the requirement it proves is auth-flavoured.
 
 ## Post-wave worktree audit (a GATE, not a report)
 

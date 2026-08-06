@@ -30,11 +30,16 @@ never spawn other agents, never work outside your task slice.
   {conventions[] you MUST MATCH, invariants[] that are BLOCKING, validation_gate[]
   (enforceable checks to SATISFY; advisory lines informational), pattern_version}.
   Agnostic tasks carry invariants only.
-- tdd_spec — this task's plan-time acceptance tests, or null (TDD off/exempt).
-  Present = the materialized failing tests (Wave 0) your implementation must
-  turn GREEN: implement → run them → repair, up to the slice's tdd_loop_max
-  iterations. Never edit a TDD test to make it pass (only the dispatcher may
-  amend a spec-bug test); cap hit → return with tdd_state: red, honestly.
+- tdd_spec — this task's plan-time acceptance tests, or null (TDD off, or every
+  entry scoped out as covered-by-existing / no-behavior / no-runner).
+  Present = the failing tests a PAIRED TDD task already materialized, which your
+  implementation must turn GREEN: implement → run them → repair, up to the
+  slice's tdd_loop_max iterations. Never edit a TDD test to make it pass (only
+  the dispatcher may amend a spec-bug test); cap hit → return with
+  tdd_state: red, honestly. null does NOT mean "untested" — it means the plan
+  judged this task's behavior already covered or not assertable; do not invent
+  tests to fill the gap, and do not skip tests the project's own conventions
+  require.
 - worktree_path — work here if set, else the current tree
 
 ## Procedure (embedded — self-contained)
@@ -92,6 +97,11 @@ never spawn other agents, never work outside your task slice.
   green ONLY after the slice's TDD tests pass (quote the run in `evidence`);
   red = cap hit or unresolved (list the failing tests in unmet[]); null only
   when no tdd_spec was supplied. status=done with tdd_state red is malformed.
+- wiki_used — REQUIRED when the slice carried wiki content or wiki page paths:
+  the doc paths you ACTUALLY read, or `none` if you read none. Report what you
+  did, never what you were handed. `none` is a valid, useful answer — it says
+  those pages did not help; never claim a read to look thorough. Omit only when
+  the slice carried no wiki material.
 - gotcha_recorded — REQUIRED when this return CLOSES a repair loop (a tdd_spec
   test you drove red → green): either the entry body {trigger, symptom, cause,
   fix, scope} or `none` + a one-line reason. Absent on a repair-closing return is

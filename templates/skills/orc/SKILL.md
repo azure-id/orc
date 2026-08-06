@@ -210,12 +210,10 @@ Emit `PHASE planning start`, then emit ONE `CONFIG <key=value …>` line with th
 resolved values of every config key this run will consume (incl. `fable5_*` when enabled, and ALWAYS `opus5_only` — it selects the executor table AND every fixed role, so retro can segment per-band outcomes BY dispatch mode) — the runtime
 proof `/orc-retro` audits that the run honored the config.
 **Wiki consult (load `references/wiki-consult.md`;
-always report — no tier is silent):** compute the FRESH/AGING/STALE tier from
-`.claude/orc/wiki-meta.json`, pull the relevant pages (incl. cross-cutting maps
-like `orc-reference-api-surface`), apply
+always report — no tier is silent):** read the FRESH/AGING/STALE tier from
+**`orc wiki status`** (v0.41.0 — deterministic; never hand-compute it from `wiki-meta.json`), pull the relevant pages (incl. cross-cutting maps like `orc-reference-api-surface`), apply
 `code > fresh wiki > stale wiki (hints) > model priors`, emit
-`WIKI-CONSULT <tier> :: docs=<pages>`, AND print the one-line tier report to the
-user (every tier, `absent` included). **Crosslink:** per wiki-consult.md, inject
+`WIKI-CONSULT <tier> :: docs=<pages>`, print the one-line tier report (every tier, `absent` included), and attribute per-dispatch too — `wiki:` on the `DISPATCH` line + a `wiki_used` return (wiki-consult.md Step 5). **Crosslink:** per wiki-consult.md, inject
 the cached `.claude/orc/crosslink/needs.json` contract into any boundary-touching
 task (advisory) and print + emit `CROSSLINK <state> :: boundaries=<n> peers=<names>`
 — `configured-no-cache` prints the "cache not built" warning (full orc reads
@@ -241,10 +239,8 @@ only input that does NOT proceed to Phase 2 (each repo builds later, in its own
 `schemas/planning-output.md` (per-task `declared_files` incl. tests,
 `grounding[]`, `acceptance[]`, `requirements[]`, `spec_invariants[]`,
 `depends_on`, `owns_area`, `spec_ref`, + a `coverage` echo, + `tdd_spec` —
-TDD is ALWAYS ON in full orc/ultra: per-requirement given/when/then + runnable
-skeletons, or `tdd: exempt — <reason>` per requirement; no test runner in the
-project → whole-run exemption, ONE preflight line says so); missing declared
-files → extract and confirm before leaving this phase.
+TDD is ALWAYS ON in full orc/ultra but **SCOPED to what can actually fail (v0.41.0)**: a `disposition` per entry (`new-surface | behavior-change | covered-by-existing | no-behavior | no-runner`) DERIVED from the planner's facets — constants/translations/file-splits get NO test, a cited `risk[]` is never scoped out, and a PAIRED task materializes it, never a Wave 0 (schema notes 7-8; gate check 5);
+missing declared files → extract and confirm before leaving this phase.
 
 **Phase 1 exit gate** (deterministic — full checks in analyst-gates.md; emit
 `GATE` lines): Glob every `disposition: exists` path, recompute coverage (no
@@ -290,12 +286,8 @@ dispatching. **Pattern-resolve gate
 apply cached; miss → codify/agnostic per `pattern_findings`; learn → dispatch
 the codifier); hold resolved patterns in run state.
 
-**Wave 0 — TDD red proof (before the implementation waves; skip only on a
-whole-run exemption):** dispatch ONE task that materializes every non-exempt
-`tdd_spec` skeleton into real FAILING tests in the project's test tree, runs
-them, and returns the red evidence. Emit `TDD-RED task=<id> iter=0` per
-requirement. **Pre-implementation green is read per entry `kind`:** a `new-surface` entry that PASSES is a spec bug → block that requirement's dispatch and surface it; a `regression-guard` entry passing is EXPECTED and blocks nothing; anything else → adjudicate with the user, recorded in `decisions`.
-Wave 0 is orchestrator-SYNTHESIZED: dispatched like any task, scored from the DERIVED vector in `wave-grouping.md` (no inherited risk floor). Then per implementation wave:
+**TDD red proof — PAIRED TASKS, not a Wave 0 (v0.41.0):** TDD tasks are ORDINARY planner-emitted tasks the impl task `depends_on`, so they wave and score like any other (mechanics in `wave-grouping.md`); no `new-surface`/`behavior-change` entries → no TDD task at all. Each materializes its skeletons into real FAILING tests and returns the red evidence; emit `TDD-RED task=<id> iter=0` per requirement.
+**Pre-implementation green is read per `disposition`:** a `new-surface` entry that PASSES is a spec bug → block that requirement's dispatch and surface it; a `behavior-change` regression-guard passing is EXPECTED and blocks nothing; anything else → adjudicate with the user, recorded in `decisions`. Then per implementation wave:
 1. Dispatch EVERY task as a spawned subagent (emit `DISPATCH <agent> :: <task>
    expect=<model>/<effort>` BEFORE the Task call; subagent wrapper framing + the
    task's INPUT SLICE per orc-execution/core.md + its scored model). Every

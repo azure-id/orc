@@ -44,6 +44,18 @@ A task whose slice carried a `tdd_spec` must return `tdd_state: green|red` —
 the lane runs its repair loop up to `tdd_loop_max`, then STOPS with the red
 report — never re-dispatch past the cap.
 
+## 5b. Wiki attestation (when wiki content or page pointers were injected — v0.41.0)
+
+A task whose slice carried wiki material must return **`wiki_used`** — the doc
+paths it ACTUALLY read, or `none`. Quoted like `actual_model`: what the agent
+did, never what the dispatcher assumed.
+
+`none` is a valid and INFORMATIVE return, not a failure: it says the pages were
+not useful or were ignored. Record it and surface it — a wiki whose pages are
+shipped into every slice and read by nobody is the failure mode this field
+exists to make visible, and it is invisible if `none` is quietly dropped. Absent
+on a slice that carried wiki material is malformed. Not required otherwise.
+
 ## 6. Worktree delta (post-wave, every lane that dispatches executors)
 
 Compare `git status --short` before and after each dispatch. A path that

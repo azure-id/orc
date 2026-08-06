@@ -21,7 +21,9 @@ pattern:   js cached · ts cached
 gotchas:   12 known · 3 match this change's files
 crosslink: 2 boundaries (payments-api) — advisory
 scoring:   8-band default table
-tdd:       ON — 6 requirements with skeletons, 1 exempt (docs-only)
+tdd:       3 tasks with tests (T3, T6, T9) · 2 covered-by-existing · 2 no-behavior
+           skipped: R4 translation strings (no-behavior) · R7 file split
+                    (covered-by-existing → test/api/health.test.js:41)
 trace:     .claude/orc/logs/run-orc-<slug>-210726-154500.txt
 waves:     3 planned — will pause after wave 2 (batch_pause_every=2)
 ```
@@ -54,10 +56,26 @@ waves:     3 planned — will pause after wave 2 (batch_pause_every=2)
   shadowed (`rubric_bands_override` / `fable5_*` present but INERT) — a setting
   the user tuned and the run then ignored has to be said out loud.
 - **tdd:** ALWAYS printed on a lane whose TDD policy is on — BOTH branches, not
-  only the exemption. `ON — <n> requirements with skeletons, <m> exempt
-  (<reasons>)`, counted straight from the plan's `tdd_spec`; or
+  only the exemption. Counted straight from the plan's `tdd_spec`, broken down
+  by `disposition` so the user sees **what got no test and why** (v0.41.0):
+
+  ```
+  tdd:  3 tasks with tests (T3, T6, T9) · 2 covered-by-existing · 2 no-behavior
+        skipped: R4 translation strings (no-behavior) · R7 file split
+                 (covered-by-existing → test/api/health.test.js:41)
+  ```
+
+  The `skipped:` continuation is REQUIRED whenever any entry is
+  `covered-by-existing` or `no-behavior`, one line per entry, each naming its
+  `reason` (or its `covered_by` path). Scoping TDD down is only safe if the
+  scoping is visible: a silently skipped test is indistinguishable from a
+  forgotten one, and this is the line that keeps the token saving honest.
+
+  Whole-run exemption →
   `EXEMPT (whole run) — no test runner detected in this project`, which is the
-  ONE line `SKILL.md` mandates for that case. A lane whose policy is off
+  ONE line `SKILL.md` mandates for that case. A plan where NO task needed a test
+  → `no tasks required tests (all covered-by-existing / no-behavior)` plus the
+  same `skipped:` breakdown — never silence. A lane whose policy is off
   (orc-fast, or orc-mini when the user declined) prints `off (<lane> policy)`.
   This line is the producer the mandate previously lacked — without it an
   orchestrator that prints only what the payload compels prints nothing at all

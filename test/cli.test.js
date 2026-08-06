@@ -875,6 +875,160 @@ test("wiki sync --check: a branch switch alone is NOT out of sync (exit 0)", () 
   }
 });
 
+// Normal development on ONE documented area, well past wiki_aging_max. Every
+// commit lands on a file a doc covers, so this is ordinary work — not a
+// coverage gap. It is the state every real repo reaches, and the one the frozen
+// oldest-doc anchor turned into a permanent STALE that no refresh could clear.
+function churn(root, git, n, name = "a") {
+  for (let i = 0; i < n; i++) {
+    fs.writeFileSync(path.join(root, "src", name + ".js"), `module.exports = ${i + 2};\n`);
+    git(["add", "-A"]);
+    git(["commit", "-q", "-m", `edit ${name} ${i}`]);
+  }
+}
+
+// The delta refresh: re-stamp ONLY the named doc at HEAD, exactly as the default
+// refresh path does. Every other doc keeps its original anchor — which is
+// precisely why `meta.scan_commit` never moves.
+function deltaRefresh(root, git, name) {
+  const head = git(["rev-parse", "HEAD"]).stdout.trim();
+  const docPath = path.join(root, "wiki", `orc-feature-${name}.md`);
+  fs.writeFileSync(
+    docPath,
+    fs.readFileSync(docPath, "utf8").replace(/scanned_commit: .*/, `scanned_commit: ${head}`)
+  );
+  assert.strictEqual(cli(["wiki", "sync", "--dir", root]).status, 0);
+  return head;
+}
+
+test("wiki status: a delta refresh MOVES the freshness anchor (regression: same hash, STALE forever)", () => {
+  const { root, git } = impactFixture();
+  try {
+    churn(root, git, 40); // 40 > wiki_aging_max 30
+
+    const before = cli(["wiki", "status", "--dir", root]);
+    assert.match(before.stdout, /STALE/, "doc a's covered file changed 40 times → STALE: " + before.stdout);
+    const anchorBefore = before.stdout.match(/freshness anchor ([0-9a-f]+)/);
+    assert.ok(anchorBefore, "the tier-pinning anchor is shown: " + before.stdout);
+
+    deltaRefresh(root, git, "a");
+
+    const after = cli(["wiki", "status", "--dir", root]);
+    assert.doesNotMatch(after.stdout, /STALE/, "the refresh cleared the staleness it was run for: " + after.stdout);
+    assert.match(after.stdout, /FRESH/, "no doc's covered files have changed since its own anchor: " + after.stdout);
+    const anchorAfter = after.stdout.match(/freshness anchor ([0-9a-f]+)/);
+    assert.ok(anchorAfter);
+    assert.notStrictEqual(
+      anchorAfter[1],
+      anchorBefore[1],
+      "the reported hash MOVED — pre-fix it was the frozen oldest-doc anchor forever"
+    );
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("wiki status: docs whose own area never changed stay FRESH through heavy churn elsewhere", () => {
+  const { root, git } = impactFixture();
+  try {
+    // 40 commits, all on src/a.js. Docs b/c/d cover untouched files — a doc
+    // about auth does not rot because another area changed 40 times.
+    churn(root, git, 40);
+    const r = cli(["wiki", "status", "--dir", root]);
+    assert.match(r.stdout, /3 fresh/, "b/c/d are untouched and stay fresh: " + r.stdout);
+    assert.match(r.stdout, /1 stale/, "only doc a rotted: " + r.stdout);
+    assert.match(r.stdout, /orc-feature-a\.md/, "the offending doc is named: " + r.stdout);
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("wiki status: a changed covered file IS stale — the fix must not over-correct to always-FRESH", () => {
+  const { root, git } = impactFixture();
+  try {
+    churn(root, git, 12);
+    const r = cli(["wiki", "status", "--dir", root]);
+    assert.match(r.stdout, /AGING|STALE/, "doc a's own surface moved: " + r.stdout);
+    assert.match(r.stdout, /orc-feature-a\.md/, "the offending doc is named: " + r.stdout);
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("wiki status: the tier edges come from config, not hardcoded 10/30", () => {
+  const { root, git } = impactFixture();
+  try {
+    churn(root, git, 12);
+    assert.match(cli(["wiki", "status", "--dir", root]).stdout, /AGING/, "12c is AGING at the default edges");
+
+    // Raising the fresh edge past the distance must move the tier. Pre-fix this
+    // did nothing at all: wikiStatus never read the config.
+    assert.strictEqual(cli(["config", "set", "wiki_fresh_max", "50", "--dir", root]).status, 0);
+    const r = cli(["wiki", "status", "--dir", root]);
+    assert.match(r.stdout, /FRESH/, "wiki_fresh_max moved the boundary: " + r.stdout);
+    assert.match(r.stdout, /fresh < 50c/, "the edges in force are shown: " + r.stdout);
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("wiki status: a blind spot degrades ONE step to AGING — never straight to STALE", () => {
+  const { root, git } = impactFixture();
+  try {
+    fs.mkdirSync(path.join(root, "src", "new"), { recursive: true });
+    fs.writeFileSync(path.join(root, "src", "new", "unseen.js"), "module.exports = 9;\n");
+    git(["add", "-A"]);
+    git(["commit", "-q", "-m", "add an area no doc covers"]);
+    const r = cli(["wiki", "status", "--dir", root]);
+    // Every repo eventually grows a file no doc covers. Forcing STALE on that
+    // would recreate the permanent-STALE bug from the other direction: the docs
+    // on disk are accurate, the COVERAGE is merely incomplete.
+    assert.match(r.stdout, /AGING/, "a coverage gap is not doc rot: " + r.stdout);
+    assert.doesNotMatch(r.stdout, /STALE \(/, "never straight to STALE: " + r.stdout);
+    assert.match(r.stdout, /blind spot/i, "the reason is named, not just the verdict: " + r.stdout);
+    assert.match(r.stdout, /4 fresh/, "no individual doc rotted: " + r.stdout);
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("wiki status --json: machine-readable freshness for hooks and skills", () => {
+  const { root, git } = impactFixture();
+  try {
+    churn(root, git, 40);
+    deltaRefresh(root, git, "a");
+    const r = cli(["wiki", "status", "--json", "--dir", root]);
+    assert.strictEqual(r.status, 0, "--json never overloads the exit code (that is the existence probe's contract)");
+    const j = JSON.parse(r.stdout);
+    assert.strictEqual(j.state, "registered");
+    assert.strictEqual(j.tier, "FRESH", "a completed delta refresh reads FRESH: " + r.stdout);
+    assert.strictEqual(j.docs, 4);
+    assert.strictEqual(j.edges.freshMax, 10);
+    assert.strictEqual(j.edges.agingMax, 30);
+    assert.ok(typeof j.distance === "number", "distance is a number for hooks to compare");
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("wiki impact: a completed delta refresh exits 0 CLEAN instead of recommending FULL forever", () => {
+  const { root, git } = impactFixture();
+  try {
+    // Pre-fix: 40 commits put the frozen scan_commit past wiki_aging_max, so
+    // `aging` stayed permanently true and impact exited 3 "FULL refresh
+    // recommended" — the expensive re-scan the delta path exists to avoid —
+    // even after the delta refresh had done its job and every doc read CLEAN.
+    churn(root, git, 40);
+    assert.strictEqual(cli(["wiki", "impact", "--dir", root]).status, 3, "FULL recommended while doc a is genuinely rotten");
+    deltaRefresh(root, git, "a");
+    const r = cli(["wiki", "impact", "--dir", root]);
+    assert.strictEqual(r.status, 0, "no doc touched, nothing blind → CLEAN: " + r.stdout);
+    assert.doesNotMatch(r.stdout, /FULL refresh recommended/, r.stdout);
+  } finally {
+    rmrf(root);
+  }
+});
+
 test("wiki impact: a doc refreshed at HEAD reads CLEAN even when the global anchor is behind", () => {
   const { root, git } = impactFixture();
   try {

@@ -87,16 +87,43 @@ planning-output per `repos[]` entry** — never a single merged plan:
    CITES its source (R3 / DoD#2); a line with no source is invented by
    definition. Never invent criteria the spec lacks. When the run's TDD policy
    is on (full orc/ultra + standalone /orc-plan: always), author each
-   requirement's `tdd_spec` entry — `kind` (`new-surface` = behavior that does
-   not exist yet, MUST be red pre-implementation; `regression-guard` = existing
-   behavior the change must not break, EXPECTED green — you know which is which,
-   the orchestrator does not), given/when/then + a RUNNABLE test skeleton in the
-   project's own framework (real target path; Wave 0 materializes it into a
-   failing test), or `tdd: exempt — <reason>` for requirements with no runnable
-   surface. If a `tdd_spec` target file is also a task's declared file where that
-   task's `test_surface` is `new-tests`, FOLD them together yourself — Wave 0
-   materializes the spec first, so that task would otherwise re-derive tests that
-   already exist (the orchestrator bounces this collision at the Phase 1 gate).
+   requirement's `tdd_spec` entry. **TDD IS SCOPED TO WHAT CAN ACTUALLY FAIL —
+   set `disposition` from the closed set, and DERIVE it from the facets you
+   already produced rather than judging it fresh:**
+   - `test_surface: none` + `novelty: mechanical` → **`no-behavior`** (+`reason`).
+     Constants, i18n/translation strings, docs, config, markdown payloads. A test
+     here could only restate its own assignment — it costs plan, red-proof and
+     executor tokens and asserts nothing.
+   - `test_surface: update-existing` + `novelty: mechanical` →
+     **`covered-by-existing`** (+`covered_by: path:line`). Pure refactors, moves,
+     file splits: the behavior is unchanged and an EXISTING test proves it. You
+     MUST cite a test that really exists — the Phase-1 gate resolves the path and
+     bounces the plan if it does not, because an unverifiable claim here silently
+     deletes coverage.
+   - otherwise → **`new-surface`** (behavior does not exist yet, MUST be red
+     pre-implementation) or **`behavior-change`** (existing behavior
+     intentionally changes: pair a regression-guard, EXPECTED green, with the new
+     assertion). You know which is which; the orchestrator does not. Both need
+     given/when/then + a RUNNABLE skeleton in the project's own framework (real
+     target path; the paired TDD task materializes it into a failing test).
+   - no test runner in the project at all → **`no-runner`**, whole-run.
+
+   **Safety floor:** a task with non-empty `facets.risk[]` — auth, money,
+   migration, security, concurrency, data-integrity — can NEVER be
+   `covered-by-existing` or `no-behavior`. Deviating from the derivation table
+   above is allowed but needs a one-line `reason`; the derivation is the default.
+
+   **Emit a PAIRED TDD TASK, never a Wave 0.** For each implementation task with
+   `new-surface`/`behavior-change` entries, emit a separate task
+   (`TDD: <what it proves>`, `declared_files` = just its test files) and put its
+   id in the implementation task's `depends_on`; set each `tdd_spec` entry's
+   `task` to the implementation task it belongs to. TDD tasks are ordinary tasks
+   — they wave and score like any other, so independent ones run in parallel.
+   If no task needs one, emit none. If a `tdd_spec` target file is also a task's
+   declared file where that task's `test_surface` is `new-tests`, FOLD them
+   together yourself — the TDD task materializes the spec first, so that task
+   would otherwise re-derive tests that already exist (the orchestrator bounces
+   this collision at the Phase 1 gate).
 4. Right-size with anchors: normally 1–5 declared files + one owns_area per
    task; >7 files or two unrelated areas → split; ≤~10-line dependency-bound
    change → merge; deviation needs a one-line reason. Same-file tasks either

@@ -30,10 +30,18 @@ to 70) — the orchestrator scores from these arithmetically; you never compute
 the score or emit fan_in/fan_out) + sliced per-task acceptance[] where each
 line cites its source (R3 / DoD#2 — no source = invented) + (when the caller's
 slice says `tdd: on` — orc-mini's one intake question) each requirement's
-`tdd_spec` entry: `kind` (`new-surface` = must be red pre-implementation |
-`regression-guard` = expected green, that IS its assertion) + given/when/then +
-a runnable skeleton in the project's own
-test framework, or `tdd: exempt — <reason>`. ALWAYS run the cheap
+`tdd_spec` entry with a `disposition` from the closed set, DERIVED from the
+facets you already produced — `test_surface: none` + `novelty: mechanical` →
+`no-behavior` (+reason; constants, translation strings, docs, config: a test
+there only restates itself); `test_surface: update-existing` + `novelty:
+mechanical` → `covered-by-existing` (+`covered_by: path:line` that MUST resolve;
+pure refactors/moves/splits); otherwise `new-surface` (must be red
+pre-implementation) or `behavior-change` (regression-guard expected green, that
+IS its assertion, + the new assertion), both with given/when/then + a runnable
+skeleton in the project's own test framework; no test runner at all →
+`no-runner`. **Safety floor: a task with non-empty `facets.risk[]` is NEVER
+`covered-by-existing` or `no-behavior`.** Mini has ONE executor, so emit no
+paired TDD task — the executor materializes the skeletons itself. ALWAYS run the cheap
 self-checks: cycles, same-file collisions, AND coverage (every in-scope R#/DoD
 line in ≥1 task's requirements[] — an orphan requirement is a malformed plan;
 fix before presenting). Set `plan_confidence: high|medium|low` (+ reason) and

@@ -6,7 +6,7 @@
 
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
-![Version](https://img.shields.io/badge/version-0.40.0-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.41.0-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
@@ -46,98 +46,86 @@ zero-dependency npm package installs those files into your `.claude/` directory.
 
 ## Changelog
 
-**Latest: v0.40.0 — updated 2026-08-06.**
+**Latest: v0.41.0 — updated 2026-08-06.**
 
-### v0.40.0 — Gotchas: repair memory that outlives the run _(2026-08-06)_
+### v0.41.0 — A wiki that can tell you it is fresh, and TDD only where it can fail _(2026-08-06)_
 
-ORC has always known what your codebase **is** (the wiki), how it **writes code**
-(the pattern cache), and what a change must **prove** (`tdd_spec`). It knew
-nothing about what this project has already gotten **wrong** — so a failure that
-cost a run three repair rounds in July cost the next run three more in August.
+Three reported defects. Two of them turned out to be the same bug.
 
-**A gotcha is ONE project-specific failure that a repair already solved.**
+**The wiki was permanently STALE, with the same hash after every refresh.**
+`wiki-meta.json`'s `scan_commit` is the **oldest** doc's anchor — deliberately, as
+the conservative floor for the blind-spot sweep. But a delta refresh (the default
+path) re-scans only the *touched* docs, so untouched docs keep their original
+`scanned_commit` and **that anchor can never move**. Every refresh reported the
+identical hash and a distance that only grew. ORC diagnosed exactly this in
+v0.34.5 and fixed it for `orc wiki impact`'s per-doc view; four other consumers
+were left reading the frozen anchor — including the summary line that made a
+fully-refreshed wiki still recommend the expensive FULL re-scan forever.
 
-```markdown
-## G-014 · express · repair
-- trigger:   adding a route handler that awaits a Mongoose query
-- symptom:   Cannot read properties of undefined (reading 'session') in tests
-- cause:     the test harness stubs req.session only for authed routes
-- fix:       register the route under authedRouter, not app
-- scope:     src/routes/**/*.js
-- origin:    run-orc-add-billing-050826-141233 · TDD repair round 2
-- hits:      3
-- last_seen: 05-08-2026
+Freshness is now **coverage-relative**, computed by one shared engine:
+
+```
+per-doc distance = git rev-list --count <doc.scanned_commit>..HEAD -- <what that doc covers>
+wiki tier        = the worst doc's tier
 ```
 
-**Recorded only on a red → green repair.** The TDD repair loop, a `DRIFT-FROM`
-recovery round, a reviewer P0/P1 fixed in-run, a verifier `unmet[]` closed in-run.
-**A loop that hit its cap and STOPPED records nothing** — an unsolved failure is
-not a gotcha, it is an open problem, and the honest red report is where it belongs.
-A first-try success has no repair to remember.
+A doc about auth no longer rots because the README changed forty times. A
+STRUCTURAL blind spot degrades the tier by exactly **one** step and never past
+AGING — the docs on disk are accurate, the *coverage* is incomplete, and forcing
+STALE there would just recreate permanent-STALE from the other direction.
 
-**Injected only when the `scope` glob matches.** Into an executor slice, beside
-the pattern block, capped at **3** entries, highest `hits` first. Zero matches =
-**no block at all**, not an empty one. Injecting unfiltered is the exact failure
-mode that would turn this into the bloat it exists to prevent — a pattern is what
-the project *always* does, a gotcha is what it got wrong *once, somewhere
-specific*.
+**`orc wiki status` also stopped ignoring your config.** It hardcoded the 10/30
+edges and never read `wiki_fresh_max` / `wiki_aging_max`, so raising them to quiet
+the STALE spam did nothing. It now reports the tier, the anchor that actually pins
+it, the edges in force, and a per-doc breakdown — plus `--json` for hooks and
+skills. `meta.scan_commit` is unchanged on disk: no migration, no re-scan.
 
-**Three parties, no overlap.** The agent RETURNS the body via the new
-`gotcha_recorded` field (body, or `none` + a reason — the same shape as
-`crosslink_tags`); the ORCHESTRATOR appends it at phase close, deduping on
-`symptom` + `scope` so a repeat bumps `hits` instead of adding a twin; the CLI
-owns counting, capping and archival. **A subagent never writes the file.**
+**You can now see the wiki working.** The tier line was already mandated but was
+*computed by the model* — the failure class ORC has already lost twice. It now
+comes from the probe. And attribution moved to the point of use: every dispatch
+whose slice carried wiki material names the docs and the tier at time of use, and
+every executor returns `wiki_used` — the pages it **actually read**, or `none`.
+`none` is kept and surfaced: a wiki shipped into every slice and read by nobody is
+precisely what this field exists to expose.
 
-**New CLI** — the exit code IS the contract, same convention as
-`orc pattern status`:
-
-```bash
-orc gotcha status    # 0 = entries exist · 1 = none (the deterministic probe)
-orc gotcha list      # the same, and prints them
-orc gotcha prune     # archive the low-value tail down to gotchas_max
+```
+DISPATCH orc-executor-sonnet-5-high :: T4 modify health API
+  wiki: FRESH — 2 docs → orc-feature-health.md, orc-reference-api-surface.md
 ```
 
-Eviction ranks fewest `hits`, then oldest `last_seen`, and **archives** whole
-entry blocks to `gotchas-archive.md` — never deletes. IDs are monotonic and never
-reused, so an archived gotcha stays traceable.
+**TDD stopped writing tests for things that cannot fail.** The only exemption was
+"no runnable surface", so a constant and an i18n map — which *do* have a runnable
+surface — got tests that only restated their own assignment, and a pure file split
+got brand-new tests when the existing suite already proved the behavior unchanged.
 
-**Your data, not ORC's.** `.claude/orc/gotchas.md` sits beside the pattern cache
-and, like it, is absent from the install manifest — `orc update`,
-`orc update --prune` and `orc doctor --fix` all leave it byte-identical (a test
-asserts each of the three). `orc config set gotchas off` disables it live; a full
-revert of this release would remove the CLI and the contracts and still never
-touch the file.
+The planner already computed the answer and threw it away: a constant is
+`novelty: mechanical` + `test_surface: none`; a file split is `mechanical` +
+`update-existing`. So each `tdd_spec` entry now carries a **derived** disposition:
 
-**Staleness is yours too.** An injected gotcha is presented to an executor as
-fact and nothing re-verifies it; `orc gotcha prune` handles capacity, not
-correctness. So: delete an entry that stopped being true. That is deliberately
-manual — a model deciding which of its own memories to forget is a worse failure
-mode than a stale line a human can read.
+| disposition | case | test authored? |
+|---|---|---|
+| `new-surface` | behavior does not exist yet | yes — red first |
+| `behavior-change` | behavior intentionally changes | yes — guard + new assertion |
+| `covered-by-existing` | pure refactor / move / split | **no** — must cite the existing test |
+| `no-behavior` | constant, translation string, docs, config | **no** |
+| `no-runner` | project has no test runner | no — whole-run |
 
-| Lane | Reads | Writes |
-|------|-------|--------|
-| `/orc`, `/orc-ultra` | yes | yes |
-| `/orc-mini` | yes | yes |
-| `/orc-fast` | yes | **no** |
-| `/orc-diy` | compile-owned (`gotchas` flow key) | compile-owned |
-| `/orc-quick` | **no** | **no** |
-| `/orc-retro` | yes (calibration input) | no — read-only by contract |
+Two guards keep this from becoming a coverage hole: a `covered-by-existing`
+citation that does not resolve **bounces the plan**, and a task with cited
+`risk[]` (auth, money, migration, security, concurrency, data-integrity) can never
+be scoped out. Preflight always prints what was skipped and why.
 
-**`/orc-fast` keeps exactly two prerequisites.** Gotchas are additive there and a
-missing file never forces a fallback; fast reads but never writes, because one
-executor plus one repair round is too little signal to attribute a cause.
+**Wave 0 is gone.** TDD is a *paired task* the implementation task `depends_on` —
+an ordinary task, so independent red proofs share a wave and run in parallel while
+the dependency keeps every proof ahead of the code it proves. If nothing needs a
+test, there is no TDD task and no extra wave.
 
-**`/orc-quick` does not participate at all — not even reading.** Its preflight
-reads `log_dir` and no other config key, by contract; a `gotchas` key read would
-break that guarantee. The diff for `templates/skills/orc-quick/` in this release
-is empty. That exclusion is intentional and is not an oversight.
-
-Config: `gotchas` (`on` | `off`, default **on**) · `gotchas_max` (default **40**).
-Preflight always prints one line — `12 known · 3 match this change's files`, or
-`none yet`, or `off`. **Zero new skills, zero new agents.**
+**Zero new skills, zero new agents, one new CLI flag.**
 
 <details>
 <summary><b>Previous versions</b> (click to expand)</summary>
+
+### v0.40.0 — Gotchas: repair memory that outlives the run _(2026-08-06)_
 
 ### v0.39.0 — The read ladder, and foreign input that is evidence rather than instruction _(2026-08-06)_
 

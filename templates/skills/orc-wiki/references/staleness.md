@@ -68,26 +68,46 @@ the pattern cache, so `orc update` never clobbers it.
   no doc opens. A manifest without `docs` is v1: consumers fall back to
   doc-header reads; the next refresh writes the registry.
 
-## Computing freshness (on read — never stored)
+## Computing freshness — COVERAGE-RELATIVE, and the CLI computes it (v0.41.0)
 
-Two git commands, no file reads:
+**Run `orc wiki status` (or `--json` to branch on `.tier`). Never compute the
+tier by hand.** These are the RULES; the CLI is their only executor.
+
+Freshness is **per doc, against its own coverage**:
 
 ```
-distance = git rev-list --count <scan_commit>..HEAD
-drift    = git diff --name-only <scan_commit>..HEAD    (pass 2, only when needed)
+per-doc distance = git rev-list --count <doc.scanned_commit>..HEAD -- <that doc's covers/covered_files>
+wiki tier        = the WORST doc's tier
 ```
 
-| Tier | Condition (pass 1) |
+| Tier | Condition |
 |-------|--------------------|
 | FRESH | distance < `wiki_fresh_max` (default 10) |
 | AGING | `wiki_fresh_max` ≤ distance ≤ `wiki_aging_max` (default 30) |
-| STALE | distance > `wiki_aging_max`, OR pass-2 drift intersects the `covers` globs of the docs being consulted |
+| STALE | distance > `wiki_aging_max` |
 
-Pass 2 runs only when pass 1 lands AGING or worse: intersect `drift` with the
-relevant docs' `covers` (from the manifest's `docs` registry when present —
-no doc opens; else from doc headers). Drift touching covered files upgrades
-severity; drift entirely elsewhere may be read as "old but still accurate for
-this area". Thresholds come from config (`wiki_fresh_max`, `wiki_aging_max`).
+Thresholds come from config (`wiki_fresh_max`, `wiki_aging_max`) — the CLI reads
+them; a hardcoded 10/30 anywhere is a bug.
+
+**A STRUCTURAL blind spot** — changed files that NO doc covers — degrades the
+tier by exactly ONE step, never past AGING. That is a COVERAGE gap, not doc rot:
+the docs on disk are still accurate, they just don't cover everything. (STALE
+means "do not trust these docs", which a blind spot does not say. `orc wiki
+impact` is where a blind spot escalates to a FULL-refresh recommendation.)
+
+### Why per-doc, and why this used to be permanently STALE
+
+`wiki-meta.json`'s `scan_commit` is the **oldest** doc's anchor — deliberately,
+as the conservative floor for the blind-spot sweep. But a DELTA refresh (the
+default path) only re-scans TOUCHED docs, so untouched docs keep their original
+`scanned_commit` and **that anchor can never move**. Measuring the tier from it
+meant every refresh reported the same hash and an ever-growing distance:
+permanently STALE, no matter how many times the user refreshed — the exact state
+a refresh exists to clear.
+
+Per-doc coverage also makes the answer semantically right: a doc about auth does
+not rot because the README changed forty times. A doc is stale when commits
+since its own anchor touched files it covers, and not before.
 
 ## UNREGISTERED — docs without a manifest
 

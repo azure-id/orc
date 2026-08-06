@@ -78,6 +78,12 @@ mock_example: ask          # ask | on | off — post-verify mocked runnable exam
                            #   DRIFT-FROM recovery (_shared/drift-recovery.md, cap 2).
 
 # --- TDD anchor (plan-time acceptance tests; full orc + ultra ALWAYS on) ---
+# SCOPED (v0.41.0): each tdd_spec entry carries a `disposition` derived from the
+# planner's facets — new-surface | behavior-change get tests; covered-by-existing
+# (cites an existing test) and no-behavior (constants, translation strings, docs,
+# config) get NONE; no-runner is the whole-run exemption. A task with a cited
+# facets.risk[] can NEVER be scoped out. There is no key for this: a switch here
+# would just restore the tautological tests it removes.
 tdd_loop_max: 3            # max implement→test→repair iterations per task in the
                            #   TDD gate; cap hit → STOP SEQUENCE + honest red report.
                            #   Lane policy (fixed, not configurable): full orc +
@@ -152,8 +158,8 @@ retro_repo: azure-id/orc      # GitHub owner/repo that receives retro reports.
 # Every ORC run writes a persistent behavior trace; there is no on/off key.
 log_dir: .claude/orc/logs     # persistent trace folder — NEVER deleted on completion
 
-# --- Wiki freshness (computed on read from .claude/orc/wiki-meta.json) ---
-wiki_fresh_max: 10            # commit distance < this → FRESH (silent)
+# --- Wiki freshness (COVERAGE-RELATIVE, computed on read by `orc wiki status`) ---
+wiki_fresh_max: 10            # per-doc commit distance < this → FRESH (silent)
 wiki_aging_max: 30            # distance ≤ this → AGING (notice); beyond → STALE
 wiki_refresh_ask_tasks: 3     # post-ship refresh ask fires when tasks ≥ this…
 wiki_refresh_ask_files: 10    # …or the run's touched files exceed this (full/ultra lanes)
@@ -334,10 +340,18 @@ above (`analyze`→`orc-analyst-fable-5`, `plan`→`orc-planner-fable-5`,
   `security_review` on, executor tier floor) and NEVER writes them to
   `orc.config.yaml`. See the orc skill's `references/ultra-mode.md`.
 - `wiki_fresh_max` / `wiki_aging_max` set the wiki freshness tier edges. The
-  tier is ALWAYS computed on read (`git rev-list --count <scan_commit>..HEAD`
-  against `.claude/orc/wiki-meta.json` — written only by orc-wiki): FRESH →
-  silent, AGING → notice, STALE → warn (full/mini lanes) or the orc-fast user
-  gate. See `../orc-wiki/references/staleness.md`.
+  tier is ALWAYS computed on read, and **`orc wiki status` is the only thing
+  that computes it** (v0.41.0 — `--json` for a machine-readable `.tier`): never
+  hand-run a `git rev-list` against `.claude/orc/wiki-meta.json`. Freshness is
+  **coverage-relative** — a doc is stale only when commits since ITS OWN
+  `scanned_commit` touched files IT covers, and the wiki's tier is its worst
+  doc. (Measuring from the manifest's `scan_commit` — the OLDEST doc's anchor,
+  which a delta refresh deliberately leaves frozen — reported the same hash and
+  a growing distance forever, so the wiki read STALE no matter how often it was
+  refreshed.) A STRUCTURAL blind spot degrades the tier ONE step, never past
+  AGING: that is a coverage gap, not doc rot. FRESH → silent, AGING → notice,
+  STALE → warn (full/mini lanes) or the orc-fast user gate. See
+  `../orc-wiki/references/staleness.md`.
 - `wiki_refresh_ask_tasks` / `wiki_refresh_ask_files` set the BIG-run trigger
   for the post-ship wiki refresh ask (full + ultra lanes only; guarded on a
   non-empty wiki). Judged by FINAL counts at ship time.
