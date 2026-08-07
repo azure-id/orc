@@ -106,6 +106,20 @@ Read the source. **Auto-detect** which of three modes applies:
 request as the requirement and reconcile it against the code, in requirement
 mode. Good?"). For documents, confirm prose vs audit as before.
 
+## Phase A″ — Is this even analyzable? (the reverse trigger)
+
+Thin input is ABSORBED here, not bounced — an expensive way to ask what a
+conversation asks free. Mirror of the planner's gate, BEFORE the depth choice:
+
+> **analyzable ⇔ the input names (a) a subject the repo could plausibly contain
+> — a feature, a flow, a file, or a document — AND (b) at least one thing that
+> should be true when the work is done.** Failing either → do NOT analyze.
+
+Failing it **offers** `/orc-grill` (conversation: no scan, no scout tokens) —
+never forces; `analyze anyway` proceeds as today. The same signal also arrives
+LATE, as a return that is mostly `ASSUMPTION`/`UNVERIFIED`. Both branches, the
+offer wording, the auto-consume back here: `references/thin-input.md`.
+
 ## Phase A′ — Standard vs Deep gate (default STANDARD)
 
 Before reconciliation, offer the depth choice (config `default_analysis_depth`

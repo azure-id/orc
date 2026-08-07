@@ -51,7 +51,11 @@ phase: execution wave 2
 run_meta:                 # FIRST packet of the run ONLY; omit thereafter
   lane: orc               # orc | ultra | mini | fast | diy | wiki | analyze |
                           # plan | claude | poly | learn | verify | pattern |
-                          # combine | prsetup | prdriver | quick
+                          # prsetup | prdriver | quick
+                          # (`ultra` = an /orc-ultra run; the ONLY lane the orc
+                          #  spine can emit besides `orc`. No other value here
+                          #  is legal — a lane no entry point opens is a lane
+                          #  every counting tool reports as permanently zero.)
   slug: cas-multi-exchange-withdrawal
   trace_path: .claude/orc/logs/run-orc-cas-multi-exchange-withdrawal-240726-002352.txt
 events:                   # each {ts, verb, tail}; verb from the CLOSED set below
@@ -82,7 +86,17 @@ decisions: >              # free text — the WHY layer
 | Multi-dispatch | `orc-wiki`, `orc-pr-driver` (lane `prdriver`) | orc-wiki: one per scan-batch boundary (the points that already run the registration sync / offer the pause) + the end-of-run packet. orc-pr-driver: one per LAYER boundary (each layer's green gate closes) + the end-of-run packet |
 | Composed | `orc-diy` | one packet per ENABLED phase group, **minimum 2** — the flow shape is user-composed, so the count is too (the compiled flow carries this block automatically) |
 | Iterative | `orc-quick` | **one packet per completed numbered entry** + the end-of-run `FINISH` packet — the lane loops on user requests, so the count follows entries, not phases |
-| Single-dispatch | `orc-claude`, `orc-plan`, `orc-analyze` (+ mini), `orc-pattern`, `orc-verify`, `orc-learn`, `orc-poly`, `orc-pr-setup` (lane `prsetup`), `context-combiner` (lane `combine`) | **exactly ONE mandatory end-of-run packet** |
+| Single-dispatch | `orc-claude`, `orc-plan`, `orc-analyze` (+ mini), `orc-pattern`, `orc-verify`, `orc-learn`, `orc-poly`, `orc-pr-setup` (lane `prsetup`), `orc-grill`, `orc-route` | **exactly ONE mandatory end-of-run packet** |
+
+**`context-combiner` is NOT a lane — it is a PHASE inside the analyze run.** It
+has no slash command and no entry point of its own: `orc-analyze` Phase F
+dispatches it while `.current` still points at that run's `run-analyze-…` file.
+So it never writes a pointer, never touches a trace file, and never emits its own
+`FINISH`; its `DISPATCH`/`RETURN`, its Phase D challenge verdicts and its
+conservation-gate result all fold into **orc-analyze's** end-of-run packet. The
+hook agrees — `context-combiner` maps to its own `PHASE-EDGE` role family
+(`combine`), which segments the phase *within* that trace. Listing it as a lane
+(as this table did before v0.42.0) declared a run nothing could ever open.
 
 **The single-packet obligation is defined HERE, once** (every trace-owning lane
 already loads this reference) — micro-lane spines keep only their existing trace
@@ -106,7 +120,9 @@ trace and never emit `SPAWN`/`RETURN`.
 - One file per run: **`run-<lane>-<slug>-<DDMMYY>-<HHMMSS>.txt`**, append-only.
   - `lane` — the trace-owning skill's short name (`orc`, `ultra`, `mini`, `fast`,
     `diy`, `wiki`, `analyze`, `plan`, `claude`, `poly`, `learn`, `verify`,
-    `pattern`, `combine`, `prsetup`, `prdriver`, `quick`).
+    `pattern`, `prsetup`, `prdriver`, `quick`, `grill`, `route`). Every value
+    here is a lane some entry point actually opens — keep it that way: this
+    list IS the lane vocabulary `orc stats` and `/orc-retro` count against.
   - `slug` — kebab-cased short user context from the intent (`[a-z0-9-]`, ≤32
     chars, filesystem-safe, no trailing hyphen) — same derivation as the
     run-folder slug.
@@ -202,7 +218,7 @@ supplies the fact in a packet, the writer writes the line. `SPAWN`, `RETURN` and
 | `QUESTION count=<n> :: <topic>` | subagent→orc → writer | stopped to ask the user |
 | `CONTEXT-GAP :: <what was already known>` | subagent→orc → writer | asked/re-derived something already in context |
 | `REPLAN wave=<n> :: <reason>` | orc → writer | re-planned after a conflict/failure |
-| `GATE <name> pass\|bounce\|escalate :: <detail>` | orc → writer | exit-gate result — name ∈ grounding \| coverage \| graph \| evidence \| derivation \| facet (the plan's facet-vocabulary check, `effort-and-mode.md`) \| schema (the plan-handoff schema check) \| judgment (ultra; `escalate` is judgment-only) \| wave-boundary \| stack-gate (Phase 8 stacked-PR threshold + handoff) \| stack-certainty (a stacked-PR seam decision) \| layer-green (one layer's green-gate ladder). The shared-band SIBLING-CONSISTENCY determination is NOT a gate name — carry it in the packet's `decisions`, never as an invented verb. Bounce detail lists the misses (feeds `/orc-retro` gate-bounce rates) |
+| `GATE <name> pass\|bounce\|escalate :: <detail>` | orc → writer | exit-gate result — name ∈ grounding \| coverage \| graph \| evidence \| derivation \| facet (the plan's facet-vocabulary check, `effort-and-mode.md`) \| schema (the plan-handoff schema check) \| judgment (ultra; `escalate` is judgment-only) \| wave-boundary \| budget (the Phase-1 `run_budget_dispatches` forecast gate — `pass` or the `stop` that blocks wave 1; emitted only when the key is > 0) \| stack-gate (Phase 8 stacked-PR threshold + handoff) \| stack-certainty (a stacked-PR seam decision) \| layer-green (one layer's green-gate ladder). The shared-band SIBLING-CONSISTENCY determination is NOT a gate name — carry it in the packet's `decisions`, never as an invented verb. Bounce detail lists the misses (feeds `/orc-retro` gate-bounce rates) |
 | `ADVISE :: brief=<path> questions=<n>` | orc → writer | ultra Phase U0 — advisor brief received, clarification round relayed |
 | `JUDGE <gate> <verdict> round=<n> blocking=<n> advisory=<n> downgraded=<n>` | orc → writer | ultra judgment verdict (gate ∈ analysis \| plan \| implementation) |
 | `OUTCOME task=<id> score=<n> band=<range> model=<m> retries=<n> requeues=<n> needs_context=<n> unmet=<n>` | orc → writer | task closed — links the scoring band to what it actually took (feeds `/orc-retro` calibration) |
@@ -212,10 +228,30 @@ supplies the fact in a packet, the writer writes the line. `SPAWN`, `RETURN` and
 | `TDD-RED task=<id> iter=<n> :: <failing tests>` | executor→orc → writer | TDD repair-loop iteration — the plan's acceptance tests still red (cap `tdd_loop_max`; a paired TDD task's red proof also emits iter=0) |
 | `TDD-GREEN task=<id> iter=<n>` | executor→orc → writer | the task's TDD acceptance tests pass (the non-exempt definition-of-done) |
 | `NOTE :: <decisions>` | writer | the packet's `decisions` field — the WHY layer (scoring rationale, user answers verbatim, what was rejected). One line per packet, only when `decisions` is non-empty |
+| `STATS lane=<l> slug=<s> dispatches=<n> waves=<n> tasks=<n> bands=<h:n,m:n,l:n> downgrades=<n> duration_ms=<n>` | orc → writer | ONE deterministic summary line per run, in the `FINISH` packet, immediately BEFORE the `FINISH` line. This is what `orc stats` reads — one line per file, never a parse of the whole trace. Omit a field you genuinely do not have (a lane with no waves omits `waves=`); never guess one. Every trace-owning lane emits it, not just `orc` |
 | `FINISH :: <detail>` | orc → writer | run ended |
 
 `SPAWN`/`RETURN`/`PHASE-EDGE` come from the hook automatically. Every other verb
 reaches the file through a packet — you never append lines by hand.
+
+### Why `STATS` exists as its own line (v0.42.0)
+
+`orc stats` counts usage from these files. Lane and date are free — they are in
+the filename, which is already DATA. Everything else would cost a full parse of
+a 20-minute trace, per run, forever. One deterministic line at a step that
+already exists makes the depth free instead: `orc stats` reads the tail of each
+file and nothing more.
+
+Two consequences to keep true, because a counting tool built on a drifting log
+produces confident WRONG numbers, which is worse than no numbers:
+
+- **A run with no `FINISH` is counted as unfinished, permanently.** That is
+  correct behaviour and it is why `FINISH` is mandatory even on an abort.
+- **A trace older than v0.42.0 has no `STATS` line.** `orc stats` falls back to
+  counting `DISPATCH` lines — orchestrator-written and present in every lane
+  (including `/orc-quick`, whose ad-hoc recon emits no `SPAWN`/`RETURN`). Old
+  traces still count, with less detail. Never back-fill a `STATS` line into an
+  old trace: the numbers would be invented, and the trace is append-only.
 
 **Skeleton caveat (read every retro metric with it):** the hook only sees a NEW
 dispatch. CONTINUING an already-running agent fires no PreToolUse/SubagentStop

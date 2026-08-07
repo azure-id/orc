@@ -29,9 +29,11 @@ boundary is not.
    Stopping without a good checkpoint is the one thing that loses work.
 3. **Update `run/{run-slug}/state-of-play.md`** — the 10-line human-readable re-anchor:
    current phase, wave, done/pending tasks, last decision, next action.
+3b. **Write `{run_dir}/{run-slug}/RESUME.md`** — the same breath as steps 2–3,
+   by YOU, never a dispatched agent. Overwrite; never append. Shape below.
 4. **Usage report** (see below).
 5. **Generate the resume block** (see below) — regenerate FRESH at every stop,
-   never reuse an old one.
+   never reuse an old one. It is printed inline AND is the body of `RESUME.md`.
 6. Tell the user: what's done / remaining, then BOTH continue paths:
    "Reply **continue** here, or paste the block below in a **fresh session**
    (recommended if this conversation is long — cheaper and cleaner than
@@ -50,21 +52,88 @@ Instead, at every stop and at run completion:
 
 Never skip either part.
 
-## The resume block (fresh-session path)
+## The resume block — printed inline AND written to `RESUME.md`
 
-Generate exactly this shape, with real values:
+A fresh session + disk state is cheaper AND higher-fidelity than a long compacted
+session: near-empty context, perfect state. Offer it proactively at every pause
+once the run is more than ~2 waves old or usage is heavy — do not wait to be
+forced.
+
+**The problem this file fixes.** ORC used to print the block and nothing else. If
+the user closed the window, got distracted, or came back three days later, the
+work was safe (the checkpoint is on disk) but the *way back in* was gone.
+
+### Where it goes, and why there
 
 ```
-Continue ORC run `{run-id}`.
-Read run/{run-slug}/state-of-play.md, then run/{run-slug}/checkpoint.json.
-Resume from the checkpoint's phase and wave. The intent-spec is approved —
-do not re-plan. Do not redo tasks marked done.
+{run_dir}/{run-slug}/RESUME.md
 ```
 
-A fresh session + disk state is cheaper AND higher-fidelity than a long
-compacted session: near-empty context, perfect state. Offer it proactively at
-every pause once the run is more than ~2 waves old or usage is heavy — do not
-wait to be forced.
+Inside the run folder — with `checkpoint.json` and `state-of-play.md`, where run
+state has lived safely since v0.34.1 — **never at the project root**.
+`/orc-quick` and `/orc-grill` put their docs at the root because those are
+deliverables a human reads later. A resume prompt is *transient run state*: dead
+the moment the run finishes, and it must never be at risk of being committed.
+Discovery is `orc resume`'s job, not the filesystem's.
+
+### Lifecycle — the file existing IS the "unfinished" flag
+
+- **Written at EVERY stop**, as the third write in the same breath as
+  `checkpoint.json` and `state-of-play.md`. ORC writes it itself — no dispatch.
+  A dispatch inside the stop sequence would mean a stop can fail because a
+  subagent did, at the one step whose entire job is not losing work.
+- **ONE per run slug, always overwritten, never appended.** This is already the
+  protocol's rule above ("regenerated FRESH at every stop, never reuse an old
+  one"), because a stale resume block points at a wave that is already done. This
+  gives that rule a place on disk.
+- **Deleted at `FINISH`** — in the same Phase 8 step that deletes
+  `log_dir/.current`. So a `RESUME.md` existing means **this run is still waiting
+  for you**, with no stale entries and no separate "is this consumed?"
+  bookkeeping.
+- **NOT deleted when a resume merely starts.** If that session then dies, the
+  pointer must still be there.
+
+### Contents (deterministic — this shape, not an improvisation)
+
+```
+Continue ORC run `merchant-notifications`.
+
+Read .claude/orc/run/merchant-notifications/state-of-play.md,
+then .claude/orc/run/merchant-notifications/checkpoint.json.
+Resume from the checkpoint's phase and wave.
+The intent-spec is approved — do not re-plan. Do not redo tasks marked done.
+
+Where it stands:  /orc · phase execution · wave 2 of 4 done
+Done:             T1, T2, T3, T5
+Left:             T4 (requeued — see failure_reason), T6, T7
+Watch out for:    T4 failed once on a missing migration; the gotcha is recorded
+Next action:      dispatch wave 3 (T6, T7)
+```
+
+Every blank is a value you hold at that instant (phase, wave, task states,
+failure reasons) — which is exactly why no model is needed to fill them in.
+
+**Keep the `Where it stands:` line in exactly that shape** — lane, then phase,
+then `wave K of N`, separated by ` · `. It is the ONE line `orc resume` and
+`orc run list` parse, which is how they can list every waiting run without ever
+opening a `checkpoint.json`. Prose elsewhere in the file is free-form.
+
+### Always tell the user both paths
+
+```
+Paused after wave 2 of 4.
+
+To continue in a NEW session (cheaper and cleaner than this long one):
+open a fresh session and paste the contents of
+
+  .claude/orc/run/merchant-notifications/RESUME.md
+  (or just run `orc resume` and pick it from the list)
+
+Or reply `continue` here.
+```
+
+Name the path AND the command. A user who lost the chat has neither the block nor
+the slug in front of them.
 
 ## Compaction-proofing (always on, not just at stops)
 

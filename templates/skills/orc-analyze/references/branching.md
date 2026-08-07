@@ -32,6 +32,10 @@ Ask: "Is this related context (same scope, so it can be combined)?"
    `combined-report.md` + `combined-requirement-spec.md`.
 3. **Analyze another related doc** → back to the relatedness gate (loop).
 
+**Trace:** the combiner runs INSIDE this analyze run — it never opens one of its
+own. Its dispatch, every Phase D verdict and its conservation-gate result are
+events in THIS lane's end-of-run packet (`../orc/references/trace-protocol.md`).
+
 ## After the combiner returns
 The orchestrator offers (gating on the combiner's `handoff_ready`):
 1. **Stop here** → the combined report is copied OUT for the user.

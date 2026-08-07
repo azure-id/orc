@@ -89,3 +89,80 @@ The pattern and crosslink lines reuse Changes 4/5's already-emitted content — 
 NOT recompute. If the pattern resolve gate has not run yet when the block is
 printed, show the tagged languages as `pending resolve` rather than delaying the
 block.
+
+---
+
+# The `forecast:` block (v0.42.0) — printed EARLIER, and separately
+
+A second, shorter block. It is NOT part of the preflight block above and does not
+change it. It answers the one question ORC never answered: **what will this run
+cost me in time, before it starts?**
+
+## When
+
+**The moment the Phase 1 exit gate passes**, and *before* the pause-schedule
+question, and long before the first executor dispatch.
+
+That timing is the whole design. It is the EARLIEST point where every number is
+real — the plan exists, so tasks, dependencies and facets are all in hand, which
+makes waves and scores computable. It is also the LAST cheap moment to walk away:
+nothing dispatched, nothing written, nothing wasted. Printed any later it would
+still be honest and would be useless.
+
+On a `/orc-plan` **Save & stop** it prints alongside the routing question
+(`../../orc-route/SKILL.md`), so price and recommended lane arrive together.
+
+## Template
+
+```
+── forecast ──
+tasks:     7 · waves: 3 · subagents: about 17
+models:    2 high · 3 medium · 1 low
+time:      about 45-80 minutes in this lane
+cheaper:   /orc-mini would be about 15 minutes with 3 subagents
+           (it skips full review and verification)
+```
+
+## Line rules
+
+- **Presentation only — NO new probes.** Every value is already in hand at this
+  instant: `tasks` and `waves` from the plan and the wave grouping, `subagents`
+  from the dispatch count the lane's phases imply, `models` from the score→model
+  table that was already resolved for the `scoring:` line above.
+- **`subagents` is an estimate and says so** (`about N`). The honest floor is
+  one per task plus the lane's fixed roles plus one trace-writer per phase; a
+  repair round or a requeue makes the real number higher, never lower.
+- **`time:` is a RANGE, calibrated from measured runs, never invented.** The
+  corpus behind the current ranges: `/orc-fast` ≈ 9 min / 3 dispatches ·
+  `/orc-mini` ≈ 15 min / 3 · `/orc` 48–84 min / 15–23. Scale within the lane's
+  range by task count. If a lane has no measured corpus, print
+  `time: not measured for this lane` rather than a guess — a fabricated number
+  here is worse than no number, because it looks computed.
+- **`cheaper:` names ONE alternative and what it costs you**, never a bare
+  "X is faster". Omit the line when no cheaper lane can run this plan (say why in
+  one clause instead — e.g. `cheaper: none — /orc-fast needs a fresh wiki`).
+- **The full lane can cost six times more than the fast lane.** That ratio is the
+  reason this block exists; do not bury it in prose.
+
+## `run_budget_dispatches` — the optional hard stop
+
+Config key, `common` tier, default `0` (off). When set and the forecast's
+`subagents` estimate EXCEEDS it, the run **stops before wave 1** with the same
+discipline as the batch pause — a gate, not a hint. Never dispatch wave 1 past
+an unacknowledged budget stop.
+
+```
+── budget ──
+This run forecasts about 17 subagents; your run_budget_dispatches is 12.
+
+  1  proceed anyway
+  2  switch to /orc-mini (about 3 subagents — skips full review and verify)
+  3  stop and re-plan smaller
+```
+
+Emit `GATE budget stop :: forecast=<n> limit=<m>` before stopping, and
+`GATE budget pass :: forecast=<n> limit=<m>` when the forecast is within the
+limit (so a run that silently passed is distinguishable from one where the key
+was unset). `0` means the gate never fires and no `GATE budget` line is emitted
+at all.
+

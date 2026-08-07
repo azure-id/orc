@@ -80,6 +80,9 @@ const CONTRACTS = [
       "skills/orc-mini/SKILL.md",
       "skills/orc-mini/examples/mini-run-mock.md",
       "skills/orc-quick/SKILL.md",
+      // v0.42.0: orc-grill dispatches read-only recon ad-hoc, so it owns the
+      // claimed-vs-actual check itself (the hook writes no SPAWN/RETURN for it).
+      "skills/orc-grill/SKILL.md",
       "skills/orc-quick/references/dispatch-gate.md",
       "skills/orc-retro/SKILL.md",
       "skills/orc-retro/examples/retro-mock.md",
@@ -242,6 +245,11 @@ const CONTRACTS = [
       "skills/orc/schemas/planning-output.md",
       "skills/orc/subskills/orc-planner-mini/SKILL.md",
       "skills/orc/subskills/orc-planner/SKILL.md",
+      // v0.42.0: /orc-explain names ORC jargon in order to DEFINE it for a user
+      // who did not follow a message. A vocabulary mention, not a second copy of
+      // the grounding contract — registered so the set-equality check stays true.
+      "commands/orc-explain.md",
+      "skills/orc-explain/SKILL.md",
     ],
   },
   {
@@ -358,6 +366,12 @@ const CONTRACTS = [
       "skills/orc/subskills/orc-execution/core.md",
       "skills/orc/subskills/orc-planner-mini/SKILL.md",
       "skills/orc/subskills/orc-planner/SKILL.md",
+      // v0.42.0: an interview`s `constraint`-tagged decisions are what BECOME
+      // spec_invariants[] downstream — that is what makes the conversation
+      // load-bearing rather than merely a good conversation.
+      "skills/_shared/interview.md",
+      "skills/orc-grill/SKILL.md",
+      "skills/orc-grill/references/grill-doc.md",
     ],
   },
   {
@@ -385,6 +399,10 @@ const CONTRACTS = [
       "skills/orc-pr-driver/SKILL.md",
       "skills/orc-pr-setup/SKILL.md",
       "skills/orc/subskills/orc-pr/stack-gate.md",
+      // v0.42.0: the run_budget_dispatches gate — a forecast over budget STOPS
+      // before wave 1 with the batch pause`s discipline, and says so in the trace.
+      "skills/orc/config.md",
+      "skills/orc/references/preflight-report.md",
     ],
   },
   {
@@ -444,6 +462,8 @@ const CONTRACTS = [
       "skills/orc-wiki/SKILL.md",
       "skills/orc/SKILL.md",
       "skills/orc/references/trace-protocol.md",
+      "skills/orc-grill/SKILL.md",
+      "skills/orc-route/SKILL.md",
     ],
   },
   {
@@ -472,9 +492,16 @@ const CONTRACTS = [
       "skills/orc-wiki/SKILL.md",
       "skills/orc/SKILL.md",
       "skills/orc/references/trace-protocol.md",
+      // v0.42.0: the plan-input entry path (plan-handoff.md) is a run-start
+      // step like any other — it wrote `.current` without creating the file,
+      // the exact v0.34.2 split signature, on the one entry path this token's
+      // file set did not cover. Registered so the next reader cannot drop it.
+      "skills/orc/references/plan-handoff.md",
       "skills/orc/subskills/orc-planner/SKILL.md",
       "skills/orc-pr-driver/SKILL.md",
       "skills/orc-pr-setup/SKILL.md",
+      "skills/orc-grill/SKILL.md",
+      "skills/orc-route/SKILL.md",
     ],
   },
   {
@@ -501,6 +528,14 @@ const CONTRACTS = [
       "skills/orc/references/plan-handoff.md",
       "skills/orc/references/trace-protocol.md",
       "skills/orc/subskills/orc-planner/SKILL.md",
+      // v0.42.0: context-combiner states the NEGATIVE of this contract — it is a
+      // phase inside the analyze run and must never write a pointer of its own.
+      "skills/context-combiner/SKILL.md",
+      "skills/orc-grill/SKILL.md",
+      "skills/orc-route/SKILL.md",
+      // v0.42.0: the stop sequence deletes RESUME.md in the SAME step as the run
+      // pointer — both mark `this run is still open`, so they must die together.
+      "skills/orc/references/stop-and-resume.md",
     ],
   },
   {
@@ -526,6 +561,8 @@ const CONTRACTS = [
       "skills/orc-wiki/SKILL.md",
       "skills/orc/SKILL.md",
       "skills/orc/references/trace-protocol.md",
+      "skills/orc-grill/SKILL.md",
+      "skills/orc-route/SKILL.md",
     ],
   },
   {
@@ -542,6 +579,9 @@ const CONTRACTS = [
       "skills/orc/SKILL.md",
       "skills/orc/config.md",
       "skills/orc/references/trace-protocol.md",
+      // v0.42.0: the combiner is segmented as its own PHASE-EDGE family INSIDE the
+      // analyze trace — the reason it needs no lane of its own.
+      "skills/context-combiner/SKILL.md",
     ],
   },
   {
@@ -649,6 +689,74 @@ const CONTRACTS = [
       "skills/orc-wiki/references/staleness.md",
       "skills/orc/references/pattern-gate.md",
       "skills/orc/references/wiki-consult.md",
+      "skills/_shared/interview.md",
+      "skills/orc-grill/SKILL.md",
+      "skills/orc-route/SKILL.md",
+    ],
+  },
+  {
+    // v0.42.0: the interview mechanic (design tree → frontier → rounds →
+    // confirmation gate) is shared prose, not one lane's trick — /orc-grill
+    // runs it end to end and intake.md borrows its round format. Canonical
+    // copy: skills/_shared/interview.md. Token = the pointer every consumer
+    // carries, so a lane cannot fork its own divergent interview.
+    name: "the interview primitive (v0.42.0 — frontier rounds, facts vs decisions)",
+    token: "_shared/interview.md",
+    files: [
+      "skills/_shared/README.md",
+      "skills/_shared/interview.md",
+      "skills/orc-grill/SKILL.md",
+      "skills/orc/references/intake.md",
+      "commands/orc-grill.md",
+    ],
+  },
+  {
+    // The one rule that makes an interview load-bearing rather than a good
+    // conversation: a settled decision must come from the human. Pinned
+    // verbatim so no lane can soften it into "assume a sensible default".
+    name: "interview decisions belong to the user (v0.42.0)",
+    token: "a lane that answers its own interview question",
+    files: [
+      "skills/_shared/interview.md",
+      "skills/orc-grill/SKILL.md",
+    ],
+  },
+  {
+    // v0.42.0: the analyst gate mirrors the planner’s plannable floor. Both
+    // sentences must stay literally identical wherever they are stated, or a
+    // lane quietly widens its own entry criteria and thin input walks back in.
+    name: "analyzable floor (v0.42.0 — the analyst’s mirror of plannable)",
+    token: "analyzable ⇔ the input names",
+    files: [
+      "skills/orc-analyze/SKILL.md",
+      "skills/orc-analyze/references/thin-input.md",
+      "skills/orc-grill/SKILL.md",
+    ],
+  },
+  {
+    // v0.42.0: the resume pointer. ORC writes it at every stop and DELETES it at
+    // FINISH, so the file existing IS the "this run is unfinished" flag — there
+    // is no second consumed/not-consumed record to drift. `orc resume` and
+    // `orc run list` both read it, hence the bin mirror: a rename on either
+    // side breaks discovery for every paused run on disk.
+    name: "resume pointer file (v0.42.0 — written at every stop, deleted at FINISH)",
+    token: "RESUME.md",
+    binFiles: ["bin/cli.js"],
+    files: [
+      "skills/orc/SKILL.md",
+      "skills/orc/references/stop-and-resume.md",
+    ],
+  },
+  {
+    // v0.42.0: the one deterministic summary line `orc stats` reads. Pinned to
+    // the protocol (where every trace-owning lane picks the obligation up), the
+    // orc spine Phase 8 (where it is emitted), and the CLI that parses it.
+    name: "STATS trace line (v0.42.0 — the line orc stats reads)",
+    token: "STATS lane=",
+    binFiles: ["bin/cli.js"],
+    files: [
+      "skills/orc/SKILL.md",
+      "skills/orc/references/trace-protocol.md",
     ],
   },
   {
@@ -672,6 +780,8 @@ const CONTRACTS = [
       "skills/orc-wiki/SKILL.md",
       "skills/orc-wiki/references/crosslink.md",
       "skills/orc-wiki/references/staleness.md",
+      "skills/_shared/interview.md",
+      "skills/orc-route/SKILL.md",
     ],
   },
   {
@@ -920,6 +1030,11 @@ const CONTRACTS = [
       "skills/orc/references/intake.md",
       "skills/orc/references/plan-handoff.md",
       "skills/orc/schemas/planning-output.md",
+      // v0.42.0: /orc-route REUSES this file`s plan-input definition rather than
+      // writing a second one — a second definition of `what counts as a plan` is
+      // drift the lint cannot see.
+      "commands/orc-route.md",
+      "skills/orc-route/SKILL.md",
     ],
   },
   {
@@ -950,6 +1065,9 @@ const CONTRACTS = [
       "skills/orc/schemas/planning-output.md",
       "skills/orc/subskills/orc-planner-mini/SKILL.md",
       "skills/orc/subskills/orc-planner/SKILL.md",
+      "commands/orc-route.md",
+      "skills/orc-route/SKILL.md",
+      "skills/orc/references/preflight-report.md",
     ],
   },
   {
@@ -1191,6 +1309,9 @@ const CONTRACTS = [
       "skills/orc/subskills/orc-testgen/core.md",
       "skills/_shared/stack-plan.md",
       "skills/orc/subskills/orc-pr/stack-gate.md",
+      // v0.42.0: named as a sibling project-root deliverable, so the grill doc lands
+      // in the same visible place and not inside .claude/.
+      "skills/orc-grill/references/grill-doc.md",
     ],
   },
   {
@@ -1311,6 +1432,9 @@ const CONTRACTS = [
       "skills/orc-wiki/references/integrity-check.md",
       "skills/orc-wiki/references/orientation.md",
       "skills/orc/references/wiki-consult.md",
+      // v0.42.0: /orc-explain defines ORC terms in the PROJECT`s own words, which is
+      // what the orientation doc exists to supply.
+      "skills/orc-explain/SKILL.md",
     ],
   },
   {
@@ -1329,6 +1453,11 @@ const CONTRACTS = [
       "skills/orc/SKILL.md",
       "skills/orc/config.md",
       "skills/orc/subskills/orc-pr/stack-gate.md",
+      // v0.42.0: the interview names the mock-example phase as the instrument for a
+      // question talking cannot settle (`how should this feel?`).
+      "skills/_shared/interview.md",
+      "skills/orc-grill/SKILL.md",
+      "skills/orc-grill/references/grill-doc.md",
     ],
   },
   {
@@ -1491,6 +1620,11 @@ const CONTRACTS = [
       "skills/orc/SKILL.md",
       "skills/orc/config.md",
       "skills/orc/references/ultra-mode.md",
+      // v0.42.0: the interview + the grill name mock_example as the INSTRUMENT for
+      // a question conversation cannot settle — they never run it themselves.
+      "skills/_shared/interview.md",
+      "skills/orc-grill/SKILL.md",
+      "skills/orc-grill/references/grill-doc.md",
     ],
   },
   {
@@ -1524,6 +1658,9 @@ const CONTRACTS = [
       "skills/orc/config.md",
       "skills/orc/references/intake.md",
       "skills/_shared/stack-plan.md",
+      // v0.42.0: RESUME.md is transient RUN STATE and lives here with the
+      // checkpoint — never at the project root, where it could be committed.
+      "skills/orc/references/stop-and-resume.md",
     ],
   },
   // ── Stacked pull requests (v0.37.0) ──────────────────────────────────────
@@ -1663,6 +1800,9 @@ const CONTRACTS = [
       "skills/orc/SKILL.md",
       "skills/orc/references/wiki-consult.md",
       "skills/orc/subskills/orc-execution/core.md",
+      // v0.42.0: the interview applies the SAME ladder to fact-finding — stop at the
+      // step that answers, and dispatch only as the last rung.
+      "skills/_shared/interview.md",
     ],
   },
   {
@@ -1769,7 +1909,17 @@ const BUDGETS = [
   // probe (before any reference loads), the slice-build injection rule (the
   // scope filter + cap 3 IS the anti-bloat guard), and the phase-close capture
   // (only the orchestrator may write the file). See _shared/gotchas.md.
-  { file: "skills/orc/SKILL.md", maxLines: 455 },
+  // v0.42.0: deliberate raise 455→462 — three spine facts the QoL release adds.
+  // (1) The `forecast:` mandate: it fires between the Phase-1 exit gate and the
+  // Phase-2 pause question, so a reference loaded at either end is loaded on the
+  // wrong side of it; and run_budget_dispatches is a HARD STOP, which the spine
+  // must own for the same reason the batch pause does. (2) The ultra lane names
+  // its own trace lane (`run-ultra-…`) — an ultra run traced as `orc` is counted
+  // as a plain /orc run forever. (3) Phase 8 now closes BOTH open-run markers —
+  // .current and the run’s RESUME.md — and emits the one STATS line orc stats
+  // reads; all three are run-end facts a reference loaded earlier cannot carry.
+  // Mechanics live in references/{preflight-report,stop-and-resume,trace-protocol}.md.
+  { file: "skills/orc/SKILL.md", maxLines: 462 },
   // v0.33.0: deliberate raises 264→289 / 197→219 / 171→179 — orc-wiki gains the
   // crosslink-compile entry branch, the delta-refresh default (impact probe),
   // and the orientation/atlas assemble steps (detail in references/); mini
@@ -1798,7 +1948,13 @@ const BUDGETS = [
   // fast gains the ladder as a slice line. Both are hard rules by nature: they
   // bound what the role may treat as instruction and how much it may read, and
   // neither survives being deferred to a reference.
-  { file: "skills/orc-analyze/SKILL.md", maxLines: 201 },
+  // v0.42.0: deliberate raise 201→215 — the analyzable gate (the reverse
+  // trigger to /orc-grill). It has to sit in the spine because it decides
+  // BEFORE any reference loads whether this run should happen at all, and the
+  // `analyzable ⇔` sentence is a registered contract token that must be stated
+  // where the decision is made. The two branches, the offer wording and the
+  // auto-consume live in references/thin-input.md, loaded only when it fails.
+  { file: "skills/orc-analyze/SKILL.md", maxLines: 215 },
   // v0.40.0: deliberate raise 182→187 — gotchas as an explicit NON-gate. It has
   // to be stated where the two prerequisites are stated, or a later reader adds
   // a third gate and breaks the lane's entire premise.

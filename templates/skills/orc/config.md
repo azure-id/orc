@@ -118,6 +118,14 @@ security_review: off       # off | ask | on — fires only on runs where a task
                            #   ask → one prompt after review, user decides
                            #   on  → dispatch the security pass without asking
 
+# --- Run cost budget (opt-in hard stop; OFF by default) ---
+run_budget_dispatches: 0   # 0 = off. Above 0, the Phase-1 `forecast:` block
+                           #   estimates how many subagents this run will
+                           #   dispatch; exceeding this number STOPS the run
+                           #   before wave 1 — a hard gate with the batch
+                           #   pause's discipline, never a hint — and offers
+                           #   proceed / a cheaper lane / re-plan smaller.
+
 # --- Opus-5-only dispatch (HARD-GATED, FORCING — default off) ---
 opus5_only: false          # true → EVERY dispatched role resolves to a claude-opus-5
                            #   agent, effort as the only cost dial. Outranks BOTH
@@ -361,6 +369,16 @@ above (`analyze`→`orc-analyst-fable-5`, `plan`→`orc-planner-fable-5`,
   is `min(Signal-A provider-wiki-tier, Signal-B snapshot-age)`, computed on read,
   advisory only — a stale crosslink warns, never blocks. See
   `../orc-wiki/references/crosslink.md` + `../orc-wiki/references/staleness.md`.
+- `run_budget_dispatches` (default `0` = off) is the only cost gate ORC has that
+  fires BEFORE money is spent. The Phase-1 `forecast:` block already estimates
+  the run's subagent count from the plan (`references/preflight-report.md`); this
+  key turns that estimate into a **hard stop before wave 1** when it is exceeded
+  — same discipline as `batch_pause_every`, so a run never dispatches past an
+  unacknowledged budget stop. It offers proceed · switch to a cheaper lane ·
+  re-plan smaller, and emits `GATE budget stop|pass :: forecast=<n> limit=<m>`.
+  At `0` the gate never fires and no `GATE budget` line is emitted at all.
+  The estimate is a floor: repairs and requeues push the real count up, never
+  down — so set the budget as a "stop and make me think" line, not a quota.
 - `security_review` gates the opt-in Phase 5.5 security pass (default `off`).
   The trigger is the EXISTING risk floor: it can only fire on a run where at
   least one task scored ≥ 70 (security/money/migrations/auth). `ask` → one

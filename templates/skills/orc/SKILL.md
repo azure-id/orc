@@ -110,6 +110,9 @@ deterministically; the rich narrative is **dispatched, never remembered** — ev
 the current **phase packet**; you never append a trace line yourself. Run start:
 create `log_dir`, write `log_dir/.current` = `run-orc-<slug>-<DDMMYY>-<HHMMSS>.txt`
 AND `touch the trace file` of that name in the SAME step; store `trace_path`.
+**Under `ultra_mode` the lane segment is `ultra`, not `orc`** (`run-ultra-<slug>-…`)
+— the filename IS the per-lane data, so an ultra run named `orc` is counted as a
+plain `/orc` run forever, hiding the costliest lane in every usage report.
 **Phase close = dispatch `orc-trace-writer-haiku-4-5`** with that packet
 (`phase`, `events[]`, and `decisions` — the WHY: scoring rationale, the user's
 answers VERBATIM, what you rejected; `run_meta` on the FIRST packet only).
@@ -251,6 +254,15 @@ answered before Phase 2; non-blocking show their `proposed_default` for tacit
 approval. **Step-back valve:** `plan_confidence: low` OR >3 blocking questions →
 recommend stepping back to `orc-analyze` (user may override and proceed). On
 pass, emit `PHASE planning end`.
+
+**Then print the `forecast:` block, BEFORE the Phase-2 pause question**
+(`references/preflight-report.md`) — tasks · waves · estimated subagents · model
+mix · a measured time RANGE · one cheaper lane and what it costs. This is the
+earliest instant every number is real and the last cheap moment to walk away.
+Presentation only, no new probes. When `config.run_budget_dispatches` > 0 and the
+forecast exceeds it, this is a **hard stop** with the batch pause's discipline
+(`GATE budget stop`) offering proceed · cheaper lane · re-plan smaller — never
+dispatch wave 1 past it.
 
 ## Phase 2 — Effort, dispatch style, scoring (load references/effort-and-mode.md) · Trace: `PHASE scoring`, `SCORE`
 
@@ -443,4 +455,7 @@ wiki now?"**; on "later" print the prominent stale warning and stamp
 `wiki_refresh_declined` in the checkpoint. Then ALWAYS show the completion
 usage report — /usage limits + the full dispatch log (model/effort/score per
 subagent). The user must always know what the run cost. Finally emit
-`PHASE ship end`, then `FINISH :: <detail>`, and delete `log_dir/.current`.
+`PHASE ship end`, then the one-line `STATS lane=… dispatches=… downgrades=…`
+summary (trace-protocol.md — what `orc stats` reads), then `FINISH :: <detail>`,
+and in ONE step delete BOTH `log_dir/.current` and the run's `RESUME.md` (that
+file existing is what marks a run unfinished — stop-and-resume.md).
