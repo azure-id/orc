@@ -245,7 +245,13 @@ straight to a loose `plan-{name}.md` with no checkpoint.
   build?"
 - **Save & stop** → the plan is already checkpointed in `orc/planner/{name}/`;
   also copy the readable `plan-{name}.md` out to the project root if the user
-  wants it. "Saved the plan (checkpointed) — stopping here."
+  wants it. "Saved the plan (checkpointed) — stopping here." Then ask ONE extra
+  question — only on this branch: **"Want a lane recommendation for building
+  this? [yes / no]"**. Yes → run `../../../orc-route/SKILL.md` on this plan
+  (it is already a valid plan input) and print the `forecast:` block from
+  `../../references/preflight-report.md` alongside it, so price and lane land
+  together. No → stop. *Take into build* never asks (the lane is chosen and
+  running); *Poly split & stop* never asks (it has its own per-repo handoff).
 - **Poly split & stop** (poly-spec input only) → the per-repo plans are written
   (HOST here, each PEER into its repo). Present them and the handoff — "open
   each repo in its own session and run `/orc` on its plan; every plan pins the

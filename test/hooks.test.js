@@ -314,13 +314,54 @@ test("payload: every GATE name and lane token used in the payload is a declared 
 
   const gateRow = proto.split("\n").find((l) => l.includes("| `GATE <name>"));
   assert.ok(gateRow, "found the GATE verb row");
-  for (const name of ["grounding", "coverage", "graph", "evidence", "derivation", "facet", "schema", "judgment", "wave-boundary"])
+  for (const name of ["grounding", "coverage", "graph", "evidence", "derivation", "facet", "schema", "judgment", "wave-boundary", "budget"])
     assert.ok(gateRow.includes(name), `GATE name "${name}" is declared`);
 
   const laneRow = proto.match(/lane: orc {2,}#([\s\S]*?)\n\S/);
   assert.ok(laneRow, "found the lane enum");
-  for (const lane of ["diy", "combine", "orc", "mini", "fast", "wiki"])
+  for (const lane of ["diy", "orc", "ultra", "mini", "fast", "wiki", "quick"])
     assert.ok(laneRow[1].includes(lane), `lane "${lane}" is declared`);
+
+  // v0.42.0: `combine` must NOT be here. The context-combiner has no slash
+  // command and is only ever dispatched from inside an open orc-analyze run, so
+  // a `combine` lane is one nothing can open — and a lane no entry point opens
+  // is a lane every counting tool (`orc stats`, `/orc-retro`) reports as
+  // permanently zero. It stays a PHASE: the hook still gives it its own
+  // PHASE-EDGE family (asserted above), inside the analyze trace.
+  assert.ok(!/\bcombine\b/.test(laneRow[1]), "`combine` is a phase, not a lane");
+});
+
+test("payload: every lane in the trace-protocol enum is one some skill actually opens", () => {
+  const skillsRoot = path.join(__dirname, "..", "templates", "skills");
+  const proto = fs
+    .readFileSync(path.join(skillsRoot, "orc", "references", "trace-protocol.md"), "utf8")
+    .replace(/\r\n/g, "\n");
+  const laneRow = proto.match(/lane: orc {2,}#([\s\S]*?)\n\S/);
+  const declared = laneRow[1]
+    .replace(/#|\(.*?\)/gs, " ")
+    .split(/[|\s]+/)
+    .map((s) => s.trim())
+    .filter((s) => /^[a-z]{2,10}$/.test(s));
+
+  // Every `run-<lane>-<slug>-…` pointer any payload file tells a lane to write.
+  const opened = new Set();
+  const walkAll = (dir) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) walkAll(p);
+      else if (e.name.endsWith(".md"))
+        for (const m of fs.readFileSync(p, "utf8").matchAll(/run-([a-z0-9]+)-<slug>/g)) opened.add(m[1]);
+    }
+  };
+  walkAll(skillsRoot);
+
+  const phantom = declared.filter((l) => !opened.has(l) && !["lane", "the", "and", "orc"].includes(l));
+  assert.deepStrictEqual(
+    phantom,
+    [],
+    `these lanes are declared in trace-protocol.md but no skill writes a run-<lane>-<slug> pointer for them: ${phantom.join(", ")}. ` +
+      "A lane nothing opens is counted as permanently zero by orc stats and /orc-retro."
+  );
 });
 
 test("trace: orc-retro is never traced (the miner must not pollute its own data)", () => {

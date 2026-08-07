@@ -79,10 +79,32 @@ assume.
   become ONE batched question in the sign-off round ("These I could not confirm
   in the repo: … — confirm, correct, or drop?"). Never more than one round.
 - **Escalation valve:** more than 3 tags means the request is under-grounded
-  for a direct intake — RECOMMEND routing through `orc-analyze` (requirement
-  mode) instead of stretching intake into a second analyst. The user chooses.
+  for a direct intake — stretching intake into a second analyst is the one thing
+  not to do. Two exits, and they answer DIFFERENT questions. Offer them in this
+  order; the user chooses:
+  1. **`/orc-grill`** — when the **intent** is unclear ("I want notifications",
+     "something is wrong with refunds"). A conversation: minutes, no scan, no
+     scout tokens. It comes back with a scoped idea, and its exit 2 feeds
+     `orc-analyze` directly.
+  2. **`/orc-analyze`** (requirement mode) — when the intent is clear but its
+     **grounding in the code** is not. A scan: tokens, evidence, `file:line`.
+
+  Naming them in that order matters: a scan cannot fix a vague intent, it can
+  only re-ask it at scan prices.
   (The standalone planner has the same valve: a request below its plannable
   floor routes to the analyst instead of being planned thin — no side door.)
+
+## Question rounds that run long — borrow the interview format
+
+The tiers above are a fixed questionnaire, which is right for a request that
+arrives well-formed. When a tier's round runs long or the answers keep opening
+new questions, switch that round to the frontier format in
+`../../_shared/interview.md`: ask every question whose prerequisites are settled
+in ONE round (never two questions where one depends on the other), each in the
+shape `❓ **Q1** — **<title>**: <body>` with the recommendation alone on a `➡️`
+line. Two rules from that contract still bind here — resolve FACTS yourself
+before asking (wiki → pattern → gotchas), and never adopt a DECISION by default.
+Same primitive, a different front door; do not fork a second version of it.
 
 ## Step 4 — Sign-off
 

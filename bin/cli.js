@@ -757,6 +757,7 @@ const CONFIG_META = [
   { key: "gotchas", def: "on", tier: "common", validate: vEnum("on", "off"), options: ["on", "off"], desc: "Repair memory: record a gotcha when a repair loop goes red → green, and inject the scope-matching ones into executor slices. Never injected unfiltered; see .claude/orc/gotchas.md." },
   { key: "gotchas_max", def: 40, tier: "common", validate: vInt(5), options: [20, 40, 60, 100], desc: "Live gotcha entries kept before the lowest-value tail is archived to gotchas-archive.md (never deleted)." },
   { key: "security_review", def: "off", tier: "common", validate: vEnum("off", "ask", "on"), options: ["off", "ask", "on"], desc: "Opt-in Phase 5.5 security pass on runs with a task scored >= 70 (risk floor). OFF by default." },
+  { key: "run_budget_dispatches", def: 0, tier: "common", validate: vInt(0), options: [0, 8, 12, 20, 30], desc: "Subagent budget for one run. The Phase-1 forecast estimates how many subagents the run will dispatch; if that exceeds this number the run STOPS before wave 1 (a hard gate like the batch pause, not a hint) and offers proceed / a cheaper lane / re-plan smaller. 0 = off, nothing changes." },
   { key: "mock_example", def: "ask", tier: "common", validate: vEnum("ask", "on", "off"), options: ["ask", "on", "off"], desc: "Post-verify mocked runnable example (mock-examples/<slug>/, never committed): ask = offer after a green verify, on = always, off = never." },
   { key: "tdd_loop_max", def: 3, tier: "common", validate: vInt(1), options: [1, 2, 3, 4, 5], desc: "Max implement→test→repair iterations per task in the TDD gate; cap hit → STOP SEQUENCE + honest red report." },
   { key: "stacked_pr", def: "ask", tier: "common", validate: vEnum("ask", "on", "off"), options: ["ask", "on", "off"], desc: "Phase 8 stacked-PR gate (full /orc + /orc-ultra only): ask = ONE P0 question when the change trips the threshold below, on = take yes without asking, off = always one regular PR. Yes needs a ticket AND a resolved PR template, else it degrades to a regular PR. Hands off to /orc-pr-setup → /orc-pr-driver; never fires in orc-mini/orc-fast/orc-diy." },
@@ -1150,11 +1151,185 @@ function configInteractive(claudeDir) {
   })();
 }
 
+// ── Config profiles (v0.42.0) — coherent bundles over the existing keys ─────
+// Mirrors the working `orc diy init --preset` pattern. A profile is PURELY a
+// batch of `orc config set` calls: every key is an existing, validated
+// CONFIG_META key, so no key changes meaning and nothing here can express a
+// state the interactive menu could not. That is the whole safety argument —
+// a profile is a shortcut, never a second configuration system.
+const CONFIG_PROFILES = {
+  "solo-fast": {
+    desc: "One person, moving fast, reads their own diffs. Fewer gates, bigger waves.",
+    keys: {
+      max_wave_tasks: 4,
+      batch_pause_every: 3,
+      default_analysis_depth: "standard",
+      generate_tests: false,
+      pattern_findings: "on",
+      security_review: "off",
+      mock_example: "off",
+      stacked_pr: "off",
+    },
+  },
+  balanced: {
+    desc: "Today's defaults. Change nothing unless you know why.",
+    keys: {
+      max_wave_tasks: 3,
+      batch_pause_every: 2,
+      default_analysis_depth: "standard",
+      generate_tests: false,
+      pattern_findings: "ask",
+      security_review: "off",
+      mock_example: "ask",
+      stacked_pr: "ask",
+      run_budget_dispatches: 0,
+    },
+  },
+  paranoid: {
+    desc: "Shared codebase, real users. Every gate on, small waves, pause often.",
+    keys: {
+      max_wave_tasks: 2,
+      batch_pause_every: 1,
+      default_analysis_depth: "deep",
+      generate_tests: true,
+      pattern_findings: "on",
+      security_review: "on",
+      mock_example: "ask",
+      stacked_pr: "ask",
+      tdd_loop_max: 4,
+    },
+  },
+  "token-lean": {
+    desc: "Cheapest coherent setup: no deep scans, no extra passes, a hard dispatch budget.",
+    keys: {
+      max_wave_tasks: 3,
+      batch_pause_every: 2,
+      max_scouts: 1,
+      default_analysis_depth: "standard",
+      generate_tests: false,
+      pattern_findings: "off",
+      security_review: "off",
+      mock_example: "off",
+      run_budget_dispatches: 12,
+    },
+  },
+};
+
+function configProfile(claudeDir, name) {
+  if (!name || !CONFIG_PROFILES[name]) {
+    console.log(ui.header("orc config profile — coherent setting bundles"));
+    for (const [k, v] of Object.entries(CONFIG_PROFILES))
+      console.log(`  ${ui.color.cyan(k.padEnd(12))} ${v.desc}`);
+    console.log(
+      "\n" +
+        ui.color.gray(
+          "Apply one with: orc config profile <name>\n" +
+            "Every profile writes only existing, validated keys — nothing it sets is\n" +
+            "something you could not set yourself with `orc config set`.\n" +
+            "Not sure which? `orc config recommend` looks at this repo and suggests one."
+        )
+    );
+    if (name) process.exit(1);
+    return;
+  }
+  const prof = CONFIG_PROFILES[name];
+  const { map } = readOverride(claudeDir);
+  const changed = [];
+  for (const [key, value] of Object.entries(prof.keys)) {
+    const m = metaFor(key);
+    if (!m) continue; // a profile can never invent a key
+    const res = m.validate(String(value));
+    if (res.err) continue;
+    const before = map[key] === undefined ? m.def : map[key];
+    if (String(before) !== String(res.value)) changed.push([key, before, res.value]);
+    map[key] = res.value;
+  }
+  const p = writeOverride(claudeDir, map);
+  console.log(ui.header(`profile: ${name}`));
+  console.log("  " + prof.desc + "\n");
+  if (!changed.length) console.log("  Nothing changed — this repo was already on that profile.");
+  else
+    console.log(
+      ui.kv(changed.map(([k, before, after]) => [k, `${ui.color.gray(String(before))} ${ui.glyph.arrow} ${after}`]))
+    );
+  console.log(`\n  ${ui.color.gray("written to " + p)}`);
+  console.log(ui.color.gray("  Undo any single key with: orc config reset <key>"));
+}
+
+// `orc config recommend` — probe the repo, suggest ONE profile, say WHY.
+// Read-only: it never writes. The reasons are the point; a recommendation you
+// cannot argue with is one you cannot correct.
+function configRecommend(claudeDir) {
+  const root = path.join(claudeDir, "..");
+  const has = (rel) => fs.existsSync(path.join(root, rel));
+  const reasons = [];
+  let score = { "solo-fast": 0, paranoid: 0, "token-lean": 0 };
+
+  let pkg = null;
+  try { pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")); } catch (_) {}
+  const testScript = pkg && pkg.scripts && pkg.scripts.test && !/no test specified/i.test(pkg.scripts.test);
+  if (testScript) { score.paranoid++; reasons.push("a real `npm test` script exists — gates have something to check"); }
+  else reasons.push("no test runner detected — extra gates would have little to verify");
+
+  const ci = has(".github/workflows") || has(".gitlab-ci.yml") || has("azure-pipelines.yml");
+  if (ci) { score.paranoid++; reasons.push("CI is configured — this repo is shared, not a scratchpad"); }
+  else { score["solo-fast"]++; reasons.push("no CI config found — looks like solo or early-stage work"); }
+
+  let contributors = 0;
+  try {
+    const out = require("child_process")
+      .execFileSync("git", ["shortlog", "-sne", "HEAD"], { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+    contributors = out.trim().split("\n").filter(Boolean).length;
+  } catch (_) {}
+  if (contributors > 3) { score.paranoid++; reasons.push(`${contributors} contributors in history — coordination cost is real`); }
+  else if (contributors) { score["solo-fast"]++; reasons.push(`${contributors} contributor(s) in history`); }
+
+  let files = 0;
+  try {
+    const out = require("child_process")
+      .execFileSync("git", ["ls-files"], { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+    files = out.trim().split("\n").filter(Boolean).length;
+  } catch (_) {}
+  if (files > 1500) { score["token-lean"]++; reasons.push(`${files} tracked files — deep scans get expensive fast here`); }
+  else if (files) reasons.push(`${files} tracked files`);
+
+  const wiki = wikiState(claudeDir);
+  if (wiki && wiki.state && wiki.state !== "none") reasons.push("a project wiki exists — grounding is already cheap");
+  else { score["token-lean"]++; reasons.push("no wiki yet — every run re-derives context, so keep scans narrow"); }
+
+  const monorepo = has("packages") || has("apps") || has("pnpm-workspace.yaml") || has("lerna.json");
+  if (monorepo) { score["token-lean"]++; reasons.push("monorepo layout — scope each run narrowly"); }
+
+  const best = Object.entries(score).sort((a, b) => b[1] - a[1]);
+  const pick = best[0][1] === 0 ? "balanced" : best[0][0];
+
+  console.log(ui.header("orc config recommend"));
+  console.log("  What I looked at:");
+  for (const r of reasons) console.log(`    ${ui.glyph.bullet} ${r}`);
+  console.log(
+    `\n  ${ui.glyph.arrow} ${ui.color.cyan(pick)} — ${CONFIG_PROFILES[pick].desc}`
+  );
+  console.log(
+    "\n" +
+      ui.color.gray(
+        `  Apply it:   orc config profile ${pick}\n` +
+          "  See them all: orc config profile\n" +
+          "  This command only reads — nothing was changed."
+      )
+  );
+}
+
 function config() {
   const claudeDir = resolveClaudeDir();
   const pos = positionals(); // ["config", <sub?>, <key?>, <value?>]
   const sub = pos[1];
   switch (sub) {
+    case "profile":
+      configProfile(claudeDir, pos[2]);
+      break;
+    case "recommend":
+      configRecommend(claudeDir);
+      break;
     case undefined:
       configInteractive(claudeDir);
       break;
@@ -1175,6 +1350,7 @@ function config() {
       console.error(
         `Unknown: orc config ${sub}\n` +
           "Usage: orc config [list | set <key> <value> | reset [key] | path]\n" +
+          "       orc config profile [<name>] | recommend\n" +
           "       orc config            (interactive menu)"
       );
       process.exit(1);
@@ -3594,6 +3770,519 @@ function wiki() {
   }
 }
 
+// ── Run state: `orc resume`, `orc run list|show`, `orc stats` (v0.42.0) ─────
+// Three read-only commands over state ORC already writes. The design constraint
+// shared by all three is SCALE: `log_dir` and `run_dir` are never auto-deleted
+// by design, so 100+ runs is a normal working directory, and a command that
+// opened every file to build a list would get slower forever. So: enumerate with
+// readdir + stat ONLY, sort, then read a bounded HEAD of just the page being
+// displayed. `checkpoint.json` is never read for a listing — only `run show`
+// opens it.
+
+const RESUME_FILE = "RESUME.md";
+const RUN_PAGE_DEFAULT = 20;
+
+// Read at most `bytes` from the front of a file. The listing path never needs
+// more than the first few lines, and a run folder can hold a large trace.
+function readHead(file, bytes = 4096) {
+  let fd;
+  try {
+    fd = fs.openSync(file, "r");
+    const buf = Buffer.alloc(bytes);
+    const n = fs.readSync(fd, buf, 0, bytes, 0);
+    return buf.slice(0, n).toString("utf8");
+  } catch (_) {
+    return null;
+  } finally {
+    if (fd !== undefined) try { fs.closeSync(fd); } catch (_) {}
+  }
+}
+
+function relAge(ms) {
+  const s = Math.max(0, Math.round((Date.now() - ms) / 1000));
+  if (s < 90) return "just now";
+  const m = Math.round(s / 60);
+  if (m < 90) return `${m} minutes ago`;
+  const h = Math.round(m / 60);
+  if (h < 36) return `${h} hours ago`;
+  const d = Math.round(h / 24);
+  return `${d} ${d === 1 ? "day" : "days"} ago`;
+}
+
+// The ONE line RESUME.md guarantees (references/stop-and-resume.md):
+//   Where it stands:  /orc · phase execution · wave 2 of 4 done
+// Parsing this is why a listing never has to open checkpoint.json.
+function parseStands(text) {
+  const m = /^Where it stands:\s*(.+)$/m.exec(text || "");
+  const out = { lane: "", phase: "", wave: "" };
+  if (!m) return out;
+  for (const part of m[1].split("·").map((s) => s.trim())) {
+    if (!part) continue;
+    if (/^\/?orc/i.test(part) && !out.lane) out.lane = part.startsWith("/") ? part : "/" + part;
+    else if (/^phase\b/i.test(part)) out.phase = part.replace(/^phase\s+/i, "");
+    else if (/^wave\b/i.test(part)) out.wave = part;
+  }
+  return out;
+}
+
+// Enumerate run folders with stat only. `waiting` == a RESUME.md exists, which
+// IS the unfinished flag: ORC deletes that file at FINISH, so there is no
+// separate "is this consumed?" bookkeeping to drift out of sync.
+function listRuns(claudeDir) {
+  const root = resolveRunDir(claudeDir);
+  let entries = [];
+  try {
+    entries = fs.readdirSync(root, { withFileTypes: true });
+  } catch (_) {
+    return { root, runs: [] };
+  }
+  const runs = [];
+  for (const e of entries) {
+    if (!e.isDirectory()) continue;
+    const dir = path.join(root, e.name);
+    let mtime = 0;
+    try { mtime = fs.statSync(dir).mtimeMs; } catch (_) {}
+    let resumeMtime = null;
+    try { resumeMtime = fs.statSync(path.join(dir, RESUME_FILE)).mtimeMs; } catch (_) {}
+    runs.push({
+      slug: e.name,
+      dir,
+      mtime,
+      resumeMtime,
+      waiting: resumeMtime !== null,
+      sortKey: resumeMtime !== null ? resumeMtime : mtime,
+    });
+  }
+  runs.sort((a, b) => b.sortKey - a.sortKey);
+  return { root, runs };
+}
+
+// Status claims only what the disk can PROVE:
+//   waiting — RESUME.md exists. Authoritative: ORC writes it at every stop and
+//             deletes it at FINISH, so its presence IS "this run is still open".
+//   done    — no RESUME.md, but the folder holds something. Either it finished
+//             or it never paused; both mean "not waiting for you".
+//   empty   — a folder with nothing in it at all.
+// What this deliberately does NOT do is infer "finished" from state-of-play.md.
+// That file is written at a STOP, so a run that shipped straight through never
+// has one, and calling those "incomplete" was a confident lie about real runs.
+// Only ever called for the page being displayed — one readdir, no file reads.
+function runStatus(run) {
+  if (run.waiting) return "waiting";
+  try {
+    return fs.readdirSync(run.dir).length ? "done" : "empty";
+  } catch (_) {
+    return "empty";
+  }
+}
+
+// Best-effort clipboard, zero dependencies: spawn the OS tool if there is one.
+// EVERY failure path is non-fatal — a missing tool, a non-TTY, a spawn error.
+// The command must never exit non-zero because of the clipboard.
+function copyToClipboard(text) {
+  const { spawnSync } = require("child_process");
+  const candidates =
+    process.platform === "win32"
+      ? [["clip", []]]
+      : process.platform === "darwin"
+      ? [["pbcopy", []]]
+      : [["wl-copy", []], ["xclip", ["-selection", "clipboard"]]];
+  for (const [cmd, argv] of candidates) {
+    try {
+      const r = spawnSync(cmd, argv, { input: text, windowsHide: true });
+      if (!r.error && r.status === 0) return true;
+    } catch (_) {}
+  }
+  return false;
+}
+
+function printResumeEntry(run, { clipboard }) {
+  const body = fs.readFileSync(path.join(run.dir, RESUME_FILE), "utf8");
+  if (clipboard && copyToClipboard(body))
+    console.log(ui.color.green("Copied to clipboard.") + " Open a new session and paste it.\n");
+  else if (clipboard)
+    console.log(ui.color.yellow("Could not reach a clipboard tool") + " — copy the text below by hand.\n");
+  const bar = ui.color.gray("─".repeat(40));
+  console.log(bar);
+  console.log(body.trimEnd());
+  console.log(bar);
+}
+
+// `orc resume` — the read half of RESUME.md. Replaces nothing: before this,
+// the only way back into a paused run was a prompt printed in a chat window
+// the user may have closed.
+//   orc resume                 numbered picker over every waiting run
+//   orc resume <n> | <slug>    skip the picker
+//   orc resume --no-clipboard  print only
+// Exit codes follow `orc pattern status`: 0 = at least one resume exists (and
+// one was printed), 1 = none waiting.
+function resume() {
+  const claudeDir = resolveClaudeDir();
+  const clipboard = flag("--no-clipboard") !== true;
+  const { runs } = listRuns(claudeDir);
+  const waiting = runs.filter((r) => r.waiting);
+
+  if (!waiting.length) {
+    // An empty list is a real answer, not an error condition.
+    console.log("No runs are waiting. Everything you started has finished.");
+    process.exit(1);
+  }
+
+  const rows = waiting.map((r) => {
+    const head = readHead(path.join(r.dir, RESUME_FILE)) || "";
+    const s = parseStands(head);
+    return { ...r, ...s };
+  });
+
+  const render = (r, i) =>
+    `  ${String(i + 1).padStart(2)}  ${r.slug.padEnd(26)} ${(r.lane || "—").padEnd(10)} ` +
+    `${(r.wave || r.phase || "").padEnd(13)} ${ui.color.gray("paused " + relAge(r.resumeMtime))}`;
+
+  const arg = positionals()[1];
+  if (arg) {
+    const byIndex = /^\d+$/.test(arg) ? rows[Number(arg) - 1] : null;
+    const pick = byIndex || rows.find((r) => r.slug === arg);
+    if (!pick) {
+      console.error(`No waiting run matches "${arg}".`);
+      rows.forEach((r, i) => console.error(render(r, i)));
+      process.exit(1);
+    }
+    printResumeEntry(pick, { clipboard });
+    return;
+  }
+
+  console.log(
+    `\n${plural(rows.length, "run")} ${rows.length === 1 ? "is" : "are"} waiting for you.\n`
+  );
+  rows.forEach((r, i) => console.log(render(r, i)));
+
+  // Same convention as `orc onboarding`: a menu on a TTY, the plain list when
+  // piped — so a model or a script reading this never hangs on a prompt.
+  if (!process.stdin.isTTY) {
+    console.log("\n" + ui.color.gray("Pick one with: orc resume <number|slug>"));
+    return;
+  }
+  const readline = require("readline");
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  rl.question("\nPick a number (or q to quit): ", (ans) => {
+    rl.close();
+    const choice = String(ans).trim().toLowerCase();
+    if (!choice || choice === "q") return;
+    const pick = rows[Number(choice) - 1];
+    if (!pick) {
+      console.log("  ? not a valid choice");
+      return;
+    }
+    console.log("");
+    printResumeEntry(pick, { clipboard });
+  });
+}
+
+// `orc run list` / `orc run show <slug|n>`
+function runCmd() {
+  const claudeDir = resolveClaudeDir();
+  const pos = positionals(); // ["run", <sub?>, <arg?>]
+  const sub = pos[1] || "list";
+  const { root, runs } = listRuns(claudeDir);
+
+  if (sub === "show") {
+    const arg = pos[2];
+    const pick = /^\d+$/.test(String(arg)) ? runs[Number(arg) - 1] : runs.find((r) => r.slug === arg);
+    if (!pick) {
+      console.error(arg ? `No run matches "${arg}".` : "Usage: orc run show <slug|number>");
+      process.exit(1);
+    }
+    console.log(ui.header(`run ${pick.slug}`));
+    console.log(ui.kv([["status", runStatus(pick)], ["folder", pick.dir], ["updated", relAge(pick.sortKey)]]));
+    for (const [label, file] of [
+      ["state-of-play", "state-of-play.md"],
+      ["resume", RESUME_FILE],
+    ]) {
+      const p = path.join(pick.dir, file);
+      if (!fs.existsSync(p)) continue;
+      console.log(ui.header(label));
+      console.log(fs.readFileSync(p, "utf8").trimEnd());
+    }
+    // `run show` is the ONLY path allowed to open the checkpoint.
+    const ck = path.join(pick.dir, "checkpoint.json");
+    if (fs.existsSync(ck)) {
+      try {
+        const j = JSON.parse(fs.readFileSync(ck, "utf8"));
+        console.log(ui.header("checkpoint"));
+        console.log(
+          ui.kv([
+            ["phase", String(j.phase ?? "—")],
+            ["wave", String(j.wave ?? "—")],
+            ["updated_at", String(j.updated_at ?? "—")],
+            ["trace", String(j.trace_path ?? "—")],
+          ])
+        );
+      } catch (_) {
+        console.log(ui.color.gray("\n(checkpoint.json is present but unreadable)"));
+      }
+    }
+    return;
+  }
+
+  if (sub !== "list") {
+    console.error(`Unknown subcommand: orc run ${sub}\nTry: orc run list | orc run show <slug|n>`);
+    process.exit(1);
+  }
+
+  if (!runs.length) {
+    console.log(`No runs recorded yet under ${root}.`);
+    return;
+  }
+
+  const asJson = flag("--json") === true;
+  const all = flag("--all") === true;
+  const limitFlag = Number(flag("--limit"));
+  const limit = all ? runs.length : Number.isFinite(limitFlag) && limitFlag > 0 ? limitFlag : RUN_PAGE_DEFAULT;
+  const page = runs.slice(0, limit);
+
+  // The status probe and the head read happen HERE — only for the page being
+  // displayed, so a 200-run folder costs the same as a 20-run one.
+  for (const r of page) {
+    r.status = runStatus(r);
+    const src = r.waiting ? RESUME_FILE : "state-of-play.md";
+    Object.assign(r, parseStands(readHead(path.join(r.dir, src)) || ""));
+  }
+
+  if (asJson) {
+    console.log(
+      JSON.stringify(
+        {
+          run_dir: root,
+          total: runs.length,
+          shown: page.length,
+          runs: page.map((r) => ({
+            slug: r.slug,
+            status: r.status,
+            lane: r.lane || null,
+            phase: r.phase || null,
+            wave: r.wave || null,
+            updated_ms: Math.round(r.sortKey),
+          })),
+        },
+        null,
+        2
+      )
+    );
+    return;
+  }
+
+  console.log(ui.header(`orc runs — ${runs.length} total`));
+  page.forEach((r, i) => {
+    const badge =
+      r.status === "waiting"
+        ? ui.color.yellow("waiting")
+        : r.status === "done"
+        ? ui.color.green("done   ")
+        : ui.color.gray("empty  ");
+    console.log(
+      `  ${String(i + 1).padStart(3)}  ${badge}  ${r.slug.padEnd(30)} ` +
+        `${(r.lane || "").padEnd(9)} ${(r.wave || r.phase || "").padEnd(13)} ` +
+        ui.color.gray(relAge(r.sortKey))
+    );
+  });
+  if (page.length < runs.length)
+    console.log(
+      "\n" + ui.color.gray(`showing 1-${page.length} of ${runs.length} — --limit <n> for more, --all for everything`)
+    );
+  console.log(
+    "\n" +
+      ui.color.gray(
+        "waiting = a resume pointer is on disk · done = no pointer (finished, or never paused)\n" +
+          "Runs from before v0.42.0 wrote no pointer, so they all read `done`.\n" +
+          "Details: orc run show <slug|number>   ·   Resume one: orc resume"
+      )
+  );
+}
+
+// ── orc stats — deterministic usage counting (no model, no cost) ────────────
+// Source: the trace files that already exist. Their names are DATA
+// (`run-<lane>-<slug>-<DDMMYY>-<HHMMSS>.txt`), so lane and date come from the
+// filename with zero parsing and the headline counts are free. Depth comes from
+// the single `STATS` line each run appends at FINISH; traces older than v0.42.0
+// have no such line and fall back to counting `DISPATCH` lines, which are
+// orchestrator-written and present in every lane.
+const TRACE_NAME = /^run-([a-z0-9]+)-(.+)-(\d{6})-(\d{6})\.txt$/;
+const TRACE_GENERIC = /^run-(\d{6})-(\d{6})\.txt$/;
+
+function resolveLogDir(claudeDir) {
+  let rel = ".claude/orc/logs";
+  try {
+    rel = readOverride(claudeDir).map.log_dir || rel;
+  } catch (_) {}
+  return path.isAbsolute(rel) ? rel : path.join(claudeDir, "..", rel);
+}
+
+// DDMMYY (the trace filename's own stamp) → a comparable YYYY-MM-DD.
+function traceDateIso(ddmmyy) {
+  const dd = ddmmyy.slice(0, 2), mm = ddmmyy.slice(2, 4), yy = ddmmyy.slice(4, 6);
+  return `20${yy}-${mm}-${dd}`;
+}
+
+// Read the tail of a file — the STATS line is appended at FINISH, so it is at
+// the end. Never parse a 20-minute trace to count one run.
+function readTail(file, bytes = 8192) {
+  let fd;
+  try {
+    fd = fs.openSync(file, "r");
+    const size = fs.fstatSync(fd).size;
+    const start = Math.max(0, size - bytes);
+    const buf = Buffer.alloc(Math.min(bytes, size));
+    fs.readSync(fd, buf, 0, buf.length, start);
+    return buf.toString("utf8");
+  } catch (_) {
+    return "";
+  } finally {
+    if (fd !== undefined) try { fs.closeSync(fd); } catch (_) {}
+  }
+}
+
+// Parses the run summary the orchestrator appends at FINISH, e.g.
+//   [080826 12:00:00.000] orc  STATS lane=orc slug=merchant-notifications \
+//        dispatches=17 waves=4 tasks=7 bands=high:2,med:3,low:1 downgrades=0
+// Contract copy lives in templates/skills/orc/references/trace-protocol.md.
+function parseStatsLine(text) {
+  const m = /^.*\bSTATS\s+(.+)$/m.exec(text || "");
+  if (!m) return null;
+  const out = {};
+  for (const kv of m[1].trim().split(/\s+/)) {
+    const eq = kv.indexOf("=");
+    if (eq > 0) out[kv.slice(0, eq)] = kv.slice(eq + 1);
+  }
+  return out;
+}
+
+function bar(n, max, width = 12) {
+  if (!max) return "";
+  return "█".repeat(Math.max(1, Math.round((n / max) * width)));
+}
+
+function stats() {
+  const claudeDir = resolveClaudeDir();
+  const dir = resolveLogDir(claudeDir);
+  const asJson = flag("--json") === true;
+  const since = flag("--since");
+
+  let names = [];
+  try {
+    names = fs.readdirSync(dir).filter((f) => f.endsWith(".txt"));
+  } catch (_) {
+    console.log(`No traces yet under ${dir}. Run any ORC lane and they appear here.`);
+    process.exit(1);
+  }
+
+  const lanes = new Map();
+  const agents = new Map();
+  let total = 0, dispatches = 0, downgrades = 0, unfinished = 0, unknownLane = 0;
+  let firstDate = null, lastDate = null;
+
+  for (const name of names) {
+    const m = TRACE_NAME.exec(name);
+    const g = m ? null : TRACE_GENERIC.exec(name);
+    if (!m && !g) continue;
+    const date = traceDateIso(m ? m[3] : g[1]);
+    // --since filters on the FILENAME date, before any file is opened.
+    if (typeof since === "string" && since && date < since) continue;
+
+    const lane = m ? m[1] : "unknown";
+    if (!m) unknownLane++;
+    total++;
+    lanes.set(lane, (lanes.get(lane) || 0) + 1);
+    if (!firstDate || date < firstDate) firstDate = date;
+    if (!lastDate || date > lastDate) lastDate = date;
+
+    const tail = readTail(path.join(dir, name));
+    const st = parseStatsLine(tail);
+    if (st) {
+      dispatches += Number(st.dispatches) || 0;
+      downgrades += Number(st.downgrades) || 0;
+    } else {
+      // Legacy fallback: count DISPATCH lines. Cheaper detail, same headline.
+      const body = fs.readFileSync(path.join(dir, name), "utf8");
+      dispatches += (body.match(/\bDISPATCH\s+\S/g) || []).length;
+      downgrades += (body.match(/⛔ DOWNGRADE/g) || []).length;
+      for (const a of body.match(/\bDISPATCH\s+(orc-[\w.-]+)/g) || []) {
+        const key = a.replace(/^\S+\s+/, "").replace(/-(haiku|sonnet|opus|fable)-.*$/, "");
+        agents.set(key, (agents.get(key) || 0) + 1);
+      }
+    }
+    if (st) {
+      for (const a of tail.match(/\bDISPATCH\s+(orc-[\w.-]+)/g) || []) {
+        const key = a.replace(/^\S+\s+/, "").replace(/-(haiku|sonnet|opus|fable)-.*$/, "");
+        agents.set(key, (agents.get(key) || 0) + 1);
+      }
+    }
+    if (!/\bFINISH\b/.test(tail)) unfinished++;
+  }
+
+  if (!total) {
+    console.log(since ? `No traces on or after ${since}.` : `No traces yet under ${dir}.`);
+    process.exit(1);
+  }
+
+  const laneRows = [...lanes.entries()].sort((a, b) => b[1] - a[1]);
+  const agentRows = [...agents.entries()].sort((a, b) => b[1] - a[1]);
+
+  if (asJson) {
+    console.log(
+      JSON.stringify(
+        {
+          log_dir: dir,
+          runs: total,
+          from: firstDate,
+          to: lastDate,
+          lanes: Object.fromEntries(laneRows),
+          agents: Object.fromEntries(agentRows),
+          dispatches,
+          downgrades,
+          unfinished,
+          unknown_lane: unknownLane,
+        },
+        null,
+        2
+      )
+    );
+    return;
+  }
+
+  console.log(ui.header(`ORC usage — ${plural(total, "run")}, ${firstDate} to ${lastDate}`));
+  console.log("\n" + ui.color.bold("Lanes"));
+  const maxLane = laneRows[0][1];
+  for (const [lane, n] of laneRows) {
+    const pct = Math.round((n / total) * 100);
+    // `unknown` is not a lane — it is a trace whose name carries no lane at all
+    // (a pre-v0.34.2 hook bootstrap). Never print it as if it were a command.
+    const label = lane === "unknown" ? ui.color.gray("(no lane)") : "/" + lane;
+    console.log(
+      `  ${label.padEnd(lane === "unknown" ? 14 + (ui.useColor ? 9 : 0) : 14)} ${String(n).padStart(3)} ` +
+        `${n === 1 ? "run " : "runs"}   ${bar(n, maxLane).padEnd(13)} (${pct}%)`
+    );
+  }
+  if (agentRows.length) {
+    console.log("\n" + ui.color.bold("Subagents dispatched") + `          ${dispatches} total`);
+    for (const [a, n] of agentRows.slice(0, 8))
+      console.log(`  ${a.replace(/^orc-/, "").padEnd(28)} ${String(n).padStart(3)}`);
+  }
+  console.log("\n" + ui.color.bold("Health"));
+  console.log(ui.kv([
+    ["model downgrades", String(downgrades)],
+    ["runs that never finished", `${unfinished}${unfinished ? "   (see `orc resume`)" : ""}`],
+    ...(unknownLane ? [["traces with no lane in the name", `${unknownLane}   (pre-v0.34.2 bootstrap files)`]] : []),
+  ]));
+  console.log(
+    "\n" +
+      ui.color.gray(
+        "Counts only what traces record. `/orc-retro` and `/orc-explain` never write one,\n" +
+          "so they never appear here. Deleting or moving log_dir resets these numbers;\n" +
+          "nothing auto-prunes traces."
+      )
+  );
+}
+
 function where() {
   const claudeDir = resolveClaudeDir();
   console.log("skills   →", path.join(claudeDir, "skills"));
@@ -4054,6 +4743,12 @@ Usage:
     orc config set <key> <value>          validate + write one setting
     orc config reset [key]                revert one key (or all) to defaults
     orc config path                       print the override file location
+    orc config profile [<name>]           apply a coherent bundle over the existing keys
+                                          (solo-fast, balanced, paranoid, token-lean);
+                                          no name = list them with what each is for
+    orc config recommend                  read-only: probe this repo (tests? CI? size?
+                                          wiki? monorepo?) and suggest ONE profile, with
+                                          the reasons it decided from
   orc diy [--dir <path>]                  compose your own flow — INTERACTIVE menu (project-scoped; no --global)
     orc diy init [--preset <name>]        create the flow config (presets: lean, paranoid, solo-fast)
     orc diy set <key> <value>             change one flow key (requires recompile)
@@ -4090,6 +4785,15 @@ Usage:
     orc pr stack status [<slug>]          is a stack plan READY? (exit 0 ready /
                                           1 absent-or-unfilled) — the probe the driver runs first
                                           (aliases: orc pr-stack-template, orc pr-stack-status)
+  orc resume [<n>|<slug>]                 runs waiting for you — numbered list, pick one, and it
+                                          prints (and copies) the paste-into-a-fresh-session prompt
+                                          (exit 0 = something is waiting, 1 = nothing is)
+                                          [--no-clipboard]  print only, never touch the clipboard
+  orc run list [--all|--limit <n>]        every run, newest first, with status
+                                          waiting | finished | incomplete  [--json]
+    orc run show <slug|n>                 one run: state-of-play, resume prompt, checkpoint
+  orc stats [--since YYYY-MM-DD] [--json] how much you actually use each lane and agent, counted
+                                          from the trace filenames — no model, instant, free
   orc onboarding [<topic>]                guided walkthrough (menu on a TTY; prints all when piped)
                                           topics: overview, install, first-run, lanes,
                                           config, knowledge, upgrade, troubleshooting
@@ -4151,6 +4855,15 @@ Skills installed: ${listSkillNames().join(", ")}`);
     case "pr-stack-template":
     case "pr-stack-status":
       pr(cmd);
+      break;
+    case "resume":
+      resume();
+      break;
+    case "run":
+      runCmd();
+      break;
+    case "stats":
+      stats();
       break;
     case "where":
       where();

@@ -37,8 +37,10 @@ violation.
 
 1. **This IS a run — bootstrap it.** Load the spine (`orc/SKILL.md`) and
    `references/trace-protocol.md`; create `log_dir`, write `log_dir/.current` =
-   `run-orc-<slug>-<DDMMYY>-<HHMMSS>.txt`, store `trace_path` in the checkpoint.
-   Record `PHASE intake start` into this phase's packet.
+   `run-orc-<slug>-<DDMMYY>-<HHMMSS>.txt` AND `touch the trace file` of that name
+   in the SAME step (both, or neither — a pointer naming a file that does not
+   exist is what splits a run across two files), store `trace_path` in the
+   checkpoint. Record `PHASE intake start` into this phase's packet.
 2. **Schema-validate against `schemas/planning-output.md`.** Every task needs
    `declared_files`, `grounding[]`, `depends_on`, `requirements[]`,
    `acceptance[]`, `owns_area`, `spec_ref`, and the `facets` block (Part D). A

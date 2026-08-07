@@ -6,7 +6,7 @@
 
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
-![Version](https://img.shields.io/badge/version-0.41.0-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.42.0-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
@@ -46,84 +46,143 @@ zero-dependency npm package installs those files into your `.claude/` directory.
 
 ## Changelog
 
-**Latest: v0.41.0 — updated 2026-08-06.**
+**Latest: v0.42.0 — updated 2026-08-08.**
 
-### v0.41.0 — A wiki that can tell you it is fresh, and TDD only where it can fail _(2026-08-06)_
+### v0.42.0 — Say what you mean, see what it costs, find your way back _(2026-08-08)_
 
-Three reported defects. Two of them turned out to be the same bug.
+A quality-of-life release. Nothing here changes how ORC builds — the wiki,
+patterns, gotchas, TDD scoping, traces and guards are untouched. It changes what
+using ORC *feels like*: getting the request right before spending, seeing the
+price before the run starts, and finding your way back into work you paused.
 
-**The wiki was permanently STALE, with the same hash after every refresh.**
-`wiki-meta.json`'s `scan_commit` is the **oldest** doc's anchor — deliberately, as
-the conservative floor for the blind-spot sweep. But a delta refresh (the default
-path) re-scans only the *touched* docs, so untouched docs keep their original
-`scanned_commit` and **that anchor can never move**. Every refresh reported the
-identical hash and a distance that only grew. ORC diagnosed exactly this in
-v0.34.5 and fixed it for `orc wiki impact`'s per-doc view; four other consumers
-were left reading the frozen anchor — including the summary line that made a
-fully-refreshed wiki still recommend the expensive FULL re-scan forever.
+**First, an audit that paid for itself.** This release makes traces load-bearing
+for the first time — `orc stats` counts your usage straight from them. A counting
+tool built on a drifting log produces *confident wrong numbers*, which is worse
+than no numbers, so the trace subsystem was audited before any of it was written.
+The good news held: zero orphan traces on every run since v0.34.2, one file per
+run, no dangling pointers, and the `.txt`/`.jsonl` halves agreeing on all 133
+events checked.
 
-Freshness is now **coverage-relative**, computed by one shared engine:
+It also found three real defects, all the same shape — **a lane the protocol
+declared that nothing could ever open**:
+
+- `context-combiner` was listed as its own lane. It has no slash command and only
+  ever runs *inside* an open `/orc-analyze` run — so that lane would have read
+  zero forever. It is now documented as a phase, which is what the hook already
+  believed.
+- The plan-handoff entry path wrote the trace pointer without creating the file:
+  the exact signature of the split-run bug fixed in v0.34.2, on the one path that
+  fix's lint never covered.
+- **Every `/orc-ultra` run was traced as plain `/orc`** — the most expensive lane
+  in the product, invisible in any usage report. Ultra now names its own lane.
+
+A new test walks the entire payload and fails on any declared lane no skill
+actually opens, so this class cannot come back quietly.
+
+**`/orc-grill` — for when you do not know what you want yet.** One vague sentence
+is a complete input. *"I want notifications for merchants."* *"Something is wrong
+with our refunds."* It asks you rounds of questions — every question that is
+*ready*, together, never two where one depends on the other — and each carries a
+recommendation, so "1, 3, default the rest" keeps things moving.
+
+Two rules do the work. **Facts are ORC's job**: it checks the wiki, the cached
+pattern and the gotcha list before asking, so you are never made to recite your
+own codebase. **Decisions are yours**, and it waits for them — it never answers
+its own question, because a default adopted in silence is indistinguishable a
+week later from a decision you made, and it is the one the build gets wrong.
+
+An empty question list does not end it. It plays the idea back in plain words and
+asks whether that is what you meant; only your yes ends it. Then: save it to
+`orc-grill/<slug>/grill-context.md`, carry it straight into `/orc-analyze` (the
+saved doc *is* the input, so the analyst spends its tokens on code instead of
+re-asking scope), or drop it.
+
+`/orc-analyze` learned to send you there. Thin input used to get *absorbed* —
+every unknown became an assumption tag and then a question, which is an expensive
+way to ask what a conversation asks for free. It now has an entry floor, and
+failing it **offers** the grill. Accepting comes straight back to the same
+invocation; you retype nothing.
+
+**`/orc-explain` — "wait, what?"** You type it after a message that did not land.
+ORC says it again: the point first, then the background it assumed, then every
+ORC-only word (band, facet, disposition, wave, slice, freshness tier) defined in
+your project's own terms. It is not "be shorter" — a summary of something you did
+not understand is the same thing you did not understand.
+
+**You now see the price before the run starts.**
 
 ```
-per-doc distance = git rev-list --count <doc.scanned_commit>..HEAD -- <what that doc covers>
-wiki tier        = the worst doc's tier
+── forecast ──
+tasks:     7 · waves: 3 · subagents: about 17
+models:    2 high · 3 medium · 1 low
+time:      about 45-80 minutes in this lane
+cheaper:   /orc-mini would be about 15 minutes with 3 subagents
+           (it skips full review and verification)
 ```
 
-A doc about auth no longer rots because the README changed forty times. A
-STRUCTURAL blind spot degrades the tier by exactly **one** step and never past
-AGING — the docs on disk are accurate, the *coverage* is incomplete, and forcing
-STALE there would just recreate permanent-STALE from the other direction.
+It prints the moment the plan passes its gate — the earliest point where every
+number is real, and the last cheap moment to walk away. The time ranges come from
+measured runs, not invention; a lane with no measured corpus says so rather than
+printing a number that merely looks computed. Set `run_budget_dispatches` and a
+run forecasting more than that **stops and asks** before wave 1.
 
-**`orc wiki status` also stopped ignoring your config.** It hardcoded the 10/30
-edges and never read `wiki_fresh_max` / `wiki_aging_max`, so raising them to quiet
-the STALE spam did nothing. It now reports the tier, the anchor that actually pins
-it, the edges in force, and a per-doc breakdown — plus `--json` for hooks and
-skills. `meta.scan_commit` is unchanged on disk: no migration, no re-scan.
-
-**You can now see the wiki working.** The tier line was already mandated but was
-*computed by the model* — the failure class ORC has already lost twice. It now
-comes from the probe. And attribution moved to the point of use: every dispatch
-whose slice carried wiki material names the docs and the tier at time of use, and
-every executor returns `wiki_used` — the pages it **actually read**, or `none`.
-`none` is kept and surfaced: a wiki shipped into every slice and read by nobody is
-precisely what this field exists to expose.
+**`orc resume` — you paused three days ago. Where were you?** ORC now writes the
+resume prompt to disk at every stop and deletes it when the run finishes, so a
+file existing means that run is still waiting for you — no stale entries, no
+bookkeeping to drift.
 
 ```
-DISPATCH orc-executor-sonnet-5-high :: T4 modify health API
-  wiki: FRESH — 2 docs → orc-feature-health.md, orc-reference-api-surface.md
+orc resume
+
+2 runs are waiting for you.
+
+   1  merchant-notifications   /orc       wave 2 of 4   paused 3 days ago
+   2  refund-audit             /orc-mini  wave 1 of 2   paused 6 hours ago
+
+Pick a number (or q to quit):
 ```
 
-**TDD stopped writing tests for things that cannot fail.** The only exemption was
-"no runnable surface", so a constant and an i18n map — which *do* have a runnable
-surface — got tests that only restated their own assignment, and a pure file split
-got brand-new tests when the existing suite already proved the behavior unchanged.
+Pick one and it prints the prompt — and copies it to your clipboard where the OS
+allows. A clipboard failure never fails the command.
 
-The planner already computed the answer and threw it away: a constant is
-`novelty: mechanical` + `test_surface: none`; a file split is `mechanical` +
-`update-existing`. So each `tdd_spec` entry now carries a **derived** disposition:
+**`orc run list` / `orc run show`** browse every run, newest first, and
+**`orc stats`** counts how much you actually use each lane and agent — no model,
+instant, free, local:
 
-| disposition | case | test authored? |
-|---|---|---|
-| `new-surface` | behavior does not exist yet | yes — red first |
-| `behavior-change` | behavior intentionally changes | yes — guard + new assertion |
-| `covered-by-existing` | pure refactor / move / split | **no** — must cite the existing test |
-| `no-behavior` | constant, translation string, docs, config | **no** |
-| `no-runner` | project has no test runner | no — whole-run |
+```
+Lanes
+  /orc            24 runs   ████████████       (39%)
+  /orc-mini       18 runs   █████████          (29%)
+  /orc-quick      11 runs   █████              (18%)
+  /orc-fast        1 run                        (2%)
+```
 
-Two guards keep this from becoming a coverage hole: a `covered-by-existing`
-citation that does not resolve **bounces the plan**, and a task with cited
-`risk[]` (auth, money, migration, security, concurrency, data-integrity) can never
-be scoped out. Preflight always prints what was skipped and why.
+Enough to notice you have used `/orc-fast` once in three months because your wiki
+is never fresh — or that 39% of your runs take the full lane when half of them
+were one small endpoint. It is not a replacement for `/orc-retro`: stats
+**counts** what you do, retro **judges** how it went. Both state their blind
+spots out loud rather than burying them.
 
-**Wave 0 is gone.** TDD is a *paired task* the implementation task `depends_on` —
-an ordinary task, so independent red proofs share a wave and run in parallel while
-the dependency keeps every proof ahead of the code it proves. If nothing needs a
-test, there is no TDD task and no extra wave.
+**`/orc-route` — you have a plan; which lane should build it?** Plan-only, on
+purpose. A plan has tasks, files, dependencies and scores, so routing from it is
+arithmetic; routing from a sentence is guessing, and a guess that looks like a
+calculation is worse than no answer. Give it prose and it refuses and says why.
+Every runner-up names what choosing it *costs* you; every impossible lane names
+what is blocking it and how to fix that. Risk beats size — a small plan with a
+risky task still earns the full lane.
 
-**Zero new skills, zero new agents, one new CLI flag.**
+**Getting started got shorter.** `orc config recommend` reads your repo (tests?
+CI? contributors? size? wiki? monorepo?) and suggests one of four profiles, with
+the reasons it decided from; `orc config profile <name>` applies it. Every
+profile writes only existing, validated keys, so nothing it sets is something you
+could not set yourself.
+
+**Three new skills, zero new agents** — the `/orc-quick` precedent holds.
 
 <details>
 <summary><b>Previous versions</b> (click to expand)</summary>
+
+### v0.41.0 — A wiki that can tell you it is fresh, and TDD only where it can fail _(2026-08-06)_
 
 ### v0.40.0 — Gotchas: repair memory that outlives the run _(2026-08-06)_
 
@@ -295,6 +354,12 @@ orc init --global   # install into ~/.claude          (all projects)
 orc update          # re-copy this package's files (offline; local only)
 orc upgrade         # fetch the LATEST package, then apply it (pulls a new version)
 orc config          # view/change settings (interactive; zero model tokens)
+orc config recommend   # read your repo, suggest ONE settings profile, with reasons
+orc config profile <n> # apply it (solo-fast | balanced | paranoid | token-lean)
+orc resume          # runs waiting for you → pick one, get the paste-in prompt (+clipboard)
+orc run list        # every run, newest first: waiting | done | empty  (--json, --all)
+orc run show <slug> # one run: state-of-play, resume prompt, checkpoint
+orc stats           # how much you actually use each lane and agent (no model, free)
 orc wiki            # wiki registration state (registered / UNREGISTERED / out of sync)
 orc wiki sync       # rebuild the wiki index + manifest from the docs (instant, no re-scan)
 orc pattern status  # deterministic "does a cached code-pattern exist" probe (exit 1 when absent)
@@ -382,6 +447,9 @@ needed. Either way, your `.claude/orc.config.yaml` overrides are left untouched.
 | **`/orc`** | The full orchestrator: intake → planning → per-task scoring → conflict-free parallel waves → review → verify → ship. Checkpoints eagerly; resumes in a fresh session at any pause. |
 | **`/orc-ultra`** | Maximum-rigor lane: the full pipeline plus an Opus 5 **xhigh** advisor (brief + rubric + one clarification round) and three judgment gates (after analysis, planning, and verify). Deep analyze, pattern/testgen/security forced on, executor tier floor. Costly by design. |
 | **`/orc-quick`** | **The quick lane — for almost anything.** Three steps per request: look (silent) → ask once → do. A small fix, a fast context dig, a defect hunt, a dependency bump, or PR review comments all run the same way. **Always asks which agent to dispatch** — no config can override that. Saves every request as a numbered entry in `orc-quick/<slug>/quick-context.md`. See below. |
+| **`/orc-grill`** | **For when you do not know what you want yet.** One vague sentence is a complete input. Asks rounds of questions (every question that is *ready*, together — never two where one depends on the other), looks facts up itself instead of making you recite your codebase, and never answers its own question. Ends when *you* say the idea matches what you meant. Then: save it to `orc-grill/<slug>/grill-context.md`, carry it into `/orc-analyze`, or drop it. No scan, no plan, no code. |
+| **`/orc-route`** | **You have a plan — which lane should build it?** Reads the plan's own numbers (tasks, waves, files, top score, risk) plus ORC's deterministic probes, then names one lane, the runners-up with what each *costs* you, and any lane that is impossible with the condition blocking it and its fix. **Plan-only**: given a request in words it refuses and says why, because routing from a sentence is guessing. `/orc-plan` offers it automatically after "Save & stop". |
+| **`/orc-explain`** | **"Wait, what?"** Type it after a message that did not land. ORC says it again: the point first, then the background it assumed, then every ORC-only term (band, facet, disposition, wave, slice, freshness tier) defined in your project's own words. Not "be shorter" — a summary of something you did not understand is the same thing you did not understand. |
 | **`/orc-mini`** | The fast path — see below. |
 | **`/orc-fast`** | Fastest lane — knowledge-gated: needs a fresh wiki + cached code-pattern, skips analyst/planner, one Sonnet 4.6 high executor + smoke gate. Falls back to `orc-mini` when a prerequisite is missing. See below. |
 | **`/orc-diy`** | **Your own lane** — runs the flow you composed with the `orc diy` CLI. Hard-gated: unconfigured/stale → offers plain `/orc`. Guide: [ORC-DIY README](templates/skills/orc-diy/README.md). |
@@ -704,6 +772,12 @@ run in-session.
 templates/
 ├── skills/
 │   ├── orc/                 full orchestrator — spine, schemas, references, subskills, config
+│   ├── _shared/             cross-lane contract prose (not a skill): return-validation, smoke-gate,
+│   │                        fallback-handoff, read-ladder, gotchas, untrusted-input, interview
+│   ├── orc-quick/           quick lane — look · ask once · do; always asks which agent (own README)
+│   ├── orc-grill/           sharpen a vague idea by conversation — frontier rounds, three exits
+│   ├── orc-route/           plan-only lane router — refuses prose rather than guess
+│   ├── orc-explain/         re-pitch the last message with the background it assumed
 │   ├── orc-mini/            fast path (smoke gate + opt-in test authoring)
 │   ├── orc-fast/            fastest lane — knowledge-gated, falls back to orc-mini
 │   ├── orc-diy/             build-your-own lane — CLI-composed, compiled, hard-gated (see its own README)
@@ -721,10 +795,13 @@ templates/
 │   ├── orc-advisor/         ultra-lane advisory brief + rubric + clarification round (/orc-ultra only)
 │   ├── orc-judge/           ultra-lane judgment gates — analysis / plan / implementation (/orc-ultra only)
 │   └── context-combiner/    merges 2+ related analyses into one combined spec (+ schemas)
-├── commands/                /orc /orc-ultra /orc-mini /orc-fast /orc-diy /orc-analyze /orc-plan /orc-poly /orc-pr-setup /orc-pr-driver /orc-verify /orc-wiki /orc-pattern /orc-retro /orc-claude /orc-learn
+├── commands/                /orc /orc-ultra /orc-quick /orc-grill /orc-route /orc-explain /orc-mini /orc-fast /orc-diy
+│                            /orc-analyze /orc-plan /orc-poly /orc-pr-setup /orc-pr-driver /orc-verify /orc-wiki
+│                            /orc-pattern /orc-retro /orc-claude /orc-learn
 ├── hooks/                   effort guard (PreToolUse) · statusline warning · behavior trace
 └── agents/                  single-role, model-pinned subagents (+ read-only scout) + MODEL-MAPPING.md
-bin/cli.js                   installer + config editor + flow composer (init / update / upgrade / config / diy / where)
+bin/cli.js                   installer + config editor + flow composer + run-state reader
+                             (init / update / upgrade / config / diy / where / resume / run / stats)
 ```
 
 The `orc` skill is a thin **spine** that loads references and subskills only when

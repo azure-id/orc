@@ -68,6 +68,15 @@ it were a single analysis — with PROOF that no source requirement was lost.
    file and continue from the first unanswered item — never re-ask a recorded
    decision, never lose one.
 9. Usage: report handoff + remind the user to run `/usage`. Never invoke it.
+10. **Never open a run of your own.** The combiner has no slash command; it is
+    always dispatched from `orc-analyze` Phase F while that run's trace is still
+    open. So: do NOT write `log_dir/.current`, do NOT create a trace file, do
+    NOT emit `FINISH`. Your `DISPATCH`/`RETURN`, every Phase D verdict and the
+    Phase E conservation result belong to the **dispatching lane's** end-of-run
+    packet — the hook segments your work as its own `PHASE-EDGE` family
+    (`combine`) inside that same file. Bootstrapping here would split the
+    analyze run across two files and invent a lane nothing can open. See
+    `../orc/references/trace-protocol.md`.
 
 ## Phase A — Load sources
 Read every source `requirement-spec.md` (2+) the orchestrator hands you, plus

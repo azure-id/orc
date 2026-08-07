@@ -56,6 +56,20 @@ const required = [
   "templates/skills/orc-quick/references/context-doc.md",
   "templates/skills/orc-quick/references/dispatch-gate.md",
   "templates/skills/orc-quick/references/gh-mode.md",
+  // Quality-of-life lanes (v0.42.0). Three skills, ZERO new agents — the grill
+  // dispatches read-only recon ad-hoc (the orc-quick precedent) and the other
+  // two dispatch nothing at all. `_shared/interview.md` is the canonical
+  // mechanic both the grill and intake.md run; a missing copy of it makes the
+  // grill a lane with no procedure.
+  "templates/skills/_shared/interview.md",
+  "templates/skills/orc-grill/SKILL.md",
+  "templates/skills/orc-grill/references/grill-doc.md",
+  "templates/skills/orc-route/SKILL.md",
+  "templates/skills/orc-explain/SKILL.md",
+  "templates/skills/orc-analyze/references/thin-input.md",
+  "templates/commands/orc-grill.md",
+  "templates/commands/orc-route.md",
+  "templates/commands/orc-explain.md",
   "templates/commands/orc.md",
   "templates/commands/orc-quick.md",
   "templates/commands/orc-diy.md",
@@ -135,7 +149,11 @@ const agentCount = walkCount(path.join(ROOT, "templates/agents"), ".md");
 // into the slack an under-set floor grants. Raise them with the payload.
 // v0.38.0: +1 skill (orc-quick) and NO new agent — the quick lane reuses
 // shipped executors and dispatches read-only recon ad-hoc by model name.
-if (skillCount < 26) missing.push(`templates/skills (expected >=26 SKILL.md, found ${skillCount})`);
+// v0.42.0: +3 skills (orc-grill, orc-route, orc-explain) and still NO new
+// agent — same precedent. The agent floor deliberately does NOT move: a QoL
+// lane that needed a pinned agent would also need its opus5_only twin, a
+// MODEL-MAPPING row and a golden test, which is why none of them has one.
+if (skillCount < 29) missing.push(`templates/skills (expected >=29 SKILL.md, found ${skillCount})`);
 if (agentCount < 40) missing.push(`templates/agents (expected >=40 .md, found ${agentCount})`);
 
 // B4 — encoding/mojibake guard. The OneDrive corruption rule becomes a gate:
