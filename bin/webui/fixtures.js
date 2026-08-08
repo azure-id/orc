@@ -216,6 +216,36 @@ module.exports.get = function get(route, q) {
       return mockDetail;
     case "/api/stack":
       return { slugs: ["billing-split"], slug: "billing-split", ambiguous: false, plan: { slug: "billing-split", ready: false, exists: true, plan_path: PROJECT + "/stacked-pr/billing-split/stack-plan.md", layers: 4, ticket: "PAY-2214", problems: ["3 unfilled placeholders (e.g. <risk> <owner> <base>)"] } };
+    case "/api/changelog":
+      // Two entries, so the modal has to handle a LIST rather than one release —
+      // skipping a version is the normal case, not the exotic one.
+      return {
+        version: "0.43.2",
+        latest: "0.44.0",
+        update_available: true,
+        source: "https://raw.githubusercontent.com/azure-id/orc/main/README.md",
+        check_disabled: false,
+        fetched: true,
+        entries: [
+          {
+            version: "0.44.0",
+            date: "2026-08-09",
+            title: "`orc ui`: the guided tour, and an upgrade you can read first",
+            body:
+              "**A version number is not a reason to upgrade.** The banner now fetches the\n" +
+              "changelog from the same branch `orc upgrade` installs from, so what you read\n" +
+              "and what you get can never be different releases.\n\n" +
+              "- First-run tour over the key surfaces, skippable per project\n" +
+              "- The upgrade spotlight clears when you actually reach the preview",
+          },
+          {
+            version: "0.43.3",
+            date: "2026-08-08",
+            title: "settings stop being a wall",
+            body: "Collapsible tiers and a filter across all of them at once.",
+          },
+        ],
+      };
     case "/api/crosslink/kinds":
       // A short slice of the real catalog — enough to design the picker with,
       // including the nested `auth/oidc` whose directory is sanitised to

@@ -5206,6 +5206,13 @@ function doctor() {
 const UPDATE_URL =
   process.env.ORC_VERSION_URL ||
   "https://raw.githubusercontent.com/azure-id/orc/main/package.json";
+// The changelog lives in the README next to that package.json, on the same
+// branch `orc upgrade` installs from — so "what would I get" is answered by the
+// same source as "is there something newer", never by a second one that could
+// describe a different release.
+const CHANGELOG_URL =
+  process.env.ORC_CHANGELOG_URL ||
+  "https://raw.githubusercontent.com/azure-id/orc/main/README.md";
 const CACHE_FILE = path.join(os.homedir(), ".orc-update-check.json");
 const CHECK_TTL_MS = 24 * 60 * 60 * 1000;
 
@@ -5348,6 +5355,120 @@ async function version() {
   } else {
     console.log("✓ up to date");
   }
+}
+
+// ---------------------------------------------------------------------------
+// orc changelog — "what would I actually get if I upgraded".
+//
+// A version number is not a reason to upgrade. This fetches the README from the
+// same branch `orc upgrade` installs from and returns the entries NEWER than
+// what is installed, so the answer and the payload can never describe different
+// releases.
+//
+// Parsing is deliberately forgiving: the changelog is prose a human maintains,
+// and a heading that does not match must degrade to "no entries", never to a
+// crash or a wrong entry. Anything unparsed is simply not reported.
+// ---------------------------------------------------------------------------
+
+// Zero-dep HTTPS GET → text (or null). Same bounded, redirect-following,
+// fail-silent shape as httpsGetJson — this one just does not parse.
+function httpsGetText(url, timeoutMs) {
+  return new Promise((resolve) => {
+    let settled = false;
+    const done = (v) => {
+      if (!settled) {
+        settled = true;
+        resolve(v);
+      }
+    };
+    try {
+      const https = require("https");
+      const req = https.get(url, { headers: { "User-Agent": "orc-cli" } }, (res) => {
+        if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+          res.resume();
+          httpsGetText(res.headers.location, timeoutMs).then(done);
+          return;
+        }
+        if (res.statusCode !== 200) {
+          res.resume();
+          return done(null);
+        }
+        let data = "";
+        res.on("data", (c) => (data += c));
+        res.on("end", () => done(data));
+      });
+      req.on("error", () => done(null));
+      req.setTimeout(timeoutMs, () => {
+        req.destroy();
+        done(null);
+      });
+    } catch (_) {
+      done(null);
+    }
+  });
+}
+
+// Split a README's `## Changelog` section into entries. The shape this reads is
+// the one this repo's own README uses and the CHANGELOG rule in CLAUDE.md
+// mandates: `### v<semver> — <title> _(<date>)_`, newest first.
+function parseChangelog(md) {
+  if (!md) return [];
+  const start = md.search(/^##\s+Changelog\s*$/m);
+  const body = start === -1 ? md : md.slice(start);
+  const out = [];
+  // Headings only — `###` exactly, so a `####` inside an entry stays body text.
+  const re = /^###\s+v(\d+\.\d+\.\d+)\s*(?:[—-]\s*)?([^\n]*?)\s*$/gm;
+  const hits = [];
+  let m;
+  while ((m = re.exec(body))) hits.push({ version: m[1], rest: m[2] || "", at: m.index, end: re.lastIndex });
+  for (let i = 0; i < hits.length; i++) {
+    const h = hits[i];
+    const next = hits[i + 1];
+    // `_(2026-08-08)_` is the date convention; a missing one is not an error.
+    const dateM = h.rest.match(/_\((\d{4}-\d{2}-\d{2})\)_/);
+    out.push({
+      version: h.version,
+      title: h.rest.replace(/_\(\d{4}-\d{2}-\d{2}\)_/, "").trim(),
+      date: dateM ? dateM[1] : null,
+      body: body.slice(h.end, next ? next.at : undefined).trim(),
+    });
+  }
+  return out;
+}
+
+async function changelog() {
+  const cur = currentVersion();
+  const disabled = updateCheckDisabled();
+  const md = disabled ? null : await httpsGetText(CHANGELOG_URL, 4000);
+  const all = parseChangelog(md);
+  // Only what you do not already have. An "upgrade" that lists the release you
+  // are running is noise, and reads as though the check is broken.
+  const newer = all.filter((e) => semverGt(e.version, cur));
+
+  if (wantsJson()) {
+    return emitJson({
+      version: cur,
+      latest: all.length ? all[0].version : null,
+      update_available: !!(all.length && semverGt(all[0].version, cur)),
+      entries: newer,
+      source: CHANGELOG_URL,
+      // Told apart on purpose: opted out, unreachable, and "nothing new" are
+      // three different answers and the UI renders each differently.
+      check_disabled: disabled,
+      fetched: md !== null,
+    });
+  }
+
+  if (disabled) return console.log("Update checks are disabled (ORC_NO_UPDATE_CHECK).");
+  if (md === null) return console.log("(couldn't fetch the changelog — offline or source unreachable)");
+  if (!newer.length) return console.log(`orc ${cur} — up to date. Nothing newer in the changelog.`);
+  console.log(`orc ${cur} → ${newer[0].version}\n`);
+  for (const e of newer) {
+    console.log(`### v${e.version}${e.date ? "  (" + e.date + ")" : ""}`);
+    if (e.title) console.log("  " + e.title);
+    console.log("");
+  }
+  console.log("Run `orc upgrade` to install.");
 }
 
 // ── orc onboarding (D.2) — the "never need the GitHub README" walkthrough ────
@@ -5578,13 +5699,14 @@ Usage:
                                           [--stop]       stop this project's server (exit 0 stopped
                                                          / 1 nothing was running)
   orc version                             print installed version + check for a newer one
+  orc changelog                           what you would GET by upgrading (entries newer than yours)
   orc --help
 
 Machine-readable output:
   --json is accepted by config list | config profile | config recommend | where |
-  version | doctor | wiki status | wiki impact | pattern status | gotcha list |
-  crosslink list | crosslink status | diy show | diy status | run list |
-  run show | stats | pr stack status | mock list | mock show.
+  version | changelog | doctor | wiki status | wiki impact | pattern status |
+  gotcha list | crosslink list | crosslink status | crosslink kinds | diy show |
+  diy status | run list | run show | stats | pr stack status | mock list | mock show.
   It prints ONE object to stdout and keeps the command's normal exit code.
 
 Targets:
@@ -5666,6 +5788,9 @@ Skills installed: ${listSkillNames().join(", ")}`);
     case "--version":
     case "-v":
       await version();
+      break;
+    case "changelog":
+      await changelog();
       break;
     case "--help":
     case "-h":

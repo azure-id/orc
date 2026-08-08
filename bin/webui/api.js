@@ -56,11 +56,23 @@ function runCli(argv, ctx, { json = false } = {}) {
   // Always target the project explicitly: the server's cwd is not a reliable
   // way to reach the same .claude the launching command resolved.
   if (ctx.projectRoot) args.push("--dir", ctx.projectRoot);
+  // ORC_NO_UPDATE_CHECK exists here to protect the --json contract: most
+  // commands end with `maybeNudge()`, which prints an "update available" line to
+  // STDOUT and would sit beside the object this parses.
+  //
+  // `version` and `changelog` are the exceptions, and forcing the flag on them
+  // was a real bug: neither nudges, and for both the check IS the payload — so
+  // the panel asked whether an update existed with the check switched off and
+  // was told `check_disabled: true` forever. A blanket env var silenced the one
+  // command whose entire job is to answer that question.
+  const CHECKS_UPDATES = argv[0] === "version" || argv[0] === "changelog";
+  const env = { ...process.env, NO_COLOR: "1" };
+  if (!CHECKS_UPDATES) env.ORC_NO_UPDATE_CHECK = "1";
   const r = spawnSync(process.execPath, [CLI, ...args], {
     encoding: "utf8",
     timeout: CLI_TIMEOUT_MS,
     windowsHide: true,
-    env: { ...process.env, NO_COLOR: "1", ORC_NO_UPDATE_CHECK: "1" },
+    env,
   });
   const stdout = r.stdout || "";
   let data = null;
@@ -151,6 +163,7 @@ function startJob(argv, ctx) {
 
 const READS = {
   "/api/version": () => ["version"],
+  "/api/changelog": () => ["changelog"],
   "/api/where": () => ["where"],
   "/api/doctor": () => ["doctor"],
   "/api/config": () => ["config", "list"],

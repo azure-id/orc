@@ -142,6 +142,38 @@ function kvList(rows, copyable) {
   return dl;
 }
 
+// A collapsible card. Extracted from the settings tiers so a second caller does
+// not fork the fold behaviour — the `1fr → 0fr` grid trick needs a real element
+// child to collapse against, and getting that subtly wrong twice is how two
+// sections end up animating differently.
+function collapsible({ title, count, desc, content, collapsed, chipEl }) {
+  const wrap = el("div", "card tier" + (collapsed ? " collapsed" : ""));
+
+  const h = el("button", "tier-head");
+  h.type = "button";
+  h.setAttribute("aria-expanded", String(!collapsed));
+  h.append(el("span", "tier-caret", "▸"));
+  h.append(el("h2", null, title));
+  if (count) h.append(el("span", "tier-count", count));
+  if (chipEl) h.append(chipEl);
+  h.addEventListener("click", () => {
+    const open = h.getAttribute("aria-expanded") === "true";
+    h.setAttribute("aria-expanded", String(!open));
+    wrap.classList.toggle("collapsed", open);
+  });
+
+  const inner = el("div", "tier-body-inner");
+  if (desc) inner.append(el("div", "tier-desc", desc));
+  const rows = el("div", "tier-rows");
+  rows.append(content);
+  inner.append(rows);
+  const bodyWrap = el("div", "tier-body");
+  bodyWrap.append(inner);
+
+  wrap.append(h, bodyWrap);
+  return wrap;
+}
+
 function skeleton(n) {
   const f = frag();
   for (let i = 0; i < (n || 4); i++) f.append(el("div", "skeleton" + (i % 3 === 2 ? " w-60" : i % 3 === 1 ? " w-40" : "")));
@@ -206,9 +238,102 @@ function modal({ title, body, actions }) {
 // a global install can win skill resolution while this panel edits a project
 // file nothing reads. Reported here, never fixed here — this UI never edits
 // global config, by design.
+// The update banner. It is a BUTTON, not a notice: the useful question is
+// "what changed", and the answer is one click away rather than on GitHub.
+async function renderUpdateBanner(host) {
+  let v;
+  try {
+    v = await versionInfo();
+  } catch (_) {
+    return;
+  }
+  if (!v || !v.update_available) return;
+
+  const b = el("button", "banner banner-update");
+  b.type = "button";
+  const inner = el("div");
+  inner.append(el("strong", null, `orc ${v.latest} is available — you have ${v.version}.`));
+  inner.append(el("div", "note", "Click to read what changed, then upgrade from Maintenance."));
+  b.append(el("span", "banner-badge", "NEW"), inner, el("span", "banner-more", "Read →"));
+  b.addEventListener("click", () => showChangelog(v));
+  host.append(b);
+}
+
+// Fetched lazily — the modal is what needs the changelog, and paying for that
+// request on every page load to fill a box nobody opened is waste.
+async function showChangelog(v) {
+  const body = el("div", "stack stack-sm");
+  const slot = el("div", "stack stack-sm");
+  slot.append(skeleton(4));
+  body.append(slot);
+
+  const close = modal({
+    title: `What's new in ${v.latest}`,
+    body,
+    actions: [
+      { label: "Later", onClick: (c) => c() },
+      {
+        label: "Take me to the upgrade",
+        cls: "btn-primary",
+        onClick: (c) => {
+          c();
+          location.hash = "#/maintenance";
+          // The spotlight is armed here and lands after the panel renders — a
+          // highlight fired now would point at a node that does not exist yet.
+          startUpgradeSpotlight();
+        },
+      },
+    ],
+  });
+
+  try {
+    const d = (await read("/api/changelog")).data;
+    slot.replaceChildren();
+    if (d.check_disabled) {
+      slot.append(el("div", "note", "Update checks are disabled (ORC_NO_UPDATE_CHECK), so there is nothing to show."));
+    } else if (!d.fetched) {
+      slot.append(el("div", "note", "Could not reach the changelog — you are offline, or the source is unreachable."));
+      slot.append(el("div", "note", "The release itself is still real; this panel just could not fetch its notes."));
+    } else if (!d.entries.length) {
+      slot.append(el("div", "note", "No changelog entries newer than what you have."));
+    } else {
+      for (const e of d.entries) {
+        const sec = el("div", "cl-entry");
+        const h = el("div", "cl-head");
+        h.append(el("span", "cl-version", "v" + e.version));
+        if (e.date) h.append(el("span", "cl-date", e.date));
+        sec.append(h);
+        if (e.title) sec.append(el("div", "cl-title", stripMd(e.title)));
+        if (e.body) sec.append(el("div", "cl-body", stripMd(e.body)));
+        slot.append(sec);
+      }
+      slot.append(el("div", "note", "Source: " + d.source));
+    }
+  } catch (e) {
+    slot.replaceChildren(el("div", "note", "Could not load the changelog: " + e.message));
+  }
+  return close;
+}
+
+// The changelog is markdown written for GitHub. Rather than render it — which
+// would mean an HTML sanitiser for text fetched over the network — the few
+// inline markers are stripped and it is shown as plain text. Nothing from the
+// network is ever parsed as HTML by this panel.
+function stripMd(s) {
+  return String(s)
+    .replace(/```[\s\S]*?```/g, (m) => m.replace(/```\w*\n?/g, "").trim())
+    .replace(/\*\*(.+?)\*\*/g, "$1")
+    .replace(/\*(.+?)\*/g, "$1")
+    .replace(/`(.+?)`/g, "$1")
+    .replace(/^\s*[-*]\s+/gm, "• ")
+    .replace(/\[(.+?)\]\((.+?)\)/g, "$1")
+    .trim();
+}
+
 async function renderBanners() {
   const host = $("#banners");
   host.replaceChildren();
+  renderUpdateBanner(host);
   let doctor;
   try {
     doctor = (await read("/api/doctor")).data;
@@ -256,6 +381,9 @@ async function renderBanners() {
 
 const PANELS = {};
 let currentPanel = null;
+// Filled by boot(). The tour needs the project root to remember "seen" per
+// project, and needs to know it is not looking at fixtures.
+let metaInfo = { fixtures: false, project_root: "" };
 
 function route() {
   const name = (location.hash.replace(/^#\//, "") || "overview").split("?")[0];
@@ -1756,12 +1884,12 @@ PANELS.experiment = function (host) {
 
       const launch = card("Start a session");
       launch.append(
-        el("div", "note", "Opens a new terminal in this project and starts `claude`. Nothing about that session comes back to this page — it is yours to drive.")
+        el("div", "note", "Opens a terminal in this project and starts `claude`. Nothing about that session comes back to this page — it is yours to drive.")
       );
       launch.append(kvList([["project", d.project_root]], true));
 
       const row = el("div", "row-actions");
-      const go = el("button", "btn btn-primary", "Open Claude here");
+      const go = el("button", "btn btn-primary", "Start a new Claude session");
       go.type = "button";
       if (!d.can_launch) {
         go.disabled = true;
@@ -1777,15 +1905,15 @@ PANELS.experiment = function (host) {
           toast("Could not open a terminal", "bad", String(e.message) + "\nRun `claude` in " + d.project_root + " yourself.");
         }
         go.disabled = false;
-        go.textContent = "Open Claude here";
+        go.textContent = "Start a new Claude session";
       });
       row.append(go);
       if (!d.can_launch) row.append(el("span", "note", "Fixture mode — the button is inert on purpose."));
       launch.append(row);
       out.append(launch);
 
-      const lanes = card("Lanes", chip(String(d.lanes.length) + " commands", "info"));
-      lanes.append(el("div", "note", "Type one of these into the session once it opens. Copy takes the command; the panel does not run it."));
+      // Collapsed by default: the reason you open this panel is to start a
+      // session, and twelve lanes above that button push it off the fold.
       const list = el("div", "lane-list");
       for (const l of d.lanes) {
         const item = el("div", "lane");
@@ -1798,8 +1926,15 @@ PANELS.experiment = function (host) {
         item.append(left, cp);
         list.append(item);
       }
-      lanes.append(list);
-      out.append(lanes);
+      out.append(
+        collapsible({
+          title: "Lanes",
+          count: `${d.lanes.length} commands`,
+          desc: "Type one of these into the session once it opens. Copy takes the command; the panel does not run it.",
+          content: list,
+          collapsed: true,
+        })
+      );
 
       return out;
     }
@@ -1840,6 +1975,7 @@ async function renderMaintenance(body) {
 
   for (const a of d.actions) {
     const row = el("div", "action");
+    row.dataset.action = a.id; // the upgrade spotlight anchors on this
     const left = el("div");
     left.append(el("div", "setting-name", a.id));
     left.append(el("div", "setting-desc", a.label));
@@ -2035,6 +2171,251 @@ async function refreshJob() {
   }
 }
 
+/* ==================================================================== tour == */
+
+// A spotlight tour. Two callers, two shapes:
+//   · the first-run walkthrough — next/skip, remembered once finished or skipped
+//   · the upgrade spotlight — no buttons at all; it clears when you do the thing
+//
+// Seen-state is per PROJECT, keyed on the project root, so a second repo gets
+// its own tour and clearing it for one does not clear it for the rest. It lives
+// in localStorage rather than a config key on purpose: this panel writes config
+// only by shelling the CLI, and "this browser has seen the tour" is not a fact
+// about the project that belongs in a file the whole team shares.
+const TOUR_KEY = "orc-ui-tour-seen";
+
+function tourSeen(root) {
+  try {
+    return JSON.parse(localStorage.getItem(TOUR_KEY) || "{}")[root || "?"] === true;
+  } catch (_) {
+    return false;
+  }
+}
+function markTourSeen(root) {
+  try {
+    const all = JSON.parse(localStorage.getItem(TOUR_KEY) || "{}");
+    all[root || "?"] = true;
+    localStorage.setItem(TOUR_KEY, JSON.stringify(all));
+  } catch (_) {}
+}
+
+let tourActive = null;
+
+function clearTour() {
+  if (!tourActive) return;
+  tourActive.cleanup();
+  tourActive = null;
+}
+
+// One spotlight over one element. The target is found at SHOW time, never
+// captured up front: panels re-render, and a held reference points at a node
+// that is no longer in the document.
+function spotlight({ selector, title, text, step, total, onNext, onSkip, dismissOnClickSelector }) {
+  clearTour();
+
+  const target = selector ? document.querySelector(selector) : null;
+  // A step whose target is missing is SKIPPED, never shown floating in the
+  // middle of the screen pointing at nothing.
+  if (selector && !target) return false;
+
+  const layer = el("div", "tour-layer");
+  const ring = el("div", "tour-ring");
+  const pop = el("div", "tour-pop");
+
+  const place = () => {
+    if (!target) return;
+    const r = target.getBoundingClientRect();
+    const pad = 6;
+    ring.style.top = r.top - pad + "px";
+    ring.style.left = r.left - pad + "px";
+    ring.style.width = r.width + pad * 2 + "px";
+    ring.style.height = r.height + pad * 2 + "px";
+    // Below the target unless that would run off-screen, then above it.
+    const below = r.bottom + 12;
+    const wantAbove = below + 150 > window.innerHeight;
+    pop.style.top = (wantAbove ? Math.max(8, r.top - 12 - pop.offsetHeight) : below) + "px";
+    pop.style.left = Math.min(Math.max(8, r.left), Math.max(8, window.innerWidth - pop.offsetWidth - 8)) + "px";
+  };
+
+  if (title) pop.append(el("div", "tour-title", title));
+  pop.append(el("div", "tour-text", text));
+
+  const foot = el("div", "tour-foot");
+  if (total) foot.append(el("span", "tour-count", `${step} of ${total}`));
+  if (onSkip) {
+    const skip = el("button", "btn btn-ghost btn-sm btn-allow-busy", "Skip tour");
+    skip.type = "button";
+    skip.addEventListener("click", onSkip);
+    foot.append(skip);
+  }
+  if (onNext) {
+    const next = el("button", "btn btn-primary btn-sm btn-allow-busy", step === total ? "Done" : "Next");
+    next.type = "button";
+    next.addEventListener("click", onNext);
+    foot.append(next);
+  }
+  // The upgrade spotlight has no buttons — it says what to do and waits.
+  if (!onNext && !onSkip) foot.append(el("span", "tour-waiting", "Waiting for you…"));
+  pop.append(foot);
+
+  layer.append(ring, pop);
+  document.body.append(layer);
+  place();
+  // Re-place after layout settles, so the popover's own height is known.
+  requestAnimationFrame(place);
+
+  const onResize = () => place();
+  window.addEventListener("resize", onResize);
+  window.addEventListener("scroll", onResize, true);
+
+  // The "do the thing and I go away" variant. Capture phase, so it fires even
+  // though the layer sits above the page.
+  let onDo = null;
+  if (dismissOnClickSelector) {
+    onDo = (e) => {
+      const hit = e.target.closest && e.target.closest(dismissOnClickSelector);
+      if (hit) clearTour();
+    };
+    document.addEventListener("click", onDo, true);
+  }
+
+  if (target) {
+    target.classList.add("tour-target");
+    // z-index only applies to positioned elements, so a static target needs
+    // `position: relative` to lift above the scrim. A target that is ALREADY
+    // positioned (the rail is sticky) must keep what it has — overriding it
+    // unsticks the sidebar for the duration of the tour.
+    if (getComputedStyle(target).position === "static") target.classList.add("tour-target-rel");
+  }
+
+  tourActive = {
+    cleanup() {
+      window.removeEventListener("resize", onResize);
+      window.removeEventListener("scroll", onResize, true);
+      if (onDo) document.removeEventListener("click", onDo, true);
+      if (target) target.classList.remove("tour-target", "tour-target-rel");
+      layer.remove();
+    },
+  };
+  return true;
+}
+
+// The first-run walkthrough. Each step names the panel it lives on, so the tour
+// navigates for you rather than telling you to go somewhere.
+const TOUR_STEPS = [
+  {
+    panel: "overview",
+    selector: ".rail",
+    title: "Everything that is not AI",
+    text: "This panel drives the deterministic half of ORC — settings, health, runs, knowledge, stats. It never runs a lane and never calls a model. Press 1–9 or 0 to jump between panels; hover here to see the numbers.",
+  },
+  {
+    panel: "overview",
+    selector: ".grid-3",
+    title: "Is anything wrong right now",
+    text: "Install health, wiki freshness, runs still waiting, and your ORC version with a live update check. If one of these is amber, it is the thing worth reading first.",
+  },
+  {
+    panel: "settings",
+    selector: ".toolbar",
+    title: "36 keys, one filter",
+    text: "Filter by key or description across every section at once — you never need to know which tier a key was filed under. 'Changed only' shows just what you have overridden.",
+  },
+  {
+    panel: "settings",
+    selector: "#ladder-card",
+    title: "The score → model ladder",
+    text: "A diagram, not an editor. It comes from the CLI's own table, and it re-draws itself when a setting like opus5_only changes what wins — which is how the precedence rule is taught rather than described.",
+  },
+  {
+    panel: "runs",
+    selector: ".run-list, .empty",
+    title: "Every run ORC recorded",
+    text: "'waiting' means a resume pointer is on disk — that run can be picked up in a fresh session. Open one to read its checkpoint, state of play and trace.",
+  },
+  {
+    panel: "knowledge",
+    selector: ".stack",
+    title: "What ORC already knows",
+    text: "The wiki, cached code patterns and gotchas. Freshness is computed against the files each doc actually covers, so 'stale' here means something it documents really did change.",
+  },
+  {
+    panel: "experiment",
+    selector: ".lane-list",
+    title: "Pick a lane",
+    text: "Copy any lane command, or open a Claude session in this repo. The panel hands off to a terminal and forgets — nothing about that session comes back here.",
+  },
+  {
+    panel: "maintenance",
+    selector: ".action",
+    title: "Preview, then apply",
+    text: "Nothing here runs on its own. Every action shows the CLI's own read-only preview first and the exact command it will run — and a prune names every file, because a count is not consent.",
+  },
+];
+
+function startFirstRunTour(root) {
+  let i = 0;
+  const finish = () => {
+    clearTour();
+    markTourSeen(root);
+    toast("Tour finished — press ? any time for shortcuts", "ok");
+  };
+  const show = () => {
+    if (i >= TOUR_STEPS.length) return finish();
+    const s = TOUR_STEPS[i];
+    const go = () => {
+      const ok = spotlight({
+        selector: s.selector,
+        title: s.title,
+        text: s.text,
+        step: i + 1,
+        total: TOUR_STEPS.length,
+        onNext: () => {
+          i++;
+          show();
+        },
+        onSkip: finish,
+      });
+      // A step whose target never appeared is skipped rather than shown empty.
+      if (!ok) {
+        i++;
+        show();
+      }
+    };
+    if (currentPanel !== s.panel) {
+      location.hash = "#/" + s.panel;
+      // Panels render async; wait for the body rather than guessing a delay.
+      waitFor(s.selector, go);
+    } else {
+      waitFor(s.selector, go);
+    }
+  };
+  show();
+}
+
+// Poll briefly for a selector — panels fetch before they render, so a step must
+// wait for its target instead of assuming it is already there.
+function waitFor(selector, cb, tries) {
+  const n = tries === undefined ? 40 : tries;
+  if (!selector || document.querySelector(selector)) return cb();
+  if (n <= 0) return cb();
+  setTimeout(() => waitFor(selector, cb, n - 1), 50);
+}
+
+// The upgrade spotlight: no next, no skip. It points at the upgrade row and
+// clears the moment you click its Preview button — the tour ends because you
+// did the thing, not because you dismissed it.
+function startUpgradeSpotlight() {
+  waitFor("[data-action='upgrade']", () => {
+    spotlight({
+      selector: "[data-action='upgrade']",
+      title: "Upgrade is here",
+      text: "Click Preview… to see exactly what it would install and run. Nothing happens until you approve it.",
+      dismissOnClickSelector: "[data-action='upgrade'] button",
+    });
+  });
+}
+
 /* =============================================================== shortcuts == */
 
 // Keyboard nav for a panel app that is otherwise all mouse. Deliberately small
@@ -2064,7 +2445,22 @@ function showShortcuts() {
   }
   body.append(list);
   body.append(el("div", "note", "Shortcuts are ignored while you are typing in a field."));
-  modal({ title: "Keyboard shortcuts", body, actions: [{ label: "Close", onClick: (c) => c() }] });
+  modal({
+    title: "Keyboard shortcuts",
+    body,
+    actions: [
+      // Dismissing the tour must never be a one-way door: it is skippable
+      // precisely because it can be replayed.
+      {
+        label: "Replay the tour",
+        onClick: (c) => {
+          c();
+          startFirstRunTour(metaInfo.project_root);
+        },
+      },
+      { label: "Close", onClick: (c) => c() },
+    ],
+  });
 }
 
 function installShortcuts() {
@@ -2118,6 +2514,7 @@ async function boot() {
   // looking at fixtures, which must never be mistaken for a real install.
   try {
     const meta = await api("/api/meta");
+    metaInfo = meta;
     const proj = $("#rail-project");
     proj.textContent = meta.fixtures ? "FIXTURE MODE" : meta.project_root || "";
     proj.title = meta.project_root || "";
@@ -2171,6 +2568,14 @@ async function boot() {
 
   window.addEventListener("hashchange", route);
   route();
+
+  // First run for THIS project → the tour. Fixture mode is excluded: a tour of
+  // canned data would teach the panel using numbers that are not real.
+  if (!metaInfo.fixtures && !tourSeen(metaInfo.project_root)) {
+    // Let the first panel finish its fetch, so step one has something to point
+    // at rather than a skeleton.
+    setTimeout(() => startFirstRunTour(metaInfo.project_root), 600);
+  }
 
   // Heartbeat: no ping from any client for 60s and the server exits, so closing
   // this tab shuts down a write surface instead of leaving it holding a token.

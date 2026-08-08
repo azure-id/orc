@@ -437,6 +437,127 @@ test("js: every panel container carries the class that spaces its children", () 
   }
 });
 
+// v0.43.5 — the panel asked whether an update existed with the check turned off.
+//
+// runCli forced ORC_NO_UPDATE_CHECK=1 on every subprocess to keep maybeNudge's
+// stdout line out of the --json object. `version` has no nudge and the check IS
+// its payload, so the blanket flag silenced the one command whose entire job is
+// to answer the question the UI was asking.
+test("ui: the update-check env var never gags the commands that check updates", () => {
+  const api = fs.readFileSync(path.join(REPO, "bin", "webui", "api.js"), "utf8");
+  const i = api.indexOf("function runCli");
+  const fn = api.slice(i, api.indexOf("\nfunction readCli"));
+
+  assert.match(fn, /ORC_NO_UPDATE_CHECK/, "the guard must still exist for commands that nudge");
+  // Conditional, never unconditional — that was the bug.
+  assert.ok(
+    !/env:\s*\{[^}]*ORC_NO_UPDATE_CHECK/.test(fn),
+    "the flag must not be set inline for every command"
+  );
+  assert.match(fn, /argv\[0\] === "version"/, "`version` must be exempt");
+  assert.match(fn, /argv\[0\] === "changelog"/, "`changelog` must be exempt");
+});
+
+test("changelog: the parser reads this repo's own README", () => {
+  // The parser's contract is THIS file's format — the one CLAUDE.md mandates.
+  // Testing it against the real README is what stops the two drifting.
+  const cli = fs.readFileSync(path.join(REPO, "bin", "cli.js"), "utf8");
+  const start = cli.indexOf("function parseChangelog");
+  const end = cli.indexOf("\nasync function changelog");
+  assert.ok(start > 0 && end > start, "the parser must exist");
+  const parseChangelog = new Function(cli.slice(start, end) + "\nreturn parseChangelog;")();
+
+  const readme = fs.readFileSync(path.join(REPO, "README.md"), "utf8");
+  const entries = parseChangelog(readme);
+  assert.ok(entries.length > 20, `expected the real changelog to parse, got ${entries.length}`);
+  assert.match(entries[0].version, /^\d+\.\d+\.\d+$/, "the newest entry must have a semver");
+  assert.match(entries[0].date || "", /^\d{4}-\d{2}-\d{2}$/, "and a parsed date");
+  assert.ok(entries[0].body.length > 0, "and a body to show in the modal");
+  // Newest first is what makes "entries newer than mine" a prefix, not a scan.
+  assert.ok(
+    entries[0].version.localeCompare(entries[entries.length - 1].version, undefined, { numeric: true }) > 0,
+    "entries must come out newest-first"
+  );
+
+  // Malformed input degrades to nothing, never to a wrong entry or a throw.
+  assert.deepStrictEqual(parseChangelog(""), []);
+  assert.deepStrictEqual(parseChangelog(null), []);
+  assert.deepStrictEqual(parseChangelog("## Changelog\n\nno entries here\n"), []);
+});
+
+test("changelog: fetched content is never parsed as HTML", () => {
+  const js = fs.readFileSync(path.join(REPO, "bin", "webui", "app.js"), "utf8");
+  const i = js.indexOf("async function showChangelog");
+  const fn = js.slice(i, js.indexOf("\nfunction stripMd"));
+  // This text comes off the network. It goes in as TEXT — never innerHTML, and
+  // never through a markdown renderer that would emit tags.
+  assert.ok(!/innerHTML|insertAdjacentHTML|outerHTML/.test(fn), "changelog text must never be set as HTML");
+  assert.match(js, /function stripMd/, "markdown markers are stripped, not rendered");
+});
+
+// v0.43.6 — the first spotlight rendered UNDERNEATH the sidebar.
+//
+// Two compounding causes, both invisible in the numbers alone: the wrapper was
+// `position: fixed`, which ALWAYS creates a stacking context, trapping the ring
+// and popover at the layer's z-index while the highlighted element (46) painted
+// over them; and `.tour-target` forced `position: relative`, which unsticks the
+// sticky rail — step one's target.
+test("tour: the spotlight always stacks above what it points at", () => {
+  const css = fs.readFileSync(path.join(REPO, "bin", "webui", "app.css"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+  const rule = (sel) => {
+    const m = css.match(new RegExp("\\" + sel + "\\s*\\{([^}]*)\\}"));
+    return m ? m[1] : "";
+  };
+  const z = (sel) => {
+    const m = rule(sel).match(/z-index:\s*(\d+)/);
+    return m ? Number(m[1]) : null;
+  };
+
+  // The wrapper must generate no box — anything positioned here re-creates the
+  // stacking context that caused the bug.
+  assert.match(rule(".tour-layer"), /display:\s*contents/, "the tour wrapper must not create a stacking context");
+  assert.ok(!/position:\s*(fixed|absolute|relative|sticky)/.test(rule(".tour-layer")), "the wrapper must not be positioned");
+
+  const ring = z(".tour-ring");
+  const targetZ = z(".tour-target");
+  const pop = z(".tour-pop");
+  const modal = z(".modal-host");
+  assert.ok(ring && targetZ && pop && modal, "every tour layer needs an explicit z-index");
+  assert.ok(ring < targetZ, "the highlighted element must sit above the scrim");
+  assert.ok(targetZ < pop, "the popover must never be buried by what it points at");
+  assert.ok(pop < modal, "a modal still wins over the tour");
+
+  // Forcing position on the target is what unstuck the rail.
+  assert.ok(!/position:/.test(rule(".tour-target")), ".tour-target must not force a position");
+  assert.match(rule(".tour-target-rel"), /position:\s*relative/, "static targets get relative separately");
+
+  const js = fs.readFileSync(path.join(REPO, "bin", "webui", "app.js"), "utf8");
+  assert.match(
+    js,
+    /getComputedStyle\(target\)\.position === "static"/,
+    "the relative fallback must apply only to targets that are actually static"
+  );
+});
+
+test("tour: it is per-project, skippable, and replayable", () => {
+  const js = fs.readFileSync(path.join(REPO, "bin", "webui", "app.js"), "utf8");
+
+  // Keyed by project root: a second repo gets its own tour.
+  assert.match(js, /function tourSeen\(root\)/, "seen-state must be per project");
+  assert.match(js, /\[root \|\| "\?"\]/, "the project root must be the key");
+  // Never a one-way door.
+  assert.match(js, /Replay the tour/, "a dismissed tour must be replayable");
+  // Fixture mode teaches the panel with numbers that are not real.
+  assert.match(js, /!metaInfo\.fixtures && !tourSeen/, "the tour must not run on fixtures");
+
+  // The upgrade spotlight ends because you did the thing — so it has no Next
+  // and no Skip, and it names the click that clears it.
+  const i = js.indexOf("function startUpgradeSpotlight");
+  const fn = js.slice(i, i + 700);
+  assert.match(fn, /dismissOnClickSelector/, "the upgrade spotlight must clear on the real click");
+  assert.ok(!/onNext|onSkip/.test(fn), "the upgrade spotlight must have no next/skip");
+});
+
 // v0.43.4 — the Experiment panel moves the "never spawns claude" boundary by
 // exactly one step, and these are the rails that keep it there.
 test("experiment: the launcher takes no command from the browser", () => {

@@ -6,7 +6,7 @@
 
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
-![Version](https://img.shields.io/badge/version-0.43.4-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.43.5-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
@@ -46,7 +46,54 @@ zero-dependency npm package installs those files into your `.claude/` directory.
 
 ## Changelog
 
-**Latest: v0.43.4 — updated 2026-08-08.**
+**Latest: v0.43.5 — updated 2026-08-08.**
+
+### v0.43.5 — the update check works, and the UI teaches itself _(2026-08-08)_
+
+**The panel was asking whether an update existed with the check switched off.**
+`runCli` forced `ORC_NO_UPDATE_CHECK=1` on every subprocess — a real protection,
+because most commands end with a nudge line that would land on stdout beside the
+`--json` object. But `version` has no nudge and the check *is* its payload, so a
+blanket flag silenced the one command whose whole job is to answer that
+question. It returned `check_disabled: true` forever. `version` and `changelog`
+are now exempt, and a test pins that the flag stays conditional.
+
+**`orc changelog` — what you would actually get.** A version number is not a
+reason to upgrade. The new command fetches the README from *the same branch
+`orc upgrade` installs from* and returns the entries newer than yours, so what
+you read and what you install can never be different releases. `--json` too.
+Opted-out, unreachable and nothing-new are three distinct answers.
+
+**The update banner is a button.** When a newer release exists it drops in at
+the top of every panel; clicking it opens the changelog in a modal, and **Take
+me to the upgrade** navigates to Maintenance and spotlights the upgrade row.
+Changelog text is fetched over the network, so it is stripped of markdown and
+inserted as **text — never HTML**, and never through a renderer that emits tags.
+
+**A first-run tour.** Eight steps across the rail, Overview's health tiles,
+Settings' filter and score ladder, Runs, Knowledge, Experiment and Maintenance's
+preview-then-apply rule — with Next and Skip, navigating panels for you. Seen
+state is **per project**, so a new repo gets its own tour, and it never runs on
+fixtures. Dismissing it is not a one-way door: **Replay the tour** lives in the
+`?` dialog.
+
+**The upgrade spotlight has no buttons.** It points at the upgrade row and
+clears when you click Preview — it ends because you did the thing, not because
+you dismissed it. The spotlight is a ring with the scrim thrown outward, so the
+page underneath stays readable and clickable.
+
+**Experiment: the lane list is collapsed by default.** You open that panel to
+start a session, and twelve lanes above the button pushed it off the fold. The
+fold behaviour is now one shared `collapsible()` rather than a second copy of
+the settings tiers.
+
+**No embedded web terminal, and the reason is a hard one.** Driving an
+interactive `claude` from the browser needs a real PTY: with pipes it falls back
+to `--print` and exits 1 (verified, not assumed). Node ships no PTY, so this
+would need `node-pty` — a **native module compiled at install time**. ORC is
+zero-dependency with no build step, and a failed native build would break the
+whole installer, not just the panel. xterm.js alone is fine to vendor; the PTY
+is the blocker. The button opens your own terminal instead.
 
 ### v0.43.4 — a warning that finally clears, an Experiment panel, crosslink from the UI _(2026-08-08)_
 

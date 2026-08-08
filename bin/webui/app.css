@@ -453,6 +453,46 @@ pre.block.wrap { white-space: pre-wrap; word-break: break-word; }
 .banner strong { display: block; margin-bottom: 2px; }
 .banner-fix { display: flex; align-items: center; gap: var(--sp-2); margin-top: var(--sp-2); flex-wrap: wrap; }
 
+/* The update banner is a button: "what changed" is the useful question, and it
+   should not require leaving for GitHub to answer it. */
+.banner-update {
+  width: 100%;
+  align-items: center;
+  border-color: var(--accent);
+  background: var(--accent-wash);
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  transition: background var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease);
+  animation: banner-drop var(--dur-slow) var(--ease);
+}
+.banner-update:hover { background: var(--surface-3); transform: translateY(-1px); }
+.banner-update .note { color: var(--text-dim); }
+.banner-badge {
+  flex: none;
+  align-self: flex-start;
+  background: var(--accent);
+  color: #fff;
+  border-radius: 100px;
+  padding: 1px 8px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .08em;
+}
+.banner-more { margin-left: auto; flex: none; color: var(--accent); font-size: 12px; white-space: nowrap; }
+@keyframes banner-drop {
+  from { opacity: 0; transform: translateY(-10px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.cl-entry { border-left: 2px solid var(--line); padding-left: var(--sp-3); }
+.cl-head { display: flex; align-items: baseline; gap: var(--sp-2); }
+.cl-version { font-family: var(--mono); font-size: 13px; color: var(--accent); font-weight: 600; }
+.cl-date { font-size: 11px; color: var(--text-faint); }
+.cl-title { font-size: 13px; font-weight: 600; margin-top: 2px; }
+.cl-body { font-size: 12.5px; color: var(--text-dim); white-space: pre-wrap; margin-top: var(--sp-2); line-height: 1.6; }
+
 /* Loading is a skeleton shimmer, never a spinner. */
 .skeleton {
   height: 12px;
@@ -496,6 +536,70 @@ pre.block.wrap { white-space: pre-wrap; word-break: break-word; }
   from { opacity: 0; transform: translateX(12px); }
   to   { opacity: 1; transform: none; }
 }
+
+/* --- the tour ------------------------------------------------------------ */
+/* The spotlight is a RING, not a dimming overlay over a cut-out: the page stays
+   fully readable and fully clickable underneath, which is what lets the upgrade
+   spotlight end because you did the thing rather than because you dismissed it. */
+
+/* `display: contents` is load-bearing. This wrapper used to be `position:
+   fixed`, which ALWAYS creates a stacking context — so the ring and the popover
+   were trapped at the layer's own z-index and the highlighted element (46)
+   painted straight over both. Step one targets the sticky rail, which is why
+   the very first spotlight appeared underneath the sidebar. Generating no box
+   at all lets each child stack against the page directly, while still being one
+   node to remove on cleanup. */
+.tour-layer { display: contents; }
+
+/* The ladder, in paint order: scrim/ring 45 → the highlighted element 46 (so it
+   stays lit and clickable) → the popover 48 (always readable, whatever it is
+   pointing at) → modals 50. */
+.tour-ring {
+  position: fixed;
+  border: 2px solid var(--accent);
+  border-radius: var(--radius);
+  /* The scrim is thrown OUTWARD from the ring, so the target itself is never
+     covered by anything. */
+  z-index: 45;
+  box-shadow: 0 0 0 4px var(--accent-wash), 0 0 0 9999px rgba(0, 0, 0, .55);
+  pointer-events: none;
+  transition: top var(--dur-slow) var(--ease), left var(--dur-slow) var(--ease),
+              width var(--dur-slow) var(--ease), height var(--dur-slow) var(--ease);
+  animation: ring-in var(--dur) var(--ease);
+}
+:root[data-theme="light"] .tour-ring { box-shadow: 0 0 0 4px var(--accent-wash), 0 0 0 9999px rgba(16, 24, 40, .38); }
+@keyframes ring-in {
+  from { opacity: 0; transform: scale(1.04); }
+  to   { opacity: 1; transform: none; }
+}
+
+.tour-pop {
+  position: fixed;
+  z-index: 48;
+  width: min(340px, calc(100vw - 16px));
+  background: var(--surface);
+  border: 1px solid var(--accent-dim);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: var(--sp-4);
+  pointer-events: auto;
+  animation: pop-in var(--dur) var(--ease);
+}
+@keyframes pop-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
+}
+.tour-title { font-size: 14px; font-weight: 600; margin-bottom: var(--sp-2); }
+.tour-text { font-size: 12.5px; color: var(--text-dim); line-height: 1.6; }
+.tour-foot { display: flex; align-items: center; gap: var(--sp-2); margin-top: var(--sp-4); }
+.tour-count { font-size: 11px; color: var(--text-faint); margin-right: auto; font-variant-numeric: tabular-nums; }
+.tour-waiting { font-size: 11px; color: var(--accent); margin-left: auto; }
+/* The highlighted element rides above the scrim so it stays lit and clickable.
+   z-index ONLY — forcing `position: relative` here broke the sticky rail, which
+   is a positioned element already. The relative fallback is applied separately,
+   and only to targets that are actually static. */
+.tour-target { z-index: 46; }
+.tour-target-rel { position: relative; }
 
 .modal-host { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: var(--sp-4); }
 .modal-host[hidden] { display: none; }
