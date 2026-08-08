@@ -13,7 +13,11 @@
  * with a bare IIFE, has no require.main guard, prints and process.exit()s
  * directly, and is pinned by contract tokens with binFiles: ["bin/cli.js"].
  *
- * It also never runs a lane, never spawns `claude`, never calls a model API.
+ * It also never RUNS a lane and never calls a model API. Since v0.43.4 there is
+ * exactly one deliberate exception to "never spawns claude": the Experiment
+ * panel can open a TERMINAL with `claude` in it and then forget about it (see
+ * `launchClaude`). No model output ever flows back through this server, no
+ * session is proxied, no API key is held — the panel is still not an AI client.
  */
 
 const { spawn, spawnSync } = require("child_process");
@@ -161,6 +165,7 @@ const READS = {
   "/api/stats": (q) => (q.since ? ["stats", "--since", String(q.since)] : ["stats"]),
   "/api/diy": () => ["diy", "show"],
   "/api/crosslink": () => ["crosslink", "list"],
+  "/api/crosslink/kinds": () => ["crosslink", "kinds"],
   "/api/mocks": () => ["mock", "list"],
   "/api/mock": (q) => ["mock", "show", String(q.slug || "")],
   "/api/stack": (q) => (q.slug ? ["pr", "stack", "status", String(q.slug)] : ["pr", "stack", "status"]),
@@ -175,6 +180,17 @@ const WRITES = {
   "/api/wiki/sync": () => ["wiki", "sync"],
   "/api/gotcha/prune": () => ["gotcha", "prune"],
   "/api/crosslink/remove": (b) => ["crosslink", "remove", String(b.name)],
+  // The UI assembles no YAML. It hands the CLI the same arguments the
+  // interactive prompt collects, and every rejection the user sees is the
+  // CLI's own validator speaking — there is no second idea of a valid slug,
+  // a valid kind or a valid edge target anywhere in this panel.
+  "/api/crosslink/add": (b) => {
+    const argv = ["crosslink", "add", String(b.name), String(b.repo_path), "--kinds", String(b.kinds)];
+    if (b.direction) argv.push("--direction", String(b.direction));
+    if (b.via) argv.push("--via", String(b.via));
+    if (b.target) argv.push("--target", String(b.target));
+    return argv;
+  },
 };
 
 // Maintenance: the safety-critical panel. Each action is a PAIR — a read-only
@@ -210,6 +226,60 @@ const MAINTENANCE = {
     network: true,
   },
 };
+
+// ── the Experiment panel ────────────────────────────────────────────────────
+//
+// THE BOUNDARY MOVES EXACTLY ONE STEP, AND NO FURTHER. `orc ui` still renders
+// no model output, proxies no session and holds no API key — it does not become
+// an AI client. What it gains is a HANDOFF: it can open a terminal, in this
+// project, with `claude` running in it, and then forget about it. The spawned
+// process is not a child this server manages, reads or reports on; it is the
+// same detached-launch mechanism `openBrowser()` has always used.
+//
+// The lanes are a SERVER-SIDE catalog and the browser sends only an id. No
+// string typed in a browser ever reaches a shell — the cwd is always the
+// server's own projectRoot, and an unknown id is a 400. That constraint is the
+// only reason a launch button is safe on a write surface at all.
+const LANES = [
+  { id: "orc", cmd: "/orc", what: "Full pipeline: intake → plan → scored parallel waves → review → verify → ship." },
+  { id: "orc-quick", cmd: "/orc-quick", what: "Ask for anything. Look → ask once → do, and it always asks which agent." },
+  { id: "orc-mini", cmd: "/orc-mini", what: "One executor, smoke gate, ship. No full review or verify phase." },
+  { id: "orc-fast", cmd: "/orc-fast", what: "Fastest lane. Needs a fresh wiki AND a cached pattern, or it falls back." },
+  { id: "orc-ultra", cmd: "/orc-ultra", what: "Maximum rigor: an advisor plus three judgment gates. Cost accepted." },
+  { id: "orc-plan", cmd: "/orc-plan", what: "Turn a request or analyst spec into a grounded task plan. Plan only." },
+  { id: "orc-analyze", cmd: "/orc-analyze", what: "Turn a document or a vague requirement into code-grounded requirements." },
+  { id: "orc-wiki", cmd: "/orc-wiki", what: "Build or refresh the project wiki. Expensive; always asks first." },
+  { id: "orc-pattern", cmd: "/orc-pattern", what: "Learn this project's real code conventions and cache them per language." },
+  { id: "orc-verify", cmd: "/orc-verify", what: "Verify the git-modified changes in the working tree. Read-only." },
+  { id: "orc-learn", cmd: "/orc-learn", what: "Generate per-feature onboarding docs. Local and git-ignored." },
+  { id: "orc-retro", cmd: "/orc-retro", what: "Mine the behavior traces for calibration. Read-only, report-only." },
+];
+
+// Open a terminal running `claude` in the project root. Best-effort and never
+// fatal — a failed launch is reported so the user can copy the command instead,
+// which is why the command is always on screen anyway.
+function launchClaude(ctx) {
+  const cwd = ctx.projectRoot;
+  let cmd, args;
+  if (process.platform === "win32") {
+    // `start` needs an empty title argument first, or a quoted path becomes it.
+    cmd = "cmd";
+    args = ["/c", "start", "", "cmd", "/k", "claude"];
+  } else if (process.platform === "darwin") {
+    cmd = "osascript";
+    args = ["-e", `tell application "Terminal" to do script "cd ${JSON.stringify(cwd).slice(1, -1)} && claude"`, "-e", 'tell application "Terminal" to activate'];
+  } else {
+    cmd = "x-terminal-emulator";
+    args = ["-e", "claude"];
+  }
+  try {
+    const child = spawn(cmd, args, { cwd, detached: true, stdio: "ignore", windowsHide: false });
+    child.unref();
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: String(e && e.message) };
+  }
+}
 
 // ── request handling ────────────────────────────────────────────────────────
 
@@ -311,6 +381,20 @@ async function handleApi(req, res, url, ctx) {
       const { SECTIONS } = require("../onboarding-content.js");
       return json(res, 200, { ok: true, exit_code: 0, data: { sections: SECTIONS } });
     }
+    if (route === "/api/experiment") {
+      return json(res, 200, {
+        ok: true,
+        exit_code: 0,
+        data: {
+          lanes: LANES,
+          project_root: ctx.projectRoot,
+          platform: process.platform,
+          // Fixture mode must never spawn a real terminal on a machine that has
+          // no project — the button says so instead of lying about it.
+          can_launch: !ctx.fixtures,
+        },
+      });
+    }
     if (route === "/api/maintenance") {
       const actions = Object.entries(MAINTENANCE).map(([id, m]) => ({
         id,
@@ -358,6 +442,24 @@ async function handleApi(req, res, url, ctx) {
     body = await readBody(req);
   } catch (e) {
     return json(res, 400, { error: e.message });
+  }
+
+  // The handoff. It takes NO command from the browser: the lane id is looked up
+  // in the server's own catalog and is used only to echo back what to type. The
+  // process spawned is always a bare `claude` in the server's own projectRoot,
+  // so there is no path by which browser input reaches a shell.
+  if (route === "/api/experiment/launch") {
+    if (ctx.fixtures) return json(res, 400, { error: "fixture mode never launches anything real" });
+    const lane = body.lane ? LANES.find((l) => l.id === String(body.lane)) : null;
+    if (body.lane && !lane) return json(res, 400, { error: "unknown lane" });
+    const r = launchClaude(ctx);
+    if (!r.ok) return json(res, 500, { error: "could not open a terminal: " + r.error });
+    return json(res, 200, {
+      ok: true,
+      // What to type once it is open. The UI shows this; the server never runs it.
+      type_this: lane ? lane.cmd : null,
+      cwd: ctx.projectRoot,
+    });
   }
 
   if (route === "/api/maintenance/apply") {

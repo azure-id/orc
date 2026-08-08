@@ -232,6 +232,20 @@ async function renderBanners() {
       )
     );
     if (finding) bannerBody.append(el("div", "note", finding.message));
+    // The command that actually clears the finding, copyable. This panel is
+    // project-scoped and never writes global config, so handing over the exact
+    // line to paste is the whole of what it can do — and a wrong line here is
+    // why the warning felt permanent.
+    const fixCmd = (doctor.findings || []).map((f) => f.fix_command).find(Boolean);
+    if (fixCmd) {
+      const row = el("div", "banner-fix");
+      row.append(el("code", "action-cmd", fixCmd));
+      const cp = el("button", "btn btn-ghost btn-sm", "Copy");
+      cp.type = "button";
+      cp.addEventListener("click", () => copy(fixCmd, "Command copied"));
+      row.append(cp);
+      bannerBody.append(row);
+    }
     bannerBody.append(el("div", "note", "Check it with: orc doctor"));
     b.append(bannerBody);
     host.append(b);
@@ -1424,17 +1438,27 @@ async function renderCrosslink(body) {
   const out = frag();
 
   if (!d.configured) {
-    out.append(empty("No cross-repo links yet.", "Add one from a terminal with `orc crosslink` (it is an interactive composer)."));
+    const e = empty("No cross-repo links yet.", "Link a sibling repo below, or run `orc crosslink` in a terminal for the guided version.");
+    out.append(e);
+    out.append(await addLinkCard(d, body));
     body.replaceChildren(out);
     return;
   }
 
+  // The graph as a picture, not a list of rows. Direction is the whole point of
+  // a crosslink edge — which repo consumes which — and an arrow says that
+  // faster than the words "we call them" repeated down a column.
+  out.append(graphCard(d));
+
   const head2 = card("Graph");
-  head2.append(kvList([["self", d.self], ["config", d.config_path], ["needs baseline", d.needs_baseline || "not built yet — run /orc-wiki here"]]));
+  head2.append(kvList([["self", d.self], ["config", d.config_path], ["needs baseline", d.needs_baseline || "not built yet — run /orc-wiki here"]], true));
   out.append(head2);
+
+  out.append(await addLinkCard(d, body));
 
   for (const n of d.nodes) {
     const c = el("div", "action");
+    c.dataset.node = n.name; // paired with the graph node above on hover
     const left = el("div");
     const name = el("div", "setting-name");
     name.append(document.createTextNode(n.name));
@@ -1470,6 +1494,204 @@ async function renderCrosslink(body) {
   }
 
   body.replaceChildren(out);
+}
+
+// A radial graph: self in the middle, every linked repo around it, each edge
+// drawn in the direction it actually points. Nothing here is a control — it is
+// a diagram, and it is the fastest answer to "which way does this one go".
+function graphCard(d) {
+  const c = card("Topology", chip(`${d.nodes.length} repo${d.nodes.length === 1 ? "" : "s"} · ${d.links.length} edge${d.links.length === 1 ? "" : "s"}`, "info"));
+  const wrap = el("div", "graph");
+
+  const self = el("div", "graph-self");
+  self.append(el("span", "graph-dot"), el("span", null, d.self));
+  self.title = "This repo";
+  wrap.append(self);
+
+  const ring = el("div", "graph-ring");
+  for (const n of d.nodes) {
+    const node = el("div", "graph-node graph-" + (n.direction || "none"));
+    node.dataset.name = n.name;
+
+    // The arrow IS the information: ▶ we consume them, ◀ they consume us.
+    const arrow = el("span", "graph-arrow", n.direction === "consume" ? "──▶" : n.direction === "provide" ? "◀──" : "───");
+    const via = (d.links.find((l) => l.from === n.name || l.to === n.name) || {}).via;
+    const label = el("div", "graph-label");
+    label.append(el("span", "graph-name", n.name));
+    if (via) label.append(el("span", "graph-via", via));
+
+    const pv = n.provider || {};
+    const state =
+      pv.state === "missing" ? ["missing", "bad"] :
+      pv.state === "no-wiki" ? ["no wiki", "warn"] :
+      pv.state === "unregistered" ? ["unregistered", "warn"] :
+      pv.state === "corrupt" ? ["corrupt", "bad"] :
+      n.direction === "provide" ? ["inbound", ""] :
+      [pv.tier || "linked", pv.tier === "FRESH" ? "ok" : pv.tier === "AGING" ? "warn" : "bad"];
+
+    node.append(arrow, label, chip(state[0], state[1]));
+    node.title = `${n.name} — ${n.repo_path}`;
+    // Hovering a node lights its row below, so the picture and the detail list
+    // are obviously the same set of things.
+    node.addEventListener("mouseenter", () => {
+      const row = document.querySelector('.action[data-node="' + n.name + '"]');
+      if (row) row.classList.add("linked-hi");
+    });
+    node.addEventListener("mouseleave", () => {
+      for (const r of document.querySelectorAll(".linked-hi")) r.classList.remove("linked-hi");
+    });
+    ring.append(node);
+  }
+  wrap.append(ring);
+  c.append(wrap);
+  if (!d.nodes.length) c.append(el("div", "note", "Nothing linked yet — the graph fills in as you add repos."));
+  return c;
+}
+
+// The add form. It mirrors the interactive CLI prompt field for field, and it
+// submits to the CLI rather than writing YAML — so the errors shown here are
+// the CLI's own, not a second opinion about what is valid.
+async function addLinkCard(d, body) {
+  const c = card("Link a repo");
+  c.append(
+    el("div", "note", "The same four answers `orc crosslink` asks for. The path is the repo ROOT, relative to this one (e.g. ../service-z).")
+  );
+
+  const form = el("div", "linkform");
+  const mk = (labelText, node, hint) => {
+    const f = el("label", "field");
+    f.append(el("span", "field-label", labelText));
+    f.append(node);
+    if (hint) f.append(el("span", "field-hint", hint));
+    return f;
+  };
+
+  const name = el("input", "text-input");
+  name.placeholder = "service-z";
+  const repoPath = el("input", "text-input");
+  repoPath.placeholder = "../service-z";
+
+  // The catalog comes from the CLI so the picker can never drift from it.
+  let kinds = [];
+  try {
+    kinds = (await read("/api/crosslink/kinds")).data.kinds || [];
+  } catch (_) {}
+  const kindBox = el("div", "kind-picker");
+  const picked = new Set();
+  for (const k of kinds) {
+    const b = el("button", "kind", k);
+    b.type = "button";
+    b.addEventListener("click", () => {
+      if (picked.has(k)) picked.delete(k);
+      else picked.add(k);
+      b.classList.toggle("kind-on", picked.has(k));
+      syncVia();
+    });
+    kindBox.append(b);
+  }
+  const custom = el("input", "text-input");
+  custom.placeholder = "or type your own, comma-separated";
+
+  const dirSeg = el("div", "seg");
+  let direction = "calls";
+  const dirs = [
+    ["calls", `${d.self || "this repo"} calls them`],
+    ["called-by", `they call ${d.self || "this repo"}`],
+  ];
+  for (const [val, label] of dirs) {
+    const b = el("button", null, label);
+    b.type = "button";
+    b.setAttribute("aria-pressed", String(val === direction));
+    b.addEventListener("click", () => {
+      direction = val;
+      for (const other of dirSeg.children) other.setAttribute("aria-pressed", "false");
+      b.setAttribute("aria-pressed", "true");
+    });
+    dirSeg.append(b);
+  }
+
+  const via = el("select", "text-input");
+  const syncVia = () => {
+    const all = [...picked, ...custom.value.split(",").map((x) => x.trim().toLowerCase()).filter(Boolean)];
+    via.replaceChildren();
+    for (const k of [...new Set(all)]) {
+      const o = el("option", null, k);
+      o.value = k;
+      via.append(o);
+    }
+    via.disabled = !all.length;
+  };
+  custom.addEventListener("input", syncVia);
+  syncVia();
+
+  form.append(
+    mk("Name (slug)", name, "a-z, 0-9, dashes"),
+    mk("Repo path", repoPath, "relative to this repo"),
+    mk("Kinds", kindBox, "what crosses the boundary — pick any"),
+    mk("Custom kinds", custom),
+    mk("Direction", dirSeg, "which repo consumes which"),
+    mk("Edge carried by", via, "one of the kinds above")
+  );
+  c.append(form);
+
+  const err = el("div", "input-err");
+  const actions = el("div", "row-actions");
+  const save = el("button", "btn btn-primary", "Link repo");
+  save.type = "button";
+  const cmdPreview = el("code", "action-cmd", "");
+  const syncCmd = () => {
+    const all = [...picked, ...custom.value.split(",").map((x) => x.trim().toLowerCase()).filter(Boolean)];
+    cmdPreview.textContent =
+      `orc crosslink add ${name.value || "<name>"} ${repoPath.value || "<path>"} ` +
+      `--kinds ${all.join(",") || "<kinds>"} --direction ${direction}` +
+      (via.value ? ` --via ${via.value}` : "");
+  };
+  for (const n of [name, repoPath, custom]) n.addEventListener("input", syncCmd);
+  via.addEventListener("change", syncCmd);
+  kindBox.addEventListener("click", syncCmd);
+  dirSeg.addEventListener("click", syncCmd);
+  syncCmd();
+
+  save.addEventListener("click", async () => {
+    err.textContent = "";
+    const all = [...picked, ...custom.value.split(",").map((x) => x.trim().toLowerCase()).filter(Boolean)];
+    // Only the empties are caught here. Everything about VALIDITY — the slug
+    // shape, a taken name, an unknown target — is the CLI's call, reported below.
+    if (!name.value.trim() || !repoPath.value.trim() || !all.length) {
+      err.textContent = "Name, path and at least one kind are required.";
+      return;
+    }
+    save.disabled = true;
+    save.textContent = "Linking…";
+    try {
+      const r = await post("/api/crosslink/add", {
+        name: name.value.trim(),
+        repo_path: repoPath.value.trim(),
+        kinds: all.join(","),
+        direction,
+        via: via.value || all[0],
+      });
+      if (!r.ok) {
+        err.textContent = r.output || "The CLI refused that link.";
+        save.disabled = false;
+        save.textContent = "Link repo";
+        return;
+      }
+      toast("Linked " + name.value.trim(), "ok", r.output);
+      await renderCrosslink(body);
+      // The new node draws itself in — the one moment where motion is the
+      // feedback that the link now exists.
+      const fresh = document.querySelector('.graph-node[data-name="' + name.value.trim() + '"]');
+      if (fresh) fresh.classList.add("graph-new");
+    } catch (e) {
+      err.textContent = String(e.message);
+      save.disabled = false;
+      save.textContent = "Link repo";
+    }
+  });
+  actions.append(save);
+  c.append(cmdPreview, err, actions);
+  return c;
 }
 
 function confirmRemove(name, body) {
@@ -1512,6 +1734,73 @@ PANELS.learn = function (host) {
         c.append(pre);
         out.append(c);
       }
+      return out;
+    }
+  );
+};
+
+/* ============================================================== EXPERIMENT == */
+
+// The one place this panel touches AI at all — and it does so by getting out of
+// the way. It opens a terminal with `claude` in this repo and forgets about it.
+// No lane output ever comes back here; there is nothing to stream, cancel or
+// watch. If the launch fails, the command is on screen to copy, which is the
+// same thing the panel is for on a machine where it works.
+PANELS.experiment = function (host) {
+  head(host, "Experiment", "Open a Claude session in this repo and pick a lane. The panel hands off — it never runs one.");
+  section(
+    host,
+    () => read("/api/experiment").then((r) => r.data),
+    (d) => {
+      const out = frag();
+
+      const launch = card("Start a session");
+      launch.append(
+        el("div", "note", "Opens a new terminal in this project and starts `claude`. Nothing about that session comes back to this page — it is yours to drive.")
+      );
+      launch.append(kvList([["project", d.project_root]], true));
+
+      const row = el("div", "row-actions");
+      const go = el("button", "btn btn-primary", "Open Claude here");
+      go.type = "button";
+      if (!d.can_launch) {
+        go.disabled = true;
+        go.title = "Fixture mode never launches anything real.";
+      }
+      go.addEventListener("click", async () => {
+        go.disabled = true;
+        go.textContent = "Opening…";
+        try {
+          const r = await post("/api/experiment/launch", {});
+          toast(r.ok ? "Terminal opened in " + r.cwd : "Could not open a terminal", r.ok ? "ok" : "bad");
+        } catch (e) {
+          toast("Could not open a terminal", "bad", String(e.message) + "\nRun `claude` in " + d.project_root + " yourself.");
+        }
+        go.disabled = false;
+        go.textContent = "Open Claude here";
+      });
+      row.append(go);
+      if (!d.can_launch) row.append(el("span", "note", "Fixture mode — the button is inert on purpose."));
+      launch.append(row);
+      out.append(launch);
+
+      const lanes = card("Lanes", chip(String(d.lanes.length) + " commands", "info"));
+      lanes.append(el("div", "note", "Type one of these into the session once it opens. Copy takes the command; the panel does not run it."));
+      const list = el("div", "lane-list");
+      for (const l of d.lanes) {
+        const item = el("div", "lane");
+        const left = el("div");
+        left.append(el("div", "lane-cmd", l.cmd));
+        left.append(el("div", "setting-desc", l.what));
+        const cp = el("button", "btn btn-sm", "Copy");
+        cp.type = "button";
+        cp.addEventListener("click", () => copy(l.cmd, l.cmd + " copied"));
+        item.append(left, cp);
+        list.append(item);
+      }
+      lanes.append(list);
+      out.append(lanes);
+
       return out;
     }
   );
@@ -1751,7 +2040,7 @@ async function refreshJob() {
 // Keyboard nav for a panel app that is otherwise all mouse. Deliberately small
 // and unmodified: single keys, and ONLY when you are not typing into something.
 const SHORTCUTS = [
-  ["1 – 9", "Jump to that panel in the rail"],
+  ["1 – 9, 0", "Jump to that panel in the rail"],
   ["/", "Focus the filter box (Settings)"],
   ["r", "Reload the current panel"],
   ["t", "Toggle light / dark"],
@@ -1785,9 +2074,11 @@ function installShortcuts() {
     if (!$("#modal-host").hidden) return;
     if (typingInto(e.target)) return;
 
-    if (e.key >= "1" && e.key <= "9") {
-      const links = document.querySelectorAll("#nav a");
-      const target = links[Number(e.key) - 1];
+    if (e.key >= "0" && e.key <= "9") {
+      // Matched on data-idx, not on position: the rail's order is HTML's to
+      // decide, and a positional lookup silently rebinds every key the moment a
+      // panel is inserted in the middle.
+      const target = document.querySelector('#nav a[data-idx="' + e.key + '"]');
       if (target) {
         e.preventDefault();
         location.hash = target.getAttribute("href");

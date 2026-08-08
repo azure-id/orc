@@ -216,6 +216,25 @@ module.exports.get = function get(route, q) {
       return mockDetail;
     case "/api/stack":
       return { slugs: ["billing-split"], slug: "billing-split", ambiguous: false, plan: { slug: "billing-split", ready: false, exists: true, plan_path: PROJECT + "/stacked-pr/billing-split/stack-plan.md", layers: 4, ticket: "PAY-2214", problems: ["3 unfilled placeholders (e.g. <risk> <owner> <base>)"] } };
+    case "/api/crosslink/kinds":
+      // A short slice of the real catalog — enough to design the picker with,
+      // including the nested `auth/oidc` whose directory is sanitised to
+      // `auth-oidc` on disk. A picker that never sees one cannot be trusted.
+      return { kinds: ["grpc", "rest-endpoint", "graphql", "websocket", "message-queue", "webhook", "shared-db", "auth/oidc"] };
+    case "/api/experiment":
+      // can_launch:false is the fixture-mode state on purpose — a disabled
+      // launch button with a reason is a thing that needs designing.
+      return {
+        lanes: [
+          { id: "orc", cmd: "/orc", what: "Full pipeline: intake → plan → scored parallel waves → review → verify → ship." },
+          { id: "orc-quick", cmd: "/orc-quick", what: "Ask for anything. Look → ask once → do, and it always asks which agent." },
+          { id: "orc-mini", cmd: "/orc-mini", what: "One executor, smoke gate, ship. No full review or verify phase." },
+          { id: "orc-wiki", cmd: "/orc-wiki", what: "Build or refresh the project wiki. Expensive; always asks first." },
+        ],
+        project_root: "/example/project",
+        platform: "linux",
+        can_launch: false,
+      };
     case "/api/learn":
       return { sections: require("../onboarding-content.js").SECTIONS };
     case "/api/maintenance":

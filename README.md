@@ -6,7 +6,7 @@
 
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
-![Version](https://img.shields.io/badge/version-0.43.3-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.43.4-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
@@ -46,7 +46,39 @@ zero-dependency npm package installs those files into your `.claude/` directory.
 
 ## Changelog
 
-**Latest: v0.43.3 — updated 2026-08-08.**
+**Latest: v0.43.4 — updated 2026-08-08.**
+
+### v0.43.4 — a warning that finally clears, an Experiment panel, crosslink from the UI _(2026-08-08)_
+
+**`global-retired-agents` told you to run a command that could never fix it.**
+The finding said `orc update --global`. Those names were retired *before* the
+manifest now on disk was written, so no manifest ever claimed them — and the
+auto-prune only deletes what a previous manifest proves ORC owned. The sweep
+that does catch them is gated on `--prune` by design (it deletes files nothing
+proves are ours). So the warning came back after every "fix", which reads as a
+broken tool rather than a wrong instruction. It now says **`orc update --global
+--prune`** and explains why the flag is required; the working command also ships
+as a machine-readable `fix_command`, which the UI shows with a copy button.
+`orc doctor --fix` still cannot clear it — a global install is not this
+project's to prune, and that is deliberate.
+
+**`/api/experiment` — a panel that hands off to a terminal.** It lists every ORC
+lane with a copy button and opens a Claude session in this repo. **The boundary
+moves exactly one step:** the panel still renders no model output, proxies no
+session and holds no API key — it opens a terminal and forgets about it. The
+lane catalog is server-side and the browser sends only an id, so no string typed
+in a browser ever reaches a shell, and the cwd is always the server's own
+project root.
+
+**Crosslink is now settable from the UI**, which needed a new CLI command
+first: `orc crosslink add <name> <path> --kinds <a,b> [--direction calls|
+called-by] [--via <kind>] [--target self|<node>]`, plus `orc crosslink kinds`
+for the catalog. The panel writes no YAML — it shells that command, so every
+rejection you see is the CLI's own validator, and the crosslink config keeps
+exactly one writer. The panel gained a **topology graph**: self at the centre,
+each linked repo with the arrow pointing the way the edge actually points,
+direction carried by colour as well as glyph, hovering a node lights its detail
+row, and a newly linked repo draws itself in.
 
 ### v0.43.3 — `orc ui`: it tells you about updates, and 36 keys stop being a wall _(2026-08-08)_
 

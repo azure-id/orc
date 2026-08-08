@@ -2546,9 +2546,92 @@ function crosslinkRemove(claudeDir, name) {
   console.log(`Removed ${name} and its edges.`);
 }
 
+// Non-interactive add — the same write the interactive flow performs, reachable
+// without a TTY. It exists because `orc ui` may only write by shelling the real
+// command: a UI that assembled this YAML itself would be a second writer of the
+// crosslink config, and the CLI is the ONLY writer by contract.
+//
+// Every validation below MIRRORS the interactive prompt that rejects the same
+// input, so the two paths cannot diverge in what they accept.
+function crosslinkAdd(claudeDir, name, repoPath) {
+  const cfg = crosslinkEnsureSelf(claudeDir);
+
+  if (!name || !/^[a-z0-9][a-z0-9-]*$/.test(name)) {
+    console.error("❌ invalid slug — a-z, 0-9, dashes (must start alphanumeric).");
+    process.exit(1);
+  }
+  if (name === cfg.self || cfg.nodes.some((n) => n.name === name)) {
+    console.error(`❌ the name "${name}" is taken (or is this repo itself).`);
+    process.exit(1);
+  }
+  if (!repoPath) {
+    console.error("❌ a repo path is required (the repo ROOT, e.g. ../service-z).");
+    process.exit(1);
+  }
+
+  const rawKinds = String(flag("--kinds") || "").trim();
+  const kinds = [
+    ...new Set(
+      rawKinds
+        .split(",")
+        .map((x) => x.trim())
+        .filter(Boolean)
+        // Numbers index the catalog, exactly as at the interactive prompt.
+        .map((tok) => (/^\d+$/.test(tok) && CROSSLINK_KINDS[Number(tok) - 1] ? CROSSLINK_KINDS[Number(tok) - 1] : tok.toLowerCase()))
+    ),
+  ];
+  if (!kinds.length) {
+    console.error("❌ at least one kind is required: --kinds <name|number>[,…]");
+    console.error("   catalog: " + CROSSLINK_KINDS.join(", "));
+    process.exit(1);
+  }
+
+  const dir = String(flag("--direction") || "calls");
+  if (dir !== "calls" && dir !== "called-by") {
+    console.error('❌ --direction must be "calls" (this repo calls them) or "called-by" (they call this repo).');
+    process.exit(1);
+  }
+  const via = String(flag("--via") || kinds[0]).toLowerCase();
+  if (!kinds.includes(via)) {
+    console.error(`❌ --via must be one of the picked kinds: ${kinds.join(", ")}`);
+    process.exit(1);
+  }
+  const target = String(flag("--target") || "self");
+  const targetKey = target === "self" || target === cfg.self ? "self" : target;
+  if (targetKey !== "self" && !cfg.nodes.some((n) => n.name === targetKey)) {
+    console.error(`❌ --target "${target}" is not this repo or an already-linked repo.`);
+    process.exit(1);
+  }
+
+  cfg.nodes.push({ name, repo_path: repoPath, kinds });
+  const edge = dir === "calls" ? { from: targetKey, to: name, via } : { from: name, to: targetKey, via };
+  cfg.links.push(edge);
+  writeCrosslinkConfig(claudeDir, cfg);
+
+  if (wantsJson()) {
+    return emitJson({
+      added: name,
+      repo_path: repoPath,
+      kinds,
+      edge,
+      // The provider probe is the honest part: a link to a repo with no wiki is
+      // legal and useful, it is just worth less until they adopt crosslink.
+      provider: crosslinkProviderInfo(path.resolve(repoRootOf(claudeDir), repoPath)),
+    });
+  }
+  console.log(
+    `✓ added ${name}  ·  edge ${edge.from} ──${via}──▶ ${edge.to}` +
+      (edge.from === "self" ? "  (we consume → drift-checked)" : "")
+  );
+  console.log(crosslinkProviderLine(claudeDir, repoPath));
+}
+
 function crosslinkInteractive(claudeDir) {
   if (!process.stdin.isTTY) {
-    console.log("(non-interactive shell — showing the graph; add links from a real terminal with `orc crosslink`)");
+    console.log(
+      "(non-interactive shell — showing the graph; add a link from a real terminal with `orc crosslink`,\n" +
+        " or non-interactively with `orc crosslink add <name> <path> --kinds <a,b>`)"
+    );
     crosslinkList(claudeDir);
     return;
   }
@@ -2671,6 +2754,15 @@ function crosslink() {
       if (wantsJson()) crosslinkJson(claudeDir);
       else crosslinkStatus(claudeDir);
       break;
+    case "add":
+      crosslinkAdd(claudeDir, pos[2], pos[3]);
+      break;
+    case "kinds":
+      // The catalog, machine-readable — so a picker can offer the real list
+      // instead of a copy of it that drifts.
+      if (wantsJson()) emitJson({ kinds: CROSSLINK_KINDS });
+      else console.log(CROSSLINK_KINDS.join("\n"));
+      break;
     case "remove":
       crosslinkRemove(claudeDir, pos[2]);
       break;
@@ -2678,7 +2770,9 @@ function crosslink() {
       console.error(
         `Unknown: orc crosslink ${pos[1]}\n` +
           "Usage: orc crosslink                 (interactive: add/list/remove/done)\n" +
-          "       orc crosslink [list | status | remove <name>]"
+          "       orc crosslink add <name> <repo-path> --kinds <a,b> [--direction calls|called-by]\n" +
+          "                                            [--via <kind>] [--target self|<node>]\n" +
+          "       orc crosslink [list | status | kinds | remove <name>]"
       );
       process.exit(1);
   }
@@ -4956,12 +5050,21 @@ function doctor() {
           .filter((f) => /^orc-.*\.md$/i.test(f) && !shipped.has("agents/" + f));
         if (shadows.length) {
           globalInfo.shadows = true;
+          // `--prune` is NOT optional here, and saying `orc update --global`
+          // alone made this finding permanent. These names were retired BEFORE
+          // the manifest now on disk was written, so no manifest ever claimed
+          // them: the auto-prune (which only deletes what a previous manifest
+          // proves ORC owned) can never reach them, and a plain update just
+          // re-reports them forever. The candidate sweep that DOES catch them
+          // is gated on --prune by design — it is deleting files nothing proves
+          // are ours.
           warn(
             "global-retired-agents",
             `${shadows.length} retired agent name(s) still live in ~/.claude/agents: ` +
               shadows.slice(0, 5).join(", ") + (shadows.length > 5 ? " …" : "") +
-              " — run `orc update --global` (never deleted from here)",
-            { paths: shadows.map((f) => "agents/" + f) }
+              " — run `orc update --global --prune` (--prune is required: no manifest claims these, " +
+              "so a plain update only reports them; never deleted from here)",
+            { paths: shadows.map((f) => "agents/" + f), fix_command: "orc update --global --prune" }
           );
         } else ok("no retired agent names shadowing from ~/.claude/agents");
       } catch (_) {}

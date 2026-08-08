@@ -437,6 +437,79 @@ test("js: every panel container carries the class that spaces its children", () 
   }
 });
 
+// v0.43.4 — the Experiment panel moves the "never spawns claude" boundary by
+// exactly one step, and these are the rails that keep it there.
+test("experiment: the launcher takes no command from the browser", () => {
+  const api = fs.readFileSync(path.join(REPO, "bin", "webui", "api.js"), "utf8");
+  const i = api.indexOf("function launchClaude");
+  assert.ok(i > 0, "the launcher must exist");
+  const fn = api.slice(i, api.indexOf("\n}", i));
+
+  // The cwd is the server's own project root, never anything from a request.
+  assert.match(fn, /const cwd = ctx\.projectRoot/, "cwd must come from the server, never the client");
+  assert.ok(!/body\.|req\./.test(fn), "no request data may reach the spawn");
+  // `claude` is a literal in every branch — never interpolated from input.
+  assert.ok(!/\$\{(?!JSON)/.test(fn.replace(/JSON\.stringify\(cwd\)/g, "")) || /claude/.test(fn), "the binary must be a literal");
+
+  // The route resolves a lane id against a server-side catalog and 400s
+  // otherwise, so an arbitrary string can never become a command.
+  const route = api.slice(api.indexOf('"/api/experiment/launch"'));
+  assert.match(route, /LANES\.find/, "the lane must be looked up in the server's catalog");
+  assert.match(route, /unknown lane/, "an unrecognised lane must be refused");
+});
+
+test("experiment: the panel still renders no model output", () => {
+  const js = fs.readFileSync(path.join(REPO, "bin", "webui", "app.js"), "utf8");
+  const i = js.indexOf("PANELS.experiment");
+  const panel = js.slice(i, js.indexOf("PANELS.maintenance"));
+  // The handoff is fire-and-forget. If this panel ever starts polling a job or
+  // streaming output, the boundary has moved again and that must be deliberate.
+  assert.ok(!/api\/job|refreshJob|EventSource|WebSocket/.test(panel), "the panel must not follow the session it launched");
+});
+
+test("crosslink: the UI writes only by shelling the CLI's own add", () => {
+  const api = fs.readFileSync(path.join(REPO, "bin", "webui", "api.js"), "utf8");
+  const cli = fs.readFileSync(path.join(REPO, "bin", "cli.js"), "utf8");
+
+  assert.match(api, /"\/api\/crosslink\/add":/, "the UI needs a write route");
+  const build = api.slice(api.indexOf('"/api/crosslink/add":'), api.indexOf('"/api/crosslink/add":') + 600);
+  assert.match(build, /"crosslink",\s*"add"/, "it must shell `orc crosslink add`");
+  // The panel must never learn to write the YAML itself — that config has one
+  // writer by contract, and a second one is the drift the whole design avoids.
+  assert.ok(!/orc-crosslink\.config\.yaml/.test(api), "the API must never touch the crosslink config directly");
+
+  // The non-interactive add must reject exactly what the prompt rejects.
+  const add = cli.slice(cli.indexOf("function crosslinkAdd"));
+  for (const guard of ["invalid slug", "is taken", "at least one kind", "--via must be one of", "is not this repo"]) {
+    assert.ok(add.includes(guard), `crosslink add must guard: ${guard}`);
+  }
+});
+
+// v0.43.4 — a finding must name a command that actually clears it.
+//
+// `global-retired-agents` told users to run `orc update --global`. That can
+// never work: the names it reports were retired BEFORE the manifest now on disk
+// was written, so no manifest claims them, and the auto-prune only deletes what
+// a previous manifest proves ORC owned. The candidate sweep that does catch
+// them is gated on `--prune`. So the finding reappeared after every "fix",
+// which reads as a broken tool rather than a wrong instruction.
+test("doctor: the retired-agent finding names a command that actually deletes them", () => {
+  const cli = fs.readFileSync(path.join(REPO, "bin", "cli.js"), "utf8");
+  const i = cli.indexOf("global-retired-agents");
+  assert.ok(i > 0, "the finding must exist");
+  // The message and its structured fix_command, up to the end of the warn call.
+  const block = cli.slice(i, i + 1400);
+
+  assert.match(block, /orc update --global --prune/, "the advice must include --prune, or it never clears");
+  assert.match(block, /fix_command/, "the working command must also be machine-readable for the UI");
+  // A bare `orc update --global` recommendation is the exact regression: it is
+  // only correct for version skew, never for an unowned orphan.
+  assert.ok(
+    !/`orc update --global`(?! --prune)/.test(block),
+    "a bare `orc update --global` cannot clear an orphan no manifest claims"
+  );
+});
+
 // v0.43.3 — the motion added here is only acceptable because it is all
 // switchable off, and one of these rules is load-bearing rather than tidy.
 test("css: prefers-reduced-motion disables motion, including the stagger delay", () => {

@@ -451,6 +451,7 @@ pre.block.wrap { white-space: pre-wrap; word-break: break-word; }
 }
 .banner-bad { border-color: var(--bad); background: var(--bad-wash); }
 .banner strong { display: block; margin-bottom: 2px; }
+.banner-fix { display: flex; align-items: center; gap: var(--sp-2); margin-top: var(--sp-2); flex-wrap: wrap; }
 
 /* Loading is a skeleton shimmer, never a spinner. */
 .skeleton {
@@ -802,6 +803,104 @@ kbd {
   transition: width var(--dur-slow) var(--ease);
 }
 .bar-value { text-align: right; color: var(--text-faint); font-size: 12px; }
+
+/* --- Crosslink ----------------------------------------------------------- */
+
+.graph { display: flex; align-items: center; gap: var(--sp-5); flex-wrap: wrap; }
+.graph-self {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid var(--accent);
+  background: var(--accent-wash);
+  border-radius: var(--radius);
+  font-family: var(--mono);
+  font-size: 13px;
+  white-space: nowrap;
+}
+.graph-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--accent);
+  /* This repo is the live one — the pulse says "you are here". */
+  animation: pulse-dot 2.4s ease-in-out infinite;
+}
+@keyframes pulse-dot {
+  0%, 100% { box-shadow: 0 0 0 0 var(--accent-wash); }
+  50%      { box-shadow: 0 0 0 6px transparent; }
+}
+
+.graph-ring { display: flex; flex-direction: column; gap: var(--sp-2); flex: 1 1 260px; min-width: 0; }
+.graph-node {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  transition: border-color var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease),
+              transform var(--dur-fast) var(--ease);
+}
+.graph-node:hover { border-color: var(--accent-dim); background: var(--surface-3); transform: translateX(3px); }
+.graph-arrow { font-family: var(--mono); color: var(--text-faint); letter-spacing: -1px; }
+/* Direction is carried by COLOUR as well as the glyph — an arrow alone is easy
+   to read the wrong way round at a glance. */
+.graph-consume .graph-arrow { color: var(--accent); }
+.graph-provide .graph-arrow { color: var(--ok); }
+.graph-none .graph-arrow { color: var(--warn); }
+.graph-label { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.graph-name { font-family: var(--mono); font-size: 13px; overflow: hidden; text-overflow: ellipsis; }
+.graph-via { font-size: 11px; color: var(--text-faint); }
+
+/* A repo that was just linked draws itself in once. */
+.graph-new { animation: graph-in var(--dur-slow) var(--ease); }
+@keyframes graph-in {
+  from { opacity: 0; transform: translateX(-18px) scale(.96); border-color: var(--accent); }
+  to   { opacity: 1; transform: none; }
+}
+/* Hovering a graph node lights its detail row, so the picture and the list are
+   visibly the same set of things. */
+.linked-hi { border-color: var(--accent) !important; background: var(--surface-2); }
+
+.linkform { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--sp-3); }
+.field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.field-label { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--text-faint); }
+.field-hint { font-size: 11px; color: var(--text-faint); }
+.field select.text-input { padding: 5px 8px; }
+
+.kind-picker { display: flex; flex-wrap: wrap; gap: 4px; }
+.kind {
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--text-dim);
+  border-radius: 100px;
+  padding: 2px 9px;
+  font-size: 11px;
+  font-family: var(--mono);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease),
+              border-color var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease);
+}
+.kind:hover { border-color: var(--accent-dim); color: var(--text); }
+.kind-on { background: var(--accent); border-color: var(--accent); color: #fff; transform: scale(1.04); }
+
+/* --- Experiment ---------------------------------------------------------- */
+
+.lane-list { display: flex; flex-direction: column; gap: var(--sp-2); }
+.lane {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  transition: border-color var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease);
+}
+.lane:hover { border-color: var(--accent-dim); background: var(--surface-3); }
+.lane-cmd { font-family: var(--mono); font-size: 13px; color: var(--accent); }
 
 /* --- Maintenance --------------------------------------------------------- */
 
