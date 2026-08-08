@@ -25,21 +25,26 @@
     </div>
 
     <ul class="nav" id="nav">
-      <li><a href="#/overview"    data-panel="overview">Overview</a></li>
-      <li><a href="#/settings"    data-panel="settings">Settings</a></li>
-      <li><a href="#/runs"        data-panel="runs">Runs</a></li>
-      <li><a href="#/knowledge"   data-panel="knowledge">Knowledge</a></li>
-      <li><a href="#/stats"       data-panel="stats">Stats</a></li>
-      <li><a href="#/flow"        data-panel="flow">Flow</a></li>
-      <li><a href="#/crosslink"   data-panel="crosslink">Crosslink</a></li>
-      <li><a href="#/learn"       data-panel="learn">Learn</a></li>
-      <li><a href="#/maintenance" data-panel="maintenance">Maintenance</a></li>
+      <!-- data-idx is the keyboard shortcut for that panel; the rail reveals
+           the numbers on hover so they are discoverable without a legend. -->
+      <li><a href="#/overview"    data-panel="overview"    data-idx="1">Overview</a></li>
+      <li><a href="#/settings"    data-panel="settings"    data-idx="2">Settings</a></li>
+      <li><a href="#/runs"        data-panel="runs"        data-idx="3">Runs</a></li>
+      <li><a href="#/knowledge"   data-panel="knowledge"   data-idx="4">Knowledge</a></li>
+      <li><a href="#/stats"       data-panel="stats"       data-idx="5">Stats</a></li>
+      <li><a href="#/flow"        data-panel="flow"        data-idx="6">Flow</a></li>
+      <li><a href="#/crosslink"   data-panel="crosslink"   data-idx="7">Crosslink</a></li>
+      <li><a href="#/learn"       data-panel="learn"       data-idx="8">Learn</a></li>
+      <li><a href="#/maintenance" data-panel="maintenance" data-idx="9">Maintenance</a></li>
     </ul>
 
     <div class="rail-foot">
       <div class="rail-project" id="rail-project" title="">—</div>
       <div class="rail-version" id="rail-version"></div>
-      <button class="btn btn-ghost btn-sm" id="theme-toggle" type="button">Light</button>
+      <div class="rail-buttons">
+        <button class="btn btn-ghost btn-sm" id="theme-toggle" type="button">Light</button>
+        <button class="btn btn-ghost btn-sm" id="shortcut-hint" type="button" title="Keyboard shortcuts">?</button>
+      </div>
     </div>
   </nav>
 

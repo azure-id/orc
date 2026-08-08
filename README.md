@@ -6,7 +6,7 @@
 
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
-![Version](https://img.shields.io/badge/version-0.43.2-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.43.3-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
@@ -46,7 +46,40 @@ zero-dependency npm package installs those files into your `.claude/` directory.
 
 ## Changelog
 
-**Latest: v0.43.2 — updated 2026-08-08.**
+**Latest: v0.43.3 — updated 2026-08-08.**
+
+### v0.43.3 — `orc ui`: it tells you about updates, and 36 keys stop being a wall _(2026-08-08)_
+
+**The update check was already real — the panel just never asked.** `orc version
+--json` performs a bounded live check against the install source and returns
+`update_available`. That answer now reaches three places: a version tile on
+Overview, one quiet dot in the rail on every panel, and the Maintenance
+`upgrade` row, which says what it would actually do *before* you preview it and
+offers a **Check again** button. One check per page load, shared — and the
+browser never compares version strings itself, so the semver rules and the 24h
+cache stay in the CLI where they already live. `latest: null` reads as
+**offline**, not as "up to date"; those are different facts.
+
+**Settings: three collapsible sections and a filter.** 36 keys in three flat
+lists meant scrolling was the only way to find anything. Each tier is now its
+own card with a header explaining what the tier *is* ("advanced" means you need
+a reason, not don't touch), and the toolbar filters by key **or** description
+across every tier at once — so finding a key no longer depends on guessing
+which tier it was filed under. Plus **Changed only**, a match count, and
+collapse-all. Rows highlight on hover, because 36 rows of identical weight is
+where a click on the wrong key comes from.
+
+**Interaction.** Keyboard nav (`1`–`9` for panels, `/` to filter, `r` to
+reload, `t` for theme, `?` for the list, `Esc` to close or clear), with the
+digits revealed on rail hover so they are discoverable without a legend. Copy
+buttons on every path. A staggered entrance so a panel reads as a sequence
+rather than a flash, a sweep bar while a mutation runs so a frozen panel never
+looks like a hang, and press feedback on every button.
+
+All of it is off under `prefers-reduced-motion` — including the stagger's
+`animation-delay`, which is load-bearing rather than tidy: the entrance fills
+`backwards`, so a surviving delay would leave blocks invisible instead of
+merely still. A test pins that.
 
 ### v0.43.2 — `orc ui`: boxes stop colliding, because the container owns the gap _(2026-08-08)_
 

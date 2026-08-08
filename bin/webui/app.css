@@ -161,18 +161,36 @@ code, kbd, pre, .mono { font-family: var(--mono); font-size: .92em; }
 
 .nav { display: flex; flex-direction: column; gap: 2px; flex: 1; }
 .nav a {
-  display: block;
+  display: flex;
+  align-items: center;
   padding: 7px var(--sp-3);
   border-radius: var(--radius-sm);
   color: var(--text-dim);
-  transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+  transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease),
+              transform var(--dur-fast) var(--ease);
 }
-.nav a:hover { background: var(--surface-2); color: var(--text); text-decoration: none; }
+.nav a:hover { background: var(--surface-2); color: var(--text); text-decoration: none; transform: translateX(2px); }
 .nav a[aria-current="page"] {
   background: var(--accent-wash);
   color: var(--text);
   box-shadow: inset 2px 0 0 var(--accent);
 }
+/* The digit that jumps here. Hidden until you hover the rail, so the shortcuts
+   are discoverable without a legend taking up permanent space. */
+.nav a::after {
+  content: attr(data-idx);
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-faint);
+  opacity: 0;
+  transition: opacity var(--dur) var(--ease);
+}
+.rail:hover .nav a::after { opacity: .65; }
+
+.rail-buttons { display: flex; gap: var(--sp-2); }
+.rail-buttons .btn { flex: 1; justify-content: center; }
+#shortcut-hint { flex: 0 0 auto; min-width: 30px; }
 
 .rail-foot {
   display: flex;
@@ -205,6 +223,24 @@ code, kbd, pre, .mono { font-family: var(--mono); font-size: .92em; }
 .panel { animation: panel-in var(--dur) var(--ease); }
 @keyframes panel-in {
   from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* Staggered entrance. The blocks of a panel arrive in reading order rather than
+   all at once, which makes a panel of six cards parse as a sequence instead of
+   a flash. Capped at 8 so a long list never becomes a slow one — every child
+   past the cap shares the last delay. */
+.stack > * { animation: block-in var(--dur) var(--ease) backwards; }
+.stack > *:nth-child(1) { animation-delay: 0ms; }
+.stack > *:nth-child(2) { animation-delay: 30ms; }
+.stack > *:nth-child(3) { animation-delay: 60ms; }
+.stack > *:nth-child(4) { animation-delay: 90ms; }
+.stack > *:nth-child(5) { animation-delay: 120ms; }
+.stack > *:nth-child(6) { animation-delay: 150ms; }
+.stack > *:nth-child(7) { animation-delay: 180ms; }
+.stack > *:nth-child(n+8) { animation-delay: 210ms; }
+@keyframes block-in {
+  from { opacity: 0; transform: translateY(8px); }
   to   { opacity: 1; transform: none; }
 }
 
@@ -263,11 +299,61 @@ code, kbd, pre, .mono { font-family: var(--mono); font-size: .92em; }
 .stat { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: var(--sp-4); }
 .stat-label { font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--text-faint); }
 .stat-value { font-size: 26px; font-weight: 600; line-height: 1.2; margin-top: 4px; letter-spacing: -.02em; }
+.stat-value .chip { vertical-align: middle; margin-left: var(--sp-2); }
 .stat-note { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
+.stat-ok   { color: var(--ok); }
+.stat-warn { color: var(--warn); }
+.stat-bad  { color: var(--bad); }
+/* The version tile answers over the network, so it has a waiting state. It
+   dims rather than moves: a tile that reflows when the answer lands shifts the
+   three tiles beside it. */
+.stat-pending .stat-value { color: var(--text-faint); font-size: 18px; }
+.stat-pending { animation: breathe 1.6s ease-in-out infinite; }
+@keyframes breathe {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: .62; }
+}
+
+/* the rail's "a newer release exists" line — one dot, every panel, never modal */
+.rail-update {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--warn);
+  animation: rail-update-in var(--dur-slow) var(--ease);
+}
+.rail-update:hover { text-decoration: none; color: var(--warn); filter: brightness(1.15); }
+@keyframes rail-update-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.action-status { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
 
 .kv { display: grid; grid-template-columns: minmax(120px, max-content) minmax(0, 1fr); gap: 6px var(--sp-4); }
 .kv dt { color: var(--text-faint); font-size: 12px; }
 .kv dd { margin: 0; font-family: var(--mono); font-size: 12px; word-break: break-all; }
+/* A copy button that is always visible turns a value list into a row of
+   buttons, so it fades in with the row it belongs to. It stays reachable by
+   keyboard regardless — :focus-within, not hover alone. */
+.kv-copy { display: flex; align-items: baseline; gap: var(--sp-2); }
+.copy-btn {
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--text-dim);
+  border-radius: 4px;
+  padding: 0 6px;
+  font-size: 10px;
+  font-family: var(--font);
+  cursor: pointer;
+  opacity: 0;
+  flex: none;
+  transition: opacity var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease),
+              border-color var(--dur-fast) var(--ease);
+}
+.kv-copy:hover .copy-btn, .copy-btn:focus-visible { opacity: 1; }
+.copy-btn:hover { color: var(--accent); border-color: var(--accent-dim); }
 
 .chip {
   display: inline-flex;
@@ -308,6 +394,9 @@ code, kbd, pre, .mono { font-family: var(--mono); font-size: .92em; }
   transition: background var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease), opacity var(--dur-fast);
 }
 .btn:hover:not(:disabled) { background: var(--surface-3); border-color: var(--accent-dim); }
+/* A press that moves confirms the click landed — the one bit of feedback that
+   is never wrong, even when the request behind it is slow. */
+.btn:active:not(:disabled) { transform: translateY(1px); }
 .btn:disabled { opacity: .45; cursor: not-allowed; }
 .btn-sm { padding: 3px 9px; font-size: 12px; }
 .btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
@@ -433,33 +522,127 @@ pre.block.wrap { white-space: pre-wrap; word-break: break-word; }
 /* The whole UI goes read-only while a mutation runs (single-flight). */
 body.busy .btn:not(.btn-allow-busy) { pointer-events: none; opacity: .45; }
 body.busy .setting-control { pointer-events: none; opacity: .5; }
+/* …and it SAYS so. A frozen panel with no explanation reads as a hang; a moving
+   bar at the top edge reads as "something of mine is running". */
+body.busy::before {
+  content: "";
+  position: fixed;
+  inset: 0 0 auto 0;
+  height: 2px;
+  z-index: 60;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  background-size: 40% 100%;
+  background-repeat: no-repeat;
+  animation: busy-sweep 1.1s var(--ease) infinite;
+}
+@keyframes busy-sweep {
+  from { background-position: -40% 0; }
+  to   { background-position: 140% 0; }
+}
+
+/* Cards lift slightly on hover ONLY where they are interactive. A static card
+   that reacts to the pointer promises a click that does not exist. */
+.run-card:hover, .action:hover { transform: translateY(-1px); }
+.action { transition: border-color var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease); }
+.action:hover { border-color: var(--accent-dim); }
+
+kbd {
+  background: var(--surface-3);
+  border: 1px solid var(--line);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-size: 11px;
+  color: var(--text);
+  white-space: nowrap;
+}
 
 /* ---------------------------------------------------------------- PANELS -- */
 
 /* --- Settings ------------------------------------------------------------ */
 
-/* No outer margin — the enclosing `.stack` owns the gap. */
+/* The settings toolbar — find a key across every tier without scrolling. */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  position: sticky;
+  top: var(--sp-3);
+  z-index: 5;
+}
+.search { flex: 1 1 220px; min-width: 0; }
+.search .text-input { width: 100%; padding: 6px 10px; font-size: 13px; }
+.toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--text-dim); cursor: pointer; white-space: nowrap; }
+.toggle:has(input:disabled) { opacity: .5; cursor: default; }
+.toolbar-result { font-size: 12px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+.toolbar-result-none { color: var(--warn); }
+
+/* `hidden` here is the FILTER's hide. It is a class, not the [hidden]
+   attribute, so a filtered-out row cannot fight a component that sets its own
+   display. */
+.hidden { display: none !important; }
+
+/* Each tier is its own card with a clickable header, so 36 keys read as three
+   labelled groups instead of one wall. */
+.tier { padding: 0; overflow: hidden; }
 .tier-head {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: var(--sp-3);
-  margin-bottom: var(--sp-3);
-  padding-bottom: var(--sp-2);
+  width: 100%;
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--surface-2);
+  border: 0;
   border-bottom: 1px solid var(--line-soft);
+  cursor: pointer;
+  text-align: left;
+  transition: background var(--dur-fast) var(--ease);
 }
-.tier-head h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--text-dim); }
-.tier-count { font-size: 12px; color: var(--text-faint); }
+.tier-head:hover { background: var(--surface-3); }
+.tier-head h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--text); }
+.tier-count { font-size: 12px; color: var(--text-faint); margin-left: auto; font-variant-numeric: tabular-nums; }
+.tier-caret {
+  color: var(--text-faint);
+  font-size: 11px;
+  transform: rotate(90deg);
+  transition: transform var(--dur) var(--ease);
+}
+.tier-desc { padding: var(--sp-3) var(--sp-4) 0; color: var(--text-dim); font-size: 12.5px; }
+.tier-rows { padding: 0 var(--sp-4) var(--sp-2); }
+
+/* Collapsed: the caret turns and the body folds away. `grid-template-rows`
+   animates 1fr -> 0fr, which `height: auto` cannot do — and it needs a real
+   element to collapse against, which is what `.tier-body-inner` is for. */
+.tier-body {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows var(--dur-slow) var(--ease), opacity var(--dur) var(--ease);
+}
+.tier-body-inner { min-height: 0; overflow: hidden; }
+.tier.collapsed > .tier-body { grid-template-rows: 0fr; opacity: 0; }
+.tier.collapsed .tier-caret { transform: rotate(0deg); }
 
 .setting {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 260px;
   gap: var(--sp-4);
   align-items: start;
-  padding: var(--sp-3) 0;
+  padding: var(--sp-3) var(--sp-2);
+  margin: 0 calc(var(--sp-2) * -1);
+  border-radius: var(--radius-sm);
   border-bottom: 1px solid var(--line-soft);
   /* 220ms desaturate + lock slide when another key shadows this one. */
-  transition: opacity var(--dur-shadow) var(--ease), filter var(--dur-shadow) var(--ease);
+  transition: opacity var(--dur-shadow) var(--ease), filter var(--dur-shadow) var(--ease),
+              background var(--dur-fast) var(--ease);
 }
+/* Which row you are on, at a glance — 36 rows of the same weight is where a
+   mis-click on the wrong key comes from. */
+.setting:hover { background: var(--surface-2); }
 .setting:last-child { border-bottom: 0; }
 .setting-name { display: flex; align-items: center; gap: var(--sp-2); font-family: var(--mono); font-size: 13px; }
 .setting-desc { color: var(--text-dim); font-size: 12.5px; margin-top: 3px; }
@@ -472,6 +655,7 @@ body.busy .setting-control { pointer-events: none; opacity: .5; }
   flex: none;
   animation: dot-in var(--dur) var(--ease);
 }
+.dot-warn { background: var(--warn); }
 @keyframes dot-in {
   from { transform: scale(0); opacity: 0; }
   to   { transform: none; opacity: 1; }
@@ -700,7 +884,14 @@ body.busy .setting-control { pointer-events: none; opacity: .5; }
   *, *::before, *::after {
     animation-duration: 1ms !important;
     animation-iteration-count: 1 !important;
+    /* Load-bearing, not tidiness: the staggered entrance fills `backwards`, so
+       a delay that survives here leaves a block sitting at opacity 0 for its
+       whole delay — reduced motion would mean things simply do not appear. */
+    animation-delay: 0ms !important;
     transition-duration: 1ms !important;
     scroll-behavior: auto !important;
   }
+  /* Reduced motion means no movement, not fast movement — the hover and press
+     nudges are removed outright rather than sped up. */
+  .nav a:hover, .btn:active:not(:disabled), .run-card:hover, .action:hover { transform: none !important; }
 }

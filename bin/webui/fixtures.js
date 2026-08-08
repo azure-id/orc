@@ -162,7 +162,10 @@ module.exports.get = function get(route, q) {
     case "/api/meta":
       return undefined; // served for real even in fixture mode
     case "/api/version":
-      return { version: "0.43.0", latest: "0.43.0", update_available: false, install_spec: "github:azure-id/orc", check_disabled: false };
+      // An update IS available here on purpose. "Up to date" is the state that
+      // needs no design; you cannot lay out the update chip, the rail dot or
+      // the upgrade row against a version that matches.
+      return { version: "0.43.2", latest: "0.44.0", update_available: true, install_spec: "github:azure-id/orc", check_disabled: false };
     case "/api/where":
       return where;
     case "/api/doctor":

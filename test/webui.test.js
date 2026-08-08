@@ -437,6 +437,40 @@ test("js: every panel container carries the class that spaces its children", () 
   }
 });
 
+// v0.43.3 — the motion added here is only acceptable because it is all
+// switchable off, and one of these rules is load-bearing rather than tidy.
+test("css: prefers-reduced-motion disables motion, including the stagger delay", () => {
+  const css = fs.readFileSync(path.join(REPO, "bin", "webui", "app.css"), "utf8");
+  const block = css.slice(css.indexOf("@media (prefers-reduced-motion: reduce)"));
+  assert.ok(block, "the reduced-motion block must exist");
+
+  for (const prop of ["animation-duration", "animation-iteration-count", "transition-duration"]) {
+    assert.match(block, new RegExp(prop + ":[^;]*!important"), `${prop} must be neutralised`);
+  }
+  // The staggered entrance fills `backwards`. Without this reset the delay
+  // survives, and a reduced-motion user watches blocks stay invisible for the
+  // length of their delay — motion "off" would mean content missing.
+  assert.match(block, /animation-delay:\s*0ms\s*!important/, "the stagger delay must be reset, or blocks never appear");
+  assert.match(block, /transform:\s*none\s*!important/, "hover/press nudges must be removed, not merely sped up");
+});
+
+test("ui: the update check is surfaced, and never invented in the browser", () => {
+  const js = fs.readFileSync(path.join(REPO, "bin", "webui", "app.js"), "utf8");
+  const api = fs.readFileSync(path.join(REPO, "bin", "webui", "api.js"), "utf8");
+
+  // The comparison belongs to the CLI, which owns the semver rules and the
+  // cache. The browser must never diff version strings itself.
+  assert.match(api, /"\/api\/version":\s*\(\)\s*=>\s*\["version"\]/, "the version route must shell the real CLI");
+  assert.ok(
+    !/semver|localeCompare\(.*version|parseInt\(.*version/i.test(js),
+    "the panel must not compare versions itself — `update_available` comes from the CLI"
+  );
+  assert.match(js, /update_available/, "the CLI's own verdict must be what the UI reads");
+
+  // One check per page load, shared by the tile, the rail and the upgrade row.
+  assert.match(js, /versionPromise\s*=\s*versionPromise\s*\|\|/, "the version check must be shared, not repeated per consumer");
+});
+
 test("server: a write shells the real CLI, so its validators still decide", async () => {
   const { root } = freshInstall();
   let srv;
@@ -582,6 +616,11 @@ test("fixtures match the live --json shapes for the routes they stand in for", (
 test("fixtures carry the UGLY states, not just the happy ones", () => {
   const fixtures = require(path.join(REPO, "bin", "webui", "fixtures.js"));
   assert.strictEqual(fixtures.get("/api/wiki", {}).tier, "STALE", "a STALE wiki must be designable");
+  assert.strictEqual(
+    fixtures.get("/api/version", {}).update_available,
+    true,
+    "an AVAILABLE update must be designable — 'up to date' is the state that needs no design"
+  );
   assert.strictEqual(fixtures.get("/api/doctor", {}).ok, false, "an unhealthy doctor must be designable");
   assert.ok(fixtures.get("/api/doctor", {}).global_install.shadows, "the global-install banner must be designable");
   assert.ok(

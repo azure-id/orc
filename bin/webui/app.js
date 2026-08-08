@@ -48,6 +48,34 @@ async function read(path) {
 
 const post = (path, body) => api(path, { method: "POST", body });
 
+/* --------------------------------------------------------------- version -- */
+// `orc version --json` performs a REAL bounded network check against the
+// install source and reports {version, latest, update_available}. Three places
+// want that answer — the Overview tile, the rail badge and the Maintenance
+// upgrade row — so the promise is shared: one check per page load, not three.
+// `refresh()` is the only way to force a second one, and it is a button the
+// user presses; nothing here polls for a new release on its own.
+let versionPromise = null;
+const versionInfo = () => (versionPromise = versionPromise || read("/api/version").then((r) => r.data));
+function refreshVersion() {
+  versionPromise = null;
+  return versionInfo();
+}
+
+// The one place that decides what a version payload MEANS, so the tile, the rail
+// and the upgrade row can never disagree about it. `latest: null` is not "up to
+// date" — it is "we could not tell", which is a different thing to show.
+function versionState(v) {
+  if (!v) return { kind: "", label: "unknown", note: "Could not read the installed version." };
+  if (v.check_disabled)
+    return { kind: "", label: "check off", note: "Update checks are disabled (ORC_NO_UPDATE_CHECK)." };
+  if (!v.latest)
+    return { kind: "warn", label: "offline", note: "Could not reach the install source to compare versions." };
+  if (v.update_available)
+    return { kind: "warn", label: v.latest + " available", note: `You have ${v.version}. Maintenance → upgrade installs it.` };
+  return { kind: "ok", label: "up to date", note: `${v.version} is the latest on ${v.install_spec || "the install source"}.` };
+}
+
 /* ----------------------------------------------------------------- utils -- */
 
 const $ = (sel, root) => (root || document).querySelector(sel);
@@ -93,11 +121,23 @@ function card(title, right) {
   return c;
 }
 
-function kvList(rows) {
+// `copyable` marks the rows whose whole purpose is to be pasted somewhere else
+// — filesystem paths, config locations, install specs. Selecting a wrapped
+// monospace path by hand is the kind of small friction nobody reports.
+function kvList(rows, copyable) {
   const dl = el("dl", "kv");
   for (const [k, v] of rows) {
     if (v === undefined || v === null || v === "") continue;
-    dl.append(el("dt", null, k), el("dd", null, esc(v)));
+    const dd = el("dd", null, esc(v));
+    if (copyable) {
+      dd.classList.add("kv-copy");
+      const b = el("button", "copy-btn", "copy");
+      b.type = "button";
+      b.title = "Copy to clipboard";
+      b.addEventListener("click", () => copy(String(v), k));
+      dd.append(b);
+    }
+    dl.append(el("dt", null, k), dd);
   }
   return dl;
 }
@@ -285,6 +325,31 @@ PANELS.overview = function (host) {
           (d.waiting || []).length ? "warn" : "ok"
         )
       );
+
+      // The version check crosses the network, so it must never hold up the
+      // three tiles beside it: the tile renders in its pending state and fills
+      // itself in when the answer lands.
+      const vt = statTile("ORC version", "checking…", "Comparing against the install source.", "");
+      vt.classList.add("stat-pending");
+      stats.append(vt);
+      versionInfo()
+        .then((v) => {
+          const s = versionState(v);
+          vt.classList.remove("stat-pending");
+          vt.replaceChildren();
+          vt.append(el("div", "stat-label", "ORC version"));
+          const val = el("div", "stat-value" + (s.kind ? " stat-" + s.kind : ""));
+          val.append(document.createTextNode(v && v.version ? "v" + v.version : "?"), chip(s.label, s.kind));
+          vt.append(val, el("div", "stat-note", s.note));
+        })
+        .catch(() => {
+          vt.classList.remove("stat-pending");
+          vt.replaceChildren(
+            el("div", "stat-label", "ORC version"),
+            el("div", "stat-value", "?"),
+            el("div", "stat-note", "The version check did not complete.")
+          );
+        });
       out.append(stats);
 
       if ((d.waiting || []).length) {
@@ -329,13 +394,16 @@ PANELS.overview = function (host) {
       const paths = card("Where things are");
       const where = d.where || {};
       paths.append(
-        kvList([
-          ["project", where.project_root],
-          ["config", where.config],
-          ["skills", where.skills],
-          ["runs", where.run_dir],
-          ["traces", where.log_dir],
-        ])
+        kvList(
+          [
+            ["project", where.project_root],
+            ["config", where.config],
+            ["skills", where.skills],
+            ["runs", where.run_dir],
+            ["traces", where.log_dir],
+          ],
+          true
+        )
       );
       out.append(paths);
 
@@ -370,6 +438,97 @@ function statTile(label, value, note, kind) {
 /* ================================================================ SETTINGS == */
 
 const TIER_LABEL = { common: "Common", fable5: "Fable 5 role override", advanced: "Advanced" };
+
+// A tier name alone does not say why a key lives there, and "advanced" reads as
+// "do not touch" when it actually means "you need a reason".
+const TIER_DESC = {
+  common: "The keys most runs actually touch. If you change one thing, it is probably here.",
+  fable5: "Per-role Fable 5 overrides. The whole block goes inert while opus5_only is on — that is the precedence rule, not a bug.",
+  advanced: "Everything else ORC knows. The defaults are deliberate; change one when you have a reason for it.",
+};
+
+// The settings toolbar: find a key by name or description across every tier,
+// narrow to just what you have changed, and open/close all sections. It filters
+// what is ALREADY rendered — no refetch, so it stays instant at 36 keys.
+function settingsToolbar(d, tiers) {
+  const bar = el("div", "toolbar");
+
+  const search = el("div", "search");
+  const input = el("input", "text-input");
+  input.type = "search";
+  input.id = "settings-filter";
+  input.placeholder = "Filter keys…   (press / )";
+  input.setAttribute("aria-label", "Filter settings by key or description");
+  search.append(input);
+  bar.append(search);
+
+  const changedWrap = el("label", "toggle");
+  const changed = el("input");
+  changed.type = "checkbox";
+  const overridden = d.keys.filter((k) => k.is_overridden).length;
+  changedWrap.append(changed, document.createTextNode(` Changed only (${overridden})`));
+  changedWrap.title = overridden ? "Show only keys whose value differs from the default." : "Nothing is overridden yet — every key is at its default.";
+  if (!overridden) changed.disabled = true;
+  bar.append(changedWrap);
+
+  const result = el("span", "toolbar-result");
+  bar.append(result);
+
+  const toggleAll = el("button", "btn btn-ghost btn-sm", "Collapse all");
+  toggleAll.type = "button";
+  toggleAll.addEventListener("click", () => {
+    const anyOpen = tiers.some((t) => !t.wrap.classList.contains("collapsed"));
+    for (const t of tiers) {
+      t.wrap.classList.toggle("collapsed", anyOpen);
+      t.wrap.querySelector(".tier-head").setAttribute("aria-expanded", String(!anyOpen));
+    }
+    toggleAll.textContent = anyOpen ? "Expand all" : "Collapse all";
+  });
+  bar.append(toggleAll);
+
+  const apply = () => {
+    const q = input.value.trim().toLowerCase();
+    const onlyChanged = changed.checked;
+    let shown = 0;
+    for (const t of tiers) {
+      let visible = 0;
+      for (const row of t.rows.children) {
+        const k = row.dataset.key || "";
+        const desc = (row.querySelector(".setting-desc") || {}).textContent || "";
+        const hit =
+          (!q || k.toLowerCase().includes(q) || desc.toLowerCase().includes(q)) &&
+          (!onlyChanged || row.dataset.overridden === "1");
+        row.classList.toggle("hidden", !hit);
+        if (hit) visible++;
+      }
+      shown += visible;
+      t.count.textContent = visible === t.total ? `${t.total} key${t.total === 1 ? "" : "s"}` : `${visible} of ${t.total}`;
+      // A tier with no matches is hidden outright — an empty titled box is
+      // noise between the ones that DID match.
+      t.wrap.classList.toggle("hidden", visible === 0);
+      // A filter that matches inside a closed section would look like no match
+      // at all, so filtering forces the section open.
+      if ((q || onlyChanged) && visible) {
+        t.wrap.classList.remove("collapsed");
+        t.wrap.querySelector(".tier-head").setAttribute("aria-expanded", "true");
+      }
+    }
+    result.textContent = q || onlyChanged ? `${shown} match${shown === 1 ? "" : "es"}` : "";
+    result.classList.toggle("toolbar-result-none", (q || onlyChanged) && shown === 0);
+  };
+
+  input.addEventListener("input", apply);
+  changed.addEventListener("change", apply);
+  // Esc clears rather than blurs: the filter is the thing in your way.
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && input.value) {
+      e.stopPropagation();
+      input.value = "";
+      apply();
+    }
+  });
+  return bar;
+}
 
 PANELS.settings = function (host) {
   const actions = el("div", "row-actions");
@@ -424,16 +583,51 @@ async function renderSettings(body) {
   // flips — which is how the precedence rule gets taught rather than described.
   out.append(ladderCard(d.score_table));
 
+  // 36 keys in three flat lists is a wall, and the answer to "where is the one
+  // I want" was scrolling. Each tier is now its own collapsible card, and the
+  // toolbar filters across ALL of them at once — so finding a key never depends
+  // on knowing which tier somebody filed it under.
+  const tiers = [];
+  out.append(settingsToolbar(d, tiers));
+
   for (const tier of ["common", "fable5", "advanced"]) {
     const keys = d.keys.filter((k) => k.tier === tier);
     if (!keys.length) continue;
-    const wrap = el("div", "tier");
-    const h = el("div", "tier-head");
+
+    const allInert = keys.every((k) => k.is_shadowed);
+    const wrap = el("div", "card tier");
+    wrap.dataset.tier = tier;
+
+    const h = el("button", "tier-head");
+    h.type = "button";
+    h.setAttribute("aria-expanded", "true");
+    h.append(el("span", "tier-caret", "▸"));
     h.append(el("h2", null, TIER_LABEL[tier] || tier));
-    h.append(el("span", "tier-count", `${keys.length} key${keys.length === 1 ? "" : "s"}`));
-    if (keys.every((k) => k.is_shadowed) && keys[0].is_shadowed) h.append(chip("inert", "warn"));
-    wrap.append(h);
-    for (const k of keys) wrap.append(settingRow(k, body));
+    const count = el("span", "tier-count", `${keys.length} key${keys.length === 1 ? "" : "s"}`);
+    h.append(count);
+    if (allInert) h.append(chip("inert", "warn"));
+
+    const rows = el("div", "tier-rows");
+    for (const k of keys) rows.append(settingRow(k, body));
+
+    // Collapse is height-animated rather than a display swap, so the rows below
+    // it move with the section instead of teleporting.
+    h.addEventListener("click", () => {
+      const open = h.getAttribute("aria-expanded") === "true";
+      h.setAttribute("aria-expanded", String(!open));
+      wrap.classList.toggle("collapsed", open);
+    });
+
+    // The collapse animates `grid-template-rows: 1fr -> 0fr`, which needs a real
+    // element child to collapse against — so the body is wrapped, not folded in
+    // place. `height: auto` cannot be transitioned; this can.
+    const inner = el("div", "tier-body-inner");
+    inner.append(el("div", "tier-desc", TIER_DESC[tier] || ""), rows);
+    const bodyWrap = el("div", "tier-body");
+    bodyWrap.append(inner);
+
+    wrap.append(h, bodyWrap);
+    tiers.push({ tier, wrap, rows, count, total: keys.length });
     out.append(wrap);
   }
 
@@ -534,6 +728,9 @@ function morphLadder(oldCard, newCard) {
 function settingRow(k, panelBody) {
   const row = el("div", "setting" + (k.is_shadowed ? " shadowed" : ""));
   row.dataset.key = k.key;
+  // Read by the toolbar's "changed only" filter. It is on the row rather than
+  // recomputed from the control, because the control's shape differs per kind.
+  row.dataset.overridden = k.is_overridden ? "1" : "0";
 
   const left = el("div");
   const name = el("div", "setting-name");
@@ -1359,10 +1556,32 @@ async function renderMaintenance(body) {
     left.append(el("div", "setting-desc", a.label));
     left.append(el("div", "action-cmd", a.command));
     if (a.network) left.append(el("div", "note", "Reaches the network and replaces the installed package."));
+
+    // `upgrade` is the one action whose whole point is a comparison, so it says
+    // what it would actually do BEFORE you preview it — and offers to check
+    // again, because "up to date" is only as old as the last check.
+    if (a.id === "upgrade") {
+      const status = el("div", "action-status");
+      status.append(el("span", "note", "checking for a newer release…"));
+      left.append(status);
+      const paint = (v) => {
+        const s = versionState(v);
+        status.replaceChildren();
+        status.append(chip(s.label, s.kind), el("span", "note", s.note));
+        const again = el("button", "btn btn-ghost btn-sm btn-allow-busy", "Check again");
+        again.type = "button";
+        again.addEventListener("click", () => {
+          status.replaceChildren(el("span", "note", "checking…"));
+          refreshVersion().then(paint).catch(() => status.replaceChildren(el("span", "note", "check failed.")));
+        });
+        status.append(again);
+      };
+      versionInfo().then(paint).catch(() => status.replaceChildren(el("span", "note", "Could not check.")));
+    }
+
     const btn = el("button", "btn btn-sm", "Preview…");
     btn.type = "button";
     btn.addEventListener("click", () => previewAction(a.id, body));
-    left.append();
     row.append(left, btn);
     out.append(row);
   }
@@ -1527,6 +1746,80 @@ async function refreshJob() {
   }
 }
 
+/* =============================================================== shortcuts == */
+
+// Keyboard nav for a panel app that is otherwise all mouse. Deliberately small
+// and unmodified: single keys, and ONLY when you are not typing into something.
+const SHORTCUTS = [
+  ["1 – 9", "Jump to that panel in the rail"],
+  ["/", "Focus the filter box (Settings)"],
+  ["r", "Reload the current panel"],
+  ["t", "Toggle light / dark"],
+  ["?", "This list"],
+  ["Esc", "Close a dialog, or clear the filter"],
+];
+
+// A keystroke must never be stolen from an input, a textarea or a select — that
+// is how a UI eats the "r" in the middle of a path somebody is typing.
+function typingInto(t) {
+  return !!t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable);
+}
+
+function showShortcuts() {
+  const body = el("div", "stack stack-sm");
+  const list = el("dl", "kv");
+  for (const [key, what] of SHORTCUTS) {
+    const dt = el("dt");
+    dt.append(el("kbd", null, key));
+    list.append(dt, el("dd", null, what));
+  }
+  body.append(list);
+  body.append(el("div", "note", "Shortcuts are ignored while you are typing in a field."));
+  modal({ title: "Keyboard shortcuts", body, actions: [{ label: "Close", onClick: (c) => c() }] });
+}
+
+function installShortcuts() {
+  document.addEventListener("keydown", (e) => {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    // A dialog owns the keyboard while it is open; it has its own Esc handler.
+    if (!$("#modal-host").hidden) return;
+    if (typingInto(e.target)) return;
+
+    if (e.key >= "1" && e.key <= "9") {
+      const links = document.querySelectorAll("#nav a");
+      const target = links[Number(e.key) - 1];
+      if (target) {
+        e.preventDefault();
+        location.hash = target.getAttribute("href");
+      }
+      return;
+    }
+    if (e.key === "/") {
+      const f = $("#settings-filter");
+      if (f) {
+        e.preventDefault();
+        f.focus();
+        f.select();
+      }
+      return;
+    }
+    if (e.key === "r") {
+      e.preventDefault();
+      route();
+      return;
+    }
+    if (e.key === "t") {
+      e.preventDefault();
+      $("#theme-toggle").click();
+      return;
+    }
+    if (e.key === "?") {
+      e.preventDefault();
+      showShortcuts();
+    }
+  });
+}
+
 /* ================================================================= startup == */
 
 async function boot() {
@@ -1538,6 +1831,20 @@ async function boot() {
     proj.textContent = meta.fixtures ? "FIXTURE MODE" : meta.project_root || "";
     proj.title = meta.project_root || "";
     $("#rail-version").textContent = (meta.fixtures ? "fixtures · " : "") + "v" + (meta.version || "?");
+
+    // A newer release is worth ONE quiet dot in the rail, on every panel — not a
+    // banner, not a modal. It links to the panel that can actually install it;
+    // it never installs anything itself.
+    versionInfo()
+      .then((v) => {
+        if (!v || !v.update_available) return;
+        const link = el("a", "rail-update", "");
+        link.href = "#/maintenance";
+        link.append(el("span", "dot dot-warn"), document.createTextNode(`v${v.latest} available`));
+        link.title = `You have ${v.version}. Maintenance → upgrade installs ${v.latest}.`;
+        $("#rail-version").after(link);
+      })
+      .catch(() => {});
     if (meta.fixtures) {
       const b = el("div", "banner");
       b.append(el("div", null, "Fixture mode: every number on this page is canned. Nothing real is read, and nothing can be written."));
@@ -1566,6 +1873,10 @@ async function boot() {
     localStorage.setItem("orc-ui-theme", next);
     syncTheme();
   });
+
+  installShortcuts();
+  const help = $("#shortcut-hint");
+  if (help) help.addEventListener("click", showShortcuts);
 
   window.addEventListener("hashchange", route);
   route();
