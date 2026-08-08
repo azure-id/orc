@@ -1610,6 +1610,47 @@ const DIY_META = [
 ];
 const diyMetaFor = (key) => DIY_META.find((m) => m.key === key);
 
+// The compiled flow AS A PIPELINE — one row per stitched block, in the exact
+// order `diyCompile` concatenates them. This is the single source for the UI's
+// flow stepper: the panel draws what this returns and never re-derives the
+// shape from the raw keys, because a second idea of "which phases run, in what
+// order" is drift no contract lint could see. A step is OFF when the key that
+// owns it resolves to the literal "off"; blocks with no key always run.
+// `locked-blocks.md` has no row on purpose — it is standing rules, not a phase.
+const DIY_STEPS = [
+  { block: "header", label: "intake", key: null, note: () => "self-gate" },
+  { block: "trace", label: "trace", key: null, note: () => "always on" },
+  { block: "wiki", label: "wiki", key: "wiki_gate" },
+  { block: "analyze", label: "analyze", key: "analyze" },
+  { block: "planning", label: "plan", key: "planning" },
+  { block: "pattern", label: "pattern", key: "pattern" },
+  { block: "scoring", label: "score", key: "scoring" },
+  { block: "execution", label: "execute", key: null, note: (c) => (c.scoring === "off" ? c.fixed_executor || "(unset)" : "scored") },
+  { block: "review", label: "review", key: "review" },
+  { block: "security", label: "security", key: "security" },
+  { block: "verify", label: "verify", key: "verify" },
+  { block: "testgen", label: "testgen", key: "testgen" },
+  { block: "mock-example", label: "mock", key: "mock_example" },
+  { block: "ship", label: "ship", key: "ship_mode" },
+  { block: "summary", label: "summary", key: "summary" },
+];
+
+function diySteps(cfg) {
+  return DIY_STEPS.map((s) => {
+    const value = s.key ? String(cfg[s.key] === "" ? "" : cfg[s.key]) : "";
+    return {
+      block: s.block,
+      label: s.label,
+      key: s.key,
+      value,
+      // OFF is a first-class state, not an absence: a phase you switched off
+      // still occupies its slot so the pipeline reads the same width either way.
+      on: value !== "off",
+      note: s.note ? s.note(cfg) : value,
+    };
+  });
+}
+
 const DIY_PRESETS = {
   lean: { analyze: "off", review: "blocking-only", verify: "smoke", summary: "short", flow_name: "lean" },
   paranoid: { analyze: "full", security: "always", testgen: "on", verify: "full", flow_name: "paranoid" },
@@ -1955,6 +1996,8 @@ function diyShow(claudeDir) {
       })),
       errors: v.errors,
       warnings: v.warnings,
+      // The compiled pipeline, in stitch order — see DIY_STEPS.
+      steps: cfg ? diySteps(cfg) : [],
       // The tier-CLIPPED table this flow would actually compile — not the
       // canonical ladder. A DIY flow's executors are compile-owned.
       score_table: cfg ? diyScoreTable(cfg) : null,

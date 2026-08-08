@@ -306,7 +306,7 @@ code, kbd, pre, .mono { font-family: var(--mono); font-size: .92em; }
 .stat-label { font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--text-faint); }
 .stat-value { font-size: 26px; font-weight: 600; line-height: 1.2; margin-top: 4px; letter-spacing: -.02em; }
 .stat-value .chip { vertical-align: middle; margin-left: var(--sp-2); }
-.stat-note { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
+.stat-note { font-size: 10px; color: var(--text-dim); margin-top: 2px; }
 .stat-ok   { color: var(--ok); }
 .stat-warn { color: var(--warn); }
 .stat-bad  { color: var(--bad); }
@@ -1078,61 +1078,177 @@ kbd {
 }
 .bar-value { text-align: right; color: var(--text-faint); font-size: 12px; }
 
-/* --- Crosslink ----------------------------------------------------------- */
+/* --- Flow stepper -------------------------------------------------------- */
 
-.graph { display: flex; align-items: center; gap: var(--sp-5); flex-wrap: wrap; }
-.graph-self {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--sp-2);
-  padding: var(--sp-3) var(--sp-4);
-  border: 1px solid var(--accent);
-  background: var(--accent-wash);
-  border-radius: var(--radius);
-  font-family: var(--mono);
-  font-size: 13px;
-  white-space: nowrap;
-}
-.graph-dot {
-  width: 8px; height: 8px; border-radius: 50%;
-  background: var(--accent);
-  /* This repo is the live one — the pulse says "you are here". */
-  animation: pulse-dot 2.4s ease-in-out infinite;
-}
-@keyframes pulse-dot {
-  0%, 100% { box-shadow: 0 0 0 0 var(--accent-wash); }
-  50%      { box-shadow: 0 0 0 6px transparent; }
-}
-
-.graph-ring { display: flex; flex-direction: column; gap: var(--sp-2); flex: 1 1 260px; min-width: 0; }
-.graph-node {
+/* The compiled DIY pipeline, left to right. The sweep runs ONCE per render
+   (open, and again after a compile) — the stagger is per-element via --d, so
+   the rail lights up in order instead of all at once. */
+.stepper { display: flex; align-items: stretch; gap: 0; padding: var(--sp-2) 2px var(--sp-3); min-width: min-content; }
+.step {
   display: flex;
-  align-items: center;
-  gap: var(--sp-3);
+  flex-direction: column;
+  gap: 3px;
+  align-items: flex-start;
   padding: var(--sp-2) var(--sp-3);
+  min-width: 84px;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   background: var(--surface-2);
+  font: inherit;
+  text-align: left;
+  white-space: nowrap;
+  animation: step-lit var(--dur-slow) var(--ease) var(--d, 0ms) both;
   transition: border-color var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease),
               transform var(--dur-fast) var(--ease);
 }
-.graph-node:hover { border-color: var(--accent-dim); background: var(--surface-3); transform: translateX(3px); }
-.graph-arrow { font-family: var(--mono); color: var(--text-faint); letter-spacing: -1px; }
-/* Direction is carried by COLOUR as well as the glyph — an arrow alone is easy
-   to read the wrong way round at a glance. */
-.graph-consume .graph-arrow { color: var(--accent); }
-.graph-provide .graph-arrow { color: var(--ok); }
-.graph-none .graph-arrow { color: var(--warn); }
-.graph-label { display: flex; flex-direction: column; min-width: 0; flex: 1; }
-.graph-name { font-family: var(--mono); font-size: 13px; overflow: hidden; text-overflow: ellipsis; }
-.graph-via { font-size: 11px; color: var(--text-faint); }
+button.step { cursor: pointer; }
+button.step:hover { border-color: var(--accent-dim); background: var(--surface-3); transform: translateY(-2px); }
+button.step:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.step-name { font-family: var(--mono); font-size: 13px; color: var(--text); }
+.step-note { font-size: 11px; color: var(--text-faint); max-width: 132px; overflow: hidden; text-overflow: ellipsis; }
 
-/* A repo that was just linked draws itself in once. */
-.graph-new { animation: graph-in var(--dur-slow) var(--ease); }
-@keyframes graph-in {
-  from { opacity: 0; transform: translateX(-18px) scale(.96); border-color: var(--accent); }
-  to   { opacity: 1; transform: none; }
+/* An OFF phase keeps its slot and turns RED. It is not a dimmed absence — it is
+   a phase this flow deliberately does not run, and that is worth seeing. */
+.step-off { border-color: var(--bad); background: var(--bad-wash); animation-name: step-lit-off; }
+.step-off .step-name { color: var(--bad); text-decoration: line-through; text-decoration-color: rgba(240, 83, 63, .55); }
+.step-off .step-note { color: var(--bad); }
+button.step-off:hover { border-color: var(--bad); background: rgba(240, 83, 63, .2); }
+
+@keyframes step-lit {
+  0%   { opacity: 0; transform: translateX(-10px); border-color: var(--line); }
+  35%  { opacity: 1; transform: none; border-color: var(--accent); background: var(--accent-wash); }
+  100% { opacity: 1; transform: none; border-color: var(--line); background: var(--surface-2); }
 }
+@keyframes step-lit-off {
+  0%   { opacity: 0; transform: translateX(-10px); }
+  35%  { opacity: 1; transform: none; box-shadow: 0 0 0 3px var(--bad-wash); }
+  100% { opacity: 1; transform: none; box-shadow: none; }
+}
+
+/* The connector. The base hairline is always there; the accent segment travels
+   across it once, left to right, then fades — that IS the "in this order". */
+.step-link { position: relative; align-self: center; width: 22px; height: 2px; background: var(--line); flex: none; }
+.step-flow {
+  position: absolute;
+  inset: 0;
+  background: var(--accent);
+  transform-origin: left center;
+  transform: scaleX(0);
+  animation: step-flow var(--dur-slow) var(--ease) var(--d, 0ms) both;
+}
+@keyframes step-flow {
+  0%   { transform: scaleX(0); opacity: 1; }
+  55%  { transform: scaleX(1); opacity: 1; }
+  100% { transform: scaleX(1); opacity: 0; }
+}
+
+/* --- Crosslink ----------------------------------------------------------- */
+
+/* Nothing is linked yet, so the Design tab has nothing to draw. The pulse points
+   at the tab that can fix that; it is dropped the moment a link exists. */
+.tabs button.tab-spot { color: var(--accent); animation: tab-spot 2s ease-in-out infinite; }
+@keyframes tab-spot {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: .5; }
+}
+
+/* THE VAULT GRAPH. Absolutely-positioned repo boxes over a stretched SVG edge
+   layer — both use the same normalised coordinates, so they line up at any
+   width without measuring anything. */
+/* Width and height are set inline by vaultCard — the canvas is sized to the
+   ring it has to hold, so it is never the thing that decides the spacing.
+   `margin: 0 auto` centres it when the panel is wider than the graph; when the
+   panel is NARROWER, the `.scroll-x` wrapper scrolls rather than compressing
+   the ring back into a collision. */
+.vault {
+  position: relative;
+  margin: 0 auto;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  background: radial-gradient(circle at 50% 50%, var(--surface-2) 0%, var(--surface) 62%);
+}
+.vault-edges { position: absolute; inset: 0; width: 100%; height: 100%; }
+.vault-line {
+  stroke: var(--line);
+  stroke-width: 1.5;
+  /* pathLength="1" — the draw-in is written in fractions, not pixels. */
+  stroke-dasharray: 1;
+  animation: edge-draw var(--dur-slow) var(--ease) var(--d, 0ms) both;
+}
+/* A short dash running from → to. The direction of travel IS the direction of
+   the dependency, which is the whole point of a crosslink edge. */
+.vault-pulse {
+  stroke: var(--accent);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-dasharray: .07 .93;
+  opacity: .85;
+  animation: edge-pulse 2.8s linear var(--d, 0ms) infinite;
+}
+@keyframes edge-draw {
+  from { stroke-dashoffset: 1; opacity: 0; }
+  to   { stroke-dashoffset: 0; opacity: 1; }
+}
+@keyframes edge-pulse {
+  from { stroke-dashoffset: 1; }
+  to   { stroke-dashoffset: 0; }
+}
+.vault-via { fill: var(--text-faint); font-family: var(--mono); font-size: 11px; }
+
+/* Hover a repo: its edges brighten, every other edge steps back. */
+.vault-edge { transition: opacity var(--dur) var(--ease); }
+.vault-edge.edge-dim { opacity: .22; }
+.vault-edge.edge-hi .vault-line { stroke: var(--accent-dim); }
+.vault-edge.edge-hi .vault-pulse { stroke-width: 3.5; opacity: 1; }
+
+/* THE BOX SIZE IS FIXED, AND THAT IS LOAD-BEARING. These two numbers are the
+   VAULT.W / VAULT.H the ring radii are solved from in app.js — change one and
+   you must change the other, or the arithmetic that guarantees no two repos
+   overlap is being done against the wrong box. A box that grew to fit its
+   longest repo name could not be spaced by arithmetic at all, only measured;
+   long names ellipsis instead. */
+.vault-node {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  box-sizing: border-box;
+  width: 156px;
+  height: 78px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 2px;
+  padding: var(--sp-2) var(--sp-3);
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  font: inherit;
+  text-align: left;
+  animation: vault-in var(--dur-slow) var(--ease) var(--d, 0ms) both;
+  transition: border-color var(--dur-fast) var(--ease), box-shadow var(--dur-fast) var(--ease);
+}
+button.vault-node { cursor: pointer; }
+/* A hovered repo lifts above its neighbours' shadows, never under them. */
+.vault-node:hover, .vault-node.vault-hi { border-color: var(--accent); z-index: 3; }
+button.vault-node:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; z-index: 3; }
+.vault-name,
+.vault-sub { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vault-name { font-family: var(--mono); font-size: 13px; color: var(--text); }
+.vault-sub { font-size: 11px; color: var(--text-faint); }
+/* The state chip must not push the box taller than the geometry assumes. */
+.vault-node .chip { flex: none; margin-top: 2px; max-width: 100%; }
+/* This repo is the hub — it is the one node that is not a link. */
+.vault-hub { border-color: var(--accent); background: var(--accent-wash); z-index: 2; }
+.vault-consume { border-left: 3px solid var(--accent); }
+.vault-provide { border-left: 3px solid var(--ok); }
+.vault-none { border-left: 3px solid var(--warn); }
+@keyframes vault-in {
+  from { opacity: 0; transform: translate(-50%, -50%) scale(.88); }
+  to   { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+
 /* Hovering a graph node lights its detail row, so the picture and the list are
    visibly the same set of things. */
 .linked-hi { border-color: var(--accent) !important; background: var(--surface-2); }
@@ -1480,5 +1596,9 @@ kbd {
   /* Reduced motion means no movement, not fast movement — the hover and press
      nudges are removed outright rather than sped up. */
   .nav a:hover, .btn:active:not(:disabled), .action:hover,
-  .todo:hover, .stat-link:hover, .graph-node:hover { transform: none !important; }
+  .todo:hover, .stat-link:hover, button.step:hover { transform: none !important; }
+  /* The vault pulse is the one INFINITE animation on the page. Capping it to a
+     single 1ms run would still leave a dash frozen mid-edge, so it is removed
+     outright and the edge reads as a plain line. */
+  .vault-pulse { display: none; }
 }

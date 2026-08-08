@@ -350,14 +350,43 @@ const diy = {
   paths: { config: PROJECT + "/.claude/orc-diy.config.yaml", compiled: PROJECT + "/.claude/orc/diy/FLOW-COMPILED.md", lock: PROJECT + "/.claude/orc/diy/flow.lock.json" },
   keys: [
     { key: "flow_name", value: "lean", default: "custom", is_set: true, desc: "Name shown in the compiled flow." },
+    { key: "wiki_gate", value: "notice", default: "notice", is_set: false, desc: "Wiki freshness at preflight." },
     { key: "analyze", value: "off", default: "full", is_set: true, desc: "Analyst phase." },
+    { key: "planning", value: "own-planner", default: "auto", is_set: true, desc: "Planning route." },
+    { key: "pattern", value: "ask", default: "ask", is_set: false, desc: "Code-pattern gate on a cache miss." },
+    { key: "scoring", value: "on", default: "on", is_set: false, desc: "Rubric scoring." },
     { key: "review", value: "blocking-only", default: "full", is_set: true, desc: "Review phase depth." },
+    { key: "security", value: "off", default: "off", is_set: false, desc: "Security pass." },
     { key: "verify", value: "smoke", default: "full", is_set: true, desc: "Verification depth." },
+    { key: "testgen", value: "off", default: "off", is_set: false, desc: "Test-authoring phase." },
+    { key: "mock_example", value: "ask", default: "ask", is_set: false, desc: "Post-verify mocked example." },
+    { key: "ship_mode", value: "ask", default: "ask", is_set: false, desc: "Terminal ship behavior." },
+    { key: "summary", value: "off", default: "full", is_set: true, desc: "Summary depth." },
     { key: "tdd", value: "on", default: "on", is_set: false, desc: "TDD gate." },
     { key: "session_tier", value: "opus-4-8-high", default: "opus-4-8-high", is_set: false, desc: "Declared main-session tier." },
   ],
   errors: [],
   warnings: ["tdd is on but verify is smoke — the red proof gates less than it could"],
+  // The stepper's data. A lean flow is the useful fixture here precisely
+  // because it is half switched off — you cannot design the red OFF state
+  // against a pipeline where every phase is on.
+  steps: [
+    { block: "header", label: "intake", key: null, value: "", on: true, note: "self-gate" },
+    { block: "trace", label: "trace", key: null, value: "", on: true, note: "always on" },
+    { block: "wiki", label: "wiki", key: "wiki_gate", value: "notice", on: true, note: "notice" },
+    { block: "analyze", label: "analyze", key: "analyze", value: "off", on: false, note: "off" },
+    { block: "planning", label: "plan", key: "planning", value: "own-planner", on: true, note: "own-planner" },
+    { block: "pattern", label: "pattern", key: "pattern", value: "ask", on: true, note: "ask" },
+    { block: "scoring", label: "score", key: "scoring", value: "on", on: true, note: "on" },
+    { block: "execution", label: "execute", key: null, value: "", on: true, note: "scored" },
+    { block: "review", label: "review", key: "review", value: "blocking-only", on: true, note: "blocking-only" },
+    { block: "security", label: "security", key: "security", value: "off", on: false, note: "off" },
+    { block: "verify", label: "verify", key: "verify", value: "smoke", on: true, note: "smoke" },
+    { block: "testgen", label: "testgen", key: "testgen", value: "off", on: false, note: "off" },
+    { block: "mock-example", label: "mock", key: "mock_example", value: "ask", on: true, note: "ask" },
+    { block: "ship", label: "ship", key: "ship_mode", value: "ask", on: true, note: "ask" },
+    { block: "summary", label: "summary", key: "summary", value: "off", on: false, note: "off" },
+  ],
   score_table: "| Score | Executor agent |\n|-------|----------------|\n| [0,30) | orc-executor-haiku-4-5 |\n| [90,100] | orc-executor-opus-4-8-high |",
 };
 

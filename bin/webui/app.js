@@ -1949,13 +1949,17 @@ async function renderFlow(body) {
   out.append(gate);
 
   if (d.configured) {
+    out.append(stepperCard(d));
+
     for (const e of d.errors || []) out.append(bannerLine(e, true));
     for (const w of d.warnings || []) out.append(bannerLine(w, false));
 
     const keys = card(t("flow.keys"));
+    keys.id = "flow-keys";
     keys.append(el("div", "note", t("flow.keysNote")));
     for (const k of d.keys) {
       const row = el("div", "setting");
+      row.dataset.key = k.key; // the stepper jumps here when you click a phase
       const left = el("div");
       const name = el("div", "setting-name");
       name.append(document.createTextNode(k.key));
@@ -2002,6 +2006,62 @@ function bannerLine(text, bad) {
   return b;
 }
 
+// THE FLOW STEPPER (v0.43.7). A compiled DIY flow is a pipeline, and a column
+// of key/value rows is the one shape that never shows you a pipeline. Every
+// step here comes from `orc diy show --json`'s `steps[]`, which the CLI derives
+// from the SAME array `orc diy compile` stitches with — the panel draws the
+// order, it never decides it.
+//
+// A phase you switched OFF keeps its slot and turns RED. Removing it would make
+// "I turned review off" and "this flow has no review phase" look identical, and
+// it would make the rail change width every time you flip a key.
+//
+// The sweep runs ONCE — on open and again after a successful compile. It reads
+// as "this is the order things happen in"; a loop would just be motion above a
+// form you are trying to edit.
+function stepperCard(d) {
+  const on = d.steps.filter((s) => s.on).length;
+  const c = card(t("flow.pipeline"), chip(t("flow.pipelinePhases", { on, total: d.steps.length }), "info"));
+  c.append(el("div", "note", t("flow.pipelineNote")));
+
+  const scroll = el("div", "scroll-x");
+  const rail = el("div", "stepper");
+  d.steps.forEach((s, i) => {
+    if (i) {
+      const link = el("div", "step-link");
+      link.append(el("span", "step-flow"));
+      link.style.setProperty("--d", i * 90 + "ms");
+      rail.append(link);
+    }
+    // A step is a button only when there is a key to jump to; a keyless phase
+    // (intake, trace, execute) has nothing to edit, so it is not offered as one.
+    const step = el(s.key ? "button" : "div", "step" + (s.on ? "" : " step-off"));
+    if (s.key) {
+      step.type = "button";
+      step.title = t("flow.stepJump", { key: s.key });
+      step.addEventListener("click", () => jumpToKey(s.key));
+    }
+    step.style.setProperty("--d", i * 90 + "ms");
+    // label / value / key come from the CLI — never translated.
+    step.append(el("span", "step-name", s.label));
+    step.append(el("span", "step-note", s.on ? s.note || "on" : "off"));
+    rail.append(step);
+  });
+  scroll.append(rail);
+  c.append(scroll);
+  return c;
+}
+
+function jumpToKey(key) {
+  const row = document.querySelector('#flow-keys .setting[data-key="' + key + '"]');
+  if (!row) return;
+  row.scrollIntoView({ behavior: "smooth", block: "center" });
+  row.classList.remove("linked-hi");
+  void row.offsetWidth; // restart the highlight when the same step is clicked twice
+  row.classList.add("linked-hi");
+  setTimeout(() => row.classList.remove("linked-hi"), 1600);
+}
+
 /* =============================================================== CROSSLINK == */
 
 PANELS.crosslink = function (host) {
@@ -2011,23 +2071,71 @@ PANELS.crosslink = function (host) {
   renderCrosslink(body);
 };
 
+// TWO TABS (v0.43.7): DESIGN is the picture of the boundary, SETTINGS is every
+// control. They were one scrolling column, which made the diagram something you
+// scrolled past on the way to the add form rather than the thing you came for.
+//
+// With nothing linked yet there is no picture to draw, so Settings opens
+// selected and its tab is spotlighted — Design stays reachable and says, in the
+// empty state, exactly which tab makes it appear.
 async function renderCrosslink(body) {
   body.replaceChildren(skeleton(5));
   const d = (await read("/api/crosslink")).data;
+  const live = d.configured && d.nodes.length > 0;
+
+  const tabs = el("div", "tabs");
+  // `stack` as well as `tab-pane`: the Settings tab holds several cards, and
+  // the container is what spaces panel blocks — see `.stack` in app.css.
+  const pane = el("div", "tab-pane stack");
+  const views = {
+    design: () => designView(d, live, () => select("settings")),
+    settings: () => settingsView(d, body),
+  };
+  const select = async (which) => {
+    for (const b of tabs.children) b.setAttribute("aria-selected", String(b.dataset.tab === which));
+    pane.replaceChildren(skeleton(3));
+    const built = await views[which]();
+    pane.replaceChildren(built);
+  };
+  // Keys are written out in full, never assembled from the tab id — a key built
+  // from a fragment is invisible to every check that looks for one.
+  for (const [which, label] of [["design", t("crosslink.tab.design")], ["settings", t("crosslink.tab.settings")]]) {
+    const b = el("button", null, label);
+    b.type = "button";
+    b.dataset.tab = which;
+    // The spotlight is the answer to "there is nothing here" — it points at the
+    // one tab that can change that, and it is dropped the moment a link exists.
+    if (!live && which === "settings") b.classList.add("tab-spot");
+    b.addEventListener("click", () => select(which));
+    tabs.append(b);
+  }
+  body.replaceChildren(tabs, pane);
+  select(live ? "design" : "settings");
+}
+
+function designView(d, live, gotoSettings) {
+  const out = frag();
+  if (!live) {
+    const e = empty(t("crosslink.design.empty"), t("crosslink.design.emptyHint"));
+    const go = el("button", "btn btn-sm btn-primary", t("crosslink.design.emptyCta"));
+    go.type = "button";
+    go.addEventListener("click", gotoSettings);
+    e.append(go);
+    out.append(e);
+    return out;
+  }
+  out.append(vaultCard(d));
+  return out;
+}
+
+async function settingsView(d, body) {
   const out = frag();
 
   if (!d.configured) {
-    const e = empty(t("crosslink.empty"), t("crosslink.emptyHint"));
-    out.append(e);
+    out.append(empty(t("crosslink.empty"), t("crosslink.emptyHint")));
     out.append(await addLinkCard(d, body));
-    body.replaceChildren(out);
-    return;
+    return out;
   }
-
-  // The graph as a picture, not a list of rows. Direction is the whole point of
-  // a crosslink edge — which repo consumes which — and an arrow says that
-  // faster than the words "we call them" repeated down a column.
-  out.append(graphCard(d));
 
   const head2 = card(t("crosslink.graph"));
   head2.append(
@@ -2085,38 +2193,152 @@ async function renderCrosslink(body) {
     out.append(lc);
   }
 
-  body.replaceChildren(out);
+  return out;
 }
 
-// A radial graph: self in the middle, every linked repo around it, each edge
-// drawn in the direction it actually points. Nothing here is a control — it is
-// a diagram, and it is the fastest answer to "which way does this one go".
-function graphCard(d) {
+/* ------------------------------------------------------- the vault graph -- */
+
+// THE DESIGN TAB (v0.43.7). Self in the middle, every linked repo on a ring
+// around it, one line per edge drawn in the direction it actually points, and a
+// pulse travelling that line so "which way does this one go" is answered by
+// motion instead of by reading an arrow glyph.
+//
+// The layout is COMPUTED, not simulated: peer i sits at a fixed angle for a
+// given node count, so the same config draws the same picture every time you
+// open the tab. A physics sim would be prettier to poke and useless to compare.
+//
+// THE LAYOUT IS SOLVED IN PIXELS FROM THE REAL BOX SIZE, and that is the whole
+// fix in v0.43.7's first patch. Placing fixed-pixel boxes on a ring whose radius
+// was a FRACTION of the container ("0.34 of the height") is a guess: nothing in
+// it knows how wide a repo box is, so at three peers the boxes overlapped and
+// the picture was unreadable. Repo boxes are a fixed size now and the radii are
+// derived from that size, so separation is a property of the layout rather than
+// a value that happened to look right in one screenshot. See ringRadii().
+//
+// Edges carry pathLength="1", so the draw-in and the travelling pulse are
+// written as fractions of the line and never need its length measured.
+
+// Fixed box metrics. Fixed is what makes the geometry solvable — a box that
+// sizes to its longest repo name cannot be spaced by arithmetic, only measured
+// and re-measured. Long names ellipsis instead.
+const VAULT = { W: 156, H: 78, GAP: 20, PAD: 24 };
+
+// The smallest ellipse on which no two boxes — and no box and the hub — can
+// overlap.
+//
+// Two axis-aligned boxes miss each other when |dx| >= W+GAP OR |dy| >= H+GAP.
+// For neighbours Δ apart on the ring with midangle m:
+//     dx = rx·2sin(Δ/2)·|sin m|      dy = ry·2sin(Δ/2)·|cos m|
+// One of |sin m|, |cos m| is always at least 1/√2, so scaling both radii by √2
+// makes whichever term is doing the work clear its threshold on its own. The
+// same √2 as a FLOOR handles the hub, which sits at the centre and is a box too.
+// Wider angular gaps only push boxes further apart, so neighbours are the worst
+// case and checking them is enough.
+function ringRadii(n) {
+  const needX = Math.SQRT2 * (VAULT.W + VAULT.GAP);
+  const needY = Math.SQRT2 * (VAULT.H + VAULT.GAP);
+  // n === 1 has no neighbour pair — and sin(π/1) is 0, so the general form
+  // divides by zero. One peer only ever has to clear the hub.
+  const sep = n > 1 ? 2 * Math.sin(Math.PI / n) : Infinity;
+  return { rx: Math.max(needX, needX / sep), ry: Math.max(needY, needY / sep) };
+}
+
+function vaultCard(d) {
   const summary = t(d.nodes.length === 1 && d.links.length === 1 ? "crosslink.repos" : "crosslink.reposPlural", {
     repos: d.nodes.length,
     edges: d.links.length,
   });
-  const c = card(t("crosslink.topology"), chip(summary, "info"));
-  const wrap = el("div", "graph");
+  const c = card(t("crosslink.design.title"), chip(summary, "info"));
+  c.append(el("div", "note", t("crosslink.design.note")));
 
-  const self = el("div", "graph-self");
-  self.append(el("span", "graph-dot"), el("span", null, d.self));
-  self.title = "This repo";
-  wrap.append(self);
+  const n = d.nodes.length;
+  const { rx, ry } = ringRadii(n);
+  // Lay out around an origin first, then size the canvas to what was actually
+  // placed. Deriving it from the radii instead would pad for a full ellipse even
+  // when the ring only uses part of one — a single peer would sit in a box wide
+  // enough for six. The ring opens at -90°, so peer 0 is directly above.
+  const at = [[0, 0]]; // the hub
+  for (let i = 0; i < n; i++) {
+    const a = -Math.PI / 2 + (i * 2 * Math.PI) / n;
+    at.push([rx * Math.cos(a), ry * Math.sin(a)]);
+  }
+  const half = [VAULT.W / 2, VAULT.H / 2];
+  const bound = (axis) => {
+    const lo = Math.min(...at.map((p) => p[axis] - half[axis]));
+    const hi = Math.max(...at.map((p) => p[axis] + half[axis]));
+    return [lo, hi - lo];
+  };
+  const [minX, spanX] = bound(0);
+  const [minY, spanY] = bound(1);
+  const boxW = Math.round(spanX + 2 * VAULT.PAD);
+  const boxH = Math.round(spanY + 2 * VAULT.PAD);
+  // Origin-relative → canvas pixels.
+  const put = (p) => [p[0] - minX + VAULT.PAD, p[1] - minY + VAULT.PAD];
 
-  const ring = el("div", "graph-ring");
-  for (const n of d.nodes) {
-    const node = el("div", "graph-node graph-" + (n.direction || "none"));
-    node.dataset.name = n.name;
+  // Positions are pixel centres. `self` and the repo's real name both map to the
+  // hub because a link may name this repo either way.
+  const hub = put(at[0]);
+  const pos = { [d.self]: hub, self: hub };
+  d.nodes.forEach((node, i) => {
+    pos[node.name] = put(at[i + 1]);
+  });
 
-    // The arrow IS the information: ▶ we consume them, ◀ they consume us.
-    const arrow = el("span", "graph-arrow", n.direction === "consume" ? "──▶" : n.direction === "provide" ? "◀──" : "───");
-    const via = (d.links.find((l) => l.from === n.name || l.to === n.name) || {}).via;
-    const label = el("div", "graph-label");
-    label.append(el("span", "graph-name", n.name));
-    if (via) label.append(el("span", "graph-via", via));
+  // A ring big enough not to collide can be wider than the panel. That is a
+  // scroll, not a reason to squeeze the boxes back together.
+  const scroll = el("div", "scroll-x");
+  const wrap = el("div", "vault");
+  wrap.style.width = boxW + "px";
+  wrap.style.height = boxH + "px";
 
-    const pv = n.provider || {};
+  const svg = svgEl("svg", { class: "vault-edges", viewBox: `0 0 ${boxW} ${boxH}` });
+  d.links.forEach((l, i) => {
+    // `from`/`to` may name this repo either as the literal "self" or by its
+    // real name — the config accepts both, so the position map holds both.
+    const a = pos[l.from];
+    const b = pos[l.to];
+    if (!a || !b) return; // an edge naming a repo that is not in the graph
+    const g = svgEl("g", { class: "vault-edge", "data-a": l.from, "data-b": l.to });
+    g.style.setProperty("--d", i * 140 + "ms");
+    // The canvas is a known pixel size, so the viewBox is 1:1 with it and the
+    // endpoints go straight in — no measuring pass, and no stretched viewBox
+    // squashing the labels and strokes.
+    const ends = { x1: a[0].toFixed(1), y1: a[1].toFixed(1), x2: b[0].toFixed(1), y2: b[1].toFixed(1), pathLength: "1" };
+    g.append(svgEl("line", { ...ends, class: "vault-line" }));
+    // The pulse runs from → to, which IS the direction of the dependency.
+    g.append(svgEl("line", { ...ends, class: "vault-pulse" }));
+    if (l.via) {
+      // Nudged off the line so the label sits beside it, not on top of it.
+      const label = svgEl("text", {
+        class: "vault-via",
+        x: ((a[0] + b[0]) / 2).toFixed(1),
+        y: ((a[1] + b[1]) / 2 - 8).toFixed(1),
+        "text-anchor": "middle",
+      });
+      label.textContent = l.via;
+      g.append(label);
+    }
+    svg.append(g);
+  });
+  wrap.append(svg);
+
+  const place = (node, p, i) => {
+    node.style.left = p[0].toFixed(1) + "px";
+    node.style.top = p[1].toFixed(1) + "px";
+    node.style.setProperty("--d", i * 90 + "ms");
+    wrap.append(node);
+  };
+
+  const self = el("div", "vault-node vault-hub");
+  self.append(el("span", "vault-name", d.self), el("span", "vault-sub", t("crosslink.design.thisRepo")));
+  place(self, pos[d.self], 0);
+
+  d.nodes.forEach((node, i) => {
+    const box = el("button", "vault-node vault-" + (node.direction || "none"));
+    box.type = "button";
+    box.dataset.name = node.name;
+    box.append(el("span", "vault-name", node.name));
+    box.append(el("span", "vault-sub", node.repo_path));
+    const pv = node.provider || {};
     // The chip carries the CLI's own state word, so the picture and `orc
     // crosslink list` always say the same thing.
     const state =
@@ -2124,26 +2346,50 @@ function graphCard(d) {
       pv.state === "no-wiki" ? ["no wiki", "warn"] :
       pv.state === "unregistered" ? ["unregistered", "warn"] :
       pv.state === "corrupt" ? ["corrupt", "bad"] :
-      n.direction === "provide" ? ["inbound", ""] :
+      node.direction === "provide" ? ["inbound", ""] :
       [pv.tier || "linked", pv.tier === "FRESH" ? "ok" : pv.tier === "AGING" ? "warn" : "bad"];
+    box.append(chip(state[0], state[1]));
+    box.title = `${node.name} — ${node.repo_path}`;
 
-    node.append(arrow, label, chip(state[0], state[1]));
-    node.title = `${n.name} — ${n.repo_path}`;
-    // Hovering a node lights its row below, so the picture and the detail list
-    // are obviously the same set of things.
-    node.addEventListener("mouseenter", () => {
-      const row = document.querySelector('.action[data-node="' + n.name + '"]');
-      if (row) row.classList.add("linked-hi");
+    // Hovering a repo lights the edges it is an end of, so a busy ring can still
+    // be read one repo at a time.
+    const hi = (onOff) => {
+      box.classList.toggle("vault-hi", onOff);
+      for (const g of svg.querySelectorAll(".vault-edge")) {
+        if (g.dataset.a === node.name || g.dataset.b === node.name) g.classList.toggle("edge-hi", onOff);
+        else g.classList.toggle("edge-dim", onOff);
+      }
+    };
+    box.addEventListener("mouseenter", () => hi(true));
+    box.addEventListener("mouseleave", () => hi(false));
+    box.addEventListener("focus", () => hi(true));
+    box.addEventListener("blur", () => hi(false));
+    // Clicking a repo is a question about that repo — the answer (its state, its
+    // kinds, the Remove button) lives on the Settings tab, so go there.
+    box.addEventListener("click", () => {
+      const tab = document.querySelector('.tabs button[data-tab="settings"]');
+      if (!tab) return;
+      tab.click();
+      setTimeout(() => {
+        const row = document.querySelector('.action[data-node="' + node.name + '"]');
+        if (!row) return;
+        row.scrollIntoView({ behavior: "smooth", block: "center" });
+        row.classList.add("linked-hi");
+        setTimeout(() => row.classList.remove("linked-hi"), 1600);
+      }, 120);
     });
-    node.addEventListener("mouseleave", () => {
-      for (const r of document.querySelectorAll(".linked-hi")) r.classList.remove("linked-hi");
-    });
-    ring.append(node);
-  }
-  wrap.append(ring);
-  c.append(wrap);
-  if (!d.nodes.length) c.append(el("div", "note", t("crosslink.graphEmpty")));
+    place(box, pos[node.name], i + 1);
+  });
+
+  scroll.append(wrap);
+  c.append(scroll);
   return c;
+}
+
+function svgEl(tag, attrs) {
+  const node = document.createElementNS("http://www.w3.org/2000/svg", tag);
+  for (const [k, v] of Object.entries(attrs || {})) node.setAttribute(k, v);
+  return node;
 }
 
 // The add form. It mirrors the interactive CLI prompt field for field, and it

@@ -670,6 +670,132 @@ test("crosslink: the UI writes only by shelling the CLI's own add", () => {
   }
 });
 
+// v0.43.7 — the Flow stepper draws the pipeline, and it must draw the REAL one.
+//
+// The whole value of the picture is that it agrees with what compiles. The
+// panel is only allowed to render `steps[]`; the moment it starts deciding the
+// order (or which phases are on) from the raw keys, there are two ideas of the
+// pipeline and no lint that can see the difference.
+test("flow stepper: the panel renders the CLI's steps[], it never derives them", () => {
+  const js = fs.readFileSync(path.join(REPO, "bin", "webui", "app.js"), "utf8");
+  const i = js.indexOf("function stepperCard");
+  assert.ok(i > 0, "the stepper must exist");
+  const fn = js.slice(i, js.indexOf("function jumpToKey"));
+
+  assert.match(fn, /d\.steps\.forEach/, "it must iterate the CLI's steps[]");
+  // A hardcoded phase list in the panel IS the drift this design forbids.
+  for (const phase of ["analyze", "planning", "scoring", "testgen", "mock-example"]) {
+    assert.ok(!fn.includes(`"${phase}"`), `the panel must not name the phase "${phase}" itself`);
+  }
+  // OFF is a state of a step that is still drawn, never a filter.
+  assert.ok(!/steps\.filter\([^)]*\.on\)\s*\.forEach/.test(fn), "an off phase must keep its slot, not be filtered out");
+  assert.match(fn, /step-off/, "off phases must be marked so the stylesheet can red them");
+
+  const css = fs.readFileSync(path.join(REPO, "bin", "webui", "app.css"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+  assert.match(css, /\.step-off\s*\{[^}]*border-color:\s*var\(--bad\)/, "an off phase is drawn RED, not merely dimmed");
+  assert.match(css, /\.step-link/, "the connectors carry the left-to-right sweep");
+  // One-shot, not ambient: the rail sits above a form you are trying to edit.
+  const sweep = css.slice(css.indexOf(".step-flow"), css.indexOf(".step-flow") + 400);
+  assert.ok(!/infinite/.test(sweep), "the stepper sweep must run once per render, never loop");
+});
+
+// v0.43.7 — the Crosslink Design tab.
+//
+// The picture must stay comparable between openings (a computed layout, not a
+// physics sim) and must never become a second opinion about peer state: the
+// chips repeat the CLI's own words.
+test("crosslink design: a computed layout, and the CLI's own state words", () => {
+  const js = fs.readFileSync(path.join(REPO, "bin", "webui", "app.js"), "utf8");
+  const i = js.indexOf("function vaultCard");
+  assert.ok(i > 0, "the vault graph must exist");
+  const fn = js.slice(i, js.indexOf("function svgEl"));
+
+  assert.match(fn, /Math\.cos|Math\.sin/, "peers sit at computed angles");
+  // A sim would place the same config differently on every open.
+  for (const sim of ["requestAnimationFrame(function tick", "velocity", "repulsion"]) {
+    assert.ok(!fn.includes(sim), `the layout must be computed, not simulated (${sim})`);
+  }
+  // Both spellings of "this repo" must resolve, or an edge silently vanishes.
+  assert.match(fn, /pos = \{ \[d\.self\]: hub, self: hub \}/, "links name self as either the literal 'self' or the repo name");
+  assert.match(fn, /if \(!a \|\| !b\) return/, "an edge naming an unknown repo is skipped, never drawn to nowhere");
+  assert.ok(!/preserveAspectRatio/.test(fn), "stretching a viewBox squashes every label and stroke with it");
+  for (const word of ["missing", "no wiki", "unregistered", "corrupt"]) {
+    assert.ok(fn.includes(`"${word}"`), `the chip must repeat the CLI's own state word: ${word}`);
+  }
+
+  // Two tabs, and the empty Design tab must point at the one that fills it.
+  const panel = js.slice(js.indexOf("async function renderCrosslink"), js.indexOf("function designView"));
+  assert.match(panel, /crosslink\.tab\.design/, "a Design tab");
+  assert.match(panel, /crosslink\.tab\.settings/, "a Settings tab");
+  assert.match(panel, /tab-spot/, "with nothing linked, the tab that can fix that is spotlighted");
+  assert.match(panel, /select\(live \? "design" : "settings"\)/, "nothing to draw → Settings opens selected");
+  // The Settings tab holds several cards; the container owns the gap.
+  assert.match(panel, /el\("div", "tab-pane stack"\)/, "the pane must space the blocks it holds");
+
+  const css = fs.readFileSync(path.join(REPO, "bin", "webui", "app.css"), "utf8");
+  const rm = css.slice(css.indexOf("@media (prefers-reduced-motion"));
+  assert.match(rm, /\.vault-pulse\s*\{\s*display:\s*none/, "the one infinite animation must be removed, not merely capped");
+});
+
+// v0.43.7 — repo boxes overlapped, and the reason is worth pinning: the ring
+// radius was a FRACTION of the container ("0.34 of the height") while the boxes
+// were fixed pixels, so nothing in the layout knew how big a box was. Three
+// peers were enough to pile them on top of each other.
+//
+// The radii are solved from the box size now, so "no two repos overlap" is a
+// property that can be CHECKED rather than eyeballed — which is what this does,
+// by running the shipped ringRadii() over every node count that fits on screen.
+test("crosslink design: no two repo boxes can overlap, at any node count", () => {
+  const js = fs.readFileSync(path.join(REPO, "bin", "webui", "app.js"), "utf8");
+  const m = js.match(/const VAULT = \{ W: (\d+), H: (\d+), GAP: (\d+), PAD: (\d+) \}/);
+  assert.ok(m, "the box metrics must be declared in one place");
+  const VAULT = { W: +m[1], H: +m[2], GAP: +m[3], PAD: +m[4] };
+
+  // The CSS box and the box the maths solves for MUST be the same box. This is
+  // the drift that reintroduces the bug: widen the card in CSS alone and the
+  // radii are computed against a box that no longer exists.
+  const css = fs.readFileSync(path.join(REPO, "bin", "webui", "app.css"), "utf8");
+  const rule = css.slice(css.indexOf(".vault-node {"), css.indexOf(".vault-node {") + 500);
+  assert.strictEqual(+rule.match(/width:\s*(\d+)px/)[1], VAULT.W, "CSS width must equal VAULT.W");
+  assert.strictEqual(+rule.match(/height:\s*(\d+)px/)[1], VAULT.H, "CSS height must equal VAULT.H");
+  assert.match(rule, /box-sizing:\s*border-box/, "padding and border must count inside the fixed size");
+
+  // Run the real function, not a copy of its arithmetic.
+  const ringRadii = new Function(
+    "VAULT",
+    js.slice(js.indexOf("function ringRadii"), js.indexOf("function vaultCard")) + "; return ringRadii;"
+  )(VAULT);
+
+  for (let n = 1; n <= 16; n++) {
+    const { rx, ry } = ringRadii(n);
+    assert.ok(Number.isFinite(rx) && Number.isFinite(ry), `n=${n}: radii must be finite (n=1 has no neighbour pair)`);
+
+    const pts = [[0, 0, "hub"]];
+    for (let i = 0; i < n; i++) {
+      const a = -Math.PI / 2 + (i * 2 * Math.PI) / n;
+      pts.push([rx * Math.cos(a), ry * Math.sin(a), "peer" + i]);
+    }
+    for (let i = 0; i < pts.length; i++) {
+      for (let j = i + 1; j < pts.length; j++) {
+        const dx = Math.abs(pts[i][0] - pts[j][0]);
+        const dy = Math.abs(pts[i][1] - pts[j][1]);
+        // Boxes are centred on their point: they miss each other only if they
+        // are clear on one axis or the other.
+        assert.ok(
+          dx - VAULT.W >= -0.01 || dy - VAULT.H >= -0.01,
+          `n=${n}: ${pts[i][2]} and ${pts[j][2]} overlap (dx=${dx.toFixed(1)}, dy=${dy.toFixed(1)}, box ${VAULT.W}x${VAULT.H})`
+        );
+      }
+    }
+  }
+
+  // A ring wide enough not to collide can exceed the panel — that must scroll,
+  // never squeeze the ring back into a collision.
+  const fn = js.slice(js.indexOf("function vaultCard"), js.indexOf("function svgEl"));
+  assert.match(fn, /el\("div", "scroll-x"\)/, "a graph wider than the panel scrolls in its own container");
+  assert.ok(!/max-width/.test(rule), "a max-width on the box would shrink it below the size the maths assumes");
+});
+
 // v0.43.4 — a finding must name a command that actually clears it.
 //
 // `global-retired-agents` told users to run `orc update --global`. That can

@@ -6,7 +6,7 @@
 
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
-![Version](https://img.shields.io/badge/version-0.43.6-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.43.7-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
@@ -46,7 +46,57 @@ zero-dependency npm package installs those files into your `.claude/` directory.
 
 ## Changelog
 
-**Latest: v0.43.6 — updated 2026-08-08.**
+**Latest: v0.43.7 — updated 2026-08-09.**
+
+### v0.43.7 — the flow you can see, and a boundary you can read _(2026-08-09)_
+
+**Flow (DIY) draws the pipeline.** A compiled flow is an ordered sequence of
+phases, and a column of key/value rows is the one shape that cannot show you a
+sequence — you could read every key on the panel and still not know what runs
+before what. Below the gate card there is now a **stepper**: every phase this
+flow compiles, left to right, in the order it actually runs, with a light that
+sweeps through the connectors once on open and once more after a successful
+`orc diy compile`.
+
+**A phase you switched off keeps its slot and turns red.** Dropping it would
+have made "I turned review off" and "this flow has no review phase" look
+identical, and it would have made the rail change width every time you flipped a
+key. Off is a decision worth seeing, so it is drawn in red with the phase name
+struck through — and it still animates, because it is still part of the shape.
+Click any phase to jump to the key that owns it.
+
+**The steps come from the compiler, not from the panel.** `orc diy show --json`
+grew a `steps[]` array derived from the *same* array `orc diy compile` stitches
+the flow with, so the picture cannot drift from the pipeline. A golden test
+fails if a block ever joins the stitch order without a step — a phase that runs
+but is never drawn would be invisible in exactly the way this panel exists to
+prevent.
+
+**Crosslink is two tabs: Design and Settings.** The graph and the add form were
+one scrolling column, which made the diagram something you scrolled past on the
+way to the controls rather than the thing you came for. **Design** is the
+boundary as a picture — this repo in the middle, every linked repo on a ring
+around it, one line per edge with a pulse travelling it **in the direction the
+dependency runs**, so "which way does this one go" is answered by motion instead
+of by squinting at an arrow glyph. Hover a repo to pick its edges out of a busy
+ring; click one to land on its row in Settings.
+
+The layout is **computed, not simulated** — a given config draws the same
+picture every time you open the tab, which is what makes two openings
+comparable. Repo boxes are a **fixed size**, and the ring's radii are solved
+from that size: two boxes clear each other when they are apart by more than a
+box on one axis or the other, so the radius is whatever makes that true for
+every pair. Sizing the ring as a *fraction of the container* instead — which is
+what shipped first — is a guess that knows nothing about how wide a repo box is,
+and three peers were enough to pile them on top of each other. A test now runs
+the real layout function over every node count from 1 to 16 and fails on any
+overlap. A ring too wide for the panel **scrolls**; it is never squeezed back
+into a collision. `prefers-reduced-motion` drops the pulse outright.
+
+**With nothing linked, Design says so and spotlights Settings.** An empty
+diagram cannot explain itself, so the empty state names the tab that fills it
+and offers a button that goes there — and the spotlight is dropped the moment a
+link exists.
 
 ### v0.43.6 — `orc ui` in two languages, and panels that point at the right page _(2026-08-08)_
 
@@ -829,8 +879,8 @@ orc ui --stop          # shut this project's server down (exit 0 stopped / 1 non
 | Runs | run history as an **accordion** — a row expands in place into state-of-play, resume prompt, checkpoint, trace tail, mock example | — |
 | Knowledge | wiki freshness + refresh scope, code-patterns, gotchas | `wiki sync`, `gotcha prune` |
 | Stats | lane and subagent usage, downgrades | — |
-| Flow (DIY) | the compiled flow and its gate | `diy set`, `diy compile` |
-| Crosslink | the cross-repo graph and each peer's freshness; **browse** for a peer folder instead of typing its path | `crosslink add` / `remove` |
+| Flow (DIY) | the compiled flow and its gate, plus a **stepper** of every phase in run order (off phases stay in place, in red) | `diy set`, `diy compile` |
+| Crosslink | two tabs — **Design**, the boundary as an animated graph, and **Settings**, each peer's freshness plus **browse** for a peer folder instead of typing its path | `crosslink add` / `remove` |
 | Learn | the `orc onboarding` walkthrough, one section at a time with a contents rail | — |
 | Experiment | every lane, with a copy button; opens a Claude session in a terminal | — |
 | Maintenance | `update`, `update --prune`, `doctor --fix`, `upgrade` | behind preview-then-apply |
@@ -852,6 +902,11 @@ orc ui --stop          # shut this project's server down (exit 0 stopped / 1 non
   problem in one list, but they are not all fixed in the same place — a STALE
   DIY flow is recompiled on **Flow**, not Maintenance. Routing is a table keyed
   on the finding id; a finding with nothing to press anywhere offers no button.
+- **Every picture is drawn from CLI output, never re-derived.** The Flow stepper
+  renders `orc diy show --json`'s `steps[]`, which the CLI builds from the array
+  `orc diy compile` stitches with; the Crosslink graph renders `orc crosslink
+  list --json` and repeats the CLI's own state words. The panel draws the order;
+  it never decides it.
 - **English and Indonesian**, switched from the rail (or `l`) and remembered per
   browser, never written to project config. **Only the panel's own prose is
   translated** — config keys, their descriptions and values, agent names, model

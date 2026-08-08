@@ -409,6 +409,49 @@ test("diy compile: the documented stitch order equals the compiler's order array
   assert.ok(code.includes("mock-example"), "the phase that went missing from the doc is in both");
 });
 
+// The `orc ui` flow stepper draws `steps[]` and nothing else. If a block joins
+// the stitch order without a DIY_STEPS row, the picture silently stops being
+// the pipeline — a phase would run that the panel never draws.
+test("diy show --json: steps[] is the stitch order (minus the locked rules)", () => {
+  const { root, claudeDir } = freshInstall();
+  try {
+    const cliSrc = fs.readFileSync(path.join(REPO, "bin", "cli.js"), "utf8");
+    const order = cliSrc
+      .match(/const order = \[([^\]]+)\]/)[1]
+      .split(",")
+      .map((x) => x.trim().replace(/^"|"$/g, ""))
+      .filter((x) => x !== "null");
+
+    assert.strictEqual(cli(["diy", "init", "--dir", root]).status, 0);
+    const d = JSON.parse(cli(["diy", "show", "--json", "--dir", root]).stdout);
+    assert.deepStrictEqual(d.steps.map((s) => s.block), order, "every stitched block has exactly one step, in order");
+
+    const byBlock = Object.fromEntries(d.steps.map((s) => [s.block, s]));
+    assert.strictEqual(byBlock.header.on, true, "a keyless block always runs");
+    assert.strictEqual(byBlock.execution.note, "scored", "scoring on → execute is scored");
+    assert.strictEqual(byBlock.testgen.on, false, "testgen defaults off");
+    assert.strictEqual(byBlock.verify.on, true);
+
+    // An OFF phase keeps its slot — the stepper's width must not depend on config.
+    assert.strictEqual(cli(["diy", "set", "review", "off", "--dir", root]).status, 0);
+    assert.strictEqual(cli(["diy", "set", "scoring", "off", "--dir", root]).status, 0);
+    assert.strictEqual(cli(["diy", "set", "fixed_executor", "orc-executor-sonnet-5-high", "--dir", root]).status, 0);
+    const d2 = JSON.parse(cli(["diy", "show", "--json", "--dir", root]).stdout);
+    assert.strictEqual(d2.steps.length, d.steps.length, "off never removes a step");
+    const b2 = Object.fromEntries(d2.steps.map((s) => [s.block, s]));
+    assert.strictEqual(b2.review.on, false);
+    assert.strictEqual(b2.scoring.on, false);
+    assert.strictEqual(b2.execution.note, "orc-executor-sonnet-5-high", "scoring off → execute names the fixed executor");
+
+    // Unconfigured is an ANSWER, not an error: the object still comes back.
+    rmrf(path.join(claudeDir, "orc-diy.config.yaml"));
+    const none = JSON.parse(cli(["diy", "show", "--json", "--dir", root]).stdout);
+    assert.deepStrictEqual(none.steps, [], "no config → no pipeline to draw");
+  } finally {
+    rmrf(root);
+  }
+});
+
 test("orc pattern status: 0 cached, 1 absent, 2 unknown key", () => {
   const { root, claudeDir } = freshInstall();
   try {
