@@ -180,18 +180,20 @@ async function renderBanners() {
   if (g.present && g.shadows) {
     const finding = (doctor.findings || []).find((f) => f.id === "global-skew" || f.id === "global-retired-agents");
     const b = el("div", "banner");
-    const body = el("div");
-    body.append(el("strong", null, "A global ORC install exists at ~/.claude and may win skill resolution."));
-    body.append(
+    // Prose inside the banner flex row, not a panel container: its lines are
+    // meant to read tight, so it is deliberately not a `stack`.
+    const bannerBody = el("div");
+    bannerBody.append(el("strong", null, "A global ORC install exists at ~/.claude and may win skill resolution."));
+    bannerBody.append(
       el(
         "div",
         null,
         "These project settings may not be the ones your runs read. This panel never edits global config — it reports the conflict."
       )
     );
-    if (finding) body.append(el("div", "note", finding.message));
-    body.append(el("div", "note", "Check it with: orc doctor"));
-    b.append(body);
+    if (finding) bannerBody.append(el("div", "note", finding.message));
+    bannerBody.append(el("div", "note", "Check it with: orc doctor"));
+    b.append(bannerBody);
     host.append(b);
   }
 }
@@ -231,7 +233,9 @@ function head(host, title, sub, right) {
 // Every panel body is rendered async; this keeps the skeleton/error handling in
 // ONE place instead of nine.
 async function section(host, loader, render) {
-  const slot = el("div");
+  // `stack` is not decoration: it is what spaces the blocks a panel renders.
+  // Without it the children collide unless they happen to be two cards in a row.
+  const slot = el("div", "stack");
   slot.append(skeleton(4));
   host.append(slot);
   try {
@@ -378,7 +382,7 @@ PANELS.settings = function (host) {
   actions.append(profBtn, recBtn);
   head(host, "Settings", "Every key `orc config` knows. Each change shells the real command, so the CLI's validators decide.", actions);
 
-  const body = el("div");
+  const body = el("div", "stack");
   host.append(body);
   renderSettings(body);
 };
@@ -688,7 +692,7 @@ async function rerenderSettings(panelBody) {
 
 async function showProfiles() {
   const d = (await read("/api/config/profiles")).data;
-  const body = el("div");
+  const body = el("div", "stack stack-sm");
   body.append(el("div", "note", "A profile writes only existing, validated keys — nothing it sets is something you could not set yourself."));
   for (const p of d.profiles) {
     const c = el("div", "action");
@@ -717,7 +721,7 @@ async function showProfiles() {
 
 async function showRecommend() {
   const d = (await read("/api/config/recommend")).data;
-  const body = el("div");
+  const body = el("div", "stack stack-sm");
   body.append(el("div", "note", "Read-only: this looked at the repo and suggests one profile. Nothing was changed."));
   const list = el("ul");
   for (const r of d.reasons) {
@@ -747,8 +751,8 @@ async function showRecommend() {
 PANELS.runs = function (host) {
   head(host, "Runs", "Everything ORC has recorded, newest first. `waiting` means a resume pointer is still on disk.");
   const layout = el("div", "grid");
-  const listSlot = el("div");
-  const detailSlot = el("div");
+  const listSlot = el("div", "stack");
+  const detailSlot = el("div", "stack");
   layout.append(listSlot, detailSlot);
   host.append(layout);
 
@@ -808,7 +812,7 @@ function showRun(slot, slug) {
 
       if (d.resume)
         addTab("Resume", () => {
-          const box = el("div");
+          const box = el("div", "stack stack-sm");
           box.append(el("div", "note", "Paste this into a fresh Claude Code session to pick the run back up."));
           const actions = el("div", "row-actions");
           const cp = el("button", "btn btn-sm", "Copy prompt");
@@ -821,7 +825,7 @@ function showRun(slot, slug) {
       if (d.state_of_play) addTab("State of play", () => el("pre", "block wrap", d.state_of_play));
       if (d.checkpoint)
         addTab("Checkpoint", () => {
-          const box = el("div");
+          const box = el("div", "stack stack-sm");
           box.append(
             kvList([
               ["phase", d.checkpoint.phase],
@@ -835,7 +839,7 @@ function showRun(slot, slug) {
         });
       if (d.trace)
         addTab("Trace", () => {
-          const box = el("div");
+          const box = el("div", "stack stack-sm");
           box.append(el("div", "note", "The tail of this run's behavior trace. Traces are permanent and never auto-pruned."));
           box.append(el("pre", "block", d.trace));
           return box;
@@ -848,7 +852,7 @@ function showRun(slot, slug) {
             "Not generated for this run.",
             "That is normal: mock examples are written only after a green verify, and only when config `mock_example` is `on` (or you accept the `ask` offer)."
           );
-        const box = el("div");
+        const box = el("div", "stack stack-sm");
         box.append(kvList([["folder", mock.dir], ["files", String(mock.files.length)], ["written", relAge(mock.mtime_ms)]]));
         box.append(el("div", "note", "Read-only. This panel never runs a mock example — it is arbitrary project code."));
         if (mock.readme) box.append(el("pre", "block wrap", mock.readme));
@@ -881,7 +885,7 @@ function showRun(slot, slug) {
 
 PANELS.knowledge = function (host) {
   head(host, "Knowledge", "What ORC already knows about this repo: the wiki, cached code-patterns, and repair memory.");
-  const body = el("div");
+  const body = el("div", "stack");
   host.append(body);
   renderKnowledge(body);
 };
@@ -1125,7 +1129,7 @@ function barCard(title, map, label) {
 
 PANELS.flow = function (host) {
   head(host, "Flow (DIY)", "The user-composed lane. Shape is CLI-owned and compiled — a stale compile never runs.");
-  const body = el("div");
+  const body = el("div", "stack");
   host.append(body);
   renderFlow(body);
 };
@@ -1212,7 +1216,7 @@ function bannerLine(text, bad) {
 
 PANELS.crosslink = function (host) {
   head(host, "Crosslink", "Cross-repo wiki references. Advisory, never blocking — it reads foreign WIKI only, never foreign source.");
-  const body = el("div");
+  const body = el("div", "stack");
   host.append(body);
   renderCrosslink(body);
 };
@@ -1330,7 +1334,7 @@ PANELS.learn = function (host) {
 
 PANELS.maintenance = function (host) {
   head(host, "Maintenance", "update · upgrade · doctor --fix. Preview first, approve, then it runs — never automatically.");
-  const body = el("div");
+  const body = el("div", "stack");
   host.append(body);
   renderMaintenance(body);
 };

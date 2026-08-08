@@ -6,7 +6,7 @@
 
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
-![Version](https://img.shields.io/badge/version-0.43.1-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.43.2-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
@@ -46,7 +46,28 @@ zero-dependency npm package installs those files into your `.claude/` directory.
 
 ## Changelog
 
-**Latest: v0.43.1 — updated 2026-08-08.**
+**Latest: v0.43.2 — updated 2026-08-08.**
+
+### v0.43.2 — `orc ui`: boxes stop colliding, because the container owns the gap _(2026-08-08)_
+
+With the stylesheet finally loading, the real spacing bug was visible: blocks
+touched with no gap between them.
+
+The cause was the spacing model, not a missing value. Panels spaced their
+children with `.card + .card`, which matches only **two cards in a row** — and
+the sequences these panels actually render are a stat grid then a card, a
+settings tier then a card, a run list then a card. None of those matched, so
+none of them had a gap. Card internals had the same problem: a note against a
+table, a file list against a `<pre>`.
+
+Spacing now belongs to the **container**. A `.stack` class holds every panel
+body, async slot and run-detail tab pane, so any mix of children is spaced in
+any order — and the block types themselves lost their outer margins, which is
+what would otherwise double up inside a gapped parent.
+
+Two tests hold the line from both ends: the pair-based selectors must stay
+gone, and every panel container must carry `stack`. A future panel written as
+`const body = el("div")` fails the suite instead of shipping flush boxes.
 
 ### v0.43.1 — the panel's stylesheet and script actually reach the browser _(2026-08-08)_
 

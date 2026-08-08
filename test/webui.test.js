@@ -388,6 +388,55 @@ test("server: every asset the shell references loads as the browser requests it"
   }
 });
 
+// v0.43.2 — spacing belongs to the CONTAINER, not to adjacent-sibling pairs.
+//
+// The panel bodies originally spaced their children with `.card + .card`, which
+// matches only two cards in a row. The actual sequences these panels render are
+// a stat `.grid` then a card, a `.tier` then a card, a `.run-list` then a card —
+// none of which that selector sees, so those boxes touched with no gap at all.
+// A pair-based rule has to be re-stated for every new combination of block
+// types, which means it is one new panel away from being wrong again.
+//
+// So the contract is asserted from both ends: the fragile pair rules must stay
+// gone, and every container that holds panel blocks must carry `stack`.
+test("css: block spacing is owned by the container, not by sibling pairs", () => {
+  // Comments are stripped first: this file DOCUMENTS the dead selectors by
+  // name, and a test that cannot tell a rule from a comment about that rule
+  // would fail on its own explanation.
+  const css = fs.readFileSync(path.join(REPO, "bin", "webui", "app.css"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+
+  assert.match(css, /\.stack\s*\{[^}]*display:\s*flex/, "`.stack` must exist and be a flex container");
+  assert.match(css, /\.stack\s*\{[^}]*gap:/, "`.stack` must space its children with gap");
+
+  // Each of these spaced exactly one pair of block types and nothing else.
+  // Re-adding one means a block type has an outer margin again, which double-
+  // spaces inside a gapped container instead of fixing the collision.
+  for (const dead of [".card + .card", ".action + .action", ".skeleton + .skeleton"]) {
+    assert.ok(!css.includes(dead), `${dead} is pair-based spacing — the container owns the gap now`);
+  }
+  assert.ok(!/\.tier\s*\{[^}]*margin/.test(css), "`.tier` must not carry an outer margin");
+  assert.ok(!/\.tabs\s*\{[^}]*margin/.test(css), "`.tabs` must not carry an outer margin");
+});
+
+test("js: every panel container carries the class that spaces its children", () => {
+  const js = fs.readFileSync(path.join(REPO, "bin", "webui", "app.js"), "utf8");
+
+  // These four names ARE the panel containers: `section`'s async slot, each
+  // panel's `body`, and the two halves of the Runs split. A new panel written
+  // as `const body = el("div")` renders its cards flush against each other and
+  // looks like a CSS bug — it is this test, not the stylesheet, that catches it.
+  const containers = [...js.matchAll(/const (body|slot|listSlot|detailSlot) = el\("div"([^)]*)\)/g)];
+  assert.ok(containers.length >= 10, `expected the panel containers to be found, saw ${containers.length}`);
+
+  for (const m of containers) {
+    assert.match(
+      m[2],
+      /"stack/,
+      `\`const ${m[1]} = el("div"${m[2]})\` must carry "stack" — without it its children collide`
+    );
+  }
+});
+
 test("server: a write shells the real CLI, so its validators still decide", async () => {
   const { root } = freshInstall();
   let srv;

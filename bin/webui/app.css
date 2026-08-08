@@ -221,19 +221,38 @@ code, kbd, pre, .mono { font-family: var(--mono); font-size: .92em; }
 .page-head h1 { font-size: 20px; font-weight: 600; letter-spacing: -.01em; }
 .page-sub { color: var(--text-dim); font-size: 13px; margin-top: 2px; }
 
+/* SPACING IS OWNED BY THE CONTAINER, never by adjacent-sibling pairs.
+   The original model spaced `.card + .card` — which only ever matched two cards
+   in a row. A `.grid` of stat tiles followed by a card, a `.tier` followed by a
+   card, a `.run-list` followed by a card: all of those are the COMMON sequences
+   in these panels, none of them matched, and every one of them collided. A rule
+   that has to be re-stated for each new pair of block types is a rule that will
+   be forgotten the next time a panel gains a block type.
+
+   `.stack` is that container. Every panel body and async slot carries it, so
+   spacing holds for any mix of children, in any order, forever. Because the gap
+   belongs to the parent, NO block type may carry its own outer margin — that is
+   what would double up. */
+.stack { display: flex; flex-direction: column; gap: var(--sp-4); min-width: 0; }
+.stack-sm { gap: var(--sp-3); }
+/* A flex column child will not shrink below its content without this, which is
+   how a wide table or a long path escapes its card. */
+.stack > * { min-width: 0; }
+
 .card {
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--radius);
   padding: var(--sp-4) var(--sp-5);
 }
-.card + .card { margin-top: var(--sp-4); }
+/* Card internals get the same treatment: a card holds a head, then any mix of
+   notes, tables, lists and action rows, and those collided too. */
+.card > * + * { margin-top: var(--sp-3); }
 .card-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--sp-3);
-  margin-bottom: var(--sp-3);
 }
 .card-head h2 { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: .07em; color: var(--text-dim); }
 
@@ -352,7 +371,6 @@ pre.block.wrap { white-space: pre-wrap; word-break: break-word; }
   background-size: 400% 100%;
   animation: shimmer 1.3s ease-in-out infinite;
 }
-.skeleton + .skeleton { margin-top: var(--sp-3); }
 .skeleton.w-60 { width: 60%; }
 .skeleton.w-40 { width: 40%; }
 .skeleton.tall { height: 56px; }
@@ -420,7 +438,7 @@ body.busy .setting-control { pointer-events: none; opacity: .5; }
 
 /* --- Settings ------------------------------------------------------------ */
 
-.tier { margin-top: var(--sp-5); }
+/* No outer margin — the enclosing `.stack` owns the gap. */
 .tier-head {
   display: flex;
   align-items: baseline;
@@ -571,7 +589,8 @@ body.busy .setting-control { pointer-events: none; opacity: .5; }
 .run-where { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
 .run-age { font-size: 12px; color: var(--text-faint); white-space: nowrap; }
 
-.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); margin-bottom: var(--sp-4); }
+/* No margin-bottom — the card's own rhythm spaces the pane below it. */
+.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); }
 .tabs button {
   border: 0;
   background: transparent;
@@ -612,7 +631,6 @@ body.busy .setting-control { pointer-events: none; opacity: .5; }
   border: 1px solid var(--line);
   border-radius: var(--radius);
 }
-.action + .action { margin-top: var(--sp-3); }
 .action-cmd {
   font-family: var(--mono);
   font-size: 12px;
