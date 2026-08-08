@@ -1,0 +1,411 @@
+"use strict";
+/**
+ * api.js — the /api router for `orc ui`.
+ *
+ * THE ONE ARCHITECTURAL RULE: this file never re-implements CLI logic. Every
+ * endpoint spawns `node bin/cli.js <cmd> --json` and forwards the parsed
+ * object. That makes UI/CLI drift structurally impossible — the UI *is* the
+ * CLI — and it means every write inherits the CLI's validators, the LEGACY_KEYS
+ * aliasing, the shadowing announcements and the fable5_effort frontmatter
+ * rewrite for free, with zero duplicated logic.
+ *
+ * The alternative (requiring cli.js as a library) is off the table: cli.js ends
+ * with a bare IIFE, has no require.main guard, prints and process.exit()s
+ * directly, and is pinned by contract tokens with binFiles: ["bin/cli.js"].
+ *
+ * It also never runs a lane, never spawns `claude`, never calls a model API.
+ */
+
+const { spawn, spawnSync } = require("child_process");
+const path = require("path");
+const fixtures = require("./fixtures.js");
+
+const CLI = path.join(__dirname, "..", "cli.js");
+
+// A single-user localhost panel re-reads the same command several times while
+// one page renders. A short TTL collapses that without ever showing stale data
+// across a user action: every mutation clears the cache outright.
+const READ_TTL_MS = 2500;
+const CLI_TIMEOUT_MS = 30_000;
+
+const cache = new Map();
+
+function cacheKey(argv) {
+  return argv.join("\u0000");
+}
+
+function clearCache() {
+  cache.clear();
+}
+
+// ── running the CLI ─────────────────────────────────────────────────────────
+
+// Several commands use a NON-ZERO exit as a normal answer, not a failure:
+// `pattern status` (1 = absent, 2 = unknown key), `gotcha list` (1 = none),
+// `wiki impact` (2 = delta, 3 = full), `pr stack status` (1 = not ready),
+// `doctor` (1 = issues found), `resume` (1 = nothing waiting). So the exit code
+// is DATA here, never an error condition — a run counts as failed only when it
+// produced no parseable object.
+function runCli(argv, ctx, { json = false } = {}) {
+  const args = [...argv];
+  if (json) args.push("--json");
+  // Always target the project explicitly: the server's cwd is not a reliable
+  // way to reach the same .claude the launching command resolved.
+  if (ctx.projectRoot) args.push("--dir", ctx.projectRoot);
+  const r = spawnSync(process.execPath, [CLI, ...args], {
+    encoding: "utf8",
+    timeout: CLI_TIMEOUT_MS,
+    windowsHide: true,
+    env: { ...process.env, NO_COLOR: "1", ORC_NO_UPDATE_CHECK: "1" },
+  });
+  const stdout = r.stdout || "";
+  let data = null;
+  try {
+    data = JSON.parse(stdout);
+  } catch (_) {}
+  return {
+    ok: data !== null,
+    exit_code: r.status === null ? -1 : r.status,
+    data,
+    stderr: (r.stderr || "").trim(),
+    stdout: data === null ? stdout.trim() : "",
+    command: "orc " + argv.join(" "),
+  };
+}
+
+function readCli(argv, ctx) {
+  const key = cacheKey([ctx.projectRoot || "", ...argv]);
+  const hit = cache.get(key);
+  if (hit && Date.now() - hit.at < READ_TTL_MS) return hit.value;
+  const value = runCli(argv, ctx, { json: true });
+  cache.set(key, { at: Date.now(), value });
+  return value;
+}
+
+// ── jobs (the mutation half) ────────────────────────────────────────────────
+// SINGLE-FLIGHT: one mutation at a time, process-wide. The client goes
+// read-only while a job runs, so a second one is a bug, not a race to win.
+// Output accumulates in memory and the client polls /api/job — which is what
+// makes `orc update` and `orc upgrade` show their real output as it happens
+// instead of a spinner and a verdict.
+
+let job = null;
+let jobSeq = 0;
+
+function jobView() {
+  if (!job) return { id: null, running: false };
+  return {
+    id: job.id,
+    command: job.command,
+    running: job.running,
+    exit_code: job.exit_code,
+    output: job.output,
+    started_ms: job.started_ms,
+  };
+}
+
+function startJob(argv, ctx) {
+  if (job && job.running) return { error: "busy", job: jobView() };
+  const args = [...argv];
+  if (ctx.projectRoot) args.push("--dir", ctx.projectRoot);
+  const id = ++jobSeq;
+  job = {
+    id,
+    command: "orc " + argv.join(" "),
+    running: true,
+    exit_code: null,
+    output: "",
+    started_ms: Date.now(),
+  };
+  const child = spawn(process.execPath, [CLI, ...args], {
+    windowsHide: true,
+    env: { ...process.env, NO_COLOR: "1" },
+  });
+  const append = (buf) => {
+    job.output += buf.toString("utf8");
+    // A runaway job must not grow the server's heap without bound.
+    if (job.output.length > 400_000) job.output = job.output.slice(-400_000);
+  };
+  child.stdout.on("data", append);
+  child.stderr.on("data", append);
+  child.on("error", (e) => {
+    job.output += "\n" + String(e.message);
+    job.exit_code = -1;
+    job.running = false;
+  });
+  child.on("close", (code) => {
+    job.exit_code = code === null ? -1 : code;
+    job.running = false;
+    clearCache(); // every panel refetches against the new truth
+  });
+  return { job: jobView() };
+}
+
+// ── the endpoint table ──────────────────────────────────────────────────────
+// READS map a route to CLI argv. WRITES are separate and POST-only — a GET can
+// never mutate, so a prefetch, a bookmark or a browser retry is always safe.
+
+const READS = {
+  "/api/version": () => ["version"],
+  "/api/where": () => ["where"],
+  "/api/doctor": () => ["doctor"],
+  "/api/config": () => ["config", "list"],
+  "/api/config/profiles": () => ["config", "profile"],
+  "/api/config/recommend": () => ["config", "recommend"],
+  "/api/runs": (q) => ["run", "list", "--limit", String(Math.min(200, Number(q.limit) || 40))],
+  "/api/run": (q) => ["run", "show", String(q.slug || "")],
+  "/api/wiki": () => ["wiki", "status"],
+  "/api/wiki/impact": () => ["wiki", "impact"],
+  "/api/patterns": () => ["pattern", "status"],
+  "/api/gotchas": () => ["gotcha", "list"],
+  "/api/stats": (q) => (q.since ? ["stats", "--since", String(q.since)] : ["stats"]),
+  "/api/diy": () => ["diy", "show"],
+  "/api/crosslink": () => ["crosslink", "list"],
+  "/api/mocks": () => ["mock", "list"],
+  "/api/mock": (q) => ["mock", "show", String(q.slug || "")],
+  "/api/stack": (q) => (q.slug ? ["pr", "stack", "status", String(q.slug)] : ["pr", "stack", "status"]),
+};
+
+const WRITES = {
+  "/api/config/set": (b) => ["config", "set", String(b.key), String(b.value)],
+  "/api/config/reset": (b) => (b.key ? ["config", "reset", String(b.key)] : ["config", "reset"]),
+  "/api/config/profile": (b) => ["config", "profile", String(b.name)],
+  "/api/diy/set": (b) => ["diy", "set", String(b.key), String(b.value)],
+  "/api/diy/compile": () => ["diy", "compile"],
+  "/api/wiki/sync": () => ["wiki", "sync"],
+  "/api/gotcha/prune": () => ["gotcha", "prune"],
+  "/api/crosslink/remove": (b) => ["crosslink", "remove", String(b.name)],
+};
+
+// Maintenance: the safety-critical panel. Each action is a PAIR — a read-only
+// preview and the apply that the preview is consent for. The apply route can
+// never be reached without the UI having fetched the preview first, and the
+// exact command is part of the preview payload so it is always visible in the
+// confirmation, and always typeable by hand instead.
+const MAINTENANCE = {
+  update: {
+    apply: ["update"],
+    label: "Re-copy this package's payload over the installed one",
+    // `orc doctor --json` already itemises exactly what an update would change
+    // (version skew, missing files, orphans) — a preview with no second engine.
+    preview: ["doctor"],
+  },
+  prune: {
+    apply: ["update", "--prune"],
+    label: "Update AND delete ORC-named orphans from a pre-manifest install",
+    preview: ["doctor"],
+    // A count is not consent for a deletion: the UI must name every file, and
+    // doctor's findings carry `paths` for exactly the two orphan findings.
+    names_files: true,
+  },
+  fix: {
+    apply: ["doctor", "--fix"],
+    label: "Apply every fix orc doctor found (= update + prune + settings re-merge)",
+    preview: ["doctor"],
+  },
+  upgrade: {
+    apply: ["upgrade"],
+    label: "Fetch the LATEST package from the network, then apply it",
+    preview: ["version"],
+    network: true,
+  },
+};
+
+// ── request handling ────────────────────────────────────────────────────────
+
+function json(res, status, obj) {
+  const body = JSON.stringify(obj);
+  res.writeHead(status, {
+    "content-type": "application/json; charset=utf-8",
+    "cache-control": "no-store",
+    // Belt and braces on top of the loopback + token checks in serve.js.
+    "x-content-type-options": "nosniff",
+  });
+  res.end(body);
+}
+
+function readBody(req) {
+  return new Promise((resolve, reject) => {
+    let raw = "";
+    req.on("data", (c) => {
+      raw += c;
+      if (raw.length > 64_000) reject(new Error("body too large"));
+    });
+    req.on("end", () => {
+      if (!raw) return resolve({});
+      try {
+        resolve(JSON.parse(raw));
+      } catch (_) {
+        reject(new Error("body is not JSON"));
+      }
+    });
+    req.on("error", reject);
+  });
+}
+
+// The Overview panel needs four commands at once. Doing that in one request
+// keeps the first paint to a single round trip.
+function overview(ctx) {
+  const doctor = readCli(["doctor"], ctx);
+  const runs = readCli(["run", "list", "--limit", "200"], ctx);
+  const waiting = runs.data ? runs.data.runs.filter((r) => r.status === "waiting") : [];
+  return {
+    where: readCli(["where"], ctx).data,
+    doctor: doctor.data,
+    wiki: readCli(["wiki", "status"], ctx).data,
+    patterns: readCli(["pattern", "status"], ctx).data,
+    runs_total: runs.data ? runs.data.total : 0,
+    waiting: waiting.map((r) => r.slug),
+    diy: readCli(["diy", "show"], ctx).data,
+  };
+}
+
+async function handleApi(req, res, url, ctx) {
+  const route = url.pathname;
+  const q = Object.fromEntries(url.searchParams);
+
+  // Liveness. The page pings this every 15s; no ping from any client for the
+  // grace window and the server exits, so a closed tab does not leave a write
+  // surface holding a valid token.
+  if (route === "/api/ping") {
+    ctx.onHeartbeat();
+    return json(res, 200, { ok: true, job: jobView() });
+  }
+
+  // sendBeacon on beforeunload — a best-effort fast path to the same shutdown
+  // the heartbeat timeout would reach a minute later.
+  if (route === "/api/bye") {
+    ctx.onBye();
+    return json(res, 200, { ok: true });
+  }
+
+  if (route === "/api/meta") {
+    return json(res, 200, {
+      project_root: ctx.projectRoot,
+      fixtures: ctx.fixtures,
+      version: ctx.version,
+      port: ctx.port,
+      idle_minutes: ctx.idleMinutes,
+      started_ms: ctx.startedMs,
+    });
+  }
+
+  if (route === "/api/job") return json(res, 200, jobView());
+
+  // Fixture mode short-circuits every data route: canned JSON, no project, no
+  // spawn. This is what makes the STALE chip and the unhealthy doctor panel
+  // designable on a machine where everything is green (see the plan, §9).
+  if (ctx.fixtures) {
+    if (req.method !== "GET") return json(res, 200, { ok: true, fixture: true, command: "(fixtures — nothing ran)" });
+    const canned = fixtures.get(route, q);
+    if (canned === undefined) return json(res, 404, { error: "no fixture for " + route });
+    return json(res, 200, { ok: true, exit_code: 0, data: canned, fixture: true });
+  }
+
+  if (req.method === "GET") {
+    if (route === "/api/overview") return json(res, 200, { ok: true, exit_code: 0, data: overview(ctx) });
+    if (route === "/api/learn") {
+      // The only endpoint with no CLI behind it: the onboarding topics are
+      // static content already shipped as a module, so spawning to read them
+      // would be ceremony with a cost.
+      const { SECTIONS } = require("../onboarding-content.js");
+      return json(res, 200, { ok: true, exit_code: 0, data: { sections: SECTIONS } });
+    }
+    if (route === "/api/maintenance") {
+      const actions = Object.entries(MAINTENANCE).map(([id, m]) => ({
+        id,
+        label: m.label,
+        command: "orc " + m.apply.join(" "),
+        network: !!m.network,
+        names_files: !!m.names_files,
+      }));
+      return json(res, 200, { ok: true, exit_code: 0, data: { actions } });
+    }
+    if (route === "/api/maintenance/preview") {
+      const m = MAINTENANCE[String(q.action)];
+      if (!m) return json(res, 400, { error: "unknown action" });
+      const probe = readCli(m.preview, ctx);
+      return json(res, 200, {
+        ok: true,
+        exit_code: 0,
+        data: {
+          action: String(q.action),
+          label: m.label,
+          command: "orc " + m.apply.join(" "),
+          network: !!m.network,
+          names_files: !!m.names_files,
+          preview_command: "orc " + m.preview.join(" "),
+          preview: probe.data,
+          // Only the UI can know a run is mid-flight; updating changes the
+          // skills that run would resume into.
+          waiting_runs: (readCli(["run", "list", "--limit", "200"], ctx).data || { runs: [] }).runs
+            .filter((r) => r.status === "waiting")
+            .map((r) => r.slug),
+          dirty_tree: m.network ? isDirtyTree(ctx) : false,
+        },
+      });
+    }
+    const build = READS[route];
+    if (!build) return json(res, 404, { error: "unknown endpoint " + route });
+    const out = readCli(build(q), ctx);
+    return json(res, out.ok ? 200 : 500, out);
+  }
+
+  if (req.method !== "POST") return json(res, 405, { error: "method not allowed" });
+
+  let body;
+  try {
+    body = await readBody(req);
+  } catch (e) {
+    return json(res, 400, { error: e.message });
+  }
+
+  if (route === "/api/maintenance/apply") {
+    const m = MAINTENANCE[String(body.action)];
+    if (!m) return json(res, 400, { error: "unknown action" });
+    const started = startJob(m.apply, ctx);
+    if (started.error) return json(res, 409, started);
+    return json(res, 200, { ok: true, ...started });
+  }
+
+  const build = WRITES[route];
+  if (!build) return json(res, 404, { error: "unknown endpoint " + route });
+  if (job && job.running) return json(res, 409, { error: "busy", job: jobView() });
+  let argv;
+  try {
+    argv = build(body);
+  } catch (_) {
+    return json(res, 400, { error: "bad request body" });
+  }
+  if (argv.some((a) => a === "undefined" || a === "null" || a === ""))
+    return json(res, 400, { error: "missing argument" });
+  const out = runCli(argv, ctx);
+  clearCache();
+  // A write's exit code is a REAL failure signal (validators exit 1), unlike a
+  // read's — so it is reported as such, with the CLI's own message.
+  return json(res, 200, {
+    ok: out.exit_code === 0,
+    exit_code: out.exit_code,
+    command: out.command,
+    // Writes print human text, not JSON — that IS the confirmation to show.
+    output: (out.stdout + (out.stderr ? "\n" + out.stderr : "")).trim(),
+  });
+}
+
+// `orc upgrade` replaces the package while your working tree may hold changes.
+// Worth a warning before, not a surprise after.
+function isDirtyTree(ctx) {
+  try {
+    const r = spawnSync("git", ["status", "--porcelain"], {
+      cwd: ctx.projectRoot,
+      encoding: "utf8",
+      windowsHide: true,
+      timeout: 5000,
+    });
+    return r.status === 0 && !!(r.stdout || "").trim();
+  } catch (_) {
+    return false;
+  }
+}
+
+module.exports = { handleApi, clearCache, READS, WRITES, MAINTENANCE };
