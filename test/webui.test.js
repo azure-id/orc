@@ -352,6 +352,42 @@ test("server: rejects a missing/bad token, a non-loopback Host, and a bad method
   }
 });
 
+// The auth test above proves an UNTOKENED asset is refused. That is only half
+// the contract, and the half that shipped broken: the shell references app.css
+// and app.js, a <link>/<script> sends no token of its own, and so the browser
+// got 401 on BOTH while the page itself was a clean 200. The result renders as
+// unstyled, scriptless markup — every panel dead, every button inert — and no
+// existing case saw it, because each one fetched assets with a token the real
+// browser never has. So follow the reference chain the browser actually walks:
+// load the page, then fetch every URL it points at EXACTLY as written.
+test("server: every asset the shell references loads as the browser requests it", async () => {
+  const { root } = freshInstall();
+  let srv;
+  try {
+    srv = await startServer(root);
+    const { port, token } = srv.lock;
+
+    const page = await request(port, "/?t=" + token);
+    assert.strictEqual(page.status, 200, "the shell itself must load");
+
+    const refs = [...page.raw.matchAll(/(?:href|src)="((?!https?:|\/\/|#|data:)[^"]+)"/g)].map((m) => m[1]);
+    assert.ok(refs.length >= 2, "the shell must reference its stylesheet and its script");
+    assert.ok(
+      refs.some((r) => r.startsWith("app.css")) && refs.some((r) => r.startsWith("app.js")),
+      "app.css and app.js must both be referenced"
+    );
+
+    for (const ref of refs) {
+      const res = await request(port, "/" + ref.replace(/^\.?\//, ""));
+      assert.strictEqual(res.status, 200, `${ref} must load with no extra credential — the browser has none to add`);
+      assert.ok(res.raw.length > 0, `${ref} must not be empty`);
+    }
+  } finally {
+    if (srv) srv.child.kill();
+    rmrf(root);
+  }
+});
+
 test("server: a write shells the real CLI, so its validators still decide", async () => {
   const { root } = freshInstall();
   let srv;

@@ -6,7 +6,7 @@
 
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
-![Version](https://img.shields.io/badge/version-0.43.0-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.43.1-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
@@ -46,7 +46,24 @@ zero-dependency npm package installs those files into your `.claude/` directory.
 
 ## Changelog
 
-**Latest: v0.43.0 — updated 2026-08-08.**
+**Latest: v0.43.1 — updated 2026-08-08.**
+
+### v0.43.1 — the panel's stylesheet and script actually reach the browser _(2026-08-08)_
+
+`orc ui` shipped its whole design and never showed it. The token is required on
+every request, but a `<link>` and a `<script>` send no token of their own — so
+the page itself loaded `200` while `app.css` and `app.js` both came back `401`.
+What rendered was bare markup: default serif, a bulleted list of blue links, no
+theme, no animation, and every button inert because no script ever ran.
+
+The shell now goes out with the live token stamped onto both asset references.
+Doing it there — rather than with a cookie — keeps the token explicit per
+request, so no ambient credential exists for a cross-origin page to ride on.
+
+The auth tests all passed because each one fetched assets *with* a token the
+real browser never has. The new case follows the reference chain a browser
+actually walks: load the page, then fetch every URL it points at exactly as
+written, with nothing added.
 
 ### v0.43.0 — `orc ui`: a control panel for everything that is not ai _(2026-08-08)_
 

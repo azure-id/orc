@@ -287,6 +287,21 @@ async function serve(opts) {
         res.writeHead(500, { "content-type": "text/plain" }).end("missing asset\n");
         return;
       }
+      // The token is required on EVERY request, and a <link>/<script> in the
+      // HTML carries no query string of its own — so app.css and app.js would
+      // 401 and the page would render as unstyled, scriptless markup. Stamp the
+      // live token onto the two asset references as the shell goes out. Doing it
+      // here (rather than with a cookie) keeps the token explicit per request:
+      // there is no ambient credential a cross-origin page could ever ride on.
+      if (stat.file === "app.html") {
+        body = Buffer.from(
+          body
+            .toString("utf8")
+            .replace('href="app.css"', `href="app.css?t=${token}"`)
+            .replace('src="app.js"', `src="app.js?t=${token}"`),
+          "utf8"
+        );
+      }
       res.writeHead(200, {
         "content-type": stat.type,
         "cache-control": "no-store",
