@@ -14,6 +14,16 @@ const required = [
   "bin/cli.js",
   "package.json",
   "README.md",
+  // The `orc ui` web panel (v0.43.0). Named file by file, not covered by a
+  // count: the panel is four files that only work together, and a publish
+  // missing any one of them serves a page that 500s or renders blank. NOTE the
+  // folder — `bin/ui.js` is the TERMINAL styling kit and is a different thing.
+  "bin/webui/serve.js",
+  "bin/webui/api.js",
+  "bin/webui/fixtures.js",
+  "bin/webui/app.html",
+  "bin/webui/app.css",
+  "bin/webui/app.js",
   "templates",
   "templates/skills/orc/SKILL.md",
   "templates/skills/orc/references/ultra-mode.md",

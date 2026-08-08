@@ -2,6 +2,10 @@
 /**
  * ui.js — a tiny zero-dependency terminal UI kit shared by the orc CLI.
  *
+ * NOT the web panel. `bin/webui/` is `orc ui`, the local browser control panel;
+ * this file is the TERMINAL styling kit the CLI prints through. One letter
+ * apart, entirely different jobs — do not let the names collide.
+ *
  * Rules that keep automated callers safe:
  *  - COLOR is emitted ONLY on a real TTY and only when NO_COLOR is unset. Piped
  *    output (tests, `| cat`, CI) is byte-identical to the plain text — no ANSI.

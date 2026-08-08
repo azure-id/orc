@@ -65,6 +65,22 @@ function positionals() {
   return out;
 }
 
+// ── Machine-readable output (v0.43.0) ──────────────────────────────────────
+// One rule, enforced by test/cli.test.js for every flagged command: `--json`
+// prints EXACTLY ONE object to stdout, nothing else — no banner, no colour, no
+// update nudge — and keeps the exit code the human path would have used. The
+// exit codes are already a contract (`pattern status`, `diy status`, `resume`,
+// `wiki impact`), so the flag changes rendering only, never semantics. `orc ui`
+// is the first consumer, but the flags stand on their own: they make the whole
+// CLI scriptable.
+const wantsJson = () => flag("--json") === true;
+
+// Print the object and (optionally) exit with the human path's code.
+function emitJson(obj, exitCode) {
+  process.stdout.write(JSON.stringify(obj, null, 2) + "\n");
+  if (exitCode !== undefined) process.exit(exitCode);
+}
+
 function resolveClaudeDir() {
   // --global  → ~/.claude    (available in every project)
   // --dir X   → X/.claude
@@ -267,7 +283,12 @@ function writeManifest(claudeDir, files) {
 }
 
 // Only paths ORC plants (the four payload trees) are ever prunable — a defence
-// in depth on top of "was in the previous manifest".
+// in depth on top of "was in the previous manifest". Everything under
+// .claude/orc/ is therefore permanently safe from the prune by construction:
+// patterns/, gotchas.md, the wiki manifest, run folders, logs/, the install
+// manifest itself, and — since v0.43.0 — ui.lock, the `orc ui` server's lock
+// file. A prune that deleted a live server's lock would orphan a running write
+// surface with no way left to find or stop it.
 function isPrunable(rel) {
   return /^(skills|commands|agents|hooks)\//.test(rel);
 }
@@ -694,20 +715,32 @@ const KNOWN_MODELS = [
   "claude-fable-5",
 ];
 
-const vInt = (min) => (raw) => {
-  const n = Number(raw);
-  if (!Number.isInteger(n) || n < min) return { err: `must be an integer >= ${min}` };
-  return { value: n };
-};
-const vRange = (min, max) => (raw) => {
-  const n = Number(raw);
-  if (!Number.isInteger(n) || n < min || n > max)
-    return { err: `must be an integer ${min}-${max}` };
-  return { value: n };
-};
-const vEnum = (...opts) => (raw) =>
-  opts.includes(raw) ? { value: raw } : { err: `must be one of: ${opts.join(", ")}` };
-const vModel = (raw) => {
+// Every validator carries a `kind` tag (plus its bounds/choices). Nothing in the
+// terminal path reads it — it exists so `orc config list --json` can describe
+// each key's CONTROL to a non-terminal caller without a second table to drift.
+// The validator IS the source of truth for what a value may be, so the control
+// description is derived from it rather than re-declared.
+const tag = (fn, meta) => Object.assign(fn, meta);
+
+const vInt = (min) =>
+  tag((raw) => {
+    const n = Number(raw);
+    if (!Number.isInteger(n) || n < min) return { err: `must be an integer >= ${min}` };
+    return { value: n };
+  }, { kind: "int", min });
+const vRange = (min, max) =>
+  tag((raw) => {
+    const n = Number(raw);
+    if (!Number.isInteger(n) || n < min || n > max)
+      return { err: `must be an integer ${min}-${max}` };
+    return { value: n };
+  }, { kind: "range", min, max });
+const vEnum = (...opts) =>
+  tag(
+    (raw) => (opts.includes(raw) ? { value: raw } : { err: `must be one of: ${opts.join(", ")}` }),
+    { kind: "enum", choices: opts }
+  );
+const vModel = tag((raw) => {
   if (!KNOWN_MODELS.includes(raw))
     return { err: `unknown model id (expected one of: ${KNOWN_MODELS.join(", ")})` };
   // Opus 4.8 is the baseline; Fable 5 is strictly capable (never downgrades a
@@ -717,30 +750,36 @@ const vModel = (raw) => {
       ? null
       : "⚠ below Opus/Fable — every opus-* agent silently falls back to a smaller model (tier ladder).";
   return { value: raw, warn };
-};
-const vPath = (raw) =>
-  raw && raw.trim() ? { value: raw } : { err: "must be a non-empty path" };
+}, { kind: "enum", choices: KNOWN_MODELS });
+const vPath = tag(
+  (raw) => (raw && raw.trim() ? { value: raw } : { err: "must be a non-empty path" }),
+  { kind: "path" }
+);
 // GitHub delivery target for /orc-retro — owner/repo, nothing else.
-const vRepo = (raw) =>
-  /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/.test(String(raw).trim())
-    ? { value: String(raw).trim() }
-    : { err: "must be a GitHub owner/repo (e.g. azure-id/orc)" };
+const vRepo = tag(
+  (raw) =>
+    /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/.test(String(raw).trim())
+      ? { value: String(raw).trim() }
+      : { err: "must be a GitHub owner/repo (e.g. azure-id/orc)" },
+  { kind: "repo" }
+);
 
 // Fable 5 role override (C.1). Roles that MAY be handed to a Fable 5 agent.
 const FABLE5_ROLES = ["analyze", "plan", "advisor", "judge", "review"];
 // CSV (or bracketed) subset validator → a normalized flow-array string
 // (`[analyze, plan]`), which serializeValue passes through as valid YAML.
-const vSubset = (allowed) => (raw) => {
-  const items = String(raw)
-    .replace(/^\[|\]$/g, "")
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
-  const bad = items.filter((x) => !allowed.includes(x));
-  if (bad.length)
-    return { err: `unknown role(s): ${bad.join(", ")} (allowed: ${allowed.join(", ")})` };
-  return { value: `[${[...new Set(items)].join(", ")}]` };
-};
+const vSubset = (allowed) =>
+  tag((raw) => {
+    const items = String(raw)
+      .replace(/^\[|\]$/g, "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const bad = items.filter((x) => !allowed.includes(x));
+    if (bad.length)
+      return { err: `unknown role(s): ${bad.join(", ")} (allowed: ${allowed.join(", ")})` };
+    return { value: `[${[...new Set(items)].join(", ")}]` };
+  }, { kind: "subset", choices: allowed });
 
 // Ordered, tiered metadata. Common first, then advanced.
 // `options` (common tier only) is the pick-list shown in the interactive menu —
@@ -930,6 +969,103 @@ function configList(claudeDir) {
       );
   }
   console.log("");
+}
+
+// Which keys a currently-set key makes INERT. The CLI already announces this in
+// prose at `config set` time (opus5Notice / opus5ConflictWarn / fable5Warn);
+// this is the same rule expressed as data, so a non-terminal caller can render
+// the shadow instead of parsing the sentence. ONE rule today: opus5_only
+// outranks the whole fable5_* block and a hand-written rubric_bands_override.
+function shadowReason(key, map) {
+  if (String(map.opus5_only) !== "true") return null;
+  if (key.startsWith("fable5_"))
+    return "shadowed by opus5_only — every role dispatches its Opus 5 agent, so the Fable 5 override is inert";
+  if (key === "rubric_bands_override")
+    return "shadowed by opus5_only — executors use the fixed 3-band Opus 5 ladder";
+  return null;
+}
+
+// The score→model ladder, as data. Read from DIY_SCORE_TABLE so the UI adds no
+// SIXTH copy of a table already mirrored in five places (config.md,
+// MODEL-MAPPING.md, effort-and-mode.md, build-agents.js VARIANTS, and that
+// constant). `opus5_only` replaces it with the 3-band effort ladder.
+const OPUS5_SCORE_TABLE = [
+  [0, 40, "orc-executor-opus-5-low"],
+  [40, 80, "orc-executor-opus-5-med"],
+  [80, 101, "orc-executor-opus-5-high"],
+];
+const bandRows = (rows) =>
+  rows.map(([lo, hi, agent]) => ({ from: lo, to: hi === 101 ? 100 : hi, inclusive_to: hi === 101, agent }));
+
+function scoreTableJson(map) {
+  const forced = String(map.opus5_only) === "true";
+  return {
+    // Which table RESOLVES (highest-wins): opus5_only > rubric_bands_override
+    // (hand-written, registry-less) > the default 8-band.
+    active: forced ? "opus5_only" : map.rubric_bands_override ? "rubric_bands_override" : "default",
+    default: bandRows(DIY_SCORE_TABLE),
+    opus5_only: bandRows(OPUS5_SCORE_TABLE),
+  };
+}
+
+// `orc config list --json`. Everything the human table shows, plus the three
+// things only a renderer needs: the control shape (derived from the validator),
+// whether another key shadows this one, and the resolved score ladder.
+function configListJson(claudeDir) {
+  const { path: p, map } = readOverride(claudeDir);
+  const has = (k) => Object.prototype.hasOwnProperty.call(map, k);
+  const keys = CONFIG_META.map((m) => {
+    const v = m.validate || {};
+    const why = shadowReason(m.key, map);
+    return {
+      key: m.key,
+      tier: m.tier,
+      value: has(m.key) ? map[m.key] : m.def,
+      default: m.def,
+      is_overridden: has(m.key),
+      is_shadowed: !!why,
+      shadow_reason: why,
+      desc: m.desc,
+      options: m.options || null,
+      control: {
+        kind: v.kind || "text",
+        choices: v.choices || null,
+        min: v.min === undefined ? null : v.min,
+        max: v.max === undefined ? null : v.max,
+      },
+    };
+  });
+  // Hand-edited keys CONFIG_META does not know — rubric_bands_override is the
+  // designed case. Reported as read-only: `orc config set` refuses them, so an
+  // editor offering to write one would be lying about what happens next.
+  const extra = Object.keys(map)
+    .filter((k) => !metaFor(k))
+    .map((k) => ({
+      key: k,
+      value: map[k],
+      is_shadowed: !!shadowReason(k, map),
+      shadow_reason: shadowReason(k, map),
+      editable: false,
+    }));
+  // A retired name still on disk. readOverride() resolves it away, so without
+  // this the file says one thing and the listing says another.
+  const legacy = [];
+  try {
+    const raw = fs.readFileSync(p, "utf8");
+    for (const [old, now] of Object.entries(LEGACY_KEYS))
+      if (new RegExp("^\\s*" + old + "\\s*:", "m").test(raw)) legacy.push({ key: old, renamed_to: now });
+  } catch (_) {}
+  emitJson({
+    config_path: p,
+    exists: fs.existsSync(p),
+    keys,
+    hand_edited: extra,
+    legacy_keys: legacy,
+    score_table: scoreTableJson(map),
+    // Permanently on and deliberately not a key — say so, or a reader hunts for
+    // the switch (only the folder is configurable).
+    behavior_trace: { always_on: true, configurable_key: "log_dir" },
+  });
 }
 
 function configSet(claudeDir, key, rawValue) {
@@ -1215,6 +1351,28 @@ const CONFIG_PROFILES = {
   },
 };
 
+// `orc config profile --json` — the bundles themselves, plus which keys each
+// one would actually change from where this repo stands now. A profile is a
+// preview-then-apply action in any UI, and a list with no diff is not a preview.
+function configProfileJson(claudeDir) {
+  const { map } = readOverride(claudeDir);
+  emitJson({
+    profiles: Object.entries(CONFIG_PROFILES).map(([name, prof]) => {
+      const changes = [];
+      for (const [key, value] of Object.entries(prof.keys)) {
+        const m = metaFor(key);
+        if (!m) continue;
+        const res = m.validate(String(value));
+        if (res.err) continue;
+        const before = map[key] === undefined ? m.def : map[key];
+        if (String(before) !== String(res.value))
+          changes.push({ key, from: before, to: res.value });
+      }
+      return { name, desc: prof.desc, keys: prof.keys, changes };
+    }),
+  });
+}
+
 function configProfile(claudeDir, name) {
   if (!name || !CONFIG_PROFILES[name]) {
     console.log(ui.header("orc config profile — coherent setting bundles"));
@@ -1259,7 +1417,7 @@ function configProfile(claudeDir, name) {
 // `orc config recommend` — probe the repo, suggest ONE profile, say WHY.
 // Read-only: it never writes. The reasons are the point; a recommendation you
 // cannot argue with is one you cannot correct.
-function configRecommend(claudeDir) {
+function computeRecommend(claudeDir) {
   const root = path.join(claudeDir, "..");
   const has = (rel) => fs.existsSync(path.join(root, rel));
   const reasons = [];
@@ -1302,7 +1460,15 @@ function configRecommend(claudeDir) {
 
   const best = Object.entries(score).sort((a, b) => b[1] - a[1]);
   const pick = best[0][1] === 0 ? "balanced" : best[0][0];
+  return { reasons, score, pick };
+}
 
+function configRecommend(claudeDir) {
+  const { reasons, score, pick } = computeRecommend(claudeDir);
+  if (wantsJson()) {
+    emitJson({ recommended: pick, desc: CONFIG_PROFILES[pick].desc, reasons, scores: score });
+    return;
+  }
   console.log(ui.header("orc config recommend"));
   console.log("  What I looked at:");
   for (const r of reasons) console.log(`    ${ui.glyph.bullet} ${r}`);
@@ -1325,17 +1491,22 @@ function config() {
   const sub = pos[1];
   switch (sub) {
     case "profile":
-      configProfile(claudeDir, pos[2]);
+      // `--json` is a LISTING, never an apply: a machine-readable form of "what
+      // would this bundle change" cannot also mutate the file.
+      if (wantsJson()) configProfileJson(claudeDir);
+      else configProfile(claudeDir, pos[2]);
       break;
     case "recommend":
       configRecommend(claudeDir);
       break;
     case undefined:
-      configInteractive(claudeDir);
+      if (wantsJson()) configListJson(claudeDir);
+      else configInteractive(claudeDir);
       break;
     case "list":
     case "get":
-      configList(claudeDir);
+      if (wantsJson()) configListJson(claudeDir);
+      else configList(claudeDir);
       break;
     case "path":
       console.log(overridePath(claudeDir));
@@ -1765,6 +1936,30 @@ function diyCompile(claudeDir) {
 function diyShow(claudeDir) {
   const map = readDiyConfig(claudeDir);
   const st = diyStatus(claudeDir);
+  if (wantsJson()) {
+    const cfg = map ? diyResolve(map) : null;
+    const v = cfg ? diyValidate(cfg) : { errors: [], warnings: [] };
+    const p = diyPaths(claudeDir);
+    return emitJson({
+      state: st.state,
+      reason: st.reason,
+      triggers: st.triggers || [],
+      configured: !!map,
+      paths: { config: p.config, compiled: p.compiled, lock: p.lock },
+      keys: DIY_META.map((m) => ({
+        key: m.key,
+        value: cfg ? cfg[m.key] : m.def,
+        default: m.def,
+        is_set: !!(map && m.key in map),
+        desc: m.desc,
+      })),
+      errors: v.errors,
+      warnings: v.warnings,
+      // The tier-CLIPPED table this flow would actually compile — not the
+      // canonical ladder. A DIY flow's executors are compile-owned.
+      score_table: cfg ? diyScoreTable(cfg) : null,
+    });
+  }
   console.log(`\nORC-DIY  gate: ${st.state} — ${st.reason}\n`);
   if (!map) {
     console.log("Bootstrap:  orc diy init [--preset lean|paranoid|solo-fast]");
@@ -1997,15 +2192,18 @@ function diy() {
       // Exit code IS the contract, mirroring `orc pattern status <lang>`:
       // 0 = READY (the flow can run), 1 = STALE | UNCONFIGURED (it cannot).
       const st = diyStatus(claudeDir);
-      if (args.includes("--json")) console.log(JSON.stringify(st));
-      else console.log(`${st.state} — ${st.reason}`);
+      if (wantsJson()) emitJson(st, st.state === "READY" ? 0 : 1);
+      console.log(`${st.state} — ${st.reason}`);
       process.exit(st.state === "READY" ? 0 : 1);
     }
     case "show":
       diyShow(claudeDir);
       break;
     case undefined:
-      diyInteractive(claudeDir); // TTY menu; falls back to the table when piped
+      // --json is never the interactive menu (which prints a "non-interactive
+      // shell" preamble when piped, breaking the one-object rule).
+      if (wantsJson()) diyShow(claudeDir);
+      else diyInteractive(claudeDir); // TTY menu; falls back to the table when piped
       break;
     case "reset": {
       const p = diyPaths(claudeDir);
@@ -2272,6 +2470,40 @@ function crosslinkEnsureSelf(claudeDir) {
   return cfg;
 }
 
+// One object for both `crosslink list --json` and `crosslink status --json` —
+// they differ only in what the human renderer chooses to print, and two shapes
+// for one graph is a drift surface with no upside.
+function crosslinkJson(claudeDir) {
+  const cfg = readCrosslinkConfig(claudeDir);
+  if (!cfg) return emitJson({ configured: false, self: null, nodes: [], links: [], needs_baseline: null });
+  const isSelf = (x) => x === "self" || x === cfg.self;
+  emitJson({
+    configured: true,
+    self: cfg.self,
+    config_path: crosslinkPaths(claudeDir).config,
+    nodes: cfg.nodes.map((n) => {
+      const root = path.resolve(repoRootOf(claudeDir), n.repo_path);
+      return {
+        name: n.name,
+        repo_path: n.repo_path,
+        resolved_path: root,
+        kinds: n.kinds || [],
+        direction: crosslinkDirection(cfg, n.name),
+        // Peer freshness uses the DEFAULT 10/30 edges by design — a peer repo's
+        // config is not ours to read (see crosslinkProviderInfo).
+        provider: crosslinkProviderInfo(root),
+      };
+    }),
+    links: cfg.links.map((l) => ({
+      from: l.from,
+      to: l.to,
+      via: l.via,
+      relation: isSelf(l.from) ? "we-call" : isSelf(l.to) ? "they-call-us" : "external",
+    })),
+    needs_baseline: fs.existsSync(crosslinkPaths(claudeDir).needs) ? crosslinkPaths(claudeDir).needs : null,
+  });
+}
+
 function crosslinkList(claudeDir) {
   const cfg = readCrosslinkConfig(claudeDir);
   if (!cfg || !cfg.nodes.length) {
@@ -2427,14 +2659,17 @@ function crosslink() {
   const pos = positionals(); // ["crosslink", <sub?>, ...]
   switch (pos[1]) {
     case undefined:
-      crosslinkInteractive(claudeDir);
+      if (wantsJson()) crosslinkJson(claudeDir);
+      else crosslinkInteractive(claudeDir);
       break;
     case "list":
     case "show":
-      crosslinkList(claudeDir);
+      if (wantsJson()) crosslinkJson(claudeDir);
+      else crosslinkList(claudeDir);
       break;
     case "status":
-      crosslinkStatus(claudeDir);
+      if (wantsJson()) crosslinkJson(claudeDir);
+      else crosslinkStatus(claudeDir);
       break;
     case "remove":
       crosslinkRemove(claudeDir, pos[2]);
@@ -3181,27 +3416,36 @@ const IMPACT_NOISE = /^(wiki\/|\.claude\/|learning-docs\/|mock-examples\/|test-g
 function wikiImpact(claudeDir) {
   const paths = wikiPaths(claudeDir);
   const s = wikiState(claudeDir);
-  if (s.state === "none") {
-    console.log("no wiki — nothing to diff against. Run `/orc-wiki` to build one.");
+  const asJson = wantsJson();
+  // Exit 1 = "cannot compute" — three distinct reasons, all of which a caller
+  // must be able to tell apart, so the JSON path names which one it hit.
+  const cannot = (reason, hint) => {
+    if (asJson) emitJson({ ok: false, state: s.state, reason, hint, recommendation: "unavailable" }, 1);
+    console.log(hint);
     process.exit(1);
-  }
-  if (s.state !== "registered") {
-    console.log(`⚠ wiki is ${s.state.toUpperCase()} — run \`orc wiki sync\` first, then re-run \`orc wiki impact\`.`);
-    process.exit(1);
-  }
+  };
+  if (s.state === "none")
+    cannot("no-wiki", "no wiki — nothing to diff against. Run `/orc-wiki` to build one.");
+  if (s.state !== "registered")
+    cannot(
+      "not-registered",
+      `⚠ wiki is ${s.state.toUpperCase()} — run \`orc wiki sync\` first, then re-run \`orc wiki impact\`.`
+    );
   const meta = s.meta;
-  if (!meta.scan_commit) {
-    console.log("⚠ no scan_commit in the manifest — impact needs a commit anchor; a /orc-wiki refresh restores it.");
-    process.exit(1);
-  }
+  if (!meta.scan_commit)
+    cannot(
+      "no-anchor",
+      "⚠ no scan_commit in the manifest — impact needs a commit anchor; a /orc-wiki refresh restores it."
+    );
   const diff = spawnSync("git", ["diff", "--name-only", `${meta.scan_commit}..HEAD`], {
     cwd: paths.root,
     encoding: "utf8",
   });
-  if (diff.status !== 0) {
-    console.log(`⚠ git diff failed (is scan_commit ${String(meta.scan_commit).slice(0, 8)} still resolvable here?)`);
-    process.exit(1);
-  }
+  if (diff.status !== 0)
+    cannot(
+      "git-failed",
+      `⚠ git diff failed (is scan_commit ${String(meta.scan_commit).slice(0, 8)} still resolvable here?)`
+    );
   const changed = (diff.stdout || "").split(/\r?\n/).map((x) => x.trim()).filter(Boolean);
 
   // Per-doc changed-file sets from each doc's OWN `scanned_commit` (v0.34.5).
@@ -3222,11 +3466,13 @@ function wikiImpact(claudeDir) {
     return (r2.stdout || "").split(/\r?\n/).map((x) => x.trim()).filter(Boolean);
   };
 
+  const say = asJson ? () => {} : (s) => console.log(s);
   const docs = Array.isArray(meta.docs) ? meta.docs : [];
   let touchedDocs = 0;
   let structuralDocs = 0;
+  const rows = [];
   const pad = Math.max(12, ...docs.map((d) => d.file.length));
-  console.log(`\norc wiki impact — ${changed.length} changed file(s) since scan_commit ${String(meta.scan_commit).slice(0, 8)}\n`);
+  say(`\norc wiki impact — ${changed.length} changed file(s) since scan_commit ${String(meta.scan_commit).slice(0, 8)}\n`);
   for (const d of docs) {
     const hits = perDocChanged(d).filter((f) => docCovers(d, f));
     // A covered file that no longer exists = the doc's anchor is gone
@@ -3236,12 +3482,15 @@ function wikiImpact(claudeDir) {
     );
     if (gone.length) {
       structuralDocs++;
-      console.log(`  STRUCTURAL   ${d.file.padEnd(pad)}  covered file(s) gone: ${gone.join(", ")}`);
+      rows.push({ file: d.file, state: "STRUCTURAL", hits: [], gone });
+      say(`  STRUCTURAL   ${d.file.padEnd(pad)}  covered file(s) gone: ${gone.join(", ")}`);
     } else if (hits.length) {
       touchedDocs++;
-      console.log(`  TOUCHED (${hits.length})  ${d.file.padEnd(pad)}  ${hits.slice(0, 4).join(", ")}${hits.length > 4 ? " …" : ""}`);
+      rows.push({ file: d.file, state: "TOUCHED", hits, gone: [] });
+      say(`  TOUCHED (${hits.length})  ${d.file.padEnd(pad)}  ${hits.slice(0, 4).join(", ")}${hits.length > 4 ? " …" : ""}`);
     } else {
-      console.log(`  CLEAN        ${d.file}`);
+      rows.push({ file: d.file, state: "CLEAN", hits: [], gone: [] });
+      say(`  CLEAN        ${d.file}`);
     }
   }
 
@@ -3250,9 +3499,9 @@ function wikiImpact(claudeDir) {
     (f) => !IMPACT_NOISE.test(f) && !docs.some((d) => docCovers(d, f))
   );
   if (blind.length) {
-    console.log(`\n  STRUCTURAL blind spot — ${plural(blind.length, "changed file")} no doc covers:`);
-    for (const f of blind.slice(0, 10)) console.log("    " + f);
-    if (blind.length > 10) console.log(`    … and ${blind.length - 10} more`);
+    say(`\n  STRUCTURAL blind spot — ${plural(blind.length, "changed file")} no doc covers:`);
+    for (const f of blind.slice(0, 10)) say("    " + f);
+    if (blind.length > 10) say(`    … and ${blind.length - 10} more`);
   }
 
   const map = readOverride(claudeDir).map;
@@ -3272,13 +3521,35 @@ function wikiImpact(claudeDir) {
   // `pct` counts touched + structural, so it measures REFRESH SCOPE, not
   // "touched" — and it is the number users tune wiki_delta_full_threshold
   // against, so the label has to say what it counts.
-  console.log(`\n  summary: ${docs.length} registered · ${touchedDocs} touched · ${structuralDocs} structural · ${pct}% affected (threshold ${threshold}%)` + (dist !== null ? ` · freshness ${fresh.tier}, ${dist} commits behind on the worst doc's covered files` : ""));
+  say(`\n  summary: ${docs.length} registered · ${touchedDocs} touched · ${structuralDocs} structural · ${pct}% affected (threshold ${threshold}%)` + (dist !== null ? ` · freshness ${fresh.tier}, ${dist} commits behind on the worst doc's covered files` : ""));
   const fullReasons = [];
   if (pct > threshold) fullReasons.push(`affected ${pct}% > wiki_delta_full_threshold ${threshold}%`);
   if (structuralDocs || blind.length) fullReasons.push("STRUCTURAL change (gone anchors / blind spot)");
   if (aging) fullReasons.push(`worst doc ${dist} commits behind on its own covered files > wiki_aging_max ${agingMax}`);
 
-  if (!touchedDocs && !structuralDocs && !blind.length && !aging) {
+  const clean = !touchedDocs && !structuralDocs && !blind.length && !aging;
+  const recommendation = clean ? "CLEAN" : fullReasons.length ? "FULL" : "DELTA";
+  if (asJson)
+    emitJson(
+      {
+        ok: true,
+        scan_commit: meta.scan_commit,
+        changed_files: changed.length,
+        docs: rows,
+        blind_spot: blind,
+        registered: docs.length,
+        touched: touchedDocs,
+        structural: structuralDocs,
+        affected_pct: pct,
+        threshold,
+        freshness: { tier: fresh.tier, distance: fresh.distance, aging_max: agingMax },
+        recommendation,
+        reasons: fullReasons,
+      },
+      clean ? 0 : fullReasons.length ? 3 : 2
+    );
+
+  if (clean) {
     console.log("  → CLEAN — the wiki still covers HEAD; no refresh needed.");
     process.exit(0);
   }
@@ -3331,8 +3602,38 @@ function knownPatternLangs(claudeDir) {
   return [];
 }
 
+// The cached patterns as data, with each file's mtime — the only freshness
+// signal a pattern has (unlike the wiki, it carries no commit anchor).
+function patternEntries(claudeDir) {
+  const dir = patternsDir(claudeDir);
+  return listPatternLangs(claudeDir).map((lang) => {
+    const file = path.join(dir, lang + "-pattern.md");
+    let mtime = null;
+    try { mtime = Math.round(fs.statSync(file).mtimeMs); } catch (_) {}
+    return { lang, path: file, mtime_ms: mtime };
+  });
+}
+
 function patternStatus(claudeDir, lang) {
   const langs = listPatternLangs(claudeDir);
+  // The exit code is the contract (0 cached / 1 absent / 2 unknown key) and
+  // --json must not disturb it — so the JSON path mirrors each branch's code.
+  if (wantsJson()) {
+    const known = knownPatternLangs(claudeDir);
+    const unknown = !!(lang && known.length && !known.includes(lang));
+    const cached = lang ? langs.includes(lang) : langs.length > 0;
+    emitJson(
+      {
+        lang: lang || null,
+        cached,
+        unknown_language: unknown,
+        patterns_dir: patternsDir(claudeDir),
+        patterns: patternEntries(claudeDir),
+        known_languages: known,
+      },
+      unknown ? 2 : cached ? 0 : 1
+    );
+  }
   // A key the payload has never heard of is a CALLER bug, not an absent cache
   // (v0.34.8). The probe used to glob `<lang>-pattern.md` and answer for any
   // string, so a gate asking about `js` — a file extension, not one of the
@@ -3459,6 +3760,24 @@ function gotchaRow(e) {
 function gotchaStatus(claudeDir, verbose) {
   const file = gotchasPath(claudeDir);
   const { entries } = parseGotchas(file);
+  if (wantsJson()) {
+    emitJson(
+      {
+        file,
+        count: entries.length,
+        gotchas: entries.map((e) => ({
+          id: e.id,
+          area: e.area,
+          kind: e.kind,
+          hits: e.hits,
+          last_seen: e.fields.last_seen || null,
+          trigger: e.fields.trigger || null,
+          fields: e.fields,
+        })),
+      },
+      entries.length ? 0 : 1
+    );
+  }
   if (!entries.length) {
     console.log("no gotchas recorded yet — nothing to inject (a repair loop that goes red → green writes the first one)");
     process.exit(1);
@@ -3532,6 +3851,160 @@ function gotcha() {
         `Unknown: orc gotcha ${pos[1]}\n` +
           "Usage: orc gotcha status | list   whether repair memory exists (exit 0 = entries, 1 = none)\n" +
           "       orc gotcha prune           archive the low-value tail down to gotchas_max"
+      );
+      process.exit(1);
+  }
+}
+
+// ── Mock examples (`orc mock …`) ───────────────────────────────────────────
+// `mock-examples/<change-slug>/` sits at the PROJECT ROOT and holds EXAMPLE.md
+// plus one minimal runnable mocked example, written after a green verify
+// (config `mock_example`, default `ask`) and NEVER staged. Until now it had no
+// CLI surface at all, so anything wanting to show one had to invent its own
+// filesystem logic for a folder whose location is a contract.
+//
+// Read-only by design, and it never offers to RUN anything: a mock example is
+// arbitrary project code, and "here is a Run button" for arbitrary code is a
+// promise this command has no business making.
+const MOCK_DIR = "mock-examples";
+const MOCK_README = "EXAMPLE.md";
+// A mock example is small by construction; this cap only stops a stray build
+// artifact inside one from being enumerated forever.
+const MOCK_MAX_FILES = 200;
+
+function mockRoot(claudeDir) {
+  return path.join(repoRootOf(claudeDir), MOCK_DIR);
+}
+
+function listMocks(claudeDir) {
+  const root = mockRoot(claudeDir);
+  let entries = [];
+  try {
+    entries = fs.readdirSync(root, { withFileTypes: true });
+  } catch (_) {
+    return { root, mocks: [] };
+  }
+  const mocks = [];
+  for (const e of entries) {
+    if (!e.isDirectory()) continue;
+    const dir = path.join(root, e.name);
+    let mtime = 0;
+    try { mtime = fs.statSync(dir).mtimeMs; } catch (_) {}
+    mocks.push({
+      slug: e.name,
+      dir,
+      mtime_ms: Math.round(mtime),
+      has_readme: fs.existsSync(path.join(dir, MOCK_README)),
+    });
+  }
+  mocks.sort((a, b) => b.mtime_ms - a.mtime_ms);
+  return { root, mocks };
+}
+
+// Relative file list for ONE mock, with sizes. Never reads the file bodies —
+// `mock show` renders EXAMPLE.md; everything else is a listing.
+function mockFiles(dir) {
+  const out = [];
+  const walk = (d, prefix) => {
+    if (out.length >= MOCK_MAX_FILES) return;
+    let entries = [];
+    try { entries = fs.readdirSync(d, { withFileTypes: true }); } catch (_) { return; }
+    for (const e of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+      if (out.length >= MOCK_MAX_FILES) return;
+      const rel = prefix ? prefix + "/" + e.name : e.name;
+      if (e.isDirectory()) {
+        if (e.name === "node_modules" || e.name === ".git") continue;
+        walk(path.join(d, e.name), rel);
+        continue;
+      }
+      let size = null;
+      try { size = fs.statSync(path.join(d, e.name)).size; } catch (_) {}
+      out.push({ path: rel, size });
+    }
+  };
+  walk(dir, "");
+  return out;
+}
+
+function mockList(claudeDir) {
+  const { root, mocks } = listMocks(claudeDir);
+  if (wantsJson()) return emitJson({ root, total: mocks.length, mocks });
+  if (!mocks.length) {
+    // NOT an error state: `mock_example: off` and a declined `ask` are both
+    // normal, so an empty list must never read as something missing.
+    console.log(
+      `No mock examples under ${root}.\n` +
+        "  Nothing is wrong — they are written only after a green verify, when\n" +
+        "  config `mock_example` is `on` (or you accept the `ask` offer)."
+    );
+    return;
+  }
+  console.log(ui.header(`mock examples — ${plural(mocks.length, "example")}`));
+  for (const m of mocks)
+    console.log(
+      `  ${m.slug.padEnd(32)} ${m.has_readme ? ui.color.green(MOCK_README) : ui.color.gray("no " + MOCK_README)}  ` +
+        ui.color.gray(relAge(m.mtime_ms))
+    );
+  console.log("\n" + ui.color.gray(`Details: orc mock show <slug>   ·   never committed (ship excludes ${MOCK_DIR}/)`));
+}
+
+function mockShow(claudeDir, slug) {
+  const { root, mocks } = listMocks(claudeDir);
+  const pick = mocks.find((m) => m.slug === slug);
+  if (!pick) {
+    if (wantsJson()) emitJson({ root, slug: slug || null, found: false, known: mocks.map((m) => m.slug) }, 1);
+    console.error(
+      slug ? `No mock example named "${slug}".` : "Usage: orc mock show <slug>"
+    );
+    if (mocks.length) console.error("  known: " + mocks.map((m) => m.slug).join(", "));
+    process.exit(1);
+  }
+  const readmePath = path.join(pick.dir, MOCK_README);
+  let readme = null;
+  try { readme = fs.existsSync(readmePath) ? fs.readFileSync(readmePath, "utf8") : null; } catch (_) {}
+  const files = mockFiles(pick.dir);
+  if (wantsJson())
+    return emitJson({
+      root,
+      slug: pick.slug,
+      found: true,
+      dir: pick.dir,
+      mtime_ms: pick.mtime_ms,
+      readme,
+      readme_path: readme === null ? null : readmePath,
+      files,
+      truncated: files.length >= MOCK_MAX_FILES,
+    });
+  console.log(ui.header(`mock example — ${pick.slug}`));
+  console.log(ui.kv([["folder", pick.dir], ["files", String(files.length)], ["written", relAge(pick.mtime_ms)]]));
+  if (readme) {
+    console.log(ui.header(MOCK_README));
+    console.log(readme.trimEnd());
+  } else console.log(ui.color.gray(`\n(no ${MOCK_README} in this folder)`));
+  console.log(ui.header("files"));
+  for (const f of files) console.log(`  ${f.path}`);
+}
+
+function mock() {
+  if (flag("--global")) {
+    console.error("❌ orc mock is project-scoped — mock examples live in the repo. Run it from the project (or with --dir <path>).");
+    process.exit(1);
+  }
+  const claudeDir = resolveClaudeDir();
+  const pos = positionals(); // ["mock", <sub?>, <slug?>]
+  switch (pos[1]) {
+    case undefined:
+    case "list":
+      mockList(claudeDir);
+      break;
+    case "show":
+      mockShow(claudeDir, pos[2]);
+      break;
+    default:
+      console.error(
+        `Unknown: orc mock ${pos[1]}\n` +
+          "Usage: orc mock list [--json]        every mock-examples/<slug>/, newest first\n" +
+          "       orc mock show <slug> [--json] EXAMPLE.md + the file tree (read-only; never runs it)"
       );
       process.exit(1);
   }
@@ -3651,8 +4124,43 @@ function stackTemplate(claudeDir, slugArg) {
 // Exit code IS the contract (same convention as `orc pattern status` /
 // `orc diy status`): 0 = READY, 1 = absent | unfilled. A driver branches on it
 // without parsing prose.
+// Every readiness check `stackStatus` makes, as data — so the JSON path answers
+// the ambiguous cases (no plans, several plans) with an object instead of the
+// prose branch, while keeping the 0 ready / 1 not-ready exit contract.
+function stackProbe(claudeDir, slug) {
+  const p = stackPaths(claudeDir, slug);
+  if (!fs.existsSync(p.plan)) return { slug, ready: false, plan_path: p.plan, exists: false, problems: ["absent"] };
+  const text = fs.readFileSync(p.plan, "utf8");
+  const problems = [];
+  const holes = [...text.matchAll(/<[^<>\n]{2,60}>/g)].map((m) => m[0]);
+  if (holes.length)
+    problems.push(`${plural(holes.length, "unfilled placeholder")} (e.g. ${[...new Set(holes)].slice(0, 5).join(" ")})`);
+  const ticket = /^-\s*ticket:\s*(.+)$/m.exec(text);
+  if (!ticket || !ticket[1].trim()) problems.push("no ticket");
+  const layers = [...text.matchAll(/^##\s+Layer\s+\d+\b/gm)].length;
+  if (layers < 2) problems.push(`${layers} layer section(s) — a stack needs 2+`);
+  if (!/^##\s+Decisions\s*$/m.test(text)) problems.push("no `## Decisions` section");
+  return {
+    slug,
+    ready: problems.length === 0,
+    exists: true,
+    plan_path: p.plan,
+    layers,
+    ticket: ticket ? ticket[1].trim() : null,
+    problems,
+  };
+}
+
 function stackStatus(claudeDir, slugArg) {
   const slugs = listStackSlugs(claudeDir);
+  if (wantsJson()) {
+    const slug = slugArg || (slugs.length === 1 ? slugs[0] : null);
+    const probe = slug ? stackProbe(claudeDir, slug) : null;
+    emitJson(
+      { slugs, slug, ambiguous: !slug && slugs.length > 1, plan: probe },
+      probe && probe.ready ? 0 : 1
+    );
+  }
   let slug = slugArg;
   if (!slug) {
     if (!slugs.length) {
@@ -3992,6 +4500,45 @@ function runCmd() {
       console.error(arg ? `No run matches "${arg}".` : "Usage: orc run show <slug|number>");
       process.exit(1);
     }
+    const readIf = (f) => {
+      const p = path.join(pick.dir, f);
+      try { return fs.existsSync(p) ? fs.readFileSync(p, "utf8") : null; } catch (_) { return null; }
+    };
+    if (wantsJson()) {
+      let checkpoint = null;
+      try { checkpoint = JSON.parse(fs.readFileSync(path.join(pick.dir, "checkpoint.json"), "utf8")); } catch (_) {}
+      let files = [];
+      try { files = fs.readdirSync(pick.dir).sort(); } catch (_) {}
+      // The TAIL of this run's behavior trace, resolved from the checkpoint's
+      // own `trace_path`. JSON-only on purpose: dumping a 20-minute trace into
+      // the terminal report would bury the state-of-play it exists to show,
+      // while a caller rendering the run has nowhere else to get it (traces
+      // are not addressable by run slug).
+      let trace = null;
+      let tracePath = null;
+      if (checkpoint && checkpoint.trace_path) {
+        const rel = String(checkpoint.trace_path);
+        tracePath = path.isAbsolute(rel) ? rel : path.join(repoRootOf(claudeDir), rel);
+        if (fs.existsSync(tracePath)) trace = readTail(tracePath, 24576);
+        else tracePath = null;
+      }
+      emitJson({
+        slug: pick.slug,
+        dir: pick.dir,
+        status: runStatus(pick),
+        updated_ms: Math.round(pick.sortKey),
+        // The parsed one-liner RESUME.md guarantees, so a caller gets the
+        // lane/phase/wave without re-implementing the parser.
+        stands: parseStands(readHead(path.join(pick.dir, pick.waiting ? RESUME_FILE : "state-of-play.md")) || ""),
+        resume: readIf(RESUME_FILE),
+        state_of_play: readIf("state-of-play.md"),
+        checkpoint,
+        trace_path: tracePath,
+        trace,
+        files,
+      });
+      return;
+    }
     console.log(ui.header(`run ${pick.slug}`));
     console.log(ui.kv([["status", runStatus(pick)], ["folder", pick.dir], ["updated", relAge(pick.sortKey)]]));
     for (const [label, file] of [
@@ -4029,12 +4576,14 @@ function runCmd() {
     process.exit(1);
   }
 
+  const asJson = wantsJson();
   if (!runs.length) {
+    // "No runs" is a SUCCESS answer, so --json must still return the object.
+    if (asJson) return emitJson({ run_dir: root, total: 0, shown: 0, runs: [] });
     console.log(`No runs recorded yet under ${root}.`);
     return;
   }
 
-  const asJson = flag("--json") === true;
   const all = flag("--all") === true;
   const limitFlag = Number(flag("--limit"));
   const limit = all ? runs.length : Number.isFinite(limitFlag) && limitFlag > 0 ? limitFlag : RUN_PAGE_DEFAULT;
@@ -4167,12 +4716,24 @@ function stats() {
   const asJson = flag("--json") === true;
   const since = flag("--since");
 
+  // "No traces" is a real answer, not a failure — so --json still returns the
+  // object (with the same exit 1 the human path uses). A caller must not have
+  // to special-case an empty log dir by parsing prose.
+  const empty = (msg) => {
+    if (asJson)
+      emitJson(
+        { log_dir: dir, runs: 0, from: null, to: null, lanes: {}, agents: {}, dispatches: 0, downgrades: 0, unfinished: 0, unknown_lane: 0 },
+        1
+      );
+    console.log(msg);
+    process.exit(1);
+  };
+
   let names = [];
   try {
     names = fs.readdirSync(dir).filter((f) => f.endsWith(".txt"));
   } catch (_) {
-    console.log(`No traces yet under ${dir}. Run any ORC lane and they appear here.`);
-    process.exit(1);
+    empty(`No traces yet under ${dir}. Run any ORC lane and they appear here.`);
   }
 
   const lanes = new Map();
@@ -4219,10 +4780,7 @@ function stats() {
     if (!/\bFINISH\b/.test(tail)) unfinished++;
   }
 
-  if (!total) {
-    console.log(since ? `No traces on or after ${since}.` : `No traces yet under ${dir}.`);
-    process.exit(1);
-  }
+  if (!total) empty(since ? `No traces on or after ${since}.` : `No traces yet under ${dir}.`);
 
   const laneRows = [...lanes.entries()].sort((a, b) => b[1] - a[1]);
   const agentRows = [...agents.entries()].sort((a, b) => b[1] - a[1]);
@@ -4285,6 +4843,22 @@ function stats() {
 
 function where() {
   const claudeDir = resolveClaudeDir();
+  if (wantsJson())
+    return emitJson({
+      claude_dir: claudeDir,
+      project_root: repoRootOf(claudeDir),
+      package_root: PKG_ROOT,
+      package_version: currentVersion(),
+      installed_version: installedPayloadVersion(claudeDir),
+      skills: path.join(claudeDir, "skills"),
+      commands: path.join(claudeDir, "commands"),
+      agents: path.join(claudeDir, "agents"),
+      hooks: path.join(claudeDir, "hooks"),
+      settings: path.join(claudeDir, "settings.json"),
+      config: overridePath(claudeDir),
+      run_dir: resolveRunDir(claudeDir),
+      log_dir: resolveLogDir(claudeDir),
+    });
   console.log("skills   →", path.join(claudeDir, "skills"));
   console.log("commands →", path.join(claudeDir, "commands"));
   console.log("agents   →", path.join(claudeDir, "agents"));
@@ -4649,6 +5223,18 @@ async function maybeNudge() {
 // `orc version` — always live-checks (bounded), so users can force a check.
 async function version() {
   const cur = currentVersion();
+  if (wantsJson()) {
+    const latest = updateCheckDisabled() ? null : await getLatestVersion({ force: true });
+    return emitJson({
+      version: cur,
+      latest,
+      update_available: !!(latest && semverGt(latest, cur)),
+      // What `orc upgrade` would actually install — the resolved source matters
+      // more than the version number when approving a network mutation.
+      install_spec: process.env.ORC_INSTALL_SPEC || readLastGoodSpec() || TARBALL_SPEC,
+      check_disabled: updateCheckDisabled(),
+    });
+  }
   console.log(`orc ${cur}`);
   if (updateCheckDisabled()) return;
   const latest = await getLatestVersion({ force: true });
@@ -4725,6 +5311,77 @@ function onboarding() {
   })();
 }
 
+// ── orc ui (v0.43.0) — the local web control panel ─────────────────────────
+// A browser panel for everything in ORC that is NOT ai: settings, install
+// health, run history, knowledge state, usage stats and the mock examples runs
+// leave behind. It never runs a lane, never spawns `claude`, never calls the
+// Anthropic API — that boundary is the whole design, and everything it shows or
+// writes is deterministic output from THIS CLI (the server shells out to it).
+//
+// PROJECT-SCOPED, and deliberately so: one repo, one server, one settings file,
+// exactly like `orc diy` / `orc crosslink` / `orc wiki` / `orc pattern`. There
+// is no --global. `--dir` still points at ONE other project; it does not make
+// the panel span several.
+const UI_DEFAULT_PORT = 9921;
+
+function uiCmd() {
+  if (flag("--global")) {
+    console.error(
+      "❌ orc ui is project-scoped — one repo, one server, one settings file.\n" +
+        "   Config does not merge: ~/.claude and <project>/.claude are two independent\n" +
+        "   files, so editing both from one panel would be genuinely ambiguous.\n" +
+        "   Run it from the project (or with --dir <path>). `orc doctor` reports a\n" +
+        "   global install that can win skill resolution."
+    );
+    process.exit(1);
+  }
+  const claudeDir = resolveClaudeDir();
+  const webui = require("./webui/serve.js");
+
+  if (flag("--stop") === true) process.exit(webui.stop(claudeDir));
+
+  const fixtures = flag("--fixtures") === true;
+  const portRaw = flag("--port");
+  const explicitPort = typeof portRaw === "string";
+  const port = explicitPort ? Number(portRaw) : UI_DEFAULT_PORT;
+  if (explicitPort && (!Number.isInteger(port) || port < 1 || port > 65535)) {
+    console.error(`❌ --port must be a number between 1 and 65535 (got "${portRaw}").`);
+    process.exit(1);
+  }
+  const idleRaw = flag("--idle");
+  const idleMinutes = typeof idleRaw === "string" ? Number(idleRaw) : webui.DEFAULT_IDLE_MIN;
+  if (!Number.isFinite(idleMinutes) || idleMinutes < 0) {
+    console.error(`❌ --idle must be minutes >= 0 (0 disables the timeout).`);
+    process.exit(1);
+  }
+
+  // Fixture mode needs no project at all — that is half its point.
+  if (!fixtures && !fs.existsSync(path.join(claudeDir, "hooks")))
+    console.error(
+      "  ⚠ no ORC payload here yet (run `orc init`). The panel will open, but most\n" +
+        "    of it will read empty. `orc ui --fixtures` shows it with canned data."
+    );
+
+  webui
+    .serve({
+      claudeDir,
+      projectRoot: repoRootOf(claudeDir),
+      port,
+      explicitPort,
+      open: flag("--no-open") !== true,
+      idleMinutes,
+      fixtures,
+      version: currentVersion(),
+    })
+    .then((code) => {
+      if (typeof code === "number") process.exit(code);
+    })
+    .catch((e) => {
+      console.error("❌ orc ui failed to start: " + (e && e.message));
+      process.exit(1);
+    });
+}
+
 function help() {
   console.log(`orc — install the ORC Claude Code skill constellation
 
@@ -4778,6 +5435,10 @@ Usage:
                                           (exit 0 = entries, 1 = none); list also prints them
     orc gotcha prune                      archive the low-value tail (fewest hits, then oldest)
                                           down to gotchas_max → gotchas-archive.md; never deletes
+  orc mock [--dir <path>]                 mocked runnable examples left by a green verify
+                                          (project-scoped; no --global) — read-only, never runs one
+    orc mock list [--json]                every mock-examples/<slug>/, newest first
+    orc mock show <slug> [--json]         EXAMPLE.md + the file tree for one example
   orc pr [--dir <path>]                   stacked pull requests (project-scoped; no --global)
     orc pr stack template [<slug>]        write a fill-in stack-plan skeleton to
                                           stacked-pr/<slug>/stack-plan.md — fill it in and start
@@ -4803,8 +5464,25 @@ Usage:
     orc doctor --fix                      apply the fixes (= update + prune + settings re-merge)
     orc doctor --json                     the same findings as ONE JSON object on stdout (no banner,
                                           no colour) — same exit code as the human report (0/1)
+  orc ui [--dir <path>]                   local web control panel for everything in ORC that is
+                                          NOT ai — settings, health, runs, knowledge, stats, mock
+                                          examples. Binds 127.0.0.1:${UI_DEFAULT_PORT} and opens a browser.
+                                          It never runs a lane and never calls a model.
+                                          [--port <n>]   pick the port (no auto-walk when explicit)
+                                          [--no-open]    print the URL instead of opening it
+                                          [--idle <min>] shut down after N idle minutes (0 = never)
+                                          [--fixtures]   canned data, no project needed
+                                          [--stop]       stop this project's server (exit 0 stopped
+                                                         / 1 nothing was running)
   orc version                             print installed version + check for a newer one
   orc --help
+
+Machine-readable output:
+  --json is accepted by config list | config profile | config recommend | where |
+  version | doctor | wiki status | wiki impact | pattern status | gotcha list |
+  crosslink list | crosslink status | diy show | diy status | run list |
+  run show | stats | pr stack status | mock list | mock show.
+  It prints ONE object to stdout and keeps the command's normal exit code.
 
 Targets:
   (default)      ./.claude            current project
@@ -4850,6 +5528,12 @@ Skills installed: ${listSkillNames().join(", ")}`);
       break;
     case "gotcha":
       gotcha();
+      break;
+    case "mock":
+      mock();
+      break;
+    case "ui":
+      uiCmd();
       break;
     case "pr":
     case "pr-stack-template":

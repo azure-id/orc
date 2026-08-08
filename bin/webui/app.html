@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>orc ui</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+
+<!--
+  The shell is deliberately static and small: every panel is rendered by its own
+  function in app.js against its own endpoint, with no shared mutable state, so
+  rewriting one panel cannot break another. See the plan, §9.
+  No inline <script> or style="" anywhere — the server sends a strict CSP.
+-->
+
+<div class="shell">
+
+  <nav class="rail" aria-label="Panels">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">◆</span>
+      <span class="brand-text">orc<span class="brand-dim">&nbsp;ui</span></span>
+    </div>
+
+    <ul class="nav" id="nav">
+      <li><a href="#/overview"    data-panel="overview">Overview</a></li>
+      <li><a href="#/settings"    data-panel="settings">Settings</a></li>
+      <li><a href="#/runs"        data-panel="runs">Runs</a></li>
+      <li><a href="#/knowledge"   data-panel="knowledge">Knowledge</a></li>
+      <li><a href="#/stats"       data-panel="stats">Stats</a></li>
+      <li><a href="#/flow"        data-panel="flow">Flow</a></li>
+      <li><a href="#/crosslink"   data-panel="crosslink">Crosslink</a></li>
+      <li><a href="#/learn"       data-panel="learn">Learn</a></li>
+      <li><a href="#/maintenance" data-panel="maintenance">Maintenance</a></li>
+    </ul>
+
+    <div class="rail-foot">
+      <div class="rail-project" id="rail-project" title="">—</div>
+      <div class="rail-version" id="rail-version"></div>
+      <button class="btn btn-ghost btn-sm" id="theme-toggle" type="button">Light</button>
+    </div>
+  </nav>
+
+  <main class="main">
+    <!--
+      Global banner slot. The one thing that must be visible on EVERY panel is
+      the global-install warning: if ORC is installed globally, the skills that
+      actually run may be the global copy reading the global config, while this
+      panel edits the project one that nothing reads.
+    -->
+    <div id="banners" class="banners"></div>
+
+    <div id="panel" class="panel" aria-live="polite"></div>
+  </main>
+
+</div>
+
+<!-- Single modal host. Every confirmation and preview renders into it. -->
+<div class="modal-host" id="modal-host" hidden>
+  <div class="modal-backdrop" id="modal-backdrop"></div>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <h2 class="modal-title" id="modal-title"></h2>
+    <div class="modal-body" id="modal-body"></div>
+    <div class="modal-foot" id="modal-foot"></div>
+  </div>
+</div>
+
+<!-- Transient confirmations (a committed setting, a failed write). -->
+<div class="toasts" id="toasts" aria-live="polite"></div>
+
+<script src="app.js"></script>
+</body>
+</html>

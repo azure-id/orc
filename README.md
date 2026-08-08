@@ -6,7 +6,7 @@
 
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
-![Version](https://img.shields.io/badge/version-0.42.0-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.43.0-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
@@ -46,141 +46,66 @@ zero-dependency npm package installs those files into your `.claude/` directory.
 
 ## Changelog
 
-**Latest: v0.42.0 — updated 2026-08-08.**
+**Latest: v0.43.0 — updated 2026-08-08.**
 
-### v0.42.0 — Say what you mean, see what it costs, find your way back _(2026-08-08)_
+### v0.43.0 — `orc ui`: a control panel for everything that is not ai _(2026-08-08)_
 
-A quality-of-life release. Nothing here changes how ORC builds — the wiki,
-patterns, gotchas, TDD scoping, traces and guards are untouched. It changes what
-using ORC *feels like*: getting the request right before spending, seeing the
-price before the run starts, and finding your way back into work you paused.
-
-**First, an audit that paid for itself.** This release makes traces load-bearing
-for the first time — `orc stats` counts your usage straight from them. A counting
-tool built on a drifting log produces *confident wrong numbers*, which is worse
-than no numbers, so the trace subsystem was audited before any of it was written.
-The good news held: zero orphan traces on every run since v0.34.2, one file per
-run, no dangling pointers, and the `.txt`/`.jsonl` halves agreeing on all 133
-events checked.
-
-It also found three real defects, all the same shape — **a lane the protocol
-declared that nothing could ever open**:
-
-- `context-combiner` was listed as its own lane. It has no slash command and only
-  ever runs *inside* an open `/orc-analyze` run — so that lane would have read
-  zero forever. It is now documented as a phase, which is what the hook already
-  believed.
-- The plan-handoff entry path wrote the trace pointer without creating the file:
-  the exact signature of the split-run bug fixed in v0.34.2, on the one path that
-  fix's lint never covered.
-- **Every `/orc-ultra` run was traced as plain `/orc`** — the most expensive lane
-  in the product, invisible in any usage report. Ultra now names its own lane.
-
-A new test walks the entire payload and fails on any declared lane no skill
-actually opens, so this class cannot come back quietly.
-
-**`/orc-grill` — for when you do not know what you want yet.** One vague sentence
-is a complete input. *"I want notifications for merchants."* *"Something is wrong
-with our refunds."* It asks you rounds of questions — every question that is
-*ready*, together, never two where one depends on the other — and each carries a
-recommendation, so "1, 3, default the rest" keeps things moving.
-
-Two rules do the work. **Facts are ORC's job**: it checks the wiki, the cached
-pattern and the gotcha list before asking, so you are never made to recite your
-own codebase. **Decisions are yours**, and it waits for them — it never answers
-its own question, because a default adopted in silence is indistinguishable a
-week later from a decision you made, and it is the one the build gets wrong.
-
-An empty question list does not end it. It plays the idea back in plain words and
-asks whether that is what you meant; only your yes ends it. Then: save it to
-`orc-grill/<slug>/grill-context.md`, carry it straight into `/orc-analyze` (the
-saved doc *is* the input, so the analyst spends its tokens on code instead of
-re-asking scope), or drop it.
-
-`/orc-analyze` learned to send you there. Thin input used to get *absorbed* —
-every unknown became an assumption tag and then a question, which is an expensive
-way to ask what a conversation asks for free. It now has an entry floor, and
-failing it **offers** the grill. Accepting comes straight back to the same
-invocation; you retype nothing.
-
-**`/orc-explain` — "wait, what?"** You type it after a message that did not land.
-ORC says it again: the point first, then the background it assumed, then every
-ORC-only word (band, facet, disposition, wave, slice, freshness tier) defined in
-your project's own terms. It is not "be shorter" — a summary of something you did
-not understand is the same thing you did not understand.
-
-**You now see the price before the run starts.**
+A new surface, and a boundary that defines it: **`orc ui` never runs a lane,
+never spawns `claude`, never calls a model API.** It is a local web panel for
+the deterministic half of ORC — settings, install health, run history,
+knowledge state, usage stats, and the mocked examples runs leave behind.
 
 ```
-── forecast ──
-tasks:     7 · waves: 3 · subagents: about 17
-models:    2 high · 3 medium · 1 low
-time:      about 45-80 minutes in this lane
-cheaper:   /orc-mini would be about 15 minutes with 3 subagents
-           (it skips full review and verification)
+orc ui                # binds 127.0.0.1:9921 and opens a browser
+orc ui --fixtures     # canned data, no project needed
+orc ui --stop         # shut this project's server down
 ```
 
-It prints the moment the plan passes its gate — the earliest point where every
-number is real, and the last cheap moment to walk away. The time ranges come from
-measured runs, not invention; a lane with no measured corpus says so rather than
-printing a number that merely looks computed. Set `run_budget_dispatches` and a
-run forecasting more than that **stops and asks** before wave 1.
+**The CLI got machine-readable first, and that ships value on its own.**
+`--json` now works on `config list`, `config profile`, `config recommend`,
+`where`, `version`, `wiki impact`, `pattern status`, `gotcha list`,
+`crosslink list|status`, `diy show`, `run show`, `pr stack status` and the new
+`orc mock list|show` — one object on stdout, and the command's normal exit code
+untouched (several of those codes are already contracts). ORC is scriptable now
+whether or not you ever open the panel.
 
-**`orc resume` — you paused three days ago. Where were you?** ORC now writes the
-resume prompt to disk at every stop and deletes it when the run finishes, so a
-file existing means that run is still waiting for you — no stale entries, no
-bookkeeping to drift.
+**The panel *is* the CLI.** Every read shells `node bin/cli.js <cmd> --json` and
+every write shells the real command, so the UI inherits the existing validators,
+the renamed-key aliasing and the shadowing announcements for free — and UI/CLI
+drift is structurally impossible rather than merely discouraged.
 
-```
-orc resume
+**Shadowing is the feature.** Flip `opus5_only` on and the `fable5_*` rows
+desaturate, a lock slides in, and the score→model ladder morphs from the default
+8-band table to the 3-band effort ladder. The animation teaches the precedence
+rule instead of describing it. The ladder is read from the CLI's own table, so
+the panel adds no sixth copy of a table already mirrored in five places.
 
-2 runs are waiting for you.
+**Maintenance is in scope, behind preview-then-apply.** `update`, `update
+--prune`, `doctor --fix` and `upgrade` each show the CLI's own read-only preview
+first, name the exact command, and stay disabled until you have looked. A prune
+names **every** file it would delete — a count is not consent for a deletion.
+Two guards only a UI can offer: it warns when a run is still `waiting` (updating
+changes the skills that run resumes into) and when `upgrade` would land on a
+dirty tree.
 
-   1  merchant-notifications   /orc       wave 2 of 4   paused 3 days ago
-   2  refund-audit             /orc-mini  wave 1 of 2   paused 6 hours ago
+**It is treated as a write surface,** because it is one: loopback bind only, a
+random per-launch token on every call, a Host-header check against DNS
+rebinding, no CORS headers at all, POST-only mutations. A forgotten server
+shuts itself down — ~1 minute after the last tab closes, or after 30 idle
+minutes.
 
-Pick a number (or q to quit):
-```
+**Project-scoped, no `--global`.** Config does not merge, so a panel editing two
+scopes would be genuinely ambiguous. If a global install exists that can win
+skill resolution, every page carries a banner saying so — reported, never
+edited from here.
 
-Pick one and it prints the prompt — and copies it to your clipboard where the OS
-allows. A clipboard failure never fails the command.
-
-**`orc run list` / `orc run show`** browse every run, newest first, and
-**`orc stats`** counts how much you actually use each lane and agent — no model,
-instant, free, local:
-
-```
-Lanes
-  /orc            24 runs   ████████████       (39%)
-  /orc-mini       18 runs   █████████          (29%)
-  /orc-quick      11 runs   █████              (18%)
-  /orc-fast        1 run                        (2%)
-```
-
-Enough to notice you have used `/orc-fast` once in three months because your wiki
-is never fresh — or that 39% of your runs take the full lane when half of them
-were one small endpoint. It is not a replacement for `/orc-retro`: stats
-**counts** what you do, retro **judges** how it went. Both state their blind
-spots out loud rather than burying them.
-
-**`/orc-route` — you have a plan; which lane should build it?** Plan-only, on
-purpose. A plan has tasks, files, dependencies and scores, so routing from it is
-arithmetic; routing from a sentence is guessing, and a guess that looks like a
-calculation is worse than no answer. Give it prose and it refuses and says why.
-Every runner-up names what choosing it *costs* you; every impossible lane names
-what is blocking it and how to fix that. Risk beats size — a small plan with a
-risky task still earns the full lane.
-
-**Getting started got shorter.** `orc config recommend` reads your repo (tests?
-CI? contributors? size? wiki? monorepo?) and suggests one of four profiles, with
-the reasons it decided from; `orc config profile <name>` applies it. Every
-profile writes only existing, validated keys, so nothing it sets is something you
-could not set yourself.
-
-**Three new skills, zero new agents** — the `/orc-quick` precedent holds.
+**Zero dependencies, zero build step**, as ever: `node:http`, vanilla JS,
+hand-written CSS. Edit `app.css`, hit refresh.
 
 <details>
 <summary><b>Previous versions</b> (click to expand)</summary>
+
+### v0.42.0 — Say what you mean, see what it costs, find your way back _(2026-08-08)_
 
 ### v0.41.0 — A wiki that can tell you it is fresh, and TDD only where it can fail _(2026-08-06)_
 
@@ -291,6 +216,7 @@ could not set yourself.
 - [Why ORC exists](#why-orc-exists)
 - [Quick start](#quick-start)
 - [Commands](#commands)
+- [`orc ui` — the control panel](#orc-ui--the-control-panel)
 - [Eval status](#eval-status)
 - [How model selection works](#how-model-selection-works-and-how-to-verify-it)
 - [The tier guard](#the-tier-guard-installed-automatically)
@@ -360,6 +286,11 @@ orc resume          # runs waiting for you → pick one, get the paste-in prompt
 orc run list        # every run, newest first: waiting | done | empty  (--json, --all)
 orc run show <slug> # one run: state-of-play, resume prompt, checkpoint
 orc stats           # how much you actually use each lane and agent (no model, free)
+orc ui              # local web control panel for everything that is NOT ai
+                    #   (settings, health, runs, knowledge, stats, mock examples)
+                    #   --fixtures  canned data, no project needed
+                    #   --stop      shut this project's server down
+orc mock list       # mocked runnable examples a green verify left behind (read-only)
 orc wiki            # wiki registration state (registered / UNREGISTERED / out of sync)
 orc wiki sync       # rebuild the wiki index + manifest from the docs (instant, no re-scan)
 orc pattern status  # deterministic "does a cached code-pattern exist" probe (exit 1 when absent)
@@ -653,6 +584,54 @@ before when absent; `orc-fast` requires it.
 
 ---
 
+## `orc ui` — the control panel
+
+A local web panel for **everything in ORC that is not ai**. One boundary defines
+it: **it never runs a lane, never spawns `claude`, never calls a model API.**
+Everything it shows or writes is deterministic CLI output.
+
+```bash
+orc ui                 # binds 127.0.0.1:9921 and opens a browser
+orc ui --port 9930     # an explicit port never auto-walks — a collision is an error
+orc ui --no-open       # print the URL only
+orc ui --idle 0        # disable the idle shutdown (default: 30 minutes)
+orc ui --fixtures      # canned data, no project needed
+orc ui --stop          # shut this project's server down (exit 0 stopped / 1 none)
+```
+
+| Panel | Shows | Can change |
+|---|---|---|
+| Overview | version, `orc doctor`, wiki tier, what is waiting | — |
+| Settings | every config key, tiered, with its control | `config set` / `reset` / `profile` |
+| Runs | run history, state-of-play, resume prompt, checkpoint, trace tail, mock example | — |
+| Knowledge | wiki freshness + refresh scope, code-patterns, gotchas | `wiki sync`, `gotcha prune` |
+| Stats | lane and subagent usage, downgrades | — |
+| Flow (DIY) | the compiled flow and its gate | `diy set`, `diy compile` |
+| Crosslink | the cross-repo graph and each peer's freshness | `crosslink remove` |
+| Learn | the `orc onboarding` walkthrough | — |
+| Maintenance | `update`, `update --prune`, `doctor --fix`, `upgrade` | behind preview-then-apply |
+
+- **The panel *is* the CLI.** Reads shell `orc <cmd> --json`; writes shell the
+  real command. It inherits the existing validators and cannot drift from them.
+- **Project-scoped, no `--global`.** Config does not merge — `~/.claude` and
+  `<project>/.claude` are independent files. If a global install exists that can
+  win skill resolution, every page carries a banner saying so. The panel reports
+  that conflict; it never edits global config.
+- **Treated as a write surface.** Loopback bind only, a random per-launch token
+  on every call, a Host-header check against DNS rebinding, no CORS headers,
+  POST-only mutations. A forgotten server exits ~1 minute after the last tab
+  closes, or after 30 idle minutes.
+- **Nothing is automatic.** No fix-on-load, no background repair. Every
+  destructive action shows the CLI's own read-only preview first and names the
+  exact command; a prune names **every** file it would delete.
+- **`--fixtures` carries one of every state**, including the ugly ones — a STALE
+  wiki, an unhealthy doctor, a waiting run, a shadowed setting — so the panel can
+  be restyled without needing a broken project to look at.
+
+Zero dependencies, zero build step: `node:http`, vanilla JS, hand-written CSS.
+
+---
+
 ## Eval status
 
 The constellation is graded **end-to-end**, not just per-file: a 17-lane
@@ -801,7 +780,12 @@ templates/
 ├── hooks/                   effort guard (PreToolUse) · statusline warning · behavior trace
 └── agents/                  single-role, model-pinned subagents (+ read-only scout) + MODEL-MAPPING.md
 bin/cli.js                   installer + config editor + flow composer + run-state reader
-                             (init / update / upgrade / config / diy / where / resume / run / stats)
+                             (init / update / upgrade / config / diy / where / resume / run / stats
+                              / mock / ui) — every read command also speaks --json
+bin/ui.js                    TERMINAL styling kit the CLI prints through (not the web panel)
+bin/webui/                   `orc ui` — the local web control panel: serve.js (http, token auth,
+                             lifecycle) · api.js (routes → cli.js --json) · fixtures.js (canned
+                             states) · app.html/app.css/app.js. Zero deps, no build step.
 ```
 
 The `orc` skill is a thin **spine** that loads references and subskills only when
