@@ -32,10 +32,17 @@ const HEARTBEAT_GRACE_MS = 60_000;
 const DEFAULT_IDLE_MIN = 30;
 const LOCK_REL = path.join("orc", "ui.lock");
 
+// The string tables are STATIC assets, not an API route: they are shipped data
+// with no CLI behind them, and serving them as files means adding a language is
+// dropping a JSON file in i18n/ and naming it in LANGS — no server change. The
+// map is a fixed table rather than a path join, so no request can ever name a
+// file of its own choosing.
 const STATIC = {
   "/": { file: "app.html", type: "text/html; charset=utf-8" },
   "/app.css": { file: "app.css", type: "text/css; charset=utf-8" },
   "/app.js": { file: "app.js", type: "text/javascript; charset=utf-8" },
+  "/i18n/en.json": { file: path.join("i18n", "en.json"), type: "application/json; charset=utf-8" },
+  "/i18n/id.json": { file: path.join("i18n", "id.json"), type: "application/json; charset=utf-8" },
 };
 
 // ── the lock file ───────────────────────────────────────────────────────────

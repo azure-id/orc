@@ -24,19 +24,24 @@
       <span class="brand-text">orc<span class="brand-dim">&nbsp;ui</span></span>
     </div>
 
+    <!--
+      data-idx is the keyboard shortcut for that panel; the rail reveals the
+      numbers on hover so they are discoverable without a legend.
+      data-i18n names the string table entry: the text between the tags is the
+      English fallback that ships in the markup, so a failed i18n fetch renders
+      a readable English rail rather than a column of empty links.
+    -->
     <ul class="nav" id="nav">
-      <!-- data-idx is the keyboard shortcut for that panel; the rail reveals
-           the numbers on hover so they are discoverable without a legend. -->
-      <li><a href="#/overview"    data-panel="overview"    data-idx="1">Overview</a></li>
-      <li><a href="#/settings"    data-panel="settings"    data-idx="2">Settings</a></li>
-      <li><a href="#/runs"        data-panel="runs"        data-idx="3">Runs</a></li>
-      <li><a href="#/knowledge"   data-panel="knowledge"   data-idx="4">Knowledge</a></li>
-      <li><a href="#/stats"       data-panel="stats"       data-idx="5">Stats</a></li>
-      <li><a href="#/flow"        data-panel="flow"        data-idx="6">Flow</a></li>
-      <li><a href="#/crosslink"   data-panel="crosslink"   data-idx="7">Crosslink</a></li>
-      <li><a href="#/learn"       data-panel="learn"       data-idx="8">Learn</a></li>
-      <li><a href="#/experiment"  data-panel="experiment"  data-idx="9">Experiment</a></li>
-      <li><a href="#/maintenance" data-panel="maintenance" data-idx="0">Maintenance</a></li>
+      <li><a href="#/overview"    data-panel="overview"    data-idx="1" data-i18n="nav.overview">Overview</a></li>
+      <li><a href="#/settings"    data-panel="settings"    data-idx="2" data-i18n="nav.settings">Settings</a></li>
+      <li><a href="#/runs"        data-panel="runs"        data-idx="3" data-i18n="nav.runs">Runs</a></li>
+      <li><a href="#/knowledge"   data-panel="knowledge"   data-idx="4" data-i18n="nav.knowledge">Knowledge</a></li>
+      <li><a href="#/stats"       data-panel="stats"       data-idx="5" data-i18n="nav.stats">Stats</a></li>
+      <li><a href="#/flow"        data-panel="flow"        data-idx="6" data-i18n="nav.flow">Flow</a></li>
+      <li><a href="#/crosslink"   data-panel="crosslink"   data-idx="7" data-i18n="nav.crosslink">Crosslink</a></li>
+      <li><a href="#/learn"       data-panel="learn"       data-idx="8" data-i18n="nav.learn">Learn</a></li>
+      <li><a href="#/experiment"  data-panel="experiment"  data-idx="9" data-i18n="nav.experiment">Experiment</a></li>
+      <li><a href="#/maintenance" data-panel="maintenance" data-idx="0" data-i18n="nav.maintenance">Maintenance</a></li>
     </ul>
 
     <div class="rail-foot">
@@ -45,6 +50,16 @@
       <div class="rail-buttons">
         <button class="btn btn-ghost btn-sm" id="theme-toggle" type="button">Light</button>
         <button class="btn btn-ghost btn-sm" id="shortcut-hint" type="button" title="Keyboard shortcuts">?</button>
+      </div>
+      <!--
+        Language sits BELOW the theme row on purpose: it is the same class of
+        control (a per-browser display preference, never a project setting) and
+        it is switched far less often, so it gets the calmer position.
+      -->
+      <div class="rail-buttons">
+        <button class="btn btn-ghost btn-sm lang-btn" id="lang-toggle" type="button">
+          <span class="lang-globe" aria-hidden="true">🌐</span><span id="lang-label">English</span>
+        </button>
       </div>
     </div>
   </nav>

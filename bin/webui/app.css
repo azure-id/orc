@@ -192,6 +192,12 @@ code, kbd, pre, .mono { font-family: var(--mono); font-size: .92em; }
 .rail-buttons .btn { flex: 1; justify-content: center; }
 #shortcut-hint { flex: 0 0 auto; min-width: 30px; }
 
+/* The language toggle sits directly under the theme toggle: same class of
+   control (a per-browser display preference), same place, same weight. */
+.lang-btn { gap: 6px; overflow: hidden; }
+.lang-btn #lang-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lang-globe { flex: none; opacity: .7; font-size: 12px; }
+
 .rail-foot {
   display: flex;
   flex-direction: column;
@@ -313,6 +319,108 @@ code, kbd, pre, .mono { font-family: var(--mono); font-size: .92em; }
   0%, 100% { opacity: 1; }
   50%      { opacity: .62; }
 }
+
+/* A tile that LEADS somewhere says so by moving; a tile that leads nowhere is a
+   plain div and never reacts. `text-align: left` because it is a <button> now
+   and would otherwise centre its own text. */
+.stat-link {
+  text-align: left;
+  width: 100%;
+  font: inherit;
+  cursor: pointer;
+  position: relative;
+  transition: border-color var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease),
+              background var(--dur-fast) var(--ease);
+}
+.stat-link::after {
+  content: "→";
+  position: absolute;
+  top: var(--sp-3);
+  right: var(--sp-3);
+  color: var(--text-faint);
+  opacity: 0;
+  transform: translateX(-4px);
+  transition: opacity var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease);
+}
+.stat-link:hover { border-color: var(--accent-dim); background: var(--surface-2); transform: translateY(-2px); }
+.stat-link:hover::after { opacity: 1; transform: none; }
+
+/* --- Overview: the "worth doing" list ------------------------------------ */
+/* Each row is a decision with somewhere to go. The colour bar on the left is
+   the severity; the arrow-side label names the panel that owns the fix, which
+   is the whole reason this list exists — a finding that sends you to the wrong
+   panel is worse than a finding with no button at all. */
+
+.todo-list { display: flex; flex-direction: column; gap: var(--sp-2); }
+.todo {
+  display: grid;
+  grid-template-columns: 4px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--sp-3);
+  width: 100%;
+  padding: var(--sp-3);
+  padding-left: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  overflow: hidden;
+  transition: border-color var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease),
+              transform var(--dur-fast) var(--ease);
+}
+.todo:hover { border-color: var(--accent-dim); background: var(--surface-3); transform: translateX(3px); }
+.todo-mark { align-self: stretch; background: var(--idle); }
+.todo-bad  .todo-mark { background: var(--bad); }
+.todo-warn .todo-mark { background: var(--warn); }
+.todo-info .todo-mark { background: var(--accent); }
+.todo-body { min-width: 0; }
+.todo-title { font-size: 13px; font-weight: 600; }
+.todo-text { font-size: 12.5px; color: var(--text-dim); margin-top: 3px; }
+/* The CLI's own words for WHY, kept visually distinct from our explanation. */
+.todo-evidence {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--text-faint);
+  margin-top: 5px;
+  padding-left: var(--sp-3);
+  border-left: 2px solid var(--line);
+}
+.todo-cta { flex: none; font-size: 12px; color: var(--accent); white-space: nowrap; }
+.todo-cta::after { content: " →"; }
+/* The update row arrives after a network check, so it draws itself in rather
+   than appearing between two rows you were already reading. */
+.todo-late { animation: todo-in var(--dur-slow) var(--ease); }
+@keyframes todo-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.all-clear { display: flex; align-items: center; gap: var(--sp-4); padding: var(--sp-2) 0; }
+.all-clear-mark {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--ok-wash);
+  color: var(--ok);
+  font-size: 17px;
+  animation: all-clear-in var(--dur-slow) var(--ease);
+}
+.all-clear-title { font-size: 13px; font-weight: 600; }
+@keyframes all-clear-in {
+  from { transform: scale(.6); opacity: 0; }
+  to   { transform: none; opacity: 1; }
+}
+
+/* A doctor finding, with the button that goes where its fix actually is. */
+.finding { display: flex; align-items: flex-start; gap: var(--sp-3); font-size: 12.5px; }
+.finding > div { min-width: 0; }
+.finding .btn { margin-top: 5px; }
 
 /* the rail's "a newer release exists" line — one dot, every panel, never modal */
 .rail-update {
@@ -539,8 +647,13 @@ pre.block.wrap { white-space: pre-wrap; word-break: break-word; }
 
 /* --- the tour ------------------------------------------------------------ */
 /* The spotlight is a RING, not a dimming overlay over a cut-out: the page stays
-   fully readable and fully clickable underneath, which is what lets the upgrade
-   spotlight end because you did the thing rather than because you dismissed it. */
+   fully READABLE underneath, so a step can point at a real control and you can
+   see what it is pointing at.
+   It is not, however, clickable during the guided tour. `.tour-block` sits above
+   everything except the popover and swallows every click, so Next and Skip are
+   the only live controls on screen. The upgrade spotlight opts out of the
+   blocker (`interactive: true`) because its whole design is that clicking the
+   thing dismisses it. */
 
 /* `display: contents` is load-bearing. This wrapper used to be `position:
    fixed`, which ALWAYS creates a stacking context — so the ring and the popover
@@ -552,8 +665,22 @@ pre.block.wrap { white-space: pre-wrap; word-break: break-word; }
 .tour-layer { display: contents; }
 
 /* The ladder, in paint order: scrim/ring 45 → the highlighted element 46 (so it
-   stays lit and clickable) → the popover 48 (always readable, whatever it is
-   pointing at) → modals 50. */
+   stays lit) → the click blocker 47 → the popover 48 (always readable and
+   always the only live thing) → modals 50.
+   The blocker sits ABOVE the highlighted element on purpose: lifting the target
+   to 46 is what keeps it visible through the scrim, and a blocker underneath it
+   would leave that one element clickable — which is precisely the click that
+   navigates away mid-tour. */
+.tour-block {
+  position: fixed;
+  inset: 0;
+  z-index: 47;
+  /* Fully transparent: the scrim is already drawn by the ring's outward shadow,
+     and a second dimming layer would double it. This element exists only to
+     receive clicks. */
+  background: transparent;
+  cursor: not-allowed;
+}
 .tour-ring {
   position: fixed;
   border: 2px solid var(--accent);
@@ -594,7 +721,9 @@ pre.block.wrap { white-space: pre-wrap; word-break: break-word; }
 .tour-foot { display: flex; align-items: center; gap: var(--sp-2); margin-top: var(--sp-4); }
 .tour-count { font-size: 11px; color: var(--text-faint); margin-right: auto; font-variant-numeric: tabular-nums; }
 .tour-waiting { font-size: 11px; color: var(--accent); margin-left: auto; }
-/* The highlighted element rides above the scrim so it stays lit and clickable.
+/* The highlighted element rides above the scrim so it stays LIT. During the
+   guided tour it is not clickable — `.tour-block` is above it — which is the
+   point: it is being explained, not operated.
    z-index ONLY — forcing `position: relative` here broke the sticky rail, which
    is a positioned element already. The relative fallback is applied separately,
    and only to targets that are actually static. */
@@ -856,30 +985,64 @@ kbd {
 .ladder-note { font-size: 12px; color: var(--text-faint); margin-top: var(--sp-2); }
 
 /* --- Runs ---------------------------------------------------------------- */
+/* An ACCORDION, not a list plus a detail box below it. A row expands in place,
+   so what you clicked stays where your eye already is however long the list
+   gets — which is the failure mode the old two-column layout had: the more runs
+   a repo accumulated, the further the detail was from the thing you clicked. */
 
 .run-list { display: flex; flex-direction: column; gap: var(--sp-2); }
-.run-card {
-  display: grid;
-  grid-template-columns: 88px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: var(--sp-4);
-  padding: var(--sp-3) var(--sp-4);
+.run-row {
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--radius);
+  overflow: hidden;
+  transition: border-color var(--dur-fast) var(--ease), box-shadow var(--dur) var(--ease);
+}
+.run-row:hover { border-color: var(--accent-dim); }
+.run-row.open { border-color: var(--accent); box-shadow: 0 6px 22px rgba(0, 0, 0, .22); }
+:root[data-theme="light"] .run-row.open { box-shadow: 0 6px 22px rgba(16, 24, 40, .10); }
+
+.run-card {
+  display: grid;
+  grid-template-columns: 16px 88px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  background: transparent;
+  border: 0;
   cursor: pointer;
   text-align: left;
   width: 100%;
-  transition: border-color var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease);
+  transition: background var(--dur-fast) var(--ease);
 }
-.run-card:hover { border-color: var(--accent-dim); background: var(--surface-2); }
-.run-card[aria-current="true"] { border-color: var(--accent); }
+.run-card:hover { background: var(--surface-2); }
+.run-row.open > .run-card { background: var(--surface-2); }
+.run-caret {
+  color: var(--text-faint);
+  font-size: 11px;
+  transition: transform var(--dur) var(--ease), color var(--dur-fast) var(--ease);
+}
+.run-row.open .run-caret { transform: rotate(90deg); color: var(--accent); }
+.run-mid { min-width: 0; }
 .run-slug { font-family: var(--mono); font-size: 13px; overflow: hidden; text-overflow: ellipsis; }
 .run-where { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
 .run-age { font-size: 12px; color: var(--text-faint); white-space: nowrap; }
 
+/* The fold. Same `1fr -> 0fr` grid trick as the settings tiers: `height: auto`
+   cannot be transitioned, and the inner element is what there is to collapse
+   against. Closed is the default, so a fresh list never flashes open. */
+.run-body {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--dur-slow) var(--ease), opacity var(--dur) var(--ease);
+  opacity: 0;
+}
+.run-body-inner { min-height: 0; overflow: hidden; }
+.run-row.open > .run-body { grid-template-rows: 1fr; opacity: 1; }
+.run-pane { padding: var(--sp-4) var(--sp-4) var(--sp-4); border-top: 1px solid var(--line-soft); }
+
 /* No margin-bottom — the card's own rhythm spaces the pane below it. */
-.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); }
+.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
 .tabs button {
   border: 0;
   background: transparent;
@@ -892,6 +1055,13 @@ kbd {
 }
 .tabs button:hover { color: var(--text); }
 .tabs button[aria-selected="true"] { color: var(--text); border-bottom-color: var(--accent); }
+/* A tab swap replaces the pane's children; without a re-triggered fade the
+   change reads as a flicker rather than a transition. */
+.tab-pane { animation: tab-in var(--dur) var(--ease); }
+@keyframes tab-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: none; }
+}
 
 /* --- Stats --------------------------------------------------------------- */
 
@@ -989,6 +1159,208 @@ kbd {
 .kind:hover { border-color: var(--accent-dim); color: var(--text); }
 .kind-on { background: var(--accent); border-color: var(--accent); color: #fff; transform: scale(1.04); }
 
+/* --- Crosslink: the folder picker ---------------------------------------- */
+/* A directory listing the SERVER walks, rendered as a list you click through.
+   Nothing here reads a file — the two chips are a single existsSync each. */
+
+.path-row { display: flex; gap: var(--sp-2); align-items: center; }
+.path-row .text-input { flex: 1 1 auto; min-width: 0; }
+.path-row .btn { flex: none; }
+
+.picker-crumbs { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
+.picker-path {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--text-dim);
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+  padding: 2px 8px;
+  overflow-wrap: anywhere;
+}
+.picker-list {
+  max-height: 46vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: var(--sp-2);
+  background: var(--surface-2);
+}
+.picker-item {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: 6px var(--sp-3);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
+}
+.picker-item:hover { background: var(--surface-3); border-color: var(--accent-dim); }
+.picker-icon { color: var(--text-faint); font-size: 11px; }
+.picker-item:hover .picker-icon { color: var(--accent); }
+.picker-name { font-family: var(--mono); font-size: 13px; overflow: hidden; text-overflow: ellipsis; }
+.picker-tags { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 3px; }
+.picker-into { color: var(--text-faint); opacity: 0; transition: opacity var(--dur-fast) var(--ease); }
+.picker-item:hover .picker-into { opacity: 1; }
+.picker-foot { display: flex; justify-content: flex-end; }
+.picker-warn { color: var(--warn); }
+
+/* --- Learn --------------------------------------------------------------- */
+/* A contents rail plus ONE section, rather than every section stacked open.
+   The walkthrough is ordered and you are at a position in it — the layout says
+   so, which is what the wall of eight boxes could not. */
+
+.learn {
+  display: grid;
+  grid-template-columns: 244px minmax(0, 1fr);
+  gap: var(--sp-4);
+  align-items: start;
+}
+
+.learn-side {
+  position: sticky;
+  top: var(--sp-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-3);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  max-height: calc(100vh - var(--sp-6));
+}
+.learn-side-head {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  color: var(--text-faint);
+  padding: 0 var(--sp-2);
+}
+.learn-side .text-input { font-family: var(--font); font-size: 12.5px; padding: 5px 9px; }
+.learn-nav { display: flex; flex-direction: column; gap: 2px; overflow-y: auto; min-height: 0; }
+.learn-nav-item {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 6px var(--sp-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-dim);
+  text-align: left;
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+.learn-nav-item:hover { background: var(--surface-2); color: var(--text); }
+.learn-nav-item[aria-current="true"] {
+  background: var(--accent-wash);
+  color: var(--text);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+.learn-num {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-faint);
+  transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease),
+              border-color var(--dur-fast) var(--ease);
+}
+.learn-nav-item[aria-current="true"] .learn-num { background: var(--accent); border-color: var(--accent); color: #fff; }
+/* Sections already behind you read as done, so the rail doubles as progress. */
+.learn-seen .learn-num { border-color: var(--ok); color: var(--ok); }
+.learn-nav-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.learn-result { font-size: 11.5px; color: var(--text-faint); padding: 0 var(--sp-2); }
+
+.learn-pane {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0 var(--sp-5) var(--sp-4);
+  overflow: hidden;
+  min-width: 0;
+}
+.learn-progress { height: 3px; background: var(--surface-3); margin: 0 calc(var(--sp-5) * -1); }
+.learn-progress-fill {
+  height: 100%;
+  width: 0;
+  background: var(--accent);
+  transition: width var(--dur-slow) var(--ease);
+}
+.learn-meta {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  color: var(--text-faint);
+  margin-top: var(--sp-4);
+  font-variant-numeric: tabular-nums;
+}
+.learn-title { font-size: 19px; font-weight: 600; letter-spacing: -.01em; margin-top: 4px; }
+
+.learn-article { margin-top: var(--sp-4); animation: learn-in var(--dur) var(--ease); }
+@keyframes learn-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: none; }
+}
+.learn-para { font-size: 13.5px; line-height: 1.7; color: var(--text-dim); }
+.learn-para + .learn-para { margin-top: var(--sp-3); }
+.learn-bullet {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-dim);
+  padding-left: var(--sp-4);
+  position: relative;
+  margin-top: var(--sp-2);
+}
+.learn-bullet::before { content: "•"; position: absolute; left: var(--sp-2); color: var(--accent); }
+/* A pipeline line is a diagram, not a sentence. */
+.learn-flowline {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
+  padding: var(--sp-3);
+  margin-top: var(--sp-3);
+  overflow-x: auto;
+  white-space: pre;
+}
+/* An indented command line becomes a click-to-copy chip. */
+.learn-cmd-row { display: flex; align-items: baseline; gap: var(--sp-3); margin-top: 6px; flex-wrap: wrap; }
+.learn-cmd {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--accent);
+  background: var(--accent-wash);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  padding: 2px 9px;
+  cursor: pointer;
+  transition: border-color var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease);
+}
+.learn-cmd:hover { border-color: var(--accent); background: var(--surface-3); }
+.learn-cmd-what { font-size: 12.5px; color: var(--text-dim); }
+.learn-hint { margin-top: var(--sp-4); }
+
+.learn-foot { display: flex; gap: var(--sp-2); align-items: center; margin-top: var(--sp-5); flex-wrap: wrap; }
+.learn-foot .btn:last-child { margin-left: auto; }
+
 /* --- Experiment ---------------------------------------------------------- */
 
 .lane-list { display: flex; flex-direction: column; gap: var(--sp-2); }
@@ -1057,6 +1429,15 @@ kbd {
 
 /* --------------------------------------------------------------- RESPONSIVE */
 
+@media (max-width: 1040px) {
+  /* The Learn rail stops being a rail and becomes a scrollable strip above the
+     reading pane — a 244px column plus prose does not fit twice over. */
+  .learn { grid-template-columns: 1fr; }
+  .learn-side { position: static; max-height: none; }
+  .learn-nav { flex-direction: row; overflow-x: auto; padding-bottom: 2px; }
+  .learn-nav-item { flex: 0 0 auto; max-width: 210px; }
+}
+
 @media (max-width: 900px) {
   .shell { grid-template-columns: 1fr; }
   .rail {
@@ -1076,8 +1457,10 @@ kbd {
   .main { padding: var(--sp-4); }
   .setting { grid-template-columns: 1fr; }
   .setting-control { align-items: flex-start; }
-  .run-card { grid-template-columns: 80px minmax(0, 1fr); }
-  .run-age { grid-column: 2; }
+  .run-card { grid-template-columns: 16px 80px minmax(0, 1fr); }
+  .run-age { grid-column: 3; }
+  .todo { grid-template-columns: 4px minmax(0, 1fr); }
+  .todo-cta { grid-column: 2; margin-top: var(--sp-2); }
 }
 
 /* ---------------------------------------------------------- REDUCED MOTION */
@@ -1096,5 +1479,6 @@ kbd {
   }
   /* Reduced motion means no movement, not fast movement — the hover and press
      nudges are removed outright rather than sped up. */
-  .nav a:hover, .btn:active:not(:disabled), .run-card:hover, .action:hover { transform: none !important; }
+  .nav a:hover, .btn:active:not(:disabled), .action:hover,
+  .todo:hover, .stat-link:hover, .graph-node:hover { transform: none !important; }
 }

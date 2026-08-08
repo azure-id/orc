@@ -21,6 +21,8 @@
  */
 
 const { spawn, spawnSync } = require("child_process");
+const fs = require("fs");
+const os = require("os");
 const path = require("path");
 const fixtures = require("./fixtures.js");
 
@@ -268,6 +270,67 @@ const LANES = [
   { id: "orc-retro", cmd: "/orc-retro", what: "Mine the behavior traces for calibration. Read-only, report-only." },
 ];
 
+// ── the folder picker ───────────────────────────────────────────────────────
+//
+// The THIRD endpoint with no CLI behind it (after /api/learn's shipped content
+// and /api/experiment's lane catalog), and for the same reason: there is no
+// `orc` command that lists directories, so there is nothing to shell. It exists
+// because a crosslink repo path typed by hand is the one field in this panel
+// where a typo is invisible until the edge silently resolves to nothing — the
+// CLI then saves it as a PENDING edge and you find out much later.
+//
+// It is a DIRECTORY LISTER and nothing more, and the limits are the design:
+//   · directory names only — never a file list, never file contents, never a
+//     stat beyond "does .git / .claude/wiki exist here";
+//   · dotfolders are hidden (`.git`, `node_modules` and friends are noise here);
+//   · it reads, it never writes, and no path it is handed can reach a shell;
+//   · a path that cannot be read is an ANSWER (`error`), never a 500.
+// Nothing is copied out of the folders it lists, so a wrong click costs a
+// re-click. The browser is already loopback + token gated; this adds no reach
+// beyond what the person at the keyboard already has.
+const FS_LIST_MAX = 400;
+
+function fsList(dir, ctx) {
+  const target = path.resolve(dir || ctx.projectRoot || os.homedir());
+  let entries;
+  try {
+    entries = fs.readdirSync(target, { withFileTypes: true });
+  } catch (e) {
+    return { path: target, error: String(e.code || e.message), dirs: [] };
+  }
+  const dirs = [];
+  for (const e of entries) {
+    if (dirs.length >= FS_LIST_MAX) break;
+    if (!e.isDirectory() || e.name.startsWith(".") || e.name === "node_modules") continue;
+    const full = path.join(target, e.name);
+    dirs.push({
+      name: e.name,
+      path: full,
+      // The two facts that decide whether a folder is worth linking at all.
+      // Both are a single existsSync — nothing inside either one is read.
+      is_repo: fs.existsSync(path.join(full, ".git")),
+      has_wiki: fs.existsSync(path.join(full, ".claude", "wiki")),
+    });
+  }
+  dirs.sort((a, b) => a.name.localeCompare(b.name));
+  const parent = path.dirname(target);
+  return {
+    path: target,
+    parent: parent === target ? null : parent, // null AT a filesystem root
+    sep: path.sep,
+    home: os.homedir(),
+    project_root: ctx.projectRoot || null,
+    is_project_root: !!ctx.projectRoot && path.resolve(ctx.projectRoot) === target,
+    // What the crosslink config actually stores. Computed here rather than in
+    // the browser because only the server knows the real path separator, and a
+    // Windows path assembled with "/" is the kind of thing that works until it
+    // does not.
+    relative: ctx.projectRoot ? path.relative(ctx.projectRoot, target).split(path.sep).join("/") || "." : null,
+    truncated: dirs.length >= FS_LIST_MAX,
+    dirs,
+  };
+}
+
 // Open a terminal running `claude` in the project root. Best-effort and never
 // fatal — a failed launch is reported so the user can copy the command instead,
 // which is why the command is always on screen anyway.
@@ -393,6 +456,9 @@ async function handleApi(req, res, url, ctx) {
       // would be ceremony with a cost.
       const { SECTIONS } = require("../onboarding-content.js");
       return json(res, 200, { ok: true, exit_code: 0, data: { sections: SECTIONS } });
+    }
+    if (route === "/api/fs/list") {
+      return json(res, 200, { ok: true, exit_code: 0, data: fsList(q.path, ctx) });
     }
     if (route === "/api/experiment") {
       return json(res, 200, {

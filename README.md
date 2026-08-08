@@ -6,7 +6,7 @@
 
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
-![Version](https://img.shields.io/badge/version-0.43.5-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.43.6-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
@@ -46,7 +46,80 @@ zero-dependency npm package installs those files into your `.claude/` directory.
 
 ## Changelog
 
-**Latest: v0.43.5 — updated 2026-08-08.**
+**Latest: v0.43.6 — updated 2026-08-08.**
+
+### v0.43.6 — `orc ui` in two languages, and panels that point at the right page _(2026-08-08)_
+
+**The guided tour is modal now.** It shipped fully click-through, which sounds
+friendlier and is not: clicking the sidebar mid-tour swapped the panel out from
+under the popover, so the ring was left circling an element that no longer
+existed and the step's text described a page you were no longer on. **Next and
+Skip are the only live controls** while a step is up — the rail, the panel and
+the keyboard are all inert, and Escape means Skip. The upgrade spotlight is the
+one deliberate exception: it has no buttons and clears when you click Preview,
+so blocking the page would block the very click that dismisses it.
+
+**Experiment's lane list ships expanded.** It was collapsed to keep the launch
+button above the fold, and that cost more than it saved — a collapsed section is
+zero-height, so the tour step that teaches the lanes was drawing a ring around
+nothing. A section the tour explains has to be a section the tour can see.
+
+**Runs is an accordion.** It was a list with a detail card *underneath* it:
+clicking the fourth run rendered its checkpoint below run forty, so reading what
+you clicked meant scrolling past everything you did not — a problem that grew
+with the list. Every row now **expands in place**, animated with the same fold
+the settings tiers use, one row open at a time, detail fetched on first open and
+kept. Plus a status filter (all / waiting / done / other), a text filter and a
+match count.
+
+**A caution now points at the page that can actually clear it.** `orc doctor`
+reports every problem in one list, and Overview sent all of them to Maintenance.
+That is right for the install-footprint findings and **wrong for `diy-stale`** —
+the flow is recompiled with `orc diy compile`, which is a button on **Flow**. The
+panel was telling you to go somewhere with no control for the thing it was
+complaining about. Routing is now a table keyed on the finding id, and a finding
+with nothing to press anywhere (a dangling trace pointer) offers no button at all
+rather than a useless one.
+
+**Overview got a "Worth doing" list.** One severity-ordered list of everything
+wanting a decision, each row naming the panel that owns its fix: install
+findings, runs left waiting, an available update — and the wiki, which finally
+turns its tier into advice instead of a colour. **An AGING wiki is not an error,
+it is the moment a refresh is still cheap**, so it says so; a STALE one says
+`/orc-fast` will fall back until it is refreshed; an unregistered one is offered
+the free `orc wiki sync`. Refreshing costs a model, so the panel never claims it
+can do it. The health tiles are links to the panels behind their numbers, and
+there is a fifth for cached code patterns.
+
+**Learn shows one section at a time.** Eight sections stacked as eight boxes of
+monospace text is the whole document dumped on screen: nothing is emphasised, so
+nothing is read. There is now a contents rail with progress, prev/next, a search
+that filters the rail, and typography — indented command lines become
+click-to-copy chips, pipelines render as diagrams. Where you are is remembered.
+The content is unchanged: still `bin/onboarding-content.js`, the same text the
+terminal prints.
+
+**Crosslink: browse for the repo folder.** A hand-typed peer path is the one
+field here whose mistakes are invisible — the CLI accepts an unresolvable path
+on purpose (it saves a PENDING edge), so a typo does not fail, it just silently
+never links. A browser cannot hand back a real path, so **the server walks the
+filesystem** (`/api/fs/list`, directory names only — never a file, never its
+contents) and the page renders the walk. It marks which folders are git repos
+and which have a wiki, refuses to link this repo to itself, and **computes the
+stored relative path server-side** so Windows and macOS both get it right.
+Typing a path by hand still works: browsing is an addition, not a gate.
+
+**English and Indonesian.** A language button sits under the theme toggle in the
+rail (`l` toggles it), and the choice is remembered per browser — like the theme,
+never written to project config, which is a file your whole team shares. **The
+scope rule is narrow and enforced by test:** only the panel's own prose is
+translated. Config keys, their descriptions and values, agent names, model ids,
+paths, commands, `orc doctor` messages and CLI output are shown exactly as the
+CLI wrote them — a translated config key is a key that does not exist, and a
+translated command is a command you cannot type. English is the fallback table,
+so a missing translation degrades to English, never to a raw dotted key. Adding
+a language is a JSON file in `bin/webui/i18n/` and two lines. Still zero
+dependencies, zero build step.
 
 ### v0.43.5 — the update check works, and the UI teaches itself _(2026-08-08)_
 
@@ -751,14 +824,15 @@ orc ui --stop          # shut this project's server down (exit 0 stopped / 1 non
 
 | Panel | Shows | Can change |
 |---|---|---|
-| Overview | version, `orc doctor`, wiki tier, what is waiting | — |
+| Overview | version, `orc doctor`, wiki tier, what is waiting — plus **Worth doing**, one list of everything wanting a decision, each row linking to the panel that owns its fix | — |
 | Settings | every config key, tiered, with its control | `config set` / `reset` / `profile` |
-| Runs | run history, state-of-play, resume prompt, checkpoint, trace tail, mock example | — |
+| Runs | run history as an **accordion** — a row expands in place into state-of-play, resume prompt, checkpoint, trace tail, mock example | — |
 | Knowledge | wiki freshness + refresh scope, code-patterns, gotchas | `wiki sync`, `gotcha prune` |
 | Stats | lane and subagent usage, downgrades | — |
 | Flow (DIY) | the compiled flow and its gate | `diy set`, `diy compile` |
-| Crosslink | the cross-repo graph and each peer's freshness | `crosslink remove` |
-| Learn | the `orc onboarding` walkthrough | — |
+| Crosslink | the cross-repo graph and each peer's freshness; **browse** for a peer folder instead of typing its path | `crosslink add` / `remove` |
+| Learn | the `orc onboarding` walkthrough, one section at a time with a contents rail | — |
+| Experiment | every lane, with a copy button; opens a Claude session in a terminal | — |
 | Maintenance | `update`, `update --prune`, `doctor --fix`, `upgrade` | behind preview-then-apply |
 
 - **The panel *is* the CLI.** Reads shell `orc <cmd> --json`; writes shell the
@@ -774,6 +848,17 @@ orc ui --stop          # shut this project's server down (exit 0 stopped / 1 non
 - **Nothing is automatic.** No fix-on-load, no background repair. Every
   destructive action shows the CLI's own read-only preview first and names the
   exact command; a prune names **every** file it would delete.
+- **A caution points at the page that can clear it.** `orc doctor` reports every
+  problem in one list, but they are not all fixed in the same place — a STALE
+  DIY flow is recompiled on **Flow**, not Maintenance. Routing is a table keyed
+  on the finding id; a finding with nothing to press anywhere offers no button.
+- **English and Indonesian**, switched from the rail (or `l`) and remembered per
+  browser, never written to project config. **Only the panel's own prose is
+  translated** — config keys, their descriptions and values, agent names, model
+  ids, paths, commands and `orc doctor` messages are shown exactly as the CLI
+  wrote them, because a translated config key is a key that does not exist.
+  English is the fallback table, so a gap degrades to English, never to a raw
+  key. A new language is a JSON file in `bin/webui/i18n/` plus two lines.
 - **`--fixtures` carries one of every state**, including the ugly ones — a STALE
   wiki, an unhealthy doctor, a waiting run, a shadowed setting — so the panel can
   be restyled without needing a broken project to look at.
@@ -935,7 +1020,8 @@ bin/cli.js                   installer + config editor + flow composer + run-sta
 bin/ui.js                    TERMINAL styling kit the CLI prints through (not the web panel)
 bin/webui/                   `orc ui` — the local web control panel: serve.js (http, token auth,
                              lifecycle) · api.js (routes → cli.js --json) · fixtures.js (canned
-                             states) · app.html/app.css/app.js. Zero deps, no build step.
+                             states) · app.html/app.css/app.js · i18n/{en,id}.json (panel prose
+                             only — never CLI data). Zero deps, no build step.
 ```
 
 The `orc` skill is a thin **spine** that loads references and subskills only when

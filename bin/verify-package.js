@@ -15,7 +15,7 @@ const required = [
   "package.json",
   "README.md",
   // The `orc ui` web panel (v0.43.0). Named file by file, not covered by a
-  // count: the panel is four files that only work together, and a publish
+  // count: the panel is a set of files that only work together, and a publish
   // missing any one of them serves a page that 500s or renders blank. NOTE the
   // folder — `bin/ui.js` is the TERMINAL styling kit and is a different thing.
   "bin/webui/serve.js",
@@ -24,6 +24,11 @@ const required = [
   "bin/webui/app.html",
   "bin/webui/app.css",
   "bin/webui/app.js",
+  // The string tables (v0.43.6). Named here for the same reason: English is the
+  // FALLBACK table every other language falls back to, so a publish that drops
+  // it renders raw dotted keys on every panel, in every language.
+  "bin/webui/i18n/en.json",
+  "bin/webui/i18n/id.json",
   "templates",
   "templates/skills/orc/SKILL.md",
   "templates/skills/orc/references/ultra-mode.md",

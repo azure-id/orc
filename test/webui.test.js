@@ -24,6 +24,13 @@ const { cli, rmrf, tmpdir, freshInstall, REPO } = require("./_helpers");
 const CLI = path.join(REPO, "bin", "cli.js");
 const LOCK_REL = path.join(".claude", "orc", "ui.lock");
 
+// The shipped string tables. English is the FALLBACK table every other language
+// falls back to, so it is loaded separately as well as in the pair.
+const i18nPath = (code) => path.join(REPO, "bin", "webui", "i18n", code + ".json");
+const readTable = (code) => JSON.parse(fs.readFileSync(i18nPath(code), "utf8"));
+const en = readTable("en");
+const TABLES = { en, id: readTable("id") };
+
 // ── the --json contract ─────────────────────────────────────────────────────
 
 // Every command the help text advertises as --json-capable. `exit` is the code
@@ -545,17 +552,74 @@ test("tour: it is per-project, skippable, and replayable", () => {
   // Keyed by project root: a second repo gets its own tour.
   assert.match(js, /function tourSeen\(root\)/, "seen-state must be per project");
   assert.match(js, /\[root \|\| "\?"\]/, "the project root must be the key");
-  // Never a one-way door.
-  assert.match(js, /Replay the tour/, "a dismissed tour must be replayable");
+  // Never a one-way door. The prose now lives in the string table, so that is
+  // where the affordance is asserted — a replay button with no label is the
+  // same regression as no replay button.
+  assert.match(js, /t\("shortcuts\.replay"\)/, "a dismissed tour must be replayable");
+  assert.ok(en["shortcuts.replay"], "the replay action needs a label in the string table");
   // Fixture mode teaches the panel with numbers that are not real.
   assert.match(js, /!metaInfo\.fixtures && !tourSeen/, "the tour must not run on fixtures");
 
   // The upgrade spotlight ends because you did the thing — so it has no Next
   // and no Skip, and it names the click that clears it.
   const i = js.indexOf("function startUpgradeSpotlight");
-  const fn = js.slice(i, i + 700);
+  const fn = js.slice(i, i + 800);
   assert.match(fn, /dismissOnClickSelector/, "the upgrade spotlight must clear on the real click");
   assert.ok(!/onNext|onSkip/.test(fn), "the upgrade spotlight must have no next/skip");
+});
+
+// v0.43.6 — the guided tour is MODAL.
+//
+// It shipped fully click-through, which sounds friendlier and is not: clicking
+// the sidebar mid-tour swapped the panel out from under the popover, so the
+// ring was left pointing at an element that no longer existed and the step's
+// text described a page you were no longer on. Next and Skip must be the only
+// live controls while a step is up.
+test("tour: a guided step blocks everything except its own buttons", () => {
+  const js = fs.readFileSync(path.join(REPO, "bin", "webui", "app.js"), "utf8");
+  const css = fs.readFileSync(path.join(REPO, "bin", "webui", "app.css"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+
+  // The blocker exists, and it is created for every step that did not opt out.
+  assert.match(js, /const blocker = interactive \? null : el\("div", "tour-block"\)/, "a non-interactive step must build a blocker");
+
+  const rule = (sel) => {
+    const m = css.match(new RegExp("\\" + sel + "\\s*\\{([^}]*)\\}"));
+    return m ? m[1] : "";
+  };
+  const z = (sel) => {
+    const m = rule(sel).match(/z-index:\s*(\d+)/);
+    return m ? Number(m[1]) : null;
+  };
+  const block = z(".tour-block");
+  assert.ok(block, ".tour-block needs an explicit z-index");
+  // ABOVE the highlighted element: lifting the target to 46 is what keeps it
+  // visible through the scrim, and a blocker underneath it would leave exactly
+  // one element clickable — the one that navigates away mid-tour.
+  assert.ok(block > z(".tour-target"), "the blocker must cover the highlighted element too");
+  assert.ok(block < z(".tour-pop"), "the popover must stay above the blocker, or Next is unclickable");
+  assert.match(rule(".tour-block"), /position:\s*fixed/, "the blocker must cover the viewport");
+  assert.ok(!/pointer-events:\s*none/.test(rule(".tour-block")), "the blocker must RECEIVE clicks, not pass them through");
+
+  // The keyboard is blocked too: 1-9 navigating the rail is the same failure.
+  assert.match(js, /if \(tourActive && tourActive\.blocking\) return;/, "shortcuts must be inert during a blocking step");
+  assert.match(js, /tourActive = \{\s*\n?\s*blocking:/, "the tour must publish whether it is blocking");
+
+  // The upgrade spotlight is the ONE opt-out — blocking it would block the very
+  // click that dismisses it.
+  const up = js.slice(js.indexOf("function startUpgradeSpotlight"), js.indexOf("function startUpgradeSpotlight") + 800);
+  assert.match(up, /interactive:\s*true/, "the upgrade spotlight must stay click-through");
+});
+
+// v0.43.6 — a tour step must point at something that HAS a size. The Experiment
+// lanes shipped collapsed, and a collapsed section is zero-height: the step that
+// teaches it drew a ring around nothing.
+test("experiment: the lane list the tour points at is expanded", () => {
+  const js = fs.readFileSync(path.join(REPO, "bin", "webui", "app.js"), "utf8");
+  const panel = js.slice(js.indexOf("PANELS.experiment"), js.indexOf("PANELS.maintenance"));
+  assert.match(panel, /collapsed:\s*false/, "the Lanes section must render expanded");
+  assert.ok(!/collapsed:\s*true/.test(panel), "nothing on this panel may ship collapsed while the tour targets it");
+  // And the tour really does target it, so the two stay tied together.
+  assert.match(js, /selector: "\.lane-list", title: "tour\.7\.title"/, "the tour step must still point at .lane-list");
 });
 
 // v0.43.4 — the Experiment panel moves the "never spawns claude" boundary by
@@ -837,7 +901,233 @@ test("fixtures carry the UGLY states, not just the happy ones", () => {
 test("the ui never offers to run a mock example", () => {
   const app = fs.readFileSync(path.join(REPO, "bin", "webui", "app.js"), "utf8");
   assert.ok(!/Run mock|runMock|\/api\/mock\/run/.test(app), "there must be no run affordance for a mock example");
-  assert.match(app, /Not generated for this run/, "a run with no mock example says so plainly");
+  // The honesty line moved into the string table with everything else, so it is
+  // asserted where it now lives — in EVERY language, because a missing
+  // translation here would silently become an empty state that reads as "one is
+  // missing" rather than "none was ever generated".
+  assert.match(app, /t\("runs\.mock\.none"\)/, "the panel must render the not-generated line");
+  for (const [code, table] of Object.entries(TABLES)) {
+    assert.match(table["runs.mock.none"] || "", /\S/, `${code} must say a run has no mock example`);
+    assert.match(table["runs.mock.noneHint"] || "", /mock_example/, `${code} must name the config key that controls it`);
+  }
+});
+
+// ── i18n (v0.43.6) ──────────────────────────────────────────────────────────
+//
+// THE SCOPE RULE is the thing worth protecting here, and it is not obvious:
+// only the panel's OWN prose is translated. Everything that arrives from
+// `bin/cli.js --json` — config keys, their descriptions, values, agent names,
+// model ids, paths, commands, doctor messages — is machine text and stays
+// exactly as the CLI wrote it. A translated config key is a key that does not
+// exist; a translated command is a command you cannot type.
+
+test("i18n: every key the panel asks for exists in English", () => {
+  // Comments are stripped first. This file DOCUMENTS the fragment-built key
+  // form it forbids ("t(\"settings.tier.\" + tier)"), and a scan that cannot
+  // tell a call from a comment about that call fails on its own explanation.
+  const js = fs
+    .readFileSync(path.join(REPO, "bin", "webui", "app.js"), "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/^\s*\/\/.*$/gm, "");
+  const keys = new Set();
+  for (const m of js.matchAll(/\bt\("([a-zA-Z0-9_.]+)"/g)) keys.add(m[1]);
+  // tn() picks `key` or `key + "Plural"`, so BOTH must exist or a plural count
+  // renders as a raw dotted key at exactly the moment there is more than one.
+  for (const m of js.matchAll(/\btn\([^,]+,\s*"([a-zA-Z0-9_.]+)"/g)) {
+    keys.add(m[1]);
+    keys.add(m[1] + "Plural");
+  }
+  assert.ok(keys.size > 200, `expected the panel to use the table heavily, saw ${keys.size}`);
+  const missing = [...keys].filter((k) => !(k in en));
+  assert.deepStrictEqual(missing, [], "these keys are used but not defined in en.json");
+});
+
+test("i18n: every language defines exactly the same keys", () => {
+  // A key present in en and absent in id is not a crash — t() falls back — but
+  // it IS a half-translated screen nobody notices. Parity is the only way that
+  // stays visible.
+  const enKeys = Object.keys(en).filter((k) => k !== "_readme").sort();
+  for (const [code, table] of Object.entries(TABLES)) {
+    if (code === "en") continue;
+    const keys = Object.keys(table).filter((k) => k !== "_readme").sort();
+    assert.deepStrictEqual(keys, enKeys, `${code}.json must define exactly the keys en.json defines`);
+  }
+});
+
+test("i18n: placeholders survive translation", () => {
+  // `{n}`, `{version}`, `{command}` are substituted by t(). A translation that
+  // drops one silently loses the number or the command it was carrying.
+  for (const [code, table] of Object.entries(TABLES)) {
+    if (code === "en") continue;
+    for (const [key, value] of Object.entries(en)) {
+      if (key === "_readme" || typeof value !== "string") continue;
+      const want = [...value.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
+      const got = [...String(table[key]).matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
+      assert.deepStrictEqual(got, want, `${code}.json "${key}" must carry the same placeholders`);
+    }
+  }
+});
+
+test("i18n: config keys and CLI vocabulary are never translated", () => {
+  const cliSrc = fs.readFileSync(CLI, "utf8");
+  const js = fs.readFileSync(path.join(REPO, "bin", "webui", "app.js"), "utf8");
+
+  // The real registry key names, straight from the CLI. If any of them ever
+  // became a translatable STRING VALUE rather than an id quoted inside a
+  // sentence, the panel would be writing a key that does not exist.
+  const registryKeys = [...cliSrc.matchAll(/\{\s*key:\s*"(\w+)",[^}]*tier:\s*"/g)].map((m) => m[1]);
+  assert.ok(registryKeys.length > 20, `expected to find the config registry, saw ${registryKeys.length}`);
+  for (const [code, table] of Object.entries(TABLES)) {
+    for (const [key, value] of Object.entries(table)) {
+      if (key === "_readme" || typeof value !== "string") continue;
+      assert.ok(!registryKeys.includes(value.trim()), `${code}.json "${key}" is a bare config key — those are ids, not prose`);
+    }
+  }
+
+  // The values the panel reads out of a payload go through as-is. These are the
+  // spots where a t() call would translate DATA, so they are named explicitly.
+  for (const expr of ["k.desc", "k.shadow_reason", "f.message", "a.label", "l.what", "p.desc", "d.reason"]) {
+    assert.ok(
+      !new RegExp("t\\(\\s*" + expr.replace(".", "\\.") + "\\s*\\)").test(js),
+      `${expr} comes from the CLI — it must never be passed through t()`
+    );
+  }
+});
+
+test("i18n: the language switch is a browser preference, never project config", () => {
+  const js = fs.readFileSync(path.join(REPO, "bin", "webui", "app.js"), "utf8");
+  const api = fs.readFileSync(path.join(REPO, "bin", "webui", "api.js"), "utf8");
+  const html = fs.readFileSync(path.join(REPO, "bin", "webui", "app.html"), "utf8");
+
+  // Remembered in localStorage, exactly like the theme — never written to
+  // orc.config.yaml, which is a file the whole team shares.
+  assert.match(js, /const LANG_KEY = "orc-ui-lang"/, "the language must be a named localStorage key");
+  assert.match(js, /localStorage\.setItem\(LANG_KEY/, "the choice must be remembered in the browser");
+  assert.ok(!/lang/i.test((api.match(/const WRITES = \{[\s\S]*?\n\};/) || [""])[0]), "no write route may carry a language");
+
+  // The button lives in the rail, under the theme toggle, and ships an English
+  // fallback in the markup so a failed fetch still renders a readable rail.
+  assert.match(html, /id="lang-toggle"/, "the rail needs a language button");
+  assert.match(html, /data-i18n="nav\.overview">Overview</, "nav labels need an in-markup English fallback");
+});
+
+test("i18n: the string tables are served, and only those two", () => {
+  const serve = fs.readFileSync(path.join(REPO, "bin", "webui", "serve.js"), "utf8");
+  const table = serve.slice(serve.indexOf("const STATIC = {"), serve.indexOf("};", serve.indexOf("const STATIC = {")));
+  assert.match(table, /"\/i18n\/en\.json"/, "English must be served — it is the fallback table");
+  assert.match(table, /"\/i18n\/id\.json"/, "Indonesian must be served");
+  // A FIXED map, never a path join against the request: a static table is what
+  // stops a URL naming a file of its own choosing.
+  assert.ok(!/req\.|url\.|pathname/.test(table), "the static map must not interpolate anything from a request");
+});
+
+// v0.43.6 — a caution must point at the panel that can actually clear it.
+//
+// `orc doctor` reports every problem in one list, and the Overview sent all of
+// them to Maintenance. That is right for the install-footprint findings and
+// WRONG for `diy-stale`: the flow is recompiled with `orc diy compile`, which
+// is a button on FLOW. The panel was telling people to go to a page with no
+// control for the thing it was complaining about.
+test("overview: a finding routes to the panel that owns its fix", () => {
+  const js = fs.readFileSync(path.join(REPO, "bin", "webui", "app.js"), "utf8");
+  const cliSrc = fs.readFileSync(CLI, "utf8");
+
+  assert.match(js, /const FINDING_ROUTE = \{/, "the routing table must exist");
+  const table = js.slice(js.indexOf("const FINDING_ROUTE = {"), js.indexOf("const DEFAULT_FINDING_ROUTE"));
+  assert.match(table, /"diy-stale":\s*\{\s*panel:\s*"flow"/, "a stale DIY flow is recompiled on Flow, not Maintenance");
+  // A finding with nothing to press anywhere must offer no button at all rather
+  // than a button that goes somewhere useless.
+  assert.match(table, /"trace-pointer-dangling":\s*\{\s*panel:\s*null/, "a self-clearing finding gets no destination");
+  assert.match(js, /const DEFAULT_FINDING_ROUTE = \{ panel: "maintenance"/, "install-footprint findings still go to Maintenance");
+
+  // The ids are the CLI's. A renamed finding must not silently fall back to the
+  // default route, so both routed ids are checked against the source.
+  for (const id of ["diy-stale", "trace-pointer-dangling"]) {
+    assert.ok(cliSrc.includes(`"${id}"`), `orc doctor must still emit the finding id "${id}"`);
+  }
+});
+
+// v0.43.6 — an AGING wiki is not an error, it is the moment a refresh is still
+// cheap. The Overview said so with a colour and nothing else.
+test("overview: the wiki tier turns into advice, not just a colour", () => {
+  const js = fs.readFileSync(path.join(REPO, "bin", "webui", "app.js"), "utf8");
+  const fn = js.slice(js.indexOf("function attentionCard"), js.indexOf("function statTile"));
+
+  assert.match(fn, /w\.tier === "AGING"/, "an AGING wiki must produce a recommendation");
+  assert.match(fn, /overview\.item\.wikiAging/, "and it must be a titled, explained item");
+  assert.match(fn, /w\.state !== "registered"/, "an unregistered wiki must be offered the free sync");
+  assert.match(fn, /p\.patterns \|\| \[\]/, "a missing code pattern is worth surfacing too");
+
+  // The refresh itself costs a model, so the panel must never claim it can do
+  // it — every language has to keep that caveat.
+  for (const [code, table] of Object.entries(TABLES)) {
+    assert.match(table["overview.item.wikiAging.body"] || "", /model|Claude Code/i, `${code} must say a refresh runs in Claude Code`);
+  }
+});
+
+// v0.43.6 — Runs is an accordion. The old list-plus-detail-box put the detail
+// further from the row the longer the list got.
+test("runs: a row expands in place instead of rendering a box below the list", () => {
+  const js = fs.readFileSync(path.join(REPO, "bin", "webui", "app.js"), "utf8");
+  const css = fs.readFileSync(path.join(REPO, "bin", "webui", "app.css"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+
+  // The split layout is gone — there is no second column to render into.
+  assert.ok(!/const detailSlot/.test(js), "there must be no separate detail slot");
+  assert.ok(!/function showRun\(/.test(js), "the detail renderer must fill the row's own pane");
+  assert.match(js, /function loadRunDetail\(pane, slug\)/, "detail is loaded into the row that asked for it");
+
+  // The fold animates the same way the settings tiers do: `height: auto` cannot
+  // be transitioned, and the inner element is what collapses against.
+  assert.match(css, /\.run-body\s*\{[^}]*grid-template-rows:\s*0fr/, "the fold must start closed");
+  assert.match(css, /\.run-row\.open > \.run-body\s*\{[^}]*grid-template-rows:\s*1fr/, "and open to 1fr");
+  assert.match(css, /\.run-body-inner\s*\{[^}]*min-height:\s*0/, "the inner element is what collapses against");
+
+  // One row at a time: two open rows re-create the scrolling problem.
+  assert.match(js, /const collapseAll = \(except\)/, "opening a row must close the others");
+  // Detail is fetched once per row and kept, so re-opening costs nothing.
+  assert.match(js, /if \(open && !entry\.loaded\)/, "a row must fetch its detail only on first open");
+});
+
+// v0.43.6 — the folder picker. A browser cannot hand back a real path, so the
+// server walks the filesystem and the page renders the walk.
+test("crosslink: the folder picker lists directories and nothing else", () => {
+  const api = fs.readFileSync(path.join(REPO, "bin", "webui", "api.js"), "utf8");
+  const js = fs.readFileSync(path.join(REPO, "bin", "webui", "app.js"), "utf8");
+  const fn = api.slice(api.indexOf("function fsList"), api.indexOf("// Open a terminal running"));
+
+  assert.match(fn, /e\.isDirectory\(\)/, "only directories may be listed");
+  assert.ok(!/readFileSync|createReadStream/.test(fn), "the picker must never read a file's contents");
+  assert.ok(!/spawn|exec/.test(fn), "no path may reach a shell");
+  // A path it cannot read is an ANSWER, not a 500 — an unreadable folder is a
+  // normal thing to click on.
+  assert.match(fn, /return \{ path: target, error:/, "an unreadable folder must return an error field, not throw");
+  // The relative path is computed SERVER-side: only the server knows the real
+  // separator, and a Windows path assembled with "/" works until it does not.
+  assert.match(fn, /path\.relative\(ctx\.projectRoot, target\)/, "the stored relative path is the server's to compute");
+  assert.match(fn, /split\(path\.sep\)\.join\("\/"\)/, "and it must be normalised for the config file");
+
+  // GET only, and it never appears in the write table.
+  assert.ok(!/\/api\/fs\/list/.test((api.match(/const WRITES = \{[\s\S]*?\n\};/) || [""])[0]), "the picker must not be a write route");
+  // Typing a path by hand still works — browsing is an addition, not the gate.
+  assert.match(js, /const repoPath = el\("input", "text-input"\)/, "the path field must remain a plain text input");
+  assert.match(js, /function pickFolder\(onPick\)/, "and the picker hands back a path to put in it");
+});
+
+test("learn: one section at a time, with a contents rail", () => {
+  const js = fs.readFileSync(path.join(REPO, "bin", "webui", "app.js"), "utf8");
+  const panel = js.slice(js.indexOf("PANELS.learn"), js.indexOf("PANELS.experiment"));
+
+  // The old shape was every section rendered as a card of monospace text.
+  assert.ok(!/for \(const s of d\.sections\) \{\s*\n\s*const c = card\(s\.title\)/.test(panel), "sections must not all render at once");
+  assert.match(panel, /learn-nav-item/, "there must be a contents rail");
+  assert.match(panel, /function goTo\(i\)/, "and a position you move through");
+  assert.match(panel, /LEARN_POS_KEY/, "where you are must survive leaving the panel");
+
+  // The content itself is still the shipped walkthrough — one source, two
+  // surfaces. The panel formats it; it never rewrites it.
+  const content = fs.readFileSync(path.join(REPO, "bin", "onboarding-content.js"), "utf8");
+  assert.match(content, /SECTIONS/, "the walkthrough must still come from onboarding-content.js");
+  assert.ok(!/innerHTML|insertAdjacentHTML/.test(panel), "walkthrough text must never be parsed as markup");
 });
 
 // bin/ui.js is the TERMINAL styling kit; bin/webui/ is this. Two different

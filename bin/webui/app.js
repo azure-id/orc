@@ -48,6 +48,95 @@ async function read(path) {
 
 const post = (path, body) => api(path, { method: "POST", body });
 
+/* ------------------------------------------------------------------- i18n -- */
+/*
+   THE SCOPE RULE, and it is deliberately narrow: only the panel's OWN prose is
+   translated. Everything that arrives from `bin/cli.js --json` stays exactly as
+   the CLI wrote it — config keys and their descriptions, values, agent names,
+   model ids, file paths, commands, `orc doctor` messages, command output. Those
+   are identifiers, not sentences: a translated config key is a key that does not
+   exist, and a translated command is a command you cannot type. So `t()` is
+   never applied to a value read out of a payload, and neither string table
+   contains a single ORC key name.
+
+   The tables are plain JSON served as static assets. Adding a language is a file
+   in i18n/ plus one row in LANGS and one row in serve.js's STATIC map — no build
+   step, no library, no dependency.
+*/
+const LANGS = [
+  { code: "en", label: "English" },
+  { code: "id", label: "Bahasa Indonesia" },
+];
+const LANG_KEY = "orc-ui-lang";
+
+let lang = "en";
+// English is loaded first and kept as the FALLBACK table: a key the other
+// language has not translated yet renders in English rather than as a raw
+// dotted key. A half-finished translation degrades to mixed prose, never to
+// debug output on somebody's screen.
+let DICT = {};
+let DICT_EN = {};
+
+function loadLang(code) {
+  return fetch(`/i18n/${code}.json`, { headers: { "x-orc-token": TOKEN }, cache: "no-store" }).then((r) => {
+    if (!r.ok) throw new Error(`i18n ${code} ${r.status}`);
+    return r.json();
+  });
+}
+
+// A missing or broken table must never blank the UI. Every failure path here
+// lands on English, so the worst case is untranslated text — never empty text.
+async function setLang(code, opts) {
+  const rerender = !opts || opts.rerender !== false;
+  const want = LANGS.some((l) => l.code === code) ? code : "en";
+  try {
+    DICT = want === "en" ? DICT_EN : await loadLang(want);
+    lang = want;
+  } catch (_) {
+    DICT = DICT_EN;
+    lang = "en";
+  }
+  try {
+    localStorage.setItem(LANG_KEY, lang);
+  } catch (_) {}
+  document.documentElement.setAttribute("lang", lang);
+  applyStaticText();
+  if (rerender) route();
+}
+
+function t(key, vars) {
+  let s = DICT[key];
+  if (s === undefined) s = DICT_EN[key];
+  if (s === undefined) s = key;
+  if (vars) for (const k of Object.keys(vars)) s = s.split("{" + k + "}").join(String(vars[k]));
+  return s;
+}
+
+// English has one plural form and Indonesian has none, so count-aware lookup is
+// a second key rather than a plural-rules engine: `n === 1` picks the singular.
+const tn = (n, key, vars) => t(n === 1 ? key : key + "Plural", Object.assign({ n }, vars || {}));
+
+// The parts of the shell that are markup rather than a render function. Called
+// on every language change; panels re-render themselves through `route()`.
+function applyStaticText() {
+  for (const node of document.querySelectorAll("[data-i18n]")) node.textContent = t(node.dataset.i18n);
+  const tt = $("#theme-toggle");
+  if (tt) tt.textContent = document.documentElement.getAttribute("data-theme") === "light" ? t("rail.dark") : t("rail.light");
+  const hint = $("#shortcut-hint");
+  if (hint) hint.title = t("rail.shortcuts");
+  const label = $("#lang-label");
+  if (label) label.textContent = (LANGS.find((l) => l.code === lang) || LANGS[0]).label;
+  const btn = $("#lang-toggle");
+  if (btn) btn.title = t("lang.title");
+}
+
+// Two languages, so the control is a TOGGLE rather than a menu: one click, no
+// dropdown to open. A third language would make this a <select>; two do not.
+function cycleLang() {
+  const i = LANGS.findIndex((l) => l.code === lang);
+  setLang(LANGS[(i + 1) % LANGS.length].code);
+}
+
 /* --------------------------------------------------------------- version -- */
 // `orc version --json` performs a REAL bounded network check against the
 // install source and reports {version, latest, update_available}. Three places
@@ -66,14 +155,22 @@ function refreshVersion() {
 // and the upgrade row can never disagree about it. `latest: null` is not "up to
 // date" — it is "we could not tell", which is a different thing to show.
 function versionState(v) {
-  if (!v) return { kind: "", label: "unknown", note: "Could not read the installed version." };
-  if (v.check_disabled)
-    return { kind: "", label: "check off", note: "Update checks are disabled (ORC_NO_UPDATE_CHECK)." };
-  if (!v.latest)
-    return { kind: "warn", label: "offline", note: "Could not reach the install source to compare versions." };
+  if (!v) return { kind: "", label: t("version.unknown.label"), note: t("version.unknown.note") };
+  if (v.check_disabled) return { kind: "", label: t("version.off.label"), note: t("version.off.note") };
+  if (!v.latest) return { kind: "warn", label: t("version.offline.label"), note: t("version.offline.note") };
   if (v.update_available)
-    return { kind: "warn", label: v.latest + " available", note: `You have ${v.version}. Maintenance → upgrade installs it.` };
-  return { kind: "ok", label: "up to date", note: `${v.version} is the latest on ${v.install_spec || "the install source"}.` };
+    return {
+      kind: "warn",
+      label: t("version.available.label", { latest: v.latest }),
+      note: t("version.available.note", { version: v.version }),
+    };
+  return {
+    kind: "ok",
+    label: t("version.current.label"),
+    // `install_spec` is CLI data (a package spec), so it is interpolated, never
+    // translated — only the sentence around it is ours.
+    note: t("version.current.note", { version: v.version, source: v.install_spec || "the install source" }),
+  };
 }
 
 /* ----------------------------------------------------------------- utils -- */
@@ -96,13 +193,13 @@ function esc(s) {
 function relAge(ms) {
   if (!ms) return "";
   const s = Math.max(0, Math.round((Date.now() - ms) / 1000));
-  if (s < 90) return "just now";
+  if (s < 90) return t("age.now");
   const m = Math.round(s / 60);
-  if (m < 90) return `${m} min ago`;
+  if (m < 90) return t("age.min", { n: m });
   const h = Math.round(m / 60);
-  if (h < 36) return `${h} hours ago`;
+  if (h < 36) return t("age.hours", { n: h });
   const d = Math.round(h / 24);
-  return `${d} ${d === 1 ? "day" : "days"} ago`;
+  return tn(d, "age.day");
 }
 
 function chip(text, kind, pulse) {
@@ -131,9 +228,9 @@ function kvList(rows, copyable) {
     const dd = el("dd", null, esc(v));
     if (copyable) {
       dd.classList.add("kv-copy");
-      const b = el("button", "copy-btn", "copy");
+      const b = el("button", "copy-btn", t("common.copy").toLowerCase());
       b.type = "button";
-      b.title = "Copy to clipboard";
+      b.title = t("common.copy");
       b.addEventListener("click", () => copy(String(v), k));
       dd.append(b);
     }
@@ -198,8 +295,8 @@ function toast(msg, kind, detail) {
 function copy(text, label) {
   navigator.clipboard
     .writeText(text)
-    .then(() => toast((label || "Copied") + " to clipboard.", "ok"))
-    .catch(() => toast("Could not reach the clipboard — select the text and copy by hand.", "bad"));
+    .then(() => toast(t("common.clipboardOk", { label: label || t("common.copied") }), "ok"))
+    .catch(() => toast(t("common.clipboardFail"), "bad"));
 }
 
 /* ----------------------------------------------------------------- modal -- */
@@ -252,9 +349,9 @@ async function renderUpdateBanner(host) {
   const b = el("button", "banner banner-update");
   b.type = "button";
   const inner = el("div");
-  inner.append(el("strong", null, `orc ${v.latest} is available — you have ${v.version}.`));
-  inner.append(el("div", "note", "Click to read what changed, then upgrade from Maintenance."));
-  b.append(el("span", "banner-badge", "NEW"), inner, el("span", "banner-more", "Read →"));
+  inner.append(el("strong", null, t("banner.update.title", { latest: v.latest, version: v.version })));
+  inner.append(el("div", "note", t("banner.update.note")));
+  b.append(el("span", "banner-badge", "NEW"), inner, el("span", "banner-more", t("banner.update.cta")));
   b.addEventListener("click", () => showChangelog(v));
   host.append(b);
 }
@@ -268,12 +365,12 @@ async function showChangelog(v) {
   body.append(slot);
 
   const close = modal({
-    title: `What's new in ${v.latest}`,
+    title: t("changelog.title", { version: v.latest }),
     body,
     actions: [
-      { label: "Later", onClick: (c) => c() },
+      { label: t("common.later"), onClick: (c) => c() },
       {
-        label: "Take me to the upgrade",
+        label: t("changelog.goUpgrade"),
         cls: "btn-primary",
         onClick: (c) => {
           c();
@@ -290,12 +387,12 @@ async function showChangelog(v) {
     const d = (await read("/api/changelog")).data;
     slot.replaceChildren();
     if (d.check_disabled) {
-      slot.append(el("div", "note", "Update checks are disabled (ORC_NO_UPDATE_CHECK), so there is nothing to show."));
+      slot.append(el("div", "note", t("changelog.disabled")));
     } else if (!d.fetched) {
-      slot.append(el("div", "note", "Could not reach the changelog — you are offline, or the source is unreachable."));
-      slot.append(el("div", "note", "The release itself is still real; this panel just could not fetch its notes."));
+      slot.append(el("div", "note", t("changelog.offline")));
+      slot.append(el("div", "note", t("changelog.offlineNote")));
     } else if (!d.entries.length) {
-      slot.append(el("div", "note", "No changelog entries newer than what you have."));
+      slot.append(el("div", "note", t("changelog.empty")));
     } else {
       for (const e of d.entries) {
         const sec = el("div", "cl-entry");
@@ -307,10 +404,10 @@ async function showChangelog(v) {
         if (e.body) sec.append(el("div", "cl-body", stripMd(e.body)));
         slot.append(sec);
       }
-      slot.append(el("div", "note", "Source: " + d.source));
+      slot.append(el("div", "note", t("changelog.source", { src: d.source })));
     }
   } catch (e) {
-    slot.replaceChildren(el("div", "note", "Could not load the changelog: " + e.message));
+    slot.replaceChildren(el("div", "note", t("changelog.loadFail", { err: e.message })));
   }
   return close;
 }
@@ -348,14 +445,10 @@ async function renderBanners() {
     // Prose inside the banner flex row, not a panel container: its lines are
     // meant to read tight, so it is deliberately not a `stack`.
     const bannerBody = el("div");
-    bannerBody.append(el("strong", null, "A global ORC install exists at ~/.claude and may win skill resolution."));
-    bannerBody.append(
-      el(
-        "div",
-        null,
-        "These project settings may not be the ones your runs read. This panel never edits global config — it reports the conflict."
-      )
-    );
+    bannerBody.append(el("strong", null, t("banner.global.title")));
+    bannerBody.append(el("div", null, t("banner.global.body")));
+    // The finding's own text is the CLI speaking. It is shown verbatim in every
+    // language — a doctor message names files and commands.
     if (finding) bannerBody.append(el("div", "note", finding.message));
     // The command that actually clears the finding, copyable. This panel is
     // project-scoped and never writes global config, so handing over the exact
@@ -365,13 +458,13 @@ async function renderBanners() {
     if (fixCmd) {
       const row = el("div", "banner-fix");
       row.append(el("code", "action-cmd", fixCmd));
-      const cp = el("button", "btn btn-ghost btn-sm", "Copy");
+      const cp = el("button", "btn btn-ghost btn-sm", t("common.copy"));
       cp.type = "button";
-      cp.addEventListener("click", () => copy(fixCmd, "Command copied"));
+      cp.addEventListener("click", () => copy(fixCmd, t("common.copied")));
       row.append(cp);
       bannerBody.append(row);
     }
-    bannerBody.append(el("div", "note", "Check it with: orc doctor"));
+    bannerBody.append(el("div", "note", t("banner.global.check")));
     b.append(bannerBody);
     host.append(b);
   }
@@ -425,53 +518,98 @@ async function section(host, loader, render) {
     const out = render(data);
     slot.replaceChildren(out || el("div"));
   } catch (e) {
-    slot.replaceChildren(empty("Could not load this panel.", String(e.message)));
+    slot.replaceChildren(empty(t("common.loadFail"), String(e.message)));
   }
   return slot;
 }
 
 /* ================================================================ OVERVIEW == */
 
+/* WHERE A PROBLEM IS ACTUALLY FIXED (v0.43.6).
+   `orc doctor` reports every problem in one list, and the panel used to send
+   the whole list to Maintenance with a single "Open Maintenance" button. That
+   is right for the install-footprint findings — version skew, orphans, missing
+   files, unwired hooks — because `orc update` / `doctor --fix` really is where
+   those are repaired. It was WRONG for the ones whose fix lives on another
+   panel, and `diy-stale` was the one people hit: the flow is recompiled with
+   `orc diy compile`, which is a button on FLOW. Sending them to Maintenance
+   pointed at a page with no control for the thing it was complaining about.
+
+   So the routing is a table keyed on the finding id the CLI already emits.
+   `null` means there is nothing to press anywhere — a dangling trace pointer
+   clears itself on the next run, and offering a button for it would be a lie. */
+const FINDING_ROUTE = {
+  "diy-stale": { panel: "flow", cta: "overview.item.diyStale.cta" },
+  "trace-pointer-dangling": { panel: null },
+};
+const DEFAULT_FINDING_ROUTE = { panel: "maintenance", cta: "overview.item.doctor.cta" };
+const findingRoute = (id) => FINDING_ROUTE[id] || DEFAULT_FINDING_ROUTE;
+
 PANELS.overview = function (host) {
-  head(host, "Overview", "Install health, knowledge state and what is waiting for you.");
+  head(host, t("overview.title"), t("overview.sub"));
   section(
     host,
     () => read("/api/overview").then((r) => r.data),
     (d) => {
       const out = frag();
-
-      const stats = el("div", "grid grid-3");
       const doctor = d.doctor || {};
-      stats.append(
-        statTile(
-          "Install",
-          doctor.ok ? "Healthy" : `${(doctor.findings || []).length} issue${(doctor.findings || []).length === 1 ? "" : "s"}`,
-          doctor.installed_version ? `payload ${doctor.installed_version} · cli ${doctor.package_version}` : "",
-          doctor.ok ? "ok" : "warn"
-        )
-      );
       const w = d.wiki || {};
+      const p = d.patterns || {};
+      const waiting = d.waiting || [];
+      const findings = doctor.findings || [];
+
+      /* --- the tiles ------------------------------------------------------ */
+      const stats = el("div", "grid grid-3");
       stats.append(
         statTile(
-          "Wiki",
-          w.state === "registered" ? w.tier || "tier unknown" : (w.state || "none").toUpperCase(),
-          w.state === "registered" ? `${w.docs} docs · last scan ${w.last_scan || "?"}` : "no registered wiki",
-          w.tier === "FRESH" ? "ok" : w.tier === "AGING" ? "warn" : w.state === "none" ? "" : "bad"
+          t("overview.tile.install"),
+          doctor.ok ? t("overview.tile.installHealthy") : tn(findings.length, "overview.tile.installIssues"),
+          doctor.installed_version
+            ? t("overview.tile.installNote", { payload: doctor.installed_version, cli: doctor.package_version })
+            : "",
+          doctor.ok ? "ok" : "warn",
+          doctor.ok ? null : "maintenance"
         )
       );
       stats.append(
         statTile(
-          "Runs waiting",
-          String((d.waiting || []).length),
-          `${d.runs_total || 0} recorded in total`,
-          (d.waiting || []).length ? "warn" : "ok"
+          t("overview.tile.wiki"),
+          // TIER and STATE are CLI vocabulary (FRESH / AGING / STALE /
+          // unregistered) — the words the docs and every other lane use. They
+          // are shown as-is in both languages; only the sentence under them is
+          // translated.
+          w.state === "registered" ? w.tier || t("overview.tile.wikiUnknown") : String(w.state || "none").toUpperCase(),
+          w.state === "registered"
+            ? t("overview.tile.wikiNote", { docs: w.docs, scan: w.last_scan || "?" })
+            : t("overview.tile.wikiNone"),
+          w.tier === "FRESH" ? "ok" : w.tier === "AGING" ? "warn" : w.state === "none" ? "" : "bad",
+          "knowledge"
+        )
+      );
+      stats.append(
+        statTile(
+          t("overview.tile.waiting"),
+          String(waiting.length),
+          t("overview.tile.waitingNote", { n: d.runs_total || 0 }),
+          waiting.length ? "warn" : "ok",
+          "runs"
+        )
+      );
+      const langs = (p.patterns || []).map((x) => x.lang);
+      stats.append(
+        statTile(
+          t("overview.tile.patterns"),
+          String(langs.length),
+          langs.length ? langs.join(", ") : t("overview.tile.patternsNone"),
+          langs.length ? "ok" : "",
+          "knowledge"
         )
       );
 
       // The version check crosses the network, so it must never hold up the
-      // three tiles beside it: the tile renders in its pending state and fills
-      // itself in when the answer lands.
-      const vt = statTile("ORC version", "checking…", "Comparing against the install source.", "");
+      // tiles beside it: the tile renders in its pending state and fills itself
+      // in when the answer lands.
+      const vt = statTile(t("overview.tile.version"), t("common.checking"), t("overview.tile.versionChecking"), "");
       vt.classList.add("stat-pending");
       stats.append(vt);
       versionInfo()
@@ -479,7 +617,7 @@ PANELS.overview = function (host) {
           const s = versionState(v);
           vt.classList.remove("stat-pending");
           vt.replaceChildren();
-          vt.append(el("div", "stat-label", "ORC version"));
+          vt.append(el("div", "stat-label", t("overview.tile.version")));
           const val = el("div", "stat-value" + (s.kind ? " stat-" + s.kind : ""));
           val.append(document.createTextNode(v && v.version ? "v" + v.version : "?"), chip(s.label, s.kind));
           vt.append(val, el("div", "stat-note", s.note));
@@ -487,26 +625,32 @@ PANELS.overview = function (host) {
         .catch(() => {
           vt.classList.remove("stat-pending");
           vt.replaceChildren(
-            el("div", "stat-label", "ORC version"),
+            el("div", "stat-label", t("overview.tile.version")),
             el("div", "stat-value", "?"),
-            el("div", "stat-note", "The version check did not complete.")
+            el("div", "stat-note", t("overview.tile.versionFailed"))
           );
         });
       out.append(stats);
 
-      if ((d.waiting || []).length) {
-        const c = card("Waiting for you");
-        c.append(
-          el("div", "note", "A resume pointer is on disk for these. `orc resume` prints the paste-into-a-fresh-session prompt.")
-        );
+      /* --- worth doing ----------------------------------------------------
+         One list, in severity order, of everything that wants a decision — and
+         every row carries the panel where the fix actually is. This is the
+         panel's answer to "what now", and it is the only place the wiki tier
+         turns into advice instead of a colour. */
+      out.append(attentionCard(d, findings));
+
+      /* --- waiting runs --------------------------------------------------- */
+      if (waiting.length) {
+        const c = card(t("overview.waiting.title"));
+        c.append(el("div", "note", t("overview.waiting.note")));
         const list = el("div", "run-list");
-        for (const slug of d.waiting) {
+        for (const slug of waiting) {
           const b = el("button", "run-card");
           b.type = "button";
           b.append(chip("waiting", "warn"));
           const mid = el("div");
           mid.append(el("div", "run-slug", slug));
-          mid.append(el("div", "run-where", "open — see the Runs panel for where it stands"));
+          mid.append(el("div", "run-where", t("overview.waiting.where")));
           b.append(mid, el("div", "run-age", ""));
           b.addEventListener("click", () => {
             location.hash = "#/runs?slug=" + encodeURIComponent(slug);
@@ -517,45 +661,56 @@ PANELS.overview = function (host) {
         out.append(c);
       }
 
-      if (!doctor.ok && (doctor.findings || []).length) {
-        const c = card("orc doctor");
-        for (const f of doctor.findings) {
-          const row = el("div", "note");
-          row.append(chip(f.fixable ? "fixable" : "manual", f.fixable ? "info" : "warn"), document.createTextNode(" " + f.message));
+      /* --- the raw doctor list -------------------------------------------
+         Kept below the actionable card, because it is the EVIDENCE: the exact
+         message the CLI printed, unedited and untranslated, so what you read
+         here is what you would read in a terminal. */
+      if (!doctor.ok && findings.length) {
+        const c = card(t("overview.doctor.title"));
+        for (const f of findings) {
+          const row = el("div", "finding");
+          row.append(chip(f.fixable ? t("overview.doctor.fixable") : t("overview.doctor.manual"), f.fixable ? "info" : "warn"));
+          const detail = el("div");
+          detail.append(el("div", null, f.message));
+          const r = findingRoute(f.id);
+          if (r.panel) {
+            const go = el("button", "btn btn-ghost btn-sm", t(r.cta));
+            go.type = "button";
+            go.addEventListener("click", () => (location.hash = "#/" + r.panel));
+            detail.append(go);
+          } else {
+            detail.append(el("div", "note", t("overview.attention.nothingToDo")));
+          }
+          row.append(detail);
           c.append(row);
         }
-        const a = el("div", "row-actions");
-        const go = el("button", "btn btn-sm", "Open Maintenance");
-        go.type = "button";
-        go.addEventListener("click", () => (location.hash = "#/maintenance"));
-        a.append(go);
-        c.append(el("div", "note", ""), a);
         out.append(c);
       }
 
-      const paths = card("Where things are");
+      /* --- where things are ----------------------------------------------- */
+      const paths = card(t("overview.paths.title"));
       const where = d.where || {};
       paths.append(
         kvList(
           [
-            ["project", where.project_root],
-            ["config", where.config],
-            ["skills", where.skills],
-            ["runs", where.run_dir],
-            ["traces", where.log_dir],
+            [t("overview.paths.project"), where.project_root],
+            [t("overview.paths.config"), where.config],
+            [t("overview.paths.skills"), where.skills],
+            [t("overview.paths.runs"), where.run_dir],
+            [t("overview.paths.traces"), where.log_dir],
           ],
           true
         )
       );
       out.append(paths);
 
-      const know = card("Knowledge");
-      const p = d.patterns || {};
+      const know = card(t("overview.know.title"));
       know.append(
         kvList([
-          ["patterns cached", (p.patterns || []).map((x) => x.lang).join(", ") || "none"],
-          ["crosslink tags", w.crosslink_tags === undefined ? "" : String(w.crosslink_tags)],
-          ["diy flow", d.diy ? `${d.diy.state} — ${d.diy.reason}` : ""],
+          [t("overview.know.patterns"), langs.join(", ") || t("common.none")],
+          [t("overview.know.tags"), w.crosslink_tags === undefined ? "" : String(w.crosslink_tags)],
+          // `state` and `reason` are the CLI's — shown verbatim.
+          [t("overview.know.diy"), d.diy ? `${d.diy.state} — ${d.diy.reason}` : ""],
         ])
       );
       out.append(know);
@@ -565,29 +720,169 @@ PANELS.overview = function (host) {
   );
 };
 
-function statTile(label, value, note, kind) {
-  const t = el("div", "stat");
-  t.append(el("div", "stat-label", label));
+// The actionable list. Each entry is {kind, title, body, panel, cta} and knows
+// where its fix lives — never a blanket "go to Maintenance".
+function attentionCard(d, findings) {
+  const w = d.wiki || {};
+  const p = d.patterns || {};
+  const items = [];
+
+  // 1. Install findings, routed per id.
+  for (const f of findings) {
+    const r = findingRoute(f.id);
+    if (f.id === "diy-stale") {
+      items.push({
+        kind: "warn",
+        title: t("overview.item.diyStale.title"),
+        body: t("overview.item.diyStale.body"),
+        evidence: d.diy && d.diy.reason,
+        panel: "flow",
+        cta: t("overview.item.diyStale.cta"),
+      });
+    } else if (r.panel) {
+      items.push({
+        kind: f.fixable ? "warn" : "bad",
+        // A doctor finding is already a sentence written for a human — using it
+        // as the title beats paraphrasing it into something less exact.
+        title: f.message,
+        panel: r.panel,
+        cta: t(r.cta),
+      });
+    }
+  }
+
+  // 2. The wiki. THIS is the recommendation the panel was missing: an AGING
+  //    wiki is not an error, it is the moment a refresh is still cheap.
+  if (!w.state || w.state === "none") {
+    items.push({ kind: "info", title: t("overview.item.wikiNone.title"), body: t("overview.item.wikiNone.body"), panel: "knowledge", cta: t("overview.item.wikiNone.cta") });
+  } else if (w.state !== "registered") {
+    items.push({ kind: "warn", title: t("overview.item.wikiUnregistered.title"), body: t("overview.item.wikiUnregistered.body"), panel: "knowledge", cta: t("overview.item.wikiUnregistered.cta") });
+  } else if (w.tier === "AGING") {
+    items.push({
+      kind: "warn",
+      title: t("overview.item.wikiAging.title"),
+      body: t("overview.item.wikiAging.body"),
+      evidence: (w.reasons || [])[0],
+      panel: "knowledge",
+      cta: t("overview.item.wikiAging.cta"),
+    });
+  } else if (w.tier && w.tier !== "FRESH") {
+    items.push({
+      kind: "bad",
+      title: t("overview.item.wikiStale.title"),
+      body: t("overview.item.wikiStale.body"),
+      evidence: (w.reasons || [])[0],
+      panel: "knowledge",
+      cta: t("overview.item.wikiStale.cta"),
+    });
+  }
+
+  // 3. No cached pattern — not a fault, but the cheapest quality win there is.
+  if (!(p.patterns || []).length)
+    items.push({ kind: "info", title: t("overview.item.patterns.title"), body: t("overview.item.patterns.body"), panel: "knowledge", cta: t("overview.item.patterns.cta") });
+
+  // 4. Runs left waiting.
+  if ((d.waiting || []).length)
+    items.push({
+      kind: "warn",
+      title: tn((d.waiting || []).length, "overview.item.waiting.title"),
+      body: t("overview.item.waiting.body"),
+      panel: "runs",
+      cta: t("overview.item.waiting.cta"),
+    });
+
+  const c = card(t("overview.attention.title"), chip(String(items.length), items.length ? "warn" : "ok"));
+  c.id = "attention-card";
+
+  if (!items.length) {
+    const ok = el("div", "all-clear");
+    ok.append(el("div", "all-clear-mark", "✓"));
+    const txt = el("div");
+    txt.append(el("div", "all-clear-title", t("overview.attention.allClear")));
+    txt.append(el("div", "note", t("overview.attention.allClearHint")));
+    ok.append(txt);
+    c.append(ok);
+  }
+
+  const list = el("div", "todo-list");
+  const order = { bad: 0, warn: 1, info: 2 };
+  items.sort((a, b) => (order[a.kind] || 3) - (order[b.kind] || 3));
+  for (const it of items) {
+    const row = el("button", "todo todo-" + it.kind);
+    row.type = "button";
+    row.append(el("span", "todo-mark"));
+    const mid = el("div", "todo-body");
+    mid.append(el("div", "todo-title", it.title));
+    if (it.body) mid.append(el("div", "todo-text", it.body));
+    // The CLI's own words for WHY, kept verbatim under our explanation.
+    if (it.evidence) mid.append(el("div", "todo-evidence", it.evidence));
+    row.append(mid, el("span", "todo-cta", it.cta));
+    row.addEventListener("click", () => (location.hash = "#/" + it.panel));
+    list.append(row);
+  }
+  if (items.length) c.append(list);
+
+  // The update offer is appended asynchronously so a slow network check never
+  // delays the list — it arrives as one more row when the answer does.
+  versionInfo()
+    .then((v) => {
+      if (!v || !v.update_available) return;
+      const row = el("button", "todo todo-info todo-late");
+      row.type = "button";
+      row.append(el("span", "todo-mark"));
+      const mid = el("div", "todo-body");
+      mid.append(el("div", "todo-title", t("overview.item.update.title", { latest: v.latest })));
+      mid.append(el("div", "todo-text", t("overview.item.update.body", { version: v.version })));
+      row.append(mid, el("span", "todo-cta", t("overview.item.update.cta")));
+      row.addEventListener("click", () => (location.hash = "#/maintenance"));
+      if (!list.isConnected) c.append(list);
+      list.append(row);
+      const count = c.querySelector(".card-head .chip");
+      if (count) {
+        count.textContent = String(list.children.length);
+        count.className = "chip chip-warn";
+      }
+      const clear = c.querySelector(".all-clear");
+      if (clear) clear.remove();
+    })
+    .catch(() => {});
+
+  return c;
+}
+
+// A tile can now be a LINK to the panel that owns its number. It stays a plain
+// div when there is nowhere useful to go — a tile that reacts to the pointer
+// and then does nothing is worse than one that never moved.
+function statTile(label, value, note, kind, panel) {
+  const tile = el(panel ? "button" : "div", "stat" + (panel ? " stat-link" : ""));
+  if (panel) {
+    tile.type = "button";
+    tile.addEventListener("click", () => (location.hash = "#/" + panel));
+  }
+  tile.append(el("div", "stat-label", label));
   const v = el("div", "stat-value", value);
   if (kind === "ok") v.style.color = "var(--ok)";
   if (kind === "warn") v.style.color = "var(--warn)";
   if (kind === "bad") v.style.color = "var(--bad)";
-  t.append(v);
-  if (note) t.append(el("div", "stat-note", note));
-  return t;
+  tile.append(v);
+  if (note) tile.append(el("div", "stat-note", note));
+  return tile;
 }
 
 /* ================================================================ SETTINGS == */
 
-const TIER_LABEL = { common: "Common", fable5: "Fable 5 role override", advanced: "Advanced" };
-
-// A tier name alone does not say why a key lives there, and "advanced" reads as
-// "do not touch" when it actually means "you need a reason".
-const TIER_DESC = {
-  common: "The keys most runs actually touch. If you change one thing, it is probably here.",
-  fable5: "Per-role Fable 5 overrides. The whole block goes inert while opus5_only is on — that is the precedence rule, not a bug.",
-  advanced: "Everything else ORC knows. The defaults are deliberate; change one when you have a reason for it.",
-};
+// The tier IDS are the CLI's (`k.tier`); only their display name and blurb are
+// ours to translate. A tier name alone does not say why a key lives there, and
+// "advanced" reads as "do not touch" when it means "you need a reason".
+//
+// Written out as a literal map rather than `t("settings.tier." + tier)` so the
+// keys stay GREPPABLE: a build of a string key from a fragment is a key no
+// coverage check can see, and the check is the only thing standing between a
+// renamed key and a raw dotted string on somebody's screen.
+const TIER_LABEL_KEY = { common: "settings.tier.common", fable5: "settings.tier.fable5", advanced: "settings.tier.advanced" };
+const TIER_DESC_KEY = { common: "settings.tierDesc.common", fable5: "settings.tierDesc.fable5", advanced: "settings.tierDesc.advanced" };
+const TIER_LABEL = (tier) => (TIER_LABEL_KEY[tier] ? t(TIER_LABEL_KEY[tier]) : tier);
+const TIER_DESC = (tier) => (TIER_DESC_KEY[tier] ? t(TIER_DESC_KEY[tier]) : "");
 
 // The settings toolbar: find a key by name or description across every tier,
 // narrow to just what you have changed, and open/close all sections. It filters
@@ -599,8 +894,8 @@ function settingsToolbar(d, tiers) {
   const input = el("input", "text-input");
   input.type = "search";
   input.id = "settings-filter";
-  input.placeholder = "Filter keys…   (press / )";
-  input.setAttribute("aria-label", "Filter settings by key or description");
+  input.placeholder = t("settings.filter");
+  input.setAttribute("aria-label", t("settings.filterAria"));
   search.append(input);
   bar.append(search);
 
@@ -608,23 +903,23 @@ function settingsToolbar(d, tiers) {
   const changed = el("input");
   changed.type = "checkbox";
   const overridden = d.keys.filter((k) => k.is_overridden).length;
-  changedWrap.append(changed, document.createTextNode(` Changed only (${overridden})`));
-  changedWrap.title = overridden ? "Show only keys whose value differs from the default." : "Nothing is overridden yet — every key is at its default.";
+  changedWrap.append(changed, document.createTextNode(" " + t("settings.changedOnly", { n: overridden })));
+  changedWrap.title = overridden ? t("settings.changedTitle") : t("settings.changedNone");
   if (!overridden) changed.disabled = true;
   bar.append(changedWrap);
 
   const result = el("span", "toolbar-result");
   bar.append(result);
 
-  const toggleAll = el("button", "btn btn-ghost btn-sm", "Collapse all");
+  const toggleAll = el("button", "btn btn-ghost btn-sm", t("settings.collapseAll"));
   toggleAll.type = "button";
   toggleAll.addEventListener("click", () => {
-    const anyOpen = tiers.some((t) => !t.wrap.classList.contains("collapsed"));
-    for (const t of tiers) {
-      t.wrap.classList.toggle("collapsed", anyOpen);
-      t.wrap.querySelector(".tier-head").setAttribute("aria-expanded", String(!anyOpen));
+    const anyOpen = tiers.some((x) => !x.wrap.classList.contains("collapsed"));
+    for (const x of tiers) {
+      x.wrap.classList.toggle("collapsed", anyOpen);
+      x.wrap.querySelector(".tier-head").setAttribute("aria-expanded", String(!anyOpen));
     }
-    toggleAll.textContent = anyOpen ? "Expand all" : "Collapse all";
+    toggleAll.textContent = anyOpen ? t("settings.expandAll") : t("settings.collapseAll");
   });
   bar.append(toggleAll);
 
@@ -632,9 +927,9 @@ function settingsToolbar(d, tiers) {
     const q = input.value.trim().toLowerCase();
     const onlyChanged = changed.checked;
     let shown = 0;
-    for (const t of tiers) {
+    for (const x of tiers) {
       let visible = 0;
-      for (const row of t.rows.children) {
+      for (const row of x.rows.children) {
         const k = row.dataset.key || "";
         const desc = (row.querySelector(".setting-desc") || {}).textContent || "";
         const hit =
@@ -644,18 +939,18 @@ function settingsToolbar(d, tiers) {
         if (hit) visible++;
       }
       shown += visible;
-      t.count.textContent = visible === t.total ? `${t.total} key${t.total === 1 ? "" : "s"}` : `${visible} of ${t.total}`;
+      x.count.textContent = visible === x.total ? tn(x.total, "settings.keys") : t("settings.ofTotal", { n: visible, total: x.total });
       // A tier with no matches is hidden outright — an empty titled box is
       // noise between the ones that DID match.
-      t.wrap.classList.toggle("hidden", visible === 0);
+      x.wrap.classList.toggle("hidden", visible === 0);
       // A filter that matches inside a closed section would look like no match
       // at all, so filtering forces the section open.
       if ((q || onlyChanged) && visible) {
-        t.wrap.classList.remove("collapsed");
-        t.wrap.querySelector(".tier-head").setAttribute("aria-expanded", "true");
+        x.wrap.classList.remove("collapsed");
+        x.wrap.querySelector(".tier-head").setAttribute("aria-expanded", "true");
       }
     }
-    result.textContent = q || onlyChanged ? `${shown} match${shown === 1 ? "" : "es"}` : "";
+    result.textContent = q || onlyChanged ? tn(shown, "settings.matches") : "";
     result.classList.toggle("toolbar-result-none", (q || onlyChanged) && shown === 0);
   };
 
@@ -674,14 +969,14 @@ function settingsToolbar(d, tiers) {
 
 PANELS.settings = function (host) {
   const actions = el("div", "row-actions");
-  const profBtn = el("button", "btn btn-sm", "Profiles");
+  const profBtn = el("button", "btn btn-sm", t("settings.profiles"));
   profBtn.type = "button";
   profBtn.addEventListener("click", showProfiles);
-  const recBtn = el("button", "btn btn-sm", "Recommend a profile");
+  const recBtn = el("button", "btn btn-sm", t("settings.recommend"));
   recBtn.type = "button";
   recBtn.addEventListener("click", showRecommend);
   actions.append(profBtn, recBtn);
-  head(host, "Settings", "Every key `orc config` knows. Each change shells the real command, so the CLI's validators decide.", actions);
+  head(host, t("settings.title"), t("settings.sub"), actions);
 
   const body = el("div", "stack");
   host.append(body);
@@ -694,28 +989,22 @@ async function renderSettings(body) {
   try {
     d = (await read("/api/config")).data;
   } catch (e) {
-    body.replaceChildren(empty("Could not read the config.", String(e.message)));
+    body.replaceChildren(empty(t("settings.readFail"), String(e.message)));
     return;
   }
 
   const out = frag();
 
-  const pathCard = card("Override file");
+  const pathCard = card(t("settings.file.title"));
   pathCard.append(
     kvList([
-      ["file", d.config_path],
-      ["state", d.exists ? "exists — only changed keys are written here" : "not created yet (every key is at its default)"],
+      [t("settings.file.file"), d.config_path],
+      [t("settings.file.state"), d.exists ? t("settings.file.exists") : t("settings.file.absent")],
     ])
   );
   // Permanently on, deliberately not a key — say so, or somebody hunts for the
   // switch that does not exist.
-  pathCard.append(
-    el(
-      "div",
-      "note",
-      "Behavior-trace logging is permanently ON and is not configurable. Every run writes a trace; only its folder (log_dir) is a setting."
-    )
-  );
+  pathCard.append(el("div", "note", t("settings.file.traceNote")));
   if ((d.legacy_keys || []).length)
     for (const l of d.legacy_keys)
       pathCard.append(el("div", "note", `\`${l.key}\` is still in the file — it was renamed to \`${l.renamed_to}\`, and is read as that.`));
@@ -744,10 +1033,10 @@ async function renderSettings(body) {
     h.type = "button";
     h.setAttribute("aria-expanded", "true");
     h.append(el("span", "tier-caret", "▸"));
-    h.append(el("h2", null, TIER_LABEL[tier] || tier));
-    const count = el("span", "tier-count", `${keys.length} key${keys.length === 1 ? "" : "s"}`);
+    h.append(el("h2", null, TIER_LABEL(tier)));
+    const count = el("span", "tier-count", tn(keys.length, "settings.keys"));
     h.append(count);
-    if (allInert) h.append(chip("inert", "warn"));
+    if (allInert) h.append(chip(t("settings.inert"), "warn"));
 
     const rows = el("div", "tier-rows");
     for (const k of keys) rows.append(settingRow(k, body));
@@ -764,7 +1053,7 @@ async function renderSettings(body) {
     // element child to collapse against — so the body is wrapped, not folded in
     // place. `height: auto` cannot be transitioned; this can.
     const inner = el("div", "tier-body-inner");
-    inner.append(el("div", "tier-desc", TIER_DESC[tier] || ""), rows);
+    inner.append(el("div", "tier-desc", TIER_DESC(tier)), rows);
     const bodyWrap = el("div", "tier-body");
     bodyWrap.append(inner);
 
@@ -774,15 +1063,8 @@ async function renderSettings(body) {
   }
 
   if ((d.hand_edited || []).length) {
-    const c = card("Hand-edited keys");
-    c.append(
-      el(
-        "div",
-        "note",
-        "These are not in the config registry, so `orc config set` refuses them and this panel will not write them. " +
-          "rubric_bands_override is the designed case: it is hand-written by intent. Edit the YAML file directly."
-      )
-    );
+    const c = card(t("settings.handEdited.title"));
+    c.append(el("div", "note", t("settings.handEdited.note")));
     for (const k of d.hand_edited) {
       const row = el("div", "setting" + (k.is_shadowed ? " shadowed" : ""));
       const left = el("div");
@@ -790,11 +1072,11 @@ async function renderSettings(body) {
       name.append(document.createTextNode(k.key));
       if (k.is_shadowed) {
         const lock = el("span", "lock");
-        lock.append(document.createTextNode("🔒 shadowed"));
+        lock.append(document.createTextNode("🔒 " + t("settings.shadowed")));
         name.append(lock);
       }
       left.append(name);
-      left.append(el("div", "setting-desc", "read-only here — hand-edit orc.config.yaml"));
+      left.append(el("div", "setting-desc", t("settings.handEdited.readonly")));
       if (k.shadow_reason) left.append(el("div", "shadow-why", k.shadow_reason));
       const right = el("div", "setting-control");
       right.append(el("div", "readonly-value", String(k.value)));
@@ -808,7 +1090,7 @@ async function renderSettings(body) {
 }
 
 function ladderCard(table) {
-  const c = card("Score → model ladder");
+  const c = card(t("settings.ladder.title"));
   c.id = "ladder-card"; // the FLIP morph finds it by id, never by a :has() query
   const active = table.active;
   c.append(
@@ -816,10 +1098,10 @@ function ladderCard(table) {
       "div",
       "note",
       active === "opus5_only"
-        ? "opus5_only is ON — executors use the fixed 3-band effort ladder. It outranks the default table, rubric_bands_override, and the whole fable5_* block."
+        ? t("settings.ladder.opus5")
         : active === "rubric_bands_override"
-        ? "A hand-written rubric_bands_override is in the file. It replaces the default table (and is itself outranked by opus5_only)."
-        : "The default 8-band table. Tables resolve highest-wins: opus5_only > rubric_bands_override > this one."
+        ? t("settings.ladder.override")
+        : t("settings.ladder.default")
     )
   );
   const ladder = el("div", "ladder");
@@ -837,13 +1119,7 @@ function ladderCard(table) {
     ladder.append(rung);
   }
   c.append(ladder);
-  c.append(
-    el(
-      "div",
-      "ladder-note",
-      "Read-only — a diagram, not an editor. This comes from the CLI's own table, so the panel adds no extra copy of it."
-    )
-  );
+  c.append(el("div", "ladder-note", t("settings.ladder.note")));
   return c;
 }
 
@@ -880,17 +1156,19 @@ function settingRow(k, panelBody) {
   if (k.is_overridden) name.append(el("span", "dot"));
   if (k.is_shadowed) {
     const lock = el("span", "lock");
-    lock.append(document.createTextNode("🔒 shadowed"));
+    lock.append(document.createTextNode("🔒 " + t("settings.shadowed")));
     name.append(lock);
   }
   left.append(name);
+  // `k.desc` and `k.shadow_reason` are the CLI's registry text — never
+  // translated. They name keys, values and precedence rules by their real ids.
   left.append(el("div", "setting-desc", k.desc));
   if (k.shadow_reason) left.append(el("div", "shadow-why", k.shadow_reason));
 
   const right = el("div", "setting-control");
   right.append(controlFor(k, panelBody));
   if (k.is_overridden) {
-    const reset = el("button", "btn btn-ghost btn-sm", "reset to " + String(k.default));
+    const reset = el("button", "btn btn-ghost btn-sm", t("setting.resetTo", { value: String(k.default) }));
     reset.type = "button";
     reset.addEventListener("click", () => writeSetting("/api/config/reset", { key: k.key }, panelBody, row));
     right.append(reset);
@@ -995,7 +1273,7 @@ async function writeSetting(endpoint, body, panelBody, node) {
     const r = await post(endpoint, body);
     if (!r.ok) {
       if (node && node.classList) node.classList.add("invalid");
-      toast("The CLI refused that value.", "bad", r.output || r.command);
+      toast(t("write.refused"), "bad", r.output || r.command);
       return;
     }
     // Brief success flash on the row, then re-render from the CLI so the
@@ -1009,7 +1287,7 @@ async function writeSetting(endpoint, body, panelBody, node) {
     toast(r.command, "ok", r.output && r.output.length < 400 ? r.output : "");
     await rerenderSettings(panelBody);
   } catch (e) {
-    toast("Write failed.", "bad", String(e.message));
+    toast(t("write.failed"), "bad", String(e.message));
   }
 }
 
@@ -1032,18 +1310,21 @@ async function rerenderSettings(panelBody) {
 async function showProfiles() {
   const d = (await read("/api/config/profiles")).data;
   const body = el("div", "stack stack-sm");
-  body.append(el("div", "note", "A profile writes only existing, validated keys — nothing it sets is something you could not set yourself."));
+  body.append(el("div", "note", t("profiles.note")));
   for (const p of d.profiles) {
     const c = el("div", "action");
     const left = el("div");
+    // Profile name and description come from the CLI's registry — untranslated.
     left.append(el("div", "setting-name", p.name));
     left.append(el("div", "setting-desc", p.desc));
     if (p.changes.length) {
       const list = el("div", "note");
-      list.textContent = "would change: " + p.changes.map((c2) => `${c2.key} ${c2.from} → ${c2.to}`).join(", ");
+      list.textContent = t("profiles.wouldChange", {
+        list: p.changes.map((c2) => `${c2.key} ${c2.from} → ${c2.to}`).join(", "),
+      });
       left.append(list);
-    } else left.append(el("div", "note", "this repo is already on that profile — nothing would change"));
-    const apply = el("button", "btn btn-sm btn-allow-busy" + (p.changes.length ? " btn-primary" : ""), "Apply");
+    } else left.append(el("div", "note", t("profiles.noChange")));
+    const apply = el("button", "btn btn-sm btn-allow-busy" + (p.changes.length ? " btn-primary" : ""), t("profiles.apply"));
     apply.type = "button";
     apply.disabled = !p.changes.length;
     apply.addEventListener("click", async () => {
@@ -1055,13 +1336,13 @@ async function showProfiles() {
     c.append(left, apply);
     body.append(c);
   }
-  const close = modal({ title: "Config profiles", body, actions: [{ label: "Close", onClick: (c) => c() }] });
+  const close = modal({ title: t("profiles.title"), body, actions: [{ label: t("common.close"), onClick: (c) => c() }] });
 }
 
 async function showRecommend() {
   const d = (await read("/api/config/recommend")).data;
   const body = el("div", "stack stack-sm");
-  body.append(el("div", "note", "Read-only: this looked at the repo and suggests one profile. Nothing was changed."));
+  body.append(el("div", "note", t("recommend.note")));
   const list = el("ul");
   for (const r of d.reasons) {
     const li = el("li", "note", "• " + r);
@@ -1072,7 +1353,7 @@ async function showRecommend() {
   const left = el("div");
   left.append(el("div", "setting-name", d.recommended));
   left.append(el("div", "setting-desc", d.desc));
-  const apply = el("button", "btn btn-sm btn-primary btn-allow-busy", "Apply " + d.recommended);
+  const apply = el("button", "btn btn-sm btn-primary btn-allow-busy", t("recommend.applyIt", { name: d.recommended }));
   apply.type = "button";
   apply.addEventListener("click", async () => {
     const r = await post("/api/config/profile", { name: d.recommended });
@@ -1082,148 +1363,315 @@ async function showRecommend() {
   });
   pick.append(left, apply);
   body.append(pick);
-  const close = modal({ title: "Recommended profile", body, actions: [{ label: "Close", onClick: (c) => c() }] });
+  const close = modal({ title: t("recommend.title"), body, actions: [{ label: t("common.close"), onClick: (c) => c() }] });
 }
 
 /* ==================================================================== RUNS == */
 
+/* THE LIST IS THE DETAIL VIEW (v0.43.6).
+   This panel used to be a list with a detail CARD underneath it: clicking the
+   fourth run rendered its checkpoint below run forty. On a repo with any
+   history that means scrolling past the entire list to read what you just
+   clicked, and then scrolling back up to click the next one — the list grows,
+   so the problem grows with it, which is the shape of a design that does not
+   survive its own success.
+
+   Now every row EXPANDS IN PLACE. The detail is a child of the row, animated
+   open with the same `grid-template-rows: 0fr -> 1fr` fold the settings tiers
+   use, so what you clicked stays exactly where your eye already is. One row is
+   open at a time — an accordion, not a set of toggles — because two open runs
+   re-create the scrolling problem in miniature. Detail is fetched on FIRST open
+   and then kept, so re-opening a row is instant and costs nothing. */
+
+const RUN_STATUS_KIND = { waiting: "warn", done: "ok" };
+
 PANELS.runs = function (host) {
-  head(host, "Runs", "Everything ORC has recorded, newest first. `waiting` means a resume pointer is still on disk.");
-  const layout = el("div", "grid");
-  const listSlot = el("div", "stack");
-  const detailSlot = el("div", "stack");
-  layout.append(listSlot, detailSlot);
-  host.append(layout);
-
-  const wanted = new URLSearchParams((location.hash.split("?")[1] || "")).get("slug");
-
-  section(
-    listSlot,
-    () => read("/api/runs").then((r) => r.data),
-    (d) => {
-      if (!d.total) return empty("No runs recorded yet.", d.run_dir);
-      const list = el("div", "run-list");
-      for (const r of d.runs) {
-        const b = el("button", "run-card");
-        b.type = "button";
-        b.append(chip(r.status, r.status === "waiting" ? "warn" : r.status === "done" ? "ok" : ""));
-        const mid = el("div");
-        mid.append(el("div", "run-slug", r.slug));
-        const where = [r.lane, r.phase && "phase " + r.phase, r.wave].filter(Boolean).join(" · ");
-        mid.append(el("div", "run-where", where || "—"));
-        b.append(mid, el("div", "run-age", relAge(r.updated_ms)));
-        b.addEventListener("click", () => {
-          for (const other of list.querySelectorAll(".run-card")) other.setAttribute("aria-current", "false");
-          b.setAttribute("aria-current", "true");
-          showRun(detailSlot, r.slug);
-        });
-        list.append(b);
-        if (r.slug === wanted) setTimeout(() => b.click(), 0);
-      }
-      return list;
-    }
-  );
+  head(host, t("runs.title"), t("runs.sub"));
+  const body = el("div", "stack");
+  host.append(body);
+  renderRuns(body);
 };
 
-function showRun(slot, slug) {
-  slot.replaceChildren(skeleton(5));
-  Promise.all([read("/api/run?slug=" + encodeURIComponent(slug)), read("/api/mock?slug=" + encodeURIComponent(slug)).catch(() => ({ data: null }))])
+async function renderRuns(body) {
+  body.replaceChildren(skeleton(6));
+  let d;
+  try {
+    d = (await read("/api/runs")).data;
+  } catch (e) {
+    body.replaceChildren(empty(t("common.loadFail"), String(e.message)));
+    return;
+  }
+  if (!d.total) {
+    body.replaceChildren(empty(t("runs.empty"), d.run_dir));
+    return;
+  }
+
+  const wanted = new URLSearchParams(location.hash.split("?")[1] || "").get("slug");
+  const out = frag();
+
+  // --- toolbar: status segments + a text filter, both client-side over an
+  //     already-fetched list, so filtering never costs a request.
+  const bar = el("div", "toolbar");
+  const search = el("div", "search");
+  const input = el("input", "text-input");
+  input.type = "search";
+  input.placeholder = t("runs.search");
+  search.append(input);
+  bar.append(search);
+
+  let statusFilter = "all";
+  const seg = el("div", "seg");
+  const segs = [
+    ["all", t("runs.filterAll")],
+    ["waiting", t("runs.filterWaiting")],
+    ["done", t("runs.filterDone")],
+    ["other", t("runs.filterOther")],
+  ];
+  for (const [val, label] of segs) {
+    const b = el("button", null, label);
+    b.type = "button";
+    b.setAttribute("aria-pressed", String(val === statusFilter));
+    b.addEventListener("click", () => {
+      statusFilter = val;
+      for (const other of seg.children) other.setAttribute("aria-pressed", "false");
+      b.setAttribute("aria-pressed", "true");
+      apply();
+    });
+    seg.append(b);
+  }
+  bar.append(seg);
+  const count = el("span", "toolbar-result");
+  bar.append(count);
+  const closeAll = el("button", "btn btn-ghost btn-sm", t("runs.collapseAll"));
+  closeAll.type = "button";
+  closeAll.addEventListener("click", () => collapseAll());
+  bar.append(closeAll);
+  out.append(bar);
+
+  const list = el("div", "run-list");
+  const rows = [];
+
+  const collapseAll = (except) => {
+    for (const r of rows) if (r.row !== except) setOpen(r, false);
+  };
+
+  function setOpen(entry, open) {
+    entry.row.classList.toggle("open", open);
+    entry.head.setAttribute("aria-expanded", String(open));
+    if (open && !entry.loaded) {
+      entry.loaded = true;
+      loadRunDetail(entry.pane, entry.slug);
+    }
+  }
+
+  for (const r of d.runs) {
+    const row = el("div", "run-row");
+    row.dataset.slug = r.slug;
+    row.dataset.status = r.status;
+
+    const headBtn = el("button", "run-card");
+    headBtn.type = "button";
+    headBtn.setAttribute("aria-expanded", "false");
+    headBtn.append(el("span", "run-caret", "▸"));
+    // Status is the CLI's vocabulary (`waiting` / `done` / `empty`) — the same
+    // word `orc run list` prints. Shown as-is in every language.
+    headBtn.append(chip(r.status, RUN_STATUS_KIND[r.status] || ""));
+    const mid = el("div", "run-mid");
+    mid.append(el("div", "run-slug", r.slug));
+    const where = [r.lane, r.phase && "phase " + r.phase, r.wave].filter(Boolean).join(" · ");
+    mid.append(el("div", "run-where", where || "—"));
+    headBtn.append(mid, el("div", "run-age", relAge(r.updated_ms)));
+
+    // The fold. `.run-body-inner` is the real element the 1fr→0fr grid
+    // collapses against; without it there is nothing to animate to zero.
+    const pane = el("div", "run-pane stack stack-sm");
+    pane.append(skeleton(4));
+    const inner = el("div", "run-body-inner");
+    inner.append(pane);
+    const fold = el("div", "run-body");
+    fold.append(inner);
+
+    const entry = { row, head: headBtn, pane, slug: r.slug, loaded: false };
+    rows.push(entry);
+
+    headBtn.addEventListener("click", () => {
+      const isOpen = row.classList.contains("open");
+      collapseAll(row);
+      setOpen(entry, !isOpen);
+      // A row that opens near the bottom of the viewport would otherwise reveal
+      // its content off-screen — the one scroll this panel ever performs.
+      if (!isOpen)
+        requestAnimationFrame(() => {
+          const rect = row.getBoundingClientRect();
+          if (rect.top < 0 || rect.top > window.innerHeight * 0.6)
+            row.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
+        });
+    });
+
+    row.append(headBtn, fold);
+    list.append(row);
+  }
+  out.append(list);
+
+  const none = empty(t("runs.noMatch"));
+  none.classList.add("hidden");
+  out.append(none);
+
+  function apply() {
+    const q = input.value.trim().toLowerCase();
+    let shown = 0;
+    for (const entry of rows) {
+      const st = entry.row.dataset.status;
+      const statusHit =
+        statusFilter === "all" || (statusFilter === "other" ? st !== "waiting" && st !== "done" : st === statusFilter);
+      const textHit = !q || entry.row.textContent.toLowerCase().includes(q);
+      const hit = statusHit && textHit;
+      entry.row.classList.toggle("hidden", !hit);
+      // A filtered-out row must not stay open behind the filter — reopening the
+      // filter would reveal a run you no longer have in view.
+      if (!hit) setOpen(entry, false);
+      if (hit) shown++;
+    }
+    count.textContent = t("runs.count", { shown, total: d.total });
+    none.classList.toggle("hidden", shown > 0);
+  }
+  input.addEventListener("input", apply);
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && input.value) {
+      e.stopPropagation();
+      input.value = "";
+      apply();
+    }
+  });
+
+  body.replaceChildren(out);
+  apply();
+
+  // Deep link from Overview: open that run, and only that run.
+  if (wanted) {
+    const entry = rows.find((r) => r.slug === wanted);
+    if (entry) {
+      setOpen(entry, true);
+      requestAnimationFrame(() => entry.row.scrollIntoView({ block: "center" }));
+    }
+  }
+}
+
+// Fills one expanded row. Identical content to the old detail card — the change
+// is WHERE it renders, not what it says.
+function loadRunDetail(pane, slug) {
+  Promise.all([
+    read("/api/run?slug=" + encodeURIComponent(slug)),
+    read("/api/mock?slug=" + encodeURIComponent(slug)).catch(() => ({ data: null })),
+  ])
     .then(([runRes, mockRes]) => {
       const d = runRes.data;
       const mock = mockRes && mockRes.data && mockRes.data.found ? mockRes.data : null;
-      const c = card(null);
-      c.append(
+      const out = frag();
+
+      out.append(
         kvList([
-          ["slug", d.slug],
-          ["status", d.status],
-          ["lane", d.stands && d.stands.lane],
-          ["phase", d.stands && d.stands.phase],
-          ["wave", d.stands && d.stands.wave],
-          ["folder", d.dir],
-          ["updated", relAge(d.updated_ms)],
+          [t("runs.field.slug"), d.slug],
+          [t("runs.field.status"), d.status],
+          [t("runs.field.lane"), d.stands && d.stands.lane],
+          [t("runs.field.phase"), d.stands && d.stands.phase],
+          [t("runs.field.wave"), d.stands && d.stands.wave],
+          [t("runs.field.folder"), d.dir],
+          [t("runs.field.updated"), relAge(d.updated_ms)],
         ])
       );
 
       const tabs = el("div", "tabs");
-      const pane = el("div");
+      const view = el("div", "tab-pane");
       const views = [];
       const addTab = (label, render) => views.push({ label, render });
 
       if (d.resume)
-        addTab("Resume", () => {
+        addTab(t("runs.tab.resume"), () => {
           const box = el("div", "stack stack-sm");
-          box.append(el("div", "note", "Paste this into a fresh Claude Code session to pick the run back up."));
+          box.append(el("div", "note", t("runs.resume.note")));
           const actions = el("div", "row-actions");
-          const cp = el("button", "btn btn-sm", "Copy prompt");
+          const cp = el("button", "btn btn-sm", t("runs.resume.copy"));
           cp.type = "button";
-          cp.addEventListener("click", () => copy(d.resume, "Resume prompt copied"));
+          cp.addEventListener("click", () => copy(d.resume, t("runs.resume.copied")));
           actions.append(cp);
           box.append(actions, el("pre", "block wrap", d.resume));
           return box;
         });
-      if (d.state_of_play) addTab("State of play", () => el("pre", "block wrap", d.state_of_play));
+      if (d.state_of_play) addTab(t("runs.tab.state"), () => el("pre", "block wrap", d.state_of_play));
       if (d.checkpoint)
-        addTab("Checkpoint", () => {
+        addTab(t("runs.tab.checkpoint"), () => {
           const box = el("div", "stack stack-sm");
+          // These four are checkpoint.json's own field names — file keys, not
+          // labels, so they stay exactly as the file spells them.
           box.append(
             kvList([
               ["phase", d.checkpoint.phase],
               ["wave", d.checkpoint.wave],
               ["updated_at", d.checkpoint.updated_at],
-              ["trace", d.checkpoint.trace_path],
+              ["trace_path", d.checkpoint.trace_path],
             ])
           );
           box.append(el("pre", "block", JSON.stringify(d.checkpoint, null, 2)));
           return box;
         });
       if (d.trace)
-        addTab("Trace", () => {
+        addTab(t("runs.tab.trace"), () => {
           const box = el("div", "stack stack-sm");
-          box.append(el("div", "note", "The tail of this run's behavior trace. Traces are permanent and never auto-pruned."));
+          box.append(el("div", "note", t("runs.trace.note")));
           box.append(el("pre", "block", d.trace));
           return box;
         });
-      // Honesty rule: a run with no mock example shows "not generated", never an
-      // empty state that implies one is missing. And never a Run button.
-      addTab("Mock example", () => {
-        if (!mock)
-          return empty(
-            "Not generated for this run.",
-            "That is normal: mock examples are written only after a green verify, and only when config `mock_example` is `on` (or you accept the `ask` offer)."
-          );
+      // Honesty rule: a run with no mock example shows "Not generated for this
+      // run", never an empty state that implies one is missing. And never a
+      // Run button.
+      addTab(t("runs.tab.mock"), () => {
+        if (!mock) return empty(t("runs.mock.none"), t("runs.mock.noneHint"));
         const box = el("div", "stack stack-sm");
-        box.append(kvList([["folder", mock.dir], ["files", String(mock.files.length)], ["written", relAge(mock.mtime_ms)]]));
-        box.append(el("div", "note", "Read-only. This panel never runs a mock example — it is arbitrary project code."));
+        box.append(
+          kvList([
+            [t("runs.field.folder"), mock.dir],
+            [t("runs.field.files"), String(mock.files.length)],
+            [t("runs.field.written"), relAge(mock.mtime_ms)],
+          ])
+        );
+        box.append(el("div", "note", t("runs.mock.readonly")));
         if (mock.readme) box.append(el("pre", "block wrap", mock.readme));
         const fl = el("div", "file-list");
         for (const f of mock.files) fl.append(el("div", null, f.path));
         box.append(fl);
         return box;
       });
-      if (!views.length) addTab("Files", () => el("pre", "block", (d.files || []).join("\n") || "(empty folder)"));
+      if (!views.length)
+        addTab(t("runs.tab.files"), () => el("pre", "block", (d.files || []).join("\n") || t("runs.emptyFolder")));
 
+      const show = (v, btn) => {
+        for (const other of tabs.children) other.setAttribute("aria-selected", "false");
+        btn.setAttribute("aria-selected", "true");
+        view.replaceChildren(v.render());
+        // Re-trigger the tab-swap fade; a replaced child alone shows no change.
+        view.style.animation = "none";
+        void view.offsetHeight;
+        view.style.animation = "";
+      };
       views.forEach((v, i) => {
         const b = el("button", null, v.label);
         b.type = "button";
         b.setAttribute("aria-selected", String(i === 0));
-        b.addEventListener("click", () => {
-          for (const other of tabs.children) other.setAttribute("aria-selected", "false");
-          b.setAttribute("aria-selected", "true");
-          pane.replaceChildren(v.render());
-        });
+        b.addEventListener("click", () => show(v, b));
         tabs.append(b);
       });
-      pane.replaceChildren(views[0].render());
-      c.append(tabs, pane);
-      slot.replaceChildren(c);
+      view.replaceChildren(views[0].render());
+      out.append(tabs, view);
+      pane.replaceChildren(out);
     })
-    .catch((e) => slot.replaceChildren(empty("Could not open that run.", String(e.message))));
+    .catch((e) => pane.replaceChildren(empty(t("runs.openFail"), String(e.message))));
 }
 
 /* =============================================================== KNOWLEDGE == */
 
 PANELS.knowledge = function (host) {
-  head(host, "Knowledge", "What ORC already knows about this repo: the wiki, cached code-patterns, and repair memory.");
+  head(host, t("knowledge.title"), t("knowledge.sub"));
   const body = el("div", "stack");
   host.append(body);
   renderKnowledge(body);
@@ -1241,43 +1689,43 @@ async function renderKnowledge(body) {
 
   // --- wiki
   const w = wikiRes.data || {};
-  const wc = card("Wiki", wikiActions(body, w));
+  const wc = card(t("knowledge.wiki"), wikiActions(body, w));
   if (!w.state || w.state === "none") {
-    wc.append(empty("No wiki yet.", "Run /orc-wiki in Claude Code to build one. This panel never scans — that costs a model."));
+    wc.append(empty(t("knowledge.wiki.none"), t("knowledge.wiki.noneHint")));
   } else if (w.state !== "registered") {
-    wc.append(el("div", "banner"), el("div", "note", `The wiki is ${w.state.toUpperCase()} — nothing can read it until it is registered.`));
-    wc.append(el("div", "note", "`orc wiki sync` fixes this instantly: registration is derived from the docs, so it is free and never a re-scan."));
+    wc.append(el("div", "note", t("knowledge.wiki.unregistered", { state: String(w.state).toUpperCase() })));
+    wc.append(el("div", "note", t("knowledge.wiki.syncHint")));
   } else {
-    const tierChip = chip(w.tier || "tier unknown", w.tier === "FRESH" ? "ok" : w.tier === "AGING" ? "warn" : "bad", w.tier === "STALE");
+    const tierChip = chip(w.tier || t("overview.tile.wikiUnknown"), w.tier === "FRESH" ? "ok" : w.tier === "AGING" ? "warn" : "bad", w.tier === "STALE");
     const headRow = el("div", "row-actions");
     headRow.append(tierChip);
     wc.append(headRow);
     wc.append(
       kvList([
-        ["docs", String(w.docs)],
-        ["last scan", w.last_scan],
-        ["distance", w.distance === null ? "unmeasurable" : `${w.distance} commits on the worst doc's covered files`],
-        ["anchor", w.anchor ? String(w.anchor).slice(0, 8) : ""],
-        ["edges", w.edges ? `fresh < ${w.edges.freshMax}c · aging <= ${w.edges.agingMax}c` : ""],
-        ["crosslink tags", w.crosslink_tags === undefined ? "" : String(w.crosslink_tags)],
-        ["structural blind spots", w.blind ? String(w.blind) : "0"],
+        [t("knowledge.field.docs"), String(w.docs)],
+        [t("knowledge.field.lastScan"), w.last_scan],
+        [
+          t("knowledge.field.distance"),
+          w.distance === null ? t("knowledge.field.unmeasurable") : t("knowledge.field.distanceValue", { n: w.distance }),
+        ],
+        [t("knowledge.field.anchor"), w.anchor ? String(w.anchor).slice(0, 8) : ""],
+        // `wiki_fresh_max` / `wiki_aging_max` are config keys — the numbers are
+        // shown, the key names are not paraphrased.
+        [t("knowledge.field.edges"), w.edges ? `fresh < ${w.edges.freshMax}c · aging <= ${w.edges.agingMax}c` : ""],
+        [t("knowledge.field.tags"), w.crosslink_tags === undefined ? "" : String(w.crosslink_tags)],
+        [t("knowledge.field.blind"), w.blind ? String(w.blind) : "0"],
       ])
     );
-    for (const r of w.reasons || []) wc.append(el("div", "note", "why: " + r));
-    wc.append(
-      el(
-        "div",
-        "note",
-        "Freshness is coverage-relative: a doc is stale only when commits since its OWN anchor touched files IT covers."
-      )
-    );
+    // The reason text is the CLI's own sentence about a real doc — verbatim.
+    for (const r of w.reasons || []) wc.append(el("div", "note", t("knowledge.wiki.why", { reason: r })));
+    wc.append(el("div", "note", t("knowledge.wiki.freshNote")));
   }
   out.append(wc);
 
   // --- impact
   const imp = impactRes.data;
   if (imp && imp.ok) {
-    const c = card("Refresh scope (orc wiki impact)");
+    const c = card(t("knowledge.impact.title"));
     const rec = el("div", "row-actions");
     rec.append(chip(imp.recommendation, imp.recommendation === "CLEAN" ? "ok" : imp.recommendation === "DELTA" ? "info" : "warn"));
     c.append(rec);
@@ -1286,14 +1734,21 @@ async function renderKnowledge(body) {
       el(
         "div",
         "note",
-        `${imp.registered} registered · ${imp.touched} touched · ${imp.structural} structural · ${imp.affected_pct}% affected (threshold ${imp.threshold}%)`
+        t("knowledge.impact.counts", {
+          registered: imp.registered,
+          touched: imp.touched,
+          structural: imp.structural,
+          pct: imp.affected_pct,
+          threshold: imp.threshold,
+        })
       )
     );
-    const t = el("div", "scroll-x");
+    const scroll = el("div", "scroll-x");
     const table = el("table");
     const thead = el("thead");
     const hr = el("tr");
-    for (const h of ["Doc", "State", "Detail"]) hr.append(el("th", null, h));
+    for (const h of [t("knowledge.impact.col.doc"), t("knowledge.impact.col.state"), t("knowledge.impact.col.detail")])
+      hr.append(el("th", null, h));
     thead.append(hr);
     const tb = el("tbody");
     for (const d of imp.docs) {
@@ -1306,35 +1761,29 @@ async function renderKnowledge(body) {
       tb.append(tr);
     }
     table.append(thead, tb);
-    t.append(table);
-    c.append(t);
+    scroll.append(table);
+    c.append(scroll);
     if ((imp.blind_spot || []).length) {
-      c.append(el("div", "note", "Structural blind spot — changed files no doc covers:"));
+      c.append(el("div", "note", t("knowledge.impact.blind")));
       const fl = el("div", "file-list");
       for (const f of imp.blind_spot) fl.append(el("div", null, f));
       c.append(fl);
     }
     out.append(c);
   } else if (imp && !imp.ok) {
-    const c = card("Refresh scope (orc wiki impact)");
+    const c = card(t("knowledge.impact.title"));
     c.append(el("div", "note", imp.hint || `unavailable (${imp.reason})`));
     out.append(c);
   }
 
   // --- patterns
   const p = patRes.data || {};
-  const pc = card("Code patterns");
-  pc.append(
-    el(
-      "div",
-      "note",
-      "Reconciled per-language conventions, injected literally into executor slices. Project conventions win; security and correctness invariants are always kept."
-    )
-  );
+  const pc = card(t("knowledge.patterns.title"));
+  pc.append(el("div", "note", t("knowledge.patterns.note")));
   if (!(p.patterns || []).length) {
-    pc.append(empty("No cached patterns.", "Run /orc-pattern in Claude Code to codify one. Codifying costs a model, so this panel never does it."));
+    pc.append(empty(t("knowledge.patterns.none"), t("knowledge.patterns.noneHint")));
   } else {
-    const t = el("table");
+    const table = el("table");
     const tb = el("tbody");
     for (const row of p.patterns) {
       const tr = el("tr");
@@ -1343,32 +1792,36 @@ async function renderKnowledge(body) {
       tr.append(el("td", "note", row.path));
       tb.append(tr);
     }
-    t.append(tb);
+    table.append(tb);
     const sc = el("div", "scroll-x");
-    sc.append(t);
+    sc.append(table);
     pc.append(sc);
   }
+  // Language KEYS are the CLI's framework ids (`react`, `nestjs`, …) — a
+  // translated one would not resolve to a playbook.
   if ((p.known_languages || []).length)
-    pc.append(el("div", "note", "Known language keys: " + p.known_languages.join(", ")));
+    pc.append(el("div", "note", t("knowledge.patterns.known", { list: p.known_languages.join(", ") })));
   out.append(pc);
 
   // --- gotchas
   const g = gotRes.data || {};
-  const pruneBtn = el("button", "btn btn-sm", "Prune to gotchas_max");
+  const pruneBtn = el("button", "btn btn-sm", t("knowledge.gotchas.prune"));
   pruneBtn.type = "button";
   pruneBtn.addEventListener("click", async () => {
     const r = await post("/api/gotcha/prune", {});
     toast(r.command, r.ok ? "ok" : "bad", r.output);
     renderKnowledge(body);
   });
-  const gc = card("Repair memory (gotchas)", g.count ? pruneBtn : null);
-  gc.append(el("div", "note", "One entry per project-specific failure a repair already solved. Pruning ARCHIVES the low-value tail — it never deletes."));
+  const gc = card(t("knowledge.gotchas.title"), g.count ? pruneBtn : null);
+  gc.append(el("div", "note", t("knowledge.gotchas.note")));
   if (!g.count) {
-    gc.append(empty("Nothing recorded yet.", "A repair loop that goes red → green writes the first one."));
+    gc.append(empty(t("knowledge.gotchas.none"), t("knowledge.gotchas.noneHint")));
   } else {
-    const t = el("table");
+    const table = el("table");
     const thead = el("thead");
     const hr = el("tr");
+    // These are the gotcha record's own field names, printed by `orc gotcha
+    // list` — column headers stay in the file's vocabulary.
     for (const h of ["Id", "Area", "Kind", "Hits", "Last seen", "Trigger"]) hr.append(el("th", null, h));
     thead.append(hr);
     const tb = el("tbody");
@@ -1377,9 +1830,9 @@ async function renderKnowledge(body) {
       tr.append(el("td", "mono", e.id), el("td", "mono", e.area), el("td", null, e.kind), el("td", null, String(e.hits)), el("td", "note", e.last_seen || "?"), el("td", "note", e.trigger || ""));
       tb.append(tr);
     }
-    t.append(thead, tb);
+    table.append(thead, tb);
     const sc = el("div", "scroll-x");
-    sc.append(t);
+    sc.append(table);
     gc.append(sc);
   }
   out.append(gc);
@@ -1404,38 +1857,35 @@ function wikiActions(body, w) {
 /* =================================================================== STATS == */
 
 PANELS.stats = function (host) {
-  head(host, "Stats", "Counted from the trace filenames — no model, instant, free.");
+  head(host, t("stats.title"), t("stats.sub"));
   section(
     host,
     () => read("/api/stats").then((r) => r.data),
     (d) => {
-      if (!d.runs) return empty("No traces yet.", d.log_dir + " — run any ORC lane and they appear here.");
+      if (!d.runs) return empty(t("stats.empty"), t("stats.emptyHint", { dir: d.log_dir }));
       const out = frag();
 
       const tiles = el("div", "grid grid-3");
-      tiles.append(statTile("Runs", String(d.runs), `${d.from} → ${d.to}`));
-      tiles.append(statTile("Subagents dispatched", String(d.dispatches)));
-      tiles.append(statTile("Model downgrades", String(d.downgrades), "a dispatch that ran below its pin", d.downgrades ? "warn" : "ok"));
+      tiles.append(statTile(t("stats.runs"), String(d.runs), `${d.from} → ${d.to}`));
+      tiles.append(statTile(t("stats.dispatches"), String(d.dispatches)));
+      tiles.append(
+        statTile(t("stats.downgrades"), String(d.downgrades), t("stats.downgradesNote"), d.downgrades ? "warn" : "ok")
+      );
       out.append(tiles);
 
-      out.append(barCard("Lanes", d.lanes, (k) => (k === "unknown" ? "(no lane)" : "/" + k)));
-      if (Object.keys(d.agents || {}).length) out.append(barCard("Subagents", d.agents, (k) => k.replace(/^orc-/, "")));
+      // Lane and agent NAMES are the CLI's — only the card titles are ours.
+      out.append(barCard(t("stats.lanes"), d.lanes, (k) => (k === "unknown" ? "(no lane)" : "/" + k)));
+      if (Object.keys(d.agents || {}).length) out.append(barCard(t("stats.agents"), d.agents, (k) => k.replace(/^orc-/, "")));
 
-      const health = card("Health");
+      const health = card(t("stats.health"));
       health.append(
         kvList([
-          ["runs that never finished", String(d.unfinished) + (d.unfinished ? "   (see the Runs panel)" : "")],
-          ["traces with no lane in the name", d.unknown_lane ? String(d.unknown_lane) + "   (pre-v0.34.2 bootstrap files)" : "0"],
-          ["log dir", d.log_dir],
+          [t("stats.unfinished"), String(d.unfinished)],
+          [t("stats.unknownLane"), d.unknown_lane ? String(d.unknown_lane) + "   (pre-v0.34.2 bootstrap files)" : "0"],
+          [t("stats.logDir"), d.log_dir],
         ])
       );
-      health.append(
-        el(
-          "div",
-          "note",
-          "Counts only what traces record. /orc-retro and /orc-explain never write one, so they never appear here. Nothing auto-prunes traces."
-        )
-      );
+      health.append(el("div", "note", t("stats.note")));
       out.append(health);
       return out;
     }
@@ -1467,7 +1917,7 @@ function barCard(title, map, label) {
 /* ==================================================================== FLOW == */
 
 PANELS.flow = function (host) {
-  head(host, "Flow (DIY)", "The user-composed lane. Shape is CLI-owned and compiled — a stale compile never runs.");
+  head(host, t("flow.title"), t("flow.sub"));
   const body = el("div", "stack");
   host.append(body);
   renderFlow(body);
@@ -1478,7 +1928,7 @@ async function renderFlow(body) {
   const d = (await read("/api/diy")).data;
   const out = frag();
 
-  const compile = el("button", "btn btn-sm btn-primary", "orc diy compile");
+  const compile = el("button", "btn btn-sm btn-primary", t("flow.compile"));
   compile.type = "button";
   compile.addEventListener("click", async () => {
     const r = await post("/api/diy/compile", {});
@@ -1486,24 +1936,24 @@ async function renderFlow(body) {
     renderFlow(body);
   });
 
-  const gate = card("Gate", d.configured ? compile : null);
+  // The Overview's "worth doing" row for a STALE flow deep-links to this panel,
+  // so the recompile button is the first thing on it. `#diy-gate` is the anchor.
+  const gate = card(t("flow.gate"), d.configured ? compile : null);
+  gate.id = "diy-gate";
   const chipRow = el("div", "row-actions");
   chipRow.append(chip(d.state, d.state === "READY" ? "ok" : d.state === "STALE" ? "warn" : ""));
   gate.append(chipRow);
   gate.append(el("div", "note", d.reason));
-  for (const t of d.triggers || []) gate.append(el("div", "note", "• " + t));
-  if (!d.configured)
-    gate.append(
-      el("div", "note", "Bootstrap it from a terminal: orc diy init [--preset lean|paranoid|solo-fast]. UNCONFIGURED and STALE both refuse to run, and /orc-diy offers plain /orc instead.")
-    );
+  for (const trigger of d.triggers || []) gate.append(el("div", "note", "• " + trigger));
+  if (!d.configured) gate.append(el("div", "note", t("flow.bootstrap")));
   out.append(gate);
 
   if (d.configured) {
     for (const e of d.errors || []) out.append(bannerLine(e, true));
     for (const w of d.warnings || []) out.append(bannerLine(w, false));
 
-    const keys = card("Flow keys");
-    keys.append(el("div", "note", "Changing a key makes the compile STALE — recompile before running /orc-diy."));
+    const keys = card(t("flow.keys"));
+    keys.append(el("div", "note", t("flow.keysNote")));
     for (const k of d.keys) {
       const row = el("div", "setting");
       const left = el("div");
@@ -1514,7 +1964,7 @@ async function renderFlow(body) {
       const right = el("div", "setting-control");
       const input = el("input", "text-input");
       input.value = String(k.value === "" ? "" : k.value);
-      const save = el("button", "btn btn-sm", "set");
+      const save = el("button", "btn btn-sm", t("flow.set"));
       save.type = "button";
       const go = async () => {
         const r = await post("/api/diy/set", { key: k.key, value: input.value });
@@ -1530,14 +1980,15 @@ async function renderFlow(body) {
     out.append(keys);
 
     if (d.score_table) {
-      const st = card("Compiled executor table");
-      st.append(el("div", "note", "Clipped to the declared session tier at COMPILE time, never at runtime."));
+      const st = card(t("flow.table"));
+      st.append(el("div", "note", t("flow.tableNote")));
       const sc = el("div", "scroll-x");
       sc.append(el("pre", "block", d.score_table));
       st.append(sc);
       out.append(st);
     }
-    const paths = card("Files");
+    const paths = card(t("flow.files"));
+    // config / compiled / lock are the artifact names in the DIY contract.
     paths.append(kvList([["config", d.paths.config], ["compiled", d.paths.compiled], ["lock", d.paths.lock]]));
     out.append(paths);
   }
@@ -1554,7 +2005,7 @@ function bannerLine(text, bad) {
 /* =============================================================== CROSSLINK == */
 
 PANELS.crosslink = function (host) {
-  head(host, "Crosslink", "Cross-repo wiki references. Advisory, never blocking — it reads foreign WIKI only, never foreign source.");
+  head(host, t("crosslink.title"), t("crosslink.sub"));
   const body = el("div", "stack");
   host.append(body);
   renderCrosslink(body);
@@ -1566,7 +2017,7 @@ async function renderCrosslink(body) {
   const out = frag();
 
   if (!d.configured) {
-    const e = empty("No cross-repo links yet.", "Link a sibling repo below, or run `orc crosslink` in a terminal for the guided version.");
+    const e = empty(t("crosslink.empty"), t("crosslink.emptyHint"));
     out.append(e);
     out.append(await addLinkCard(d, body));
     body.replaceChildren(out);
@@ -1578,8 +2029,17 @@ async function renderCrosslink(body) {
   // faster than the words "we call them" repeated down a column.
   out.append(graphCard(d));
 
-  const head2 = card("Graph");
-  head2.append(kvList([["self", d.self], ["config", d.config_path], ["needs baseline", d.needs_baseline || "not built yet — run /orc-wiki here"]], true));
+  const head2 = card(t("crosslink.graph"));
+  head2.append(
+    kvList(
+      [
+        [t("crosslink.self"), d.self],
+        [t("crosslink.config"), d.config_path],
+        [t("crosslink.needs"), d.needs_baseline || t("crosslink.needsNone")],
+      ],
+      true
+    )
+  );
   out.append(head2);
 
   out.append(await addLinkCard(d, body));
@@ -1590,25 +2050,29 @@ async function renderCrosslink(body) {
     const left = el("div");
     const name = el("div", "setting-name");
     name.append(document.createTextNode(n.name));
-    name.append(chip(n.direction === "consume" ? "we call them" : n.direction === "provide" ? "they call us" : "no edge", n.direction === "consume" ? "info" : n.direction === "provide" ? "" : "warn"));
+    name.append(
+      chip(
+        n.direction === "consume" ? t("crosslink.weCall") : n.direction === "provide" ? t("crosslink.theyCall") : t("crosslink.noEdge"),
+        n.direction === "consume" ? "info" : n.direction === "provide" ? "" : "warn"
+      )
+    );
     left.append(name);
+    // repo_path and kind ids come straight from the config file.
     left.append(el("div", "setting-desc", n.repo_path + (n.kinds.length ? "  ·  kinds: " + n.kinds.join(", ") : "")));
     const pv = n.provider || {};
-    if (pv.state === "missing") left.append(el("div", "note", "path not found — saved as a PENDING edge; it resolves when the path appears"));
-    else if (pv.state === "no-wiki") left.append(el("div", "note", "no wiki there — /orc-wiki in that repo (edge saved, inert until then)"));
-    else if (pv.state === "unregistered") left.append(el("div", "note", "wiki found but UNREGISTERED — `orc wiki sync` in that repo"));
-    else if (pv.state === "corrupt") left.append(el("div", "note", "their wiki-meta.json is unreadable — `orc wiki sync` there"));
-    else if (n.direction === "provide")
-      left.append(el("div", "note", "inbound only — we resolve nothing from them, so their tags and freshness do not matter here"));
+    if (pv.state === "missing") left.append(el("div", "note", t("crosslink.state.missing")));
+    else if (pv.state === "no-wiki") left.append(el("div", "note", t("crosslink.state.noWiki")));
+    else if (pv.state === "unregistered") left.append(el("div", "note", t("crosslink.state.unregistered")));
+    else if (pv.state === "corrupt") left.append(el("div", "note", t("crosslink.state.corrupt")));
+    else if (n.direction === "provide") left.append(el("div", "note", t("crosslink.state.inbound")));
     else {
       const row = el("div", "row-actions");
-      row.append(chip(pv.tier || "tier unknown", pv.tier === "FRESH" ? "ok" : pv.tier === "AGING" ? "warn" : "bad", pv.tier === "STALE"));
-      row.append(el("span", "note", `last scan ${pv.last_scan || "?"} · ${pv.tags || 0} crosslink tags · peer defaults 10/30`));
+      row.append(chip(pv.tier || t("overview.tile.wikiUnknown"), pv.tier === "FRESH" ? "ok" : pv.tier === "AGING" ? "warn" : "bad", pv.tier === "STALE"));
+      row.append(el("span", "note", t("crosslink.peerNote", { scan: pv.last_scan || "?", tags: pv.tags || 0 })));
       left.append(row);
-      if (!pv.tags)
-        left.append(el("div", "note", `Tags are published by the repo being called: run /orc-wiki crosslink IN ${n.repo_path}.`));
+      if (!pv.tags) left.append(el("div", "note", t("crosslink.noTags", { path: n.repo_path })));
     }
-    const rm = el("button", "btn btn-sm btn-danger", "Remove");
+    const rm = el("button", "btn btn-sm btn-danger", t("common.remove"));
     rm.type = "button";
     rm.addEventListener("click", () => confirmRemove(n.name, body));
     c.append(left, rm);
@@ -1616,7 +2080,7 @@ async function renderCrosslink(body) {
   }
 
   if (d.links.length) {
-    const lc = card("Edges");
+    const lc = card(t("crosslink.edges"));
     for (const l of d.links) lc.append(el("div", "note", `${l.from} ──${l.via}──▶ ${l.to}   (${l.relation.replace(/-/g, " ")})`));
     out.append(lc);
   }
@@ -1628,7 +2092,11 @@ async function renderCrosslink(body) {
 // drawn in the direction it actually points. Nothing here is a control — it is
 // a diagram, and it is the fastest answer to "which way does this one go".
 function graphCard(d) {
-  const c = card("Topology", chip(`${d.nodes.length} repo${d.nodes.length === 1 ? "" : "s"} · ${d.links.length} edge${d.links.length === 1 ? "" : "s"}`, "info"));
+  const summary = t(d.nodes.length === 1 && d.links.length === 1 ? "crosslink.repos" : "crosslink.reposPlural", {
+    repos: d.nodes.length,
+    edges: d.links.length,
+  });
+  const c = card(t("crosslink.topology"), chip(summary, "info"));
   const wrap = el("div", "graph");
 
   const self = el("div", "graph-self");
@@ -1649,6 +2117,8 @@ function graphCard(d) {
     if (via) label.append(el("span", "graph-via", via));
 
     const pv = n.provider || {};
+    // The chip carries the CLI's own state word, so the picture and `orc
+    // crosslink list` always say the same thing.
     const state =
       pv.state === "missing" ? ["missing", "bad"] :
       pv.state === "no-wiki" ? ["no wiki", "warn"] :
@@ -1672,7 +2142,7 @@ function graphCard(d) {
   }
   wrap.append(ring);
   c.append(wrap);
-  if (!d.nodes.length) c.append(el("div", "note", "Nothing linked yet — the graph fills in as you add repos."));
+  if (!d.nodes.length) c.append(el("div", "note", t("crosslink.graphEmpty")));
   return c;
 }
 
@@ -1680,14 +2150,14 @@ function graphCard(d) {
 // submits to the CLI rather than writing YAML — so the errors shown here are
 // the CLI's own, not a second opinion about what is valid.
 async function addLinkCard(d, body) {
-  const c = card("Link a repo");
-  c.append(
-    el("div", "note", "The same four answers `orc crosslink` asks for. The path is the repo ROOT, relative to this one (e.g. ../service-z).")
-  );
+  const c = card(t("crosslink.add.title"));
+  c.append(el("div", "note", t("crosslink.add.note")));
 
   const form = el("div", "linkform");
   const mk = (labelText, node, hint) => {
-    const f = el("label", "field");
+    // `label` wraps its control, and a label that CONTAINS a button steals that
+    // button's click — so the path row (input + Browse) is a plain div instead.
+    const f = el(node.dataset && node.dataset.nolabel ? "div" : "label", "field");
     f.append(el("span", "field-label", labelText));
     f.append(node);
     if (hint) f.append(el("span", "field-hint", hint));
@@ -1696,8 +2166,26 @@ async function addLinkCard(d, body) {
 
   const name = el("input", "text-input");
   name.placeholder = "service-z";
+
+  // THE PATH FIELD (v0.43.6). A hand-typed path is the one field here whose
+  // mistakes are invisible: the CLI accepts an unresolvable path on purpose
+  // (it saves a PENDING edge that resolves later), so a typo does not fail —
+  // it just silently never links. The Browse button removes the typo entirely.
+  // It is still a plain text input: browsing is an ADDITION, never the only
+  // way in, and pasting a path you already know stays the fastest route.
   const repoPath = el("input", "text-input");
   repoPath.placeholder = "../service-z";
+  const pathRow = el("div", "path-row");
+  pathRow.dataset.nolabel = "1";
+  const browse = el("button", "btn btn-sm", t("crosslink.add.browse"));
+  browse.type = "button";
+  browse.addEventListener("click", () =>
+    pickFolder((rel) => {
+      repoPath.value = rel;
+      syncCmd();
+    })
+  );
+  pathRow.append(repoPath, browse);
 
   // The catalog comes from the CLI so the picker can never drift from it.
   let kinds = [];
@@ -1718,13 +2206,14 @@ async function addLinkCard(d, body) {
     kindBox.append(b);
   }
   const custom = el("input", "text-input");
-  custom.placeholder = "or type your own, comma-separated";
+  custom.placeholder = t("crosslink.add.customHint");
 
   const dirSeg = el("div", "seg");
   let direction = "calls";
+  const self = d.self || "this repo";
   const dirs = [
-    ["calls", `${d.self || "this repo"} calls them`],
-    ["called-by", `they call ${d.self || "this repo"}`],
+    ["calls", t("crosslink.add.dirCalls", { self })],
+    ["called-by", t("crosslink.add.dirCalledBy", { self })],
   ];
   for (const [val, label] of dirs) {
     const b = el("button", null, label);
@@ -1753,18 +2242,18 @@ async function addLinkCard(d, body) {
   syncVia();
 
   form.append(
-    mk("Name (slug)", name, "a-z, 0-9, dashes"),
-    mk("Repo path", repoPath, "relative to this repo"),
-    mk("Kinds", kindBox, "what crosses the boundary — pick any"),
-    mk("Custom kinds", custom),
-    mk("Direction", dirSeg, "which repo consumes which"),
-    mk("Edge carried by", via, "one of the kinds above")
+    mk(t("crosslink.add.name"), name, t("crosslink.add.nameHint")),
+    mk(t("crosslink.add.path"), pathRow, t("crosslink.add.pathHint")),
+    mk(t("crosslink.add.kinds"), kindBox, t("crosslink.add.kindsHint")),
+    mk(t("crosslink.add.custom"), custom),
+    mk(t("crosslink.add.direction"), dirSeg, t("crosslink.add.directionHint")),
+    mk(t("crosslink.add.via"), via, t("crosslink.add.viaHint"))
   );
   c.append(form);
 
   const err = el("div", "input-err");
   const actions = el("div", "row-actions");
-  const save = el("button", "btn btn-primary", "Link repo");
+  const save = el("button", "btn btn-primary", t("crosslink.add.save"));
   save.type = "button";
   const cmdPreview = el("code", "action-cmd", "");
   const syncCmd = () => {
@@ -1786,11 +2275,11 @@ async function addLinkCard(d, body) {
     // Only the empties are caught here. Everything about VALIDITY — the slug
     // shape, a taken name, an unknown target — is the CLI's call, reported below.
     if (!name.value.trim() || !repoPath.value.trim() || !all.length) {
-      err.textContent = "Name, path and at least one kind are required.";
+      err.textContent = t("crosslink.add.required");
       return;
     }
     save.disabled = true;
-    save.textContent = "Linking…";
+    save.textContent = t("crosslink.add.saving");
     try {
       const r = await post("/api/crosslink/add", {
         name: name.value.trim(),
@@ -1800,12 +2289,13 @@ async function addLinkCard(d, body) {
         via: via.value || all[0],
       });
       if (!r.ok) {
-        err.textContent = r.output || "The CLI refused that link.";
+        // The CLI's own rejection text wins over ours whenever there is one.
+        err.textContent = r.output || t("crosslink.add.refused");
         save.disabled = false;
-        save.textContent = "Link repo";
+        save.textContent = t("crosslink.add.save");
         return;
       }
-      toast("Linked " + name.value.trim(), "ok", r.output);
+      toast(t("crosslink.add.linked", { name: name.value.trim() }), "ok", r.output);
       await renderCrosslink(body);
       // The new node draws itself in — the one moment where motion is the
       // feedback that the link now exists.
@@ -1814,7 +2304,7 @@ async function addLinkCard(d, body) {
     } catch (e) {
       err.textContent = String(e.message);
       save.disabled = false;
-      save.textContent = "Link repo";
+      save.textContent = t("crosslink.add.save");
     }
   });
   actions.append(save);
@@ -1822,18 +2312,125 @@ async function addLinkCard(d, body) {
   return c;
 }
 
+/* --- the folder picker ------------------------------------------------------
+   A browser cannot hand back a real filesystem path — `<input type="file"
+   webkitdirectory>` gives a folder NAME and nothing above it, which is exactly
+   the part a relative repo path needs. So the picker walks the filesystem on
+   the SERVER (`/api/fs/list`, directory names only) and the browser just
+   renders it. That also makes it identical on Windows and macOS: the server
+   knows the real separator and computes the stored relative path itself, so
+   nothing here has to guess whether to write `..\peer` or `../peer`.
+
+   It never picks a FILE and never opens one. `onPick` receives the relative
+   path the crosslink config will store — the same string you would have typed. */
+function pickFolder(onPick) {
+  const body = el("div", "stack stack-sm");
+  const crumbs = el("div", "picker-crumbs");
+  const listBox = el("div", "picker-list");
+  const foot = el("div", "picker-foot");
+  const relLine = el("div", "note");
+  body.append(crumbs, listBox, relLine, foot);
+
+  let current = null; // the listing payload for the folder on screen
+
+  const choose = el("button", "btn btn-primary btn-allow-busy", t("picker.choose"));
+  choose.type = "button";
+  choose.disabled = true;
+
+  const go = async (path) => {
+    listBox.replaceChildren(skeleton(6));
+    let d;
+    try {
+      d = (await read("/api/fs/list" + (path ? "?path=" + encodeURIComponent(path) : ""))).data;
+    } catch (e) {
+      listBox.replaceChildren(empty(t("picker.unreadable"), String(e.message)));
+      return;
+    }
+    current = d;
+
+    // Breadcrumbs: the shortcuts you actually want (up, home, this project)
+    // rather than a clickable path split on the separator, which on Windows is
+    // a row of one-letter targets.
+    crumbs.replaceChildren();
+    const crumb = (label, target, disabled) => {
+      const b = el("button", "btn btn-ghost btn-sm", label);
+      b.type = "button";
+      b.disabled = !target || disabled;
+      b.addEventListener("click", () => go(target));
+      return b;
+    };
+    crumbs.append(crumb("↑ " + t("picker.up"), d.parent));
+    crumbs.append(crumb(t("picker.home"), d.home));
+    if (d.project_root) crumbs.append(crumb(t("picker.project"), d.project_root));
+    crumbs.append(el("code", "picker-path", d.path));
+
+    listBox.replaceChildren();
+    if (d.error) {
+      listBox.append(empty(t("picker.unreadable"), d.error));
+    } else if (!d.dirs.length) {
+      listBox.append(empty(t("picker.empty")));
+    } else {
+      for (const dir of d.dirs) {
+        const row = el("button", "picker-item");
+        row.type = "button";
+        row.append(el("span", "picker-icon", dir.is_repo ? "◆" : "▸"));
+        const mid = el("div");
+        mid.append(el("div", "picker-name", dir.name));
+        const tags = el("div", "picker-tags");
+        // The two facts that decide whether linking this folder is useful.
+        if (dir.is_repo) tags.append(chip(t("picker.isRepo"), "info"));
+        if (dir.has_wiki) tags.append(chip(t("picker.hasWiki"), "ok"));
+        if (d.project_root && dir.path === d.project_root) tags.append(chip(t("picker.sameRepo"), "warn"));
+        mid.append(tags);
+        row.append(mid, el("span", "picker-into", "→"));
+        // Single click NAVIGATES into the folder; "Use this folder" selects the
+        // one you are standing in. One gesture per meaning, so a click never
+        // both descends and commits.
+        row.addEventListener("click", () => go(dir.path));
+        listBox.append(row);
+      }
+    }
+
+    const isSelf = d.is_project_root;
+    choose.disabled = !!d.error || isSelf;
+    relLine.textContent = d.error
+      ? ""
+      : isSelf
+      ? t("picker.sameRepo")
+      : t("picker.relative", { rel: d.relative });
+    relLine.classList.toggle("picker-warn", isSelf);
+  };
+
+  choose.addEventListener("click", () => {
+    if (!current || current.is_project_root) return;
+    onPick(current.relative);
+    close();
+  });
+  foot.append(choose);
+
+  const close = modal({
+    title: t("picker.title"),
+    body,
+    actions: [{ label: t("common.cancel"), onClick: (c) => c() }],
+  });
+  body.insertBefore(el("div", "note", t("picker.note")), crumbs);
+  // Start one level ABOVE the project: a linked repo is almost always a sibling.
+  go(metaInfo.project_root ? metaInfo.project_root + "/.." : "");
+  return close;
+}
+
 function confirmRemove(name, body) {
   const b = el("div");
-  b.append(el("div", null, `Remove the linked repo "${name}" and every edge that touches it?`));
-  b.append(el("div", "note", "This only edits this repo's crosslink config. The other repo is never touched."));
+  b.append(el("div", null, t("crosslink.remove.body", { name })));
+  b.append(el("div", "note", t("crosslink.remove.note")));
   b.append(el("div", "action-cmd", `orc crosslink remove ${name}`));
   const close = modal({
-    title: "Remove linked repo",
+    title: t("crosslink.remove.title"),
     body: b,
     actions: [
-      { label: "Cancel", onClick: (c) => c() },
+      { label: t("common.cancel"), onClick: (c) => c() },
       {
-        label: "Remove",
+        label: t("common.remove"),
         cls: "btn-danger",
         onClick: async (c) => {
           const r = await post("/api/crosslink/remove", { name });
@@ -1849,23 +2446,221 @@ function confirmRemove(name, body) {
 
 /* =================================================================== LEARN == */
 
+/* ONE THING AT A TIME (v0.43.6).
+   This panel used to stack all eight walkthrough sections as eight boxes of
+   monospace text, every one of them open. That is the whole document dumped on
+   screen: nothing is emphasised, so nothing is read, and finding the section
+   you wanted meant scrolling through the seven you did not.
+
+   A walkthrough has a natural shape — it is ORDERED, and you are at a position
+   in it. So the panel now shows a CONTENTS rail and exactly one section, with
+   Previous / Next, a progress bar, and a search that filters the rail rather
+   than the page. The content is unchanged: it is the same `bin/onboarding-
+   content.js` the terminal prints, which is the point — one source, two
+   surfaces.
+
+   Where you are is remembered per browser, so switching panels and coming back
+   does not restart the walkthrough. */
+
+const LEARN_POS_KEY = "orc-ui-learn-pos";
+
 PANELS.learn = function (host) {
-  head(host, "Learn", "The same walkthrough as `orc onboarding` — no GitHub README needed.");
-  section(
-    host,
-    () => read("/api/learn").then((r) => r.data),
-    (d) => {
-      const out = frag();
-      for (const s of d.sections) {
-        const c = card(s.title);
-        const pre = el("pre", "block wrap", s.lines.join("\n"));
-        c.append(pre);
-        out.append(c);
-      }
-      return out;
-    }
-  );
+  head(host, t("learn.title"), t("learn.sub"));
+  const body = el("div", "stack");
+  host.append(body);
+  renderLearn(body);
 };
+
+async function renderLearn(body) {
+  body.replaceChildren(skeleton(6));
+  let d;
+  try {
+    d = (await read("/api/learn")).data;
+  } catch (e) {
+    body.replaceChildren(empty(t("common.loadFail"), String(e.message)));
+    return;
+  }
+  const sections = d.sections || [];
+  if (!sections.length) {
+    body.replaceChildren(empty(t("common.loadFail")));
+    return;
+  }
+
+  let idx = 0;
+  try {
+    const saved = Number(localStorage.getItem(LEARN_POS_KEY));
+    if (Number.isInteger(saved) && saved >= 0 && saved < sections.length) idx = saved;
+  } catch (_) {}
+
+  const wrap = el("div", "learn");
+
+  /* --- the contents rail ---------------------------------------------- */
+  const side = el("aside", "learn-side");
+  const sideHead = el("div", "learn-side-head", t("learn.contents"));
+  const search = el("input", "text-input");
+  search.type = "search";
+  search.placeholder = t("learn.search");
+  const navList = el("div", "learn-nav");
+  const searchResult = el("div", "learn-result");
+  side.append(sideHead, search, navList, searchResult);
+
+  const navItems = sections.map((s, i) => {
+    const b = el("button", "learn-nav-item");
+    b.type = "button";
+    b.append(el("span", "learn-num", String(i + 1)));
+    // The section title is content, shipped in onboarding-content.js — the same
+    // text the terminal prints. Never translated here.
+    b.append(el("span", "learn-nav-title", stripLeadingGlyph(s.title)));
+    b.addEventListener("click", () => goTo(i));
+    navList.append(b);
+    return b;
+  });
+
+  /* --- the reading pane ------------------------------------------------ */
+  const pane = el("div", "learn-pane");
+  const progress = el("div", "learn-progress");
+  const bar = el("div", "learn-progress-fill");
+  progress.append(bar);
+  const meta = el("div", "learn-meta");
+  const title = el("h2", "learn-title");
+  const article = el("div", "learn-article");
+  const foot = el("div", "learn-foot");
+
+  const prev = el("button", "btn btn-sm", t("learn.prev"));
+  prev.type = "button";
+  prev.addEventListener("click", () => goTo(idx - 1));
+  // Next is wired through `onclick` ONLY, and re-assigned by paint(): on the
+  // last section it wraps to the start instead of advancing. An addEventListener
+  // here as well would leave two live handlers, and both read the same mutable
+  // `idx` — so one click would advance twice.
+  const next = el("button", "btn btn-sm btn-primary", t("learn.next"));
+  next.type = "button";
+  const copyBtn = el("button", "btn btn-ghost btn-sm", t("learn.copySection"));
+  copyBtn.type = "button";
+  copyBtn.addEventListener("click", () => copy(sections[idx].lines.join("\n"), t("learn.copied")));
+
+  foot.append(prev, next, copyBtn);
+  pane.append(progress, meta, title, article, foot);
+  wrap.append(side, pane);
+  body.replaceChildren(wrap);
+
+  function goTo(i) {
+    if (i < 0 || i >= sections.length) return;
+    idx = i;
+    try {
+      localStorage.setItem(LEARN_POS_KEY, String(idx));
+    } catch (_) {}
+    paint();
+  }
+
+  function paint() {
+    const s = sections[idx];
+    navItems.forEach((b, i) => {
+      b.setAttribute("aria-current", i === idx ? "true" : "false");
+      b.classList.toggle("learn-seen", i < idx);
+    });
+    bar.style.width = ((idx + 1) / sections.length) * 100 + "%";
+    meta.textContent = t("learn.progress", { n: idx + 1, total: sections.length });
+    title.textContent = stripLeadingGlyph(s.title);
+    article.replaceChildren(renderLearnBody(s.lines));
+    // Re-trigger the section-swap animation on every move.
+    article.style.animation = "none";
+    void article.offsetHeight;
+    article.style.animation = "";
+    prev.disabled = idx === 0;
+    next.textContent = idx === sections.length - 1 ? t("learn.restart") : t("learn.next");
+    next.onclick = () => goTo(idx === sections.length - 1 ? 0 : idx + 1);
+    // The rail scrolls itself so the current item is always visible, which
+    // matters once the rail is taller than the viewport.
+    navItems[idx].scrollIntoView({ block: "nearest" });
+  }
+
+  search.addEventListener("input", () => {
+    const q = search.value.trim().toLowerCase();
+    let hits = 0;
+    sections.forEach((s, i) => {
+      const hit = !q || (s.title + " " + s.lines.join(" ")).toLowerCase().includes(q);
+      navItems[i].classList.toggle("hidden", !hit);
+      if (hit) hits++;
+    });
+    searchResult.textContent = q ? (hits ? tn(hits, "learn.matches") : t("learn.noMatch")) : "";
+    searchResult.classList.toggle("toolbar-result-none", !!q && !hits);
+    // A search with exactly one hit jumps to it — the obvious next click.
+    if (q && hits === 1) {
+      const only = sections.findIndex((s) => (s.title + " " + s.lines.join(" ")).toLowerCase().includes(q));
+      if (only >= 0 && only !== idx) goTo(only);
+    }
+  });
+  search.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && search.value) {
+      e.stopPropagation();
+      search.value = "";
+      search.dispatchEvent(new Event("input"));
+    }
+  });
+
+  paint();
+}
+
+// The onboarding titles carry a circled number ("① What ORC is") because a
+// terminal has no other way to show order. The rail already numbers every item,
+// so the glyph would be shown twice.
+function stripLeadingGlyph(s) {
+  return String(s || "").replace(/^[①-⑳⓪]\s*/, "");
+}
+
+/* The walkthrough is plain text written for a terminal, and it stays plain
+   text — nothing here is parsed as markup. What the panel adds is TYPOGRAPHY:
+   an indented line that starts with `orc ` or `/orc` is a command, so it is
+   rendered as a click-to-copy chip; a blank line becomes a paragraph break; a
+   line that is a bullet keeps its shape. Everything else is prose. */
+function renderLearnBody(lines) {
+  const out = frag();
+  let para = null;
+  const flush = () => {
+    if (para && para.childNodes.length) out.append(para);
+    para = null;
+  };
+
+  for (const raw of lines) {
+    const line = String(raw);
+    if (!line.trim()) {
+      flush();
+      continue;
+    }
+    const cmd = line.match(/^\s{2,}((?:orc|claude)\s+\S.*?|\/orc[\w-]*)(?:\s{2,}(.*))?$/);
+    if (cmd) {
+      flush();
+      const row = el("div", "learn-cmd-row");
+      const chipBtn = el("button", "learn-cmd", cmd[1].trim());
+      chipBtn.type = "button";
+      chipBtn.title = t("common.copy");
+      chipBtn.addEventListener("click", () => copy(cmd[1].trim(), cmd[1].trim()));
+      row.append(chipBtn);
+      if (cmd[2]) row.append(el("span", "learn-cmd-what", cmd[2].trim()));
+      out.append(row);
+      continue;
+    }
+    if (/^\s*[•·]/.test(line)) {
+      flush();
+      out.append(el("div", "learn-bullet", line.replace(/^\s*[•·]\s*/, "")));
+      continue;
+    }
+    // A pipeline / diagram line is centred monospace, not prose.
+    if (/[→←]/.test(line) && line.trim().length < 100) {
+      flush();
+      out.append(el("div", "learn-flowline", line.trim()));
+      continue;
+    }
+    if (!para) para = el("p", "learn-para");
+    if (para.childNodes.length) para.append(document.createTextNode(" "));
+    para.append(document.createTextNode(line.trim()));
+  }
+  flush();
+  const hint = el("div", "note learn-hint", t("learn.cmdHint"));
+  out.append(hint);
+  return out;
+}
 
 /* ============================================================== EXPERIMENT == */
 
@@ -1875,64 +2670,67 @@ PANELS.learn = function (host) {
 // watch. If the launch fails, the command is on screen to copy, which is the
 // same thing the panel is for on a machine where it works.
 PANELS.experiment = function (host) {
-  head(host, "Experiment", "Open a Claude session in this repo and pick a lane. The panel hands off — it never runs one.");
+  head(host, t("experiment.title"), t("experiment.sub"));
   section(
     host,
     () => read("/api/experiment").then((r) => r.data),
     (d) => {
       const out = frag();
 
-      const launch = card("Start a session");
-      launch.append(
-        el("div", "note", "Opens a terminal in this project and starts `claude`. Nothing about that session comes back to this page — it is yours to drive.")
-      );
-      launch.append(kvList([["project", d.project_root]], true));
+      const launch = card(t("experiment.start"));
+      launch.append(el("div", "note", t("experiment.startNote")));
+      launch.append(kvList([[t("experiment.project"), d.project_root]], true));
 
       const row = el("div", "row-actions");
-      const go = el("button", "btn btn-primary", "Start a new Claude session");
+      const go = el("button", "btn btn-primary", t("experiment.launch"));
       go.type = "button";
       if (!d.can_launch) {
         go.disabled = true;
-        go.title = "Fixture mode never launches anything real.";
+        go.title = t("experiment.fixtureTitle");
       }
       go.addEventListener("click", async () => {
         go.disabled = true;
-        go.textContent = "Opening…";
+        go.textContent = t("experiment.opening");
         try {
           const r = await post("/api/experiment/launch", {});
-          toast(r.ok ? "Terminal opened in " + r.cwd : "Could not open a terminal", r.ok ? "ok" : "bad");
+          toast(r.ok ? t("experiment.opened", { cwd: r.cwd }) : t("experiment.openFail"), r.ok ? "ok" : "bad");
         } catch (e) {
-          toast("Could not open a terminal", "bad", String(e.message) + "\nRun `claude` in " + d.project_root + " yourself.");
+          toast(t("experiment.openFail"), "bad", String(e.message) + "\n" + t("experiment.openFailHint", { root: d.project_root }));
         }
         go.disabled = false;
-        go.textContent = "Start a new Claude session";
+        go.textContent = t("experiment.launch");
       });
       row.append(go);
-      if (!d.can_launch) row.append(el("span", "note", "Fixture mode — the button is inert on purpose."));
+      if (!d.can_launch) row.append(el("span", "note", t("experiment.fixtureNote")));
       launch.append(row);
       out.append(launch);
 
-      // Collapsed by default: the reason you open this panel is to start a
-      // session, and twelve lanes above that button push it off the fold.
+      // EXPANDED by default (v0.43.6). It shipped collapsed to keep the launch
+      // button above the fold, and that cost more than it saved: the lanes are
+      // the reason to look at this panel at all, and a collapsed section has
+      // ZERO height — so the first-run tour, which points at `.lane-list`, was
+      // drawing a spotlight ring around nothing. A section the tour teaches
+      // must be a section the tour can see.
       const list = el("div", "lane-list");
       for (const l of d.lanes) {
         const item = el("div", "lane");
         const left = el("div");
+        // Lane command and blurb are the server's catalog — untranslated.
         left.append(el("div", "lane-cmd", l.cmd));
         left.append(el("div", "setting-desc", l.what));
-        const cp = el("button", "btn btn-sm", "Copy");
+        const cp = el("button", "btn btn-sm", t("common.copy"));
         cp.type = "button";
-        cp.addEventListener("click", () => copy(l.cmd, l.cmd + " copied"));
+        cp.addEventListener("click", () => copy(l.cmd, l.cmd));
         item.append(left, cp);
         list.append(item);
       }
       out.append(
         collapsible({
-          title: "Lanes",
-          count: `${d.lanes.length} commands`,
-          desc: "Type one of these into the session once it opens. Copy takes the command; the panel does not run it.",
+          title: t("experiment.lanes"),
+          count: t("experiment.lanesCount", { n: d.lanes.length }),
+          desc: t("experiment.lanesDesc"),
           content: list,
-          collapsed: true,
+          collapsed: false,
         })
       );
 
@@ -1954,7 +2752,7 @@ PANELS.experiment = function (host) {
 //   - Never automatic. No fix-on-load, no background repair, no nag that runs.
 
 PANELS.maintenance = function (host) {
-  head(host, "Maintenance", "update · upgrade · doctor --fix. Preview first, approve, then it runs — never automatically.");
+  head(host, t("maintenance.title"), t("maintenance.sub"));
   const body = el("div", "stack");
   host.append(body);
   renderMaintenance(body);
@@ -1965,53 +2763,49 @@ async function renderMaintenance(body) {
   const d = (await read("/api/maintenance")).data;
   const out = frag();
 
-  out.append(
-    el(
-      "div",
-      "banner",
-      "Nothing on this panel runs on its own. Each action shows the CLI's own read-only preview first, and the exact command it will run."
-    )
-  );
+  out.append(el("div", "banner", t("maintenance.banner")));
 
   for (const a of d.actions) {
     const row = el("div", "action");
     row.dataset.action = a.id; // the upgrade spotlight anchors on this
     const left = el("div");
+    // Action id, label and command are the server's catalog — the label
+    // describes an exact CLI invocation, so it is shown as written.
     left.append(el("div", "setting-name", a.id));
     left.append(el("div", "setting-desc", a.label));
     left.append(el("div", "action-cmd", a.command));
-    if (a.network) left.append(el("div", "note", "Reaches the network and replaces the installed package."));
+    if (a.network) left.append(el("div", "note", t("maintenance.network")));
 
     // `upgrade` is the one action whose whole point is a comparison, so it says
     // what it would actually do BEFORE you preview it — and offers to check
     // again, because "up to date" is only as old as the last check.
     if (a.id === "upgrade") {
       const status = el("div", "action-status");
-      status.append(el("span", "note", "checking for a newer release…"));
+      status.append(el("span", "note", t("maintenance.checking")));
       left.append(status);
       const paint = (v) => {
         const s = versionState(v);
         status.replaceChildren();
         status.append(chip(s.label, s.kind), el("span", "note", s.note));
-        const again = el("button", "btn btn-ghost btn-sm btn-allow-busy", "Check again");
+        const again = el("button", "btn btn-ghost btn-sm btn-allow-busy", t("maintenance.checkAgain"));
         again.type = "button";
         again.addEventListener("click", () => {
-          status.replaceChildren(el("span", "note", "checking…"));
-          refreshVersion().then(paint).catch(() => status.replaceChildren(el("span", "note", "check failed.")));
+          status.replaceChildren(el("span", "note", t("common.checking")));
+          refreshVersion().then(paint).catch(() => status.replaceChildren(el("span", "note", t("maintenance.checkFailed"))));
         });
         status.append(again);
       };
-      versionInfo().then(paint).catch(() => status.replaceChildren(el("span", "note", "Could not check.")));
+      versionInfo().then(paint).catch(() => status.replaceChildren(el("span", "note", t("maintenance.couldNotCheck"))));
     }
 
-    const btn = el("button", "btn btn-sm", "Preview…");
+    const btn = el("button", "btn btn-sm", t("maintenance.preview"));
     btn.type = "button";
     btn.addEventListener("click", () => previewAction(a.id, body));
     row.append(left, btn);
     out.append(row);
   }
 
-  const job = card("Last run");
+  const job = card(t("maintenance.lastRun"));
   job.id = "job-card";
   out.append(job);
   body.replaceChildren(out);
@@ -2024,7 +2818,7 @@ async function previewAction(action, body) {
 
   b.append(el("div", null, d.label));
   b.append(el("div", "action-cmd", d.command));
-  b.append(el("div", "note", `Preview came from: ${d.preview_command} (read-only).`));
+  b.append(el("div", "note", t("maintenance.previewFrom", { command: d.preview_command })));
 
   // Guard 1 — a run is mid-flight. Updating changes the skills that run will
   // resume into. The CLI has no idea you are mid-run; this panel does.
@@ -2032,8 +2826,8 @@ async function previewAction(action, body) {
   if (d.waiting_runs.length) {
     const warn = el("div", "banner banner-bad");
     const inner = el("div");
-    inner.append(el("strong", null, `${d.waiting_runs.length} run(s) are still waiting.`));
-    inner.append(el("div", null, "Updating changes the skills those runs will resume into: " + d.waiting_runs.join(", ")));
+    inner.append(el("strong", null, t("maintenance.waitingRuns", { n: d.waiting_runs.length })));
+    inner.append(el("div", null, t("maintenance.waitingBody", { slugs: d.waiting_runs.join(", ") })));
     const lbl = el("label", "note");
     const cb = el("input");
     cb.type = "checkbox";
@@ -2041,7 +2835,7 @@ async function previewAction(action, body) {
       ackWaiting = cb.checked;
       syncApply();
     });
-    lbl.append(cb, document.createTextNode(" I understand — continue anyway"));
+    lbl.append(cb, document.createTextNode(" " + t("maintenance.waitingAck")));
     inner.append(lbl);
     warn.append(inner);
     b.append(warn);
@@ -2051,7 +2845,7 @@ async function previewAction(action, body) {
   // BEFORE, not a surprise after.
   if (d.dirty_tree) {
     const warn = el("div", "banner");
-    warn.append(el("div", null, "The working tree has uncommitted changes. `orc upgrade` replaces the package while they are still there."));
+    warn.append(el("div", null, t("maintenance.dirtyTree")));
     b.append(warn);
   }
 
@@ -2059,33 +2853,36 @@ async function previewAction(action, body) {
   if (action === "upgrade") {
     b.append(
       kvList([
-        ["installed", pv.version],
-        ["available", pv.latest || "could not check (offline?)"],
-        ["source", pv.install_spec],
-        ["update available", pv.update_available ? "yes" : "no"],
+        [t("maintenance.installed"), pv.version],
+        [t("maintenance.available"), pv.latest || t("maintenance.availableUnknown")],
+        [t("maintenance.source"), pv.install_spec],
+        [t("maintenance.updateAvailable"), pv.update_available ? t("maintenance.yes") : t("maintenance.no")],
       ])
     );
-    b.append(el("div", "note", "This is what would be installed. `Check only` re-reads the version without changing anything."));
+    b.append(el("div", "note", t("maintenance.upgradeNote")));
   } else {
     const findings = pv.findings || [];
     b.append(
       kvList([
-        ["installed payload", pv.installed_version],
-        ["this cli", pv.package_version],
-        ["findings", String(findings.length)],
+        [t("maintenance.installedPayload"), pv.installed_version],
+        [t("maintenance.thisCli"), pv.package_version],
+        [t("maintenance.findings"), String(findings.length)],
       ])
     );
-    if (!findings.length) b.append(el("div", "note", "orc doctor reports a healthy install — this would be a no-op re-copy."));
+    if (!findings.length) b.append(el("div", "note", t("maintenance.healthy")));
     for (const f of findings) {
       const line = el("div", "note");
-      line.append(chip(f.fixable ? "fixable" : "manual", f.fixable ? "info" : "warn"), document.createTextNode(" " + f.message));
+      line.append(
+        chip(f.fixable ? t("overview.doctor.fixable") : t("overview.doctor.manual"), f.fixable ? "info" : "warn"),
+        document.createTextNode(" " + f.message)
+      );
       b.append(line);
     }
     // A count is NOT consent for a deletion — name every file.
     if (d.names_files) {
       const paths = findings.filter((f) => f.id === "orphan" || f.id === "orphan-candidates").flatMap((f) => f.paths || []);
       const c = el("div");
-      c.append(el("div", "note", paths.length ? `These ${paths.length} file(s) would be DELETED:` : "No orphan files were detected — nothing would be deleted."));
+      c.append(el("div", "note", paths.length ? t("maintenance.wouldDelete", { n: paths.length }) : t("maintenance.wouldDeleteNone")));
       if (paths.length) {
         const fl = el("div", "file-list");
         for (const p of paths) fl.append(el("div", null, p));
@@ -2100,14 +2897,14 @@ async function previewAction(action, body) {
     if (applyBtn) applyBtn.disabled = !ackWaiting;
   };
 
-  const actions = [{ label: "Cancel", onClick: (c) => c() }];
+  const actions = [{ label: t("common.cancel"), onClick: (c) => c() }];
   if (action === "upgrade")
     actions.push({
-      label: "Check only",
-      onClick: () => toast("Version check done — see the panel above. Nothing was changed.", "ok"),
+      label: t("maintenance.checkOnly"),
+      onClick: () => toast(t("maintenance.checkOnlyDone"), "ok"),
     });
   actions.push({
-    label: action === "prune" ? "Delete and update" : action === "upgrade" ? "Upgrade now" : "Apply",
+    label: action === "prune" ? t("maintenance.applyPrune") : action === "upgrade" ? t("maintenance.applyUpgrade") : t("maintenance.apply"),
     cls: action === "prune" || action === "upgrade" ? "btn-danger" : "btn-primary",
     id: "apply-btn",
     disabled: !ackWaiting,
@@ -2115,16 +2912,16 @@ async function previewAction(action, body) {
       try {
         await post("/api/maintenance/apply", { action });
         close();
-        toast("Running: " + d.command, "ok");
+        toast(t("maintenance.started", { command: d.command }), "ok");
         setBusy(true);
         refreshJob();
       } catch (e) {
-        toast("Could not start it.", "bad", String(e.message));
+        toast(t("maintenance.startFail"), "bad", String(e.message));
       }
     },
   });
 
-  modal({ title: "Preview — " + d.command, body: b, actions });
+  modal({ title: t("maintenance.previewTitle", { command: d.command }), body: b, actions });
   applyBtn = document.getElementById("apply-btn");
   syncApply();
 }
@@ -2148,15 +2945,20 @@ async function refreshJob() {
   host.replaceChildren();
   if (!j.id) {
     const h0 = el("div", "card-head");
-    h0.append(el("h2", null, "Last run"));
-    host.append(h0, el("div", "note", "Nothing has been run from this panel yet."));
+    h0.append(el("h2", null, t("maintenance.lastRun")));
+    host.append(h0, el("div", "note", t("maintenance.nothingRun")));
     return;
   }
   const h = el("div", "card-head");
   h.append(el("h2", null, j.command));
-  h.append(chip(j.running ? "running" : j.exit_code === 0 ? "done" : "failed", j.running ? "info" : j.exit_code === 0 ? "ok" : "bad"));
+  h.append(
+    chip(
+      j.running ? t("maintenance.running") : j.exit_code === 0 ? t("common.done") : t("maintenance.failed"),
+      j.running ? "info" : j.exit_code === 0 ? "ok" : "bad"
+    )
+  );
   host.append(h);
-  const out = el("pre", "job-output", j.output || "(no output yet)");
+  const out = el("pre", "job-output", j.output || t("maintenance.noOutput"));
   host.append(out);
   out.scrollTop = out.scrollHeight;
 
@@ -2210,7 +3012,21 @@ function clearTour() {
 // One spotlight over one element. The target is found at SHOW time, never
 // captured up front: panels re-render, and a held reference points at a node
 // that is no longer in the document.
-function spotlight({ selector, title, text, step, total, onNext, onSkip, dismissOnClickSelector }) {
+//
+// MODALITY (v0.43.6). The guided tour is now a MODAL spotlight: while a step is
+// up, Next and Skip are the only things you can click, the rail is inert, and
+// the panel underneath cannot be navigated. It shipped fully click-through,
+// which sounds friendlier and is not: clicking the sidebar mid-tour swapped the
+// panel out from under the popover, so the ring was left pointing at an element
+// that no longer existed and the step's text described a page you were no
+// longer on. A tour that can be walked away from without ending is a tour that
+// silently breaks.
+//
+// The ONE exception is the upgrade spotlight, which has no buttons and whose
+// entire design is "do the thing and I go away" — it passes `interactive: true`
+// and keeps the page live underneath. Modality is opt-out precisely because
+// that variant is the odd one, not the rule.
+function spotlight({ selector, title, text, step, total, onNext, onSkip, dismissOnClickSelector, interactive }) {
   clearTour();
 
   const target = selector ? document.querySelector(selector) : null;
@@ -2219,6 +3035,11 @@ function spotlight({ selector, title, text, step, total, onNext, onSkip, dismiss
   if (selector && !target) return false;
 
   const layer = el("div", "tour-layer");
+  // The blocker sits ABOVE the highlighted element and below the popover, so
+  // the only live controls on screen are the ones inside the popover. It is a
+  // real element rather than a `pointer-events: none` trick because it also
+  // has to swallow the click, not merely fail to receive it.
+  const blocker = interactive ? null : el("div", "tour-block");
   const ring = el("div", "tour-ring");
   const pop = el("div", "tour-pop");
 
@@ -2241,25 +3062,30 @@ function spotlight({ selector, title, text, step, total, onNext, onSkip, dismiss
   pop.append(el("div", "tour-text", text));
 
   const foot = el("div", "tour-foot");
-  if (total) foot.append(el("span", "tour-count", `${step} of ${total}`));
+  if (total) foot.append(el("span", "tour-count", t("common.step", { n: step, total })));
+  let nextBtn = null;
   if (onSkip) {
-    const skip = el("button", "btn btn-ghost btn-sm btn-allow-busy", "Skip tour");
+    const skip = el("button", "btn btn-ghost btn-sm btn-allow-busy", t("common.skipTour"));
     skip.type = "button";
     skip.addEventListener("click", onSkip);
     foot.append(skip);
   }
   if (onNext) {
-    const next = el("button", "btn btn-primary btn-sm btn-allow-busy", step === total ? "Done" : "Next");
-    next.type = "button";
-    next.addEventListener("click", onNext);
-    foot.append(next);
+    nextBtn = el("button", "btn btn-primary btn-sm btn-allow-busy", step === total ? t("common.done") : t("common.next"));
+    nextBtn.type = "button";
+    nextBtn.addEventListener("click", onNext);
+    foot.append(nextBtn);
   }
   // The upgrade spotlight has no buttons — it says what to do and waits.
-  if (!onNext && !onSkip) foot.append(el("span", "tour-waiting", "Waiting for you…"));
+  if (!onNext && !onSkip) foot.append(el("span", "tour-waiting", t("common.waiting")));
   pop.append(foot);
 
+  if (blocker) layer.append(blocker);
   layer.append(ring, pop);
   document.body.append(layer);
+  // Focus moves into the popover so the keyboard agrees with the mouse about
+  // what is live — and Enter/Space advance the tour without reaching for it.
+  if (nextBtn) nextBtn.focus({ preventScroll: true });
   place();
   // Re-place after layout settles, so the popover's own height is known.
   requestAnimationFrame(place);
@@ -2288,11 +3114,34 @@ function spotlight({ selector, title, text, step, total, onNext, onSkip, dismiss
     if (getComputedStyle(target).position === "static") target.classList.add("tour-target-rel");
   }
 
+  // A blocked tour also owns the KEYBOARD: without this, `1`–`9` still navigate
+  // the rail and `r` still reloads the panel, which is the same "the page moved
+  // out from under the step" failure the blocker exists to prevent. Only Escape
+  // gets through, and it means the same thing Skip does.
+  let onKey = null;
+  if (blocker) {
+    onKey = (e) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        (onSkip || clearTour)();
+        return;
+      }
+      if (e.key === "Tab") return; // focus stays reachable inside the popover
+      if (pop.contains(e.target)) return;
+      e.preventDefault();
+      e.stopPropagation();
+    };
+    document.addEventListener("keydown", onKey, true);
+  }
+
   tourActive = {
+    blocking: !!blocker,
     cleanup() {
       window.removeEventListener("resize", onResize);
       window.removeEventListener("scroll", onResize, true);
       if (onDo) document.removeEventListener("click", onDo, true);
+      if (onKey) document.removeEventListener("keydown", onKey, true);
       if (target) target.classList.remove("tour-target", "tour-target-rel");
       layer.remove();
     },
@@ -2301,56 +3150,20 @@ function spotlight({ selector, title, text, step, total, onNext, onSkip, dismiss
 }
 
 // The first-run walkthrough. Each step names the panel it lives on, so the tour
-// navigates for you rather than telling you to go somewhere.
+// navigates for you rather than telling you to go somewhere. Titles and text are
+// keys, not sentences — the tour is panel prose, so it translates with the rest.
+// Both keys are spelled out rather than derived from a step number, for the
+// same reason the tier labels are: a key assembled from a fragment is invisible
+// to the coverage check that keeps the tables honest.
 const TOUR_STEPS = [
-  {
-    panel: "overview",
-    selector: ".rail",
-    title: "Everything that is not AI",
-    text: "This panel drives the deterministic half of ORC — settings, health, runs, knowledge, stats. It never runs a lane and never calls a model. Press 1–9 or 0 to jump between panels; hover here to see the numbers.",
-  },
-  {
-    panel: "overview",
-    selector: ".grid-3",
-    title: "Is anything wrong right now",
-    text: "Install health, wiki freshness, runs still waiting, and your ORC version with a live update check. If one of these is amber, it is the thing worth reading first.",
-  },
-  {
-    panel: "settings",
-    selector: ".toolbar",
-    title: "36 keys, one filter",
-    text: "Filter by key or description across every section at once — you never need to know which tier a key was filed under. 'Changed only' shows just what you have overridden.",
-  },
-  {
-    panel: "settings",
-    selector: "#ladder-card",
-    title: "The score → model ladder",
-    text: "A diagram, not an editor. It comes from the CLI's own table, and it re-draws itself when a setting like opus5_only changes what wins — which is how the precedence rule is taught rather than described.",
-  },
-  {
-    panel: "runs",
-    selector: ".run-list, .empty",
-    title: "Every run ORC recorded",
-    text: "'waiting' means a resume pointer is on disk — that run can be picked up in a fresh session. Open one to read its checkpoint, state of play and trace.",
-  },
-  {
-    panel: "knowledge",
-    selector: ".stack",
-    title: "What ORC already knows",
-    text: "The wiki, cached code patterns and gotchas. Freshness is computed against the files each doc actually covers, so 'stale' here means something it documents really did change.",
-  },
-  {
-    panel: "experiment",
-    selector: ".lane-list",
-    title: "Pick a lane",
-    text: "Copy any lane command, or open a Claude session in this repo. The panel hands off to a terminal and forgets — nothing about that session comes back here.",
-  },
-  {
-    panel: "maintenance",
-    selector: ".action",
-    title: "Preview, then apply",
-    text: "Nothing here runs on its own. Every action shows the CLI's own read-only preview first and the exact command it will run — and a prune names every file, because a count is not consent.",
-  },
+  { panel: "overview", selector: ".rail", title: "tour.1.title", text: "tour.1.text" },
+  { panel: "overview", selector: ".grid-3", title: "tour.2.title", text: "tour.2.text" },
+  { panel: "settings", selector: ".toolbar", title: "tour.3.title", text: "tour.3.text" },
+  { panel: "settings", selector: "#ladder-card", title: "tour.4.title", text: "tour.4.text" },
+  { panel: "runs", selector: ".run-list, .empty", title: "tour.5.title", text: "tour.5.text" },
+  { panel: "knowledge", selector: ".stack", title: "tour.6.title", text: "tour.6.text" },
+  { panel: "experiment", selector: ".lane-list", title: "tour.7.title", text: "tour.7.text" },
+  { panel: "maintenance", selector: ".action", title: "tour.8.title", text: "tour.8.text" },
 ];
 
 function startFirstRunTour(root) {
@@ -2358,7 +3171,7 @@ function startFirstRunTour(root) {
   const finish = () => {
     clearTour();
     markTourSeen(root);
-    toast("Tour finished — press ? any time for shortcuts", "ok");
+    toast(t("tour.finished"), "ok");
   };
   const show = () => {
     if (i >= TOUR_STEPS.length) return finish();
@@ -2366,8 +3179,8 @@ function startFirstRunTour(root) {
     const go = () => {
       const ok = spotlight({
         selector: s.selector,
-        title: s.title,
-        text: s.text,
+        title: t(s.title),
+        text: t(s.text),
         step: i + 1,
         total: TOUR_STEPS.length,
         onNext: () => {
@@ -2404,14 +3217,17 @@ function waitFor(selector, cb, tries) {
 
 // The upgrade spotlight: no next, no skip. It points at the upgrade row and
 // clears the moment you click its Preview button — the tour ends because you
-// did the thing, not because you dismissed it.
+// did the thing, not because you dismissed it. That makes it the ONE spotlight
+// that must stay click-through (`interactive: true`): blocking the page here
+// would block the very click that dismisses it.
 function startUpgradeSpotlight() {
   waitFor("[data-action='upgrade']", () => {
     spotlight({
       selector: "[data-action='upgrade']",
-      title: "Upgrade is here",
-      text: "Click Preview… to see exactly what it would install and run. Nothing happens until you approve it.",
+      title: t("tour.upgrade.title"),
+      text: t("tour.upgrade.text"),
       dismissOnClickSelector: "[data-action='upgrade'] button",
+      interactive: true,
     });
   });
 }
@@ -2420,13 +3236,14 @@ function startUpgradeSpotlight() {
 
 // Keyboard nav for a panel app that is otherwise all mouse. Deliberately small
 // and unmodified: single keys, and ONLY when you are not typing into something.
-const SHORTCUTS = [
-  ["1 – 9, 0", "Jump to that panel in the rail"],
-  ["/", "Focus the filter box (Settings)"],
-  ["r", "Reload the current panel"],
-  ["t", "Toggle light / dark"],
-  ["?", "This list"],
-  ["Esc", "Close a dialog, or clear the filter"],
+const SHORTCUTS = () => [
+  ["1 – 9, 0", t("shortcuts.panels")],
+  ["/", t("shortcuts.filter")],
+  ["r", t("shortcuts.reload")],
+  ["t", t("shortcuts.theme")],
+  ["l", t("shortcuts.lang")],
+  ["?", t("shortcuts.list")],
+  ["Esc", t("shortcuts.escape")],
 ];
 
 // A keystroke must never be stolen from an input, a textarea or a select — that
@@ -2438,27 +3255,27 @@ function typingInto(t) {
 function showShortcuts() {
   const body = el("div", "stack stack-sm");
   const list = el("dl", "kv");
-  for (const [key, what] of SHORTCUTS) {
+  for (const [key, what] of SHORTCUTS()) {
     const dt = el("dt");
     dt.append(el("kbd", null, key));
     list.append(dt, el("dd", null, what));
   }
   body.append(list);
-  body.append(el("div", "note", "Shortcuts are ignored while you are typing in a field."));
+  body.append(el("div", "note", t("shortcuts.note")));
   modal({
-    title: "Keyboard shortcuts",
+    title: t("shortcuts.title"),
     body,
     actions: [
       // Dismissing the tour must never be a one-way door: it is skippable
       // precisely because it can be replayed.
       {
-        label: "Replay the tour",
+        label: t("shortcuts.replay"),
         onClick: (c) => {
           c();
           startFirstRunTour(metaInfo.project_root);
         },
       },
-      { label: "Close", onClick: (c) => c() },
+      { label: t("common.close"), onClick: (c) => c() },
     ],
   });
 }
@@ -2468,6 +3285,9 @@ function installShortcuts() {
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     // A dialog owns the keyboard while it is open; it has its own Esc handler.
     if (!$("#modal-host").hidden) return;
+    // …and so does a blocking tour step. Its own capture-phase handler has
+    // already swallowed the key by now; this is the second lock on the door.
+    if (tourActive && tourActive.blocking) return;
     if (typingInto(e.target)) return;
 
     if (e.key >= "0" && e.key <= "9") {
@@ -2500,6 +3320,11 @@ function installShortcuts() {
       $("#theme-toggle").click();
       return;
     }
+    if (e.key === "l") {
+      e.preventDefault();
+      cycleLang();
+      return;
+    }
     if (e.key === "?") {
       e.preventDefault();
       showShortcuts();
@@ -2510,13 +3335,30 @@ function installShortcuts() {
 /* ================================================================= startup == */
 
 async function boot() {
-  // Meta first: it names the project in the rail and tells us whether we are
+  // Language first, and English is loaded UNCONDITIONALLY: it is the fallback
+  // table every other language falls back to, so it must exist before the first
+  // t() call regardless of which language is selected. If even English cannot be
+  // fetched, t() returns the key and the page is ugly but functional — never
+  // blank, and never blocked on a file.
+  try {
+    DICT_EN = await loadLang("en");
+  } catch (_) {
+    DICT_EN = {};
+  }
+  let savedLang = "en";
+  try {
+    savedLang = localStorage.getItem(LANG_KEY) || "en";
+  } catch (_) {}
+  // No rerender: nothing has been routed yet, and route() is called below.
+  await setLang(savedLang, { rerender: false });
+
+  // Meta next: it names the project in the rail and tells us whether we are
   // looking at fixtures, which must never be mistaken for a real install.
   try {
     const meta = await api("/api/meta");
     metaInfo = meta;
     const proj = $("#rail-project");
-    proj.textContent = meta.fixtures ? "FIXTURE MODE" : meta.project_root || "";
+    proj.textContent = meta.fixtures ? t("rail.fixtures") : meta.project_root || "";
     proj.title = meta.project_root || "";
     $("#rail-version").textContent = (meta.fixtures ? "fixtures · " : "") + "v" + (meta.version || "?");
 
@@ -2535,14 +3377,14 @@ async function boot() {
       .catch(() => {});
     if (meta.fixtures) {
       const b = el("div", "banner");
-      b.append(el("div", null, "Fixture mode: every number on this page is canned. Nothing real is read, and nothing can be written."));
+      b.append(el("div", null, t("banner.fixtures")));
       $("#banners").append(b);
     }
   } catch (_) {
     document.body.replaceChildren(
       (() => {
-        const e2 = el("div", "empty", "This page is missing its session token.");
-        e2.append(el("div", "note", "Re-run `orc ui` in your project to get a fresh URL."));
+        const e2 = el("div", "empty", t("banner.noToken"));
+        e2.append(el("div", "note", t("banner.noTokenHint")));
         return e2;
       })()
     );
@@ -2553,7 +3395,7 @@ async function boot() {
   const saved = localStorage.getItem("orc-ui-theme");
   if (saved) document.documentElement.setAttribute("data-theme", saved);
   const tt = $("#theme-toggle");
-  const syncTheme = () => (tt.textContent = document.documentElement.getAttribute("data-theme") === "light" ? "Dark" : "Light");
+  const syncTheme = () => (tt.textContent = document.documentElement.getAttribute("data-theme") === "light" ? t("rail.dark") : t("rail.light"));
   syncTheme();
   tt.addEventListener("click", () => {
     const next = document.documentElement.getAttribute("data-theme") === "light" ? "dark" : "light";
@@ -2561,6 +3403,13 @@ async function boot() {
     localStorage.setItem("orc-ui-theme", next);
     syncTheme();
   });
+
+  // Language, right below it in the rail: the same class of control (a
+  // per-browser display preference), so it lives in the same place and is
+  // remembered the same way. It never touches project config.
+  const lb = $("#lang-toggle");
+  if (lb) lb.addEventListener("click", cycleLang);
+  applyStaticText();
 
   installShortcuts();
   const help = $("#shortcut-hint");

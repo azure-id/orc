@@ -267,6 +267,28 @@ module.exports.get = function get(route, q) {
       };
     case "/api/learn":
       return { sections: require("../onboarding-content.js").SECTIONS };
+    case "/api/fs/list":
+      // The folder picker on canned data. It carries the states that are hard
+      // to reach on a tidy machine: a plain folder, a git repo WITHOUT a wiki
+      // (the case that saves an inert edge), a repo with one, and the project
+      // itself — which the picker must refuse.
+      return {
+        path: "/example",
+        parent: "/",
+        sep: "/",
+        home: "/home/dev",
+        project_root: PROJECT,
+        is_project_root: false,
+        relative: "..",
+        truncated: false,
+        dirs: [
+          { name: "payments-core", path: "/example/payments-core", is_repo: true, has_wiki: true },
+          { name: "storefront-web", path: "/example/storefront-web", is_repo: true, has_wiki: false },
+          { name: "ledger-batch", path: "/example/ledger-batch", is_repo: true, has_wiki: false },
+          { name: "project", path: PROJECT, is_repo: true, has_wiki: true },
+          { name: "scratch", path: "/example/scratch", is_repo: false, has_wiki: false },
+        ],
+      };
     case "/api/maintenance":
       return {
         actions: [
