@@ -516,8 +516,64 @@ code, kbd, pre, .mono { font-family: var(--mono); font-size: .92em; }
 .row-actions { display: flex; gap: var(--sp-2); flex-wrap: wrap; }
 
 /* Wide content scrolls in its OWN container — the page body never scrolls
-   horizontally. */
+   horizontally.
+
+   THE SCROLLBAR IS PART OF THE PICTURE (v0.44.0). The default platform bar is
+   an opaque grey slab with its own track colour, and under the flow stepper it
+   cut a hard band across the bottom of the rail — the loudest thing on a card
+   whose whole job is to be read as a diagram. So: no track at all (the card's
+   own background shows through), a thin rounded thumb in the panel's line
+   colour, and full contrast only on hover. It is quiet until you reach for it.
+
+   Both syntaxes are given because they are not interchangeable: Firefox reads
+   `scrollbar-width`/`scrollbar-color`, WebKit and Chromium read the
+   pseudo-elements, and neither falls back to the other. */
 .scroll-x { overflow-x: auto; }
+
+.scroll-x, .file-list, .block, .modal, .run-detail, pre {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+.scroll-x::-webkit-scrollbar,
+.file-list::-webkit-scrollbar,
+.block::-webkit-scrollbar,
+.modal::-webkit-scrollbar,
+pre::-webkit-scrollbar { height: 9px; width: 9px; }
+/* Transparent TRACK, transparent corner — the card behind it is the background,
+   so a scrolling box no longer announces itself with a grey gutter. */
+.scroll-x::-webkit-scrollbar-track,
+.file-list::-webkit-scrollbar-track,
+.block::-webkit-scrollbar-track,
+.modal::-webkit-scrollbar-track,
+pre::-webkit-scrollbar-track { background: transparent; }
+.scroll-x::-webkit-scrollbar-corner,
+.file-list::-webkit-scrollbar-corner,
+.block::-webkit-scrollbar-corner,
+.modal::-webkit-scrollbar-corner,
+pre::-webkit-scrollbar-corner { background: transparent; }
+.scroll-x::-webkit-scrollbar-thumb,
+.file-list::-webkit-scrollbar-thumb,
+.block::-webkit-scrollbar-thumb,
+.modal::-webkit-scrollbar-thumb,
+pre::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border-radius: 999px;
+  /* A transparent border with `background-clip: content-box` is what keeps the
+     thumb visually THINNER than the track it needs for a comfortable hit area. */
+  border: 2px solid transparent;
+  background-clip: content-box;
+  transition: background var(--dur-fast) var(--ease);
+}
+.scroll-x:hover::-webkit-scrollbar-thumb,
+.file-list:hover::-webkit-scrollbar-thumb,
+.block:hover::-webkit-scrollbar-thumb,
+.modal:hover::-webkit-scrollbar-thumb,
+pre:hover::-webkit-scrollbar-thumb { background: var(--accent-dim); background-clip: content-box; }
+.scroll-x::-webkit-scrollbar-thumb:active,
+.file-list::-webkit-scrollbar-thumb:active,
+.block::-webkit-scrollbar-thumb:active,
+.modal::-webkit-scrollbar-thumb:active,
+pre::-webkit-scrollbar-thumb:active { background: var(--accent); background-clip: content-box; }
 
 table { border-collapse: collapse; width: 100%; font-size: 13px; }
 th, td { text-align: left; padding: 7px var(--sp-3); border-bottom: 1px solid var(--line-soft); vertical-align: top; }
@@ -729,6 +785,15 @@ pre.block.wrap { white-space: pre-wrap; word-break: break-word; }
    and only to targets that are actually static. */
 .tour-target { z-index: 46; }
 .tour-target-rel { position: relative; }
+
+/* While a spotlight is up, the panel's entrance animations are FROZEN (v0.44.0).
+   `panel-in` and `block-in` both animate `transform`, and an element with a
+   running transform animation is a stacking context — so for the ~300ms a panel
+   takes to arrive, `.tour-target`'s z-index is trapped inside `.panel` and the
+   ladder above is decided by whether the spotlight landed before or after the
+   animation finished. Freezing them makes the ladder the only thing that
+   orders these layers, at any timing. */
+body.tour-on .panel, body.tour-on .stack > * { animation: none !important; }
 
 .modal-host { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: var(--sp-4); }
 .modal-host[hidden] { display: none; }
@@ -952,6 +1017,29 @@ kbd {
 .text-input.invalid { border-color: var(--bad); }
 .input-err { font-size: 11.5px; color: var(--bad); }
 
+/* A closed set gets a dropdown, not a text box (v0.44.0). The native control is
+   kept — it is the one widget every platform already knows how to open with a
+   keyboard, and a hand-rolled listbox on a write surface is a lot of new
+   behaviour for no new capability. Only the chrome is ours. */
+.select-input {
+  min-width: 190px;
+  max-width: 100%;
+  padding: 4px 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 12px;
+  cursor: pointer;
+  transition: border-color var(--dur-fast) var(--ease);
+}
+.select-input:hover { border-color: var(--accent-dim); }
+.select-input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* The out-of-set placeholder (an unset fixed_executor) reads as absent, not as
+   a value you could have chosen. */
+.select-input option:disabled { color: var(--text-faint); }
+
 .readonly-value {
   font-family: var(--mono);
   font-size: 11.5px;
@@ -1080,10 +1168,21 @@ kbd {
 
 /* --- Flow stepper -------------------------------------------------------- */
 
-/* The compiled DIY pipeline, left to right. The sweep runs ONCE per render
-   (open, and again after a compile) — the stagger is per-element via --d, so
-   the rail lights up in order instead of all at once. */
-.stepper { display: flex; align-items: stretch; gap: 0; padding: var(--sp-2) 2px var(--sp-3); min-width: min-content; }
+/* The compiled DIY pipeline, left to right. The sweep LOOPS (v0.44.0): a single
+   pulse travels the rail every --sweep, and the rail is at rest for the ~88% of
+   the cycle in between. The stagger is per-element via --d, so the pulse moves
+   in stitch order instead of the whole rail blinking at once.
+
+   It runs forever because the rail is the one thing on this panel that says
+   "these phases happen in this order", and a one-shot said it before the card
+   had finished arriving. The long idle stretch is what keeps a permanent
+   animation from behaving like a permanent distraction.
+
+   The ENTRANCE and the PULSE are separate animations on purpose: one animates
+   geometry (once, `backwards`, so hover keeps its transform afterwards), the
+   other animates colour (forever). Merging them is how the old rule ended up
+   with a filled `transform: none` sitting on top of the hover lift. */
+.stepper { display: flex; align-items: stretch; gap: 0; padding: var(--sp-2) 2px var(--sp-3); min-width: min-content; --sweep: 4200ms; }
 .step {
   display: flex;
   flex-direction: column;
@@ -1097,9 +1196,27 @@ kbd {
   font: inherit;
   text-align: left;
   white-space: nowrap;
-  animation: step-lit var(--dur-slow) var(--ease) var(--d, 0ms) both;
+  animation: step-in var(--dur-slow) var(--ease) var(--d, 0ms) backwards;
   transition: border-color var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease),
               transform var(--dur-fast) var(--ease);
+  /* The pulse lives on an overlay, not on the step itself. A running animation
+     wins over a transition for the SAME property, so pulsing `.step`'s own
+     border-color and background forever would have silently killed the hover
+     state on every step — a permanent animation must not cost an interaction.
+     `isolation: isolate` scopes the overlay's negative z-index to this box, so
+     it paints above the step's background and below its text. */
+  position: relative;
+  isolation: isolate;
+}
+.step::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  z-index: -1;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  pointer-events: none;
+  animation: step-pulse var(--sweep) linear var(--d, 0ms) infinite;
 }
 button.step { cursor: pointer; }
 button.step:hover { border-color: var(--accent-dim); background: var(--surface-3); transform: translateY(-2px); }
@@ -1109,24 +1226,33 @@ button.step:focus-visible { outline: 2px solid var(--accent); outline-offset: 2p
 
 /* An OFF phase keeps its slot and turns RED. It is not a dimmed absence — it is
    a phase this flow deliberately does not run, and that is worth seeing. */
-.step-off { border-color: var(--bad); background: var(--bad-wash); animation-name: step-lit-off; }
+.step-off { border-color: var(--bad); background: var(--bad-wash); }
+.step-off::before { animation-name: step-pulse-off; }
 .step-off .step-name { color: var(--bad); text-decoration: line-through; text-decoration-color: rgba(240, 83, 63, .55); }
 .step-off .step-note { color: var(--bad); }
 button.step-off:hover { border-color: var(--bad); background: rgba(240, 83, 63, .2); }
 
-@keyframes step-lit {
-  0%   { opacity: 0; transform: translateX(-10px); border-color: var(--line); }
-  35%  { opacity: 1; transform: none; border-color: var(--accent); background: var(--accent-wash); }
-  100% { opacity: 1; transform: none; border-color: var(--line); background: var(--surface-2); }
+/* Geometry only — colour belongs to the pulse. */
+@keyframes step-in {
+  from { opacity: 0; transform: translateX(-10px); }
+  to   { opacity: 1; transform: none; }
 }
-@keyframes step-lit-off {
-  0%   { opacity: 0; transform: translateX(-10px); }
-  35%  { opacity: 1; transform: none; box-shadow: 0 0 0 3px var(--bad-wash); }
-  100% { opacity: 1; transform: none; box-shadow: none; }
+/* Lit for ~4% of the cycle, fully transparent for the rest of it — the overlay
+   only ever ADDS colour, so at rest the step is exactly its own styling and
+   hover works normally. An OFF phase pulses in its own red, so the loop never
+   quietly recolours it back to "running". */
+@keyframes step-pulse {
+  0%, 12%, 100% { border-color: transparent; background: transparent; box-shadow: none; }
+  4%            { border-color: var(--accent); background: var(--accent-wash); box-shadow: 0 0 0 3px var(--accent-wash); }
+}
+@keyframes step-pulse-off {
+  0%, 12%, 100% { border-color: transparent; background: transparent; box-shadow: none; }
+  4%            { border-color: var(--bad); background: rgba(240, 83, 63, .22); box-shadow: 0 0 0 3px var(--bad-wash); }
 }
 
 /* The connector. The base hairline is always there; the accent segment travels
-   across it once, left to right, then fades — that IS the "in this order". */
+   across it once per cycle, left to right, then fades — that IS the "in this
+   order", and it is what carries the pulse from one phase to the next. */
 .step-link { position: relative; align-self: center; width: 22px; height: 2px; background: var(--line); flex: none; }
 .step-flow {
   position: absolute;
@@ -1134,13 +1260,30 @@ button.step-off:hover { border-color: var(--bad); background: rgba(240, 83, 63, 
   background: var(--accent);
   transform-origin: left center;
   transform: scaleX(0);
-  animation: step-flow var(--dur-slow) var(--ease) var(--d, 0ms) both;
+  animation: step-flow var(--sweep) linear var(--d, 0ms) infinite;
 }
 @keyframes step-flow {
-  0%   { transform: scaleX(0); opacity: 1; }
-  55%  { transform: scaleX(1); opacity: 1; }
-  100% { transform: scaleX(1); opacity: 0; }
+  0%          { transform: scaleX(0); opacity: 1; }
+  4%          { transform: scaleX(1); opacity: 1; }
+  9%          { transform: scaleX(1); opacity: 0; }
+  9.01%, 100% { transform: scaleX(0); opacity: 0; }
 }
+
+/* A shipped starting shape for the flow. Same two-column row as `.action` on
+   Maintenance — it is the same kind of thing: a named CLI invocation with its
+   command visible before you press it. */
+.preset-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--sp-4);
+  align-items: center;
+  padding: var(--sp-3);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  transition: border-color var(--dur-fast) var(--ease);
+}
+.preset-row:hover { border-color: var(--accent-dim); }
 
 /* --- Crosslink ----------------------------------------------------------- */
 
@@ -1597,8 +1740,14 @@ button.vault-node:focus-visible { outline: 2px solid var(--accent); outline-offs
      nudges are removed outright rather than sped up. */
   .nav a:hover, .btn:active:not(:disabled), .action:hover,
   .todo:hover, .stat-link:hover, button.step:hover { transform: none !important; }
-  /* The vault pulse is the one INFINITE animation on the page. Capping it to a
-     single 1ms run would still leave a dash frozen mid-edge, so it is removed
+  /* The vault pulse is one of two INFINITE animations on the page. Capping it to
+     a single 1ms run would still leave a dash frozen mid-edge, so it is removed
      outright and the edge reads as a plain line. */
   .vault-pulse { display: none; }
+  /* The other one: the looping flow sweep. `animation-iteration-count: 1` above
+     would still fire it once and then leave the connector segment collapsed at
+     its final keyframe, so both halves are removed outright — the rail is drawn
+     in its resting state and the hairlines read as plain connectors. */
+  .step, .step::before { animation: none !important; }
+  .step-flow { display: none; }
 }

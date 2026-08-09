@@ -192,6 +192,18 @@ const WRITES = {
   "/api/config/profile": (b) => ["config", "profile", String(b.name)],
   "/api/diy/set": (b) => ["diy", "set", String(b.key), String(b.value)],
   "/api/diy/compile": () => ["diy", "compile"],
+  // The bootstrap the TTY composer offers as its first question, and the one
+  // piece of DIY the panel had no way to reach (v0.44.0). `--force` is what
+  // makes it an ANSWER rather than an error on an already-configured project:
+  // `orc diy init` refuses to overwrite without it. That is destructive, so the
+  // UI confirms with the preset's own diff and the exact command on screen.
+  // An empty name is the wizard's "full-lane defaults" — a real invocation,
+  // not a synthesised one.
+  "/api/diy/preset": (b) => {
+    const argv = ["diy", "init", "--force"];
+    if (b.name) argv.push("--preset", String(b.name));
+    return argv;
+  },
   "/api/wiki/sync": () => ["wiki", "sync"],
   "/api/gotcha/prune": () => ["gotcha", "prune"],
   "/api/crosslink/remove": (b) => ["crosslink", "remove", String(b.name)],
@@ -239,6 +251,23 @@ const MAINTENANCE = {
     label: "Fetch the LATEST package from the network, then apply it",
     preview: ["version"],
     network: true,
+  },
+  // ADVANCED (v0.44.0) — the one action on this panel that does not target the
+  // project. Every other route pins `--dir <projectRoot>`; `--global` outranks
+  // `--dir` in `resolveClaudeDir`, so this pair reaches ~/.claude and its
+  // preview reports on the same place it would write.
+  //
+  // It is here because a stale GLOBAL install is a real failure this panel
+  // already REPORTS (the persistent banner, and doctor's global-skew finding)
+  // and previously could not act on — the fix was "go type it in a terminal".
+  // It stays boxed off as advanced, and it is still the only global reach the
+  // panel has: config is never written globally, because config does not merge
+  // and a global write would silently outrank the file every panel here edits.
+  "update-global": {
+    apply: ["update", "--global"],
+    label: "Re-copy this package's payload over the GLOBAL install in ~/.claude",
+    preview: ["doctor", "--global"],
+    advanced: true,
   },
 };
 
@@ -481,6 +510,7 @@ async function handleApi(req, res, url, ctx) {
         command: "orc " + m.apply.join(" "),
         network: !!m.network,
         names_files: !!m.names_files,
+        advanced: !!m.advanced,
       }));
       return json(res, 200, { ok: true, exit_code: 0, data: { actions } });
     }
@@ -497,6 +527,7 @@ async function handleApi(req, res, url, ctx) {
           command: "orc " + m.apply.join(" "),
           network: !!m.network,
           names_files: !!m.names_files,
+          advanced: !!m.advanced,
           preview_command: "orc " + m.preview.join(" "),
           preview: probe.data,
           // Only the UI can know a run is mid-flight; updating changes the

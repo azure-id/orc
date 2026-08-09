@@ -1948,6 +1948,11 @@ async function renderFlow(body) {
   if (!d.configured) gate.append(el("div", "note", t("flow.bootstrap")));
   out.append(gate);
 
+  // Directly below the gate, configured or not: the flow's SHAPE is the first
+  // decision, and picking a shipped starting point is how the terminal composer
+  // opens. It was the one DIY question the panel could not answer.
+  out.append(presetCard(d, body));
+
   if (d.configured) {
     out.append(stepperCard(d));
 
@@ -1966,18 +1971,49 @@ async function renderFlow(body) {
       if (k.is_set) name.append(el("span", "dot"));
       left.append(name, el("div", "setting-desc", k.desc || ""));
       const right = el("div", "setting-control");
-      const input = el("input", "text-input");
-      input.value = String(k.value === "" ? "" : k.value);
-      const save = el("button", "btn btn-sm", t("flow.set"));
-      save.type = "button";
-      const go = async () => {
-        const r = await post("/api/diy/set", { key: k.key, value: input.value });
+      const commit = async (value) => {
+        const r = await post("/api/diy/set", { key: k.key, value });
         toast(r.command, r.ok ? "ok" : "bad", r.output);
         renderFlow(body);
       };
-      save.addEventListener("click", go);
-      input.addEventListener("keydown", (e) => e.key === "Enter" && go());
-      right.append(input, save);
+
+      // A flow key is a CLOSED SET, so it gets a dropdown carrying every legal
+      // value — `orc diy set` would reject anything else anyway, and a text box
+      // that only ever accepts a handful of words is a memory test with a
+      // rejection at the end of it. The list is the CLI's `options`; the panel
+      // holds no copy of what a key accepts.
+      if (k.options && k.options.length) {
+        const sel = el("select", "select-input");
+        const current = String(k.value === "" ? "" : k.value);
+        // A value outside its own option list still has to be SHOWN — an unset
+        // fixed_executor is exactly that. It leads, and it is disabled, so the
+        // dropdown reports the state without offering it back as a choice the
+        // validator would refuse.
+        if (!k.options.some((o) => String(o) === current)) {
+          const ph = el("option", null, current === "" ? t("flow.unset") : current);
+          ph.value = current;
+          ph.disabled = true;
+          sel.append(ph);
+        }
+        for (const opt of k.options) {
+          const o = el("option", null, String(opt));
+          o.value = String(opt);
+          sel.append(o);
+        }
+        sel.value = current;
+        sel.addEventListener("change", () => commit(sel.value));
+        right.append(sel);
+      } else {
+        // Free text (flow_name is a slug) — validation is the CLI's exit code.
+        const input = el("input", "text-input");
+        input.value = String(k.value === "" ? "" : k.value);
+        const save = el("button", "btn btn-sm", t("flow.set"));
+        save.type = "button";
+        const go = () => commit(input.value);
+        save.addEventListener("click", go);
+        input.addEventListener("keydown", (e) => e.key === "Enter" && go());
+        right.append(input, save);
+      }
       row.append(left, right);
       keys.append(row);
     }
@@ -2006,6 +2042,76 @@ function bannerLine(text, bad) {
   return b;
 }
 
+// THE PRESETS (v0.44.0). `orc diy` opens by asking which shape to start from —
+// full-lane defaults or one of the shipped presets — and that question had no
+// answer in this panel at all: a flow could be tuned key by key here, but never
+// STARTED from a known-good shape.
+//
+// It is a REPLACEMENT, not a merge: `orc diy init --force` rewrites the config
+// file, which is what the terminal does too. So every row names the keys the
+// preset actually changes, the exact command is on the row before you click it,
+// and applying it goes through a confirmation that says what is lost.
+function presetCard(d, body) {
+  const c = card(t("flow.presets"));
+  c.id = "diy-presets";
+  c.append(el("div", "note", d.configured ? t("flow.presetsNoteConfigured") : t("flow.presetsNote")));
+
+  // The wizard's first option. An empty name means no --preset flag at all —
+  // the same bare `orc diy init` a terminal user answers "1" to.
+  const rows = [{ name: "", changes: null }, ...(d.presets || [])];
+  for (const p of rows) {
+    const row = el("div", "preset-row");
+    const left = el("div");
+    // Preset names and their key=value diffs are CLI data — never translated.
+    left.append(el("div", "setting-name", p.name || t("flow.presetDefaults")));
+    left.append(
+      el(
+        "div",
+        "setting-desc",
+        p.changes ? Object.entries(p.changes).map(([k, v]) => `${k}=${v}`).join(" · ") : t("flow.presetDefaultsDesc")
+      )
+    );
+    left.append(el("div", "action-cmd", "orc diy init --force" + (p.name ? " --preset " + p.name : "")));
+
+    const use = el("button", "btn btn-sm", t("flow.presetUse"));
+    use.type = "button";
+    use.addEventListener("click", () => confirmPreset(p, d, body));
+    row.append(left, use);
+    c.append(row);
+  }
+  return c;
+}
+
+function confirmPreset(p, d, body) {
+  const b = el("div", "stack stack-sm");
+  b.append(el("div", null, p.name ? t("flow.presetConfirm", { name: p.name }) : t("flow.presetConfirmDefaults")));
+  b.append(el("div", "action-cmd", "orc diy init --force" + (p.name ? " --preset " + p.name : "")));
+  if (p.changes) {
+    b.append(kvList(Object.entries(p.changes).map(([k, v]) => [k, String(v)])));
+  }
+  // Overwriting a flow you tuned by hand is the only way this can hurt, so it
+  // is said plainly rather than implied by the word "force" in the command.
+  if (d.configured) b.append(bannerLine(t("flow.presetOverwrite"), true));
+
+  modal({
+    title: t("flow.presetTitle"),
+    body: b,
+    actions: [
+      { label: t("common.cancel"), onClick: (c) => c() },
+      {
+        label: t("flow.presetApply"),
+        cls: d.configured ? "btn-danger" : "btn-primary",
+        onClick: async (close) => {
+          close();
+          const r = await post("/api/diy/preset", { name: p.name });
+          toast(r.command, r.ok ? "ok" : "bad", r.output);
+          renderFlow(body);
+        },
+      },
+    ],
+  });
+}
+
 // THE FLOW STEPPER (v0.43.7). A compiled DIY flow is a pipeline, and a column
 // of key/value rows is the one shape that never shows you a pipeline. Every
 // step here comes from `orc diy show --json`'s `steps[]`, which the CLI derives
@@ -2016,9 +2122,13 @@ function bannerLine(text, bad) {
 // "I turned review off" and "this flow has no review phase" look identical, and
 // it would make the rail change width every time you flip a key.
 //
-// The sweep runs ONCE — on open and again after a successful compile. It reads
-// as "this is the order things happen in"; a loop would just be motion above a
-// form you are trying to edit.
+// The sweep LOOPS (v0.44.0). It was one-shot on the reasoning that motion above
+// a form is a distraction; in use the opposite complaint arrived — the one thing
+// on the panel that says "these run in this order" said it once, before you had
+// finished reading the card, and there was no way to see it again short of a
+// recompile. The loop is a long, mostly-idle cycle: a single pulse travels the
+// rail and the rail is at rest for the rest of it, so it reads as a heartbeat
+// rather than a flashing sign. `prefers-reduced-motion` removes it entirely.
 function stepperCard(d) {
   const on = d.steps.filter((s) => s.on).length;
   const c = card(t("flow.pipeline"), chip(t("flow.pipelinePhases", { on, total: d.steps.length }), "info"));
@@ -3011,6 +3121,15 @@ async function renderMaintenance(body) {
 
   out.append(el("div", "banner", t("maintenance.banner")));
 
+  // ADVANCED is a section, not a disclaimer (v0.44.0). Everything above targets
+  // THIS project; everything in the box below reaches outside it. The global
+  // update lives there because a stale global install is a failure this panel
+  // already reports and, until now, could only tell you to fix in a terminal.
+  const advanced = card(t("maintenance.advanced"));
+  advanced.id = "maintenance-advanced";
+  advanced.append(el("div", "note", t("maintenance.advancedNote")));
+  let anyAdvanced = false;
+
   for (const a of d.actions) {
     const row = el("div", "action");
     row.dataset.action = a.id; // the upgrade spotlight anchors on this
@@ -3044,12 +3163,21 @@ async function renderMaintenance(body) {
       versionInfo().then(paint).catch(() => status.replaceChildren(el("span", "note", t("maintenance.couldNotCheck"))));
     }
 
+    if (a.advanced) left.append(el("div", "note", t("maintenance.globalNote")));
+
     const btn = el("button", "btn btn-sm", t("maintenance.preview"));
     btn.type = "button";
     btn.addEventListener("click", () => previewAction(a.id, body));
     row.append(left, btn);
-    out.append(row);
+    if (a.advanced) {
+      anyAdvanced = true;
+      advanced.append(row);
+    } else {
+      out.append(row);
+    }
   }
+
+  if (anyAdvanced) out.append(advanced);
 
   const job = card(t("maintenance.lastRun"));
   job.id = "job-card";
@@ -3065,6 +3193,15 @@ async function previewAction(action, body) {
   b.append(el("div", null, d.label));
   b.append(el("div", "action-cmd", d.command));
   b.append(el("div", "note", t("maintenance.previewFrom", { command: d.preview_command })));
+
+  // The one action that writes outside this project says so before it runs, and
+  // the preview it is showing came from the SAME target — `orc doctor --global`,
+  // not the project doctor.
+  if (d.advanced) {
+    const g = el("div", "banner");
+    g.append(el("div", null, t("maintenance.globalWarn")));
+    b.append(g);
+  }
 
   // Guard 1 — a run is mid-flight. Updating changes the skills that run will
   // resume into. The CLI has no idea you are mid-run; this panel does.
@@ -3280,6 +3417,28 @@ function spotlight({ selector, title, text, step, total, onNext, onSkip, dismiss
   // middle of the screen pointing at nothing.
   if (selector && !target) return false;
 
+  // OFF-SCREEN TARGETS (v0.44.0). A spotlight only works on something you can
+  // SEE. The upgrade row is the fourth action on Maintenance and sits below the
+  // fold on a normal window, so arriving from the changelog's "go upgrade" drew
+  // the ring at y≈760 in a 720px viewport — the popover floated near the bottom
+  // pointing at nothing, and the thing it was pointing at was off screen.
+  // Scroll FIRST, place after; `place()` also re-runs on every scroll, so the
+  // ring keeps tracking if the user scrolls away.
+  //
+  // INSTANT, not smooth. A smooth scroll needs animation frames to finish, so
+  // the ring's position would depend on frames arriving — and a spotlight that
+  // is correct only when the tab is in the foreground and unthrottled is not
+  // correct. The step appears in place instead of gliding to it, which is the
+  // right trade for the one control that has to be pointing at something.
+  if (target) target.scrollIntoView({ block: "center", inline: "nearest" });
+  // A spotlight also freezes the panel's entrance animations. `panel-in` and
+  // `block-in` both animate `transform`, and a running transform animation makes
+  // its element a STACKING CONTEXT — which traps the highlighted element's
+  // z-index inside the panel and decides the ring/popover ladder by accident of
+  // timing. With the animations off, the documented ladder is the only thing
+  // that orders these layers.
+  document.body.classList.add("tour-on");
+
   const layer = el("div", "tour-layer");
   // The blocker sits ABOVE the highlighted element and below the popover, so
   // the only live controls on screen are the ones inside the popover. It is a
@@ -3333,8 +3492,10 @@ function spotlight({ selector, title, text, step, total, onNext, onSkip, dismiss
   // what is live — and Enter/Space advance the tour without reaching for it.
   if (nextBtn) nextBtn.focus({ preventScroll: true });
   place();
-  // Re-place after layout settles, so the popover's own height is known.
+  // Re-place after layout settles, so the popover's own height is known — and
+  // again once the smooth scroll above has finished moving the target.
   requestAnimationFrame(place);
+  const settle = [setTimeout(place, 160), setTimeout(place, 420)];
 
   const onResize = () => place();
   window.addEventListener("resize", onResize);
@@ -3388,7 +3549,9 @@ function spotlight({ selector, title, text, step, total, onNext, onSkip, dismiss
       window.removeEventListener("scroll", onResize, true);
       if (onDo) document.removeEventListener("click", onDo, true);
       if (onKey) document.removeEventListener("keydown", onKey, true);
+      for (const id of settle) clearTimeout(id);
       if (target) target.classList.remove("tour-target", "tour-target-rel");
+      document.body.classList.remove("tour-on");
       layer.remove();
     },
   };

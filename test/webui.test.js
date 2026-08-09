@@ -694,9 +694,151 @@ test("flow stepper: the panel renders the CLI's steps[], it never derives them",
   const css = fs.readFileSync(path.join(REPO, "bin", "webui", "app.css"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
   assert.match(css, /\.step-off\s*\{[^}]*border-color:\s*var\(--bad\)/, "an off phase is drawn RED, not merely dimmed");
   assert.match(css, /\.step-link/, "the connectors carry the left-to-right sweep");
-  // One-shot, not ambient: the rail sits above a form you are trying to edit.
-  const sweep = css.slice(css.indexOf(".step-flow"), css.indexOf(".step-flow") + 400);
-  assert.ok(!/infinite/.test(sweep), "the stepper sweep must run once per render, never loop");
+
+  // v0.44.0 — the sweep LOOPS. It was one-shot, and said the one thing this
+  // card exists to say ("these run in this order") before the card had finished
+  // arriving, with no way to see it again short of a recompile.
+  const sweep = css.slice(css.indexOf(".step-flow {"), css.indexOf(".step-flow {") + 400);
+  assert.match(sweep, /infinite/, "the connector sweep must loop");
+  assert.match(css, /--sweep:/, "the cycle length must be one variable, shared by the steps and the connectors");
+  // A loop is only tolerable because it is mostly IDLE. Both pulse keyframes
+  // must return to rest well before the cycle ends — a pulse that fills its
+  // cycle is a flashing sign above a form.
+  for (const name of ["step-pulse", "step-pulse-off"]) {
+    const kf = css.slice(css.indexOf("@keyframes " + name + " {"), css.indexOf("@keyframes " + name + " {") + 400);
+    assert.match(kf, /0%,\s*1[0-9]%,\s*100%/, `${name} must be at rest for most of the cycle`);
+  }
+  // Reduced motion means NO motion. Capping the iteration count would still
+  // fire it once and leave the connector collapsed at its last keyframe, so
+  // both halves are removed outright.
+  const rm = css.slice(css.indexOf("@media (prefers-reduced-motion: reduce)"));
+  assert.match(rm, /\.step, \.step::before\s*\{\s*animation:\s*none/, "reduced motion must remove the step pulse outright");
+  assert.match(rm, /\.step-flow\s*\{\s*display:\s*none/, "reduced motion must remove the connector sweep outright");
+
+  // The pulse rides an OVERLAY, never the step's own border/background: a
+  // running animation beats a transition on the same property, so pulsing the
+  // step itself forever would have silently killed `button.step:hover`.
+  assert.match(css, /\.step::before\s*\{[^}]*animation:\s*step-pulse/, "the pulse must live on the overlay");
+  const stepRule = css.slice(css.indexOf(".step {"), css.indexOf(".step {") + 700);
+  assert.ok(!/animation:[^;]*step-pulse/.test(stepRule), ".step must not animate its own colours");
+  assert.match(stepRule, /isolation:\s*isolate/, "the overlay's negative z-index must be scoped to the step");
+  assert.match(css, /button\.step:hover\s*\{[^}]*border-color/, "hover feedback must survive the loop");
+});
+
+// v0.44.0 — the scrollbar under the stepper was the loudest thing on a card
+// whose whole job is to be read as a diagram: an opaque platform slab with its
+// own track colour, cutting a hard band across the bottom of the rail.
+test("css: a scrolling box has a transparent track, not a grey gutter", () => {
+  const css = fs.readFileSync(path.join(REPO, "bin", "webui", "app.css"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+
+  // Both syntaxes, because neither falls back to the other: Firefox reads the
+  // properties, WebKit and Chromium read the pseudo-elements.
+  assert.match(css, /scrollbar-width:\s*thin/, "Firefox needs scrollbar-width");
+  assert.match(css, /scrollbar-color:\s*var\(--line\) transparent/, "Firefox needs a transparent track colour");
+  assert.match(css, /::-webkit-scrollbar-track[^{]*\{[^}]*background:\s*transparent/, "the WebKit track must be transparent");
+  assert.match(css, /::-webkit-scrollbar-thumb[^{]*\{[^}]*border-radius:\s*999px/, "the thumb is rounded");
+  // The card behind it must show through — a track painted in a surface colour
+  // is the grey band this replaced.
+  assert.ok(
+    !/::-webkit-scrollbar-track[^{]*\{[^}]*background:\s*var\(--surface/.test(css),
+    "the track must never be painted in a surface colour"
+  );
+});
+
+// v0.44.0 — a flow key accepts a CLOSED SET, so it gets a dropdown.
+//
+// The list is the CLI's `options`, never a copy: a second idea of what a key
+// accepts is the same drift the stepper's steps[] rule exists to prevent, and
+// here it would show a value that `orc diy set` then refuses.
+test("flow keys: a closed set renders as a dropdown built from the CLI's options", () => {
+  const js = fs.readFileSync(path.join(REPO, "bin", "webui", "app.js"), "utf8");
+  const cli = fs.readFileSync(path.join(REPO, "bin", "cli.js"), "utf8");
+
+  const fn = js.slice(js.indexOf("async function renderFlow"), js.indexOf("function bannerLine"));
+  assert.match(fn, /k\.options && k\.options\.length/, "a key with options must become a select");
+  assert.match(fn, /el\("select", "select-input"\)/, "the control is a real <select>");
+  // No hardcoded value list anywhere in the panel.
+  for (const v of ["blocking-only", "own-planner", "report-only", "hands-off"]) {
+    assert.ok(!js.includes(`"${v}"`), `the panel must not name the flow value "${v}" itself`);
+  }
+  // A value outside its own set (an unset fixed_executor) is still SHOWN, and
+  // shown as unpickable — the validator would refuse it back.
+  assert.match(fn, /ph\.disabled = true/, "an out-of-set value must be shown but not offered");
+
+  // The CLI half: `options` is emitted straight off DIY_META.
+  const show = cli.slice(cli.indexOf("function diyShow"), cli.indexOf("function diyInteractive"));
+  assert.match(show, /options: m\.options \? m\.options\.map\(String\) : null/, "diy show --json must publish each key's closed set");
+});
+
+// v0.44.0 — the panel could tune a flow key by key but never START one from a
+// known shape, which is the terminal composer's very first question.
+test("flow presets: the bootstrap shapes are the CLI's, and applying one is confirmed", () => {
+  const js = fs.readFileSync(path.join(REPO, "bin", "webui", "app.js"), "utf8");
+  const api = fs.readFileSync(path.join(REPO, "bin", "webui", "api.js"), "utf8");
+  const cli = fs.readFileSync(path.join(REPO, "bin", "cli.js"), "utf8");
+
+  assert.match(cli, /presets: Object\.entries\(DIY_PRESETS\)/, "diy show --json must publish the preset catalog");
+  const fn = js.slice(js.indexOf("function presetCard"), js.indexOf("function confirmPreset"));
+  assert.match(fn, /d\.presets/, "the panel must render the CLI's presets, not its own list");
+  // The names are the CLI's; the panel must not carry a copy of them.
+  for (const name of ["paranoid", "solo-fast"]) {
+    assert.ok(!js.includes(`"${name}"`), `the panel must not name the preset "${name}" itself`);
+  }
+  // It sits directly under the gate card, which is what the deep-link anchors on.
+  assert.match(js, /out\.append\(gate\);[\s\S]{0,400}presetCard\(d, body\)/, "the presets belong immediately below the gate");
+
+  // `--force` is what makes this an answer on an already-configured project,
+  // and it REPLACES the config — so it is confirmed, and the loss is named.
+  const route = api.slice(api.indexOf('"/api/diy/preset"'), api.indexOf('"/api/diy/preset"') + 400);
+  assert.match(route, /"diy", "init", "--force"/, "it must shell the CLI's own bootstrap");
+  assert.match(route, /if \(b\.name\) argv\.push\("--preset"/, "an empty name is the wizard's full-lane defaults");
+  const confirm = js.slice(js.indexOf("function confirmPreset"), js.indexOf("function confirmPreset") + 1600);
+  assert.match(confirm, /modal\(/, "applying a preset must be confirmed");
+  assert.ok(en["flow.presetOverwrite"], "the confirmation must say what is replaced");
+});
+
+// v0.44.0 — the one action on Maintenance that does not target this project.
+test("maintenance: the global update is boxed off, previewed globally, and labelled", () => {
+  const api = fs.readFileSync(path.join(REPO, "bin", "webui", "api.js"), "utf8");
+  const js = fs.readFileSync(path.join(REPO, "bin", "webui", "app.js"), "utf8");
+
+  const entry = api.slice(api.indexOf('"update-global": {'), api.indexOf('"update-global": {') + 300);
+  assert.match(entry, /apply: \["update", "--global"\]/, "it must shell the real command");
+  // The preview has to read the SAME place the apply would write, or it is a
+  // report about the project dressed up as one about ~/.claude.
+  assert.match(entry, /preview: \["doctor", "--global"\]/, "the preview must target the global install too");
+  assert.match(entry, /advanced: true/, "it must be flagged advanced so the panel boxes it off");
+
+  // It is the ONLY global reach: config never merges, so a global config write
+  // would silently outrank the project file every other panel here edits.
+  assert.ok(!/"config",\s*"set"[^\]]*--global/.test(api), "config is never written globally");
+
+  assert.match(js, /if \(anyAdvanced\) out\.append\(advanced\)/, "the advanced box appears only when something is in it");
+  assert.match(js, /t\("maintenance\.globalWarn"\)/, "the preview must say it writes outside this project");
+  assert.ok(en["maintenance.advanced"] && en["maintenance.globalNote"], "the advanced section needs its labels");
+});
+
+// v0.44.0 — a spotlight can only work on something you can SEE.
+//
+// The upgrade row is the fourth action on Maintenance and sits below the fold
+// on a normal window, so arriving from the changelog's "go upgrade" drew the
+// ring off screen and left the popover pointing at nothing.
+test("tour: a spotlight scrolls its target into view and freezes the panel entrance", () => {
+  const js = fs.readFileSync(path.join(REPO, "bin", "webui", "app.js"), "utf8");
+  const css = fs.readFileSync(path.join(REPO, "bin", "webui", "app.css"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+
+  const fn = js.slice(js.indexOf("function spotlight({"), js.indexOf("// The first-run walkthrough"));
+  assert.match(fn, /target\.scrollIntoView\(\{ block: "center"/, "the target must be scrolled into view first");
+  // Smooth needs frames to land; a spotlight that is only correct in a
+  // foregrounded, unthrottled tab is not correct.
+  assert.ok(!/scrollIntoView\(\{[^}]*behavior:\s*"smooth"/.test(fn), "the scroll must be instant, not animated");
+
+  // `panel-in` and `block-in` both animate transform, and a running transform
+  // animation is a stacking context — which decides the ring/popover ladder by
+  // accident of timing rather than by the documented z-index order.
+  assert.match(fn, /classList\.add\("tour-on"\)/, "the panel entrance must be frozen while a step is up");
+  assert.match(fn, /classList\.remove\("tour-on"\)/, "and unfrozen on cleanup");
+  assert.match(css, /body\.tour-on \.panel[^{]*\{\s*animation:\s*none/, "the freeze must cover the panel and its blocks");
 });
 
 // v0.43.7 — the Crosslink Design tab.

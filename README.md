@@ -6,7 +6,7 @@
 
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
-![Version](https://img.shields.io/badge/version-0.43.7-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.44.0-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
@@ -46,337 +46,82 @@ zero-dependency npm package installs those files into your `.claude/` directory.
 
 ## Changelog
 
-**Latest: v0.43.7 — updated 2026-08-09.**
+**Latest: v0.44.0 — updated 2026-08-09.**
 
-### v0.43.7 — the flow you can see, and a boundary you can read _(2026-08-09)_
+### v0.44.0 — the panel stops making you type what it already knows _(2026-08-09)_
 
-**Flow (DIY) draws the pipeline.** A compiled flow is an ordered sequence of
-phases, and a column of key/value rows is the one shape that cannot show you a
-sequence — you could read every key on the panel and still not know what runs
-before what. Below the gate card there is now a **stepper**: every phase this
-flow compiles, left to right, in the order it actually runs, with a light that
-sweeps through the connectors once on open and once more after a successful
-`orc diy compile`.
+Five things on `orc ui` that were technically usable and practically annoying.
 
-**A phase you switched off keeps its slot and turns red.** Dropping it would
-have made "I turned review off" and "this flow has no review phase" look
-identical, and it would have made the rail change width every time you flipped a
-key. Off is a decision worth seeing, so it is drawn in red with the phase name
-struck through — and it still animates, because it is still part of the shape.
-Click any phase to jump to the key that owns it.
+**A flow key is a closed set, so it is a dropdown now.** Every key on the Flow
+panel accepted a handful of exact words and gave you a text box — a memory test
+with a rejection at the end of it. `orc diy show --json` now publishes each
+key's `options` straight off `DIY_META`, and the panel renders them as a
+dropdown: every band for `rubric_bands`, every tier for `session_tier`, every
+executor for `fixed_executor`. The list is the CLI's, never a copy — a second
+idea of what a key accepts would show you a value `orc diy set` then refuses.
+Only `flow_name` stays free text, because a slug is not a closed set. A value
+outside its own set (an unset `fixed_executor`) is still shown, and shown as
+unpickable.
 
-**The steps come from the compiler, not from the panel.** `orc diy show --json`
-grew a `steps[]` array derived from the *same* array `orc diy compile` stitches
-the flow with, so the picture cannot drift from the pipeline. A golden test
-fails if a block ever joins the stitch order without a step — a phase that runs
-but is never drawn would be invisible in exactly the way this panel exists to
-prevent.
+**You can start a flow from a preset without opening a terminal.** `orc diy`
+opens by asking which shape to begin from — full-lane defaults, `lean`,
+`paranoid`, `solo-fast` — and that question had no answer in this panel at all.
+It is now a card directly under the gate, each row naming the keys that preset
+actually changes and the exact command before you press it. Applying one shells
+`orc diy init --force`, which REPLACES the config, so it is confirmed and the
+loss is named rather than implied by the word "force".
 
-**Crosslink is two tabs: Design and Settings.** The graph and the add form were
-one scrolling column, which made the diagram something you scrolled past on the
-way to the controls rather than the thing you came for. **Design** is the
-boundary as a picture — this repo in the middle, every linked repo on a ring
-around it, one line per edge with a pulse travelling it **in the direction the
-dependency runs**, so "which way does this one go" is answered by motion instead
-of by squinting at an arrow glyph. Hover a repo to pick its edges out of a busy
-ring; click one to land on its row in Settings.
+**The pipeline sweep loops, and the scrollbar stopped shouting.** The stepper's
+light ran once, said the one thing that card exists to say — these run in this
+order — before the card had finished arriving, and could not be seen again
+short of a recompile. It now runs on a long, mostly-idle cycle: one pulse
+travels the rail, then the rail rests. `prefers-reduced-motion` removes it
+outright rather than capping it, which would freeze a connector mid-collapse.
+The platform scrollbar underneath it — an opaque slab with its own track
+colour — cut a hard grey band across the bottom of a card meant to be read as a
+diagram; every scrolling box now has a transparent track and a thin rounded
+thumb that only reaches full contrast on hover.
 
-The layout is **computed, not simulated** — a given config draws the same
-picture every time you open the tab, which is what makes two openings
-comparable. Repo boxes are a **fixed size**, and the ring's radii are solved
-from that size: two boxes clear each other when they are apart by more than a
-box on one axis or the other, so the radius is whatever makes that true for
-every pair. Sizing the ring as a *fraction of the container* instead — which is
-what shipped first — is a guess that knows nothing about how wide a repo box is,
-and three peers were enough to pile them on top of each other. A test now runs
-the real layout function over every node count from 1 to 16 and fails on any
-overlap. A ring too wide for the panel **scrolls**; it is never squeezed back
-into a collision. `prefers-reduced-motion` drops the pulse outright.
+**`orc update --global` is a button, in an Advanced box.** A stale global
+install is a failure this panel already reported — the persistent banner, and
+doctor's version-skew finding — and could only tell you to go fix in a terminal.
+It is the one action here that does not target the current project, so it is
+boxed off below the upgrade row, its preview reads the same place the apply
+writes (`orc doctor --global`, not the project doctor), and the confirmation
+says plainly that every project on the machine sees the result. Config is still
+never written globally: config does not merge, and a global write would silently
+outrank the project file every other panel edits.
 
-**With nothing linked, Design says so and spotlights Settings.** An empty
-diagram cannot explain itself, so the empty state names the tab that fills it
-and offers a button that goes there — and the spotlight is dropped the moment a
-link exists.
-
-### v0.43.6 — `orc ui` in two languages, and panels that point at the right page _(2026-08-08)_
-
-**The guided tour is modal now.** It shipped fully click-through, which sounds
-friendlier and is not: clicking the sidebar mid-tour swapped the panel out from
-under the popover, so the ring was left circling an element that no longer
-existed and the step's text described a page you were no longer on. **Next and
-Skip are the only live controls** while a step is up — the rail, the panel and
-the keyboard are all inert, and Escape means Skip. The upgrade spotlight is the
-one deliberate exception: it has no buttons and clears when you click Preview,
-so blocking the page would block the very click that dismisses it.
-
-**Experiment's lane list ships expanded.** It was collapsed to keep the launch
-button above the fold, and that cost more than it saved — a collapsed section is
-zero-height, so the tour step that teaches the lanes was drawing a ring around
-nothing. A section the tour explains has to be a section the tour can see.
-
-**Runs is an accordion.** It was a list with a detail card *underneath* it:
-clicking the fourth run rendered its checkpoint below run forty, so reading what
-you clicked meant scrolling past everything you did not — a problem that grew
-with the list. Every row now **expands in place**, animated with the same fold
-the settings tiers use, one row open at a time, detail fetched on first open and
-kept. Plus a status filter (all / waiting / done / other), a text filter and a
-match count.
-
-**A caution now points at the page that can actually clear it.** `orc doctor`
-reports every problem in one list, and Overview sent all of them to Maintenance.
-That is right for the install-footprint findings and **wrong for `diy-stale`** —
-the flow is recompiled with `orc diy compile`, which is a button on **Flow**. The
-panel was telling you to go somewhere with no control for the thing it was
-complaining about. Routing is now a table keyed on the finding id, and a finding
-with nothing to press anywhere (a dangling trace pointer) offers no button at all
-rather than a useless one.
-
-**Overview got a "Worth doing" list.** One severity-ordered list of everything
-wanting a decision, each row naming the panel that owns its fix: install
-findings, runs left waiting, an available update — and the wiki, which finally
-turns its tier into advice instead of a colour. **An AGING wiki is not an error,
-it is the moment a refresh is still cheap**, so it says so; a STALE one says
-`/orc-fast` will fall back until it is refreshed; an unregistered one is offered
-the free `orc wiki sync`. Refreshing costs a model, so the panel never claims it
-can do it. The health tiles are links to the panels behind their numbers, and
-there is a fifth for cached code patterns.
-
-**Learn shows one section at a time.** Eight sections stacked as eight boxes of
-monospace text is the whole document dumped on screen: nothing is emphasised, so
-nothing is read. There is now a contents rail with progress, prev/next, a search
-that filters the rail, and typography — indented command lines become
-click-to-copy chips, pipelines render as diagrams. Where you are is remembered.
-The content is unchanged: still `bin/onboarding-content.js`, the same text the
-terminal prints.
-
-**Crosslink: browse for the repo folder.** A hand-typed peer path is the one
-field here whose mistakes are invisible — the CLI accepts an unresolvable path
-on purpose (it saves a PENDING edge), so a typo does not fail, it just silently
-never links. A browser cannot hand back a real path, so **the server walks the
-filesystem** (`/api/fs/list`, directory names only — never a file, never its
-contents) and the page renders the walk. It marks which folders are git repos
-and which have a wiki, refuses to link this repo to itself, and **computes the
-stored relative path server-side** so Windows and macOS both get it right.
-Typing a path by hand still works: browsing is an addition, not a gate.
-
-**English and Indonesian.** A language button sits under the theme toggle in the
-rail (`l` toggles it), and the choice is remembered per browser — like the theme,
-never written to project config, which is a file your whole team shares. **The
-scope rule is narrow and enforced by test:** only the panel's own prose is
-translated. Config keys, their descriptions and values, agent names, model ids,
-paths, commands, `orc doctor` messages and CLI output are shown exactly as the
-CLI wrote them — a translated config key is a key that does not exist, and a
-translated command is a command you cannot type. English is the fallback table,
-so a missing translation degrades to English, never to a raw dotted key. Adding
-a language is a JSON file in `bin/webui/i18n/` and two lines. Still zero
-dependencies, zero build step.
-
-### v0.43.5 — the update check works, and the UI teaches itself _(2026-08-08)_
-
-**The panel was asking whether an update existed with the check switched off.**
-`runCli` forced `ORC_NO_UPDATE_CHECK=1` on every subprocess — a real protection,
-because most commands end with a nudge line that would land on stdout beside the
-`--json` object. But `version` has no nudge and the check *is* its payload, so a
-blanket flag silenced the one command whose whole job is to answer that
-question. It returned `check_disabled: true` forever. `version` and `changelog`
-are now exempt, and a test pins that the flag stays conditional.
-
-**`orc changelog` — what you would actually get.** A version number is not a
-reason to upgrade. The new command fetches the README from *the same branch
-`orc upgrade` installs from* and returns the entries newer than yours, so what
-you read and what you install can never be different releases. `--json` too.
-Opted-out, unreachable and nothing-new are three distinct answers.
-
-**The update banner is a button.** When a newer release exists it drops in at
-the top of every panel; clicking it opens the changelog in a modal, and **Take
-me to the upgrade** navigates to Maintenance and spotlights the upgrade row.
-Changelog text is fetched over the network, so it is stripped of markdown and
-inserted as **text — never HTML**, and never through a renderer that emits tags.
-
-**A first-run tour.** Eight steps across the rail, Overview's health tiles,
-Settings' filter and score ladder, Runs, Knowledge, Experiment and Maintenance's
-preview-then-apply rule — with Next and Skip, navigating panels for you. Seen
-state is **per project**, so a new repo gets its own tour, and it never runs on
-fixtures. Dismissing it is not a one-way door: **Replay the tour** lives in the
-`?` dialog.
-
-**The upgrade spotlight has no buttons.** It points at the upgrade row and
-clears when you click Preview — it ends because you did the thing, not because
-you dismissed it. The spotlight is a ring with the scrim thrown outward, so the
-page underneath stays readable and clickable.
-
-**Experiment: the lane list is collapsed by default.** You open that panel to
-start a session, and twelve lanes above the button pushed it off the fold. The
-fold behaviour is now one shared `collapsible()` rather than a second copy of
-the settings tiers.
-
-**No embedded web terminal, and the reason is a hard one.** Driving an
-interactive `claude` from the browser needs a real PTY: with pipes it falls back
-to `--print` and exits 1 (verified, not assumed). Node ships no PTY, so this
-would need `node-pty` — a **native module compiled at install time**. ORC is
-zero-dependency with no build step, and a failed native build would break the
-whole installer, not just the panel. xterm.js alone is fine to vendor; the PTY
-is the blocker. The button opens your own terminal instead.
-
-### v0.43.4 — a warning that finally clears, an Experiment panel, crosslink from the UI _(2026-08-08)_
-
-**`global-retired-agents` told you to run a command that could never fix it.**
-The finding said `orc update --global`. Those names were retired *before* the
-manifest now on disk was written, so no manifest ever claimed them — and the
-auto-prune only deletes what a previous manifest proves ORC owned. The sweep
-that does catch them is gated on `--prune` by design (it deletes files nothing
-proves are ours). So the warning came back after every "fix", which reads as a
-broken tool rather than a wrong instruction. It now says **`orc update --global
---prune`** and explains why the flag is required; the working command also ships
-as a machine-readable `fix_command`, which the UI shows with a copy button.
-`orc doctor --fix` still cannot clear it — a global install is not this
-project's to prune, and that is deliberate.
-
-**`/api/experiment` — a panel that hands off to a terminal.** It lists every ORC
-lane with a copy button and opens a Claude session in this repo. **The boundary
-moves exactly one step:** the panel still renders no model output, proxies no
-session and holds no API key — it opens a terminal and forgets about it. The
-lane catalog is server-side and the browser sends only an id, so no string typed
-in a browser ever reaches a shell, and the cwd is always the server's own
-project root.
-
-**Crosslink is now settable from the UI**, which needed a new CLI command
-first: `orc crosslink add <name> <path> --kinds <a,b> [--direction calls|
-called-by] [--via <kind>] [--target self|<node>]`, plus `orc crosslink kinds`
-for the catalog. The panel writes no YAML — it shells that command, so every
-rejection you see is the CLI's own validator, and the crosslink config keeps
-exactly one writer. The panel gained a **topology graph**: self at the centre,
-each linked repo with the arrow pointing the way the edge actually points,
-direction carried by colour as well as glyph, hovering a node lights its detail
-row, and a newly linked repo draws itself in.
-
-### v0.43.3 — `orc ui`: it tells you about updates, and 36 keys stop being a wall _(2026-08-08)_
-
-**The update check was already real — the panel just never asked.** `orc version
---json` performs a bounded live check against the install source and returns
-`update_available`. That answer now reaches three places: a version tile on
-Overview, one quiet dot in the rail on every panel, and the Maintenance
-`upgrade` row, which says what it would actually do *before* you preview it and
-offers a **Check again** button. One check per page load, shared — and the
-browser never compares version strings itself, so the semver rules and the 24h
-cache stay in the CLI where they already live. `latest: null` reads as
-**offline**, not as "up to date"; those are different facts.
-
-**Settings: three collapsible sections and a filter.** 36 keys in three flat
-lists meant scrolling was the only way to find anything. Each tier is now its
-own card with a header explaining what the tier *is* ("advanced" means you need
-a reason, not don't touch), and the toolbar filters by key **or** description
-across every tier at once — so finding a key no longer depends on guessing
-which tier it was filed under. Plus **Changed only**, a match count, and
-collapse-all. Rows highlight on hover, because 36 rows of identical weight is
-where a click on the wrong key comes from.
-
-**Interaction.** Keyboard nav (`1`–`9` for panels, `/` to filter, `r` to
-reload, `t` for theme, `?` for the list, `Esc` to close or clear), with the
-digits revealed on rail hover so they are discoverable without a legend. Copy
-buttons on every path. A staggered entrance so a panel reads as a sequence
-rather than a flash, a sweep bar while a mutation runs so a frozen panel never
-looks like a hang, and press feedback on every button.
-
-All of it is off under `prefers-reduced-motion` — including the stagger's
-`animation-delay`, which is load-bearing rather than tidy: the entrance fills
-`backwards`, so a surviving delay would leave blocks invisible instead of
-merely still. A test pins that.
-
-### v0.43.2 — `orc ui`: boxes stop colliding, because the container owns the gap _(2026-08-08)_
-
-With the stylesheet finally loading, the real spacing bug was visible: blocks
-touched with no gap between them.
-
-The cause was the spacing model, not a missing value. Panels spaced their
-children with `.card + .card`, which matches only **two cards in a row** — and
-the sequences these panels actually render are a stat grid then a card, a
-settings tier then a card, a run list then a card. None of those matched, so
-none of them had a gap. Card internals had the same problem: a note against a
-table, a file list against a `<pre>`.
-
-Spacing now belongs to the **container**. A `.stack` class holds every panel
-body, async slot and run-detail tab pane, so any mix of children is spaced in
-any order — and the block types themselves lost their outer margins, which is
-what would otherwise double up inside a gapped parent.
-
-Two tests hold the line from both ends: the pair-based selectors must stay
-gone, and every panel container must carry `stack`. A future panel written as
-`const body = el("div")` fails the suite instead of shipping flush boxes.
-
-### v0.43.1 — the panel's stylesheet and script actually reach the browser _(2026-08-08)_
-
-`orc ui` shipped its whole design and never showed it. The token is required on
-every request, but a `<link>` and a `<script>` send no token of their own — so
-the page itself loaded `200` while `app.css` and `app.js` both came back `401`.
-What rendered was bare markup: default serif, a bulleted list of blue links, no
-theme, no animation, and every button inert because no script ever ran.
-
-The shell now goes out with the live token stamped onto both asset references.
-Doing it there — rather than with a cookie — keeps the token explicit per
-request, so no ambient credential exists for a cross-origin page to ride on.
-
-The auth tests all passed because each one fetched assets *with* a token the
-real browser never has. The new case follows the reference chain a browser
-actually walks: load the page, then fetch every URL it points at exactly as
-written, with nothing added.
-
-### v0.43.0 — `orc ui`: a control panel for everything that is not ai _(2026-08-08)_
-
-A new surface, and a boundary that defines it: **`orc ui` never runs a lane,
-never spawns `claude`, never calls a model API.** It is a local web panel for
-the deterministic half of ORC — settings, install health, run history,
-knowledge state, usage stats, and the mocked examples runs leave behind.
-
-```
-orc ui                # binds 127.0.0.1:9921 and opens a browser
-orc ui --fixtures     # canned data, no project needed
-orc ui --stop         # shut this project's server down
-```
-
-**The CLI got machine-readable first, and that ships value on its own.**
-`--json` now works on `config list`, `config profile`, `config recommend`,
-`where`, `version`, `wiki impact`, `pattern status`, `gotcha list`,
-`crosslink list|status`, `diy show`, `run show`, `pr stack status` and the new
-`orc mock list|show` — one object on stdout, and the command's normal exit code
-untouched (several of those codes are already contracts). ORC is scriptable now
-whether or not you ever open the panel.
-
-**The panel *is* the CLI.** Every read shells `node bin/cli.js <cmd> --json` and
-every write shells the real command, so the UI inherits the existing validators,
-the renamed-key aliasing and the shadowing announcements for free — and UI/CLI
-drift is structurally impossible rather than merely discouraged.
-
-**Shadowing is the feature.** Flip `opus5_only` on and the `fable5_*` rows
-desaturate, a lock slides in, and the score→model ladder morphs from the default
-8-band table to the 3-band effort ladder. The animation teaches the precedence
-rule instead of describing it. The ladder is read from the CLI's own table, so
-the panel adds no sixth copy of a table already mirrored in five places.
-
-**Maintenance is in scope, behind preview-then-apply.** `update`, `update
---prune`, `doctor --fix` and `upgrade` each show the CLI's own read-only preview
-first, name the exact command, and stay disabled until you have looked. A prune
-names **every** file it would delete — a count is not consent for a deletion.
-Two guards only a UI can offer: it warns when a run is still `waiting` (updating
-changes the skills that run resumes into) and when `upgrade` would land on a
-dirty tree.
-
-**It is treated as a write surface,** because it is one: loopback bind only, a
-random per-launch token on every call, a Host-header check against DNS
-rebinding, no CORS headers at all, POST-only mutations. A forgotten server
-shuts itself down — ~1 minute after the last tab closes, or after 30 idle
-minutes.
-
-**Project-scoped, no `--global`.** Config does not merge, so a panel editing two
-scopes would be genuinely ambiguous. If a global install exists that can win
-skill resolution, every page carries a banner saying so — reported, never
-edited from here.
-
-**Zero dependencies, zero build step**, as ever: `node:http`, vanilla JS,
-hand-written CSS. Edit `app.css`, hit refresh.
+**The upgrade spotlight was pointing off the bottom of the screen.** The upgrade
+row is the fourth action on Maintenance and sits below the fold on a normal
+window, so arriving from the changelog's "go upgrade" drew the ring at y≈760 in
+a 720px viewport: a popover floating near the bottom, pointing at nothing. A
+spotlight now scrolls its target into view first — instantly, not smoothly, since
+a smooth scroll needs frames to land and a spotlight that is only correct in a
+foregrounded tab is not correct. It also freezes the panel's entrance
+animations while a step is up: `panel-in` and `block-in` both animate
+`transform`, and a running transform animation is a stacking context, which was
+deciding the ring/popover ladder by accident of timing instead of by the
+documented z-index order.
 
 <details>
 <summary><b>Previous versions</b> (click to expand)</summary>
+
+### v0.43.7 — the flow you can see, and a boundary you can read _(2026-08-09)_
+
+### v0.43.6 — `orc ui` in two languages, and panels that point at the right page _(2026-08-08)_
+
+### v0.43.5 — the update check works, and the UI teaches itself _(2026-08-08)_
+
+### v0.43.4 — a warning that finally clears, an Experiment panel, crosslink from the UI _(2026-08-08)_
+
+### v0.43.3 — `orc ui`: it tells you about updates, and 36 keys stop being a wall _(2026-08-08)_
+
+### v0.43.2 — `orc ui`: boxes stop colliding, because the container owns the gap _(2026-08-08)_
+
+### v0.43.1 — the panel's stylesheet and script actually reach the browser _(2026-08-08)_
+
+### v0.43.0 — `orc ui`: a control panel for everything that is not ai _(2026-08-08)_
 
 ### v0.42.0 — Say what you mean, see what it costs, find your way back _(2026-08-08)_
 

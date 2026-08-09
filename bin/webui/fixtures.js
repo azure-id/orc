@@ -296,16 +296,28 @@ module.exports.get = function get(route, q) {
           { id: "prune", label: "Update AND delete ORC-named orphans from a pre-manifest install", command: "orc update --prune", network: false, names_files: true },
           { id: "fix", label: "Apply every fix orc doctor found (= update + prune + settings re-merge)", command: "orc doctor --fix", network: false, names_files: false },
           { id: "upgrade", label: "Fetch the LATEST package from the network, then apply it", command: "orc upgrade", network: true, names_files: false },
+          { id: "update-global", label: "Re-copy this package's payload over the GLOBAL install in ~/.claude", command: "orc update --global", network: false, names_files: false, advanced: true },
         ],
       };
     case "/api/maintenance/preview":
       return {
         action: q.action,
         label: "Preview (fixtures)",
-        command: "orc " + (q.action === "prune" ? "update --prune" : q.action === "fix" ? "doctor --fix" : q.action === "upgrade" ? "upgrade" : "update"),
+        command:
+          "orc " +
+          (q.action === "prune"
+            ? "update --prune"
+            : q.action === "fix"
+              ? "doctor --fix"
+              : q.action === "upgrade"
+                ? "upgrade"
+                : q.action === "update-global"
+                  ? "update --global"
+                  : "update"),
         network: q.action === "upgrade",
         names_files: q.action === "prune",
-        preview_command: "orc doctor",
+        advanced: q.action === "update-global",
+        preview_command: q.action === "update-global" ? "orc doctor --global" : "orc doctor",
         preview: doctor,
         waiting_runs: ["merchant-notifications", "refund-webhook-retry"],
         dirty_tree: true,
@@ -348,22 +360,34 @@ const diy = {
   triggers: ["config changed since the last compile", "orc updated 0.41.0 → 0.43.0"],
   configured: true,
   paths: { config: PROJECT + "/.claude/orc-diy.config.yaml", compiled: PROJECT + "/.claude/orc/diy/FLOW-COMPILED.md", lock: PROJECT + "/.claude/orc/diy/flow.lock.json" },
+  // `options` is the key's closed set (v0.44.0) and the panel turns it into a
+  // dropdown. The fixture carries all three shapes on purpose: an ordinary
+  // enum, a NUMERIC set (rubric_bands — every band, not just the current one),
+  // `options: null` free text (flow_name), and the ugly one — `fixed_executor`
+  // holding the empty value, which is NOT in its own option list.
   keys: [
-    { key: "flow_name", value: "lean", default: "custom", is_set: true, desc: "Name shown in the compiled flow." },
-    { key: "wiki_gate", value: "notice", default: "notice", is_set: false, desc: "Wiki freshness at preflight." },
-    { key: "analyze", value: "off", default: "full", is_set: true, desc: "Analyst phase." },
-    { key: "planning", value: "own-planner", default: "auto", is_set: true, desc: "Planning route." },
-    { key: "pattern", value: "ask", default: "ask", is_set: false, desc: "Code-pattern gate on a cache miss." },
-    { key: "scoring", value: "on", default: "on", is_set: false, desc: "Rubric scoring." },
-    { key: "review", value: "blocking-only", default: "full", is_set: true, desc: "Review phase depth." },
-    { key: "security", value: "off", default: "off", is_set: false, desc: "Security pass." },
-    { key: "verify", value: "smoke", default: "full", is_set: true, desc: "Verification depth." },
-    { key: "testgen", value: "off", default: "off", is_set: false, desc: "Test-authoring phase." },
-    { key: "mock_example", value: "ask", default: "ask", is_set: false, desc: "Post-verify mocked example." },
-    { key: "ship_mode", value: "ask", default: "ask", is_set: false, desc: "Terminal ship behavior." },
-    { key: "summary", value: "off", default: "full", is_set: true, desc: "Summary depth." },
-    { key: "tdd", value: "on", default: "on", is_set: false, desc: "TDD gate." },
-    { key: "session_tier", value: "opus-4-8-high", default: "opus-4-8-high", is_set: false, desc: "Declared main-session tier." },
+    { key: "flow_name", value: "lean", default: "custom", is_set: true, desc: "Name shown in the compiled flow.", options: null },
+    { key: "wiki_gate", value: "notice", default: "notice", is_set: false, desc: "Wiki freshness at preflight.", options: ["notice", "off", "hard"] },
+    { key: "analyze", value: "off", default: "full", is_set: true, desc: "Analyst phase.", options: ["auto", "off", "mini", "full"] },
+    { key: "planning", value: "own-planner", default: "auto", is_set: true, desc: "Planning route.", options: ["auto", "own-planner", "superpowers", "openspec"] },
+    { key: "pattern", value: "ask", default: "ask", is_set: false, desc: "Code-pattern gate on a cache miss.", options: ["ask", "off", "on"] },
+    { key: "scoring", value: "on", default: "on", is_set: false, desc: "Rubric scoring.", options: ["on", "off"] },
+    { key: "fixed_executor", value: "", default: "", is_set: false, desc: "Executor used for every task when scoring is off.", options: ["orc-executor-haiku-4-5", "orc-executor-sonnet-4-6-med", "orc-executor-sonnet-5-high", "orc-executor-opus-4-8-high", "orc-executor-opus-5-high"] },
+    { key: "review", value: "blocking-only", default: "full", is_set: true, desc: "Review phase depth.", options: ["on", "off", "blocking-only"] },
+    { key: "security", value: "off", default: "off", is_set: false, desc: "Security pass.", options: ["off", "ask", "on", "always"] },
+    { key: "verify", value: "smoke", default: "full", is_set: true, desc: "Verification depth.", options: ["full", "off", "smoke"] },
+    { key: "testgen", value: "off", default: "off", is_set: false, desc: "Test-authoring phase.", options: ["off", "ask", "on"] },
+    { key: "mock_example", value: "ask", default: "ask", is_set: false, desc: "Post-verify mocked example.", options: ["ask", "on", "off"] },
+    { key: "ship_mode", value: "ask", default: "ask", is_set: false, desc: "Terminal ship behavior.", options: ["ask", "commit", "pr", "report-only"] },
+    { key: "summary", value: "off", default: "full", is_set: true, desc: "Summary depth.", options: ["full", "off", "short"] },
+    { key: "tdd", value: "on", default: "on", is_set: false, desc: "TDD gate.", options: ["on", "off"] },
+    { key: "rubric_bands", value: 5, default: 5, is_set: false, desc: "Scoring granularity (scoring on only).", options: [2, 3, 4, 5, 6, 7, 8] },
+    { key: "session_tier", value: "opus-4-8-high", default: "opus-4-8-high", is_set: false, desc: "Declared main-session tier.", options: ["sonnet-4-6-high", "opus-4-7-high", "opus-4-8-high", "opus-5-high", "opus-5-max", "fable-5-high"] },
+  ],
+  presets: [
+    { name: "lean", changes: { analyze: "off", review: "blocking-only", verify: "smoke", summary: "short", flow_name: "lean" } },
+    { name: "paranoid", changes: { analyze: "full", security: "always", testgen: "on", verify: "full", flow_name: "paranoid" } },
+    { name: "solo-fast", changes: { scoring: "off", fixed_executor: "orc-executor-sonnet-5-high", review: "off", verify: "smoke", autonomy: "semi", flow_name: "solo-fast" } },
   ],
   errors: [],
   warnings: ["tdd is on but verify is smoke — the red proof gates less than it could"],

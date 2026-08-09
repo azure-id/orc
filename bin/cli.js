@@ -1993,7 +1993,17 @@ function diyShow(claudeDir) {
         default: m.def,
         is_set: !!(map && m.key in map),
         desc: m.desc,
+        // The CLOSED SET this key accepts, straight off DIY_META (v0.44.0). A
+        // consumer that has to know the legal values otherwise has to keep its
+        // own copy of them, and a copy of a closed set is drift by definition —
+        // `orc ui` renders these as a dropdown so a flow key can never be
+        // mistyped. `null` means the key is free text (flow_name is a slug).
+        options: m.options ? m.options.map(String) : null,
       })),
+      // The bootstrap catalog the interactive composer offers. `changes` is the
+      // preset's own diff against the defaults — the same list the TTY wizard
+      // prints beside each name.
+      presets: Object.entries(DIY_PRESETS).map(([name, changes]) => ({ name, changes })),
       errors: v.errors,
       warnings: v.warnings,
       // The compiled pipeline, in stitch order — see DIY_STEPS.
