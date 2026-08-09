@@ -366,7 +366,7 @@ const diy = {
   // `options: null` free text (flow_name), and the ugly one — `fixed_executor`
   // holding the empty value, which is NOT in its own option list.
   keys: [
-    { key: "flow_name", value: "lean", default: "custom", is_set: true, desc: "Name shown in the compiled flow.", options: null },
+    { key: "flow_name", value: "my-lean", default: "custom", is_set: true, desc: "Name shown in the compiled flow.", options: null },
     { key: "wiki_gate", value: "notice", default: "notice", is_set: false, desc: "Wiki freshness at preflight.", options: ["notice", "off", "hard"] },
     { key: "analyze", value: "off", default: "full", is_set: true, desc: "Analyst phase.", options: ["auto", "off", "mini", "full"] },
     { key: "planning", value: "own-planner", default: "auto", is_set: true, desc: "Planning route.", options: ["auto", "own-planner", "superpowers", "openspec"] },
@@ -379,15 +379,20 @@ const diy = {
     { key: "testgen", value: "off", default: "off", is_set: false, desc: "Test-authoring phase.", options: ["off", "ask", "on"] },
     { key: "mock_example", value: "ask", default: "ask", is_set: false, desc: "Post-verify mocked example.", options: ["ask", "on", "off"] },
     { key: "ship_mode", value: "ask", default: "ask", is_set: false, desc: "Terminal ship behavior.", options: ["ask", "commit", "pr", "report-only"] },
-    { key: "summary", value: "off", default: "full", is_set: true, desc: "Summary depth.", options: ["full", "off", "short"] },
+    { key: "summary", value: "short", default: "full", is_set: true, desc: "Summary depth.", options: ["full", "off", "short"] },
     { key: "tdd", value: "on", default: "on", is_set: false, desc: "TDD gate.", options: ["on", "off"] },
     { key: "rubric_bands", value: 5, default: 5, is_set: false, desc: "Scoring granularity (scoring on only).", options: [2, 3, 4, 5, 6, 7, 8] },
     { key: "session_tier", value: "opus-4-8-high", default: "opus-4-8-high", is_set: false, desc: "Declared main-session tier.", options: ["sonnet-4-6-high", "opus-4-7-high", "opus-4-8-high", "opus-5-high", "opus-5-max", "fable-5-high"] },
   ],
+  // The bootstrap catalog, empty name first (= full-lane defaults, no --preset
+  // flag). `lean` is ACTIVE here even though this flow was renamed away from
+  // it — that is the state the "in use" chip exists for, and you cannot design
+  // it against a catalog where nothing matches.
   presets: [
-    { name: "lean", changes: { analyze: "off", review: "blocking-only", verify: "smoke", summary: "short", flow_name: "lean" } },
-    { name: "paranoid", changes: { analyze: "full", security: "always", testgen: "on", verify: "full", flow_name: "paranoid" } },
-    { name: "solo-fast", changes: { scoring: "off", fixed_executor: "orc-executor-sonnet-5-high", review: "off", verify: "smoke", autonomy: "semi", flow_name: "solo-fast" } },
+    { name: "", changes: {}, active: false },
+    { name: "lean", changes: { analyze: "off", review: "blocking-only", verify: "smoke", summary: "short", flow_name: "lean" }, active: true },
+    { name: "paranoid", changes: { analyze: "full", security: "always", testgen: "on", verify: "full", flow_name: "paranoid" }, active: false },
+    { name: "solo-fast", changes: { scoring: "off", fixed_executor: "orc-executor-sonnet-5-high", review: "off", verify: "smoke", autonomy: "semi", flow_name: "solo-fast" }, active: false },
   ],
   errors: [],
   warnings: ["tdd is on but verify is smoke — the red proof gates less than it could"],
@@ -409,7 +414,7 @@ const diy = {
     { block: "testgen", label: "testgen", key: "testgen", value: "off", on: false, note: "off" },
     { block: "mock-example", label: "mock", key: "mock_example", value: "ask", on: true, note: "ask" },
     { block: "ship", label: "ship", key: "ship_mode", value: "ask", on: true, note: "ask" },
-    { block: "summary", label: "summary", key: "summary", value: "off", on: false, note: "off" },
+    { block: "summary", label: "summary", key: "summary", value: "short", on: true, note: "short" },
   ],
   score_table: "| Score | Executor agent |\n|-------|----------------|\n| [0,30) | orc-executor-haiku-4-5 |\n| [90,100] | orc-executor-opus-4-8-high |",
 };

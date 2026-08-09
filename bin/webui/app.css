@@ -633,9 +633,13 @@ pre.block.wrap { white-space: pre-wrap; word-break: break-word; }
 }
 .banner-update:hover { background: var(--surface-3); transform: translateY(-1px); }
 .banner-update .note { color: var(--text-dim); }
+/* All three children on ONE vertical centre line (v0.44.1). The badge used to
+   be `align-self: flex-start` while the row was `align-items: center` and the
+   CTA sat on the centre — three items, three different alignments, in a row
+   that is 69px tall. Nothing about a "NEW" pill wants to be pinned to the top
+   of a two-line message. */
 .banner-badge {
   flex: none;
-  align-self: flex-start;
   background: var(--accent);
   color: #fff;
   border-radius: 100px;
@@ -651,11 +655,15 @@ pre.block.wrap { white-space: pre-wrap; word-break: break-word; }
 }
 
 .cl-entry { border-left: 2px solid var(--line); padding-left: var(--sp-3); }
-.cl-head { display: flex; align-items: baseline; gap: var(--sp-2); }
+.cl-head { display: flex; align-items: baseline; gap: var(--sp-2); flex-wrap: wrap; }
 .cl-version { font-family: var(--mono); font-size: 13px; color: var(--accent); font-weight: 600; }
-.cl-date { font-size: 11px; color: var(--text-faint); }
+.cl-date { font-size: 11px; color: var(--text-faint); margin-left: auto; }
 .cl-title { font-size: 13px; font-weight: 600; margin-top: 2px; }
-.cl-body { font-size: 12.5px; color: var(--text-dim); white-space: pre-wrap; margin-top: var(--sp-2); line-height: 1.6; }
+/* `pre-wrap` is still right — the body carries real paragraph breaks — but the
+   text reaching it has been REFLOWED first (see `reflowMd`), so a paragraph is
+   one long line that wraps to this box instead of the README's 78-column
+   hard wraps ending raggedly in the middle of it. */
+.cl-body { font-size: 12.5px; color: var(--text-dim); white-space: pre-wrap; margin-top: var(--sp-2); line-height: 1.6; overflow-wrap: anywhere; }
 
 /* Loading is a skeleton shimmer, never a spinner. */
 .skeleton {
@@ -1284,6 +1292,58 @@ button.step-off:hover { border-color: var(--bad); background: rgba(240, 83, 63, 
   transition: border-color var(--dur-fast) var(--ease);
 }
 .preset-row:hover { border-color: var(--accent-dim); }
+.preset-head { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
+/* The shape you are already on. It keeps its row (removing it would make "you
+   are on lean" and "lean does not exist" look the same) and loses its button. */
+.preset-active { border-color: var(--ok); background: var(--ok-wash); }
+.preset-active:hover { border-color: var(--ok); }
+
+/* --- Staged edits -------------------------------------------------------- */
+
+/* A row with an unwritten change. The marker is on the LEFT edge and the label
+   is beside the key, because the control itself already shows the new value —
+   what is missing without this is "and it has not been written yet". */
+.setting.staged {
+  border-left: 2px solid var(--accent);
+  padding-left: calc(var(--sp-3) - 2px);
+  background: var(--accent-wash);
+}
+
+.edit-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  flex-wrap: wrap;
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  transition: border-color var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease);
+}
+/* It follows you ONLY while there is something to lose. A permanently sticky
+   bar is a permanently smaller viewport; a bar you have to scroll to find is an
+   Apply that gets forgotten. Dirty is the one state where both matter. */
+.edit-bar-dirty {
+  position: sticky;
+  bottom: var(--sp-4);
+  z-index: 6;
+  border-color: var(--accent-dim);
+  background: var(--surface-3);
+  box-shadow: var(--shadow);
+}
+.edit-summary { flex: 1 1 260px; min-width: 0; }
+.edit-actions { display: flex; gap: var(--sp-2); flex: none; margin-left: auto; }
+.edit-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 5px; }
+.edit-chip {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 100px;
+  padding: 1px 9px;
+}
+.edit-key { color: var(--accent); }
 
 /* --- Crosslink ----------------------------------------------------------- */
 

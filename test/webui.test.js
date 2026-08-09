@@ -256,7 +256,11 @@ test("run show --json carries the resume text, the checkpoint and the trace tail
 
 // Start `orc ui` and wait for its lock file, which is written only after a
 // successful bind — so this never races the listen.
-function startServer(root, extraArgs) {
+// `until` exists for the one test that starts a server against a lock file that
+// ALREADY EXISTS (the stale-pid case). Without it this polls, reads the stale
+// lock before the server has replaced it, and resolves with the very token the
+// test is asserting must never be reused — a flake in the test, not the product.
+function startServer(root, extraArgs, until) {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [CLI, "ui", "--dir", root, "--no-open", ...(extraArgs || [])], {
       env: { ...process.env, ORC_NO_UPDATE_CHECK: "1", NO_COLOR: "1" },
@@ -271,7 +275,7 @@ function startServer(root, extraArgs) {
       try {
         lock = JSON.parse(fs.readFileSync(path.join(root, LOCK_REL), "utf8"));
       } catch (_) {}
-      if (lock && lock.port) {
+      if (lock && lock.port && (!until || until(lock))) {
         clearInterval(poll);
         resolve({ child, lock });
         return;
@@ -777,7 +781,7 @@ test("flow presets: the bootstrap shapes are the CLI's, and applying one is conf
   const api = fs.readFileSync(path.join(REPO, "bin", "webui", "api.js"), "utf8");
   const cli = fs.readFileSync(path.join(REPO, "bin", "cli.js"), "utf8");
 
-  assert.match(cli, /presets: Object\.entries\(DIY_PRESETS\)/, "diy show --json must publish the preset catalog");
+  assert.match(cli, /\.\.\.Object\.entries\(DIY_PRESETS\)\.map/, "diy show --json must publish the preset catalog");
   const fn = js.slice(js.indexOf("function presetCard"), js.indexOf("function confirmPreset"));
   assert.match(fn, /d\.presets/, "the panel must render the CLI's presets, not its own list");
   // The names are the CLI's; the panel must not carry a copy of them.
@@ -795,6 +799,123 @@ test("flow presets: the bootstrap shapes are the CLI's, and applying one is conf
   const confirm = js.slice(js.indexOf("function confirmPreset"), js.indexOf("function confirmPreset") + 1600);
   assert.match(confirm, /modal\(/, "applying a preset must be confirmed");
   assert.ok(en["flow.presetOverwrite"], "the confirmation must say what is replaced");
+});
+
+// v0.44.1 — the preset you are already on must not offer to overwrite itself.
+test("flow presets: the active shape is CLI-detected and ignores the flow's name", () => {
+  const cli = fs.readFileSync(path.join(REPO, "bin", "cli.js"), "utf8");
+  const js = fs.readFileSync(path.join(REPO, "bin", "webui", "app.js"), "utf8");
+
+  const show = cli.slice(cli.indexOf("function diyShow"), cli.indexOf("function diyInteractive"));
+  // flow_name is a LABEL. Renaming `solo-fast` to `solo` must not make the
+  // panel forget which shape the flow came from, so it is excluded from the
+  // match on both the defaults row and every preset row.
+  const excl = show.match(/k === "flow_name"/g) || [];
+  const exclDefaults = show.match(/m\.key === "flow_name"/g) || [];
+  assert.ok(excl.length >= 1 && exclDefaults.length >= 1, "the match must exclude flow_name on both rows");
+  assert.match(show, /active: !!cfg && Object\.entries\(changes\)\.every/, "a preset is active when every key it sets still holds that value");
+  // The empty-name row is the wizard's own first option, not a UI invention.
+  assert.match(show, /\{ name: "", changes: \{\}, active:/, "the catalog must lead with full-lane defaults");
+
+  const fn = js.slice(js.indexOf("function presetCard"), js.indexOf("const presetCommand"));
+  assert.match(fn, /p\.active/, "the panel must read the CLI's verdict, not recompute it");
+  assert.match(fn, /if \(!p\.active\)/, "the active row must not render a Use button");
+  assert.match(fn, /preset-active/, "the active row is marked so the stylesheet can show it");
+  // It keeps its ROW: removing it would make "you are on lean" and "lean does
+  // not exist" render identically.
+  assert.ok(!/presets\.filter/.test(fn), "an active preset keeps its row, it is never filtered out");
+});
+
+// v0.44.1 — writes are BATCHED. Every control used to commit on the spot: one
+// click, one subprocess, one full re-render that scrolled the list away.
+test("edits: nothing is written until Apply, on Settings and on Flow alike", () => {
+  const js = fs.readFileSync(path.join(REPO, "bin", "webui", "app.js"), "utf8");
+
+  assert.match(js, /function editSet\(/, "there must be one staging mechanism");
+  assert.match(js, /function editBar\(/, "and one bar that commits it");
+  // Staging a value back to what it already was must CLEAR the edit, or Cancel
+  // and "set it back by hand" would disagree about whether anything is pending.
+  const set = js.slice(js.indexOf("    set(key, value, original) {"), js.indexOf("    reset(key) {"));
+  assert.match(set, /map\.delete\(key\)/, "re-staging the original value must drop the edit");
+
+  // No control may write directly any more.
+  const control = js.slice(js.indexOf("function controlFor(k, edits)"), js.indexOf("// The Settings edit bar."));
+  assert.ok(!/post\(/.test(control), "a Settings control must stage, never post");
+  assert.match(control, /edits\.set\(k\.key/, "it stages against the edit set");
+  // Nothing re-renders until Apply, so a control has to repaint its own state.
+  assert.match(control, /const paint = \(v\) =>/, "a segmented control must follow its own click");
+
+  const flow = js.slice(js.indexOf("async function renderFlow"), js.indexOf("function bannerLine"));
+  assert.match(flow, /editSet\(/, "the flow keys stage too");
+  assert.match(flow, /keys\.append\(bar\)/, "the flow bar sits at the bottom of the keys card");
+
+  // Apply runs the staged writes one at a time and never aborts the rest — the
+  // remaining writes are independent, and stopping halfway leaves a state
+  // nobody chose.
+  const apply = js.slice(js.indexOf("async function applyEdits"), js.indexOf("function settingRow"));
+  assert.match(apply, /for \(const \[key, e\] of list\)/, "writes run in staged order");
+  assert.ok(!/break;/.test(apply), "a refused write must not abort the remaining ones");
+  assert.match(apply, /failed\.push/, "every failure is reported by key");
+
+  // Cancel is offered ONLY when there is something to cancel.
+  const bar = js.slice(js.indexOf("function editBar(edits,"), js.indexOf("// Apply runs the staged writes"));
+  assert.match(bar, /if \(n\) actions\.append\(cancel\)/, "Cancel appears only while dirty");
+  assert.match(bar, /apply\.disabled = n === 0/, "Apply is inert with nothing staged");
+  // A count is not a change list: the pending keys are named.
+  assert.match(bar, /edit-chip/, "the pending edits must be named, not counted");
+
+  for (const k of ["edits.apply", "edits.cancel", "edits.resetAll", "edits.pending"]) {
+    assert.ok(en[k], `the edit bar needs a label for ${k}`);
+  }
+});
+
+// v0.44.1 — the ring is `position: fixed` at coordinates measured ONCE, and
+// this page grows things above the fold on its own schedule: the update banner
+// lands after a network check, doctor's banners after that, and the upgrade row
+// fills in a version chip of its own. Every one pushed the target down and left
+// the spotlight framing empty space.
+test("tour: a spotlight re-places itself when the page grows under it", () => {
+  const js = fs.readFileSync(path.join(REPO, "bin", "webui", "app.js"), "utf8");
+  const fn = js.slice(js.indexOf("function spotlight({"), js.indexOf("// The first-run walkthrough"));
+
+  assert.match(fn, /new ResizeObserver\(reflow\)/, "a height change anywhere must re-place the ring");
+  assert.match(fn, /getElementById\("banners"\)/, "the banner host is the one that grows late");
+
+  // A ResizeObserver alone is not enough: it is delivered from the RENDERING
+  // lifecycle, so a throttled tab — exactly the tab somebody comes back to —
+  // never gets the callback. The MutationObserver runs off the microtask queue.
+  assert.match(fn, /new MutationObserver\(/, "there must be a frame-independent trigger too");
+  assert.match(fn, /mo\.observe\(document\.body, \{ childList: true, subtree: true/, "it must watch the whole document, not one host");
+  // Attributes are the one thing it must NOT watch: `place()` writes inline
+  // styles on the ring and popover, so observing them is an infinite loop.
+  assert.ok(!/attributes:\s*true/.test(fn), "observing attributes would make place() trigger itself forever");
+  assert.match(fn, /if \(queued\) return;/, "mutations must coalesce to one reflow per task");
+  assert.match(fn, /ro\.disconnect\(\)/, "the observers must be released on cleanup");
+  assert.match(fn, /mo\.disconnect\(\)/, "the observers must be released on cleanup");
+
+  // keepInView must NOT be wired to the scroll listener — a spotlight that
+  // scrolls back every time you scroll away is one you cannot get out of.
+  assert.match(fn, /const onResize = \(\) => place\(\);/, "scrolling only re-places, it never re-scrolls");
+  assert.match(fn, /if \(!target \|\| adjusting\) return;/, "the re-scroll must not recurse through its own scroll event");
+});
+
+// v0.44.1 — the changelog is this repo's README, hard-wrapped at ~78 columns,
+// rendered `pre-wrap` into a 660px box: every authoring line break survived and
+// the paragraphs came out as a ragged stack ending nowhere near the right edge.
+test("changelog: the body is reflowed to the box, and the banner lines up", () => {
+  const js = fs.readFileSync(path.join(REPO, "bin", "webui", "app.js"), "utf8");
+  const css = fs.readFileSync(path.join(REPO, "bin", "webui", "app.css"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+
+  assert.match(js, /function reflowMd\(/, "the body must be reflowed before it is rendered");
+  assert.match(js, /reflowMd\(stripMd\(e\.body\)\)/, "and the modal must actually use it");
+
+  // The three children of the update banner used to sit on three different
+  // alignments: badge at the top, text at the top, CTA on the centre.
+  assert.ok(
+    !/\.banner-badge\s*\{[^}]*align-self:\s*flex-start/.test(css),
+    "the NEW pill must not be pinned to the top of a two-line message"
+  );
+  assert.match(css, /\.banner-update\s*\{[^}]*align-items:\s*center/, "the banner row centres its children");
 });
 
 // v0.44.0 — the one action on Maintenance that does not target this project.
@@ -1068,7 +1189,8 @@ test("ui: a lock whose pid is dead is stale — cleaned, never trusted", async (
       path.join(root, LOCK_REL),
       JSON.stringify({ pid: 999999, port: 9999, token: "stale", started_ms: 1 })
     );
-    srv = await startServer(root);
+    // Wait for the lock the SERVER wrote, not the stale one already on disk.
+    srv = await startServer(root, [], (lock) => lock.pid !== 999999);
     assert.notStrictEqual(srv.lock.token, "stale", "a stale lock must never be reused");
     assert.ok(srv.lock.pid !== 999999, "the new lock records the live pid");
   } finally {

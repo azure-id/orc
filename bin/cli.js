@@ -2000,10 +2000,25 @@ function diyShow(claudeDir) {
         // mistyped. `null` means the key is free text (flow_name is a slug).
         options: m.options ? m.options.map(String) : null,
       })),
-      // The bootstrap catalog the interactive composer offers. `changes` is the
-      // preset's own diff against the defaults — the same list the TTY wizard
-      // prints beside each name.
-      presets: Object.entries(DIY_PRESETS).map(([name, changes]) => ({ name, changes })),
+      // The bootstrap catalog the interactive composer offers, in the SAME
+      // order and with the same first option: an empty `name` is the wizard's
+      // "full-lane defaults" (a bare `orc diy init`, no --preset flag).
+      // `changes` is the preset's own diff against the defaults.
+      //
+      // `active` answers "am I on this one?" (v0.44.1) — a preset is IN USE
+      // when every key it sets still holds that value. **`flow_name` is
+      // excluded**: it is a label the user is free to rename, and renaming
+      // `solo-fast` to `solo` must not make this forget where the flow came
+      // from. A preset whose keys were all kept is still the shape you are on,
+      // whatever else was tuned around it.
+      presets: [
+        { name: "", changes: {}, active: !!cfg && DIY_META.every((m) => m.key === "flow_name" || String(cfg[m.key]) === String(m.def)) },
+        ...Object.entries(DIY_PRESETS).map(([name, changes]) => ({
+          name,
+          changes,
+          active: !!cfg && Object.entries(changes).every(([k, v]) => k === "flow_name" || String(cfg[k]) === String(v)),
+        })),
+      ],
       errors: v.errors,
       warnings: v.warnings,
       // The compiled pipeline, in stitch order — see DIY_STEPS.

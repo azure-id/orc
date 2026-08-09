@@ -6,7 +6,7 @@
 
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
-![Version](https://img.shields.io/badge/version-0.44.0-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.44.1-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
@@ -46,66 +46,48 @@ zero-dependency npm package installs those files into your `.claude/` directory.
 
 ## Changelog
 
-**Latest: v0.44.0 — updated 2026-08-09.**
+**Latest: v0.44.1 — updated 2026-08-09.**
 
-### v0.44.0 — the panel stops making you type what it already knows _(2026-08-09)_
+### v0.44.1 — apply when you say so, and a spotlight that survives a banner _(2026-08-09)_
 
-Five things on `orc ui` that were technically usable and practically annoying.
+**Nothing is written until you press Apply.** Every control on Settings and on
+Flow used to commit the instant you touched it: one click, one CLI subprocess,
+one full re-render that scrolled the list out from under you. Changing five keys
+was five of those. Edits are staged now — the rows mark themselves, an edit bar
+names each pending change (a count is not a change list), and Apply runs them in
+the order you staged them. A refused write does not abort the rest; it is
+reported by key. **Discard appears only when there is something to discard**, and
+**Reset** is the CLI's own `orc config reset` / `orc diy init --force`, confirmed.
+The bar sticks to the bottom of the viewport only while something is pending.
 
-**A flow key is a closed set, so it is a dropdown now.** Every key on the Flow
-panel accepted a handful of exact words and gave you a text box — a memory test
-with a rejection at the end of it. `orc diy show --json` now publishes each
-key's `options` straight off `DIY_META`, and the panel renders them as a
-dropdown: every band for `rubric_bands`, every tier for `session_tier`, every
-executor for `fixed_executor`. The list is the CLI's, never a copy — a second
-idea of what a key accepts would show you a value `orc diy set` then refuses.
-Only `flow_name` stays free text, because a slug is not a closed set. A value
-outside its own set (an unset `fixed_executor`) is still shown, and shown as
-unpickable.
+**The Flow preset you are already on says so and stops offering itself.**
+`orc diy show --json` now marks each preset `active`, and the match deliberately
+ignores `flow_name` — rename `solo-fast` to `solo` and it is still recognised as
+solo-fast. A button whose only possible effect is to overwrite your config with
+itself is not a button.
 
-**You can start a flow from a preset without opening a terminal.** `orc diy`
-opens by asking which shape to begin from — full-lane defaults, `lean`,
-`paranoid`, `solo-fast` — and that question had no answer in this panel at all.
-It is now a card directly under the gate, each row naming the keys that preset
-actually changes and the exact command before you press it. Applying one shells
-`orc diy init --force`, which REPLACES the config, so it is confirmed and the
-loss is named rather than implied by the word "force".
+**The spotlight stopped breaking when the page grew under it.** The ring is
+`position: fixed` at coordinates measured once, and this page adds things above
+the fold on its own schedule — the blue update banner after a network check,
+doctor's banners after that, a version chip filling into the upgrade row. Each
+one pushed the target down and left the ring framing empty space above it. It now
+re-places on any layout change, through a ResizeObserver **and** a
+MutationObserver: the observer is the right instrument but is delivered from the
+rendering lifecycle, so a throttled tab — exactly the tab somebody comes back
+to — never gets the callback.
 
-**The pipeline sweep loops, and the scrollbar stopped shouting.** The stepper's
-light ran once, said the one thing that card exists to say — these run in this
-order — before the card had finished arriving, and could not be seen again
-short of a recompile. It now runs on a long, mostly-idle cycle: one pulse
-travels the rail, then the rail rests. `prefers-reduced-motion` removes it
-outright rather than capping it, which would freeze a connector mid-collapse.
-The platform scrollbar underneath it — an opaque slab with its own track
-colour — cut a hard grey band across the bottom of a card meant to be read as a
-diagram; every scrolling box now has a transparent track and a thin rounded
-thumb that only reaches full contrast on hover.
-
-**`orc update --global` is a button, in an Advanced box.** A stale global
-install is a failure this panel already reported — the persistent banner, and
-doctor's version-skew finding — and could only tell you to go fix in a terminal.
-It is the one action here that does not target the current project, so it is
-boxed off below the upgrade row, its preview reads the same place the apply
-writes (`orc doctor --global`, not the project doctor), and the confirmation
-says plainly that every project on the machine sees the result. Config is still
-never written globally: config does not merge, and a global write would silently
-outrank the project file every other panel edits.
-
-**The upgrade spotlight was pointing off the bottom of the screen.** The upgrade
-row is the fourth action on Maintenance and sits below the fold on a normal
-window, so arriving from the changelog's "go upgrade" drew the ring at y≈760 in
-a 720px viewport: a popover floating near the bottom, pointing at nothing. A
-spotlight now scrolls its target into view first — instantly, not smoothly, since
-a smooth scroll needs frames to land and a spotlight that is only correct in a
-foregrounded tab is not correct. It also freezes the panel's entrance
-animations while a step is up: `panel-in` and `block-in` both animate
-`transform`, and a running transform animation is a stacking context, which was
-deciding the ring/popover ladder by accident of timing instead of by the
-documented z-index order.
+**The changelog reads like prose again.** It is this repo's README, hard-wrapped
+at 78 columns, rendered `pre-wrap` into a 660px box: every authoring line break
+survived and the paragraphs came out as a ragged stack ending nowhere near the
+right edge. Paragraphs are reflowed to the box now (blank lines still break,
+bullets still get their own line), the entry date is right-aligned to the same
+edge the version starts from, and the update banner's three children — badge,
+message, "Read →" — finally sit on one centre line instead of three.
 
 <details>
 <summary><b>Previous versions</b> (click to expand)</summary>
+
+### v0.44.0 — the panel stops making you type what it already knows _(2026-08-09)_
 
 ### v0.43.7 — the flow you can see, and a boundary you can read _(2026-08-09)_
 

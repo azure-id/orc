@@ -401,7 +401,7 @@ async function showChangelog(v) {
         if (e.date) h.append(el("span", "cl-date", e.date));
         sec.append(h);
         if (e.title) sec.append(el("div", "cl-title", stripMd(e.title)));
-        if (e.body) sec.append(el("div", "cl-body", stripMd(e.body)));
+        if (e.body) sec.append(el("div", "cl-body", reflowMd(stripMd(e.body))));
         slot.append(sec);
       }
       slot.append(el("div", "note", t("changelog.source", { src: d.source })));
@@ -425,6 +425,37 @@ function stripMd(s) {
     .replace(/^\s*[-*]\s+/gm, "• ")
     .replace(/\[(.+?)\]\((.+?)\)/g, "$1")
     .trim();
+}
+
+// REFLOW (v0.44.1). The changelog is this repo's own README, and that file is
+// hard-wrapped at ~78 columns. `.cl-body` renders `pre-wrap`, so every one of
+// those authoring line breaks survived into a 660px box: paragraphs came out as
+// a ragged stack of short lines that ended nowhere near the right edge, which
+// is exactly the "misaligned" the modal looked. The wrapping belongs to the
+// box, not to the source file.
+//
+// Blank lines are paragraph breaks and are KEPT; a bullet keeps its own line
+// (joining those would run a list into one sentence); everything else in a
+// paragraph joins with a space and wraps to whatever width it is given.
+function reflowMd(s) {
+  return String(s)
+    .split(/\n{2,}/)
+    .map((para) =>
+      para
+        .split("\n")
+        .reduce((lines, raw) => {
+          const line = raw.trim();
+          if (!line) return lines;
+          // A bullet opens a line; anything else continues the one before it,
+          // which is also how a bullet that wrapped in the source rejoins.
+          if (!lines.length || line.startsWith("• ")) lines.push(line);
+          else lines[lines.length - 1] += " " + line;
+          return lines;
+        }, [])
+        .join("\n")
+    )
+    .filter(Boolean)
+    .join("\n\n");
 }
 
 async function renderBanners() {
@@ -995,6 +1026,16 @@ async function renderSettings(body) {
 
   const out = frag();
 
+  // One edit set per render, so a re-render is also the discard: there is no
+  // way for a staged value to outlive the data it was staged against.
+  let bar = null;
+  const edits = editSet(() => {
+    if (bar) bar.paint();
+    for (const row of body.querySelectorAll(".setting[data-key]")) {
+      row.classList.toggle("staged", edits.map.has(row.dataset.key));
+    }
+  });
+
   const pathCard = card(t("settings.file.title"));
   pathCard.append(
     kvList([
@@ -1039,7 +1080,7 @@ async function renderSettings(body) {
     if (allInert) h.append(chip(t("settings.inert"), "warn"));
 
     const rows = el("div", "tier-rows");
-    for (const k of keys) rows.append(settingRow(k, body));
+    for (const k of keys) rows.append(settingRow(k, body, edits));
 
     // Collapse is height-animated rather than a display swap, so the rows below
     // it move with the section instead of teleporting.
@@ -1085,6 +1126,12 @@ async function renderSettings(body) {
     }
     out.append(c);
   }
+
+  // Last block on the panel, and it sticks to the bottom of the viewport once
+  // something is pending: with 36 keys across three tiers, an Apply you have to
+  // go looking for is an Apply that gets forgotten.
+  bar = settingsEditBar(edits, body);
+  out.append(bar);
 
   body.replaceChildren(out);
 }
@@ -1143,7 +1190,141 @@ function morphLadder(oldCard, newCard) {
   }
 }
 
-function settingRow(k, panelBody) {
+/* ============================================================ staged edits == */
+//
+// WRITES ARE BATCHED (v0.44.1). Every control used to commit on the spot: one
+// click, one `orc config set`, one full re-render of the panel. Changing four
+// keys meant four subprocesses and four re-renders, and each one scrolled the
+// list out from under you — so a routine "set these five things" was a fight.
+//
+// Nothing is written until Apply now. Edits accumulate here, the affected rows
+// mark themselves, and an edit bar at the bottom says how many are pending.
+// The CLI is still the only writer and still the only validator; what changed
+// is WHEN it is called, never by whom.
+//
+// An entry is `{kind: "set", value}` or `{kind: "reset"}` — a per-key reset is
+// `orc config reset <key>` (it REMOVES the key from the file), which is not the
+// same write as setting it to its default value, so it cannot be flattened into
+// one.
+function editSet(onChange) {
+  const map = new Map();
+  const api = {
+    map,
+    get size() {
+      return map.size;
+    },
+    // Staging a value back to what it already was CLEARS the edit rather than
+    // recording a no-op — otherwise "cancel" and "set it back by hand" would
+    // leave the bar claiming an unsaved change that would write nothing.
+    set(key, value, original) {
+      if (String(value) === String(original)) map.delete(key);
+      else map.set(key, { kind: "set", value: String(value), original: String(original) });
+      onChange(api);
+    },
+    reset(key) {
+      map.set(key, { kind: "reset" });
+      onChange(api);
+    },
+    drop(key) {
+      map.delete(key);
+      onChange(api);
+    },
+    clear() {
+      map.clear();
+      onChange(api);
+    },
+    entries() {
+      return [...map.entries()];
+    },
+  };
+  return api;
+}
+
+// The bar. Apply is disabled with nothing pending; Reset is always offered
+// (it is a write in its own right, not an undo); **Cancel appears only when
+// there is something to cancel** — a permanently visible Cancel next to a
+// disabled Apply reads as though the panel is broken.
+function editBar(edits, { onApply, onReset, onCancel, resetLabel }) {
+  const bar = el("div", "edit-bar");
+  const summary = el("div", "edit-summary");
+  const actions = el("div", "edit-actions");
+
+  const apply = el("button", "btn btn-sm btn-primary", t("edits.apply"));
+  apply.type = "button";
+  apply.addEventListener("click", () => onApply(apply));
+
+  const reset = el("button", "btn btn-sm btn-ghost", resetLabel || t("edits.reset"));
+  reset.type = "button";
+  reset.addEventListener("click", onReset);
+
+  const cancel = el("button", "btn btn-sm btn-ghost", t("edits.cancel"));
+  cancel.type = "button";
+  cancel.addEventListener("click", onCancel);
+
+  bar.paint = () => {
+    const n = edits.size;
+    bar.classList.toggle("edit-bar-dirty", n > 0);
+    apply.disabled = n === 0;
+    apply.textContent = n ? t("edits.applyN", { n }) : t("edits.apply");
+    // The pending list is named, never counted: "3 changes" is not consent for
+    // three writes you can no longer see.
+    summary.replaceChildren();
+    if (!n) {
+      summary.append(el("span", "note", t("edits.none")));
+    } else {
+      summary.append(el("span", "note", t("edits.pending")));
+      const list = el("div", "edit-list");
+      for (const [key, e] of edits.entries()) {
+        const item = el("span", "edit-chip");
+        // Key names and values are CLI data — never translated.
+        item.append(el("span", "edit-key", key));
+        item.append(document.createTextNode(e.kind === "reset" ? " → " + t("edits.toDefault") : " → " + e.value));
+        list.append(item);
+      }
+      summary.append(list);
+    }
+    actions.replaceChildren();
+    actions.append(apply, reset);
+    if (n) actions.append(cancel);
+  };
+
+  bar.append(summary, actions);
+  bar.paint();
+  return bar;
+}
+
+// Apply runs the staged writes ONE AT A TIME, in the order they were staged —
+// the same sequence a terminal user would type, which matters because settings
+// can shadow each other. A failure does not abort the rest: the remaining
+// writes are independent, and stopping halfway would leave a state nobody
+// chose. Every failure is reported by key.
+async function applyEdits(edits, routes, button) {
+  const list = edits.entries();
+  if (!list.length) return { ok: true, failed: [] };
+  const label = button && button.textContent;
+  if (button) {
+    button.disabled = true;
+    button.textContent = t("edits.applying");
+  }
+  const failed = [];
+  for (const [key, e] of list) {
+    try {
+      const r = e.kind === "reset" ? await post(routes.reset, { key }) : await post(routes.set, { key, value: e.value });
+      if (!r.ok) failed.push(`${key}: ${(r.output || r.command || "").trim().split("\n")[0]}`);
+    } catch (err) {
+      failed.push(`${key}: ${err.message}`);
+    }
+  }
+  if (button) {
+    button.disabled = false;
+    if (label) button.textContent = label;
+  }
+  if (failed.length) toast(t("edits.someFailed", { n: failed.length }), "bad", failed.join("\n"));
+  else toast(t("edits.applied", { n: list.length }), "ok");
+  return { ok: !failed.length, failed };
+}
+
+function settingRow(k, panelBody, edits) {
   const row = el("div", "setting" + (k.is_shadowed ? " shadowed" : ""));
   row.dataset.key = k.key;
   // Read by the toolbar's "changed only" filter. It is on the row rather than
@@ -1166,11 +1347,11 @@ function settingRow(k, panelBody) {
   if (k.shadow_reason) left.append(el("div", "shadow-why", k.shadow_reason));
 
   const right = el("div", "setting-control");
-  right.append(controlFor(k, panelBody));
+  right.append(controlFor(k, edits));
   if (k.is_overridden) {
     const reset = el("button", "btn btn-ghost btn-sm", t("setting.resetTo", { value: String(k.default) }));
     reset.type = "button";
-    reset.addEventListener("click", () => writeSetting("/api/config/reset", { key: k.key }, panelBody, row));
+    reset.addEventListener("click", () => edits.reset(k.key));
     right.append(reset);
   }
 
@@ -1181,20 +1362,34 @@ function settingRow(k, panelBody) {
 // The control follows the VALIDATOR, not a hand-kept table: enum → segmented,
 // int/range → stepper with the options list as presets, path/repo/model → a
 // text input whose validation is the CLI's own exit code.
-function controlFor(k, panelBody) {
+//
+// Since v0.44.1 a control STAGES its value instead of writing it. Each one also
+// repaints its own selected state from the staged value, because nothing
+// re-renders until Apply — a segmented control that does not follow your click
+// would look broken, and a click that neither writes nor moves is worse than no
+// control at all.
+function controlFor(k, edits) {
   const c = k.control || { kind: "text" };
-  const commit = (value, node) => writeSetting("/api/config/set", { key: k.key, value }, panelBody, node);
+  const original = String(k.value);
+  const stage = (value) => edits.set(k.key, String(value), original);
 
   if (c.kind === "enum") {
     const choices = c.choices || k.options || [];
     const seg = el("div", "seg");
+    const paint = (v) => {
+      for (const b of seg.children) b.setAttribute("aria-pressed", String(b.dataset.value === String(v)));
+    };
     for (const opt of choices) {
       const b = el("button", null, String(opt));
       b.type = "button";
-      b.setAttribute("aria-pressed", String(String(k.value) === String(opt)));
-      b.addEventListener("click", () => commit(String(opt), b));
+      b.dataset.value = String(opt);
+      b.addEventListener("click", () => {
+        stage(String(opt));
+        paint(String(opt));
+      });
       seg.append(b);
     }
+    paint(original);
     return seg;
   }
 
@@ -1202,23 +1397,24 @@ function controlFor(k, panelBody) {
     const wrap = el("div", "stepper");
     const input = el("input");
     input.type = "number";
-    input.value = String(k.value);
+    input.value = original;
     if (c.min !== null && c.min !== undefined) input.min = String(c.min);
     if (c.max !== null && c.max !== undefined) input.max = String(c.max);
-    const save = el("button", "btn btn-sm", "set");
-    save.type = "button";
-    save.addEventListener("click", () => commit(input.value, input));
-    input.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") commit(input.value, input);
-    });
-    wrap.append(input, save);
-    const presets = (k.options || []).filter((o) => String(o) !== String(k.value));
+    // No `set` button here any more: the edit bar's Apply is the one commit
+    // point, so a second button beside every number would be two ideas of what
+    // "save" means.
+    input.addEventListener("input", () => stage(input.value));
+    wrap.append(input);
+    const presets = (k.options || []).filter((o) => String(o) !== original);
     if (presets.length) {
       const seg = el("div", "seg");
       for (const p of presets.slice(0, 5)) {
         const b = el("button", null, String(p));
         b.type = "button";
-        b.addEventListener("click", () => commit(String(p), b));
+        b.addEventListener("click", () => {
+          input.value = String(p);
+          stage(String(p));
+        });
         seg.append(b);
       }
       const box = el("div");
@@ -1231,7 +1427,7 @@ function controlFor(k, panelBody) {
 
   if (c.kind === "subset") {
     const chosen = new Set(
-      String(k.value)
+      original
         .replace(/^\[|\]$/g, "")
         .split(",")
         .map((s) => s.trim())
@@ -1244,7 +1440,8 @@ function controlFor(k, panelBody) {
       b.setAttribute("aria-pressed", String(chosen.has(opt)));
       b.addEventListener("click", () => {
         chosen.has(opt) ? chosen.delete(opt) : chosen.add(opt);
-        commit([...chosen].join(",") || "", b);
+        b.setAttribute("aria-pressed", String(chosen.has(opt)));
+        stage([...chosen].join(",") || "");
       });
       seg.append(b);
     }
@@ -1256,39 +1453,52 @@ function controlFor(k, panelBody) {
   const wrap = el("div");
   wrap.className = "setting-control";
   const input = el("input", "text-input");
-  input.value = String(k.value);
-  const save = el("button", "btn btn-sm", "set");
-  save.type = "button";
-  const go = () => commit(input.value, input);
-  save.addEventListener("click", go);
-  input.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") go();
-  });
-  wrap.append(input, save);
+  input.value = original;
+  input.addEventListener("input", () => stage(input.value));
+  wrap.append(input);
   return wrap;
 }
 
-async function writeSetting(endpoint, body, panelBody, node) {
-  try {
-    const r = await post(endpoint, body);
-    if (!r.ok) {
-      if (node && node.classList) node.classList.add("invalid");
-      toast(t("write.refused"), "bad", r.output || r.command);
-      return;
-    }
-    // Brief success flash on the row, then re-render from the CLI so the
-    // shadowing, the overridden dots and the ladder all reflect real state.
-    if (node && node.closest) {
-      const row = node.closest(".setting");
-      if (row) {
-        row.animate([{ background: "var(--ok-wash)" }, { background: "transparent" }], { duration: 700, easing: "ease-out" });
-      }
-    }
-    toast(r.command, "ok", r.output && r.output.length < 400 ? r.output : "");
-    await rerenderSettings(panelBody);
-  } catch (e) {
-    toast(t("write.failed"), "bad", String(e.message));
-  }
+// The Settings edit bar. Reset is `orc config reset` with NO key — the CLI's
+// own "put every key back to its default", not a loop of per-key writes. It is
+// a real write, so it is confirmed and it discards anything staged first: a
+// reset that silently kept four pending edits queued behind it would apply them
+// straight back over the defaults.
+function settingsEditBar(edits, panelBody) {
+  const bar = editBar(edits, {
+    resetLabel: t("edits.resetAll"),
+    onApply: async (btn) => {
+      await applyEdits(edits, { set: "/api/config/set", reset: "/api/config/reset" }, btn);
+      await rerenderSettings(panelBody);
+    },
+    onReset: () => {
+      modal({
+        title: t("edits.resetAllTitle"),
+        body: (() => {
+          const box = el("div", "stack stack-sm");
+          box.append(el("div", null, t("edits.resetAllBody")));
+          box.append(el("div", "action-cmd", "orc config reset"));
+          return box;
+        })(),
+        actions: [
+          { label: t("common.cancel"), onClick: (c) => c() },
+          {
+            label: t("edits.resetAllApply"),
+            cls: "btn-danger",
+            onClick: async (close) => {
+              close();
+              edits.clear();
+              const r = await post("/api/config/reset", {});
+              toast(r.command, r.ok ? "ok" : "bad", r.output);
+              await rerenderSettings(panelBody);
+            },
+          },
+        ],
+      });
+    },
+    onCancel: () => rerenderSettings(panelBody),
+  });
+  return bar;
 }
 
 // A re-render must not lose the ladder morph, so the ladder is swapped through
@@ -1962,6 +2172,18 @@ async function renderFlow(body) {
     const keys = card(t("flow.keys"));
     keys.id = "flow-keys";
     keys.append(el("div", "note", t("flow.keysNote")));
+
+    // Batched, exactly like Settings (v0.44.1). Recompiling is already a second
+    // step after a key change, so writing each key the instant you touch it
+    // bought nothing and cost a full re-render per key.
+    let bar = null;
+    const edits = editSet(() => {
+      if (bar) bar.paint();
+      for (const row of keys.querySelectorAll(".setting[data-key]")) {
+        row.classList.toggle("staged", edits.map.has(row.dataset.key));
+      }
+    });
+
     for (const k of d.keys) {
       const row = el("div", "setting");
       row.dataset.key = k.key; // the stepper jumps here when you click a phase
@@ -1971,11 +2193,8 @@ async function renderFlow(body) {
       if (k.is_set) name.append(el("span", "dot"));
       left.append(name, el("div", "setting-desc", k.desc || ""));
       const right = el("div", "setting-control");
-      const commit = async (value) => {
-        const r = await post("/api/diy/set", { key: k.key, value });
-        toast(r.command, r.ok ? "ok" : "bad", r.output);
-        renderFlow(body);
-      };
+      const current = String(k.value === "" ? "" : k.value);
+      const stage = (value) => edits.set(k.key, String(value), current);
 
       // A flow key is a CLOSED SET, so it gets a dropdown carrying every legal
       // value — `orc diy set` would reject anything else anyway, and a text box
@@ -1984,7 +2203,6 @@ async function renderFlow(body) {
       // holds no copy of what a key accepts.
       if (k.options && k.options.length) {
         const sel = el("select", "select-input");
-        const current = String(k.value === "" ? "" : k.value);
         // A value outside its own option list still has to be SHOWN — an unset
         // fixed_executor is exactly that. It leads, and it is disabled, so the
         // dropdown reports the state without offering it back as a choice the
@@ -2001,22 +2219,33 @@ async function renderFlow(body) {
           sel.append(o);
         }
         sel.value = current;
-        sel.addEventListener("change", () => commit(sel.value));
+        sel.addEventListener("change", () => stage(sel.value));
         right.append(sel);
       } else {
         // Free text (flow_name is a slug) — validation is the CLI's exit code.
         const input = el("input", "text-input");
-        input.value = String(k.value === "" ? "" : k.value);
-        const save = el("button", "btn btn-sm", t("flow.set"));
-        save.type = "button";
-        const go = () => commit(input.value);
-        save.addEventListener("click", go);
-        input.addEventListener("keydown", (e) => e.key === "Enter" && go());
-        right.append(input, save);
+        input.value = current;
+        input.addEventListener("input", () => stage(input.value));
+        right.append(input);
       }
       row.append(left, right);
       keys.append(row);
     }
+
+    // The bar is the LAST thing in the keys card, which is where the user asked
+    // for it. Reset here is `orc diy init --force`: the CLI has no "put every
+    // key back to its default" for a flow — `orc diy reset` DELETES the config
+    // and unconfigures the lane, which is a different, larger thing.
+    bar = editBar(edits, {
+      resetLabel: t("edits.resetFlow"),
+      onApply: async (btn) => {
+        await applyEdits(edits, { set: "/api/diy/set" }, btn);
+        renderFlow(body);
+      },
+      onReset: () => confirmPreset(d.presets.find((p) => !p.name) || { name: "", changes: {} }, d, body),
+      onCancel: () => renderFlow(body),
+    });
+    keys.append(bar);
     out.append(keys);
 
     if (d.score_table) {
@@ -2051,42 +2280,54 @@ function bannerLine(text, bad) {
 // file, which is what the terminal does too. So every row names the keys the
 // preset actually changes, the exact command is on the row before you click it,
 // and applying it goes through a confirmation that says what is lost.
+//
+// A row you are ALREADY ON says so and drops its button (v0.44.1). The match is
+// the CLI's — `presets[].active` — and it deliberately ignores `flow_name`, so
+// renaming `solo-fast` to `solo` does not make the panel forget which shape the
+// flow came from. Offering "use this" for the thing already in use is a button
+// whose only possible effect is to overwrite your config with itself.
 function presetCard(d, body) {
   const c = card(t("flow.presets"));
   c.id = "diy-presets";
   c.append(el("div", "note", d.configured ? t("flow.presetsNoteConfigured") : t("flow.presetsNote")));
 
-  // The wizard's first option. An empty name means no --preset flag at all —
-  // the same bare `orc diy init` a terminal user answers "1" to.
-  const rows = [{ name: "", changes: null }, ...(d.presets || [])];
-  for (const p of rows) {
-    const row = el("div", "preset-row");
+  for (const p of d.presets || []) {
+    const row = el("div", "preset-row" + (p.active ? " preset-active" : ""));
     const left = el("div");
+    const head = el("div", "preset-head");
     // Preset names and their key=value diffs are CLI data — never translated.
-    left.append(el("div", "setting-name", p.name || t("flow.presetDefaults")));
+    head.append(el("div", "setting-name", p.name || t("flow.presetDefaults")));
+    if (p.active) head.append(chip(t("flow.presetInUse"), "ok"));
+    left.append(head);
+    const changed = Object.entries(p.changes || {});
     left.append(
-      el(
-        "div",
-        "setting-desc",
-        p.changes ? Object.entries(p.changes).map(([k, v]) => `${k}=${v}`).join(" · ") : t("flow.presetDefaultsDesc")
-      )
+      el("div", "setting-desc", changed.length ? changed.map(([k, v]) => `${k}=${v}`).join(" · ") : t("flow.presetDefaultsDesc"))
     );
-    left.append(el("div", "action-cmd", "orc diy init --force" + (p.name ? " --preset " + p.name : "")));
+    left.append(el("div", "action-cmd", presetCommand(p)));
+    // The match ignores flow_name, so say so on the row that matched — a chip
+    // reading "in use" beside a flow called something else is otherwise just
+    // confusing.
+    if (p.active) left.append(el("div", "note", t("flow.presetInUseNote")));
+    row.append(left);
 
-    const use = el("button", "btn btn-sm", t("flow.presetUse"));
-    use.type = "button";
-    use.addEventListener("click", () => confirmPreset(p, d, body));
-    row.append(left, use);
+    if (!p.active) {
+      const use = el("button", "btn btn-sm", t("flow.presetUse"));
+      use.type = "button";
+      use.addEventListener("click", () => confirmPreset(p, d, body));
+      row.append(use);
+    }
     c.append(row);
   }
   return c;
 }
 
+const presetCommand = (p) => "orc diy init --force" + (p.name ? " --preset " + p.name : "");
+
 function confirmPreset(p, d, body) {
   const b = el("div", "stack stack-sm");
   b.append(el("div", null, p.name ? t("flow.presetConfirm", { name: p.name }) : t("flow.presetConfirmDefaults")));
-  b.append(el("div", "action-cmd", "orc diy init --force" + (p.name ? " --preset " + p.name : "")));
-  if (p.changes) {
+  b.append(el("div", "action-cmd", presetCommand(p)));
+  if (p.changes && Object.keys(p.changes).length) {
     b.append(kvList(Object.entries(p.changes).map(([k, v]) => [k, String(v)])));
   }
   // Overwriting a flow you tuned by hand is the only way this can hurt, so it
@@ -3501,6 +3742,71 @@ function spotlight({ selector, title, text, step, total, onNext, onSkip, dismiss
   window.addEventListener("resize", onResize);
   window.addEventListener("scroll", onResize, true);
 
+  // LAYOUT SHIFTS UNDER THE SPOTLIGHT (v0.44.1). The ring and the popover are
+  // `position: fixed` at coordinates measured ONCE, and this page grows things
+  // above the fold on its own schedule: the blue update banner lands after a
+  // network check, `orc doctor` adds its own banners after that, and on
+  // Maintenance the upgrade row fills in a version chip and a "Check again"
+  // button of its own. Every one of those pushes the target down by tens of
+  // pixels — and the ring stayed where it was, so the spotlight ended up
+  // framing empty space above the thing it was pointing at.
+  //
+  // Re-place on any of it. `place()` alone handles a target that merely MOVED;
+  // `keepInView()` handles one shoved off the viewport entirely, and is
+  // deliberately NOT wired to the scroll listener — a spotlight that scrolls
+  // back every time you scroll away is a spotlight you cannot get out of.
+  let adjusting = false;
+  const keepInView = () => {
+    if (!target || adjusting) return;
+    const r = target.getBoundingClientRect();
+    if (r.top >= 0 && r.bottom <= window.innerHeight) return;
+    adjusting = true;
+    target.scrollIntoView({ block: "center", inline: "nearest" });
+    requestAnimationFrame(() => {
+      adjusting = false;
+    });
+  };
+  const reflow = () => {
+    keepInView();
+    place();
+  };
+
+  // TWO observers, because one of them is not enough on its own.
+  //
+  // A ResizeObserver is the right instrument — it fires on the height change
+  // however it was caused, without this file having to know every place that
+  // can grow. But it is delivered from the RENDERING lifecycle, so a tab the
+  // browser has throttled (backgrounded, or not compositing) never gets the
+  // callback, and that is exactly a tab somebody comes back to.
+  //
+  // A MutationObserver runs off the microtask queue and needs no frames at all.
+  // It watches the whole document because the growth is never in one place: the
+  // update banner is inserted into `#banners`, doctor's banners after it, and
+  // the upgrade row grows a version chip INSIDE itself. Coalesced to one reflow
+  // per task, so a panel re-render costs one re-place, not one per node.
+  let ro = null;
+  let mo = null;
+  if (typeof ResizeObserver === "function") {
+    ro = new ResizeObserver(reflow);
+    for (const n of [document.body, document.getElementById("banners"), document.getElementById("panel"), target]) {
+      if (n) ro.observe(n);
+    }
+  }
+  let queued = null;
+  if (typeof MutationObserver === "function") {
+    mo = new MutationObserver(() => {
+      if (queued) return;
+      queued = setTimeout(() => {
+        queued = null;
+        reflow();
+      }, 0);
+    });
+    // Attributes are NOT observed on purpose: `place()` writes inline styles on
+    // the ring and the popover, and observing them would make this trigger
+    // itself forever.
+    mo.observe(document.body, { childList: true, subtree: true, characterData: true });
+  }
+
   // The "do the thing and I go away" variant. Capture phase, so it fires even
   // though the layer sits above the page.
   let onDo = null;
@@ -3549,6 +3855,9 @@ function spotlight({ selector, title, text, step, total, onNext, onSkip, dismiss
       window.removeEventListener("scroll", onResize, true);
       if (onDo) document.removeEventListener("click", onDo, true);
       if (onKey) document.removeEventListener("keydown", onKey, true);
+      if (ro) ro.disconnect();
+      if (mo) mo.disconnect();
+      if (queued) clearTimeout(queued);
       for (const id of settle) clearTimeout(id);
       if (target) target.classList.remove("tour-target", "tour-target-rel");
       document.body.classList.remove("tour-on");
