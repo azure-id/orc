@@ -79,6 +79,16 @@ const required = [
   "templates/skills/_shared/interview.md",
   "templates/skills/orc-grill/SKILL.md",
   "templates/skills/orc-grill/references/grill-doc.md",
+  // v0.45.0 — /orc-brainstorm, again with ZERO new agents. `lane-suspend.md` is
+  // the RETURN-TO contract BOTH halves of the brainstorm↔grill trip read: a
+  // publish missing it leaves a lane that suspends into another lane with no
+  // definition of how (or whether) it comes back. `lenses.md` is the only place
+  // ORC generates options on purpose — without it B2 is a mood, not a phase.
+  "templates/skills/_shared/lane-suspend.md",
+  "templates/skills/orc-brainstorm/SKILL.md",
+  "templates/skills/orc-brainstorm/references/brainstorm-doc.md",
+  "templates/skills/orc-brainstorm/references/lenses.md",
+  "templates/commands/orc-brainstorm.md",
   "templates/skills/orc-route/SKILL.md",
   "templates/skills/orc-explain/SKILL.md",
   "templates/skills/orc-analyze/references/thin-input.md",
@@ -168,7 +178,10 @@ const agentCount = walkCount(path.join(ROOT, "templates/agents"), ".md");
 // agent — same precedent. The agent floor deliberately does NOT move: a QoL
 // lane that needed a pinned agent would also need its opus5_only twin, a
 // MODEL-MAPPING row and a golden test, which is why none of them has one.
-if (skillCount < 29) missing.push(`templates/skills (expected >=29 SKILL.md, found ${skillCount})`);
+// v0.45.0: +1 skill (orc-brainstorm) and STILL no new agent — its divergent
+// generation is the orchestrator's own work and its recon is dispatched ad-hoc
+// by model+effort, so the agent floor holds at 40.
+if (skillCount < 30) missing.push(`templates/skills (expected >=30 SKILL.md, found ${skillCount})`);
 if (agentCount < 40) missing.push(`templates/agents (expected >=40 .md, found ${agentCount})`);
 
 // B4 — encoding/mojibake guard. The OneDrive corruption rule becomes a gate:

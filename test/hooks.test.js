@@ -364,6 +364,90 @@ test("payload: every lane in the trace-protocol enum is one some skill actually 
   );
 });
 
+// ── v0.45.0: the SUSPEND round trip (RETURN-TO) ────────────────────────────
+
+test("trace: a suspended lane that re-writes its pointer on RESUME keeps ONE file", () => {
+  const { root, claudeDir } = freshInstall();
+  try {
+    const dir = path.join(claudeDir, "orc", "logs");
+    fs.mkdirSync(dir, { recursive: true });
+    const sender = "run-brainstorm-merchant-onboarding-010126-101010.txt";
+    const cur = path.join(dir, ".current");
+
+    // The sender's run-start step: pointer + file, in the same step.
+    fs.writeFileSync(cur, sender + "\n");
+    fs.writeFileSync(path.join(dir, sender), "");
+    runHook(claudeDir, "orc-trace.js", {
+      hook_event_name: "PreToolUse",
+      tool_name: "Agent",
+      tool_input: { subagent_type: "orc-trace-writer-haiku-4-5", description: "brainstorm packet" },
+    });
+
+    // It suspends into the receiving lane, which runs its own normal run and —
+    // at ITS FINISH — deletes the pointer. That is the whole hazard: from here
+    // on, every line the RESUMING lane writes would land somewhere else.
+    fs.unlinkSync(cur);
+
+    // The _shared/lane-suspend.md resume rule: re-write .current AND touch the
+    // trace file, in the SAME step. Both, or neither.
+    fs.writeFileSync(cur, sender + "\n");
+    const now = Date.now() / 1000;
+    fs.utimesSync(path.join(dir, sender), now, now);
+
+    runHook(claudeDir, "orc-trace.js", {
+      hook_event_name: "PreToolUse",
+      tool_name: "Agent",
+      tool_input: { subagent_type: "orc-trace-writer-haiku-4-5", description: "post-return packet" },
+    });
+
+    const runFiles = fs.readdirSync(dir).filter((f) => f.endsWith(".txt"));
+    assert.deepStrictEqual(runFiles, [sender], "the resumed run stays in ONE file");
+    const body = fs.readFileSync(path.join(dir, sender), "utf8");
+    assert.match(body, /brainstorm packet/, "the pre-suspend half survives");
+    assert.match(body, /post-return packet/, "…and the post-return half joins it");
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("payload: the suspend contract states BOTH halves of the resume pointer rule", () => {
+  const suspend = fs.readFileSync(
+    path.join(__dirname, "..", "templates", "skills", "_shared", "lane-suspend.md"),
+    "utf8"
+  );
+  const rule = suspend.slice(suspend.indexOf("On RESUME"));
+  assert.match(rule, /\.current/, "the pointer half is stated");
+  assert.match(rule, /touch the trace file/, "the file-creation half is stated");
+  assert.match(rule, /SAME step/, "…and they are one step, not two");
+  // The receiver deleting the pointer is the reason the rule exists at all —
+  // stated, or the next reader deletes the rule as redundant with run start.
+  assert.match(suspend, /deletes `log_dir\/\.current` at its `FINISH`/, "the cause is named");
+});
+
+test("payload: every numbered menu orc-brainstorm prints ends with the user's own slot", () => {
+  const skill = fs
+    .readFileSync(
+      path.join(__dirname, "..", "templates", "skills", "orc-brainstorm", "SKILL.md"),
+      "utf8"
+    )
+    .replace(/\r\n/g, "\n");
+
+  const blocks = [...skill.matchAll(/```\n([\s\S]*?)```/g)].map((m) => m[1]);
+  let menus = 0;
+  for (const b of blocks) {
+    const options = b.split("\n").filter((l) => /^\d+\s{2}\S/.test(l));
+    if (options.length < 2) continue;
+    menus++;
+    assert.match(
+      options[options.length - 1],
+      /Your own/,
+      `a menu ends without the open slot:\n${b}`
+    );
+  }
+  // A regex that silently matches nothing would pass forever.
+  assert.ok(menus >= 3, `expected the P0 gate, the exit and the suspend offer; found ${menus}`);
+});
+
 test("trace: orc-retro is never traced (the miner must not pollute its own data)", () => {
   const { root, claudeDir } = freshInstall();
   try {

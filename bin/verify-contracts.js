@@ -83,6 +83,8 @@ const CONTRACTS = [
       // v0.42.0: orc-grill dispatches read-only recon ad-hoc, so it owns the
       // claimed-vs-actual check itself (the hook writes no SPAWN/RETURN for it).
       "skills/orc-grill/SKILL.md",
+      // v0.45.0: same for brainstorm's fact-finding recon.
+      "skills/orc-brainstorm/SKILL.md",
       "skills/orc-quick/references/dispatch-gate.md",
       "skills/orc-retro/SKILL.md",
       "skills/orc-retro/examples/retro-mock.md",
@@ -372,6 +374,13 @@ const CONTRACTS = [
       "skills/_shared/interview.md",
       "skills/orc-grill/SKILL.md",
       "skills/orc-grill/references/grill-doc.md",
+      // v0.45.0: the brainstorm converges onto tagged decisions the same way —
+      // a `constraint` row is what makes a chosen direction load-bearing — and
+      // lane-suspend states that a decision carried back untagged stops becoming
+      // one.
+      "skills/_shared/lane-suspend.md",
+      "skills/orc-brainstorm/SKILL.md",
+      "skills/orc-brainstorm/references/brainstorm-doc.md",
     ],
   },
   {
@@ -464,6 +473,7 @@ const CONTRACTS = [
       "skills/orc/references/trace-protocol.md",
       "skills/orc-grill/SKILL.md",
       "skills/orc-route/SKILL.md",
+      "skills/orc-brainstorm/SKILL.md",
     ],
   },
   {
@@ -502,6 +512,11 @@ const CONTRACTS = [
       "skills/orc-pr-setup/SKILL.md",
       "skills/orc-grill/SKILL.md",
       "skills/orc-route/SKILL.md",
+      // v0.45.0: brainstorm writes it at run start, and lane-suspend.md states
+      // the RESUME half — a returning lane whose pointer was deleted by the lane
+      // it borrowed writes every later line into nothing.
+      "skills/orc-brainstorm/SKILL.md",
+      "skills/_shared/lane-suspend.md",
     ],
   },
   {
@@ -533,6 +548,8 @@ const CONTRACTS = [
       "skills/context-combiner/SKILL.md",
       "skills/orc-grill/SKILL.md",
       "skills/orc-route/SKILL.md",
+      "skills/orc-brainstorm/SKILL.md",
+      "skills/_shared/lane-suspend.md",
       // v0.42.0: the stop sequence deletes RESUME.md in the SAME step as the run
       // pointer — both mark `this run is still open`, so they must die together.
       "skills/orc/references/stop-and-resume.md",
@@ -563,6 +580,7 @@ const CONTRACTS = [
       "skills/orc/references/trace-protocol.md",
       "skills/orc-grill/SKILL.md",
       "skills/orc-route/SKILL.md",
+      "skills/orc-brainstorm/SKILL.md",
     ],
   },
   {
@@ -692,6 +710,10 @@ const CONTRACTS = [
       "skills/_shared/interview.md",
       "skills/orc-grill/SKILL.md",
       "skills/orc-route/SKILL.md",
+      // v0.45.0: brainstorm's B0 probes, and the this-repo-precedent lens (the
+      // one lens that reads the project's own knowledge) follows the same rule.
+      "skills/orc-brainstorm/SKILL.md",
+      "skills/orc-brainstorm/references/lenses.md",
     ],
   },
   {
@@ -708,6 +730,11 @@ const CONTRACTS = [
       "skills/orc-grill/SKILL.md",
       "skills/orc/references/intake.md",
       "commands/orc-grill.md",
+      // v0.45.0: brainstorm's B1 frame runs the same rounds — it must point here,
+      // never fork a second interview. lane-suspend.md pins the tag vocabulary a
+      // returning decision keeps.
+      "skills/_shared/lane-suspend.md",
+      "skills/orc-brainstorm/SKILL.md",
     ],
   },
   {
@@ -719,6 +746,71 @@ const CONTRACTS = [
     files: [
       "skills/_shared/interview.md",
       "skills/orc-grill/SKILL.md",
+      // v0.45.0: brainstorm states the convergent half in order to mirror it.
+      "skills/orc-brainstorm/SKILL.md",
+    ],
+  },
+  {
+    // v0.45.0: the DIVERGENT mirror of the rule above. Generating options is
+    // ORC's job; choosing between them is the user's. Registered as its own
+    // token, and deliberately pinned to interview.md as well, so the pair stays
+    // a pair — a brainstorm that starts picking and a grill that starts
+    // answering are the same drift seen from two sides.
+    name: "generated options belong to the user (v0.45.0 — the divergent mirror)",
+    token: "a lane that picks its own favourite",
+    files: [
+      "skills/_shared/interview.md",
+      "skills/orc-brainstorm/SKILL.md",
+    ],
+  },
+  {
+    // v0.45.0: the SUSPEND contract — leave mid-run, let another lane settle one
+    // thing, come back and finish. The opposite shape to FALLBACK-FROM, which
+    // leaves and does not return. Canonical prose: _shared/lane-suspend.md.
+    name: "lane suspend/resume canonical pointer (v0.45.0 — _shared/lane-suspend.md)",
+    token: "_shared/lane-suspend.md",
+    files: [
+      "skills/_shared/README.md",
+      "skills/_shared/lane-suspend.md",
+      "skills/orc-brainstorm/SKILL.md",
+      "skills/orc-grill/SKILL.md",
+      "skills/orc/references/trace-protocol.md",
+    ],
+  },
+  {
+    // v0.45.0: the marker itself. Both halves of a suspend must agree on it, and
+    // the receiving lane's extra exit exists ONLY under it.
+    name: "suspend marker (v0.45.0 — RETURN-TO, the sender finishes the run)",
+    token: "RETURN-TO",
+    files: [
+      "skills/_shared/README.md",
+      "skills/_shared/lane-suspend.md",
+      "skills/orc-brainstorm/SKILL.md",
+      "skills/orc-grill/SKILL.md",
+      "skills/orc/references/trace-protocol.md",
+      "commands/orc-brainstorm.md",
+    ],
+  },
+  {
+    // v0.45.0: the brainstorm deliverable's location. Project root, one .md per
+    // slug ever, never staged — same discipline as orc-quick/ and orc-grill/.
+    name: "brainstorm deliverable location (v0.45.0 — orc/brainstorming-session/<slug>/)",
+    token: "orc/brainstorming-session/",
+    files: [
+      "skills/orc-brainstorm/SKILL.md",
+      "skills/orc-brainstorm/references/brainstorm-doc.md",
+      "commands/orc-brainstorm.md",
+    ],
+  },
+  {
+    // v0.45.0: the open slot. The entire value of a brainstorm is the idea ORC
+    // did not think of; a closed menu is a survey. Pinned verbatim because it is
+    // exactly the kind of rule a later edit "tidies" into a trailing sentence.
+    name: "the open slot (v0.45.0 — every menu ends with the user's own words)",
+    token: "ends with a slot for the user's own words",
+    files: [
+      "skills/orc-brainstorm/SKILL.md",
+      "commands/orc-brainstorm.md",
     ],
   },
   {
@@ -731,6 +823,9 @@ const CONTRACTS = [
       "skills/orc-analyze/SKILL.md",
       "skills/orc-analyze/references/thin-input.md",
       "skills/orc-grill/SKILL.md",
+      // v0.45.0: brainstorm's exit 2 reuses the SAME sentence — a second
+      // definition of "analyzable" is drift the lint cannot see.
+      "skills/orc-brainstorm/SKILL.md",
     ],
   },
   {
@@ -800,6 +895,9 @@ const CONTRACTS = [
       "skills/_shared/fallback-handoff.md",
       "skills/orc-fast/SKILL.md",
       "skills/orc-mini/SKILL.md",
+      // v0.45.0: lane-suspend.md defines itself AGAINST this contract — leaving
+      // and returning vs leaving for good. Naming the sibling is the point.
+      "skills/_shared/lane-suspend.md",
     ],
   },
   {
@@ -1458,6 +1556,11 @@ const CONTRACTS = [
       "skills/_shared/interview.md",
       "skills/orc-grill/SKILL.md",
       "skills/orc-grill/references/grill-doc.md",
+      // v0.45.0: brainstorm names the same instrument for the same class of
+      // question — "how should it feel" is not settled by generating options
+      // either.
+      "skills/orc-brainstorm/SKILL.md",
+      "skills/orc-brainstorm/references/brainstorm-doc.md",
     ],
   },
   {
@@ -1625,6 +1728,8 @@ const CONTRACTS = [
       "skills/_shared/interview.md",
       "skills/orc-grill/SKILL.md",
       "skills/orc-grill/references/grill-doc.md",
+      "skills/orc-brainstorm/SKILL.md",
+      "skills/orc-brainstorm/references/brainstorm-doc.md",
     ],
   },
   {
@@ -1816,6 +1921,11 @@ const CONTRACTS = [
       "skills/orc-quick/references/gh-mode.md",
       "skills/orc-wiki/SKILL.md",
       "skills/orc/references/wiki-consult.md",
+      // v0.45.0: a non-code brainstorm looks facts up on the web, and the analogy
+      // lens reads other people's docs. Both are FOREIGN input — quotable as
+      // evidence, never a directive, and never able to move a phase.
+      "skills/orc-brainstorm/SKILL.md",
+      "skills/orc-brainstorm/references/lenses.md",
     ],
   },
   // ── v0.40.0 — gotchas (repair memory) ───────────────────────────────────

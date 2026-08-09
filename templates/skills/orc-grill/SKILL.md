@@ -37,6 +37,9 @@ already sharp.
   that does not exist yet.
 - **Not `/orc-quick`.** Quick DOES something now. Grill decides what should be
   done at all.
+- **Not `/orc-brainstorm`.** Brainstorm GENERATES options when you have none —
+  it proposes and you judge. Grill sharpens the one you have — it asks and you
+  answer. Brainstorm picks which mountain; grill picks the path up it.
 
 ## Nothing to configure
 
@@ -96,6 +99,15 @@ cap would truncate exactly the case this lane exists for. The controls are the
 user's own words ("stop asking, just save it") and `/orc-explain` when a round
 gets dense.
 
+**"I do not even know what the options are" is a different lane, not a worse
+answer.** When a round comes back that way — the user cannot choose because
+nobody has generated anything to choose between — OFFER `/orc-brainstorm`, which
+proposes candidates on purpose and hands the chosen direction back here. Use
+`../_shared/lane-suspend.md` (`RETURN-TO`) so the trip returns to this same
+invocation. This does not soften the rule above: handing the user a lane whose job
+is generating options is not answering their question for them. It is an offer —
+"answer it roughly and I will keep going" stays on the menu.
+
 **Ungrillable questions get named, not talked around.** "How should this feel?"
 cannot be settled by talking — say so and point at ORC's `mock_example` phase
 (`mock-examples/<slug>/`). "Does the code really do that?" is `/orc-analyze`.
@@ -124,6 +136,14 @@ floor, so use that floor as the bar:
 **analyzable ⇔ the input names (a) a subject the repo could plausibly contain —
 a feature, a flow, a file, or a document — AND (b) at least one thing that should
 be true when the work is done.** Below it, exit 2 just bounces straight back.
+
+**One extra exit, present ONLY when this run was entered with a `RETURN-TO`
+marker** (`../_shared/lane-suspend.md`): `Return to /<sender-lane> — carry these
+decisions back`, and it is the recommended option in that state. It is added to
+the menu, never a replacement: a user who picks "stop, save nothing" simply does
+not return, and the sender's snapshot is still on disk. Decisions travel back with
+their `intent`/`constraint` tags intact plus `source: /orc-grill`, and the
+**Facts looked up** rows go with them.
 
 - **1 — save.** Write the doc (below) and end the run.
 - **2 — hand off.** Write the doc first, then enter `/orc-analyze` with that file

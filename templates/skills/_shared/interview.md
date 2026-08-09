@@ -80,6 +80,12 @@ A default silently adopted is
 indistinguishable, one week later, from a decision the user made — and it is the
 one the build gets wrong.
 
+**The mirrored half, for a lane that GENERATES options** (`/orc-brainstorm`):
+producing candidates is ORC's job, choosing between them is the user's, and
+**a lane that picks its own favourite** and moves on has broken the same
+contract. Convergent and divergent work split the same way; the two sentences are
+registered as a pair so neither lane can drift into the other's habits.
+
 ## The confirmation gate — an empty frontier does NOT end the session
 
 When no open question remains, do not declare victory. Play the idea back in

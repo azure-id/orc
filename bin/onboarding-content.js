@@ -61,7 +61,8 @@ const SECTIONS = [
       "  a quick question, or a small fix        →  /orc-quick",
       "  one clear change you can describe       →  /orc-mini",
       "  a big or risky change                   →  /orc",
-      "  you do not know what you want yet       →  /orc-grill   (a conversation)",
+      "  you have no idea what the options are   →  /orc-brainstorm (it proposes)",
+      "  one idea, but it is still vague         →  /orc-grill   (a conversation)",
       "  a document to turn into requirements    →  /orc-analyze",
       "  a plan already in hand                  →  /orc-route   (which lane builds it)",
       "  something ORC said that did not land    →  /orc-explain",
@@ -72,10 +73,11 @@ const SECTIONS = [
   },
   {
     id: "lanes",
-    title: "④ Lanes cheat-sheet (20 commands)",
+    title: "④ Lanes cheat-sheet (21 commands)",
     lines: [
       "  /orc           full orchestrated pipeline",
       "  /orc-quick     ask for almost anything — 3 steps, always asks which agent",
+      "  /orc-brainstorm no idea yet? it generates the options, you pick",
       "  /orc-grill     sharpen a vague idea by conversation (no scan, no build)",
       "  /orc-route     you have a PLAN — which lane should build it? (refuses prose)",
       "  /orc-explain   say the last ORC message again, with the background it assumed",

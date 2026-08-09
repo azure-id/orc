@@ -51,7 +51,8 @@ phase: execution wave 2
 run_meta:                 # FIRST packet of the run ONLY; omit thereafter
   lane: orc               # orc | ultra | mini | fast | diy | wiki | analyze |
                           # plan | claude | poly | learn | verify | pattern |
-                          # prsetup | prdriver | quick
+                          # prsetup | prdriver | quick | grill | route |
+                          # brainstorm
                           # (`ultra` = an /orc-ultra run; the ONLY lane the orc
                           #  spine can emit besides `orc`. No other value here
                           #  is legal — a lane no entry point opens is a lane
@@ -86,7 +87,7 @@ decisions: >              # free text — the WHY layer
 | Multi-dispatch | `orc-wiki`, `orc-pr-driver` (lane `prdriver`) | orc-wiki: one per scan-batch boundary (the points that already run the registration sync / offer the pause) + the end-of-run packet. orc-pr-driver: one per LAYER boundary (each layer's green gate closes) + the end-of-run packet |
 | Composed | `orc-diy` | one packet per ENABLED phase group, **minimum 2** — the flow shape is user-composed, so the count is too (the compiled flow carries this block automatically) |
 | Iterative | `orc-quick` | **one packet per completed numbered entry** + the end-of-run `FINISH` packet — the lane loops on user requests, so the count follows entries, not phases |
-| Single-dispatch | `orc-claude`, `orc-plan`, `orc-analyze` (+ mini), `orc-pattern`, `orc-verify`, `orc-learn`, `orc-poly`, `orc-pr-setup` (lane `prsetup`), `orc-grill`, `orc-route` | **exactly ONE mandatory end-of-run packet** |
+| Single-dispatch | `orc-claude`, `orc-plan`, `orc-analyze` (+ mini), `orc-pattern`, `orc-verify`, `orc-learn`, `orc-poly`, `orc-pr-setup` (lane `prsetup`), `orc-grill`, `orc-route`, `orc-brainstorm` (lane `brainstorm`) | **exactly ONE mandatory end-of-run packet** |
 
 **`context-combiner` is NOT a lane — it is a PHASE inside the analyze run.** It
 has no slash command and no entry point of its own: `orc-analyze` Phase F
@@ -120,7 +121,8 @@ trace and never emit `SPAWN`/`RETURN`.
 - One file per run: **`run-<lane>-<slug>-<DDMMYY>-<HHMMSS>.txt`**, append-only.
   - `lane` — the trace-owning skill's short name (`orc`, `ultra`, `mini`, `fast`,
     `diy`, `wiki`, `analyze`, `plan`, `claude`, `poly`, `learn`, `verify`,
-    `pattern`, `prsetup`, `prdriver`, `quick`, `grill`, `route`). Every value
+    `pattern`, `prsetup`, `prdriver`, `quick`, `grill`, `route`,
+    `brainstorm`). Every value
     here is a lane some entry point actually opens — keep it that way: this
     list IS the lane vocabulary `orc stats` and `/orc-retro` count against.
   - `slug` — kebab-cased short user context from the intent (`[a-z0-9-]`, ≤32
@@ -139,6 +141,14 @@ trace and never emit `SPAWN`/`RETURN`.
   run end (success or abort). The `orc-trace.js` hook reads it to know which file
   to append to, and since v0.34.2 it also honors a POINTER whose mtime is fresh
   even when the file is not there yet — the two fixes are independent on purpose.
+- **A SUSPENDED lane re-writes its pointer on RESUME.** When a lane hands control
+  to another lane and expects it back (`_shared/lane-suspend.md`, `RETURN-TO`),
+  the receiving lane DELETES `.current` at its own `FINISH`. So on return the
+  suspending lane re-writes `.current` and must `touch the trace file` it names,
+  in the SAME step — both, or neither. Otherwise every line it writes after the
+  return goes nowhere: the v0.34.2 split-run signature, reached by a different
+  road. Two traces for a suspend is CORRECT — two lanes ran, and `orc stats`
+  counts two.
 - **Rename repair (deterministic-with-repair, not memory-only).** When no usable
   pointer exists as the first ORC-agent dispatch fires, the hook creates the
   folder + a generic `run-<DDMMYY>-<HHMMSS>.txt` and points at it. The FIRST

@@ -6,7 +6,7 @@
 
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
-![Version](https://img.shields.io/badge/version-0.44.1-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.45.0-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
@@ -46,46 +46,58 @@ zero-dependency npm package installs those files into your `.claude/` directory.
 
 ## Changelog
 
-**Latest: v0.44.1 — updated 2026-08-09.**
+**Latest: v0.45.0 — updated 2026-08-10.**
 
-### v0.44.1 — apply when you say so, and a spotlight that survives a banner _(2026-08-09)_
+### v0.45.0 — `/orc-brainstorm`: for when you do not have the idea yet _(2026-08-10)_
 
-**Nothing is written until you press Apply.** Every control on Settings and on
-Flow used to commit the instant you touched it: one click, one CLI subprocess,
-one full re-render that scrolled the list out from under you. Changing five keys
-was five of those. Edits are staged now — the rows mark themselves, an edit bar
-names each pending change (a count is not a change list), and Apply runs them in
-the order you staged them. A refused write does not abort the rest; it is
-reported by key. **Discard appears only when there is something to discard**, and
-**Reset** is the CLI's own `orc config reset` / `orc diy init --force`, confirmed.
-The bar sticks to the bottom of the viewport only while something is pending.
+**ORC had no lane for the first question.** `/orc-grill` sharpens an idea you
+already have; `/orc-analyze` checks a requirement against your code. If you
+arrived with a *problem* and no candidate answer, you either built the first idea
+you thought of or spent an analyze run discovering you analyzed the wrong thing.
+`/orc-brainstorm` generates the options. Grill converges; brainstorm diverges
+first, then converges — they compose (`/orc-brainstorm → /orc-grill →
+/orc-analyze → /orc-plan → /orc`). Brainstorm picks which mountain; grill picks
+the path up it. **It is not restricted to code:** "how should we onboard new
+merchants", "what should this product even be called", "how do we halve the
+support queue" are all valid inputs, and the repo is used when it helps and
+ignored when it does not.
 
-**The Flow preset you are already on says so and stops offering itself.**
-`orc diy show --json` now marks each preset `active`, and the match deliberately
-ignores `flow_name` — rename `solo-fast` to `solo` and it is still recognised as
-solo-fast. A button whose only possible effect is to overwrite your config with
-itself is not a button.
+**It generates on purpose.** Candidates come from named thinking lenses — SCAMPER,
+inversion, Six Thinking Hats, analogy, constraint-flip, first principles, and what
+this repo already tried and abandoned — announced with each batch, so you can ask
+for a different one. At least 8 candidates across at least 3 lenses, no cap, and
+**no criticism at all** while generating: a downside voiced during generation
+kills the three ideas that would have come after it. Every objection is held and
+released in the stress phase, as a pre-mortem plus an honest worst case AND an
+honest best case per direction.
 
-**The spotlight stopped breaking when the page grew under it.** The ring is
-`position: fixed` at coordinates measured once, and this page adds things above
-the fold on its own schedule — the blue update banner after a network check,
-doctor's banners after that, a version chip filling into the upgrade row. Each
-one pushed the target down and left the ring framing empty space above it. It now
-re-places on any layout change, through a ResizeObserver **and** a
-MutationObserver: the observer is the right instrument but is delivered from the
-rendering lifecycle, so a throttled tab — exactly the tab somebody comes back
-to — never gets the callback.
+**It never picks for you, and it never writes the file unasked.** It recommends
+one direction and argues for it, then waits — the mirror of the grill's rule that
+a lane must never answer its own question. When the picture looks complete it says
+*why* it thinks so and asks whether to write it up; only your yes writes anything.
+And **every menu ends with your own slot** ("in your words", "mix 1 and 2", "none
+of these"), because the whole value of a brainstorm is the idea ORC did not think
+of — a closed menu is a survey. Your idea joins the pool quoted verbatim and gets
+stress-tested exactly like one of its own.
 
-**The changelog reads like prose again.** It is this repo's README, hard-wrapped
-at 78 columns, rendered `pre-wrap` into a 660px box: every authoring line break
-survived and the paragraphs came out as a ragged stack ending nowhere near the
-right edge. Paragraphs are reflowed to the box now (blank lines still break,
-bullets still get their own line), the entry date is right-aligned to the same
-edge the version starts from, and the update banner's three children — badge,
-message, "Read →" — finally sit on one centre line instead of three.
+**The graveyard is the deliverable.** Every candidate lands in a direction or in
+the graveyard with the reason it lost, and the saved doc's centre section is "the
+pick — and why the others lost", one paragraph per loser. That is what stops the
+next session — or the next person — re-proposing what this one already rejected.
+It saves to `orc/brainstorming-session/<slug>/brainstorm-session.md` at your
+project root, one file per topic forever, never staged for commit.
+
+**And it can borrow `/orc-grill` mid-run and come back.** When one decision has to
+be settled before the options even make sense, it offers to suspend into grill and
+**return** with your answers carried over — a new `RETURN-TO` contract, the
+opposite shape to the existing fallback that leaves and does not come back. It
+works in reverse too: grill offers brainstorm when a round comes back "I do not
+even know what the options are". Zero new agents, zero new config keys.
 
 <details>
 <summary><b>Previous versions</b> (click to expand)</summary>
+
+### v0.44.1 — apply when you say so, and a spotlight that survives a banner _(2026-08-09)_
 
 ### v0.44.0 — the panel stops making you type what it already knows _(2026-08-09)_
 
@@ -378,7 +390,8 @@ needed. Either way, your `.claude/orc.config.yaml` overrides are left untouched.
 | **`/orc`** | The full orchestrator: intake → planning → per-task scoring → conflict-free parallel waves → review → verify → ship. Checkpoints eagerly; resumes in a fresh session at any pause. |
 | **`/orc-ultra`** | Maximum-rigor lane: the full pipeline plus an Opus 5 **xhigh** advisor (brief + rubric + one clarification round) and three judgment gates (after analysis, planning, and verify). Deep analyze, pattern/testgen/security forced on, executor tier floor. Costly by design. |
 | **`/orc-quick`** | **The quick lane — for almost anything.** Three steps per request: look (silent) → ask once → do. A small fix, a fast context dig, a defect hunt, a dependency bump, or PR review comments all run the same way. **Always asks which agent to dispatch** — no config can override that. Saves every request as a numbered entry in `orc-quick/<slug>/quick-context.md`. See below. |
-| **`/orc-grill`** | **For when you do not know what you want yet.** One vague sentence is a complete input. Asks rounds of questions (every question that is *ready*, together — never two where one depends on the other), looks facts up itself instead of making you recite your codebase, and never answers its own question. Ends when *you* say the idea matches what you meant. Then: save it to `orc-grill/<slug>/grill-context.md`, carry it into `/orc-analyze`, or drop it. No scan, no plan, no code. |
+| **`/orc-brainstorm`** | **For when you do not have the idea yet.** A problem, a goal, or a hunch — code or not. It generates candidates against named thinking lenses (SCAMPER, inversion, Six Thinking Hats, analogy, constraint-flip, first principles, what this repo already tried), with **no criticism while generating**; clusters them into 3–5 directions with the bet each makes and what it kills; stress-tests each with a pre-mortem plus the honest worst *and* best case; then recommends one and **waits — it never picks for you**. Every menu ends with your own slot. It stops and asks before writing anything; saved to `orc/brainstorming-session/<slug>/brainstorm-session.md`, whose centre section is *the pick — and why the others lost*. Can borrow `/orc-grill` mid-run and come back. |
+| **`/orc-grill`** | **For when you have one idea but it is still vague.** One vague sentence is a complete input. Asks rounds of questions (every question that is *ready*, together — never two where one depends on the other), looks facts up itself instead of making you recite your codebase, and never answers its own question. Ends when *you* say the idea matches what you meant. Then: save it to `orc-grill/<slug>/grill-context.md`, carry it into `/orc-analyze`, or drop it. No scan, no plan, no code. |
 | **`/orc-route`** | **You have a plan — which lane should build it?** Reads the plan's own numbers (tasks, waves, files, top score, risk) plus ORC's deterministic probes, then names one lane, the runners-up with what each *costs* you, and any lane that is impossible with the condition blocking it and its fix. **Plan-only**: given a request in words it refuses and says why, because routing from a sentence is guessing. `/orc-plan` offers it automatically after "Save & stop". |
 | **`/orc-explain`** | **"Wait, what?"** Type it after a message that did not land. ORC says it again: the point first, then the background it assumed, then every ORC-only term (band, facet, disposition, wave, slice, freshness tier) defined in your project's own words. Not "be shorter" — a summary of something you did not understand is the same thing you did not understand. |
 | **`/orc-mini`** | The fast path — see below. |
@@ -769,8 +782,9 @@ templates/
 ├── skills/
 │   ├── orc/                 full orchestrator — spine, schemas, references, subskills, config
 │   ├── _shared/             cross-lane contract prose (not a skill): return-validation, smoke-gate,
-│   │                        fallback-handoff, read-ladder, gotchas, untrusted-input, interview
+│   │                        fallback-handoff, lane-suspend, read-ladder, gotchas, untrusted-input, interview
 │   ├── orc-quick/           quick lane — look · ask once · do; always asks which agent (own README)
+│   ├── orc-brainstorm/      no idea yet? generates candidates against lenses; you pick (+ lens catalogue)
 │   ├── orc-grill/           sharpen a vague idea by conversation — frontier rounds, three exits
 │   ├── orc-route/           plan-only lane router — refuses prose rather than guess
 │   ├── orc-explain/         re-pitch the last message with the background it assumed
@@ -791,9 +805,9 @@ templates/
 │   ├── orc-advisor/         ultra-lane advisory brief + rubric + clarification round (/orc-ultra only)
 │   ├── orc-judge/           ultra-lane judgment gates — analysis / plan / implementation (/orc-ultra only)
 │   └── context-combiner/    merges 2+ related analyses into one combined spec (+ schemas)
-├── commands/                /orc /orc-ultra /orc-quick /orc-grill /orc-route /orc-explain /orc-mini /orc-fast /orc-diy
-│                            /orc-analyze /orc-plan /orc-poly /orc-pr-setup /orc-pr-driver /orc-verify /orc-wiki
-│                            /orc-pattern /orc-retro /orc-claude /orc-learn
+├── commands/                /orc /orc-ultra /orc-quick /orc-brainstorm /orc-grill /orc-route /orc-explain /orc-mini
+│                            /orc-fast /orc-diy /orc-analyze /orc-plan /orc-poly /orc-pr-setup /orc-pr-driver
+│                            /orc-verify /orc-wiki /orc-pattern /orc-retro /orc-claude /orc-learn
 ├── hooks/                   effort guard (PreToolUse) · statusline warning · behavior trace
 └── agents/                  single-role, model-pinned subagents (+ read-only scout) + MODEL-MAPPING.md
 bin/cli.js                   installer + config editor + flow composer + run-state reader
