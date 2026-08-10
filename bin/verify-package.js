@@ -89,6 +89,35 @@ const required = [
   "templates/skills/orc-brainstorm/references/brainstorm-doc.md",
   "templates/skills/orc-brainstorm/references/lenses.md",
   "templates/commands/orc-brainstorm.md",
+  // v0.46.0 — the six new lanes. Named file by file for the same reason the
+  // panel's files are: each SKILL.md is useless without its references (a lane
+  // whose card/ledger/surface shape is missing dispatches against a contract it
+  // cannot read), and the two CONSUMER gate files are what /orc loads at Phase 1
+  // — a publish that drops one leaves the spine pointing at nothing.
+  "templates/skills/orc-pact/SKILL.md",
+  "templates/skills/orc-pact/references/ledger.md",
+  "templates/skills/orc-pact/references/gate.md",
+  "templates/skills/orc-boundary/SKILL.md",
+  "templates/skills/orc-boundary/references/card.md",
+  "templates/skills/orc-boundary/references/gate.md",
+  "templates/skills/orc-handoff/SKILL.md",
+  "templates/skills/orc-handoff/references/surfaces.md",
+  "templates/skills/orc-handoff/references/handoff-log.md",
+  "templates/skills/orc-budget/SKILL.md",
+  "templates/skills/orc-budget/references/corpus.md",
+  "templates/skills/orc-aftermath/SKILL.md",
+  "templates/skills/orc-aftermath/references/report.md",
+  "templates/skills/orc-export/SKILL.md",
+  // W1 — the partial-refresh reference is the whole tier ladder + the budget cap
+  // + the retirement offer; without it orc-wiki's spine points at a missing file
+  // at exactly the moment it has to choose which scanner to dispatch.
+  "templates/skills/orc-wiki/references/partial-refresh.md",
+  "templates/commands/orc-pact.md",
+  "templates/commands/orc-boundary.md",
+  "templates/commands/orc-handoff.md",
+  "templates/commands/orc-budget.md",
+  "templates/commands/orc-aftermath.md",
+  "templates/commands/orc-export.md",
   "templates/skills/orc-route/SKILL.md",
   "templates/skills/orc-explain/SKILL.md",
   "templates/skills/orc-analyze/references/thin-input.md",
@@ -123,6 +152,10 @@ const required = [
   "templates/agents/orc-pattern-codifier-sonnet-5-high.md",
   "templates/agents/orc-retro-sonnet-5-high.md",
   "templates/agents/orc-wiki-scanner-opus-4-8-high.md",
+  // v0.46.0 — the LIGHT half of the wiki scan tier ladder. Both halves must ship:
+  // the ladder resolves at dispatch time, so a missing light scanner makes every
+  // small-delta refresh dispatch a nonexistent agent.
+  "templates/agents/orc-wiki-scanner-sonnet-5-high.md",
   "templates/agents/orc-context-combiner-opus-5-high.md",
   // The orc-mini lane's agent pair and the whole Fable 5 role-override feature
   // were guarded by nothing but the count floor — a publish missing any of them
@@ -181,8 +214,16 @@ const agentCount = walkCount(path.join(ROOT, "templates/agents"), ".md");
 // v0.45.0: +1 skill (orc-brainstorm) and STILL no new agent — its divergent
 // generation is the orchestrator's own work and its recon is dispatched ad-hoc
 // by model+effort, so the agent floor holds at 40.
-if (skillCount < 30) missing.push(`templates/skills (expected >=30 SKILL.md, found ${skillCount})`);
-if (agentCount < 40) missing.push(`templates/agents (expected >=40 .md, found ${agentCount})`);
+// v0.46.0: +6 skills (orc-pact, orc-boundary, orc-handoff, orc-budget,
+// orc-aftermath, orc-export) and +1 agent — and the split is the point. Five of
+// the six lanes ship ZERO agents (the v0.38.0/v0.45.0 precedent: read-only recon
+// is dispatched ad-hoc by model+effort, and three of them dispatch nothing at
+// all because their work is deterministic CLI). The ONE new agent is the wiki
+// scan ladder's LIGHT half, which is a real dispatch target with a real name and
+// therefore earns a MODEL-MAPPING row, an explicit guard entry above, and a
+// place in the opus5_only table's prose.
+if (skillCount < 36) missing.push(`templates/skills (expected >=36 SKILL.md, found ${skillCount})`);
+if (agentCount < 41) missing.push(`templates/agents (expected >=41 .md, found ${agentCount})`);
 
 // B4 — encoding/mojibake guard. The OneDrive corruption rule becomes a gate:
 // scan every shipped text file for the U+FFFD replacement char (invalid UTF-8

@@ -219,7 +219,8 @@ Direction chosen. What next?
 1  Stop here — save it            → orc/brainstorming-session/<slug>/brainstorm-session.md
 2  Continue into /orc-analyze     → check it against the real code
 3  Continue into /orc-grill       → sharpen this direction into a settled spec
-4  Your own — something else, or stop and save nothing
+4  Save the constraints to the pact → they outlive this run  (/orc-pact)
+5  Your own — something else, or stop and save nothing
 ```
 
 - **1 — save.** Write the doc (`references/brainstorm-doc.md`), close the trace,
@@ -234,7 +235,13 @@ Direction chosen. What next?
 - **3 — hand off to grill.** The natural next step. Writes the doc first, then
   enters `/orc-grill` with the chosen direction as its opening sentence and the
   tagged decisions pre-loaded as settled, so grill does not re-ask them.
-- **4 — the open slot**, including "save nothing" — writes nothing, still closes
+- **4 — hand the constraints to the pact (v0.46.0).** Present ONLY when at least
+  one B5 decision was tagged `constraint`. Writes the doc first, then hands those
+  rows quoted VERBATIM, with `origin: {lane: orc-brainstorm, run: <this run>}`, to
+  `/orc-pact` — the only thing that writes the ledger. Without it a constraint
+  settled here lives exactly as long as the session does. No constraints → the
+  option is **absent with the reason printed**, never a dead number.
+- **5 — the open slot**, including "save nothing" — writes nothing, still closes
   the trace properly.
 
 ---

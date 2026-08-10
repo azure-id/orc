@@ -175,6 +175,25 @@ const READS = {
   "/api/run": (q) => ["run", "show", String(q.slug || "")],
   "/api/wiki": () => ["wiki", "status"],
   "/api/wiki/impact": () => ["wiki", "impact"],
+  // v0.46.0. Every one is a READ with an exit-code contract, so the exit code is
+  // DATA here exactly like `pattern status` and `wiki impact` above: pact 0/1/2/3,
+  // boundary 0/1/2/3, handoff 0/1, budget 0/1/2/3, aftermath 0/1/2/3,
+  // wiki plan 0/1/2/3, wiki debt 0/1/3, export --check 0/1.
+  "/api/wiki/plan": () => ["wiki", "plan"],
+  "/api/wiki/debt": () => ["wiki", "debt"],
+  "/api/wiki/usage": () => ["wiki", "usage"],
+  "/api/pact": () => ["pact", "status"],
+  "/api/boundary": (q) => (q.path ? ["boundary", "status", String(q.path)] : ["boundary", "status"]),
+  "/api/handoff": () => ["handoff", "surfaces"],
+  "/api/budget/rates": () => ["budget", "rates"],
+  // A forecast takes a PLAN PATH. The browser sends a path the folder picker
+  // produced; the server passes it straight to the CLI and never opens the file
+  // itself — /api/fs/list stays a directory LISTER, and widening it to read a
+  // plan would be the one change that turns this panel into a file reader.
+  "/api/budget/forecast": (q) => ["budget", "forecast", String(q.plan || "")],
+  "/api/budget/actual": (q) => ["budget", "actual", String(q.slug || "")],
+  "/api/aftermath": (q) => (q.since ? ["aftermath", "status", "--since", String(q.since)] : ["aftermath", "status"]),
+  "/api/export": () => ["export", "--check"],
   "/api/patterns": () => ["pattern", "status"],
   "/api/gotchas": () => ["gotcha", "list"],
   "/api/stats": (q) => (q.since ? ["stats", "--since", String(q.since)] : ["stats"]),
@@ -186,6 +205,16 @@ const READS = {
   "/api/stack": (q) => (q.slug ? ["pr", "stack", "status", String(q.slug)] : ["pr", "stack", "status"]),
 };
 
+// v0.46.0 writes. THE LINE THIS PANEL DOES NOT CROSS: a button exists only for an
+// action that costs NO model tokens. `orc pact check` runs the ledger's own cheap
+// proofs (a test, a command, a grep the user wrote); `orc handoff set` edits one
+// graded surface; `orc export` compiles files already on disk. Every one is
+// deterministic and every one is a real CLI command.
+//
+// The conversational half of each lane — reconciling a promise, deciding a
+// verdict, walking somebody through a change — costs model tokens, so the panel
+// COPIES those commands and never runs them. A test greps this object to make
+// sure no lane name ever appears inside it.
 const WRITES = {
   "/api/config/set": (b) => ["config", "set", String(b.key), String(b.value)],
   "/api/config/reset": (b) => (b.key ? ["config", "reset", String(b.key)] : ["config", "reset"]),
@@ -205,7 +234,16 @@ const WRITES = {
     return argv;
   },
   "/api/wiki/sync": () => ["wiki", "sync"],
+  "/api/wiki/usage/rebuild": () => ["wiki", "usage", "--rebuild"],
   "/api/gotcha/prune": () => ["gotcha", "prune"],
+  "/api/pact/check": (b) => (b.id ? ["pact", "check", String(b.id)] : ["pact", "check"]),
+  "/api/pact/sync": () => ["pact", "sync"],
+  // The surface id, the key and the value all come from the browser — and all
+  // three are validated by the CLI, which refuses a RED surface, an unknown id,
+  // a key that does not already exist, and a write at all when handoff_write is
+  // false. There is no second idea of a safe edit anywhere in this panel.
+  "/api/handoff/set": (b) => ["handoff", "set", String(b.id), String(b.key), String(b.value)],
+  "/api/budget/calibrate": () => ["budget", "calibrate"],
   "/api/crosslink/remove": (b) => ["crosslink", "remove", String(b.name)],
   // The UI assembles no YAML. It hands the CLI the same arguments the
   // interactive prompt collects, and every rejection the user sees is the
@@ -251,6 +289,16 @@ const MAINTENANCE = {
     label: "Fetch the LATEST package from the network, then apply it",
     preview: ["version"],
     network: true,
+  },
+  // v0.46.0 — the portable export. It belongs on Maintenance by the v0.43.6 rule
+  // (a caution routes to the panel that can CLEAR it): `export-stale` is cleared
+  // by `orc export`, which is a CLI write this panel can run. Its preview is the
+  // `--check` report, which names WHICH source drifted — a count of stale sources
+  // would not be consent to overwrite a committed file.
+  export: {
+    apply: ["export"],
+    label: "Recompile AGENTS.md from the wiki, patterns, PACT.md and boundary cards",
+    preview: ["export", "--check"],
   },
   // ADVANCED (v0.44.0) — the one action on this panel that does not target the
   // project. Every other route pins `--dir <projectRoot>`; `--global` outranks
@@ -432,6 +480,12 @@ function overview(ctx) {
     runs_total: runs.data ? runs.data.total : 0,
     waiting: waiting.map((r) => r.slug),
     diy: readCli(["diy", "show"], ctx).data,
+    // v0.46.0 chips. Each is the CLI's OWN answer — the panel repeats the state
+    // words and never derives them. A chip with nothing to say still renders its
+    // good state, so "healthy" and "not measured" never look the same.
+    pact: readCli(["pact", "status"], ctx).data,
+    boundary: readCli(["boundary", "status"], ctx).data,
+    wiki_debt: readCli(["wiki", "debt"], ctx).data,
   };
 }
 

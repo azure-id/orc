@@ -33,13 +33,21 @@ agent: same task slice, same return contract, same phase.
 | mini plan | `orc-planner-mini-sonnet-5-high` | `orc-planner-mini-opus-5-med` |
 | scout | `orc-scout-sonnet-4-6-high` | `orc-scout-opus-5-low` |
 | pattern codify | `orc-pattern-codifier-sonnet-5-high` | `orc-pattern-codifier-opus-5-med` |
-| wiki scan | `orc-wiki-scanner-opus-4-8-high` | `orc-wiki-scanner-opus-5-med` |
+| wiki scan | `orc-wiki-scanner-opus-4-8-high` (deep) **or** `orc-wiki-scanner-sonnet-5-high` (light) | `orc-wiki-scanner-opus-5-med` |
 | claude write | `orc-claude-writer-opus-4-8-high` | `orc-claude-writer-opus-5-med` |
 | retro mine | `orc-retro-sonnet-5-high` | `orc-retro-opus-5-med` |
 
 The nine roles already pinned to `claude-opus-5` — analyst, planner, reviewer,
 verifier, test-author, combiner, learn-writer, advisor, judge — are already
 compliant and dispatch unchanged (their efforts are NOT rewritten by this mode).
+
+**The wiki scan tier ladder (v0.46.0) adds NO row here, and needs no new pair.**
+Off, the ladder picks deep or light per delta. ON, this mode already forces the
+wiki scanner to `orc-wiki-scanner-opus-5-med` — so **both tiers collapse onto that
+one shipped agent** and the ladder simply stops applying. A cheaper Opus 5 scanner
+variant for the light tier does not exist and must never be added: a pair for a
+tier that cannot occur while the flag is on is exactly the phantom this table
+exists to prevent. Ladder: `../orc-wiki/references/partial-refresh.md`.
 
 ## Out of scope — never forced
 

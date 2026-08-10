@@ -37,6 +37,16 @@
       <li><a href="#/runs"        data-panel="runs"        data-idx="3" data-i18n="nav.runs">Runs</a></li>
       <li><a href="#/knowledge"   data-panel="knowledge"   data-idx="4" data-i18n="nav.knowledge">Knowledge</a></li>
       <li><a href="#/stats"       data-panel="stats"       data-idx="5" data-i18n="nav.stats">Stats</a></li>
+      <!--
+        v0.46.0. Promises and Boundary sit next to Knowledge because they ARE
+        knowledge — derived, coverage-anchored, and stale the same way a wiki doc
+        is. Self-serve sits last of the three: it is the only panel here aimed at
+        somebody who does not read code, and it is the one a developer opens
+        least often.
+      -->
+      <li><a href="#/pact"        data-panel="pact"        data-idx="p" data-i18n="nav.pact">Promises</a></li>
+      <li><a href="#/boundary"    data-panel="boundary"    data-idx="b" data-i18n="nav.boundary">Boundary</a></li>
+      <li><a href="#/handoff"     data-panel="handoff"     data-idx="h" data-i18n="nav.handoff">Self-serve</a></li>
       <li><a href="#/flow"        data-panel="flow"        data-idx="6" data-i18n="nav.flow">Flow</a></li>
       <li><a href="#/crosslink"   data-panel="crosslink"   data-idx="7" data-i18n="nav.crosslink">Crosslink</a></li>
       <li><a href="#/learn"       data-panel="learn"       data-idx="8" data-i18n="nav.learn">Learn</a></li>

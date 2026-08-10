@@ -157,6 +157,371 @@ const stats = {
   unknown_lane: 1,
 };
 
+/* ============================================================ v0.46.0 ====== */
+/* Same rule as everything above: ONE OF EVERY STATE, including the ugly ones.
+   You cannot design a BROKEN promise card on a ledger where everything holds,
+   a REFUSE checklist on a repo with no refusals, or an empty-debt Knowledge
+   panel on a wiki that owes four docs. test/webui.test.js asserts the count per
+   state, so a new state cannot ship without a fixture. */
+
+const pact = {
+  ok: true,
+  ledger: PROJECT + "/.claude/orc/pact/ledger.json",
+  doc: PROJECT + "/PACT.md",
+  doc_exists: true,
+  entries: 5,
+  retired: 1,
+  counts: { HOLDING: 2, DRIFTED: 1, UNCHECKABLE: 1, BROKEN: 1 },
+  line: "pact: 2 holding · 1 drifted · 1 uncheckable · 1 BROKEN",
+  rows: [
+    {
+      id: "PACT-014",
+      statement: "A payment is never written to the ledger twice for one idempotency key.",
+      origin: { lane: "orc-grill", run: "run-grill-checkout-100826-141130", kind: "constraint" },
+      anchors: ["src/payments/ledger.ts:88", "src/payments/idempotency.ts"],
+      check: { kind: "test", ref: "npm test -- idempotency" },
+      verified_commit: "8a62b4f1c9",
+      confidence: "high",
+      last_check: { status: "fail", commit: "8a62b4f1c9", at: "09-08-2026 11:20:04", ref: "npm test -- idempotency" },
+      // A real-looking failure, not a placeholder: the panel has to lay out a
+      // multi-line check output that does not fit its card.
+      history: [
+        { at: "09-08-2026 11:20:04", status: "fail", commit: "8a62b4f1c9" },
+        { at: "02-08-2026 09:14:51", status: "pass", commit: "c273793aa1" },
+      ],
+      retired: false,
+      state: "BROKEN",
+      why: "check failed at 8a62b4f1 (09-08-2026 11:20:04)",
+      distance: 3,
+    },
+    {
+      id: "PACT-002",
+      statement: "Refund windows are configured, never hardcoded.",
+      origin: { lane: "orc-brainstorm", run: "run-brainstorm-refunds-010826-101010", kind: "constraint" },
+      anchors: ["src/billing/refund.ts"],
+      check: { kind: "grep", ref: "REFUND_WINDOW_DAYS" },
+      verified_commit: "c273793aa1",
+      confidence: "medium",
+      last_check: { status: "pass", commit: "c273793aa1", at: "01-08-2026 10:11:02", ref: "REFUND_WINDOW_DAYS" },
+      history: [{ at: "01-08-2026 10:11:02", status: "pass", commit: "c273793aa1" }],
+      retired: false,
+      state: "DRIFTED",
+      why: "6 commits since c273793a touched 1 anchored file",
+      distance: 6,
+    },
+    {
+      id: "PACT-007",
+      statement: "The admin export never contains a raw email address.",
+      origin: { lane: "user", run: null, kind: "constraint" },
+      anchors: ["src/admin/export.ts"],
+      check: { kind: "manual", ref: null },
+      verified_commit: "783f6971aa",
+      confidence: "low",
+      last_check: null,
+      history: [],
+      retired: false,
+      state: "UNCHECKABLE",
+      // The long day count: an UNCHECKABLE promise nobody has looked at for
+      // months is the case this state exists to make visible.
+      why: "no cheap check exists — this promise is held by review, not by a runner",
+      distance: null,
+    },
+    {
+      id: "PACT-001",
+      statement: "Every outbound webhook is signed with the tenant's current secret.",
+      origin: { lane: "orc", run: "run-orc-webhooks-120726-084500", kind: "constraint" },
+      anchors: ["src/webhooks/sign.ts:40"],
+      check: { kind: "command", ref: "npm run test:webhooks" },
+      verified_commit: "e9dad01bb2",
+      confidence: "high",
+      last_check: { status: "pass", commit: "e9dad01bb2", at: "05-08-2026 16:02:11", ref: "npm run test:webhooks" },
+      history: [{ at: "05-08-2026 16:02:11", status: "pass", commit: "e9dad01bb2" }],
+      retired: false,
+      state: "HOLDING",
+      why: "verified at e9dad01b; no commit since has touched its anchors",
+      distance: 0,
+    },
+    {
+      id: "PACT-009",
+      statement: "Session cookies are always SameSite=Lax.",
+      origin: { lane: "orc-grill", run: "run-grill-auth-200626-113000", kind: "constraint" },
+      anchors: ["src/auth/session.ts"],
+      check: { kind: "grep", ref: "SameSite=Lax" },
+      verified_commit: "cc4778e0aa",
+      confidence: "high",
+      last_check: { status: "pass", commit: "cc4778e0aa", at: "21-06-2026 09:00:00", ref: "SameSite=Lax" },
+      history: [{ at: "21-06-2026 09:00:00", status: "pass", commit: "cc4778e0aa" }],
+      retired: false,
+      state: "HOLDING",
+      why: "verified at cc4778e0; no commit since has touched its anchors",
+      distance: 0,
+    },
+  ],
+};
+
+const boundary = {
+  ok: true,
+  dir: PROJECT + "/.claude/orc/boundary",
+  counts: { EXECUTE: 2, ESCALATE: 1, REFUSE: 1 },
+  stale: 1,
+  malformed: [],
+  line: "boundary: 2 execute · 1 escalate · 1 refuse (1 stale)",
+  cards: [
+    {
+      file: "src-payments.md",
+      path: PROJECT + "/.claude/orc/boundary/src-payments.md",
+      area: "src/payments",
+      verdict: "REFUSE",
+      checklist: [
+        "add a test runner to this package",
+        "cover the idempotency path",
+        "record the money invariant in PACT.md",
+      ],
+      escalate_to: null,
+      anchored_files: ["src/payments/ledger.ts", "src/payments/idempotency.ts"],
+      verified_commit: "8a62b4f1c9",
+      distance: 0,
+      stale: false,
+      malformed: [],
+      reasons: [
+        "self-verify: no — no test runner in this package",
+        "reversible: no — writes to a live ledger",
+      ],
+    },
+    {
+      file: "db-migrations.md",
+      path: PROJECT + "/.claude/orc/boundary/db-migrations.md",
+      area: "db/migrations",
+      verdict: "ESCALATE",
+      checklist: [],
+      escalate_to: "the data owner",
+      anchored_files: ["db/migrations"],
+      verified_commit: "c273793aa1",
+      distance: 0,
+      stale: false,
+      malformed: [],
+      reasons: ["reversible: no — a forward migration on live rows", "decision: yes — the rollout window is not ORC's call"],
+    },
+    {
+      file: "web-locales.md",
+      path: PROJECT + "/.claude/orc/boundary/web-locales.md",
+      area: "web/locales",
+      verdict: "EXECUTE",
+      checklist: [],
+      escalate_to: null,
+      anchored_files: ["web/locales/en.json"],
+      verified_commit: "783f6971aa",
+      distance: 0,
+      stale: false,
+      malformed: [],
+      reasons: ["self-verify: yes — `npm run i18n:check`", "reversible: yes — one git checkout"],
+    },
+    {
+      file: "src-notifications.md",
+      path: PROJECT + "/.claude/orc/boundary/src-notifications.md",
+      area: "src/notifications",
+      verdict: "EXECUTE",
+      checklist: [],
+      escalate_to: null,
+      anchored_files: ["src/notifications/dispatcher.ts"],
+      verified_commit: "9f2c41ab8d",
+      // STALE: the evidence moved. Not a wrong card — one whose four answers
+      // were computed against a commit that is 12 behind.
+      distance: 12,
+      stale: true,
+      malformed: [],
+      reasons: ["self-verify: yes — covered by test/notifications", "reversible: yes"],
+    },
+  ],
+};
+
+const handoff = {
+  ok: true,
+  map: PROJECT + "/orc-handoff/surfaces.md",
+  map_exists: true,
+  write_enabled: true,
+  counts: { green: 4, amber: 1, red: 2 },
+  surfaces: [
+    { id: "H-001", file: "web/locales/en.json", what: "Screen text", fields: {}, grade: "green", check: "npm run i18n:check", check_kind: "command", revert: "git checkout -- web/locales/en.json", reason: null, ask: null, exists: true },
+    { id: "H-002", file: "web/locales/id.json", what: "Screen text (Indonesian)", fields: {}, grade: "green", check: "npm run i18n:check", check_kind: "command", revert: "git checkout -- web/locales/id.json", reason: null, ask: null, exists: true },
+    { id: "H-003", file: "content/pricing.md", what: "The pricing page", fields: { upgrade: "a link checker would make this green" }, grade: "amber", check: "open /pricing in the app and read the page", check_kind: "manual", revert: "git checkout -- content/pricing.md", reason: null, ask: null, exists: true },
+    { id: "H-004", file: "config/features.yaml", what: "Feature switches", fields: {}, grade: "green", check: "npm run validate:flags", check_kind: "command", revert: "git checkout -- config/features.yaml", reason: null, ask: null, exists: true },
+    // A GREEN surface whose check FAILS. The panel must be able to render the
+    // failure and the undo command without it reading as "your edit was saved".
+    { id: "H-005", file: "content/faq.md", what: "The FAQ page", fields: { last_check: "fail" }, grade: "green", check: "npm run lint:content", check_kind: "command", revert: "git checkout -- content/faq.md", reason: null, ask: null, exists: true },
+    { id: "H-006", file: "src/config/limits.ts", what: "Looks like settings, is code", fields: {}, grade: "red", check: null, check_kind: "manual", revert: "git checkout -- src/config/limits.ts", reason: "this file decides how much a customer is charged", ask: "a backend developer", exists: true },
+    { id: "H-007", file: "db/seeds/tenants.sql", what: "Looks like data, is a migration input", fields: {}, grade: "red", check: null, check_kind: "manual", revert: "git checkout -- db/seeds/tenants.sql", reason: "this file is replayed into production on every deploy", ask: "the data owner", exists: true },
+  ],
+};
+
+const wikiPlan = {
+  ok: true,
+  registered: 14,
+  pending: 4,
+  deep: 2,
+  light: 2,
+  usage_window: 20,
+  usage_runs_scanned: 20,
+  estimate: { tokens: { input: 21000, cache_write: 96000, cache_read: 168000, output: 50000 }, usd: 0.94, weighted: 133800 },
+  estimate_unavailable: null,
+  freshness: { tier: "FRESH", distance: 6, edges: { freshMax: 10, agingMax: 30 } },
+  scan_tier_mode: "ladder",
+  free_repairs: [
+    { id: "orientation", cost: "free", cmd: "/orc-wiki refresh wiki/orc-orientation.md", what: "regenerate the derived orientation doc (read first by every consumer)" },
+  ],
+  rows: [
+    { doc: "wiki/orc-feature-refunds.md", state: "STRUCTURAL", delta: 0, delta_files: [], gone: ["api/refunds/window.ts"], used: 17, used_of: 20, last_used: "2026-08-10", tier: "deep", agent: "orc-wiki-scanner-opus-4-8-high", tier_rule: "structural", tier_why: "STRUCTURAL — a covered file is gone; a targeted refresh cannot re-anchor blind", new_surface: false, estimate: { p50: { input: 8000, cache_write: 40000, cache_read: 69000, output: 21000 }, p90: { input: 11000, cache_write: 58000, cache_read: 99000, output: 30000 }, samples: 7 }, usd: 0.42, retire_hint: false },
+    { doc: "wiki/orc-feature-payments.md", state: "TOUCHED", delta: 6, delta_files: ["src/payments/ledger.ts", "src/payments/idempotency.ts"], gone: [], used: 14, used_of: 20, last_used: "2026-08-09", tier: "deep", agent: "orc-wiki-scanner-opus-4-8-high", tier_rule: "wide-delta", tier_why: "covered files touched >= wiki_tier_deep_files", new_surface: false, estimate: { p50: { input: 7000, cache_write: 36000, cache_read: 62000, output: 19000 }, p90: { input: 10000, cache_write: 51000, cache_read: 88000, output: 27000 }, samples: 7 }, usd: 0.38, retire_hint: false },
+    { doc: "wiki/orc-reference-config.md", state: "TOUCHED", delta: 1, delta_files: ["src/config/index.ts"], gone: [], used: 2, used_of: 20, last_used: "2026-07-25", tier: "light", agent: "orc-wiki-scanner-sonnet-5-high", tier_rule: "small-delta", tier_why: "small delta, no new surface", new_surface: false, estimate: { p50: { input: 3000, cache_write: 11000, cache_read: 17000, output: 4000 }, p90: { input: 4000, cache_write: 16000, cache_read: 25000, output: 6000 }, samples: 4 }, usd: 0.06, retire_hint: false },
+    // The zero-use retire candidate. It KEEPS ITS SLOT and renders muted with a
+    // hint — filtering it out would make "unused" and "does not exist" identical.
+    { doc: "wiki/orc-feature-admin-export.md", state: "TOUCHED", delta: 3, delta_files: ["src/admin/export.ts"], gone: [], used: 0, used_of: 20, last_used: null, tier: "light", agent: "orc-wiki-scanner-sonnet-5-high", tier_rule: "small-delta", tier_why: "small delta, no new surface", new_surface: false, estimate: { p50: { input: 3000, cache_write: 9000, cache_read: 20000, output: 6000 }, p90: { input: 4000, cache_write: 13000, cache_read: 29000, output: 9000 }, samples: 4 }, usd: 0.08, retire_hint: true },
+  ],
+};
+
+const wikiDebt = {
+  ok: true,
+  project: "shopcart",
+  pending: 4,
+  deep: 2,
+  tokens: { input: 21000, cache_write: 96000, cache_read: 168000, output: 50000 },
+  usd: 0.94,
+  oldest_commits_behind: 11,
+  tier: "FRESH",
+  edges: { freshMax: 10, agingMax: 30 },
+  docs: [
+    { doc: "wiki/orc-feature-refunds.md", state: "STRUCTURAL", tier: "deep", used: 17 },
+    { doc: "wiki/orc-feature-payments.md", state: "TOUCHED", tier: "deep", used: 14 },
+    { doc: "wiki/orc-reference-config.md", state: "TOUCHED", tier: "light", used: 2 },
+    { doc: "wiki/orc-feature-admin-export.md", state: "TOUCHED", tier: "light", used: 0 },
+  ],
+};
+
+const wikiUsage = {
+  ok: true,
+  file: PROJECT + "/.claude/orc/wiki-usage.json",
+  window_runs: 20,
+  runs_scanned: 20,
+  rebuilt_at: "10-08-2026 09:41:02",
+  registered: 14,
+  in_active_use: 8,
+  never_used: 2,
+  rows: [
+    { doc: "wiki/orc-orientation.md", used: 20, of: 20, last_used: "2026-08-10" },
+    { doc: "wiki/orc-feature-refunds.md", used: 17, of: 20, last_used: "2026-08-10" },
+    { doc: "wiki/orc-feature-payments.md", used: 14, of: 20, last_used: "2026-08-09" },
+    { doc: "wiki/orc-reference-http.md", used: 9, of: 20, last_used: "2026-08-06" },
+    { doc: "wiki/orc-reference-config.md", used: 2, of: 20, last_used: "2026-07-25" },
+    { doc: "wiki/orc-feature-admin-export.md", used: 0, of: 20, last_used: null },
+    { doc: "wiki/orc-reference-legacy-cron.md", used: 0, of: 20, last_used: null },
+  ],
+};
+
+const budgetForecast = {
+  ok: true,
+  plan: PROJECT + "/.claude/orc/run/store-credit/plan.md",
+  tasks: 14,
+  waves: 5,
+  tokens: {
+    p50: { input: 53400, cache_write: 362800, cache_read: 733800, output: 75100 },
+    p90: { input: 81000, cache_write: 548000, cache_read: 1140000, output: 118000 },
+  },
+  raw: { p50: 1225100, p90: 1887000 },
+  weighted: { p50: 564680, p90: 861000 },
+  usd: { p50: 6.76, p90: 10.5 },
+  price_table: { as_of: "2026-08-01", age_days: 9, stale: false, path: "bin/pricing.json" },
+  quota: { available: true, plan: "max20", label: "Max 20x", window_pct: 18.2, weekly_pct: 4.1 },
+  // A task at CONTEXT RISK — the state that cannot be designed on a small plan.
+  context_risk: [{ task: "T12", agent: "orc-executor-opus-5-high", peak: 189000, window: 200000, pct: 95 }],
+  bands: [
+    { band: "[0,30)", agent: "orc-executor-haiku-4-5", count: 2, tasks: ["T01", "T02"], samples: 9, p50: { input: 1200, cache_write: 6400, cache_read: 11800, output: 900 }, p90: { input: 1800, cache_write: 9200, cache_read: 17000, output: 1400 } },
+    { band: "[40,55)", agent: "orc-executor-sonnet-4-6-high", count: 3, tasks: ["T03", "T05", "T07"], samples: 12, p50: { input: 7800, cache_write: 52100, cache_read: 104000, output: 8400 }, p90: { input: 11000, cache_write: 75000, cache_read: 150000, output: 12000 } },
+    { band: "[70,80)", agent: "orc-executor-opus-4-7-high", count: 1, tasks: ["T04"], samples: 6, p50: { input: 5700, cache_write: 40200, cache_read: 81000, output: 9300 }, p90: { input: 8100, cache_write: 58000, cache_read: 117000, output: 13400 } },
+    // A band with insufficient history — the low-confidence warning is not
+    // optional chrome, so the fixture has to be able to trigger it.
+    { band: "[90,100]", agent: "orc-executor-opus-5-high", count: 1, tasks: ["T12"], samples: 2, p50: { input: 9100, cache_write: 61000, cache_read: 128000, output: 17000 }, p90: { input: 14000, cache_write: 94000, cache_read: 198000, output: 26000 } },
+  ],
+  fixed_roles: [
+    { role: "orc-system-analyst-opus-5-high", samples: 11, p50: { input: 6100, cache_write: 41000, cache_read: 82000, output: 9000 }, p90: { input: 8600, cache_write: 58000, cache_read: 116000, output: 13000 } },
+    { role: "orc-planner-opus-5-med", samples: 11, p50: { input: 5000, cache_write: 33000, cache_read: 68000, output: 7400 }, p90: { input: 7100, cache_write: 47000, cache_read: 96000, output: 10500 } },
+    { role: "orc-trace-writer-haiku-4-5", samples: 41, p50: { input: 900, cache_write: 3000, cache_read: 5400, output: 700 }, p90: { input: 1300, cache_write: 4400, cache_read: 7800, output: 1000 } },
+  ],
+  low_confidence_bands: 1,
+  min_samples: 5,
+  // Non-zero on purpose: `unattributed` is shown whenever it is above 0, and a
+  // fixture where it is always 0 makes that branch undesignable.
+  unattributed: { blocks: 12, tokens: { input: 900, cache_write: 12000, cache_read: 24000, output: 1100 } },
+  transcripts_readable: true,
+  lanes: [
+    { lane: "ultra", cmd: "/orc-ultra", raw: 2410000, weighted: 1090000, usd: 14.2, low_confidence_bands: 1, low_confidence_roles: 0 },
+    { lane: "orc", cmd: "/orc", raw: 1225100, weighted: 564680, usd: 6.76, low_confidence_bands: 1, low_confidence_roles: 0 },
+    { lane: "mini", cmd: "/orc-mini", raw: 410000, weighted: 188000, usd: 2.1, low_confidence_bands: 0, low_confidence_roles: 0 },
+    { lane: "fast", cmd: "/orc-fast", raw: 0, weighted: 0, usd: null, low_confidence_bands: 1, low_confidence_roles: 1 },
+  ],
+  view: "auto",
+};
+
+const budgetRates = {
+  ok: true,
+  version: 1,
+  calibrated_at: "10-08-2026 09:40:11",
+  transcript_dir: "/home/you/.claude/projects/-example-project",
+  transcripts_readable: true,
+  transcript_files: 31,
+  traces_read: 42,
+  dispatches_joined: 96,
+  price_table_as_of: "2026-08-01",
+  bands: {
+    "[0,30)": { samples: 9, p50: { input: 1200, cache_write: 6400, cache_read: 11800, output: 900 }, p90: { input: 1800, cache_write: 9200, cache_read: 17000, output: 1400 }, peak_p50: 24000, peak_p90: 38000 },
+    "[40,55)": { samples: 12, p50: { input: 7800, cache_write: 52100, cache_read: 104000, output: 8400 }, p90: { input: 11000, cache_write: 75000, cache_read: 150000, output: 12000 }, peak_p50: 78000, peak_p90: 121000 },
+    "[70,80)": { samples: 6, p50: { input: 5700, cache_write: 40200, cache_read: 81000, output: 9300 }, p90: { input: 8100, cache_write: 58000, cache_read: 117000, output: 13400 }, peak_p50: 96000, peak_p90: 142000 },
+    "[90,100]": { samples: 2, p50: { input: 9100, cache_write: 61000, cache_read: 128000, output: 17000 }, p90: { input: 14000, cache_write: 94000, cache_read: 198000, output: 26000 }, peak_p50: 151000, peak_p90: 189000 },
+  },
+  roles: {
+    "orc-system-analyst-opus-5-high": { samples: 11, p50: { input: 6100, cache_write: 41000, cache_read: 82000, output: 9000 }, p90: { input: 8600, cache_write: 58000, cache_read: 116000, output: 13000 }, peak_p50: 88000, peak_p90: 131000 },
+    "orc-trace-writer-haiku-4-5": { samples: 41, p50: { input: 900, cache_write: 3000, cache_read: 5400, output: 700 }, p90: { input: 1300, cache_write: 4400, cache_read: 7800, output: 1000 }, peak_p50: 9000, peak_p90: 14000 },
+  },
+  lanes: {},
+  unattributed: { blocks: 12, tokens: { input: 900, cache_write: 12000, cache_read: 24000, output: 1100 } },
+};
+
+const aftermath = {
+  ok: true,
+  window_days: 30,
+  log_dir: PROJECT + "/.claude/orc/logs",
+  counts: { HELD: 1, CHURN: 1, REVERTED: 1, TOO_RECENT: 1 },
+  runs: [
+    {
+      slug: "store-credit",
+      lane: "orc",
+      age_days: 18,
+      commits: 3,
+      files: 9,
+      grade: "CHURN",
+      strength: 2,
+      signals: [
+        { kind: "churn", strength: 2, detail: "3 shipped files rewritten within 30 days", files: ["src/payments/ledger.ts", "src/payments/credit.ts", "src/api/refunds.ts"] },
+        { kind: "promise-broken", strength: 3, detail: "1 promise anchored in this change is BROKEN", ids: ["PACT-014"] },
+      ],
+      note: "signals, not a verdict: why a file changed again is not knowable from git.",
+    },
+    { slug: "admin-export", lane: "orc", age_days: 24, commits: 2, files: 4, grade: "HELD", strength: 0, signals: [], note: "no churn signal in the window. That is not proof it worked — only that nothing came back." },
+    { slug: "webhook-retry", lane: "mini", age_days: 12, commits: 1, files: 2, grade: "REVERTED", strength: 3, signals: [{ kind: "revert", strength: 3, detail: 'a1b2c3d Revert "webhook retry backoff"' }], note: "signals, not a verdict: why a file changed again is not knowable from git." },
+    { slug: "copy-tweak", lane: "mini", age_days: 2, grade: "TOO_RECENT", strength: 0, signals: [], note: "younger than 7 days — too recent to grade. That is an answer, not a gap." },
+  ],
+};
+
+const exportState = {
+  ok: false,
+  out: PROJECT + "/AGENTS.md",
+  exists: true,
+  source_commit: "c273793aa1b4",
+  sources: 17,
+  drifted: ["PACT.md", "wiki/orc-feature-payments.md", ".claude/orc/patterns/ts-pattern.md"],
+  removed: [],
+  stale: true,
+};
+
 module.exports.get = function get(route, q) {
   switch (route) {
     case "/api/meta":
@@ -189,7 +554,33 @@ module.exports.get = function get(route, q) {
         scores: { "solo-fast": 0, paranoid: 3, "token-lean": 0 },
       };
     case "/api/overview":
-      return { where, doctor, wiki, patterns: patterns, runs_total: runs.total, waiting: ["merchant-notifications", "refund-webhook-retry"], diy };
+      return { where, doctor, wiki, patterns: patterns, runs_total: runs.total, waiting: ["merchant-notifications", "refund-webhook-retry"], diy, pact, boundary, wiki_debt: wikiDebt };
+    case "/api/pact":
+      return pact;
+    case "/api/boundary":
+      return boundary;
+    case "/api/handoff":
+      return handoff;
+    case "/api/wiki/plan":
+      return wikiPlan;
+    case "/api/wiki/debt":
+      return wikiDebt;
+    case "/api/wiki/usage":
+      return wikiUsage;
+    case "/api/budget/forecast":
+      // No plan path → the exit-3 "no forecast possible" state, which is what a
+      // first-time user sees and therefore has to be designed too.
+      return q && q.plan
+        ? budgetForecast
+        : { ok: false, reason: "no-plan", hint: "pick a plan file — a forecast from a sentence is a guess that looks computed" };
+    case "/api/budget/rates":
+      return budgetRates;
+    case "/api/budget/actual":
+      return { ok: true, run: "store-credit", lane: "orc", trace: "run-orc-store-credit-100826-093012.txt", rows: [{ band: "[40,55)", dispatches: 3, forecast_weighted: 96000, actual_weighted: 138000, diff_pct: 44, tokens: { input: 9000, cache_write: 61000, cache_read: 121000, output: 11000 } }, { band: "[70,80)", dispatches: 1, forecast_weighted: 121000, actual_weighted: 304000, diff_pct: 151, tokens: { input: 12000, cache_write: 98000, cache_read: 240000, output: 24000 } }], actual: { tokens: { input: 21000, cache_write: 159000, cache_read: 361000, output: 35000 }, raw: 576000, weighted: 251100, usd: 7.02 }, cache_read_share: 0.71, unattributed: { blocks: 12, tokens: { input: 900, cache_write: 12000, cache_read: 24000, output: 1100 } }, joined: 17, dispatches: 19 };
+    case "/api/aftermath":
+      return aftermath;
+    case "/api/export":
+      return exportState;
     case "/api/runs":
       return runs;
     case "/api/run":

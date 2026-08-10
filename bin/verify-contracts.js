@@ -66,25 +66,26 @@ const CONTRACTS = [
       "agents/orc-verifier-opus-5-med.md",
       "agents/orc-wiki-scanner-opus-4-8-high.md",
       "agents/orc-wiki-scanner-opus-5-med.md",
+      "agents/orc-wiki-scanner-sonnet-5-high.md",
       "hooks/orc-trace.js",
       "skills/_shared/return-validation.md",
       "skills/orc-advisor/SKILL.md",
       "skills/orc-analyze-mini/SKILL.md",
+      "skills/orc-boundary/SKILL.md",
+      "skills/orc-brainstorm/SKILL.md",
+      "skills/orc-budget/SKILL.md",
+      "skills/orc-budget/references/corpus.md",
       "skills/orc-claude/SKILL.md",
       "skills/orc-claude/examples/claude-run-mock.md",
       "skills/orc-diy/references/blocks/trace.md",
       "skills/orc-fast/SKILL.md",
+      "skills/orc-grill/SKILL.md",
       "skills/orc-judge/SKILL.md",
       "skills/orc-learn/SKILL.md",
       "skills/orc-learn/examples/learn-run-mock.md",
       "skills/orc-mini/SKILL.md",
       "skills/orc-mini/examples/mini-run-mock.md",
       "skills/orc-quick/SKILL.md",
-      // v0.42.0: orc-grill dispatches read-only recon ad-hoc, so it owns the
-      // claimed-vs-actual check itself (the hook writes no SPAWN/RETURN for it).
-      "skills/orc-grill/SKILL.md",
-      // v0.45.0: same for brainstorm's fact-finding recon.
-      "skills/orc-brainstorm/SKILL.md",
       "skills/orc-quick/references/dispatch-gate.md",
       "skills/orc-retro/SKILL.md",
       "skills/orc-retro/examples/retro-mock.md",
@@ -99,7 +100,7 @@ const CONTRACTS = [
       "skills/orc/subskills/orc-review-verify/SKILL.md",
       "skills/orc/subskills/orc-review-verify/core.md",
       "skills/orc/subskills/orc-testgen/core.md",
-    ],
+        ],
   },
   {
     name: "pattern invariants_checked attestation (executor return)",
@@ -361,27 +362,25 @@ const CONTRACTS = [
       "agents/orc-planner-mini-opus-5-med.md",
       "agents/orc-planner-mini-sonnet-5-high.md",
       "agents/orc-planner-opus-5-med.md",
+      "commands/orc-pact.md",
+      "skills/_shared/interview.md",
+      "skills/_shared/lane-suspend.md",
+      "skills/orc-brainstorm/SKILL.md",
+      "skills/orc-brainstorm/references/brainstorm-doc.md",
+      "skills/orc-grill/SKILL.md",
+      "skills/orc-grill/references/grill-doc.md",
       "skills/orc-mini/SKILL.md",
+      "skills/orc-pact/SKILL.md",
+      "skills/orc-pact/references/gate.md",
+      "skills/orc-pact/references/ledger.md",
       "skills/orc/SKILL.md",
       "skills/orc/references/analyst-gates.md",
+      "skills/orc/references/preflight-report.md",
       "skills/orc/schemas/planning-output.md",
       "skills/orc/subskills/orc-execution/core.md",
       "skills/orc/subskills/orc-planner-mini/SKILL.md",
       "skills/orc/subskills/orc-planner/SKILL.md",
-      // v0.42.0: an interview`s `constraint`-tagged decisions are what BECOME
-      // spec_invariants[] downstream — that is what makes the conversation
-      // load-bearing rather than merely a good conversation.
-      "skills/_shared/interview.md",
-      "skills/orc-grill/SKILL.md",
-      "skills/orc-grill/references/grill-doc.md",
-      // v0.45.0: the brainstorm converges onto tagged decisions the same way —
-      // a `constraint` row is what makes a chosen direction load-bearing — and
-      // lane-suspend states that a decision carried back untagged stops becoming
-      // one.
-      "skills/_shared/lane-suspend.md",
-      "skills/orc-brainstorm/SKILL.md",
-      "skills/orc-brainstorm/references/brainstorm-doc.md",
-    ],
+        ],
   },
   {
     name: "GATE trace verb (v0.9.0 — deterministic exit-gate pass/bounce lines)",
@@ -457,24 +456,30 @@ const CONTRACTS = [
     token: "zero new trace lines is a protocol violation",
     files: [
       "agents/orc-trace-writer-haiku-4-5.md",
+      "skills/orc-aftermath/SKILL.md",
       "skills/orc-analyze/SKILL.md",
+      "skills/orc-boundary/SKILL.md",
+      "skills/orc-brainstorm/SKILL.md",
+      "skills/orc-budget/SKILL.md",
       "skills/orc-claude/SKILL.md",
       "skills/orc-diy/references/blocks/trace.md",
+      "skills/orc-export/SKILL.md",
       "skills/orc-fast/SKILL.md",
+      "skills/orc-grill/SKILL.md",
+      "skills/orc-handoff/SKILL.md",
       "skills/orc-learn/SKILL.md",
       "skills/orc-mini/SKILL.md",
+      "skills/orc-pact/SKILL.md",
       "skills/orc-poly/SKILL.md",
       "skills/orc-pr-driver/SKILL.md",
       "skills/orc-pr-setup/SKILL.md",
       "skills/orc-quick/SKILL.md",
+      "skills/orc-route/SKILL.md",
       "skills/orc-verify/SKILL.md",
       "skills/orc-wiki/SKILL.md",
       "skills/orc/SKILL.md",
       "skills/orc/references/trace-protocol.md",
-      "skills/orc-grill/SKILL.md",
-      "skills/orc-route/SKILL.md",
-      "skills/orc-brainstorm/SKILL.md",
-    ],
+        ],
   },
   {
     // v0.34.2: the pointer alone was never enough. `traceStats` cannot tell a
@@ -488,36 +493,35 @@ const CONTRACTS = [
     name: "trace file created with the pointer (v0.34.2 — kills the .current clobber)",
     token: "touch the trace file",
     files: [
+      "skills/_shared/lane-suspend.md",
+      "skills/orc-aftermath/SKILL.md",
       "skills/orc-analyze-mini/SKILL.md",
       "skills/orc-analyze/SKILL.md",
+      "skills/orc-boundary/SKILL.md",
+      "skills/orc-brainstorm/SKILL.md",
+      "skills/orc-budget/SKILL.md",
       "skills/orc-claude/SKILL.md",
       "skills/orc-diy/references/blocks/trace.md",
+      "skills/orc-export/SKILL.md",
       "skills/orc-fast/SKILL.md",
+      "skills/orc-grill/SKILL.md",
+      "skills/orc-handoff/SKILL.md",
       "skills/orc-learn/SKILL.md",
       "skills/orc-mini/SKILL.md",
+      "skills/orc-pact/SKILL.md",
       "skills/orc-pattern/SKILL.md",
       "skills/orc-poly/SKILL.md",
+      "skills/orc-pr-driver/SKILL.md",
+      "skills/orc-pr-setup/SKILL.md",
       "skills/orc-quick/SKILL.md",
+      "skills/orc-route/SKILL.md",
       "skills/orc-verify/SKILL.md",
       "skills/orc-wiki/SKILL.md",
       "skills/orc/SKILL.md",
-      "skills/orc/references/trace-protocol.md",
-      // v0.42.0: the plan-input entry path (plan-handoff.md) is a run-start
-      // step like any other — it wrote `.current` without creating the file,
-      // the exact v0.34.2 split signature, on the one entry path this token's
-      // file set did not cover. Registered so the next reader cannot drop it.
       "skills/orc/references/plan-handoff.md",
+      "skills/orc/references/trace-protocol.md",
       "skills/orc/subskills/orc-planner/SKILL.md",
-      "skills/orc-pr-driver/SKILL.md",
-      "skills/orc-pr-setup/SKILL.md",
-      "skills/orc-grill/SKILL.md",
-      "skills/orc-route/SKILL.md",
-      // v0.45.0: brainstorm writes it at run start, and lane-suspend.md states
-      // the RESUME half — a returning lane whose pointer was deleted by the lane
-      // it borrowed writes every later line into nothing.
-      "skills/orc-brainstorm/SKILL.md",
-      "skills/_shared/lane-suspend.md",
-    ],
+        ],
   },
   {
     name: "behavior-trace run pointer (every ORC entry point writes .current)",
@@ -525,35 +529,38 @@ const CONTRACTS = [
     files: [
       "agents/orc-trace-writer-haiku-4-5.md",
       "hooks/orc-trace.js",
+      "skills/_shared/lane-suspend.md",
+      "skills/context-combiner/SKILL.md",
+      "skills/orc-aftermath/SKILL.md",
       "skills/orc-analyze-mini/SKILL.md",
       "skills/orc-analyze/SKILL.md",
+      "skills/orc-boundary/SKILL.md",
+      "skills/orc-brainstorm/SKILL.md",
+      "skills/orc-budget/SKILL.md",
+      "skills/orc-budget/references/corpus.md",
       "skills/orc-claude/SKILL.md",
       "skills/orc-diy/references/blocks/trace.md",
+      "skills/orc-export/SKILL.md",
       "skills/orc-fast/SKILL.md",
+      "skills/orc-grill/SKILL.md",
+      "skills/orc-handoff/SKILL.md",
       "skills/orc-learn/SKILL.md",
       "skills/orc-mini/SKILL.md",
+      "skills/orc-pact/SKILL.md",
       "skills/orc-pattern/SKILL.md",
       "skills/orc-poly/SKILL.md",
       "skills/orc-pr-driver/SKILL.md",
       "skills/orc-pr-setup/SKILL.md",
       "skills/orc-quick/SKILL.md",
+      "skills/orc-route/SKILL.md",
       "skills/orc-verify/SKILL.md",
       "skills/orc-wiki/SKILL.md",
       "skills/orc/SKILL.md",
       "skills/orc/references/plan-handoff.md",
+      "skills/orc/references/stop-and-resume.md",
       "skills/orc/references/trace-protocol.md",
       "skills/orc/subskills/orc-planner/SKILL.md",
-      // v0.42.0: context-combiner states the NEGATIVE of this contract — it is a
-      // phase inside the analyze run and must never write a pointer of its own.
-      "skills/context-combiner/SKILL.md",
-      "skills/orc-grill/SKILL.md",
-      "skills/orc-route/SKILL.md",
-      "skills/orc-brainstorm/SKILL.md",
-      "skills/_shared/lane-suspend.md",
-      // v0.42.0: the stop sequence deletes RESUME.md in the SAME step as the run
-      // pointer — both mark `this run is still open`, so they must die together.
-      "skills/orc/references/stop-and-resume.md",
-    ],
+        ],
   },
   {
     // v0.32.0: narration is DISPATCHED, not remembered. The pen moved from the
@@ -571,17 +578,25 @@ const CONTRACTS = [
       "hooks/orc-trace.js",
       "skills/_shared/fable5-override.md",
       "skills/_shared/opus5-only.md",
+      "skills/orc-aftermath/SKILL.md",
+      "skills/orc-boundary/SKILL.md",
+      "skills/orc-boundary/references/gate.md",
+      "skills/orc-brainstorm/SKILL.md",
+      "skills/orc-budget/SKILL.md",
       "skills/orc-diy/references/blocks/trace.md",
+      "skills/orc-export/SKILL.md",
       "skills/orc-fast/SKILL.md",
+      "skills/orc-grill/SKILL.md",
+      "skills/orc-handoff/SKILL.md",
       "skills/orc-mini/SKILL.md",
+      "skills/orc-pact/SKILL.md",
+      "skills/orc-pact/references/gate.md",
       "skills/orc-quick/SKILL.md",
+      "skills/orc-route/SKILL.md",
       "skills/orc-wiki/SKILL.md",
       "skills/orc/SKILL.md",
       "skills/orc/references/trace-protocol.md",
-      "skills/orc-grill/SKILL.md",
-      "skills/orc-route/SKILL.md",
-      "skills/orc-brainstorm/SKILL.md",
-    ],
+        ],
   },
   {
     // v0.32.0: the hook's zero-model-dependence phase segmentation. Producer
@@ -625,17 +640,22 @@ const CONTRACTS = [
     files: [
       "agents/orc-wiki-scanner-opus-4-8-high.md",
       "agents/orc-wiki-scanner-opus-5-med.md",
+      "agents/orc-wiki-scanner-sonnet-5-high.md",
+      "commands/orc-export.md",
       "commands/orc-wiki.md",
       "hooks/orc-statusline.js",
+      "skills/orc-export/SKILL.md",
+      "skills/orc-pact/SKILL.md",
       "skills/orc-wiki/README.md",
       "skills/orc-wiki/SKILL.md",
       "skills/orc-wiki/references/crosslink.md",
       "skills/orc-wiki/references/integrity-check.md",
       "skills/orc-wiki/references/orientation.md",
+      "skills/orc-wiki/references/partial-refresh.md",
       "skills/orc-wiki/references/staleness.md",
       "skills/orc-wiki/schemas/crosslink-tag.md",
       "skills/orc-wiki/schemas/wiki-doc.md",
-    ],
+        ],
   },
   {
     name: "wiki CROSSLINK-ONLY branch (v0.18.0 — publish tags from existing docs; never a re-scan)",
@@ -655,8 +675,9 @@ const CONTRACTS = [
       "skills/orc-wiki/README.md",
       "skills/orc-wiki/SKILL.md",
       "skills/orc-wiki/references/crosslink.md",
+      "skills/orc-wiki/references/partial-refresh.md",
       "skills/orc-wiki/references/staleness.md",
-    ],
+        ],
   },
   {
     name: "wiki freshness manifest (v0.11.0 — written ONLY by `orc wiki sync`, computed on read)",
@@ -668,6 +689,7 @@ const CONTRACTS = [
       "skills/orc-fast/SKILL.md",
       "skills/orc-learn/SKILL.md",
       "skills/orc-mini/SKILL.md",
+      "skills/orc-pact/SKILL.md",
       "skills/orc-poly/SKILL.md",
       "skills/orc-poly/examples/poly-run-mock.md",
       "skills/orc-quick/SKILL.md",
@@ -675,12 +697,13 @@ const CONTRACTS = [
       "skills/orc-wiki/SKILL.md",
       "skills/orc-wiki/references/crosslink.md",
       "skills/orc-wiki/references/integrity-check.md",
+      "skills/orc-wiki/references/partial-refresh.md",
       "skills/orc-wiki/references/staleness.md",
       "skills/orc-wiki/schemas/crosslink-tag.md",
       "skills/orc/SKILL.md",
       "skills/orc/config.md",
       "skills/orc/references/wiki-consult.md",
-    ],
+        ],
   },
   {
     // v0.25.0: existence detection is a shared contract so a generated wiki /
@@ -692,29 +715,29 @@ const CONTRACTS = [
     name: "artifact existence probe (v0.25.0 — deterministic CLI, never ad-hoc find)",
     token: "detecting-artifacts.md",
     files: [
-      // v0.40.0: the gotcha existence probe follows the same never-a-find rule.
-      "skills/_shared/gotchas.md",
       "skills/_shared/README.md",
-      // v0.39.0: read-ladder.md hands off to it — the ladder decides HOW MUCH to
-      // read, never WHETHER the knowledge exists.
+      "skills/_shared/gotchas.md",
+      "skills/_shared/interview.md",
       "skills/_shared/read-ladder.md",
+      "skills/orc-boundary/SKILL.md",
+      "skills/orc-boundary/references/card.md",
+      "skills/orc-brainstorm/SKILL.md",
+      "skills/orc-brainstorm/references/lenses.md",
       "skills/orc-diy/references/flow-schema.md",
       "skills/orc-fast/SKILL.md",
+      "skills/orc-grill/SKILL.md",
+      "skills/orc-handoff/SKILL.md",
       "skills/orc-mini/SKILL.md",
+      "skills/orc-pact/SKILL.md",
       "skills/orc-poly/SKILL.md",
       "skills/orc-quick/SKILL.md",
+      "skills/orc-route/SKILL.md",
       "skills/orc-verify/SKILL.md",
+      "skills/orc-wiki/references/partial-refresh.md",
       "skills/orc-wiki/references/staleness.md",
       "skills/orc/references/pattern-gate.md",
       "skills/orc/references/wiki-consult.md",
-      "skills/_shared/interview.md",
-      "skills/orc-grill/SKILL.md",
-      "skills/orc-route/SKILL.md",
-      // v0.45.0: brainstorm's B0 probes, and the this-repo-precedent lens (the
-      // one lens that reads the project's own knowledge) follows the same rule.
-      "skills/orc-brainstorm/SKILL.md",
-      "skills/orc-brainstorm/references/lenses.md",
-    ],
+        ],
   },
   {
     // v0.42.0: the interview mechanic (design tree → frontier → rounds →
@@ -725,17 +748,16 @@ const CONTRACTS = [
     name: "the interview primitive (v0.42.0 — frontier rounds, facts vs decisions)",
     token: "_shared/interview.md",
     files: [
+      "commands/orc-grill.md",
       "skills/_shared/README.md",
       "skills/_shared/interview.md",
-      "skills/orc-grill/SKILL.md",
-      "skills/orc/references/intake.md",
-      "commands/orc-grill.md",
-      // v0.45.0: brainstorm's B1 frame runs the same rounds — it must point here,
-      // never fork a second interview. lane-suspend.md pins the tag vocabulary a
-      // returning decision keeps.
       "skills/_shared/lane-suspend.md",
+      "skills/orc-boundary/SKILL.md",
       "skills/orc-brainstorm/SKILL.md",
-    ],
+      "skills/orc-grill/SKILL.md",
+      "skills/orc-pact/SKILL.md",
+      "skills/orc/references/intake.md",
+        ],
   },
   {
     // The one rule that makes an interview load-bearing rather than a good
@@ -797,10 +819,11 @@ const CONTRACTS = [
     name: "brainstorm deliverable location (v0.45.0 — orc/brainstorming-session/<slug>/)",
     token: "orc/brainstorming-session/",
     files: [
+      "commands/orc-brainstorm.md",
       "skills/orc-brainstorm/SKILL.md",
       "skills/orc-brainstorm/references/brainstorm-doc.md",
-      "commands/orc-brainstorm.md",
-    ],
+      "skills/orc-pact/SKILL.md",
+        ],
   },
   {
     // v0.45.0: the open slot. The entire value of a brainstorm is the idea ORC
@@ -858,26 +881,25 @@ const CONTRACTS = [
     name: "wiki freshness tier enum (v0.11.0 — FRESH/AGING/STALE, computed on read)",
     token: "AGING",
     files: [
-      // v0.40.0: names the fast lane FRESH/AGING gate when explaining why gotchas
-      // are NOT a third prerequisite there.
-      "skills/_shared/gotchas.md",
       "hooks/orc-statusline.js",
-      "skills/orc/SKILL.md",
-      "skills/orc/config.md",
-      "skills/orc/references/wiki-consult.md",
+      "skills/_shared/gotchas.md",
+      "skills/_shared/interview.md",
       "skills/orc-fast/SKILL.md",
       "skills/orc-learn/SKILL.md",
       "skills/orc-learn/references/refresh.md",
       "skills/orc-mini/SKILL.md",
       "skills/orc-poly/SKILL.md",
-      "skills/orc-poly/references/gather.md",
       "skills/orc-poly/examples/poly-run-mock.md",
+      "skills/orc-poly/references/gather.md",
+      "skills/orc-route/SKILL.md",
       "skills/orc-wiki/SKILL.md",
       "skills/orc-wiki/references/crosslink.md",
+      "skills/orc-wiki/references/partial-refresh.md",
       "skills/orc-wiki/references/staleness.md",
-      "skills/_shared/interview.md",
-      "skills/orc-route/SKILL.md",
-    ],
+      "skills/orc/SKILL.md",
+      "skills/orc/config.md",
+      "skills/orc/references/wiki-consult.md",
+        ],
   },
   {
     name: "post-ship wiki refresh ask (v0.11.0 — BIG-run trigger, full+ultra lanes)",
@@ -968,13 +990,14 @@ const CONTRACTS = [
       "agents/orc-learn-writer-opus-5-low.md",
       "agents/orc-wiki-scanner-opus-4-8-high.md",
       "agents/orc-wiki-scanner-opus-5-med.md",
+      "agents/orc-wiki-scanner-sonnet-5-high.md",
       "skills/orc-learn/references/refresh.md",
       "skills/orc-learn/references/template-knowledge.md",
       "skills/orc-wiki/SKILL.md",
       "skills/orc-wiki/references/integrity-check.md",
       "skills/orc-wiki/references/staleness.md",
       "skills/orc-wiki/schemas/wiki-doc.md",
-    ],
+        ],
   },
   {
     name: "wiki doc schema version marker (v0.15.0 — v1 docs upgrade lazily)",
@@ -1058,14 +1081,14 @@ const CONTRACTS = [
       "skills/orc-quick/SKILL.md",
       "skills/orc-retro/SKILL.md",
       "skills/orc-wiki/SKILL.md",
+      "skills/orc-wiki/references/partial-refresh.md",
       "skills/orc-wiki/references/pattern-prewarm.md",
       "skills/orc/SKILL.md",
       "skills/orc/config.md",
       "skills/orc/references/analyst-gates.md",
       "skills/orc/references/pattern-gate.md",
       "skills/orc/references/ultra-mode.md",
-      "skills/_shared/README.md",
-    ],
+        ],
   },
   {
     // The config key itself mirrors bin/cli.js's CONFIG_META entry — a rename on
@@ -1082,6 +1105,7 @@ const CONTRACTS = [
       "agents/orc-retro-opus-5-med.md",
       "agents/orc-scout-opus-5-low.md",
       "agents/orc-wiki-scanner-opus-5-med.md",
+      "agents/orc-wiki-scanner-sonnet-5-high.md",
       "commands/orc-pattern.md",
       "skills/_shared/drift-recovery.md",
       "skills/_shared/fable5-override.md",
@@ -1097,6 +1121,7 @@ const CONTRACTS = [
       "skills/orc-quick/references/dispatch-gate.md",
       "skills/orc-retro/SKILL.md",
       "skills/orc-wiki/SKILL.md",
+      "skills/orc-wiki/references/partial-refresh.md",
       "skills/orc-wiki/references/pattern-prewarm.md",
       "skills/orc/SKILL.md",
       "skills/orc/config.md",
@@ -1106,7 +1131,7 @@ const CONTRACTS = [
       "skills/orc/references/preflight-report.md",
       "skills/orc/references/trace-protocol.md",
       "skills/orc/references/ultra-mode.md",
-    ],
+        ],
   },
   {
     name: "CONFIG trace verb (v0.30.0 — Phase 1 resolved-config runtime proof)",
@@ -1342,6 +1367,7 @@ const CONTRACTS = [
     binFiles: ["bin/cli.js"],
     files: [
       "commands/orc-wiki.md",
+      "skills/orc-boundary/references/card.md",
       "skills/orc-poly/SKILL.md",
       "skills/orc-poly/references/gather.md",
       "skills/orc-wiki/README.md",
@@ -1351,10 +1377,11 @@ const CONTRACTS = [
       "skills/orc-wiki/references/crosslink.md",
       "skills/orc-wiki/references/integrity-check.md",
       "skills/orc-wiki/references/orientation.md",
+      "skills/orc-wiki/references/partial-refresh.md",
       "skills/orc-wiki/references/staleness.md",
       "skills/orc-wiki/schemas/crosslink-tag.md",
       "skills/orc/references/wiki-consult.md",
-    ],
+        ],
   },
   {
     name: "crosslink provider registry (v0.17.0 — wiki-meta sibling, integrity-gated)",
@@ -1363,12 +1390,13 @@ const CONTRACTS = [
     files: [
       "agents/orc-wiki-scanner-opus-4-8-high.md",
       "agents/orc-wiki-scanner-opus-5-med.md",
+      "agents/orc-wiki-scanner-sonnet-5-high.md",
       "skills/orc-wiki/README.md",
       "skills/orc-wiki/SKILL.md",
       "skills/orc-wiki/references/crosslink.md",
       "skills/orc-wiki/references/integrity-check.md",
       "skills/orc-wiki/schemas/crosslink-tag.md",
-    ],
+        ],
   },
   {
     // The CLI half (bin/cli.js `countBoundaryRows` boundary detector + the
@@ -1379,13 +1407,14 @@ const CONTRACTS = [
     files: [
       "agents/orc-wiki-scanner-opus-4-8-high.md",
       "agents/orc-wiki-scanner-opus-5-med.md",
+      "agents/orc-wiki-scanner-sonnet-5-high.md",
       "skills/orc-wiki/SKILL.md",
       "skills/orc-wiki/references/crosslink.md",
       "skills/orc-wiki/references/integrity-check.md",
       "skills/orc-wiki/references/staleness.md",
       "skills/orc-wiki/schemas/crosslink-tag.md",
       "skills/orc-wiki/schemas/wiki-doc.md",
-    ],
+        ],
   },
   {
     // v0.26.0: the manual-QA deliverables are pinned to a visible project-root
@@ -1451,12 +1480,13 @@ const CONTRACTS = [
       "agents/orc-planner-fable-5.md",
       "agents/orc-planner-opus-5-med.md",
       "commands/orc-poly.md",
-      "skills/orc/subskills/orc-planner/SKILL.md",
-      "skills/orc-poly/SKILL.md",
-      "skills/orc-poly/references/poly-spec.md",
-      "skills/orc-poly/examples/poly-run-mock.md",
       "skills/_shared/stack-plan.md",
-    ],
+      "skills/orc-pact/SKILL.md",
+      "skills/orc-poly/SKILL.md",
+      "skills/orc-poly/examples/poly-run-mock.md",
+      "skills/orc-poly/references/poly-spec.md",
+      "skills/orc/subskills/orc-planner/SKILL.md",
+        ],
   },
   {
     name: "orc-poly frozen boundary (v0.27.0 — every per-repo plan pins interface-contract.md)",
@@ -1466,12 +1496,13 @@ const CONTRACTS = [
       "agents/orc-planner-opus-5-med.md",
       "commands/orc-plan.md",
       "commands/orc-poly.md",
-      "skills/orc/subskills/orc-planner/SKILL.md",
+      "skills/orc-pact/SKILL.md",
       "skills/orc-poly/SKILL.md",
+      "skills/orc-poly/examples/poly-run-mock.md",
       "skills/orc-poly/references/gather.md",
       "skills/orc-poly/references/poly-spec.md",
-      "skills/orc-poly/examples/poly-run-mock.md",
-    ],
+      "skills/orc/subskills/orc-planner/SKILL.md",
+        ],
   },
   {
     // v0.33.0: the commit-scoped delta probe — the DEFAULT refresh path. The
@@ -1481,9 +1512,10 @@ const CONTRACTS = [
     binFiles: ["bin/cli.js"],
     files: [
       "skills/orc-wiki/SKILL.md",
+      "skills/orc-wiki/references/partial-refresh.md",
       "skills/orc-wiki/references/staleness.md",
       "skills/orc/config.md",
-    ],
+        ],
   },
   {
     // v0.33.0: the federation atlas. The derived-artifact handling (never a
@@ -1525,15 +1557,15 @@ const CONTRACTS = [
     token: "orc-orientation.md",
     binFiles: ["bin/cli.js"],
     files: [
+      "skills/orc-explain/SKILL.md",
+      "skills/orc-export/SKILL.md",
       "skills/orc-wiki/SKILL.md",
       "skills/orc-wiki/references/claude-md-injection.md",
       "skills/orc-wiki/references/integrity-check.md",
       "skills/orc-wiki/references/orientation.md",
+      "skills/orc-wiki/references/partial-refresh.md",
       "skills/orc/references/wiki-consult.md",
-      // v0.42.0: /orc-explain defines ORC terms in the PROJECT`s own words, which is
-      // what the orientation doc exists to supply.
-      "skills/orc-explain/SKILL.md",
-    ],
+        ],
   },
   {
     // v0.33.0: the mock-example deliverable folder — visible at project root,
@@ -1752,8 +1784,10 @@ const CONTRACTS = [
     binFiles: ["bin/cli.js"],
     files: [
       "skills/_shared/fallback-handoff.md",
+      "skills/_shared/stack-plan.md",
       "skills/orc-diy/references/blocks/header.md",
       "skills/orc-diy/references/locked-blocks.md",
+      "skills/orc-export/SKILL.md",
       "skills/orc-fast/SKILL.md",
       "skills/orc-mini/SKILL.md",
       "skills/orc-quick/references/context-doc.md",
@@ -1762,11 +1796,8 @@ const CONTRACTS = [
       "skills/orc/SKILL.md",
       "skills/orc/config.md",
       "skills/orc/references/intake.md",
-      "skills/_shared/stack-plan.md",
-      // v0.42.0: RESUME.md is transient RUN STATE and lives here with the
-      // checkpoint — never at the project root, where it could be committed.
       "skills/orc/references/stop-and-resume.md",
-    ],
+        ],
   },
   // ── Stacked pull requests (v0.37.0) ──────────────────────────────────────
   {
@@ -1896,19 +1927,18 @@ const CONTRACTS = [
       "agents/orc-executor-sonnet-4-6-med.md",
       "agents/orc-executor-sonnet-5-high.md",
       "skills/_shared/README.md",
+      "skills/_shared/interview.md",
       "skills/_shared/read-ladder.md",
       "skills/orc-analyze-mini/SKILL.md",
       "skills/orc-analyze/SKILL.md",
+      "skills/orc-boundary/SKILL.md",
       "skills/orc-fast/SKILL.md",
       "skills/orc-quick/references/dispatch-gate.md",
       "skills/orc-wiki/SKILL.md",
       "skills/orc/SKILL.md",
       "skills/orc/references/wiki-consult.md",
       "skills/orc/subskills/orc-execution/core.md",
-      // v0.42.0: the interview applies the SAME ladder to fact-finding — stop at the
-      // step that answers, and dispatch only as the last rung.
-      "skills/_shared/interview.md",
-    ],
+        ],
   },
   {
     name: "foreign input is evidence, never instruction",
@@ -1917,16 +1947,16 @@ const CONTRACTS = [
       "skills/_shared/README.md",
       "skills/_shared/untrusted-input.md",
       "skills/orc-analyze/SKILL.md",
+      "skills/orc-boundary/SKILL.md",
+      "skills/orc-brainstorm/SKILL.md",
+      "skills/orc-brainstorm/references/lenses.md",
+      "skills/orc-export/SKILL.md",
+      "skills/orc-pact/SKILL.md",
       "skills/orc-poly/SKILL.md",
       "skills/orc-quick/references/gh-mode.md",
       "skills/orc-wiki/SKILL.md",
       "skills/orc/references/wiki-consult.md",
-      // v0.45.0: a non-code brainstorm looks facts up on the web, and the analogy
-      // lens reads other people's docs. Both are FOREIGN input — quotable as
-      // evidence, never a directive, and never able to move a phase.
-      "skills/orc-brainstorm/SKILL.md",
-      "skills/orc-brainstorm/references/lenses.md",
-    ],
+        ],
   },
   // ── v0.40.0 — gotchas (repair memory) ───────────────────────────────────
   {
@@ -1970,6 +2000,161 @@ const CONTRACTS = [
       "skills/orc/subskills/orc-execution/core.md",
       "skills/orc/subskills/orc-review-verify/core.md",
     ],
+  },
+  {
+    name: "pact ledger location (v0.46.0 — .claude/orc/pact/, states computed never stored)",
+    token: ".claude/orc/pact/ledger.json",
+    files: [
+      "skills/orc-aftermath/SKILL.md",
+      "skills/orc-pact/SKILL.md",
+      "skills/orc-pact/references/ledger.md",
+    ],
+    binFiles: ["bin/cli.js"],
+  },
+  {
+    name: "pact deliverable (v0.46.0 — PACT.md at the project ROOT, derived by `orc pact sync`)",
+    token: "PACT.md",
+    files: [
+      "commands/orc-export.md",
+      "commands/orc-pact.md",
+      "skills/orc-boundary/SKILL.md",
+      "skills/orc-export/SKILL.md",
+      "skills/orc-pact/SKILL.md",
+      "skills/orc-pact/references/ledger.md",
+    ],
+    binFiles: ["bin/cli.js"],
+  },
+  {
+    name: "pact probe (v0.46.0 — exit-code contract, the only thing that computes a state)",
+    token: "orc pact status",
+    files: [
+      "commands/orc-pact.md",
+      "skills/orc-aftermath/SKILL.md",
+      "skills/orc-pact/SKILL.md",
+      "skills/orc-pact/references/gate.md",
+      "skills/orc/SKILL.md",
+      "skills/orc/references/preflight-report.md",
+    ],
+    binFiles: ["bin/cli.js"],
+  },
+  {
+    name: "boundary card dir (v0.46.0 — per AREA, consulted in O(1))",
+    token: ".claude/orc/boundary/",
+    files: [
+      "skills/orc-boundary/SKILL.md",
+      "skills/orc-boundary/references/card.md",
+      "skills/orc-boundary/references/gate.md",
+      "skills/orc-export/SKILL.md",
+    ],
+    binFiles: ["bin/cli.js"],
+  },
+  {
+    name: "boundary probe (v0.46.0 — exit-code contract; the skill never computes a verdict)",
+    token: "orc boundary status",
+    files: [
+      "commands/orc-boundary.md",
+      "skills/orc-boundary/SKILL.md",
+      "skills/orc-boundary/references/card.md",
+      "skills/orc-boundary/references/gate.md",
+      "skills/orc/SKILL.md",
+      "skills/orc/references/preflight-report.md",
+    ],
+    binFiles: ["bin/cli.js"],
+  },
+  {
+    name: "handoff surface map (v0.46.0 — orc-handoff/surfaces.md at the project ROOT)",
+    token: "orc-handoff/surfaces.md",
+    files: [
+      "commands/orc-handoff.md",
+      "skills/orc-handoff/SKILL.md",
+      "skills/orc-handoff/references/surfaces.md",
+    ],
+    binFiles: ["bin/cli.js"],
+  },
+  {
+    name: "handoff single writer (v0.46.0 — the lane and the panel share ONE write path)",
+    token: "orc handoff set",
+    files: [
+      "commands/orc-handoff.md",
+      "skills/orc-handoff/SKILL.md",
+      "skills/orc-handoff/references/surfaces.md",
+    ],
+    binFiles: ["bin/cli.js"],
+  },
+  {
+    name: "budget plan key (v0.46.0 — asked once, stored; never a guessed quota percentage)",
+    token: "budget_plan",
+    files: [
+      "skills/orc-budget/SKILL.md",
+      "skills/orc-budget/references/corpus.md",
+    ],
+    binFiles: ["bin/cli.js"],
+  },
+  {
+    name: "budget forecast is PLAN-ONLY (v0.46.0 — a forecast from prose is a guess that looks computed)",
+    token: "orc budget forecast",
+    files: [
+      "skills/orc-budget/SKILL.md",
+      "skills/orc-route/SKILL.md",
+    ],
+    binFiles: ["bin/cli.js"],
+  },
+  {
+    name: "aftermath output dir (v0.46.0 — orc-aftermath/<period>/, report-only)",
+    token: "orc-aftermath/",
+    files: [
+      "commands/orc-aftermath.md",
+      "skills/orc-aftermath/SKILL.md",
+      "skills/orc-aftermath/references/report.md",
+    ],
+    binFiles: ["bin/cli.js"],
+  },
+  {
+    name: "export derived marker (v0.46.0 — fingerprinted, --checkable, never hand-written)",
+    token: "orc-export:derived",
+    files: [
+      "skills/orc-export/SKILL.md",
+    ],
+    binFiles: ["bin/cli.js"],
+  },
+  {
+    name: "wiki work list (v0.46.0 — ranked + priced; the skill renders, never computes)",
+    token: "orc wiki plan",
+    files: [
+      "skills/orc-wiki/SKILL.md",
+      "skills/orc-wiki/references/partial-refresh.md",
+    ],
+    binFiles: ["bin/cli.js"],
+  },
+  {
+    name: "wiki usage file (v0.46.0 — from TRACES, its own file, NEVER wiki-meta.json)",
+    token: "wiki-usage.json",
+    files: [
+      "skills/orc-wiki/SKILL.md",
+      "skills/orc-wiki/references/partial-refresh.md",
+    ],
+    binFiles: ["bin/cli.js"],
+  },
+  {
+    name: "wiki light scanner (v0.46.0 — the tier ladder's cheap half, dispatched BY NAME)",
+    token: "orc-wiki-scanner-sonnet-5-high",
+    files: [
+      "agents/MODEL-MAPPING.md",
+      "agents/orc-wiki-scanner-sonnet-5-high.md",
+      "skills/_shared/opus5-only.md",
+      "skills/orc-wiki/SKILL.md",
+      "skills/orc-wiki/references/partial-refresh.md",
+    ],
+    binFiles: ["bin/cli.js"],
+  },
+  {
+    name: "wiki scan tier mode (v0.46.0 — ladder | always_deep; the tier is never silent)",
+    token: "wiki_scan_tier",
+    files: [
+      "skills/orc-wiki/SKILL.md",
+      "skills/orc-wiki/references/partial-refresh.md",
+    ],
+    binFiles: ["bin/cli.js"],
   },
 ];
 
@@ -2029,7 +2214,23 @@ const BUDGETS = [
   // .current and the run’s RESUME.md — and emits the one STATS line orc stats
   // reads; all three are run-end facts a reference loaded earlier cannot carry.
   // Mechanics live in references/{preflight-report,stop-and-resume,trace-protocol}.md.
-  { file: "skills/orc/SKILL.md", maxLines: 462 },
+  // v0.46.0: deliberate raise 462→490 — the six new lanes' CONSUMER seams. Every
+  // one is a spine fact by the same test the earlier raises used: it happens at a
+  // decision point the spine owns, before (or instead of) any reference load.
+  // (1) The Phase-1 probe block — pact/boundary/wiki-debt/aftermath are read
+  // alongside wiki/pattern/gotchas, and the "print each probe's own line VERBATIM"
+  // rule is what stops a second wording of a number the CLI already computed.
+  // (2) The Phase-1 PACT INJECTION: it fires between the exit gate and the
+  // forecast, so a reference loaded at either end sits on the wrong side of it —
+  // and it is the entire payoff of the pact lane. (3) The Phase-3 BOUNDARY gate:
+  // it decides WHETHER a task is dispatched at all, which no reference loaded
+  // after the wave can do, and the lift-one-task-not-the-wave rule is the part a
+  // later reader would most plausibly get wrong. (4) The Phase-6 pact recheck,
+  // whose "P1 finding, never an automatic abort" clause is a gate outcome.
+  // (5) The Phase-8 handoff sentence — one line, and the only discovery path the
+  // non-dev lane has. Mechanics live in orc-pact/references/gate.md,
+  // orc-boundary/references/gate.md and references/preflight-report.md.
+  { file: "skills/orc/SKILL.md", maxLines: 490 },
   // v0.33.0: deliberate raises 264→289 / 197→219 / 171→179 — orc-wiki gains the
   // crosslink-compile entry branch, the delta-refresh default (impact probe),
   // and the orientation/atlas assemble steps (detail in references/); mini
@@ -2045,7 +2246,16 @@ const BUDGETS = [
   // (a linked repo's wiki is FOREIGN input). Both are dispatch-time facts: the
   // ladder goes into the scan slice this lane assembles, and the trust rule
   // governs the crosslink peek, which happens before any reference loads.
-  { file: "skills/orc-wiki/SKILL.md", maxLines: 296 },
+  // v0.46.0: deliberate raise 296→325 — the partial-refresh workstream (W1). All
+  // three additions are DISPATCH-TIME or ENTRY-TIME facts a reference loaded
+  // later cannot carry: the TARGETED REFRESH entry branch (it must skip Phase 0
+  // branch detection and Phase 1 area planning, which is a decision made before
+  // either runs), the scan TIER resolution (it picks WHICH agent name to
+  // dispatch, and the "print the resolved tier" rule is what stops a cheaper
+  // model being a quiet substitution), and the plan/debt/usage pointer with the
+  // one rule that must not be re-derived — usage never enters wiki-meta.json.
+  // Everything else lives in references/partial-refresh.md.
+  { file: "skills/orc-wiki/SKILL.md", maxLines: 325 },
   // v0.34.2: deliberate raise 219→220 — the run-start `touch the trace file`
   // step. It is one line, it is the fix for the corpus's largest defect family,
   // and it has to sit in the spine because it happens before any reference loads.

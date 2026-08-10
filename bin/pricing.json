@@ -1,0 +1,60 @@
+{
+  "_readme": [
+    "Dated price table for `orc budget`. Point `orc config set budget_price_table <path>`",
+    "at your own copy to override it. Rates are USD per MILLION tokens.",
+    "",
+    "Four rates per model, never one: cache reads are usually the LARGEST token",
+    "count in a run and the CHEAPEST per token, so a blended number hides",
+    "whichever component is about to bite you. cache_write/cache_read are the",
+    "multipliers this vendor publishes against `input` (1.25x / 0.1x) written out",
+    "as absolute rates so nothing has to remember the ratio.",
+    "",
+    "`as_of` is load-bearing: a table older than 90 days makes every dollar",
+    "figure print a staleness warning. Bump the date only when you have checked",
+    "the published rates."
+  ],
+  "as_of": "2026-08-01",
+  "currency": "USD",
+  "unit": "per_million_tokens",
+  "server_tools": {
+    "web_search_requests": 0.01,
+    "web_fetch_requests": 0.0
+  },
+  "models": {
+    "claude-opus-5": { "input": 15, "cache_write": 18.75, "cache_read": 1.5, "output": 75 },
+    "claude-opus-4-8": { "input": 15, "cache_write": 18.75, "cache_read": 1.5, "output": 75 },
+    "claude-opus-4-7": { "input": 15, "cache_write": 18.75, "cache_read": 1.5, "output": 75 },
+    "claude-fable-5": { "input": 15, "cache_write": 18.75, "cache_read": 1.5, "output": 75 },
+    "claude-sonnet-5": { "input": 3, "cache_write": 3.75, "cache_read": 0.3, "output": 15 },
+    "claude-sonnet-4-6": { "input": 3, "cache_write": 3.75, "cache_read": 0.3, "output": 15 },
+    "claude-haiku-4-5": { "input": 1, "cache_write": 1.25, "cache_read": 0.1, "output": 5 }
+  },
+  "families": {
+    "opus": { "input": 15, "cache_write": 18.75, "cache_read": 1.5, "output": 75 },
+    "fable": { "input": 15, "cache_write": 18.75, "cache_read": 1.5, "output": 75 },
+    "sonnet": { "input": 3, "cache_write": 3.75, "cache_read": 0.3, "output": 15 },
+    "haiku": { "input": 1, "cache_write": 1.25, "cache_read": 0.1, "output": 5 }
+  },
+  "_plans_readme": [
+    "Quota view. A Pro/Max user does not pay per token — they burn a 5-hour",
+    "session window and a weekly ceiling. These are WEIGHTED-token capacities",
+    "(cache reads counted at their 0.1x weight), because that is the unit the",
+    "forecast can actually produce. They are approximations of a published",
+    "allowance, not a metered balance: the percentages are a magnitude, and the",
+    "renderer says so."
+  ],
+  "plans": {
+    "pro": { "label": "Pro", "window_weighted_tokens": 900000, "weekly_weighted_tokens": 9000000 },
+    "max5": { "label": "Max 5x", "window_weighted_tokens": 4500000, "weekly_weighted_tokens": 45000000 },
+    "max20": { "label": "Max 20x", "window_weighted_tokens": 18000000, "weekly_weighted_tokens": 180000000 }
+  },
+  "context_windows": {
+    "claude-opus-5": 200000,
+    "claude-opus-4-8": 200000,
+    "claude-opus-4-7": 200000,
+    "claude-fable-5": 200000,
+    "claude-sonnet-5": 200000,
+    "claude-sonnet-4-6": 200000,
+    "claude-haiku-4-5": 200000
+  }
+}

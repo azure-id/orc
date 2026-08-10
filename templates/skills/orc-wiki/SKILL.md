@@ -134,6 +134,14 @@ Then detect state and branch:
 - **Wiki checkpoint exists (mid-scan)** → RESUME. Re-anchor from
   state-of-play + checkpoint; show "X of Y areas done, ~Z remaining"; light
   cost note; continue where it stopped.
+- **`/orc-wiki refresh <doc> | --only <glob> | --top N | --all-touched`
+  (explicit)** → **TARGETED REFRESH** (references/partial-refresh.md). Skips
+  branch detection AND area planning — the doc exists, so its coverage area is
+  already in its own header. Probe with `orc wiki plan --json` (free, ranked,
+  priced), confirm the doc + delta + resolved TIER + estimate in ONE turn, scan,
+  `orc wiki sync`, integrity-check that doc. **Free repairs are always offered
+  before anything that costs money** — sync, then the orientation doc, then a
+  crosslink backfill, and only then a paid scan.
 - **Complete wiki, no active checkpoint** → REFRESH. **Run `orc wiki impact`
   FIRST** (deterministic probe — exit 0 clean / 2 delta / 3 full recommended;
   staleness.md mode 1). **Delta is the default path**: on exit 2, offer to
@@ -172,7 +180,16 @@ cadence; SKIP any that don't apply — never fabricate one):
 ## Phase 2 — Scan (spawned agents, 5-task pauses)
 
 Write checkpoint + state-of-play into the run subfolder BEFORE dispatching.
-Per scan-task: spawn `orc-wiki-scanner-opus-4-8-high` BY NAME (`orc-wiki-scanner-opus-5-med` under `opus5_only`) with the area's file list + the
+**Resolve the scan TIER per task first** (`wiki_scan_tier`, default `ladder`;
+`wiki_tier_deep_files`, default 3 — full ladder in references/partial-refresh.md):
+first scan · STRUCTURAL · wide delta · a new exported symbol → **deep**; otherwise
+**light** (`orc-wiki-scanner-sonnet-5-high`). `always_deep` restores the old
+behaviour, `opus5_only` collapses BOTH tiers onto `orc-wiki-scanner-opus-5-med`
+(no new pair). **PRINT the resolved tier** — a cheaper model is never a quiet
+substitution. `wiki_refresh_budget` (0 = no cap) caps scan-tasks per run as a
+PLANNED stop, and `wiki_retire_after_runs` (0 = never) offers — never performs —
+retirement of a doc no run has sliced.
+Per scan-task: spawn `orc-wiki-scanner-opus-4-8-high` BY NAME (`orc-wiki-scanner-opus-5-med` under `opus5_only`, `orc-wiki-scanner-sonnet-5-high` at the light tier) with the area's file list + the
 doc-writing contract (schemas/wiki-doc.md — v2: evidence anchors in contract
 sections, `keywords[]` + per-file `covered_files` hashes, AND `crosslink_tags`
 = one tag body per OUTWARD boundary point in the area's files, or `none`+reason)
@@ -284,6 +301,16 @@ headers; tags stay OUT of `wiki/INDEX.md`). **Resolve** (only with
 `.claude/orc-crosslink.config.yaml`) records consumed deps in
 `.claude/orc/crosslink/needs.json` + the gitignored `.claude/orc/crosslink/
 cache/`; per-point drift warns, never gates. Emit `WIKI-CHECK crosslink …`.
+
+## Partial refresh, debt & usage (references/partial-refresh.md — v0.46.0)
+
+`orc wiki plan` ranks and PRICES the pending work (STRUCTURAL first, then
+use × delta, zero-use last with a retire hint); `orc wiki debt` is the one-line
+habit; `orc wiki usage [--rebuild]` reads back the point-of-use attribution
+v0.41.0 has been recording and never reading. **Usage lives in its own file
+(`.claude/orc/wiki-usage.json`), never in `wiki-meta.json`** — that manifest is
+100% doc-header-derived and `orc wiki sync` is its only writer. Render what the
+CLI returns; never compute an order, a tier or an estimate here.
 
 ## Refresh & staleness (references/staleness.md — THE canonical freshness reference)
 

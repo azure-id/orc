@@ -222,7 +222,14 @@ task (advisory) and print + emit `CROSSLINK <state> :: boundaries=<n> peers=<nam
 — `configured-no-cache` prints the "cache not built" warning (full orc reads
 only pre-built needs/cache, never peer source live). **Gotchas (repair memory,
 config `gotchas`):** probe ONCE with `orc gotcha status` (exit 0 = entries exist,
-1 = none — never a `find`); canonical `_shared/gotchas.md`. **Preflight:** print the compact block per
+1 = none — never a `find`); canonical `_shared/gotchas.md`.
+**Pact / boundary / aftermath / wiki debt (v0.46.0 — all CONSUMED here, never
+written here):** probe `orc pact status --json` (`pact_gate`, default `warn`),
+`orc boundary status --json` (`boundary_gate`, default `warn`), `orc wiki debt
+--json`, and — only to decide whether the preflight's `after:` line fires at all —
+`orc aftermath status --json`. Print each probe's own `line` VERBATIM; never
+recount or re-word one. Gates: `../orc-pact/references/gate.md` +
+`../orc-boundary/references/gate.md`. **Preflight:** print the compact block per
 `references/preflight-report.md` once wiki + crosslink (+ pattern/waves) resolve.
 
 Ask which planner: **Superpowers / OpenSpec / Requirement Planner / ORC
@@ -252,7 +259,12 @@ bounce to the planner (one retry), then escalate. **After the gate passes,
 relay the plan's `open_questions[]` in ONE batch:** blocking questions must be
 answered before Phase 2; non-blocking show their `proposed_default` for tacit
 approval. **Step-back valve:** `plan_confidence: low` OR >3 blocking questions →
-recommend stepping back to `orc-analyze` (user may override and proceed). On
+recommend stepping back to `orc-analyze` (user may override and proceed).
+**Pact injection (`pact_gate: warn`) — the payoff, and it happens HERE:** a
+DRIFTED or BROKEN promise whose `anchors` intersect a task's `declared_files` is
+appended VERBATIM to that task's `constraints[]` (the `spec_invariants[]`
+channel — no new plumbing) and PRINTED per task. HOLDING entries are never
+injected. Last month's decision constrains this month's plan, automatically. On
 pass, emit `PHASE planning end`.
 
 **Then print the `forecast:` block, BEFORE the Phase-2 pause question**
@@ -292,7 +304,12 @@ group waves (cap `max_wave_tasks`, mark `is_batch_pause` from `pause_schedule`;
 waves are computed for BOTH dispatch styles — sequential fires a wave's tasks
 one at a time, parallel fires them together) → SHOW the wave plan (wave → tasks →
 pause marks) to the user BEFORE wave 1 → write checkpoint + state-of-play BEFORE
-dispatching. **Pattern-resolve gate
+dispatching. **Boundary gate, per wave (`boundary_gate`; emit `BOUNDARY`):**
+`warn` prints each task's verdict; `block` additionally LIFTS a REFUSE task out of
+the wave — **the wave still runs the rest** — and hands it back with its checklist
+plus the "not blocked for you" line (it gates ORC's dispatch, never an explicit
+instruction). ESCALATE dispatches but gates ship on the named human, riding the
+EXISTING pause machinery. An uncarded area is `unknown`, never REFUSE. **Pattern-resolve gate
 (once, before the first wave):** resolve each tagged language per
 `references/pattern-gate.md` and report ONE user line per language (cache hit →
 apply cached; miss → codify/agnostic per `pattern_findings`; learn → dispatch
@@ -389,7 +406,12 @@ definition-of-done PLUS the pattern's `validation_gate[]` lines (each a
 criterion; unmet = P0). The return carries `criteria[]` {criterion, pass|fail,
 evidence} — every criterion needs evidence. Quote spot-check P0/P1 first, then:
 P0 → auto-fix once → re-verify once → second failure STOPS; P1 → ask before the
-one fix attempt, then re-verify (same single-retry cap). Emit
+one fix attempt, then re-verify (same single-retry cap).
+**Pact recheck (`pact_recheck_on_verify`, default true; emit `PACT recheck`):**
+after GREEN, run `orc pact check` scoped to the promises whose anchors intersect
+this run's CHANGED files. A promise that flips to BROKEN is a **P1 finding with its
+check output** — reported, never an automatic abort: the ledger may simply have
+outgrown the code, and that is the user's call. Emit
 `VERDICT pass|fail :: <detail>`, then `PHASE verify end`.
 
 ## Phase 6.5 — Test Authoring (opt-in; load subskills/orc-testgen/) · Trace: `DISPATCH`/`VERIFY`
@@ -440,6 +462,11 @@ template, or "no" → **one regular PR, never re-asked**. "Yes" → commit on th
 current branch (the driver's snapshot), write `stacked-pr/<slug>/STACK-FROM.md`
 (`_shared/stack-plan.md`, `ENTRY-MODE: orc-run`, this run's `RUN-DIR`), then hand
 off **`/orc-pr-setup`** → **`/orc-pr-driver`**. ORC never cuts layers itself.
+
+**Handoff seam (one sentence, only when it applies):** if any changed file is a
+GREEN surface in `orc handoff surfaces --json`, say so —
+*"2 of these were changes a PM could have made alone — `/orc-handoff` next time."*
+That sentence is how anyone finds out that lane exists.
 
 Then ask together: **commit? push? create PR?** (PR: ticket +
 title + target branch; generate from `subskills/orc-pr/pr.md`). If Phase 6.5 ran,

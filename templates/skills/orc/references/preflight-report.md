@@ -16,9 +16,12 @@ whose house style is in force (pattern), whether peer contracts are in play
 
 ```
 ── run preflight ──
-wiki:      FRESH — 12 docs consulted
+wiki:      FRESH — 12 docs consulted · 4 docs pending refresh, 335k tok / $0.94
 pattern:   js cached · ts cached
 gotchas:   12 known · 3 match this change's files
+pact:      11 holding · 2 drifted · 3 uncheckable
+bound:     9 execute · 2 escalate · 1 refuse (2 stale)
+after:     src/payments — 2 shipped files rewritten within 30 days of run store-credit
 crosslink: 2 boundaries (payments-api) — advisory
 scoring:   8-band default table
 tdd:       3 tasks with tests (T3, T6, T9) · 2 covered-by-existing · 2 no-behavior
@@ -43,6 +46,22 @@ waves:     3 planned — will pause after wave 2 (batch_pause_every=2)
   that the run is not learning from its own repairs, and a user who did not should
   see that it is. Canonical: `../../_shared/gotchas.md`. `.claude/orc/gotchas.md`
   is where the entries live.
+- **wiki, the debt tail (v0.46.0):** append `· <n> docs pending refresh, <tok> /
+  <$>` from `orc wiki debt --json` **only when debt exists** (exit 1). Exit 0
+  appends nothing — a tail that says "no debt" on every run is a tail people stop
+  reading, and this one has to be legible the time it matters.
+- **pact:** the `line` field from `orc pact status --json`, VERBATIM — never
+  re-worded, never recounted here (`pact_gate: off` omits the line entirely; no
+  ledger prints `none — /orc-pact harvests one from this run's
+  spec_invariants[]`). Canonical: `../../orc-pact/references/gate.md`.
+- **bound:** the `line` field from `orc boundary status --json`, VERBATIM, and the
+  ACTIVE mode is named whenever a verdict is later printed (`boundary_gate: off`
+  omits the line). Uncarded areas are `unknown`, never REFUSE. Canonical:
+  `../../orc-boundary/references/gate.md`.
+- **after:** printed **ONLY when the area this run is about to touch has a recent
+  churn signal** (`orc aftermath status --json`, exit 1 or 2, intersected with the
+  plan's `declared_files`). A clean run prints nothing at all — the whole value of
+  this line is that it is rare. Never a verdict, never a name.
 - **crosslink:** the crosslink line from `wiki-consult.md` when a probe hit
   (`cached` or `configured-no-cache`); omit the whole line when crosslink is
   not in play (state `none`).

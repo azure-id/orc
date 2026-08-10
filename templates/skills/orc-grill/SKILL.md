@@ -128,8 +128,17 @@ The idea is sharp now. What next?
 
 1  Stop here — save it        → writes orc-grill/<slug>/grill-context.md
 2  Continue into /orc-analyze → checks it against the real code
-3  Stop, save nothing
+3  Save the constraints to the pact → they outlive this run  (/orc-pact)
+4  Stop, save nothing
 ```
+
+**Exit 3 (v0.46.0)** is present only when at least one decision settled here was
+tagged `constraint`. It writes the doc first, then hands those rows — quoted
+VERBATIM, with `origin: {lane: orc-grill, run: <this run>}` — to `/orc-pact`,
+which is the only thing that writes the ledger. Without it, every constraint this
+lane settles evaporates when the run ends, which is exactly the failure `/orc-pact`
+exists for. No constraints settled → the option is **absent with the reason
+printed**, never a dead number.
 
 **When is it sharp enough?** Exit 2 exists to clear the analyst's own entry
 floor, so use that floor as the bar:

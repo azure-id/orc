@@ -804,6 +804,20 @@ const CONFIG_META = [
   { key: "stacked_pr_files", def: 20, tier: "common", validate: vInt(1), options: [10, 15, 20, 30, 40], desc: "Changed-file count >= this trips the stacked-PR gate; also the per-layer hard max (soft target = half of it)." },
   { key: "stacked_pr_max_layers", def: 6, tier: "common", validate: vInt(2), options: [4, 5, 6, 8, 10], desc: "Soft cap on layers per stack: <= cap proceed, cap+1..cap+2 warn + explicit override, beyond → STOP (multiple stacks or a phased release). N layers = N full CI runs." },
   { key: "opus5_only", def: false, tier: "common", validate: vEnum("true", "false"), options: ["true", "false"], desc: "EVERY dispatched role uses ONE model — Opus 5 — with EFFORT as the cost dial (executors: [0,40) low · [40,80) medium · [80,100] high; each fixed role its own pinned effort). Deep SWE-benchmark work on cost vs efficiency across Claude models finds a single Opus 5 agent with the effort ladder the most efficient setup. It FORCES: while on it outranks fable5_* and a hand-written rubric_bands_override. Needs an Opus 5 main session or EVERY dispatch silently downgrades. Excludes the Haiku trace writer and orc-diy (compile-owned)." },
+  // --- v0.46.0 — the six new lanes ------------------------------------------
+  { key: "pact_gate", def: "warn", tier: "common", validate: vEnum("off", "warn"), options: ["off", "warn"], desc: "Invariant ledger at Phase 1 + planning: warn = print the one pact line and inject a DRIFTED/BROKEN promise whose anchors intersect the plan's declared files as a planner constraint; off = nothing. NEVER blocks — a promise is advice with a receipt, not a gate. See /orc-pact." },
+  { key: "pact_recheck_on_verify", def: "true", tier: "common", validate: vEnum("true", "false"), options: ["true", "false"], desc: "Phase 6: re-run the cheap checks for ONLY the invariants the change touched (`orc pact check`), so a promise that just leaked is caught in the run that broke it." },
+  { key: "boundary_gate", def: "warn", tier: "common", validate: vEnum("off", "warn", "block"), options: ["off", "warn", "block"], desc: "Boundary verdicts at dispatch: warn = print the counts and the per-task verdict, off = ignore the cards, block = a REFUSE task is LIFTED OUT of its wave (the wave proceeds) and handed back with its checklist. `block` changes dispatch behaviour, which is why the default is warn. It gates ORC's own dispatch, never an explicit instruction from you." },
+  { key: "handoff_write", def: "true", tier: "common", validate: vEnum("true", "false"), options: ["true", "false"], desc: "Whether `orc handoff set` (and the Self-serve panel) may write a graded surface. false = MAP-ONLY, for teams that want no browser writes at all. A RED surface is never written either way." },
+  { key: "budget_min_samples", def: 5, tier: "common", validate: vInt(1), options: [3, 5, 8, 12], desc: "Dispatches a band needs before /orc-budget calls its forecast confident. Below it the band is printed as low-confidence — a forecast is a range WITH a sample count, never one number." },
+  { key: "budget_units", def: "auto", tier: "common", validate: vEnum("auto", "tokens", "usd", "quota", "all"), options: ["auto", "tokens", "usd", "quota", "all"], desc: "Primary unit for a forecast. auto picks from budget_plan: a Pro/Max user burns a session window, not dollars, so `$7.02` means nothing to them and `18% of your 5-hour window` means everything. Tokens are always available." },
+  { key: "budget_plan", def: "auto", tier: "common", validate: vEnum("auto", "pro", "max5", "max20", "api"), options: ["auto", "pro", "max5", "max20", "api"], desc: "Which Claude plan you are on, for the quota view. There is no reliable local signal for this, so it is ASKED ONCE at the first forecast and stored — never a wrong guess rendered as a percentage. api = billed per token, so USD is the primary unit." },
+  { key: "budget_price_table", def: "", tier: "advanced", validate: vPath, desc: "Path to your own dated price table (default: the shipped bin/pricing.json). A table older than 90 days prints a staleness warning beside every dollar figure." },
+  { key: "aftermath_window_days", def: 30, tier: "advanced", validate: vInt(1), desc: "How far back /orc-aftermath grades. A run younger than 7 days is `too recent to grade` — an answer, not a gap." },
+  { key: "wiki_scan_tier", def: "ladder", tier: "advanced", validate: vEnum("ladder", "always_deep"), desc: "Wiki scan tier: ladder picks light/deep per delta (first scan, STRUCTURAL, wide delta or a new exported symbol → deep; otherwise light), always_deep restores pre-v0.46.0 behaviour. The resolved tier is always printed — a cheaper model is never a quiet substitution." },
+  { key: "wiki_tier_deep_files", def: 3, tier: "advanced", validate: vInt(1), desc: "Covered files touched at or above this count send the refresh to the DEEP scanner." },
+  { key: "wiki_refresh_budget", def: 0, tier: "advanced", validate: vInt(0), desc: "Max scan-tasks per refresh run; 0 = no cap. A capped refresh is a PLANNED stop, not an interrupt: sync has already run, so the wiki is registered and consistent, and the remaining docs are AGING, not broken. Separate from the fixed pause-every-5 rule — do not merge them." },
+  { key: "wiki_retire_after_runs", def: 0, tier: "advanced", validate: vInt(0), desc: "Offer to retire a doc no run put into a slice in this many runs (0 = never offer). Retiring MOVES it to wiki/retired/ and drops it from INDEX.md — reversible, never a delete." },
   // --- Fable 5 role override (HARD-GATED: nothing changes unless enabled: true) ---
   { key: "fable5_enabled", def: false, tier: "fable5", validate: vEnum("true", "false"), options: ["true", "false"], desc: "Master gate — route selected roles to Fable 5 agents. Nothing changes unless true." },
   { key: "fable5_effort", def: "medium", tier: "fable5", validate: vEnum("medium", "high", "xhigh", "max"), options: ["medium", "high", "xhigh", "max"], desc: "Effort for the Fable 5 role agents (the CLI rewrites their effort: frontmatter on set)." },
@@ -3724,6 +3738,508 @@ function wikiImpact(claudeDir) {
   process.exit(2);
 }
 
+// ── W1: wiki partial refresh (v0.46.0) — usage · plan · debt ─────────────────
+//
+// `orc wiki impact` answers WHAT CHANGED. These three answer WHAT TO DO ABOUT
+// IT, IN WHAT ORDER, FOR HOW MUCH — the half that was missing, and the reason a
+// 2-line change used to cost a whole-lane spin-up at the most expensive scanner
+// in the payload.
+//
+// THREE RULES THIS BLOCK MUST KEEP (see knowledge.md §4z.7):
+//   1. `orc wiki sync` stays the ONLY writer of wiki-meta.json + INDEX.md, and
+//      stays 100% derived from doc headers. Usage comes from TRACES, not headers,
+//      so it gets its own file and its own writer — never a new manifest key.
+//   2. `meta.scan_commit` is the OLDEST doc's anchor (the blind-spot floor) and
+//      is NEVER read as a tier. Every per-doc decision here takes the same
+//      per-doc `scanned_commit` path `wikiImpact`'s perDocChanged takes.
+//   3. Edges come from `wiki_fresh_max` / `wiki_aging_max` via the one engine,
+//      `computeWikiFreshness`. A hardcoded 10/30 anywhere below is a bug.
+
+const WIKI_USAGE_FILE = "wiki-usage.json";
+// How many recent runs the usage window covers. Not a config key: the number is
+// the DENOMINATOR printed next to every count ("17/20"), so a user-tunable
+// value would make two machines disagree about what "used" means while showing
+// the same-looking fraction.
+const WIKI_USAGE_RUNS = 20;
+
+function wikiUsagePath(claudeDir) {
+  return path.join(claudeDir, "orc", WIKI_USAGE_FILE);
+}
+
+// Point-of-use attribution, read back at last. Since v0.41.0 every dispatch
+// whose slice carried wiki material writes a `wiki:` continuation and every
+// return carries `wiki_used`; the run-level `WIKI-CONSULT` line records the
+// selection. Two releases of clean data that nothing read.
+//
+// A doc counts ONCE per run however many slices carried it: the question is
+// "how many of the last N runs found this page worth shipping", not "how many
+// slices". Counting slices would rank a doc by the run's wave count.
+const USE_DISPATCH = /wiki:\s*[A-Za-z]+\s*[—-]{1,2}[^→\n]*→\s*([^\n]+)/g;
+const USE_CONSULT = /WIKI-CONSULT\s+\S+\s*::\s*docs=([^\n]+)/g;
+
+function rebuildWikiUsage(claudeDir) {
+  const dir = resolveLogDir(claudeDir);
+  let names = [];
+  try {
+    names = fs
+      .readdirSync(dir)
+      .filter((f) => f.endsWith(".txt"))
+      .map((f) => ({ f, at: fs.statSync(path.join(dir, f)).mtimeMs }))
+      .sort((a, b) => b.at - a.at)
+      .slice(0, WIKI_USAGE_RUNS);
+  } catch (_) {
+    names = [];
+  }
+  const docs = {};
+  for (const { f, at } of names) {
+    const body = fs.readFileSync(path.join(dir, f), "utf8");
+    const seen = new Set();
+    for (const re of [USE_DISPATCH, USE_CONSULT]) {
+      re.lastIndex = 0;
+      let m;
+      while ((m = re.exec(body))) {
+        for (const raw of m[1].split(",")) {
+          const d = raw.trim().replace(/^`|`$/g, "");
+          // `none` is the informative return, not a doc. Recorded as a run that
+          // consulted nothing, never as a page named "none".
+          if (!d || d === "none" || !/\.md$/.test(d)) continue;
+          seen.add(d.replace(/^wiki\//, ""));
+        }
+      }
+    }
+    for (const d of seen) {
+      const e = (docs[d] = docs[d] || { used: 0, last_used: null });
+      e.used += 1;
+      if (!e.last_used || at > e.last_used) e.last_used = at;
+    }
+  }
+  const out = {
+    version: 1,
+    rebuilt_at: fmtStamp(new Date()),
+    window_runs: WIKI_USAGE_RUNS,
+    runs_scanned: names.length,
+    log_dir: dir,
+    docs,
+  };
+  const p = wikiUsagePath(claudeDir);
+  fs.mkdirSync(path.dirname(p), { recursive: true });
+  fs.writeFileSync(p, JSON.stringify(out, null, 2) + "\n");
+  return out;
+}
+
+function readWikiUsage(claudeDir) {
+  const p = wikiUsagePath(claudeDir);
+  if (!fs.existsSync(p)) return null;
+  try {
+    return JSON.parse(fs.readFileSync(p, "utf8"));
+  } catch (_) {
+    return null;
+  }
+}
+
+// The usage lookup is by BASENAME as well as by registry path: a doc registers
+// as `wiki/orc-feature-x.md` and a trace names it `orc-feature-x.md`.
+function usageFor(usage, file) {
+  if (!usage || !usage.docs) return null;
+  const base = String(file).replace(/^wiki\//, "");
+  const hit = usage.docs[base] || usage.docs[file] || null;
+  if (!hit) return { used: 0, last_used: null };
+  return hit;
+}
+
+// ── the scan tier ladder (B5) — the biggest single cut ───────────────────────
+// Every scan-task used to dispatch `orc-wiki-scanner-opus-4-8-high` whether the
+// delta was 2 lines or 2000. The ladder sends a small, no-new-surface delta to
+// the LIGHT scanner instead. Five rows, in order; first match wins.
+//
+// NEVER SILENT: the resolved tier is printed in `orc wiki plan` and in the
+// refresh confirmation. A cheaper model is a decision the user sees, never a
+// quiet substitution.
+const WIKI_SCANNER_DEEP = "orc-wiki-scanner-opus-4-8-high";
+const WIKI_SCANNER_LIGHT = "orc-wiki-scanner-sonnet-5-high";
+// `opus5_only` already forces the wiki scanner to the shipped
+// orc-wiki-scanner-opus-5-med, so BOTH tiers collapse to that one agent while
+// the flag is on. That is why the ladder adds NO row to OPUS5_ONLY_ROLES and no
+// new agent pair: see _shared/opus5-only.md.
+const WIKI_SCANNER_OPUS5 = "orc-wiki-scanner-opus-5-med";
+
+const WIKI_TIER_LADDER = [
+  { id: "first-scan", tier: "deep", why: "first scan of this area (no doc yet)" },
+  { id: "structural", tier: "deep", why: "STRUCTURAL — a covered file is gone; a targeted refresh cannot re-anchor blind" },
+  { id: "wide-delta", tier: "deep", why: "covered files touched >= wiki_tier_deep_files" },
+  { id: "new-surface", tier: "deep", why: "a new exported symbol in a covered file" },
+  { id: "small-delta", tier: "light", why: "small delta, no new surface" },
+];
+
+// `always_deep` restores pre-v0.46.0 behaviour exactly: every row returns deep.
+function wikiScanTier(input, cfg) {
+  const always = String((cfg && cfg.wiki_scan_tier) || "ladder") === "always_deep";
+  const deepFiles = Number((cfg && cfg.wiki_tier_deep_files) || 3);
+  let rowId = "small-delta";
+  if (input.first_scan) rowId = "first-scan";
+  else if (input.structural) rowId = "structural";
+  else if ((input.touched || 0) >= deepFiles) rowId = "wide-delta";
+  else if (input.new_surface) rowId = "new-surface";
+  const row = WIKI_TIER_LADDER.find((r) => r.id === rowId);
+  const tier = always ? "deep" : row.tier;
+  const agent = cfg && String(cfg.opus5_only) === "true"
+    ? WIKI_SCANNER_OPUS5
+    : tier === "deep"
+      ? WIKI_SCANNER_DEEP
+      : WIKI_SCANNER_LIGHT;
+  return {
+    tier,
+    agent,
+    rule: row.id,
+    why: always && row.tier === "light" ? "wiki_scan_tier=always_deep overrides the ladder" : row.why,
+  };
+}
+
+// A new EXPORTED symbol in a covered file is a new surface the doc's contract
+// section cannot describe from its old body, so it earns the deep scanner.
+// Deliberately conservative and language-agnostic: it greps the ADDED lines of
+// the doc's own diff for the handful of export forms that are unambiguous.
+const EXPORT_ADD = /^\+\s*(export\s+(default\s+)?(async\s+)?(function|class|const|let|var|interface|type|enum)\b|(func|type)\s+[A-Z]|public\s+(static\s+)?[A-Za-z<>[\]]+\s+[A-Za-z_]|def\s+[a-z_]+|module\.exports)/;
+
+function docHasNewSurface(root, anchor, files) {
+  if (!anchor || !files.length) return false;
+  const argv = ["diff", "--unified=0", `${anchor}..HEAD`, "--", ...files.slice(0, 60)];
+  const out = gitIn(root, argv);
+  if (out === null) return false;
+  return out.split(/\r?\n/).some((l) => EXPORT_ADD.test(l));
+}
+
+// The shared engine behind `wiki plan` and `wiki debt`. Returns rows already in
+// RANKED order, plus the freshness object and the resolved config.
+//
+// THE RANKING RULE (B3):
+//   1. STRUCTURAL always first — a doc pointing at a missing file is actively
+//      lying, and no cheaper step repairs it.
+//   2. Then by USE x DELTA, where `used` is how many of the last N runs put that
+//      doc into a slice. Refresh what gets read.
+//   3. Zero-use docs sink to the bottom with a retire hint. They cost money on
+//      every full refresh and context tokens whenever they ARE included.
+function wikiPlanRows(claudeDir) {
+  const paths = wikiPaths(claudeDir);
+  const s = wikiState(claudeDir);
+  if (s.state === "none") return { error: "no-wiki", state: s.state };
+  if (s.state !== "registered") return { error: "not-registered", state: s.state };
+  const meta = s.meta;
+  const docs = Array.isArray(meta.docs) ? meta.docs : [];
+  const cfg = resolvedConfig(claudeDir);
+  const edges = wikiFreshnessEdges(claudeDir);
+  const fresh = computeWikiFreshness(paths.root, meta, edges);
+  const usage = readWikiUsage(claudeDir);
+  const rates = budgetRates(claudeDir);
+
+  const globalAnchor = meta.scan_commit || null;
+  const perDocChanged = (d) => {
+    const anchorC = d.scanned_commit || globalAnchor;
+    if (!anchorC) return [];
+    const out = gitIn(paths.root, ["diff", "--name-only", `${anchorC}..HEAD`]);
+    if (out === null) return [];
+    return out.split(/\r?\n/).map((x) => x.trim()).filter(Boolean);
+  };
+
+  const rows = [];
+  for (const d of docs) {
+    const anchor = d.scanned_commit || globalAnchor;
+    const hits = perDocChanged(d).filter((f) => docCovers(d, f));
+    const gone = Object.keys(d.covered_files || {}).filter(
+      (f) => !fs.existsSync(path.join(paths.root, f))
+    );
+    const structural = gone.length > 0;
+    if (!structural && !hits.length) continue; // CLEAN — no work, no row
+    const newSurface = !structural && docHasNewSurface(paths.root, anchor, hits);
+    const t = wikiScanTier(
+      { first_scan: false, structural, touched: hits.length, new_surface: newSurface },
+      cfg
+    );
+    const u = usageFor(usage, d.file);
+    const est = budgetScanEstimate(rates, t.agent);
+    rows.push({
+      doc: d.file,
+      state: structural ? "STRUCTURAL" : "TOUCHED",
+      delta: hits.length,
+      delta_files: hits.slice(0, 8),
+      gone,
+      used: u ? u.used : null,
+      used_of: usage ? usage.window_runs || WIKI_USAGE_RUNS : null,
+      last_used: u && u.last_used ? new Date(u.last_used).toISOString().slice(0, 10) : null,
+      tier: t.tier,
+      agent: t.agent,
+      tier_rule: t.rule,
+      tier_why: t.why,
+      new_surface: newSurface,
+      estimate: est,
+      // Priced HERE, so the JSON consumer (and `orc ui`) never has to know a
+      // rate table exists. A row we cannot price carries null, never a guess.
+      usd: est ? priceVector(claudeDir, est.p50, t.agent).usd : null,
+      retire_hint: !!(usage && u && u.used === 0),
+    });
+  }
+
+  // STRUCTURAL first, then use x delta, then zero-use last. `used === null`
+  // (no usage file yet) is NOT zero-use: unknown must never be ranked as dead.
+  const weight = (r) => (r.used === null ? 1 : r.used) * Math.max(1, r.delta);
+  rows.sort((a, b) => {
+    const as = a.state === "STRUCTURAL" ? 0 : 1;
+    const bs = b.state === "STRUCTURAL" ? 0 : 1;
+    if (as !== bs) return as - bs;
+    const az = a.used === 0 ? 1 : 0;
+    const bz = b.used === 0 ? 1 : 0;
+    if (az !== bz) return az - bz;
+    return weight(b) - weight(a) || a.doc.localeCompare(b.doc);
+  });
+
+  return { rows, docs, meta, fresh, edges, cfg, usage, rates, root: paths.root, state: s.state };
+}
+
+// The free-repairs ladder (B9). A user must NEVER be able to pay for something a
+// free step would have fixed, so the ordering is a hard rule in the CLI as well
+// as in the skill: sync, orientation, crosslink backfill, and only THEN a
+// targeted refresh that costs money.
+function freeRepairs(claudeDir, p) {
+  const out = [];
+  if (p.state !== "registered")
+    out.push({ id: "sync", cost: "free", cmd: "orc wiki sync", what: "register the docs on disk (fixes UNREGISTERED)" });
+  const hasOrientation = (p.docs || []).some((d) => /orc-orientation\.md$/.test(d.file));
+  if (!hasOrientation)
+    out.push({ id: "orientation", cost: "free", cmd: "/orc-wiki refresh wiki/orc-orientation.md", what: "regenerate the derived orientation doc (read first by every consumer)" });
+  // countBoundaryRows reads doc BODIES, so it takes readWikiDocs output — never
+  // the manifest entries, which carry headers only.
+  const onDisk = readWikiDocs(wikiPaths(claudeDir).wikiDir).docs;
+  if (countBoundaryRows(onDisk) > 0) {
+    const dir = path.join(wikiPaths(claudeDir).crosslinkDir);
+    let tags = 0;
+    try {
+      for (const k of fs.readdirSync(dir, { withFileTypes: true }))
+        if (k.isDirectory()) tags += fs.readdirSync(path.join(dir, k.name)).filter((f) => f.endsWith(".md")).length;
+    } catch (_) {}
+    if (!tags)
+      out.push({ id: "crosslink", cost: "free", cmd: "/orc-wiki crosslink", what: "publish boundary tags from already-anchored doc rows" });
+  }
+  return out;
+}
+
+const sumVec = (a, b) => ({
+  input: (a.input || 0) + (b.input || 0),
+  cache_write: (a.cache_write || 0) + (b.cache_write || 0),
+  cache_read: (a.cache_read || 0) + (b.cache_read || 0),
+  output: (a.output || 0) + (b.output || 0),
+});
+const ZERO_VEC = { input: 0, cache_write: 0, cache_read: 0, output: 0 };
+
+function wikiPlan(claudeDir) {
+  const asJson = wantsJson();
+  const p = wikiPlanRows(claudeDir);
+  if (p.error) {
+    const hint =
+      p.error === "no-wiki"
+        ? "no wiki — nothing to plan. Run `/orc-wiki` to build one."
+        : `⚠ wiki is ${String(p.state).toUpperCase()} — run \`orc wiki sync\` first (free), then re-run \`orc wiki plan\`.`;
+    if (asJson) emitJson({ ok: false, reason: p.error, state: p.state, hint, rows: [] }, 3);
+    console.log(hint);
+    process.exit(3);
+  }
+  const rows = p.rows;
+  const repairs = freeRepairs(claudeDir, p);
+  const deep = rows.filter((r) => r.tier === "deep").length;
+  const totals = rows.reduce(
+    (acc, r) => (r.estimate ? sumVec(acc, r.estimate.p50) : acc),
+    { ...ZERO_VEC }
+  );
+  const priced = rows.every((r) => r.estimate);
+  const money = priced ? priceVector(claudeDir, totals, rows[0] && rows[0].agent) : null;
+  const code = !rows.length ? 0 : deep ? 2 : 1;
+
+  if (asJson)
+    emitJson(
+      {
+        ok: true,
+        registered: p.docs.length,
+        pending: rows.length,
+        deep,
+        light: rows.length - deep,
+        rows,
+        free_repairs: repairs,
+        usage_window: p.usage ? p.usage.window_runs : null,
+        usage_runs_scanned: p.usage ? p.usage.runs_scanned : null,
+        estimate: priced ? { tokens: totals, usd: money && money.usd, weighted: money && money.weighted } : null,
+        estimate_unavailable: priced ? null : "insufficient history",
+        freshness: { tier: p.fresh.tier, distance: p.fresh.distance, edges: p.edges },
+        scan_tier_mode: String(p.cfg.wiki_scan_tier || "ladder"),
+      },
+      code
+    );
+
+  if (!rows.length) {
+    console.log(`\norc wiki plan — nothing to do. ${plural(p.docs.length, "doc")} registered, all CLEAN.`);
+    if (repairs.length) {
+      console.log("\n  free repairs available (no model, no cost):");
+      for (const r of repairs) console.log(`    ${r.cmd.padEnd(46)} ${r.what}`);
+    }
+    process.exit(0);
+  }
+
+  console.log(`\norc wiki plan — ${rows.length} of ${p.docs.length} docs need work\n`);
+  const w = Math.max(24, ...rows.map((r) => r.doc.replace(/^wiki\//, "").length));
+  console.log(
+    "  #  " + "doc".padEnd(w) + "  state       delta   used   tier    est. tokens   est. $"
+  );
+  console.log("  " + "─".repeat(w + 58));
+  rows.forEach((r, i) => {
+    const est = r.estimate;
+    const tok = est
+      ? `${kTok(est.p50.input + est.p50.cache_write + est.p50.cache_read)} / ${kTok(est.p50.output)}`
+      : "—";
+    const usd = est ? "$" + priceVector(claudeDir, est.p50, r.agent).usd.toFixed(2) : "—";
+    const used = r.used === null ? "  ?  " : `${r.used}/${r.used_of}`;
+    console.log(
+      `  ${String(i + 1).padStart(2)}  ${r.doc.replace(/^wiki\//, "").padEnd(w)}  ` +
+        `${r.state.padEnd(11)} ${(r.state === "STRUCTURAL" ? "—" : String(r.delta) + " file" + (r.delta === 1 ? "" : "s")).padEnd(7)} ` +
+        `${used.padEnd(6)} ${r.tier.padEnd(7)} ${tok.padEnd(13)} ${usd}`
+    );
+    if (r.state === "STRUCTURAL") console.log(`      covered file gone: ${r.gone.slice(0, 3).join(", ")}`);
+    if (r.retire_hint)
+      console.log(`      ⓘ never used in the last ${r.used_of} runs — consider retiring instead`);
+  });
+  console.log("  " + "─".repeat(w + 58));
+  if (priced) {
+    const all = priceVector(claudeDir, totals, rows[0].agent);
+    console.log(
+      `  clear everything        ${String(rows.length).padStart(2)} tasks   ${kTok(totals.input + totals.cache_write + totals.cache_read + totals.output)} tokens   $${all.usd.toFixed(2)}`
+    );
+  } else {
+    console.log(`  estimate: insufficient history — run \`orc budget calibrate\` after a run or two.`);
+  }
+  if (repairs.length) {
+    console.log("\n  free repairs FIRST (a user must never pay for what a free step fixes):");
+    for (const r of repairs) console.log(`    ${r.cmd.padEnd(46)} ${r.what}`);
+  }
+  console.log(
+    `\n  tier: ${deep} deep · ${rows.length - deep} light` +
+      (String(p.cfg.wiki_scan_tier || "ladder") === "always_deep" ? "   (wiki_scan_tier=always_deep)" : "") +
+      `\n  Run:  /orc-wiki refresh --top ${Math.min(2, rows.length)}`
+  );
+  process.exit(code);
+}
+
+function wikiDebt(claudeDir) {
+  const asJson = wantsJson();
+  const p = wikiPlanRows(claudeDir);
+  if (p.error) {
+    const hint = p.error === "no-wiki" ? "no wiki — no debt to report. Run `/orc-wiki` to build one." : `⚠ wiki is ${String(p.state).toUpperCase()} — run \`orc wiki sync\` (free) first.`;
+    if (asJson) emitJson({ ok: false, reason: p.error, hint, pending: 0 }, 3);
+    console.log(hint);
+    process.exit(3);
+  }
+  const rows = p.rows;
+  const totals = rows.reduce((acc, r) => (r.estimate ? sumVec(acc, r.estimate.p50) : acc), { ...ZERO_VEC });
+  const priced = rows.length > 0 && rows.every((r) => r.estimate);
+  const money = priced ? priceVector(claudeDir, totals, rows[0].agent) : null;
+  // Debt AGE is the worst pending doc's own coverage-relative distance — the
+  // same per-doc number `computeWikiFreshness` computes, never a global date.
+  const byDoc = new Map((p.fresh.perDoc || []).map((r) => [r.file, r]));
+  const ages = rows.map((r) => (byDoc.get(r.doc) || {}).distance).filter((n) => typeof n === "number");
+  const oldest = ages.length ? Math.max(...ages) : null;
+  const name = path.basename(p.root);
+
+  if (asJson)
+    emitJson(
+      {
+        ok: true,
+        project: name,
+        pending: rows.length,
+        deep: rows.filter((r) => r.tier === "deep").length,
+        tokens: priced ? totals : null,
+        usd: money ? money.usd : null,
+        oldest_commits_behind: oldest,
+        tier: p.fresh.tier,
+        edges: p.edges,
+        docs: rows.map((r) => ({ doc: r.doc, state: r.state, tier: r.tier, used: r.used })),
+      },
+      rows.length ? 1 : 0
+    );
+
+  if (!rows.length) {
+    console.log(`\nWIKI DEBT · ${name}\n  0 docs pending — nothing owed. Tier ${p.fresh.tier}.`);
+    process.exit(0);
+  }
+  console.log(`\nWIKI DEBT · ${name}`);
+  console.log(
+    `  ${plural(rows.length, "doc")} pending` +
+      (priced ? ` · ${kTok(totals.input + totals.cache_write + totals.cache_read + totals.output)} tokens · $${money.usd.toFixed(2)}` : " · estimate unavailable (insufficient history)") +
+      (oldest === null ? "" : ` · oldest debt ${oldest} commits`)
+  );
+  console.log(`  tier:    ${p.fresh.tier} (edges wiki_fresh_max=${p.edges.freshMax}, wiki_aging_max=${p.edges.agingMax})`);
+  const structural = rows.filter((r) => r.state === "STRUCTURAL").length;
+  console.log(`  states:  ${structural} STRUCTURAL · ${rows.length - structural} TOUCHED`);
+  console.log(
+    "  Nothing is broken." +
+      (priced && rows.length > 2 ? ` Clear the top 2 and debt drops.` : "") +
+      `\n  Ranked list:  orc wiki plan`
+  );
+  process.exit(1);
+}
+
+function wikiUsageCmd(claudeDir, { rebuild } = {}) {
+  const asJson = wantsJson();
+  let usage = rebuild ? rebuildWikiUsage(claudeDir) : readWikiUsage(claudeDir);
+  if (!usage) {
+    // Absent is not an error — build it, since the input (traces) is already on
+    // disk and free to read. Only an empty trace corpus is a real "no data".
+    usage = rebuildWikiUsage(claudeDir);
+  }
+  const s = wikiState(claudeDir);
+  const registered = s.meta && Array.isArray(s.meta.docs) ? s.meta.docs.map((d) => d.file) : [];
+  const rows = registered.map((f) => {
+    const u = usageFor(usage, f);
+    return {
+      doc: f,
+      used: u.used,
+      of: usage.window_runs,
+      last_used: u.last_used ? new Date(u.last_used).toISOString().slice(0, 10) : null,
+    };
+  });
+  rows.sort((a, b) => b.used - a.used || a.doc.localeCompare(b.doc));
+  const dead = rows.filter((r) => !r.used);
+
+  if (asJson)
+    emitJson(
+      {
+        ok: true,
+        file: wikiUsagePath(claudeDir),
+        window_runs: usage.window_runs,
+        runs_scanned: usage.runs_scanned,
+        rebuilt_at: usage.rebuilt_at,
+        registered: registered.length,
+        in_active_use: rows.length - dead.length,
+        never_used: dead.length,
+        rows,
+      },
+      usage.runs_scanned ? 0 : 1
+    );
+
+  if (!usage.runs_scanned) {
+    console.log(`No traces under ${usage.log_dir} — usage cannot be computed yet. Run any lane once.`);
+    process.exit(1);
+  }
+  console.log(`\nWIKI USAGE · last ${plural(usage.runs_scanned, "run")} (window ${usage.window_runs})\n`);
+  const w = Math.max(24, ...rows.map((r) => r.doc.replace(/^wiki\//, "").length));
+  for (const r of rows)
+    console.log(
+      `  ${r.doc.replace(/^wiki\//, "").padEnd(w)}  ${String(r.used).padStart(2)}/${r.of}  ${r.last_used || "never"}`
+    );
+  if (dead.length)
+    console.log(
+      `\n  ${plural(dead.length, "doc")} never put into a slice in ${usage.window_runs} runs. That costs money on\n` +
+        `  every full refresh — and context tokens whenever ${dead.length === 1 ? "it is" : "they are"} included.\n` +
+        `  Retire with /orc-wiki (moves to wiki/retired/, drops from INDEX.md). Reversible; never a delete.`
+    );
+  process.exit(0);
+}
+
 // ── Pattern cache (deterministic existence probe) ───────────────────────────
 // The pattern cache lives at <claude>/orc/patterns/<lang>-pattern.md, written by
 // orc-pattern's codifier. Like the wiki manifest it sits under the HIDDEN
@@ -4424,6 +4940,15 @@ function wiki() {
     case "impact":
       wikiImpact(claudeDir);
       break;
+    case "plan":
+      wikiPlan(claudeDir);
+      break;
+    case "debt":
+      wikiDebt(claudeDir);
+      break;
+    case "usage":
+      wikiUsageCmd(claudeDir, { rebuild: flag("--rebuild") === true });
+      break;
     case undefined:
     case "status":
       wikiStatus(claudeDir, { json: flag("--json") });
@@ -4434,7 +4959,11 @@ function wiki() {
           "Usage: orc wiki status [--json]      registration state + computed freshness tier\n" +
           "       orc wiki sync [--check]       rebuild wiki-meta.json + INDEX.md from the docs\n" +
           "       orc wiki impact               commit-scoped delta probe: per-doc CLEAN | TOUCHED |\n" +
-          "                                     STRUCTURAL vs scan_commit (exit 0 clean / 2 delta / 3 full)"
+          "                                     STRUCTURAL vs scan_commit (exit 0 clean / 2 delta / 3 full)\n" +
+          "       orc wiki plan [--json]        RANKED, priced work list — what to refresh, in what\n" +
+          "                                     order, for how much (exit 0 none / 1 light / 2 deep / 3 n/a)\n" +
+          "       orc wiki debt [--json]        one-line pending-refresh summary (exit 0 none / 1 debt)\n" +
+          "       orc wiki usage [--rebuild]    which docs runs actually put into a slice"
       );
       process.exit(1);
   }
@@ -5001,6 +5530,2037 @@ function stats() {
           "nothing auto-prunes traces."
       )
   );
+}
+
+// ── Resolved config (defaults + the user override, one place) ────────────────
+// Several v0.46.0 commands need the EFFECTIVE value of a handful of keys, and
+// each of them reaching into readOverride with its own fallback literal is how
+// a default drifts. CONFIG_META is the default table; the override wins.
+function resolvedConfig(claudeDir) {
+  const out = {};
+  for (const m of CONFIG_META) out[m.key] = m.def;
+  let map = {};
+  try {
+    map = readOverride(claudeDir).map;
+  } catch (_) {}
+  for (const k of Object.keys(map)) out[k] = map[k];
+  return out;
+}
+
+const isTrue = (v) => String(v) === "true";
+
+// ── /orc-budget (v0.46.0) — the token vector, and four honest views of it ────
+//
+// Account-level burn tracking is a solved problem. What nobody can answer is:
+// given THIS plan — 14 tasks, 4 waves, top score 78 — what will it burn, and
+// what does each lane burn instead? ORC can, because ORC composes the slice and
+// knows the band of every task before it dispatches.
+//
+// TOKENS ARE THE UNIT OF TRUTH; usd/quota/context are DERIVED FROM the vector,
+// never stored beside it. The four kinds are kept separate everywhere because
+// they price and behave completely differently — cache reads are usually the
+// LARGEST count and the cheapest per token, so a blended headline hides
+// whichever component is about to bite you.
+//
+// THE JOIN IS THE MOAT: the Claude Code transcripts give the COST (four token
+// counts, model, effort, isSidechain, timestamp); ORC's own traces give the
+// MEANING (task, score, band, expected model, requeues, wiki use). Neither is
+// enough alone, and nobody else has the right-hand column.
+
+const VEC_KINDS = ["input", "cache_write", "cache_read", "output"];
+// The weighted-token equivalent: only CACHE READS are discounted (0.1x), which is
+// what makes the number comparable to a raw count without pretending output is
+// cheap. Reported ALONGSIDE the raw total, never instead of it — raw is what
+// fills a context window and a rate limit; weighted is what fills an invoice.
+const CACHE_READ_WEIGHT = 0.1;
+const weightedTokens = (v) =>
+  (v.input || 0) + (v.cache_write || 0) + (v.cache_read || 0) * CACHE_READ_WEIGHT + (v.output || 0);
+const rawTokens = (v) => VEC_KINDS.reduce((n, k) => n + (v[k] || 0), 0);
+const kTok = (n) =>
+  n >= 1e6 ? (n / 1e6).toFixed(2) + "M" : n >= 1000 ? Math.round(n / 1000) + "k" : String(Math.round(n));
+
+const PRICE_STALE_DAYS = 90;
+const PRICING_DEFAULT = path.join(__dirname, "pricing.json");
+
+function readPricing(claudeDir) {
+  const cfg = resolvedConfig(claudeDir);
+  let p = PRICING_DEFAULT;
+  const custom = String(cfg.budget_price_table || "").trim();
+  if (custom) p = path.isAbsolute(custom) ? custom : path.join(repoRootOf(claudeDir), custom);
+  try {
+    const t = JSON.parse(fs.readFileSync(p, "utf8"));
+    t._path = p;
+    const asOf = Date.parse(String(t.as_of || "") + "T00:00:00Z");
+    t._age_days = isNaN(asOf) ? null : Math.floor((Date.now() - asOf) / 86400000);
+    t._stale = t._age_days === null || t._age_days > PRICE_STALE_DAYS;
+    return t;
+  } catch (_) {
+    return null;
+  }
+}
+
+const MODEL_FAMILIES = ["opus", "sonnet", "haiku", "fable"];
+const EFFORT_WORDS = new Set(["low", "med", "medium", "high", "xhigh", "max"]);
+
+// `orc-executor-opus-4-8-high` → `claude-opus-4-8`. An agent's model lives in its
+// NAME by house rule (a model change is always a rename), so this needs no table.
+function modelOf(name) {
+  if (!name) return null;
+  const s = String(name);
+  if (s.startsWith("claude-")) return s;
+  const parts = s.split("-");
+  const i = parts.findIndex((p) => MODEL_FAMILIES.includes(p));
+  if (i === -1) return null;
+  const rest = parts.slice(i);
+  if (EFFORT_WORDS.has(rest[rest.length - 1])) rest.pop();
+  return "claude-" + rest.join("-");
+}
+function effortOf(name) {
+  const last = String(name || "").split("-").pop();
+  if (!EFFORT_WORDS.has(last)) return null;
+  return last === "med" ? "medium" : last;
+}
+
+function rateFor(table, model) {
+  if (!table) return null;
+  const m = String(model || "");
+  if (table.models && table.models[m]) return table.models[m];
+  const fam = MODEL_FAMILIES.find((f) => m.includes(f));
+  if (fam && table.families && table.families[fam]) return table.families[fam];
+  return null;
+}
+
+// USD + the weighted equivalent for one vector. `hint` is an agent name or a
+// model id; a model we have no rate for yields usd: null — NEVER an invented
+// price, and never a family guess presented as a figure.
+function priceVector(claudeDir, vec, hint) {
+  const table = readPricing(claudeDir);
+  const rate = rateFor(table, modelOf(hint));
+  const usd = rate
+    ? (vec.input * rate.input +
+        vec.cache_write * rate.cache_write +
+        vec.cache_read * rate.cache_read +
+        vec.output * rate.output) /
+      1e6
+    : null;
+  return { usd, weighted: weightedTokens(vec), raw: rawTokens(vec), rate, table };
+}
+
+// ── the corpus: Claude Code's own JSONL transcripts ──────────────────────────
+// Verified shape (every assistant message):
+//   "usage": { input_tokens, cache_creation_input_tokens,
+//              cache_read_input_tokens, output_tokens,
+//              server_tool_use: { web_search_requests, web_fetch_requests } }
+// and the LINE carries model, timestamp, cwd, sessionId and isSidechain — which
+// is how a subagent dispatch is told apart from the main thread.
+function transcriptDir(root) {
+  // ORC_TRANSCRIPT_DIR is a TEST seam (same family as ORC_NO_UPDATE_CHECK): the
+  // real corpus lives in the user's home and a test must never write there.
+  if (process.env.ORC_TRANSCRIPT_DIR) return process.env.ORC_TRANSCRIPT_DIR;
+  return path.join(os.homedir(), ".claude", "projects", String(root).replace(/[^A-Za-z0-9]/g, "-"));
+}
+
+const CORPUS_MAX_FILES = 80;
+
+function readCorpus(root) {
+  const dir = transcriptDir(root);
+  let files;
+  try {
+    files = fs
+      .readdirSync(dir)
+      .filter((f) => f.endsWith(".jsonl"))
+      .map((f) => ({ f, at: fs.statSync(path.join(dir, f)).mtimeMs }))
+      .sort((a, b) => b.at - a.at)
+      .slice(0, CORPUS_MAX_FILES);
+  } catch (_) {
+    // A missing or unreadable transcript directory is an ANSWER, not a failure:
+    // the caller forecasts in TOKENS ONLY from ORC trace metadata and prints
+    // "dollars and quota unavailable: no local usage data". Never a price.
+    return { dir, ok: false, files: 0, blocks: [], groups: [] };
+  }
+  const blocks = [];
+  for (const { f } of files) {
+    let text;
+    try {
+      text = fs.readFileSync(path.join(dir, f), "utf8");
+    } catch (_) {
+      continue;
+    }
+    for (const line of text.split(/\r?\n/)) {
+      if (!line || line[0] !== "{") continue;
+      let o;
+      try {
+        o = JSON.parse(line);
+      } catch (_) {
+        continue;
+      }
+      const msg = o.message || o;
+      const u = msg && msg.usage;
+      if (!u || typeof u.output_tokens !== "number") continue;
+      const st = u.server_tool_use || {};
+      blocks.push({
+        file: f,
+        session: o.sessionId || null,
+        at: Date.parse(o.timestamp || "") || 0,
+        cwd: o.cwd || null,
+        sidechain: !!o.isSidechain,
+        model: msg.model || o.model || null,
+        effort: o.effort || msg.effort || null,
+        vec: {
+          input: u.input_tokens || 0,
+          cache_write: u.cache_creation_input_tokens || 0,
+          cache_read: u.cache_read_input_tokens || 0,
+          output: u.output_tokens || 0,
+        },
+        web_search: st.web_search_requests || 0,
+        web_fetch: st.web_fetch_requests || 0,
+      });
+    }
+  }
+  blocks.sort((a, b) => a.at - b.at);
+  return { dir, ok: true, files: files.length, blocks, groups: groupSidechains(blocks) };
+}
+
+// One subagent dispatch = a CONTIGUOUS run of sidechain messages in one session
+// on one model. Grouping is what turns per-message usage into a per-dispatch
+// cost that a DISPATCH trace line can be joined to.
+function groupSidechains(blocks) {
+  const groups = [];
+  let cur = null;
+  for (const b of blocks) {
+    if (!b.sidechain) {
+      cur = null;
+      continue;
+    }
+    if (!cur || cur.session !== b.session || cur.model !== b.model || b.at - cur.end > 20 * 60_000) {
+      cur = {
+        session: b.session,
+        model: b.model,
+        effort: b.effort,
+        cwd: b.cwd,
+        start: b.at,
+        end: b.at,
+        messages: 0,
+        vec: { ...ZERO_VEC },
+        // Peak CONTEXT for this dispatch: the largest single prompt it sent.
+        // This is the input to the context-risk forecast — a run does not only
+        // cost money, it can hit compaction, which is invisible in every spend
+        // tool and silently degrades quality.
+        peak: 0,
+        web_search: 0,
+        web_fetch: 0,
+        claimed: false,
+      };
+      groups.push(cur);
+    }
+    cur.end = b.at;
+    cur.messages++;
+    cur.vec = sumVec(cur.vec, b.vec);
+    cur.peak = Math.max(cur.peak, b.vec.input + b.vec.cache_write + b.vec.cache_read);
+    cur.web_search += b.web_search;
+    cur.web_fetch += b.web_fetch;
+  }
+  return groups;
+}
+
+// ── the ORC side of the join: trace metadata ─────────────────────────────────
+const TRACE_TS = /^\[(\d{2})(\d{2})(\d{2})\s+(\d{2}):(\d{2}):(\d{2})(?:\.(\d{3}))?\]/;
+function traceTs(line) {
+  const m = TRACE_TS.exec(line);
+  if (!m) return null;
+  return new Date(2000 + +m[3], +m[2] - 1, +m[1], +m[4], +m[5], +m[6], +(m[7] || 0)).getTime();
+}
+
+function readTraceMeta(file) {
+  let text;
+  try {
+    text = fs.readFileSync(file, "utf8");
+  } catch (_) {
+    return null;
+  }
+  const lines = text.split(/\r?\n/);
+  const out = { file, start: null, end: null, dispatches: [], bands: {}, finished: /\bFINISH\b/.test(text) };
+  for (const line of lines) {
+    const ts = traceTs(line);
+    if (ts) {
+      if (out.start === null) out.start = ts;
+      out.end = ts;
+    }
+    const d = /\bDISPATCH\s+(orc-[\w.-]+)\s*::\s*([^\n]*?)(?:\s+expect=(\S+))?\s*$/.exec(line);
+    if (d) out.dispatches.push({ agent: d[1], task: (d[2] || "").trim(), expect: d[3] || null, at: ts });
+    const s = /\bSCORE\s+task=(\S+)\s+score=(\d+)\s+band=(\S+)/.exec(line);
+    if (s) out.bands[s[1]] = { score: Number(s[2]), band: s[3] };
+    const st = parseStatsLine(line);
+    if (st && st.lane) out.stats = st;
+  }
+  return out;
+}
+
+function listTraces(claudeDir) {
+  const dir = resolveLogDir(claudeDir);
+  let names = [];
+  try {
+    names = fs.readdirSync(dir).filter((f) => f.endsWith(".txt"));
+  } catch (_) {
+    return { dir, runs: [] };
+  }
+  const runs = [];
+  for (const name of names) {
+    const m = TRACE_NAME.exec(name);
+    runs.push({
+      name,
+      lane: m ? m[1] : "unknown",
+      slug: m ? m[2] : null,
+      date: m ? traceDateIso(m[3]) : null,
+      path: path.join(dir, name),
+      mtime: (() => {
+        try {
+          return fs.statSync(path.join(dir, name)).mtimeMs;
+        } catch (_) {
+          return 0;
+        }
+      })(),
+    });
+  }
+  runs.sort((a, b) => b.mtime - a.mtime);
+  return { dir, runs };
+}
+
+// Greedy nearest-in-time join. A sidechain group is claimed by the DISPATCH line
+// with the same MODEL whose timestamp is nearest and not after it by more than
+// the group's own duration. A group nothing can claim counts into `unattributed`
+// — which is ALWAYS printed, never silently dropped.
+function joinRun(trace, groups) {
+  const out = { rows: [], unattributed: [] };
+  if (!trace || trace.start === null) return out;
+  const pad = 5 * 60_000;
+  const inWindow = groups.filter((g) => !g.claimed && g.start >= trace.start - pad && g.start <= (trace.end || trace.start) + pad);
+  for (const d of trace.dispatches) {
+    const want = modelOf(d.expect ? d.expect.split("/")[0] : d.agent);
+    let best = null;
+    for (const g of inWindow) {
+      if (g.claimed) continue;
+      if (want && g.model && modelOf(g.model) !== want) continue;
+      const dist = d.at === null ? 0 : Math.abs(g.start - d.at);
+      if (!best || dist < best.dist) best = { g, dist };
+    }
+    if (!best) {
+      out.rows.push({ ...d, group: null });
+      continue;
+    }
+    best.g.claimed = true;
+    out.rows.push({ ...d, group: best.g });
+  }
+  for (const g of inWindow) if (!g.claimed) out.unattributed.push(g);
+  return out;
+}
+
+// ── calibration: the per-band / per-role rate model ─────────────────────────
+const RATES_FILE = "budget-rates.json";
+const ratesPath = (claudeDir) => path.join(claudeDir, "orc", RATES_FILE);
+
+function pct(sorted, p) {
+  if (!sorted.length) return 0;
+  const i = Math.min(sorted.length - 1, Math.max(0, Math.ceil((p / 100) * sorted.length) - 1));
+  return sorted[i];
+}
+function vecPct(samples, p) {
+  const out = {};
+  for (const k of VEC_KINDS) out[k] = Math.round(pct(samples.map((s) => s[k] || 0).sort((a, b) => a - b), p));
+  return out;
+}
+
+function calibrate(claudeDir) {
+  const root = repoRootOf(claudeDir);
+  const corpus = readCorpus(root);
+  const { runs } = listTraces(claudeDir);
+  const bands = {};
+  const roles = {};
+  let joined = 0;
+  let unattributedBlocks = 0;
+  let unattributedVec = { ...ZERO_VEC };
+  const laneTotals = {};
+
+  for (const r of runs.slice(0, WIKI_USAGE_RUNS * 3)) {
+    const trace = readTraceMeta(r.path);
+    if (!trace) continue;
+    const j = joinRun(trace, corpus.groups);
+    const laneVec = laneTotals[r.lane] || (laneTotals[r.lane] = { runs: 0, vec: { ...ZERO_VEC } });
+    laneVec.runs++;
+    for (const row of j.rows) {
+      if (!row.group) continue;
+      joined++;
+      laneVec.vec = sumVec(laneVec.vec, row.group.vec);
+      const sample = { ...row.group.vec, peak: row.group.peak };
+      const role = (roles[row.agent] = roles[row.agent] || { samples: [] });
+      role.samples.push(sample);
+      // Executors are keyed by BAND (that is the dial the score→model table
+      // turns); every other role is keyed by its own name.
+      const band = (trace.bands[row.task.split(/\s+/)[0]] || {}).band;
+      if (band && /executor/.test(row.agent)) {
+        const b = (bands[band] = bands[band] || { samples: [], models: {} });
+        b.samples.push(sample);
+        b.models[row.agent] = (b.models[row.agent] || 0) + 1;
+      }
+    }
+    for (const g of j.unattributed) {
+      unattributedBlocks++;
+      unattributedVec = sumVec(unattributedVec, g.vec);
+    }
+  }
+
+  const finish = (bag) => {
+    const out = {};
+    for (const [k, v] of Object.entries(bag)) {
+      out[k] = {
+        samples: v.samples.length,
+        p50: vecPct(v.samples, 50),
+        p90: vecPct(v.samples, 90),
+        peak_p50: Math.round(pct(v.samples.map((s) => s.peak || 0).sort((a, b) => a - b), 50)),
+        peak_p90: Math.round(pct(v.samples.map((s) => s.peak || 0).sort((a, b) => a - b), 90)),
+      };
+      if (v.models) out[k].models = v.models;
+    }
+    return out;
+  };
+
+  const table = readPricing(claudeDir);
+  const out = {
+    version: 1,
+    calibrated_at: fmtStamp(new Date()),
+    transcript_dir: corpus.dir,
+    transcripts_readable: corpus.ok,
+    transcript_files: corpus.files,
+    traces_read: Math.min(runs.length, WIKI_USAGE_RUNS * 3),
+    dispatches_joined: joined,
+    price_table_as_of: table ? table.as_of : null,
+    bands: finish(bands),
+    roles: finish(roles),
+    lanes: Object.fromEntries(
+      Object.entries(laneTotals).map(([l, v]) => [l, { runs: v.runs, vec: v.vec, per_run: divVec(v.vec, v.runs) }])
+    ),
+    // ALWAYS present, including when 0 — a caller must never have to guess
+    // whether the number is missing or genuinely zero.
+    unattributed: { blocks: unattributedBlocks, tokens: unattributedVec },
+  };
+  const p = ratesPath(claudeDir);
+  fs.mkdirSync(path.dirname(p), { recursive: true });
+  fs.writeFileSync(p, JSON.stringify(out, null, 2) + "\n");
+  return out;
+}
+
+const divVec = (v, n) => {
+  const out = {};
+  for (const k of VEC_KINDS) out[k] = n ? Math.round((v[k] || 0) / n) : 0;
+  return out;
+};
+
+// Read the rate model, building it lazily on a miss. It is a DERIVED cache over
+// data already on disk (traces + transcripts), so rebuilding it costs no model
+// and no network — which is why `orc wiki plan` can price a refresh on a machine
+// that has never run `orc budget calibrate`.
+function budgetRates(claudeDir) {
+  const p = ratesPath(claudeDir);
+  if (fs.existsSync(p)) {
+    try {
+      return JSON.parse(fs.readFileSync(p, "utf8"));
+    } catch (_) {}
+  }
+  try {
+    return calibrate(claudeDir);
+  } catch (_) {
+    return null;
+  }
+}
+
+function budgetScanEstimate(rates, agent) {
+  const r = rates && rates.roles && rates.roles[agent];
+  if (!r || !r.samples) return null;
+  return { p50: r.p50, p90: r.p90, samples: r.samples };
+}
+
+// ── the plan reader (forecast input) ─────────────────────────────────────────
+// The FIXED formula from references/effort-and-mode.md, mirrored here so the
+// forecast computes a real band instead of guessing one. Both copies change
+// together — the contract lint pins the formula's tokens into this file.
+const FACET_B = (n) => (n <= 1 ? 2 : n <= 3 ? 6 : n <= 5 ? 10 : 15);
+const FACET_N = { mechanical: 0, imitate: 8, "new-surface": 18, "novel-algorithm": 30 };
+const FACET_L = { none: 0, branching: 8, stateful: 16, algorithmic: 24 };
+const FACET_T = { none: 0, "update-existing": 4, "new-tests": 8 };
+const FACET_U = { low: 0, medium: 6, high: 12 };
+const RISK_FLOOR = 70;
+
+function scoreFromFacets(f, fanIn, fanOut) {
+  const raw =
+    FACET_B(Number(f.breadth) || 0) +
+    (FACET_N[f.novelty] || 0) +
+    (FACET_L[f.logic] || 0) +
+    (FACET_T[f.test_surface] || 0) +
+    5 * Math.min(fanIn, 3) +
+    3 * Math.min(fanOut, 3) +
+    (FACET_U[f.uncertainty] || 0);
+  const floored = f.risk && f.risk.length ? Math.max(raw, RISK_FLOOR) : raw;
+  return Math.max(0, Math.min(100, floored));
+}
+
+// The resolved score→model table. `opus5_only` outranks everything (3 bands);
+// otherwise the default 8-band table. A hand-written `rubric_bands_override` is
+// registry-less by design, so the forecast reports it as UNKNOWN rather than
+// pretending to resolve it.
+const OPUS5_BANDS = [
+  [0, 40, "orc-executor-opus-5-low"],
+  [40, 80, "orc-executor-opus-5-med"],
+  [80, 101, "orc-executor-opus-5-high"],
+];
+function bandFor(score, cfg) {
+  const rows = isTrue(cfg.opus5_only) ? OPUS5_BANDS : DIY_SCORE_TABLE;
+  for (const [lo, hi, agent] of rows)
+    if (score >= lo && score < hi) return { band: `[${lo},${hi === 101 ? "100]" : hi + ")"}`, agent };
+  const last = rows[rows.length - 1];
+  return { band: `[${last[0]},100]`, agent: last[2] };
+}
+
+const INLINE_LIST = (s) =>
+  String(s || "")
+    .replace(/^\[|\]$/g, "")
+    .split(",")
+    .map((x) => x.trim().replace(/^["']|["']$/g, ""))
+    .filter(Boolean);
+
+function parsePlanTasks(text) {
+  const src = String(text).replace(/\r\n/g, "\n");
+  const tasks = [];
+  const re = /^(\s*)-\s+id:\s*([A-Za-z0-9_.-]+)\s*$/gm;
+  const marks = [];
+  let m;
+  while ((m = re.exec(src))) marks.push({ indent: m[1].length, id: m[2], from: m.index, to: src.length });
+  for (let i = 0; i < marks.length; i++) if (marks[i + 1]) marks[i].to = marks[i + 1].from;
+  for (const mk of marks) {
+    const block = src.slice(mk.from, mk.to);
+    const one = (k) => {
+      const r = new RegExp("^\\s*" + k + ":\\s*(.*)$", "m").exec(block);
+      return r ? r[1].replace(/\s+#.*$/, "").trim() : null;
+    };
+    // `facets:` is a nested map, so its extent is decided by INDENTATION, not by
+    // the next `key:` line — a lookahead for that matches the map's own first
+    // child and silently yields an empty block, which scores every task 0.
+    const fBlock = (() => {
+      const lines = block.split("\n");
+      const i = lines.findIndex((l) => /^\s*facets:\s*$/.test(l));
+      if (i === -1) return null;
+      const base = /^(\s*)/.exec(lines[i])[1].length;
+      const out = [];
+      for (let j = i + 1; j < lines.length; j++) {
+        if (!lines[j].trim()) continue;
+        if (/^(\s*)/.exec(lines[j])[1].length <= base) break;
+        out.push(lines[j]);
+      }
+      return out.join("\n");
+    })();
+    const fOne = (k) => {
+      const r = new RegExp("^\\s*" + k + ":\\s*(.*)$", "m").exec(fBlock);
+      return r ? r[1].replace(/\s+#.*$/, "").trim() : null;
+    };
+    const declared = INLINE_LIST(one("declared_files"));
+    tasks.push({
+      id: mk.id,
+      title: one("title") || "",
+      declared_files: declared,
+      depends_on: INLINE_LIST(one("depends_on")),
+      computed_score: one("computed_score") && /^\d+$/.test(one("computed_score")) ? Number(one("computed_score")) : null,
+      override_score: one("override_score") && /^\d+$/.test(one("override_score")) ? Number(one("override_score")) : null,
+      facets: fBlock
+        ? {
+            breadth: fOne("breadth") !== null ? Number(fOne("breadth")) : declared.length,
+            novelty: fOne("novelty"),
+            logic: fOne("logic"),
+            test_surface: fOne("test_surface"),
+            risk: INLINE_LIST(fOne("risk")),
+            uncertainty: fOne("uncertainty"),
+          }
+        : null,
+    });
+  }
+  return tasks;
+}
+
+// Fixed roles a run dispatches besides executors. Named, not guessed: the
+// forecast has to say WHICH roles it priced or the total is unfalsifiable.
+const LANE_FIXED_ROLES = {
+  orc: ["orc-system-analyst-opus-5-high", "orc-planner-opus-5-med", "orc-reviewer-opus-5-med", "orc-verifier-opus-5-med", "orc-trace-writer-haiku-4-5"],
+  ultra: ["orc-advisor-opus-5-xhigh", "orc-system-analyst-opus-5-high", "orc-planner-opus-5-med", "orc-judge-opus-5-xhigh", "orc-reviewer-opus-5-med", "orc-verifier-opus-5-med", "orc-trace-writer-haiku-4-5"],
+  mini: ["orc-analyze-mini-sonnet-5-high", "orc-planner-mini-sonnet-5-high", "orc-trace-writer-haiku-4-5"],
+  fast: ["orc-trace-writer-haiku-4-5"],
+};
+const FORECAST_LANES = ["ultra", "orc", "mini", "fast"];
+const LANE_CMD = { orc: "/orc", ultra: "/orc-ultra", mini: "/orc-mini", fast: "/orc-fast" };
+// orc-mini and orc-fast dispatch ONE executor for the whole request — they do
+// not score per task. Rendering a per-band table for either would be a table the
+// lane never runs.
+const LANE_ONE_EXECUTOR = { mini: "orc-executor-sonnet-5-high", fast: "orc-executor-sonnet-4-6-high" };
+
+function laneForecast(lane, tasks, rates, cfg) {
+  const rows = [];
+  let low = 0;
+  let lowRoles = 0;
+  const p50 = { ...ZERO_VEC };
+  const p90 = { ...ZERO_VEC };
+  const minSamples = Number(cfg.budget_min_samples) || 5;
+  const contextRisk = [];
+
+  const grouped = new Map();
+  if (LANE_ONE_EXECUTOR[lane]) {
+    grouped.set("(one executor)", { agent: LANE_ONE_EXECUTOR[lane], n: 1, tasks: ["(whole request)"] });
+  } else {
+    for (const t of tasks) {
+      const score = t.override_score ?? t.computed_score ?? (t.facets ? scoreFromFacets(t.facets, t.depends_on.length, tasks.filter((x) => x.depends_on.includes(t.id)).length) : null);
+      const b = score === null ? { band: "unscored", agent: null } : bandFor(score, cfg);
+      const g = grouped.get(b.band) || { agent: b.agent, n: 0, tasks: [] };
+      g.n++;
+      g.tasks.push(t.id);
+      grouped.set(b.band, g);
+    }
+  }
+
+  for (const [band, g] of grouped) {
+    const src = (rates && rates.bands && rates.bands[band]) || (g.agent && rates && rates.roles && rates.roles[g.agent]) || null;
+    const samples = src ? src.samples : 0;
+    if (!src || samples < minSamples) low++;
+    const per50 = src ? src.p50 : null;
+    const per90 = src ? src.p90 : null;
+    rows.push({ band, agent: g.agent, count: g.n, tasks: g.tasks, samples, p50: per50 ? mulVec(per50, g.n) : null, p90: per90 ? mulVec(per90, g.n) : null });
+    if (per50) {
+      Object.assign(p50, sumVec(p50, mulVec(per50, g.n)));
+      Object.assign(p90, sumVec(p90, mulVec(per90 || per50, g.n)));
+    }
+    // Context risk: the p90 PEAK prompt for this band against the model's
+    // window. Forecast before the wave, not after compaction.
+    if (src && src.peak_p90 && g.agent) {
+      const win = contextWindowFor(g.agent);
+      if (win && src.peak_p90 / win > 0.9)
+        for (const id of g.tasks)
+          contextRisk.push({ task: id, agent: g.agent, peak: src.peak_p90, window: win, pct: Math.round((src.peak_p90 / win) * 100) });
+    }
+  }
+
+  const fixed = [];
+  for (const role of LANE_FIXED_ROLES[lane] || []) {
+    const src = rates && rates.roles && rates.roles[role];
+    if (!src) {
+      lowRoles++;
+      fixed.push({ role, samples: 0, p50: null });
+      continue;
+    }
+    fixed.push({ role, samples: src.samples, p50: src.p50, p90: src.p90 });
+    Object.assign(p50, sumVec(p50, src.p50));
+    Object.assign(p90, sumVec(p90, src.p90));
+  }
+
+  return { lane, cmd: LANE_CMD[lane], rows, fixed, p50, p90, low_confidence_bands: low, low_confidence_roles: lowRoles, context_risk: contextRisk };
+}
+
+const mulVec = (v, n) => {
+  const out = {};
+  for (const k of VEC_KINDS) out[k] = Math.round((v[k] || 0) * n);
+  return out;
+};
+
+let readPricingCache = null;
+function contextWindowFor(agent) {
+  const m = modelOf(agent);
+  const t = readPricingCache;
+  return t && t.context_windows ? t.context_windows[m] || null : null;
+}
+
+function quotaView(table, cfg, weighted) {
+  const plan = String(cfg.budget_plan || "auto");
+  // NEVER a quota figure without a known plan. `auto` with nothing to detect from
+  // says so in one line and offers the one-off question — a wrong guess rendered
+  // as a percentage is worse than no percentage.
+  if (plan === "auto" || plan === "api") return { available: false, plan, reason: plan === "api" ? "billed per token — the USD view is the primary one" : "budget_plan is not set (orc config set budget_plan pro|max5|max20|api)" };
+  const p = table && table.plans && table.plans[plan];
+  if (!p) return { available: false, plan, reason: "no capacity row for this plan in the price table" };
+  return {
+    available: true,
+    plan,
+    label: p.label,
+    window_pct: (weighted / p.window_weighted_tokens) * 100,
+    weekly_pct: (weighted / p.weekly_weighted_tokens) * 100,
+  };
+}
+
+function budgetForecast(claudeDir, planPath) {
+  const asJson = wantsJson();
+  const cfg = resolvedConfig(claudeDir);
+  const table = readPricing(claudeDir);
+  readPricingCache = table;
+  const naive = flag("--naive") === true;
+  const asView = typeof flag("--as") === "string" ? String(flag("--as")) : String(cfg.budget_units || "auto");
+
+  if (!planPath) {
+    console.error("usage: orc budget forecast <plan-file> [--json] [--as tokens|usd|quota|context|all]");
+    process.exit(1);
+  }
+  const root = repoRootOf(claudeDir);
+  const abs = path.isAbsolute(planPath)
+    ? planPath
+    : [path.join(root, planPath), path.join(process.cwd(), planPath)].find((c) => fs.existsSync(c)) ||
+      path.join(root, planPath);
+  if (!fs.existsSync(abs)) {
+    if (asJson) emitJson({ ok: false, reason: "no-plan", path: abs }, 3);
+    console.log(`no such plan file: ${abs}`);
+    process.exit(3);
+  }
+  const tasks = parsePlanTasks(fs.readFileSync(abs, "utf8"));
+  if (!tasks.length) {
+    if (asJson) emitJson({ ok: false, reason: "not-a-plan", path: abs, hint: "no `- id:` task blocks found — a forecast needs a PLAN, not a request" }, 3);
+    console.log(`not a plan: no \`- id:\` task blocks in ${path.basename(abs)}.\n  A forecast from a sentence is a guess that looks computed. Run /orc-plan first.`);
+    process.exit(3);
+  }
+  const rates = naive ? null : budgetRates(claudeDir);
+  const haveHistory = !!(rates && rates.dispatches_joined);
+  if (!haveHistory && !naive) {
+    const msg =
+      "BUDGET · no forecast\n" +
+      `  0 joinable dispatches in ${resolveLogDir(claudeDir)} and ${transcriptDir(repoRootOf(claudeDir))}.\n` +
+      "  I will not invent numbers. Run /orc or /orc-mini once, then ask again.\n" +
+      "  A floor from the public price table only:  orc budget forecast --naive";
+    if (asJson) emitJson({ ok: false, reason: "no-history", tasks: tasks.length, hint: msg }, 3);
+    console.log(msg);
+    process.exit(3);
+  }
+
+  const waves = Math.max(1, new Set(tasks.map((t) => t.depends_on.length)).size);
+  const lanes = FORECAST_LANES.map((l) => laneForecast(l, tasks, rates, cfg));
+  const primary = lanes.find((l) => l.lane === "orc");
+  const money50 = priceVector(claudeDir, primary.p50, "claude-opus-4-8");
+  const money90 = priceVector(claudeDir, primary.p90, "claude-opus-4-8");
+  const quota = quotaView(table, cfg, money50.weighted);
+  const risk = primary.context_risk;
+  const code = risk.length ? 2 : primary.low_confidence_bands ? 1 : 0;
+
+  if (asJson)
+    emitJson(
+      {
+        ok: true,
+        plan: abs,
+        tasks: tasks.length,
+        waves,
+        // The vector is the object. usd and quota are DERIVED FROM it here and
+        // are never stored beside it — a caller can always recompute them.
+        tokens: { p50: primary.p50, p90: primary.p90 },
+        raw: { p50: rawTokens(primary.p50), p90: rawTokens(primary.p90) },
+        weighted: { p50: money50.weighted, p90: money90.weighted },
+        usd: { p50: money50.usd, p90: money90.usd },
+        price_table: table ? { as_of: table.as_of, age_days: table._age_days, stale: table._stale, path: table._path } : null,
+        quota,
+        context_risk: risk,
+        bands: primary.rows,
+        fixed_roles: primary.fixed,
+        low_confidence_bands: primary.low_confidence_bands,
+        min_samples: Number(cfg.budget_min_samples) || 5,
+        unattributed: rates ? rates.unattributed : { blocks: 0, tokens: ZERO_VEC },
+        transcripts_readable: rates ? rates.transcripts_readable : false,
+        lanes: lanes.map((l) => ({
+          lane: l.lane,
+          cmd: l.cmd,
+          raw: rawTokens(l.p50),
+          weighted: weightedTokens(l.p50),
+          usd: priceVector(claudeDir, l.p50, "claude-opus-4-8").usd,
+          low_confidence_bands: l.low_confidence_bands,
+          low_confidence_roles: l.low_confidence_roles,
+        })),
+        view: asView,
+      },
+      code
+    );
+
+  console.log(ui.header(`ORC · budget · forecast — ${plural(tasks.length, "task")}, on /orc`));
+  const show = (v) => asView === "all" || asView === "auto" || asView === v;
+  if (show("tokens")) {
+    const vecCols = (v) =>
+      v
+        ? `${kTok(v.input).padStart(7)} ${kTok(v.cache_write).padStart(9)} ${kTok(v.cache_read).padStart(9)} ${kTok(v.output).padStart(9)}`
+        : "  insufficient history".padEnd(37);
+    console.log("\nTOKENS  (p50 → p90)");
+    console.log("  band             model                              in   cache-w   cache-r       out");
+    console.log("  " + "─".repeat(74));
+    for (const r of primary.rows)
+      console.log(
+        `  ${r.band.padEnd(15)}×${String(r.count).padEnd(2)} ${String(r.agent || "unscored").replace(/^orc-executor-/, "").padEnd(26)} ${vecCols(r.p50)}`
+      );
+    for (const f of primary.fixed)
+      console.log(`  ${"fixed role".padEnd(18)} ${f.role.replace(/^orc-/, "").padEnd(26)} ${vecCols(f.p50)}`);
+    console.log("  " + "─".repeat(74));
+    console.log(`  ${"TOTAL p50".padEnd(18)} ${"".padEnd(26)} ${vecCols(primary.p50)}`);
+    console.log(`  ${"TOTAL p90".padEnd(18)} ${"".padEnd(26)} ${vecCols(primary.p90)}`);
+    console.log(`\n  weighted total (cache-read at ${CACHE_READ_WEIGHT}×)      p50  ${kTok(money50.weighted)}-equivalent`);
+    console.log(`  raw total                                p50  ${kTok(money50.raw)} tokens`);
+  }
+  if (show("usd")) {
+    const stale = table && table._stale ? `  ⚠ price table ${table._age_days === null ? "undated" : table._age_days + " days old"} (> ${PRICE_STALE_DAYS})` : table ? `  price table ${table.as_of} (${table._age_days} days old ✓)` : "";
+    console.log(
+      `\nUSD          ` +
+        (money50.usd === null ? "unavailable: no rate for this model in the price table" : `$${money50.usd.toFixed(2)} → $${money90.usd.toFixed(2)}${stale}`)
+    );
+  }
+  if (show("quota"))
+    console.log(
+      `QUOTA        ` +
+        (quota.available
+          ? `${quota.window_pct.toFixed(1)}% of a 5-hour window on ${quota.label}\n             ${quota.weekly_pct.toFixed(1)}% of the weekly limit`
+          : quota.reason)
+    );
+  if (show("context") || risk.length)
+    console.log(
+      `\nCONTEXT      ` +
+        (risk.length
+          ? `${plural(risk.length, "task")} at risk — ` + risk.map((r) => `${r.task} est. ${kTok(r.peak)}/${kTok(r.window)} (${r.pct}%)`).join(", ")
+          : "no task forecasts above 90% of its window")
+    );
+  // A forecast is a range WITH a sample count, never one number — so the
+  // shortfall is stated per band AND per fixed role, not folded into one figure.
+  console.log(
+    `\nCONFIDENCE   ${primary.rows.length - primary.low_confidence_bands} of ${plural(primary.rows.length, "band")} at or above budget_min_samples (${Number(cfg.budget_min_samples) || 5})` +
+      (primary.low_confidence_roles
+        ? `\n             ${plural(primary.low_confidence_roles, "fixed role")} ${primary.low_confidence_roles === 1 ? "has" : "have"} no history yet — the total is a FLOOR, not a range`
+        : "")
+  );
+  if (rates && rates.unattributed)
+    console.log(
+      `             ${kTok(rawTokens(rates.unattributed.tokens))} in ${plural(rates.unattributed.blocks, "block")} are unattributed in the corpus.`
+    );
+  if (rates && !rates.transcripts_readable)
+    console.log("             dollars and quota unavailable: no local usage data (tokens are from ORC trace metadata)");
+
+  console.log("\n  lane          raw p50    weighted    usd p50");
+  console.log("  " + "─".repeat(46));
+  for (const l of lanes) {
+    const u = priceVector(claudeDir, l.p50, "claude-opus-4-8").usd;
+    console.log(
+      `  ${(l.cmd || l.lane).padEnd(13)} ${(rawTokens(l.p50) ? kTok(rawTokens(l.p50)) : "—").padStart(8)} ${(rawTokens(l.p50) ? kTok(weightedTokens(l.p50)) : "—").padStart(11)} ${(u === null || !rawTokens(l.p50) ? "—" : "$" + u.toFixed(2)).padStart(10)}` +
+        (l.low_confidence_bands + l.low_confidence_roles ? "  floor" : "") +
+        (l.lane === "orc" ? "  ←" : "")
+    );
+  }
+  process.exit(code);
+}
+
+function budgetActual(claudeDir, slugArg) {
+  const asJson = wantsJson();
+  readPricingCache = readPricing(claudeDir);
+  const { runs } = listTraces(claudeDir);
+  const run = runs.find((r) => r.name === slugArg || r.slug === slugArg || (r.slug && slugArg && r.slug.includes(slugArg)));
+  if (!run) {
+    if (asJson) emitJson({ ok: false, reason: "no-run", asked: slugArg || null, known: runs.slice(0, 10).map((r) => r.slug) }, 3);
+    console.log(`no trace matching "${slugArg || ""}". Known runs:\n` + runs.slice(0, 10).map((r) => "  " + r.slug).join("\n"));
+    process.exit(3);
+  }
+  const trace = readTraceMeta(run.path);
+  const corpus = readCorpus(repoRootOf(claudeDir));
+  const j = joinRun(trace, corpus.groups);
+  const rates = budgetRates(claudeDir);
+  const byBand = {};
+  let actual = { ...ZERO_VEC };
+  for (const row of j.rows) {
+    if (!row.group) continue;
+    const band = (trace.bands[row.task.split(/\s+/)[0]] || {}).band || row.agent;
+    const b = (byBand[band] = byBand[band] || { n: 0, vec: { ...ZERO_VEC } });
+    b.n++;
+    b.vec = sumVec(b.vec, row.group.vec);
+    actual = sumVec(actual, row.group.vec);
+  }
+  const rows = Object.entries(byBand).map(([band, v]) => {
+    const src = (rates && rates.bands && rates.bands[band]) || (rates && rates.roles && rates.roles[band]) || null;
+    const fc = src ? mulVec(src.p50, v.n) : null;
+    return {
+      band,
+      dispatches: v.n,
+      forecast_weighted: fc ? weightedTokens(fc) : null,
+      actual_weighted: weightedTokens(v.vec),
+      diff_pct: fc && weightedTokens(fc) ? Math.round(((weightedTokens(v.vec) - weightedTokens(fc)) / weightedTokens(fc)) * 100) : null,
+      tokens: v.vec,
+    };
+  });
+  const unatt = j.unattributed.reduce((a, g) => sumVec(a, g.vec), { ...ZERO_VEC });
+  const money = priceVector(claudeDir, actual, "claude-opus-4-8");
+  const cacheShare = rawTokens(actual) ? actual.cache_read / rawTokens(actual) : 0;
+
+  if (asJson)
+    emitJson(
+      {
+        ok: true,
+        run: run.slug,
+        lane: run.lane,
+        trace: run.name,
+        rows,
+        actual: { tokens: actual, raw: rawTokens(actual), weighted: money.weighted, usd: money.usd },
+        cache_read_share: cacheShare,
+        unattributed: { blocks: j.unattributed.length, tokens: unatt },
+        joined: j.rows.filter((r) => r.group).length,
+        dispatches: j.rows.length,
+      },
+      0
+    );
+
+  console.log(ui.header(`ORC · budget · actual — ${run.slug} (/${run.lane})`));
+  console.log("\n  band                 disp   forecast p50 (w)     actual (w)     diff");
+  console.log("  " + "─".repeat(66));
+  for (const r of rows)
+    console.log(
+      `  ${r.band.replace(/^orc-/, "").padEnd(26)} ${String(r.dispatches).padStart(4)}   ${(r.forecast_weighted === null ? "—" : kTok(r.forecast_weighted)).padStart(16)}   ${kTok(r.actual_weighted).padStart(12)}   ${(r.diff_pct === null ? "—" : (r.diff_pct > 0 ? "+" : "") + r.diff_pct + "%").padStart(6)}`
+    );
+  console.log("  " + "─".repeat(66));
+  console.log(
+    `  TOTAL actual    ${kTok(money.weighted)} weighted / ${kTok(money.raw)} raw` +
+      (money.usd === null ? "" : ` / $${money.usd.toFixed(2)}`)
+  );
+  console.log(`  cache-read share  ${(cacheShare * 100).toFixed(0)}% of raw tokens`);
+  console.log(
+    `  unattributed      ${j.unattributed.length ? `${kTok(rawTokens(unatt))} in ${plural(j.unattributed.length, "block")} could not be joined to a task` : "0"}`
+  );
+  console.log(`\n  Feed to /orc-retro for calibration.`);
+}
+
+function budgetRatesCmd(claudeDir) {
+  const asJson = wantsJson();
+  const rates = budgetRates(claudeDir);
+  if (!rates) {
+    if (asJson) emitJson({ ok: false, reason: "no-rates" }, 3);
+    console.log("no rate model yet — run `orc budget calibrate` (free; reads traces + local transcripts).");
+    process.exit(3);
+  }
+  if (asJson) emitJson({ ok: true, ...rates }, rates.dispatches_joined ? 0 : 3);
+  console.log(ui.header("ORC · budget · rates (tokens per dispatch)"));
+  console.log(
+    ui.kv([
+      ["calibrated", rates.calibrated_at],
+      ["dispatches joined", String(rates.dispatches_joined)],
+      ["transcripts", rates.transcripts_readable ? `${rates.transcript_files} file(s) — ${rates.transcript_dir}` : `unreadable — ${rates.transcript_dir}`],
+      ["unattributed", `${rates.unattributed.blocks} block(s), ${kTok(rawTokens(rates.unattributed.tokens))}`],
+    ])
+  );
+  const rowsOf = (bag, title) => {
+    const keys = Object.keys(bag || {});
+    if (!keys.length) return;
+    console.log("\n" + ui.color.bold(title));
+    for (const k of keys) {
+      const v = bag[k];
+      console.log(
+        `  ${k.replace(/^orc-/, "").padEnd(30)} n=${String(v.samples).padStart(3)}  p50 ${kTok(rawTokens(v.p50)).padStart(7)}  p90 ${kTok(rawTokens(v.p90)).padStart(7)}  peak p90 ${kTok(v.peak_p90)}`
+      );
+    }
+  };
+  rowsOf(rates.bands, "Bands (executors)");
+  rowsOf(rates.roles, "Roles");
+  if (!rates.dispatches_joined) process.exit(3);
+}
+
+function budget() {
+  if (flag("--global")) {
+    console.error("❌ orc budget is project-scoped — the traces and the plan live in the repo. Run it from the project (or with --dir <path>).");
+    process.exit(1);
+  }
+  const claudeDir = resolveClaudeDir();
+  const pos = positionals(); // ["budget", <sub?>, <arg?>]
+  switch (pos[1]) {
+    case "forecast":
+      budgetForecast(claudeDir, pos[2]);
+      break;
+    case "actual":
+      budgetActual(claudeDir, pos[2]);
+      break;
+    case undefined:
+    case "rates":
+      budgetRatesCmd(claudeDir);
+      break;
+    case "calibrate": {
+      const out = calibrate(claudeDir);
+      if (wantsJson()) emitJson({ ok: true, ...out }, out.dispatches_joined ? 0 : 3);
+      console.log(
+        `✓ calibrated — ${out.dispatches_joined} dispatch(es) joined from ${out.traces_read} trace(s)` +
+          ` and ${out.transcript_files} transcript file(s)\n  ${ratesPath(claudeDir)}` +
+          (out.unattributed.blocks ? `\n  ${out.unattributed.blocks} sidechain block(s) could not be joined to a task (always reported, never dropped)` : "")
+      );
+      if (!out.dispatches_joined) process.exit(3);
+      break;
+    }
+    default:
+      console.error(
+        `Unknown: orc budget ${pos[1]}\n` +
+          "Usage: orc budget forecast <plan> [--as tokens|usd|quota|context|all] [--naive]\n" +
+          "       orc budget actual <run-slug>     what the run really cost, vs the rate model\n" +
+          "       orc budget rates                 what the corpus says per band, in tokens\n" +
+          "       orc budget calibrate             rebuild the model from traces + transcripts"
+      );
+      process.exit(1);
+  }
+}
+
+// ── /orc-pact (v0.46.0) — the invariant ledger ───────────────────────────────
+//
+// /orc-grill and /orc-brainstorm already tag every settled decision `intent` or
+// `constraint`, and constraints become `spec_invariants[]`. Then the run ended
+// and they evaporated. This is the ledger that outlives the run.
+//
+// FOUR STATES, COMPUTED — NEVER STORED, exactly like a wiki doc's freshness:
+//   HOLDING      its check passed at a commit that still covers its anchors
+//   DRIFTED      commits since verified_commit touched files it anchors
+//                (COVERAGE-RELATIVE — not a global date, not a repo-wide diff)
+//   UNCHECKABLE  no cheap check exists. THE HONEST STATE, and the point of the
+//                lane: a promise nobody can test is worth knowing about.
+//   BROKEN       the check ran and failed
+//
+// ASSUMPTIONS ARE NOT A SECOND LEDGER. An assumption is an invariant with
+// `confidence: low` and `check.kind: manual`. Two ledgers would be drift.
+
+const PACT_DIR = "pact";
+const PACT_LEDGER = "ledger.json";
+const PACT_DOC = "PACT.md";
+const PACT_CHECK_KINDS = ["test", "command", "grep", "manual"];
+
+function pactPaths(claudeDir) {
+  const root = repoRootOf(claudeDir);
+  return {
+    root,
+    dir: path.join(claudeDir, "orc", PACT_DIR),
+    ledger: path.join(claudeDir, "orc", PACT_DIR, PACT_LEDGER),
+    doc: path.join(root, PACT_DOC),
+  };
+}
+
+function readLedger(claudeDir) {
+  const p = pactPaths(claudeDir);
+  if (!fs.existsSync(p.ledger)) return null;
+  try {
+    const l = JSON.parse(fs.readFileSync(p.ledger, "utf8"));
+    l.entries = Array.isArray(l.entries) ? l.entries : [];
+    return l;
+  } catch (_) {
+    return null;
+  }
+}
+
+function writeLedger(claudeDir, ledger) {
+  const p = pactPaths(claudeDir);
+  fs.mkdirSync(p.dir, { recursive: true });
+  ledger.version = 1;
+  ledger.updated_at = fmtStamp(new Date());
+  fs.writeFileSync(p.ledger, JSON.stringify(ledger, null, 2) + "\n");
+  return p.ledger;
+}
+
+// The state machine. Everything here is derived from the entry + git; nothing
+// reads a stored status field, because a stored status is a status that lies the
+// moment somebody commits.
+function pactStateOf(root, e) {
+  const kind = (e.check && e.check.kind) || "manual";
+  const lc = e.last_check || null;
+  if (lc && lc.status === "fail") return { state: "BROKEN", why: `check failed at ${String(lc.commit || "").slice(0, 8)}${lc.at ? " (" + lc.at + ")" : ""}` };
+  if (kind === "manual" || !e.check || !e.check.ref)
+    return { state: "UNCHECKABLE", why: "no cheap check exists — this promise is held by review, not by a runner" };
+  const anchorFiles = (e.anchors || []).map((a) => String(a).split(":")[0]).filter(Boolean);
+  if (!e.verified_commit) return { state: "DRIFTED", why: "never verified at a commit" };
+  const argv = ["rev-list", "--count", `${e.verified_commit}..HEAD`];
+  if (anchorFiles.length) argv.push("--", ...anchorFiles.slice(0, 100));
+  const n = gitIn(root, argv);
+  if (n === null || !/^\d+$/.test(n)) return { state: "UNCHECKABLE", why: `verified_commit ${String(e.verified_commit).slice(0, 8)} is not resolvable here` };
+  const d = Number(n);
+  if (d > 0)
+    return {
+      state: "DRIFTED",
+      why: `${plural(d, "commit")} since ${String(e.verified_commit).slice(0, 8)} touched ${plural(anchorFiles.length, "anchored file")}`,
+      distance: d,
+    };
+  return { state: "HOLDING", why: `verified at ${String(e.verified_commit).slice(0, 8)}; no commit since has touched its anchors`, distance: 0 };
+}
+
+const PACT_ORDER = { BROKEN: 0, DRIFTED: 1, UNCHECKABLE: 2, HOLDING: 3 };
+
+function pactRows(claudeDir) {
+  const p = pactPaths(claudeDir);
+  const ledger = readLedger(claudeDir);
+  if (!ledger) return { error: "no-ledger", paths: p };
+  const rows = ledger.entries.map((e) => {
+    const st = pactStateOf(p.root, e);
+    return {
+      id: e.id,
+      statement: e.statement || "",
+      origin: e.origin || null,
+      anchors: e.anchors || [],
+      check: e.check || { kind: "manual", ref: null },
+      verified_commit: e.verified_commit || null,
+      confidence: e.confidence || "medium",
+      last_check: e.last_check || null,
+      history: Array.isArray(e.history) ? e.history : [],
+      retired: !!e.retired,
+      state: st.state,
+      why: st.why,
+      distance: st.distance === undefined ? null : st.distance,
+    };
+  });
+  const live = rows.filter((r) => !r.retired);
+  live.sort((a, b) => PACT_ORDER[a.state] - PACT_ORDER[b.state] || a.id.localeCompare(b.id));
+  return { ledger, rows: live, retired: rows.filter((r) => r.retired), paths: p };
+}
+
+const pactCode = (rows) =>
+  rows.some((r) => r.state === "BROKEN") ? 2 : rows.some((r) => r.state === "DRIFTED") ? 1 : 0;
+
+function pactStatus(claudeDir) {
+  const asJson = wantsJson();
+  const p = pactRows(claudeDir);
+  if (p.error) {
+    const hint = "no pact ledger yet — run `/orc-pact` to harvest one (its input is a run's spec_invariants[], never an invented promise).";
+    if (asJson) emitJson({ ok: false, reason: "no-ledger", ledger: p.paths.ledger, entries: 0, counts: {}, rows: [], hint }, 3);
+    console.log(hint);
+    process.exit(3);
+  }
+  const counts = { HOLDING: 0, DRIFTED: 0, UNCHECKABLE: 0, BROKEN: 0 };
+  for (const r of p.rows) counts[r.state]++;
+  const code = pactCode(p.rows);
+  if (asJson)
+    emitJson(
+      {
+        ok: true,
+        ledger: p.paths.ledger,
+        doc: p.paths.doc,
+        doc_exists: fs.existsSync(p.paths.doc),
+        entries: p.rows.length,
+        retired: p.retired.length,
+        counts,
+        // The one preflight line /orc prints. Assembled here so the spine never
+        // composes a second wording for it.
+        line: `pact: ${counts.HOLDING} holding · ${counts.DRIFTED} drifted · ${counts.UNCHECKABLE} uncheckable${counts.BROKEN ? " · " + counts.BROKEN + " BROKEN" : ""}`,
+        rows: p.rows,
+      },
+      code
+    );
+  if (!p.rows.length) {
+    console.log("pact ledger exists but has no live entries. `/orc-pact` harvests from a run's spec_invariants[].");
+    process.exit(0);
+  }
+  console.log(ui.header(`ORC · pact — ${plural(p.rows.length, "promise")}`));
+  console.log(
+    `\n  ${counts.HOLDING} holding · ${counts.DRIFTED} drifted · ${counts.UNCHECKABLE} uncheckable` +
+      (counts.BROKEN ? ` · ${counts.BROKEN} BROKEN` : "") +
+      (p.retired.length ? `  (${p.retired.length} retired)` : "") +
+      "\n"
+  );
+  for (const r of p.rows) {
+    console.log(`  ${r.state.padEnd(12)} ${r.id}  ${r.statement}`);
+    console.log(`  ${"".padEnd(12)} ${ui.color.gray(r.why)}`);
+    if (r.anchors.length) console.log(`  ${"".padEnd(12)} anchors: ${r.anchors.slice(0, 3).join(", ")}`);
+    if (r.check && r.check.ref) console.log(`  ${"".padEnd(12)} check (${r.check.kind}): ${r.check.ref}`);
+  }
+  console.log(
+    "\n  UNCHECKABLE is the honest state, not a failure — it never raises the exit code.\n" +
+      "  Re-check the drifted ones:  orc pact check"
+  );
+  process.exit(code);
+}
+
+// Run an entry's own cheapest proof. `test`/`command` shell the ref; `grep`
+// searches the anchors for it. A PASS re-anchors to HEAD — that is what clears
+// DRIFTED without a model ever being involved.
+function runPactCheck(root, e) {
+  const kind = (e.check && e.check.kind) || "manual";
+  const ref = e.check && e.check.ref;
+  if (kind === "manual" || !ref) return { status: "skipped", reason: "manual check — a human decides this one" };
+  if (kind === "grep") {
+    const files = (e.anchors || []).map((a) => String(a).split(":")[0]).filter(Boolean);
+    if (!files.length) return { status: "skipped", reason: "grep check with no anchors to search" };
+    let hit = false;
+    for (const f of files) {
+      try {
+        if (fs.readFileSync(path.join(root, f), "utf8").includes(ref)) {
+          hit = true;
+          break;
+        }
+      } catch (_) {}
+    }
+    return { status: hit ? "pass" : "fail", output: hit ? `found "${ref}"` : `"${ref}" not found in ${files.length} anchored file(s)` };
+  }
+  const r = spawnSync(ref, { cwd: root, shell: true, encoding: "utf8", timeout: 10 * 60_000 });
+  const out = ((r.stdout || "") + (r.stderr || "")).trim();
+  return { status: r.status === 0 ? "pass" : "fail", exit_code: r.status, output: out.slice(-2000) };
+}
+
+function pactCheckCmd(claudeDir, idArg) {
+  const asJson = wantsJson();
+  const p = pactRows(claudeDir);
+  if (p.error) {
+    if (asJson) emitJson({ ok: false, reason: "no-ledger" }, 3);
+    console.log("no pact ledger — nothing to check.");
+    process.exit(3);
+  }
+  const head = gitIn(p.paths.root, ["rev-parse", "HEAD"]);
+  const target = idArg
+    ? p.rows.filter((r) => r.id === idArg)
+    : p.rows.filter((r) => r.state === "DRIFTED" || r.state === "BROKEN");
+  if (idArg && !target.length) {
+    if (asJson) emitJson({ ok: false, reason: "no-such-id", asked: idArg }, 1);
+    console.log(`no live entry ${idArg}.`);
+    process.exit(1);
+  }
+  const results = [];
+  for (const r of target) {
+    const entry = p.ledger.entries.find((x) => x.id === r.id);
+    const res = runPactCheck(p.paths.root, entry);
+    results.push({ id: r.id, statement: r.statement, ...res });
+    if (res.status === "skipped") continue;
+    entry.last_check = { status: res.status, commit: head, at: fmtStamp(new Date()), ref: entry.check.ref };
+    entry.history = Array.isArray(entry.history) ? entry.history : [];
+    entry.history.unshift({ at: entry.last_check.at, status: res.status, commit: head });
+    entry.history = entry.history.slice(0, 10);
+    // A PASS re-anchors. NEVER auto-retire and never auto-edit the statement:
+    // retirement is a user decision with a recorded reason.
+    if (res.status === "pass") entry.verified_commit = head;
+  }
+  writeLedger(claudeDir, p.ledger);
+  const after = pactRows(claudeDir);
+  const code = pactCode(after.rows);
+  if (asJson) emitJson({ ok: true, checked: results.length, results, counts_after: after.rows.reduce((a, r) => ((a[r.state] = (a[r.state] || 0) + 1), a), {}) }, code);
+  if (!results.length) {
+    console.log("nothing to re-check — no DRIFTED or BROKEN entry.");
+    process.exit(0);
+  }
+  for (const r of results)
+    console.log(
+      `  ${r.status === "pass" ? "✓" : r.status === "fail" ? "✗" : "–"} ${r.id}  ${r.status.toUpperCase()}  ${r.statement}` +
+        (r.status === "fail" && r.output ? "\n      " + String(r.output).split("\n").slice(-3).join("\n      ") : "") +
+        (r.status === "skipped" ? "\n      " + r.reason : "")
+    );
+  console.log(`\n  ledger updated. A pass re-anchored to ${String(head || "").slice(0, 8)}.`);
+  process.exit(code);
+}
+
+// PACT.md is DERIVED — 100% from the ledger, written only by this command, the
+// same rule wiki-meta.json + INDEX.md live under. It is a COMMITTED deliverable
+// at the project root, never hidden in .claude/: a PM has to be able to read it
+// in a PR.
+function pactSync(claudeDir) {
+  const p = pactRows(claudeDir);
+  if (p.error) {
+    console.log("no pact ledger — nothing to render.");
+    process.exit(3);
+  }
+  const counts = { HOLDING: 0, DRIFTED: 0, UNCHECKABLE: 0, BROKEN: 0 };
+  for (const r of p.rows) counts[r.state]++;
+  const lines = [
+    "<!-- orc-pact:derived — written by `orc pact sync`. Do NOT hand-edit:",
+    "     the source of truth is .claude/orc/pact/ledger.json. -->",
+    "",
+    "# Promises this project makes",
+    "",
+    `${counts.HOLDING} holding · ${counts.DRIFTED} drifted · ${counts.UNCHECKABLE} uncheckable` +
+      (counts.BROKEN ? ` · **${counts.BROKEN} broken**` : "") +
+      `  ·  rendered ${fmtStamp(new Date())}`,
+    "",
+    "State is COMPUTED on read, never stored: **DRIFTED** means commits since the",
+    "promise was last verified touched the files it anchors. **UNCHECKABLE** means",
+    "no cheap check exists — that is honest, not a failure.",
+    "",
+  ];
+  for (const state of ["BROKEN", "DRIFTED", "UNCHECKABLE", "HOLDING"]) {
+    const rows = p.rows.filter((r) => r.state === state);
+    if (!rows.length) continue;
+    lines.push(`## ${state}`, "");
+    for (const r of rows) {
+      lines.push(`### ${r.id} — ${r.statement}`, "");
+      lines.push(`- state: ${r.state} — ${r.why}`);
+      if (r.anchors.length) lines.push(`- anchors: ${r.anchors.map((a) => "`" + a + "`").join(", ")}`);
+      lines.push(`- check: ${r.check.kind}${r.check.ref ? " — `" + r.check.ref + "`" : ""}`);
+      if (r.origin) lines.push(`- origin: ${r.origin.lane || "?"}${r.origin.run ? " (" + r.origin.run + ")" : ""} · ${r.origin.kind || "constraint"}`);
+      lines.push(`- confidence: ${r.confidence}`);
+      lines.push("");
+    }
+  }
+  if (p.retired.length) {
+    lines.push("## Retired", "");
+    for (const r of p.retired) lines.push(`- ~~${r.id}~~ ${r.statement}${r.retired_reason ? " — " + r.retired_reason : ""}`);
+    lines.push("");
+  }
+  fs.writeFileSync(p.paths.doc, lines.join("\n"));
+  console.log(`✓ ${PACT_DOC} rendered from the ledger — ${plural(p.rows.length, "promise")}, ${p.retired.length} retired.\n  ${p.paths.doc}`);
+}
+
+function pact() {
+  if (flag("--global")) {
+    console.error("❌ orc pact is project-scoped — the promises are this repo's. Run it from the project (or with --dir <path>).");
+    process.exit(1);
+  }
+  const claudeDir = resolveClaudeDir();
+  const pos = positionals(); // ["pact", <sub?>, <id?>]
+  switch (pos[1]) {
+    case undefined:
+    case "status":
+      pactStatus(claudeDir);
+      break;
+    case "check":
+      pactCheckCmd(claudeDir, pos[2]);
+      break;
+    case "sync":
+      pactSync(claudeDir);
+      break;
+    default:
+      console.error(
+        `Unknown: orc pact ${pos[1]}\n` +
+          "Usage: orc pact status [--json]   computed states (exit 0 holding / 1 drifted / 2 broken / 3 no ledger)\n" +
+          "       orc pact check [<id>]      run the cheap checks and re-anchor what passes\n" +
+          "       orc pact sync              re-render the derived PACT.md from the ledger"
+      );
+      process.exit(1);
+  }
+}
+
+// ── /orc-boundary (v0.46.0) — execute · escalate · refuse ────────────────────
+//
+// Every skill in the ecosystem assumes the answer to "should the agent do this?"
+// is yes. Measured cost: agents spend 5x-50x longer than human experts, mostly on
+// attempts that were never going to succeed.
+//
+// A REFUSE ALWAYS NAMES WHAT WOULD MAKE IT A YES. "No" with no "unless" is not a
+// boundary, it is a shrug — so a REFUSE card with no checklist is MALFORMED and
+// reported as an error, never rendered as an empty card.
+//
+// The artifact is a card per AREA, not per request, so it is computed once and
+// consulted in O(1). Cards go stale the same coverage-relative way a wiki doc
+// does: commits since `verified_commit` that touched `anchored_files`.
+
+const BOUNDARY_DIR = "boundary";
+const BOUNDARY_VERDICTS = ["EXECUTE", "ESCALATE", "REFUSE"];
+
+function boundaryPaths(claudeDir) {
+  return { root: repoRootOf(claudeDir), dir: path.join(claudeDir, "orc", BOUNDARY_DIR) };
+}
+
+function readBoundaryCards(claudeDir) {
+  const p = boundaryPaths(claudeDir);
+  const cards = [];
+  let names = [];
+  try {
+    names = fs.readdirSync(p.dir).filter((f) => f.endsWith(".md"));
+  } catch (_) {
+    return { cards, dir: p.dir, root: p.root };
+  }
+  for (const n of names) {
+    const abs = path.join(p.dir, n);
+    const text = fs.readFileSync(abs, "utf8");
+    const h = parseDocHeader(text) || {};
+    const verdict = String(h.verdict || "").toUpperCase();
+    const anchored = Array.isArray(h.anchored_files) ? h.anchored_files : [];
+    const checklist = Array.isArray(h.checklist) ? h.checklist : [];
+    // Staleness: coverage-relative, one shared idea with the wiki and the pact.
+    let distance = null;
+    if (h.verified_commit) {
+      const argv = ["rev-list", "--count", `${h.verified_commit}..HEAD`];
+      if (anchored.length) argv.push("--", ...anchored.slice(0, 100));
+      const out = gitIn(p.root, argv);
+      if (out !== null && /^\d+$/.test(out)) distance = Number(out);
+    }
+    const malformed = [];
+    if (!BOUNDARY_VERDICTS.includes(verdict)) malformed.push(`verdict must be one of ${BOUNDARY_VERDICTS.join(" | ")}`);
+    if (verdict === "REFUSE" && !checklist.length)
+      malformed.push("a REFUSE with no checklist is malformed — a boundary must name what would make it a yes");
+    if (verdict === "ESCALATE" && !h.escalate_to) malformed.push("an ESCALATE must name the human it escalates to");
+    cards.push({
+      file: n,
+      path: abs,
+      area: h.area || n.replace(/\.md$/, ""),
+      verdict: BOUNDARY_VERDICTS.includes(verdict) ? verdict : null,
+      checklist,
+      escalate_to: h.escalate_to || null,
+      anchored_files: anchored,
+      verified_commit: h.verified_commit || null,
+      distance,
+      stale: distance !== null && distance > 0,
+      malformed,
+      reasons: Array.isArray(h.reasons) ? h.reasons : [],
+    });
+  }
+  cards.sort((a, b) => a.area.localeCompare(b.area));
+  return { cards, dir: p.dir, root: p.root };
+}
+
+function boundaryStatus(claudeDir, pathArg) {
+  const asJson = wantsJson();
+  const { cards, dir } = readBoundaryCards(claudeDir);
+  const filtered = pathArg
+    ? cards.filter((c) => c.area === pathArg || String(pathArg).startsWith(c.area + "/") || c.area.startsWith(String(pathArg)))
+    : cards;
+  if (!filtered.length) {
+    const hint = pathArg
+      ? `no boundary card covers ${pathArg} — run \`/orc-boundary\` scoped to it. An area with no card is UNKNOWN, never assumed safe.`
+      : `no boundary cards yet — run \`/orc-boundary\` to write them (${dir}).`;
+    if (asJson) emitJson({ ok: false, reason: "no-card", asked: pathArg || null, dir, cards: [], counts: {}, hint }, 3);
+    console.log(hint);
+    process.exit(3);
+  }
+  const counts = { EXECUTE: 0, ESCALATE: 0, REFUSE: 0 };
+  for (const c of filtered) if (c.verdict) counts[c.verdict]++;
+  const stale = filtered.filter((c) => c.stale).length;
+  const malformed = filtered.filter((c) => c.malformed.length);
+  const code = malformed.length || stale === filtered.length ? 3 : counts.REFUSE ? 2 : counts.ESCALATE ? 1 : 0;
+
+  if (asJson)
+    emitJson(
+      {
+        ok: !malformed.length,
+        dir,
+        cards: filtered,
+        counts,
+        stale,
+        malformed: malformed.map((c) => ({ area: c.area, problems: c.malformed })),
+        line: `boundary: ${counts.EXECUTE} execute · ${counts.ESCALATE} escalate · ${counts.REFUSE} refuse${stale ? ` (${stale} stale)` : ""}`,
+      },
+      code
+    );
+
+  console.log(ui.header(`ORC · boundary — ${plural(filtered.length, "area")}`));
+  console.log(`\n  ${counts.EXECUTE} execute · ${counts.ESCALATE} escalate · ${counts.REFUSE} refuse${stale ? ` (${stale} stale)` : ""}\n`);
+  for (const c of filtered) {
+    console.log(`  ${(c.verdict || "MALFORMED").padEnd(10)} ${c.area}${c.stale ? `   (stale — ${plural(c.distance, "commit")} since it was verified)` : ""}`);
+    for (const r of c.reasons.slice(0, 3)) console.log(`  ${"".padEnd(10)} ${ui.color.gray(r)}`);
+    if (c.verdict === "REFUSE")
+      for (const k of c.checklist) console.log(`  ${"".padEnd(10)} □ ${k}`);
+    if (c.verdict === "ESCALATE") console.log(`  ${"".padEnd(10)} → ${c.escalate_to}`);
+    for (const m of c.malformed) console.log(`  ${"".padEnd(10)} ❌ ${m}`);
+  }
+  console.log(
+    "\n  This gates ORC's OWN dispatch, never you: an explicit instruction always wins.\n" +
+      `  Gate mode: boundary_gate=${resolvedConfig(claudeDir).boundary_gate}`
+  );
+  process.exit(code);
+}
+
+function boundary() {
+  if (flag("--global")) {
+    console.error("❌ orc boundary is project-scoped — the cards describe this repo. Run it from the project (or with --dir <path>).");
+    process.exit(1);
+  }
+  const claudeDir = resolveClaudeDir();
+  const pos = positionals(); // ["boundary", <sub?>, <path?>]
+  switch (pos[1]) {
+    case undefined:
+    case "status":
+      boundaryStatus(claudeDir, pos[2]);
+      break;
+    default:
+      console.error(
+        `Unknown: orc boundary ${pos[1]}\n` +
+          "Usage: orc boundary status [<path>] [--json]   per-area verdicts\n" +
+          "       exit 0 all EXECUTE / 1 any ESCALATE / 2 any REFUSE / 3 no card or stale"
+      );
+      process.exit(1);
+  }
+}
+
+// ── /orc-handoff (v0.46.0) — what a non-developer can safely change ──────────
+//
+// THE INSIGHT NOBODY SHIPPED: the safety grade is NOT derived from file type. It
+// is derived from WHETHER A CHEAP CHECK EXISTS for that surface. A YAML with a
+// schema validator is GREEN; the same YAML without one is AMBER. That reframing
+// is what makes this deterministic rather than a vibe.
+//
+//   GREEN  change it — a check will catch a mistake
+//   AMBER  change it, but the check is manual — here it is
+//   RED    looks like content, is not. ORC will not touch it.
+//
+// The map is written by the LANE (it needs to read the repo); this CLI READS it
+// and owns the WRITE path, so the browser panel and the lane share one writer.
+
+// The map's location is a registered contract token, so the CLI holds the WHOLE
+// relative path as one literal — a rename on either side then fails the lint,
+// which two assembled halves would not.
+const HANDOFF_MAP_REL = "orc-handoff/surfaces.md";
+const HANDOFF_DIR = HANDOFF_MAP_REL.split("/")[0];
+const HANDOFF_MAP = HANDOFF_MAP_REL.split("/")[1];
+const HANDOFF_GRADES = ["green", "amber", "red"];
+// `## H-001 · <file> · <what it is>` — the heading is the identity, exactly like
+// a gotcha entry. Fields are `- key: value` lines until the next heading.
+const SURFACE_HEAD = /^##\s+(H-\d{3})\s+·\s+(.+?)\s+·\s+(.+?)\s*$/;
+
+function handoffPaths(claudeDir) {
+  const root = repoRootOf(claudeDir);
+  return { root, dir: path.join(root, HANDOFF_DIR), map: path.join(root, HANDOFF_DIR, HANDOFF_MAP) };
+}
+
+function parseSurfaces(file) {
+  if (!fs.existsSync(file)) return [];
+  const lines = fs.readFileSync(file, "utf8").replace(/\r\n/g, "\n").split("\n");
+  const out = [];
+  let cur = null;
+  for (const line of lines) {
+    const m = SURFACE_HEAD.exec(line);
+    if (m) {
+      cur = { id: m[1], file: m[2].trim(), what: m[3].trim(), fields: {} };
+      out.push(cur);
+      continue;
+    }
+    if (!cur) continue;
+    const f = /^-\s+([a-z_]+):\s*(.*)$/.exec(line);
+    if (f) cur.fields[f[1]] = f[2].trim();
+  }
+  for (const s of out) {
+    s.grade = HANDOFF_GRADES.includes(String(s.fields.grade).toLowerCase()) ? String(s.fields.grade).toLowerCase() : "red";
+    s.check = s.fields.check || null;
+    s.check_kind = s.fields.check_kind || (s.check ? "command" : "manual");
+    s.revert = s.fields.revert || `git checkout -- ${s.file}`;
+    s.reason = s.fields.reason || null;
+    s.ask = s.fields.ask || null;
+    s.exists = fs.existsSync(s.file) || undefined;
+  }
+  return out;
+}
+
+function handoffSurfaces(claudeDir) {
+  const asJson = wantsJson();
+  const p = handoffPaths(claudeDir);
+  const surfaces = parseSurfaces(p.map).map((s) => ({
+    ...s,
+    exists: fs.existsSync(path.join(p.root, s.file)),
+  }));
+  const counts = { green: 0, amber: 0, red: 0 };
+  for (const s of surfaces) counts[s.grade]++;
+  const writable = isTrue(resolvedConfig(claudeDir).handoff_write);
+  if (asJson)
+    emitJson(
+      {
+        ok: true,
+        map: p.map,
+        map_exists: fs.existsSync(p.map),
+        write_enabled: writable,
+        counts,
+        surfaces,
+      },
+      surfaces.length ? 0 : 1
+    );
+  if (!surfaces.length) {
+    console.log(`no surface map yet — run \`/orc-handoff\` to make one (${p.map}).`);
+    process.exit(1);
+  }
+  console.log(ui.header(`ORC · handoff — ${plural(surfaces.length, "surface")}`));
+  console.log(`\n  ${counts.green} green · ${counts.amber} amber · ${counts.red} red   (writes ${writable ? "enabled" : "OFF — handoff_write=false"})\n`);
+  for (const s of surfaces) {
+    const dot = s.grade === "green" ? "🟢" : s.grade === "amber" ? "🟡" : "🔴";
+    console.log(`  ${dot} ${s.id}  ${s.file}${s.exists ? "" : "   (missing)"}`);
+    console.log(`      ${s.what}`);
+    if (s.grade !== "red") {
+      console.log(`      check:  ${s.check || "(manual — see the map)"}`);
+      console.log(`      undo:   ${s.revert}`);
+    } else {
+      console.log(`      why not: ${s.reason || "looks like content, is not"}`);
+      if (s.ask) console.log(`      ask:     ${s.ask}`);
+    }
+  }
+  process.exit(0);
+}
+
+// Set one key inside a graded surface. JSON gets a DOTTED key; a flat
+// `key: value` YAML / `key=value` file gets a whole-line replace. Anything else
+// is refused with a reason — pretending to understand a file format is exactly
+// the failure this lane's grading exists to avoid.
+function setInFile(abs, key, value) {
+  const text = fs.readFileSync(abs, "utf8");
+  const ext = path.extname(abs).toLowerCase();
+  if (ext === ".json") {
+    let obj;
+    try {
+      obj = JSON.parse(text);
+    } catch (e) {
+      return { ok: false, reason: "the file is not valid JSON right now — fix that first" };
+    }
+    const parts = key.split(".");
+    let node = obj;
+    for (const k of parts.slice(0, -1)) {
+      if (typeof node[k] !== "object" || node[k] === null) return { ok: false, reason: `no such key path: ${key}` };
+      node = node[k];
+    }
+    const last = parts[parts.length - 1];
+    if (!(last in node)) return { ok: false, reason: `no such key: ${key} (this lane never CREATES keys, only changes them)` };
+    const before = node[last];
+    if (typeof before === "object") return { ok: false, reason: `${key} holds a structure, not a value` };
+    node[last] = value;
+    const nl = text.endsWith("\n") ? "\n" : "";
+    const indent = /^\{\n(\s+)/.exec(text);
+    fs.writeFileSync(abs, JSON.stringify(obj, null, indent ? indent[1].length : 2) + nl);
+    return { ok: true, before: String(before), after: value };
+  }
+  if (ext === ".yaml" || ext === ".yml" || ext === ".env" || ext === ".properties" || ext === ".ini" || ext === ".toml") {
+    const sep = ext === ".env" || ext === ".properties" ? "=" : ": ";
+    const re = new RegExp("^(\\s*" + key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\s*" + (sep === "=" ? "=" : ":") + "\\s*)(.*)$", "m");
+    const m = re.exec(text);
+    if (!m) return { ok: false, reason: `no such key: ${key} (this lane never CREATES keys, only changes them)` };
+    fs.writeFileSync(abs, text.replace(re, (_, head) => head + value));
+    return { ok: true, before: m[2].trim(), after: value };
+  }
+  return { ok: false, reason: `${ext || "this file type"} is not a format this lane edits — change it by hand` };
+}
+
+function handoffSet(claudeDir, id, key, value) {
+  const asJson = wantsJson();
+  const p = handoffPaths(claudeDir);
+  const cfg = resolvedConfig(claudeDir);
+  const fail = (reason, code) => {
+    if (asJson) emitJson({ ok: false, reason, surface: id || null, key: key || null }, code);
+    console.error("❌ " + reason);
+    process.exit(code);
+  };
+  if (!isTrue(cfg.handoff_write)) fail("handoff_write is false — this project is map-only. `orc config set handoff_write true` to allow writes.", 1);
+  if (!id || !key || value === undefined) fail("usage: orc handoff set <surface-id> <key> <value>", 1);
+  const s = parseSurfaces(p.map).find((x) => x.id === id);
+  if (!s) fail(`no such surface ${id} — run \`orc handoff surfaces\` for the list.`, 1);
+  // A RED surface is NEVER edited, and the grade is never re-derived here to
+  // make a change possible.
+  if (s.grade === "red") fail(`${id} is RED: ${s.reason || "looks like content, is not"}. ORC will not touch it.${s.ask ? " Ask: " + s.ask : ""}`, 1);
+  const abs = path.join(p.root, s.file);
+  if (!fs.existsSync(abs)) fail(`${s.file} does not exist.`, 1);
+  // The undo command is printed BEFORE the write, not after. In --json mode it
+  // goes to STDERR instead of being dropped: stdout must stay exactly one
+  // object, and the object already carries `revert` for the caller.
+  const undoLine = `undo this with:  ${s.revert}`;
+  if (asJson) process.stderr.write(undoLine + String.fromCharCode(10));
+  else console.log(undoLine);
+  const r = setInFile(abs, key, String(value));
+  if (!r.ok) fail(r.reason, 1);
+  const out = {
+    ok: true,
+    surface: id,
+    file: s.file,
+    grade: s.grade,
+    key,
+    before: r.before,
+    after: r.after,
+    revert: s.revert,
+    check: s.check,
+    // AMBER applies, then hands back the manual check as a TASK — never as a pass.
+    check_kind: s.grade === "amber" ? "manual" : s.check_kind,
+  };
+  if (s.grade === "green" && s.check) {
+    const run = spawnSync(s.check, { cwd: p.root, shell: true, encoding: "utf8", timeout: 10 * 60_000 });
+    out.check_status = run.status === 0 ? "pass" : "fail";
+    out.check_output = ((run.stdout || "") + (run.stderr || "")).trim().slice(-2000);
+  }
+  if (asJson) emitJson(out, 0);
+  console.log(`✓ ${s.file}: ${key}\n    was:  ${r.before}\n    now:  ${r.after}`);
+  if (out.check_status)
+    console.log(
+      out.check_status === "pass"
+        ? `✓ the check passed:  ${s.check}`
+        : `✗ the check FAILED:  ${s.check}\n  Undo:  ${s.revert}\n${String(out.check_output).split("\n").slice(-6).map((l) => "    " + l).join("\n")}`
+    );
+  else if (s.grade === "amber") console.log(`⚠ the check for this file is MANUAL, so nothing has verified your change yet:\n    ${s.check || "(see the map)"}`);
+  console.log(`\nNothing was staged or committed. To commit:  git add ${s.file} && git commit`);
+}
+
+function handoff() {
+  if (flag("--global")) {
+    console.error("❌ orc handoff is project-scoped — the surfaces are this repo's files. Run it from the project (or with --dir <path>).");
+    process.exit(1);
+  }
+  const claudeDir = resolveClaudeDir();
+  const pos = positionals(); // ["handoff", <sub?>, ...]
+  switch (pos[1]) {
+    case undefined:
+    case "surfaces":
+      handoffSurfaces(claudeDir);
+      break;
+    case "set":
+      handoffSet(claudeDir, pos[2], pos[3], pos.slice(4).join(" ") || undefined);
+      break;
+    default:
+      console.error(
+        `Unknown: orc handoff ${pos[1]}\n` +
+          "Usage: orc handoff surfaces [--json]              the graded map (exit 0 = surfaces, 1 = none)\n" +
+          "       orc handoff set <id> <key> <value>         change one value on a GREEN/AMBER surface"
+      );
+      process.exit(1);
+  }
+}
+
+// ── /orc-aftermath (v0.46.0) — did the thing we shipped hold up ──────────────
+//
+// Everyone reaches for production telemetry. For a large class of outcomes THE
+// REPOSITORY'S OWN FUTURE is the grading signal, and it is free: files rewritten
+// soon after, a test we added deleted or skipped, the commit reverted, a promise
+// that was HOLDING now BROKEN.
+//
+// THE RULE THAT KEEPS IT HONEST: churn is a SIGNAL, not a verdict. A file being
+// rewritten is a fact; WHY is not knowable from git. This reports the signal and
+// its strength. It never writes "this change was bad", never names a person, and
+// never edits anything.
+
+// Same rule as HANDOFF_MAP_REL: the report location is a registered contract
+// token, so the literal lives here even though the SKILL is what writes the file.
+const AFTERMATH_OUT_DIR = "orc-aftermath/";
+const AFTERMATH_MIN_DAYS = 7;
+const AFTERMATH_GRADES = { held: "HELD", churn: "CHURN", reverted: "REVERTED", recent: "TOO_RECENT", shallow: "SHALLOW" };
+
+function parseSince(v) {
+  const m = /^(\d+)\s*d?$/.exec(String(v || "").trim());
+  return m ? Number(m[1]) : null;
+}
+
+function aftermathForRun(root, run, windowDays, pactLive) {
+  const ageDays = (Date.now() - run.mtime) / 86400000;
+  if (ageDays < AFTERMATH_MIN_DAYS)
+    return { slug: run.slug, lane: run.lane, age_days: Math.round(ageDays), grade: AFTERMATH_GRADES.recent, signals: [], strength: 0, note: `younger than ${AFTERMATH_MIN_DAYS} days — too recent to grade. That is an answer, not a gap.` };
+
+  const iso = new Date(run.mtime).toISOString();
+  // The run's own commits: everything committed from the run's end onward, up to
+  // one day after — the ship window. Deliberately coarse: a precise attribution
+  // would need a commit id ORC does not record, and inventing one is worse.
+  const own = gitIn(root, ["log", "--since", iso, "--until", new Date(run.mtime + 86400000).toISOString(), "--format=%H", "--no-merges"]);
+  const shas = (own || "").split(/\r?\n/).filter(Boolean);
+  if (!shas.length)
+    return { slug: run.slug, lane: run.lane, age_days: Math.round(ageDays), grade: AFTERMATH_GRADES.shallow, signals: [], strength: 0, note: "no commit found in this run's ship window — nothing to grade against" };
+
+  const files = new Set();
+  for (const sha of shas)
+    for (const f of (gitIn(root, ["show", "--name-only", "--format=", sha]) || "").split(/\r?\n/))
+      if (f.trim()) files.add(f.trim());
+
+  const signals = [];
+  // 1. Reverted.
+  const reverts = gitIn(root, ["log", "--since", iso, "--format=%H %s", "--no-merges", "--grep", "^Revert"]) || "";
+  const revertHit = reverts
+    .split(/\r?\n/)
+    .filter(Boolean)
+    .filter((l) => shas.some((s) => l.includes(s.slice(0, 7))));
+  if (revertHit.length) signals.push({ kind: "revert", strength: 3, detail: revertHit[0] });
+
+  // 2. Shipped files rewritten since, inside the window.
+  const later = gitIn(root, ["log", "--since", new Date(run.mtime + 86400000).toISOString(), "--format=%H", "--no-merges"]) || "";
+  const laterShas = later.split(/\r?\n/).filter(Boolean);
+  const rewritten = new Map();
+  for (const sha of laterShas)
+    for (const f of (gitIn(root, ["show", "--name-only", "--format=", sha]) || "").split(/\r?\n/)) {
+      const t = f.trim();
+      if (t && files.has(t)) rewritten.set(t, (rewritten.get(t) || 0) + 1);
+    }
+  if (rewritten.size)
+    signals.push({
+      kind: "churn",
+      strength: rewritten.size >= 3 ? 2 : 1,
+      detail: `${plural(rewritten.size, "shipped file")} rewritten within ${windowDays} days`,
+      files: [...rewritten.keys()].slice(0, 8),
+    });
+
+  // 3. A test the run added that no longer exists, or is now skipped.
+  const testFiles = [...files].filter((f) => /(^|\/)(test|tests|spec|__tests__)\//.test(f) || /\.(test|spec)\.[a-z]+$/.test(f));
+  const goneTests = testFiles.filter((f) => !fs.existsSync(path.join(root, f)));
+  if (goneTests.length) signals.push({ kind: "test-deleted", strength: 3, detail: `${plural(goneTests.length, "test file")} we added no longer exists`, files: goneTests.slice(0, 5) });
+  const skipped = testFiles.filter((f) => {
+    try {
+      return /\b(it|test|describe)\.skip\b|\bxit\(|\bskip\s*=\s*true|@Ignore\b/.test(fs.readFileSync(path.join(root, f), "utf8"));
+    } catch (_) {
+      return false;
+    }
+  });
+  if (skipped.length) signals.push({ kind: "test-skipped", strength: 2, detail: `${plural(skipped.length, "test file")} we added now contains a skip`, files: skipped.slice(0, 5) });
+
+  // 4. A promise that used to hold and now does not, in this run's area.
+  const broken = (pactLive || []).filter(
+    (r) => r.state === "BROKEN" && (r.anchors || []).some((a) => files.has(String(a).split(":")[0]))
+  );
+  if (broken.length) signals.push({ kind: "promise-broken", strength: 3, detail: `${plural(broken.length, "promise")} anchored in this change is BROKEN`, ids: broken.map((r) => r.id) });
+
+  const strength = signals.reduce((n, s) => Math.max(n, s.strength), 0);
+  const grade = revertHit.length ? AFTERMATH_GRADES.reverted : signals.length ? AFTERMATH_GRADES.churn : AFTERMATH_GRADES.held;
+  return {
+    slug: run.slug,
+    lane: run.lane,
+    age_days: Math.round(ageDays),
+    commits: shas.length,
+    files: files.size,
+    grade,
+    strength,
+    signals,
+    note:
+      grade === AFTERMATH_GRADES.held
+        ? "no churn signal in the window. That is not proof it worked — only that nothing came back."
+        : "signals, not a verdict: why a file changed again is not knowable from git.",
+  };
+}
+
+function aftermathStatus(claudeDir) {
+  const asJson = wantsJson();
+  const cfg = resolvedConfig(claudeDir);
+  const windowDays = parseSince(flag("--since")) || Number(cfg.aftermath_window_days) || 30;
+  const root = repoRootOf(claudeDir);
+  const { runs, dir } = listTraces(claudeDir);
+  if (!gitIn(root, ["rev-parse", "--is-inside-work-tree"])) {
+    if (asJson) emitJson({ ok: false, reason: "no-git", hint: "aftermath grades from git history — this is not a git work tree" }, 3);
+    console.log("aftermath grades from git history — this is not a git work tree.");
+    process.exit(3);
+  }
+  const cut = Date.now() - windowDays * 86400000;
+  const inWindow = runs.filter((r) => r.mtime >= cut && r.slug);
+  if (!inWindow.length) {
+    if (asJson) emitJson({ ok: false, reason: "shallow", window_days: windowDays, log_dir: dir, runs: [] }, 3);
+    console.log(`no runs in the last ${windowDays} days under ${dir} — history too shallow to grade.`);
+    process.exit(3);
+  }
+  const p = pactRows(claudeDir);
+  const rows = inWindow.map((r) => aftermathForRun(root, r, windowDays, p.error ? [] : p.rows));
+  const counts = {};
+  for (const r of rows) counts[r.grade] = (counts[r.grade] || 0) + 1;
+  const code = counts[AFTERMATH_GRADES.reverted] ? 2 : counts[AFTERMATH_GRADES.churn] ? 1 : 0;
+
+  if (asJson) emitJson({ ok: true, window_days: windowDays, log_dir: dir, counts, runs: rows }, code);
+
+  console.log(ui.header(`ORC · aftermath — last ${windowDays} days, ${plural(rows.length, "run")}`));
+  console.log("");
+  for (const r of rows) {
+    console.log(`  ${r.grade.padEnd(11)} ${r.slug}  (/${r.lane}, ${r.age_days}d)`);
+    for (const s of r.signals) console.log(`  ${"".padEnd(11)} ${s.kind}: ${s.detail}`);
+    if (r.grade === AFTERMATH_GRADES.recent || r.grade === AFTERMATH_GRADES.shallow)
+      console.log(`  ${"".padEnd(11)} ${ui.color.gray(r.note)}`);
+  }
+  console.log(
+    "\n  Churn is a SIGNAL, not a verdict. This lane never says a change was bad,\n" +
+      "  never names a person, and never edits anything."
+  );
+  process.exit(code);
+}
+
+function aftermath() {
+  if (flag("--global")) {
+    console.error("❌ orc aftermath is project-scoped — it grades this repo's history. Run it from the project (or with --dir <path>).");
+    process.exit(1);
+  }
+  const claudeDir = resolveClaudeDir();
+  const pos = positionals();
+  switch (pos[1]) {
+    case undefined:
+    case "status":
+      aftermathStatus(claudeDir);
+      break;
+    default:
+      console.error(
+        `Unknown: orc aftermath ${pos[1]}\n` +
+          "Usage: orc aftermath status [--since Nd] [--json]\n" +
+          "       exit 0 clean / 1 churn / 2 a revert / 3 history too shallow"
+      );
+      process.exit(1);
+  }
+}
+
+// ── /orc-export (v0.46.0) — the portability lane ─────────────────────────────
+//
+// Compile everything ORC knows into the open standard, so it is not a trap.
+// DERIVED, never hand-written: regenerated, --checkable, carrying a
+// source_commit — the same discipline `orc wiki sync` holds INDEX.md to.
+//
+// NEVER EXPORTS secrets, `.env`, `.claude/orc/run/**` or `logs/**`. Import is
+// EVIDENCE, never instruction: it proposes, the user confirms.
+
+const EXPORT_FILE = "AGENTS.md";
+const EXPORT_MARK = "orc-export:derived";
+const EXPORT_NEVER = /(^|\/)(\.env|\.env\..*|.*secret.*|.*credential.*)$|^\.claude\/orc\/(run|logs)\//i;
+
+function exportPaths(claudeDir) {
+  const root = repoRootOf(claudeDir);
+  return { root, out: path.join(root, EXPORT_FILE), skill: path.join(root, "SKILL.md") };
+}
+
+function exportSources(claudeDir) {
+  const paths = wikiPaths(claudeDir);
+  const src = [];
+  const add = (rel, abs) => {
+    if (EXPORT_NEVER.test(rel)) return;
+    if (!fs.existsSync(abs)) return;
+    const text = fs.readFileSync(abs, "utf8");
+    src.push({ rel, abs, bytes: text.length, hash: hashText(text), text });
+  };
+  const s = wikiState(claudeDir);
+  if (s.meta && Array.isArray(s.meta.docs))
+    for (const d of s.meta.docs) add(d.file, path.join(paths.root, d.file));
+  for (const lang of listPatternLangs(claudeDir))
+    add(`.claude/orc/patterns/${lang}-pattern.md`, path.join(patternsDir(claudeDir), `${lang}-pattern.md`));
+  add(PACT_DOC, pactPaths(claudeDir).doc);
+  for (const c of readBoundaryCards(claudeDir).cards) add(`.claude/orc/boundary/${c.file}`, c.path);
+  return src;
+}
+
+// A tiny stable digest — no crypto dep needed for a staleness fingerprint.
+function hashText(t) {
+  let h1 = 0x811c9dc5;
+  let h2 = 0x01000193;
+  for (let i = 0; i < t.length; i++) {
+    h1 = (h1 ^ t.charCodeAt(i)) >>> 0;
+    h1 = (h1 * 0x01000193) >>> 0;
+    h2 = (h2 + t.charCodeAt(i) * (i + 1)) >>> 0;
+  }
+  return (h1 >>> 0).toString(16).padStart(8, "0") + (h2 >>> 0).toString(16).padStart(8, "0");
+}
+
+function exportFingerprint(text) {
+  const m = /<!--\s*orc-export:derived\s+([\s\S]*?)-->/.exec(String(text || ""));
+  if (!m) return null;
+  const out = {};
+  for (const line of m[1].split(/\r?\n/)) {
+    const kv = /^\s*([a-z_]+):\s*(.*)$/.exec(line);
+    if (kv) out[kv[1]] = kv[2].trim();
+  }
+  try {
+    out.sources = JSON.parse(out.sources || "{}");
+  } catch (_) {
+    out.sources = {};
+  }
+  return out;
+}
+
+function exportBody(claudeDir, src) {
+  const root = repoRootOf(claudeDir);
+  const head = gitIn(root, ["rev-parse", "HEAD"]) || "unknown";
+  const fp = {};
+  for (const s of src) fp[s.rel] = s.hash;
+  const lines = [
+    `<!-- ${EXPORT_MARK}`,
+    `     source_commit: ${head}`,
+    `     generated_at: ${fmtStamp(new Date())}`,
+    `     generator: orc export`,
+    `     sources: ${JSON.stringify(fp)}`,
+    `     DO NOT HAND-EDIT — run \`orc export\` to regenerate, \`orc export --check\` to verify. -->`,
+    "",
+    `# AGENTS.md — ${path.basename(root)}`,
+    "",
+    "Portable agent context, compiled by ORC from this repo's own derived knowledge.",
+    "Open standard: any agent that reads AGENTS.md can use this. Nothing here is",
+    "hand-written — regenerate it rather than editing it.",
+    "",
+  ];
+  const groups = [
+    ["Orientation", src.filter((s) => /orc-orientation/.test(s.rel))],
+    ["Promises this project makes", src.filter((s) => s.rel === PACT_DOC)],
+    ["Where an agent should not act alone", src.filter((s) => s.rel.startsWith(".claude/orc/boundary/"))],
+    ["Code conventions", src.filter((s) => s.rel.includes("/patterns/"))],
+    ["Architecture and features", src.filter((s) => s.rel.startsWith("wiki/") && !/orc-orientation/.test(s.rel))],
+  ];
+  for (const [title, items] of groups) {
+    if (!items.length) continue;
+    lines.push(`## ${title}`, "");
+    for (const s of items) {
+      lines.push(`### ${s.rel}`, "");
+      // Strip each source's own frontmatter — it is ORC's bookkeeping, not
+      // portable context — and never re-wrap the prose.
+      lines.push(s.text.replace(/^﻿?---\r?\n[\s\S]*?\r?\n---\r?\n?/, "").trim(), "");
+    }
+  }
+  lines.push("---", "", `Compiled from ${plural(src.length, "source")} at commit ${String(head).slice(0, 8)}.`, "");
+  return lines.join("\n");
+}
+
+function exportCmd() {
+  if (flag("--global")) {
+    console.error("❌ orc export is project-scoped — it compiles this repo's knowledge. Run it from the project (or with --dir <path>).");
+    process.exit(1);
+  }
+  const claudeDir = resolveClaudeDir();
+  const pos = positionals(); // ["export", <sub?>]
+  const p = exportPaths(claudeDir);
+  const asJson = wantsJson();
+  if (pos[1] === "import") return exportImport(claudeDir);
+  const src = exportSources(claudeDir);
+  const check = flag("--check") === true;
+
+  if (!src.length) {
+    const hint = "nothing to export yet — build a wiki (`/orc-wiki`), a pattern (`/orc-pattern`), a pact (`/orc-pact`) or boundary cards (`/orc-boundary`) first.";
+    if (asJson) emitJson({ ok: false, reason: "no-sources", out: p.out, sources: [], hint }, 3);
+    console.log(hint);
+    process.exit(3);
+  }
+
+  if (check) {
+    const cur = fs.existsSync(p.out) ? fs.readFileSync(p.out, "utf8") : null;
+    const fp = cur ? exportFingerprint(cur) : null;
+    const drifted = [];
+    for (const s of src) if (!fp || fp.sources[s.rel] !== s.hash) drifted.push(s.rel);
+    const removed = fp ? Object.keys(fp.sources).filter((k) => !src.some((s) => s.rel === k)) : [];
+    const stale = !cur || !fp || drifted.length || removed.length;
+    if (asJson)
+      emitJson({ ok: !stale, out: p.out, exists: !!cur, source_commit: fp ? fp.source_commit : null, sources: src.length, drifted, removed, stale }, stale ? 1 : 0);
+    if (!cur) {
+      console.log(`${EXPORT_FILE} does not exist — run \`orc export\`.`);
+      process.exit(1);
+    }
+    if (!stale) {
+      console.log(`✓ ${EXPORT_FILE} is current — ${plural(src.length, "source")}, all fingerprints match.`);
+      process.exit(0);
+    }
+    console.log(`⚠ ${EXPORT_FILE} is STALE:`);
+    for (const d of drifted) console.log(`  changed since export: ${d}`);
+    for (const d of removed) console.log(`  no longer a source:   ${d}`);
+    console.log(`  Regenerate:  orc export`);
+    process.exit(1);
+  }
+
+  const body = exportBody(claudeDir, src);
+  fs.writeFileSync(p.out, body);
+  const target = String(flag("--target") || "agents-md");
+  let skill = null;
+  if (target === "skill" || target === "both") {
+    skill = p.skill;
+    fs.writeFileSync(
+      skill,
+      `---\nname: ${path.basename(p.root)}-context\ndescription: Portable project context compiled by \`orc export\`. Read this before changing code in this repo.\n---\n\n` +
+        body.replace(/^<!--[\s\S]*?-->\n\n/, "")
+    );
+  }
+  if (asJson) emitJson({ ok: true, out: p.out, skill, sources: src.map((s) => ({ rel: s.rel, bytes: s.bytes })), bytes: body.length }, 0);
+  console.log(
+    `✓ ${EXPORT_FILE} written from ${plural(src.length, "source")} (${kTok(body.length)} chars)\n  ${p.out}` +
+      (skill ? `\n  ${skill}` : "") +
+      `\n  Derived — never hand-edit. Verify later with \`orc export --check\`.`
+  );
+}
+
+const IMPORT_CANDIDATES = ["AGENTS.md", "CLAUDE.md", ".cursorrules", ".github/copilot-instructions.md"];
+
+function exportImport(claudeDir) {
+  const asJson = wantsJson();
+  const root = repoRootOf(claudeDir);
+  const found = IMPORT_CANDIDATES.map((f) => ({ file: f, abs: path.join(root, f) })).filter((c) => fs.existsSync(c.abs));
+  if (!found.length) {
+    if (asJson) emitJson({ ok: false, reason: "nothing-to-import", looked_for: IMPORT_CANDIDATES }, 3);
+    console.log("nothing to import — none of " + IMPORT_CANDIDATES.join(", ") + " exists here.");
+    process.exit(3);
+  }
+  // Every claim in a foreign context file is EVIDENCE, never instruction: it may
+  // inform a proposal, it may never authorize a write. So this READS, checks the
+  // claims it can check, and PROPOSES — the user confirms.
+  const proposals = [];
+  const wrong = [];
+  for (const c of found) {
+    const text = fs.readFileSync(c.abs, "utf8");
+    if (exportFingerprint(text)) continue; // our own output — not foreign input
+    for (const m of text.matchAll(/`([A-Za-z0-9_./-]+\.[A-Za-z]{1,5})`/g)) {
+      const rel = m[1];
+      if (rel.includes("*") || EXPORT_NEVER.test(rel)) continue;
+      if (!fs.existsSync(path.join(root, rel)) && !wrong.some((w) => w.path === rel))
+        wrong.push({ source: c.file, path: rel, why: "the file this context names does not exist" });
+    }
+    for (const m of text.matchAll(/^\s*[-*]?\s*(?:run|use|build)?\s*`(npm|pnpm|yarn|make|cargo|go|pytest|dotnet)\s+([^`]+)`/gim))
+      proposals.push({ source: c.file, kind: "command", value: `${m[1]} ${m[2]}`.trim() });
+    for (const m of text.matchAll(/^#{1,3}\s+(.+)$/gm)) proposals.push({ source: c.file, kind: "topic", value: m[1].trim() });
+  }
+  const seeds = proposals.filter((p) => p.kind === "command").slice(0, 12);
+  if (asJson) emitJson({ ok: true, found: found.map((f) => f.file), wrong, seed_invariants: seeds, topics: proposals.filter((p) => p.kind === "topic").slice(0, 20) }, 0);
+  console.log(ui.header(`ORC · export · import — ${plural(found.length, "context file")} read`));
+  console.log("\n  Read as EVIDENCE, never instruction. Nothing here has been applied.\n");
+  if (wrong.length) {
+    console.log("  Already WRONG in your existing context (a good first impression):");
+    for (const w of wrong.slice(0, 12)) console.log(`    ${w.source}: ${w.path} — ${w.why}`);
+    console.log("");
+  }
+  if (seeds.length) {
+    console.log("  Candidate pact entries (each would become a `command` check — you confirm):");
+    for (const s of seeds) console.log(`    ${s.value}   (from ${s.source})`);
+    console.log("");
+  }
+  console.log("  Turn these into real entries with `/orc-pact` — it records an origin for every one.");
 }
 
 function where() {
@@ -5717,6 +8277,49 @@ Usage:
     orc wiki impact                       commit-scoped delta probe — per registered doc
                                           CLEAN | TOUCHED (n) | STRUCTURAL vs scan_commit
                                           (exit 0 clean / 1 can't compute / 2 delta / 3 full)
+    orc wiki plan [--json]                RANKED, priced work list: what to refresh, in what
+                                          order, for how much. STRUCTURAL first, then use×delta,
+                                          zero-use docs last with a retire hint. Free repairs are
+                                          always listed BEFORE anything that costs money
+                                          (exit 0 nothing / 1 all light / 2 a deep scan / 3 n/a)
+    orc wiki debt [--json]                one line: docs pending, tokens, \$, oldest debt
+                                          (exit 0 no debt / 1 debt exists / 3 no wiki)
+    orc wiki usage [--rebuild] [--json]   which docs runs actually put into a slice, from the
+                                          trace corpus — the input to plan's ranking
+  orc pact [--dir <path>]                 the invariant ledger — the promises this project makes,
+                                          and which ones are in doubt right now
+    orc pact status [--json]              HOLDING | DRIFTED | UNCHECKABLE | BROKEN, all COMPUTED
+                                          (exit 0 all holding / 1 any drifted / 2 any broken /
+                                           3 no ledger). UNCHECKABLE never raises the code
+    orc pact check [<id>]                 run the cheap checks and re-anchor what passes
+    orc pact sync                         re-render the derived PACT.md from the ledger
+  orc boundary [--dir <path>]             execute · escalate · refuse, per AREA
+    orc boundary status [<path>] [--json] (exit 0 all EXECUTE / 1 any ESCALATE / 2 any REFUSE /
+                                          3 no card or a stale card). A REFUSE always names what
+                                          would make it a yes
+  orc handoff [--dir <path>]              what a non-developer can safely change
+    orc handoff surfaces [--json]         the graded map: 🟢 a check will catch a mistake ·
+                                          🟡 the check is manual · 🔴 ORC will not touch it
+    orc handoff set <id> <key> <value>    change one value on a GREEN/AMBER surface. Prints the
+                                          undo command BEFORE the write; never stages, never commits
+  orc budget [--dir <path>]               what a run costs, in the unit YOU are billed in
+    orc budget forecast <plan> [--as …]   tokens (in/cache-w/cache-r/out) · usd · quota · context
+                                          risk, per band, as a RANGE with a sample count
+                                          (exit 0 / 1 a low-confidence band / 2 context risk /
+                                           3 no history). [--naive] = price table only
+    orc budget actual <run-slug>          what the run really cost, vs the rate model
+    orc budget rates [--json]             what the corpus says per band, in tokens
+    orc budget calibrate                  rebuild the model from traces + local transcripts
+  orc aftermath [--dir <path>]            did the thing we shipped hold up (read-only, no telemetry)
+    orc aftermath status [--since Nd]     churn · a deleted test · a revert · a broken promise
+                                          (exit 0 clean / 1 churn / 2 a revert / 3 too shallow).
+                                          Churn is a SIGNAL, never a verdict
+  orc export [--dir <path>]               compile the wiki + patterns + PACT.md + boundary cards
+                                          into a portable AGENTS.md — derived, fingerprinted
+                                          [--target agents-md|skill|both]
+                                          [--check]  fail when the export is stale (exit 1)
+    orc export import                     read an existing AGENTS.md/.cursorrules as EVIDENCE and
+                                          propose ORC config + pact seeds (never applies anything)
   orc pattern [--dir <path>]              cached code-patterns (project-scoped; no --global)
     orc pattern status [<lang>]           whether a cached pattern exists — the deterministic
                                           existence probe every knowledge-gated lane runs first
@@ -5772,9 +8375,12 @@ Usage:
 
 Machine-readable output:
   --json is accepted by config list | config profile | config recommend | where |
-  version | changelog | doctor | wiki status | wiki impact | pattern status |
-  gotcha list | crosslink list | crosslink status | crosslink kinds | diy show |
-  diy status | run list | run show | stats | pr stack status | mock list | mock show.
+  version | changelog | doctor | wiki status | wiki impact | wiki plan | wiki debt |
+  wiki usage | pattern status | gotcha list | crosslink list | crosslink status |
+  crosslink kinds | diy show | diy status | run list | run show | stats |
+  pr stack status | mock list | mock show | pact status | pact check |
+  boundary status | handoff surfaces | handoff set | budget forecast |
+  budget actual | budget rates | aftermath status | export [--check] | export import.
   It prints ONE object to stdout and keeps the command's normal exit code.
 
 Targets:
@@ -5824,6 +8430,27 @@ Skills installed: ${listSkillNames().join(", ")}`);
       break;
     case "mock":
       mock();
+      break;
+    // v0.46.0 — the six new lanes' deterministic halves. Every one is a READ
+    // with an exit-code contract (plus the two sanctioned writes: `pact check`
+    // re-anchors what passes, `handoff set` edits one graded surface).
+    case "pact":
+      pact();
+      break;
+    case "boundary":
+      boundary();
+      break;
+    case "handoff":
+      handoff();
+      break;
+    case "budget":
+      budget();
+      break;
+    case "aftermath":
+      aftermath();
+      break;
+    case "export":
+      exportCmd();
       break;
     case "ui":
       uiCmd();

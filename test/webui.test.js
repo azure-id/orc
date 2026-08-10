@@ -299,6 +299,14 @@ function request(port, pathname, { token, method = "GET", host, body } = {}) {
         port,
         path: pathname,
         method,
+        // `agent: false` is load-bearing, not tidiness. Since Node 19
+        // `http.globalAgent` defaults to keepAlive:true, so every request here
+        // leaves a POOLED socket open; the test then kills the server in its
+        // `finally`, the pooled socket errors, and the ECONNRESET lands AFTER
+        // the test ended — which node:test reports as an uncaughtException that
+        // fails the whole FILE with no failing assertion in it. One socket per
+        // request, closed with the response, and the file is deterministic.
+        agent: false,
         headers: Object.assign(
           {},
           token ? { "x-orc-token": token } : {},
@@ -351,9 +359,12 @@ test("server: rejects a missing/bad token, a non-loopback Host, and a bad method
 
     // No CORS headers at all — a cross-origin page must not read a byte.
     const raw = await new Promise((res) =>
-      http.get({ host: "127.0.0.1", port, path: "/api/config?t=" + token }, (r) => {
+      http.get({ host: "127.0.0.1", port, path: "/api/config?t=" + token, agent: false }, (r) => {
         r.resume();
-        res(r.headers);
+        // Resolve on `end`, not on the headers: resolving early lets the test
+        // finish while the body is still arriving, which is the same
+        // after-the-test socket error by a different route.
+        r.on("end", () => res(r.headers));
       })
     );
     assert.ok(!Object.keys(raw).some((h) => h.startsWith("access-control-")), "no CORS headers may be sent");
@@ -1464,7 +1475,12 @@ test("runs: a row expands in place instead of rendering a box below the list", (
   // The split layout is gone — there is no second column to render into.
   assert.ok(!/const detailSlot/.test(js), "there must be no separate detail slot");
   assert.ok(!/function showRun\(/.test(js), "the detail renderer must fill the row's own pane");
-  assert.match(js, /function loadRunDetail\(pane, slug\)/, "detail is loaded into the row that asked for it");
+  // The signature grew a third parameter in v0.46.0 (the aftermath grade, which
+  // renders INSIDE the expanded row), so the assertion pins the first two — the
+  // pane and the slug are what make this "the row that asked for it".
+  assert.match(js, /function loadRunDetail\(pane, slug(, \w+)?\)/, "detail is loaded into the row that asked for it");
+  // …and the aftermath detail goes in that same pane, not a box below the list.
+  assert.match(js, /const ab = afterBox\(grade\);/, "the aftermath detail renders inside the expanded row");
 
   // The fold animates the same way the settings tiers do: `height: auto` cannot
   // be transitioned, and the inner element is what collapses against.

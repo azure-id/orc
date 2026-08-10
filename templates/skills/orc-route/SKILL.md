@@ -83,8 +83,10 @@ Not a formula to hide behind — these are the real discriminators, in order:
 
 1. **Hard gates first.** A lane whose prerequisites fail is `not possible`, not
    "runner-up". `/orc-fast` needs a FRESH or AGING wiki **and** a cached pattern
-   **and** a single-task plan — it runs ONE task. `/orc-diy` needs `orc diy
-   status` to exit 0.
+   **and** a single-task plan — it runs ONE task, **and (v0.46.0) a plan carrying
+   any boundary REFUSE can never route there**: fast has one executor and no wave
+   to lift the refused task out of, so the gate has nowhere to act. `/orc-diy`
+   needs `orc diy status` to exit 0.
 2. **Risk beats size.** Any task with a cited `risk[]`, or `plan_confidence:
    low`, recommends `/orc` — review and verify are what you are paying for, and
    a small risky change is exactly the case that earns them.
@@ -98,6 +100,15 @@ Not a formula to hide behind — these are the real discriminators, in order:
 State the numbers you decided from. A recommendation without its evidence cannot
 be argued with, and the user is the one who knows whether the risk is real.
 
+**Cost, when it is knowable (v0.46.0).** Run `orc budget forecast <plan> --json`
+and add ONE cost column per lane, in the primary unit `budget_units` resolves to.
+Routing stops being qualitative the moment "about 3x faster" becomes "1.23M vs
+0.41M raw, 18% vs 6% of a 5-hour window". Two rules ride with it: a band below
+`budget_min_samples` makes the number a FLOOR and the column says so, and **exit 3
+(no history) means the column is simply absent** — never a guessed figure, and
+never a reason to withhold the recommendation itself, which does not depend on
+cost.
+
 ## Output shape
 
 ```
@@ -106,10 +117,13 @@ Plan: merchant-notifications — 7 tasks, 3 waves, 14 files touched
 
 → /orc          the plan has risky tasks and a task above 70;
                 review and verify are worth paying for here
-   runner-up    /orc-mini — about 3x faster, but it skips full review
-                and verification. Fine only if you will read the diff yourself.
+                1.23M raw · 18% of a 5-hour window on Max 20x
+   runner-up    /orc-mini — about 3x faster and 0.41M raw (6% of a window),
+                but it skips full review and verification. Fine only if you
+                will read the diff yourself.
    not possible /orc-fast — needs a fresh wiki (yours is STALE) and this plan
-                is 7 tasks; that lane runs ONE task
+                is 7 tasks; that lane runs ONE task. It also carries 1 boundary
+                REFUSE, which fast has no wave to lift out.
 
 Start /orc now?  [yes / no]
 ```

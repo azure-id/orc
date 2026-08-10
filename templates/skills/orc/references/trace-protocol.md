@@ -52,7 +52,8 @@ run_meta:                 # FIRST packet of the run ONLY; omit thereafter
   lane: orc               # orc | ultra | mini | fast | diy | wiki | analyze |
                           # plan | claude | poly | learn | verify | pattern |
                           # prsetup | prdriver | quick | grill | route |
-                          # brainstorm
+                          # brainstorm | pact | boundary | handoff | budget |
+                          # aftermath | export
                           # (`ultra` = an /orc-ultra run; the ONLY lane the orc
                           #  spine can emit besides `orc`. No other value here
                           #  is legal — a lane no entry point opens is a lane
@@ -87,7 +88,7 @@ decisions: >              # free text — the WHY layer
 | Multi-dispatch | `orc-wiki`, `orc-pr-driver` (lane `prdriver`) | orc-wiki: one per scan-batch boundary (the points that already run the registration sync / offer the pause) + the end-of-run packet. orc-pr-driver: one per LAYER boundary (each layer's green gate closes) + the end-of-run packet |
 | Composed | `orc-diy` | one packet per ENABLED phase group, **minimum 2** — the flow shape is user-composed, so the count is too (the compiled flow carries this block automatically) |
 | Iterative | `orc-quick` | **one packet per completed numbered entry** + the end-of-run `FINISH` packet — the lane loops on user requests, so the count follows entries, not phases |
-| Single-dispatch | `orc-claude`, `orc-plan`, `orc-analyze` (+ mini), `orc-pattern`, `orc-verify`, `orc-learn`, `orc-poly`, `orc-pr-setup` (lane `prsetup`), `orc-grill`, `orc-route`, `orc-brainstorm` (lane `brainstorm`) | **exactly ONE mandatory end-of-run packet** |
+| Single-dispatch | `orc-claude`, `orc-plan`, `orc-analyze` (+ mini), `orc-pattern`, `orc-verify`, `orc-learn`, `orc-poly`, `orc-pr-setup` (lane `prsetup`), `orc-grill`, `orc-route`, `orc-brainstorm` (lane `brainstorm`), `orc-pact` (lane `pact`), `orc-boundary` (lane `boundary`), `orc-handoff` (lane `handoff`), `orc-budget` (lane `budget`), `orc-aftermath` (lane `aftermath`), `orc-export` (lane `export`) | **exactly ONE mandatory end-of-run packet** |
 
 **`context-combiner` is NOT a lane — it is a PHASE inside the analyze run.** It
 has no slash command and no entry point of its own: `orc-analyze` Phase F
@@ -239,6 +240,8 @@ supplies the fact in a packet, the writer writes the line. `SPAWN`, `RETURN` and
 | `TDD-GREEN task=<id> iter=<n>` | executor→orc → writer | the task's TDD acceptance tests pass (the non-exempt definition-of-done) |
 | `NOTE :: <decisions>` | writer | the packet's `decisions` field — the WHY layer (scoring rationale, user answers verbatim, what was rejected). One line per packet, only when `decisions` is non-empty |
 | `STATS lane=<l> slug=<s> dispatches=<n> waves=<n> tasks=<n> bands=<h:n,m:n,l:n> downgrades=<n> duration_ms=<n>` | orc → writer | ONE deterministic summary line per run, in the `FINISH` packet, immediately BEFORE the `FINISH` line. This is what `orc stats` reads — one line per file, never a parse of the whole trace. Omit a field you genuinely do not have (a lane with no waves omits `waves=`); never guess one. Every trace-owning lane emits it, not just `orc` |
+| `PACT <state> :: <ids>` | orc → writer | invariant-ledger state at the Phase-1 probe (`pact_gate`), and `PACT inject task=<id> :: <PACT-id>` when a DRIFTED/BROKEN promise is appended to a task's `constraints[]`. `PACT recheck pass\|fail :: <ids>` at Phase 6. Records whether last month's decisions constrained this month's plan |
+| `BOUNDARY <verdict> task=<id> :: <area>` | orc → writer | per-task boundary verdict (verdict ∈ `EXECUTE` \| `ESCALATE` \| `REFUSE` \| `unknown` — an uncarded area is UNKNOWN, never REFUSE), plus `BOUNDARY lift task=<id> :: <area>` when `boundary_gate: block` removes ONE task from a wave (the wave still runs). `/orc-retro` reads these to answer the question the lane exists for: how much work did we stop attempting, and was that right |
 | `FINISH :: <detail>` | orc → writer | run ended |
 
 `SPAWN`/`RETURN`/`PHASE-EDGE` come from the hook automatically. Every other verb

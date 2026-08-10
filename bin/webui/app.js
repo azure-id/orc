@@ -572,6 +572,12 @@ async function section(host, loader, render) {
 const FINDING_ROUTE = {
   "diy-stale": { panel: "flow", cta: "overview.item.diyStale.cta" },
   "trace-pointer-dangling": { panel: null },
+  // v0.46.0. Correct by the rule, not by default: `export-stale` is cleared by
+  // `orc export`, which IS a CLI write Maintenance can run — so Maintenance is
+  // genuinely the panel that can clear it, not merely the fallback.
+  "export-stale": { panel: "maintenance", cta: "overview.item.exportStale.cta" },
+  "pact-broken": { panel: "pact", cta: "overview.item.pactBroken.cta" },
+  "boundary-refuse": { panel: "boundary", cta: "overview.item.boundaryRefuse.cta" },
 };
 const DEFAULT_FINDING_ROUTE = { panel: "maintenance", cta: "overview.item.doctor.cta" };
 const findingRoute = (id) => FINDING_ROUTE[id] || DEFAULT_FINDING_ROUTE;
@@ -633,6 +639,46 @@ PANELS.overview = function (host) {
           String(langs.length),
           langs.length ? langs.join(", ") : t("overview.tile.patternsNone"),
           langs.length ? "ok" : "",
+          "knowledge"
+        )
+      );
+
+      /* v0.46.0 — three chips repeating the CLI's OWN state words. A chip with
+         nothing to say still renders its good state: an absent chip and a
+         healthy one must never look the same. */
+      const pc = d.pact;
+      const bc = d.boundary;
+      const wd = d.wiki_debt;
+      stats.append(
+        statTile(
+          t("overview.tile.pact"),
+          pc && pc.ok
+            ? (pc.counts.BROKEN ? pc.counts.BROKEN + " BROKEN" : pc.counts.DRIFTED ? pc.counts.DRIFTED + " DRIFTED" : pc.counts.HOLDING + " HOLDING")
+            : t("overview.tile.none"),
+          pc && pc.ok ? t("overview.tile.pactNote", { n: pc.entries, u: pc.counts.UNCHECKABLE }) : t("overview.tile.pactNone"),
+          pc && pc.ok ? (pc.counts.BROKEN ? "bad" : pc.counts.DRIFTED ? "warn" : "ok") : "",
+          pc && pc.ok ? "pact" : null
+        )
+      );
+      stats.append(
+        statTile(
+          t("overview.tile.boundary"),
+          bc && bc.cards && bc.cards.length
+            ? (bc.counts.REFUSE ? bc.counts.REFUSE + " REFUSE" : bc.counts.ESCALATE ? bc.counts.ESCALATE + " ESCALATE" : bc.counts.EXECUTE + " EXECUTE")
+            : t("overview.tile.none"),
+          bc && bc.cards && bc.cards.length ? t("overview.tile.boundaryNote", { n: bc.cards.length, stale: bc.stale }) : t("overview.tile.boundaryNone"),
+          bc && bc.cards && bc.cards.length ? (bc.counts.REFUSE ? "bad" : bc.counts.ESCALATE ? "warn" : "ok") : "",
+          bc && bc.cards && bc.cards.length ? "boundary" : null
+        )
+      );
+      stats.append(
+        statTile(
+          t("overview.tile.debt"),
+          wd && wd.ok && wd.pending ? String(wd.pending) : "0",
+          wd && wd.ok && wd.pending
+            ? t("overview.tile.debtNote", { tier: wd.tier, tok: kTokUi((wd.tokens || {}).input + (wd.tokens || {}).cache_write + (wd.tokens || {}).cache_read + (wd.tokens || {}).output) })
+            : t("overview.tile.debtNone"),
+          wd && wd.ok && wd.pending ? "warn" : "ok",
           "knowledge"
         )
       );
@@ -1594,6 +1640,11 @@ async function showRecommend() {
    and then kept, so re-opening a row is instant and costs nothing. */
 
 const RUN_STATUS_KIND = { waiting: "warn", done: "ok" };
+// The aftermath grade chip. The LABELS are ours to shorten; the GRADE ids are
+// the CLI's and are what the kind map is keyed on.
+const AFTER_KIND = { HELD: "ok", CHURN: "warn", REVERTED: "bad", TOO_RECENT: "", SHALLOW: "" };
+const AFTER_LABEL = { HELD: "✓ HELD", CHURN: "~ CHURN", REVERTED: "✗ REVERTED", TOO_RECENT: "– too recent", SHALLOW: "– no commits" };
+const afterGrade = (after, slug) => ((after && after.runs) || []).find((r) => r.slug === slug) || null;
 
 PANELS.runs = function (host) {
   head(host, t("runs.title"), t("runs.sub"));
@@ -1605,8 +1656,12 @@ PANELS.runs = function (host) {
 async function renderRuns(body) {
   body.replaceChildren(skeleton(6));
   let d;
+  let after = null;
   try {
     d = (await read("/api/runs")).data;
+    // One extra read, in parallel with nothing — the grade chip is per row and
+    // fetching it per row would be N requests for a list that is already loaded.
+    after = (await read("/api/aftermath").catch(() => ({ data: null }))).data;
   } catch (e) {
     body.replaceChildren(empty(t("common.loadFail"), String(e.message)));
     return;
@@ -1670,7 +1725,7 @@ async function renderRuns(body) {
     entry.head.setAttribute("aria-expanded", String(open));
     if (open && !entry.loaded) {
       entry.loaded = true;
-      loadRunDetail(entry.pane, entry.slug);
+      loadRunDetail(entry.pane, entry.slug, entry.grade);
     }
   }
 
@@ -1686,6 +1741,15 @@ async function renderRuns(body) {
     // Status is the CLI's vocabulary (`waiting` / `done` / `empty`) — the same
     // word `orc run list` prints. Shown as-is in every language.
     headBtn.append(chip(r.status, RUN_STATUS_KIND[r.status] || ""));
+    // The aftermath grade (v0.46.0). The CLI's own word, and `TOO_RECENT` KEEPS
+    // ITS SLOT — it is an answer ("younger than 7 days"), not a gap, and hiding
+    // it would make a fresh run and an ungraded one look identical.
+    const grade = afterGrade(after, r.slug);
+    if (grade) {
+      const gc = chip(AFTER_LABEL[grade.grade] || grade.grade, AFTER_KIND[grade.grade] || "");
+      gc.title = grade.note || "";
+      headBtn.append(gc);
+    }
     const mid = el("div", "run-mid");
     mid.append(el("div", "run-slug", r.slug));
     const where = [r.lane, r.phase && "phase " + r.phase, r.wave].filter(Boolean).join(" · ");
@@ -1701,7 +1765,7 @@ async function renderRuns(body) {
     const fold = el("div", "run-body");
     fold.append(inner);
 
-    const entry = { row, head: headBtn, pane, slug: r.slug, loaded: false };
+    const entry = { row, head: headBtn, pane, slug: r.slug, grade, loaded: false };
     rows.push(entry);
 
     headBtn.addEventListener("click", () => {
@@ -1769,7 +1833,25 @@ async function renderRuns(body) {
 
 // Fills one expanded row. Identical content to the old detail card — the change
 // is WHERE it renders, not what it says.
-function loadRunDetail(pane, slug) {
+// The aftermath detail goes INSIDE the expanded row — there is no detail box
+// below the list and no `showRun`. One row open at a time, fetched on first open.
+function afterBox(grade) {
+  if (!grade) return null;
+  const box = el("div", "after-box");
+  box.append(el("div", "after-head", t("runs.after.signals")));
+  for (const sig of grade.signals || []) {
+    const line = el("div", "after-row");
+    line.append(chip(sig.kind, sig.strength >= 3 ? "bad" : "warn"));
+    line.append(el("span", null, sig.detail));
+    box.append(line);
+  }
+  // Churn is a SIGNAL, not a verdict — the caveat always travels with the
+  // evidence, including on HELD ("nothing came back" is not "it worked").
+  if (grade.note) box.append(el("div", "note", grade.note));
+  return box;
+}
+
+function loadRunDetail(pane, slug, grade) {
   Promise.all([
     read("/api/run?slug=" + encodeURIComponent(slug)),
     read("/api/mock?slug=" + encodeURIComponent(slug)).catch(() => ({ data: null })),
@@ -1778,6 +1860,8 @@ function loadRunDetail(pane, slug) {
       const d = runRes.data;
       const mock = mockRes && mockRes.data && mockRes.data.found ? mockRes.data : null;
       const out = frag();
+      const ab = afterBox(grade);
+      if (ab) out.append(ab);
 
       out.append(
         kvList([
@@ -1889,13 +1973,18 @@ PANELS.knowledge = function (host) {
 
 async function renderKnowledge(body) {
   body.replaceChildren(skeleton(6));
-  const [wikiRes, impactRes, patRes, gotRes] = await Promise.all([
+  const [wikiRes, impactRes, patRes, gotRes, planRes, debtRes, usageRes] = await Promise.all([
     read("/api/wiki").catch(() => ({ data: null })),
     read("/api/wiki/impact").catch(() => ({ data: null })),
     read("/api/patterns").catch(() => ({ data: null })),
     read("/api/gotchas").catch(() => ({ data: null })),
+    read("/api/wiki/plan").catch(() => ({ data: null })),
+    read("/api/wiki/debt").catch(() => ({ data: null })),
+    read("/api/wiki/usage").catch(() => ({ data: null })),
   ]);
   const out = frag();
+  out.append(wikiPlanCard(planRes.data, debtRes.data, body));
+  if (usageRes.data && usageRes.data.rows) out.append(wikiUsageCard(usageRes.data, body));
 
   // --- wiki
   const w = wikiRes.data || {};
@@ -2050,6 +2139,151 @@ async function renderKnowledge(body) {
   body.replaceChildren(out);
 }
 
+/* PART B MADE VISIBLE (v0.46.0).
+
+   THE PANEL MUST NEVER COMPUTE THE ORDER, THE TIER OR THE ESTIMATE ITSELF — it
+   renders `orc wiki plan --json`'s rows in the order they arrive and nothing
+   else, the same rule the Flow stepper lives under. A second idea of "which doc
+   matters most" is exactly the drift this panel exists to make impossible.
+
+   And: a `used 0/20` row KEEPS ITS SLOT, rendered muted with a retire hint.
+   Filtering it out would make "nobody reads this" and "this does not exist"
+   look identical — the same rule as an OFF phase in the stepper. */
+function wikiPlanCard(plan, debt, body) {
+  const c = card(t("knowledge.plan"), wikiPlanActions(body, plan));
+
+  if (!plan || !plan.ok) {
+    c.append(empty(t("knowledge.plan.na"), t("knowledge.plan.naHint")));
+    return c;
+  }
+
+  // The debt line first: the habit this whole workstream is aiming at.
+  if (debt && debt.ok && debt.pending) {
+    const chips = el("div", "row-actions");
+    chips.append(chip(tn(debt.pending, "knowledge.debt.pending"), "warn"));
+    if (debt.tokens) chips.append(chip(kTokUi(debt.tokens.input + debt.tokens.cache_write + debt.tokens.cache_read + debt.tokens.output), null));
+    if (debt.usd !== null && debt.usd !== undefined) chips.append(chip("$" + debt.usd.toFixed(2), null));
+    if (debt.oldest_commits_behind !== null) chips.append(chip(tn(debt.oldest_commits_behind, "knowledge.debt.oldest"), null));
+    c.append(chips);
+    c.append(el("div", "note", t("knowledge.debt.nothingBroken")));
+  } else if (debt && debt.ok) {
+    c.append(el("div", "note ok", t("knowledge.debt.none")));
+  }
+
+  if (!plan.rows || !plan.rows.length) {
+    c.append(el("div", "note ok", t("knowledge.plan.clean")));
+    return c;
+  }
+
+  // FREE REPAIRS FIRST — a user must never be able to pay for something a free
+  // step would have fixed, so they render ABOVE the priced table.
+  if (plan.free_repairs && plan.free_repairs.length) {
+    const box = el("div", "free-box");
+    box.append(el("div", "free-head", t("knowledge.plan.freeFirst")));
+    for (const r of plan.free_repairs) {
+      const row = el("div", "free-row");
+      row.append(chip(t("knowledge.plan.free"), "ok"));
+      row.append(el("span", null, r.what));
+      row.append(el("code", "mono", r.cmd));
+      box.append(row);
+    }
+    c.append(box);
+  }
+
+  const tbl = el("table", "tbl");
+  const th = el("tr");
+  for (const h of ["knowledge.plan.col.doc", "knowledge.plan.col.state", "knowledge.plan.col.delta", "knowledge.plan.col.used", "knowledge.plan.col.tier", "knowledge.plan.col.tokens", "knowledge.plan.col.usd"])
+    th.append(el("th", null, t(h)));
+  tbl.append(th);
+  for (const r of plan.rows) {
+    const tr = el("tr", r.retire_hint ? "row-muted" : null);
+    tr.append(el("td", "mono", r.doc.replace(/^wiki\//, "")));
+    // The CLI's exact state words. Never a friendlier synonym.
+    const stateCell = el("td");
+    stateCell.append(chip(r.state, r.state === "STRUCTURAL" ? "bad" : "warn"));
+    tr.append(stateCell);
+    tr.append(el("td", "num", r.state === "STRUCTURAL" ? "—" : String(r.delta)));
+    tr.append(el("td", "num", r.used === null ? "?" : `${r.used}/${r.used_of}`));
+    tr.append(el("td", null, r.tier));
+    const est = r.estimate;
+    tr.append(el("td", "num", est ? kTokUi(est.p50.input + est.p50.cache_write + est.p50.cache_read + est.p50.output) : "—"));
+    // The dollar figure is the CLI's — the panel never prices anything itself,
+    // and a row the CLI could not price shows an em dash rather than a guess.
+    tr.append(el("td", "num", r.usd === null || r.usd === undefined ? "—" : "$" + r.usd.toFixed(2)));
+    tbl.append(tr);
+    if (r.state === "STRUCTURAL" && r.gone && r.gone.length) {
+      const note = el("tr", "row-note");
+      const td = el("td", null, t("knowledge.plan.gone", { files: r.gone.slice(0, 3).join(", ") }));
+      td.setAttribute("colspan", "7");
+      note.append(td);
+      tbl.append(note);
+    }
+    if (r.retire_hint) {
+      const note = el("tr", "row-note");
+      const td = el("td", null, t("knowledge.plan.retireHint", { n: r.used_of }));
+      td.setAttribute("colspan", "7");
+      note.append(td);
+      tbl.append(note);
+    }
+  }
+  c.append(tbl);
+  if (plan.estimate_unavailable) c.append(el("div", "note", t("knowledge.plan.noEstimate")));
+  c.append(el("div", "note", t("knowledge.plan.tierNote", { mode: plan.scan_tier_mode, deep: plan.deep, light: plan.light })));
+  // A refresh COSTS MONEY, so it is a command, never a button.
+  c.append(laneCommand(`/orc-wiki refresh --top ${Math.min(2, plan.rows.length)}`, t("knowledge.plan.refreshWhy")));
+  return c;
+}
+
+function wikiPlanActions(body, plan) {
+  const wrap = el("div", "row-actions");
+  // `orc wiki sync` is FREE ($0.00), so it gets a button.
+  const s = el("button", "btn btn-sm", t("knowledge.syncFree"));
+  s.type = "button";
+  s.addEventListener("click", async () => {
+    const r = await post("/api/wiki/sync", {});
+    toast(r.ok ? t("knowledge.syncOk") : t("common.writeFail"), r.ok ? "ok" : "bad", r.output);
+    renderKnowledge(body);
+  });
+  wrap.append(s);
+  return wrap;
+}
+
+function wikiUsageCard(u, body) {
+  const c = card(t("knowledge.usage"), (() => {
+    const wrap = el("div", "row-actions");
+    const b = el("button", "btn btn-ghost btn-sm", t("knowledge.usage.rebuild"));
+    b.type = "button";
+    b.addEventListener("click", async () => {
+      const r = await post("/api/wiki/usage/rebuild", {});
+      toast(r.ok ? t("knowledge.usage.rebuilt") : t("common.writeFail"), r.ok ? "ok" : "bad", r.output);
+      renderKnowledge(body);
+    });
+    wrap.append(b);
+    return wrap;
+  })());
+  const chips = el("div", "row-actions");
+  chips.append(chip(t("knowledge.usage.registered", { n: u.registered }), null));
+  chips.append(chip(t("knowledge.usage.active", { n: u.in_active_use }), "ok"));
+  if (u.never_used) chips.append(chip(t("knowledge.usage.never", { n: u.never_used, runs: u.window_runs }), "warn"));
+  c.append(chips);
+  const body2 = el("div", "usage-rows");
+  for (const r of u.rows) {
+    const row = el("div", "usage-row" + (r.used ? "" : " row-muted"));
+    row.append(el("span", "mono", r.doc.replace(/^wiki\//, "")));
+    const track = el("div", "bar-track");
+    const fill = el("div", "bar-fill");
+    track.append(fill);
+    requestAnimationFrame(() => fill.style.setProperty("width", Math.max(2, (r.used / (r.of || 1)) * 100) + "%"));
+    row.append(track);
+    row.append(el("span", "bar-value", `${r.used}/${r.of}`));
+    row.append(el("span", "note", r.last_used || t("knowledge.usage.neverUsed")));
+    body2.append(row);
+  }
+  c.append(body2);
+  c.append(el("div", "note", t("knowledge.usage.note")));
+  return c;
+}
+
 function wikiActions(body, w) {
   if (!w || !w.state || w.state === "none") return null;
   const wrap = el("div", "row-actions");
@@ -2066,8 +2300,38 @@ function wikiActions(body, w) {
 
 /* =================================================================== STATS == */
 
+/* The Cost tab's unit choice persists: a Max user who picked Quota once should
+   not have to pick it every time the panel reloads. It is a per-browser display
+   preference, exactly like the theme and the language — never a project setting,
+   and never written to config. */
+const COST_UNIT_KEY = "orc-ui-cost-unit";
+const COST_UNITS = ["tokens", "quota", "usd"];
+// Written out in full, never assembled from `"cost.unit." + u` — a key built
+// from a fragment is invisible to the i18n coverage check.
+const COST_UNIT_KEY_OF = { tokens: "cost.unit.tokens", quota: "cost.unit.quota", usd: "cost.unit.usd" };
+
 PANELS.stats = function (host) {
   head(host, t("stats.title"), t("stats.sub"));
+  const tabs = el("div", "tabs");
+  const body = el("div", "stack");
+  let active = "usage";
+  const mk = (id, label) => {
+    const b = el("button", "tab" + (id === active ? " tab-on" : ""), label);
+    b.type = "button";
+    b.addEventListener("click", () => {
+      active = id;
+      for (const x of tabs.children) x.classList.toggle("tab-on", x === b);
+      body.replaceChildren();
+      (id === "usage" ? renderStatsUsage : renderStatsCost)(body);
+    });
+    return b;
+  };
+  tabs.append(mk("usage", t("stats.tab.usage")), mk("cost", t("stats.tab.cost")));
+  host.append(tabs, body);
+  renderStatsUsage(body);
+};
+
+function renderStatsUsage(host) {
   section(
     host,
     () => read("/api/stats").then((r) => r.data),
@@ -2100,7 +2364,223 @@ PANELS.stats = function (host) {
       return out;
     }
   );
-};
+}
+
+/* --------------------------------------------------------------- STATS · COST
+   Unit-aware, because a dollar figure is the wrong headline for most Claude Code
+   users: on Pro or Max you burn a 5-hour window, not an invoice.
+
+   THE STACKED BAR EXISTS SO CACHE-READ IS VISIBLY SEPARATE. A single-value bar
+   would re-hide the exact thing the four-component vector exists to expose — and
+   the four components are the CLI's, never recomputed here. */
+
+const kTokUi = (n) =>
+  n >= 1e6 ? (n / 1e6).toFixed(2) + "M" : n >= 1000 ? Math.round(n / 1000) + "k" : String(Math.round(n || 0));
+
+function costUnit() {
+  try {
+    const v = localStorage.getItem(COST_UNIT_KEY);
+    return COST_UNITS.includes(v) ? v : "tokens";
+  } catch (_) {
+    return "tokens";
+  }
+}
+
+async function renderStatsCost(host) {
+  host.replaceChildren(skeleton(5));
+  const url = statsPlanPath ? "/api/budget/forecast?plan=" + encodeURIComponent(statsPlanPath) : "/api/budget/rates";
+  const [main, rates] = await Promise.all([
+    read(url).catch(() => ({ data: null })),
+    read("/api/budget/rates").catch(() => ({ data: null })),
+  ]);
+  const out = frag();
+
+  // --- the plan picker. `browse` reuses /api/fs/list, which is a DIRECTORY
+  // lister: names only, never a file's contents. The server passes the PATH to
+  // `orc budget forecast`; nothing here opens the plan.
+  const pick = card(t("cost.plan"));
+  const row = el("div", "row-actions");
+  const input = el("input", "input");
+  input.type = "text";
+  input.value = statsPlanPath || "";
+  input.placeholder = t("cost.planPlaceholder");
+  const browse = el("button", "btn btn-ghost btn-sm", t("cost.browse"));
+  browse.type = "button";
+  browse.addEventListener("click", () => pickFolder((p) => (input.value = p)));
+  const go = el("button", "btn btn-sm", t("cost.forecast"));
+  go.type = "button";
+  go.addEventListener("click", () => {
+    statsPlanPath = input.value.trim();
+    host.replaceChildren();
+    renderStatsCost(host);
+  });
+  row.append(input, browse, go);
+  pick.append(row);
+  pick.append(el("div", "note", t("cost.planOnly")));
+  out.append(pick);
+
+  const d = main.data;
+  if (!statsPlanPath || !d || !d.ok || !d.lanes) {
+    const c = card(t("cost.title"));
+    c.append(empty(t("cost.noForecast"), t("cost.noForecastHint")));
+    if (rates.data && rates.data.dispatches_joined) c.append(ratesCard(rates.data));
+    else c.append(laneCommand("orc budget calibrate", t("cost.calibrateWhy")));
+    out.append(c);
+    host.replaceChildren(out);
+    return;
+  }
+
+  // --- the unit switch
+  const unit = costUnit();
+  const c = card(t("cost.title"), unitSwitch(unit, host));
+  c.append(el("div", "note", t("cost.sub", { tasks: d.tasks, waves: d.waves })));
+
+  // --- one stacked bar per lane
+  const maxRaw = Math.max(...d.lanes.map((l) => l.raw || 0), 1);
+  const bars = el("div", "bars");
+  for (const l of d.lanes) {
+    const r = el("div", "bar-row");
+    r.append(el("div", "bar-label", l.cmd || l.lane));
+    if (!l.raw) {
+      // A lane with no measurable cost is NOT free. Saying so is the honest
+      // rendering; a zero-length bar would read as "cheapest".
+      const box = el("div", "bar-track");
+      box.append(el("div", "bar-none", t("cost.notPossible")));
+      r.append(box, el("div", "bar-value", "—"));
+      bars.append(r);
+      continue;
+    }
+    const track = el("div", "bar-track");
+    const st = el("div", "bar-stack");
+    // The vector's four parts, in their real proportions, from the primary
+    // lane's own breakdown when we have it and the lane totals otherwise.
+    const parts = l.lane === "orc" && d.tokens ? d.tokens.p50 : null;
+    if (parts) {
+      for (const [k, cls] of [["input", "seg-in"], ["cache_write", "seg-cw"], ["cache_read", "seg-cr"], ["output", "seg-out"]]) {
+        const seg = el("div", "bar-seg " + cls);
+        seg.title = `${k}: ${kTokUi(parts[k])}`;
+        st.append(seg);
+        requestAnimationFrame(() => seg.style.setProperty("flex-grow", String(parts[k] || 0)));
+      }
+    } else {
+      const seg = el("div", "bar-seg seg-cr");
+      st.append(seg);
+      requestAnimationFrame(() => seg.style.setProperty("flex-grow", "1"));
+    }
+    track.append(st);
+    requestAnimationFrame(() => st.style.setProperty("width", Math.max(4, (l.raw / maxRaw) * 100) + "%"));
+    r.append(track);
+    r.append(el("div", "bar-value", laneUnitValue(l, d, unit)));
+    if (l.lane === "orc") r.append(el("span", "bar-mark", "←"));
+    bars.append(r);
+  }
+  c.append(bars);
+
+  const legend = el("div", "legend");
+  for (const [k, cls] of [["cost.legend.in", "seg-in"], ["cost.legend.cw", "seg-cw"], ["cost.legend.cr", "seg-cr"], ["cost.legend.out", "seg-out"]]) {
+    const item = el("span", "legend-item");
+    item.append(el("span", "legend-dot " + cls));
+    item.append(el("span", null, t(k)));
+    legend.append(item);
+  }
+  c.append(legend);
+  c.append(el("div", "note", t("cost.cacheNote")));
+
+  // --- the honesty block. NONE of this is optional chrome: an honest range
+  // rendered as a confident bar is a lie the panel invented.
+  if (d.low_confidence_bands)
+    c.append(el("div", "note warn", tn(d.low_confidence_bands, "cost.lowConfidence", { min: d.min_samples })));
+  if (d.price_table && d.price_table.stale)
+    c.append(el("div", "note warn", t("cost.priceStale", { as_of: d.price_table.as_of, days: d.price_table.age_days })));
+  if (!d.transcripts_readable) c.append(el("div", "note warn", t("cost.noTranscripts")));
+  if (d.unattributed && d.unattributed.blocks)
+    c.append(el("div", "note", tn(d.unattributed.blocks, "cost.unattributed")));
+  out.append(c);
+
+  // --- context risk. The output nobody else has, so it gets its own card.
+  if (d.context_risk && d.context_risk.length) {
+    const rc = card(t("cost.contextTitle"));
+    rc.append(el("div", "note warn", t("cost.contextIntro")));
+    for (const r of d.context_risk) {
+      const line = el("div", "row-actions");
+      line.append(chip(r.task, "warn"));
+      line.append(el("span", null, t("cost.contextRow", { agent: r.agent.replace(/^orc-executor-/, ""), peak: kTokUi(r.peak), window: kTokUi(r.window), pct: r.pct })));
+      const b = el("button", "btn btn-ghost btn-sm", t("cost.contextOpenUsage"));
+      b.type = "button";
+      b.addEventListener("click", () => (location.hash = "#/knowledge"));
+      line.append(b);
+      rc.append(line);
+    }
+    rc.append(el("div", "note", t("cost.contextHint")));
+    out.append(rc);
+  }
+
+  // --- the per-band table, rendered from the CLI's own rows
+  const bc = card(t("cost.bands"));
+  const tbl = el("table", "tbl");
+  const thead = el("tr");
+  for (const h of ["cost.col.band", "cost.col.model", "cost.col.n", "cost.col.in", "cost.col.cw", "cost.col.cr", "cost.col.out", "cost.col.samples"])
+    thead.append(el("th", null, t(h)));
+  tbl.append(thead);
+  for (const b of d.bands || []) {
+    const tr = el("tr", b.samples < d.min_samples ? "row-soft" : null);
+    tr.append(el("td", "mono", b.band));
+    tr.append(el("td", null, String(b.agent || "").replace(/^orc-executor-/, "")));
+    tr.append(el("td", null, String(b.count)));
+    for (const k of ["input", "cache_write", "cache_read", "output"]) tr.append(el("td", "num", b.p50 ? kTokUi(b.p50[k]) : "—"));
+    tr.append(el("td", "num", String(b.samples)));
+    tbl.append(tr);
+  }
+  bc.append(tbl);
+  bc.append(el("div", "note", t("cost.bandsNote")));
+  out.append(bc);
+  out.append(laneCommand("/orc-budget", t("cost.laneWhy")));
+  host.replaceChildren(out);
+}
+
+let statsPlanPath = "";
+
+function unitSwitch(active, host) {
+  const wrap = el("div", "seg-ctl");
+  for (const u of COST_UNITS) {
+    const b = el("button", "seg-btn" + (u === active ? " seg-on" : ""), t(COST_UNIT_KEY_OF[u]));
+    b.type = "button";
+    b.addEventListener("click", () => {
+      try {
+        localStorage.setItem(COST_UNIT_KEY, u);
+      } catch (_) {}
+      host.replaceChildren();
+      renderStatsCost(host);
+    });
+    wrap.append(b);
+  }
+  return wrap;
+}
+
+function laneUnitValue(l, d, unit) {
+  if (unit === "usd") return l.usd === null || l.usd === undefined ? "—" : "$" + l.usd.toFixed(2);
+  if (unit === "quota") {
+    // NEVER a quota figure without a known plan — the CLI decides that, and when
+    // it says unavailable the cell says so rather than inventing a percentage.
+    if (!d.quota || !d.quota.available) return t("cost.quotaNa");
+    const share = d.weighted && d.weighted.p50 ? l.weighted / d.weighted.p50 : 1;
+    return (d.quota.window_pct * share).toFixed(1) + "%";
+  }
+  return kTokUi(l.raw);
+}
+
+function ratesCard(r) {
+  const c = card(t("cost.ratesTitle"));
+  c.append(
+    kvList([
+      [t("cost.rates.calibrated"), r.calibrated_at],
+      [t("cost.rates.joined"), String(r.dispatches_joined)],
+      [t("cost.rates.transcripts"), r.transcripts_readable ? `${r.transcript_files}` : t("cost.rates.unreadable")],
+      [t("cost.rates.unattributed"), `${r.unattributed.blocks}`],
+    ])
+  );
+  return c;
+}
 
 function barCard(title, map, label) {
   const c = card(title);
@@ -3550,6 +4030,446 @@ async function previewAction(action, body) {
   syncApply();
 }
 
+/* ============================================== PROMISES · BOUNDARY · SELF-SERVE
+   (v0.46.0)
+
+   THE LINE, restated because these three panels sit right on it: a FREE action
+   gets a button, a PAID action gets a copy-able command. `orc pact check` runs
+   the ledger's own cheap proofs and `orc handoff set` edits one graded surface —
+   both deterministic, both a button. `/orc-pact`'s reconcile conversation and
+   `/orc-boundary`'s evidence pass cost model tokens, so they are commands with
+   the reason printed next to them.
+
+   And the second rule, which these panels are the first real test of: the CLI's
+   state words are the ONLY state words. HOLDING/DRIFTED/UNCHECKABLE/BROKEN and
+   EXECUTE/ESCALATE/REFUSE are rendered verbatim, never softened into a friendlier
+   synonym — a second vocabulary is drift no lint can see. test/webui.test.js
+   greps this file for the literals that must come from the CLI instead. */
+
+// Worst first, always. A ledger sorted by id buries the one entry that needs a
+// decision under four that do not.
+const PACT_KIND = { BROKEN: "bad", DRIFTED: "warn", UNCHECKABLE: "warn", HOLDING: "ok" };
+const PACT_ORDER_UI = ["BROKEN", "DRIFTED", "UNCHECKABLE", "HOLDING"];
+
+PANELS.pact = function (host) {
+  head(host, t("pact.title"), t("pact.sub"));
+  const body = el("div", "stack");
+  host.append(body);
+  renderPact(body);
+};
+
+async function renderPact(body) {
+  body.replaceChildren(skeleton(5));
+  const [pactRes, boundRes, afterRes] = await Promise.all([
+    read("/api/pact").catch(() => ({ data: null })),
+    read("/api/boundary").catch(() => ({ data: null })),
+    read("/api/aftermath").catch(() => ({ data: null })),
+  ]);
+  const d = pactRes.data;
+  const out = frag();
+
+  if (!d || !d.ok || !d.rows || !d.rows.length) {
+    const c = card(t("pact.title"));
+    c.append(empty(t("pact.none"), t("pact.noneHint")));
+    c.append(laneCommand("/orc-pact", t("pact.cmdHarvestWhy")));
+    out.append(c);
+    body.replaceChildren(out);
+    return;
+  }
+
+  // --- the summary row, in the CLI's own words
+  const sum = card(t("pact.summary"), pactActions(body, d));
+  const chips = el("div", "row-actions");
+  for (const s of PACT_ORDER_UI) {
+    const n = (d.counts || {})[s] || 0;
+    if (!n && s !== "HOLDING") continue;
+    chips.append(chip(`${n} ${s}`, PACT_KIND[s], s === "BROKEN"));
+  }
+  sum.append(chips);
+  sum.append(kvList([[t("pact.field.ledger"), d.ledger], [t("pact.field.doc"), d.doc]], true));
+  if (!d.doc_exists) sum.append(el("div", "note", t("pact.docMissing")));
+  sum.append(el("div", "note", t("pact.uncheckableNote")));
+  out.append(sum);
+
+  // --- one card per promise, worst state first (the CLI already sorted them)
+  for (const r of d.rows) {
+    const c = card(null);
+    const headRow = el("div", "row-actions");
+    headRow.append(chip(r.state, PACT_KIND[r.state], r.state === "BROKEN"));
+    headRow.append(el("span", "mono dim", r.id));
+    c.append(headRow);
+    c.append(el("div", "promise", r.statement));
+    c.append(el("div", "note", r.why));
+
+    const rows = [];
+    if (r.anchors && r.anchors.length) rows.push([t("pact.field.anchors"), r.anchors.join(", ")]);
+    rows.push([t("pact.field.check"), r.check && r.check.ref ? `${r.check.kind} — ${r.check.ref}` : t("pact.field.checkManual")]);
+    if (r.origin) rows.push([t("pact.field.origin"), `${r.origin.lane || "?"}${r.origin.run ? " · " + r.origin.run : ""}`]);
+    rows.push([t("pact.field.confidence"), r.confidence]);
+    if (r.verified_commit) rows.push([t("pact.field.verified"), String(r.verified_commit).slice(0, 10)]);
+    c.append(kvList(rows));
+
+    if (r.last_check && r.last_check.status === "fail")
+      c.append(el("div", "note bad", t("pact.lastCheckFailed", { at: r.last_check.at })));
+
+    // ALSO FLAGGED BY — three lanes agreeing is the strongest signal ORC can
+    // produce, and in a terminal you only ever see one lane at a time. This is
+    // the whole reason the panel is worth building.
+    const also = alsoFlagged(r, boundRes.data, afterRes.data);
+    if (also.length) {
+      const box = el("div", "also");
+      box.append(el("div", "also-head", t("pact.alsoFlagged")));
+      for (const a of also) {
+        const line = el("div", "also-row");
+        line.append(chip(a.chip, a.kind));
+        line.append(el("span", null, a.text));
+        if (a.panel) {
+          const b = el("button", "btn btn-ghost btn-sm", t("common.open"));
+          b.type = "button";
+          b.addEventListener("click", () => (location.hash = "#/" + a.panel));
+          line.append(b);
+        }
+        box.append(line);
+      }
+      c.append(box);
+    }
+
+    // A re-check is FREE (it runs the user's own command), so it is a button.
+    if (r.check && r.check.ref) {
+      const act = el("div", "row-actions");
+      const b = el("button", "btn btn-sm", t("pact.recheckOne"));
+      b.type = "button";
+      b.addEventListener("click", () => confirmPactCheck([r], body));
+      act.append(b);
+      act.append(el("span", "note", "orc pact check " + r.id));
+      c.append(act);
+    }
+    if (r.history && r.history.length > 1)
+      c.append(
+        collapsible({
+          title: t("pact.history"),
+          count: String(r.history.length),
+          collapsed: true,
+          content: kvList(r.history.map((h) => [h.at, `${h.status} @ ${String(h.commit || "").slice(0, 10)}`])),
+        })
+      );
+    out.append(c);
+  }
+
+  out.append(laneCommand("/orc-pact", t("pact.cmdReconcileWhy")));
+  body.replaceChildren(out);
+}
+
+// The cross-panel agreement line. Deliberately conservative: it only claims an
+// overlap it can SEE (a shared file path, a named pact id), never a guess.
+function alsoFlagged(row, boundary, after) {
+  const out = [];
+  const files = (row.anchors || []).map((a) => String(a).split(":")[0]);
+  for (const c of (boundary && boundary.cards) || []) {
+    if (c.verdict === "EXECUTE") continue;
+    if (!files.some((f) => f === c.area || f.startsWith(c.area + "/"))) continue;
+    out.push({ chip: c.verdict, kind: c.verdict === "REFUSE" ? "bad" : "warn", text: t("pact.alsoBoundary", { area: c.area }), panel: "boundary" });
+  }
+  for (const r of (after && after.runs) || [])
+    for (const s of r.signals || [])
+      if ((s.ids || []).includes(row.id))
+        out.push({ chip: r.grade, kind: "warn", text: t("pact.alsoAftermath", { slug: r.slug }), panel: "runs" });
+  return out;
+}
+
+function pactActions(body, d) {
+  const wrap = el("div", "row-actions");
+  const drifted = (d.rows || []).filter((r) => (r.state === "DRIFTED" || r.state === "BROKEN") && r.check && r.check.ref);
+  if (drifted.length) {
+    const b = el("button", "btn btn-sm", tn(drifted.length, "pact.recheckAll"));
+    b.type = "button";
+    b.addEventListener("click", () => confirmPactCheck(drifted, body));
+    wrap.append(b);
+  }
+  const s = el("button", "btn btn-ghost btn-sm", t("pact.syncDoc"));
+  s.type = "button";
+  s.addEventListener("click", async () => {
+    const r = await post("/api/pact/sync", {});
+    toast(r.ok ? t("pact.syncOk") : t("common.writeFail"), r.ok ? "ok" : "bad", r.output);
+    renderPact(body);
+  });
+  wrap.append(s);
+  return wrap;
+}
+
+// A COUNT IS NOT CONSENT: the confirmation names every id it is about to run,
+// and shows the exact command.
+function confirmPactCheck(rows, body) {
+  const b = frag();
+  b.append(el("p", null, tn(rows.length, "pact.confirmBody")));
+  const list = el("ul", "file-list");
+  for (const r of rows) {
+    const li = el("li");
+    li.append(el("span", "mono", r.id + "  "));
+    li.append(el("span", null, r.check.ref));
+    list.append(li);
+  }
+  b.append(list);
+  b.append(el("div", "note", t("pact.confirmNote")));
+  const cmd = rows.length === 1 ? "orc pact check " + rows[0].id : "orc pact check";
+  b.append(el("pre", "cmd", cmd));
+  modal({
+    title: t("pact.confirmTitle"),
+    body: b,
+    actions: {
+      [t("common.cancel")]: null,
+      [t("pact.confirmGo")]: async () => {
+        const r = await post("/api/pact/check", rows.length === 1 ? { id: rows[0].id } : {});
+        toast(r.ok ? t("pact.checkDone") : t("pact.checkFound"), r.ok ? "ok" : "warn", r.output);
+        renderPact(body);
+      },
+    },
+  });
+}
+
+/* ------------------------------------------------------------------ BOUNDARY */
+
+const VERDICT_KIND = { EXECUTE: "ok", ESCALATE: "warn", REFUSE: "bad" };
+
+PANELS.boundary = function (host) {
+  head(host, t("boundary.title"), t("boundary.sub"));
+  section(
+    host,
+    () => read("/api/boundary").then((r) => r.data),
+    (d) => {
+      const out = frag();
+      if (!d || !d.cards || !d.cards.length) {
+        const c = card(t("boundary.title"));
+        c.append(empty(t("boundary.none"), t("boundary.noneHint")));
+        c.append(laneCommand("/orc-boundary", t("boundary.cmdWhy")));
+        out.append(c);
+        return out;
+      }
+
+      const sum = card(t("boundary.summary"));
+      const chips = el("div", "row-actions");
+      for (const v of ["EXECUTE", "ESCALATE", "REFUSE"])
+        chips.append(chip(`${(d.counts || {})[v] || 0} ${v}`, VERDICT_KIND[v], v === "REFUSE" && d.counts.REFUSE));
+      if (d.stale) chips.append(chip(tn(d.stale, "boundary.staleChip"), "warn"));
+      sum.append(chips);
+      sum.append(el("div", "note", t("boundary.gatesOrc")));
+      out.append(sum);
+
+      for (const c of d.cards) {
+        const cc = card(null);
+        const headRow = el("div", "row-actions");
+        // The CLI's exact word, never a friendlier synonym.
+        headRow.append(chip(c.verdict || "MALFORMED", c.verdict ? VERDICT_KIND[c.verdict] : "bad"));
+        headRow.append(el("span", "mono", c.area));
+        if (c.stale) headRow.append(chip(t("boundary.stale"), "warn"));
+        cc.append(headRow);
+
+        for (const r of c.reasons || []) cc.append(el("div", "note", r));
+
+        // THE CHECKLIST IS THE PRODUCT. A REFUSE with none is malformed in the
+        // lane, so this renders an ERROR — never an empty card that reads as a
+        // flat no.
+        if (c.verdict === "REFUSE") {
+          if (!c.checklist || !c.checklist.length) {
+            cc.append(el("div", "note bad", t("boundary.malformedNoChecklist")));
+          } else {
+            const box = el("div", "checklist");
+            box.append(el("div", "checklist-head", t("boundary.wouldMakeYes")));
+            for (const item of c.checklist) {
+              const row = el("div", "checklist-row");
+              row.append(el("span", "checklist-box", "□"));
+              row.append(el("span", null, item));
+              // A caution routes to the panel that can CLEAR it — the v0.43.6
+              // FINDING_ROUTE idea, applied to a checklist item.
+              const route = checklistRoute(item);
+              if (route) {
+                const b = el("button", "btn btn-ghost btn-sm", route.label);
+                b.type = "button";
+                b.addEventListener("click", () => (location.hash = "#/" + route.panel));
+                row.append(b);
+              }
+              box.append(row);
+            }
+            cc.append(box);
+          }
+        }
+        if (c.verdict === "ESCALATE")
+          cc.append(
+            c.escalate_to
+              ? el("div", "note", t("boundary.escalateTo", { who: c.escalate_to }))
+              : el("div", "note bad", t("boundary.malformedNoWho"))
+          );
+        for (const m of c.malformed || []) cc.append(el("div", "note bad", m));
+
+        // A STALE card shows the refresh COMMAND, not a button: refreshing it
+        // re-runs the four questions, which costs model tokens.
+        if (c.stale) cc.append(laneCommand("/orc-boundary " + c.area, tn(c.distance, "boundary.staleWhy")));
+        out.append(cc);
+      }
+      return out;
+    }
+  );
+};
+
+// Only the routes that genuinely clear the item. Everything else gets no button
+// at all — a button that lands on a page with no control for the thing is the
+// exact defect FINDING_ROUTE was introduced to fix.
+function checklistRoute(item) {
+  const s = String(item).toLowerCase();
+  if (s.includes("pact.md") || s.includes("invariant") || s.includes("promise")) return { panel: "pact", label: t("boundary.route.pact") };
+  if (s.includes("pattern") || s.includes("convention")) return { panel: "knowledge", label: t("boundary.route.knowledge") };
+  if (s.includes("wiki") || s.includes("document")) return { panel: "knowledge", label: t("boundary.route.knowledge") };
+  return null;
+}
+
+/* ----------------------------------------------------------------- SELF-SERVE
+   This panel changes what `orc ui` IS: until now a config tool for a developer,
+   now also a tool for somebody who does not read code, will never open a
+   terminal, and may not read English first. It inherits EVERY Maintenance rule
+   with no exceptions, and adds one of its own: a RED surface gets NO BUTTON AT
+   ALL — not a disabled one. A disabled button invites a support question; a
+   reason and a person to ask answers it. */
+
+const GRADE_DOT = { green: "🟢", amber: "🟡", red: "🔴" };
+const GRADE_KIND = { green: "ok", amber: "warn", red: "bad" };
+// Same rule as COST_UNIT_KEY_OF: full keys, never `"handoff.grade." + g`.
+const GRADE_LABEL_KEY = { green: "handoff.grade.green", amber: "handoff.grade.amber", red: "handoff.grade.red" };
+
+PANELS.handoff = function (host) {
+  head(host, t("handoff.title"), t("handoff.sub"));
+  const body = el("div", "stack");
+  host.append(body);
+  renderHandoff(body);
+};
+
+async function renderHandoff(body) {
+  body.replaceChildren(skeleton(5));
+  const res = await read("/api/handoff").catch(() => ({ data: null }));
+  const d = res.data;
+  const out = frag();
+
+  if (!d || !d.surfaces || !d.surfaces.length) {
+    const c = card(t("handoff.title"));
+    c.append(empty(t("handoff.none"), t("handoff.noneHint")));
+    c.append(laneCommand("/orc-handoff", t("handoff.cmdMapWhy")));
+    out.append(c);
+    body.replaceChildren(out);
+    return;
+  }
+
+  const sum = card(t("handoff.summary"));
+  const chips = el("div", "row-actions");
+  for (const g of ["green", "amber", "red"])
+    chips.append(chip(`${GRADE_DOT[g]} ${(d.counts || {})[g] || 0}`, GRADE_KIND[g]));
+  sum.append(chips);
+  sum.append(el("div", "note", t("handoff.gradeExplain")));
+  if (!d.write_enabled) sum.append(el("div", "note warn", t("handoff.writesOff")));
+  out.append(sum);
+
+  for (const s of d.surfaces) {
+    const c = card(null);
+    const headRow = el("div", "row-actions");
+    headRow.append(chip(`${GRADE_DOT[s.grade]} ${t(GRADE_LABEL_KEY[s.grade])}`, GRADE_KIND[s.grade]));
+    headRow.append(el("span", "mono", s.file));
+    if (!s.exists) headRow.append(chip(t("handoff.missing"), "bad"));
+    c.append(headRow);
+    c.append(el("div", "promise", s.what));
+
+    if (s.grade === "red") {
+      // NO BUTTON AT ALL. Not a disabled one.
+      c.append(el("div", "note bad", t("handoff.redWhy", { why: s.reason || "" })));
+      if (s.ask) c.append(el("div", "note", t("handoff.redAsk", { who: s.ask })));
+    } else {
+      c.append(
+        kvList([
+          [t("handoff.field.check"), s.check || t("handoff.field.checkManual")],
+          [t("handoff.field.undo"), s.revert],
+        ])
+      );
+      if (s.grade === "amber") c.append(el("div", "note warn", t("handoff.amberNote")));
+      if (d.write_enabled && s.exists) {
+        const act = el("div", "row-actions");
+        const b = el("button", "btn btn-sm", t("handoff.change"));
+        b.type = "button";
+        b.addEventListener("click", () => editSurface(s, body));
+        act.append(b);
+        c.append(act);
+      }
+    }
+    out.append(c);
+  }
+  out.append(laneCommand("/orc-handoff", t("handoff.cmdDoWhy")));
+  body.replaceChildren(out);
+}
+
+// Preview then apply, the undo command BEFORE the write, one mutation at a time,
+// the exact command always visible. Every one of these is a Maintenance rule this
+// panel inherits rather than re-decides.
+function editSurface(s, body) {
+  const b = frag();
+  b.append(el("p", null, t("handoff.editIntro", { file: s.file })));
+
+  const keyIn = el("input", "input");
+  keyIn.type = "text";
+  keyIn.placeholder = t("handoff.keyPlaceholder");
+  const valIn = el("input", "input");
+  valIn.type = "text";
+  valIn.placeholder = t("handoff.valuePlaceholder");
+  const form = el("div", "form");
+  form.append(el("label", null, t("handoff.keyLabel")), keyIn);
+  form.append(el("label", null, t("handoff.valueLabel")), valIn);
+  b.append(form);
+  b.append(el("div", "note", t("handoff.noNewKeys")));
+
+  // The undo command, BEFORE the write. This is the whole consent step.
+  const undo = el("div", "undo-box");
+  undo.append(el("div", "undo-head", t("handoff.undoFirst")));
+  undo.append(el("pre", "cmd", s.revert));
+  b.append(undo);
+
+  const cmdBox = el("pre", "cmd", `orc handoff set ${s.id} <key> <value>`);
+  b.append(el("div", "note", t("handoff.willRun")));
+  b.append(cmdBox);
+  const sync = () => {
+    cmdBox.textContent = `orc handoff set ${s.id} ${keyIn.value || "<key>"} ${valIn.value || "<value>"}`;
+  };
+  keyIn.addEventListener("input", sync);
+  valIn.addEventListener("input", sync);
+  if (s.check) b.append(el("div", "note", t("handoff.thenCheck", { check: s.check })));
+
+  modal({
+    title: t("handoff.editTitle", { file: s.file }),
+    body: b,
+    actions: {
+      [t("common.cancel")]: null,
+      [t("handoff.applyChange")]: async () => {
+        if (!keyIn.value || !valIn.value) return toast(t("handoff.needBoth"), "bad");
+        const r = await post("/api/handoff/set", { id: s.id, key: keyIn.value, value: valIn.value });
+        // AMBER applies, then shows the manual check as a TASK — never a pass.
+        if (r.ok && s.grade === "amber") toast(t("handoff.amberApplied"), "warn", s.check || "");
+        else toast(r.ok ? t("handoff.applied") : t("handoff.failed"), r.ok ? "ok" : "bad", r.output);
+        renderHandoff(body);
+      },
+    },
+  });
+}
+
+/* A paid action is a COMMAND, never a button. This renders one, with the reason
+   it is not a button — making the boundary visible rather than hiding it. */
+function laneCommand(cmd, why) {
+  const box = el("div", "lane-cmd");
+  box.append(el("div", "lane-cmd-head", t("common.runInClaude")));
+  const row = el("div", "row-actions");
+  row.append(el("pre", "cmd", cmd));
+  const b = el("button", "btn btn-ghost btn-sm", t("common.copy"));
+  b.type = "button";
+  b.addEventListener("click", () => copy(cmd, cmd));
+  row.append(b);
+  box.append(row);
+  if (why) box.append(el("div", "note", why));
+  return box;
+}
+
 // While a mutation runs the WHOLE ui is read-only, output streams into the
 // panel, and every panel refetches when it finishes.
 function setBusy(on) {
@@ -3882,6 +4802,14 @@ const TOUR_STEPS = [
   { panel: "knowledge", selector: ".stack", title: "tour.6.title", text: "tour.6.text" },
   { panel: "experiment", selector: ".lane-list", title: "tour.7.title", text: "tour.7.text" },
   { panel: "maintenance", selector: ".action", title: "tour.8.title", text: "tour.8.text" },
+  /* v0.46.0 — four steps for the four new surfaces. Each MUST point at something
+     with a SIZE: the fallbacks are the reason a `.lane-cmd` is listed second in
+     every selector, because an empty Promises panel still renders the /orc-pact
+     command box and a zero-height target makes the spotlight land on nothing. */
+  { panel: "pact", selector: ".promise, .lane-cmd", title: "tour.9.title", text: "tour.9.text" },
+  { panel: "boundary", selector: ".checklist, .lane-cmd, .card", title: "tour.10.title", text: "tour.10.text" },
+  { panel: "handoff", selector: ".promise, .lane-cmd", title: "tour.11.title", text: "tour.11.text" },
+  { panel: "knowledge", selector: ".free-box, .tbl, .stack", title: "tour.12.title", text: "tour.12.text" },
 ];
 
 function startFirstRunTour(root) {
@@ -3956,6 +4884,7 @@ function startUpgradeSpotlight() {
 // and unmodified: single keys, and ONLY when you are not typing into something.
 const SHORTCUTS = () => [
   ["1 – 9, 0", t("shortcuts.panels")],
+  ["p · b · h", t("shortcuts.panelsLetters")],
   ["/", t("shortcuts.filter")],
   ["r", t("shortcuts.reload")],
   ["t", t("shortcuts.theme")],
@@ -4018,6 +4947,19 @@ function installShortcuts() {
         location.hash = target.getAttribute("href");
       }
       return;
+    }
+    // v0.46.0: the rail outgrew ten digits, so three panels carry a LETTER key.
+    // Same lookup, same rule — matched on data-idx, never on position — and the
+    // letters are checked before the r/t/l actions so a rail key can never be
+    // shadowed by one of them. Adding a panel whose letter collides with an
+    // action would break the action; p/b/h were free.
+    if (/^[pbh]$/.test(e.key)) {
+      const target = document.querySelector('#nav a[data-idx="' + e.key + '"]');
+      if (target) {
+        e.preventDefault();
+        location.hash = target.getAttribute("href");
+        return;
+      }
     }
     if (e.key === "/") {
       const f = $("#settings-filter");

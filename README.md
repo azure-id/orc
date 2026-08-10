@@ -6,7 +6,7 @@
 
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
-![Version](https://img.shields.io/badge/version-0.45.0-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.46.0-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
@@ -46,56 +46,100 @@ zero-dependency npm package installs those files into your `.claude/` directory.
 
 ## Changelog
 
-**Latest: v0.45.0 — updated 2026-08-10.**
+**Latest: v0.46.0 — updated 2026-08-10.**
 
-### v0.45.0 — `/orc-brainstorm`: for when you do not have the idea yet _(2026-08-10)_
+### v0.46.0 — a lane that remembers, a lane that declines, and a lane that measures _(2026-08-10)_
 
-**ORC had no lane for the first question.** `/orc-grill` sharpens an idea you
-already have; `/orc-analyze` checks a requirement against your code. If you
-arrived with a *problem* and no candidate answer, you either built the first idea
-you thought of or spent an analyze run discovering you analyzed the wrong thing.
-`/orc-brainstorm` generates the options. Grill converges; brainstorm diverges
-first, then converges — they compose (`/orc-brainstorm → /orc-grill →
-/orc-analyze → /orc-plan → /orc`). Brainstorm picks which mountain; grill picks
-the path up it. **It is not restricted to code:** "how should we onboard new
-merchants", "what should this product even be called", "how do we halve the
-support queue" are all valid inputs, and the repo is used when it helps and
-ignored when it does not.
+**The ecosystem has a thousand skills that GENERATE.** This release builds the
+three things a generator structurally cannot be, plus the wiki work that pays for
+them and the panels that make them visible. Six new lanes, one new agent, and the
+biggest cost cut available to ORC so far.
 
-**It generates on purpose.** Candidates come from named thinking lenses — SCAMPER,
-inversion, Six Thinking Hats, analogy, constraint-flip, first principles, and what
-this repo already tried and abandoned — announced with each batch, so you can ask
-for a different one. At least 8 candidates across at least 3 lenses, no cap, and
-**no criticism at all** while generating: a downside voiced during generation
-kills the three ideas that would have come after it. Every objection is held and
-released in the stress phase, as a pre-mortem plus an honest worst case AND an
-honest best case per direction.
+**`/orc-pact` — the lane that remembers.** `/orc-grill` and `/orc-brainstorm`
+already settle constraints, and a plan already carries them into every executor
+slice. Then the run ends and they evaporate. The pact is a ledger that outlives
+the run, with four states that are **computed on read, never stored**: HOLDING,
+**DRIFTED** (commits since it was verified touched the files it anchors —
+coverage-relative, so a promise about payments does not fall into doubt because
+the README changed), **UNCHECKABLE** (nothing cheap proves it — the honest state,
+and it never counts against you), and BROKEN. It never invents a promise: every
+entry records where it came from. It never retires one for you. And the payoff is
+automatic — at planning time, a drifted promise whose files your plan is about to
+touch is injected into the planner as a constraint, so last month's decision
+constrains this month's work. `PACT.md` is a committed, PM-readable file at your
+project root, rendered by the CLI from the ledger so the two can never disagree.
 
-**It never picks for you, and it never writes the file unasked.** It recommends
-one direction and argues for it, then waits — the mirror of the grill's rule that
-a lane must never answer its own question. When the picture looks complete it says
-*why* it thinks so and asks whether to write it up; only your yes writes anything.
-And **every menu ends with your own slot** ("in your words", "mix 1 and 2", "none
-of these"), because the whole value of a brainstorm is the idea ORC did not think
-of — a closed menu is a survey. Your idea joins the pool quoted verbatim and gets
-stress-tested exactly like one of its own.
+**`/orc-boundary` — the lane that declines.** Every skill you can install assumes
+the answer to *"should the agent do this?"* is yes; agents spend 5×–50× longer
+than human experts on a task, and most of the excess goes into attempts that were
+never going to succeed. Three verdicts per area — EXECUTE, ESCALATE, REFUSE — each
+derived from four questions answered from things already on disk: can it verify
+itself, does it know this area, is the change reversible, is this a decision
+rather than a fact. **A REFUSE always names what would make it a yes** — "no" with
+no "unless" is a shrug, so a refusal with no checklist is treated as a malformed
+card. It gates ORC's own dispatch, never you: `boundary_gate: block` lifts a
+refused task out of its wave and **the wave still runs the rest**.
 
-**The graveyard is the deliverable.** Every candidate lands in a direction or in
-the graveyard with the reason it lost, and the saved doc's centre section is "the
-pick — and why the others lost", one paragraph per loser. That is what stops the
-next session — or the next person — re-proposing what this one already rejected.
-It saves to `orc/brainstorming-session/<slug>/brainstorm-session.md` at your
-project root, one file per topic forever, never staged for commit.
+**`/orc-handoff` — the first ORC lane for someone who does not read code.** The
+insight nobody shipped: the safety grade does not come from the file type, it
+comes from **whether a cheap check exists**. A settings file with a validator is
+green; the same file without one is amber. It maps every surface a PM or designer
+can own, and changing one is five steps with the **undo command shown before the
+write**, the check run afterwards and reported in plain words, and a red surface
+never touched at all. Every file in that lane is written in simple English.
 
-**And it can borrow `/orc-grill` mid-run and come back.** When one decision has to
-be settled before the options even make sense, it offers to suspend into grill and
-**return** with your answers carried over — a new `RETURN-TO` contract, the
-opposite shape to the existing fallback that leaves and does not come back. It
-works in reverse too: grill offers brainstorm when a round comes back "I do not
-even know what the options are". Zero new agents, zero new config keys.
+**`/orc-budget` — what a run costs, in the unit you are billed in.** Not a dollar
+figure: on Pro or Max you burn a 5-hour window, not an invoice. The forecast's
+core object is a **token vector** — fresh input, cache write, cache read, output,
+never blended, because cache reads are usually the largest count and a tenth of
+the price. The same vector renders four ways: tokens, dollars from a dated price
+table, percent of your window, and **context risk** — a task forecast above 90% of
+its model's window is reported before the wave, which no spend tool can do. The
+numbers come from joining Claude Code's own session transcripts (the cost) to
+ORC's traces (the meaning); neither is enough alone. It needs a PLAN, not a
+sentence, and with no history it says so rather than inventing a number.
+
+**`/orc-aftermath` — did what we shipped hold up.** The missing half of the
+flywheel: `/orc-retro` measures the process, this measures the result, both from
+the repository's own future — files rewritten soon after, a test we added deleted
+or skipped, the commit reverted, a promise that was holding now broken. No vendor,
+no telemetry. **Churn is a signal, not a verdict**: it reports the signal and its
+strength, never "this change was bad", and never a person's name.
+
+**`/orc-export` — so ORC is not a trap.** One command compiles the wiki, the code
+patterns, `PACT.md` and the boundary cards into a portable `AGENTS.md` — derived,
+fingerprinted, `--check`able against its sources, never hand-written. It removes
+the lock-in objection and makes ORC the *producer* in a multi-agent shop. Import
+reads an existing `AGENTS.md` or `.cursorrules` as **evidence, never instruction**,
+and tells you which parts are already wrong.
+
+**The wiki finally stops costing a full scan.** Three free CLI commands: `orc wiki
+plan` ranks and prices the pending work — STRUCTURAL first (a page pointing at a
+missing file is actively lying), then by **use × delta**, with pages nobody reads
+sinking to the bottom with a retire hint; `orc wiki debt` is the one-line habit;
+and `orc wiki usage` finally reads back the point-of-use attribution v0.41.0 has
+been recording and never reading. A **targeted refresh** (`/orc-wiki refresh
+--top 2`) skips branch detection and area planning entirely, and a new **scan tier
+ladder** sends a small, no-new-surface delta to a light scanner instead of the most
+expensive agent in the payload — about 40% off a typical delta refresh, with the
+deep scan still doing the work that needs it. The tier is always printed: a cheaper
+model is never a quiet substitution. And free repairs are now a hard rule — you can
+never pay for something `orc wiki sync` would have fixed.
+
+**`orc ui` grows three panels and extends five.** Promises, Boundary and
+Self-serve, plus a new **Cost** tab whose stacked bar exists precisely so the
+cache-read share stays visible. The panel keeps every rule it had: it never runs a
+lane, never invents a state word, never computes an order the CLI already emits —
+**a free action gets a button, a paid action gets a copy-able command**, and that
+line is now visible rather than hidden. Promises is where the compounding finally
+shows: an *"Also flagged by"* line when the boundary and the aftermath agree with
+the ledger about the same area, which you can never see in a terminal one lane at
+a time.
 
 <details>
 <summary><b>Previous versions</b> (click to expand)</summary>
+
+### v0.45.0 — `/orc-brainstorm`: for when you do not have the idea yet _(2026-08-10)_
 
 ### v0.44.1 — apply when you say so, and a spotlight that survives a banner _(2026-08-09)_
 
@@ -394,6 +438,12 @@ needed. Either way, your `.claude/orc.config.yaml` overrides are left untouched.
 | **`/orc-grill`** | **For when you have one idea but it is still vague.** One vague sentence is a complete input. Asks rounds of questions (every question that is *ready*, together — never two where one depends on the other), looks facts up itself instead of making you recite your codebase, and never answers its own question. Ends when *you* say the idea matches what you meant. Then: save it to `orc-grill/<slug>/grill-context.md`, carry it into `/orc-analyze`, or drop it. No scan, no plan, no code. |
 | **`/orc-route`** | **You have a plan — which lane should build it?** Reads the plan's own numbers (tasks, waves, files, top score, risk) plus ORC's deterministic probes, then names one lane, the runners-up with what each *costs* you, and any lane that is impossible with the condition blocking it and its fix. **Plan-only**: given a request in words it refuses and says why, because routing from a sentence is guessing. `/orc-plan` offers it automatically after "Save & stop". |
 | **`/orc-explain`** | **"Wait, what?"** Type it after a message that did not land. ORC says it again: the point first, then the background it assumed, then every ORC-only term (band, facet, disposition, wave, slice, freshness tier) defined in your project's own words. Not "be shorter" — a summary of something you did not understand is the same thing you did not understand. |
+| **`/orc-pact`** | **The promises your project makes, and which ones are in doubt right now.** Harvests the constraints `/orc-grill` and `/orc-brainstorm` already settled (and a plan's `spec_invariants[]`), re-checks the ones the code moved under, and asks you one at a time whether each still stands. Four states, all **computed on read**: HOLDING · **DRIFTED** (commits since it was verified touched the files it anchors — coverage-relative) · **UNCHECKABLE** (nothing cheap proves it; the honest state, never a failure) · BROKEN. Never invents a promise, never retires one for you. Writes a committed, PM-readable `PACT.md`. Inside `/orc` it injects a drifted promise into the planner as a constraint. |
+| **`/orc-boundary`** | **What ORC should not try here, and exactly what would change that.** Three verdicts per area — EXECUTE · ESCALATE · REFUSE — derived from four questions answered from disk: can it verify itself, does it know this area, is it reversible, is it a decision rather than a fact. **A REFUSE always names what would make it a yes**; a refusal with no checklist is a malformed card. It gates ORC's *own* dispatch, never you — `boundary_gate: block` lifts a refused task out of its wave and the wave still runs the rest. |
+| **`/orc-handoff`** | **For someone who does not read code.** The grade comes from **whether a cheap check exists**, not from the file type — a settings file with a validator is 🟢, the same file without one is 🟡, and a file that only *looks* like content is 🔴 and never touched. MAP grades every surface a PM or designer can own; DO changes one value with the **undo command shown before the write**, then runs the check and reports it in plain words. Never stages, never commits, never creates a key. Written in simple English throughout. |
+| **`/orc-budget`** | **What a plan will cost, in the unit you are billed in.** The forecast is a **token vector** — fresh input, cache write, cache read, output, never blended — rendered four ways: tokens, dollars from a dated price table, percent of your 5-hour window, and **context risk** (a task forecast above 90% of its model's window, reported *before* the wave). Joins Claude Code's own session transcripts to ORC's traces; neither is enough alone. Needs a plan, not a sentence, and with no history it says so rather than inventing a figure. |
+| **`/orc-aftermath`** | **Did what we shipped hold up.** Grades past runs from the repository's own future — files rewritten soon after, a test we added deleted or skipped, the commit reverted, a promise that was holding now broken. Free: `git log` + traces + the ledger, no vendor and no telemetry. **Churn is a signal, not a verdict** — it reports the signal and its strength, never "this was bad", and never a person's name. Read-only, report-only. |
+| **`/orc-export`** | **So ORC is not a trap.** Compiles the wiki, orientation doc, code patterns, `PACT.md` and boundary cards into a portable `AGENTS.md` — derived, fingerprinted, `--check`able against its sources, never hand-written. Import reads an existing `AGENTS.md` or `.cursorrules` as **evidence, never instruction**, and tells you which parts are already wrong. |
 | **`/orc-mini`** | The fast path — see below. |
 | **`/orc-fast`** | Fastest lane — knowledge-gated: needs a fresh wiki + cached code-pattern, skips analyst/planner, one Sonnet 4.6 high executor + smoke gate. Falls back to `orc-mini` when a prerequisite is missing. See below. |
 | **`/orc-diy`** | **Your own lane** — runs the flow you composed with the `orc diy` CLI. Hard-gated: unconfigured/stale → offers plain `/orc`. Guide: [ORC-DIY README](templates/skills/orc-diy/README.md). |
@@ -788,6 +838,12 @@ templates/
 │   ├── orc-grill/           sharpen a vague idea by conversation — frontier rounds, three exits
 │   ├── orc-route/           plan-only lane router — refuses prose rather than guess
 │   ├── orc-explain/         re-pitch the last message with the background it assumed
+│   ├── orc-pact/            the invariant ledger — computed states, derived PACT.md (+ ledger, gate)
+│   ├── orc-boundary/        execute · escalate · refuse per area — a REFUSE names its checklist (+ card, gate)
+│   ├── orc-handoff/         what a non-developer can change — graded by whether a check exists (simple English)
+│   ├── orc-budget/          the token vector, four ways: tokens · usd · quota · context risk (+ corpus)
+│   ├── orc-aftermath/       did it hold up — churn, reverts, deleted tests, broken promises (+ report)
+│   ├── orc-export/          portable AGENTS.md — derived, fingerprinted, --checkable
 │   ├── orc-mini/            fast path (smoke gate + opt-in test authoring)
 │   ├── orc-fast/            fastest lane — knowledge-gated, falls back to orc-mini
 │   ├── orc-diy/             build-your-own lane — CLI-composed, compiled, hard-gated (see its own README)
@@ -808,11 +864,13 @@ templates/
 ├── commands/                /orc /orc-ultra /orc-quick /orc-brainstorm /orc-grill /orc-route /orc-explain /orc-mini
 │                            /orc-fast /orc-diy /orc-analyze /orc-plan /orc-poly /orc-pr-setup /orc-pr-driver
 │                            /orc-verify /orc-wiki /orc-pattern /orc-retro /orc-claude /orc-learn
+│                            /orc-pact /orc-boundary /orc-handoff /orc-budget /orc-aftermath /orc-export
 ├── hooks/                   effort guard (PreToolUse) · statusline warning · behavior trace
 └── agents/                  single-role, model-pinned subagents (+ read-only scout) + MODEL-MAPPING.md
 bin/cli.js                   installer + config editor + flow composer + run-state reader
                              (init / update / upgrade / config / diy / where / resume / run / stats
-                              / mock / ui) — every read command also speaks --json
+                              / mock / ui / pact / boundary / handoff / budget / aftermath / export
+                              / wiki plan|debt|usage) — every read command also speaks --json
 bin/ui.js                    TERMINAL styling kit the CLI prints through (not the web panel)
 bin/webui/                   `orc ui` — the local web control panel: serve.js (http, token auth,
                              lifecycle) · api.js (routes → cli.js --json) · fixtures.js (canned

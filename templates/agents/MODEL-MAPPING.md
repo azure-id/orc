@@ -34,7 +34,8 @@ Score→executor mapping lives in config.md (one canonical 8-band table;
 | orc-context-combiner-opus-5-high | claude-opus-5 | high | combine 2+ related analyses (full lane) |
 | orc-pattern-codifier-sonnet-5-high | claude-sonnet-5 | high | reconcile per-language playbook vs. project files → cached code-pattern (opt-in) |
 | orc-retro-sonnet-5-high | claude-sonnet-5 | high | mine behavior traces → calibration report (/orc-retro; read-only) |
-| orc-wiki-scanner-opus-4-8-high | claude-opus-4-8 | high | scan ONE wiki coverage area → evidence-anchored doc body + crosslink tags (/orc-wiki only; read-only against the project) |
+| orc-wiki-scanner-opus-4-8-high | claude-opus-4-8 | high | scan ONE wiki coverage area → evidence-anchored doc body + crosslink tags (/orc-wiki only; read-only against the project). The DEEP half of the v0.46.0 tier ladder: first scan · STRUCTURAL · wide delta · a new exported symbol |
+| orc-wiki-scanner-sonnet-5-high | claude-sonnet-5 | high | the LIGHT half of the same ladder — an existing doc whose covered files moved by a small, no-new-surface delta. IDENTICAL return contract; it escalates with `needs_context` rather than under-delivering. Never used for a first scan |
 | orc-executor-opus-5-med | claude-opus-5 | medium | `opus5_only` ladder ONLY — the [40,80) band (never dispatched by the default 8-band table) |
 | orc-executor-opus-5-low | claude-opus-5 | low | `opus5_only` ladder ONLY — the [0,40) band, and the forced mini/fast executor (never dispatched by the default 8-band table) |
 | orc-advisor-opus-5-xhigh | claude-opus-5 | xhigh | ultra Phase U0 advisory brief + rubric + clarification questions (read-only; /orc-ultra only) |
