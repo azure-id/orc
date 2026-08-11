@@ -427,8 +427,8 @@ function stripMd(s) {
     .trim();
 }
 
-// REFLOW (v0.44.1). The changelog is this repo's own README, and that file is
-// hard-wrapped at ~78 columns. `.cl-body` renders `pre-wrap`, so every one of
+// REFLOW (v0.44.1). The changelog is this repo's own CHANGELOG.md, and that
+// file is hard-wrapped at ~78 columns. `.cl-body` renders `pre-wrap`, so every one of
 // those authoring line breaks survived into a 660px box: paragraphs came out as
 // a ragged stack of short lines that ended nowhere near the right edge, which
 // is exactly the "misaligned" the modal looked. The wrapping belongs to the
@@ -3739,6 +3739,465 @@ function renderLearnBody(lines) {
   return out;
 }
 
+/* ======================================================= MOCKED SKILL USE == */
+/*
+   Every lane, written out as a run you can read before you pay for one: what
+   you type, what ORC prints back, what lands on disk. The whole point is that
+   nobody should have to spend tokens to find out what a command looks like.
+
+   THE SAME RULE AS THE FLOW STEPPER: the catalogue is DERIVED by
+   `bin/mockrun-catalog.js` — groups, reading order, lane names, summaries — and
+   this panel renders it and decides none of it. A second idea of the order (or
+   of which doc belongs to which lane) is exactly the drift the panel exists to
+   make impossible. Everything that arrives in the payload is CLI-side data, so
+   nothing in it is ever passed through `t()`.
+
+   Markdown is rendered to real DOM nodes, never assigned as HTML: `renderMd`
+   builds elements and every piece of text goes in through `textContent`. These
+   files ship inside the package, but "it is our own file" is not a reason to
+   parse it as markup.
+*/
+
+const MOCKRUN_KEY = "orc-ui-mockrun-doc";
+
+PANELS.mockrun = function (host) {
+  head(host, t("mockrun.title"), t("mockrun.sub"));
+  const body = el("div", "stack");
+  host.append(body);
+  renderMockrun(body);
+};
+
+async function renderMockrun(body) {
+  body.replaceChildren(skeleton(5));
+  let d;
+  try {
+    d = (await read("/api/mockruns")).data;
+  } catch (e) {
+    body.replaceChildren(empty(t("common.loadFail"), String(e.message)));
+    return;
+  }
+  const groups = (d && d.groups) || [];
+  const docs = (d && d.docs) || [];
+  if (!docs.length) {
+    body.replaceChildren(empty(t("mockrun.none"), t("mockrun.noneHint")));
+    return;
+  }
+
+  // `open` is a slug or null (null = the gallery). Remembered per browser so
+  // coming back to the panel returns you to what you were reading.
+  let open = null;
+  try {
+    const saved = localStorage.getItem(MOCKRUN_KEY);
+    if (saved && docs.some((x) => x.slug === saved)) open = saved;
+  } catch (_) {}
+
+  const wrap = el("div", "mock");
+
+  /* --- the contents rail ------------------------------------------------ */
+  const side = el("aside", "mock-side");
+  const sideHead = el("div", "mock-side-head", t("mockrun.contents"));
+  const search = el("input", "text-input");
+  search.type = "search";
+  search.placeholder = t("mockrun.search");
+  const navList = el("div", "mock-nav");
+  const searchResult = el("div", "learn-result");
+  side.append(sideHead, search, navList, searchResult);
+
+  const navItems = new Map();
+  for (const g of groups) {
+    // Group titles come from the CLI. They are content, not panel prose.
+    navList.append(el("div", "mock-nav-group", g.title));
+    for (const doc of g.docs) {
+      const b = el("button", "mock-nav-item");
+      b.type = "button";
+      b.append(el("span", "mock-nav-title", doc.lane || doc.title));
+      if (doc.kind === "annotated") b.append(el("span", "mock-nav-tag", t("mockrun.kindAnnotated")));
+      b.addEventListener("click", () => show(doc.slug));
+      navList.append(b);
+      navItems.set(doc.slug, b);
+    }
+  }
+
+  /* --- the pane --------------------------------------------------------- */
+  const pane = el("div", "mock-pane");
+  wrap.append(side, pane);
+  body.replaceChildren(wrap);
+
+  function mark() {
+    for (const [slug, b] of navItems) b.setAttribute("aria-current", slug === open ? "true" : "false");
+  }
+
+  // Re-run the pane's entrance animation on every swap, the same way the Learn
+  // panel does — without it, switching document reads as a content flicker.
+  function replay() {
+    pane.style.animation = "none";
+    void pane.offsetHeight;
+    pane.style.animation = "";
+  }
+
+  function gallery() {
+    open = null;
+    try {
+      localStorage.removeItem(MOCKRUN_KEY);
+    } catch (_) {}
+    mark();
+    const out = frag();
+
+    const intro = el("div", "note mock-intro");
+    intro.append(document.createTextNode(t("mockrun.intro", { n: docs.length })));
+    out.append(intro);
+
+    for (const g of groups) {
+      const sec = el("section", "mock-group");
+      sec.append(el("h2", "mock-group-head", g.title));
+      const grid = el("div", "mock-grid");
+      g.docs.forEach((doc, i) => {
+        const c = el("button", "mock-card");
+        c.type = "button";
+        // The stagger is a CSS custom property so reduced motion's blanket
+        // `animation-delay: 0ms !important` still wins over it.
+        c.style.setProperty("--i", String(Math.min(i, 8)));
+        const top = el("div", "mock-card-top");
+        top.append(el("span", "mock-card-lane", doc.lane || doc.title));
+        if (doc.kind === "annotated") top.append(chip(t("mockrun.kindAnnotated")));
+        c.append(top);
+        c.append(el("div", "mock-card-sum", doc.summary));
+        c.append(el("div", "mock-card-foot", tn(doc.lines, "mockrun.lines")));
+        c.addEventListener("click", () => show(doc.slug));
+        grid.append(c);
+      });
+      sec.append(grid);
+      out.append(sec);
+    }
+    pane.replaceChildren(out);
+    replay();
+  }
+
+  async function show(slug) {
+    open = slug;
+    try {
+      localStorage.setItem(MOCKRUN_KEY, slug);
+    } catch (_) {}
+    mark();
+    pane.replaceChildren(skeleton(6));
+    let doc;
+    try {
+      doc = (await read("/api/mockrun?slug=" + encodeURIComponent(slug))).data;
+    } catch (e) {
+      pane.replaceChildren(empty(t("common.loadFail"), String(e.message)));
+      return;
+    }
+    if (!doc || !doc.found) {
+      pane.replaceChildren(empty(t("mockrun.missing", { slug })));
+      return;
+    }
+
+    const out = frag();
+
+    const back = el("button", "btn btn-ghost btn-sm mock-back", t("mockrun.back"));
+    back.type = "button";
+    back.addEventListener("click", gallery);
+    out.append(back);
+
+    const h = el("div", "mock-doc-head");
+    h.append(el("h2", "mock-doc-title", doc.title));
+    const meta = el("div", "mock-doc-meta");
+    // The lane is a command you type, so it is printed as one — a chip would
+    // uppercase it, and `/ORC-GRILL` is not a command that exists.
+    if (doc.lane) meta.append(el("span", "mock-doc-lane", doc.lane));
+    meta.append(el("span", "mock-doc-path", doc.path));
+    meta.append(el("span", "mock-doc-lines", tn(doc.lines, "mockrun.lines")));
+    h.append(meta);
+    out.append(h);
+
+    const article = el("article", "mock-article");
+    article.append(renderMd(doc.body, { title: doc.title, docs, open: show }));
+    out.append(article);
+
+    // Reading order is the catalogue's order, so "next" means the next thing
+    // the index would have you read — not the next file alphabetically.
+    const idx = docs.findIndex((x) => x.slug === doc.slug);
+    const foot = el("div", "mock-doc-foot");
+    const prev = docs[idx - 1];
+    const next = docs[idx + 1];
+    if (prev) {
+      const b = el("button", "btn btn-sm", "← " + (prev.lane || prev.title));
+      b.type = "button";
+      b.addEventListener("click", () => show(prev.slug));
+      foot.append(b);
+    }
+    const cmd = el("button", "btn btn-ghost btn-sm", t("mockrun.copyCmd"));
+    cmd.type = "button";
+    cmd.addEventListener("click", () => copy("orc mock-run show " + doc.slug, "orc mock-run"));
+    foot.append(cmd);
+    if (next) {
+      const b = el("button", "btn btn-sm btn-primary", (next.lane || next.title) + " →");
+      b.type = "button";
+      b.addEventListener("click", () => show(next.slug));
+      foot.append(b);
+    }
+    out.append(foot);
+
+    pane.replaceChildren(out);
+    replay();
+    pane.scrollTop = 0;
+  }
+
+  search.addEventListener("input", () => {
+    const q = search.value.trim().toLowerCase();
+    let hits = 0;
+    for (const doc of docs) {
+      const hay = (doc.slug + " " + doc.title + " " + (doc.lane || "") + " " + doc.summary).toLowerCase();
+      const hit = !q || hay.includes(q);
+      navItems.get(doc.slug).classList.toggle("hidden", !hit);
+      if (hit) hits++;
+    }
+    // A group whose every item is filtered out keeps an orphan heading.
+    for (const gh of navList.querySelectorAll(".mock-nav-group")) {
+      let n = gh.nextElementSibling;
+      let any = false;
+      while (n && !n.classList.contains("mock-nav-group")) {
+        if (!n.classList.contains("hidden")) any = true;
+        n = n.nextElementSibling;
+      }
+      gh.classList.toggle("hidden", !!q && !any);
+    }
+    searchResult.textContent = q ? (hits ? tn(hits, "mockrun.matches") : t("mockrun.noMatch")) : "";
+    searchResult.classList.toggle("toolbar-result-none", !!q && !hits);
+  });
+  search.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && search.value) {
+      e.stopPropagation();
+      search.value = "";
+      search.dispatchEvent(new Event("input"));
+    }
+  });
+
+  if (open) show(open);
+  else gallery();
+}
+
+/* --- markdown → DOM -------------------------------------------------------
+   Small on purpose: headings, fenced code, tables, quotes, lists, rules and
+   paragraphs — the shapes the mocked runs actually use. Anything it does not
+   recognise stays as text, which is the correct failure: an unrendered line is
+   readable, a swallowed one is not.
+
+   A link to another `.md` in the catalogue becomes a button that opens that
+   document here. A link that resolves to nothing renders as its text, never as
+   a dead link. */
+function renderMd(md, opts) {
+  const o = opts || {};
+  const lines = String(md || "").split(/\r?\n/);
+  const out = frag();
+  let i = 0;
+  let skippedTitle = false;
+
+  const isTableRow = (s) => /^\s*\|.*\|\s*$/.test(s || "");
+  const isDivider = (s) => /^\s*\|?[\s:|-]{3,}\|?\s*$/.test(s || "") && (s || "").includes("-");
+
+  while (i < lines.length) {
+    const line = lines[i];
+
+    if (!line.trim()) {
+      i++;
+      continue;
+    }
+
+    // Fenced code. The fence language is ignored — none of these documents are
+    // syntax-highlighted, and a wrong highlight is worse than none.
+    const fence = line.match(/^\s*```/);
+    if (fence) {
+      const buf = [];
+      i++;
+      while (i < lines.length && !/^\s*```/.test(lines[i])) buf.push(lines[i++]);
+      i++; // the closing fence
+      const box = el("div", "md-codebox");
+      const pre = el("pre", "md-code", buf.join("\n"));
+      const b = el("button", "copy-btn md-code-copy", t("common.copy").toLowerCase());
+      b.type = "button";
+      b.addEventListener("click", () => copy(buf.join("\n"), t("mockrun.codeBlock")));
+      box.append(pre, b);
+      out.append(box);
+      continue;
+    }
+
+    // Table: a row, then a divider row.
+    if (isTableRow(line) && isDivider(lines[i + 1])) {
+      const cells = (s) =>
+        s
+          .trim()
+          .replace(/^\||\|$/g, "")
+          .split("|")
+          .map((c) => c.trim());
+      const table = el("table", "md-table");
+      const thead = el("thead");
+      const hr = el("tr");
+      for (const c of cells(line)) {
+        const th = el("th");
+        inline(th, c, o);
+        hr.append(th);
+      }
+      thead.append(hr);
+      table.append(thead);
+      i += 2;
+      const tbody = el("tbody");
+      while (i < lines.length && isTableRow(lines[i])) {
+        const tr = el("tr");
+        for (const c of cells(lines[i])) {
+          const td = el("td");
+          inline(td, c, o);
+          tr.append(td);
+        }
+        tbody.append(tr);
+        i++;
+      }
+      table.append(tbody);
+      const scroller = el("div", "md-tablewrap");
+      scroller.append(table);
+      out.append(scroller);
+      continue;
+    }
+
+    const h = line.match(/^(#{1,6})\s+(.*)$/);
+    if (h) {
+      // The pane already prints the document title above the article.
+      if (h[1].length === 1 && !skippedTitle) {
+        skippedTitle = true;
+        i++;
+        continue;
+      }
+      const level = Math.min(h[1].length + 1, 5);
+      const node = el("h" + level, "md-h md-h" + h[1].length);
+      inline(node, h[2], o);
+      out.append(node);
+      i++;
+      continue;
+    }
+
+    if (/^\s*(---|\*\*\*|___)\s*$/.test(line)) {
+      out.append(el("hr", "md-hr"));
+      i++;
+      continue;
+    }
+
+    if (/^\s*>/.test(line)) {
+      const buf = [];
+      while (i < lines.length && /^\s*>/.test(lines[i])) buf.push(lines[i++].replace(/^\s*>\s?/, ""));
+      const q = el("blockquote", "md-quote");
+      inline(q, buf.join(" "), o);
+      out.append(q);
+      continue;
+    }
+
+    const bullet = line.match(/^(\s*)([-*+]|\d+[.)])\s+(.*)$/);
+    if (bullet) {
+      const ordered = /\d/.test(bullet[2]);
+      const list = el(ordered ? "ol" : "ul", "md-list");
+      while (i < lines.length) {
+        const m = lines[i].match(/^(\s*)([-*+]|\d+[.)])\s+(.*)$/);
+        if (!m) {
+          // A wrapped continuation line belongs to the item above it.
+          if (lines[i].trim() && /^\s{2,}\S/.test(lines[i]) && list.lastChild) {
+            list.lastChild.append(document.createTextNode(" "));
+            inline(list.lastChild, lines[i].trim(), o);
+            i++;
+            continue;
+          }
+          break;
+        }
+        const li = el("li", "md-li md-li-" + Math.min(2, Math.floor(m[1].length / 2)));
+        inline(li, m[3], o);
+        list.append(li);
+        i++;
+      }
+      out.append(list);
+      continue;
+    }
+
+    // Paragraph: consecutive plain lines, rewrapped by the box rather than by
+    // the file's own 78-column hard wrap (the changelog lesson, v0.44.1).
+    //
+    // THE FIRST LINE IS TAKEN UNCONDITIONALLY, and that is load-bearing: this
+    // is the fall-through branch, so a line the branches above declined but the
+    // condition below also rejects (a stray `| … |` row with no divider under
+    // it, say) would leave `i` exactly where it was — an infinite loop that
+    // hangs the panel on one malformed line. Always consume one, then extend.
+    const buf = [lines[i++].trim()];
+    while (
+      i < lines.length &&
+      lines[i].trim() &&
+      !/^\s*(```|#{1,6}\s|>|---|\*\*\*|___)/.test(lines[i]) &&
+      !/^(\s*)([-*+]|\d+[.)])\s+/.test(lines[i]) &&
+      !isTableRow(lines[i])
+    )
+      buf.push(lines[i++].trim());
+    const p = el("p", "md-p");
+    inline(p, buf.join(" "), o);
+    out.append(p);
+  }
+  return out;
+}
+
+// Inline markup: `code`, **bold**, and links. Everything else is text.
+function inline(parent, text, opts) {
+  const o = opts || {};
+  const src = String(text || "");
+  const re = /(`[^`]+`)|(\*\*[^*]+\*\*)|(\[[^\]]+\]\([^)\s]+\))/g;
+  let last = 0;
+  let m;
+  while ((m = re.exec(src))) {
+    if (m.index > last) parent.append(document.createTextNode(src.slice(last, m.index)));
+    const tok = m[0];
+    if (tok.startsWith("`")) parent.append(el("code", "md-code-inline", tok.slice(1, -1)));
+    else if (tok.startsWith("**")) parent.append(el("strong", null, tok.slice(2, -2)));
+    else {
+      const lm = tok.match(/^\[([^\]]+)\]\(([^)\s]+)\)$/);
+      // `nolink` is the recursion stop: a link LABEL gets the same inline pass
+      // (so `[`orc mock-run`](…)` is not printed with its backticks) but can
+      // never contain another link to descend into.
+      if (o.nolink) parent.append(document.createTextNode(lm[1]));
+      else parent.append(link(lm[1], lm[2], o));
+    }
+    last = re.lastIndex;
+  }
+  if (last < src.length) parent.append(document.createTextNode(src.slice(last)));
+}
+
+function link(text, href, o) {
+  const label = (node) => {
+    inline(node, text, Object.assign({}, o, { nolink: true }));
+    return node;
+  };
+  if (/^https?:\/\//i.test(href)) {
+    const a = label(el("a", "md-link"));
+    a.href = href;
+    a.target = "_blank";
+    a.rel = "noreferrer noopener";
+    return a;
+  }
+  // A relative link into the catalogue opens in this panel. Resolution is by
+  // the target's own tail, so `orc-pact.md` and
+  // `../templates/skills/orc-mini/examples/mini-run-mock.md` both land.
+  const docs = o.docs || [];
+  const tail = href.split("#")[0].replace(/^\.\//, "");
+  const base = tail.split("/").pop();
+  const hit =
+    docs.find((d) => d.path.endsWith(tail.replace(/^(\.\.\/)+/, ""))) ||
+    docs.find((d) => d.slug + ".md" === base) ||
+    docs.find((d) => d.path.endsWith("/" + base));
+  if (hit && o.open) {
+    const b = label(el("button", "md-doclink"));
+    b.type = "button";
+    b.title = hit.title;
+    b.addEventListener("click", () => o.open(hit.slug));
+    return b;
+  }
+  // Nothing to open: the words stay, the link does not. A dead link in a panel
+  // that cannot browse a repository is a promise it cannot keep.
+  return label(el("span", "md-link-flat"));
+}
+
 /* ============================================================== EXPERIMENT == */
 
 // The one place this panel touches AI at all — and it does so by getting out of
@@ -4884,7 +5343,7 @@ function startUpgradeSpotlight() {
 // and unmodified: single keys, and ONLY when you are not typing into something.
 const SHORTCUTS = () => [
   ["1 – 9, 0", t("shortcuts.panels")],
-  ["p · b · h", t("shortcuts.panelsLetters")],
+  ["p · b · h · m", t("shortcuts.panelsLetters")],
   ["/", t("shortcuts.filter")],
   ["r", t("shortcuts.reload")],
   ["t", t("shortcuts.theme")],
@@ -4952,8 +5411,8 @@ function installShortcuts() {
     // Same lookup, same rule — matched on data-idx, never on position — and the
     // letters are checked before the r/t/l actions so a rail key can never be
     // shadowed by one of them. Adding a panel whose letter collides with an
-    // action would break the action; p/b/h were free.
-    if (/^[pbh]$/.test(e.key)) {
+    // action would break the action; p/b/h/m were free.
+    if (/^[pbhm]$/.test(e.key)) {
       const target = document.querySelector('#nav a[data-idx="' + e.key + '"]');
       if (target) {
         e.preventDefault();

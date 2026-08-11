@@ -29,6 +29,13 @@ const required = [
   // it renders raw dotted keys on every panel, in every language.
   "bin/webui/i18n/en.json",
   "bin/webui/i18n/id.json",
+  // The mocked runs (v0.46.x): the catalogue module plus the folder it reads.
+  // Both `orc mock-run` and the panel's Mocked Skill Use page are empty without
+  // them, and an empty catalogue looks like a broken feature rather than a
+  // publish that dropped a folder.
+  "bin/mockrun-catalog.js",
+  "mock-run",
+  "mock-run/INDEX.md",
   "templates",
   "templates/skills/orc/SKILL.md",
   "templates/skills/orc/references/ultra-mode.md",

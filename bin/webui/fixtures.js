@@ -614,7 +614,7 @@ module.exports.get = function get(route, q) {
         version: "0.43.2",
         latest: "0.44.0",
         update_available: true,
-        source: "https://raw.githubusercontent.com/azure-id/orc/main/README.md",
+        source: "https://raw.githubusercontent.com/azure-id/orc/main/CHANGELOG.md",
         check_disabled: false,
         fetched: true,
         entries: [
@@ -658,6 +658,16 @@ module.exports.get = function get(route, q) {
       };
     case "/api/learn":
       return { sections: require("../onboarding-content.js").SECTIONS };
+    // The mocked runs are package content, identical on every machine and
+    // needing no project — so fixture mode serves the REAL catalogue. A canned
+    // copy here could only ever be a worse version of a file sitting next to
+    // it, and it would be the one thing on this panel that could go stale.
+    case "/api/mockruns":
+      return require("../mockrun-catalog.js").catalogue();
+    case "/api/mockrun": {
+      const doc = require("../mockrun-catalog.js").get(String((q && q.slug) || ""));
+      return doc ? { ...doc, found: true } : { slug: String((q && q.slug) || ""), found: false };
+    }
     case "/api/fs/list":
       // The folder picker on canned data. It carries the states that are hard
       // to reach on a tidy machine: a plain folder, a git repo WITHOUT a wiki

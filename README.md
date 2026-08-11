@@ -6,37 +6,40 @@
 
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
-![Version](https://img.shields.io/badge/version-0.46.0-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.46.1-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
 ![Dependencies](https://img.shields.io/badge/dependencies-zero-lightgrey.svg?style=for-the-badge)
 ![GitHub stars](https://img.shields.io/github/stars/azure-id/orc?style=for-the-badge&color=yellow)
 
+**Latest: v0.46.1** · updated 2026-08-12 · [full changelog](CHANGELOG.md)
+
 </div>
 
 ---
 
 > [!IMPORTANT]
-> **🚀 `orc-open` is released — ORC for non-Claude agents.**
-> A provider-agnostic port of the ORC pipeline for use outside Claude Code is now
-> available: **[github.com/azure-id/orc-open](https://github.com/azure-id/orc-open)**.
-> If you run a different coding agent (or want ORC's orchestration decoupled from
-> Claude Code), start there. This repository remains the Claude Code–native
-> constellation.
+> **`orc-open` is released — ORC for non-Claude agents.**
+> A provider-agnostic port of the pipeline:
+> **[github.com/azure-id/orc-open](https://github.com/azure-id/orc-open)**. Use it
+> if you run a different coding agent. This repository stays Claude Code–native.
 
 ---
 
-ORC takes a feature — or a requirements document — and drives it through a
-disciplined pipeline: understand intent, analyze docs against your actual code,
-plan, dispatch scored parallel subagents, review, verify, and ship. It keeps
-cost down by matching each task to the cheapest capable model, survives long
-runs by checkpointing to disk, and can build a persistent knowledge base of your
-project that makes every future run smarter.
+## What ORC is
 
-ORC is **not a runtime.** It's a set of markdown **skills**, **slash commands**,
-and **subagent definitions** that Claude Code reads and follows. This
-zero-dependency npm package installs those files into your `.claude/` directory.
+You give ORC a feature — or a requirements document. It works out what you
+meant, plans the work, sends each task to the **cheapest model that can still do
+it**, runs the tasks that do not collide **at the same time**, reviews the
+result, verifies it against a definition of done you signed off, and ships it.
+
+It writes its state to disk as it goes, so a long run survives a pause, a token
+limit, or a brand new chat session.
+
+**ORC is not a program that runs.** It is a set of markdown **skills**, **slash
+commands** and **subagent definitions** that Claude Code reads and follows. This
+zero-dependency npm package copies those files into your `.claude/` folder.
 
 ```text
                     ┌──────────────── you own scope + sign-off ────────────────┐
@@ -44,276 +47,54 @@ zero-dependency npm package installs those files into your `.claude/` directory.
                               (grounded)         (per task)   (cheapest capable model)     (checkpointed to disk)
 ```
 
-## Changelog
+---
 
-**Latest: v0.46.0 — updated 2026-08-10.**
+## 👀 See it run before you run it
 
-### v0.46.0 — a lane that remembers, a lane that declines, and a lane that measures _(2026-08-10)_
+Every lane is written out as a **mocked run**: what you type, what ORC prints
+back, and the files that land on disk. Nothing was executed to make them — they
+exist so you never have to spend tokens to find out what a command does.
 
-**The ecosystem has a thousand skills that GENERATE.** This release builds the
-three things a generator structurally cannot be, plus the wiki work that pays for
-them and the panels that make them visible. Six new lanes, one new agent, and the
-biggest cost cut available to ORC so far.
+### **▶ [Start here: `mock-run/INDEX.md`](mock-run/INDEX.md)**
 
-**`/orc-pact` — the lane that remembers.** `/orc-grill` and `/orc-brainstorm`
-already settle constraints, and a plan already carries them into every executor
-slice. Then the run ends and they evaporate. The pact is a ledger that outlives
-the run, with four states that are **computed on read, never stored**: HOLDING,
-**DRIFTED** (commits since it was verified touched the files it anchors —
-coverage-relative, so a promise about payments does not fall into doubt because
-the README changed), **UNCHECKABLE** (nothing cheap proves it — the honest state,
-and it never counts against you), and BROKEN. It never invents a promise: every
-entry records where it came from. It never retires one for you. And the payoff is
-automatic — at planning time, a drifted promise whose files your plan is about to
-touch is injected into the planner as a constraint, so last month's decision
-constrains this month's work. `PACT.md` is a committed, PM-readable file at your
-project root, rendered by the CLI from the ledger so the two can never disagree.
+Also available without leaving your machine:
 
-**`/orc-boundary` — the lane that declines.** Every skill you can install assumes
-the answer to *"should the agent do this?"* is yes; agents spend 5×–50× longer
-than human experts on a task, and most of the excess goes into attempts that were
-never going to succeed. Three verdicts per area — EXECUTE, ESCALATE, REFUSE — each
-derived from four questions answered from things already on disk: can it verify
-itself, does it know this area, is the change reversible, is this a decision
-rather than a fact. **A REFUSE always names what would make it a yes** — "no" with
-no "unless" is a shrug, so a refusal with no checklist is treated as a malformed
-card. It gates ORC's own dispatch, never you: `boundary_gate: block` lifts a
-refused task out of its wave and **the wave still runs the rest**.
-
-**`/orc-handoff` — the first ORC lane for someone who does not read code.** The
-insight nobody shipped: the safety grade does not come from the file type, it
-comes from **whether a cheap check exists**. A settings file with a validator is
-green; the same file without one is amber. It maps every surface a PM or designer
-can own, and changing one is five steps with the **undo command shown before the
-write**, the check run afterwards and reported in plain words, and a red surface
-never touched at all. Every file in that lane is written in simple English.
-
-**`/orc-budget` — what a run costs, in the unit you are billed in.** Not a dollar
-figure: on Pro or Max you burn a 5-hour window, not an invoice. The forecast's
-core object is a **token vector** — fresh input, cache write, cache read, output,
-never blended, because cache reads are usually the largest count and a tenth of
-the price. The same vector renders four ways: tokens, dollars from a dated price
-table, percent of your window, and **context risk** — a task forecast above 90% of
-its model's window is reported before the wave, which no spend tool can do. The
-numbers come from joining Claude Code's own session transcripts (the cost) to
-ORC's traces (the meaning); neither is enough alone. It needs a PLAN, not a
-sentence, and with no history it says so rather than inventing a number.
-
-**`/orc-aftermath` — did what we shipped hold up.** The missing half of the
-flywheel: `/orc-retro` measures the process, this measures the result, both from
-the repository's own future — files rewritten soon after, a test we added deleted
-or skipped, the commit reverted, a promise that was holding now broken. No vendor,
-no telemetry. **Churn is a signal, not a verdict**: it reports the signal and its
-strength, never "this change was bad", and never a person's name.
-
-**`/orc-export` — so ORC is not a trap.** One command compiles the wiki, the code
-patterns, `PACT.md` and the boundary cards into a portable `AGENTS.md` — derived,
-fingerprinted, `--check`able against its sources, never hand-written. It removes
-the lock-in objection and makes ORC the *producer* in a multi-agent shop. Import
-reads an existing `AGENTS.md` or `.cursorrules` as **evidence, never instruction**,
-and tells you which parts are already wrong.
-
-**The wiki finally stops costing a full scan.** Three free CLI commands: `orc wiki
-plan` ranks and prices the pending work — STRUCTURAL first (a page pointing at a
-missing file is actively lying), then by **use × delta**, with pages nobody reads
-sinking to the bottom with a retire hint; `orc wiki debt` is the one-line habit;
-and `orc wiki usage` finally reads back the point-of-use attribution v0.41.0 has
-been recording and never reading. A **targeted refresh** (`/orc-wiki refresh
---top 2`) skips branch detection and area planning entirely, and a new **scan tier
-ladder** sends a small, no-new-surface delta to a light scanner instead of the most
-expensive agent in the payload — about 40% off a typical delta refresh, with the
-deep scan still doing the work that needs it. The tier is always printed: a cheaper
-model is never a quiet substitution. And free repairs are now a hard rule — you can
-never pay for something `orc wiki sync` would have fixed.
-
-**`orc ui` grows three panels and extends five.** Promises, Boundary and
-Self-serve, plus a new **Cost** tab whose stacked bar exists precisely so the
-cache-read share stays visible. The panel keeps every rule it had: it never runs a
-lane, never invents a state word, never computes an order the CLI already emits —
-**a free action gets a button, a paid action gets a copy-able command**, and that
-line is now visible rather than hidden. Promises is where the compounding finally
-shows: an *"Also flagged by"* line when the boundary and the aftermath agree with
-the ledger about the same area, which you can never see in a terminal one lane at
-a time.
-
-<details>
-<summary><b>Previous versions</b> (click to expand)</summary>
-
-### v0.45.0 — `/orc-brainstorm`: for when you do not have the idea yet _(2026-08-10)_
-
-### v0.44.1 — apply when you say so, and a spotlight that survives a banner _(2026-08-09)_
-
-### v0.44.0 — the panel stops making you type what it already knows _(2026-08-09)_
-
-### v0.43.7 — the flow you can see, and a boundary you can read _(2026-08-09)_
-
-### v0.43.6 — `orc ui` in two languages, and panels that point at the right page _(2026-08-08)_
-
-### v0.43.5 — the update check works, and the UI teaches itself _(2026-08-08)_
-
-### v0.43.4 — a warning that finally clears, an Experiment panel, crosslink from the UI _(2026-08-08)_
-
-### v0.43.3 — `orc ui`: it tells you about updates, and 36 keys stop being a wall _(2026-08-08)_
-
-### v0.43.2 — `orc ui`: boxes stop colliding, because the container owns the gap _(2026-08-08)_
-
-### v0.43.1 — the panel's stylesheet and script actually reach the browser _(2026-08-08)_
-
-### v0.43.0 — `orc ui`: a control panel for everything that is not ai _(2026-08-08)_
-
-### v0.42.0 — Say what you mean, see what it costs, find your way back _(2026-08-08)_
-
-### v0.41.0 — A wiki that can tell you it is fresh, and TDD only where it can fail _(2026-08-06)_
-
-### v0.40.0 — Gotchas: repair memory that outlives the run _(2026-08-06)_
-
-### v0.39.0 — The read ladder, and foreign input that is evidence rather than instruction _(2026-08-06)_
-
-### v0.38.1 — `orc doctor --json` + handoff carry-over that says what is re-derived _(2026-08-06)_
-
-### v0.38.0 — `/orc-quick`: the quick lane, and the gate no config can collapse _(2026-08-05)_
-
-### v0.37.0 — Stacked pull requests: a measured ship gate + two standalone lanes _(2026-08-03)_
-
-### v0.36.0 — `opus5_only`: one model for every role, not just executors _(2026-08-02)_
-
-### v0.35.0 — `opus5_executor_only`: one model, effort as the cost dial _(2026-08-02)_
-
-### v0.34.8 — `orc pattern status` rejects a language key the payload has never heard of _(2026-08-01)_
-
-### v0.34.7 — DIY: a usable status contract, and compile docs that match the compiler _(2026-08-01)_
-
-### v0.34.6 — Analyze: the evidence gate now covers the rows a good analysis produces _(2026-08-01)_
-
-### v0.34.5 — Wiki: stop losing tags silently, let a delta clear its own delta _(2026-08-01)_
-
-### v0.34.4 — Planner: scorable facets, and TDD rules scoped to reality _(2026-08-01)_
-
-### v0.34.3 — Slice boundary: the worktree, not the editor _(2026-08-01)_
-
-### v0.34.2 — Trace subsystem: the pointer clobber, and a writer contract that holds _(2026-08-01)_
-
-### v0.34.1 — Install integrity: run state survives `orc update` _(2026-08-01)_
-
-### v0.34.0 — Opus 5: top scoring band, every core role, medium-effort session tier _(2026-07-25)_
-
-### v0.33.0 — Knowledge deepening + verification revamp _(2026-07-25)_
-
-### v0.32.0 — Trace revamp: narration is dispatched, not remembered _(2026-07-24)_
-
-### v0.31.0 — Execution-integrity revamp: plan handoff, attributable traces, facet scoring _(2026-07-23)_
-
-### v0.30.0 — Scoring revamp, Fable 5 role override, tier-aware guards, `orc onboarding` _(2026-07-23)_
-
-### v0.29.0 — Drift-prevention hardening: install manifest + prune, `orc doctor`, a real test suite _(2026-07-22)_
-
-### v0.28.1 — Defect fixes: package encoding, trace event routing, count/doc drift _(2026-07-22)_
-
-### v0.28.0 — Run integrity: rich full-lane traces, deterministic wave stop, visible knowledge gates _(2026-07-21)_
-
-### v0.27.0 — `/orc-poly`: plan one change across two-or-more repos without drift _(2026-07-20)_
-
-### v0.26.0 — Test-gen output pinned to a visible `test-generator/<change-slug>/` deliverable _(2026-07-19)_
-
-### v0.25.1 — Eval report: the full 17-lane suite graded against the v0.25.0 payload _(2026-07-18)_
-### v0.25.0 — Deterministic artifact detection: a generated wiki/pattern is never missed _(2026-07-18)_
-### v0.24.0 — Crosslink fused into wiki generation: always-on, per-scan-task, never wiped _(2026-07-18)_
-### v0.23.0 — Trace fix: SPAWN restored on the `Agent` tool, stale runs rotate to fresh files _(2026-07-18)_
-
-### v0.22.0 — `/orc-learn`: per-feature onboarding docs — learning.md + knowledge.md, wiki-deep, git-ignored _(2026-07-17)_
-
-### v0.21.0 — Statusline shows live subscription usage: 5h ↔ weekly, official numbers _(2026-07-16)_
-
-### v0.20.0 — One source of truth: generated executor agents + shared cross-lane contracts _(2026-07-16)_
-
-### v0.19.0 — Thin spines: skill compaction, budget lint, and a trace that logs every phase _(2026-07-16)_
-
-### v0.18.0 — `orc wiki sync`: the wiki registers itself — a paused scan is no longer an invisible wiki _(2026-07-15)_
-
-### v0.17.3 — Trace the wiki consult: Phase 1 now logs whether the run grounded in the wiki (and if it was stale) _(2026-07-14)_
-### v0.17.2 — Behavior-trace logging is permanent + the trace folder is now created deterministically _(2026-07-14)_
-### v0.17.1 — Complete cross-repo crosslink setup guide in the orc-wiki README _(2026-07-14)_
-### v0.17.0 — `orc crosslink`: cross-repo wiki references — advisory boundary contracts _(2026-07-14)_
-### v0.16.1 — Interactive `orc diy` composer + numbered picks in `orc config` _(2026-07-14)_
-### v0.16.0 — `/orc-diy`: build your own lane — CLI-composed flow, compiled, hard-gated _(2026-07-14)_
-### v0.15.0 — Wiki v2: evidence-anchored docs · per-file staleness registry · integrity gate _(2026-07-14)_
-### v0.14.0 — Postgres data-access playbook: cross-cutting query grounding _(2026-07-13)_
-### v0.13.0 — `/orc-claude`: local CLAUDE.md builder — fenced sections, fingerprint refresh, zero questions _(2026-07-12)_
-
-### v0.12.0 — Lossless context-combiner: conservation gate · overlap taxonomy · evidence freshness _(2026-07-12)_
-### v0.11.0 — `/orc-fast`: knowledge-gated speed lane + wiki freshness infrastructure _(2026-07-12)_
-### v0.10.1 — README: a fuller "Why ORC exists" _(2026-07-12)_
-### v0.10.0 — `/orc-ultra`: max-effort advisor + three judgment gates for ultra-complex work _(2026-07-12)_
-### v0.9.0 — Trust-but-verify the analyst→planner chain: quote-anchored evidence · coverage gate · anchored judgment _(2026-07-12)_
-### v0.8.1 — /orc-retro delivers upstream: PR/issue to the ORC repo, channel-gated _(2026-07-12)_
-### v0.8.0 — Close the loop: grounded intake · scoring anchors · OUTCOME marker · /orc-retro trace miner · eval harness _(2026-07-12)_
-### v0.7.0 — Evidence everywhere: grounded plans · verbatim proof · anchored findings · contract lint · trace fixes _(2026-07-12)_
-### v0.6.0 — P0–P3 ladder · house rules · deep playbooks + wired gates · 3 new languages · FE rule packs · security pass _(2026-07-11)_
-### v0.5.1 — Statusline false-degrade fix _(2026-07-11)_
-### v0.5.0 — Code-pattern findings: executors match your house style, invariants always enforced
-### v0.4.5 — Rewrite weak worker descriptions (the real score lever)
-### v0.4.4 — Act on external review: raise sub-70 workers, fix cross-spine paths
-### v0.4.3 — `orc-analyze`: trim description under the 1024-char skill-spec limit
-### v0.4.2 — External-review pass: worked examples + sharper mini-analyst activation
-### v0.4.1 — `orc-mini`: faster, safer fast-lane — smoke gate, opt-in tests, trimmed ceremony
-### v0.4.0 — Opt-in Phase 6.5 Test Authoring (writes test cases, never runs them)
-### v0.3.0 — Opt-in behavior-trace logging + claimed-vs-actual model verification
-### v0.2.4 — `orc-analyze`: gather anchored adjacent-scope context (non-actionable)
-### v0.2.3 — Context Combiner: merge 2+ related analyses into one combined spec
-### v0.2.2 — Config: enforce per-key override-first resolution
-### v0.2.1 — Move config editing into the `orc config` CLI (zero-token); drop `/orc-config`
-### v0.2.0 — Doc-optional evidence-backed analyst + deep mode
-
-</details>
-
-## Contents
-
-- [Changelog](#changelog)
-- [Why ORC exists](#why-orc-exists)
-- [Quick start](#quick-start)
-- [Commands](#commands)
-- [`orc ui` — the control panel](#orc-ui--the-control-panel)
-- [Eval status](#eval-status)
-- [How model selection works](#how-model-selection-works-and-how-to-verify-it)
-- [The tier guard](#the-tier-guard-installed-automatically)
-- [Configuration](#configuration-orc-config)
-- [What's inside the package](#whats-inside-the-package)
-- [In-depth guides](#in-depth-guides)
-- [Design principles](#design-principles)
-- [Requirements](#requirements)
+```bash
+orc mock-run list           # every walkthrough, in reading order
+orc mock-run show orc-pact  # read one
+orc ui                      # ▸ Mocked Skill Use  — the same docs, searchable
+```
 
 ---
 
-## Why ORC exists
+## Why it works this way
 
-Hand a real feature to a single agent and it fails the same ways every time: it
-picks one reading of your requirements silently, runs the top model on
-everything, forgets decisions when context compacts, says "done" against a
-definition of done nobody wrote, cites code that doesn't exist, and leaves
-nothing to inspect. These are **process problems** — the ones teams solved with
-roles, reviews, and written agreements. ORC encodes that discipline as skills:
+A single agent handed a real feature fails the same ways every time: it silently
+picks one reading of your request, runs the most expensive model on everything,
+forgets decisions when the context compacts, says "done" against a definition
+nobody wrote, cites code that does not exist, and leaves nothing to inspect.
 
-- **Coordination and labor are separate jobs.** The orchestrator never
-  implements — even a one-line change goes to a spawned subagent — keeping its
+Those are **process problems** — the ones teams solved with roles, reviews and
+written agreements. ORC writes that discipline down as skills:
+
+- **Coordinating and doing are different jobs.** The orchestrator never
+  implements. Even a one-line change goes to a subagent, which keeps its own
   context lean for the whole run.
 - **Every task is scored, and the score picks the model.** You see the table
-  before anything dispatches; named, model-pinned agents make what ran
-  verifiable, not a prose request.
-- **"Done" is written before work starts.** Intake produces a signed-off
-  intent-spec whose definition-of-done becomes the end verification; with
-  documents, the analyst grounds every requirement in real code first.
-- **Nothing is trusted, everything is attested.** `file:line` quotes, grounding
-  attestations, verbatim build output, anchored findings — the orchestrator
-  spot-checks each on return, so a hallucinated citation bounces instead of
-  riding into a slice.
-- **Disk is the source of truth.** Eager checkpoints make every pause — planned,
-  token-limit, or crash — a clean resume, even in a fresh session.
-- **Rigor is a dial.** The same spine runs as `orc-mini` (one subagent), `/orc`
-  (real features), and `/orc-ultra` (max-effort advisor + judgment gates) when a
-  miss is expensive.
-- **The system learns.** Code patterns make executors match your house style,
-  the optional wiki sharpens every future plan, and behavior traces feed
-  `/orc-retro`, which recalibrates scoring from real runs.
+  before anything starts, and the agents are named and model-pinned, so what ran
+  is a fact you can check.
+- **"Done" is written before the work starts.** Intake produces a signed-off
+  spec whose definition of done becomes the final verification.
+- **Nothing is trusted, everything is attested.** `file:line` quotes, verbatim
+  build output, anchored findings — and the orchestrator spot-checks them, so a
+  made-up citation bounces instead of riding into a task.
+- **Disk beats memory.** Eager checkpoints turn every pause into a clean resume,
+  including in a fresh session.
+- **Rigor is a dial.** The same spine runs as `/orc-mini` (one subagent), `/orc`
+  (real features), and `/orc-ultra` (advisor plus judgment gates).
+- **It learns.** Code patterns make executors write like your codebase, the wiki
+  sharpens every future plan, and traces feed `/orc-retro`, which recalibrates
+  the scoring from real runs.
 
 ---
 
@@ -323,335 +104,154 @@ roles, reviews, and written agreements. ORC encodes that discipline as skills:
 npm i -g orc
 # or straight from GitHub — no registry needed
 npm i -g github:azure-id/orc
-
-# or if installing is causing pain, try this:
+# or, if the install fights you:
 npm i -g https://github.com/azure-id/orc/archive/refs/heads/main.tar.gz
 ```
 
 Then, inside a project:
 
 ```bash
-orc init            # install into ./.claude          (this project)
-orc init --global   # install into ~/.claude          (all projects)
-orc update          # re-copy this package's files (offline; local only)
-orc upgrade         # fetch the LATEST package, then apply it (pulls a new version)
-orc config          # view/change settings (interactive; zero model tokens)
-orc config recommend   # read your repo, suggest ONE settings profile, with reasons
-orc config profile <n> # apply it (solo-fast | balanced | paranoid | token-lean)
-orc resume          # runs waiting for you → pick one, get the paste-in prompt (+clipboard)
-orc run list        # every run, newest first: waiting | done | empty  (--json, --all)
-orc run show <slug> # one run: state-of-play, resume prompt, checkpoint
-orc stats           # how much you actually use each lane and agent (no model, free)
-orc ui              # local web control panel for everything that is NOT ai
-                    #   (settings, health, runs, knowledge, stats, mock examples)
-                    #   --fixtures  canned data, no project needed
-                    #   --stop      shut this project's server down
-orc mock list       # mocked runnable examples a green verify left behind (read-only)
-orc wiki            # wiki registration state (registered / UNREGISTERED / out of sync)
-orc wiki sync       # rebuild the wiki index + manifest from the docs (instant, no re-scan)
-orc pattern status  # deterministic "does a cached code-pattern exist" probe (exit 1 when absent)
-orc pr stack template  # fill-in stacked-PR plan skeleton → stacked-pr/<slug>/stack-plan.md
-orc pr stack status    # is a stack plan READY? (exit 0 ready / 1 absent-or-unfilled)
-orc version         # print installed version + check for a newer one
-orc where           # print the target paths
-orc --help
+orc init            # install into ./.claude   (this project)
+orc init --global   # install into ~/.claude   (all projects)
+orc onboarding      # the whole walkthrough in the terminal — no GitHub needed
+orc config          # view or change settings (zero model tokens)
+orc ui              # the local control panel
+orc --help          # every command
 ```
 
-> **"ORC can't see my wiki" / `orc crosslink` says there's no wiki-meta.json?**
-> Run **`orc wiki sync`**, not a re-scan. Docs without a manifest are
-> *UNREGISTERED*, not missing — common when a scan stopped at one of `/orc-wiki`'s
-> 5-area pauses. Sync rebuilds the index from the docs you already have, for free.
-
-`orc init` installs three things into `.claude/`: **skills/**, **commands/**, and
-**agents/**. After installing:
+After installing:
 
 1. Paste your team's PR template into `skills/orc/subskills/orc-pr/pr.md`.
 2. Add `.claude/orc/run/` to your project `.gitignore`.
-3. **Run `/agents`** to confirm the agent model IDs your Claude Code accepts.
-4. **Run your main Claude Code session on Opus 5** — a subagent's model can't
-   exceed the main session's tier, and as of v0.34.0 every core role agent
-   (analyst, planner, reviewer, verifier, test author, combiner, ultra
-   advisor/judge) plus the top executor band is pinned to `claude-opus-5`. On an
-   Opus 4.8 session they all quietly run at 4.8; on Sonnet, at Sonnet (see
-   `agents/MODEL-MAPPING.md`).
-5. If a `/command` doesn't appear, your Claude Code may read commands from a
+3. Run **`/agents`** to confirm your Claude Code accepts the agent model ids.
+4. **Run your main session on Opus 5.** A subagent can never use a better model
+   than your session. This is the most common cause of "it used the wrong
+   model" — see [model selection](guides/model-selection.md).
+5. If a `/command` does not appear, your Claude Code may read commands from a
    different folder — move the files in `commands/` there.
 
 <details>
-<summary><b>Staying up to date & upgrading</b></summary>
+<summary><b>Staying up to date</b></summary>
 
 <br>
 
-`orc version` prints what you have and checks the source for a newer release:
-
-```text
-$ orc version
-orc 0.4.1
-⬆  newer version available: 0.5.0 — run `orc upgrade`
-```
-
-Normal commands (`orc init`, `orc update`, …) also show a one-line nudge when a
-newer version exists. The check hits the source's `package.json` over HTTPS, is
-**cached for 24h** (so it never slows you down), and is **fail-silent** offline.
-Opt out entirely with `ORC_NO_UPDATE_CHECK=1`.
-
-**You don't even have to run a command.** The same nudge surfaces *inside Claude
-Code* through ORC's hooks — with **zero model tokens**, since hooks are scripts
-Claude Code runs, not model turns:
-
-- When you invoke **`/orc`**, the `PreToolUse` guard checks the cache and shows a
-  `systemMessage` — displayed to you, not added to the model's context.
-- The **statusline** appends a `⬆ orc X` hint whenever a newer version is known
-  (read straight from the cache — no network on that path).
-
-`orc update` only re-copies whatever is **already installed** — it never reaches
-the network. To actually move to the latest, use **`orc upgrade`**, which
-refreshes the package from the source first and then applies it:
+`orc update` re-copies the files already in this package. It never uses the
+network. **`orc upgrade` is the one that pulls a new version**: it fetches the
+newest package first, then applies it. Your `.claude/orc.config.yaml` survives
+both.
 
 ```bash
-orc upgrade                  # ./.claude   — fetch latest, then update this project
-orc upgrade --global         # ~/.claude   — fetch latest, then update all projects
-orc upgrade --from github:azure-id/orc   # pull from a fork or any npm spec
+orc version                  # what you have, and whether something newer exists
+orc changelog                # what you would GET by upgrading
+orc upgrade                  # fetch the latest, then update this project
+orc upgrade --global         # the same for ~/.claude
+orc upgrade --from github:azure-id/orc   # a fork, or any npm spec
 ```
 
-If the GitHub spec fails to install (common under **NVM**), `orc upgrade`
-automatically retries with a plain tarball of the default branch — no action
-needed. Either way, your `.claude/orc.config.yaml` overrides are left untouched.
+The update check reads the source over HTTPS, is cached for 24 hours, and fails
+silently when you are offline. Turn it off with `ORC_NO_UPDATE_CHECK=1`.
+
+You do not have to run a command to hear about it: the same notice appears
+inside Claude Code through ORC's hooks, at **zero model tokens** — hooks are
+scripts Claude Code runs, not model turns.
+
+If the GitHub spec fails to install (common under **NVM**), `orc upgrade` retries
+with a plain tarball by itself.
 
 </details>
 
+> **"ORC cannot see my wiki"?** Run **`orc wiki sync`**, not a new scan. Docs
+> without a manifest are *unregistered*, not missing — common when a scan stopped
+> at one of `/orc-wiki`'s pauses. Sync rebuilds the index from the docs you
+> already have, for free.
+
 ---
 
-## Commands
+## The lanes
 
 > [!TIP]
-> Multi-step flows chain naturally:
-> **`/orc-analyze` → `/orc-plan` → `/orc`** — analyze a doc into a grounded spec,
-> shape it into a task plan, then build it through the full pipeline.
+> They chain naturally: **`/orc-brainstorm` → `/orc-grill` → `/orc-analyze` →
+> `/orc-plan` → `/orc-route` → `/orc`**. You can start anywhere.
 
-| Command | What it does |
-|---------|--------------|
-| **`/orc`** | The full orchestrator: intake → planning → per-task scoring → conflict-free parallel waves → review → verify → ship. Checkpoints eagerly; resumes in a fresh session at any pause. |
-| **`/orc-ultra`** | Maximum-rigor lane: the full pipeline plus an Opus 5 **xhigh** advisor (brief + rubric + one clarification round) and three judgment gates (after analysis, planning, and verify). Deep analyze, pattern/testgen/security forced on, executor tier floor. Costly by design. |
-| **`/orc-quick`** | **The quick lane — for almost anything.** Three steps per request: look (silent) → ask once → do. A small fix, a fast context dig, a defect hunt, a dependency bump, or PR review comments all run the same way. **Always asks which agent to dispatch** — no config can override that. Saves every request as a numbered entry in `orc-quick/<slug>/quick-context.md`. See below. |
-| **`/orc-brainstorm`** | **For when you do not have the idea yet.** A problem, a goal, or a hunch — code or not. It generates candidates against named thinking lenses (SCAMPER, inversion, Six Thinking Hats, analogy, constraint-flip, first principles, what this repo already tried), with **no criticism while generating**; clusters them into 3–5 directions with the bet each makes and what it kills; stress-tests each with a pre-mortem plus the honest worst *and* best case; then recommends one and **waits — it never picks for you**. Every menu ends with your own slot. It stops and asks before writing anything; saved to `orc/brainstorming-session/<slug>/brainstorm-session.md`, whose centre section is *the pick — and why the others lost*. Can borrow `/orc-grill` mid-run and come back. |
-| **`/orc-grill`** | **For when you have one idea but it is still vague.** One vague sentence is a complete input. Asks rounds of questions (every question that is *ready*, together — never two where one depends on the other), looks facts up itself instead of making you recite your codebase, and never answers its own question. Ends when *you* say the idea matches what you meant. Then: save it to `orc-grill/<slug>/grill-context.md`, carry it into `/orc-analyze`, or drop it. No scan, no plan, no code. |
-| **`/orc-route`** | **You have a plan — which lane should build it?** Reads the plan's own numbers (tasks, waves, files, top score, risk) plus ORC's deterministic probes, then names one lane, the runners-up with what each *costs* you, and any lane that is impossible with the condition blocking it and its fix. **Plan-only**: given a request in words it refuses and says why, because routing from a sentence is guessing. `/orc-plan` offers it automatically after "Save & stop". |
-| **`/orc-explain`** | **"Wait, what?"** Type it after a message that did not land. ORC says it again: the point first, then the background it assumed, then every ORC-only term (band, facet, disposition, wave, slice, freshness tier) defined in your project's own words. Not "be shorter" — a summary of something you did not understand is the same thing you did not understand. |
-| **`/orc-pact`** | **The promises your project makes, and which ones are in doubt right now.** Harvests the constraints `/orc-grill` and `/orc-brainstorm` already settled (and a plan's `spec_invariants[]`), re-checks the ones the code moved under, and asks you one at a time whether each still stands. Four states, all **computed on read**: HOLDING · **DRIFTED** (commits since it was verified touched the files it anchors — coverage-relative) · **UNCHECKABLE** (nothing cheap proves it; the honest state, never a failure) · BROKEN. Never invents a promise, never retires one for you. Writes a committed, PM-readable `PACT.md`. Inside `/orc` it injects a drifted promise into the planner as a constraint. |
-| **`/orc-boundary`** | **What ORC should not try here, and exactly what would change that.** Three verdicts per area — EXECUTE · ESCALATE · REFUSE — derived from four questions answered from disk: can it verify itself, does it know this area, is it reversible, is it a decision rather than a fact. **A REFUSE always names what would make it a yes**; a refusal with no checklist is a malformed card. It gates ORC's *own* dispatch, never you — `boundary_gate: block` lifts a refused task out of its wave and the wave still runs the rest. |
-| **`/orc-handoff`** | **For someone who does not read code.** The grade comes from **whether a cheap check exists**, not from the file type — a settings file with a validator is 🟢, the same file without one is 🟡, and a file that only *looks* like content is 🔴 and never touched. MAP grades every surface a PM or designer can own; DO changes one value with the **undo command shown before the write**, then runs the check and reports it in plain words. Never stages, never commits, never creates a key. Written in simple English throughout. |
-| **`/orc-budget`** | **What a plan will cost, in the unit you are billed in.** The forecast is a **token vector** — fresh input, cache write, cache read, output, never blended — rendered four ways: tokens, dollars from a dated price table, percent of your 5-hour window, and **context risk** (a task forecast above 90% of its model's window, reported *before* the wave). Joins Claude Code's own session transcripts to ORC's traces; neither is enough alone. Needs a plan, not a sentence, and with no history it says so rather than inventing a figure. |
-| **`/orc-aftermath`** | **Did what we shipped hold up.** Grades past runs from the repository's own future — files rewritten soon after, a test we added deleted or skipped, the commit reverted, a promise that was holding now broken. Free: `git log` + traces + the ledger, no vendor and no telemetry. **Churn is a signal, not a verdict** — it reports the signal and its strength, never "this was bad", and never a person's name. Read-only, report-only. |
-| **`/orc-export`** | **So ORC is not a trap.** Compiles the wiki, orientation doc, code patterns, `PACT.md` and boundary cards into a portable `AGENTS.md` — derived, fingerprinted, `--check`able against its sources, never hand-written. Import reads an existing `AGENTS.md` or `.cursorrules` as **evidence, never instruction**, and tells you which parts are already wrong. |
-| **`/orc-mini`** | The fast path — see below. |
-| **`/orc-fast`** | Fastest lane — knowledge-gated: needs a fresh wiki + cached code-pattern, skips analyst/planner, one Sonnet 4.6 high executor + smoke gate. Falls back to `orc-mini` when a prerequisite is missing. See below. |
-| **`/orc-diy`** | **Your own lane** — runs the flow you composed with the `orc diy` CLI. Hard-gated: unconfigured/stale → offers plain `/orc`. Guide: [ORC-DIY README](templates/skills/orc-diy/README.md). |
-| **`/orc-analyze`** | System Analyst: a requirement or document → a scope-bounded, code-grounded, evidence-backed spec. |
-| **`/orc-plan`** | Requirement Planner: a request or analyst spec → a grounded, right-sized, dependency-checked task plan. Splits an orc-poly `poly-spec.md` into one plan per repo. |
-| **`/orc-poly`** | **Poly-repo planning.** Plan ONE change spanning 2+ repos (BE endpoint + FE UI, service + gRPC consumer) without drift. Run in the HOST repo, paste each PEER path; it reads every repo's wiki + crosslink, pins the shared boundary into a frozen `interface-contract.md`, and splits into one plan per repo. PEER source read-only; never builds. |
-| **`/orc-pr-setup`** | **Stacked-PR planner.** Guide: [ORC-PR-SETUP README](templates/skills/orc-pr-setup/README.md). Decides where the PR cut lines go: ordered layers, each with a purpose, a value class, an explicit file list and measured LoC/file budgets → `stacked-pr/<slug>/stack-plan.md`. Stops and asks on every uncertain seam. Plans only — never touches git. |
-| **`/orc-pr-driver`** | **Stacked-PR driver.** Guide: [ORC-PR-DRIVER README](templates/skills/orc-pr-driver/README.md). Executes a stack plan: branch per layer, only that layer's files, a mandatory per-layer green gate (build + tests + lint at *that layer's own base* + the repo's hooks, never `--no-verify`), `gh stack submit`, then sync/rebase/bottom-up merge. Start here with a hand-filled plan (`orc pr stack template`). |
-| **`/orc-verify`** | Standalone verification of git-modified changes (build + tests + diff sanity). Read-only. |
-| **`/orc-wiki`** | Builds a persistent knowledge base into `wiki/` and points `CLAUDE.md` at it. Expensive, opt-in. Powers **cross-repo crosslink** — guide: [ORC-WIKI README](templates/skills/orc-wiki/README.md). |
-| **`/orc-pattern`** | Learns and caches your real code conventions per language so executors match your house style. Reconciles a generic playbook (9 languages) against your files — conventions defer to your codebase; security/correctness invariants always carry through. `--refresh` to relearn. |
-| **`/orc-claude`** | Builds/refreshes the **local repo's** `CLAUDE.md` from verified facts — fenced, version-stamped sections, fingerprint-scoped refresh. Zero questions; user content never trimmed, wiki block byte-preserved. |
-| **`/orc-learn`** | Per-feature **onboarding docs** for humans — `learning-docs/<feature>/learning.md` (mental model, walkthrough, recipes, FAQ) + `knowledge.md` (`file:line`-anchored). Local, git-ignored; `refresh` regenerates only what you pick. |
-| **`/orc-retro`** | Mines behavior traces into an AI-readable calibration report (per-band outcomes, downgrades, pipeline leaks) and files it to the ORC repo (`retro_repo`) as a PR (issue fallback). Hard-gates on an authed gh CLI or GitHub MCP. |
+### Build something
 
-### `/orc` — the full orchestrator
+| Command | What it does | Mocked run |
+|---|---|---|
+| **`/orc`** | The full pipeline: intake → plan → scored parallel waves → review → verify → ship. Checkpoints eagerly; resumes in a fresh session. | [see it](mock-run/orc.md) |
+| **`/orc-ultra`** | The same, plus an Opus 5 **xhigh** advisor and three judgment gates. Deep analysis, patterns, tests and security forced on. Costly by design. | [see it](mock-run/orc-ultra.md) |
+| **`/orc-mini`** | One Sonnet 5 executor, a build + test smoke gate, ship. Skips full review and verify. Switches to the full flow mid-run on request. | [see it](templates/skills/orc-mini/examples/mini-run-mock.md) |
+| **`/orc-fast`** | The fastest lane. Needs a fresh wiki **and** a cached code pattern; then it skips the analyst and planner entirely. A missing prerequisite falls back to `/orc-mini` — the chat never stops. | [see it](mock-run/orc-fast.md) |
+| **`/orc-quick`** | Ask for anything: a fix, a question, a defect hunt, a dependency bump, PR comments. Look → ask once → do. **It always asks which agent to dispatch**, and no setting can change that. | [see it](mock-run/orc-quick.md) |
+| **`/orc-diy`** | Your own lane, composed in the terminal with `orc diy` and compiled. Unconfigured or stale → it refuses and offers plain `/orc`. | [see it](mock-run/orc-diy.md) |
 
-Feature or spec → shipped code: intake (signed-off intent-spec) → planning →
-per-task scoring → conflict-free parallel waves → review → verify → ship.
-Checkpoints eagerly; resumes in a fresh session at any pause. Also accepts a
-**handed-off plan** (pasted planning-output or a saved plan file) — it re-grounds
-and re-scores the plan in the executing session before building.
+### Work out what to build
 
-- **Every executor slice carries a house-rules card** (surgical, simplicity-first,
-  no scope creep) plus the intent-spec's constraints and — when a code-pattern is
-  resolved — your conventions, blocking invariants, and the playbook's
-  **validation gate** (checked only when your own tooling can verify it).
-- **Review + verify findings land on a P0–P3 ladder:** P0 (broken
-  build/tests/invariants) auto-fixed once · P1 (correctness/security) gates ship,
-  asks first · P2 optional fix-batch · P3 counted. Frontend work also gets capped
-  a11y/perf rule packs.
-- **Two opt-in phases:** a **security pass** (`security_review`, fires only when a
-  task scored ≥ 70) sweeping changed files against a 12-item OWASP/STRIDE
-  checklist, and **test authoring** (`generate_tests`) that writes test cases +
-  `TEST-PLAN.md` + a curl bundle but never runs them.
+| Command | What it does | Mocked run |
+|---|---|---|
+| **`/orc-brainstorm`** | You do not have the idea yet. It generates candidates against named thinking lenses with **no criticism while generating**, clusters them into a few real directions, stress-tests each, then recommends one and **waits — it never picks for you**. Every menu ends with your own slot. | [see it](mock-run/orc-brainstorm.md) |
+| **`/orc-grill`** | You have one idea and it is still vague. It asks rounds of questions, **looks facts up itself** instead of making you recite your own codebase, and never answers its own question. Ends when *you* say the idea matches what you meant. | [see it](mock-run/orc-grill.md) |
+| **`/orc-analyze`** | A document or a request → a scope-bounded, code-grounded spec. Every claim carries `file:line` evidence or becomes a question. Deep mode adds parallel scouts. | [see it](templates/skills/orc-analyze/examples/analyze-mock.md) |
+| **`/orc-plan`** | A request or a spec → a real task plan: grounded files, dependencies, facets, and a test disposition per task. | [see it](mock-run/orc-plan.md) |
+| **`/orc-route`** | You have a plan — which lane should build it? It names one lane, the runners-up with what each costs you, and any lane that is impossible with the condition blocking it. **It refuses to route a sentence**, because that would be guessing. | [see it](mock-run/orc-route.md) |
+| **`/orc-explain`** | "Wait, what?" It says the last message again: the point first, then the background it assumed, then every ORC-only word defined in your project's terms. | [see it](mock-run/orc-explain.md) |
+| **`/orc-poly`** | One change across two or more repos, without drift. Peer source is read-only; it freezes the shared boundary into a contract and writes one plan per repo. It never builds. | [see it](templates/skills/orc-poly/examples/poly-run-mock.md) |
 
-### `/orc-mini` — the fast path
+### Teach ORC your project
 
-```text
-intake (Q1–Q4, soft sign-off) ─▶ plan ─▶ ONE Sonnet-5-high subagent
-   ─▶ build + test smoke gate (red blocks ship) ─▶ opt-in "write test cases?" ─▶ ship
-```
+| Command | What it does | Mocked run |
+|---|---|---|
+| **`/orc-wiki`** | Scans your codebase into a persistent `wiki/`, evidence-anchored, and points `CLAUDE.md` at it. Freshness is computed on read, never stored. Expensive and opt-in — it always warns first. | [see it](templates/skills/orc-wiki/examples/wiki-run-mock.md) |
+| **`/orc-pattern`** | Learns your real conventions per language, so executors write code that matches your codebase. Your conventions win; security and correctness invariants always carry through. | [see it](mock-run/orc-pattern.md) |
+| **`/orc-learn`** | Onboarding docs for a human, one feature at a time, `file:line`-anchored. Local and git-ignored. | [see it](templates/skills/orc-learn/examples/learn-run-mock.md) |
+| **`/orc-claude`** | Builds or refreshes this repo's `CLAUDE.md` from verified facts. Zero questions; your own content is never trimmed. | [see it](templates/skills/orc-claude/examples/claude-run-mock.md) |
+| **`/orc-export`** | Compiles the wiki, patterns, `PACT.md` and boundary cards into a portable `AGENTS.md` — derived, fingerprinted, `--check`able. So ORC is not a trap. | [see it](mock-run/orc-export.md) |
 
-Same spine as `/orc`, leaner: lighter intake, a one-line complexity read (no
-scoring table), and one Sonnet-tier subagent (no parallel waves). It skips the
-full review/verify/summary passes but still runs a **build + test smoke gate**
-(a red build blocks the ship, auto-fixed once), **offers opt-in test authoring**,
-and **switches to the full flow mid-run** on request (shared run folder +
-checkpoint, so nothing is lost).
+### Check what happened
 
-### `/orc-fast` — the fastest lane (knowledge-gated)
+| Command | What it does | Mocked run |
+|---|---|---|
+| **`/orc-pact`** | The promises your project makes, and which are in doubt right now. Four states, all **computed on read**: HOLDING · DRIFTED · **UNCHECKABLE** (the honest state — never a failure) · BROKEN. It never invents a promise and never retires one for you. | [see it](mock-run/orc-pact.md) |
+| **`/orc-boundary`** | What ORC should **not** try here, and exactly what would change that. EXECUTE · ESCALATE · REFUSE, per area. **A REFUSE always names what would make it a yes.** It gates ORC's own dispatch, never your instructions. | [see it](mock-run/orc-boundary.md) |
+| **`/orc-verify`** | Verifies only your git-modified changes: build, tests, diff sanity, findings on a P0–P3 ladder. Read-only. | [see it](templates/skills/orc-verify/examples/verify-mock.md) |
+| **`/orc-aftermath`** | Did what we shipped hold up? Graded from the repository's own future: churn, reverts, deleted tests, broken promises. **Churn is a signal, never a verdict**, and it never names a person. | [see it](mock-run/orc-aftermath.md) |
+| **`/orc-budget`** | What a run costs, in the unit you are billed in. A **token vector** — fresh input, cache write, cache read, output, never blended — shown four ways: tokens, dollars, percent of your 5-hour window, and context risk. Needs a plan, not a sentence. | [see it](mock-run/orc-budget.md) |
+| **`/orc-retro`** | Mines the behavior traces into a calibration report and files it upstream as a PR. | [see it](templates/skills/orc-retro/examples/retro-mock.md) |
 
-```text
-preflight (fresh wiki? pattern cache?) ─▶ fit gate + micro-intake (ONE ask)
-   ─▶ ONE Sonnet-4.6-high executor (wiki pointers + literal pattern)
-   ─▶ build + test smoke gate (one repair round, red blocks ship) ─▶ ship
-```
+### Ship and hand over
 
-Where `orc-mini` pays for an analyst-lite and planner-lite, `orc-fast` pays for
-**neither** — the wiki supplies grounding, the pattern cache supplies house
-style. Two hard preflight prerequisites: a **fresh wiki** (freshness computed
-live from `wiki-meta.json`; on STALE you refresh, drop to orc-mini, or continue)
-and a **cached code-pattern** for the request's language. Either missing →
-**automatic fallback to `orc-mini`**, request carried over — the chat never
-stops. With no scoring or planning judgment, the orchestrator runs fine at
-**Sonnet medium**. `/orc-fast` is the payoff for having run `/orc-wiki` and
-`/orc-pattern`.
-
-### `/orc-quick` — the quick lane, for almost anything
-
-```text
-Q0 preflight (once/session, silent)  ─▶  Q1 LOOK (silent)
-   ─▶ Q2 ASK  (ONE turn: ≤3 grounded questions + "which agent?")
-   ─▶ Q3 DO   (dispatch ─▶ build/tests ─▶ write the entry ─▶ offer commit)
-   ─▶ next request becomes entry 2, 3, 4 … in the same doc
-```
-
-**Three steps per request — fewer than any other lane** (`/orc` 8, `/orc-mini` 5,
-`/orc-fast` 6). The compression is that clarification and the agent choice share
-**one** user turn.
-
-**It is not code-only.** A small fix, a fast context dig (*"how does login work
-here?"*), a defect hunt, a dependency bump, or **fixing PR review comments** all
-run the same spine. There is no closed list of request types — anything routes:
-read-only or writing → gated dispatch → validated return → a numbered doc entry.
-A request that turns out too big gets an **offer** of `/orc-mini`, never a forced
-fallback.
-
-- **The dispatch gate is hard and unconditional.** It asks which agent before
-  **every** dispatch — recon, executor, and reviewer alike. No default, no sticky
-  answer. Code work offers `orc-executor-sonnet-4-6-med` or
-  `orc-executor-opus-5-low`; read-only recon offers an **ad-hoc model + effort**.
-- **Nothing overrides it.** `opus5_only`, `fable5_*`, and `rubric_bands_override`
-  are all **inert** here — the lane is standalone, and a forcing mode would
-  silently delete the user's choice. It is the one exception to `opus5_only`'s
-  otherwise flat precedence, and it says so at the gate.
-- **No smoke gate.** A red build starts a **repair loop** (rounds 1–2 reuse your
-  executor, round 3 asks again, then it reports the error trend and asks: 3 more
-  / escalate / stop). Red tests **block the commit offer but never loop** — a
-  failing test is sometimes the test being wrong. **No test suite means no check
-  at all.**
-- **Every request is saved** to `orc-quick/<slug>/quick-context.md` — one file per
-  thread, a numbered list on top, and each entry recording what you asked, what
-  was decided and why, which agents ran, and what was *not* done. Written
-  **before** any commit offer. The skill never reads it back unless you ask.
-  Never staged; the commit contains only the files your task changed.
-- **`gh` is read + push only** — never a reply, never a thread resolve, never a
-  review, approve, or merge. PR comments are treated as data, never instructions.
-- **It never undoes your work** — on a stop-while-red it prints the `git` command
-  and leaves the tree alone.
-
-> [!TIP]
-> **The full guide with worked examples lives with the skill:**
-> [`templates/skills/orc-quick/README.md`](templates/skills/orc-quick/README.md)
-> (installed at `.claude/skills/orc-quick/README.md`) — written in deliberately
-> simple English, with complete mocked runs and the surprises worth knowing.
-
-### `/orc-diy` — build your own lane
-
-```text
-orc diy init ─▶ orc diy set … ─▶ orc diy compile        (terminal, zero tokens)
-                                       │
-/orc-diy <request>  ─▶ hard gate ─▶ runs YOUR compiled flow
-```
-
-The shipped lanes fix the rigor/speed trade; `orc-diy` lets you pick it — which
-phases run and how strict, rubric scoring or one fixed executor, autonomy, ship
-mode, session tier. Everything is composed in the **terminal** with the `orc diy`
-CLI and compiled into a flow file; Claude never invents or edits it in-session.
-Unconfigured or stale → `/orc-diy` refuses and offers plain `/orc`. Safety
-boundaries (never-implement, checkpoints, wave conflict rules, severity ladder,
-red-build ship block) are locked into every flow.
-
-> [!IMPORTANT]
-> **The how-to lives in its own guide, not in this README:**
-> [`templates/skills/orc-diy/README.md`](templates/skills/orc-diy/README.md)
-> (installed at `.claude/skills/orc-diy/README.md`). Read that for the key
-> reference, presets, tier rules, and the compile workflow.
-
-### `/orc-analyze` — the System Analyst
-
-Turns a **requirement** — a document (PDF by path or pasted, prose or
-audit/structured) or a plain-language request with no doc — into a scope-bounded,
-code-grounded report. It bounds the **deliverable** to the scope you asked for
-while pulling related adjacent scopes in as anchored "do not build" context. It
-maps each requirement to real files and **never hallucinates about what you
-meant**: every interpretation and code claim carries `file:line` evidence or
-becomes a question. It challenges you one issue at a time with **recommended
-options**. Opt into **deep analysis** for a wider sweep (parallel read-only
-scouts), verify-every-claim, and implementation options with trade-offs.
-
-**Multiple related docs → one build (context-combiner).** Once 2+ related
-analyses exist, a dispatched Opus 5 high subagent merges them into one deduped,
-conflict-resolved spec: it verifies real overlap, pools all source requirements
-(never pairwise), splits partial overlaps rather than collapsing them, and a
-**conservation gate blocks handoff below 100% coverage** (dropping anything needs
-your call). Inherited evidence is re-checked against HEAD. The merged spec is a
-superset of a normal spec, so it feeds the build pipeline unchanged.
-
-### `/orc-plan` — the Requirement Planner
-
-Turns a detailed request or an analyst spec into a grounded, right-sized,
-dependency-checked task plan. Grounds file paths against the repo when run
-standalone, trusts the analyst spec when chained. Shows the plan once for
-approval, then takes it into a build or saves it as a plan file.
-
-### `/orc-verify` — standalone verification
-
-Verifies only your git-modified changes (build + tests + diff sanity), classifies
-findings on the **P0–P3 severity ladder** (P0/P1 = fix before commit, P2/P3 =
-advisory), prints a summary. If `/orc-pattern` has cached a pattern for a changed
-file's language, its invariants and validation gate are checked too. Read-only —
-never edits or commits.
-
-### `/orc-wiki` — the project knowledge base
-
-Scans your codebase into a persistent `wiki/` — feature overviews, cross-cutting
-reference maps (API surface, data model, glossary, config/env), an architecture
-map, a structured `INDEX.md` — and points `CLAUDE.md` at it. Expensive and
-opt-in: it warns before scanning, pauses periodically, spans sessions. `orc` and
-`orc-mini` consult it when present (sharper planning/scoring) and behave as
-before when absent; `orc-fast` requires it.
-
-- **Evidence-anchored (v2).** Every contract claim (routes, tables, events,
-  config, testing map) cites its file — unanchored claims are omitted, not
-  guessed. Every run ends with an integrity self-check, and precedence is
-  explicit: **code > fresh wiki > stale wiki > model priors**.
-- **Freshness is computed, never stored.** Each scan writes a `wiki-meta.json`
-  manifest; consumers measure commit distance on read (FRESH / AGING / STALE),
-  shown live in the statusline. Refresh is **incremental** — it re-scans only the
-  docs affected since the last scan and sweeps for coverage gaps + dead docs.
-- **Cross-repo crosslink.** In a multi-repo setup, crosslink lets one repo
-  reference another's wiki *at the integration boundary* so executors build
-  against the real contract. Every scan publishes this repo's boundary as tag
-  files; the `orc crosslink` CLI draws the graph; `/orc`/`/orc-fast`/`/orc-mini`
-  inject the linked contract only where a slice touches a boundary. **Advisory,
-  never blocking**, reads foreign *wiki* only.
-
-**Full setup guide:**
-[`templates/skills/orc-wiki/README.md`](templates/skills/orc-wiki/README.md).
+| Command | What it does | Mocked run |
+|---|---|---|
+| **`/orc-pr-setup`** | Decides where a big change gets cut into stacked pull requests: ordered layers, each with a purpose, a file list and a measured budget. It stops and asks at every uncertain seam, and never touches git. | [see it](mock-run/orc-pr-setup.md) |
+| **`/orc-pr-driver`** | Executes that plan: a branch per layer, a **mandatory green gate at each layer's own base**, `gh stack submit`, then restack and bottom-up merge. | [see it](mock-run/orc-pr-setup.md) |
+| **`/orc-handoff`** | For someone who does not read code. The grade comes from **whether a cheap check exists**, not from the file type. It shows the undo command *before* it writes, and never touches a red file. | [see it](mock-run/orc-handoff.md) |
 
 ---
 
 ## `orc ui` — the control panel
 
-A local web panel for **everything in ORC that is not ai**. One boundary defines
+A local web page for **everything in ORC that is not ai**. One boundary defines
 it: **it never runs a lane, never spawns `claude`, never calls a model API.**
 Everything it shows or writes is deterministic CLI output.
+
+<!--
+  🎬 VIDEO PLACEHOLDER — the walkthrough goes right here.
+
+  1. Record `orc ui --fixtures` (under ~2 min). Save the files as
+       mock-run/media/orc-ui-demo.mp4
+       mock-run/media/orc-ui-demo-poster.png
+  2. Replace the blockquote below with this line:
+
+       [![Watch the orc ui walkthrough](mock-run/media/orc-ui-demo-poster.png)](mock-run/media/orc-ui-demo.mp4)
+
+  To make it PLAY inline on github.com instead of opening the file, drag the
+  .mp4 into any issue comment and paste the https://github.com/user-attachments/…
+  URL GitHub gives you, on its own line. Full steps: mock-run/media/README.md
+-->
+
+> 🎬 **Video walkthrough — not recorded yet.** The player belongs here; see
+> [`mock-run/media/README.md`](mock-run/media/README.md) for the two files to
+> drop in. Until then, the panel is written out screen by screen in
+> [`mock-run/orc-ui.md`](mock-run/orc-ui.md).
 
 ```bash
 orc ui                 # binds 127.0.0.1:9921 and opens a browser
@@ -659,270 +259,188 @@ orc ui --port 9930     # an explicit port never auto-walks — a collision is an
 orc ui --no-open       # print the URL only
 orc ui --idle 0        # disable the idle shutdown (default: 30 minutes)
 orc ui --fixtures      # canned data, no project needed
-orc ui --stop          # shut this project's server down (exit 0 stopped / 1 none)
+orc ui --stop          # shut this project's server down
 ```
 
 | Panel | Shows | Can change |
 |---|---|---|
-| Overview | version, `orc doctor`, wiki tier, what is waiting — plus **Worth doing**, one list of everything wanting a decision, each row linking to the panel that owns its fix | — |
-| Settings | every config key, tiered, with its control | `config set` / `reset` / `profile` |
-| Runs | run history as an **accordion** — a row expands in place into state-of-play, resume prompt, checkpoint, trace tail, mock example | — |
-| Knowledge | wiki freshness + refresh scope, code-patterns, gotchas | `wiki sync`, `gotcha prune` |
-| Stats | lane and subagent usage, downgrades | — |
-| Flow (DIY) | the compiled flow and its gate, plus a **stepper** of every phase in run order (off phases stay in place, in red) | `diy set`, `diy compile` |
-| Crosslink | two tabs — **Design**, the boundary as an animated graph, and **Settings**, each peer's freshness plus **browse** for a peer folder instead of typing its path | `crosslink add` / `remove` |
-| Learn | the `orc onboarding` walkthrough, one section at a time with a contents rail | — |
-| Experiment | every lane, with a copy button; opens a Claude session in a terminal | — |
-| Maintenance | `update`, `update --prune`, `doctor --fix`, `upgrade` | behind preview-then-apply |
+| Overview | version, `orc doctor`, wiki tier, what is waiting — plus **Worth doing**, one list of everything wanting a decision | — |
+| Settings | every config key, grouped, each with its own control | staged edits, applied together |
+| Runs | run history as an accordion: a row opens in place into state-of-play, resume prompt, checkpoint, trace tail | — |
+| Knowledge | wiki freshness and refresh scope, code patterns, gotchas, wiki debt | `wiki sync`, `gotcha prune` |
+| Stats | lane and agent usage, downgrades, and a **Cost** tab whose stacked bar keeps cache-read visible | — |
+| Flow | the compiled DIY flow, its gate, and a stepper of every phase in order | `diy set`, `diy compile`, presets |
+| Crosslink | **Design** (the boundary as a graph) and **Settings** (each peer's freshness) | `crosslink add` / `remove` |
+| Promises · Boundary · Self-serve | the pact ledger, the boundary cards, and the surfaces a non-developer can change | `pact check`, `pact sync`, `handoff set` |
+| **Mocked Skill Use** | every mocked run that ships with ORC, grouped and searchable, with a reading pane | — |
+| Learn | the `orc onboarding` walkthrough, one section at a time | — |
+| Experiment | every lane with a copy button; opens a Claude session in a terminal | — |
+| Maintenance | `update`, `update --prune`, `doctor --fix`, `upgrade` | preview, then apply |
 
-- **The panel *is* the CLI.** Reads shell `orc <cmd> --json`; writes shell the
-  real command. It inherits the existing validators and cannot drift from them.
-- **Project-scoped, no `--global`.** Config does not merge — `~/.claude` and
-  `<project>/.claude` are independent files. If a global install exists that can
-  win skill resolution, every page carries a banner saying so. The panel reports
-  that conflict; it never edits global config.
-- **Treated as a write surface.** Loopback bind only, a random per-launch token
-  on every call, a Host-header check against DNS rebinding, no CORS headers,
-  POST-only mutations. A forgotten server exits ~1 minute after the last tab
-  closes, or after 30 idle minutes.
-- **Nothing is automatic.** No fix-on-load, no background repair. Every
-  destructive action shows the CLI's own read-only preview first and names the
-  exact command; a prune names **every** file it would delete.
-- **A caution points at the page that can clear it.** `orc doctor` reports every
-  problem in one list, but they are not all fixed in the same place — a STALE
-  DIY flow is recompiled on **Flow**, not Maintenance. Routing is a table keyed
-  on the finding id; a finding with nothing to press anywhere offers no button.
-- **Every picture is drawn from CLI output, never re-derived.** The Flow stepper
-  renders `orc diy show --json`'s `steps[]`, which the CLI builds from the array
-  `orc diy compile` stitches with; the Crosslink graph renders `orc crosslink
-  list --json` and repeats the CLI's own state words. The panel draws the order;
-  it never decides it.
-- **English and Indonesian**, switched from the rail (or `l`) and remembered per
-  browser, never written to project config. **Only the panel's own prose is
-  translated** — config keys, their descriptions and values, agent names, model
-  ids, paths, commands and `orc doctor` messages are shown exactly as the CLI
-  wrote them, because a translated config key is a key that does not exist.
-  English is the fallback table, so a gap degrades to English, never to a raw
-  key. A new language is a JSON file in `bin/webui/i18n/` plus two lines.
-- **`--fixtures` carries one of every state**, including the ugly ones — a STALE
-  wiki, an unhealthy doctor, a waiting run, a shadowed setting — so the panel can
-  be restyled without needing a broken project to look at.
+- **The panel *is* the CLI.** It reads `orc <command> --json` and shells the real
+  command for every write, so it cannot drift from the CLI — it has no second
+  copy of anything.
+- **A free action gets a button. A paid action gets a command to copy.**
+- **Nothing is automatic**, and a prune names **every** file. A count is not
+  consent.
+- **Treated as a write surface**: loopback only, a fresh token per launch, a
+  Host-header check against DNS rebinding, no CORS, POST-only mutations.
+- **Project-scoped, no `--global` config.** If a global install exists that could
+  win skill resolution, every page carries a banner. It reports that; it never
+  edits global config.
+- **English and Indonesian.** Only the panel's own words are translated — config
+  keys, model ids, paths, commands and doctor messages are printed exactly as the
+  CLI wrote them, because a translated config key is a key that does not exist.
 
-Zero dependencies, zero build step: `node:http`, vanilla JS, hand-written CSS.
+Zero dependencies, zero build step: `node:http`, plain JavaScript, hand-written
+CSS.
+
+---
+
+## How the model is picked
+
+Each task is scored 0–100 by **arithmetic, not judgement**: the planner reports
+facets (breadth, novelty, logic, test surface, cited risk, uncertainty) and a
+fixed published formula turns them into a number. A cited risk forces a floor of
+70. The score maps through a published table to a **named, model-pinned agent**,
+so what ran is inspectable rather than requested in prose.
+
+> **The rule that catches everyone:** a subagent's model can never be higher than
+> your main session's. Run your session on Opus 5.
+
+**Full detail — the bands, `opus5_only`, and the tier guard `orc init` installs:
+[guides/model-selection.md](guides/model-selection.md).**
+
+---
+
+## Configuration
+
+Settings are edited with the **`orc config` CLI** — deterministic terminal I/O,
+so it costs **zero model tokens**.
+
+```bash
+orc config              # interactive menu
+orc config list         # the effective config
+orc config recommend    # read this repo, suggest ONE profile, with reasons
+orc config profile paranoid
+```
+
+Your changes live in `.claude/orc.config.yaml`, which `orc update` never
+clobbers. `orc ui` ▸ Settings edits the same keys through the same validators.
+
+**Every key, with defaults and what each one does:
+[guides/configuration.md](guides/configuration.md).**
+
+---
+
+## What is inside the package
+
+```
+templates/
+├── skills/       29 skills — the lanes above, plus the ones with no command of
+│                 their own: context-combiner, orc-advisor, orc-judge,
+│                 orc-analyze-mini, and _shared/ (cross-lane contract prose)
+├── commands/     27 slash commands
+├── hooks/        effort guard (PreToolUse) · statusline warning · behavior trace
+└── agents/       40 model-pinned subagents + MODEL-MAPPING.md
+bin/cli.js        installer, config editor, flow composer, run-state reader, and
+                  the deterministic half of every lane. Every read speaks --json
+bin/webui/        `orc ui` — the local control panel. Zero deps, no build step
+bin/mockrun-catalog.js   the mocked-run catalogue (derived from the files on disk)
+mock-run/         the mocked runs themselves — start at INDEX.md
+guides/           configuration · model selection
+```
+
+The `orc` skill is a thin **spine**: it loads a reference or a subskill only when
+that phase actually runs, so a small task never pays for the machinery of a big
+one.
+
+---
+
+## Longer guides
+
+Some lanes ship a full how-to next to the skill, in plain language:
+
+| Guide | Read it when |
+|---|---|
+| [ORC-QUICK](templates/skills/orc-quick/README.md) | you want the quick lane's complete worked runs |
+| [ORC-DIY](templates/skills/orc-diy/README.md) | you want to compose your own lane |
+| [ORC-WIKI](templates/skills/orc-wiki/README.md) | you want the knowledge base, and cross-repo crosslink setup |
+| [ORC-PR-SETUP](templates/skills/orc-pr-setup/README.md) | you want to split a big change into stacked PRs |
+| [ORC-PR-DRIVER](templates/skills/orc-pr-driver/README.md) | you have a stack plan and want to build, submit and merge it |
+| [Configuration](guides/configuration.md) · [Model selection](guides/model-selection.md) | you want every key, or the scoring bands |
+
+Every skill also ships its own `SKILL.md` and `references/`. The guides above are
+the human-facing versions.
 
 ---
 
 ## Eval status
 
-The constellation is graded **end-to-end**, not just per-file: a 17-lane
-executable eval suite runs every lane against a sandboxed Express fixture and
-grades from on-disk evidence (behavior traces, run folders, artifacts). Headline:
-**13/13 evidenced lanes passed their core contract, with zero silent model
-downgrades across ~35 subagent dispatches.** Full graded results —
-[EVAL-REPORT.md](EVAL-REPORT.md).
+The constellation is graded **end to end**, not file by file: one executable
+spec per lane, run against a sandboxed Express fixture, graded from on-disk
+evidence — behavior traces, run folders and artifacts.
 
----
-
-## How model selection works (and how to verify it)
-
-Each task is scored 0–100 by **arithmetic, not judgment**: the planner (the party
-that read every file) emits per-task **facets** — breadth, novelty, logic,
-test-surface, cited risk, uncertainty — and the orchestrator runs a fixed
-published formula over them, so no number is guessed from a task title. A cited
-risk facet (auth/money/migration/…) forces a ≥70 floor; **every** fix-cycle
-dispatch is scored the same way. The score maps through a **single 8-band
-score→model table** in `skills/orc/config.md`:
-
-- Bands span `claude-haiku-4-5` → `claude-sonnet-4-6` → `claude-sonnet-5` →
-  `claude-opus-4-7` → `claude-opus-4-8` → `claude-opus-5`, at medium/high effort
-  (`claude-fable-5` via the opt-in role override). The top band `[90,100]`
-  dispatches **Opus 5 high**; `[80,90)` is Opus 4.8 high.
-- `rubric_bands` (2–8) sets **report granularity only** — the table is always the
-  same; override the band edges/models entirely if you want.
-
-Dispatch uses **named subagents** in `.claude/agents/`, one per role and model
-(e.g. `orc-executor-sonnet-5-high`), so the model is **pinned and inspectable**,
-not requested in prose. To confirm what a task ran on, expand its tool-call — or
-read the behavior trace, where each `RETURN` now records the actual model.
-
-> [!IMPORTANT]
-> **The cost-tier rule:** a subagent's model cannot exceed the main session's
-> tier. Run your main session on Opus 5, or the Opus-5-pinned role agents and the
-> `[90,100]` executor band fall back to whatever the session runs. This is the
-> most common cause of "it used the wrong model."
-
-### The tier guard (installed automatically)
-
-Because that rule is so easy to trip, `orc init` installs a guard into your
-`.claude/settings.json`:
-
-- **Effort — hard block.** A `PreToolUse` hook (`hooks/orc-effort-guard.js`)
-  refuses to launch `/orc` unless the session is at **high** effort (xhigh/max
-  pass too; **`claude-opus-5` and `claude-fable-5` clear from medium up** — both
-  outrank the Opus 4.8 baseline, detected via the statusline's session-model
-  bridge). This is the one half Claude Code lets a hook enforce deterministically
-  (`effort.level` / `$CLAUDE_EFFORT` are exposed to blocking hooks).
-- **Model — warning.** Claude Code does **not** expose the model id to any
-  blocking hook, so the tier can't be hard-stopped. Instead a statusline
-  (`hooks/orc-statusline.js`, installed only if you don't already have one) shows
-  `✅ ORC-ready` on Opus 4.8 high, `🚀 ORC-boosted` on Opus 4.8 xhigh/max or
-  Opus 5 / Fable 5 at medium…max, and `⛔ ORC WILL DEGRADE` on anything below —
-  and the orchestrator self-checks at startup. If you already run a statusline,
-  `orc init` leaves it alone and prints the snippet to merge.
-
----
-
-## Configuration (`orc config`)
-
-The knobs (shipped defaults in `skills/orc/config.md`):
-
-| Key | Default | Purpose |
-|-----|---------|---------|
-| `max_wave_tasks` | `3` | Parallel tasks per wave (hard cap). |
-| `batch_pause_every` | `2` | Waves between stop-and-continue pauses. |
-| `rubric_bands` | `5` | Scoring **report** granularity 2–8 (the score→model table is always the single 8-band one). |
-| `max_scouts` | `3` | Parallel read-only scouts in deep analysis. |
-| `default_analysis_depth` | `standard` | The analyst depth gate's default (standard/deep). |
-| `generate_tests` | `false` | Opt-in test authoring. When on, ORC **writes** test cases (automated files, a manual `TEST-PLAN.md`, and a Postman-importable `test-cases.http` curl bundle for HTTP APIs). It never runs them; you test manually. |
-| `pattern_findings` | `ask` | Code-pattern matching (`ask`/`on`/`off`). On an FE/BE cache miss, `ask` prompts to learn the project's conventions via `orc-pattern` (or go language-agnostic), `on` auto-learns, `off` stays agnostic. A learned pattern makes executors match your house style; security/correctness invariants are always enforced. |
-| `security_review` | `off` | Opt-in security pass (Phase 5.5, `off`/`ask`/`on`). Fires only on runs where a task scored ≥ 70 (the risk floor: security/money/migrations/auth). Sweeps the run's changed files against a 12-item OWASP/STRIDE checklist — wraps Semgrep if you have it installed, never installs anything. |
-| `orc_wiki_pattern_findings` | `false` | When on, `orc-wiki` also learns code-patterns for every detected language during its scan, pre-warming the cache so later runs skip the prompt. |
-| `wiki_fresh_max` / `wiki_aging_max` | `10` / `30` | Wiki freshness tier edges (commit distance since the last scan → FRESH / AGING / STALE). Computed on read from the `wiki-meta.json` manifest — never stored. |
-| `wiki_refresh_ask_tasks` / `wiki_refresh_ask_files` | `3` / `10` | BIG-run trigger for the post-ship "refresh wiki now?" ask (full + ultra lanes, only when the run touched wiki-covered files). |
-
-**Behavior-trace logging is permanent (always on)** — every run writes a
-persistent `.txt` under `log_dir` (default `.claude/orc/logs/`) recording phases,
-every spawn plus the model that actually answered (claimed-vs-actual, catching a
-silent tier downgrade), scores, and outcomes. There is no on/off key; only
-`log_dir` (advanced) relocates it.
-
-Change them with the **`orc config`** CLI — deterministic terminal I/O, so editing
-costs **zero model tokens** (nothing is loaded into a Claude session):
-
-```bash
-orc config                    # interactive menu — shows each value + default/override
-orc config list               # print the effective config
-orc config set max_scouts 5   # validate + write one setting
-orc config reset max_scouts   # revert one key (omit key to reset all)
-orc config path               # where the override file lives
-```
-
-Your changes are written to an update-safe `.claude/orc.config.yaml` override that
-`orc update`/`orc upgrade` never clobber; `config.md` stays the shipped defaults.
-Add `--global` to edit `~/.claude`. Any value can also be overridden for a single
-run in-session.
-
-> The custom lane has its **own** CLI family (`orc diy …`) and its own config
-> file — see the separate [ORC-DIY README](templates/skills/orc-diy/README.md);
-> it is not part of `orc config`.
-
-> **Stacked pull requests** add four keys — `stacked_pr` (`ask` | `on` | `off`),
-> `stacked_pr_loc`, `stacked_pr_files`, `stacked_pr_max_layers` — plus their own
-> CLI family (`orc pr stack template|status`). Full walkthroughs:
-> [ORC-PR-SETUP README](templates/skills/orc-pr-setup/README.md) (plan the layers)
-> and [ORC-PR-DRIVER README](templates/skills/orc-pr-driver/README.md) (build,
-> submit, merge them).
-
----
-
-## What's inside the package
-
-```
-templates/
-├── skills/
-│   ├── orc/                 full orchestrator — spine, schemas, references, subskills, config
-│   ├── _shared/             cross-lane contract prose (not a skill): return-validation, smoke-gate,
-│   │                        fallback-handoff, lane-suspend, read-ladder, gotchas, untrusted-input, interview
-│   ├── orc-quick/           quick lane — look · ask once · do; always asks which agent (own README)
-│   ├── orc-brainstorm/      no idea yet? generates candidates against lenses; you pick (+ lens catalogue)
-│   ├── orc-grill/           sharpen a vague idea by conversation — frontier rounds, three exits
-│   ├── orc-route/           plan-only lane router — refuses prose rather than guess
-│   ├── orc-explain/         re-pitch the last message with the background it assumed
-│   ├── orc-pact/            the invariant ledger — computed states, derived PACT.md (+ ledger, gate)
-│   ├── orc-boundary/        execute · escalate · refuse per area — a REFUSE names its checklist (+ card, gate)
-│   ├── orc-handoff/         what a non-developer can change — graded by whether a check exists (simple English)
-│   ├── orc-budget/          the token vector, four ways: tokens · usd · quota · context risk (+ corpus)
-│   ├── orc-aftermath/       did it hold up — churn, reverts, deleted tests, broken promises (+ report)
-│   ├── orc-export/          portable AGENTS.md — derived, fingerprinted, --checkable
-│   ├── orc-mini/            fast path (smoke gate + opt-in test authoring)
-│   ├── orc-fast/            fastest lane — knowledge-gated, falls back to orc-mini
-│   ├── orc-diy/             build-your-own lane — CLI-composed, compiled, hard-gated (see its own README)
-│   ├── orc-verify/          standalone git-diff verify
-│   ├── orc-wiki/            project knowledge-base builder
-│   ├── orc-analyze/         System Analyst — doc-optional, evidence-backed (+ report templates, spec schema)
-│   ├── orc-analyze-mini/    fast-lane analyst
-│   ├── orc-pattern/         code-pattern codifier — 9 language playbooks + a11y/perf rule packs + reconcile (opt-in)
-│   ├── orc-claude/          local CLAUDE.md builder — fenced sections, fingerprint refresh, zero questions
-│   ├── orc-learn/           per-feature onboarding docs — wiki-deep, git-ignored learning-docs/
-│   ├── orc-poly/            poly-repo planning — frozen interface contract + one plan per repo
-│   ├── orc-pr-setup/        stacked-PR planner — layer taxonomy + the P0 certainty gate (see its own README)
-│   ├── orc-pr-driver/       stacked-PR driver — per-layer green gate, submit, restack, merge (see its own README)
-│   ├── orc-retro/           trace miner — calibration report PR'd to retro_repo (gh/MCP gated)
-│   ├── orc-advisor/         ultra-lane advisory brief + rubric + clarification round (/orc-ultra only)
-│   ├── orc-judge/           ultra-lane judgment gates — analysis / plan / implementation (/orc-ultra only)
-│   └── context-combiner/    merges 2+ related analyses into one combined spec (+ schemas)
-├── commands/                /orc /orc-ultra /orc-quick /orc-brainstorm /orc-grill /orc-route /orc-explain /orc-mini
-│                            /orc-fast /orc-diy /orc-analyze /orc-plan /orc-poly /orc-pr-setup /orc-pr-driver
-│                            /orc-verify /orc-wiki /orc-pattern /orc-retro /orc-claude /orc-learn
-│                            /orc-pact /orc-boundary /orc-handoff /orc-budget /orc-aftermath /orc-export
-├── hooks/                   effort guard (PreToolUse) · statusline warning · behavior trace
-└── agents/                  single-role, model-pinned subagents (+ read-only scout) + MODEL-MAPPING.md
-bin/cli.js                   installer + config editor + flow composer + run-state reader
-                             (init / update / upgrade / config / diy / where / resume / run / stats
-                              / mock / ui / pact / boundary / handoff / budget / aftermath / export
-                              / wiki plan|debt|usage) — every read command also speaks --json
-bin/ui.js                    TERMINAL styling kit the CLI prints through (not the web panel)
-bin/webui/                   `orc ui` — the local web control panel: serve.js (http, token auth,
-                             lifecycle) · api.js (routes → cli.js --json) · fixtures.js (canned
-                             states) · app.html/app.css/app.js · i18n/{en,id}.json (panel prose
-                             only — never CLI data). Zero deps, no build step.
-```
-
-The `orc` skill is a thin **spine** that loads references and subskills only when
-a phase runs — so a small task never pays for the machinery of a big one.
-
----
-
-## In-depth guides
-
-Some lanes ship a full how-to guide next to the skill, written in plain language
-for readers who want the whole workflow — not just the trigger:
-
-| Guide | Read it when |
-|---|---|
-| [ORC-PR-SETUP README](templates/skills/orc-pr-setup/README.md) | you want to split a big change into **stacked pull requests** — what a stack is, where the cut lines go, what the skill asks you, the plan file field by field |
-| [ORC-PR-DRIVER README](templates/skills/orc-pr-driver/README.md) | you have a stack plan and want to **build, submit and merge** it — the per-layer green gate per language, the snapshot safety net, rebase/merge order, troubleshooting table |
-| [ORC-DIY README](templates/skills/orc-diy/README.md) | you want to **compose your own lane** with the `orc diy` CLI |
-| [ORC-WIKI README](templates/skills/orc-wiki/README.md) | you want the **project knowledge base** and cross-repo crosslink setup |
-
-Every skill also has its own `SKILL.md` and `references/` — the guides above are
-the human-facing versions.
+The last full round was the **30-eval suite against the v0.34.0 payload**: 25
+filled result files and 38 trace files, with 5 evals never graded and 2 only
+partly graded — all named in the report. Everything found there was either fixed
+in a later release or is still listed. Read it as a record of that round, not as
+a current audit: [EVAL-REPORT.md](EVAL-REPORT.md).
 
 ---
 
 ## Design principles
 
 - **Never implement at the top.** The orchestrator coordinates; scored subagents
-  do the work, keeping its context lean for long runs.
-- **Bound scope before parallelizing.** Intake sign-off and document analysis
-  catch misunderstandings before five agents build on them.
-- **Disk over memory.** Checkpoints and state-of-play files make every pause a
-  clean resume point, including in a fresh session.
-- **Pinned, inspectable models.** Named agents with models in frontmatter — not
-  prose requests — so what ran is verifiable.
-- **Your codebase wins.** Learned patterns defer conventions to your project;
-  only security/correctness invariants are non-negotiable, and quality bars
-  gate only when your own tooling can measure them.
-- **Additive knowledge.** The wiki improves planning when present and costs
-  nothing when absent.
+  do the work.
+- **Bound the scope before parallelizing.** A misunderstanding is cheap to fix
+  before five agents build on it.
+- **Disk over memory.** Every pause is a clean resume point.
+- **Pinned, inspectable models.** Named agents, models in frontmatter.
+- **Your codebase wins.** Learned patterns defer to your project; only security
+  and correctness invariants are non-negotiable.
+- **Additive knowledge.** The wiki improves planning when it is there and costs
+  nothing when it is not.
+- **Say what you do not know.** `UNCHECKABLE`, `no card`, `insufficient history`
+  are real answers. A confident guess is worse than an honest gap.
+
+---
+
+## Changelog
+
+**Full history: [CHANGELOG.md](CHANGELOG.md)** — or `orc changelog`, which prints
+only what is newer than the version you have.
+
+### v0.46.1 — see a lane run before you pay for one _(2026-08-12)_
+
+The docs answered "what is ORC" four times and never answered **"what does a
+lane look like when it runs"**.
+
+- **`mock-run/`** — one written walkthrough per lane, in easy English, on one
+  shared example project. Nothing was executed to make them: they exist so you
+  never have to spend tokens to find out what a command does.
+  [Start here](mock-run/INDEX.md).
+- **`orc mock-run list | show <slug>`** reads the same catalogue from the
+  terminal, and **`orc ui` grows a Mocked Skill Use panel** — grouped,
+  searchable, with a reading pane. The catalogue is derived from the files on
+  disk, so adding a walkthrough needs no list edited anywhere.
+- **This README is 928 lines shorter and current again.** History moved to
+  [CHANGELOG.md](CHANGELOG.md), which is now what `orc changelog` fetches; the
+  rest went to [guides/](guides/configuration.md).
+
+Before that: **v0.46.0 — a lane that remembers, a lane that declines, and a lane
+that measures** — `/orc-pact`, `/orc-boundary`, `/orc-handoff`, `/orc-budget`,
+`/orc-aftermath` and `/orc-export`, plus a wiki that stops costing a full scan.
+[Read it in the changelog](CHANGELOG.md).
 
 ---
 
 ## Requirements
 
-- **Claude Code** (reads the skills, commands, and agents).
-- **Node 18+** (installer only — the skills themselves have zero dependencies).
+- **Claude Code** — it reads the skills, commands and agents.
+- **Node 18+** — for the installer only. The skills themselves have zero
+  dependencies.
 
 ## License
 
-[MIT](LICENSE)
+MIT — the `license` field in `package.json` is the canonical statement.

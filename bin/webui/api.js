@@ -540,6 +540,19 @@ async function handleApi(req, res, url, ctx) {
       const { SECTIONS } = require("../onboarding-content.js");
       return json(res, 200, { ok: true, exit_code: 0, data: { sections: SECTIONS } });
     }
+    // The mocked runs (v0.46.x). Same shape as /api/learn above and for the
+    // same reason: this is static content that ships inside this package, so
+    // spawning a subprocess to read files sitting next to this one would be
+    // ceremony with a cost. `orc mock-run` reads the identical module, so the
+    // terminal and the panel cannot disagree.
+    if (route === "/api/mockruns") {
+      return json(res, 200, { ok: true, exit_code: 0, data: require("../mockrun-catalog.js").catalogue() });
+    }
+    if (route === "/api/mockrun") {
+      const doc = require("../mockrun-catalog.js").get(String(q.slug || ""));
+      if (!doc) return json(res, 200, { ok: true, exit_code: 1, data: { slug: String(q.slug || ""), found: false } });
+      return json(res, 200, { ok: true, exit_code: 0, data: { ...doc, found: true } });
+    }
     if (route === "/api/fs/list") {
       return json(res, 200, { ok: true, exit_code: 0, data: fsList(q.path, ctx) });
     }

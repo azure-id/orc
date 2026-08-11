@@ -4688,6 +4688,74 @@ function mock() {
   }
 }
 
+// ── Mocked runs (`orc mock-run …`) ─────────────────────────────────────────
+// The written walkthroughs that ship WITH THIS PACKAGE — one per lane: what you
+// type, what ORC prints back, what lands on disk. Nothing was executed to make
+// them; they are documentation, and the point is that nobody should have to
+// spend tokens to find out what a lane looks like.
+//
+// NOT `orc mock`, one screen up: that lists the runnable `mock-examples/<slug>/`
+// folders a green verify left in YOUR project. This one is package content —
+// identical on every machine, needs no `.claude/`, and therefore takes no
+// --global/--dir target (it accepts and ignores them, because `orc ui` appends
+// --dir to every read it makes).
+//
+// The catalogue itself is DERIVED in bin/mockrun-catalog.js — a new .md file in
+// mock-run/ appears here by itself.
+function mockRunList() {
+  const cat = require("./mockrun-catalog.js").catalogue();
+  if (wantsJson()) return emitJson(cat);
+  if (!cat.total) {
+    console.error("No mocked runs found in this install — mock-run/ is missing from the package.");
+    process.exit(1);
+  }
+  console.log(ui.header(`mocked runs — ${plural(cat.total, "document")} that ship with ORC`));
+  for (const g of cat.groups) {
+    console.log("\n" + ui.color.bold(g.title));
+    for (const d of g.docs) {
+      const tag = d.kind === "annotated" ? ui.color.gray(" (annotated)") : "";
+      console.log(`  ${d.slug.padEnd(26)} ${d.summary.slice(0, 62)}${tag}`);
+    }
+  }
+  console.log(
+    "\n" +
+      ui.color.gray("Read one:  orc mock-run show <slug>   ·   or open the panel:  orc ui  ▸ Mocked Skill Use")
+  );
+}
+
+function mockRunShow(slug) {
+  const catalog = require("./mockrun-catalog.js");
+  const doc = slug ? catalog.get(slug) : null;
+  if (!doc) {
+    const known = catalog.list().map((d) => d.slug);
+    if (wantsJson()) emitJson({ slug: slug || null, found: false, known }, 1);
+    console.error(slug ? `No mocked run named "${slug}".` : "Usage: orc mock-run show <slug>");
+    console.error("  known: " + known.join(", "));
+    process.exit(1);
+  }
+  if (wantsJson()) return emitJson({ ...doc, found: true });
+  console.log(ui.header(doc.title));
+  console.log(ui.color.gray(`${doc.path}  ·  ${doc.lines} lines` + (doc.lane ? `  ·  ${doc.lane}` : "")));
+  console.log("\n" + doc.body.trimEnd());
+}
+
+function mockRun() {
+  const pos = positionals(); // ["mock-run", <sub?>, <slug?>]
+  switch (pos[1]) {
+    case undefined:
+    case "list":
+      mockRunList();
+      break;
+    case "show":
+      mockRunShow(pos[2]);
+      break;
+    default:
+      // A bare `orc mock-run <slug>` is what people type — treat it as `show`
+      // rather than an error, since no slug can collide with `list`/`show`.
+      mockRunShow(pos[1]);
+  }
+}
+
 // ── Stacked PRs (`orc pr stack …`) ─────────────────────────────────────────
 // The skeleton generator + the existence probe for stacked-pr/<slug>/stack-plan.md.
 // WHY a CLI command and not a skill step: the plan is the CONTRACT between
@@ -7834,13 +7902,16 @@ function doctor() {
 const UPDATE_URL =
   process.env.ORC_VERSION_URL ||
   "https://raw.githubusercontent.com/azure-id/orc/main/package.json";
-// The changelog lives in the README next to that package.json, on the same
+// The changelog lives in CHANGELOG.md next to that package.json, on the same
 // branch `orc upgrade` installs from — so "what would I get" is answered by the
 // same source as "is there something newer", never by a second one that could
-// describe a different release.
+// describe a different release. (It lived in the README until the README was
+// compacted; the README now carries only the newest entry and links here, so
+// reading the README would answer with one entry no matter how far behind you
+// are.)
 const CHANGELOG_URL =
   process.env.ORC_CHANGELOG_URL ||
-  "https://raw.githubusercontent.com/azure-id/orc/main/README.md";
+  "https://raw.githubusercontent.com/azure-id/orc/main/CHANGELOG.md";
 const CACHE_FILE = path.join(os.homedir(), ".orc-update-check.json");
 const CHECK_TTL_MS = 24 * 60 * 60 * 1000;
 
@@ -7988,8 +8059,8 @@ async function version() {
 // ---------------------------------------------------------------------------
 // orc changelog — "what would I actually get if I upgraded".
 //
-// A version number is not a reason to upgrade. This fetches the README from the
-// same branch `orc upgrade` installs from and returns the entries NEWER than
+// A version number is not a reason to upgrade. This fetches CHANGELOG.md from
+// the same branch `orc upgrade` installs from and returns the entries NEWER than
 // what is installed, so the answer and the payload can never describe different
 // releases.
 //
@@ -8036,9 +8107,11 @@ function httpsGetText(url, timeoutMs) {
   });
 }
 
-// Split a README's `## Changelog` section into entries. The shape this reads is
-// the one this repo's own README uses and the CHANGELOG rule in CLAUDE.md
-// mandates: `### v<semver> — <title> _(<date>)_`, newest first.
+// Split CHANGELOG.md into entries (a `## Changelog` heading, if present, marks
+// where they start — otherwise the whole document is the changelog, which is
+// what CHANGELOG.md itself is). The shape this reads is the one this repo's own
+// CHANGELOG.md uses and the changelog rule in CLAUDE.md mandates:
+// `### v<semver> — <title> _(<date>)_`, newest first.
 function parseChangelog(md) {
   if (!md) return [];
   const start = md.search(/^##\s+Changelog\s*$/m);
@@ -8058,7 +8131,15 @@ function parseChangelog(md) {
       version: h.version,
       title: h.rest.replace(/_\(\d{4}-\d{2}-\d{2}\)_/, "").trim(),
       date: dateM ? dateM[1] : null,
-      body: body.slice(h.end, next ? next.at : undefined).trim(),
+      // An entry ends at the next `###` — OR at the next `##`, whichever comes
+      // first. A level-2 heading is a DOCUMENT section (`## Earlier releases`),
+      // never part of a release, and without this cut the newest entry's body
+      // carried that heading and the rule above it into the upgrade modal.
+      body: body
+        .slice(h.end, next ? next.at : undefined)
+        .split(/\n##(?!#)\s/)[0]
+        .replace(/\s*\n-{3,}\s*$/, "")
+        .trim(),
     });
   }
   return out;
@@ -8334,6 +8415,12 @@ Usage:
                                           (project-scoped; no --global) — read-only, never runs one
     orc mock list [--json]                every mock-examples/<slug>/, newest first
     orc mock show <slug> [--json]         EXAMPLE.md + the file tree for one example
+  orc mock-run                            MOCKED RUNS — a written walkthrough per lane: what you
+                                          type, what ORC prints, what lands on disk. Ships with
+                                          the package, so it needs no project (a different thing
+                                          from orc mock above)
+    orc mock-run list [--json]            every walkthrough, grouped in reading order
+    orc mock-run show <slug> [--json]     read one (also: orc mock-run <slug>)
   orc pr [--dir <path>]                   stacked pull requests (project-scoped; no --global)
     orc pr stack template [<slug>]        write a fill-in stack-plan skeleton to
                                           stacked-pr/<slug>/stack-plan.md — fill it in and start
@@ -8378,7 +8465,8 @@ Machine-readable output:
   version | changelog | doctor | wiki status | wiki impact | wiki plan | wiki debt |
   wiki usage | pattern status | gotcha list | crosslink list | crosslink status |
   crosslink kinds | diy show | diy status | run list | run show | stats |
-  pr stack status | mock list | mock show | pact status | pact check |
+  pr stack status | mock list | mock show | mock-run list | mock-run show |
+  pact status | pact check |
   boundary status | handoff surfaces | handoff set | budget forecast |
   budget actual | budget rates | aftermath status | export [--check] | export import.
   It prints ONE object to stdout and keeps the command's normal exit code.
@@ -8430,6 +8518,12 @@ Skills installed: ${listSkillNames().join(", ")}`);
       break;
     case "mock":
       mock();
+      break;
+    // Package content, not project state — hence a separate command from `mock`
+    // above, which reads mock-examples/ inside the user's repo.
+    case "mock-run":
+    case "mockrun":
+      mockRun();
       break;
     // v0.46.0 — the six new lanes' deterministic halves. Every one is a READ
     // with an exit-code contract (plus the two sanctioned writes: `pact check`

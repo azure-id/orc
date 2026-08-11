@@ -480,17 +480,20 @@ test("ui: the update-check env var never gags the commands that check updates", 
   assert.match(fn, /argv\[0\] === "changelog"/, "`changelog` must be exempt");
 });
 
-test("changelog: the parser reads this repo's own README", () => {
+test("changelog: the parser reads this repo's own CHANGELOG.md", () => {
   // The parser's contract is THIS file's format — the one CLAUDE.md mandates.
-  // Testing it against the real README is what stops the two drifting.
+  // Testing it against the real CHANGELOG.md is what stops the two drifting.
+  // (It read the README until the README was compacted to the newest entry
+  // only; a parser pointed at the README would answer "one entry" to a user
+  // ten releases behind.)
   const cli = fs.readFileSync(path.join(REPO, "bin", "cli.js"), "utf8");
   const start = cli.indexOf("function parseChangelog");
   const end = cli.indexOf("\nasync function changelog");
   assert.ok(start > 0 && end > start, "the parser must exist");
   const parseChangelog = new Function(cli.slice(start, end) + "\nreturn parseChangelog;")();
 
-  const readme = fs.readFileSync(path.join(REPO, "README.md"), "utf8");
-  const entries = parseChangelog(readme);
+  const changelogMd = fs.readFileSync(path.join(REPO, "CHANGELOG.md"), "utf8");
+  const entries = parseChangelog(changelogMd);
   assert.ok(entries.length > 20, `expected the real changelog to parse, got ${entries.length}`);
   assert.match(entries[0].version, /^\d+\.\d+\.\d+$/, "the newest entry must have a semver");
   assert.match(entries[0].date || "", /^\d{4}-\d{2}-\d{2}$/, "and a parsed date");
@@ -500,6 +503,25 @@ test("changelog: the parser reads this repo's own README", () => {
     entries[0].version.localeCompare(entries[entries.length - 1].version, undefined, { numeric: true }) > 0,
     "entries must come out newest-first"
   );
+
+  // An entry stops at the next SECTION heading, not only at the next release.
+  // `## Earlier releases` and the rule above it are document furniture, and
+  // they used to be glued onto the end of the newest entry in the upgrade
+  // modal — the one place a user reads a release body in full.
+  for (const e of entries) {
+    assert.ok(!/\n##(?!#)\s/.test(e.body), `v${e.version} swallowed a section heading`);
+    assert.ok(!/-{3,}\s*$/.test(e.body), `v${e.version} ends on a horizontal rule`);
+  }
+
+  // The installed version must have an entry, or `orc changelog` tells everyone
+  // upgrading to it that there is nothing new — and `orc upgrade` never fires
+  // for anyone at all, because the version gate is what triggers it.
+  const pkg = JSON.parse(fs.readFileSync(path.join(REPO, "package.json"), "utf8"));
+  assert.ok(
+    entries.some((e) => e.version === pkg.version),
+    `package.json is ${pkg.version} but CHANGELOG.md has no entry for it`
+  );
+  assert.strictEqual(entries[0].version, pkg.version, "the newest entry must be the shipped version");
 
   // Malformed input degrades to nothing, never to a wrong entry or a throw.
   assert.deepStrictEqual(parseChangelog(""), []);
@@ -1546,4 +1568,155 @@ test("bin/ui.js and bin/webui/ each name the other", () => {
     /bin\/ui\.js/,
     "bin/webui/serve.js should point at bin/ui.js"
   );
+});
+
+// ── Mocked Skill Use (v0.46.x) ──────────────────────────────────────────────
+//
+// The catalogue is DERIVED from the files on disk, so the failure this guards
+// is a doc that exists and is invisible: a walkthrough in mock-run/ that no
+// surface lists is the same as a walkthrough nobody wrote.
+
+test("mock-run: every walkthrough on disk is in the catalogue", () => {
+  const catalog = require(path.join(REPO, "bin", "mockrun-catalog.js"));
+  const cat = catalog.catalogue();
+
+  const files = fs
+    .readdirSync(path.join(REPO, "mock-run"))
+    .filter((f) => f.endsWith(".md") && f !== "INDEX.md" && f !== "README.md");
+  assert.ok(files.length >= 10, `expected the shipped walkthroughs, got ${files.length}`);
+  for (const f of files) {
+    const slug = f.replace(/\.md$/, "");
+    assert.ok(
+      cat.docs.some((d) => d.slug === slug),
+      `${f} is on disk but not in the catalogue`
+    );
+  }
+
+  // Grouping decides reading order, and `other` is the honest fallback — but a
+  // doc landing there means GROUP_OF was not updated, so the shipped set must
+  // never use it.
+  const stray = cat.docs.filter((d) => d.group === "other").map((d) => d.slug);
+  assert.deepStrictEqual(stray, [], "every shipped walkthrough needs a group in GROUP_OF");
+
+  // Every doc must carry the two things the panel renders it by.
+  for (const d of cat.docs) {
+    assert.ok(d.title && d.title !== d.slug, `${d.slug} needs a "# " heading`);
+    assert.ok(d.summary, `${d.slug} needs a summary line`);
+    assert.ok(fs.existsSync(path.join(REPO, d.path)), `${d.slug} points at a missing file`);
+  }
+
+  // A lane name is claimed only when the payload really ships that command.
+  for (const d of cat.docs.filter((x) => x.lane))
+    assert.ok(
+      fs.existsSync(path.join(REPO, "templates", "commands", d.lane.slice(1) + ".md")),
+      `${d.slug} claims ${d.lane}, which is not a shipped command`
+    );
+
+  // One doc, with its body; an unknown slug is null, never a guess.
+  assert.ok(catalog.get("orc-pact").body.length > 500);
+  assert.strictEqual(catalog.get("no-such-doc"), null);
+});
+
+test("mock-run: the CLI and the panel read the same module", () => {
+  const cliSrc = fs.readFileSync(CLI, "utf8");
+  const api = fs.readFileSync(path.join(REPO, "bin", "webui", "api.js"), "utf8");
+  const fixtures = fs.readFileSync(path.join(REPO, "bin", "webui", "fixtures.js"), "utf8");
+
+  assert.match(cliSrc, /require\("\.\/mockrun-catalog\.js"\)/, "the CLI must read the catalogue module");
+  assert.match(api, /require\("\.\.\/mockrun-catalog\.js"\)/, "and so must the panel's API");
+  // Fixture mode serves the REAL catalogue: it is package content, identical on
+  // every machine, so a canned copy could only go stale.
+  assert.match(fixtures, /require\("\.\.\/mockrun-catalog\.js"\)/, "fixtures serve the real thing");
+
+  // It is a DIFFERENT command from `orc mock`, which reads mock-examples/ in
+  // the user's project. Collapsing the two would make a package doc look like
+  // something a run produced.
+  assert.match(cliSrc, /case "mock-run":/, "orc mock-run must be its own command");
+  assert.match(cliSrc, /case "mock":/, "and orc mock must still exist beside it");
+});
+
+test("mock-run: the panel renders markdown as DOM, never as HTML", () => {
+  const js = fs.readFileSync(path.join(REPO, "bin", "webui", "app.js"), "utf8");
+  const panel = js.slice(js.indexOf("PANELS.mockrun"), js.indexOf("PANELS.experiment"));
+
+  assert.ok(!/innerHTML|insertAdjacentHTML|outerHTML/.test(panel), "walkthrough text must never be parsed as markup");
+  assert.match(panel, /function renderMd\(/, "there must be a markdown renderer");
+  assert.match(panel, /md-codebox/, "a transcript must render as a code block");
+  assert.match(panel, /md-table/, "and a table as a table");
+
+  // The panel names no document, no group and no order of its own — same rule
+  // as the Flow stepper.
+  assert.ok(!/"orc-pact"|"orc-grill"|"Start here"/.test(panel), "the panel must not name a doc or a group itself");
+
+  // Panel prose is translated; CLI-side data never is.
+  for (const [code, table] of Object.entries(TABLES)) {
+    for (const k of ["nav.mockrun", "mockrun.title", "mockrun.sub", "mockrun.back", "mockrun.lines", "mockrun.linesPlural"])
+      assert.ok(table[k], `${code} is missing ${k}`);
+  }
+});
+
+// The renderer runs over files a maintainer edits by hand, so its failure mode
+// is a HANG: one line that every branch declines leaves the cursor where it
+// was. This drives it over every shipped document with a tiny DOM shim.
+test("mock-run: the markdown renderer terminates on every shipped document", () => {
+  const src = fs.readFileSync(path.join(REPO, "bin", "webui", "app.js"), "utf8");
+  const from = src.indexOf("function renderMd(");
+  const to = src.indexOf("/* ============================================================== EXPERIMENT ==", from);
+  assert.ok(from > 0 && to > from, "the renderer must exist");
+
+  const nodes = [];
+  const mk = (tag) => {
+    const n = {
+      tag,
+      className: "",
+      textContent: "",
+      children: [],
+      style: { setProperty() {} },
+      classList: { toggle() {}, add() {} },
+      setAttribute() {},
+      addEventListener() {},
+      append(...c) {
+        for (const x of c) (x && x.__frag ? n.children.push(...x.children) : n.children.push(x));
+      },
+      get lastChild() {
+        return n.children[n.children.length - 1];
+      },
+    };
+    nodes.push(n);
+    return n;
+  };
+  global.document = {
+    createElement: mk,
+    createDocumentFragment: () => Object.assign(mk("#frag"), { __frag: true }),
+    createTextNode: (s) => ({ data: s }),
+  };
+  const prelude =
+    "const el=(tag,cls,text)=>{const n=document.createElement(tag);if(cls)n.className=cls;" +
+    "if(text!==undefined)n.textContent=text;return n;};" +
+    "const frag=()=>document.createDocumentFragment();const t=(k)=>k;const copy=()=>{};";
+  const renderMd = new Function(prelude + src.slice(from, to) + "\nreturn renderMd;")();
+  const docs = require(path.join(REPO, "bin", "mockrun-catalog.js")).list();
+
+  for (const d of docs) {
+    nodes.length = 0;
+    const body = fs.readFileSync(path.join(REPO, d.path), "utf8");
+    renderMd(body, { title: d.title, docs, open() {} });
+    assert.ok(nodes.length > 3, `${d.slug} rendered almost nothing`);
+  }
+
+  // A malformed table row — a row with no divider under it — is the shape that
+  // hung it: every block branch declines it and the paragraph branch used to
+  // decline it too.
+  nodes.length = 0;
+  renderMd("| a | b |\n\ntext after\n", { docs: [], open() {} });
+  assert.ok(nodes.length > 0, "a stray table row must still render");
+
+  // A relative link into the catalogue becomes a button; anything else does not
+  // pretend to be a link.
+  nodes.length = 0;
+  renderMd("see [it](orc-pact.md) and [that](../bin/cli.js)\n", { docs, open() {} });
+  assert.ok(nodes.some((n) => n.className === "md-doclink"), "a catalogue link opens in the panel");
+  assert.ok(nodes.some((n) => n.className === "md-link-flat"), "an unresolvable link renders as plain text");
+
+  delete global.document;
 });

@@ -1680,6 +1680,268 @@ button.vault-node:focus-visible { outline: 2px solid var(--accent); outline-offs
 .learn-foot { display: flex; gap: var(--sp-2); align-items: center; margin-top: var(--sp-5); flex-wrap: wrap; }
 .learn-foot .btn:last-child { margin-left: auto; }
 
+/* --- Mocked skill use ---------------------------------------------------- */
+/* Two states in one pane: a GALLERY of every mocked run, and one DOCUMENT.
+   Same rail-plus-pane skeleton as Learn — the two panels are the same kind of
+   thing (reading, not doing), and giving them different furniture would be a
+   difference that means nothing. */
+
+.mock {
+  display: grid;
+  grid-template-columns: 244px minmax(0, 1fr);
+  gap: var(--sp-4);
+  align-items: start;
+}
+.mock-side {
+  position: sticky;
+  top: var(--sp-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-3);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  max-height: calc(100vh - var(--sp-6));
+}
+.mock-side-head {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  color: var(--text-faint);
+  padding: 0 var(--sp-2);
+}
+.mock-side .text-input { font-family: var(--font); font-size: 12.5px; padding: 5px 9px; }
+.mock-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  overflow-y: auto;
+  min-height: 0;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+.mock-nav::-webkit-scrollbar { width: 9px; }
+.mock-nav::-webkit-scrollbar-track { background: transparent; }
+.mock-nav::-webkit-scrollbar-thumb { background: var(--line); border-radius: 999px; }
+.mock-nav-group {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  color: var(--text-faint);
+  padding: var(--sp-3) var(--sp-2) 2px;
+}
+.mock-nav-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  padding: 5px var(--sp-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-dim);
+  text-align: left;
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+.mock-nav-item:hover { background: var(--surface-2); color: var(--text); }
+.mock-nav-item[aria-current="true"] {
+  background: var(--accent-wash);
+  color: var(--text);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+.mock-nav-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--mono); font-size: 12px; }
+.mock-nav-tag { font-size: 9.5px; color: var(--text-faint); text-transform: uppercase; letter-spacing: .06em; flex: none; }
+
+.mock-pane {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: var(--sp-5);
+  min-width: 0;
+  animation: learn-in var(--dur) var(--ease);
+}
+.mock-intro { margin-bottom: var(--sp-4); }
+.mock-group + .mock-group { margin-top: var(--sp-5); }
+.mock-group-head {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  color: var(--text-faint);
+  margin-bottom: var(--sp-3);
+}
+.mock-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(232px, 1fr));
+  gap: var(--sp-3);
+}
+/* The cards arrive in reading order rather than all at once — the same idea as
+   `.stack > *`, but the delay is a variable because a grid has no useful
+   nth-child ladder. Reduced motion zeroes it centrally. */
+.mock-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+  padding: var(--sp-3);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--text-dim);
+  animation: block-in var(--dur) var(--ease) backwards;
+  animation-delay: calc(var(--i, 0) * 35ms);
+  transition: border-color var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease),
+              transform var(--dur-fast) var(--ease);
+}
+.mock-card:hover {
+  border-color: var(--accent);
+  background: var(--surface-3);
+  transform: translateY(-2px);
+}
+.mock-card-top { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); }
+.mock-card-lane { font-family: var(--mono); font-size: 12.5px; color: var(--text); }
+.mock-card-sum {
+  font-size: 12.5px;
+  line-height: 1.55;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.mock-card-foot { font-size: 11px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+
+.mock-back { margin-bottom: var(--sp-3); }
+.mock-doc-head { border-bottom: 1px solid var(--line-soft); padding-bottom: var(--sp-3); }
+.mock-doc-title { font-size: 19px; font-weight: 600; letter-spacing: -.01em; }
+.mock-doc-meta { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; margin-top: var(--sp-2); }
+.mock-doc-path, .mock-doc-lines { font-family: var(--mono); font-size: 11px; color: var(--text-faint); }
+.mock-doc-lane {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--accent);
+  background: var(--accent-wash);
+  border-radius: 100px;
+  padding: 2px 10px;
+}
+.mock-doc-foot {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  margin-top: var(--sp-5);
+  padding-top: var(--sp-4);
+  border-top: 1px solid var(--line-soft);
+}
+.mock-doc-foot .btn:last-child { margin-left: auto; }
+
+/* --- markdown, rendered as DOM (never innerHTML) */
+.mock-article { max-width: 78ch; }
+.md-h { font-weight: 600; letter-spacing: -.01em; color: var(--text); margin-top: var(--sp-5); }
+.md-h2 { font-size: 16px; }
+.md-h3 { font-size: 14px; }
+.md-h4, .md-h5, .md-h6 { font-size: 13px; color: var(--text-dim); }
+.md-p { font-size: 13.5px; line-height: 1.75; color: var(--text-dim); margin-top: var(--sp-3); }
+.md-hr { border: 0; border-top: 1px solid var(--line-soft); margin: var(--sp-5) 0; }
+.md-quote {
+  margin-top: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  border-left: 2px solid var(--accent);
+  background: var(--accent-wash);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text);
+}
+.md-list { margin-top: var(--sp-3); display: flex; flex-direction: column; gap: 4px; list-style: none; }
+.md-li {
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--text-dim);
+  padding-left: var(--sp-4);
+  position: relative;
+}
+.md-li::before { content: "•"; position: absolute; left: var(--sp-2); color: var(--accent); }
+.md-li-1 { margin-left: var(--sp-4); }
+.md-li-2 { margin-left: var(--sp-6); }
+ol.md-list { counter-reset: md; }
+ol.md-list .md-li::before { counter-increment: md; content: counter(md) "."; font-family: var(--mono); font-size: 11px; }
+
+/* A transcript is the point of these documents, so the code box is the loudest
+   thing on the page and it scrolls itself rather than the article. */
+.md-codebox { position: relative; margin-top: var(--sp-3); }
+.md-code {
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: var(--sp-3) var(--sp-4);
+  overflow-x: auto;
+  white-space: pre;
+}
+.md-code-copy { position: absolute; top: 6px; right: 8px; opacity: 0; transition: opacity var(--dur-fast) var(--ease); }
+.md-codebox:hover .md-code-copy, .md-code-copy:focus-visible { opacity: 1; }
+.md-code-inline {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  background: var(--surface-3);
+  border-radius: 4px;
+  padding: 1px 5px;
+  color: var(--text);
+}
+.md-tablewrap {
+  margin-top: var(--sp-3);
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+.md-tablewrap::-webkit-scrollbar { height: 9px; }
+.md-tablewrap::-webkit-scrollbar-track { background: transparent; }
+.md-tablewrap::-webkit-scrollbar-thumb { background: var(--line); border-radius: 999px; }
+.md-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.md-table th {
+  text-align: left;
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--text-faint);
+  padding: var(--sp-2) var(--sp-3);
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+.md-table td {
+  padding: var(--sp-2) var(--sp-3);
+  border-bottom: 1px solid var(--line-soft);
+  color: var(--text-dim);
+  vertical-align: top;
+}
+.md-link { color: var(--accent); text-decoration: none; }
+.md-link:hover { text-decoration: underline; }
+.md-link-flat { color: var(--text); }
+.md-doclink {
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  color: var(--accent);
+  cursor: pointer;
+  border-bottom: 1px dashed var(--accent-dim);
+}
+.md-doclink:hover { border-bottom-style: solid; }
+
+@media (max-width: 860px) {
+  .mock { grid-template-columns: minmax(0, 1fr); }
+  .mock-side { position: static; max-height: 320px; }
+}
+
 /* --- Experiment ---------------------------------------------------------- */
 
 .lane-list { display: flex; flex-direction: column; gap: var(--sp-2); }
