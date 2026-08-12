@@ -82,6 +82,14 @@ one the build gets wrong.
 
 **The mirrored half, for a lane that GENERATES options** (`/orc-brainstorm`):
 producing candidates is ORC's job, choosing between them is the user's, and
+**The third half, for a lane that GRADES** (`/orc-challenge`): ORC judges, the
+user fixes, ORC re-judges — and **a lane that fixes what it judged has broken
+this contract**, because a session that just wrote the fix will grade its own
+homework and it will always pass. Its intake is this same split applied to the
+PURPOSE of the review: **a lane that guesses the user's goal has broken this
+contract** too, because a finding is only a finding relative to a goal, and a
+*defensible* finding about the wrong thing is worse than an obviously wrong one.
+
 **a lane that picks its own favourite** and moves on has broken the same
 contract. Convergent and divergent work split the same way; the two sentences are
 registered as a pair so neither lane can drift into the other's habits.

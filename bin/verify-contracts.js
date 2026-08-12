@@ -32,6 +32,9 @@ const CONTRACTS = [
       "agents/orc-analyst-fable-5.md",
       "agents/orc-analyze-mini-opus-5-med.md",
       "agents/orc-analyze-mini-sonnet-5-high.md",
+      "agents/orc-challenge-advisor-opus-5-med.md",
+      "agents/orc-challenge-judge-opus-5-high.md",
+      "agents/orc-challenge-reader-opus-5-low.md",
       "agents/orc-claude-writer-opus-4-8-high.md",
       "agents/orc-claude-writer-opus-5-med.md",
       "agents/orc-context-combiner-opus-5-high.md",
@@ -75,6 +78,7 @@ const CONTRACTS = [
       "skills/orc-brainstorm/SKILL.md",
       "skills/orc-budget/SKILL.md",
       "skills/orc-budget/references/corpus.md",
+      "skills/orc-challenge/SKILL.md",
       "skills/orc-claude/SKILL.md",
       "skills/orc-claude/examples/claude-run-mock.md",
       "skills/orc-diy/references/blocks/trace.md",
@@ -100,7 +104,7 @@ const CONTRACTS = [
       "skills/orc/subskills/orc-review-verify/SKILL.md",
       "skills/orc/subskills/orc-review-verify/core.md",
       "skills/orc/subskills/orc-testgen/core.md",
-        ],
+    ],
   },
   {
     name: "pattern invariants_checked attestation (executor return)",
@@ -500,6 +504,12 @@ const CONTRACTS = [
       "skills/orc-boundary/SKILL.md",
       "skills/orc-brainstorm/SKILL.md",
       "skills/orc-budget/SKILL.md",
+      // v0.47.0: /orc-challenge writes a pointer, so it owes BOTH halves — and it
+      // owes them TWICE, because the lane resumes in a fresh session by design
+      // (the _shared/lane-suspend.md resume rule, reached by a different road).
+      // intake.md carries it too: its `/orc-grill` exit is a real suspend.
+      "skills/orc-challenge/SKILL.md",
+      "skills/orc-challenge/references/intake.md",
       "skills/orc-claude/SKILL.md",
       "skills/orc-diy/references/blocks/trace.md",
       "skills/orc-export/SKILL.md",
@@ -538,6 +548,10 @@ const CONTRACTS = [
       "skills/orc-brainstorm/SKILL.md",
       "skills/orc-budget/SKILL.md",
       "skills/orc-budget/references/corpus.md",
+      "skills/orc-challenge/SKILL.md",
+      "skills/orc-challenge/examples/tsd-two-iterations.md",
+      "skills/orc-challenge/references/fix-brief.md",
+      "skills/orc-challenge/references/intake.md",
       "skills/orc-claude/SKILL.md",
       "skills/orc-diy/references/blocks/trace.md",
       "skills/orc-export/SKILL.md",
@@ -560,7 +574,7 @@ const CONTRACTS = [
       "skills/orc/references/stop-and-resume.md",
       "skills/orc/references/trace-protocol.md",
       "skills/orc/subskills/orc-planner/SKILL.md",
-        ],
+    ],
   },
   {
     // v0.32.0: narration is DISPATCHED, not remembered. The pen moved from the
@@ -686,6 +700,7 @@ const CONTRACTS = [
     files: [
       "hooks/orc-statusline.js",
       "skills/_shared/detecting-artifacts.md",
+      "skills/orc-challenge/references/cycle-state.md",
       "skills/orc-fast/SKILL.md",
       "skills/orc-learn/SKILL.md",
       "skills/orc-mini/SKILL.md",
@@ -703,7 +718,7 @@ const CONTRACTS = [
       "skills/orc/SKILL.md",
       "skills/orc/config.md",
       "skills/orc/references/wiki-consult.md",
-        ],
+    ],
   },
   {
     // v0.25.0: existence detection is a shared contract so a generated wiki /
@@ -723,6 +738,10 @@ const CONTRACTS = [
       "skills/orc-boundary/references/card.md",
       "skills/orc-brainstorm/SKILL.md",
       "skills/orc-brainstorm/references/lenses.md",
+      "skills/orc-challenge/SKILL.md",
+      "skills/orc-challenge/examples/code-module.md",
+      "skills/orc-challenge/references/cycle-state.md",
+      "skills/orc-challenge/references/kinds.md",
       "skills/orc-diy/references/flow-schema.md",
       "skills/orc-fast/SKILL.md",
       "skills/orc-grill/SKILL.md",
@@ -737,7 +756,7 @@ const CONTRACTS = [
       "skills/orc-wiki/references/staleness.md",
       "skills/orc/references/pattern-gate.md",
       "skills/orc/references/wiki-consult.md",
-        ],
+    ],
   },
   {
     // v0.42.0: the interview mechanic (design tree → frontier → rounds →
@@ -754,10 +773,12 @@ const CONTRACTS = [
       "skills/_shared/lane-suspend.md",
       "skills/orc-boundary/SKILL.md",
       "skills/orc-brainstorm/SKILL.md",
+      "skills/orc-challenge/SKILL.md",
+      "skills/orc-challenge/references/intake.md",
       "skills/orc-grill/SKILL.md",
       "skills/orc-pact/SKILL.md",
       "skills/orc/references/intake.md",
-        ],
+    ],
   },
   {
     // The one rule that makes an interview load-bearing rather than a good
@@ -767,9 +788,9 @@ const CONTRACTS = [
     token: "a lane that answers its own interview question",
     files: [
       "skills/_shared/interview.md",
-      "skills/orc-grill/SKILL.md",
-      // v0.45.0: brainstorm states the convergent half in order to mirror it.
       "skills/orc-brainstorm/SKILL.md",
+      "skills/orc-challenge/SKILL.md",
+      "skills/orc-grill/SKILL.md",
     ],
   },
   {
@@ -783,7 +804,152 @@ const CONTRACTS = [
     files: [
       "skills/_shared/interview.md",
       "skills/orc-brainstorm/SKILL.md",
+      "skills/orc-challenge/SKILL.md",
     ],
+  },
+  {
+    // v0.47.0: the THIRD member of the pair above. Same split every time — facts
+    // and findings are ORC's, the work and the decision are the user's — but here
+    // it is the WORK that must stay the user's: a session that just wrote the fix
+    // will grade its own homework, and it will always pass. The separation is not
+    // friction; it is the measuring instrument.
+    name: "the grader never repairs (v0.47.0 — /orc-challenge)",
+    token: "a lane that fixes what it judged",
+    files: [
+      "skills/_shared/interview.md",
+      "skills/orc-challenge/SKILL.md",
+    ],
+  },
+  {
+    // The same contract applied to the PURPOSE of the review rather than to a
+    // design question. A finding is only a finding relative to a goal, and a
+    // DEFENSIBLE finding about the wrong thing is worse than an obviously wrong
+    // one — the user burns three iterations on what did not matter. Mirrored in
+    // bin/cli.js, where `--goal` has no default and `init` refuses by name.
+    name: "the review's goal is the user's to state (v0.47.0 — /orc-challenge intake)",
+    token: "a lane that guesses the user's goal",
+    files: [
+      "skills/_shared/interview.md",
+      "skills/orc-challenge/SKILL.md",
+      "skills/orc-challenge/references/intake.md",
+    ],
+    binFiles: ["bin/cli.js"],
+  },
+  {
+    // The frozen goal is a PATH in every dispatch, never prose — which is the
+    // whole reason it is written to disk at intake instead of being retyped into
+    // each slice. `goals.md` is also a filename the CLI owns.
+    name: "the frozen goal file (v0.47.0 — /orc-challenge)",
+    token: "goals.md",
+    files: [
+      "agents/orc-challenge-advisor-opus-5-med.md",
+      "agents/orc-challenge-judge-opus-5-high.md",
+      "skills/orc-challenge/SKILL.md",
+      "skills/orc-challenge/examples/tsd-two-iterations.md",
+      "skills/orc-challenge/references/cycle-state.md",
+      "skills/orc-challenge/references/dimensions.md",
+      "skills/orc-challenge/references/fix-brief.md",
+      "skills/orc-challenge/references/intake.md",
+      "skills/orc-challenge/references/sealed-slice.md",
+    ],
+    binFiles: ["bin/cli.js"],
+  },
+  {
+    // A fix is a CLAIM; a verdict is EVIDENCE. The moment the judge is handed a
+    // summary of what changed, it is grading the summary — written by the party
+    // with an interest in passing.
+    name: "the sealed judge slice (v0.47.0 — paths and ids only)",
+    token: "judge slice is SEALED",
+    files: [
+      "skills/orc-challenge/SKILL.md",
+      "skills/orc-challenge/references/sealed-slice.md",
+    ],
+  },
+  {
+    // Rule 2. A judge that CAN pass something can be talked into passing
+    // something; a judge that can only find, or fail to find, cannot.
+    name: "PASS is the CLI's, never the judge's (v0.47.0)",
+    token: "PASS is computed, never declared",
+    files: [
+      "skills/orc-challenge/SKILL.md",
+      "skills/orc-challenge/references/rubric.md",
+    ],
+    binFiles: ["bin/cli.js"],
+  },
+  {
+    // The cycle folder. Project root, one folder per slug ever, never staged —
+    // and never inside .claude/, because the review trail is a deliverable the
+    // user may want in a pull request.
+    name: "the challenge cycle folder (v0.47.0)",
+    token: "orc/orc-challenge/",
+    files: [
+      "agents/orc-challenge-judge-opus-5-high.md",
+      "skills/orc-challenge/examples/code-module.md",
+      "skills/orc-challenge/examples/tsd-two-iterations.md",
+      "skills/orc-challenge/references/fix-brief.md",
+      "skills/orc-challenge/references/intake.md",
+      "skills/orc-challenge/references/sealed-slice.md",
+      "skills/orc-challenge/references/verdict-doc.md",
+      // The /orc-export seam: a PASSED cycle is portable evidence that a spec was
+      // checked, not just written. An in-flight one is never exported.
+      "skills/orc-export/SKILL.md",
+    ],
+    binFiles: ["bin/cli.js"],
+  },
+  {
+    name: "the paste-into-a-fresh-session brief (v0.47.0)",
+    token: "fix-brief-",
+    files: [
+      "skills/orc-challenge/SKILL.md",
+      "skills/orc-challenge/examples/tsd-two-iterations.md",
+      "skills/orc-challenge/references/fix-brief.md",
+      "skills/orc-challenge/references/intake.md",
+    ],
+    binFiles: ["bin/cli.js"],
+  },
+  {
+    // The block that stops the resumed session asking where the fix went. That
+    // is a fact the cycle already owns, and asking for it is rule 0's failure
+    // mode in miniature.
+    name: "the declared revision location (v0.47.0)",
+    token: "Where to put the revised version",
+    files: [
+      "skills/orc-challenge/references/fix-brief.md",
+      "skills/orc-challenge/references/intake.md",
+    ],
+    binFiles: ["bin/cli.js"],
+  },
+  {
+    // It LISTS, it does not adopt: a judge pointed at the wrong file produces a
+    // page of confident, useless findings.
+    name: "the missing-revision state (v0.47.0)",
+    token: "MISSING-REVISION",
+    files: [
+      "skills/orc-challenge/references/cycle-state.md",
+      "skills/orc-challenge/references/fix-brief.md",
+    ],
+    binFiles: ["bin/cli.js"],
+  },
+  {
+    // THE LEDGER, and `orc challenge` is its only writer — the same rule
+    // wiki-meta.json lives under.
+    name: "the challenge ledger (v0.47.0 — CLI-only writer)",
+    token: "challenge.json",
+    files: ["skills/orc-challenge/references/cycle-state.md"],
+    binFiles: ["bin/cli.js"],
+  },
+  {
+    // The trace verb, pinned the way `CROSSLINK` is. The CLI assembles the line
+    // (`record` returns it as `trace_line`), so a second wording anywhere would
+    // be a second count of the same iteration.
+    name: "the CHALLENGE trace verb (v0.47.0)",
+    token: "CHALLENGE iter=",
+    files: [
+      "skills/orc-challenge/SKILL.md",
+      "skills/orc-challenge/examples/tsd-two-iterations.md",
+      "skills/orc/references/trace-protocol.md",
+    ],
+    binFiles: ["bin/cli.js"],
   },
   {
     // v0.45.0: the SUSPEND contract — leave mid-run, let another lane settle one
@@ -795,6 +961,7 @@ const CONTRACTS = [
       "skills/_shared/README.md",
       "skills/_shared/lane-suspend.md",
       "skills/orc-brainstorm/SKILL.md",
+      "skills/orc-challenge/references/intake.md",
       "skills/orc-grill/SKILL.md",
       "skills/orc/references/trace-protocol.md",
     ],
@@ -805,12 +972,13 @@ const CONTRACTS = [
     name: "suspend marker (v0.45.0 — RETURN-TO, the sender finishes the run)",
     token: "RETURN-TO",
     files: [
+      "commands/orc-brainstorm.md",
       "skills/_shared/README.md",
       "skills/_shared/lane-suspend.md",
       "skills/orc-brainstorm/SKILL.md",
+      "skills/orc-challenge/references/intake.md",
       "skills/orc-grill/SKILL.md",
       "skills/orc/references/trace-protocol.md",
-      "commands/orc-brainstorm.md",
     ],
   },
   {
@@ -861,6 +1029,9 @@ const CONTRACTS = [
     token: "RESUME.md",
     binFiles: ["bin/cli.js"],
     files: [
+      "skills/orc-challenge/SKILL.md",
+      "skills/orc-challenge/examples/tsd-two-iterations.md",
+      "skills/orc-challenge/references/fix-brief.md",
       "skills/orc/SKILL.md",
       "skills/orc/references/stop-and-resume.md",
     ],
@@ -960,9 +1131,12 @@ const CONTRACTS = [
       "skills/context-combiner/SKILL.md",
       "skills/context-combiner/schemas/combined-report.md",
       "skills/context-combiner/schemas/combined-requirement-spec.md",
+      "skills/orc-analyze/references/branching.md",
+      "skills/orc-challenge/SKILL.md",
+      "skills/orc-challenge/references/conservation.md",
+      "skills/orc-challenge/references/cycle-state.md",
       "skills/orc/SKILL.md",
       "skills/orc/references/analyst-gates.md",
-      "skills/orc-analyze/references/branching.md",
     ],
   },
   {
@@ -1111,6 +1285,7 @@ const CONTRACTS = [
       "skills/_shared/fable5-override.md",
       "skills/_shared/opus5-only.md",
       "skills/orc-analyze/references/deep-mode.md",
+      "skills/orc-challenge/README.md",
       "skills/orc-claude/SKILL.md",
       "skills/orc-diy/README.md",
       "skills/orc-fast/SKILL.md",
@@ -1131,7 +1306,7 @@ const CONTRACTS = [
       "skills/orc/references/preflight-report.md",
       "skills/orc/references/trace-protocol.md",
       "skills/orc/references/ultra-mode.md",
-        ],
+    ],
   },
   {
     name: "CONFIG trace verb (v0.30.0 — Phase 1 resolved-config runtime proof)",
@@ -1832,16 +2007,17 @@ const CONTRACTS = [
     files: [
       "commands/orc-pr-driver.md",
       "commands/orc-pr-setup.md",
+      "skills/_shared/README.md",
       "skills/_shared/gh-stack-commands.md",
       "skills/_shared/stack-plan.md",
+      "skills/orc-challenge/references/kinds.md",
+      "skills/orc-pr-driver/README.md",
       "skills/orc-pr-driver/SKILL.md",
       "skills/orc-pr-driver/references/orc-run-split.md",
+      "skills/orc-pr-setup/README.md",
       "skills/orc-pr-setup/SKILL.md",
       "skills/orc/SKILL.md",
       "skills/orc/subskills/orc-pr/stack-gate.md",
-      "skills/orc-pr-driver/README.md",
-      "skills/orc-pr-setup/README.md",
-      "skills/_shared/README.md",
     ],
   },
   {
@@ -1950,13 +2126,14 @@ const CONTRACTS = [
       "skills/orc-boundary/SKILL.md",
       "skills/orc-brainstorm/SKILL.md",
       "skills/orc-brainstorm/references/lenses.md",
+      "skills/orc-challenge/SKILL.md",
       "skills/orc-export/SKILL.md",
       "skills/orc-pact/SKILL.md",
       "skills/orc-poly/SKILL.md",
       "skills/orc-quick/references/gh-mode.md",
       "skills/orc-wiki/SKILL.md",
       "skills/orc/references/wiki-consult.md",
-        ],
+    ],
   },
   // ── v0.40.0 — gotchas (repair memory) ───────────────────────────────────
   {
@@ -2230,7 +2407,13 @@ const BUDGETS = [
   // (5) The Phase-8 handoff sentence — one line, and the only discovery path the
   // non-dev lane has. Mechanics live in orc-pact/references/gate.md,
   // orc-boundary/references/gate.md and references/preflight-report.md.
-  { file: "skills/orc/SKILL.md", maxLines: 490 },
+  // v0.47.0: deliberate raise 490→494 — the `challenge_gate` probe joins the
+  // Phase-1 block above. It belongs in the spine for the same reason its four
+  // neighbours do: it is read alongside them in one pass, its output is a CLI
+  // line printed VERBATIM, and a reference loaded later would arrive after the
+  // planner already committed to building from a document that has not passed
+  // its own review. Four lines, one probe, no new mechanics.
+  { file: "skills/orc/SKILL.md", maxLines: 494 },
   // v0.33.0: deliberate raises 264→289 / 197→219 / 171→179 — orc-wiki gains the
   // crosslink-compile entry branch, the delta-refresh default (impact probe),
   // and the orientation/atlas assemble steps (detail in references/); mini
@@ -2274,7 +2457,12 @@ const BUDGETS = [
   // `analyzable ⇔` sentence is a registered contract token that must be stated
   // where the decision is made. The two branches, the offer wording and the
   // auto-consume live in references/thin-input.md, loaded only when it fails.
-  { file: "skills/orc-analyze/SKILL.md", maxLines: 215 },
+  // v0.47.0: deliberate raise 215→221 — the `/orc-challenge` probe at Phase A.
+  // It has to sit at the point the source mode is confirmed: by the time any
+  // reference loads, scope is already bounded and the analyst is committed to a
+  // document that may not have passed its own review. One probe, one VERBATIM
+  // line, no mechanics — the same shape as the Phase-1 probes in orc/SKILL.md.
+  { file: "skills/orc-analyze/SKILL.md", maxLines: 221 },
   // v0.40.0: deliberate raise 182→187 — gotchas as an explicit NON-gate. It has
   // to be stated where the two prerequisites are stated, or a later reader adds
   // a third gate and breaks the lane's entire premise.

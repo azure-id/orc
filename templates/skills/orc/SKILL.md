@@ -229,7 +229,11 @@ written here):** probe `orc pact status --json` (`pact_gate`, default `warn`),
 --json`, and — only to decide whether the preflight's `after:` line fires at all —
 `orc aftermath status --json`. Print each probe's own `line` VERBATIM; never
 recount or re-word one. Gates: `../orc-pact/references/gate.md` +
-`../orc-boundary/references/gate.md`. **Preflight:** print the compact block per
+`../orc-boundary/references/gate.md`. **Challenge (v0.47.0, `challenge_gate`,
+default `warn`):** when the run's INPUT DOCUMENT has a cycle, print
+`orc challenge status <slug> --json`'s `preflight_line` verbatim — building from
+a document that has not passed its own review is worth one line. There is no
+`block` mode (the `/orc-pact` precedent). **Preflight:** print the compact block per
 `references/preflight-report.md` once wiki + crosslink (+ pattern/waves) resolve.
 
 Ask which planner: **Superpowers / OpenSpec / Requirement Planner / ORC

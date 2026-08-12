@@ -75,6 +75,19 @@ Moves nothing and deletes nothing: sets `retired: true` and records
 heading. A promise that silently disappeared is indistinguishable from one that
 was never made — and six months later somebody re-derives it from scratch.
 
+## A challenge finding that is really a DECISION
+
+`/orc-challenge`'s advisor flags them: a P0/P1 like *"the document never says
+whether refunds are idempotent"* is not a documentation defect — it is a
+**constraint nobody has recorded**. Fixing it in a fifth iteration of a document
+review is the wrong shape; recording it here is the right one.
+
+It arrives like any other harvest: **quoted verbatim**, with an `origin` naming
+the cycle and the finding id (`{ lane: "challenge", run: "tsd-payments#F-003" }`),
+and the user confirms it before it lands. The finding stays open in the cycle
+until the artifact actually says what was decided — the ledger records the
+decision, it does not close somebody else's finding.
+
 ## What never goes in
 
 - A promise with no origin.

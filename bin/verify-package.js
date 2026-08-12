@@ -119,6 +119,25 @@ const required = [
   // + the retirement offer; without it orc-wiki's spine points at a missing file
   // at exactly the moment it has to choose which scanner to dispatch.
   "templates/skills/orc-wiki/references/partial-refresh.md",
+  // v0.47.0 — /orc-challenge. Named file by file for the reason every lane's
+  // files are: the SKILL.md is a spine and its references ARE the contract. A
+  // publish that drops `sealed-slice.md` ships a judge whose slice has no
+  // definition, which is the one thing this lane exists to prevent; a publish
+  // that drops `intake.md` ships a lane with no goal contract, so rule 0 becomes
+  // a sentence nobody can act on.
+  "templates/skills/orc-challenge/SKILL.md",
+  "templates/skills/orc-challenge/README.md",
+  "templates/skills/orc-challenge/references/intake.md",
+  "templates/skills/orc-challenge/references/dimensions.md",
+  "templates/skills/orc-challenge/references/kinds.md",
+  "templates/skills/orc-challenge/references/rubric.md",
+  "templates/skills/orc-challenge/references/sealed-slice.md",
+  "templates/skills/orc-challenge/references/cycle-state.md",
+  "templates/skills/orc-challenge/references/verdict-doc.md",
+  "templates/skills/orc-challenge/references/fix-brief.md",
+  "templates/skills/orc-challenge/references/plain-english.md",
+  "templates/skills/orc-challenge/references/conservation.md",
+  "templates/commands/orc-challenge.md",
   "templates/commands/orc-pact.md",
   "templates/commands/orc-boundary.md",
   "templates/commands/orc-handoff.md",
@@ -179,6 +198,13 @@ const required = [
   "templates/agents/orc-wiki-scanner-opus-5-med.md",
   "templates/agents/orc-claude-writer-opus-5-med.md",
   "templates/agents/orc-retro-opus-5-med.md",
+  // v0.47.0 — the three /orc-challenge agents. All THREE must ship: a cycle that
+  // cannot dispatch the reader silently loses D4, and one that cannot dispatch
+  // the advisor turns a FAIL into a list with no order. All three are already
+  // Opus 5, so `opus5_only` needs no twin for any of them.
+  "templates/agents/orc-challenge-judge-opus-5-high.md",
+  "templates/agents/orc-challenge-advisor-opus-5-med.md",
+  "templates/agents/orc-challenge-reader-opus-5-low.md",
   "templates/agents/orc-analyst-fable-5.md",
   "templates/agents/orc-planner-fable-5.md",
   "templates/agents/orc-advisor-fable-5.md",
@@ -229,8 +255,15 @@ const agentCount = walkCount(path.join(ROOT, "templates/agents"), ".md");
 // scan ladder's LIGHT half, which is a real dispatch target with a real name and
 // therefore earns a MODEL-MAPPING row, an explicit guard entry above, and a
 // place in the opus5_only table's prose.
-if (skillCount < 36) missing.push(`templates/skills (expected >=36 SKILL.md, found ${skillCount})`);
-if (agentCount < 41) missing.push(`templates/agents (expected >=41 .md, found ${agentCount})`);
+// v0.47.0: +1 skill (orc-challenge) and +3 agents — the first lane since v0.42.0
+// to earn any, and it earns three because each is a DIFFERENT INSTRUMENT, not a
+// tier of the same one. The reader is `low` on purpose (a harder-thinking reader
+// papers over exactly the gaps D4 measures), the judge is `high` because D2 is
+// the only dimension no computer can reach, and the advisor is `medium` because
+// grouping findings is pattern work. All three are claude-opus-5, so `opus5_only`
+// adds NO pair and the floor moves by exactly three.
+if (skillCount < 37) missing.push(`templates/skills (expected >=37 SKILL.md, found ${skillCount})`);
+if (agentCount < 44) missing.push(`templates/agents (expected >=44 .md, found ${agentCount})`);
 
 // B4 — encoding/mojibake guard. The OneDrive corruption rule becomes a gate:
 // scan every shipped text file for the U+FFFD replacement char (invalid UTF-8

@@ -10,9 +10,7 @@
     "Istilah teknis ORC (lane, wiki, pattern, trace, run, gate) sengaja",
     "dipertahankan — itu nama barangnya, bukan kata biasa."
   ],
-
   "lang.title": "Ganti bahasa",
-
   "nav.overview": "Ringkasan",
   "nav.settings": "Pengaturan",
   "nav.runs": "Run",
@@ -24,12 +22,10 @@
   "nav.mockrun": "Contoh Penggunaan Skill",
   "nav.experiment": "Eksperimen",
   "nav.maintenance": "Pemeliharaan",
-
   "rail.light": "Terang",
   "rail.dark": "Gelap",
   "rail.shortcuts": "Pintasan papan ketik",
   "rail.fixtures": "MODE FIXTURE",
-
   "common.copy": "Salin",
   "common.copied": "Tersalin",
   "common.cancel": "Batal",
@@ -46,13 +42,11 @@
   "common.clipboardFail": "Papan klip tidak bisa diakses — pilih teksnya dan salin manual.",
   "common.none": "tidak ada",
   "common.checking": "memeriksa…",
-
   "age.now": "baru saja",
   "age.min": "{n} menit lalu",
   "age.hours": "{n} jam lalu",
   "age.day": "{n} hari lalu",
   "age.dayPlural": "{n} hari lalu",
-
   "version.unknown.label": "tidak diketahui",
   "version.unknown.note": "Versi yang terpasang tidak terbaca.",
   "version.off.label": "pemeriksaan mati",
@@ -63,7 +57,6 @@
   "version.available.note": "Anda memakai {version}. Pemeliharaan → upgrade akan memasangnya.",
   "version.current.label": "terbaru",
   "version.current.note": "{version} adalah yang terbaru di {source}.",
-
   "banner.update.title": "orc {latest} sudah tersedia — Anda memakai {version}.",
   "banner.update.note": "Klik untuk membaca apa yang berubah, lalu upgrade dari panel Pemeliharaan.",
   "banner.update.cta": "Baca →",
@@ -73,7 +66,6 @@
   "banner.fixtures": "Mode fixture: semua angka di halaman ini palsu. Tidak ada data nyata yang dibaca, dan tidak ada yang bisa ditulis.",
   "banner.noToken": "Halaman ini kehilangan token sesinya.",
   "banner.noTokenHint": "Jalankan `orc ui` lagi di proyek Anda untuk mendapat URL baru.",
-
   "changelog.title": "Yang baru di {version}",
   "changelog.disabled": "Pemeriksaan pembaruan dimatikan (ORC_NO_UPDATE_CHECK), jadi tidak ada yang bisa ditampilkan.",
   "changelog.offline": "Changelog tidak terjangkau — Anda sedang luring, atau sumbernya mati.",
@@ -82,7 +74,6 @@
   "changelog.source": "Sumber: {src}",
   "changelog.goUpgrade": "Bawa saya ke upgrade",
   "changelog.loadFail": "Changelog gagal dimuat: {err}",
-
   "overview.title": "Ringkasan",
   "overview.sub": "Kesehatan instalasi, kondisi pengetahuan, dan apa yang masih menunggu Anda.",
   "overview.tile.install": "Instalasi",
@@ -101,12 +92,10 @@
   "overview.tile.versionFailed": "Pemeriksaan versi tidak selesai.",
   "overview.tile.patterns": "Code pattern",
   "overview.tile.patternsNone": "belum ada yang tersimpan",
-
   "overview.attention.title": "Layak dikerjakan",
   "overview.attention.allClear": "Tidak ada yang perlu perhatian Anda.",
   "overview.attention.allClearHint": "Instalasi sehat, pengetahuan segar, tidak ada run yang tertinggal.",
   "overview.attention.nothingToDo": "Tidak perlu tindakan — ini bersih sendiri di run berikutnya.",
-
   "overview.item.diyStale.title": "Flow DIY perlu dikompilasi ulang",
   "overview.item.diyStale.body": "Compile yang STALE menolak dijalankan. Kompilasi ulang di panel Flow — di situlah `orc diy compile` berada, bukan di Pemeliharaan.",
   "overview.item.diyStale.cta": "Kompilasi ulang di Flow",
@@ -133,7 +122,6 @@
   "overview.item.update.body": "Anda memakai {version}. Baca dulu changelog-nya, baru upgrade — tidak ada yang terpasang sendiri.",
   "overview.item.update.cta": "Buka Pemeliharaan",
   "overview.item.doctor.cta": "Buka Pemeliharaan",
-
   "overview.waiting.title": "Menunggu Anda",
   "overview.waiting.note": "Penunjuk resume ada di disk untuk yang berikut. `orc resume` mencetak prompt untuk ditempel ke sesi baru.",
   "overview.waiting.where": "terbuka — lihat panel Run untuk posisinya",
@@ -150,7 +138,6 @@
   "overview.know.patterns": "pattern tersimpan",
   "overview.know.tags": "tag crosslink",
   "overview.know.diy": "flow diy",
-
   "settings.title": "Pengaturan",
   "settings.sub": "Semua kunci yang dikenal `orc config`. Setiap perubahan menjalankan perintah CLI aslinya, jadi validator CLI yang memutuskan.",
   "settings.profiles": "Profil",
@@ -190,7 +177,6 @@
   "settings.ladder.override": "Ada rubric_bands_override tulisan tangan di berkas. Itu menggantikan tabel default (dan sendirinya dikalahkan oleh opus5_only).",
   "settings.ladder.default": "Tabel default 8 pita. Tabel diselesaikan dengan yang tertinggi menang: opus5_only > rubric_bands_override > yang ini.",
   "settings.ladder.note": "Hanya baca — ini diagram, bukan editor. Datanya dari tabel milik CLI, jadi panel tidak menyimpan salinan kedua.",
-
   "runs.title": "Run",
   "runs.sub": "Semua yang pernah dicatat ORC, terbaru di atas. Klik satu run untuk membukanya di tempat.",
   "runs.empty": "Belum ada run yang tercatat.",
@@ -226,7 +212,6 @@
   "runs.field.files": "berkas",
   "runs.field.written": "ditulis",
   "runs.emptyFolder": "(folder kosong)",
-
   "knowledge.title": "Pengetahuan",
   "knowledge.sub": "Yang sudah diketahui ORC tentang repo ini: wiki, code-pattern tersimpan, dan memori perbaikan.",
   "knowledge.wiki": "Wiki",
@@ -261,7 +246,6 @@
   "knowledge.field.edges": "batas",
   "knowledge.field.tags": "tag crosslink",
   "knowledge.field.blind": "titik buta struktural",
-
   "stats.title": "Statistik",
   "stats.sub": "Dihitung dari nama berkas trace — tanpa model, instan, gratis.",
   "stats.empty": "Belum ada trace.",
@@ -277,7 +261,6 @@
   "stats.unknownLane": "trace tanpa nama lane di berkasnya",
   "stats.logDir": "folder log",
   "stats.note": "Hanya menghitung yang dicatat trace. /orc-retro dan /orc-explain tidak pernah menulis trace, jadi tidak pernah muncul di sini. Tidak ada trace yang dipangkas otomatis.",
-
   "flow.title": "Flow (DIY)",
   "flow.sub": "Lane rakitan pengguna. Bentuknya milik CLI dan harus dikompilasi — compile yang basi tidak pernah dijalankan.",
   "flow.gate": "Gate",
@@ -321,7 +304,6 @@
   "flow.table": "Tabel executor hasil compile",
   "flow.tableNote": "Dipotong ke tier sesi yang dideklarasikan saat COMPILE, bukan saat run.",
   "flow.files": "Berkas",
-
   "crosslink.title": "Crosslink",
   "crosslink.sub": "Rujukan wiki antar repo. Bersifat saran, tidak pernah memblokir — hanya membaca WIKI asing, tidak pernah kode asing.",
   "crosslink.empty": "Belum ada tautan antar repo.",
@@ -377,7 +359,6 @@
   "crosslink.remove.title": "Hapus repo tertaut",
   "crosslink.remove.body": "Hapus repo tertaut \"{name}\" beserta semua sisi yang menyentuhnya?",
   "crosslink.remove.note": "Ini hanya mengubah config crosslink repo ini. Repo satunya tidak pernah disentuh.",
-
   "picker.title": "Pilih folder repo",
   "picker.note": "Folder saja. Isinya tidak dibaca — ini hanya mendaftar nama direktori supaya Anda tidak perlu mengetik path manual.",
   "picker.up": "Folder induk",
@@ -390,7 +371,6 @@
   "picker.choose": "Pakai folder ini",
   "picker.relative": "Disimpan sebagai: {rel}",
   "picker.sameRepo": "Itu repo ini sendiri — pilih folder lain.",
-
   "learn.title": "Belajar",
   "learn.sub": "Panduan yang sama dengan `orc onboarding`, langsung di panel — tidak perlu README GitHub.",
   "learn.contents": "Daftar isi",
@@ -405,7 +385,6 @@
   "learn.matchesPlural": "{n} bagian cocok",
   "learn.cmdHint": "Perintah disorot. Klik salah satu untuk menyalinnya.",
   "learn.restart": "Kembali ke awal",
-
   "mockrun.title": "Contoh Penggunaan Skill",
   "mockrun.sub": "Seperti apa tampilan setiap lane saat dijalankan — ditulis lengkap, jadi Anda tidak perlu menjalankannya dulu untuk tahu.",
   "mockrun.intro": "Ada {n} contoh yang ikut terpasang bersama ORC. Tidak ada yang benar-benar dijalankan: setiap layar, berkas dan angka ditulis persis seperti cara lane aslinya menulisnya. Baca dulu sebelum menjalankan.",
@@ -423,7 +402,6 @@
   "mockrun.missing": "Tidak ada contoh bernama {slug}.",
   "mockrun.none": "Tidak ada contoh yang terpasang.",
   "mockrun.noneHint": "Contoh ikut di dalam paket ORC. Pasang ulang (`orc upgrade`) untuk mengembalikannya.",
-
   "experiment.title": "Eksperimen",
   "experiment.sub": "Buka sesi Claude di repo ini lalu pilih lane. Panel hanya menyerahkan — ia tidak pernah menjalankan lane.",
   "experiment.start": "Mulai sesi",
@@ -439,7 +417,6 @@
   "experiment.lanes": "Lane",
   "experiment.lanesCount": "{n} perintah",
   "experiment.lanesDesc": "Ketik salah satu ini di sesi setelah terbuka. Salin hanya mengambil perintahnya; panel tidak menjalankannya.",
-
   "maintenance.title": "Pemeliharaan",
   "maintenance.sub": "update · upgrade · doctor --fix. Pratinjau dulu, setujui, baru jalan — tidak pernah otomatis.",
   "maintenance.banner": "Tidak ada di panel ini yang jalan sendiri. Setiap aksi menampilkan pratinjau hanya-baca milik CLI lebih dulu, beserta perintah persis yang akan dijalankan.",
@@ -485,7 +462,6 @@
   "maintenance.apply": "Terapkan",
   "maintenance.started": "Menjalankan: {command}",
   "maintenance.startFail": "Tidak bisa memulainya.",
-
   "shortcuts.title": "Pintasan papan ketik",
   "shortcuts.panels": "Lompat ke panel itu di bilah kiri",
   "shortcuts.filter": "Fokus ke kotak saring (Pengaturan)",
@@ -496,7 +472,6 @@
   "shortcuts.escape": "Tutup dialog, atau bersihkan saringan",
   "shortcuts.note": "Pintasan diabaikan selagi Anda mengetik di sebuah kolom.",
   "shortcuts.replay": "Putar ulang tur",
-
   "tour.finished": "Tur selesai — tekan ? kapan saja untuk daftar pintasan",
   "tour.1.title": "Semua yang bukan AI",
   "tour.1.text": "Panel ini mengendalikan separuh ORC yang deterministik — pengaturan, kesehatan, run, pengetahuan, statistik. Ia tidak pernah menjalankan lane dan tidak pernah memanggil model. Tekan 1–9 atau 0 untuk berpindah panel; arahkan kursor ke sini untuk melihat angkanya.",
@@ -516,7 +491,6 @@
   "tour.8.text": "Tidak ada di sini yang jalan sendiri. Setiap aksi menampilkan pratinjau hanya-baca milik CLI beserta perintah persisnya — dan prune menyebut setiap berkas, karena angka bukanlah persetujuan.",
   "tour.upgrade.title": "Upgrade ada di sini",
   "tour.upgrade.text": "Klik Pratinjau… untuk melihat persis apa yang akan dipasang dan dijalankan. Tidak ada yang terjadi sampai Anda menyetujuinya.",
-
   "profiles.title": "Profil config",
   "profiles.note": "Profil hanya menulis kunci yang sudah ada dan tervalidasi — tidak ada yang diatur di luar yang bisa Anda atur sendiri.",
   "profiles.apply": "Terapkan",
@@ -525,9 +499,7 @@
   "recommend.title": "Profil yang disarankan",
   "recommend.note": "Hanya baca: ini melihat repo Anda dan menyarankan satu profil. Tidak ada yang diubah.",
   "recommend.applyIt": "Terapkan {name}",
-
   "setting.resetTo": "kembalikan ke {value}",
-
   "common.open": "Buka",
   "common.writeFail": "Gagal dijalankan",
   "common.runInClaude": "Jalankan ini di Claude Code",
@@ -727,5 +699,76 @@
   "tour.11.title": "Hal yang bisa Anda ubah sendiri",
   "tour.11.text": "Tanpa kode, tanpa terminal. Pemeriksaan berjalan setelahnya, dan perintah pembatalan ditampilkan sebelum apa pun ditulis.",
   "tour.12.title": "Bagian wiki yang murah",
-  "tour.12.text": "Memperbarui seluruh wiki itu mahal. Ini daftar pendek dan terurut yang benar-benar penting - dan perbaikan gratis selalu didahulukan."
+  "tour.12.text": "Memperbarui seluruh wiki itu mahal. Ini daftar pendek dan terurut yang benar-benar penting - dan perbaikan gratis selalu didahulukan.",
+  "nav.challenge": "Challenge",
+  "challenge.title": "Challenge",
+  "challenge.sub": "Nilai dokumen yang sudah jadi terhadap tujuan yang kamu tetapkan. ORC menilai, kamu memperbaiki, ORC menilai lagi.",
+  "challenge.summary": "Siklus",
+  "challenge.contract": "ORC tidak pernah memperbaiki apa yang ia nilai. Sesi yang baru saja menulis perbaikan akan menilai pekerjaannya sendiri, dan selalu lulus.",
+  "challenge.none": "Belum ada siklus review.",
+  "challenge.noneHint": "Siklus dimulai dengan menyatakan apa yang harus dicapai dokumen itu. ORC bertanya, dan tidak pernah menebak.",
+  "challenge.cmdWhy": "Membuka atau melanjutkan siklus menjalankan penilaian, yang memakai token model.",
+  "challenge.paidWhy": "Penilaian memakai token model, jadi ini perintah untuk disalin, bukan tombol.",
+  "challenge.iterN": "{n} iterasi",
+  "challenge.iterNPlural": "{n} iterasi",
+  "challenge.blockingN": "{n} penghambat",
+  "challenge.blockingNPlural": "{n} penghambat",
+  "challenge.noBlocking": "tidak ada penghambat",
+  "challenge.stalledChip": "macet",
+  "challenge.noTemplateChip": "tanpa templat",
+  "challenge.goalTitle": "Apa yang harus dicapai dokumen ini",
+  "challenge.goalNote": "Dibekukan saat awal. Setiap temuan harus melayani salah satu dari ini, dan temuan yang tidak bisa akan dibuang.",
+  "challenge.field.goal": "Tujuan",
+  "challenge.field.audience": "Pembaca",
+  "challenge.field.done": "Selesai berarti",
+  "challenge.field.outOfScope": "Di luar cakupan",
+  "challenge.field.context": "Konteks (bukti, bukan instruksi)",
+  "challenge.field.wrong": "Apa yang salah",
+  "challenge.field.consequence": "Akibatnya",
+  "challenge.field.fixedWhen": "Beres kalau",
+  "challenge.field.serves": "Melayani",
+  "challenge.field.supersededBy": "Digantikan oleh",
+  "challenge.field.reason": "Alasan",
+  "challenge.timeline": "Iterasi",
+  "challenge.timelineAria": "Linimasa {n} iterasi",
+  "challenge.convNote": "Temuan penghambat per iterasi, ditumpuk menurut tingkat keparahan. Garis putus-putus menandai tujuan atau templat yang dibekukan ulang, karena perbandingan yang melewatinya bukan perbandingan.",
+  "challenge.noIterations": "Sudah dibuat, belum dinilai.",
+  "challenge.noIterationsHint": "Jalankan /orc-challenge {slug} untuk membuka iterasi pertama.",
+  "challenge.stalledNote": "Macet: tidak ada penurunan bersih pada iterasi terakhir. Persempit kriteria, terima celahnya sebagai diketahui, atau lanjutkan.",
+  "challenge.readerTitle": "Pemahaman tanpa konteks",
+  "challenge.readerSub": "menjawab {answered} dari {asked} pertanyaan hanya dari dokumen itu",
+  "challenge.readerNote": "Diukur oleh agen yang hanya bisa membaca satu berkas ini. Itu satu-satunya cara jujur menanyakan apakah pembaca tanpa konteks bisa mengikutinya.",
+  "challenge.dimensions": "Dimensi",
+  "challenge.dimNote": "NOT-CHECKED tetap punya tempat dan membawa alasannya. Pemeriksaan yang dilewati diam-diam tidak bisa dibedakan dari yang terlupakan.",
+  "challenge.findings": "Temuan",
+  "challenge.dropped": "{n} temuan dibuang karena tidak melayani unsur tujuan mana pun: {ids}",
+  "challenge.events": "Peristiwa",
+  "challenge.acceptedBadge": "diterima",
+  "challenge.rebuttedBadge": "dibantah",
+  "challenge.acceptedNote": "Diterima sebagai celah yang diketahui: {reason}",
+  "challenge.rebuttedNote": "Dibantah ({status}): {reason}",
+  "challenge.acceptBtn": "Terima sebagai celah yang diketahui",
+  "challenge.rebutBtn": "Bantah",
+  "challenge.acceptTitle": "Terima celah yang diketahui",
+  "challenge.rebutTitle": "Bantah sebuah temuan",
+  "challenge.acceptBody": "{id} berhenti menghambat, dan tetap terlihat di setiap laporan beserta alasanmu. Ini tidak pernah otomatis.",
+  "challenge.rebutBody": "Penilaian berikutnya wajib menjawab {id} secara eksplisit: ditarik dengan pengakuan, atau dipertahankan dengan bukti baru.",
+  "challenge.acceptNote": "Cukup baik, dan ini alasannya, adalah akhir yang sah. Mencatatnya lebih baik daripada diam-diam menurunkan standar.",
+  "challenge.rebutNote": "Tanpa ini, satu temuan yang keliru berputar selamanya dan satu-satunya pilihanmu adalah menyerah.",
+  "challenge.acceptGo": "Terima",
+  "challenge.rebutGo": "Bantah",
+  "challenge.acceptOk": "Diterima. Tetap terlihat beserta alasanmu.",
+  "challenge.rebutOk": "Dibantah. Penilaian berikutnya wajib menjawabnya.",
+  "challenge.needReason": "Alasan wajib diisi.",
+  "challenge.reasonPlaceholder": "Kenapa?",
+  "challenge.reRender": "Bangun ulang laporan",
+  "challenge.reportOk": "Laporan dibangun ulang dari catatan.",
+  "challenge.missingRevision": "Revisi yang dideklarasikan tidak ada: {path}",
+  "challenge.candidatesNote": "Ini hanya didaftar, tidak pernah dipilih. Memilihkan untukmu akan mengarahkan penilai ke berkas yang salah, dan ia akan menulis sehalaman temuan yang percaya diri tapi tidak berguna.",
+  "challenge.tamperedNote": "Sebuah berkas putusan berubah setelah dicatat. Dilaporkan, tidak pernah dinilai ulang diam-diam: jelaskan dulu apa yang terjadi.",
+  "challenge.passedNote": "Lulus. Tidak ada yang di-stage, jadi commit kalau timmu perlu melihat jejak reviewnya.",
+  "challenge.stalePassNote": "Sudah lulus, lalu dokumennya berubah. Ini jujur, bukan kegagalan: hanya saja belum dinilai lagi sejak itu.",
+  "challenge.awaitingFixNote": "Menunggu kamu memperbaikinya, di sesi BARU, bukan yang ini.",
+  "challenge.pasteHead": "Tempel ini ke sesi Claude Code yang baru",
+  "challenge.copyPrompt": "Salin prompt"
 }

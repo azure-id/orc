@@ -623,3 +623,57 @@ test("wiki use is attested per dispatch, not assumed from the Phase-1 line", () 
   assert.match(read("skills/orc/subskills/orc-execution/core.md"), /^- wiki\s/m,
     "the slice contract declares the wiki field");
 });
+
+// ── v0.47.0 /orc-challenge: the sealed slice, and the three instruments ─────
+
+test("the challenge judge's dispatch block carries ONLY paths and ids", () => {
+  // A fix is a CLAIM; a verdict is EVIDENCE. The moment the judge is handed a
+  // summary of what changed, it is grading the summary — written by the party
+  // with an interest in passing.
+  const spine = read("skills/orc-challenge/SKILL.md");
+  const sealed = read("skills/orc-challenge/references/sealed-slice.md");
+  for (const f of [spine, sealed]) assert.match(f, /judge slice is SEALED/, "the token is present");
+
+  // The permitted field list, from the reference's own fenced example.
+  const block = sealed.match(/```\n(goals:[\s\S]*?)```/);
+  assert.ok(block, "the reference shows the exact dispatch block");
+  const fields = block[1].split("\n").filter((l) => l.trim());
+  assert.ok(fields.length >= 6, "the whole slice is shown, not a fragment");
+  for (const line of fields) {
+    const [key, ...rest] = line.split(":");
+    const value = rest.join(":").replace(/\(.*?\)/g, "").trim();
+    const pathShaped = /[\/]|\.md$|\.json$|<skill>/.test(value);
+    const idShaped = /^(F-\d+\s*)+$/.test(value) || /^\(none[^)]*\)?$/.test(value);
+    assert.ok(pathShaped || idShaped, `slice field "${key.trim()}" is a path or an id, not prose: ${value}`);
+  }
+
+  // And the things that may NEVER appear are named, so a later editor cannot
+  // add one by accident.
+  for (const forbidden of ["the diff", "the fix brief", "the user says"])
+    assert.ok(sealed.includes(forbidden), `the reference forbids "${forbidden}" by name`);
+});
+
+test("the challenge reader is deliberately WEAK, and nothing may upgrade it", () => {
+  // A stronger, harder-thinking cold reader reasons AROUND the gaps D4 exists
+  // to find, so a "helpful" model bump here silently breaks the measurement.
+  const agent = read("agents/orc-challenge-reader-opus-5-low.md");
+  assert.match(agent, /^model: claude-opus-5$/m);
+  assert.match(agent, /^effort: low$/m);
+  assert.match(agent, /^tools: Read$/m, "Read and nothing else — the instrument is defined by what it cannot reach");
+  assert.ok(!/Glob|Grep|Bash/.test(agent.split("---")[1] || ""), "no search tool in the frontmatter");
+
+  const dims = read("skills/orc-challenge/references/dimensions.md");
+  assert.match(dims, /WORSE instrument/, "the reference states WHY low is correct");
+
+  // The judge and the advisor are read-only, and the advisor never writes prose.
+  const advisor = read("agents/orc-challenge-advisor-opus-5-med.md");
+  assert.match(advisor, /no rewritten prose|no prose|never.*prose/i, "the advisor may not hand over wording");
+});
+
+test("the challenge judge can never declare a pass", () => {
+  const judge = read("agents/orc-challenge-judge-opus-5-high.md");
+  assert.match(judge, /cannot pass anything|Declare PASS/i, "the agent says it outright");
+  const rubric = read("skills/orc-challenge/references/rubric.md");
+  assert.match(rubric, /PASS is computed, never declared/);
+  assert.match(rubric, /can only find, or fail to find/, "the reason is stated, not just the rule");
+});

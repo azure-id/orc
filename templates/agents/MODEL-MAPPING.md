@@ -42,6 +42,9 @@ Score→executor mapping lives in config.md (one canonical 8-band table;
 | orc-judge-opus-5-xhigh | claude-opus-5 | xhigh | ultra judgment gates — analysis / plan / implementation (read-only; /orc-ultra only) |
 | orc-learn-writer-opus-5-low | claude-opus-5 | low | deepen ONE feature → learning-docs/<slug>/ (/orc-learn only; git-ignored output) |
 | orc-claude-writer-opus-4-8-high | claude-opus-4-8 | high | scan repo → write/refresh the local CLAUDE.md (/orc-claude only; zero questions) |
+| orc-challenge-judge-opus-5-high | claude-opus-5 | high | grade ONE finished artifact against a FROZEN goal + template (/orc-challenge only; read-only). It reports findings and can never declare a pass — `orc challenge record` computes that |
+| orc-challenge-advisor-opus-5-med | claude-opus-5 | medium | turn a FAILED verdict into a remediation strategy — root-cause groups, an order with reasons, the decisions that are not defects (/orc-challenge only; read-only, no prose, no diffs) |
+| orc-challenge-reader-opus-5-low | claude-opus-5 | low | the COLD READ: answer questions from ONE artifact with `Read` and nothing else (/orc-challenge only). LOW ON PURPOSE — a harder-thinking reader reasons around the gaps D4 exists to find, so a stronger configuration is a worse instrument |
 | orc-trace-writer-haiku-4-5 | claude-haiku-4-5 | — (no ladder) | append one phase block of behavior-trace narration from an orchestrator packet (every trace-owning lane; append-only, never reads source) |
 
 ## Opus-5-only mode agents (hard-gated; dispatched only when `opus5_only: true`)

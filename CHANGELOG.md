@@ -10,6 +10,150 @@ Format: `### v<version> — <title> _(<date>)_`.
 
 ---
 
+### v0.47.0 — the lane that refuses to produce _(2026-08-12)_
+
+**Every other lane in ORC — and nearly every other skill in the ecosystem —
+produces. This one refuses to.** `/orc-challenge` grades a finished artifact,
+writes down what is wrong, and then stops and makes the user go away and fix it
+somewhere else. The stopping is not friction: **the separation is the measuring
+instrument.**
+
+**The one-sentence contract: ORC judges, the user fixes, ORC re-judges — and ORC
+never fixes what it judged.** A session that just wrote the fix will grade its
+own homework and it will always pass. That registers as the third member of an
+existing pair — `a lane that answers its own interview question` (v0.42.0),
+`a lane that picks its own favourite` (v0.45.0), and now **`a lane that fixes
+what it judged`**. Same split every time: facts and findings are ORC's, the work
+and the decision are the user's.
+
+**Rule 0 precedes every other rule: it never guesses the goal.** A finding is
+only a finding relative to a goal — the same TSD is *finished* for one purpose
+and nowhere near done for another. A lane that assumes will attack the wrong
+thing with total confidence, and every one of its findings will be *defensible*,
+which is worse than being obviously wrong: the user spends three iterations
+fixing what did not matter. So intake ASKS, in ONE round, for the goal, the
+audience, what "done" means, the template, and where the fixed version will go —
+and freezes them to `goals.md`. **`orc challenge init` has no default for
+`--goal`, `--audience` or `--done-means`**, so a run that tried to skip the round
+fails at the CLI by name instead of inventing a purpose. Every finding must name
+which goal element it `serves`; one that cannot is **dropped**, which is the
+mechanism that stops a large context window from reviewing the entire universe.
+
+**Three agents, and they are three different INSTRUMENTS, not three tiers.**
+
+- **`orc-challenge-reader-opus-5-low`** — the cold read. Tools: `Read` and
+  nothing else. It is given the artifact and the audience line, never the goal,
+  and it answers questions FROM the artifact rather than reviewing it. Returns a
+  scored questionnaire (`8/12`). **`low` effort is a measurement choice, not a
+  cost one:** a harder-thinking reader reasons around exactly the gaps this
+  exists to find, so a stronger configuration is a WORSE instrument.
+- **`orc-challenge-judge-opus-5-high`** — grades against the frozen template and
+  goal. Its slice is **SEALED**: paths and finding ids only, never prose from the
+  session, never a diff summary, never "the user says they fixed #4". A fix is a
+  claim; a verdict is evidence. **It cannot declare a pass** — `orc challenge
+  record` computes that, which removes leniency as a possibility.
+- **`orc-challenge-advisor-opus-5-med`** — dispatched only on a FAIL (advice on a
+  passed artifact is invented work and it costs money). Twelve findings are
+  usually three causes: it groups them by root cause, orders them with the
+  dependency reason, and flags the ones that are really unmade DECISIONS. No
+  prose, no diffs — handing over wording is fixing by another name.
+
+All three are already `claude-opus-5`, so `opus5_only` is a no-op here: zero new
+pairs, no rename churn. The lane is **unaffected, not exempt**.
+
+**`orc challenge lint` — the deterministic engine, and it costs zero model
+tokens.** Structure against the frozen template (missing / out-of-order /
+invented / empty-ceremony sections, table column drift, untagged code fences,
+links and `file:line` anchors that do not resolve) plus prose (acronyms used
+before they are defined, sentences over 25 words with a p50/p90 distribution, a
+passive-voice percentage, curated idioms and phrasal verbs, ambiguous
+quantifiers, bare-pronoun openers, placeholder markers, a Flesch–Kincaid
+estimate). **Sentences are measured over PARAGRAPHS, not lines** — a hard-wrapped
+43-word sentence is still a 43-word sentence, and splitting at the newline is how
+a length check silently passes every wrapped document. Two honesty rules are
+printed by the command itself: it is a SIGNAL, not a verdict, and it is
+English-specific and heuristic. Its real payoff is that `lint.json` rides in the
+judge's slice, so the judge never spends tokens counting. It is useful with no
+cycle, no model and no ORC run at all: `orc challenge lint README.md`.
+
+**Conservation — nothing evaporates.** Every finding from iteration N−1 appears
+in N with exactly ONE outcome (`resolved` · `still-open` · `superseded` ·
+`withdrawn` · `accepted`) and a reason; below 100% coverage the verdict is
+malformed and `record` rejects it **naming the missing ids**. A silently dropped
+finding is indistinguishable from a fixed one, and that is the classic way a
+review cycle appears to converge. `record` also rejects an unknown carry id, a
+reasonless withdrawal, an uncited supersede, an **ignored rebuttal**, and a
+**silent dimension** — `NOT-CHECKED` with a reason is allowed, silence is not.
+
+**Two escape valves, because a loop with no exit is a trap.** `orc challenge
+accept <slug> <id> "reason"` — the finding stops blocking immediately and stays
+visible forever in the report with the reason; never automatic (the `/orc-pact`
+retirement rule). `orc challenge rebut <slug> <id> "reason"` — the next judge
+must answer it explicitly, `withdrawn` with an admission or `upheld` with new
+evidence, and a verdict that ignores it is rejected. Without it, one wrong
+finding loops forever and the user's only move is to give up.
+
+**Convergence, not a cap.** There is deliberately no loop cap and no config key
+for one: every other loop in ORC runs inside a single session and costs tokens
+per turn, but here each turn is a separate human sitting down to work, and a cap
+that refused on iteration 6 would be refusing to review a hard document. It
+reports `stalled` instead — once, with three honest options.
+
+**Seven states, all COMPUTED, none stored** — `AWAITING-JUDGE`, `AWAITING-FIX`,
+`AWAITING-RECHECK`, `PASSED`, `STALE-PASS` (honest, not a failure — the
+`UNCHECKABLE` precedent), `MISSING-REVISION`, and `TAMPERED` (a verdict file
+changed after it was recorded: reported, never silently re-graded). Two flags
+ride alongside rather than becoming states of their own, because a state that
+means two things is a state that lies: `stalled` and `no_template`.
+
+**The resumed session never asks where the fix went.** `revision_mode` is
+declared at intake and restated in a `Where to put the revised version` block in
+every fix brief; `orc challenge diff` resolves the expectation first and then
+reports which carried findings the change actually TOUCHED —
+coverage-relative, the `computeWikiFreshness` lesson applied to findings, and a
+hint for the human that is **never an input to the judge**. When the declared
+path is not there, `MISSING-REVISION` **lists candidates and never adopts one**:
+picking the closest-looking file would point the judge at the wrong artifact and
+produce a page of confident, useless findings. The escape (`orc challenge expect
+--set`) is a recorded command.
+
+**The CLI half: 12 subcommands, every read with an exit-code contract and
+`--json`.** `list` (0/1/3) · `status` (0/1/2/3) · `show` · `diff` (0/1/2/3) ·
+`expect` · `lint` (0/1/2) · `outline` · `record` (the GATE, not a store) ·
+`accept` · `rebut` · `template`/`goals` (re-freezing is a recorded event that
+needs a reason, and prior iterations keep their stamp) · `report` (derives
+`CHALLENGE.md`, plus the final report on a pass). `challenge.json` has exactly
+one writer, and it is never a model.
+
+**The `orc ui` Challenge panel** renders it and decides nothing about it: the
+goal block above everything, the state chip with its ONE next action inline, an
+iteration timeline whose **geometry is solved from the box size** (with a dashed
+version break wherever a goal or template was re-frozen), the convergence chart
+stacked by severity, a dimension strip where `NOT-CHECKED` keeps its slot and
+carries its reason, the cold reader's score, and the findings with their accept /
+rebut buttons. **A free action gets a button, a paid action gets a copy-able
+command** — running an iteration has no write route at all. `--fixtures` carries
+one of every state including the ugly ones, and a test asserts it.
+
+**Four config keys**, all `common`: `challenge_pass_severity` (default `p1`),
+`challenge_stall_after` (3), `challenge_reader` (`on`; `off` makes D4 report
+`NOT-CHECKED` with that reason, never silently), and `challenge_gate` (`warn`;
+there is deliberately no `block` — the `/orc-pact` precedent). Deliberately NOT
+added: a same-session escape hatch (that is how the premise dies), any model or
+effort key, and any loop cap.
+
+**Seams:** `/orc` prints one preflight line when it is about to build from a
+document that has not passed its own review; `/orc-analyze` prints the cycle
+state at Phase A (the two compose in one order — challenge it, then analyze it);
+`/orc-pact` gains the finding-that-is-really-a-decision harvest; intake's "I
+don't know yet" suspends into `/orc-grill` and comes back; `/orc-export` can
+carry a PASSED cycle as portable evidence.
+
+**Trace:** lane `challenge`, **Iterative tier** (one packet per completed
+iteration), and a new `CHALLENGE iter=…` verb whose line the CLI assembles so
+nothing composes a second wording for the same number. Several trace files for
+one cycle is CORRECT — several sessions ran.
+
 ### v0.46.1 — see a lane run before you pay for one _(2026-08-12)_
 
 **The docs answered "what is ORC" four times and never answered "what does a

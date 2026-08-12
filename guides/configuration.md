@@ -57,6 +57,10 @@ this CLI for every write.
 | `budget_min_samples` | `5` | Dispatches a band needs before a forecast is called confident. |
 | `budget_units` | `auto` | Which unit a forecast leads with: tokens, usd, quota, or all. |
 | `budget_plan` | `auto` | Your Claude plan, for the quota view. Asked once, then stored. |
+| `challenge_pass_severity` | `p1` | The severity at or above which an open `/orc-challenge` finding blocks a pass. Accepted exceptions are subtracted first, and the pass itself is computed by the CLI — never declared by the judge. |
+| `challenge_stall_after` | `3` | Iterations with no net reduction before a cycle is flagged `stalled`. A flag, never a cap: each turn is a person sitting down to work. |
+| `challenge_reader` | `on` | The cold read that measures whether a reader with no context can follow the artifact. `off` makes that dimension report `NOT-CHECKED` with that reason — never silently. |
+| `challenge_gate` | `warn` | One `/orc` preflight line when the document it is about to build from has an in-flight, failing review cycle. There is no `block`. |
 
 ## Fable 5 role override
 

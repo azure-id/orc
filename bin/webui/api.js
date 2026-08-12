@@ -194,6 +194,25 @@ const READS = {
   "/api/budget/actual": (q) => ["budget", "actual", String(q.slug || "")],
   "/api/aftermath": (q) => (q.since ? ["aftermath", "status", "--since", String(q.since)] : ["aftermath", "status"]),
   "/api/export": () => ["export", "--check"],
+  // v0.47.0 — /orc-challenge. Same shape: every one is a READ whose exit code is
+  // DATA (list 0/1/3, status 0/1/2/3, diff 0/1/2/3, lint 0/1/2), and the panel
+  // derives nothing from them — not the state word, not the iteration order, not
+  // the pass decision, not the expected revision path.
+  "/api/challenge": () => ["challenge", "list"],
+  "/api/challenge/one": (q) => ["challenge", "status", String(q.slug || "")],
+  "/api/challenge/show": (q) => [
+    "challenge",
+    "show",
+    String(q.slug || ""),
+    ...(q.iteration ? ["--iteration", String(q.iteration)] : []),
+  ],
+  "/api/challenge/diff": (q) => ["challenge", "diff", String(q.slug || "")],
+  "/api/challenge/lint": (q) => [
+    "challenge",
+    "lint",
+    String(q.path || ""),
+    ...(q.template ? ["--template", String(q.template)] : []),
+  ],
   "/api/patterns": () => ["pattern", "status"],
   "/api/gotchas": () => ["gotcha", "list"],
   "/api/stats": (q) => (q.since ? ["stats", "--since", String(q.since)] : ["stats"]),
@@ -244,6 +263,13 @@ const WRITES = {
   // false. There is no second idea of a safe edit anywhere in this panel.
   "/api/handoff/set": (b) => ["handoff", "set", String(b.id), String(b.key), String(b.value)],
   "/api/budget/calibrate": () => ["budget", "calibrate"],
+  // v0.47.0. All three are FREE and deterministic, so all three get a button.
+  // Running an ITERATION costs model tokens, so it is a copy-able command and
+  // there is deliberately no route for it here. `accept` and `rebut` both refuse
+  // without a reason — the CLI decides that, not the form.
+  "/api/challenge/accept": (b) => ["challenge", "accept", String(b.slug), String(b.id), String(b.reason || "")],
+  "/api/challenge/rebut": (b) => ["challenge", "rebut", String(b.slug), String(b.id), String(b.reason || "")],
+  "/api/challenge/report": (b) => ["challenge", "report", String(b.slug)],
   "/api/crosslink/remove": (b) => ["crosslink", "remove", String(b.name)],
   // The UI assembles no YAML. It hands the CLI the same arguments the
   // interactive prompt collects, and every rejection the user sees is the

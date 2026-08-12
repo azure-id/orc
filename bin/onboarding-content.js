@@ -73,7 +73,7 @@ const SECTIONS = [
   },
   {
     id: "lanes",
-    title: "④ Lanes cheat-sheet (21 commands)",
+    title: "④ Lanes cheat-sheet (28 commands)",
     lines: [
       "  /orc           full orchestrated pipeline",
       "  /orc-quick     ask for almost anything — 3 steps, always asks which agent",
@@ -91,6 +91,13 @@ const SECTIONS = [
       "  /orc-pr-setup  stacked-PR planner — where the PR cut lines go (plans only)",
       "  /orc-pr-driver stacked-PR driver — layer branches, per-layer green gate, submit",
       "  /orc-verify    verify the git-modified changes (read-only)",
+      "  /orc-challenge grade a FINISHED artifact, then stop — you fix it elsewhere",
+      "  /orc-pact      the promises this project makes, and which are in doubt",
+      "  /orc-boundary  what ORC should NOT try here, and what would change that",
+      "  /orc-handoff   what a non-developer can safely change, with the undo first",
+      "  /orc-budget    what a PLAN will cost, in the unit you are billed in",
+      "  /orc-aftermath did what we shipped hold up (read-only, no telemetry)",
+      "  /orc-export    compile the context into a portable AGENTS.md",
       "  /orc-wiki      build/maintain the project knowledge base",
       "  /orc-pattern   learn & cache your code conventions per language",
       "  /orc-claude    build/refresh this repo's CLAUDE.md",

@@ -53,7 +53,7 @@ run_meta:                 # FIRST packet of the run ONLY; omit thereafter
                           # plan | claude | poly | learn | verify | pattern |
                           # prsetup | prdriver | quick | grill | route |
                           # brainstorm | pact | boundary | handoff | budget |
-                          # aftermath | export
+                          # aftermath | export | challenge
                           # (`ultra` = an /orc-ultra run; the ONLY lane the orc
                           #  spine can emit besides `orc`. No other value here
                           #  is legal — a lane no entry point opens is a lane
@@ -87,7 +87,7 @@ decisions: >              # free text — the WHY layer
 | Build lanes | `orc` (incl. ultra), `orc-mini`, `orc-fast` | per phase — full orc ≈ 7–9 (ultra adds U0 + judge packets); orc-mini batches to 3 (intake+plan, execution, ship); orc-fast to 2 (preflight+dispatch, gate+ship) |
 | Multi-dispatch | `orc-wiki`, `orc-pr-driver` (lane `prdriver`) | orc-wiki: one per scan-batch boundary (the points that already run the registration sync / offer the pause) + the end-of-run packet. orc-pr-driver: one per LAYER boundary (each layer's green gate closes) + the end-of-run packet |
 | Composed | `orc-diy` | one packet per ENABLED phase group, **minimum 2** — the flow shape is user-composed, so the count is too (the compiled flow carries this block automatically) |
-| Iterative | `orc-quick` | **one packet per completed numbered entry** + the end-of-run `FINISH` packet — the lane loops on user requests, so the count follows entries, not phases |
+| Iterative | `orc-quick`, `orc-challenge` (lane `challenge`) | **one packet per completed numbered entry** + the end-of-run `FINISH` packet — the lane loops on user requests, so the count follows entries, not phases. For `orc-challenge` the unit is one completed ITERATION (C2→C8), and the packet goes out at the stop; on a PASS it is the `FINISH` packet. **Several trace files for one cycle is CORRECT** — several sessions ran, and `orc stats` counts several |
 | Single-dispatch | `orc-claude`, `orc-plan`, `orc-analyze` (+ mini), `orc-pattern`, `orc-verify`, `orc-learn`, `orc-poly`, `orc-pr-setup` (lane `prsetup`), `orc-grill`, `orc-route`, `orc-brainstorm` (lane `brainstorm`), `orc-pact` (lane `pact`), `orc-boundary` (lane `boundary`), `orc-handoff` (lane `handoff`), `orc-budget` (lane `budget`), `orc-aftermath` (lane `aftermath`), `orc-export` (lane `export`) | **exactly ONE mandatory end-of-run packet** |
 
 **`context-combiner` is NOT a lane — it is a PHASE inside the analyze run.** It
@@ -123,7 +123,7 @@ trace and never emit `SPAWN`/`RETURN`.
   - `lane` — the trace-owning skill's short name (`orc`, `ultra`, `mini`, `fast`,
     `diy`, `wiki`, `analyze`, `plan`, `claude`, `poly`, `learn`, `verify`,
     `pattern`, `prsetup`, `prdriver`, `quick`, `grill`, `route`,
-    `brainstorm`). Every value
+    `brainstorm`, `challenge`). Every value
     here is a lane some entry point actually opens — keep it that way: this
     list IS the lane vocabulary `orc stats` and `/orc-retro` count against.
   - `slug` — kebab-cased short user context from the intent (`[a-z0-9-]`, ≤32
@@ -242,6 +242,7 @@ supplies the fact in a packet, the writer writes the line. `SPAWN`, `RETURN` and
 | `STATS lane=<l> slug=<s> dispatches=<n> waves=<n> tasks=<n> bands=<h:n,m:n,l:n> downgrades=<n> duration_ms=<n>` | orc → writer | ONE deterministic summary line per run, in the `FINISH` packet, immediately BEFORE the `FINISH` line. This is what `orc stats` reads — one line per file, never a parse of the whole trace. Omit a field you genuinely do not have (a lane with no waves omits `waves=`); never guess one. Every trace-owning lane emits it, not just `orc` |
 | `PACT <state> :: <ids>` | orc → writer | invariant-ledger state at the Phase-1 probe (`pact_gate`), and `PACT inject task=<id> :: <PACT-id>` when a DRIFTED/BROKEN promise is appended to a task's `constraints[]`. `PACT recheck pass\|fail :: <ids>` at Phase 6. Records whether last month's decisions constrained this month's plan |
 | `BOUNDARY <verdict> task=<id> :: <area>` | orc → writer | per-task boundary verdict (verdict ∈ `EXECUTE` \| `ESCALATE` \| `REFUSE` \| `unknown` — an uncarded area is UNKNOWN, never REFUSE), plus `BOUNDARY lift task=<id> :: <area>` when `boundary_gate: block` removes ONE task from a wave (the wave still runs). `/orc-retro` reads these to answer the question the lane exists for: how much work did we stop attempting, and was that right |
+| `CHALLENGE iter=<n> findings=P0:<n>/P1:<n>/P2:<n> coverage=<n>% verdict=PASS\|FAIL` | orc → writer | one line per completed `/orc-challenge` iteration boundary. **Copy `orc challenge record`'s `trace_line` verbatim** — the CLI assembles it so the lane never composes a second wording for the same number. Plus `CHALLENGE accept :: <id>` and `CHALLENGE rebut :: <id>` when an escape valve is used, and `CHALLENGE regoal\|retemplate :: v<n>` on a re-freeze. `/orc-retro` reads the sequence to answer whether a cycle converged or stalled |
 | `FINISH :: <detail>` | orc → writer | run ended |
 
 `SPAWN`/`RETURN`/`PHASE-EDGE` come from the hook automatically. Every other verb

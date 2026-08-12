@@ -54,6 +54,7 @@ Sources, in the order they appear in the output:
 | `.claude/orc/boundary/*.md` | where an agent should not act alone, with the checklist |
 | `.claude/orc/patterns/<lang>-pattern.md` | how code in this repo is actually written |
 | `wiki/orc-feature-*`, `wiki/orc-reference-*` | architecture and features, evidence-anchored |
+| a PASSED `orc/orc-challenge/<slug>/` cycle | OPTIONAL — a **reviewed artifacts** section: which documents were graded, against what goal, and what was accepted as a known gap. Portable evidence that a spec was checked, not just written. A cycle that is not `PASSED` is never exported: an in-flight review is not a claim |
 
 Each source's own frontmatter is stripped — that is ORC's bookkeeping, not portable
 context — and the prose is copied through unchanged. **Never re-summarise a source

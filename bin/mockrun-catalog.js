@@ -79,6 +79,7 @@ const GROUP_OF = {
   "orc-export": "knowledge",
 
   "orc-verify": "check",
+  "orc-challenge": "check",
   "orc-pact": "check",
   "orc-boundary": "check",
   "orc-aftermath": "check",

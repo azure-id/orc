@@ -64,6 +64,12 @@ exists to prevent. Ladder: `../orc-wiki/references/partial-refresh.md`.
   `opus5_only` is neither read nor honored by `orc-quick`. When the mode is on,
   the lane SAYS so at the gate (`orc-quick ignores opus5_only — both options are
   live`), because a shadowed setting must never be silent in either direction.
+- **`/orc-challenge` — UNAFFECTED, not exempt.** All three of its agents are
+  already `claude-opus-5` (judge high, advisor medium, reader low), so the mode
+  has nothing to force: zero new pairs, no rename churn, no roster row. The
+  reader's `low` effort is a MEASUREMENT choice, not a cost one — a
+  harder-thinking cold reader reasons around exactly the gaps D4 exists to find
+  — so nothing may ever "upgrade" it.
   See `orc-quick/references/dispatch-gate.md`.
 
 ## It FORCES — precedence is flat while ON

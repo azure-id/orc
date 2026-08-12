@@ -814,6 +814,11 @@ const CONFIG_META = [
   { key: "budget_plan", def: "auto", tier: "common", validate: vEnum("auto", "pro", "max5", "max20", "api"), options: ["auto", "pro", "max5", "max20", "api"], desc: "Which Claude plan you are on, for the quota view. There is no reliable local signal for this, so it is ASKED ONCE at the first forecast and stored — never a wrong guess rendered as a percentage. api = billed per token, so USD is the primary unit." },
   { key: "budget_price_table", def: "", tier: "advanced", validate: vPath, desc: "Path to your own dated price table (default: the shipped bin/pricing.json). A table older than 90 days prints a staleness warning beside every dollar figure." },
   { key: "aftermath_window_days", def: 30, tier: "advanced", validate: vInt(1), desc: "How far back /orc-aftermath grades. A run younger than 7 days is `too recent to grade` — an answer, not a gap." },
+  // --- v0.47.0 — /orc-challenge ---------------------------------------------
+  { key: "challenge_pass_severity", def: "p1", tier: "common", validate: vEnum("p0", "p1", "p2"), options: ["p0", "p1", "p2"], desc: "The severity at or above which an open finding BLOCKS a pass. PASS is computed, never declared: the judge reports findings and `orc challenge record` decides, which removes leniency as a possibility — a judge can only find, or fail to find. Accepted exceptions are subtracted first." },
+  { key: "challenge_stall_after", def: 3, tier: "common", validate: vInt(2), options: [2, 3, 4, 5], desc: "Iterations with no net reduction in blocking findings before a cycle is flagged `stalled`. A FLAG, never a cap: each turn of this loop is a separate human sitting down to work, so refusing on iteration 6 would be refusing to review a hard document. It reports honestly and offers three options instead." },
+  { key: "challenge_reader", def: "on", tier: "common", validate: vEnum("on", "off"), options: ["on", "off"], desc: "The COLD READ dispatch that measures D4 (can a reader with no prior context follow this?). A grounded judge structurally cannot answer that — it has read the repo and will fill every gap the document leaves. off → D4 reports NOT-CHECKED with that reason, never silently." },
+  { key: "challenge_gate", def: "warn", tier: "common", validate: vEnum("off", "warn"), options: ["off", "warn"], desc: "Whether /orc's Phase-1 preflight prints one line when the document it is about to build from has an in-flight, failing challenge cycle. There is deliberately NO `block` — the /orc-pact precedent: the payoff is knowing, not gating." },
   { key: "wiki_scan_tier", def: "ladder", tier: "advanced", validate: vEnum("ladder", "always_deep"), desc: "Wiki scan tier: ladder picks light/deep per delta (first scan, STRUCTURAL, wide delta or a new exported symbol → deep; otherwise light), always_deep restores pre-v0.46.0 behaviour. The resolved tier is always printed — a cheaper model is never a quiet substitution." },
   { key: "wiki_tier_deep_files", def: 3, tier: "advanced", validate: vInt(1), desc: "Covered files touched at or above this count send the refresh to the DEEP scanner." },
   { key: "wiki_refresh_budget", def: 0, tier: "advanced", validate: vInt(0), desc: "Max scan-tasks per refresh run; 0 = no cap. A capped refresh is a PLANNED stop, not an interrupt: sync has already run, so the wiki is registered and consistent, and the remaining docs are AGING, not broken. Separate from the fixed pause-every-5 rule — do not merge them." },
@@ -7631,6 +7636,1709 @@ function exportImport(claudeDir) {
   console.log("  Turn these into real entries with `/orc-pact` — it records an origin for every one.");
 }
 
+// ── /orc-challenge (v0.47.0) — the lane that refuses to produce ──────────────
+//
+// Every other lane in ORC produces. This one grades a finished artifact, writes
+// down what is wrong, and then STOPS and makes the user go and fix it in a
+// different session. The stopping is not friction — the separation IS the
+// measuring instrument, because a session that just wrote the fix will grade its
+// own homework and it will always pass.
+//
+// THE CLI OWNS EVERYTHING A COMPUTER CAN DECIDE, and the split is the design:
+//   · challenge.json — THE LEDGER, and this file is its only writer
+//   · the cycle STATE — computed on read, never stored (the pact/wiki rule)
+//   · PASS is computed, never declared — decided HERE, not by the judge. That
+//     removes leniency as a possibility: it can only find, or fail to find
+//   · `challenge lint` — everything a computer can answer must never cost a
+//     model token, and "is this English simple enough" is substantially
+//     computable
+//   · `challenge init` — `--goal`, `--audience` and `--done-means` have NO
+//     default value, so a skill that tried to skip the intake round fails at the
+//     CLI instead of silently inventing a purpose for the review
+
+const CHALLENGE_DIR = "orc/orc-challenge/";
+const CHALLENGE_LEDGER = "challenge.json";
+const CHALLENGE_DOC = "CHALLENGE.md";
+const CHALLENGE_GOALS = "goals.md";
+const CHALLENGE_TEMPLATE = "template.md";
+const CHALLENGE_DIMS = ["D1", "D2", "D3", "D4", "D5", "D6", "D7"];
+const CHALLENGE_KINDS = ["tsd", "prd", "adr", "api-contract", "readme", "runbook", "plan", "code", "mixed"];
+const CHALLENGE_SEVERITIES = ["P0", "P1", "P2", "P3"];
+// Conservation (rule 4): every carried finding gets exactly ONE of these, with a
+// reason. A silently dropped finding is indistinguishable from a fixed one.
+const CHALLENGE_OUTCOMES = ["resolved", "still-open", "superseded", "withdrawn", "accepted"];
+// The state word list. Mirrored in references/cycle-state.md — documented drift
+// the token lint cannot see (a word list is not a single token), so a golden test
+// compares the two.
+const CHALLENGE_STATES = [
+  "AWAITING-JUDGE",
+  "AWAITING-FIX",
+  "AWAITING-RECHECK",
+  "PASSED",
+  "STALE-PASS",
+  "MISSING-REVISION",
+  "TAMPERED",
+];
+const CHALLENGE_REVISION_MODES = ["in-place", "new-file", "directory"];
+// The goal elements a finding may claim to serve. A finding that cannot be traced
+// to one is OUT OF SCOPE and is dropped by `record` — rule 0, made structural.
+const CHALLENGE_SERVES = ["goal", "audience", "done_means", "out_of_scope"];
+
+// `flag()` returns only the FIRST occurrence and `positionals()` knows only three
+// value-taking flags. Intake collects repeatable ones (--artifact, --out-of-scope,
+// --context-ref), so this family reads its own arguments.
+const CHALLENGE_VALUE_FLAGS = [
+  "--artifact", "--kind", "--goal", "--audience", "--done-means", "--out-of-scope",
+  "--context-ref", "--template", "--dimensions", "--revision", "--revision-pattern",
+  "--iteration", "--from", "--set", "--reason", "--dir", "--preset",
+];
+
+function chPositionals() {
+  const out = [];
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a === "--global") continue;
+    if (CHALLENGE_VALUE_FLAGS.includes(a)) {
+      i++;
+      continue;
+    }
+    if (a.startsWith("-")) continue;
+    out.push(a);
+  }
+  return out;
+}
+
+function chOptAll(name) {
+  const out = [];
+  for (let i = 0; i < args.length; i++)
+    if (args[i] === name && args[i + 1] !== undefined && !String(args[i + 1]).startsWith("--"))
+      out.push(String(args[i + 1]));
+  return out;
+}
+const chOpt = (name) => {
+  const v = chOptAll(name);
+  return v.length ? v[0] : undefined;
+};
+
+const chSlug = (raw) =>
+  String(raw || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48);
+
+function challengePaths(claudeDir, slug) {
+  const root = repoRootOf(claudeDir);
+  const dir = path.join(root, ...CHALLENGE_DIR.split("/").filter(Boolean));
+  const cycle = slug ? path.join(dir, slug) : null;
+  return {
+    root,
+    dir,
+    cycle,
+    ledger: cycle ? path.join(cycle, CHALLENGE_LEDGER) : null,
+    goals: cycle ? path.join(cycle, CHALLENGE_GOALS) : null,
+    template: cycle ? path.join(cycle, CHALLENGE_TEMPLATE) : null,
+    doc: cycle ? path.join(cycle, CHALLENGE_DOC) : null,
+  };
+}
+
+const shaOfFile = (abs) => {
+  try {
+    return sha256(fs.readFileSync(abs, "utf8").replace(/\r\n/g, "\n"));
+  } catch (_) {
+    return null;
+  }
+};
+const shortSha = (s) => (s ? String(s).slice(0, 8) : "—");
+
+function readCycle(claudeDir, slug) {
+  const p = challengePaths(claudeDir, slug);
+  if (!p.ledger || !fs.existsSync(p.ledger)) return null;
+  try {
+    const c = JSON.parse(fs.readFileSync(p.ledger, "utf8"));
+    c.iterations = Array.isArray(c.iterations) ? c.iterations : [];
+    c.artifacts = Array.isArray(c.artifacts) ? c.artifacts : [];
+    c.dimensions = Array.isArray(c.dimensions) ? c.dimensions : CHALLENGE_DIMS.slice(0, 6);
+    c.accepted = c.accepted || {};
+    c.rebuttals = c.rebuttals || {};
+    c.events = Array.isArray(c.events) ? c.events : [];
+    return c;
+  } catch (_) {
+    return null;
+  }
+}
+
+// THE LEDGER HAS EXACTLY ONE WRITER (rule 10) — this function, reached only from
+// an `orc challenge` subcommand. A model never edits challenge.json.
+function writeCycle(claudeDir, slug, cyc) {
+  const p = challengePaths(claudeDir, slug);
+  fs.mkdirSync(p.cycle, { recursive: true });
+  cyc.version = 1;
+  cyc.updated_at = fmtStamp(new Date());
+  fs.writeFileSync(p.ledger, JSON.stringify(cyc, null, 2) + "\n");
+  return p.ledger;
+}
+
+function listCycleSlugs(claudeDir) {
+  const p = challengePaths(claudeDir);
+  if (!fs.existsSync(p.dir)) return [];
+  return fs
+    .readdirSync(p.dir, { withFileTypes: true })
+    .filter((e) => e.isDirectory() && fs.existsSync(path.join(p.dir, e.name, CHALLENGE_LEDGER)))
+    .map((e) => e.name)
+    .sort();
+}
+
+const iterDir = (n) => "iteration-" + String(n).padStart(2, "0");
+
+// ── the open finding set ────────────────────────────────────────────────────
+// Everything downstream (PASS, coverage, the convergence chart, the fix brief)
+// reads this one function, so there is exactly one idea of "still open".
+function challengeOpen(cyc) {
+  const last = cyc.iterations[cyc.iterations.length - 1];
+  if (!last) return [];
+  return (last.findings || []).filter((f) => {
+    if (cyc.accepted[f.id]) return false;
+    const o = f.outcome;
+    return o === null || o === undefined || o === "still-open";
+  });
+}
+
+const sevRank = (s) => CHALLENGE_SEVERITIES.indexOf(String(s || "P3").toUpperCase());
+
+function challengeBlocking(cyc, cfg) {
+  const bar = sevRank(String(cfg.challenge_pass_severity || "p1").toUpperCase());
+  return challengeOpen(cyc).filter((f) => sevRank(f.severity) <= bar);
+}
+
+function challengeCounts(cyc) {
+  const counts = { P0: 0, P1: 0, P2: 0, P3: 0, accepted: 0, rebutted: 0 };
+  for (const f of challengeOpen(cyc)) counts[String(f.severity || "P3").toUpperCase()]++;
+  counts.accepted = Object.keys(cyc.accepted || {}).length;
+  counts.rebutted = Object.values(cyc.rebuttals || {}).filter((r) => r.status === "open").length;
+  return counts;
+}
+
+// ── where the revision goes (§13.3) ─────────────────────────────────────────
+// Declared at intake, so the resumed session NEVER has to ask "where did you put
+// the fixed version?". That is a fact the cycle already owns, and asking for it
+// is rule 0's failure mode in miniature.
+function challengeExpected(cyc) {
+  const rev = cyc.revision || { mode: "in-place" };
+  const first = (cyc.artifacts[0] || {}).path || "";
+  if (rev.expect_override) return rev.expect_override;
+  // Before iteration 1 there is no revision yet — what gets judged is the
+  // artifact the user brought.
+  if (!cyc.iterations.length) return first;
+  if (rev.mode === "new-file" && rev.pattern)
+    return String(rev.pattern).replace(/\{n\}/g, String(cyc.iterations.length + 1));
+  if (rev.mode === "directory" && rev.pattern) return String(rev.pattern);
+  return first;
+}
+
+function challengeTampered(claudeDir, slug, cyc) {
+  const p = challengePaths(claudeDir, slug);
+  for (const it of cyc.iterations) {
+    if (!it.verdict_file || !it.verdict_file_sha) continue;
+    const abs = path.join(p.cycle, it.verdict_file);
+    const now = shaOfFile(abs);
+    if (now === null) return { iteration: it.n, why: `verdict file is gone: ${it.verdict_file}` };
+    if (now !== it.verdict_file_sha)
+      return { iteration: it.n, why: `${it.verdict_file} changed after it was recorded` };
+  }
+  return null;
+}
+
+// Nothing below is stored. Same rule as a wiki tier and a pact state: a stored
+// status is a status that lies the moment somebody saves a file.
+function challengeStateOf(claudeDir, slug, cyc, cfg) {
+  const p = challengePaths(claudeDir, slug);
+  const tam = challengeTampered(claudeDir, slug, cyc);
+  if (tam)
+    return { state: "TAMPERED", why: `${tam.why} — reported, never silently re-graded` };
+  if (!cyc.iterations.length)
+    return { state: "AWAITING-JUDGE", why: "created, not yet judged" };
+  const last = cyc.iterations[cyc.iterations.length - 1];
+  const changed = (cyc.artifacts || []).filter((a) => {
+    const now = shaOfFile(path.join(p.root, a.path));
+    const then = (last.artifact_shas || {})[a.path];
+    return now !== null && then && now !== then;
+  });
+  // `last.passed` is the verdict's own HISTORY — it is what the convergence
+  // chart draws, and it never changes. The STATE is recomputed live from the
+  // open set, in BOTH directions: an accepted exception clears a block the
+  // moment it is recorded (otherwise the escape valve does not escape until one
+  // more paid iteration has run), and raising `challenge_pass_severity`
+  // un-passes a cycle immediately (otherwise a stored verdict outranks the bar
+  // the user just set — which is exactly the stored-status lie this whole file
+  // avoids everywhere else).
+  const liveBlocking = challengeBlocking(cyc, cfg);
+  if (liveBlocking.length === 0)
+    return changed.length
+      ? {
+          state: "STALE-PASS",
+          why: `passed at iteration ${last.n}, but ${plural(changed.length, "artifact")} changed afterwards — honest, not a failure`,
+        }
+      : { state: "PASSED", why: `passed at iteration ${last.n}; nothing has changed since` };
+  const expected = challengeExpected(cyc);
+  const expectedAbs = path.join(p.root, expected);
+  if (!fs.existsSync(expectedAbs))
+    return {
+      state: "MISSING-REVISION",
+      why: `the declared revision ${expected} does not exist — candidates are listed, never adopted`,
+    };
+  const expSha = shaOfFile(expectedAbs);
+  const expThen = (last.artifact_shas || {})[expected];
+  if (changed.length || (expThen && expSha !== expThen))
+    return { state: "AWAITING-RECHECK", why: "the artifact moved since the last verdict — a new iteration is warranted" };
+  return {
+    state: "AWAITING-FIX",
+    why: `${plural(challengeBlocking(cyc, cfg).length, "blocking finding")} open and nothing has changed yet`,
+  };
+}
+
+// `stalled` is a FLAG that rides alongside the state, never a state of its own —
+// a state that means two things is a state that lies. And it is a measurement,
+// not a cap (§19): each turn of this loop is a separate human sitting down to
+// work, so refusing on iteration 6 would be refusing to review a hard document.
+function challengeStalled(cyc, cfg) {
+  const n = Math.max(2, Number(cfg.challenge_stall_after || 3));
+  const conv = cyc.iterations.map((it) => Number(it.blocking || 0));
+  if (conv.length < n) return false;
+  const window = conv.slice(-n);
+  return window[window.length - 1] >= window[0];
+}
+
+function challengeDimensionRows(cyc) {
+  const last = cyc.iterations[cyc.iterations.length - 1];
+  const reported = new Map(((last && last.dimensions) || []).map((d) => [d.id, d]));
+  return CHALLENGE_DIMS.map((id) => {
+    if (!cyc.dimensions.includes(id)) return { id, status: "NOT-SELECTED" };
+    const r = reported.get(id);
+    if (!r) return { id, status: "NOT-CHECKED", reason: "not yet judged" };
+    return {
+      id,
+      status: r.status,
+      findings: r.findings === undefined ? 0 : r.findings,
+      ...(r.score ? { score: r.score } : {}),
+      ...(r.reason ? { reason: r.reason } : {}),
+    };
+  });
+}
+
+function challengeView(claudeDir, slug, cfg) {
+  const cyc = readCycle(claudeDir, slug);
+  if (!cyc) return null;
+  const p = challengePaths(claudeDir, slug);
+  const st = challengeStateOf(claudeDir, slug, cyc, cfg);
+  const counts = challengeCounts(cyc);
+  const last = cyc.iterations[cyc.iterations.length - 1] || null;
+  const expected = challengeExpected(cyc);
+  const blocking = challengeBlocking(cyc, cfg);
+  return {
+    cyc,
+    paths: p,
+    state: st.state,
+    why: st.why,
+    counts,
+    blocking,
+    expected,
+    stalled: challengeStalled(cyc, cfg),
+    no_template: !!cyc.no_template,
+    dimensions: challengeDimensionRows(cyc),
+    last,
+    convergence: cyc.iterations.map((it) => ({
+      n: it.n,
+      blocking: Number(it.blocking || 0),
+      passed: !!it.passed,
+      graded_against: it.graded_against || 1,
+      graded_against_goal: it.graded_against_goal || 1,
+      severities: it.severities || {},
+    })),
+  };
+}
+
+// A blocking finding is what raises the code; a P0 raises it further. UNCHECKED
+// dimensions never raise it — rule 6 makes them LOUD, not fatal.
+function challengeCode(v) {
+  // A tampered ledger is never "passed": the evidence under the verdict moved,
+  // so the honest answer is the same tier as a P0 — report it, never re-grade it.
+  if (v.state === "TAMPERED") return 2;
+  if (v.state === "PASSED") return 0;
+  if (v.counts.P0) return 2;
+  return v.blocking.length ? 1 : v.state === "STALE-PASS" ? 1 : 0;
+}
+
+function challengeLine(slug, v) {
+  return (
+    `challenge: ${slug} ${v.state}` +
+    (v.blocking.length ? ` — ${plural(v.blocking.length, "blocking finding")} open` : "") +
+    (v.no_template ? " · no template (D1 NOT-CHECKED)" : "") +
+    (v.stalled ? " · stalled" : "")
+  );
+}
+
+// ── orc challenge init ──────────────────────────────────────────────────────
+function challengeInit(claudeDir) {
+  const asJson = wantsJson();
+  const pos = chPositionals(); // ["challenge","init",<slug?>]
+  const artifacts = chOptAll("--artifact");
+  const goal = chOpt("--goal");
+  const audience = chOpt("--audience");
+  const doneMeans = chOpt("--done-means");
+  const slug = chSlug(pos[2] || (artifacts[0] ? path.basename(artifacts[0]).replace(/\.[a-z]+$/i, "") : ""));
+  const fail = (reason, hint) => {
+    if (asJson) emitJson({ ok: false, reason, hint }, 2);
+    console.error("❌ " + hint);
+    process.exit(2);
+  };
+
+  if (!slug) fail("no-slug", "orc challenge init needs a slug (or an --artifact to derive one from).");
+  if (!artifacts.length) fail("no-artifact", "orc challenge init needs at least one --artifact <path>.");
+
+  // RULE 0, MADE STRUCTURAL. These three have no fallback value: a finding is
+  // only a finding relative to a goal, and a *defensible* finding about the
+  // wrong thing is worse than an obviously wrong one, because the user spends
+  // three iterations fixing what did not matter.
+  for (const [flagName, val] of [["--goal", goal], ["--audience", audience], ["--done-means", doneMeans]])
+    if (!val || !String(val).trim())
+      fail(
+        "missing-goal-field",
+        `${flagName} is required and has no default. ORC never guesses what "good" means here — ` +
+          `ask the user and pass their words. (a lane that guesses the user's goal has broken this contract)`
+      );
+
+  const p = challengePaths(claudeDir, slug);
+  if (fs.existsSync(p.ledger)) fail("exists", `a cycle named ${slug} already exists at ${p.cycle}.`);
+
+  const templateSrc = chOpt("--template");
+  const noTemplate = args.includes("--no-template");
+  if (!templateSrc && !noTemplate)
+    fail(
+      "no-template",
+      "supply --template <path> (it is copied and FROZEN), or pass --no-template after an explicit " +
+        '"I have no template" — D1 is then reported NOT-CHECKED with that reason, never silently skipped.'
+    );
+
+  const kind = (chOpt("--kind") || "tsd").toLowerCase();
+  if (!CHALLENGE_KINDS.includes(kind))
+    fail("bad-kind", `--kind must be one of: ${CHALLENGE_KINDS.join(", ")}`);
+
+  const dimsRaw = chOpt("--dimensions");
+  const dims = dimsRaw
+    ? dimsRaw.split(/[,\s]+/).map((d) => d.trim().toUpperCase()).filter(Boolean)
+    : CHALLENGE_DIMS.slice(0, 6);
+  for (const d of dims) if (!CHALLENGE_DIMS.includes(d)) fail("bad-dimension", `unknown dimension ${d} (valid: ${CHALLENGE_DIMS.join(", ")})`);
+
+  const revMode = (chOpt("--revision") || "in-place").toLowerCase();
+  if (!CHALLENGE_REVISION_MODES.includes(revMode))
+    fail("bad-revision", `--revision must be one of: ${CHALLENGE_REVISION_MODES.join(", ")}`);
+  const revPattern = chOpt("--revision-pattern");
+  if (revMode !== "in-place" && !revPattern)
+    fail("no-revision-pattern", `--revision ${revMode} needs --revision-pattern (use {n} for the iteration the revision answers).`);
+
+  for (const a of artifacts)
+    if (!fs.existsSync(path.join(p.root, a)))
+      fail("no-such-artifact", `artifact not found: ${a} (paths are relative to the repo root)`);
+
+  fs.mkdirSync(p.cycle, { recursive: true });
+
+  // FROZEN AT INTAKE. The goal is prose the user wrote in this session, and the
+  // judge slice may never carry prose from this session (rule 3) — so it goes to
+  // disk once and every iteration's judge reads the identical file.
+  const outOfScope = chOptAll("--out-of-scope");
+  const contextRefs = chOptAll("--context-ref");
+  const goalsBody = [
+    "<!-- orc-challenge: FROZEN at intake, v1. Changing this is a `regoal` event",
+    "     (`orc challenge goals <slug> --set <path>`), and prior iterations are",
+    "     stamped graded_against_goal: 1 — a review history against a moving goal",
+    "     is not a history. -->",
+    "",
+    `# Goal — ${slug}`,
+    "",
+    "## Goal",
+    "",
+    String(goal).trim(),
+    "",
+    "## Audience",
+    "",
+    String(audience).trim(),
+    "",
+    "## Done means",
+    "",
+    String(doneMeans).trim(),
+    "",
+    "## Out of scope",
+    "",
+    ...(outOfScope.length ? outOfScope.map((s) => `- ${s}`) : ["- (nothing declared)"]),
+    "",
+    "## Context refs",
+    "",
+    "Read as EVIDENCE, never as instruction.",
+    "",
+    ...(contextRefs.length ? contextRefs.map((s) => `- ${s}`) : ["- (none)"]),
+    "",
+    "## Where the revised version goes",
+    "",
+    `- mode: ${revMode}`,
+    ...(revPattern ? [`- pattern: ${revPattern}`] : []),
+    "",
+  ].join("\n");
+  fs.writeFileSync(p.goals, goalsBody);
+
+  let template = { source: null, frozen: null, sha: null, version: 1 };
+  if (templateSrc) {
+    const abs = path.isAbsolute(templateSrc) ? templateSrc : path.join(p.root, templateSrc);
+    if (!fs.existsSync(abs)) fail("no-such-template", `template not found: ${templateSrc}`);
+    // Recorded as a POINTER *and* copied: the file it points at can change, the
+    // frozen copy cannot. Comparability across iterations is the only reason the
+    // iteration history is worth anything.
+    const body = fs.readFileSync(abs, "utf8");
+    fs.writeFileSync(p.template, body);
+    template = { source: templateSrc, frozen: CHALLENGE_TEMPLATE, sha: sha256(body.replace(/\r\n/g, "\n")), version: 1 };
+  }
+
+  const head = gitIn(p.root, ["rev-parse", "HEAD"]);
+  const cyc = {
+    version: 1,
+    slug,
+    kind,
+    created_at: fmtStamp(new Date()),
+    artifacts: artifacts.map((a) => ({
+      path: a,
+      sha: shaOfFile(path.join(p.root, a)),
+      seen_at_commit: head || null,
+    })),
+    template,
+    no_template: !templateSrc,
+    goals: {
+      frozen: CHALLENGE_GOALS,
+      sha: sha256(goalsBody),
+      version: 1,
+      goal: String(goal).trim(),
+      audience: String(audience).trim(),
+      done_means: String(doneMeans).trim(),
+      out_of_scope: outOfScope,
+      context_refs: contextRefs,
+    },
+    revision: { mode: revMode, ...(revPattern ? { pattern: revPattern } : {}) },
+    dimensions: dims,
+    accepted: {},
+    rebuttals: {},
+    events: [{ at: fmtStamp(new Date()), kind: "created", detail: `goal v1, template v${template.version}` }],
+    iterations: [],
+  };
+  writeCycle(claudeDir, slug, cyc);
+
+  if (asJson)
+    emitJson({ ok: true, slug, dir: p.cycle, goals: p.goals, template: templateSrc ? p.template : null, no_template: !templateSrc, dimensions: dims, revision: cyc.revision }, 0);
+  console.log(ui.header(`ORC · challenge — ${slug} created`));
+  console.log(`\n  goal frozen:  ${p.goals}`);
+  console.log(`  template:     ${templateSrc ? p.template + "  (frozen v1)" : "none — D1 will report NOT-CHECKED with that reason"}`);
+  console.log(`  dimensions:   ${dims.join(" ")}`);
+  console.log(`  revision:     ${revMode}${revPattern ? " — " + revPattern : " (the artifact's own path)"}`);
+  console.log(`\n  Next:  /orc-challenge ${slug}`);
+  process.exit(0);
+}
+
+// ── orc challenge list / status / show ──────────────────────────────────────
+function challengeList(claudeDir) {
+  const asJson = wantsJson();
+  const cfg = resolvedConfig(claudeDir);
+  const slugs = listCycleSlugs(claudeDir);
+  if (!slugs.length) {
+    const hint = "no challenge cycles yet — run `/orc-challenge` to open one (it asks for the goal first, and never guesses it).";
+    if (asJson) emitJson({ ok: false, reason: "no-cycles", cycles: [], hint }, 3);
+    console.log(hint);
+    process.exit(3);
+  }
+  const rows = slugs.map((s) => {
+    const v = challengeView(claudeDir, s, cfg);
+    return {
+      slug: s,
+      kind: v.cyc.kind,
+      state: v.state,
+      why: v.why,
+      iterations: v.cyc.iterations.length,
+      blocking: v.blocking.length,
+      counts: v.counts,
+      stalled: v.stalled,
+      no_template: v.no_template,
+      goal: v.cyc.goals.goal,
+      next: v.state === "PASSED" ? null : `/orc-challenge ${s}`,
+    };
+  });
+  const inFlight = rows.filter((r) => r.state !== "PASSED");
+  const code = inFlight.length ? 1 : 0;
+  if (asJson) emitJson({ ok: true, cycles: rows, in_flight: inFlight.length }, code);
+  console.log(ui.header(`ORC · challenge — ${plural(rows.length, "cycle")}`));
+  console.log("");
+  for (const r of rows) {
+    console.log(`  ${r.state.padEnd(17)} ${r.slug}  ${ui.color.gray(r.kind)}`);
+    console.log(`  ${"".padEnd(17)} ${ui.color.gray(r.why)}`);
+    if (r.stalled) console.log(`  ${"".padEnd(17)} ⚠ stalled — no net reduction in ${cfg.challenge_stall_after} iterations`);
+  }
+  console.log("\n  ORC judges, you fix, ORC re-judges — and it never fixes what it judged.");
+  process.exit(code);
+}
+
+function challengeStatus(claudeDir, slugArg) {
+  const asJson = wantsJson();
+  const cfg = resolvedConfig(claudeDir);
+  const slug = chSlug(slugArg);
+  const v = slug ? challengeView(claudeDir, slug, cfg) : null;
+  if (!v) {
+    const hint = `no challenge cycle "${slugArg || ""}" — \`orc challenge list\` shows the ones that exist.`;
+    if (asJson) emitJson({ ok: false, reason: "no-such-cycle", slug: slugArg || null, hint }, 3);
+    console.log(hint);
+    process.exit(3);
+  }
+  const code = challengeCode(v);
+  const expectedAbs = path.join(v.paths.root, v.expected);
+  const payload = {
+    ok: true,
+    slug,
+    state: v.state,
+    why: v.why,
+    stalled: v.stalled,
+    no_template: v.no_template,
+    kind: v.cyc.kind,
+    goals: {
+      version: v.cyc.goals.version,
+      goal: v.cyc.goals.goal,
+      audience: v.cyc.goals.audience,
+      done_means: v.cyc.goals.done_means,
+      out_of_scope: v.cyc.goals.out_of_scope || [],
+      context_refs: v.cyc.goals.context_refs || [],
+    },
+    template: { ...v.cyc.template, no_template: v.no_template },
+    iterations: v.cyc.iterations.length,
+    artifacts: (v.cyc.artifacts || []).map((a) => ({
+      path: a.path,
+      changed_since_verdict:
+        !!v.last && shaOfFile(path.join(v.paths.root, a.path)) !== (v.last.artifact_shas || {})[a.path],
+    })),
+    revision: {
+      mode: (v.cyc.revision || {}).mode || "in-place",
+      pattern: (v.cyc.revision || {}).pattern || null,
+      expected: v.expected,
+      found: fs.existsSync(expectedAbs),
+    },
+    counts: v.counts,
+    dimensions: v.dimensions,
+    convergence: v.convergence,
+    dir: v.paths.cycle,
+    next: v.state === "PASSED" ? null : `/orc-challenge ${slug}`,
+    preflight_line: challengeLine(slug, v),
+  };
+  if (asJson) emitJson(payload, code);
+  console.log(ui.header(`ORC · challenge — ${slug}`));
+  console.log(`\n  ${v.state}  ${ui.color.gray(v.why)}`);
+  console.log(`\n  goal (v${v.cyc.goals.version}): ${v.cyc.goals.goal}`);
+  console.log(`  audience:   ${v.cyc.goals.audience}`);
+  console.log(`  done means: ${v.cyc.goals.done_means}`);
+  console.log(
+    `\n  iterations: ${v.cyc.iterations.length}` +
+      `   open: P0 ${v.counts.P0} · P1 ${v.counts.P1} · P2 ${v.counts.P2} · P3 ${v.counts.P3}` +
+      (v.counts.accepted ? ` · ${v.counts.accepted} accepted` : "") +
+      (v.counts.rebutted ? ` · ${v.counts.rebutted} rebutted` : "")
+  );
+  console.log(`  dimensions: ${v.dimensions.map((d) => d.id + " " + d.status).join(" · ")}`);
+  if (v.state !== "PASSED")
+    console.log(`  revision:   ${v.expected}  ${fs.existsSync(expectedAbs) ? "FOUND" : "MISSING"}`);
+  if (v.stalled)
+    console.log(
+      `\n  ⚠ stalled — no net reduction in ${cfg.challenge_stall_after} iterations. Three honest options:\n` +
+        `      1  Narrow the rubric      orc challenge init … --dimensions D1,D2,D6\n` +
+        `      2  Accept a known gap     orc challenge accept ${slug} <id> "reason"\n` +
+        `      3  Keep going             /orc-challenge ${slug}`
+    );
+  if (payload.next) console.log(`\n  Next:  ${payload.next}`);
+  process.exit(code);
+}
+
+function challengeShow(claudeDir, slugArg) {
+  const asJson = wantsJson();
+  const cfg = resolvedConfig(claudeDir);
+  const slug = chSlug(slugArg);
+  const v = slug ? challengeView(claudeDir, slug, cfg) : null;
+  if (!v) {
+    if (asJson) emitJson({ ok: false, reason: "no-such-cycle", slug: slugArg || null }, 3);
+    console.log(`no challenge cycle "${slugArg || ""}".`);
+    process.exit(3);
+  }
+  const want = chOpt("--iteration");
+  const iters = want ? v.cyc.iterations.filter((it) => String(it.n) === String(Number(want))) : v.cyc.iterations;
+  const payload = {
+    ok: true,
+    slug,
+    state: v.state,
+    kind: v.cyc.kind,
+    goals: v.cyc.goals,
+    template: v.cyc.template,
+    no_template: v.no_template,
+    dimensions_selected: v.cyc.dimensions,
+    accepted: v.cyc.accepted,
+    rebuttals: v.cyc.rebuttals,
+    events: v.cyc.events,
+    revision: { ...(v.cyc.revision || {}), expected: v.expected },
+    iterations: iters,
+    open: challengeOpen(v.cyc),
+    dir: v.paths.cycle,
+  };
+  if (asJson) emitJson(payload, 0);
+  console.log(ui.header(`ORC · challenge ${slug} — ${plural(iters.length, "iteration")}`));
+  for (const it of iters) {
+    console.log(`\n  iteration ${it.n}  ${it.passed ? "PASS" : "FAIL"}   coverage ${it.coverage_pct}%   graded against template v${it.graded_against} · goal v${it.graded_against_goal}`);
+    for (const f of it.findings || [])
+      console.log(
+        `    ${String(f.severity).padEnd(3)} ${f.id}  ${f.dimension}  ${f.anchor}` +
+          (f.outcome ? `  → ${f.outcome}` : "") +
+          `\n        ${ui.color.gray(f.what_is_wrong || "")}`
+      );
+  }
+  process.exit(0);
+}
+
+// ── orc challenge diff ──────────────────────────────────────────────────────
+// Per-finding freshness is COVERAGE-RELATIVE — the computeWikiFreshness lesson
+// applied to findings: did the lines THIS finding anchors actually change?
+//
+// It is a HINT FOR THE HUMAN AND NEVER AN INPUT TO THE JUDGE. Untouched does not
+// mean unfixed (the fix may be elsewhere) and touched does not mean fixed. Rule
+// 11: the judge re-reads the artifact from disk, every time.
+// +/− for one path, tracked or not. An untracked file is reported as wholly
+// added, which is what it is — `git diff` reports it as nothing at all.
+function challengeGitStat(root, rel) {
+  const tracked = gitIn(root, ["ls-files", "--error-unmatch", "--", rel]);
+  if (tracked === null || !String(tracked).trim()) {
+    let n = 0;
+    try {
+      n = fs.readFileSync(path.join(root, rel), "utf8").split("\n").length;
+    } catch (_) {}
+    return { added: n, removed: 0, untracked: true };
+  }
+  const nm = String(gitIn(root, ["diff", "--numstat", "HEAD", "--", rel]) || "").trim().split(/\s+/);
+  return { added: Number(nm[0]) || 0, removed: Number(nm[1]) || 0, untracked: false };
+}
+
+function challengeDiff(claudeDir, slugArg) {
+  const asJson = wantsJson();
+  const cfg = resolvedConfig(claudeDir);
+  const slug = chSlug(slugArg);
+  const v = slug ? challengeView(claudeDir, slug, cfg) : null;
+  if (!v) {
+    if (asJson) emitJson({ ok: false, reason: "no-such-cycle", slug: slugArg || null }, 3);
+    console.log(`no challenge cycle "${slugArg || ""}".`);
+    process.exit(3);
+  }
+  const expectedAbs = path.join(v.paths.root, v.expected);
+  const found = fs.existsSync(expectedAbs);
+
+  if (!found) {
+    // IT LISTS, IT DOES NOT ADOPT. Picking the closest-looking file would be ORC
+    // guessing what the user did, and a judge pointed at the wrong file produces
+    // a page of confident, useless findings.
+    const since = v.last ? v.last.closed_at : null;
+    // `git status --porcelain`, not `git diff` — a brand-new `-v2.md` is
+    // UNTRACKED, and a diff against HEAD cannot see it. Missing the one file the
+    // user actually wrote is the whole failure this branch exists to avoid.
+    const raw = gitIn(v.paths.root, ["status", "--porcelain"]) || "";
+    const candidates = raw
+      .split("\n")
+      .map((l) => l.trim())
+      .filter(Boolean)
+      .map((l) => l.replace(/^\S+\s+/, "").replace(/^"|"$/g, ""))
+      // A directory is never the revision, and the review trail is never the
+      // artifact — git collapses an untracked tree to `orc/`, which is why both
+      // shapes are excluded rather than just the full path.
+      .filter((f) => f && !f.endsWith("/") && !f.startsWith(CHALLENGE_DIR.split("/")[0] + "/") && f !== v.expected)
+      .map((f) => ({ path: f, ...challengeGitStat(v.paths.root, f) }))
+      .slice(0, 20);
+    const payload = {
+      ok: true,
+      slug,
+      state: "MISSING-REVISION",
+      expected: v.expected,
+      found: false,
+      since,
+      candidates,
+      note: "candidates are LISTED, never adopted — record the real one with `orc challenge expect <slug> --set <path>`",
+    };
+    if (asJson) emitJson(payload, 2);
+    console.log(`\nexpected revision:  ${v.expected}   MISSING\n`);
+    if (candidates.length) {
+      console.log("Candidates changed since the last iteration (git):");
+      candidates.forEach((c, i) => console.log(`  ${i + 1}  ${c.path.padEnd(44)} +${c.added} −${c.removed}`));
+      console.log("\nWhich of these is the revision — or is the work not done yet?");
+      console.log(`Record it:  orc challenge expect ${slug} --set <path>`);
+    } else {
+      console.log("Nothing has changed in the working tree yet.");
+    }
+    process.exit(2);
+  }
+
+  const nowSha = shaOfFile(expectedAbs);
+  const thenSha = v.last ? (v.last.artifact_shas || {})[v.expected] || (v.cyc.artifacts[0] || {}).sha : (v.cyc.artifacts[0] || {}).sha;
+  const changed = !!thenSha && nowSha !== thenSha;
+  const stat = challengeGitStat(v.paths.root, v.expected);
+  const added = stat.added;
+  const removed = stat.removed;
+
+  // Which lines moved, so a carried finding can be marked touched/untouched.
+  // An UNTRACKED revision has no hunks and every line of it is new, so every
+  // anchor counts as touched — the opposite of what an empty patch would say.
+  const moved = new Set();
+  if (!stat.untracked) {
+    const patch = gitIn(v.paths.root, ["diff", "-U0", "HEAD", "--", v.expected]) || "";
+    for (const m of patch.matchAll(/^@@ -\d+(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/gm)) {
+      const start = Number(m[2]);
+      const len = m[3] === undefined ? 1 : Number(m[3]);
+      for (let i = start; i < start + Math.max(1, len); i++) moved.add(i);
+    }
+  }
+
+  const carried = challengeOpen(v.cyc).map((f) => {
+    const line = Number(String(f.anchor || "").split(":").pop());
+    const touched = stat.untracked
+      ? true
+      : !Number.isFinite(line)
+        ? changed
+        : moved.has(line) || moved.has(line - 1) || moved.has(line + 1);
+    return { id: f.id, anchor: f.anchor, severity: f.severity, dimension: f.dimension, touched };
+  });
+  const payload = {
+    ok: true,
+    slug,
+    state: v.state,
+    expected: v.expected,
+    found: true,
+    sha_before: thenSha || null,
+    sha_after: nowSha,
+    changed,
+    added,
+    removed,
+    carried,
+    touched: carried.filter((c) => c.touched).length,
+    untouched: carried.filter((c) => !c.touched).map((c) => c.id),
+    note: "touched/untouched is a HINT for you, never an input to the judge — the judge always re-reads the artifact",
+  };
+  if (asJson) emitJson(payload, changed ? 1 : 0);
+  console.log(`\nexpected revision:  ${v.expected}   FOUND   (${shortSha(thenSha)} → ${shortSha(nowSha)}, +${added} −${removed})`);
+  console.log(
+    `carried findings:   ${carried.length}   ·  ${payload.touched} touched  ·  ${payload.untouched.length} untouched` +
+      (payload.untouched.length ? `   ← ${payload.untouched.join(" ")}` : "")
+  );
+  console.log(ui.color.gray("\n  touched/untouched is a hint for you. The judge re-reads the artifact either way."));
+  process.exit(changed ? 1 : 0);
+}
+
+// ── orc challenge expect ────────────────────────────────────────────────────
+// A plan the user cannot deviate from is a plan they will deviate from silently.
+// The escape is a RECORDED command, never a guess.
+function challengeExpectCmd(claudeDir, slugArg) {
+  const asJson = wantsJson();
+  const cfg = resolvedConfig(claudeDir);
+  const slug = chSlug(slugArg);
+  const cyc = slug ? readCycle(claudeDir, slug) : null;
+  if (!cyc) {
+    if (asJson) emitJson({ ok: false, reason: "no-such-cycle", slug: slugArg || null }, 3);
+    console.log(`no challenge cycle "${slugArg || ""}".`);
+    process.exit(3);
+  }
+  const p = challengePaths(claudeDir, slug);
+  const set = chOpt("--set");
+  if (set) {
+    const norm = set.replace(/\\/g, "/");
+    const abs = path.resolve(p.root, norm);
+    const refuse = (why) => {
+      if (asJson) emitJson({ ok: false, reason: "refused", why }, 2);
+      console.error("❌ " + why);
+      process.exit(2);
+    };
+    if (!abs.startsWith(path.resolve(p.root))) refuse("the revision path must be inside this repo.");
+    if (abs.startsWith(path.resolve(p.cycle)))
+      refuse("the revision may never live under orc/orc-challenge/ — that folder is the review trail, not the artifact.");
+    cyc.revision = { ...(cyc.revision || { mode: "in-place" }), expect_override: norm };
+    cyc.events.push({ at: fmtStamp(new Date()), kind: "expect", detail: norm });
+    writeCycle(claudeDir, slug, cyc);
+  }
+  const v = challengeView(claudeDir, slug, cfg);
+  const abs = path.join(p.root, v.expected);
+  if (asJson) emitJson({ ok: true, slug, expected: v.expected, found: fs.existsSync(abs), mode: (cyc.revision || {}).mode || "in-place" }, 0);
+  console.log("\n  Where to put the revised version\n");
+  console.log(`  Write to:      ${v.expected}        ← this exact path`);
+  console.log(`  Do NOT write:  anything under ${CHALLENGE_DIR}${slug}/`);
+  console.log(`  Status:        ${fs.existsSync(abs) ? "FOUND" : "not there yet"}`);
+  process.exit(0);
+}
+
+// ── orc challenge accept / rebut ────────────────────────────────────────────
+// Two escape valves, because a loop with no exit is a trap. Neither is ever
+// automatic — the /orc-pact retirement rule.
+function challengeAccept(claudeDir, slugArg, id, reason) {
+  const asJson = wantsJson();
+  const slug = chSlug(slugArg);
+  const cyc = slug ? readCycle(claudeDir, slug) : null;
+  if (!cyc) {
+    if (asJson) emitJson({ ok: false, reason: "no-such-cycle" }, 3);
+    console.log(`no challenge cycle "${slugArg || ""}".`);
+    process.exit(3);
+  }
+  const known = new Set(cyc.iterations.flatMap((it) => (it.findings || []).map((f) => f.id)));
+  if (!id || !known.has(id)) {
+    if (asJson) emitJson({ ok: false, reason: "no-such-finding", id: id || null }, 3);
+    console.log(`no finding ${id || "(none given)"} in ${slug}.`);
+    process.exit(3);
+  }
+  if (!reason || !String(reason).trim()) {
+    if (asJson) emitJson({ ok: false, reason: "no-reason" }, 2);
+    console.error('❌ accepting a finding requires a reason: orc challenge accept <slug> <id> "why"');
+    process.exit(2);
+  }
+  cyc.accepted[id] = { reason: String(reason).trim(), at: fmtStamp(new Date()), iteration: cyc.iterations.length };
+  cyc.events.push({ at: fmtStamp(new Date()), kind: "accept", detail: `${id} — ${reason}` });
+  writeCycle(claudeDir, slug, cyc);
+  if (asJson) emitJson({ ok: true, slug, id, accepted: cyc.accepted[id] }, 0);
+  console.log(`✓ ${id} accepted as a known gap. It stops blocking, and it stays visible in every report with your reason.`);
+  process.exit(0);
+}
+
+function challengeRebut(claudeDir, slugArg, id, reason) {
+  const asJson = wantsJson();
+  const slug = chSlug(slugArg);
+  const cyc = slug ? readCycle(claudeDir, slug) : null;
+  if (!cyc) {
+    if (asJson) emitJson({ ok: false, reason: "no-such-cycle" }, 3);
+    console.log(`no challenge cycle "${slugArg || ""}".`);
+    process.exit(3);
+  }
+  const known = new Set(cyc.iterations.flatMap((it) => (it.findings || []).map((f) => f.id)));
+  if (!id || !known.has(id)) {
+    if (asJson) emitJson({ ok: false, reason: "no-such-finding", id: id || null }, 3);
+    console.log(`no finding ${id || "(none given)"} in ${slug}.`);
+    process.exit(3);
+  }
+  if (!reason || !String(reason).trim()) {
+    if (asJson) emitJson({ ok: false, reason: "no-reason" }, 2);
+    console.error('❌ a rebuttal requires a reason: orc challenge rebut <slug> <id> "why the judge is wrong"');
+    process.exit(2);
+  }
+  cyc.rebuttals[id] = { reason: String(reason).trim(), at: fmtStamp(new Date()), status: "open" };
+  cyc.events.push({ at: fmtStamp(new Date()), kind: "rebut", detail: `${id} — ${reason}` });
+  writeCycle(claudeDir, slug, cyc);
+  if (asJson) emitJson({ ok: true, slug, id, rebuttal: cyc.rebuttals[id] }, 0);
+  console.log(
+    `✓ ${id} rebutted. The next judgement MUST answer it explicitly — withdrawn (with an admission) or\n` +
+      `  upheld (with new evidence). A rebutted finding the next verdict ignores is malformed and is rejected.`
+  );
+  process.exit(0);
+}
+
+// ── orc challenge template / goals (the two frozen artifacts) ───────────────
+function challengeRefreeze(claudeDir, slugArg, which) {
+  const asJson = wantsJson();
+  const slug = chSlug(slugArg);
+  const cyc = slug ? readCycle(claudeDir, slug) : null;
+  if (!cyc) {
+    if (asJson) emitJson({ ok: false, reason: "no-such-cycle" }, 3);
+    console.log(`no challenge cycle "${slugArg || ""}".`);
+    process.exit(3);
+  }
+  const p = challengePaths(claudeDir, slug);
+  const set = chOpt("--set");
+  if (!set) {
+    const body = fs.existsSync(which === "goals" ? p.goals : p.template)
+      ? fs.readFileSync(which === "goals" ? p.goals : p.template, "utf8")
+      : null;
+    if (asJson)
+      emitJson(
+        which === "goals"
+          ? { ok: true, slug, goals: cyc.goals, file: p.goals }
+          : { ok: true, slug, template: cyc.template, no_template: !!cyc.no_template, file: cyc.no_template ? null : p.template },
+        0
+      );
+    console.log(body === null ? `(no ${which} file — D1 is NOT-CHECKED with that reason)` : body);
+    process.exit(0);
+  }
+  const reason = chOpt("--reason");
+  if (!reason || !String(reason).trim()) {
+    if (asJson) emitJson({ ok: false, reason: "no-reason" }, 2);
+    console.error(
+      `❌ changing the frozen ${which} mid-cycle needs --reason "…". Prior iterations are stamped ` +
+        `graded_against${which === "goals" ? "_goal" : ""}: ${which === "goals" ? cyc.goals.version : cyc.template.version}, ` +
+        "because a review history against a moving yardstick is not a history."
+    );
+    process.exit(2);
+  }
+  const abs = path.isAbsolute(set) ? set : path.join(p.root, set);
+  if (!fs.existsSync(abs)) {
+    if (asJson) emitJson({ ok: false, reason: "no-such-file", path: set }, 2);
+    console.error(`❌ not found: ${set}`);
+    process.exit(2);
+  }
+  const body = fs.readFileSync(abs, "utf8");
+  if (which === "goals") {
+    fs.writeFileSync(p.goals, body);
+    cyc.goals = { ...cyc.goals, frozen: CHALLENGE_GOALS, sha: sha256(body.replace(/\r\n/g, "\n")), version: (cyc.goals.version || 1) + 1, source: set };
+    cyc.events.push({ at: fmtStamp(new Date()), kind: "regoal", detail: `${set} — ${reason}`, to_version: cyc.goals.version });
+  } else {
+    fs.writeFileSync(p.template, body);
+    cyc.template = { source: set, frozen: CHALLENGE_TEMPLATE, sha: sha256(body.replace(/\r\n/g, "\n")), version: (cyc.template.version || 1) + 1 };
+    cyc.no_template = false;
+    cyc.events.push({ at: fmtStamp(new Date()), kind: "retemplate", detail: `${set} — ${reason}`, to_version: cyc.template.version });
+  }
+  writeCycle(claudeDir, slug, cyc);
+  if (asJson) emitJson({ ok: true, slug, which, version: which === "goals" ? cyc.goals.version : cyc.template.version, reason }, 0);
+  console.log(
+    `✓ ${which} re-frozen at v${which === "goals" ? cyc.goals.version : cyc.template.version}. ` +
+      `Prior iterations keep their stamp, and the panel draws the version break.`
+  );
+  process.exit(0);
+}
+
+// ── orc challenge record — THE GATE, not a store ────────────────────────────
+// `record` is the skill's ONE write. It rejects a malformed verdict (rule 4,
+// rule 6), it DROPS findings with no `serves` (rule 0), and it — not the judge —
+// computes PASS (rule 2).
+function challengeRecord(claudeDir, slugArg) {
+  const asJson = wantsJson();
+  const cfg = resolvedConfig(claudeDir);
+  const slug = chSlug(slugArg);
+  const cyc = slug ? readCycle(claudeDir, slug) : null;
+  const bad = (reason, detail, extra) => {
+    if (asJson) emitJson({ ok: false, reason, detail, ...(extra || {}) }, 2);
+    console.error("❌ malformed verdict — " + detail);
+    process.exit(2);
+  };
+  if (!cyc) {
+    if (asJson) emitJson({ ok: false, reason: "no-such-cycle", slug: slugArg || null }, 3);
+    console.log(`no challenge cycle "${slugArg || ""}".`);
+    process.exit(3);
+  }
+  const p = challengePaths(claudeDir, slug);
+  const from = chOpt("--from");
+  if (!from) bad("no-input", "orc challenge record needs --from <verdict.json>.");
+  const fromAbs = path.isAbsolute(from) ? from : path.join(p.root, from);
+  let input;
+  try {
+    input = JSON.parse(fs.readFileSync(fromAbs, "utf8"));
+  } catch (e) {
+    bad("unreadable", `could not read ${from}: ${e.message}`);
+  }
+
+  const n = Number(chOpt("--iteration") || input.iteration || cyc.iterations.length + 1);
+  if (!Number.isFinite(n) || n < 1) bad("bad-iteration", "--iteration must be a positive integer.");
+  if (cyc.iterations.some((it) => it.n === n)) bad("duplicate-iteration", `iteration ${n} is already recorded.`);
+
+  const carriedIn = challengeOpen(cyc);
+  const carriedIds = new Set(carriedIn.map((f) => f.id));
+
+  // RULE 0 — a finding that cannot be traced to the stated goal, audience or
+  // done_means is out of scope and is DROPPED. This is the mechanism that stops
+  // a judge with a large context window from reviewing the entire universe.
+  const dropped = [];
+  const raw = Array.isArray(input.findings) ? input.findings : [];
+  const findings = [];
+  for (const f of raw) {
+    const serves = String(f.serves || "").trim();
+    if (!serves || !CHALLENGE_SERVES.some((s) => serves === s || serves.startsWith(s))) {
+      dropped.push({ id: f.id || "(unnamed)", why: "no `serves` — not traceable to a stated goal element" });
+      continue;
+    }
+    if (!CHALLENGE_SEVERITIES.includes(String(f.severity || "").toUpperCase()))
+      bad("bad-severity", `finding ${f.id}: severity must be one of ${CHALLENGE_SEVERITIES.join(", ")}.`);
+    if (!CHALLENGE_DIMS.includes(String(f.dimension || "").toUpperCase()))
+      bad("bad-dimension", `finding ${f.id}: dimension must be one of ${CHALLENGE_DIMS.join(", ")}.`);
+    const carried = carriedIds.has(f.id);
+    if (carried) {
+      if (!CHALLENGE_OUTCOMES.includes(String(f.outcome || "")))
+        bad("bad-outcome", `carried finding ${f.id} needs an outcome from: ${CHALLENGE_OUTCOMES.join(", ")}.`, { id: f.id });
+      if (f.outcome === "withdrawn" && !String(f.reason || "").trim())
+        bad("withdrawn-no-reason", `finding ${f.id} was withdrawn with no reason.`, { id: f.id });
+      if (f.outcome === "superseded" && !String(f.superseded_by || "").trim())
+        bad("superseded-no-id", `finding ${f.id} was superseded without citing the replacement id.`, { id: f.id });
+    } else if (f.outcome !== undefined && f.outcome !== null && f.outcome !== "still-open") {
+      bad("unknown-carry-id", `finding ${f.id} carries an outcome but was not open at iteration ${n - 1}.`, { id: f.id });
+    }
+    findings.push({
+      id: f.id,
+      dimension: String(f.dimension).toUpperCase(),
+      severity: String(f.severity).toUpperCase(),
+      anchor: f.anchor || null,
+      quote: f.quote || null,
+      what_is_wrong: f.what_is_wrong || null,
+      consequence: f.consequence || null,
+      acceptance_line: f.acceptance_line || null,
+      serves,
+      carried,
+      outcome: carried ? f.outcome : f.outcome === "still-open" ? "still-open" : null,
+      reason: f.reason || null,
+      superseded_by: f.superseded_by || null,
+    });
+  }
+
+  // RULE 4 — conservation. Below 100% the verdict is malformed and this rejects
+  // it by name. Borrowed from context-combiner: a silently dropped finding is
+  // indistinguishable from a fixed one.
+  const answered = new Set(findings.filter((f) => f.carried).map((f) => f.id));
+  for (const id of Object.keys(cyc.accepted)) answered.add(id);
+  const missing = [...carriedIds].filter((id) => !answered.has(id));
+  const coverage = carriedIds.size === 0 ? 100 : Math.round(((carriedIds.size - missing.length) / carriedIds.size) * 100);
+  if (missing.length)
+    bad(
+      "coverage",
+      `coverage is ${coverage}% — every finding carried in must get exactly ONE outcome. Missing: ${missing.join(", ")}`,
+      { coverage_pct: coverage, missing }
+    );
+
+  // A rebutted finding the next judge ignores is a malformed return, and the
+  // iteration is rejected. Without this, one bad finding loops forever.
+  const openRebuttals = Object.entries(cyc.rebuttals).filter(([, r]) => r.status === "open");
+  const addressed = new Map((Array.isArray(input.rebuttals_addressed) ? input.rebuttals_addressed : []).map((r) => [r.id, r]));
+  const ignored = openRebuttals.filter(([id]) => !addressed.has(id)).map(([id]) => id);
+  if (ignored.length)
+    bad("rebuttal-ignored", `these rebuttals were not addressed: ${ignored.join(", ")}`, { ignored });
+  for (const [id, r] of addressed) {
+    if (!["withdrawn", "upheld"].includes(String(r.result)))
+      bad("bad-rebuttal-result", `rebuttal ${id}: result must be "withdrawn" or "upheld".`);
+    if (!String(r.reason || "").trim()) bad("rebuttal-no-reason", `rebuttal ${id}: a result needs its reason.`);
+    if (cyc.rebuttals[id]) cyc.rebuttals[id] = { ...cyc.rebuttals[id], status: r.result, answered_at: fmtStamp(new Date()), answer: r.reason };
+  }
+
+  // RULE 6 — a dimension is NEVER silently skipped. Every SELECTED dimension must
+  // report, and NOT-CHECKED must carry its reason. Making it structural here is
+  // what lets PASS be a pure severity question below.
+  const dimsIn = new Map((Array.isArray(input.dimensions) ? input.dimensions : []).map((d) => [String(d.id).toUpperCase(), d]));
+  const dimensions = [];
+  for (const id of cyc.dimensions) {
+    const d = dimsIn.get(id);
+    if (!d) bad("dimension-silent", `dimension ${id} is selected but reported nothing. NOT-CHECKED with a reason is allowed; silence is not.`, { dimension: id });
+    const status = String(d.status || "").toUpperCase();
+    if (!["CHECKED", "NOT-CHECKED"].includes(status))
+      bad("dimension-status", `dimension ${id}: status must be CHECKED or NOT-CHECKED.`);
+    if (status === "NOT-CHECKED" && !String(d.reason || "").trim())
+      bad("dimension-no-reason", `dimension ${id} is NOT-CHECKED with no reason — a silently skipped check is indistinguishable from a forgotten one.`);
+    dimensions.push({
+      id,
+      status,
+      findings: Number(d.findings || findings.filter((f) => f.dimension === id && !f.outcome).length),
+      ...(d.score ? { score: String(d.score) } : {}),
+      ...(d.reason ? { reason: String(d.reason) } : {}),
+    });
+  }
+
+  const verdictFile = input.verdict_file || `${iterDir(n)}/verdict.md`;
+  const verdictAbs = path.join(p.cycle, verdictFile);
+  const verdictSha = shaOfFile(verdictAbs);
+  if (verdictSha === null) bad("no-verdict-file", `the verdict body is missing: ${verdictFile}`);
+
+  const it = {
+    n,
+    started_at: input.started_at || fmtStamp(new Date()),
+    artifact_shas: {},
+    graded_against: cyc.template.version || 1,
+    graded_against_goal: cyc.goals.version || 1,
+    lint: input.lint || null,
+    reader: input.reader || null,
+    verdict_file: verdictFile,
+    verdict_file_sha: verdictSha,
+    advice_file: input.advice_file || null,
+    dimensions,
+    findings,
+    dropped,
+    coverage_pct: coverage,
+    closed_at: fmtStamp(new Date()),
+  };
+  for (const a of cyc.artifacts) it.artifact_shas[a.path] = shaOfFile(path.join(p.root, a.path));
+  const expected = challengeExpected(cyc);
+  if (!it.artifact_shas[expected]) it.artifact_shas[expected] = shaOfFile(path.join(p.root, expected));
+
+  cyc.iterations.push(it);
+
+  // RULE 2 — PASS IS COMPUTED HERE. The judge reports findings; it can never
+  // declare a pass, which removes leniency as a possibility: it can only find,
+  // or fail to find.
+  const blocking = challengeBlocking(cyc, cfg);
+  it.blocking = blocking.length;
+  it.severities = { P0: 0, P1: 0, P2: 0, P3: 0 };
+  for (const f of challengeOpen(cyc)) it.severities[f.severity]++;
+  it.passed = blocking.length === 0;
+  it.advised = !it.passed;
+
+  cyc.events.push({ at: it.closed_at, kind: "iteration", detail: `${n} — ${it.passed ? "PASS" : "FAIL"} (${blocking.length} blocking)` });
+  writeCycle(claudeDir, slug, cyc);
+
+  const v = challengeView(claudeDir, slug, cfg);
+  const payload = {
+    ok: true,
+    slug,
+    iteration: n,
+    passed: it.passed,
+    blocking: it.blocking,
+    severities: it.severities,
+    coverage_pct: coverage,
+    dropped,
+    dimensions,
+    state: v.state,
+    stalled: v.stalled,
+    advise: !it.passed,
+    // The one trace line this iteration owes, assembled here so the skill never
+    // composes a second wording for it.
+    trace_line: `CHALLENGE iter=${n} findings=P0:${it.severities.P0}/P1:${it.severities.P1}/P2:${it.severities.P2} coverage=${coverage}% verdict=${it.passed ? "PASS" : "FAIL"}`,
+    next: it.passed ? `orc challenge report ${slug}` : `write ${CHALLENGE_DIR}${slug}/fix-brief-${String(n).padStart(2, "0")}.md, then STOP`,
+  };
+  if (asJson) emitJson(payload, 0);
+  console.log(`\n  iteration ${n}: ${it.passed ? "PASS" : "FAIL"} — ${plural(it.blocking, "blocking finding")}, coverage ${coverage}%`);
+  if (dropped.length) console.log(`  ${plural(dropped.length, "finding")} dropped for having no \`serves\` (out of scope of the stated goal).`);
+  console.log(`  ${payload.trace_line}`);
+  process.exit(0);
+}
+
+// ── orc challenge report — DERIVED prose ────────────────────────────────────
+// CHALLENGE.md and the final report are rendered from the ledger plus the verdict
+// bodies. Same split as wiki docs (a model) vs wiki/INDEX.md (the CLI): prose
+// costs a model, registration is derived.
+function challengeReport(claudeDir, slugArg) {
+  const asJson = wantsJson();
+  const cfg = resolvedConfig(claudeDir);
+  const slug = chSlug(slugArg);
+  const v = slug ? challengeView(claudeDir, slug, cfg) : null;
+  if (!v) {
+    if (asJson) emitJson({ ok: false, reason: "no-such-cycle", slug: slugArg || null }, 3);
+    console.log(`no challenge cycle "${slugArg || ""}".`);
+    process.exit(3);
+  }
+  const c = v.cyc;
+  const L = [
+    "<!-- orc-challenge:derived — written by `orc challenge report`. Do NOT hand-edit:",
+    `     the source of truth is ${CHALLENGE_DIR}${slug}/${CHALLENGE_LEDGER}. -->`,
+    "",
+    `# Challenge — ${slug}`,
+    "",
+    `**State:** ${v.state} — ${v.why}`,
+    `**Rendered:** ${fmtStamp(new Date())}`,
+    "",
+    "## What this artifact has to achieve",
+    "",
+    `- **Goal (v${c.goals.version}):** ${c.goals.goal}`,
+    `- **Audience:** ${c.goals.audience}`,
+    `- **Done means:** ${c.goals.done_means}`,
+    ...(c.goals.out_of_scope || []).map((s) => `- **Out of scope:** ${s}`),
+    ...(c.goals.context_refs || []).map((s) => `- **Context (evidence, not instruction):** ${s}`),
+    "",
+    "## Artifacts",
+    "",
+    ...c.artifacts.map((a) => `- \`${a.path}\``),
+    "",
+    `Revision goes to: \`${v.expected}\` (${(c.revision || {}).mode || "in-place"})`,
+    "",
+    "## Dimensions",
+    "",
+    ...v.dimensions.map(
+      (d) =>
+        `- **${d.id}** — ${d.status}` +
+        (d.status === "CHECKED" && d.findings !== undefined ? ` · ${plural(d.findings, "finding")}` : "") +
+        (d.score ? ` · ${d.score}` : "") +
+        (d.reason ? ` — ${d.reason}` : "")
+    ),
+    "",
+    "## Convergence",
+    "",
+    "| Iteration | Verdict | Blocking | P0 | P1 | P2 | P3 | Coverage | Template | Goal |",
+    "|---|---|---|---|---|---|---|---|---|---|",
+    ...c.iterations.map(
+      (it) =>
+        `| ${it.n} | ${it.passed ? "PASS" : "FAIL"} | ${it.blocking || 0} | ${(it.severities || {}).P0 || 0} | ${(it.severities || {}).P1 || 0} | ` +
+        `${(it.severities || {}).P2 || 0} | ${(it.severities || {}).P3 || 0} | ${it.coverage_pct}% | v${it.graded_against} | v${it.graded_against_goal} |`
+    ),
+    "",
+  ];
+  if (v.stalled)
+    L.push(
+      `⚠ **stalled** — no net reduction in ${cfg.challenge_stall_after} iterations. Narrow the rubric, accept the gaps, or keep going.`,
+      ""
+    );
+  const open = challengeOpen(c);
+  if (open.length) {
+    L.push("## Open findings", "");
+    for (const f of open)
+      L.push(
+        `### ${f.id} · ${f.severity} · ${f.dimension} — ${f.anchor || "(no anchor)"}`,
+        "",
+        f.what_is_wrong ? `${f.what_is_wrong}` : "",
+        f.consequence ? `- **Consequence:** ${f.consequence}` : "",
+        f.acceptance_line ? `- **Fixed when:** ${f.acceptance_line}` : "",
+        `- **Serves:** ${f.serves}`,
+        ""
+      );
+  }
+  const acc = Object.entries(c.accepted);
+  if (acc.length) {
+    L.push("## Accepted exceptions", "", "Accepted as known gaps. They stopped blocking; they never stopped being true.", "");
+    for (const [id, a] of acc) L.push(`- **${id}** — ${a.reason}  _(${a.at})_`);
+    L.push("");
+  }
+  const reb = Object.entries(c.rebuttals);
+  if (reb.length) {
+    L.push("## Rebuttals", "");
+    for (const [id, r] of reb) L.push(`- **${id}** — ${r.reason} → **${r.status}**${r.answer ? " — " + r.answer : ""}`);
+    L.push("");
+  }
+  if (c.events.length) {
+    L.push("## Events", "");
+    for (const e of c.events) L.push(`- \`${e.at}\` **${e.kind}** — ${e.detail}`);
+    L.push("");
+  }
+  L.push(
+    "---",
+    "",
+    "These files are **not staged**. Commit them if your team should see the review trail.",
+    ""
+  );
+  // Keep the blank lines — markdown needs them — but drop the `undefined`/false
+  // rows the optional fields above produce, and collapse any run of three.
+  const body = L.filter((l) => typeof l === "string").join("\n").replace(/\n{3,}/g, "\n\n") + "\n";
+  fs.mkdirSync(v.paths.cycle, { recursive: true });
+  fs.writeFileSync(v.paths.doc, body);
+
+  let final = null;
+  if (v.state === "PASSED") {
+    const d = new Date();
+    final = path.join(
+      v.paths.cycle,
+      `final-report-${two(d.getDate())}${two(d.getMonth() + 1)}${String(d.getFullYear()).slice(2)}-${two(d.getHours())}${two(d.getMinutes())}${two(d.getSeconds())}.md`
+    );
+    fs.writeFileSync(final, body.replace(`# Challenge — ${slug}`, `# Challenge — ${slug} — PASSED`));
+  }
+  if (asJson) emitJson({ ok: true, slug, doc: v.paths.doc, final_report: final, state: v.state }, 0);
+  console.log(`✓ ${CHALLENGE_DOC} rendered from the ledger — ${plural(c.iterations.length, "iteration")}.\n  ${v.paths.doc}`);
+  if (final) console.log(`✓ final report: ${final}`);
+  console.log(`  Not staged. Commit them if your team should see the review trail:  git add ${CHALLENGE_DIR}${slug}/`);
+  process.exit(0);
+}
+
+// ── orc challenge outline / lint — the deterministic engine ─────────────────
+//
+// TWO HONESTY RULES, stated in references/plain-english.md and printed by the
+// command itself:
+//   1. It is a SIGNAL, not a verdict (the /orc-aftermath rule). A long sentence
+//      is not automatically a defect. The lint NEVER blocks; it feeds the judge,
+//      who decides.
+//   2. It is English-specific and heuristic. Grade formulas are estimates and
+//      passive-voice detection is a pattern match. Say so, once, on the output.
+//
+// Its real payoff: lint.json rides in the judge's slice, so the judge never
+// spends tokens counting sentences — it spends them on D2, the only dimension
+// no computer can reach.
+
+// The curated lists. references/plain-english.md carries the same words as
+// documented drift the token lint cannot see (a word list is not a token).
+const LINT_IDIOMS = [
+  "spin up", "spun up", "roll out", "rolled out", "kick off", "kicked off", "go-live",
+  "reach out", "circle back", "touch base", "move the needle", "low-hanging fruit",
+  "boil the ocean", "ramp up", "wind down", "drill down", "hash out", "iron out",
+  "flesh out", "in the weeds", "on the same page", "at the end of the day",
+  "bake in", "baked in", "double down", "take a stab", "ballpark", "off the shelf",
+];
+const LINT_MARKERS = ["TBD", "TODO", "???", "tbc", "as needed", "and so on", "etc.", "FIXME", "N/A?"];
+const LINT_VAGUE = [
+  "some", "several", "appropriate", "reasonable", "quickly", "efficient", "efficiently",
+  "properly", "adequate", "sufficient", "various", "a number of", "as required",
+  "if necessary", "where applicable", "robust", "scalable", "seamless",
+];
+// Acronyms every reader of a technical doc already has. Everything else must be
+// expanded on first use — that is a D5 finding, not a style opinion.
+const LINT_COMMON_ACRONYMS = new Set([
+  "API", "HTTP", "HTTPS", "JSON", "YAML", "XML", "URL", "URI", "ID", "IDS", "UI", "UX",
+  "CPU", "RAM", "SQL", "CSV", "PDF", "HTML", "CSS", "CI", "CD", "PR", "MR", "OK", "AWS",
+  "GCP", "SDK", "CLI", "IDE", "OS", "TLS", "SSL", "DNS", "TCP", "UDP", "REST", "CRUD",
+  "UUID", "README", "MD", "GB", "MB", "KB", "MS", "TBD", "TODO", "FAQ", "ADR", "PRD",
+  "TSD", "SLA", "SLO", "QA", "AI", "ML", "LLM", "ORC", "A", "I", "AND", "OR", "THE",
+]);
+const LINT_SENTENCE_MAX = 25;
+const LINT_PASSIVE_MAX_PCT = 25;
+const LINT_EMPTY_SECTION_WORDS = 15;
+
+const PASSIVE_RE = /\b(is|are|was|were|be|been|being)\s+(?:\w+ly\s+)?(\w+(?:ed|en))\b/gi;
+const SYLL_RE = /[aeiouy]+/g;
+
+function syllables(word) {
+  const w = String(word).toLowerCase().replace(/[^a-z]/g, "");
+  if (!w) return 0;
+  const m = w.replace(/e$/, "").match(SYLL_RE);
+  return Math.max(1, m ? m.length : 1);
+}
+
+// Strip everything a prose metric must not read: fenced code, inline code,
+// tables, link targets, HTML comments. Counting a URL as a long sentence is how
+// a lint loses a reader's trust in one line of output.
+function proseLines(text) {
+  const lines = text.replace(/\r\n/g, "\n").split("\n");
+  const out = [];
+  let fence = false;
+  let comment = false;
+  for (let i = 0; i < lines.length; i++) {
+    let l = lines[i];
+    if (/^\s*```/.test(l)) {
+      fence = !fence;
+      continue;
+    }
+    if (fence) continue;
+    if (/<!--/.test(l)) comment = true;
+    if (comment) {
+      if (/-->/.test(l)) comment = false;
+      continue;
+    }
+    if (/^\s*\|/.test(l)) continue;
+    if (/^\s{4,}\S/.test(l)) continue;
+    l = l
+      .replace(/`[^`]*`/g, " ")
+      .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+      .replace(/https?:\/\/\S+/g, " ");
+    out.push({ n: i + 1, text: l });
+  }
+  return out;
+}
+
+function headingTree(text) {
+  const out = [];
+  const lines = text.replace(/\r\n/g, "\n").split("\n");
+  let fence = false;
+  for (let i = 0; i < lines.length; i++) {
+    if (/^\s*```/.test(lines[i])) {
+      fence = !fence;
+      continue;
+    }
+    if (fence) continue;
+    const m = lines[i].match(/^(#{1,6})\s+(.+?)\s*$/);
+    if (m) out.push({ line: i + 1, depth: m[1].length, title: m[2].replace(/[*_`]/g, "").trim() });
+  }
+  return out;
+}
+
+const normHead = (s) =>
+  String(s)
+    .toLowerCase()
+    .replace(/^\d+[.)]?\s*/, "")
+    .replace(/[^a-z0-9 ]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+function challengeOutline(pathArg) {
+  const asJson = wantsJson();
+  if (!pathArg || !fs.existsSync(pathArg)) {
+    if (asJson) emitJson({ ok: false, reason: "unreadable", path: pathArg || null }, 2);
+    console.error(`❌ cannot read: ${pathArg || "(no path given)"}`);
+    process.exit(2);
+  }
+  const text = fs.readFileSync(pathArg, "utf8");
+  const tree = headingTree(text);
+  if (asJson) emitJson({ ok: true, path: pathArg, headings: tree }, 0);
+  console.log(ui.header(`outline — ${pathArg}`));
+  for (const h of tree) console.log(`  ${String(h.line).padStart(5)}  ${"  ".repeat(h.depth - 1)}${h.title}`);
+  process.exit(0);
+}
+
+function challengeLint(pathArg, templateArg) {
+  const asJson = wantsJson();
+  if (!pathArg || !fs.existsSync(pathArg) || fs.statSync(pathArg).isDirectory()) {
+    if (asJson) emitJson({ ok: false, reason: "unreadable", path: pathArg || null }, 2);
+    console.error(`❌ cannot read: ${pathArg || "(no path given)"}`);
+    process.exit(2);
+  }
+  const text = fs.readFileSync(pathArg, "utf8");
+  const lines = text.replace(/\r\n/g, "\n").split("\n");
+  const findings = [];
+  let seq = 0;
+  const add = (dimension, line, what, quote) =>
+    findings.push({
+      id: "L-" + String(++seq).padStart(3, "0"),
+      dimension,
+      line,
+      what,
+      quote: quote ? String(quote).slice(0, 160) : null,
+    });
+
+  // ── structure (needs a template) ──────────────────────────────────────────
+  const tree = headingTree(text);
+  let structure = null;
+  if (templateArg && fs.existsSync(templateArg)) {
+    // Depth 2–3 only. The H1 is the document's TITLE, and a title that differs
+    // from the template's is the document being about something — not a missing
+    // section and not an invented one.
+    const secOf = (t) => headingTree(t).filter((h) => h.depth >= 2 && h.depth <= 3);
+    const tTree = secOf(fs.readFileSync(templateArg, "utf8"));
+    const have = secOf(text).map((h) => normHead(h.title));
+    const required = tTree.map((h) => normHead(h.title));
+    const missingSections = required.filter((r) => r && !have.includes(r));
+    for (const m of missingSections) add("D1", 1, `required section missing: "${m}"`, null);
+
+    // out of order: the required sections that DO appear, compared pairwise
+    const present = required.filter((r) => have.includes(r));
+    const order = present.map((r) => have.indexOf(r));
+    const outOfOrder = order.some((x, i) => i > 0 && x < order[i - 1]);
+    if (outOfOrder) add("D1", 1, "required sections appear out of the template's order", null);
+
+    const invented = tree.filter((h) => h.depth >= 2 && h.depth <= 3 && !required.includes(normHead(h.title)));
+    for (const h of invented) add("D1", h.line, `section not in the template: "${h.title}"`, h.title);
+    structure = {
+      required: required.length,
+      present: present.length,
+      missing: missingSections,
+      out_of_order: outOfOrder,
+      invented: invented.map((h) => h.title),
+    };
+  }
+
+  // Empty ceremony — a heading with almost no body under it. A CONTAINER (its
+  // next heading is deeper) is skipped: its children carry the body, and
+  // flagging it would fire on the title of every well-structured document.
+  for (let i = 0; i < tree.length; i++) {
+    const next = tree[i + 1];
+    if (next && next.depth > tree[i].depth) continue;
+    const from = tree[i].line;
+    const to = next ? next.line : lines.length + 1;
+    const words = lines
+      .slice(from, to - 1)
+      .join(" ")
+      .replace(/[^\w\s]/g, " ")
+      .split(/\s+/)
+      .filter(Boolean).length;
+    if (words < LINT_EMPTY_SECTION_WORDS)
+      add("D1", tree[i].line, `section "${tree[i].title}" has ${plural(words, "word")} of body — ceremony, not content`, tree[i].title);
+  }
+
+  // table column consistency + code fences with no language tag
+  let cols = null;
+  let fence = false;
+  for (let i = 0; i < lines.length; i++) {
+    const l = lines[i];
+    const f = l.match(/^\s*```(\S*)/);
+    if (f) {
+      if (!fence && !f[1]) add("D1", i + 1, "code fence has no language tag", l.trim());
+      fence = !fence;
+      continue;
+    }
+    if (fence) continue;
+    if (/^\s*\|/.test(l)) {
+      const n = l.split("|").length;
+      if (cols === null) cols = n;
+      else if (n !== cols) {
+        add("D3", i + 1, `table row has ${n - 1} cells where the table opened with ${cols - 1}`, l.trim());
+        cols = n;
+      }
+    } else cols = null;
+  }
+
+  // relative links and file:line anchors that do not resolve on disk
+  const base = path.dirname(path.resolve(pathArg));
+  for (let i = 0; i < lines.length; i++) {
+    for (const m of lines[i].matchAll(/\[[^\]]*\]\(([^)#\s]+)[^)]*\)/g)) {
+      const target = m[1];
+      if (/^(https?:|mailto:|#)/.test(target)) continue;
+      if (!fs.existsSync(path.resolve(base, target))) add("D3", i + 1, `link target does not resolve: ${target}`, lines[i].trim());
+    }
+    for (const m of lines[i].matchAll(/`([\w./-]+\.[a-z]{1,5}):(\d+)`/g))
+      if (!fs.existsSync(path.resolve(base, m[1]))) add("D3", i + 1, `anchor points at a file that is not there: ${m[1]}`, lines[i].trim());
+  }
+
+  // ── prose (no template needed) ────────────────────────────────────────────
+  const prose = proseLines(text);
+  const body = prose.map((p) => p.text).join("\n");
+
+  // acronym used before it is defined
+  const defined = new Set();
+  for (const m of body.matchAll(/\(([A-Z]{2,6})\)/g)) defined.add(m[1]);
+  for (const m of body.matchAll(/\b([A-Z]{2,6})\b\s*\(([^)]{4,})\)/g)) defined.add(m[1]);
+  const seenAcr = new Set();
+  for (const p of prose)
+    for (const m of p.text.matchAll(/\b([A-Z]{2,6})\b/g)) {
+      const a = m[1];
+      if (LINT_COMMON_ACRONYMS.has(a) || defined.has(a) || seenAcr.has(a)) continue;
+      seenAcr.add(a);
+      add("D5", p.n, `"${a}" is used before it is defined`, p.text.trim());
+    }
+
+  // sentence length, passive voice, reading grade
+  // Sentences are measured over PARAGRAPHS, not over lines. A hard-wrapped
+  // 39-word sentence is still a 39-word sentence; splitting at the newline is
+  // how a length check silently passes every wrapped document.
+  const sentences = [];
+  let para = null;
+  const flush = () => {
+    if (!para) return;
+    for (const s of para.text.split(/(?<=[.!?])\s+/)) {
+      const words = s.trim().split(/\s+/).filter(Boolean);
+      if (words.length < 3) continue;
+      sentences.push({ n: para.n, text: s.trim(), words: words.length });
+    }
+    para = null;
+  };
+  for (const p of prose) {
+    const clean = p.text.replace(/^\s*[-*+>]\s+/, "").replace(/^#+\s+/, "").trim();
+    // A blank line, a heading or a new list item starts a new block.
+    if (!clean || /^#+\s/.test(p.text) || /^\s*[-*+>]\s+/.test(p.text)) flush();
+    if (!clean) continue;
+    if (!para) para = { n: p.n, text: clean };
+    else para.text += " " + clean;
+    if (/^#+\s/.test(p.text)) flush();
+  }
+  flush();
+  sentences.sort((a, b) => a.n - b.n);
+  for (const s of sentences)
+    if (s.words > LINT_SENTENCE_MAX) add("D5", s.n, `sentence is ${s.words} words (over ${LINT_SENTENCE_MAX})`, s.text);
+  const lens = sentences.map((s) => s.words).sort((a, b) => a - b);
+  const at = (q) => (lens.length ? lens[Math.min(lens.length - 1, Math.floor(q * lens.length))] : 0);
+
+  let passiveHits = 0;
+  for (const s of sentences) if (PASSIVE_RE.test(s.text)) passiveHits++;
+  PASSIVE_RE.lastIndex = 0;
+  const passivePct = sentences.length ? Math.round((passiveHits / sentences.length) * 100) : 0;
+  if (passivePct > LINT_PASSIVE_MAX_PCT)
+    add("D5", 1, `${passivePct}% of sentences look passive (heuristic; threshold ${LINT_PASSIVE_MAX_PCT}%)`, null);
+
+  const totalWords = sentences.reduce((n, s) => n + s.words, 0);
+  const totalSyll = sentences.reduce((n, s) => n + s.text.split(/\s+/).reduce((k, w) => k + syllables(w), 0), 0);
+  const fk =
+    sentences.length && totalWords
+      ? Math.round((0.39 * (totalWords / sentences.length) + 11.8 * (totalSyll / totalWords) - 15.59) * 10) / 10
+      : 0;
+
+  // idioms, markers, vague quantifiers, bare pronoun openers
+  const lower = (s) => s.toLowerCase();
+  for (const p of prose) {
+    const lt = lower(p.text);
+    for (const idiom of LINT_IDIOMS)
+      if (lt.includes(idiom)) add("D5", p.n, `idiom / phrasal verb: "${idiom}" — hard for a non-native reader`, p.text.trim());
+    for (const marker of LINT_MARKERS)
+      if (lt.includes(lower(marker))) add("D6", p.n, `placeholder marker: "${marker}"`, p.text.trim());
+    for (const vague of LINT_VAGUE)
+      if (new RegExp("\\b" + vague.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b", "i").test(p.text))
+        add("D6", p.n, `ambiguous quantifier: "${vague}" — an implementer cannot build from it`, p.text.trim());
+    if (/^\s*(This|It|They|These|Those)\s+(is|are|was|were|will|can|should|must|does|do|has|have)\b/.test(p.text))
+      add("D3", p.n, "sentence opens with a bare pronoun — the referent is ambiguous", p.text.trim());
+  }
+
+  findings.sort((a, b) => a.line - b.line);
+  findings.forEach((f, i) => (f.id = "L-" + String(i + 1).padStart(3, "0")));
+
+  const byDim = {};
+  for (const f of findings) byDim[f.dimension] = (byDim[f.dimension] || 0) + 1;
+  const payload = {
+    ok: true,
+    path: pathArg,
+    template: templateArg || null,
+    findings,
+    counts: { total: findings.length, by_dimension: byDim },
+    metrics: {
+      headings: tree.length,
+      sentences: sentences.length,
+      words: totalWords,
+      sentence_p50: at(0.5),
+      sentence_p90: at(0.9),
+      passive_pct: passivePct,
+      flesch_kincaid_grade: fk,
+    },
+    structure,
+    honesty: [
+      "This is a SIGNAL, not a verdict. A long sentence is not automatically a defect — the lint never blocks; it feeds the judge, who decides.",
+      "It is English-specific and heuristic: the grade is an estimate and passive-voice detection is a pattern match.",
+    ],
+  };
+  if (asJson) emitJson(payload, findings.length ? 1 : 0);
+  console.log(ui.header(`orc challenge lint — ${path.basename(pathArg)}`));
+  console.log(
+    `\n  ${plural(findings.length, "finding")} · ${sentences.length} sentences · p50 ${at(0.5)}w / p90 ${at(0.9)}w · ` +
+      `passive ${passivePct}% · grade ${fk}`
+  );
+  if (structure)
+    console.log(
+      `  template: ${structure.present}/${structure.required} required sections present` +
+        (structure.missing.length ? `, missing ${structure.missing.length}` : "") +
+        (structure.out_of_order ? ", OUT OF ORDER" : "") +
+        (structure.invented.length ? `, ${structure.invented.length} not in the template` : "")
+    );
+  else console.log("  no template given — D1 structure checks did not run.");
+  console.log("");
+  for (const f of findings.slice(0, 60))
+    console.log(`  ${f.id}  ${f.dimension}  ${String(f.line).padStart(5)}  ${f.what}`);
+  if (findings.length > 60) console.log(`  … and ${findings.length - 60} more (use --json for all of them)`);
+  console.log(ui.color.gray("\n  " + payload.honesty[0] + "\n  " + payload.honesty[1]));
+  process.exit(findings.length ? 1 : 0);
+}
+
+function challenge() {
+  if (flag("--global")) {
+    console.error("❌ orc challenge is project-scoped — the review trail is this repo's. Run it from the project (or with --dir <path>).");
+    process.exit(1);
+  }
+  const claudeDir = resolveClaudeDir();
+  const pos = chPositionals(); // ["challenge", <sub?>, <slug|path?>, <id?>, <reason?>]
+  switch (pos[1]) {
+    case undefined:
+    case "list":
+      challengeList(claudeDir);
+      break;
+    case "status":
+      challengeStatus(claudeDir, pos[2]);
+      break;
+    case "show":
+      challengeShow(claudeDir, pos[2]);
+      break;
+    case "diff":
+      challengeDiff(claudeDir, pos[2]);
+      break;
+    case "expect":
+      challengeExpectCmd(claudeDir, pos[2]);
+      break;
+    case "init":
+      challengeInit(claudeDir);
+      break;
+    case "record":
+      challengeRecord(claudeDir, pos[2]);
+      break;
+    case "accept":
+      challengeAccept(claudeDir, pos[2], pos[3], pos.slice(4).join(" ") || chOpt("--reason"));
+      break;
+    case "rebut":
+      challengeRebut(claudeDir, pos[2], pos[3], pos.slice(4).join(" ") || chOpt("--reason"));
+      break;
+    case "template":
+      challengeRefreeze(claudeDir, pos[2], "template");
+      break;
+    case "goals":
+      challengeRefreeze(claudeDir, pos[2], "goals");
+      break;
+    case "report":
+      challengeReport(claudeDir, pos[2]);
+      break;
+    case "lint":
+      challengeLint(pos[2], chOpt("--template"));
+      break;
+    case "outline":
+      challengeOutline(pos[2]);
+      break;
+    default:
+      console.error(
+        `Unknown: orc challenge ${pos[1]}\n` +
+          "Usage: orc challenge list [--json]                 every cycle + computed state (0 all passed / 1 in-flight / 3 none)\n" +
+          "       orc challenge status <slug> [--json]        one cycle (0 passed / 1 blocking / 2 a P0 / 3 unknown)\n" +
+          "       orc challenge show <slug> [--iteration N]   full detail incl. findings\n" +
+          "       orc challenge diff <slug>                   expected revision, then per-finding touched/untouched\n" +
+          "       orc challenge expect <slug> [--set <path>]  where the next revision is expected\n" +
+          "       orc challenge lint <path> [--template <p>]  deterministic prose+structure lint, ZERO tokens\n" +
+          "       orc challenge outline <path>                the heading tree\n" +
+          "       orc challenge record <slug> --iteration N --from <json>\n" +
+          '       orc challenge accept|rebut <slug> <id> "reason"\n' +
+          "       orc challenge template|goals <slug> [--set <path> --reason \"…\"]\n" +
+          "       orc challenge report <slug>                 re-derive CHALLENGE.md\n" +
+          "       orc challenge init <slug> --artifact <p> --goal … --audience … --done-means … (--template <p> | --no-template)"
+      );
+      process.exit(1);
+  }
+}
+
 function where() {
   const claudeDir = resolveClaudeDir();
   if (wantsJson())
@@ -8395,6 +10103,41 @@ Usage:
     orc aftermath status [--since Nd]     churn · a deleted test · a revert · a broken promise
                                           (exit 0 clean / 1 churn / 2 a revert / 3 too shallow).
                                           Churn is a SIGNAL, never a verdict
+  orc challenge [--dir <path>]            grade a FINISHED artifact against a goal you stated —
+                                          ORC judges, you fix, ORC re-judges, and it never fixes
+                                          what it judged (project-scoped; no --global)
+    orc challenge list [--json]           every cycle + its COMPUTED state
+                                          (exit 0 all passed / 1 any in-flight / 3 no cycles)
+    orc challenge status <slug> [--json]  one cycle (exit 0 passed / 1 open blocking findings /
+                                          2 a P0 is open / 3 unknown slug)
+    orc challenge show <slug> [--iteration N]   full detail incl. every finding
+    orc challenge diff <slug>             resolve the expected revision, then per-finding
+                                          touched/untouched (exit 0 unchanged / 1 changed /
+                                          2 MISSING-REVISION / 3 unknown). A HINT for you —
+                                          never an input to the judge, which always re-reads
+    orc challenge expect <slug> [--set <path>]  where the next revision is expected; --set
+                                          records a deviation instead of ORC guessing one
+    orc challenge lint <path> [--template <p>]  deterministic prose + structure lint, ZERO model
+                                          tokens (exit 0 clean / 1 findings / 2 unreadable).
+                                          Useful with no cycle and no model at all
+    orc challenge outline <path>          the heading tree
+    orc challenge record <slug> --iteration N --from <json>
+                                          THE GATE: rejects coverage < 100%, an unknown carry id,
+                                          an ignored rebuttal and a silent dimension; drops a
+                                          finding with no \`serves\`; and COMPUTES pass/fail
+    orc challenge accept <slug> <id> "reason"   accept a known gap — it stops blocking and stays
+                                          visible forever with your reason
+    orc challenge rebut <slug> <id> "reason"    the judge is wrong; the next verdict must answer it
+    orc challenge template|goals <slug> [--set <path> --reason "…"]
+                                          print the frozen yardstick, or re-freeze it (a recorded
+                                          event; prior iterations keep their stamp)
+    orc challenge report <slug>           re-derive CHALLENGE.md (+ the final report on a pass)
+    orc challenge init <slug> --artifact <p> --kind <k> --goal … --audience … --done-means …
+                                          [--out-of-scope …] [--context-ref …]
+                                          (--template <p> | --no-template) [--dimensions D1,D2,…]
+                                          [--revision in-place|new-file|directory --revision-pattern …]
+                                          --goal/--audience/--done-means have NO default: ORC never
+                                          guesses what "good" means here
   orc export [--dir <path>]               compile the wiki + patterns + PACT.md + boundary cards
                                           into a portable AGENTS.md — derived, fingerprinted
                                           [--target agents-md|skill|both]
@@ -8468,7 +10211,9 @@ Machine-readable output:
   pr stack status | mock list | mock show | mock-run list | mock-run show |
   pact status | pact check |
   boundary status | handoff surfaces | handoff set | budget forecast |
-  budget actual | budget rates | aftermath status | export [--check] | export import.
+  budget actual | budget rates | aftermath status | export [--check] | export import |
+  challenge list | challenge status | challenge show | challenge diff | challenge expect |
+  challenge lint | challenge outline | challenge record | challenge report.
   It prints ONE object to stdout and keeps the command's normal exit code.
 
 Targets:
@@ -8545,6 +10290,12 @@ Skills installed: ${listSkillNames().join(", ")}`);
       break;
     case "export":
       exportCmd();
+      break;
+    // v0.47.0 — the lane that refuses to produce. Every subcommand is a READ
+    // with an exit-code contract except `init`, `record`, `accept`, `rebut`,
+    // `template`, `goals` and `report`, which are the ledger's only writers.
+    case "challenge":
+      challenge();
       break;
     case "ui":
       uiCmd();

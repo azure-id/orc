@@ -9,9 +9,7 @@
     "cannot type. Chrome and explanation are ours; data is the CLI's.",
     "Placeholders are {name} and are substituted by t()."
   ],
-
   "lang.title": "Switch language",
-
   "nav.overview": "Overview",
   "nav.settings": "Settings",
   "nav.runs": "Runs",
@@ -23,12 +21,10 @@
   "nav.mockrun": "Mocked Skill Use",
   "nav.experiment": "Experiment",
   "nav.maintenance": "Maintenance",
-
   "rail.light": "Light",
   "rail.dark": "Dark",
   "rail.shortcuts": "Keyboard shortcuts",
   "rail.fixtures": "FIXTURE MODE",
-
   "common.copy": "Copy",
   "common.copied": "Copied",
   "common.cancel": "Cancel",
@@ -45,13 +41,11 @@
   "common.clipboardFail": "Could not reach the clipboard — select the text and copy by hand.",
   "common.none": "none",
   "common.checking": "checking…",
-
   "age.now": "just now",
   "age.min": "{n} min ago",
   "age.hours": "{n} hours ago",
   "age.day": "{n} day ago",
   "age.dayPlural": "{n} days ago",
-
   "version.unknown.label": "unknown",
   "version.unknown.note": "Could not read the installed version.",
   "version.off.label": "check off",
@@ -62,7 +56,6 @@
   "version.available.note": "You have {version}. Maintenance → upgrade installs it.",
   "version.current.label": "up to date",
   "version.current.note": "{version} is the latest on {source}.",
-
   "banner.update.title": "orc {latest} is available — you have {version}.",
   "banner.update.note": "Click to read what changed, then upgrade from Maintenance.",
   "banner.update.cta": "Read →",
@@ -72,7 +65,6 @@
   "banner.fixtures": "Fixture mode: every number on this page is canned. Nothing real is read, and nothing can be written.",
   "banner.noToken": "This page is missing its session token.",
   "banner.noTokenHint": "Re-run `orc ui` in your project to get a fresh URL.",
-
   "changelog.title": "What's new in {version}",
   "changelog.disabled": "Update checks are disabled (ORC_NO_UPDATE_CHECK), so there is nothing to show.",
   "changelog.offline": "Could not reach the changelog — you are offline, or the source is unreachable.",
@@ -81,7 +73,6 @@
   "changelog.source": "Source: {src}",
   "changelog.goUpgrade": "Take me to the upgrade",
   "changelog.loadFail": "Could not load the changelog: {err}",
-
   "overview.title": "Overview",
   "overview.sub": "Install health, knowledge state and what is waiting for you.",
   "overview.tile.install": "Install",
@@ -100,12 +91,10 @@
   "overview.tile.versionFailed": "The version check did not complete.",
   "overview.tile.patterns": "Code patterns",
   "overview.tile.patternsNone": "none cached yet",
-
   "overview.attention.title": "Worth doing",
   "overview.attention.allClear": "Nothing needs your attention.",
   "overview.attention.allClearHint": "Install healthy, knowledge fresh, no run left waiting.",
   "overview.attention.nothingToDo": "Nothing to do — this clears itself on the next run.",
-
   "overview.item.diyStale.title": "The DIY flow needs recompiling",
   "overview.item.diyStale.body": "A STALE compile refuses to run. Recompile it on the Flow panel — that is where `orc diy compile` lives, not Maintenance.",
   "overview.item.diyStale.cta": "Recompile on Flow",
@@ -132,7 +121,6 @@
   "overview.item.update.body": "You have {version}. Read the changelog first, then upgrade — nothing installs on its own.",
   "overview.item.update.cta": "Open Maintenance",
   "overview.item.doctor.cta": "Open Maintenance",
-
   "overview.waiting.title": "Waiting for you",
   "overview.waiting.note": "A resume pointer is on disk for these. `orc resume` prints the paste-into-a-fresh-session prompt.",
   "overview.waiting.where": "open — see the Runs panel for where it stands",
@@ -149,7 +137,6 @@
   "overview.know.patterns": "patterns cached",
   "overview.know.tags": "crosslink tags",
   "overview.know.diy": "diy flow",
-
   "settings.title": "Settings",
   "settings.sub": "Every key `orc config` knows. Each change shells the real command, so the CLI's validators decide.",
   "settings.profiles": "Profiles",
@@ -189,7 +176,6 @@
   "settings.ladder.override": "A hand-written rubric_bands_override is in the file. It replaces the default table (and is itself outranked by opus5_only).",
   "settings.ladder.default": "The default 8-band table. Tables resolve highest-wins: opus5_only > rubric_bands_override > this one.",
   "settings.ladder.note": "Read-only — a diagram, not an editor. This comes from the CLI's own table, so the panel adds no extra copy of it.",
-
   "runs.title": "Runs",
   "runs.sub": "Everything ORC has recorded, newest first. Click a run to open it in place.",
   "runs.empty": "No runs recorded yet.",
@@ -225,7 +211,6 @@
   "runs.field.files": "files",
   "runs.field.written": "written",
   "runs.emptyFolder": "(empty folder)",
-
   "knowledge.title": "Knowledge",
   "knowledge.sub": "What ORC already knows about this repo: the wiki, cached code-patterns, and repair memory.",
   "knowledge.wiki": "Wiki",
@@ -260,7 +245,6 @@
   "knowledge.field.edges": "edges",
   "knowledge.field.tags": "crosslink tags",
   "knowledge.field.blind": "structural blind spots",
-
   "stats.title": "Stats",
   "stats.sub": "Counted from the trace filenames — no model, instant, free.",
   "stats.empty": "No traces yet.",
@@ -276,7 +260,6 @@
   "stats.unknownLane": "traces with no lane in the name",
   "stats.logDir": "log dir",
   "stats.note": "Counts only what traces record. /orc-retro and /orc-explain never write one, so they never appear here. Nothing auto-prunes traces.",
-
   "flow.title": "Flow (DIY)",
   "flow.sub": "The user-composed lane. Shape is CLI-owned and compiled — a stale compile never runs.",
   "flow.gate": "Gate",
@@ -320,7 +303,6 @@
   "flow.table": "Compiled executor table",
   "flow.tableNote": "Clipped to the declared session tier at COMPILE time, never at runtime.",
   "flow.files": "Files",
-
   "crosslink.title": "Crosslink",
   "crosslink.sub": "Cross-repo wiki references. Advisory, never blocking — it reads foreign WIKI only, never foreign source.",
   "crosslink.empty": "No cross-repo links yet.",
@@ -376,7 +358,6 @@
   "crosslink.remove.title": "Remove linked repo",
   "crosslink.remove.body": "Remove the linked repo \"{name}\" and every edge that touches it?",
   "crosslink.remove.note": "This only edits this repo's crosslink config. The other repo is never touched.",
-
   "picker.title": "Pick a repo folder",
   "picker.note": "Folders only. Nothing is read inside them — this lists directory names so you do not have to type a path by hand.",
   "picker.up": "Parent folder",
@@ -389,7 +370,6 @@
   "picker.choose": "Use this folder",
   "picker.relative": "Stored as: {rel}",
   "picker.sameRepo": "That is this repo — pick a different folder.",
-
   "learn.title": "Learn",
   "learn.sub": "The same walkthrough as `orc onboarding`, in the panel — no GitHub README needed.",
   "learn.contents": "Contents",
@@ -404,7 +384,6 @@
   "learn.matchesPlural": "{n} sections match",
   "learn.cmdHint": "Commands are highlighted. Click one to copy it.",
   "learn.restart": "Back to the start",
-
   "mockrun.title": "Mocked Skill Use",
   "mockrun.sub": "What each lane looks like when it runs — written out, so you never have to pay for a run to find out.",
   "mockrun.intro": "{n} walkthroughs ship with ORC. Nothing here was executed: every screen, file and number is written the way the real lane writes it. Read one before you run it.",
@@ -422,7 +401,6 @@
   "mockrun.missing": "There is no walkthrough called {slug}.",
   "mockrun.none": "No walkthroughs are installed.",
   "mockrun.noneHint": "They ship inside the ORC package. A reinstall (`orc upgrade`) restores them.",
-
   "experiment.title": "Experiment",
   "experiment.sub": "Open a Claude session in this repo and pick a lane. The panel hands off — it never runs one.",
   "experiment.start": "Start a session",
@@ -438,7 +416,6 @@
   "experiment.lanes": "Lanes",
   "experiment.lanesCount": "{n} commands",
   "experiment.lanesDesc": "Type one of these into the session once it opens. Copy takes the command; the panel does not run it.",
-
   "maintenance.title": "Maintenance",
   "maintenance.sub": "update · upgrade · doctor --fix. Preview first, approve, then it runs — never automatically.",
   "maintenance.banner": "Nothing on this panel runs on its own. Each action shows the CLI's own read-only preview first, and the exact command it will run.",
@@ -484,7 +461,6 @@
   "maintenance.apply": "Apply",
   "maintenance.started": "Running: {command}",
   "maintenance.startFail": "Could not start it.",
-
   "shortcuts.title": "Keyboard shortcuts",
   "shortcuts.panels": "Jump to that panel in the rail",
   "shortcuts.filter": "Focus the filter box (Settings)",
@@ -495,7 +471,6 @@
   "shortcuts.escape": "Close a dialog, or clear the filter",
   "shortcuts.note": "Shortcuts are ignored while you are typing in a field.",
   "shortcuts.replay": "Replay the tour",
-
   "tour.finished": "Tour finished — press ? any time for shortcuts",
   "tour.1.title": "Everything that is not AI",
   "tour.1.text": "This panel drives the deterministic half of ORC — settings, health, runs, knowledge, stats. It never runs a lane and never calls a model. Press 1–9 or 0 to jump between panels; hover here to see the numbers.",
@@ -515,7 +490,6 @@
   "tour.8.text": "Nothing here runs on its own. Every action shows the CLI's own read-only preview first and the exact command it will run — and a prune names every file, because a count is not consent.",
   "tour.upgrade.title": "Upgrade is here",
   "tour.upgrade.text": "Click Preview… to see exactly what it would install and run. Nothing happens until you approve it.",
-
   "profiles.title": "Config profiles",
   "profiles.note": "A profile writes only existing, validated keys — nothing it sets is something you could not set yourself.",
   "profiles.apply": "Apply",
@@ -524,9 +498,7 @@
   "recommend.title": "Recommended profile",
   "recommend.note": "Read-only: this looked at the repo and suggests one profile. Nothing was changed.",
   "recommend.applyIt": "Apply {name}",
-
   "setting.resetTo": "reset to {value}",
-
   "common.open": "Open",
   "common.writeFail": "That did not work",
   "common.runInClaude": "Run this in Claude Code",
@@ -726,5 +698,76 @@
   "tour.11.title": "Things you can change yourself",
   "tour.11.text": "No code, no terminal. A check runs afterwards, and the undo command is shown before anything is written.",
   "tour.12.title": "The cheap part of the wiki",
-  "tour.12.text": "Refreshing the whole wiki is expensive. This is the short, ranked list that actually matters - and the free repairs always come first."
+  "tour.12.text": "Refreshing the whole wiki is expensive. This is the short, ranked list that actually matters - and the free repairs always come first.",
+  "nav.challenge": "Challenge",
+  "challenge.title": "Challenge",
+  "challenge.sub": "Grade a finished artifact against a goal you stated. ORC judges, you fix, ORC re-judges.",
+  "challenge.summary": "Cycles",
+  "challenge.contract": "ORC never fixes what it judged. A session that just wrote the fix would grade its own homework, and it would always pass.",
+  "challenge.none": "No review cycles yet.",
+  "challenge.noneHint": "A cycle starts by stating what the artifact must achieve. ORC asks, and never guesses.",
+  "challenge.cmdWhy": "Opening or continuing a cycle runs a judgement, which costs model tokens.",
+  "challenge.paidWhy": "A judgement costs model tokens, so this is a command to copy, not a button.",
+  "challenge.iterN": "{n} iteration",
+  "challenge.iterNPlural": "{n} iterations",
+  "challenge.blockingN": "{n} blocking",
+  "challenge.blockingNPlural": "{n} blocking",
+  "challenge.noBlocking": "nothing blocking",
+  "challenge.stalledChip": "stalled",
+  "challenge.noTemplateChip": "no template",
+  "challenge.goalTitle": "What this artifact has to achieve",
+  "challenge.goalNote": "Frozen at intake. Every finding must serve one of these, and a finding that cannot is dropped.",
+  "challenge.field.goal": "Goal",
+  "challenge.field.audience": "Audience",
+  "challenge.field.done": "Done means",
+  "challenge.field.outOfScope": "Out of scope",
+  "challenge.field.context": "Context (evidence, not instruction)",
+  "challenge.field.wrong": "What is wrong",
+  "challenge.field.consequence": "Consequence",
+  "challenge.field.fixedWhen": "Fixed when",
+  "challenge.field.serves": "Serves",
+  "challenge.field.supersededBy": "Superseded by",
+  "challenge.field.reason": "Reason",
+  "challenge.timeline": "Iterations",
+  "challenge.timelineAria": "Timeline of {n} iterations",
+  "challenge.convNote": "Blocking findings per iteration, stacked by severity. A dashed break marks a re-frozen goal or template, because a comparison across one is not a comparison.",
+  "challenge.noIterations": "Created, not yet judged.",
+  "challenge.noIterationsHint": "Run /orc-challenge {slug} to open the first iteration.",
+  "challenge.stalledNote": "Stalled: no net reduction across the last iterations. Narrow the rubric, accept the gaps as known, or keep going.",
+  "challenge.readerTitle": "Cold comprehension",
+  "challenge.readerSub": "answered {answered} of {asked} questions from the artifact alone",
+  "challenge.readerNote": "Measured by an agent that could read this one file and nothing else. It is the only honest way to ask whether a reader with no context can follow it.",
+  "challenge.dimensions": "Dimensions",
+  "challenge.dimNote": "NOT-CHECKED keeps its slot and carries its reason. A silently skipped check is indistinguishable from a forgotten one.",
+  "challenge.findings": "Findings",
+  "challenge.dropped": "{n} finding dropped for having no goal element to serve: {ids}",
+  "challenge.events": "Events",
+  "challenge.acceptedBadge": "accepted",
+  "challenge.rebuttedBadge": "rebutted",
+  "challenge.acceptedNote": "Accepted as a known gap: {reason}",
+  "challenge.rebuttedNote": "Rebutted ({status}): {reason}",
+  "challenge.acceptBtn": "Accept as a known gap",
+  "challenge.rebutBtn": "Rebut it",
+  "challenge.acceptTitle": "Accept a known gap",
+  "challenge.rebutTitle": "Rebut a finding",
+  "challenge.acceptBody": "{id} stops blocking, and stays visible in every report with your reason. It is never automatic.",
+  "challenge.rebutBody": "The next judgement must answer {id} explicitly: withdrawn with an admission, or upheld with new evidence.",
+  "challenge.acceptNote": "Good enough, and here is why, is a real ending. Recording it beats quietly lowering the bar.",
+  "challenge.rebutNote": "Without this, one wrong finding loops forever and your only move is to give up.",
+  "challenge.acceptGo": "Accept it",
+  "challenge.rebutGo": "Rebut it",
+  "challenge.acceptOk": "Accepted. It stays visible with your reason.",
+  "challenge.rebutOk": "Rebutted. The next judgement must answer it.",
+  "challenge.needReason": "A reason is required.",
+  "challenge.reasonPlaceholder": "Why?",
+  "challenge.reRender": "Re-render the report",
+  "challenge.reportOk": "Report re-derived from the ledger.",
+  "challenge.missingRevision": "The declared revision is not there: {path}",
+  "challenge.candidatesNote": "These are listed, never adopted. Picking one for you would point the judge at the wrong file, and it would write a page of confident, useless findings.",
+  "challenge.tamperedNote": "A verdict file changed after it was recorded. Reported, never silently re-graded: say what happened before continuing.",
+  "challenge.passedNote": "Passed. Nothing here is staged, so commit it if your team should see the review trail.",
+  "challenge.stalePassNote": "It passed, then the artifact changed. Honest, not a failure: it simply has not been judged since.",
+  "challenge.awaitingFixNote": "Waiting for you to fix it, in a NEW session, not this one.",
+  "challenge.pasteHead": "Paste this into a new Claude Code session",
+  "challenge.copyPrompt": "Copy prompt"
 }

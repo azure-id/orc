@@ -106,6 +106,12 @@ Read the source. **Auto-detect** which of three modes applies:
 request as the requirement and reconcile it against the code, in requirement
 mode. Good?"). For documents, confirm prose vs audit as before.
 
+**Document source? Probe `orc challenge status <slug> --json`** and print its
+`preflight_line` VERBATIM when a cycle exists — a PASSED artifact is a materially
+better input and a `STALE-PASS` is worth saying out loud. Never blocks, never
+re-judges: the two lanes compose in one order — challenge it until it passes,
+THEN analyze it.
+
 ## Phase A″ — Is this even analyzable? (the reverse trigger)
 
 Thin input is ABSORBED here, not bounced — an expensive way to ask what a

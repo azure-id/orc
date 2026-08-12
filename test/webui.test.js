@@ -1319,6 +1319,73 @@ test("fixtures carry the UGLY states, not just the happy ones", () => {
   );
 });
 
+// v0.47.0 — /orc-challenge. ONE FIXTURE PER STATE, and the ugly ones are the
+// point: you cannot design a TAMPERED chip on a healthy cycle, a candidate list
+// on a cycle whose revision is where it was declared, or a `NOT-CHECKED`
+// dimension chip on a cycle that has a template.
+test("challenge fixtures carry one of every computed state", () => {
+  const fixtures = require(path.join(REPO, "bin", "webui", "fixtures.js"));
+  const cycles = fixtures.get("/api/challenge", {}).cycles;
+  const cli = fs.readFileSync(path.join(REPO, "bin", "cli.js"), "utf8");
+  const block = cli.match(/const CHALLENGE_STATES = \[([\s\S]*?)\n\];/);
+  assert.ok(block, "CHALLENGE_STATES is parseable");
+  const states = [...block[1].matchAll(/"([A-Z-]+)"/g)].map((m) => m[1]);
+  assert.ok(states.length >= 7, "the full state list is present");
+  for (const s of states)
+    assert.ok(
+      cycles.some((c) => c.state === s),
+      `a ${s} cycle must be designable`
+    );
+
+  // The flags ride alongside the state, so they need their own fixtures.
+  assert.ok(cycles.some((c) => c.stalled), "a stalled cycle must be designable");
+  assert.ok(cycles.some((c) => c.no_template), "a cycle with no template must be designable");
+  assert.ok(cycles.some((c) => c.iterations === 0), "a zero-iteration cycle must be designable");
+  assert.ok(cycles.some((c) => c.counts.accepted > 0), "an accepted exception must be designable");
+  assert.ok(cycles.some((c) => c.counts.rebutted > 0), "an open rebuttal must be designable");
+
+  // A NOT-CHECKED dimension always carries its reason — rule 6, and the chip
+  // shows that reason on hover AND to a screen reader.
+  const noTpl = cycles.find((c) => c.no_template);
+  const dims = fixtures.get("/api/challenge/one", { slug: noTpl.slug }).dimensions;
+  const nc = dims.filter((d) => d.status === "NOT-CHECKED");
+  assert.ok(nc.length, "a NOT-CHECKED dimension must be designable");
+  for (const d of nc) assert.match(d.reason || "", /\S/, `${d.id} NOT-CHECKED must carry its reason`);
+  assert.ok(dims.some((d) => d.status === "NOT-SELECTED"), "NOT-SELECTED is a different word and needs its own chip");
+
+  // A version break in the middle of the convergence chart.
+  const conv = fixtures.get("/api/challenge/one", { slug: "tsd-payments" }).convergence;
+  assert.ok(
+    conv.some((it, i) => i > 0 && (it.graded_against_goal !== conv[i - 1].graded_against_goal || it.graded_against !== conv[i - 1].graded_against)),
+    "a regoal/retemplate version break must be designable"
+  );
+
+  // MISSING-REVISION's candidate list — the one place the panel offers a
+  // command instead of a pick.
+  const miss = fixtures.get("/api/challenge/diff", { slug: cycles.find((c) => c.state === "MISSING-REVISION").slug });
+  assert.strictEqual(miss.found, false, "the missing-revision diff must report found:false");
+  assert.ok((miss.candidates || []).length, "the candidate list must be designable");
+});
+
+// The panel draws `--json` and decides nothing about it — the Flow-stepper rule
+// applied to a second surface.
+test("the challenge panel derives no state word of its own", () => {
+  const app = fs.readFileSync(path.join(REPO, "bin", "webui", "app.js"), "utf8");
+  const cli = fs.readFileSync(path.join(REPO, "bin", "cli.js"), "utf8");
+  const states = [...(cli.match(/const CHALLENGE_STATES = \[([\s\S]*?)\n\];/) || ["", ""])[1].matchAll(/"([A-Z-]+)"/g)].map((m) => m[1]);
+  // The panel may KEY on a state (a colour, a pulse, a next action) but must
+  // never invent one the CLI cannot emit.
+  const panel = app.slice(app.indexOf("CHALLENGE ="), app.indexOf("function laneCommand"));
+  for (const m of panel.matchAll(/"(AWAITING-[A-Z]+|PASSED|STALE-PASS|MISSING-REVISION|TAMPERED)"/g))
+    assert.ok(states.includes(m[1]), `${m[1]} is a state the CLI can actually emit`);
+  // And a paid action is never a button: running an iteration has no write route.
+  const api = fs.readFileSync(path.join(REPO, "bin", "webui", "api.js"), "utf8");
+  const writes = (api.match(/const WRITES = \{[\s\S]*?\n\};/) || [""])[0];
+  assert.ok(!/orc-challenge/.test(writes), "no lane invocation may be a write route");
+  for (const free of ["challenge/accept", "challenge/rebut", "challenge/report"])
+    assert.ok(writes.includes(free), `${free} is free and deterministic, so it is a real button`);
+});
+
 // The panel never claims a mock example is missing when none was ever asked
 // for, and it never offers to run one.
 test("the ui never offers to run a mock example", () => {

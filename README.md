@@ -6,14 +6,14 @@
 
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
-![Version](https://img.shields.io/badge/version-0.46.1-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.47.0-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
 ![Dependencies](https://img.shields.io/badge/dependencies-zero-lightgrey.svg?style=for-the-badge)
 ![GitHub stars](https://img.shields.io/github/stars/azure-id/orc?style=for-the-badge&color=yellow)
 
-**Latest: v0.46.1** · updated 2026-08-12 · [full changelog](CHANGELOG.md)
+**Latest: v0.47.0** · updated 2026-08-12 · [full changelog](CHANGELOG.md)
 
 </div>
 
@@ -210,6 +210,7 @@ with a plain tarball by itself.
 
 | Command | What it does | Mocked run |
 |---|---|---|
+| **`/orc-challenge`** | Grades a **finished** artifact — a TSD, a PRD, an ADR, an API contract, a README, a module — against a goal **you** state, then **stops and makes you fix it in a different session**. ORC judges, you fix, ORC re-judges: **it never fixes what it judged**, because a session that just wrote the fix would grade its own homework. **And it never guesses what "good" means here.** | [see it](mock-run/orc-challenge.md) |
 | **`/orc-pact`** | The promises your project makes, and which are in doubt right now. Four states, all **computed on read**: HOLDING · DRIFTED · **UNCHECKABLE** (the honest state — never a failure) · BROKEN. It never invents a promise and never retires one for you. | [see it](mock-run/orc-pact.md) |
 | **`/orc-boundary`** | What ORC should **not** try here, and exactly what would change that. EXECUTE · ESCALATE · REFUSE, per area. **A REFUSE always names what would make it a yes.** It gates ORC's own dispatch, never your instructions. | [see it](mock-run/orc-boundary.md) |
 | **`/orc-verify`** | Verifies only your git-modified changes: build, tests, diff sanity, findings on a P0–P3 ladder. Read-only. | [see it](templates/skills/orc-verify/examples/verify-mock.md) |
@@ -411,27 +412,38 @@ a current audit: [EVAL-REPORT.md](EVAL-REPORT.md).
 **Full history: [CHANGELOG.md](CHANGELOG.md)** — or `orc changelog`, which prints
 only what is newer than the version you have.
 
-### v0.46.1 — see a lane run before you pay for one _(2026-08-12)_
+### v0.47.0 — the lane that refuses to produce _(2026-08-12)_
 
-The docs answered "what is ORC" four times and never answered **"what does a
-lane look like when it runs"**.
+Every other lane in ORC makes something. **`/orc-challenge` grades a finished
+thing, writes down what is wrong, and then stops and makes you go and fix it
+somewhere else.**
 
-- **`mock-run/`** — one written walkthrough per lane, in easy English, on one
-  shared example project. Nothing was executed to make them: they exist so you
-  never have to spend tokens to find out what a command does.
-  [Start here](mock-run/INDEX.md).
-- **`orc mock-run list | show <slug>`** reads the same catalogue from the
-  terminal, and **`orc ui` grows a Mocked Skill Use panel** — grouped,
-  searchable, with a reading pane. The catalogue is derived from the files on
-  disk, so adding a walkthrough needs no list edited anywhere.
-- **This README is 928 lines shorter and current again.** History moved to
-  [CHANGELOG.md](CHANGELOG.md), which is now what `orc changelog` fetches; the
-  rest went to [guides/](guides/configuration.md).
+- **ORC judges, you fix, ORC re-judges — and it never fixes what it judged.**
+  A session that just wrote the fix would grade its own homework and it would
+  always pass. The separation is not friction; it is the measuring instrument.
+- **It never guesses what "good" means here.** Intake asks — in one round — what
+  the artifact must achieve, who reads it, and what you would accept as
+  finished. Those are frozen to disk, and every finding must name which of them
+  it serves; a finding that cannot is dropped.
+- **Three instruments, not three tiers.** `orc challenge lint` counts what a
+  computer can count, for free. A **cold reader** with `Read` and nothing else
+  answers questions from the artifact alone — `8/12` is what "someone new can
+  follow this" looks like as a number. A grounded judge spends its effort on the
+  one dimension no computer can reach. **It cannot declare a pass**: the CLI
+  computes that from the findings, which removes leniency as a possibility.
+- **Nothing evaporates.** Every finding from last round gets exactly one outcome
+  and a reason, or the verdict is rejected by name. Two ways out of the loop:
+  `orc challenge accept` (a known gap, visible forever with your reason) and
+  `orc challenge rebut` (the judge is wrong, and the next one must answer you).
+- **No iteration cap** — each turn is a person sitting down to work — so it
+  measures instead and reports `stalled` with three honest options.
+- Plus the `orc challenge` CLI family (12 subcommands, all `--json`), a
+  **Challenge panel** in `orc ui` with the convergence chart, and a mocked run.
 
-Before that: **v0.46.0 — a lane that remembers, a lane that declines, and a lane
-that measures** — `/orc-pact`, `/orc-boundary`, `/orc-handoff`, `/orc-budget`,
-`/orc-aftermath` and `/orc-export`, plus a wiki that stops costing a full scan.
-[Read it in the changelog](CHANGELOG.md).
+Before that: **v0.46.1 — see a lane run before you pay for one** (`mock-run/`,
+`orc mock-run`, and the Mocked Skill Use panel), and **v0.46.0 — a lane that
+remembers, a lane that declines, and a lane that measures**.
+[Read them in the changelog](CHANGELOG.md).
 
 ---
 
