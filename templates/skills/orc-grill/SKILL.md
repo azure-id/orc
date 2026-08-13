@@ -129,7 +129,8 @@ The idea is sharp now. What next?
 1  Stop here — save it        → writes orc-grill/<slug>/grill-context.md
 2  Continue into /orc-analyze → checks it against the real code
 3  Save the constraints to the pact → they outlive this run  (/orc-pact)
-4  Stop, save nothing
+4  Write it up as a document  → /orc-doc, so other people can act on it
+5  Stop, save nothing
 ```
 
 **Exit 3 (v0.46.0)** is present only when at least one decision settled here was
@@ -139,6 +140,14 @@ which is the only thing that writes the ledger. Without it, every constraint thi
 lane settles evaporates when the run ends, which is exactly the failure `/orc-pact`
 exists for. No constraints settled → the option is **absent with the reason
 printed**, never a dead number.
+
+**Exit 4 (v0.48.0)** writes the doc first, then enters `/orc-doc` with it as the
+D1 context. The interview has already produced exactly what D1 and D4 ask for, so
+those gates are **pre-answered from the artifact and the user only confirms** —
+which is the whole point of not re-asking a frozen question. Settled decisions
+travel with their `intent`/`constraint` tags, and any `spec_invariants[]` lands
+in `context.md`'s decision table. Exits 2 and 4 are different questions: 2 asks
+*is this buildable*, 4 asks *can somebody who was not here act on it*.
 
 **When is it sharp enough?** Exit 2 exists to clear the analyst's own entry
 floor, so use that floor as the bar:
@@ -161,7 +170,7 @@ their `intent`/`constraint` tags intact plus `source: /orc-grill`, and the
   ordinary analyze run — same phases, same gates, same `requirement-spec.md`.
   When this lane was entered FROM `/orc-analyze` (its reverse trigger), exit 2
   returns to that same invocation and the user retypes nothing.
-- **3 — drop it.** Write nothing. Still close the trace properly.
+- **5 — drop it.** Write nothing. Still close the trace properly.
 
 ---
 

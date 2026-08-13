@@ -39,6 +39,7 @@ All of it uses **easy English**, short sentences, and the same fake project.
 |---|---|---|
 | [orc-brainstorm](orc-brainstorm.md) | `/orc-brainstorm` | No idea yet: it generates the options and **you** pick |
 | [orc-grill](orc-grill.md) | `/orc-grill` | One vague idea, sharpened by questions — it never answers its own |
+| [orc-doc](orc-doc.md) | `/orc-doc` | A PRD, TSD, agreement, report or runbook — written in parts, so nothing holds it all |
 | [orc-plan](orc-plan.md) | `/orc-plan` | A real task plan: grounded files, dependencies, facets, test dispositions |
 | [orc-route](orc-route.md) | `/orc-route` | You have a plan — which lane should build it, and which cannot |
 | [orc-explain](orc-explain.md) | `/orc-explain` | "Wait, what?" — it says the last message again, properly |

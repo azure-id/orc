@@ -53,7 +53,7 @@ run_meta:                 # FIRST packet of the run ONLY; omit thereafter
                           # plan | claude | poly | learn | verify | pattern |
                           # prsetup | prdriver | quick | grill | route |
                           # brainstorm | pact | boundary | handoff | budget |
-                          # aftermath | export | challenge
+                          # aftermath | export | challenge | doc
                           # (`ultra` = an /orc-ultra run; the ONLY lane the orc
                           #  spine can emit besides `orc`. No other value here
                           #  is legal — a lane no entry point opens is a lane

@@ -62,6 +62,11 @@ const GROUP_OF = {
   "orc-quick": "build",
   "orc-diy": "build",
 
+  // v0.48.0. It sits with the deciding lanes rather than the knowledge ones: a
+  // /orc-doc document is derived from what you DECIDED, not from the code —
+  // which is exactly what separates it from /orc-wiki and /orc-learn.
+  "orc-doc": "decide",
+
   "orc-brainstorm": "decide",
   "orc-grill": "decide",
   "orc-plan": "decide",

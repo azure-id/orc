@@ -308,7 +308,21 @@ function modal({ title, body, actions }) {
   const f = $("#modal-foot");
   b.replaceChildren(body);
   f.replaceChildren();
-  for (const a of actions) {
+  // Two call shapes exist in this file: an ARRAY of {label,onClick}, and an
+  // OBJECT keyed by label whose value is the handler (`null` = just close).
+  // `for…of` over the object form throws, which silently killed the confirm
+  // dialogs on Promises, Self-serve and Challenge — a dead button that logs
+  // nothing. Normalising here is what stops a third shape appearing.
+  const list = Array.isArray(actions)
+    ? actions
+    : Object.entries(actions || {}).map(([label, fn]) => ({
+        label,
+        onClick: (close) => {
+          close();
+          if (typeof fn === "function") fn();
+        },
+      }));
+  for (const a of list) {
     const btn = el("button", "btn btn-allow-busy " + (a.cls || ""), a.label);
     btn.type = "button";
     if (a.id) btn.id = a.id;
@@ -5438,6 +5452,521 @@ function laneCommand(cmd, why) {
   return box;
 }
 
+/* ==================================================================== DOCS == */
+/*
+   THE PANEL DERIVES NOTHING. Not the section order, not a line range, not a
+   state word, not the batching, not a lint rule name, not the completion
+   verdict. It draws `orc doc … --json`. (The Flow-stepper rule: a second idea
+   of the pipeline is exactly the drift this panel exists to make impossible.)
+
+   THE FREE/PAID LINE, visible rather than hidden: `list`, `status`, `map`,
+   `lint`, `plan` and `assemble` are deterministic and cost no model tokens, so
+   each is a real BUTTON. Writing a section, checking a range and editing one all
+   cost model tokens, so they are copy-able commands and there is no route for
+   any of them.
+
+   AND IT IS A PLAN PREVIEW, NOT A LIVE MONITOR. The server cannot see a running
+   session, so the wave card says so in one line. Claiming live status would be
+   this panel's first lie.
+*/
+
+// The five section states the CLI can emit. The panel may KEY on one — a colour,
+// a marker, an action — but never invent one.
+const DOC_STATE_KIND = {
+  planned: "",
+  written: "ok",
+  checked: "ok",
+  "user-edited": "info",
+  open: "warn",
+};
+
+PANELS.docs = function (host) {
+  head(host, t("docs.title"), t("docs.sub"));
+  const body = el("div", "stack");
+  host.append(body);
+  renderDocs(body);
+};
+
+async function renderDocs(body) {
+  body.replaceChildren(skeleton(5));
+  let d;
+  try {
+    d = (await read("/api/doc")).data;
+  } catch (e) {
+    body.replaceChildren(empty(t("common.loadFail"), String(e.message)));
+    return;
+  }
+  const out = frag();
+
+  // An empty list is an ANSWER, not a gap: it renders the command that starts
+  // one, never a spinner and never a "nothing here" shrug.
+  if (!d || !d.documents || !d.documents.length) {
+    const c = card(t("docs.title"));
+    c.append(empty(t("docs.none"), t("docs.noneHint")));
+    c.append(laneCommand("/orc-doc", t("docs.cmdWhy")));
+    out.append(c);
+    body.replaceChildren(out);
+    return;
+  }
+
+  const sum = card(t("docs.summary"));
+  const chips = el("div", "row-actions");
+  chips.append(chip(tn(d.documents.length, "docs.docN"), "info"));
+  const edited = d.documents.reduce((a, x) => a + (x.user_edited || []).length, 0);
+  if (edited) chips.append(chip(tn(edited, "docs.editedN"), "info"));
+  sum.append(chips);
+  sum.append(el("div", "note", t("docs.contract")));
+  out.append(sum);
+
+  // One row open at a time, detail fetched on first open — the Runs-panel rule.
+  // There is no detail box below the list.
+  const list = el("div", "run-list doc-list");
+  const rows = [];
+  const setOpen = (entry, open) => {
+    entry.row.classList.toggle("open", open);
+    entry.head.setAttribute("aria-expanded", String(open));
+    if (open && !entry.loaded) {
+      entry.loaded = true;
+      loadDocDetail(entry.pane, entry.slug, body);
+    }
+  };
+  const collapseAll = (except) => {
+    for (const r of rows) if (r.row !== except) setOpen(r, false);
+  };
+
+  for (const doc of d.documents) {
+    const row = el("div", "run-row");
+    const headBtn = el("button", "run-card");
+    headBtn.type = "button";
+    headBtn.setAttribute("aria-expanded", "false");
+    headBtn.append(el("span", "run-caret", "▸"));
+    // The CLI's own words. `not started` is the CLI's phrase for a document with
+    // no document.md, and it is never softened into "failed" or "empty".
+    headBtn.append(chip(doc.document, doc.document === "present" ? "ok" : ""));
+    if ((doc.user_edited || []).length) headBtn.append(chip(t("docs.editedChip"), "info"));
+    const mid = el("div", "run-mid");
+    mid.append(el("div", "run-slug", doc.title || doc.slug));
+    mid.append(el("div", "run-where", `${String(doc.type).toUpperCase()} · ${doc.slug}`));
+    headBtn.append(mid);
+    headBtn.append(
+      el("div", "run-age", `${doc.sections_written}/${doc.sections_total}`)
+    );
+
+    const pane = el("div", "run-pane stack stack-sm");
+    pane.append(skeleton(4));
+    const inner = el("div", "run-body-inner");
+    inner.append(pane);
+    const fold = el("div", "run-body");
+    fold.append(inner);
+
+    const entry = { row, head: headBtn, pane, slug: doc.slug, loaded: false };
+    rows.push(entry);
+    headBtn.addEventListener("click", () => {
+      const isOpen = row.classList.contains("open");
+      collapseAll(row);
+      setOpen(entry, !isOpen);
+    });
+    row.append(headBtn, fold);
+    list.append(row);
+  }
+  out.append(list);
+  out.append(laneCommand("/orc-doc", t("docs.cmdWhy")));
+  body.replaceChildren(out);
+}
+
+// PROGRESSIVE DISCLOSURE, in the order a human reads it: the shape of the whole
+// document first (the ribbon), then what is wrong with it, then the sections,
+// then the plan, then the history.
+async function loadDocDetail(pane, slug, body) {
+  let s;
+  let map = null;
+  let lint = null;
+  let plan = null;
+  let show = null;
+  const q = "?slug=" + encodeURIComponent(slug);
+  try {
+    s = (await read("/api/doc/one" + q)).data;
+    map = (await read("/api/doc/map" + q).catch(() => ({ data: null }))).data;
+    lint = (await read("/api/doc/lint" + q).catch(() => ({ data: null }))).data;
+    plan = (await read("/api/doc/plan" + q + "&role=write").catch(() => ({ data: null }))).data;
+    show = (await read("/api/doc/show" + q).catch(() => ({ data: null }))).data;
+  } catch (e) {
+    pane.replaceChildren(empty(t("common.loadFail"), String(e.message)));
+    return;
+  }
+  const out = frag();
+  const sections = (map && map.sections) || [];
+
+  // --- 1. the state line, and the ONE next action
+  const st = card(null);
+  const stRow = el("div", "row-actions");
+  stRow.append(chip(s.state, s.state === "complete" ? "ok" : s.state === "not-started" ? "" : "info"));
+  stRow.append(el("span", "note", s.where));
+  st.append(stRow);
+  st.append(docNextAction(s, body));
+  out.append(st);
+
+  // --- 2. THE RIBBON. The one picture this panel is for.
+  if (sections.length) {
+    const rc = card(t("docs.ribbon"), docFreeActions(slug, body));
+    rc.append(docRibbon(sections, (id) => docOpenSection(pane, id)));
+    rc.append(docRibbonLegend());
+    out.append(rc);
+  }
+
+  // --- 3. health — straight from the lint. The CLI's words are the only words.
+  //     `ok: false` is the CLI answering "there is no document yet", which is a
+  //     real state and not a card with empty numbers in it.
+  if (lint && lint.ok !== false) {
+    const hc = card(t("docs.health"));
+    hc.append(docHealth(lint));
+    out.append(hc);
+  }
+
+  // --- 4. the sections
+  if (sections.length) {
+    const sc = card(t("docs.sections"));
+    sc.append(docSectionList(sections, slug, show));
+    sc.append(el("div", "note", t("docs.sectionsNote")));
+    out.append(sc);
+  }
+
+  // --- 5. the wave preview
+  if (plan && plan.waves && plan.waves.length) {
+    const wc = card(t("docs.waves"));
+    wc.append(el("div", "note", t("docs.wavesNote")));
+    wc.append(docWaves(plan));
+    if (plan.clamped) wc.append(el("div", "note bad", t("docs.clamped", { from: plan.clamped.from, to: plan.clamped.to })));
+    if ((plan.oversized || []).length)
+      wc.append(el("div", "note bad", t("docs.oversized", { ids: plan.oversized.join(", ") })));
+    out.append(wc);
+  }
+
+  // --- 6. the cycles, last. History is not an action.
+  if (show && show.cycles && show.cycles.length) {
+    out.append(
+      collapsible({
+        title: t("docs.cycles"),
+        count: String(show.cycles.length),
+        collapsed: true,
+        content: kvList(show.cycles.map((c) => [`${c.at}`, `${t("docs.cycleN", { n: c.n })} · ${c.kind} · ${tn(c.agents, "docs.agentN")}`])),
+      })
+    );
+  }
+
+  pane.replaceChildren(out);
+}
+
+// EVERY STATE ANSWERS "so what do I do now?".
+function docNextAction(s, body) {
+  const wrap = el("div", "stack stack-sm");
+  if ((s.user_edited || []).length)
+    wrap.append(el("div", "note", t("docs.editedNote", { names: s.user_edited.map((x) => x.heading).join(" · ") })));
+  if ((s.open_sections || []).length)
+    wrap.append(el("div", "note warn", t("docs.openNote", { names: s.open_sections.map((x) => x.heading).join(" · ") })));
+  if (s.state === "complete") {
+    wrap.append(el("div", "note ok", t("docs.completeNote")));
+    wrap.append(el("pre", "cmd", `git add ${s.document}`));
+    wrap.append(el("div", "note", t("docs.challengeNote")));
+    wrap.append(el("pre", "cmd", `/orc-challenge ${s.document}`));
+    return wrap;
+  }
+  wrap.append(laneCommand(s.resume, t("docs.paidWhy")));
+  return wrap;
+}
+
+// The free actions. A refetch of a deterministic read is a BUTTON; so is
+// `assemble`, which only concatenates files already on disk in an order the
+// outline already fixed.
+function docFreeActions(slug, body) {
+  const row = el("div", "row-actions");
+  const relint = el("button", "btn btn-ghost btn-sm", t("docs.reLint"));
+  relint.type = "button";
+  relint.addEventListener("click", () => renderDocs(body));
+  row.append(relint);
+  const asm = el("button", "btn btn-ghost btn-sm", t("docs.assemble"));
+  asm.type = "button";
+  asm.addEventListener("click", () => {
+    const b = frag();
+    b.append(el("p", null, t("docs.assembleBody")));
+    // The exact command is ALWAYS on screen, so it is always typeable by hand
+    // instead — the Maintenance rule, applied to the one free write here.
+    b.append(el("pre", "cmd", `orc doc assemble ${slug}`));
+    b.append(el("div", "note", t("docs.assembleNote")));
+    modal({
+      title: t("docs.assembleTitle"),
+      body: b,
+      actions: [
+        { label: t("common.cancel"), onClick: (close) => close() },
+        {
+          label: t("docs.assembleGo"),
+          onClick: async (close) => {
+            close();
+            const r = await post("/api/doc/assemble", { slug });
+            toast(r.ok ? t("docs.assembleOk") : t("common.writeFail"), r.ok ? "ok" : "bad", r.output);
+            renderDocs(body);
+          },
+        },
+      ],
+    });
+  });
+  row.append(asm);
+  return row;
+}
+
+/* THE RIBBON — each section is a segment whose width is proportional to its line
+   count, coloured by its state. In one glance: how long the document is, where
+   the weight sits, what is still open, what the user edited, and where the
+   findings are.
+
+   GEOMETRY IS SOLVED FROM THE BOX SIZE, never expressed as a fraction of the
+   container (the VAULT / ringRadii lesson): a segment is `lines × PX` with a
+   floor that keeps a 3-line section clickable, the canvas is the bounding box of
+   what was PLACED, and a document too long for the panel SCROLLS rather than
+   being squeezed into unreadable slivers. */
+const DOC_RIBBON = { H: 34, MIN: 14, PX: 1.6, GAP: 2, PAD: 8, LABEL: 16 };
+
+function docRibbon(sections, onPick) {
+  const wrap = el("div", "doc-ribbon-wrap");
+  const widths = sections.map((s) => Math.max(DOC_RIBBON.MIN, Math.round((s.lines || 1) * DOC_RIBBON.PX)));
+  const xs = [];
+  let x = DOC_RIBBON.PAD;
+  for (const w of widths) {
+    xs.push(x);
+    x += w + DOC_RIBBON.GAP;
+  }
+  const width = x - DOC_RIBBON.GAP + DOC_RIBBON.PAD;
+  const height = DOC_RIBBON.H + DOC_RIBBON.LABEL + 2 * DOC_RIBBON.PAD;
+
+  const NS = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(NS, "svg");
+  svg.setAttribute("class", "doc-ribbon");
+  // The canvas keeps its aspect: a stretched `preserveAspectRatio="none"` viewBox
+  // squashes every label and every stroke.
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  svg.setAttribute("width", String(width));
+  svg.setAttribute("height", String(height));
+  svg.setAttribute("role", "img");
+  svg.setAttribute("aria-label", t("docs.ribbonAria", { n: sections.length }));
+
+  const mk = (name, attrs, text) => {
+    const n = document.createElementNS(NS, name);
+    for (const k of Object.keys(attrs)) n.setAttribute(k, String(attrs[k]));
+    if (text !== undefined) n.textContent = text;
+    return n;
+  };
+
+  sections.forEach((s, i) => {
+    const w = widths[i];
+    const g = mk("g", {
+      class: "doc-seg doc-seg-" + s.state.replace(/[^a-z-]/g, "") + (s.findings ? " has-findings" : ""),
+      style: `animation-delay:${i * 26}ms`,
+      tabindex: "0",
+      role: "button",
+    });
+    g.append(mk("rect", { x: xs[i], y: DOC_RIBBON.PAD, width: w, height: DOC_RIBBON.H, rx: 4, class: "doc-seg-box" }));
+    // A findings marker is STATIC. A blinking error is a reduced-motion hazard
+    // and reads as an urgency this panel has no right to imply.
+    if (s.findings)
+      g.append(mk("rect", { x: xs[i], y: DOC_RIBBON.PAD, width: w, height: 3, class: "doc-seg-mark" }));
+    if (w >= 22)
+      g.append(
+        mk(
+          "text",
+          { x: xs[i] + w / 2, y: DOC_RIBBON.PAD + DOC_RIBBON.H + 12, class: "doc-seg-n", "text-anchor": "middle" },
+          String(i + 1)
+        )
+      );
+    // The tooltip repeats the CLI's own numbers and its own state word.
+    g.append(
+      mk("title", {}, `${s.heading} — ${s.state} · ${s.start}..${s.end} · ${s.lines} L${s.findings ? " · " + s.findings : ""}`)
+    );
+    const pick = () => onPick(s.id);
+    g.addEventListener("click", pick);
+    g.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        pick();
+      }
+    });
+    svg.append(g);
+  });
+
+  wrap.append(svg);
+  return wrap;
+}
+
+function docRibbonLegend() {
+  const row = el("div", "row-actions doc-legend");
+  for (const state of Object.keys(DOC_STATE_KIND)) {
+    const item = el("span", "doc-legend-item");
+    item.append(el("span", "doc-legend-swatch doc-seg-" + state.replace(/[^a-z-]/g, "")));
+    item.append(el("span", "note", state));
+    row.append(item);
+  }
+  return row;
+}
+
+// Open one section row in the list, from a ribbon click. One at a time.
+function docOpenSection(pane, id) {
+  const btn = pane.querySelector('[data-section="' + CSS.escape(id) + '"]');
+  if (!btn) return;
+  for (const other of pane.querySelectorAll(".doc-row.open")) if (other !== btn.parentElement) other.classList.remove("open");
+  btn.parentElement.classList.add("open");
+  btn.setAttribute("aria-expanded", "true");
+  btn.scrollIntoView({ block: "nearest" });
+  btn.focus();
+}
+
+function docSectionList(sections, slug, show) {
+  const list = el("div", "doc-rows");
+  const outline = new Map(((show && show.outline) || []).map((o) => [o.id, o]));
+  for (const s of sections) {
+    const row = el("div", "run-row doc-row");
+    const btn = el("button", "run-card");
+    btn.type = "button";
+    btn.dataset.section = s.id;
+    btn.setAttribute("aria-expanded", "false");
+    btn.append(el("span", "run-caret", "▸"));
+    btn.append(chip(s.state, DOC_STATE_KIND[s.state] || ""));
+    const mid = el("div", "run-mid");
+    mid.append(el("div", "run-slug", s.heading));
+    mid.append(el("div", "run-where mono", `${s.start}..${s.end}`));
+    btn.append(mid);
+    btn.append(el("div", "run-age", `${s.lines} L`));
+    if (s.findings) btn.append(chip(String(s.findings), "warn"));
+
+    const pane = el("div", "run-pane stack stack-sm");
+    const rows = [];
+    const o = outline.get(s.id);
+    if (o && o.purpose) rows.push([t("docs.field.purpose"), o.purpose]);
+    rows.push([t("docs.field.required"), o && o.required === false ? t("docs.optional") : t("docs.required")]);
+    rows.push([t("docs.field.hash"), String(s.hash || "").slice(0, 12)]);
+    if (s.cycle) rows.push([t("docs.field.cycle"), String(s.cycle)]);
+    if (s.renamed_from) rows.push([t("docs.field.renamedFrom"), s.renamed_from]);
+    pane.append(kvList(rows));
+    // REVEAL — the panel never shows a section's text until somebody asks for
+    // that one section. It is rendered as DOM through `renderMd`, never as HTML.
+    pane.append(docRevealBtn(slug, s.id, pane));
+    const inner = el("div", "run-body-inner");
+    inner.append(pane);
+    const fold = el("div", "run-body");
+    fold.append(inner);
+
+    btn.addEventListener("click", () => {
+      const open = row.classList.contains("open");
+      for (const other of list.querySelectorAll(".doc-row.open")) other.classList.remove("open");
+      row.classList.toggle("open", !open);
+      btn.setAttribute("aria-expanded", String(!open));
+    });
+    row.append(btn, fold);
+    list.append(row);
+  }
+  return list;
+}
+
+function docRevealBtn(slug, id, pane) {
+  const wrap = el("div", "stack stack-sm");
+  const b = el("button", "btn btn-ghost btn-sm", t("docs.reveal"));
+  b.type = "button";
+  b.addEventListener("click", async () => {
+    b.disabled = true;
+    let r = null;
+    try {
+      r = (await read("/api/doc/section?slug=" + encodeURIComponent(slug) + "&section=" + encodeURIComponent(id))).data;
+    } catch (_) {}
+    b.remove();
+    if (!r || !r.text) {
+      wrap.append(el("div", "note", t("docs.revealFail")));
+      return;
+    }
+    const box = el("div", "doc-reveal");
+    box.append(renderMd(r.text));
+    wrap.append(box);
+    wrap.append(el("div", "note", t("docs.revealNote")));
+  });
+  wrap.append(b);
+  return wrap;
+}
+
+// The health card. STRAIGHT FROM `orc doc lint --json`: the CLI's rule names,
+// the CLI's counts, the CLI's own honesty lines. Never a friendlier synonym for
+// a rule, and the two honesty lines are not optional chrome.
+function docHealth(lint) {
+  const wrap = el("div", "stack stack-sm");
+  const chips = el("div", "row-actions");
+  chips.append(chip(tn(lint.errors, "docs.errorN"), lint.errors ? "bad" : "ok"));
+  chips.append(chip(tn(lint.warnings, "docs.warnN"), lint.warnings ? "warn" : ""));
+  chips.append(chip(lint.target_label, "info"));
+  chips.append(chip(`max H${lint.max_heading}`, ""));
+  chips.append(chip("front matter: " + lint.front_matter, ""));
+  wrap.append(chips);
+
+  const r = lint.readability || {};
+  wrap.append(
+    kvList([
+      [t("docs.read.avg"), `${r.avg_sentence_words} / ${r.avg_bar}`],
+      [t("docs.read.longest"), r.longest_sentence_line ? `${r.longest_sentence_words} → L${r.longest_sentence_line}` : "—"],
+      [t("docs.read.longWords"), `${r.long_word_pct}%`],
+      [t("docs.read.passive"), String(r.passive_constructions)],
+      [t("docs.read.acronyms"), (r.undefined_acronyms || []).map((a) => a.acronym).join(", ")],
+    ])
+  );
+
+  // Findings grouped by the CLI's rule name, as bars. A rule keeps its slot at
+  // zero only when it fired at least once — a table of every rule that did not
+  // fire is noise, but a rule that fired and is not shown is a lie.
+  const byRule = new Map();
+  for (const f of lint.findings || []) byRule.set(f.rule, (byRule.get(f.rule) || 0) + 1);
+  if (byRule.size) {
+    const max = Math.max(...byRule.values());
+    const bars = el("div", "doc-bars");
+    for (const [rule, n] of [...byRule.entries()].sort((a, b) => b[1] - a[1])) {
+      const row = el("div", "doc-bar-row");
+      row.append(el("span", "doc-bar-label mono", rule));
+      const bar = el("div", "doc-bar");
+      const seg = el("div", "doc-bar-seg");
+      seg.style.setProperty("--w", ((n / max) * 100).toFixed(2) + "%");
+      bar.append(seg);
+      row.append(bar);
+      row.append(el("span", "doc-bar-n", String(n)));
+      bars.append(row);
+    }
+    wrap.append(bars);
+  }
+  if (lint.import_note) wrap.append(el("div", "note warn", lint.import_note));
+  for (const line of lint.honesty || []) wrap.append(el("div", "note", line));
+  return wrap;
+}
+
+/* THE WAVE VISUALISER — the part of ORC that has never been drawn. `orc doc plan
+   --json` gives the exact batching, so the panel can show it and decide nothing
+   about it: the agent name, the sections, the budget and the wave number are all
+   the CLI's. */
+function docWaves(plan) {
+  const wrap = el("div", "doc-waves");
+  plan.waves.forEach((w, wi) => {
+    const row = el("div", "doc-wave");
+    row.style.setProperty("--i", String(wi));
+    row.append(el("div", "doc-wave-n", t("docs.waveN", { n: w.n })));
+    const cards = el("div", "doc-wave-cards");
+    for (const a of w.agents) {
+      const c = el("div", "doc-agent" + (a.oversized ? " oversized" : ""));
+      c.append(el("div", "doc-agent-name mono", a.agent));
+      c.append(el("div", "doc-agent-secs", a.headings.join(" + ")));
+      const meta = el("div", "row-actions");
+      meta.append(chip(`${a.budget_lines} L`, ""));
+      if (a.range) meta.append(chip(`${a.range[0]}..${a.range[1]}`, "info"));
+      if (a.oversized) meta.append(chip(t("docs.oversizedChip"), "bad"));
+      c.append(meta);
+      cards.append(c);
+    }
+    row.append(cards);
+    wrap.append(row);
+  });
+  return wrap;
+}
+
 // While a mutation runs the WHOLE ui is read-only, output streams into the
 // panel, and every panel refetches when it finishes.
 function setBusy(on) {
@@ -5778,6 +6307,11 @@ const TOUR_STEPS = [
   { panel: "boundary", selector: ".checklist, .lane-cmd, .card", title: "tour.10.title", text: "tour.10.text" },
   { panel: "handoff", selector: ".promise, .lane-cmd", title: "tour.11.title", text: "tour.11.text" },
   { panel: "knowledge", selector: ".free-box, .tbl, .stack", title: "tour.12.title", text: "tour.12.text" },
+  /* v0.48.0 — the ribbon. Same rule as every step above: it must point at
+     something with a SIZE, and the ribbon only exists once a document has been
+     assembled — so `.lane-cmd` and `.doc-list` are the fallbacks, because an
+     empty Docs panel still renders the /orc-doc command box. */
+  { panel: "docs", selector: ".doc-ribbon-wrap, .doc-list, .lane-cmd", title: "tour.13.title", text: "tour.13.text" },
 ];
 
 function startFirstRunTour(root) {
@@ -5852,7 +6386,7 @@ function startUpgradeSpotlight() {
 // and unmodified: single keys, and ONLY when you are not typing into something.
 const SHORTCUTS = () => [
   ["1 – 9, 0", t("shortcuts.panels")],
-  ["p · b · h · m", t("shortcuts.panelsLetters")],
+  ["d · c · p · b · h · m", t("shortcuts.panelsLetters")],
   ["/", t("shortcuts.filter")],
   ["r", t("shortcuts.reload")],
   ["t", t("shortcuts.theme")],
@@ -5916,12 +6450,17 @@ function installShortcuts() {
       }
       return;
     }
-    // v0.46.0: the rail outgrew ten digits, so three panels carry a LETTER key.
+    // v0.46.0: the rail outgrew ten digits, so several panels carry a LETTER key.
     // Same lookup, same rule — matched on data-idx, never on position — and the
     // letters are checked before the r/t/l actions so a rail key can never be
     // shadowed by one of them. Adding a panel whose letter collides with an
-    // action would break the action; p/b/h/m were free.
-    if (/^[pbhm]$/.test(e.key)) {
+    // action would break the action; p/b/h/m/c/d were free.
+    //
+    // The class is derived from the rail rather than re-listed, because that is
+    // what went wrong the first time: `c` was given to Challenge in the markup
+    // and never added to a hardcoded `[pbhm]`, so the key did nothing and
+    // nothing failed. A rail key now works because it is IN THE RAIL.
+    if (/^[a-z]$/.test(e.key)) {
       const target = document.querySelector('#nav a[data-idx="' + e.key + '"]');
       if (target) {
         e.preventDefault();

@@ -10,6 +10,91 @@ Format: `### v<version> — <title> _(<date>)_`.
 
 ---
 
+### v0.48.0 — a document long enough to end a session, written anyway _(2026-08-13)_
+
+**`/orc-doc`** writes the long document — a PRD, a TSD, a cross-team
+collaboration agreement, a status report or a workflow/runbook — as portable
+Markdown, and it survives the session that started it.
+
+Two contracts hold the lane together, and everything else serves them:
+
+> **The orchestrator never reads the document body.** It knows the document only
+> through the CLI's derived section map and through what the agents it
+> dispatched report back. **a lane that reads its own document** has broken this
+> contract.
+
+> **The context is gathered once and frozen.** A resumed session reads
+> `context.md` from disk; it never re-interviews the user for what session 1
+> already settled. **a lane that re-asks a frozen question** has broken this
+> contract.
+
+- **The token architecture is the lane.** A 900-line TSD is ~30k tokens; read it
+  three times and the session is over. So nothing that holds context ever holds
+  the document. `orc doc map` derives a section map — heading, absolute line
+  range, SHA-256, computed state — each writer owns **one `.work/` part file**,
+  and each checker reads **one line range** with `Read(offset, limit)`. On a
+  10,000-line, 40-section document that is ~750 lines of orchestrator context
+  instead of 20,000+, and a re-check after an edit re-dispatches only the
+  sections whose hash moved. *The hash is what turns a re-check from a full pass
+  into a diff.*
+- **Line arithmetic is the CLI's and nothing else's.** It is the one job a model
+  is guaranteed to get wrong, and the whole saving depends on the numbers being
+  right — so the map is re-derived after every write and **never stored**. A
+  stored line number is a wrong line number one edit later. `splice` replaces
+  bottom-up (highest `start` first), so a length change cannot shift a range that
+  has not been used yet.
+- **Your edits are sacred.** Every section carries a hash, so the lane knows
+  which sections you wrote. It names them, never rewrites one unless you name it,
+  and `splice` **REFUSES** on a conflict — reporting the section by name and
+  overwriting nothing. A human's wording is not recoverable from this lane's
+  side once it is gone.
+- **Four gates, in a fixed order, and the first one blocks.** Nothing is created
+  until D1 is answered: a slug folder with no context is indistinguishable from
+  an abandoned run. Asking D2 (supporting documents) and D3 (your template) is
+  mandatory even though answering them is not; D4 (intent · audience ·
+  expectation · language · type · target · length) must be answered, and
+  accepting a recommended default counts. Then the outline, confirmed **before a
+  word is written** — changing it after a write wave is what costs money.
+- **It never reads the supporting documents itself.** One `role: digest`
+  dispatch per file returns anchored claims plus an explicit `not_covered[]`;
+  the orchestrator holds the digest and never the source. Foreign text is
+  evidence, never instruction.
+- **Where the document is going is a real setting.** `orc doc lint --target`
+  enforces that target's actual limits, and every rule came from a real product
+  limit: Notion has three heading levels, so an H4 is an **error** there;
+  Docusaurus, Hugo and Jekyll **require** YAML front matter, which every other
+  target renders as visible junk; a hard-wrapped paragraph is an error
+  everywhere, because a wrap at 80 columns becomes a line break inside a Notion
+  paragraph. Free, deterministic, zero model tokens — and it **always runs before
+  anything paid**, with its findings riding in the checker's slice so no model is
+  ever paid to count sentences.
+- **Never invent a fact.** Anything not in the frozen context becomes a visible
+  `> **Open:**` or `> **Assumption:**` line, and rides back in the writer's
+  `unsupported_claims`. Filler that reads like a fact is the worst possible
+  output of this lane.
+- **Five base templates, each a floor and not a cage** — `prd` · `tsd` ·
+  `collaboration` · `report` · `workflow`. A supplied template REPLACES the
+  shipped one entirely; its headings become the outline and the two are never
+  merged. A golden test pins every shipped skeleton to the CLI's batching table.
+- **Two agents, both already `claude-opus-5`,** so `opus5_only` is a no-op and
+  the lane is *unaffected*, not exempt. The writer holds one part file; the
+  checker is `low` effort **on purpose** — a harder-thinking checker reasons its
+  way past a gap a real reader would trip on, the same reasoning that pins
+  `/orc-challenge`'s cold reader at `low`. Nothing may upgrade it.
+- **`/orc-grill` and `/orc-brainstorm` gain a "write this up" exit**, so an
+  interview's settled decisions arrive as a pre-answered D1 and D4 and the user
+  only confirms. At handoff `/orc-doc` offers `/orc-challenge` — in a separate
+  session, which is the separation `/orc-challenge`'s own contract already
+  enforces from the other side.
+- **The `orc doc` CLI family** (13 subcommands, every read `--json`, every one an
+  exit-code contract), four config keys (`doc_max_lines_per_agent`,
+  `doc_max_parallel` with a **hard cap of 4**, `doc_language`, `doc_dir`), and a
+  **Docs panel** in `orc ui` whose ribbon draws the whole document in one
+  picture — one block per section, sized by its length and coloured by its state.
+- Counts move: **skills 37 → 38 · commands 28 → 29 · agent files 44 → 46.**
+
+---
+
 ### v0.47.0 — the lane that refuses to produce _(2026-08-12)_
 
 **Every other lane in ORC — and nearly every other skill in the ecosystem —

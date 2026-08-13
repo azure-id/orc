@@ -137,6 +137,26 @@ const required = [
   "templates/skills/orc-challenge/references/fix-brief.md",
   "templates/skills/orc-challenge/references/plain-english.md",
   "templates/skills/orc-challenge/references/conservation.md",
+  // v0.48.0 — /orc-doc. Named file by file for the reason every lane's files
+  // are: `chunking.md` IS the token architecture (a publish that drops it ships
+  // an orchestrator with no definition of what it may hold, which is the one
+  // thing this lane exists to bound), `resume-protocol.md` is the whole reason
+  // the context is frozen, and `templates/` is the five base skeletons the
+  // batching table is pinned to by a golden test.
+  "templates/skills/orc-doc/SKILL.md",
+  "templates/skills/orc-doc/README.md",
+  "templates/skills/orc-doc/references/gates.md",
+  "templates/skills/orc-doc/references/chunking.md",
+  "templates/skills/orc-doc/references/resume-protocol.md",
+  "templates/skills/orc-doc/references/portable-markdown.md",
+  "templates/skills/orc-doc/references/plain-language.md",
+  "templates/skills/orc-doc/references/import-targets.md",
+  "templates/skills/orc-doc/references/templates/prd.md",
+  "templates/skills/orc-doc/references/templates/tsd.md",
+  "templates/skills/orc-doc/references/templates/collaboration.md",
+  "templates/skills/orc-doc/references/templates/report.md",
+  "templates/skills/orc-doc/references/templates/workflow.md",
+  "templates/commands/orc-doc.md",
   "templates/commands/orc-challenge.md",
   "templates/commands/orc-pact.md",
   "templates/commands/orc-boundary.md",
@@ -205,6 +225,12 @@ const required = [
   "templates/agents/orc-challenge-judge-opus-5-high.md",
   "templates/agents/orc-challenge-advisor-opus-5-med.md",
   "templates/agents/orc-challenge-reader-opus-5-low.md",
+  // v0.48.0 — the two /orc-doc agents. BOTH must ship: a write wave that cannot
+  // dispatch the writer has nothing to assemble, and a check wave that cannot
+  // dispatch the checker silently turns the only judgment step into the free
+  // lint. Both are already Opus 5, so `opus5_only` adds no twin for either.
+  "templates/agents/orc-doc-writer-opus-5-med.md",
+  "templates/agents/orc-doc-checker-opus-5-low.md",
   "templates/agents/orc-analyst-fable-5.md",
   "templates/agents/orc-planner-fable-5.md",
   "templates/agents/orc-advisor-fable-5.md",
@@ -262,8 +288,15 @@ const agentCount = walkCount(path.join(ROOT, "templates/agents"), ".md");
 // the only dimension no computer can reach, and the advisor is `medium` because
 // grouping findings is pattern work. All three are claude-opus-5, so `opus5_only`
 // adds NO pair and the floor moves by exactly three.
-if (skillCount < 37) missing.push(`templates/skills (expected >=37 SKILL.md, found ${skillCount})`);
-if (agentCount < 44) missing.push(`templates/agents (expected >=44 .md, found ${agentCount})`);
+// v0.48.0: +1 skill (orc-doc) and +2 agents. The split follows v0.47.0's rule —
+// an agent exists when it is a DIFFERENT INSTRUMENT, not a tier of the same one.
+// The writer holds one part file and never `document.md`; the checker holds one
+// LINE RANGE and has `Read` only. The checker is `low` on purpose (a
+// harder-thinking checker reasons its way past a gap a real reader would trip
+// on — the challenge cold reader's reasoning), so nothing may upgrade it. Both
+// are claude-opus-5, so `opus5_only` adds NO pair and the floor moves by two.
+if (skillCount < 38) missing.push(`templates/skills (expected >=38 SKILL.md, found ${skillCount})`);
+if (agentCount < 46) missing.push(`templates/agents (expected >=46 .md, found ${agentCount})`);
 
 // B4 — encoding/mojibake guard. The OneDrive corruption rule becomes a gate:
 // scan every shipped text file for the U+FFFD replacement char (invalid UTF-8

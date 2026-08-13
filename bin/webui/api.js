@@ -213,6 +213,31 @@ const READS = {
     String(q.path || ""),
     ...(q.template ? ["--template", String(q.template)] : []),
   ],
+  // v0.48.0 — /orc-doc. Same shape again: every one is a READ whose exit code is
+  // DATA (list 0, status 0/1/2, map 0/2, plan 0/1, lint 0/1/2), and the panel
+  // derives nothing from them — not the section order, not a line range, not a
+  // state word, not the batching, not a lint rule name. It draws what the CLI
+  // computed.
+  //
+  // `/api/doc/section` is the ONE route that returns any of the document's
+  // prose, it returns exactly ONE section, and only on an explicit Reveal click.
+  // The rule this lane lives by is that nothing HOLDS the document — not that
+  // the text is secret — and the panel renders it as DOM through `renderMd`,
+  // never as HTML.
+  "/api/doc": () => ["doc", "list"],
+  "/api/doc/one": (q) => ["doc", "status", String(q.slug || "")],
+  "/api/doc/show": (q) => ["doc", "show", String(q.slug || "")],
+  "/api/doc/section": (q) => ["doc", "show", String(q.slug || ""), "--section", String(q.section || "")],
+  "/api/doc/map": (q) => ["doc", "map", String(q.slug || "")],
+  "/api/doc/lint": (q) => [
+    "doc",
+    "lint",
+    String(q.slug || ""),
+    ...(q.target ? ["--target", String(q.target)] : []),
+  ],
+  "/api/doc/plan": (q) => ["doc", "plan", String(q.slug || ""), "--role", String(q.role || "write")],
+  "/api/doc/templates": () => ["doc", "templates"],
+  "/api/doc/targets": () => ["doc", "targets"],
   "/api/patterns": () => ["pattern", "status"],
   "/api/gotchas": () => ["gotcha", "list"],
   "/api/stats": (q) => (q.since ? ["stats", "--since", String(q.since)] : ["stats"]),
@@ -270,6 +295,12 @@ const WRITES = {
   "/api/challenge/accept": (b) => ["challenge", "accept", String(b.slug), String(b.id), String(b.reason || "")],
   "/api/challenge/rebut": (b) => ["challenge", "rebut", String(b.slug), String(b.id), String(b.reason || "")],
   "/api/challenge/report": (b) => ["challenge", "report", String(b.slug)],
+  // v0.48.0. `assemble` is the ONE /orc-doc write that costs nothing: it
+  // concatenates part files that are already on disk, in an order the outline
+  // already fixed. Writing a part, checking a range and editing a section all
+  // cost model tokens, so they are copy-able commands and there is deliberately
+  // no route for any of them.
+  "/api/doc/assemble": (b) => ["doc", "assemble", String(b.slug)],
   "/api/crosslink/remove": (b) => ["crosslink", "remove", String(b.name)],
   // The UI assembles no YAML. It hands the CLI the same arguments the
   // interactive prompt collects, and every rejection the user sees is the

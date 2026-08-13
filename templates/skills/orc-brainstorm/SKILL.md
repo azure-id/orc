@@ -220,7 +220,8 @@ Direction chosen. What next?
 2  Continue into /orc-analyze     → check it against the real code
 3  Continue into /orc-grill       → sharpen this direction into a settled spec
 4  Save the constraints to the pact → they outlive this run  (/orc-pact)
-5  Your own — something else, or stop and save nothing
+5  Write it up as a document       → /orc-doc, so other people can act on it
+6  Your own — something else, or stop and save nothing
 ```
 
 - **1 — save.** Write the doc (`references/brainstorm-doc.md`), close the trace,
@@ -241,7 +242,13 @@ Direction chosen. What next?
   `/orc-pact` — the only thing that writes the ledger. Without it a constraint
   settled here lives exactly as long as the session does. No constraints → the
   option is **absent with the reason printed**, never a dead number.
-- **5 — the open slot**, including "save nothing" — writes nothing, still closes
+- **5 — write it up (v0.48.0).** Writes the doc FIRST, then enters `/orc-doc`
+  with the chosen direction as the D1 context and the tagged decisions carried
+  in, so D1 and D4 are **pre-answered from the artifact and the user only
+  confirms**. Unlike exit 2 it has no entry floor — a product name, an
+  onboarding flow or a support-queue problem is a perfectly good document and a
+  hopeless analysis. It is offered for every topic class.
+- **6 — the open slot**, including "save nothing" — writes nothing, still closes
   the trace properly.
 
 ---

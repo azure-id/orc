@@ -61,6 +61,10 @@ this CLI for every write.
 | `challenge_stall_after` | `3` | Iterations with no net reduction before a cycle is flagged `stalled`. A flag, never a cap: each turn is a person sitting down to work. |
 | `challenge_reader` | `on` | The cold read that measures whether a reader with no context can follow the artifact. `off` makes that dimension report `NOT-CHECKED` with that reason — never silently. |
 | `challenge_gate` | `warn` | One `/orc` preflight line when the document it is about to build from has an in-flight, failing review cycle. There is no `block`. |
+| `doc_max_lines_per_agent` | `400` | Write/read budget per dispatched `/orc-doc` agent, in lines. A section is never split to fit — one over the cap is reported as a planning smell and offered as a split instead. |
+| `doc_max_parallel` | `4` | Agents per `/orc-doc` wave. **Hard cap 4** — a larger value is clamped and the clamp is announced, because more parallel writers is more chances for the outline to drift. |
+| `doc_language` | `en` | Default output language, always confirmable per run. A non-English document is held to the same plain-language bar in that language. |
+| `doc_dir` | `orc/orc-doc` | Where `/orc-doc` folders live. Project root, not `.claude/` — a document is a deliverable a human opens. |
 
 ## Fable 5 role override
 

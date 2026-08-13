@@ -6,14 +6,14 @@
 
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
-![Version](https://img.shields.io/badge/version-0.47.0-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.48.0-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
 ![Dependencies](https://img.shields.io/badge/dependencies-zero-lightgrey.svg?style=for-the-badge)
 ![GitHub stars](https://img.shields.io/github/stars/azure-id/orc?style=for-the-badge&color=yellow)
 
-**Latest: v0.47.0** · updated 2026-08-12 · [full changelog](CHANGELOG.md)
+**Latest: v0.48.0** · updated 2026-08-13 · [full changelog](CHANGELOG.md)
 
 </div>
 
@@ -192,6 +192,7 @@ with a plain tarball by itself.
 | **`/orc-grill`** | You have one idea and it is still vague. It asks rounds of questions, **looks facts up itself** instead of making you recite your own codebase, and never answers its own question. Ends when *you* say the idea matches what you meant. | [see it](mock-run/orc-grill.md) |
 | **`/orc-analyze`** | A document or a request → a scope-bounded, code-grounded spec. Every claim carries `file:line` evidence or becomes a question. Deep mode adds parallel scouts. | [see it](templates/skills/orc-analyze/examples/analyze-mock.md) |
 | **`/orc-plan`** | A request or a spec → a real task plan: grounded files, dependencies, facets, and a test disposition per task. | [see it](mock-run/orc-plan.md) |
+| **`/orc-doc`** | Writes the long document — a PRD, a TSD, a cross-team agreement, a status report or a runbook — as portable Markdown that imports cleanly into Notion, Obsidian, Docs, Coda, Craft and GitHub. **ORC never reads the document body**: writers each own one part file, checkers each read one line range, and the orchestrator holds a map. Resumable months later without you explaining anything twice. | [see it](mock-run/orc-doc.md) |
 | **`/orc-route`** | You have a plan — which lane should build it? It names one lane, the runners-up with what each costs you, and any lane that is impossible with the condition blocking it. **It refuses to route a sentence**, because that would be guessing. | [see it](mock-run/orc-route.md) |
 | **`/orc-explain`** | "Wait, what?" It says the last message again: the point first, then the background it assumed, then every ORC-only word defined in your project's terms. | [see it](mock-run/orc-explain.md) |
 | **`/orc-poly`** | One change across two or more repos, without drift. Peer source is read-only; it freezes the shared boundary into a contract and writes one plan per repo. It never builds. | [see it](templates/skills/orc-poly/examples/poly-run-mock.md) |
@@ -225,6 +226,31 @@ with a plain tarball by itself.
 | **`/orc-pr-setup`** | Decides where a big change gets cut into stacked pull requests: ordered layers, each with a purpose, a file list and a measured budget. It stops and asks at every uncertain seam, and never touches git. | [see it](mock-run/orc-pr-setup.md) |
 | **`/orc-pr-driver`** | Executes that plan: a branch per layer, a **mandatory green gate at each layer's own base**, `gh stack submit`, then restack and bottom-up merge. | [see it](mock-run/orc-pr-setup.md) |
 | **`/orc-handoff`** | For someone who does not read code. The grade comes from **whether a cheap check exists**, not from the file type. It shows the undo command *before* it writes, and never touches a red file. | [see it](mock-run/orc-handoff.md) |
+
+---
+
+## Documents that go somewhere
+
+`/orc-doc` writes the long document — and Markdown is the deliverable because of
+where a Markdown file can actually go:
+
+| Target | Imports `.md`? |
+|---|---|
+| Notion · Obsidian · Google Docs · Coda · Craft · Apple Notes · GitHub | **natively** |
+| Docusaurus · Hugo · Jekyll · MkDocs | yes — and these *want* YAML front matter |
+| Confluence | not natively. Plan for a marketplace importer app |
+| Microsoft OneNote | **no**. Convert to Word or PDF first |
+
+That table is load-bearing, not decoration: `orc doc lint --target` enforces the
+real limit of the place your document is going. Notion has three heading levels,
+so an H4 is an **error** there. A hard-wrapped paragraph is an error everywhere,
+because a wrap at 80 columns becomes a line break inside a Notion paragraph.
+
+Five base templates — `prd` · `tsd` · `collaboration` · `report` · `workflow` —
+each a floor rather than a cage. `orc doc templates` prints them; bring your own
+and its headings become the outline.
+
+**Full detail: [`guides/documents.md`](guides/documents.md).**
 
 ---
 
@@ -273,6 +299,7 @@ orc ui --stop          # shut this project's server down
 | Flow | the compiled DIY flow, its gate, and a stepper of every phase in order | `diy set`, `diy compile`, presets |
 | Crosslink | **Design** (the boundary as a graph) and **Settings** (each peer's freshness) | `crosslink add` / `remove` |
 | Promises · Boundary · Self-serve | the pact ledger, the boundary cards, and the surfaces a non-developer can change | `pact check`, `pact sync`, `handoff set` |
+| **Docs** | every `/orc-doc` document as a **ribbon** — one block per section, sized by its length and coloured by its state — plus the lint health card and the wave preview | `doc assemble` |
 | **Mocked Skill Use** | every mocked run that ships with ORC, grouped and searchable, with a reading pane | — |
 | Learn | the `orc onboarding` walkthrough, one section at a time | — |
 | Experiment | every lane with a copy button; opens a Claude session in a terminal | — |
@@ -412,35 +439,38 @@ a current audit: [EVAL-REPORT.md](EVAL-REPORT.md).
 **Full history: [CHANGELOG.md](CHANGELOG.md)** — or `orc changelog`, which prints
 only what is newer than the version you have.
 
-### v0.47.0 — the lane that refuses to produce _(2026-08-12)_
+### v0.48.0 — a document long enough to end a session, written anyway _(2026-08-13)_
 
-Every other lane in ORC makes something. **`/orc-challenge` grades a finished
-thing, writes down what is wrong, and then stops and makes you go and fix it
-somewhere else.**
+**`/orc-doc`** writes a PRD, a TSD, a cross-team agreement, a status report or a
+runbook — as Markdown that imports cleanly into the tools people actually read
+documents in.
 
-- **ORC judges, you fix, ORC re-judges — and it never fixes what it judged.**
-  A session that just wrote the fix would grade its own homework and it would
-  always pass. The separation is not friction; it is the measuring instrument.
-- **It never guesses what "good" means here.** Intake asks — in one round — what
-  the artifact must achieve, who reads it, and what you would accept as
-  finished. Those are frozen to disk, and every finding must name which of them
-  it serves; a finding that cannot is dropped.
-- **Three instruments, not three tiers.** `orc challenge lint` counts what a
-  computer can count, for free. A **cold reader** with `Read` and nothing else
-  answers questions from the artifact alone — `8/12` is what "someone new can
-  follow this" looks like as a number. A grounded judge spends its effort on the
-  one dimension no computer can reach. **It cannot declare a pass**: the CLI
-  computes that from the findings, which removes leniency as a possibility.
-- **Nothing evaporates.** Every finding from last round gets exactly one outcome
-  and a reason, or the verdict is rejected by name. Two ways out of the loop:
-  `orc challenge accept` (a known gap, visible forever with your reason) and
-  `orc challenge rebut` (the judge is wrong, and the next one must answer you).
-- **No iteration cap** — each turn is a person sitting down to work — so it
-  measures instead and reports `stalled` with three honest options.
-- Plus the `orc challenge` CLI family (12 subcommands, all `--json`), a
-  **Challenge panel** in `orc ui` with the convergence chart, and a mocked run.
+- **The orchestrator never reads the document body.** A 900-line TSD is ~30k
+  tokens; read it three times and the session is over. So nothing that holds
+  context ever holds the document: the CLI derives a section map (heading, line
+  range, hash), each writer owns **one part file**, each checker reads **one line
+  range**. A 10,000-line document costs the orchestrator ~750 lines instead of
+  20,000 — and a re-check after an edit re-reads only the sections whose hash
+  moved.
+- **The context is gathered once and frozen.** A resumed session reads
+  `context.md` — the request quoted verbatim — and never re-asks what you already
+  answered. It tells you which sections **you** edited, and then stops and asks
+  what should change. No change request, no work.
+- **Line arithmetic is the CLI's, never the model's.** The map is re-derived
+  after every write and never stored. `splice` replaces bottom-up so a length
+  change cannot shift a range that has not been used yet, and it **refuses** when
+  a section moved on disk — naming it, and overwriting nothing.
+- **Where the document is going is a real setting.** `orc doc lint` enforces that
+  target's actual limits: an H4 is an error under Notion, YAML front matter is
+  required under Docusaurus and banned everywhere else, and a hard-wrapped
+  paragraph is an error everywhere. Free, deterministic, and it always runs
+  before anything paid — its findings ride in the checker's slice so no model is
+  ever paid to count sentences.
+- Five base templates (each a floor, not a cage), two agents, the `orc doc` CLI
+  family, four config keys, a **Docs panel** in `orc ui` whose ribbon draws the
+  whole document in one picture, and a mocked run.
 
-Before that: **v0.46.1 — see a lane run before you pay for one** (`mock-run/`,
+Before that: **v0.47.0 — a lane that refuses to produce**, **v0.46.1 — see a lane run before you pay for one** (`mock-run/`,
 `orc mock-run`, and the Mocked Skill Use panel), and **v0.46.0 — a lane that
 remembers, a lane that declines, and a lane that measures**.
 [Read them in the changelog](CHANGELOG.md).

@@ -300,6 +300,12 @@ function isPrunable(rel) {
 // can never match. Pre-v0.34.1 installs kept it at .claude/skills/orc/run/,
 // where every `orc update` (and `orc doctor --fix`) destroyed it.
 const RUN_DIR_DEFAULT = ".claude/orc/run";
+// /orc-doc's folder (v0.48.0). Declared HERE, above CONFIG_META, because the
+// config default reads it — and held as ONE whole relative literal (the
+// CHALLENGE_DIR precedent) so it can be a registered contract token: a rename on
+// either side then fails the lint, which two assembled halves would not.
+const DOC_DIR = "orc/orc-doc/";
+const DOC_DIR_DEFAULT = DOC_DIR.replace(/\/$/, "");
 const LEGACY_RUN_REL = "skills/orc/run";
 const RUN_GITIGNORE = "# ORC run artifacts — never commit\n*\n!.gitignore\n";
 
@@ -755,6 +761,13 @@ const vPath = tag(
   (raw) => (raw && raw.trim() ? { value: raw } : { err: "must be a non-empty path" }),
   { kind: "path" }
 );
+// A short free-text value with a SUGGESTED pick-list rather than a closed one —
+// a language tag is not an enum ORC gets to decide, so the menu guides without
+// locking anybody out of the language they actually write in.
+const vText = tag(
+  (raw) => (raw && String(raw).trim() ? { value: String(raw).trim() } : { err: "must be a non-empty value" }),
+  { kind: "text" }
+);
 // GitHub delivery target for /orc-retro — owner/repo, nothing else.
 const vRepo = tag(
   (raw) =>
@@ -819,6 +832,11 @@ const CONFIG_META = [
   { key: "challenge_stall_after", def: 3, tier: "common", validate: vInt(2), options: [2, 3, 4, 5], desc: "Iterations with no net reduction in blocking findings before a cycle is flagged `stalled`. A FLAG, never a cap: each turn of this loop is a separate human sitting down to work, so refusing on iteration 6 would be refusing to review a hard document. It reports honestly and offers three options instead." },
   { key: "challenge_reader", def: "on", tier: "common", validate: vEnum("on", "off"), options: ["on", "off"], desc: "The COLD READ dispatch that measures D4 (can a reader with no prior context follow this?). A grounded judge structurally cannot answer that — it has read the repo and will fill every gap the document leaves. off → D4 reports NOT-CHECKED with that reason, never silently." },
   { key: "challenge_gate", def: "warn", tier: "common", validate: vEnum("off", "warn"), options: ["off", "warn"], desc: "Whether /orc's Phase-1 preflight prints one line when the document it is about to build from has an in-flight, failing challenge cycle. There is deliberately NO `block` — the /orc-pact precedent: the payoff is knowing, not gating." },
+  // --- v0.48.0 — /orc-doc ----------------------------------------------------
+  { key: "doc_max_lines_per_agent", def: 400, tier: "common", validate: vInt(40), options: [200, 400, 600, 800], desc: "Write/read budget per dispatched /orc-doc agent, in lines. It is what turns a 10,000-line document into ~25 slices the orchestrator never reads: a writer is given its own part file and a checker is given a line RANGE. A section is NEVER split to fit — a single section over this cap is reported as a planning smell and offered as a split at the outline gate instead." },
+  { key: "doc_max_parallel", def: 4, tier: "common", validate: vInt(1), options: [1, 2, 3, 4], desc: "Agents per /orc-doc wave. HARD CAP 4 — a larger value is clamped and the clamp is announced, because more parallel writers is more chances for the outline to drift and the assemble wave is what has to reconcile it. Each agent writes its own file in .work/, so no two ever have document.md open." },
+  { key: "doc_language", def: "en", tier: "common", validate: vText, options: ["en", "id", "es", "de", "fr", "ja"], desc: "Default output language for /orc-doc, always confirmable per run. A non-English document is held to the SAME plain-language bar in that language — short sentences, common words, acronyms expanded; technical terms with no natural translation stay in English and are glossed once." },
+  { key: "doc_dir", def: DOC_DIR_DEFAULT, tier: "advanced", validate: vPath, desc: "Where /orc-doc folders live. Project root, not .claude/ — a document is a deliverable a human opens, and the same call /orc-quick, /orc-brainstorm and poly-repo-implementation/ already made." },
   { key: "wiki_scan_tier", def: "ladder", tier: "advanced", validate: vEnum("ladder", "always_deep"), desc: "Wiki scan tier: ladder picks light/deep per delta (first scan, STRUCTURAL, wide delta or a new exported symbol → deep; otherwise light), always_deep restores pre-v0.46.0 behaviour. The resolved tier is always printed — a cheaper model is never a quiet substitution." },
   { key: "wiki_tier_deep_files", def: 3, tier: "advanced", validate: vInt(1), desc: "Covered files touched at or above this count send the refresh to the DEEP scanner." },
   { key: "wiki_refresh_budget", def: 0, tier: "advanced", validate: vInt(0), desc: "Max scan-tasks per refresh run; 0 = no cap. A capped refresh is a PLANNED stop, not an interrupt: sync has already run, so the wiki is registered and consistent, and the remaining docs are AGING, not broken. Separate from the fixed pause-every-5 rule — do not merge them." },
@@ -9339,6 +9357,1671 @@ function challenge() {
   }
 }
 
+// ── /orc-doc (v0.48.0) — the lane that writes the long document ─────────────
+//
+// THE ONE CONTRACT THIS HALF EXISTS TO ENFORCE: the orchestrator never reads the
+// document body. It knows the document only through the derived section map and
+// through what the agents it dispatched reported back.
+//
+// Line arithmetic is the one job a language model is guaranteed to get wrong,
+// and the entire token saving depends on the line numbers being right. So the
+// map is computed HERE and by nothing else, re-derived after every write, and
+// NEVER stored — the same rule that governs computeWikiFreshness and the Flow
+// stepper. A stored line number is a wrong line number one edit later.
+//
+// What this half owns, and a skill that recomputes one of these has forked it:
+//   · the section map + its absolute line numbers
+//   · the per-section hashes, and the drift/`user-edited` state derived from them
+//   · the batching (never split a section, ≤ doc_max_parallel, ≤ the line budget)
+//   · the lint findings and the readability signals
+//   · the completion state and every exit code
+// The skill owns the prose: context.md, RESUME.md, changelog.md, the questions.
+
+const DOC_STATE_FILE = "doc.json";
+const DOC_FILE = "document.md";
+const DOC_OUTLINE_FILE = "outline.md";
+const DOC_WORK = ".work";
+// The section states. Mirrored in references/chunking.md — documented drift the
+// token lint cannot see (a word list is not a single token), so a golden test
+// compares the two.
+const DOC_STATES = ["planned", "written", "checked", "user-edited", "open"];
+const DOC_ROLES = ["write", "check", "edit"];
+const DOC_LENGTHS = ["short", "standard", "thorough"];
+// The hard cap is 4 and a larger value is CLAMPED, never honoured: five agents
+// writing five parts of one document is five chances for the outline to drift,
+// and the wave that assembles them is the one that has to reconcile it.
+const DOC_MAX_PARALLEL_CAP = 4;
+
+const DOC_VALUE_FLAGS = [
+  "--type", "--template", "--title", "--language", "--target", "--length",
+  "--role", "--section", "--set", "--dir", "--budget", "--limit",
+];
+
+function docPositionals() {
+  const out = [];
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a === "--global") continue;
+    if (DOC_VALUE_FLAGS.includes(a)) {
+      i++;
+      continue;
+    }
+    if (a.startsWith("-")) continue;
+    out.push(a);
+  }
+  return out;
+}
+
+function docOpt(name) {
+  for (let i = 0; i < args.length; i++)
+    if (args[i] === name && args[i + 1] !== undefined && !String(args[i + 1]).startsWith("--"))
+      return String(args[i + 1]);
+  return undefined;
+}
+
+const docSlugify = (raw) =>
+  String(raw || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60);
+
+const docStamp = () => {
+  const d = new Date();
+  return `${two(d.getDate())}${two(d.getMonth() + 1)}${String(d.getFullYear()).slice(2)}`;
+};
+
+// ── where a Markdown file can actually go (§1.1) ────────────────────────────
+// This table is not decoration — it is LOAD-BEARING. `orc doc lint --target`
+// enforces the real limit of the place the document is going, and a lint rule
+// that came from a real product limit is worth ten invented ones.
+const DOC_TARGETS = [
+  {
+    id: "generic", label: "Generic Markdown", imports: "yes",
+    how: "the intersection of every target below — the safe default",
+    watch: "nothing target-specific; the strictest rule of each target applies",
+    max_heading: 3, front_matter: "ban",
+  },
+  {
+    id: "notion", label: "Notion", imports: "native",
+    how: "Settings ▸ Import ▸ Text & Markdown; a ZIP of a folder preserves structure",
+    watch: "only H1-H3 exist — H4+ degrades to bold text. 5 MB/file free, 50 MB paid, 5 GB/ZIP. A hidden file in the ZIP fails the import",
+    max_heading: 3, front_matter: "ban",
+  },
+  {
+    id: "obsidian", label: "Obsidian", imports: "native",
+    how: "drop the file or the folder into the vault",
+    watch: "nothing — this is its native storage format",
+    max_heading: 6, front_matter: "allow",
+  },
+  {
+    id: "gdocs", label: "Google Docs", imports: "native",
+    how: "File ▸ Open an .md, or upload to Drive and open with Docs. Import/export is on by default",
+    watch: "tables convert, but complex ones flatten",
+    max_heading: 6, front_matter: "ban",
+  },
+  {
+    id: "coda", label: "Coda", imports: "native",
+    how: "type /import on the canvas and pick Markdown (or /markdown); multi-file is supported",
+    watch: "nothing notable",
+    max_heading: 6, front_matter: "ban",
+  },
+  {
+    id: "craft", label: "Craft", imports: "yes",
+    how: "import an Obsidian/Markdown folder; it converts files to documents with backlinks and attachments",
+    watch: "nothing notable",
+    max_heading: 6, front_matter: "ban",
+  },
+  {
+    id: "applenotes", label: "Apple Notes", imports: "native",
+    how: "import the .md; it converts the syntax to rich text on the way in",
+    watch: "macOS Tahoe / iOS 26 and newer only — older versions have no support at all",
+    max_heading: 6, front_matter: "ban",
+  },
+  {
+    id: "github", label: "GitHub / GitLab", imports: "native",
+    how: "it IS the format — commit the file",
+    watch: "a relative image path must exist in the repository",
+    max_heading: 6, front_matter: "ban",
+  },
+  {
+    id: "docusaurus", label: "Docusaurus", imports: "yes",
+    how: "drop it into the content tree",
+    watch: "this one WANTS YAML front matter — the only case where the default flips",
+    max_heading: 6, front_matter: "require",
+  },
+  {
+    id: "hugo", label: "Hugo", imports: "yes",
+    how: "drop it into content/",
+    watch: "wants YAML front matter (title, date)",
+    max_heading: 6, front_matter: "require",
+  },
+  {
+    id: "jekyll", label: "Jekyll", imports: "yes",
+    how: "drop it into _posts/ or a collection",
+    watch: "wants YAML front matter, and will not render the page without it",
+    max_heading: 6, front_matter: "require",
+  },
+  {
+    id: "confluence", label: "Confluence", imports: "app-required",
+    how: "a marketplace app (Markdown Importer & Editor, Markdown Importer for Confluence) or a converter script",
+    watch: "no native file import. Plan for an admin-installed app — this is the one mainstream target that costs a step",
+    max_heading: 6, front_matter: "ban",
+  },
+  {
+    id: "onenote", label: "Microsoft OneNote", imports: "no",
+    how: "convert to Word or PDF first, then import that",
+    watch: "zero native support on every platform. SharePoint/OneDrive rendering an .md FILE is not the same as a OneNote page",
+    max_heading: 6, front_matter: "ban",
+  },
+];
+const docTarget = (id) => DOC_TARGETS.find((t) => t.id === String(id || "generic")) || DOC_TARGETS[0];
+
+// ── the five base templates (§2) ────────────────────────────────────────────
+// GOLDEN: every shipped references/templates/<type>.md must carry exactly these
+// H2 headings, in this order. A test compares the two, because a template whose
+// skeleton disagrees with the batching table produces a plan for a document
+// nobody is writing.
+//
+// `affinity` keeps sections that reference each other in the SAME agent where
+// the budget allows — cross-agent consistency is expensive to check and free to
+// prevent. `required: false` sections may be dropped at the outline gate;
+// a required section with no material becomes a visible `> **Open:**` line.
+const DOC_TEMPLATES = [
+  {
+    type: "prd",
+    label: "PRD — Product Requirements Document",
+    about: "cover → problem → goals → requirements → risks → rollout, the shape every current template converges on",
+    sections: [
+      { heading: "Document info", required: true, budget: 20, affinity: "meta", purpose: "title, owner, status, version, date, reviewers — as a table" },
+      { heading: "Summary", required: true, budget: 30, affinity: "frame", purpose: "what we are building, in three sentences" },
+      { heading: "Problem and context", required: true, budget: 90, affinity: "frame", purpose: "who hurts, and what the evidence is" },
+      { heading: "Goals and success metrics", required: true, budget: 80, affinity: "goals", purpose: "each metric with a baseline and a target" },
+      { heading: "Non-goals", required: true, budget: 40, affinity: "goals", purpose: "what this deliberately does not do" },
+      { heading: "Users and jobs to be done", required: true, budget: 70, affinity: "users", purpose: "who they are and what they are trying to get done" },
+      { heading: "Scenarios and user stories", required: true, budget: 110, affinity: "users", purpose: "the concrete paths through the product" },
+      { heading: "Functional requirements", required: true, budget: 220, affinity: "req", purpose: "numbered FR-1…, each with a priority" },
+      { heading: "Non-functional requirements", required: true, budget: 120, affinity: "req", purpose: "performance, security, privacy, accessibility, i18n, compliance" },
+      { heading: "Experience and flows", required: false, budget: 90, affinity: "ux", purpose: "links to designs, described in words for readers who cannot open them" },
+      { heading: "Dependencies and assumptions", required: true, budget: 60, affinity: "risk", purpose: "what has to be true, and who else is involved" },
+      { heading: "Risks and open questions", required: true, budget: 80, affinity: "risk", purpose: "each with an owner" },
+      { heading: "Rollout and measurement plan", required: true, budget: 80, affinity: "ship", purpose: "how it reaches users and how we know it worked" },
+      { heading: "Milestones", required: true, budget: 40, affinity: "ship", purpose: "a table: milestone, due, status" },
+      { heading: "Out of scope for this release", required: true, budget: 40, affinity: "ship", purpose: "explicitly deferred, so nobody re-litigates it" },
+      { heading: "Glossary", required: false, budget: 40, affinity: "back", purpose: "every term the audience would not already know" },
+      { heading: "Revision history", required: true, budget: 20, affinity: "back", purpose: "a table: version, date, author, what changed" },
+    ],
+  },
+  {
+    type: "tsd",
+    label: "TSD — Technical Specification / Design Document",
+    about: "the durable design-doc structure whose whole point is that the document exists to write down the trade-offs",
+    sections: [
+      { heading: "Document info", required: true, budget: 20, affinity: "meta", purpose: "title, author, status, reviewers, date" },
+      { heading: "Context and scope", required: true, budget: 90, affinity: "frame", purpose: "the landscape this is being built into" },
+      { heading: "Goals and non-goals", required: true, budget: 60, affinity: "frame", purpose: "both halves; the non-goals are what stop the scope moving" },
+      { heading: "Overview of the design", required: true, budget: 90, affinity: "design", purpose: "the whole thing in one page, before any detail" },
+      { heading: "Detailed design", required: true, budget: 300, affinity: "design", purpose: "H3 subsections: architecture, data model, interfaces, key flows, failure handling" },
+      { heading: "Alternatives considered", required: true, budget: 120, affinity: "design", purpose: "one subsection each: the option, the trade-off, why not. MANDATORY — this is why the document exists" },
+      { heading: "Cross-cutting concerns", required: true, budget: 110, affinity: "ops", purpose: "security, privacy, observability, cost, compliance" },
+      { heading: "Migration, rollout and backout", required: true, budget: 90, affinity: "ops", purpose: "including how to undo it" },
+      { heading: "Testing strategy", required: true, budget: 70, affinity: "ops", purpose: "what proves this works, at which level" },
+      { heading: "Operational readiness", required: true, budget: 70, affinity: "ops", purpose: "SLOs, alerts, and the runbook this points at" },
+      { heading: "Open questions", required: true, budget: 40, affinity: "back", purpose: "each with an owner and a date it must be answered by" },
+      { heading: "Timeline and milestones", required: false, budget: 40, affinity: "back", purpose: "a table" },
+      { heading: "Revision history", required: true, budget: 20, affinity: "back", purpose: "a table: version, date, author, what changed" },
+    ],
+  },
+  {
+    type: "collaboration",
+    label: "Collaboration — cross-team working agreement",
+    about: "two or more teams agreeing who owns what and how they will talk; RACI is the spine",
+    sections: [
+      { heading: "Document info", required: true, budget: 20, affinity: "meta", purpose: "owner, version, date, the teams it binds" },
+      { heading: "Purpose and scope", required: true, budget: 60, affinity: "frame", purpose: "what this agreement covers, and what it does not" },
+      { heading: "Parties", required: true, budget: 60, affinity: "frame", purpose: "a table: team, what they bring, named contact, time zone" },
+      { heading: "Shared goal and definition of success", required: true, budget: 50, affinity: "frame", purpose: "one goal both sides would state the same way" },
+      { heading: "Ownership split (RACI)", required: true, budget: 110, affinity: "own", purpose: "a table — row = deliverable or decision, column = team" },
+      { heading: "Interfaces between us", required: true, budget: 110, affinity: "own", purpose: "what each side hands over, in what format, by when" },
+      { heading: "Decision rights and escalation path", required: true, budget: 70, affinity: "own", purpose: "who decides, who breaks a tie, and how fast" },
+      { heading: "Communication plan", required: true, budget: 60, affinity: "comm", purpose: "channel, cadence, meeting, status format" },
+      { heading: "Dependencies and critical dates", required: true, budget: 60, affinity: "comm", purpose: "a table, with the owner of each date" },
+      { heading: "Decision log", required: true, budget: 60, affinity: "back", purpose: "a table: date, decision, who decided, why" },
+      { heading: "Risks", required: true, budget: 50, affinity: "back", purpose: "each with an owner and a mitigation" },
+      { heading: "Open questions", required: true, budget: 40, affinity: "back", purpose: "each with an owner" },
+      { heading: "Revision history", required: true, budget: 20, affinity: "back", purpose: "a table: version, date, author, what changed" },
+    ],
+  },
+  {
+    type: "report",
+    label: "Report — status / outcome report",
+    about: "executive summary plus RAG, because the reader is skimming for one thing: is this on track, and what do you need from me",
+    sections: [
+      { heading: "Document info", required: true, budget: 20, affinity: "meta", purpose: "period covered, author, audience, distribution" },
+      { heading: "Executive summary", required: true, budget: 30, affinity: "frame", purpose: "one to three sentences, ending in the ask" },
+      { heading: "Overall status", required: true, budget: 50, affinity: "frame", purpose: "green / amber / red, plus a per-workstream RAG table" },
+      { heading: "Results against target", required: true, budget: 60, affinity: "results", purpose: "a table: metric, target, actual, delta" },
+      { heading: "What shipped this period", required: true, budget: 60, affinity: "results", purpose: "facts, with links" },
+      { heading: "What is planned next period", required: true, budget: 60, affinity: "results", purpose: "commitments, with owners" },
+      { heading: "Risks and issues", required: true, budget: 80, affinity: "risk", purpose: "a table: description, impact, owner, mitigation, due" },
+      { heading: "Decisions needed from you", required: true, budget: 60, affinity: "risk", purpose: "the section that justifies the document existing" },
+      { heading: "Effort and budget", required: false, budget: 40, affinity: "back", purpose: "optional — include it only if somebody asked" },
+      { heading: "Milestones", required: true, budget: 40, affinity: "back", purpose: "a table: milestone, due, status" },
+      { heading: "Evidence and links", required: true, budget: 40, affinity: "back", purpose: "where every number above came from" },
+      { heading: "Revision history", required: true, budget: 20, affinity: "back", purpose: "a table: version, date, author, what changed" },
+    ],
+  },
+  {
+    type: "workflow",
+    label: "Workflow — SOP / runbook",
+    about: "purpose, scope, responsibilities, procedure — written for the least experienced person qualified to do the job",
+    sections: [
+      { heading: "Document info", required: true, budget: 20, affinity: "meta", purpose: "owner, version, approved by, next review date" },
+      { heading: "Purpose", required: true, budget: 30, affinity: "frame", purpose: "what this procedure achieves" },
+      { heading: "Scope: when to use this, and when not to", required: true, budget: 50, affinity: "frame", purpose: "both halves — the second one is the half people skip" },
+      { heading: "Roles and responsibilities", required: true, budget: 50, affinity: "frame", purpose: "who may run this, and who must be told" },
+      { heading: "Before you start", required: true, budget: 50, affinity: "proc", purpose: "access, tools and inputs you need in hand" },
+      { heading: "The procedure", required: true, budget: 240, affinity: "proc", purpose: "numbered steps; each step: who does it, what they do, what they should see, how to confirm it worked" },
+      { heading: "Decision points", required: true, budget: 60, affinity: "proc", purpose: "condition, then which step to go to" },
+      { heading: "When it goes wrong", required: true, budget: 110, affinity: "fail", purpose: "a table: symptom, likely cause, what to do, how to roll back" },
+      { heading: "Escalation", required: true, budget: 40, affinity: "fail", purpose: "who to contact, at what point, on what channel" },
+      { heading: "Definitions", required: false, budget: 40, affinity: "back", purpose: "every term the least experienced reader would not know" },
+      { heading: "Related documents", required: false, budget: 30, affinity: "back", purpose: "what this points at, and what points at this" },
+      { heading: "Revision history", required: true, budget: 20, affinity: "back", purpose: "a table: version, date, author, what changed" },
+    ],
+  },
+];
+const DOC_TYPES = DOC_TEMPLATES.map((t) => t.type);
+const docTemplate = (type) => DOC_TEMPLATES.find((t) => t.type === String(type || "").toLowerCase());
+
+function docPaths(claudeDir, slug) {
+  const root = repoRootOf(claudeDir);
+  let rel = DOC_DIR_DEFAULT;
+  try {
+    rel = resolvedConfig(claudeDir).doc_dir || DOC_DIR_DEFAULT;
+  } catch (_) {}
+  const dir = path.isAbsolute(rel) ? rel : path.join(root, ...String(rel).split(/[\\/]/).filter(Boolean));
+  const folder = slug ? path.join(dir, slug) : null;
+  return {
+    root,
+    rel: String(rel).replace(/\\/g, "/"),
+    dir,
+    folder,
+    state: folder ? path.join(folder, DOC_STATE_FILE) : null,
+    document: folder ? path.join(folder, DOC_FILE) : null,
+    outline: folder ? path.join(folder, DOC_OUTLINE_FILE) : null,
+    work: folder ? path.join(folder, DOC_WORK) : null,
+  };
+}
+
+function docRead(claudeDir, slug) {
+  const p = docPaths(claudeDir, slug);
+  if (!p.state || !fs.existsSync(p.state)) return null;
+  try {
+    const d = JSON.parse(fs.readFileSync(p.state, "utf8"));
+    d.outline = Array.isArray(d.outline) ? d.outline : [];
+    d.sections = d.sections || {};
+    d.extracts = d.extracts || {};
+    d.cycles = Array.isArray(d.cycles) ? d.cycles : [];
+    return d;
+  } catch (_) {
+    return null;
+  }
+}
+
+// doc.json HAS EXACTLY ONE WRITER — this function, reached only from an
+// `orc doc` subcommand. A model never edits it, and never invents a line number.
+function docWrite(claudeDir, slug, d) {
+  const p = docPaths(claudeDir, slug);
+  fs.mkdirSync(p.folder, { recursive: true });
+  d.version = 1;
+  d.updated_at = fmtStamp(new Date());
+  fs.writeFileSync(p.state, JSON.stringify(d, null, 2) + "\n");
+  return p.state;
+}
+
+function docList(claudeDir) {
+  const p = docPaths(claudeDir);
+  if (!fs.existsSync(p.dir)) return [];
+  return fs
+    .readdirSync(p.dir, { withFileTypes: true })
+    .filter((e) => e.isDirectory() && fs.existsSync(path.join(p.dir, e.name, DOC_STATE_FILE)))
+    .map((e) => e.name)
+    .sort();
+}
+
+const docLines = (text) => String(text).replace(/\r\n/g, "\n").split("\n");
+const docHash = (s) => sha256(String(s).replace(/\r\n/g, "\n").replace(/\s+$/, ""));
+
+// The heading id: ordinal + the slugified heading. Stable across every rewrite
+// of the BODY, which is what a re-check needs; an INSERTED section renumbers its
+// followers, which is what the rename repair below is for.
+const docSectionId = (n, heading) => `${two(n)}-${docSlugify(heading).slice(0, 40) || "section"}`;
+
+// ── the section map — DERIVED, NEVER STORED (§5.2) ──────────────────────────
+// Because it is re-derived after every single write, no line number in this
+// system is ever stale. That is the entire reason range-based reading is safe.
+function docScan(text) {
+  const lines = docLines(text);
+  const heads = [];
+  let fence = false;
+  for (let i = 0; i < lines.length; i++) {
+    if (/^\s*(```|~~~)/.test(lines[i])) {
+      fence = !fence;
+      continue;
+    }
+    if (fence) continue;
+    const m = lines[i].match(/^(#{1,6})\s+(.+?)\s*$/);
+    if (m) heads.push({ line: i + 1, level: m[1].length, heading: m[2].replace(/[*_`]/g, "").trim() });
+  }
+  const h2 = heads.filter((h) => h.level === 2);
+  const sections = h2.map((h, i) => {
+    const start = h.line;
+    const end = i + 1 < h2.length ? h2[i + 1].line - 1 : lines.length;
+    const body = lines.slice(start - 1, end).join("\n");
+    return {
+      id: docSectionId(i + 1, h.heading),
+      ordinal: i + 1,
+      heading: h.heading,
+      level: 2,
+      start,
+      end,
+      lines: end - start + 1,
+      hash: docHash(body),
+      text: body,
+    };
+  });
+  return {
+    total_lines: lines.length,
+    preamble_end: h2.length ? h2[0].line - 1 : lines.length,
+    headings: heads,
+    sections,
+  };
+}
+
+// A heading whose TEXT changed but whose position and neighbours match is the
+// SAME section with a new id — repaired, never lost. A heading that appears with
+// no such match is new. Without this, one typo in a heading throws away that
+// section's whole history.
+// A SECTION'S IDENTITY COMES FROM THE OUTLINE, NEVER FROM ITS POSITION IN THE
+// FILE. `docScan` can only number what it sees, and a skipped optional section
+// shifts every ordinal after it — so a purely positional id would rename half
+// the document the first time somebody dropped a section nobody asked for.
+//
+// Two passes, in this order:
+//   1. exact heading match, consumed in document order — the normal case;
+//   2. RENAME REPAIR for what is left: an unmatched section sitting between two
+//      matched neighbours takes the one unconsumed outline entry between them.
+//      A heading whose text changed but whose position and neighbours match is
+//      the SAME section with a new name. Anything still unmatched is genuinely
+//      new and keeps its positional id.
+function docReconcile(d, scan) {
+  const outline = d.outline || [];
+  const bySlug = new Map();
+  outline.forEach((o, i) => {
+    const k = docSlugify(o.heading);
+    if (!bySlug.has(k)) bySlug.set(k, []);
+    bySlug.get(k).push(i);
+  });
+  const used = new Set();
+  const sections = scan.sections.map((s) => ({ ...s, outline_index: null }));
+
+  for (const s of sections) {
+    const cands = bySlug.get(docSlugify(s.heading)) || [];
+    const hit = cands.find((i) => !used.has(i));
+    if (hit === undefined) continue;
+    used.add(hit);
+    s.outline_index = hit;
+    s.id = outline[hit].id;
+  }
+
+  const repairs = [];
+  const nextMatched = (from) => {
+    for (let j = from; j < sections.length; j++) if (sections[j].outline_index !== null) return sections[j].outline_index;
+    return outline.length;
+  };
+  for (let k = 0; k < sections.length; k++) {
+    const s = sections[k];
+    if (s.outline_index !== null) continue;
+    const prev = k > 0 && sections[k - 1].outline_index !== null ? sections[k - 1].outline_index : -1;
+    const next = nextMatched(k + 1);
+    const gap = [];
+    for (let i = prev + 1; i < next; i++) if (!used.has(i)) gap.push(i);
+    // Exactly one candidate, or it is ambiguous and nothing is repaired: a
+    // guessed identity is worse than a lost one, because it silently attaches a
+    // section's whole history to the wrong text.
+    if (gap.length !== 1) continue;
+    const i = gap[0];
+    used.add(i);
+    s.outline_index = i;
+    const from = outline[i].id;
+    // The new id is built from the OUTLINE slot, so ids stay in outline order
+    // even when the file's own ordinals do not.
+    s.id = docSectionId(i + 1, s.heading);
+    repairs.push({ from, to: s.id, heading: s.heading, index: i });
+  }
+  return { sections, repairs };
+}
+
+function docApplyRepairs(d, repairs) {
+  for (const r of repairs) {
+    const rec = d.sections[r.from];
+    if (rec) {
+      d.sections[r.to] = { ...rec, renamed_from: r.from };
+      delete d.sections[r.from];
+    }
+    const o = (d.outline || [])[r.index] || (d.outline || []).find((x) => x.id === r.from);
+    if (o) {
+      o.id = r.to;
+      o.heading = r.heading;
+    }
+    if (d.extracts && d.extracts[r.from]) {
+      d.extracts[r.to] = d.extracts[r.from];
+      delete d.extracts[r.from];
+    }
+  }
+  return repairs.length;
+}
+
+// `state` is COMPUTED by comparing the live hash to the one doc.json recorded at
+// the end of the last cycle — never stored as a claim. A stored status is a
+// status that lies the moment somebody saves a file.
+function docStateOfSection(rec, live) {
+  if (!live) return "planned";
+  if (/^\s*>\s*\*\*Open:/m.test(live.text) && live.lines <= 6) return "open";
+  if (!rec || !rec.hash) return "written";
+  if (rec.hash !== live.hash) return "user-edited";
+  return DOC_STATES.includes(rec.state) && rec.state !== "planned" ? rec.state : "written";
+}
+
+function docMapView(claudeDir, slug, { persist = false } = {}) {
+  const d = docRead(claudeDir, slug);
+  if (!d) return null;
+  const p = docPaths(claudeDir, slug);
+  if (!fs.existsSync(p.document))
+    return { d, paths: p, document: null, sections: [], total_lines: 0, repairs: [] };
+  const text = fs.readFileSync(p.document, "utf8");
+  const scan = docScan(text);
+  const { sections: resolved, repairs } = docReconcile(d, scan);
+  // The repair is the ONE thing map writes, and it is a repair, not a claim:
+  // without it the identity of a section a human renamed is lost forever, and
+  // nothing else in this system ever runs after a hand edit.
+  if (persist && repairs.length) {
+    docApplyRepairs(d, repairs);
+    docWrite(claudeDir, slug, d);
+  }
+  // The scan is re-keyed to the outline's ids, so `scan.sections` and the view
+  // agree — `extract` reads the text off one and the hash off the other.
+  scan.sections = resolved;
+  const outline = d.outline || [];
+  const sections = resolved.map((s) => {
+    const rec = d.sections[s.id];
+    const o = s.outline_index === null ? null : outline[s.outline_index];
+    return {
+      id: s.id,
+      heading: s.heading,
+      level: s.level,
+      start: s.start,
+      end: s.end,
+      lines: s.lines,
+      hash: s.hash,
+      state: docStateOfSection(rec, s),
+      required: o ? !!o.required : true,
+      purpose: o ? o.purpose || null : null,
+      findings: rec && rec.findings ? rec.findings : 0,
+      cycle: rec && rec.cycle ? rec.cycle : null,
+      renamed_from: (rec && rec.renamed_from) || null,
+    };
+  });
+  return {
+    d,
+    paths: p,
+    document: p.document,
+    total_lines: scan.total_lines,
+    preamble_end: scan.preamble_end,
+    sections,
+    scan,
+    repairs,
+  };
+}
+
+// The one status line every listing parses, so a listing never has to open
+// doc.json. Same shape as the run trio's `Where it stands:` line.
+function docWhereLine(d, view) {
+  const written = view ? view.sections.filter((s) => s.state !== "planned" && s.state !== "open").length : 0;
+  const total = (d.outline || []).length || (view ? view.sections.length : 0);
+  return `Where it stands:  /orc-doc · ${String(d.type || "").toUpperCase()} · cycle ${d.cycle || 0} · ${written} of ${total} sections written`;
+}
+
+// ── the free check (§4.4 + §7) ──────────────────────────────────────────────
+// Two honesty rules, printed by the command itself:
+//   1. A readability signal is a SIGNAL, not a verdict. It never blocks.
+//   2. It is English-specific and heuristic — passive detection is a pattern
+//      match and a syllable count is an estimate. Say so, once, on the output.
+// Its real payoff: the findings ride in the checker's slice, so a model never
+// spends a token counting sentences.
+const DOC_SENTENCE_MAX = 35;
+const DOC_SENTENCE_AVG_MAX = 20;
+const DOC_HARDWRAP_MIN = 60;
+
+function docLintRun(text, targetId) {
+  const tgt = docTarget(targetId);
+  const lines = docLines(text);
+  const findings = [];
+  let seq = 0;
+  const add = (severity, rule, line, what, quote) =>
+    findings.push({
+      id: "D-" + String(++seq).padStart(3, "0"),
+      severity, // "error" blocks the handoff; "warn" is advisory
+      rule,
+      line,
+      what,
+      quote: quote ? String(quote).slice(0, 160) : null,
+    });
+
+  // front matter, first — every rule below counts lines from the same file
+  const hasFront = /^---\s*$/.test(lines[0] || "");
+  let frontEnd = 0;
+  if (hasFront) {
+    for (let i = 1; i < lines.length; i++)
+      if (/^---\s*$/.test(lines[i])) {
+        frontEnd = i + 1;
+        break;
+      }
+  }
+  if (tgt.front_matter === "require" && !hasFront)
+    add("error", "front-matter-required", 1, `--target ${tgt.id} requires YAML front matter, and will not render the page without it`);
+  if (tgt.front_matter === "ban" && hasFront)
+    add("error", "front-matter-banned", 1, `--target ${tgt.id} renders YAML front matter as visible junk at the top of the page`);
+
+  const scan = docScan(text);
+  const h1 = scan.headings.filter((h) => h.level === 1);
+  if (h1.length === 0) add("error", "no-h1", 1, "no H1 — every importer's outline builder starts from one");
+  if (h1.length > 1)
+    for (const h of h1.slice(1)) add("error", "many-h1", h.line, `a second H1: "${h.heading}". Exactly one is the title`);
+  let prev = 0;
+  for (const h of scan.headings) {
+    if (prev && h.level > prev + 1)
+      add("error", "skipped-level", h.line, `heading jumps from H${prev} to H${h.level} — the outline builder loses the branch`);
+    prev = h.level;
+    if (h.level > tgt.max_heading)
+      add("error", "heading-too-deep", h.line, `H${h.level} is deeper than ${tgt.label} supports (max H${tgt.max_heading}) — it degrades to bold text`, h.heading);
+    if (/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u.test(h.heading))
+      add("warn", "emoji-heading", h.line, "an emoji in a heading — some importers slug headings and mangle the anchor", h.heading);
+  }
+
+  // Setext headings survive nothing, and an underline that looks like a rule is
+  // a heading the outline builder never sees.
+  for (let i = 1; i < lines.length; i++)
+    if (/^(=+|-{3,})\s*$/.test(lines[i]) && /\S/.test(lines[i - 1]) && !/^\s*[|>#-]/.test(lines[i - 1]) && i > frontEnd)
+      add("error", "setext-heading", i + 1, "a setext (underlined) heading — use ATX (`##`) so every importer sees it", lines[i - 1]);
+
+  let fence = false;
+  let fenceLang = true;
+  let tableCols = 0;
+  let prevProse = null;
+  for (let i = 0; i < lines.length; i++) {
+    const n = i + 1;
+    const l = lines[i];
+    if (n <= frontEnd) continue;
+
+    const fm = l.match(/^\s*(```|~~~)(\s*[A-Za-z0-9_+-]*)/);
+    if (fm) {
+      if (!fence) {
+        fence = true;
+        fenceLang = !!(fm[2] || "").trim();
+        if (fm[1] === "~~~") add("error", "tilde-fence", n, "a `~~~` fence — only ``` fences convert reliably");
+        else if (!fenceLang) add("warn", "fence-no-language", n, "a code fence with no language tag");
+      } else fence = false;
+      prevProse = null;
+      continue;
+    }
+    if (fence) continue;
+
+    if (/^\s{4,}\S/.test(l) && !/^\s*[-*+\d]/.test(l) && !/^\s*\|/.test(l))
+      add("warn", "indented-code", n, "an indented code block — it converts unreliably; use a ``` fence");
+
+    if (/<!--/.test(l)) add("error", "html-comment", n, "an HTML comment — some importers render it as literal text", l.trim());
+    if (/<(table|div|span|br|img|p|b|i|u|font|sup|sub)\b[^>]*>/i.test(l))
+      add("error", "raw-html", n, "raw HTML — it survives almost no import path", l.trim());
+
+    if (/\[\[[^\]]+\]\]/.test(l)) add("error", "wikilink", n, "a [[wikilink]] — Obsidian-only syntax", l.trim());
+    if (/\[\^[^\]]+\]/.test(l)) add("error", "footnote", n, "a footnote — Pandoc-only syntax", l.trim());
+    if (/^:\s+\S/.test(l) && /\S/.test(lines[i - 1] || "")) add("warn", "definition-list", n, "a definition list — Pandoc-only syntax", l.trim());
+
+    for (const m of l.matchAll(/!\[([^\]]*)\]\(([^)]+)\)/g)) {
+      if (!m[1].trim()) add("error", "image-no-alt", n, "an image with no alt text — the alt text is what survives an import", m[0]);
+      const near = (lines[i + 1] || "") + (lines[i - 1] || "");
+      if (!/\S/.test(near))
+        add("warn", "image-no-description", n, "an image with no one-line text description beside it — images do not travel through most imports", m[0]);
+    }
+
+    if (/^\s*\|/.test(l)) {
+      const cells = l.trim().replace(/^\||\|$/g, "").split("|").length;
+      if (/^\s*\|[\s:|-]+\|?\s*$/.test(l)) {
+        // the delimiter row — it defines the column count
+      } else if (!tableCols) tableCols = cells;
+      else if (cells !== tableCols)
+        add("warn", "ragged-table", n, `a table row with ${cells} cells where the header has ${tableCols} — complex tables flatten on import`, l.trim());
+      prevProse = null;
+      continue;
+    }
+    tableCols = 0;
+
+    // THE HARD-WRAP RULE — the single most common import-mangling bug. A wrap at
+    // 80 columns becomes a line break INSIDE a Notion or Docs paragraph.
+    const isProse = /\S/.test(l) && !/^\s*[-*+>#|]/.test(l) && !/^\s*\d+[.)]\s/.test(l);
+    if (
+      isProse &&
+      prevProse &&
+      !prevProse.reported &&
+      prevProse.text.length >= DOC_HARDWRAP_MIN &&
+      !/[.:;!?]\s*$/.test(prevProse.text)
+    )
+      add("error", "hard-wrap", prevProse.n, "a hard-wrapped paragraph — one paragraph must be one line, or the wrap becomes a line break on import", prevProse.text);
+    // ONE finding per paragraph. A five-line wrapped paragraph is one mistake,
+    // and reporting it four times buries the other rules.
+    prevProse = isProse ? { n, text: l.trim(), reported: !!(prevProse && (prevProse.reported || prevProse.text.length >= DOC_HARDWRAP_MIN)) } : null;
+
+    for (const marker of LINT_MARKERS)
+      if (l.includes(marker)) {
+        add("warn", "placeholder", n, `leftover placeholder text: ${marker}`, l.trim());
+        break;
+      }
+  }
+
+  // ── readability signals (§7) ──────────────────────────────────────────────
+  const prose = proseLines(text).filter((p) => /\S/.test(p.text) && !/^\s*#/.test(p.text));
+  const sentences = [];
+  for (const p of prose)
+    for (const raw of p.text.split(/(?<=[.!?])\s+/)) {
+      const words = raw.trim().split(/\s+/).filter(Boolean);
+      if (words.length) sentences.push({ line: p.n, words: words.length, text: raw.trim() });
+    }
+  const totalWords = sentences.reduce((a, s) => a + s.words, 0);
+  const avg = sentences.length ? Math.round((totalWords / sentences.length) * 10) / 10 : 0;
+  const longest = sentences.reduce((a, s) => (!a || s.words > a.words ? s : a), null);
+  for (const s of sentences)
+    if (s.words > DOC_SENTENCE_MAX)
+      add("warn", "long-sentence", s.line, `a ${s.words}-word sentence — one idea per sentence, and the bar is ${DOC_SENTENCE_MAX}`, s.text);
+
+  const longWords = sentences.reduce(
+    (a, s) => a + s.text.split(/\s+/).filter((w) => syllables(w) >= 4).length,
+    0
+  );
+  let passive = 0;
+  for (const p of prose) passive += (p.text.match(PASSIVE_RE) || []).length;
+
+  const seenAcr = new Set();
+  const undefinedAcr = [];
+  for (const p of prose)
+    for (const m of p.text.matchAll(/\b([A-Z]{2,6})\b/g)) {
+      const a = m[1];
+      if (LINT_COMMON_ACRONYMS.has(a) || seenAcr.has(a)) continue;
+      seenAcr.add(a);
+      // "expanded on first use" looks like `Something Something (ABC)` or
+      // `ABC (something something)`.
+      const expanded = new RegExp(`\\(${a}\\)|${a}\\s*\\(`).test(p.text);
+      if (!expanded) {
+        undefinedAcr.push({ acronym: a, line: p.n });
+        add("warn", "undefined-acronym", p.n, `"${a}" is used without being expanded on first use`, p.text.trim().slice(0, 120));
+      }
+    }
+
+  const errors = findings.filter((f) => f.severity === "error").length;
+  const warnings = findings.length - errors;
+  return {
+    target: tgt.id,
+    target_label: tgt.label,
+    max_heading: tgt.max_heading,
+    front_matter: tgt.front_matter,
+    lines: lines.length,
+    findings,
+    errors,
+    warnings,
+    readability: {
+      sentences: sentences.length,
+      avg_sentence_words: avg,
+      avg_bar: DOC_SENTENCE_AVG_MAX,
+      longest_sentence_words: longest ? longest.words : 0,
+      longest_sentence_line: longest ? longest.line : null,
+      long_word_pct: totalWords ? Math.round((longWords / totalWords) * 100) : 0,
+      passive_constructions: passive,
+      undefined_acronyms: undefinedAcr,
+    },
+    honesty: [
+      "A readability signal is a SIGNAL, not a verdict. This never blocks anything.",
+      "It is English-specific and heuristic: passive voice is a pattern match and a syllable count is an estimate.",
+    ],
+    import_note: tgt.imports === "native" ? null : tgt.watch,
+  };
+}
+
+// ── the commands ────────────────────────────────────────────────────────────
+
+function docInit(claudeDir) {
+  const asJson = wantsJson();
+  const pos = docPositionals(); // ["doc","init",<slug?>]
+  const fail = (reason, hint, code = 2) => {
+    if (asJson) emitJson({ ok: false, reason, hint }, code);
+    console.error("❌ " + hint);
+    process.exit(code);
+  };
+  const type = String(docOpt("--type") || "").toLowerCase();
+  const tpl = docTemplate(type);
+  const custom = docOpt("--template");
+  if (!type) fail("no-type", `orc doc init needs --type <${DOC_TYPES.join("|")}>.`);
+  if (!tpl) fail("bad-type", `--type must be one of: ${DOC_TYPES.join(", ")}`);
+  const explicit = docSlugify(pos[2] || "");
+  if (!explicit) fail("no-slug", "orc doc init needs a slug (it becomes the folder name).");
+  // The folder is `<slug>-<DDMMYY>`, so the same subject on two days is two
+  // documents and neither silently overwrites the other.
+  const folderSlug = /-\d{6}$/.test(explicit) ? explicit : explicit + "-" + docStamp();
+  const paths = docPaths(claudeDir, folderSlug);
+  if (fs.existsSync(paths.state)) fail("exists", `a document named ${folderSlug} already exists at ${paths.folder}`, 1);
+
+  let sections = tpl.sections.map((s) => ({ ...s }));
+  let templateSource = "shipped:" + tpl.type;
+  if (custom) {
+    const abs = path.isAbsolute(custom) ? custom : path.join(paths.root, custom);
+    if (!fs.existsSync(abs)) fail("no-such-template", `template not found: ${custom}`);
+    // A user template REPLACES the shipped one entirely. Its headings become the
+    // outline; its body text is instructions for the writer, never content to
+    // copy through. The two are never merged silently.
+    const heads = docScan(fs.readFileSync(abs, "utf8")).sections;
+    if (!heads.length)
+      fail(
+        "no-headings",
+        `no \`## \` headings found in ${custom}. A structure is never guessed out of prose — ` +
+          `show the user the shipped ${tpl.type} outline and ask which to use.`
+      );
+    sections = heads.map((h) => ({ heading: h.heading, required: true, budget: 120, affinity: null, purpose: null }));
+    templateSource = custom;
+  }
+
+  const outline = sections.map((s, i) => ({
+    id: docSectionId(i + 1, s.heading),
+    heading: s.heading,
+    level: 2,
+    required: s.required !== false,
+    purpose: s.purpose || null,
+    affinity: s.affinity || null,
+    budget_lines: s.budget || 120,
+  }));
+
+  const target = String(docOpt("--target") || "generic").toLowerCase();
+  if (!DOC_TARGETS.some((t) => t.id === target))
+    fail("bad-target", `--target must be one of: ${DOC_TARGETS.map((t) => t.id).join(", ")}`);
+  const length = String(docOpt("--length") || "standard").toLowerCase();
+  if (!DOC_LENGTHS.includes(length)) fail("bad-length", `--length must be one of: ${DOC_LENGTHS.join(", ")}`);
+
+  const cfg = resolvedConfig(claudeDir);
+  const d = {
+    version: 1,
+    slug: folderSlug,
+    type: tpl.type,
+    title: docOpt("--title") || folderSlug.replace(/-\d{6}$/, "").replace(/-/g, " "),
+    language: docOpt("--language") || cfg.doc_language || "en",
+    target,
+    length,
+    template: { source: templateSource, label: tpl.label },
+    created_at: fmtStamp(new Date()),
+    cycle: 0,
+    outline,
+    sections: {},
+    extracts: {},
+    cycles: [],
+  };
+  fs.mkdirSync(paths.work, { recursive: true });
+  docWrite(claudeDir, folderSlug, d);
+  docWriteOutline(claudeDir, folderSlug, d);
+
+  const oversized = outline.filter((o) => o.budget_lines > Number(cfg.doc_max_lines_per_agent || 400));
+  if (asJson)
+    emitJson(
+      {
+        ok: true,
+        slug: folderSlug,
+        dir: paths.folder,
+        type: tpl.type,
+        target,
+        language: d.language,
+        outline,
+        oversized: oversized.map((o) => o.id),
+        next: `orc doc plan ${folderSlug} --role write`,
+      },
+      0
+    );
+  console.log(ui.header(`ORC · doc — ${folderSlug} created`));
+  console.log(`\n  type:      ${tpl.label}`);
+  console.log(`  template:  ${templateSource}`);
+  console.log(`  target:    ${docTarget(target).label}`);
+  console.log(`  sections:  ${outline.length}   (${outline.filter((o) => o.required).length} required)`);
+  console.log(`  folder:    ${paths.folder}`);
+  console.log(`\n  Next:  orc doc plan ${folderSlug} --role write`);
+  process.exit(0);
+}
+
+// outline.md is DERIVED from doc.json and rewritten whenever the outline
+// changes. It is the writer/orchestrator contract in a form a human can read —
+// and having one writer is what stops the two disagreeing about section order.
+function docWriteOutline(claudeDir, slug, d) {
+  const p = docPaths(claudeDir, slug);
+  const L = [
+    "<!-- orc-doc:derived — written by the `orc doc` CLI from doc.json.",
+    "     Change the outline with `orc doc outline <slug> --set <file>`; a hand",
+    "     edit here is overwritten the next time anything writes. -->",
+    "",
+    `# Outline — ${d.title}`,
+    "",
+    `Type: ${d.type} · Language: ${d.language} · Target: ${d.target} · Length: ${d.length}`,
+    "",
+    "| # | Section | Required | Budget | Purpose |",
+    "|---|---|---|---|---|",
+    ...d.outline.map(
+      (o, i) =>
+        `| ${i + 1} | ${o.heading} | ${o.required ? "yes" : "no"} | ${o.budget_lines} | ${o.purpose || "—"} |`
+    ),
+    "",
+    "A required section with no material becomes a visible `> **Open:** …` line.",
+    "It is never a silent omission, and never invented filler.",
+    "",
+  ];
+  fs.writeFileSync(p.outline, L.join("\n"));
+  return p.outline;
+}
+
+function docOutlineCmd(claudeDir, slugArg) {
+  const asJson = wantsJson();
+  const slug = docResolveSlug(claudeDir, slugArg);
+  const d = slug ? docRead(claudeDir, slug) : null;
+  if (!d) return docNoSuch(asJson, slugArg);
+  const set = docOpt("--set");
+  if (set) {
+    const p = docPaths(claudeDir, slug);
+    const abs = path.isAbsolute(set) ? set : path.join(p.root, set);
+    if (!fs.existsSync(abs)) {
+      if (asJson) emitJson({ ok: false, reason: "no-such-file", path: set }, 2);
+      console.error(`❌ not found: ${set}`);
+      process.exit(2);
+    }
+    const heads = docScan(fs.readFileSync(abs, "utf8")).sections;
+    if (!heads.length) {
+      if (asJson) emitJson({ ok: false, reason: "no-headings", path: set }, 2);
+      console.error(`❌ no \`## \` headings in ${set} — a structure is never guessed out of prose.`);
+      process.exit(2);
+    }
+    const old = new Map(d.outline.map((o) => [docSlugify(o.heading), o]));
+    d.outline = heads.map((h, i) => {
+      const prev = old.get(docSlugify(h.heading));
+      return {
+        id: docSectionId(i + 1, h.heading),
+        heading: h.heading,
+        level: 2,
+        required: prev ? prev.required : true,
+        purpose: prev ? prev.purpose : null,
+        affinity: prev ? prev.affinity : null,
+        budget_lines: prev ? prev.budget_lines : 120,
+      };
+    });
+    docWrite(claudeDir, slug, d);
+    docWriteOutline(claudeDir, slug, d);
+  }
+  if (asJson) emitJson({ ok: true, slug, outline: d.outline, file: docPaths(claudeDir, slug).outline }, 0);
+  console.log(ui.header(`ORC · doc outline — ${slug}`));
+  d.outline.forEach((o, i) =>
+    console.log(`  ${String(i + 1).padStart(3)}  ${o.required ? " " : "·"} ${o.heading.padEnd(44)} ${String(o.budget_lines).padStart(4)} L`)
+  );
+  process.exit(0);
+}
+
+// A prefix is enough, because the folder carries a date suffix nobody memorises.
+function docResolveSlug(claudeDir, raw) {
+  const want = String(raw || "");
+  if (!want) return null;
+  const all = docList(claudeDir);
+  if (all.includes(want)) return want;
+  const hits = all.filter((s) => s.startsWith(want));
+  return hits.length === 1 ? hits[0] : null;
+}
+
+function docNoSuch(asJson, slugArg) {
+  const hint = `no document "${slugArg || ""}" — \`orc doc list\` shows the ones that exist (a prefix is enough).`;
+  if (asJson) emitJson({ ok: false, reason: "no-such-doc", slug: slugArg || null, hint }, 2);
+  console.log(hint);
+  process.exit(2);
+}
+
+function docListCmd(claudeDir) {
+  const asJson = wantsJson();
+  const slugs = docList(claudeDir);
+  const rows = slugs.map((s) => {
+    const view = docMapView(claudeDir, s);
+    const d = view.d;
+    const written = view.sections.filter((x) => x.state !== "planned" && x.state !== "open").length;
+    return {
+      slug: s,
+      title: d.title,
+      type: d.type,
+      target: d.target,
+      language: d.language,
+      cycle: d.cycle || 0,
+      // It may only claim what the disk proves: a missing document.md means
+      // NOT STARTED, never "failed".
+      document: view.document && fs.existsSync(view.document) ? "present" : "not started",
+      lines: view.total_lines,
+      sections_total: (d.outline || []).length,
+      sections_written: written,
+      user_edited: view.sections.filter((x) => x.state === "user-edited").map((x) => x.id),
+      where: docWhereLine(d, view),
+      dir: view.paths.folder,
+      next: `/orc-doc resume ${s}`,
+    };
+  });
+  if (asJson) emitJson({ ok: true, dir: docPaths(claudeDir).rel, documents: rows, total: rows.length }, 0);
+  if (!rows.length) {
+    console.log("no documents yet — run `/orc-doc` to start one (it asks what you want written first, and never invents it).");
+    process.exit(0);
+  }
+  console.log(ui.header(`ORC · doc — ${plural(rows.length, "document")}`));
+  console.log("");
+  for (const r of rows) {
+    console.log(`  ${r.type.toUpperCase().padEnd(14)} ${r.slug}`);
+    console.log(`  ${"".padEnd(14)} ${ui.color.gray(r.where)}`);
+    if (r.user_edited.length)
+      console.log(`  ${"".padEnd(14)} ${ui.color.gray("you edited: " + r.user_edited.join(", "))}`);
+  }
+  process.exit(0);
+}
+
+function docShowCmd(claudeDir, slugArg) {
+  const asJson = wantsJson();
+  const slug = docResolveSlug(claudeDir, slugArg);
+  const view = slug ? docMapView(claudeDir, slug) : null;
+  if (!view) return docNoSuch(asJson, slugArg);
+  const d = view.d;
+
+  // ONE section's text, on an explicit request. This is the only command that
+  // returns any of the document's prose, and it is deliberately one section at a
+  // time: the rule is that nothing HOLDS the document, not that the text is
+  // secret. A caller that asked for a named section has already decided to spend
+  // the context on it.
+  const want = docOpt("--section");
+  if (want) {
+    const s = (view.sections || []).find((x) => x.id === want || x.id.startsWith(want));
+    if (!s || !view.scan) {
+      const hint = `no section "${want}" in ${slug} — \`orc doc map ${slug}\` lists them.`;
+      if (asJson) emitJson({ ok: false, reason: "no-such-section", slug, section: want, hint }, 2);
+      console.error("❌ " + hint);
+      process.exit(2);
+    }
+    const scanned = view.scan.sections.find((x) => x.id === s.id);
+    if (asJson)
+      emitJson(
+        { ok: true, slug, section: s.id, heading: s.heading, start: s.start, end: s.end, lines: s.lines, state: s.state, hash: s.hash, text: scanned.text },
+        0
+      );
+    console.log(scanned.text);
+    process.exit(0);
+  }
+
+  const payload = {
+    ok: true,
+    slug,
+    title: d.title,
+    type: d.type,
+    language: d.language,
+    target: d.target,
+    length: d.length,
+    template: d.template,
+    cycle: d.cycle || 0,
+    dir: view.paths.folder,
+    document: view.document && fs.existsSync(view.document) ? view.document : null,
+    total_lines: view.total_lines,
+    outline: d.outline,
+    sections: view.sections,
+    extracts: d.extracts,
+    cycles: d.cycles,
+    lock: d.lock || null,
+    where: docWhereLine(d, view),
+  };
+  if (asJson) emitJson(payload, 0);
+  console.log(ui.header(`ORC · doc ${slug} — ${d.title}`));
+  console.log(`\n  ${docWhereLine(d, view)}\n`);
+  for (const s of view.sections)
+    console.log(
+      `  ${s.state.padEnd(12)} ${String(s.start).padStart(5)}..${String(s.end).padEnd(5)} ` +
+        `${String(s.lines).padStart(4)}L  ${s.heading}` +
+        (s.findings ? `  ${ui.color.gray(plural(s.findings, "finding"))}` : "")
+    );
+  process.exit(0);
+}
+
+function docMapCmd(claudeDir, slugArg) {
+  const asJson = wantsJson();
+  const slug = docResolveSlug(claudeDir, slugArg);
+  const view = slug ? docMapView(claudeDir, slug, { persist: true }) : null;
+  if (!view) return docNoSuch(asJson, slugArg);
+  if (!view.document || !fs.existsSync(view.document)) {
+    const hint = `no ${DOC_FILE} yet for ${slug} — nothing has been assembled.`;
+    if (asJson) emitJson({ ok: false, reason: "no-document", slug, hint }, 2);
+    console.log(hint);
+    process.exit(2);
+  }
+  const payload = {
+    ok: true,
+    slug,
+    file: path.relative(view.paths.root, view.document).split(path.sep).join("/"),
+    lines: view.total_lines,
+    preamble_end: view.preamble_end,
+    sections: view.sections.map(({ id, heading, level, start, end, lines, hash, state, required, findings, renamed_from }) => ({
+      id, heading, level, start, end, lines, hash, state, required, findings, renamed_from,
+    })),
+    repaired: view.repairs,
+    note: "line numbers are DERIVED on every read and never stored — a stored line number is a wrong line number one edit later",
+  };
+  if (asJson) emitJson(payload, 0);
+  console.log(ui.header(`ORC · doc map — ${slug}  (${view.total_lines} lines)`));
+  console.log("");
+  for (const s of view.sections)
+    console.log(
+      `  ${s.id.padEnd(30)} ${String(s.start).padStart(5)}..${String(s.end).padEnd(5)} ` +
+        `${String(s.lines).padStart(4)}L  ${s.state.padEnd(12)} ${s.hash.slice(0, 8)}`
+    );
+  if (view.repairs.length)
+    for (const r of view.repairs) console.log(`\n  repaired: ${r.from} → ${r.to} (heading renamed; history kept)`);
+  process.exit(0);
+}
+
+// ── the batching — the model NEVER decides how to split (§5.4) ──────────────
+function docPlanCmd(claudeDir, slugArg) {
+  const asJson = wantsJson();
+  const slug = docResolveSlug(claudeDir, slugArg);
+  const view = slug ? docMapView(claudeDir, slug) : null;
+  if (!view) return docNoSuch(asJson, slugArg);
+  const d = view.d;
+  const cfg = resolvedConfig(claudeDir);
+  const role = String(docOpt("--role") || "write").toLowerCase();
+  if (!DOC_ROLES.includes(role)) {
+    if (asJson) emitJson({ ok: false, reason: "bad-role", hint: `--role must be one of: ${DOC_ROLES.join(", ")}` }, 2);
+    console.error(`❌ --role must be one of: ${DOC_ROLES.join(", ")}`);
+    process.exit(2);
+  }
+  const budget = Math.max(40, Number(docOpt("--budget") || cfg.doc_max_lines_per_agent || 400));
+  const wanted = Math.max(1, Number(cfg.doc_max_parallel || DOC_MAX_PARALLEL_CAP));
+  const parallel = Math.min(DOC_MAX_PARALLEL_CAP, wanted);
+  const clamped = wanted > DOC_MAX_PARALLEL_CAP ? { from: wanted, to: parallel } : null;
+
+  const live = new Map(view.sections.map((s) => [s.id, s]));
+  let items = [];
+  if (role === "write") {
+    // Only what has no body yet. A `user-edited` section is NEVER re-written
+    // without an instruction naming it — overwriting a human's paragraph is
+    // unrecoverable from this lane's side.
+    items = d.outline
+      .filter((o) => {
+        const s = live.get(o.id);
+        return !s || s.state === "planned" || s.state === "open";
+      })
+      .map((o) => ({
+        id: o.id,
+        heading: o.heading,
+        required: !!o.required,
+        purpose: o.purpose,
+        affinity: o.affinity,
+        budget_lines: o.budget_lines,
+        part: `${DOC_WORK}/${o.id}.md`,
+      }));
+  } else if (role === "check") {
+    // The hash is what turns a re-check from a full pass into a diff: a section
+    // whose hash has not moved since it was checked does not need re-reading.
+    items = view.sections
+      .filter((s) => s.state !== "planned" && s.state !== "checked")
+      .map((s) => ({
+        id: s.id,
+        heading: s.heading,
+        required: s.required,
+        purpose: s.purpose,
+        affinity: (d.outline.find((o) => o.id === s.id) || {}).affinity || null,
+        budget_lines: s.lines,
+        start: s.start,
+        end: s.end,
+      }));
+  } else {
+    items = view.sections
+      .filter((s) => s.findings > 0)
+      .map((s) => ({
+        id: s.id,
+        heading: s.heading,
+        required: s.required,
+        purpose: s.purpose,
+        affinity: null,
+        budget_lines: s.lines,
+        start: s.start,
+        end: s.end,
+        part: `${DOC_WORK}/${s.id}.md`,
+      }));
+  }
+
+  const agentName = role === "check" ? "orc-doc-checker-opus-5-low" : "orc-doc-writer-opus-5-med";
+
+  if (!items.length) {
+    // An empty result is an ANSWER, so it returns the SAME object shape with an
+    // empty wave list — a caller must never have to special-case "nothing to do"
+    // by parsing prose or by finding half the keys missing.
+    const hint =
+      role === "write"
+        ? "every section already has a body — nothing to write."
+        : role === "check"
+          ? "every section has been checked since it last changed — nothing to re-read."
+          : "no section carries an open finding — nothing to edit.";
+    if (asJson)
+      emitJson(
+        {
+          ok: true, slug, role, agent: agentName, budget_lines: budget, parallel, clamped,
+          waves: [], agents: 0, oversized: [], hint,
+          note: "no section is ever split across two agents, and no two agents ever share a file",
+        },
+        1
+      );
+    console.log(hint);
+    process.exit(1);
+  }
+
+  // Pack in outline order, and NEVER split a section — a writer given half a
+  // section writes half an idea. Sections that reference each other (Goals ↔
+  // Non-goals, Alternatives ↔ Detailed design) share an `affinity` and are kept
+  // in the SAME agent wherever the budget allows: cross-agent consistency is
+  // expensive to check and free to prevent.
+  const groups = [];
+  for (const it of items) {
+    const last = groups[groups.length - 1];
+    if (last && it.affinity && last.affinity === it.affinity) last.items.push(it);
+    else groups.push({ affinity: it.affinity, items: [it] });
+  }
+  const slices = [];
+  let cur = null;
+  const push = (sections, oversized) => {
+    cur = { sections: [...sections], budget_lines: sections.reduce((a, x) => a + x.budget_lines, 0), oversized: !!oversized };
+    slices.push(cur);
+  };
+  for (const g of groups) {
+    const total = g.items.reduce((a, x) => a + x.budget_lines, 0);
+    if (total <= budget) {
+      if (cur && !cur.oversized && cur.budget_lines + total <= budget) {
+        cur.sections.push(...g.items);
+        cur.budget_lines += total;
+      } else push(g.items, false);
+      continue;
+    }
+    // The group does not fit whole: split it, still never splitting a section.
+    for (const it of g.items) {
+      if (it.budget_lines > budget) {
+        // A single section over the cap is a PLANNING SMELL, not something to
+        // dispatch anyway: the lane offers to split it into sub-sections at the
+        // outline gate rather than handing a writer an over-budget slice.
+        push([it], true);
+        cur = null;
+        continue;
+      }
+      if (cur && !cur.oversized && cur.budget_lines + it.budget_lines <= budget) {
+        cur.sections.push(it);
+        cur.budget_lines += it.budget_lines;
+      } else push([it], false);
+    }
+  }
+
+  const agent = agentName;
+  const waves = [];
+  for (let i = 0; i < slices.length; i += parallel) {
+    const group = slices.slice(i, i + parallel);
+    waves.push({
+      n: waves.length + 1,
+      agents: group.map((s) => {
+        const out = {
+          agent,
+          sections: s.sections.map((x) => x.id),
+          headings: s.sections.map((x) => x.heading),
+          budget_lines: s.budget_lines,
+          oversized: !!s.oversized,
+        };
+        if (role === "write") out.part = `${DOC_WORK}/${s.sections[0].id}.md`;
+        if (role === "edit") out.part = `${DOC_WORK}/${s.sections[0].id}.md`;
+        if (role === "check" || role === "edit") {
+          // A checker reads a RANGE and never the whole document:
+          // Read(file_path, offset=start, limit=end-start+1).
+          out.range = [s.sections[0].start, s.sections[s.sections.length - 1].end];
+          out.read_limit = out.range[1] - out.range[0] + 1;
+        }
+        return out;
+      }),
+    });
+  }
+  const agents = waves.reduce((a, w) => a + w.agents.length, 0);
+  const payload = {
+    ok: true,
+    slug,
+    role,
+    agent,
+    budget_lines: budget,
+    parallel,
+    clamped,
+    waves,
+    agents,
+    oversized: slices.filter((s) => s.oversized).map((s) => s.sections[0].id),
+    hint: null,
+    note: "no section is ever split across two agents, and no two agents ever share a file",
+  };
+  if (asJson) emitJson(payload, 0);
+  console.log(ui.header(`ORC · doc plan — ${slug} · ${role}`));
+  if (clamped)
+    console.log(
+      `\n  ⚠ doc_max_parallel ${clamped.from} clamped to the hard cap ${clamped.to} — ` +
+        "more parallel writers is more chances for the outline to drift."
+    );
+  for (const w of waves) {
+    console.log(`\n  wave ${w.n}`);
+    for (const a of w.agents)
+      console.log(
+        `    ${a.agent}  ${String(a.budget_lines).padStart(4)}L  ${a.sections.join(" + ")}` +
+          (a.range ? `   lines ${a.range[0]}..${a.range[1]}` : "") +
+          (a.oversized ? "   ⚠ over budget — split it at the outline gate" : "")
+      );
+  }
+  console.log(`\n  ${plural(agents, "agent")} across ${plural(waves.length, "wave")}.`);
+  process.exit(0);
+}
+
+// ── extract → edit the part → splice back (§5.6) ────────────────────────────
+function docExtractCmd(claudeDir, slugArg) {
+  const asJson = wantsJson();
+  const slug = docResolveSlug(claudeDir, slugArg);
+  const view = slug ? docMapView(claudeDir, slug) : null;
+  if (!view) return docNoSuch(asJson, slugArg);
+  if (!view.document || !fs.existsSync(view.document)) {
+    if (asJson) emitJson({ ok: false, reason: "no-document", slug }, 2);
+    console.error(`❌ no ${DOC_FILE} yet for ${slug}.`);
+    process.exit(2);
+  }
+  const want = String(docOpt("--section") || "");
+  const s = view.sections.find((x) => x.id === want) || view.sections.find((x) => x.id.startsWith(want));
+  if (!s) {
+    const hint = `no section "${want}" in ${slug} — \`orc doc map ${slug}\` lists them.`;
+    if (asJson) emitJson({ ok: false, reason: "no-such-section", section: want || null, hint }, 2);
+    console.error("❌ " + hint);
+    process.exit(2);
+  }
+  const scanned = view.scan.sections.find((x) => x.id === s.id);
+  const p = view.paths;
+  fs.mkdirSync(p.work, { recursive: true });
+  const rel = `${DOC_WORK}/${s.id}.md`;
+  fs.writeFileSync(path.join(p.folder, rel), scanned.text.replace(/\s*$/, "") + "\n");
+  const d = view.d;
+  d.extracts[s.id] = { file: rel, hash: s.hash, start: s.start, end: s.end, at: fmtStamp(new Date()) };
+  docWrite(claudeDir, slug, d);
+  if (asJson) emitJson({ ok: true, slug, section: s.id, file: rel, start: s.start, end: s.end, lines: s.lines, hash: s.hash }, 0);
+  console.log(`✓ ${s.id} extracted to ${rel}  (lines ${s.start}..${s.end}, ${s.lines} L)`);
+  console.log(`  Edit ONLY that file. Then: orc doc splice ${slug}`);
+  process.exit(0);
+}
+
+function docSpliceCmd(claudeDir, slugArg) {
+  const asJson = wantsJson();
+  const slug = docResolveSlug(claudeDir, slugArg);
+  const view = slug ? docMapView(claudeDir, slug) : null;
+  if (!view) return docNoSuch(asJson, slugArg);
+  const d = view.d;
+  const p = view.paths;
+  const ids = Object.keys(d.extracts || {});
+  if (!ids.length) {
+    if (asJson) emitJson({ ok: true, slug, spliced: [], hint: "nothing is extracted" }, 1);
+    console.log("nothing is extracted — `orc doc extract <slug> --section <id>` first.");
+    process.exit(1);
+  }
+  const live = new Map(view.sections.map((s) => [s.id, s]));
+  // REFUSE on a conflict, by section NAME. The user edited that section while we
+  // were working, and overwriting a human's paragraph is unrecoverable from this
+  // lane's side — the part file is gone and their wording with it.
+  const conflicts = [];
+  const missing = [];
+  for (const id of ids) {
+    const rec = d.extracts[id];
+    const s = live.get(id);
+    if (!s) {
+      missing.push(id);
+      continue;
+    }
+    if (s.hash !== rec.hash) conflicts.push({ id, heading: s.heading, was: rec.hash.slice(0, 8), now: s.hash.slice(0, 8) });
+    if (!fs.existsSync(path.join(p.folder, rec.file))) missing.push(id);
+  }
+  if (conflicts.length || missing.length) {
+    const payload = {
+      ok: false,
+      reason: conflicts.length ? "hash-conflict" : "missing-part",
+      slug,
+      conflicts,
+      missing,
+      hint: conflicts.length
+        ? `these sections changed on disk after they were extracted: ${conflicts.map((c) => c.heading).join(", ")}. ` +
+          "Nothing was written. Ask before overwriting — a human's wording is not recoverable from here."
+        : `these part files are missing: ${missing.join(", ")}`,
+    };
+    if (asJson) emitJson(payload, 1);
+    console.error("❌ " + payload.hint);
+    process.exit(1);
+  }
+
+  // BOTTOM-UP (highest start first), so an edit that changes a section's length
+  // never shifts a range that has not been spliced yet. This is why the model
+  // never does line arithmetic.
+  const order = ids
+    .map((id) => ({ id, ...d.extracts[id], live: live.get(id) }))
+    .sort((a, b) => b.live.start - a.live.start);
+  let lines = docLines(fs.readFileSync(p.document, "utf8"));
+  const spliced = [];
+  for (const e of order) {
+    const body = docLines(fs.readFileSync(path.join(p.folder, e.file), "utf8"));
+    while (body.length && !/\S/.test(body[body.length - 1])) body.pop();
+    const before = e.live.end - e.live.start + 1;
+    lines.splice(e.live.start - 1, before, ...body);
+    spliced.push({ id: e.id, heading: e.live.heading, was_lines: before, now_lines: body.length, delta: body.length - before });
+  }
+  fs.writeFileSync(p.document, lines.join("\n").replace(/\n{3,}/g, "\n\n").replace(/\s*$/, "") + "\n");
+
+  d.extracts = {};
+  d.cycle = (d.cycle || 0) + 1;
+  const body = fs.readFileSync(p.document, "utf8");
+  const after = docScan(body);
+  const rec = docReconcile(d, after);
+  docApplyRepairs(d, rec.repairs);
+  after.sections = rec.sections;
+  for (const s of after.sections) {
+    const prev = d.sections[s.id] || {};
+    const touched = spliced.some((x) => x.id === s.id);
+    d.sections[s.id] = {
+      ...prev,
+      hash: s.hash,
+      state: touched ? "written" : prev.state || "written",
+      cycle: touched ? d.cycle : prev.cycle || d.cycle,
+      findings: touched ? 0 : prev.findings || 0,
+    };
+  }
+  d.cycles.push({ n: d.cycle, at: fmtStamp(new Date()), kind: "edit", agents: spliced.length, sections: spliced.map((s) => s.id) });
+  docWrite(claudeDir, slug, d);
+
+  const lint = docLintRun(body, d.target);
+  const payload = {
+    ok: true,
+    slug,
+    spliced,
+    lines: after.total_lines,
+    lint: { errors: lint.errors, warnings: lint.warnings },
+    note: "the map and the lint were re-derived after the write — no line number in this system is ever stale",
+  };
+  if (asJson) emitJson(payload, 0);
+  console.log(`✓ ${plural(spliced.length, "section")} spliced back, bottom-up.`);
+  for (const s of spliced) console.log(`    ${s.id.padEnd(30)} ${s.was_lines} → ${s.now_lines} L  (${s.delta >= 0 ? "+" : ""}${s.delta})`);
+  console.log(`\n  ${DOC_FILE} is now ${after.total_lines} lines · lint ${lint.errors} errors, ${lint.warnings} warnings`);
+  console.log(ui.color.gray("  Bottom-up: the highest section is replaced first, so no range shifts before it is used."));
+  process.exit(0);
+}
+
+function docAssembleCmd(claudeDir, slugArg) {
+  const asJson = wantsJson();
+  const slug = docResolveSlug(claudeDir, slugArg);
+  const d = slug ? docRead(claudeDir, slug) : null;
+  if (!d) return docNoSuch(asJson, slugArg);
+  const p = docPaths(claudeDir, slug);
+  const parts = [];
+  const missing = [];
+  for (const o of d.outline) {
+    const file = path.join(p.folder, DOC_WORK, o.id + ".md");
+    if (fs.existsSync(file)) parts.push({ o, file });
+    else if (o.required) missing.push(o.id);
+  }
+  if (missing.length) {
+    const hint = `cannot assemble — these required parts have not been written: ${missing.join(", ")}`;
+    if (asJson) emitJson({ ok: false, reason: "missing-part", slug, missing, hint }, 1);
+    console.error("❌ " + hint);
+    process.exit(1);
+  }
+
+  const out = [`# ${d.title}`, ""];
+  for (const { o, file } of parts) {
+    let body = docLines(fs.readFileSync(file, "utf8"))
+      // The template's purpose comments are instructions for the writer. They
+      // never reach document.md — and an HTML comment is a lint error anyway.
+      .filter((l) => !/^\s*<!--\s*purpose:/i.test(l))
+      .join("\n")
+      .replace(/^\s*\n+/, "")
+      .replace(/\s*$/, "");
+    if (!/^##\s/.test(body)) body = `## ${o.heading}\n\n` + body;
+    out.push(body, "");
+  }
+  const body = out.join("\n").replace(/\n{3,}/g, "\n\n").replace(/\s*$/, "") + "\n";
+  fs.mkdirSync(p.folder, { recursive: true });
+  fs.writeFileSync(p.document, body);
+
+  d.cycle = (d.cycle || 0) + 1;
+  const scan = docScan(body);
+  // Re-key to the outline before recording a hash: a skipped optional section
+  // shifts every ordinal after it, and a hash filed under a positional id would
+  // make the next `map` read the whole document as renamed.
+  scan.sections = docReconcile(d, scan).sections;
+  for (const s of scan.sections) {
+    const prev = d.sections[s.id] || {};
+    const isOpen = /^\s*>\s*\*\*Open:/m.test(s.text) && s.lines <= 6;
+    d.sections[s.id] = { ...prev, hash: s.hash, state: isOpen ? "open" : "written", cycle: d.cycle, findings: 0 };
+  }
+  d.cycles.push({ n: d.cycle, at: fmtStamp(new Date()), kind: "write", agents: parts.length, sections: parts.map((x) => x.o.id) });
+  docWrite(claudeDir, slug, d);
+  docWriteOutline(claudeDir, slug, d);
+
+  const lint = docLintRun(body, d.target);
+  const view = docMapView(claudeDir, slug);
+  const payload = {
+    ok: true,
+    slug,
+    file: path.relative(p.root, p.document).split(path.sep).join("/"),
+    sections: scan.sections.length,
+    lines: scan.total_lines,
+    skipped_optional: d.outline.filter((o) => !o.required && !parts.some((x) => x.o.id === o.id)).map((o) => o.id),
+    lint: { errors: lint.errors, warnings: lint.warnings },
+    where: docWhereLine(d, view),
+  };
+  if (asJson) emitJson(payload, 0);
+  console.log(`✓ assembled ${plural(scan.sections.length, "section")} → ${p.document}  (${scan.total_lines} lines)`);
+  console.log(`  lint: ${lint.errors} errors, ${lint.warnings} warnings  ·  run \`orc doc lint ${slug}\` for the detail`);
+  process.exit(0);
+}
+
+function docLintCmd(claudeDir, arg) {
+  const asJson = wantsJson();
+  const slug = docResolveSlug(claudeDir, arg);
+  let file = null;
+  let target = docOpt("--target");
+  if (slug) {
+    const p = docPaths(claudeDir, slug);
+    const d = docRead(claudeDir, slug);
+    file = p.document;
+    if (!target) target = d.target;
+  } else if (arg) {
+    file = path.isAbsolute(arg) ? arg : path.join(repoRootOf(claudeDir), arg);
+  }
+  if (!file || !fs.existsSync(file) || fs.statSync(file).isDirectory()) {
+    const hint = `cannot read: ${arg || "(no slug or path given)"}`;
+    if (asJson) emitJson({ ok: false, reason: "no-document", path: arg || null, hint }, 2);
+    console.error("❌ " + hint);
+    process.exit(2);
+  }
+  const res = docLintRun(fs.readFileSync(file, "utf8"), target);
+  const payload = { ok: true, slug: slug || null, file: file.split(path.sep).join("/"), ...res };
+  const code = res.findings.length ? 1 : 0;
+  if (asJson) emitJson(payload, code);
+  console.log(ui.header(`orc doc lint — ${path.basename(file)}  →  ${res.target_label}`));
+  console.log(
+    `\n  ${res.errors} errors · ${res.warnings} warnings · ${res.lines} lines\n` +
+      `  readability: avg ${res.readability.avg_sentence_words} words/sentence (bar ${res.readability.avg_bar}) · ` +
+      `longest ${res.readability.longest_sentence_words} → L${res.readability.longest_sentence_line} · ` +
+      `${res.readability.passive_constructions} passive · ${res.readability.undefined_acronyms.length} undefined acronyms\n`
+  );
+  for (const f of res.findings.slice(0, 60))
+    console.log(`  ${f.id}  ${f.severity.padEnd(5)} ${String(f.line).padStart(5)}  ${f.what}`);
+  if (res.findings.length > 60) console.log(`  … and ${res.findings.length - 60} more (use --json for all of them)`);
+  if (res.import_note) console.log(ui.color.gray(`\n  ${res.target_label}: ${res.import_note}`));
+  console.log(ui.color.gray("\n  " + res.honesty[0] + "\n  " + res.honesty[1]));
+  process.exit(code);
+}
+
+function docStatusCmd(claudeDir, slugArg) {
+  const asJson = wantsJson();
+  const slug = docResolveSlug(claudeDir, slugArg);
+  const view = slug ? docMapView(claudeDir, slug) : null;
+  if (!view) return docNoSuch(asJson, slugArg);
+  const d = view.d;
+  const p = view.paths;
+  const hasDoc = !!view.document && fs.existsSync(view.document);
+  const lint = hasDoc ? docLintRun(fs.readFileSync(view.document, "utf8"), d.target) : null;
+  const byId = new Map(view.sections.map((s) => [s.id, s]));
+  const open = d.outline.filter((o) => {
+    const s = byId.get(o.id);
+    return o.required && (!s || s.state === "planned" || s.state === "open");
+  });
+  const userEdited = view.sections.filter((s) => s.state === "user-edited");
+  const complete = hasDoc && !open.length && lint && lint.errors === 0;
+  const payload = {
+    ok: true,
+    slug,
+    title: d.title,
+    type: d.type,
+    target: d.target,
+    language: d.language,
+    cycle: d.cycle || 0,
+    state: complete ? "complete" : hasDoc ? "in-progress" : "not-started",
+    document: hasDoc ? path.relative(p.root, view.document).split(path.sep).join("/") : null,
+    lines: view.total_lines,
+    sections_total: d.outline.length,
+    sections_written: view.sections.filter((s) => s.state !== "planned" && s.state !== "open").length,
+    open_sections: open.map((o) => ({ id: o.id, heading: o.heading })),
+    user_edited: userEdited.map((s) => ({ id: s.id, heading: s.heading })),
+    lint: lint ? { errors: lint.errors, warnings: lint.warnings, target: lint.target } : null,
+    dir: p.folder,
+    where: docWhereLine(d, view),
+    resume: `/orc-doc resume ${slug}`,
+  };
+  const code = complete ? 0 : 1;
+  if (asJson) emitJson(payload, code);
+  console.log(ui.header(`ORC · doc status — ${slug}`));
+  console.log(`\n  ${payload.state}`);
+  console.log(`  ${docWhereLine(d, view)}`);
+  if (lint) console.log(`  lint: ${lint.errors} errors, ${lint.warnings} warnings against ${lint.target_label}`);
+  if (userEdited.length)
+    console.log(`\n  You edited since last time: ${userEdited.map((s) => s.heading).join(", ")}\n  ${ui.color.gray("These are never rewritten unless you name them.")}`);
+  if (open.length) console.log(`  Still open: ${open.map((o) => o.heading).join(" · ")}`);
+  console.log(`\n  Carry on, even in a brand-new chat:  ${payload.resume}`);
+  process.exit(code);
+}
+
+function docTemplatesCmd() {
+  const asJson = wantsJson();
+  const rows = DOC_TEMPLATES.map((t) => ({
+    type: t.type,
+    label: t.label,
+    about: t.about,
+    sections: t.sections.map((s) => ({ heading: s.heading, required: s.required !== false, budget_lines: s.budget, purpose: s.purpose })),
+  }));
+  if (asJson) emitJson({ ok: true, templates: rows }, 0);
+  console.log(ui.header(`ORC · doc templates — ${plural(rows.length, "base template")}`));
+  for (const t of rows) {
+    console.log(`\n  ${t.type.padEnd(14)} ${t.label}`);
+    console.log(`  ${"".padEnd(14)} ${ui.color.gray(t.about)}`);
+    t.sections.forEach((s, i) => console.log(`  ${"".padEnd(14)} ${String(i + 1).padStart(3)}. ${s.heading}${s.required ? "" : "  (optional)"}`));
+  }
+  console.log(ui.color.gray("\n  A template is a floor, not a cage — bring your own with --template <path> and its headings become the outline."));
+  process.exit(0);
+}
+
+function docTargetsCmd() {
+  const asJson = wantsJson();
+  if (asJson) emitJson({ ok: true, targets: DOC_TARGETS }, 0);
+  console.log(ui.header(`ORC · doc targets — where a Markdown file can actually go`));
+  console.log("");
+  for (const t of DOC_TARGETS) {
+    console.log(`  ${t.id.padEnd(12)} ${t.label.padEnd(28)} imports: ${t.imports}   max H${t.max_heading}   front matter: ${t.front_matter}`);
+    console.log(`  ${"".padEnd(12)} ${ui.color.gray(t.watch)}`);
+  }
+  console.log(ui.color.gray("\n  A lint rule that came from a real product limit is worth ten invented ones."));
+  process.exit(0);
+}
+
+function doc() {
+  if (flag("--global")) {
+    console.error("❌ orc doc is project-scoped — the document is this project's. Run it from the project (or with --dir <path>).");
+    process.exit(1);
+  }
+  const claudeDir = resolveClaudeDir();
+  const pos = docPositionals(); // ["doc", <sub?>, <slug|path?>]
+  switch (pos[1]) {
+    case undefined:
+    case "list":
+      docListCmd(claudeDir);
+      break;
+    case "init":
+      docInit(claudeDir);
+      break;
+    case "show":
+      docShowCmd(claudeDir, pos[2]);
+      break;
+    case "map":
+      docMapCmd(claudeDir, pos[2]);
+      break;
+    case "plan":
+      docPlanCmd(claudeDir, pos[2]);
+      break;
+    case "outline":
+      docOutlineCmd(claudeDir, pos[2]);
+      break;
+    case "extract":
+      docExtractCmd(claudeDir, pos[2]);
+      break;
+    case "splice":
+      docSpliceCmd(claudeDir, pos[2]);
+      break;
+    case "assemble":
+      docAssembleCmd(claudeDir, pos[2]);
+      break;
+    case "lint":
+      docLintCmd(claudeDir, pos[2]);
+      break;
+    case "status":
+      docStatusCmd(claudeDir, pos[2]);
+      break;
+    case "templates":
+      docTemplatesCmd();
+      break;
+    case "targets":
+      docTargetsCmd();
+      break;
+    default:
+      console.error(
+        `Unknown: orc doc ${pos[1]}\n` +
+          "Usage: orc doc list [--json]                        every document + its `Where it stands:` line\n" +
+          "       orc doc status <slug> [--json]               0 complete / 1 in progress / 2 unknown slug\n" +
+          "       orc doc show <slug> [--json]                 full state: sections, cycles, extracts\n" +
+          "       orc doc map <slug> [--json]                  the DERIVED section map (fresh line numbers)\n" +
+          "       orc doc plan <slug> --role write|check|edit  the batching (never splits a section, <=4)\n" +
+          "       orc doc outline <slug> [--set <path>]        the agreed section list\n" +
+          "       orc doc extract <slug> --section <id>        one part file + its recorded hash\n" +
+          "       orc doc splice <slug>                        parts -> document, bottom-up (1 = hash conflict)\n" +
+          "       orc doc assemble <slug>                      parts -> document, outline order\n" +
+          "       orc doc lint <slug|path> [--target <t>]      the free check (0 clean / 1 findings / 2 none)\n" +
+          "       orc doc templates | targets [--json]\n" +
+          "       orc doc init <slug> --type <" + DOC_TYPES.join("|") + "> [--template <p>] [--target <t>]"
+      );
+      process.exit(1);
+  }
+}
+
 function where() {
   const claudeDir = resolveClaudeDir();
   if (wantsJson())
@@ -10138,6 +11821,40 @@ Usage:
                                           [--revision in-place|new-file|directory --revision-pattern …]
                                           --goal/--audience/--done-means have NO default: ORC never
                                           guesses what "good" means here
+  orc doc [--dir <path>]                  write a long document — PRD · TSD · collaboration
+                                          agreement · report · workflow — as portable Markdown
+                                          (project-scoped; no --global). The orchestrator never
+                                          reads the document body; it reads the map below
+    orc doc list [--json]                 every document + its \`Where it stands:\` line
+    orc doc status <slug> [--json]        one document (exit 0 complete / 1 in progress /
+                                          2 unknown slug). A prefix is enough for <slug>
+    orc doc show <slug> [--json]          full state: outline, sections, cycles, extracts
+      … --section <id>                    ONE section's text, on an explicit request — the only
+                                          command that returns any of the document's prose
+    orc doc map <slug> [--json]           THE SECTION MAP — heading, absolute line range, hash and
+                                          computed state per section. Derived on every read and
+                                          NEVER stored: a stored line number is a wrong line number
+                                          one edit later
+    orc doc plan <slug> --role write|check|edit
+                                          the batching: never splits a section, never exceeds
+                                          doc_max_parallel (hard cap 4) or the per-agent line
+                                          budget (exit 0 work to do / 1 nothing to do)
+    orc doc outline <slug> [--set <path>] the agreed section list; --set adopts another file's
+                                          headings (a structure is never guessed out of prose)
+    orc doc extract <slug> --section <id> one part file + its recorded hash
+    orc doc splice <slug>                 parts → document, BOTTOM-UP so no range shifts before it
+                                          is used (exit 0 written / 1 hash conflict — a section
+                                          changed on disk and nothing was overwritten)
+    orc doc assemble <slug>               parts → document in outline order (exit 1 names every
+                                          missing required part)
+    orc doc lint <slug|path> [--target <t>]
+                                          the FREE check: portability rules from a real product
+                                          limit, plus readability signals (exit 0 clean /
+                                          1 findings / 2 unreadable). Zero model tokens
+    orc doc templates [--json]            the five base templates + their section lists
+    orc doc targets [--json]              where a Markdown file can actually go, and what to watch
+    orc doc init <slug> --type <t> [--template <p>] [--title …] [--language …]
+                                          [--target <t>] [--length short|standard|thorough]
   orc export [--dir <path>]               compile the wiki + patterns + PACT.md + boundary cards
                                           into a portable AGENTS.md — derived, fingerprinted
                                           [--target agents-md|skill|both]
@@ -10213,7 +11930,9 @@ Machine-readable output:
   boundary status | handoff surfaces | handoff set | budget forecast |
   budget actual | budget rates | aftermath status | export [--check] | export import |
   challenge list | challenge status | challenge show | challenge diff | challenge expect |
-  challenge lint | challenge outline | challenge record | challenge report.
+  challenge lint | challenge outline | challenge record | challenge report |
+  doc list | doc status | doc show | doc map | doc plan | doc outline | doc lint |
+  doc templates | doc targets.
   It prints ONE object to stdout and keeps the command's normal exit code.
 
 Targets:
@@ -10296,6 +12015,12 @@ Skills installed: ${listSkillNames().join(", ")}`);
     // `template`, `goals` and `report`, which are the ledger's only writers.
     case "challenge":
       challenge();
+      break;
+    // v0.48.0 — the lane that writes the long document. Every subcommand is a
+    // READ with an exit-code contract except `init`, `outline --set`, `extract`,
+    // `splice` and `assemble`, which are doc.json's only writers.
+    case "doc":
+      doc();
       break;
     case "ui":
       uiCmd();
