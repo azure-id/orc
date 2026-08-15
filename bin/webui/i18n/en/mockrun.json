@@ -1,0 +1,19 @@
+{
+  "mockrun.title": "Mocked Skill Use",
+  "mockrun.sub": "What each lane looks like when it runs — written out, so you never have to pay for a run to find out.",
+  "mockrun.intro": "{n} walkthroughs ship with ORC. Nothing here was executed: every screen, file and number is written the way the real lane writes it. Read one before you run it.",
+  "mockrun.contents": "All walkthroughs",
+  "mockrun.search": "Search the walkthroughs…",
+  "mockrun.noMatch": "No walkthrough matches that.",
+  "mockrun.matches": "{n} walkthrough matches",
+  "mockrun.matchesPlural": "{n} walkthroughs match",
+  "mockrun.back": "← All walkthroughs",
+  "mockrun.lines": "{n} line",
+  "mockrun.linesPlural": "{n} lines",
+  "mockrun.kindAnnotated": "annotated",
+  "mockrun.copyCmd": "Copy the terminal command",
+  "mockrun.codeBlock": "Code block",
+  "mockrun.missing": "There is no walkthrough called {slug}.",
+  "mockrun.none": "No walkthroughs are installed.",
+  "mockrun.noneHint": "They ship inside the ORC package. A reinstall (`orc upgrade`) restores them."
+}

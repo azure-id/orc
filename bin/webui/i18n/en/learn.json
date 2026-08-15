@@ -1,0 +1,16 @@
+{
+  "learn.title": "Learn",
+  "learn.sub": "The same walkthrough as `orc onboarding`, in the panel — no GitHub README needed.",
+  "learn.contents": "Contents",
+  "learn.progress": "{n} of {total}",
+  "learn.prev": "← Previous",
+  "learn.next": "Next →",
+  "learn.copySection": "Copy this section",
+  "learn.copied": "Section copied",
+  "learn.search": "Search the walkthrough…",
+  "learn.noMatch": "Nothing in the walkthrough matches that.",
+  "learn.matches": "{n} section matches",
+  "learn.matchesPlural": "{n} sections match",
+  "learn.cmdHint": "Commands are highlighted. Click one to copy it.",
+  "learn.restart": "Back to the start"
+}

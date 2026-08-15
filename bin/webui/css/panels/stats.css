@@ -1,0 +1,87 @@
+/* panels/stats.css — orc ui
+   The usage bars, the Usage|Cost tabs, the four-part token bar, the tables.
+
+   The <link> ORDER in app.html is the cascade order, and the numeric
+   prefix is that order. No @import: it would carry no session token and
+   401. */
+
+/* --- Stats --------------------------------------------------------------- */
+
+.bars { display: flex; flex-direction: column; gap: var(--sp-2); }
+.bar-row { display: grid; grid-template-columns: 120px minmax(0, 1fr) 76px; align-items: center; gap: var(--sp-3); font-size: 13px; }
+.bar-label { font-family: var(--mono); color: var(--text-dim); }
+.bar-track { height: 8px; background: var(--surface-2); border-radius: 4px; overflow: hidden; }
+.bar-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 4px;
+  width: 0;
+  transition: width var(--dur-slow) var(--ease);
+}
+.bar-value { text-align: right; color: var(--text-faint); font-size: 12px; }
+
+/* --- tabs (Stats: Usage | Cost) */
+.tabs { display: flex; gap: var(--sp-2); border-bottom: 1px solid var(--border); }
+.tab {
+  background: none; border: none; border-bottom: 2px solid transparent;
+  color: var(--text-dim); font: inherit; font-size: 13px;
+  padding: var(--sp-2) var(--sp-3); cursor: pointer;
+}
+.tab:hover { color: var(--text); }
+.tab-on { color: var(--text); border-bottom-color: var(--accent); }
+
+/* --- the unit switch */
+.seg-ctl { display: inline-flex; border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; }
+.seg-btn {
+  background: none; border: none; color: var(--text-dim);
+  font: inherit; font-size: 12px; padding: 4px 10px; cursor: pointer;
+}
+.seg-btn + .seg-btn { border-left: 1px solid var(--border); }
+.seg-on { background: var(--accent-wash); color: var(--accent); }
+
+/* --- the four-part token bar. THE SEGMENTS EXIST SO CACHE-READ IS VISIBLY
+   SEPARATE; a single fill would re-hide exactly what it is here to expose. */
+.bar-stack { display: flex; height: 100%; width: 0; transition: width .32s ease; }
+.bar-seg { height: 100%; flex-grow: 0; flex-basis: 0; transition: flex-grow .32s ease; }
+.seg-in  { background: var(--accent); }
+.seg-cw  { background: var(--warn); }
+.seg-cr  { background: var(--border); }
+.seg-out { background: var(--bad); }
+.bar-none { font-size: 11.5px; color: var(--text-dim); padding-left: var(--sp-2); line-height: 8px; }
+.bar-mark { color: var(--accent); font-family: var(--mono); }
+
+.legend { display: flex; gap: var(--sp-4); flex-wrap: wrap; font-size: 11.5px; color: var(--text-dim); }
+.legend-item { display: inline-flex; align-items: center; gap: 6px; }
+.legend-dot { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+
+/* --- tables (wiki plan, cost bands) */
+.tbl { width: 100%; border-collapse: collapse; font-size: 12.5px; display: block; overflow-x: auto;
+       scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+.tbl::-webkit-scrollbar { height: 8px; }
+.tbl::-webkit-scrollbar-track { background: transparent; }
+.tbl::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+.tbl th {
+  text-align: left; font-weight: 600; font-size: 11px; text-transform: uppercase;
+  letter-spacing: .06em; color: var(--text-dim); padding: var(--sp-2) var(--sp-3);
+  border-bottom: 1px solid var(--border); white-space: nowrap;
+}
+.tbl td { padding: var(--sp-2) var(--sp-3); border-bottom: 1px solid var(--border); vertical-align: middle; }
+.tbl td.num { text-align: right; font-family: var(--mono); white-space: nowrap; }
+/* A zero-use row and a thin-sample row KEEP THEIR SLOT and render muted. Hiding
+   either would make "measured and unused" look identical to "not there". */
+.row-muted td { opacity: .55; }
+.row-soft td { opacity: .62; }
+.row-note td { border-bottom: none; padding-top: 0; color: var(--text-dim); font-size: 11.5px; }
+
+.usage-rows { display: flex; flex-direction: column; gap: var(--sp-2); }
+.usage-row { display: grid; grid-template-columns: minmax(0, 1fr) 120px 52px 90px; gap: var(--sp-3); align-items: center; font-size: 12.5px; }
+.usage-row .mono { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.form { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: var(--sp-2) var(--sp-3); align-items: center; }
+.form label { font-size: 12.5px; color: var(--text-dim); }
+
+@media (max-width: 720px) {
+  .usage-row { grid-template-columns: minmax(0, 1fr) 52px; }
+  .usage-row .bar-track, .usage-row .note { display: none; }
+  .form { grid-template-columns: minmax(0, 1fr); }
+}

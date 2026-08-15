@@ -1,0 +1,19 @@
+{
+  "mockrun.title": "Contoh Penggunaan Skill",
+  "mockrun.sub": "Seperti apa tampilan setiap lane saat dijalankan — ditulis lengkap, jadi Anda tidak perlu menjalankannya dulu untuk tahu.",
+  "mockrun.intro": "Ada {n} contoh yang ikut terpasang bersama ORC. Tidak ada yang benar-benar dijalankan: setiap layar, berkas dan angka ditulis persis seperti cara lane aslinya menulisnya. Baca dulu sebelum menjalankan.",
+  "mockrun.contents": "Semua contoh",
+  "mockrun.search": "Cari contoh…",
+  "mockrun.noMatch": "Tidak ada contoh yang cocok.",
+  "mockrun.matches": "{n} contoh cocok",
+  "mockrun.matchesPlural": "{n} contoh cocok",
+  "mockrun.back": "← Semua contoh",
+  "mockrun.lines": "{n} baris",
+  "mockrun.linesPlural": "{n} baris",
+  "mockrun.kindAnnotated": "beranotasi",
+  "mockrun.copyCmd": "Salin perintah terminal",
+  "mockrun.codeBlock": "Blok kode",
+  "mockrun.missing": "Tidak ada contoh bernama {slug}.",
+  "mockrun.none": "Tidak ada contoh yang terpasang.",
+  "mockrun.noneHint": "Contoh ikut di dalam paket ORC. Pasang ulang (`orc upgrade`) untuk mengembalikannya."
+}

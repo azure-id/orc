@@ -1,0 +1,103 @@
+/* 02-shell.css — orc ui
+   The rail, the main column, the banner slot, the panel container.
+
+   The <link> ORDER in app.html is the cascade order, and the numeric
+   prefix is that order. No @import: it would carry no session token and
+   401. */
+
+/* ---------------------------------------------------------------- LAYOUT -- */
+
+.shell {
+  display: grid;
+  grid-template-columns: var(--rail-w) minmax(0, 1fr);
+  min-height: 100%;
+}
+
+.rail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+  padding: var(--sp-5) var(--sp-3);
+  background: var(--bg-rail);
+  border-right: 1px solid var(--line-soft);
+  position: sticky;
+  top: 0;
+  height: 100vh;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 0 var(--sp-2);
+  font-weight: 600;
+  letter-spacing: .02em;
+}
+.brand-mark { color: var(--accent); }
+.brand-dim { color: var(--text-faint); font-weight: 400; }
+
+.nav { display: flex; flex-direction: column; gap: 2px; flex: 1; }
+.nav a {
+  display: flex;
+  align-items: center;
+  padding: 7px var(--sp-3);
+  border-radius: var(--radius-sm);
+  color: var(--text-dim);
+  transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease),
+              transform var(--dur-fast) var(--ease);
+}
+.nav a:hover { background: var(--surface-2); color: var(--text); text-decoration: none; transform: translateX(2px); }
+.nav a[aria-current="page"] {
+  background: var(--accent-wash);
+  color: var(--text);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+/* The digit that jumps here. Hidden until you hover the rail, so the shortcuts
+   are discoverable without a legend taking up permanent space. */
+.nav a::after {
+  content: attr(data-idx);
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-faint);
+  opacity: 0;
+  transition: opacity var(--dur) var(--ease);
+}
+.rail:hover .nav a::after { opacity: .65; }
+
+.rail-buttons { display: flex; gap: var(--sp-2); }
+.rail-buttons .btn { flex: 1; justify-content: center; }
+#shortcut-hint { flex: 0 0 auto; min-width: 30px; }
+
+/* The language toggle sits directly under the theme toggle: same class of
+   control (a per-browser display preference), same place, same weight. */
+.lang-btn { gap: 6px; overflow: hidden; }
+.lang-btn #lang-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lang-globe { flex: none; opacity: .7; font-size: 12px; }
+
+.rail-foot {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: 0 var(--sp-2);
+  font-size: 12px;
+  color: var(--text-faint);
+}
+.rail-project {
+  font-family: var(--mono);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl;              /* keep the leaf folder visible when it truncates */
+  text-align: left;
+}
+
+.main {
+  min-width: 0;
+  padding: var(--sp-6) var(--sp-6) var(--sp-7);
+  max-width: 1180px;
+}
+
+.banners { display: flex; flex-direction: column; gap: var(--sp-3); }
+.banners:not(:empty) { margin-bottom: var(--sp-5); }

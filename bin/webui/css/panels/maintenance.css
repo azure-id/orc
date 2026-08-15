@@ -1,0 +1,55 @@
+/* panels/maintenance.css — orc ui
+   The preview/apply job surface.
+
+   The <link> ORDER in app.html is the cascade order, and the numeric
+   prefix is that order. No @import: it would carry no session token and
+   401. */
+
+/* --- Maintenance --------------------------------------------------------- */
+
+.action {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--sp-4);
+  align-items: center;
+  padding: var(--sp-4);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.action-cmd {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--accent);
+  background: var(--accent-wash);
+  border-radius: var(--radius-sm);
+  padding: 2px 8px;
+  display: inline-block;
+  margin-top: 6px;
+}
+.file-list {
+  max-height: 240px;
+  overflow-y: auto;
+  background: var(--surface-2);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
+  padding: var(--sp-3);
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.file-list div { padding: 1px 0; }
+
+.job-output {
+  max-height: 320px;
+  overflow-y: auto;
+  background: #000;
+  color: #d7dae0;
+  border-radius: var(--radius-sm);
+  padding: var(--sp-3);
+  font-family: var(--mono);
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+:root[data-theme="light"] .job-output { background: #12151a; }

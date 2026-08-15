@@ -1,0 +1,154 @@
+/* panels/learn.css — orc ui
+   The contents rail plus one section.
+
+   The <link> ORDER in app.html is the cascade order, and the numeric
+   prefix is that order. No @import: it would carry no session token and
+   401. */
+
+/* --- Learn --------------------------------------------------------------- */
+/* A contents rail plus ONE section, rather than every section stacked open.
+   The walkthrough is ordered and you are at a position in it — the layout says
+   so, which is what the wall of eight boxes could not. */
+
+.learn {
+  display: grid;
+  grid-template-columns: 244px minmax(0, 1fr);
+  gap: var(--sp-4);
+  align-items: start;
+}
+
+.learn-side {
+  position: sticky;
+  top: var(--sp-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-3);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  max-height: calc(100vh - var(--sp-6));
+}
+.learn-side-head {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  color: var(--text-faint);
+  padding: 0 var(--sp-2);
+}
+.learn-side .text-input { font-family: var(--font); font-size: 12.5px; padding: 5px 9px; }
+.learn-nav { display: flex; flex-direction: column; gap: 2px; overflow-y: auto; min-height: 0; }
+.learn-nav-item {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 6px var(--sp-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-dim);
+  text-align: left;
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+.learn-nav-item:hover { background: var(--surface-2); color: var(--text); }
+.learn-nav-item[aria-current="true"] {
+  background: var(--accent-wash);
+  color: var(--text);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+.learn-num {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-faint);
+  transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease),
+              border-color var(--dur-fast) var(--ease);
+}
+.learn-nav-item[aria-current="true"] .learn-num { background: var(--accent); border-color: var(--accent); color: #fff; }
+/* Sections already behind you read as done, so the rail doubles as progress. */
+.learn-seen .learn-num { border-color: var(--ok); color: var(--ok); }
+.learn-nav-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.learn-result { font-size: 11.5px; color: var(--text-faint); padding: 0 var(--sp-2); }
+
+.learn-pane {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0 var(--sp-5) var(--sp-4);
+  overflow: hidden;
+  min-width: 0;
+}
+.learn-progress { height: 3px; background: var(--surface-3); margin: 0 calc(var(--sp-5) * -1); }
+.learn-progress-fill {
+  height: 100%;
+  width: 0;
+  background: var(--accent);
+  transition: width var(--dur-slow) var(--ease);
+}
+.learn-meta {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  color: var(--text-faint);
+  margin-top: var(--sp-4);
+  font-variant-numeric: tabular-nums;
+}
+.learn-title { font-size: 19px; font-weight: 600; letter-spacing: -.01em; margin-top: 4px; }
+
+.learn-article { margin-top: var(--sp-4); animation: learn-in var(--dur) var(--ease); }
+@keyframes learn-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: none; }
+}
+.learn-para { font-size: 13.5px; line-height: 1.7; color: var(--text-dim); }
+.learn-para + .learn-para { margin-top: var(--sp-3); }
+.learn-bullet {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-dim);
+  padding-left: var(--sp-4);
+  position: relative;
+  margin-top: var(--sp-2);
+}
+.learn-bullet::before { content: "•"; position: absolute; left: var(--sp-2); color: var(--accent); }
+/* A pipeline line is a diagram, not a sentence. */
+.learn-flowline {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
+  padding: var(--sp-3);
+  margin-top: var(--sp-3);
+  overflow-x: auto;
+  white-space: pre;
+}
+/* An indented command line becomes a click-to-copy chip. */
+.learn-cmd-row { display: flex; align-items: baseline; gap: var(--sp-3); margin-top: 6px; flex-wrap: wrap; }
+.learn-cmd {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--accent);
+  background: var(--accent-wash);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  padding: 2px 9px;
+  cursor: pointer;
+  transition: border-color var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease);
+}
+.learn-cmd:hover { border-color: var(--accent); background: var(--surface-3); }
+.learn-cmd-what { font-size: 12.5px; color: var(--text-dim); }
+.learn-hint { margin-top: var(--sp-4); }
+
+.learn-foot { display: flex; gap: var(--sp-2); align-items: center; margin-top: var(--sp-5); flex-wrap: wrap; }
+.learn-foot .btn:last-child { margin-left: auto; }

@@ -5,7 +5,40 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="referrer" content="no-referrer">
 <title>orc ui</title>
-<link rel="stylesheet" href="app.css">
+<!--
+  THE ASSET MANIFEST. This list is the load order, and for CSS the load order is
+  the cascade order — which is why the files carry numeric prefixes and why
+  06-responsive and 04-motion are last (both override rules from the shell AND
+  from panels, and several of their declarations are deliberately not
+  !important). One <link> per file, never @import: an @import request carries no
+  session token of its own and would 401.
+
+  A file that is not listed here does not run, and the test suite reads THIS
+  list — appJs()/appCss() in test/_helpers.js concatenate exactly what the
+  browser loads, so a forgotten entry cannot hide behind a passing suite.
+-->
+<link rel="stylesheet" href="css/00-tokens.css">
+<link rel="stylesheet" href="css/01-base.css">
+<link rel="stylesheet" href="css/02-shell.css">
+<link rel="stylesheet" href="css/03-components.css">
+<link rel="stylesheet" href="css/panels/overview.css">
+<link rel="stylesheet" href="css/05-tour.css">
+<link rel="stylesheet" href="css/panels/settings.css">
+<link rel="stylesheet" href="css/panels/runs.css">
+<link rel="stylesheet" href="css/panels/stats.css">
+<link rel="stylesheet" href="css/panels/flow.css">
+<link rel="stylesheet" href="css/panels/crosslink.css">
+<link rel="stylesheet" href="css/panels/learn.css">
+<link rel="stylesheet" href="css/panels/mockrun.css">
+<link rel="stylesheet" href="css/panels/experiment.css">
+<link rel="stylesheet" href="css/panels/maintenance.css">
+<link rel="stylesheet" href="css/panels/pact.css">
+<link rel="stylesheet" href="css/panels/boundary.css">
+<link rel="stylesheet" href="css/panels/handoff.css">
+<link rel="stylesheet" href="css/panels/challenge.css">
+<link rel="stylesheet" href="css/panels/docs.css">
+<link rel="stylesheet" href="css/06-responsive.css">
+<link rel="stylesheet" href="css/04-motion.css">
 </head>
 <body>
 
@@ -115,6 +148,41 @@
 <!-- Transient confirmations (a committed setting, a failed write). -->
 <div class="toasts" id="toasts" aria-live="polite"></div>
 
-<script src="app.js"></script>
+<!--
+  Classic scripts in an explicit load order — no type="module" anywhere. An ES
+  module `import` carries no query string, so every import would 401 against the
+  per-launch token unless static auth were weakened, and weakening it is not on
+  the table. Classic scripts also mean every top-level function and const lands
+  in ONE shared global scope, so the split needed no import/export and changed
+  no call site.
+
+  99-boot.js is last because boot() is the one call that runs at load time.
+-->
+<script src="js/00-core.js"></script>
+<script src="js/01-i18n.js"></script>
+<script src="js/02-ui.js"></script>
+<script src="js/03-md.js"></script>
+<script src="js/04-router.js"></script>
+<script src="js/05-banners.js"></script>
+<script src="js/06-edit.js"></script>
+<script src="js/panels/overview.js"></script>
+<script src="js/panels/settings.js"></script>
+<script src="js/panels/runs.js"></script>
+<script src="js/panels/knowledge.js"></script>
+<script src="js/panels/stats.js"></script>
+<script src="js/panels/flow.js"></script>
+<script src="js/panels/crosslink.js"></script>
+<script src="js/panels/learn.js"></script>
+<script src="js/panels/mockrun.js"></script>
+<script src="js/panels/experiment.js"></script>
+<script src="js/panels/maintenance.js"></script>
+<script src="js/panels/pact.js"></script>
+<script src="js/panels/boundary.js"></script>
+<script src="js/panels/handoff.js"></script>
+<script src="js/panels/challenge.js"></script>
+<script src="js/panels/docs.js"></script>
+<script src="js/90-tour.js"></script>
+<script src="js/91-shortcuts.js"></script>
+<script src="js/99-boot.js"></script>
 </body>
 </html>

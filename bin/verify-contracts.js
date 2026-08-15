@@ -366,6 +366,7 @@ const CONTRACTS = [
     name: "spec invariants last-mile wiring (v0.9.0 — task field -> slice constraints[])",
     token: "spec_invariants",
     files: [
+      "skills/orc-doc/SKILL.md",
       "agents/orc-planner-fable-5.md",
       "agents/orc-planner-mini-opus-5-med.md",
       "agents/orc-planner-mini-sonnet-5-high.md",
@@ -798,6 +799,7 @@ const CONTRACTS = [
       "skills/_shared/interview.md",
       "skills/orc-brainstorm/SKILL.md",
       "skills/orc-challenge/SKILL.md",
+      "skills/orc-doc/SKILL.md",
       "skills/orc-grill/SKILL.md",
     ],
   },
@@ -880,6 +882,7 @@ const CONTRACTS = [
     name: "PASS is the CLI's, never the judge's (v0.47.0)",
     token: "PASS is computed, never declared",
     files: [
+      "skills/orc-doc/references/gates.md",
       "skills/orc-challenge/SKILL.md",
       "skills/orc-challenge/references/rubric.md",
     ],
@@ -2386,6 +2389,71 @@ const CONTRACTS = [
       "skills/orc-doc/references/resume-protocol.md",
     ],
     binFiles: ["bin/cli.js"],
+  },
+  // ── v0.48.1 — the score, the finish line, the memory ──────────────────────
+  {
+    // The pipeline stops being something the orchestrator REMEMBERS. Same shape
+    // as the Flow stepper: the CLI computes the next legal action, the skill
+    // renders it. A session that improvises the order is the exact drift this
+    // command exists to prevent.
+    name: "the CLI computes the next action, the skill renders it (v0.48.1)",
+    token: "orc doc next",
+    files: [
+      "skills/orc-doc/SKILL.md",
+      "skills/orc-doc/references/chunking.md",
+      "skills/orc-doc/references/resume-protocol.md",
+    ],
+    binFiles: ["bin/cli.js"],
+  },
+  {
+    // Shipping is RECORDED as a decision (/orc-pact) and the resulting state is
+    // COMPUTED, never stored (/orc-challenge). `shipped-drifted` names the
+    // sections that moved — coverage-relative, the computeWikiFreshness lesson.
+    name: "delivery is recorded, its state is computed (v0.48.1 — shipped-drifted)",
+    token: "shipped-drifted",
+    files: [
+      "skills/orc-doc/SKILL.md",
+      "skills/orc-doc/references/gates.md",
+    ],
+    binFiles: ["bin/cli.js"],
+  },
+  {
+    // The call site is the contract. A skill that forgets to log at D1 leaves
+    // the journal permanently empty, and an empty journal is indistinguishable
+    // from a document nobody ever asked for anything on.
+    name: "the request is recorded VERBATIM at D1 (v0.48.1 — orc doc log)",
+    token: "orc doc log",
+    files: [
+      "skills/orc-doc/SKILL.md",
+      "skills/orc-doc/references/gates.md",
+      "skills/orc-doc/references/resume-protocol.md",
+    ],
+    binFiles: ["bin/cli.js"],
+  },
+  {
+    // The fourth member of the family, with `reads its own document` and
+    // `re-asks a frozen question`. A cycle nobody logged renders AS A GAP —
+    // never a plausible reconstruction from file mtimes. The /orc-pact
+    // UNCHECKABLE rule: not knowing is an answer, and faking it teaches people
+    // to distrust the rows that are real.
+    name: "the journal never invents an entry (v0.48.1 — /orc-doc)",
+    token: "a lane that invents a journal entry",
+    files: [
+      "skills/orc-doc/SKILL.md",
+      "skills/orc-doc/references/resume-protocol.md",
+    ],
+  },
+  {
+    // `orc doc read` prints prose, so the rule table has to say out loud that
+    // the orchestrator is not the one who runs it — otherwise it reads as a
+    // hole in hard rule 0. It is a command for the human, like
+    // `orc challenge report`.
+    name: "orc doc read is for the HUMAN (v0.48.1 — rule 0 is not softened)",
+    token: "The orchestrator never runs `orc doc read`",
+    files: [
+      "skills/orc-doc/SKILL.md",
+      "skills/orc-doc/references/chunking.md",
+    ],
   },
 ];
 

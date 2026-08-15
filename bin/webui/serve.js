@@ -32,18 +32,55 @@ const HEARTBEAT_GRACE_MS = 60_000;
 const DEFAULT_IDLE_MIN = 30;
 const LOCK_REL = path.join("orc", "ui.lock");
 
-// The string tables are STATIC assets, not an API route: they are shipped data
-// with no CLI behind them, and serving them as files means adding a language is
-// dropping a JSON file in i18n/ and naming it in LANGS — no server change. The
-// map is a fixed table rather than a path join, so no request can ever name a
-// file of its own choosing.
-const STATIC = {
-  "/": { file: "app.html", type: "text/html; charset=utf-8" },
-  "/app.css": { file: "app.css", type: "text/css; charset=utf-8" },
-  "/app.js": { file: "app.js", type: "text/javascript; charset=utf-8" },
-  "/i18n/en.json": { file: path.join("i18n", "en.json"), type: "application/json; charset=utf-8" },
-  "/i18n/id.json": { file: path.join("i18n", "id.json"), type: "application/json; charset=utf-8" },
+// ── the static map ──────────────────────────────────────────────────────────
+// The panel is ~55 files (v0.48.1), so the old hand-written table became a
+// maintenance trap: a new stylesheet that nobody added to it 401s, and the
+// symptom is an unstyled page rather than an error anyone can read.
+//
+// It is built by a ONE-TIME walk at server start, never per request. A request
+// path is therefore still a KEY LOOKUP in a frozen table and never a path join
+// — directory traversal stays structurally impossible, which is a STRONGER
+// guarantee than the hand-written table gave, not a weaker one.
+//
+// The string tables are static assets rather than an API route on purpose:
+// they are shipped data with no CLI behind them, so adding a language is
+// dropping JSON into i18n/ and naming it in LANGS — no server change.
+const TYPES = {
+  ".html": "text/html; charset=utf-8",
+  ".css": "text/css; charset=utf-8",
+  ".js": "text/javascript; charset=utf-8",
+  ".json": "application/json; charset=utf-8",
 };
+
+// Server-side code is NEVER served. These are required by node, not fetched by
+// the browser, and shipping them would hand a reader the API surface map.
+const NEVER_SERVE = new Set(["serve.js", "api.js", "fixtures.js"]);
+
+function buildStatic(rootDir) {
+  const map = Object.create(null);
+  const walk = (dir, prefix) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const rel = prefix ? prefix + "/" + e.name : e.name;
+      // fixtures/ is canned data for `--fixtures`; api.js reads it in-process.
+      if (e.isDirectory()) {
+        if (e.name === "fixtures") continue;
+        walk(path.join(dir, e.name), rel);
+        continue;
+      }
+      if (NEVER_SERVE.has(rel)) continue;
+      const type = TYPES[path.extname(e.name)];
+      if (!type) continue;
+      // The key is the POSIX-normalised path relative to bin/webui/, so Windows
+      // and macOS agree on it — the /api/fs/list precedent.
+      map["/" + rel] = { file: path.join(...rel.split("/")), type };
+    }
+  };
+  walk(rootDir, "");
+  map["/"] = map["/app.html"];
+  return map;
+}
+
+const STATIC = buildStatic(__dirname);
 
 // ── the lock file ───────────────────────────────────────────────────────────
 // `.claude/orc/ui.lock` — project-scoped like everything else, and the thing
@@ -295,17 +332,24 @@ async function serve(opts) {
         return;
       }
       // The token is required on EVERY request, and a <link>/<script> in the
-      // HTML carries no query string of its own — so app.css and app.js would
-      // 401 and the page would render as unstyled, scriptless markup. Stamp the
-      // live token onto the two asset references as the shell goes out. Doing it
-      // here (rather than with a cookie) keeps the token explicit per request:
-      // there is no ambient credential a cross-origin page could ever ride on.
+      // HTML carries no query string of its own — so every asset would 401 and
+      // the page would render as unstyled, scriptless markup. Stamp the live
+      // token onto EVERY asset reference as the shell goes out. Doing it here
+      // (rather than with a cookie) keeps the token explicit per request: there
+      // is no ambient credential a cross-origin page could ever ride on.
+      //
+      // Generic since v0.48.1: naming the two files was fine when there were
+      // two. With ~55 the pattern has to be the rule, or the next <script> tag
+      // someone adds 401s silently. A test parses app.html and asserts every
+      // href/src comes back stamped AND resolves to a real entry in STATIC.
       if (stat.file === "app.html") {
         body = Buffer.from(
           body
             .toString("utf8")
-            .replace('href="app.css"', `href="app.css?t=${token}"`)
-            .replace('src="app.js"', `src="app.js?t=${token}"`),
+            .replace(
+              /(href|src)="([\w./-]+\.(?:css|js))"/g,
+              (m, attr, ref) => `${attr}="${ref}?t=${token}"`
+            ),
           "utf8"
         );
       }
@@ -405,4 +449,4 @@ async function serve(opts) {
   return new Promise(() => {}); // run until a shutdown path exits
 }
 
-module.exports = { serve, stop, readLock, liveLock, lockPath, removeLock, loopbackHost, DEFAULT_PORT, PORT_WALK_MAX, HEARTBEAT_GRACE_MS, DEFAULT_IDLE_MIN };
+module.exports = { serve, stop, readLock, liveLock, lockPath, removeLock, loopbackHost, buildStatic, DEFAULT_PORT, PORT_WALK_MAX, HEARTBEAT_GRACE_MS, DEFAULT_IDLE_MIN };

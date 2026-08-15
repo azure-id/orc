@@ -1,0 +1,90 @@
+/* panels/challenge.css — orc ui
+   The iteration timeline, the convergence chart, the findings.
+
+   The <link> ORDER in app.html is the cascade order, and the numeric
+   prefix is that order. No @import: it would carry no session token and
+   401. */
+
+/* ================================================================ CHALLENGE */
+/* Reuses the existing palette tokens — no new colours. The convergence bar is
+   deliberately the same visual family as the budget cost bar, because both are
+   "one row, several kinds, stacked, and the KINDS must stay visibly separate". */
+
+.ch-list .run-where { text-transform: none; }
+
+/* --- the goal block, the reader score --- */
+.ch-score { display: flex; align-items: baseline; gap: var(--sp-3); }
+.ch-score-num {
+  font: 600 30px/1 var(--mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  color: var(--accent);
+}
+
+/* --- the iteration timeline (the hero) ---------------------------------- */
+/* The wrapper SCROLLS rather than squeezing: the SVG carries an intrinsic width
+   solved from the node box, so a 14-iteration cycle is legible sideways instead
+   of illegible in place. A transparent track, both syntaxes — neither falls back
+   to the other. */
+.ch-rail-wrap {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: var(--sp-2);
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+.ch-rail-wrap::-webkit-scrollbar { height: 8px; }
+.ch-rail-wrap::-webkit-scrollbar-track { background: transparent; }
+.ch-rail-wrap::-webkit-scrollbar-thumb { background: var(--line); border-radius: 4px; }
+.ch-rail { display: block; }
+.ch-rail-link { stroke: var(--line); stroke-width: 2; }
+/* A version break: a comparison across one is not a comparison, so it is drawn,
+   not implied. */
+.ch-rail-break { stroke: var(--warn); stroke-width: 2; stroke-dasharray: 3 3; }
+.ch-rail-breaklabel { fill: var(--warn); font-size: 10px; }
+.ch-rail-box { fill: var(--surface-2); stroke: var(--line); stroke-width: 1.5; }
+.ch-rail-node.pass .ch-rail-box { stroke: var(--ok); fill: var(--ok-wash); }
+.ch-rail-node.fail .ch-rail-box { stroke: var(--warn); fill: var(--warn-wash); }
+.ch-rail-n { fill: var(--text); font: 600 15px/1 var(--mono, ui-monospace, monospace); }
+.ch-rail-verdict { fill: var(--text-dim); font-size: 11px; }
+/* Staggered entrance, `backwards` so the geometry lands once and the delay never
+   leaves a node invisible. */
+.ch-rail-node { animation: ch-node-in .28s ease-out backwards; }
+@keyframes ch-node-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+/* --- the convergence chart ---------------------------------------------- */
+.ch-conv { margin-top: var(--sp-3); display: grid; gap: var(--sp-1); }
+.ch-conv-row { display: grid; grid-template-columns: 2ch minmax(0, 1fr) 3ch; align-items: center; gap: var(--sp-2); }
+.ch-conv-n, .ch-conv-blocking { font: 500 12px/1 var(--mono, ui-monospace, monospace); color: var(--text-faint); }
+.ch-conv-blocking { text-align: right; color: var(--text-dim); }
+.ch-conv-bar { display: flex; height: 12px; border-radius: 3px; overflow: hidden; background: var(--surface-3); }
+/* Draws left to right on open, once: the SHAPE of the trend is the information,
+   so animating it is the fastest way to read it. */
+.ch-conv-seg { width: var(--w); animation: ch-grow .5s ease-out backwards; }
+@keyframes ch-grow { from { width: 0; } to { width: var(--w); } }
+.ch-sev-p0 { background: var(--bad); }
+.ch-sev-p1 { background: var(--warn); }
+.ch-sev-p2 { background: var(--accent-dim); }
+.ch-sev-p3 { background: var(--idle); }
+
+/* --- findings ------------------------------------------------------------ */
+.ch-finding {
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
+  padding: var(--sp-3);
+  margin-top: var(--sp-3);
+  display: grid;
+  gap: var(--sp-2);
+}
+.ch-anchor { color: var(--text-faint); font-size: 12px; }
+.ch-quote {
+  margin: 0;
+  padding-left: var(--sp-3);
+  border-left: 3px solid var(--line);
+  color: var(--text-dim);
+  overflow-wrap: anywhere;
+}
+/* The paste block is wide by nature. It scrolls INSIDE itself — the page body
+   never scrolls horizontally. */
+.ch-prompt { max-height: 320px; overflow: auto; scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+.ch-prompt::-webkit-scrollbar { width: 8px; height: 8px; }
+.ch-prompt::-webkit-scrollbar-track { background: transparent; }
+.ch-prompt::-webkit-scrollbar-thumb { background: var(--line); border-radius: 4px; }

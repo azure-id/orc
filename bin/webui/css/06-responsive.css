@@ -1,0 +1,46 @@
+/* 06-responsive.css — orc ui
+   The width breakpoints that cross panel boundaries (the rail becomes a strip,
+   the Learn rail becomes a scrollable row). They override rules from the shell
+   AND from four panels, so they load after every one of them — the same reason
+   04-motion.css is last. Breakpoints that only touch ONE panel stay in that
+   panel's file.
+
+   The <link> ORDER in app.html is the cascade order, and the numeric
+   prefix is that order. No @import: it would carry no session token and
+   401. */
+
+/* --------------------------------------------------------------- RESPONSIVE */
+
+@media (max-width: 1040px) {
+  /* The Learn rail stops being a rail and becomes a scrollable strip above the
+     reading pane — a 244px column plus prose does not fit twice over. */
+  .learn { grid-template-columns: 1fr; }
+  .learn-side { position: static; max-height: none; }
+  .learn-nav { flex-direction: row; overflow-x: auto; padding-bottom: 2px; }
+  .learn-nav-item { flex: 0 0 auto; max-width: 210px; }
+}
+
+@media (max-width: 900px) {
+  .shell { grid-template-columns: 1fr; }
+  .rail {
+    position: static;
+    height: auto;
+    flex-direction: row;
+    align-items: center;
+    gap: var(--sp-4);
+    overflow-x: auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .nav { flex-direction: row; flex-wrap: nowrap; }
+  .nav a { white-space: nowrap; }
+  .rail-foot { flex-direction: row; align-items: center; }
+  .rail-project { max-width: 180px; }
+  .main { padding: var(--sp-4); }
+  .setting { grid-template-columns: 1fr; }
+  .setting-control { align-items: flex-start; }
+  .run-card { grid-template-columns: 16px 80px minmax(0, 1fr); }
+  .run-age { grid-column: 3; }
+  .todo { grid-template-columns: 4px minmax(0, 1fr); }
+  .todo-cta { grid-column: 2; margin-top: var(--sp-2); }
+}

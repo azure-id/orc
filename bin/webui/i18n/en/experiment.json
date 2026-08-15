@@ -1,0 +1,17 @@
+{
+  "experiment.title": "Experiment",
+  "experiment.sub": "Open a Claude session in this repo and pick a lane. The panel hands off — it never runs one.",
+  "experiment.start": "Start a session",
+  "experiment.startNote": "Opens a terminal in this project and starts `claude`. Nothing about that session comes back to this page — it is yours to drive.",
+  "experiment.project": "project",
+  "experiment.launch": "Start a new Claude session",
+  "experiment.opening": "Opening…",
+  "experiment.opened": "Terminal opened in {cwd}",
+  "experiment.openFail": "Could not open a terminal",
+  "experiment.openFailHint": "Run `claude` in {root} yourself.",
+  "experiment.fixtureNote": "Fixture mode — the button is inert on purpose.",
+  "experiment.fixtureTitle": "Fixture mode never launches anything real.",
+  "experiment.lanes": "Lanes",
+  "experiment.lanesCount": "{n} commands",
+  "experiment.lanesDesc": "Type one of these into the session once it opens. Copy takes the command; the panel does not run it."
+}

@@ -1,0 +1,26 @@
+/* panels/boundary.css — orc ui
+   The checklist — what would make a REFUSE a yes. It is the product, so it is
+   the most legible thing on the card.
+
+   The <link> ORDER in app.html is the cascade order, and the numeric
+   prefix is that order. No @import: it would carry no session token and
+   401. */
+
+.checklist {
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+  padding: var(--sp-3);
+}
+.checklist-head {
+  font-size: 11.5px;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  color: var(--text-dim);
+  margin-bottom: var(--sp-2);
+}
+.checklist-row { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; font-size: 13px; }
+.checklist-row + .checklist-row { margin-top: var(--sp-2); }
+.checklist-box { color: var(--text-dim); font-family: var(--mono); }
+
+/* A paid action. Deliberately quiet - it is not a call to action, it is an
+   honest statement that this panel cannot do the thing. */

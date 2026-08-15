@@ -117,3 +117,46 @@ last session actually do", and it is written by the lane, not derived:
 - Untouched: §02 and §08 — you edited those yourself.
 - Still open: §13 Rollout.
 ```
+
+---
+
+## The journal — what you asked for, in order (v0.48.1)
+
+`changelog.md` above is **lane-written prose**. The journal is the **derived**
+companion, and the two are not the same thing: one is a narrative someone wrote,
+the other is a merge of four sources with the provenance of every row attached.
+
+```
+orc doc log     <slug> --kind request|decision|gate|note --text "…" [--sections a,b] [--source user|/orc-grill|/orc-brainstorm]
+orc doc journal <slug> [--json]
+```
+
+| `origin` | source | what it is |
+|---|---|---|
+| `recorded` | `journal[]` | the user's own words, **verbatim** |
+| `derived` | `cycles[]` | a write / check / edit wave — a machine fact |
+| `derived` | the ship / unship records | a machine fact |
+| `observed` | a section that turned `user-edited` | a machine fact, no text |
+
+**It never invents an entry.** A cycle that ran with nothing logged renders as
+an explicit gap — *"cycle 2 ran · no request was recorded for it"* — and **never**
+a plausible reconstruction from file mtimes. **a lane that invents a journal entry**
+has broken this contract. Same honesty rule as `/orc-pact`'s
+**UNCHECKABLE**: not knowing is an answer, and faking it teaches people to
+distrust the rows that are real.
+
+**Call `orc doc log` at D1 with the user's words verbatim.** A resumed session
+reads the journal to answer *"what have I been asking for?"*, and a paraphrase
+there is the same failure as a paraphrase in `context.md` — it is where a
+resumed session quietly starts writing a different document.
+
+## Resuming is a loop now, not a memory
+
+The resumed session's moves are unchanged — `orc doc status`, `orc doc map`,
+read `context.md` and `outline.md` (**not the document**), name what the user
+edited, then HARD STOP and ask. After that, **`orc doc next <slug> --json` says
+what happens next** and this lane does exactly that, until it exits 1.
+
+Nothing about the pipeline is remembered across the gap any more. That is the
+point: a session resumed months later in a fresh context has the same
+information as the one that started it.

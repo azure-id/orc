@@ -13,7 +13,7 @@
 ![Dependencies](https://img.shields.io/badge/dependencies-zero-lightgrey.svg?style=for-the-badge)
 ![GitHub stars](https://img.shields.io/github/stars/azure-id/orc?style=for-the-badge&color=yellow)
 
-**Latest: v0.48.0** · updated 2026-08-13 · [full changelog](CHANGELOG.md)
+**Latest: v0.48.1** · updated 2026-08-16 · [full changelog](CHANGELOG.md)
 
 </div>
 
@@ -373,7 +373,8 @@ templates/
 └── agents/       40 model-pinned subagents + MODEL-MAPPING.md
 bin/cli.js        installer, config editor, flow composer, run-state reader, and
                   the deterministic half of every lane. Every read speaks --json
-bin/webui/        `orc ui` — the local control panel. Zero deps, no build step
+bin/webui/        `orc ui` — the local control panel: css/ + js/ + i18n/<lang>/ +
+                  fixtures/, one file per layer and per panel. Zero deps, no build step
 bin/mockrun-catalog.js   the mocked-run catalogue (derived from the files on disk)
 mock-run/         the mocked runs themselves — start at INDEX.md
 guides/           configuration · model selection
@@ -439,40 +440,41 @@ a current audit: [EVAL-REPORT.md](EVAL-REPORT.md).
 **Full history: [CHANGELOG.md](CHANGELOG.md)** — or `orc changelog`, which prints
 only what is newer than the version you have.
 
-### v0.48.0 — a document long enough to end a session, written anyway _(2026-08-13)_
+### v0.48.1 — one file per thing, and a document that can be finished _(2026-08-16)_
 
-**`/orc-doc`** writes a PRD, a TSD, a cross-team agreement, a status report or a
-runbook — as Markdown that imports cleanly into the tools people actually read
-documents in.
+Two halves, deliberately separate so that any behaviour difference is
+attributable to the second one.
 
-- **The orchestrator never reads the document body.** A 900-line TSD is ~30k
-  tokens; read it three times and the session is over. So nothing that holds
-  context ever holds the document: the CLI derives a section map (heading, line
-  range, hash), each writer owns **one part file**, each checker reads **one line
-  range**. A 10,000-line document costs the orchestrator ~750 lines instead of
-  20,000 — and a re-check after an edit re-reads only the sections whose hash
-  moved.
-- **The context is gathered once and frozen.** A resumed session reads
-  `context.md` — the request quoted verbatim — and never re-asks what you already
-  answered. It tells you which sections **you** edited, and then stops and asks
-  what should change. No change request, no work.
-- **Line arithmetic is the CLI's, never the model's.** The map is re-derived
-  after every write and never stored. `splice` replaces bottom-up so a length
-  change cannot shift a range that has not been used yet, and it **refuses** when
-  a section moved on disk — naming it, and overwriting nothing.
-- **Where the document is going is a real setting.** `orc doc lint` enforces that
-  target's actual limits: an H4 is an error under Notion, YAML front matter is
-  required under Docusaurus and banned everywhere else, and a hard-wrapped
-  paragraph is an error everywhere. Free, deterministic, and it always runs
-  before anything paid — its findings ride in the checker's slice so no model is
-  ever paid to count sentences.
-- Five base templates (each a floor, not a cage), two agents, the `orc doc` CLI
-  family, four config keys, a **Docs panel** in `orc ui` whose ribbon draws the
-  whole document in one picture, and a mocked run.
+- **`bin/webui/` is an architecture, not four monoliths.** A 260 KB `app.js`, a
+  95 KB stylesheet and a 53 KB string table became ~60 named files — one per
+  panel, one per CSS layer, one per i18n namespace, one per fixture set — so
+  changing the Docs panel means opening `js/panels/docs.js` instead of paging
+  through everything. Classic scripts in an explicit load order, because **an ES
+  module import carries no query string** and every asset here needs the
+  per-launch session token. `serve.js` builds its static map from a walk and
+  stamps every asset reference generically, so a forgotten `<script>` tag can no
+  longer ship. The test suite is split to match. No behaviour changed.
+- **`/orc-doc` can be finished.** `orc doc next` turns the pipeline from
+  something the orchestrator remembers into something the CLI computes — exit 0
+  = do this, exit 1 = a human decides, and it names which decision.
+  `orc doc ship` records delivery as a decision (`--where` has no default;
+  "shipped" with nowhere to point at is not a fact), while the resulting
+  `shipped` / `shipped-drifted` state stays computed — and a drift **names the
+  sections that moved**. `orc doc audit` reports every drift class from disk
+  with a fix command each.
+- **And it remembers what you asked for.** `orc doc log` / `journal` /
+  `context` record and serve what nothing recorded before: the verbatim request,
+  the frozen brief, the reference files **and whether they still hold**, and the
+  ordered story of every request from the first firing to the last touch — with
+  gaps shown as gaps and **never reconstructed**. The Docs panel is rebuilt
+  around that: memory first, state second.
+- D4/D5 gain a three-test `RETURN-TO` suspend into **`/orc-grill`** for the
+  decisions the lane must not answer for itself.
 
-Before that: **v0.47.0 — a lane that refuses to produce**, **v0.46.1 — see a lane run before you pay for one** (`mock-run/`,
-`orc mock-run`, and the Mocked Skill Use panel), and **v0.46.0 — a lane that
-remembers, a lane that declines, and a lane that measures**.
+Before that: **v0.48.0 — a document long enough to end a session, written
+anyway** (`/orc-doc`), **v0.47.0 — a lane that refuses to produce**, **v0.46.1 —
+see a lane run before you pay for one**, and **v0.46.0 — a lane that remembers,
+a lane that declines, and a lane that measures**.
 [Read them in the changelog](CHANGELOG.md).
 
 ---

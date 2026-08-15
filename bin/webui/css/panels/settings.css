@@ -1,0 +1,222 @@
+/* panels/settings.css — orc ui
+   The toolbar, the tier accordions, every control kind, the ladder.
+
+   The <link> ORDER in app.html is the cascade order, and the numeric
+   prefix is that order. No @import: it would carry no session token and
+   401. */
+
+/* ---------------------------------------------------------------- PANELS -- */
+
+/* --- Settings ------------------------------------------------------------ */
+
+/* The settings toolbar — find a key across every tier without scrolling. */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  position: sticky;
+  top: var(--sp-3);
+  z-index: 5;
+}
+.search { flex: 1 1 220px; min-width: 0; }
+.search .text-input { width: 100%; padding: 6px 10px; font-size: 13px; }
+.toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--text-dim); cursor: pointer; white-space: nowrap; }
+.toggle:has(input:disabled) { opacity: .5; cursor: default; }
+.toolbar-result { font-size: 12px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+.toolbar-result-none { color: var(--warn); }
+
+/* `hidden` here is the FILTER's hide. It is a class, not the [hidden]
+   attribute, so a filtered-out row cannot fight a component that sets its own
+   display. */
+.hidden { display: none !important; }
+
+/* Each tier is its own card with a clickable header, so 36 keys read as three
+   labelled groups instead of one wall. */
+.tier { padding: 0; overflow: hidden; }
+.tier-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  width: 100%;
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--surface-2);
+  border: 0;
+  border-bottom: 1px solid var(--line-soft);
+  cursor: pointer;
+  text-align: left;
+  transition: background var(--dur-fast) var(--ease);
+}
+.tier-head:hover { background: var(--surface-3); }
+.tier-head h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--text); }
+.tier-count { font-size: 12px; color: var(--text-faint); margin-left: auto; font-variant-numeric: tabular-nums; }
+.tier-caret {
+  color: var(--text-faint);
+  font-size: 11px;
+  transform: rotate(90deg);
+  transition: transform var(--dur) var(--ease);
+}
+.tier-desc { padding: var(--sp-3) var(--sp-4) 0; color: var(--text-dim); font-size: 12.5px; }
+.tier-rows { padding: 0 var(--sp-4) var(--sp-2); }
+
+/* Collapsed: the caret turns and the body folds away. `grid-template-rows`
+   animates 1fr -> 0fr, which `height: auto` cannot do — and it needs a real
+   element to collapse against, which is what `.tier-body-inner` is for. */
+.tier-body {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows var(--dur-slow) var(--ease), opacity var(--dur) var(--ease);
+}
+.tier-body-inner { min-height: 0; overflow: hidden; }
+.tier.collapsed > .tier-body { grid-template-rows: 0fr; opacity: 0; }
+.tier.collapsed .tier-caret { transform: rotate(0deg); }
+
+.setting {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 260px;
+  gap: var(--sp-4);
+  align-items: start;
+  padding: var(--sp-3) var(--sp-2);
+  margin: 0 calc(var(--sp-2) * -1);
+  border-radius: var(--radius-sm);
+  border-bottom: 1px solid var(--line-soft);
+  /* 220ms desaturate + lock slide when another key shadows this one. */
+  transition: opacity var(--dur-shadow) var(--ease), filter var(--dur-shadow) var(--ease),
+              background var(--dur-fast) var(--ease);
+}
+/* Which row you are on, at a glance — 36 rows of the same weight is where a
+   mis-click on the wrong key comes from. */
+.setting:hover { background: var(--surface-2); }
+.setting:last-child { border-bottom: 0; }
+.setting-name { display: flex; align-items: center; gap: var(--sp-2); font-family: var(--mono); font-size: 13px; }
+.setting-desc { color: var(--text-dim); font-size: 12.5px; margin-top: 3px; }
+.setting-control { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
+
+/* the overridden dot animates in when a value is committed */
+.dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--accent);
+  flex: none;
+  animation: dot-in var(--dur) var(--ease);
+}
+.dot-warn { background: var(--warn); }
+@keyframes dot-in {
+  from { transform: scale(0); opacity: 0; }
+  to   { transform: none; opacity: 1; }
+}
+
+/* THE SHADOWING ANIMATION (plan §6.2). Flip opus5_only on and the fable5_*
+   rows desaturate, a lock slides in, and the reason is right there. The
+   animation teaches the precedence rule — that is the whole point. */
+.setting.shadowed { opacity: .42; filter: saturate(.15); }
+.lock {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--warn);
+  background: var(--warn-wash);
+  border-radius: 100px;
+  padding: 1px 8px;
+  animation: lock-in var(--dur-shadow) var(--ease);
+}
+@keyframes lock-in {
+  from { opacity: 0; transform: translateX(-10px); }
+  to   { opacity: 1; transform: none; }
+}
+.shadow-why { font-size: 11.5px; color: var(--warn); margin-top: 4px; }
+
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: var(--radius-sm); overflow: hidden; }
+.seg button {
+  border: 0;
+  background: var(--surface-2);
+  padding: 4px 11px;
+  font-size: 12px;
+  cursor: pointer;
+  color: var(--text-dim);
+  transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button:hover { background: var(--surface-3); color: var(--text); }
+.seg button[aria-pressed="true"] { background: var(--accent); color: #fff; }
+
+.stepper { display: inline-flex; align-items: center; gap: 6px; }
+.stepper input {
+  width: 74px;
+  padding: 4px 8px;
+  text-align: center;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  font-family: var(--mono);
+}
+.text-input {
+  width: 100%;
+  padding: 4px 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  font-family: var(--mono);
+  font-size: 12px;
+}
+.text-input.invalid { border-color: var(--bad); }
+.input-err { font-size: 11.5px; color: var(--bad); }
+
+/* A closed set gets a dropdown, not a text box (v0.44.0). The native control is
+   kept — it is the one widget every platform already knows how to open with a
+   keyboard, and a hand-rolled listbox on a write surface is a lot of new
+   behaviour for no new capability. Only the chrome is ours. */
+.select-input {
+  min-width: 190px;
+  max-width: 100%;
+  padding: 4px 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 12px;
+  cursor: pointer;
+  transition: border-color var(--dur-fast) var(--ease);
+}
+.select-input:hover { border-color: var(--accent-dim); }
+.select-input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* The out-of-set placeholder (an unset fixed_executor) reads as absent, not as
+   a value you could have chosen. */
+.select-input option:disabled { color: var(--text-faint); }
+
+.readonly-value {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--text-faint);
+  background: var(--surface-2);
+  border: 1px dashed var(--line);
+  border-radius: var(--radius-sm);
+  padding: 3px 8px;
+  max-width: 100%;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+/* the score ladder — a diagram, not an editor */
+.ladder { display: flex; flex-direction: column; gap: 4px; }
+.rung {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  align-items: center;
+  gap: var(--sp-3);
+  padding: 5px var(--sp-3);
+  background: var(--surface-2);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
+  font-family: var(--mono);
+  font-size: 12px;
+}
+.rung-band { color: var(--text-faint); }
+.rung-bar { height: 4px; border-radius: 2px; background: var(--accent); opacity: .55; }
+.rung-agent { color: var(--text-dim); }
+.ladder-note { font-size: 12px; color: var(--text-faint); margin-top: var(--sp-2); }

@@ -1,0 +1,84 @@
+/* 04-motion.css — orc ui
+   The panel entrance, the staggered block entrance, and THE ONE
+   @media (prefers-reduced-motion) block.
+   
+   LOADED LAST, and that is load-bearing. Several reduced-motion rules are
+   plain declarations rather than !important (.vault-pulse and .step-flow are
+   removed with `display: none`, because capping an infinite animation to one
+   iteration freezes it mid-cycle). An equal-specificity rule in a panel file
+   loading afterwards would win on order and quietly switch the animation back
+   on. A test asserts this media query appears here and in no panels/*.css.
+
+   The <link> ORDER in app.html is the cascade order, and the numeric
+   prefix is that order. No @import: it would carry no session token and
+   401. */
+
+/* Panel swap: 180ms slide + fade, ease-out. */
+.panel { animation: panel-in var(--dur) var(--ease); }
+@keyframes panel-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* Staggered entrance. The blocks of a panel arrive in reading order rather than
+   all at once, which makes a panel of six cards parse as a sequence instead of
+   a flash. Capped at 8 so a long list never becomes a slow one — every child
+   past the cap shares the last delay. */
+.stack > * { animation: block-in var(--dur) var(--ease) backwards; }
+.stack > *:nth-child(1) { animation-delay: 0ms; }
+.stack > *:nth-child(2) { animation-delay: 30ms; }
+.stack > *:nth-child(3) { animation-delay: 60ms; }
+.stack > *:nth-child(4) { animation-delay: 90ms; }
+.stack > *:nth-child(5) { animation-delay: 120ms; }
+.stack > *:nth-child(6) { animation-delay: 150ms; }
+.stack > *:nth-child(7) { animation-delay: 180ms; }
+.stack > *:nth-child(n+8) { animation-delay: 210ms; }
+@keyframes block-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: none; }
+}
+/* ---------------------------------------------------------- REDUCED MOTION */
+/* Non-negotiable: every animation and transition above is off. */
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    /* Load-bearing, not tidiness: the staggered entrance fills `backwards`, so
+       a delay that survives here leaves a block sitting at opacity 0 for its
+       whole delay — reduced motion would mean things simply do not appear. */
+    animation-delay: 0ms !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
+  /* Reduced motion means no movement, not fast movement — the hover and press
+     nudges are removed outright rather than sped up. */
+  .nav a:hover, .btn:active:not(:disabled), .action:hover,
+  .todo:hover, .stat-link:hover, button.step:hover { transform: none !important; }
+  /* The vault pulse is one of two INFINITE animations on the page. Capping it to
+     a single 1ms run would still leave a dash frozen mid-edge, so it is removed
+     outright and the edge reads as a plain line. */
+  .vault-pulse { display: none; }
+  /* The other one: the looping flow sweep. `animation-iteration-count: 1` above
+     would still fire it once and then leave the connector segment collapsed at
+     its final keyframe, so both halves are removed outright — the rail is drawn
+     in its resting state and the hairlines read as plain connectors. */
+  .step, .step::before { animation: none !important; }
+  .step-flow { display: none; }
+  /* The cost bar grows in two dimensions (the stack's width, each segment's
+     flex-grow). Both are removed rather than shortened, so the bar is simply
+     drawn at its final proportions. */
+  .bar-stack, .bar-seg { transition: none !important; }
+  /* The challenge timeline and its convergence bar. Both are removed rather
+     than shortened: a capped `ch-grow` leaves a segment frozen part-way, which
+     misreports the count it is drawn from — worse than no animation at all. */
+  .ch-rail-node, .ch-conv-seg { animation: none !important; }
+  /* The Docs ribbon (v0.48.0). Three animations, all REMOVED rather than
+     capped: `doc-seg-in` capped at one iteration would still leave a segment
+     mid-`scaleY`, and the two INFINITE ones (the written sheen and the
+     user-edited pulse) would freeze at whatever opacity the single run stopped
+     on — a segment drawn at 40% height misreports the line count it is drawn
+     from, which is worse than no animation at all. The wave rows and the health
+     bars go the same way: a bar frozen part-way is a wrong number. */
+  .doc-seg, .doc-seg-box, .doc-wave, .doc-bar-seg { animation: none !important; }
+}

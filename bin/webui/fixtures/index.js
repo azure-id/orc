@@ -1,0 +1,304 @@
+"use strict";
+/**
+ * fixtures.js — canned API responses for `orc ui --fixtures`.
+ *
+ * This exists because you cannot DESIGN a state you cannot reach. On a healthy
+ * install with a fresh wiki and no paused runs, the STALE chip, the `waiting`
+ * run card, the shadowed-setting lock and the unhealthy doctor panel are
+ * unreachable — so they get built once, blind, and never looked at again.
+ *
+ * The rule for this file: carry ONE OF EVERY STATE, including the ugly ones.
+ * It also means the UI can be worked on with no ORC project at all.
+ *
+ * Shapes MUST match what `bin/cli.js --json` really emits. A fixture that has
+ * drifted from the CLI is worse than no fixture, so test/webui.test.js asserts
+ * the fixture key set against the live CLI output for the shared routes.
+ */
+
+
+// v0.48.1 — the data lives one file per panel; this file is the ROUTER and
+// nothing else. Adding a fixture is a new key in the panel's own file plus a
+// case here; it is never an edit to a 1 700-line module.
+const { PROJECT, doctor, where } = require("./shell.js");
+const { config } = require("./settings.js");
+const { wiki, wikiPlan, wikiDebt, wikiUsage, patterns, gotchas, wikiImpact } = require("./knowledge.js");
+const { runs, runDetail, aftermath } = require("./runs.js");
+const { stats, budgetForecast, budgetRates } = require("./stats.js");
+const { pact } = require("./pact.js");
+const { boundary } = require("./boundary.js");
+const { handoff } = require("./handoff.js");
+const { exportState, mocks } = require("./maintenance.js");
+const { chGoals, chDims, challengeCycles, challengeList, challengeShow, challengeDiff, challengeDiffMissing, challengeLint } = require("./challenge.js");
+const { docList, docStatuses, docMapSections, docMap, docLint, docPlan, docShow, docSection, docShipped, docShippedDrifted, docNext, docAudit, docJournalRich, docJournalEmpty, docContext } = require("./docs.js");
+const { diy } = require("./flow.js");
+const { crosslink } = require("./crosslink.js");
+const { mockDetail } = require("./mockrun.js");
+
+module.exports.get = function get(route, q) {
+  switch (route) {
+    case "/api/doc":
+      return docList;
+    case "/api/doc/one":
+      // The two SHIPPED states overlay the plain ones, so `shipped`,
+      // `shipped-drifted` and a FORCED ship are all reachable in the panel.
+      return (
+        { [docShipped.slug]: docShipped, [docShippedDrifted.slug]: docShippedDrifted }[q && q.slug] ||
+        (q && docStatuses[q.slug]) ||
+        docStatuses["prd-checkout-refund-130826"]
+      );
+    case "/api/doc/show":
+      // The memory fields ride on whichever slug was asked for, so the header
+      // strip, the brief and the journal are all designable per state.
+      return {
+        ...docShow,
+        slug: (q && q.slug) || docShow.slug,
+        created_at: "13-08-2026 09:02:11",
+        last_touched_at: "15-08-2026 17:05:00",
+        sessions: 3,
+        context: (docContext[q && q.slug] || docContext["prd-checkout-refund-130826"]).context,
+        journal: (q && q.slug === "collab-risk-and-payments-130826" ? docJournalEmpty : docJournalRich).journal,
+        shipped: (docStatuses[q && q.slug] || {}).shipped || null,
+        ship_history: [],
+      };
+    case "/api/doc/map":
+      return docMap;
+    case "/api/doc/lint":
+      return docLint;
+    case "/api/doc/plan":
+      return docPlan;
+    case "/api/doc/section":
+      return docSection;
+    // v0.48.1. Each of these has ONE OF EVERY STATE behind it: a free next, a
+    // paid next, a next that is blocked on a human; a clean audit and a dirty
+    // one; a rich journal and one with nothing recorded at all.
+    case "/api/doc/next":
+      return docNext[(q && q.slug) || ""] || docNext["prd-checkout-refund-130826"];
+    case "/api/doc/audit":
+      return docAudit[(q && q.slug) || ""] || docAudit["prd-checkout-refund-130826"];
+    case "/api/doc/journal":
+      return (q && q.slug) === "collab-risk-and-payments-130826" ? docJournalEmpty : docJournalRich;
+    case "/api/doc/context":
+      return docContext[(q && q.slug) || ""] || docContext["prd-checkout-refund-130826"];
+    case "/api/challenge":
+      return challengeList;
+    case "/api/challenge/one":
+      return (q && challengeCycles[q.slug]) || challengeCycles["tsd-payments"];
+    case "/api/challenge/show":
+      // Only the rich cycle carries findings. Every other slug returns its own
+      // identity with an empty iteration list, which is the honest shape for a
+      // cycle nobody has judged yet — and stops the panel drawing one cycle's
+      // findings under another cycle's name.
+      return q && q.slug && q.slug !== challengeShow.slug
+        ? { ...challengeShow, slug: q.slug, iterations: [], accepted: {}, rebuttals: {}, events: [] }
+        : challengeShow;
+    case "/api/challenge/diff":
+      return q && q.slug === "billing-webhooks" ? challengeDiffMissing : challengeDiff;
+    case "/api/challenge/lint":
+      return challengeLint;
+    case "/api/meta":
+      return undefined; // served for real even in fixture mode
+    case "/api/version":
+      // An update IS available here on purpose. "Up to date" is the state that
+      // needs no design; you cannot lay out the update chip, the rail dot or
+      // the upgrade row against a version that matches.
+      return { version: "0.43.2", latest: "0.44.0", update_available: true, install_spec: "github:azure-id/orc", check_disabled: false };
+    case "/api/where":
+      return where;
+    case "/api/doctor":
+      return doctor;
+    case "/api/config":
+      return config;
+    case "/api/config/profiles":
+      return {
+        profiles: [
+          { name: "solo-fast", desc: "One person, moving fast, reads their own diffs. Fewer gates, bigger waves.", keys: { max_wave_tasks: 4, batch_pause_every: 3 }, changes: [{ key: "batch_pause_every", from: 2, to: 3 }] },
+          { name: "balanced", desc: "Today's defaults. Change nothing unless you know why.", keys: { max_wave_tasks: 3 }, changes: [{ key: "max_wave_tasks", from: 4, to: 3 }] },
+          { name: "paranoid", desc: "Shared codebase, real users. Every gate on, small waves, pause often.", keys: { max_wave_tasks: 2, security_review: "on" }, changes: [{ key: "max_wave_tasks", from: 4, to: 2 }, { key: "security_review", from: "off", to: "on" }] },
+          { name: "token-lean", desc: "Big repo, tight budget. Narrow scans, shallow analysis.", keys: { max_scouts: 1 }, changes: [{ key: "max_scouts", from: 3, to: 1 }] },
+        ],
+      };
+    case "/api/config/recommend":
+      return {
+        recommended: "paranoid",
+        desc: "Shared codebase, real users. Every gate on, small waves, pause often.",
+        reasons: ["a real `npm test` script exists — gates have something to check", "CI is configured — this repo is shared, not a scratchpad", "7 contributors in history — coordination cost is real", "a project wiki exists — grounding is already cheap"],
+        scores: { "solo-fast": 0, paranoid: 3, "token-lean": 0 },
+      };
+    case "/api/overview":
+      return { where, doctor, wiki, patterns: patterns, runs_total: runs.total, waiting: ["merchant-notifications", "refund-webhook-retry"], diy, pact, boundary, wiki_debt: wikiDebt };
+    case "/api/pact":
+      return pact;
+    case "/api/boundary":
+      return boundary;
+    case "/api/handoff":
+      return handoff;
+    case "/api/wiki/plan":
+      return wikiPlan;
+    case "/api/wiki/debt":
+      return wikiDebt;
+    case "/api/wiki/usage":
+      return wikiUsage;
+    case "/api/budget/forecast":
+      // No plan path → the exit-3 "no forecast possible" state, which is what a
+      // first-time user sees and therefore has to be designed too.
+      return q && q.plan
+        ? budgetForecast
+        : { ok: false, reason: "no-plan", hint: "pick a plan file — a forecast from a sentence is a guess that looks computed" };
+    case "/api/budget/rates":
+      return budgetRates;
+    case "/api/budget/actual":
+      return { ok: true, run: "store-credit", lane: "orc", trace: "run-orc-store-credit-100826-093012.txt", rows: [{ band: "[40,55)", dispatches: 3, forecast_weighted: 96000, actual_weighted: 138000, diff_pct: 44, tokens: { input: 9000, cache_write: 61000, cache_read: 121000, output: 11000 } }, { band: "[70,80)", dispatches: 1, forecast_weighted: 121000, actual_weighted: 304000, diff_pct: 151, tokens: { input: 12000, cache_write: 98000, cache_read: 240000, output: 24000 } }], actual: { tokens: { input: 21000, cache_write: 159000, cache_read: 361000, output: 35000 }, raw: 576000, weighted: 251100, usd: 7.02 }, cache_read_share: 0.71, unattributed: { blocks: 12, tokens: { input: 900, cache_write: 12000, cache_read: 24000, output: 1100 } }, joined: 17, dispatches: 19 };
+    case "/api/aftermath":
+      return aftermath;
+    case "/api/export":
+      return exportState;
+    case "/api/runs":
+      return runs;
+    case "/api/run":
+      return q && q.slug && q.slug !== runDetail.slug
+        ? { ...runDetail, slug: q.slug, status: "done", resume: null, stands: { lane: "/orc-mini", phase: "", wave: "" } }
+        : runDetail;
+    case "/api/wiki":
+      return wiki;
+    case "/api/wiki/impact":
+      return wikiImpact;
+    case "/api/patterns":
+      return patterns;
+    case "/api/gotchas":
+      return gotchas;
+    case "/api/stats":
+      return stats;
+    case "/api/diy":
+      return diy;
+    case "/api/crosslink":
+      return crosslink;
+    case "/api/mocks":
+      return mocks;
+    case "/api/mock":
+      return mockDetail;
+    case "/api/stack":
+      return { slugs: ["billing-split"], slug: "billing-split", ambiguous: false, plan: { slug: "billing-split", ready: false, exists: true, plan_path: PROJECT + "/stacked-pr/billing-split/stack-plan.md", layers: 4, ticket: "PAY-2214", problems: ["3 unfilled placeholders (e.g. <risk> <owner> <base>)"] } };
+    case "/api/changelog":
+      // Two entries, so the modal has to handle a LIST rather than one release —
+      // skipping a version is the normal case, not the exotic one.
+      return {
+        version: "0.43.2",
+        latest: "0.44.0",
+        update_available: true,
+        source: "https://raw.githubusercontent.com/azure-id/orc/main/CHANGELOG.md",
+        check_disabled: false,
+        fetched: true,
+        entries: [
+          {
+            version: "0.44.0",
+            date: "2026-08-09",
+            title: "`orc ui`: the guided tour, and an upgrade you can read first",
+            body:
+              "**A version number is not a reason to upgrade.** The banner now fetches the\n" +
+              "changelog from the same branch `orc upgrade` installs from, so what you read\n" +
+              "and what you get can never be different releases.\n\n" +
+              "- First-run tour over the key surfaces, skippable per project\n" +
+              "- The upgrade spotlight clears when you actually reach the preview",
+          },
+          {
+            version: "0.43.3",
+            date: "2026-08-08",
+            title: "settings stop being a wall",
+            body: "Collapsible tiers and a filter across all of them at once.",
+          },
+        ],
+      };
+    case "/api/crosslink/kinds":
+      // A short slice of the real catalog — enough to design the picker with,
+      // including the nested `auth/oidc` whose directory is sanitised to
+      // `auth-oidc` on disk. A picker that never sees one cannot be trusted.
+      return { kinds: ["grpc", "rest-endpoint", "graphql", "websocket", "message-queue", "webhook", "shared-db", "auth/oidc"] };
+    case "/api/experiment":
+      // can_launch:false is the fixture-mode state on purpose — a disabled
+      // launch button with a reason is a thing that needs designing.
+      return {
+        lanes: [
+          { id: "orc", cmd: "/orc", what: "Full pipeline: intake → plan → scored parallel waves → review → verify → ship." },
+          { id: "orc-quick", cmd: "/orc-quick", what: "Ask for anything. Look → ask once → do, and it always asks which agent." },
+          { id: "orc-mini", cmd: "/orc-mini", what: "One executor, smoke gate, ship. No full review or verify phase." },
+          { id: "orc-wiki", cmd: "/orc-wiki", what: "Build or refresh the project wiki. Expensive; always asks first." },
+        ],
+        project_root: "/example/project",
+        platform: "linux",
+        can_launch: false,
+      };
+    case "/api/learn":
+      return { sections: require("../../onboarding-content.js").SECTIONS };
+    // The mocked runs are package content, identical on every machine and
+    // needing no project — so fixture mode serves the REAL catalogue. A canned
+    // copy here could only ever be a worse version of a file sitting next to
+    // it, and it would be the one thing on this panel that could go stale.
+    case "/api/mockruns":
+      return require("../../mockrun-catalog.js").catalogue();
+    case "/api/mockrun": {
+      const doc = require("../../mockrun-catalog.js").get(String((q && q.slug) || ""));
+      return doc ? { ...doc, found: true } : { slug: String((q && q.slug) || ""), found: false };
+    }
+    case "/api/fs/list":
+      // The folder picker on canned data. It carries the states that are hard
+      // to reach on a tidy machine: a plain folder, a git repo WITHOUT a wiki
+      // (the case that saves an inert edge), a repo with one, and the project
+      // itself — which the picker must refuse.
+      return {
+        path: "/example",
+        parent: "/",
+        sep: "/",
+        home: "/home/dev",
+        project_root: PROJECT,
+        is_project_root: false,
+        relative: "..",
+        truncated: false,
+        dirs: [
+          { name: "payments-core", path: "/example/payments-core", is_repo: true, has_wiki: true },
+          { name: "storefront-web", path: "/example/storefront-web", is_repo: true, has_wiki: false },
+          { name: "ledger-batch", path: "/example/ledger-batch", is_repo: true, has_wiki: false },
+          { name: "project", path: PROJECT, is_repo: true, has_wiki: true },
+          { name: "scratch", path: "/example/scratch", is_repo: false, has_wiki: false },
+        ],
+      };
+    case "/api/maintenance":
+      return {
+        actions: [
+          { id: "update", label: "Re-copy this package's payload over the installed one", command: "orc update", network: false, names_files: false },
+          { id: "prune", label: "Update AND delete ORC-named orphans from a pre-manifest install", command: "orc update --prune", network: false, names_files: true },
+          { id: "fix", label: "Apply every fix orc doctor found (= update + prune + settings re-merge)", command: "orc doctor --fix", network: false, names_files: false },
+          { id: "upgrade", label: "Fetch the LATEST package from the network, then apply it", command: "orc upgrade", network: true, names_files: false },
+          { id: "update-global", label: "Re-copy this package's payload over the GLOBAL install in ~/.claude", command: "orc update --global", network: false, names_files: false, advanced: true },
+        ],
+      };
+    case "/api/maintenance/preview":
+      return {
+        action: q.action,
+        label: "Preview (fixtures)",
+        command:
+          "orc " +
+          (q.action === "prune"
+            ? "update --prune"
+            : q.action === "fix"
+              ? "doctor --fix"
+              : q.action === "upgrade"
+                ? "upgrade"
+                : q.action === "update-global"
+                  ? "update --global"
+                  : "update"),
+        network: q.action === "upgrade",
+        names_files: q.action === "prune",
+        advanced: q.action === "update-global",
+        preview_command: q.action === "update-global" ? "orc doctor --global" : "orc doctor",
+        preview: doctor,
+        waiting_runs: ["merchant-notifications", "refund-webhook-retry"],
+        dirty_tree: true,
+      };
+    case "/api/job":
+      return { id: null, running: false };
+    default:
+      return undefined;
+  }
+};
+
+// ── the states below are referenced above; declared after for readability ───

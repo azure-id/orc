@@ -10,6 +10,122 @@ Format: `### v<version> — <title> _(<date>)_`.
 
 ---
 
+### v0.48.1 — one file per thing, and a document that can be finished _(2026-08-16)_
+
+Two halves, deliberately kept separate so that **any** behaviour difference
+observed after this release is attributable to the second one and to nothing
+else.
+
+#### The panel is an architecture now
+
+`bin/webui/` was four monoliths: a 6 500-line `app.js`, a 2 500-line
+stylesheet, a 1 700-line fixture module and two 800-key string tables. Any
+change to one panel meant paging through all of it to find three places.
+
+It is now ~60 named files — one per panel, one per CSS layer, one per i18n
+namespace, one per fixture set — and the **filename is the load order**, so a
+future session never has to reason about dependencies.
+
+- **Classic scripts, not ES modules,** and the constraint that decided it:
+  `serve.js` requires the per-launch token on every static request, and **an
+  `import` carries no query string**. A module graph would 401 on every import
+  unless static auth were weakened, which was not on the table. Classic scripts
+  also share one global lexical scope, so the split added no `import`/`export`
+  and changed no call site.
+- **`serve.js` builds its static map from a one-time walk at boot.** A request
+  path is still a KEY LOOKUP in a frozen table, never a path join — directory
+  traversal stays structurally impossible. Server-side code (`serve.js`,
+  `api.js`, `fixtures/`) is never served.
+- **Token stamping is generic.** Naming two files was fine when there were two;
+  with ~55 the pattern has to be the rule, or the next `<script>` tag someone
+  adds 401s silently. A test parses `app.html` and asserts every reference comes
+  back stamped **and** resolves.
+- **`06-responsive.css` and `04-motion.css` load last, and that is
+  load-bearing.** Several reduced-motion rules are deliberately not
+  `!important` — `.vault-pulse` and `.step-flow` are removed with
+  `display: none`, because capping an infinite animation to one iteration
+  freezes it mid-cycle — so an equal-specificity rule loading afterwards would
+  win on order and switch the animation back on.
+- **`verify-package.js` names every file AND asserts set equality** with the
+  directory, in both directions: the agent-file pattern, applied to the panel.
+- The test suite is split to match (`test/cli/`, `test/lanes/`, `test/webui/`),
+  using an `appJs()` / `appCss()` helper that concatenates exactly what
+  `app.html` loads — so a file the manifest forgot cannot hide behind a passing
+  suite.
+
+**No behaviour changed.** All 274 tests pass, all 17 panels render in both
+themes and both languages with zero console errors, and the guided tour runs end
+to end.
+
+#### `/orc-doc` has a finish line
+
+- **`orc doc next`** turns the pipeline from something the orchestrator
+  REMEMBERS into something the CLI COMPUTES — the Flow-stepper shape, and for
+  the same reason: D6–D9 was prose a session had to hold in its head across a
+  resume that might be months later in a fresh context. Exit **0** = an action
+  is available (`command`, plus `paid` so a caller knows button vs copy-able
+  command), **1** = waiting on a human decision, **named** in `blocked_by`,
+  **2** = unknown slug.
+- **`orc doc ship` records delivery as a DECISION** (`/orc-pact`'s rule) while
+  the resulting state stays **COMPUTED** (`/orc-challenge`'s rule). `--where`
+  has **no default** — "shipped" with nowhere to point at is not a fact, it is a
+  feeling — and shipping an incomplete document needs `--force --reason`,
+  recorded verbatim. `unship` needs a reason and keeps the old record in
+  `ship_history[]`.
+- **`shipped-drifted` names the sections that moved,** by diffing the recorded
+  per-section hashes against the live map. Coverage-relative, the
+  `computeWikiFreshness` lesson applied to a document: a whole-file "something
+  changed" cannot tell you what to re-read. It exits **1**, because the document
+  moved after it was delivered and that is work.
+- **`orc doc audit`** reports every drift class from disk — an extract never
+  spliced back, an extract whose section moved under it, a heading a hand edit
+  deleted or added, a target that no longer matches the file, a reference file
+  that moved, a cycle count that disagrees with itself — each with a fix command
+  and the panel that can clear it. A hand-edited section is **reported and never
+  counted as a finding**: flagging it would teach people to stop editing their
+  own document. `orc doctor` gains a `doc-drifted` finding routed to Docs.
+
+#### And it remembers what you asked for
+
+This was a **data** gap, not a rendering one. `created_at` existed and
+`orc doc show --json` never emitted it; `context.md` and `context-sources.md`
+were files the CLI never opened; and what the user actually ASKED FOR, in order,
+across every session, lived nowhere at all.
+
+- **`orc doc log` / `journal`** record and serve it. The journal merges four
+  sources into one chronological array with the provenance of every row attached
+  — `recorded` (the user's own words, verbatim), `derived` (a cycle, a ship
+  record), `observed` (a section that turned `user-edited`) — and **it never
+  invents an entry**: a cycle that ran with nothing logged renders as an explicit
+  gap, never a plausible reconstruction from file mtimes. The `/orc-pact`
+  UNCHECKABLE rule: not knowing is an answer, and faking it teaches people to
+  distrust the rows that are real.
+- **`orc doc context`** returns the frozen brief — the verbatim request first,
+  because that is the memory-regain payload — plus the D2 reference table with a
+  live state per file: `ok`, `MISSING`, `SOURCE-DRIFTED`. A source is stale
+  only when THAT FILE moved, never because the repository did, and it is a
+  **warning, never an error**: a frozen context is *supposed* to be old.
+- **`orc doc read`** is a reader for the HUMAN — and the rule table says out
+  loud that the orchestrator never runs it, registered as a contract token so
+  the sentence cannot quietly disappear.
+- **The Docs panel is rebuilt around this: MEMORY FIRST, state second.** The
+  header strip, the brief, the reference files and the journal come before the
+  ribbon — because a user coming back after three weeks did not come back to ask
+  what state the document is in.
+
+#### One more way in
+
+D4 and D5 gain a `RETURN-TO` suspend into **`/orc-grill`** — gated on all
+three of the `_shared/lane-suspend.md` tests (a DECISION not a fact, a
+PREREQUISITE that changes the option set, a SUBTREE with more than one question
+hanging off it), or it asks inline. The snapshot is **run state, never the
+deliverable**, so hard rule 10 still holds; and on resume the lane re-writes
+`.current` and touches the trace file in the same step, because `/orc-grill`
+deleted the pointer at its own `FINISH`. Two traces for one document is
+correct — two lanes ran.
+
+---
+
 ### v0.48.0 — a document long enough to end a session, written anyway _(2026-08-13)_
 
 **`/orc-doc`** writes the long document — a PRD, a TSD, a cross-team

@@ -1,0 +1,100 @@
+/* panels/overview.css — orc ui
+   The "worth doing" list, the all-clear, a doctor finding, the rail update dot.
+
+   The <link> ORDER in app.html is the cascade order, and the numeric
+   prefix is that order. No @import: it would carry no session token and
+   401. */
+
+/* --- Overview: the "worth doing" list ------------------------------------ */
+/* Each row is a decision with somewhere to go. The colour bar on the left is
+   the severity; the arrow-side label names the panel that owns the fix, which
+   is the whole reason this list exists — a finding that sends you to the wrong
+   panel is worse than a finding with no button at all. */
+
+.todo-list { display: flex; flex-direction: column; gap: var(--sp-2); }
+.todo {
+  display: grid;
+  grid-template-columns: 4px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--sp-3);
+  width: 100%;
+  padding: var(--sp-3);
+  padding-left: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  overflow: hidden;
+  transition: border-color var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease),
+              transform var(--dur-fast) var(--ease);
+}
+.todo:hover { border-color: var(--accent-dim); background: var(--surface-3); transform: translateX(3px); }
+.todo-mark { align-self: stretch; background: var(--idle); }
+.todo-bad  .todo-mark { background: var(--bad); }
+.todo-warn .todo-mark { background: var(--warn); }
+.todo-info .todo-mark { background: var(--accent); }
+.todo-body { min-width: 0; }
+.todo-title { font-size: 13px; font-weight: 600; }
+.todo-text { font-size: 12.5px; color: var(--text-dim); margin-top: 3px; }
+/* The CLI's own words for WHY, kept visually distinct from our explanation. */
+.todo-evidence {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--text-faint);
+  margin-top: 5px;
+  padding-left: var(--sp-3);
+  border-left: 2px solid var(--line);
+}
+.todo-cta { flex: none; font-size: 12px; color: var(--accent); white-space: nowrap; }
+.todo-cta::after { content: " →"; }
+/* The update row arrives after a network check, so it draws itself in rather
+   than appearing between two rows you were already reading. */
+.todo-late { animation: todo-in var(--dur-slow) var(--ease); }
+@keyframes todo-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.all-clear { display: flex; align-items: center; gap: var(--sp-4); padding: var(--sp-2) 0; }
+.all-clear-mark {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--ok-wash);
+  color: var(--ok);
+  font-size: 17px;
+  animation: all-clear-in var(--dur-slow) var(--ease);
+}
+.all-clear-title { font-size: 13px; font-weight: 600; }
+@keyframes all-clear-in {
+  from { transform: scale(.6); opacity: 0; }
+  to   { transform: none; opacity: 1; }
+}
+
+/* A doctor finding, with the button that goes where its fix actually is. */
+.finding { display: flex; align-items: flex-start; gap: var(--sp-3); font-size: 12.5px; }
+.finding > div { min-width: 0; }
+.finding .btn { margin-top: 5px; }
+
+/* the rail's "a newer release exists" line — one dot, every panel, never modal */
+.rail-update {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--warn);
+  animation: rail-update-in var(--dur-slow) var(--ease);
+}
+.rail-update:hover { text-decoration: none; color: var(--warn); filter: brightness(1.15); }
+@keyframes rail-update-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.action-status { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }

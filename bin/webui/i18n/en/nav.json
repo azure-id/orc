@@ -1,0 +1,18 @@
+{
+  "nav.overview": "Overview",
+  "nav.settings": "Settings",
+  "nav.runs": "Runs",
+  "nav.knowledge": "Knowledge",
+  "nav.stats": "Stats",
+  "nav.flow": "Flow",
+  "nav.crosslink": "Crosslink",
+  "nav.learn": "Learn",
+  "nav.mockrun": "Mocked Skill Use",
+  "nav.experiment": "Experiment",
+  "nav.maintenance": "Maintenance",
+  "nav.pact": "Promises",
+  "nav.boundary": "Boundary",
+  "nav.handoff": "Self-serve",
+  "nav.challenge": "Challenge",
+  "nav.docs": "Docs"
+}

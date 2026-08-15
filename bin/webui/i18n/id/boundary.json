@@ -1,0 +1,20 @@
+{
+  "boundary.title": "Batas",
+  "boundary.sub": "Di mana ORC boleh bertindak sendiri, di mana perlu orang, dan di mana ia tidak akan bertindak sama sekali.",
+  "boundary.none": "Belum ada kartu batas",
+  "boundary.noneHint": "Area tanpa kartu berstatus UNKNOWN - tidak pernah dianggap aman. Kartu ditulis sekali per area lalu dibaca seketika.",
+  "boundary.cmdWhy": "Menentukan keputusan berarti membaca area itu dan menjawab empat pertanyaan, jadi ada biaya model. Panel ini membaca kartu; ia tidak bisa menulisnya.",
+  "boundary.summary": "Area",
+  "boundary.staleChip": "1 usang",
+  "boundary.staleChipPlural": "{n} usang",
+  "boundary.gatesOrc": "Ini membatasi ORC sendiri, bukan Anda. Kalau Anda memintanya langsung, pekerjaan tetap dikerjakan - kartu hanya ditampilkan, bukan dipaksakan kepada Anda.",
+  "boundary.stale": "usang",
+  "boundary.malformedNoChecklist": "Kartu ini menolak tanpa menyebut apa yang akan mengubahnya. Penolakan tanpa daftar syarat itu cacat - jalankan ulang lane untuk area ini.",
+  "boundary.wouldMakeYes": "Apa yang membuat ini jadi boleh",
+  "boundary.escalateTo": "Disetujui oleh: {who}",
+  "boundary.malformedNoWho": "Kartu ini minta persetujuan tapi tidak menyebut siapa. Itu cacat - jalankan ulang lane untuk area ini.",
+  "boundary.staleWhy": "1 commit menyentuh area ini sejak kartu dibuat, jadi buktinya sudah bergeser. Bukan berarti kartunya salah - hanya perlu dicek lagi.",
+  "boundary.staleWhyPlural": "{n} commit menyentuh area ini sejak kartu dibuat, jadi buktinya sudah bergeser. Bukan berarti kartunya salah - hanya perlu dicek lagi.",
+  "boundary.route.pact": "Buka Janji",
+  "boundary.route.knowledge": "Buka Pengetahuan"
+}

@@ -1,0 +1,92 @@
+/* 00-tokens.css — orc ui
+   Palette, the theme states, the type scale, spacing. Every colour token is
+   defined on bare :root here; the override blocks below redefine tokens ONLY.
+
+   The <link> ORDER in app.html is the cascade order, and the numeric
+   prefix is that order. No @import: it would carry no session token and
+   401. */
+
+/* ---------------------------------------------------------------- TOKENS -- */
+
+:root {
+  /* surface ladder — deepest at the back, lightest at the front */
+  --bg:            #0c0e12;
+  --bg-rail:       #090a0d;
+  --surface:       #14171d;
+  --surface-2:     #1a1e26;
+  --surface-3:     #212630;
+  --line:          #262c37;
+  --line-soft:     #1c212a;
+
+  --text:          #e6e9ef;
+  --text-dim:      #98a1b0;
+  --text-faint:    #667084;
+
+  /* one accent; status carries the rest */
+  --accent:        #4c9aff;
+  --accent-dim:    #2f6fc4;
+  --accent-wash:   rgba(76, 154, 255, .12);
+
+  --ok:            #3fb950;
+  --ok-wash:       rgba(63, 185, 80, .12);
+  --warn:          #d8a01a;
+  --warn-wash:     rgba(216, 160, 26, .12);
+  --bad:           #f0533f;
+  --bad-wash:      rgba(240, 83, 63, .12);
+  --idle:          #6b7280;
+  --idle-wash:     rgba(107, 114, 128, .12);
+
+  --radius:        10px;
+  --radius-sm:     6px;
+  --radius-lg:     14px;
+
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --sp-6: 32px;
+  --sp-7: 48px;
+
+  --dur-fast:   120ms;
+  --dur:        180ms;
+  --dur-shadow: 220ms;
+  --dur-slow:   320ms;
+  --ease:       cubic-bezier(.2, .7, .3, 1);
+
+  --rail-w: 208px;
+
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+  --shadow: 0 10px 30px rgba(0, 0, 0, .45);
+}
+
+:root[data-theme="light"] {
+  --bg:            #f6f7f9;
+  --bg-rail:       #eceef2;
+  --surface:       #ffffff;
+  --surface-2:     #f3f5f8;
+  --surface-3:     #e9ecf1;
+  --line:          #d8dde5;
+  --line-soft:     #e6e9ee;
+
+  --text:          #171a20;
+  --text-dim:      #57616f;
+  --text-faint:    #808a99;
+
+  --accent:        #1f6feb;
+  --accent-dim:    #1a5cc4;
+  --accent-wash:   rgba(31, 111, 235, .10);
+
+  --ok:            #1a7f37;
+  --ok-wash:       rgba(26, 127, 55, .10);
+  --warn:          #9a6700;
+  --warn-wash:     rgba(154, 103, 0, .10);
+  --bad:           #cf222e;
+  --bad-wash:      rgba(207, 34, 46, .10);
+  --idle:          #6b7280;
+  --idle-wash:     rgba(107, 114, 128, .10);
+
+  --shadow: 0 10px 30px rgba(16, 24, 40, .12);
+}

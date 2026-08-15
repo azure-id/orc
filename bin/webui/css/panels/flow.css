@@ -1,0 +1,177 @@
+/* panels/flow.css — orc ui
+   The compiled DIY pipeline stepper, presets, and the staged-edit bar.
+
+   The <link> ORDER in app.html is the cascade order, and the numeric
+   prefix is that order. No @import: it would carry no session token and
+   401. */
+
+/* --- Flow stepper -------------------------------------------------------- */
+
+/* The compiled DIY pipeline, left to right. The sweep LOOPS (v0.44.0): a single
+   pulse travels the rail every --sweep, and the rail is at rest for the ~88% of
+   the cycle in between. The stagger is per-element via --d, so the pulse moves
+   in stitch order instead of the whole rail blinking at once.
+
+   It runs forever because the rail is the one thing on this panel that says
+   "these phases happen in this order", and a one-shot said it before the card
+   had finished arriving. The long idle stretch is what keeps a permanent
+   animation from behaving like a permanent distraction.
+
+   The ENTRANCE and the PULSE are separate animations on purpose: one animates
+   geometry (once, `backwards`, so hover keeps its transform afterwards), the
+   other animates colour (forever). Merging them is how the old rule ended up
+   with a filled `transform: none` sitting on top of the hover lift. */
+.stepper { display: flex; align-items: stretch; gap: 0; padding: var(--sp-2) 2px var(--sp-3); min-width: min-content; --sweep: 4200ms; }
+.step {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  align-items: flex-start;
+  padding: var(--sp-2) var(--sp-3);
+  min-width: 84px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  font: inherit;
+  text-align: left;
+  white-space: nowrap;
+  animation: step-in var(--dur-slow) var(--ease) var(--d, 0ms) backwards;
+  transition: border-color var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease),
+              transform var(--dur-fast) var(--ease);
+  /* The pulse lives on an overlay, not on the step itself. A running animation
+     wins over a transition for the SAME property, so pulsing `.step`'s own
+     border-color and background forever would have silently killed the hover
+     state on every step — a permanent animation must not cost an interaction.
+     `isolation: isolate` scopes the overlay's negative z-index to this box, so
+     it paints above the step's background and below its text. */
+  position: relative;
+  isolation: isolate;
+}
+.step::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  z-index: -1;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  pointer-events: none;
+  animation: step-pulse var(--sweep) linear var(--d, 0ms) infinite;
+}
+button.step { cursor: pointer; }
+button.step:hover { border-color: var(--accent-dim); background: var(--surface-3); transform: translateY(-2px); }
+button.step:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.step-name { font-family: var(--mono); font-size: 13px; color: var(--text); }
+.step-note { font-size: 11px; color: var(--text-faint); max-width: 132px; overflow: hidden; text-overflow: ellipsis; }
+
+/* An OFF phase keeps its slot and turns RED. It is not a dimmed absence — it is
+   a phase this flow deliberately does not run, and that is worth seeing. */
+.step-off { border-color: var(--bad); background: var(--bad-wash); }
+.step-off::before { animation-name: step-pulse-off; }
+.step-off .step-name { color: var(--bad); text-decoration: line-through; text-decoration-color: rgba(240, 83, 63, .55); }
+.step-off .step-note { color: var(--bad); }
+button.step-off:hover { border-color: var(--bad); background: rgba(240, 83, 63, .2); }
+
+/* Geometry only — colour belongs to the pulse. */
+@keyframes step-in {
+  from { opacity: 0; transform: translateX(-10px); }
+  to   { opacity: 1; transform: none; }
+}
+/* Lit for ~4% of the cycle, fully transparent for the rest of it — the overlay
+   only ever ADDS colour, so at rest the step is exactly its own styling and
+   hover works normally. An OFF phase pulses in its own red, so the loop never
+   quietly recolours it back to "running". */
+@keyframes step-pulse {
+  0%, 12%, 100% { border-color: transparent; background: transparent; box-shadow: none; }
+  4%            { border-color: var(--accent); background: var(--accent-wash); box-shadow: 0 0 0 3px var(--accent-wash); }
+}
+@keyframes step-pulse-off {
+  0%, 12%, 100% { border-color: transparent; background: transparent; box-shadow: none; }
+  4%            { border-color: var(--bad); background: rgba(240, 83, 63, .22); box-shadow: 0 0 0 3px var(--bad-wash); }
+}
+
+/* The connector. The base hairline is always there; the accent segment travels
+   across it once per cycle, left to right, then fades — that IS the "in this
+   order", and it is what carries the pulse from one phase to the next. */
+.step-link { position: relative; align-self: center; width: 22px; height: 2px; background: var(--line); flex: none; }
+.step-flow {
+  position: absolute;
+  inset: 0;
+  background: var(--accent);
+  transform-origin: left center;
+  transform: scaleX(0);
+  animation: step-flow var(--sweep) linear var(--d, 0ms) infinite;
+}
+@keyframes step-flow {
+  0%          { transform: scaleX(0); opacity: 1; }
+  4%          { transform: scaleX(1); opacity: 1; }
+  9%          { transform: scaleX(1); opacity: 0; }
+  9.01%, 100% { transform: scaleX(0); opacity: 0; }
+}
+
+/* A shipped starting shape for the flow. Same two-column row as `.action` on
+   Maintenance — it is the same kind of thing: a named CLI invocation with its
+   command visible before you press it. */
+.preset-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--sp-4);
+  align-items: center;
+  padding: var(--sp-3);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  transition: border-color var(--dur-fast) var(--ease);
+}
+.preset-row:hover { border-color: var(--accent-dim); }
+.preset-head { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
+/* The shape you are already on. It keeps its row (removing it would make "you
+   are on lean" and "lean does not exist" look the same) and loses its button. */
+.preset-active { border-color: var(--ok); background: var(--ok-wash); }
+.preset-active:hover { border-color: var(--ok); }
+
+/* --- Staged edits -------------------------------------------------------- */
+
+/* A row with an unwritten change. The marker is on the LEFT edge and the label
+   is beside the key, because the control itself already shows the new value —
+   what is missing without this is "and it has not been written yet". */
+.setting.staged {
+  border-left: 2px solid var(--accent);
+  padding-left: calc(var(--sp-3) - 2px);
+  background: var(--accent-wash);
+}
+
+.edit-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  flex-wrap: wrap;
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  transition: border-color var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease);
+}
+/* It follows you ONLY while there is something to lose. A permanently sticky
+   bar is a permanently smaller viewport; a bar you have to scroll to find is an
+   Apply that gets forgotten. Dirty is the one state where both matter. */
+.edit-bar-dirty {
+  position: sticky;
+  bottom: var(--sp-4);
+  z-index: 6;
+  border-color: var(--accent-dim);
+  background: var(--surface-3);
+  box-shadow: var(--shadow);
+}
+.edit-summary { flex: 1 1 260px; min-width: 0; }
+.edit-actions { display: flex; gap: var(--sp-2); flex: none; margin-left: auto; }
+.edit-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 5px; }
+.edit-chip {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 100px;
+  padding: 1px 9px;
+}
+.edit-key { color: var(--accent); }

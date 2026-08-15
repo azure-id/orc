@@ -1,0 +1,118 @@
+/* panels/docs.css — orc ui
+   The section ribbon, the health bars, the wave preview.
+
+   The <link> ORDER in app.html is the cascade order, and the numeric
+   prefix is that order. No @import: it would carry no session token and
+   401. */
+
+/* ============================================================ DOCS (v0.48.0) */
+
+/* --- THE RIBBON — the one picture this panel is for ---------------------- */
+/* Each segment's width is `lines × PX` with a floor, solved in JS from the box
+   size, so the SVG carries an INTRINSIC width. The wrapper therefore SCROLLS
+   rather than squeezing a 40-section document into unreadable slivers — the
+   ch-rail rule, and the reason the viewBox is never stretched. Transparent
+   track, both syntaxes: neither falls back to the other. */
+.doc-ribbon-wrap {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: var(--sp-2);
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+.doc-ribbon-wrap::-webkit-scrollbar { height: 8px; }
+.doc-ribbon-wrap::-webkit-scrollbar-track { background: transparent; }
+.doc-ribbon-wrap::-webkit-scrollbar-thumb { background: var(--line); border-radius: 4px; }
+.doc-ribbon { display: block; }
+
+.doc-seg { cursor: pointer; outline: none; }
+.doc-seg-box { fill: var(--surface-3); stroke: var(--line-soft); stroke-width: 1; }
+.doc-seg-n { fill: var(--text-faint); font: 500 9px/1 var(--mono, ui-monospace, monospace); }
+.doc-seg:hover .doc-seg-box,
+.doc-seg:focus-visible .doc-seg-box { stroke: var(--accent); stroke-width: 2; }
+
+/* The five states the CLI can emit, and no others. An `open` section is drawn
+   in the warning colour because it is a REAL state of the document — something
+   nobody has decided yet — not a defect and not an absence. */
+.doc-seg-planned .doc-seg-box { fill: var(--surface-3); stroke-dasharray: 3 3; }
+.doc-seg-written .doc-seg-box { fill: var(--accent-dim); stroke: var(--accent-dim); }
+.doc-seg-checked .doc-seg-box { fill: var(--ok); stroke: var(--ok); }
+.doc-seg-useredited .doc-seg-box,
+.doc-seg-user-edited .doc-seg-box { fill: var(--warn-wash); stroke: var(--warn); }
+.doc-seg-open .doc-seg-box { fill: var(--warn-wash); stroke: var(--warn); stroke-dasharray: 3 3; }
+/* A findings marker is STATIC. A blinking error is a reduced-motion hazard and
+   reads as an urgency this panel has no right to imply. */
+.doc-seg-mark { fill: var(--bad); }
+
+/* Two SEPARATE animations, for the reason the flow stepper needed two: the
+   entrance places geometry ONCE and fills `backwards`, the pulse carries colour
+   forever. One animation doing both freezes the geometry when the other is
+   capped. */
+.doc-seg { animation: doc-seg-in .26s ease-out backwards; }
+@keyframes doc-seg-in { from { opacity: 0; transform: scaleY(.4); transform-origin: center; } to { opacity: 1; transform: none; } }
+/* The travelling sheen loops across the WRITTEN segments only — a long, mostly
+   idle cycle, like the flow stepper's sweep. */
+.doc-seg-written .doc-seg-box { animation: doc-sheen 9s ease-in-out infinite; }
+@keyframes doc-sheen { 0%, 82% { opacity: .85; } 90% { opacity: 1; } 100% { opacity: .85; } }
+/* A section the human edited gets a soft pulse in its OWN colour, so it reads
+   as "yours", never as "wrong". */
+.doc-seg-user-edited .doc-seg-box { animation: doc-mine 3.4s ease-in-out infinite; }
+@keyframes doc-mine { 0%, 100% { stroke-opacity: .55; } 50% { stroke-opacity: 1; } }
+
+.doc-legend { gap: var(--sp-3); flex-wrap: wrap; }
+.doc-legend-item { display: inline-flex; align-items: center; gap: 6px; }
+.doc-legend-swatch {
+  width: 14px; height: 10px; border-radius: 2px;
+  background: var(--surface-3); border: 1px solid var(--line-soft);
+}
+.doc-legend-swatch.doc-seg-written { background: var(--accent-dim); border-color: var(--accent-dim); }
+.doc-legend-swatch.doc-seg-checked { background: var(--ok); border-color: var(--ok); }
+.doc-legend-swatch.doc-seg-user-edited { background: var(--warn-wash); border-color: var(--warn); }
+.doc-legend-swatch.doc-seg-open { background: var(--warn-wash); border-color: var(--warn); border-style: dashed; }
+
+/* --- sections + reveal ---------------------------------------------------- */
+.doc-rows { display: grid; gap: var(--sp-1); }
+.doc-reveal {
+  border-left: 3px solid var(--line);
+  padding-left: var(--sp-3);
+  max-height: 340px;
+  overflow: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+.doc-reveal::-webkit-scrollbar { width: 8px; height: 8px; }
+.doc-reveal::-webkit-scrollbar-track { background: transparent; }
+.doc-reveal::-webkit-scrollbar-thumb { background: var(--line); border-radius: 4px; }
+
+/* --- health bars ---------------------------------------------------------- */
+.doc-bars { display: grid; gap: var(--sp-1); margin-top: var(--sp-2); }
+.doc-bar-row { display: grid; grid-template-columns: minmax(0, 22ch) minmax(0, 1fr) 3ch; align-items: center; gap: var(--sp-2); }
+.doc-bar-label { font-size: 12px; color: var(--text-dim); overflow-wrap: anywhere; }
+.doc-bar { height: 10px; border-radius: 3px; overflow: hidden; background: var(--surface-3); }
+.doc-bar-seg { width: var(--w); height: 100%; background: var(--warn); animation: doc-grow .45s ease-out backwards; }
+@keyframes doc-grow { from { width: 0; } to { width: var(--w); } }
+.doc-bar-n { text-align: right; font: 500 12px/1 var(--mono, ui-monospace, monospace); color: var(--text-dim); }
+
+/* --- the wave preview ----------------------------------------------------- */
+.doc-waves { display: grid; gap: var(--sp-3); margin-top: var(--sp-2); }
+.doc-wave {
+  display: grid;
+  grid-template-columns: minmax(0, 9ch) minmax(0, 1fr);
+  gap: var(--sp-3);
+  align-items: start;
+  animation: doc-wave-in .3s ease-out backwards;
+  animation-delay: calc(var(--i) * 70ms);
+}
+@keyframes doc-wave-in { from { opacity: 0; transform: translateX(-8px); } to { opacity: 1; transform: none; } }
+.doc-wave-n { font: 600 12px/1.6 var(--mono, ui-monospace, monospace); color: var(--text-faint); }
+.doc-wave-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: var(--sp-2); }
+.doc-agent {
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
+  padding: var(--sp-2) var(--sp-3);
+  display: grid;
+  gap: 6px;
+}
+.doc-agent.oversized { border-color: var(--bad); }
+.doc-agent-name { font-size: 11px; color: var(--text-faint); overflow-wrap: anywhere; }
+.doc-agent-secs { font-size: 12px; color: var(--text-dim); overflow-wrap: anywhere; }

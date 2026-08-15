@@ -1,0 +1,20 @@
+{
+  "boundary.title": "Boundary",
+  "boundary.sub": "Where ORC will act on its own, where it needs a person, and where it will not act at all.",
+  "boundary.none": "No boundary cards yet",
+  "boundary.noneHint": "An area with no card is UNKNOWN - never assumed safe. Cards are written once per area and then consulted instantly.",
+  "boundary.cmdWhy": "Working out a verdict means reading the area and answering four questions about it, so it costs model tokens. This panel reads the cards; it cannot write one.",
+  "boundary.summary": "Areas",
+  "boundary.staleChip": "1 stale",
+  "boundary.staleChipPlural": "{n} stale",
+  "boundary.gatesOrc": "This gates ORC's own dispatch, never you. Ask ORC directly and it will still do the work - the card is shown, not enforced against you.",
+  "boundary.stale": "stale",
+  "boundary.malformedNoChecklist": "This card refuses without saying what would change that. A refusal with no checklist is malformed - re-run the lane for this area.",
+  "boundary.wouldMakeYes": "What would make this a yes",
+  "boundary.escalateTo": "Signed off by: {who}",
+  "boundary.malformedNoWho": "This card escalates without naming anybody. An escalation with no name is malformed - re-run the lane for this area.",
+  "boundary.staleWhy": "1 commit has touched this area since the card was written, so its evidence has moved. That is not a wrong card - just one worth re-checking.",
+  "boundary.staleWhyPlural": "{n} commits have touched this area since the card was written, so its evidence has moved. That is not a wrong card - just one worth re-checking.",
+  "boundary.route.pact": "Open Promises",
+  "boundary.route.knowledge": "Open Knowledge"
+}

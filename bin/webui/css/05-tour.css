@@ -1,0 +1,100 @@
+/* 05-tour.css — orc ui
+   The spotlight ring, .tour-block, and the z-index ladder.
+
+   The <link> ORDER in app.html is the cascade order, and the numeric
+   prefix is that order. No @import: it would carry no session token and
+   401. */
+
+/* --- the tour ------------------------------------------------------------ */
+/* The spotlight is a RING, not a dimming overlay over a cut-out: the page stays
+   fully READABLE underneath, so a step can point at a real control and you can
+   see what it is pointing at.
+   It is not, however, clickable during the guided tour. `.tour-block` sits above
+   everything except the popover and swallows every click, so Next and Skip are
+   the only live controls on screen. The upgrade spotlight opts out of the
+   blocker (`interactive: true`) because its whole design is that clicking the
+   thing dismisses it. */
+
+/* `display: contents` is load-bearing. This wrapper used to be `position:
+   fixed`, which ALWAYS creates a stacking context — so the ring and the popover
+   were trapped at the layer's own z-index and the highlighted element (46)
+   painted straight over both. Step one targets the sticky rail, which is why
+   the very first spotlight appeared underneath the sidebar. Generating no box
+   at all lets each child stack against the page directly, while still being one
+   node to remove on cleanup. */
+.tour-layer { display: contents; }
+
+/* The ladder, in paint order: scrim/ring 45 → the highlighted element 46 (so it
+   stays lit) → the click blocker 47 → the popover 48 (always readable and
+   always the only live thing) → modals 50.
+   The blocker sits ABOVE the highlighted element on purpose: lifting the target
+   to 46 is what keeps it visible through the scrim, and a blocker underneath it
+   would leave that one element clickable — which is precisely the click that
+   navigates away mid-tour. */
+.tour-block {
+  position: fixed;
+  inset: 0;
+  z-index: 47;
+  /* Fully transparent: the scrim is already drawn by the ring's outward shadow,
+     and a second dimming layer would double it. This element exists only to
+     receive clicks. */
+  background: transparent;
+  cursor: not-allowed;
+}
+.tour-ring {
+  position: fixed;
+  border: 2px solid var(--accent);
+  border-radius: var(--radius);
+  /* The scrim is thrown OUTWARD from the ring, so the target itself is never
+     covered by anything. */
+  z-index: 45;
+  box-shadow: 0 0 0 4px var(--accent-wash), 0 0 0 9999px rgba(0, 0, 0, .55);
+  pointer-events: none;
+  transition: top var(--dur-slow) var(--ease), left var(--dur-slow) var(--ease),
+              width var(--dur-slow) var(--ease), height var(--dur-slow) var(--ease);
+  animation: ring-in var(--dur) var(--ease);
+}
+:root[data-theme="light"] .tour-ring { box-shadow: 0 0 0 4px var(--accent-wash), 0 0 0 9999px rgba(16, 24, 40, .38); }
+@keyframes ring-in {
+  from { opacity: 0; transform: scale(1.04); }
+  to   { opacity: 1; transform: none; }
+}
+
+.tour-pop {
+  position: fixed;
+  z-index: 48;
+  width: min(340px, calc(100vw - 16px));
+  background: var(--surface);
+  border: 1px solid var(--accent-dim);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: var(--sp-4);
+  pointer-events: auto;
+  animation: pop-in var(--dur) var(--ease);
+}
+@keyframes pop-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
+}
+.tour-title { font-size: 14px; font-weight: 600; margin-bottom: var(--sp-2); }
+.tour-text { font-size: 12.5px; color: var(--text-dim); line-height: 1.6; }
+.tour-foot { display: flex; align-items: center; gap: var(--sp-2); margin-top: var(--sp-4); }
+.tour-count { font-size: 11px; color: var(--text-faint); margin-right: auto; font-variant-numeric: tabular-nums; }
+.tour-waiting { font-size: 11px; color: var(--accent); margin-left: auto; }
+/* The highlighted element rides above the scrim so it stays LIT. During the
+   guided tour it is not clickable — `.tour-block` is above it — which is the
+   point: it is being explained, not operated.
+   z-index ONLY — forcing `position: relative` here broke the sticky rail, which
+   is a positioned element already. The relative fallback is applied separately,
+   and only to targets that are actually static. */
+.tour-target { z-index: 46; }
+.tour-target-rel { position: relative; }
+
+/* While a spotlight is up, the panel's entrance animations are FROZEN (v0.44.0).
+   `panel-in` and `block-in` both animate `transform`, and an element with a
+   running transform animation is a stacking context — so for the ~300ms a panel
+   takes to arrive, `.tour-target`'s z-index is trapped inside `.panel` and the
+   ladder above is decided by whether the spotlight landed before or after the
+   animation finished. Freezing them makes the ladder the only thing that
+   orders these layers, at any timing. */
+body.tour-on .panel, body.tour-on .stack > * { animation: none !important; }

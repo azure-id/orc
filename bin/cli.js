@@ -9890,7 +9890,17 @@ function docMapView(claudeDir, slug, { persist = false } = {}) {
 function docWhereLine(d, view) {
   const written = view ? view.sections.filter((s) => s.state !== "planned" && s.state !== "open").length : 0;
   const total = (d.outline || []).length || (view ? view.sections.length : 0);
-  return `Where it stands:  /orc-doc · ${String(d.type || "").toUpperCase()} · cycle ${d.cycle || 0} · ${written} of ${total} sections written`;
+  // The PREFIX is byte-stable — `orc doc list` parses it, which is how a listing
+  // never has to open doc.json. v0.48.1 appends a SUFFIX and never touches the
+  // rest.
+  const base = `Where it stands:  /orc-doc · ${String(d.type || "").toUpperCase()} · cycle ${d.cycle || 0} · ${written} of ${total} sections written`;
+  if (!d || !d.shipped) return base;
+  const drift = view ? docShipDrift(d, view) : null;
+  return (
+    base +
+    ` · shipped ${d.shipped.at.split(" ")[0]} → ${d.shipped.where}` +
+    (drift && drift.length ? ` (drifted: ${plural(drift.length, "section")})` : "")
+  );
 }
 
 // ── the free check (§4.4 + §7) ──────────────────────────────────────────────
@@ -10365,6 +10375,11 @@ function docShowCmd(claudeDir, slugArg) {
     process.exit(0);
   }
 
+  // v0.48.1 — the memory fields. `created_at` was already in doc.json and was
+  // never emitted: the CLI knew when a document started and never said so. That
+  // is a bug fix, not a feature.
+  const jr = docJournalRows(claudeDir, slug);
+  const ctx = docContextSources(docContextPaths(view.paths), view.paths.root);
   const payload = {
     ok: true,
     slug,
@@ -10375,13 +10390,32 @@ function docShowCmd(claudeDir, slugArg) {
     length: d.length,
     template: d.template,
     cycle: d.cycle || 0,
+    created_at: d.created_at || null,
+    last_touched_at: d.updated_at || null,
+    sessions: docSessionCount(claudeDir, slug),
     dir: view.paths.folder,
     document: view.document && fs.existsSync(view.document) ? view.document : null,
     total_lines: view.total_lines,
     outline: d.outline,
     sections: view.sections,
     extracts: d.extracts,
-    cycles: d.cycles,
+    // Per cycle: the role, the sections it touched, the findings it raised, and
+    // the agent + model that ran it. It was all in doc.json and effectively
+    // invisible.
+    cycles: (d.cycles || []).map((c, i) => ({
+      n: c.n || i + 1,
+      at: c.at || null,
+      role: c.role || null,
+      sections: c.sections || [],
+      findings: c.findings || 0,
+      agents: c.agents || null,
+      model: c.model || null,
+      effort: c.effort || null,
+    })),
+    journal: jr ? jr.rows : [],
+    context: ctx,
+    shipped: d.shipped || null,
+    ship_history: d.ship_history || [],
     lock: d.lock || null,
     where: docWhereLine(d, view),
   };
@@ -10888,7 +10922,9 @@ function docStatusCmd(claudeDir, slugArg) {
     return o.required && (!s || s.state === "planned" || s.state === "open");
   });
   const userEdited = view.sections.filter((s) => s.state === "user-edited");
-  const complete = hasDoc && !open.length && lint && lint.errors === 0;
+  const state = docComputedState(d, view, { hasDoc, open, lint });
+  const drift = docShipDrift(d, view);
+  const next = docNextAction(claudeDir, slug);
   const payload = {
     ok: true,
     slug,
@@ -10897,7 +10933,10 @@ function docStatusCmd(claudeDir, slugArg) {
     target: d.target,
     language: d.language,
     cycle: d.cycle || 0,
-    state: complete ? "complete" : hasDoc ? "in-progress" : "not-started",
+    state,
+    shipped: d.shipped || null,
+    drifted_sections: state === "shipped-drifted" ? drift : [],
+    next: next ? { phase: next.phase, action: next.action, command: next.command, paid: next.paid, blocked_by: next.blocked_by } : null,
     document: hasDoc ? path.relative(p.root, view.document).split(path.sep).join("/") : null,
     lines: view.total_lines,
     sections_total: d.outline.length,
@@ -10909,16 +10948,733 @@ function docStatusCmd(claudeDir, slugArg) {
     where: docWhereLine(d, view),
     resume: `/orc-doc resume ${slug}`,
   };
-  const code = complete ? 0 : 1;
+  // 1 = THERE IS SOMETHING TO DO. `shipped-drifted` is a 1 for that reason: the
+  // document moved after it was delivered, so either re-ship it or say why not.
+  const code = DOC_STATE_EXIT[state];
   if (asJson) emitJson(payload, code);
   console.log(ui.header(`ORC · doc status — ${slug}`));
-  console.log(`\n  ${payload.state}`);
+  console.log(`\n  ${state}`);
   console.log(`  ${docWhereLine(d, view)}`);
   if (lint) console.log(`  lint: ${lint.errors} errors, ${lint.warnings} warnings against ${lint.target_label}`);
   if (userEdited.length)
     console.log(`\n  You edited since last time: ${userEdited.map((s) => s.heading).join(", ")}\n  ${ui.color.gray("These are never rewritten unless you name them.")}`);
   if (open.length) console.log(`  Still open: ${open.map((o) => o.heading).join(" · ")}`);
+  if (state === "shipped-drifted")
+    console.log(
+      `\n  Changed since it shipped: ${drift.map((s) => s.heading).join(", ")}\n  ` +
+        ui.color.gray("Coverage-relative on purpose — a whole-file \"something changed\" cannot tell you what to re-read.")
+    );
+  if (next) console.log(`\n  Next:  ${next.command || ui.color.yellow("waiting on you — " + next.blocked_by)}`);
   console.log(`\n  Carry on, even in a brand-new chat:  ${payload.resume}`);
+  process.exit(code);
+}
+
+// ── ship: RECORDED as a decision, COMPUTED as a state (v0.48.1) ─────────────
+// Two rules this repo already uses for exactly this shape:
+//   1. /orc-pact — "retirement is a user decision with a recorded reason", so
+//      shipping is RECORDED and never inferred from "it looks finished".
+//   2. /orc-challenge — "PASS is computed, never declared", so the resulting
+//      STATE is derived from the record every time it is read, never stored.
+//
+// Before this, `docStatusCmd` computed `complete` and stopped there. Nothing
+// recorded that a document was DELIVERED, so a listing could not tell a PRD
+// that went to a backend team in March from one that has been sitting finished
+// and forgotten ever since.
+
+const docWholeHash = (view) => (view && view.document && fs.existsSync(view.document) ? docHash(fs.readFileSync(view.document, "utf8")) : null);
+
+function docSectionHashes(view) {
+  const out = {};
+  for (const s of (view && view.sections) || []) out[s.id] = s.hash;
+  return out;
+}
+
+// Which sections moved SINCE THE SHIP — coverage-relative, the
+// `computeWikiFreshness` lesson applied to a document. A whole-file "something
+// changed" would be useless: it cannot tell you what to re-read.
+function docShipDrift(d, view) {
+  const rec = d && d.shipped;
+  if (!rec) return null;
+  const then = rec.section_hashes || {};
+  const now = docSectionHashes(view);
+  const out = [];
+  for (const s of (view && view.sections) || [])
+    if (then[s.id] && then[s.id] !== now[s.id]) out.push({ id: s.id, heading: s.heading, reason: "changed" });
+  for (const id of Object.keys(then)) if (!(id in now)) out.push({ id, heading: id, reason: "gone" });
+  for (const s of (view && view.sections) || []) if (!(s.id in then)) out.push({ id: s.id, heading: s.heading, reason: "added" });
+  return out;
+}
+
+// not-started | in-progress | complete | shipped | shipped-drifted.
+// `shipped-drifted` KEEPS ITS SLOT and is an answer, not a gap.
+function docComputedState(d, view, { hasDoc, open, lint }) {
+  if (!hasDoc) return "not-started";
+  const finished = !open.length && lint && lint.errors === 0;
+  if (d.shipped) {
+    const drift = docShipDrift(d, view);
+    return drift && drift.length ? "shipped-drifted" : "shipped";
+  }
+  return finished ? "complete" : "in-progress";
+}
+
+// `1` means THERE IS SOMETHING TO DO, and that is now said out loud in the help
+// text. `shipped-drifted` is a 1 for that reason: the document moved after it
+// was delivered, so either re-ship it or say why not — either way, work.
+const DOC_STATE_EXIT = { "not-started": 1, "in-progress": 1, complete: 0, shipped: 0, "shipped-drifted": 1 };
+
+function docShipCmd(claudeDir, slugArg, undo) {
+  const asJson = wantsJson();
+  const slug = docResolveSlug(claudeDir, slugArg);
+  const view = slug ? docMapView(claudeDir, slug) : null;
+  if (!view) return docNoSuch(asJson, slugArg);
+  const d = view.d;
+  const fail = (reason, hint, extra, code = 2) => {
+    if (asJson) emitJson({ ok: false, reason, slug, hint, ...(extra || {}) }, code);
+    console.error("❌ " + hint);
+    process.exit(code);
+  };
+
+  if (undo) {
+    // Unship needs a reason for the same rule ship needs a destination: an
+    // undone decision with no recorded why is a decision nobody can review.
+    const reason = docOpt("--reason");
+    if (!reason) fail("no-reason", "orc doc unship needs --reason <text> — an un-shipped document with no reason is a state nobody can explain.");
+    if (!d.shipped) fail("not-shipped", `${slug} was never shipped, so there is nothing to undo.`, null, 1);
+    d.ship_history = Array.isArray(d.ship_history) ? d.ship_history : [];
+    d.ship_history.push({ ...d.shipped, unshipped_at: fmtStamp(new Date()), unship_reason: reason });
+    d.shipped = null;
+    docWrite(claudeDir, slug, d);
+    if (asJson) emitJson({ ok: true, slug, state: "in-progress", ship_history: d.ship_history.length, reason }, 0);
+    console.log(ui.header(`ORC · doc unship — ${slug}`));
+    console.log(`\n  Un-shipped. The previous record is kept in ship_history (${d.ship_history.length} now) — nothing is ever silently erased.`);
+    console.log(`  Reason: ${reason}`);
+    process.exit(0);
+  }
+
+  // `--where` has NO DEFAULT, the `orc challenge init --goal` rule: "shipped"
+  // with no destination is not a fact, it is a feeling.
+  const where = docOpt("--where");
+  if (!where)
+    fail(
+      "no-where",
+      "orc doc ship needs --where <destination> — a Notion URL, a Slack thread, " +
+        '"handed to the platform team in the 12 Aug review". Shipped with no destination is not a fact.'
+    );
+
+  const hasDoc = !!view.document && fs.existsSync(view.document);
+  const lint = hasDoc ? docLintRun(fs.readFileSync(view.document, "utf8"), d.target) : null;
+  const byId = new Map(view.sections.map((s) => [s.id, s]));
+  const open = d.outline.filter((o) => {
+    const s = byId.get(o.id);
+    return o.required && (!s || s.state === "planned" || s.state === "open");
+  });
+  const complete = hasDoc && !open.length && lint && lint.errors === 0;
+  const forced = flag("--force");
+  const forceReason = docOpt("--reason");
+
+  if (!complete && !forced)
+    fail(
+      "not-complete",
+      `${slug} is not complete: ` +
+        (open.length ? `${plural(open.length, "required section")} still open (${open.map((o) => o.heading).join(", ")})` : "") +
+        (open.length && lint && lint.errors ? "; " : "") +
+        (lint && lint.errors ? `${plural(lint.errors, "lint error")}` : "") +
+        ". Ship it anyway with --force --reason <text>.",
+      { open_sections: open.map((o) => ({ id: o.id, heading: o.heading })), lint_errors: lint ? lint.errors : null },
+      1
+    );
+  // The escape valve is never automatic and never silent.
+  if (!complete && forced && !forceReason)
+    fail("no-force-reason", "--force needs --reason <text>: shipping an incomplete document is a decision, and it is recorded verbatim.");
+
+  d.shipped = {
+    at: fmtStamp(new Date()),
+    where,
+    note: docOpt("--note") || null,
+    cycle: d.cycle || 0,
+    lines: view.total_lines,
+    document_hash: docWholeHash(view),
+    section_hashes: docSectionHashes(view),
+    source_commit: gitIn(view.paths.root, ["rev-parse", "--short", "HEAD"]) || null,
+    forced: !complete,
+    force_reason: !complete ? forceReason : null,
+  };
+  docWrite(claudeDir, slug, d);
+
+  if (asJson) emitJson({ ok: true, slug, state: "shipped", shipped: d.shipped, where: docWhereLine(d, view) }, 0);
+  console.log(ui.header(`ORC · doc ship — ${slug}`));
+  console.log(`\n  Shipped ${d.shipped.at} → ${where}`);
+  if (d.shipped.note) console.log(`  Note: ${d.shipped.note}`);
+  if (d.shipped.forced) console.log(ui.color.yellow(`  FORCED (incomplete): ${forceReason}`));
+  console.log(ui.color.gray(`\n  ${view.sections.length} section hashes recorded. If any of them changes, this reads shipped-drifted —`));
+  console.log(ui.color.gray("  which names the sections that moved, so you know exactly what a re-send would change."));
+  process.exit(0);
+}
+
+// ── the audit — every drift class, from disk (v0.48.1) ──────────────────────
+// Each finding carries a `fix` command and a `panel` (the FINDING_ROUTE rule: a
+// caution routes to the panel that can CLEAR it; `panel: null` when there is
+// genuinely no button).
+//
+// `user-edited` sections are REPORTED and never counted as a finding. Rule 4
+// says a human's wording is not recoverable from this lane's side, and flagging
+// their edits as drift would teach people to stop editing their own document.
+function docAuditFindings(claudeDir, slug) {
+  const view = docMapView(claudeDir, slug);
+  if (!view) return null;
+  const d = view.d;
+  const p = view.paths;
+  const out = [];
+  const add = (id, summary, fix, panel, level = "error") => out.push({ id, level, summary, fix, panel });
+  const hasDoc = !!view.document && fs.existsSync(view.document);
+
+  // Extracts that never came back, and extracts whose section moved under them.
+  const now = docSectionHashes(view);
+  for (const [id, rec] of Object.entries(d.extracts || {})) {
+    const part = p.work ? path.join(p.work, id + ".md") : null;
+    if (!part || !fs.existsSync(part)) continue;
+    let age = "";
+    try {
+      age = " (" + relAgeShort(Date.now() - fs.statSync(part).mtimeMs) + " old)";
+    } catch (_) {}
+    if (rec && rec.hash && now[id] && rec.hash !== now[id])
+      add(
+        "extract-stale",
+        `.work/${id}.md was extracted from a version of "${id}" that no longer matches the document — splice WILL refuse.`,
+        `orc doc extract ${slug} --section ${id}`,
+        "docs"
+      );
+    else add("orphan-extract", `.work/${id}.md was extracted${age} and never spliced back.`, `orc doc splice ${slug}`, "docs", "warn");
+  }
+
+  // The outline and the document disagreeing is always a hand edit, and always
+  // worth naming: every later batch is computed from the outline.
+  if (hasDoc) {
+    const live = new Set(view.sections.map((s) => s.id));
+    for (const o of d.outline || [])
+      if (!live.has(o.id))
+        add("section-vanished", `outline lists "${o.heading}" but the document has no such heading.`, `orc doc map ${slug}`, "docs");
+    const planned = new Set((d.outline || []).map((o) => o.id));
+    for (const s of view.sections)
+      if (!planned.has(s.id))
+        add("section-unlisted", `the document has "${s.heading}" but the outline does not.`, `orc doc outline ${slug}`, "docs", "warn");
+
+    // The target decides the portability rules the lint enforces, so a target
+    // that disagrees with the file is a lint measuring the wrong thing.
+    const tgt = docTarget(d.target);
+    const text = fs.readFileSync(view.document, "utf8");
+    const hasFront = /^---\r?\n/.test(text);
+    if (tgt && tgt.front_matter === "required" && !hasFront)
+      add("target-mismatch", `target ${tgt.label} requires front matter and the document has none.`, `orc doc lint ${slug}`, "docs");
+    if (tgt && tgt.front_matter === "banned" && hasFront)
+      add("target-mismatch", `target ${tgt.label} does not support front matter, and the document starts with some.`, `orc doc lint ${slug}`, "docs");
+    const tooDeep = view.sections.filter((s) => s.level > Number(tgt && tgt.max_heading ? tgt.max_heading : 6));
+    if (tooDeep.length)
+      add(
+        "target-mismatch",
+        `${plural(tooDeep.length, "heading")} deeper than H${tgt.max_heading}, which ${tgt.label} flattens.`,
+        `orc doc lint ${slug}`,
+        "docs"
+      );
+  }
+
+  const drift = docShipDrift(d, view);
+  if (drift && drift.length)
+    add(
+      "ship-drifted",
+      `shipped ${d.shipped.at} to ${d.shipped.where}, and ${plural(drift.length, "section")} changed since: ` +
+        drift.map((s) => s.heading).join(", ") + ".",
+      `orc doc ship ${slug} --where "<where it went this time>"`,
+      "docs",
+      "warn"
+    );
+
+  // Hard rule 10: nothing is created before D1 is answered — so a doc.json with
+  // no context.md is a document that was started without a frozen brief.
+  const ctx = docContextPaths(p);
+  if (!fs.existsSync(ctx.context))
+    add("context-missing", "doc.json exists but context.md does not — this document has no frozen brief.", `/orc-doc resume ${slug}`, null);
+  else {
+    // docContextSources, not docContextRead: only the former resolves each
+    // reference file against disk and sets its state.
+    const src = docContextSources(ctx, p.root);
+    // A WARNING, never an error. A frozen context is SUPPOSED to be old; what
+    // is not acceptable is nobody knowing a source moved under it.
+    const moved = (src.sources || []).filter((s) => s.state === "MISSING" || s.state === "SOURCE-DRIFTED");
+    if (moved.length)
+      add(
+        "source-drifted",
+        `${plural(moved.length, "reference file")} moved since the brief was frozen: ` + moved.map((s) => `${s.path} (${s.state})`).join(", "),
+        `orc doc context ${slug}`,
+        "docs",
+        "warn"
+      );
+    const behind = docContextCommitsBehind(p.root, src.source_commit);
+    if (behind !== null && behind > 200)
+      add(
+        "context-behind",
+        `the brief was frozen ${plural(behind, "commit")} ago. That is not wrong — a frozen context is meant to be old — but it is worth a look.`,
+        `orc doc context ${slug}`,
+        "docs",
+        "warn"
+      );
+  }
+
+  if ((d.cycle || 0) !== (d.cycles || []).length)
+    add(
+      "cycle-mismatch",
+      `doc.json says cycle ${d.cycle || 0} but records ${plural((d.cycles || []).length, "cycle")}.`,
+      `orc doc show ${slug} --json`,
+      null,
+      "warn"
+    );
+
+  return { view, findings: out, user_edited: view.sections.filter((s) => s.state === "user-edited").map((s) => ({ id: s.id, heading: s.heading })) };
+}
+
+function docAuditCmd(claudeDir, slugArg) {
+  const asJson = wantsJson();
+  const slug = docResolveSlug(claudeDir, slugArg);
+  const res = slug ? docAuditFindings(claudeDir, slug) : null;
+  if (!res) return docNoSuch(asJson, slugArg);
+  const code = res.findings.length ? 1 : 0;
+  if (asJson) emitJson({ ok: true, slug, clean: !res.findings.length, findings: res.findings, user_edited: res.user_edited }, code);
+  console.log(ui.header(`ORC · doc audit — ${slug}`));
+  if (!res.findings.length) console.log("\n  Nothing drifted.");
+  for (const f of res.findings) {
+    console.log(`\n  ${(f.level === "error" ? ui.color.red("✗") : ui.color.yellow("~"))} ${f.id}`);
+    console.log(`    ${f.summary}`);
+    console.log(`    fix: ${f.fix}`);
+  }
+  if (res.user_edited.length)
+    console.log(
+      ui.color.gray(`\n  You edited: ${res.user_edited.map((s) => s.heading).join(", ")}\n` + "  Reported, never a finding — your wording is not recoverable from this side.")
+    );
+  process.exit(code);
+}
+
+// ── the memory surface (v0.48.1) ────────────────────────────────────────────
+// A DATA gap, not a rendering one. Measured on disk before this release:
+// `created_at` existed and `orc doc show --json` never emitted it; `context.md`
+// and `context-sources.md` were files the CLI never opened; and what the user
+// ASKED FOR, in order, across every session, lived nowhere at all.
+//
+// No conflict with hard rule 0. Rule 0 forbids the orchestrator reading
+// `document.md`. `context.md` and `outline.md` are exactly what a resumed
+// session is INSTRUCTED to read.
+
+// How many separate sessions have touched this document — counted from the
+// trace files the hook already writes, never from a counter a model maintains.
+function docSessionCount(claudeDir, slug) {
+  try {
+    const dir = resolveLogDir(claudeDir);
+    if (!fs.existsSync(dir)) return 0;
+    const base = String(slug).replace(/-\d{6}$/, "");
+    return fs.readdirSync(dir).filter((f) => f.startsWith("run-doc-") && f.includes(base) && f.endsWith(".txt")).length;
+  } catch (_) {
+    return 0;
+  }
+}
+
+const DOC_CONTEXT_FILE = "context.md";
+const DOC_SOURCES_FILE = "context-sources.md";
+const DOC_CHANGELOG_FILE = "changelog.md";
+const DOC_JOURNAL_KINDS = ["request", "decision", "gate", "note"];
+
+function docContextPaths(p) {
+  return {
+    context: p.folder ? path.join(p.folder, DOC_CONTEXT_FILE) : null,
+    sources: p.folder ? path.join(p.folder, DOC_SOURCES_FILE) : null,
+    changelog: p.folder ? path.join(p.folder, DOC_CHANGELOG_FILE) : null,
+  };
+}
+
+function docContextCommitsBehind(root, commit) {
+  if (!commit) return null;
+  const out = gitIn(root, ["rev-list", "--count", `${commit}..HEAD`]);
+  return out === null ? null : Number(out) || 0;
+}
+
+// Parse the frozen brief. The VERBATIM REQUEST comes first because that is the
+// memory-regain payload — everything else is supporting detail.
+function docContextRead(ctx, root) {
+  if (!ctx.context || !fs.existsSync(ctx.context)) return { exists: false, sources: [] };
+  const text = fs.readFileSync(ctx.context, "utf8");
+  const frozen = (text.match(/<!--\s*frozen\s+([^·\n]+?)\s*(?:·|-->)/) || [])[1] || null;
+  // NO `m` FLAG on the terminator. Under `m`, `$` matches end of LINE, so a
+  // lazy body stops at the first newline and every multi-line block came back
+  // as its first line only — which read as "the brief has one bullet" rather
+  // than as a parser bug.
+  const block = (title) => {
+    const re = new RegExp("(?:^|\\n)##\\s+" + title + "[^\\n]*\\n([\\s\\S]*?)(?=\\n##\\s|$(?![\\s\\S]))");
+    const m = re.exec(text);
+    return m ? m[1].trim() : null;
+  };
+  const request = block("The request \\(verbatim\\)") || block("The request");
+  const sources = [];
+  const table = block("Supporting documents[^\\n]*") || "";
+  for (const line of table.split("\n")) {
+    const cells = line.split("|").map((c) => c.trim());
+    if (cells.length < 4 || /^-+$/.test(cells[1]) || /^path$/i.test(cells[1])) continue;
+    const rel = cells[1];
+    if (!rel || /^\*?none\*?$/i.test(rel)) continue;
+    sources.push({ path: rel, read: /^y/i.test(cells[2] || ""), digest: cells[3] || null });
+  }
+  return {
+    exists: true,
+    path: ctx.context,
+    frozen_at: frozen,
+    request: request ? request.replace(/^>\s?/gm, "").trim() : null,
+    purpose: block("Purpose[^\\n]*"),
+    template: block("Template[^\\n]*"),
+    decisions: block("Decisions[^\\n]*"),
+    sources,
+    source_commit: (text.match(/source_commit:\s*([0-9a-f]{7,40})/) || [])[1] || null,
+  };
+}
+
+// Does each D2 reference file still exist, and has it changed since the freeze?
+// Coverage-relative, the `computeWikiFreshness` shape applied to a brief: a
+// supporting document is stale only when THAT FILE moved, never because the
+// repository did.
+function docContextSources(ctx, root) {
+  const parsed = docContextRead(ctx, root);
+  if (!parsed.exists) return parsed;
+  const recorded = {};
+  if (ctx.sources && fs.existsSync(ctx.sources)) {
+    const s = fs.readFileSync(ctx.sources, "utf8");
+    for (const m of s.matchAll(/^<!--\s*source:\s*(\S+)\s+sha:\s*([0-9a-f]+)\s*-->/gm)) recorded[m[1]] = m[2];
+  }
+  parsed.sources = parsed.sources.map((row) => {
+    const abs = path.isAbsolute(row.path) ? row.path : path.join(root, ...row.path.split(/[\\/]/));
+    if (!fs.existsSync(abs)) return { ...row, state: "MISSING", note: "the file the brief was built on is gone" };
+    const known = recorded[row.path];
+    if (!known) return { ...row, state: "ok", note: "no hash was recorded at freeze time — existence is all that can be checked" };
+    const live = docHash(fs.readFileSync(abs, "utf8"));
+    return live === known
+      ? { ...row, state: "ok" }
+      : { ...row, state: "SOURCE-DRIFTED", note: "changed since the brief was frozen — the brief is not wrong, but it is older than this file" };
+  });
+  parsed.sources_path = ctx.sources && fs.existsSync(ctx.sources) ? ctx.sources : null;
+  return parsed;
+}
+
+function docContextCmd(claudeDir, slugArg) {
+  const asJson = wantsJson();
+  const slug = docResolveSlug(claudeDir, slugArg);
+  const d = slug ? docRead(claudeDir, slug) : null;
+  if (!d) return docNoSuch(asJson, slugArg);
+  const p = docPaths(claudeDir, slug);
+  const ctx = docContextSources(docContextPaths(p), p.root);
+  const drifted = (ctx.sources || []).filter((s) => s.state !== "ok");
+  const code = drifted.length ? 1 : 0;
+  if (asJson) emitJson({ ok: true, slug, context: ctx, drifted: drifted.map((s) => s.path) }, code);
+
+  console.log(ui.header(`ORC · doc context — ${slug}`));
+  if (!ctx.exists) {
+    console.log("\n  No context.md. This document was started without a frozen brief.");
+    process.exit(code);
+  }
+  console.log(ui.color.gray(`\n  Frozen ${ctx.frozen_at || "(date not recorded)"} — read forever, never re-asked.`));
+  if (ctx.request) console.log(`\n  YOU ASKED FOR:\n${ctx.request.split("\n").map((l) => "    " + l).join("\n")}`);
+  if (ctx.purpose) console.log(`\n  Purpose\n${ctx.purpose.split("\n").map((l) => "    " + l).join("\n")}`);
+  if (!ctx.sources.length) console.log(ui.color.gray("\n  Reference files: none — you were asked and said none."));
+  else {
+    console.log("\n  Reference files");
+    for (const s of ctx.sources) console.log(`    ${s.state.padEnd(16)} ${s.path}${s.note ? "  " + ui.color.gray(s.note) : ""}`);
+  }
+  process.exit(code);
+}
+
+// ── the journal — one writer, and it NEVER invents an entry ─────────────────
+function docLogCmd(claudeDir, slugArg) {
+  const asJson = wantsJson();
+  const slug = docResolveSlug(claudeDir, slugArg);
+  const d = slug ? docRead(claudeDir, slug) : null;
+  if (!d) return docNoSuch(asJson, slugArg);
+  const fail = (reason, hint) => {
+    if (asJson) emitJson({ ok: false, reason, slug, hint }, 2);
+    console.error("❌ " + hint);
+    process.exit(2);
+  };
+  const kind = String(docOpt("--kind") || "").toLowerCase();
+  if (!DOC_JOURNAL_KINDS.includes(kind)) fail("bad-kind", `--kind must be one of: ${DOC_JOURNAL_KINDS.join(", ")}`);
+  const text = docOpt("--text");
+  if (!text) fail("no-text", "orc doc log needs --text — and at D1 it is the user's words VERBATIM, never a paraphrase.");
+
+  d.journal = Array.isArray(d.journal) ? d.journal : [];
+  const entry = {
+    n: d.journal.length + 1,
+    at: fmtStamp(new Date()),
+    kind,
+    text,
+    cycle: d.cycle || 0,
+    sections: String(docOpt("--sections") || "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean),
+    source: docOpt("--source") || "user",
+  };
+  d.journal.push(entry);
+  // Through docWrite, so doc.json still has EXACTLY ONE WRITER.
+  docWrite(claudeDir, slug, d);
+  if (asJson) emitJson({ ok: true, slug, entry, entries: d.journal.length }, 0);
+  console.log(`recorded #${entry.n} (${kind}) — ${d.journal.length} entries in the journal for ${slug}`);
+  process.exit(0);
+}
+
+// Merge four sources into ONE chronological array. Every row carries its
+// PROVENANCE so the panel can be honest about which is which:
+//   recorded  the user's own words, verbatim (journal[])
+//   derived   a machine fact (a cycle, a ship record)
+//   observed  a machine fact with no text (a section that turned user-edited)
+//
+// AND IT NEVER INVENTS AN ENTRY. A cycle that ran with nothing logged renders
+// as an explicit gap — never a plausible reconstruction from file mtimes. Same
+// honesty rule as /orc-pact's UNCHECKABLE: not knowing is an answer, and faking
+// it teaches people to distrust the rows that are real.
+function docJournalRows(claudeDir, slug) {
+  const view = docMapView(claudeDir, slug);
+  if (!view) return null;
+  const d = view.d;
+  const rows = [];
+  for (const e of d.journal || [])
+    rows.push({ at: e.at, origin: "recorded", kind: e.kind, text: e.text, cycle: e.cycle || 0, sections: e.sections || [], source: e.source || "user" });
+
+  const logged = new Set((d.journal || []).map((e) => e.cycle));
+  (d.cycles || []).forEach((c, i) => {
+    const n = c.n || i + 1;
+    rows.push({
+      at: c.at || null,
+      origin: "derived",
+      kind: c.role ? c.role + " cycle" : "cycle",
+      text: null,
+      cycle: n,
+      sections: c.sections || [],
+      agents: c.agents || null,
+      gap: !logged.has(n),
+    });
+  });
+
+  if (d.shipped) rows.push({ at: d.shipped.at, origin: "derived", kind: "shipped", text: d.shipped.where, cycle: d.shipped.cycle || 0, sections: [] });
+  for (const h of d.ship_history || [])
+    rows.push({ at: h.unshipped_at, origin: "derived", kind: "unshipped", text: h.unship_reason || null, cycle: h.cycle || 0, sections: [] });
+
+  for (const s of view.sections)
+    if (s.state === "user-edited") rows.push({ at: null, origin: "observed", kind: "you edited", text: null, cycle: s.cycle || 0, sections: [s.id] });
+
+  // Oldest first: reading order IS the story.
+  rows.sort((a, b) => (a.cycle || 0) - (b.cycle || 0) || String(a.at || "").localeCompare(String(b.at || "")));
+  return { view, rows };
+}
+
+function docJournalCmd(claudeDir, slugArg) {
+  const asJson = wantsJson();
+  const slug = docResolveSlug(claudeDir, slugArg);
+  const res = slug ? docJournalRows(claudeDir, slug) : null;
+  if (!res) return docNoSuch(asJson, slugArg);
+  const recorded = res.rows.filter((r) => r.origin === "recorded").length;
+  const gaps = res.rows.filter((r) => r.gap).length;
+  if (asJson) emitJson({ ok: true, slug, entries: res.rows.length, recorded, gaps, journal: res.rows }, 0);
+  console.log(ui.header(`ORC · doc journal — ${slug}`));
+  console.log(ui.color.gray(`\n  ${plural(res.rows.length, "entry", "entries")}, ${recorded} in your own words. Oldest first.\n`));
+  for (const r of res.rows) {
+    const mark = r.origin === "recorded" ? "•" : r.origin === "observed" ? "~" : "·";
+    const head = `  ${mark} ${(r.at || "—").padEnd(20)} ${r.kind}`;
+    if (r.gap) console.log(head + ui.color.gray("  · no request was recorded for it"));
+    else console.log(head + (r.text ? "  " + r.text.split("\n")[0].slice(0, 96) : ""));
+  }
+  if (gaps)
+    console.log(
+      ui.color.gray(`\n  ${plural(gaps, "cycle")} ran with nothing recorded. Shown as a gap on purpose — a reconstruction would read like a fact.`)
+    );
+  process.exit(0);
+}
+
+// ── the reader — for the HUMAN, never for the orchestrator ──────────────────
+// This does NOT weaken hard rule 0. `SKILL.md`'s rule table carries the line
+// "the orchestrator never runs `orc doc read`", registered as a contract token
+// so it cannot quietly disappear. It is a command for the person, the same way
+// `orc challenge report` is.
+function docReadCmd(claudeDir, slugArg) {
+  const asJson = wantsJson();
+  const slug = docResolveSlug(claudeDir, slugArg);
+  const view = slug ? docMapView(claudeDir, slug) : null;
+  if (!view) return docNoSuch(asJson, slugArg);
+  if (!view.document || !fs.existsSync(view.document)) {
+    const hint = `no ${DOC_FILE} yet for ${slug} — nothing has been assembled.`;
+    if (asJson) emitJson({ ok: false, reason: "no-document", slug, hint }, 1);
+    console.error("❌ " + hint);
+    process.exit(1);
+  }
+  const want = docOpt("--section");
+  if (!want || flag("--toc")) {
+    const toc = view.sections.map((s) => ({ id: s.id, heading: s.heading, level: s.level, start: s.start, end: s.end, lines: s.lines, state: s.state }));
+    if (asJson) emitJson({ ok: true, slug, document: view.document, total_lines: view.total_lines, toc }, 0);
+    console.log(ui.header(`ORC · doc read — ${slug}  (${plural(view.total_lines, "line")})`));
+    console.log("");
+    for (const s of toc)
+      console.log(`  ${String(s.start).padStart(5)}..${String(s.end).padEnd(5)} ${"  ".repeat(Math.max(0, s.level - 2))}${s.heading}`);
+    console.log(ui.color.gray(`\n  One section at a time:  orc doc read ${slug} --section <id>`));
+    process.exit(0);
+  }
+  const s = view.sections.find((x) => x.id === want || x.id.startsWith(want));
+  if (!s) {
+    const hint = `no section "${want}" in ${slug} — \`orc doc read ${slug} --toc\` lists them.`;
+    if (asJson) emitJson({ ok: false, reason: "no-such-section", slug, section: want, hint }, 2);
+    console.error("❌ " + hint);
+    process.exit(2);
+  }
+  const scanned = view.scan.sections.find((x) => x.id === s.id);
+  if (asJson) emitJson({ ok: true, slug, section: s.id, heading: s.heading, start: s.start, end: s.end, lines: s.lines, state: s.state, text: scanned.text }, 0);
+  console.log(scanned.text);
+  process.exit(0);
+}
+
+// ── `orc doc next` — the orchestrator's score (v0.48.1) ─────────────────────
+// The CLI computes the next legal action; the skill RENDERS it and does exactly
+// that. Same shape as the Flow stepper, and for the same reason: D6–D9 used to
+// be prose the orchestrator had to hold in its head across a session that might
+// be resumed months later in a fresh context. That is precisely the
+// remembered-not-dispatched protocol that has failed twice in this repo (the
+// v0.32.0 narration lesson).
+//
+// Exit codes, the `pattern status` / `diy status` convention:
+//   0  an action is available
+//   1  waiting on a HUMAN decision — `blocked_by` names it in one sentence
+//   2  unknown slug
+function docNextAction(claudeDir, slug) {
+  const view = docMapView(claudeDir, slug);
+  if (!view) return null;
+  const d = view.d;
+  const p = view.paths;
+  const hasDoc = !!view.document && fs.existsSync(view.document);
+  const allParts = p.work && fs.existsSync(p.work) ? fs.readdirSync(p.work).filter((f) => f.endsWith(".md")) : [];
+  // Only a RECORDED extract is waiting to be spliced. A write-wave part file is
+  // consumed by `assemble` and then just lingers in .work/ — treating those as
+  // pending splices told every finished document to splice forever.
+  const parts = allParts.filter((f) => (d.extracts || {})[f.replace(/\.md$/, "")]);
+  const byId = new Map(view.sections.map((s) => [s.id, s]));
+  const open = (d.outline || []).filter((o) => {
+    const s = byId.get(o.id);
+    return o.required && (!s || s.state === "planned" || s.state === "open");
+  });
+  const lint = hasDoc ? docLintRun(fs.readFileSync(view.document, "utf8"), d.target) : null;
+  const A = (phase, action, command, why, paid, alternatives) => ({
+    ok: true,
+    slug,
+    phase,
+    action,
+    command,
+    why,
+    paid: !!paid,
+    blocked_by: null,
+    alternatives: alternatives || [],
+  });
+  const BLOCK = (phase, blocked_by, alternatives) => ({
+    ok: true,
+    slug,
+    phase,
+    action: "ask",
+    command: null,
+    why: blocked_by,
+    paid: false,
+    blocked_by,
+    alternatives: alternatives || [],
+  });
+
+  const ctx = docContextPaths(p);
+  if (!fs.existsSync(ctx.context))
+    return BLOCK("D1", "no context.md — the brief was never frozen. Ask the D1 question and write it before anything else runs.");
+
+  if (!(d.outline || []).length) return A("D5", "outline", `orc doc outline ${slug} --json`, "there is no agreed outline yet", false);
+
+  // A section a human edited is never rewritten without an instruction naming
+  // it: their wording is not recoverable from this side.
+  const edited = view.sections.filter((s) => s.state === "user-edited");
+  if (edited.length && !parts.length)
+    return BLOCK(
+      "D8",
+      `you edited ${edited.map((s) => s.heading).join(", ")} by hand. Nothing rewrites those without you naming them — ask what should change.`,
+      [`orc doc read ${slug} --section ${edited[0].id}`]
+    );
+
+  // Extract → edit → splice. The half-finished round comes before anything new.
+  const stale = parts.map((f) => f.replace(/\.md$/, "")).filter((id) => {
+    const rec = (d.extracts || {})[id];
+    const live = byId.get(id);
+    return rec && live && rec.hash && rec.hash !== live.hash;
+  });
+  if (stale.length)
+    return BLOCK(
+      "D8",
+      `.work/${stale[0]}.md was extracted from a version that no longer matches the document — splice will refuse. Re-extract, or decide which wording wins.`,
+      [`orc doc extract ${slug} --section ${stale[0]}`, `orc doc audit ${slug} --json`]
+    );
+  if (parts.length && hasDoc)
+    return A("D8", "splice", `orc doc splice ${slug}`, `${plural(parts.length, "part file")} waiting in .work/ — bottom-up, so no line number moves under another`, false);
+  if (allParts.length && !hasDoc)
+    return A("D7", "assemble", `orc doc assemble ${slug}`, `${plural(allParts.length, "part file")} written and nothing assembled yet`, false);
+
+  if (!hasDoc) return A("D6", "plan-write", `orc doc plan ${slug} --role write --json`, "the outline is agreed and nothing has been written", true);
+
+  // THE FREE CHECK ALWAYS RUNS BEFORE THE PAID ONE. `orc doc lint` costs zero
+  // tokens and its findings ride in the checker's slice, so no model is ever
+  // paid to count sentences.
+  const checkedCycle = (d.cycles || []).filter((c) => c.role === "check").slice(-1)[0];
+  const writtenSince = view.sections.filter((s) => s.state === "written").length;
+  if (lint && lint.errors)
+    return A("D7", "lint", `orc doc lint ${slug} --json`, `${plural(lint.errors, "lint error")} — the free check runs before the paid one`, false, [
+      `orc doc map ${slug} --json`,
+    ]);
+  if (writtenSince)
+    return A(
+      "D7",
+      "plan-check",
+      `orc doc plan ${slug} --role check --json`,
+      `${plural(writtenSince, "section")} written since the last check`,
+      true,
+      [`orc doc lint ${slug} --json`, `orc doc map ${slug} --json`]
+    );
+
+  if (open.length)
+    return A("D6", "plan-write", `orc doc plan ${slug} --role write --json`, `${plural(open.length, "required section")} still open`, true);
+
+  const audit = docAuditFindings(claudeDir, slug);
+  const blockingAudit = (audit.findings || []).filter((f) => f.level === "error");
+  if (blockingAudit.length)
+    return A("D9", "audit", `orc doc audit ${slug} --json`, blockingAudit[0].summary, false);
+
+  if (!d.shipped)
+    return BLOCK("D9", "the document is complete. Shipping is YOUR decision and it needs a destination — nothing here can infer one.", [
+      `orc doc ship ${slug} --where "<where it went>"`,
+      `/orc-challenge ${path.relative(p.root, view.document).split(path.sep).join("/")}`,
+    ]);
+
+  const drift = docShipDrift(d, view);
+  if (drift && drift.length)
+    return BLOCK(
+      "D9",
+      `shipped to ${d.shipped.where}, then ${plural(drift.length, "section")} changed (${drift.map((s) => s.heading).join(", ")}). Re-send it, or say why not.`,
+      [`orc doc ship ${slug} --where "<where it went this time>"`, `orc doc audit ${slug} --json`]
+    );
+
+  return BLOCK("D9", `shipped ${d.shipped.at} to ${d.shipped.where}, and nothing has changed since. There is nothing to do.`);
+}
+
+function docNextCmd(claudeDir, slugArg) {
+  const asJson = wantsJson();
+  const slug = docResolveSlug(claudeDir, slugArg);
+  const next = slug ? docNextAction(claudeDir, slug) : null;
+  if (!next) return docNoSuch(asJson, slugArg);
+  const code = next.blocked_by ? 1 : 0;
+  if (asJson) emitJson(next, code);
+  console.log(ui.header(`ORC · doc next — ${slug}`));
+  console.log(`\n  ${next.phase}   ${next.action}`);
+  console.log(`  ${ui.color.gray(next.why)}`);
+  if (next.command) console.log(`\n  ${next.paid ? "PAID  " : "free  "}${next.command}`);
+  else console.log(`\n  ${ui.color.yellow("waiting on you: " + next.blocked_by)}`);
+  if (next.alternatives.length) console.log(ui.color.gray("\n  also possible: " + next.alternatives.join("  ·  ")));
   process.exit(code);
 }
 
@@ -10996,6 +11752,31 @@ function doc() {
     case "status":
       docStatusCmd(claudeDir, pos[2]);
       break;
+    // v0.48.1 — the score, the finish line, the drift report and the memory.
+    case "next":
+      docNextCmd(claudeDir, pos[2]);
+      break;
+    case "ship":
+      docShipCmd(claudeDir, pos[2], false);
+      break;
+    case "unship":
+      docShipCmd(claudeDir, pos[2], true);
+      break;
+    case "audit":
+      docAuditCmd(claudeDir, pos[2]);
+      break;
+    case "log":
+      docLogCmd(claudeDir, pos[2]);
+      break;
+    case "journal":
+      docJournalCmd(claudeDir, pos[2]);
+      break;
+    case "context":
+      docContextCmd(claudeDir, pos[2]);
+      break;
+    case "read":
+      docReadCmd(claudeDir, pos[2]);
+      break;
     case "templates":
       docTemplatesCmd();
       break;
@@ -11006,7 +11787,8 @@ function doc() {
       console.error(
         `Unknown: orc doc ${pos[1]}\n` +
           "Usage: orc doc list [--json]                        every document + its `Where it stands:` line\n" +
-          "       orc doc status <slug> [--json]               0 complete / 1 in progress / 2 unknown slug\n" +
+          "       orc doc next <slug> [--json]                 THE NEXT LEGAL ACTION. 0 = do it / 1 = a human decides / 2 = unknown\n" +
+          "       orc doc status <slug> [--json]               0 nothing to do / 1 something to do / 2 unknown slug\n" +
           "       orc doc show <slug> [--json]                 full state: sections, cycles, extracts\n" +
           "       orc doc map <slug> [--json]                  the DERIVED section map (fresh line numbers)\n" +
           "       orc doc plan <slug> --role write|check|edit  the batching (never splits a section, <=4)\n" +
@@ -11015,6 +11797,13 @@ function doc() {
           "       orc doc splice <slug>                        parts -> document, bottom-up (1 = hash conflict)\n" +
           "       orc doc assemble <slug>                      parts -> document, outline order\n" +
           "       orc doc lint <slug|path> [--target <t>]      the free check (0 clean / 1 findings / 2 none)\n" +
+          "       orc doc audit <slug> [--json]                every drift class, from disk (0 clean / 1 findings)\n" +
+          "       orc doc ship <slug> --where <destination>    record the delivery. --where has NO DEFAULT\n" +
+          "       orc doc unship <slug> --reason <text>        undo it; the old record is kept in ship_history\n" +
+          "       orc doc log <slug> --kind request|decision|gate|note --text <t>\n" +
+          "       orc doc journal <slug> [--json]              the ordered story, gaps shown AS gaps\n" +
+          "       orc doc context <slug> [--json]              the frozen brief + whether its sources still hold\n" +
+          "       orc doc read <slug> [--section <id>|--toc]   FOR THE HUMAN — the orchestrator never runs this\n" +
           "       orc doc templates | targets [--json]\n" +
           "       orc doc init <slug> --type <" + DOC_TYPES.join("|") + "> [--template <p>] [--target <t>]"
       );
@@ -11251,6 +12040,26 @@ function doctor() {
   if (dstat.state === "UNCONFIGURED") ok("orc-diy not configured (fine — /orc-diy stays gated)");
   else if (dstat.state === "STALE") warn("diy-stale", `orc-diy flow STALE: ${dstat.reason}`, { reason: dstat.reason });
   else ok(`orc-diy flow READY (${dstat.reason})`);
+
+  // 6) a document that drifted (v0.48.1). Routed to the Docs panel via
+  // FINDING_ROUTE — a caution points at the panel that can CLEAR it, and
+  // `orc doc audit` / `orc doc ship` both live there.
+  try {
+    const dirty = [];
+    for (const s of docList(claudeDir)) {
+      const res = docAuditFindings(claudeDir, s);
+      const errs = res ? res.findings.filter((f) => f.level === "error").length : 0;
+      const warns = res ? res.findings.length - errs : 0;
+      if (res && res.findings.length) dirty.push({ slug: s, errors: errs, warnings: warns });
+    }
+    if (dirty.length)
+      warn(
+        "doc-drifted",
+        `${plural(dirty.length, "document")} audit dirty: ${dirty.map((x) => x.slug).join(", ")} — \`orc doc audit <slug>\` names each finding and its fix`,
+        { documents: dirty }
+      );
+    else if (docList(claudeDir).length) ok(`${plural(docList(claudeDir).length, "document")}, none drifted`);
+  } catch (_) {}
 
   if (asJson) {
     // Exactly one object, then the same exit code the human path would use.

@@ -1,0 +1,23 @@
+/* panels/experiment.css — orc ui
+   The lane list.
+
+   The <link> ORDER in app.html is the cascade order, and the numeric
+   prefix is that order. No @import: it would carry no session token and
+   401. */
+
+/* --- Experiment ---------------------------------------------------------- */
+
+.lane-list { display: flex; flex-direction: column; gap: var(--sp-2); }
+.lane {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  transition: border-color var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease);
+}
+.lane:hover { border-color: var(--accent-dim); background: var(--surface-3); }
+.lane-cmd { font-family: var(--mono); font-size: 13px; color: var(--accent); }

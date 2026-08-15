@@ -24,7 +24,7 @@ const { spawn, spawnSync } = require("child_process");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
-const fixtures = require("./fixtures.js");
+const fixtures = require("./fixtures/index.js");
 
 const CLI = path.join(__dirname, "..", "cli.js");
 
@@ -238,6 +238,18 @@ const READS = {
   "/api/doc/plan": (q) => ["doc", "plan", String(q.slug || ""), "--role", String(q.role || "write")],
   "/api/doc/templates": () => ["doc", "templates"],
   "/api/doc/targets": () => ["doc", "targets"],
+  // v0.48.1 — the score, the drift report and the memory surface. Every one is
+  // a subprocess of the real command: the panel decides nothing about the
+  // pipeline order, nothing about which drift classes exist, and nothing about
+  // which journal rows are the user's own words.
+  //
+  // There is deliberately NO route for `orc doc log`: the SKILL records a
+  // request, because the skill is what took one. A panel that could write a
+  // journal entry could write one nobody said.
+  "/api/doc/next": (q) => ["doc", "next", String(q.slug || "")],
+  "/api/doc/audit": (q) => ["doc", "audit", String(q.slug || "")],
+  "/api/doc/journal": (q) => ["doc", "journal", String(q.slug || "")],
+  "/api/doc/context": (q) => ["doc", "context", String(q.slug || "")],
   "/api/patterns": () => ["pattern", "status"],
   "/api/gotchas": () => ["gotcha", "list"],
   "/api/stats": (q) => (q.since ? ["stats", "--since", String(q.since)] : ["stats"]),
@@ -301,6 +313,16 @@ const WRITES = {
   // cost model tokens, so they are copy-able commands and there is deliberately
   // no route for any of them.
   "/api/doc/assemble": (b) => ["doc", "assemble", String(b.slug)],
+  // v0.48.1. Shipping is a DECISION, so it is a write — and `--where` has no
+  // default here either, because the CLI refuses without it and the panel must
+  // never invent an argument the human path demands.
+  "/api/doc/ship": (b) => {
+    const argv = ["doc", "ship", String(b.slug), "--where", String(b.where || "")];
+    if (b.note) argv.push("--note", String(b.note));
+    if (b.force) argv.push("--force", "--reason", String(b.reason || ""));
+    return argv;
+  },
+  "/api/doc/unship": (b) => ["doc", "unship", String(b.slug), "--reason", String(b.reason || "")],
   "/api/crosslink/remove": (b) => ["crosslink", "remove", String(b.name)],
   // The UI assembles no YAML. It hands the CLI the same arguments the
   // interactive prompt collects, and every rejection the user sees is the

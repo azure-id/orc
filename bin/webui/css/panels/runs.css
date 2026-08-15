@@ -1,0 +1,85 @@
+/* panels/runs.css — orc ui
+   The run accordion and its tabs.
+
+   The <link> ORDER in app.html is the cascade order, and the numeric
+   prefix is that order. No @import: it would carry no session token and
+   401. */
+
+/* --- Runs ---------------------------------------------------------------- */
+/* An ACCORDION, not a list plus a detail box below it. A row expands in place,
+   so what you clicked stays where your eye already is however long the list
+   gets — which is the failure mode the old two-column layout had: the more runs
+   a repo accumulated, the further the detail was from the thing you clicked. */
+
+.run-list { display: flex; flex-direction: column; gap: var(--sp-2); }
+.run-row {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+  transition: border-color var(--dur-fast) var(--ease), box-shadow var(--dur) var(--ease);
+}
+.run-row:hover { border-color: var(--accent-dim); }
+.run-row.open { border-color: var(--accent); box-shadow: 0 6px 22px rgba(0, 0, 0, .22); }
+:root[data-theme="light"] .run-row.open { box-shadow: 0 6px 22px rgba(16, 24, 40, .10); }
+
+.run-card {
+  display: grid;
+  grid-template-columns: 16px 88px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  transition: background var(--dur-fast) var(--ease);
+}
+.run-card:hover { background: var(--surface-2); }
+.run-row.open > .run-card { background: var(--surface-2); }
+.run-caret {
+  color: var(--text-faint);
+  font-size: 11px;
+  transition: transform var(--dur) var(--ease), color var(--dur-fast) var(--ease);
+}
+.run-row.open .run-caret { transform: rotate(90deg); color: var(--accent); }
+.run-mid { min-width: 0; }
+.run-slug { font-family: var(--mono); font-size: 13px; overflow: hidden; text-overflow: ellipsis; }
+.run-where { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
+.run-age { font-size: 12px; color: var(--text-faint); white-space: nowrap; }
+
+/* The fold. Same `1fr -> 0fr` grid trick as the settings tiers: `height: auto`
+   cannot be transitioned, and the inner element is what there is to collapse
+   against. Closed is the default, so a fresh list never flashes open. */
+.run-body {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--dur-slow) var(--ease), opacity var(--dur) var(--ease);
+  opacity: 0;
+}
+.run-body-inner { min-height: 0; overflow: hidden; }
+.run-row.open > .run-body { grid-template-rows: 1fr; opacity: 1; }
+.run-pane { padding: var(--sp-4) var(--sp-4) var(--sp-4); border-top: 1px solid var(--line-soft); }
+
+/* No margin-bottom — the card's own rhythm spaces the pane below it. */
+.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.tabs button {
+  border: 0;
+  background: transparent;
+  padding: 7px var(--sp-4);
+  color: var(--text-dim);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
+}
+.tabs button:hover { color: var(--text); }
+.tabs button[aria-selected="true"] { color: var(--text); border-bottom-color: var(--accent); }
+/* A tab swap replaces the pane's children; without a re-triggered fade the
+   change reads as a flicker rather than a transition. */
+.tab-pane { animation: tab-in var(--dur) var(--ease); }
+@keyframes tab-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: none; }
+}

@@ -71,6 +71,8 @@ that recomputes one of these has forked it.**
 | **8** | **It never stages and never commits.** The document is the user's to publish. |
 | **9** | **Repair is capped at 2 rounds.** After that it reports what is still open, honestly, and stops. |
 | **10** | **Nothing is created before D1 is answered.** A slug folder with no context is indistinguishable from an abandoned run. |
+| **11** | **The orchestrator never runs `orc doc read`.** That command exists for the HUMAN, the same way `orc challenge report` does. Reading a section is still delegated — rule 0 is not softened by a command that happens to print prose. |
+| **12** | **The journal never invents an entry.** `orc doc log` records what the user actually said; `orc doc journal` merges that with machine facts and shows a cycle nobody logged AS A GAP. **a lane that invents a journal entry** has broken this contract. |
 
 ---
 
@@ -126,6 +128,78 @@ after a write wave is what costs money. `orc doc plan --role write` reports any
 section over the per-agent budget: that is a **planning smell**, and the offer is
 to split it into sub-sections here — never to dispatch an over-budget writer.
 
+### When D4 or D5 will not settle — offer `/orc-grill` (`RETURN-TO`)
+
+`../_shared/lane-suspend.md`. Brainstorm generates candidates when you have none;
+**grill sharpens one idea you already have**, which is exactly the shape of a
+`/orc-doc` session that has a purpose and a template but cannot settle a
+*decision*. D1 already offers `/orc-brainstorm` for the narrower case of no
+chosen direction at all.
+
+**The gate is all three, or it asks inline:**
+
+1. **A DECISION, not a fact.** `../_shared/interview.md`'s split governs: facts
+   are ORC's to look up (wiki → pattern → gotchas → an ad-hoc read-only dispatch
+   LAST). If a lookup can settle it, **ORC looks it up and never suspends** —
+   *a lane that answers its own interview question* is forbidden, and so is a
+   lane that outsources a question it owed itself.
+2. **A PREREQUISITE.** Settling it changes the **option set** — the outline, the
+   audience, the document type. A single paragraph's wording never qualifies.
+3. **A SUBTREE.** More than one downstream question hangs off it.
+
+Fewer than three → ask inline in the D4 round. The offer is **never a forced
+handoff**, and *"park it as a stated assumption and continue"* stays on the menu
+— which then becomes a `> **Assumption:** …` line in the document, per rule 5.
+
+**The snapshot, and rule 10.** Rule 10 says nothing is created before D1 is
+answered; lane-suspend says the sender snapshots first. Both hold, because
+**the suspend snapshot is RUN STATE, not the deliverable**: it is written to
+`{run_dir}/{slug}/`, **never** to `doc_dir/<slug>/`. No slug folder, no
+`context.md`, no `doc.json` is created by a suspend. Say that in one line as you
+write it.
+
+**The trace obligation — the expensive half.** `/orc-grill` deletes `.current`
+at its `FINISH`. So **on RESUME, re-write `log_dir/.current` AND
+`touch the trace file` in the SAME step.** Both, or neither — this is the
+v0.34.2 split-run family arriving by a different road, and **two traces for one
+document is CORRECT: two lanes ran.**
+
+**Coming back.** Constraints return with their `intent`/`constraint` tags intact
+plus `source: /orc-grill`, land in `context.md` as `spec_invariants[]`, and are
+**quoted verbatim**. Log each one with
+`orc doc log <slug> --kind decision --source /orc-grill --text "<verbatim>"`.
+Resume at the phase you left, and **never re-ask what the trip just settled**
+(hard rule 1, *a lane that re-asks a frozen question*).
+
+## D6–D9 — run `orc doc next`, do what it says
+
+> **`orc doc next <slug> --json` computes the next legal action; this skill
+> RENDERS it and does exactly that.** Same shape as the Flow stepper, and for
+> the same reason: D6–D9 used to be prose the orchestrator had to hold in its
+> head across a session that might be resumed months later in a fresh context.
+> That is precisely the remembered-not-dispatched protocol that has failed twice
+> in this repo — see the v0.32.0 narration lesson.
+
+**The loop.** Run `orc doc next <slug> --json`. Do what `command` says. Repeat
+until it exits **1**, then ask the user what `blocked_by` names. **Never invent
+the next step**, and **never run a command `next` did not name** — a session
+that improvises the order is the drift this command exists to prevent.
+
+| exit | meaning |
+|---|---|
+| **0** | an action is available: `command` is it, and `paid` says whether it costs model tokens |
+| **1** | waiting on a HUMAN decision — `blocked_by` names it in one sentence, never a generic "waiting" |
+| **2** | unknown slug |
+
+Also log the request: at **D1**, and at the opening of every edit round, call
+`orc doc log <slug> --kind request --text "<the user's words, VERBATIM>"`. Same
+rule that governs `context.md` — a paraphrase is where a resumed session quietly
+starts writing a different document. Settled D4/D5 decisions go in as
+`--kind decision`, with `--source /orc-grill` when they came back from a
+suspend.
+
+**What each action means, when `next` names it:**
+
 ## D6 — Write
 
 `orc doc plan <slug> --role write --json` computes the batches. Dispatch
@@ -151,14 +225,25 @@ Never argue with the refusal — the user edited it; ask. Cap 2 rounds, then
 report what is still open. Same cap-and-report shape as
 `../_shared/drift-recovery.md`.
 
-## D9 — Handoff and STOP
+## D9 — Handoff, SHIP, and STOP
 
 Write `changelog.md`, rewrite `RESUME.md` (**by ORC itself, never by a
 dispatched agent** — a dispatch inside a stop sequence lets a stop fail because
 a subagent did), dispatch the trace packet, and print the hand-back block from
-`references/resume-protocol.md`. Then **end the turn**. Offer
-`/orc-challenge <path>` — in a separate session — and print the `git add`
-command. Run neither.
+`references/resume-protocol.md`.
+
+Then run `orc doc audit <slug> --json` and relay anything it found: it names
+every drift class from disk — an extract that was never spliced back, a section a hand edit deleted,
+a target that no longer matches the file, a reference file that moved.
+
+**Shipping is the finish line, and it is the USER'S decision.** Offer
+`orc doc ship <slug> --where "<where it went>"`. `--where` has **no default**:
+"shipped" with no destination is not a fact, it is a feeling. Never infer one,
+never run it unasked. Once recorded, `orc doc status` computes `shipped` — and
+`shipped-drifted` the moment a section changes afterwards, naming which ones.
+
+Then **end the turn**. Offer `/orc-challenge <path>` — in a separate session —
+and print the `git add` command. Run neither.
 
 ---
 

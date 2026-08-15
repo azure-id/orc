@@ -1,0 +1,17 @@
+{
+  "experiment.title": "Eksperimen",
+  "experiment.sub": "Buka sesi Claude di repo ini lalu pilih lane. Panel hanya menyerahkan — ia tidak pernah menjalankan lane.",
+  "experiment.start": "Mulai sesi",
+  "experiment.startNote": "Membuka terminal di proyek ini dan menjalankan `claude`. Tidak ada apa pun dari sesi itu yang kembali ke halaman ini — sesi itu milik Anda.",
+  "experiment.project": "proyek",
+  "experiment.launch": "Mulai sesi Claude baru",
+  "experiment.opening": "Membuka…",
+  "experiment.opened": "Terminal terbuka di {cwd}",
+  "experiment.openFail": "Terminal gagal dibuka",
+  "experiment.openFailHint": "Jalankan `claude` sendiri di {root}.",
+  "experiment.fixtureNote": "Mode fixture — tombolnya sengaja mati.",
+  "experiment.fixtureTitle": "Mode fixture tidak pernah menjalankan apa pun yang nyata.",
+  "experiment.lanes": "Lane",
+  "experiment.lanesCount": "{n} perintah",
+  "experiment.lanesDesc": "Ketik salah satu ini di sesi setelah terbuka. Salin hanya mengambil perintahnya; panel tidak menjalankannya."
+}

@@ -1,0 +1,43 @@
+/* panels/pact.css — orc ui
+   The promise sentence a card is ABOUT, and the "also" rows.
+
+   The <link> ORDER in app.html is the cascade order, and the numeric
+   prefix is that order. No @import: it would carry no session token and
+   401. */
+
+/* ==================================== PROMISES - BOUNDARY - SELF-SERVE - COST
+   (v0.46.0)
+
+   These panels are mostly composed from the primitives already above - .card,
+   .chip, .note, .bar-track, .tbl. What is genuinely new is a small set of
+   shapes that carry MEANING and therefore cannot be a generic box:
+
+     .promise      the sentence a card is ABOUT - the thing you actually read
+     .checklist    what would make a REFUSE a yes. It is the product, so it is
+                   the most legible thing on a boundary card
+     .undo-box     the undo command, shown BEFORE a write. Given its own frame
+                   so it cannot be skimmed past
+     .lane-cmd     a PAID action, which is a copy-able command and never a
+                   button. This class is the visual form of that boundary
+     .bar-stack    the four-part token bar. A single-value bar would re-hide the
+                   cache-read share, which is the whole point of showing it   */
+
+.promise {
+  font-size: 14.5px;
+  line-height: 1.5;
+  color: var(--text);
+}
+
+.also {
+  border-left: 2px solid var(--accent);
+  padding-left: var(--sp-3);
+}
+.also-head {
+  font-size: 11.5px;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  color: var(--text-dim);
+  margin-bottom: var(--sp-2);
+}
+.also-row { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; font-size: 12.5px; }
+.also-row + .also-row { margin-top: var(--sp-2); }

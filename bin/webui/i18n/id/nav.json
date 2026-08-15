@@ -1,0 +1,18 @@
+{
+  "nav.overview": "Ringkasan",
+  "nav.settings": "Pengaturan",
+  "nav.runs": "Run",
+  "nav.knowledge": "Pengetahuan",
+  "nav.stats": "Statistik",
+  "nav.flow": "Flow",
+  "nav.crosslink": "Crosslink",
+  "nav.learn": "Belajar",
+  "nav.mockrun": "Contoh Penggunaan Skill",
+  "nav.experiment": "Eksperimen",
+  "nav.maintenance": "Pemeliharaan",
+  "nav.pact": "Janji",
+  "nav.boundary": "Batas",
+  "nav.handoff": "Ubah Sendiri",
+  "nav.challenge": "Challenge",
+  "nav.docs": "Dokumen"
+}

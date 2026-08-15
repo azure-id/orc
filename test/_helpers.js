@@ -60,4 +60,130 @@ function freshInstall() {
   return { root, claudeDir: path.join(root, ".claude") };
 }
 
-module.exports = { REPO, CLI, HOOK_SRC, FAKE_HOME, tmpdir, rmrf, cli, runHook, freshInstall };
+// ── the panel, read as ONE string ───────────────────────────────────────────
+// v0.48.1. `bin/webui/` is many files now, but almost every assertion in the
+// suite is about the panel as a WHOLE ("no panel stylesheet defines a colour
+// token", "the CLI's state words appear verbatim"). Concatenating in the SAME
+// order `app.html` loads them keeps every grep-style assertion valid across the
+// split — and it makes a file `app.html` forgot to load impossible to hide,
+// because a file that is not in the manifest is not in this string either.
+//
+// The list is derived from `app.html` rather than from a directory walk on
+// purpose: these tests are about what the BROWSER actually runs.
+const WEBUI = path.join(REPO, "bin", "webui");
+
+function appHtml() {
+  return fs.readFileSync(path.join(WEBUI, "app.html"), "utf8");
+}
+
+// Every href="…"/src="…" in app.html, in document order, as webui-relative
+// POSIX paths. `ext` filters to one asset kind.
+function assetRefs(ext) {
+  const out = [];
+  const re = /(?:href|src)="([\w./-]+)"/g;
+  let m;
+  while ((m = re.exec(appHtml()))) if (m[1].endsWith("." + ext)) out.push(m[1]);
+  return out;
+}
+
+function concatRefs(ext) {
+  return assetRefs(ext)
+    .map((rel) => {
+      const abs = path.join(WEBUI, ...rel.split("/"));
+      // A manifest entry with no file behind it is a hard failure here rather
+      // than a confusing assertion miss 40 tests later.
+      if (!fs.existsSync(abs)) throw new Error(`app.html references ${rel}, which does not exist`);
+      return `/* ${rel} */\n` + fs.readFileSync(abs, "utf8");
+    })
+    .join("\n");
+}
+
+let _js = null;
+let _css = null;
+function appJs() {
+  if (_js === null) _js = concatRefs("js");
+  return _js;
+}
+function appCss() {
+  if (_css === null) _css = concatRefs("css");
+  return _css;
+}
+
+// ONE panel's module. Before v0.48.1 a per-panel assertion had to slice the
+// monolith between two landmark comments — which broke the moment either
+// landmark moved, and silently returned an empty string rather than failing.
+// A panel is a file now, so ask for the file.
+function panelJs(name) {
+  return fs.readFileSync(path.join(WEBUI, "js", "panels", name + ".js"), "utf8");
+}
+function panelCss(name) {
+  return fs.readFileSync(path.join(WEBUI, "css", "panels", name + ".css"), "utf8");
+}
+
+// ONE language's full string table, merged from its namespace files exactly
+// the way loadLang() merges them in the browser. Assertions about coverage and
+// about the scope rule are about the whole table, not about one file.
+function i18nNamespaces() {
+  const src = fs.readFileSync(path.join(WEBUI, "js", "01-i18n.js"), "utf8");
+  const block = /const NAMESPACES = \[([\s\S]*?)\];/.exec(src);
+  if (!block) throw new Error("01-i18n.js no longer declares NAMESPACES");
+  return [...block[1].matchAll(/"([\w-]+)"/g)].map((m) => m[1]);
+}
+
+function i18nTable(code) {
+  const out = {};
+  for (const ns of i18nNamespaces())
+    Object.assign(out, JSON.parse(fs.readFileSync(path.join(WEBUI, "i18n", code, ns + ".json"), "utf8")));
+  return out;
+}
+
+// Every fixture file as ONE string. The canned data is per panel now, but the
+// rules asserted against it ("one of every state", "no CLI vocabulary") are
+// about the fixture set as a whole.
+function fixtureSrc() {
+  const dir = path.join(WEBUI, "fixtures");
+  return fs
+    .readdirSync(dir)
+    .sort()
+    .map((f) => "/* " + f + " */\n" + fs.readFileSync(path.join(dir, f), "utf8"))
+    .join("\n");
+}
+
+// Every file under bin/webui/, as webui-relative POSIX paths. Used by the
+// set-equality guard in verify-package.js's test and by the i18n parity checks.
+function webuiFiles(sub) {
+  const base = sub ? path.join(WEBUI, ...sub.split("/")) : WEBUI;
+  const out = [];
+  const walk = (dir, prefix) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => (a.name < b.name ? -1 : 1))) {
+      const rel = prefix ? prefix + "/" + e.name : e.name;
+      if (e.isDirectory()) walk(path.join(dir, e.name), rel);
+      else out.push(rel);
+    }
+  };
+  walk(base, "");
+  return out;
+}
+
+module.exports = {
+  REPO,
+  CLI,
+  HOOK_SRC,
+  FAKE_HOME,
+  WEBUI,
+  tmpdir,
+  rmrf,
+  cli,
+  runHook,
+  freshInstall,
+  appHtml,
+  assetRefs,
+  appJs,
+  appCss,
+  panelJs,
+  panelCss,
+  fixtureSrc,
+  i18nNamespaces,
+  i18nTable,
+  webuiFiles,
+};

@@ -1,0 +1,16 @@
+{
+  "learn.title": "Belajar",
+  "learn.sub": "Panduan yang sama dengan `orc onboarding`, langsung di panel — tidak perlu README GitHub.",
+  "learn.contents": "Daftar isi",
+  "learn.progress": "{n} dari {total}",
+  "learn.prev": "← Sebelumnya",
+  "learn.next": "Berikutnya →",
+  "learn.copySection": "Salin bagian ini",
+  "learn.copied": "Bagian tersalin",
+  "learn.search": "Cari di panduan…",
+  "learn.noMatch": "Tidak ada bagian panduan yang cocok.",
+  "learn.matches": "{n} bagian cocok",
+  "learn.matchesPlural": "{n} bagian cocok",
+  "learn.cmdHint": "Perintah disorot. Klik salah satu untuk menyalinnya.",
+  "learn.restart": "Kembali ke awal"
+}

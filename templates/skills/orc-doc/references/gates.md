@@ -162,3 +162,82 @@ starts writing a different document.
 
 A `spec_invariants[]` array arriving from `/orc-grill` or `/orc-brainstorm`
 lands in that decision table, tagged as it arrived.
+
+---
+
+## Delivery — the finish line (v0.48.1)
+
+`orc doc status` computed `complete` and stopped there. Nothing recorded that a
+document was **delivered**, so a listing could not tell a PRD that went to a
+backend team in March from one that has been sitting finished-and-forgotten ever
+since.
+
+Two rules this repo already uses for exactly this shape:
+
+1. **`/orc-pact` — retirement is a user decision with a recorded reason.** So
+   shipping is RECORDED, never inferred from "it looks finished".
+2. **`/orc-challenge` — PASS is computed, never declared.** So the resulting
+   STATE is derived from that record on every read, never stored as a claim.
+
+```
+orc doc ship   <slug> --where <destination> [--note <text>] [--force --reason <text>]
+orc doc unship <slug> --reason <text>
+```
+
+- **`--where` has NO DEFAULT.** Missing it fails, naming the flag — the
+  `orc challenge init --goal` rule. "Shipped" with no destination is not a fact,
+  it is a feeling. Free text: a Notion URL, a Slack thread, *"handed to the
+  platform team in the 12 Aug review"*.
+- **`ship` refuses unless the state is `complete`**, naming every open required
+  section and the lint error count. `--force` is the escape valve and it
+  **requires `--reason`**, recorded verbatim. Neither the refusal nor the
+  override is ever automatic.
+- **`unship` requires `--reason`** and keeps the previous record in
+  `ship_history[]`. Nothing is ever silently erased.
+
+### The five computed states
+
+| state | condition |
+|---|---|
+| `not-started` | no `document.md` |
+| `in-progress` | open required sections, or lint errors |
+| `complete` | no open required sections, zero lint errors, no ship record |
+| `shipped` | a ship record whose `document_hash` still matches the live file |
+| `shipped-drifted` | a ship record, and the live hashes differ |
+
+`shipped-drifted` reports **which sections changed since ship**, by diffing the
+recorded `section_hashes` against the live map. That is the `/orc-pact` DRIFTED
+shape and the `computeWikiFreshness` lesson applied to a document:
+**coverage-relative, not global.** A whole-file "something changed" cannot tell
+you what to re-read.
+
+**Exit codes.** `orc doc status` keeps 0 / 1 / 2, and `1` means **there is
+something to do**: `in-progress` → 1, and **`shipped-drifted` → 1** (the
+document moved after it was delivered; either re-send it or say why not — that
+is work). `complete` and `shipped` → 0. Unknown slug → 2.
+
+## The memory surface (v0.48.1)
+
+What a returning user needs, and where it lives:
+
+| what they need | command |
+|---|---|
+| the brief I gave at the start, verbatim | `orc doc context <slug> --json` |
+| which reference documents fed it — **and whether they still hold** | the same command; each row carries `ok` / `MISSING` / `SOURCE-DRIFTED` |
+| what I asked for, in order, across every session | `orc doc journal <slug> --json` |
+| when this started, and how many sessions touched it | `orc doc show <slug> --json` |
+
+**No conflict with hard rule 0.** Rule 0 forbids the orchestrator reading
+`document.md`. `context.md` and `outline.md` are exactly what a resumed session
+is *instructed* to read. Surfacing them is that rule working, not an exception.
+
+**`orc doc log` is how a request gets recorded**, and the skill calls it at D1
+(the request, **verbatim**), at every settled D4/D5 decision, at the opening of
+every edit round, on every resume, and on return from a `/orc-grill` suspend
+(with `--source`). It appends through `docWrite`, so `doc.json` still has
+exactly one writer.
+
+**A source is stale only when THAT FILE moved** — never because the repository
+did. It is the tenth `audit` finding class, `source-drifted`, and a **warning,
+never an error**: a frozen context is *supposed* to be old. What is not
+acceptable is nobody knowing a source moved under it.

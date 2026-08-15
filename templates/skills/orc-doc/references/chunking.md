@@ -205,3 +205,44 @@ document this size is usually several documents.
 | `document.md` deleted, `context.md` intact | `orc doc status` reports `not-started`. Offer a full regenerate FROM THE FROZEN CONTEXT, and say clearly that anything typed into the old file is gone |
 | A wave partially fails | Each part file is independent. Re-dispatch the failed slices only; `assemble` refuses while a required part is missing and NAMES the missing sections |
 | Two sessions on one slug | The **hash is the guard**, not a lock file: every extract records the section's hash and `splice` refuses when it no longer matches, naming the section. A second session cannot silently overwrite the first one's work, and a pid lock would add a second, weaker idea of the same protection |
+
+---
+
+## The pipeline is CLI-computed, not remembered (v0.48.1)
+
+Everything above describes what each phase DOES. What decides **which phase is
+next** is `orc doc next <slug> --json`, and this lane renders it rather than
+reasoning about it.
+
+```json
+{ "ok": true, "slug": "…", "phase": "D7",
+  "action": "lint",
+  "command": "orc doc lint acme-prd --json",
+  "why": "3 sections were written since the last assemble; the free check runs before the paid one",
+  "paid": false,
+  "blocked_by": null,
+  "alternatives": ["orc doc map acme-prd --json"] }
+```
+
+Exit **0** = an action is available · **1** = waiting on a human decision, named
+in `blocked_by` · **2** = unknown slug. The same convention as
+`orc pattern status` and `orc diy status`.
+
+`paid` is what lets a caller obey the W2 rule — **a free action gets a button, a
+paid action gets a copy-able command** — without holding a second idea of which
+steps cost money.
+
+Never run a command `next` did not name, and never invent the next step. A
+session that improvises the order is exactly the drift this command exists to
+prevent, and it is the drift that is invisible until months later, in a fresh
+context, on a resumed run.
+
+## Reading a section, and who is allowed to
+
+`orc doc read <slug> [--section <id>|--toc]` prints the table of contents, or ONE
+section with absolute line numbers, straight from the derived map.
+
+**The orchestrator never runs `orc doc read`.** It is a command for the HUMAN,
+the same way `orc challenge report` is. Hard rule 0 is not softened by a command
+that happens to print prose: reading the document is still delegated, always, to
+a checker that receives one line RANGE and nothing else.

@@ -288,3 +288,94 @@ where the weight sits, what is still open, and which parts are yours.
 
 Free things are buttons there. Writing and checking cost model tokens, so those
 are commands to copy.
+
+---
+
+## 12. Finishing it — the part that used to be missing
+
+A document could be *complete* and there was no way to say it had actually been
+**delivered**. So a PRD that went to a backend team in March looked exactly like
+one that had been sitting finished-and-forgotten ever since.
+
+```
+$ orc doc ship prd-checkout-refund-130826 --where "Notion › Platform › Refund PRD" --note "handed to the ingest squad"
+
+  ORC · doc ship — prd-checkout-refund-130826
+  ───────────────────────────────────────────
+
+  Shipped 16-08-2026 09:41:02 → Notion › Platform › Refund PRD
+  Note: handed to the ingest squad
+
+  17 section hashes recorded. If any of them changes, this reads shipped-drifted —
+  which names the sections that moved, so you know exactly what a re-send would change.
+```
+
+**`--where` has no default.** Shipped with nowhere to point at is not a fact, it
+is a feeling. ORC will not guess one and will not ship without one.
+
+Change one paragraph afterwards and the state changes with it:
+
+```
+$ orc doc status prd-checkout-refund-130826
+
+  shipped-drifted
+  Where it stands:  /orc-doc · PRD · cycle 3 · 17 of 17 sections written · shipped 16-08-2026 → Notion › Platform › Refund PRD (drifted: 1 section)
+
+  Changed since it shipped: Goals and success metrics
+```
+
+It names the section. A whole-file "something changed" would not tell you what
+to re-send.
+
+---
+
+## 13. What did I ask for, again?
+
+Come back three weeks later and you do not need to know what state the document
+is in. You need **your own memory back**.
+
+```
+$ orc doc journal prd-checkout-refund-130826
+
+  ORC · doc journal — prd-checkout-refund-130826
+  ─────────────────────────────────────────────
+
+  8 entries, 4 in your own words. Oldest first.
+
+  • 13-08-2026 09:02:11  request   write the refund PRD for checkout, and do not invent an SLA
+  · 13-08-2026 09:14:02  write cycle
+  • 13-08-2026 09:40:55  decision  partial refunds are out of scope for v1
+  · 13-08-2026 10:11:30  check cycle
+  ~ —                    you edited
+  • 14-08-2026 08:20:03  request   the goals section reads like marketing — make it measurable
+  · 14-08-2026 08:44:19  edit cycle   · no request was recorded for it
+  • 15-08-2026 17:05:00  note      waiting on legal before the rollout section
+
+  1 cycle ran with nothing recorded. Shown as a gap on purpose — a reconstruction would read like a fact.
+```
+
+That last line is the rule. A cycle nobody logged is shown **as a gap**, never
+filled in with something that sounds plausible. And `orc doc context` gives you
+the brief you froze on day one — your request, quoted word for word — plus
+whether each reference file you pointed at still says what it said then.
+
+---
+
+## 14. Which command comes next
+
+You never have to remember.
+
+```
+$ orc doc next prd-checkout-refund-130826
+
+  ORC · doc next — prd-checkout-refund-130826
+  ───────────────────────────────────────────
+
+  D7   lint
+  3 sections were written since the last assemble; the free check runs before the paid one
+
+  free  orc doc lint prd-checkout-refund-130826 --json
+```
+
+Do what it says, then run it again. When it stops giving you a command, it tells
+you what **you** have to decide — by name, never as a shrug.

@@ -1,0 +1,194 @@
+/* panels/crosslink.css — orc ui
+   The vault graph and the folder picker. .vault-node's box MUST stay the same
+   size as VAULT.W/H in js/panels/crosslink.js — a test asserts it.
+
+   The <link> ORDER in app.html is the cascade order, and the numeric
+   prefix is that order. No @import: it would carry no session token and
+   401. */
+
+/* --- Crosslink ----------------------------------------------------------- */
+
+/* Nothing is linked yet, so the Design tab has nothing to draw. The pulse points
+   at the tab that can fix that; it is dropped the moment a link exists. */
+.tabs button.tab-spot { color: var(--accent); animation: tab-spot 2s ease-in-out infinite; }
+@keyframes tab-spot {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: .5; }
+}
+
+/* THE VAULT GRAPH. Absolutely-positioned repo boxes over a stretched SVG edge
+   layer — both use the same normalised coordinates, so they line up at any
+   width without measuring anything. */
+/* Width and height are set inline by vaultCard — the canvas is sized to the
+   ring it has to hold, so it is never the thing that decides the spacing.
+   `margin: 0 auto` centres it when the panel is wider than the graph; when the
+   panel is NARROWER, the `.scroll-x` wrapper scrolls rather than compressing
+   the ring back into a collision. */
+.vault {
+  position: relative;
+  margin: 0 auto;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  background: radial-gradient(circle at 50% 50%, var(--surface-2) 0%, var(--surface) 62%);
+}
+.vault-edges { position: absolute; inset: 0; width: 100%; height: 100%; }
+.vault-line {
+  stroke: var(--line);
+  stroke-width: 1.5;
+  /* pathLength="1" — the draw-in is written in fractions, not pixels. */
+  stroke-dasharray: 1;
+  animation: edge-draw var(--dur-slow) var(--ease) var(--d, 0ms) both;
+}
+/* A short dash running from → to. The direction of travel IS the direction of
+   the dependency, which is the whole point of a crosslink edge. */
+.vault-pulse {
+  stroke: var(--accent);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-dasharray: .07 .93;
+  opacity: .85;
+  animation: edge-pulse 2.8s linear var(--d, 0ms) infinite;
+}
+@keyframes edge-draw {
+  from { stroke-dashoffset: 1; opacity: 0; }
+  to   { stroke-dashoffset: 0; opacity: 1; }
+}
+@keyframes edge-pulse {
+  from { stroke-dashoffset: 1; }
+  to   { stroke-dashoffset: 0; }
+}
+.vault-via { fill: var(--text-faint); font-family: var(--mono); font-size: 11px; }
+
+/* Hover a repo: its edges brighten, every other edge steps back. */
+.vault-edge { transition: opacity var(--dur) var(--ease); }
+.vault-edge.edge-dim { opacity: .22; }
+.vault-edge.edge-hi .vault-line { stroke: var(--accent-dim); }
+.vault-edge.edge-hi .vault-pulse { stroke-width: 3.5; opacity: 1; }
+
+/* THE BOX SIZE IS FIXED, AND THAT IS LOAD-BEARING. These two numbers are the
+   VAULT.W / VAULT.H the ring radii are solved from in app.js — change one and
+   you must change the other, or the arithmetic that guarantees no two repos
+   overlap is being done against the wrong box. A box that grew to fit its
+   longest repo name could not be spaced by arithmetic at all, only measured;
+   long names ellipsis instead. */
+.vault-node {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  box-sizing: border-box;
+  width: 156px;
+  height: 78px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 2px;
+  padding: var(--sp-2) var(--sp-3);
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  font: inherit;
+  text-align: left;
+  animation: vault-in var(--dur-slow) var(--ease) var(--d, 0ms) both;
+  transition: border-color var(--dur-fast) var(--ease), box-shadow var(--dur-fast) var(--ease);
+}
+button.vault-node { cursor: pointer; }
+/* A hovered repo lifts above its neighbours' shadows, never under them. */
+.vault-node:hover, .vault-node.vault-hi { border-color: var(--accent); z-index: 3; }
+button.vault-node:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; z-index: 3; }
+.vault-name,
+.vault-sub { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vault-name { font-family: var(--mono); font-size: 13px; color: var(--text); }
+.vault-sub { font-size: 11px; color: var(--text-faint); }
+/* The state chip must not push the box taller than the geometry assumes. */
+.vault-node .chip { flex: none; margin-top: 2px; max-width: 100%; }
+/* This repo is the hub — it is the one node that is not a link. */
+.vault-hub { border-color: var(--accent); background: var(--accent-wash); z-index: 2; }
+.vault-consume { border-left: 3px solid var(--accent); }
+.vault-provide { border-left: 3px solid var(--ok); }
+.vault-none { border-left: 3px solid var(--warn); }
+@keyframes vault-in {
+  from { opacity: 0; transform: translate(-50%, -50%) scale(.88); }
+  to   { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+
+/* Hovering a graph node lights its detail row, so the picture and the list are
+   visibly the same set of things. */
+.linked-hi { border-color: var(--accent) !important; background: var(--surface-2); }
+
+.linkform { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--sp-3); }
+.field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.field-label { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--text-faint); }
+.field-hint { font-size: 11px; color: var(--text-faint); }
+.field select.text-input { padding: 5px 8px; }
+
+.kind-picker { display: flex; flex-wrap: wrap; gap: 4px; }
+.kind {
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--text-dim);
+  border-radius: 100px;
+  padding: 2px 9px;
+  font-size: 11px;
+  font-family: var(--mono);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease),
+              border-color var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease);
+}
+.kind:hover { border-color: var(--accent-dim); color: var(--text); }
+.kind-on { background: var(--accent); border-color: var(--accent); color: #fff; transform: scale(1.04); }
+
+/* --- Crosslink: the folder picker ---------------------------------------- */
+/* A directory listing the SERVER walks, rendered as a list you click through.
+   Nothing here reads a file — the two chips are a single existsSync each. */
+
+.path-row { display: flex; gap: var(--sp-2); align-items: center; }
+.path-row .text-input { flex: 1 1 auto; min-width: 0; }
+.path-row .btn { flex: none; }
+
+.picker-crumbs { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
+.picker-path {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--text-dim);
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+  padding: 2px 8px;
+  overflow-wrap: anywhere;
+}
+.picker-list {
+  max-height: 46vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: var(--sp-2);
+  background: var(--surface-2);
+}
+.picker-item {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: 6px var(--sp-3);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
+}
+.picker-item:hover { background: var(--surface-3); border-color: var(--accent-dim); }
+.picker-icon { color: var(--text-faint); font-size: 11px; }
+.picker-item:hover .picker-icon { color: var(--accent); }
+.picker-name { font-family: var(--mono); font-size: 13px; overflow: hidden; text-overflow: ellipsis; }
+.picker-tags { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 3px; }
+.picker-into { color: var(--text-faint); opacity: 0; transition: opacity var(--dur-fast) var(--ease); }
+.picker-item:hover .picker-into { opacity: 1; }
+.picker-foot { display: flex; justify-content: flex-end; }
+.picker-warn { color: var(--warn); }
