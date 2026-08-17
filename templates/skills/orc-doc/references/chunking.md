@@ -1,9 +1,26 @@
-# The token architecture — map, plan, extract, splice
+# The token architecture — sections, parts, compile
 
 This file is the point of the lane.
 
 > **The orchestrator never reads the document body.**
 > **a lane that reads its own document** has broken this contract.
+
+## The one sentence that changed in v0.49.0
+
+**`sections/` is the source of truth. `document.md` is a build artifact.**
+
+Before this, `document.md` was the truth and the part files were scratch. So
+every later change was *extract* (copy a section OUT of the monolith) → edit →
+*splice* (write it back IN). The section files existed and were dead, and a
+resumed session, an update and a re-check all routed through the 10,000-line
+file.
+
+Now a section lives in its own file, which is the source of truth, and the
+document is rebuilt from those files on demand. **`orc doc compile` costs zero
+model tokens** — it is Node code in the same process, and it always was free.
+Anyone who tells you this release made compiling cheaper is selling something.
+What it bought is **early review, a resumable wave, no round trip, and bounded
+reads**.
 
 ## What the orchestrator may hold
 
@@ -11,12 +28,52 @@ This file is the point of the lane.
 |---|---|
 | `context.md` (small, written by itself) | the body of `document.md` |
 | `outline.md` (headings only) | the body of any supporting document |
-| `orc doc map --json` (heading + line range + hash + state per section) | the body of any `.work/` part |
-| `orc doc lint --json` (findings with line numbers) | the raw template file |
-| each agent's **structured return** (≤ ~40 lines) | anything an agent read to produce that return |
+| `orc doc parts --json` (one row per section: file, state, hash) | the body of any section file |
+| `orc doc map --json` (heading + line range + hash + state per section) | the raw template file |
+| `orc doc lint --json` (findings with line numbers) | anything an agent read to produce its return |
+| each agent's **structured return** (≤ ~40 lines) | |
 
 If the orchestrator ever needs a fact from inside the document, **it dispatches
 for it.** Reading is delegated, always.
+
+## What lands on disk
+
+```
+orc/orc-doc/<slug>/
+├── doc.json              CLI-owned state (version 2). Never hand-edited
+├── context.md            the FROZEN brief. Written ONCE, quoted verbatim
+├── context-sources.md    the digest of the D2 documents (anchored)
+├── outline.md            DERIVED by the CLI from doc.json
+├── gaps.md               DERIVED — every Open / Assumption, OUT of the document
+├── changelog.md          one entry per cycle: what changed, and who asked
+├── sections/          ◄── THE SOURCE OF TRUTH
+│   ├── 00-front.md          anything above the first `## ` (front matter, an H1)
+│   ├── 01-document-info.md
+│   ├── 02-summary.md
+│   └── 04-detailed-design/  ◄── a big section, stored as sub-parts
+│       ├── 00-head.md           the `## ` heading + any intro prose
+│       ├── 01-data-model.md     `### Data model`
+│       └── 02-api-surface.md    `### API surface`
+└── document.md        ◄── THE BUILD ARTIFACT. Rebuilt, never edited by ORC
+
+.claude/orc/run/<slug>/
+└── RESUME.md          ◄── the registered v0.42.0 home, and the ONLY place
+                           `orc resume` and `orc run list` look
+```
+
+`sections/<NN>-<slug>.md` starts with its own `## Heading` and contains nothing
+else. **Directly readable, directly editable, directly diffable in a PR.**
+
+**The join key is the FILENAME.** No markers inside the files: an HTML comment
+is a *lint error* in this lane and mangles on a Notion or Google Docs import,
+and the deliverable's cleanliness is this lane's entire product. A marker that
+buys nothing costs the import.
+
+**Order comes from `doc.json.outline`, never from the filename number.** The
+number is a *mirror* of the outline index, kept in sync by the CLI — which is
+why `orc doc outline --set` renames the files on disk in the same step. This is
+the existing rule one level up: *a section's id comes from the OUTLINE, never
+from the file's own ordinal.*
 
 ## The section map — derived, never stored
 
@@ -38,12 +95,11 @@ $ orc doc map prd-checkout-refund-130826 --json
   BODY, which is what a re-check needs.
 - **`hash`** = SHA-256 of the section's exact text, and it does three jobs:
   **drift detection** (did the user edit it?), **conflict detection** (did it
-  change between extract and splice?), and **skip detection** (a section whose
-  hash has not moved does not need re-checking). *The hash is what turns a
-  re-check from a full pass into a diff.*
-- **`state`** ∈ `planned | written | checked | user-edited | open`. COMPUTED by
-  comparing the live hash to the one `doc.json` recorded at the end of the last
-  cycle — never stored as a claim.
+  change between two sessions?), and **skip detection** (a section whose hash
+  has not moved does not need re-checking). *The hash is what turns a re-check
+  from a full pass into a diff.*
+- **`state`** ∈ `planned | written | checked | user-edited | open | unconfirmed`.
+  COMPUTED from the disk every time — never stored as a claim.
 - **Renames are repaired, not lost.** A heading whose text changed but whose
   position and neighbours match is the same section with a new `id`; `doc.json`
   is updated and the history follows it. A heading that appears with no such
@@ -51,6 +107,16 @@ $ orc doc map prd-checkout-refund-130826 --json
 
 Because the map is re-derived after every single write, **no line number in this
 system is ever stale.** That is what makes range-based reading safe.
+
+### `unconfirmed` — the state a usage limit leaves behind
+
+A part is `written` only when its hash was recorded from a **validated return**
+(`orc doc parts <slug> --confirm <ids>`, run at the wave's stop sequence). **A
+file present with no recorded hash is `unconfirmed`:** a writer killed mid-flight
+leaves a truncated file, and detection is already paid for. `orc doc parts`
+reports it, `orc doc next` offers to re-write it, and `compile` includes it only
+under `--partial` with the state named. **A half-written section never silently
+becomes the deliverable.**
 
 ## Dispatch #0 — digesting the supporting documents
 
@@ -69,29 +135,38 @@ dispatched writer:
 
 ```
 $ orc doc plan prd-checkout-refund-130826 --role write --json
-{ "waves": [ { "n": 1, "agents": [
-      { "agent": "orc-doc-writer-opus-5-med", "part": ".work/02-summary.md",
-        "sections": ["02-summary","03-problem"], "budget_lines": 120 } ] } ] }
+{ "write_mode": "partial", "more_waves": 6,
+  "waves": [ { "n": 1, "agents": [
+      { "agent": "orc-doc-writer-opus-5-med",
+        "sections": ["02-summary","03-problem"],
+        "parts": [ { "id": "02-summary", "file": "sections/02-summary.md" },
+                   { "id": "03-problem", "file": "sections/03-problem.md" } ],
+        "budget_lines": 120 } ] } ] }
 ```
 
 Rules the planner obeys, and none of them is the model's to decide:
 
 1. **Never split a section across two agents.** A writer given half a section
    writes half an idea.
-2. **≤ `doc_max_parallel` agents per wave** — default 4, and the **hard cap is
-   4**. A larger value is clamped and the clamp is announced.
-3. **≤ `doc_max_lines_per_agent` planned lines per agent** (default 400).
-4. Sections that reference each other (`Goals` ↔ `Non-goals`, `Alternatives` ↔
+2. **one file per section** — never one file for a two-section slice. A slice
+   covering two sections returns two `parts[]` entries with two distinct paths.
+   Before v0.49.0 it returned one file named after the first section while
+   compile looked one up per outline id, so the second section's file never
+   existed at all. That was a live bug, and this rule fixes it by construction.
+3. **≤ `doc_max_parallel` agents per wave** — default 2, and the **hard cap is
+   2**. A larger value is clamped and the clamp is announced.
+4. **≤ `doc_max_lines_per_agent` planned lines per agent** (default 400).
+5. Sections that reference each other (`Goals` ↔ `Non-goals`, `Alternatives` ↔
    `Detailed design`) share an `affinity` and land in the **same** agent
    wherever the budget allows — cross-agent consistency is expensive to check
    and free to prevent.
-5. A single section whose budget exceeds the cap is a **planning smell**: it is
-   returned in `oversized[]` and offered as a split at the outline gate, never
-   dispatched as an over-budget slice.
+6. A single section whose budget exceeds the cap is a **planning smell**: it is
+   returned in `oversized[]`. The offer at the outline gate is *"add
+   sub-headings and store it in parts"* first, *"make them real sections"*
+   second — never an over-budget slice.
 
-**Each writer writes its own file in `.work/`.** No two agents ever have
-`document.md` open. That is why parallel writing is safe here and is not safe in
-the naive design.
+**Each writer owns exactly ONE file.** No two agents ever share one, and nobody
+ever has `document.md` open. That is why parallel writing is safe here.
 
 ### The writer's slice
 
@@ -105,68 +180,165 @@ sections:    [{ id, heading, level, purpose, required, budget_lines }]
 context:     <context.md, in full — it is small>
 evidence:    <only the context-sources.md entries relevant to these sections>
 rules:       references/plain-language.md + references/portable-markdown.md
-write to:    .work/02-summary.md
+write to:    sections/02-summary.md          ← one file, and only this one
 ```
 
 The return contract is in the agent file. The one thing to enforce on receipt:
 `start` / `end` are **part-local**. Absolute line numbers are the CLI's job at
-assemble — asking an agent for an absolute number in a file it cannot see is
+compile — asking an agent for an absolute number in a file it cannot see is
 exactly how that number gets invented.
 
-## Assemble → lint → map → check
+## Partial writing — the biggest saving in the lane
 
-1. **`orc doc assemble <slug>`** — concatenates the parts in outline order,
-   normalises the blank lines between them, strips the template's purpose
-   comments, and writes each section's hash into `doc.json`. Deterministic: the
-   same parts always produce the same file.
-2. **`orc doc lint <slug> --target <t> --json`** — **free**. Every mechanical
+`doc_write_mode` is `ask | partial | all`, default `ask`. It is asked **once per
+run and stored** (`orc doc mode <slug> --set partial`), never decided per wave by
+the orchestrator — that is remembered-not-dispatched protocol, the failure this
+repo has already paid for twice.
+
+In `partial`, `orc doc plan --role write` returns **wave 1 only**, with
+`more_waves: N`. The rest cannot be bought by accident. You read what wave 1
+wrote, and you redirect before waves 2..N are paid for.
+
+## Compile — free, on demand, deterministic
+
+```
+orc doc compile <slug> [--partial] [--strip-annotations] [--json]
+```
+
+1. `front` = `sections/00-front.md`, verbatim and first, if it exists.
+2. `# <title>` — **unless** the front file already carries an H1.
+3. Every outline entry whose source resolves, **in outline order**.
+4. Blank-line normalisation runs **ONCE, at the very end**, so a nested join is
+   never normalised twice.
+
+`--partial` writes what exists. **A missing section is simply ABSENT — never
+stubbed with a note.** The omission is reported loudly OUTSIDE the document: in
+compile's own output, in `status`, in `next` and in `audit`.
+
+### The deliverable carries content only
+
+No `> **Open:**`, no `> **Assumption:**`, no note callout, no HTML comment — not
+in `document.md`, and not in any file under `sections/`. This does not relax the
+never-invent-a-fact rule; it moves where the honesty is written down. A gap goes
+to `orc doc log --kind gap` and lands in `gaps.md`; a settled choice goes to
+`--kind decision` and lands in the journal.
+
+`orc doc lint`'s **`annotation-in-body`** is an ERROR and matches an EXACT,
+narrow set — `> **Open:**`, `> **Assumption:**`, `> **Note (ORC):**`, an
+`orc-doc:` fence — and nothing else. A user's own line beginning "Note:" is
+content. `compile` **REPORTS** every match in `annotations[]` and never silently
+strips one: rule 4 outranks tidiness, because we cannot tell whose line it is.
+`--strip-annotations` is the explicit opt-in.
+
+**Determinism:** the same sources always produce the same file, byte for byte.
+Nothing in the compile reads a clock, a config that could change, or the
+filesystem order — `readdir` is never the order, the outline is.
+
+### `source_hashes` — why nothing has to be remembered
+
+`compile` records `compiled.source_hashes = { id → hash of that section's
+assembled source }`. **`document.md` is stale ⇔ some section hashes differently
+today than that recorded.** Pure disk comparison, coverage-relative, no stored
+status word — the `computeWikiFreshness` / `shipped-drifted` rule applied to a
+build artifact. It is why `orc doc ship` can refuse on a stale document and
+*name the sections*.
+
+## The reverse direction: `orc doc split` (also free)
+
+```
+orc doc split <slug>                              document.md → sections/
+orc doc split <slug> --section <id> --by-heading   one section → sub-parts
+```
+
+`docScan` already returns every `##` section with its exact text and
+`docReconcile` already re-keys those to outline ids, so decomposing a monolith
+costs nothing. This is what the migration uses, and it is also what recovers a
+document a human reshaped by hand in an editor.
+
+**Round-trip property:** `split` then `compile` reproduces `document.md`
+byte-for-byte for any document the CLI itself produced. There is a test.
+
+## A section too big for one file — sub-parts
+
+One head section with a lot of text splits **underneath**, and the reader never
+knows. Forcing it to become several `##` sections would change the document a
+reader sees in order to solve ORC's storage problem, which is backwards.
+
+Where the sub-headings come from — and this is the elegant part: **nowhere new.**
+`docScan` already collects every heading level; it merely filtered to level 2.
+So a user template that already has `###` under a `##` carries its own
+sub-structure for free. Three sources, all deterministic, all zero-token:
+
+1. `orc doc init --template <path>` — the `###` under each `##` become `subsections[]`
+2. `orc doc outline <slug> --set <file>` — same parse
+3. `orc doc split <slug> --section <id> --by-heading`
+
+**When it splits.** A section is stored as sub-parts when it has `subsections[]`
+**and** its budget exceeds `doc_max_lines_per_agent`, or when asked explicitly.
+**No new config key** — `doc_max_lines_per_agent` is already the threshold.
+
+### The five rules that make nesting safe
+
+Every one is a **refuse-and-name**, never a silent fix:
+
+1. **Exactly one `##` per section.** `00-head.md` carries it; if that file is
+   absent, compile emits the outline's own heading.
+2. **A child that starts with `##` is a REFUSAL, named by file.** Demoting it to
+   `###` would restructure the deliverable; promoting it would split one section
+   into two. Neither is ours to choose.
+3. **A child must start at `###` or deeper.** Anything else is a refusal, named.
+4. **Order is `outline[i].subsections[]`** — never `readdir`, never the filename
+   number.
+5. **Blank-line normalisation runs ONCE, at the very end.**
+
+**One helper, every consumer.** `docSectionSource` returns a section's files and
+its assembled text, and resolves flat-or-nested in one place. Compile, `parts`,
+the staleness check, `extract` and the check-dispatch all call it. A second idea
+of "what a section's source is" is exactly the drift this lane exists to prevent.
+
+**Invisible above and below.** `docScan` on the compiled document still cuts on
+`##` only, so `map`, `lint`, `ship` and `audit` are completely unchanged — a
+split section is one section with one range. And the reader gets an ordinary
+document.
+
+**Sub-part hashes** live in `doc.json.sections[id].parts`, so a single changed
+sub-part is detectable and **only that sub-part is re-checked**.
+
+## Lint → map → check
+
+1. **`orc doc lint <slug> --target <t> --json`** — **free**. Every mechanical
    portability rule plus the readability signals. Exit 0 clean · 1 findings ·
    2 no document. **Free checks run before paid ones. Always.**
-3. **`orc doc map <slug> --json`** — the fresh absolute line numbers.
-4. **`orc doc plan <slug> --role check --json`** — the checker batches.
+2. **`orc doc map <slug> --json`** — the fresh absolute line numbers.
+3. **`orc doc plan <slug> --role check --json`** — the checker batches.
 
 ### The checker's slice
 
 ```
 role:      check
-read ONLY: document.md lines 119..204     ← Read(file_path, offset=119, limit=86)
-sections:  ["04-goals","05-non-goals"]
-purpose:   <what these sections are supposed to do, from outline.md>
+read ONLY: sections/04-goals-and-metrics.md               ← Read(file_path), offset 1
+sections:  ["04-goals"]
+purpose:   <what this section is supposed to do, from outline.md>
 audience:  <D4 audience>
 expectation: <D4 expectation>
 language:  en
-already reported by lint: [{line: 131, rule: "long-sentence", …}]
+already reported by lint: [{line: 13, rule: "long-sentence", …}]
 ```
 
-A checker **never opens a second file** and is never given the whole document.
-Findings the lint already reported are never re-reported — paying a model to
-repeat a free check is the mistake this ordering exists to prevent.
+**One bounded part file per checker, so there is no line arithmetic anywhere in
+the check loop**, and no two checkers ever share a file. A checker never opens a
+second file and is never given the whole document. Findings the lint already
+reported are never re-reported — paying a model to repeat a free check is the
+mistake this ordering exists to prevent.
 
 `severity` reuses the house ladder: **P0/P1 block the handoff, P2/P3 are
 advisory** and are shown to the user as optional.
 
-## The edit wave — extract, edit, splice
+## The edit round
 
-```
-orc doc extract <slug> --section 04-goals   →  .work/04-goals-and-metrics.md  (+ records the hash)
-        │        writer slice: the part file + the finding + the instruction
-        ▼        the writer edits ONLY .work/04-goals-and-metrics.md
-orc doc splice <slug>                       →  document.md
-```
-
-`splice` rules:
-
-- Replaces each extracted range **bottom-up** (highest `start` first), so an
-  edit that changes a section's length never shifts a range that has not been
-  spliced yet. **This is why the model never does line arithmetic.**
-- **Refuses** any part whose recorded hash no longer matches the file on disk —
-  the user edited that section while we were working. It reports the conflict by
-  section NAME and asks. It never overwrites. A human's wording is not
-  recoverable from this lane's side once it is gone.
-- Re-runs the map and the lint after splicing and rewrites `doc.json`.
-
-Edits are therefore **parallel-safe** (≤ 4 disjoint sections at a time) while
-still touching only the lines that needed touching.
+Open `sections/<id>.md`, edit it in place, `orc doc compile`. **No extract, no
+splice, no monolith touched.** For a section stored as sub-parts, the writer
+opens the one ~150-line sub-part rather than the whole 900 lines.
 
 **Repair is capped at 2 rounds.** After that the lane reports what is still
 open, honestly, and stops — the same cap-and-report shape as
@@ -184,14 +356,24 @@ is *offered*, never applied.
 |---|---|
 | Document | 10,000 lines, 40 sections, ~250 lines each |
 | `doc_max_lines_per_agent` | 400 |
-| `doc_max_parallel` | 4 |
+| `doc_max_parallel` | 2 |
 | Batches | 40 sections → 25 agent slices (1–2 sections each) |
-| Waves | ⌈25 / 4⌉ = **7 waves**, parallel within each |
+| Waves | ⌈25 / 2⌉ = **13 waves**, parallel within each |
+| In `partial` | **wave 1 is bought, then the lane STOPS.** Waves 2–13 are only paid for if wave 1 was right |
 | Orchestrator context spent | 25 returns × ~30 lines ≈ **750 lines**, plus the map |
 | Naive alternative | 10,000 lines read at least twice ≈ **20,000+ lines** |
 
-On a re-check after an edit, only the sections whose hash changed are
-re-dispatched — typically 1 or 2 slices, not 25.
+Where the saving actually is:
+
+| Flow | before v0.49.0 | now |
+|---|---|---|
+| First pass | 25 slices, **all bought before anything is viewable** | wave 1 → you read it → redirect or continue |
+| The session dies mid-run | the write loop lived in the orchestrator's head, and `orc resume` could not even see the run | **the section files on disk ARE the progress**; `RESUME.md` is rewritten every wave and `orc resume` finds it |
+| Update 2 sections, fresh session | `map` (40 rows) → `extract` ×2 → `splice` (rewrites the 10k file) | `parts` (40 rows) → open two files, edit in place |
+| Update inside a 900-line section | the writer opens all 900 lines | it opens the one ~150-line sub-part |
+| Re-check after that edit | a RANGE of a document whose line numbers moved | **one bounded part file, offset 1** |
+| Resume months later | needs `document.md` to exist | `status` + `parts` — works before a single compile has ever run |
+| Compile | free | free. It always was |
 
 At 40 sections the lane also raises the split offer at the outline gate: a
 document this size is usually several documents.
@@ -201,10 +383,34 @@ document this size is usually several documents.
 | Situation | What happens |
 |---|---|
 | The supplied template is enormous or unparseable | Parse headings only. None found → say so, show the shipped outline, ask which to use. Never guess a structure out of prose |
-| The user reshapes `document.md` by hand | Rename repair handles a changed heading. A section in `doc.json` with no match on disk is reported as *removed by you* and dropped from the outline after confirmation — never silently re-added |
-| `document.md` deleted, `context.md` intact | `orc doc status` reports `not-started`. Offer a full regenerate FROM THE FROZEN CONTEXT, and say clearly that anything typed into the old file is gone |
-| A wave partially fails | Each part file is independent. Re-dispatch the failed slices only; `assemble` refuses while a required part is missing and NAMES the missing sections |
-| Two sessions on one slug | The **hash is the guard**, not a lock file: every extract records the section's hash and `splice` refuses when it no longer matches, naming the section. A second session cannot silently overwrite the first one's work, and a pid lock would add a second, weaker idea of the same protection |
+| The user reshapes `document.md` by hand | `orc doc split` recovers it: rename repair handles a changed heading, and anything ambiguous is a refusal that names the section |
+| `document.md` deleted, `sections/` intact | Nothing is lost. `orc doc compile` rebuilds it, free |
+| `sections/` deleted, `document.md` intact | `orc doc split` recovers every section from it |
+| A wave partially fails | Each section file is independent. Re-dispatch the failed slices only; a file with no validated return is `unconfirmed` and is named |
+| A wave is killed by a usage limit | The files already written stay. `RESUME.md` names where it stopped, `orc resume` finds it, and the next session starts at wave K+1 and re-reads nothing |
+| Two sessions on one slug | The **hash is the guard**, not a lock file: a section whose hash moved is `user-edited`, and nothing rewrites one without an instruction naming it |
+
+## Backward compatibility — v1 → v2
+
+`doc.json.version` goes 1 → 2. The migration is **lazy, free, idempotent and
+non-destructive**, and it runs on the first `orc doc <anything> <slug>` — never
+on `list`, because a listing must not mutate.
+
+- `document.md` is **split into `sections/` and NEVER deleted** — it becomes the
+  build artifact, and `compiled.source_hashes` is seeded from the sections just
+  written, so it starts life *fresh*, not stale.
+- A recorded `.work/` extract is the newer edit, so **it wins** for that id.
+- Part files with no `document.md` (a run killed mid-write) are **moved**.
+- A section body that is nothing but a `> **Open:**` stub **does not survive**:
+  it becomes `planned`, so the pipeline offers to write it.
+- `RESUME.md` is **moved** to `{run_dir}/{slug}/` and its heading prefix is
+  stripped, so the line finally parses.
+- An **unparseable** document (no `##` at all) is a **REFUSAL**: `version` stays
+  1, nothing is written. A guessed structure is worse than none.
+
+`assemble`, `extract` and `splice` survive as thin aliases for one release —
+`orc doc next` output gets copied into notes and scripts, and a v1 document
+mid-flight still emits them.
 
 ---
 
@@ -218,7 +424,7 @@ reasoning about it.
 { "ok": true, "slug": "…", "phase": "D7",
   "action": "lint",
   "command": "orc doc lint acme-prd --json",
-  "why": "3 sections were written since the last assemble; the free check runs before the paid one",
+  "why": "3 sections changed since the last compile; the free check runs before the paid one",
   "paid": false,
   "blocked_by": null,
   "alternatives": ["orc doc map acme-prd --json"] }
@@ -232,6 +438,9 @@ in `blocked_by` · **2** = unknown slug. The same convention as
 paid action gets a copy-able command** — without holding a second idea of which
 steps cost money.
 
+**The wave-review gate is just another `blocked_by`**, which is why partial mode
+needs no new prose: after each wave `next` exits 1 and names the human decision.
+
 Never run a command `next` did not name, and never invent the next step. A
 session that improvises the order is exactly the drift this command exists to
 prevent, and it is the drift that is invisible until months later, in a fresh
@@ -240,9 +449,9 @@ context, on a resumed run.
 ## Reading a section, and who is allowed to
 
 `orc doc read <slug> [--section <id>|--toc]` prints the table of contents, or ONE
-section with absolute line numbers, straight from the derived map.
+section straight from its own file.
 
 **The orchestrator never runs `orc doc read`.** It is a command for the HUMAN,
 the same way `orc challenge report` is. Hard rule 0 is not softened by a command
 that happens to print prose: reading the document is still delegated, always, to
-a checker that receives one line RANGE and nothing else.
+a checker that receives one bounded part file and nothing else.

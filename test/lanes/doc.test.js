@@ -25,13 +25,17 @@ function initDoc(root, slug, type, extra) {
   return { res: r, data: r.status === 0 ? json(r) : null };
 }
 
-// Fill every part file with a body of `n` prose lines. Deliberately unwrapped:
-// the lint's hard-wrap rule is an ERROR, and a fixture that trips it would make
-// every other assertion here read as a failure.
+// Fill every SECTION FILE with a body of `n` prose lines. Deliberately
+// unwrapped: the lint's hard-wrap rule is an ERROR, and a fixture that trips it
+// would make every other assertion here read as a failure.
+//
+// v0.49.0 — these land in `sections/`, not `.work/`. That folder IS the source
+// of truth now, and `document.md` is what `orc doc compile` builds from it.
 function writeParts(root, slug, opts) {
   const o = opts || {};
   const show = json(cli(["doc", "show", slug, "--json", "--dir", root]));
-  const work = path.join(root, "orc", "orc-doc", slug, ".work");
+  const dir = path.join(root, "orc", "orc-doc", slug, "sections");
+  fs.mkdirSync(dir, { recursive: true });
   for (const sec of show.outline) {
     if (o.skip && o.skip.includes(sec.id)) continue;
     const n = (o.lines && o.lines[sec.id]) || 3;
@@ -41,9 +45,60 @@ function writeParts(root, slug, opts) {
     // other way would trip an ERROR and make every lint assertion below read as
     // a failure of something else.
     for (let i = 0; i < n; i++) body.push(`Line ${i + 1} of ${sec.heading}, written as one unwrapped line.`, "");
-    fs.writeFileSync(path.join(work, sec.id + ".md"), body.join("\n"));
+    fs.writeFileSync(path.join(dir, sec.id + ".md"), body.join("\n"));
   }
   return show;
+}
+
+// Every section file, hash-recorded from a "validated return" — the state a
+// wave reaches at its stop sequence. Without it every part is `unconfirmed`,
+// which is correct but is not the state most of these fixtures are about.
+function confirmAll(root, slug) {
+  const ids = json(cli(["doc", "parts", slug, "--json", "--dir", root])).parts.filter((p) => p.exists).map((p) => p.id);
+  if (ids.length) cli(["doc", "parts", slug, "--confirm", ids.join(","), "--json", "--dir", root]);
+  return ids;
+}
+
+// Flip a compiled v2 document back to v1, keeping document.md exactly as it is.
+// The extract/splice ALIASES are asserted against this: they must exit
+// identically to v0.48.1 on a document that has not migrated yet.
+function toV1(root, slug) {
+  const statePath = path.join(root, "orc", "orc-doc", slug, "doc.json");
+  const d = JSON.parse(fs.readFileSync(statePath, "utf8"));
+  d.version = 1;
+  fs.writeFileSync(statePath, JSON.stringify(d, null, 2) + "\n");
+  fs.mkdirSync(path.join(root, "orc", "orc-doc", slug, ".work"), { recursive: true });
+}
+
+// A v1 document on disk: doc.json version 1, one monolithic document.md, and
+// nothing under sections/. This is what a document in flight looked like before
+// v0.49.0, and every backward-compatibility assertion starts from it.
+function makeV1(root, slug, opts) {
+  const o = opts || {};
+  const dir = path.join(root, "orc", "orc-doc", slug);
+  const statePath = path.join(dir, "doc.json");
+  const d = JSON.parse(fs.readFileSync(statePath, "utf8"));
+  d.version = 1;
+  const out = [`# ${d.title}`, ""];
+  for (const sec of d.outline) {
+    out.push("## " + sec.heading, "");
+    if (o.openStub && o.openStub.includes(sec.id)) out.push("> **Open:** nobody has decided this yet", "");
+    else out.push(`Body of ${sec.heading} on one unwrapped line.`, "");
+  }
+  fs.writeFileSync(path.join(dir, "document.md"), out.join("\n").replace(/\n{3,}/g, "\n\n").replace(/\s*$/, "") + "\n");
+  fs.rmSync(path.join(dir, "sections"), { recursive: true, force: true });
+  fs.mkdirSync(path.join(dir, ".work"), { recursive: true });
+  if (o.extract) {
+    fs.writeFileSync(path.join(dir, ".work", o.extract + ".md"), `## ${o.extractHeading}\n\nThe NEWER edit, extracted and never spliced.\n`);
+    d.extracts = { [o.extract]: { file: `.work/${o.extract}.md`, hash: "deadbeef", start: 3, end: 6, at: "x" } };
+  }
+  if (o.resume)
+    fs.writeFileSync(
+      path.join(dir, "RESUME.md"),
+      `# Resume this document\n\n    /orc-doc resume ${slug}\n\n## Where it stands:  /orc-doc · PRD · cycle 1 · 3 of 17 sections written\n`
+    );
+  fs.writeFileSync(statePath, JSON.stringify(d, null, 2) + "\n");
+  return dir;
 }
 
 // ── 1. the golden: shipped templates == DOC_TEMPLATES ──────────────────────
@@ -89,7 +144,7 @@ test("doc map: ranges are contiguous, cover the file, and never overlap", () => 
     const { data } = initDoc(root, "map-fixture", "prd");
     const slug = data.slug;
     writeParts(root, slug, { lines: { "02-summary": 9, "08-functional-requirements": 21 } });
-    assert.strictEqual(cli(["doc", "assemble", slug, "--dir", root]).status, 0);
+    assert.strictEqual(cli(["doc", "compile", slug, "--dir", root]).status, 0);
 
     const map = json(cli(["doc", "map", slug, "--json", "--dir", root]));
     assert.ok(map.sections.length >= 17);
@@ -128,12 +183,15 @@ test("doc splice: an early section grows and a later one shrinks, and both land 
     const { data } = initDoc(root, "splice-fixture", "prd");
     const slug = data.slug;
     writeParts(root, slug);
-    cli(["doc", "assemble", slug, "--dir", root]);
+    cli(["doc", "compile", slug, "--dir", root]);
 
     const before = json(cli(["doc", "map", slug, "--json", "--dir", root]));
     const early = before.sections[1]; // 02-summary
     const late = before.sections[6]; // 07-…
     const folder = path.join(root, "orc", "orc-doc", slug);
+    // The extract/splice pair is the V1 shape, kept as an alias for one release.
+    // Every other subcommand migrates on sight, so the flip goes last.
+    toV1(root, slug);
 
     assert.strictEqual(cli(["doc", "extract", slug, "--section", early.id, "--dir", root]).status, 0);
     assert.strictEqual(cli(["doc", "extract", slug, "--section", late.id, "--dir", root]).status, 0);
@@ -177,10 +235,11 @@ test("doc splice: REFUSES when the section moved on disk, and names it", () => {
     const { data } = initDoc(root, "conflict-fixture", "prd");
     const slug = data.slug;
     writeParts(root, slug);
-    cli(["doc", "assemble", slug, "--dir", root]);
+    cli(["doc", "compile", slug, "--dir", root]);
     const map = json(cli(["doc", "map", slug, "--json", "--dir", root]));
     const target = map.sections[2];
     const folder = path.join(root, "orc", "orc-doc", slug);
+    toV1(root, slug);
 
     cli(["doc", "extract", slug, "--section", target.id, "--dir", root]);
     // A human types straight into the document while we are working.
@@ -207,7 +266,7 @@ test("doc splice: REFUSES when the section moved on disk, and names it", () => {
 
 // ── 5. the batching rules ──────────────────────────────────────────────────
 
-test("doc plan: never splits a section, never exceeds 4 agents, honours the budget", () => {
+test("doc plan: never splits a section, never exceeds 2 agents, honours the budget", () => {
   const { root } = freshInstall();
   try {
     const { data } = initDoc(root, "plan-fixture", "tsd");
@@ -216,12 +275,13 @@ test("doc plan: never splits a section, never exceeds 4 agents, honours the budg
     cli(["config", "set", "doc_max_parallel", "9", "--dir", root]);
     const plan = json(cli(["doc", "plan", slug, "--role", "write", "--json", "--dir", root]));
 
-    assert.strictEqual(plan.parallel, 4, "the hard cap is 4");
-    assert.deepStrictEqual(plan.clamped, { from: 9, to: 4 }, "the clamp is DATA, so the panel and the terminal can both say it");
+    // v0.49.0 lowered the hard cap from 4 to 2.
+    assert.strictEqual(plan.parallel, 2, "the hard cap is 2");
+    assert.deepStrictEqual(plan.clamped, { from: 9, to: 2 }, "the clamp is DATA, so the panel and the terminal can both say it");
 
     const seen = new Set();
     for (const w of plan.waves) {
-      assert.ok(w.agents.length <= 4, "no wave exceeds the cap");
+      assert.ok(w.agents.length <= 2, "no wave exceeds the cap");
       for (const a of w.agents) {
         assert.ok(a.sections.length >= 1);
         for (const id of a.sections) {
@@ -256,13 +316,15 @@ test("doc plan: an empty result is an ANSWER — same object, exit 1", () => {
     const { data } = initDoc(root, "empty-plan", "report");
     const slug = data.slug;
     writeParts(root, slug);
-    cli(["doc", "assemble", slug, "--dir", root]);
+    // A part with no validated return is `unconfirmed` and IS still work.
+    confirmAll(root, slug);
+    cli(["doc", "compile", slug, "--dir", root]);
     const r = cli(["doc", "plan", slug, "--role", "write", "--json", "--dir", root]);
     assert.strictEqual(r.status, 1, "nothing to do is exit 1");
     const out = json(r);
     // Same keys as the work-to-do shape: a caller must never special-case this
     // by parsing prose or by finding half the keys missing.
-    for (const k of ["ok", "slug", "role", "agent", "budget_lines", "parallel", "clamped", "waves", "agents", "oversized", "hint", "note"])
+    for (const k of ["ok", "slug", "role", "agent", "budget_lines", "parallel", "clamped", "waves", "agents", "more_waves", "write_mode", "oversized", "hint", "note"])
       assert.ok(k in out, `the empty result still carries "${k}"`);
     assert.deepStrictEqual(out.waves, []);
     assert.match(out.hint, /\S/);
@@ -271,19 +333,32 @@ test("doc plan: an empty result is an ANSWER — same object, exit 1", () => {
   }
 });
 
-test("doc plan --role check: a checker gets a LINE RANGE, never the whole file", () => {
+test("doc plan --role check: a checker gets ONE bounded part file, and never shares it", () => {
   const { root } = freshInstall();
   try {
     const { data } = initDoc(root, "check-plan", "report");
     const slug = data.slug;
     writeParts(root, slug);
-    cli(["doc", "assemble", slug, "--dir", root]);
+    confirmAll(root, slug);
+    cli(["doc", "compile", slug, "--dir", root]);
+
+    // v2 — the section file IS the unit, so no line arithmetic exists anywhere
+    // in the check loop, and no two checkers ever share a file.
     const plan = json(cli(["doc", "plan", slug, "--role", "check", "--json", "--dir", root]));
     assert.strictEqual(plan.agent, "orc-doc-checker-opus-5-low");
+    const seenFiles = new Set();
     for (const a of plan.waves.flatMap((w) => w.agents)) {
-      assert.ok(Array.isArray(a.range) && a.range.length === 2, "every check slice carries a range");
-      assert.strictEqual(a.read_limit, a.range[1] - a.range[0] + 1, "…and the Read(offset, limit) that goes with it");
+      assert.ok(Array.isArray(a.files) && a.files.length, "every check slice names its part files");
+      assert.strictEqual(a.range, undefined, "and carries no line range at all");
+      for (const f of a.files) {
+        assert.ok(!seenFiles.has(f), `${f} is read by exactly one checker`);
+        seenFiles.add(f);
+      }
     }
+
+    // The v1 RANGE form still exists in the CLI, but it is only reachable by a
+    // document the migration REFUSED (an unparseable one): `orc doc plan`
+    // migrates on sight, so a v1 document never plans as v1 twice.
   } finally {
     rmrf(root);
   }
@@ -297,7 +372,7 @@ test("doc lint: the target profile decides, and front matter flips with it", () 
     const { data } = initDoc(root, "lint-fixture", "report", ["--target", "notion"]);
     const slug = data.slug;
     writeParts(root, slug);
-    cli(["doc", "assemble", slug, "--dir", root]);
+    cli(["doc", "compile", slug, "--dir", root]);
     const doc = path.join(root, "orc", "orc-doc", slug, "document.md");
     fs.appendFileSync(doc, "\n#### A heading four levels deep\n\nA sentence.\n");
 
@@ -412,19 +487,30 @@ test("doc status: 0 complete · 1 in progress · 2 unknown slug", () => {
     const show = json(cli(["doc", "show", slug, "--json", "--dir", root]));
     const optional = show.outline.filter((o) => !o.required).map((o) => o.id);
     writeParts(root, slug, { skip: optional });
-    cli(["doc", "assemble", slug, "--dir", root]);
+    // A file with no validated return is `unconfirmed`, and unconfirmed IS work.
+    const unconfirmed = cli(["doc", "status", slug, "--json", "--dir", root]);
+    assert.strictEqual(unconfirmed.status, 1, "a part nobody confirmed keeps the document in progress");
+    assert.ok(
+      json(unconfirmed).open_sections.length,
+      "and it is NAMED — a half-written section never silently becomes the deliverable"
+    );
+
+    confirmAll(root, slug);
+    cli(["doc", "compile", slug, "--dir", root]);
     const done = cli(["doc", "status", slug, "--json", "--dir", root]);
-    assert.strictEqual(done.status, 0, "every required section written and a clean lint is 0");
+    assert.strictEqual(done.status, 0, "every required section written, confirmed, compiled and lint-clean is 0");
     assert.strictEqual(json(done).state, "complete");
 
-    // An `> **Open:**` section is a REAL state, and it holds the document open.
-    const work = path.join(root, "orc", "orc-doc", slug, ".work");
+    // v0.49.0 — ORC's own bookkeeping in the body is a LINT ERROR now, not a
+    // section state. The deliverable carries content only.
+    const sections = path.join(root, "orc", "orc-doc", slug, "sections");
     const first = show.outline[1];
-    fs.writeFileSync(path.join(work, first.id + ".md"), `## ${first.heading}\n\n> **Open:** nobody has decided this yet.\n`);
-    cli(["doc", "assemble", slug, "--dir", root]);
+    fs.writeFileSync(path.join(sections, first.id + ".md"), `## ${first.heading}\n\n> **Open:** nobody has decided this yet.\n`);
+    confirmAll(root, slug);
+    cli(["doc", "compile", slug, "--dir", root]);
     const open = cli(["doc", "status", slug, "--json", "--dir", root]);
-    assert.strictEqual(open.status, 1, "an open section keeps the document in progress");
-    assert.ok(json(open).open_sections.some((o) => o.heading === first.heading));
+    assert.strictEqual(open.status, 1, "an annotation left in the body keeps the document in progress");
+    assert.ok(json(open).lint.errors > 0, "and it is the FREE check that says so");
   } finally {
     rmrf(root);
   }
@@ -454,7 +540,8 @@ test("doc map: a renamed heading keeps its section identity and its history", ()
     const { data } = initDoc(root, "rename-fixture", "report");
     const slug = data.slug;
     writeParts(root, slug);
-    cli(["doc", "assemble", slug, "--dir", root]);
+    confirmAll(root, slug);
+    cli(["doc", "compile", slug, "--dir", root]);
     const before = json(cli(["doc", "map", slug, "--json", "--dir", root]));
     const target = before.sections[3];
     assert.strictEqual(target.state, "written");
@@ -509,13 +596,13 @@ test("doc assemble: the template's purpose comments never reach the deliverable"
     const { data } = initDoc(root, "purpose-strip", "report");
     const slug = data.slug;
     const show = json(cli(["doc", "show", slug, "--json", "--dir", root]));
-    const work = path.join(root, "orc", "orc-doc", slug, ".work");
+    const sections = path.join(root, "orc", "orc-doc", slug, "sections");
     for (const o of show.outline)
       fs.writeFileSync(
-        path.join(work, o.id + ".md"),
+        path.join(sections, o.id + ".md"),
         `## ${o.heading}\n\n<!-- purpose: ${o.purpose} -->\n\nA line of prose.\n`
       );
-    cli(["doc", "assemble", slug, "--dir", root]);
+    cli(["doc", "compile", slug, "--dir", root]);
     const body = fs.readFileSync(path.join(root, "orc", "orc-doc", slug, "document.md"), "utf8");
     assert.ok(!/purpose:/.test(body), "the writer's instructions are stripped");
     assert.ok(!/<!--/.test(body), "and an HTML comment is a lint error anyway");
@@ -530,10 +617,10 @@ test("doc assemble: the same parts always produce the same file", () => {
     const { data } = initDoc(root, "deterministic", "workflow");
     const slug = data.slug;
     writeParts(root, slug);
-    cli(["doc", "assemble", slug, "--dir", root]);
+    cli(["doc", "compile", slug, "--dir", root]);
     const doc = path.join(root, "orc", "orc-doc", slug, "document.md");
     const first = fs.readFileSync(doc, "utf8");
-    cli(["doc", "assemble", slug, "--dir", root]);
+    cli(["doc", "compile", slug, "--dir", root]);
     assert.strictEqual(fs.readFileSync(doc, "utf8"), first, "assemble is deterministic");
   } finally {
     rmrf(root);
@@ -611,7 +698,7 @@ test("doc show --section: exactly one section's text, and an unknown id is exit 
     const { data } = initDoc(root, "reveal", "report");
     const slug = data.slug;
     writeParts(root, slug);
-    cli(["doc", "assemble", slug, "--dir", root]);
+    cli(["doc", "compile", slug, "--dir", root]);
     const map = json(cli(["doc", "map", slug, "--json", "--dir", root]));
     const s = map.sections[2];
 
@@ -653,6 +740,14 @@ test("docs panel: it derives no section state of its own", () => {
   const writes = (api.match(/const WRITES = \{[\s\S]*?\n\};/) || [""])[0];
   assert.ok(!/orc-doc"/.test(writes) && !/"\/api\/doc\/plan"/.test(writes), "no lane invocation may be a write route");
   assert.ok(writes.includes("doc/assemble"), "assemble is free and deterministic, so it is a real button");
+  // v0.49.0 — compile and migrate are both FREE and non-destructive, so both
+  // are buttons. `orc doc mode` deliberately is NOT: it is a user decision the
+  // skill asks (the `orc doc log` precedent).
+  assert.ok(writes.includes("doc/compile"), "compile is free, so it is a real button");
+  assert.ok(writes.includes("doc/migrate"), "migrate is free and never deletes document.md, so it is a real button");
+  assert.ok(!writes.includes("doc/mode"), "the write mode is a USER decision the skill asks, never a panel toggle");
+  // …and `parts` is a READ.
+  assert.ok(/"\/api\/doc\/parts"/.test(api), "the section files are a read route");
 });
 
 test("docs fixtures: one of every section state, and the ugly ones", () => {
@@ -683,6 +778,24 @@ test("docs fixtures: one of every section state, and the ugly ones", () => {
       docs.some((d) => (fixtures.get("/api/doc/one", { slug: d.slug }) || {}).state === st),
       `a ${st} document must be designable`
     );
+
+  // ── v0.49.0 — the section files, and the ugly ones ────────────────────────
+  const allStatuses = docs.map((d) => fixtures.get("/api/doc/one", { slug: d.slug })).filter(Boolean);
+  assert.ok(allStatuses.some((s) => s.version === 1), "a v1 document awaiting migration must be designable");
+  assert.ok(allStatuses.some((s) => (s.document_stale || []).length), "a document behind its own sections must be designable");
+  assert.ok(allStatuses.some((s) => s.wave && s.wave.done < s.wave.total), "a PAUSED wave must be designable");
+  assert.ok(allStatuses.some((s) => s.write_mode === "partial"), "partial mode must be designable");
+
+  const partsSets = docs.map((d) => fixtures.get("/api/doc/parts", { slug: d.slug })).filter(Boolean);
+  const rows = partsSets.flatMap((p) => p.parts);
+  for (const st of states)
+    if (st !== "open")
+      assert.ok(rows.some((r) => r.state === st), `a ${st} PART must be designable`);
+  assert.ok(rows.some((r) => r.nested && r.subsections.length), "a section stored as sub-parts must be designable");
+  assert.ok(rows.some((r) => (r.subsections || []).some((x) => x.changed)), "…and ONE changed sub-part, which is what makes a re-check cheap");
+  assert.ok(rows.some((r) => !r.exists), "a not-written-yet row KEEPS ITS SLOT, so it must be designable");
+  assert.ok(rows.some((r) => !r.ordinal_ok), "a misnumbered part must be designable");
+  assert.ok(partsSets.some((p) => p.wave === null), "a document with no plan yet must be designable");
 
   // And the ugly halves of each: a FORCED ship with its verbatim reason, a
   // drift that NAMES its sections, a journal with nothing recorded (the gap
@@ -764,7 +877,12 @@ function shipReady(root, slug) {
     "<!-- source: policy.md sha: " + sha + " -->\n\n## 1. policy.md\nRefunds within 30 days.\n"
   );
   writeParts(root, slug);
-  assert.strictEqual(cli(["doc", "assemble", slug, "--dir", root]).status, 0);
+  // The wave's stop sequence: validate the returns, THEN record the hashes.
+  // Without it every part is `unconfirmed` and the document is correctly, and
+  // unhelpfully, never finished.
+  confirmAll(root, slug);
+  cli(["doc", "mode", slug, "--set", "all", "--dir", root]);
+  assert.strictEqual(cli(["doc", "compile", slug, "--dir", root]).status, 0);
   return dir;
 }
 
@@ -913,9 +1031,18 @@ test("doc: docWhereLine's PREFIX is byte-stable with and without a ship record",
 
     // `orc doc list` parses the prefix — that is how a listing never has to
     // open doc.json. v0.48.1 appends a SUFFIX and touches nothing before it.
-    assert.ok(after.startsWith(before), "the ship state is a SUFFIX; the parsed prefix must not move");
-    assert.match(before, /^Where it stands:  \/orc-doc · PRD · cycle \d+ · \d+ of \d+ sections written$/);
-    assert.match(after, / · shipped \d{2}-\d{2}-\d{4} → Notion$/);
+    // The PREFIX is what a listing parses. v0.48.1 appends the ship suffix and
+    // v0.49.0 appends phase/wave after it — neither may touch the prefix.
+    const prefix = /^Where it stands:  \/orc-doc · PRD · cycle \d+ · \d+ of \d+ sections written/;
+    assert.match(before, prefix);
+    assert.match(after, prefix);
+    assert.strictEqual(before.match(prefix)[0], after.match(prefix)[0], "the parsed prefix is byte-identical either way");
+    assert.match(after, / · shipped \d{2}-\d{2}-\d{4} → Notion/);
+    // …and `parseStands` — the real one — still reads it.
+    const src = fs.readFileSync(path.join(REPO, "bin", "cli.js"), "utf8");
+    // eslint-disable-next-line no-eval
+    const parseStands = eval("(" + src.match(/function parseStands\(text\) \{[\s\S]*?\n\}/)[0] + ")");
+    assert.strictEqual(parseStands(after).lane, "/orc-doc");
   } finally {
     rmrf(root);
   }
@@ -930,21 +1057,36 @@ test("doc audit: it detects each drift class, and user-edited is NOT one of them
 
     assert.strictEqual(cli(["doc", "audit", slug, "--dir", root]).status, 0, "a clean document audits clean");
 
-    // ship-drifted + source-drifted + orphan-extract
+    // ship-drifted + source-drifted, from a hand edit straight into the artifact
     cli(["doc", "ship", slug, "--where", "Notion", "--dir", root]);
     const map = json(cli(["doc", "map", slug, "--json", "--dir", root]));
     fs.writeFileSync(doc, fs.readFileSync(doc, "utf8").replace("Line 1 of " + map.sections[1].heading, "changed"));
     fs.writeFileSync(path.join(root, "policy.md"), "# Policy\n\nCHANGED.\n");
-    assert.strictEqual(cli(["doc", "extract", slug, "--section", map.sections[3].id, "--dir", root]).status, 0);
+
+    // v0.49.0 — document-stale: a section file moved and nothing rebuilt.
+    const sections = path.join(dir, "sections");
+    const stale = map.sections[3];
+    fs.appendFileSync(path.join(sections, stale.id + ".md"), "\nA line added straight into the section file.\n");
+
+    // part-missing: a required section whose source file is gone.
+    const gone = map.sections[5];
+    fs.unlinkSync(path.join(sections, gone.id + ".md"));
 
     // section-unlisted: a heading nobody planned.
     fs.appendFileSync(doc, "\n## Appendix nobody planned\n\nText.\n");
+    // annotation-in-body: ORC's own bookkeeping, in the deliverable.
+    fs.appendFileSync(doc, "\n> **Open:** nobody decided the fraud limit\n");
 
     const r = cli(["doc", "audit", slug, "--json", "--dir", root]);
     assert.strictEqual(r.status, 1);
     const ids = new Set(json(r).findings.map((f) => f.id));
-    for (const want of ["ship-drifted", "source-drifted", "orphan-extract", "section-unlisted"])
+    for (const want of ["ship-drifted", "source-drifted", "section-unlisted", "document-stale", "part-missing", "annotation-in-body"])
       assert.ok(ids.has(want), "audit must detect " + want + " — it found " + [...ids].join(", "));
+    // …and document-stale NAMES the section that moved. Coverage-relative, the
+    // `computeWikiFreshness` lesson: a whole-file "something changed" cannot
+    // tell you what to re-read.
+    const staleFinding = json(r).findings.find((f) => f.id === "document-stale");
+    assert.ok(staleFinding.summary.includes(stale.heading), "the stale finding names the section, never just a count");
 
     // Rule 4: a human's wording is not recoverable from this side, so their
     // edits are REPORTED and never counted as drift. Flagging them would teach
@@ -1089,6 +1231,494 @@ test("doc: the audit routes into doctor, and the panel knows where to send it", 
     const overview = panelJs("overview");
     const route = overview.slice(overview.indexOf("const FINDING_ROUTE"));
     assert.match(route, /"doc-drifted":\s*\{\s*panel:\s*"docs"/, "and it routes to Docs, where ship and audit both live");
+  } finally {
+    rmrf(root);
+  }
+});
+
+// ── v0.49.0 — the document is a FOLDER, and the file is a build artifact ────
+
+test("doc compile: the same sources always produce the same file, nesting included", () => {
+  const { root } = freshInstall();
+  try {
+    const slug = initDoc(root, "determinism", "tsd").data.slug;
+    const dir = path.join(root, "orc", "orc-doc", slug);
+    writeParts(root, slug);
+    // One section stored as SUB-PARTS: a nested join must be as deterministic
+    // as a flat one, and must normalise blank lines exactly ONCE.
+    const nested = json(cli(["doc", "show", slug, "--json", "--dir", root])).outline[4];
+    fs.writeFileSync(
+      path.join(dir, "sections", nested.id + ".md"),
+      `## ${nested.heading}\n\nIntro prose on one line.\n\n### Data model\n\nOne table, one row per account.\n\n### API surface\n\nTwo endpoints, both idempotent.\n`
+    );
+    assert.strictEqual(cli(["doc", "split", slug, "--section", nested.id, "--by-heading", "--dir", root]).status, 0);
+
+    assert.strictEqual(cli(["doc", "compile", slug, "--dir", root]).status, 0);
+    const once = fs.readFileSync(path.join(dir, "document.md"));
+    assert.strictEqual(cli(["doc", "compile", slug, "--dir", root]).status, 0);
+    const twice = fs.readFileSync(path.join(dir, "document.md"));
+    assert.ok(once.equals(twice), "compile is deterministic — nothing in it reads a clock or a readdir order");
+
+    // The nesting is invisible ABOVE and BELOW: exactly one `## ` for it.
+    const body = once.toString().replace(/\r\n/g, "\n");
+    assert.strictEqual(body.split("\n").filter((l) => l === "## " + nested.heading).length, 1);
+    assert.ok(body.includes("### Data model") && body.includes("### API surface"));
+    const map = json(cli(["doc", "map", slug, "--json", "--dir", root]));
+    assert.strictEqual(map.sections.filter((s) => s.id === nested.id).length, 1, "a split section is ONE section to the map");
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("doc split then compile reproduces the document byte-for-byte", () => {
+  const { root } = freshInstall();
+  try {
+    const slug = initDoc(root, "roundtrip", "report").data.slug;
+    const doc = path.join(root, "orc", "orc-doc", slug, "document.md");
+    writeParts(root, slug);
+    cli(["doc", "compile", slug, "--dir", root]);
+    const before = fs.readFileSync(doc);
+
+    assert.strictEqual(cli(["doc", "split", slug, "--dir", root]).status, 0);
+    assert.strictEqual(cli(["doc", "compile", slug, "--dir", root]).status, 0);
+    assert.ok(before.equals(fs.readFileSync(doc)), "split then compile is the identity — that is what makes recovery safe");
+
+    // …and 00-front.md is what carries everything above the first heading, so
+    // the H1 survives a round trip instead of being regenerated twice.
+    const front = path.join(root, "orc", "orc-doc", slug, "sections", "00-front.md");
+    assert.ok(fs.existsSync(front));
+    assert.match(fs.readFileSync(front, "utf8"), /^#\s/m);
+    assert.strictEqual(before.toString().split("\n").filter((l) => /^#\s/.test(l)).length, 1, "exactly one H1, never two");
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("doc compile --partial: exactly what exists, and the rest is NAMED, never stubbed", () => {
+  const { root } = freshInstall();
+  try {
+    const slug = initDoc(root, "partial", "report").data.slug;
+    const show = json(cli(["doc", "show", slug, "--json", "--dir", root]));
+    const keep = show.outline.slice(0, 3).map((o) => o.id);
+    writeParts(root, slug, { skip: show.outline.slice(3).map((o) => o.id) });
+
+    // Without --partial it REFUSES and names every missing required section.
+    const refused = cli(["doc", "compile", slug, "--json", "--dir", root]);
+    assert.strictEqual(refused.status, 1);
+    assert.strictEqual(json(refused).reason, "missing-part");
+    assert.ok(json(refused).missing.length >= 1);
+
+    const r = cli(["doc", "compile", slug, "--partial", "--json", "--dir", root]);
+    assert.strictEqual(r.status, 0);
+    const out = json(r);
+    assert.deepStrictEqual(out.missing.map((m) => m.id).filter((id) => keep.includes(id)), [], "nothing kept is reported missing");
+    assert.ok(out.missing.length, "and what is missing is NAMED, outside the document");
+
+    const body = fs.readFileSync(path.join(root, "orc", "orc-doc", slug, "document.md"), "utf8");
+    const heads = body.replace(/\r\n/g, "\n").split("\n").filter((l) => /^##\s/.test(l));
+    assert.strictEqual(heads.length, keep.length, "exactly the sections that exist, in outline order");
+    // The document carries CONTENT ONLY: no stub, no Open line, no note.
+    assert.ok(!/>\s*\*\*Open:/.test(body), "a missing section is ABSENT, never stubbed with a note");
+    assert.ok(!/>\s*\*\*Assumption:/.test(body));
+    assert.strictEqual(out.annotations.length, 0);
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("doc plan: ONE FILE PER SECTION — a two-section slice returns two paths", () => {
+  const { root } = freshInstall();
+  try {
+    const slug = initDoc(root, "one-file", "prd").data.slug;
+    const plan = json(cli(["doc", "plan", slug, "--role", "write", "--json", "--dir", root]));
+    const multi = plan.waves.flatMap((w) => w.agents).find((a) => a.sections.length > 1);
+    assert.ok(multi, "the fixture really does produce a multi-section slice");
+    assert.strictEqual(multi.parts.length, multi.sections.length, "one part entry per SECTION, never one per slice");
+    assert.strictEqual(new Set(multi.parts.map((p) => p.file)).size, multi.parts.length, "and every path is distinct");
+    // Regression guard: before v0.49.0 the slice named ONE file after its first
+    // section while compile looked one up per outline id, so the second
+    // section's file never existed at all.
+    assert.strictEqual(multi.part, multi.parts[0].file, "the singular `part` is kept as parts[0].file for one release");
+    const seen = new Set();
+    for (const a of plan.waves.flatMap((w) => w.agents))
+      for (const pt of a.parts) {
+        assert.ok(!seen.has(pt.file), `${pt.file} is owned by exactly one agent`);
+        seen.add(pt.file);
+      }
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("doc compile: a sub-part that would restructure the document is REFUSED, by file", () => {
+  const { root } = freshInstall();
+  try {
+    const slug = initDoc(root, "subparts", "tsd").data.slug;
+    const dir = path.join(root, "orc", "orc-doc", slug);
+    writeParts(root, slug);
+    const target = json(cli(["doc", "show", slug, "--json", "--dir", root])).outline[4];
+    const sub = path.join(dir, "sections", target.id);
+    fs.mkdirSync(sub, { recursive: true });
+    fs.rmSync(path.join(dir, "sections", target.id + ".md"));
+    fs.writeFileSync(path.join(sub, "00-head.md"), `## ${target.heading}\n\nIntro on one line.\n`);
+    fs.writeFileSync(path.join(sub, "01-data-model.md"), "### Data model\n\nOne row per account.\n");
+    // The outline has to know the order — it is NEVER readdir.
+    const state = path.join(dir, "doc.json");
+    const d = JSON.parse(fs.readFileSync(state, "utf8"));
+    d.outline.find((o) => o.id === target.id).subsections = [{ id: "01-data-model", heading: "Data model", level: 3 }];
+    fs.writeFileSync(state, JSON.stringify(d, null, 2) + "\n");
+    assert.strictEqual(cli(["doc", "compile", slug, "--partial", "--dir", root]).status, 0, "the well-formed nesting compiles");
+
+    // A child that starts with `##` — demoting it restructures the document,
+    // promoting it splits one section in two. Neither is this lane's to choose.
+    fs.writeFileSync(path.join(sub, "01-data-model.md"), "## Data model\n\nOne row per account.\n");
+    let r = cli(["doc", "compile", slug, "--partial", "--json", "--dir", root]);
+    assert.strictEqual(r.status, 1);
+    assert.strictEqual(json(r).reason, "subpart-shape");
+    assert.ok(json(r).problems.some((p) => p.file.includes("01-data-model.md")), "the refusal names the FILE");
+
+    // A child with no sub-heading at all is the same refusal.
+    fs.writeFileSync(path.join(sub, "01-data-model.md"), "One row per account.\n");
+    r = cli(["doc", "compile", slug, "--partial", "--json", "--dir", root]);
+    assert.strictEqual(r.status, 1);
+    assert.strictEqual(json(r).problems[0].rule, "subpart-bad-level");
+
+    // `00-head.md` absent → the `## ` heading is generated exactly ONCE.
+    fs.writeFileSync(path.join(sub, "01-data-model.md"), "### Data model\n\nOne row per account.\n");
+    fs.rmSync(path.join(sub, "00-head.md"));
+    assert.strictEqual(cli(["doc", "compile", slug, "--partial", "--dir", root]).status, 0);
+    const body = fs.readFileSync(path.join(dir, "document.md"), "utf8").replace(/\r\n/g, "\n");
+    assert.strictEqual(body.split("\n").filter((l) => l === "## " + target.heading).length, 1);
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("doc parts: a sub-part hash marks only that sub-part", () => {
+  const { root } = freshInstall();
+  try {
+    const slug = initDoc(root, "subhash", "tsd").data.slug;
+    const dir = path.join(root, "orc", "orc-doc", slug);
+    writeParts(root, slug);
+    const target = json(cli(["doc", "show", slug, "--json", "--dir", root])).outline[4];
+    fs.writeFileSync(
+      path.join(dir, "sections", target.id + ".md"),
+      `## ${target.heading}\n\nIntro on one line.\n\n### Data model\n\nOne row per account.\n\n### API surface\n\nTwo endpoints.\n`
+    );
+    cli(["doc", "split", slug, "--section", target.id, "--by-heading", "--dir", root]);
+    confirmAll(root, slug);
+
+    let row = json(cli(["doc", "parts", slug, "--json", "--dir", root])).parts.find((p) => p.id === target.id);
+    assert.ok(row.nested && row.subsections.length === 2);
+    assert.ok(row.subsections.every((s) => !s.changed), "nothing has moved yet");
+
+    fs.appendFileSync(path.join(dir, "sections", target.id, "02-api-surface.md"), "\nA third endpoint.\n");
+    row = json(cli(["doc", "parts", slug, "--json", "--dir", root])).parts.find((p) => p.id === target.id);
+    assert.deepStrictEqual(row.subsections.filter((s) => s.changed).map((s) => s.id), ["02-api-surface"], "only the sub-part that moved");
+
+    // …and the check dispatch re-reads only it.
+    const plan = json(cli(["doc", "plan", slug, "--role", "check", "--json", "--dir", root]));
+    const slice = plan.waves.flatMap((w) => w.agents).find((a) => a.sections.includes(target.id));
+    assert.deepStrictEqual(slice.changed_subparts, [`sections/${target.id}/02-api-surface.md`]);
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("doc migrate: a v1 document opens, migrates and continues without losing a byte", () => {
+  const { root } = freshInstall();
+  try {
+    const slug = initDoc(root, "legacy", "report").data.slug;
+    const show = json(cli(["doc", "show", slug, "--json", "--dir", root]));
+    const stub = show.outline[8].id;
+    const extract = show.outline[1];
+    const dir = makeV1(root, slug, { openStub: [stub], extract: extract.id, extractHeading: extract.heading, resume: true });
+    const beforeDoc = fs.readFileSync(path.join(dir, "document.md"));
+
+    const r = cli(["doc", "migrate", slug, "--json", "--dir", root]);
+    assert.strictEqual(r.status, 0, r.stdout + r.stderr);
+    assert.strictEqual(json(r).migrated, true);
+
+    // document.md is NEVER deleted — it becomes the build artifact.
+    assert.ok(fs.readFileSync(path.join(dir, "document.md")).equals(beforeDoc), "the old file is untouched");
+
+    const sections = path.join(dir, "sections");
+    assert.ok(fs.existsSync(path.join(sections, "00-front.md")));
+    // The pending extract is the NEWER edit, so it won.
+    assert.match(fs.readFileSync(path.join(sections, extract.id + ".md"), "utf8"), /The NEWER edit/);
+    // An `> **Open:**` stub does NOT survive: it becomes `planned`.
+    assert.ok(!fs.existsSync(path.join(sections, stub + ".md")), "the stub is not carried into v2");
+    const parts = json(cli(["doc", "parts", slug, "--json", "--dir", root])).parts;
+    assert.strictEqual(parts.find((p) => p.id === stub).state, "planned");
+
+    // RESUME.md moved to the ONE place `orc resume` looks, and its line parses.
+    assert.ok(!fs.existsSync(path.join(dir, "RESUME.md")), "no second copy — two copies is two ideas, and they drift");
+    const moved = path.join(root, ".claude", "orc", "run", slug, "RESUME.md");
+    assert.ok(fs.existsSync(moved), "it lives in the registered v0.42.0 home");
+    const src = fs.readFileSync(path.join(REPO, "bin", "cli.js"), "utf8");
+    // eslint-disable-next-line no-eval
+    const parseStands = eval("(" + src.match(/function parseStands\(text\) \{[\s\S]*?\n\}/)[0] + ")");
+    assert.strictEqual(parseStands(fs.readFileSync(moved, "utf8")).lane, "/orc-doc", "the `## ` prefix made this unmatchable, forever");
+    assert.strictEqual(json(cli(["run", "list", "--json", "--dir", root])).runs.filter((x) => x.slug === slug).length, 1);
+
+    // version 2, migrations recorded, and the JOURNAL untouched: `orc doc log`
+    // records what the USER said, and a migration is a machine fact.
+    const d = JSON.parse(fs.readFileSync(path.join(dir, "doc.json"), "utf8"));
+    assert.strictEqual(d.version, 2);
+    assert.strictEqual(d.migrations.length, 1);
+    assert.ok(!(d.journal || []).length, "a migration is never a journal entry");
+
+    // Idempotent.
+    assert.strictEqual(json(cli(["doc", "migrate", slug, "--json", "--dir", root])).migrated, false);
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("doc migrate: an unparseable document is REFUSED, and stays on v1", () => {
+  const { root } = freshInstall();
+  try {
+    const slug = initDoc(root, "unparseable", "report").data.slug;
+    const dir = makeV1(root, slug, {});
+    fs.writeFileSync(path.join(dir, "document.md"), "Just prose. No headings anywhere.\n\nAnother paragraph.\n");
+
+    const r = cli(["doc", "migrate", slug, "--json", "--dir", root]);
+    assert.strictEqual(r.status, 1);
+    assert.strictEqual(json(r).reason, "unparseable-document");
+    const d = JSON.parse(fs.readFileSync(path.join(dir, "doc.json"), "utf8"));
+    assert.strictEqual(d.version, 1, "a guessed structure is worse than none");
+    assert.ok(!fs.existsSync(path.join(dir, "sections", "01-document-info.md")), "and nothing was written");
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("doc: the shipped RESUME.md template parses with the REAL parseStands", () => {
+  const ref = fs
+    .readFileSync(path.join(REPO, "templates", "skills", "orc-doc", "references", "resume-protocol.md"), "utf8")
+    .replace(/\r\n/g, "\n");
+  const line = ref.split("\n").find((l) => l.includes("Where it stands:"));
+  assert.ok(line, "the template still carries the one line every listing parses");
+  assert.ok(!/^#{1,6}\s/.test(line), "at COLUMN 0 — `parseStands` is line-anchored, so a `## ` prefix never matched");
+
+  const src = fs.readFileSync(path.join(REPO, "bin", "cli.js"), "utf8");
+  // eslint-disable-next-line no-eval
+  const parseStands = eval("(" + src.match(/function parseStands\(text\) \{[\s\S]*?\n\}/)[0] + ")");
+  const got = parseStands(ref);
+  assert.strictEqual(got.lane, "/orc-doc");
+  assert.ok(got.phase, "phase is what a person returning after a usage-limit reset needs");
+  assert.ok(got.wave, "…and so is the wave");
+});
+
+test("doc: the wave is COMPUTED from confirmed parts, never claimed", () => {
+  const { root } = freshInstall();
+  try {
+    const slug = initDoc(root, "waves", "prd").data.slug;
+    cli(["doc", "mode", slug, "--set", "all", "--dir", root]);
+    const plan = json(cli(["doc", "plan", slug, "--role", "write", "--json", "--dir", root]));
+    const total = plan.waves.length;
+    writeParts(root, slug);
+
+    // Files on disk with no validated return do NOT count as a finished wave.
+    let parts = json(cli(["doc", "parts", slug, "--json", "--dir", root]));
+    assert.strictEqual(parts.wave.done, 0, "an unconfirmed file is not a done wave");
+    assert.strictEqual(parts.wave.total, total);
+    assert.strictEqual(parts.unconfirmed.length, parts.parts.length);
+
+    cli(["doc", "parts", slug, "--confirm", plan.waves[0].agents.flatMap((a) => a.sections).join(","), "--json", "--dir", root]);
+    parts = json(cli(["doc", "parts", slug, "--json", "--dir", root]));
+    assert.strictEqual(parts.wave.done, 1, "one wave, all of it hash-confirmed");
+
+    // And the resume line carries it, so `orc run list` can show it.
+    assert.match(json(cli(["doc", "status", slug, "--json", "--dir", root])).where, / · wave 1 of \d+$/);
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("doc: staleness is coverage-relative — it names the section that moved", () => {
+  const { root } = freshInstall();
+  try {
+    const slug = initDoc(root, "stale", "report").data.slug;
+    const dir = shipReady(root, slug);
+    // Nothing moved: it audits clean on this class.
+    assert.ok(!/document-stale/.test(cli(["doc", "audit", slug, "--json", "--dir", root]).stdout));
+
+    const map = json(cli(["doc", "map", slug, "--json", "--dir", root]));
+    const moved = map.sections[2];
+    fs.appendFileSync(path.join(dir, "sections", moved.id + ".md"), "\nOne more line, typed straight into the section file.\n");
+
+    const st = json(cli(["doc", "status", slug, "--json", "--dir", root]));
+    assert.deepStrictEqual(
+      st.document_stale.map((s) => s.id),
+      [moved.id],
+      "ONE section, named — a whole-file `something changed` cannot tell you what to re-read"
+    );
+
+    // `ship` refuses on it, because a document.md behind its own sections/ is
+    // not the document that would be delivered.
+    const r = cli(["doc", "ship", slug, "--where", "Notion", "--json", "--dir", root]);
+    assert.strictEqual(r.status, 1);
+    assert.strictEqual(json(r).reason, "document-stale");
+    assert.ok(json(r).hint.includes(moved.heading), "and it names the section");
+
+    cli(["doc", "compile", slug, "--dir", root]);
+    assert.strictEqual(json(cli(["doc", "status", slug, "--json", "--dir", root])).document_stale.length, 0);
+    assert.strictEqual(cli(["doc", "ship", slug, "--where", "Notion", "--dir", root]).status, 0);
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("doc outline --set: a renumber RENAMES the files on disk, and audit stays clean", () => {
+  const { root } = freshInstall();
+  try {
+    const slug = initDoc(root, "renumber", "report").data.slug;
+    const dir = path.join(root, "orc", "orc-doc", slug);
+    const show = json(cli(["doc", "show", slug, "--json", "--dir", root]));
+    writeParts(root, slug);
+    confirmAll(root, slug);
+    cli(["doc", "compile", slug, "--dir", root]);
+
+    // Drop the SECOND section: every ordinal after it shifts by one.
+    const kept = show.outline.filter((_, i) => i !== 1);
+    fs.writeFileSync(path.join(root, "new-outline.md"), kept.map((o) => `## ${o.heading}\n\nx\n`).join("\n"));
+    assert.strictEqual(cli(["doc", "outline", slug, "--set", "new-outline.md", "--json", "--dir", root]).status, 0);
+
+    const parts = json(cli(["doc", "parts", slug, "--json", "--dir", root]));
+    for (const p of parts.parts) {
+      assert.ok(p.ordinal_ok, `${p.id} mirrors its outline position`);
+      if (p.exists) assert.ok(fs.existsSync(path.join(dir, p.files[0])), `${p.files[0]} really is on disk under its new name`);
+    }
+    assert.strictEqual(parts.misnumbered.length, 0);
+    const ids = new Set(json(cli(["doc", "audit", slug, "--json", "--dir", root])).findings.map((f) => f.id));
+    assert.ok(!ids.has("part-misnumbered"), "a renumber nobody asked about is never reported as drift");
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("doc lint: `annotation-in-body` is EXACT, and never argues with the author", () => {
+  const { root } = freshInstall();
+  try {
+    const slug = initDoc(root, "annot", "report").data.slug;
+    const dir = path.join(root, "orc", "orc-doc", slug);
+    writeParts(root, slug);
+    cli(["doc", "compile", slug, "--partial", "--dir", root]);
+    const doc = path.join(dir, "document.md");
+
+    // A user's OWN prose. A narrow rule that is always right beats a broad one
+    // that argues with the author.
+    fs.appendFileSync(doc, "\nNote: refunds settle overnight.\n\nNote to reviewers, please read the appendix.\n\nOpen questions are tracked in Jira.\n");
+    let res = json(cli(["doc", "lint", slug, "--json", "--dir", root]));
+    assert.strictEqual(res.findings.filter((f) => f.rule === "annotation-in-body").length, 0, "a line beginning `Note:` is CONTENT");
+
+    // ORC's own markers, and only those.
+    fs.appendFileSync(
+      doc,
+      "\n> **Open:** nobody decided the fraud limit\n\n> **Assumption:** refunds settle in one banking day\n\n> **Note (ORC):** carried over from cycle 1\n"
+    );
+    res = json(cli(["doc", "lint", slug, "--json", "--dir", root]));
+    const hits = res.findings.filter((f) => f.rule === "annotation-in-body");
+    assert.strictEqual(hits.length, 3, "exactly the three ORC markers");
+    assert.ok(hits.every((f) => f.severity === "error"));
+
+    // compile REPORTS them and never strips — rule 4 outranks tidiness, because
+    // we cannot tell whose line it is.
+    const c = json(cli(["doc", "compile", slug, "--partial", "--json", "--dir", root]));
+    assert.strictEqual(c.stripped.length, 0, "a silent strip can delete a user's real line");
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("doc: doc_max_parallel is a HARD CAP of 2, and the clamp is announced", () => {
+  const { root } = freshInstall();
+  try {
+    const slug = initDoc(root, "cap", "prd").data.slug;
+    cli(["config", "set", "doc_max_parallel", "4", "--dir", root]);
+    const plan = json(cli(["doc", "plan", slug, "--role", "write", "--json", "--dir", root]));
+    assert.strictEqual(plan.parallel, 2);
+    assert.deepStrictEqual(plan.clamped, { from: 4, to: 2 });
+    const human = cli(["doc", "plan", slug, "--role", "write", "--dir", root]).stdout;
+    assert.match(human, /clamped to the hard cap 2/, "a clamped setting is never silent");
+    // …and the config's own options no longer offer a value that cannot happen.
+    const keys = json(cli(["config", "list", "--json", "--dir", root])).keys;
+    const key = keys.find((k) => k.key === "doc_max_parallel");
+    assert.deepStrictEqual(key.options, [1, 2]);
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("doc next: partial mode BLOCKS after each wave, and names the human decision", () => {
+  const { root } = freshInstall();
+  try {
+    const slug = initDoc(root, "partialnext", "prd").data.slug;
+    const dir = path.join(root, "orc", "orc-doc", slug);
+    fs.writeFileSync(path.join(dir, "context.md"), "# Context\n\n## The request (verbatim)\n> write it\n");
+
+    // write_mode unset is a HUMAN decision, named — never a model's default.
+    let n = cli(["doc", "next", slug, "--json", "--dir", root]);
+    assert.strictEqual(n.status, 1);
+    assert.match(json(n).blocked_by, /partial or all/);
+    assert.ok(json(n).alternatives.some((a) => /orc doc mode/.test(a)));
+
+    cli(["doc", "mode", slug, "--set", "partial", "--dir", root]);
+    n = cli(["doc", "next", slug, "--json", "--dir", root]);
+    assert.strictEqual(n.status, 0);
+    assert.strictEqual(json(n).action, "plan-write");
+
+    // Wave 1 written and confirmed → it STOPS so you can read it and redirect.
+    const plan = json(cli(["doc", "plan", slug, "--role", "write", "--json", "--dir", root]));
+    assert.strictEqual(plan.waves.length, 1, "partial returns wave 1 only — the rest cannot be bought by accident");
+    assert.ok(plan.more_waves > 0);
+    const wave1 = plan.waves[0].agents.flatMap((a) => a.sections);
+    const all = json(cli(["doc", "show", slug, "--json", "--dir", root])).outline.map((o) => o.id);
+    writeParts(root, slug, { skip: all.filter((id) => !wave1.includes(id)) });
+    cli(["doc", "parts", slug, "--confirm", wave1.join(","), "--json", "--dir", root]);
+
+    n = cli(["doc", "next", slug, "--json", "--dir", root]);
+    assert.strictEqual(n.status, 1, "a wave boundary is a real STOP, not a loop iteration");
+    assert.match(json(n).blocked_by, /wave 1 of \d+/);
+    assert.ok(json(n).alternatives.some((a) => /compile .* --partial/.test(a)), "and it offers the free look");
+
+    // Every command it can emit is a real subcommand.
+    const src = fs.readFileSync(path.join(REPO, "bin", "cli.js"), "utf8");
+    const subs = new Set([...src.matchAll(/^    case "([a-z-]+)":$/gm)].map((m) => m[1]));
+    for (const cmd of [json(n).command, ...json(n).alternatives].filter(Boolean))
+      if (cmd.startsWith("orc doc ")) assert.ok(subs.has(cmd.split(/\s+/)[2]), `${cmd} names a real subcommand`);
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("doc: assemble / extract / splice still exit as they did, on a v1 document", () => {
+  const { root } = freshInstall();
+  try {
+    const slug = initDoc(root, "aliases", "report").data.slug;
+    writeParts(root, slug);
+    cli(["doc", "compile", slug, "--dir", root]);
+    const map = json(cli(["doc", "map", slug, "--json", "--dir", root]));
+    toV1(root, slug);
+
+    // v1 extract still copies to .work/ and records the hash.
+    const r = cli(["doc", "extract", slug, "--section", map.sections[2].id, "--json", "--dir", root]);
+    assert.strictEqual(r.status, 0);
+    assert.strictEqual(json(r).file, `.work/${map.sections[2].id}.md`);
+    assert.strictEqual(cli(["doc", "splice", slug, "--json", "--dir", root]).status, 0);
+
+    // `assemble` is an alias for `compile` and keeps its exit codes.
+    assert.strictEqual(cli(["doc", "assemble", slug, "--dir", root]).status, 0);
+    fs.rmSync(path.join(root, "orc", "orc-doc", slug, "sections", map.sections[3].id + ".md"));
+    const missing = cli(["doc", "assemble", slug, "--json", "--dir", root]);
+    assert.strictEqual(missing.status, 1, "a missing required part is still exit 1");
+    assert.strictEqual(json(missing).reason, "missing-part");
+
+    // And in v2 the section file IS the extract, so nothing is copied.
+    const v2 = cli(["doc", "extract", slug, "--section", map.sections[2].id, "--json", "--dir", root]);
+    assert.strictEqual(v2.status, 0);
+    assert.match(json(v2).file, /^sections\//);
   } finally {
     rmrf(root);
   }

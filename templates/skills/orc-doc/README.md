@@ -12,8 +12,17 @@ explaining anything twice.
 > dispatched report back.
 
 That is why a 900-line TSD does not end a session. Nothing that holds context
-ever holds the document: the writers each own one part file, the checkers each
-read one line range, and the orchestrator holds a map.
+ever holds the document: each writer owns exactly ONE file, each checker reads
+ONE bounded part, and the orchestrator holds a map.
+
+And since v0.49.0 there is a second sentence:
+
+> **`sections/` is the source of truth. `document.md` is a build artifact.**
+
+Each section lives in its own file you can open, edit and diff in a PR.
+`orc doc compile` rebuilds the document from them, for free, whenever you ask —
+so a resumed session, an update and a re-check never touch the 10,000-line
+file.
 
 ## Five base templates
 
@@ -40,6 +49,30 @@ floor, not a cage** — bring your own and its headings become the outline.
 Then it shows you the outline and waits. Changing the outline after a write wave
 is what costs money.
 
+It also asks **how much to write at once**: `partial` (recommended) writes ONE
+wave and stops so you can read those section files and redirect before the rest
+is paid for; `all` writes every wave. Asked once, stored, never re-decided.
+
+## Every wave is a stop
+
+A wave boundary is not a loop iteration. At the end of each one you get every
+file path it wrote, a free way to see it as one document, and the single line
+that resumes the work:
+
+```
+Wave 2 of 7 done — 6 of 17 sections written.
+  orc/orc-doc/acme-prd-170826/sections/05-rollout.md   96 L
+
+See it as one file (free):   orc doc compile acme-prd-170826 --partial
+To carry on — new session, or after your usage limit resets:
+    /orc-doc resume acme-prd-170826
+```
+
+`RESUME.md` is written **first**, before anything that needs a subagent, into
+`.claude/orc/run/<slug>/` — so `orc resume` and `orc run list` can actually find
+it. The section files on disk ARE the progress: the next session starts at wave
+3 and re-reads nothing it already wrote.
+
 ## Doing it by hand
 
 Every step has a real CLI command, and every one of them is free:
@@ -49,16 +82,25 @@ orc doc templates                          # the five, with their sections
 orc doc targets                            # where a .md can actually go
 orc doc init my-prd --type prd --target notion
 orc doc outline my-prd --set my-headings.md   # or bring your own structure
-orc doc plan my-prd --role write --json    # the batching: <=4 agents, no split sections
-#   … writers fill .work/<id>.md …
-orc doc assemble my-prd                    # parts -> document.md, outline order
+orc doc mode my-prd --set partial          # one wave at a time, then stop
+orc doc plan my-prd --role write --json    # the batching: <=2 agents, ONE FILE PER SECTION
+#   … writers fill sections/<id>.md …
+orc doc parts my-prd --confirm 01-x,02-y   # record the validated returns
+orc doc parts my-prd                       # what is written, and what is not
+orc doc compile my-prd [--partial]         # sections/ -> document.md. FREE
 orc doc lint my-prd                        # the free check (0 clean / 1 findings)
 orc doc map my-prd                         # fresh line numbers, never stored
-orc doc plan my-prd --role check --json    # the checker ranges
-orc doc extract my-prd --section 04-goals  # one part file + its hash
-orc doc splice my-prd                      # bottom-up, refuses on a conflict
-orc doc status my-prd                      # 0 complete / 1 in progress / 2 unknown
+orc doc plan my-prd --role check --json    # one bounded part file per checker
+orc doc split my-prd --section 04-design --by-heading   # store a big section in parts
+orc doc split my-prd                       # recover sections/ from document.md
+orc doc status my-prd                      # 0 nothing to do / 1 something to do / 2 unknown
+orc doc next my-prd                        # what to do next, and whether it costs money
 ```
+
+`orc doc assemble`, `extract` and `splice` still work — they are thin aliases for
+one release. A v1 document migrates the first time you touch it: `document.md` is
+split into `sections/` and **never deleted**, and an unparseable one is refused
+rather than guessed at.
 
 `orc doc list` shows every document with its `Where it stands:` line.
 
@@ -77,10 +119,17 @@ unless you name it.
 ## What it will not do
 
 - Read your document body into the orchestrator's context.
-- Invent a fact. Anything it was not given becomes a visible `> **Open:**` or
-  `> **Assumption:**` line.
-- Overwrite a paragraph you wrote. `splice` refuses on a hash conflict and names
-  the section.
+- Invent a fact. Anything it was not given comes back as a **gap** — recorded in
+  `gaps.md` and raised with you, never written into the document.
+- Put its own bookkeeping in your deliverable.
+  The document **carries content only**: no `> **Open:**`, no
+  `> **Assumption:**`, no note callout, in `document.md` OR in a section file.
+- Stub a section it has not written. Under `--partial` a missing section is
+  simply **absent**, and named loudly outside the document.
+- Overwrite a paragraph you wrote. A section whose hash moved is `user-edited`,
+  and nothing rewrites it without you naming it.
+- Ship a document that is behind its own sections. `orc doc ship` refuses and
+  names what moved.
 - Stage or commit anything. It prints the `git add` command.
 - Grade its own output. It offers `/orc-challenge`, in a separate session.
 
@@ -89,7 +138,8 @@ unless you name it.
 | Key | Default | What it does |
 |---|---|---|
 | `doc_max_lines_per_agent` | `400` | write/read budget per dispatched agent |
-| `doc_max_parallel` | `4` | agents per wave. **Hard cap 4** — larger is clamped, and the clamp is announced |
+| `doc_max_parallel` | `2` | agents per wave. **Hard cap 2** — larger is clamped, and the clamp is announced |
+| `doc_write_mode` | `ask` | `partial` writes one wave then stops · `all` writes every wave · `ask` makes it a question, asked once and stored |
 | `doc_language` | `en` | the D4 default, always confirmable per run |
 | `doc_dir` | `orc/orc-doc` | where the folders live |
 

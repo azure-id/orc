@@ -29,7 +29,7 @@ const { boundary } = require("./boundary.js");
 const { handoff } = require("./handoff.js");
 const { exportState, mocks } = require("./maintenance.js");
 const { chGoals, chDims, challengeCycles, challengeList, challengeShow, challengeDiff, challengeDiffMissing, challengeLint } = require("./challenge.js");
-const { docList, docStatuses, docMapSections, docMap, docLint, docPlan, docShow, docSection, docShipped, docShippedDrifted, docNext, docAudit, docJournalRich, docJournalEmpty, docContext } = require("./docs.js");
+const { docList, docParts, docStatuses, docMapSections, docMap, docLint, docPlan, docShow, docSection, docShipped, docShippedDrifted, docNext, docAudit, docJournalRich, docJournalEmpty, docContext } = require("./docs.js");
 const { diy } = require("./flow.js");
 const { crosslink } = require("./crosslink.js");
 const { mockDetail } = require("./mockrun.js");
@@ -71,6 +71,8 @@ module.exports.get = function get(route, q) {
     // v0.48.1. Each of these has ONE OF EVERY STATE behind it: a free next, a
     // paid next, a next that is blocked on a human; a clean audit and a dirty
     // one; a rich journal and one with nothing recorded at all.
+    case "/api/doc/parts":
+      return docParts[(q && q.slug) || ""] || docParts["prd-checkout-refund-130826"];
     case "/api/doc/next":
       return docNext[(q && q.slug) || ""] || docNext["prd-checkout-refund-130826"];
     case "/api/doc/audit":

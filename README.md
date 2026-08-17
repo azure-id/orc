@@ -6,14 +6,14 @@
 
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
-![Version](https://img.shields.io/badge/version-0.48.0-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.49.0-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
 ![Dependencies](https://img.shields.io/badge/dependencies-zero-lightgrey.svg?style=for-the-badge)
 ![GitHub stars](https://img.shields.io/github/stars/azure-id/orc?style=for-the-badge&color=yellow)
 
-**Latest: v0.48.1** · updated 2026-08-16 · [full changelog](CHANGELOG.md)
+**Latest: v0.49.0** · updated 2026-08-17 · [full changelog](CHANGELOG.md)
 
 </div>
 
@@ -192,7 +192,7 @@ with a plain tarball by itself.
 | **`/orc-grill`** | You have one idea and it is still vague. It asks rounds of questions, **looks facts up itself** instead of making you recite your own codebase, and never answers its own question. Ends when *you* say the idea matches what you meant. | [see it](mock-run/orc-grill.md) |
 | **`/orc-analyze`** | A document or a request → a scope-bounded, code-grounded spec. Every claim carries `file:line` evidence or becomes a question. Deep mode adds parallel scouts. | [see it](templates/skills/orc-analyze/examples/analyze-mock.md) |
 | **`/orc-plan`** | A request or a spec → a real task plan: grounded files, dependencies, facets, and a test disposition per task. | [see it](mock-run/orc-plan.md) |
-| **`/orc-doc`** | Writes the long document — a PRD, a TSD, a cross-team agreement, a status report or a runbook — as portable Markdown that imports cleanly into Notion, Obsidian, Docs, Coda, Craft and GitHub. **ORC never reads the document body**: writers each own one part file, checkers each read one line range, and the orchestrator holds a map. Resumable months later without you explaining anything twice. | [see it](mock-run/orc-doc.md) |
+| **`/orc-doc`** | Writes the long document — a PRD, a TSD, a cross-team agreement, a status report or a runbook — as portable Markdown that imports cleanly into Notion, Obsidian, Docs, Coda, Craft and GitHub. **ORC never reads the document body**: each section is its own file under `sections/`, each writer owns exactly one of them, each checker reads one bounded part, and `document.md` is a build artifact rebuilt for free. Every wave is a stop you can walk away from, and it resumes months later without you explaining anything twice. | [see it](mock-run/orc-doc.md) |
 | **`/orc-route`** | You have a plan — which lane should build it? It names one lane, the runners-up with what each costs you, and any lane that is impossible with the condition blocking it. **It refuses to route a sentence**, because that would be guessing. | [see it](mock-run/orc-route.md) |
 | **`/orc-explain`** | "Wait, what?" It says the last message again: the point first, then the background it assumed, then every ORC-only word defined in your project's terms. | [see it](mock-run/orc-explain.md) |
 | **`/orc-poly`** | One change across two or more repos, without drift. Peer source is read-only; it freezes the shared boundary into a contract and writes one plan per repo. It never builds. | [see it](templates/skills/orc-poly/examples/poly-run-mock.md) |
@@ -299,7 +299,7 @@ orc ui --stop          # shut this project's server down
 | Flow | the compiled DIY flow, its gate, and a stepper of every phase in order | `diy set`, `diy compile`, presets |
 | Crosslink | **Design** (the boundary as a graph) and **Settings** (each peer's freshness) | `crosslink add` / `remove` |
 | Promises · Boundary · Self-serve | the pact ledger, the boundary cards, and the surfaces a non-developer can change | `pact check`, `pact sync`, `handoff set` |
-| **Docs** | every `/orc-doc` document as a **ribbon** — one block per section, sized by its length and coloured by its state — plus the lint health card and the wave preview | `doc assemble` |
+| **Docs** | every `/orc-doc` document as a **ribbon** — one block per section, sized by its length and coloured by its state — plus the section files with their sub-parts, the wave strip, the lint health card and the wave preview | `doc compile` · `doc migrate` |
 | **Mocked Skill Use** | every mocked run that ships with ORC, grouped and searchable, with a reading pane | — |
 | Learn | the `orc onboarding` walkthrough, one section at a time | — |
 | Experiment | every lane with a copy button; opens a Claude session in a terminal | — |
@@ -440,41 +440,46 @@ a current audit: [EVAL-REPORT.md](EVAL-REPORT.md).
 **Full history: [CHANGELOG.md](CHANGELOG.md)** — or `orc changelog`, which prints
 only what is newer than the version you have.
 
-### v0.48.1 — one file per thing, and a document that can be finished _(2026-08-16)_
+### v0.49.0 — the document is a folder, and the file is a build artifact _(2026-08-17)_
 
-Two halves, deliberately separate so that any behaviour difference is
-attributable to the second one.
+`/orc-doc` only. No other lane changes, and zero new agents.
 
-- **`bin/webui/` is an architecture, not four monoliths.** A 260 KB `app.js`, a
-  95 KB stylesheet and a 53 KB string table became ~60 named files — one per
-  panel, one per CSS layer, one per i18n namespace, one per fixture set — so
-  changing the Docs panel means opening `js/panels/docs.js` instead of paging
-  through everything. Classic scripts in an explicit load order, because **an ES
-  module import carries no query string** and every asset here needs the
-  per-launch session token. `serve.js` builds its static map from a walk and
-  stamps every asset reference generically, so a forgotten `<script>` tag can no
-  longer ship. The test suite is split to match. No behaviour changed.
-- **`/orc-doc` can be finished.** `orc doc next` turns the pipeline from
-  something the orchestrator remembers into something the CLI computes — exit 0
-  = do this, exit 1 = a human decides, and it names which decision.
-  `orc doc ship` records delivery as a decision (`--where` has no default;
-  "shipped" with nowhere to point at is not a fact), while the resulting
-  `shipped` / `shipped-drifted` state stays computed — and a drift **names the
-  sections that moved**. `orc doc audit` reports every drift class from disk
-  with a fix command each.
-- **And it remembers what you asked for.** `orc doc log` / `journal` /
-  `context` record and serve what nothing recorded before: the verbatim request,
-  the frozen brief, the reference files **and whether they still hold**, and the
-  ordered story of every request from the first firing to the last touch — with
-  gaps shown as gaps and **never reconstructed**. The Docs panel is rebuilt
-  around that: memory first, state second.
-- D4/D5 gain a three-test `RETURN-TO` suspend into **`/orc-grill`** for the
-  decisions the lane must not answer for itself.
+- **`sections/` is the source of truth.** Each section lives in its own real,
+  visible, diffable file; **`document.md` is a build artifact** that
+  `orc doc compile` rebuilds from those files, for free. Before this, `.work/`
+  was scratch and the monolith was truth, so every later change was extract →
+  edit → splice through a 10,000-line file. `orc doc split` goes the other way
+  and recovers a document a human reshaped by hand — byte for byte.
+- **You can look before you buy the rest.** `orc doc compile --partial` writes
+  exactly what exists and names the rest OUTSIDE the document; with the new
+  `doc_write_mode: partial` (asked once, stored) a write plan returns **wave 1
+  only**. Waves 2..N are bought only if wave 1 was right. That is the saving —
+  compiling was already free and always had been.
+- **A wave is a stop you can walk away from.** `RESUME.md` moves to the run dir,
+  where `orc resume` actually looks; its one line moves to column 0 (a `## `
+  prefix made it unmatchable, forever) and gains `· phase … · wave K of N`. The
+  section files ARE the progress, so `K of N` is computed, and a file no
+  validated return confirmed is `unconfirmed` — re-written, never shipped.
+- **The deliverable carries content only.** No `> **Open:**`, no
+  `> **Assumption:**`, in the document or in a section file. It still never
+  invents a fact: a gap goes to `gaps.md` and is raised with you. The new
+  `annotation-in-body` lint rule matches ORC's own markers and nothing else, and
+  `compile` reports them rather than silently stripping a line that might be
+  yours.
+- **A live bug, fixed by construction:** a two-section slice used to write one
+  file named after the first, so the second section's file never existed. **One
+  file per section** now. And a section too big for one file splits *underneath*
+  into sub-parts the reader never sees.
+- `doc_max_parallel`'s hard cap is now **2**; `orc doc parts` is the new
+  wave-boundary read; `orc doc ship` refuses on a stale document and names the
+  sections. A v1 document migrates on first touch — `document.md` is never
+  deleted, and an unparseable one is refused rather than guessed at.
 
-Before that: **v0.48.0 — a document long enough to end a session, written
-anyway** (`/orc-doc`), **v0.47.0 — a lane that refuses to produce**, **v0.46.1 —
-see a lane run before you pay for one**, and **v0.46.0 — a lane that remembers,
-a lane that declines, and a lane that measures**.
+Before that: **v0.48.1 — one file per thing, and a document that can be
+finished**, **v0.48.0 — a document long enough to end a session, written
+anyway** (`/orc-doc`), **v0.47.0 — a lane that refuses to produce**, and
+**v0.46.0 — a lane that remembers, a lane that declines, and a lane that
+measures**.
 [Read them in the changelog](CHANGELOG.md).
 
 ---

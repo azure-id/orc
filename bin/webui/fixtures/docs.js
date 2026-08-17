@@ -119,7 +119,13 @@ const docStatuses = {
     target: "notion",
     language: "en",
     cycle: 2,
+    version: 2,
     state: "in-progress",
+    write_mode: "partial",
+    wave: { done: 5, total: 7, role: "write" },
+    // document.md behind its own sections/ — coverage-relative, and NAMED.
+    document_stale: [{ id: "04-goals-and-success-metrics", heading: "Goals and success metrics", reason: "changed" }],
+    sections_dir: "orc/orc-doc/prd-checkout-refund-130826/sections",
     document: "orc/orc-doc/prd-checkout-refund-130826/document.md",
     lines: 487,
     sections_total: 17,
@@ -145,7 +151,12 @@ const docStatuses = {
     target: "confluence",
     language: "en",
     cycle: 3,
+    version: 2,
     state: "complete",
+    write_mode: "all",
+    wave: { done: 4, total: 4, role: "write" },
+    document_stale: [],
+    sections_dir: "orc/orc-doc/runbook-payout-freeze-110826/sections",
     document: "orc/orc-doc/adr-queue-choice-070826/document.md",
     lines: 212,
     sections_total: 12,
@@ -165,7 +176,14 @@ const docStatuses = {
     target: "generic",
     language: "id",
     cycle: 0,
+    // A document started before sections/ became the source of truth. You cannot
+    // design the migrate card on a document that is already v2.
+    version: 1,
     state: "not-started",
+    write_mode: null,
+    wave: null,
+    document_stale: [],
+    sections_dir: "orc/orc-doc/collab-risk-and-payments-130826/sections",
     document: null,
     lines: 0,
     sections_total: 13,
@@ -192,6 +210,10 @@ const docMapSections = [
   { id: "07-scenarios-and-user-stories", heading: "Scenarios and user stories", level: 2, start: 241, end: 333, lines: 93, hash: "3c5eb244cd18", state: "written", required: true, findings: 0, renamed_from: null },
   { id: "08-functional-requirements", heading: "Functional requirements", level: 2, start: 334, end: 470, lines: 137, hash: "be7aca8c0091", state: "user-edited", required: true, findings: 0, renamed_from: null },
   { id: "09-non-functional-requirements", heading: "Non-functional requirements", level: 2, start: 471, end: 480, lines: 10, hash: "4ff6336511cc", state: "planned", required: true, findings: 0, renamed_from: null },
+  // v0.49.0 — a file on disk that no validated return ever confirmed. This is
+  // exactly what a wave killed by a usage limit leaves behind, and you cannot
+  // design the chip for it on a document where every wave finished.
+  { id: "09b-open-questions", heading: "Open questions", level: 2, start: 481, end: 486, lines: 6, hash: "9b0c1177fe20", state: "unconfirmed", required: true, findings: 0, renamed_from: null },
   { id: "10-revision-history", heading: "Revision history", level: 2, start: 481, end: 487, lines: 7, hash: "0d8c6a9d7742", state: "written", required: true, findings: 0, renamed_from: null },
 ];
 
@@ -607,4 +629,106 @@ const docContext = {
   },
 };
 
-module.exports = { docList, docStatuses, docMapSections, docMap, docLint, docPlan, docShow, docSection, docShipped, docShippedDrifted, docNext, docAudit, docJournalRich, docJournalEmpty, docContext };
+
+// ── the SECTION FILES (v0.49.0) ─────────────────────────────────────────────
+// ONE OF EVERY STATE, the ugly ones included: a section stored as SUB-PARTS
+// (with one of them changed), an `unconfirmed` file a killed wave left behind,
+// a `planned` row that KEEPS ITS SLOT, a `user-edited` one, and a misnumbered
+// id. You cannot design the `unconfirmed` chip on a document where every wave
+// finished, and you cannot design the nested rows on a flat one.
+const docParts = {
+  "prd-checkout-refund-130826": {
+    ok: true,
+    slug: "prd-checkout-refund-130826",
+    dir: "orc/orc-doc/prd-checkout-refund-130826/sections",
+    front: "sections/00-front.md",
+    confirmed: [],
+    total: 10,
+    written: 6,
+    missing: ["09-non-functional-requirements"],
+    unconfirmed: ["09b-open-questions"],
+    misnumbered: ["09b-open-questions"],
+    problems: [],
+    wave: { done: 5, total: 7, role: "write" },
+    parts: [
+      { id: "01-document-info", heading: "Document info", required: true, files: ["sections/01-document-info.md"], nested: false, exists: true, lines: 22, hash: "a91f4c02de77", state: "checked", subsections: [], ordinal_ok: true, findings: 0 },
+      { id: "02-summary", heading: "Summary", required: true, files: ["sections/02-summary.md"], nested: false, exists: true, lines: 17, hash: "4c02aa1791ff", state: "user-edited", subsections: [], ordinal_ok: true, findings: 0 },
+      { id: "03-the-problem-we-are-solving", heading: "The problem we are solving", required: true, files: ["sections/03-the-problem-we-are-solving.md"], nested: false, exists: true, lines: 77, hash: "7731bb04ce19", state: "written", subsections: [], ordinal_ok: true, findings: 1 },
+      {
+        // The nested one: a big section stored as sub-parts, invisible to the
+        // reader and to `orc doc map`, and only the sub-part that MOVED is
+        // marked — which is what makes a re-check cost one small read.
+        id: "04-goals-and-success-metrics",
+        heading: "Goals and success metrics",
+        required: true,
+        files: [
+          "sections/04-goals-and-success-metrics/00-head.md",
+          "sections/04-goals-and-success-metrics/01-north-star.md",
+          "sections/04-goals-and-success-metrics/02-guardrails.md",
+        ],
+        nested: true,
+        exists: true,
+        lines: 58,
+        hash: "5d642c42aa10",
+        state: "written",
+        subsections: [
+          { id: "01-north-star", heading: "North star", file: "sections/04-goals-and-success-metrics/01-north-star.md", exists: true, lines: 21, hash: "aa10c42b7731", changed: false },
+          { id: "02-guardrails", heading: "Guardrails", file: "sections/04-goals-and-success-metrics/02-guardrails.md", exists: true, lines: 24, hash: "c42baa1077f3", changed: true },
+        ],
+        ordinal_ok: true,
+        findings: 2,
+      },
+      { id: "05-non-goals", heading: "Non-goals", required: true, files: ["sections/05-non-goals.md"], nested: false, exists: true, lines: 5, hash: "c28656c5be31", state: "written", subsections: [], ordinal_ok: true, findings: 0 },
+      { id: "06-users-and-jobs-to-be-done", heading: "Users and jobs to be done", required: true, files: ["sections/06-users-and-jobs-to-be-done.md"], nested: false, exists: true, lines: 59, hash: "a0c7398aff02", state: "checked", subsections: [], ordinal_ok: true, findings: 0 },
+      { id: "07-scenarios-and-user-stories", heading: "Scenarios and user stories", required: true, files: ["sections/07-scenarios-and-user-stories.md"], nested: false, exists: true, lines: 93, hash: "3c5eb244cd18", state: "written", subsections: [], ordinal_ok: true, findings: 0 },
+      { id: "08-functional-requirements", heading: "Functional requirements", required: true, files: ["sections/08-functional-requirements.md"], nested: false, exists: true, lines: 137, hash: "be7aca8c0091", state: "user-edited", subsections: [], ordinal_ok: true, findings: 0 },
+      // Not written yet. It KEEPS ITS SLOT — "not written" is an answer.
+      { id: "09-non-functional-requirements", heading: "Non-functional requirements", required: true, files: [], nested: false, exists: false, lines: 0, hash: null, state: "planned", subsections: [], ordinal_ok: true, findings: 0 },
+      // A file a usage limit left behind: on disk, never confirmed by a return.
+      { id: "09b-open-questions", heading: "Open questions", required: true, files: ["sections/09b-open-questions.md"], nested: false, exists: true, lines: 6, hash: "9b0c1177fe20", state: "unconfirmed", subsections: [], ordinal_ok: false, findings: 0 },
+    ],
+    note: "the section files ARE the progress — there is no checkpoint file to invent and none to drift",
+  },
+  "runbook-payout-freeze-110826": {
+    ok: true,
+    slug: "runbook-payout-freeze-110826",
+    dir: "orc/orc-doc/runbook-payout-freeze-110826/sections",
+    front: null,
+    confirmed: [],
+    total: 2,
+    written: 2,
+    missing: [],
+    unconfirmed: [],
+    misnumbered: [],
+    problems: [],
+    wave: { done: 4, total: 4, role: "write" },
+    parts: [
+      { id: "01-purpose", heading: "Purpose", required: true, files: ["sections/01-purpose.md"], nested: false, exists: true, lines: 12, hash: "77f3aa10c42b", state: "checked", subsections: [], ordinal_ok: true, findings: 0 },
+      { id: "02-the-procedure", heading: "The procedure", required: true, files: ["sections/02-the-procedure.md"], nested: false, exists: true, lines: 84, hash: "0091be7aca8c", state: "checked", subsections: [], ordinal_ok: true, findings: 0 },
+    ],
+    note: "the section files ARE the progress — there is no checkpoint file to invent and none to drift",
+  },
+  // Nothing written at all: the card still has to read well, and `orc doc parts`
+  // still answers with its object rather than an error.
+  "collab-risk-and-payments-130826": {
+    ok: true,
+    slug: "collab-risk-and-payments-130826",
+    dir: "orc/orc-doc/collab-risk-and-payments-130826/sections",
+    front: null,
+    confirmed: [],
+    total: 2,
+    written: 0,
+    missing: ["01-document-info", "02-purpose-and-scope"],
+    unconfirmed: [],
+    misnumbered: [],
+    problems: [],
+    wave: null,
+    parts: [
+      { id: "01-document-info", heading: "Document info", required: true, files: [], nested: false, exists: false, lines: 0, hash: null, state: "planned", subsections: [], ordinal_ok: true, findings: 0 },
+      { id: "02-purpose-and-scope", heading: "Purpose and scope", required: true, files: [], nested: false, exists: false, lines: 0, hash: null, state: "planned", subsections: [], ordinal_ok: true, findings: 0 },
+    ],
+    note: "the section files ARE the progress — there is no checkpoint file to invent and none to drift",
+  },
+};
+
+module.exports = { docList, docParts, docStatuses, docMapSections, docMap, docLint, docPlan, docShow, docSection, docShipped, docShippedDrifted, docNext, docAudit, docJournalRich, docJournalEmpty, docContext };

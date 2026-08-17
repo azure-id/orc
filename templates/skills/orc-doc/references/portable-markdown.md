@@ -25,24 +25,44 @@ hard-wraps at 80 columns produces a document that reads perfectly in a terminal
 and arrives in Notion as a column of broken fragments. `orc doc lint` reports
 it once per paragraph, as an ERROR.
 
-## Where a `> **Open:**` line belongs
+## Where a gap goes, and why it is not in the document
 
-A required section with no material gets a visible line:
+**The deliverable carries content only.** No `> **Open:**`, no
+`> **Assumption:**`, no note callout, no HTML comment — not in `document.md`, and
+not in any file under `sections/`.
 
-```markdown
-> **Open:** the fraud limit has not been decided. Needed before the rollout
-> section can commit to a date.
-```
+This does **not** relax the never-invent-a-fact rule; it changes only where the
+honesty is written down. ORC still refuses to make something up. What is not in
+`context.md` or `context-sources.md` is **not written at all**:
 
-That is the document being honest. It is never a lint finding and never a
-checker finding — inventing filler to avoid it is.
+| what it is | where it goes |
+|---|---|
+| nobody has decided this yet | `orc doc log <slug> --kind gap --sections <id> --text "the fraud limit has not been decided"` → `gaps.md`, and it is raised with the user |
+| I had to assume it to write the sentence | the same, and it is raised with the user |
+| which option we chose, and why | `orc doc log <slug> --kind decision --text "…"` → the journal |
+| the template's `<!-- purpose: … -->` lines | stripped at compile — they are instructions for the writer |
 
-The same shape, for something you had to assume in order to write the sentence:
+**Why the reversal.** A PRD that arrives in Notion with three `> **Open:**`
+blockquotes in it is a PRD the reader has to filter. The gap is real and worth
+recording; it just is not part of what the reader came for. And a *stub* section
+that is nothing but an Open line is worse than an absent one — under
+`orc doc compile --partial` a missing section is simply **absent**, and named
+loudly outside the document.
 
-```markdown
-> **Assumption:** refunds settle within one banking day. Not stated in anything
-> I was given.
-```
+**It is enforced in four places**, and none of them is a silent rewrite:
+
+1. **The writer never emits one** — uncertainty goes in its return's `gaps[]`.
+2. **`orc doc lint`'s `annotation-in-body` is an ERROR.** The rule matches an
+   EXACT, narrow set — `> **Open:**`, `> **Assumption:**`, `> **Note (ORC):**`,
+   an `orc-doc:` fence — and **nothing else**. A user's own line beginning
+   "Note:" is content and is never flagged. A narrow rule that is always right
+   beats a broad one that argues with the author.
+3. **`compile` REPORTS them and never silently strips.** They come back in
+   `annotations[]` with a line and a fix. We cannot tell whose line it is, and a
+   silent strip can delete a real sentence. The one exception is the explicit
+   `orc doc compile --strip-annotations`.
+4. **The section state no longer sniffs the body.** Existence and hashes decide
+   it, which was always strictly more reliable than a text match.
 
 ## Severity
 

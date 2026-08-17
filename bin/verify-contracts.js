@@ -1054,6 +1054,8 @@ const CONTRACTS = [
       "skills/orc-doc/references/resume-protocol.md",
       "skills/orc/SKILL.md",
       "skills/orc/references/stop-and-resume.md",
+      "skills/orc-doc/README.md",
+      "skills/orc-doc/references/chunking.md",
     ],
   },
   {
@@ -1996,7 +1998,10 @@ const CONTRACTS = [
       "skills/orc/config.md",
       "skills/orc/references/intake.md",
       "skills/orc/references/stop-and-resume.md",
-        ],
+      "skills/orc-doc/README.md",
+      "skills/orc-doc/references/chunking.md",
+      "skills/orc-doc/references/gates.md",
+    ],
   },
   // ── Stacked pull requests (v0.37.0) ──────────────────────────────────────
   {
@@ -2387,6 +2392,7 @@ const CONTRACTS = [
       "skills/orc-doc/references/chunking.md",
       "skills/orc-doc/references/gates.md",
       "skills/orc-doc/references/resume-protocol.md",
+      "skills/orc-doc/README.md",
     ],
     binFiles: ["bin/cli.js"],
   },
@@ -2402,6 +2408,7 @@ const CONTRACTS = [
       "skills/orc-doc/SKILL.md",
       "skills/orc-doc/references/chunking.md",
       "skills/orc-doc/references/resume-protocol.md",
+      "skills/orc-doc/README.md",
     ],
     binFiles: ["bin/cli.js"],
   },
@@ -2414,6 +2421,7 @@ const CONTRACTS = [
     files: [
       "skills/orc-doc/SKILL.md",
       "skills/orc-doc/references/gates.md",
+      "skills/orc-doc/references/chunking.md",
     ],
     binFiles: ["bin/cli.js"],
   },
@@ -2427,6 +2435,8 @@ const CONTRACTS = [
       "skills/orc-doc/SKILL.md",
       "skills/orc-doc/references/gates.md",
       "skills/orc-doc/references/resume-protocol.md",
+      "skills/orc-doc/references/portable-markdown.md",
+      "skills/orc-doc/references/chunking.md",
     ],
     binFiles: ["bin/cli.js"],
   },
@@ -2454,6 +2464,107 @@ const CONTRACTS = [
       "skills/orc-doc/SKILL.md",
       "skills/orc-doc/references/chunking.md",
     ],
+  },
+  // ── v0.49.0 — the document is a FOLDER, the file is a build artifact ──────
+  {
+    // The inversion this release exists to end: `.work/` was scratch and
+    // `document.md` was truth, so every later change was extract → edit →
+    // splice through the 10,000-line file. Naming the folder in every consumer
+    // is what stops a spine quietly going back to the monolith.
+    name: "sections/ is the source of truth (v0.49.0 — /orc-doc)",
+    token: "sections/",
+    files: [
+      "skills/orc-doc/SKILL.md",
+      "skills/orc-doc/README.md",
+      "skills/orc-doc/references/chunking.md",
+      "skills/orc-doc/references/gates.md",
+      "skills/orc-doc/references/resume-protocol.md",
+      "agents/orc-doc-checker-opus-5-low.md",
+      "agents/orc-doc-writer-opus-5-med.md",
+      "commands/orc-doc.md",
+      "skills/orc-doc/references/portable-markdown.md",
+      "skills/orc-doc/examples/orc-doc-prd-run.md",
+    ],
+    binFiles: ["bin/cli.js"],
+  },
+  {
+    // `document.md` is REBUILT, never edited in place. The command name is a
+    // single token the lint can see, and it is mirrored in the CLI.
+    name: "document.md is a build artifact (v0.49.0 — orc doc compile)",
+    token: "orc doc compile",
+    files: [
+      "skills/orc-doc/SKILL.md",
+      "skills/orc-doc/README.md",
+      "skills/orc-doc/references/chunking.md",
+      "skills/orc-doc/references/resume-protocol.md",
+      "commands/orc-doc.md",
+      "skills/orc-doc/references/gates.md",
+      "skills/orc-doc/references/portable-markdown.md",
+      "skills/orc-doc/examples/orc-doc-prd-run.md",
+    ],
+    binFiles: ["bin/cli.js"],
+  },
+  {
+    // ONE FILE PER SECTION. Before v0.49.0 a two-section slice wrote one file
+    // named after the first, while compile looked one up per outline id — so
+    // the second section's file never existed. A live bug, fixed by
+    // construction, and the sentence is what keeps it fixed.
+    name: "one file per section (v0.49.0 — the D-3 regression guard)",
+    token: "one file per section",
+    files: [
+      "skills/orc-doc/SKILL.md",
+      "skills/orc-doc/references/chunking.md",
+      "agents/orc-doc-writer-opus-5-med.md",
+    ],
+  },
+  {
+    // The deliverable is only what the reader came for. ORC's uncertainty is
+    // still recorded — in gaps.md and the journal — just not in the document.
+    name: "the deliverable carries content only (v0.49.0 — /orc-doc)",
+    token: "carries content only",
+    files: [
+      "skills/orc-doc/SKILL.md",
+      "skills/orc-doc/README.md",
+      "skills/orc-doc/references/chunking.md",
+      "skills/orc-doc/references/plain-language.md",
+      "skills/orc-doc/references/portable-markdown.md",
+      "agents/orc-doc-writer-opus-5-med.md",
+      "agents/orc-doc-checker-opus-5-low.md",
+      "commands/orc-doc.md",
+      "skills/orc-doc/references/resume-protocol.md",
+      "skills/orc-doc/references/templates/collaboration.md",
+      "skills/orc-doc/references/templates/prd.md",
+      "skills/orc-doc/references/templates/report.md",
+      "skills/orc-doc/references/templates/tsd.md",
+      "skills/orc-doc/references/templates/workflow.md",
+      "skills/orc-doc/examples/orc-doc-prd-run.md",
+    ],
+  },
+  {
+    // A wave boundary is a real STOP, not a loop iteration. Treat it as a loop
+    // and a usage-limit kill between waves leaves nothing that says where it
+    // stopped — which is exactly what happened before this release.
+    name: "every wave is a stop (v0.49.0 — /orc-doc)",
+    token: "Every wave is a stop",
+    files: [
+      "skills/orc-doc/SKILL.md",
+      "skills/orc-doc/README.md",
+      "commands/orc-doc.md",
+    ],
+  },
+  {
+    // Asked ONCE and stored, never decided per wave by the orchestrator — that
+    // is remembered-not-dispatched protocol, the failure this repo has already
+    // paid for twice.
+    name: "partial writing is a stored mode, not a per-wave choice (v0.49.0)",
+    token: "doc_write_mode",
+    files: [
+      "skills/orc-doc/SKILL.md",
+      "skills/orc-doc/README.md",
+      "skills/orc-doc/references/chunking.md",
+      "skills/orc-doc/examples/orc-doc-prd-run.md",
+    ],
+    binFiles: ["bin/cli.js"],
   },
 ];
 

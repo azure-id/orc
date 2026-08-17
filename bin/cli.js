@@ -834,7 +834,8 @@ const CONFIG_META = [
   { key: "challenge_gate", def: "warn", tier: "common", validate: vEnum("off", "warn"), options: ["off", "warn"], desc: "Whether /orc's Phase-1 preflight prints one line when the document it is about to build from has an in-flight, failing challenge cycle. There is deliberately NO `block` — the /orc-pact precedent: the payoff is knowing, not gating." },
   // --- v0.48.0 — /orc-doc ----------------------------------------------------
   { key: "doc_max_lines_per_agent", def: 400, tier: "common", validate: vInt(40), options: [200, 400, 600, 800], desc: "Write/read budget per dispatched /orc-doc agent, in lines. It is what turns a 10,000-line document into ~25 slices the orchestrator never reads: a writer is given its own part file and a checker is given a line RANGE. A section is NEVER split to fit — a single section over this cap is reported as a planning smell and offered as a split at the outline gate instead." },
-  { key: "doc_max_parallel", def: 4, tier: "common", validate: vInt(1), options: [1, 2, 3, 4], desc: "Agents per /orc-doc wave. HARD CAP 4 — a larger value is clamped and the clamp is announced, because more parallel writers is more chances for the outline to drift and the assemble wave is what has to reconcile it. Each agent writes its own file in .work/, so no two ever have document.md open." },
+  { key: "doc_max_parallel", def: 2, tier: "common", validate: vInt(1), options: [1, 2], desc: "Agents per /orc-doc wave. HARD CAP 2 — a larger value is clamped and the clamp is announced, because more parallel writers is more chances for the outline to drift and the compile is what has to reconcile them. Each agent owns exactly ONE file under sections/, so no two ever share one." },
+  { key: "doc_write_mode", def: "ask", tier: "common", validate: vEnum("ask", "partial", "all"), options: ["ask", "partial", "all"], desc: "How much of a /orc-doc document is bought at once. `partial` writes ONE wave, then stops so you can read those section files and redirect before the rest is paid for — the single biggest saving in the lane. `all` writes every wave. `ask` (default) makes it a question asked once per run and stored, so the choice is yours and never the model's to remember." },
   { key: "doc_language", def: "en", tier: "common", validate: vText, options: ["en", "id", "es", "de", "fr", "ja"], desc: "Default output language for /orc-doc, always confirmable per run. A non-English document is held to the SAME plain-language bar in that language — short sentences, common words, acronyms expanded; technical terms with no natural translation stay in English and are glossed once." },
   { key: "doc_dir", def: DOC_DIR_DEFAULT, tier: "advanced", validate: vPath, desc: "Where /orc-doc folders live. Project root, not .claude/ — a document is a deliverable a human opens, and the same call /orc-quick, /orc-brainstorm and poly-repo-implementation/ already made." },
   { key: "wiki_scan_tier", def: "ladder", tier: "advanced", validate: vEnum("ladder", "always_deep"), desc: "Wiki scan tier: ladder picks light/deep per delta (first scan, STRUCTURAL, wide delta or a new exported symbol → deep; otherwise light), always_deep restores pre-v0.46.0 behaviour. The resolved tier is always printed — a cheaper model is never a quiet substitution." },
@@ -9381,20 +9382,44 @@ const DOC_STATE_FILE = "doc.json";
 const DOC_FILE = "document.md";
 const DOC_OUTLINE_FILE = "outline.md";
 const DOC_WORK = ".work";
+// ── v0.49.0 — `sections/` is the source of truth, `document.md` is a BUILD
+// ARTIFACT. Before this, every later change was extract (copy a section OUT of
+// the monolith) → edit → splice (write it back IN), so the section files existed
+// and were dead, and a resumed session routed through the 10,000-line file.
+const DOC_SECTIONS = "sections";
+const DOC_FRONT_FILE = "00-front.md";
+const DOC_HEAD_FILE = "00-head.md";
+const DOC_GAPS_FILE = "gaps.md";
+const DOC_STATE_VERSION = 2;
 // The section states. Mirrored in references/chunking.md — documented drift the
 // token lint cannot see (a word list is not a single token), so a golden test
 // compares the two.
-const DOC_STATES = ["planned", "written", "checked", "user-edited", "open"];
+// `unconfirmed` (v0.49.0): a part file is on disk but no validated return ever
+// recorded its hash. A writer killed by a usage limit leaves exactly that, and a
+// half-written section must never silently become the deliverable.
+const DOC_STATES = ["planned", "written", "checked", "user-edited", "open", "unconfirmed"];
 const DOC_ROLES = ["write", "check", "edit"];
 const DOC_LENGTHS = ["short", "standard", "thorough"];
-// The hard cap is 4 and a larger value is CLAMPED, never honoured: five agents
-// writing five parts of one document is five chances for the outline to drift,
-// and the wave that assembles them is the one that has to reconcile it.
-const DOC_MAX_PARALLEL_CAP = 4;
+const DOC_WRITE_MODES = ["ask", "partial", "all"];
+// The hard cap is 2 and a larger value is CLAMPED, never honoured: parallel
+// writers on one document is chances for the outline to drift, and the compile
+// is what has to reconcile them. v0.49.0 lowered it from 4.
+const DOC_MAX_PARALLEL_CAP = 2;
+
+// ORC's OWN bookkeeping markers, defined ONCE and used by lint + compile +
+// audit. The set is EXACT and narrow on purpose: a user's own prose beginning
+// "Note:" is content and is never flagged. A narrow rule that is always right
+// beats a broad one that argues with the author.
+//
+// A bare `<!-- … -->` is deliberately NOT in here: `html-comment` already
+// reports it as an error, and one line must never collect two findings for the
+// same fact. `<!-- orc-doc:… -->` and an `orc-doc:` fence ARE ours, so they are.
+const DOC_ANNOTATION_RE = /^\s*(?:>\s*\*\*(?:Open|Assumption|Note \(ORC\)):|<!--\s*orc-doc:|(?:```|~~~)\s*orc-doc:)/;
 
 const DOC_VALUE_FLAGS = [
   "--type", "--template", "--title", "--language", "--target", "--length",
   "--role", "--section", "--set", "--dir", "--budget", "--limit",
+  "--only", "--confirm",
 ];
 
 function docPositionals() {
@@ -9651,8 +9676,25 @@ function docPaths(claudeDir, slug) {
     document: folder ? path.join(folder, DOC_FILE) : null,
     outline: folder ? path.join(folder, DOC_OUTLINE_FILE) : null,
     work: folder ? path.join(folder, DOC_WORK) : null,
+    // v0.49.0 — the real, visible, diffable source of truth.
+    sections: folder ? path.join(folder, DOC_SECTIONS) : null,
+    front: folder ? path.join(folder, DOC_SECTIONS, DOC_FRONT_FILE) : null,
+    gaps: folder ? path.join(folder, DOC_GAPS_FILE) : null,
   };
 }
+
+// Where RESUME.md actually lives (v0.49.0). The registered v0.42.0 home, and
+// the ONLY place `listRuns()` looks — which is why a document paused by a usage
+// limit never appeared in `orc run list` and `orc resume` could not find it.
+function docRunDir(claudeDir, slug) {
+  try {
+    return path.join(resolveRunDir(claudeDir), slug);
+  } catch (_) {
+    return null;
+  }
+}
+
+const docRelFolder = (p, abs) => path.relative(p.folder, abs).split(path.sep).join("/");
 
 function docRead(claudeDir, slug) {
   const p = docPaths(claudeDir, slug);
@@ -9663,6 +9705,10 @@ function docRead(claudeDir, slug) {
     d.sections = d.sections || {};
     d.extracts = d.extracts || {};
     d.cycles = Array.isArray(d.cycles) ? d.cycles : [];
+    // BOTH versions are accepted. A v1 document in flight must open, migrate and
+    // continue without the user knowing anything happened.
+    d.version = Number(d.version) || 1;
+    d.migrations = Array.isArray(d.migrations) ? d.migrations : [];
     return d;
   } catch (_) {
     return null;
@@ -9674,7 +9720,7 @@ function docRead(claudeDir, slug) {
 function docWrite(claudeDir, slug, d) {
   const p = docPaths(claudeDir, slug);
   fs.mkdirSync(p.folder, { recursive: true });
-  d.version = 1;
+  d.version = Number(d.version) || 1;
   d.updated_at = fmtStamp(new Date());
   fs.writeFileSync(p.state, JSON.stringify(d, null, 2) + "\n");
   return p.state;
@@ -9697,6 +9743,192 @@ const docHash = (s) => sha256(String(s).replace(/\r\n/g, "\n").replace(/\s+$/, "
 // of the BODY, which is what a re-check needs; an INSERTED section renumbers its
 // followers, which is what the rename repair below is for.
 const docSectionId = (n, heading) => `${two(n)}-${docSlugify(heading).slice(0, 40) || "section"}`;
+
+// ── the section FILES — one file per thing, and ONE resolver (v0.49.0) ───────
+// `docSectionSource` is the single answer to "what is this section's source?".
+// Compile, `parts`, the staleness check, `extract` and the check-dispatch ALL
+// call it. A second idea of what a section's source is would be exactly the
+// drift this lane exists to prevent.
+
+const docSectionFile = (p, id) => path.join(p.sections, id + ".md");
+const docSectionDir = (p, id) => path.join(p.sections, id);
+
+// Strip the template's purpose comments (instructions for the writer, never
+// content), drop leading blanks, drop trailing whitespace. Blank-line
+// normalisation happens ONCE, at the very end of a compile, so a nested join is
+// never normalised twice.
+function docTrimPart(text) {
+  return docLines(text)
+    .filter((l) => !/^\s*<!--\s*purpose:/i.test(l))
+    .join("\n")
+    .replace(/^\s*\n+/, "")
+    .replace(/\s*$/, "");
+}
+
+const docFirstLine = (text) => (docLines(text).find((l) => /\S/.test(l)) || "").trim();
+
+function docSectionSource(p, o) {
+  const out = { id: o.id, files: [], parts: [], text: null, nested: false, problems: [] };
+  if (!p.sections) return out;
+  const flat = docSectionFile(p, o.id);
+  if (fs.existsSync(flat) && fs.statSync(flat).isFile()) {
+    const raw = fs.readFileSync(flat, "utf8");
+    const rel = docRelFolder(p, flat);
+    out.files.push(rel);
+    out.parts.push({ sub: null, file: rel, hash: docHash(raw), lines: docLines(raw).length });
+    out.text = docTrimPart(raw);
+    return out;
+  }
+  const dir = docSectionDir(p, o.id);
+  if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) return out;
+  out.nested = true;
+  // ORDER IS `outline[i].subsections[]` — never `readdir`, never the filename
+  // number. Decision 4, one level down.
+  const seq = [];
+  const head = path.join(dir, DOC_HEAD_FILE);
+  if (fs.existsSync(head)) seq.push({ sub: DOC_HEAD_FILE.replace(/\.md$/, ""), file: head, head: true });
+  for (const s of o.subsections || []) {
+    const f = path.join(dir, s.id + ".md");
+    if (fs.existsSync(f)) seq.push({ sub: s.id, file: f, head: false, heading: s.heading });
+  }
+  if (!seq.length) return out;
+  const chunks = [];
+  for (const it of seq) {
+    const raw = fs.readFileSync(it.file, "utf8");
+    const body = docTrimPart(raw);
+    const rel = docRelFolder(p, it.file);
+    const first = docFirstLine(body);
+    // Every rule here is a REFUSE-AND-NAME, never a silent fix. Demoting a `##`
+    // to `###` would restructure the deliverable; promoting it would split one
+    // section into two. Neither is ours to choose.
+    if (!it.head) {
+      if (/^##\s/.test(first))
+        out.problems.push({ rule: "subpart-h2", file: rel, what: `${rel} starts with a \`## \` heading. A sub-part is part of ONE section — demoting it would restructure the document and promoting it would split the section in two. Neither is this lane's to choose.` });
+      else if (!/^#{3,6}\s/.test(first))
+        out.problems.push({ rule: "subpart-bad-level", file: rel, what: `${rel} does not start at \`### \` or deeper. A sub-part carries its own sub-heading; without one the compile cannot tell where it begins.` });
+    }
+    out.files.push(rel);
+    out.parts.push({ sub: it.sub, file: rel, hash: docHash(raw), lines: docLines(raw).length });
+    chunks.push(body);
+  }
+  out.text = chunks.join("\n\n");
+  return out;
+}
+
+// Exactly one `## ` per section: `00-head.md` carries it, and when that file is
+// absent the compile emits the outline's own heading. Never twice, never none.
+function docSectionBody(o, src) {
+  let body = src.text || "";
+  if (!/^##\s/.test(docFirstLine(body))) body = `## ${o.heading}\n\n` + body;
+  return body.replace(/\s*$/, "");
+}
+
+// `state` is COMPUTED from the disk every time, never stored as a claim.
+//   planned      no source file at all
+//   unconfirmed  a file exists but no VALIDATED RETURN ever recorded its hash —
+//                exactly what a writer killed by a usage limit leaves behind
+//   user-edited  the recorded hash no longer matches the file
+//   checked      a check cycle confirmed it and it has not moved since
+//   written      confirmed, not yet checked
+function docPartState(rec, exists, hash) {
+  if (!exists) return "planned";
+  if (!rec || !rec.source_hash) return "unconfirmed";
+  if (rec.source_hash !== hash) return "user-edited";
+  return rec.state === "checked" ? "checked" : "written";
+}
+
+// The `sections/` view — and it works BEFORE a single compile has ever run,
+// which is the whole reason a resumed session no longer needs `document.md`.
+function docPartsView(claudeDir, slug) {
+  const d = docRead(claudeDir, slug);
+  if (!d) return null;
+  const p = docPaths(claudeDir, slug);
+  const rows = (d.outline || []).map((o, i) => {
+    const src = docSectionSource(p, o);
+    const rec = d.sections[o.id] || {};
+    const exists = !!src.text;
+    const hash = exists ? docHash(src.text) : null;
+    return {
+      id: o.id,
+      heading: o.heading,
+      required: o.required !== false,
+      purpose: o.purpose || null,
+      files: src.files,
+      nested: src.nested,
+      exists,
+      lines: exists ? docLines(src.text).length : 0,
+      hash,
+      state: docPartState(rec, exists, hash),
+      findings: rec.findings || 0,
+      cycle: rec.cycle || null,
+      subsections: (o.subsections || []).map((s) => {
+        const part = src.parts.find((x) => x.sub === s.id);
+        const known = (rec.parts || {})[s.id];
+        return {
+          id: s.id,
+          heading: s.heading,
+          file: part ? part.file : null,
+          exists: !!part,
+          lines: part ? part.lines : 0,
+          hash: part ? part.hash : null,
+          changed: !!(part && known && known !== part.hash),
+        };
+      }),
+      // The NUMBER is a mirror of the outline index, kept in sync by the CLI.
+      // Order is always the outline — the number is never what decides it.
+      ordinal_ok: o.id === docSectionId(i + 1, o.heading),
+      problems: src.problems,
+    };
+  });
+  const front = p.front && fs.existsSync(p.front) ? docRelFolder(p, p.front) : null;
+  return { d, paths: p, rows, front };
+}
+
+// `K of N` is DERIVED by counting waves whose sections are ALL hash-confirmed —
+// never a number a model claims. Same discipline as every other state here.
+function docWaveState(d, rows) {
+  const waves = ((d.plan || {}).waves || []).filter(Array.isArray);
+  if (!waves.length) return null;
+  const done = new Set(rows.filter((r) => r.state === "written" || r.state === "checked").map((r) => r.id));
+  let k = 0;
+  for (const w of waves) {
+    if (!w.length || !w.every((id) => done.has(id))) break;
+    k++;
+  }
+  return { done: k, total: waves.length, role: (d.plan || {}).role || "write" };
+}
+
+// `document.md` is stale ⇔ some section's assembled source hashes differently
+// today than `compiled.source_hashes` recorded. Pure disk comparison, no stored
+// status word, and COVERAGE-RELATIVE — the `computeWikiFreshness` /
+// `shipped-drifted` rule applied to a build artifact.
+function docDocStale(view) {
+  const d = view.d;
+  const c = d.compiled;
+  if (!c || !c.source_hashes) return null;
+  const then = c.source_hashes;
+  const out = [];
+  for (const r of view.rows) {
+    if (!r.exists) {
+      if (then[r.id]) out.push({ id: r.id, heading: r.heading, reason: "gone" });
+      continue;
+    }
+    if (!then[r.id]) out.push({ id: r.id, heading: r.heading, reason: "added" });
+    else if (then[r.id] !== r.hash) out.push({ id: r.id, heading: r.heading, reason: "changed" });
+  }
+  return out;
+}
+
+// ORC's own markers, found in a body that is supposed to carry content only.
+// REPORTED, never silently stripped: rule 4 outranks tidiness, because we cannot
+// tell whose line it is.
+function docAnnotations(text) {
+  const out = [];
+  docLines(text).forEach((l, i) => {
+    if (DOC_ANNOTATION_RE.test(l)) out.push({ line: i + 1, quote: l.trim().slice(0, 160) });
+  });
+  return out;
+}
 
 // ── the section map — DERIVED, NEVER STORED (§5.2) ──────────────────────────
 // Because it is re-derived after every single write, no line number in this
@@ -9826,9 +10058,12 @@ function docApplyRepairs(d, repairs) {
 // `state` is COMPUTED by comparing the live hash to the one doc.json recorded at
 // the end of the last cycle — never stored as a claim. A stored status is a
 // status that lies the moment somebody saves a file.
-function docStateOfSection(rec, live) {
+function docStateOfSection(rec, live, version) {
   if (!live) return "planned";
-  if (/^\s*>\s*\*\*Open:/m.test(live.text) && live.lines <= 6) return "open";
+  // v1 ONLY. In v2 the deliverable carries content only, so nothing ever writes
+  // a `> **Open:**` stub into the body and there is nothing to sniff for. A text
+  // match was always strictly less reliable than the hash it sat beside.
+  if ((Number(version) || 1) < 2 && /^\s*>\s*\*\*Open:/m.test(live.text) && live.lines <= 6) return "open";
   if (!rec || !rec.hash) return "written";
   if (rec.hash !== live.hash) return "user-edited";
   return DOC_STATES.includes(rec.state) && rec.state !== "planned" ? rec.state : "written";
@@ -9838,8 +10073,10 @@ function docMapView(claudeDir, slug, { persist = false } = {}) {
   const d = docRead(claudeDir, slug);
   if (!d) return null;
   const p = docPaths(claudeDir, slug);
+  // `parts_only` lets a caller tell "not compiled yet" from "empty document" —
+  // in v2 those are completely different situations and both are normal.
   if (!fs.existsSync(p.document))
-    return { d, paths: p, document: null, sections: [], total_lines: 0, repairs: [] };
+    return { d, paths: p, document: null, sections: [], total_lines: 0, repairs: [], parts_only: true };
   const text = fs.readFileSync(p.document, "utf8");
   const scan = docScan(text);
   const { sections: resolved, repairs } = docReconcile(d, scan);
@@ -9865,7 +10102,7 @@ function docMapView(claudeDir, slug, { persist = false } = {}) {
       end: s.end,
       lines: s.lines,
       hash: s.hash,
-      state: docStateOfSection(rec, s),
+      state: docStateOfSection(rec, s, d.version),
       required: o ? !!o.required : true,
       purpose: o ? o.purpose || null : null,
       findings: rec && rec.findings ? rec.findings : 0,
@@ -9887,20 +10124,31 @@ function docMapView(claudeDir, slug, { persist = false } = {}) {
 
 // The one status line every listing parses, so a listing never has to open
 // doc.json. Same shape as the run trio's `Where it stands:` line.
-function docWhereLine(d, view) {
-  const written = view ? view.sections.filter((s) => s.state !== "planned" && s.state !== "open").length : 0;
+function docWhereLine(d, view, extra) {
+  const e = extra || {};
+  // In v2 the SECTION FILES are the progress, so `written` is counted from them
+  // when the caller has them — the count no longer waits for a compile.
+  const written = Array.isArray(e.rows)
+    ? e.rows.filter((r) => r.state === "written" || r.state === "checked").length
+    : view
+      ? view.sections.filter((s) => s.state !== "planned" && s.state !== "open").length
+      : 0;
   const total = (d.outline || []).length || (view ? view.sections.length : 0);
   // The PREFIX is byte-stable — `orc doc list` parses it, which is how a listing
   // never has to open doc.json. v0.48.1 appends a SUFFIX and never touches the
-  // rest.
+  // rest; v0.49.0 appends one more, so `orc run list` finally shows phase AND
+  // wave. `parseStands` splits on `·` and matches positionally-free.
   const base = `Where it stands:  /orc-doc · ${String(d.type || "").toUpperCase()} · cycle ${d.cycle || 0} · ${written} of ${total} sections written`;
-  if (!d || !d.shipped) return base;
-  const drift = view ? docShipDrift(d, view) : null;
-  return (
-    base +
-    ` · shipped ${d.shipped.at.split(" ")[0]} → ${d.shipped.where}` +
-    (drift && drift.length ? ` (drifted: ${plural(drift.length, "section")})` : "")
-  );
+  let line = base;
+  if (d && d.shipped) {
+    const drift = view ? docShipDrift(d, view) : null;
+    line +=
+      ` · shipped ${d.shipped.at.split(" ")[0]} → ${d.shipped.where}` +
+      (drift && drift.length ? ` (drifted: ${plural(drift.length, "section")})` : "");
+  }
+  if (e.phase) line += ` · phase ${e.phase}`;
+  if (e.wave) line += ` · wave ${e.wave.done} of ${e.wave.total}`;
+  return line;
 }
 
 // ── the free check (§4.4 + §7) ──────────────────────────────────────────────
@@ -10040,6 +10288,17 @@ function docLintRun(text, targetId) {
       }
   }
 
+  // ── the clean-deliverable rule (v0.49.0) ──────────────────────────────────
+  // The deliverable carries CONTENT ONLY. ORC's own bookkeeping — an Open, an
+  // Assumption, a note callout, an `orc-doc:` fence — belongs in `gaps.md` and
+  // in the journal, not in the document the reader came for.
+  //
+  // It uses the SAME helper the compile reports with, so the free check and the
+  // build can never disagree about what one of ORC's markers is. And the set is
+  // narrow on purpose: a user's own line beginning "Note:" is content.
+  for (const a of docAnnotations(text))
+    add("error", "annotation-in-body", a.line, "ORC bookkeeping in the deliverable — it belongs in gaps.md, not in the document", a.quote);
+
   // ── readability signals (§7) ──────────────────────────────────────────────
   const prose = proseLines(text).filter((p) => /\S/.test(p.text) && !/^\s*#/.test(p.text));
   const sentences = [];
@@ -10167,7 +10426,7 @@ function docInit(claudeDir) {
 
   const cfg = resolvedConfig(claudeDir);
   const d = {
-    version: 1,
+    version: DOC_STATE_VERSION,
     slug: folderSlug,
     type: tpl.type,
     title: docOpt("--title") || folderSlug.replace(/-\d{6}$/, "").replace(/-/g, " "),
@@ -10178,11 +10437,16 @@ function docInit(claudeDir) {
     created_at: fmtStamp(new Date()),
     cycle: 0,
     outline,
+    write_mode: cfg.doc_write_mode && cfg.doc_write_mode !== "ask" ? cfg.doc_write_mode : null,
     sections: {},
     extracts: {},
     cycles: [],
+    migrations: [],
   };
-  fs.mkdirSync(paths.work, { recursive: true });
+  // `sections/` is a REAL, VISIBLE folder — a hidden dot-folder is not something
+  // a human opens, edits, or reviews in a PR, and half the point is that you can
+  // read one section without opening the document.
+  fs.mkdirSync(paths.sections, { recursive: true });
   docWrite(claudeDir, folderSlug, d);
   docWriteOutline(claudeDir, folderSlug, d);
 
@@ -10198,6 +10462,8 @@ function docInit(claudeDir) {
         language: d.language,
         outline,
         oversized: oversized.map((o) => o.id),
+        sections_dir: path.relative(paths.root, paths.sections).split(path.sep).join("/"),
+        write_mode: d.write_mode,
         next: `orc doc plan ${folderSlug} --role write`,
       },
       0
@@ -10230,11 +10496,15 @@ function docWriteOutline(claudeDir, slug, d) {
     "|---|---|---|---|---|",
     ...d.outline.map(
       (o, i) =>
-        `| ${i + 1} | ${o.heading} | ${o.required ? "yes" : "no"} | ${o.budget_lines} | ${o.purpose || "—"} |`
+        `| ${i + 1} | ${o.heading} | ${o.required ? "yes" : "no"} | ${o.budget_lines} | ${o.purpose || "—"} |` +
+        ((o.subsections || []).length ? `\n| | ${o.subsections.map((s) => "· " + s.heading).join("<br>")} | | | stored as parts |` : "")
     ),
     "",
-    "A required section with no material becomes a visible `> **Open:** …` line.",
-    "It is never a silent omission, and never invented filler.",
+    "A required section with no material is NOT written. It is returned as a gap,",
+    "recorded in gaps.md, and raised with you — the deliverable carries content only.",
+    "",
+    "One file per section under `sections/`. `document.md` is a build artifact:",
+    "rebuild it any time, for free, with `orc doc compile`.",
     "",
   ];
   fs.writeFileSync(p.outline, L.join("\n"));
@@ -10262,20 +10532,41 @@ function docOutlineCmd(claudeDir, slugArg) {
       process.exit(2);
     }
     const old = new Map(d.outline.map((o) => [docSlugify(o.heading), o]));
+    const renames = [];
     d.outline = heads.map((h, i) => {
       const prev = old.get(docSlugify(h.heading));
+      const id = docSectionId(i + 1, h.heading);
+      if (prev && prev.id !== id) renames.push({ from: prev.id, to: id });
       return {
-        id: docSectionId(i + 1, h.heading),
+        id,
         heading: h.heading,
         level: 2,
         required: prev ? prev.required : true,
         purpose: prev ? prev.purpose : null,
         affinity: prev ? prev.affinity : null,
         budget_lines: prev ? prev.budget_lines : 120,
+        subsections: prev ? prev.subsections || [] : [],
       };
     });
+    // The filename NUMBER is a mirror of the outline index, and the CLI is what
+    // keeps it in sync. A renumber renames the files on disk in the SAME step —
+    // otherwise `audit` would report `part-misnumbered` on a document nobody
+    // touched, and the section's whole history would sit under a dead name.
+    const p2 = docPaths(claudeDir, slug);
+    for (const r of renames) {
+      for (const [from, to] of [[docSectionFile(p2, r.from), docSectionFile(p2, r.to)], [docSectionDir(p2, r.from), docSectionDir(p2, r.to)]])
+        if (fs.existsSync(from) && !fs.existsSync(to)) {
+          try { fs.renameSync(from, to); } catch (_) {}
+        }
+      if (d.sections[r.from]) {
+        d.sections[r.to] = { ...d.sections[r.from], renamed_from: r.from };
+        delete d.sections[r.from];
+      }
+    }
     docWrite(claudeDir, slug, d);
     docWriteOutline(claudeDir, slug, d);
+    if (renames.length && !asJson)
+      for (const r of renames) console.log(`  renamed: ${r.from} → ${r.to}`);
   }
   if (asJson) emitJson({ ok: true, slug, outline: d.outline, file: docPaths(claudeDir, slug).outline }, 0);
   console.log(ui.header(`ORC · doc outline — ${slug}`));
@@ -10305,12 +10596,19 @@ function docNoSuch(asJson, slugArg) {
 function docListCmd(claudeDir) {
   const asJson = wantsJson();
   const slugs = docList(claudeDir);
+  // A listing must NOT mutate, so `list` is the one command that never triggers
+  // the lazy migration.
   const rows = slugs.map((s) => {
     const view = docMapView(claudeDir, s);
     const d = view.d;
-    const written = view.sections.filter((x) => x.state !== "planned" && x.state !== "open").length;
+    const v2 = d.version >= DOC_STATE_VERSION;
+    const pv = docPartsView(claudeDir, s);
+    const written = v2
+      ? pv.rows.filter((x) => x.state === "written" || x.state === "checked").length
+      : view.sections.filter((x) => x.state !== "planned" && x.state !== "open").length;
     return {
       slug: s,
+      version: d.version,
       title: d.title,
       type: d.type,
       target: d.target,
@@ -10322,8 +10620,8 @@ function docListCmd(claudeDir) {
       lines: view.total_lines,
       sections_total: (d.outline || []).length,
       sections_written: written,
-      user_edited: view.sections.filter((x) => x.state === "user-edited").map((x) => x.id),
-      where: docWhereLine(d, view),
+      user_edited: (v2 ? pv.rows : view.sections).filter((x) => x.state === "user-edited").map((x) => x.id),
+      where: docWhereLine(d, view, { rows: v2 ? pv.rows : null, wave: docWaveState(d, pv.rows) }),
       dir: view.paths.folder,
       next: `/orc-doc resume ${s}`,
     };
@@ -10471,10 +10769,18 @@ function docMapCmd(claudeDir, slugArg) {
 function docPlanCmd(claudeDir, slugArg) {
   const asJson = wantsJson();
   const slug = docResolveSlug(claudeDir, slugArg);
+  if (slug) docMigrateV2(claudeDir, slug);
   const view = slug ? docMapView(claudeDir, slug) : null;
   if (!view) return docNoSuch(asJson, slugArg);
   const d = view.d;
   const cfg = resolvedConfig(claudeDir);
+  const v2 = d.version >= DOC_STATE_VERSION;
+  const pv = v2 ? docPartsView(claudeDir, slug) : null;
+  const only = String(docOpt("--only") || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const writeMode = d.write_mode || (cfg.doc_write_mode === "ask" ? null : cfg.doc_write_mode);
   const role = String(docOpt("--role") || "write").toLowerCase();
   if (!DOC_ROLES.includes(role)) {
     if (asJson) emitJson({ ok: false, reason: "bad-role", hint: `--role must be one of: ${DOC_ROLES.join(", ")}` }, 2);
@@ -10487,13 +10793,28 @@ function docPlanCmd(claudeDir, slugArg) {
   const clamped = wanted > DOC_MAX_PARALLEL_CAP ? { from: wanted, to: parallel } : null;
 
   const live = new Map(view.sections.map((s) => [s.id, s]));
+  const byPart = pv ? new Map(pv.rows.map((r) => [r.id, r])) : null;
+  // ONE FILE PER SECTION, never per slice. Before v0.49.0 a slice covering two
+  // sections wrote ONE file named after the first, while compile looked up a
+  // file per outline id — so the second section's file never existed. That was a
+  // live bug; one file per section fixes it by construction.
+  const partFile = (o) => {
+    if (!v2) return `${DOC_WORK}/${o.id}.md`;
+    const row = byPart ? byPart.get(o.id) : null;
+    if (row && row.nested) return `${DOC_SECTIONS}/${o.id}/`;
+    return `${DOC_SECTIONS}/${o.id}.md`;
+  };
   let items = [];
   if (role === "write") {
-    // Only what has no body yet. A `user-edited` section is NEVER re-written
-    // without an instruction naming it — overwriting a human's paragraph is
-    // unrecoverable from this lane's side.
+    // Only what has no body yet, plus anything a wave left `unconfirmed`. A
+    // `user-edited` section is NEVER re-written without an instruction naming
+    // it — overwriting a human's paragraph is unrecoverable from this side.
     items = d.outline
       .filter((o) => {
+        if (v2) {
+          const r = byPart.get(o.id);
+          return !r || r.state === "planned" || r.state === "unconfirmed";
+        }
         const s = live.get(o.id);
         return !s || s.state === "planned" || s.state === "open";
       })
@@ -10504,38 +10825,65 @@ function docPlanCmd(claudeDir, slugArg) {
         purpose: o.purpose,
         affinity: o.affinity,
         budget_lines: o.budget_lines,
-        part: `${DOC_WORK}/${o.id}.md`,
+        part: partFile(o),
+        subsections: (o.subsections || []).map((s) => ({ id: s.id, heading: s.heading, file: `${DOC_SECTIONS}/${o.id}/${s.id}.md` })),
       }));
   } else if (role === "check") {
     // The hash is what turns a re-check from a full pass into a diff: a section
     // whose hash has not moved since it was checked does not need re-reading.
-    items = view.sections
-      .filter((s) => s.state !== "planned" && s.state !== "checked")
-      .map((s) => ({
-        id: s.id,
-        heading: s.heading,
-        required: s.required,
-        purpose: s.purpose,
-        affinity: (d.outline.find((o) => o.id === s.id) || {}).affinity || null,
-        budget_lines: s.lines,
-        start: s.start,
-        end: s.end,
-      }));
+    // In v2 a checker gets one bounded PART FILE, so there is no line arithmetic
+    // anywhere in the loop.
+    items = v2
+      ? pv.rows
+          .filter((r) => r.exists && r.state !== "checked")
+          .map((r) => {
+            const o = d.outline.find((x) => x.id === r.id) || {};
+            return {
+              id: r.id,
+              heading: r.heading,
+              required: r.required,
+              purpose: r.purpose,
+              affinity: o.affinity || null,
+              budget_lines: r.lines,
+              part: partFile(o),
+              files: r.files,
+              // Only the sub-parts that MOVED are re-read. A single changed
+              // sub-part in a 900-line section costs one ~150-line read.
+              changed_subparts: r.subsections.filter((s) => s.changed).map((s) => s.file),
+            };
+          })
+      : view.sections
+          .filter((s) => s.state !== "planned" && s.state !== "checked")
+          .map((s) => ({
+            id: s.id,
+            heading: s.heading,
+            required: s.required,
+            purpose: s.purpose,
+            affinity: (d.outline.find((o) => o.id === s.id) || {}).affinity || null,
+            budget_lines: s.lines,
+            start: s.start,
+            end: s.end,
+          }));
   } else {
-    items = view.sections
+    items = (v2 ? pv.rows : view.sections)
       .filter((s) => s.findings > 0)
-      .map((s) => ({
-        id: s.id,
-        heading: s.heading,
-        required: s.required,
-        purpose: s.purpose,
-        affinity: null,
-        budget_lines: s.lines,
-        start: s.start,
-        end: s.end,
-        part: `${DOC_WORK}/${s.id}.md`,
-      }));
+      .map((s) => {
+        const o = d.outline.find((x) => x.id === s.id) || { id: s.id };
+        return {
+          id: s.id,
+          heading: s.heading,
+          required: s.required,
+          purpose: s.purpose,
+          affinity: null,
+          budget_lines: s.lines,
+          start: s.start,
+          end: s.end,
+          part: partFile(o),
+          files: v2 ? s.files : undefined,
+        };
+      });
   }
+  if (only.length) items = items.filter((it) => only.some((k) => it.id === k || it.id.startsWith(k)));
 
   const agentName = role === "check" ? "orc-doc-checker-opus-5-low" : "orc-doc-writer-opus-5-med";
 
@@ -10553,7 +10901,8 @@ function docPlanCmd(claudeDir, slugArg) {
       emitJson(
         {
           ok: true, slug, role, agent: agentName, budget_lines: budget, parallel, clamped,
-          waves: [], agents: 0, oversized: [], hint,
+          write_mode: writeMode, waves: [], agents: 0, more_waves: 0, only: only.length ? only : null,
+          oversized: [], hint,
           note: "no section is ever split across two agents, and no two agents ever share a file",
         },
         1
@@ -10606,11 +10955,11 @@ function docPlanCmd(claudeDir, slugArg) {
   }
 
   const agent = agentName;
-  const waves = [];
+  const allWaves = [];
   for (let i = 0; i < slices.length; i += parallel) {
     const group = slices.slice(i, i + parallel);
-    waves.push({
-      n: waves.length + 1,
+    allWaves.push({
+      n: allWaves.length + 1,
       agents: group.map((s) => {
         const out = {
           agent,
@@ -10619,19 +10968,45 @@ function docPlanCmd(claudeDir, slugArg) {
           budget_lines: s.budget_lines,
           oversized: !!s.oversized,
         };
-        if (role === "write") out.part = `${DOC_WORK}/${s.sections[0].id}.md`;
-        if (role === "edit") out.part = `${DOC_WORK}/${s.sections[0].id}.md`;
-        if (role === "check" || role === "edit") {
-          // A checker reads a RANGE and never the whole document:
+        // ONE ENTRY PER SECTION — and per SUB-PART for a nested section. The
+        // singular `part` is kept as parts[0].file for one release, because
+        // `next` output gets copied into notes and scripts.
+        if (role !== "check" || v2)
+          out.parts = s.sections.flatMap((x) =>
+            (x.subsections || []).length
+              ? x.subsections.map((sub) => ({ id: x.id, subsection: sub.id, file: sub.file, heading: sub.heading, purpose: x.purpose, budget_lines: x.budget_lines }))
+              : [{ id: x.id, subsection: null, file: x.part, heading: x.heading, purpose: x.purpose, budget_lines: x.budget_lines }]
+          );
+        if (out.parts && out.parts.length) out.part = out.parts[0].file;
+        if (!v2 && (role === "check" || role === "edit")) {
+          // v1 documents keep the RANGE form on the alias path:
           // Read(file_path, offset=start, limit=end-start+1).
           out.range = [s.sections[0].start, s.sections[s.sections.length - 1].end];
           out.read_limit = out.range[1] - out.range[0] + 1;
+        }
+        if (v2 && role === "check") {
+          out.files = s.sections.flatMap((x) => x.files || []);
+          out.changed_subparts = s.sections.flatMap((x) => x.changed_subparts || []);
         }
         return out;
       }),
     });
   }
+
+  // PARTIAL is a first-class mode, and it returns WAVE 1 ONLY — the rest cannot
+  // be bought by accident. This is the single biggest saving in the lane: you
+  // read what wave 1 wrote and redirect before waves 2..N are paid for.
+  const partial = role === "write" && writeMode === "partial" && !only.length;
+  const waves = partial ? allWaves.slice(0, 1) : allWaves;
   const agents = waves.reduce((a, w) => a + w.agents.length, 0);
+
+  // The wave list is PERSISTED so `K of N` can be DERIVED later by counting
+  // waves whose sections are all hash-confirmed — never claimed by a model.
+  if (role === "write" && !only.length) {
+    d.plan = { role, at: fmtStamp(new Date()), waves: allWaves.map((w) => w.agents.flatMap((a) => a.sections)) };
+    docWrite(claudeDir, slug, d);
+  }
+
   const payload = {
     ok: true,
     slug,
@@ -10640,8 +11015,11 @@ function docPlanCmd(claudeDir, slugArg) {
     budget_lines: budget,
     parallel,
     clamped,
+    write_mode: writeMode,
     waves,
     agents,
+    more_waves: partial ? allWaves.length - 1 : 0,
+    only: only.length ? only : null,
     oversized: slices.filter((s) => s.oversized).map((s) => s.sections[0].id),
     hint: null,
     note: "no section is ever split across two agents, and no two agents ever share a file",
@@ -10659,17 +11037,49 @@ function docPlanCmd(claudeDir, slugArg) {
       console.log(
         `    ${a.agent}  ${String(a.budget_lines).padStart(4)}L  ${a.sections.join(" + ")}` +
           (a.range ? `   lines ${a.range[0]}..${a.range[1]}` : "") +
-          (a.oversized ? "   ⚠ over budget — split it at the outline gate" : "")
+          (a.oversized ? "   ⚠ over budget — split it, or store it in parts" : "")
       );
   }
   console.log(`\n  ${plural(agents, "agent")} across ${plural(waves.length, "wave")}.`);
+  if (partial)
+    console.log(
+      ui.color.gray(
+        `  partial mode: ${plural(payload.more_waves, "later wave")} not returned. Read wave 1's files, then ask for the next.`
+      )
+    );
   process.exit(0);
 }
 
 // ── extract → edit the part → splice back (§5.6) ────────────────────────────
+// v0.49.0: both survive as THIN ALIASES for one release. `orc doc next` output
+// gets copied into notes and scripts, and a v1 document mid-flight still emits
+// them. In v2 the section file IS the extract, so `extract` makes no copy.
 function docExtractCmd(claudeDir, slugArg) {
   const asJson = wantsJson();
   const slug = docResolveSlug(claudeDir, slugArg);
+  // NO lazy migration here: a v1 document must reach the v1 extract, so its
+  // recorded hash still guards the splice that follows.
+  const d0 = slug ? docRead(claudeDir, slug) : null;
+  if (d0 && d0.version >= DOC_STATE_VERSION) {
+    const p = docPaths(claudeDir, slug);
+    const want = String(docOpt("--section") || "");
+    const entry = (d0.outline || []).find((x) => x.id === want || x.id.startsWith(want));
+    const src = entry ? docSectionSource(p, entry) : null;
+    if (!entry || !src || !src.text) {
+      const hint = `no written section "${want}" in ${slug} — \`orc doc parts ${slug}\` lists them.`;
+      if (asJson) emitJson({ ok: false, reason: "no-such-section", slug, section: want || null, hint }, 2);
+      console.error("❌ " + hint);
+      process.exit(2);
+    }
+    const hash = docHash(src.text);
+    const prev = d0.sections[entry.id] || {};
+    d0.sections[entry.id] = { ...prev, source_hash: prev.source_hash || hash };
+    docWrite(claudeDir, slug, d0);
+    if (asJson) emitJson({ ok: true, slug, section: entry.id, files: src.files, file: src.files[0], lines: docLines(src.text).length, hash, alias: "extract" }, 0);
+    console.log(`✓ ${entry.id} already lives at ${src.files[0]} — the section file IS the source, so nothing was copied.`);
+    console.log(`  Edit it, then: orc doc compile ${slug}`);
+    process.exit(0);
+  }
   const view = slug ? docMapView(claudeDir, slug) : null;
   if (!view) return docNoSuch(asJson, slugArg);
   if (!view.document || !fs.existsSync(view.document)) {
@@ -10702,6 +11112,15 @@ function docExtractCmd(claudeDir, slugArg) {
 function docSpliceCmd(claudeDir, slugArg) {
   const asJson = wantsJson();
   const slug = docResolveSlug(claudeDir, slugArg);
+  const d0 = slug ? docRead(claudeDir, slug) : null;
+  if (!d0) return docNoSuch(asJson, slugArg);
+  // A v1-era recorded `.work/` part is drained into sections/ first, hash-guarded
+  // exactly as before — the refuse-by-name block below is preserved verbatim on
+  // the v1 path, because two sessions on one slug is still a real risk.
+  if (d0.version >= DOC_STATE_VERSION || !Object.keys(d0.extracts || {}).length) {
+    docMigrateV2(claudeDir, slug);
+    return docCompileCmd(claudeDir, slugArg, { alias: "splice" });
+  }
   const view = slug ? docMapView(claudeDir, slug) : null;
   if (!view) return docNoSuch(asJson, slugArg);
   const d = view.d;
@@ -10800,39 +11219,85 @@ function docSpliceCmd(claudeDir, slugArg) {
   process.exit(0);
 }
 
-function docAssembleCmd(claudeDir, slugArg) {
+// ── compile — `document.md` is a BUILD ARTIFACT (v0.49.0) ───────────────────
+// ZERO model tokens, zero subprocess, zero shell script. It is Node code in this
+// same process, which is better than a shell step: no quoting, identical on
+// Windows, and it can re-derive doc.json in the same pass. Measured cost is I/O
+// only — outline.length reads, one write, one docScan.
+//
+// Anyone who claims v0.49.0 made compiling cheaper is selling something: it was
+// already free. The saving is early review, a resumable wave, no round trip and
+// bounded reads.
+function docCompileCmd(claudeDir, slugArg, opts) {
+  const o = opts || {};
   const asJson = wantsJson();
   const slug = docResolveSlug(claudeDir, slugArg);
-  const d = slug ? docRead(claudeDir, slug) : null;
-  if (!d) return docNoSuch(asJson, slugArg);
-  const p = docPaths(claudeDir, slug);
-  const parts = [];
+  const pv = slug ? docPartsView(claudeDir, slug) : null;
+  if (!pv) return docNoSuch(asJson, slugArg);
+  docMigrateV2(claudeDir, slug);
+  const view = docPartsView(claudeDir, slug);
+  const d = view.d;
+  const p = view.paths;
+  const partial = o.partial || flag("--partial");
+  const strip = flag("--strip-annotations");
+  const alias = o.alias || null;
+
+  const present = [];
   const missing = [];
-  for (const o of d.outline) {
-    const file = path.join(p.folder, DOC_WORK, o.id + ".md");
-    if (fs.existsSync(file)) parts.push({ o, file });
-    else if (o.required) missing.push(o.id);
+  const skippedOptional = [];
+  const problems = [];
+  for (const row of view.rows) {
+    const entry = d.outline.find((x) => x.id === row.id);
+    const src = docSectionSource(p, entry);
+    if (src.problems.length) problems.push(...src.problems);
+    if (src.text) present.push({ o: entry, src, row });
+    else if (row.required) missing.push({ id: row.id, heading: row.heading });
+    else skippedOptional.push(row.id);
   }
-  if (missing.length) {
-    const hint = `cannot assemble — these required parts have not been written: ${missing.join(", ")}`;
-    if (asJson) emitJson({ ok: false, reason: "missing-part", slug, missing, hint }, 1);
+
+  // A nested section that would restructure the deliverable is a REFUSAL, named
+  // by file. Never a silent demote, never a silent promote.
+  if (problems.length) {
+    const hint = "cannot compile — " + problems.map((x) => x.what).join("  ·  ");
+    if (asJson) emitJson({ ok: false, reason: "subpart-shape", slug, problems, hint }, 1);
     console.error("❌ " + hint);
     process.exit(1);
   }
 
-  const out = [`# ${d.title}`, ""];
-  for (const { o, file } of parts) {
-    let body = docLines(fs.readFileSync(file, "utf8"))
-      // The template's purpose comments are instructions for the writer. They
-      // never reach document.md — and an HTML comment is a lint error anyway.
-      .filter((l) => !/^\s*<!--\s*purpose:/i.test(l))
-      .join("\n")
-      .replace(/^\s*\n+/, "")
-      .replace(/\s*$/, "");
-    if (!/^##\s/.test(body)) body = `## ${o.heading}\n\n` + body;
-    out.push(body, "");
+  if (missing.length && !partial) {
+    const hint =
+      `cannot compile — ${plural(missing.length, "required section")} ${missing.length === 1 ? "has" : "have"} no source file: ` +
+      missing.map((m) => m.id).join(", ") +
+      ". Write them, or see what exists so far with --partial.";
+    if (asJson) emitJson({ ok: false, reason: "missing-part", slug, missing: missing.map((m) => m.id), hint }, 1);
+    console.error("❌ " + hint);
+    process.exit(1);
   }
-  const body = out.join("\n").replace(/\n{3,}/g, "\n\n").replace(/\s*$/, "") + "\n";
+
+  // Partial: a missing section is simply ABSENT. It is NOT stubbed with a note —
+  // the deliverable carries content only. The omission is reported loudly
+  // OUTSIDE the document: here, in `status`, in `next` and in `audit`.
+  // `00-front.md` is reserved for anything above the first `## ` — front matter
+  // for a Docusaurus target, an exec summary a human typed, the H1 itself. It
+  // survives a round trip instead of being regenerated, which is what makes
+  // `split` → `compile` byte-for-byte.
+  const out = [];
+  let front = null;
+  if (p.front && fs.existsSync(p.front)) front = docTrimPart(fs.readFileSync(p.front, "utf8"));
+  if (front) out.push(front, "");
+  if (!front || !/^#\s/m.test(front)) out.push(`# ${d.title}`, "");
+  for (const x of present) out.push(docSectionBody(x.o, x.src), "");
+
+  let body = out.join("\n");
+  const annotations = docAnnotations(body);
+  let stripped = [];
+  if (strip && annotations.length) {
+    stripped = annotations.map((a) => a.quote);
+    body = docLines(body).filter((l) => !DOC_ANNOTATION_RE.test(l)).join("\n");
+  }
+  // ONCE, at the very end — so a nested join is never normalised twice.
+  body = body.replace(/\n{3,}/g, "\n\n").replace(/\s*$/, "") + "\n";
+
   fs.mkdirSync(p.folder, { recursive: true });
   fs.writeFileSync(p.document, body);
 
@@ -10844,29 +11309,494 @@ function docAssembleCmd(claudeDir, slugArg) {
   scan.sections = docReconcile(d, scan).sections;
   for (const s of scan.sections) {
     const prev = d.sections[s.id] || {};
-    const isOpen = /^\s*>\s*\*\*Open:/m.test(s.text) && s.lines <= 6;
-    d.sections[s.id] = { ...prev, hash: s.hash, state: isOpen ? "open" : "written", cycle: d.cycle, findings: 0 };
+    const row = view.rows.find((r) => r.id === s.id);
+    d.sections[s.id] = {
+      ...prev,
+      hash: s.hash,
+      state: row && row.state === "unconfirmed" ? "unconfirmed" : prev.state === "checked" ? "checked" : "written",
+      cycle: d.cycle,
+      findings: prev.findings || 0,
+    };
   }
-  d.cycles.push({ n: d.cycle, at: fmtStamp(new Date()), kind: "write", agents: parts.length, sections: parts.map((x) => x.o.id) });
+  // `source_hashes` IS the staleness mechanism, and it is why nothing has to be
+  // remembered: `document.md` is stale ⇔ some section's source hashes
+  // differently today than this recorded. Pure disk comparison.
+  const sourceHashes = {};
+  for (const x of present) sourceHashes[x.o.id] = x.row.hash;
+  d.compiled = {
+    at: fmtStamp(new Date()),
+    cycle: d.cycle,
+    partial: !!missing.length,
+    sections: present.map((x) => x.o.id),
+    missing: missing.map((m) => m.id),
+    source_hashes: sourceHashes,
+  };
+  d.cycles.push({
+    n: d.cycle,
+    at: fmtStamp(new Date()),
+    kind: "compile",
+    role: "compile",
+    agents: 0,
+    sections: present.map((x) => x.o.id),
+  });
   docWrite(claudeDir, slug, d);
   docWriteOutline(claudeDir, slug, d);
 
   const lint = docLintRun(body, d.target);
-  const view = docMapView(claudeDir, slug);
+  const mv = docMapView(claudeDir, slug);
+  const after = docPartsView(claudeDir, slug);
   const payload = {
     ok: true,
     slug,
     file: path.relative(p.root, p.document).split(path.sep).join("/"),
     sections: scan.sections.length,
     lines: scan.total_lines,
-    skipped_optional: d.outline.filter((o) => !o.required && !parts.some((x) => x.o.id === o.id)).map((o) => o.id),
+    partial: !!missing.length,
+    missing: missing.map((m) => ({ id: m.id, heading: m.heading })),
+    skipped_optional: skippedOptional,
+    annotations,
+    stripped,
     lint: { errors: lint.errors, warnings: lint.warnings },
-    where: docWhereLine(d, view),
+    where: docWhereLine(d, mv, { rows: after.rows, wave: docWaveState(d, after.rows) }),
+    note: "document.md is a BUILD ARTIFACT — the files under sections/ are the source of truth",
   };
   if (asJson) emitJson(payload, 0);
-  console.log(`✓ assembled ${plural(scan.sections.length, "section")} → ${p.document}  (${scan.total_lines} lines)`);
+  if (alias) console.log(ui.color.gray(`  \`orc doc ${alias}\` is now \`orc doc compile\` — same result, and the section files are the source.`));
+  console.log(`✓ compiled ${plural(scan.sections.length, "section")} → ${p.document}  (${scan.total_lines} lines)`);
+  if (missing.length)
+    console.log(
+      ui.color.yellow(`  PARTIAL — ${plural(missing.length, "required section")} not written yet: `) +
+        missing.map((m) => m.heading).join(", ") +
+        "\n  " +
+        ui.color.gray("Absent, not stubbed. The document carries content only.")
+    );
+  if (annotations.length && !strip)
+    console.log(
+      ui.color.yellow(`  ${plural(annotations.length, "ORC annotation")} still in the body`) +
+        ` (first at line ${annotations[0].line}). Reported, never silently removed — we cannot tell whose line it is.` +
+        `\n  Remove them with:  orc doc compile ${slug} --strip-annotations`
+    );
+  if (stripped.length) console.log(ui.color.gray(`  stripped ${plural(stripped.length, "annotation")} on your explicit request.`));
   console.log(`  lint: ${lint.errors} errors, ${lint.warnings} warnings  ·  run \`orc doc lint ${slug}\` for the detail`);
   process.exit(0);
+}
+
+// ── parts — the wave-boundary command, and it works before any compile ──────
+// `--confirm <ids>` is how a VALIDATED RETURN becomes a recorded hash. Until
+// then a part file on disk is `unconfirmed`: a writer killed by a usage limit
+// leaves a truncated file, and detection is already paid for.
+function docPartsCmd(claudeDir, slugArg) {
+  const asJson = wantsJson();
+  const slug = docResolveSlug(claudeDir, slugArg);
+  if (!slug || !docRead(claudeDir, slug)) return docNoSuch(asJson, slugArg);
+  docMigrateV2(claudeDir, slug);
+
+  const confirm = String(docOpt("--confirm") || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (confirm.length) {
+    const view = docPartsView(claudeDir, slug);
+    const d = view.d;
+    const unknown = [];
+    const empty = [];
+    const confirmed = [];
+    for (const want of confirm) {
+      const row = view.rows.find((r) => r.id === want || r.id.startsWith(want));
+      if (!row) {
+        unknown.push(want);
+        continue;
+      }
+      if (!row.exists) {
+        empty.push(row.id);
+        continue;
+      }
+      const entry = d.outline.find((x) => x.id === row.id);
+      const src = docSectionSource(view.paths, entry);
+      const prev = d.sections[row.id] || {};
+      const parts = {};
+      for (const pt of src.parts) if (pt.sub) parts[pt.sub] = pt.hash;
+      d.sections[row.id] = { ...prev, source_hash: row.hash, state: "written", cycle: d.cycle || 0, findings: prev.findings || 0, parts };
+      confirmed.push(row.id);
+    }
+    if (unknown.length || empty.length) {
+      const hint =
+        (unknown.length ? `no such section: ${unknown.join(", ")}. ` : "") +
+        (empty.length ? `nothing on disk for: ${empty.join(", ")} — a return cannot confirm a file that was never written. ` : "");
+      if (asJson) emitJson({ ok: false, reason: unknown.length ? "no-such-section" : "no-source", slug, unknown, empty, confirmed, hint }, 1);
+      console.error("❌ " + hint);
+      process.exit(1);
+    }
+    docWrite(claudeDir, slug, d);
+  }
+
+  const view = docPartsView(claudeDir, slug);
+  const d = view.d;
+  const wave = docWaveState(d, view.rows);
+  const problems = view.rows.flatMap((r) => r.problems.map((x) => ({ id: r.id, ...x })));
+  const missing = view.rows.filter((r) => r.required && !r.exists).map((r) => r.id);
+  const unconfirmed = view.rows.filter((r) => r.state === "unconfirmed").map((r) => r.id);
+  const misnumbered = view.rows.filter((r) => !r.ordinal_ok).map((r) => r.id);
+  const payload = {
+    ok: true,
+    slug,
+    dir: path.relative(view.paths.root, view.paths.sections).split(path.sep).join("/"),
+    front: view.front,
+    confirmed: confirm.length ? confirm : [],
+    parts: view.rows.map(({ id, heading, required, files, nested, exists, lines, hash, state, subsections, ordinal_ok, findings }) => ({
+      id, heading, required, files, nested, exists, lines, hash, state, subsections, ordinal_ok, findings,
+    })),
+    total: view.rows.length,
+    written: view.rows.filter((r) => r.state === "written" || r.state === "checked").length,
+    missing,
+    unconfirmed,
+    misnumbered,
+    problems,
+    wave,
+    note: "the section files ARE the progress — there is no checkpoint file to invent and none to drift",
+  };
+  const code = missing.length || unconfirmed.length ? 1 : 0;
+  if (asJson) emitJson(payload, code);
+  console.log(ui.header(`ORC · doc parts — ${slug}`));
+  if (wave) console.log(`\n  wave ${wave.done} of ${wave.total} confirmed`);
+  console.log("");
+  for (const r of view.rows) {
+    console.log(
+      `  ${r.state.padEnd(12)} ${String(r.lines).padStart(4)}L  ${r.id.padEnd(32)} ${r.files[0] || ui.color.gray("(not written)")}` +
+        (r.ordinal_ok ? "" : ui.color.yellow("   ⚠ number does not mirror the outline"))
+    );
+    for (const s of r.subsections)
+      console.log(`  ${"".padEnd(12)} ${String(s.lines).padStart(4)}L    ${s.id.padEnd(30)} ${s.file || ui.color.gray("(not written)")}`);
+  }
+  if (unconfirmed.length)
+    console.log(
+      ui.color.yellow(`\n  ${plural(unconfirmed.length, "part")} on disk with no validated return: `) +
+        unconfirmed.join(", ") +
+        "\n  " +
+        ui.color.gray("A wave killed mid-flight leaves exactly this. It is re-written, never shipped.")
+    );
+  process.exit(code);
+}
+
+// ── split — the reverse direction, also free ────────────────────────────────
+// `docScan` already returns every `##` section with its exact text and
+// `docReconcile` already re-keys those to outline ids. So decomposing a monolith
+// costs nothing, and it is what the migration uses — and what recovers a
+// document a human reshaped by hand in an editor.
+function docSplitSections(claudeDir, slug, d, p) {
+  if (!fs.existsSync(p.document)) return { written: [], front: null, reason: "no-document" };
+  const text = fs.readFileSync(p.document, "utf8");
+  const scan = docScan(text);
+  if (!scan.sections.length) return { written: [], front: null, reason: "no-headings" };
+  const rec = docReconcile(d, scan);
+  docApplyRepairs(d, rec.repairs);
+  fs.mkdirSync(p.sections, { recursive: true });
+  const written = [];
+  for (const s of rec.sections) {
+    // A section body that is nothing but a `> **Open:**` stub does NOT survive
+    // into v2. It becomes `planned`, so the pipeline offers to write it.
+    const bodyOnly = docLines(s.text).slice(1).filter((l) => /\S/.test(l));
+    if (bodyOnly.length && bodyOnly.every((l) => DOC_ANNOTATION_RE.test(l))) continue;
+    const file = docSectionFile(p, s.id);
+    fs.writeFileSync(file, s.text.replace(/\s*$/, "") + "\n");
+    written.push({ id: s.id, file: docRelFolder(p, file), lines: s.lines });
+  }
+  let front = null;
+  if (scan.preamble_end > 0) {
+    const pre = docLines(text).slice(0, scan.preamble_end).join("\n").replace(/\s*$/, "");
+    if (/\S/.test(pre)) {
+      fs.writeFileSync(p.front, pre + "\n");
+      front = docRelFolder(p, p.front);
+    }
+  }
+  return { written, front, repairs: rec.repairs, reason: null };
+}
+
+// Cut ONE existing flat section on its own `###` headings, so a big section
+// stores as sub-parts without the reader ever knowing. The deliverable's
+// structure is never changed to solve ORC's storage problem.
+function docSplitByHeading(p, d, id) {
+  const entry = (d.outline || []).find((x) => x.id === id || x.id.startsWith(id));
+  if (!entry) return { ok: false, reason: "no-such-section" };
+  const flat = docSectionFile(p, entry.id);
+  if (!fs.existsSync(flat)) return { ok: false, reason: "no-source" };
+  const text = fs.readFileSync(flat, "utf8");
+  const lines = docLines(text);
+  const scan = docScan(text);
+  const h3 = scan.headings.filter((h) => h.level === 3);
+  if (!h3.length) return { ok: false, reason: "no-subheadings" };
+  const slugs = h3.map((h) => docSlugify(h.heading));
+  if (new Set(slugs).size !== slugs.length) return { ok: false, reason: "ambiguous-subheadings" };
+
+  const dir = docSectionDir(p, entry.id);
+  fs.mkdirSync(dir, { recursive: true });
+  const outFiles = [];
+  const head = lines.slice(0, h3[0].line - 1).join("\n").replace(/\s*$/, "");
+  fs.writeFileSync(path.join(dir, DOC_HEAD_FILE), head + "\n");
+  outFiles.push(docRelFolder(p, path.join(dir, DOC_HEAD_FILE)));
+  const subs = [];
+  h3.forEach((h, i) => {
+    const end = i + 1 < h3.length ? h3[i + 1].line - 1 : lines.length;
+    const sid = docSectionId(i + 1, h.heading);
+    const f = path.join(dir, sid + ".md");
+    fs.writeFileSync(f, lines.slice(h.line - 1, end).join("\n").replace(/\s*$/, "") + "\n");
+    subs.push({ id: sid, heading: h.heading, level: 3 });
+    outFiles.push(docRelFolder(p, f));
+  });
+  fs.unlinkSync(flat);
+  entry.subsections = subs;
+  return { ok: true, id: entry.id, files: outFiles, subsections: subs };
+}
+
+function docSplitCmd(claudeDir, slugArg) {
+  const asJson = wantsJson();
+  const slug = docResolveSlug(claudeDir, slugArg);
+  const d = slug ? docRead(claudeDir, slug) : null;
+  if (!d) return docNoSuch(asJson, slugArg);
+  const p = docPaths(claudeDir, slug);
+  const one = docOpt("--section");
+
+  if (one || flag("--by-heading")) {
+    const res = docSplitByHeading(p, d, one || "");
+    if (!res.ok) {
+      const hints = {
+        "no-such-section": `no section "${one}" in ${slug} — \`orc doc parts ${slug}\` lists them.`,
+        "no-source": `${one} has no source file yet — there is nothing to split.`,
+        "no-subheadings": `${one} has no \`### \` headings, so there is nothing to cut on. Add sub-headings first, or make them real \`## \` sections at the outline gate.`,
+        "ambiguous-subheadings": `${one} has two identical \`### \` headings. Ambiguous is a refusal, never a guess — rename one.`,
+      };
+      const code = res.reason === "no-such-section" ? 2 : 1;
+      if (asJson) emitJson({ ok: false, reason: res.reason, slug, section: one || null, hint: hints[res.reason] }, code);
+      console.error("❌ " + hints[res.reason]);
+      process.exit(code);
+    }
+    docWrite(claudeDir, slug, d);
+    docWriteOutline(claudeDir, slug, d);
+    if (asJson) emitJson({ ok: true, slug, section: res.id, files: res.files, subsections: res.subsections }, 0);
+    console.log(`✓ ${res.id} stored as ${plural(res.files.length, "part")} under sections/${res.id}/`);
+    for (const f of res.files) console.log(`    ${f}`);
+    console.log(ui.color.gray("\n  Invisible to the reader: the compiled document still has exactly one `## ` for this section."));
+    process.exit(0);
+  }
+
+  const res = docSplitSections(claudeDir, slug, d, p);
+  if (res.reason) {
+    const hint =
+      res.reason === "no-document"
+        ? `no ${DOC_FILE} for ${slug} — there is nothing to split. The section files are already the source.`
+        : `${DOC_FILE} has no \`## \` headings at all. A structure is never guessed out of prose, so nothing was written.`;
+    const code = res.reason === "no-document" ? 1 : 2;
+    if (asJson) emitJson({ ok: false, reason: res.reason, slug, hint }, code);
+    console.error("❌ " + hint);
+    process.exit(code);
+  }
+  for (const w of res.written) {
+    const prev = d.sections[w.id] || {};
+    const entry = d.outline.find((x) => x.id === w.id);
+    const src = entry ? docSectionSource(p, entry) : null;
+    d.sections[w.id] = { ...prev, source_hash: src && src.text ? docHash(src.text) : null, state: prev.state === "checked" ? "checked" : "written" };
+  }
+  docWrite(claudeDir, slug, d);
+  if (asJson) emitJson({ ok: true, slug, written: res.written, front: res.front, repaired: res.repairs || [] }, 0);
+  console.log(`✓ ${plural(res.written.length, "section")} written to sections/`);
+  for (const w of res.written) console.log(`    ${w.file.padEnd(46)} ${w.lines} L`);
+  if (res.front) console.log(`    ${res.front.padEnd(46)} (everything above the first heading)`);
+  process.exit(0);
+}
+
+// ── migration v1 → v2 — lazy, free, idempotent, non-destructive ─────────────
+// A v1 document in flight must open, migrate and continue without the user
+// knowing anything happened, and without losing a byte. Runs on the first
+// `orc doc <anything> <slug>` where version < 2 — never on `list`, because a
+// listing must not mutate.
+function docMigrateV2(claudeDir, slug, opts) {
+  const o = opts || {};
+  const d = docRead(claudeDir, slug);
+  if (!d || d.version >= DOC_STATE_VERSION) return null;
+  const p = docPaths(claudeDir, slug);
+  const notes = [];
+
+  // Refuse rather than guess. A guessed structure is worse than none — the
+  // `docInit` no-headings precedent.
+  if (fs.existsSync(p.document)) {
+    const scan = docScan(fs.readFileSync(p.document, "utf8"));
+    if (!scan.sections.length)
+      return {
+        refused: true,
+        slug,
+        reason: "unparseable-document",
+        hint:
+          `${DOC_FILE} has no \`## \` headings, so its sections cannot be recovered. Nothing was written and the document stays on v1 — ` +
+          "a guessed structure is worse than none.",
+      };
+  }
+
+  fs.mkdirSync(p.sections, { recursive: true });
+  let sections = [];
+
+  if (fs.existsSync(p.document)) {
+    const res = docSplitSections(claudeDir, slug, d, p);
+    sections = res.written.map((w) => w.id);
+    notes.push(`${plural(sections.length, "section")} recovered from ${DOC_FILE}; the file itself was NOT deleted — it is the build artifact now.`);
+    if (res.front) notes.push("everything above the first heading kept in sections/00-front.md");
+  }
+
+  // A recorded extract is the NEWER edit, so it wins for that id.
+  const extracts = Object.keys(d.extracts || {});
+  for (const id of extracts) {
+    const rec = d.extracts[id];
+    const src = rec && rec.file ? path.join(p.folder, rec.file) : null;
+    if (!src || !fs.existsSync(src)) continue;
+    fs.writeFileSync(docSectionFile(p, id), fs.readFileSync(src, "utf8"));
+    if (!sections.includes(id)) sections.push(id);
+    notes.push(`${rec.file} was a pending extract — the newer edit, so it won for ${id}.`);
+  }
+  d.extracts = {};
+
+  // Mid-write: part files exist and nothing was ever assembled. MOVE them.
+  if (!fs.existsSync(p.document) && p.work && fs.existsSync(p.work)) {
+    for (const f of fs.readdirSync(p.work).filter((x) => x.endsWith(".md"))) {
+      const id = f.replace(/\.md$/, "");
+      const dst = docSectionFile(p, id);
+      if (fs.existsSync(dst)) continue;
+      fs.writeFileSync(dst, fs.readFileSync(path.join(p.work, f), "utf8"));
+      try { fs.unlinkSync(path.join(p.work, f)); } catch (_) {}
+      if (!sections.includes(id)) sections.push(id);
+    }
+    if (sections.length) notes.push(`${plural(sections.length, "part file")} moved out of ${DOC_WORK}/ — nothing had been assembled yet.`);
+  }
+
+  // The v0.42.0 home is the only place `listRuns()` looks, which is why a
+  // document paused by a usage limit never showed up in `orc run list`.
+  const legacyResume = p.folder ? path.join(p.folder, RESUME_FILE) : null;
+  if (legacyResume && fs.existsSync(legacyResume)) {
+    const runDir = docRunDir(claudeDir, slug);
+    if (runDir) {
+      fs.mkdirSync(runDir, { recursive: true });
+      // The `## ` prefix made `parseStands` — which is line-anchored — unable to
+      // match the ONE line the whole listing contract depends on.
+      const body = fs.readFileSync(legacyResume, "utf8").replace(/^#{1,6}\s+(Where it stands:)/m, "$1");
+      fs.writeFileSync(path.join(runDir, RESUME_FILE), body);
+      try { fs.unlinkSync(legacyResume); } catch (_) {}
+      notes.push(`RESUME.md moved to ${path.relative(p.root, path.join(runDir, RESUME_FILE)).split(path.sep).join("/")} and its heading prefix stripped, so \`orc resume\` can finally see it.`);
+    }
+  }
+
+  // Record the hashes now, so `document.md` starts life FRESH rather than stale.
+  const sourceHashes = {};
+  for (const entry of d.outline || []) {
+    const src = docSectionSource(p, entry);
+    if (!src.text) continue;
+    const h = docHash(src.text);
+    sourceHashes[entry.id] = h;
+    const prev = d.sections[entry.id] || {};
+    d.sections[entry.id] = { ...prev, source_hash: h, state: prev.state === "checked" ? "checked" : "written" };
+  }
+  if (fs.existsSync(p.document))
+    d.compiled = { at: fmtStamp(new Date()), cycle: d.cycle || 0, partial: false, sections: Object.keys(sourceHashes), missing: [], source_hashes: sourceHashes };
+
+  if (o.clean && p.work && fs.existsSync(p.work)) {
+    try { fs.rmSync(p.work, { recursive: true, force: true }); notes.push(`${DOC_WORK}/ removed on your explicit request.`); } catch (_) {}
+  }
+
+  d.version = DOC_STATE_VERSION;
+  d.migrations = Array.isArray(d.migrations) ? d.migrations : [];
+  // NOT in the journal: `orc doc log` records what the USER said, and a
+  // migration is a machine fact (hard rule 12).
+  d.migrations.push({ from: 1, to: DOC_STATE_VERSION, at: fmtStamp(new Date()), sections, notes });
+  docWrite(claudeDir, slug, d);
+  return { refused: false, slug, from: 1, to: DOC_STATE_VERSION, sections, notes };
+}
+
+function docMigrateCmd(claudeDir, slugArg) {
+  const asJson = wantsJson();
+  const slug = docResolveSlug(claudeDir, slugArg);
+  const d = slug ? docRead(claudeDir, slug) : null;
+  if (!d) return docNoSuch(asJson, slugArg);
+  const already = d.version >= DOC_STATE_VERSION;
+  const res = docMigrateV2(claudeDir, slug, { clean: flag("--clean") });
+  if (res && res.refused) {
+    if (asJson) emitJson({ ok: false, reason: res.reason, slug, hint: res.hint }, 1);
+    console.error("❌ " + res.hint);
+    process.exit(1);
+  }
+  if (already || !res) {
+    if (asJson) emitJson({ ok: true, slug, migrated: false, version: DOC_STATE_VERSION, hint: "already on v2 — nothing to do" }, 0);
+    console.log(`${slug} is already on v${DOC_STATE_VERSION}. Nothing to do.`);
+    process.exit(0);
+  }
+  if (asJson) emitJson({ ok: true, slug, migrated: true, ...res }, 0);
+  console.log(ui.header(`ORC · doc migrate — ${slug}  v1 → v${DOC_STATE_VERSION}`));
+  console.log(`\n  ${plural(res.sections.length, "section")} now live under sections/, which is the source of truth.`);
+  for (const n of res.notes) console.log(`    · ${n}`);
+  console.log(ui.color.gray(`\n  ${DOC_FILE} was NOT deleted. It is the build artifact — rebuild it any time with \`orc doc compile ${slug}\`.`));
+  process.exit(0);
+}
+
+// ── write mode — asked once per run, stored, enforced by `orc doc next` ─────
+// Never decided per wave by the skill: that is remembered-not-dispatched
+// protocol, the failure this repo has already paid for twice.
+function docModeCmd(claudeDir, slugArg) {
+  const asJson = wantsJson();
+  const slug = docResolveSlug(claudeDir, slugArg);
+  const d = slug ? docRead(claudeDir, slug) : null;
+  if (!d) return docNoSuch(asJson, slugArg);
+  const set = docOpt("--set");
+  if (set) {
+    if (!DOC_WRITE_MODES.includes(set) || set === "ask") {
+      const hint = `--set must be one of: ${DOC_WRITE_MODES.filter((m) => m !== "ask").join(", ")}`;
+      if (asJson) emitJson({ ok: false, reason: "bad-mode", slug, hint }, 2);
+      console.error("❌ " + hint);
+      process.exit(2);
+    }
+    d.write_mode = set;
+    docWrite(claudeDir, slug, d);
+  }
+  const cfg = resolvedConfig(claudeDir);
+  const resolved = d.write_mode || (cfg.doc_write_mode === "ask" ? null : cfg.doc_write_mode);
+  const payload = {
+    ok: true,
+    slug,
+    write_mode: resolved,
+    stored: d.write_mode || null,
+    config_default: cfg.doc_write_mode,
+    hint: resolved
+      ? null
+      : "unset — this is a decision, and it is asked once and stored. `partial` writes ONE wave so you can read it before the rest is paid for.",
+  };
+  if (asJson) emitJson(payload, 0);
+  console.log(`write mode for ${slug}: ${resolved || "unset (ask)"}`);
+  if (!resolved) console.log(ui.color.gray("  " + payload.hint));
+  process.exit(0);
+}
+
+// ── gaps.md — DERIVED, CLI-written, never compiled in ───────────────────────
+// This is where an Open question and an Assumption go now. The deliverable
+// carries content only; ORC's uncertainty about it is real and is written down,
+// just not inside the document the reader came for.
+function docWriteGaps(claudeDir, slug, d) {
+  const p = docPaths(claudeDir, slug);
+  const rows = (d.journal || []).filter((e) => e.kind === "gap");
+  if (!rows.length) {
+    try { if (fs.existsSync(p.gaps)) fs.unlinkSync(p.gaps); } catch (_) {}
+    return null;
+  }
+  const L = [
+    "<!-- orc-doc:derived — written by the `orc doc` CLI from doc.json.",
+    "     Record one with `orc doc log <slug> --kind gap --sections <id> --text \"…\"`. -->",
+    "",
+    `# Gaps — ${d.title}`,
+    "",
+    "Everything ORC could not anchor to the frozen context. It is NOT in the",
+    "document: the deliverable carries content only.",
+    "",
+    "| # | Section | Kind | What is missing |",
+    "|---|---|---|---|",
+    ...rows.map((e, i) => `| ${i + 1} | ${(e.sections || []).join(", ") || "—"} | ${e.source === "assumption" ? "assumption" : "open"} | ${String(e.text).replace(/\|/g, "\\|").split("\n")[0]} |`),
+    "",
+  ];
+  fs.writeFileSync(p.gaps, L.join("\n"));
+  return p.gaps;
 }
 
 function docLintCmd(claudeDir, arg) {
@@ -10910,21 +11840,26 @@ function docLintCmd(claudeDir, arg) {
 function docStatusCmd(claudeDir, slugArg) {
   const asJson = wantsJson();
   const slug = docResolveSlug(claudeDir, slugArg);
+  if (slug) docMigrateV2(claudeDir, slug);
   const view = slug ? docMapView(claudeDir, slug) : null;
   if (!view) return docNoSuch(asJson, slugArg);
   const d = view.d;
   const p = view.paths;
+  const v2 = d.version >= DOC_STATE_VERSION;
+  const pv = docPartsView(claudeDir, slug);
   const hasDoc = !!view.document && fs.existsSync(view.document);
   const lint = hasDoc ? docLintRun(fs.readFileSync(view.document, "utf8"), d.target) : null;
-  const byId = new Map(view.sections.map((s) => [s.id, s]));
+  const byId = new Map((v2 ? pv.rows : view.sections).map((s) => [s.id, s]));
   const open = d.outline.filter((o) => {
     const s = byId.get(o.id);
-    return o.required && (!s || s.state === "planned" || s.state === "open");
+    return o.required && (!s || s.state === "planned" || s.state === "open" || s.state === "unconfirmed");
   });
-  const userEdited = view.sections.filter((s) => s.state === "user-edited");
-  const state = docComputedState(d, view, { hasDoc, open, lint });
+  const userEdited = (v2 ? pv.rows : view.sections).filter((s) => s.state === "user-edited");
+  const staleDoc = v2 && hasDoc ? docDocStale(pv) : null;
+  const state = docComputedState(d, view, { hasDoc, open, lint, pv: v2 ? pv : null, staleDoc });
   const drift = docShipDrift(d, view);
   const next = docNextAction(claudeDir, slug);
+  const wave = docWaveState(d, pv.rows);
   const payload = {
     ok: true,
     slug,
@@ -10932,20 +11867,28 @@ function docStatusCmd(claudeDir, slugArg) {
     type: d.type,
     target: d.target,
     language: d.language,
+    version: d.version,
     cycle: d.cycle || 0,
     state,
+    write_mode: d.write_mode || null,
+    wave,
     shipped: d.shipped || null,
     drifted_sections: state === "shipped-drifted" ? drift : [],
     next: next ? { phase: next.phase, action: next.action, command: next.command, paid: next.paid, blocked_by: next.blocked_by } : null,
     document: hasDoc ? path.relative(p.root, view.document).split(path.sep).join("/") : null,
+    document_stale: staleDoc && staleDoc.length ? staleDoc : [],
+    sections_dir: path.relative(p.root, p.sections).split(path.sep).join("/"),
     lines: view.total_lines,
     sections_total: d.outline.length,
-    sections_written: view.sections.filter((s) => s.state !== "planned" && s.state !== "open").length,
+    sections_written: (v2 ? pv.rows : view.sections).filter((s) => (v2 ? s.state === "written" || s.state === "checked" : s.state !== "planned" && s.state !== "open")).length,
     open_sections: open.map((o) => ({ id: o.id, heading: o.heading })),
     user_edited: userEdited.map((s) => ({ id: s.id, heading: s.heading })),
     lint: lint ? { errors: lint.errors, warnings: lint.warnings, target: lint.target } : null,
     dir: p.folder,
-    where: docWhereLine(d, view),
+    // ONE GENERATOR, NOT TWO. The skill copies this line VERBATIM into
+    // RESUME.md, so the CLI computes and the skill renders — and the two can no
+    // longer disagree about what the run's own status line says.
+    where: docWhereLine(d, view, { rows: v2 ? pv.rows : null, phase: next ? next.phase : null, wave }),
     resume: `/orc-doc resume ${slug}`,
   };
   // 1 = THERE IS SOMETHING TO DO. `shipped-drifted` is a 1 for that reason: the
@@ -10954,7 +11897,11 @@ function docStatusCmd(claudeDir, slugArg) {
   if (asJson) emitJson(payload, code);
   console.log(ui.header(`ORC · doc status — ${slug}`));
   console.log(`\n  ${state}`);
-  console.log(`  ${docWhereLine(d, view)}`);
+  console.log(`  ${payload.where}`);
+  if (staleDoc && staleDoc.length)
+    console.log(
+      `  ${DOC_FILE} is behind sections/: ${staleDoc.map((s) => s.heading).join(", ")}  ${ui.color.gray("(free to rebuild — orc doc compile)")}`
+    );
   if (lint) console.log(`  lint: ${lint.errors} errors, ${lint.warnings} warnings against ${lint.target_label}`);
   if (userEdited.length)
     console.log(`\n  You edited since last time: ${userEdited.map((s) => s.heading).join(", ")}\n  ${ui.color.gray("These are never rewritten unless you name them.")}`);
@@ -11007,9 +11954,15 @@ function docShipDrift(d, view) {
 
 // not-started | in-progress | complete | shipped | shipped-drifted.
 // `shipped-drifted` KEEPS ITS SLOT and is an answer, not a gap.
-function docComputedState(d, view, { hasDoc, open, lint }) {
-  if (!hasDoc) return "not-started";
-  const finished = !open.length && lint && lint.errors === 0;
+function docComputedState(d, view, { hasDoc, open, lint, pv, staleDoc }) {
+  // v2: the SECTION FILES are the progress, so a document with sections written
+  // and no compile yet is `in-progress`, never `not-started`. A build artifact
+  // that has not been built yet says nothing about whether work happened.
+  if (pv) {
+    const anyWritten = pv.rows.some((r) => r.exists);
+    if (!hasDoc && !anyWritten) return "not-started";
+  } else if (!hasDoc) return "not-started";
+  const finished = hasDoc && !open.length && lint && lint.errors === 0 && !(staleDoc && staleDoc.length);
   if (d.shipped) {
     const drift = docShipDrift(d, view);
     return drift && drift.length ? "shipped-drifted" : "shipped";
@@ -11063,11 +12016,24 @@ function docShipCmd(claudeDir, slugArg, undo) {
 
   const hasDoc = !!view.document && fs.existsSync(view.document);
   const lint = hasDoc ? docLintRun(fs.readFileSync(view.document, "utf8"), d.target) : null;
-  const byId = new Map(view.sections.map((s) => [s.id, s]));
+  const v2 = d.version >= DOC_STATE_VERSION;
+  const pv = v2 ? docPartsView(claudeDir, slug) : null;
+  const byId = new Map((v2 ? pv.rows : view.sections).map((s) => [s.id, s]));
   const open = d.outline.filter((o) => {
     const s = byId.get(o.id);
-    return o.required && (!s || s.state === "planned" || s.state === "open");
+    return o.required && (!s || s.state === "planned" || s.state === "open" || s.state === "unconfirmed");
   });
+  // A document.md behind its own sections/ is not the document that would be
+  // delivered. Same wording family as `shipped-drifted`, one step earlier.
+  const staleDoc = v2 && hasDoc ? docDocStale(pv) : null;
+  if (staleDoc && staleDoc.length)
+    fail(
+      "document-stale",
+      `${DOC_FILE} is behind sections/: ${staleDoc.map((s) => s.heading).join(", ")} changed since the last compile. ` +
+        `Rebuild it first (free): orc doc compile ${slug}`,
+      { stale_sections: staleDoc },
+      1
+    );
   const complete = hasDoc && !open.length && lint && lint.errors === 0;
   const forced = flag("--force");
   const forceReason = docOpt("--reason");
@@ -11127,6 +12093,66 @@ function docAuditFindings(claudeDir, slug) {
   const out = [];
   const add = (id, summary, fix, panel, level = "error") => out.push({ id, level, summary, fix, panel });
   const hasDoc = !!view.document && fs.existsSync(view.document);
+  const v2 = d.version >= DOC_STATE_VERSION;
+
+  // ── v0.49.0 — the folder's own drift classes ──────────────────────────────
+  if (v2) {
+    const pv = docPartsView(claudeDir, slug);
+    for (const r of pv.rows) {
+      if (r.required && !r.exists)
+        add("part-missing", `"${r.heading}" is required and has no source file under sections/.`, `orc doc plan ${slug} --role write --only ${r.id} --json`, "docs");
+      if (r.state === "unconfirmed")
+        add(
+          "part-unconfirmed",
+          `${r.files[0]} exists but no validated return ever recorded its hash — a wave killed mid-flight leaves exactly this.`,
+          `orc doc plan ${slug} --role write --only ${r.id} --json`,
+          "docs"
+        );
+      if (!r.ordinal_ok)
+        add("part-misnumbered", `${r.id} no longer mirrors its outline position.`, `orc doc outline ${slug} --set ${DOC_OUTLINE_FILE}`, "docs", "warn");
+      for (const pb of r.problems) add("subpart-bad-level", pb.what, `orc doc parts ${slug} --json`, "docs");
+    }
+    // A file under sections/ that no outline entry claims.
+    if (pv.paths.sections && fs.existsSync(pv.paths.sections)) {
+      const claimed = new Set(pv.rows.map((r) => r.id));
+      for (const e of fs.readdirSync(pv.paths.sections, { withFileTypes: true })) {
+        const id = e.name.replace(/\.md$/, "");
+        if (id === DOC_FRONT_FILE.replace(/\.md$/, "") || claimed.has(id)) continue;
+        add("part-orphan", `sections/${e.name} is not in the outline — nothing will ever compile it.`, `orc doc outline ${slug} --json`, "docs", "warn");
+      }
+    }
+    const staleDoc = hasDoc ? docDocStale(pv) : null;
+    if (staleDoc && staleDoc.length)
+      add(
+        "document-stale",
+        `${DOC_FILE} is behind sections/: ${staleDoc.map((s) => s.heading).join(", ")}.`,
+        `orc doc compile ${slug}`,
+        "docs",
+        "warn"
+      );
+    if (p.work && fs.existsSync(p.work) && fs.readdirSync(p.work).length)
+      add("legacy-work", `${DOC_WORK}/ still holds files from before this document became a folder. Nothing reads them.`, `orc doc migrate ${slug} --clean`, "docs", "warn");
+    if (p.folder && fs.existsSync(path.join(p.folder, RESUME_FILE)))
+      add(
+        "resume-misplaced",
+        `RESUME.md is in the document folder, where \`orc resume\` and \`orc run list\` never look.`,
+        `orc doc migrate ${slug}`,
+        "docs"
+      );
+  } else {
+    add("doc-v1", `${slug} is still v1: one file, and every change routed through it.`, `orc doc migrate ${slug}`, "docs", "warn");
+  }
+
+  if (hasDoc) {
+    const ann = docAnnotations(fs.readFileSync(view.document, "utf8"));
+    if (ann.length)
+      add(
+        "annotation-in-body",
+        `${plural(ann.length, "line")} of ORC bookkeeping in the deliverable (first at line ${ann[0].line}). The document carries content only.`,
+        `orc doc compile ${slug} --strip-annotations`,
+        "docs"
+      );
+  }
 
   // Extracts that never came back, and extracts whose section moved under them.
   const now = docSectionHashes(view);
@@ -11151,9 +12177,13 @@ function docAuditFindings(claudeDir, slug) {
   // worth naming: every later batch is computed from the outline.
   if (hasDoc) {
     const live = new Set(view.sections.map((s) => s.id));
+    // A section that was never WRITTEN did not vanish — it is `part-missing`,
+    // reported above. Claiming both would be the audit saying something the disk
+    // does not prove, and under `compile --partial` it would say it eight times.
+    const written = v2 ? new Set(docPartsView(claudeDir, slug).rows.filter((r) => r.exists).map((r) => r.id)) : null;
     for (const o of d.outline || [])
-      if (!live.has(o.id))
-        add("section-vanished", `outline lists "${o.heading}" but the document has no such heading.`, `orc doc map ${slug}`, "docs");
+      if (!live.has(o.id) && (!written || written.has(o.id)))
+        add("section-vanished", `outline lists "${o.heading}" but the document has no such heading.`, `orc doc compile ${slug}`, "docs");
     const planned = new Set((d.outline || []).map((o) => o.id));
     for (const s of view.sections)
       if (!planned.has(s.id))
@@ -11279,7 +12309,10 @@ function docSessionCount(claudeDir, slug) {
 const DOC_CONTEXT_FILE = "context.md";
 const DOC_SOURCES_FILE = "context-sources.md";
 const DOC_CHANGELOG_FILE = "changelog.md";
-const DOC_JOURNAL_KINDS = ["request", "decision", "gate", "note"];
+// `gap` (v0.49.0) is where an Open question or an Assumption goes now that the
+// deliverable carries content only. It is NOT a second ledger: it rides the
+// journal, which already has exactly one writer, and gaps.md is derived from it.
+const DOC_JOURNAL_KINDS = ["request", "decision", "gate", "note", "gap"];
 
 function docContextPaths(p) {
   return {
@@ -11418,7 +12451,8 @@ function docLogCmd(claudeDir, slugArg) {
   d.journal.push(entry);
   // Through docWrite, so doc.json still has EXACTLY ONE WRITER.
   docWrite(claudeDir, slug, d);
-  if (asJson) emitJson({ ok: true, slug, entry, entries: d.journal.length }, 0);
+  const gaps = docWriteGaps(claudeDir, slug, d);
+  if (asJson) emitJson({ ok: true, slug, entry, entries: d.journal.length, gaps: gaps ? path.basename(gaps) : null }, 0);
   console.log(`recorded #${entry.n} (${kind}) — ${d.journal.length} entries in the journal for ${slug}`);
   process.exit(0);
 }
@@ -11501,13 +12535,26 @@ function docReadCmd(claudeDir, slugArg) {
   const slug = docResolveSlug(claudeDir, slugArg);
   const view = slug ? docMapView(claudeDir, slug) : null;
   if (!view) return docNoSuch(asJson, slugArg);
+  const want0 = docOpt("--section");
+  // v2: a named section is read straight from its own file, so `read` works
+  // BEFORE a single compile has ever run.
+  if (want0 && view.d.version >= DOC_STATE_VERSION && !flag("--toc")) {
+    const entry = (view.d.outline || []).find((x) => x.id === want0 || x.id.startsWith(want0));
+    const src = entry ? docSectionSource(view.paths, entry) : null;
+    if (entry && src && src.text) {
+      const text = docSectionBody(entry, src);
+      if (asJson) emitJson({ ok: true, slug, section: entry.id, heading: entry.heading, files: src.files, lines: docLines(text).length, text }, 0);
+      console.log(text);
+      process.exit(0);
+    }
+  }
   if (!view.document || !fs.existsSync(view.document)) {
-    const hint = `no ${DOC_FILE} yet for ${slug} — nothing has been assembled.`;
+    const hint = `no ${DOC_FILE} yet for ${slug} — nothing has been compiled. The sections themselves: orc doc parts ${slug}`;
     if (asJson) emitJson({ ok: false, reason: "no-document", slug, hint }, 1);
     console.error("❌ " + hint);
     process.exit(1);
   }
-  const want = docOpt("--section");
+  const want = want0;
   if (!want || flag("--toc")) {
     const toc = view.sections.map((s) => ({ id: s.id, heading: s.heading, level: s.level, start: s.start, end: s.end, lines: s.lines, state: s.state }));
     if (asJson) emitJson({ ok: true, slug, document: view.document, total_lines: view.total_lines, toc }, 0);
@@ -11548,6 +12595,7 @@ function docNextAction(claudeDir, slug) {
   if (!view) return null;
   const d = view.d;
   const p = view.paths;
+  const v2 = d.version >= DOC_STATE_VERSION;
   const hasDoc = !!view.document && fs.existsSync(view.document);
   const allParts = p.work && fs.existsSync(p.work) ? fs.readdirSync(p.work).filter((f) => f.endsWith(".md")) : [];
   // Only a RECORDED extract is waiting to be spliced. A write-wave part file is
@@ -11589,9 +12637,76 @@ function docNextAction(claudeDir, slug) {
 
   if (!(d.outline || []).length) return A("D5", "outline", `orc doc outline ${slug} --json`, "there is no agreed outline yet", false);
 
+  // ── v0.49.0 — the folder ladder. Free repairs first, always. ──────────────
+  if (!v2)
+    return A("D6", "migrate", `orc doc migrate ${slug} --json`, "this document is still v1: one file, and every change routed through it", false, [
+      `orc doc audit ${slug} --json`,
+    ]);
+
+  const pv = docPartsView(claudeDir, slug);
+  const cfg = resolvedConfig(claudeDir);
+  const writeMode = d.write_mode || (cfg.doc_write_mode === "ask" ? null : cfg.doc_write_mode);
+  const shape = pv.rows.flatMap((r) => r.problems);
+  if (shape.length)
+    return BLOCK("D6", `${shape[0].what} Nothing was compiled — a nested sub-part that would restructure the deliverable is a refusal, never a silent fix.`, [
+      `orc doc parts ${slug} --json`,
+    ]);
+
+  if (!writeMode)
+    return BLOCK(
+      "D6",
+      "partial or all — your call. `partial` writes ONE wave and stops so you can read those files and redirect before the rest is paid for; `all` writes every wave.",
+      [`orc doc mode ${slug} --set partial`, `orc doc mode ${slug} --set all`]
+    );
+
+  const unconfirmed = pv.rows.filter((r) => r.state === "unconfirmed");
+  if (unconfirmed.length)
+    return A(
+      "D6",
+      "plan-write",
+      `orc doc plan ${slug} --role write --only ${unconfirmed.map((r) => r.id).join(",")} --json`,
+      `${plural(unconfirmed.length, "part file")} on disk with no validated return — a wave was killed mid-flight. Re-write, never ship.`,
+      true,
+      [`orc doc parts ${slug} --json`]
+    );
+
+  const notWritten = pv.rows.filter((r) => r.required && !r.exists);
+  const wave = docWaveState(d, pv.rows);
+  if (notWritten.length) {
+    if (writeMode === "all")
+      return A("D6", "plan-write", `orc doc plan ${slug} --role write --json`, `${plural(notWritten.length, "required section")} ${notWritten.length === 1 ? "has" : "have"} no source file yet`, true);
+    // Partial: after every wave the lane STOPS. The wave-review gate is just
+    // another `blocked_by`, which is why the skill needs no new prose for it.
+    if (wave && wave.done > 0 && wave.done < wave.total)
+      return BLOCK(
+        "D6",
+        `wave ${wave.done} of ${wave.total} is written. Read those section files and say whether to carry on — nothing later is bought yet.`,
+        [`orc doc compile ${slug} --partial`, `orc doc parts ${slug} --json`]
+      );
+    return A(
+      "D6",
+      "plan-write",
+      `orc doc plan ${slug} --role write --json`,
+      `${plural(notWritten.length, "required section")} ${notWritten.length === 1 ? "has" : "have"} no source file yet — partial mode returns wave 1 only`,
+      true
+    );
+  }
+
+  const staleDoc = hasDoc ? docDocStale(pv) : null;
+  if (!hasDoc)
+    return A("D7", "compile", `orc doc compile ${slug} --json`, "every required section is written and nothing has been compiled yet", false);
+  if (staleDoc && staleDoc.length)
+    return A(
+      "D7",
+      "compile",
+      `orc doc compile ${slug} --json`,
+      `${plural(staleDoc.length, "section")} changed since the last compile (${staleDoc.map((s) => s.heading).join(", ")})`,
+      false
+    );
+
   // A section a human edited is never rewritten without an instruction naming
   // it: their wording is not recoverable from this side.
-  const edited = view.sections.filter((s) => s.state === "user-edited");
+  const edited = pv.rows.filter((s) => s.state === "user-edited");
   if (edited.length && !parts.length)
     return BLOCK(
       "D8",
@@ -11621,8 +12736,7 @@ function docNextAction(claudeDir, slug) {
   // THE FREE CHECK ALWAYS RUNS BEFORE THE PAID ONE. `orc doc lint` costs zero
   // tokens and its findings ride in the checker's slice, so no model is ever
   // paid to count sentences.
-  const checkedCycle = (d.cycles || []).filter((c) => c.role === "check").slice(-1)[0];
-  const writtenSince = view.sections.filter((s) => s.state === "written").length;
+  const writtenSince = (v2 ? pv.rows : view.sections).filter((s) => s.state === "written").length;
   if (lint && lint.errors)
     return A("D7", "lint", `orc doc lint ${slug} --json`, `${plural(lint.errors, "lint error")} — the free check runs before the paid one`, false, [
       `orc doc map ${slug} --json`,
@@ -11637,7 +12751,7 @@ function docNextAction(claudeDir, slug) {
       [`orc doc lint ${slug} --json`, `orc doc map ${slug} --json`]
     );
 
-  if (open.length)
+  if (!v2 && open.length)
     return A("D6", "plan-write", `orc doc plan ${slug} --role write --json`, `${plural(open.length, "required section")} still open`, true);
 
   const audit = docAuditFindings(claudeDir, slug);
@@ -11717,6 +12831,16 @@ function doc() {
   }
   const claudeDir = resolveClaudeDir();
   const pos = docPositionals(); // ["doc", <sub?>, <slug|path?>]
+  // The migration is LAZY, free, idempotent and non-destructive: it runs on the
+  // first `orc doc <anything> <slug>` where version < 2. Never on `list` — a
+  // listing must not mutate — and never on `init`/`migrate`, which own it.
+  // `splice` and `extract` are excluded on purpose: a v1 document with a PENDING
+  // extract has to reach its own hash-conflict refusal, preserved verbatim,
+  // before anything moves. Two sessions on one slug is still a real risk.
+  if (pos[1] && !["list", "init", "migrate", "splice", "extract", "templates", "targets"].includes(pos[1])) {
+    const s = docResolveSlug(claudeDir, pos[2]);
+    if (s) docMigrateV2(claudeDir, s);
+  }
   switch (pos[1]) {
     case undefined:
     case "list":
@@ -11744,7 +12868,24 @@ function doc() {
       docSpliceCmd(claudeDir, pos[2]);
       break;
     case "assemble":
-      docAssembleCmd(claudeDir, pos[2]);
+      // Alias for one release, naming the new command. Exit codes preserved.
+      docCompileCmd(claudeDir, pos[2], { alias: "assemble" });
+      break;
+    // v0.49.0 — sections/ is the source of truth, document.md is a build artifact
+    case "compile":
+      docCompileCmd(claudeDir, pos[2]);
+      break;
+    case "parts":
+      docPartsCmd(claudeDir, pos[2]);
+      break;
+    case "split":
+      docSplitCmd(claudeDir, pos[2]);
+      break;
+    case "migrate":
+      docMigrateCmd(claudeDir, pos[2]);
+      break;
+    case "mode":
+      docModeCmd(claudeDir, pos[2]);
       break;
     case "lint":
       docLintCmd(claudeDir, pos[2]);
@@ -11791,16 +12932,21 @@ function doc() {
           "       orc doc status <slug> [--json]               0 nothing to do / 1 something to do / 2 unknown slug\n" +
           "       orc doc show <slug> [--json]                 full state: sections, cycles, extracts\n" +
           "       orc doc map <slug> [--json]                  the DERIVED section map (fresh line numbers)\n" +
-          "       orc doc plan <slug> --role write|check|edit  the batching (never splits a section, <=4)\n" +
+          "       orc doc parts <slug> [--confirm <ids>]       the SECTION FILES (works before any compile)\n" +
+          "       orc doc compile <slug> [--partial]           sections/ -> document.md. FREE, on demand\n" +
+          "       orc doc split <slug> [--section <id> --by-heading]  document -> sections/, or a section -> parts\n" +
+          "       orc doc migrate <slug> [--clean]             v1 -> v2, lazy and non-destructive\n" +
+          "       orc doc mode <slug> [--set partial|all]      how much is bought at once\n" +
+          "       orc doc plan <slug> --role write|check|edit  the batching (never splits a section, <=2)\n" +
           "       orc doc outline <slug> [--set <path>]        the agreed section list\n" +
-          "       orc doc extract <slug> --section <id>        one part file + its recorded hash\n" +
-          "       orc doc splice <slug>                        parts -> document, bottom-up (1 = hash conflict)\n" +
-          "       orc doc assemble <slug>                      parts -> document, outline order\n" +
+          "       orc doc extract <slug> --section <id>        alias — in v2 the section file IS the extract\n" +
+          "       orc doc splice <slug>                        alias -> compile (v1 parts are drained first)\n" +
+          "       orc doc assemble <slug>                      alias -> compile\n" +
           "       orc doc lint <slug|path> [--target <t>]      the free check (0 clean / 1 findings / 2 none)\n" +
           "       orc doc audit <slug> [--json]                every drift class, from disk (0 clean / 1 findings)\n" +
           "       orc doc ship <slug> --where <destination>    record the delivery. --where has NO DEFAULT\n" +
           "       orc doc unship <slug> --reason <text>        undo it; the old record is kept in ship_history\n" +
-          "       orc doc log <slug> --kind request|decision|gate|note --text <t>\n" +
+          "       orc doc log <slug> --kind request|decision|gate|note|gap --text <t>\n" +
           "       orc doc journal <slug> [--json]              the ordered story, gaps shown AS gaps\n" +
           "       orc doc context <slug> [--json]              the frozen brief + whether its sources still hold\n" +
           "       orc doc read <slug> [--section <id>|--toc]   FOR THE HUMAN — the orchestrator never runs this\n" +
@@ -12644,18 +13790,39 @@ Usage:
                                           computed state per section. Derived on every read and
                                           NEVER stored: a stored line number is a wrong line number
                                           one edit later
-    orc doc plan <slug> --role write|check|edit
+    orc doc parts <slug> [--json]         THE SECTION FILES — one row per section (and per stored
+                                          sub-part), with its computed state. Works BEFORE a single
+                                          compile has ever run, because the files ARE the progress
+      … --confirm <id,id>                 record a VALIDATED RETURN's hash. Until then a file on
+                                          disk is \`unconfirmed\`: a wave killed by a usage limit
+                                          leaves exactly that, and it is re-written, never shipped
+    orc doc compile <slug> [--partial]    sections/ → document.md. ZERO model tokens, on demand.
+                                          --partial writes what exists and NAMES what is missing;
+                                          nothing is ever stubbed into the deliverable
+      … --strip-annotations               remove ORC's own markers, on your explicit request only
+    orc doc split <slug>                  document.md → sections/ (also free). Recovers a document
+                                          a human reshaped by hand
+      … --section <id> --by-heading       store ONE big section as sub-parts, cut on its own
+                                          \`###\` headings. Invisible to the reader and to the map
+    orc doc migrate <slug> [--clean]      v1 → v2. Lazy, idempotent, non-destructive: document.md
+                                          is never deleted, and an unparseable one is REFUSED
+    orc doc mode <slug> [--set partial|all]
+                                          how much of the document is bought at once. \`partial\`
+                                          writes ONE wave and stops so you can redirect
+    orc doc plan <slug> --role write|check|edit [--only <ids>]
                                           the batching: never splits a section, never exceeds
-                                          doc_max_parallel (hard cap 4) or the per-agent line
-                                          budget (exit 0 work to do / 1 nothing to do)
+                                          doc_max_parallel (hard cap 2) or the per-agent line
+                                          budget (exit 0 work to do / 1 nothing to do). ONE FILE
+                                          PER SECTION — never one file for a two-section slice
     orc doc outline <slug> [--set <path>] the agreed section list; --set adopts another file's
-                                          headings (a structure is never guessed out of prose)
-    orc doc extract <slug> --section <id> one part file + its recorded hash
-    orc doc splice <slug>                 parts → document, BOTTOM-UP so no range shifts before it
-                                          is used (exit 0 written / 1 hash conflict — a section
-                                          changed on disk and nothing was overwritten)
-    orc doc assemble <slug>               parts → document in outline order (exit 1 names every
-                                          missing required part)
+                                          headings (a structure is never guessed out of prose) and
+                                          RENAMES the files on disk in the same step
+    orc doc extract <slug> --section <id> alias. In v2 the section file IS the extract, so nothing
+                                          is copied — it prints the path and records the hash
+    orc doc splice <slug>                 alias → compile. A v1-era pending part is drained first,
+                                          hash-guarded (exit 1 = a section changed on disk and
+                                          nothing was overwritten)
+    orc doc assemble <slug>               alias → compile
     orc doc lint <slug|path> [--target <t>]
                                           the FREE check: portability rules from a real product
                                           limit, plus readability signals (exit 0 clean /

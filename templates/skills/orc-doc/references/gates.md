@@ -9,6 +9,7 @@ before D1. The ladder is the user's priority made mechanical.
 | **D2** | asking is **P0**, answering is P1 | Paths to supporting documents? | Optional — "none" is a complete answer and is recorded |
 | **D3** | asking is **P0**, answering is P1 | Do you have your own template? Path? | Optional — falls back to the shipped base template for the type |
 | **D4** | asking is **P0**, answering is **required** | Intent · audience · expectation (+ language, type, target, length) | Re-ask ONCE with a recommended default per field; an accepted default counts as answered |
+| **D5** | asking is **P0** | The outline, and **how much to write at once** (`partial` / `all`) | The outline is confirmed before a word is written; the write mode is stored, never re-decided per wave |
 
 ---
 
@@ -101,28 +102,60 @@ writes the folder, `doc.json` and the derived `outline.md`. **Then show the
 section list and confirm it** — changing the outline after a write wave is what
 costs money.
 
-Two things to raise here, both from `orc doc plan --role write --json`:
+Three things to raise here. Two come from `orc doc plan --role write --json`:
 
 - **`oversized[]`** — a section whose budget exceeds `doc_max_lines_per_agent`.
-  Offer to split it into sub-sections. Never dispatch an over-budget writer.
+  Two offers, **in this order**:
+  1. **Store it as sub-parts** — `orc doc split <slug> --section <id>
+     --by-heading` cuts it on its own `### ` headings into
+     `sections/<id>/<NN>-<sub>.md`. The reader never knows: the compiled
+     document still has exactly one `## ` for it, and `orc doc map` still sees
+     one section. **This is the default offer**, because changing the
+     deliverable's structure to solve ORC's storage problem is backwards.
+  2. **Make them real `## ` sections** — a genuine restructure, and the user's
+     call.
+  Never dispatch an over-budget writer. There is **no new config key**:
+  `doc_max_lines_per_agent` is already the threshold.
 - **more than ~30 sections** — offer a SPLIT: a parent `document.md` that is an
   index plus per-area child documents, each its own slug, cross-linked. It
   offers; it never splits on its own. A document nobody will read is not a
   deliverable.
 
+And one is a question:
+
+- **How much do you want written at once?** `partial` (recommended) writes ONE
+  wave and stops, so you can read those section files and redirect before the
+  rest is paid for. `all` writes every wave. Store the answer with
+  `orc doc mode <slug> --set <mode>`; it is asked **once per run**, never
+  re-decided per wave — that is remembered-not-dispatched protocol, and this
+  repo has already paid for it twice.
+
 ## What lands on disk
 
 ```
 <project root>/orc/orc-doc/<slug>-<DDMMYY>/
-├─ RESUME.md            ← the paste-into-a-new-session file. P0.
 ├─ context.md           ← the FROZEN gathered context. Written ONCE.
 ├─ context-sources.md   ← the digest of the D2 documents (anchored)
 ├─ outline.md           ← DERIVED by the CLI from doc.json
-├─ document.md          ← THE DELIVERABLE
+├─ gaps.md              ← DERIVED. Every Open / Assumption, OUT of the document
 ├─ changelog.md         ← one entry per cycle: what changed, and who asked
-├─ doc.json             ← CLI-owned state. Never hand-edited.
-└─ .work/               ← transient part files. Never the deliverable.
+├─ doc.json             ← CLI-owned state (version 2). Never hand-edited.
+├─ sections/            ← THE SOURCE OF TRUTH. One file per section
+│  ├─ 00-front.md          anything above the first `## `
+│  ├─ 01-document-info.md
+│  └─ 04-detailed-design/  a big section, stored as sub-parts
+│     ├─ 00-head.md
+│     └─ 01-data-model.md
+└─ document.md          ← THE BUILD ARTIFACT. `orc doc compile` rebuilds it, free
+
+<project root>/.claude/orc/run/<slug>-<DDMMYY>/
+└─ RESUME.md            ← the paste-into-a-new-session file. P0.
 ```
+
+**`RESUME.md` is NOT in the document folder.** It lives in the run dir — the
+registered v0.42.0 home, and the only place `orc resume` and `orc run list`
+look. Before v0.49.0 it sat beside `document.md`, where nothing ever found it,
+so a document paused by a usage limit never appeared in a listing at all.
 
 Project root, not `.claude/` — the same call `/orc-quick`, `/orc-brainstorm` and
 `poly-repo-implementation/` already made: this is a deliverable a human opens.

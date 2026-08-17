@@ -6,14 +6,20 @@
    script, no import/export: an ES module import carries no query string,
    and every static request here needs the per-launch session token. */
 
-// The five section states the CLI can emit. The panel may KEY on one — a colour,
+// The six section states the CLI can emit. The panel may KEY on one — a colour,
 // a marker, an action — but never invent one.
+//
+// `unconfirmed` (v0.49.0) is a file on disk that no validated return ever
+// confirmed: exactly what a wave killed by a usage limit leaves behind. It reads
+// as a WARNING, never as progress, because a half-written section must never
+// look finished.
 const DOC_STATE_KIND = {
   planned: "",
   written: "ok",
   checked: "ok",
   "user-edited": "info",
   open: "warn",
+  unconfirmed: "warn",
 };
 
 PANELS.docs = function (host) {
@@ -130,6 +136,7 @@ async function loadDocDetail(pane, slug, body) {
   let show = null;
   let next = null;
   let audit = null;
+  let parts = null;
   const q = "?slug=" + encodeURIComponent(slug);
   const soft = (route) => read(route).catch(() => ({ data: null }));
   try {
@@ -140,6 +147,7 @@ async function loadDocDetail(pane, slug, body) {
     show = (await soft("/api/doc/show" + q)).data;
     next = (await soft("/api/doc/next" + q)).data;
     audit = (await soft("/api/doc/audit" + q)).data;
+    parts = (await soft("/api/doc/parts" + q)).data;
   } catch (e) {
     pane.replaceChildren(empty(t("common.loadFail"), String(e.message)));
     return;
@@ -176,6 +184,10 @@ async function loadDocDetail(pane, slug, body) {
   st.append(docNextAction(s, next, body));
   out.append(st);
 
+  // --- 5b. a v1 document, before anything else: it is one file, and every
+  //     change still routes through it until it migrates.
+  if (s.version !== undefined && s.version < 2) out.append(docMigrateCard(slug, body));
+
   // --- 6. ship. A decision, so it is a modal that names its destination and
   //     shows the exact command BEFORE it runs.
   out.append(docShipCard(s, body));
@@ -200,7 +212,20 @@ async function loadDocDetail(pane, slug, body) {
     out.append(hc);
   }
 
-  // --- 10. the sections
+  // --- 10a. THE SECTION FILES (v0.49.0). `sections/` is the source of truth,
+  //     so this card is the one that works before a single compile has ever
+  //     run. Every word in it is the CLI's: the state, the path, the counts.
+  if (parts && parts.parts && parts.parts.length) {
+    const pc = card(t("docs.parts"), docCompileBtn(slug, body, parts));
+    if (parts.wave) pc.append(docWaveStrip(parts.wave, s));
+    pc.append(docPartList(parts.parts, parts.dir));
+    pc.append(el("div", "note", t("docs.partsNote")));
+    if ((s.document_stale || []).length)
+      pc.append(el("div", "note bad", t("docs.docStale", { ids: s.document_stale.map((x) => x.heading).join(", ") })));
+    out.append(pc);
+  }
+
+  // --- 10b. the sections, as the COMPILED document sees them (line ranges)
   if (sections.length) {
     const sc = card(t("docs.sections"));
     sc.append(docSectionList(sections, slug, show));
@@ -521,26 +546,26 @@ function docFreeActions(slug, body) {
   relint.type = "button";
   relint.addEventListener("click", () => renderDocs(body));
   row.append(relint);
-  const asm = el("button", "btn btn-ghost btn-sm", t("docs.assemble"));
+  const asm = el("button", "btn btn-ghost btn-sm", t("docs.compile"));
   asm.type = "button";
   asm.addEventListener("click", () => {
     const b = frag();
-    b.append(el("p", null, t("docs.assembleBody")));
+    b.append(el("p", null, t("docs.compileBody")));
     // The exact command is ALWAYS on screen, so it is always typeable by hand
     // instead — the Maintenance rule, applied to the one free write here.
-    b.append(el("pre", "cmd", `orc doc assemble ${slug}`));
-    b.append(el("div", "note", t("docs.assembleNote")));
+    b.append(el("pre", "cmd", `orc doc compile ${slug}`));
+    b.append(el("div", "note", t("docs.compileNote")));
     modal({
-      title: t("docs.assembleTitle"),
+      title: t("docs.compileTitle"),
       body: b,
       actions: [
         { label: t("common.cancel"), onClick: (close) => close() },
         {
-          label: t("docs.assembleGo"),
+          label: t("docs.compileGo"),
           onClick: async (close) => {
             close();
-            const r = await post("/api/doc/assemble", { slug });
-            toast(r.ok ? t("docs.assembleOk") : t("common.writeFail"), r.ok ? "ok" : "bad", r.output);
+            const r = await post("/api/doc/compile", { slug });
+            toast(r.ok ? t("docs.compileOk") : t("common.writeFail"), r.ok ? "ok" : "bad", r.output);
             renderDocs(body);
           },
         },
@@ -549,6 +574,27 @@ function docFreeActions(slug, body) {
   });
   row.append(asm);
   return row;
+}
+
+// A v1 document is one file, and every change routes through it. Migrating is
+// FREE and non-destructive — document.md is never deleted — so it is a button,
+// with the command visible and the refusal case named.
+function docMigrateCard(slug, body) {
+  const c = card(t("docs.migrateTitle"));
+  c.append(el("p", "note", t("docs.migrateBody")));
+  c.append(el("pre", "cmd", `orc doc migrate ${slug}`));
+  const row = el("div", "row-actions");
+  const b = el("button", "btn btn-sm", t("docs.migrateGo"));
+  b.type = "button";
+  b.addEventListener("click", async () => {
+    b.disabled = true;
+    const r = await post("/api/doc/migrate", { slug });
+    toast(r.ok ? t("docs.migrateOk") : t("common.writeFail"), r.ok ? "ok" : "bad", r.output);
+    renderDocs(body);
+  });
+  row.append(b);
+  c.append(row);
+  return c;
 }
 
 /* THE RIBBON — each section is a segment whose width is proportional to its line
@@ -700,6 +746,87 @@ function docSectionList(sections, slug, show) {
     list.append(row);
   }
   return list;
+}
+
+/* --- the SECTION FILES (v0.49.0) ------------------------------------------
+   One row per section, and a NESTED row per stored sub-part. It derives
+   nothing: the state words, the paths, the line counts and the wave are all
+   `orc doc parts --json`'s, verbatim. A `planned` row KEEPS ITS SLOT — "not
+   written yet" is an answer, and a list that hides it cannot be designed. */
+function docPartList(rows, dir) {
+  const list = el("div", "doc-rows");
+  for (const p of rows) {
+    const row = el("div", "doc-part");
+    const head = el("div", "doc-part-head");
+    head.append(chip(p.state, DOC_STATE_KIND[p.state] || ""));
+    const mid = el("div", "run-mid");
+    mid.append(el("div", "run-slug", p.heading));
+    mid.append(el("div", "run-where mono", p.files.length ? p.files[0] : t("docs.partNone")));
+    head.append(mid);
+    head.append(el("div", "run-age", p.exists ? `${p.lines} L` : "—"));
+    if (!p.required) head.append(chip(t("docs.optional"), ""));
+    if (!p.ordinal_ok) head.append(chip(t("docs.misnumbered"), "warn"));
+    if (p.findings) head.append(chip(String(p.findings), "warn"));
+    row.append(head);
+    for (const sub of p.subsections || []) {
+      const sr = el("div", "doc-subpart");
+      sr.append(el("span", "doc-subpart-mark", "└"));
+      sr.append(el("span", null, sub.heading));
+      sr.append(el("span", "run-where mono", sub.file || t("docs.partNone")));
+      sr.append(el("span", "run-age", sub.exists ? `${sub.lines} L` : "—"));
+      if (sub.changed) sr.append(chip(t("docs.subChanged"), "warn"));
+      row.append(sr);
+    }
+    list.append(row);
+  }
+  const foot = el("div", "note mono", dir || "");
+  list.append(foot);
+  return list;
+}
+
+// `K of N` comes from the CLI, which DERIVES it by counting waves whose
+// sections are all hash-confirmed. The panel never counts anything.
+function docWaveStrip(wave, s) {
+  const wrap = el("div", "row-actions doc-wave-strip");
+  wrap.append(chip(t("docs.waveOf", { k: wave.done, n: wave.total }), wave.done >= wave.total ? "ok" : "info"));
+  if (s && s.write_mode) wrap.append(chip(s.write_mode, ""));
+  wrap.append(el("span", "note", s ? s.where : ""));
+  return wrap;
+}
+
+// A FREE action gets a button, and the exact command is always on screen so it
+// stays typeable by hand. `--partial` is offered only when something really is
+// missing, because a partial compile of a finished document is just a compile.
+function docCompileBtn(slug, body, parts) {
+  const row = el("div", "row-actions");
+  const partial = (parts.missing || []).length > 0;
+  const b = el("button", "btn btn-ghost btn-sm", t("docs.compile"));
+  b.type = "button";
+  b.addEventListener("click", () => {
+    const cmd = `orc doc compile ${slug}${partial ? " --partial" : ""}`;
+    const c = frag();
+    c.append(el("p", null, partial ? t("docs.compilePartialBody", { n: parts.missing.length }) : t("docs.compileBody")));
+    c.append(el("pre", "cmd", cmd));
+    c.append(el("div", "note", t("docs.compileNote")));
+    modal({
+      title: t("docs.compileTitle"),
+      body: c,
+      actions: [
+        { label: t("common.cancel"), onClick: (close) => close() },
+        {
+          label: t("docs.compileGo"),
+          onClick: async (close) => {
+            close();
+            const r = await post("/api/doc/compile", { slug, partial });
+            toast(r.ok ? t("docs.compileOk") : t("common.writeFail"), r.ok ? "ok" : "bad", r.output);
+            renderDocs(body);
+          },
+        },
+      ],
+    });
+  });
+  row.append(b);
+  return row;
 }
 
 function docRevealBtn(slug, id, pane) {

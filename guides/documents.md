@@ -29,13 +29,33 @@ context-window problems wearing a costume:
 3. **The context dies with the session.** You come back on Monday, the model
    knows nothing, and you paste the same brief for the fourth time.
 
+## The document is a folder (v0.49.0)
+
+> **`sections/` is the source of truth. `document.md` is a build artifact.**
+
+Each section lives in `sections/<NN>-<slug>.md` — a real, visible file you can
+open, edit and read in a pull request. `orc doc compile` rebuilds the document
+from those files, for **zero model tokens**, whenever you ask; `orc doc split`
+goes the other way and recovers the sections from a document a human reshaped by
+hand, byte for byte.
+
+That is a re-pointing, not a speed-up: compiling was **always** free. What the
+folder buys is early review, a resumable wave, no extract/splice round trip, and
+reads bounded to one file. A section too big for one file splits *underneath*
+into sub-parts (`sections/<id>/00-head.md` + `NN-<sub>.md`) that the reader never
+sees — the compiled document still has exactly one `## ` for it.
+
+The join key is the **filename**. There are no markers inside the files: an HTML
+comment is a lint error in this lane and mangles on import, and it would buy
+nothing the filename does not already give.
+
 ## Who holds what
 
 | Holder | What it holds |
 |---|---|
 | the orchestrator | `context.md`, `outline.md`, the section map, the lint findings, each agent's ~30-line return |
-| each writer | its own `.work/<id>.md`, and nothing else |
-| each checker | one line range, read with an offset and a limit |
+| each writer | ONE file under `sections/`, and nothing else |
+| each checker | ONE bounded part file, read from line 1 |
 | nobody | the whole document |
 
 **Line arithmetic is the CLI's job.** It is the one thing a language model is
@@ -49,9 +69,10 @@ right — so the map is computed by `bin/cli.js`, re-derived after every write, 
 |---|---|
 | Document | 10,000 lines, 40 sections |
 | `doc_max_lines_per_agent` | 400 |
-| `doc_max_parallel` | 4 (hard cap) |
+| `doc_max_parallel` | 2 (hard cap) |
 | Batches | 25 agent slices |
-| Waves | ⌈25 / 4⌉ = **7**, parallel within each |
+| Waves | ⌈25 / 2⌉ = **13**, parallel within each |
+| In `partial` mode | **wave 1 is bought, then it STOPS.** The rest is paid for only if wave 1 was right |
 | Orchestrator context spent | 25 returns × ~30 lines ≈ **750 lines**, plus the map |
 | Reading it twice instead | **20,000+ lines** |
 
@@ -83,7 +104,7 @@ answered, but *"yes, use your default"* is an answer.
 | `workflow` | purpose → **when NOT to use this** → the procedure → **when it goes wrong** → escalation |
 
 Each ships as `templates/skills/orc-doc/references/templates/<type>.md`: a
-heading skeleton, a one-line purpose comment per section (stripped at assemble,
+heading skeleton, a one-line purpose comment per section (stripped at compile,
 never reaching the deliverable), and a starter table where a table is the right
 shape.
 
@@ -131,16 +152,20 @@ Average ≤ 20 words a sentence, anything over 35 is a finding with its line
 number; common words over precise-sounding ones; every acronym expanded on first
 use; active voice; facts in tables; each section opens with its conclusion.
 
-**Never invent a fact.** Anything not in `context.md` or `context-sources.md`
-becomes a visible line:
+**Never invent a fact — and never write the uncertainty into the document.**
+What is not in `context.md` or `context-sources.md` is **not written at all**. It
+comes back as a gap, is recorded with `orc doc log --kind gap`, lands in the
+derived `gaps.md`, and is raised with you.
 
-```markdown
-> **Open:** the fraud limit has not been decided.
-> **Assumption:** refunds settle within one banking day. Not stated anywhere I was given.
-```
+**The deliverable carries content only.** No `> **Open:**`, no
+`> **Assumption:**`, no note callout, no HTML comment — not in `document.md` and
+not in a section file. `orc doc lint`'s `annotation-in-body` is an ERROR, and it
+matches an exact, narrow set of ORC's own markers: a line of yours beginning
+"Note:" is content and is never flagged. `compile` REPORTS a match and never
+silently strips it, because we cannot tell whose line it is.
 
-Those are the document being honest. Filler that reads like a fact is the worst
-possible output of this lane.
+Filler that reads like a fact is the worst possible output of this lane; one of
+ORC's markers left in the reader's document is the second worst.
 
 **The checker is `low` effort on purpose.** It reads a short range and answers a
 bounded question, and a harder-thinking checker reasons its way past a gap a real
@@ -150,20 +175,17 @@ reader at `low`. Nothing may upgrade it.
 ## Editing safely
 
 ```bash
-orc doc extract <slug> --section 04-goals   # part file + its recorded hash
-#   … a writer edits ONLY that file …
-orc doc splice <slug>                       # bottom-up, then re-map and re-lint
+#   … a writer opens sections/04-goals-and-metrics.md and edits it IN PLACE …
+orc doc compile <slug>                      # rebuild, then re-map and re-lint
 ```
 
-Bottom-up (highest `start` first) is why the model never does line arithmetic: an
-edit that changes a section's length cannot shift a range that has not been
-spliced yet.
+No extract, no splice, no monolith touched. For a section stored as sub-parts the
+writer opens the one ~150-line sub-part rather than all 900 lines.
 
-`splice` **refuses** when a section's hash no longer matches the file on disk —
-you edited it while we were working. It reports the conflict by section NAME,
-overwrites nothing, and asks. **A `user-edited` section is never rewritten
-without an instruction naming it**; a finding inside one is reported and the fix
-offered, never applied.
+A section whose hash moved is `user-edited`, and **it is never rewritten without
+an instruction naming it**; a finding inside one is reported and the fix offered,
+never applied. `orc doc ship` **refuses on a `document.md` that is behind its own
+`sections/`**, and names what moved.
 
 ## Resuming
 
@@ -172,12 +194,17 @@ offered, never applied.
 /orc-doc resume prd-checkout     a prefix is enough
 ```
 
-The new session runs `orc doc status` and `orc doc map`, reads `context.md` and
-`outline.md` (**not the document**), names the sections you edited, and then
-**stops and asks what should change**. No change request → no work.
+The new session runs `orc doc status` and `orc doc parts` — which works before a
+single compile has ever run — reads `context.md` and `outline.md` (**not the
+document**), names the sections you edited, and then **stops and asks what should
+change**. No change request → no work.
 
 `RESUME.md` is written by the lane itself, never by a dispatched agent — a
-dispatch inside a stop sequence lets a stop fail because a subagent did.
+dispatch inside a stop sequence lets a stop fail because a subagent did — and it
+lives in `.claude/orc/run/<slug>/`, the one place `orc resume` and `orc run list`
+actually look. **It is rewritten at the end of every WAVE**, not just every
+cycle: a usage-limit kill between waves has to leave something on disk that says
+where it stopped, and the section files already say what is done.
 
 ## The CLI
 
@@ -189,9 +216,14 @@ dispatch inside a stop sequence lets a stop fail because a subagent did.
 | `orc doc map <slug>` | 0 · 2 no document |
 | `orc doc plan <slug> --role write\|check\|edit` | 0 work to do · 1 nothing to do |
 | `orc doc outline <slug> [--set <path>]` | 0 · 2 unknown |
-| `orc doc extract <slug> --section <id>` | 0 · 2 unknown section |
-| `orc doc splice <slug>` | 0 · **1 hash conflict** |
-| `orc doc assemble <slug>` | 0 · 1 missing required part |
+| `orc doc parts <slug> [--confirm <ids>]` | 0 all written · 1 something missing or unconfirmed |
+| `orc doc compile <slug> [--partial]` | 0 · **1 missing required section (named)** · 2 unknown |
+| `orc doc split <slug> [--section <id> --by-heading]` | 0 · 1 nothing to split · 2 unparseable |
+| `orc doc migrate <slug> [--clean]` | 0 migrated or already v2 · **1 refused (named)** |
+| `orc doc mode <slug> [--set partial|all]` | 0 · 2 unknown |
+| `orc doc extract <slug> --section <id>` | alias · 0 · 2 unknown section |
+| `orc doc splice <slug>` | alias · 0 · **1 hash conflict** |
+| `orc doc assemble <slug>` | alias → compile · 0 · 1 missing required section |
 | `orc doc lint <slug\|path> [--target <t>]` | **0 clean · 1 findings · 2 unreadable** |
 | `orc doc templates` · `orc doc targets` | 0 |
 | `orc doc init <slug> --type <t>` | 0 · 1 exists · 2 bad args |
@@ -204,7 +236,8 @@ path would use. An empty result is an ANSWER, so it still returns its object.
 | Key | Default | What it does |
 |---|---|---|
 | `doc_max_lines_per_agent` | `400` | write/read budget per dispatched agent |
-| `doc_max_parallel` | `4` | agents per wave. **Hard cap 4**; larger is clamped and the clamp is announced |
+| `doc_max_parallel` | `2` | agents per wave. **Hard cap 2**; larger is clamped and the clamp is announced |
+| `doc_write_mode` | `ask` | `partial` writes ONE wave and stops · `all` writes every wave · `ask` makes it a question, asked once per run and stored |
 | `doc_language` | `en` | the D4 default, always confirmable per run |
 | `doc_dir` | `orc/orc-doc` | where the folders live |
 

@@ -31,15 +31,18 @@
 .doc-seg:hover .doc-seg-box,
 .doc-seg:focus-visible .doc-seg-box { stroke: var(--accent); stroke-width: 2; }
 
-/* The five states the CLI can emit, and no others. An `open` section is drawn
+/* The six states the CLI can emit, and no others. An `open` section is drawn
    in the warning colour because it is a REAL state of the document — something
-   nobody has decided yet — not a defect and not an absence. */
+   nobody has decided yet — not a defect and not an absence. `unconfirmed` is
+   drawn the same way and for the same reason: it is an honest answer about a
+   file nobody validated, not a defect in it. */
 .doc-seg-planned .doc-seg-box { fill: var(--surface-3); stroke-dasharray: 3 3; }
 .doc-seg-written .doc-seg-box { fill: var(--accent-dim); stroke: var(--accent-dim); }
 .doc-seg-checked .doc-seg-box { fill: var(--ok); stroke: var(--ok); }
 .doc-seg-useredited .doc-seg-box,
 .doc-seg-user-edited .doc-seg-box { fill: var(--warn-wash); stroke: var(--warn); }
 .doc-seg-open .doc-seg-box { fill: var(--warn-wash); stroke: var(--warn); stroke-dasharray: 3 3; }
+.doc-seg-unconfirmed .doc-seg-box { fill: var(--warn-wash); stroke: var(--warn); stroke-dasharray: 1 2; }
 /* A findings marker is STATIC. A blinking error is a reduced-motion hazard and
    reads as an urgency this panel has no right to imply. */
 .doc-seg-mark { fill: var(--bad); }
@@ -69,6 +72,7 @@
 .doc-legend-swatch.doc-seg-checked { background: var(--ok); border-color: var(--ok); }
 .doc-legend-swatch.doc-seg-user-edited { background: var(--warn-wash); border-color: var(--warn); }
 .doc-legend-swatch.doc-seg-open { background: var(--warn-wash); border-color: var(--warn); border-style: dashed; }
+.doc-legend-swatch.doc-seg-unconfirmed { background: var(--warn-wash); border-color: var(--warn); border-style: dotted; }
 
 /* --- sections + reveal ---------------------------------------------------- */
 .doc-rows { display: grid; gap: var(--sp-1); }
@@ -116,3 +120,19 @@
 .doc-agent.oversized { border-color: var(--bad); }
 .doc-agent-name { font-size: 11px; color: var(--text-faint); overflow-wrap: anywhere; }
 .doc-agent-secs { font-size: 12px; color: var(--text-dim); overflow-wrap: anywhere; }
+
+/* --- the SECTION FILES (v0.49.0) ------------------------------------------
+   sections/ is the source of truth, so this list is the one that has to read
+   well before a single compile has ever run. A `planned` row KEEPS ITS SLOT:
+   "not written yet" is an answer, and a list that hides it cannot be designed. */
+.doc-part {
+  border: 1px solid var(--line-soft); border-radius: var(--r-2);
+  background: var(--surface-2); padding: var(--sp-2); display: grid; gap: 4px;
+}
+.doc-part-head { display: flex; align-items: center; gap: var(--sp-2); }
+.doc-subpart {
+  display: flex; align-items: center; gap: var(--sp-2);
+  padding-left: var(--sp-4); color: var(--text-dim); font-size: var(--fs-sm);
+}
+.doc-subpart-mark { color: var(--text-faint); font-family: var(--mono, ui-monospace, monospace); }
+.doc-wave-strip { margin-bottom: var(--sp-2); flex-wrap: wrap; }

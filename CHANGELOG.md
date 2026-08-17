@@ -10,6 +10,128 @@ Format: `### v<version> — <title> _(<date>)_`.
 
 ---
 
+### v0.49.0 — the document is a folder, and the file is a build artifact _(2026-08-17)_
+
+`/orc-doc` only. No other lane changes, and **zero new agents**.
+
+Three quarters of what this release is about already existed: `orc doc plan`
+already wrote one part file per section, the ids were already number-then-name,
+the split already cut on `## ` alone, and `orc doc assemble` was already pure
+Node — **zero model tokens, and it always was**. Anyone who tells you this
+release made compiling cheaper is selling something.
+
+What was wrong was the direction of the arrow.
+
+#### `sections/` is the source of truth
+
+`.work/` was scratch and `document.md` was the truth, so after the first
+assemble every later change was *extract* (copy a section OUT of the monolith) →
+edit → *splice* (write it back IN). The section files existed and were dead. A
+resumed session, an update and a re-check all routed through the 10,000-line
+file.
+
+Now each section lives in `sections/<NN>-<slug>.md` — a real, visible folder you
+can open, edit and read in a pull request — and **`document.md` is a build
+artifact** that `orc doc compile` rebuilds from those files, for free, when you
+ask. `orc doc split` goes the other way and recovers the sections from a
+document a human reshaped by hand; **`split` then `compile` reproduces the file
+byte for byte**, and there is a test.
+
+The join key is the **filename**. No comment markers inside the files: an HTML
+comment is a lint error in this lane and mangles on a Notion or Google Docs
+import, and the deliverable's cleanliness is the lane's entire product. A marker
+that buys nothing costs the import.
+
+#### You can look before you buy the rest
+
+`orc doc compile --partial` writes exactly the sections that exist and **names
+the rest outside the document** — nothing is ever stubbed into the deliverable.
+Paired with the new `doc_write_mode` (`ask` · `partial` · `all`, asked once per
+run and stored), `orc doc plan --role write` returns **wave 1 only**, with
+`more_waves: N`. You read what it wrote, and waves 2..N are bought only if wave 1
+was right. That is the single biggest saving in the lane, and it has nothing to
+do with the compile.
+
+#### A wave is a stop you can walk away from
+
+The write loop used to live in the orchestrator's head, and `/orc-doc`'s
+`RESUME.md` sat in the document folder — where `orc resume` and `orc run list`
+never look — carrying a `## Where it stands:` line that the line-anchored parser
+**could never match**, and no phase and no wave even if it had.
+
+All four are fixed. `RESUME.md` moves to `{run_dir}/{slug}/`, the line is at
+column 0 and gains a `· phase D6 · wave 2 of 7` suffix (the byte-stable prefix is
+untouched), and a test feeds the shipped template to the real `parseStands`. The
+section files on disk ARE the progress, so `K of N` is **computed** by counting
+waves whose sections are all hash-confirmed. A part on disk that no validated
+return ever confirmed is `unconfirmed` — exactly what a usage limit leaves — and
+it is re-written, never shipped.
+
+#### The deliverable carries content only
+
+`> **Open:**` and `> **Assumption:**` lines are no longer written into your
+document, and the section state no longer sniffs the body text for them. This
+does not relax "never invent a fact"; it moves where the honesty is written down.
+A gap goes to `orc doc log --kind gap` and lands in a derived `gaps.md`, and is
+raised with you.
+
+`orc doc lint` gains `annotation-in-body` as an **error**, matching an exact,
+narrow set of ORC's own markers and nothing else — a line of yours beginning
+"Note:" is content and is never flagged. `compile` **reports** every match and
+never silently strips one: we cannot tell whose line it is.
+
+#### A live bug, fixed by construction
+
+A slice covering two sections wrote **one** file, named after the first, while
+`assemble` looked one up per outline id. The second section's file never existed:
+if it was required, assemble refused forever; if it was optional, it silently
+vanished from the deliverable. **One file per section** now, per slice entry, with
+a regression test.
+
+#### A section too big for one file
+
+It splits **underneath** — `sections/04-detailed-design/{00-head,01-data-model,…}.md`
+— cut on its own `### ` headings, which `docScan` already collected and merely
+filtered out. The reader never knows: the compiled document has exactly one `## `
+for it, and `orc doc map`, `lint`, `ship` and `audit` are completely unchanged.
+Five refuse-and-name rules make the nesting safe, and a changed sub-part is
+detected on its own, so a re-check inside a 900-line section reads ~150 lines.
+
+**No new config key** for it: `doc_max_lines_per_agent` is already the threshold.
+
+#### The rest
+
+- **`doc_max_parallel` hard cap is now 2** (default 2, was 4/4). A larger value
+  is clamped and the clamp is announced.
+- **`orc doc parts`** is the new wave-boundary read, and the one that works
+  before a single compile has ever run. `--confirm <ids>` is how a validated
+  return becomes a recorded hash.
+- **`orc doc ship` refuses on a stale `document.md`**, naming the sections —
+  coverage-relative, one step earlier than `shipped-drifted`.
+- **`orc doc audit`** gains `part-missing`, `part-orphan`, `part-misnumbered`,
+  `part-unconfirmed`, `subpart-bad-level`, `document-stale`,
+  `annotation-in-body`, `legacy-work` and `resume-misplaced`.
+- **`orc doc outline --set` renames the files on disk** when a renumber moves
+  them, in the same step.
+- **A checker now reads ONE bounded part file**, so there is no line arithmetic
+  anywhere in the check loop.
+- The Docs panel gains a **Section files** card with nested sub-part rows, a wave
+  strip, a compile button and a migrate button. It derives nothing new: the CLI's
+  state words, verbatim.
+
+#### Nothing is lost on the way
+
+`doc.json` goes to `version: 2` and a v1 document migrates the first time you
+touch it — lazy, free, idempotent, non-destructive. `document.md` is **never
+deleted** (it becomes the build artifact, and starts life fresh rather than
+stale), a pending extract wins as the newer edit, an `> **Open:**` stub does not
+survive, `RESUME.md` is moved and its prefix stripped, and an **unparseable**
+document is REFUSED with `version` left at 1 — a guessed structure is worse than
+none. `assemble`, `extract` and `splice` survive as thin aliases for one release,
+with their exit codes preserved.
+
+---
+
 ### v0.48.1 — one file per thing, and a document that can be finished _(2026-08-16)_
 
 Two halves, deliberately kept separate so that **any** behaviour difference

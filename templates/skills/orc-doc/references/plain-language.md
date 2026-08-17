@@ -22,9 +22,12 @@ Both the writer and the checker are held to this. The free half is measured by
 7. **Facts go in tables**, not in a paragraph listing six things.
 8. **Say the thing first.** Each section opens with its conclusion; the
    reasoning follows.
-9. **Never invent a fact.** Anything not in `context.md` or `context-sources.md`
-   is `> **Open:** …` or `> **Assumption:** …`. Filler that reads like a fact is
-   the worst possible output of this lane.
+9. **Never invent a fact.** What is not in `context.md` or `context-sources.md`
+   is **not written at all** — it comes back as a gap and is raised with the
+   user. The deliverable carries content only, so it never carries ORC's own
+   uncertainty markers. Filler that reads like a fact is the worst possible
+   output of this lane; a `> **Open:**` line left in the reader's document is
+   the second worst.
 10. **Non-English output is held to the same bar in that language** — short
     sentences, common words, acronyms expanded. Technical terms with no natural
     translation stay in English and are glossed once.

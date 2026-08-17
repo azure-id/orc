@@ -3,9 +3,10 @@
      cover → problem → goals → requirements → risks → rollout, the shape every current template converges on
 
      Every `<!-- purpose: … -->` line is an instruction for the WRITER and is
-     STRIPPED at assemble — it never reaches document.md. A required section
-     with no material becomes a visible `> **Open:** …` line: never a silent
-     omission, and never invented filler.
+     STRIPPED at compile — it never reaches document.md. A required section with
+     no material is NOT written: it comes back as a gap, lands in gaps.md, and is
+     raised with you. The deliverable carries content only — never a silent
+     omission, never invented filler, and never ORC's own bookkeeping.
 
      A template is a floor, not a cage. Your own template REPLACES this one
      entirely (`orc doc init … --template <path>`); the two are never merged.

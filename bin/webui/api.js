@@ -246,6 +246,9 @@ const READS = {
   // There is deliberately NO route for `orc doc log`: the SKILL records a
   // request, because the skill is what took one. A panel that could write a
   // journal entry could write one nobody said.
+  // v0.49.0 — the SECTION FILES. This is the one read that works before a
+  // single compile has ever run, because the files ARE the progress.
+  "/api/doc/parts": (q) => ["doc", "parts", String(q.slug || "")],
   "/api/doc/next": (q) => ["doc", "next", String(q.slug || "")],
   "/api/doc/audit": (q) => ["doc", "audit", String(q.slug || "")],
   "/api/doc/journal": (q) => ["doc", "journal", String(q.slug || "")],
@@ -307,12 +310,22 @@ const WRITES = {
   "/api/challenge/accept": (b) => ["challenge", "accept", String(b.slug), String(b.id), String(b.reason || "")],
   "/api/challenge/rebut": (b) => ["challenge", "rebut", String(b.slug), String(b.id), String(b.reason || "")],
   "/api/challenge/report": (b) => ["challenge", "report", String(b.slug)],
-  // v0.48.0. `assemble` is the ONE /orc-doc write that costs nothing: it
-  // concatenates part files that are already on disk, in an order the outline
-  // already fixed. Writing a part, checking a range and editing a section all
-  // cost model tokens, so they are copy-able commands and there is deliberately
-  // no route for any of them.
+  // v0.48.0. `assemble` — now `compile` — is the ONE /orc-doc write that costs
+  // nothing: it concatenates section files that are already on disk, in an order
+  // the outline already fixed. Writing a section, checking one and editing one
+  // all cost model tokens, so they are copy-able commands and there is
+  // deliberately no route for any of them.
   "/api/doc/assemble": (b) => ["doc", "assemble", String(b.slug)],
+  // v0.49.0. Both free, both non-destructive: `compile` rebuilds the artifact
+  // from disk, and `migrate` never deletes document.md and refuses what it
+  // cannot parse. `orc doc mode` deliberately has NO route — it is a USER
+  // decision the skill asks (the `orc doc log` precedent).
+  "/api/doc/compile": (b) => {
+    const argv = ["doc", "compile", String(b.slug)];
+    if (b.partial) argv.push("--partial");
+    return argv;
+  },
+  "/api/doc/migrate": (b) => ["doc", "migrate", String(b.slug)],
   // v0.48.1. Shipping is a DECISION, so it is a write — and `--where` has no
   // default here either, because the CLI refuses without it and the panel must
   // never invent an argument the human path demands.

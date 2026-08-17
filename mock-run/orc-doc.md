@@ -22,9 +22,17 @@ session is over. So nothing that holds context ever holds the document:
 | Who | What they hold |
 |---|---|
 | **ORC** | a map: heading, line range, fingerprint, state — one line per section |
-| **Each writer** | its own part file, and nothing else |
-| **Each checker** | one line range, read with an offset and a limit |
+| **Each writer** | ONE section file, and nothing else |
+| **Each checker** | ONE section file, read from its first line |
 | **Nobody** | the whole document |
+
+And the second rule, which is what makes all of that cheap to come back to:
+
+> **The folder is the document. `document.md` is just built from it.**
+
+Each section is its own file in `sections/`. You can open one, change one line,
+and see it in a pull request. `document.md` is rebuilt from those files whenever
+you ask, and rebuilding costs **nothing at all**.
 
 Five kinds of document: `prd` · `tsd` · `collaboration` · `report` · `workflow`.
 
@@ -129,32 +137,69 @@ $ orc doc plan prd-checkout-refund-130826 --role write
 
   wave 1
     orc-doc-writer-opus-5-med   260L  01-document-info + 02-summary + 03-problem-and-context + 04-goals + 05-non-goals
+                                      -> sections/01-document-info.md
+                                      -> sections/02-summary.md
+                                      -> sections/03-problem-and-context.md
+                                      -> sections/04-goals-and-success-metrics.md
+                                      -> sections/05-non-goals.md
     orc-doc-writer-opus-5-med   180L  06-users + 07-scenarios
-    orc-doc-writer-opus-5-med   340L  08-functional-requirements + 09-non-functional-requirements
-    orc-doc-writer-opus-5-med   390L  10-experience + 11-dependencies + 12-risks + 13-rollout + 14-milestones + 15-out-of-scope
+                                      -> sections/06-users-and-jobs-to-be-done.md
+                                      -> sections/07-scenarios-and-user-stories.md
 
-  wave 2
-    orc-doc-writer-opus-5-med    60L  16-glossary + 17-revision-history
-
-  5 agents across 2 waves.
+  2 agents in this wave.
+  partial mode: 4 later waves not returned. Read wave 1's files, then ask for the next.
 ```
 
-Three rules you can see in that output:
+Four rules you can see in that output:
 
 - **A section is never split across two agents.** Half a section is half an idea.
-- **Four agents at a time, and four is a hard cap.** More writers is more chances
+- **One file per section.** A slice with five sections writes five files — never
+  one file with five sections in it.
+- **Two agents at a time, and two is a hard cap.** More writers is more chances
   for the outline to drift.
 - **Sections that talk about each other stay together.** Goals and Non-goals are
   in one slice, because keeping them consistent is free and checking it is not.
 
-Each writer writes **its own file**. No two agents ever have the document open.
+Each writer owns **one file**. No two agents ever share one.
 
 ---
 
-## 6. Assemble, then the free check, then the paid one
+## 5b. Every wave is a place you can stop
+
+At the end of each wave, this is what you see:
 
 ```
-✓ assembled 17 sections → orc/orc-doc/prd-checkout-refund-130826/document.md  (487 lines)
+Wave 1 of 5 done — 7 of 17 sections written.
+
+  orc/orc-doc/prd-checkout-refund-130826/sections/01-document-info.md         22 L
+  orc/orc-doc/prd-checkout-refund-130826/sections/02-summary.md               17 L
+  orc/orc-doc/prd-checkout-refund-130826/sections/03-problem-and-context.md   77 L
+  …
+
+Read them now if you want to redirect — nothing later is bought yet.
+See it as one file (free):   orc doc compile prd-checkout-refund-130826 --partial
+
+To carry on — new session, or after your usage limit resets:
+
+    /orc-doc resume prd-checkout-refund-130826
+
+Everything needed is on disk. The next session starts at wave 2 and re-reads
+nothing it already wrote.
+```
+
+That is the point of writing one wave at a time. If the first wave went the wrong
+way, you have paid for one wave. And if your usage limit runs out here, nothing
+is lost: the files on disk **are** the progress.
+
+---
+
+## 6. Compile, then the free check, then the paid one
+
+Compiling just joins the section files into one document, in the order you
+agreed. It uses no model at all, so you can do it as often as you like.
+
+```
+✓ compiled 17 sections → orc/orc-doc/prd-checkout-refund-130826/document.md  (487 lines)
 
 orc doc lint — document.md  →  Notion
 
@@ -174,30 +219,36 @@ That check costs **zero model tokens**, and it always runs first. Its findings
 then ride along in the checkers' slices, so no model is ever paid to count
 sentences — and no checker repeats something the lint already said.
 
-Then the checkers, each with a line range and nothing else:
+Then the checkers, each with one file and nothing else:
 
 ```
 $ orc doc plan prd-checkout-refund-130826 --role check
 
   wave 1
-    orc-doc-checker-opus-5-low   86L  04-goals + 05-non-goals   lines 119..204
-    orc-doc-checker-opus-5-low   83L  06-users + 07-scenarios   lines 205..287
+    orc-doc-checker-opus-5-low   58L  04-goals-and-success-metrics
+                                      reads sections/04-goals-and-success-metrics.md
+    orc-doc-checker-opus-5-low   59L  06-users-and-jobs-to-be-done
+                                      reads sections/06-users-and-jobs-to-be-done.md
 ```
+
+Because each checker gets its own file, there is no line counting anywhere in
+this step. And no two checkers ever open the same file.
 
 ---
 
 ## 7. What you get, and what it says at the end
 
 ```
-Saved to  orc/orc-doc/prd-checkout-refund-130826/document.md
+Saved to  orc/orc-doc/prd-checkout-refund-130826/sections/   (the real thing)
+          orc/orc-doc/prd-checkout-refund-130826/document.md (built from it)
 
 Editing it yourself is expected — go ahead. When you want to carry on, even in a
 brand-new chat, paste this line:
 
     /orc-doc resume prd-checkout-refund-130826
 
-The full picture is in that folder's RESUME.md — it remembers the context, the
-audience and what is still open, so you never have to explain it twice.
+The full picture is in RESUME.md — it remembers the context, the audience and
+what is still open, so you never have to explain it twice.
 
 Not staged, not committed. If your team should see it:
     git add orc/orc-doc/prd-checkout-refund-130826/
@@ -222,10 +273,11 @@ from this side.
 Picking up: PRD — checkout refunds (started 13-08-2026, cycle 2).
 I have read the context you gave me — you do not need to repeat it.
 
-  Document:  487 lines · 17 sections · 14 written · lint GREEN
+  Sections:  17 planned · 14 written · wave 4 of 5
   You edited since last time: §02 Summary, §08 Requirements
       ← I will not touch these unless you say so
-  Still open: §12 Risks (waiting on the fraud limit) · §13 Rollout (not started)
+  Not written yet: §12 Risks · §13 Rollout
+  document.md is 1 section behind the folder — rebuilding it is free.
 
 What should change?
 ```
@@ -244,27 +296,36 @@ nothing.
 
 ## 9. Editing one section, safely
 
-```
-$ orc doc extract prd-checkout-refund-130826 --section 04-goals
-✓ 04-goals extracted to .work/04-goals.md  (lines 119..176, 58 L)
-
-… a writer edits ONLY that file …
-
-$ orc doc splice prd-checkout-refund-130826
-✓ 1 section spliced back, bottom-up.
-    04-goals    58 → 71 L  (+13)
-```
-
-**Bottom-up** is the whole trick: the highest section is replaced first, so an
-edit that changes a section's length never shifts a range that has not been
-used yet. The model does no line arithmetic at all.
-
-And if you had edited that section in the meantime:
+There is nothing to take out and nothing to put back. The section file **is** the
+section:
 
 ```
-❌ these sections changed on disk after they were extracted: Goals and success
-   metrics. Nothing was written. Ask before overwriting — a human's wording is
-   not recoverable from here.
+… a writer opens sections/04-goals-and-success-metrics.md and changes it …
+
+$ orc doc compile prd-checkout-refund-130826
+✓ compiled 17 sections → document.md  (500 lines)
+```
+
+A very long section is kept in parts underneath, so even then the writer only
+opens the part it needs:
+
+```
+sections/08-functional-requirements/
+├── 00-head.md          the heading and the opening lines
+├── 01-payments.md
+└── 02-refunds.md       ← only this one is opened
+```
+
+The reader never sees any of that. In the finished document it is one ordinary
+section with one heading.
+
+If you had edited a section yourself in the meantime, ORC says so by name and
+leaves it alone. And it will not hand you a `document.md` that is behind the
+folder:
+
+```
+❌ document.md is behind sections/: Goals and success metrics changed since the
+   last compile. Rebuild it first (free): orc doc compile prd-checkout-refund-130826
 ```
 
 ---
@@ -272,8 +333,12 @@ And if you had edited that section in the meantime:
 ## 10. What it will not do
 
 - Read your document into its own context.
-- Invent a fact. Anything it was not given becomes a visible `> **Open:**` or
-  `> **Assumption:**` line.
+- Invent a fact. Anything it was not given comes back as a **gap**, is written
+  into `gaps.md`, and is raised with you.
+- Put its own notes in your document. No "Open:" lines, no "Assumption:" lines —
+  nothing but what a reader came for, in `document.md` and in every section file.
+- Leave a hole where a section should be. A part-written document simply does not
+  have that section, and says so plainly outside the document.
 - Overwrite a paragraph you wrote.
 - Stage or commit anything.
 - Grade its own output.
@@ -284,7 +349,9 @@ And if you had edited that section in the meantime:
 
 `orc ui` ▸ **Docs** draws the whole document as one ribbon: each section is a
 block sized by its length and coloured by its state. In one glance you can see
-where the weight sits, what is still open, and which parts are yours.
+where the weight sits, what is still open, and which parts are yours. Under it,
+the **section files** — one row each, with the parts of a long section nested
+beneath it, and how far through the waves you are.
 
 Free things are buttons there. Writing and checking cost model tokens, so those
 are commands to copy.
@@ -372,7 +439,7 @@ $ orc doc next prd-checkout-refund-130826
   ───────────────────────────────────────────
 
   D7   lint
-  3 sections were written since the last assemble; the free check runs before the paid one
+  3 sections changed since the last compile; the free check runs before the paid one
 
   free  orc doc lint prd-checkout-refund-130826 --json
 ```
