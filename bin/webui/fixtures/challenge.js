@@ -23,11 +23,128 @@ const chGoals = (goal, audience, done, version) => ({
 
 const chDims = (rows) => rows;
 
+/* THE COUNCIL (v0.49.1). Shapes match `orc challenge status --json`'s
+   `council[]` exactly — a drifted fixture is worse than no fixture.
+
+   ONE OF EVERY STATE, and the ugly ones are the point: a NOT-RUN lens with a
+   reason, a NOT-SELECTED lens, a corroborated finding, a `merged` and an
+   `out-of-goal` disposition, an open premise, a dismissed one, an adopted one
+   with its version break, an open opportunity, a taken one, a dropped one, and
+   a v1-migrated cycle with NO ROSTER AT ALL. You cannot design a NOT-RUN row on
+   a run where everything ran. */
+const CH_LENS = {
+  judge: { display: "The Judge", agent: "orc-challenge-judge-opus-5-high", effort: "high", class: "finding", prefix: "F-", blocks: true, always: true, why: "grade the artifact against the frozen goal and template" },
+  reader: { display: "The Cold Reader", agent: "orc-challenge-reader-opus-5-low", effort: "low", class: "finding", prefix: "R-", blocks: true, always: false, why: "can a stranger answer this document's own questions?" },
+  contrarian: { display: "The Contrarian", agent: "orc-challenge-contrarian-opus-5-high", effort: "high", class: "finding", prefix: "C-", blocks: true, always: false, why: "assume it has a fatal flaw, then go find it" },
+  outsider: { display: "The Outsider", agent: "orc-challenge-outsider-opus-5-low", effort: "low", class: "finding", prefix: "O-", blocks: true, always: false, why: "what does this assume you already know?" },
+  executor: { display: "The Executor", agent: "orc-challenge-executor-opus-5-med", effort: "medium", class: "finding", prefix: "E-", blocks: true, always: false, why: "can this be started on Monday? where is the first step?" },
+  principles: { display: "The First Principles Thinker", agent: "orc-challenge-principles-opus-5-high", effort: "high", class: "premise", prefix: "Q-", blocks: false, always: false, why: "is this even the right problem? (never blocks)" },
+  expansionist: { display: "The Expansionist", agent: "orc-challenge-expansionist-opus-5-med", effort: "medium", class: "opportunity", prefix: "X-", blocks: false, always: false, why: "what upside is being missed? (never blocks)" },
+};
+const CH_ORDER = ["judge", "reader", "contrarian", "outsider", "executor", "principles", "expansionist"];
+
+// `spec` maps a lens id to its row: `false` = not selected, a string = NOT-RUN
+// with that reason, an object = RAN with those counts.
+const chCouncil = (slug, roster, spec) =>
+  CH_ORDER.map((lens) => {
+    const meta = CH_LENS[lens];
+    const selected = meta.always || roster.includes(lens);
+    const base = { lens, ...meta, selected };
+    if (!selected)
+      return { ...base, status: "NOT-SELECTED", add_with: `orc challenge council ${slug} --set ${roster.concat(lens).join(",")} --reason "…"` };
+    const v = spec[lens];
+    if (typeof v === "string") return { ...base, status: "NOT-RUN", reason: v };
+    if (!v) return { ...base, status: "NOT-RUN", reason: "not yet judged" };
+    return { ...base, status: "RAN", raised: 0, adopted: 0, rejected: 0, merged: 0, out_of_goal: 0, ...v };
+  });
+
 const challengeCycles = {
   // The rich one: an accepted exception, an OPEN rebuttal, and a `regoal` version
   // break in the middle of the convergence chart.
   "tsd-payments": {
     ok: true,
+    // The rich roster: four lenses ran, one hit a usage limit mid-batch, one was
+    // never selected. An open premise AND a dismissed one; three opportunities
+    // in all three states.
+    council_version: 2,
+    council_unset: false,
+    council_suggested: ["reader", "contrarian", "executor"],
+    council: chCouncil("tsd-payments", ["reader", "contrarian", "outsider", "executor", "principles", "expansionist"], {
+      judge: { raised: 4 },
+      reader: { raised: 3, adopted: 2, merged: 1 },
+      contrarian: { raised: 6, adopted: 4, merged: 1, rejected: 1 },
+      outsider: { raised: 3, adopted: 1, merged: 2 },
+      executor: { raised: 2, adopted: 2, monday_morning: [
+        "open docs/tsd-payments.md §4.2 and write the idempotency window in seconds",
+        "ask the payments lead which queue the dead letters go to",
+      ] },
+      principles: "usage limit reached mid-batch",
+      expansionist: { raised: 0 },
+    }),
+    lens_counts: { judge: 4, reader: 3, contrarian: 6, outsider: 3, executor: 2 },
+    premises: {
+      "Q-001": {
+        raised_at: 2,
+        disputes: "goal",
+        quote: "a backend team implements this without asking me anything",
+        reframe: "the underlying job is not \"describe the payments flow\"; it is \"decide whether refunds are idempotent per key or per order\" — three sections answer the second question as if the first were settled",
+        what_changes: "the review would attack the undecided interfaces, not the prose",
+        cheapest_test: "ask the payments lead whether that decision has been taken. One message, no rewrite.",
+        status: "open",
+        reason: null,
+        goal_version_after: null,
+      },
+      "Q-002": {
+        raised_at: 1,
+        disputes: "audience",
+        quote: "backend engineers, 2 of 5 non-native English readers",
+        reframe: "the people who actually implement this are the platform team, not the backend group",
+        what_changes: "D5 would stop dominating and D2 would",
+        cheapest_test: "check who is on the delivery ticket",
+        status: "dismissed",
+        reason: "the backend group owns it; the platform team only reviews",
+        goal_version_after: null,
+      },
+    },
+    open_premises: ["Q-001"],
+    opportunities: {
+      "X-001": {
+        raised_at: 2,
+        what: "the retry table generalises to every idempotent write in the service",
+        upside: "one table instead of four, and the next endpoint inherits the semantics for free",
+        first_step: "list the four existing retry policies side by side",
+        anchor: "docs/tsd-payments.md:212",
+        confidence: "medium",
+        route: "brainstorm",
+        status: "open",
+        resolved_reason: null,
+        resolved_at: null,
+      },
+      "X-002": {
+        raised_at: 2,
+        what: "§6 is the enablement doc the support team has been asking for",
+        upside: "support stops filing tickets to ask what a settlement window is",
+        first_step: "send §6 to support and ask if it stands on its own",
+        anchor: "docs/tsd-payments.md:301",
+        confidence: "high",
+        route: "pact",
+        status: "taken",
+        resolved_reason: "we want to commit to keeping it readable on its own",
+        resolved_at: "12-08-2026 10:02:00",
+      },
+      "X-003": {
+        raised_at: 1,
+        what: "the ledger format could be reused by the 2027 migration",
+        upside: "one fewer format to write",
+        first_step: "ask whether the migration has picked a format yet",
+        anchor: "docs/tsd-payments.md:88",
+        confidence: "low",
+        route: "none",
+        status: "dropped",
+        resolved_reason: "explicitly out of scope for this document",
+        resolved_at: "11-08-2026 09:30:00",
+      },
+    },
     slug: "tsd-payments",
     state: "AWAITING-RECHECK",
     why: "the artifact moved since the last verdict — a new iteration is warranted",
@@ -55,9 +172,9 @@ const challengeCycles = {
       { id: "D7", status: "NOT-SELECTED" },
     ]),
     convergence: [
-      { n: 1, blocking: 9, passed: false, graded_against: 1, graded_against_goal: 1, severities: { P0: 2, P1: 7, P2: 6, P3: 1 } },
-      { n: 2, blocking: 5, passed: false, graded_against: 1, graded_against_goal: 1, severities: { P0: 1, P1: 4, P2: 5, P3: 2 } },
-      { n: 3, blocking: 3, passed: false, graded_against: 1, graded_against_goal: 2, severities: { P0: 0, P1: 3, P2: 5, P3: 2 } },
+      { n: 1, blocking: 9, passed: false, graded_against: 1, graded_against_goal: 1, graded_against_council: 1, severities: { P0: 2, P1: 7, P2: 6, P3: 1 } },
+      { n: 2, blocking: 5, passed: false, graded_against: 1, graded_against_goal: 1, graded_against_council: 1, severities: { P0: 1, P1: 4, P2: 5, P3: 2 } },
+      { n: 3, blocking: 3, passed: false, graded_against: 1, graded_against_goal: 2, graded_against_council: 2, severities: { P0: 0, P1: 3, P2: 5, P3: 2 } },
     ],
     dir: PROJECT + "/orc/orc-challenge/tsd-payments",
     next: "/orc-challenge tsd-payments",
@@ -66,6 +183,33 @@ const challengeCycles = {
   // Stalled: four iterations, no net reduction. The warning is not chrome.
   "checkout-prd": {
     ok: true,
+    // The two never-blocking lenses ONLY — a roster with no extra finding lens
+    // at all, which is a legitimate and cheap choice.
+    council_version: 1,
+    council_unset: false,
+    council_suggested: ["reader", "outsider", "principles", "expansionist"],
+    council: chCouncil("checkout-prd", ["principles", "expansionist"], {
+      judge: { raised: 7 },
+      principles: { raised: 0 },
+      expansionist: { raised: 2 },
+    }),
+    lens_counts: { judge: 7 },
+    premises: {},
+    open_premises: [],
+    opportunities: {
+      "X-010": {
+        raised_at: 3,
+        what: "the guest-checkout path is 90% of a working one-tap flow",
+        upside: "the conversion win the PRD is chasing, without the account work",
+        first_step: "measure how many guest sessions already have a saved card",
+        anchor: "docs/checkout-prd.md:140",
+        confidence: "medium",
+        route: "brainstorm",
+        status: "open",
+        resolved_reason: null,
+        resolved_at: null,
+      },
+    },
     slug: "checkout-prd",
     state: "AWAITING-FIX",
     why: "4 blocking findings open and nothing has changed yet",
@@ -104,6 +248,15 @@ const challengeCycles = {
   // Zero iterations. "Created, not yet judged" is an ANSWER, not a blank card.
   "runbook-oncall": {
     ok: true,
+    // Selected but nothing has run yet — the NOT-RUN-because-not-yet-judged row.
+    council_version: 1,
+    council_unset: false,
+    council_suggested: ["reader", "outsider", "executor"],
+    council: chCouncil("runbook-oncall", ["outsider", "executor"], {}),
+    lens_counts: {},
+    premises: {},
+    open_premises: [],
+    opportunities: {},
     slug: "runbook-oncall",
     state: "AWAITING-JUDGE",
     why: "created, not yet judged",
@@ -136,6 +289,32 @@ const challengeCycles = {
   },
   "adr-0012-events": {
     ok: true,
+    // A cycle where an ADOPTED premise moved the goal — the version break in the
+    // rail is a `c` break here, not a `v` one.
+    council_version: 2,
+    council_unset: false,
+    council_suggested: ["reader", "contrarian", "principles"],
+    council: chCouncil("adr-0012-events", ["contrarian", "principles"], {
+      judge: { raised: 2 },
+      contrarian: { raised: 3, adopted: 2, out_of_goal: 1 },
+      principles: { raised: 1 },
+    }),
+    lens_counts: { judge: 2, contrarian: 3 },
+    premises: {
+      "Q-020": {
+        raised_at: 1,
+        disputes: "done_means",
+        quote: "the decision is recorded and its alternatives are written down",
+        reframe: "an ADR whose alternatives are written down but never costed is not a decision record",
+        what_changes: "the review would ask for the cost of each alternative",
+        cheapest_test: "pick the cheapest rejected alternative and try to cost it in one line",
+        status: "adopted",
+        reason: "right — the alternatives were listed, never weighed",
+        goal_version_after: 2,
+      },
+    },
+    open_premises: [],
+    opportunities: {},
     slug: "adr-0012-events",
     state: "PASSED",
     why: "passed at iteration 2; nothing has changed since",
@@ -173,6 +352,27 @@ const challengeCycles = {
   // precedent from /orc-pact.
   "api-contract-v2": {
     ok: true,
+    // The full roster, everything ran, nothing missing — the clean case.
+    council_version: 1,
+    council_unset: false,
+    council_suggested: ["reader", "contrarian", "executor"],
+    council: chCouncil("api-contract-v2", ["reader", "contrarian", "outsider", "executor", "principles", "expansionist"], {
+      judge: { raised: 3 },
+      reader: { raised: 2, adopted: 2 },
+      contrarian: { raised: 4, adopted: 3, merged: 1 },
+      outsider: { raised: 1, adopted: 1 },
+      executor: { raised: 3, adopted: 2, rejected: 1, monday_morning: [
+        "generate the client from the schema and see what fails to compile",
+        "ask who owns the deprecation window for v1",
+        "write the first contract test against the pagination example",
+      ] },
+      principles: { raised: 0 },
+      expansionist: { raised: 1 },
+    }),
+    lens_counts: { judge: 3, reader: 2, contrarian: 4, outsider: 1, executor: 3 },
+    premises: {},
+    open_premises: [],
+    opportunities: {},
     slug: "api-contract-v2",
     state: "STALE-PASS",
     why: "passed at iteration 3, but 1 artifact changed afterwards — honest, not a failure",
@@ -210,6 +410,17 @@ const challengeCycles = {
   // The declared revision is not where it was declared. Candidates are LISTED.
   "billing-webhooks": {
     ok: true,
+    // A V1-MIGRATED CYCLE: the roster was never answered, and `orc challenge
+    // record` refuses the next iteration by name until it is. UNSET is an
+    // ANSWER, not an error — you cannot design that empty state without one.
+    council_version: 1,
+    council_unset: true,
+    council_suggested: ["reader", "contrarian", "executor"],
+    council: chCouncil("billing-webhooks", [], {}),
+    lens_counts: { judge: 5 },
+    premises: {},
+    open_premises: [],
+    opportunities: {},
     slug: "billing-webhooks",
     state: "MISSING-REVISION",
     why: "the declared revision docs/billing-webhooks-v2.md does not exist — candidates are listed, never adopted",
@@ -245,6 +456,19 @@ const challengeCycles = {
   // A verdict file changed after it was recorded. Reported, never re-graded.
   "readme-onboarding": {
     ok: true,
+    // The outsider alone — exactly the right roster for a README, and the one
+    // case where the reader is NOT selected while `challenge_reader` is on.
+    council_version: 1,
+    council_unset: false,
+    council_suggested: ["reader", "outsider"],
+    council: chCouncil("readme-onboarding", ["outsider"], {
+      judge: { raised: 1 },
+      outsider: { raised: 5, adopted: 4, merged: 1 },
+    }),
+    lens_counts: { judge: 1, outsider: 5 },
+    premises: {},
+    open_premises: [],
+    opportunities: {},
     slug: "readme-onboarding",
     state: "TAMPERED",
     why: "iteration-01/verdict.md changed after it was recorded — reported, never silently re-graded",
@@ -282,6 +506,15 @@ const challengeCycles = {
   // in the verdict, in the report, and as a chip here.
   "mobile-spec": {
     ok: true,
+    // `none` — a first-class answer that reproduces the v0.47.0 review exactly.
+    council_version: 1,
+    council_unset: false,
+    council_suggested: ["reader", "contrarian", "executor"],
+    council: chCouncil("mobile-spec", [], { judge: { raised: 2 } }),
+    lens_counts: { judge: 2 },
+    premises: {},
+    open_premises: [],
+    opportunities: {},
     slug: "mobile-spec",
     state: "AWAITING-FIX",
     why: "2 blocking findings open and nothing has changed yet",
@@ -386,9 +619,12 @@ const challengeShow = {
           outcome: "still-open",
           reason: null,
           superseded_by: null,
+          lens: "judge",
+          disposition: null,
+          corroborated_by: [],
         },
         {
-          id: "F-007",
+          id: "R-007",
           dimension: "D5",
           severity: "P1",
           anchor: "docs/tsd-payments.md:84",
@@ -401,9 +637,15 @@ const challengeShow = {
           outcome: "still-open",
           reason: null,
           superseded_by: null,
+          lens: "reader",
+          disposition: "adopted",
+          // Two lenses landing on the same defect from opposite directions is
+          // the strongest comprehension evidence this lane can produce — and it
+          // is a SIGNAL, never an automatic severity bump.
+          corroborated_by: ["outsider"],
         },
         {
-          id: "F-011",
+          id: "C-011",
           dimension: "D1",
           severity: "P1",
           anchor: "docs/tsd-payments.md:1",
@@ -416,6 +658,9 @@ const challengeShow = {
           outcome: null,
           reason: null,
           superseded_by: null,
+          lens: "contrarian",
+          disposition: "adopted",
+          corroborated_by: [],
         },
         {
           id: "F-009",
@@ -431,6 +676,9 @@ const challengeShow = {
           outcome: "resolved",
           reason: "§6 now points at §2",
           superseded_by: null,
+          lens: "judge",
+          disposition: null,
+          corroborated_by: [],
         },
         {
           id: "F-014",
@@ -446,9 +694,12 @@ const challengeShow = {
           outcome: "still-open",
           reason: null,
           superseded_by: null,
+          lens: "judge",
+          disposition: null,
+          corroborated_by: [],
         },
         {
-          id: "F-016",
+          id: "E-016",
           dimension: "D2",
           severity: "P2",
           anchor: "docs/tsd-payments.md:96",
@@ -461,9 +712,18 @@ const challengeShow = {
           outcome: "superseded",
           reason: "§5 was rewritten around the outbox",
           superseded_by: "F-021",
+          lens: "executor",
+          disposition: null,
+          corroborated_by: [],
         },
       ],
       dropped: [{ id: "F-020", why: "no `serves` — not traceable to a stated goal element" }],
+      council_coverage_pct: 100,
+      council: challengeCycles["tsd-payments"].council
+        .filter((r) => r.selected && r.lens !== "judge")
+        .map((r) => (r.status === "RAN"
+          ? { lens: r.lens, ran: true, raised: r.raised, adopted: r.adopted, rejected: r.rejected, merged: r.merged, out_of_goal: r.out_of_goal }
+          : { lens: r.lens, ran: false, reason: r.reason })),
     },
   ],
   open: [],
@@ -538,4 +798,28 @@ const challengeLint = {
 // segment on a document with no gaps, a lint-RED health card on a clean file,
 // or ribbon overflow on a document with nine sections.
 
-module.exports = { chGoals, chDims, challengeCycles, challengeList, challengeShow, challengeDiff, challengeDiffMissing, challengeLint };
+/* `orc challenge roles --json` — STATIC. It works with no cycle at all, and it
+   is the ONE catalogue: the panel names no lens, class or disposition itself. */
+const challengeRoles = {
+  ok: true,
+  lenses: CH_ORDER.map((lens) => ({ lens, ...CH_LENS[lens], suggested: null })),
+  council: CH_ORDER.filter((l) => l !== "judge"),
+  classes: ["finding", "opportunity", "premise"],
+  dispositions: ["adopted", "merged", "rejected", "out-of-goal"],
+  routes: ["brainstorm", "pact", "grill", "none"],
+  kinds: ["tsd", "prd", "adr", "api-contract", "readme", "runbook", "plan", "code", "mixed"],
+  suggested: null,
+  rule: "A lens raises; only the judge resolves. ORC proposes the council; the user picks it.",
+};
+
+const challengeCouncil = {
+  ok: true,
+  slug: "tsd-payments",
+  council: ["reader", "contrarian", "outsider", "executor", "principles", "expansionist"],
+  council_version: 2,
+  suggested: ["reader", "contrarian", "executor"],
+  rows: challengeCycles["tsd-payments"].council,
+  lens_counts: challengeCycles["tsd-payments"].lens_counts,
+};
+
+module.exports = { chGoals, chDims, challengeRoles, challengeCouncil, challengeCycles, challengeList, challengeShow, challengeDiff, challengeDiffMissing, challengeLint };

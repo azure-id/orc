@@ -85,6 +85,10 @@ const GROUP_OF = {
 
   "orc-verify": "check",
   "orc-challenge": "check",
+  // v0.49.1. It sits beside the lane it belongs to, and it is a SEPARATE
+  // walkthrough because the council is a decision the reader takes before the
+  // first review runs — not a detail of one.
+  "orc-challenge-council": "check",
   "orc-pact": "check",
   "orc-boundary": "check",
   "orc-aftermath": "check",

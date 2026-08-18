@@ -55,6 +55,50 @@ reads one definition, so there is exactly one idea of "still open":
 - It is not a licence to renumber. **An id is permanent.** `F-003` means the same
   thing in iteration 7 as it did in iteration 1, or the history is worthless.
 
+## Conservation of INPUT — the council (v0.49.1)
+
+Everything above conserves findings ACROSS iterations. The council needs the same
+rule pointed the other way, at the input to one iteration:
+
+> **Every id the council raised must appear in the judge's return with exactly
+> ONE disposition and a reason. `council_coverage_pct` must be 100.**
+
+The obvious failure of adding five reviewers is that the judge quietly ignores
+four of them and the run looks identical while costing five times more. So
+`orc challenge record` **reads `iteration-NN/council/*.json` itself** and derives
+the id set. The judge cannot shrink it by omission, because the set was never the
+judge's to report.
+
+### The disposition set — closed
+
+| Disposition | Meaning | Requires |
+|---|---|---|
+| `adopted` | the judge agrees; the finding enters `findings[]` under its own id | `severity`, `dimension`, `serves` |
+| `merged` | the same defect as another finding | `merged_into` (a resolvable id) |
+| `rejected` | the judge read the anchor and disagrees | `reason` |
+| `out-of-goal` | real, but traceable to no goal element | `reason` — **reported**, never silently dropped |
+
+**An id is permanent, across prefixes.** `C-004` adopted by the judge stays
+`C-004` in the verdict, in the report, and in iteration 9. That is what lets a
+user find out whether a lens is earning its dispatch — and it is why a lens may
+only RAISE. **A lens raises; only the judge resolves.**
+
+### Across a changed roster
+
+Rule 11 already says a carried finding is re-judged from the artifact on disk,
+never from an account of what changed — so the judge never needed the original
+raiser. **The judge resolves every carried finding, whatever prefix it carries**,
+which makes the roster freely variable between iterations at zero cost to
+conservation.
+
+### The classes that are conserved but never gated
+
+An `opportunity` and a `premise` never enter `findings[]` and never touch the
+pass gate — but neither may evaporate. An opportunity lands `taken` or `dropped`
+with a reason (`orc challenge opportunity`); a premise lands `adopted` (a
+`regoal`) or `dismissed` with a reason (`orc challenge premise`). **Neither is
+ever automatic**, and a dismissed premise stays visible in the report forever.
+
 ## Rebuttals interact with conservation
 
 An open rebuttal is a second obligation on top of the outcome: the next verdict

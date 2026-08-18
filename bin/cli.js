@@ -3478,6 +3478,96 @@ function wikiSync(claudeDir, { check } = {}) {
   console.log("\n   Registration only — nothing was scanned and no doc was changed.");
 }
 
+// ── `--json is not a summary` (v0.49.1) ────────────────────────────────────
+// The rule this release adds, and it is a rule no contract lint can enforce:
+//
+//   A read's `--json` is the WHOLE computed object, not a summary. A field the
+//   human path prints and the JSON omits is drift — and it is drift no lint can
+//   see, because both halves live in one function.
+//
+// `wikiStatus`'s TTY branch printed the per-doc tier counts, the worst doc's
+// FILENAME (the thing actually pinning the tier), the top five stale docs with
+// their own distances and the crosslink boundary state. `--json` emitted five
+// scalars and a COUNT. The panel therefore could not be as detailed as the
+// terminal, no matter how it was written.
+function wikiStatusDetail(claudeDir, paths, s, f) {
+  const counts = { FRESH: 0, AGING: 0, STALE: 0, unknown: 0 };
+  for (const r of f.perDoc) counts[r.tier]++;
+  const meta = s.meta || {};
+  const byFile = new Map((Array.isArray(meta.docs) ? meta.docs : []).map((d) => [d.file, d]));
+  const usage = readWikiUsage(claudeDir);
+  const provided = readCrosslinkProvided(paths);
+  // A tag carries no "source doc" field, so per-doc tag counts are derived the
+  // one honest way available: COVERAGE-RELATIVE. A tag belongs to the doc(s)
+  // that cover the file its `anchor` names — the same relation `docCovers`
+  // already defines everywhere else. A tag with no resolvable anchor belongs to
+  // no doc and is counted in `crosslink.provided` only. Nothing is guessed.
+  const tagsPerDoc = new Map();
+  for (const t of provided.list || []) {
+    const file = String((t && t.anchor) || "").split(":")[0].trim();
+    if (!file) continue;
+    for (const d of Array.isArray(meta.docs) ? meta.docs : [])
+      if (docCovers(d, file)) tagsPerDoc.set(d.file, (tagsPerDoc.get(d.file) || 0) + 1);
+  }
+  const onDisk = readWikiDocs(paths.wikiDir).docs;
+  const titleOf = (file) => {
+    const hit = onDisk.find((d) => d.rel === file);
+    if (!hit) return null;
+    const h = hit.header || {};
+    if (h.title) return String(h.title);
+    const m = hit.text.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, "").match(/^#\s+(.+)$/m);
+    return m ? m[1].trim() : null;
+  };
+  const worstRow = f.perDoc.find((r) => r.distance === f.distance && r.anchor === f.anchor) || null;
+  const orientationFile = (Array.isArray(meta.docs) ? meta.docs : []).find((d) => /orc-orientation\.md$/.test(d.file));
+  return {
+    counts,
+    // The doc pinning the tier, BY NAME. Today the user is told a hash instead,
+    // and a hash is not a thing anybody can go and refresh.
+    worst: worstRow ? { file: worstRow.file, distance: worstRow.distance, anchor: worstRow.anchor } : null,
+    per_doc: f.perDoc.map((r) => {
+      const entry = byFile.get(r.file) || {};
+      const u = usageFor(usage, r.file);
+      return {
+        file: r.file,
+        title: titleOf(r.file),
+        tier: r.tier,
+        distance: r.distance,
+        anchor: r.anchor,
+        scanned_commit: entry.scanned_commit || null,
+        doc_type: entry.doc_type || null,
+        covers: entry.covers || [],
+        covered_files: Object.keys(entry.covered_files || {}).length,
+        crosslink_tags: tagsPerDoc.get(r.file) || 0,
+        // `used: null` is NOT zero-use (the wiki plan rule): unknown must never
+        // be ranked, or reported, as dead.
+        used: usage ? (u ? u.used : 0) : null,
+        used_of: usage ? usage.window_runs || WIKI_USAGE_RUNS : null,
+        last_used: u && u.last_used ? String(u.last_used).slice(0, 10) : null,
+        retire_hint: !!(usage && u && u.used === 0),
+      };
+    }),
+    // The FILES, not a count. `blind: 2` tells a user nothing they can act on.
+    blind_spot: f.blind,
+    orientation: orientationFile
+      ? { present: true, file: orientationFile.file, scanned_commit: orientationFile.scanned_commit || null }
+      : { present: false, file: "wiki/orc-orientation.md", regenerate: "/orc-wiki refresh wiki/orc-orientation.md" },
+    crosslink: {
+      provided: (provided.list || []).length,
+      boundary_rows: countBoundaryRows(onDisk),
+      state:
+        (provided.list || []).length > 0
+          ? "PUBLISHED"
+          : countBoundaryRows(onDisk) > 0
+            ? "UNPUBLISHED"
+            : "NONE",
+    },
+    // Reused VERBATIM from `wiki plan`, because a user must never be able to pay
+    // for what a free step fixes — and today that list exists only inside `plan`.
+    free_repairs: freeRepairs(claudeDir, { state: s.state, docs: Array.isArray(meta.docs) ? meta.docs : [] }),
+  };
+}
+
 function wikiStatus(claudeDir, { json } = {}) {
   const s = wikiState(claudeDir);
   const paths = wikiPaths(claudeDir);
@@ -3494,6 +3584,13 @@ function wikiStatus(claudeDir, { json } = {}) {
       out.blind = f.blind.length;
       out.last_scan = s.meta.last_scan || null;
       out.crosslink_tags = readCrosslinkProvided(paths).list.length;
+      // v0.49.1 — `--json is not a summary`. Every legacy key above keeps its
+      // name, its position and its meaning (`orc doctor`, the overview tile and
+      // `_shared/detecting-artifacts.md` all read them); everything below is
+      // ADDITIVE, and it is the same object the TTY branch has been printing all
+      // along. A field the human path prints and the JSON omits is drift no lint
+      // can see, because both halves live in one function.
+      Object.assign(out, wikiStatusDetail(claudeDir, paths, s, f));
     }
     // Always exit 0: the `state`/`tier` fields ARE the branch. Overloading the
     // exit code here would collide with the existence contract in
@@ -4371,6 +4468,120 @@ function patternStatus(claudeDir, lang) {
   console.log(`✓ ${plural(langs.length, "cached pattern")}: ${langs.join(", ")}`);
 }
 
+// ── orc pattern show (v0.49.1) ─────────────────────────────────────────────
+// A cached code-pattern was a FILENAME and an MTIME. The pattern file is the
+// thing injected LITERALLY into every executor slice, and nothing in the CLI or
+// the UI would show you a line of it. A user who cannot read it cannot trust it.
+//
+// It REPORTS WHAT IS ON DISK AND INVENTS NOTHING. The codifier may not write a
+// parseable header today, and with no header this returns `headered: false` plus
+// the headings it could parse, and says so in one line. It NEVER derives a
+// "codified at" from the file's mtime — that is the `/orc-pact` UNCHECKABLE rule
+// and the `/orc-doc` journal rule (a cycle nobody logged renders AS A GAP, never
+// a reconstruction from mtimes). Teaching the codifier to write a header belongs
+// in the release that touches /orc-pattern.
+function patternShow(claudeDir, lang) {
+  const asJson = wantsJson();
+  const wantBody = args.includes("--body");
+  const known = knownPatternLangs(claudeDir);
+  if (!lang) {
+    const hint = "orc pattern show needs a language key — `orc pattern status` lists the cached ones.";
+    if (asJson) emitJson({ ok: false, reason: "no-language", hint, known_languages: known }, 2);
+    console.error("❌ " + hint);
+    process.exit(2);
+  }
+  // The v0.34.8 contract, unchanged: exit 2 is a CALLER bug (a key the payload
+  // has never heard of), never an absent cache.
+  if (known.length && !known.includes(lang)) {
+    const hint =
+      `unknown language key "${lang}" — not a row in orc-pattern/references/INDEX.md. ` +
+      `Keys are FRAMEWORK names, not file extensions: ${known.join(", ")}.`;
+    if (asJson) emitJson({ ok: false, reason: "unknown-language", lang, known_languages: known, hint }, 2);
+    console.log("✗ " + hint);
+    process.exit(2);
+  }
+  const file = path.join(patternsDir(claudeDir), lang + "-pattern.md");
+  if (!fs.existsSync(file)) {
+    const hint = `✗ absent — no ${lang}-pattern.md (run \`/orc-pattern\` in Claude Code to codify it)`;
+    if (asJson) emitJson({ ok: false, reason: "absent", lang, path: file, hint }, 1);
+    console.log(hint);
+    process.exit(1);
+  }
+  let text = "";
+  try {
+    text = fs.readFileSync(file, "utf8");
+  } catch (e) {
+    if (asJson) emitJson({ ok: false, reason: "unreadable", lang, path: file, detail: e.message }, 2);
+    console.error("❌ could not read " + file + ": " + e.message);
+    process.exit(2);
+  }
+  const header = parseDocHeader(text);
+  const body = text.replace(/^﻿/, "").replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, "");
+  const headings = body
+    .split(/\r?\n/)
+    .filter((l) => /^#{2,3}\s+\S/.test(l))
+    .map((l) => l.replace(/^#+\s+/, "").trim());
+  // Counted from the file's own vocabulary — never inferred, never a judgment.
+  const countOf = (re) => (body.match(re) || []).length;
+  const conflicts = body
+    .split(/\r?\n/)
+    .filter((l) => /\bCONFLICT\b/i.test(l))
+    .map((l) => l.replace(/^[-*>\s]+/, "").trim());
+  let stat = null;
+  try {
+    stat = fs.statSync(file);
+  } catch (_) {}
+  const payload = {
+    ok: true,
+    lang,
+    path: file,
+    // `headered: false` is the honest answer, and `codified_at` stays null with
+    // it. An mtime is when the FILE moved, not when the pattern was codified.
+    headered: !!header,
+    codified_at: header && header.codified_at ? header.codified_at : null,
+    source_commit: header && header.source_commit ? header.source_commit : null,
+    playbook: header && header.playbook ? header.playbook : null,
+    headings,
+    conventions: countOf(/\bCONVENTION\b/gi),
+    invariants: countOf(/\bINVARIANT\b/gi),
+    conflicts,
+    bytes: Buffer.byteLength(text, "utf8"),
+    lines: text.split(/\r?\n/).length,
+    mtime_ms: stat ? Math.round(stat.mtimeMs) : null,
+    ...(wantBody ? { body: text } : {}),
+    ...(header
+      ? {}
+      : {
+          header_note:
+            "this pattern file carries no parseable header — reported as it is on disk; a codified-at date is never derived from the file's mtime",
+        }),
+  };
+  if (asJson) emitJson(payload, 0);
+  console.log(ui.header(`ORC · pattern — ${lang}`));
+  console.log(`\n  ${file}`);
+  console.log(`  ${payload.lines} lines · ${payload.bytes} bytes`);
+  if (header) {
+    console.log(`  codified_at:   ${payload.codified_at || "(not recorded)"}`);
+    console.log(`  source_commit: ${payload.source_commit ? String(payload.source_commit).slice(0, 8) : "(not recorded)"}`);
+    console.log(`  playbook:      ${payload.playbook || "(not recorded)"}`);
+  } else {
+    console.log("  ⚠ no parseable header — showing what could be read. No date is derived from the file's mtime.");
+  }
+  console.log(`  conventions:   ${payload.conventions}   invariants: ${payload.invariants}`);
+  if (headings.length) {
+    console.log("\n  Sections:");
+    for (const h of headings.slice(0, 30)) console.log(`    ${h}`);
+    if (headings.length > 30) console.log(`    … and ${headings.length - 30} more`);
+  }
+  if (conflicts.length) {
+    console.log("\n  Conflicts the codifier flagged (the project does X, the invariant says Y):");
+    for (const c of conflicts.slice(0, 10)) console.log(`    ${c}`);
+  }
+  if (wantBody) console.log("\n" + text);
+  else console.log("\n  `--body` prints the pattern itself — this is the text injected LITERALLY into every executor slice.");
+  process.exit(0);
+}
+
 function pattern() {
   if (flag("--global")) {
     console.error("❌ orc pattern is project-scoped — the cache lives in the repo. Run it from the project (or with --dir <path>).");
@@ -4383,10 +4594,15 @@ function pattern() {
     case "status":
       patternStatus(claudeDir, pos[2]);
       break;
+    case "show":
+      patternShow(claudeDir, pos[2]);
+      break;
     default:
       console.error(
         `Unknown: orc pattern ${pos[1]}\n` +
-          "Usage: orc pattern status [<lang>]   whether a cached code-pattern exists (exit 1 when <lang> absent)"
+          "Usage: orc pattern status [<lang>]      whether a cached code-pattern exists (exit 1 when <lang> absent)\n" +
+          "       orc pattern show <lang> [--body] what is IN it: headings, conventions vs invariants,\n" +
+          "                                        flagged conflicts (exit 0 cached / 1 absent / 2 unknown key)"
       );
       process.exit(1);
   }
@@ -4467,6 +4683,16 @@ function gotchaStatus(claudeDir, verbose) {
       {
         file,
         count: entries.length,
+        // `--json is not a summary` (v0.49.1): the cap is what makes the count
+        // mean anything, and only `prune` printed it. A panel cannot render
+        // "11 of 40" from a payload that carries the 11 alone.
+        gotchas_max:
+          Number(
+            Object.prototype.hasOwnProperty.call(readOverride(claudeDir).map, "gotchas_max")
+              ? readOverride(claudeDir).map.gotchas_max
+              : metaFor("gotchas_max").def
+          ) || 40,
+        archive: gotchasArchivePath(claudeDir),
         gotchas: entries.map((e) => ({
           id: e.id,
           area: e.area,
@@ -4530,6 +4756,132 @@ function gotchaPrune(claudeDir) {
   );
 }
 
+// ── orc gotcha show / list --archived / prune --dry-run (v0.49.1) ──────────
+// `gotchaStatus` already emits `fields` — the WHOLE record, symptom, fix, why —
+// on every entry, and the panel rendered six columns and discarded the rest.
+// These three finish the read: the archive is reachable, one entry is printable
+// in full, and eviction is PREVIEWABLE.
+//
+// `prune --dry-run` exists because **a count is not consent** (v0.43.0). The
+// panel's preview-then-apply pattern needs a command that NAMES EVERY ENTRY it
+// would archive, and until now the only way to find out was to run the eviction.
+function gotchaShow(claudeDir, idArg) {
+  const asJson = wantsJson();
+  const file = gotchasPath(claudeDir);
+  const archive = gotchasArchivePath(claudeDir);
+  const id = String(idArg || "").trim().toUpperCase();
+  const live = parseGotchas(file).entries;
+  const arch = parseGotchas(archive).entries;
+  const hit = live.find((e) => e.id === id) || arch.find((e) => e.id === id) || null;
+  if (!hit) {
+    const hint = `no gotcha "${idArg || ""}" — \`orc gotcha list\` shows the live ones, \`--archived\` the evicted ones.`;
+    if (asJson)
+      emitJson({ ok: false, reason: "no-such-gotcha", id: idArg || null, known: live.concat(arch).map((e) => e.id), hint }, 3);
+    console.log(hint);
+    process.exit(3);
+  }
+  const archived = !live.some((e) => e.id === id);
+  const payload = {
+    ok: true,
+    id: hit.id,
+    area: hit.area,
+    kind: hit.kind,
+    hits: hit.hits,
+    archived,
+    file: archived ? archive : file,
+    // EVERY field the record carries. The panel discarded these; nothing else
+    // in ORC has a second idea of what a gotcha record contains.
+    fields: hit.fields,
+    text: hit.text,
+  };
+  if (asJson) emitJson(payload, 0);
+  console.log(ui.header(`ORC · gotcha — ${hit.id}${archived ? "  (archived)" : ""}`));
+  console.log("\n" + hit.text);
+  if (archived) console.log(ui.color.gray("\n  Archived, never deleted — ids are monotonic and never reused."));
+  process.exit(0);
+}
+
+// Which entries eviction WOULD archive, and why — fewest hits first, then oldest
+// last_seen, exactly the ranking `gotchaPrune` uses. It writes nothing.
+function gotchaPruneDryRun(claudeDir) {
+  const asJson = wantsJson();
+  const file = gotchasPath(claudeDir);
+  const { entries } = parseGotchas(file);
+  const ovr = readOverride(claudeDir).map;
+  const max =
+    Number(
+      Object.prototype.hasOwnProperty.call(ovr, "gotchas_max") ? ovr.gotchas_max : metaFor("gotchas_max").def
+    ) || 40;
+  const ranked = [...entries].sort((a, b) => a.hits - b.hits || a.seen - b.seen);
+  const evict = entries.length > max ? ranked.slice(0, entries.length - max) : [];
+  const payload = {
+    ok: true,
+    dry_run: true,
+    file,
+    count: entries.length,
+    gotchas_max: max,
+    would_archive: evict.map((e, i) => ({
+      id: e.id,
+      area: e.area,
+      kind: e.kind,
+      hits: e.hits,
+      last_seen: e.fields.last_seen || null,
+      trigger: e.fields.trigger || null,
+      why: `rank ${i + 1} of the low-value tail — ${e.hits} hit(s), last seen ${e.fields.last_seen || "?"}`,
+    })),
+    archive: gotchasArchivePath(claudeDir),
+    honesty: "eviction is an ARCHIVE, never a delete — a gotcha that stopped being true is yours to remove",
+  };
+  const code = evict.length ? 1 : 0;
+  if (asJson) emitJson(payload, code);
+  if (!entries.length) {
+    console.log("no gotchas recorded yet — nothing to prune");
+    process.exit(0);
+  }
+  if (!evict.length) {
+    console.log(`✓ ${plural(entries.length, "gotcha")} — within gotchas_max (${max}); nothing would be archived`);
+    process.exit(0);
+  }
+  console.log(`Would archive ${plural(evict.length, "gotcha")} (${entries.length} live, gotchas_max=${max}) — nothing has been written:`);
+  for (const e of payload.would_archive) console.log(`  ${e.id} · ${e.area} · ${e.kind} · hits ${e.hits} · ${e.last_seen || "?"}\n      ${e.why}`);
+  console.log(`\n  → ${payload.archive}\n  ${payload.honesty}`);
+  process.exit(code);
+}
+
+// The archive read. Same shape as the live list, so one renderer serves both.
+function gotchaArchived(claudeDir) {
+  const asJson = wantsJson();
+  const file = gotchasArchivePath(claudeDir);
+  const { entries } = parseGotchas(file);
+  if (asJson)
+    emitJson(
+      {
+        ok: true,
+        file,
+        archived: true,
+        count: entries.length,
+        gotchas: entries.map((e) => ({
+          id: e.id,
+          area: e.area,
+          kind: e.kind,
+          hits: e.hits,
+          last_seen: e.fields.last_seen || null,
+          trigger: e.fields.trigger || null,
+          fields: e.fields,
+        })),
+      },
+      entries.length ? 0 : 1
+    );
+  if (!entries.length) {
+    console.log("no archived gotchas — nothing has been evicted yet");
+    process.exit(1);
+  }
+  console.log(`✓ ${plural(entries.length, "archived gotcha")} — ${file}`);
+  for (const e of entries) console.log(gotchaRow(e));
+  console.log("\n  Archived, never deleted. Ids are monotonic and never reused.");
+  process.exit(0);
+}
+
 function gotcha() {
   if (flag("--global")) {
     console.error("❌ orc gotcha is project-scoped — the memory is this repo's. Run it from the project (or with --dir <path>).");
@@ -4543,16 +4895,25 @@ function gotcha() {
       gotchaStatus(claudeDir, false);
       break;
     case "list":
-      gotchaStatus(claudeDir, true);
+      if (args.includes("--archived")) gotchaArchived(claudeDir);
+      else gotchaStatus(claudeDir, true);
+      break;
+    case "show":
+      gotchaShow(claudeDir, pos[2]);
       break;
     case "prune":
-      gotchaPrune(claudeDir);
+      // A count is not consent (v0.43.0): the panel previews before it applies,
+      // and this is the command that preview runs.
+      if (args.includes("--dry-run")) gotchaPruneDryRun(claudeDir);
+      else gotchaPrune(claudeDir);
       break;
     default:
       console.error(
         `Unknown: orc gotcha ${pos[1]}\n` +
-          "Usage: orc gotcha status | list   whether repair memory exists (exit 0 = entries, 1 = none)\n" +
-          "       orc gotcha prune           archive the low-value tail down to gotchas_max"
+          "Usage: orc gotcha status | list [--archived]   repair memory (exit 0 = entries, 1 = none)\n" +
+          "       orc gotcha show <id>                    ONE entry, every field (exit 0 / 3 unknown id)\n" +
+          "       orc gotcha prune [--dry-run]            archive the low-value tail down to gotchas_max.\n" +
+          "                                               --dry-run NAMES every entry and writes nothing"
       );
       process.exit(1);
   }
@@ -5018,6 +5379,210 @@ function pr(alias) {
   }
 }
 
+// ── orc wiki docs / show / coverage (v0.49.1) ──────────────────────────────
+// `orc wiki` had six subcommands and NOT ONE OF THEM LISTED THE DOCS. A user
+// could learn the wiki was STALE with 14 docs and 47 commits of drift, and could
+// not learn what any of those 14 docs was about, what it covered, when it was
+// scanned, or whether it carried crosslink tags. The panel showed the wiki's
+// TEMPERATURE and never its CONTENTS.
+//
+// All three are REPORTS. None of them scans, none of them writes, and
+// `wiki coverage` deliberately has no threshold and no config key: a coverage
+// percentage that starts nagging becomes a number people game.
+
+// The shared row builder — `wiki docs`, `wiki show` and the panel all read the
+// SAME object, so there is exactly one idea of what a doc row is.
+function wikiDocRows(claudeDir) {
+  const paths = wikiPaths(claudeDir);
+  const s = wikiState(claudeDir);
+  if (s.state === "none") return { error: "no-wiki", state: s.state, code: 1 };
+  if (s.state !== "registered") return { error: "not-registered", state: s.state, code: 3 };
+  const edges = wikiFreshnessEdges(claudeDir);
+  const f = computeWikiFreshness(paths.root, s.meta, edges);
+  const detail = wikiStatusDetail(claudeDir, paths, s, f);
+  return { rows: detail.per_doc, detail, fresh: f, edges, state: s.state, meta: s.meta, paths, code: 0 };
+}
+
+function wikiDocsCmd(claudeDir) {
+  const asJson = wantsJson();
+  const d = wikiDocRows(claudeDir);
+  if (d.error) {
+    const hint =
+      d.error === "no-wiki"
+        ? "no wiki — run `/orc-wiki` in Claude Code to build one"
+        : `the wiki is ${String(d.state).toUpperCase()} — \`orc wiki sync\` registers what is on disk (free, instant, no re-scan)`;
+    if (asJson) emitJson({ ok: false, reason: d.error, state: d.state, hint, docs: [] }, d.code);
+    console.log(hint);
+    process.exit(d.code);
+  }
+  const payload = {
+    ok: true,
+    state: d.state,
+    tier: d.fresh.tier,
+    edges: d.edges,
+    docs: d.rows,
+    counts: d.detail.counts,
+    worst: d.detail.worst,
+    free_repairs: d.detail.free_repairs,
+  };
+  if (asJson) emitJson(payload, 0);
+  console.log(ui.header(`ORC · wiki — ${plural(d.rows.length, "registered doc")}`));
+  console.log("");
+  for (const r of d.rows) {
+    console.log(
+      `  ${r.tier.padEnd(7)} ${r.file.replace(/^wiki\//, "").padEnd(38)} ` +
+        `${r.distance === null ? "  ?" : String(r.distance).padStart(3)}c  ` +
+        `${r.used === null ? "usage ?" : `used ${r.used}/${r.used_of}`}  ` +
+        `${r.crosslink_tags ? r.crosslink_tags + " tags" : ""}`
+    );
+    if (r.title) console.log(`  ${"".padEnd(7)} ${ui.color.gray(r.title)}`);
+    if ((r.covers || []).length) console.log(`  ${"".padEnd(7)} ${ui.color.gray("covers: " + r.covers.join(", "))}`);
+    if (r.retire_hint) console.log(`  ${"".padEnd(7)} ${ui.color.gray(`used 0/${r.used_of} — a retire candidate, never retired for you`)}`);
+  }
+  console.log(`\n  Distances are on each doc's OWN covered files. The wiki's tier is its worst doc.`);
+  process.exit(0);
+}
+
+function wikiShowCmd(claudeDir, docArg) {
+  const asJson = wantsJson();
+  const wantBody = args.includes("--body");
+  const d = wikiDocRows(claudeDir);
+  if (d.error) {
+    const hint = d.error === "no-wiki" ? "no wiki — run `/orc-wiki` to build one" : `the wiki is ${String(d.state).toUpperCase()} — run \`orc wiki sync\``;
+    if (asJson) emitJson({ ok: false, reason: d.error, state: d.state, hint }, d.code);
+    console.log(hint);
+    process.exit(d.code);
+  }
+  const want = String(docArg || "").trim();
+  const norm = (x) => String(x).replace(/^wiki\//, "").replace(/\.md$/, "");
+  const row = d.rows.find((r) => r.file === want || norm(r.file) === norm(want));
+  if (!row) {
+    const hint = `no registered doc "${want}" — \`orc wiki docs\` lists them.`;
+    if (asJson) emitJson({ ok: false, reason: "no-such-doc", doc: want || null, known: d.rows.map((r) => r.file), hint }, 3);
+    console.log(hint);
+    process.exit(3);
+  }
+  const abs = path.join(d.paths.root, ...row.file.split("/"));
+  let body = null;
+  if (wantBody) {
+    try {
+      body = fs.readFileSync(abs, "utf8");
+    } catch (e) {
+      if (asJson) emitJson({ ok: false, reason: "unreadable", doc: row.file, detail: e.message }, 2);
+      console.error("❌ could not read " + row.file + ": " + e.message);
+      process.exit(2);
+    }
+  }
+  const tags = (readCrosslinkProvided(d.paths).list || []).filter((t) => {
+    const file = String(t.anchor || "").split(":")[0].trim();
+    return file && d.meta.docs.some((x) => x.file === row.file && docCovers(x, file));
+  });
+  // Only the free repairs that apply to THIS doc. A user must never be able to
+  // pay for what a free step fixes.
+  const repairs = d.detail.free_repairs.filter((r) => r.id !== "orientation" || /orc-orientation\.md$/.test(row.file));
+  const payload = {
+    ok: true,
+    doc: row.file,
+    path: abs,
+    ...row,
+    tags,
+    free_repairs: repairs,
+    // `--body` is opt-in on purpose (the `/api/doc/section` precedent): prose is
+    // returned only on an explicit request, exactly one artifact at a time.
+    ...(wantBody ? { body } : {}),
+  };
+  if (asJson) emitJson(payload, 0);
+  console.log(ui.header(`ORC · wiki — ${row.file}`));
+  console.log(`\n  ${row.tier}${row.distance === null ? "" : ` (${row.distance}c on its own covered files)`}`);
+  if (row.title) console.log(`  ${row.title}`);
+  console.log(`\n  doc_type:       ${row.doc_type || "?"}`);
+  console.log(`  scanned_commit: ${row.scanned_commit ? String(row.scanned_commit).slice(0, 8) : "?"}`);
+  console.log(`  covers:         ${(row.covers || []).join(", ") || "(none declared)"}`);
+  console.log(`  covered_files:  ${row.covered_files}`);
+  console.log(`  crosslink tags: ${row.crosslink_tags}`);
+  console.log(`  usage:          ${row.used === null ? "unknown (no usage file yet)" : `${row.used}/${row.used_of} runs`}`);
+  for (const t of tags) console.log(`    ${t.tag}  ${ui.color.gray(t.kind || "")}`);
+  for (const r of repairs) console.log(`\n  FREE  ${r.cmd}\n        ${ui.color.gray(r.what)}`);
+  if (wantBody) console.log("\n" + body);
+  else console.log(`\n  \`--body\` prints the doc itself.`);
+  process.exit(0);
+}
+
+// The number nobody could get. It is a REPORT and never a gate: no threshold, no
+// config key, nothing branches on it. A repo that deliberately documents four
+// subsystems out of forty is not broken.
+function wikiCoverage(claudeDir) {
+  const asJson = wantsJson();
+  const paths = wikiPaths(claudeDir);
+  const s = wikiState(claudeDir);
+  if (s.state !== "registered") {
+    const hint =
+      s.state === "none"
+        ? "no wiki — run `/orc-wiki` in Claude Code to build one"
+        : `the wiki is ${String(s.state).toUpperCase()} — \`orc wiki sync\` first (free, instant)`;
+    if (asJson) emitJson({ ok: false, reason: s.state === "none" ? "no-wiki" : "not-registered", state: s.state, hint }, 3);
+    console.log(hint);
+    process.exit(3);
+  }
+  const tracked = gitIn(paths.root, ["ls-files"]);
+  if (tracked === null) {
+    const hint = "not a git repository (or git failed) — coverage is measured against tracked files";
+    if (asJson) emitJson({ ok: false, reason: "no-git", hint }, 3);
+    console.log(hint);
+    process.exit(3);
+  }
+  const docs = Array.isArray(s.meta.docs) ? s.meta.docs : [];
+  const files = tracked.split(/\r?\n/).map((x) => x.trim()).filter(Boolean).filter((f) => !IMPACT_NOISE.test(f));
+  const covered = [];
+  const uncovered = [];
+  for (const f of files) (docs.some((d) => docCovers(d, f)) ? covered : uncovered).push(f);
+  const pct = files.length ? Math.round((covered.length / files.length) * 100) : 0;
+
+  // Collapsed to DIRECTORIES and ranked by file count, because "240 uncovered
+  // files, all in vendor/" and "12 uncovered files, all in src/payments/" are
+  // opposite situations and a flat list of 240 paths hides both.
+  const byDir = new Map();
+  for (const f of uncovered) {
+    const dir = f.includes("/") ? f.slice(0, f.lastIndexOf("/")) : ".";
+    if (!byDir.has(dir)) byDir.set(dir, []);
+    byDir.get(dir).push(f);
+  }
+  const dirs = [...byDir.entries()]
+    .map(([dir, list]) => ({
+      dir,
+      files: list.length,
+      newest_commit: gitIn(paths.root, ["log", "-1", "--format=%h %ad", "--date=short", "--", dir]) || null,
+      sample: list.slice(0, 4),
+    }))
+    .sort((a, b) => b.files - a.files || a.dir.localeCompare(b.dir));
+
+  const payload = {
+    ok: true,
+    tracked: files.length,
+    covered: covered.length,
+    uncovered: uncovered.length,
+    coverage_pct: pct,
+    docs: docs.length,
+    uncovered_dirs: dirs,
+    honesty: "coverage is a report, not a target — there is no threshold and nothing branches on it",
+  };
+  // Exit 1 = blind spots exist. It is a BRANCH, not a failure: nothing in ORC
+  // gates on it, and no config key can make it gate.
+  const code = uncovered.length ? 1 : 0;
+  if (asJson) emitJson(payload, code);
+  console.log(ui.header("ORC · wiki — coverage"));
+  console.log(`\n  ${pct}% of tracked files are covered by at least one wiki doc`);
+  console.log(`  ${covered.length} covered · ${uncovered.length} not covered · ${files.length} tracked (ORC's own artifacts excluded)`);
+  if (dirs.length) {
+    console.log("\n  Not covered, by directory:");
+    for (const d of dirs.slice(0, 15))
+      console.log(`    ${String(d.files).padStart(4)}  ${d.dir}${d.newest_commit ? ui.color.gray("   last touched " + d.newest_commit) : ""}`);
+    if (dirs.length > 15) console.log(`    … and ${dirs.length - 15} more (use --json for all of them)`);
+  }
+  console.log(`\n  ${ui.color.gray(payload.honesty)}`);
+  process.exit(code);
+}
+
 function wiki() {
   if (flag("--global")) {
     console.error("❌ orc wiki is project-scoped — the wiki lives in the repo. Run it from the project (or with --dir <path>).");
@@ -5041,6 +5606,15 @@ function wiki() {
     case "usage":
       wikiUsageCmd(claudeDir, { rebuild: flag("--rebuild") === true });
       break;
+    case "docs":
+      wikiDocsCmd(claudeDir);
+      break;
+    case "show":
+      wikiShowCmd(claudeDir, pos[2]);
+      break;
+    case "coverage":
+      wikiCoverage(claudeDir);
+      break;
     case undefined:
     case "status":
       wikiStatus(claudeDir, { json: flag("--json") });
@@ -5055,7 +5629,13 @@ function wiki() {
           "       orc wiki plan [--json]        RANKED, priced work list — what to refresh, in what\n" +
           "                                     order, for how much (exit 0 none / 1 light / 2 deep / 3 n/a)\n" +
           "       orc wiki debt [--json]        one-line pending-refresh summary (exit 0 none / 1 debt)\n" +
-          "       orc wiki usage [--rebuild]    which docs runs actually put into a slice"
+          "       orc wiki usage [--rebuild]    which docs runs actually put into a slice\n" +
+          "       orc wiki docs [--json]        the registered doc table: tier, own distance, covers,\n" +
+          "                                     usage, tags (exit 0 registered / 1 none / 3 unregistered)\n" +
+          "       orc wiki show <doc> [--body]  ONE doc: header, coverage, tags, usage, its free repairs\n" +
+          "                                     (exit 0 / 2 unreadable / 3 unknown doc)\n" +
+          "       orc wiki coverage [--json]    % of tracked files covered by >=1 doc, and the uncovered\n" +
+          "                                     set by directory. A REPORT, never a gate (exit 0 full / 1 gaps)"
       );
       process.exit(1);
   }
@@ -7703,6 +8283,106 @@ const CHALLENGE_REVISION_MODES = ["in-place", "new-file", "directory"];
 // to one is OUT OF SCOPE and is dropped by `record` — rule 0, made structural.
 const CHALLENGE_SERVES = ["goal", "audience", "done_means", "out_of_scope"];
 
+// ── The council (v0.49.1) ───────────────────────────────────────────────────
+// Seven ways of looking at a finished artifact. ONE always runs (the judge);
+// SIX are selectable, and THE USER SELECTS THEM. ORC proposes a roster from the
+// kind + the goal — that is a FACT, so ORC may compute it — but accepting it is
+// a DECISION, so `orc challenge init --council` has NO default and refuses by
+// name. `a lane that picks its own council has broken this contract`: a council
+// chosen by ORC is ORC deciding which kinds of criticism the user is allowed to
+// hear, which is a bigger decision than any single finding in the run.
+//
+// And the rule that keeps five extra reviewers safe: `A lens raises; only the
+// judge resolves`. The pass gate learns NOTHING about the council — an adopted
+// council finding is an ordinary finding from that moment on.
+const CHALLENGE_LENSES = ["judge", "reader", "contrarian", "outsider", "executor", "principles", "expansionist"];
+const CHALLENGE_COUNCIL = CHALLENGE_LENSES.filter((l) => l !== "judge"); // the selectable six
+// Two of the six cannot produce a FINDING without lying. A finding must carry
+// `serves` (rule 0) and `record` drops one without it — but the expansionist's
+// whole brief is "what upside is nobody counting?", which by construction is not
+// in the stated goal, and the first-principles thinker disputes the YARDSTICK
+// every finding is measured against. So they get their own classes, and neither
+// ever touches the pass gate.
+const CHALLENGE_CLASSES = ["finding", "opportunity", "premise"];
+const CHALLENGE_DISPOSITIONS = ["adopted", "merged", "rejected", "out-of-goal"];
+const CHALLENGE_ROUTES = ["brainstorm", "pact", "grill", "none"];
+const CHALLENGE_PREMISE_DISPUTES = CHALLENGE_SERVES; // goal | audience | done_means | out_of_scope
+
+// THE CATALOGUE. `orc challenge roles` prints it, the SKILL renders the P0 ask
+// from it, and `orc ui` draws the roster card from it — one list, three
+// renderers, the Flow-stepper rule. The panel names no lens itself.
+const CHALLENGE_LENS_META = {
+  judge: {
+    display: "The Judge", agent: "orc-challenge-judge-opus-5-high", effort: "high",
+    class: "finding", prefix: "F-", always: true, blocks: true,
+    why: "grade the artifact against the frozen goal and template",
+    suggest_for: CHALLENGE_KINDS.slice(),
+  },
+  reader: {
+    display: "The Cold Reader", agent: "orc-challenge-reader-opus-5-low", effort: "low",
+    class: "finding", prefix: "R-", always: false, blocks: true,
+    why: "can a stranger answer this document's own questions?",
+    suggest_for: ["tsd", "prd", "adr", "api-contract", "readme", "runbook", "plan", "mixed"],
+  },
+  contrarian: {
+    display: "The Contrarian", agent: "orc-challenge-contrarian-opus-5-high", effort: "high",
+    class: "finding", prefix: "C-", always: false, blocks: true,
+    why: "assume it has a fatal flaw, then go find it",
+    suggest_for: ["tsd", "adr", "api-contract", "plan", "code", "mixed"],
+  },
+  outsider: {
+    display: "The Outsider", agent: "orc-challenge-outsider-opus-5-low", effort: "low",
+    class: "finding", prefix: "O-", always: false, blocks: true,
+    why: "what does this assume you already know?",
+    suggest_for: ["readme", "runbook", "prd", "mixed"],
+  },
+  executor: {
+    display: "The Executor", agent: "orc-challenge-executor-opus-5-med", effort: "medium",
+    class: "finding", prefix: "E-", always: false, blocks: true,
+    why: "can this be started on Monday? where is the first step?",
+    suggest_for: ["tsd", "runbook", "plan", "api-contract"],
+  },
+  principles: {
+    display: "The First Principles Thinker", agent: "orc-challenge-principles-opus-5-high", effort: "high",
+    class: "premise", prefix: "Q-", always: false, blocks: false,
+    why: "is this even the right problem? (never blocks)",
+    suggest_for: ["prd", "adr", "plan"],
+  },
+  expansionist: {
+    display: "The Expansionist", agent: "orc-challenge-expansionist-opus-5-med", effort: "medium",
+    class: "opportunity", prefix: "X-", always: false, blocks: false,
+    why: "what upside is being missed? (never blocks)",
+    suggest_for: ["prd", "adr"],
+  },
+};
+
+// ORC proposes; the user picks. Computed from the kind alone — a fact — and it
+// is a SUGGESTION in every renderer, never a value anything writes on its own.
+function challengeSuggestCouncil(kind) {
+  return CHALLENGE_COUNCIL.filter((l) => CHALLENGE_LENS_META[l].suggest_for.includes(String(kind || "")));
+}
+
+// `--council <csv|all|none>`. Returns { ok, council } or { ok:false, bad }.
+function parseCouncil(raw) {
+  const v = String(raw == null ? "" : raw).trim().toLowerCase();
+  if (v === "all") return { ok: true, council: CHALLENGE_COUNCIL.slice() };
+  if (v === "none") return { ok: true, council: [] };
+  const want = v.split(/[,\s]+/).map((x) => x.trim()).filter(Boolean);
+  const bad = want.filter((x) => !CHALLENGE_COUNCIL.includes(x));
+  if (bad.length) return { ok: false, bad };
+  // Order is the catalogue's, never the user's typing order, so two identical
+  // rosters can never render as two different lists.
+  return { ok: true, council: CHALLENGE_COUNCIL.filter((l) => want.includes(l)) };
+}
+
+const lensPrefix = (lens) => (CHALLENGE_LENS_META[lens] || {}).prefix || null;
+const lensOfPrefix = (id) => {
+  const m = /^([A-Z])-/.exec(String(id || ""));
+  if (!m) return null;
+  for (const l of CHALLENGE_LENSES) if (CHALLENGE_LENS_META[l].prefix === m[1] + "-") return l;
+  return null;
+};
+
 // `flag()` returns only the FIRST occurrence and `positionals()` knows only three
 // value-taking flags. Intake collects repeatable ones (--artifact, --out-of-scope,
 // --context-ref), so this family reads its own arguments.
@@ -7710,6 +8390,7 @@ const CHALLENGE_VALUE_FLAGS = [
   "--artifact", "--kind", "--goal", "--audience", "--done-means", "--out-of-scope",
   "--context-ref", "--template", "--dimensions", "--revision", "--revision-pattern",
   "--iteration", "--from", "--set", "--reason", "--dir", "--preset",
+  "--council",
 ];
 
 function chPositionals() {
@@ -7781,6 +8462,18 @@ function readCycle(claudeDir, slug) {
     c.accepted = c.accepted || {};
     c.rebuttals = c.rebuttals || {};
     c.events = Array.isArray(c.events) ? c.events : [];
+    // LEDGER v2 (v0.49.1) — additive. A v1 cycle reads back with `council: null`
+    // and NOTHING defaults it: a silent default would be ORC picking the
+    // council, which is the one decision this release exists to hand back.
+    // `record` refuses the next iteration by name until the roster is answered.
+    c.council = Array.isArray(c.council) ? c.council : null;
+    c.council_version = Number(c.council_version) || 1;
+    c.opportunities = c.opportunities || {};
+    c.premises = c.premises || {};
+    // `lens` is required on every finding from v2 on. A v1 iteration read back
+    // gets `judge`, so the per-lens legend never gains a blank column.
+    for (const it of c.iterations)
+      for (const f of it.findings || []) if (!f.lens) f.lens = "judge";
     return c;
   } catch (_) {
     return null;
@@ -7792,7 +8485,7 @@ function readCycle(claudeDir, slug) {
 function writeCycle(claudeDir, slug, cyc) {
   const p = challengePaths(claudeDir, slug);
   fs.mkdirSync(p.cycle, { recursive: true });
-  cyc.version = 1;
+  cyc.version = 2;
   cyc.updated_at = fmtStamp(new Date());
   fs.writeFileSync(p.ledger, JSON.stringify(cyc, null, 2) + "\n");
   return p.ledger;
@@ -7945,6 +8638,104 @@ function challengeDimensionRows(cyc) {
   });
 }
 
+// ── the council on disk (v0.49.1) ───────────────────────────────────────────
+// The orchestrator writes a machine JSON beside every council report, and
+// `record` READS THAT DIRECTORY ITSELF to derive the raised-id set. That is what
+// makes `council_coverage_pct` real: the judge cannot shrink the set by omitting
+// an id, because the set is not the judge's to report.
+function councilDir(paths, n) {
+  return path.join(paths.cycle, iterDir(n), "council");
+}
+
+// One lens's machine report, or null. `ran: false` + a reason is a VALID report
+// — rule 15: a selected role is never silently absent.
+function readCouncilReport(paths, n, lens) {
+  const f = path.join(councilDir(paths, n), lens + ".json");
+  if (!fs.existsSync(f)) return null;
+  try {
+    const j = JSON.parse(fs.readFileSync(f, "utf8"));
+    return j && typeof j === "object" ? j : null;
+  } catch (_) {
+    return { __unreadable: true };
+  }
+}
+
+// Everything the roster put on disk for iteration N, keyed by lens.
+function readCouncilDir(paths, n, roster) {
+  const out = {};
+  for (const lens of roster || []) {
+    const rep = readCouncilReport(paths, n, lens);
+    const mdPath = path.join(councilDir(paths, n), lens + ".md");
+    out[lens] = {
+      lens,
+      report: rep,
+      has_md: fs.existsSync(mdPath),
+      md: path.posix.join(iterDir(n), "council", lens + ".md"),
+      ran: rep ? rep.ran !== false : false,
+      reason: rep && rep.ran === false ? String(rep.reason || "") : null,
+      ids: rep && rep.ran !== false ? (Array.isArray(rep.findings) ? rep.findings : []).map((x) => String(x.id || "")).filter(Boolean) : [],
+      opportunities: rep && Array.isArray(rep.opportunities) ? rep.opportunities : [],
+      premises: rep && Array.isArray(rep.premises) ? rep.premises : [],
+    };
+  }
+  return out;
+}
+
+// One row per lens in the CATALOGUE order, with this cycle's participation.
+// A NOT-RUN row KEEPS ITS SLOT and carries its reason, and a NOT-SELECTED row is
+// rendered muted — filtering either out makes "the contrarian found nothing" and
+// "the contrarian never ran" look identical (rule 6, extended to roles).
+function challengeCouncilRows(cyc) {
+  const roster = Array.isArray(cyc.council) ? cyc.council : [];
+  const last = cyc.iterations[cyc.iterations.length - 1] || null;
+  const part = new Map((((last && last.council) || [])).map((c) => [c.lens, c]));
+  return CHALLENGE_LENSES.map((lens) => {
+    const meta = CHALLENGE_LENS_META[lens];
+    const selected = meta.always || roster.includes(lens);
+    const row = {
+      lens,
+      display: meta.display,
+      agent: meta.agent,
+      effort: meta.effort,
+      class: meta.class,
+      prefix: meta.prefix,
+      blocks: meta.blocks,
+      always: meta.always,
+      why: meta.why,
+      selected,
+    };
+    if (!selected) return { ...row, status: "NOT-SELECTED", add_with: `orc challenge council ${cyc.slug} --set ${[...roster, lens].join(",")} --reason "…"` };
+    const pr = part.get(lens);
+    if (lens === "judge")
+      return { ...row, status: last ? "RAN" : "NOT-RUN", reason: last ? null : "not yet judged", raised: last ? (last.findings || []).filter((f) => f.lens === "judge" && !f.carried).length : 0 };
+    if (!pr) return { ...row, status: "NOT-RUN", reason: last ? "no report and no reason recorded" : "not yet judged" };
+    if (pr.ran === false) return { ...row, status: "NOT-RUN", reason: pr.reason || "(no reason recorded)" };
+    return {
+      ...row,
+      status: "RAN",
+      raised: Number(pr.raised || 0),
+      adopted: Number(pr.adopted || 0),
+      rejected: Number(pr.rejected || 0),
+      merged: Number(pr.merged || 0),
+      out_of_goal: Number(pr.out_of_goal || 0),
+      ...(pr.monday_morning ? { monday_morning: pr.monday_morning } : {}),
+    };
+  });
+}
+
+// The per-lens legend under the convergence chart: `F 4 · C 6 · O 3`. It is how
+// a user finds out whether a lens is earning its dispatch, so an ADOPTED finding
+// KEEPS THE RAISER'S ID and the raiser keeps the credit forever.
+function challengeLensCounts(cyc) {
+  const last = cyc.iterations[cyc.iterations.length - 1];
+  const out = {};
+  for (const f of (last && last.findings) || []) {
+    const l = f.lens || "judge";
+    out[l] = (out[l] || 0) + 1;
+  }
+  return out;
+}
+
 function challengeView(claudeDir, slug, cfg) {
   const cyc = readCycle(claudeDir, slug);
   if (!cyc) return null;
@@ -7965,6 +8756,11 @@ function challengeView(claudeDir, slug, cfg) {
     stalled: challengeStalled(cyc, cfg),
     no_template: !!cyc.no_template,
     dimensions: challengeDimensionRows(cyc),
+    council: challengeCouncilRows(cyc),
+    council_unset: cyc.council === null,
+    lens_counts: challengeLensCounts(cyc),
+    opportunities: cyc.opportunities || {},
+    premises: cyc.premises || {},
     last,
     convergence: cyc.iterations.map((it) => ({
       n: it.n,
@@ -7972,7 +8768,11 @@ function challengeView(claudeDir, slug, cfg) {
       passed: !!it.passed,
       graded_against: it.graded_against || 1,
       graded_against_goal: it.graded_against_goal || 1,
+      // A THIRD version-break trigger (v0.49.1): comparing an iteration judged
+      // by three lenses to one judged by six is not a comparison.
+      graded_against_council: it.graded_against_council || 1,
       severities: it.severities || {},
+      council: it.council || [],
     })),
   };
 }
@@ -8049,6 +8849,26 @@ function challengeInit(claudeDir) {
     : CHALLENGE_DIMS.slice(0, 6);
   for (const d of dims) if (!CHALLENGE_DIMS.includes(d)) fail("bad-dimension", `unknown dimension ${d} (valid: ${CHALLENGE_DIMS.join(", ")})`);
 
+  // RULE 12, MADE STRUCTURAL (v0.49.1). Same shape as --goal above: no default,
+  // refuses BY NAME. A council chosen by ORC is ORC deciding which kinds of
+  // criticism the user is allowed to hear — a bigger decision than any single
+  // finding in the run. `none` is a first-class answer and reproduces v0.47.0
+  // exactly. (a lane that picks its own council has broken this contract)
+  const councilRaw = chOpt("--council");
+  if (councilRaw === undefined || !String(councilRaw).trim())
+    fail(
+      "missing-council",
+      "--council is required and has no default. ORC SUGGESTS a roster (from the kind and the goal); " +
+        `the user PICKS it. Pass a csv of ${CHALLENGE_COUNCIL.join(", ")} — or "all", or "none" ` +
+        `(none reproduces the judge-plus-reader review exactly). Suggested for --kind ${kind}: ` +
+        `${challengeSuggestCouncil(kind).join(",") || "none"}. ` +
+        "(a lane that picks its own council has broken this contract)"
+    );
+  const parsedCouncil = parseCouncil(councilRaw);
+  if (!parsedCouncil.ok)
+    fail("bad-lens", `unknown council lens: ${parsedCouncil.bad.join(", ")} (valid: ${CHALLENGE_COUNCIL.join(", ")}, or "all" / "none")`);
+  const council = parsedCouncil.council;
+
   const revMode = (chOpt("--revision") || "in-place").toLowerCase();
   if (!CHALLENGE_REVISION_MODES.includes(revMode))
     fail("bad-revision", `--revision must be one of: ${CHALLENGE_REVISION_MODES.join(", ")}`);
@@ -8119,7 +8939,7 @@ function challengeInit(claudeDir) {
 
   const head = gitIn(p.root, ["rev-parse", "HEAD"]);
   const cyc = {
-    version: 1,
+    version: 2,
     slug,
     kind,
     created_at: fmtStamp(new Date()),
@@ -8142,21 +8962,346 @@ function challengeInit(claudeDir) {
     },
     revision: { mode: revMode, ...(revPattern ? { pattern: revPattern } : {}) },
     dimensions: dims,
+    // FROZEN, exactly like the goal and the template — changed only by a
+    // recorded `recouncil` event, never re-decided per iteration.
+    council,
+    council_version: 1,
     accepted: {},
     rebuttals: {},
-    events: [{ at: fmtStamp(new Date()), kind: "created", detail: `goal v1, template v${template.version}` }],
+    opportunities: {},
+    premises: {},
+    events: [{ at: fmtStamp(new Date()), kind: "created", detail: `goal v1, template v${template.version}, council v1 (${council.join(",") || "none"})` }],
     iterations: [],
   };
   writeCycle(claudeDir, slug, cyc);
 
   if (asJson)
-    emitJson({ ok: true, slug, dir: p.cycle, goals: p.goals, template: templateSrc ? p.template : null, no_template: !templateSrc, dimensions: dims, revision: cyc.revision }, 0);
+    emitJson({ ok: true, slug, dir: p.cycle, goals: p.goals, template: templateSrc ? p.template : null, no_template: !templateSrc, dimensions: dims, revision: cyc.revision, council, council_version: 1, suggested_council: challengeSuggestCouncil(kind) }, 0);
   console.log(ui.header(`ORC · challenge — ${slug} created`));
   console.log(`\n  goal frozen:  ${p.goals}`);
   console.log(`  template:     ${templateSrc ? p.template + "  (frozen v1)" : "none — D1 will report NOT-CHECKED with that reason"}`);
   console.log(`  dimensions:   ${dims.join(" ")}`);
+  console.log(
+    `  council (v1): ${council.length ? council.join(" ") : "none — judge only (plus the advisor on a fail)"}` +
+      (council.length ? `  → ${council.length + 1} dispatch(es) per iteration` : "")
+  );
   console.log(`  revision:     ${revMode}${revPattern ? " — " + revPattern : " (the artifact's own path)"}`);
   console.log(`\n  Next:  /orc-challenge ${slug}`);
+  process.exit(0);
+}
+
+// ── orc challenge roles — THE CATALOGUE ─────────────────────────────────────
+// Static: it works with no cycle, no project and no git. The SKILL renders the
+// P0 council ask from THIS, and `orc ui` draws the roster card from THIS. One
+// list, three renderers — the Flow-stepper rule. A hand-listed lens anywhere
+// else is a second idea of what the council is.
+function challengeRoles() {
+  const asJson = wantsJson();
+  const kind = (chOpt("--kind") || "").toLowerCase();
+  const rows = CHALLENGE_LENSES.map((lens) => ({
+    lens,
+    ...CHALLENGE_LENS_META[lens],
+    suggested: kind ? CHALLENGE_LENS_META[lens].suggest_for.includes(kind) : null,
+  }));
+  if (asJson)
+    emitJson(
+      {
+        ok: true,
+        lenses: rows,
+        council: CHALLENGE_COUNCIL,
+        classes: CHALLENGE_CLASSES,
+        dispositions: CHALLENGE_DISPOSITIONS,
+        routes: CHALLENGE_ROUTES,
+        kinds: CHALLENGE_KINDS,
+        suggested: kind ? challengeSuggestCouncil(kind) : null,
+        rule: "A lens raises; only the judge resolves. ORC proposes the council; the user picks it.",
+      },
+      0
+    );
+  console.log(ui.header("ORC · challenge — the council"));
+  console.log("");
+  for (const r of rows) {
+    console.log(
+      `  ${r.lens.padEnd(13)} ${r.display.padEnd(30)} ${r.class.padEnd(12)} ${r.prefix}###  ${r.blocks ? "blocks" : "never blocks"}` +
+        (r.always ? "  (always runs)" : "")
+    );
+    console.log(`  ${"".padEnd(13)} ${ui.color.gray(r.agent + " · " + r.effort)}`);
+    console.log(`  ${"".padEnd(13)} ${ui.color.gray(r.why)}`);
+  }
+  console.log("\n  A lens raises; only the judge resolves. ORC proposes the council; the user picks it.");
+  if (kind) console.log(`  Suggested for --kind ${kind}: ${challengeSuggestCouncil(kind).join(",") || "none"}`);
+  process.exit(0);
+}
+
+// ── orc challenge council — the frozen roster ───────────────────────────────
+// Read: the roster + per-iteration participation. Write (`--set`): a recorded
+// `recouncil` event that bumps `council_version`, exactly like `regoal` and
+// `retemplate`. It is NEVER a config key: a global default roster would silently
+// answer the one question this release exists to ask.
+function challengeCouncilCmd(claudeDir, slugArg) {
+  const asJson = wantsJson();
+  const cfg = resolvedConfig(claudeDir);
+  const slug = chSlug(slugArg);
+  const cyc = slug ? readCycle(claudeDir, slug) : null;
+  if (!cyc) {
+    if (asJson) emitJson({ ok: false, reason: "no-such-cycle", slug: slugArg || null }, 3);
+    console.log(`no challenge cycle "${slugArg || ""}".`);
+    process.exit(3);
+  }
+  const set = chOpt("--set");
+  if (set !== undefined) {
+    const reason = chOpt("--reason");
+    const bad = (why, detail) => {
+      if (asJson) emitJson({ ok: false, reason: why, detail }, 2);
+      console.error("❌ " + detail);
+      process.exit(2);
+    };
+    if (!reason || !String(reason).trim())
+      bad("no-reason", 'changing the roster needs --reason "…" — it is a recorded decision, not a setting.');
+    const parsed = parseCouncil(set);
+    if (!parsed.ok)
+      bad("bad-lens", `unknown council lens: ${parsed.bad.join(", ")} (valid: ${CHALLENGE_COUNCIL.join(", ")}, or "all" / "none")`);
+    const before = cyc.council;
+    cyc.council = parsed.council;
+    cyc.council_version = (Number(cyc.council_version) || 1) + (before === null ? 0 : 1);
+    cyc.events.push({
+      at: fmtStamp(new Date()),
+      kind: "recouncil",
+      detail: `council v${cyc.council_version}: ${cyc.council.join(",") || "none"} — ${String(reason).trim()}`,
+    });
+    writeCycle(claudeDir, slug, cyc);
+    if (asJson)
+      emitJson({ ok: true, slug, council: cyc.council, council_version: cyc.council_version, reason: String(reason).trim() }, 0);
+    console.log(`✓ council v${cyc.council_version}: ${cyc.council.join(" ") || "none"}  — ${String(reason).trim()}`);
+    process.exit(0);
+  }
+  const v = challengeView(claudeDir, slug, cfg);
+  const code = cyc.council === null ? 1 : 0;
+  const payload = {
+    ok: cyc.council !== null,
+    slug,
+    council: cyc.council,
+    council_version: cyc.council_version,
+    suggested: challengeSuggestCouncil(cyc.kind),
+    rows: v.council,
+    lens_counts: v.lens_counts,
+    ...(cyc.council === null
+      ? {
+          reason: "council-unset",
+          hint: `the roster is a decision, not a default; run \`orc challenge council ${slug} --set <csv|all|none> --reason "…"\``,
+        }
+      : {}),
+  };
+  if (asJson) emitJson(payload, code);
+  console.log(ui.header(`ORC · challenge ${slug} — council v${cyc.council_version}`));
+  console.log("");
+  if (cyc.council === null) {
+    console.log("  UNSET — this cycle was opened before the council existed (ledger v1).");
+    console.log("  The roster is a decision, not a default. Run:");
+    console.log(`      orc challenge council ${slug} --set <csv|all|none> --reason "…"`);
+    console.log(`  Suggested for --kind ${cyc.kind}: ${challengeSuggestCouncil(cyc.kind).join(",") || "none"}`);
+    process.exit(1);
+  }
+  for (const r of v.council)
+    console.log(
+      `  ${String(r.status).padEnd(13)} ${r.lens.padEnd(13)} ${r.class.padEnd(12)}` +
+        (r.status === "RAN" && r.raised !== undefined
+          ? ` raised ${r.raised} · adopted ${r.adopted || 0} · rejected ${r.rejected || 0} · merged ${r.merged || 0}`
+          : "") +
+        (r.reason ? ` ${ui.color.gray("— " + r.reason)}` : "")
+    );
+  process.exit(0);
+}
+
+// ── orc challenge note — the two lenses that never touch the pass gate ──────
+// The expansionist returns `opportunity`, the first-principles thinker returns
+// `premise`. Neither has a severity, neither has a `serves`, and forcing either
+// to have one would make it lie. They are recorded HERE, never by `record`, and
+// this command REFUSES a `findings` key by name so the two paths can never be
+// confused.
+function challengeNote(claudeDir, slugArg) {
+  const asJson = wantsJson();
+  const slug = chSlug(slugArg);
+  const cyc = slug ? readCycle(claudeDir, slug) : null;
+  const bad = (reason, detail) => {
+    if (asJson) emitJson({ ok: false, reason, detail }, 2);
+    console.error("❌ " + detail);
+    process.exit(2);
+  };
+  if (!cyc) {
+    if (asJson) emitJson({ ok: false, reason: "no-such-cycle", slug: slugArg || null }, 3);
+    console.log(`no challenge cycle "${slugArg || ""}".`);
+    process.exit(3);
+  }
+  const p = challengePaths(claudeDir, slug);
+  const from = chOpt("--from");
+  if (!from) bad("no-input", "orc challenge note needs --from <report.json>.");
+  const fromAbs = path.isAbsolute(from) ? from : path.join(p.root, from);
+  let input;
+  try {
+    input = JSON.parse(fs.readFileSync(fromAbs, "utf8"));
+  } catch (e) {
+    bad("unreadable", `could not read ${from}: ${e.message}`);
+  }
+  if (Object.prototype.hasOwnProperty.call(input, "findings"))
+    bad(
+      "class-mismatch",
+      "`orc challenge note` records OPPORTUNITIES and PREMISES only. The expansionist and the " +
+        "first-principles thinker never touch the pass gate — a findings[] key here is a class error, " +
+        "not a typo. Findings go through `orc challenge record`."
+    );
+  const n = Number(chOpt("--iteration") || input.iteration || cyc.iterations.length || 1);
+  if (!Number.isFinite(n) || n < 1) bad("bad-iteration", "--iteration must be a positive integer.");
+
+  const addedO = [];
+  for (const o of Array.isArray(input.opportunities) ? input.opportunities : []) {
+    const id = String(o.id || "").trim();
+    if (!/^X-\d+/.test(id)) bad("bad-id", `opportunity id must start with X- (got "${id || "(unnamed)"}")`);
+    if (cyc.opportunities[id]) bad("duplicate-id", `opportunity ${id} is already recorded — an id is permanent.`);
+    const route = String(o.route || "none").toLowerCase();
+    if (!CHALLENGE_ROUTES.includes(route))
+      bad("bad-route", `opportunity ${id}: route must be one of ${CHALLENGE_ROUTES.join(", ")}.`);
+    if (o.severity !== undefined)
+      bad("class-mismatch", `opportunity ${id} carries a severity. An opportunity never blocks and never has one.`);
+    cyc.opportunities[id] = {
+      raised_at: n,
+      what: String(o.what || "").trim(),
+      upside: String(o.upside || "").trim(),
+      first_step: String(o.first_step || "").trim(),
+      anchor: o.anchor || null,
+      confidence: o.confidence || null,
+      route,
+      status: "open",
+      resolved_reason: null,
+      resolved_at: null,
+    };
+    addedO.push(id);
+  }
+  const addedQ = [];
+  for (const q of Array.isArray(input.premises) ? input.premises : []) {
+    const id = String(q.id || "").trim();
+    if (!/^Q-\d+/.test(id)) bad("bad-id", `premise id must start with Q- (got "${id || "(unnamed)"}")`);
+    if (cyc.premises[id]) bad("duplicate-id", `premise ${id} is already recorded — an id is permanent.`);
+    const disputes = String(q.disputes || "").trim();
+    if (!CHALLENGE_PREMISE_DISPUTES.includes(disputes))
+      bad("bad-disputes", `premise ${id}: disputes must be one of ${CHALLENGE_PREMISE_DISPUTES.join(", ")}.`);
+    if (q.severity !== undefined)
+      bad("class-mismatch", `premise ${id} carries a severity. A premise challenge disputes the yardstick; it never blocks.`);
+    cyc.premises[id] = {
+      raised_at: n,
+      disputes,
+      quote: q.quote || null,
+      reframe: String(q.reframe || "").trim(),
+      what_changes: q.what_changes || null,
+      cheapest_test: q.cheapest_test || null,
+      status: "open",
+      reason: null,
+      goal_version_after: null,
+    };
+    addedQ.push(id);
+  }
+  if (addedO.length || addedQ.length)
+    cyc.events.push({
+      at: fmtStamp(new Date()),
+      kind: "note",
+      detail: `iteration ${n}: ${addedQ.length} premise(s), ${addedO.length} opportunity(ies)`,
+    });
+  writeCycle(claudeDir, slug, cyc);
+  const payload = {
+    ok: true,
+    slug,
+    iteration: n,
+    opportunities: addedO,
+    premises: addedQ,
+    open_premises: Object.entries(cyc.premises)
+      .filter(([, q]) => q.status === "open")
+      .map(([id]) => id),
+    note: "an opportunity and a premise NEVER enter findings[] and never touch the pass gate.",
+  };
+  if (asJson) emitJson(payload, 0);
+  console.log(
+    `✓ recorded ${plural(addedQ.length, "premise")} and ${plural(addedO.length, "opportunity", "opportunities")} at iteration ${n}.`
+  );
+  console.log("  Neither blocks. A premise challenge is resolved by a HUMAN and by nobody else.");
+  process.exit(0);
+}
+
+// ── orc challenge premise — dismiss (adopting is `goals --set`) ─────────────
+// Exactly two resolutions exist, and both are the USER's:
+//   adopt   → `orc challenge goals <slug> --set <path> --reason "…"` (a regoal)
+//   dismiss → here, with a reason that stays visible in the report forever.
+function challengePremiseCmd(claudeDir, slugArg, idArg, reasonArg) {
+  const asJson = wantsJson();
+  const slug = chSlug(slugArg);
+  const cyc = slug ? readCycle(claudeDir, slug) : null;
+  const id = String(idArg || "").trim();
+  if (!cyc) {
+    if (asJson) emitJson({ ok: false, reason: "no-such-cycle", slug: slugArg || null }, 3);
+    console.log(`no challenge cycle "${slugArg || ""}".`);
+    process.exit(3);
+  }
+  if (!id || !cyc.premises[id]) {
+    if (asJson) emitJson({ ok: false, reason: "no-such-premise", id: id || null, known: Object.keys(cyc.premises) }, 3);
+    console.log(`no premise "${id}" in ${slug} (known: ${Object.keys(cyc.premises).join(", ") || "none"}).`);
+    process.exit(3);
+  }
+  const reason = String(reasonArg || chOpt("--reason") || "").trim();
+  if (!reason) {
+    const detail = `dismissing ${id} needs a reason. It stays visible in the report forever — that is the point.`;
+    if (asJson) emitJson({ ok: false, reason: "no-reason", detail }, 2);
+    console.error("❌ " + detail);
+    process.exit(2);
+  }
+  cyc.premises[id] = { ...cyc.premises[id], status: "dismissed", reason, resolved_at: fmtStamp(new Date()) };
+  cyc.events.push({ at: fmtStamp(new Date()), kind: "premise-dismissed", detail: `${id} — ${reason}` });
+  writeCycle(claudeDir, slug, cyc);
+  if (asJson) emitJson({ ok: true, slug, id, status: "dismissed", reason }, 0);
+  console.log(`✓ ${id} dismissed — ${reason}\n  Recorded, never hidden: a dismissed premise stays in the report.`);
+  process.exit(0);
+}
+
+// ── orc challenge opportunity — conserve it, either way ─────────────────────
+// Conservation applied to the class that never blocks: every opportunity lands
+// TAKEN or DROPPED with a reason. An idea that quietly evaporates is
+// indistinguishable from one nobody had.
+function challengeOpportunityCmd(claudeDir, slugArg, idArg, reasonArg) {
+  const asJson = wantsJson();
+  const slug = chSlug(slugArg);
+  const cyc = slug ? readCycle(claudeDir, slug) : null;
+  const id = String(idArg || "").trim();
+  if (!cyc) {
+    if (asJson) emitJson({ ok: false, reason: "no-such-cycle", slug: slugArg || null }, 3);
+    console.log(`no challenge cycle "${slugArg || ""}".`);
+    process.exit(3);
+  }
+  if (!id || !cyc.opportunities[id]) {
+    if (asJson)
+      emitJson({ ok: false, reason: "no-such-opportunity", id: id || null, known: Object.keys(cyc.opportunities) }, 3);
+    console.log(`no opportunity "${id}" in ${slug} (known: ${Object.keys(cyc.opportunities).join(", ") || "none"}).`);
+    process.exit(3);
+  }
+  const take = args.includes("--take");
+  const drop = args.includes("--drop");
+  const reason = String(reasonArg || chOpt("--reason") || "").trim();
+  const bad = (r, detail) => {
+    if (asJson) emitJson({ ok: false, reason: r, detail }, 2);
+    console.error("❌ " + detail);
+    process.exit(2);
+  };
+  if (take === drop) bad("no-verdict", `pass exactly one of --take or --drop for ${id}.`);
+  if (!reason)
+    bad(
+      "no-reason",
+      `${take ? "taking" : "dropping"} ${id} needs a reason — an idea that evaporates is indistinguishable from one nobody had.`
+    );
+  const status = take ? "taken" : "dropped";
+  cyc.opportunities[id] = { ...cyc.opportunities[id], status, resolved_reason: reason, resolved_at: fmtStamp(new Date()) };
+  cyc.events.push({ at: fmtStamp(new Date()), kind: "opportunity-" + status, detail: `${id} — ${reason}` });
+  writeCycle(claudeDir, slug, cyc);
+  const route = cyc.opportunities[id].route;
+  if (asJson) emitJson({ ok: true, slug, id, status, reason, route, next: take && route !== "none" ? `/orc-${route}` : null }, 0);
+  console.log(`✓ ${id} ${status} — ${reason}`);
+  if (take && route !== "none") console.log(`  Its home is /orc-${route}. This lane never builds it.`);
   process.exit(0);
 }
 
@@ -8184,6 +9329,10 @@ function challengeList(claudeDir) {
       stalled: v.stalled,
       no_template: v.no_template,
       goal: v.cyc.goals.goal,
+      council: v.cyc.council,
+      council_unset: v.council_unset,
+      open_premises: Object.entries(v.premises).filter(([, q]) => q.status === "open").length,
+      open_opportunities: Object.entries(v.opportunities).filter(([, o]) => o.status === "open").length,
       next: v.state === "PASSED" ? null : `/orc-challenge ${s}`,
     };
   });
@@ -8245,6 +9394,16 @@ function challengeStatus(claudeDir, slugArg) {
     },
     counts: v.counts,
     dimensions: v.dimensions,
+    // v0.49.1 — the roster, its participation, and the two classes that never
+    // touch the pass gate. A NOT-RUN row keeps its slot and carries its reason.
+    council: v.council,
+    council_version: v.cyc.council_version,
+    council_unset: v.council_unset,
+    council_suggested: challengeSuggestCouncil(v.cyc.kind),
+    lens_counts: v.lens_counts,
+    opportunities: v.opportunities,
+    premises: v.premises,
+    open_premises: Object.entries(v.premises).filter(([, q]) => q.status === "open").map(([id]) => id),
     convergence: v.convergence,
     dir: v.paths.cycle,
     next: v.state === "PASSED" ? null : `/orc-challenge ${slug}`,
@@ -8263,6 +9422,29 @@ function challengeStatus(claudeDir, slugArg) {
       (v.counts.rebutted ? ` · ${v.counts.rebutted} rebutted` : "")
   );
   console.log(`  dimensions: ${v.dimensions.map((d) => d.id + " " + d.status).join(" · ")}`);
+  if (v.council_unset)
+    console.log(
+      `  council:    UNSET — opened before the council existed. \`orc challenge council ${slug} --set … --reason "…"\`` +
+        " (the roster is a decision, not a default)"
+    );
+  else
+    console.log(
+      `  council v${v.cyc.council_version}: ` +
+        v.council
+          .filter((r) => r.selected)
+          .map((r) => r.lens + " " + r.status)
+          .join(" · ")
+    );
+  const openQ = Object.entries(v.premises).filter(([, q]) => q.status === "open");
+  if (openQ.length)
+    console.log(
+      `\n  ⚠ ${plural(openQ.length, "open premise challenge")} — the yardstick itself is disputed:\n` +
+        openQ.map(([id, q]) => `      ${id}  disputes ${q.disputes}: ${q.reframe}`).join("\n") +
+        `\n      Adopt it  (orc challenge goals ${slug} --set <path> --reason "…")  or dismiss it` +
+        `  (orc challenge premise ${slug} <id> --dismiss --reason "…"). Neither is automatic.`
+    );
+  const openX = Object.entries(v.opportunities).filter(([, o]) => o.status === "open");
+  if (openX.length) console.log(`  ${plural(openX.length, "open opportunity", "open opportunities")} — never work, never a block: ${openX.map(([id]) => id).join(", ")}`);
   if (v.state !== "PASSED")
     console.log(`  revision:   ${v.expected}  ${fs.existsSync(expectedAbs) ? "FOUND" : "MISSING"}`);
   if (v.stalled)
@@ -8299,6 +9481,12 @@ function challengeShow(claudeDir, slugArg) {
     dimensions_selected: v.cyc.dimensions,
     accepted: v.cyc.accepted,
     rebuttals: v.cyc.rebuttals,
+    council: v.council,
+    council_version: v.cyc.council_version,
+    council_unset: v.council_unset,
+    lens_counts: v.lens_counts,
+    opportunities: v.opportunities,
+    premises: v.premises,
     events: v.cyc.events,
     revision: { ...(v.cyc.revision || {}), expected: v.expected },
     iterations: iters,
@@ -8650,6 +9838,19 @@ function challengeRecord(claudeDir, slugArg) {
   if (!Number.isFinite(n) || n < 1) bad("bad-iteration", "--iteration must be a positive integer.");
   if (cyc.iterations.some((it) => it.n === n)) bad("duplicate-iteration", `iteration ${n} is already recorded.`);
 
+  // ── COUNCIL GATE 0 (v0.49.1) — the ROSTER, checked before anything else ───
+  // A cycle whose roster was never answered cannot record an iteration at all.
+  // Checked here rather than below, because "who reviewed this?" is a question
+  // about the CYCLE, and answering a malformed-verdict complaint first would
+  // send the user to fix the wrong file.
+  const roster = cyc.council;
+  if (roster === null)
+    bad(
+      "council-unset",
+      `the roster is a decision, not a default; run \`orc challenge council ${slug} --set <csv|all|none> --reason "…"\` ` +
+        "before recording an iteration. (a lane that picks its own council has broken this contract)"
+    );
+
   const carriedIn = challengeOpen(cyc);
   const carriedIds = new Set(carriedIn.map((f) => f.id));
 
@@ -8694,6 +9895,13 @@ function challengeRecord(claudeDir, slugArg) {
       outcome: carried ? f.outcome : f.outcome === "still-open" ? "still-open" : null,
       reason: f.reason || null,
       superseded_by: f.superseded_by || null,
+      // v0.49.1. `lens` is required from ledger v2 on; the council gates below
+      // DERIVE it (from the id's prefix, the raiser on disk, or the carried
+      // record) and reject a claim that disagrees. An adopted council finding
+      // KEEPS THE RAISER'S ID and therefore the raiser's credit, forever.
+      lens: f.lens ? String(f.lens) : null,
+      disposition: null,
+      corroborated_by: Array.isArray(f.corroborated_by) ? f.corroborated_by.map(String) : [],
     });
   }
 
@@ -8723,6 +9931,137 @@ function challengeRecord(claudeDir, slugArg) {
       bad("bad-rebuttal-result", `rebuttal ${id}: result must be "withdrawn" or "upheld".`);
     if (!String(r.reason || "").trim()) bad("rebuttal-no-reason", `rebuttal ${id}: a result needs its reason.`);
     if (cyc.rebuttals[id]) cyc.rebuttals[id] = { ...cyc.rebuttals[id], status: r.result, answered_at: fmtStamp(new Date()), answer: r.reason };
+  }
+
+  // ── COUNCIL GATES (v0.49.1) — part two, after the findings are shaped ─────
+  const onDisk = readCouncilDir(p, n, roster);
+
+  // RULE 15 — a selected role is never silently absent. A roster lens needs
+  // EITHER a machine report on disk OR an explicit `ran: false` + reason in the
+  // verdict's `council[]`. Silence is rejected. Rule 6, for roles.
+  const declared = new Map(
+    (Array.isArray(input.council) ? input.council : []).map((c) => [String(c.lens || ""), c])
+  );
+  for (const lens of declared.keys())
+    if (!CHALLENGE_LENSES.includes(lens)) bad("unknown-lens", `council entry names an unknown lens "${lens}" (valid: ${CHALLENGE_LENSES.join(", ")}).`);
+
+  const councilRows = [];
+  const ranThisIteration = new Set(["judge"]);
+  for (const lens of roster) {
+    const disk = onDisk[lens];
+    const say = declared.get(lens);
+    if (disk && disk.report && disk.report.__unreadable)
+      bad("council-unreadable", `${lens}.json is not valid JSON — the council report is the id set \`record\` derives from, so it cannot be skipped.`);
+    const ranOnDisk = !!(disk && disk.report && disk.report.ran !== false);
+    const saysNotRun = say && say.ran === false;
+    if (!ranOnDisk && !saysNotRun)
+      bad(
+        "lens-silent",
+        `${lens} is on the roster but returned neither a report (${iterDir(n)}/council/${lens}.json) nor an explicit ` +
+          `{ "lens": "${lens}", "ran": false, "reason": "…" }. A selected role is never silently absent.`,
+        { lens }
+      );
+    if (!ranOnDisk) {
+      const why = String((say && say.reason) || "").trim();
+      if (!why) bad("lens-silent", `${lens} is reported NOT-RUN with no reason — a skipped role is indistinguishable from a forgotten one.`, { lens });
+      councilRows.push({ lens, ran: false, reason: why });
+      continue;
+    }
+    ranThisIteration.add(lens);
+    councilRows.push({ lens, ran: true, raised: (disk.ids || []).length, adopted: 0, rejected: 0, merged: 0, out_of_goal: 0,
+      ...(disk.report && disk.report.monday_morning ? { monday_morning: disk.report.monday_morning } : {}) });
+  }
+
+  // The id set the council RAISED, derived from disk. The judge cannot shrink
+  // it by omission, which is the whole reason this is not read from the return.
+  const raisedIds = new Map(); // id -> lens
+  for (const lens of roster) {
+    const disk = onDisk[lens];
+    if (!disk || !disk.report || disk.report.ran === false) continue;
+    if (CHALLENGE_LENS_META[lens].class !== "finding") {
+      // A non-finding lens that wrote findings[] is a CLASS error, named as one.
+      if (Array.isArray(disk.report.findings) && disk.report.findings.length)
+        bad(
+          "class-mismatch",
+          `${lens} returned findings[]. The expansionist and the first-principles thinker never touch the pass gate; ` +
+            "record them with `orc challenge note`.",
+          { lens }
+        );
+      continue;
+    }
+    for (const id of disk.ids) {
+      if (raisedIds.has(id)) bad("duplicate-id", `${id} was raised by both ${raisedIds.get(id)} and ${lens}. An id is permanent and belongs to exactly one raiser.`, { id });
+      if (lensOfPrefix(id) !== lens)
+        bad("bad-prefix", `${lens} raised ${id}, whose prefix belongs to ${lensOfPrefix(id) || "no lens"}. Prefixes are the raiser's signature (${CHALLENGE_LENS_META[lens].prefix}###).`, { id, lens });
+      raisedIds.set(id, lens);
+    }
+  }
+
+  // Every raised id must come back with exactly ONE disposition and a reason.
+  // conservation.md applied to INPUT instead of to carry-forward.
+  const dispIn = new Map(
+    (Array.isArray(input.council_dispositions) ? input.council_dispositions : []).map((d) => [String(d.id || ""), d])
+  );
+  const missingDisp = [];
+  const byLensCount = new Map(councilRows.filter((r) => r.ran).map((r) => [r.lens, r]));
+  for (const [id, lens] of raisedIds) {
+    const d = dispIn.get(id);
+    if (!d) {
+      missingDisp.push(id);
+      continue;
+    }
+    const disp = String(d.disposition || "");
+    if (!CHALLENGE_DISPOSITIONS.includes(disp))
+      bad("bad-disposition", `${id}: disposition must be one of ${CHALLENGE_DISPOSITIONS.join(", ")}.`, { id });
+    if (disp === "merged") {
+      const into = String(d.merged_into || "").trim();
+      if (!into) bad("bad-disposition", `${id} is merged with no merged_into id.`, { id });
+      const resolvable = findings.some((f) => f.id === into) || raisedIds.has(into) || carriedIds.has(into);
+      if (!resolvable) bad("bad-disposition", `${id} is merged into ${into}, which is not a finding in this verdict, a council id, or a carried id.`, { id });
+    }
+    if ((disp === "rejected" || disp === "out-of-goal") && !String(d.reason || "").trim())
+      bad("bad-disposition", `${id} is ${disp} with no reason — the judge read the anchor, so it can say why.`, { id });
+    if (disp === "adopted" && !findings.some((f) => f.id === id))
+      bad("bad-disposition", `${id} is adopted but never appears in findings[]. An adopted finding KEEPS THE RAISER'S ID.`, { id });
+    const row = byLensCount.get(lens);
+    if (row) row[disp === "out-of-goal" ? "out_of_goal" : disp] += 1;
+  }
+  if (missingDisp.length)
+    bad(
+      "council-coverage",
+      `council coverage is below 100% — every id the council raised needs exactly ONE disposition ` +
+        `(${CHALLENGE_DISPOSITIONS.join(" | ")}). Missing: ${missingDisp.join(", ")}`,
+      { council_coverage_pct: raisedIds.size ? Math.round(((raisedIds.size - missingDisp.length) / raisedIds.size) * 100) : 100, missing: missingDisp }
+    );
+  // Past the gate it is 100 by construction — the gate is the only way it can
+  // be anything else, and it exits 2 there rather than recording a number.
+  const councilCoverage = 100;
+
+  // `corroborated_by` is a SIGNAL, never an automatic severity bump (the
+  // /orc-aftermath rule: churn is a signal, not a verdict). It may only name a
+  // lens that actually ran this iteration.
+  for (const f of findings) {
+    for (const c of Array.isArray(f.corroborated_by) ? f.corroborated_by : [])
+      if (!ranThisIteration.has(String(c)))
+        bad("unknown-corroborator", `finding ${f.id}: corroborated_by names "${c}", which did not run at iteration ${n}.`, { id: f.id });
+  }
+
+  // The lens on every finding. A carried council finding keeps its raiser
+  // whatever the roster looks like today — RULE 13: the judge resolves every
+  // carried finding, so the roster is freely variable at zero cost.
+  const carriedLens = new Map(carriedIn.map((f) => [f.id, f.lens || "judge"]));
+  for (const f of findings) {
+    const claimed = f.lens ? String(f.lens) : null;
+    if (claimed && !CHALLENGE_LENSES.includes(claimed))
+      bad("unknown-lens", `finding ${f.id} claims lens "${claimed}" (valid: ${CHALLENGE_LENSES.join(", ")}).`, { id: f.id });
+    const derived = raisedIds.get(f.id) || carriedLens.get(f.id) || lensOfPrefix(f.id) || "judge";
+    if (claimed && claimed !== derived)
+      bad("bad-prefix", `finding ${f.id} claims lens "${claimed}" but its id belongs to "${derived}". An id is permanent, and so is its raiser.`, { id: f.id });
+    f.lens = derived;
+    if (dispIn.has(f.id)) {
+      const d = dispIn.get(f.id);
+      f.disposition = String(d.disposition);
+    }
   }
 
   // RULE 6 — a dimension is NEVER silently skipped. Every SELECTED dimension must
@@ -8758,8 +10097,14 @@ function challengeRecord(claudeDir, slugArg) {
     artifact_shas: {},
     graded_against: cyc.template.version || 1,
     graded_against_goal: cyc.goals.version || 1,
+    // The THIRD version-break trigger (v0.49.1). Comparing an iteration judged
+    // by three lenses to one judged by six is not a comparison, so the rail
+    // draws a break for it exactly as it does for a regoal or a retemplate.
+    graded_against_council: cyc.council_version || 1,
     lint: input.lint || null,
     reader: input.reader || null,
+    council: councilRows,
+    council_coverage_pct: councilCoverage,
     verdict_file: verdictFile,
     verdict_file_sha: verdictSha,
     advice_file: input.advice_file || null,
@@ -8797,6 +10142,9 @@ function challengeRecord(claudeDir, slugArg) {
     blocking: it.blocking,
     severities: it.severities,
     coverage_pct: coverage,
+    council_coverage_pct: councilCoverage,
+    council: councilRows,
+    lens_counts: challengeLensCounts(cyc),
     dropped,
     dimensions,
     state: v.state,
@@ -8804,12 +10152,28 @@ function challengeRecord(claudeDir, slugArg) {
     advise: !it.passed,
     // The one trace line this iteration owes, assembled here so the skill never
     // composes a second wording for it.
-    trace_line: `CHALLENGE iter=${n} findings=P0:${it.severities.P0}/P1:${it.severities.P1}/P2:${it.severities.P2} coverage=${coverage}% verdict=${it.passed ? "PASS" : "FAIL"}`,
+    trace_line:
+      `CHALLENGE iter=${n} findings=P0:${it.severities.P0}/P1:${it.severities.P1}/P2:${it.severities.P2} ` +
+      `coverage=${coverage}% council=${councilRows.filter((r) => r.ran).length}/${roster.length}` +
+      (raisedIds.size
+        ? ` raised=${[...byLensCount.entries()]
+            .filter(([, r]) => r.raised)
+            .map(([l, r]) => CHALLENGE_LENS_META[l].prefix.replace("-", "") + ":" + r.raised)
+            .join(",")}` +
+          ` adopted=${[...byLensCount.values()].reduce((a, r) => a + (r.adopted || 0), 0)}`
+        : "") +
+      ` verdict=${it.passed ? "PASS" : "FAIL"}`,
     next: it.passed ? `orc challenge report ${slug}` : `write ${CHALLENGE_DIR}${slug}/fix-brief-${String(n).padStart(2, "0")}.md, then STOP`,
   };
   if (asJson) emitJson(payload, 0);
   console.log(`\n  iteration ${n}: ${it.passed ? "PASS" : "FAIL"} — ${plural(it.blocking, "blocking finding")}, coverage ${coverage}%`);
   if (dropped.length) console.log(`  ${plural(dropped.length, "finding")} dropped for having no \`serves\` (out of scope of the stated goal).`);
+  for (const r of councilRows)
+    console.log(
+      r.ran
+        ? `  ${r.lens.padEnd(13)} RAN      raised ${r.raised} · adopted ${r.adopted} · merged ${r.merged} · rejected ${r.rejected} · out-of-goal ${r.out_of_goal}`
+        : `  ${r.lens.padEnd(13)} NOT-RUN  ${r.reason}`
+    );
   console.log(`  ${payload.trace_line}`);
   process.exit(0);
 }
@@ -9317,6 +10681,21 @@ function challenge() {
     case "record":
       challengeRecord(claudeDir, pos[2]);
       break;
+    case "roles":
+      challengeRoles();
+      break;
+    case "council":
+      challengeCouncilCmd(claudeDir, pos[2]);
+      break;
+    case "note":
+      challengeNote(claudeDir, pos[2]);
+      break;
+    case "premise":
+      challengePremiseCmd(claudeDir, pos[2], pos[3], pos.slice(4).join(" ") || chOpt("--reason"));
+      break;
+    case "opportunity":
+      challengeOpportunityCmd(claudeDir, pos[2], pos[3], pos.slice(4).join(" ") || chOpt("--reason"));
+      break;
     case "accept":
       challengeAccept(claudeDir, pos[2], pos[3], pos.slice(4).join(" ") || chOpt("--reason"));
       break;
@@ -9348,11 +10727,17 @@ function challenge() {
           "       orc challenge expect <slug> [--set <path>]  where the next revision is expected\n" +
           "       orc challenge lint <path> [--template <p>]  deterministic prose+structure lint, ZERO tokens\n" +
           "       orc challenge outline <path>                the heading tree\n" +
+          "       orc challenge roles [--kind <k>] [--json]     the lens catalogue (works with no cycle)\n" +
+          "       orc challenge council <slug> [--json]        the frozen roster (0 set / 1 unset / 3 unknown)\n" +
+          "       orc challenge council <slug> --set <csv|all|none> --reason \"…\"\n" +
+          "       orc challenge note <slug> --iteration N --from <json>   opportunities + premises ONLY\n" +
+          "       orc challenge premise <slug> <id> --dismiss --reason \"…\"\n" +
+          "       orc challenge opportunity <slug> <id> --take|--drop --reason \"…\"\n" +
           "       orc challenge record <slug> --iteration N --from <json>\n" +
           '       orc challenge accept|rebut <slug> <id> "reason"\n' +
           "       orc challenge template|goals <slug> [--set <path> --reason \"…\"]\n" +
           "       orc challenge report <slug>                 re-derive CHALLENGE.md\n" +
-          "       orc challenge init <slug> --artifact <p> --goal … --audience … --done-means … (--template <p> | --no-template)"
+          "       orc challenge init <slug> --artifact <p> --goal … --audience … --done-means … --council <csv|all|none> (--template <p> | --no-template)"
       );
       process.exit(1);
   }
@@ -13186,6 +14571,43 @@ function doctor() {
   if (dstat.state === "UNCONFIGURED") ok("orc-diy not configured (fine — /orc-diy stays gated)");
   else if (dstat.state === "STALE") warn("diy-stale", `orc-diy flow STALE: ${dstat.reason}`, { reason: dstat.reason });
   else ok(`orc-diy flow READY (${dstat.reason})`);
+
+  // 5b) the wiki (v0.49.1). Exactly TWO findings, and the restraint is the
+  // design: a doctor that warns about normal states teaches people to ignore
+  // doctor. Both route to the Knowledge panel via FINDING_ROUTE — a caution
+  // routes to the panel that can CLEAR it, and `orc wiki sync` is a button
+  // there.
+  try {
+    const ws = wikiState(claudeDir);
+    if (ws.state === "none") ok("no wiki (fine — nothing consults one)");
+    else if (["unregistered", "drifted", "corrupt"].includes(ws.state))
+      warn(
+        "wiki-unregistered",
+        `wiki is ${ws.state.toUpperCase()} — nothing can read it until it is registered. ` +
+          "Fix: `orc wiki sync` (FREE, instant, derived from the docs, no re-scan)",
+        { state: ws.state, fix_command: "orc wiki sync" }
+      );
+    else {
+      const wpaths = wikiPaths(claudeDir);
+      const f = computeWikiFreshness(wpaths.root, ws.meta, wikiFreshnessEdges(claudeDir));
+      // STALE only, and NEVER on AGING. Aging is a normal state that every
+      // living repo passes through, and a doctor that warns about it is a
+      // doctor people learn to skip.
+      if (f.tier === "STALE") {
+        const plan = wikiPlanRows(claudeDir);
+        const pending = plan && !plan.error ? plan.rows.length : 0;
+        if (pending)
+          warn(
+            "wiki-debt",
+            `wiki is STALE with ${plural(pending, "doc")} pending a refresh` +
+              (f.reasons[0] ? ` (${f.reasons[0]})` : "") +
+              " — `orc wiki plan` ranks them; `/orc-wiki refresh --top 2` is the cheapest real dent",
+            { tier: f.tier, pending, fix_command: "/orc-wiki refresh --top 2" }
+          );
+        else ok(`wiki STALE but nothing pending a refresh (${plural(ws.docs, "doc")})`);
+      } else ok(`wiki ${f.tier} (${plural(ws.docs, "doc")}${f.distance === null ? "" : ", " + f.distance + "c on the worst doc"})`);
+    }
+  } catch (_) {}
 
   // 6) a document that drifted (v0.48.1). Routed to the Docs panel via
   // FINDING_ROUTE — a caution points at the panel that can CLEAR it, and

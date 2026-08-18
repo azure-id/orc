@@ -21,14 +21,14 @@
 // case here; it is never an edit to a 1 700-line module.
 const { PROJECT, doctor, where } = require("./shell.js");
 const { config } = require("./settings.js");
-const { wiki, wikiPlan, wikiDebt, wikiUsage, patterns, gotchas, wikiImpact } = require("./knowledge.js");
+const { wiki, wikiDocs, wikiShow, wikiCoverage, wikiCoverageFull, wikiUnregistered, wikiPlan, wikiDebt, wikiUsage, patterns, patternShow, gotchas, gotchasArchived, gotchaPrunePreview, wikiImpact } = require("./knowledge.js");
 const { runs, runDetail, aftermath } = require("./runs.js");
 const { stats, budgetForecast, budgetRates } = require("./stats.js");
 const { pact } = require("./pact.js");
 const { boundary } = require("./boundary.js");
 const { handoff } = require("./handoff.js");
 const { exportState, mocks } = require("./maintenance.js");
-const { chGoals, chDims, challengeCycles, challengeList, challengeShow, challengeDiff, challengeDiffMissing, challengeLint } = require("./challenge.js");
+const { chGoals, chDims, challengeRoles, challengeCouncil, challengeCycles, challengeList, challengeShow, challengeDiff, challengeDiffMissing, challengeLint } = require("./challenge.js");
 const { docList, docParts, docStatuses, docMapSections, docMap, docLint, docPlan, docShow, docSection, docShipped, docShippedDrifted, docNext, docAudit, docJournalRich, docJournalEmpty, docContext } = require("./docs.js");
 const { diy } = require("./flow.js");
 const { crosslink } = require("./crosslink.js");
@@ -97,6 +97,14 @@ module.exports.get = function get(route, q) {
       return q && q.slug === "billing-webhooks" ? challengeDiffMissing : challengeDiff;
     case "/api/challenge/lint":
       return challengeLint;
+    case "/api/challenge/roles":
+      return challengeRoles;
+    case "/api/challenge/council":
+      // UNSET is an ANSWER, not an error — the panel has to be designable
+      // against a cycle nobody has answered the roster for.
+      return q && q.slug === "billing-webhooks"
+        ? { ok: false, slug: "billing-webhooks", council: null, council_version: 1, suggested: challengeRoles.council.slice(0, 3), rows: challengeCycles["billing-webhooks"].council, lens_counts: {}, reason: "council-unset", hint: 'the roster is a decision, not a default; run `orc challenge council billing-webhooks --set <csv|all|none> --reason "…"`' }
+        : challengeCouncil;
     case "/api/meta":
       return undefined; // served for real even in fixture mode
     case "/api/version":
@@ -168,6 +176,25 @@ module.exports.get = function get(route, q) {
       return patterns;
     case "/api/gotchas":
       return gotchas;
+    // v0.49.1 — the wiki's CONTENTS, the pattern's CONTENTS, and the two gotcha
+    // reads the panel needs to preview an eviction and reach the archive.
+    case "/api/wiki/docs":
+      return wikiDocs;
+    case "/api/wiki/show":
+      // `--body` is opt-in: the default carries no prose at all.
+      return q && q.body ? wikiShow : (({ body, ...rest }) => rest)(wikiShow);
+    case "/api/wiki/coverage":
+      // Two of them, so 61% AND 100% are both designable. `?full=1` picks the
+      // happy one; a state with no fixture is a state nobody has looked at.
+      return q && q.full ? wikiCoverageFull : wikiCoverage;
+    case "/api/pattern/show": {
+      const one = patternShow[(q && q.lang) || "react"] || patternShow.react;
+      return q && q.body ? one : (({ body, ...rest }) => rest)(one);
+    }
+    case "/api/gotchas/archived":
+      return gotchasArchived;
+    case "/api/gotcha/prune/preview":
+      return gotchaPrunePreview;
     case "/api/stats":
       return stats;
     case "/api/diy":

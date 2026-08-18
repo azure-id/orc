@@ -105,3 +105,26 @@ Per the advisor's grouping, in the advisor's suggested order:
 - a claim that a finding is easy, or an estimate in hours. Effort is in the
   artifact's own units — sections, endpoints, rows.
 - a promise about what the next judgement will say.
+
+## The council changes the ORDER of the brief (v0.49.1)
+
+Three blocks, in this order, and the order is the argument:
+
+1. **Open premise challenges — FIRST.** A premise disputes the frozen goal, and
+   the goal is the yardstick every finding below it was measured against. If the
+   user adopts one, some of the findings underneath stop mattering. Print each
+   with its `reframe` and its `cheapest_test`, and the two commands that resolve
+   it — `orc challenge goals <slug> --set <path> --reason "…"` (adopt) or
+   `orc challenge premise <slug> <id> --dismiss --reason "…"`. **Neither is
+   automatic, and ORC never picks.**
+2. **The findings**, grouped by the advisor's root causes, exactly as before.
+   A council-origin finding shows its raiser (`raised by the contrarian · adopted
+   by the judge`) — an id is permanent, and so is its credit.
+3. **Opportunities — LAST, and clearly marked NOT WORK.** They never block and
+   nothing here is required. Each carries its `first_step` and its route, and the
+   route is where it belongs *next*: `/orc-brainstorm`, `/orc-pact`,
+   `/orc-grill`, or nowhere yet. **This lane never builds one.**
+
+And rule 15: **a selected lens that did not run is named here too, with its
+reason.** A brief that silently omits a role the user paid to select is the same
+defect as a silently skipped dimension.

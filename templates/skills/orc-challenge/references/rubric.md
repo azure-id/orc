@@ -90,3 +90,20 @@ Three honest options:
 
 It prints once when `stalled` flips true, and again only if the count RISES.
 Never a block, never a nag repeated every iteration.
+
+## Severity is about the consequence, never about who raised it
+
+A council lens does not get a severity discount for being clever or a bump for
+being enthusiastic. The ladder is unchanged and it asks one question: **what
+happens to the STATED audience if this ships as written?**
+
+`corroborated_by` — two lenses independently landing on the same defect — is the
+strongest comprehension evidence this lane can produce, and it is **a signal,
+never an automatic severity bump.** (The `/orc-aftermath` rule: churn is a
+signal, not a verdict.) The judge may raise a severity because the corroboration
+told it something about the consequence; it may never raise one because two
+agents agreed.
+
+And the contrarian's rule against manufacturing findings is the same rule
+everybody else here lives under: **never invent a finding to look thorough, and
+never soften one to look balanced.** Balance is the judge's job.

@@ -119,3 +119,36 @@ orc challenge record <slug> --iteration N --from orc/orc-challenge/<slug>/iterat
 
 The CLI prints the `trace_line` for the iteration. Use it verbatim — do not
 compose a second wording for it.
+
+## The council section (v0.49.1)
+
+The verdict body gains one section, above the findings.
+
+**One row per roster lens, and a NOT-RUN row keeps its slot with its reason** —
+filtering it out makes *"the contrarian found nothing"* and *"the contrarian
+never ran"* look identical. Rule 15.
+
+```
+council v1 — 4 of 5 ran
+
+  RAN      reader        raised 3 · adopted 2 · merged 1 · rejected 0 · out-of-goal 0
+  RAN      contrarian    raised 6 · adopted 4 · merged 1 · rejected 1 · out-of-goal 0
+  RAN      outsider      raised 3 · adopted 1 · merged 2 · rejected 0 · out-of-goal 0
+  RAN      executor      raised 2 · adopted 2 · merged 0 · rejected 0 · out-of-goal 0
+  NOT-RUN  principles    usage limit reached mid-batch
+```
+
+Then the **disposition table** — every id the council raised, with the ONE
+disposition it got and its reason. `council_coverage_pct` must be 100 or
+`orc challenge record` rejects the verdict and names the missing ids.
+
+Every finding line carries its **lens**, and where two lenses landed on the same
+defect, `also found by: outsider`. **Corroboration is a signal, never an
+automatic severity bump.**
+
+An **adopted council finding keeps the raiser's id.** `C-004` is `C-004` here and
+in iteration 9.
+
+The council executor's `monday_morning` list is printed verbatim — including
+`monday_morning_stops_at`, which is the most legible sentence this lane produces
+for a non-engineer.

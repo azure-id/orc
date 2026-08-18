@@ -183,3 +183,110 @@ test("the ui never offers to run a mock example", () => {
 // model ids, paths, commands, doctor messages — is machine text and stays
 // exactly as the CLI wrote it. A translated config key is a key that does not
 // exist; a translated command is a command you cannot type.
+
+// v0.49.1 — THE COUNCIL. You cannot design a NOT-RUN row on a run where
+// everything ran, a NOT-SELECTED row on a full roster, or the empty state of a
+// cycle whose roster was never answered.
+test("council fixtures carry one of every roster state", () => {
+  const fixtures = require(path.join(REPO, "bin", "webui", "fixtures", "index.js"));
+  const cycles = fixtures.get("/api/challenge", {}).cycles;
+  const one = (slug) => fixtures.get("/api/challenge/one", { slug });
+  const rows = cycles.flatMap((c) => one(c.slug).council || []);
+  for (const status of ["RAN", "NOT-RUN", "NOT-SELECTED"])
+    assert.ok(rows.some((r) => r.status === status), `a ${status} lens row must be designable`);
+  // Rule 15: a NOT-RUN row that is NOT simply "not yet judged" must carry a
+  // real reason, because that is the case a user paid for and did not get.
+  assert.ok(
+    rows.some((r) => r.status === "NOT-RUN" && /limit|failed|error/i.test(r.reason || "")),
+    "a lens that could not run must carry a REAL reason"
+  );
+  // Every lens must appear somewhere, or one of them has never been looked at.
+  const roles = fixtures.get("/api/challenge/roles", {});
+  for (const l of roles.lenses.map((x) => x.lens))
+    assert.ok(rows.some((r) => r.lens === l), `the ${l} lens must appear in some fixture`);
+
+  // A cycle with NO ROSTER AT ALL — a v1 ledger migrated forward. UNSET is an
+  // ANSWER, not an error, and `orc challenge record` refuses until it is
+  // answered.
+  assert.ok(cycles.some((c) => one(c.slug).council_unset), "a council-less v1 cycle must be designable");
+  const unset = fixtures.get("/api/challenge/council", { slug: "billing-webhooks" });
+  assert.strictEqual(unset.council, null);
+  assert.strictEqual(unset.reason, "council-unset");
+  assert.ok(unset.suggested.length, "and ORC still SUGGESTS — the fact is its, the decision is not");
+
+  // The two classes that never touch the pass gate, in every one of their
+  // states.
+  const rich = one("tsd-payments");
+  const premises = Object.values(rich.premises || {});
+  for (const st of ["open", "dismissed"])
+    assert.ok(premises.some((q) => q.status === st), `a ${st} premise must be designable`);
+  const opps = Object.values(rich.opportunities || {});
+  for (const st of ["open", "taken", "dropped"])
+    assert.ok(opps.some((o) => o.status === st), `a ${st} opportunity must be designable`);
+  for (const q of premises) assert.ok(!("severity" in q), "a premise NEVER carries a severity");
+  for (const o of opps) assert.ok(!("severity" in o), "an opportunity NEVER carries a severity");
+  // An adopted premise is what MOVED the goal — the council is the first thing
+  // that can legitimately do that.
+  assert.ok(
+    Object.values(one("adr-0012-events").premises || {}).some((q) => q.status === "adopted" && q.goal_version_after),
+    "an adopted premise with its version break must be designable"
+  );
+
+  // A corroborated finding, and a council-raised id that KEPT ITS RAISER'S
+  // PREFIX after the judge adopted it.
+  const findings = fixtures.get("/api/challenge/show", { slug: "tsd-payments" }).iterations[0].findings;
+  assert.ok(findings.some((f) => (f.corroborated_by || []).length), "a corroborated finding must be designable");
+  assert.ok(findings.some((f) => f.lens && f.lens !== "judge"), "a council-raised finding must be designable");
+  assert.ok(findings.every((f) => "lens" in f), "every finding carries its raiser — no blank column");
+  // A council row with every disposition it can report.
+  const it = fixtures.get("/api/challenge/show", { slug: "tsd-payments" }).iterations[0];
+  assert.strictEqual(it.council_coverage_pct, 100);
+  assert.ok(it.council.some((r) => r.ran === false && r.reason), "the NOT-RUN row survives into the iteration record");
+});
+
+// v0.49.1 — THE KNOWLEDGE DEEPENING. Same rule: one of every state, including
+// the ugly ones. You cannot design a `used 0/20` retire hint on a wiki nobody
+// has stopped reading, or an unheadered pattern on a tidy one.
+test("knowledge fixtures carry one of every state the new reads can return", () => {
+  const fixtures = require(path.join(REPO, "bin", "webui", "fixtures", "index.js"));
+  const w = fixtures.get("/api/wiki", {});
+  // `--json is not a summary`: the fixture must carry the WHOLE object, or the
+  // panel gets designed against a payload the CLI does not send.
+  for (const k of ["counts", "worst", "per_doc", "blind_spot", "orientation", "crosslink", "free_repairs"])
+    assert.ok(k in w, `the wiki fixture carries ${k}`);
+  assert.ok(Array.isArray(w.blind_spot) && w.blind_spot.length, "the blind spot is a FILE LIST, and a non-empty one");
+
+  const docs = fixtures.get("/api/wiki/docs", {}).docs;
+  for (const tier of ["FRESH", "AGING", "STALE", "unknown"])
+    assert.ok(docs.some((d) => d.tier === tier), `a ${tier} doc must be designable`);
+  assert.ok(docs.some((d) => d.retire_hint), "a zero-use retire candidate must be designable");
+  assert.ok(docs.some((d) => d.used === null), "`used: null` is UNKNOWN, not zero-use, and needs its own row");
+  assert.ok(docs.some((d) => d.crosslink_tags === 0), "a doc with no tags must be designable");
+
+  // `--body` is opt-in: the default carries no prose at all.
+  assert.ok(!("body" in fixtures.get("/api/wiki/show", {})), "the default show carries no body");
+  assert.ok("body" in fixtures.get("/api/wiki/show", { body: 1 }), "and --body returns one");
+
+  // 61% AND 100%, because a full-coverage repo is a different picture.
+  assert.ok(fixtures.get("/api/wiki/coverage", {}).uncovered_dirs.length, "an uncovered set must be designable");
+  assert.strictEqual(fixtures.get("/api/wiki/coverage", { full: 1 }).coverage_pct, 100);
+  assert.ok(!("threshold" in fixtures.get("/api/wiki/coverage", {})), "coverage is a report — nothing to gate on");
+
+  // A headered pattern AND an unheadered one, which says so and invents no date.
+  const react = fixtures.get("/api/pattern/show", { lang: "react" });
+  const express = fixtures.get("/api/pattern/show", { lang: "express" });
+  assert.strictEqual(react.headered, true);
+  assert.ok(react.conflicts.length, "a flagged conflict must be designable");
+  assert.strictEqual(express.headered, false);
+  assert.strictEqual(express.codified_at, null, "no date is ever derived from an mtime");
+  assert.ok(!("body" in react), "--body is opt-in here too");
+
+  // The gotcha reads: every field, the cap, a preview, and a non-empty archive.
+  const g = fixtures.get("/api/gotchas", {});
+  assert.ok(g.gotchas_max, "the cap is what makes the count mean anything");
+  assert.ok(g.gotchas.every((e) => Object.keys(e.fields || {}).length), "every entry carries its FULL record");
+  assert.ok(fixtures.get("/api/gotchas/archived", {}).count, "a non-empty archive must be designable");
+  const prev = fixtures.get("/api/gotcha/prune/preview", {});
+  assert.ok(prev.would_archive.length, "a preview that would evict something must be designable");
+  assert.ok(prev.would_archive.every((e) => e.why), "and every named entry says WHY it is in the tail");
+});

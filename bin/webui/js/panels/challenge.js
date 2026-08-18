@@ -105,10 +105,15 @@ async function loadChallengeDetail(pane, slug, body) {
   let s;
   let show = null;
   let diff = null;
+  let roles = null;
   try {
     s = (await read("/api/challenge/one?slug=" + encodeURIComponent(slug))).data;
     show = (await read("/api/challenge/show?slug=" + encodeURIComponent(slug)).catch(() => ({ data: null }))).data;
     diff = (await read("/api/challenge/diff?slug=" + encodeURIComponent(slug)).catch(() => ({ data: null }))).data;
+    // THE CATALOGUE. The panel names no lens, no class and no disposition
+    // itself — it draws what `orc challenge roles --json` returns, exactly as
+    // the Flow stepper draws `orc diy show --json`'s steps[].
+    roles = (await read("/api/challenge/roles").catch(() => ({ data: null }))).data;
   } catch (e) {
     pane.replaceChildren(empty(t("common.loadFail"), String(e.message)));
     return;
@@ -129,6 +134,19 @@ async function loadChallengeDetail(pane, slug, body) {
   );
   g.append(el("div", "note", t("challenge.goalNote")));
   out.append(g);
+
+  // --- 1b. THE COUNCIL, directly under the goal (v0.49.1). One row per roster
+  //     lens. A NOT-RUN row KEEPS ITS SLOT and carries its reason, and a
+  //     NOT-SELECTED row renders muted with the line that would add it —
+  //     filtering either out makes "the contrarian found nothing" and "the
+  //     contrarian never ran" look identical.
+  out.append(challengeCouncilCard(s, roles, show));
+
+  // --- 1c. PREMISE CHALLENGES. When one is open this is the LOUDEST card on
+  //     the panel and it sits above the findings, because a premise disputes the
+  //     yardstick every finding below it was measured against.
+  const premiseCard = challengePremiseCard(s, slug, body);
+  if (premiseCard) out.append(premiseCard);
 
   // --- 2. the state, and its ONE next action
   const st = card(null);
@@ -195,6 +213,12 @@ async function loadChallengeDetail(pane, slug, body) {
       hdr.append(chip(f.severity, CH_SEV_KIND[f.severity] || ""));
       hdr.append(el("span", "mono dim", f.id));
       hdr.append(chip(f.dimension, ""));
+      // The RAISER. An adopted council finding keeps the raiser's id, so this
+      // chip is how a user finds out whether a lens is earning its dispatch.
+      // The word is the CLI's own lens id — never a friendlier synonym.
+      if (f.lens && f.lens !== "judge") hdr.append(chip(f.lens, "info"));
+      if ((f.corroborated_by || []).length)
+        hdr.append(chip(t("challenge.alsoFoundBy", { lenses: f.corroborated_by.join(", ") }), "info"));
       if (f.outcome) hdr.append(chip(f.outcome, f.outcome === "resolved" ? "ok" : f.outcome === "still-open" ? "warn" : ""));
       if (show.accepted && show.accepted[f.id]) hdr.append(chip(t("challenge.acceptedBadge"), "ok"));
       if (show.rebuttals && show.rebuttals[f.id]) hdr.append(chip(t("challenge.rebuttedBadge"), "info"));
@@ -206,6 +230,9 @@ async function loadChallengeDetail(pane, slug, body) {
       if (f.consequence) rows.push([t("challenge.field.consequence"), f.consequence]);
       if (f.acceptance_line) rows.push([t("challenge.field.fixedWhen"), f.acceptance_line]);
       if (f.serves) rows.push([t("challenge.field.serves"), f.serves]);
+      if (f.lens && f.lens !== "judge")
+        rows.push([t("challenge.field.raisedBy"), t("challenge.raisedAdopted", { lens: f.lens })]);
+      if (f.disposition) rows.push([t("challenge.field.disposition"), f.disposition]);
       if (f.superseded_by) rows.push([t("challenge.field.supersededBy"), f.superseded_by]);
       if (f.reason) rows.push([t("challenge.field.reason"), f.reason]);
       box.append(kvList(rows));
@@ -229,6 +256,13 @@ async function loadChallengeDetail(pane, slug, body) {
       fc.append(el("div", "note", t("challenge.dropped", { n: last.dropped.length, ids: last.dropped.map((x) => x.id).join(", ") })));
     out.append(fc);
   }
+
+  // --- 6b. OPPORTUNITIES. Its own card, visually distinct from findings, and
+  //     with NO SEVERITY COLOUR anywhere in it: an opportunity never blocks, and
+  //     colouring it like a defect is exactly the confusion the class split
+  //     exists to prevent.
+  const oppCard = challengeOpportunityCard(s, slug, body);
+  if (oppCard) out.append(oppCard);
 
   // --- 7. events, collapsed
   if (show && show.events && show.events.length)
@@ -390,6 +424,35 @@ function challengeValveBtn(which, slug, id, body) {
   return b;
 }
 
+/* ONE reason prompt for the two council writes (v0.49.1).
+
+   Both `premise --dismiss` and `opportunity --take|--drop` REFUSE without a
+   reason, and the refusal is the CLI's, not this form's — so the button submits
+   whatever was typed and reports what came back. A reason recorded here stays
+   visible in the report forever, which is the point of demanding one. */
+function challengeReasonPrompt({ title, note, onSubmit }) {
+  const wrap = frag();
+  const input = el("input", "text-input");
+  input.type = "text";
+  input.placeholder = t("challenge.reasonPlaceholder");
+  wrap.append(input);
+  wrap.append(el("div", "note", note));
+  const m = modal({
+    title,
+    body: wrap,
+    actions: {
+      [t("common.cancel")]: null,
+      [t("common.confirm")]: async () => {
+        const reason = input.value.trim();
+        if (!reason) return toast(t("challenge.needReason"), "bad");
+        await onSubmit(reason);
+      },
+    },
+  });
+  requestAnimationFrame(() => input.focus());
+  return m;
+}
+
 /* THE ITERATION TIMELINE — the hero.
 
    GEOMETRY IS SOLVED FROM THE BOX SIZE, never expressed as a fraction of the
@@ -404,8 +467,14 @@ function challengeTimeline(s) {
   const box = el("div", "ch-rail-wrap");
   // Where a version break falls: between iteration i-1 and i, when either frozen
   // yardstick's version number changed.
+  // v0.49.1 adds a THIRD trigger: comparing an iteration judged by three lenses
+  // to one judged by six is not a comparison.
   const breakBefore = iters.map((it, i) =>
-    i === 0 ? false : it.graded_against !== iters[i - 1].graded_against || it.graded_against_goal !== iters[i - 1].graded_against_goal
+    i === 0
+      ? false
+      : it.graded_against !== iters[i - 1].graded_against ||
+        it.graded_against_goal !== iters[i - 1].graded_against_goal ||
+        (it.graded_against_council || 1) !== (iters[i - 1].graded_against_council || 1)
   );
   const xs = [];
   let x = CH_NODE.PAD;
@@ -444,7 +513,14 @@ function challengeTimeline(s) {
       if (breakBefore[i]) {
         const bx = (prevEnd + cx) / 2;
         svg.append(mk("line", { x1: bx, y1: cy - 6, x2: bx, y2: cy + CH_NODE.H + 6, class: "ch-rail-break" }));
-        svg.append(mk("text", { x: bx, y: cy + CH_NODE.H + 18, class: "ch-rail-breaklabel", "text-anchor": "middle" }, `v${it.graded_against_goal}`));
+        // The label names WHICH yardstick moved. `c2` is a council change; a
+        // bare version number is a goal change, as it always was.
+        const prev = iters[i - 1];
+        const label =
+          (it.graded_against_council || 1) !== (prev.graded_against_council || 1)
+            ? `c${it.graded_against_council || 1}`
+            : `v${it.graded_against_goal}`;
+        svg.append(mk("text", { x: bx, y: cy + CH_NODE.H + 18, class: "ch-rail-breaklabel", "text-anchor": "middle" }, label));
       }
     }
     const g = mk("g", { class: "ch-rail-node" + (it.passed ? " pass" : " fail"), style: `animation-delay:${i * 40}ms` });
@@ -483,8 +559,191 @@ function challengeConvergence(s) {
     rowEl.append(el("span", "ch-conv-blocking", String(it.blocking)));
     wrap.append(rowEl);
   }
+  // THE PER-LENS LEGEND (v0.49.1). The stacking stays severity — do not add a
+  // second dimension to a bar that works — so "which lens is earning its money"
+  // gets its own row underneath. The counts and the prefixes are the CLI's.
+  const counts = s.lens_counts || {};
+  const lenses = Object.keys(counts);
+  if (lenses.length) {
+    const legend = el("div", "ch-lens-legend");
+    for (const lens of lenses) {
+      const item = el("span", "ch-lens-legend-item");
+      item.append(el("span", "mono", lens));
+      item.append(el("span", "ch-lens-legend-n", String(counts[lens])));
+      legend.append(item);
+    }
+    wrap.append(legend);
+  }
   wrap.append(el("div", "note", t("challenge.convNote")));
   return wrap;
+}
+
+/* THE COUNCIL CARD (v0.49.1).
+
+   THE PANEL DERIVES NOTHING HERE. It does not name a lens, does not know which
+   class blocks, does not compute a disposition and does not decide the roster
+   suggestion — every one of those comes from `orc challenge roles --json` and
+   `orc challenge status --json`. Same rule as the Flow stepper: a second idea of
+   what the council is, is exactly the drift this panel exists to make
+   impossible.
+
+   A NOT-RUN row KEEPS ITS SLOT with its reason, and a NOT-SELECTED row renders
+   muted with the one line that would add it. */
+function challengeCouncilCard(s, roles, show) {
+  const c = card(t("challenge.council") + (s.council_version ? "  v" + s.council_version : ""));
+  if (s.council_unset) {
+    c.append(empty(t("challenge.councilUnset"), t("challenge.councilUnsetHint")));
+    c.append(laneCommand(`/orc-challenge ${s.slug}`, t("challenge.councilUnsetWhy")));
+    return c;
+  }
+  const ran = (s.council || []).filter((r) => r.status === "RAN").length;
+  const selected = (s.council || []).filter((r) => r.selected).length;
+  const head = el("div", "row-actions");
+  head.append(chip(t("challenge.councilRan", { ran, of: selected }), ran === selected ? "ok" : "warn"));
+  c.append(head);
+
+  for (const r of s.council || []) {
+    const row = el("div", "ch-lens-row" + (r.selected ? "" : " row-muted"));
+    const top = el("div", "row-actions");
+    top.append(chip(r.status, r.status === "RAN" ? "ok" : r.status === "NOT-RUN" ? "warn" : ""));
+    top.append(el("span", "ch-lens-name", r.display));
+    // `class` is the CLI's word — finding | opportunity | premise. It is never
+    // translated: a translated class word is a class that does not exist.
+    top.append(chip(r.class, r.class === "finding" ? "" : "info"));
+    if (!r.blocks) top.append(chip(t("challenge.neverBlocks"), "info"));
+    row.append(top);
+    row.append(el("div", "mono dim ch-lens-agent", r.agent + " · " + r.effort));
+    row.append(el("div", "note", r.why));
+    if (r.status === "RAN" && r.raised !== undefined)
+      row.append(
+        el(
+          "div",
+          "note",
+          t("challenge.lensCounts", {
+            raised: r.raised,
+            adopted: r.adopted || 0,
+            merged: r.merged || 0,
+            rejected: r.rejected || 0,
+            outOfGoal: r.out_of_goal || 0,
+          })
+        )
+      );
+    // Rule 15: a selected role is never silently absent.
+    if (r.status === "NOT-RUN" && r.reason) row.append(el("div", "note warn", t("challenge.lensNotRun", { reason: r.reason })));
+    if (r.status === "NOT-SELECTED" && r.add_with) {
+      row.append(el("div", "note", t("challenge.lensNotSelected")));
+      row.append(el("pre", "cmd", r.add_with));
+    }
+    // THE MONDAY-MORNING LIST — the single most legible artifact this lane
+    // produces for a non-engineer, so it sits high, inside the council card.
+    if ((r.monday_morning || []).length) {
+      const ol = el("ol", "ch-monday");
+      for (const step of r.monday_morning) ol.append(el("li", null, step));
+      row.append(el("div", "ch-monday-head", t("challenge.mondayMorning")));
+      row.append(ol);
+    }
+    c.append(row);
+  }
+  c.append(el("div", "note", t("challenge.councilNote")));
+  void roles;
+  void show;
+  return c;
+}
+
+/* PREMISE CHALLENGES — the loudest card here when one is open, because a premise
+   disputes the frozen goal that every finding below was measured against.
+
+   Two resolutions, and NEITHER IS AUTOMATIC: dismiss (free, a real write, so a
+   button) or change the goal (a copy-able command, because it needs a FILE the
+   panel must not invent). */
+function challengePremiseCard(s, slug, body) {
+  const all = Object.entries(s.premises || {});
+  if (!all.length) return null;
+  const open = all.filter(([, q]) => q.status === "open");
+  const c = card(t("challenge.premises"));
+  if (open.length) c.classList.add("ch-premise-loud");
+  for (const [id, q] of all) {
+    const box = el("div", "ch-premise");
+    const hdr = el("div", "row-actions");
+    hdr.append(el("span", "mono dim", id));
+    hdr.append(chip(t("challenge.disputes", { what: q.disputes }), q.status === "open" ? "bad" : ""));
+    hdr.append(chip(q.status, q.status === "open" ? "warn" : ""));
+    box.append(hdr);
+    if (q.quote) box.append(el("blockquote", "ch-quote", q.quote));
+    const rows = [];
+    if (q.reframe) rows.push([t("challenge.field.reframe"), q.reframe]);
+    if (q.what_changes) rows.push([t("challenge.field.whatChanges"), q.what_changes]);
+    if (q.cheapest_test) rows.push([t("challenge.field.cheapestTest"), q.cheapest_test]);
+    if (q.reason) rows.push([t("challenge.field.reason"), q.reason]);
+    box.append(kvList(rows));
+    if (q.status === "open") {
+      const acts = el("div", "row-actions");
+      const dismiss = el("button", "btn btn-sm", t("challenge.dismissPremise"));
+      dismiss.type = "button";
+      dismiss.addEventListener("click", () => challengeReasonPrompt({
+        title: t("challenge.dismissPremise"),
+        note: t("challenge.dismissPremiseNote"),
+        onSubmit: async (reason) => {
+          const r = await post("/api/challenge/premise", { slug, id, reason });
+          toast(r.command, r.ok ? "ok" : "bad", r.output);
+          renderChallenge(body);
+        },
+      }));
+      acts.append(dismiss);
+      box.append(acts);
+      // Adopting needs a goals FILE, so it is a command and never a button.
+      box.append(laneCommand(`orc challenge goals ${slug} --set <path> --reason "…"`, t("challenge.adoptPremiseWhy")));
+    }
+    c.append(box);
+  }
+  c.append(el("div", "note", t("challenge.premiseNote")));
+  return c;
+}
+
+/* OPPORTUNITIES — no severity colour anywhere in this card. An opportunity never
+   blocks, and every one of them carries a first step and a route. */
+function challengeOpportunityCard(s, slug, body) {
+  const all = Object.entries(s.opportunities || {});
+  if (!all.length) return null;
+  const c = card(t("challenge.opportunities"));
+  c.append(el("div", "note", t("challenge.opportunityNote")));
+  for (const [id, o] of all) {
+    const box = el("div", "ch-opportunity");
+    const hdr = el("div", "row-actions");
+    hdr.append(el("span", "mono dim", id));
+    hdr.append(chip(o.status, ""));
+    // The route is the CLI's own word — it is the lane this belongs in next.
+    if (o.route && o.route !== "none") hdr.append(chip(o.route, "info"));
+    box.append(hdr);
+    const rows = [];
+    if (o.what) rows.push([t("challenge.field.what"), o.what]);
+    if (o.upside) rows.push([t("challenge.field.upside"), o.upside]);
+    if (o.first_step) rows.push([t("challenge.field.firstStep"), o.first_step]);
+    if (o.anchor) rows.push([t("challenge.field.anchor"), o.anchor]);
+    if (o.confidence) rows.push([t("challenge.field.confidence"), o.confidence]);
+    if (o.resolved_reason) rows.push([t("challenge.field.reason"), o.resolved_reason]);
+    box.append(kvList(rows));
+    if (o.status === "open") {
+      const acts = el("div", "row-actions");
+      for (const take of [true, false]) {
+        const b = el("button", "btn btn-sm" + (take ? "" : " btn-ghost"), take ? t("challenge.takeOpportunity") : t("challenge.dropOpportunity"));
+        b.type = "button";
+        b.addEventListener("click", () => challengeReasonPrompt({
+          title: take ? t("challenge.takeOpportunity") : t("challenge.dropOpportunity"),
+          note: t("challenge.opportunityReasonNote"),
+          onSubmit: async (reason) => {
+            const r = await post("/api/challenge/opportunity", { slug, id, take, reason });
+            toast(r.command, r.ok ? "ok" : "bad", r.output);
+            renderChallenge(body);
+          },
+        }));
+        acts.append(b);
+      }
+      box.append(acts);
+    }
+    c.append(box);
+  }
+  return c;
 }
 
 /* A paid action is a COMMAND, never a button. This renders one, with the reason

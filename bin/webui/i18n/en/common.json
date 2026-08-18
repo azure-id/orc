@@ -64,5 +64,6 @@
   "common.open": "Open",
   "common.writeFail": "That did not work",
   "common.runInClaude": "Run this in Claude Code",
-  "shortcuts.panelsLetters": "Promises, Boundary, Self-serve, Mocked Skill Use"
+  "shortcuts.panelsLetters": "Promises, Boundary, Self-serve, Mocked Skill Use",
+  "common.confirm": "Confirm"
 }

@@ -47,10 +47,16 @@ iteration had run.
 | `challenge lint <path>` | 0 clean · 1 findings · 2 unreadable |
 | `challenge outline <path>` | 0 · 2 unreadable |
 | `challenge record` | 0 recorded · 2 malformed · 3 unknown slug |
+| `challenge roles` | 0 (static — works with no cycle, no project, no git) |
+| `challenge council <slug>` | 0 roster set · 1 roster UNSET · 3 unknown slug |
+| `challenge council --set` | 0 · 2 no reason, or an unknown lens · 3 unknown slug |
+| `challenge note` | 0 · 2 malformed (incl. a `findings[]` key) · 3 unknown slug |
+| `challenge premise <slug> <id> --dismiss` | 0 · 2 no reason · 3 unknown id |
+| `challenge opportunity <slug> <id> --take\|--drop` | 0 · 2 no reason, or neither/both flags · 3 unknown id |
 | `challenge accept` / `rebut` | 0 · 2 no reason · 3 unknown id |
 | `challenge template` / `goals` | 0 · 2 refused (no reason, or no such file) · 3 unknown |
 | `challenge report` | 0 · 3 unknown |
-| `challenge init` | 0 · 2 exists, or a required flag is missing, or no template decision |
+| `challenge init` | 0 · 2 exists, or a required flag is missing (`--goal`, `--audience`, `--done-means`, **`--council`**), or no template decision |
 
 ## Per-finding freshness is COVERAGE-RELATIVE
 
@@ -138,3 +144,42 @@ MISSING-REVISION · TAMPERED`
 Mirrored in `bin/cli.js`'s `CHALLENGE_STATES` and `challengeStateOf()` —
 documented drift the token lint cannot see (a word list is not a single token),
 covered by a golden test instead. Change both together.
+
+## Ledger v2 (v0.49.1) — additive, and `council: null` is a real state
+
+Every v1 key keeps its name, its meaning and its position. Added:
+
+```jsonc
+{
+  "version": 2,
+  "council": ["reader","contrarian","executor"],   // FROZEN; null on a migrated v1 cycle
+  "council_version": 1,
+  "opportunities": { "X-002": { "raised_at": 2, "status": "open", "route": "brainstorm", "…": "…" } },
+  "premises":      { "Q-001": { "raised_at": 2, "disputes": "goal", "status": "open", "…": "…" } },
+  "iterations": [
+    { "n": 2,
+      "graded_against_council": 1,
+      "council": [
+        { "lens": "contrarian", "ran": true,  "raised": 6, "adopted": 4, "rejected": 1, "merged": 1, "out_of_goal": 0 },
+        { "lens": "outsider",   "ran": false, "reason": "usage limit reached mid-batch" }
+      ],
+      "council_coverage_pct": 100,
+      "findings": [
+        { "id": "C-004", "lens": "contrarian", "disposition": "adopted",
+          "corroborated_by": ["outsider"], "dimension": "D2", "severity": "P0", "…": "…" }
+      ]
+    }
+  ]
+}
+```
+
+- **`lens` is required on every finding.** A v1 iteration read back gets `judge`,
+  so the per-lens legend never gains a blank column.
+- **`council: null` is not "no council".** It means the roster was never
+  answered, and `orc challenge record` **refuses the next iteration by name**
+  (`council-unset`) until it is. A silent default would be ORC picking the
+  council — rule 12.
+- **`council_version`** increments on a recorded `recouncil` event, exactly like
+  `goals.version` and `template.version`, and the iteration rail draws a THIRD
+  version break for it: comparing an iteration judged by three lenses to one
+  judged by six is not a comparison.

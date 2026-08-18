@@ -64,6 +64,7 @@ All of it uses **easy English**, short sentences, and the same fake project.
 |---|---|---|
 | [orc-verify](../templates/skills/orc-verify/examples/verify-mock.md) | `/orc-verify` | Verify only your git-modified changes. Read-only |
 | [orc-challenge](orc-challenge.md) | `/orc-challenge` | Grade a finished document, then stop and make you fix it in another session |
+| [orc-challenge-council](orc-challenge-council.md) | `/orc-challenge` | Six more ways of looking at the same document — and you choose which ones run |
 | [orc-pact](orc-pact.md) | `/orc-pact` | The promises your system makes, and which are in doubt right now |
 | [orc-boundary](orc-boundary.md) | `/orc-boundary` | What the agent should **not** try here, and what would change that |
 | [orc-aftermath](orc-aftermath.md) | `/orc-aftermath` | Did what we shipped hold up. Churn is a signal, never a verdict |

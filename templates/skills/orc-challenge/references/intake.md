@@ -37,6 +37,46 @@ the user's to state, and the lane waits.
 | **`out_of_scope`** — what the artifact deliberately does not cover | no | **ASK ONCE**, accept "nothing". Without it, D7 findings are guesses |
 | **`revision_mode`** — where the fixed version will be put | **yes** | **ASK.** `in-place` is the default OFFERED, and it is confirmed, never assumed — the resume depends on it |
 | **`kind`**, **`dimensions`**, **`slug`** | yes | derived from the answers, then **confirmed** — deriving a dimension set is a FACT, so ORC may propose it; accepting it is a DECISION, so the user confirms |
+| **`council`** — which lenses review this | **yes** | **ASK.** ORC SUGGESTS a roster from the `kind` and the goal; the user PICKS it. `--council` has no default and `init` refuses by name. `none` is a first-class answer |
+
+## The council ask — question 7, and it is a P0
+
+**a lane that picks its own council has broken this contract.** A council chosen
+by ORC is ORC deciding which kinds of criticism the user is allowed to hear,
+which is a bigger decision than any single finding in the run.
+
+Four rules on this block:
+
+1. **The suggestion is COMPUTED; the selection is the USER's.** Deriving a
+   suggestion from `kind` + the goal is a FACT (the same latitude `--dimensions`
+   already has); accepting it is a DECISION.
+2. **The cost is stated in DISPATCHES, never in dollars.** `/orc-budget`'s rule:
+   no dollar figure without a dated price table, and this ask has no plan to
+   price.
+3. **`challenge_reader` is announced when the roster overrides it.** The config
+   key seeds the reader's default; if the user unticks it while
+   `challenge_reader: on`, say so — *a shadowed setting must never be silent*
+   (the `opus5_only` precedent).
+4. **The table is read from `orc challenge roles --kind <k> --json`.** The skill
+   NEVER hand-lists the lenses, and neither does the panel. One catalogue, three
+   renderers — the Flow-stepper rule.
+
+```
+7  Who is on the council for this review?  (judge always runs; advisor runs on a fail)
+
+     ORC suggests, for a TSD aimed at implementers:
+       [x] cold reader     can a stranger answer this document's own questions?
+       [x] contrarian      assume it has a fatal flaw, then go find it
+       [x] executor        can this be started on Monday? where is the first step?
+       [ ] outsider        what does this assume you already know?
+       [ ] principles      is this even the right problem?          (never blocks)
+       [ ] expansionist    what upside is being missed?             (never blocks)
+
+     Reply with the ones you want (or "all", or "none").
+     Each one is one extra read-only Opus 5 dispatch per iteration.
+```
+
+Roles, efforts, the reader/outsider seam and the class split: `council.md`.
 
 ## The asking is ONE round, not an interrogation
 
@@ -45,8 +85,8 @@ Every question that is ready goes in the same round — the
 the remaining three in a second round rather than filling them in.
 
 ```
-Before I can judge this, I need to know what "good" means for it. Six questions,
-one round:
+Before I can judge this, I need to know what "good" means for it. Seven
+questions, one round:
 
 1  What must this document achieve?  (e.g. "a backend team implements it without
    asking me anything" · "it survives Tuesday's review board" · "our offshore
@@ -58,6 +98,7 @@ one round:
 5  Anything deliberately OUT of scope?
 6  When you fix it, where will the fixed version go?
       a  over the same file        b  docs/<name>-v{n}.md        c  a folder
+7  Who is on the council?  (the block above — I suggest, you pick)
 ```
 
 ## "I don't know yet" is a legitimate answer to `goal`
@@ -120,10 +161,11 @@ orc challenge init <slug> \
   --out-of-scope "…" --context-ref "…" \
   --template docs/templates/tsd.md \
   --dimensions D1,D2,D3,D4,D5,D6 \
+  --council reader,contrarian,executor \
   --revision new-file --revision-pattern "docs/tsd-payments-v{n}.md"
 ```
 
-`--goal`, `--audience` and `--done-means` have **no default value**: a run that
-tried to skip this round fails at the CLI, by name, rather than silently
-inventing a purpose. That is rule 0 made structural instead of merely written
-down.
+`--goal`, `--audience`, `--done-means` and `--council` have **no default value**:
+a run that tried to skip this round fails at the CLI, by name, rather than
+silently inventing a purpose or a roster. That is rules 0 and 12 made structural
+instead of merely written down.

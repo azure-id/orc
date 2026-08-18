@@ -94,6 +94,15 @@ contract** too, because a finding is only a finding relative to a goal, and a
 contract. Convergent and divergent work split the same way; the two sentences are
 registered as a pair so neither lane can drift into the other's habits.
 
+**The fourth half, for a lane that CHOOSES ITS REVIEWERS** (`/orc-challenge`'s
+council): deriving a suggested roster from the artifact's kind and goal is a
+FACT, so ORC may compute it — but accepting it is a DECISION, so the lane waits,
+and **a lane that picks its own council has broken this contract.** A council
+chosen by ORC is ORC deciding which kinds of criticism the user is allowed to
+hear, which is a bigger decision than any single finding in the run. Registered
+alongside the other three for the same reason: all four are one contract seen
+from four sides.
+
 ## The confirmation gate — an empty frontier does NOT end the session
 
 When no open question remains, do not declare victory. Play the idea back in

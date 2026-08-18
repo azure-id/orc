@@ -35,7 +35,7 @@
   "overview.item.wikiNone.cta": "Open Knowledge",
   "overview.item.wikiUnregistered.title": "The wiki is not registered",
   "overview.item.wikiUnregistered.body": "Docs exist but nothing can read them. Registration is derived from the docs, so `orc wiki sync` is free and instant — never a re-scan.",
-  "overview.item.wikiUnregistered.cta": "Sync on Knowledge",
+  "overview.item.wikiUnregistered.cta": "Open Knowledge",
   "overview.item.patterns.title": "No code pattern cached",
   "overview.item.patterns.body": "Without one, executors write generic code instead of code that matches this repo. /orc-pattern codifies it once and every later run reuses it.",
   "overview.item.patterns.cta": "Open Knowledge",
@@ -76,5 +76,6 @@
   "overview.item.exportStale.cta": "Recompile it",
   "overview.item.pactBroken.cta": "Open Promises",
   "overview.item.boundaryRefuse.cta": "Open Boundary",
-  "overview.item.docDrifted.cta": "Open Docs"
+  "overview.item.docDrifted.cta": "Open Docs",
+  "overview.item.wikiDebt.cta": "Open Knowledge"
 }

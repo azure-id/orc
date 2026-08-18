@@ -88,3 +88,64 @@
 .ch-prompt::-webkit-scrollbar { width: 8px; height: 8px; }
 .ch-prompt::-webkit-scrollbar-track { background: transparent; }
 .ch-prompt::-webkit-scrollbar-thumb { background: var(--line); border-radius: 4px; }
+
+/* --- the council (v0.49.1) ----------------------------------------------- */
+/* One row per roster lens. A NOT-RUN row keeps its slot and a NOT-SELECTED row
+   renders muted (`.row-muted`, defined once in 03-components.css) — filtering
+   either out makes "the contrarian found nothing" and "the contrarian never
+   ran" look identical. Same reason an OFF phase keeps its slot in the Flow
+   stepper. */
+.ch-lens-row {
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
+  padding: var(--sp-3);
+  margin-top: var(--sp-2);
+  display: grid;
+  gap: var(--sp-1);
+}
+.ch-lens-name { font-weight: 600; }
+.ch-lens-agent { font-size: 12px; }
+.ch-monday-head { margin-top: var(--sp-2); font-weight: 600; font-size: 13px; }
+.ch-monday { margin: 0; padding-left: var(--sp-4); color: var(--text-dim); display: grid; gap: 2px; }
+
+/* The per-lens legend under the convergence chart. The bar keeps SEVERITY
+   stacking — a bar that works does not gain a second dimension — so "which lens
+   is earning its money" gets its own row instead. */
+.ch-lens-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  margin-top: var(--sp-2);
+  font-size: 12px;
+  color: var(--text-faint);
+}
+.ch-lens-legend-item { display: inline-flex; gap: 6px; align-items: baseline; }
+.ch-lens-legend-n { color: var(--text); font-variant-numeric: tabular-nums; }
+
+/* --- premise challenges --------------------------------------------------- */
+/* THE LOUDEST CARD ON THE PANEL when one is open, and it sits above the
+   findings: a premise disputes the yardstick every finding below it was
+   measured against. */
+.ch-premise-loud { border-color: var(--bad); }
+.ch-premise {
+  border: 1px solid var(--line-soft);
+  border-left: 3px solid var(--bad);
+  border-radius: var(--radius-sm);
+  padding: var(--sp-3);
+  margin-top: var(--sp-3);
+  display: grid;
+  gap: var(--sp-2);
+}
+
+/* --- opportunities -------------------------------------------------------- */
+/* NO SEVERITY COLOUR ANYWHERE IN HERE. An opportunity never blocks and never has
+   a severity; colouring it like a defect is exactly the confusion the class
+   split exists to prevent. */
+.ch-opportunity {
+  border: 1px dashed var(--line-soft);
+  border-radius: var(--radius-sm);
+  padding: var(--sp-3);
+  margin-top: var(--sp-3);
+  display: grid;
+  gap: var(--sp-2);
+}

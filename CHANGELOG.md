@@ -10,6 +10,329 @@ Format: `### v<version> — <title> _(<date>)_`.
 
 ---
 
+### v0.49.1 — the challenge council, and a `--json` that stops throwing things away _(2026-08-18)_
+
+One release, two workstreams, and **zero new skills**. They ship together because
+they are the same defect seen twice: **ORC computes far more than it shows.**
+`computeWikiFreshness` builds a per-doc table that `--json` threw away;
+`challenge record` computes per-dimension, per-severity, per-iteration detail
+that the panel rendered as one chip. Both halves are "stop discarding what you
+already computed" — and only one of them also adds new thinking.
+
+---
+
+## Part A — the challenge council
+
+### Five more ways of looking, and none of them is ORC's to choose
+
+`/orc-challenge` had one grounded opinion (the judge) and one blind one (the cold
+reader), and both read the artifact the same way: *does this document do what a
+document is supposed to do?* Five ways of looking were missing, and each one is
+missed for a different reason:
+
+| Role | It asks | It fails when |
+|---|---|---|
+| **The Contrarian** | where is the fatal flaw? | it assumes the artifact is fine and stops looking |
+| **The First Principles Thinker** | are we even solving the right problem? | it accepts the framing it was handed |
+| **The Expansionist** | what is being undervalued here? | it only counts what is wrong |
+| **The Outsider** | what does this assume I already know? | it is an expert and cannot un-know things |
+| **The Executor** | what do you actually do on Monday morning? | it grades the theory and never the first step |
+
+> **A lens raises; only the judge resolves. ORC proposes the council; the user
+> picks it.**
+
+**`a lane that picks its own council` has broken this contract** — registered as
+the fourth member of the family with `a lane that answers its own interview
+question`, `a lane that picks its own favourite` and `a lane that fixes what it
+judged`. A council chosen by ORC is ORC deciding **which kinds of criticism the
+user is allowed to hear**, which is a bigger decision than any single finding in
+the run. So `orc challenge init --council` has **no default** and refuses by
+name, exactly like `--goal` since v0.47.0:
+
+```
+❌ --council is required and has no default. ORC SUGGESTS a roster (from the kind
+   and the goal); the user PICKS it. […] Suggested for --kind tsd:
+   reader,contrarian,executor.
+   (a lane that picks its own council has broken this contract)
+```
+
+`none` is a first-class answer and reproduces the v0.47.0 review exactly. The
+cost is stated in **dispatches**, never in dollars — `/orc-budget`'s rule: no
+dollar figure without a dated price table.
+
+### Two of them cannot produce a finding without lying
+
+This is the most important decision in the release.
+
+**The expansionist.** A finding must carry `serves` — the goal element it
+advances — and `record` DROPS one without it. Its entire brief is *"what upside
+is everyone missing?"*, which by construction is **not** in the stated goal.
+Given a `serves` field it would either invent a goal element or be silently
+dropped. So it returns an **opportunity**: no severity, never in `findings[]`,
+never near the pass gate, always with a `first_step` and a route
+(`brainstorm | pact | grill | none`). It is conserved — `--take` or `--drop`,
+both requiring a reason — and **this lane never builds one**.
+
+**The first-principles thinker.** Its most valuable output is *"you are asking
+the wrong question entirely"*, and in this lane the question is the **frozen
+goal**. A finding is measured against the goal; a premise challenge disputes the
+**yardstick**. Those cannot be the same object. It returns a **premise**, and
+exactly two resolutions exist, both a human's: adopt it (`orc challenge goals
+--set`, a `regoal` that bumps `goals.version`) or dismiss it with a mandatory
+reason that stays in the report forever. **The judge never sees that report** —
+handing a judge a document arguing the frozen goal is wrong would bend every
+finding it produced afterwards.
+
+> The three finding lenses feed **the judge**. The two non-finding lenses feed
+> **the user**. That sentence is the whole architecture.
+
+### The gate that makes five extra reviewers safe
+
+The obvious failure of adding five reviewers is that the judge quietly ignores
+four of them and the run looks identical while costing five times more.
+
+> **Every id the council raised must appear in the judge's return with exactly
+> ONE disposition and a reason. `council_coverage_pct` must be 100.**
+
+That is conservation applied to **input** instead of to carry-forward, and the
+CLI enforces it without reading a word of prose: the orchestrator writes a
+machine JSON beside every council report, and **`orc challenge record` reads that
+directory itself**. The judge cannot shrink the set by omission, because the set
+was never the judge's to report.
+
+```
+❌ malformed verdict — council coverage is below 100% — every id the council
+   raised needs exactly ONE disposition (adopted | merged | rejected |
+   out-of-goal). Missing: O-003
+```
+
+**An adopted finding keeps the raiser's id.** `C-004` stays `C-004` in the
+verdict, in the report, in iteration 9 — which is what lets the panel say *"the
+contrarian raised four of the six blockers this iteration"*, and how a user finds
+out within two rounds whether a lens is worth its money.
+
+**PASS is computed exactly as before.** An adopted council finding is an ordinary
+finding from that moment on; `challengeBlocking()`, `challengeOpen()`,
+`challengeCounts()` and `challengeStateOf()` are untouched. The pass gate learns
+nothing about the council.
+
+### A selected role is never silently absent
+
+Rule 6 (`NOT-CHECKED` is never silent), extended from dimensions to roles. A
+roster lens returns either a report or an explicit `{ "lens": …, "ran": false,
+"reason": … }`, and silence is rejected by name:
+
+```
+❌ malformed verdict — executor is on the roster but returned neither a report
+   nor an explicit { "lens": "executor", "ran": false, "reason": "…" }.
+   A selected role is never silently absent.
+```
+
+The trace carries it too, so `orc stats` and `/orc-retro` see a NOT-RUN lens and
+not only the panel:
+
+```
+CHALLENGE iter=2 findings=P0:1/P1:3/P2:6 coverage=100% council=4/5 raised=C:6,O:3,E:2 adopted=9 verdict=FAIL
+```
+
+### Effort is a measurement, not a cost choice
+
+`outsider` is `low` for the same reason the cold reader is: a harder-thinking
+outsider reasons its way *around* an unexplained acronym and reports the document
+is fine, which is exactly the gap the instrument exists to find. **Nothing may
+ever upgrade it.** `contrarian` is `high` because at low effort it returns the
+three surface complaints the free lint already caught for nothing.
+
+That is why there is **no model or effort config key**: a key that lets
+`outsider: low` be tuned is a key that lets the instrument be broken.
+
+All seven lenses are `claude-opus-5`, so **`opus5_only` is a no-op for this lane —
+it is unaffected, not exempt** — and the agent count moves 46 → 51 with no paired
+variants.
+
+### The reader / outsider seam
+
+These two are the closest pair in ORC and the one place this release could have
+shipped a duplicate instrument. The distinction is structural:
+
+| | `reader` | `outsider` |
+|---|---|---|
+| Told the audience | **yes** | **no** |
+| What it generates | 8–15 questions the artifact *promised* to answer | nothing — it reacts to what is on the page |
+| What it returns | a **scored** questionnaire (`8/12`) | an **unscored** ranked list of assumed knowledge |
+| The measurement | *can this be answered from the page?* | *what does this page assume you already know?* |
+
+They are dispatched with no knowledge of each other. Where they agree, that is
+recorded as `corroborated_by` — the strongest comprehension evidence the lane can
+produce, and **never an automatic severity bump**.
+
+### The roster is frozen, and `council: null` is a real state
+
+Ledger `version: 2`, additive: every v1 key keeps its name, meaning and position.
+The roster is a per-cycle **frozen** decision changed only by a recorded
+`recouncil` event, which bumps `council_version` exactly like `goals.version` —
+and the iteration rail draws a **third** version break for it, because comparing
+an iteration judged by three lenses to one judged by six is not a comparison.
+
+**There is no `challenge_council` config key.** A global default roster would
+silently answer the one question this release exists to ask. A cycle opened
+before v0.49.1 reads back with `council: null` and `record` refuses the next
+iteration by name until it is answered — `orc challenge council <slug>` exits 1
+for that state, because **UNSET is an answer, not an error**.
+
+### New commands
+
+| Command | Does |
+|---|---|
+| `orc challenge roles [--kind k] [--json]` | the lens catalogue. Static — it works with no cycle at all |
+| `orc challenge council <slug> [--json]` | the frozen roster + per-iteration participation (0 set · 1 unset · 3 unknown) |
+| `orc challenge council <slug> --set <csv\|all\|none> --reason "…"` | a recorded `recouncil` |
+| `orc challenge note <slug> --from <json>` | opportunities and premises ONLY — it refuses a `findings[]` key by name |
+| `orc challenge premise <slug> <id> --dismiss --reason "…"` | |
+| `orc challenge opportunity <slug> <id> --take\|--drop --reason "…"` | |
+
+### The panel
+
+It **derives nothing**: it does not name a lens, does not know which class
+blocks, does not compute a disposition and does not decide the suggestion. A test
+greps the panel for every lens display name, every disposition word and every
+agent name and fails if it finds one.
+
+New: a **Council card** directly under the goal (a NOT-RUN row keeps its slot
+with its reason; a NOT-SELECTED row is muted with the line that would add it; the
+council executor's `monday_morning` list sits here, because it is the most
+legible thing this lane produces for a non-engineer); a **premise card** that is
+the loudest thing on the panel when one is open and sits *above* the findings; an
+**opportunities card** with no severity colour anywhere in it; a lens chip and an
+`also found by` chip on every finding; and a per-lens legend under the
+convergence chart.
+
+There is deliberately **no route for `council --set`** — changing the roster is a
+decision with a recorded reason the *lane* takes in conversation.
+
+### Deliberately absent
+
+- **An anonymised peer-review round.** It doubles the dispatch count, and the
+  judge's adoption pass already reconciles the lenses. The payoff — *"two
+  advisors independently hit the same thing"* — is `corroborated_by[]` at zero
+  extra cost.
+- **A chairman agent.** ORC already has one: the advisor groups findings by root
+  cause and orders the fix. Rule 5 still holds — no advisor on PASS.
+- **A `challenge_council` key, any model or effort key, a `block` mode on a
+  council output, a loop cap, and auto-severity from corroboration.**
+
+---
+
+## Part B — the knowledge deepening
+
+### `--json is not a summary`
+
+> A read's `--json` is the WHOLE computed object, not a summary. **A field the
+> human path prints and the JSON omits is drift — and it is drift no lint can
+> see, because both halves live in one function.**
+
+`wikiStatus()` computes `computeWikiFreshness(...)` and the terminal branch
+printed the per-doc FRESH/AGING/STALE counts, **the worst doc's filename** (the
+thing actually pinning the tier), the top five stale docs with their own
+distances, and the crosslink boundary state. The `--json` branch emitted five
+scalars and `blind` **as a count**. The panel therefore *could not* be as
+detailed as the terminal, no matter how it was written.
+
+`wiki status --json` now carries `counts`, `worst`, `per_doc[]`, `blind_spot` as
+the **file list it always was**, `orientation`, `crosslink`, and `free_repairs`
+reused verbatim from `wiki plan` — a user must never be able to pay for what a
+free step fixes. **Every legacy key keeps its name, position and meaning** (`orc
+doctor`, the overview tile and `_shared/detecting-artifacts.md` all read them)
+and the exit code stays 0 in every state.
+
+### You can finally see what the wiki contains
+
+`orc wiki` had six subcommands and **not one of them listed the docs**. A user
+could learn the wiki was STALE with 14 docs and 47 commits of drift, and could
+not learn what any of those 14 docs was about.
+
+| Command | Returns | Exit |
+|---|---|---|
+| `orc wiki docs [--json]` | the doc table: tier, its OWN distance, covers, usage, tags, retire hint | 0 · 1 none · 3 unregistered |
+| `orc wiki show <doc> [--body]` | one doc + its tags + the free repairs that apply to IT | 0 · 2 unreadable · 3 unknown |
+| `orc wiki coverage [--json]` | % of tracked files covered by ≥1 doc, uncovered set by DIRECTORY | 0 full · 1 gaps |
+| `orc pattern show <lang> [--body]` | headings, conventions vs invariants, flagged conflicts | 0 · 1 absent · 2 unknown key |
+| `orc gotcha show <id>` | one entry, EVERY field | 0 · 3 unknown |
+| `orc gotcha list --archived` | the archive | 0 · 1 none |
+| `orc gotcha prune --dry-run` | exactly what eviction would archive, and why | 0 none · 1 would prune |
+
+**`orc wiki coverage` is a REPORT and never a gate.** No threshold, no config
+key, nothing branches on it — a repo that deliberately documents four subsystems
+out of forty is not broken, and a coverage percentage that starts nagging becomes
+a number people game. The uncovered set is collapsed to directories and ranked by
+file count, because *"240 uncovered files, all in `vendor/`"* and *"12 uncovered
+files, all in `src/payments/`"* are opposite situations.
+
+**`--body` is opt-in** on both `wiki show` and `pattern show`: prose is returned
+only on an explicit request, exactly one artifact at a time, rendered as DOM and
+never as HTML.
+
+**`orc pattern show` invents nothing.** The codifier may not write a parseable
+header today; with none it returns `headered: false` plus the headings it could
+parse, and says so in one line. It **never** derives a "codified at" from the
+file's mtime — the `/orc-pact` UNCHECKABLE rule.
+
+### Two doctor findings, and the restraint is the design
+
+| id | Warns when | Fix |
+|---|---|---|
+| `wiki-unregistered` | the wiki is unregistered, drifted or corrupt | `orc wiki sync` — free, instant, and until it is done nothing can read the wiki at all |
+| `wiki-debt` | tier is **STALE** and `wiki plan` has pending rows | `/orc-wiki refresh --top 2` |
+
+**`wiki-debt` fires on STALE and never on AGING.** Aging is a normal state every
+living repo passes through, and a doctor that warns about it is a doctor people
+learn to ignore. Deliberately not added: `pattern-missing` — a project with no
+cached pattern is not misconfigured, and warning about it would be ORC nagging
+for a paid scan.
+
+Both route to the Knowledge panel: *a caution routes to the panel that can CLEAR
+it*, and `orc wiki sync` is a button there.
+
+### `orc ui ▸ Knowledge` — five tabs
+
+```
+Knowledge   [ Wiki ] [ Coverage ] [ Code patterns ] [ Memory ] [ Peers ]
+```
+
+A header strip renders above them all — tier · docs · covered % · blind ·
+pending · patterns · repair notes — and **a value the CLI could not compute
+renders as an em dash, never as a guess.**
+
+- **Wiki** — the tier card with the **worst doc named** (a hash is not something
+  anybody can go and refresh), the per-doc counts as a stacked bar, free repairs
+  above everything priced, and **the doc table**. A row expands in place, one at
+  a time, detail fetched on first open.
+- **Coverage** — one honestly-qualified number, the uncovered set by directory,
+  the structural blind spot as the file list it always was, and one line that is
+  not optional chrome: coverage is a report, not a target.
+- **Code patterns** — per language, with **the conflicts the codifier flagged in
+  their own block**: they are the most decision-shaped thing in the file and were
+  invisible outside it. Reveal shows the text that is injected literally into
+  every executor slice; a user who cannot read it cannot trust it.
+- **Memory** — every field the CLI already emitted, headroom against
+  `gotchas_max`, and a **preview-then-apply prune that names every entry** (a
+  count is not consent). The archive is reachable and labelled recoverable.
+- **Peers** — compact, read-only, every word the CLI's. It links to Crosslink and
+  never duplicates its editor: one boundary, one picture.
+
+### Guards
+
+Five new agent files named explicitly in `verify-package.js` (floor 46 → 51,
+skills unchanged at 38); five new contract-lint entries; a golden test comparing
+`CHALLENGE_LENS_META` to `council.md`'s roster table; and one test per new read,
+because `--json is not a summary` is drift no lint can catch.
+
+`css/panels/knowledge.css` is a new file, so it is `<link>`ed in `app.html` **and**
+named in `verify-package.js` — the manifest is the load order, and a file the
+manifest forgot is a file the test suite never sees.
+
+---
+
 ### v0.49.0 — the document is a folder, and the file is a build artifact _(2026-08-17)_
 
 `/orc-doc` only. No other lane changes, and **zero new agents**.

@@ -58,6 +58,10 @@ const INIT = (root, extra) => [
   "--audience", "backend engineers, 2 of 5 non-native English readers",
   "--done-means", "no open interface question and no TBD in the design sections",
   "--template", "docs/templates/tsd.md",
+  // v0.49.1 — `--council` has no default either (rule 12). `none` reproduces
+  // the v0.47.0 judge-plus-reader review EXACTLY, which is what every test
+  // written before the council is asserting about.
+  "--council", "none",
   ...(extra || []),
 ];
 

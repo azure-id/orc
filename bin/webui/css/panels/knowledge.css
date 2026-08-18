@@ -1,0 +1,86 @@
+/* panels/knowledge.css — the Knowledge panel (v0.49.1).
+
+   Five tabs' worth of surface. Loaded by app.html in the order its <link> sits
+   in that manifest, and for CSS the load order IS the cascade order — which is
+   why 06-responsive and 04-motion come after every panel sheet.
+
+   NO COLOUR TOKEN IS DEFINED HERE. Every one of them is declared once, on bare
+   :root, in 00-tokens.css. */
+
+/* --- the header strip (v0.49.1) ------------------------------------------ */
+/* Above the tabs, on every one of them: what ORC knows about this repo, in one
+   line. A `—` means the CLI could not compute it, and that is an ANSWER. */
+.kn-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-4);
+  padding: var(--sp-3);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
+  margin-bottom: var(--sp-3);
+}
+.kn-strip-item { display: grid; gap: 2px; }
+.kn-strip-value { font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.kn-strip-label { font-size: 11px; color: var(--text-faint); text-transform: uppercase; letter-spacing: .04em; }
+
+/* --- the per-doc tier bar + the coverage bar ------------------------------ */
+.kn-tierbar {
+  display: flex;
+  height: 8px;
+  min-width: 120px;
+  flex: 1;
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--line-soft);
+}
+.kn-tierbar-seg { width: var(--w); }
+.kn-tier-ok { background: var(--ok); }
+.kn-tier-warn { background: var(--warn); }
+.kn-tier-bad { background: var(--bad); }
+.kn-tier-idle { background: var(--idle); }
+
+.kn-coverage { display: flex; align-items: baseline; gap: var(--sp-3); margin-bottom: var(--sp-2); }
+.kn-coverage-num { font-size: 34px; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* --- rows that expand IN PLACE ------------------------------------------- */
+/* One at a time, detail fetched on first open, and NO detail box below the
+   table — the Runs-row rule. */
+.kn-doc-row { cursor: pointer; }
+.kn-doc-row:hover td { background: var(--surface-2); }
+.kn-doc-row.open td { background: var(--surface-2); }
+.kn-doc-detail > td { background: var(--surface-2); padding: var(--sp-3); }
+
+/* --- revealed prose ------------------------------------------------------- */
+/* Rendered as DOM by renderMd, never as HTML. It scrolls INSIDE itself; the page
+   body never scrolls horizontally. */
+.kn-body {
+  margin-top: var(--sp-2);
+  max-height: 420px;
+  overflow: auto;
+  padding: var(--sp-3);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+.kn-body::-webkit-scrollbar { width: 8px; height: 8px; }
+.kn-body::-webkit-scrollbar-track { background: transparent; }
+.kn-body::-webkit-scrollbar-thumb { background: var(--line); border-radius: 4px; }
+
+/* --- patterns ------------------------------------------------------------- */
+.kn-pattern {
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
+  padding: var(--sp-3);
+  margin-top: var(--sp-2);
+  display: grid;
+  gap: var(--sp-2);
+}
+/* The most decision-shaped thing in a pattern file, and until now invisible
+   outside it. */
+.kn-conflicts { border-left: 3px solid var(--warn); padding-left: var(--sp-3); display: grid; gap: 4px; }
+.kn-conflicts-head { font-weight: 600; font-size: 13px; }
+
+/* --- preview-then-apply --------------------------------------------------- */
+.kn-prune { margin-top: var(--sp-3); display: grid; gap: var(--sp-2); }
+.kn-prune-head { font-weight: 600; font-size: 13px; }

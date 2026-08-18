@@ -693,3 +693,97 @@ test("mock-run: the markdown renderer terminates on every shipped document", () 
 
   delete global.document;
 });
+
+// ── v0.49.1 — the council, and the knowledge deepening ──────────────────────
+
+test("challenge panel: it draws the council, it never NAMES a lens", () => {
+  const js = panelJs("challenge");
+
+  // THE CATALOGUE IS THE CLI'S. `orc challenge roles --json` is the one list,
+  // and the panel is one of its three renderers — the Flow-stepper rule applied
+  // to a second table.
+  for (const display of [
+    "The Contrarian",
+    "The Cold Reader",
+    "The Outsider",
+    "The Executor",
+    "The First Principles Thinker",
+    "The Expansionist",
+  ])
+    assert.ok(!js.includes(display), `the panel must not name the lens "${display}" itself`);
+  for (const disp of ["out-of-goal", '"adopted"', '"merged"', '"rejected"'])
+    assert.ok(!js.includes(disp), `the panel must not carry the disposition word ${disp}`);
+  // The agent name and the effort come from the payload, never from here.
+  assert.ok(!/orc-challenge-(contrarian|outsider|executor|principles|expansionist)/.test(js), "no agent name in the panel");
+
+  // A NOT-RUN row KEEPS ITS SLOT with its reason, and a NOT-SELECTED row is
+  // muted rather than dropped: filtering either out makes "found nothing" and
+  // "never ran" identical.
+  assert.match(js, /challengeCouncilCard/, "the council has its own card");
+  assert.ok(!/council\.filter\([^)]*status === "RAN"\)\s*\.map/.test(js), "a NOT-RUN row is never filtered out of the list");
+  assert.match(js, /r\.status === "NOT-RUN" && r\.reason/, "and it carries its reason");
+
+  // An opportunity NEVER blocks and never has a severity, so its card carries
+  // no severity colour at all.
+  const css = panelCss("challenge").replace(/\/\*[\s\S]*?\*\//g, "");
+  const opp = css.slice(css.indexOf(".ch-opportunity"), css.indexOf(".ch-opportunity") + 300);
+  assert.ok(opp.length, "the opportunity card is styled");
+  assert.ok(!/--bad|--warn|ch-sev-/.test(opp), "no severity colour anywhere in an opportunity");
+
+  // A premise disputes the yardstick every finding was measured against, so it
+  // is the loudest thing here when one is open.
+  assert.match(css, /\.ch-premise-loud/, "an open premise gets a loud card");
+});
+
+test("challenge panel: the version break has a THIRD trigger", () => {
+  const js = panelJs("challenge");
+  // Comparing an iteration judged by three lenses to one judged by six is not a
+  // comparison, so the rail breaks for it exactly as it does for a regoal.
+  assert.match(js, /graded_against_council/, "the council version is a break trigger");
+  assert.match(js, /`c\$\{it\.graded_against_council/, "and the break is LABELLED as a council change");
+});
+
+test("knowledge panel: five tabs, and it derives no tier, order or arithmetic", () => {
+  const js = panelJs("knowledge");
+
+  // Five tabs, the Crosslink two-tab precedent. The keys are written out in
+  // full — a key assembled from the tab id is invisible to every check.
+  for (const key of [
+    "knowledge.tab.wiki",
+    "knowledge.tab.coverage",
+    "knowledge.tab.patterns",
+    "knowledge.tab.memory",
+    "knowledge.tab.peers",
+  ])
+    assert.ok(js.includes(`"${key}"`), `the tab key ${key} is written out in full`);
+
+  // It never computes a tier, a coverage percentage or an order.
+  assert.ok(!/freshMax\s*[<>]/.test(js), "no freshness arithmetic in the panel");
+  assert.ok(!/covered\s*\/\s*tracked/.test(js), "the coverage percentage is the CLI's");
+  assert.ok(!/\.sort\(/.test(js), "the panel never re-ranks what the CLI ordered");
+
+  // A value the CLI could not compute is an em dash, never a zero.
+  assert.match(js, /=== undefined \? "—"/, "an uncomputable value renders as an em dash");
+
+  // A `used: null` row is NOT zero-use, and coverage says out loud that it is
+  // not a target — that line is not optional chrome.
+  assert.match(js, /used === null \? "\?"/);
+  assert.match(js, /knowledge\.coverage\.notATarget/);
+
+  // Prose is DOM, never HTML, and only on an explicit request.
+  assert.match(js, /renderMd\(/, "revealed bodies go through renderMd");
+  assert.ok(!/innerHTML/.test(js), "never as HTML");
+  assert.match(js, /&body=1/, "the body is opt-in, one artifact at a time");
+
+  // A COUNT IS NOT CONSENT: apply stays disabled until a preview was fetched.
+  assert.match(js, /apply\.disabled = true/, "the apply button starts disabled");
+  assert.match(js, /gotcha\/prune\/preview/, "and it is a preview endpoint that enables it");
+});
+
+test("knowledge panel: both new doctor findings route to the panel that can CLEAR them", () => {
+  const js = panelJs("overview");
+  // `orc wiki sync` is a BUTTON on Knowledge and `orc wiki plan` is the card
+  // above it, so Knowledge genuinely clears both — it is not the fallback.
+  assert.match(js, /"wiki-unregistered":\s*\{\s*panel:\s*"knowledge"/);
+  assert.match(js, /"wiki-debt":\s*\{\s*panel:\s*"knowledge"/);
+});

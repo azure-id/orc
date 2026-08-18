@@ -69,3 +69,22 @@ yourself. A hand-computed tier is one that gets skipped under load or measured
 from the wrong anchor — the same reason existence became a probe in the first
 place. Absent routes per each lane's own gate: orc-fast → fallback to orc-mini;
 orc / orc-mini → proceed without it (the wiki/pattern are purely additive).
+
+## The payload rule (v0.49.1)
+
+A probe answers EXISTENCE and a tier answers FRESHNESS, and both come from the
+CLI. One more rule governs what the CLI hands back:
+
+> **`--json is not a summary`** — a read's `--json` is the WHOLE computed object.
+> A field the human path prints and the JSON omits is drift, and it is drift NO
+> LINT CAN SEE, because both halves live in one function.
+
+`orc wiki status --json` used to emit five scalars and a COUNT while its own
+terminal branch printed the per-doc tier counts, the worst doc's FILENAME and the
+crosslink boundary state — so nothing reading the JSON could ever be as detailed
+as the terminal, however well it was written.
+
+The practical consequence for a skill: **read the whole object.** If you find
+yourself about to recompute something because "the JSON does not carry it", check
+whether the human path prints it. If it does, that is a CLI bug, not a reason to
+recompute — and recomputing it is how a second idea of a number gets born.

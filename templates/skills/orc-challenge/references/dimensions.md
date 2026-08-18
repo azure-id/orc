@@ -10,12 +10,21 @@ from a forgotten one.
 | ID | Dimension | Produced by | Blocking by default |
 |---|---|---|---|
 | `D1` | Template conformance | lint (structure) + judge (substance) | yes |
-| `D2` | Technical completeness | judge (grounded) | yes |
+| `D2` | Technical completeness | judge (grounded) + contrarian + council executor | yes |
 | `D3` | Internal consistency | lint (links/anchors) + judge | yes |
-| `D4` | Cold comprehension | reader | yes |
-| `D5` | Plain English for non-native readers | lint (metrics) + reader (judgment) | yes |
-| `D6` | Actionability | lint (markers) + judge | yes |
+| `D4` | Cold comprehension | **reader (the score)** + outsider (load-bearing assumptions) | yes |
+| `D5` | Plain English for non-native readers | lint (metrics) + reader (judgment) + outsider | yes |
+| `D6` | Actionability | lint (markers) + judge + council executor | yes |
 | `D7` | Scope discipline | judge | advisory |
+
+**D4 stays the reader's score.** The outsider feeds D4 only where an assumption
+is load-bearing, and it returns **no score of its own** — a second comprehension
+number would leave a user asking which one is real. The seam between the two is
+in `council.md`, and it is structural, not stylistic.
+
+The two non-finding lenses feed **no dimension at all.** An `opportunity` and a
+`premise` never enter `findings[]` and never touch the pass gate, so they can
+never move a dimension's status.
 
 ---
 

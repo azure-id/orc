@@ -1,6 +1,20 @@
 "use strict";
 /* panels/knowledge.js — orc ui client
-   Wiki status, the refresh plan, debt and usage.
+   What ORC knows about this repo: the wiki, its coverage, the code patterns,
+   the repair memory, and what it knows from next door.
+
+   FIVE TABS since v0.49.1, the Crosslink two-tab precedent. This was one
+   scrolling column of six cards, and the release that made the CLI stop
+   discarding what it computes roughly tripled the content — which is not
+   survivable as one scroll.
+
+   THE PANEL DERIVES NOTHING. It never computes a tier, a distance, a coverage
+   percentage, an order, an estimate or a price: `computeWikiFreshness` is the
+   one engine, `orc wiki plan` decides the order, and a value the CLI could not
+   compute renders as an em dash, never as a guess.
+
+   A FREE ACTION GETS A BUTTON; A PAID ACTION GETS A COPY-ABLE COMMAND — and
+   that line is visible on the panel rather than implied.
 
    Loaded by app.html in the order its numeric prefix names. Classic
    script, no import/export: an ES module import carries no query string,
@@ -15,9 +29,13 @@ PANELS.knowledge = function (host) {
   renderKnowledge(body);
 };
 
+// Which tab was open, so a write that re-renders the panel does not throw the
+// user back to the first one.
+let KN_TAB = "wiki";
+
 async function renderKnowledge(body) {
   body.replaceChildren(skeleton(6));
-  const [wikiRes, impactRes, patRes, gotRes, planRes, debtRes, usageRes] = await Promise.all([
+  const [wikiRes, impactRes, patRes, gotRes, planRes, debtRes, usageRes, docsRes, covRes] = await Promise.all([
     read("/api/wiki").catch(() => ({ data: null })),
     read("/api/wiki/impact").catch(() => ({ data: null })),
     read("/api/patterns").catch(() => ({ data: null })),
@@ -25,13 +43,96 @@ async function renderKnowledge(body) {
     read("/api/wiki/plan").catch(() => ({ data: null })),
     read("/api/wiki/debt").catch(() => ({ data: null })),
     read("/api/wiki/usage").catch(() => ({ data: null })),
+    read("/api/wiki/docs").catch(() => ({ data: null })),
+    read("/api/wiki/coverage").catch(() => ({ data: null })),
   ]);
-  const out = frag();
-  out.append(wikiPlanCard(planRes.data, debtRes.data, body));
-  if (usageRes.data && usageRes.data.rows) out.append(wikiUsageCard(usageRes.data, body));
+  const d = {
+    wiki: wikiRes.data || {},
+    impact: impactRes.data,
+    patterns: patRes.data || {},
+    gotchas: gotRes.data || {},
+    plan: planRes.data,
+    debt: debtRes.data,
+    usage: usageRes.data,
+    docs: docsRes.data,
+    coverage: covRes.data,
+  };
 
-  // --- wiki
-  const w = wikiRes.data || {};
+  const out = frag();
+  // THE HEADER STRIP, above the tabs and on every one of them: the numbers that
+  // answer "what does ORC know about this repo?" in one line. Every value is
+  // CLI-computed, and one it could not compute renders as an em dash.
+  out.append(knowledgeHeaderStrip(d));
+
+  const tabs = el("div", "tabs");
+  const pane = el("div", "tab-pane stack");
+  const views = {
+    wiki: () => knWikiTab(d, body),
+    coverage: () => knCoverageTab(d),
+    patterns: () => knPatternsTab(d),
+    memory: () => knMemoryTab(d, body),
+    peers: () => knPeersTab(d),
+  };
+  const select = (which) => {
+    KN_TAB = which;
+    for (const b of tabs.children) b.setAttribute("aria-selected", String(b.dataset.tab === which));
+    pane.replaceChildren(views[which]());
+  };
+  // Keys are written out in full, never assembled from the tab id — a key built
+  // from a fragment is invisible to every check that looks for one.
+  for (const [which, label] of [
+    ["wiki", t("knowledge.tab.wiki")],
+    ["coverage", t("knowledge.tab.coverage")],
+    ["patterns", t("knowledge.tab.patterns")],
+    ["memory", t("knowledge.tab.memory")],
+    ["peers", t("knowledge.tab.peers")],
+  ]) {
+    const b = el("button", null, label);
+    b.type = "button";
+    b.dataset.tab = which;
+    b.addEventListener("click", () => select(which));
+    tabs.append(b);
+  }
+  out.append(tabs, pane);
+  body.replaceChildren(out);
+  select(views[KN_TAB] ? KN_TAB : "wiki");
+}
+
+/* THE HEADER STRIP. Six numbers, all of them the CLI's. A `—` means the CLI
+   could not compute it, and that is an ANSWER — never a zero, never a guess. */
+function knowledgeHeaderStrip(d) {
+  const w = d.wiki || {};
+  const strip = el("div", "kn-strip");
+  const item = (label, value, kind) => {
+    const box = el("div", "kn-strip-item" + (kind ? " kn-" + kind : ""));
+    box.append(el("span", "kn-strip-value", value));
+    box.append(el("span", "kn-strip-label", label));
+    strip.append(box);
+  };
+  // The tier word is the CLI's own. Never a friendlier synonym.
+  item(t("knowledge.strip.wiki"), w.tier || (w.state ? String(w.state).toUpperCase() : "—"));
+  item(t("knowledge.strip.docs"), w.docs === undefined ? "—" : String(w.docs));
+  item(
+    t("knowledge.strip.covered"),
+    d.coverage && d.coverage.ok ? d.coverage.coverage_pct + "%" : "—"
+  );
+  item(t("knowledge.strip.blind"), w.blind === undefined ? "—" : String(w.blind));
+  item(
+    t("knowledge.strip.pending"),
+    d.debt && d.debt.ok && d.debt.pending !== undefined ? String(d.debt.pending) : "—"
+  );
+  item(t("knowledge.strip.patterns"), String((d.patterns.patterns || []).length));
+  item(t("knowledge.strip.gotchas"), d.gotchas.count === undefined ? "—" : String(d.gotchas.count));
+  return strip;
+}
+
+/* ── TAB 1 — WIKI ────────────────────────────────────────────────────────── */
+function knWikiTab(d, body) {
+  const out = frag();
+  out.append(wikiPlanCard(d.plan, d.debt, body));
+  if (d.usage && d.usage.rows) out.append(wikiUsageCard(d.usage, body));
+
+  const w = d.wiki;
   const wc = card(t("knowledge.wiki"), wikiActions(body, w));
   if (!w.state || w.state === "none") {
     wc.append(empty(t("knowledge.wiki.none"), t("knowledge.wiki.noneHint")));
@@ -42,31 +143,65 @@ async function renderKnowledge(body) {
     const tierChip = chip(w.tier || t("overview.tile.wikiUnknown"), w.tier === "FRESH" ? "ok" : w.tier === "AGING" ? "warn" : "bad", w.tier === "STALE");
     const headRow = el("div", "row-actions");
     headRow.append(tierChip);
+    // The per-doc split as a small stacked bar. The counts are the CLI's.
+    if (w.counts) {
+      const total = Math.max(1, w.counts.FRESH + w.counts.AGING + w.counts.STALE + (w.counts.unknown || 0));
+      const bar = el("div", "kn-tierbar");
+      for (const [tier, cls] of [["FRESH", "ok"], ["AGING", "warn"], ["STALE", "bad"], ["unknown", "idle"]]) {
+        const n = w.counts[tier] || 0;
+        if (!n) continue;
+        const seg = el("div", "kn-tierbar-seg kn-tier-" + cls);
+        seg.style.setProperty("--w", ((n / total) * 100).toFixed(2) + "%");
+        seg.title = `${tier} ${n}`;
+        bar.append(seg);
+      }
+      headRow.append(bar);
+    }
     wc.append(headRow);
-    wc.append(
-      kvList([
-        [t("knowledge.field.docs"), String(w.docs)],
-        [t("knowledge.field.lastScan"), w.last_scan],
-        [
-          t("knowledge.field.distance"),
-          w.distance === null ? t("knowledge.field.unmeasurable") : t("knowledge.field.distanceValue", { n: w.distance }),
-        ],
-        [t("knowledge.field.anchor"), w.anchor ? String(w.anchor).slice(0, 8) : ""],
-        // `wiki_fresh_max` / `wiki_aging_max` are config keys — the numbers are
-        // shown, the key names are not paraphrased.
-        [t("knowledge.field.edges"), w.edges ? `fresh < ${w.edges.freshMax}c · aging <= ${w.edges.agingMax}c` : ""],
-        [t("knowledge.field.tags"), w.crosslink_tags === undefined ? "" : String(w.crosslink_tags)],
-        [t("knowledge.field.blind"), w.blind ? String(w.blind) : "0"],
-      ])
+    const rows = [
+      [t("knowledge.field.docs"), String(w.docs)],
+      [t("knowledge.field.lastScan"), w.last_scan],
+    ];
+    // THE DOC PINNING THE TIER, BY NAME. A hash is not a thing anybody can go
+    // and refresh — and until v0.49.1 the hash is all `--json` carried.
+    if (w.worst)
+      rows.push([t("knowledge.field.worst"), `${w.worst.file} (${w.worst.distance}c)`]);
+    rows.push(
+      [
+        t("knowledge.field.distance"),
+        w.distance === null ? t("knowledge.field.unmeasurable") : t("knowledge.field.distanceValue", { n: w.distance }),
+      ],
+      [t("knowledge.field.anchor"), w.anchor ? String(w.anchor).slice(0, 8) : ""],
+      // `wiki_fresh_max` / `wiki_aging_max` are config keys — the numbers are
+      // shown, the key names are not paraphrased.
+      [t("knowledge.field.edges"), w.edges ? `fresh < ${w.edges.freshMax}c · aging <= ${w.edges.agingMax}c` : ""],
+      [t("knowledge.field.tags"), w.crosslink_tags === undefined ? "" : String(w.crosslink_tags)],
+      [t("knowledge.field.blind"), w.blind ? String(w.blind) : "0"]
     );
+    wc.append(kvList(rows));
     // The reason text is the CLI's own sentence about a real doc — verbatim.
     for (const r of w.reasons || []) wc.append(el("div", "note", t("knowledge.wiki.why", { reason: r })));
     wc.append(el("div", "note", t("knowledge.wiki.freshNote")));
+    // The orientation doc is read FIRST by every consumer, and the panel used
+    // not to mention it exists.
+    if (w.orientation) {
+      if (w.orientation.present)
+        wc.append(el("div", "note ok", t("knowledge.orientation.present", { file: w.orientation.file })));
+      else {
+        wc.append(el("div", "note warn", t("knowledge.orientation.missing")));
+        wc.append(el("pre", "cmd", w.orientation.regenerate));
+      }
+    }
   }
   out.append(wc);
 
-  // --- impact
-  const imp = impactRes.data;
+  // THE DOC TABLE — the headline addition. A row EXPANDS IN PLACE (one at a
+  // time, detail fetched on first open); there is no detail box below the
+  // table, which is the Runs-row rule.
+  out.append(wikiDocsCard(d.docs));
+
+  // impact, unchanged, moved onto this tab
+  const imp = d.impact;
   if (imp && imp.ok) {
     const c = card(t("knowledge.impact.title"));
     const rec = el("div", "row-actions");
@@ -94,93 +229,490 @@ async function renderKnowledge(body) {
       hr.append(el("th", null, h));
     thead.append(hr);
     const tb = el("tbody");
-    for (const d of imp.docs) {
+    for (const doc of imp.docs) {
       const tr = el("tr");
-      tr.append(el("td", "mono", d.file));
+      tr.append(el("td", "mono", doc.file));
       const st = el("td");
-      st.append(chip(d.state, d.state === "CLEAN" ? "ok" : d.state === "TOUCHED" ? "info" : "warn"));
+      st.append(chip(doc.state, doc.state === "CLEAN" ? "ok" : doc.state === "TOUCHED" ? "info" : "warn"));
       tr.append(st);
-      tr.append(el("td", "note", d.gone.length ? "gone: " + d.gone.join(", ") : d.hits.slice(0, 4).join(", ")));
+      tr.append(el("td", "note", doc.gone.length ? "gone: " + doc.gone.join(", ") : doc.hits.slice(0, 4).join(", ")));
       tb.append(tr);
     }
     table.append(thead, tb);
     scroll.append(table);
     c.append(scroll);
-    if ((imp.blind_spot || []).length) {
-      c.append(el("div", "note", t("knowledge.impact.blind")));
-      const fl = el("div", "file-list");
-      for (const f of imp.blind_spot) fl.append(el("div", null, f));
-      c.append(fl);
-    }
     out.append(c);
   } else if (imp && !imp.ok) {
     const c = card(t("knowledge.impact.title"));
     c.append(el("div", "note", imp.hint || `unavailable (${imp.reason})`));
     out.append(c);
   }
+  return out;
+}
 
-  // --- patterns
-  const p = patRes.data || {};
+/* THE DOC TABLE. Ordered exactly as the CLI ordered it — THE PANEL NEVER
+   INVENTS A RANK (the `wiki plan` rule). A row expands IN PLACE. */
+function wikiDocsCard(docs) {
+  const c = card(t("knowledge.docs.title"));
+  if (!docs || !docs.ok || !(docs.docs || []).length) {
+    c.append(empty(t("knowledge.docs.none"), (docs && docs.hint) || t("knowledge.docs.noneHint")));
+    return c;
+  }
+  c.append(el("div", "note", t("knowledge.docs.note")));
+  const scroll = el("div", "scroll-x");
+  const table = el("table");
+  const thead = el("thead");
+  const hr = el("tr");
+  for (const h of [
+    t("knowledge.docs.col.doc"),
+    t("knowledge.docs.col.tier"),
+    t("knowledge.docs.col.distance"),
+    t("knowledge.docs.col.covers"),
+    t("knowledge.docs.col.used"),
+    t("knowledge.docs.col.tags"),
+  ])
+    hr.append(el("th", null, h));
+  thead.append(hr);
+  const tb = el("tbody");
+  const open = { row: null };
+  for (const r of docs.docs) {
+    const tr = el("tr", "kn-doc-row" + (r.retire_hint ? " row-muted" : ""));
+    tr.tabIndex = 0;
+    const detail = el("tr", "kn-doc-detail");
+    const dtd = el("td");
+    dtd.setAttribute("colspan", "6");
+    detail.append(dtd);
+    detail.hidden = true;
+    let loaded = false;
+    const toggle = () => {
+      const willOpen = detail.hidden;
+      // One row open at a time — the Runs-row rule.
+      if (open.row && open.row !== detail) {
+        open.row.hidden = true;
+        open.row.previousSibling.classList.remove("open");
+      }
+      detail.hidden = !willOpen;
+      tr.classList.toggle("open", willOpen);
+      open.row = willOpen ? detail : null;
+      if (willOpen && !loaded) {
+        loaded = true;
+        loadWikiDoc(dtd, r.file);
+      }
+    };
+    tr.addEventListener("click", toggle);
+    tr.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        toggle();
+      }
+    });
+    tr.append(el("td", "mono", r.file.replace(/^wiki\//, "")));
+    const tc = el("td");
+    tc.append(chip(r.tier, r.tier === "FRESH" ? "ok" : r.tier === "AGING" ? "warn" : r.tier === "STALE" ? "bad" : ""));
+    tr.append(tc);
+    tr.append(el("td", "num", r.distance === null ? "?" : r.distance + "c"));
+    tr.append(el("td", "note", (r.covers || []).join(", ")));
+    // `used: null` is NOT zero-use — unknown must never be reported as dead.
+    tr.append(el("td", "num", r.used === null ? "?" : `${r.used}/${r.used_of}`));
+    tr.append(el("td", "num", String(r.crosslink_tags || 0)));
+    tb.append(tr, detail);
+  }
+  table.append(thead, tb);
+  scroll.append(table);
+  c.append(scroll);
+  return c;
+}
+
+async function loadWikiDoc(host, file) {
+  host.replaceChildren(skeleton(2));
+  const r = await read("/api/wiki/show?doc=" + encodeURIComponent(file)).catch(() => ({ data: null }));
+  const d = r.data;
+  if (!d || !d.ok) {
+    host.replaceChildren(el("div", "note", (d && d.hint) || t("common.loadFail")));
+    return;
+  }
+  const out = frag();
+  out.append(
+    kvList([
+      [t("knowledge.docs.field.title"), d.title || ""],
+      [t("knowledge.docs.field.type"), d.doc_type || ""],
+      [t("knowledge.docs.field.scanned"), d.scanned_commit ? String(d.scanned_commit).slice(0, 8) : ""],
+      [t("knowledge.docs.field.covers"), (d.covers || []).join(", ")],
+      [t("knowledge.docs.field.coveredFiles"), String(d.covered_files)],
+      [t("knowledge.docs.field.lastUsed"), d.last_used || t("knowledge.usage.neverUsed")],
+    ])
+  );
+  if ((d.tags || []).length) {
+    const tl = el("div", "row-actions");
+    for (const tag of d.tags) tl.append(chip(tag.tag, "info"));
+    out.append(tl);
+  }
+  // Free repairs FIRST, as everywhere else on this panel.
+  for (const rep of d.free_repairs || []) {
+    const row = el("div", "free-row");
+    row.append(chip(t("knowledge.plan.free"), "ok"));
+    row.append(el("span", null, rep.what));
+    row.append(el("code", "mono", rep.cmd));
+    out.append(row);
+  }
+  // REVEAL. The body is fetched only on an explicit request, one artifact at a
+  // time, and it is rendered as DOM — never as HTML.
+  const reveal = el("button", "btn btn-ghost btn-sm", t("knowledge.reveal"));
+  reveal.type = "button";
+  reveal.addEventListener("click", async () => {
+    reveal.disabled = true;
+    const b = await read("/api/wiki/show?doc=" + encodeURIComponent(file) + "&body=1").catch(() => ({ data: null }));
+    const box = el("div", "kn-body");
+    box.append(renderMd((b.data && b.data.body) || ""));
+    reveal.replaceWith(box);
+  });
+  out.append(reveal);
+  host.replaceChildren(out);
+}
+
+/* ── TAB 2 — COVERAGE ────────────────────────────────────────────────────── */
+function knCoverageTab(d) {
+  const out = frag();
+  const cov = d.coverage;
+  const c = card(t("knowledge.coverage.title"));
+  if (!cov || !cov.ok) {
+    c.append(empty(t("knowledge.coverage.na"), (cov && cov.hint) || t("knowledge.coverage.naHint")));
+    out.append(c);
+    return out;
+  }
+  const big = el("div", "kn-coverage");
+  big.append(el("span", "kn-coverage-num", cov.coverage_pct + "%"));
+  big.append(el("span", "note", t("knowledge.coverage.sub", { covered: cov.covered, tracked: cov.tracked })));
+  c.append(big);
+  const bar = el("div", "kn-tierbar");
+  const seg = el("div", "kn-tierbar-seg kn-tier-ok");
+  seg.style.setProperty("--w", cov.coverage_pct + "%");
+  bar.append(seg);
+  const rest = el("div", "kn-tierbar-seg kn-tier-idle");
+  rest.style.setProperty("--w", 100 - cov.coverage_pct + "%");
+  bar.append(rest);
+  c.append(bar);
+  // NOT OPTIONAL CHROME. There is no threshold, no config key, and nothing
+  // branches on this number — a coverage percentage that starts nagging becomes
+  // a number people game.
+  c.append(el("div", "note", t("knowledge.coverage.notATarget")));
+  out.append(c);
+
+  if ((cov.uncovered_dirs || []).length) {
+    const uc = card(t("knowledge.coverage.uncovered"));
+    uc.append(el("div", "note", t("knowledge.coverage.uncoveredNote")));
+    const scroll = el("div", "scroll-x");
+    const table = el("table");
+    const thead = el("thead");
+    const hr = el("tr");
+    for (const h of [t("knowledge.coverage.col.dir"), t("knowledge.coverage.col.files"), t("knowledge.coverage.col.last")])
+      hr.append(el("th", null, h));
+    thead.append(hr);
+    const tb = el("tbody");
+    for (const row of cov.uncovered_dirs) {
+      const tr = el("tr");
+      tr.append(el("td", "mono", row.dir));
+      tr.append(el("td", "num", String(row.files)));
+      tr.append(el("td", "note", row.newest_commit || ""));
+      tb.append(tr);
+    }
+    table.append(thead, tb);
+    scroll.append(table);
+    uc.append(scroll);
+    out.append(uc);
+  }
+
+  // THE STRUCTURAL BLIND SPOT AS THE FILE LIST IT ALWAYS WAS — no longer as the
+  // number `2`, which tells a user nothing they can act on.
+  const blind = (d.wiki && d.wiki.blind_spot) || (d.impact && d.impact.blind_spot) || [];
+  const bc = card(t("knowledge.blind.title"));
+  if (!blind.length) {
+    bc.append(el("div", "note ok", t("knowledge.blind.none")));
+  } else {
+    bc.append(el("div", "note", t("knowledge.blind.note")));
+    const fl = el("div", "file-list");
+    for (const f of blind) fl.append(el("div", null, f));
+    bc.append(fl);
+  }
+  out.append(bc);
+  return out;
+}
+
+/* ── TAB 3 — PATTERNS ────────────────────────────────────────────────────── */
+function knPatternsTab(d) {
+  const out = frag();
+  const p = d.patterns || {};
   const pc = card(t("knowledge.patterns.title"));
   pc.append(el("div", "note", t("knowledge.patterns.note")));
   if (!(p.patterns || []).length) {
     pc.append(empty(t("knowledge.patterns.none"), t("knowledge.patterns.noneHint")));
   } else {
-    const table = el("table");
-    const tb = el("tbody");
     for (const row of p.patterns) {
-      const tr = el("tr");
-      tr.append(el("td", "mono", row.lang));
-      tr.append(el("td", "note", relAge(row.mtime_ms)));
-      tr.append(el("td", "note", row.path));
-      tb.append(tr);
+      const box = el("div", "kn-pattern");
+      const hdr = el("div", "row-actions");
+      // The language KEY is the CLI's framework id (`react`, `nestjs`, …) — a
+      // translated one would resolve to no playbook.
+      hdr.append(el("span", "mono", row.lang));
+      hdr.append(el("span", "note", relAge(row.mtime_ms)));
+      box.append(hdr);
+      box.append(el("div", "note mono", row.path));
+      const more = el("button", "btn btn-ghost btn-sm", t("knowledge.patterns.inspect"));
+      more.type = "button";
+      const detail = el("div", "stack stack-sm");
+      more.addEventListener("click", async () => {
+        more.disabled = true;
+        await loadPattern(detail, row.lang);
+        more.remove();
+      });
+      box.append(more, detail);
+      pc.append(box);
     }
-    table.append(tb);
-    const sc = el("div", "scroll-x");
-    sc.append(table);
-    pc.append(sc);
   }
-  // Language KEYS are the CLI's framework ids (`react`, `nestjs`, …) — a
-  // translated one would not resolve to a playbook.
-  if ((p.known_languages || []).length)
-    pc.append(el("div", "note", t("knowledge.patterns.known", { list: p.known_languages.join(", ") })));
+  // Known-but-uncached languages: PAID, so a command and never a button.
+  const cached = new Set((p.patterns || []).map((x) => x.lang));
+  const uncached = (p.known_languages || []).filter((l) => !cached.has(l));
+  if (uncached.length) {
+    pc.append(el("div", "note", t("knowledge.patterns.known", { list: uncached.join(", ") })));
+    for (const l of uncached.slice(0, 6)) pc.append(el("pre", "cmd", `/orc-pattern ${l}`));
+    pc.append(el("div", "note", t("knowledge.patterns.paidWhy")));
+  }
   out.append(pc);
+  return out;
+}
 
-  // --- gotchas
-  const g = gotRes.data || {};
-  const pruneBtn = el("button", "btn btn-sm", t("knowledge.gotchas.prune"));
-  pruneBtn.type = "button";
-  pruneBtn.addEventListener("click", async () => {
+async function loadPattern(host, lang) {
+  host.replaceChildren(skeleton(2));
+  const r = await read("/api/pattern/show?lang=" + encodeURIComponent(lang)).catch(() => ({ data: null }));
+  const d = r.data;
+  if (!d || !d.ok) {
+    host.replaceChildren(el("div", "note", (d && d.hint) || t("common.loadFail")));
+    return;
+  }
+  const out = frag();
+  out.append(
+    kvList([
+      [t("knowledge.patterns.field.codified"), d.codified_at || "—"],
+      [t("knowledge.patterns.field.source"), d.source_commit ? String(d.source_commit).slice(0, 8) : "—"],
+      [t("knowledge.patterns.field.playbook"), d.playbook || "—"],
+      [t("knowledge.patterns.field.size"), `${d.lines} · ${d.bytes}`],
+      [t("knowledge.patterns.field.counts"), `${d.conventions} · ${d.invariants}`],
+    ])
+  );
+  // An unheadered file SAYS SO in one line. No date is ever derived from an
+  // mtime — that is the `/orc-pact` UNCHECKABLE rule.
+  if (!d.headered) out.append(el("div", "note warn", t("knowledge.patterns.unheadered")));
+  if ((d.headings || []).length) {
+    const hl = el("div", "row-actions");
+    for (const h of d.headings.slice(0, 20)) hl.append(chip(h, ""));
+    out.append(hl);
+  }
+  // CONFLICTS get their own block: they are the most decision-shaped thing in
+  // the file (the project does X, the invariant says Y) and until now they were
+  // invisible outside it.
+  if ((d.conflicts || []).length) {
+    const cb = el("div", "kn-conflicts");
+    cb.append(el("div", "kn-conflicts-head", t("knowledge.patterns.conflicts")));
+    for (const c of d.conflicts) cb.append(el("div", "note", c));
+    out.append(cb);
+  }
+  const reveal = el("button", "btn btn-ghost btn-sm", t("knowledge.reveal"));
+  reveal.type = "button";
+  reveal.addEventListener("click", async () => {
+    reveal.disabled = true;
+    const b = await read("/api/pattern/show?lang=" + encodeURIComponent(lang) + "&body=1").catch(() => ({ data: null }));
+    const box = el("div", "kn-body");
+    box.append(renderMd((b.data && b.data.body) || ""));
+    reveal.replaceWith(box);
+  });
+  out.append(reveal);
+  out.append(el("div", "note", t("knowledge.patterns.literalNote")));
+  host.replaceChildren(out);
+}
+
+/* ── TAB 4 — MEMORY (gotchas) ────────────────────────────────────────────── */
+function knMemoryTab(d, body) {
+  const out = frag();
+  const g = d.gotchas || {};
+  const gc = card(t("knowledge.gotchas.title"));
+  gc.append(el("div", "note", t("knowledge.gotchas.note")));
+  if (!g.count) {
+    gc.append(empty(t("knowledge.gotchas.none"), t("knowledge.gotchas.noneHint")));
+    out.append(gc);
+    return out;
+  }
+  const scroll = el("div", "scroll-x");
+  const table = el("table");
+  const thead = el("thead");
+  const hr = el("tr");
+  // These are the gotcha record's own field names, printed by `orc gotcha
+  // list` — column headers stay in the file's vocabulary.
+  for (const h of ["Id", "Area", "Kind", "Hits", "Last seen", "Trigger"]) hr.append(el("th", null, h));
+  thead.append(hr);
+  const tb = el("tbody");
+  const open = { row: null };
+  for (const e of g.gotchas) {
+    const tr = el("tr", "kn-doc-row");
+    tr.tabIndex = 0;
+    const detail = el("tr", "kn-doc-detail");
+    const dtd = el("td");
+    dtd.setAttribute("colspan", "6");
+    detail.append(dtd);
+    detail.hidden = true;
+    // EVERY FIELD the CLI already emits. `gotchaStatus` has always sent
+    // `fields`; the panel rendered six columns and discarded the rest.
+    dtd.append(kvList(Object.keys(e.fields || {}).map((k) => [k, e.fields[k]])));
+    const toggle = () => {
+      const willOpen = detail.hidden;
+      if (open.row && open.row !== detail) {
+        open.row.hidden = true;
+        open.row.previousSibling.classList.remove("open");
+      }
+      detail.hidden = !willOpen;
+      tr.classList.toggle("open", willOpen);
+      open.row = willOpen ? detail : null;
+    };
+    tr.addEventListener("click", toggle);
+    tr.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter" || ev.key === " ") {
+        ev.preventDefault();
+        toggle();
+      }
+    });
+    tr.append(
+      el("td", "mono", e.id),
+      el("td", "mono", e.area),
+      el("td", null, e.kind),
+      el("td", null, String(e.hits)),
+      el("td", "note", e.last_seen || "?"),
+      el("td", "note", e.trigger || "")
+    );
+    tb.append(tr, detail);
+  }
+  table.append(thead, tb);
+  scroll.append(table);
+  gc.append(scroll);
+  gc.append(gotchaPruneBox(g, body));
+  out.append(gc);
+
+  // The archive is reachable and clearly labelled as recoverable: eviction is
+  // an ARCHIVE, never a delete.
+  const ac = card(t("knowledge.archive.title"));
+  const load = el("button", "btn btn-ghost btn-sm", t("knowledge.archive.load"));
+  load.type = "button";
+  load.addEventListener("click", async () => {
+    load.disabled = true;
+    const r = await read("/api/gotchas/archived").catch(() => ({ data: null }));
+    const a = r.data;
+    const box = el("div", "stack stack-sm");
+    if (!a || !a.count) box.append(el("div", "note", t("knowledge.archive.empty")));
+    else for (const e of a.gotchas) box.append(el("div", "note mono", `${e.id} · ${e.area} · ${e.kind} · hits ${e.hits}`));
+    load.replaceWith(box);
+  });
+  ac.append(el("div", "note", t("knowledge.archive.note")));
+  ac.append(load);
+  out.append(ac);
+  return out;
+}
+
+/* PREVIEW-THEN-APPLY. The Apply button stays disabled until a preview has been
+   fetched, the exact command is on screen throughout, and THE PREVIEW NAMES
+   EVERY ENTRY that would be archived — a count is not consent. */
+function gotchaPruneBox(g, body) {
+  const box = el("div", "kn-prune");
+  const cfgMax = g.gotchas_max;
+  box.append(el("div", "kn-prune-head", t("knowledge.gotchas.headroom", { n: g.count, max: cfgMax === undefined ? "?" : cfgMax })));
+  box.append(el("pre", "cmd", "orc gotcha prune"));
+  const acts = el("div", "row-actions");
+  const preview = el("button", "btn btn-sm", t("knowledge.gotchas.preview"));
+  preview.type = "button";
+  const apply = el("button", "btn btn-sm btn-primary", t("knowledge.gotchas.prune"));
+  apply.type = "button";
+  apply.disabled = true;
+  const list = el("div", "stack stack-sm");
+  preview.addEventListener("click", async () => {
+    const r = await read("/api/gotcha/prune/preview").catch(() => ({ data: null }));
+    const d = r.data;
+    list.replaceChildren();
+    if (!d || !(d.would_archive || []).length) {
+      list.append(el("div", "note ok", t("knowledge.gotchas.pruneNone")));
+      apply.disabled = true;
+      return;
+    }
+    list.append(el("div", "note warn", t("knowledge.gotchas.pruneWould", { n: d.would_archive.length })));
+    for (const e of d.would_archive) list.append(el("div", "note mono", `${e.id} · ${e.area} · ${e.kind} · hits ${e.hits} · ${e.last_seen || "?"}`));
+    list.append(el("div", "note", d.honesty));
+    apply.disabled = false;
+  });
+  apply.addEventListener("click", async () => {
     const r = await post("/api/gotcha/prune", {});
     toast(r.command, r.ok ? "ok" : "bad", r.output);
     renderKnowledge(body);
   });
-  const gc = card(t("knowledge.gotchas.title"), g.count ? pruneBtn : null);
-  gc.append(el("div", "note", t("knowledge.gotchas.note")));
-  if (!g.count) {
-    gc.append(empty(t("knowledge.gotchas.none"), t("knowledge.gotchas.noneHint")));
-  } else {
-    const table = el("table");
-    const thead = el("thead");
-    const hr = el("tr");
-    // These are the gotcha record's own field names, printed by `orc gotcha
-    // list` — column headers stay in the file's vocabulary.
-    for (const h of ["Id", "Area", "Kind", "Hits", "Last seen", "Trigger"]) hr.append(el("th", null, h));
-    thead.append(hr);
-    const tb = el("tbody");
-    for (const e of g.gotchas) {
-      const tr = el("tr");
-      tr.append(el("td", "mono", e.id), el("td", "mono", e.area), el("td", null, e.kind), el("td", null, String(e.hits)), el("td", "note", e.last_seen || "?"), el("td", "note", e.trigger || ""));
-      tb.append(tr);
-    }
-    table.append(thead, tb);
-    const sc = el("div", "scroll-x");
-    sc.append(table);
-    gc.append(sc);
-  }
-  out.append(gc);
+  acts.append(preview, apply);
+  box.append(acts, list);
+  return box;
+}
 
-  body.replaceChildren(out);
+/* ── TAB 5 — PEERS ───────────────────────────────────────────────────────── */
+/* COMPACT and READ-ONLY. It links to Crosslink and NEVER duplicates its editor:
+   one boundary, one picture. This tab exists because "what does ORC know?"
+   includes what it knows from next door, and that is where a user looks first. */
+function knPeersTab(d) {
+  const out = frag();
+  const c = card(t("knowledge.peers.title"));
+  c.append(el("div", "note", t("knowledge.peers.note")));
+  const go = el("button", "btn btn-ghost btn-sm", t("knowledge.peers.open"));
+  go.type = "button";
+  go.addEventListener("click", () => {
+    location.hash = "#/crosslink";
+  });
+  c.append(go);
+  out.append(c);
+  renderPeers(c);
+  return out;
+}
+
+async function renderPeers(host) {
+  const r = await read("/api/crosslink").catch(() => ({ data: null }));
+  const d = r.data;
+  if (!d) return;
+  if (!d.configured || !(d.nodes || []).length) {
+    host.append(el("div", "note", t("knowledge.peers.none")));
+    return;
+  }
+  const scroll = el("div", "scroll-x");
+  const table = el("table");
+  const thead = el("thead");
+  const hr = el("tr");
+  for (const h of [
+    t("knowledge.peers.col.repo"),
+    t("knowledge.peers.col.state"),
+    t("knowledge.peers.col.tier"),
+    t("knowledge.peers.col.tags"),
+  ])
+    hr.append(el("th", null, h));
+  thead.append(hr);
+  const tb = el("tbody");
+  for (const n of d.nodes) {
+    const prov = n.provider || {};
+    const tr = el("tr");
+    tr.append(el("td", "mono", n.name));
+    const st = el("td");
+    // Every word here is the CLI's own — the peer's state, and the peer's
+    // freshness tier as IT computed it. A peer's config is not ours to read
+    // (`crosslinkProviderInfo`), so nothing here is recomputed on this side.
+    st.append(chip(prov.state || "—", prov.state === "wiki" ? "ok" : "warn"));
+    tr.append(st);
+    const tc = el("td");
+    if (prov.tier) tc.append(chip(prov.tier, prov.tier === "FRESH" ? "ok" : prov.tier === "AGING" ? "warn" : "bad"));
+    else tc.append(el("span", "note", "—"));
+    tr.append(tc);
+    tr.append(el("td", "num", prov.tags === undefined ? "—" : String(prov.tags)));
+    tb.append(tr);
+  }
+  table.append(thead, tb);
+  scroll.append(table);
+  host.append(scroll);
 }
 
 /* PART B MADE VISIBLE (v0.46.0).
@@ -289,6 +821,7 @@ function wikiPlanActions(body, plan) {
     renderKnowledge(body);
   });
   wrap.append(s);
+  void plan;
   return wrap;
 }
 

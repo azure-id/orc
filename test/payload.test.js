@@ -643,7 +643,10 @@ test("the challenge judge's dispatch block carries ONLY paths and ids", () => {
     const [key, ...rest] = line.split(":");
     const value = rest.join(":").replace(/\(.*?\)/g, "").trim();
     const pathShaped = /[\/]|\.md$|\.json$|<skill>/.test(value);
-    const idShaped = /^(F-\d+\s*)+$/.test(value) || /^\(none[^)]*\)?$/.test(value);
+    // v0.49.1: a council lens signs its findings with its own prefix, and an
+    // ADOPTED finding keeps the raiser's id — so `carry_ids` legitimately mixes
+    // F-, R-, C-, O- and E-. Still id-shaped, still never prose.
+    const idShaped = /^([A-Z]-\d+\s*)+$/.test(value) || /^\(none[^)]*\)?$/.test(value);
     assert.ok(pathShaped || idShaped, `slice field "${key.trim()}" is a path or an id, not prose: ${value}`);
   }
 
@@ -651,6 +654,17 @@ test("the challenge judge's dispatch block carries ONLY paths and ids", () => {
   // add one by accident.
   for (const forbidden of ["the diff", "the fix brief", "the user says"])
     assert.ok(sealed.includes(forbidden), `the reference forbids "${forbidden}" by name`);
+
+  // v0.49.1 — the two council reports that may NEVER be in the judge's slice.
+  // A judge handed a document arguing that the frozen goal is wrong is biased
+  // on every finding it produces afterwards, and an opportunity is not a defect.
+  for (const f of [spine, sealed])
+    for (const forbidden of ["principles.md", "expansionist.md"])
+      assert.ok(f.includes(forbidden), `the excluded council report ${forbidden} is named`);
+  assert.ok(
+    !/^principles:|^expansionist:/m.test(block[1]),
+    "neither non-finding lens appears as a slice row"
+  );
 });
 
 test("the challenge reader is deliberately WEAK, and nothing may upgrade it", () => {

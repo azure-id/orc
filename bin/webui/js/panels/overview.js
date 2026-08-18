@@ -35,6 +35,12 @@ const FINDING_ROUTE = {
   // DOCS, so that is where a drifted document has to send you.
   "doc-drifted": { panel: "docs", cta: "overview.item.docDrifted.cta" },
   "boundary-refuse": { panel: "boundary", cta: "overview.item.boundaryRefuse.cta" },
+  // v0.49.1. Same rule a third time. `orc wiki sync` is a BUTTON on Knowledge
+  // and it is free, and `orc wiki plan` (which ranks the refresh) is the card
+  // directly above it — so Knowledge is genuinely the panel that can clear
+  // both, not merely the fallback.
+  "wiki-unregistered": { panel: "knowledge", cta: "overview.item.wikiUnregistered.cta" },
+  "wiki-debt": { panel: "knowledge", cta: "overview.item.wikiDebt.cta" },
 };
 const DEFAULT_FINDING_ROUTE = { panel: "maintenance", cta: "overview.item.doctor.cta" };
 const findingRoute = (id) => FINDING_ROUTE[id] || DEFAULT_FINDING_ROUTE;

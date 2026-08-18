@@ -33,6 +33,7 @@ const required = [
   "bin/webui/css/panels/overview.css",
   "bin/webui/css/panels/settings.css",
   "bin/webui/css/panels/runs.css",
+  "bin/webui/css/panels/knowledge.css",
   // No knowledge.css: that panel is composed entirely from shared primitives
   // (.card, .chip, .tbl, .bar-track). An empty stylesheet would be one more
   // request and one more thing to keep in the manifest for no rules at all.
@@ -244,6 +245,10 @@ const required = [
   "templates/skills/orc-challenge/references/fix-brief.md",
   "templates/skills/orc-challenge/references/plain-english.md",
   "templates/skills/orc-challenge/references/conservation.md",
+  // v0.49.1 — the council's canonical prose. The spine keeps the token and a
+  // pointer; this file is the one copy (the `_shared/` discipline).
+  "templates/skills/orc-challenge/references/council.md",
+  "templates/skills/orc-challenge/examples/council-full-roster.md",
   // v0.48.0 — /orc-doc. Named file by file for the reason every lane's files
   // are: `chunking.md` IS the token architecture (a publish that drops it ships
   // an orchestrator with no definition of what it may hold, which is the one
@@ -332,6 +337,19 @@ const required = [
   "templates/agents/orc-challenge-judge-opus-5-high.md",
   "templates/agents/orc-challenge-advisor-opus-5-med.md",
   "templates/agents/orc-challenge-reader-opus-5-low.md",
+  // v0.49.1 — THE COUNCIL. Five DIFFERENT INSTRUMENTS, not five tiers of one:
+  // the contrarian assumes a fatal flaw, the outsider knows nothing and may not
+  // be told, the council executor asks what you do Monday morning, the
+  // first-principles thinker disputes the goal itself, and the expansionist is
+  // the only lens not looking for a defect. All five must ship: a roster lens
+  // that cannot be dispatched is a NOT-RUN row a user paid to select, and rule
+  // 15 makes that loud rather than silent. All five are claude-opus-5, so
+  // `opus5_only` adds NO pair and the floor moves by exactly five.
+  "templates/agents/orc-challenge-contrarian-opus-5-high.md",
+  "templates/agents/orc-challenge-outsider-opus-5-low.md",
+  "templates/agents/orc-challenge-executor-opus-5-med.md",
+  "templates/agents/orc-challenge-principles-opus-5-high.md",
+  "templates/agents/orc-challenge-expansionist-opus-5-med.md",
   // v0.48.0 — the two /orc-doc agents. BOTH must ship: a write wave that cannot
   // dispatch the writer has nothing to assemble, and a check wave that cannot
   // dispatch the checker silently turns the only judgment step into the free
@@ -402,8 +420,15 @@ const agentCount = walkCount(path.join(ROOT, "templates/agents"), ".md");
 // harder-thinking checker reasons its way past a gap a real reader would trip
 // on — the challenge cold reader's reasoning), so nothing may upgrade it. Both
 // are claude-opus-5, so `opus5_only` adds NO pair and the floor moves by two.
+// v0.49.1: +0 skills and +5 agents — THE COUNCIL. Same rule as v0.47.0, applied
+// five times: each of these is a DIFFERENT INSTRUMENT, not a tier of one. The
+// outsider is `low` and the contrarian is `high` for the same class of reason
+// the cold reader is `low` — effort here is a MEASUREMENT choice, not a cost
+// one, and a key that let either be tuned would be a key that let the
+// instrument be broken. All five are claude-opus-5, so `opus5_only` adds NO
+// pair and the floor moves by exactly five.
 if (skillCount < 38) missing.push(`templates/skills (expected >=38 SKILL.md, found ${skillCount})`);
-if (agentCount < 46) missing.push(`templates/agents (expected >=46 .md, found ${agentCount})`);
+if (agentCount < 51) missing.push(`templates/agents (expected >=51 .md, found ${agentCount})`);
 
 // B4 — encoding/mojibake guard. The OneDrive corruption rule becomes a gate:
 // scan every shipped text file for the U+FFFD replacement char (invalid UTF-8

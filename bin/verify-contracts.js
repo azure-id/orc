@@ -33,7 +33,12 @@ const CONTRACTS = [
       "agents/orc-analyze-mini-opus-5-med.md",
       "agents/orc-analyze-mini-sonnet-5-high.md",
       "agents/orc-challenge-advisor-opus-5-med.md",
+      "agents/orc-challenge-contrarian-opus-5-high.md",
+      "agents/orc-challenge-executor-opus-5-med.md",
+      "agents/orc-challenge-expansionist-opus-5-med.md",
       "agents/orc-challenge-judge-opus-5-high.md",
+      "agents/orc-challenge-outsider-opus-5-low.md",
+      "agents/orc-challenge-principles-opus-5-high.md",
       "agents/orc-challenge-reader-opus-5-low.md",
       "agents/orc-claude-writer-opus-4-8-high.md",
       "agents/orc-claude-writer-opus-5-med.md",
@@ -81,6 +86,7 @@ const CONTRACTS = [
       "skills/orc-budget/SKILL.md",
       "skills/orc-budget/references/corpus.md",
       "skills/orc-challenge/SKILL.md",
+      "skills/orc-challenge/references/council.md",
       "skills/orc-claude/SKILL.md",
       "skills/orc-claude/examples/claude-run-mock.md",
       "skills/orc-diy/references/blocks/trace.md",
@@ -242,13 +248,17 @@ const CONTRACTS = [
       "agents/orc-planner-mini-opus-5-med.md",
       "agents/orc-planner-mini-sonnet-5-high.md",
       "agents/orc-planner-opus-5-med.md",
-      "skills/orc-mini/SKILL.md",
-      "skills/orc/SKILL.md",
-      // v0.41.0: `disposition` is also the TDD scoping field (new-surface |
-      // behavior-change | covered-by-existing | no-behavior | no-runner), so
-      // these three carry the token for that reason, not for grounding.
+      "commands/orc-explain.md",
+      "skills/orc-challenge/examples/council-full-roster.md",
+      "skills/orc-challenge/references/conservation.md",
+      "skills/orc-challenge/references/council.md",
+      "skills/orc-challenge/references/cycle-state.md",
+      "skills/orc-challenge/references/verdict-doc.md",
       "skills/orc-diy/references/blocks/execution.md",
       "skills/orc-diy/references/flow-schema.md",
+      "skills/orc-explain/SKILL.md",
+      "skills/orc-mini/SKILL.md",
+      "skills/orc/SKILL.md",
       "skills/orc/config.md",
       "skills/orc/references/analyst-gates.md",
       "skills/orc/references/plan-handoff.md",
@@ -256,11 +266,6 @@ const CONTRACTS = [
       "skills/orc/schemas/planning-output.md",
       "skills/orc/subskills/orc-planner-mini/SKILL.md",
       "skills/orc/subskills/orc-planner/SKILL.md",
-      // v0.42.0: /orc-explain names ORC jargon in order to DEFINE it for a user
-      // who did not follow a message. A vocabulary mention, not a second copy of
-      // the grounding contract — registered so the set-equality check stays true.
-      "commands/orc-explain.md",
-      "skills/orc-explain/SKILL.md",
     ],
   },
   {
@@ -781,6 +786,7 @@ const CONTRACTS = [
       "skills/orc-boundary/SKILL.md",
       "skills/orc-brainstorm/SKILL.md",
       "skills/orc-challenge/SKILL.md",
+      "skills/orc-challenge/references/council.md",
       "skills/orc-challenge/references/intake.md",
       "skills/orc-doc/SKILL.md",
       "skills/orc-doc/references/gates.md",
@@ -799,6 +805,7 @@ const CONTRACTS = [
       "skills/_shared/interview.md",
       "skills/orc-brainstorm/SKILL.md",
       "skills/orc-challenge/SKILL.md",
+      "skills/orc-challenge/references/council.md",
       "skills/orc-doc/SKILL.md",
       "skills/orc-grill/SKILL.md",
     ],
@@ -815,6 +822,7 @@ const CONTRACTS = [
       "skills/_shared/interview.md",
       "skills/orc-brainstorm/SKILL.md",
       "skills/orc-challenge/SKILL.md",
+      "skills/orc-challenge/references/council.md",
     ],
   },
   {
@@ -828,6 +836,7 @@ const CONTRACTS = [
     files: [
       "skills/_shared/interview.md",
       "skills/orc-challenge/SKILL.md",
+      "skills/orc-challenge/references/council.md",
       "skills/orc-doc/SKILL.md",
     ],
   },
@@ -854,9 +863,15 @@ const CONTRACTS = [
     token: "goals.md",
     files: [
       "agents/orc-challenge-advisor-opus-5-med.md",
+      "agents/orc-challenge-contrarian-opus-5-high.md",
+      "agents/orc-challenge-executor-opus-5-med.md",
+      "agents/orc-challenge-expansionist-opus-5-med.md",
       "agents/orc-challenge-judge-opus-5-high.md",
+      "agents/orc-challenge-principles-opus-5-high.md",
       "skills/orc-challenge/SKILL.md",
+      "skills/orc-challenge/examples/council-full-roster.md",
       "skills/orc-challenge/examples/tsd-two-iterations.md",
+      "skills/orc-challenge/references/council.md",
       "skills/orc-challenge/references/cycle-state.md",
       "skills/orc-challenge/references/dimensions.md",
       "skills/orc-challenge/references/fix-brief.md",
@@ -873,8 +888,91 @@ const CONTRACTS = [
     token: "judge slice is SEALED",
     files: [
       "skills/orc-challenge/SKILL.md",
+      "skills/orc-challenge/references/council.md",
       "skills/orc-challenge/references/sealed-slice.md",
     ],
+  },
+  {
+    // v0.49.1: the FOURTH member of the interview family. Same split every time
+    // — the facts are ORC's, the decision is the user's — but this one is about
+    // WHO REVIEWS. A council chosen by ORC is ORC deciding which kinds of
+    // criticism the user is allowed to hear, which is a bigger decision than any
+    // single finding in the run. Mirrored in bin/cli.js, where `--council` has
+    // no default and `init` refuses by name.
+    // v0.49.1. The rule NO OTHER LINT CAN ENFORCE, which is exactly why it is
+    // written down in three places and tested per read: a field the human path
+    // prints and the JSON omits is drift, and both halves live in ONE function,
+    // so nothing structural can ever notice the gap.
+    name: "a read hands back the whole computed object (v0.49.1)",
+    token: "--json is not a summary",
+    files: ["skills/_shared/detecting-artifacts.md"],
+    binFiles: ["bin/cli.js"],
+  },
+  {
+    name: "the council is the user's to pick (v0.49.1 — /orc-challenge)",
+    token: "a lane that picks its own council",
+    files: [
+      "skills/_shared/interview.md",
+      "skills/orc-challenge/README.md",
+      "skills/orc-challenge/SKILL.md",
+      "skills/orc-challenge/examples/council-full-roster.md",
+      "skills/orc-challenge/references/council.md",
+      "skills/orc-challenge/references/intake.md",
+    ],
+    binFiles: ["bin/cli.js"],
+  },
+  {
+    // The rule that makes five extra reviewers SAFE. A lens may only ever add a
+    // candidate; the judge is the only role that assigns an outcome, and it is
+    // the instrument `orc challenge record` validates against. Without this, the
+    // council is five more opinions with no arbiter and the ledger stops meaning
+    // anything.
+    name: "a lens raises, the judge resolves (v0.49.1 — the council)",
+    token: "A lens raises; only the judge resolves",
+    files: [
+      "agents/orc-challenge-contrarian-opus-5-high.md",
+      "agents/orc-challenge-executor-opus-5-med.md",
+      "skills/orc-challenge/README.md",
+      "skills/orc-challenge/SKILL.md",
+      "skills/orc-challenge/references/conservation.md",
+      "skills/orc-challenge/references/council.md",
+    ],
+  },
+  {
+    // The council's canonical prose has ONE copy. The spine keeps the token and
+    // a pointer; every lens agent points at it too, so a maintainer editing one
+    // agent cannot invent a second idea of what the council is.
+    name: "the council's canonical prose (v0.49.1)",
+    token: "council.md",
+    files: [
+      "agents/orc-challenge-contrarian-opus-5-high.md",
+      "agents/orc-challenge-executor-opus-5-med.md",
+      "agents/orc-challenge-expansionist-opus-5-med.md",
+      "agents/orc-challenge-outsider-opus-5-low.md",
+      "agents/orc-challenge-principles-opus-5-high.md",
+      "skills/orc-challenge/README.md",
+      "skills/orc-challenge/SKILL.md",
+      "skills/orc-challenge/references/dimensions.md",
+      "skills/orc-challenge/references/intake.md",
+      "skills/orc-challenge/references/sealed-slice.md",
+    ],
+  },
+  {
+    // conservation.md applied to INPUT. The obvious failure of adding five
+    // reviewers is that the judge quietly ignores four of them and the run looks
+    // identical while costing five times more — so the id set is derived by the
+    // CLI from the reports on disk, never from the judge's account of them.
+    name: "council conservation (v0.49.1 — conservation of input)",
+    token: "council_coverage_pct",
+    files: [
+      "skills/orc-challenge/README.md",
+      "skills/orc-challenge/SKILL.md",
+      "skills/orc-challenge/references/conservation.md",
+      "skills/orc-challenge/references/council.md",
+      "skills/orc-challenge/references/cycle-state.md",
+      "skills/orc-challenge/references/verdict-doc.md",
+    ],
+    binFiles: ["bin/cli.js"],
   },
   {
     // Rule 2. A judge that CAN pass something can be talked into passing
@@ -897,13 +995,13 @@ const CONTRACTS = [
     files: [
       "agents/orc-challenge-judge-opus-5-high.md",
       "skills/orc-challenge/examples/code-module.md",
+      "skills/orc-challenge/examples/council-full-roster.md",
       "skills/orc-challenge/examples/tsd-two-iterations.md",
+      "skills/orc-challenge/references/council.md",
       "skills/orc-challenge/references/fix-brief.md",
       "skills/orc-challenge/references/intake.md",
       "skills/orc-challenge/references/sealed-slice.md",
       "skills/orc-challenge/references/verdict-doc.md",
-      // The /orc-export seam: a PASSED cycle is portable evidence that a spec was
-      // checked, not just written. An in-flight one is never exported.
       "skills/orc-export/SKILL.md",
     ],
     binFiles: ["bin/cli.js"],
@@ -958,7 +1056,9 @@ const CONTRACTS = [
     token: "CHALLENGE iter=",
     files: [
       "skills/orc-challenge/SKILL.md",
+      "skills/orc-challenge/examples/council-full-roster.md",
       "skills/orc-challenge/examples/tsd-two-iterations.md",
+      "skills/orc-challenge/references/council.md",
       "skills/orc/references/trace-protocol.md",
     ],
     binFiles: ["bin/cli.js"],
@@ -1154,9 +1254,12 @@ const CONTRACTS = [
       "skills/context-combiner/schemas/combined-report.md",
       "skills/context-combiner/schemas/combined-requirement-spec.md",
       "skills/orc-analyze/references/branching.md",
+      "skills/orc-challenge/README.md",
       "skills/orc-challenge/SKILL.md",
       "skills/orc-challenge/references/conservation.md",
+      "skills/orc-challenge/references/council.md",
       "skills/orc-challenge/references/cycle-state.md",
+      "skills/orc-challenge/references/verdict-doc.md",
       "skills/orc/SKILL.md",
       "skills/orc/references/analyst-gates.md",
     ],
@@ -1308,6 +1411,9 @@ const CONTRACTS = [
       "skills/_shared/opus5-only.md",
       "skills/orc-analyze/references/deep-mode.md",
       "skills/orc-challenge/README.md",
+      "skills/orc-challenge/SKILL.md",
+      "skills/orc-challenge/references/council.md",
+      "skills/orc-challenge/references/intake.md",
       "skills/orc-claude/SKILL.md",
       "skills/orc-diy/README.md",
       "skills/orc-doc/README.md",
@@ -2373,6 +2479,7 @@ const CONTRACTS = [
     name: "the orchestrator never reads the document body (v0.48.0 — /orc-doc)",
     token: "a lane that reads its own document",
     files: [
+      "skills/orc-challenge/references/council.md",
       "skills/orc-doc/SKILL.md",
       "skills/orc-doc/references/chunking.md",
     ],

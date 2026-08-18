@@ -35,7 +35,7 @@
   "overview.item.wikiNone.cta": "Buka Pengetahuan",
   "overview.item.wikiUnregistered.title": "Wiki belum terdaftar",
   "overview.item.wikiUnregistered.body": "Dokumennya ada tapi belum bisa dibaca siapa pun. Registrasi diturunkan dari dokumen, jadi `orc wiki sync` gratis dan instan — bukan scan ulang.",
-  "overview.item.wikiUnregistered.cta": "Sync di Pengetahuan",
+  "overview.item.wikiUnregistered.cta": "Buka Pengetahuan",
   "overview.item.patterns.title": "Belum ada code pattern tersimpan",
   "overview.item.patterns.body": "Tanpa itu, executor menulis kode generik, bukan kode yang cocok dengan repo ini. /orc-pattern merangkumnya sekali dan dipakai ulang oleh setiap run berikutnya.",
   "overview.item.patterns.cta": "Buka Pengetahuan",
@@ -76,5 +76,6 @@
   "overview.item.exportStale.cta": "Susun ulang",
   "overview.item.pactBroken.cta": "Buka Janji",
   "overview.item.boundaryRefuse.cta": "Buka Batas",
-  "overview.item.docDrifted.cta": "Buka Dokumen"
+  "overview.item.docDrifted.cta": "Buka Dokumen",
+  "overview.item.wikiDebt.cta": "Buka Pengetahuan"
 }

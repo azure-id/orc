@@ -6,14 +6,16 @@
 
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
-![Version](https://img.shields.io/badge/version-0.49.0-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.49.1-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
 ![Dependencies](https://img.shields.io/badge/dependencies-zero-lightgrey.svg?style=for-the-badge)
 ![GitHub stars](https://img.shields.io/github/stars/azure-id/orc?style=for-the-badge&color=yellow)
 
-**Latest: v0.49.0** · updated 2026-08-17 · [full changelog](CHANGELOG.md)
+**Latest: v0.49.1** · updated 2026-08-18 · [full changelog](CHANGELOG.md)
+
+**🇮🇩 [Baca dalam Bahasa Indonesia](README-id.md)**
 
 </div>
 
@@ -161,6 +163,12 @@ with a plain tarball by itself.
 > at one of `/orc-wiki`'s pauses. Sync rebuilds the index from the docs you
 > already have, for free.
 
+> **"What does ORC actually know about my project?"** `orc wiki docs` lists every
+> registered doc, `orc wiki coverage` says how much of your code is written about
+> at all, and `orc pattern show <lang>` prints the conventions that go into every
+> agent that writes code here. All free, all read-only —
+> **[`guides/knowledge-reads.md`](guides/knowledge-reads.md)**.
+
 ---
 ## Terminal Hook
 ORC have terminal hook to see: Context Window %, 5 Hour usage %, Weekly usage % and others you might see
@@ -285,7 +293,7 @@ orc ui --stop          # shut this project's server down
 | Overview | version, `orc doctor`, wiki tier, what is waiting — plus **Worth doing**, one list of everything wanting a decision | — |
 | Settings | every config key, grouped, each with its own control | staged edits, applied together |
 | Runs | run history as an accordion: a row opens in place into state-of-play, resume prompt, checkpoint, trace tail | — |
-| Knowledge | wiki freshness and refresh scope, code patterns, gotchas, wiki debt | `wiki sync`, `gotcha prune` |
+| **Knowledge** | **five tabs**: the wiki's tier AND its **contents** (every doc, what it covers, how often it is read), coverage against your tracked files, the code patterns with the conflicts the codifier flagged, repair memory with a **preview-then-apply** prune, and a read-only view of the linked repos | `wiki sync`, `gotcha prune` |
 | Stats | lane and agent usage, downgrades, and a **Cost** tab whose stacked bar keeps cache-read visible | — |
 | Flow | the compiled DIY flow, its gate, and a stepper of every phase in order | `diy set`, `diy compile`, presets |
 | Crosslink | **Design** (the boundary as a graph) and **Settings** (each peer's freshness) | `crosslink add` / `remove` |
@@ -368,7 +376,7 @@ bin/webui/        `orc ui` — the local control panel: css/ + js/ + i18n/<lang>
                   fixtures/, one file per layer and per panel. Zero deps, no build step
 bin/mockrun-catalog.js   the mocked-run catalogue (derived from the files on disk)
 mock-run/         the mocked runs themselves — start at INDEX.md
-guides/           configuration · model selection
+guides/           configuration · model selection · documents · knowledge reads
 ```
 
 The `orc` skill is a thin **spine**: it loads a reference or a subskill only when
@@ -431,46 +439,50 @@ a current audit: [EVAL-REPORT.md](EVAL-REPORT.md).
 **Full history: [CHANGELOG.md](CHANGELOG.md)** — or `orc changelog`, which prints
 only what is newer than the version you have.
 
-### v0.49.0 — the document is a folder, and the file is a build artifact _(2026-08-17)_
+### v0.49.1 — the challenge council, and a `--json` that stops throwing things away _(2026-08-18)_
 
-`/orc-doc` only. No other lane changes, and zero new agents.
+Two workstreams, one release. They are the same defect seen twice: **ORC computes
+far more than it shows.**
 
-- **`sections/` is the source of truth.** Each section lives in its own real,
-  visible, diffable file; **`document.md` is a build artifact** that
-  `orc doc compile` rebuilds from those files, for free. Before this, `.work/`
-  was scratch and the monolith was truth, so every later change was extract →
-  edit → splice through a 10,000-line file. `orc doc split` goes the other way
-  and recovers a document a human reshaped by hand — byte for byte.
-- **You can look before you buy the rest.** `orc doc compile --partial` writes
-  exactly what exists and names the rest OUTSIDE the document; with the new
-  `doc_write_mode: partial` (asked once, stored) a write plan returns **wave 1
-  only**. Waves 2..N are bought only if wave 1 was right. That is the saving —
-  compiling was already free and always had been.
-- **A wave is a stop you can walk away from.** `RESUME.md` moves to the run dir,
-  where `orc resume` actually looks; its one line moves to column 0 (a `## `
-  prefix made it unmatchable, forever) and gains `· phase … · wave K of N`. The
-  section files ARE the progress, so `K of N` is computed, and a file no
-  validated return confirmed is `unconfirmed` — re-written, never shipped.
-- **The deliverable carries content only.** No `> **Open:**`, no
-  `> **Assumption:**`, in the document or in a section file. It still never
-  invents a fact: a gap goes to `gaps.md` and is raised with you. The new
-  `annotation-in-body` lint rule matches ORC's own markers and nothing else, and
-  `compile` reports them rather than silently stripping a line that might be
-  yours.
-- **A live bug, fixed by construction:** a two-section slice used to write one
-  file named after the first, so the second section's file never existed. **One
-  file per section** now. And a section too big for one file splits *underneath*
-  into sub-parts the reader never sees.
-- `doc_max_parallel`'s hard cap is now **2**; `orc doc parts` is the new
-  wave-boundary read; `orc doc ship` refuses on a stale document and names the
-  sections. A v1 document migrates on first touch — `document.md` is never
-  deleted, and an unparseable one is refused rather than guessed at.
+- **`/orc-challenge` gets five more instruments — and YOU pick them.** The
+  contrarian (*where is the fatal flaw?*), the outsider (*what does this assume I
+  already know?*), the council executor (*what do you do Monday morning?*), the
+  first-principles thinker (*are we even solving the right problem?*) and the
+  expansionist (*what is being undervalued?*). ORC suggests a roster from the
+  kind and the goal; **you choose it**, because choosing the council is choosing
+  which kinds of criticism you are allowed to hear. `--council` has no default
+  and refuses by name; `none` gives you exactly the review you had before.
+- **Two of them never block anything, and that is the honest answer.** An
+  expansionist that had to file a "finding" would have to invent a goal element
+  to serve, so it files an **opportunity** — no severity, always with a first
+  step and a route. A first-principles thinker disputes the *goal itself*, so it
+  files a **premise challenge**, which only a person can settle and which the
+  judge never sees.
+- **Six reviewers cannot quietly become one.** `orc challenge record` reads what
+  every reviewer wrote **from disk** and refuses the verdict unless the judge
+  accounted for every single id — adopted, merged, rejected or out-of-goal, each
+  with its reason. An adopted finding **keeps the raiser's id forever**, so after
+  two rounds you can see plainly which reviewer is worth its money. A reviewer
+  that did not run says so, with the reason, in the report *and* in the trace.
+- **`--json` is now the whole computed object, not a summary.** `orc wiki status
+  --json` used to emit five numbers while its own terminal output printed the
+  per-doc breakdown and **the name of the doc actually pinning the tier** — so
+  the panel could never be as detailed as the terminal. Fixed, plus new reads:
+  `orc wiki docs`, `wiki show <doc> [--body]`, `wiki coverage`, `pattern show
+  <lang> [--body]`, `gotcha show`, `gotcha list --archived`, and
+  `gotcha prune --dry-run`, which names every entry it would archive.
+- **`orc ui ▸ Knowledge` becomes five tabs** — Wiki, Coverage, Code patterns,
+  Memory, Peers — so you can finally see what the wiki *contains*, read the code
+  pattern that goes into every executor, and preview an eviction before it
+  happens. Coverage says out loud that it is a report and not a target.
+- `orc doctor` gains exactly two wiki cautions: `wiki-unregistered` (free to fix)
+  and `wiki-debt` — **on STALE only, never on AGING**, because a doctor that
+  warns about a normal state is a doctor you learn to ignore.
 
-Before that: **v0.48.1 — one file per thing, and a document that can be
-finished**, **v0.48.0 — a document long enough to end a session, written
-anyway** (`/orc-doc`), **v0.47.0 — a lane that refuses to produce**, and
-**v0.46.0 — a lane that remembers, a lane that declines, and a lane that
-measures**.
+Before that: **v0.49.0 — the document is a folder, and the file is a build
+artifact** (`/orc-doc`), **v0.48.1 — one file per thing, and a document that can
+be finished**, **v0.48.0 — a document long enough to end a session, written
+anyway**, and **v0.47.0 — a lane that refuses to produce**.
 [Read them in the changelog](CHANGELOG.md).
 
 ---

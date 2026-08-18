@@ -182,6 +182,23 @@ const READS = {
   "/api/wiki/plan": () => ["wiki", "plan"],
   "/api/wiki/debt": () => ["wiki", "debt"],
   "/api/wiki/usage": () => ["wiki", "usage"],
+  // v0.49.1 — the wiki's CONTENTS, not only its temperature. All three are
+  // READS whose exit code is DATA (docs 0/1/3, show 0/2/3, coverage 0/1), and
+  // `coverage` deliberately has no threshold: nothing branches on it, here or
+  // anywhere else. `--body` is opt-in and one artifact at a time — the
+  // /api/doc/section precedent.
+  "/api/wiki/docs": () => ["wiki", "docs"],
+  "/api/wiki/show": (q) => ["wiki", "show", String(q.doc || ""), ...(q.body ? ["--body"] : [])],
+  "/api/wiki/coverage": () => ["wiki", "coverage"],
+  // The pattern file is injected LITERALLY into every executor slice, and until
+  // now nothing would show you a line of it. Same 0/1/2 contract `pattern
+  // status` has had since v0.34.8.
+  "/api/pattern/show": (q) => ["pattern", "show", String(q.lang || ""), ...(q.body ? ["--body"] : [])],
+  "/api/gotcha/show": (q) => ["gotcha", "show", String(q.id || "")],
+  "/api/gotchas/archived": () => ["gotcha", "list", "--archived"],
+  // Preview-then-apply: A COUNT IS NOT CONSENT. The Apply button stays disabled
+  // until this has been fetched, and it names every entry eviction would touch.
+  "/api/gotcha/prune/preview": () => ["gotcha", "prune", "--dry-run"],
   "/api/pact": () => ["pact", "status"],
   "/api/boundary": (q) => (q.path ? ["boundary", "status", String(q.path)] : ["boundary", "status"]),
   "/api/handoff": () => ["handoff", "surfaces"],
@@ -207,6 +224,12 @@ const READS = {
     ...(q.iteration ? ["--iteration", String(q.iteration)] : []),
   ],
   "/api/challenge/diff": (q) => ["challenge", "diff", String(q.slug || "")],
+  // v0.49.1 — the council. `roles` is STATIC (it works with no cycle at all),
+  // and it is the ONE catalogue: the panel names no lens, no class and no
+  // disposition itself, exactly as it names no flow step. `council` is 0 set /
+  // 1 unset / 3 unknown, and UNSET is an ANSWER, not an error.
+  "/api/challenge/roles": (q) => ["challenge", "roles", ...(q.kind ? ["--kind", String(q.kind)] : [])],
+  "/api/challenge/council": (q) => ["challenge", "council", String(q.slug || "")],
   "/api/challenge/lint": (q) => [
     "challenge",
     "lint",
@@ -310,6 +333,18 @@ const WRITES = {
   "/api/challenge/accept": (b) => ["challenge", "accept", String(b.slug), String(b.id), String(b.reason || "")],
   "/api/challenge/rebut": (b) => ["challenge", "rebut", String(b.slug), String(b.id), String(b.reason || "")],
   "/api/challenge/report": (b) => ["challenge", "report", String(b.slug)],
+  // v0.49.1. Both are FREE and both REFUSE without a reason, so both are
+  // buttons. There is deliberately NO route for `council --set`: changing the
+  // roster mid-cycle is a decision with a recorded reason that the LANE takes in
+  // the conversation — the same reasoning that keeps `orc doc log` and
+  // `orc doc mode` off the panel. Adopting a premise needs a goals FILE, which
+  // the panel must not invent, so that one stays a copy-able command too.
+  "/api/challenge/premise": (b) => [
+    "challenge", "premise", String(b.slug), String(b.id), "--dismiss", "--reason", String(b.reason || ""),
+  ],
+  "/api/challenge/opportunity": (b) => [
+    "challenge", "opportunity", String(b.slug), String(b.id), b.take ? "--take" : "--drop", "--reason", String(b.reason || ""),
+  ],
   // v0.48.0. `assemble` — now `compile` — is the ONE /orc-doc write that costs
   // nothing: it concatenates section files that are already on disk, in an order
   // the outline already fixed. Writing a section, checking one and editing one
