@@ -162,6 +162,14 @@ with a plain tarball by itself.
 > already have, for free.
 
 ---
+## Terminal Hook
+ORC have terminal hook to see: Context Window %, 5 Hour usage %, Weekly usage % and others you might see
+
+<img width="725" height="96" alt="image" src="https://github.com/user-attachments/assets/6a649c87-81ea-4fd9-9d0b-6bb4b97fe9cd" />
+
+<br>
+
+---
 
 ## The lanes
 
