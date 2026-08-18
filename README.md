@@ -101,10 +101,6 @@ written agreements. ORC writes that discipline down as skills:
 ## Quick start
 
 ```bash
-npm i -g orc
-# or straight from GitHub — no registry needed
-npm i -g github:azure-id/orc
-# or, if the install fights you:
 npm i -g https://github.com/azure-id/orc/archive/refs/heads/main.tar.gz
 ```
 
@@ -260,20 +256,7 @@ A local web page for **everything in ORC that is not ai**. One boundary defines
 it: **it never runs a lane, never spawns `claude`, never calls a model API.**
 Everything it shows or writes is deterministic CLI output.
 
-<!--
-  🎬 VIDEO PLACEHOLDER — the walkthrough goes right here.
-
-  1. Record `orc ui --fixtures` (under ~2 min). Save the files as
-       mock-run/media/orc-ui-demo.mp4
-       mock-run/media/orc-ui-demo-poster.png
-  2. Replace the blockquote below with this line:
-
-       [![Watch the orc ui walkthrough](mock-run/media/orc-ui-demo-poster.png)](mock-run/media/orc-ui-demo.mp4)
-
-  To make it PLAY inline on github.com instead of opening the file, drag the
-  .mp4 into any issue comment and paste the https://github.com/user-attachments/…
-  URL GitHub gives you, on its own line. Full steps: mock-run/media/README.md
--->
+<img width="1870" height="1269" alt="image" src="https://github.com/user-attachments/assets/207fe821-9aa6-430e-bdcc-968340cc687f" />
 
 > 🎬 **Video walkthrough — not recorded yet.** The player belongs here; see
 > [`mock-run/media/README.md`](mock-run/media/README.md) for the two files to
