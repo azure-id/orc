@@ -314,3 +314,119 @@ test("every profile names a lane-safe, existing key set (no decorative keys)", (
   assert.ok(used.length > 10, "profiles actually set keys");
   for (const k of used) assert.ok(known.has(k), `profile key "${k}" is a real CONFIG_META key`);
 });
+
+/* ══════════════════════════════════════════════════════════ v0.49.2 ═══════
+   A RUN THE HUMAN IS FINISHED WITH.
+
+   `RESUME.md` existing IS the unfinished flag (v0.42.0) and ORC deletes it at
+   FINISH — so a run the user ABANDONED was waiting forever: `orc resume` kept
+   offering it, the Overview kept counting it, and the maintenance preview kept
+   refusing to upgrade because "4 run(s) are still waiting". There was no way
+   out that did not involve deleting a file by hand.
+
+   Closing is a USER DECISION, RECORDED, COMPUTED FROM DISK, and REVERSIBLE. It
+   is deliberately not called `done`: the disk cannot prove the run finished. */
+
+test("run close: a reason is REQUIRED, and it deletes nothing", () => {
+  const root = tmpdir();
+  try {
+    seedRun(root, "merchant-notifications", { resume: RESUME_BODY });
+
+    // A state change with no recorded reason is a state nobody can audit —
+    // the same rule that stops `/orc-pact` retiring a promise without one.
+    let r = cli(["run", "close", "merchant-notifications", "--json", "--dir", root]);
+    assert.strictEqual(r.status, 2);
+    assert.strictEqual(JSON.parse(r.stdout).reason, "no-reason");
+
+    r = cli(["run", "close", "merchant-notifications", "--reason", "superseded by the v2 plan", "--json", "--dir", root]);
+    assert.strictEqual(r.status, 0);
+    const d = JSON.parse(r.stdout);
+    assert.strictEqual(d.status, "closed");
+    assert.deepStrictEqual(d.deleted, [], "nothing is deleted, ever");
+    assert.match(d.moved, /RESUME\.md -> RESUME\.closed\.md/);
+
+    const dir = path.join(root, RUN_REL, "merchant-notifications");
+    assert.ok(!fs.existsSync(path.join(dir, "RESUME.md")), "the pointer moved");
+    assert.ok(fs.existsSync(path.join(dir, "RESUME.closed.md")), "and it is still on disk, byte for byte");
+    assert.strictEqual(fs.readFileSync(path.join(dir, "RESUME.closed.md"), "utf8"), RESUME_BODY);
+    assert.match(JSON.parse(fs.readFileSync(path.join(dir, "closed.json"), "utf8")).reason, /superseded/);
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("run close: a closed run stops being waiting — everywhere, from ONE boolean", () => {
+  const root = tmpdir();
+  try {
+    seedRun(root, "closed-one", { resume: RESUME_BODY });
+    seedRun(root, "still-open", { resume: RESUME_BODY });
+    cli(["run", "close", "closed-one", "--reason", "answered the question", "--dir", root]);
+
+    const list = JSON.parse(cli(["run", "list", "--json", "--dir", root]).stdout);
+    const row = (slug) => list.runs.find((x) => x.slug === slug);
+    // A NEW COMPUTED STATE, not `done`: the disk cannot prove the run finished,
+    // only that a human said they were finished with it.
+    assert.strictEqual(row("closed-one").status, "closed");
+    assert.strictEqual(row("still-open").status, "waiting");
+    // Nothing disappears, and the reason rides along.
+    assert.match(row("closed-one").closed.reason, /answered the question/);
+    assert.strictEqual(row("still-open").closed, null);
+    // A closed run keeps everything it KNEW — closing is about attention, not
+    // erasure.
+    assert.strictEqual(row("closed-one").lane, "/orc");
+    assert.strictEqual(row("closed-one").wave, "wave 2 of 4 done");
+
+    // `orc resume` skips it.
+    const res = cli(["run", "resume", "--dir", root]);
+    void res;
+    const rr = cli(["resume", "--no-clipboard", "--dir", root]);
+    assert.strictEqual(rr.status, 0, "the other run is still waiting");
+    assert.ok(!/closed-one/.test(rr.stdout), "but the closed one is never offered");
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("run reopen: it puts the run back, and double-closing is refused by name", () => {
+  const root = tmpdir();
+  try {
+    seedRun(root, "changed-my-mind", { resume: RESUME_BODY });
+    cli(["run", "close", "changed-my-mind", "--reason", "not needed", "--dir", root]);
+
+    let r = cli(["run", "close", "changed-my-mind", "--reason", "again", "--json", "--dir", root]);
+    assert.strictEqual(r.status, 2);
+    assert.strictEqual(JSON.parse(r.stdout).reason, "already-closed");
+
+    r = cli(["run", "reopen", "changed-my-mind", "--json", "--dir", root]);
+    assert.strictEqual(r.status, 0);
+    assert.strictEqual(JSON.parse(r.stdout).status, "waiting");
+    assert.match(JSON.parse(r.stdout).was_reason, /not needed/, "and it says what it had been closed with");
+
+    const dir = path.join(root, RUN_REL, "changed-my-mind");
+    assert.ok(fs.existsSync(path.join(dir, "RESUME.md")));
+    assert.ok(!fs.existsSync(path.join(dir, "RESUME.closed.md")));
+    assert.strictEqual(fs.readFileSync(path.join(dir, "RESUME.md"), "utf8"), RESUME_BODY, "byte for byte");
+
+    r = cli(["run", "reopen", "changed-my-mind", "--json", "--dir", root]);
+    assert.strictEqual(r.status, 2);
+    assert.strictEqual(JSON.parse(r.stdout).reason, "not-closed");
+
+    r = cli(["run", "close", "no-such-run", "--reason", "x", "--json", "--dir", root]);
+    assert.strictEqual(r.status, 1);
+    assert.strictEqual(JSON.parse(r.stdout).reason, "no-such-run");
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("run close: a run that is not waiting has no pointer to close", () => {
+  const root = tmpdir();
+  try {
+    seedRun(root, "already-done", { files: { "state-of-play.md": "done\n" } });
+    const r = cli(["run", "close", "already-done", "--reason", "x", "--json", "--dir", root]);
+    assert.strictEqual(r.status, 2);
+    assert.strictEqual(JSON.parse(r.stdout).reason, "not-waiting");
+  } finally {
+    rmrf(root);
+  }
+});

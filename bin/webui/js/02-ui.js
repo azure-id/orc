@@ -90,6 +90,15 @@ function empty(msg, hint) {
   return box;
 }
 
+// Every panel's load-failure box. It shows the reason AND the output the CLI
+// actually produced — a 500 with no message is what the user saw before v0.49.2.
+function failBox(e) {
+  const box = empty(t("common.loadFail"), String((e && e.message) || e));
+  const detail = e && e.detail ? String(e.detail).trim() : "";
+  if (detail) box.append(el("pre", "block wrap fail-detail", detail.slice(0, 2000)));
+  return box;
+}
+
 function toast(msg, kind, detail) {
   const t = el("div", "toast" + (kind ? " toast-" + kind : ""));
   t.append(el("div", null, msg));

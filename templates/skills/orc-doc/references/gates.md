@@ -72,6 +72,25 @@ through. It **replaces** the shipped template entirely — never a silent merge.
 No `## ` headings found → say so, show the shipped outline, and ask which to
 use. **A structure is never guessed out of prose.**
 
+### A supplied template is a P0 cage, not a suggestion
+
+It **locks by default**. A writer may not add, rename, merge or drop a heading;
+what does not fit is a **gap**. *a lane that writes outside its template* has
+broken the contract. Three enforcement points, all free:
+
+- `orc doc lint` errors `heading-outside-template` on an H2+ that is neither the
+  section's own heading nor a declared subsection.
+- `orc doc parts --confirm` **REFUSES** a part whose headings drifted, naming the
+  heading and writing nothing — the `splice` hash-conflict refusal shape.
+- `orc doc audit` reports `template-drift`, and `template-moved` when the source
+  template file itself changed since init (reported, **never** auto-synced).
+
+`--template-soft` opts out at init and the init line says which is in force. A
+**shipped** base template stays a floor — `orc doc templates` has always said so,
+and that sentence now applies to the base templates only. A human adding a
+heading by hand is `user-edited`, which is REPORTED and never a finding.
+`references/generation-rules.md`.
+
 ## D4 — purpose (must be answered)
 
 ONE batched round, in the `../../_shared/interview.md` format — every question
@@ -129,6 +148,22 @@ And one is a question:
   `orc doc mode <slug> --set <mode>`; it is asked **once per run**, never
   re-decided per wave — that is remembered-not-dispatched protocol, and this
   repo has already paid for it twice.
+
+## D5.5 — the run map, once, before the first paid wave
+
+`orc doc forecast <slug> --json`, RENDERED. Waves, agents per wave, how many
+STOPS there will be, and a token range with its sample count. Every honesty rule
+of `/orc-budget` is inherited: four token kinds never blended, no dollars without
+a dated price table, no quota without a known plan, `unattributed` always
+reported — and **no history means no forecast**, with the `--naive` price-table
+floor offered instead.
+
+`orc doc next` names it **exactly once**, `paid: false`, before the first write
+wave. The record lives in `doc.json.forecast`, so a resumed session in a fresh
+context prints one line and moves on. A changed outline or a changed write mode
+invalidates it — **a forecast for a different shape is not a forecast.** A
+refusal for no history is still an answer and is still shown once; otherwise this
+is a step the lane could never get past.
 
 ## What lands on disk
 

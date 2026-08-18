@@ -20,7 +20,7 @@ async function renderChallenge(body) {
   try {
     d = (await read("/api/challenge")).data;
   } catch (e) {
-    body.replaceChildren(empty(t("common.loadFail"), String(e.message)));
+    body.replaceChildren(failBox(e));
     return;
   }
   const out = frag();
@@ -115,7 +115,7 @@ async function loadChallengeDetail(pane, slug, body) {
     // the Flow stepper draws `orc diy show --json`'s steps[].
     roles = (await read("/api/challenge/roles").catch(() => ({ data: null }))).data;
   } catch (e) {
-    pane.replaceChildren(empty(t("common.loadFail"), String(e.message)));
+    pane.replaceChildren(failBox(e));
     return;
   }
   const out = frag();

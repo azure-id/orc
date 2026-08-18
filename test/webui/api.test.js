@@ -281,3 +281,47 @@ test("ui: the update-check env var never gags the commands that check updates", 
   assert.match(fn, /argv\[0\] === "version"/, "`version` must be exempt");
   assert.match(fn, /argv\[0\] === "changelog"/, "`changelog` must be exempt");
 });
+
+/* ══════════════════════════════════════════════════════════ v0.49.2 ═══════
+   A 500 WITH NO MESSAGE IS WHAT THE USER ACTUALLY SAW. A read that produced no
+   parseable object already carried `stderr` and `stdout` in the body; nothing
+   was named `error`, so the client fell through to "request failed (500)" and
+   one corrupt file on disk looked like a broken panel. */
+
+test("a read that produces no JSON comes back with the CLI's own reason", () => {
+  const api = fs.readFileSync(path.join(REPO, "bin", "webui", "api.js"), "utf8");
+  // The body gains an `error` the client already knows how to render.
+  assert.match(api, /out\.ok \? out : \{ \.\.\.out, error: readFailReason\(out\) \}/);
+  assert.match(api, /function readFailReason\(out\)/);
+  // It names WHAT ran and WHY it stopped, in the CLI's own first line.
+  const fn = api.slice(api.indexOf("function readFailReason"));
+  assert.match(fn.slice(0, 600), /out\.stderr \|\| out\.stdout/);
+  assert.match(fn.slice(0, 600), /produced no JSON \(exit \$\{out\.exit_code\}\)/);
+
+  // And the client renders it — message AND the output itself.
+  const core = fs.readFileSync(path.join(REPO, "bin", "webui", "js", "00-core.js"), "utf8");
+  assert.match(core, /function failure\(payload, status\)/);
+  assert.match(core, /err\.detail = \[payload\.command, payload\.stderr, payload\.stdout\]/);
+  const ui = fs.readFileSync(path.join(REPO, "bin", "webui", "js", "02-ui.js"), "utf8");
+  assert.match(ui, /function failBox\(e\)/);
+  assert.match(ui, /e\.detail/);
+  // Every panel that used to show only `e.message` now shows the box.
+  for (const f of ["panels/docs.js", "panels/challenge.js", "panels/runs.js", "04-router.js"]) {
+    const src = fs.readFileSync(path.join(REPO, "bin", "webui", "js", f), "utf8");
+    assert.ok(!/empty\(t\("common\.loadFail"\), String\(e\.message\)\)/.test(src), `${f} must render the reason, not just the message`);
+    assert.match(src, /failBox\(e\)/);
+  }
+});
+
+test("maintenance: waiting_runs excludes a run the human closed", () => {
+  const api = fs.readFileSync(path.join(REPO, "bin", "webui", "api.js"), "utf8");
+  // ONE boolean, read everywhere. `closed` is not `waiting`, so the upgrade
+  // preview unblocks without any other subsystem learning a new word.
+  assert.match(api, /\.filter\(\(r\) => r\.status === "waiting"\)/);
+  const fixtures = fs.readFileSync(path.join(REPO, "bin", "webui", "fixtures", "index.js"), "utf8");
+  assert.match(fixtures, /waiting_runs: runs\.runs\.filter\(\(r\) => r\.status === "waiting"\)/,
+    "the fixture derives it from the SAME list the Runs panel renders");
+  // The Overview payload carries rows, not bare slugs — the age column needs a
+  // number and the button needs a slug.
+  assert.match(api, /waiting: waiting\.map\(\(r\) => \(\{ slug: r\.slug, updated_ms: r\.updated_ms, lane: r\.lane \|\| null \}\)\)/);
+});

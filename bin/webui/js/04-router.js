@@ -45,7 +45,7 @@ async function section(host, loader, render) {
     const out = render(data);
     slot.replaceChildren(out || el("div"));
   } catch (e) {
-    slot.replaceChildren(empty(t("common.loadFail"), String(e.message)));
+    slot.replaceChildren(failBox(e));
   }
   return slot;
 }

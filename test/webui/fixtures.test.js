@@ -290,3 +290,43 @@ test("knowledge fixtures carry one of every state the new reads can return", () 
   assert.ok(prev.would_archive.length, "a preview that would evict something must be designable");
   assert.ok(prev.would_archive.every((e) => e.why), "and every named entry says WHY it is in the tail");
 });
+
+/* v0.49.2 — ONE OF EVERY STATE, including the ugly ones. You cannot design a
+   `—` row on a table where every row has a number, and you cannot design a
+   collided card on a list of short slugs. */
+
+test("fixtures: the states v0.49.2 introduced are all designable", () => {
+  const fixtures = require(path.join(REPO, "bin", "webui", "fixtures", "index.js"));
+  const runs = fixtures.get("/api/runs", {}).runs;
+  assert.ok(runs.some((r) => r.status === "closed"), "a closed run");
+  assert.ok(runs.find((r) => r.status === "closed").closed.reason, "carrying the reason it was closed with");
+  assert.ok(runs.filter((r) => r.status === "waiting").length >= 3, "enough waiting runs to see the card as a list");
+  assert.ok(runs.some((r) => r.slug.length > 28), "and a slug long enough to collide, which is the state that broke");
+
+  // The house rules: populated, with all three priorities AND a disabled rule.
+  const rules = fixtures.get("/api/doc/rules", {});
+  assert.ok(rules.rules.length >= 3);
+  for (const p of ["P0", "P1", "P2"]) assert.ok(rules.rules.some((r) => r.priority === p), `${p} is designable`);
+  assert.ok(rules.rules.some((r) => !r.enabled), "a DISABLED rule keeps its slot");
+  assert.ok(rules.boundary, "and the boundary sentence is always there");
+
+  // Frozen: clean AND drifted, and the drift NAMES what moved.
+  const drifted = fixtures.get("/api/doc/rules/one", { slug: "prd-checkout-refund-130826" });
+  assert.strictEqual(drifted.drift.drifted, true);
+  assert.ok(drifted.drift.added.length || drifted.drift.changed.length);
+  assert.strictEqual(fixtures.get("/api/doc/rules/one", { slug: "runbook-payout-freeze-110826" }).drift.drifted, false);
+
+  // The run map: a real one, a low-confidence naive floor, and a REFUSAL.
+  const fc = fixtures.get("/api/doc/forecast", { slug: "prd-checkout-refund-130826" });
+  assert.ok(fc.waves.length > 1 && fc.stops > 1);
+  for (const k of ["input", "cache_write", "cache_read", "output"]) assert.ok(k in fc.tokens.p50);
+  assert.ok(fixtures.get("/api/doc/forecast", { slug: "tsd-ledger-rewrite-090826" }).low_confidence_roles.length);
+  assert.strictEqual(fixtures.get("/api/doc/forecast", { slug: "collab-risk-and-payments-130826" }).ok, false);
+
+  // The cost report: joined, PARTLY joined (a `—` row), and no trace at all.
+  const cost = fixtures.get("/api/doc/cost", { slug: "prd-checkout-refund-130826" });
+  assert.ok(cost.by_section.some((s) => s.joined === false && s.tokens === null), "a section nothing joins reads —, never 0");
+  assert.ok(cost.by_section.some((s) => s.joined === true));
+  assert.ok("unattributed" in cost, "unattributed is always present");
+  assert.strictEqual(fixtures.get("/api/doc/cost", { slug: "collab-risk-and-payments-130826" }).ok, false);
+});

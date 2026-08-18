@@ -50,6 +50,7 @@
   "overview.waiting.title": "Menunggu Anda",
   "overview.waiting.note": "Penunjuk resume ada di disk untuk yang berikut. `orc resume` mencetak prompt untuk ditempel ke sesi baru.",
   "overview.waiting.where": "terbuka — lihat panel Run untuk posisinya",
+  "overview.waiting.since": "menunggu sejak {age}",
   "overview.doctor.title": "orc doctor",
   "overview.doctor.fixable": "bisa diperbaiki",
   "overview.doctor.manual": "manual",

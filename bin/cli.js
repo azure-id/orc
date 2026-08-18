@@ -55,7 +55,7 @@ function positionals() {
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
     if (a === "--global") continue;
-    if (a === "--dir" || a === "--from" || a === "--preset") {
+    if (a === "--dir" || a === "--from" || a === "--preset" || a === "--reason") {
       i++; // skip the flag's value
       continue;
     }
@@ -837,6 +837,7 @@ const CONFIG_META = [
   { key: "doc_max_parallel", def: 2, tier: "common", validate: vInt(1), options: [1, 2], desc: "Agents per /orc-doc wave. HARD CAP 2 — a larger value is clamped and the clamp is announced, because more parallel writers is more chances for the outline to drift and the compile is what has to reconcile them. Each agent owns exactly ONE file under sections/, so no two ever share one." },
   { key: "doc_write_mode", def: "ask", tier: "common", validate: vEnum("ask", "partial", "all"), options: ["ask", "partial", "all"], desc: "How much of a /orc-doc document is bought at once. `partial` writes ONE wave, then stops so you can read those section files and redirect before the rest is paid for — the single biggest saving in the lane. `all` writes every wave. `ask` (default) makes it a question asked once per run and stored, so the choice is yours and never the model's to remember." },
   { key: "doc_language", def: "en", tier: "common", validate: vText, options: ["en", "id", "es", "de", "fr", "ja"], desc: "Default output language for /orc-doc, always confirmable per run. A non-English document is held to the SAME plain-language bar in that language — short sentences, common words, acronyms expanded; technical terms with no natural translation stay in English and are glossed once." },
+  { key: "doc_local_refs", def: "error", tier: "common", validate: vEnum("off", "warn", "error"), options: ["off", "warn", "error"], desc: "How /orc-doc's free lint treats a LOCAL-ONLY reference in the deliverable — a `src/foo.ts:42` anchor, an absolute path, a `./relative` opener, localhost, a file:// URL, a relative .md link. The reader of a PRD or a TSD usually has no repository, so a path is a dead end for them. A genuinely internal runbook legitimately names local paths, which is why there are three values and not a rule with no switch; fenced code is always exempt, because a code example that SHOWS a path is content." },
   { key: "doc_dir", def: DOC_DIR_DEFAULT, tier: "advanced", validate: vPath, desc: "Where /orc-doc folders live. Project root, not .claude/ — a document is a deliverable a human opens, and the same call /orc-quick, /orc-brainstorm and poly-repo-implementation/ already made." },
   { key: "wiki_scan_tier", def: "ladder", tier: "advanced", validate: vEnum("ladder", "always_deep"), desc: "Wiki scan tier: ladder picks light/deep per delta (first scan, STRUCTURAL, wide delta or a new exported symbol → deep; otherwise light), always_deep restores pre-v0.46.0 behaviour. The resolved tier is always printed — a cheaper model is never a quiet substitution." },
   { key: "wiki_tier_deep_files", def: 3, tier: "advanced", validate: vInt(1), desc: "Covered files touched at or above this count send the refresh to the DEEP scanner." },
@@ -5651,6 +5652,14 @@ function wiki() {
 // opens it.
 
 const RESUME_FILE = "RESUME.md";
+// v0.49.2 — `RESUME.md` existing IS the unfinished flag (v0.42.0), and ORC
+// deletes it at FINISH. A run the user ABANDONED still has one, so it was
+// waiting forever: `orc resume` kept offering it, the Overview kept counting it,
+// and `api.js` kept it in `waiting_runs`, which is what blocked the upgrade
+// preview with "4 run(s) are still waiting" and gave the user no way out.
+// Closing MOVES the pointer aside and records why. It deletes nothing.
+const RESUME_CLOSED_FILE = "RESUME.closed.md";
+const RUN_CLOSED_FILE = "closed.json";
 const RUN_PAGE_DEFAULT = 20;
 
 // Read at most `bytes` from the front of a file. The listing path never needs
@@ -5715,13 +5724,20 @@ function listRuns(claudeDir) {
     try { mtime = fs.statSync(dir).mtimeMs; } catch (_) {}
     let resumeMtime = null;
     try { resumeMtime = fs.statSync(path.join(dir, RESUME_FILE)).mtimeMs; } catch (_) {}
+    let closedMtime = null;
+    try { closedMtime = fs.statSync(path.join(dir, RESUME_CLOSED_FILE)).mtimeMs; } catch (_) {}
     runs.push({
       slug: e.name,
       dir,
       mtime,
       resumeMtime,
-      waiting: resumeMtime !== null,
-      sortKey: resumeMtime !== null ? resumeMtime : mtime,
+      closedMtime,
+      // A closed run is NOT waiting. That is the whole fix: one boolean, read by
+      // `orc resume`, the Overview card and the maintenance preview alike, so
+      // the state cannot be true in one place and false in another.
+      waiting: resumeMtime !== null && closedMtime === null,
+      closed: closedMtime !== null,
+      sortKey: resumeMtime !== null ? resumeMtime : closedMtime !== null ? closedMtime : mtime,
     });
   }
   runs.sort((a, b) => b.sortKey - a.sortKey);
@@ -5729,6 +5745,10 @@ function listRuns(claudeDir) {
 }
 
 // Status claims only what the disk can PROVE:
+//   closed  — RESUME.closed.md exists: a HUMAN said they are finished with this
+//             run and gave a reason (v0.49.2). Deliberately not called `done` —
+//             the disk cannot prove the run finished, and this listing may only
+//             claim what the disk proves. `orc run reopen` puts it back.
 //   waiting — RESUME.md exists. Authoritative: ORC writes it at every stop and
 //             deletes it at FINISH, so its presence IS "this run is still open".
 //   done    — no RESUME.md, but the folder holds something. Either it finished
@@ -5739,12 +5759,73 @@ function listRuns(claudeDir) {
 // has one, and calling those "incomplete" was a confident lie about real runs.
 // Only ever called for the page being displayed — one readdir, no file reads.
 function runStatus(run) {
+  if (run.closed) return "closed";
   if (run.waiting) return "waiting";
   try {
     return fs.readdirSync(run.dir).length ? "done" : "empty";
   } catch (_) {
     return "empty";
   }
+}
+
+// What a close recorded. A state change nobody wrote a reason for is a state
+// nobody can audit later — the same rule that makes `/orc-pact` refuse to retire
+// a promise without one.
+function readClosed(run) {
+  try {
+    const j = JSON.parse(fs.readFileSync(path.join(run.dir, RUN_CLOSED_FILE), "utf8"));
+    return { at: j.at || null, reason: j.reason || null, resume_file: j.resume_file || RESUME_CLOSED_FILE };
+  } catch (_) {
+    return null;
+  }
+}
+
+// `orc run close <slug> --reason "<why>"` / `orc run reopen <slug>`.
+// It MOVES `RESUME.md` aside and writes `closed.json`. Nothing is deleted, ever
+// — reopening has to be able to put the run back exactly as it was.
+function runCloseCmd(claudeDir, runs, sub, arg) {
+  const asJson = wantsJson();
+  const pick = /^\d+$/.test(String(arg)) ? runs[Number(arg) - 1] : runs.find((r) => r.slug === arg);
+  const fail = (reason, hint, code) => {
+    if (asJson) emitJson({ ok: false, reason, slug: arg || null, hint }, code);
+    console.error(hint);
+    process.exit(code);
+  };
+  if (!pick)
+    return fail(
+      "no-such-run",
+      arg ? `No run matches "${arg}". \`orc run list\` shows the ones that exist.` : `Usage: orc run ${sub} <slug|number>` + (sub === "close" ? ' --reason "<why>"' : ""),
+      1
+    );
+  const live = path.join(pick.dir, RESUME_FILE);
+  const aside = path.join(pick.dir, RESUME_CLOSED_FILE);
+  const ledger = path.join(pick.dir, RUN_CLOSED_FILE);
+
+  if (sub === "close") {
+    if (pick.closed) return fail("already-closed", `${pick.slug} is already closed. \`orc run reopen ${pick.slug}\` puts it back.`, 2);
+    if (!pick.waiting) return fail("not-waiting", `${pick.slug} is not waiting — there is no resume pointer to close.`, 2);
+    const reason = flag("--reason");
+    if (typeof reason !== "string" || !reason.trim())
+      return fail("no-reason", `orc run close needs --reason "<why>". A run closed with no recorded reason is a state nobody can audit.`, 2);
+    fs.renameSync(live, aside);
+    const at = fmtStamp(new Date());
+    fs.writeFileSync(ledger, JSON.stringify({ at, reason: reason.trim(), resume_file: RESUME_CLOSED_FILE }, null, 2) + "\n");
+    if (asJson)
+      emitJson({ ok: true, slug: pick.slug, status: "closed", at, reason: reason.trim(), moved: RESUME_FILE + " -> " + RESUME_CLOSED_FILE, deleted: [] }, 0);
+    console.log(`✓ ${pick.slug} closed — ${reason.trim()}`);
+    console.log(`  ${RESUME_FILE} was MOVED to ${RESUME_CLOSED_FILE}. Nothing was deleted.`);
+    console.log(`  Changed your mind: orc run reopen ${pick.slug}`);
+    process.exit(0);
+  }
+
+  if (!pick.closed) return fail("not-closed", `${pick.slug} is not closed, so there is nothing to reopen.`, 2);
+  const prev = readClosed(pick);
+  fs.renameSync(aside, live);
+  try { fs.unlinkSync(ledger); } catch (_) {}
+  if (asJson) emitJson({ ok: true, slug: pick.slug, status: "waiting", was_closed_at: prev && prev.at, was_reason: prev && prev.reason }, 0);
+  console.log(`✓ ${pick.slug} reopened — it is waiting again.`);
+  if (prev && prev.reason) console.log(`  It had been closed with: ${prev.reason}`);
+  process.exit(0);
 }
 
 // Best-effort clipboard, zero dependencies: spawn the OS tool if there is one.
@@ -5856,6 +5937,10 @@ function runCmd() {
   const sub = pos[1] || "list";
   const { root, runs } = listRuns(claudeDir);
 
+  // The only two WRITES in `orc run`, and both are a human's decision recorded
+  // on disk. Neither deletes anything.
+  if (sub === "close" || sub === "reopen") return runCloseCmd(claudeDir, runs, sub, pos[2]);
+
   if (sub === "show") {
     const arg = pos[2];
     const pick = /^\d+$/.test(String(arg)) ? runs[Number(arg) - 1] : runs.find((r) => r.slug === arg);
@@ -5892,8 +5977,11 @@ function runCmd() {
         updated_ms: Math.round(pick.sortKey),
         // The parsed one-liner RESUME.md guarantees, so a caller gets the
         // lane/phase/wave without re-implementing the parser.
-        stands: parseStands(readHead(path.join(pick.dir, pick.waiting ? RESUME_FILE : "state-of-play.md")) || ""),
-        resume: readIf(RESUME_FILE),
+        stands: parseStands(
+          readHead(path.join(pick.dir, pick.waiting ? RESUME_FILE : pick.closed ? RESUME_CLOSED_FILE : "state-of-play.md")) || ""
+        ),
+        resume: readIf(RESUME_FILE) || readIf(RESUME_CLOSED_FILE),
+        closed: pick.closed ? readClosed(pick) : null,
         state_of_play: readIf("state-of-play.md"),
         checkpoint,
         trace_path: tracePath,
@@ -5904,9 +5992,12 @@ function runCmd() {
     }
     console.log(ui.header(`run ${pick.slug}`));
     console.log(ui.kv([["status", runStatus(pick)], ["folder", pick.dir], ["updated", relAge(pick.sortKey)]]));
+    const cl = pick.closed ? readClosed(pick) : null;
+    if (cl) console.log(ui.color.gray(`  closed ${cl.at || ""} — ${cl.reason || ""}`.trimEnd()));
     for (const [label, file] of [
       ["state-of-play", "state-of-play.md"],
       ["resume", RESUME_FILE],
+      ["resume (closed)", RESUME_CLOSED_FILE],
     ]) {
       const p = path.join(pick.dir, file);
       if (!fs.existsSync(p)) continue;
@@ -5935,7 +6026,10 @@ function runCmd() {
   }
 
   if (sub !== "list") {
-    console.error(`Unknown subcommand: orc run ${sub}\nTry: orc run list | orc run show <slug|n>`);
+    console.error(
+      `Unknown subcommand: orc run ${sub}\n` +
+        `Try: orc run list | orc run show <slug|n> | orc run close <slug> --reason "<why>" | orc run reopen <slug>`
+    );
     process.exit(1);
   }
 
@@ -5956,7 +6050,7 @@ function runCmd() {
   // displayed, so a 200-run folder costs the same as a 20-run one.
   for (const r of page) {
     r.status = runStatus(r);
-    const src = r.waiting ? RESUME_FILE : "state-of-play.md";
+    const src = r.waiting ? RESUME_FILE : r.closed ? RESUME_CLOSED_FILE : "state-of-play.md";
     Object.assign(r, parseStands(readHead(path.join(r.dir, src)) || ""));
   }
 
@@ -5974,6 +6068,9 @@ function runCmd() {
             phase: r.phase || null,
             wave: r.wave || null,
             updated_ms: Math.round(r.sortKey),
+            // Present only on a closed run, so a caller never has to guess why a
+            // row is not in `waiting` any more (v0.49.2).
+            closed: r.closed ? readClosed(r) : null,
           })),
         },
         null,
@@ -5988,6 +6085,8 @@ function runCmd() {
     const badge =
       r.status === "waiting"
         ? ui.color.yellow("waiting")
+        : r.status === "closed"
+        ? ui.color.gray("closed ")
         : r.status === "done"
         ? ui.color.green("done   ")
         : ui.color.gray("empty  ");
@@ -5996,6 +6095,9 @@ function runCmd() {
         `${(r.lane || "").padEnd(9)} ${(r.wave || r.phase || "").padEnd(13)} ` +
         ui.color.gray(relAge(r.sortKey))
     );
+    // A closed row NEVER disappears — it carries the reason the human gave.
+    const cl = r.status === "closed" ? readClosed(r) : null;
+    if (cl && cl.reason) console.log(`       ${ui.color.gray("closed: " + cl.reason)}`);
   });
   if (page.length < runs.length)
     console.log(
@@ -6005,6 +6107,7 @@ function runCmd() {
     "\n" +
       ui.color.gray(
         "waiting = a resume pointer is on disk · done = no pointer (finished, or never paused)\n" +
+          "closed = you said you were finished with it — orc run reopen <slug> puts it back\n" +
           "Runs from before v0.42.0 wrote no pointer, so they all read `done`.\n" +
           "Details: orc run show <slug|number>   ·   Resume one: orc resume"
       )
@@ -8470,6 +8573,14 @@ function readCycle(claudeDir, slug) {
     c.council_version = Number(c.council_version) || 1;
     c.opportunities = c.opportunities || {};
     c.premises = c.premises || {};
+    // v0.49.2 — default what this function already promised to default. A ledger
+    // written by a session that died mid-`init` has no `goals` and no `kind`, and
+    // `challengeList` then read `.goal` off undefined and took the WHOLE listing
+    // down — including the cycles that were perfectly fine. A missing goal renders
+    // as an em dash; it is never invented, and `record` still refuses without a
+    // frozen goal, so nothing downstream is loosened by this.
+    c.goals = c.goals || { goal: null, audience: null, done_means: null };
+    c.kind = c.kind || "unknown";
     // `lens` is required on every finding from v2 on. A v1 iteration read back
     // gets `judge`, so the per-lens legend never gains a blank column.
     for (const it of c.iterations)
@@ -8477,6 +8588,20 @@ function readCycle(claudeDir, slug) {
     return c;
   } catch (_) {
     return null;
+  }
+}
+
+// Why a ledger would not read. `null` from `readCycle` means one of two very
+// different things — the cycle does not exist, or its ledger is corrupt — and a
+// listing that cannot tell them apart cannot report the second one honestly.
+function readCycleWhy(claudeDir, slug) {
+  const p = challengePaths(claudeDir, slug);
+  if (!p.ledger || !fs.existsSync(p.ledger)) return null;
+  try {
+    JSON.parse(fs.readFileSync(p.ledger, "utf8"));
+    return null;
+  } catch (e) {
+    return String((e && e.message) || e).split("\n")[0];
   }
 }
 
@@ -9318,6 +9443,29 @@ function challengeList(claudeDir) {
   }
   const rows = slugs.map((s) => {
     const v = challengeView(claudeDir, s, cfg);
+    // v0.49.2 — a cycle that will not parse becomes a ROW, never an exception.
+    // UNREADABLE is a LIST-level state: it never reaches the pass gate, it never
+    // claims a verdict, and `challengeCode` / `challengeStateOf` are untouched by
+    // it. One bad ledger used to take the whole panel down and hide every healthy
+    // cycle with it, which is the opposite of what a listing is for.
+    if (!v)
+      return {
+        slug: s,
+        kind: "unknown",
+        state: "UNREADABLE",
+        why: `challenge.json could not be parsed — ${readCycleWhy(claudeDir, s) || "unknown read error"}`,
+        iterations: 0,
+        blocking: 0,
+        counts: { P0: 0, P1: 0, P2: 0, P3: 0, accepted: 0, rebutted: 0 },
+        stalled: false,
+        no_template: false,
+        goal: null,
+        council: null,
+        council_unset: false,
+        open_premises: 0,
+        open_opportunities: 0,
+        next: null,
+      };
     return {
       slug: s,
       kind: v.cyc.kind,
@@ -9337,8 +9485,9 @@ function challengeList(claudeDir) {
     };
   });
   const inFlight = rows.filter((r) => r.state !== "PASSED");
+  const unreadable = rows.filter((r) => r.state === "UNREADABLE");
   const code = inFlight.length ? 1 : 0;
-  if (asJson) emitJson({ ok: true, cycles: rows, in_flight: inFlight.length }, code);
+  if (asJson) emitJson({ ok: true, cycles: rows, in_flight: inFlight.length, unreadable: unreadable.length }, code);
   console.log(ui.header(`ORC · challenge — ${plural(rows.length, "cycle")}`));
   console.log("");
   for (const r of rows) {
@@ -9356,8 +9505,15 @@ function challengeStatus(claudeDir, slugArg) {
   const slug = chSlug(slugArg);
   const v = slug ? challengeView(claudeDir, slug, cfg) : null;
   if (!v) {
-    const hint = `no challenge cycle "${slugArg || ""}" — \`orc challenge list\` shows the ones that exist.`;
-    if (asJson) emitJson({ ok: false, reason: "no-such-cycle", slug: slugArg || null, hint }, 3);
+    // The two reasons are different facts, so they are reported as different
+    // facts (v0.49.2). A corrupt ledger reported as "no such cycle" sends the
+    // user looking for a typo that is not there.
+    const why = slug ? readCycleWhy(claudeDir, slug) : null;
+    const hint = why
+      ? `challenge cycle "${slug}" exists but its challenge.json could not be parsed — ${why}`
+      : `no challenge cycle "${slugArg || ""}" — \`orc challenge list\` shows the ones that exist.`;
+    if (asJson)
+      emitJson({ ok: false, reason: why ? "unreadable" : "no-such-cycle", slug: slugArg || null, why: why || null, hint }, 3);
     console.log(hint);
     process.exit(3);
   }
@@ -10805,6 +10961,8 @@ const DOC_VALUE_FLAGS = [
   "--type", "--template", "--title", "--language", "--target", "--length",
   "--role", "--section", "--set", "--dir", "--budget", "--limit",
   "--only", "--confirm",
+  // v0.49.2
+  "--priority", "--text", "--set-file", "--reason", "--as", "--where", "--note", "--kind",
 ];
 
 function docPositionals() {
@@ -11094,6 +11252,11 @@ function docRead(claudeDir, slug) {
     // continue without the user knowing anything happened.
     d.version = Number(d.version) || 1;
     d.migrations = Array.isArray(d.migrations) ? d.migrations : [];
+    // v0.49.2. A document created before house rules existed has none, and that
+    // is an ANSWER, not a gap: it was written against no house rules, which is
+    // exactly what an empty frozen set means.
+    d.doc_rules = Array.isArray(d.doc_rules) ? d.doc_rules : [];
+    d.doc_rule_syncs = Array.isArray(d.doc_rule_syncs) ? d.doc_rule_syncs : [];
     return d;
   } catch (_) {
     return null;
@@ -11160,7 +11323,7 @@ function docSectionSource(p, o) {
     const raw = fs.readFileSync(flat, "utf8");
     const rel = docRelFolder(p, flat);
     out.files.push(rel);
-    out.parts.push({ sub: null, file: rel, hash: docHash(raw), lines: docLines(raw).length });
+    out.parts.push({ sub: null, file: rel, hash: docHash(raw), lines: docLines(raw).length, text: raw });
     out.text = docTrimPart(raw);
     return out;
   }
@@ -11193,7 +11356,7 @@ function docSectionSource(p, o) {
         out.problems.push({ rule: "subpart-bad-level", file: rel, what: `${rel} does not start at \`### \` or deeper. A sub-part carries its own sub-heading; without one the compile cannot tell where it begins.` });
     }
     out.files.push(rel);
-    out.parts.push({ sub: it.sub, file: rel, hash: docHash(raw), lines: docLines(raw).length });
+    out.parts.push({ sub: it.sub, file: rel, hash: docHash(raw), lines: docLines(raw).length, text: raw });
     chunks.push(body);
   }
   out.text = chunks.join("\n\n");
@@ -11547,8 +11710,117 @@ const DOC_SENTENCE_MAX = 35;
 const DOC_SENTENCE_AVG_MAX = 20;
 const DOC_HARDWRAP_MIN = 60;
 
-function docLintRun(text, targetId) {
+
+// ── §B — THE PRE-DETERMINED GENERATION RULES (v0.49.2) ──────────────────────
+// ORC's own, read AFTER the house rules, shipped enabled, applied to every
+// document. All four are FREE and deterministic — rule 6 (the free check runs
+// before the paid one) is what makes them worth having at all: no model is ever
+// paid to notice a `TODO`.
+//
+// Every one is NARROW on purpose. A broad rule that argues with the author gets
+// switched off; a narrow rule that is always right gets used. That is the same
+// reasoning that keeps `DOC_ANNOTATION_RE` to an exact set.
+
+// B.1 — no questions, confirmations, or non-document explanation in the body.
+// It matches ORC-shaped or APPROVAL-shaped markers, never "is this a question
+// mark": a document may legitimately ask its reader a rhetorical question.
+const DOC_CONFIRM_MARKERS = [
+  "to be confirmed", "to be decided", "please confirm", "needs confirmation",
+  "we need to decide", "pending confirmation",
+];
+// Short markers need a WORD BOUNDARY. A three-letter substring match would flag
+// a word that happens to contain it, and a rule that is wrong once is a rule
+// people switch off. `(?)` is punctuation, so it is matched literally.
+const DOC_CONFIRM_TOKENS = [
+  [/\bTBA\b/, "TBA"],
+  [/\bTBD\b/, "TBD"],
+  [/\bTODO\b/, "TODO"],
+  [/\bFIXME\b/, "FIXME"],
+  [/\bXXX\b/, "XXX"],
+  [/\?{3}/, "???"],
+  [/\(\?\)/, "(?)"],
+];
+// A line that is ONLY a question put to the reader as an APPROVER.
+const DOC_APPROVAL_RE = /^\s*(?:Should|Do|Can|Would|Could)\s+we\b.*\?\s*$/;
+// A heading that DECLARES a questions section. A template that says it has open
+// questions is allowed to have open questions.
+const DOC_QUESTION_SECTION_RE = /open questions|questions|risks|assumptions/i;
+
+// B.4 — no local-only references. The document is for a reader who has no
+// repository, no checkout and no shell.
+const DOC_LOCAL_REF_RULES = [
+  [/(?:^|[\s(\[])[\w./-]+\.[A-Za-z]{1,4}:\d+\b/, "a file:line anchor — the reader has no repository to open it in"],
+  [/(?:^|[\s(\["'])[A-Za-z]:[\\/][^\s)"']+/, "an absolute Windows path — it exists only on one machine"],
+  [/(?:^|[\s(\["'])\/(?:Users|home|mnt|var|opt|etc)\/[^\s)"']+/, "an absolute path — it exists only on one machine"],
+  [/(?:^|[\s(\["'])\.\.?\/[^\s)"']+/, "a relative path — it means nothing without the folder it is relative to"],
+  [/\b(?:localhost|127\.0\.0\.1|0\.0\.0\.0)\b/, "a localhost address — nobody reading this can reach it"],
+  [/\bfile:\/\/\S+/, "a file:// URL — it resolves only on the machine that wrote it"],
+  [/(?:^|[\s(\["'])(?:src|bin|lib|app|test|tests|pkg|internal)\/[\w./-]+\.[A-Za-z]{1,4}\b/, "a repository path — the reader has no checkout"],
+  [/\[[^\]]+\]\((?!https?:|mailto:|#)[^)]+\.(?:md|txt)\)/, "a link to a local file — it breaks the moment the document is imported"],
+];
+
+// Which OUTLINE section a line falls in, so a rule can be exempted per section
+// without the lint ever being told the outline. Derived from the file's own
+// headings, which is all `docScan` already gives us.
+function docSectionAt(scan, line) {
+  let cur = null;
+  for (const h of scan.sections) {
+    if (h.start <= line) cur = h;
+    else break;
+  }
+  return cur;
+}
+
+// ONE place builds the lint's options, so `lint`, `compile`, `status`, `ship`,
+// `audit` and `next` can never disagree about which rules were in force.
+// The budgets come from the OUTLINE, which is the only thing that knows what a
+// section was planned to be — the lint itself is never told the outline.
+// The template cage, read in ONE place. `locked` is only ever true for a USER
+// template — a shipped base template is a floor, not a cage.
+function docLock(d) {
+  const t = (d && d.template) || {};
+  return {
+    locked: !!t.locked,
+    path: t.path || null,
+    hash: t.hash || null,
+    source: t.source || "shipped",
+    // The headings the template declared. A document whose outline was later
+    // edited on purpose keeps the ORIGINAL list — the cage is the template, not
+    // whatever the outline drifted into.
+    headings: Array.isArray(t.headings) ? t.headings : [],
+  };
+}
+
+function docLintOpts(claudeDir, d) {
+  let localRefs = "error";
+  try {
+    localRefs = resolvedConfig(claudeDir).doc_local_refs || "error";
+  } catch (_) {}
+  const budgets = {};
+  for (const o of (d && d.outline) || []) if (o.budget_lines) budgets[o.id] = o.budget_lines;
+  const lock = docLock(d);
+  // A subsection the outline DECLARES is allowed too — sub-parts split
+  // underneath a section and are invisible to the reader, so they were never
+  // headings the template had to know about.
+  const subs = [];
+  for (const o of (d && d.outline) || []) for (const s of o.subsections || []) subs.push(s.heading);
+  return {
+    local_refs: localRefs,
+    budgets,
+    template_locked: lock.locked,
+    allowed_headings: lock.locked ? lock.headings.concat(subs) : null,
+  };
+}
+
+function docLintRun(text, targetId, opts) {
   const tgt = docTarget(targetId);
+  const o = opts || {};
+  // `off | warn | error` (config `doc_local_refs`). A rule with no switch gets
+  // fought instead of used, and a genuinely internal runbook legitimately names
+  // local paths.
+  const localRefs = ["off", "warn", "error"].includes(o.local_refs) ? o.local_refs : "error";
+  // The outline's own headings, when the caller has them, so `open questions`
+  // can be exempted by NAME rather than by the file's ordinal.
   const lines = docLines(text);
   const findings = [];
   let seq = 0;
@@ -11572,16 +11844,22 @@ function docLintRun(text, targetId) {
         break;
       }
   }
-  if (tgt.front_matter === "require" && !hasFront)
+  // v0.49.2 — a PART is not a document. Front matter and the single H1 belong to
+  // the whole file; a section file has neither by design, and reporting them on
+  // every part would bury the findings a revision round can act on.
+  const wholeDoc = !o.part;
+  if (wholeDoc && tgt.front_matter === "require" && !hasFront)
     add("error", "front-matter-required", 1, `--target ${tgt.id} requires YAML front matter, and will not render the page without it`);
-  if (tgt.front_matter === "ban" && hasFront)
+  if (wholeDoc && tgt.front_matter === "ban" && hasFront)
     add("error", "front-matter-banned", 1, `--target ${tgt.id} renders YAML front matter as visible junk at the top of the page`);
 
   const scan = docScan(text);
   const h1 = scan.headings.filter((h) => h.level === 1);
-  if (h1.length === 0) add("error", "no-h1", 1, "no H1 — every importer's outline builder starts from one");
+  if (wholeDoc && h1.length === 0) add("error", "no-h1", 1, "no H1 — every importer's outline builder starts from one");
   if (h1.length > 1)
     for (const h of h1.slice(1)) add("error", "many-h1", h.line, `a second H1: "${h.heading}". Exactly one is the title`);
+  if (!wholeDoc && h1.length)
+    for (const h of h1) add("error", "many-h1", h.line, `an H1 inside a section file: "${h.heading}". The H1 is the document's title and lives in the front matter file`);
   let prev = 0;
   for (const h of scan.headings) {
     if (prev && h.level > prev + 1)
@@ -11591,6 +11869,16 @@ function docLintRun(text, targetId) {
       add("error", "heading-too-deep", h.line, `H${h.level} is deeper than ${tgt.label} supports (max H${tgt.max_heading}) — it degrades to bold text`, h.heading);
     if (/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u.test(h.heading))
       add("warn", "emoji-heading", h.line, "an emoji in a heading — some importers slug headings and mangle the anchor", h.heading);
+    // v0.49.2 — TEMPLATE LOCK. Only under a lock, only H2 and deeper (the H1 is
+    // the title), and only against the headings the template itself declared.
+    if (o.template_locked && h.level >= 2 && !(o.allowed_headings || []).includes(h.heading))
+      add(
+        "error",
+        "heading-outside-template",
+        h.line,
+        `"${h.heading}" is not a heading this document's template has. A supplied template is a cage: what does not fit is a gap, not a new section`,
+        h.heading
+      );
   }
 
   // Setext headings survive nothing, and an underline that looks like a rule is
@@ -11671,6 +11959,30 @@ function docLintRun(text, targetId) {
         add("warn", "placeholder", n, `leftover placeholder text: ${marker}`, l.trim());
         break;
       }
+
+    // ── B.1 — no questions, confirmations or approval-seeking in the body ──
+    // Exempt: a section whose OWN heading declares it (open questions, risks,
+    // assumptions). Fenced code was already skipped by the `continue` above.
+    const sec = docSectionAt(scan, n);
+    const inQuestions = !!(sec && DOC_QUESTION_SECTION_RE.test(sec.heading));
+    if (!inQuestions) {
+      const low = l.toLowerCase();
+      const phrase = DOC_CONFIRM_MARKERS.find((m) => low.includes(m));
+      const token = phrase ? null : (DOC_CONFIRM_TOKENS.find(([re]) => re.test(l)) || [null, null])[1];
+      if (phrase || token)
+        add("error", "question-in-body", n, `"${phrase || token}" — the deliverable answers, it does not ask. Raise it as a gap instead: orc doc log --kind gap`, l.trim());
+      else if (DOC_APPROVAL_RE.test(l))
+        add("error", "question-in-body", n, "a question put to the reader as an approver — the deliverable answers, it does not ask. Raise it as a gap instead", l.trim());
+    }
+
+    // ── B.4 — no local-only references ────────────────────────────────────
+    if (localRefs !== "off") {
+      for (const [re, why] of DOC_LOCAL_REF_RULES)
+        if (re.test(l)) {
+          add(localRefs, "local-reference", n, why, l.trim());
+          break; // one finding per line: a path and its link are one mistake
+        }
+    }
   }
 
   // ── the clean-deliverable rule (v0.49.0) ──────────────────────────────────
@@ -11683,6 +11995,49 @@ function docLintRun(text, targetId) {
   // narrow on purpose: a user's own line beginning "Note:" is content.
   for (const a of docAnnotations(text))
     add("error", "annotation-in-body", a.line, "ORC bookkeeping in the deliverable — it belongs in gaps.md, not in the document", a.quote);
+
+  // ── B.2 — `N/A` plus one short line, never filler (v0.49.2) ───────────────
+  // What you do not have is `N/A` and at most one short sentence saying what is
+  // missing. Never write around a hole. A WARN, never an error: the author may
+  // have a reason, and a hard rule here would be ORC arguing about content it
+  // has not read.
+  //
+  // ── B.3 — the bloat SIGNAL, per section ───────────────────────────────────
+  // Not a prose rule the model has to feel — a measurement. Under the budget is
+  // correct; well over it is a finding.
+  const sectionRows = [];
+  for (const s of scan.sections) {
+    const body = docLines(s.text).slice(1); // drop the heading itself
+    const nonBlank = body.filter((x) => /\S/.test(x));
+    const budget = ((o.budgets || {})[s.id] || (o.budgets || {})[s.heading] || 0) || null;
+    const overPct = budget ? Math.round(((s.lines - budget) / budget) * 100) : null;
+    sectionRows.push({
+      id: s.id,
+      heading: s.heading,
+      start: s.start,
+      lines: s.lines,
+      words: (s.text.match(/\S+/g) || []).length,
+      budget_lines: budget,
+      over_budget_pct: overPct,
+    });
+    if (/^\s*N\/A\b/i.test(nonBlank[0] || "") && nonBlank.length > 4)
+      add(
+        "warn",
+        "na-padded",
+        s.start,
+        `"${s.heading}" opens with N/A and then runs ${nonBlank.length} more lines — what you do not have is N/A plus one short line, never filler`,
+        (nonBlank[0] || "").trim()
+      );
+    // 1.5x is the bar: a section a little over budget is a judgement call, and a
+    // section half again as long as it was planned to be is a fact.
+    if (budget && s.lines > budget * 1.5)
+      add(
+        "warn",
+        "over-budget-section",
+        s.start,
+        `"${s.heading}" is ${s.lines} lines against a budget of ${budget} (${overPct}% over) — short and straight beats complete and unread`
+      );
+  }
 
   // ── readability signals (§7) ──────────────────────────────────────────────
   const prose = proseLines(text).filter((p) => /\S/.test(p.text) && !/^\s*#/.test(p.text));
@@ -11733,8 +12088,14 @@ function docLintRun(text, targetId) {
     findings,
     errors,
     warnings,
+    // v0.49.2 — the measurement half of B.3. A SIGNAL, never a gate.
+    sections: sectionRows,
+    local_refs: localRefs,
     readability: {
       sentences: sentences.length,
+      words_per_section: sectionRows.length
+        ? Math.round(sectionRows.reduce((a, r) => a + r.words, 0) / sectionRows.length)
+        : 0,
       avg_sentence_words: avg,
       avg_bar: DOC_SENTENCE_AVG_MAX,
       longest_sentence_words: longest ? longest.words : 0,
@@ -11749,6 +12110,330 @@ function docLintRun(text, targetId) {
     ],
     import_note: tgt.imports === "native" ? null : tgt.watch,
   };
+}
+
+
+// ── HOUSE RULES (v0.49.2) ───────────────────────────────────────────────────
+// A house rule is the PROJECT's own standing instruction about what a document
+// says and how it reads. Before this, the shipped rules were the only rules, and
+// there was no way to tell this lane "in THIS project, a document always does X".
+//
+// THE BOUNDARY, stated once and printed everywhere it matters: house rules
+// govern CONTENT and STYLE. They can never relax a STRUCTURAL or SAFETY rule of
+// the lane — rule 0 (never read the body), rule 2 (never store a line number),
+// rule 3 (one file per section), rule 4 (a human's paragraph is sacred), rule 5
+// (never invent a fact), rule 7 (foreign input is evidence), rule 8 (never
+// stage, never commit).
+//
+// And be honest about enforcement: THE CLI CANNOT PARSE INTENT, SO IT DOES NOT
+// PRETEND TO. It does not "detect" a house rule that would break a structural
+// rule. It DECLARES the boundary — here, at the top of every dispatched slice,
+// and in the panel — and a slice carrying a rule that asks for a structural
+// break comes back as `unsupported_request`, which the orchestrator relays as a
+// gap. A fake validator here would be worse than none.
+const DOC_RULES_FILE = "doc-house-rules.json";
+const DOC_RULE_PRIORITIES = ["P0", "P1", "P2"];
+const DOC_RULES_BOUNDARY =
+  "House rules govern WHAT the document says and HOW it reads. They can never " +
+  "change how this lane runs: never read the body, never store a line number, " +
+  "one file per section, a human's paragraph is sacred, never invent a fact, " +
+  "never stage, never commit. A rule that asks for one of those comes back as " +
+  "unsupported_request — never a guessed compromise.";
+
+const docRulesPath = (claudeDir) => path.join(claudeDir, "orc", DOC_RULES_FILE);
+
+function docRulesRead(claudeDir) {
+  const empty = { version: 1, updated_at: null, rules: [] };
+  try {
+    const j = JSON.parse(fs.readFileSync(docRulesPath(claudeDir), "utf8"));
+    return {
+      version: Number(j.version) || 1,
+      updated_at: j.updated_at || null,
+      rules: (Array.isArray(j.rules) ? j.rules : []).map((r) => ({
+        id: String(r.id || ""),
+        priority: DOC_RULE_PRIORITIES.includes(r.priority) ? r.priority : "P2",
+        // VERBATIM in, verbatim out — the `context.md` rule. A rule the user
+        // wrote is quoted, never paraphrased, never re-worded on a read.
+        text: String(r.text || ""),
+        enabled: r.enabled !== false,
+        added_at: r.added_at || null,
+      })).filter((r) => r.id && r.text),
+    };
+  } catch (_) {
+    return empty;
+  }
+}
+
+// ONE WRITER, and it is this function, reached only from `orc doc rules`.
+function docRulesWrite(claudeDir, led) {
+  const p = docRulesPath(claudeDir);
+  fs.mkdirSync(path.dirname(p), { recursive: true });
+  led.version = 1;
+  led.updated_at = fmtStamp(new Date());
+  fs.writeFileSync(p, JSON.stringify(led, null, 2) + "\n");
+  return p;
+}
+
+const docRulesSort = (rules) =>
+  rules.slice().sort((a, b) => DOC_RULE_PRIORITIES.indexOf(a.priority) - DOC_RULE_PRIORITIES.indexOf(b.priority) || a.id.localeCompare(b.id));
+
+const docRulesEnabled = (led) => docRulesSort(led.rules.filter((r) => r.enabled));
+
+function docRulesNextId(led) {
+  let n = 0;
+  for (const r of led.rules) {
+    const m = /^H-(\d+)$/.exec(r.id);
+    if (m) n = Math.max(n, Number(m[1]));
+  }
+  return "H-" + String(n + 1).padStart(3, "0");
+}
+
+const docRulesCounts = (rules) => {
+  const c = { P0: 0, P1: 0, P2: 0 };
+  for (const r of rules) c[r.priority]++;
+  return c;
+};
+
+// The one line the preflight prints. A rule set is NEVER silent.
+function docRulesLine(rules) {
+  if (!rules.length) return "house rules: none";
+  const c = docRulesCounts(rules);
+  const parts = DOC_RULE_PRIORITIES.filter((k) => c[k]).map((k) => `${k} ${c[k]}`);
+  return `house rules: ${rules.length} (${parts.join(" · ")})`;
+}
+
+// FROZEN vs PROJECT — coverage-relative, and it NAMES every rule that moved.
+// A "rules changed" boolean would tell the user a fact they cannot act on: the
+// `computeWikiFreshness` lesson, applied to a ledger.
+function docRulesDrift(frozen, project) {
+  const fz = new Map((frozen || []).map((r) => [r.id, r]));
+  const pj = new Map(project.map((r) => [r.id, r]));
+  const added = [];
+  const removed = [];
+  const changed = [];
+  for (const [id, r] of pj) if (!fz.has(id)) added.push({ id, priority: r.priority, text: r.text });
+  for (const [id, r] of fz) if (!pj.has(id)) removed.push({ id, priority: r.priority, text: r.text });
+  for (const [id, r] of pj) {
+    const was = fz.get(id);
+    if (!was) continue;
+    if (was.text !== r.text || was.priority !== r.priority)
+      changed.push({ id, from: { priority: was.priority, text: was.text }, to: { priority: r.priority, text: r.text } });
+  }
+  return { added, removed, changed, drifted: added.length + removed.length + changed.length > 0 };
+}
+
+// house-rules.md is DERIVED — never hand-edited, rewritten whenever the frozen
+// set changes. It exists so the rules a document was written against are
+// readable beside the document, not only inside doc.json.
+function docWriteHouseRules(claudeDir, slug, d) {
+  const p = docPaths(claudeDir, slug);
+  const rules = docRulesSort(d.doc_rules || []);
+  const L = [
+    "<!-- orc-doc:derived — written by the `orc doc` CLI from doc.json.",
+    "     Change the project ledger with `orc doc rules add|remove|move`; re-freeze",
+    "     this document with `orc doc rules " + slug + " --sync`. A hand edit here",
+    "     is overwritten the next time anything writes. -->",
+    "",
+    `# House rules — ${d.title}`,
+    "",
+    "These are the rules this document was FROZEN against at `orc doc init`. A",
+    "document is written against the rules that were true when it started.",
+    "",
+  ];
+  if (!rules.length) L.push("No house rules were set when this document started.", "");
+  for (const pr of DOC_RULE_PRIORITIES) {
+    const rows = rules.filter((r) => r.priority === pr);
+    if (!rows.length) continue;
+    L.push(`## ${pr}`, "");
+    for (const r of rows) L.push(`- \`${r.id}\` ${r.text}`);
+    L.push("");
+  }
+  L.push("---", "", DOC_RULES_BOUNDARY, "");
+  fs.writeFileSync(path.join(p.folder, "house-rules.md"), L.join("\n"));
+  return path.join(p.folder, "house-rules.md");
+}
+
+// `orc doc rules …` — the project ledger, the frozen set, and the drift between.
+// The skill's side of this is hard rule 15: `house rules are read first` — the
+// enabled set rides at the TOP of every dispatched slice, above ORC's own
+// generation rules. This function is where that set comes from.
+function docRulesCmd(claudeDir, slugArg) {
+  const asJson = wantsJson();
+  const led = docRulesRead(claudeDir);
+  const pos = docPositionals(); // ["doc","rules",<sub|slug?>,<id?>]
+  const sub = String(pos[2] || "");
+  const fail = (reason, hint, code = 2) => {
+    if (asJson) emitJson({ ok: false, reason, hint, boundary: DOC_RULES_BOUNDARY }, code);
+    console.error("❌ " + hint);
+    process.exit(code);
+  };
+  const save = (msg, extra) => {
+    docRulesWrite(claudeDir, led);
+    if (asJson) emitJson({ ok: true, ...extra, rules: docRulesSort(led.rules), boundary: DOC_RULES_BOUNDARY }, 0);
+    console.log("✓ " + msg);
+    console.log(ui.color.gray("  " + docRulesLine(docRulesEnabled(led))));
+    process.exit(0);
+  };
+  const findRule = (id) => led.rules.find((r) => r.id === String(id || "").toUpperCase());
+
+  // ── the writes ───────────────────────────────────────────────────────────
+  if (sub === "add") {
+    const pr = String(docOpt("--priority") || "").toUpperCase();
+    if (!DOC_RULE_PRIORITIES.includes(pr)) return fail("bad-priority", `--priority must be one of: ${DOC_RULE_PRIORITIES.join(", ")}`);
+    const text = docOpt("--text");
+    if (!text || !String(text).trim()) return fail("no-text", `orc doc rules add needs --text "<the rule, in your own words>".`);
+    // ONE LINE. A multi-line rule is REFUSED by name rather than silently
+    // flattened: it keeps the panel's write path a plain argv string, and two
+    // rules stapled together are two rules.
+    if (/[\r\n]/.test(String(text)))
+      return fail("multiline", "a house rule is ONE line. Add it as two rules instead — a rule that spans lines is two rules stapled together.");
+    const id = docRulesNextId(led);
+    led.rules.push({ id, priority: pr, text: String(text), enabled: true, added_at: fmtStamp(new Date()) });
+    return save(`${id} ${pr} — ${text}`, { id, priority: pr, text: String(text) });
+  }
+  if (sub === "remove") {
+    const r = findRule(pos[3]);
+    if (!r) return fail("no-such-rule", `no house rule "${pos[3] || ""}". \`orc doc rules\` lists them.`);
+    led.rules = led.rules.filter((x) => x.id !== r.id);
+    return save(`${r.id} removed`, { id: r.id, removed: r });
+  }
+  if (sub === "enable" || sub === "disable") {
+    const r = findRule(pos[3]);
+    if (!r) return fail("no-such-rule", `no house rule "${pos[3] || ""}". \`orc doc rules\` lists them.`);
+    r.enabled = sub === "enable";
+    return save(`${r.id} ${sub}d`, { id: r.id, enabled: r.enabled });
+  }
+  if (sub === "move") {
+    const r = findRule(pos[3]);
+    if (!r) return fail("no-such-rule", `no house rule "${pos[3] || ""}". \`orc doc rules\` lists them.`);
+    const pr = String(docOpt("--priority") || "").toUpperCase();
+    if (!DOC_RULE_PRIORITIES.includes(pr)) return fail("bad-priority", `--priority must be one of: ${DOC_RULE_PRIORITIES.join(", ")}`);
+    const from = r.priority;
+    r.priority = pr;
+    return save(`${r.id} ${from} -> ${pr}`, { id: r.id, from, to: pr });
+  }
+  const setFile = docOpt("--set-file");
+  if (setFile) {
+    const abs = path.isAbsolute(setFile) ? setFile : path.join(repoRootOf(claudeDir), setFile);
+    if (!fs.existsSync(abs)) return fail("no-such-file", `no such file: ${setFile}`);
+    // `P0 the rule text` per line. A bulk replace is CLI-only and destructive,
+    // so it is never a panel button.
+    const rows = [];
+    for (const raw of fs.readFileSync(abs, "utf8").split(/\r?\n/)) {
+      const line = raw.trim();
+      if (!line || line.startsWith("#")) continue;
+      const m = /^(P[012])\s+(.+)$/.exec(line);
+      if (!m) return fail("bad-line", `every line must start with P0, P1 or P2: "${line.slice(0, 60)}"`);
+      rows.push({ priority: m[1], text: m[2].trim() });
+    }
+    if (!rows.length) return fail("empty-file", `${setFile} holds no rules.`);
+    led.rules = rows.map((r, i) => ({
+      id: "H-" + String(i + 1).padStart(3, "0"),
+      priority: r.priority,
+      text: r.text,
+      enabled: true,
+      added_at: fmtStamp(new Date()),
+    }));
+    return save(`${rows.length} rules replaced from ${setFile}`, { replaced: rows.length });
+  }
+  if (flag("--reset") === true) {
+    const n = led.rules.length;
+    led.rules = [];
+    return save(`${n} rules removed`, { removed: n });
+  }
+
+  // ── the reads ────────────────────────────────────────────────────────────
+  const enabled = docRulesEnabled(led);
+  // `orc doc rules <slug>` — the FROZEN set of one document, and its drift.
+  const slug = sub && sub !== "list" ? docResolveSlug(claudeDir, sub) : slugArg ? docResolveSlug(claudeDir, slugArg) : null;
+  if ((sub && sub !== "list") || slugArg) {
+    if (!slug) return docNoSuch(asJson, sub || slugArg);
+    const d = docRead(claudeDir, slug);
+    if (!d) return docNoSuch(asJson, sub || slugArg);
+    const frozen = docRulesSort(d.doc_rules || []);
+    const drift = docRulesDrift(frozen, enabled);
+    if (flag("--sync") === true) {
+      // A DELIBERATE re-freeze. It NAMES the already-written sections that
+      // predate the new set and never re-writes one: auto-rewriting would be ORC
+      // spending money applying a rule change nobody asked it to apply
+      // retroactively.
+      const predate = d.outline
+        .filter((o) => {
+          const st = (d.sections || {})[o.id];
+          return st && st.state && st.state !== "planned";
+        })
+        .map((o) => o.id);
+      d.doc_rules = enabled.map((r) => ({ ...r }));
+      d.doc_rule_syncs = Array.isArray(d.doc_rule_syncs) ? d.doc_rule_syncs : [];
+      d.doc_rule_syncs.push({ at: fmtStamp(new Date()), rules: enabled.length, predate });
+      docWrite(claudeDir, slug, d);
+      docWriteHouseRules(claudeDir, slug, d);
+      if (asJson)
+        emitJson({ ok: true, slug, synced: enabled.length, predate, rules: enabled, boundary: DOC_RULES_BOUNDARY }, 0);
+      console.log(`✓ ${slug} re-frozen against ${plural(enabled.length, "house rule")}.`);
+      if (predate.length) {
+        console.log(`\n  These sections were written BEFORE the change and are NOT re-written:`);
+        for (const id of predate) console.log(`    ${id}`);
+        console.log(`\n  Whether any of them needs redoing is your call, not ORC's.`);
+      }
+      process.exit(0);
+    }
+    const code = drift.drifted ? 1 : 0;
+    if (asJson)
+      emitJson(
+        { ok: true, slug, frozen, project: enabled, drift, counts: docRulesCounts(frozen), line: docRulesLine(frozen), boundary: DOC_RULES_BOUNDARY },
+        code
+      );
+    console.log(ui.header(`ORC · doc rules — ${slug}`));
+    console.log(`\n  ${docRulesLine(frozen)}   ${ui.color.gray("(frozen at init)")}`);
+    for (const r of frozen) console.log(`    ${r.priority}  ${ui.color.gray(r.id)}  ${r.text}`);
+    if (!drift.drifted) console.log(`\n  The project ledger has not moved since.`);
+    else {
+      console.log(`\n  The project ledger HAS moved since this document was frozen:`);
+      for (const r of drift.added) console.log(`    + ${r.priority}  ${r.id}  ${r.text}`);
+      for (const r of drift.removed) console.log(`    - ${r.priority}  ${r.id}  ${r.text}`);
+      for (const r of drift.changed) console.log(`    ~ ${r.id}  ${r.from.priority} "${r.from.text}" -> ${r.to.priority} "${r.to.text}"`);
+      console.log(`\n  Re-freeze deliberately:  orc doc rules ${slug} --sync`);
+    }
+    console.log("\n" + ui.color.gray("  " + DOC_RULES_BOUNDARY));
+    process.exit(code);
+  }
+
+  // `orc doc rules` — the project ledger. NO rules is an ANSWER, so the object
+  // is still returned; only the exit code says "there is nothing here yet".
+  const code = led.rules.length ? 0 : 1;
+  if (asJson)
+    emitJson(
+      {
+        ok: true,
+        file: docRulesPath(claudeDir),
+        rules: docRulesSort(led.rules),
+        enabled,
+        counts: docRulesCounts(enabled),
+        line: docRulesLine(enabled),
+        priorities: DOC_RULE_PRIORITIES,
+        updated_at: led.updated_at,
+        boundary: DOC_RULES_BOUNDARY,
+      },
+      code
+    );
+  console.log(ui.header("ORC · doc house rules"));
+  if (!led.rules.length) {
+    console.log(`\n  No house rules yet.`);
+    console.log(`\n  Add one:  orc doc rules add --priority P0 --text "every document opens with a one-paragraph summary"`);
+  } else {
+    console.log("");
+    for (const pr of DOC_RULE_PRIORITIES) {
+      const rows = docRulesSort(led.rules).filter((r) => r.priority === pr);
+      if (!rows.length) continue;
+      console.log(`  ${pr}`);
+      for (const r of rows)
+        console.log(`    ${ui.color.gray(r.id)}  ${r.enabled ? "" : ui.color.gray("(disabled) ")}${r.text}`);
+    }
+    console.log(`\n  ${docRulesLine(docRulesEnabled(led))}`);
+  }
+  console.log("\n" + ui.color.gray("  " + DOC_RULES_BOUNDARY));
+  process.exit(code);
 }
 
 // ── the commands ────────────────────────────────────────────────────────────
@@ -11776,6 +12461,11 @@ function docInit(claudeDir) {
 
   let sections = tpl.sections.map((s) => ({ ...s }));
   let templateSource = "shipped:" + tpl.type;
+  // v0.49.2 — TEMPLATE LOCK. A SUPPLIED template is a P0 cage, not a suggestion:
+  // `--template` set the outline and then nothing stopped a writer adding a
+  // heading the template never had. A SHIPPED base template stays unlocked — it
+  // is a floor, not a cage, which is what `orc doc templates` has always said.
+  let templateLock = { path: null, hash: null, locked: false, headings: [], source: "shipped" };
   if (custom) {
     const abs = path.isAbsolute(custom) ? custom : path.join(paths.root, custom);
     if (!fs.existsSync(abs)) fail("no-such-template", `template not found: ${custom}`);
@@ -11791,6 +12481,15 @@ function docInit(claudeDir) {
       );
     sections = heads.map((h) => ({ heading: h.heading, required: true, budget: 120, affinity: null, purpose: null }));
     templateSource = custom;
+    templateLock = {
+      path: String(custom).replace(/\\/g, "/"),
+      hash: shaOfFile(abs),
+      // Locked BY DEFAULT whenever a user template is supplied. `--template-soft`
+      // opts out, and the init output says which one is in force.
+      locked: flag("--template-soft") !== true,
+      headings: heads.map((h) => h.heading),
+      source: "user",
+    };
   }
 
   const outline = sections.map((s, i) => ({
@@ -11810,6 +12509,11 @@ function docInit(claudeDir) {
   if (!DOC_LENGTHS.includes(length)) fail("bad-length", `--length must be one of: ${DOC_LENGTHS.join(", ")}`);
 
   const cfg = resolvedConfig(claudeDir);
+  // FROZEN at init, for the same reason `context.md` is frozen: if a P0 changes
+  // at wave 3, half the document silently no longer complies and nothing on disk
+  // says so. `orc doc rules <slug>` reports the drift; `--sync` re-freezes
+  // deliberately and NAMES the sections that predate the change.
+  const houseRules = docRulesEnabled(docRulesRead(claudeDir));
   const d = {
     version: DOC_STATE_VERSION,
     slug: folderSlug,
@@ -11818,7 +12522,7 @@ function docInit(claudeDir) {
     language: docOpt("--language") || cfg.doc_language || "en",
     target,
     length,
-    template: { source: templateSource, label: tpl.label },
+    template: { source: templateSource, label: tpl.label, ...templateLock },
     created_at: fmtStamp(new Date()),
     cycle: 0,
     outline,
@@ -11827,6 +12531,8 @@ function docInit(claudeDir) {
     extracts: {},
     cycles: [],
     migrations: [],
+    doc_rules: houseRules.map((r) => ({ ...r })),
+    doc_rule_syncs: [],
   };
   // `sections/` is a REAL, VISIBLE folder — a hidden dot-folder is not something
   // a human opens, edits, or reviews in a PR, and half the point is that you can
@@ -11834,6 +12540,7 @@ function docInit(claudeDir) {
   fs.mkdirSync(paths.sections, { recursive: true });
   docWrite(claudeDir, folderSlug, d);
   docWriteOutline(claudeDir, folderSlug, d);
+  docWriteHouseRules(claudeDir, folderSlug, d);
 
   const oversized = outline.filter((o) => o.budget_lines > Number(cfg.doc_max_lines_per_agent || 400));
   if (asJson)
@@ -11849,6 +12556,10 @@ function docInit(claudeDir) {
         oversized: oversized.map((o) => o.id),
         sections_dir: path.relative(paths.root, paths.sections).split(path.sep).join("/"),
         write_mode: d.write_mode,
+        doc_rules: houseRules,
+        doc_rules_line: docRulesLine(houseRules),
+        template_locked: templateLock.locked,
+        allowed_headings: templateLock.locked ? templateLock.headings : null,
         next: `orc doc plan ${folderSlug} --role write`,
       },
       0
@@ -11858,6 +12569,13 @@ function docInit(claudeDir) {
   console.log(`  template:  ${templateSource}`);
   console.log(`  target:    ${docTarget(target).label}`);
   console.log(`  sections:  ${outline.length}   (${outline.filter((o) => o.required).length} required)`);
+  console.log(`  ${docRulesLine(houseRules)}`);
+  if (templateLock.source === "user")
+    console.log(
+      templateLock.locked
+        ? `  template:  LOCKED — a heading this template never had is a lint error and \`parts --confirm\` refuses it`
+        : `  template:  soft (--template-soft) — the outline came from it, but nothing enforces it`
+    );
   console.log(`  folder:    ${paths.folder}`);
   console.log(`\n  Next:  orc doc plan ${folderSlug} --role write`);
   process.exit(0);
@@ -12151,12 +12869,19 @@ function docMapCmd(claudeDir, slugArg) {
 }
 
 // ── the batching — the model NEVER decides how to split (§5.4) ──────────────
-function docPlanCmd(claudeDir, slugArg) {
-  const asJson = wantsJson();
+// v0.49.2 — the batcher is a FUNCTION, and `orc doc plan`, `orc doc forecast`
+// and `orc doc next` all call it. A forecast computed by a second idea of the
+// wave shape would describe a run the run will not follow, which is the same
+// drift the Flow stepper rule exists to prevent.
+//
+// It RETURNS the shape and prints nothing. `role` overrides `--role` so a
+// forecast can ask for the check pass without the flag.
+function docPlanShape(claudeDir, slugArg, roleOverride) {
   const slug = docResolveSlug(claudeDir, slugArg);
   if (slug) docMigrateV2(claudeDir, slug);
+  if (slug) docMigrateV2(claudeDir, slug);
   const view = slug ? docMapView(claudeDir, slug) : null;
-  if (!view) return docNoSuch(asJson, slugArg);
+  if (!view) return null;
   const d = view.d;
   const cfg = resolvedConfig(claudeDir);
   const v2 = d.version >= DOC_STATE_VERSION;
@@ -12166,12 +12891,8 @@ function docPlanCmd(claudeDir, slugArg) {
     .map((s) => s.trim())
     .filter(Boolean);
   const writeMode = d.write_mode || (cfg.doc_write_mode === "ask" ? null : cfg.doc_write_mode);
-  const role = String(docOpt("--role") || "write").toLowerCase();
-  if (!DOC_ROLES.includes(role)) {
-    if (asJson) emitJson({ ok: false, reason: "bad-role", hint: `--role must be one of: ${DOC_ROLES.join(", ")}` }, 2);
-    console.error(`❌ --role must be one of: ${DOC_ROLES.join(", ")}`);
-    process.exit(2);
-  }
+  const role = String(roleOverride || docOpt("--role") || "write").toLowerCase();
+  if (!DOC_ROLES.includes(role)) return { bad_role: true, role, slug, d, view };
   const budget = Math.max(40, Number(docOpt("--budget") || cfg.doc_max_lines_per_agent || 400));
   const wanted = Math.max(1, Number(cfg.doc_max_parallel || DOC_MAX_PARALLEL_CAP));
   const parallel = Math.min(DOC_MAX_PARALLEL_CAP, wanted);
@@ -12250,10 +12971,33 @@ function docPlanCmd(claudeDir, slugArg) {
             end: s.end,
           }));
   } else {
+    const lintOpts = docLintOpts(claudeDir, d);
     items = (v2 ? pv.rows : view.sections)
       .filter((s) => s.findings > 0)
       .map((s) => {
         const o = d.outline.find((x) => x.id === s.id) || { id: s.id };
+        // v0.49.2 — EVERY finding carries the FILE and the PART-LOCAL line. An
+        // edit round that names a rule but not a place cannot be followed in
+        // `sections/`, which is where the user is actually reading. The compiled
+        // `document.md` line number is deliberately NOT carried: it is stale the
+        // moment anything is written, which is what rule 2 exists for.
+        let anchors = [];
+        if (v2) {
+          const src = docSectionSource(view.paths, o);
+          for (const pt of (src && src.parts) || []) {
+            const res = docLintRun(pt.text, d.target, { ...lintOpts, part: true });
+            for (const f of res.findings)
+              anchors.push({
+                rule: f.rule,
+                severity: f.severity,
+                file: pt.file,
+                line: f.line,
+                sub_file: pt.sub ? pt.file : null,
+                what: f.what,
+                quote: f.quote,
+              });
+          }
+        }
         return {
           id: s.id,
           heading: s.heading,
@@ -12265,6 +13009,7 @@ function docPlanCmd(claudeDir, slugArg) {
           end: s.end,
           part: partFile(o),
           files: v2 ? s.files : undefined,
+          findings: anchors,
         };
       });
   }
@@ -12273,27 +13018,19 @@ function docPlanCmd(claudeDir, slugArg) {
   const agentName = role === "check" ? "orc-doc-checker-opus-5-low" : "orc-doc-writer-opus-5-med";
 
   if (!items.length) {
-    // An empty result is an ANSWER, so it returns the SAME object shape with an
-    // empty wave list — a caller must never have to special-case "nothing to do"
-    // by parsing prose or by finding half the keys missing.
+    // An empty result is an ANSWER, so the SAME shape comes back with an empty
+    // wave list — a caller must never have to special-case "nothing to do" by
+    // parsing prose or by finding half the keys missing.
     const hint =
       role === "write"
         ? "every section already has a body — nothing to write."
         : role === "check"
           ? "every section has been checked since it last changed — nothing to re-read."
           : "no section carries an open finding — nothing to edit.";
-    if (asJson)
-      emitJson(
-        {
-          ok: true, slug, role, agent: agentName, budget_lines: budget, parallel, clamped,
-          write_mode: writeMode, waves: [], agents: 0, more_waves: 0, only: only.length ? only : null,
-          oversized: [], hint,
-          note: "no section is ever split across two agents, and no two agents ever share a file",
-        },
-        1
-      );
-    console.log(hint);
-    process.exit(1);
+    return {
+      slug, role, d, view, agent: agentName, budget, parallel, clamped, writeMode,
+      only, items: 0, waves: [], slices: [], hint,
+    };
   }
 
   // Pack in outline order, and NEVER split a section — a writer given half a
@@ -12356,11 +13093,20 @@ function docPlanCmd(claudeDir, slugArg) {
         // ONE ENTRY PER SECTION — and per SUB-PART for a nested section. The
         // singular `part` is kept as parts[0].file for one release, because
         // `next` output gets copied into notes and scripts.
+        const anchorsFor = (x, file) => (x.findings || []).filter((f) => f.file === file);
         if (role !== "check" || v2)
           out.parts = s.sections.flatMap((x) =>
             (x.subsections || []).length
-              ? x.subsections.map((sub) => ({ id: x.id, subsection: sub.id, file: sub.file, heading: sub.heading, purpose: x.purpose, budget_lines: x.budget_lines }))
-              : [{ id: x.id, subsection: null, file: x.part, heading: x.heading, purpose: x.purpose, budget_lines: x.budget_lines }]
+              ? x.subsections.map((sub) => ({
+                  id: x.id, subsection: sub.id, file: sub.file, heading: sub.heading,
+                  purpose: x.purpose, budget_lines: x.budget_lines,
+                  findings: anchorsFor(x, sub.file),
+                }))
+              : [{
+                  id: x.id, subsection: null, file: x.part, heading: x.heading,
+                  purpose: x.purpose, budget_lines: x.budget_lines,
+                  findings: anchorsFor(x, x.part),
+                }]
           );
         if (out.parts && out.parts.length) out.part = out.parts[0].file;
         if (!v2 && (role === "check" || role === "edit")) {
@@ -12376,6 +13122,47 @@ function docPlanCmd(claudeDir, slugArg) {
         return out;
       }),
     });
+  }
+
+  return {
+    slug, role, d, view, agent, budget, parallel, clamped, writeMode, only,
+    items: items.length,
+    // ALL waves. The `partial` truncation is the COMMAND's, never the shape's:
+    // a forecast is telling the user what the whole document costs.
+    waves: allWaves,
+    slices,
+    hint: null,
+  };
+}
+
+function docPlanCmd(claudeDir, slugArg) {
+  const asJson = wantsJson();
+  const shape = docPlanShape(claudeDir, slugArg);
+  if (!shape) return docNoSuch(asJson, slugArg);
+  if (shape.bad_role) {
+    if (asJson) emitJson({ ok: false, reason: "bad-role", hint: `--role must be one of: ${DOC_ROLES.join(", ")}` }, 2);
+    console.error(`❌ --role must be one of: ${DOC_ROLES.join(", ")}`);
+    process.exit(2);
+  }
+  const { slug, role, d, agent, budget, parallel, clamped, writeMode, only, allWaves = shape.waves } = shape;
+
+  if (!shape.items) {
+    if (asJson)
+      emitJson(
+        {
+          ok: true, slug, role, agent, budget_lines: budget, parallel, clamped,
+          write_mode: writeMode, waves: [], agents: 0, more_waves: 0, only: only.length ? only : null,
+          oversized: [], hint: shape.hint,
+          doc_rules: docRulesSort(d.doc_rules || []),
+          doc_rules_boundary: DOC_RULES_BOUNDARY,
+          template_locked: docLock(d).locked,
+          allowed_headings: docLock(d).locked ? docLock(d).headings : null,
+          note: "no section is ever split across two agents, and no two agents ever share a file",
+        },
+        1
+      );
+    console.log(shape.hint);
+    process.exit(1);
   }
 
   // PARTIAL is a first-class mode, and it returns WAVE 1 ONLY — the rest cannot
@@ -12405,8 +13192,18 @@ function docPlanCmd(claudeDir, slugArg) {
     agents,
     more_waves: partial ? allWaves.length - 1 : 0,
     only: only.length ? only : null,
-    oversized: slices.filter((s) => s.oversized).map((s) => s.sections[0].id),
+    oversized: shape.slices.filter((s) => s.oversized).map((s) => s.sections[0].id),
     hint: null,
+    // HOUSE RULES ARE READ FIRST. They ride on the plan, not on each agent,
+    // because they are identical for every dispatch in the run — and the SKILL
+    // puts them at the very top of every slice, above ORC's own generation
+    // rules. That order is the contract.
+    doc_rules: docRulesSort(d.doc_rules || []),
+    doc_rules_boundary: DOC_RULES_BOUNDARY,
+    // THE CAGE, on every write item. A writer may not add, rename, merge or drop
+    // a heading; what does not fit is a gap.
+    template_locked: docLock(d).locked,
+    allowed_headings: docLock(d).locked ? docLock(d).headings : null,
     note: "no section is ever split across two agents, and no two agents ever share a file",
   };
   if (asJson) emitJson(payload, 0);
@@ -12426,6 +13223,12 @@ function docPlanCmd(claudeDir, slugArg) {
       );
   }
   console.log(`\n  ${plural(agents, "agent")} across ${plural(waves.length, "wave")}.`);
+  console.log(`  ${docRulesLine(payload.doc_rules)}   ${ui.color.gray("— read first in every slice")}`);
+  if (payload.template_locked)
+    console.log(
+      `  template:  LOCKED to ${payload.allowed_headings.length} headings   ` +
+        ui.color.gray("— a writer may not add, rename, merge or drop one; what does not fit is a gap")
+    );
   if (partial)
     console.log(
       ui.color.gray(
@@ -12587,7 +13390,7 @@ function docSpliceCmd(claudeDir, slugArg) {
   d.cycles.push({ n: d.cycle, at: fmtStamp(new Date()), kind: "edit", agents: spliced.length, sections: spliced.map((s) => s.id) });
   docWrite(claudeDir, slug, d);
 
-  const lint = docLintRun(body, d.target);
+  const lint = docLintRun(body, d.target, docLintOpts(claudeDir, d));
   const payload = {
     ok: true,
     slug,
@@ -12727,7 +13530,7 @@ function docCompileCmd(claudeDir, slugArg, opts) {
   docWrite(claudeDir, slug, d);
   docWriteOutline(claudeDir, slug, d);
 
-  const lint = docLintRun(body, d.target);
+  const lint = docLintRun(body, d.target, docLintOpts(claudeDir, d));
   const mv = docMapView(claudeDir, slug);
   const after = docPartsView(claudeDir, slug);
   const payload = {
@@ -12785,6 +13588,7 @@ function docPartsCmd(claudeDir, slugArg) {
     const d = view.d;
     const unknown = [];
     const empty = [];
+    const drifted = [];
     const confirmed = [];
     for (const want of confirm) {
       const row = view.rows.find((r) => r.id === want || r.id.startsWith(want));
@@ -12798,17 +13602,36 @@ function docPartsCmd(claudeDir, slugArg) {
       }
       const entry = d.outline.find((x) => x.id === row.id);
       const src = docSectionSource(view.paths, entry);
+      // v0.49.2 — under a TEMPLATE LOCK, a part whose headings drifted is
+      // REFUSED and NOTHING is written: the `splice` hash-conflict refusal
+      // shape. Confirming it would record a hash for a section that is no longer
+      // the section the template declared.
+      const lock = docLock(d);
+      if (lock.locked) {
+        const allowed = new Set(lock.headings.concat((entry.subsections || []).map((x) => x.heading)));
+        const stray = docScan(src.text || "").headings.filter((h) => h.level >= 2 && !allowed.has(h.heading));
+        if (stray.length) {
+          drifted.push({ id: row.id, headings: stray.map((h) => h.heading) });
+          continue;
+        }
+      }
       const prev = d.sections[row.id] || {};
       const parts = {};
       for (const pt of src.parts) if (pt.sub) parts[pt.sub] = pt.hash;
       d.sections[row.id] = { ...prev, source_hash: row.hash, state: "written", cycle: d.cycle || 0, findings: prev.findings || 0, parts };
       confirmed.push(row.id);
     }
-    if (unknown.length || empty.length) {
+    if (unknown.length || empty.length || drifted.length) {
       const hint =
         (unknown.length ? `no such section: ${unknown.join(", ")}. ` : "") +
-        (empty.length ? `nothing on disk for: ${empty.join(", ")} — a return cannot confirm a file that was never written. ` : "");
-      if (asJson) emitJson({ ok: false, reason: unknown.length ? "no-such-section" : "no-source", slug, unknown, empty, confirmed, hint }, 1);
+        (empty.length ? `nothing on disk for: ${empty.join(", ")} — a return cannot confirm a file that was never written. ` : "") +
+        (drifted.length
+          ? `outside the locked template: ` +
+            drifted.map((x) => `${x.id} adds "${x.headings.join('", "')}"`).join("; ") +
+            `. Nothing was written. Remove the heading, or unlock the template deliberately. `
+          : "");
+      const reason = unknown.length ? "no-such-section" : drifted.length ? "template-drift" : "no-source";
+      if (asJson) emitJson({ ok: false, reason, slug, unknown, empty, drifted, confirmed: [], hint }, 1);
       console.error("❌ " + hint);
       process.exit(1);
     }
@@ -13189,11 +14012,30 @@ function docLintCmd(claudeDir, arg) {
   const slug = docResolveSlug(claudeDir, arg);
   let file = null;
   let target = docOpt("--target");
+  let section = null;
+  let subFiles = null;
   if (slug) {
     const p = docPaths(claudeDir, slug);
     const d = docRead(claudeDir, slug);
     file = p.document;
     if (!target) target = d.target;
+    // v0.49.2 — lint ONE SECTION FILE and report PART-LOCAL line numbers. The
+    // part file is what the writer opens, so those are the only line numbers a
+    // revision round can act on. Re-derived on every call, never stored (rule 2).
+    const want = String(docOpt("--section") || "");
+    if (want) {
+      const entry = (d.outline || []).find((x) => x.id === want || x.id.startsWith(want));
+      const src = entry ? docSectionSource(p, entry) : null;
+      if (!entry || !src || !src.files.length) {
+        const hint = `no written section "${want}" in ${slug} — \`orc doc parts ${slug}\` lists them.`;
+        if (asJson) emitJson({ ok: false, reason: "no-such-section", slug, section: want, hint }, 2);
+        console.error("❌ " + hint);
+        process.exit(2);
+      }
+      section = entry.id;
+      subFiles = src.files;
+      file = path.join(p.folder, src.files[0]);
+    }
   } else if (arg) {
     file = path.isAbsolute(arg) ? arg : path.join(repoRootOf(claudeDir), arg);
   }
@@ -13203,8 +14045,21 @@ function docLintCmd(claudeDir, arg) {
     console.error("❌ " + hint);
     process.exit(2);
   }
-  const res = docLintRun(fs.readFileSync(file, "utf8"), target);
-  const payload = { ok: true, slug: slug || null, file: file.split(path.sep).join("/"), ...res };
+  const res = docLintRun(fs.readFileSync(file, "utf8"), target, {
+    ...docLintOpts(claudeDir, slug ? docRead(claudeDir, slug) : null),
+    part: !!section,
+  });
+  const payload = {
+    ok: true,
+    slug: slug || null,
+    // The path RELATIVE to the document folder when this is a section file —
+    // `sections/03-goals.md` is what the user sees in their editor.
+    file: (section ? subFiles[0] : file.split(path.sep).join("/")),
+    section,
+    files: subFiles,
+    part_local: !!section,
+    ...res,
+  };
   const code = res.findings.length ? 1 : 0;
   if (asJson) emitJson(payload, code);
   console.log(ui.header(`orc doc lint — ${path.basename(file)}  →  ${res.target_label}`));
@@ -13233,7 +14088,7 @@ function docStatusCmd(claudeDir, slugArg) {
   const v2 = d.version >= DOC_STATE_VERSION;
   const pv = docPartsView(claudeDir, slug);
   const hasDoc = !!view.document && fs.existsSync(view.document);
-  const lint = hasDoc ? docLintRun(fs.readFileSync(view.document, "utf8"), d.target) : null;
+  const lint = hasDoc ? docLintRun(fs.readFileSync(view.document, "utf8"), d.target, docLintOpts(claudeDir, d)) : null;
   const byId = new Map((v2 ? pv.rows : view.sections).map((s) => [s.id, s]));
   const open = d.outline.filter((o) => {
     const s = byId.get(o.id);
@@ -13400,7 +14255,7 @@ function docShipCmd(claudeDir, slugArg, undo) {
     );
 
   const hasDoc = !!view.document && fs.existsSync(view.document);
-  const lint = hasDoc ? docLintRun(fs.readFileSync(view.document, "utf8"), d.target) : null;
+  const lint = hasDoc ? docLintRun(fs.readFileSync(view.document, "utf8"), d.target, docLintOpts(claudeDir, d)) : null;
   const v2 = d.version >= DOC_STATE_VERSION;
   const pv = v2 ? docPartsView(claudeDir, slug) : null;
   const byId = new Map((v2 ? pv.rows : view.sections).map((s) => [s.id, s]));
@@ -13526,6 +14381,65 @@ function docAuditFindings(claudeDir, slug) {
       );
   } else {
     add("doc-v1", `${slug} is still v1: one file, and every change routed through it.`, `orc doc migrate ${slug}`, "docs", "warn");
+  }
+
+  // v0.49.2 — the TEMPLATE LOCK, from disk, in both directions.
+  const lock = docLock(d);
+  if (lock.locked) {
+    const allowed = new Set(lock.headings);
+    for (const o of d.outline || []) for (const s of o.subsections || []) allowed.add(s.heading);
+    const stray = [];
+    for (const o of d.outline || []) {
+      const src = docSectionSource(p, o);
+      if (!src || !src.text) continue;
+      for (const h of docScan(src.text).headings)
+        if (h.level >= 2 && !allowed.has(h.heading)) stray.push({ id: o.id, heading: h.heading });
+    }
+    if (stray.length)
+      add(
+        "template-drift",
+        `${plural(stray.length, "heading")} the template never had: ` +
+          stray.map((x) => `"${x.heading}" in ${x.id}`).join(", ") +
+          `. A supplied template is a cage — what does not fit is a gap.`,
+        `orc doc lint ${slug} --json`,
+        "docs"
+      );
+    // The template FILE moved. REPORTED, never auto-synced: re-freezing an
+    // outline against a template somebody edited is a decision, not a repair.
+    if (lock.path) {
+      const abs = path.isAbsolute(lock.path) ? lock.path : path.join(p.root, lock.path);
+      const now = shaOfFile(abs);
+      if (now === null)
+        add("template-moved", `the template ${lock.path} is gone — the lock still holds the headings it declared.`, `orc doc rules ${slug}`, "docs", "warn");
+      else if (lock.hash && now !== lock.hash)
+        add(
+          "template-moved",
+          `${lock.path} has changed since this document was created. The lock still holds the ORIGINAL headings — nothing is re-synced on its own.`,
+          `orc doc outline ${slug}`,
+          "docs",
+          "warn"
+        );
+    }
+  }
+
+  // v0.49.2 — the frozen house rules and the project ledger have parted. It is a
+  // WARN, never an error: the drift is a fact about the document, and whether
+  // any already-written section needs redoing is the user's call, not ORC's.
+  const hrDrift = docRulesDrift(d.doc_rules || [], docRulesEnabled(docRulesRead(claudeDir)));
+  if (hrDrift.drifted) {
+    const bits = [];
+    if (hrDrift.added.length) bits.push(`${hrDrift.added.length} added`);
+    if (hrDrift.removed.length) bits.push(`${hrDrift.removed.length} removed`);
+    if (hrDrift.changed.length) bits.push(`${hrDrift.changed.length} changed`);
+    add(
+      "house-rules-drifted",
+      `the project's house rules moved since this document was frozen (${bits.join(", ")}: ` +
+        `${[...hrDrift.added, ...hrDrift.removed].map((r) => r.id).concat(hrDrift.changed.map((r) => r.id)).join(", ")}). ` +
+        `Nothing is re-written on its own.`,
+      `orc doc rules ${slug} --sync`,
+      "docs",
+      "warn"
+    );
   }
 
   if (hasDoc) {
@@ -13992,7 +14906,7 @@ function docNextAction(claudeDir, slug) {
     const s = byId.get(o.id);
     return o.required && (!s || s.state === "planned" || s.state === "open");
   });
-  const lint = hasDoc ? docLintRun(fs.readFileSync(view.document, "utf8"), d.target) : null;
+  const lint = hasDoc ? docLintRun(fs.readFileSync(view.document, "utf8"), d.target, docLintOpts(claudeDir, d)) : null;
   const A = (phase, action, command, why, paid, alternatives) => ({
     ok: true,
     slug,
@@ -14042,6 +14956,28 @@ function docNextAction(claudeDir, slug) {
       "D6",
       "partial or all — your call. `partial` writes ONE wave and stops so you can read those files and redirect before the rest is paid for; `all` writes every wave.",
       [`orc doc mode ${slug} --set partial`, `orc doc mode ${slug} --set all`]
+    );
+
+  // v0.49.2 — THE RUN MAP, ONCE. Before the first paid wave the user is told
+  // how many waves there are, how many stops, and what the whole document costs.
+  // It is named EXACTLY ONCE: a resumed session in a fresh context does not
+  // re-show it, because the record is on disk rather than in a model's memory.
+  // A forecast for a DIFFERENT shape is not a forecast, so a changed outline or
+  // a changed write mode invalidates it.
+  const fc = d.forecast || null;
+  const fcStale =
+    fc && (fc.outline_hash !== docOutlineHash(d) || (fc.write_mode || null) !== (writeMode || null));
+  const anyWritten = pv.rows.some((r) => r.exists);
+  if ((!fc || fcStale) && !anyWritten)
+    return A(
+      "D5.5",
+      "forecast",
+      `orc doc forecast ${slug} --json`,
+      fcStale
+        ? "the outline or the write mode changed since the last forecast — a forecast for a different shape is not a forecast"
+        : "you are about to buy the first wave and have not been told what the whole document costs",
+      false,
+      [`orc doc forecast ${slug} --naive --json`]
     );
 
   const unconfirmed = pv.rows.filter((r) => r.state === "unconfirmed");
@@ -14177,6 +15113,330 @@ function docNextCmd(claudeDir, slugArg) {
   process.exit(code);
 }
 
+
+
+// The outline's identity: ids, headings and budgets, in order. It is what
+// decides whether a stored forecast still describes THIS document — the same
+// question `compiled.source_hashes` answers for the build artifact.
+const docOutlineHash = (d) =>
+  docHash(((d && d.outline) || []).map((o) => `${o.id}|${o.heading}|${o.budget_lines}`).join("\n"));
+
+// ── §D — THE WAVE FORECAST, ONCE, BEFORE THE FIRST WAVE (v0.49.2) ───────────
+// The user is asked `partial` or `all` with no idea what either costs or how
+// many stops there will be. This answers both, from `orc doc plan --role write`
+// over ALL waves (never the `partial` truncation — they are being told what the
+// WHOLE document costs) × the same rate model `orc budget` uses.
+//
+// Every honesty rule of /orc-budget is INHERITED, not re-invented: four token
+// kinds never blended, a range with a sample count, no dollars without a dated
+// price table, no quota without a known plan, `unattributed` always reported,
+// and NO HISTORY MEANS NO FORECAST — it refuses rather than inventing numbers.
+function docForecastCmd(claudeDir, slugArg) {
+  const asJson = wantsJson();
+  const cfg = resolvedConfig(claudeDir);
+  const slug = docResolveSlug(claudeDir, slugArg);
+  const d = slug ? docRead(claudeDir, slug) : null;
+  if (!d) return docNoSuch(asJson, slugArg);
+  const naive = flag("--naive") === true;
+  const asView = typeof flag("--as") === "string" ? String(flag("--as")) : "all";
+  const table = readPricing(claudeDir);
+  readPricingCache = table;
+
+  const rates = naive ? null : budgetRates(claudeDir);
+  const minSamples = Number(cfg.budget_min_samples) || 5;
+  if (!naive && !(rates && rates.dispatches_joined)) {
+    const msg =
+      "BUDGET · no forecast\n" +
+      `  0 joinable dispatches in ${resolveLogDir(claudeDir)}.\n` +
+      "  I will not invent numbers. Write one wave, then ask again.\n" +
+      "  A floor from the public price table only:  orc doc forecast " + slug + " --naive";
+    d.forecast = {
+      shown_at: fmtStamp(new Date()),
+      waves: null,
+      tokens: null,
+      write_mode: d.write_mode || null,
+      outline_hash: docOutlineHash(d),
+      available: false,
+      reason: "no-history",
+    };
+    docWrite(claudeDir, slug, d);
+    if (asJson) emitJson({ ok: false, reason: "no-history", slug, hint: msg, shown_at: d.forecast.shown_at }, 3);
+    console.log(msg);
+    process.exit(3);
+  }
+
+  // The wave shape comes from the SAME batcher the dispatch uses, so a forecast
+  // can never describe a run-map the run will not follow.
+  const shape = docPlanShape(claudeDir, slug, "write");
+  const checks = docPlanShape(claudeDir, slug, "check");
+  const writeRole = "orc-doc-writer-opus-5-med";
+  const checkRole = "orc-doc-checker-opus-5-low";
+  const roleRate = (name) => (rates && rates.roles && rates.roles[name]) || null;
+
+  const vecFor = (name, n, p) => {
+    const src = roleRate(name);
+    if (src) return mulVec(src[p], n);
+    // The --naive floor: one agent's worth of the SMALLEST thing the price table
+    // can price. Labelled a floor everywhere it is printed.
+    return mulVec({ input: 12000, cache_write: 40000, cache_read: 90000, output: 6000 }, n);
+  };
+  const lowConfidence = [writeRole, checkRole].filter((r) => {
+    const src = roleRate(r);
+    return !src || src.samples < minSamples;
+  });
+
+  const waves = shape.waves.map((w) => ({
+    n: w.n,
+    agents: w.agents.length,
+    sections: w.agents.flatMap((a) => a.sections),
+    headings: w.agents.flatMap((a) => a.headings),
+    budget_lines: w.agents.reduce((a, x) => a + x.budget_lines, 0),
+    p50: vecFor(writeRole, w.agents.length, "p50"),
+    p90: vecFor(writeRole, w.agents.length, "p90"),
+  }));
+  const writeAgents = waves.reduce((a, w) => a + w.agents, 0);
+  const checkAgents = checks.waves.reduce((a, w) => a + w.agents.length, 0);
+  const p50 = sumVec(vecFor(writeRole, writeAgents, "p50"), vecFor(checkRole, checkAgents, "p50"));
+  const p90 = sumVec(vecFor(writeRole, writeAgents, "p90"), vecFor(checkRole, checkAgents, "p90"));
+  const money50 = priceVector(claudeDir, p50, "claude-opus-5");
+  const money90 = priceVector(claudeDir, p90, "claude-opus-5");
+  const quota = quotaView(table, cfg, money50.weighted);
+  const writeMode = d.write_mode || (cfg.doc_write_mode === "ask" ? null : cfg.doc_write_mode);
+  // A STOP is a hand-back. In `partial` every wave is one; in `all` the whole
+  // write is one.
+  const stops = writeMode === "partial" ? waves.length : 1;
+
+  const payload = {
+    ok: true,
+    slug,
+    write_mode: writeMode,
+    stops,
+    waves,
+    checks: {
+      agents: checkAgents,
+      p50: vecFor(checkRole, checkAgents, "p50"),
+      p90: vecFor(checkRole, checkAgents, "p90"),
+      note: "the check pass is forecast separately — it is a second decision, not part of the write",
+    },
+    tokens: { p50, p90 },
+    raw: { p50: rawTokens(p50), p90: rawTokens(p90) },
+    weighted: { p50: money50.weighted, p90: money90.weighted },
+    usd: { p50: money50.usd, p90: money90.usd },
+    price_table: table ? { as_of: table.as_of, age_days: table._age_days, stale: table._stale } : null,
+    quota,
+    min_samples: minSamples,
+    samples: { write: (roleRate(writeRole) || {}).samples || 0, check: (roleRate(checkRole) || {}).samples || 0 },
+    low_confidence_roles: lowConfidence,
+    naive,
+    unattributed: rates ? rates.unattributed : { blocks: 0, tokens: ZERO_VEC },
+    free_steps: ["orc doc compile", "orc doc lint", "orc doc parts", "orc doc audit"],
+    shown_at: (d.forecast && d.forecast.shown_at) || null,
+    view: asView,
+  };
+
+  // Recorded so `orc doc next` names it EXACTLY ONCE. A resumed session in a
+  // fresh context does not re-show it, because the record is on disk rather than
+  // in a model's memory. Running it BY HAND always recomputes and always prints —
+  // the once-rule governs `next`, never the user.
+  d.forecast = {
+    shown_at: (d.forecast && d.forecast.shown_at) || fmtStamp(new Date()),
+    waves: waves.length,
+    tokens: p50,
+    write_mode: writeMode,
+    outline_hash: docOutlineHash(d),
+    available: true,
+    naive,
+  };
+  docWrite(claudeDir, slug, d);
+
+  const code = lowConfidence.length ? 1 : 0;
+  if (asJson) emitJson(payload, code);
+
+  console.log(ui.header(`ORC · doc forecast — ${slug}`));
+  console.log(
+    `\n  This document is ${plural(shape.items, "section")} in ${plural(waves.length, "wave")}, ` +
+      `${shape.parallel} ${shape.parallel === 1 ? "agent" : "agents"} per wave.`
+  );
+  console.log("");
+  for (const w of waves)
+    console.log(
+      `  wave ${String(w.n).padEnd(2)} ${w.sections.join(" + ").padEnd(34)} ~${String(w.budget_lines).padStart(4)} lines   ` +
+        `p50 ${kTok(weightedTokens(w.p50)).padStart(7)}   p90 ${kTok(weightedTokens(w.p90)).padStart(7)}`
+    );
+  console.log(`  then    compile (free) → lint (free) → ${plural(checkAgents, "checker read")}`);
+  console.log(
+    `\n  TOKENS  p50 in ${kTok(p50.input)} · cache-w ${kTok(p50.cache_write)} · cache-r ${kTok(p50.cache_read)} · out ${kTok(p50.output)}`
+  );
+  console.log(`          p90 in ${kTok(p90.input)} · cache-w ${kTok(p90.cache_write)} · cache-r ${kTok(p90.cache_read)} · out ${kTok(p90.output)}`);
+  console.log(
+    `  USD     ` + (money50.usd === null ? "unavailable: no dated price table" : `$${money50.usd.toFixed(2)} → $${money90.usd.toFixed(2)}`)
+  );
+  console.log(`  QUOTA   ` + (quota.available ? `${quota.window_pct.toFixed(1)}% of a 5-hour window on ${quota.label}` : quota.reason));
+  console.log(
+    `\n  Every wave is a stop. ` +
+      (writeMode === "partial"
+        ? `In partial you pay for wave 1 and then decide — ${plural(stops, "stop")} in all.`
+        : writeMode === "all"
+          ? `In all mode the whole write runs, then hands back once.`
+          : `The mode is not chosen yet — it is asked once and stored.`)
+  );
+  if (naive) console.log(ui.color.yellow(`\n  --naive: this is a FLOOR from the price table, not a forecast from your history.`));
+  if (lowConfidence.length)
+    console.log(
+      ui.color.yellow(
+        `\n  LOW CONFIDENCE: ${lowConfidence.join(", ")} ${lowConfidence.length === 1 ? "has" : "have"} fewer than ${minSamples} samples. ` +
+          `The total is a FLOOR, not a range.`
+      )
+    );
+  if (rates && rates.unattributed)
+    console.log(
+      ui.color.gray(`  ${kTok(rawTokens(rates.unattributed.tokens))} in ${plural(rates.unattributed.blocks, "block")} are unattributed in the corpus.`)
+    );
+  process.exit(code);
+}
+
+// ── §E — WHAT THIS DOCUMENT COST (v0.49.2) ──────────────────────────────────
+// `orc budget actual` works per RUN. A document spans several runs — that is the
+// whole design of this lane — so nobody could answer "what did this document
+// cost". This joins EVERY trace whose slug matches, using the same
+// `listTraces` → `readTraceMeta` → `readCorpus` → `joinRun` → `priceVector`
+// pipeline `/orc-budget` already owns. It re-implements nothing.
+//
+// Per-section attribution is only honest because the doc lane's DISPATCH tail
+// names the sections it was for:
+//   DISPATCH orc-doc-writer-opus-5-med :: doc write sections=03-goals,04-scope …
+// A dispatch whose sections cannot be read reports `joined: false` and
+// `tokens: null` — NEVER zero. An unknown reported as a number is worse than an
+// unknown reported as unknown (the /orc-pact UNCHECKABLE rule).
+const DOC_TRACE_TAIL_RE = /\bsections=([\w,-]+)/;
+const DOC_TRACE_ROLE_RE = /\bdoc\s+(write|check|digest|edit)\b/;
+
+function docCostCmd(claudeDir, slugArg) {
+  const asJson = wantsJson();
+  const slug = docResolveSlug(claudeDir, slugArg);
+  const d = slug ? docRead(claudeDir, slug) : null;
+  if (!d) return docNoSuch(asJson, slugArg);
+  readPricingCache = readPricing(claudeDir);
+
+  const { runs } = listTraces(claudeDir);
+  // EVERY trace for this slug. Several sessions per document is CORRECT, and the
+  // counts have to add up across them.
+  const mine = runs.filter((r) => r.slug && (r.slug === slug || r.slug.startsWith(slug) || slug.startsWith(r.slug)));
+  if (!mine.length) {
+    const hint =
+      `no trace for "${slug}" in ${resolveLogDir(claudeDir)}. ` +
+      `A cost report is joined from traces and local transcripts — it is never estimated.`;
+    if (asJson) emitJson({ ok: false, reason: "no-trace", slug, hint, known: runs.slice(0, 10).map((r) => r.slug) }, 3);
+    console.log(hint);
+    process.exit(3);
+  }
+
+  const corpus = readCorpus(repoRootOf(claudeDir));
+  const byRole = {};
+  const bySection = {};
+  for (const o of d.outline || []) bySection[o.id] = { id: o.id, heading: o.heading, dispatches: 0, joined: 0, vec: { ...ZERO_VEC } };
+  let total = { ...ZERO_VEC };
+  let unattVec = { ...ZERO_VEC };
+  let unattBlocks = 0;
+  let dispatches = 0;
+  let joined = 0;
+  const runRows = [];
+
+  for (const r of mine) {
+    const trace = readTraceMeta(r.path);
+    if (!trace) continue;
+    const j = joinRun(trace, corpus.groups);
+    let runVec = { ...ZERO_VEC };
+    for (const row of j.rows) {
+      dispatches++;
+      const roleM = DOC_TRACE_ROLE_RE.exec(row.task || "");
+      const role = roleM ? roleM[1] : "other";
+      const ids = (DOC_TRACE_TAIL_RE.exec(row.task || "") || [null, ""])[1].split(",").filter(Boolean);
+      for (const id of ids) if (bySection[id]) bySection[id].dispatches++;
+      if (!row.group) continue;
+      joined++;
+      const vec = row.group.vec;
+      total = sumVec(total, vec);
+      runVec = sumVec(runVec, vec);
+      const rr = (byRole[role] = byRole[role] || { dispatches: 0, vec: { ...ZERO_VEC } });
+      rr.dispatches++;
+      rr.vec = sumVec(rr.vec, vec);
+      // A slice covering two sections SPLITS its cost evenly across them. It is
+      // an even split, said out loud in `honesty[]` — never a weighting invented
+      // from line counts nobody measured.
+      if (ids.length) {
+        const share = divVec(vec, ids.length);
+        for (const id of ids)
+          if (bySection[id]) {
+            bySection[id].joined++;
+            bySection[id].vec = sumVec(bySection[id].vec, share);
+          }
+      }
+    }
+    for (const g of j.unattributed) {
+      unattBlocks++;
+      unattVec = sumVec(unattVec, g.vec);
+    }
+    runRows.push({ trace: r.name, lane: r.lane, date: r.date, tokens: runVec, weighted: weightedTokens(runVec) });
+  }
+
+  const money = priceVector(claudeDir, total, "claude-opus-5");
+  const sections = Object.values(bySection).map((s) => ({
+    id: s.id,
+    heading: s.heading,
+    dispatches: s.dispatches,
+    // NEVER zero for an unknown. A section with no joinable dispatch reads `—`.
+    joined: s.joined > 0,
+    tokens: s.joined ? s.vec : null,
+    weighted: s.joined ? weightedTokens(s.vec) : null,
+    usd: s.joined ? priceVector(claudeDir, s.vec, "claude-opus-5").usd : null,
+  }));
+  const unjoined = sections.filter((s) => !s.joined).length;
+  const code = joined === 0 ? 3 : unjoined ? 1 : 0;
+
+  const payload = {
+    ok: joined > 0,
+    slug,
+    runs: runRows,
+    total: { tokens: total, raw: rawTokens(total), weighted: money.weighted, usd: money.usd },
+    by_role: Object.fromEntries(
+      Object.entries(byRole).map(([k, v]) => [k, { dispatches: v.dispatches, tokens: v.vec, weighted: weightedTokens(v.vec) }])
+    ),
+    by_section: sections,
+    dispatches,
+    joined,
+    // ALWAYS present, including when zero.
+    unattributed: { blocks: unattBlocks, tokens: unattVec },
+    price_table: readPricingCache ? { as_of: readPricingCache.as_of, age_days: readPricingCache._age_days, stale: readPricingCache._stale } : null,
+    honesty: [
+      "The join is nearest-in-time between an ORC trace and a local usage transcript. A dispatch the transcript cannot confirm is reported, never estimated.",
+      "A slice that covered two sections splits its cost evenly between them — an even split, not a measurement.",
+      "A section with no joinable dispatch reads —, never 0. An unknown reported as a number is worse than an unknown reported as unknown.",
+    ],
+  };
+  if (asJson) emitJson(payload, code);
+
+  console.log(ui.header(`ORC · doc cost — ${slug}`));
+  console.log(`\n  ${plural(mine.length, "trace")} · ${joined} of ${plural(dispatches, "dispatch")} joined`);
+  console.log("\n  section                            disp        weighted        usd");
+  console.log("  " + "─".repeat(66));
+  for (const s of sections)
+    console.log(
+      `  ${s.id.padEnd(32)} ${String(s.dispatches).padStart(4)}   ${(s.joined ? kTok(s.weighted) : "—").padStart(13)}   ${(s.usd === null ? "—" : "$" + s.usd.toFixed(2)).padStart(8)}`
+    );
+  console.log("  " + "─".repeat(66));
+  for (const [role, v] of Object.entries(payload.by_role))
+    console.log(`  ${("by role: " + role).padEnd(32)} ${String(v.dispatches).padStart(4)}   ${kTok(v.weighted).padStart(13)}`);
+  console.log(
+    `\n  TOTAL   ${kTok(money.weighted)} weighted / ${kTok(money.raw)} raw` + (money.usd === null ? "" : ` / $${money.usd.toFixed(2)}`)
+  );
+  console.log(
+    `  unattributed  ${unattBlocks ? `${kTok(rawTokens(unattVec))} in ${plural(unattBlocks, "block")} could not be joined` : "0"}`
+  );
+  console.log(ui.color.gray("\n  " + payload.honesty.join("\n  ")));
+  process.exit(code);
+}
+
 function docTemplatesCmd() {
   const asJson = wantsJson();
   const rows = DOC_TEMPLATES.map((t) => ({
@@ -14222,7 +15482,7 @@ function doc() {
   // `splice` and `extract` are excluded on purpose: a v1 document with a PENDING
   // extract has to reach its own hash-conflict refusal, preserved verbatim,
   // before anything moves. Two sessions on one slug is still a real risk.
-  if (pos[1] && !["list", "init", "migrate", "splice", "extract", "templates", "targets"].includes(pos[1])) {
+  if (pos[1] && !["list", "init", "migrate", "splice", "extract", "templates", "targets", "rules"].includes(pos[1])) {
     const s = docResolveSlug(claudeDir, pos[2]);
     if (s) docMigrateV2(claudeDir, s);
   }
@@ -14271,6 +15531,17 @@ function doc() {
       break;
     case "mode":
       docModeCmd(claudeDir, pos[2]);
+      break;
+    // v0.49.2 — the project's OWN standing instructions about what a document
+    // says and how it reads, plus the per-document frozen set and its drift.
+    case "rules":
+      docRulesCmd(claudeDir, undefined);
+      break;
+    case "cost":
+      docCostCmd(claudeDir, pos[2]);
+      break;
+    case "forecast":
+      docForecastCmd(claudeDir, pos[2]);
       break;
     case "lint":
       docLintCmd(claudeDir, pos[2]);
@@ -15249,10 +16520,35 @@ Usage:
                                           the FREE check: portability rules from a real product
                                           limit, plus readability signals (exit 0 clean /
                                           1 findings / 2 unreadable). Zero model tokens
+      … --section <id>                    lint ONE section file and report PART-LOCAL line
+                                          numbers — the lines the writer actually opens
+    orc doc rules [--json]                the PROJECT's own house rules (P0/P1/P2) — what a
+                                          document says and how it reads. They can never change
+                                          how this lane RUNS (exit 0 = rules exist / 1 = none yet)
+      orc doc rules add --priority P0|P1|P2 --text "…"
+                                          one line, stored and re-emitted verbatim
+      orc doc rules remove|enable|disable <id>
+      orc doc rules move <id> --priority P1
+      orc doc rules <slug> [--json]       the set FROZEN into one document, and every rule that
+                                          moved since (exit 1 = the ledger drifted)
+      orc doc rules <slug> --sync         re-freeze deliberately; NAMES the sections that predate
+                                          the change and re-writes nothing
+      orc doc rules --set-file <path> | --reset
+    orc doc forecast <slug> [--json]      the run map, BEFORE the first paid wave: waves, agents,
+                                          stops, and a token range with a sample count. No history
+                                          → it refuses rather than invent (exit 0 / 1 low
+                                          confidence / 3 no history)  [--naive] [--as tokens|usd|quota|all]
+    orc doc cost <slug> [--json]          what this document actually cost, joined across EVERY
+                                          session it spanned — per role and per section. A section
+                                          nothing joins reads — , never 0 (exit 0 joined /
+                                          1 partly / 3 no trace)
     orc doc templates [--json]            the five base templates + their section lists
     orc doc targets [--json]              where a Markdown file can actually go, and what to watch
     orc doc init <slug> --type <t> [--template <p>] [--title …] [--language …]
                                           [--target <t>] [--length short|standard|thorough]
+                                          a SUPPLIED --template is a P0 CAGE by default: a heading
+                                          it never had is a lint error and \`parts --confirm\`
+                                          refuses it. --template-soft opts out
   orc export [--dir <path>]               compile the wiki + patterns + PACT.md + boundary cards
                                           into a portable AGENTS.md — derived, fingerprinted
                                           [--target agents-md|skill|both]
@@ -15291,8 +16587,12 @@ Usage:
                                           (exit 0 = something is waiting, 1 = nothing is)
                                           [--no-clipboard]  print only, never touch the clipboard
   orc run list [--all|--limit <n>]        every run, newest first, with status
-                                          waiting | finished | incomplete  [--json]
+                                          waiting | closed | done | empty  [--json]
     orc run show <slug|n>                 one run: state-of-play, resume prompt, checkpoint
+    orc run close <slug|n>                you are finished with a run that never reached FINISH:
+      --reason "<why>"                    moves RESUME.md aside (never deletes it) and records why,
+                                          so it stops counting as waiting  [--json]
+    orc run reopen <slug|n>               put it back — it is waiting again  [--json]
   orc stats [--since YYYY-MM-DD] [--json] how much you actually use each lane and agent, counted
                                           from the trace filenames — no model, instant, free
   orc onboarding [<topic>]                guided walkthrough (menu on a TTY; prints all when piped)
@@ -15345,6 +16645,28 @@ update vs upgrade:
            overrides survive either way.
 
 Skills installed: ${listSkillNames().join(", ")}`);
+}
+
+// ── the `--json` crash envelope (v0.49.2) ───────────────────────────────────
+// A read asked for JSON must answer in JSON or not at all. Before this, an
+// unexpected throw inside any `--json` route printed a Node stack to stderr and
+// NOTHING parseable to stdout, so `orc ui` had a bare 500 with no reason in it —
+// which is exactly what the user saw when one corrupt challenge ledger crashed
+// the panel. This is the general fix: every `--json` route inherits it, and the
+// human path is untouched (a stack is the right answer at a terminal).
+function jsonCrash(err) {
+  const msg = String((err && err.stack) || err || "unknown error");
+  emitJson(
+    {
+      ok: false,
+      reason: "crashed",
+      command: [cmd, ...args.slice(1)].filter(Boolean).join(" "),
+      error: msg.split("\n")[0],
+      stack: msg,
+      hint: "this is a bug in orc — the command threw before it could answer. Re-run without --json to see the full stack.",
+    },
+    70
+  );
 }
 
 (async () => {
@@ -15467,4 +16789,7 @@ Skills installed: ${listSkillNames().join(", ")}`);
       help();
       process.exit(1);
   }
-})();
+})().catch((err) => {
+  if (wantsJson()) jsonCrash(err);
+  throw err;
+});

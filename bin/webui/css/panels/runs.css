@@ -36,6 +36,16 @@
   width: 100%;
   transition: background var(--dur-fast) var(--ease);
 }
+/* A row that NAVIGATES has no caret, so it declares one fewer column. Before
+   v0.49.2 the Overview built a three-child card against the four-column grid
+   and the chip printed over the slug — silently, because a grid never
+   complains. A card and its column count are now stated together. */
+.run-card.no-caret { grid-template-columns: 88px minmax(0, 1fr) auto; }
+/* An OPTIONAL second chip — the aftermath grade in Runs, "you edited it" in
+   Docs — is a fifth child, so it gets its own column rather than wrapping the
+   age onto a second row. Both panels hit this; the class names the SLOT. */
+.run-card.has-extra { grid-template-columns: 16px 88px auto minmax(0, 1fr) auto; }
+.run-card.no-caret.has-extra { grid-template-columns: 88px auto minmax(0, 1fr) auto; }
 .run-card:hover { background: var(--surface-2); }
 .run-row.open > .run-card { background: var(--surface-2); }
 .run-caret {
@@ -48,6 +58,16 @@
 .run-slug { font-family: var(--mono); font-size: 13px; overflow: hidden; text-overflow: ellipsis; }
 .run-where { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
 .run-age { font-size: 12px; color: var(--text-faint); white-space: nowrap; }
+/* Why a run was closed. It rides in the row forever: a state change nobody can
+   see the reason for is a state nobody can audit. */
+.run-closed-why { font-size: 12px; color: var(--text-faint); margin-top: 2px; font-style: italic; }
+/* The action that CLEARS a row sits with the row, right-aligned under it — the
+   FINDING_ROUTE principle, at row scale. */
+.run-card-actions {
+  justify-content: flex-end;
+  padding: 0 var(--sp-4) var(--sp-3);
+  margin-top: calc(-1 * var(--sp-2));
+}
 
 /* The fold. Same `1fr -> 0fr` grid trick as the settings tiers: `height: auto`
    cannot be transitioned, and the inner element is what there is to collapse

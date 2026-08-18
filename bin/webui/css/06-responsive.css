@@ -39,8 +39,32 @@
   .main { padding: var(--sp-4); }
   .setting { grid-template-columns: 1fr; }
   .setting-control { align-items: flex-start; }
+  /* Every `.run-card` VARIANT collapses explicitly. A variant that inherits a
+     column count it does not have is the v0.49.2 Overview collision again, just
+     at a narrower width. */
   .run-card { grid-template-columns: 16px 80px minmax(0, 1fr); }
+  .run-card.no-caret { grid-template-columns: 80px minmax(0, 1fr); }
+  .run-card.has-extra { grid-template-columns: 16px 80px auto minmax(0, 1fr); }
+  .run-card.no-caret.has-extra { grid-template-columns: 80px auto minmax(0, 1fr); }
   .run-age { grid-column: 3; }
+  .run-card.no-caret .run-age { grid-column: 2; }
+  .run-card.has-extra .run-age { grid-column: 4; }
+  .run-card.no-caret.has-extra .run-age { grid-column: 3; }
   .todo { grid-template-columns: 4px minmax(0, 1fr); }
   .todo-cta { grid-column: 2; margin-top: var(--sp-2); }
+}
+
+@media (max-width: 600px) {
+  /* Below this there is no honest way to keep a chip, a slug and an age on one
+     line, so the card stacks: chip, then the slug and where it stands, then the
+     age. One column, in reading order. */
+  .run-card,
+  .run-card.no-caret,
+  .run-card.has-extra,
+  .run-card.no-caret.has-extra {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--sp-2);
+  }
+  .run-caret { display: none; }
+  .run-card .run-age { grid-column: 1; }
 }

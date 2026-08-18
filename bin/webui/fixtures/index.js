@@ -22,14 +22,14 @@
 const { PROJECT, doctor, where } = require("./shell.js");
 const { config } = require("./settings.js");
 const { wiki, wikiDocs, wikiShow, wikiCoverage, wikiCoverageFull, wikiUnregistered, wikiPlan, wikiDebt, wikiUsage, patterns, patternShow, gotchas, gotchasArchived, gotchaPrunePreview, wikiImpact } = require("./knowledge.js");
-const { runs, runDetail, aftermath } = require("./runs.js");
+const { runs, runDetail, runDetailClosed, aftermath } = require("./runs.js");
 const { stats, budgetForecast, budgetRates } = require("./stats.js");
 const { pact } = require("./pact.js");
 const { boundary } = require("./boundary.js");
 const { handoff } = require("./handoff.js");
 const { exportState, mocks } = require("./maintenance.js");
 const { chGoals, chDims, challengeRoles, challengeCouncil, challengeCycles, challengeList, challengeShow, challengeDiff, challengeDiffMissing, challengeLint } = require("./challenge.js");
-const { docList, docParts, docStatuses, docMapSections, docMap, docLint, docPlan, docShow, docSection, docShipped, docShippedDrifted, docNext, docAudit, docJournalRich, docJournalEmpty, docContext } = require("./docs.js");
+const { docList, docParts, docStatuses, docMapSections, docMap, docLint, docPlan, docShow, docSection, docShipped, docShippedDrifted, docNext, docAudit, docJournalRich, docJournalEmpty, docContext, docRules, docRulesFrozen, docForecast, docCost } = require("./docs.js");
 const { diy } = require("./flow.js");
 const { crosslink } = require("./crosslink.js");
 const { mockDetail } = require("./mockrun.js");
@@ -81,6 +81,17 @@ module.exports.get = function get(route, q) {
       return (q && q.slug) === "collab-risk-and-payments-130826" ? docJournalEmpty : docJournalRich;
     case "/api/doc/context":
       return docContext[(q && q.slug) || ""] || docContext["prd-checkout-refund-130826"];
+    // v0.49.2. One of every state behind each: a populated ledger AND an empty
+    // one, frozen-clean AND frozen-drifted, a real forecast AND a refusal AND a
+    // naive floor, a cost report joined AND one with no trace at all.
+    case "/api/doc/rules":
+      return docRules;
+    case "/api/doc/rules/one":
+      return docRulesFrozen[(q && q.slug) || ""] || docRulesFrozen["prd-checkout-refund-130826"];
+    case "/api/doc/forecast":
+      return docForecast[(q && q.slug) || ""] || docForecast["prd-checkout-refund-130826"];
+    case "/api/doc/cost":
+      return docCost[(q && q.slug) || ""] || docCost["prd-checkout-refund-130826"];
     case "/api/challenge":
       return challengeList;
     case "/api/challenge/one":
@@ -135,7 +146,7 @@ module.exports.get = function get(route, q) {
         scores: { "solo-fast": 0, paranoid: 3, "token-lean": 0 },
       };
     case "/api/overview":
-      return { where, doctor, wiki, patterns: patterns, runs_total: runs.total, waiting: ["merchant-notifications", "refund-webhook-retry"], diy, pact, boundary, wiki_debt: wikiDebt };
+      return { where, doctor, wiki, patterns: patterns, runs_total: runs.total, waiting: runs.runs.filter((r) => r.status === "waiting").map((r) => ({ slug: r.slug, updated_ms: r.updated_ms, lane: r.lane })), diy, pact, boundary, wiki_debt: wikiDebt };
     case "/api/pact":
       return pact;
     case "/api/boundary":
@@ -164,10 +175,22 @@ module.exports.get = function get(route, q) {
       return exportState;
     case "/api/runs":
       return runs;
-    case "/api/run":
-      return q && q.slug && q.slug !== runDetail.slug
-        ? { ...runDetail, slug: q.slug, status: "done", resume: null, stands: { lane: "/orc-mini", phase: "", wave: "" } }
-        : runDetail;
+    case "/api/run": {
+      if (!q || !q.slug || q.slug === runDetail.slug) return runDetail;
+      // A closed run is its OWN detail shape — Reopen instead of Mark as done,
+      // and the recorded reason. Without it the closed state exists in the list
+      // and nowhere you can click.
+      if (q.slug === runDetailClosed.slug) return runDetailClosed;
+      const row = runs.runs.find((r) => r.slug === q.slug);
+      return {
+        ...runDetail,
+        slug: q.slug,
+        status: (row && row.status) || "done",
+        resume: row && row.status === "waiting" ? runDetail.resume : null,
+        closed: (row && row.closed) || null,
+        stands: { lane: (row && row.lane) || "/orc-mini", phase: (row && row.phase) || "", wave: (row && row.wave) || "" },
+      };
+    }
     case "/api/wiki":
       return wiki;
     case "/api/wiki/impact":
@@ -320,7 +343,10 @@ module.exports.get = function get(route, q) {
         advanced: q.action === "update-global",
         preview_command: q.action === "update-global" ? "orc doctor --global" : "orc doctor",
         preview: doctor,
-        waiting_runs: ["merchant-notifications", "refund-webhook-retry"],
+        // Derived from the SAME list the Runs panel renders, so a run closed in
+        // the fixture set stops blocking the preview here too — which is the
+        // whole point of the v0.49.2 fix.
+        waiting_runs: runs.runs.filter((r) => r.status === "waiting").map((r) => r.slug),
         dirty_tree: true,
       };
     case "/api/job":

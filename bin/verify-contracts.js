@@ -905,7 +905,10 @@ const CONTRACTS = [
     // so nothing structural can ever notice the gap.
     name: "a read hands back the whole computed object (v0.49.1)",
     token: "--json is not a summary",
-    files: ["skills/_shared/detecting-artifacts.md"],
+    files: [
+      "skills/_shared/detecting-artifacts.md",
+      "skills/orc-doc/references/house-rules.md",
+    ],
     binFiles: ["bin/cli.js"],
   },
   {
@@ -2515,6 +2518,7 @@ const CONTRACTS = [
       "skills/orc-doc/SKILL.md",
       "skills/orc-doc/references/chunking.md",
       "skills/orc-doc/references/resume-protocol.md",
+      "skills/orc-doc/references/gates.md",
       "skills/orc-doc/README.md",
     ],
     binFiles: ["bin/cli.js"],
@@ -2544,6 +2548,9 @@ const CONTRACTS = [
       "skills/orc-doc/references/resume-protocol.md",
       "skills/orc-doc/references/portable-markdown.md",
       "skills/orc-doc/references/chunking.md",
+      // v0.49.2 — both new rule pages send what they catch to the SAME place.
+      "skills/orc-doc/references/house-rules.md",
+      "skills/orc-doc/references/generation-rules.md",
     ],
     binFiles: ["bin/cli.js"],
   },
@@ -2591,6 +2598,9 @@ const CONTRACTS = [
       "commands/orc-doc.md",
       "skills/orc-doc/references/portable-markdown.md",
       "skills/orc-doc/examples/orc-doc-prd-run.md",
+      // v0.49.2 — the doc lane's DISPATCH tail names the section FILE, which is
+      // the only thing that makes `orc doc cost` per-section honest.
+      "skills/orc/references/trace-protocol.md",
     ],
     binFiles: ["bin/cli.js"],
   },
@@ -2622,6 +2632,8 @@ const CONTRACTS = [
       "skills/orc-doc/SKILL.md",
       "skills/orc-doc/references/chunking.md",
       "agents/orc-doc-writer-opus-5-med.md",
+      // The boundary sentence restates it: a house rule can never relax it.
+      "skills/orc-doc/references/house-rules.md",
     ],
   },
   {
@@ -2670,6 +2682,92 @@ const CONTRACTS = [
       "skills/orc-doc/README.md",
       "skills/orc-doc/references/chunking.md",
       "skills/orc-doc/examples/orc-doc-prd-run.md",
+    ],
+    binFiles: ["bin/cli.js"],
+  },
+  // ── v0.49.2 — house rules, the generation rules, the template lock, the
+  //              forecast, the cost report and the revision anchor ───────────
+  {
+    // The project's OWN standing instructions ride at the TOP of every slice,
+    // above ORC's own. A rule the writer reads third is a rule the writer
+    // weighs third, and the whole point of a P0 is that it is not weighed.
+    name: "house rules ride first in every dispatched slice (v0.49.2)",
+    token: "house rules are read first",
+    files: [
+      "skills/orc-doc/SKILL.md",
+      "skills/orc-doc/references/house-rules.md",
+      "skills/orc-doc/references/chunking.md",
+    ],
+    binFiles: ["bin/cli.js"],
+  },
+  {
+    // A SUPPLIED template is a cage, not a floor. `--template` set the outline
+    // and then nothing stopped a writer adding a heading it never had.
+    name: "a supplied template is a P0 cage (v0.49.2)",
+    token: "a lane that writes outside its template",
+    files: [
+      "skills/orc-doc/SKILL.md",
+      "skills/orc-doc/references/gates.md",
+      "skills/orc-doc/references/generation-rules.md",
+    ],
+  },
+  {
+    // A revision round that names a rule but not a PLACE cannot be followed in
+    // `sections/`, which is where the user is actually reading. The numbers are
+    // part-local because the part file is what the writer opens.
+    name: "an edit round names the file and the part-local line (v0.49.2)",
+    token: "sections/<id>.md \u00b7 line",
+    files: [
+      "skills/orc-doc/SKILL.md",
+      "skills/orc-doc/references/chunking.md",
+    ],
+  },
+  {
+    // The project ledger. Outside templates/, so `orc update` never clobbers it.
+    name: "the house-rule ledger's file (v0.49.2)",
+    token: "doc-house-rules.json",
+    files: ["skills/orc-doc/references/house-rules.md"],
+    binFiles: ["bin/cli.js"],
+  },
+  {
+    name: "the run map, once, before the first paid wave (v0.49.2)",
+    token: "orc doc forecast",
+    files: [
+      "skills/orc-doc/SKILL.md",
+      "skills/orc-doc/references/gates.md",
+      "skills/orc-doc/README.md",
+    ],
+    binFiles: ["bin/cli.js"],
+  },
+  {
+    name: "what a document cost, across every session it spanned (v0.49.2)",
+    token: "orc doc cost",
+    files: [
+      "skills/orc-doc/SKILL.md",
+      "skills/orc-doc/references/chunking.md",
+      // The DISPATCH tail that makes per-section attribution honest is defined
+      // there, so the command's name has to move with it.
+      "skills/orc/references/trace-protocol.md",
+      "skills/orc-doc/README.md",
+      "commands/orc-doc.md",
+    ],
+    binFiles: ["bin/cli.js"],
+  },
+  {
+    // A run the user abandoned kept a RESUME.md forever, so it was waiting
+    // forever — and that is what blocked the upgrade preview with no way out.
+    name: "a run the human is finished with (v0.49.2)",
+    token: "orc run close",
+    files: [],
+    binFiles: ["bin/cli.js"],
+  },
+  {
+    name: "the local-reference switch (v0.49.2)",
+    token: "doc_local_refs",
+    files: [
+      "skills/orc-doc/references/generation-rules.md",
+      "skills/orc-doc/SKILL.md",
+      "skills/orc-doc/README.md",
     ],
     binFiles: ["bin/cli.js"],
   },

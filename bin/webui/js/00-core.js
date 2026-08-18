@@ -43,8 +43,21 @@ async function api(path, opts) {
   try {
     payload = await res.json();
   } catch (_) {}
-  if (!res.ok) throw new Error((payload && payload.error) || `request failed (${res.status})`);
+  if (!res.ok) throw failure(payload, res.status);
   return payload;
+}
+
+// A failure has to name what ran and why it stopped. "request failed (500)" is
+// the message that sent people looking for a broken panel when what was broken
+// was one file on disk (v0.49.2).
+function failure(payload, status) {
+  const msg = (payload && payload.error) || `request failed (${status})`;
+  const err = new Error(String(msg));
+  if (payload) {
+    err.detail = [payload.command, payload.stderr, payload.stdout].filter(Boolean).join(String.fromCharCode(10));
+    err.payload = payload;
+  }
+  return err;
 }
 
 // Reads unwrap to `.data`; a non-zero exit is DATA for several commands, never

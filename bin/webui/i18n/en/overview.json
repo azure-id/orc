@@ -50,6 +50,7 @@
   "overview.waiting.title": "Waiting for you",
   "overview.waiting.note": "A resume pointer is on disk for these. `orc resume` prints the paste-into-a-fresh-session prompt.",
   "overview.waiting.where": "open — see the Runs panel for where it stands",
+  "overview.waiting.since": "waiting since {age}",
   "overview.doctor.title": "orc doctor",
   "overview.doctor.fixable": "fixable",
   "overview.doctor.manual": "manual",

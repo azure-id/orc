@@ -34,5 +34,18 @@
   "runs.field.files": "files",
   "runs.field.written": "written",
   "runs.emptyFolder": "(empty folder)",
-  "runs.after.signals": "What happened afterwards"
+  "runs.after.signals": "What happened afterwards",
+  "runs.filterClosed": "Closed",
+  "runs.close.button": "Mark as done",
+  "runs.close.reopen": "Reopen",
+  "runs.close.hint": "This run still has a resume pointer, so everything counts it as waiting.",
+  "runs.close.confirmTitle": "Mark this run as done?",
+  "runs.close.confirmBody": "You are saying you are finished with {slug}. It stops counting as waiting, and `orc resume` stops offering it.",
+  "runs.close.moves": "RESUME.md is MOVED to RESUME.closed.md and the reason is recorded. Nothing is deleted, and Reopen puts it back.",
+  "runs.close.reasonPlaceholder": "why you are finished with it",
+  "runs.close.needReason": "A reason is required — a run closed with no recorded reason is a state nobody can audit.",
+  "runs.close.done": "Marked as done.",
+  "runs.close.reopened": "Reopened — it is waiting again.",
+  "runs.close.failed": "That did not go through.",
+  "runs.close.was": "closed: {reason}"
 }

@@ -63,5 +63,7 @@
   "cost.rates.joined": "Dispatches matched",
   "cost.rates.transcripts": "Usage files read",
   "cost.rates.unreadable": "none readable",
-  "cost.rates.unattributed": "Unmatched blocks"
+  "cost.rates.unattributed": "Unmatched blocks",
+  "cost.docs": "Documents",
+  "cost.docsNote": "A /orc-doc document spans several runs, so `orc budget actual` cannot answer for one. Open a row for its run map and what it has cost so far."
 }

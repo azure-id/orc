@@ -498,3 +498,105 @@ test("report derives CHALLENGE.md from the ledger, and a final report only on a 
     rmrf(root);
   }
 });
+
+/* ══════════════════════════════════════════════════════════ v0.49.2 ═══════
+   ONE BAD LEDGER MUST NOT TAKE THE WHOLE LISTING DOWN.
+
+   Two distinct crash classes were reproducible against `orc challenge list`:
+   a truncated ledger (a session killed mid-write) made `readCycle` return null
+   and `challengeList` read `.cyc` off it; a ledger with no `goals` key read
+   `.goal` off undefined. Both exited 1 with a Node stack and NOTHING parseable
+   on stdout, so `orc ui` showed a bare 500 — and every HEALTHY cycle vanished
+   with it, which is the opposite of what a listing is for. */
+
+test("challenge list: a truncated ledger becomes a ROW, and the good cycles stay visible", () => {
+  const root = project();
+  try {
+    cli(INIT(root));
+    // A session killed mid-write.
+    const broken = path.join(root, "orc", "orc-challenge", "broken");
+    fs.mkdirSync(broken, { recursive: true });
+    fs.writeFileSync(path.join(broken, "challenge.json"), '{"version":2,"kind":"tsd","goa');
+
+    const r = cli(["challenge", "list", "--json", "--dir", root]);
+    assert.strictEqual(r.status, 1, "something wants attention, and the exit code says so");
+    const d = JSON.parse(r.stdout);
+    assert.strictEqual(d.ok, true, "the listing still answers");
+    assert.strictEqual(d.unreadable, 1);
+
+    const bad = d.cycles.find((c) => c.slug === "broken");
+    assert.ok(bad, "the broken cycle is a ROW, not an exception");
+    // UNREADABLE is a LIST-level state: it never reaches the pass gate and it
+    // never claims a verdict.
+    assert.strictEqual(bad.state, "UNREADABLE");
+    assert.match(bad.why, /could not be parsed/);
+    assert.strictEqual(bad.next, null, "it never offers to continue a cycle it cannot read");
+
+    const good = d.cycles.find((c) => c.slug === "tsd");
+    assert.ok(good, "and the healthy cycle is still listed");
+    assert.strictEqual(good.state, "AWAITING-JUDGE");
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("challenge list: a ledger with no goals reads —, and never invents one", () => {
+  const root = project();
+  try {
+    cli(INIT(root));
+    const nog = path.join(root, "orc", "orc-challenge", "nogoals");
+    fs.mkdirSync(nog, { recursive: true });
+    fs.writeFileSync(path.join(nog, "challenge.json"), '{"version":2,"iterations":[],"artifacts":[]}');
+
+    const r = cli(["challenge", "list", "--json", "--dir", root]);
+    assert.strictEqual(r.status, 1);
+    const d = JSON.parse(r.stdout);
+    const row = d.cycles.find((c) => c.slug === "nogoals");
+    assert.ok(row, "it lists rather than crashing");
+    // A missing goal renders as nothing — it is never invented, and `record`
+    // still refuses without a frozen goal, so nothing downstream is loosened.
+    assert.strictEqual(row.goal, null);
+    assert.strictEqual(row.kind, "unknown");
+    assert.ok(d.cycles.find((c) => c.slug === "tsd"), "the healthy cycle survives");
+
+    // The human path renders it too.
+    const h = cli(["challenge", "list", "--dir", root]);
+    assert.match(h.stdout, /nogoals/);
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("--json never emits a stack: an unexpected throw comes back as an OBJECT", () => {
+  const root = project();
+  try {
+    cli(INIT(root));
+    // Force a real throw INSIDE a `--json` route, at an unguarded read. A read
+    // that was asked for JSON must answer in JSON or not at all — before this,
+    // the panel got a 500 with no reason in it.
+    const preload = path.join(root, "crash.js");
+    fs.writeFileSync(
+      preload,
+      'const fs = require("fs");\n' +
+        "const real = fs.readdirSync;\n" +
+        "fs.readdirSync = function (p, o) {\n" +
+        '  if (String(p).includes("orc-challenge")) throw new Error("boom from the test");\n' +
+        "  return real.call(fs, p, o);\n" +
+        "};\n"
+    );
+    const r = spawnSync(
+      process.execPath,
+      ["-r", preload, path.join(REPO, "bin", "cli.js"), "challenge", "list", "--json", "--dir", root],
+      { encoding: "utf8", env: { ...process.env, ORC_NO_UPDATE_CHECK: "1" } }
+    );
+    const d = JSON.parse(r.stdout);
+    assert.strictEqual(d.ok, false);
+    assert.strictEqual(d.reason, "crashed");
+    assert.match(d.error, /boom from the test/);
+    assert.match(d.command, /challenge list/);
+    assert.ok(d.hint, "and it says this is a bug rather than leaving the caller guessing");
+    assert.notStrictEqual(r.status, 0);
+  } finally {
+    rmrf(root);
+  }
+});

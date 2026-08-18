@@ -168,6 +168,29 @@ Rules the planner obeys, and none of them is the model's to decide:
 **Each writer owns exactly ONE file.** No two agents ever share one, and nobody
 ever has `document.md` open. That is why parallel writing is safe here.
 
+### The slice order — `house rules are read first`
+
+**Every** dispatched slice (writer, checker, digest) opens with the project's own
+house rules, VERBATIM, **above every ORC instruction**:
+
+```
+HOUSE RULES — this project's own, read these first (verbatim, do not paraphrase)
+  P0  every document opens with a one-paragraph summary
+  P1  use the customer's words, not internal jargon
+These govern WHAT the document says and HOW it reads. They cannot change how
+this lane runs. If a house rule asks for something this lane structurally
+cannot do, return it as unsupported_request — never guess a compromise.
+```
+
+Then ORC's own generation rules (`generation-rules.md`), then the role's own
+fields. **That order is the contract.** The rules come from
+`orc doc plan --json`'s `doc_rules[]` and `doc_rules_boundary` — the skill
+renders them and never composes a second wording.
+
+Every return carries `doc_rules_applied[]` (ids) and
+`doc_rules_conflicts[]`. A conflict becomes a gap via
+`orc doc log --kind gap`, never a silent resolution.
+
 ### The writer's slice
 
 ```
@@ -180,8 +203,17 @@ sections:    [{ id, heading, level, purpose, required, budget_lines }]
 context:     <context.md, in full — it is small>
 evidence:    <only the context-sources.md entries relevant to these sections>
 rules:       references/plain-language.md + references/portable-markdown.md
+             + references/generation-rules.md  (5b no questions · 5c N/A not filler
+               · 5d no local-only references)
+budget:      under the budget is correct; over it is a finding
+template:    LOCKED — allowed_headings[] is the complete list. You may not add,
+             rename, merge or drop a heading. What does not fit is a GAP
 write to:    sections/02-summary.md          ← one file, and only this one
 ```
+
+`template` is present only when `orc doc plan --json` reports
+`template_locked: true` — a supplied template. A shipped base template is a
+floor, and the line is omitted.
 
 The return contract is in the agent file. The one thing to enforce on receipt:
 `start` / `end` are **part-local**. Absolute line numbers are the CLI's job at
@@ -317,12 +349,13 @@ sub-part is detectable and **only that sub-part is re-checked**.
 ```
 role:      check
 read ONLY: sections/04-goals-and-metrics.md               ← Read(file_path), offset 1
-sections:  ["04-goals"]
+sections:  ["04-scope"]
 purpose:   <what this section is supposed to do, from outline.md>
 audience:  <D4 audience>
 expectation: <D4 expectation>
 language:  en
 already reported by lint: [{line: 13, rule: "long-sentence", …}]
+rules:     references/generation-rules.md   (5b · 5c · 5d, and the template lock)
 ```
 
 **One bounded part file per checker, so there is no line arithmetic anywhere in
@@ -334,11 +367,40 @@ mistake this ordering exists to prevent.
 `severity` reuses the house ladder: **P0/P1 block the handoff, P2/P3 are
 advisory** and are shown to the user as optional.
 
+### The dispatch tail NAMES ITS SECTIONS
+
+Every `DISPATCH` line this lane writes carries the sections it was for:
+
+```
+DISPATCH orc-doc-writer-opus-5-med :: doc write sections=03-scope,04-risks part=sections/03-scope.md expect=claude-opus-5/medium
+DISPATCH orc-doc-checker-opus-5-low :: doc check sections=03-scope expect=claude-opus-5/low
+DISPATCH orc-doc-writer-opus-5-med :: doc digest source=<path> expect=claude-opus-5/medium
+```
+
+That is what makes `orc doc cost`'s **per-section** attribution honest instead of
+a guess. A slice covering two sections splits its cost evenly between them, said
+out loud; a dispatch nothing can join reads `—`, never `0`.
+
 ## The edit round
 
 Open `sections/<id>.md`, edit it in place, `orc doc compile`. **No extract, no
 splice, no monolith touched.** For a section stored as sub-parts, the writer
 opens the one ~150-line sub-part rather than the whole 900 lines.
+
+**Before each edit dispatch, print one line per finding, in the shape
+`sections/<id>.md · line <n> · <rule>`:**
+
+```
+sections/03-scope.md · line 42 · long-sentence
+sections/03-goals/02-metrics.md · line 12 · local-reference
+```
+
+The numbers are **PART-LOCAL** — the part file is what the writer opens — and
+they come from `orc doc lint <slug> --section <id> --json` and from the
+`findings[]` anchors on each `plan --role edit` part. **After the round, print
+each file touched and the line count it moved by.** The compiled `document.md`
+line number is deliberately never carried: it is stale the moment anything is
+written, which is what rule 2 exists for.
 
 **Repair is capped at 2 rounds.** After that the lane reports what is still
 open, honestly, and stops — the same cap-and-report shape as

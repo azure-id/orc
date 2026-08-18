@@ -731,4 +731,184 @@ const docParts = {
   },
 };
 
-module.exports = { docList, docParts, docStatuses, docMapSections, docMap, docLint, docPlan, docShow, docSection, docShipped, docShippedDrifted, docNext, docAudit, docJournalRich, docJournalEmpty, docContext };
+
+/* ── v0.49.2 — house rules, the run map, and what it cost ───────────────────
+
+   ONE OF EVERY STATE, including the ugly ones: no rules · P0-only · all three
+   priorities with a DISABLED rule · frozen-and-clean · frozen-and-drifted ·
+   a forecast with real history · a forecast that REFUSES for no history ·
+   a naive floor · a cost report fully joined · one only partly joined · one
+   with nothing joined at all. You cannot design a `—` row on a table where
+   every row has a number. */
+
+const DOC_RULES_BOUNDARY =
+  "House rules govern WHAT the document says and HOW it reads. They can never " +
+  "change how this lane runs: never read the body, never store a line number, " +
+  "one file per section, a human's paragraph is sacred, never invent a fact, " +
+  "never stage, never commit. A rule that asks for one of those comes back as " +
+  "unsupported_request — never a guessed compromise.";
+
+const docRules = {
+  ok: true,
+  file: PROJECT + "/.claude/orc/doc-house-rules.json",
+  priorities: ["P0", "P1", "P2"],
+  updated_at: "16-08-2026 08:40:12",
+  line: "house rules: 4 (P0 2 · P1 1 · P2 1)",
+  counts: { P0: 2, P1: 1, P2: 1 },
+  boundary: DOC_RULES_BOUNDARY,
+  rules: [
+    { id: "H-001", priority: "P0", text: "every document opens with a one-paragraph summary a PM can read on a phone", enabled: true, added_at: "02-08-2026 11:12:00" },
+    { id: "H-004", priority: "P0", text: "money is always written with its currency, never a bare number", enabled: true, added_at: "16-08-2026 08:40:12" },
+    { id: "H-002", priority: "P1", text: "use the customer's words for a customer-facing concept, not the internal table name", enabled: true, added_at: "02-08-2026 11:14:20" },
+    // A DISABLED rule keeps its slot: "I switched that off" and "there is no
+    // such rule" must never look the same.
+    { id: "H-003", priority: "P2", text: "prefer a table over a list of more than six items", enabled: false, added_at: "09-08-2026 14:01:55" },
+  ],
+};
+docRules.enabled = docRules.rules.filter((r) => r.enabled);
+
+const docRulesEmpty = {
+  ok: true,
+  file: docRules.file,
+  priorities: ["P0", "P1", "P2"],
+  updated_at: null,
+  line: "house rules: none",
+  counts: { P0: 0, P1: 0, P2: 0 },
+  boundary: DOC_RULES_BOUNDARY,
+  rules: [],
+  enabled: [],
+};
+
+// FROZEN, per document. One clean, one drifted — and the drifted one NAMES
+// every rule that moved.
+const docRulesFrozen = {
+  "prd-checkout-refund-130826": {
+    ok: true,
+    slug: "prd-checkout-refund-130826",
+    frozen: docRules.rules.slice(0, 3),
+    project: docRules.enabled,
+    counts: { P0: 2, P1: 1, P2: 0 },
+    line: "house rules: 3 (P0 2 · P1 1)",
+    boundary: DOC_RULES_BOUNDARY,
+    drift: {
+      drifted: true,
+      added: [{ id: "H-005", priority: "P1", text: "name the owning team in the header of every runbook" }],
+      removed: [],
+      changed: [{ id: "H-002", from: { priority: "P2", text: "use the customer's words" }, to: { priority: "P1", text: "use the customer's words for a customer-facing concept, not the internal table name" } }],
+    },
+  },
+  "runbook-payout-freeze-110826": {
+    ok: true,
+    slug: "runbook-payout-freeze-110826",
+    frozen: docRules.enabled,
+    project: docRules.enabled,
+    counts: { P0: 2, P1: 1, P2: 0 },
+    line: "house rules: 3 (P0 2 · P1 1)",
+    boundary: DOC_RULES_BOUNDARY,
+    drift: { drifted: false, added: [], removed: [], changed: [] },
+  },
+};
+
+const V = (i, cw, cr, o) => ({ input: i, cache_write: cw, cache_read: cr, output: o });
+
+const docForecast = {
+  "prd-checkout-refund-130826": {
+    ok: true,
+    slug: "prd-checkout-refund-130826",
+    write_mode: "partial",
+    stops: 3,
+    waves: [
+      { n: 1, agents: 2, sections: ["01-summary", "02-context"], headings: ["Summary", "Context"], budget_lines: 380, p50: V(9000, 61000, 121000, 11000), p90: V(14000, 92000, 190000, 18000) },
+      { n: 2, agents: 2, sections: ["03-goals", "04-scope"], headings: ["Goals", "Scope"], budget_lines: 410, p50: V(9600, 66000, 133000, 12000), p90: V(15000, 99000, 205000, 19000) },
+      { n: 3, agents: 1, sections: ["05-design"], headings: ["Design"], budget_lines: 300, p50: V(5000, 33000, 66000, 6000), p90: V(8000, 50000, 102000, 9500) },
+    ],
+    checks: { agents: 3, p50: V(4200, 21000, 58000, 3100), p90: V(6800, 33000, 91000, 5200), note: "the check pass is forecast separately — it is a second decision, not part of the write" },
+    tokens: { p50: V(27800, 181000, 378000, 32100), p90: V(43800, 274000, 588000, 51700) },
+    raw: { p50: 618900, p90: 957500 },
+    weighted: { p50: 278700, p90: 427100 },
+    usd: { p50: 6.41, p90: 9.88 },
+    price_table: { as_of: "2026-07-01", age_days: 48, stale: false },
+    quota: { available: true, label: "Max 20x", window_pct: 4.2, weekly_pct: 1.1 },
+    min_samples: 5,
+    samples: { write: 14, check: 9 },
+    low_confidence_roles: [],
+    naive: false,
+    unattributed: { blocks: 3, tokens: V(900, 12000, 24000, 1100) },
+    free_steps: ["orc doc compile", "orc doc lint", "orc doc parts", "orc doc audit"],
+    shown_at: "15-08-2026 17:05:00",
+    view: "all",
+  },
+  // LOW CONFIDENCE, and a naive floor — the state where the honest answer is
+  // "this is a floor, not a range".
+  "tsd-ledger-rewrite-090826": {
+    ok: true,
+    slug: "tsd-ledger-rewrite-090826",
+    write_mode: "all",
+    stops: 1,
+    waves: [{ n: 1, agents: 2, sections: ["01-overview", "02-interfaces"], headings: ["Overview", "Interfaces"], budget_lines: 240, p50: V(12000, 40000, 90000, 6000), p90: V(12000, 40000, 90000, 6000) }],
+    checks: { agents: 0, p50: V(0, 0, 0, 0), p90: V(0, 0, 0, 0), note: "nothing to check yet" },
+    tokens: { p50: V(12000, 40000, 90000, 6000), p90: V(12000, 40000, 90000, 6000) },
+    raw: { p50: 148000, p90: 148000 },
+    weighted: { p50: 67000, p90: 67000 },
+    usd: { p50: 1.62, p90: 1.62 },
+    price_table: { as_of: "2025-11-02", age_days: 289, stale: true },
+    quota: { available: false, reason: "budget_plan is not set (orc config set budget_plan pro|max5|max20|api)" },
+    min_samples: 5,
+    samples: { write: 1, check: 0 },
+    low_confidence_roles: ["orc-doc-writer-opus-5-med", "orc-doc-checker-opus-5-low"],
+    naive: true,
+    unattributed: { blocks: 0, tokens: V(0, 0, 0, 0) },
+    free_steps: ["orc doc compile", "orc doc lint"],
+    shown_at: null,
+    view: "all",
+  },
+  // The REFUSAL. It keeps its slot and says why.
+  "collab-risk-and-payments-130826": {
+    ok: false,
+    reason: "no-history",
+    slug: "collab-risk-and-payments-130826",
+    hint: "BUDGET · no forecast\n  0 joinable dispatches in .claude/orc/logs.\n  I will not invent numbers. Write one wave, then ask again.",
+  },
+};
+
+const docCost = {
+  "prd-checkout-refund-130826": {
+    ok: true,
+    slug: "prd-checkout-refund-130826",
+    runs: [
+      { trace: "run-doc-prd-checkout-refund-130826-130826-090211.txt", lane: "doc", date: "2026-08-13", tokens: V(11000, 71000, 152000, 13000), weighted: 110200 },
+      { trace: "run-doc-prd-checkout-refund-130826-150826-170500.txt", lane: "doc", date: "2026-08-15", tokens: V(8000, 54000, 121000, 9000), weighted: 83100 },
+    ],
+    total: { tokens: V(19000, 125000, 273000, 22000), raw: 439000, weighted: 193300, usd: 4.42 },
+    by_role: {
+      write: { dispatches: 5, tokens: V(14000, 96000, 201000, 17000), weighted: 147100 },
+      check: { dispatches: 3, tokens: V(4200, 24000, 61000, 4200), weighted: 38500 },
+      digest: { dispatches: 1, tokens: V(800, 5000, 11000, 800), weighted: 7700 },
+    },
+    by_section: [
+      { id: "01-summary", heading: "Summary", dispatches: 2, joined: true, tokens: V(3800, 24000, 51000, 4300), weighted: 37200, usd: 0.86 },
+      { id: "02-context", heading: "Context", dispatches: 2, joined: true, tokens: V(4100, 26000, 55000, 4600), weighted: 40100, usd: 0.92 },
+      // A SECTION NOTHING COULD BE JOINED TO. `—`, never 0.
+      { id: "03-goals", heading: "Goals", dispatches: 1, joined: false, tokens: null, weighted: null, usd: null },
+      { id: "04-scope", heading: "Scope", dispatches: 2, joined: true, tokens: V(5000, 31000, 68000, 5500), weighted: 49300, usd: 1.13 },
+    ],
+    dispatches: 9,
+    joined: 8,
+    unattributed: { blocks: 2, tokens: V(400, 3000, 7000, 500) },
+    price_table: { as_of: "2026-07-01", age_days: 48, stale: false },
+    honesty: [
+      "The join is nearest-in-time between an ORC trace and a local usage transcript. A dispatch the transcript cannot confirm is reported, never estimated.",
+      "A slice that covered two sections splits its cost evenly between them — an even split, not a measurement.",
+      "A section with no joinable dispatch reads —, never 0. An unknown reported as a number is worse than an unknown reported as unknown.",
+    ],
+  },
+  // NOTHING joined. An answer, and it keeps its slot.
+  "collab-risk-and-payments-130826": {
+    ok: false,
+    reason: "no-trace",
+    slug: "collab-risk-and-payments-130826",
+    hint: "no trace for this document yet. A cost report is joined from traces and local transcripts — it is never estimated.",
+  },
+};
+
+module.exports = { docList, docParts, docStatuses, docMapSections, docMap, docLint, docPlan, docShow, docSection, docShipped, docShippedDrifted, docNext, docAudit, docJournalRich, docJournalEmpty, docContext, docRules, docRulesEmpty, docRulesFrozen, docForecast, docCost };

@@ -10,6 +10,144 @@ Format: `### v<version> — <title> _(<date>)_`.
 
 ---
 
+### v0.49.2 — house rules, a run map before you pay, and three defects _(2026-08-18)_
+
+Quality of life on `/orc-doc`, plus three bugs — one of which was breaking a
+panel outright. **Zero new agents, zero new skills.** Everything here obeys the
+standing rule: **the CLI computes, the panel and the skill render.**
+
+#### `/orc-doc` — house rules
+
+A **house rule** is your project's own standing instruction about **what a
+document says and how it reads**: *"open with a one-paragraph summary a PM can
+read on a phone"*, *"money always carries its currency"*, *"use the customer's
+words, not the internal table name"*. Before this, the shipped rules were the
+only rules.
+
+- Three priorities. **P0** must, and it beats every ORC style preference; **P1**
+  should, and breaking it is recorded as a gap; **P2** prefer.
+- Stored **verbatim** in `.claude/orc/doc-house-rules.json` — one writer,
+  `orc doc rules`, outside `templates/` so `orc update` never touches it. A rule
+  is one line; a multi-line one is refused by name with the hint to add two.
+- **Each document freezes the set it started with.** If a P0 changes at wave 3,
+  half the document silently no longer complies and nothing on disk says so — so
+  `orc doc rules <slug>` reports frozen-vs-project and **names every rule that
+  was added, changed or removed**, never a "rules changed" boolean.
+  `--sync` re-freezes deliberately and **lists the sections that predate the
+  change**. It re-writes nothing: that would be ORC spending your money applying
+  a rule change retroactively without being asked.
+- **Read FIRST in every dispatched slice**, above ORC's own rules — that order is
+  the contract.
+- **The boundary is declared, not detected.** House rules govern content and
+  style; they can never change how the lane RUNS. The CLI cannot parse intent, so
+  it does not pretend to: it prints the boundary everywhere it matters, and a
+  rule that asks for a structural break comes back as `unsupported_request`.
+- New: `orc doc rules [add|remove|enable|disable|move|--sync|--set-file|--reset]`,
+  a **House rules** card at the top of `orc ui ▸ Docs` (staged and batched, like
+  every other write in the panel), and a `house-rules-drifted` audit finding.
+
+#### `/orc-doc` — four rules ORC applies to every document, all free
+
+All four are deterministic lint rules, which is what makes them worth having:
+**no model is ever paid to notice a `TODO`.** Every one is narrow on purpose — a
+broad rule that argues with the author gets switched off.
+
+- **No questions or confirmations in the body.** The deliverable answers; it does
+  not ask. `TBD`, `TODO`, `TBA`, *"to be confirmed"*, and a line that is only a
+  question put to you as an approver. **Two exemptions:** fenced code, and a
+  section your own outline calls *open questions / risks / assumptions*.
+- **Missing information is `N/A` plus one short line, never filler.** A warning,
+  never an error — you may have a reason.
+- **A section well over its planned length is a finding** (1.5× its budget), plus
+  per-section line and word counts in `orc doc lint --json`. Signals, not gates.
+- **No local-only references.** No `src/foo.ts:42`, no absolute path, no
+  `./relative`, no `localhost`, no `file://`, no link to a local `.md` — the
+  person reading a PRD has no repository. Fenced code is always exempt, because a
+  code example that *shows* a path is content. New config `doc_local_refs`
+  (`off|warn|error`, default `error`): a genuinely internal runbook legitimately
+  names local paths, and a lint rule with no switch gets fought instead of used.
+
+#### `/orc-doc` — a supplied template is a cage, not a suggestion
+
+`--template` set the outline and then nothing stopped a writer adding a heading
+it never had. It now locks by default: the slice carries the allowed headings,
+`orc doc lint` errors on a stray one, **`orc doc parts --confirm` refuses the
+part that grew one and writes nothing**, and `orc doc audit` reports both
+`template-drift` and `template-moved` (your template file itself changed —
+reported, never auto-synced). `--template-soft` opts out; a shipped base template
+stays a floor.
+
+#### `/orc-doc` — what it will cost, and what it did cost
+
+- **`orc doc forecast <slug>` — the run map, once, before the first paid wave.**
+  How many sections, how many waves, how many agents per wave, **how many times
+  it will stop**, and a token range with its sample count. Computed from the same
+  batcher the dispatch uses, so it can never describe a run that will not happen.
+  Every honesty rule of `/orc-budget` is inherited: four token kinds never
+  blended, no dollars without a dated price table, no quota without a known plan
+  — and **with no history it refuses rather than invent**, offering the
+  `--naive` price-table floor instead. `orc doc next` names it exactly once; a
+  changed outline or write mode invalidates it.
+- **`orc doc cost <slug>` — joined across every session the document spanned.**
+  `orc budget actual` works per run, and a document is not a run. Per role and
+  per section, from ORC's traces joined to your local usage transcripts. A slice
+  that covered two sections splits evenly, said out loud; **a section nothing can
+  be joined to reads `—`, never `0`.** `unattributed` is always printed.
+- Both render in `orc ui ▸ Docs` with a stacked four-kind token bar, so
+  cache-read stays visibly separate from the rest.
+
+#### `/orc-doc` — an edit round tells you where to look
+
+`orc doc lint <slug> --section <id>` lints one **section file** and returns
+**part-local** line numbers, and every finding on an edit-round slice carries its
+file and line. The skill prints one line per finding
+(`sections/03-scope.md · line 42 · long-sentence`) and, after the round, each
+file it touched. The compiled `document.md` line number is deliberately never
+carried: it is stale the moment anything is written.
+
+#### Fixed — the Overview card printed over itself
+
+`.run-card` is a four-column grid (caret · chip · mid · age) and the Overview
+built a card with **three children and no caret**, so the chip landed in the 16px
+caret column and printed straight over an 88px slug, which wrapped one word per
+line. A grid never complains. Every variant now declares its own column count —
+`.no-caret` for a row that navigates, `.has-extra` for an optional second chip —
+and the same collision in the Docs list (from its "you edited it" chip) is fixed
+the same way. The age column now carries the age `run list --json` always knew.
+
+#### Fixed — a run could never be marked done
+
+`RESUME.md` existing IS the "unfinished" flag, and ORC deletes it at `FINISH`. So
+a run you abandoned was waiting **forever**: `orc resume` kept offering it, the
+Overview kept counting it, and the upgrade preview kept refusing with "N run(s)
+are still waiting" — with no way out short of deleting a file by hand.
+
+`orc run close <slug> --reason "<why>"` **moves** `RESUME.md` to
+`RESUME.closed.md` and records why. **It deletes nothing**, and `orc run reopen`
+puts it back byte for byte. The new state is **`closed`**, deliberately not
+`done`: the disk cannot prove a run finished, only that you said you were
+finished with it. A reason is required — a state change nobody wrote a reason for
+is a state nobody can audit. Everything else follows from one boolean: `resume`
+skips it, `run list` keeps the row *and* its reason, and the upgrade unblocks.
+Buttons for both in `orc ui ▸ Runs`, and inline on the Overview card that was
+complaining.
+
+#### Fixed — one corrupt challenge ledger 500'd the whole panel
+
+Two crash classes: a ledger truncated by a killed session, and a ledger with no
+`goals` key. Both threw a Node stack with nothing parseable on stdout, so
+`orc ui ▸ Challenge` showed a bare 500 — and **every healthy cycle disappeared
+with the broken one**, which is the opposite of what a listing is for.
+
+- A broken cycle is now a **row** that reads `UNREADABLE` and carries the parse
+  error. It is a list-level state: it never reaches the pass gate and never
+  claims a verdict.
+- **No `--json` read can emit a stack trace any more.** A throw comes back as
+  `{ok: false, reason: "crashed", command, error, hint}` with its own exit code —
+  every `--json` route inherits it.
+- A 500 from the panel's API now carries the CLI's own reason, and the panel
+  renders it. A 500 with no message is what you actually saw.
+
 ### v0.49.1 — the challenge council, and a `--json` that stops throwing things away _(2026-08-18)_
 
 One release, two workstreams, and **zero new skills**. They ship together because

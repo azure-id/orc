@@ -34,5 +34,18 @@
   "runs.field.files": "berkas",
   "runs.field.written": "ditulis",
   "runs.emptyFolder": "(folder kosong)",
-  "runs.after.signals": "Apa yang terjadi setelahnya"
+  "runs.after.signals": "Apa yang terjadi setelahnya",
+  "runs.filterClosed": "Ditutup",
+  "runs.close.button": "Tandai selesai",
+  "runs.close.reopen": "Buka lagi",
+  "runs.close.hint": "Run ini masih punya penunjuk resume, jadi semuanya menghitungnya sebagai menunggu.",
+  "runs.close.confirmTitle": "Tandai run ini selesai?",
+  "runs.close.confirmBody": "Anda menyatakan sudah selesai dengan {slug}. Run ini berhenti dihitung sebagai menunggu, dan `orc resume` berhenti menawarkannya.",
+  "runs.close.moves": "RESUME.md DIPINDAHKAN ke RESUME.closed.md dan alasannya dicatat. Tidak ada yang dihapus, dan Buka lagi mengembalikannya.",
+  "runs.close.reasonPlaceholder": "alasan Anda sudah selesai dengannya",
+  "runs.close.needReason": "Alasan wajib diisi — run yang ditutup tanpa alasan tercatat adalah keadaan yang tidak bisa diaudit siapa pun.",
+  "runs.close.done": "Ditandai selesai.",
+  "runs.close.reopened": "Dibuka lagi — sekarang menunggu.",
+  "runs.close.failed": "Itu tidak berhasil.",
+  "runs.close.was": "ditutup: {reason}"
 }

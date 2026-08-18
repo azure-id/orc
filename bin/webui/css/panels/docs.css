@@ -136,3 +136,95 @@
 }
 .doc-subpart-mark { color: var(--text-faint); font-family: var(--mono, ui-monospace, monospace); }
 .doc-wave-strip { margin-bottom: var(--sp-2); flex-wrap: wrap; }
+
+/* ── v0.49.2 — house rules, the run map, and what it cost ──────────────────
+   No colour token is defined here: every one comes from 00-tokens.css on bare
+   :root, which is what keeps the light/dark/system trio honest. */
+
+.rule-group { margin-top: var(--sp-3); }
+.rule-group-head {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-bottom: var(--sp-2);
+}
+.rule-row {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  border-top: 1px solid var(--line-soft);
+}
+.rule-mid { min-width: 0; }
+.rule-text { font-size: 13px; }
+.rule-id { font-family: var(--mono); font-size: 11px; color: var(--text-faint); margin-top: 2px; }
+/* A DISABLED rule keeps its slot and reads as disabled. Hiding it would make
+   "I switched that off" and "there is no such rule" identical. */
+.rule-off .rule-text { color: var(--text-faint); text-decoration: line-through; }
+/* Staged, not written. The row says so until Apply. */
+.rule-removing .rule-text { text-decoration: line-through; opacity: .6; }
+.rule-add {
+  display: flex;
+  gap: var(--sp-2);
+  align-items: center;
+  margin-top: var(--sp-3);
+  flex-wrap: wrap;
+}
+.rule-add .text-input { flex: 1 1 220px; min-width: 0; }
+.rule-boundary { margin-top: var(--sp-3); border-top: 1px solid var(--line-soft); padding-top: var(--sp-2); }
+.rule-drift { margin-top: var(--sp-3); }
+.rule-drift-row {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text-dim);
+  padding: 2px 0;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+/* The wave table and the per-section cost table share one shape. Wide content
+   scrolls INSIDE its own box; the page body never scrolls sideways. */
+.fc-table { margin-top: var(--sp-3); overflow-x: auto; }
+.fc-row {
+  display: grid;
+  grid-template-columns: 78px minmax(0, 1fr) 72px 90px;
+  gap: var(--sp-3);
+  align-items: center;
+  padding: var(--sp-2) 0;
+  border-top: 1px solid var(--line-soft);
+  font-size: 12.5px;
+}
+.fc-wave { font-family: var(--mono); color: var(--text-dim); }
+.fc-secs { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fc-lines, .fc-agents { font-family: var(--mono); color: var(--text-dim); text-align: right; }
+/* A section nothing could be joined to KEEPS ITS SLOT and reads as unknown —
+   an em dash, never a zero. */
+.fc-row-unknown .fc-agents { color: var(--text-faint); }
+
+/* FOUR TOKEN KINDS, NEVER BLENDED. cache-read is usually the largest count at
+   about a tenth of the price, which is the whole reason it stays its own band. */
+.tok-bar-wrap { margin-top: var(--sp-3); }
+.tok-bar {
+  display: flex;
+  height: 12px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--surface-2);
+}
+.tok-seg { width: var(--w); min-width: 0; }
+.tok-input { background: var(--accent); }
+.tok-cache-write { background: var(--warn); }
+.tok-cache-read { background: var(--idle); }
+.tok-output { background: var(--ok); }
+.tok-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  margin-top: var(--sp-2);
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--text-dim);
+}
+.tok-legend-item { display: inline-flex; align-items: center; gap: 6px; }
+.tok-dot { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }

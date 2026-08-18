@@ -6,7 +6,10 @@
    script, no import/export: an ES module import carries no query string,
    and every static request here needs the per-launch session token. */
 
-const RUN_STATUS_KIND = { waiting: "warn", done: "ok" };
+// The CLI's own state words. `closed` (v0.49.2) is deliberately NOT `done`: the
+// disk cannot prove the run finished, only that a human said they were finished
+// with it — so it reads as neutral, never as a success.
+const RUN_STATUS_KIND = { waiting: "warn", done: "ok", closed: "" };
 // The aftermath grade chip. The LABELS are ours to shorten; the GRADE ids are
 // the CLI's and are what the kind map is keyed on.
 const AFTER_KIND = { HELD: "ok", CHURN: "warn", REVERTED: "bad", TOO_RECENT: "", SHALLOW: "" };
@@ -30,7 +33,7 @@ async function renderRuns(body) {
     // fetching it per row would be N requests for a list that is already loaded.
     after = (await read("/api/aftermath").catch(() => ({ data: null }))).data;
   } catch (e) {
-    body.replaceChildren(empty(t("common.loadFail"), String(e.message)));
+    body.replaceChildren(failBox(e));
     return;
   }
   if (!d.total) {
@@ -57,6 +60,7 @@ async function renderRuns(body) {
     ["all", t("runs.filterAll")],
     ["waiting", t("runs.filterWaiting")],
     ["done", t("runs.filterDone")],
+    ["closed", t("runs.filterClosed")],
     ["other", t("runs.filterOther")],
   ];
   for (const [val, label] of segs) {
@@ -116,11 +120,18 @@ async function renderRuns(body) {
       const gc = chip(AFTER_LABEL[grade.grade] || grade.grade, AFTER_KIND[grade.grade] || "");
       gc.title = grade.note || "";
       headBtn.append(gc);
+      // A fifth child needs a fifth column — see `.run-card.has-extra`. The
+      // Docs list does the same for its "you edited it" chip.
+      headBtn.classList.add("has-extra");
     }
     const mid = el("div", "run-mid");
     mid.append(el("div", "run-slug", r.slug));
     const where = [r.lane, r.phase && "phase " + r.phase, r.wave].filter(Boolean).join(" · ");
     mid.append(el("div", "run-where", where || "—"));
+    // A closed row NEVER disappears and it always carries the reason the human
+    // gave — a state change with no visible reason is a state nobody can audit.
+    if (r.closed && r.closed.reason)
+      mid.append(el("div", "run-closed-why", t("runs.close.was", { reason: r.closed.reason })));
     headBtn.append(mid, el("div", "run-age", relAge(r.updated_ms)));
 
     // The fold. `.run-body-inner` is the real element the 1fr→0fr grid
@@ -164,7 +175,11 @@ async function renderRuns(body) {
     for (const entry of rows) {
       const st = entry.row.dataset.status;
       const statusHit =
-        statusFilter === "all" || (statusFilter === "other" ? st !== "waiting" && st !== "done" : st === statusFilter);
+        statusFilter === "all"
+          ? true
+          : statusFilter === "other"
+          ? st !== "waiting" && st !== "done" && st !== "closed"
+          : st === statusFilter;
       const textHit = !q || entry.row.textContent.toLowerCase().includes(q);
       const hit = statusHit && textHit;
       entry.row.classList.toggle("hidden", !hit);
@@ -229,6 +244,14 @@ function loadRunDetail(pane, slug, grade) {
       const out = frag();
       const ab = afterBox(grade);
       if (ab) out.append(ab);
+
+      // The action that CLEARS the caution lives in the panel the caution points
+      // at — the FINDING_ROUTE principle. A waiting run the user has abandoned is
+      // what blocks the upgrade preview, and this is the button that unblocks it.
+      // A close changes the LIST (the row's status, the filters, the count), not
+      // just this row, so the refresh is the panel's, not the row's.
+      const acts = runCloseActions(d, () => route());
+      if (acts) out.append(acts);
 
       out.append(
         kvList([
@@ -327,4 +350,67 @@ function loadRunDetail(pane, slug, grade) {
       pane.replaceChildren(out);
     })
     .catch((e) => pane.replaceChildren(empty(t("runs.openFail"), String(e.message))));
+}
+
+/* MARK AS DONE / REOPEN (v0.49.2).
+
+   `RESUME.md` existing IS the unfinished flag, and ORC deletes it at FINISH — so
+   a run the user abandoned stayed "waiting" forever, kept being offered by
+   `orc resume`, and kept the upgrade preview blocked with no way out.
+
+   The confirmation names the file that MOVES and says, in as many words, that
+   nothing is deleted. The reason is REQUIRED — the CLI refuses without one, and
+   the form does not second-guess that: it submits and reports what came back. */
+function runCloseActions(d, onDone) {
+  if (d.status !== "waiting" && d.status !== "closed") return null;
+  const box = el("div", "row-actions");
+  if (d.status === "waiting") {
+    const b = el("button", "btn btn-sm", t("runs.close.button"));
+    b.type = "button";
+    b.addEventListener("click", () => confirmRunClose(d.slug, onDone));
+    box.append(b);
+    box.append(el("span", "note", t("runs.close.hint")));
+  } else {
+    const b = el("button", "btn btn-sm btn-ghost", t("runs.close.reopen"));
+    b.type = "button";
+    b.addEventListener("click", async () => {
+      const r = await post("/api/run/reopen", { slug: d.slug });
+      toast(r.ok ? t("runs.close.reopened") : t("runs.close.failed"), r.ok ? "ok" : "bad", r.output);
+      onDone();
+    });
+    box.append(b);
+    if (d.closed && d.closed.reason) box.append(el("span", "note", t("runs.close.was", { reason: d.closed.reason })));
+  }
+  return box;
+}
+
+function confirmRunClose(slug, onDone) {
+  const wrap = frag();
+  wrap.append(el("p", null, t("runs.close.confirmBody", { slug })));
+  // Never the word "delete": this MOVES one file and writes one more.
+  wrap.append(el("div", "note", t("runs.close.moves")));
+  const input = el("input", "text-input");
+  input.type = "text";
+  input.placeholder = t("runs.close.reasonPlaceholder");
+  wrap.append(input);
+  const cmd = el("pre", "cmd", `orc run close ${slug} --reason "…"`);
+  wrap.append(cmd);
+  input.addEventListener("input", () => {
+    cmd.textContent = `orc run close ${slug} --reason "${input.value || "…"}"`;
+  });
+  modal({
+    title: t("runs.close.confirmTitle"),
+    body: wrap,
+    actions: {
+      [t("common.cancel")]: null,
+      [t("runs.close.button")]: async () => {
+        const reason = input.value.trim();
+        if (!reason) return toast(t("runs.close.needReason"), "bad");
+        const r = await post("/api/run/close", { slug, reason });
+        toast(r.ok ? t("runs.close.done") : t("runs.close.failed"), r.ok ? "ok" : "bad", r.output);
+        onDone();
+      },
+    },
+  });
+  requestAnimationFrame(() => input.focus());
 }

@@ -61,6 +61,30 @@ notes, no ORC bookkeeping of any kind — not in `document.md` and not in a sect
 file. It still never invents a fact: what it was not given comes back as a gap,
 lands in `gaps.md`, and is raised with you.
 
+**Your project gets its own house rules.** A P0/P1/P2 ledger of what a document
+says and how it reads — *"open with a one-paragraph summary"*, *"money always
+carries its currency"* — stored in your words and read FIRST in every dispatch,
+above ORC's own rules. Each document freezes the set it started with, so a rule
+you change halfway through cannot silently invalidate what is already written;
+`orc doc rules <slug>` names every rule that moved since. House rules govern what
+the document SAYS — they can never change how this lane runs, and ORC declares
+that boundary rather than pretending to detect it.
+
+**Four rules it applies to every document, all free.** No questions or `TBD`s in
+the body (a section your outline calls *open questions* is exempt); what is
+missing is `N/A` plus one short line, never filler; a section well over its
+planned length is a finding; and no `src/foo.ts:42`, no `./relative`, no
+`localhost` — whoever reads a PRD has no repository. Code examples are always
+exempt. A template YOU supply is a cage, not a suggestion: a heading it never had
+is an error, and a part that grew one is refused rather than recorded.
+
+**You are told what it will cost before you pay for it.** Once, before the first
+write wave: how many sections, how many waves, **how many times it will stop**,
+and a token range with its sample count. With no history it refuses to invent
+numbers and offers a price-table floor instead. Afterwards, `orc doc cost <slug>`
+answers "what did this document cost" across **every session it spanned** — per
+role and per section, with a `—` (never a `0`) for anything it cannot join.
+
 **Where it will end up is a real setting, not a nicety.** `orc doc lint` enforces
 that target's actual limits: Notion has three heading levels, so an H4 is an
 error there; Docusaurus needs YAML front matter, so its absence is an error

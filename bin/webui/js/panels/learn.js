@@ -22,7 +22,7 @@ async function renderLearn(body) {
   try {
     d = (await read("/api/learn")).data;
   } catch (e) {
-    body.replaceChildren(empty(t("common.loadFail"), String(e.message)));
+    body.replaceChildren(failBox(e));
     return;
   }
   const sections = d.sections || [];

@@ -53,6 +53,57 @@ It also asks **how much to write at once**: `partial` (recommended) writes ONE
 wave and stops so you can read those section files and redirect before the rest
 is paid for; `all` writes every wave. Asked once, stored, never re-decided.
 
+Then, **once, before the first paid wave**, it shows you the run map: how many
+sections, how many waves, how many agents per wave, **how many times it will
+stop**, and what the whole document is likely to cost. With no history to go on
+it says so and refuses to invent numbers — `orc doc forecast <slug> --naive`
+gives you a floor from the public price table instead.
+
+## Your project's own house rules
+
+A **house rule** is your standing instruction about what a document says and how
+it reads: *"open with a one-paragraph summary a PM can read on a phone"*,
+*"money always carries its currency"*. They are read **first** in every dispatch,
+above ORC's own rules.
+
+```
+orc doc rules add --priority P0 --text "every document opens with a summary"
+orc doc rules                       # the project ledger
+orc doc rules <slug>                # what THIS document was frozen against
+orc doc rules <slug> --sync         # re-freeze, deliberately
+```
+
+**P0** must · **P1** should (breaking it is recorded as a gap) · **P2** prefer.
+
+Each document **freezes** the rules that were enabled when it started, so a rule
+you change at wave 3 cannot silently invalidate half a document. `orc doc rules
+<slug>` names every rule that moved since; `--sync` re-freezes and tells you
+which sections predate the change. **It re-writes nothing on its own** — whether
+any of them needs redoing is your call.
+
+House rules govern **what the document says and how it reads**. They can never
+change how this lane runs, and ORC says so rather than pretending to detect it:
+a rule that asks for something structural comes back marked unsupported, as a
+gap you can see.
+
+## Four rules it applies to every document
+
+All four are free — a deterministic check, no model tokens.
+
+- **No questions or confirmations in the body.** The document answers; it does
+  not ask. A section your own outline calls *open questions*, *risks* or
+  *assumptions* is exempt, and so is fenced code.
+- **What is missing is `N/A` plus one short line** — never written around.
+- **A section well over its planned length is a finding** (1.5× its budget).
+- **No local-only references.** No `src/foo.ts:42`, no `./relative`, no
+  `localhost`, no link to a local `.md` — whoever reads a PRD has no repository.
+  Code examples are exempt, and `doc_local_refs` turns it down to a warning (or
+  off) for a genuinely internal runbook.
+
+**A template you supply is a cage, not a suggestion.** A heading it never had is
+a lint error, and a part that grew one is refused rather than recorded.
+`--template-soft` opts out.
+
 ## Every wave is a stop
 
 A wave boundary is not a loop iteration. At the end of each one you get every
@@ -104,6 +155,18 @@ rather than guessed at.
 
 `orc doc list` shows every document with its `Where it stands:` line.
 
+## What it cost
+
+```
+orc doc forecast <slug>     # before you pay: waves, stops, and a range
+orc doc cost <slug>         # after: joined across EVERY session it spanned
+```
+
+`orc budget actual` works per run, and a document is not a run. `orc doc cost`
+joins every trace for the slug to your local usage transcripts and reports per
+role and per section. A section it cannot join reads `—`, never `0` — an unknown
+reported as a number is worse than an unknown reported as unknown.
+
 ## Coming back
 
 ```
@@ -141,6 +204,7 @@ unless you name it.
 | `doc_max_parallel` | `2` | agents per wave. **Hard cap 2** — larger is clamped, and the clamp is announced |
 | `doc_write_mode` | `ask` | `partial` writes one wave then stops · `all` writes every wave · `ask` makes it a question, asked once and stored |
 | `doc_language` | `en` | the D4 default, always confirmable per run |
+| `doc_local_refs` | `error` | how a local-only reference is treated: `off` · `warn` · `error` |
 | `doc_dir` | `orc/orc-doc` | where the folders live |
 
 `opus5_only` is a **no-op** here: both agents are already `claude-opus-5`. The

@@ -136,6 +136,7 @@ async function renderStatsCost(host) {
     else c.append(laneCommand("orc budget calibrate", t("cost.calibrateWhy")));
     out.append(c);
     host.replaceChildren(out);
+    await costDocuments(out);
     return;
   }
 
@@ -245,6 +246,69 @@ async function renderStatsCost(host) {
   out.append(bc);
   out.append(laneCommand("/orc-budget", t("cost.laneWhy")));
   host.replaceChildren(out);
+  await costDocuments(out);
+}
+
+/* DOCUMENTS (v0.49.2). `orc budget` works per RUN, and a /orc-doc document spans
+   several. Each row EXPANDS IN PLACE — the Runs-row rule — and fetches
+   `orc doc forecast --json` on first open. It duplicates no logic and names no
+   number itself; the card is the Docs panel's, rendered here because this is the
+   panel somebody opens when the question is "what is this costing me". */
+async function costDocuments(out) {
+  let list = null;
+  try {
+    list = (await read("/api/doc")).data;
+  } catch (_) {}
+  if (!list || !(list.documents || []).length) return;
+
+  const c = card(t("cost.docs"));
+  c.append(el("div", "note", t("cost.docsNote")));
+  const box = el("div", "run-list");
+  for (const doc of list.documents) {
+    const row = el("div", "run-row");
+    const head = el("button", "run-card", null);
+    head.type = "button";
+    head.setAttribute("aria-expanded", "false");
+    head.append(el("span", "run-caret", "▸"));
+    // The CLI's own word for the document's state — never a friendlier synonym.
+    head.append(chip(doc.document, doc.document === "present" ? "ok" : ""));
+    const mid = el("div", "run-mid");
+    mid.append(el("div", "run-slug", doc.title || doc.slug));
+    mid.append(el("div", "run-where", `${String(doc.type).toUpperCase()} · ${doc.slug}`));
+    head.append(mid, el("div", "run-age", `${doc.sections_written}/${doc.sections_total}`));
+
+    const pane = el("div", "run-pane stack stack-sm");
+    pane.append(skeleton(3));
+    const inner = el("div", "run-body-inner");
+    inner.append(pane);
+    const fold = el("div", "run-body");
+    fold.append(inner);
+    // ONE loader, so "recompute" refetches THIS row and nothing else — it must
+    // never re-render the Docs panel's detail into a card that is not it.
+    const load = async () => {
+      pane.replaceChildren(skeleton(3));
+      const q = "?slug=" + encodeURIComponent(doc.slug);
+      const fc = (await read("/api/doc/forecast" + q).catch(() => ({ data: null }))).data;
+      const cost = (await read("/api/doc/cost" + q).catch(() => ({ data: null }))).data;
+      const f = frag();
+      if (fc) f.append(docForecastCard(fc, doc.slug, load));
+      if (cost) f.append(docCostCard(cost));
+      pane.replaceChildren(f);
+    };
+    let loaded = false;
+    head.addEventListener("click", () => {
+      const open = !row.classList.contains("open");
+      row.classList.toggle("open", open);
+      head.setAttribute("aria-expanded", String(open));
+      if (!open || loaded) return;
+      loaded = true;
+      load();
+    });
+    row.append(head, fold);
+    box.append(row);
+  }
+  c.append(box);
+  out.append(c);
 }
 
 let statsPlanPath = "";

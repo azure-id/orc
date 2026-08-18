@@ -55,6 +55,8 @@ PANELS.overview = function (host) {
       const doctor = d.doctor || {};
       const w = d.wiki || {};
       const p = d.patterns || {};
+      // Rows since v0.49.2: `{ slug, updated_ms, lane }`. Everything that only
+      // wants a count still reads `.length`.
       const waiting = d.waiting || [];
       const findings = doctor.findings || [];
 
@@ -184,18 +186,37 @@ PANELS.overview = function (host) {
         const c = card(t("overview.waiting.title"));
         c.append(el("div", "note", t("overview.waiting.note")));
         const list = el("div", "run-list");
-        for (const slug of waiting) {
-          const b = el("button", "run-card");
+        for (const r of waiting) {
+          // The CARD CONTRACT (v0.49.2). `.run-card` is a four-column grid —
+          // caret, chip, mid, age — and this row used to append three children
+          // with no caret, so the chip landed in the 16px caret column and
+          // printed over an 88px-wide slug. One column short is not a rounding
+          // error; it is the whole card. This row navigates rather than expands,
+          // so it declares `.no-caret` and fills the three columns that variant
+          // has, in order.
+          const b = el("button", "run-card no-caret");
           b.type = "button";
           b.append(chip("waiting", "warn"));
-          const mid = el("div");
-          mid.append(el("div", "run-slug", slug));
-          mid.append(el("div", "run-where", t("overview.waiting.where")));
-          b.append(mid, el("div", "run-age", ""));
+          const mid = el("div", "run-mid");
+          mid.append(el("div", "run-slug", r.slug));
+          mid.append(el("div", "run-where", r.lane ? r.lane + " · " + t("overview.waiting.where") : t("overview.waiting.where")));
+          b.append(mid, el("div", "run-age", r.updated_ms ? t("overview.waiting.since", { age: relAge(r.updated_ms) }) : ""));
           b.addEventListener("click", () => {
-            location.hash = "#/runs?slug=" + encodeURIComponent(slug);
+            location.hash = "#/runs?slug=" + encodeURIComponent(r.slug);
           });
           list.append(b);
+          // A CAUTION ROUTES TO THE PANEL THAT CAN CLEAR IT — and here the panel
+          // that can clear it is this one. A waiting run is what blocks the
+          // upgrade preview, so the way out sits beside the thing complaining.
+          const done = el("button", "btn btn-sm btn-ghost", t("runs.close.button"));
+          done.type = "button";
+          done.addEventListener("click", (ev) => {
+            ev.stopPropagation();
+            confirmRunClose(r.slug, () => route());
+          });
+          const act = el("div", "row-actions run-card-actions");
+          act.append(done);
+          list.append(act);
         }
         c.append(list);
         out.append(c);

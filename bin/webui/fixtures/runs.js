@@ -15,14 +15,30 @@ const { PROJECT } = require("./shell.js");
 
 const runs = {
   run_dir: PROJECT + "/.claude/orc/run",
-  total: 5,
-  shown: 5,
+  total: 8,
+  shown: 8,
   runs: [
-    { slug: "merchant-notifications", status: "waiting", lane: "/orc", phase: "execution", wave: "wave 2 of 4", updated_ms: Date.now() - 40 * 60 * 1000 },
-    { slug: "refund-webhook-retry", status: "waiting", lane: "/orc-mini", phase: "review", wave: "", updated_ms: Date.now() - 26 * 60 * 60 * 1000 },
-    { slug: "settings-page-a11y", status: "done", lane: "/orc-quick", phase: "", wave: "", updated_ms: Date.now() - 3 * 60 * 60 * 1000 },
-    { slug: "invoice-pdf-export", status: "done", lane: "/orc-ultra", phase: "", wave: "", updated_ms: Date.now() - 5 * 24 * 60 * 60 * 1000 },
-    { slug: "abandoned-spike", status: "empty", lane: "", phase: "", wave: "", updated_ms: Date.now() - 11 * 24 * 60 * 60 * 1000 },
+    { slug: "merchant-notifications", status: "waiting", lane: "/orc", phase: "execution", wave: "wave 2 of 4", updated_ms: Date.now() - 40 * 60 * 1000, closed: null },
+    { slug: "refund-webhook-retry", status: "waiting", lane: "/orc-mini", phase: "review", wave: "", updated_ms: Date.now() - 26 * 60 * 60 * 1000, closed: null },
+    // The state that BROKE the Overview card (v0.49.2): a slug long enough to
+    // wrap, in a column that was 88px wide. You cannot design a collision you
+    // cannot look at.
+    { slug: "remittance-recipient-tsd-v2-170826", status: "waiting", lane: "/orc-doc", phase: "write", wave: "wave 1 of 3", updated_ms: Date.now() - 4 * 60 * 60 * 1000, closed: null },
+    { slug: "payout-ledger-backfill", status: "waiting", lane: "/orc", phase: "review", wave: "wave 3 of 3", updated_ms: Date.now() - 9 * 24 * 60 * 60 * 1000, closed: null },
+    // CLOSED — a human said they were finished with it, and the reason rides
+    // along forever.
+    {
+      slug: "legacy-import-spike",
+      status: "closed",
+      lane: "/orc-mini",
+      phase: "planning",
+      wave: "",
+      updated_ms: Date.now() - 21 * 24 * 60 * 60 * 1000,
+      closed: { at: "02-08-2026 11:40:12", reason: "spike answered the question; no build wanted", resume_file: "RESUME.closed.md" },
+    },
+    { slug: "settings-page-a11y", status: "done", lane: "/orc-quick", phase: "", wave: "", updated_ms: Date.now() - 3 * 60 * 60 * 1000, closed: null },
+    { slug: "invoice-pdf-export", status: "done", lane: "/orc-ultra", phase: "", wave: "", updated_ms: Date.now() - 5 * 24 * 60 * 60 * 1000, closed: null },
+    { slug: "abandoned-spike", status: "empty", lane: "", phase: "", wave: "", updated_ms: Date.now() - 11 * 24 * 60 * 60 * 1000, closed: null },
   ],
 };
 
@@ -44,6 +60,24 @@ const runDetail = {
     "blocked on the frozen copy deck. Smoke gate GREEN at the wave-2 boundary.\n",
   checkpoint: { phase: "execution", wave: 2, updated_at: "2026-08-08T10:14:02Z", trace_path: ".claude/orc/logs/run-orc-merchant-notifications-080826-094501.txt" },
   files: ["RESUME.md", "checkpoint.json", "state-of-play.md"],
+  closed: null,
+};
+
+// The other side of the same detail route: a run somebody closed. The panel
+// shows Reopen here, and the reason it was closed with.
+const runDetailClosed = {
+  slug: "legacy-import-spike",
+  dir: PROJECT + "/.claude/orc/run/legacy-import-spike",
+  status: "closed",
+  updated_ms: Date.now() - 21 * 24 * 60 * 60 * 1000,
+  stands: { lane: "/orc-mini", phase: "planning", wave: "" },
+  resume:
+    "# RESUME — legacy-import-spike\n\n" +
+    "Where it stands:  /orc-mini · phase planning\n",
+  state_of_play: null,
+  checkpoint: null,
+  files: ["RESUME.closed.md", "closed.json"],
+  closed: { at: "02-08-2026 11:40:12", reason: "spike answered the question; no build wanted", resume_file: "RESUME.closed.md" },
 };
 
 const aftermath = {
@@ -72,4 +106,4 @@ const aftermath = {
   ],
 };
 
-module.exports = { runs, runDetail, aftermath };
+module.exports = { runs, runDetail, runDetailClosed, aftermath };

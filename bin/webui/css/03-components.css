@@ -267,6 +267,15 @@ pre.block.wrap { white-space: pre-wrap; word-break: break-word; }
   border: 1px dashed var(--line);
   border-radius: var(--radius);
 }
+/* The reason a read failed, in the CLI's own output. Left-aligned inside a
+   centred box on purpose: it is a transcript, not a sentence. */
+.empty .fail-detail {
+  margin-top: var(--sp-3);
+  text-align: left;
+  max-height: 220px;
+  overflow: auto;
+  font-size: 12px;
+}
 
 .banner {
   display: flex;

@@ -263,6 +263,10 @@ const required = [
   "templates/skills/orc-doc/references/portable-markdown.md",
   "templates/skills/orc-doc/references/plain-language.md",
   "templates/skills/orc-doc/references/import-targets.md",
+  // v0.49.2 — the project's own house rules, and ORC's own generation rules.
+  // Two files because they are read in that ORDER and the order is the contract.
+  "templates/skills/orc-doc/references/house-rules.md",
+  "templates/skills/orc-doc/references/generation-rules.md",
   "templates/skills/orc-doc/references/templates/prd.md",
   "templates/skills/orc-doc/references/templates/tsd.md",
   "templates/skills/orc-doc/references/templates/collaboration.md",

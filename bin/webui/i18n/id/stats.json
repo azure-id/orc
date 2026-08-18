@@ -63,5 +63,7 @@
   "cost.rates.joined": "Dispatch tercocokkan",
   "cost.rates.transcripts": "Berkas pemakaian terbaca",
   "cost.rates.unreadable": "tidak ada yang terbaca",
-  "cost.rates.unattributed": "Blok tak tercocokkan"
+  "cost.rates.unattributed": "Blok tak tercocokkan",
+  "cost.docs": "Dokumen",
+  "cost.docsNote": "Dokumen /orc-doc mencakup beberapa run, jadi `orc budget actual` tidak bisa menjawabnya. Buka satu baris untuk melihat peta jalannya dan biayanya sejauh ini."
 }

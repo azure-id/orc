@@ -22,7 +22,7 @@ async function renderMockrun(body) {
   try {
     d = (await read("/api/mockruns")).data;
   } catch (e) {
-    body.replaceChildren(empty(t("common.loadFail"), String(e.message)));
+    body.replaceChildren(failBox(e));
     return;
   }
   const groups = (d && d.groups) || [];
@@ -133,7 +133,7 @@ async function renderMockrun(body) {
     try {
       doc = (await read("/api/mockrun?slug=" + encodeURIComponent(slug))).data;
     } catch (e) {
-      pane.replaceChildren(empty(t("common.loadFail"), String(e.message)));
+      pane.replaceChildren(failBox(e));
       return;
     }
     if (!doc || !doc.found) {

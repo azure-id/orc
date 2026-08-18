@@ -787,3 +787,117 @@ test("knowledge panel: both new doctor findings route to the panel that can CLEA
   assert.match(js, /"wiki-unregistered":\s*\{\s*panel:\s*"knowledge"/);
   assert.match(js, /"wiki-debt":\s*\{\s*panel:\s*"knowledge"/);
 });
+
+/* ══════════════════════════════════════════════════════════ v0.49.2 ═══════
+   THE CARD CONTRACT. `.run-card` is a GRID, and a grid never complains: the
+   Overview built a three-child card against a four-column template, so the
+   chip landed in the 16px caret column and printed straight over an 88px-wide
+   slug. One column short is not a rounding error, it is the whole card. */
+
+test("run cards: every variant declares its own column count", () => {
+  const js = appJs();
+  const css = appCss().replace(/\/\*[\s\S]*?\*\//g, "");
+
+  // The base grid, and one explicit variant per optional child.
+  assert.match(css, /\.run-card\s*\{[^}]*grid-template-columns:\s*16px 88px minmax\(0, 1fr\) auto/);
+  assert.match(css, /\.run-card\.no-caret\s*\{[^}]*grid-template-columns:\s*88px minmax\(0, 1fr\) auto/,
+    "a row that NAVIGATES has no caret, so it declares one fewer column");
+  assert.match(css, /\.run-card\.has-extra\s*\{[^}]*grid-template-columns:\s*16px 88px auto minmax\(0, 1fr\) auto/,
+    "an optional second chip is a fifth child and gets a fifth column");
+  assert.match(css, /\.run-card\.no-caret\.has-extra\s*\{/, "and the two combine");
+
+  // Every builder either has a caret or declares `no-caret`; every builder that
+  // appends a second chip declares `has-extra`. Both were real collisions.
+  assert.match(js, /el\("button", "run-card no-caret"\)/, "the Overview waiting row declares its variant");
+  assert.match(js, /headBtn\.classList\.add\("has-extra"\)/, "and a fifth child declares its column");
+  // Overview's row fills the three columns its variant HAS, in order.
+  assert.match(js, /chip\("waiting", "warn"\)[\s\S]{0,400}el\("div", "run-mid"\)[\s\S]{0,600}el\("div", "run-age"/,
+    "chip, mid, age — the same class sequence a Runs row uses, minus the caret");
+  // The age column existed and rendered empty. `run list --json` always knew.
+  assert.match(js, /overview\.waiting\.since/, "the age column carries the age it never had");
+
+  // Under 900px every variant collapses EXPLICITLY. A variant that inherits a
+  // column count it does not have is the same collision at a narrower width.
+  const narrow = css.slice(css.indexOf("@media (max-width: 900px)"));
+  assert.match(narrow, /\.run-card\.no-caret\s*\{[^}]*grid-template-columns/);
+  assert.match(narrow, /\.run-card\.has-extra\s*\{[^}]*grid-template-columns/);
+});
+
+test("runs: marking a run done names the file that MOVES, and never says delete", () => {
+  const js = appJs();
+  const api = fs.readFileSync(path.join(REPO, "bin", "webui", "api.js"), "utf8");
+
+  // FREE, deterministic and reversible, so it is a button — and the CLI is the
+  // only validator: the form does not have a second idea of a valid close.
+  assert.match(api, /"\/api\/run\/close":\s*\(b\) => \["run", "close", String\(b\.slug\), "--reason"/);
+  assert.match(api, /"\/api\/run\/reopen":\s*\(b\) => \["run", "reopen", String\(b\.slug\)\]/);
+
+  // The confirmation shows the exact command, live, and requires the reason.
+  assert.match(js, /function confirmRunClose\(slug, onDone\)/);
+  assert.match(js, /orc run close \$\{slug\} --reason/, "the exact command is always visible");
+  assert.match(js, /if \(!reason\) return toast\(t\("runs\.close\.needReason"\)/, "a reason is required");
+
+  // It MOVES one file. Never the word "delete" in the strings a user reads.
+  const en = JSON.parse(fs.readFileSync(path.join(REPO, "bin", "webui", "i18n", "en", "runs.json"), "utf8"));
+  assert.match(en["runs.close.moves"], /MOVED/);
+  assert.match(en["runs.close.moves"], /Nothing is deleted/);
+  for (const k of Object.keys(en).filter((x) => x.startsWith("runs.close.")))
+    assert.ok(!/\bdelet(e|ing)\b/i.test(en[k]) || /Nothing is deleted/.test(en[k]), `${k} must not promise a delete`);
+
+  // The caution routes to the panel that can CLEAR it — and here that is
+  // Overview itself, so the button is inline there too.
+  assert.match(js, /confirmRunClose\(r\.slug, \(\) => route\(\)\)/, "the Overview waiting card carries the same action");
+});
+
+test("docs: the house rules are a PROJECT card, staged and batched like every other write", () => {
+  const js = appJs();
+  const api = fs.readFileSync(path.join(REPO, "bin", "webui", "api.js"), "utf8");
+
+  // Four routes, four body shapes — and `--set-file` / `--reset` deliberately
+  // have NO route: a bulk replace of the project's standing rules is a CLI act.
+  for (const r of ["add", "remove", "toggle", "move", "sync"])
+    assert.ok(api.includes(`"/api/doc/rules/${r}"`), `the ${r} write is a real route`);
+  // As ARGV, not as prose: the comment above the block names both on purpose.
+  assert.ok(!/"--set-file"/.test(api), "a bulk replace is never a panel button");
+  assert.ok(!/"--reset"/.test(api), "and neither is a reset");
+
+  // Nothing is written until Apply, and the pending list is NAMED.
+  assert.match(js, /const edits = editSet\(\(\) => bar\.paint\(\)\);/);
+  assert.match(js, /await applyActions\(edits, btn\);/);
+  assert.match(js, /function applyActions\(edits, button\)/);
+  // A refused write NEVER aborts the rest, and every failure is reported by key.
+  const fn = js.slice(js.indexOf("async function applyActions"));
+  assert.match(fn.slice(0, 1200), /failed\.push\(`\$\{key\}:/);
+
+  // THE BOUNDARY IS ALWAYS SHOWN, never on hover — and it is the CLI's words.
+  assert.match(js, /el\("div", "note rule-boundary", d\.boundary\)/);
+  // A disabled rule keeps its slot and reads as disabled.
+  const css = appCss().replace(/\/\*[\s\S]*?\*\//g, "");
+  assert.match(css, /\.rule-off \.rule-text\s*\{[^}]*line-through/);
+});
+
+test("docs: the run map and the cost report render CLI numbers and compute none", () => {
+  const js = appJs();
+  const css = appCss().replace(/\/\*[\s\S]*?\*\//g, "");
+
+  // FOUR TOKEN KINDS, NEVER BLENDED — and they are the CLI's own field names,
+  // so they are never translated.
+  assert.match(js, /const DOC_VEC_KINDS = \["input", "cache_write", "cache_read", "output"\]/);
+  for (const k of ["tok-input", "tok-cache-write", "tok-cache-read", "tok-output"])
+    assert.ok(css.includes("." + k), `${k} is its own band`);
+  // The bar is sized by a CUSTOM PROPERTY: the panel's CSP is `style-src
+  // 'self'`, so an inline width is blocked outright.
+  assert.match(js, /seg\.style\.setProperty\("--w"/);
+  assert.match(css, /\.tok-seg\s*\{[^}]*width:\s*var\(--w\)/);
+
+  // A section nothing joins reads an em dash and KEEPS ITS SLOT.
+  assert.match(js, /s\.joined \? kNum\(s\.weighted\) : "—"/);
+  assert.match(css, /\.fc-row-unknown/);
+  // `unattributed` is ALWAYS printed, including when zero — no conditional.
+  assert.match(js, /t\("docs\.cost\.unattributed", \{ blocks: cost\.unattributed\.blocks \}\)/);
+
+  // The low-confidence warning is not optional chrome, and a FREE recompute
+  // gets a button while the naive floor is a copy-able command.
+  assert.match(js, /docs\.forecast\.lowConfidence/);
+  assert.match(js, /laneCommand\(`orc doc forecast \$\{slug\} --naive`/);
+});

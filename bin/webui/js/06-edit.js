@@ -44,6 +44,13 @@ function editSet(onChange) {
       map.set(key, { kind: "reset" });
       onChange(api);
     },
+    // An ACTION entry (v0.49.2): a route and a body, staged like any other
+    // edit, applied by `applyActions`. `label` is what the pending list names —
+    // a count is not a change list.
+    action(key, route, body, label) {
+      map.set(key, { kind: "action", route, body, value: label });
+      onChange(api);
+    },
     drop(key) {
       map.delete(key);
       onChange(api);
@@ -129,6 +136,38 @@ async function applyEdits(edits, routes, button) {
   for (const [key, e] of list) {
     try {
       const r = e.kind === "reset" ? await post(routes.reset, { key }) : await post(routes.set, { key, value: e.value });
+      if (!r.ok) failed.push(`${key}: ${(r.output || r.command || "").trim().split("\n")[0]}`);
+    } catch (err) {
+      failed.push(`${key}: ${err.message}`);
+    }
+  }
+  if (button) {
+    button.disabled = false;
+    if (label) button.textContent = label;
+  }
+  if (failed.length) toast(t("edits.someFailed", { n: failed.length }), "bad", failed.join("\n"));
+  else toast(t("edits.applied", { n: list.length }), "ok");
+  return { ok: !failed.length, failed };
+}
+
+// The same batching, for a panel whose edits are not key/value pairs (v0.49.2).
+// The house-rule ledger stages ADDs, REMOVEs, TOGGLEs and MOVEs — four routes,
+// four body shapes — so the entry carries its own `route` and `body` and this
+// runs them one at a time in staged order. Every other rule of `applyEdits`
+// holds exactly: a refused write NEVER aborts the rest, and every failure is
+// reported by the key it was staged under.
+async function applyActions(edits, button) {
+  const list = edits.entries();
+  if (!list.length) return { ok: true, failed: [] };
+  const label = button && button.textContent;
+  if (button) {
+    button.disabled = true;
+    button.textContent = t("edits.applying");
+  }
+  const failed = [];
+  for (const [key, e] of list) {
+    try {
+      const r = await post(e.route, e.body);
       if (!r.ok) failed.push(`${key}: ${(r.output || r.command || "").trim().split("\n")[0]}`);
     } catch (err) {
       failed.push(`${key}: ${err.message}`);

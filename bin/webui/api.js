@@ -32,6 +32,7 @@ const CLI = path.join(__dirname, "..", "cli.js");
 // one page renders. A short TTL collapses that without ever showing stale data
 // across a user action: every mutation clears the cache outright.
 const READ_TTL_MS = 2500;
+const chr10 = String.fromCharCode(10);
 const CLI_TIMEOUT_MS = 30_000;
 
 const cache = new Map();
@@ -89,6 +90,18 @@ function runCli(argv, ctx, { json = false } = {}) {
     stdout: data === null ? stdout.trim() : "",
     command: "orc " + argv.join(" "),
   };
+}
+
+// The one-line reason a read failed, in the CLI's own words. `crashed` is the
+// envelope the CLI itself emits when a `--json` route throws (v0.49.2); anything
+// else is a command that wrote nothing parseable at all.
+function readFailReason(out) {
+  const first = (out.stderr || out.stdout || "")
+    .split(chr10)
+    .map((l) => l.trim())
+    .filter(Boolean)[0];
+  const tail = first ? " \u2014 " + first : "";
+  return `${out.command} produced no JSON (exit ${out.exit_code})${tail}`;
 }
 
 function readCli(argv, ctx) {
@@ -276,6 +289,13 @@ const READS = {
   "/api/doc/audit": (q) => ["doc", "audit", String(q.slug || "")],
   "/api/doc/journal": (q) => ["doc", "journal", String(q.slug || "")],
   "/api/doc/context": (q) => ["doc", "context", String(q.slug || "")],
+  // v0.49.2 — the project's own house rules, the frozen set of one document,
+  // the run map and the cost report. All four are READS; the panel decides
+  // nothing about a priority, an order, a wave shape or a number.
+  "/api/doc/rules": () => ["doc", "rules"],
+  "/api/doc/rules/one": (q) => ["doc", "rules", String(q.slug || "")],
+  "/api/doc/forecast": (q) => ["doc", "forecast", String(q.slug || "")],
+  "/api/doc/cost": (q) => ["doc", "cost", String(q.slug || "")],
   "/api/patterns": () => ["pattern", "status"],
   "/api/gotchas": () => ["gotcha", "list"],
   "/api/stats": (q) => (q.since ? ["stats", "--since", String(q.since)] : ["stats"]),
@@ -371,6 +391,22 @@ const WRITES = {
     return argv;
   },
   "/api/doc/unship": (b) => ["doc", "unship", String(b.slug), "--reason", String(b.reason || "")],
+  // v0.49.2 — the house-rule ledger. Every one is FREE, deterministic and
+  // reversible, and every validator is the CLI's: a bad priority, an unknown id
+  // and a multi-line rule are all refused there, so the form does not have a
+  // second idea of a valid rule. `--set-file` and `--reset` deliberately have NO
+  // route — a bulk replace of the project's own standing rules is a CLI act.
+  "/api/doc/rules/add": (b) => ["doc", "rules", "add", "--priority", String(b.priority || ""), "--text", String(b.text || "")],
+  "/api/doc/rules/remove": (b) => ["doc", "rules", "remove", String(b.id)],
+  "/api/doc/rules/toggle": (b) => ["doc", "rules", b.enabled ? "enable" : "disable", String(b.id)],
+  "/api/doc/rules/move": (b) => ["doc", "rules", "move", String(b.id), "--priority", String(b.priority || "")],
+  "/api/doc/rules/sync": (b) => ["doc", "rules", String(b.slug), "--sync"],
+  // v0.49.2. Closing a run is FREE, deterministic, reversible, and it DELETES
+  // NOTHING — `RESUME.md` is moved aside, not removed. The CLI refuses without a
+  // reason, so the form does not have to: there is one idea of a valid close and
+  // it lives in `bin/cli.js`.
+  "/api/run/close": (b) => ["run", "close", String(b.slug), "--reason", String(b.reason || "")],
+  "/api/run/reopen": (b) => ["run", "reopen", String(b.slug)],
   "/api/crosslink/remove": (b) => ["crosslink", "remove", String(b.name)],
   // The UI assembles no YAML. It hands the CLI the same arguments the
   // interactive prompt collects, and every rejection the user sees is the
@@ -605,7 +641,11 @@ function overview(ctx) {
     wiki: readCli(["wiki", "status"], ctx).data,
     patterns: readCli(["pattern", "status"], ctx).data,
     runs_total: runs.data ? runs.data.total : 0,
-    waiting: waiting.map((r) => r.slug),
+    // Rows, not bare slugs (v0.49.2). The Overview card has an age column and
+    // rendered it empty because the payload never carried the number — and the
+    // "mark as done" button needs the slug beside a real timestamp to be worth
+    // showing at all.
+    waiting: waiting.map((r) => ({ slug: r.slug, updated_ms: r.updated_ms, lane: r.lane || null })),
     diy: readCli(["diy", "show"], ctx).data,
     // v0.46.0 chips. Each is the CLI's OWN answer — the panel repeats the state
     // words and never derives them. A chip with nothing to say still renders its
@@ -736,7 +776,11 @@ async function handleApi(req, res, url, ctx) {
     const build = READS[route];
     if (!build) return json(res, 404, { error: "unknown endpoint " + route });
     const out = readCli(build(q), ctx);
-    return json(res, out.ok ? 200 : 500, out);
+    // v0.49.2 — a read that produced no parseable object still has to SAY why.
+    // The body already carried `stderr` and `stdout`; nothing named `error`, so
+    // the client fell through to "request failed (500)" and one corrupt ledger
+    // looked like a broken panel. The reason the CLI printed is what is shown.
+    return json(res, out.ok ? 200 : 500, out.ok ? out : { ...out, error: readFailReason(out) });
   }
 
   if (req.method !== "POST") return json(res, 405, { error: "method not allowed" });

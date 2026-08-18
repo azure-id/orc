@@ -1665,9 +1665,19 @@ test("doc next: partial mode BLOCKS after each wave, and names the human decisio
     assert.ok(json(n).alternatives.some((a) => /orc doc mode/.test(a)));
 
     cli(["doc", "mode", slug, "--set", "partial", "--dir", root]);
+
+    // v0.49.2 — the run map comes first, ONCE, and it is FREE. A refusal for no
+    // history is still an answer and is still shown once: without that this step
+    // is one the lane can never get past.
     n = cli(["doc", "next", slug, "--json", "--dir", root]);
     assert.strictEqual(n.status, 0);
-    assert.strictEqual(json(n).action, "plan-write");
+    assert.strictEqual(json(n).action, "forecast", "the user is told what the whole document costs before the first paid wave");
+    assert.strictEqual(json(n).paid, false);
+    cli(["doc", "forecast", slug, "--json", "--dir", root]);
+
+    n = cli(["doc", "next", slug, "--json", "--dir", root]);
+    assert.strictEqual(n.status, 0);
+    assert.strictEqual(json(n).action, "plan-write", "and it is never named twice");
 
     // Wave 1 written and confirmed → it STOPS so you can read it and redirect.
     const plan = json(cli(["doc", "plan", slug, "--role", "write", "--json", "--dir", root]));
@@ -1719,6 +1729,452 @@ test("doc: assemble / extract / splice still exit as they did, on a v1 document"
     const v2 = cli(["doc", "extract", slug, "--section", map.sections[2].id, "--json", "--dir", root]);
     assert.strictEqual(v2.status, 0);
     assert.match(json(v2).file, /^sections\//);
+  } finally {
+    rmrf(root);
+  }
+});
+
+/* ══════════════════════════════════════════════════════════ v0.49.2 ═══════
+   House rules, the four generation rules, the template lock, the run map,
+   the cost report, and the revision anchor. */
+
+test("doc rules: an empty ledger is an ANSWER, and add/move/disable round-trip", () => {
+  const { root } = freshInstall();
+  try {
+    // NO RULES IS AN ANSWER. The object still comes back; only the exit code
+    // says there is nothing here yet.
+    let r = cli(["doc", "rules", "--json", "--dir", root]);
+    assert.strictEqual(r.status, 1);
+    assert.strictEqual(json(r).ok, true, "an empty ledger still returns the whole object");
+    assert.deepStrictEqual(json(r).rules, []);
+    assert.match(json(r).line, /house rules: none/);
+    // THE BOUNDARY IS ALWAYS DECLARED, including when there is nothing in it.
+    assert.match(json(r).boundary, /never change how this lane runs/);
+
+    r = cli(["doc", "rules", "add", "--priority", "P0", "--text", "open with a one-paragraph summary", "--json", "--dir", root]);
+    assert.strictEqual(r.status, 0);
+    assert.strictEqual(json(r).id, "H-001");
+
+    cli(["doc", "rules", "add", "--priority", "P2", "--text", "prefer a table over a long list", "--json", "--dir", root]);
+    r = cli(["doc", "rules", "--json", "--dir", root]);
+    assert.strictEqual(r.status, 0);
+    assert.strictEqual(json(r).rules.length, 2);
+    // VERBATIM in, verbatim out — the context.md rule.
+    assert.strictEqual(json(r).rules[0].text, "open with a one-paragraph summary");
+    assert.deepStrictEqual(json(r).counts, { P0: 1, P1: 0, P2: 1 });
+
+    // A re-prioritise is recorded, not re-typed.
+    cli(["doc", "rules", "move", "H-002", "--priority", "P1", "--json", "--dir", root]);
+    r = cli(["doc", "rules", "--json", "--dir", root]);
+    assert.strictEqual(json(r).rules.find((x) => x.id === "H-002").priority, "P1");
+
+    // A disabled rule KEEPS ITS SLOT: "I switched that off" and "there is no
+    // such rule" must never look the same.
+    cli(["doc", "rules", "disable", "H-002", "--json", "--dir", root]);
+    r = cli(["doc", "rules", "--json", "--dir", root]);
+    assert.strictEqual(json(r).rules.length, 2, "a disabled rule is still in the ledger");
+    assert.strictEqual(json(r).enabled.length, 1, "but it is not in the enabled set");
+
+    cli(["doc", "rules", "remove", "H-002", "--json", "--dir", root]);
+    assert.strictEqual(json(cli(["doc", "rules", "--json", "--dir", root])).rules.length, 1);
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("doc rules: a multi-line rule is REFUSED by name, and so is a bad priority", () => {
+  const { root } = freshInstall();
+  try {
+    // Two rules stapled together are two rules. Flattening it silently would
+    // make the panel's plain-argv write path a lie.
+    let r = cli(["doc", "rules", "add", "--priority", "P0", "--text", "one line\nand another", "--json", "--dir", root]);
+    assert.strictEqual(r.status, 2);
+    assert.strictEqual(json(r).reason, "multiline");
+    assert.match(json(r).hint, /two rules/);
+
+    r = cli(["doc", "rules", "add", "--priority", "P9", "--text", "nope", "--json", "--dir", root]);
+    assert.strictEqual(r.status, 2);
+    assert.strictEqual(json(r).reason, "bad-priority");
+
+    r = cli(["doc", "rules", "remove", "H-404", "--json", "--dir", root]);
+    assert.strictEqual(r.status, 2);
+    assert.strictEqual(json(r).reason, "no-such-rule");
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("doc rules: a document FREEZES the rules, and the drift NAMES every one that moved", () => {
+  const { root } = freshInstall();
+  try {
+    cli(["doc", "rules", "add", "--priority", "P0", "--text", "always name the owning team", "--json", "--dir", root]);
+    const slug = initDoc(root, "frozen", "prd").data.slug;
+
+    // FROZEN AT INIT — a document is written against the rules that were true
+    // when it started.
+    let r = cli(["doc", "rules", slug, "--json", "--dir", root]);
+    assert.strictEqual(r.status, 0, "no drift yet");
+    assert.strictEqual(json(r).frozen.length, 1);
+    assert.strictEqual(json(r).drift.drifted, false);
+    assert.ok(fs.existsSync(path.join(root, "orc", "orc-doc", slug, "house-rules.md")), "the frozen set is readable beside the document");
+
+    // The project ledger moves under it.
+    cli(["doc", "rules", "add", "--priority", "P1", "--text", "use the customer's words", "--json", "--dir", root]);
+    cli(["doc", "rules", "move", "H-001", "--priority", "P1", "--json", "--dir", root]);
+    r = cli(["doc", "rules", slug, "--json", "--dir", root]);
+    assert.strictEqual(r.status, 1, "a drifted frozen set wants attention");
+    const d = json(r).drift;
+    // COVERAGE-RELATIVE, never a boolean: it names each one.
+    assert.strictEqual(d.added.length, 1);
+    assert.strictEqual(d.added[0].id, "H-002");
+    assert.strictEqual(d.changed.length, 1);
+    assert.strictEqual(d.changed[0].from.priority, "P0");
+    assert.strictEqual(d.changed[0].to.priority, "P1");
+
+    // The audit says so too, with its fix command and its panel.
+    const a = json(cli(["doc", "audit", slug, "--json", "--dir", root]));
+    const f = a.findings.find((x) => x.id === "house-rules-drifted");
+    assert.ok(f, "the audit reports the drift");
+    assert.strictEqual(f.level, "warn", "a drift is a fact about the document, not an error");
+    assert.strictEqual(f.panel, "docs");
+    assert.match(f.fix, /orc doc rules .* --sync/);
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("doc rules --sync: it re-freezes, NAMES the sections that predate it, and re-writes nothing", () => {
+  const { root } = freshInstall();
+  try {
+    cli(["doc", "rules", "add", "--priority", "P0", "--text", "first rule", "--json", "--dir", root]);
+    const slug = initDoc(root, "syncme", "prd").data.slug;
+    const show = writeParts(root, slug, {});
+    confirmAll(root, slug);
+    const first = show.outline[0].id;
+    const before = fs.readFileSync(path.join(root, "orc", "orc-doc", slug, "sections", first + ".md"), "utf8");
+
+    cli(["doc", "rules", "add", "--priority", "P0", "--text", "second rule", "--json", "--dir", root]);
+    const r = cli(["doc", "rules", slug, "--sync", "--json", "--dir", root]);
+    assert.strictEqual(r.status, 0);
+    assert.strictEqual(json(r).synced, 2);
+    // IT NAMES THEM. Auto-rewriting would be ORC spending money applying a rule
+    // change nobody asked it to apply retroactively.
+    assert.ok(json(r).predate.length, "the already-written sections are named");
+    assert.strictEqual(
+      fs.readFileSync(path.join(root, "orc", "orc-doc", slug, "sections", first + ".md"), "utf8"),
+      before,
+      "and not one of them is re-written"
+    );
+    // Re-frozen, so the drift is gone.
+    assert.strictEqual(cli(["doc", "rules", slug, "--json", "--dir", root]).status, 0);
+    assert.ok(json(cli(["doc", "show", slug, "--json", "--dir", root])).ok);
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("doc rules: the enabled set rides on every plan, above ORC's own rules", () => {
+  const { root } = freshInstall();
+  try {
+    cli(["doc", "rules", "add", "--priority", "P0", "--text", "money always carries its currency", "--json", "--dir", root]);
+    const slug = initDoc(root, "sliced", "prd").data.slug;
+    const p = json(cli(["doc", "plan", slug, "--role", "write", "--json", "--dir", root]));
+    assert.strictEqual(p.doc_rules.length, 1);
+    assert.strictEqual(p.doc_rules[0].text, "money always carries its currency");
+    assert.match(p.doc_rules_boundary, /unsupported_request/);
+    // Even an EMPTY result carries them — a caller must never special-case
+    // "nothing to do" by finding half the keys missing.
+    writeParts(root, slug, {});
+    confirmAll(root, slug);
+    const empty = cli(["doc", "plan", slug, "--role", "write", "--json", "--dir", root]);
+    assert.strictEqual(empty.status, 1);
+    assert.ok(Array.isArray(json(empty).doc_rules), "the empty shape carries the same keys");
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("doc lint: the four generation rules are free, narrow, and exempt what they must", () => {
+  const { root } = freshInstall();
+  try {
+    const f = path.join(root, "gen.md");
+    fs.writeFileSync(
+      f,
+      [
+        "# A document",
+        "",
+        "## Goals",
+        "",
+        "The retry logic lives in src/payments/retry.ts:42 and is worth reading.",
+        "",
+        "Should we ship this in one release?",
+        "",
+        "The rollout date is TBA.",
+        "",
+        "## Non-goals",
+        "",
+        "N/A",
+        "",
+        "There is no plan here yet.",
+        "",
+        "We might revisit it later.",
+        "",
+        "Nothing is decided about reconciliation.",
+        "",
+        "Somebody will look at it.",
+        "",
+        "## Open questions",
+        "",
+        "Should we support partial settlement first?",
+        "",
+        "## Rollout",
+        "",
+        "```bash",
+        "cd ./src && node bin/cli.js",
+        "```",
+        "",
+        "Point a browser at localhost to see the staging build.",
+        "",
+      ].join("\n")
+    );
+    const r = cli(["doc", "lint", "gen.md", "--json", "--dir", root]);
+    const rules = json(r).findings.map((x) => x.rule);
+    const at = (rule) => json(r).findings.filter((x) => x.rule === rule).map((x) => x.line);
+
+    // 5b — an approval question and a confirmation marker, both errors.
+    assert.ok(rules.includes("question-in-body"));
+    assert.ok(at("question-in-body").includes(7), "a line that is only a question to an approver");
+    assert.ok(at("question-in-body").includes(9), "and a TBA");
+    // …but NOT inside a section the outline declares as open questions.
+    assert.ok(!at("question-in-body").includes(23), "a declared questions section is allowed to have one");
+
+    // 5c — N/A followed by filler.
+    assert.ok(rules.includes("na-padded"));
+
+    // 5d — a file:line anchor and a localhost, both outside fenced code.
+    const local = at("local-reference");
+    assert.ok(local.includes(5), "a file:line anchor");
+    assert.ok(local.includes(33), "and a localhost in prose");
+    assert.ok(!local.includes(30), "but NOT the same shapes inside a fence — a code example is content");
+
+    for (const rule of ["question-in-body", "local-reference"])
+      assert.strictEqual(json(r).findings.find((x) => x.rule === rule).severity, "error");
+    assert.strictEqual(json(r).findings.find((x) => x.rule === "na-padded").severity, "warn");
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("doc_local_refs: off, warn and error are all real states", () => {
+  const { root } = freshInstall();
+  try {
+    const f = path.join(root, "loc.md");
+    fs.writeFileSync(f, "# T\n\nSee src/app/main.ts:12 for the handler.\n");
+    assert.strictEqual(json(cli(["doc", "lint", "loc.md", "--json", "--dir", root])).local_refs, "error");
+    assert.strictEqual(json(cli(["doc", "lint", "loc.md", "--json", "--dir", root])).errors, 1);
+
+    cli(["config", "set", "doc_local_refs", "warn", "--dir", root]);
+    let d = json(cli(["doc", "lint", "loc.md", "--json", "--dir", root]));
+    assert.strictEqual(d.local_refs, "warn");
+    assert.strictEqual(d.findings.find((x) => x.rule === "local-reference").severity, "warn");
+
+    cli(["config", "set", "doc_local_refs", "off", "--dir", root]);
+    d = json(cli(["doc", "lint", "loc.md", "--json", "--dir", root]));
+    assert.strictEqual(d.local_refs, "off");
+    assert.ok(!d.findings.some((x) => x.rule === "local-reference"), "off means off");
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("template lock: a supplied template is a cage — lint, --confirm and audit all say so", () => {
+  const { root } = freshInstall();
+  try {
+    const tpl = path.join(root, "tpl.md");
+    fs.writeFileSync(tpl, "# My template\n\n## Overview\n\n## Interfaces\n\n## Risks\n");
+    const slug = initDoc(root, "caged", "tsd", ["--template", "tpl.md"]).data.slug;
+
+    // LOCKED BY DEFAULT whenever a user template is supplied.
+    const p = json(cli(["doc", "plan", slug, "--role", "write", "--json", "--dir", root]));
+    assert.strictEqual(p.template_locked, true);
+    assert.deepStrictEqual(p.allowed_headings, ["Overview", "Interfaces", "Risks"]);
+
+    const sec = path.join(root, "orc", "orc-doc", slug, "sections");
+    fs.mkdirSync(sec, { recursive: true });
+    fs.writeFileSync(path.join(sec, "01-overview.md"), "## Overview\n\nA short overview line.\n\n### Extra thing\n\nSomething new.\n");
+
+    // The lint errors on it.
+    const lint = json(cli(["doc", "lint", slug, "--section", "01-overview", "--json", "--dir", root]));
+    assert.ok(lint.findings.some((x) => x.rule === "heading-outside-template"));
+
+    // `parts --confirm` REFUSES and writes NOTHING — the splice refusal shape.
+    const c = cli(["doc", "parts", slug, "--confirm", "01-overview", "--json", "--dir", root]);
+    assert.strictEqual(c.status, 1);
+    assert.strictEqual(json(c).reason, "template-drift");
+    assert.deepStrictEqual(json(c).drifted[0].headings, ["Extra thing"]);
+    assert.deepStrictEqual(json(c).confirmed, [], "nothing was written");
+    const after = json(cli(["doc", "parts", slug, "--json", "--dir", root]));
+    assert.strictEqual(after.parts.find((x) => x.id === "01-overview").state, "unconfirmed");
+
+    // And the audit reports it, by heading.
+    const a = json(cli(["doc", "audit", slug, "--json", "--dir", root]));
+    const f = a.findings.find((x) => x.id === "template-drift");
+    assert.ok(f && /Extra thing/.test(f.summary));
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("template lock: --template-soft opts out, and a shipped template is never a cage", () => {
+  const { root } = freshInstall();
+  try {
+    const tpl = path.join(root, "tpl2.md");
+    fs.writeFileSync(tpl, "# T\n\n## Alpha\n\n## Beta\n");
+    const soft = initDoc(root, "softly", "tsd", ["--template", "tpl2.md", "--template-soft"]).data;
+    assert.strictEqual(soft.template_locked, false);
+    assert.strictEqual(soft.allowed_headings, null);
+
+    // A SHIPPED base template is a floor, not a cage — that sentence in
+    // `orc doc templates` stays true.
+    const base = initDoc(root, "shipped", "tsd").data;
+    assert.strictEqual(base.template_locked, false);
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("doc forecast: no history REFUSES rather than inventing, and --naive is the floor", () => {
+  const { root } = freshInstall();
+  try {
+    const slug = initDoc(root, "mapped", "prd").data.slug;
+    // I WILL NOT INVENT NUMBERS.
+    const r = cli(["doc", "forecast", slug, "--json", "--dir", root]);
+    assert.strictEqual(r.status, 3);
+    assert.strictEqual(json(r).reason, "no-history");
+    assert.match(json(r).hint, /will not invent numbers/);
+
+    const n = cli(["doc", "forecast", slug, "--naive", "--json", "--dir", root]);
+    assert.strictEqual(n.status, 1, "a floor is low-confidence by construction");
+    const d = json(n);
+    assert.strictEqual(d.naive, true);
+    assert.ok(d.low_confidence_roles.length, "and it says so");
+    // FOUR TOKEN KINDS, NEVER BLENDED.
+    for (const k of ["input", "cache_write", "cache_read", "output"]) assert.ok(k in d.tokens.p50);
+    assert.ok(d.waves.length, "the wave shape comes from the same batcher the dispatch uses");
+    assert.ok("unattributed" in d, "unattributed is ALWAYS reported");
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("doc next: the run map is named ONCE, and a changed outline invalidates it", () => {
+  const { root } = freshInstall();
+  try {
+    const slug = initDoc(root, "onceonly", "prd").data.slug;
+    fs.writeFileSync(path.join(root, "orc", "orc-doc", slug, "context.md"), "# Context\n\n## The request (verbatim)\n> write it\n");
+    cli(["doc", "mode", slug, "--set", "all", "--dir", root]);
+
+    let n = json(cli(["doc", "next", slug, "--json", "--dir", root]));
+    assert.strictEqual(n.action, "forecast");
+    assert.strictEqual(n.paid, false, "the run map is free");
+
+    // Even a REFUSAL is shown once — otherwise this is a step the lane can
+    // never get past.
+    cli(["doc", "forecast", slug, "--json", "--dir", root]);
+    n = json(cli(["doc", "next", slug, "--json", "--dir", root]));
+    assert.strictEqual(n.action, "plan-write", "and it is never named twice");
+
+    // A forecast for a DIFFERENT SHAPE is not a forecast.
+    cli(["doc", "mode", slug, "--set", "partial", "--dir", root]);
+    n = json(cli(["doc", "next", slug, "--json", "--dir", root]));
+    assert.strictEqual(n.action, "forecast");
+    assert.match(n.why, /changed since the last forecast/);
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("doc cost: no trace is an ANSWER, and a section nothing joins reads — never 0", () => {
+  const { root } = freshInstall();
+  try {
+    const slug = initDoc(root, "costed", "prd").data.slug;
+    const r = cli(["doc", "cost", slug, "--json", "--dir", root]);
+    assert.strictEqual(r.status, 3);
+    assert.strictEqual(json(r).reason, "no-trace");
+    assert.match(json(r).hint, /never estimated/);
+
+    // A trace with a doc DISPATCH whose tail names its sections. Nothing can be
+    // joined to a transcript here, so every section must read `—`.
+    const first = json(cli(["doc", "show", slug, "--json", "--dir", root])).outline[0].id;
+    const logs = path.join(root, ".claude", "orc", "logs");
+    fs.mkdirSync(logs, { recursive: true });
+    fs.writeFileSync(
+      path.join(logs, `run-doc-${slug}-180826-120000.txt`),
+      "[180826 12:00:00] PHASE write start\n" +
+        `[180826 12:00:01] DISPATCH orc-doc-writer-opus-5-med :: doc write sections=${first} part=sections/${first}.md expect=claude-opus-5/medium\n` +
+        "[180826 12:10:00] FINISH :: done\n"
+    );
+    const c = cli(["doc", "cost", slug, "--json", "--dir", root]);
+    const d = json(c);
+    const row = d.by_section.find((x) => x.id === first);
+    assert.ok(row, "every outline section keeps its slot");
+    assert.strictEqual(row.dispatches, 1, "the dispatch WAS seen");
+    assert.strictEqual(row.joined, false);
+    assert.strictEqual(row.tokens, null, "an unknown is an unknown, never a zero");
+    assert.ok("unattributed" in d, "and unattributed is always present");
+    assert.ok(d.honesty.some((h) => /never 0/.test(h)));
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("doc lint --section: part-local line numbers, and no document-level rules", () => {
+  const { root } = freshInstall();
+  try {
+    const slug = initDoc(root, "perpart", "prd").data.slug;
+    const show = writeParts(root, slug, {});
+    const first = show.outline[0].id;
+    const r = cli(["doc", "lint", slug, "--section", first, "--json", "--dir", root]);
+    const d = json(r);
+    assert.strictEqual(d.section, first);
+    assert.strictEqual(d.part_local, true);
+    assert.strictEqual(d.file, `sections/${first}.md`);
+    // A PART IS NOT A DOCUMENT: it has no H1 and no front matter by design.
+    assert.ok(!d.findings.some((x) => x.rule === "no-h1"), "a section file is not missing a title");
+    assert.ok(!d.findings.some((x) => x.rule === "front-matter-required"));
+
+    const bad = cli(["doc", "lint", slug, "--section", "99-nope", "--json", "--dir", root]);
+    assert.strictEqual(bad.status, 2);
+    assert.strictEqual(json(bad).reason, "no-such-section");
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("doc plan --role edit: every finding names its FILE and its part-local line", () => {
+  const { root } = freshInstall();
+  try {
+    const slug = initDoc(root, "anchored", "prd").data.slug;
+    const show = writeParts(root, slug, {});
+    const first = show.outline[0].id;
+    const sec = path.join(root, "orc", "orc-doc", slug, "sections", first + ".md");
+    fs.writeFileSync(sec, `## ${show.outline[0].heading}\n\nThe handler lives in src/app/main.ts:12 and is worth a read.\n`);
+    confirmAll(root, slug);
+
+    // Give the section an open finding so the edit role picks it up.
+    const state = path.join(root, "orc", "orc-doc", slug, "doc.json");
+    const d0 = JSON.parse(fs.readFileSync(state, "utf8"));
+    d0.sections[first] = { ...(d0.sections[first] || {}), findings: 1 };
+    fs.writeFileSync(state, JSON.stringify(d0, null, 2));
+
+    const p = json(cli(["doc", "plan", slug, "--role", "edit", "--json", "--dir", root]));
+    const part = p.waves[0].agents[0].parts[0];
+    assert.strictEqual(part.file, `sections/${first}.md`);
+    const f = (part.findings || []).find((x) => x.rule === "local-reference");
+    assert.ok(f, "the anchor rides on the part the writer will open");
+    assert.strictEqual(f.file, `sections/${first}.md`);
+    assert.strictEqual(typeof f.line, "number");
+    assert.ok(f.line <= 3, "PART-LOCAL — the compiled document's line number is deliberately not carried");
   } finally {
     rmrf(root);
   }

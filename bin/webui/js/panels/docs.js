@@ -35,7 +35,7 @@ async function renderDocs(body) {
   try {
     d = (await read("/api/doc")).data;
   } catch (e) {
-    body.replaceChildren(empty(t("common.loadFail"), String(e.message)));
+    body.replaceChildren(failBox(e));
     return;
   }
   const out = frag();
@@ -43,6 +43,9 @@ async function renderDocs(body) {
   // An empty list is an ANSWER, not a gap: it renders the command that starts
   // one, never a spinner and never a "nothing here" shrug.
   if (!d || !d.documents || !d.documents.length) {
+    // The house rules still render: they are what the FIRST document will
+    // freeze, so setting them before there is a document is the useful order.
+    out.append(await docRulesCard(body));
     const c = card(t("docs.title"));
     c.append(empty(t("docs.none"), t("docs.noneHint")));
     c.append(laneCommand("/orc-doc", t("docs.cmdWhy")));
@@ -50,6 +53,10 @@ async function renderDocs(body) {
     body.replaceChildren(out);
     return;
   }
+
+  // PROJECT-LEVEL, so it is above the document list. The house rules are not a
+  // property of any one document — they are what every new document freezes.
+  out.append(await docRulesCard(body));
 
   const sum = card(t("docs.summary"));
   const chips = el("div", "row-actions");
@@ -85,7 +92,13 @@ async function renderDocs(body) {
     // The CLI's own words. `not started` is the CLI's phrase for a document with
     // no document.md, and it is never softened into "failed" or "empty".
     headBtn.append(chip(doc.document, doc.document === "present" ? "ok" : ""));
-    if ((doc.user_edited || []).length) headBtn.append(chip(t("docs.editedChip"), "info"));
+    if ((doc.user_edited || []).length) {
+      headBtn.append(chip(t("docs.editedChip"), "info"));
+      // A fifth child needs a fifth column. Without this the chip took the
+      // `run-mid` column, the title was squeezed into 88px and the count wrapped
+      // onto a second row — the identical collision v0.49.2 fixed in Overview.
+      headBtn.classList.add("has-extra");
+    }
     const mid = el("div", "run-mid");
     mid.append(el("div", "run-slug", doc.title || doc.slug));
     mid.append(el("div", "run-where", `${String(doc.type).toUpperCase()} · ${doc.slug}`));
@@ -137,6 +150,9 @@ async function loadDocDetail(pane, slug, body) {
   let next = null;
   let audit = null;
   let parts = null;
+  let rules = null;
+  let forecast = null;
+  let cost = null;
   const q = "?slug=" + encodeURIComponent(slug);
   const soft = (route) => read(route).catch(() => ({ data: null }));
   try {
@@ -148,8 +164,11 @@ async function loadDocDetail(pane, slug, body) {
     next = (await soft("/api/doc/next" + q)).data;
     audit = (await soft("/api/doc/audit" + q)).data;
     parts = (await soft("/api/doc/parts" + q)).data;
+    rules = (await soft("/api/doc/rules/one" + q)).data;
+    forecast = (await soft("/api/doc/forecast" + q)).data;
+    cost = (await soft("/api/doc/cost" + q)).data;
   } catch (e) {
-    pane.replaceChildren(empty(t("common.loadFail"), String(e.message)));
+    pane.replaceChildren(failBox(e));
     return;
   }
   const out = frag();
@@ -191,6 +210,17 @@ async function loadDocDetail(pane, slug, body) {
   // --- 6. ship. A decision, so it is a modal that names its destination and
   //     shows the exact command BEFORE it runs.
   out.append(docShipCard(s, body));
+
+  // --- 6b. the FROZEN house rules for THIS document, and whether the project
+  //     ledger has moved since. A drift NAMES every rule that moved.
+  if (rules) out.append(docFrozenRulesCard(rules, slug, body));
+
+  // --- 6c. the run map. FREE to recompute, so it gets a button; nothing here
+  //     is paid, so nothing here is a copy-able command.
+  if (forecast) out.append(docForecastCard(forecast, slug, () => loadDocDetail(pane, slug, body)));
+
+  // --- 6d. what it cost, joined across EVERY session this document spanned.
+  if (cost) out.append(docCostCard(cost));
 
   // --- 7. audit. A clean audit is a one-line answer, never an empty card.
   if (audit) out.append(docAuditCard(audit, body));
@@ -856,6 +886,355 @@ function docRevealBtn(slug, id, pane) {
 // The health card. STRAIGHT FROM `orc doc lint --json`: the CLI's rule names,
 // the CLI's counts, the CLI's own honesty lines. Never a friendlier synonym for
 // a rule, and the two honesty lines are not optional chrome.
+
+/* ── v0.49.2 — HOUSE RULES, THE RUN MAP, AND WHAT IT COST ───────────────────
+
+   Every one of these renders what `bin/cli.js --json` computed and decides
+   nothing: not a priority, not an order, not a wave shape, not a number. The
+   boundary sentence is the CLI's own words, and it is ALWAYS shown — not on
+   hover — because a rule set nobody can see the limits of is a rule set people
+   argue with instead of using. */
+
+const DOC_RULE_KIND = { P0: "bad", P1: "warn", P2: "" };
+
+// The PROJECT ledger, at the top of the panel. Writes are STAGED and BATCHED —
+// the v0.44.1 rule: nothing is written until Apply, the pending edits are NAMED,
+// Discard renders only while dirty, the writes run one at a time in staged
+// order, and a refused write never aborts the rest.
+async function docRulesCard(body) {
+  const c = card(t("docs.rules.title"));
+  let d = null;
+  try {
+    d = (await read("/api/doc/rules")).data;
+  } catch (_) {}
+  if (!d) {
+    c.append(el("div", "note", t("docs.rules.unavailable")));
+    return c;
+  }
+  const rules = d.rules || [];
+  const edits = editSet(() => bar.paint());
+
+  c.append(el("div", "note", d.line));
+
+  if (!rules.length) c.append(empty(t("docs.rules.none"), t("docs.rules.noneHint")));
+
+  // P0 → P1 → P2, the CLI's own order. The priority words are the CLI's and are
+  // never translated.
+  for (const pr of d.priorities || ["P0", "P1", "P2"]) {
+    const rows = rules.filter((r) => r.priority === pr);
+    if (!rows.length) continue;
+    const grp = el("div", "rule-group");
+    grp.append(el("div", "rule-group-head", pr));
+    for (const r of rows) {
+      const row = el("div", "rule-row" + (r.enabled ? "" : " rule-off"));
+      row.append(chip(r.priority, DOC_RULE_KIND[r.priority] || ""));
+      const mid = el("div", "rule-mid");
+      // VERBATIM. The user's own words, never re-wrapped into ORC's voice.
+      mid.append(el("div", "rule-text", r.text));
+      mid.append(el("div", "rule-id", r.id));
+      row.append(mid);
+
+      const acts = el("div", "row-actions");
+      const sel = el("select", "select");
+      for (const p of d.priorities || ["P0", "P1", "P2"]) {
+        const o = el("option", null, p);
+        o.value = p;
+        if (p === r.priority) o.selected = true;
+        sel.append(o);
+      }
+      sel.addEventListener("change", () => {
+        if (sel.value === r.priority) edits.drop(r.id + ":priority");
+        else edits.action(r.id + ":priority", "/api/doc/rules/move", { id: r.id, priority: sel.value }, sel.value);
+      });
+      acts.append(sel);
+
+      const tog = el("button", "btn btn-sm btn-ghost", r.enabled ? t("docs.rules.disable") : t("docs.rules.enable"));
+      tog.type = "button";
+      tog.addEventListener("click", () => {
+        const want = !r.enabled;
+        edits.action(r.id + ":enabled", "/api/doc/rules/toggle", { id: r.id, enabled: want }, want ? t("docs.rules.enable") : t("docs.rules.disable"));
+        tog.classList.add("btn-staged");
+      });
+      acts.append(tog);
+
+      const rm = el("button", "btn btn-sm btn-ghost", t("docs.rules.remove"));
+      rm.type = "button";
+      rm.addEventListener("click", () => {
+        edits.action(r.id + ":remove", "/api/doc/rules/remove", { id: r.id }, t("docs.rules.remove"));
+        row.classList.add("rule-removing");
+      });
+      acts.append(rm);
+      row.append(acts);
+      grp.append(row);
+    }
+    c.append(grp);
+  }
+
+  // Add is ONE line plus a priority. A multi-line paste is refused by the CLI,
+  // and the CLI's own message is what the user is shown.
+  const add = el("div", "rule-add");
+  const psel = el("select", "select");
+  for (const p of d.priorities || ["P0", "P1", "P2"]) {
+    const o = el("option", null, p);
+    o.value = p;
+    psel.append(o);
+  }
+  const input = el("input", "text-input");
+  input.type = "text";
+  input.placeholder = t("docs.rules.addPlaceholder");
+  const addBtn = el("button", "btn btn-sm", t("docs.rules.add"));
+  addBtn.type = "button";
+  let addSeq = 0;
+  addBtn.addEventListener("click", () => {
+    const text = input.value.trim();
+    if (!text) return toast(t("docs.rules.addEmpty"), "bad");
+    edits.action("new:" + ++addSeq, "/api/doc/rules/add", { priority: psel.value, text }, psel.value + " " + text);
+    input.value = "";
+  });
+  add.append(psel, input, addBtn);
+  c.append(add);
+
+  // ALWAYS shown, never on hover.
+  c.append(el("div", "note rule-boundary", d.boundary));
+
+  const bar = editBar(edits, {
+    onApply: async (btn) => {
+      await applyActions(edits, btn);
+      edits.clear();
+      renderDocs(body);
+    },
+    onReset: () => renderDocs(body),
+    onCancel: () => {
+      edits.clear();
+      renderDocs(body);
+    },
+    resetLabel: t("docs.rules.refresh"),
+  });
+  c.append(bar);
+  return c;
+}
+
+// The set FROZEN into ONE document, and every rule that moved since. A drift
+// NAMES each one — coverage-relative, never a "rules changed" boolean.
+function docFrozenRulesCard(rules, slug, body) {
+  const c = card(t("docs.rules.frozenTitle"));
+  if (!rules.ok) {
+    c.append(el("div", "note", t("docs.rules.unavailable")));
+    return c;
+  }
+  const drift = rules.drift || { added: [], removed: [], changed: [], drifted: false };
+  const row = el("div", "row-actions");
+  row.append(chip(t("docs.rules.frozenChip", { n: (rules.frozen || []).length }), drift.drifted ? "warn" : "ok"));
+  if (drift.drifted) {
+    const n = drift.added.length + drift.removed.length + drift.changed.length;
+    row.append(el("span", "note", t("docs.rules.driftedN", { n })));
+    const sync = el("button", "btn btn-sm", t("docs.rules.sync"));
+    sync.type = "button";
+    sync.addEventListener("click", () => docSyncRulesModal(rules, slug, body));
+    row.append(sync);
+  } else {
+    row.append(el("span", "note", t("docs.rules.frozenClean")));
+  }
+  c.append(row);
+
+  if ((rules.frozen || []).length) {
+    const list = el("div", "rule-group");
+    for (const r of rules.frozen) {
+      const rr = el("div", "rule-row");
+      rr.append(chip(r.priority, DOC_RULE_KIND[r.priority] || ""));
+      const mid = el("div", "rule-mid");
+      mid.append(el("div", "rule-text", r.text));
+      mid.append(el("div", "rule-id", r.id));
+      rr.append(mid);
+      list.append(rr);
+    }
+    c.append(list);
+  }
+
+  // A drift that names nothing is a drift nobody can act on.
+  if (drift.drifted) {
+    const dl = el("div", "rule-drift");
+    for (const r of drift.added) dl.append(el("div", "rule-drift-row", "+ " + r.priority + "  " + r.id + "  " + r.text));
+    for (const r of drift.removed) dl.append(el("div", "rule-drift-row", "− " + r.priority + "  " + r.id + "  " + r.text));
+    for (const r of drift.changed)
+      dl.append(el("div", "rule-drift-row", "~ " + r.id + "  " + r.from.priority + " “" + r.from.text + "” → " + r.to.priority + " “" + r.to.text + "”"));
+    c.append(dl);
+  }
+  c.append(el("div", "note", rules.boundary));
+  return c;
+}
+
+// A re-freeze is FREE, and it re-writes NOTHING. The confirmation names the
+// sections that predate the change, because whether any of them needs redoing
+// is the user's call and not ORC's.
+function docSyncRulesModal(rules, slug, body) {
+  const b = frag();
+  b.append(el("p", null, t("docs.rules.syncBody")));
+  b.append(el("div", "note", t("docs.rules.syncNever")));
+  b.append(el("pre", "cmd", `orc doc rules ${slug} --sync`));
+  modal({
+    title: t("docs.rules.sync"),
+    body: b,
+    actions: {
+      [t("common.cancel")]: null,
+      [t("docs.rules.sync")]: async () => {
+        const r = await post("/api/doc/rules/sync", { slug });
+        toast(r.ok ? t("docs.rules.synced") : t("docs.rules.syncFailed"), r.ok ? "ok" : "bad", r.output);
+        renderDocs(body);
+      },
+    },
+  });
+}
+
+// THE RUN MAP. Waves, agents, stops, and the four token kinds NEVER blended —
+// `cache_read` stays visibly separate, which is why the bar is stacked.
+function docForecastCard(fc, slug, onRecompute) {
+  const recompute = el("div", "row-actions");
+  // A FREE action gets a button. Nothing in this card is paid, so nothing in it
+  // is a copy-able command.
+  const btn = el("button", "btn btn-sm btn-ghost", t("docs.forecast.recompute"));
+  btn.type = "button";
+  btn.addEventListener("click", () => onRecompute());
+  recompute.append(btn);
+  const c = card(t("docs.forecast.title"), recompute);
+
+  if (!fc.ok) {
+    // A refusal is an ANSWER and it keeps its slot. `no-history` is the CLI
+    // saying it will not invent numbers.
+    c.append(el("div", "note", fc.hint || t("docs.forecast.none")));
+    c.append(laneCommand(`orc doc forecast ${slug} --naive`, t("docs.forecast.naiveWhy")));
+    return c;
+  }
+
+  const head = el("div", "row-actions");
+  head.append(chip(tn((fc.waves || []).length, "docs.forecast.waveN"), "info"));
+  head.append(chip(tn(fc.stops, "docs.forecast.stopN"), fc.stops > 1 ? "warn" : ""));
+  if (fc.write_mode) head.append(chip(fc.write_mode, "info"));
+  c.append(head);
+
+  const tbl = el("div", "fc-table");
+  for (const w of fc.waves || []) {
+    const r = el("div", "fc-row");
+    r.append(el("span", "fc-wave", "wave " + w.n));
+    r.append(el("span", "fc-secs", (w.sections || []).join(" + ")));
+    r.append(el("span", "fc-lines", "~" + w.budget_lines + "L"));
+    r.append(el("span", "fc-agents", tn(w.agents, "docs.forecast.agentN")));
+    tbl.append(r);
+  }
+  c.append(tbl);
+
+  c.append(docTokenBar(fc.tokens && fc.tokens.p50));
+  c.append(
+    el(
+      "div",
+      "note",
+      t("docs.forecast.range", {
+        p50: fc.weighted ? kNum(fc.weighted.p50) : "—",
+        p90: fc.weighted ? kNum(fc.weighted.p90) : "—",
+        usd: fc.usd && fc.usd.p50 !== null ? "$" + fc.usd.p50.toFixed(2) : "—",
+      })
+    )
+  );
+  c.append(el("div", "note", t("docs.forecast.samples", { write: fc.samples.write, check: fc.samples.check, min: fc.min_samples })));
+  // NOT optional chrome.
+  if ((fc.low_confidence_roles || []).length)
+    c.append(el("div", "note bad", t("docs.forecast.lowConfidence", { roles: fc.low_confidence_roles.join(", ") })));
+  if (fc.naive) c.append(el("div", "note bad", t("docs.forecast.naive")));
+  if (fc.price_table && fc.price_table.stale)
+    c.append(el("div", "note bad", t("docs.forecast.stalePrice", { as_of: fc.price_table.as_of, days: fc.price_table.age_days })));
+  if (fc.quota && !fc.quota.available) c.append(el("div", "note", fc.quota.reason));
+  return c;
+}
+
+// WHAT IT COST, joined across every session. A section nothing joins reads an
+// em dash and KEEPS ITS SLOT — an unknown reported as a number is worse than an
+// unknown reported as unknown.
+function docCostCard(cost) {
+  const c = card(t("docs.cost.title"));
+  if (!cost.ok) {
+    c.append(el("div", "note", cost.hint || t("docs.cost.none")));
+    return c;
+  }
+  const head = el("div", "row-actions");
+  head.append(chip(tn((cost.runs || []).length, "docs.cost.runN"), "info"));
+  head.append(chip(t("docs.cost.joined", { joined: cost.joined, total: cost.dispatches }), cost.joined < cost.dispatches ? "warn" : "ok"));
+  c.append(head);
+
+  c.append(docTokenBar(cost.total && cost.total.tokens));
+  c.append(
+    el(
+      "div",
+      "note",
+      t("docs.cost.total", {
+        weighted: kNum(cost.total.weighted),
+        raw: kNum(cost.total.raw),
+        usd: cost.total.usd === null ? "—" : "$" + cost.total.usd.toFixed(2),
+      })
+    )
+  );
+
+  const tbl = el("div", "fc-table");
+  for (const s of cost.by_section || []) {
+    const r = el("div", "fc-row" + (s.joined ? "" : " fc-row-unknown"));
+    r.append(el("span", "fc-wave", s.id));
+    r.append(el("span", "fc-secs", s.heading));
+    r.append(el("span", "fc-lines", String(s.dispatches)));
+    r.append(el("span", "fc-agents", s.joined ? kNum(s.weighted) : "—"));
+    tbl.append(r);
+  }
+  c.append(tbl);
+
+  // ALWAYS printed, including when zero.
+  c.append(
+    el("div", "note", t("docs.cost.unattributed", { blocks: cost.unattributed.blocks }))
+  );
+  for (const h of cost.honesty || []) c.append(el("div", "note", h));
+  return c;
+}
+
+// The four token kinds, stacked and never blended. `cache_read` is usually the
+// largest count at ~0.1x the price, which is exactly why it stays its own band
+// instead of being folded into one number.
+const DOC_VEC_KINDS = ["input", "cache_write", "cache_read", "output"];
+function docTokenBar(vec) {
+  const box = el("div", "tok-bar-wrap");
+  if (!vec) {
+    box.append(el("div", "note", "—"));
+    return box;
+  }
+  const total = DOC_VEC_KINDS.reduce((a, k) => a + (vec[k] || 0), 0);
+  const bar = el("div", "tok-bar");
+  for (const k of DOC_VEC_KINDS) {
+    const seg = el("div", "tok-seg tok-" + k.replace("_", "-"));
+    // A CUSTOM PROPERTY, not an inline width: the panel's CSP is
+    // `style-src 'self'` and a style attribute is blocked outright. Same
+    // technique as the challenge convergence bar.
+    seg.style.setProperty("--w", total ? (((vec[k] || 0) / total) * 100).toFixed(2) + "%" : "0%");
+    seg.title = k + " " + kNum(vec[k] || 0);
+    bar.append(seg);
+  }
+  box.append(bar);
+  const legend = el("div", "tok-legend");
+  for (const k of DOC_VEC_KINDS) {
+    const item = el("span", "tok-legend-item");
+    item.append(el("span", "tok-dot tok-" + k.replace("_", "-")));
+    // The KIND NAMES are the CLI's own field names — never translated.
+    item.append(document.createTextNode(k + " " + kNum(vec[k] || 0)));
+    legend.append(item);
+  }
+  box.append(legend);
+  return box;
+}
+
+// Thousands, the way the CLI's own `kTok` prints them. The panel does not do
+// arithmetic on a token count — it only shortens one for display.
+function kNum(n) {
+  const v = Number(n) || 0;
+  if (v >= 1_000_000) return (v / 1_000_000).toFixed(1) + "M";
+  if (v >= 1000) return Math.round(v / 1000) + "k";
+  return String(v);
+}
+
 function docHealth(lint) {
   const wrap = el("div", "stack stack-sm");
   const chips = el("div", "row-actions");
