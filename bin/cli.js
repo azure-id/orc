@@ -75,9 +75,37 @@ function positionals() {
 // CLI scriptable.
 const wantsJson = () => flag("--json") === true;
 
+// stdout is a PIPE whenever something reads us — and `orc ui` reads every
+// panel through one. On macOS and Linux a pipe write is ASYNCHRONOUS, so
+// `process.exit()` throws away whatever has not flushed yet; on Windows it is
+// synchronous, which is why this never showed up in development. The panel
+// asked for `wiki coverage --json`, the CLI computed a perfect 30 KB object,
+// and the server received the first 9 KB of it: valid JSON in, an unparseable
+// fragment out, a 500, and a Coverage tab reporting that the repo had neither
+// a wiki nor a git repository. `wiki status --json` survived at 12 KB purely
+// because it prints and RETURNS instead of exiting.
+//
+// So write through fd 1 SYNCHRONOUSLY, and the exit that follows cannot
+// outrun it. Partial writes are real on a pipe (the kernel takes what fits),
+// hence the loop; EAGAIN is a reader that has not drained yet, EPIPE is one
+// that left.
+function writeStdoutSync(str) {
+  const buf = Buffer.from(str, "utf8");
+  let off = 0;
+  while (off < buf.length) {
+    try {
+      off += fs.writeSync(1, buf, off, buf.length - off);
+    } catch (e) {
+      if (e.code === "EAGAIN") continue;
+      if (e.code === "EPIPE") return; // the reader is gone; nothing left to say
+      throw e;
+    }
+  }
+}
+
 // Print the object and (optionally) exit with the human path's code.
 function emitJson(obj, exitCode) {
-  process.stdout.write(JSON.stringify(obj, null, 2) + "\n");
+  writeStdoutSync(JSON.stringify(obj, null, 2) + "\n");
   if (exitCode !== undefined) process.exit(exitCode);
 }
 

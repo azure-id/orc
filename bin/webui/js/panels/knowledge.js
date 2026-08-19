@@ -36,15 +36,15 @@ let KN_TAB = "wiki";
 async function renderKnowledge(body) {
   body.replaceChildren(skeleton(6));
   const [wikiRes, impactRes, patRes, gotRes, planRes, debtRes, usageRes, docsRes, covRes] = await Promise.all([
-    read("/api/wiki").catch(() => ({ data: null })),
-    read("/api/wiki/impact").catch(() => ({ data: null })),
-    read("/api/patterns").catch(() => ({ data: null })),
-    read("/api/gotchas").catch(() => ({ data: null })),
-    read("/api/wiki/plan").catch(() => ({ data: null })),
-    read("/api/wiki/debt").catch(() => ({ data: null })),
-    read("/api/wiki/usage").catch(() => ({ data: null })),
-    read("/api/wiki/docs").catch(() => ({ data: null })),
-    read("/api/wiki/coverage").catch(() => ({ data: null })),
+    read("/api/wiki").catch((e) => ({ data: null, error: e })),
+    read("/api/wiki/impact").catch((e) => ({ data: null, error: e })),
+    read("/api/patterns").catch((e) => ({ data: null, error: e })),
+    read("/api/gotchas").catch((e) => ({ data: null, error: e })),
+    read("/api/wiki/plan").catch((e) => ({ data: null, error: e })),
+    read("/api/wiki/debt").catch((e) => ({ data: null, error: e })),
+    read("/api/wiki/usage").catch((e) => ({ data: null, error: e })),
+    read("/api/wiki/docs").catch((e) => ({ data: null, error: e })),
+    read("/api/wiki/coverage").catch((e) => ({ data: null, error: e })),
   ]);
   const d = {
     wiki: wikiRes.data || {},
@@ -56,6 +56,12 @@ async function renderKnowledge(body) {
     usage: usageRes.data,
     docs: docsRes.data,
     coverage: covRes.data,
+    // A read that FAILED is not the same as a read that came back empty, and
+    // rendering them identically is what turned a truncated 30 KB payload into
+    // "this repo has no wiki and no git" (v0.49.4). The server already puts the
+    // CLI's own words in the 500 body; the panel just has to stop discarding
+    // them.
+    errors: { coverage: covRes.error || null, docs: docsRes.error || null },
   };
 
   const out = frag();
@@ -198,7 +204,7 @@ function knWikiTab(d, body) {
   // THE DOC TABLE — the headline addition. A row EXPANDS IN PLACE (one at a
   // time, detail fetched on first open); there is no detail box below the
   // table, which is the Runs-row rule.
-  out.append(wikiDocsCard(d.docs));
+  out.append(d.errors && d.errors.docs ? failBox(d.errors.docs) : wikiDocsCard(d.docs));
 
   // impact, unchanged, moved onto this tab
   const imp = d.impact;
@@ -375,6 +381,14 @@ function knCoverageTab(d) {
   const out = frag();
   const cov = d.coverage;
   const c = card(t("knowledge.coverage.title"));
+  // The read itself failed — a crash, a timeout, output the server could not
+  // parse. That is a BROKEN PANEL, not a repo without a wiki, and it must never
+  // again be reported as the latter.
+  if (d.errors && d.errors.coverage) {
+    c.append(failBox(d.errors.coverage));
+    out.append(c);
+    return out;
+  }
   if (!cov || !cov.ok) {
     c.append(empty(t("knowledge.coverage.na"), (cov && cov.hint) || t("knowledge.coverage.naHint")));
     out.append(c);
@@ -601,7 +615,7 @@ function knMemoryTab(d, body) {
   load.type = "button";
   load.addEventListener("click", async () => {
     load.disabled = true;
-    const r = await read("/api/gotchas/archived").catch(() => ({ data: null }));
+    const r = await read("/api/gotchas/archived").catch((e) => ({ data: null, error: e }));
     const a = r.data;
     const box = el("div", "stack stack-sm");
     if (!a || !a.count) box.append(el("div", "note", t("knowledge.archive.empty")));
@@ -630,7 +644,7 @@ function gotchaPruneBox(g, body) {
   apply.disabled = true;
   const list = el("div", "stack stack-sm");
   preview.addEventListener("click", async () => {
-    const r = await read("/api/gotcha/prune/preview").catch(() => ({ data: null }));
+    const r = await read("/api/gotcha/prune/preview").catch((e) => ({ data: null, error: e }));
     const d = r.data;
     list.replaceChildren();
     if (!d || !(d.would_archive || []).length) {
@@ -673,7 +687,7 @@ function knPeersTab(d) {
 }
 
 async function renderPeers(host) {
-  const r = await read("/api/crosslink").catch(() => ({ data: null }));
+  const r = await read("/api/crosslink").catch((e) => ({ data: null, error: e }));
   const d = r.data;
   if (!d) return;
   if (!d.configured || !(d.nodes || []).length) {

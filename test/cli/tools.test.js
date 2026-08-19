@@ -299,3 +299,29 @@ test("pr stack status: the exit code IS the contract (0 READY, 1 absent | unfill
     rmrf(root);
   }
 });
+
+// A LARGE `--json` payload must survive the pipe. `emitJson` used to
+// `process.stdout.write(...)` and then `process.exit(...)`; on macOS and Linux a
+// pipe write is asynchronous, so the exit discarded the tail. `orc ui` reads
+// every panel through a pipe, so `wiki coverage --json` (30 KB) arrived as a
+// 9 KB fragment, failed to parse, 500'd, and the Coverage tab reported that the
+// repo had neither a wiki nor a git repository (v0.49.4).
+test("a large --json payload is not truncated when stdout is a pipe", () => {
+  // spawnSync gives the child a PIPE for stdout — the exact condition.
+  const r = cli(["config", "list", "--json"]);
+  assert.strictEqual(r.status, 0);
+  assert.ok(r.stdout.length > 20000, "config list --json should be a big payload, got " + r.stdout.length);
+  const parsed = JSON.parse(r.stdout); // throws on a truncated tail
+  assert.ok(Array.isArray(parsed.keys) || typeof parsed === "object");
+});
+
+// Windows pipes are synchronous, so the runtime test above cannot fail there.
+// This one can: the fix is that `emitJson` writes through fd 1 synchronously,
+// and nothing may quietly put the async write back.
+test("emitJson writes stdout synchronously before it exits", () => {
+  const src = fs.readFileSync(path.join(REPO, "bin", "cli.js"), "utf8");
+  const fn = src.slice(src.indexOf("function emitJson"), src.indexOf("function resolveClaudeDir"));
+  assert.match(fn, /writeStdoutSync\(/, "emitJson must use the synchronous writer");
+  assert.doesNotMatch(fn, /process\.stdout\.write/, "an async write before process.exit truncates on a pipe");
+  assert.match(src, /function writeStdoutSync\(str\) \{[\s\S]*fs\.writeSync\(1,/, "writeStdoutSync must write fd 1");
+});

@@ -10,6 +10,30 @@ Format: `### v<version> — <title> _(<date>)_`.
 
 ---
 
+### v0.49.4 — the panel was being handed half an answer _(2026-08-20)_
+
+One bug, and it could hit any `--json` read big enough.
+
+- **Fixed: a large `--json` payload was truncated whenever something read it
+  through a pipe.** `emitJson` wrote to stdout and then called `process.exit()`.
+  On macOS and Linux a pipe write is asynchronous, so the exit threw away
+  whatever had not flushed — and `orc ui` reads every panel through a pipe. On a
+  1,100-file repo `orc wiki coverage --json` computed a perfect 30 KB object, the
+  server received the first 9 KB, `JSON.parse` failed, and **Knowledge ▸
+  Coverage** reported that the repo had neither a registered wiki nor a git
+  repository — on a wiki that was FRESH and 39% covered. `orc wiki docs` was hit
+  the same way; `wiki status` escaped only because it prints and returns instead
+  of exiting. Windows pipes are synchronous, which is why it never showed up in
+  development. Every `--json` read now writes through fd 1 synchronously.
+- **The Knowledge panel no longer reports a broken read as an empty repo.** A
+  failed request renders the CLI's own reason and output, the way every other
+  panel has since v0.49.2 — the generic "it needs a registered wiki and a git
+  repository" line is for a repo that actually has neither.
+- **Also: git output is no longer capped at Node's 1 MB default** (v0.49.3),
+  which would have truncated `git ls-files` on a repo of roughly 25,000 files.
+
+---
+
 ### v0.49.3 — coverage on a large repo _(2026-08-19)_
 
 One fix, and the bigger the repo the more it mattered.
