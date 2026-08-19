@@ -6,14 +6,14 @@
 
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
-![Version](https://img.shields.io/badge/version-0.49.2-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.49.3-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
 ![Dependencies](https://img.shields.io/badge/dependencies-zero-lightgrey.svg?style=for-the-badge)
 ![GitHub stars](https://img.shields.io/github/stars/azure-id/orc?style=for-the-badge&color=yellow)
 
-**Latest: v0.49.2** · updated 2026-08-18 · [full changelog](CHANGELOG.md)
+**Latest: v0.49.3** · updated 2026-08-19 · [full changelog](CHANGELOG.md)
 
 **🇮🇩 [Baca dalam Bahasa Indonesia](README-id.md)**
 
@@ -439,59 +439,25 @@ a current audit: [EVAL-REPORT.md](EVAL-REPORT.md).
 **Full history: [CHANGELOG.md](CHANGELOG.md)** — or `orc changelog`, which prints
 only what is newer than the version you have.
 
-### v0.49.2 — house rules, a run map before you pay, and three defects _(2026-08-18)_
+### v0.49.3 — coverage on a large repo _(2026-08-19)_
 
-Quality of life on `/orc-doc`, plus three bugs — one of which was breaking a
-panel outright. **Zero new agents, zero new skills.**
+One fix, and the bigger the repo the more it mattered.
 
-- **Your project's own house rules.** A P0/P1/P2 ledger of what a document says
-  and how it reads — *"open with a one-paragraph summary"*, *"money always
-  carries its currency"* — stored verbatim, edited in `orc ui`, and read **first
-  in every dispatched slice**, above ORC's own rules. Each document **freezes**
-  the set it started with, so a rule you change at wave 3 cannot silently
-  invalidate half a document; `orc doc rules <slug>` names every rule that moved
-  since, and `--sync` re-freezes and tells you which sections predate it. It
-  re-writes nothing on its own. House rules govern **content**, never how the
-  lane runs — and ORC declares that boundary rather than pretending to detect it.
-- **Four rules ORC now applies to every document, all free.** No questions or
-  `TBD`s in the body (a section your outline calls *open questions* is exempt);
-  missing information is `N/A` plus one short line, never filler; a section well
-  over its planned length is a finding; and **no `src/foo.ts:42`, no
-  `./relative`, no `localhost`** — the person reading a PRD has no repository.
-  Fenced code is always exempt, and `doc_local_refs` turns the last one down for
-  an internal runbook.
-- **A template you supply is now a cage, not a suggestion.** A heading it never
-  had is a lint error, `orc doc parts --confirm` refuses the part that grew one,
-  and the audit reports it. `--template-soft` opts out.
-- **`orc doc forecast` tells you what the whole document costs — once, before the
-  first paid wave.** Waves, agents, how many times it will stop, and a token
-  range with its sample count. With no history it **refuses rather than invent**,
-  and offers a price-table floor instead.
-- **`orc doc cost` finally answers "what did this document cost"** — joined
-  across every session it spanned, per role and per section. A section nothing
-  can be joined to reads `—`, never `0`.
-- **Every edit round now names the file and the line**
-  (`sections/03-scope.md · line 42 · long-sentence`), part-local, so you can
-  follow along in `sections/`.
-- **Fixed: the Overview "waiting for you" card printed over itself.** A
-  three-child card in a four-column grid — the chip landed in the caret column
-  and the slug wrapped one word per line. Every card variant now declares its own
-  columns, and the age column carries the age it always knew.
-- **Fixed: a run could never be marked done.** `orc run close <slug> --reason
-  "…"` moves `RESUME.md` aside (it deletes nothing) and records why, so an
-  abandoned run stops counting as waiting — and stops blocking the upgrade
-  preview. `orc run reopen` puts it back. It is `closed`, never `done`: the disk
-  cannot prove a run finished.
-- **Fixed: one corrupt challenge ledger 500'd the whole panel.** It is now a row
-  that says `UNREADABLE`, the healthy cycles stay visible, and **no `--json` read
-  can ever emit a stack trace again** — a throw comes back as an object with the
-  reason in it.
+- **Fixed: `orc wiki coverage` reported "not a git repository" on a large,
+  freshly refreshed wiki.** Every git call ORC makes ran through `spawnSync` on
+  Node's **1 MB** default output buffer. `git ls-files` in a big repo prints more
+  than that, the child is killed with `ENOBUFS`, and the exit status comes back
+  `null` — which the code read as *there is no git here*. So `orc ui` ▸
+  **Knowledge** ▸ **Coverage** showed no numbers at all on the repos where the
+  number matters most, and `orc wiki impact` was one wide diff away from the same
+  failure. The buffer is now **256 MB**, and a spawn error is read as an error
+  instead of being inferred from the status code.
 
-Before that: **v0.49.1 — the challenge council, and a `--json` that stops
-throwing things away**, **v0.49.0 — the document is a folder, and the file is a
-build artifact** (`/orc-doc`), **v0.48.1 — one file per thing, and a document
-that can be finished**, and **v0.48.0 — a document long enough to end a session,
-written anyway**.
+Before that: **v0.49.2 — house rules, a run map before you pay, and three
+defects**, **v0.49.1 — the challenge council, and a `--json` that stops throwing
+things away**, **v0.49.0 — the document is a folder, and the file is a build
+artifact** (`/orc-doc`), and **v0.48.1 — one file per thing, and a document that
+can be finished**.
 [Read them in the changelog](CHANGELOG.md).
 
 ---

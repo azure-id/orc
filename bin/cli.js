@@ -2997,9 +2997,16 @@ function docDescription(text) {
   return d.length > 120 ? d.slice(0, 117).trimEnd() + "…" : d;
 }
 
+// spawnSync default maxBuffer is 1 MB. `git ls-files` in a large repo blows
+// past that, spawnSync kills the child with ENOBUFS, and `status` comes back
+// null — indistinguishable from "not a git repository", which is exactly how
+// `orc wiki coverage` reported a blank page on the repos where the number
+// matters most. Size the buffer for a real repo and read `error` for the
+// failure signal instead of inferring it from the status code.
+const GIT_MAX_BUFFER = 256 * 1024 * 1024;
 function gitIn(root, argv) {
-  const r = spawnSync("git", argv, { cwd: root, encoding: "utf8" });
-  if (r.status !== 0 || !r.stdout) return null;
+  const r = spawnSync("git", argv, { cwd: root, encoding: "utf8", maxBuffer: GIT_MAX_BUFFER });
+  if (r.error || r.status !== 0 || !r.stdout) return null;
   return r.stdout.trim();
 }
 
@@ -3738,8 +3745,9 @@ function wikiImpact(claudeDir) {
   const diff = spawnSync("git", ["diff", "--name-only", `${meta.scan_commit}..HEAD`], {
     cwd: paths.root,
     encoding: "utf8",
+    maxBuffer: GIT_MAX_BUFFER,
   });
-  if (diff.status !== 0)
+  if (diff.error || diff.status !== 0)
     cannot(
       "git-failed",
       `⚠ git diff failed (is scan_commit ${String(meta.scan_commit).slice(0, 8)} still resolvable here?)`
@@ -3759,8 +3767,9 @@ function wikiImpact(claudeDir) {
     const r2 = spawnSync("git", ["diff", "--name-only", `${anchorC}..HEAD`], {
       cwd: paths.root,
       encoding: "utf8",
+      maxBuffer: GIT_MAX_BUFFER,
     });
-    if (r2.status !== 0) return changed; // unresolvable anchor → global view
+    if (r2.error || r2.status !== 0) return changed; // unresolvable anchor → global view
     return (r2.stdout || "").split(/\r?\n/).map((x) => x.trim()).filter(Boolean);
   };
 

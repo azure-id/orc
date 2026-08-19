@@ -10,6 +10,22 @@ Format: `### v<version> — <title> _(<date>)_`.
 
 ---
 
+### v0.49.3 — coverage on a large repo _(2026-08-19)_
+
+One fix, and the bigger the repo the more it mattered.
+
+- **Fixed: `orc wiki coverage` reported "not a git repository" on a large,
+  freshly refreshed wiki.** Every git call ORC makes ran through `spawnSync` on
+  Node's **1 MB** default output buffer. `git ls-files` in a big repo prints more
+  than that, the child is killed with `ENOBUFS`, and the exit status comes back
+  `null` — which the code read as *there is no git here*. So `orc ui` ▸
+  **Knowledge** ▸ **Coverage** showed no numbers at all on the repos where the
+  number matters most, and `orc wiki impact` was one wide diff away from the same
+  failure. The buffer is now **256 MB**, and a spawn error is read as an error
+  instead of being inferred from the status code.
+
+---
+
 ### v0.49.2 — house rules, a run map before you pay, and three defects _(2026-08-18)_
 
 Quality of life on `/orc-doc`, plus three bugs — one of which was breaking a
