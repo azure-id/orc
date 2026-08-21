@@ -897,10 +897,20 @@ function docRevealBtn(slug, id, pane) {
 
 const DOC_RULE_KIND = { P0: "bad", P1: "warn", P2: "" };
 
-// The PROJECT ledger, at the top of the panel. Writes are STAGED and BATCHED —
-// the v0.44.1 rule: nothing is written until Apply, the pending edits are NAMED,
-// Discard renders only while dirty, the writes run one at a time in staged
-// order, and a refused write never aborts the rest.
+// The PROJECT ledger, at the top of the panel.
+//
+// v0.49.5 — IT IS A TEXT CONFIG, SO IT IS EDITED AS TEXT. The first cut was a
+// form: a priority dropdown, a one-line input, an Add button, and a row per
+// rule with Enable / Disable / Remove beside it. Filing a standing instruction
+// as numbered rows is work the tool invented for itself, and no real P0 fits on
+// one line — so the panel now shows the FILE, in one textarea, with the P0 / P1
+// / P2 headings already in it. Type as much as you want under each one.
+//
+// The panel still decides nothing: the text comes from `orc doc rules --json`
+// and goes back through `orc doc rules set-all`, which is the only writer. The
+// v0.44.1 rule holds unchanged — nothing is written until Apply, the pending
+// edit is NAMED, Discard renders only while dirty, and a refused write is
+// reported by the CLI's own words.
 async function docRulesCard(body) {
   const c = card(t("docs.rules.title"));
   let d = null;
@@ -911,88 +921,44 @@ async function docRulesCard(body) {
     c.append(el("div", "note", t("docs.rules.unavailable")));
     return c;
   }
-  const rules = d.rules || [];
   const edits = editSet(() => bar.paint());
+  const original = String(d.text || d.template || "");
 
-  c.append(el("div", "note", d.line));
-
-  if (!rules.length) c.append(empty(t("docs.rules.none"), t("docs.rules.noneHint")));
-
-  // P0 → P1 → P2, the CLI's own order. The priority words are the CLI's and are
-  // never translated.
+  const head = el("div", "row-actions");
+  // The CLI's own summary line, never a friendlier synonym.
+  head.append(chip(d.line, d.empty ? "" : "ok"));
   for (const pr of d.priorities || ["P0", "P1", "P2"]) {
-    const rows = rules.filter((r) => r.priority === pr);
-    if (!rows.length) continue;
-    const grp = el("div", "rule-group");
-    grp.append(el("div", "rule-group-head", pr));
-    for (const r of rows) {
-      const row = el("div", "rule-row" + (r.enabled ? "" : " rule-off"));
-      row.append(chip(r.priority, DOC_RULE_KIND[r.priority] || ""));
-      const mid = el("div", "rule-mid");
-      // VERBATIM. The user's own words, never re-wrapped into ORC's voice.
-      mid.append(el("div", "rule-text", r.text));
-      mid.append(el("div", "rule-id", r.id));
-      row.append(mid);
-
-      const acts = el("div", "row-actions");
-      const sel = el("select", "select");
-      for (const p of d.priorities || ["P0", "P1", "P2"]) {
-        const o = el("option", null, p);
-        o.value = p;
-        if (p === r.priority) o.selected = true;
-        sel.append(o);
-      }
-      sel.addEventListener("change", () => {
-        if (sel.value === r.priority) edits.drop(r.id + ":priority");
-        else edits.action(r.id + ":priority", "/api/doc/rules/move", { id: r.id, priority: sel.value }, sel.value);
-      });
-      acts.append(sel);
-
-      const tog = el("button", "btn btn-sm btn-ghost", r.enabled ? t("docs.rules.disable") : t("docs.rules.enable"));
-      tog.type = "button";
-      tog.addEventListener("click", () => {
-        const want = !r.enabled;
-        edits.action(r.id + ":enabled", "/api/doc/rules/toggle", { id: r.id, enabled: want }, want ? t("docs.rules.enable") : t("docs.rules.disable"));
-        tog.classList.add("btn-staged");
-      });
-      acts.append(tog);
-
-      const rm = el("button", "btn btn-sm btn-ghost", t("docs.rules.remove"));
-      rm.type = "button";
-      rm.addEventListener("click", () => {
-        edits.action(r.id + ":remove", "/api/doc/rules/remove", { id: r.id }, t("docs.rules.remove"));
-        row.classList.add("rule-removing");
-      });
-      acts.append(rm);
-      row.append(acts);
-      grp.append(row);
-    }
-    c.append(grp);
+    const n = (d.counts || {})[pr] || 0;
+    if (n) head.append(chip(pr + " " + n, DOC_RULE_KIND[pr] || ""));
   }
+  c.append(head);
 
-  // Add is ONE line plus a priority. A multi-line paste is refused by the CLI,
-  // and the CLI's own message is what the user is shown.
-  const add = el("div", "rule-add");
-  const psel = el("select", "select");
-  for (const p of d.priorities || ["P0", "P1", "P2"]) {
-    const o = el("option", null, p);
-    o.value = p;
-    psel.append(o);
-  }
-  const input = el("input", "text-input");
-  input.type = "text";
-  input.placeholder = t("docs.rules.addPlaceholder");
-  const addBtn = el("button", "btn btn-sm", t("docs.rules.add"));
-  addBtn.type = "button";
-  let addSeq = 0;
-  addBtn.addEventListener("click", () => {
-    const text = input.value.trim();
-    if (!text) return toast(t("docs.rules.addEmpty"), "bad");
-    edits.action("new:" + ++addSeq, "/api/doc/rules/add", { priority: psel.value, text }, psel.value + " " + text);
-    input.value = "";
+  // A migration is never silent, and it says what it did NOT carry over.
+  if (d.migrated)
+    c.append(
+      el(
+        "div",
+        "note warn",
+        t("docs.rules.migrated", { from: d.migrated.from, n: d.migrated.dropped_disabled || 0 })
+      )
+    );
+
+  c.append(el("div", "note", t("docs.rules.howto")));
+
+  const ta = el("textarea", "rule-editor");
+  ta.value = original;
+  ta.spellcheck = false;
+  ta.rows = 18;
+  ta.setAttribute("aria-label", t("docs.rules.title"));
+  ta.addEventListener("input", () => {
+    if (ta.value === original) edits.drop("doc-house-rules.md");
+    else edits.action("doc-house-rules.md", "/api/doc/rules/setAll", { text: ta.value }, t("docs.rules.staged"));
   });
-  add.append(psel, input, addBtn);
-  c.append(add);
+  c.append(ta);
+
+  // The file path is CLI data. A user who would rather open it in their own
+  // editor should not have to go hunting for it.
+  c.append(el("div", "note rule-path", d.file));
 
   // ALWAYS shown, never on hover.
   c.append(el("div", "note rule-boundary", d.boundary));
@@ -1014,20 +980,22 @@ async function docRulesCard(body) {
   return c;
 }
 
-// The set FROZEN into ONE document, and every rule that moved since. A drift
-// NAMES each one — coverage-relative, never a "rules changed" boolean.
+// The text FROZEN into ONE document, and every priority block that moved since.
+// A drift NAMES the block and shows what the project says now — coverage-
+// relative, never a "rules changed" boolean.
 function docFrozenRulesCard(rules, slug, body) {
   const c = card(t("docs.rules.frozenTitle"));
   if (!rules.ok) {
     c.append(el("div", "note", t("docs.rules.unavailable")));
     return c;
   }
-  const drift = rules.drift || { added: [], removed: [], changed: [], drifted: false };
+  const drift = rules.drift || { changed: [], drifted: false };
+  const priorities = rules.priorities || ["P0", "P1", "P2"];
+  const frozen = rules.frozen || {};
   const row = el("div", "row-actions");
-  row.append(chip(t("docs.rules.frozenChip", { n: (rules.frozen || []).length }), drift.drifted ? "warn" : "ok"));
+  row.append(chip(rules.line, drift.drifted ? "warn" : "ok"));
   if (drift.drifted) {
-    const n = drift.added.length + drift.removed.length + drift.changed.length;
-    row.append(el("span", "note", t("docs.rules.driftedN", { n })));
+    row.append(el("span", "note", tn(drift.changed.length, "docs.rules.driftedN")));
     const sync = el("button", "btn btn-sm", t("docs.rules.sync"));
     sync.type = "button";
     sync.addEventListener("click", () => docSyncRulesModal(rules, slug, body));
@@ -1037,27 +1005,22 @@ function docFrozenRulesCard(rules, slug, body) {
   }
   c.append(row);
 
-  if ((rules.frozen || []).length) {
-    const list = el("div", "rule-group");
-    for (const r of rules.frozen) {
-      const rr = el("div", "rule-row");
-      rr.append(chip(r.priority, DOC_RULE_KIND[r.priority] || ""));
-      const mid = el("div", "rule-mid");
-      mid.append(el("div", "rule-text", r.text));
-      mid.append(el("div", "rule-id", r.id));
-      rr.append(mid);
-      list.append(rr);
-    }
-    c.append(list);
+  for (const pr of priorities) {
+    if (!frozen[pr]) continue;
+    const grp = el("div", "rule-group");
+    grp.append(el("div", "rule-group-head", pr));
+    // VERBATIM. The user's own words, never re-wrapped into ORC's voice.
+    grp.append(el("pre", "rule-block", frozen[pr]));
+    c.append(grp);
   }
 
   // A drift that names nothing is a drift nobody can act on.
   if (drift.drifted) {
     const dl = el("div", "rule-drift");
-    for (const r of drift.added) dl.append(el("div", "rule-drift-row", "+ " + r.priority + "  " + r.id + "  " + r.text));
-    for (const r of drift.removed) dl.append(el("div", "rule-drift-row", "− " + r.priority + "  " + r.id + "  " + r.text));
-    for (const r of drift.changed)
-      dl.append(el("div", "rule-drift-row", "~ " + r.id + "  " + r.from.priority + " “" + r.from.text + "” → " + r.to.priority + " “" + r.to.text + "”"));
+    for (const ch of drift.changed) {
+      dl.append(el("div", "rule-drift-row", ch.priority));
+      dl.append(el("pre", "rule-block rule-block-new", ch.to || t("docs.rules.nowEmpty")));
+    }
     c.append(dl);
   }
   c.append(el("div", "note", rules.boundary));

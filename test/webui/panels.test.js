@@ -849,31 +849,44 @@ test("runs: marking a run done names the file that MOVES, and never says delete"
   assert.match(js, /confirmRunClose\(r\.slug, \(\) => route\(\)\)/, "the Overview waiting card carries the same action");
 });
 
-test("docs: the house rules are a PROJECT card, staged and batched like every other write", () => {
+test("docs: the house rules are a TEXT CONFIG, edited as text and staged like every other write", () => {
   const js = appJs();
   const api = fs.readFileSync(path.join(REPO, "bin", "webui", "api.js"), "utf8");
 
-  // Four routes, four body shapes — and `--set-file` / `--reset` deliberately
-  // have NO route: a bulk replace of the project's standing rules is a CLI act.
-  for (const r of ["add", "remove", "toggle", "move", "sync"])
-    assert.ok(api.includes(`"/api/doc/rules/${r}"`), `the ${r} write is a real route`);
+  // v0.49.5 — ONE write route, because the ledger is one file. The per-priority
+  // `set`/`add`/`clear` commands stay a CLI convenience, and `--set-file` /
+  // `--reset` still have NO route: throwing away a project's standing rules is
+  // a CLI act.
+  for (const r of ["setAll", "sync"]) assert.ok(api.includes(`"/api/doc/rules/${r}"`), `the ${r} write is a real route`);
+  for (const gone of ["add", "remove", "toggle", "move"])
+    assert.ok(!api.includes(`"/api/doc/rules/${gone}"`), `the row-store ${gone} route is gone`);
   // As ARGV, not as prose: the comment above the block names both on purpose.
   assert.ok(!/"--set-file"/.test(api), "a bulk replace is never a panel button");
   assert.ok(!/"--reset"/.test(api), "and neither is a reset");
+
+  // THE CONTROL IS A TEXTAREA, not a form. No priority dropdown, no per-rule
+  // Add — that is the whole fix.
+  assert.match(js, /el\("textarea", "rule-editor"\)/);
+  assert.ok(!/docs\.rules\.addPlaceholder/.test(js), "there is no one-line rule input any more");
 
   // Nothing is written until Apply, and the pending list is NAMED.
   assert.match(js, /const edits = editSet\(\(\) => bar\.paint\(\)\);/);
   assert.match(js, /await applyActions\(edits, btn\);/);
   assert.match(js, /function applyActions\(edits, button\)/);
+  // Typing the text back to what it was CLEARS the edit rather than staging a
+  // no-op — the v0.44.1 rule, applied to a textarea.
+  assert.match(js, /if \(ta\.value === original\) edits\.drop\("doc-house-rules\.md"\);/);
   // A refused write NEVER aborts the rest, and every failure is reported by key.
   const fn = js.slice(js.indexOf("async function applyActions"));
   assert.match(fn.slice(0, 1200), /failed\.push\(`\$\{key\}:/);
 
   // THE BOUNDARY IS ALWAYS SHOWN, never on hover — and it is the CLI's words.
   assert.match(js, /el\("div", "note rule-boundary", d\.boundary\)/);
-  // A disabled rule keeps its slot and reads as disabled.
+  // The editor is monospaced and resizable: the file has a shape the user edits
+  // directly, and a P0 is as long as it needs to be.
   const css = appCss().replace(/\/\*[\s\S]*?\*\//g, "");
-  assert.match(css, /\.rule-off \.rule-text\s*\{[^}]*line-through/);
+  assert.match(css, /\.rule-editor\s*\{[^}]*resize:\s*vertical/);
+  assert.match(css, /\.rule-block\s*\{[^}]*white-space:\s*pre-wrap/);
 });
 
 test("docs: the run map and the cost report render CLI numbers and compute none", () => {

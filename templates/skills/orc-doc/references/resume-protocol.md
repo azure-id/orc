@@ -46,9 +46,24 @@ nobody asked to change is the most expensive possible way to do nothing.
 ## `RESUME.md` — the P0 hand-back
 
 Written by **the lane itself, never by a dispatched agent** — a dispatch inside
-a stop sequence lets a stop fail because a subagent did. Rewritten at the end of
-**every wave**, not just every cycle: a usage-limit kill between waves has to
-leave something on disk that says where it stopped.
+a stop sequence lets a stop fail because a subagent did.
+
+**v0.49.5 — the CLI writes it, and it is never behind.** `orc doc resume-file
+<slug>` composes the whole page from `doc.json`, and `doc.json` refreshes it on
+**every** write, so it exists from `orc doc init` onward. This replaces a rule
+the orchestrator had to remember at every stop, which is the bet this repo has
+already lost twice (the v0.32.0 narration lesson): a hand-back you are TOLD to
+write at every stop is the hand-back that goes missing on the one run that
+mattered — the one a usage limit killed.
+
+**Rule 16 — `every question points at RESUME.md`.** Before ORC asks the user
+anything, it runs `orc doc resume-file <slug>` and ends the message with that
+file's path and the line to paste. A user who has to remember where they were is
+a user who does not come back.
+
+The page is written for someone who does not read code: what this document is,
+where the files are, what is not written yet, what happens next, and the one
+line to paste. Nothing in it needs interpreting.
 
 **It lives at `{run_dir}/{slug}/RESUME.md`** — the registered v0.42.0 home, and
 the ONLY place `listRuns()` looks. It is not in the document folder, and there is
@@ -80,9 +95,10 @@ Where it stands:  /orc-doc · PRD · cycle 2 · 14 of 17 sections written · pha
 that single line is what `orc doc list`, `orc resume` and `orc run list` all
 parse. There is a test that feeds this exact template to the real parser.
 
-**One generator, not two.** `orc doc status --json` already emits `where`. Copy
-it **verbatim**; never assemble your own. The CLI computes, the skill renders,
-and the two can then never disagree.
+**One generator, not two.** The whole file comes from `orc doc resume-file`,
+which builds the `Where it stands:` line with the same function `orc doc status`
+uses. Never assemble your own copy of either. The CLI computes, the skill points
+at the result, and the two can then never disagree.
 
 ## The wave hand-back (P0, every wave)
 
@@ -102,7 +118,14 @@ To carry on — new session, or after your usage limit resets:
 
 Everything needed is on disk. The next session starts at wave 3 and re-reads
 nothing it already wrote.
+
+The full picture, in plain words:
+    .claude/orc/run/acme-prd-170826/RESUME.md
 ```
+
+**Every message that asks the user something ends with those last two lines**
+(rule 16) — a gate, a wave stop, a revision round, an offer. The path is what
+`orc doc resume-file` just printed; never type one from memory.
 
 ## The hand-back mention (P0, every cycle)
 

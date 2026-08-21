@@ -1738,98 +1738,136 @@ test("doc: assemble / extract / splice still exit as they did, on a v1 document"
    House rules, the four generation rules, the template lock, the run map,
    the cost report, and the revision anchor. */
 
-test("doc rules: an empty ledger is an ANSWER, and add/move/disable round-trip", () => {
-  const { root } = freshInstall();
+test("doc rules: an empty ledger is an ANSWER, and a MULTI-LINE block round-trips", () => {
+  const { root, claudeDir } = freshInstall();
   try {
-    // NO RULES IS AN ANSWER. The object still comes back; only the exit code
-    // says there is nothing here yet.
+    // NO RULES IS AN ANSWER. The object still comes back — including the bare
+    // TEMPLATE, because the headings exist before any rule does.
     let r = cli(["doc", "rules", "--json", "--dir", root]);
     assert.strictEqual(r.status, 1);
     assert.strictEqual(json(r).ok, true, "an empty ledger still returns the whole object");
-    assert.deepStrictEqual(json(r).rules, []);
+    assert.strictEqual(json(r).empty, true);
+    assert.deepStrictEqual(json(r).blocks, { P0: "", P1: "", P2: "" });
     assert.match(json(r).line, /house rules: none/);
+    assert.match(json(r).template, /## P0[\s\S]*## P1[\s\S]*## P2/, "the template is three headings, always");
     // THE BOUNDARY IS ALWAYS DECLARED, including when there is nothing in it.
     assert.match(json(r).boundary, /never change how this lane runs/);
 
-    r = cli(["doc", "rules", "add", "--priority", "P0", "--text", "open with a one-paragraph summary", "--json", "--dir", root]);
+    // v0.49.5 — A HOUSE RULE IS NOT ONE LINE. A whole block goes in at once and
+    // comes back VERBATIM.
+    const p0 = ["open with a one-paragraph summary", "money always carries its currency", "  - never name a customer"].join("\n");
+    r = cli(["doc", "rules", "set", "--priority", "P0", "--text", p0, "--json", "--dir", root]);
     assert.strictEqual(r.status, 0);
-    assert.strictEqual(json(r).id, "H-001");
+    assert.strictEqual(json(r).blocks.P0, p0, "verbatim in, verbatim out — indentation included");
 
-    cli(["doc", "rules", "add", "--priority", "P2", "--text", "prefer a table over a long list", "--json", "--dir", root]);
+    // `add` EXTENDS a block instead of replacing it.
+    cli(["doc", "rules", "add", "--priority", "P0", "--text", "prefer a table over a long list", "--json", "--dir", root]);
+    cli(["doc", "rules", "set", "--priority", "P2", "--text", "use the customer's words", "--json", "--dir", root]);
     r = cli(["doc", "rules", "--json", "--dir", root]);
     assert.strictEqual(r.status, 0);
-    assert.strictEqual(json(r).rules.length, 2);
-    // VERBATIM in, verbatim out — the context.md rule.
-    assert.strictEqual(json(r).rules[0].text, "open with a one-paragraph summary");
-    assert.deepStrictEqual(json(r).counts, { P0: 1, P1: 0, P2: 1 });
+    assert.deepStrictEqual(json(r).counts, { P0: 4, P1: 0, P2: 1 });
+    assert.match(json(r).line, /house rules: 5 lines \(P0 4 · P2 1\)/);
+    // The SLICE is what rides at the top of a dispatch: priority word, then the
+    // block, and an empty priority omitted.
+    assert.match(json(r).slice, /^P0\n/);
+    assert.ok(!json(r).slice.includes("P1"), "an empty priority is not in the slice");
 
-    // A re-prioritise is recorded, not re-typed.
-    cli(["doc", "rules", "move", "H-002", "--priority", "P1", "--json", "--dir", root]);
+    // The file on disk IS the config — three headings, hand-editable.
+    const file = path.join(claudeDir, "orc", "doc-house-rules.md");
+    assert.ok(fs.existsSync(file));
+    assert.match(fs.readFileSync(file, "utf8"), /## P0[\s\S]*## P1[\s\S]*## P2/);
+
+    // A hand edit is read straight back, with any plausible spelling of the
+    // heading — a config a human types must not fail on `P0:`.
+    fs.writeFileSync(file, "# my notes\n\nP0:\nsay the thing\n\n## P2\nand this\n");
     r = cli(["doc", "rules", "--json", "--dir", root]);
-    assert.strictEqual(json(r).rules.find((x) => x.id === "H-002").priority, "P1");
+    assert.strictEqual(json(r).blocks.P0, "say the thing");
+    assert.strictEqual(json(r).blocks.P2, "and this");
+    assert.match(json(r).preamble, /my notes/, "the user's own notes above the first heading survive");
 
-    // A disabled rule KEEPS ITS SLOT: "I switched that off" and "there is no
-    // such rule" must never look the same.
-    cli(["doc", "rules", "disable", "H-002", "--json", "--dir", root]);
-    r = cli(["doc", "rules", "--json", "--dir", root]);
-    assert.strictEqual(json(r).rules.length, 2, "a disabled rule is still in the ledger");
-    assert.strictEqual(json(r).enabled.length, 1, "but it is not in the enabled set");
-
-    cli(["doc", "rules", "remove", "H-002", "--json", "--dir", root]);
-    assert.strictEqual(json(cli(["doc", "rules", "--json", "--dir", root])).rules.length, 1);
+    cli(["doc", "rules", "clear", "--priority", "P0", "--json", "--dir", root]);
+    assert.strictEqual(json(cli(["doc", "rules", "--json", "--dir", root])).blocks.P0, "");
   } finally {
     rmrf(root);
   }
 });
 
-test("doc rules: a multi-line rule is REFUSED by name, and so is a bad priority", () => {
+test("doc rules: the row commands are REFUSED BY NAME, and a bad priority still is", () => {
   const { root } = freshInstall();
   try {
-    // Two rules stapled together are two rules. Flattening it silently would
-    // make the panel's plain-argv write path a lie.
-    let r = cli(["doc", "rules", "add", "--priority", "P0", "--text", "one line\nand another", "--json", "--dir", root]);
-    assert.strictEqual(r.status, 2);
-    assert.strictEqual(json(r).reason, "multiline");
-    assert.match(json(r).hint, /two rules/);
+    // A command that used to work and now does nothing is worse than one that
+    // says what replaced it.
+    for (const sub of ["remove", "enable", "disable", "move"]) {
+      const r = cli(["doc", "rules", sub, "H-001", "--json", "--dir", root]);
+      assert.strictEqual(r.status, 2, sub);
+      assert.strictEqual(json(r).reason, "retired");
+      assert.match(json(r).hint, /plain text now/);
+    }
 
-    r = cli(["doc", "rules", "add", "--priority", "P9", "--text", "nope", "--json", "--dir", root]);
+    let r = cli(["doc", "rules", "set", "--priority", "P9", "--text", "nope", "--json", "--dir", root]);
     assert.strictEqual(r.status, 2);
     assert.strictEqual(json(r).reason, "bad-priority");
 
-    r = cli(["doc", "rules", "remove", "H-404", "--json", "--dir", root]);
+    r = cli(["doc", "rules", "set", "--priority", "P0", "--json", "--dir", root]);
     assert.strictEqual(r.status, 2);
-    assert.strictEqual(json(r).reason, "no-such-rule");
+    assert.strictEqual(json(r).reason, "no-text");
   } finally {
     rmrf(root);
   }
 });
 
-test("doc rules: a document FREEZES the rules, and the drift NAMES every one that moved", () => {
+test("doc rules: the v0.49.2 row store migrates forward, and never resurrects a disabled rule", () => {
+  const { root, claudeDir } = freshInstall();
+  try {
+    fs.mkdirSync(path.join(claudeDir, "orc"), { recursive: true });
+    fs.writeFileSync(
+      path.join(claudeDir, "orc", "doc-house-rules.json"),
+      JSON.stringify({
+        version: 1,
+        rules: [
+          { id: "H-001", priority: "P0", text: "always name the owning team", enabled: true },
+          { id: "H-002", priority: "P1", text: "use the customer's words", enabled: true },
+          { id: "H-003", priority: "P0", text: "a rule that was switched off", enabled: false },
+        ],
+      })
+    );
+    const r = cli(["doc", "rules", "--json", "--dir", root]);
+    assert.strictEqual(r.status, 0);
+    assert.strictEqual(json(r).blocks.P0, "always name the owning team");
+    assert.strictEqual(json(r).blocks.P1, "use the customer's words");
+    // Silently switching someone's rule back on is the one migration outcome
+    // nobody can audit — so it is left behind and COUNTED.
+    assert.strictEqual(json(r).migrated.dropped_disabled, 1);
+    // NON-DESTRUCTIVE: the old file is still there.
+    assert.ok(fs.existsSync(path.join(claudeDir, "orc", "doc-house-rules.json")));
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("doc rules: a document FREEZES the text, and the drift NAMES the block that moved", () => {
   const { root } = freshInstall();
   try {
-    cli(["doc", "rules", "add", "--priority", "P0", "--text", "always name the owning team", "--json", "--dir", root]);
+    cli(["doc", "rules", "set", "--priority", "P0", "--text", "always name the owning team", "--json", "--dir", root]);
     const slug = initDoc(root, "frozen", "prd").data.slug;
 
     // FROZEN AT INIT — a document is written against the rules that were true
     // when it started.
     let r = cli(["doc", "rules", slug, "--json", "--dir", root]);
     assert.strictEqual(r.status, 0, "no drift yet");
-    assert.strictEqual(json(r).frozen.length, 1);
+    assert.strictEqual(json(r).frozen.P0, "always name the owning team");
     assert.strictEqual(json(r).drift.drifted, false);
     assert.ok(fs.existsSync(path.join(root, "orc", "orc-doc", slug, "house-rules.md")), "the frozen set is readable beside the document");
 
     // The project ledger moves under it.
-    cli(["doc", "rules", "add", "--priority", "P1", "--text", "use the customer's words", "--json", "--dir", root]);
-    cli(["doc", "rules", "move", "H-001", "--priority", "P1", "--json", "--dir", root]);
+    cli(["doc", "rules", "set", "--priority", "P1", "--text", "use the customer's words", "--json", "--dir", root]);
+    cli(["doc", "rules", "add", "--priority", "P0", "--text", "money carries its currency", "--json", "--dir", root]);
     r = cli(["doc", "rules", slug, "--json", "--dir", root]);
     assert.strictEqual(r.status, 1, "a drifted frozen set wants attention");
     const d = json(r).drift;
-    // COVERAGE-RELATIVE, never a boolean: it names each one.
-    assert.strictEqual(d.added.length, 1);
-    assert.strictEqual(d.added[0].id, "H-002");
-    assert.strictEqual(d.changed.length, 1);
-    assert.strictEqual(d.changed[0].from.priority, "P0");
-    assert.strictEqual(d.changed[0].to.priority, "P1");
+    // COVERAGE-RELATIVE, never a boolean: it names each block and both texts.
+    assert.deepStrictEqual(d.changed.map((c) => c.priority).sort(), ["P0", "P1"]);
+    assert.match(d.changed.find((c) => c.priority === "P0").to, /money carries its currency/);
 
     // The audit says so too, with its fix command and its panel.
     const a = json(cli(["doc", "audit", slug, "--json", "--dir", root]));
@@ -1846,7 +1884,7 @@ test("doc rules: a document FREEZES the rules, and the drift NAMES every one tha
 test("doc rules --sync: it re-freezes, NAMES the sections that predate it, and re-writes nothing", () => {
   const { root } = freshInstall();
   try {
-    cli(["doc", "rules", "add", "--priority", "P0", "--text", "first rule", "--json", "--dir", root]);
+    cli(["doc", "rules", "set", "--priority", "P0", "--text", "first rule", "--json", "--dir", root]);
     const slug = initDoc(root, "syncme", "prd").data.slug;
     const show = writeParts(root, slug, {});
     confirmAll(root, slug);
@@ -1873,14 +1911,15 @@ test("doc rules --sync: it re-freezes, NAMES the sections that predate it, and r
   }
 });
 
-test("doc rules: the enabled set rides on every plan, above ORC's own rules", () => {
+test("doc rules: the frozen text rides on every plan, above ORC's own rules", () => {
   const { root } = freshInstall();
   try {
-    cli(["doc", "rules", "add", "--priority", "P0", "--text", "money always carries its currency", "--json", "--dir", root]);
+    cli(["doc", "rules", "set", "--priority", "P0", "--text", "money always carries its currency\nand never a bare number", "--json", "--dir", root]);
     const slug = initDoc(root, "sliced", "prd").data.slug;
     const p = json(cli(["doc", "plan", slug, "--role", "write", "--json", "--dir", root]));
-    assert.strictEqual(p.doc_rules.length, 1);
-    assert.strictEqual(p.doc_rules[0].text, "money always carries its currency");
+    assert.match(p.doc_rules.P0, /money always carries its currency/);
+    assert.match(p.doc_rules.P0, /never a bare number/);
+    assert.match(p.doc_rules_text, /^P0\n/, "the slice text leads with the priority word");
     assert.match(p.doc_rules_boundary, /unsupported_request/);
     // Even an EMPTY result carries them — a caller must never special-case
     // "nothing to do" by finding half the keys missing.
@@ -1888,7 +1927,49 @@ test("doc rules: the enabled set rides on every plan, above ORC's own rules", ()
     confirmAll(root, slug);
     const empty = cli(["doc", "plan", slug, "--role", "write", "--json", "--dir", root]);
     assert.strictEqual(empty.status, 1);
-    assert.ok(Array.isArray(json(empty).doc_rules), "the empty shape carries the same keys");
+    assert.ok(json(empty).doc_rules && typeof json(empty).doc_rules.P0 === "string", "the empty shape carries the same keys");
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("doc: RESUME.md is written by the CLI on every state change, and never by a model", () => {
+  const { root, claudeDir } = freshInstall();
+  try {
+    // v0.49.5 — it exists from `orc doc init` onward. "The orchestrator
+    // remembers to write it at every stop" is the bet this repo has already
+    // lost twice; doc.json has one writer, so the hand-back hangs off that.
+    const slug = initDoc(root, "handback", "prd").data.slug;
+    const file = path.join(claudeDir, "orc", "run", slug, "RESUME.md");
+    assert.ok(fs.existsSync(file), "RESUME.md exists before a single section is written");
+    let body = fs.readFileSync(file, "utf8");
+    assert.match(body, /\/orc-doc resume handback/, "and it carries the line to paste");
+    // COLUMN 0. `parseStands` is line-anchored, so a heading prefix here means
+    // `orc resume`, `orc run list` and `orc doc list` all stop seeing it.
+    assert.match(body, /^Where it stands: {2}\/orc-doc · PRD · cycle 0 · 0 of \d+ sections written/m);
+    assert.ok(!/^#+ Where it stands/m.test(body), "never a heading prefix");
+    // `orc run list` can therefore see the document as a waiting run.
+    const runs = json(cli(["run", "list", "--json", "--dir", root]));
+    assert.ok(runs.runs.some((r) => r.slug === slug && r.status === "waiting"));
+
+    // It moves with the state, without anyone asking it to.
+    writeParts(root, slug, {});
+    confirmAll(root, slug);
+    body = fs.readFileSync(file, "utf8");
+    assert.ok(!/0 of \d+ sections written/.test(body), "the hand-back is never behind the disk");
+
+    // And on demand, for the lane to call before it asks a question.
+    const r = cli(["doc", "resume-file", slug, "--json", "--dir", root]);
+    assert.strictEqual(r.status, 0);
+    assert.strictEqual(json(r).paste, `/orc-doc resume ${slug}`);
+    assert.match(json(r).where, /^Where it stands: {2}\/orc-doc/);
+
+    // A CLOSED run is a human saying they are finished with it. Never put the
+    // pointer back behind their back.
+    cli(["run", "close", slug, "--reason", "shipped it", "--json", "--dir", root]);
+    assert.ok(!fs.existsSync(file), "closing MOVES the pointer aside");
+    cli(["doc", "log", slug, "--kind", "gap", "--text", "still thinking", "--json", "--dir", root]);
+    assert.ok(!fs.existsSync(file), "and a later write does not re-open a closed run");
   } finally {
     rmrf(root);
   }

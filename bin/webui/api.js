@@ -391,15 +391,16 @@ const WRITES = {
     return argv;
   },
   "/api/doc/unship": (b) => ["doc", "unship", String(b.slug), "--reason", String(b.reason || "")],
-  // v0.49.2 — the house-rule ledger. Every one is FREE, deterministic and
-  // reversible, and every validator is the CLI's: a bad priority, an unknown id
-  // and a multi-line rule are all refused there, so the form does not have a
-  // second idea of a valid rule. `--set-file` and `--reset` deliberately have NO
-  // route — a bulk replace of the project's own standing rules is a CLI act.
-  "/api/doc/rules/add": (b) => ["doc", "rules", "add", "--priority", String(b.priority || ""), "--text", String(b.text || "")],
-  "/api/doc/rules/remove": (b) => ["doc", "rules", "remove", String(b.id)],
-  "/api/doc/rules/toggle": (b) => ["doc", "rules", b.enabled ? "enable" : "disable", String(b.id)],
-  "/api/doc/rules/move": (b) => ["doc", "rules", "move", String(b.id), "--priority", String(b.priority || "")],
+  // v0.49.5 — the house-rule ledger is a PLAIN TEXT config, so the panel writes
+  // it the way a text config is written: the whole file, once, from one
+  // textarea. `set-all` is the only write route it needs — the per-priority
+  // `set`/`add`/`clear` commands stay a CLI convenience, and `--reset` still has
+  // no route because throwing away a project's standing rules is a CLI act.
+  //
+  // Every validator is still the CLI's. The panel has no second idea of what a
+  // house rule looks like, and the argv is a plain array, so a multi-line value
+  // needs no escaping and no temp file.
+  "/api/doc/rules/setAll": (b) => ["doc", "rules", "set-all", "--text", String(b.text || "")],
   "/api/doc/rules/sync": (b) => ["doc", "rules", String(b.slug), "--sync"],
   // v0.49.2. Closing a run is FREE, deterministic, reversible, and it DELETES
   // NOTHING — `RESUME.md` is moved aside, not removed. The CLI refuses without a

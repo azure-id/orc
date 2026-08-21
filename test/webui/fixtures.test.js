@@ -303,17 +303,21 @@ test("fixtures: the states v0.49.2 introduced are all designable", () => {
   assert.ok(runs.filter((r) => r.status === "waiting").length >= 3, "enough waiting runs to see the card as a list");
   assert.ok(runs.some((r) => r.slug.length > 28), "and a slug long enough to collide, which is the state that broke");
 
-  // The house rules: populated, with all three priorities AND a disabled rule.
+  // The house rules: a FILE (v0.49.5), with all three priority blocks filled,
+  // and at least one of them MULTI-LINE — the whole point of the rewrite. You
+  // cannot design a textarea against a one-line fixture.
   const rules = fixtures.get("/api/doc/rules", {});
-  assert.ok(rules.rules.length >= 3);
-  for (const p of ["P0", "P1", "P2"]) assert.ok(rules.rules.some((r) => r.priority === p), `${p} is designable`);
-  assert.ok(rules.rules.some((r) => !r.enabled), "a DISABLED rule keeps its slot");
+  for (const p of ["P0", "P1", "P2"]) assert.ok(rules.blocks[p], `${p} is designable`);
+  assert.ok(rules.blocks.P0.includes(String.fromCharCode(10)), "a multi-line block");
+  assert.ok(rules.text.includes("## P0") && rules.text.includes("## P2"), "and the file carries the template headings");
+  assert.ok(rules.template, "the bare template is designable on its own");
   assert.ok(rules.boundary, "and the boundary sentence is always there");
 
-  // Frozen: clean AND drifted, and the drift NAMES what moved.
+  // Frozen: clean AND drifted, and the drift NAMES the block that moved.
   const drifted = fixtures.get("/api/doc/rules/one", { slug: "prd-checkout-refund-130826" });
   assert.strictEqual(drifted.drift.drifted, true);
-  assert.ok(drifted.drift.added.length || drifted.drift.changed.length);
+  assert.ok(drifted.drift.changed.length);
+  assert.ok(drifted.drift.changed.every((c) => c.priority && typeof c.to === "string"), "each names its priority and what it says now");
   assert.strictEqual(fixtures.get("/api/doc/rules/one", { slug: "runbook-payout-freeze-110826" }).drift.drifted, false);
 
   // The run map: a real one, a low-confidence naive floor, and a REFUSAL.

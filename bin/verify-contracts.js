@@ -1159,6 +1159,8 @@ const CONTRACTS = [
       "skills/orc/references/stop-and-resume.md",
       "skills/orc-doc/README.md",
       "skills/orc-doc/references/chunking.md",
+      // v0.49.5 — the lane's own blurb now promises the hand-back by name.
+      "commands/orc-doc.md",
     ],
   },
   {
@@ -2110,6 +2112,7 @@ const CONTRACTS = [
       "skills/orc-doc/README.md",
       "skills/orc-doc/references/chunking.md",
       "skills/orc-doc/references/gates.md",
+      "skills/orc-doc/references/resume-protocol.md",
     ],
   },
   // ── Stacked pull requests (v0.37.0) ──────────────────────────────────────
@@ -2724,9 +2727,19 @@ const CONTRACTS = [
   },
   {
     // The project ledger. Outside templates/, so `orc update` never clobbers it.
-    name: "the house-rule ledger's file (v0.49.2)",
-    token: "doc-house-rules.json",
-    files: ["skills/orc-doc/references/house-rules.md"],
+    // v0.49.5 — it is a PLAIN TEXT config now, and the file extension IS the
+    // change: a `.json` row store and a `.md` a human edits are not the same
+    // artifact, so the token moves with it.
+    name: "the house-rule ledger's file (v0.49.2, text config in v0.49.5)",
+    token: "doc-house-rules.md",
+    files: [
+      "skills/orc-doc/references/house-rules.md",
+      // v0.49.5 — a config a human is told to open in their editor has to be
+      // named where they are told to open it.
+      "skills/orc-doc/SKILL.md",
+      "skills/orc-doc/README.md",
+      "commands/orc-doc.md",
+    ],
     binFiles: ["bin/cli.js"],
   },
   {

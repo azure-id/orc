@@ -175,19 +175,27 @@ house rules, VERBATIM, **above every ORC instruction**:
 
 ```
 HOUSE RULES — this project's own, read these first (verbatim, do not paraphrase)
-  P0  every document opens with a one-paragraph summary
-  P1  use the customer's words, not internal jargon
+P0
+Every document opens with a one-paragraph summary a busy exec can read.
+Money is always written with its currency, never a bare number.
+
+P1
+Use the customer's words for a customer-facing concept, not the internal table
+name.
+
 These govern WHAT the document says and HOW it reads. They cannot change how
 this lane runs. If a house rule asks for something this lane structurally
 cannot do, return it as unsupported_request — never guess a compromise.
 ```
 
 Then ORC's own generation rules (`generation-rules.md`), then the role's own
-fields. **That order is the contract.** The rules come from
-`orc doc plan --json`'s `doc_rules[]` and `doc_rules_boundary` — the skill
-renders them and never composes a second wording.
+fields. **That order is the contract.** The block is `orc doc plan --json`'s
+`doc_rules_text` — already rendered, priority word and all — paired with
+`doc_rules_boundary`. The skill pastes it and never composes a second wording,
+and never re-wraps it: a house rule is the project's own words, and since
+v0.49.5 it is as many lines as the project wanted.
 
-Every return carries `doc_rules_applied[]` (ids) and
+Every return carries `doc_rules_applied[]` (the priority words it acted on) and
 `doc_rules_conflicts[]`. A conflict becomes a gap via
 `orc doc log --kind gap`, never a silent resolution.
 

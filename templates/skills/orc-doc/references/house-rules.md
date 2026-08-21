@@ -8,6 +8,42 @@ document says and how it reads**. Before v0.49.2 the shipped rules were the only
 rules, and there was no way to tell this lane *"in THIS project, a document
 always does X"*.
 
+## It is a TEXT CONFIG, not a form (v0.49.5)
+
+The first cut modelled a house rule as a **row**: one line, one id, one priority
+picked from a dropdown, one enable flag, added one at a time. That is a form, and
+a standing instruction is not a form — it is prose the project already knows how
+to write. **Nobody's real P0 fits on one line**, and being made to file it as
+four separate rows to keep the CLI's argv simple is the tool asking the user to
+work around it.
+
+So the ledger is a plain text file with three headings, and **as much text under
+each one as you want**:
+
+```markdown
+# ORC · doc house rules
+#   … anything above the first heading is your own note, never dispatched …
+
+## P0
+
+Every document opens with a one-paragraph summary a busy exec can read.
+Money is always written with its currency, never a bare number.
+Never name a customer without written consent — use a role instead.
+
+## P1
+
+Use the customer's words for a customer-facing concept, not the internal table
+name. If both are needed, lead with the customer's.
+
+## P2
+
+Prefer a table over a list of more than six items.
+```
+
+There is **no rule count and no rule id**. The unit is the block, and the whole
+block is handed to every writer **verbatim** — the `context.md` rule, applied to
+a config file. Edit it in your editor, or in one textarea in `orc ui ▸ Docs`.
+
 ## The three priorities
 
 | Priority | Meaning | On conflict |
@@ -35,27 +71,33 @@ fake validator here would be worse than none.**
 ## The artifact
 
 ```
-.claude/orc/doc-house-rules.json      the PROJECT ledger — ONE writer: `orc doc rules`
-<doc>/house-rules.md                  the FROZEN set for one document — DERIVED, never hand-edited
+.claude/orc/doc-house-rules.md        the PROJECT ledger — plain text, hand-editable,
+                                      ONE programmatic writer: `orc doc rules`
+.claude/orc/doc-house-rules.json      the retired v0.49.2 row store. Read once, migrated
+                                      forward, and NEVER deleted
+<doc>/house-rules.md                  the FROZEN text for one document — DERIVED, never hand-edited
 ```
 
 The ledger lives outside `templates/`, so `orc update` never clobbers it — the
-same place, and for the same reason, as the cached code patterns. `text` is stored
-**verbatim** and re-emitted verbatim — the `context.md` rule. A rule is **one
-line**; a multi-line `--text` is REFUSED by name with the hint to add it as two
-rules.
+same place, and for the same reason, as the cached code patterns.
+
+**The migration is lazy, free, idempotent and non-destructive.** The first read
+with no `.md` on disk converts the old JSON, leaves that file exactly where it
+was, and **never resurrects a rule the user had DISABLED** — those are left
+behind and counted in the output. Silently switching someone's rule back on is
+the one migration outcome nobody can audit.
 
 ## Frozen per document
 
-At `orc doc init` the enabled rules are **snapshotted** into
-`doc.json.doc_rules` and rendered to `<doc>/house-rules.md`. **A document is
-written against the rules that were true when it started.**
+At `orc doc init` the ledger's text is **snapshotted** into `doc.json.doc_rules`
+and rendered to `<doc>/house-rules.md`. **A document is written against the rules
+that were true when it started.**
 
 Why freeze: the same reasoning as `context.md`. If a P0 changes at wave 3, half
 the document silently no longer complies and nothing on disk says so. So:
 
 - `orc doc rules <slug> --json` reports **frozen vs project** and, when they
-  differ, names **every** rule that was added, changed or removed —
+  differ, names **every priority block that moved** and what it says now —
   coverage-relative, never a "rules changed" boolean (the
   `computeWikiFreshness` lesson). Exit **1** when the ledger has moved.
 - `orc doc rules <slug> --sync` re-freezes deliberately, records it in
@@ -69,32 +111,43 @@ the document silently no longer complies and nothing on disk says so. So:
 ## The CLI
 
 ```
-orc doc rules [--json]                             # the project ledger
-orc doc rules <slug> [--json]                      # frozen ledger + drift vs project
-orc doc rules add --priority P0|P1|P2 --text "…"   # one line, verbatim
-orc doc rules remove <id>
-orc doc rules enable|disable <id>
-orc doc rules move <id> --priority P1              # a re-prioritise, recorded
+orc doc rules [--json]                             # the project ledger + the file path
+orc doc rules <slug> [--json]                      # frozen text + drift vs project
+orc doc rules set --priority P0|P1|P2 --text "…"   # replace ONE block. Multi-line is the point
+orc doc rules add --priority P0 --text "…"         # append to a block instead of replacing it
+orc doc rules clear --priority P0                  # empty ONE block
+orc doc rules set-all --text "…"                   # replace the WHOLE file (what `orc ui` writes)
 orc doc rules <slug> --sync                        # re-freeze, name the affected sections
-orc doc rules --set-file <path>                    # bulk replace, CLI only
-orc doc rules --reset                              # remove all
+orc doc rules --set-file <path>                    # replace the whole file from a file, CLI only
+orc doc rules --reset                              # back to the bare template
 ```
 
 Exit codes: **0** = rules exist / action done · **1** = no rules yet (an ANSWER,
-and the JSON object is still returned) or the frozen set has drifted · **2** =
-bad priority, unknown id, or multi-line text. `--json` returns the **whole
-computed object** — the ledger, the frozen set, the drift list, the boundary
-sentence — never a summary (`--json is not a summary`).
+and the JSON object is still returned, template included) or the frozen set has
+drifted · **2** = bad priority, missing text, or a retired row command. `--json`
+returns the **whole computed object** — the blocks, the rendered file, the slice
+text, the counts, the template, the drift and the boundary sentence — never a
+summary (`--json is not a summary`).
+
+`remove`, `enable`, `disable` and `move` are **refused by name**, not quietly
+dropped: a command that used to work and now does nothing is worse than one that
+says what replaced it.
 
 ## In the slice — `house rules are read first`
 
 Every dispatched slice (writer, checker, digest) carries, **at the very top and
-before any ORC instruction**:
+before any ORC instruction**, the `doc_rules_text` the CLI emits:
 
 ```
 HOUSE RULES — this project's own, read these first (verbatim, do not paraphrase)
-  P0  …
-  P1  …
+P0
+Every document opens with a one-paragraph summary a busy exec can read.
+Money is always written with its currency, never a bare number.
+
+P1
+Use the customer's words for a customer-facing concept, not the internal table
+name.
+
 These govern WHAT the document says and HOW it reads. They cannot change how
 this lane runs. If a house rule asks for something this lane structurally
 cannot do, return it as unsupported_request — never guess a compromise.
@@ -103,14 +156,15 @@ cannot do, return it as unsupported_request — never guess a compromise.
 Then, **below it**, ORC's own generation rules (`generation-rules.md`). **That
 order is the contract.**
 
-Every return gains `doc_rules_applied[]` (ids) and `doc_rules_conflicts[]`.
-A conflict becomes a gap via `orc doc log --kind gap` — never a silent
-resolution.
+Every return gains `doc_rules_applied[]` (the priority words it acted on) and
+`doc_rules_conflicts[]`. A conflict becomes a gap via `orc doc log --kind gap` —
+never a silent resolution.
 
 ## Deliberately absent
 
-- **No config key for the rules themselves.** They are an artifact with a
-  ledger, not a scalar; a config key could hold exactly one of them.
+- **No config key for the rules themselves.** They are a file, not a scalar.
+- **No priority dropdown, no rule id, no enable flag.** The unit is the block;
+  a rule you no longer want, you delete.
 - **No automatic detection of a rule that breaks a structural rule.** See the
   boundary above.
 - **No re-write on a sync.** It names the affected sections and the user decides.

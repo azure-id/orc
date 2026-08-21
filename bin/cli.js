@@ -11292,7 +11292,9 @@ function docRead(claudeDir, slug) {
     // v0.49.2. A document created before house rules existed has none, and that
     // is an ANSWER, not a gap: it was written against no house rules, which is
     // exactly what an empty frozen set means.
-    d.doc_rules = Array.isArray(d.doc_rules) ? d.doc_rules : [];
+    // v0.49.5 — a v0.49.2 document froze an ARRAY of rows; this one freezes
+    // the three text BLOCKS. Both open, and the older shape migrates on read.
+    d.doc_rules = docRulesBlocksOf(d.doc_rules);
     d.doc_rule_syncs = Array.isArray(d.doc_rule_syncs) ? d.doc_rule_syncs : [];
     return d;
   } catch (_) {
@@ -11308,7 +11310,44 @@ function docWrite(claudeDir, slug, d) {
   d.version = Number(d.version) || 1;
   d.updated_at = fmtStamp(new Date());
   fs.writeFileSync(p.state, JSON.stringify(d, null, 2) + "\n");
+  // v0.49.5 - RESUME.md IS REWRITTEN HERE, on every state change, by the CLI.
+  // It used to be prose the orchestrator was told to write at every stop, and
+  // "the orchestrator remembers to do X at every stop" is exactly the bet this
+  // repo has already lost twice (the v0.32.0 narration lesson). doc.json has one
+  // writer, so hooking the hand-back to it makes "there is always a RESUME.md,
+  // and it is always current" structurally true instead of remembered.
+  //
+  // It is still written by ORC ITSELF and never by a dispatched agent - an `orc
+  // doc` call is the lane's own hand, not a subagent's - so rule 13 holds.
+  docResumeRefresh(claudeDir, slug);
   return p.state;
+}
+
+// The re-entrancy guard: docMapView(persist) and docResumeBuild both reach
+// docWrite, and a hand-back that rewrote itself forever would be a hang.
+let docResumeBusy = false;
+function docResumeRefresh(claudeDir, slug) {
+  if (docResumeBusy) return null;
+  docResumeBusy = true;
+  try {
+    const dir = docRunDir(claudeDir, slug);
+    if (!dir) return null;
+    // A CLOSED run is a human saying they are finished with it (v0.49.2). Never
+    // re-open it behind their back by putting the pointer back.
+    if (fs.existsSync(path.join(dir, RUN_CLOSED_FILE))) return null;
+    const built = docResumeBuild(claudeDir, slug);
+    if (!built) return null;
+    fs.mkdirSync(dir, { recursive: true });
+    const file = path.join(dir, RESUME_FILE);
+    fs.writeFileSync(file, built.text);
+    return file;
+  } catch (_) {
+    // Best effort, always. A hand-back that cannot be written must never take
+    // the command that triggered it down with it.
+    return null;
+  } finally {
+    docResumeBusy = false;
+  }
 }
 
 function docList(claudeDir) {
@@ -12150,10 +12189,21 @@ function docLintRun(text, targetId, opts) {
 }
 
 
-// ── HOUSE RULES (v0.49.2) ───────────────────────────────────────────────────
+// ── HOUSE RULES (v0.49.2, rewritten as a TEXT CONFIG in v0.49.5) ────────────
 // A house rule is the PROJECT's own standing instruction about what a document
 // says and how it reads. Before this, the shipped rules were the only rules, and
 // there was no way to tell this lane "in THIS project, a document always does X".
+//
+// v0.49.5 — THE LEDGER IS A PLAIN TEXT CONFIG, NOT A ROW STORE. The first cut
+// modelled a house rule as a row: one line, one id, one priority picked from a
+// dropdown, one enable flag, added one at a time. That is a form, and a standing
+// instruction is not a form — it is prose the project already knows how to
+// write. Nobody's real P0 fits on one line, and being made to file it as four
+// separate rows to keep the CLI's argv simple is the tool asking the user to
+// work around it. So the ledger is now `.claude/orc/doc-house-rules.md`: three
+// priority headings, and underneath each one AS MUCH TEXT AS THE USER WANTS,
+// handed to the writers VERBATIM. It is edited the way every other config in
+// this repo is edited — in a text editor, or in one textarea in `orc ui`.
 //
 // THE BOUNDARY, stated once and printed everywhere it matters: house rules
 // govern CONTENT and STYLE. They can never relax a STRUCTURAL or SAFETY rule of
@@ -12168,7 +12218,9 @@ function docLintRun(text, targetId, opts) {
 // and in the panel — and a slice carrying a rule that asks for a structural
 // break comes back as `unsupported_request`, which the orchestrator relays as a
 // gap. A fake validator here would be worse than none.
-const DOC_RULES_FILE = "doc-house-rules.json";
+const DOC_RULES_FILE = "doc-house-rules.md";
+// The v0.49.2 row store. Never deleted, read once, migrated forward.
+const DOC_RULES_LEGACY_FILE = "doc-house-rules.json";
 const DOC_RULE_PRIORITIES = ["P0", "P1", "P2"];
 const DOC_RULES_BOUNDARY =
   "House rules govern WHAT the document says and HOW it reads. They can never " +
@@ -12177,86 +12229,188 @@ const DOC_RULES_BOUNDARY =
   "never stage, never commit. A rule that asks for one of those comes back as " +
   "unsupported_request — never a guessed compromise.";
 
+// The scaffold a first read writes. It is a PREAMBLE, not a schema: everything
+// above the first priority heading is the user's own notes, preserved verbatim
+// on every write, and never dispatched to anything.
+const DOC_RULES_PREAMBLE = [
+  "# ORC · doc house rules",
+  "#",
+  "# This project's own standing instructions about WHAT a document says and HOW",
+  "# it reads. Put each one under the heading you want it read at — P0 first,",
+  "# then P1, then P2 — in as many lines as you like. There is no one-line rule",
+  "# and no rule count: the whole block is handed to every writer VERBATIM.",
+  "#",
+  "# Anything above the first `## P0` heading is a note to yourself and is never",
+  "# dispatched. Edit this file directly, or in `orc ui` ▸ Docs.",
+].join("\n");
+
 const docRulesPath = (claudeDir) => path.join(claudeDir, "orc", DOC_RULES_FILE);
+const docRulesLegacyPath = (claudeDir) => path.join(claudeDir, "orc", DOC_RULES_LEGACY_FILE);
+const docRulesEmpty = () => ({ P0: "", P1: "", P2: "" });
+
+// A priority heading is a line that says P0/P1/P2 and nothing else — with or
+// without `#`s, with or without a colon — because a config a human types by
+// hand must not fail on a plausible spelling of the only structure it has.
+const DOC_RULES_HEAD_RE = /^[ \t]*#{0,6}[ \t]*(P[012])[ \t]*[:.)-]?[ \t]*$/;
+
+function docRulesParse(text) {
+  const acc = { P0: [], P1: [], P2: [] };
+  const pre = [];
+  let cur = null;
+  for (const raw of String(text == null ? "" : text).replace(/\r\n/g, "\n").split("\n")) {
+    const m = DOC_RULES_HEAD_RE.exec(raw);
+    if (m) {
+      cur = m[1];
+      continue;
+    }
+    if (cur) acc[cur].push(raw);
+    else pre.push(raw);
+  }
+  // VERBATIM inside a block: only the blank lines the headings themselves
+  // introduce are trimmed. A user's indentation, bullets and blank lines are
+  // theirs — the `context.md` rule, applied to a config file.
+  const body = (rows) => rows.join("\n").replace(/^(?:[ \t]*\n)+/, "").replace(/\s+$/, "");
+  return {
+    preamble: pre.join("\n").replace(/\s+$/, ""),
+    blocks: { P0: body(acc.P0), P1: body(acc.P1), P2: body(acc.P2) },
+  };
+}
+
+// ONE canonical shape on disk: the preamble, then P0, P1, P2 in that order,
+// every heading always present so the file is a template even when it is empty.
+function docRulesRender(preamble, blocks) {
+  const L = [String(preamble || "").replace(/\s+$/, "") || DOC_RULES_PREAMBLE, ""];
+  for (const pr of DOC_RULE_PRIORITIES) {
+    L.push("## " + pr, "");
+    const body = String((blocks || {})[pr] || "").replace(/\s+$/, "");
+    if (body) L.push(body, "");
+  }
+  return L.join("\n");
+}
+
+// LAZY, FREE, NON-DESTRUCTIVE (the v0.49.0 migration rule). The old JSON is
+// never deleted, and a rule the user had DISABLED is never resurrected — it is
+// left behind and counted, because silently switching someone's rule back on is
+// the one migration outcome nobody can audit.
+function docRulesMigrateLegacy(claudeDir) {
+  let j = null;
+  try {
+    j = JSON.parse(fs.readFileSync(docRulesLegacyPath(claudeDir), "utf8"));
+  } catch (_) {
+    return null;
+  }
+  const rows = Array.isArray(j && j.rules) ? j.rules : [];
+  if (!rows.length) return null;
+  const prOf = (r) => (DOC_RULE_PRIORITIES.includes(r && r.priority) ? r.priority : "P2");
+  const dropped = rows.filter((r) => r && r.enabled === false).length;
+  const blocks = docRulesEmpty();
+  for (const pr of DOC_RULE_PRIORITIES)
+    blocks[pr] = rows
+      .filter((r) => r && r.enabled !== false && prOf(r) === pr)
+      .map((r) => String(r.text || "").trim())
+      .filter(Boolean)
+      .join("\n");
+  const text = docRulesRender(DOC_RULES_PREAMBLE, blocks);
+  try {
+    const p = docRulesPath(claudeDir);
+    fs.mkdirSync(path.dirname(p), { recursive: true });
+    fs.writeFileSync(p, text);
+  } catch (_) {
+    return null;
+  }
+  return { from: docRulesLegacyPath(claudeDir), text, blocks, dropped_disabled: dropped };
+}
 
 function docRulesRead(claudeDir) {
-  const empty = { version: 1, updated_at: null, rules: [] };
+  let text = null;
+  let migrated = null;
   try {
-    const j = JSON.parse(fs.readFileSync(docRulesPath(claudeDir), "utf8"));
-    return {
-      version: Number(j.version) || 1,
-      updated_at: j.updated_at || null,
-      rules: (Array.isArray(j.rules) ? j.rules : []).map((r) => ({
-        id: String(r.id || ""),
-        priority: DOC_RULE_PRIORITIES.includes(r.priority) ? r.priority : "P2",
-        // VERBATIM in, verbatim out — the `context.md` rule. A rule the user
-        // wrote is quoted, never paraphrased, never re-worded on a read.
-        text: String(r.text || ""),
-        enabled: r.enabled !== false,
-        added_at: r.added_at || null,
-      })).filter((r) => r.id && r.text),
-    };
-  } catch (_) {
-    return empty;
+    text = fs.readFileSync(docRulesPath(claudeDir), "utf8");
+  } catch (_) {}
+  if (text === null) {
+    migrated = docRulesMigrateLegacy(claudeDir);
+    if (migrated) text = migrated.text;
   }
+  const parsed = docRulesParse(text === null ? DOC_RULES_PREAMBLE : text);
+  const preamble = parsed.preamble || DOC_RULES_PREAMBLE;
+  return {
+    path: docRulesPath(claudeDir),
+    exists: text !== null,
+    preamble,
+    blocks: parsed.blocks,
+    text: docRulesRender(preamble, parsed.blocks),
+    empty: DOC_RULE_PRIORITIES.every((k) => !parsed.blocks[k]),
+    migrated,
+  };
 }
 
 // ONE WRITER, and it is this function, reached only from `orc doc rules`.
-function docRulesWrite(claudeDir, led) {
+function docRulesWrite(claudeDir, preamble, blocks) {
   const p = docRulesPath(claudeDir);
   fs.mkdirSync(path.dirname(p), { recursive: true });
-  led.version = 1;
-  led.updated_at = fmtStamp(new Date());
-  fs.writeFileSync(p, JSON.stringify(led, null, 2) + "\n");
-  return p;
+  const text = docRulesRender(preamble, blocks);
+  fs.writeFileSync(p, text);
+  return { path: p, text };
 }
 
-const docRulesSort = (rules) =>
-  rules.slice().sort((a, b) => DOC_RULE_PRIORITIES.indexOf(a.priority) - DOC_RULE_PRIORITIES.indexOf(b.priority) || a.id.localeCompare(b.id));
-
-const docRulesEnabled = (led) => docRulesSort(led.rules.filter((r) => r.enabled));
-
-function docRulesNextId(led) {
-  let n = 0;
-  for (const r of led.rules) {
-    const m = /^H-(\d+)$/.exec(r.id);
-    if (m) n = Math.max(n, Number(m[1]));
+// A frozen set may be a v0.49.2 ARRAY of rows or a v0.49.5 block object. Both
+// open, and a document in flight migrates without the user knowing.
+function docRulesBlocksOf(v) {
+  const blocks = docRulesEmpty();
+  if (Array.isArray(v)) {
+    const prOf = (r) => (DOC_RULE_PRIORITIES.includes(r && r.priority) ? r.priority : "P2");
+    for (const pr of DOC_RULE_PRIORITIES)
+      blocks[pr] = v
+        .filter((r) => r && r.enabled !== false && prOf(r) === pr)
+        .map((r) => String(r.text || "").trim())
+        .filter(Boolean)
+        .join("\n");
+    return blocks;
   }
-  return "H-" + String(n + 1).padStart(3, "0");
+  if (v && typeof v === "object") for (const pr of DOC_RULE_PRIORITIES) blocks[pr] = String(v[pr] || "");
+  return blocks;
 }
 
-const docRulesCounts = (rules) => {
-  const c = { P0: 0, P1: 0, P2: 0 };
-  for (const r of rules) c[r.priority]++;
+const docRulesCount = (block) => String(block || "").split("\n").filter((l) => l.trim()).length;
+
+const docRulesCounts = (blocks) => {
+  const c = {};
+  for (const pr of DOC_RULE_PRIORITIES) c[pr] = docRulesCount((blocks || {})[pr]);
   return c;
 };
 
-// The one line the preflight prints. A rule set is NEVER silent.
-function docRulesLine(rules) {
-  if (!rules.length) return "house rules: none";
-  const c = docRulesCounts(rules);
+// The one line the preflight prints. A rule set is NEVER silent. It counts
+// LINES, because a line is the only unit this file has now — and it says so.
+function docRulesLine(blocks) {
+  const c = docRulesCounts(blocks);
+  const total = DOC_RULE_PRIORITIES.reduce((a, k) => a + c[k], 0);
+  if (!total) return "house rules: none";
   const parts = DOC_RULE_PRIORITIES.filter((k) => c[k]).map((k) => `${k} ${c[k]}`);
-  return `house rules: ${rules.length} (${parts.join(" · ")})`;
+  return `house rules: ${plural(total, "line")} (${parts.join(" · ")})`;
 }
 
-// FROZEN vs PROJECT — coverage-relative, and it NAMES every rule that moved.
-// A "rules changed" boolean would tell the user a fact they cannot act on: the
-// `computeWikiFreshness` lesson, applied to a ledger.
-function docRulesDrift(frozen, project) {
-  const fz = new Map((frozen || []).map((r) => [r.id, r]));
-  const pj = new Map(project.map((r) => [r.id, r]));
-  const added = [];
-  const removed = [];
-  const changed = [];
-  for (const [id, r] of pj) if (!fz.has(id)) added.push({ id, priority: r.priority, text: r.text });
-  for (const [id, r] of fz) if (!pj.has(id)) removed.push({ id, priority: r.priority, text: r.text });
-  for (const [id, r] of pj) {
-    const was = fz.get(id);
-    if (!was) continue;
-    if (was.text !== r.text || was.priority !== r.priority)
-      changed.push({ id, from: { priority: was.priority, text: was.text }, to: { priority: r.priority, text: r.text } });
+// What actually rides at the top of a slice: the priority word, then the block,
+// VERBATIM. An empty priority is omitted — an empty heading in a slice is noise
+// a writer has to decide about.
+function docRulesSlice(blocks) {
+  const L = [];
+  for (const pr of DOC_RULE_PRIORITIES) {
+    const body = String((blocks || {})[pr] || "").replace(/\s+$/, "");
+    if (body) L.push(pr, body, "");
   }
-  return { added, removed, changed, drifted: added.length + removed.length + changed.length > 0 };
+  return L.join("\n").replace(/\s+$/, "");
+}
+
+// FROZEN vs PROJECT — per priority, and it NAMES the block that moved with both
+// texts. A "rules changed" boolean would tell the user a fact they cannot act
+// on: the `computeWikiFreshness` lesson, applied to a config file.
+function docRulesDrift(frozen, project) {
+  const fz = docRulesBlocksOf(frozen);
+  const pj = docRulesBlocksOf(project);
+  const changed = [];
+  for (const pr of DOC_RULE_PRIORITIES)
+    if (fz[pr] !== pj[pr]) changed.push({ priority: pr, from: fz[pr], to: pj[pr] });
+  return { changed, drifted: changed.length > 0 };
 }
 
 // house-rules.md is DERIVED — never hand-edited, rewritten whenever the frozen
@@ -12264,12 +12418,13 @@ function docRulesDrift(frozen, project) {
 // readable beside the document, not only inside doc.json.
 function docWriteHouseRules(claudeDir, slug, d) {
   const p = docPaths(claudeDir, slug);
-  const rules = docRulesSort(d.doc_rules || []);
+  const blocks = docRulesBlocksOf(d.doc_rules);
   const L = [
     "<!-- orc-doc:derived — written by the `orc doc` CLI from doc.json.",
-    "     Change the project ledger with `orc doc rules add|remove|move`; re-freeze",
-    "     this document with `orc doc rules " + slug + " --sync`. A hand edit here",
-    "     is overwritten the next time anything writes. -->",
+    "     Change the project ledger in `.claude/orc/" + DOC_RULES_FILE + "` (or with",
+    "     `orc doc rules set`); re-freeze this document with",
+    "     `orc doc rules " + slug + " --sync`. A hand edit here is overwritten the",
+    "     next time anything writes. -->",
     "",
     `# House rules — ${d.title}`,
     "",
@@ -12277,13 +12432,11 @@ function docWriteHouseRules(claudeDir, slug, d) {
     "document is written against the rules that were true when it started.",
     "",
   ];
-  if (!rules.length) L.push("No house rules were set when this document started.", "");
+  if (DOC_RULE_PRIORITIES.every((pr) => !blocks[pr]))
+    L.push("No house rules were set when this document started.", "");
   for (const pr of DOC_RULE_PRIORITIES) {
-    const rows = rules.filter((r) => r.priority === pr);
-    if (!rows.length) continue;
-    L.push(`## ${pr}`, "");
-    for (const r of rows) L.push(`- \`${r.id}\` ${r.text}`);
-    L.push("");
+    if (!blocks[pr]) continue;
+    L.push(`## ${pr}`, "", blocks[pr], "");
   }
   L.push("---", "", DOC_RULES_BOUNDARY, "");
   fs.writeFileSync(path.join(p.folder, "house-rules.md"), L.join("\n"));
@@ -12292,103 +12445,108 @@ function docWriteHouseRules(claudeDir, slug, d) {
 
 // `orc doc rules …` — the project ledger, the frozen set, and the drift between.
 // The skill's side of this is hard rule 15: `house rules are read first` — the
-// enabled set rides at the TOP of every dispatched slice, above ORC's own
-// generation rules. This function is where that set comes from.
+// whole enabled text rides at the TOP of every dispatched slice, above ORC's own
+// generation rules. This function is where that text comes from.
 function docRulesCmd(claudeDir, slugArg) {
   const asJson = wantsJson();
   const led = docRulesRead(claudeDir);
-  const pos = docPositionals(); // ["doc","rules",<sub|slug?>,<id?>]
+  const pos = docPositionals(); // ["doc","rules",<sub|slug?>]
   const sub = String(pos[2] || "");
   const fail = (reason, hint, code = 2) => {
     if (asJson) emitJson({ ok: false, reason, hint, boundary: DOC_RULES_BOUNDARY }, code);
     console.error("❌ " + hint);
     process.exit(code);
   };
-  const save = (msg, extra) => {
-    docRulesWrite(claudeDir, led);
-    if (asJson) emitJson({ ok: true, ...extra, rules: docRulesSort(led.rules), boundary: DOC_RULES_BOUNDARY }, 0);
+  const save = (msg, blocks, extra) => {
+    const w = docRulesWrite(claudeDir, led.preamble, blocks);
+    const fresh = docRulesParse(w.text).blocks;
+    if (asJson)
+      emitJson(
+        {
+          ok: true,
+          ...extra,
+          file: w.path,
+          blocks: fresh,
+          text: w.text,
+          counts: docRulesCounts(fresh),
+          line: docRulesLine(fresh),
+          priorities: DOC_RULE_PRIORITIES,
+          boundary: DOC_RULES_BOUNDARY,
+        },
+        0
+      );
     console.log("✓ " + msg);
-    console.log(ui.color.gray("  " + docRulesLine(docRulesEnabled(led))));
+    console.log(ui.color.gray("  " + docRulesLine(fresh)));
+    console.log(ui.color.gray("  " + w.path));
     process.exit(0);
   };
-  const findRule = (id) => led.rules.find((r) => r.id === String(id || "").toUpperCase());
+  const priorityOf = () => {
+    const pr = String(docOpt("--priority") || "").toUpperCase();
+    return DOC_RULE_PRIORITIES.includes(pr) ? pr : null;
+  };
+  const wholeFile = (text, msg, extra) => {
+    const parsed = docRulesParse(text);
+    // A whole-file write brings its own preamble with it, so the notes a user
+    // typed above `## P0` survive a round trip through the panel.
+    led.preamble = parsed.preamble || led.preamble;
+    return save(msg, parsed.blocks, extra);
+  };
 
   // ── the writes ───────────────────────────────────────────────────────────
-  if (sub === "add") {
-    const pr = String(docOpt("--priority") || "").toUpperCase();
-    if (!DOC_RULE_PRIORITIES.includes(pr)) return fail("bad-priority", `--priority must be one of: ${DOC_RULE_PRIORITIES.join(", ")}`);
+  // The v0.49.2 row commands. They are REFUSED BY NAME rather than quietly
+  // dropped: a command that used to work and now does nothing is worse than one
+  // that says what replaced it.
+  if (sub === "remove" || sub === "enable" || sub === "disable" || sub === "move")
+    return fail(
+      "retired",
+      `\`orc doc rules ${sub}\` is gone — house rules are plain text now, not numbered rows. ` +
+        `Edit the block: orc doc rules set --priority P0 --text "…", or open ${docRulesPath(claudeDir)} in your editor.`
+    );
+
+  if (sub === "set" || sub === "add") {
+    const pr = priorityOf();
+    if (!pr) return fail("bad-priority", `--priority must be one of: ${DOC_RULE_PRIORITIES.join(", ")}`);
     const text = docOpt("--text");
-    if (!text || !String(text).trim()) return fail("no-text", `orc doc rules add needs --text "<the rule, in your own words>".`);
-    // ONE LINE. A multi-line rule is REFUSED by name rather than silently
-    // flattened: it keeps the panel's write path a plain argv string, and two
-    // rules stapled together are two rules.
-    if (/[\r\n]/.test(String(text)))
-      return fail("multiline", "a house rule is ONE line. Add it as two rules instead — a rule that spans lines is two rules stapled together.");
-    const id = docRulesNextId(led);
-    led.rules.push({ id, priority: pr, text: String(text), enabled: true, added_at: fmtStamp(new Date()) });
-    return save(`${id} ${pr} — ${text}`, { id, priority: pr, text: String(text) });
+    if (!text || !String(text).trim())
+      return fail("no-text", `orc doc rules ${sub} needs --text "<your rules, in your own words>". As many lines as you like.`);
+    const body = String(text).replace(/\r\n/g, "\n").replace(/\s+$/, "");
+    const blocks = { ...led.blocks };
+    blocks[pr] = sub === "add" && blocks[pr] ? blocks[pr] + "\n" + body : body;
+    return save(`${pr} ${sub === "add" ? "extended" : "set"} — ${plural(docRulesCount(blocks[pr]), "line")}`, blocks, { priority: pr });
   }
-  if (sub === "remove") {
-    const r = findRule(pos[3]);
-    if (!r) return fail("no-such-rule", `no house rule "${pos[3] || ""}". \`orc doc rules\` lists them.`);
-    led.rules = led.rules.filter((x) => x.id !== r.id);
-    return save(`${r.id} removed`, { id: r.id, removed: r });
+  if (sub === "clear") {
+    const pr = priorityOf();
+    if (!pr) return fail("bad-priority", `--priority must be one of: ${DOC_RULE_PRIORITIES.join(", ")}`);
+    const blocks = { ...led.blocks };
+    blocks[pr] = "";
+    return save(`${pr} cleared`, blocks, { priority: pr, cleared: true });
   }
-  if (sub === "enable" || sub === "disable") {
-    const r = findRule(pos[3]);
-    if (!r) return fail("no-such-rule", `no house rule "${pos[3] || ""}". \`orc doc rules\` lists them.`);
-    r.enabled = sub === "enable";
-    return save(`${r.id} ${sub}d`, { id: r.id, enabled: r.enabled });
-  }
-  if (sub === "move") {
-    const r = findRule(pos[3]);
-    if (!r) return fail("no-such-rule", `no house rule "${pos[3] || ""}". \`orc doc rules\` lists them.`);
-    const pr = String(docOpt("--priority") || "").toUpperCase();
-    if (!DOC_RULE_PRIORITIES.includes(pr)) return fail("bad-priority", `--priority must be one of: ${DOC_RULE_PRIORITIES.join(", ")}`);
-    const from = r.priority;
-    r.priority = pr;
-    return save(`${r.id} ${from} -> ${pr}`, { id: r.id, from, to: pr });
+  // The PANEL's write, and the one a script pipes in: the whole file at once.
+  if (sub === "set-all") {
+    const text = docOpt("--text");
+    if (text === undefined) return fail("no-text", `orc doc rules set-all needs --text "<the whole file>".`);
+    return wholeFile(text, "house rules replaced");
   }
   const setFile = docOpt("--set-file");
   if (setFile) {
     const abs = path.isAbsolute(setFile) ? setFile : path.join(repoRootOf(claudeDir), setFile);
     if (!fs.existsSync(abs)) return fail("no-such-file", `no such file: ${setFile}`);
-    // `P0 the rule text` per line. A bulk replace is CLI-only and destructive,
-    // so it is never a panel button.
-    const rows = [];
-    for (const raw of fs.readFileSync(abs, "utf8").split(/\r?\n/)) {
-      const line = raw.trim();
-      if (!line || line.startsWith("#")) continue;
-      const m = /^(P[012])\s+(.+)$/.exec(line);
-      if (!m) return fail("bad-line", `every line must start with P0, P1 or P2: "${line.slice(0, 60)}"`);
-      rows.push({ priority: m[1], text: m[2].trim() });
-    }
-    if (!rows.length) return fail("empty-file", `${setFile} holds no rules.`);
-    led.rules = rows.map((r, i) => ({
-      id: "H-" + String(i + 1).padStart(3, "0"),
-      priority: r.priority,
-      text: r.text,
-      enabled: true,
-      added_at: fmtStamp(new Date()),
-    }));
-    return save(`${rows.length} rules replaced from ${setFile}`, { replaced: rows.length });
+    return wholeFile(fs.readFileSync(abs, "utf8"), `house rules replaced from ${setFile}`, { from: setFile });
   }
   if (flag("--reset") === true) {
-    const n = led.rules.length;
-    led.rules = [];
-    return save(`${n} rules removed`, { removed: n });
+    led.preamble = DOC_RULES_PREAMBLE;
+    return save("house rules reset to the empty template", docRulesEmpty(), { reset: true });
   }
 
   // ── the reads ────────────────────────────────────────────────────────────
-  const enabled = docRulesEnabled(led);
   // `orc doc rules <slug>` — the FROZEN set of one document, and its drift.
   const slug = sub && sub !== "list" ? docResolveSlug(claudeDir, sub) : slugArg ? docResolveSlug(claudeDir, slugArg) : null;
   if ((sub && sub !== "list") || slugArg) {
     if (!slug) return docNoSuch(asJson, sub || slugArg);
     const d = docRead(claudeDir, slug);
     if (!d) return docNoSuch(asJson, sub || slugArg);
-    const frozen = docRulesSort(d.doc_rules || []);
-    const drift = docRulesDrift(frozen, enabled);
+    const frozen = docRulesBlocksOf(d.doc_rules);
+    const drift = docRulesDrift(frozen, led.blocks);
     if (flag("--sync") === true) {
       // A DELIBERATE re-freeze. It NAMES the already-written sections that
       // predate the new set and never re-writes one: auto-rewriting would be ORC
@@ -12400,14 +12558,27 @@ function docRulesCmd(claudeDir, slugArg) {
           return st && st.state && st.state !== "planned";
         })
         .map((o) => o.id);
-      d.doc_rules = enabled.map((r) => ({ ...r }));
+      d.doc_rules = { ...led.blocks };
       d.doc_rule_syncs = Array.isArray(d.doc_rule_syncs) ? d.doc_rule_syncs : [];
-      d.doc_rule_syncs.push({ at: fmtStamp(new Date()), rules: enabled.length, predate });
+      d.doc_rule_syncs.push({ at: fmtStamp(new Date()), counts: docRulesCounts(led.blocks), predate });
       docWrite(claudeDir, slug, d);
       docWriteHouseRules(claudeDir, slug, d);
+      const synced = DOC_RULE_PRIORITIES.reduce((a, k) => a + docRulesCount(led.blocks[k]), 0);
       if (asJson)
-        emitJson({ ok: true, slug, synced: enabled.length, predate, rules: enabled, boundary: DOC_RULES_BOUNDARY }, 0);
-      console.log(`✓ ${slug} re-frozen against ${plural(enabled.length, "house rule")}.`);
+        emitJson(
+          {
+            ok: true,
+            slug,
+            synced,
+            predate,
+            blocks: led.blocks,
+            text: docRulesSlice(led.blocks),
+            counts: docRulesCounts(led.blocks),
+            boundary: DOC_RULES_BOUNDARY,
+          },
+          0
+        );
+      console.log(`✓ ${slug} re-frozen against ${plural(synced, "line")} of house rules.`);
       if (predate.length) {
         console.log(`\n  These sections were written BEFORE the change and are NOT re-written:`);
         for (const id of predate) console.log(`    ${id}`);
@@ -12418,18 +12589,34 @@ function docRulesCmd(claudeDir, slugArg) {
     const code = drift.drifted ? 1 : 0;
     if (asJson)
       emitJson(
-        { ok: true, slug, frozen, project: enabled, drift, counts: docRulesCounts(frozen), line: docRulesLine(frozen), boundary: DOC_RULES_BOUNDARY },
+        {
+          ok: true,
+          slug,
+          frozen,
+          project: led.blocks,
+          drift,
+          counts: docRulesCounts(frozen),
+          line: docRulesLine(frozen),
+          priorities: DOC_RULE_PRIORITIES,
+          text: docRulesSlice(frozen),
+          boundary: DOC_RULES_BOUNDARY,
+        },
         code
       );
     console.log(ui.header(`ORC · doc rules — ${slug}`));
     console.log(`\n  ${docRulesLine(frozen)}   ${ui.color.gray("(frozen at init)")}`);
-    for (const r of frozen) console.log(`    ${r.priority}  ${ui.color.gray(r.id)}  ${r.text}`);
+    for (const pr of DOC_RULE_PRIORITIES) {
+      if (!frozen[pr]) continue;
+      console.log(`\n  ${pr}`);
+      for (const l of frozen[pr].split("\n")) console.log(`    ${l}`);
+    }
     if (!drift.drifted) console.log(`\n  The project ledger has not moved since.`);
     else {
       console.log(`\n  The project ledger HAS moved since this document was frozen:`);
-      for (const r of drift.added) console.log(`    + ${r.priority}  ${r.id}  ${r.text}`);
-      for (const r of drift.removed) console.log(`    - ${r.priority}  ${r.id}  ${r.text}`);
-      for (const r of drift.changed) console.log(`    ~ ${r.id}  ${r.from.priority} "${r.from.text}" -> ${r.to.priority} "${r.to.text}"`);
+      for (const ch of drift.changed) {
+        console.log(`    ~ ${ch.priority}  ${plural(docRulesCount(ch.from), "line")} → ${plural(docRulesCount(ch.to), "line")}`);
+        for (const l of (ch.to || "(empty)").split("\n")) console.log(`        ${l}`);
+      }
       console.log(`\n  Re-freeze deliberately:  orc doc rules ${slug} --sync`);
     }
     console.log("\n" + ui.color.gray("  " + DOC_RULES_BOUNDARY));
@@ -12438,36 +12625,47 @@ function docRulesCmd(claudeDir, slugArg) {
 
   // `orc doc rules` — the project ledger. NO rules is an ANSWER, so the object
   // is still returned; only the exit code says "there is nothing here yet".
-  const code = led.rules.length ? 0 : 1;
+  const code = led.empty ? 1 : 0;
   if (asJson)
     emitJson(
       {
         ok: true,
-        file: docRulesPath(claudeDir),
-        rules: docRulesSort(led.rules),
-        enabled,
-        counts: docRulesCounts(enabled),
-        line: docRulesLine(enabled),
+        file: led.path,
+        exists: led.exists,
+        preamble: led.preamble,
+        blocks: led.blocks,
+        text: led.text,
+        slice: docRulesSlice(led.blocks),
+        counts: docRulesCounts(led.blocks),
+        line: docRulesLine(led.blocks),
         priorities: DOC_RULE_PRIORITIES,
-        updated_at: led.updated_at,
+        empty: led.empty,
+        migrated: led.migrated ? { from: led.migrated.from, dropped_disabled: led.migrated.dropped_disabled } : null,
+        template: docRulesRender(DOC_RULES_PREAMBLE, docRulesEmpty()),
         boundary: DOC_RULES_BOUNDARY,
       },
       code
     );
   console.log(ui.header("ORC · doc house rules"));
-  if (!led.rules.length) {
+  console.log(`\n  ${led.path}`);
+  if (led.migrated)
+    console.log(
+      ui.color.yellow(`\n  Migrated from ${DOC_RULES_LEGACY_FILE} — it was left on disk, nothing was deleted.`) +
+        (led.migrated.dropped_disabled
+          ? `\n  ${plural(led.migrated.dropped_disabled, "disabled rule")} was NOT carried over. Add it back if you want it.`
+          : "")
+    );
+  if (led.empty) {
     console.log(`\n  No house rules yet.`);
-    console.log(`\n  Add one:  orc doc rules add --priority P0 --text "every document opens with a one-paragraph summary"`);
+    console.log(`\n  Write them:  orc doc rules set --priority P0 --text "every document opens with a one-paragraph summary"`);
+    console.log(`  Or open the file above in your editor — P0, P1 and P2 are already there.`);
   } else {
-    console.log("");
     for (const pr of DOC_RULE_PRIORITIES) {
-      const rows = docRulesSort(led.rules).filter((r) => r.priority === pr);
-      if (!rows.length) continue;
-      console.log(`  ${pr}`);
-      for (const r of rows)
-        console.log(`    ${ui.color.gray(r.id)}  ${r.enabled ? "" : ui.color.gray("(disabled) ")}${r.text}`);
+      if (!led.blocks[pr]) continue;
+      console.log(`\n  ${pr}`);
+      for (const l of led.blocks[pr].split("\n")) console.log(`    ${l}`);
     }
-    console.log(`\n  ${docRulesLine(docRulesEnabled(led))}`);
+    console.log(`\n  ${docRulesLine(led.blocks)}`);
   }
   console.log("\n" + ui.color.gray("  " + DOC_RULES_BOUNDARY));
   process.exit(code);
@@ -12550,7 +12748,7 @@ function docInit(claudeDir) {
   // at wave 3, half the document silently no longer complies and nothing on disk
   // says so. `orc doc rules <slug>` reports the drift; `--sync` re-freezes
   // deliberately and NAMES the sections that predate the change.
-  const houseRules = docRulesEnabled(docRulesRead(claudeDir));
+  const houseRules = docRulesRead(claudeDir).blocks;
   const d = {
     version: DOC_STATE_VERSION,
     slug: folderSlug,
@@ -12568,7 +12766,7 @@ function docInit(claudeDir) {
     extracts: {},
     cycles: [],
     migrations: [],
-    doc_rules: houseRules.map((r) => ({ ...r })),
+    doc_rules: { ...houseRules },
     doc_rule_syncs: [],
   };
   // `sections/` is a REAL, VISIBLE folder — a hidden dot-folder is not something
@@ -12594,6 +12792,7 @@ function docInit(claudeDir) {
         sections_dir: path.relative(paths.root, paths.sections).split(path.sep).join("/"),
         write_mode: d.write_mode,
         doc_rules: houseRules,
+        doc_rules_text: docRulesSlice(houseRules),
         doc_rules_line: docRulesLine(houseRules),
         template_locked: templateLock.locked,
         allowed_headings: templateLock.locked ? templateLock.headings : null,
@@ -13190,7 +13389,8 @@ function docPlanCmd(claudeDir, slugArg) {
           ok: true, slug, role, agent, budget_lines: budget, parallel, clamped,
           write_mode: writeMode, waves: [], agents: 0, more_waves: 0, only: only.length ? only : null,
           oversized: [], hint: shape.hint,
-          doc_rules: docRulesSort(d.doc_rules || []),
+          doc_rules: docRulesBlocksOf(d.doc_rules),
+          doc_rules_text: docRulesSlice(docRulesBlocksOf(d.doc_rules)),
           doc_rules_boundary: DOC_RULES_BOUNDARY,
           template_locked: docLock(d).locked,
           allowed_headings: docLock(d).locked ? docLock(d).headings : null,
@@ -13235,7 +13435,8 @@ function docPlanCmd(claudeDir, slugArg) {
     // because they are identical for every dispatch in the run — and the SKILL
     // puts them at the very top of every slice, above ORC's own generation
     // rules. That order is the contract.
-    doc_rules: docRulesSort(d.doc_rules || []),
+    doc_rules: docRulesBlocksOf(d.doc_rules),
+    doc_rules_text: docRulesSlice(docRulesBlocksOf(d.doc_rules)),
     doc_rules_boundary: DOC_RULES_BOUNDARY,
     // THE CAGE, on every write item. A writer may not add, rename, merge or drop
     // a heading; what does not fit is a gap.
@@ -14114,6 +14315,140 @@ function docLintCmd(claudeDir, arg) {
   process.exit(code);
 }
 
+// ── THE HAND-BACK: RESUME.md (v0.49.5) ──────────────────────────────────────
+// One generator, and it is this one. `orc doc status` already computes the
+// `Where it stands:` line; this builds the whole page around it, in the same
+// plain words the lane speaks to a reader who does not write code.
+//
+// Why the CLI and not the skill: a hand-back the orchestrator is TOLD to write
+// at every stop is a hand-back that goes missing on the one run that mattered —
+// the one a usage limit killed. It is written on every doc.json write instead,
+// so it exists from `orc doc init` onward and is never behind.
+function docResumeBuild(claudeDir, slug) {
+  const view = docMapView(claudeDir, slug);
+  if (!view) return null;
+  const d = view.d;
+  const p = view.paths;
+  const v2 = d.version >= DOC_STATE_VERSION;
+  const pv = docPartsView(claudeDir, slug);
+  const rows = v2 ? pv.rows : view.sections;
+  const byId = new Map(rows.map((s) => [s.id, s]));
+  const next = docNextAction(claudeDir, slug);
+  const wave = docWaveState(d, pv.rows);
+  const where = docWhereLine(d, view, { rows: v2 ? pv.rows : null, phase: next ? next.phase : null, wave });
+  const open = d.outline.filter((o) => {
+    const s = byId.get(o.id);
+    return !s || s.state === "planned" || s.state === "open" || s.state === "unconfirmed";
+  });
+  const edited = rows.filter((s) => s.state === "user-edited");
+  const rel = (abs) => (abs ? path.relative(p.root, abs).split(path.sep).join("/") : null);
+  const hasDoc = !!view.document && fs.existsSync(view.document);
+
+  const L = [
+    "# Resume this document",
+    "",
+    "You do not need to remember anything. Open a new Claude Code session in this",
+    "project and paste the line below. It reads what is already on disk.",
+    "",
+    "    /orc-doc resume " + slug,
+    "",
+    // COLUMN 0, always. `parseStands` is line-anchored, so a heading prefix here
+    // means `orc resume`, `orc run list` and `orc doc list` all stop seeing it.
+    where,
+    "",
+    "## What this document is",
+    "",
+    "- Title:      " + (d.title || slug),
+    "- Kind:       " + String(d.type || "").toUpperCase(),
+    "- Started:    " + (d.created_at || "unknown"),
+    "- " + docRulesLine(docRulesBlocksOf(d.doc_rules)),
+    "",
+    "## Where the files are",
+    "",
+    "- Sections:   " + rel(p.sections) + "/   <- the source of truth, one file per section",
+    "- Document:   " + (hasDoc ? rel(view.document) : rel(path.join(p.folder, DOC_FILE)) + "  (not built yet)"),
+    "              This is a BUILD ARTIFACT. `orc doc compile " + slug + "` rebuilds it, free.",
+    "- Context:    " + rel(p.folder) + "/context.md   <- the new session reads this, so you never",
+    "              have to explain the same thing twice.",
+    "",
+  ];
+
+  if (open.length) {
+    L.push("## Not written yet", "");
+    for (const o of open.slice(0, 40)) L.push("- " + o.heading);
+    if (open.length > 40) L.push("- ... and " + (open.length - 40) + " more");
+    L.push("");
+  }
+  if (edited.length) {
+    L.push("## You edited these yourself", "");
+    for (const s of edited) L.push("- " + s.heading);
+    L.push("", "ORC will not touch them again unless you name them.", "");
+  }
+
+  L.push("## What happens next", "");
+  if (next && next.command) {
+    L.push("The next step is:", "", "    " + next.command, "");
+    L.push(next.paid ? "That one costs model tokens." : "That one is free - it costs no model tokens.", "");
+  } else if (next && next.blocked_by) {
+    L.push("Nothing runs until you decide something:", "", "    " + next.blocked_by, "");
+  }
+  L.push(
+    "The new session will:",
+    "",
+    "1. Read the context and the plan from disk. It will NOT ask you again what you",
+    "   already answered.",
+    "2. Carry on from where it stopped, and re-read nothing it already wrote.",
+    "3. Ask you what should change - and it will not touch the document until you say.",
+    "",
+    "---",
+    "",
+    "Nothing here is staged or committed. If your team should see it:",
+    "",
+    "    git add " + rel(p.folder) + "/",
+    ""
+  );
+  return { text: L.join("\n"), where, next, wave, open, edited, dir: docRunDir(claudeDir, slug) };
+}
+
+// `orc doc resume-file <slug>` — write the hand-back on demand, and print the
+// two things a reader actually needs: where the file is, and the line to paste.
+// The lane calls it before every question it asks, so "see RESUME.md" is never
+// a promise about a file that is not there.
+function docResumeFileCmd(claudeDir, slugArg) {
+  const asJson = wantsJson();
+  const slug = docResolveSlug(claudeDir, slugArg);
+  if (!slug) return docNoSuch(asJson, slugArg);
+  const built = docResumeBuild(claudeDir, slug);
+  if (!built) return docNoSuch(asJson, slugArg);
+  const dir = docRunDir(claudeDir, slug);
+  if (!dir) {
+    if (asJson) emitJson({ ok: false, reason: "no-run-dir", slug, hint: "the run directory could not be resolved" }, 2);
+    console.error("❌ the run directory could not be resolved");
+    process.exit(2);
+  }
+  fs.mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, RESUME_FILE);
+  fs.writeFileSync(file, built.text);
+  const payload = {
+    ok: true,
+    slug,
+    file,
+    where: built.where,
+    paste: `/orc-doc resume ${slug}`,
+    next: built.next ? { phase: built.next.phase, action: built.next.action, command: built.next.command, paid: built.next.paid, blocked_by: built.next.blocked_by } : null,
+    wave: built.wave,
+    open: built.open.map((o) => ({ id: o.id, heading: o.heading })),
+    user_edited: built.edited.map((s) => ({ id: s.id, heading: s.heading })),
+    lines: built.text.split("\n").length,
+  };
+  if (asJson) emitJson(payload, 0);
+  console.log(ui.header(`ORC · doc resume-file — ${slug}`));
+  console.log(`\n  ${built.where}`);
+  console.log(`\n  Written:  ${file}`);
+  console.log(`  Paste:    ${payload.paste}`);
+  process.exit(0);
+}
+
 function docStatusCmd(claudeDir, slugArg) {
   const asJson = wantsJson();
   const slug = docResolveSlug(claudeDir, slugArg);
@@ -14462,17 +14797,12 @@ function docAuditFindings(claudeDir, slug) {
   // v0.49.2 — the frozen house rules and the project ledger have parted. It is a
   // WARN, never an error: the drift is a fact about the document, and whether
   // any already-written section needs redoing is the user's call, not ORC's.
-  const hrDrift = docRulesDrift(d.doc_rules || [], docRulesEnabled(docRulesRead(claudeDir)));
+  const hrDrift = docRulesDrift(d.doc_rules, docRulesRead(claudeDir).blocks);
   if (hrDrift.drifted) {
-    const bits = [];
-    if (hrDrift.added.length) bits.push(`${hrDrift.added.length} added`);
-    if (hrDrift.removed.length) bits.push(`${hrDrift.removed.length} removed`);
-    if (hrDrift.changed.length) bits.push(`${hrDrift.changed.length} changed`);
     add(
       "house-rules-drifted",
-      `the project's house rules moved since this document was frozen (${bits.join(", ")}: ` +
-        `${[...hrDrift.added, ...hrDrift.removed].map((r) => r.id).concat(hrDrift.changed.map((r) => r.id)).join(", ")}). ` +
-        `Nothing is re-written on its own.`,
+      `the project's house rules moved since this document was frozen ` +
+        `(${hrDrift.changed.map((c) => c.priority).join(", ")}). Nothing is re-written on its own.`,
       `orc doc rules ${slug} --sync`,
       "docs",
       "warn"
@@ -15590,6 +15920,12 @@ function doc() {
     case "next":
       docNextCmd(claudeDir, pos[2]);
       break;
+    // v0.49.5 - the hand-back, on demand. docWrite() already refreshes it on
+    // every state change; this is the lane's explicit "write it now" before it
+    // asks the user anything.
+    case "resume-file":
+      docResumeFileCmd(claudeDir, pos[2]);
+      break;
     case "ship":
       docShipCmd(claudeDir, pos[2], false);
       break;
@@ -16559,14 +16895,22 @@ Usage:
                                           1 findings / 2 unreadable). Zero model tokens
       … --section <id>                    lint ONE section file and report PART-LOCAL line
                                           numbers — the lines the writer actually opens
-    orc doc rules [--json]                the PROJECT's own house rules (P0/P1/P2) — what a
-                                          document says and how it reads. They can never change
-                                          how this lane RUNS (exit 0 = rules exist / 1 = none yet)
-      orc doc rules add --priority P0|P1|P2 --text "…"
-                                          one line, stored and re-emitted verbatim
-      orc doc rules remove|enable|disable <id>
-      orc doc rules move <id> --priority P1
-      orc doc rules <slug> [--json]       the set FROZEN into one document, and every rule that
+    orc doc resume-file <slug> [--json]   write RESUME.md now - the plain-English hand-back with
+                                          the one line to paste into a new session. It is also
+                                          rewritten automatically on every state change
+    orc doc rules [--json]                the PROJECT's own house rules — a PLAIN TEXT config at
+                                          .claude/orc/doc-house-rules.md with three headings,
+                                          P0/P1/P2, and as much text under each as you want. They
+                                          govern what a document SAYS and how it READS, and can
+                                          never change how this lane RUNS
+                                          (exit 0 = rules exist / 1 = none yet)
+      orc doc rules set --priority P0|P1|P2 --text "…"
+                                          replace ONE block. Multi-line is fine — that is the point
+      orc doc rules add --priority P0 --text "…"
+                                          append to a block instead of replacing it
+      orc doc rules clear --priority P0   empty ONE block
+      orc doc rules set-all --text "…"    replace the WHOLE file (what orc ui writes)
+      orc doc rules <slug> [--json]       the text FROZEN into one document, and every block that
                                           moved since (exit 1 = the ledger drifted)
       orc doc rules <slug> --sync         re-freeze deliberately; NAMES the sections that predate
                                           the change and re-writes nothing

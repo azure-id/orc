@@ -148,30 +148,55 @@
   color: var(--text-dim);
   margin-bottom: var(--sp-2);
 }
-.rule-row {
-  display: grid;
-  grid-template-columns: 44px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: var(--sp-3);
-  padding: var(--sp-2) var(--sp-3);
-  border-top: 1px solid var(--line-soft);
-}
-.rule-mid { min-width: 0; }
-.rule-text { font-size: 13px; }
-.rule-id { font-family: var(--mono); font-size: 11px; color: var(--text-faint); margin-top: 2px; }
-/* A DISABLED rule keeps its slot and reads as disabled. Hiding it would make
-   "I switched that off" and "there is no such rule" identical. */
-.rule-off .rule-text { color: var(--text-faint); text-decoration: line-through; }
-/* Staged, not written. The row says so until Apply. */
-.rule-removing .rule-text { text-decoration: line-through; opacity: .6; }
-.rule-add {
-  display: flex;
-  gap: var(--sp-2);
-  align-items: center;
+/* v0.49.5 — THE LEDGER IS A TEXT CONFIG, so the control is a textarea and not a
+   form. It is monospaced because the file has a shape (three headings) the user
+   is editing directly, and it resizes vertically because a P0 is as long as it
+   needs to be. */
+.rule-editor {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
   margin-top: var(--sp-3);
-  flex-wrap: wrap;
+  min-height: 320px;
+  resize: vertical;
+  padding: var(--sp-3);
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.6;
+  tab-size: 2;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  /* Both syntaxes, because neither falls back to the other. */
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
 }
-.rule-add .text-input { flex: 1 1 220px; min-width: 0; }
+.rule-editor::-webkit-scrollbar { width: 9px; }
+.rule-editor::-webkit-scrollbar-track { background: transparent; }
+.rule-editor::-webkit-scrollbar-thumb { background: var(--line); border-radius: 4px; }
+.rule-editor:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.rule-path {
+  font-family: var(--mono);
+  font-size: 11px;
+  margin-top: var(--sp-2);
+  overflow-x: auto;
+  white-space: nowrap;
+}
+/* A frozen block, VERBATIM — the user's own words, wrapped but never re-flowed
+   into ORC's voice. */
+.rule-block {
+  margin: 0;
+  padding: var(--sp-2) var(--sp-3);
+  border-left: 2px solid var(--line);
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.rule-block-new { border-left-color: var(--warn); }
 .rule-boundary { margin-top: var(--sp-3); border-top: 1px solid var(--line-soft); padding-top: var(--sp-2); }
 .rule-drift { margin-top: var(--sp-3); }
 .rule-drift-row {
@@ -179,8 +204,7 @@
   font-size: 12px;
   color: var(--text-dim);
   padding: 2px 0;
-  overflow-x: auto;
-  white-space: nowrap;
+  margin-top: var(--sp-2);
 }
 
 /* The wave table and the per-section cost table share one shape. Wide content

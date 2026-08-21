@@ -6,14 +6,14 @@
 
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
-![Version](https://img.shields.io/badge/version-0.49.4-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.49.5-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
 ![Dependencies](https://img.shields.io/badge/dependencies-zero-lightgrey.svg?style=for-the-badge)
 ![GitHub stars](https://img.shields.io/github/stars/azure-id/orc?style=for-the-badge&color=yellow)
 
-**Latest: v0.49.4** · updated 2026-08-20 · [full changelog](CHANGELOG.md)
+**Latest: v0.49.5** · updated 2026-08-21 · [full changelog](CHANGELOG.md)
 
 **🇮🇩 [Baca dalam Bahasa Indonesia](README-id.md)**
 
@@ -439,32 +439,25 @@ a current audit: [EVAL-REPORT.md](EVAL-REPORT.md).
 **Full history: [CHANGELOG.md](CHANGELOG.md)** — or `orc changelog`, which prints
 only what is newer than the version you have.
 
-### v0.49.4 — the panel was being handed half an answer _(2026-08-20)_
+### v0.49.5 — house rules are text, and the hand-back writes itself _(2026-08-21)_
 
-One bug, and it could hit any `--json` read big enough.
+Two fixes to `/orc-doc`, both the same shape: stop making a person work around
+the tool.
 
-- **Fixed: a large `--json` payload was truncated whenever something read it
-  through a pipe.** `emitJson` wrote to stdout and then called `process.exit()`.
-  On macOS and Linux a pipe write is asynchronous, so the exit threw away
-  whatever had not flushed — and `orc ui` reads every panel through a pipe. On a
-  1,100-file repo `orc wiki coverage --json` computed a perfect 30 KB object, the
-  server received the first 9 KB, `JSON.parse` failed, and **Knowledge ▸
-  Coverage** reported that the repo had neither a registered wiki nor a git
-  repository — on a wiki that was FRESH and 39% covered. `orc wiki docs` was hit
-  the same way; `wiki status` escaped only because it prints and returns instead
-  of exiting. Windows pipes are synchronous, which is why it never showed up in
-  development. Every `--json` read now writes through fd 1 synchronously.
-- **The Knowledge panel no longer reports a broken read as an empty repo.** A
-  failed request renders the CLI's own reason and output, the way every other
-  panel has since v0.49.2 — the generic "it needs a registered wiki and a git
-  repository" line is for a repo that actually has neither.
-- **Also: git output is no longer capped at Node's 1 MB default** (v0.49.3),
-  which would have truncated `git ls-files` on a repo of roughly 25,000 files.
+- **House rules are a PLAIN TEXT config, not a form.** Three headings —
+  **P0**, **P1**, **P2** — and as much text under each one as you want, handed to
+  every writer verbatim. No dropdown, no one-line rule, no Add button, no per-rule
+  row. Open `.claude/orc/doc-house-rules.md` in your editor, or edit it in **one
+  box** in `orc ui` ▸ **Docs**. The old row store migrates itself, is never
+  deleted, and never resurrects a rule you had switched off.
+- **`RESUME.md` is written by the CLI, on every state change** — so it exists from
+  `orc doc init` onward and is never behind the disk. **Every question `/orc-doc`
+  asks you now ends by pointing at it**: the file path, and the one line to paste
+  into a brand-new session. It is written for someone who does not read code.
 
-Before that: **v0.49.3 — coverage on a large repo**, **v0.49.2 — house rules, a
-run map before you pay, and three defects**, **v0.49.1 — the challenge council,
-and a `--json` that stops throwing things away**, and **v0.49.0 — the document is
-a folder, and the file is a build artifact** (`/orc-doc`).
+Before that: **v0.49.4 — the panel was being handed half an answer**,
+**v0.49.3 — coverage on a large repo**, **v0.49.2 — house rules, a run map before
+you pay, and three defects**, and **v0.49.1 — the challenge council**.
 [Read them in the changelog](CHANGELOG.md).
 
 ---

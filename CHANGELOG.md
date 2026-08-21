@@ -10,6 +10,40 @@ Format: `### v<version> — <title> _(<date>)_`.
 
 ---
 
+### v0.49.5 — house rules are text, and the hand-back writes itself _(2026-08-21)_
+
+Two fixes to `/orc-doc`, both the same shape: stop making a person work around
+the tool.
+
+- **House rules are a PLAIN TEXT config now, not a form.** The first cut modelled
+  a rule as a row — one line, one id, a P0/P1/P2 dropdown, an enable flag, added
+  one at a time. Nobody's real P0 fits on one line, and filing it as four
+  separate rows to keep the CLI's argv simple was the tool asking the user to
+  work around it. The ledger is now `.claude/orc/doc-house-rules.md`: three
+  headings, and **as much text under each one as you want**, handed to every
+  writer verbatim. Open it in your editor, or edit it in **one box** in
+  `orc ui` ▸ **Docs** — no dropdown, no Add button, no per-rule row.
+- **New: `orc doc rules set|add|clear --priority P0 --text "…"`** (multi-line is
+  the point), plus `set-all` for the whole file and `--set-file` for a bulk
+  replace. `remove`, `enable`, `disable` and `move` are **refused by name** — a
+  command that used to work and now does nothing is worse than one that says
+  what replaced it.
+- **Migration is lazy, free and non-destructive.** The old `doc-house-rules.json`
+  is read once, converted, and **left exactly where it was**. A rule you had
+  DISABLED is never resurrected — it is left behind and counted in the output.
+- **`RESUME.md` is written by the CLI, on every state change.** It used to be
+  prose the orchestrator was told to write at every stop, which is the bet this
+  repo has already lost twice: the hand-back you are TOLD to write is the one
+  that goes missing on the run a usage limit killed. `doc.json` has exactly one
+  writer, so the hand-back hangs off that — it exists from `orc doc init` onward
+  and is never behind the disk. `orc doc resume-file <slug>` writes it on demand.
+- **Every question `/orc-doc` asks you now ends by pointing at it** (hard rule
+  16): the file path, and the one line to paste into a brand-new session. The
+  page itself is written for someone who does not read code — what the document
+  is, where the files are, what is not written yet, and what happens next.
+
+---
+
 ### v0.49.4 — the panel was being handed half an answer _(2026-08-20)_
 
 One bug, and it could hit any `--json` read big enough.

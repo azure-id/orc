@@ -748,64 +748,126 @@ const DOC_RULES_BOUNDARY =
   "never stage, never commit. A rule that asks for one of those comes back as " +
   "unsupported_request — never a guessed compromise.";
 
+// v0.49.5 — the ledger is a PLAIN TEXT config, so a fixture is a FILE, not a
+// row list. The states that matter here: a file with all three blocks filled ·
+// a file that is still the bare template · one that was just MIGRATED from the
+// old row store and left a disabled rule behind. You cannot design the migration
+// note on a ledger that was never migrated.
+const NL = String.fromCharCode(10);
+const DOC_RULES_PREAMBLE = [
+  "# ORC \u00b7 doc house rules",
+  "#",
+  "# This project's own standing instructions about WHAT a document says and HOW",
+  "# it reads. Put each one under the heading you want it read at \u2014 P0 first,",
+  "# then P1, then P2 \u2014 in as many lines as you like. There is no one-line rule",
+  "# and no rule count: the whole block is handed to every writer VERBATIM.",
+  "#",
+  "# Anything above the first `## P0` heading is a note to yourself and is never",
+  "# dispatched. Edit this file directly, or in `orc ui` \u25b8 Docs.",
+].join(NL);
+
+const RULE_BLOCKS = {
+  P0: [
+    "Every document opens with a one-paragraph summary a PM can read on a phone.",
+    "Money is always written with its currency, never a bare number.",
+    "Never name a customer, a partner or an employee without written consent \u2014 use",
+    "a role instead (\"the merchant\", \"the on-call engineer\").",
+  ].join(NL),
+  P1: [
+    "Use the customer's words for a customer-facing concept, not the internal",
+    "table name. If both are needed, lead with the customer's.",
+  ].join(NL),
+  P2: "Prefer a table over a list of more than six items.",
+};
+
+const rulesFile = (blocks) => {
+  const L = [DOC_RULES_PREAMBLE, ""];
+  for (const pr of ["P0", "P1", "P2"]) {
+    L.push("## " + pr, "");
+    if (blocks[pr]) L.push(blocks[pr], "");
+  }
+  return L.join(NL);
+};
+
+const rulesSlice = (blocks) => {
+  const L = [];
+  for (const pr of ["P0", "P1", "P2"]) if (blocks[pr]) L.push(pr, blocks[pr], "");
+  return L.join(NL).replace(/\s+$/, "");
+};
+
 const docRules = {
   ok: true,
-  file: PROJECT + "/.claude/orc/doc-house-rules.json",
+  file: PROJECT + "/.claude/orc/doc-house-rules.md",
+  exists: true,
   priorities: ["P0", "P1", "P2"],
-  updated_at: "16-08-2026 08:40:12",
-  line: "house rules: 4 (P0 2 · P1 1 · P2 1)",
-  counts: { P0: 2, P1: 1, P2: 1 },
+  preamble: DOC_RULES_PREAMBLE,
+  blocks: RULE_BLOCKS,
+  text: rulesFile(RULE_BLOCKS),
+  slice: rulesSlice(RULE_BLOCKS),
+  line: "house rules: 7 lines (P0 4 \u00b7 P1 2 \u00b7 P2 1)",
+  counts: { P0: 4, P1: 2, P2: 1 },
+  empty: false,
+  migrated: null,
+  template: rulesFile({ P0: "", P1: "", P2: "" }),
   boundary: DOC_RULES_BOUNDARY,
-  rules: [
-    { id: "H-001", priority: "P0", text: "every document opens with a one-paragraph summary a PM can read on a phone", enabled: true, added_at: "02-08-2026 11:12:00" },
-    { id: "H-004", priority: "P0", text: "money is always written with its currency, never a bare number", enabled: true, added_at: "16-08-2026 08:40:12" },
-    { id: "H-002", priority: "P1", text: "use the customer's words for a customer-facing concept, not the internal table name", enabled: true, added_at: "02-08-2026 11:14:20" },
-    // A DISABLED rule keeps its slot: "I switched that off" and "there is no
-    // such rule" must never look the same.
-    { id: "H-003", priority: "P2", text: "prefer a table over a list of more than six items", enabled: false, added_at: "09-08-2026 14:01:55" },
-  ],
 };
-docRules.enabled = docRules.rules.filter((r) => r.enabled);
 
+// The bare template. It is NOT an empty card: the headings are already there,
+// which is the whole point of a text config.
 const docRulesEmpty = {
   ok: true,
   file: docRules.file,
+  exists: false,
   priorities: ["P0", "P1", "P2"],
-  updated_at: null,
+  preamble: DOC_RULES_PREAMBLE,
+  blocks: { P0: "", P1: "", P2: "" },
+  text: docRules.template,
+  slice: "",
   line: "house rules: none",
   counts: { P0: 0, P1: 0, P2: 0 },
+  empty: true,
+  migrated: null,
+  template: docRules.template,
   boundary: DOC_RULES_BOUNDARY,
-  rules: [],
-  enabled: [],
 };
 
-// FROZEN, per document. One clean, one drifted — and the drifted one NAMES
-// every rule that moved.
+// Just migrated from the v0.49.2 row store, with a disabled rule left behind.
+const docRulesMigrated = Object.assign({}, docRules, {
+  migrated: { from: PROJECT + "/.claude/orc/doc-house-rules.json", dropped_disabled: 1 },
+});
+
+// FROZEN, per document. One clean, one drifted \u2014 and the drifted one NAMES the
+// block that moved and shows what the project says now.
 const docRulesFrozen = {
   "prd-checkout-refund-130826": {
     ok: true,
     slug: "prd-checkout-refund-130826",
-    frozen: docRules.rules.slice(0, 3),
-    project: docRules.enabled,
-    counts: { P0: 2, P1: 1, P2: 0 },
-    line: "house rules: 3 (P0 2 · P1 1)",
+    priorities: ["P0", "P1", "P2"],
+    frozen: { P0: RULE_BLOCKS.P0, P1: "Use the customer's words.", P2: "" },
+    project: RULE_BLOCKS,
+    counts: { P0: 4, P1: 1, P2: 0 },
+    line: "house rules: 5 lines (P0 4 \u00b7 P1 1)",
+    text: rulesSlice({ P0: RULE_BLOCKS.P0, P1: "Use the customer's words.", P2: "" }),
     boundary: DOC_RULES_BOUNDARY,
     drift: {
       drifted: true,
-      added: [{ id: "H-005", priority: "P1", text: "name the owning team in the header of every runbook" }],
-      removed: [],
-      changed: [{ id: "H-002", from: { priority: "P2", text: "use the customer's words" }, to: { priority: "P1", text: "use the customer's words for a customer-facing concept, not the internal table name" } }],
+      changed: [
+        { priority: "P1", from: "Use the customer's words.", to: RULE_BLOCKS.P1 },
+        { priority: "P2", from: "", to: RULE_BLOCKS.P2 },
+      ],
     },
   },
   "runbook-payout-freeze-110826": {
     ok: true,
     slug: "runbook-payout-freeze-110826",
-    frozen: docRules.enabled,
-    project: docRules.enabled,
-    counts: { P0: 2, P1: 1, P2: 0 },
-    line: "house rules: 3 (P0 2 · P1 1)",
+    priorities: ["P0", "P1", "P2"],
+    frozen: RULE_BLOCKS,
+    project: RULE_BLOCKS,
+    counts: docRules.counts,
+    line: docRules.line,
+    text: docRules.slice,
     boundary: DOC_RULES_BOUNDARY,
-    drift: { drifted: false, added: [], removed: [], changed: [] },
+    drift: { drifted: false, changed: [] },
   },
 };
 
@@ -911,4 +973,4 @@ const docCost = {
   },
 };
 
-module.exports = { docList, docParts, docStatuses, docMapSections, docMap, docLint, docPlan, docShow, docSection, docShipped, docShippedDrifted, docNext, docAudit, docJournalRich, docJournalEmpty, docContext, docRules, docRulesEmpty, docRulesFrozen, docForecast, docCost };
+module.exports = { docList, docParts, docStatuses, docMapSections, docMap, docLint, docPlan, docShow, docSection, docShipped, docShippedDrifted, docNext, docAudit, docJournalRich, docJournalEmpty, docContext, docRules, docRulesEmpty, docRulesMigrated, docRulesFrozen, docForecast, docCost };

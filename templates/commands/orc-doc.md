@@ -61,14 +61,19 @@ notes, no ORC bookkeeping of any kind — not in `document.md` and not in a sect
 file. It still never invents a fact: what it was not given comes back as a gap,
 lands in `gaps.md`, and is raised with you.
 
-**Your project gets its own house rules.** A P0/P1/P2 ledger of what a document
-says and how it reads — *"open with a one-paragraph summary"*, *"money always
-carries its currency"* — stored in your words and read FIRST in every dispatch,
-above ORC's own rules. Each document freezes the set it started with, so a rule
-you change halfway through cannot silently invalidate what is already written;
-`orc doc rules <slug>` names every rule that moved since. House rules govern what
-the document SAYS — they can never change how this lane runs, and ORC declares
-that boundary rather than pretending to detect it.
+**Your project gets its own house rules.** A plain text file
+(`.claude/orc/doc-house-rules.md`) with three headings — P0, P1, P2 — and as much
+text under each as you want: *"open with a one-paragraph summary"*, *"money
+always carries its currency"*. Stored in your words and read FIRST in every
+dispatch, above ORC's own rules. Each document freezes the text it started with,
+so a rule you change halfway through cannot silently invalidate what is already
+written; `orc doc rules <slug>` names every block that moved since. House rules
+govern what the document SAYS — they can never change how this lane runs, and ORC
+declares that boundary rather than pretending to detect it.
+
+**You never have to remember where you were.** Every stop rewrites
+`RESUME.md` — plain English, the state, and the one line to paste into a brand
+new session — and every question ORC asks you ends by pointing at it.
 
 **Four rules it applies to every document, all free.** No questions or `TBD`s in
 the body (a section your outline calls *open questions* is exempt); what is

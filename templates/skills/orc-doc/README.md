@@ -66,18 +66,36 @@ it reads: *"open with a one-paragraph summary a PM can read on a phone"*,
 *"money always carries its currency"*. They are read **first** in every dispatch,
 above ORC's own rules.
 
+**It is a plain text file, not a form.** `.claude/orc/doc-house-rules.md` has
+three headings and **as much text under each one as you want** — write them the
+way you would write them for a person:
+
+```markdown
+## P0
+
+Every document opens with a one-paragraph summary a busy exec can read.
+Money is always written with its currency, never a bare number.
+
+## P1
+
+Use the customer's words for a customer-facing concept, not the table name.
 ```
-orc doc rules add --priority P0 --text "every document opens with a summary"
-orc doc rules                       # the project ledger
-orc doc rules <slug>                # what THIS document was frozen against
-orc doc rules <slug> --sync         # re-freeze, deliberately
+
+Edit it in your editor, or in one box in `orc ui` ▸ **Docs**. From the CLI:
+
+```
+orc doc rules                                       # the project ledger + where it lives
+orc doc rules set --priority P0 --text "…"          # replace one block (multi-line is the point)
+orc doc rules add --priority P0 --text "…"          # append to a block
+orc doc rules <slug>                                # what THIS document was frozen against
+orc doc rules <slug> --sync                         # re-freeze, deliberately
 ```
 
 **P0** must · **P1** should (breaking it is recorded as a gap) · **P2** prefer.
 
-Each document **freezes** the rules that were enabled when it started, so a rule
-you change at wave 3 cannot silently invalidate half a document. `orc doc rules
-<slug>` names every rule that moved since; `--sync` re-freezes and tells you
+Each document **freezes** the text that was there when it started, so a rule you
+change at wave 3 cannot silently invalidate half a document. `orc doc rules
+<slug>` names every block that moved since; `--sync` re-freezes and tells you
 which sections predate the change. **It re-writes nothing on its own** — whether
 any of them needs redoing is your call.
 
