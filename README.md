@@ -6,14 +6,14 @@
 
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
-![Version](https://img.shields.io/badge/version-0.49.5-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.50.0-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
 ![Dependencies](https://img.shields.io/badge/dependencies-zero-lightgrey.svg?style=for-the-badge)
 ![GitHub stars](https://img.shields.io/github/stars/azure-id/orc?style=for-the-badge&color=yellow)
 
-**Latest: v0.49.5** · updated 2026-08-21 · [full changelog](CHANGELOG.md)
+**Latest: v0.50.0** · updated 2026-08-22 · [full changelog](CHANGELOG.md)
 
 **🇮🇩 [Baca dalam Bahasa Indonesia](README-id.md)**
 
@@ -376,7 +376,7 @@ bin/webui/        `orc ui` — the local control panel: css/ + js/ + i18n/<lang>
                   fixtures/, one file per layer and per panel. Zero deps, no build step
 bin/mockrun-catalog.js   the mocked-run catalogue (derived from the files on disk)
 mock-run/         the mocked runs themselves — start at INDEX.md
-guides/           configuration · model selection · documents · knowledge reads
+guides/           configuration · model selection · documents · knowledge reads · other AI models
 ```
 
 The `orc` skill is a thin **spine**: it loads a reference or a subskill only when
@@ -397,6 +397,7 @@ Some lanes ship a full how-to next to the skill, in plain language:
 | [ORC-PR-SETUP](templates/skills/orc-pr-setup/README.md) | you want to split a big change into stacked PRs |
 | [ORC-PR-DRIVER](templates/skills/orc-pr-driver/README.md) | you have a stack plan and want to build, submit and merge it |
 | [Configuration](guides/configuration.md) · [Model selection](guides/model-selection.md) | you want every key, or the scoring bands |
+| [Other AI models](guides/extra-models.md) | you want part of the ladder to run somewhere other than Claude |
 
 Every skill also ships its own `SKILL.md` and `references/`. The guides above are
 the human-facing versions.
@@ -439,25 +440,33 @@ a current audit: [EVAL-REPORT.md](EVAL-REPORT.md).
 **Full history: [CHANGELOG.md](CHANGELOG.md)** — or `orc changelog`, which prints
 only what is newer than the version you have.
 
-### v0.49.5 — house rules are text, and the hand-back writes itself _(2026-08-21)_
+### v0.50.0 — work that runs somewhere else _(2026-08-22)_
 
-Two fixes to `/orc-doc`, both the same shape: stop making a person work around
-the tool.
+**`orc extra`** — a band of ORC's score ladder can now run on a **non-Claude
+model**: DeepSeek, GLM, Kimi, MiniMax, Qwen, a local Ollama, any compatible
+endpoint you name, or an agentic CLI you already have. ORC's own session never
+moves; this routes **workers**, not the conductor.
 
-- **House rules are a PLAIN TEXT config, not a form.** Three headings —
-  **P0**, **P1**, **P2** — and as much text under each one as you want, handed to
-  every writer verbatim. No dropdown, no one-line rule, no Add button, no per-rule
-  row. Open `.claude/orc/doc-house-rules.md` in your editor, or edit it in **one
-  box** in `orc ui` ▸ **Docs**. The old row store migrates itself, is never
-  deleted, and never resurrects a rule you had switched off.
-- **`RESUME.md` is written by the CLI, on every state change** — so it exists from
-  `orc doc init` onward and is never behind the disk. **Every question `/orc-doc`
-  asks you now ends by pointing at it**: the file path, and the one line to paste
-  into a brand-new session. It is written for someone who does not read code.
+- **Off by default**, and a connection that has never answered a probe can never
+  be routed to. Two locks, not one.
+- **Every armed run says so before the work starts** — an `extra:` line in the
+  preflight, with no quiet version.
+- **A gap in the table is not a hole, it is Claude**, printed with the agent it
+  resolves to. **Risky work never leaves** — money, auth, security, or any area a
+  boundary card refuses.
+- **Your key never reaches a command line**, and the encrypted vault stores it
+  only after a green test.
+- **No shipped model ids and no shipped prices.** Both go stale and both get
+  believed; `usd` reads as an em dash until you supply a rate.
+- **New panel: `orc ui` ▸ Extra** — one 0→100 rail, every unrouted range keeping
+  its slot, and the boundary paragraph always on screen.
 
-Before that: **v0.49.4 — the panel was being handed half an answer**,
-**v0.49.3 — coverage on a large repo**, **v0.49.2 — house rules, a run map before
-you pay, and three defects**, and **v0.49.1 — the challenge council**.
+Setup per provider: **[`guides/extra-models.md`](guides/extra-models.md)**.
+
+Before that: **v0.49.5 — house rules are text, and the hand-back writes
+itself**, **v0.49.4 — the panel was being handed half an answer**,
+**v0.49.3 — coverage on a large repo**, and **v0.49.2 — house rules, a run map
+before you pay, and three defects**.
 [Read them in the changelog](CHANGELOG.md).
 
 ---

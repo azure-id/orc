@@ -48,6 +48,7 @@ const required = [
   "bin/webui/css/panels/handoff.css",
   "bin/webui/css/panels/challenge.css",
   "bin/webui/css/panels/docs.css",
+  "bin/webui/css/panels/extra.css",
   "bin/webui/css/panels/experiment.css",
   // The client modules (v0.48.1). The <script> order in app.html is the load
   // order and the numeric prefix is that order; 99-boot.js must be last.
@@ -74,6 +75,7 @@ const required = [
   "bin/webui/js/panels/handoff.js",
   "bin/webui/js/panels/challenge.js",
   "bin/webui/js/panels/docs.js",
+  "bin/webui/js/panels/extra.js",
   "bin/webui/js/90-tour.js",
   "bin/webui/js/91-shortcuts.js",
   "bin/webui/js/99-boot.js",
@@ -94,6 +96,7 @@ const required = [
   "bin/webui/fixtures/flow.js",
   "bin/webui/fixtures/crosslink.js",
   "bin/webui/fixtures/mockrun.js",
+  "bin/webui/fixtures/extra.js",
   // The string tables (v0.43.6). Named here for the same reason: English is the
   // FALLBACK table every other language falls back to, so a publish that drops
   // it renders raw dotted keys on every panel, in every language.
@@ -115,6 +118,7 @@ const required = [
   "bin/webui/i18n/en/handoff.json",
   "bin/webui/i18n/en/challenge.json",
   "bin/webui/i18n/en/docs.json",
+  "bin/webui/i18n/en/extra.json",
   "bin/webui/i18n/en/experiment.json",
   "bin/webui/i18n/en/tour.json",
   "bin/webui/i18n/id/common.json",
@@ -135,6 +139,7 @@ const required = [
   "bin/webui/i18n/id/handoff.json",
   "bin/webui/i18n/id/challenge.json",
   "bin/webui/i18n/id/docs.json",
+  "bin/webui/i18n/id/extra.json",
   "bin/webui/i18n/id/experiment.json",
   "bin/webui/i18n/id/tour.json",
   // The mocked runs (v0.46.x): the catalogue module plus the folder it reads.
@@ -142,6 +147,14 @@ const required = [
   // them, and an empty catalogue looks like a broken feature rather than a
   // publish that dropped a folder.
   "bin/mockrun-catalog.js",
+  // The two DATED data files (v0.50.0). Both ship inside the package and both
+  // are load-bearing on absence rather than on content: without the catalog
+  // `orc extra providers` is a packaging bug it reports as one, and without the
+  // price table every `usd` reads as an em dash forever. They are named here for
+  // the same reason every webui file is — a publish that drops one serves a
+  // feature that looks broken rather than missing.
+  "bin/providers.json",
+  "bin/pricing.json",
   "mock-run",
   "mock-run/INDEX.md",
   "templates",

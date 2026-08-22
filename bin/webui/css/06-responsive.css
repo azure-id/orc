@@ -52,6 +52,13 @@
   .run-card.no-caret.has-extra .run-age { grid-column: 3; }
   .todo { grid-template-columns: 4px minmax(0, 1fr); }
   .todo-cta { grid-column: 2; margin-top: var(--sp-2); }
+  /* Extra (v0.50.0). The rail keeps its proportions and its scroll — squeezing
+     a band to a sliver is the one thing it must never do — but the segment
+     floor comes down, because at this width the whole point is that you can
+     still read WHICH range is which. */
+  .ex-seg { min-width: 104px; }
+  .ex-route-controls { align-items: stretch; }
+  .ex-route-controls .btn { width: 100%; }
 }
 
 @media (max-width: 600px) {
@@ -67,4 +74,10 @@
   }
   .run-caret { display: none; }
   .run-card .run-age { grid-column: 1; }
+  /* Extra: the provider catalog stops being a grid — below this a two-column
+     tile cannot hold a base URL and two links without wrapping mid-word — and
+     the connect form's two columns become one. */
+  .ex-provider-grid { grid-template-columns: minmax(0, 1fr); }
+  .ex-strip { gap: var(--sp-3); }
+  .ex-route-controls > * { flex: 1 1 100%; }
 }

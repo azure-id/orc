@@ -139,6 +139,15 @@ A selected lens that did not run is recorded
 setting — say so out loud (the `opus5_only` precedent). With the reader off and
 unselected, D4 reports `NOT-CHECKED — challenge_reader is off`. Never silent.
 
+**Extra NEVER routes here** (`extra_enabled`, `../_shared/extra-dispatch.md`) —
+INERT in this lane whatever the config says, and say so once if it is on. Every
+lens is a MEASURING INSTRUMENT, not a worker: the outsider's `low` effort and the
+cold reader's `Read`-and-nothing-else are the measurement, so swapping either for
+a different model does not make the lane cheaper, it changes WHAT IS BEING
+MEASURED — and it does so invisibly, because the verdict comes back in the same
+shape either way. The same reasoning that forbids "upgrading" the cold reader
+forbids relocating it.
+
 Roles, efforts, the reader/outsider seam and the class split:
 `references/council.md`.
 

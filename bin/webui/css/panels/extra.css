@@ -1,0 +1,299 @@
+/* panels/extra.css — the Extra panel (v0.50.0), "Integrate with other AI model".
+
+   Loaded by app.html in the order its <link> sits in that manifest, and for CSS
+   the load order IS the cascade order — which is why 06-responsive and 04-motion
+   come after every panel sheet.
+
+   NO COLOUR TOKEN IS DEFINED HERE. Every one of them is declared once, on bare
+   :root, in 00-tokens.css.
+
+   The connect animation (v0.50.0) lives here as a keyframe; the reduced-motion
+   rule that REMOVES it lives in 04-motion.css with every other one, because
+   there is exactly ONE such media block in this codebase and a test asserts that
+   the literal appears in no panel sheet — including in a comment like this one,
+   which is why this paragraph does not spell it out. */
+
+/* --- the boundary card ---------------------------------------------------- */
+/* It renders ALWAYS and never behind a hover or a fold: somebody about to send
+   their source code to a third party should not have to go looking for the
+   paragraph that says so. The accent edge is what stops it reading as chrome. */
+.ex-boundary { border-left: 3px solid var(--accent); }
+.ex-boundary-line { margin: 0 0 var(--sp-2); color: var(--text-dim); font-size: 13px; line-height: 1.55; }
+.ex-boundary-line:first-of-type { color: var(--text); }
+
+/* --- the header strip ----------------------------------------------------- */
+/* Same shape as Knowledge's, and for the same reason: the numbers that answer
+   "what is set up here?" belong on one line above everything else. A `—` means
+   the CLI could not compute it, and that is an ANSWER. */
+.ex-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-4);
+  padding: var(--sp-3);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
+}
+.ex-strip-item { display: grid; gap: 2px; }
+.ex-strip-value { font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.ex-strip-label { font-size: 11px; color: var(--text-faint); text-transform: uppercase; letter-spacing: .04em; }
+
+/* --- one connection ------------------------------------------------------- */
+.ex-profile {
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
+  padding: var(--sp-3);
+  margin-top: var(--sp-2);
+  display: grid;
+  gap: var(--sp-2);
+}
+.ex-name { font-weight: 600; }
+.ex-finding { display: block; }
+
+/* The model names a real connection test read back. They are ids, so they are
+   monospace, and the row scrolls inside itself rather than widening the page. */
+.ex-models {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1);
+  max-height: 92px;
+  overflow: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+.ex-models::-webkit-scrollbar { width: 8px; height: 8px; }
+.ex-models::-webkit-scrollbar-track { background: transparent; }
+.ex-models::-webkit-scrollbar-thumb { background: var(--line); border-radius: 4px; }
+.ex-model {
+  font-size: 11px;
+  color: var(--text-dim);
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+  padding: 1px var(--sp-2);
+}
+
+/* --- the provider catalog ------------------------------------------------- */
+/* A fixed-width tile grid, so the catalog is the same picture whatever is in it
+   — the VAULT lesson: a box sized by its longest label cannot be laid out by
+   arithmetic. It wraps; it never squeezes. */
+.ex-provider-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: var(--sp-2);
+  margin: var(--sp-2) 0;
+}
+.ex-provider {
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
+  padding: var(--sp-3);
+  display: grid;
+  gap: var(--sp-2);
+  align-content: start;
+}
+.ex-provider-id { font-weight: 600; font-size: 13px; }
+.ex-provider-label { color: var(--text-dim); font-size: 12px; }
+.ex-link { color: var(--accent); font-size: 12px; text-decoration: none; }
+.ex-link:hover { text-decoration: underline; }
+
+/* --- the connect modal: the probe note, the wire, the result -------------- */
+/* R11's first animation. The pulse travels from this machine to the provider
+   and lands green or red — the feedback that makes an invisible network call
+   feel like an event, in the one place where a user has no other way to tell
+   whether anything happened. */
+
+.ex-probe {
+  border-left: 3px solid var(--line);
+  padding-left: var(--sp-3);
+  display: grid;
+  gap: 2px;
+}
+.ex-probe-head { font-weight: 600; font-size: 13px; }
+
+.ex-wire {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-3) 0;
+}
+.ex-wire-end {
+  font-size: 11px;
+  color: var(--text-faint);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  white-space: nowrap;
+}
+/* The line is the only thing that changes colour, so the whole state of the
+   probe reads at a glance without a single word moving. */
+.ex-wire-line {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 40px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--line);
+  transition: background var(--dur) var(--ease);
+}
+.ex-wire-dot {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 8px;
+  height: 8px;
+  margin-top: -4px;
+  border-radius: 50%;
+  background: var(--accent);
+  opacity: 0;
+}
+/* INFINITE while the probe is in flight, because a probe has no known duration
+   — which is exactly why 04-motion.css removes this outright rather than
+   capping it: a capped infinite animation freezes mid-travel, and a dot stopped
+   half way across reads as a request that hung. */
+.ex-wire-live .ex-wire-dot { animation: ex-travel 1100ms var(--ease) infinite; }
+.ex-wire-live .ex-wire-line { background: var(--accent-dim); }
+.ex-wire-ok .ex-wire-line { background: var(--ok); }
+.ex-wire-bad .ex-wire-line { background: var(--bad); }
+@keyframes ex-travel {
+  0%   { left: 0;    opacity: 0; }
+  15%  { opacity: 1; }
+  85%  { opacity: 1; }
+  100% { left: 100%; opacity: 0; }
+}
+
+.ex-result { display: grid; gap: var(--sp-2); }
+.ex-result-ok,
+.ex-result-bad {
+  display: grid;
+  gap: var(--sp-2);
+  padding: var(--sp-3);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line-soft);
+}
+.ex-result-ok { border-left: 3px solid var(--ok); }
+.ex-result-bad { border-left: 3px solid var(--bad); }
+
+/* `hidden` LOSES to an author `display`, which is how a form ends up showing the
+   fields it just hid: `.field` is a flex box and `.banner` is a flex box, and an
+   author rule beats the UA stylesheet's `[hidden] { display: none }` whatever
+   its specificity. Every box this form hides is named here.
+
+   The engine `cli` fields, the region picker on a provider with one region and
+   the paste-a-key warning all shipped VISIBLE in the first draft because of
+   exactly this. */
+.ex-form-hide[hidden] { display: none; }
+
+/* The credential choice. The recommended option is first and selected, and the
+   other one is offered with its cost printed beside it rather than hidden. */
+.ex-cred-choice { display: grid; gap: var(--sp-2); }
+.ex-cred-opt { display: flex; align-items: center; gap: var(--sp-2); font-size: 13px; }
+
+.ex-save { display: grid; gap: var(--sp-2); margin-top: var(--sp-2); }
+
+/* --- the routing rail (W12) ---------------------------------------------- */
+/* One horizontal 0→100 axis. A segment is `var(--w)` of it with a readable
+   MINIMUM, so a rail too narrow for its labels SCROLLS inside its own box and is
+   never squeezed — geometry solved from the box, not from a fraction of the
+   container. An UNMAPPED range keeps its slot and is drawn in Claude's colour
+   with the agent it resolves to. */
+
+.ex-rail-wrap {
+  overflow-x: auto;
+  padding-bottom: var(--sp-2);
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+.ex-rail-wrap::-webkit-scrollbar { width: 8px; height: 8px; }
+.ex-rail-wrap::-webkit-scrollbar-track { background: transparent; }
+.ex-rail-wrap::-webkit-scrollbar-thumb { background: var(--line); border-radius: 4px; }
+
+.ex-rail {
+  display: flex;
+  gap: 2px;
+  align-items: stretch;
+  margin: var(--sp-2) 0 var(--sp-1);
+}
+.ex-seg {
+  flex: 0 0 var(--w);
+  /* The floor that makes the rail scroll instead of collapsing: a 5-point band
+     is 5% of the axis and still has to fit the word `orc-executor-opus-5-high`
+     without being squeezed to a sliver. */
+  min-width: 128px;
+  padding: var(--sp-2);
+  border-radius: var(--radius-sm);
+  display: grid;
+  gap: 2px;
+  align-content: start;
+  overflow: hidden;
+}
+.ex-seg-claude { background: var(--accent-wash); border: 1px solid var(--accent-dim); }
+.ex-seg-extra { background: var(--ok-wash); border: 1px solid var(--ok); }
+.ex-seg-band { font-family: var(--mono); font-size: 11px; color: var(--text-faint); }
+.ex-seg-target {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* R11's SECOND animation: a staged segment grows into its new colour, so the
+   trade is visible before anything is written. It runs ONCE and finishes at its
+   resting state, unlike the connect pulse — which is why 04-motion.css can leave
+   the rail alone and only remove the infinite one. The dashed edge is what
+   carries the meaning with motion off. */
+.ex-seg-staged {
+  border-style: dashed;
+  animation: ex-grow var(--dur-slow) var(--ease);
+}
+@keyframes ex-grow {
+  from { transform: scaleX(.55); transform-origin: left center; opacity: .35; }
+  to   { transform: none; opacity: 1; }
+}
+
+.ex-seg-sub { display: flex; flex-wrap: wrap; gap: 2px; align-items: center; }
+/* A chip must not push the segment wider than the geometry assumes — the same
+   guard the crosslink vault nodes needed. */
+.ex-seg-sub .chip { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ex-rail-axis {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 11px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+.ex-rail-axis-label { text-transform: uppercase; letter-spacing: .04em; }
+
+.ex-route-rows { display: grid; gap: var(--sp-2); margin-top: var(--sp-3); }
+.ex-route-row {
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
+  padding: var(--sp-2) var(--sp-3);
+  display: grid;
+  gap: var(--sp-2);
+}
+.ex-route-band { font-weight: 600; }
+.ex-route-controls { display: flex; flex-wrap: wrap; gap: var(--sp-2); align-items: center; }
+.ex-route-controls .text-input { flex: 1 1 160px; min-width: 0; }
+.ex-route-staged { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
+.ex-route-slot:empty { display: none; }
+
+/* --- what it ran, and what it cost (W12) ---------------------------------- */
+/* Every routed band keeps its slot, including one nothing has run through — a
+   row that reads `—` everywhere is an ANSWER, and dropping it would make "this
+   band cost nothing" and "nothing has run here yet" identical. */
+.ex-cost-row {
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
+  padding: var(--sp-3);
+  margin-top: var(--sp-2);
+  display: grid;
+  gap: var(--sp-2);
+}
+.ex-cost-list {
+  border-left: 3px solid var(--warn);
+  padding-left: var(--sp-3);
+  margin-top: var(--sp-3);
+  display: grid;
+  gap: 2px;
+}
+.ex-rates { margin-top: var(--sp-3); display: grid; gap: var(--sp-2); justify-items: start; }
+.ex-rates pre { max-height: 240px; overflow: auto; width: 100%; }

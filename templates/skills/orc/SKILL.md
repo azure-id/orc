@@ -126,6 +126,16 @@ any ⛔ DOWNGRADE to the user, not just into the packet. A phase ending with
 NOW, with the events' real stamps. Run end (Phase 8 or abort): the `FINISH`
 packet goes out and RETURNS, then delete `log_dir/.current`.
 
+## Extra — a band that executes OFF Claude (config `extra_enabled`, default false)
+
+Canonical: `../_shared/extra-dispatch.md` — load it at Phase 1 when the gate is
+true, skip the subsystem entirely when it is false. You stay Claude; only **who
+executes a slice** changes. `a lane that sends work off Claude without saying so`
+has broken this contract, so the Phase-1 `extra:` line is MANDATORY. **ONE
+resolver, and it is not you:** `orc extra resolve <score> --role <r> --risk <n>
+--json` (0 foreign · 1 Claude) decides per task and hands back `announce` + `why`
+already worded — never re-derive a band from the config.
+
 ## Code-pattern gate (executors match the house style)
 
 The run resolves a per-language pattern (cache
@@ -233,7 +243,13 @@ recount or re-word one. Gates: `../orc-pact/references/gate.md` +
 default `warn`):** when the run's INPUT DOCUMENT has a cycle, print
 `orc challenge status <slug> --json`'s `preflight_line` verbatim — building from
 a document that has not passed its own review is worth one line. There is no
-`block` mode (the `/orc-pact` precedent). **Preflight:** print the compact block per
+`block` mode (the `/orc-pact` precedent). **Extra (v0.50.0, `extra_enabled`) —
+resolved HERE, announced HERE, never silent:** load `../_shared/extra-dispatch.md`;
+per task run `orc extra resolve <score> --role executor --risk <n> --json`, and
+before wave 1 settle its two pre-dispatch states, both PRINTED — a `needs_reping`
+profile (re-ping; a STALE profile still routes) and a vaulted credential, which is
+**LOCKED AT DISPATCH TIME whatever `credential.present` says** and falls back to
+Claude rather than stopping the run. **Preflight:** print the compact block per
 `references/preflight-report.md` once wiki + crosslink (+ pattern/waves) resolve.
 
 Ask which planner: **Superpowers / OpenSpec / Requirement Planner / ORC
@@ -296,7 +312,13 @@ mismatch or an uncited `risk` entry bounces the plan (grounding mechanics).
 **Score every task** from its `facets` via the fixed formula, map to the model
 ladder, show the facet vector + arithmetic table, and emit `SCORE task=<id>
 score=<n> band=<band> model=<m> facets=<vector> :: <reason>` per task; a score
-override needs a written reason (logged). Use the wiki's "Notes for planning" to sharpen
+override needs a written reason (logged). **With `extra_enabled`** the table gains
+a `via` column and its head can name TWO tables (effort-and-mode.md); a foreign
+task's `SCORE` appends `via=extra:<profile>` and `model=` is the FOREIGN model id.
+**Cited-risk hold-back (deterministic, beside the facet gate):** a foreign-routed
+task with a non-empty `risk[]` is HELD BACK to its Claude band (`extra_risk_tasks`
+defaults to `off`) and every one is LISTED with its cited risk — a silently
+held-back task is indistinguishable from a forgotten one. Use the wiki's "Notes for planning" to sharpen
 core/isolated + risk factors. **Tag each task's pattern domain+language**
 (+ secondary `db: postgres`) per `references/pattern-gate.md`. Ask: "Any
 anticipated escalations, or run straight through?" Emit `PHASE scoring end`.
@@ -334,9 +356,21 @@ the codifier); hold resolved patterns in run state.
    SCOPE-MATCHING gotchas beside it (glob vs this task's `declared_files`, cap 3,
    highest `hits` first; zero matches = NO block, never an empty one — NEVER
    inject unfiltered: `_shared/gotchas.md` §7).
+   **A FOREIGN task uses Bash, not the Task tool:** write the IDENTICAL slice to a
+   file and run `orc extra dispatch --task <file> --json` (exit codes + the
+   fallback procedure: `../_shared/extra-dispatch.md`). Append `via=extra:<profile>`
+   to the `DISPATCH` line and copy the return's `trace_line` + every
+   `trace_extras[]` entry VERBATIM into the packet — the CLI composes them, and the
+   hook emits NO `SPAWN`/`RETURN` for a foreign worker, so they are the whole record.
 2. Record worker milestone pings (they bound what a mid-wave stop can save).
 3. Collect returns; VALIDATE each (emit `VERIFY <task> actual=<model>/<effort>`
    ✅ MATCH / ⛔ DOWNGRADE per return — surface any downgrade to the user).
+   **A FOREIGN return runs `_shared/return-validation.md` §2b INSTEAD of §2** — it
+   has no injected model-id line, so it cannot carry `actual_model` and faking one
+   claims evidence that does not exist; ⛔ SUBSTITUTION replaces the downgrade
+   check. A failure runs the fallback procedure (re-dispatch to
+   `fallback_to.agent`, or STOP on `extra_on_failure: stop`) — announced, never
+   quiet, and followed by the pre-composed `EXTRA fallback` line.
    `needs_context` → adjudicate → re-slice
    (cap 2 per task, then escalate). A `pattern` task must return
    `invariants_checked: true` + the matching `pattern_version`. **Evidence

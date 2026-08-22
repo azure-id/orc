@@ -152,6 +152,8 @@ the decision log.
 
 Models pinned in `.claude/agents/`; look up here, never reconstruct a name (agent = skill-name + model-effort suffix). See `.claude/agents/MODEL-MAPPING.md`. `opus5_only: true` FORCES the right column and needs an Opus 5 main session — mini's cheap-lane premise is off while it is on (`../_shared/opus5-only.md`).
 
+**Extra (`extra_enabled`, `../_shared/extra-dispatch.md`):** mini's ONE executor may run off Claude. It has no score, so resolve the pinned executor's **BAND, both edges, and require them to agree** — a partially covering row keeps the run on Claude and the preflight says so. Print the `extra:` line at intake whenever the gate is on (P0: `a lane that sends work off Claude without saying so`); dispatch via `orc extra dispatch --task <file> --json` with the IDENTICAL slice; validate with `return-validation.md` **§2b, not §2** (⛔ SUBSTITUTION replaces the downgrade check); a failure falls back to the pinned Claude agent, announced. A cited-risk change never leaves Claude (`extra_risk_tasks`, default `off`) — and mini's complexity read is not a substitute for that gate.
+
 | Role | Agent (dispatch this) | Model / effort | When `opus5_only` |
 |------|-----------------------|----------------|-------------------|
 | mini analysis (docs only) | `orc-analyze-mini-sonnet-5-high` | claude-sonnet-5 / high | `orc-analyze-mini-opus-5-med` |

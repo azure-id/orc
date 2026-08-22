@@ -273,6 +273,16 @@ section stored as sub-parts. Validate every return per
 `../_shared/return-validation.md` — `actual_model` and `actual_effort`, quoted,
 never guessed. Slice shape and the whole protocol: `references/chunking.md`.
 
+**Extra (`extra_enabled`, `../_shared/extra-dispatch.md`) reaches the WRITER and
+the CHECKER, and only if `config.extra_roles` NAMES them** — it does not by
+default. A foreign writer runs `return-validation.md` **§2b instead of §2**
+(⛔ SUBSTITUTION replaces the downgrade check), and every other rule of this lane
+is unchanged: it still owns exactly ONE file, it still never opens `document.md`,
+and the free lint still runs before it. **Say which sections went off Claude
+before the wave, not after** — a document's VOICE is the deliverable here, and a
+section written by a different model is something the user has to be able to
+choose, then find.
+
 **`doc_write_mode` is asked ONCE and stored** (`orc doc mode <slug> --set
 partial|all`). In `partial`, `plan` returns wave 1 only with `more_waves: N`, so
 the rest cannot be bought by accident. `orc doc next` blocks after each wave and

@@ -10,6 +10,83 @@ Format: `### v<version> — <title> _(<date>)_`.
 
 ---
 
+### v0.50.0 — work that runs somewhere else _(2026-08-22)_
+
+**`orc extra`** — a band of ORC's score ladder can now be answered by a
+**non-Claude worker**: DeepSeek, Z.ai (GLM), Moonshot (Kimi), MiniMax, Qwen,
+Xiaomi MiMo, StepFun, SiliconFlow, OpenRouter, a local Ollama, any
+OpenAI-/Anthropic-compatible endpoint you name, or an agentic CLI you already
+have (`opencode`, `codex`). ORC's own session never moves — this routes
+**workers**, not the conductor.
+
+- **Off by default, and a connection that has never answered can never be used.**
+  `orc extra ping` is the gate, it climbs the cheapest rung first (a free model
+  list; only then a one-token completion), and it records WHICH rung answered —
+  "verified by a models list" and "verified by a real completion" are different
+  guarantees and one green tick for both would be a lie.
+- **Every armed run says so BEFORE the work starts.** An `extra:` line joins the
+  Phase-1 preflight naming how many tasks will cross the boundary and where they
+  go. It has no quiet version. The failure this whole subsystem is shaped around
+  is not a wrong answer — it is work leaving your machine without anybody saying
+  so.
+- **A gap in the routing table is not a hole — it is Claude**, and it is printed
+  with the exact agent it resolves to, so "I left the top band on Opus on
+  purpose" and "there is no top band" can never look the same. Overlapping rows
+  are refused by name.
+- **Risky work stays.** A task whose plan cites `risk[]` (money, auth, security,
+  migration, concurrency, data-integrity) never leaves Claude, and neither does
+  anything in an area a boundary card marks REFUSE — in `warn` mode as well as
+  `block`.
+- **Three engines, and only one composes the request body.** `api` is therefore
+  the only one that can enforce the declared-files fence or carry a privacy
+  policy, so a return claiming the fence held on the other two is rendered as a
+  WARNING: a constraint that was never applied is never reported as kept.
+- **Your key never reaches a command line.** `--key <value>` is refused by name.
+  Use an environment variable (recommended) or the encrypted vault —
+  AES-256-GCM under a passphrase ORC does not store and cannot recover, stored
+  only after a green test, with a countdown that prints every time and a
+  self-destruct at ten wrong attempts that keeps the profile. New in this
+  release: `orc extra ping --passphrase-stdin` re-tests a key that is already
+  stored.
+- **No shipped model ids and no shipped prices.** Both go stale within a quarter
+  and both get believed. `orc extra ping` reads the live model list from the
+  provider; `orc extra rates` prints the JSON to paste for a price. Until a pair
+  has a rate, `usd` reads as an em dash — a cost ORC did not price itself is
+  never printed.
+- **`orc extra stats`** joins ORC's own traces per profile per band and reports
+  four token kinds separately, plus the three things only it can see: a
+  SUBSTITUTION (you did not get the model you asked for), a REROUTE (you got the
+  model and a different company served it) and a FALLBACK (it did not work and
+  Claude finished the job).
+- **A failed foreign dispatch is never a dead run.** It falls back to the Claude
+  band that task would have had, announced. `extra_on_failure: stop` is there for
+  people who would rather stop than quietly start paying full rates.
+- **New panel: `orc ui` ▸ Extra.** The boundary paragraph renders always, never
+  behind a click. One 0→100 rail, green where your connection runs the work and
+  blue where Claude does, with every unrouted range keeping its slot. Staging a
+  change previews it before anything is written. The panel names no provider, no
+  model and no agent — it draws what the CLI computed.
+- **The `orc ui` boundary is NARROWED, not broken.** The panel still never runs a
+  lane and never does agentic model work; the one model-shaped thing it can
+  trigger is a connectivity probe, and even that runs through the CLI in a
+  subprocess like every other action. A probe is a diagnostic, the family
+  `orc doctor` is in.
+- **Nine config keys**, one canonical contract
+  (`_shared/extra-dispatch.md`), a new `EXTRA` trace verb, `orc extra doctor`
+  with eleven findings, and a stance stated in exactly one place for every other
+  lane — including `/orc-challenge`, which never routes foreign, because swapping
+  a lens for a different model does not make the lane cheaper, it changes what is
+  being measured.
+- **Also:** the test suite pins `--test-concurrency=8`. At one worker per core,
+  the files that spawn real child processes and the one that derives scrypt at
+  N=2^17 starved each other and produced failures that looked exactly like
+  regressions. Determinism is worth 11% of the wall clock.
+
+Setup detail per provider: **[`guides/extra-models.md`](guides/extra-models.md)**.
+A full walkthrough: `orc mock-run orc-extra`.
+
+---
+
 ### v0.49.5 — house rules are text, and the hand-back writes itself _(2026-08-21)_
 
 Two fixes to `/orc-doc`, both the same shape: stop making a person work around

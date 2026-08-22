@@ -66,11 +66,18 @@ orc-quick has no score bands to tune. Mark the row
 3. **Already answered is not skipped.** If the user wrote "use opus 5 low", the
    gate is satisfied — say which one you are using, in one line.
 4. **No config can change this menu.** `opus5_only`, `fable5_enabled` /
-   `fable5_roles`, and `rubric_bands_override` are all inert in this lane. If
-   `opus5_only` is on, say so at the gate so the user is not confused:
+   `fable5_roles`, `rubric_bands_override` and **`extra_enabled` (v0.50.0,
+   `../../_shared/extra-dispatch.md`)** are all inert in this lane. If one is on,
+   say so at the gate so the user is not confused:
    ```
    (orc-quick ignores opus5_only — both options are live)
+   (orc-quick ignores extra_enabled — nothing here runs off Claude)
    ```
+   Extra is inert for the same reason the other three are, and it is the reason
+   that matters most here: this lane's entire premise is asking WHICH AGENT
+   before every dispatch, and a config that silently answered "a DeepSeek worker"
+   would have answered the one question the gate exists to ask. A shadowed
+   setting must never be silent — hence the line.
 5. **Warn about tier once.** If the chosen model is above the session's model,
    the subagent will quietly run at the session model. Say it at the gate, then
    report the real ⛔ DOWNGRADE after the return.

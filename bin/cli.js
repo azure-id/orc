@@ -40,6 +40,34 @@ const args = process.argv.slice(2);
 const cmd = args[0];
 
 // --- arg parsing (tiny, no deps) ---
+// Value-taking flags in the `orc extra` family. positionals() must skip their
+// VALUES too, or `--provider deepseek` contributes "deepseek" as a positional.
+const EXTRA_VALUE_FLAGS = new Set([
+  "--provider",
+  "--engine",
+  "--env-key",
+  "--region",
+  "--base-url",
+  "--anthropic-base-url",
+  "--auth-env",
+  "--cli",
+  "--cli-agent",
+  "--model",
+  "--small-model",
+  "--pepper",
+  "--max-turns",
+  "--task",
+  "--since",
+  "--completions-path",
+  "--cli-attach",
+  "--cli-args",
+  "--zdr",
+  "--data-collection",
+  "--require-parameters",
+  "--only",
+  "--allow-fallbacks",
+]);
+
 function flag(name) {
   const i = args.indexOf(name);
   if (i === -1) return undefined;
@@ -57,6 +85,13 @@ function positionals() {
     if (a === "--global") continue;
     if (a === "--dir" || a === "--from" || a === "--preset" || a === "--reason") {
       i++; // skip the flag's value
+      continue;
+    }
+    // `orc extra` takes value-flags that can legally precede a positional
+    // (`orc extra add --provider deepseek deepseek`), and a value swallowed
+    // as a positional is a profile named after a provider id.
+    if (EXTRA_VALUE_FLAGS.has(a)) {
+      i++;
       continue;
     }
     if (a.startsWith("-")) continue;
@@ -807,6 +842,20 @@ const vRepo = tag(
 
 // Fable 5 role override (C.1). Roles that MAY be handed to a Fable 5 agent.
 const FABLE5_ROLES = ["analyze", "plan", "advisor", "judge", "review"];
+// Roles `orc extra` may hand to a non-Claude worker. Declared HERE, above
+// CONFIG_META, because CONFIG_META is evaluated at module load and a `const`
+// further down the file is still in its temporal dead zone at that moment.
+const EXTRA_ROLES_ALL = [
+  "executor",
+  "reviewer",
+  "verifier",
+  "analyst",
+  "planner",
+  "scout",
+  "test-author",
+  "doc-writer",
+  "doc-checker",
+];
 // CSV (or bracketed) subset validator → a normalized flow-array string
 // (`[analyze, plan]`), which serializeValue passes through as valid YAML.
 const vSubset = (allowed) =>
@@ -844,6 +893,19 @@ const CONFIG_META = [
   { key: "stacked_pr_loc", def: 1000, tier: "common", validate: vInt(1), options: [500, 800, 1000, 1500, 2000], desc: "Change LoC (additions+deletions, exclusions applied) >= this trips the stacked-PR gate — and is ALSO the per-layer LoC ceiling: a change that cannot fit in one layer's budget is what is worth stacking." },
   { key: "stacked_pr_files", def: 20, tier: "common", validate: vInt(1), options: [10, 15, 20, 30, 40], desc: "Changed-file count >= this trips the stacked-PR gate; also the per-layer hard max (soft target = half of it)." },
   { key: "stacked_pr_max_layers", def: 6, tier: "common", validate: vInt(2), options: [4, 5, 6, 8, 10], desc: "Soft cap on layers per stack: <= cap proceed, cap+1..cap+2 warn + explicit override, beyond → STOP (multiple stacks or a phased release). N layers = N full CI runs." },
+  // --- v0.50.0 — orc extra: dispatch ORC's WORKERS to non-Claude agents -----
+  // Nine keys, and the count is the feature: the combinatorial part —
+  // providers x models x bands — is a LEDGER with a CLI and a panel
+  // (`orc extra`), not eleven YAML keys nobody can hold in their head.
+  { key: "extra_enabled", def: false, tier: "common", validate: vEnum("true", "false"), options: ["true", "false"], desc: "Master gate for `orc extra` — dispatching a scored task to a non-Claude worker (DeepSeek, GLM, Kimi, a local Ollama, any OpenAI-/Anthropic-compatible endpoint you can name). NOTHING changes unless true, the fable5_enabled precedent. The orchestrator always stays Claude; what moves is who executes a slice. Every run that will cross the boundary PRINTS it at Phase 1 — routing work off Claude silently is the failure mode this whole subsystem is shaped around." },
+  { key: "extra_roles", def: "[executor]", tier: "common", validate: vSubset(EXTRA_ROLES_ALL), options: EXTRA_ROLES_ALL, desc: "Which dispatched roles may go foreign (CSV). Executor only by default, deliberately: an executor's output is checked by the smoke gate, the TDD gate, the reviewer and the worktree-delta check, all of which are engine-blind — while a REVIEWER you cannot trust is worse than no reviewer at all, because it launders a finding nobody made." },
+  { key: "extra_risk_tasks", def: "off", tier: "common", validate: vEnum("off", "on"), options: ["off", "on"], desc: "Whether a task with a non-empty cited `risk[]` (auth, money, migration, security, concurrency, data-integrity) may leave Claude. OFF holds it on the Claude ladder whatever the route table says, and the preflight NAMES it as held back. ORC already refuses to send a refund-endpoint change to a cheap model; this keeps Extra from becoming the hole in that rule." },
+  { key: "extra_on_failure", def: "fallback", tier: "common", validate: vEnum("fallback", "stop"), options: ["fallback", "stop"], desc: "What an unreachable endpoint, a 401, a 429 past backoff, a timeout or a malformed return does. `fallback` re-dispatches the task to the Claude band it would have had, ANNOUNCED, and the run continues. `stop` is for people who would rather stop than silently start paying Anthropic rates. A failed foreign dispatch is never a dead run either way." },
+  { key: "extra_max_concurrent", def: 1, tier: "common", validate: vInt(1), options: [1, 2, 3], desc: "Foreign dispatches in flight at once. Per-provider rate limits are undocumented in aggregate, so 1 is the honest default — a wave of 3 that 429s costs more in repairs than the parallelism saved." },
+  { key: "extra_unlock", def: "per-run", tier: "common", validate: vEnum("per-run", "per-dispatch"), options: ["per-run", "per-dispatch"], desc: "When a vault-stored key asks for its passphrase. `per-run` asks ONCE at the Phase-1 stop the lane already has, so an unattended wave can actually run. `per-dispatch` prompts every time and REFUSES to start an unattended wave, naming why — it is interactive-only by design. Irrelevant when the credential source is an environment variable, which is the recommended one." },
+  { key: "extra_vault_max_attempts", def: 10, tier: "advanced", validate: vInt(3), desc: "Wrong passphrases before the encrypted key DELETES ITSELF. It is a key rather than a magic number so the count is inspectable and testable — NOT so it can be switched off; below 3 is refused. The counter stops someone at your keyboard; it does not stop someone who copies the vault file and tries offline, and scrypt's cost is the only defence there." },
+  { key: "extra_timeout_s", def: 900, tier: "advanced", validate: vInt(30), desc: "Per-dispatch wall clock for a foreign worker. The child's own timeouts are DERIVED from this rather than set independently, so three timeouts cannot disagree about which one fires first." },
+  { key: "extra_verify_max_days", def: 7, tier: "advanced", validate: vInt(1), desc: "Past this a profile's verification reads STALE and is re-pinged before wave 1. A STALE profile STILL ROUTES — a stale check is not a failed one (the /orc-pact UNCHECKABLE rule) — and freshness is computed on read, never stored." },
   { key: "opus5_only", def: false, tier: "common", validate: vEnum("true", "false"), options: ["true", "false"], desc: "EVERY dispatched role uses ONE model — Opus 5 — with EFFORT as the cost dial (executors: [0,40) low · [40,80) medium · [80,100] high; each fixed role its own pinned effort). Deep SWE-benchmark work on cost vs efficiency across Claude models finds a single Opus 5 agent with the effort ladder the most efficient setup. It FORCES: while on it outranks fable5_* and a hand-written rubric_bands_override. Needs an Opus 5 main session or EVERY dispatch silently downgrades. Excludes the Haiku trace writer and orc-diy (compile-owned)." },
   // --- v0.46.0 — the six new lanes ------------------------------------------
   { key: "pact_gate", def: "warn", tier: "common", validate: vEnum("off", "warn"), options: ["off", "warn"], desc: "Invariant ledger at Phase 1 + planning: warn = print the one pact line and inject a DRIFTED/BROKEN promise whose anchors intersect the plan's declared files as a planner constraint; off = nothing. NEVER blocks — a promise is advice with a receipt, not a gate. See /orc-pact." },
@@ -1024,6 +1086,30 @@ function configList(claudeDir) {
       console.log(`  ${ui.color.cyan(m.key.padEnd(pad))}  ${String(val).padEnd(30)} ${src}  ${ui.color.gray(m.desc)}${opts}`);
     }
   }
+  // The resolve order, said out loud whenever it is a composite. A user
+  // reading this table needs to know that the row above ("opus5_only: true")
+  // is no longer the whole answer for every score.
+  if (isTrue(map.extra_enabled)) {
+    let rows = [];
+    try {
+      const l = readExtra(claudeDir);
+      rows = l ? l.routes : [];
+    } catch (_) {}
+    console.log(ui.header("Resolve order  (highest wins)"));
+    console.log(
+      "\n  extra route row  >  opus5_only  >  rubric_bands_override  >  the default 8-band table\n"
+    );
+    if (rows.length)
+      console.log(
+        "  " +
+          ui.color.cyan(rows.map((r) => `[${r.from},${r.to >= 100 ? "100]" : r.to + ")"}`).join(", ")) +
+          ui.color.gray(`  → a non-Claude worker.  Every other score resolves on ${forced ? "opus5_only" : map.rubric_bands_override ? "rubric_bands_override" : "the default table"}.`)
+      );
+    else
+      console.log("  " + ui.color.gray("no route row yet — extra_enabled is armed but nothing goes foreign."));
+    console.log("  " + ui.color.gray("INERT in /orc-quick, which asks which agent before every dispatch."));
+  }
+
   const extra = Object.keys(map).filter((k) => !metaFor(k));
   if (extra.length) {
     console.log("\nOther (hand-edited) overrides");
@@ -1043,12 +1129,31 @@ function configList(claudeDir) {
 // this is the same rule expressed as data, so a non-terminal caller can render
 // the shadow instead of parsing the sentence. ONE rule today: opus5_only
 // outranks the whole fable5_* block and a hand-written rubric_bands_override.
-function shadowReason(key, map) {
+function shadowReason(key, map, claudeDir) {
+  // v0.50.0 — the shadow now runs BOTH WAYS, because Extra is an OVERLAY on
+  // top of whichever Claude table resolves, not a replacement for it. A score
+  // a route row covers is taken from opus5_only / rubric_bands_override / the
+  // default table alike; a score no row covers falls straight through. So
+  // neither key is wholly inert and neither is wholly live, and saying either
+  // would be a lie — the honest report is WHICH RANGES were taken.
+  if (isTrue(map.extra_enabled) && claudeDir && (key === "opus5_only" || key === "rubric_bands_override")) {
+    let taken = [];
+    try {
+      const l = readExtra(claudeDir);
+      taken = l ? l.routes.map((r) => `[${r.from},${r.to >= 100 ? "100]" : r.to + ")"}`) : [];
+    } catch (_) {}
+    if (taken.length)
+      return `partly shadowed by extra_enabled — ${taken.join(", ")} ${taken.length === 1 ? "is" : "are"} routed to a non-Claude worker; every other score still resolves here`;
+  }
   if (String(map.opus5_only) !== "true") return null;
   if (key.startsWith("fable5_"))
     return "shadowed by opus5_only — every role dispatches its Opus 5 agent, so the Fable 5 override is inert";
   if (key === "rubric_bands_override")
     return "shadowed by opus5_only — executors use the fixed 3-band Opus 5 ladder";
+  // /orc-quick asks WHICH AGENT before every dispatch, which is the lane's
+  // entire premise — so a config that silently answered that question would
+  // break it. Extra is INERT there, exactly like opus5_only and fable5_*, and
+  // a shadowed setting must never be silent.
   return null;
 }
 
@@ -1064,14 +1169,50 @@ const OPUS5_SCORE_TABLE = [
 const bandRows = (rows) =>
   rows.map(([lo, hi, agent]) => ({ from: lo, to: hi === 101 ? 100 : hi, inclusive_to: hi === 101, agent }));
 
-function scoreTableJson(map) {
+function scoreTableJson(map, claudeDir) {
   const forced = String(map.opus5_only) === "true";
+  const base = forced ? "opus5_only" : map.rubric_bands_override ? "rubric_bands_override" : "default";
+  // v0.50.0 — the resolve order, highest wins:
+  //
+  //   an extra route row covering this score  (only for the scores it covers)
+  //     > opus5_only
+  //     > rubric_bands_override
+  //     > the default 8-band table
+  //
+  // Extra is an OVERLAY, not a replacement, which is what makes "cheap grunt
+  // work goes to DeepSeek, hard work stays on Opus 5" a two-command setup
+  // rather than a full table rewrite. `active` can therefore read as a
+  // COMPOSITE — because the truth is a composite, and a single word would be
+  // a lie about what the next dispatch will do.
+  let extra = null;
+  if (isTrue(map.extra_enabled) && claudeDir) {
+    try {
+      const l = readExtra(claudeDir);
+      if (l && l.routes.length)
+        extra = l.routes
+          .slice()
+          .sort((a, b) => a.from - b.from)
+          .map((r) => ({
+            from: r.from,
+            to: r.to,
+            inclusive_to: r.to >= 100,
+            agent: null,
+            via: `extra:${r.profile}`,
+            profile: r.profile,
+            model: r.model,
+          }));
+    } catch (_) {}
+  }
   return {
-    // Which table RESOLVES (highest-wins): opus5_only > rubric_bands_override
-    // (hand-written, registry-less) > the default 8-band.
-    active: forced ? "opus5_only" : map.rubric_bands_override ? "rubric_bands_override" : "default",
+    active: extra ? `extra+${base}` : base,
+    base,
     default: bandRows(DIY_SCORE_TABLE),
     opus5_only: bandRows(OPUS5_SCORE_TABLE),
+    extra,
+    // The one place the precedence is written down as data, so a renderer
+    // never has to re-derive it (P5, applied to the table as well as to the
+    // dispatch).
+    resolve_order: ["extra", "opus5_only", "rubric_bands_override", "default"],
   };
 }
 
@@ -1083,7 +1224,7 @@ function configListJson(claudeDir) {
   const has = (k) => Object.prototype.hasOwnProperty.call(map, k);
   const keys = CONFIG_META.map((m) => {
     const v = m.validate || {};
-    const why = shadowReason(m.key, map);
+    const why = shadowReason(m.key, map, claudeDir);
     return {
       key: m.key,
       tier: m.tier,
@@ -1110,8 +1251,8 @@ function configListJson(claudeDir) {
     .map((k) => ({
       key: k,
       value: map[k],
-      is_shadowed: !!shadowReason(k, map),
-      shadow_reason: shadowReason(k, map),
+      is_shadowed: !!shadowReason(k, map, claudeDir),
+      shadow_reason: shadowReason(k, map, claudeDir),
       editable: false,
     }));
   // A retired name still on disk. readOverride() resolves it away, so without
@@ -1128,7 +1269,7 @@ function configListJson(claudeDir) {
     keys,
     hand_edited: extra,
     legacy_keys: legacy,
-    score_table: scoreTableJson(map),
+    score_table: scoreTableJson(map, claudeDir),
     // Permanently on and deliberately not a key — say so, or a reader hunts for
     // the switch (only the folder is configurable).
     behavior_trace: { always_on: true, configurable_key: "log_dir" },
@@ -1171,6 +1312,36 @@ function configSet(claudeDir, key, rawValue) {
   }
   if (key.startsWith("fable5")) fable5Warn(claudeDir);
   if (key === "opus5_only") opus5Notice(String(res.value) === "true", claudeDir);
+  if (key === "opus5_only" || key === "extra_enabled") extraShadowNotice(claudeDir);
+}
+
+// A shadowed setting must never be silent — the v0.36.0 rule, applied to a
+// shadow that runs BOTH WAYS. Turning on opus5_only while route rows exist
+// does not give you the Opus 5 ladder everywhere, and turning on Extra does
+// not take the Claude table away; saying either would be wrong. So name the
+// ranges, which is the only statement that is true from both sides.
+function extraShadowNotice(claudeDir) {
+  const { map } = readOverride(claudeDir);
+  if (!isTrue(map.extra_enabled)) return;
+  let rows = [];
+  try {
+    const l = readExtra(claudeDir);
+    rows = l ? l.routes : [];
+  } catch (_) {}
+  if (!rows.length) {
+    console.error(
+      "  ⚠ extra_enabled is true but no route row exists — nothing goes foreign yet.\n" +
+        "    `orc extra route set 0-30 <profile>/<model>` is what arms it."
+    );
+    return;
+  }
+  const bands = rows.map((r) => `[${r.from},${r.to >= 100 ? "100]" : r.to + ")"}`).join(", ");
+  const base = isTrue(map.opus5_only) ? "opus5_only" : map.rubric_bands_override ? "rubric_bands_override" : "the default 8-band table";
+  console.error(
+    `  ⚠ ${bands} ${rows.length === 1 ? "is routed to a non-Claude worker and no longer resolves" : "are routed to a non-Claude worker and no longer resolve"} on ${base}.\n` +
+      "    Every other score still does — Extra is an overlay, not a replacement.\n" +
+      "    It is INERT in /orc-quick, which asks which agent before every dispatch."
+  );
 }
 
 // The role→agent table this mode forces. Mirrors the mapping in
@@ -1657,6 +1828,15 @@ const DIY_META = [
   { key: "pattern", def: "ask", options: ["ask", "off", "on"], validate: vEnum("ask", "off", "on"), desc: "Code-pattern gate on a cache miss: ask | off | on." },
   { key: "scoring", def: "on", options: ["on", "off"], validate: vEnum("on", "off"), desc: "Rubric scoring; off sends every task to fixed_executor." },
   { key: "fixed_executor", def: "", options: Object.keys(DIY_EXECUTORS), validate: vEnum(...Object.keys(DIY_EXECUTORS)), desc: "Executor used for every task when scoring is off." },
+  // v0.50.0 — Extra is COMPILE-OWNED here, which is the whole point of this
+  // lane: turning on `extra_enabled` globally must never silently change a
+  // compiled flow. The key decides WHETHER this flow may route foreign; the
+  // resolver still decides WHERE, at run time. Deliberately NOT baked into
+  // flow.lock.json the way the score table is — the score table is clipped to
+  // the session tier and is therefore a compile-time fact, while a route row is
+  // a ledger the user edits independently and the lock's staleness triggers
+  // cannot see. Baked rows would go stale in silence.
+  { key: "extra", def: "off", options: ["off", "on"], validate: vEnum("off", "on"), desc: "Allow this flow to dispatch executors to non-Claude workers (needs extra_enabled + a route row). off = Extra is INERT here even when globally enabled, and the flow says so." },
   { key: "review", def: "on", options: ["on", "off", "blocking-only"], validate: vEnum("on", "off", "blocking-only"), desc: "Review phase: on | off | blocking-only (P2/P3 listed once, never re-offered)." },
   { key: "security", def: "off", options: ["off", "ask", "on", "always"], validate: vEnum("off", "ask", "on", "always"), desc: "Security pass; always = every run (drops the risk-floor trigger)." },
   { key: "verify", def: "full", options: ["full", "off", "smoke"], validate: vEnum("full", "off", "smoke"), desc: "Verify depth: full DoD sweep | off | smoke (build+tests only)." },
@@ -1692,6 +1872,7 @@ const DIY_STEPS = [
   { block: "planning", label: "plan", key: "planning" },
   { block: "pattern", label: "pattern", key: "pattern" },
   { block: "scoring", label: "score", key: "scoring" },
+  { block: "extra", label: "extra", key: "extra" },
   { block: "execution", label: "execute", key: null, note: (c) => (c.scoring === "off" ? c.fixed_executor || "(unset)" : "scored") },
   { block: "review", label: "review", key: "review" },
   { block: "security", label: "security", key: "security" },
@@ -1984,7 +2165,7 @@ function diyCompile(claudeDir) {
   // `trace` sits right after the locked rules and is UNCONDITIONAL — behavior
   // tracing is permanent, not a flow key, so stitching it here is what stops a
   // user-composed pipeline from being the one lane that runs blind (it was).
-  const order = ["header", null, "trace", "wiki", "analyze", "planning", "pattern", "scoring", "execution", "review", "security", "verify", "testgen", "mock-example", "ship", "summary"];
+  const order = ["header", null, "trace", "wiki", "analyze", "planning", "pattern", "scoring", "extra", "execution", "review", "security", "verify", "testgen", "mock-example", "ship", "summary"];
   const tier = DIY_TIERS[cfg.session_tier];
   const subs = {
     flow_name: cfg.flow_name,
@@ -6824,12 +7005,39 @@ const OPUS5_BANDS = [
   [40, 80, "orc-executor-opus-5-med"],
   [80, 101, "orc-executor-opus-5-high"],
 ];
-function bandFor(score, cfg) {
+function bandFor(score, cfg, claudeDir) {
+  // P5 — THERE IS ONE RESOLVER. This function is the /orc-budget half of the
+  // ladder, and `orc extra resolve` is the dispatch half; before v0.50.0 they
+  // were two constants that had already drifted in NAME (OPUS5_BANDS vs
+  // OPUS5_SCORE_TABLE). Left unrefactored, the forecast would price a run at
+  // Opus rates that is actually going to execute on DeepSeek — the exact class
+  // of lie the Flow-stepper rule exists to prevent, in the one lane whose
+  // whole job is honest numbers. So: ask the resolver first.
+  if (claudeDir && isTrue(cfg.extra_enabled)) {
+    try {
+      const r = extraResolveFor(claudeDir, score, { role: "executor" });
+      if (r.resolved === "extra")
+        return {
+          band: r.band,
+          // No Claude agent runs this task. `agent: null` is what keeps the
+          // forecast from finding an Anthropic rate for it and pricing a band
+          // that will never bill Anthropic a cent.
+          agent: null,
+          via: r.via,
+          profile: r.profile,
+          provider: r.provider,
+          model: r.model,
+          engine: r.engine,
+        };
+    } catch (_) {
+      // A broken ledger must never take the forecast down with it.
+    }
+  }
   const rows = isTrue(cfg.opus5_only) ? OPUS5_BANDS : DIY_SCORE_TABLE;
   for (const [lo, hi, agent] of rows)
-    if (score >= lo && score < hi) return { band: `[${lo},${hi === 101 ? "100]" : hi + ")"}`, agent };
+    if (score >= lo && score < hi) return { band: `[${lo},${hi === 101 ? "100]" : hi + ")"}`, agent, via: "claude" };
   const last = rows[rows.length - 1];
-  return { band: `[${last[0]},100]`, agent: last[2] };
+  return { band: `[${last[0]},100]`, agent: last[2], via: "claude" };
 }
 
 const INLINE_LIST = (s) =>
@@ -6911,7 +7119,7 @@ const LANE_CMD = { orc: "/orc", ultra: "/orc-ultra", mini: "/orc-mini", fast: "/
 // lane never runs.
 const LANE_ONE_EXECUTOR = { mini: "orc-executor-sonnet-5-high", fast: "orc-executor-sonnet-4-6-high" };
 
-function laneForecast(lane, tasks, rates, cfg) {
+function laneForecast(lane, tasks, rates, cfg, claudeDir) {
   const rows = [];
   let low = 0;
   let lowRoles = 0;
@@ -6926,8 +7134,14 @@ function laneForecast(lane, tasks, rates, cfg) {
   } else {
     for (const t of tasks) {
       const score = t.override_score ?? t.computed_score ?? (t.facets ? scoreFromFacets(t.facets, t.depends_on.length, tasks.filter((x) => x.depends_on.includes(t.id)).length) : null);
-      const b = score === null ? { band: "unscored", agent: null } : bandFor(score, cfg);
-      const g = grouped.get(b.band) || { agent: b.agent, n: 0, tasks: [] };
+      const b = score === null ? { band: "unscored", agent: null, via: "claude" } : bandFor(score, cfg, claudeDir);
+      const g = grouped.get(b.band) || {
+        agent: b.agent,
+        via: b.via || "claude",
+        extra: b.via && b.via !== "claude" ? { profile: b.profile, provider: b.provider, model: b.model, engine: b.engine } : null,
+        n: 0,
+        tasks: [],
+      };
       g.n++;
       g.tasks.push(t.id);
       grouped.set(b.band, g);
@@ -6940,7 +7154,7 @@ function laneForecast(lane, tasks, rates, cfg) {
     if (!src || samples < minSamples) low++;
     const per50 = src ? src.p50 : null;
     const per90 = src ? src.p90 : null;
-    rows.push({ band, agent: g.agent, count: g.n, tasks: g.tasks, samples, p50: per50 ? mulVec(per50, g.n) : null, p90: per90 ? mulVec(per90, g.n) : null });
+    rows.push({ band, agent: g.agent, via: g.via || "claude", extra: g.extra || null, count: g.n, tasks: g.tasks, samples, p50: per50 ? mulVec(per50, g.n) : null, p90: per90 ? mulVec(per90, g.n) : null });
     if (per50) {
       Object.assign(p50, sumVec(p50, mulVec(per50, g.n)));
       Object.assign(p90, sumVec(p90, mulVec(per90 || per50, g.n)));
@@ -7043,7 +7257,7 @@ function budgetForecast(claudeDir, planPath) {
   }
 
   const waves = Math.max(1, new Set(tasks.map((t) => t.depends_on.length)).size);
-  const lanes = FORECAST_LANES.map((l) => laneForecast(l, tasks, rates, cfg));
+  const lanes = FORECAST_LANES.map((l) => laneForecast(l, tasks, rates, cfg, claudeDir));
   const primary = lanes.find((l) => l.lane === "orc");
   const money50 = priceVector(claudeDir, primary.p50, "claude-opus-4-8");
   const money90 = priceVector(claudeDir, primary.p90, "claude-opus-4-8");
@@ -16016,6 +16230,5162 @@ function where() {
   );
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// orc extra (v0.50.0) — dispatch ORC's WORKERS to non-Claude agents
+//
+// The orchestrator stays Claude. What changes is who executes a slice: a score
+// band the user owns can point at DeepSeek, GLM, Kimi, a local Ollama, or any
+// OpenAI-/Anthropic-compatible endpoint they can name. Everything ORC already
+// does around a dispatch — the wave scheduler, the smoke gate, the TDD gate,
+// the worktree-delta check, the trace, the budget — is engine-blind, which is
+// the property that makes this safe rather than clever.
+//
+// THE HARD RULES THIS HALF ENFORCES (the skill half carries the rest):
+//   P2  a key is never stored where it can be committed, and never printed.
+//       The DEFAULT credential source is an environment variable NAME; ORC
+//       stores the name. `orc extra list --json` returns
+//       { source, key_name, present } and nothing more — a test greps every
+//       --json shape for a key-shaped string.
+//   P4  ORC ships a PROVIDER catalog, never a MODEL catalog. Model ids come
+//       from the wire at ping time (`models_seen`). bin/providers.json is
+//       DATED like bin/pricing.json and warns past 90 days.
+//   P5  there is ONE resolver (`orc extra resolve`).
+//
+// `.claude/orc/extra.json` is the ledger and `orc extra` is its ONLY writer,
+// the same discipline as doc.json, challenge.json and the pact ledger.
+// ═══════════════════════════════════════════════════════════════════════════
+
+const EXTRA_LEDGER = "extra.json";
+const EXTRA_CATALOG = path.join(__dirname, "providers.json");
+const EXTRA_CATALOG_STALE_DAYS = 90;
+const EXTRA_ENGINES = ["api", "claude-shim", "cli"];
+// Anything else is a header ORC would have to guess at. Claude Code picks the
+// header FROM the variable name, so this list IS the auth shape.
+const EXTRA_AUTH_ENVS = ["ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_API_KEY"];
+
+function extraPaths(claudeDir) {
+  return {
+    root: repoRootOf(claudeDir),
+    dir: path.join(claudeDir, "orc"),
+    ledger: path.join(claudeDir, "orc", EXTRA_LEDGER),
+    vault: path.join(claudeDir, "orc", "extra-vault.json"),
+  };
+}
+
+// The shipped catalog, with its age computed on READ — never stored. Same
+// shape as readPricing(): `_age_days` / `_stale` ride on the object so every
+// caller renders the same staleness sentence.
+function readCatalog() {
+  try {
+    const t = JSON.parse(fs.readFileSync(EXTRA_CATALOG, "utf8"));
+    t.providers = Array.isArray(t.providers) ? t.providers : [];
+    const asOf = Date.parse(String(t.as_of || "") + "T00:00:00Z");
+    t._age_days = isNaN(asOf) ? null : Math.floor((Date.now() - asOf) / 86400000);
+    t._stale = t._age_days === null || t._age_days > EXTRA_CATALOG_STALE_DAYS;
+    t._path = EXTRA_CATALOG;
+    return t;
+  } catch (_) {
+    return null;
+  }
+}
+const catalogRow = (cat, id) => (cat ? cat.providers.find((p) => p.id === id) || null : null);
+
+// A provider row + a region id → the two base URLs actually in play. Kept in
+// ONE place because a region is not cosmetic: a MiniMax key issued for the
+// international host does not authenticate against the China host, and the
+// failure is a 401 with nothing on screen explaining why.
+function providerBases(row, region) {
+  if (!row) return { api_base: null, anthropic_base: null, region: "default" };
+  const r = region && region !== "default" ? (row.regions || []).find((x) => x.id === region) : null;
+  return {
+    api_base: (r && r.api_base) || row.api_base || null,
+    anthropic_base: (r && r.anthropic_base) || row.anthropic_base || null,
+    region: r ? r.id : "default",
+  };
+}
+
+function readExtra(claudeDir) {
+  const p = extraPaths(claudeDir);
+  if (!fs.existsSync(p.ledger)) return null;
+  try {
+    const l = JSON.parse(fs.readFileSync(p.ledger, "utf8"));
+    l.profiles = Array.isArray(l.profiles) ? l.profiles : [];
+    l.routes = Array.isArray(l.routes) ? l.routes : [];
+    l.history = Array.isArray(l.history) ? l.history : [];
+    return l;
+  } catch (_) {
+    return null;
+  }
+}
+const emptyExtra = () => ({ version: 1, profiles: [], routes: [], history: [] });
+
+function writeExtra(claudeDir, ledger) {
+  const p = extraPaths(claudeDir);
+  fs.mkdirSync(p.dir, { recursive: true });
+  ledger.version = 1;
+  ledger.updated_at = new Date().toISOString();
+  fs.writeFileSync(p.ledger, JSON.stringify(ledger, null, 2) + "\n");
+  return p.ledger;
+}
+
+function extraHistory(ledger, action, detail) {
+  ledger.history = Array.isArray(ledger.history) ? ledger.history : [];
+  ledger.history.push(Object.assign({ at: new Date().toISOString(), action }, detail || {}));
+  return ledger;
+}
+
+const extraProfile = (ledger, name) =>
+  (ledger && ledger.profiles.find((x) => x.name === name)) || null;
+
+// ── P2: the ONE redaction. Every `--json` route goes through this ───────────
+// There is no secret in the ledger by construction — `credential` holds an
+// env-var NAME or a vault pointer, never a value — but "by construction" is a
+// property that survives exactly as long as nobody adds a field. So the shape
+// is built by ALLOW-LIST here: a future key carrying a secret would have to be
+// added to this function on purpose, in a diff a reviewer reads.
+function redactProfile(prof, claudeDir) {
+  const cred = prof.credential || { source: "env", key_name: null };
+  return {
+    name: prof.name,
+    provider: prof.provider,
+    engine: prof.engine,
+    region: prof.region || "default",
+    cli: prof.cli || null,
+    base_url: prof.base_url || null,
+    anthropic_base_url: prof.anthropic_base_url || null,
+    completions_path: prof.completions_path || null,
+    auth_env: prof.auth_env || null,
+    credential: {
+      source: cred.source || "env",
+      key_name: cred.key_name || null,
+      present: credentialPresent(cred, claudeDir),
+      vault: credentialVaultState(cred, claudeDir),
+    },
+    verified_at: prof.verified_at || null,
+    verify_method: prof.verify_method || null,
+    verify_base_url: prof.verify_base_url || null,
+    latency_ms: prof.latency_ms === undefined ? null : prof.latency_ms,
+    models_seen: Array.isArray(prof.models_seen) ? prof.models_seen : [],
+    model_map: prof.model_map || null,
+    tool_fidelity: prof.tool_fidelity || null,
+    privacy: prof.privacy || null,
+    notes: prof.notes || null,
+  };
+}
+
+// `present` is the ONE bit of a credential ORC will say out loud: is there
+// something to send. For an env source that is whether the variable is set in
+// THIS process; for a vault source it is whether a record exists on disk.
+// Neither reads a value into a place it could be printed.
+function credentialPresent(cred, claudeDir) {
+  const src = (cred && cred.source) || "env";
+  if (src === "env") return !!(cred.key_name && process.env[cred.key_name]);
+  if (src === "vault") {
+    try {
+      const v = JSON.parse(fs.readFileSync(extraPaths(claudeDir).vault, "utf8"));
+      const rec = v && v.records && v.records[cred.key_name];
+      // A WIPED record is a tombstone with no ciphertext. `present: false` is
+      // the right answer for it, and `vault_state` below is what keeps "wiped"
+      // and "never had a key" from collapsing into the same chip.
+      return !!(rec && rec.ciphertext && !rec.wiped_at);
+    } catch (_) {
+      return false;
+    }
+  }
+  return false;
+}
+
+// The vault record's own state, kept separate from `present` because a panel
+// that showed only presence could not tell a user their key was DELETED.
+function credentialVaultState(cred, claudeDir) {
+  if ((cred && cred.source) !== "vault") return null;
+  try {
+    const v = JSON.parse(fs.readFileSync(extraPaths(claudeDir).vault, "utf8"));
+    const rec = v && v.records && v.records[cred.key_name];
+    if (!rec) return { state: "none", attempts_used: 0, wiped_at: null };
+    if (rec.wiped_at) return { state: "wiped", attempts_used: Number(rec.attempts) || 0, wiped_at: rec.wiped_at };
+    return { state: "stored", attempts_used: Number(rec.attempts) || 0, wiped_at: null };
+  } catch (_) {
+    return { state: "none", attempts_used: 0, wiped_at: null };
+  }
+}
+
+// A secret that reaches disk reaches a commit. `orc extra add` appends the
+// vault path to .gitignore ONCE, idempotently, and never rewrites a line it
+// did not add.
+const EXTRA_GITIGNORE_LINES = [
+  ".claude/orc/extra-vault.json",
+  // Engine `cli` writes the task text and reads the tool's final message
+  // here, INSIDE the repo, because a workspace-write sandbox cannot write
+  // outside the workspace. It is removed in a `finally`; this line is what
+  // makes a CRASHED run leave an ignored file rather than a staged one.
+  ".orc-extra/",
+];
+function ensureExtraGitignore(root) {
+  const p = path.join(root, ".gitignore");
+  let text = "";
+  try {
+    text = fs.readFileSync(p, "utf8");
+  } catch (_) {}
+  const have = new Set(text.split(/\r?\n/).map((l) => l.trim()));
+  const missing = EXTRA_GITIGNORE_LINES.filter((l) => !have.has(l));
+  if (!missing.length) return null;
+  const sep = text && !text.endsWith("\n") ? "\n" : "";
+  try {
+    fs.writeFileSync(
+      p,
+      text + sep + "# orc extra — the credential vault NEVER belongs in a commit\n" + missing.join("\n") + "\n"
+    );
+  } catch (_) {
+    return null;
+  }
+  return missing;
+}
+
+// ── orc extra providers ────────────────────────────────────────────────────
+function extraProvidersCmd() {
+  const cat = readCatalog();
+  const asJson = wantsJson();
+  if (!cat) {
+    const hint = `provider catalog missing or unreadable at ${EXTRA_CATALOG} — this is a packaging bug; reinstall orc.`;
+    if (asJson) emitJson({ ok: false, reason: "no-catalog", path: EXTRA_CATALOG, hint }, 1);
+    console.error("❌ " + hint);
+    process.exit(1);
+  }
+  const rows = cat.providers.map((p) => ({
+    id: p.id,
+    label: p.label,
+    engines: p.engines || [],
+    api_base: p.api_base,
+    anthropic_base: p.anthropic_base,
+    auth_env: p.auth_env,
+    env_key_default: p.env_key_default,
+    models_path: p.models_path,
+    context_tokens: p.context_tokens === undefined ? null : p.context_tokens,
+    regions: (p.regions || []).map((r) => ({ id: r.id, label: r.label })),
+    docs_url: p.docs_url || null,
+    terms_url: p.terms_url || null,
+    notes: p.notes || null,
+  }));
+  if (asJson)
+    emitJson(
+      {
+        ok: true,
+        path: cat._path,
+        as_of: cat.as_of,
+        age_days: cat._age_days,
+        stale: cat._stale,
+        stale_after_days: EXTRA_CATALOG_STALE_DAYS,
+        // P4, said out loud in the payload so a renderer cannot invent a model
+        // dropdown out of this.
+        models: "never shipped — `orc extra ping` reads them from the provider",
+        providers: rows,
+      },
+      0
+    );
+  console.log(ui.header(`ORC · extra — ${plural(rows.length, "provider")} (catalog dated ${cat.as_of})`));
+  console.log("");
+  console.log(
+    ui.kv(
+      rows.map((r) => [
+        r.id,
+        r.label + (r.regions.length ? ui.color.gray(`  [${r.regions.map((x) => x.id).join(", ")}]`) : ""),
+        r.engines.join(" · "),
+      ])
+    )
+  );
+  console.log(
+    "\n" +
+      ui.color.gray(
+        "  Model ids are NOT shipped — they rot within a quarter. `orc extra ping <profile>`\n" +
+          "  reads them from the provider and caches them on the profile.\n" +
+          "  `orc extra providers --json` carries the base URLs, the auth variable and the terms link."
+      )
+  );
+  if (cat._stale)
+    console.log(
+      "\n  " +
+        ui.mark.warn(
+          `this catalog is ${cat._age_days === null ? "undated" : cat._age_days + " days old"} (> ${EXTRA_CATALOG_STALE_DAYS}) — ` +
+            "a base URL may have moved. Check the provider's own docs before you trust a failure."
+        )
+    );
+  console.log("");
+}
+
+// ── orc extra add ──────────────────────────────────────────────────────────
+function extraAdd(claudeDir, name) {
+  const cat = readCatalog();
+  const asJson = wantsJson();
+  const fail = (reason, msg, extra) => {
+    if (asJson) emitJson(Object.assign({ ok: false, reason, error: msg }, extra || {}), 1);
+    console.error("❌ " + msg);
+    process.exit(1);
+  };
+  if (!name || !/^[a-z0-9][a-z0-9_-]*$/i.test(name))
+    fail(
+      "bad-name",
+      "usage: orc extra add <profile> --provider <id> --engine <api|claude-shim|cli>\n" +
+        "   <profile> is your own slug — letters, digits, - and _ — and it is what a route row names."
+    );
+  const providerId = flag("--provider");
+  if (typeof providerId !== "string")
+    fail("no-provider", "--provider <id> is required. `orc extra providers` lists them (use `custom` for anything else).");
+  const row = catalogRow(cat, providerId);
+  if (!row)
+    fail(
+      "unknown-provider",
+      `unknown provider "${providerId}". Known: ${(cat ? cat.providers.map((p) => p.id) : []).join(", ")}`
+    );
+  const engine = flag("--engine");
+  if (typeof engine !== "string" || !EXTRA_ENGINES.includes(engine))
+    fail("bad-engine", `--engine must be one of: ${EXTRA_ENGINES.join(" | ")}`);
+  if (!(row.engines || []).includes(engine))
+    fail(
+      "engine-unsupported",
+      `provider "${providerId}" does not ship a ${engine} surface (it has: ${(row.engines || []).join(", ")}).`
+    );
+
+  const region = typeof flag("--region") === "string" ? flag("--region") : "default";
+  if (region !== "default" && !(row.regions || []).some((r) => r.id === region))
+    fail(
+      "unknown-region",
+      `unknown region "${region}" for ${providerId} (has: default${(row.regions || []).map((r) => ", " + r.id).join("")}).`
+    );
+
+  const bases = providerBases(row, region);
+  const baseUrl = typeof flag("--base-url") === "string" ? flag("--base-url") : null;
+  const anthropicBase =
+    typeof flag("--anthropic-base-url") === "string" ? flag("--anthropic-base-url") : null;
+  if (engine === "api" && !baseUrl && !bases.api_base)
+    fail("no-base-url", `provider "${providerId}" has no OpenAI-compatible base URL in the catalog — pass --base-url.`);
+  if (engine === "claude-shim" && !anthropicBase && !bases.anthropic_base)
+    fail("no-base-url", `provider "${providerId}" has no /anthropic base URL in the catalog — pass --anthropic-base-url.`);
+
+  let cli = null;
+  if (engine === "cli") {
+    const bin = flag("--cli");
+    if (typeof bin !== "string")
+      fail("no-cli", "--cli <bin> is required for --engine cli (e.g. --cli opencode --cli-agent build).");
+    if (!EXTRA_CLI_ADAPTERS[bin])
+      fail(
+        "no-adapter",
+        `no adapter for "${bin}". This release ships: ${Object.keys(EXTRA_CLI_ADAPTERS).join(", ")}.\n` +
+          "   An adapter is a table row — argv, env, output parser, what the tool documents about its exit codes — so adding one is small, but ORC will not pretend to drive a tool it has never been told how to call."
+      );
+    const attach = flag("--cli-attach");
+    if (attach !== undefined && !EXTRA_CLI_ADAPTERS[bin].supports.attach)
+      fail("no-attach", `--cli-attach is an \`${bin}\` feature it does not have. Only ${Object.keys(EXTRA_CLI_ADAPTERS).filter((k) => EXTRA_CLI_ADAPTERS[k].supports.attach).join(", ")} joins a running server.`);
+    if (typeof attach === "string" && !/^https?:\/\//.test(attach))
+      fail("bad-attach", `--cli-attach takes the URL of a running server (got "${attach}").`);
+    // extra_args are the USER's own words on a profile they authored, appended
+    // verbatim. That is why they are allowed at all: a task SLICE is not
+    // ORC's text and never reaches argv, but a profile is configuration.
+    const cliArgs = typeof flag("--cli-args") === "string" ? flag("--cli-args").split(/\s+/).filter(Boolean) : [];
+    cli = {
+      bin,
+      agent: typeof flag("--cli-agent") === "string" ? flag("--cli-agent") : null,
+      attach: typeof attach === "string" ? attach : null,
+      extra_args: cliArgs,
+    };
+  }
+
+  // P2 / D3 — the credential. An env-var NAME is the default and the
+  // recommended source: an environment variable your OS already protects beats
+  // a passphrase you will forget. `--key-stdin` is the second option and is
+  // the encrypted vault; there is deliberately no `--key <value>`, which would
+  // land the secret in shell history and in a world-readable process list.
+  if (args.includes("--key"))
+    fail(
+      "key-in-argv",
+      "`--key <value>` does not exist on purpose: argv is world-readable in a process list and lands in shell history.\n" +
+        "   Use --env-key <NAME> (recommended) or --key-stdin."
+    );
+  const envKey = flag("--env-key");
+  const keyStdin = args.includes("--key-stdin");
+  let credential;
+  if (keyStdin) {
+    credential = { source: "vault", key_name: name };
+  } else {
+    const kn = typeof envKey === "string" ? envKey : row.env_key_default;
+    if (!kn)
+      fail(
+        "no-credential",
+        "no credential source. Pass --env-key <NAME> (recommended) or --key-stdin (stored in the encrypted vault)."
+      );
+    credential = { source: "env", key_name: kn };
+  }
+
+  const authEnv = typeof flag("--auth-env") === "string" ? flag("--auth-env") : row.auth_env;
+  if (!EXTRA_AUTH_ENVS.includes(authEnv))
+    fail(
+      "bad-auth-env",
+      `--auth-env must be one of: ${EXTRA_AUTH_ENVS.join(" | ")}\n` +
+        "   The variable NAME decides the header: ANTHROPIC_AUTH_TOKEN → Authorization: Bearer, ANTHROPIC_API_KEY → x-api-key."
+    );
+
+  const ledger = readExtra(claudeDir) || emptyExtra();
+  if (extraProfile(ledger, name))
+    fail("exists", `profile "${name}" already exists. Remove it first: orc extra remove ${name} --reason "<why>"`);
+
+  const prof = {
+    name,
+    provider: providerId,
+    engine,
+    region: bases.region,
+    cli,
+    base_url: baseUrl || bases.api_base || null,
+    anthropic_base_url: anthropicBase || bases.anthropic_base || null,
+    // Engine `api` derives `/v1/chat/completions` vs `/chat/completions` from
+    // whether the base already carries a version segment. This is the override
+    // for a gateway that does neither, and it is null in every normal case.
+    completions_path: typeof flag("--completions-path") === "string" ? flag("--completions-path") : null,
+    auth_env: authEnv,
+    credential,
+    // Everything below is written by `orc extra ping` and by dispatch. Never
+    // guessed here — an unverified profile must read unverified.
+    verified_at: null,
+    verify_method: null,
+    verify_base_url: null,
+    latency_ms: null,
+    models_seen: [],
+    // Engine A resolves FOUR model ids, not one — Claude Code makes background
+    // calls on the `haiku` alias, so a single ANTHROPIC_MODEL 404s mid-wave.
+    // Filled at route time from models_seen; null until then.
+    model_map: { opus: null, sonnet: null, haiku: null, subagent: null },
+    // A record, never a boolean. "DeepSeek works" and "DeepSeek works if you
+    // set two env vars, and here they are" are different facts.
+    tool_fidelity: null,
+    privacy: null,
+    notes: null,
+  };
+
+  ledger.profiles.push(prof);
+  extraHistory(ledger, "add", { profile: name, provider: providerId, engine });
+  const file = writeExtra(claudeDir, ledger);
+  const ignored = ensureExtraGitignore(extraPaths(claudeDir).root);
+
+  if (asJson)
+    emitJson(
+      {
+        ok: true,
+        profile: redactProfile(prof, claudeDir),
+        ledger: file,
+        gitignore_added: ignored,
+        next: keyStdin
+          ? `orc extra ping ${name} --key-stdin`
+          : `orc extra ping ${name}`,
+      },
+      0
+    );
+
+  console.log(`\nAdded profile ${ui.color.cyan(name)}  →  ${file}`);
+  console.log(
+    ui.kv([
+      ["provider", providerId + (prof.region !== "default" ? `  (${prof.region})` : "")],
+      ["engine", engine],
+      ["base url", engine === "claude-shim" ? prof.anthropic_base_url || "—" : prof.base_url || "—"],
+      ["credential", credential.source === "env" ? `env ${credential.key_name}` : "vault (not stored yet)"],
+      ["verified", ui.color.yellow("no — nothing routes to an unverified profile")],
+    ])
+  );
+  if (ignored) console.log(ui.color.gray(`\n  .gitignore  + ${ignored.join(", ")}`));
+  if (credential.source === "env" && !process.env[credential.key_name])
+    console.log("\n  " + ui.mark.warn(`${credential.key_name} is not set in this shell — the ping will fail until it is.`));
+  console.log(
+    "\n" +
+      ui.box([
+        "Next:  " + (keyStdin ? `orc extra ping ${name} --key-stdin` : `orc extra ping ${name}`),
+        "",
+        "A profile does nothing until a route points at it. Nothing has changed",
+        "about how this repo builds yet.",
+      ]) +
+      "\n"
+  );
+}
+
+// ── orc extra list / show ──────────────────────────────────────────────────
+function extraList(claudeDir) {
+  const asJson = wantsJson();
+  const ledger = readExtra(claudeDir);
+  const cat = readCatalog();
+  const p = extraPaths(claudeDir);
+  const rows = (ledger ? ledger.profiles : []).map((x) => redactProfile(x, claudeDir));
+  if (asJson)
+    emitJson(
+      {
+        ok: true,
+        ledger: p.ledger,
+        exists: !!ledger,
+        catalog_as_of: cat ? cat.as_of : null,
+        catalog_stale: cat ? cat._stale : null,
+        profiles: rows,
+        routes: ledger ? ledger.routes : [],
+        counts: {
+          profiles: rows.length,
+          verified: rows.filter((r) => r.verified_at).length,
+          credential_present: rows.filter((r) => r.credential.present).length,
+        },
+      },
+      0
+    );
+  if (!rows.length) {
+    console.log(
+      "\nNo extra profiles yet." +
+        ui.color.gray(
+          "\n\n  orc extra providers                  what ORC knows how to reach\n" +
+            "  orc extra add <name> --provider <id> --engine api --env-key <VAR>\n" +
+            "  orc extra ping <name>                the connection gate\n"
+        )
+    );
+    return;
+  }
+  console.log(ui.header(`ORC · extra — ${plural(rows.length, "profile")}`));
+  console.log("");
+  console.log(
+    ui.kv(
+      rows.map((r) => [
+        r.name,
+        `${r.provider}/${r.engine}`,
+        (r.verified_at ? ui.color.green("verified " + r.verified_at.slice(0, 10)) : ui.color.yellow("unverified")) +
+          "  " +
+          (r.credential.present
+            ? ui.color.gray(`key ${r.credential.source}`)
+            : ui.color.red(`no key (${r.credential.source} ${r.credential.key_name || "—"})`)),
+      ])
+    )
+  );
+  console.log(ui.color.gray("\n  No key value is ever stored or printed here — only the variable NAME.\n"));
+}
+
+function extraShow(claudeDir, name) {
+  const asJson = wantsJson();
+  const ledger = readExtra(claudeDir);
+  const prof = extraProfile(ledger, name);
+  if (!prof) {
+    const known = ledger ? ledger.profiles.map((x) => x.name) : [];
+    const hint = `unknown profile "${name || ""}"${known.length ? ` — known: ${known.join(", ")}` : " — none configured yet"}`;
+    if (asJson) emitJson({ ok: false, reason: "unknown-profile", profile: name || null, known, hint }, 2);
+    console.error("❌ " + hint);
+    process.exit(2);
+  }
+  const cat = readCatalog();
+  const row = catalogRow(cat, prof.provider);
+  const view = redactProfile(prof, claudeDir);
+  if (asJson)
+    emitJson(
+      {
+        ok: true,
+        profile: view,
+        catalog: row
+          ? { id: row.id, label: row.label, docs_url: row.docs_url, terms_url: row.terms_url, notes: row.notes }
+          : null,
+        history: (ledger.history || []).filter((h) => h.profile === name),
+      },
+      0
+    );
+  console.log(ui.header(`ORC · extra — ${name}`));
+  console.log("");
+  console.log(
+    ui.kv([
+      [
+        "provider",
+        `${view.provider}${view.region !== "default" ? " (" + view.region + ")" : ""}${row ? "  " + row.label : ""}`,
+      ],
+      ["engine", view.engine],
+      ["api base", view.base_url || "—"],
+      ["/anthropic base", view.anthropic_base_url || "—"],
+      ["auth variable", view.auth_env || "—"],
+      [
+        "credential",
+        `${view.credential.source} ${view.credential.key_name || "—"} · ${view.credential.present ? "present" : "MISSING"}`,
+      ],
+      ["verified", view.verified_at ? `${view.verified_at} via ${view.verify_method}` : "no"],
+      ["models seen", view.models_seen.length ? view.models_seen.join(", ") : "— (run `orc extra ping`)"],
+      ["tool fidelity", view.tool_fidelity ? "measured" : "— (measured on first dispatch)"],
+      ["terms", (row && row.terms_url) || "—"],
+    ])
+  );
+  console.log("");
+}
+
+// ── orc extra remove ───────────────────────────────────────────────────────
+// A reason is REQUIRED — the /orc-pact retirement rule. Removing a profile
+// un-routes every band pointing at it, which is a change to how this repo
+// builds; a change like that with no recorded why is a change nobody can
+// explain in three weeks.
+function extraRemove(claudeDir, name) {
+  const asJson = wantsJson();
+  const reason = flag("--reason");
+  const ledger = readExtra(claudeDir);
+  const prof = extraProfile(ledger, name);
+  const fail = (r, msg, code) => {
+    if (asJson) emitJson({ ok: false, reason: r, error: msg }, code);
+    console.error("❌ " + msg);
+    process.exit(code);
+  };
+  if (!prof) fail("unknown-profile", `unknown profile "${name || ""}".`, 2);
+  if (typeof reason !== "string" || !reason.trim())
+    fail(
+      "no-reason",
+      `a reason is required: orc extra remove ${name} --reason "<why>"\n` +
+        "   Removing a profile un-routes every band pointing at it. That is worth one sentence.",
+      1
+    );
+
+  const orphaned = ledger.routes.filter((r) => r.profile === name);
+  ledger.routes = ledger.routes.filter((r) => r.profile !== name);
+  ledger.profiles = ledger.profiles.filter((x) => x.name !== name);
+  extraHistory(ledger, "remove", { profile: name, reason: reason.trim(), routes_dropped: orphaned.length });
+  const file = writeExtra(claudeDir, ledger);
+  // The vault record goes with it: a key nothing can reach is a key nothing
+  // should keep. The profile's history stays — it is not a secret.
+  const vaultWiped = extraVaultForget(claudeDir, name);
+
+  if (asJson)
+    emitJson(
+      { ok: true, removed: name, reason: reason.trim(), routes_dropped: orphaned, vault_record_removed: vaultWiped, ledger: file },
+      0
+    );
+  console.log(`\nRemoved profile ${ui.color.cyan(name)}  —  ${reason.trim()}`);
+  if (orphaned.length)
+    console.log(
+      "  " +
+        ui.mark.warn(
+          `${plural(orphaned.length, "route row")} dropped with it: ` +
+            orphaned.map((r) => `[${r.from},${r.to})`).join(", ") +
+            " — those scores are back on the Claude ladder."
+        )
+    );
+  console.log("");
+}
+
+// Drop a profile's vault record. Called on `remove`, and by the vault's own
+// self-destruct. Best effort: a vault that does not exist yet is not an error,
+// and a removal must never fail because a file it does not need is missing.
+function extraVaultForget(claudeDir, name) {
+  const p = extraPaths(claudeDir).vault;
+  try {
+    const v = JSON.parse(fs.readFileSync(p, "utf8"));
+    if (v && v.records && v.records[name]) {
+      delete v.records[name];
+      fs.writeFileSync(p, JSON.stringify(v, null, 2) + "\n", { mode: 0o600 });
+      return true;
+    }
+  } catch (_) {}
+  return false;
+}
+
+// ── The wire (zero-dep) ────────────────────────────────────────────────────
+// One tiny request helper for every probe. Two properties are load-bearing and
+// neither is a performance choice:
+//
+//   REDIRECTS ARE A FAILURE. Claude Code's own gateway model discovery refuses
+//   them deliberately, so a credential cannot be handed to a redirect target
+//   the user never named. We copy that verbatim.
+//
+//   The TIMEOUT is short and explicit. A probe that hangs is a connect modal
+//   that hangs, and a profile is either reachable now or it is not.
+function extraHttp(opts) {
+  return new Promise((resolve) => {
+    let url;
+    try {
+      url = new URL(opts.url);
+    } catch (_) {
+      return resolve({ ok: false, reason: "bad-url", error: `not a URL: ${opts.url}` });
+    }
+    if (url.protocol !== "https:" && url.protocol !== "http:")
+      return resolve({ ok: false, reason: "bad-url", error: `unsupported protocol ${url.protocol}` });
+    const lib = url.protocol === "https:" ? require("https") : require("http");
+    const body = opts.body === undefined ? null : Buffer.from(JSON.stringify(opts.body), "utf8");
+    const headers = Object.assign({ accept: "application/json" }, opts.headers || {});
+    if (body) {
+      headers["content-type"] = "application/json";
+      headers["content-length"] = String(body.length);
+    }
+    const started = Date.now();
+    const req = lib.request(
+      { protocol: url.protocol, hostname: url.hostname, port: url.port || undefined, path: url.pathname + url.search, method: opts.method || "GET", headers },
+      (res) => {
+        // A 3xx is refused BEFORE a single byte of the body is read: following
+        // it would send the Authorization header to a host the user did not
+        // configure. This is a credential-safety rule, not a strictness one.
+        if (res.statusCode >= 300 && res.statusCode < 400) {
+          res.destroy();
+          return resolve({
+            ok: false,
+            reason: "redirect-refused",
+            status: res.statusCode,
+            error: `endpoint redirected to ${res.headers.location || "an unnamed host"} — ORC refuses to follow a redirect with your credential attached. Configure the final URL directly.`,
+            ms: Date.now() - started,
+          });
+        }
+        // The ceiling is the CALLER's: 2 MB is right for a models list and
+        // wrong for a long completion, and a silently truncated body parses as
+        // a malformed answer, which is a different and much more confusing
+        // fact than "it was too big". So `truncated` is REPORTED.
+        const cap = Number(opts.maxBytes) || 2 * 1024 * 1024;
+        const chunks = [];
+        let size = 0;
+        let truncated = false;
+        res.on("data", (c) => {
+          size += c.length;
+          if (size <= cap) chunks.push(c);
+          else truncated = true;
+        });
+        res.on("end", () => {
+          const text = Buffer.concat(chunks).toString("utf8");
+          let json = null;
+          try {
+            json = JSON.parse(text);
+          } catch (_) {}
+          resolve({
+            ok: res.statusCode >= 200 && res.statusCode < 300,
+            status: res.statusCode,
+            json,
+            text: json ? null : text.slice(0, 400),
+            truncated,
+            bytes: size,
+            ms: Date.now() - started,
+          });
+        });
+      }
+    );
+    req.setTimeout(opts.timeoutMs || 3000, () => {
+      req.destroy();
+      resolve({ ok: false, reason: "timeout", error: `no answer in ${opts.timeoutMs || 3000}ms`, ms: Date.now() - started });
+    });
+    req.on("error", (e) =>
+      resolve({ ok: false, reason: "unreachable", error: e.message, code: e.code, ms: Date.now() - started })
+    );
+    if (body) req.write(body);
+    req.end();
+  });
+}
+
+// The provider's own words, never ORC's paraphrase. A gateway that wraps its
+// upstream's error in a house envelope is a real fidelity problem, and dropping
+// the text here would hide it.
+function extraErrText(res) {
+  if (!res) return "no response";
+  if (res.error) return res.error;
+  const j = res.json;
+  if (j) {
+    const e = j.error || j;
+    const m = e.message || e.msg || e.detail || e.type;
+    if (m) return String(m).slice(0, 300);
+  }
+  if (res.text) return String(res.text).replace(/\s+/g, " ").slice(0, 300);
+  return `HTTP ${res.status}`;
+}
+
+// ── The credential vault (P10) ─────────────────────────────────────────────
+//
+// `a key ORC can read without you` has broken this contract. The vault is
+// decryptable only with a passphrase ORC never stores, never logs, never puts
+// in argv, and never shows a model.
+//
+// AES-256-GCM under scrypt(pepper + " " + passphrase). NO separate verifier
+// hash is stored: GCM's auth tag IS the verifier, and a stored hash would hand
+// an offline attacker a cheaper oracle than the cipher itself.
+//
+// N = 2^17 costs ~128 MB and a beat of wall clock. THAT BEAT IS THE ENTIRE
+// DEFENCE against an offline attack on a copied file, so it is a feature and
+// must never be tuned down for responsiveness. Node's default maxmem is 32 MB
+// and scryptSync THROWS at this N without being told otherwise.
+const EXTRA_KDF = { algo: "scrypt", N: 131072, r: 8, p: 1, len: 32 };
+const EXTRA_KDF_MAXMEM = 256 * 1024 * 1024;
+const EXTRA_VAULT_MAX_ATTEMPTS_DEFAULT = 10;
+// The `shipped` pepper. It travels to every user inside the npm package, so it
+// is OBFUSCATION and nothing more — a secret published on npm is not a secret.
+// It exists only for someone who explicitly wants a vault portable between
+// machines with the passphrase alone, and every surface that offers it prints
+// that weakness beside it. `install` is the default.
+const EXTRA_SHIPPED_PEPPER = "orc-extra/v1/shipped-pepper/not-a-secret";
+
+function extraPepperPath() {
+  return path.join(os.homedir(), ".claude", "orc", "extra-pepper");
+}
+
+// 32 random bytes at ~/.claude/orc/extra-pepper, mode 0600, generated ONCE.
+// A real second factor: the vault travels with the repo, the pepper does not —
+// which also means LOSING THE PEPPER LOSES THE KEY, and every surface that
+// writes one says so.
+function extraPepper(mode, { create } = {}) {
+  if (mode === "shipped") return { ok: true, value: EXTRA_SHIPPED_PEPPER, mode: "shipped" };
+  const p = extraPepperPath();
+  try {
+    return { ok: true, value: fs.readFileSync(p, "utf8").trim(), mode: "install", path: p };
+  } catch (_) {}
+  if (!create)
+    return {
+      ok: false,
+      reason: "pepper-missing",
+      path: p,
+      error: `the install pepper at ${p} is gone. It is one of the two halves of the key and ORC cannot regenerate it — the stored keys cannot be opened again. Paste a new key from your provider.`,
+    };
+  try {
+    fs.mkdirSync(path.dirname(p), { recursive: true });
+    const val = crypto.randomBytes(32).toString("base64");
+    fs.writeFileSync(p, val + "\n", { mode: 0o600 });
+    return { ok: true, value: val, mode: "install", path: p, created: true };
+  } catch (e) {
+    return { ok: false, reason: "pepper-unwritable", path: p, error: e.message };
+  }
+}
+
+function extraDerive(pepper, passphrase, salt) {
+  return crypto.scryptSync(pepper + " " + passphrase, salt, EXTRA_KDF.len, {
+    N: EXTRA_KDF.N,
+    r: EXTRA_KDF.r,
+    p: EXTRA_KDF.p,
+    maxmem: EXTRA_KDF_MAXMEM,
+  });
+}
+
+function readVault(claudeDir) {
+  try {
+    const v = JSON.parse(fs.readFileSync(extraPaths(claudeDir).vault, "utf8"));
+    v.records = v.records && typeof v.records === "object" ? v.records : {};
+    return v;
+  } catch (_) {
+    return { version: 1, kdf: EXTRA_KDF, records: {} };
+  }
+}
+
+function writeVault(claudeDir, v) {
+  const p = extraPaths(claudeDir);
+  fs.mkdirSync(p.dir, { recursive: true });
+  v.version = 1;
+  v.kdf = EXTRA_KDF; // pinned IN the file so a future reader sees the cost was chosen
+  fs.writeFileSync(p.vault, JSON.stringify(v, null, 2) + "\n", { mode: 0o600 });
+  try {
+    fs.chmodSync(p.vault, 0o600);
+  } catch (_) {}
+  return p.vault;
+}
+
+function extraVaultPut(claudeDir, name, plaintext, passphrase, pepperMode) {
+  const pep = extraPepper(pepperMode, { create: true });
+  if (!pep.ok) return pep;
+  const salt = crypto.randomBytes(16);
+  const iv = crypto.randomBytes(12);
+  const key = extraDerive(pep.value, passphrase, salt);
+  const c = crypto.createCipheriv("aes-256-gcm", key, iv);
+  const ct = Buffer.concat([c.update(Buffer.from(plaintext, "utf8")), c.final()]);
+  const tag = c.getAuthTag();
+  key.fill(0);
+  const v = readVault(claudeDir);
+  v.records[name] = {
+    salt: salt.toString("base64"),
+    iv: iv.toString("base64"),
+    ciphertext: ct.toString("base64"),
+    tag: tag.toString("base64"),
+    pepper: pep.mode,
+    created_at: new Date().toISOString(),
+    attempts: 0,
+    wiped_at: null,
+  };
+  const file = writeVault(claudeDir, v);
+  return { ok: true, vault: file, pepper: pep.mode, pepper_path: pep.path || null, pepper_created: !!pep.created };
+}
+
+// Reading it back, and the self-destruct.
+//
+// `attempts` is incremented AND FLUSHED TO DISK BEFORE the decrypt is
+// attempted. A counter written after the attempt is a counter you defeat with
+// Ctrl-C.
+function extraVaultGet(claudeDir, name, passphrase, maxAttempts) {
+  const max = Math.max(3, Number(maxAttempts) || EXTRA_VAULT_MAX_ATTEMPTS_DEFAULT);
+  const v = readVault(claudeDir);
+  const rec = v.records[name];
+  if (!rec) return { ok: false, reason: "no-record", error: `no stored key for "${name}".` };
+  if (rec.wiped_at)
+    return {
+      ok: false,
+      reason: "wiped",
+      wiped_at: rec.wiped_at,
+      error: `the stored key for "${name}" was deleted after ${max} wrong attempts. Paste a new key from your provider.`,
+    };
+  const pep = extraPepper(rec.pepper);
+  if (!pep.ok) return pep;
+
+  rec.attempts = (Number(rec.attempts) || 0) + 1;
+  writeVault(claudeDir, v);
+
+  try {
+    const d = crypto.createDecipheriv(
+      "aes-256-gcm",
+      extraDerive(pep.value, passphrase, Buffer.from(rec.salt, "base64")),
+      Buffer.from(rec.iv, "base64")
+    );
+    d.setAuthTag(Buffer.from(rec.tag, "base64"));
+    const out = Buffer.concat([d.update(Buffer.from(rec.ciphertext, "base64")), d.final()]).toString("utf8");
+    rec.attempts = 0;
+    writeVault(claudeDir, v);
+    return { ok: true, value: out, attempts_used: 0, max };
+  } catch (_) {
+    const used = rec.attempts;
+    if (used >= max) {
+      // Overwrite the ciphertext with random bytes of the same length before
+      // dropping the record, so the bytes are not merely unlinked. A TOMBSTONE
+      // stays: `wiped` and `never had a key` are different facts and a panel
+      // that collapsed them would be lying about what happened here.
+      const len = Buffer.from(rec.ciphertext, "base64").length;
+      rec.ciphertext = crypto.randomBytes(len).toString("base64");
+      writeVault(claudeDir, v);
+      v.records[name] = { wiped_at: new Date().toISOString(), attempts: used, pepper: rec.pepper };
+      writeVault(claudeDir, v);
+      return {
+        ok: false,
+        reason: "wiped",
+        attempts_used: used,
+        max,
+        error: `wrong passphrase — attempt ${used} of ${max}. The stored key has been deleted, on purpose. Paste a new key from your provider.`,
+      };
+    }
+    return {
+      ok: false,
+      reason: "bad-passphrase",
+      attempts_used: used,
+      max,
+      // A countdown toward a destructive action that is not SHOWN is
+      // indistinguishable from no countdown at all.
+      error: `wrong passphrase — attempt ${used} of ${max}. At ${max} the stored key is deleted.`,
+    };
+  }
+}
+
+// The honesty this needs, in one place so every surface repeats the same
+// sentence: the counter defends against a person at your keyboard. It does NOT
+// defend against someone who copies the file and brute-forces it offline. The
+// defence there is scrypt's cost parameters, and nothing else.
+const EXTRA_VAULT_HONESTY =
+  "The attempt counter stops someone at your keyboard. It does NOT stop someone who copies " +
+  "the vault file and tries offline — scrypt's cost is the only defence there.";
+const EXTRA_VAULT_WARNING = [
+  "Write your passphrase down somewhere safe now.",
+  "ORC does not store it and cannot recover it. If you lose it, the stored key is gone",
+  "and you paste a new one from your provider. After ten wrong attempts ORC deletes the",
+  "stored key on purpose.",
+];
+
+// ── Reading a secret without it reaching argv, a log, or the screen ────────
+// Piped stdin: line 1 is the key, an OPTIONAL line 2 is the passphrase (the
+// only way an unattended shell can complete the save). A TTY gets a real
+// no-echo prompt instead.
+function readStdinLines() {
+  try {
+    return fs.readFileSync(0, "utf8").split(/\r?\n/);
+  } catch (_) {
+    return [];
+  }
+}
+
+function promptSecret(label) {
+  if (!process.stdin.isTTY) return null;
+  process.stderr.write(label);
+  let out = "";
+  const fd = process.stdin.fd;
+  try {
+    process.stdin.setRawMode(true);
+  } catch (_) {
+    return null;
+  }
+  const buf = Buffer.alloc(1);
+  for (;;) {
+    let n = 0;
+    try {
+      n = fs.readSync(fd, buf, 0, 1, null);
+    } catch (e) {
+      if (e.code === "EAGAIN") continue;
+      break;
+    }
+    if (!n) break;
+    const ch = buf[0];
+    if (ch === 3) {
+      // Ctrl-C. The attempts counter is already flushed by the time a decrypt
+      // runs, so there is nothing to gain here — but exit cleanly anyway.
+      try {
+        process.stdin.setRawMode(false);
+      } catch (_) {}
+      process.stderr.write("\n");
+      process.exit(130);
+    }
+    if (ch === 13 || ch === 10) break;
+    if (ch === 127 || ch === 8) {
+      out = out.slice(0, -1);
+      continue;
+    }
+    out += String.fromCharCode(ch);
+  }
+  try {
+    process.stdin.setRawMode(false);
+  } catch (_) {}
+  process.stderr.write("\n");
+  return out;
+}
+
+// ── Verification freshness — COMPUTED on read, never stored ────────────────
+// The computeWikiFreshness rule. A stored status word is a status word that
+// lies the moment the clock moves. And a STALE verification is not a FAILED
+// one: it still routes (the /orc-pact UNCHECKABLE rule), it just re-pings
+// before wave 1.
+function extraVerifyState(prof, cfg) {
+  const maxDays = Number((cfg && cfg.extra_verify_max_days) || EXTRA_VERIFY_MAX_DAYS_DEFAULT);
+  if (!prof.verified_at) return { state: "UNVERIFIED", age_days: null, max_days: maxDays };
+  const t = Date.parse(prof.verified_at);
+  if (isNaN(t)) return { state: "UNVERIFIED", age_days: null, max_days: maxDays };
+  const age = Math.floor((Date.now() - t) / 86400000);
+  return { state: age > maxDays ? "STALE" : "VERIFIED", age_days: age, max_days: maxDays };
+}
+const EXTRA_VERIFY_MAX_DAYS_DEFAULT = 7;
+
+// The two base URLs, per engine. There are TWO and therefore two probes: the
+// OpenAI-compatible one that engine `api` speaks, and the `/anthropic` shim
+// that engine `claude-shim` drives. `/v1/models` does not necessarily live
+// under the second one, so the profile records WHICH URL it probed.
+function extraProbeBase(prof, cat) {
+  const row = catalogRow(cat, prof.provider);
+  if (prof.engine === "claude-shim")
+    return { base: prof.anthropic_base_url, kind: "anthropic", models_path: (row && row.models_path) || "/v1/models" };
+  return { base: prof.base_url, kind: "openai", models_path: (row && row.models_path) || "/v1/models" };
+}
+
+// The auth HEADER is decided by the variable NAME, exactly as Claude Code does
+// it. Ollama's Anthropic endpoint REJECTS x-api-key, which is why a catalog row
+// naming a header instead of a variable would have failed at 401 with nothing
+// on screen explaining why.
+function extraAuthHeaders(prof, key) {
+  if (prof.engine === "claude-shim" && prof.auth_env === "ANTHROPIC_API_KEY")
+    return { "x-api-key": key, "anthropic-version": "2023-06-01" };
+  const h = { authorization: "Bearer " + key };
+  if (prof.engine === "claude-shim") h["anthropic-version"] = "2023-06-01";
+  return h;
+}
+
+const joinUrl = (base, p) => String(base).replace(/\/+$/, "") + (p.startsWith("/") ? p : "/" + p);
+
+// Resolve a profile's credential VALUE. Never returns it to a printer — every
+// caller hands it straight to a request header or a child process's env.
+function extraCredentialValue(claudeDir, prof, opts) {
+  const cred = prof.credential || {};
+  if (cred.source === "env") {
+    const v = cred.key_name ? process.env[cred.key_name] : null;
+    if (!v)
+      return {
+        ok: false,
+        reason: "missing-key",
+        error: `${cred.key_name || "the credential variable"} is not set in this environment.`,
+      };
+    return { ok: true, value: v, source: "env" };
+  }
+  if (cred.source === "vault") {
+    if (opts && opts.inMemory) return { ok: true, value: opts.inMemory, source: "memory" };
+    const pass = opts && opts.passphrase;
+    if (!pass) return { ok: false, reason: "locked", error: `"${prof.name}" is stored in the vault — a passphrase is required.` };
+    const got = extraVaultGet(claudeDir, cred.key_name || prof.name, pass, opts && opts.maxAttempts);
+    if (!got.ok) return got;
+    return { ok: true, value: got.value, source: "vault" };
+  }
+  return { ok: false, reason: "no-credential", error: "this profile has no credential source." };
+}
+
+// ── orc extra ping — THE CONNECTION GATE ───────────────────────────────────
+//
+// Cheapest rung first, and the profile records WHICH RUNG ANSWERED, because
+// "verified by a models list" and "verified by a real completion" are different
+// guarantees and collapsing them into one green tick would be a lie.
+//
+//   1  GET {base}{models_path}       free, zero tokens, and it fills models_seen
+//   2  a max_tokens:1 completion     a fraction of a cent  (--deep forces it)
+//   3  manual                        --model <id>, recorded as `manual`
+//
+// Rung 2 has one property worth the code: AN ERROR NAMING AN UNKNOWN MODEL
+// STILL PROVES THE URL AND THE CREDENTIAL, because the endpoint authenticated
+// before it rejected the name. That is the escape from the chicken-and-egg an
+// endpoint with no models list would otherwise leave you in.
+//
+// exit 0 verified · 1 unreachable · 2 unknown profile
+async function extraPing(claudeDir, name) {
+  const asJson = wantsJson();
+  const ledger = readExtra(claudeDir);
+  const prof = extraProfile(ledger, name);
+  if (!prof) {
+    const known = ledger ? ledger.profiles.map((x) => x.name) : [];
+    const hint = `unknown profile "${name || ""}"${known.length ? ` — known: ${known.join(", ")}` : " — none configured yet"}`;
+    if (asJson) emitJson({ ok: false, reason: "unknown-profile", profile: name || null, known, hint }, 2);
+    console.error("❌ " + hint);
+    process.exit(2);
+  }
+  const cfg = resolvedConfig(claudeDir);
+  const cat = readCatalog();
+  const deep = flag("--deep") === true;
+  const modelArg = typeof flag("--model") === "string" ? flag("--model") : null;
+  const keyStdin = args.includes("--key-stdin");
+  // v0.50.0 — RE-PROBING A STORED KEY. Without this a vaulted profile could
+  // never be re-verified: the probe needs the key itself, `extraCredentialValue`
+  // answers `locked` without one, and `orc extra unlock` proves a passphrase
+  // while deliberately never yielding what it unlocked. So `extra-stale-verify`
+  // promised a re-ping before wave 1 that was unreachable for exactly the
+  // profiles the vault exists for.
+  //
+  // The passphrase decrypts the stored key INTO MEMORY for the probe and
+  // nothing else: it is never re-written, and a wrong one spends an attempt on
+  // the same counter every other unlock spends, because a second door with its
+  // own counter is not a lock.
+  const passStdin = args.includes("--passphrase-stdin");
+  if (keyStdin && passStdin) {
+    const msg =
+      "--key-stdin and --passphrase-stdin cannot be combined: stdin's first line would be a key on one reading and a passphrase on the other.\n" +
+      "   Pasting a NEW key: --key-stdin (line 1 the key, an optional line 2 the passphrase that stores it).\n" +
+      "   Re-testing a STORED key: --passphrase-stdin (line 1 the passphrase).";
+    if (asJson) emitJson({ ok: false, reason: "stdin-ambiguous", error: msg }, 1);
+    console.error("❌ " + msg);
+    process.exit(1);
+  }
+
+  // The lifecycle: TEST FIRST, THEN STORE. A pasted key is held in memory for
+  // the probe and NEVER written before the test is green; a failed test leaves
+  // nothing behind — no half-profile, no orphan record — which also means a
+  // typo'd key can never rot in a vault nobody can open.
+  let pending = null;
+  let pendingPass = null;
+  let vaultPass = null;
+  if (passStdin) {
+    if ((prof.credential || {}).source !== "vault") {
+      const msg = `"${name}" reads its key from the environment variable ${(prof.credential || {}).key_name || "(none)"} — there is no stored key to unlock, so --passphrase-stdin has nothing to do.`;
+      if (asJson) emitJson({ ok: false, reason: "not-vaulted", profile: name, error: msg }, 1);
+      console.error("❌ " + msg);
+      process.exit(1);
+    }
+    vaultPass = process.stdin.isTTY
+      ? promptSecret(`Passphrase for "${name}" (not shown): `)
+      : (readStdinLines()[0] || "").trim();
+    if (!vaultPass) {
+      const msg = "no passphrase on stdin. Pipe it, or run this at a terminal.";
+      if (asJson) emitJson({ ok: false, reason: "no-passphrase", profile: name, error: msg }, 1);
+      console.error("❌ " + msg);
+      process.exit(1);
+    }
+  }
+  if (keyStdin) {
+    if (process.stdin.isTTY) {
+      pending = promptSecret(`Paste the API key for "${name}" (not shown): `);
+    } else {
+      const lines = readStdinLines();
+      pending = (lines[0] || "").trim();
+      pendingPass = (lines[1] || "").trim() || null;
+    }
+    if (!pending) {
+      const msg = "no key on stdin. Pipe it (`printf '%s' \"$KEY\" | orc extra ping <profile> --key-stdin`) or run this at a terminal.";
+      if (asJson) emitJson({ ok: false, reason: "no-key", error: msg }, 1);
+      console.error("❌ " + msg);
+      process.exit(1);
+    }
+  }
+
+  // ONE exit, so the reset cannot be forgotten on a path somebody adds later.
+  // A pasted key that failed its test leaves NOTHING behind: the key is never
+  // written, and a profile that has never verified is removed — so a typo'd
+  // key can never rot in a vault nobody can open. A profile that verified
+  // BEFORE is kept: this ping failing does not un-know what an earlier one
+  // proved (the /orc-pact rule — a failed check is not an erased history).
+  const finish = (result, code) => {
+    if (code !== 0 && pending && !prof.verified_at) {
+      ledger.profiles = ledger.profiles.filter((x) => x.name !== name);
+      extraHistory(ledger, "add-reverted", { profile: name, reason: result.error || result.reason || "connection test failed" });
+      writeExtra(claudeDir, ledger);
+      result.profile_reverted = true;
+    }
+    if (asJson) emitJson(result, code);
+    extraPingRender(result);
+    process.exit(code);
+  };
+
+  // Engine `cli` has no endpoint to probe — the thing that can be absent is the
+  // binary. Reported as its own verify_method so nobody reads it as a network
+  // proof it never was.
+  if (prof.engine === "cli") {
+    const bin = (prof.cli && prof.cli.bin) || null;
+    const found = bin ? whichBin(bin) : null;
+    if (!found)
+      return finish(
+        {
+          ok: false,
+          profile: name,
+          engine: "cli",
+          reason: "engine-unavailable",
+          error: `"${bin || "(no binary configured)"}" is not on PATH — engine \`cli\` dispatches by running it.`,
+          rung: "cli-bin",
+        },
+        1
+      );
+    prof.verified_at = new Date().toISOString();
+    prof.verify_method = "cli-bin";
+    prof.verify_base_url = found;
+    prof.latency_ms = null;
+    extraHistory(ledger, "ping", { profile: name, method: "cli-bin" });
+    writeExtra(claudeDir, ledger);
+    return finish(
+      { ok: true, profile: name, engine: "cli", rung: "cli-bin", verify_method: "cli-bin", bin: found, models_seen: prof.models_seen, note: "the binary exists; nothing about a model or a credential has been proven." },
+      0
+    );
+  }
+
+  const probe = extraProbeBase(prof, cat);
+  if (!probe.base) {
+    const msg = `profile "${name}" has no ${probe.kind === "anthropic" ? "/anthropic" : "API"} base URL.`;
+    if (asJson) emitJson({ ok: false, reason: "no-base-url", profile: name, error: msg }, 1);
+    console.error("❌ " + msg);
+    process.exit(1);
+  }
+  const cred = extraCredentialValue(claudeDir, prof, {
+    inMemory: pending,
+    passphrase: vaultPass,
+    maxAttempts: cfg.extra_vault_max_attempts,
+  });
+  if (!cred.ok)
+    return finish(
+      Object.assign({ ok: false, profile: name, engine: prof.engine, base_url: probe.base, rung: null }, cred),
+      1
+    );
+  const headers = extraAuthHeaders(prof, cred.value);
+  const attempts = [];
+
+  // ── rung 1: the free one ────────────────────────────────────────────────
+  let models = [];
+  if (!modelArg) {
+    const url = joinUrl(probe.base, probe.models_path) + "?limit=1000";
+    const r = await extraHttp({ url, headers, timeoutMs: 3000 });
+    attempts.push({ rung: "models", url, status: r.status || null, ok: !!r.ok, ms: r.ms || null, error: r.ok ? null : extraErrText(r) });
+    if (r.ok && r.json) {
+      // DELIBERATELY NOT Claude Code's filter. Its discovery keeps only ids
+      // containing `claude` or `anthropic`; copying that here would discard
+      // every DeepSeek, GLM and Kimi id — i.e. all of them. Do not "fix" this.
+      const data = Array.isArray(r.json.data) ? r.json.data : Array.isArray(r.json.models) ? r.json.models : [];
+      models = data.map((m) => (typeof m === "string" ? m : m.id || m.name)).filter(Boolean);
+    }
+    if (r.ok && models.length && !deep) {
+      prof.verified_at = new Date().toISOString();
+      prof.verify_method = "models";
+      prof.verify_base_url = probe.base;
+      prof.latency_ms = r.ms;
+      prof.models_seen = models;
+      extraHistory(ledger, "ping", { profile: name, method: "models", models: models.length });
+      writeExtra(claudeDir, ledger);
+      const saved = maybeStorePendingKey(claudeDir, ledger, prof, pending, pendingPass, asJson);
+      return finish(
+        { ok: true, profile: name, engine: prof.engine, base_url: probe.base, rung: "models", verify_method: "models", latency_ms: r.ms, models_seen: models, attempts, vault: saved },
+        0
+      );
+    }
+    // A 401/403 on the models list is already the answer — no reason to spend a
+    // completion to be told the same thing.
+    if (r.status === 401 || r.status === 403)
+      return finish(
+        { ok: false, profile: name, engine: prof.engine, base_url: probe.base, reason: "auth-failed", rung: "models", status: r.status, error: extraErrText(r), attempts },
+        1
+      );
+  }
+
+  // ── rung 2: a max_tokens:1 completion ───────────────────────────────────
+  const model = modelArg || models[0] || EXTRA_PROBE_UNKNOWN_MODEL;
+  const isProbeName = model === EXTRA_PROBE_UNKNOWN_MODEL;
+  const url =
+    probe.kind === "anthropic" ? joinUrl(probe.base, "/v1/messages") : joinUrl(probe.base, "/chat/completions");
+  const body =
+    probe.kind === "anthropic"
+      ? { model, max_tokens: 1, messages: [{ role: "user", content: "hi" }] }
+      : { model, max_tokens: 1, messages: [{ role: "user", content: "hi" }] };
+  const r2 = await extraHttp({ url, method: "POST", headers, body, timeoutMs: 20000 });
+  attempts.push({ rung: "completion", url, status: r2.status || null, ok: !!r2.ok, ms: r2.ms || null, error: r2.ok ? null : extraErrText(r2) });
+
+  if (r2.ok) {
+    const reported = (r2.json && r2.json.model) || null;
+    prof.verified_at = new Date().toISOString();
+    prof.verify_method = modelArg ? "manual" : "completion";
+    prof.verify_base_url = probe.base;
+    prof.latency_ms = r2.ms;
+    if (models.length) prof.models_seen = models;
+    else if (reported && !prof.models_seen.includes(reported)) prof.models_seen = prof.models_seen.concat(reported);
+    else if (modelArg && !prof.models_seen.includes(modelArg)) prof.models_seen = prof.models_seen.concat(modelArg);
+    extraHistory(ledger, "ping", { profile: name, method: prof.verify_method });
+    writeExtra(claudeDir, ledger);
+    const saved = maybeStorePendingKey(claudeDir, ledger, prof, pending, pendingPass, asJson);
+    return finish(
+      { ok: true, profile: name, engine: prof.engine, base_url: probe.base, rung: "completion", verify_method: prof.verify_method, latency_ms: r2.ms, model_requested: model, model_reported: reported, models_seen: prof.models_seen, attempts, vault: saved },
+      0
+    );
+  }
+
+  // THE ESCAPE FROM THE CHICKEN-AND-EGG: a 400/404 that rejects the MODEL NAME
+  // still proves the URL and the credential, because the endpoint had to
+  // authenticate before it could reject anything. Recorded as its own method —
+  // it is weaker evidence than a real completion and must never read the same.
+  if (isProbeName && (r2.status === 400 || r2.status === 404 || r2.status === 422)) {
+    prof.verified_at = new Date().toISOString();
+    prof.verify_method = "completion-unknown-model";
+    prof.verify_base_url = probe.base;
+    prof.latency_ms = r2.ms;
+    extraHistory(ledger, "ping", { profile: name, method: "completion-unknown-model" });
+    writeExtra(claudeDir, ledger);
+    const saved = maybeStorePendingKey(claudeDir, ledger, prof, pending, pendingPass, asJson);
+    return finish(
+      {
+        ok: true,
+        profile: name,
+        engine: prof.engine,
+        base_url: probe.base,
+        rung: "completion",
+        verify_method: "completion-unknown-model",
+        latency_ms: r2.ms,
+        models_seen: prof.models_seen,
+        attempts,
+        vault: saved,
+        note: "the endpoint authenticated and then rejected a model name ORC made up — the URL and the credential work, but NO model id is confirmed. Give one with --model, or route only after `orc extra models` has something in it.",
+      },
+      0
+    );
+  }
+
+  // Failed. `finish` performs the reset — see the comment there.
+  return finish(
+    {
+      ok: false,
+      profile: name,
+      engine: prof.engine,
+      base_url: probe.base,
+      reason: r2.status === 401 || r2.status === 403 ? "auth-failed" : r2.reason || "unreachable",
+      rung: "completion",
+      status: r2.status || null,
+      error: extraErrText(r2),
+      model_requested: model,
+      attempts,
+    },
+    1
+  );
+}
+
+// A model id no provider ships, on purpose: its rejection is the evidence.
+const EXTRA_PROBE_UNKNOWN_MODEL = "orc-extra-probe-no-such-model";
+
+// Store a pasted key — ONLY after a green test, and only with a passphrase.
+// No passphrase available (a piped shell that supplied one line) → the key is
+// NOT stored and that is said out loud. A silent non-save would leave a
+// profile that verified once and can never dispatch.
+function maybeStorePendingKey(claudeDir, ledger, prof, pending, pendingPass, asJson) {
+  if (!pending) return null;
+  const pepperMode = typeof flag("--pepper") === "string" ? flag("--pepper") : "install";
+  let pass = pendingPass;
+  if (!pass && process.stdin.isTTY && !asJson) {
+    console.log("\n" + ui.box(EXTRA_VAULT_WARNING));
+    pass = promptSecret("Passphrase to encrypt this key (not shown): ");
+    const again = pass ? promptSecret("Repeat it: ") : null;
+    if (pass && again !== pass) return { stored: false, reason: "passphrase-mismatch", error: "the two passphrases did not match — the key was NOT stored." };
+  }
+  if (!pass)
+    return {
+      stored: false,
+      reason: "no-passphrase",
+      error:
+        "connection verified, but the key was NOT stored: a passphrase is required and none was given. " +
+        "Re-run at a terminal, or pipe the key and the passphrase as two lines.",
+    };
+  const put = extraVaultPut(claudeDir, prof.name, pending, pass, pepperMode);
+  if (!put.ok) return Object.assign({ stored: false }, put);
+  ensureExtraGitignore(extraPaths(claudeDir).root);
+  return {
+    stored: true,
+    pepper: put.pepper,
+    pepper_path: put.pepper_path,
+    pepper_created: put.pepper_created,
+    honesty: EXTRA_VAULT_HONESTY,
+  };
+}
+
+function extraPingRender(res) {
+  if (res.ok) {
+    console.log(
+      "\n" +
+        ui.mark.ok(
+          `${ui.color.cyan(res.profile)} verified via ${res.verify_method}` +
+            (res.latency_ms ? ui.color.gray(`  ${res.latency_ms}ms`) : "")
+        )
+    );
+    if (res.base_url) console.log(ui.color.gray(`  ${res.base_url}`));
+    if (res.models_seen && res.models_seen.length)
+      console.log(
+        `\n  ${plural(res.models_seen.length, "model")}: ` +
+          res.models_seen.slice(0, 8).join(", ") +
+          (res.models_seen.length > 8 ? ", …" : "")
+      );
+    if (res.note) console.log("\n  " + ui.mark.warn(res.note));
+    if (res.vault && res.vault.stored) {
+      console.log("\n  " + ui.mark.ok(`key stored, encrypted (pepper: ${res.vault.pepper}).`));
+      if (res.vault.pepper === "shipped")
+        console.log(
+          "  " +
+            ui.mark.warn(
+              "the `shipped` pepper is a constant inside the npm package — it is obfuscation, not a secret. Only your passphrase protects this key."
+            )
+        );
+      if (res.vault.pepper_created)
+        console.log(ui.color.gray(`  pepper written to ${res.vault.pepper_path} — losing that file loses the key.`));
+      console.log(ui.color.gray("  " + EXTRA_VAULT_HONESTY));
+    } else if (res.vault && res.vault.error) {
+      console.log("\n  " + ui.mark.warn(res.vault.error));
+    }
+    console.log("");
+    return;
+  }
+  console.log("\n" + ui.mark.bad(`${ui.color.cyan(res.profile)} — ${res.reason}`));
+  if (res.error) console.log("  " + res.error);
+  if (res.base_url) console.log(ui.color.gray(`  ${res.base_url}`));
+  if (res.profile_reverted)
+    console.log(
+      "\n  " + ui.color.gray("the pasted key was discarded and the profile removed — nothing was written.")
+    );
+  console.log("");
+}
+
+// ── orc extra models — the cache, and NEVER an invention ───────────────────
+// The `pattern show` / `headered: false` precedent: with nothing cached this
+// says so and returns an empty list. It never falls back to a shipped guess,
+// because a guessed model id is a 404 in the middle of a wave.
+function extraModels(claudeDir, name) {
+  const asJson = wantsJson();
+  const ledger = readExtra(claudeDir);
+  const prof = extraProfile(ledger, name);
+  if (!prof) {
+    const known = ledger ? ledger.profiles.map((x) => x.name) : [];
+    if (asJson) emitJson({ ok: false, reason: "unknown-profile", profile: name || null, known }, 2);
+    console.error(`❌ unknown profile "${name || ""}".`);
+    process.exit(2);
+  }
+  const cfg = resolvedConfig(claudeDir);
+  const v = extraVerifyState(prof, cfg);
+  const models = Array.isArray(prof.models_seen) ? prof.models_seen : [];
+  if (asJson)
+    emitJson(
+      {
+        ok: true,
+        profile: name,
+        models,
+        source: models.length ? "cached from the last ping" : null,
+        verified_at: prof.verified_at,
+        verify_method: prof.verify_method,
+        verify_state: v.state,
+        verify_age_days: v.age_days,
+        hint: models.length ? null : "no model has been read from this provider yet — run `orc extra ping " + name + "`.",
+      },
+      0
+    );
+  if (!models.length) {
+    console.log(`\nNo models cached for ${name}. ORC never ships a model list — run \`orc extra ping ${name}\`.\n`);
+    return;
+  }
+  console.log(ui.header(`ORC · extra — ${name} · ${plural(models.length, "model")}`));
+  console.log("\n" + models.map((m) => "  " + m).join("\n"));
+  console.log(
+    ui.color.gray(
+      `\n  read from the provider at ${prof.verified_at} via ${prof.verify_method}` +
+        (v.state === "STALE" ? `  (${v.age_days}d old — STALE, still routes)` : "") +
+        "\n"
+    )
+  );
+}
+
+// ── orc extra unlock — prove the passphrase, and NEVER print the key ───────
+// This is the counter's home. It answers one question — does this passphrase
+// open this record — and returns nothing that could be pasted anywhere.
+function extraUnlock(claudeDir, name) {
+  const asJson = wantsJson();
+  const ledger = readExtra(claudeDir);
+  const prof = extraProfile(ledger, name);
+  if (!prof) {
+    if (asJson) emitJson({ ok: false, reason: "unknown-profile", profile: name || null }, 2);
+    console.error(`❌ unknown profile "${name || ""}".`);
+    process.exit(2);
+  }
+  if ((prof.credential || {}).source !== "vault") {
+    const msg = `"${name}" reads its key from the environment variable ${prof.credential.key_name} — there is nothing to unlock.`;
+    if (asJson) emitJson({ ok: false, reason: "not-vaulted", profile: name, error: msg }, 1);
+    console.error("❌ " + msg);
+    process.exit(1);
+  }
+  const cfg = resolvedConfig(claudeDir);
+  const max = Number(cfg.extra_vault_max_attempts || EXTRA_VAULT_MAX_ATTEMPTS_DEFAULT);
+  const pass = process.stdin.isTTY
+    ? promptSecret(`Passphrase for "${name}" (not shown): `)
+    : (readStdinLines()[0] || "").trim();
+  if (!pass) {
+    const msg = "no passphrase given.";
+    if (asJson) emitJson({ ok: false, reason: "no-passphrase", error: msg }, 1);
+    console.error("❌ " + msg);
+    process.exit(1);
+  }
+  const got = extraVaultGet(claudeDir, prof.credential.key_name || name, pass, max);
+  if (got.ok) {
+    // The plaintext exists in this process for exactly as long as it takes to
+    // decide it was correct. It is never returned, never printed, never logged.
+    const out = { ok: true, profile: name, unlocked: true, attempts_used: 0, max, note: "the key is not printed and was not written anywhere." };
+    if (asJson) emitJson(out, 0);
+    console.log("\n" + ui.mark.ok(`"${name}" unlocked — the passphrase is correct.`));
+    console.log(ui.color.gray("  The key was not printed and was not written anywhere.\n"));
+    return;
+  }
+  if (asJson) emitJson(Object.assign({ ok: false, profile: name, honesty: EXTRA_VAULT_HONESTY }, got), 1);
+  console.error("\n" + ui.mark.bad(got.error));
+  console.error(ui.color.gray("  " + EXTRA_VAULT_HONESTY + "\n"));
+  process.exit(1);
+}
+
+// ── orc extra rekey — an EXPLICIT passphrase change ────────────────────────
+// No silent re-encryption and no passphrase change without the old one: both
+// would be a second door into the vault.
+function extraRekey(claudeDir, name) {
+  const asJson = wantsJson();
+  const ledger = readExtra(claudeDir);
+  const prof = extraProfile(ledger, name);
+  if (!prof || (prof.credential || {}).source !== "vault") {
+    const msg = `"${name || ""}" has no vault record to rekey.`;
+    if (asJson) emitJson({ ok: false, reason: "not-vaulted", error: msg }, 1);
+    console.error("❌ " + msg);
+    process.exit(1);
+  }
+  const cfg = resolvedConfig(claudeDir);
+  const max = Number(cfg.extra_vault_max_attempts || EXTRA_VAULT_MAX_ATTEMPTS_DEFAULT);
+  let oldPass, newPass;
+  if (process.stdin.isTTY) {
+    oldPass = promptSecret("Current passphrase (not shown): ");
+    newPass = promptSecret("New passphrase (not shown): ");
+    const again = promptSecret("Repeat the new one: ");
+    if (newPass !== again) {
+      console.error("❌ the two new passphrases did not match — nothing changed.");
+      process.exit(1);
+    }
+  } else {
+    const lines = readStdinLines();
+    oldPass = (lines[0] || "").trim();
+    newPass = (lines[1] || "").trim();
+  }
+  if (!oldPass || !newPass) {
+    const msg = "rekey needs the current passphrase and a new one (two lines on stdin, or a terminal).";
+    if (asJson) emitJson({ ok: false, reason: "no-passphrase", error: msg }, 1);
+    console.error("❌ " + msg);
+    process.exit(1);
+  }
+  const got = extraVaultGet(claudeDir, prof.credential.key_name || name, oldPass, max);
+  if (!got.ok) {
+    if (asJson) emitJson(Object.assign({ ok: false, profile: name }, got), 1);
+    console.error("❌ " + got.error);
+    process.exit(1);
+  }
+  const rec = readVault(claudeDir).records[prof.credential.key_name || name] || {};
+  const put = extraVaultPut(claudeDir, prof.credential.key_name || name, got.value, newPass, rec.pepper || "install");
+  if (!put.ok) {
+    if (asJson) emitJson(Object.assign({ ok: false, profile: name }, put), 1);
+    console.error("❌ " + put.error);
+    process.exit(1);
+  }
+  if (asJson) emitJson({ ok: true, profile: name, rekeyed: true, pepper: put.pepper }, 0);
+  console.log("\n" + ui.mark.ok(`"${name}" re-encrypted under the new passphrase.`));
+  console.log(ui.color.gray("  " + EXTRA_VAULT_HONESTY + "\n"));
+}
+
+// Resolve a bare command name to an absolute path, without a shell. `spawn` on
+// Windows cannot execute a .cmd/.bat without `shell: true`, and `shell: true`
+// puts arbitrary task text through cmd.exe quoting — so the engines resolve the
+// real file and run THAT.
+function whichBin(bin) {
+  const exts = process.platform === "win32" ? (process.env.PATHEXT || ".COM;.EXE;.BAT;.CMD").split(";") : [""];
+  for (const dir of String(process.env.PATH || "").split(path.delimiter)) {
+    if (!dir) continue;
+    for (const ext of exts) {
+      const p = path.join(dir, bin + ext.toLowerCase());
+      const q = path.join(dir, bin + ext);
+      for (const cand of [p, q]) {
+        try {
+          if (fs.statSync(cand).isFile()) return cand;
+        } catch (_) {}
+      }
+    }
+  }
+  return null;
+}
+
+// ── The routing table ──────────────────────────────────────────────────────
+//
+// THE TABLE IS FLAT, AND A GAP MEANS CLAUDE. This is the one place the storage
+// shape differs from how a human describes it ("DeepSeek: 0-30, 31-70"), and
+// the reason is worth the paragraph:
+//
+//   A per-PROVIDER table forces every provider to tile 0-100. That makes two
+//   providers impossible to express (adding GLM would silently un-route
+//   DeepSeek) and makes "leave the top band on Claude" inexpressible at all.
+//   One flat table of non-overlapping rows expresses both, and it turns the
+//   resolver into a LOOKUP instead of a precedence puzzle.
+//
+// The panel still renders it per provider, because that is how a person thinks
+// about it. The storage is flat because that is what keeps the answer honest.
+//
+// Bands are half-open `[from, to)` with the top row inclusive of 100, exactly
+// like DIY_SCORE_TABLE's `101` convention — so the two tables can be compared
+// without a translation step that could drift.
+
+const EXTRA_BAND_RE = /^(\d{1,3})\s*-\s*(\d{1,3})$/;
+
+function parseBand(spec) {
+  const m = EXTRA_BAND_RE.exec(String(spec || "").trim());
+  if (!m) return { err: `band must look like 0-30 or 70-100 (got "${spec}")` };
+  const from = Number(m[1]);
+  const to = Number(m[2]);
+  if (from < 0 || to > 100) return { err: "a band lives inside 0-100" };
+  if (to <= from) return { err: `"${spec}" is empty or backwards — the second number must be larger` };
+  return { from, to };
+}
+
+const bandLabel = (r) => `[${r.from},${r.to >= 100 ? "100]" : r.to + ")"}`;
+const bandCovers = (r, score) => score >= r.from && (r.to >= 100 ? score <= 100 : score < r.to);
+const bandsOverlap = (a, b) => a.from < b.to && b.from < a.to;
+
+// The Claude fall-through, expressed as rows. `orc extra route` ALWAYS prints
+// these: a table that showed only the foreign bands would not be the routing
+// table, it would be a list of exceptions to a table you cannot see.
+function claudeGaps(routes, map) {
+  const table = isTrue(map.opus5_only) ? OPUS5_SCORE_TABLE : DIY_SCORE_TABLE;
+  const sorted = [...routes].sort((a, b) => a.from - b.from);
+  const gaps = [];
+  let at = 0;
+  for (const r of sorted) {
+    if (r.from > at) gaps.push({ from: at, to: r.from });
+    at = Math.max(at, r.to);
+  }
+  if (at < 100) gaps.push({ from: at, to: 100 });
+  // Split each gap at the Claude table's own edges, so a gap reads as the
+  // agents it actually resolves to rather than as one undifferentiated slab.
+  const out = [];
+  for (const g of gaps) {
+    for (const [lo, hi, agent] of table) {
+      const from = Math.max(g.from, lo);
+      const to = Math.min(g.to, hi === 101 ? 100 : hi);
+      if (to > from || (to === from && to === 100))
+        out.push({ from, to: hi === 101 ? 100 : to, via: "claude", agent });
+    }
+  }
+  return out;
+}
+
+function extraRouteRows(claudeDir) {
+  const ledger = readExtra(claudeDir) || emptyExtra();
+  const { map } = readOverride(claudeDir);
+  const cfg = resolvedConfig(claudeDir);
+  const foreign = [...ledger.routes]
+    .sort((a, b) => a.from - b.from)
+    .map((r) => {
+      const prof = extraProfile(ledger, r.profile);
+      const v = prof ? extraVerifyState(prof, cfg) : { state: "MISSING", age_days: null };
+      return {
+        from: r.from,
+        to: r.to,
+        band: bandLabel(r),
+        via: "extra",
+        profile: r.profile,
+        model: r.model,
+        small_model: r.small_model || null,
+        max_turns: r.max_turns === undefined ? null : r.max_turns,
+        engine: prof ? prof.engine : null,
+        provider: prof ? prof.provider : null,
+        verify_state: v.state,
+        // A routed model that is no longer in `models_seen` is an `orc extra
+        // doctor` finding, not a mid-wave 404 nobody saw coming.
+        model_known: prof ? (prof.models_seen || []).includes(r.model) : false,
+      };
+    });
+  const gaps = claudeGaps(ledger.routes, map).map((g) =>
+    Object.assign({ band: `[${g.from},${g.to >= 100 ? "100]" : g.to + ")"}` }, g)
+  );
+  return { ledger, cfg, map, foreign, gaps, rows: [...foreign, ...gaps].sort((a, b) => a.from - b.from) };
+}
+
+function extraRouteList(claudeDir) {
+  const asJson = wantsJson();
+  const t = extraRouteRows(claudeDir);
+  const enabled = isTrue(t.cfg.extra_enabled);
+  if (asJson)
+    emitJson(
+      {
+        ok: true,
+        extra_enabled: enabled,
+        claude_table: isTrue(t.map.opus5_only) ? "opus5_only" : t.map.rubric_bands_override ? "rubric_bands_override" : "default",
+        rows: t.rows,
+        foreign: t.foreign,
+        claude_fallthrough: t.gaps,
+        counts: { foreign: t.foreign.length, claude: t.gaps.length },
+        note: enabled
+          ? null
+          : "extra_enabled is false — every row below is inert and every score resolves on the Claude ladder.",
+      },
+      0
+    );
+  console.log(ui.header("ORC · extra — the routing table"));
+  if (!enabled)
+    console.log(
+      "\n  " +
+        ui.mark.warn("extra_enabled is false — these rows are INERT. `orc config set extra_enabled true` arms them.")
+    );
+  console.log("");
+  console.log(
+    ui.kv(
+      t.rows.map((r) =>
+        r.via === "extra"
+          ? [
+              r.band,
+              ui.color.cyan(`${r.profile}/${r.model}`),
+              `${r.engine || "?"} · ${r.verify_state}` + (r.model_known ? "" : ui.color.yellow("  · model not in models_seen")),
+            ]
+          : [r.band, ui.color.gray(r.agent), ui.color.gray("claude")]
+      )
+    )
+  );
+  console.log(
+    ui.color.gray(
+      "\n  A gap is not a hole — it is Claude, and it is printed so \"I left the top band\n" +
+        "  on Opus on purpose\" and \"there is no top band\" can never look the same.\n"
+    )
+  );
+}
+
+// `orc extra route set <from>-<to> <profile>/<model> [--max-turns N]`
+//
+// Overlap is REFUSED BY NAME. Tiling is NOT required — the gaps are the point.
+function extraRouteSet(claudeDir, bandSpec, target) {
+  const asJson = wantsJson();
+  const fail = (reason, msg, extra) => {
+    if (asJson) emitJson(Object.assign({ ok: false, reason, error: msg }, extra || {}), 1);
+    console.error("❌ " + msg);
+    process.exit(1);
+  };
+  const band = parseBand(bandSpec);
+  if (band.err) fail("bad-band", band.err);
+  const m = /^([^/]+)\/(.+)$/.exec(String(target || ""));
+  if (!m) fail("bad-target", `target must be <profile>/<model> (got "${target || ""}")`);
+  const [, profileName, model] = m;
+
+  const ledger = readExtra(claudeDir) || emptyExtra();
+  const prof = extraProfile(ledger, profileName);
+  if (!prof)
+    fail("unknown-profile", `unknown profile "${profileName}". \`orc extra list\` shows what exists.`, {
+      known: ledger.profiles.map((x) => x.name),
+    });
+  // R10, at the CLI as well as in the panel: nothing routes to a profile whose
+  // connection was never proven. A route to an unverified endpoint is a wave
+  // that dies at dispatch instead of at configuration time.
+  if (!prof.verified_at)
+    fail(
+      "unverified",
+      `"${profileName}" has never verified. Run \`orc extra ping ${profileName}\` first — nothing routes to an unproven endpoint.`
+    );
+
+  const clash = ledger.routes.find((r) => bandsOverlap(r, band));
+  if (clash)
+    fail(
+      "overlap",
+      `${bandLabel(band)} overlaps the existing row ${bandLabel(clash)} → ${clash.profile}/${clash.model}.\n` +
+        `   Remove it first: orc extra route rm ${clash.from}-${clash.to}`,
+      { conflicts_with: { from: clash.from, to: clash.to, profile: clash.profile, model: clash.model } }
+    );
+
+  // A model outside `models_seen` WARNS and does not refuse: a provider may add
+  // a model between pings, and refusing would make ORC's cache the authority on
+  // someone else's catalogue.
+  const known = (prof.models_seen || []).includes(model);
+  const maxTurns = flag("--max-turns");
+  // The CHEAP companion. Claude Code makes background calls on the `haiku`
+  // alias, so without one those land on the PRIMARY model — and "we sent your
+  // background calls to the expensive model" is exactly the cost surprise this
+  // subsystem exists to remove. Per-route rather than per-profile because the
+  // right companion for a 15-score rename and a 95-score migration are not
+  // necessarily the same id.
+  const smallModel = flag("--small-model");
+  const row = {
+    from: band.from,
+    to: band.to,
+    profile: profileName,
+    model,
+    small_model: typeof smallModel === "string" ? smallModel : null,
+    max_turns: typeof maxTurns === "string" && /^\d+$/.test(maxTurns) ? Number(maxTurns) : null,
+  };
+
+  // What this row TAKES. The shadowing rule runs both ways, and a band silently
+  // lifted off the Claude ladder is exactly the kind of quiet change this
+  // codebase announces everywhere else.
+  const { map } = readOverride(claudeDir);
+  const displaced = claudeGaps([row], map).filter((g) => g.from >= band.from && g.to <= band.to);
+
+  ledger.routes.push(row);
+  ledger.routes.sort((a, b) => a.from - b.from);
+  extraHistory(ledger, "route-set", { band: bandLabel(band), profile: profileName, model });
+  const file = writeExtra(claudeDir, ledger);
+  const cfg = resolvedConfig(claudeDir);
+
+  if (asJson)
+    emitJson(
+      {
+        ok: true,
+        row: Object.assign({ band: bandLabel(band) }, row),
+        model_known: known,
+        displaces: displaced,
+        extra_enabled: isTrue(cfg.extra_enabled),
+        ledger: file,
+      },
+      0
+    );
+  console.log(`\nRouted ${ui.color.cyan(bandLabel(band))} → ${profileName}/${model}`);
+  if (displaced.length)
+    console.log(
+      "  " +
+        ui.color.gray(
+          "takes this band off: " + displaced.map((d) => `${d.agent} ${bandLabel(d)}`).join(", ")
+        )
+    );
+  if (!known)
+    console.log(
+      "  " +
+        ui.mark.warn(
+          `"${model}" is not in this profile's models_seen — ORC's cache is not the authority on someone else's catalogue, so this is allowed. Re-ping to refresh it.`
+        )
+    );
+  if (!row.small_model)
+    console.log(
+      "  " +
+        ui.color.gray(
+          "no --small-model: background calls (title generation, small utility turns) will use " +
+            `"${model}". Name a cheap id to stop paying primary rates for them.`
+        )
+    );
+  if (!isTrue(cfg.extra_enabled))
+    console.log("  " + ui.mark.warn("extra_enabled is false — this row is inert until you set it."));
+  console.log("");
+}
+
+function extraRouteRm(claudeDir, bandSpec) {
+  const asJson = wantsJson();
+  const band = parseBand(bandSpec);
+  if (band.err) {
+    if (asJson) emitJson({ ok: false, reason: "bad-band", error: band.err }, 1);
+    console.error("❌ " + band.err);
+    process.exit(1);
+  }
+  const ledger = readExtra(claudeDir) || emptyExtra();
+  const before = ledger.routes.length;
+  const gone = ledger.routes.filter((r) => r.from === band.from && r.to === band.to);
+  ledger.routes = ledger.routes.filter((r) => !(r.from === band.from && r.to === band.to));
+  if (ledger.routes.length === before) {
+    const msg = `no route row is exactly ${bandLabel(band)}. \`orc extra route\` lists them.`;
+    if (asJson) emitJson({ ok: false, reason: "no-such-row", error: msg }, 1);
+    console.error("❌ " + msg);
+    process.exit(1);
+  }
+  extraHistory(ledger, "route-rm", { band: bandLabel(band) });
+  writeExtra(claudeDir, ledger);
+  if (asJson) emitJson({ ok: true, removed: gone.map((g) => Object.assign({ band: bandLabel(g) }, g)) }, 0);
+  console.log(`\nRemoved ${bandLabel(band)} — those scores are back on the Claude ladder.\n`);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// P5 — THERE IS ONE RESOLVER, AND THE SKILL IS NOT IT
+//
+// `orc extra resolve <score>` is the ONLY thing that decides whether a task
+// goes foreign and to what. The /orc skill CALLS it and RENDERS the answer; it
+// never re-derives the band from the config. This is the computeWikiFreshness
+// rule, the Flow-stepper rule and the docPlanShape rule applied a fourth time:
+// a second idea of the routing would describe a dispatch that will not happen.
+//
+// It always explains itself. `why` is not decoration — a routing decision the
+// user cannot account for is a routing decision they will turn off.
+//
+// exit 0 = extra · 1 = claude
+// ═══════════════════════════════════════════════════════════════════════════
+function extraResolveFor(claudeDir, score, opts) {
+  const o = opts || {};
+  const t = extraRouteRows(claudeDir);
+  const cfg = t.cfg;
+  const claudeTable = isTrue(t.map.opus5_only) ? "opus5_only" : t.map.rubric_bands_override ? "rubric_bands_override" : "default";
+  const claudeBand = bandFor(score, cfg);
+  const claude = {
+    via: "claude",
+    band: claudeBand.band,
+    agent: claudeBand.agent,
+    table: claudeTable,
+  };
+  const answer = (why, extra) =>
+    Object.assign({ ok: true, score, role: o.role || null, claude, resolved: "claude", why }, extra || {});
+
+  if (!isTrue(cfg.extra_enabled))
+    return answer("extra_enabled is false — the master gate. Nothing routes foreign until it is true.", { held_back: null });
+
+  const roles = INLINE_LIST(cfg.extra_roles).filter(Boolean);
+  const role = o.role || "executor";
+  if (!roles.includes(role))
+    return answer(
+      `extra_roles does not include "${role}" (it has: ${roles.join(", ") || "nothing"}). A role ORC has not been told to hand over stays on Claude.`,
+      { held_back: "role" }
+    );
+
+  const row = t.ledger.routes.find((r) => bandCovers(r, score));
+  if (!row)
+    return answer(
+      `no route row covers ${score} — Extra is an OVERLAY, so an uncovered score falls straight through to the Claude ladder.`,
+      { held_back: null }
+    );
+
+  // P1 — a cited-risk task never leaves Claude by default. This mirrors the
+  // existing risk floor: ORC already refuses to send a refund-endpoint change
+  // to a cheap model, and Extra must not become the hole in that rule.
+  // NOTE the comparison: `extra_risk_tasks` is an off/on ENUM, not a boolean.
+  // `isTrue()` here would compare "on" against "true", never match, and hold
+  // every risk task back forever — a gate the user cannot open is worse than
+  // no gate, because it looks like one.
+  const risk = Number(o.risk || 0);
+  if (risk > 0 && String(cfg.extra_risk_tasks) !== "on")
+    return answer(
+      `this task carries ${plural(risk, "cited risk")} and extra_risk_tasks is off — it is HELD BACK to ${claude.agent}.`,
+      { held_back: "risk", would_have_been: { profile: row.profile, model: row.model } }
+    );
+
+  const prof = extraProfile(t.ledger, row.profile);
+  if (!prof)
+    return answer(
+      `route row ${bandLabel(row)} names profile "${row.profile}", which no longer exists — falling through to Claude.`,
+      { held_back: "missing-profile" }
+    );
+  if (!prof.verified_at)
+    return answer(
+      `"${row.profile}" has never verified — nothing dispatches to an unproven endpoint.`,
+      { held_back: "unverified" }
+    );
+
+  // A STALE verification still ROUTES. A stale check is not a failed one (the
+  // /orc-pact UNCHECKABLE rule); the lane re-pings before wave 1 and says so.
+  const v = extraVerifyState(prof, cfg);
+  const cred = prof.credential || {};
+  return {
+    ok: true,
+    score,
+    role,
+    resolved: "extra",
+    via: `extra:${prof.name}`,
+    profile: prof.name,
+    provider: prof.provider,
+    engine: prof.engine,
+    model: row.model,
+    small_model: row.small_model || null,
+    model_known: (prof.models_seen || []).includes(row.model),
+    max_turns: row.max_turns === undefined ? null : row.max_turns,
+    band: bandLabel(row),
+    verify_state: v.state,
+    verify_age_days: v.age_days,
+    needs_reping: v.state === "STALE",
+    credential: { source: cred.source || "env", key_name: cred.key_name || null, present: credentialPresent(cred, claudeDir) },
+    claude,
+    held_back: null,
+    why:
+      `route row ${bandLabel(row)} covers ${score} and outranks the ${claudeTable} Claude table` +
+      (v.state === "STALE" ? `; verification is ${v.age_days}d old (STALE — still routes, re-pinged before wave 1)` : "") +
+      ".",
+    // P0's sentence, composed HERE so no lane writes a second wording for it.
+    announce: `task at score ${score} → ${prof.provider}/${row.model} via ${prof.engine} (profile ${prof.name}) — this sends the slice to a third party.`,
+  };
+}
+
+function extraResolveCmd(claudeDir, scoreArg) {
+  const asJson = wantsJson();
+  const score = Number(scoreArg);
+  if (!Number.isFinite(score) || score < 0 || score > 100) {
+    const msg = `usage: orc extra resolve <score 0-100> [--role <r>] [--risk N] [--json]  (got "${scoreArg === undefined ? "" : scoreArg}")`;
+    if (asJson) emitJson({ ok: false, reason: "bad-score", error: msg }, 1);
+    console.error("❌ " + msg);
+    process.exit(1);
+  }
+  const role = typeof flag("--role") === "string" ? flag("--role") : null;
+  if (role && !EXTRA_ROLES_ALL.includes(role)) {
+    const msg = `unknown role "${role}" (known: ${EXTRA_ROLES_ALL.join(", ")}).`;
+    if (asJson) emitJson({ ok: false, reason: "bad-role", error: msg }, 1);
+    console.error("❌ " + msg);
+    process.exit(1);
+  }
+  const riskFlag = flag("--risk");
+  const risk = typeof riskFlag === "string" ? Number(riskFlag) : riskFlag === true ? 1 : 0;
+  const res = extraResolveFor(claudeDir, score, { role, risk });
+  const code = res.resolved === "extra" ? 0 : 1;
+  if (asJson) emitJson(res, code);
+  if (res.resolved === "extra") {
+    console.log(`\n  ${ui.color.cyan(String(score))}  →  ${ui.color.cyan(res.via)}  ${res.provider}/${res.model}  (${res.engine})`);
+    console.log(ui.color.gray(`  ${res.why}`));
+    console.log("  " + ui.mark.warn(res.announce));
+  } else {
+    console.log(`\n  ${ui.color.cyan(String(score))}  →  claude  ${res.claude.agent}  ${ui.color.gray(res.claude.band)}`);
+    console.log(ui.color.gray(`  ${res.why}`));
+  }
+  console.log("");
+  process.exit(code);
+}
+
+// ── orc extra doctor ───────────────────────────────────────────────────────
+// Read-only, exit 0 clean / 1 findings. Every finding id gets a FINDING_ROUTE
+// row in the panel (the v0.43.6 rule — a caution routes to the panel that can
+// CLEAR it), and `orc doctor` surfaces the count and links across.
+function extraDoctorFindings(claudeDir) {
+  const out = [];
+  const ledger = readExtra(claudeDir);
+  const cfg = resolvedConfig(claudeDir);
+  const cat = readCatalog();
+  if (!ledger) return out;
+  const add = (id, message, extra) => out.push(Object.assign({ id, severity: "warn", message }, extra || {}));
+
+  if (cat && cat._stale)
+    add(
+      "extra-catalog-stale",
+      `the shipped provider catalog is dated ${cat.as_of} (${cat._age_days === null ? "undated" : cat._age_days + " days"}) — a base URL may have moved.`,
+      { as_of: cat.as_of, age_days: cat._age_days }
+    );
+
+  for (const prof of ledger.profiles) {
+    const v = extraVerifyState(prof, cfg);
+    if (v.state === "UNVERIFIED")
+      add("extra-unverified", `"${prof.name}" has never verified — nothing will route to it.`, { profile: prof.name });
+    else if (v.state === "STALE")
+      add(
+        "extra-stale-verify",
+        `"${prof.name}" last verified ${v.age_days}d ago (> extra_verify_max_days ${v.max_days}) — it still routes, and re-pings before wave 1.`,
+        { profile: prof.name, age_days: v.age_days }
+      );
+    if (!credentialPresent(prof.credential, claudeDir)) {
+      const c = prof.credential || {};
+      const vault = credentialVaultState(c, claudeDir);
+      if (vault && vault.state === "wiped")
+        add(
+          "extra-vault-wiped",
+          `"${prof.name}" had its stored key deleted after ${vault.attempts_used} wrong passphrase attempts. Paste a new key from your provider.`,
+          { profile: prof.name, wiped_at: vault.wiped_at }
+        );
+      else
+        add(
+          "extra-missing-key",
+          c.source === "env"
+            ? `"${prof.name}" reads ${c.key_name}, which is not set in this environment.`
+            : `"${prof.name}" has no stored key yet.`,
+          { profile: prof.name, source: c.source }
+        );
+    } else if ((prof.credential || {}).source === "vault") {
+      const vault = credentialVaultState(prof.credential, claudeDir);
+      if (vault && vault.attempts_used > 0)
+        add(
+          "extra-vault-attempts",
+          `"${prof.name}" has ${vault.attempts_used} failed passphrase attempts recorded — a correct unlock resets the count.`,
+          { profile: prof.name, attempts_used: vault.attempts_used }
+        );
+    }
+    if (prof.engine === "claude-shim" && !whichBin("claude"))
+      add("extra-engine-unavailable", `"${prof.name}" uses engine claude-shim, but \`claude\` is not on PATH.`, {
+        profile: prof.name,
+        engine: "claude-shim",
+      });
+    // There is NO mitigation for this one, which is exactly why it is detected
+    // once here rather than discovered in the middle of a wave. Managed
+    // settings that pin a login method cannot coexist with a third-party
+    // credential; engine `api` talks to the provider directly and is the way
+    // out, so say that instead of offering a fix that cannot work.
+    if (prof.engine === "claude-shim") {
+      const m = managedLoginConflict();
+      if (m.conflict)
+        add(
+          "extra-managed-login-conflict",
+          `this machine's managed settings set ${m.keys.join(" and ")} (${m.path}), which cannot coexist with a third-party credential — engine claude-shim is unavailable here. Switch "${prof.name}" to engine \`api\`.`,
+          { profile: prof.name, managed_settings: m.path, keys: m.keys, fixable: false }
+        );
+    }
+    if (prof.engine === "cli" && !(prof.cli && whichBin(prof.cli.bin)))
+      add(
+        "extra-engine-unavailable",
+        `"${prof.name}" uses engine cli, but "${(prof.cli && prof.cli.bin) || "(none)"}" is not on PATH.`,
+        { profile: prof.name, engine: "cli" }
+      );
+    // The install pepper is one of the two halves of the key and cannot be
+    // regenerated. Say that instead of offering a fix that cannot work.
+    if ((prof.credential || {}).source === "vault") {
+      const rec = readVault(claudeDir).records[prof.credential.key_name || prof.name];
+      if (rec && rec.ciphertext && rec.pepper === "install" && !extraPepper("install").ok)
+        add(
+          "extra-pepper-missing",
+          `"${prof.name}" is encrypted against the install pepper at ${extraPepperPath()}, which is gone. The stored key CANNOT be recovered — paste a new one.`,
+          { profile: prof.name, fixable: false }
+        );
+    }
+  }
+
+  for (let i = 0; i < ledger.routes.length; i++)
+    for (let j = i + 1; j < ledger.routes.length; j++)
+      if (bandsOverlap(ledger.routes[i], ledger.routes[j]))
+        add(
+          "extra-route-overlap",
+          `route rows ${bandLabel(ledger.routes[i])} and ${bandLabel(ledger.routes[j])} overlap — the resolver takes the first match, which is not a decision anybody made.`,
+          { rows: [bandLabel(ledger.routes[i]), bandLabel(ledger.routes[j])] }
+        );
+
+  for (const r of ledger.routes) {
+    const prof = extraProfile(ledger, r.profile);
+    if (prof && prof.models_seen.length && !prof.models_seen.includes(r.model))
+      add(
+        "extra-model-gone",
+        `${bandLabel(r)} routes to "${r.model}", which the last ping of "${r.profile}" did not list. A vanished model is a 404 in the middle of a wave.`,
+        { band: bandLabel(r), profile: r.profile, model: r.model }
+      );
+  }
+  return out;
+}
+
+function extraDoctor(claudeDir) {
+  const asJson = wantsJson();
+  const findings = extraDoctorFindings(claudeDir);
+  const code = findings.length ? 1 : 0;
+  if (asJson) emitJson({ ok: !findings.length, findings, count: findings.length }, code);
+  console.log(ui.header("ORC · extra doctor"));
+  console.log("");
+  if (!findings.length) {
+    console.log("  " + ui.mark.ok("nothing to report."));
+    console.log("");
+    process.exit(0);
+  }
+  for (const f of findings) console.log("  " + ui.mark.warn(f.message) + ui.color.gray(`  [${f.id}]`));
+  console.log("");
+  process.exit(1);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ENGINE A — `claude-shim`: spawn a nested `claude` against a foreign base URL
+//
+// The cheapest possible bridge is not a new agent loop. It is a second `claude`
+// process with a handful of environment variables overridden: the foreign model
+// then drives Claude Code's own tool harness — Read / Write / Edit / Bash, the
+// permission system, the whole thing — and ORC's slice, its return shape and
+// its worktree-delta check all keep working unchanged.
+//
+// Four rules make it safe rather than merely clever:
+//
+//   P8  `a nested claude that inherits ORC's own hooks` has broken this
+//       contract. Engine A ALWAYS passes --bare. Without it the child runs
+//       .claude/settings.json's PreToolUse effort guard, runs orc-trace.js —
+//       which appends SPAWN/RETURN lines into the PARENT RUN'S LIVE TRACE —
+//       and loads CLAUDE.md plus every ORC skill into a foreign model's
+//       context at foreign-model prices, for a slice that already carries what
+//       it needs. A `-p` session shows no workspace-trust dialog either, so
+//       project hooks would run in a folder nobody trusted. Standing rules
+//       reach the child through --append-system-prompt-file, never through
+//       discovery: what the worker knows is COMPOSED, never inherited.
+//
+//   P9  `a cost figure ORC did not price itself` has broken this contract.
+//       The result object carries `total_cost_usd`, computed client-side
+//       against ANTHROPIC's price table. On a foreign endpoint that number is
+//       fiction and it looks authoritative. This engine reads the TOKEN
+//       COUNTS and nothing else. Do not wire up the field sitting right there.
+//
+//   F3  Exit code 0 is not success. Claude Code prints an in-run failure
+//       (a 401, say) as the RESULT on stdout, so `is_error` is the signal and
+//       the exit code is one input among several. Hitting --max-turns exits
+//       with an error too, and that is `partial`, never `failed`.
+//
+//   R3  Windows. `claude` is a .cmd, which spawn cannot execute without
+//       shell:true — and shell:true puts arbitrary task text through cmd.exe
+//       quoting, which is a correctness AND an injection hazard. CreateProcess
+//       also caps a command line at 32,767 characters, which a real slice plus
+//       the standing rules exceeds. Both are solved the same way and the flags
+//       exist for it: the standing rules go in a FILE, the prompt goes on
+//       STDIN, and we resolve the real executable instead of shelling. That
+//       also makes "no secret in argv" trivially true.
+// ═══════════════════════════════════════════════════════════════════════════
+
+// spawnSync's default maxBuffer is 1 MB and this repo has already been bitten
+// twice (v0.49.3 `git ls-files`, v0.49.4 the --json pipe). A stream-json
+// transcript of a real task WILL exceed it, so engine A does not use a pipe at
+// all: the child writes to a FILE and we read the file. This constant is the
+// belt to that braces — it bounds what we are willing to read back.
+const EXTRA_MAX_OUTPUT_BYTES = 256 * 1024 * 1024;
+
+// Valid --permission-mode values, so a typo is caught here rather than by a
+// child that exits 1 with a usage message nobody sees.
+const CLAUDE_PERMISSION_MODES = [
+  "default",
+  "acceptEdits",
+  "plan",
+  "auto",
+  "dontAsk",
+  "bypassPermissions",
+  "manual",
+];
+
+// The tools a foreign executor needs. The same six ORC's own executors carry —
+// a slice that could not read or run a build would not be a slice.
+const EXTRA_DEFAULT_TOOLS = ["Read", "Write", "Edit", "Bash", "Glob", "Grep"];
+// A CLOSED set, and the closure is load-bearing rather than tidy. It is the
+// last piece of argv a task slice can influence, and closing it is what makes
+// the Windows shell path below safe (see spawnCmdSafe): with the prompt on
+// stdin, the standing rules in a file and this list closed, every byte of the
+// command line is ORC's own.
+const EXTRA_TOOLS_ALLOWED = new Set([
+  "Read", "Write", "Edit", "MultiEdit", "NotebookEdit",
+  "Bash", "BashOutput", "KillShell",
+  "Glob", "Grep", "WebFetch", "WebSearch", "TodoWrite", "Task",
+]);
+
+// ── Running the binary on Windows, without handing cmd.exe anything ────────
+// `claude` on Windows is an npm shim — a .cmd. Node REFUSES to spawn a .cmd or
+// .bat without `shell: true` (the CVE-2024-27980 fix), and `shell: true` puts
+// the command line through cmd.exe's quoting rules, which is a correctness and
+// an injection hazard for anything a task slice supplied.
+//
+// So we removed the hazard instead of living with it: the prompt goes on
+// STDIN, the standing rules go in a FILE, `--permission-mode` is checked
+// against a closed list and `--allowedTools` against EXTRA_TOOLS_ALLOWED. What
+// is left in argv is short, ORC-authored flags plus two paths we created. We
+// still quote every element ourselves rather than trusting the default
+// joining, because a temp path on Windows routinely contains a space.
+//
+// Engine B needs exactly the same protection (`codex` is an npm shim too), which
+// is why this is named for what it does rather than for its first caller.
+function spawnCmdSafe(bin, argv, opts) {
+  const needsShell = process.platform === "win32" && /\.(cmd|bat)$/i.test(bin);
+  if (!needsShell) return spawnSync(bin, argv, opts);
+  const q = (s) => `"${String(s).replace(/"/g, '""')}"`;
+  return spawnSync(q(bin) + " " + argv.map(q).join(" "), Object.assign({}, opts, { shell: true }));
+}
+
+// ── The three timeouts, DERIVED from one key ───────────────────────────────
+// Claude Code's own API_TIMEOUT_MS defaults to 600s and its byte-level stream
+// watchdog to 300s. ORC's extra_timeout_s defaults to 900. Left independent,
+// ORC's timeout never fires first and every stall is reported by whichever
+// child timer happened to win — so the user tunes a number that does nothing.
+// Ordered here, once: idle < api < wall.
+function extraTimeouts(cfg) {
+  const wall = Math.max(30, Number(cfg.extra_timeout_s) || 900) * 1000;
+  const api = Math.min(wall, Math.max(60000, wall - 60000));
+  const idle = Math.max(10000, Math.min(300000, api - 30000, 1800000));
+  return { wall_ms: wall, api_ms: api, idle_ms: idle };
+}
+
+// ── Managed settings (F4, last row) ────────────────────────────────────────
+// A machine whose managed settings pin `forceLoginMethod` / `forceLoginOrgUUID`
+// CANNOT also use ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN or an apiKeyHelper —
+// the two are mutually exclusive by policy, so engine A is simply unavailable
+// here. There is no mitigation, which is exactly why this is detected once and
+// reported as a finding rather than discovered mid-wave.
+function managedSettingsPath() {
+  if (process.platform === "win32") return "C:\\ProgramData\\ClaudeCode\\managed-settings.json";
+  if (process.platform === "darwin") return "/Library/Application Support/ClaudeCode/managed-settings.json";
+  return "/etc/claude-code/managed-settings.json";
+}
+function managedLoginConflict() {
+  const p = managedSettingsPath();
+  try {
+    const s = JSON.parse(fs.readFileSync(p, "utf8"));
+    const keys = ["forceLoginMethod", "forceLoginOrgUUID"].filter((k) => s[k] !== undefined && s[k] !== null);
+    if (keys.length) return { conflict: true, path: p, keys };
+  } catch (_) {}
+  return { conflict: false, path: p, keys: [] };
+}
+
+// ── The env matrix ─────────────────────────────────────────────────────────
+// Every variable here earns its line, and several of them are the difference
+// between "works" and "404s in the middle of a wave".
+function extraShimEnv(prof, route, key, cfg, timeouts) {
+  const models = extraModelMap(prof, route);
+  const env = {
+    // The endpoint. EVERY request the child makes — its own sub-loops and its
+    // background calls included — goes here.
+    ANTHROPIC_BASE_URL: prof.anthropic_base_url,
+
+    // The credential, through `env` ONLY — never argv, which is world-readable
+    // in a process list. The VARIABLE NAME decides the header: AUTH_TOKEN ->
+    // `Authorization: Bearer`, API_KEY -> `x-api-key`. Ollama's /v1/messages
+    // rejects x-api-key, which is why this is data on the profile and not a
+    // constant here. Prefer AUTH_TOKEN where a provider accepts both: a key
+    // that was once declined in an interactive session is ignored afterwards
+    // WITHOUT ASKING AGAIN, and that failure is invisible.
+    [prof.auth_env || "ANTHROPIC_AUTH_TOKEN"]: key,
+
+    // SIX model variables, not one. Claude Code resolves ALIASES independently
+    // of the session model and makes background calls on the `haiku` alias
+    // (title generation, small utility turns). Setting only ANTHROPIC_MODEL
+    // leaves those pointing at a model the foreign provider has never heard
+    // of, and the failure lands mid-wave rather than at dispatch.
+    ANTHROPIC_MODEL: models.primary,
+    ANTHROPIC_DEFAULT_OPUS_MODEL: models.primary,
+    ANTHROPIC_DEFAULT_SONNET_MODEL: models.primary,
+    ANTHROPIC_DEFAULT_FABLE_MODEL: models.primary,
+    ANTHROPIC_DEFAULT_HAIKU_MODEL: models.small,
+    // D10 — SET it rather than leaving it `inherit`. It overrides both the
+    // per-invocation model parameter and a subagent's own frontmatter, which
+    // is how a foreign worker's own sub-dispatches stay foreign and
+    // predictable instead of silently trying to reach Anthropic.
+    CLAUDE_CODE_SUBAGENT_MODEL: models.small,
+
+    // F4's mitigations, set up front because every one of them is a 400 that
+    // reads like a mystery when you meet it live.
+    //
+    // Claude Code sends `thinking: {"type":"adaptive"}` and treats an
+    // UNRECOGNISED model id — i.e. every foreign one — as a current model that
+    // receives the field. The shim's upstream rejects it: `Input tag
+    // 'adaptive' found`.
+    CLAUDE_CODE_DISABLE_ADAPTIVE_THINKING: "1",
+    // Pre-release beta body fields (`context_management`, `output_config`,
+    // unknown tool-schema fields) that a third-party upstream answers with
+    // `Extra inputs are not permitted`.
+    CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS: "1",
+    // D11 — every gateway request otherwise carries a system-prompt
+    // attribution block (client version + a conversation fingerprint) that a
+    // non-Anthropic upstream receives AS PART OF THE PROMPT. Turning it off
+    // improves foreign cache reuse and keeps a client fingerprint out of a
+    // third party's context. It is a COMPATIBILITY flag with a privacy side
+    // effect and Anthropic's own docs say so — never sell it as a privacy
+    // control.
+    CLAUDE_CODE_ATTRIBUTION_HEADER: "0",
+    // Claude Code assumes a context window for an unrecognised id, so it
+    // compacts too early or too late. A known window is better; where the
+    // catalog has none, stop it enforcing a guess.
+    ...(models.context_tokens
+      ? { CLAUDE_CODE_MAX_CONTEXT_TOKENS: String(models.context_tokens) }
+      : { CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT: "1" }),
+
+    // The three timeouts, ordered so ORC's own wall clock is the LAST to fire
+    // and every earlier stall arrives as a classifiable child error.
+    API_TIMEOUT_MS: String(timeouts.api_ms),
+    CLAUDE_BYTE_STREAM_IDLE_TIMEOUT_MS: String(timeouts.idle_ms),
+
+    // Never let a foreign dispatch inherit the parent run's trace pointer or
+    // its update check. --bare already skips hook discovery; this is the
+    // belt to that braces.
+    ORC_NO_UPDATE_CHECK: "1",
+    CI: "true",
+  };
+  return { env, models };
+}
+
+// The model map (F2). `routes[].model` is the primary; the CHEAP companion is
+// what background calls land on. Where the user has not named one we fall back
+// to the primary and SAY SO — "we sent your background calls to the expensive
+// model" is a cost surprise, and removing cost surprises is what this whole
+// subsystem is for.
+function extraModelMap(prof, route) {
+  const primary = route.model;
+  const small = (route && route.small_model) || (prof.model_map && prof.model_map.haiku) || null;
+  const cat = readCatalog();
+  const row = catalogRow(cat, prof.provider);
+  return {
+    primary,
+    small: small || primary,
+    small_source: small ? "route" : "primary",
+    small_note: small
+      ? null
+      : "no cheap companion model is configured, so background calls (title generation, small utility turns) go to the PRIMARY model. `orc extra route set <band> <profile>/<model> --small-model <cheap-id>` fixes the cost.",
+    context_tokens: (row && row.context_tokens) || prof.context_tokens || null,
+  };
+}
+
+// ── Failure classification (P6) ────────────────────────────────────────────
+// `system/api_retry` events under --output-format stream-json carry a closed
+// set of `error` values plus attempt / max_retries / retry_delay_ms. That is a
+// READY-MADE classifier and it is the reason this engine prefers stream-json
+// over json: without it, every failure is "the child exited non-zero" and ORC
+// has to guess whether retrying could possibly help.
+//
+// `retry` = retrying THIS profile could work. `fallback` = go to the Claude
+// band this task would have had. A failure is never a dead run either way
+// (P6); this only decides whether we spend another call finding that out.
+const EXTRA_FAILURES = {
+  rate_limit: { retry: true, label: "the provider rate-limited this key" },
+  overloaded: { retry: true, label: "the provider is overloaded" },
+  server_error: { retry: true, label: "the provider returned a server error" },
+  timeout: { retry: true, label: "no answer inside the dispatch timeout" },
+  authentication_failed: { retry: false, label: "the credential was rejected" },
+  model_not_found: { retry: false, label: "the provider does not serve this model id" },
+  billing_error: { retry: false, label: "the provider reports a billing problem" },
+  invalid_request: { retry: false, label: "the provider rejected the request shape" },
+  oauth_org_not_allowed: { retry: false, label: "this organisation may not use this endpoint" },
+  max_output_tokens: { retry: false, label: "the reply hit the output-token ceiling" },
+  "managed-login-conflict": { retry: false, label: "this machine's managed settings forbid a third-party credential" },
+  "engine-unavailable": { retry: false, label: "the engine's binary is not on PATH" },
+  "spawn-failed": { retry: false, label: "the worker process could not be started" },
+  "malformed-return": { retry: true, label: "the worker's return did not parse" },
+  // Engine C reaches the network itself, so it produces two answers engine A
+  // never sees. They live in the SAME taxonomy so `retry` means the same thing
+  // whichever engine said it, and /orc-retro can aggregate across both.
+  unreachable: { retry: true, label: "the endpoint could not be reached" },
+  "redirect-refused": { retry: false, label: "the endpoint redirected, and a credential must never follow one" },
+  "response-truncated": { retry: true, label: "the reply exceeded the response ceiling" },
+  unknown: { retry: false, label: "the worker failed and said nothing ORC can classify" },
+};
+const classifyFailure = (k) => EXTRA_FAILURES[k] || EXTRA_FAILURES.unknown;
+
+// stream-json is newline-delimited events. We want three things out of it and
+// nothing else: the final `result`, every `system`/`api_retry` (the classifier),
+// and whether a tool round trip ever completed (the fidelity measurement).
+function parseStreamJson(text) {
+  const out = { result: null, retries: [], tool_uses: 0, tool_results: 0, events: 0, init: null };
+  for (const line of String(text).split(/\r?\n/)) {
+    const t = line.trim();
+    if (!t || t[0] !== "{") continue;
+    let e;
+    try {
+      e = JSON.parse(t);
+    } catch (_) {
+      continue;
+    }
+    out.events++;
+    if (e.type === "result") out.result = e;
+    if (e.type === "system" && e.subtype === "init") out.init = e;
+    if (e.type === "system" && (e.subtype === "api_retry" || e.error))
+      out.retries.push({
+        error: e.error || null,
+        attempt: e.attempt === undefined ? null : e.attempt,
+        max_retries: e.max_retries === undefined ? null : e.max_retries,
+        retry_delay_ms: e.retry_delay_ms === undefined ? null : e.retry_delay_ms,
+      });
+    // Tool fidelity is measured, never assumed: a shim that mangles tool_use /
+    // tool_result blocks is the known weak spot of this whole transport.
+    const content = (e.message && e.message.content) || e.content;
+    if (Array.isArray(content))
+      for (const b of content) {
+        if (b && b.type === "tool_use") out.tool_uses++;
+        if (b && b.type === "tool_result") out.tool_results++;
+      }
+  }
+  return out;
+}
+
+// The four token kinds, NEVER blended (the /orc-budget rule). A shim that
+// ignores cache_control reports cache_read 0, and THAT IS A REAL MEASUREMENT,
+// not missing data — /orc-retro must not read a fidelity problem as a gap.
+function extraUsageVector(usage) {
+  const u = usage || {};
+  return {
+    input: Number(u.input_tokens || 0),
+    cache_write: Number(u.cache_creation_input_tokens || 0),
+    cache_read: Number(u.cache_read_input_tokens || 0),
+    output: Number(u.output_tokens || 0),
+  };
+}
+
+// ── The engine ─────────────────────────────────────────────────────────────
+function runClaudeShim(ctx) {
+  const { prof, route, key, cfg, slice, cwd, workDir } = ctx;
+  const started = Date.now();
+  const fail = (reason, error, extra) =>
+    Object.assign(
+      { ok: false, outcome: "failed", reason, error, retry: classifyFailure(reason).retry, duration_ms: Date.now() - started },
+      extra || {}
+    );
+
+  const managed = managedLoginConflict();
+  if (managed.conflict)
+    return fail(
+      "managed-login-conflict",
+      `this machine's managed settings set ${managed.keys.join(" and ")} (${managed.path}), which cannot coexist with a third-party credential. Engine claude-shim is unavailable here — use engine \`api\`, which talks to the provider directly.`
+    );
+
+  const bin = whichBin("claude");
+  if (!bin)
+    return fail("engine-unavailable", "`claude` is not on PATH — engine claude-shim dispatches by running it.");
+
+  const timeouts = extraTimeouts(cfg);
+  const { env, models } = extraShimEnv(prof, route, key, cfg, timeouts);
+  // The ONLY caller is the conformance run, which deliberately un-sets a
+  // mitigation to find out whether this endpoint needs it. A dispatch never
+  // passes this.
+  if (ctx.envOverride) Object.assign(env, ctx.envOverride);
+
+  // The standing rules go in a FILE and the prompt goes on STDIN (R3). Between
+  // them that leaves argv holding nothing but short flags — under Windows'
+  // 32,767-character command-line cap, and with no secret in it by
+  // construction rather than by care.
+  const rulesFile = path.join(workDir, "system-prompt.md");
+  const outFile = path.join(workDir, "output.jsonl");
+  fs.writeFileSync(rulesFile, slice.standing_rules || "", "utf8");
+
+  const tools = Array.isArray(slice.allowed_tools) && slice.allowed_tools.length ? slice.allowed_tools : EXTRA_DEFAULT_TOOLS;
+  const badTools = tools.filter((t) => !EXTRA_TOOLS_ALLOWED.has(t));
+  if (badTools.length)
+    return fail(
+      "invalid_request",
+      `the slice asks for tool(s) ORC does not recognise: ${badTools.join(", ")}. The set is closed on purpose — it is the last part of the command line a slice can influence.`
+    );
+  const mode = slice.permission_mode || "acceptEdits";
+  if (!CLAUDE_PERMISSION_MODES.includes(mode))
+    return fail("invalid_request", `permission_mode "${mode}" is not one of: ${CLAUDE_PERMISSION_MODES.join(", ")}`);
+
+  // stream-json is PREFERRED because its system/api_retry events are the
+  // classifier P6's fallback needs. It is not depended on: an endpoint or a
+  // client build that will not produce it degrades to `json`, and the
+  // degradation is RECORDED as tool_fidelity.streams rather than hidden.
+  const attempts = [];
+  for (const format of ["stream-json", "json"]) {
+    const argv = [
+      // P8. Always. Skips hooks, skills, commands, subagents, plugins, MCP
+      // servers, auto memory and CLAUDE.md — and never reads OAuth credentials
+      // or the system keychain, which is the clean answer to the auth-conflict
+      // warning a third-party base URL otherwise produces.
+      "--bare",
+      "-p",
+      "--output-format",
+      format,
+      "--permission-mode",
+      mode,
+      "--allowedTools",
+      tools.join(","),
+      "--append-system-prompt-file",
+      rulesFile,
+    ];
+    if (format === "stream-json") argv.push("--verbose"); // headless stream-json requires it
+    const maxTurns = route.max_turns || slice.max_turns || null;
+    if (maxTurns) argv.push("--max-turns", String(maxTurns));
+
+    const r = spawnCmdSafe(bin, argv, {
+      cwd,
+      env: Object.assign({}, process.env, env),
+      input: slice.prompt || "",
+      encoding: "utf8",
+      timeout: timeouts.wall_ms,
+      killSignal: "SIGTERM",
+      maxBuffer: EXTRA_MAX_OUTPUT_BYTES,
+      windowsHide: true,
+    });
+
+    if (r.error && r.error.code === "ETIMEDOUT")
+      return fail("timeout", `no answer in ${Math.round(timeouts.wall_ms / 1000)}s (the dispatch wall clock).`, { format });
+    if (r.error)
+      return fail("spawn-failed", r.error.message, { format });
+
+    const text = r.stdout || "";
+    try {
+      fs.writeFileSync(outFile, text, "utf8");
+    } catch (_) {}
+    attempts.push({ format, exit_code: r.status, bytes: text.length });
+
+    // A client that does not understand this format at all: try the next one.
+    // Anything else is a real answer and must not be retried in another shape.
+    if (!text.trim() && r.status !== 0 && format === "stream-json") continue;
+
+    return interpretShimRun({ text, format, exit: r, started, models, timeouts, attempts, outFile, stderr: r.stderr || "" });
+  }
+  return fail("spawn-failed", "the worker produced no output in either output format.", { attempts });
+}
+
+// F3 lives here: exit code 0 is NOT success, and `is_error` is the signal.
+function interpretShimRun(a) {
+  const { text, format, exit, started, models, attempts, outFile, stderr } = a;
+  const duration_ms = Date.now() - started;
+  const parsed = format === "stream-json" ? parseStreamJson(text) : { result: null, retries: [], tool_uses: 0, tool_results: 0, events: 0, init: null };
+  let result = parsed.result;
+  if (!result && format === "json") {
+    try {
+      result = JSON.parse(text);
+    } catch (_) {}
+  }
+
+  const retries = parsed.retries;
+  const lastRetry = retries.length ? retries[retries.length - 1] : null;
+  const base = {
+    engine: "claude-shim",
+    format,
+    exit_code: exit.status,
+    duration_ms,
+    attempts,
+    output_file: outFile,
+    api_retries: retries,
+    // SIGTERM is exit 143 — worth naming, because "143" reads like a crash and
+    // is in fact us killing the child at the wall clock.
+    signalled: exit.status === 143 || exit.signal === "SIGTERM",
+  };
+
+  if (!result) {
+    // Claude Code prints an in-run failure as the RESULT on stdout, so a run
+    // with no parseable result at all is a different fact from a run that
+    // failed: the transport itself did not work.
+    const cls = lastRetry && lastRetry.error ? lastRetry.error : "malformed-return";
+    return Object.assign(base, {
+      ok: false,
+      outcome: "failed",
+      reason: cls,
+      retry: classifyFailure(cls).retry,
+      error:
+        (lastRetry && lastRetry.error ? classifyFailure(cls).label + " — " : "") +
+        (String(stderr).trim().split("\n").slice(-3).join(" ").slice(0, 300) || "the worker produced no parseable result object."),
+    });
+  }
+
+  const usage = extraUsageVector(result.usage);
+  const isError = result.is_error === true;
+  const subtype = result.subtype || null;
+  // Hitting --max-turns exits with an error and IS NOT A FAILURE. It is a
+  // capped run with real work in the tree, and reporting it as `failed` would
+  // throw that work away and pay for it twice.
+  const hitCap = subtype === "error_max_turns" || /max.?turns/i.test(String(result.result || ""));
+
+  const out = Object.assign(base, {
+    // model_reported is the ONLY defence against silent substitution by an
+    // aggregator, and it is real quotable evidence rather than an assumption.
+    // `unknown` is an honest value and is reported as `unknown`, never as a
+    // match. (The comparison itself is the return-validation wave's job.)
+    model_requested: models.primary,
+    model_reported: result.model || (parsed.init && parsed.init.model) || "unknown",
+    model_map: models,
+    usage,
+    // P9: `total_cost_usd` is deliberately NOT read. On a foreign endpoint it
+    // is Anthropic's price table applied to somebody else's bill.
+    cost_usd: null,
+    cost_note: "priced by /orc-budget from the dated provider table — the worker's own total_cost_usd is Anthropic's rates and is fiction here",
+    session_id: result.session_id || null,
+    text: typeof result.result === "string" ? result.result : null,
+    tool_uses: parsed.tool_uses,
+    tool_results: parsed.tool_results,
+  });
+
+  if (hitCap)
+    return Object.assign(out, {
+      ok: true,
+      outcome: "partial",
+      reason: "max-turns",
+      error: "the worker hit its turn cap. Whatever it finished is in the worktree; the rest is not done.",
+    });
+  if (isError) {
+    const cls = lastRetry && lastRetry.error ? lastRetry.error : "unknown";
+    return Object.assign(out, {
+      ok: false,
+      outcome: "failed",
+      reason: cls,
+      retry: classifyFailure(cls).retry,
+      error: classifyFailure(cls).label + (result.result ? " — " + String(result.result).slice(0, 300) : ""),
+    });
+  }
+  return Object.assign(out, { ok: true, outcome: "done", reason: null, error: null });
+}
+
+// ══ ENGINE C: `api` — ORC's OWN TOOL LOOP ══════════════════════════════════
+//
+// Why a second engine exists at all, now that `claude-shim` demonstrably works:
+// THIS IS THE ONLY ENGINE THAT COMPOSES THE REQUEST BODY. Engine A hands the
+// conversation to a `claude` child and can add HEADERS but not body FIELDS —
+// ANTHROPIC_CUSTOM_HEADERS is headers, and that is the whole of its reach. So
+// two things are possible here and nowhere else:
+//
+//   · a routing POLICY that is enforced rather than hoped for (F6) — "never
+//     serve this from a provider that retains data", "refuse a provider that
+//     cannot do tool calls", expressed as body fields the aggregator obeys;
+//   · SEEING who actually served the request (U4) — an aggregator's
+//     provider-level fallback is on by DEFAULT and it PRESERVES the model id,
+//     so `model_reported == model_requested` reads clean while the code went to
+//     a different company. The response's own `provider` echo is the only way
+//     that becomes visible, and only a body-composing engine ever sees it.
+//
+// That is why this engine survives the plan's cut list even though A is
+// simpler: A is the cheaper transport, C is the only honest one.
+//
+// It is also the engine with NO dependencies whatsoever — no `claude` on PATH,
+// no third-party CLI, no npm package. Node's built-in http/https through
+// extraHttp(), and nothing else.
+
+// A default only. A route row's --max-turns and the slice both outrank it.
+const EXTRA_API_MAX_TURNS = 30;
+// One Read's ceiling, and one tool RESULT's ceiling. A tool result travels back
+// up the wire as prompt tokens on EVERY subsequent turn, so an unbounded one is
+// not a memory problem, it is a bill.
+const EXTRA_API_READ_BYTES = 256 * 1024;
+const EXTRA_API_TOOL_OUT = 32 * 1024;
+const EXTRA_API_GLOB_MAX = 400;
+const EXTRA_API_GREP_MAX = 200;
+// The response ceiling for ONE completion. extraHttp's default is 2 MB, which
+// is right for a models list and wrong for a long completion.
+const EXTRA_API_RESP_BYTES = 16 * 1024 * 1024;
+const EXTRA_API_SKIP_DIRS = new Set([
+  "node_modules", ".git", ".claude", ".hg", ".svn",
+  "dist", "build", "out", "coverage", ".next", ".nuxt", ".turbo",
+  ".venv", "venv", "__pycache__", "target", "vendor",
+]);
+
+// ── The completions URL, DERIVED from the base ─────────────────────────────
+// If the base already carries a version segment (`/v1`, `/api/v1`,
+// `/api/paas/v4`, `/compatible-mode/v1`) the path is `/chat/completions`; a
+// base with no version segment wants `/v1/chat/completions`. This is derivable
+// from the one thing the catalog IS authoritative about — the base URL — so it
+// does not add an eleventh field that could disagree with it.
+// `--completions-path` on the profile overrides it for a gateway that does
+// neither.
+function apiCompletionsUrl(prof) {
+  const base = String(prof.base_url || "").replace(/\/+$/, "");
+  if (prof.completions_path) return joinUrl(base, prof.completions_path);
+  return joinUrl(base, (/\/v\d+(?:[a-z]*\d*)?$/i.test(base) ? "" : "/v1") + "/chat/completions");
+}
+
+// ── F6 — the guarantee engine A cannot make ────────────────────────────────
+// The DEFAULT IS NO BLOCK, deliberately. Sending routing directives nobody
+// asked for would change where a request goes without saying so, which is the
+// exact failure this whole subsystem is shaped around. `orc extra privacy`
+// sets it, and every dispatch PRINTS which policy is in force — including when
+// the answer is "none", because "no policy" and "a policy that did not apply"
+// must not look the same.
+function apiProviderPolicy(prof) {
+  const p = prof && prof.privacy;
+  const none = {
+    block: null,
+    summary:
+      "none - this endpoint's own default routing applies. On an aggregator that means allow_fallbacks is ON, and a provider-level reroute KEEPS the model id.",
+  };
+  if (!p || typeof p !== "object") return none;
+  const block = {};
+  if (p.zdr === true) block.zdr = true;
+  if (p.data_collection) block.data_collection = p.data_collection;
+  if (p.require_parameters === true) block.require_parameters = true;
+  if (Array.isArray(p.only) && p.only.length) block.only = p.only.slice();
+  if (p.allow_fallbacks === false) block.allow_fallbacks = false;
+  const keys = Object.keys(block);
+  if (!keys.length) return none;
+  return {
+    block,
+    summary: keys
+      .map((k) => k + "=" + (Array.isArray(block[k]) ? block[k].join("|") : block[k]))
+      .join(" · "),
+  };
+}
+
+// ── The fence ──────────────────────────────────────────────────────────────
+// A foreign worker is running tools against the user's real checkout. Two
+// separate rules, and the difference between them matters:
+//
+//   CONTAINMENT — every path any tool receives is resolved and refused if it
+//   leaves the repository root. Absolute, `..`, a symlink target outside: all
+//   refused. This applies to READS as well as writes, because reading
+//   ~/.ssh/id_rsa into a prompt is the leak, not the write.
+//
+//   DECLARATION — a WRITE is refused unless the slice declared that file.
+//   declared_files is what makes a parallel wave conflict-free; a worker that
+//   writes outside it has invalidated the conflict graph the whole wave was
+//   scheduled against, and the wave, not the file, is the casualty.
+//
+// Paths resolve against the slice's cwd (the repo root unless the slice
+// narrowed it) and containment is checked against the ROOT. The declared-files
+// comparison uses the path RELATIVE TO THE ROOT, because that is what
+// declared_files is in every other ORC artifact.
+function apiResolvePath(root, cwd, p) {
+  if (typeof p !== "string" || !p.trim())
+    return { ok: false, error: "`path` is required and must be a non-empty string." };
+  const abs = path.resolve(cwd, p);
+  const rel = path.relative(root, abs);
+  // The root ITSELF is inside the root — `Glob` with path "." is a legitimate
+  // call and refusing it would look like the fence misfiring. A WRITE to "."
+  // still cannot pass, because "." matches no declared file.
+  if (rel === "") return { ok: true, abs, rel: "." };
+  if (rel.startsWith("..") || path.isAbsolute(rel))
+    return {
+      ok: false,
+      escaped: true,
+      error: `REFUSED: "${p}" resolves to ${abs}, which is outside the repository root (${root}). Every path a foreign worker names is resolved against the root and refused if it escapes - reads included.`,
+    };
+  // A symlink pointing out is the same escape by a longer road.
+  try {
+    const r2 = path.relative(fs.realpathSync(root), fs.realpathSync(abs));
+    if (r2.startsWith("..") || path.isAbsolute(r2))
+      return { ok: false, escaped: true, error: `REFUSED: "${p}" is a link that resolves outside the repository root.` };
+  } catch (_) {
+    // Does not exist yet - normal for a Write. The lexical check above stands.
+  }
+  return { ok: true, abs, rel: rel.split(path.sep).join("/") };
+}
+
+// Enough glob for a declared-files list: `**` crosses `/`, `*` does not, `?` is
+// one non-`/` character. It is NOT a glob library and does not pretend to be —
+// a declared_files entry is written by ORC's own planner, not improvised.
+function apiGlobToRe(pat) {
+  let re = "";
+  for (let i = 0; i < pat.length; i++) {
+    const c = pat[i];
+    if (c === "*") {
+      if (pat[i + 1] === "*") {
+        i++;
+        if (pat[i + 1] === "/") i++;
+        re += "(?:.*/)?";
+      } else re += "[^/]*";
+    } else if (c === "?") re += "[^/]";
+    else re += c.replace(/[.+^${}()|[\]\\]/g, "\\$&");
+  }
+  return new RegExp("^" + re + "$");
+}
+
+function apiDeclaredMatch(declared, rel) {
+  for (const raw of declared || []) {
+    const t = String(raw || "").replace(/\\/g, "/").replace(/^\.\//, "");
+    if (!t) continue;
+    if (t === rel) return t;
+    if (t.endsWith("/") && rel.startsWith(t)) return t;
+    if (/[*?]/.test(t) && apiGlobToRe(t).test(rel)) return t;
+  }
+  return null;
+}
+
+function apiWriteGate(slice, rel) {
+  const declared = slice.declared_files || [];
+  if (!declared.length)
+    return {
+      ok: false,
+      error:
+        "REFUSED: this task slice declared no files, so nothing may be written. A slice that means to write names its files - that list is what makes a parallel wave conflict-free.",
+    };
+  const hit = apiDeclaredMatch(declared, rel);
+  if (!hit)
+    return {
+      ok: false,
+      error: `REFUSED: "${rel}" is not in this task's declared_files (${declared.join(", ")}). Writing outside the declaration invalidates the conflict graph the whole wave was scheduled against, so the write is refused rather than the wave silently corrupted.`,
+    };
+  return { ok: true, matched: hit };
+}
+
+// ── Bash, and exactly what is NOT promised about it ────────────────────────
+// The fence above is a PATH fence, and a shell command is not path-shaped. ORC
+// says so rather than shipping a validator that looks like a sandbox and is
+// not: a shell command can reach anything the user can, and no amount of
+// string inspection changes that. A fake sandbox would be worse than none,
+// because it is the one people would rely on.
+//
+// What IS promised, precisely:
+//   · the tool exists only if the slice's allowed_tools asked for it
+//   · the cwd is pinned inside the repository
+//   · wall clock and output are bounded
+//   · every command is RECORDED VERBATIM in the return, so a run is auditable
+//     after the fact even where it cannot be constrained before it
+//
+// The check that actually catches a stray write is the one that already exists
+// and is engine-blind: the worktree delta, the smoke gate, the reviewer.
+//
+// The tripwire below refuses the two forms that are never an accident. It is a
+// TRIPWIRE, not a sandbox, and it says so in the refusal itself so nobody
+// reads a pass as a guarantee.
+function apiBashTripwire(root, cwd, command) {
+  const cmd = String(command || "");
+  if (!cmd.trim()) return { ok: false, error: "REFUSED: `command` is required." };
+  if (/(^|[\s;&|(])sudo\s/.test(cmd))
+    return {
+      ok: false,
+      error: "REFUSED (tripwire, not a sandbox): `sudo` in a foreign worker's command. ORC does not escalate on someone else's behalf.",
+    };
+  const tokens = cmd.match(/(?:[A-Za-z]:[\\/]|\/|\.\.[\\/])[^\s"';|&)]*/g) || [];
+  for (const t of tokens) {
+    const r = apiResolvePath(root, cwd, t);
+    if (!r.ok && r.escaped)
+      return {
+        ok: false,
+        error: `REFUSED (tripwire, not a sandbox): the command names "${t}", which is outside the repository root. This check catches an obvious escape; it cannot and does not make an arbitrary shell command safe.`,
+      };
+  }
+  return { ok: true };
+}
+
+// ── The tools, in the OpenAI function-calling shape ────────────────────────
+// The same six ORC's own executors carry. Their DESCRIPTIONS carry the fence,
+// because a worker told the rule up front spends its turns working instead of
+// discovering a refusal — and a refusal it can read is one it can recover from.
+const EXTRA_API_TOOLS = {
+  Read: {
+    description: "Read a file from the repository. Paths are relative to the repository root.",
+    parameters: {
+      type: "object",
+      properties: {
+        path: { type: "string", description: "Path relative to the repository root." },
+        offset: { type: "integer", description: "First line to return (1-based). Optional." },
+        limit: { type: "integer", description: "How many lines to return. Optional." },
+      },
+      required: ["path"],
+    },
+  },
+  Write: {
+    description:
+      "Write a file, replacing it entirely. REFUSED unless the path is in this task's declared files - that list is in your instructions.",
+    parameters: {
+      type: "object",
+      properties: { path: { type: "string" }, content: { type: "string" } },
+      required: ["path", "content"],
+    },
+  },
+  Edit: {
+    description:
+      "Replace an exact string in a file. old_string must appear exactly once unless replace_all is true. REFUSED unless the path is in this task's declared files.",
+    parameters: {
+      type: "object",
+      properties: {
+        path: { type: "string" },
+        old_string: { type: "string" },
+        new_string: { type: "string" },
+        replace_all: { type: "boolean" },
+      },
+      required: ["path", "old_string", "new_string"],
+    },
+  },
+  Glob: {
+    description: "List files matching a glob pattern (** crosses directories, * does not).",
+    parameters: {
+      type: "object",
+      properties: {
+        pattern: { type: "string" },
+        path: { type: "string", description: "Directory to search under. Optional." },
+      },
+      required: ["pattern"],
+    },
+  },
+  Grep: {
+    description: "Search file contents with a regular expression. Returns file:line matches.",
+    parameters: {
+      type: "object",
+      properties: {
+        pattern: { type: "string" },
+        path: { type: "string", description: "File or directory to search. Optional." },
+        glob: { type: "string", description: "Only search files matching this glob. Optional." },
+      },
+      required: ["pattern"],
+    },
+  },
+  Bash: {
+    description:
+      "Run a shell command with the repository as the working directory. Use it for builds and tests. Every command is recorded in this dispatch's report.",
+    parameters: {
+      type: "object",
+      properties: { command: { type: "string" }, timeout_ms: { type: "integer" } },
+      required: ["command"],
+    },
+  },
+};
+
+function apiToolSpecs(names) {
+  return names
+    .filter((n) => EXTRA_API_TOOLS[n])
+    .map((n) => ({ type: "function", function: Object.assign({ name: n }, EXTRA_API_TOOLS[n]) }));
+}
+
+// ── Running one tool call ──────────────────────────────────────────────────
+// Returns { ok, text, error, wrote }. `text` is what goes back up the wire as
+// the tool result, and A REFUSAL IS A LEGITIMATE TOOL RESULT: the worker needs
+// to read it and try something else, not have the run torn down under it.
+function apiRunTool(ctx, name, argsJson, state) {
+  const { root, cwd, slice, timeouts } = ctx;
+  const clip = (s) => {
+    const t = String(s === undefined || s === null ? "" : s);
+    return t.length > EXTRA_API_TOOL_OUT
+      ? t.slice(0, EXTRA_API_TOOL_OUT) +
+          `\n… [truncated at ${EXTRA_API_TOOL_OUT} bytes - a tool result is re-sent as prompt tokens on every later turn]`
+      : t;
+  };
+  let a;
+  try {
+    a = typeof argsJson === "string" ? JSON.parse(argsJson || "{}") : argsJson || {};
+  } catch (e) {
+    return {
+      ok: false,
+      text: `REFUSED: your arguments for ${name} were not valid JSON (${e.message}). Send them again as a JSON object.`,
+      error: "bad-arguments",
+    };
+  }
+  const fenced = (p) => apiResolvePath(root, cwd, p);
+
+  if (name === "Read") {
+    const r = fenced(a.path);
+    if (!r.ok) return { ok: false, text: r.error, error: "fence" };
+    let buf;
+    try {
+      buf = fs.readFileSync(r.abs);
+    } catch (e) {
+      return { ok: false, text: `cannot read ${r.rel}: ${e.code || e.message}`, error: "read-failed" };
+    }
+    let text = buf.slice(0, EXTRA_API_READ_BYTES).toString("utf8");
+    if (buf.length > EXTRA_API_READ_BYTES)
+      text += `\n… [file is ${buf.length} bytes; the first ${EXTRA_API_READ_BYTES} are shown]`;
+    if (a.offset || a.limit) {
+      const lines = text.split(/\r?\n/);
+      const from = Math.max(1, Number(a.offset) || 1);
+      const n = Number(a.limit) || lines.length;
+      text = lines
+        .slice(from - 1, from - 1 + n)
+        .map((l, i) => `${from + i}\t${l}`)
+        .join("\n");
+    }
+    return { ok: true, text: clip(text) };
+  }
+
+  if (name === "Write" || name === "Edit") {
+    const r = fenced(a.path);
+    if (!r.ok) return { ok: false, text: r.error, error: "fence" };
+    const gate = apiWriteGate(slice, r.rel);
+    if (!gate.ok) return { ok: false, text: gate.error, error: "undeclared" };
+    if (name === "Write") {
+      if (typeof a.content !== "string")
+        return { ok: false, text: "REFUSED: `content` must be a string.", error: "bad-arguments" };
+      try {
+        fs.mkdirSync(path.dirname(r.abs), { recursive: true });
+        fs.writeFileSync(r.abs, a.content, "utf8");
+      } catch (e) {
+        return { ok: false, text: `cannot write ${r.rel}: ${e.code || e.message}`, error: "write-failed" };
+      }
+      return { ok: true, text: `wrote ${r.rel} (${Buffer.byteLength(a.content, "utf8")} bytes)`, wrote: r.rel };
+    }
+    let before;
+    try {
+      before = fs.readFileSync(r.abs, "utf8");
+    } catch (e) {
+      return { ok: false, text: `cannot read ${r.rel} to edit it: ${e.code || e.message}`, error: "read-failed" };
+    }
+    if (typeof a.old_string !== "string" || typeof a.new_string !== "string")
+      return { ok: false, text: "REFUSED: `old_string` and `new_string` must both be strings.", error: "bad-arguments" };
+    const parts = before.split(a.old_string);
+    if (parts.length === 1)
+      return {
+        ok: false,
+        text: `old_string was not found in ${r.rel}. Read the file again - it may not say what you think it says.`,
+        error: "no-match",
+      };
+    if (parts.length > 2 && a.replace_all !== true)
+      return {
+        ok: false,
+        text: `old_string appears ${parts.length - 1} times in ${r.rel}. Include more surrounding text, or pass replace_all.`,
+        error: "ambiguous",
+      };
+    const after =
+      a.replace_all === true ? parts.join(a.new_string) : parts[0] + a.new_string + parts.slice(1).join(a.old_string);
+    try {
+      fs.writeFileSync(r.abs, after, "utf8");
+    } catch (e) {
+      return { ok: false, text: `cannot write ${r.rel}: ${e.code || e.message}`, error: "write-failed" };
+    }
+    return {
+      ok: true,
+      text: `edited ${r.rel} (${parts.length - 1} replacement${parts.length === 2 ? "" : "s"})`,
+      wrote: r.rel,
+    };
+  }
+
+  if (name === "Glob" || name === "Grep") {
+    const start = a.path ? fenced(a.path) : { ok: true, abs: cwd, rel: "." };
+    if (!start.ok) return { ok: false, text: start.error, error: "fence" };
+    const files = [];
+    const walk = (dir) => {
+      if (files.length >= EXTRA_API_GLOB_MAX * 8) return;
+      let ents = [];
+      try {
+        ents = fs.readdirSync(dir, { withFileTypes: true });
+      } catch (_) {
+        return;
+      }
+      for (const e of ents) {
+        if (e.name.startsWith(".") && e.name !== ".github") continue;
+        if (e.isDirectory()) {
+          if (EXTRA_API_SKIP_DIRS.has(e.name)) continue;
+          walk(path.join(dir, e.name));
+        } else if (e.isFile()) files.push(path.join(dir, e.name));
+      }
+    };
+    let stat = null;
+    try {
+      stat = fs.statSync(start.abs);
+    } catch (_) {}
+    if (stat && stat.isFile()) files.push(start.abs);
+    else walk(start.abs);
+    const rels = files.map((f) => path.relative(root, f).split(path.sep).join("/"));
+
+    if (name === "Glob") {
+      const re = apiGlobToRe(String(a.pattern || "*"));
+      const hits = rels.filter((x) => re.test(x) || re.test(x.split("/").pop()));
+      const shown = hits.slice(0, EXTRA_API_GLOB_MAX);
+      return {
+        ok: true,
+        text: clip(
+          (shown.join("\n") || "(no match)") +
+            (hits.length > shown.length ? `\n… ${hits.length - shown.length} more; narrow the pattern` : "")
+        ),
+      };
+    }
+    let re;
+    try {
+      re = new RegExp(String(a.pattern), "i");
+    } catch (e) {
+      return { ok: false, text: `that is not a valid regular expression: ${e.message}`, error: "bad-arguments" };
+    }
+    const only = a.glob ? apiGlobToRe(String(a.glob)) : null;
+    const out = [];
+    for (const rel of rels) {
+      if (only && !only.test(rel) && !only.test(rel.split("/").pop())) continue;
+      let body;
+      try {
+        const b = fs.readFileSync(path.join(root, rel));
+        if (b.includes(0)) continue; // binary
+        body = b.toString("utf8");
+      } catch (_) {
+        continue;
+      }
+      const lines = body.split(/\r?\n/);
+      for (let i = 0; i < lines.length; i++) {
+        if (re.test(lines[i])) out.push(`${rel}:${i + 1}: ${lines[i].slice(0, 300)}`);
+        if (out.length >= EXTRA_API_GREP_MAX) break;
+      }
+      if (out.length >= EXTRA_API_GREP_MAX) break;
+    }
+    return {
+      ok: true,
+      text:
+        clip(out.join("\n") || "(no match)") +
+        (out.length >= EXTRA_API_GREP_MAX ? `\n… stopped at ${EXTRA_API_GREP_MAX} matches` : ""),
+    };
+  }
+
+  if (name === "Bash") {
+    const tw = apiBashTripwire(root, cwd, a.command);
+    if (!tw.ok) return { ok: false, text: tw.error, error: "fence" };
+    const ms = Math.max(1000, Math.min(Number(a.timeout_ms) || timeouts.idle_ms, timeouts.idle_ms));
+    const t0 = Date.now();
+    const r = spawnSync(String(a.command), {
+      cwd,
+      shell: true,
+      encoding: "utf8",
+      timeout: ms,
+      maxBuffer: EXTRA_API_TOOL_OUT * 4,
+      windowsHide: true,
+    });
+    state.bash_calls.push({
+      command: String(a.command),
+      exit_code: r.status === undefined ? null : r.status,
+      ms: Date.now() - t0,
+    });
+    if (r.error && r.error.code === "ETIMEDOUT")
+      return { ok: false, text: `the command was killed after ${ms}ms.`, error: "timeout" };
+    if (r.error) return { ok: false, text: `could not run the command: ${r.error.message}`, error: "spawn-failed" };
+    const body = [
+      `exit ${r.status}`,
+      (r.stdout || "").trim() && "stdout:\n" + r.stdout,
+      (r.stderr || "").trim() && "stderr:\n" + r.stderr,
+    ]
+      .filter(Boolean)
+      .join("\n");
+    return { ok: r.status === 0, text: clip(body) };
+  }
+
+  return { ok: false, text: `REFUSED: there is no tool called "${name}".`, error: "unknown-tool" };
+}
+
+// ── The four kinds again, out of an OpenAI-shaped `usage` ──────────────────
+// Two of them need care, and both have cost this repo a wrong number before in
+// the /orc-budget lane:
+//
+//  · cache_read. `prompt_tokens` INCLUDES the cached tokens on every endpoint
+//    that reports them at all, so FRESH input is prompt_tokens MINUS the cached
+//    count. Not subtracting double-counts the largest number in the vector.
+//  · cache_write. OpenAI-compatible endpoints do IMPLICIT caching and report no
+//    write count, because there is no write charge to report. So this is 0, and
+//    ZERO IS THE MEASUREMENT, not missing data - /orc-retro must not read it as
+//    a gap. `cache_note` says so ON THE RECORD rather than in a comment no
+//    downstream reader ever sees.
+function extraApiUsageVector(u) {
+  const x = u || {};
+  const det = x.prompt_tokens_details || {};
+  const cacheRead = Number(det.cached_tokens || x.prompt_cache_hit_tokens || x.cache_read_input_tokens || 0);
+  const prompt = Number(x.prompt_tokens || x.input_tokens || 0);
+  return {
+    input: Math.max(0, prompt - cacheRead),
+    cache_write: Number(x.cache_creation_input_tokens || 0),
+    cache_read: cacheRead,
+    output: Number(x.completion_tokens || x.output_tokens || 0),
+  };
+}
+const extraVectorAdd = (a, b) => ({
+  input: a.input + b.input,
+  cache_write: a.cache_write + b.cache_write,
+  cache_read: a.cache_read + b.cache_read,
+  output: a.output + b.output,
+});
+
+// An HTTP answer, mapped onto the SAME closed taxonomy engine A classifies
+// with. One taxonomy, so `retry` means the same thing whichever engine
+// produced it and /orc-retro can aggregate across both.
+function apiClassifyHttp(res) {
+  if (!res) return "unknown";
+  if (res.reason === "timeout") return "timeout";
+  if (res.reason === "unreachable") return "unreachable";
+  if (res.reason === "redirect-refused") return "redirect-refused";
+  if (res.reason === "bad-url") return "invalid_request";
+  const s = Number(res.status || 0);
+  const t = String(extraErrText(res)).toLowerCase();
+  if (s === 401 || s === 403) return "authentication_failed";
+  if (s === 402 || /insufficient|balance|billing|credit|quota exceed/.test(t)) return "billing_error";
+  if (s === 429) return "rate_limit";
+  if (s === 503) return "overloaded";
+  if (s >= 500) return "server_error";
+  if (/model/.test(t) && /not (exist|found|supported|available)|unknown|invalid|unsupported|no such|unavailable|deprecated/.test(t))
+    return "model_not_found";
+  if (s === 404) return "model_not_found";
+  if (s >= 400) return "invalid_request";
+  return "unknown";
+}
+
+// ── The system preamble ────────────────────────────────────────────────────
+// ORC's own words, ABOVE the slice's standing rules and clearly separated from
+// them. A worker that is told the fence up front works inside it; a worker that
+// discovers it by refusal burns turns finding out. Naming the declared files
+// here is the single highest-value line in the whole prompt.
+function apiSystemPreamble(slice, tools) {
+  const declared = slice.declared_files || [];
+  return [
+    "You are executing ONE task inside a real repository, through a tool loop.",
+    "",
+    "Rules that are enforced, not advisory:",
+    "· Every path you name is resolved against the repository root. A path that leaves the root is refused, reads included.",
+    declared.length
+      ? "· You may WRITE ONLY these files:\n" + declared.map((f) => "    " + f).join("\n")
+      : "· This task declared NO files, so every write will be refused. If you believe a file must change, say which one and stop.",
+    "· A refusal is information, not a crash. Read it and choose differently.",
+    "",
+    "Tools available: " + tools.join(", ") + ".",
+    "When the task is finished, reply with a short report: what you changed, and anything you could not do.",
+  ].join("\n");
+}
+
+// ── The loop ───────────────────────────────────────────────────────────────
+// Returns THE SAME SHAPE runClaudeShim does. That is not tidiness: the bridge,
+// the slot accounting, the render, the trace line and every downstream gate are
+// engine-blind, and they stay that way only if the two engines are
+// indistinguishable from outside.
+//
+// Three caps, and each produces a DIFFERENT honest answer:
+//   max_turns   -> partial. Work is in the tree and it is not finished.
+//   wall clock  -> partial if any file was written, timeout if none was.
+//   output cap  -> partial (finish_reason "length"): the reply was cut off
+//                  mid-sentence, so the last tool call may never have been made.
+// None of them is `done`. A `done` with nothing in the tree is the single most
+// expensive lie this engine could tell, because the smoke gate downstream would
+// pass a wave that built nothing.
+async function runApiEngine(ctx) {
+  const { prof, route, key, cfg, slice, cwd, root, workDir } = ctx;
+  const started = Date.now();
+  const timeouts = extraTimeouts(cfg);
+  // The tools read their own budget off ctx, so a caller that did not pass one
+  // (the conformance run) still gets the same derived ladder rather than a
+  // second, disagreeing set of numbers.
+  ctx.timeouts = timeouts;
+  const deadline = started + timeouts.wall_ms;
+  const fail = (reason, error, extra) =>
+    Object.assign(
+      {
+        engine: "api",
+        format: "chat-completions",
+        exit_code: null,
+        ok: false,
+        outcome: "failed",
+        reason,
+        error,
+        retry: classifyFailure(reason).retry,
+        duration_ms: Date.now() - started,
+      },
+      extra || {}
+    );
+
+  if (!prof.base_url)
+    return fail("invalid_request", `profile "${prof.name}" has no OpenAI-compatible base URL. Engine api talks to one directly, so it cannot start without it.`);
+
+  const url = apiCompletionsUrl(prof);
+  const headers = extraAuthHeaders(prof, key);
+  const policy = apiProviderPolicy(prof);
+
+  const toolNames = (Array.isArray(slice.allowed_tools) && slice.allowed_tools.length
+    ? slice.allowed_tools
+    : EXTRA_DEFAULT_TOOLS
+  ).filter((t) => EXTRA_API_TOOLS[t]);
+  const unknown = (Array.isArray(slice.allowed_tools) ? slice.allowed_tools : []).filter((t) => !EXTRA_API_TOOLS[t]);
+  if (unknown.length)
+    return fail(
+      "invalid_request",
+      `the slice asks for tool(s) engine api does not implement: ${unknown.join(", ")}. It implements exactly six - ${Object.keys(EXTRA_API_TOOLS).join(", ")} - because it runs them itself rather than borrowing somebody else's harness.`
+    );
+  const tools = apiToolSpecs(toolNames);
+
+  const models = extraModelMap(prof, route);
+  // Engine C makes EXACTLY the calls ORC composes - there are no background
+  // turns, no title generation and no `haiku` alias. So the cheap-companion
+  // warning engine A must print does not apply here, and printing it anyway
+  // would be a cost warning about a cost that cannot occur.
+  models.small = models.primary;
+  models.small_source = "n/a";
+  models.small_note = null;
+
+  const messages = [
+    { role: "system", content: apiSystemPreamble(slice, toolNames) },
+  ];
+  if (slice.standing_rules && String(slice.standing_rules).trim())
+    messages.push({ role: "system", content: String(slice.standing_rules) });
+  messages.push({ role: "user", content: slice.prompt });
+
+  const maxTurns = Math.max(1, Number(route.max_turns || slice.max_turns || EXTRA_API_MAX_TURNS));
+  const state = { bash_calls: [], wrote: new Set(), tool_calls: [], tool_uses: 0, tool_results: 0 };
+  const apiRetries = [];
+  const servedBy = [];
+  let usage = { input: 0, cache_write: 0, cache_read: 0, output: 0 };
+  let reasoningTokens = 0;
+  let modelReported = null;
+  let finalText = null;
+  let turns = 0;
+  let cap = null; // "max-turns" | "wall-clock" | "output-cap"
+
+  const transcript = path.join(workDir, "transcript.jsonl");
+  const record = (obj) => {
+    try {
+      fs.appendFileSync(transcript, JSON.stringify(obj) + "\n", "utf8");
+    } catch (_) {}
+  };
+
+  for (turns = 1; ; turns++) {
+    if (turns > maxTurns) {
+      cap = "max-turns";
+      break;
+    }
+    const left = deadline - Date.now();
+    if (left <= 1000) {
+      cap = "wall-clock";
+      break;
+    }
+
+    const body = { model: route.model, messages, stream: false };
+    if (tools.length) {
+      body.tools = tools;
+      body.tool_choice = "auto";
+    }
+    const maxOut = Number(slice.max_output_tokens || route.max_output_tokens || 0);
+    if (maxOut > 0) body.max_tokens = maxOut;
+    // F6 - the field engine A cannot reach.
+    if (policy.block) body.provider = policy.block;
+
+    // A retryable answer is retried HERE, on the same turn, twice, inside the
+    // wall clock. Beyond that it is the caller's fallback (P6) - spending the
+    // whole budget on backoff would turn a 60-second failure into a 15-minute
+    // one and still fall back.
+    let res = null;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      const remaining = deadline - Date.now();
+      if (remaining <= 1000) break;
+      res = await extraHttp({
+        url,
+        method: "POST",
+        headers,
+        body,
+        timeoutMs: Math.min(timeouts.api_ms, remaining),
+        maxBytes: EXTRA_API_RESP_BYTES,
+      });
+      if (res.ok) break;
+      const cls = apiClassifyHttp(res);
+      apiRetries.push({
+        error: cls,
+        attempt,
+        max_retries: 3,
+        status: res.status || null,
+        detail: extraErrText(res).slice(0, 200),
+        turn: turns,
+      });
+      if (!classifyFailure(cls).retry || attempt === 3) break;
+      const waitMs = Math.min(4000, 400 * Math.pow(3, attempt - 1));
+      if (deadline - Date.now() <= waitMs + 1000) break;
+      await new Promise((r) => setTimeout(r, waitMs));
+    }
+
+    if (!res || !res.ok) {
+      const cls = apiClassifyHttp(res);
+      return fail(cls, classifyFailure(cls).label + " - " + extraErrText(res), {
+        turns,
+        api_retries: apiRetries,
+        http_status: (res && res.status) || null,
+        usage,
+        model_requested: route.model,
+        model_reported: modelReported || "unknown",
+        files_written: [...state.wrote],
+        bash_calls: state.bash_calls,
+        privacy: { applied: policy.block, summary: policy.summary },
+        served_by: servedBy,
+      });
+    }
+    if (res.truncated)
+      return fail("response-truncated", `the reply exceeded ${EXTRA_API_RESP_BYTES} bytes and cannot be parsed. Nothing is assumed about what it said.`, {
+        turns,
+        api_retries: apiRetries,
+        usage,
+        files_written: [...state.wrote],
+      });
+
+    const j = res.json;
+    const choice = j && Array.isArray(j.choices) ? j.choices[0] : null;
+    if (!choice || !choice.message)
+      return fail("malformed-return", `the endpoint answered 200 with no choices[0].message. First bytes: ${String(res.text || JSON.stringify(j || {})).slice(0, 200)}`, {
+        turns,
+        api_retries: apiRetries,
+        usage,
+        files_written: [...state.wrote],
+      });
+
+    if (j.usage) usage = extraVectorAdd(usage, extraApiUsageVector(j.usage));
+    const cd = (j.usage && j.usage.completion_tokens_details) || {};
+    reasoningTokens += Number(cd.reasoning_tokens || 0);
+    if (j.model) modelReported = j.model;
+    // U4 - the provider echo. The ONLY way a provider-level reroute is visible
+    // at all, and only a body-composing engine ever receives it.
+    if (j.provider && !servedBy.includes(j.provider)) servedBy.push(j.provider);
+    record({ turn: turns, model: j.model || null, provider: j.provider || null, finish_reason: choice.finish_reason || null });
+
+    const msg = choice.message;
+    messages.push({
+      role: "assistant",
+      content: msg.content === undefined ? null : msg.content,
+      tool_calls: msg.tool_calls || undefined,
+    });
+    if (typeof msg.content === "string" && msg.content.trim()) finalText = msg.content;
+
+    const calls = Array.isArray(msg.tool_calls) ? msg.tool_calls : [];
+    if (!calls.length) {
+      // finish_reason `length` means the reply was CUT OFF. A cut-off reply may
+      // have been about to make a tool call, so it is not a finished run.
+      if (choice.finish_reason === "length") cap = "output-cap";
+      break;
+    }
+
+    for (const c of calls) {
+      const fn = (c.function && c.function.name) || c.name || "";
+      state.tool_uses++;
+      const out = apiRunTool(ctx, fn, (c.function && c.function.arguments) || "{}", state);
+      state.tool_results++;
+      if (out.wrote) state.wrote.add(out.wrote);
+      state.tool_calls.push({ turn: turns, name: fn, ok: out.ok, error: out.error || null });
+      record({ turn: turns, tool: fn, ok: out.ok, error: out.error || null });
+      messages.push({
+        role: "tool",
+        tool_call_id: c.id || fn,
+        name: fn,
+        content: out.text || "",
+      });
+    }
+  }
+
+  const filesWritten = [...state.wrote];
+  const out = {
+    engine: "api",
+    format: "chat-completions",
+    exit_code: null,
+    duration_ms: Date.now() - started,
+    turns: Math.min(turns, maxTurns),
+    max_turns: maxTurns,
+    api_retries: apiRetries,
+    output_file: transcript,
+    model_requested: route.model,
+    // `unknown` is an honest value and is reported as `unknown`, never as a
+    // match. The comparison itself is the return-validation wave's job.
+    model_reported: modelReported || "unknown",
+    model_map: models,
+    usage,
+    reasoning_tokens: reasoningTokens,
+    cache_note:
+      "cache_write is 0 because an OpenAI-compatible endpoint caches implicitly and reports no write count - that ZERO IS A MEASUREMENT, not missing data.",
+    // P9 - never a cost figure ORC did not price itself.
+    cost_usd: null,
+    cost_note:
+      "priced by /orc-budget from the dated provider table - this engine never reads a cost figure off the wire",
+    session_id: null,
+    text: finalText,
+    tool_uses: state.tool_uses,
+    tool_results: state.tool_results,
+    tool_calls: state.tool_calls,
+    files_written: filesWritten,
+    bash_calls: state.bash_calls,
+    // F6 / U4, both recorded whether or not they fired.
+    privacy: { applied: policy.block, summary: policy.summary },
+    served_by: servedBy,
+    served_by_note: servedBy.length
+      ? servedBy.length > 1
+        ? "MORE THAN ONE provider served this one task."
+        : null
+      : "this endpoint does not name the provider that served the request, so a provider-level reroute is NOT VISIBLE here. That is a limit of the endpoint, not a clean result.",
+    reroute:
+      servedBy.length > 1 ||
+      !!(policy.block && Array.isArray(policy.block.only) && servedBy.some((p) => !policy.block.only.includes(p))),
+  };
+  if (out.reroute)
+    out.reroute_note =
+      `the model id was honoured but the serving provider was ${servedBy.join(", ")}` +
+      (policy.block && policy.block.only ? ` against a policy of only=${policy.block.only.join("|")}` : "") +
+      ". A provider-level reroute PRESERVES the model id, so a model check reads clean while the code went to a different company.";
+
+  if (cap === "max-turns")
+    return Object.assign(out, {
+      ok: true,
+      outcome: "partial",
+      reason: "max-turns",
+      error: `the worker used all ${maxTurns} turns. ${filesWritten.length ? filesWritten.length + " file(s) changed and are in the worktree" : "nothing was written"}; the rest is not done.`,
+    });
+  if (cap === "wall-clock") {
+    if (!filesWritten.length)
+      return Object.assign(fail("timeout", `no answer inside the ${Math.round(timeouts.wall_ms / 1000)}s dispatch wall clock, and nothing was written.`), out, {
+        ok: false,
+        outcome: "failed",
+        reason: "timeout",
+        retry: true,
+        error: `no answer inside the ${Math.round(timeouts.wall_ms / 1000)}s dispatch wall clock, and nothing was written.`,
+      });
+    return Object.assign(out, {
+      ok: true,
+      outcome: "partial",
+      reason: "wall-clock",
+      error: `the ${Math.round(timeouts.wall_ms / 1000)}s dispatch wall clock expired with ${filesWritten.length} file(s) already changed. Those changes are in the worktree.`,
+    });
+  }
+  if (cap === "output-cap")
+    return Object.assign(out, {
+      ok: true,
+      outcome: "partial",
+      reason: "max_output_tokens",
+      error: "the reply hit the output-token ceiling and was cut off, so a tool call it was about to make may never have happened.",
+    });
+
+  // A clean finish that changed nothing, on a slice that declared files to
+  // change, is NOT done. It is the empty-diff case, and calling it done would
+  // hand the smoke gate a wave that built nothing.
+  if (!filesWritten.length && (slice.declared_files || []).length)
+    return Object.assign(out, {
+      ok: true,
+      outcome: "partial",
+      reason: "empty-diff",
+      error: `the worker finished and reported back, but wrote none of its ${(slice.declared_files || []).length} declared file(s). "It says it is done" and "the work is done" are different facts.`,
+    });
+
+  return Object.assign(out, { ok: true, outcome: "done", reason: null, error: null });
+}
+
+// ══ ENGINE B: `cli` — DRIVE A THIRD-PARTY AGENTIC CLI ══════════════════════
+//
+// The third engine, and the one with the LEAST control. It is worth having
+// anyway, for one reason the other two cannot match: somebody has already done
+// the provider work. `opencode` fronts 75+ providers behind one interface and
+// `codex` speaks OpenAI's own Responses API; neither needs a base URL, a wire
+// format or a model map from ORC.
+//
+// WHAT THIS ENGINE CANNOT DO, said here rather than discovered later:
+//
+//   · IT CANNOT FENCE. The third-party CLI owns its own tools, so ORC has no
+//     say over which paths get read or written. `declared_files` becomes an
+//     INSTRUCTION in the task file, which is advice, not enforcement. Engine C
+//     enforces it; this one asks. Every return records `fence: {...}` saying so,
+//     because a capability gap that is not reported reads as a capability.
+//   · IT CANNOT ENFORCE A ROUTING POLICY (F6) and cannot see a provider echo
+//     (U4) — it composes no body at all. Engine C is still the only one.
+//   · IT MAY NOT REPORT TOKENS. `codex --json` does (`turn.completed.usage`);
+//     `opencode --format json` may not. An adapter with no vector returns
+//     `usage: null`, NEVER four zeros — "not reported" and "measured zero" are
+//     different facts and /orc-budget must be able to tell them apart.
+//
+// THE ADAPTER TABLE IS THE REGISTRY. Four functions and some data per tool:
+// argv, env, parse, and what the tool documents about its own exit codes. A
+// fifth tool is a table row, not a new code path.
+
+// The task text and the tool's own output file live in ONE gitignored directory
+// INSIDE the repo. Inside, because `codex --sandbox workspace-write` restricts
+// writes to the workspace and a temp dir outside it is not writable; gitignored
+// and removed in a `finally`, because a crashed run must leave an ignored file
+// rather than a staged one.
+const EXTRA_CLI_WORK = ".orc-extra";
+
+// The FLOOR of a structured foreign return. `codex --output-schema` enforces it
+// on the final message, which is how a foreign worker returns ORC's contract
+// instead of prose. Deliberately minimal — W8 owns the full foreign return
+// section, and a schema that guessed at it would have to be unpicked.
+const EXTRA_CLI_RETURN_SCHEMA = {
+  type: "object",
+  additionalProperties: true,
+  required: ["status", "summary"],
+  properties: {
+    status: { type: "string", enum: ["done", "partial", "blocked"] },
+    summary: { type: "string" },
+    files_changed: { type: "array", items: { type: "string" } },
+    unmet: { type: "array", items: { type: "string" } },
+    notes: { type: "string" },
+  },
+};
+
+// A token vector out of whatever shape a third-party CLI reports. Codex uses the
+// Responses API's names; opencode's are undocumented. The `input_tokens`
+// family INCLUDES the cached count, exactly as engine C's does, so fresh input
+// is the difference — and RETURNS NULL when there is nothing to read, which is
+// the whole point of this function existing separately.
+function extraCliUsageVector(u) {
+  if (!u || typeof u !== "object") return null;
+  const num = (...names) => {
+    for (const n of names) if (u[n] !== undefined && u[n] !== null && !isNaN(Number(u[n]))) return Number(u[n]);
+    return null;
+  };
+  const cached = num("cached_input_tokens", "cache_read_input_tokens", "prompt_cache_hit_tokens", "cached_tokens");
+  const inp = num("input_tokens", "prompt_tokens", "input");
+  const outp = num("output_tokens", "completion_tokens", "output");
+  if (inp === null && outp === null) return null;
+  return {
+    input: Math.max(0, (inp || 0) - (cached || 0)),
+    cache_write: num("cache_creation_input_tokens", "cache_write") || 0,
+    cache_read: cached || 0,
+    output: outp || 0,
+  };
+}
+
+// Tolerant, because two of these three formats are undocumented. Returns every
+// JSON object it can find, in order, whether the stream was JSONL or one blob.
+function extraCliJsonEvents(text) {
+  const out = [];
+  const t = String(text || "");
+  for (const line of t.split(/\r?\n/)) {
+    const s = line.trim();
+    if (!s || (s[0] !== "{" && s[0] !== "[")) continue;
+    try {
+      const v = JSON.parse(s);
+      if (Array.isArray(v)) out.push(...v.filter((x) => x && typeof x === "object"));
+      else out.push(v);
+    } catch (_) {}
+  }
+  if (out.length) return out;
+  // Not JSONL. One object spanning the whole stream is the other common shape.
+  try {
+    const v = JSON.parse(t);
+    if (Array.isArray(v)) return v.filter((x) => x && typeof x === "object");
+    if (v && typeof v === "object") return [v];
+  } catch (_) {}
+  return [];
+}
+
+// Depth-first hunt for a nested value, used ONLY where the shape is
+// undocumented. It is a fallback and it says which key it found, so a wrong
+// guess is visible in the return rather than silently believed.
+function extraCliDig(events, keys, pred) {
+  const seen = new Set();
+  const walk = (v, depth) => {
+    if (!v || typeof v !== "object" || depth > 6 || seen.has(v)) return null;
+    seen.add(v);
+    for (const k of keys) {
+      const got = v[k];
+      if (got !== undefined && got !== null && (!pred || pred(got))) return { key: k, value: got };
+    }
+    for (const k of Object.keys(v)) {
+      const r = walk(v[k], depth + 1);
+      if (r) return r;
+    }
+    return null;
+  };
+  for (let i = events.length - 1; i >= 0; i--) {
+    const r = walk(events[i], 0);
+    if (r) return r;
+  }
+  return null;
+}
+
+// Classify a non-zero exit from what the tool actually SAID. Neither of these
+// tools documents an exit-code table, so this is pattern matching on stderr and
+// it is labelled that way — `exit_codes: null` on the row is the honest record
+// that there is nothing to map against.
+const EXTRA_CLI_STDERR_PATTERNS = [
+  [/unauthor|invalid.{0,12}(api.?key|token|credential)|401|authentication/i, "authentication_failed"],
+  [/rate.?limit|429|too many requests/i, "rate_limit"],
+  [/insufficient|balance|billing|credit|payment/i, "billing_error"],
+  [/model .{0,60}(not found|does not exist|unknown|unsupported|not supported)|unknown model/i, "model_not_found"],
+  [/wire_api|model_providers|config\.toml/i, "invalid_request"],
+  [/sandbox|permission denied|read-?only/i, "invalid_request"],
+  [/timed? ?out|deadline/i, "timeout"],
+  [/econnrefused|enotfound|network|unreachable|dns/i, "unreachable"],
+  [/5\d\d|internal server error|overloaded/i, "server_error"],
+];
+function extraCliClassify(stderr, stdout) {
+  const t = String(stderr || "") + "\n" + String(stdout || "");
+  for (const [re, key] of EXTRA_CLI_STDERR_PATTERNS) if (re.test(t)) return key;
+  return "unknown";
+}
+
+const EXTRA_CLI_ADAPTERS = {
+  // ── opencode ─────────────────────────────────────────────────────────────
+  // Built first for one concrete reason: `opencode serve` + `--attach` removes
+  // the cold-boot cost from EVERY dispatch, which on a wave of ten tasks is the
+  // difference between this engine being usable and being a curiosity.
+  opencode: {
+    label: "opencode",
+    docs_url: "https://opencode.ai/docs/cli/",
+    // `--model provider/model` is opencode's own format, and it falls out of
+    // the route target for free: `orc extra route set 0-30 oc/deepseek/x`
+    // splits on the FIRST slash, so the model string arrives as
+    // `deepseek/x` — already the shape opencode wants.
+    model_note: "opencode wants provider/model, which is what a route target of <profile>/<provider>/<model> already produces",
+    exit_codes: null,
+    supports: { attach: true, output_schema: false, usage: "undocumented", fence: false },
+    argv(a) {
+      const v = ["run", "--model", a.model, "--format", "json", "--auto", "--dir", a.root];
+      if (a.cli.agent) v.push("--agent", a.cli.agent);
+      // R6. A running `opencode serve` is joined rather than booted.
+      if (a.cli.attach) v.push("--attach", a.cli.attach);
+      // `-f` attaches a FILE to the message, which is how the whole task text
+      // stays out of argv — the same reasoning as engine A's stdin prompt:
+      // Windows caps a command line at 32,767 characters and a task slice is
+      // not ORC's own text.
+      v.push("-f", a.taskFile);
+      v.push(...(a.cli.extra_args || []));
+      v.push(
+        "Do the task described in the attached file. It is the whole brief; nothing else is implied."
+      );
+      return v;
+    },
+    env(a) {
+      const e = {};
+      // For engine `cli` the credential's VARIABLE NAME is the one the
+      // third-party tool reads — that is what the user configured it as. ORC
+      // does not translate it into an ANTHROPIC_* name, which would be a name
+      // opencode has never heard of.
+      if (a.cli_key_name && a.key) e[a.cli_key_name] = a.key;
+      if (process.env.OPENCODE_SERVER_PASSWORD) e.OPENCODE_SERVER_PASSWORD = process.env.OPENCODE_SERVER_PASSWORD;
+      return e;
+    },
+    parse(out) {
+      const events = extraCliJsonEvents(out.stdout);
+      const usageHit = extraCliDig(events, ["usage", "tokens"], (v) => v && typeof v === "object");
+      const usage = usageHit ? extraCliUsageVector(usageHit.value) : null;
+      const modelHit = extraCliDig(events, ["model", "modelID", "model_id"], (v) => typeof v === "string");
+      const textHit = extraCliDig(events, ["text", "content", "message", "output"], (v) => typeof v === "string" && v.trim());
+      return {
+        parsed: events.length ? "json-events" : "text",
+        events: events.length,
+        usage,
+        usage_source: usageHit ? usageHit.key : null,
+        model_reported: modelHit ? modelHit.value : null,
+        text: (textHit && textHit.value) || String(out.stdout || "").trim().slice(0, 4000) || null,
+      };
+    },
+  },
+  // ── codex ────────────────────────────────────────────────────────────────
+  // The one adapter that can be MADE to return ORC's contract rather than
+  // prose: `--output-schema` validates the final message against a JSON Schema.
+  // That is the same guarantee engine A only gets to hope for, and it is why
+  // this adapter is worth its config awkwardness.
+  codex: {
+    label: "codex",
+    docs_url: "https://learn.chatgpt.com/docs/non-interactive-mode.md",
+    model_note: "codex takes a bare model id; WHICH PROVIDER serves it is decided by ~/.codex/config.toml, not by a flag",
+    exit_codes: null,
+    supports: { attach: false, output_schema: true, usage: "documented (turn.completed.usage)", fence: false },
+    // A refusal that costs nothing, made before the binary is spawned.
+    //
+    // Codex reads custom providers from `model_providers` in the USER-LEVEL
+    // `~/.codex/config.toml` and IGNORES a project-local one for that key. ORC
+    // does not write it: a file outside the project is not ORC's to edit, and a
+    // credential-bearing config least of all. So ORC READS it and reports —
+    // including the trap that costs a whole run, which is that OpenAI removed
+    // the chat/completions protocol in February 2026, so a provider row with
+    // `wire_api = "chat"` (or with none) fails at STARTUP.
+    preflight(a) {
+      const cfgPath = path.join(os.homedir(), ".codex", "config.toml");
+      let toml = null;
+      try {
+        toml = fs.readFileSync(cfgPath, "utf8");
+      } catch (_) {}
+      const paste = [
+        `[model_providers.${a.prof.name}]`,
+        `name = "${a.prof.name}"`,
+        `base_url = "${a.prof.base_url || "https://<provider>/v1"}"`,
+        `env_key = "${(a.prof.credential && a.prof.credential.key_name) || "PROVIDER_API_KEY"}"`,
+        `wire_api = "responses"`,
+        `query_params = {}`,
+      ].join("\n");
+      // A DEAD row is an error, because the run cannot start with one — codex
+      // refuses at startup and the failure would land mid-wave.
+      if (toml && /wire_api\s*=\s*"chat"/.test(toml))
+        return {
+          ok: false,
+          reason: "invalid_request",
+          error:
+            `${cfgPath} contains \`wire_api = "chat"\`. OpenAI removed the chat/completions protocol in February 2026 and codex now FAILS AT STARTUP on that row — ` +
+            "so this dispatch would die before it began. `responses` is the default and the only value.",
+          remedy: paste,
+        };
+      // No `model_providers` at all is only a problem if this profile expects a
+      // custom one. It is a WARNING carried on the return, never a refusal:
+      // codex's built-in providers work without it, and refusing here would
+      // break the ordinary case to protect the unusual one.
+      if (a.prof.base_url && !(toml && /\[model_providers\./.test(toml)))
+        return { ok: true, warn: `${cfgPath} declares no \`model_providers\`, and this profile names a custom base URL. If codex does not know this provider the dispatch will fail at startup — codex reads that key from the USER-level config only, and ignores a project-local one.`, remedy: paste };
+      return { ok: true };
+    },
+    argv(a) {
+      const v = [
+        "exec",
+        "--json",
+        // The default is READ-ONLY. Without this the worker cannot edit a file
+        // and the run looks like a model that refused to work.
+        "--sandbox",
+        "workspace-write",
+        // No session state accumulating between dispatches.
+        "--ephemeral",
+        // The contract, enforced by codex itself.
+        "--output-schema",
+        a.schemaFile,
+        // Read the final answer from a FILE rather than scraping it out of an
+        // event stream whose shape is not ours.
+        "--output-last-message",
+        a.outFile,
+        "--model",
+        a.model,
+      ];
+      // Only when there is no repo to check. Passing it unconditionally would
+      // switch off a safety net that is doing its job everywhere else.
+      if (!a.isGit) v.push("--skip-git-repo-check");
+      v.push(...(a.cli.extra_args || []));
+      // Short, ORC-authored, and it points at the file. The slice's own text
+      // never reaches argv.
+      v.push(`Read ${EXTRA_CLI_WORK}/task.md and do exactly the task it describes. It is the whole brief.`);
+      return v;
+    },
+    env(a) {
+      const e = {};
+      // BOTH, and for two different code paths: CODEX_API_KEY is what codex
+      // reads for a single invocation against a built-in provider, while a
+      // custom `model_providers` row names its own variable via `env_key` —
+      // which is the name the user configured on this profile.
+      if (a.key) e.CODEX_API_KEY = a.key;
+      if (a.cli_key_name && a.key) e[a.cli_key_name] = a.key;
+      return e;
+    },
+    parse(out) {
+      const events = extraCliJsonEvents(out.stdout);
+      // DOCUMENTED shape, so it is read by name rather than dug for. A dig
+      // would silently accept the wrong field the day the shape changes.
+      const completed = events.filter((e) => e && e.type === "turn.completed");
+      const failed = events.filter((e) => e && (e.type === "turn.failed" || e.type === "error"));
+      const last = completed[completed.length - 1] || null;
+      const usage = last ? extraCliUsageVector(last.usage) : null;
+      const model = (last && last.model) || null;
+      return {
+        parsed: events.length ? "jsonl" : "text",
+        events: events.length,
+        usage,
+        usage_source: usage ? "turn.completed.usage" : null,
+        model_reported: model,
+        turn_failed: failed.length ? String(failed[failed.length - 1].message || failed[failed.length - 1].error || "turn failed") : null,
+        // The final message came from --output-last-message; the event stream
+        // is only the telemetry.
+        text: (out.lastMessage && out.lastMessage.trim()) || String(out.stdout || "").trim().slice(0, 4000) || null,
+      };
+    },
+  },
+};
+
+// ── The runner ─────────────────────────────────────────────────────────────
+// Returns THE SAME SHAPE `runClaudeShim` and `runApiEngine` return. That is the
+// property that kept the bridge, the slot accounting, the render and every
+// downstream gate untouched across three engines, and it is worth more than any
+// one adapter.
+function runCliEngine(ctx) {
+  const { prof, route, key, cfg, slice, cwd, root, workDir } = ctx;
+  const started = Date.now();
+  const timeouts = extraTimeouts(cfg);
+  const fail = (reason, error, extra) =>
+    Object.assign(
+      {
+        engine: "cli",
+        exit_code: null,
+        ok: false,
+        outcome: "failed",
+        reason,
+        error,
+        retry: classifyFailure(reason).retry,
+        duration_ms: Date.now() - started,
+      },
+      extra || {}
+    );
+
+  const cli = prof.cli || {};
+  const adapter = EXTRA_CLI_ADAPTERS[cli.bin];
+  if (!adapter)
+    return fail(
+      "engine-unavailable",
+      `no adapter for "${cli.bin || "(no binary configured)"}". This release ships: ${Object.keys(EXTRA_CLI_ADAPTERS).join(", ")}. ` +
+        "An adapter is a table row — argv, env, output parser, what the tool documents about its exit codes — not a new code path, so adding one is small."
+    );
+  const bin = whichBin(cli.bin);
+  if (!bin) return fail("engine-unavailable", `\`${cli.bin}\` is not on PATH — engine cli dispatches by running it.`);
+
+  // ONE gitignored directory inside the repo, because a workspace-write sandbox
+  // cannot write outside the workspace. Removed in the finally below; the
+  // .gitignore line is written idempotently so a crashed run leaves an IGNORED
+  // file rather than a staged one.
+  ensureExtraGitignore(root);
+  const wdir = path.join(root, EXTRA_CLI_WORK);
+  const taskFile = path.join(wdir, "task.md");
+  const outFile = path.join(wdir, "last-message.txt");
+  const schemaFile = path.join(workDir, "return.schema.json");
+
+  const declared = slice.declared_files || [];
+  // The fence is an INSTRUCTION here, not a rule. Saying "you may only write
+  // these files" to a tool whose file access ORC does not mediate is advice —
+  // so it is written as an instruction and REPORTED as advice.
+  const task = [
+    "# Task",
+    "",
+    slice.prompt,
+    "",
+    declared.length
+      ? "## Files you may change\n\n" +
+        declared.map((f) => "- `" + f + "`" ).join("\n") +
+        "\n\nDo not change anything else. This list is what lets several tasks run at once without colliding."
+      : "## Files\n\nThis task declared no files to change. If you believe one must change, say which and stop.",
+    "",
+    "## When you finish",
+    "",
+    "Reply with JSON: `status` (`done` | `partial` | `blocked`), `summary`, `files_changed`, `unmet`, `notes`.",
+    slice.standing_rules && String(slice.standing_rules).trim() ? "\n## Standing rules\n\n" + slice.standing_rules : "",
+  ].join("\n");
+
+  let out;
+  let preflightWarn = null;
+  let preflightRemedy = null;
+  const argvUsed = [];
+  try {
+    fs.mkdirSync(wdir, { recursive: true });
+    fs.writeFileSync(taskFile, task, "utf8");
+    fs.writeFileSync(schemaFile, JSON.stringify(EXTRA_CLI_RETURN_SCHEMA, null, 2), "utf8");
+
+    const a = {
+      prof,
+      route,
+      cli,
+      cfg,
+      key,
+      cli_key_name: (prof.credential && prof.credential.key_name) || null,
+      model: route.model,
+      root,
+      cwd,
+      taskFile,
+      outFile,
+      schemaFile,
+      timeouts,
+      isGit: fs.existsSync(path.join(root, ".git")),
+    };
+    // A per-adapter refusal that can be made BEFORE spending anything. Codex's
+    // custom-provider requirement is the reason this hook exists.
+    if (adapter.preflight) {
+      const pf = adapter.preflight(a);
+      if (pf && !pf.ok) return fail(pf.reason || "invalid_request", pf.error, { adapter: cli.bin, remedy: pf.remedy || null });
+      // A warning is carried THROUGH, not printed and forgotten. It is the only
+      // notice a user gets that a config file outside this project decides
+      // whether the next wave starts at all.
+      if (pf && pf.warn) {
+        preflightWarn = pf.warn;
+        preflightRemedy = pf.remedy || null;
+      }
+    }
+
+    const argv = adapter.argv(a);
+    argvUsed.push(...argv);
+    const r = spawnCmdSafe(bin, argv, {
+      cwd,
+      env: Object.assign({}, process.env, adapter.env(a)),
+      encoding: "utf8",
+      timeout: timeouts.wall_ms,
+      killSignal: "SIGTERM",
+      maxBuffer: EXTRA_MAX_OUTPUT_BYTES,
+      windowsHide: true,
+    });
+    if (r.error && r.error.code === "ETIMEDOUT")
+      return fail("timeout", `no answer in ${Math.round(timeouts.wall_ms / 1000)}s (the dispatch wall clock).`, {
+        adapter: cli.bin,
+        argv: argvUsed,
+      });
+    if (r.error) return fail("spawn-failed", r.error.message, { adapter: cli.bin, argv: argvUsed });
+
+    let lastMessage = null;
+    try {
+      lastMessage = fs.readFileSync(outFile, "utf8");
+    } catch (_) {}
+    out = { stdout: r.stdout || "", stderr: r.stderr || "", status: r.status, lastMessage };
+  } finally {
+    try {
+      fs.rmSync(wdir, { recursive: true, force: true });
+    } catch (_) {}
+  }
+
+  const p = adapter.parse(out);
+  // A tool that can be made to answer in a schema is asked to. Prose parsing
+  // stays the FLOOR either way — the same rule engine A applies to stream-json.
+  let structured = null;
+  for (const src of [out.lastMessage, p.text]) {
+    if (!src) continue;
+    const m = /\{[\s\S]*\}/.exec(String(src));
+    if (!m) continue;
+    try {
+      const v = JSON.parse(m[0]);
+      if (v && typeof v === "object" && typeof v.status === "string") {
+        structured = v;
+        break;
+      }
+    } catch (_) {}
+  }
+
+  const base = {
+    engine: "cli",
+    adapter: cli.bin,
+    format: p.parsed,
+    exit_code: out.status,
+    duration_ms: Date.now() - started,
+    argv: argvUsed,
+    attached: cli.attach || null,
+    output_file: null, // the work dir is gone by now, and a path to a deleted file is worse than none
+    model_requested: route.model,
+    model_reported: p.model_reported || "unknown",
+    model_map: { primary: route.model, small: route.model, small_source: "n/a", small_note: null, context_tokens: null },
+    // NULL, not four zeros. "the tool did not report tokens" and "the tool
+    // reported zero" are different facts, and /orc-budget must never price the
+    // first as the second.
+    usage: p.usage,
+    usage_note: p.usage
+      ? `token counts read from the tool's own \`${p.usage_source}\` field`
+      : `${cli.bin} reported no token counts, so there is NO vector — not a zero one. /orc-budget prices this run from its sample history or says it cannot.`,
+    // P9, on every engine.
+    cost_usd: null,
+    cost_note: "priced by /orc-budget from the dated provider table — never from a figure the worker supplied",
+    session_id: null,
+    text: p.text,
+    structured_output: structured,
+    structured_output_ok: !!structured,
+    tool_uses: p.events || 0,
+    tool_results: p.events || 0,
+    events: p.events || 0,
+    // The capability gap, ON THE RECORD. A gap that is not reported reads as a
+    // capability, and this one matters: it is the difference between "ORC
+    // refused that write" and "ORC asked it not to".
+    fence: {
+      paths: false,
+      declared_files: false,
+      note:
+        `${cli.bin} owns its own tools, so ORC does not mediate its file access. declared_files was written into the task as an INSTRUCTION, which is advice, not enforcement. ` +
+        "The checks that actually catch a stray write are the engine-blind ones: the worktree delta, the smoke gate and the reviewer. Engine `api` enforces the fence itself.",
+    },
+    privacy: {
+      applied: null,
+      summary: `none — engine cli composes no request body, so a routing policy cannot be enforced through it (engine api can). ${cli.bin} sends what ${cli.bin} decides to send.`,
+    },
+    preflight_warning: preflightWarn,
+    preflight_remedy: preflightRemedy,
+  };
+
+  if (out.status !== 0) {
+    const cls = extraCliClassify(out.stderr, out.stdout);
+    return Object.assign(base, {
+      ok: false,
+      outcome: "failed",
+      reason: cls,
+      retry: classifyFailure(cls).retry,
+      classified_from: "stderr pattern — neither adapter documents an exit-code table, so this is what the tool SAID, not what its exit code means",
+      error:
+        classifyFailure(cls).label +
+        " — " +
+        (String(out.stderr).trim().split("\n").slice(-3).join(" ").slice(0, 300) || `exit ${out.status} with nothing on stderr`),
+    });
+  }
+
+  // Exit 0 is not success — F3, and it is not specific to engine A.
+  //
+  // Three ways a tool that exited 0 has still told us it failed, in order of how
+  // explicit they are: a `turn.failed` event, a structured `blocked`, and no
+  // parseable output at all.
+  if (p.turn_failed) {
+    const cls = extraCliClassify(p.turn_failed, "");
+    return Object.assign(base, {
+      ok: false,
+      outcome: "failed",
+      reason: cls,
+      retry: classifyFailure(cls).retry,
+      error: `${cli.bin} reported a failed turn and still exited ${out.status}: ${String(p.turn_failed).slice(0, 300)}`,
+    });
+  }
+  // A tool that reports `blocked` in its own structured answer has told us it
+  // did not do the work, whatever it exited with.
+  if (structured && structured.status === "blocked")
+    return Object.assign(base, {
+      ok: false,
+      outcome: "failed",
+      reason: "unknown",
+      retry: false,
+      error: "the worker reported `blocked`: " + String(structured.summary || "").slice(0, 300),
+    });
+  if (structured && structured.status === "partial")
+    return Object.assign(base, {
+      ok: true,
+      outcome: "partial",
+      reason: "worker-reported-partial",
+      error: "the worker reported `partial`: " + String(structured.summary || "").slice(0, 300),
+    });
+  if (!p.text && !structured)
+    return Object.assign(base, {
+      ok: false,
+      outcome: "failed",
+      reason: "malformed-return",
+      retry: true,
+      error: `${cli.bin} exited 0 and produced nothing ORC can read. Neither its JSON stream nor its final message parsed.`,
+    });
+  return Object.assign(base, { ok: true, outcome: "done", reason: null, error: null });
+}
+
+// ── orc extra dispatch — THE BRIDGE ────────────────────────────────────────
+//
+// The orchestrator writes a task slice to a file and runs this. The slice
+// content is IDENTICAL to what a Claude executor would receive — only the
+// transport differs, which is the property that keeps every gate downstream
+// engine-blind.
+//
+// Exit codes: 0 done · 1 failed · 2 unknown profile / bad slice · 3 not routed
+// foreign (the caller dispatches to Claude normally) · 4 partial.
+async function extraDispatch(claudeDir) {
+  const asJson = wantsJson();
+  const taskFile = flag("--task");
+  const bail = (code, obj) => {
+    if (asJson) emitJson(obj, code);
+    console.error("❌ " + (obj.error || obj.reason));
+    process.exit(code);
+  };
+  if (typeof taskFile !== "string")
+    bail(2, { ok: false, reason: "no-slice", error: "usage: orc extra dispatch --task <slice.json> [--json]" });
+
+  let slice;
+  try {
+    slice = JSON.parse(fs.readFileSync(path.resolve(taskFile), "utf8"));
+  } catch (e) {
+    bail(2, { ok: false, reason: "bad-slice", error: `cannot read the task slice at ${taskFile}: ${e.message}` });
+  }
+  if (!slice || typeof slice.prompt !== "string" || !slice.prompt.trim())
+    bail(2, { ok: false, reason: "bad-slice", error: "the task slice needs a non-empty `prompt`." });
+  const score = Number(slice.score);
+  if (!Number.isFinite(score) || score < 0 || score > 100)
+    bail(2, { ok: false, reason: "bad-slice", error: "the task slice needs a `score` between 0 and 100 — routing is what this command does." });
+
+  // P5 — the SAME resolver the preflight printed. The bridge never re-derives
+  // a band, so what runs is always what the user was told would run.
+  const res = extraResolveFor(claudeDir, score, { role: slice.role || "executor", risk: (slice.risk || []).length || slice.risk_count || 0 });
+  if (res.resolved !== "extra") {
+    const obj = Object.assign({ ok: true, dispatched: false, reason: "not-routed" }, res);
+    if (asJson) emitJson(obj, 3);
+    console.log(`\n  not routed foreign — ${res.why}\n`);
+    process.exit(3);
+  }
+
+  const ledger = readExtra(claudeDir);
+  const prof = extraProfile(ledger, res.profile);
+  const route = ledger.routes.find((r) => bandCovers(r, score));
+  const cfg = resolvedConfig(claudeDir);
+
+  // The credential. `inMemory` is how an unattended wave works: the lane
+  // unlocked the vault ONCE at the Phase-1 stop and hands the value down
+  // through env, never through argv and never back to disk.
+  const cred = extraCredentialValue(claudeDir, prof, {
+    inMemory: process.env.ORC_EXTRA_KEY || null,
+    passphrase: null,
+    maxAttempts: cfg.extra_vault_max_attempts,
+  });
+  if (!cred.ok)
+    bail(1, {
+      ok: false,
+      dispatched: false,
+      outcome: "failed",
+      reason: cred.reason,
+      error: cred.error,
+      retry: false,
+      profile: prof.name,
+      // P6 — the caller always learns which Claude agent to fall back to,
+      // without a second lookup.
+      fallback_to: res.claude,
+    });
+
+  // The cap is enforced HERE, not remembered by the caller. A refusal is a
+  // clean, cheap answer the orchestrator can act on — it holds the task for
+  // the next wave — so it is exit 3 (`this one is not going foreign right
+  // now`), the same code as an unrouted task, rather than a failure.
+  const timeouts = extraTimeouts(cfg);
+  const cap = Math.max(1, Number(cfg.extra_max_concurrent) || 1);
+  const slot = takeSlot(claudeDir, cap, timeouts.wall_ms + 60000, slice.task_id);
+  if (!slot.ok) {
+    const obj = {
+      ok: true,
+      dispatched: false,
+      reason: "concurrency-cap",
+      cap,
+      in_flight: slot.live,
+      error: `extra_max_concurrent is ${cap} and ${slot.live} foreign ${slot.live === 1 ? "dispatch is" : "dispatches are"} already running. Per-provider rate limits are undocumented in aggregate, so ORC does not queue past the cap.`,
+      fallback_to: res.claude,
+    };
+    if (asJson) emitJson(obj, 3);
+    console.log("\n  " + ui.mark.warn(obj.error) + "\n");
+    process.exit(3);
+  }
+
+  const root = repoRootOf(claudeDir);
+  const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "orc-extra-"));
+  let out;
+  try {
+    const cwd = slice.cwd ? path.resolve(root, slice.cwd) : root;
+    if (prof.engine === "claude-shim") out = runClaudeShim({ prof, route, key: cred.value, cfg, slice, cwd, workDir });
+    else if (prof.engine === "api")
+      out = await runApiEngine({ prof, route, key: cred.value, cfg, slice, cwd, root, workDir, timeouts });
+    else if (prof.engine === "cli")
+      out = runCliEngine({ prof, route, key: cred.value, cfg, slice, cwd, root, workDir, timeouts });
+    else
+      out = {
+        ok: false,
+        outcome: "failed",
+        reason: "engine-unavailable",
+        retry: false,
+        error: `engine "${prof.engine}" is not one of: ${EXTRA_ENGINES.join(", ")}.`,
+      };
+  } finally {
+    // The system-prompt file is ORC's own composition, not a secret — but the
+    // work dir is temporary by design and a stale one is just litter.
+    try {
+      fs.rmSync(workDir, { recursive: true, force: true });
+    } catch (_) {}
+    releaseSlot(claudeDir, timeouts.wall_ms + 60000);
+  }
+
+  const payload = Object.assign(
+    {
+      dispatched: true,
+      task_id: slice.task_id || null,
+      score,
+      band: res.band,
+      via: res.via,
+      profile: prof.name,
+      provider: prof.provider,
+      engine: prof.engine,
+      declared_files: slice.declared_files || [],
+      fallback_to: res.claude,
+      announce: res.announce,
+    },
+    out
+  );
+  payload.trace_line = extraTraceLine(payload);
+  payload.trace_extras = extraTraceExtras(payload);
+  const code = payload.outcome === "done" ? 0 : payload.outcome === "partial" ? 4 : 1;
+  if (asJson) emitJson(payload, code);
+  extraDispatchRender(payload);
+  process.exit(code);
+}
+
+// ── The EXTRA trace line, composed ONCE ────────────────────────────────────
+//
+// The CLI assembles it and the lane copies it VERBATIM — the `orc challenge
+// record` precedent (v0.49.1), for the same reason: a lane that composed its own
+// wording for the same numbers would produce a second format, and `orc stats`,
+// `orc extra stats` and `/orc-retro` all read this line rather than parsing a
+// 20-minute trace.
+//
+// `tok=none` IS A REAL VALUE and the only correct one when the worker reported
+// no counts. `tok=0/0/0/0` would tell /orc-budget the run was free — while
+// engine api's `cw=0` is a MEASURED zero, which is the opposite fact. The two
+// must never be normalised together, so they are not rendered the same.
+function extraTraceLine(p) {
+  const secs = Math.max(0, Math.round((p.duration_ms || 0) / 1000));
+  const dur = `${Math.floor(secs / 60)}m${String(secs % 60).padStart(2, "0")}s`;
+  const u = p.usage;
+  const tok = u ? `${u.input}/${u.cache_write}/${u.cache_read}/${u.output}` : "none";
+  return (
+    `EXTRA ${p.profile}/${p.model_requested || "?"} engine=${p.engine} ` +
+    `task=${p.task_id || "?"} band=${p.band || "?"} tok=${tok} outcome=${p.outcome} dur=${dur}`
+  );
+}
+
+// The three continuation lines, each emitted ONLY when the thing it reports
+// actually happened. A `substitution` line on a clean run would be noise the
+// retro then has to filter; an ABSENT one on a dirty run is the failure this
+// whole field exists to prevent.
+function extraTraceExtras(p) {
+  const out = [];
+  if (p.model_reported && p.model_requested && p.model_reported !== "unknown" && p.model_reported !== p.model_requested)
+    out.push(`EXTRA substitution task=${p.task_id || "?"} :: requested=${p.model_requested} reported=${p.model_reported}`);
+  if (p.reroute && Array.isArray(p.served_by) && p.served_by.length)
+    out.push(`EXTRA reroute task=${p.task_id || "?"} :: ${p.served_by.join(",")}`);
+  // The fallback line is the CALLER's to emit AFTER it re-dispatches, because
+  // only the caller knows whether it did. What the CLI can honestly supply is
+  // the text, pre-composed, so the two wordings cannot diverge.
+  if (!p.ok && p.fallback_to && p.fallback_to.agent)
+    out.push(`EXTRA fallback task=${p.task_id || "?"} :: ${p.reason} → ${p.fallback_to.agent}`);
+  return out;
+}
+
+function extraDispatchRender(p) {
+  const head = `${p.profile}/${p.model_requested || "?"} · ${p.engine}`;
+  if (p.outcome === "done") console.log("\n" + ui.mark.ok(`${head} — done in ${Math.round((p.duration_ms || 0) / 1000)}s`));
+  else if (p.outcome === "partial") console.log("\n" + ui.mark.warn(`${head} — PARTIAL: ${p.error}`));
+  else console.log("\n" + ui.mark.bad(`${head} — ${p.reason}: ${p.error}`));
+  if (p.usage)
+    console.log(
+      ui.color.gray(
+        `  tokens  in ${p.usage.input} · cache-w ${p.usage.cache_write} · cache-r ${p.usage.cache_read} · out ${p.usage.output}` +
+          "   (never blended; priced from the dated provider table, never by the worker)"
+      )
+    );
+  if (p.model_reported && p.model_requested && p.model_reported !== p.model_requested)
+    console.log(
+      "  " +
+        ui.mark.warn(
+          `the endpoint reported model "${p.model_reported}" for a request for "${p.model_requested}".`
+        )
+    );
+  if (p.model_map && p.model_map.small_note) console.log("  " + ui.mark.warn(p.model_map.small_note));
+  // Engine C only. The policy line prints even when the policy is `none` — "no
+  // policy" and "a policy that did not apply" must not look the same.
+  if (p.privacy) console.log(ui.color.gray(`  policy  ${p.privacy.summary}`));
+  // Engine B only, and it is a WARNING rather than a grey note: "ORC refused
+  // that write" and "ORC asked it not to" are different promises.
+  if (p.fence && p.fence.declared_files === false) console.log("  " + ui.mark.warn("no fence — " + p.fence.note));
+  if (p.usage === null && p.usage_note) console.log("  " + ui.mark.warn(p.usage_note));
+  if (p.preflight_warning) {
+    console.log("  " + ui.mark.warn(p.preflight_warning));
+    if (p.preflight_remedy) console.log(ui.color.gray(p.preflight_remedy.split("\n").map((l) => "      " + l).join("\n")));
+  }
+  if (p.reroute) console.log("  " + ui.mark.warn("REROUTE — " + p.reroute_note));
+  else if (p.served_by && p.served_by.length) console.log(ui.color.gray(`  served by  ${p.served_by.join(", ")}`));
+  else if (p.served_by_note) console.log(ui.color.gray("  " + p.served_by_note));
+  if (p.files_written)
+    console.log(
+      ui.color.gray(
+        `  wrote  ${p.files_written.length ? p.files_written.join(", ") : "nothing"}` +
+          (p.turns ? `   ·  ${p.turns}/${p.max_turns} turns` : "") +
+          (p.bash_calls && p.bash_calls.length ? `  ·  ${p.bash_calls.length} shell command(s), all recorded` : "")
+      )
+    );
+  if (!p.ok && p.fallback_to)
+    console.log(ui.color.gray(`  fallback: ${p.fallback_to.agent} ${p.fallback_to.band}`));
+  // Copy this into the phase packet verbatim. It is printed rather than only
+  // returned in --json because the orchestrator reads the human output too, and
+  // a line it has to retype is a line it will retype differently.
+  if (p.trace_line) {
+    console.log(ui.color.gray("  trace   " + p.trace_line));
+    for (const x of p.trace_extras || []) console.log(ui.color.gray("          " + x));
+  }
+  console.log("");
+}
+
+// ── The concurrency cap, ENFORCED rather than remembered ───────────────────
+//
+// `extra_max_concurrent` defaults to 1 because per-provider rate limits are
+// undocumented in aggregate and a wave of three that 429s costs more in repairs
+// than the parallelism saved. A cap the orchestrator is merely TOLD about is
+// the remembered-not-dispatched pattern this repo has already lost to twice, so
+// the bridge holds the slots itself.
+//
+// Slots live in one small file. A crashed dispatch must not wedge the lane
+// forever, so a slot is reaped when its process is gone or its lease expired —
+// and the lease is derived from the same extra_timeout_s everything else is.
+const EXTRA_INFLIGHT = "extra-inflight.json";
+
+function inflightPath(claudeDir) {
+  return path.join(claudeDir, "orc", EXTRA_INFLIGHT);
+}
+
+const pidAlive = (pid) => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (e) {
+    return e.code === "EPERM"; // alive, just not ours to signal
+  }
+};
+
+function readSlots(claudeDir, leaseMs) {
+  let slots = [];
+  try {
+    const j = JSON.parse(fs.readFileSync(inflightPath(claudeDir), "utf8"));
+    slots = Array.isArray(j.slots) ? j.slots : [];
+  } catch (_) {}
+  const now = Date.now();
+  return slots.filter((s) => s && s.pid && pidAlive(s.pid) && now - (s.at || 0) < leaseMs);
+}
+
+function takeSlot(claudeDir, cap, leaseMs, label) {
+  const live = readSlots(claudeDir, leaseMs);
+  if (live.length >= cap) return { ok: false, live: live.length, cap };
+  const mine = { pid: process.pid, at: Date.now(), task: label || null };
+  try {
+    fs.mkdirSync(path.dirname(inflightPath(claudeDir)), { recursive: true });
+    fs.writeFileSync(inflightPath(claudeDir), JSON.stringify({ slots: live.concat(mine) }, null, 2) + "\n");
+  } catch (_) {
+    // A slot we cannot record is a slot we cannot enforce — but refusing to
+    // dispatch because a bookkeeping file is unwritable would be the cure
+    // being worse than the disease. Proceed, unmetered, rather than stop.
+    return { ok: true, unmetered: true };
+  }
+  return { ok: true, unmetered: false };
+}
+
+function releaseSlot(claudeDir, leaseMs) {
+  try {
+    const live = readSlots(claudeDir, leaseMs).filter((s) => s.pid !== process.pid);
+    fs.writeFileSync(inflightPath(claudeDir), JSON.stringify({ slots: live }, null, 2) + "\n");
+  } catch (_) {}
+}
+
+// ── The conformance matrix ─────────────────────────────────────────────────
+//
+// `tool_fidelity` is NOT a boolean, and that is the whole point of it. The
+// difference between "DeepSeek works" and "DeepSeek works if you set two
+// environment variables, and here they are" is the difference between a
+// feature and a support thread. Each dimension is `true | false | unknown`,
+// and `unknown` is an honest value that must never be rendered as either of
+// the others.
+//
+// Anthropic publishes the gateway protocol and its failure taxonomy, so this
+// is a CONFORMANCE RUN against a documented contract — not an exploratory
+// spike. The mitigations are known in advance; what is measured is which of
+// them this particular endpoint actually needs.
+const EXTRA_FIDELITY_DIMENSIONS = [
+  ["models_endpoint", "serves GET /v1/models — the free half of the connection gate"],
+  ["streams", "produces --output-format stream-json, which is what classifies a failure"],
+  ["tool_multi_turn", "a tool_use → tool_result round trip survives the shim (the known weak spot)"],
+  ["cache_read_seen", "honours cache_control — a shim that ignores it makes every turn look costlier than it is"],
+  ["adaptive_ok", "tolerates Claude Code's adaptive `thinking` field without a 400"],
+  ["betas_ok", "tolerates the pre-release beta body fields without a 400"],
+  ["structured_output_ok", "returns a schema-validated structured_output (prose parsing stays the floor either way)"],
+];
+
+const CONFORM_TASK = [
+  "Reply with exactly the word: CONFORM",
+  "Do not create, edit or delete any file. Do not run any command.",
+].join("\n");
+
+function extraConform(claudeDir, name) {
+  const asJson = wantsJson();
+  const deep = flag("--deep") === true;
+  const ledger = readExtra(claudeDir);
+  const prof = extraProfile(ledger, name);
+  if (!prof) {
+    const known = ledger ? ledger.profiles.map((x) => x.name) : [];
+    if (asJson) emitJson({ ok: false, reason: "unknown-profile", profile: name || null, known }, 2);
+    console.error(`❌ unknown profile "${name || ""}".`);
+    process.exit(2);
+  }
+  if (prof.engine !== "claude-shim") {
+    const msg = `conformance measures the /anthropic shim surface, and "${name}" is on engine ${prof.engine}. Only claude-shim has a shim to measure.`;
+    if (asJson) emitJson({ ok: false, reason: "not-applicable", engine: prof.engine, error: msg }, 1);
+    console.error("❌ " + msg);
+    process.exit(1);
+  }
+  const cfg = resolvedConfig(claudeDir);
+  const cred = extraCredentialValue(claudeDir, prof, { inMemory: process.env.ORC_EXTRA_KEY || null });
+  if (!cred.ok) {
+    if (asJson) emitJson(Object.assign({ ok: false, profile: name }, cred), 1);
+    console.error("❌ " + cred.error);
+    process.exit(1);
+  }
+
+  // A model to speak to. `models_seen` first, else whatever the route rows
+  // already point at — and if neither exists, say so instead of inventing one.
+  const routed = ledger.routes.filter((r) => r.profile === name);
+  const model = (prof.models_seen || [])[0] || (routed[0] && routed[0].model) || null;
+  if (!model) {
+    const msg = `no model id to test with. Run \`orc extra ping ${name}\` (or route a band) so ORC has one from the provider rather than a guess.`;
+    if (asJson) emitJson({ ok: false, reason: "no-model", error: msg }, 1);
+    console.error("❌ " + msg);
+    process.exit(1);
+  }
+
+  const fid = {};
+  for (const [k] of EXTRA_FIDELITY_DIMENSIONS) fid[k] = "unknown";
+  fid.models_endpoint = prof.verify_method === "models";
+
+  const runs = [];
+  const oneRun = (label, over) => {
+    const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "orc-conform-"));
+    try {
+      const out = runClaudeShim({
+        prof,
+        route: Object.assign({ model, small_model: routed[0] && routed[0].small_model, max_turns: 2 }, over || {}),
+        key: cred.value,
+        cfg,
+        slice: {
+          prompt: CONFORM_TASK,
+          standing_rules: "You are being probed for protocol conformance. Answer in one word.",
+          // Read only: a conformance run must never be able to change the tree.
+          allowed_tools: ["Read", "Glob", "Grep"],
+          permission_mode: "default",
+        },
+        cwd: repoRootOf(claudeDir),
+        workDir,
+        envOverride: over && over.envOverride,
+      });
+      runs.push(Object.assign({ label }, summariseRun(out)));
+      return out;
+    } finally {
+      try {
+        fs.rmSync(workDir, { recursive: true, force: true });
+      } catch (_) {}
+    }
+  };
+
+  // Run 1 — the mitigated run. This is the configuration a real dispatch uses,
+  // so its result is the one that decides whether this profile is usable.
+  const base = oneRun("mitigated");
+  fid.streams = base.format === "stream-json";
+  if (base.ok || base.outcome === "partial") {
+    fid.tool_multi_turn = base.tool_uses > 0 ? base.tool_results > 0 : "unknown";
+    fid.cache_read_seen = base.usage ? base.usage.cache_read > 0 : "unknown";
+  }
+
+  // Runs 2 and 3 — only with --deep, because each one costs another call and
+  // neither changes whether the profile WORKS. They change what ORC has to
+  // send: an endpoint that tolerates the fields does not need the flags, and
+  // knowing that is worth a fraction of a cent when you are debugging a 400.
+  if (deep && (base.ok || base.outcome === "partial")) {
+    const adaptive = oneRun("adaptive", { envOverride: { CLAUDE_CODE_DISABLE_ADAPTIVE_THINKING: "0" } });
+    fid.adaptive_ok = !!adaptive.ok;
+    const betas = oneRun("betas", { envOverride: { CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS: "0" } });
+    fid.betas_ok = !!betas.ok;
+    // structured_output travels in the `output_config` body field behind a beta
+    // header — exactly what DISABLE_EXPERIMENTAL_BETAS suppresses and what a
+    // weak shim 400s on. So it can only be true where betas are, and prose
+    // parsing stays the floor regardless.
+    fid.structured_output_ok = betas.ok ? "unknown" : false;
+  }
+
+  prof.tool_fidelity = { measured_at: new Date().toISOString(), model, deep, dimensions: fid };
+  extraHistory(ledger, "conform", { profile: name, deep, ok: !!base.ok });
+  writeExtra(claudeDir, ledger);
+
+  // Every FALSE maps to something the caller can act on — a fallback reason, a
+  // flag to keep, or a cost note. A matrix that only said "false" would be a
+  // measurement nobody could use.
+  const consequences = [];
+  if (fid.streams === false)
+    consequences.push({ dimension: "streams", effect: "failures cannot be classified from api_retry events, so ORC's retry budget is the only one left", fallback_reason: "malformed-return" });
+  if (fid.tool_multi_turn === false)
+    consequences.push({ dimension: "tool_multi_turn", effect: "this shim mangles tool blocks — engine `api` is the way to use this provider", fallback_reason: "invalid_request" });
+  if (fid.cache_read_seen === false)
+    consequences.push({ dimension: "cache_read_seen", effect: "cache reads are not honoured, so every turn costs full input price. This is a MEASUREMENT, not missing data", fallback_reason: null });
+  if (fid.adaptive_ok === false)
+    consequences.push({ dimension: "adaptive_ok", effect: "keep CLAUDE_CODE_DISABLE_ADAPTIVE_THINKING=1 — without it this endpoint 400s", fallback_reason: "invalid_request" });
+  if (fid.betas_ok === false)
+    consequences.push({ dimension: "betas_ok", effect: "keep CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS=1 — without it this endpoint 400s", fallback_reason: "invalid_request" });
+
+  const payload = {
+    ok: !!base.ok,
+    profile: name,
+    engine: "claude-shim",
+    model,
+    deep,
+    usable: !!base.ok || base.outcome === "partial",
+    dimensions: fid,
+    legend: Object.fromEntries(EXTRA_FIDELITY_DIMENSIONS),
+    consequences,
+    runs,
+    // The asymmetry worth stating wherever this is read: engine claude-shim
+    // does not COMPOSE the request body, so it cannot carry a provider-routing
+    // or data-retention policy. Engine `api` can. That is the first honest
+    // reason to choose the engine with more moving parts.
+    privacy_note:
+      "engine claude-shim cannot enforce a data-retention or provider-routing policy — it does not compose the request body. Engine `api` does. Some traffic (the fast-mode availability check, the WebFetch domain safety check) still reaches Anthropic regardless of the base URL.",
+    failure: base.ok ? null : { reason: base.reason, error: base.error, retry: base.retry },
+  };
+  if (asJson) emitJson(payload, base.ok ? 0 : 1);
+  extraConformRender(payload);
+  process.exit(base.ok ? 0 : 1);
+}
+
+const summariseRun = (o) => ({
+  ok: !!o.ok,
+  outcome: o.outcome,
+  format: o.format || null,
+  reason: o.reason || null,
+  duration_ms: o.duration_ms || null,
+  usage: o.usage || null,
+});
+
+function extraConformRender(p) {
+  console.log(ui.header(`ORC · extra conform — ${p.profile} (${p.model})`));
+  console.log("");
+  const mark = (v) => (v === true ? ui.color.green("yes") : v === false ? ui.color.red("NO") : ui.color.gray("unknown"));
+  console.log(ui.kv(EXTRA_FIDELITY_DIMENSIONS.map(([k, why]) => [k, mark(p.dimensions[k]), why])));
+  if (!p.deep)
+    console.log(
+      "\n  " +
+        ui.color.gray(
+          "adaptive_ok / betas_ok / structured_output_ok read `unknown` because measuring them\n" +
+            "  costs two more calls and changes what ORC SENDS, not whether this works. `--deep` measures them."
+        )
+    );
+  if (p.consequences.length) {
+    console.log("\n  What each NO costs you:");
+    for (const c of p.consequences) console.log(`    ${ui.glyph.bullet} ${c.dimension} — ${c.effect}`);
+  }
+  if (!p.ok) console.log("\n  " + ui.mark.bad(`${p.failure.reason}: ${p.failure.error}`));
+  else console.log("\n  " + ui.mark.ok("usable."));
+  console.log("\n  " + ui.color.gray(p.privacy_note) + "\n");
+}
+
+// ── orc extra privacy — the ONE enforceable privacy control ────────────────
+//
+// F6. A policy nobody can set is decorative, so this is the setter, and it is
+// deliberately narrow: five fields, all of them an aggregator's own documented
+// body fields, and none of them invented by ORC.
+//
+// It REFUSES BY NAME on engine claude-shim rather than storing a policy that
+// would never be sent. That asymmetry is the first honest reason to choose the
+// engine with more moving parts, and hiding it would make engine A look safer
+// than it is.
+//
+// It also refuses on a provider whose catalog row does not advertise
+// `provider_routing`: an unknown body field is a 400 mid-wave on any endpoint
+// that validates strictly, and a privacy control that breaks the run is not a
+// privacy control.
+function extraPrivacy(claudeDir, name) {
+  const asJson = wantsJson();
+  const ledger = readExtra(claudeDir);
+  const prof = extraProfile(ledger, name);
+  const fail = (code, reason, msg, extra) => {
+    if (asJson) emitJson(Object.assign({ ok: false, reason, error: msg }, extra || {}), code);
+    console.error("❌ " + msg);
+    process.exit(code);
+  };
+  if (!prof) {
+    const known = ledger ? ledger.profiles.map((x) => x.name) : [];
+    fail(2, "unknown-profile", `unknown profile "${name || ""}"${known.length ? ` — known: ${known.join(", ")}` : " — none configured yet"}`, { known });
+  }
+  if (prof.engine !== "api")
+    fail(
+      1,
+      "not-applicable",
+      `a routing policy is a REQUEST BODY field, and "${name}" is on engine ${prof.engine}, which does not compose one. ` +
+        `ANTHROPIC_CUSTOM_HEADERS adds headers, not body fields, so engine claude-shim cannot enforce this and ORC will not store a policy it would silently drop.\n` +
+        "   Engine `api` is the way to enforce it.",
+      { engine: prof.engine }
+    );
+  const row = catalogRow(readCatalog(), prof.provider);
+  if (!row || row.provider_routing !== true)
+    fail(
+      1,
+      "provider-unsupported",
+      `provider "${prof.provider}" does not advertise a provider-routing block. Sending one is an unknown body field, which is a 400 in the middle of a wave on any endpoint that validates strictly — so this is refused rather than stored.`,
+      { provider: prof.provider }
+    );
+
+  const onOff = (f) => {
+    const v = flag(f);
+    if (v === undefined) return undefined;
+    if (v === "on" || v === true) return true;
+    if (v === "off") return false;
+    fail(1, "bad-value", `${f} takes on | off (got "${v}").`);
+  };
+  const cleared = args.includes("--clear");
+  const pol = cleared ? {} : Object.assign({}, prof.privacy || {});
+  const zdr = onOff("--zdr");
+  if (zdr !== undefined) pol.zdr = zdr;
+  const rp = onOff("--require-parameters");
+  if (rp !== undefined) pol.require_parameters = rp;
+  const af = onOff("--allow-fallbacks");
+  if (af !== undefined) pol.allow_fallbacks = af;
+  const dc = flag("--data-collection");
+  if (dc !== undefined) {
+    if (dc !== "deny" && dc !== "allow") fail(1, "bad-value", `--data-collection takes deny | allow (got "${dc}").`);
+    pol.data_collection = dc;
+  }
+  const only = flag("--only");
+  if (only !== undefined) {
+    const list = String(only)
+      .split(",")
+      .map((x) => x.trim())
+      .filter(Boolean);
+    if (!list.length) fail(1, "bad-value", "--only takes a comma-separated list of provider slugs.");
+    pol.only = list;
+  }
+  const touched = cleared || zdr !== undefined || rp !== undefined || af !== undefined || dc !== undefined || only !== undefined;
+
+  if (touched) {
+    prof.privacy = Object.keys(pol).length ? pol : null;
+    extraHistory(ledger, "privacy", { profile: prof.name, privacy: prof.privacy });
+    writeExtra(claudeDir, ledger);
+  }
+  const eff = apiProviderPolicy(prof);
+  if (asJson)
+    emitJson(
+      {
+        ok: true,
+        profile: prof.name,
+        provider: prof.provider,
+        engine: prof.engine,
+        changed: touched,
+        privacy: prof.privacy || null,
+        block: eff.block,
+        summary: eff.summary,
+        enforced_by: "engine api composes the request body, so this is sent on every dispatch and is the only privacy control ORC can enforce rather than hope for",
+        still_leaves_the_machine:
+          "the prompt, the slice and every file the worker reads or writes. A routing policy decides WHO serves the request, not WHETHER it is sent.",
+      },
+      0
+    );
+  console.log(`\n${ui.color.cyan(prof.name)} — routing policy${touched ? " updated" : ""}`);
+  console.log(ui.kv([["policy", eff.summary], ["sent as", eff.block ? "body.provider on every dispatch" : "nothing"]]));
+  console.log(
+    "\n" +
+      ui.box([
+        "This decides WHO serves the request. It does not decide whether it is",
+        "sent: the prompt, the slice and every file the worker reads still leave",
+        "this machine.",
+      ]) +
+      "\n"
+  );
+}
+
+// ══ orc extra stats / rates — THE FLYWHEEL ══════════════════════════════════
+//
+// The question this exists to answer, and it is the only one that matters about
+// the whole feature: **is the cheap model actually cheaper once you count the
+// repairs?** A run that costs a tenth as much and then needs two fix cycles, a
+// reviewer P0 and a re-dispatch to Claude was not cheaper. Nothing else in ORC
+// can see that, because nothing else joins the foreign dispatch to what
+// happened next.
+//
+// It reads the `EXTRA` lines out of the trace files. Unlike `orc stats`, which
+// reads only the tail of each file, this SCANS THEM WHOLE — a foreign dispatch
+// is per task, so there is no one summary line to read, and inventing one would
+// mean the orchestrator remembering a running total across a wave, which is the
+// remembered-not-dispatched pattern this repo has already lost to twice. A full
+// scan of an on-demand report is the cheaper mistake.
+
+// `EXTRA ds/deepseek-v4 engine=api task=T3 band=[0,30) tok=1/2/3/4 outcome=done dur=0m41s`
+const EXTRA_LINE_RE = /\bEXTRA\s+(\S+?)\/(\S+)\s+engine=(\S+)\s+task=(\S+)\s+band=(\S+)\s+tok=(\S+)\s+outcome=(\S+)\s+dur=(\S+)/;
+const EXTRA_SUB_RE = /\bEXTRA\s+substitution\s+task=(\S+)\s*::\s*requested=(\S+)\s+reported=(\S+)/;
+const EXTRA_REROUTE_RE = /\bEXTRA\s+reroute\s+task=(\S+)\s*::\s*(\S+)/;
+const EXTRA_FALLBACK_RE = /\bEXTRA\s+fallback\s+task=(\S+)\s*::\s*(\S+)\s+→\s+(\S+)/;
+
+function parseExtraTok(tok) {
+  // `none` is a REAL value — the worker reported no counts. It must not become
+  // a zero vector, or the report says a run with unknown cost was free.
+  if (tok === "none") return null;
+  const p = String(tok).split("/").map(Number);
+  if (p.length !== 4 || p.some((n) => !Number.isFinite(n))) return null;
+  return { input: p[0], cache_write: p[1], cache_read: p[2], output: p[3] };
+}
+
+// A rate for a NON-Claude model. Never a family fallback: `rateFor`'s
+// substring guess is right for `claude-opus-*` and would be nonsense here.
+function foreignRate(table, provider, model) {
+  const block = table && table.providers && table.providers[provider];
+  const m = block && block.models && block.models[model];
+  if (m && ["input", "cache_write", "cache_read", "output"].every((k) => typeof m[k] === "number")) return m;
+  return null;
+}
+
+function extraStatsScan(claudeDir) {
+  const dir = resolveLogDir(claudeDir);
+  // Same convention as `orc stats`: --since filters on the FILENAME date,
+  // before any file is opened.
+  const sinceArg = flag("--since");
+  const cutoff = typeof sinceArg === "string" && sinceArg ? sinceArg : null;
+  let names = [];
+  try {
+    names = fs.readdirSync(dir).filter((f) => f.endsWith(".txt"));
+  } catch (_) {}
+
+  const rows = [];
+  const subs = [];
+  const reroutes = [];
+  const fallbacks = [];
+  let filesRead = 0;
+  for (const name of names) {
+    const m = TRACE_NAME.exec(name);
+    const g = m ? null : TRACE_GENERIC.exec(name);
+    if (!m && !g) continue;
+    const stamp = traceDateIso(m ? m[3] : g[1]);
+    if (cutoff && stamp < cutoff) continue;
+    let text = "";
+    try {
+      text = fs.readFileSync(path.join(dir, name), "utf8");
+    } catch (_) {
+      continue;
+    }
+    // Cheap pre-filter: most traces have no foreign dispatch at all, and
+    // splitting a 20-minute trace into lines to find that out is the cost this
+    // avoids on every file but the few that matter.
+    if (text.indexOf("EXTRA ") === -1) continue;
+    filesRead++;
+    for (const line of text.split(/\r?\n/)) {
+      const d = EXTRA_LINE_RE.exec(line);
+      if (d) {
+        rows.push({
+          run: name,
+          date: stamp,
+          profile: d[1],
+          model: d[2],
+          engine: d[3],
+          task: d[4],
+          band: d[5],
+          usage: parseExtraTok(d[6]),
+          outcome: d[7],
+          dur: d[8],
+        });
+        continue;
+      }
+      const su = EXTRA_SUB_RE.exec(line);
+      if (su) {
+        subs.push({ run: name, task: su[1], requested: su[2], reported: su[3] });
+        continue;
+      }
+      const rr = EXTRA_REROUTE_RE.exec(line);
+      if (rr) {
+        reroutes.push({ run: name, task: rr[1], providers: rr[2].split(",") });
+        continue;
+      }
+      const fb = EXTRA_FALLBACK_RE.exec(line);
+      if (fb) fallbacks.push({ run: name, task: fb[1], reason: fb[2], agent: fb[3] });
+    }
+  }
+  return { dir, rows, subs, reroutes, fallbacks, files_scanned: filesRead, since: cutoff };
+}
+
+function extraStats(claudeDir) {
+  const asJson = wantsJson();
+  const scan = extraStatsScan(claudeDir);
+  const table = readPricing(claudeDir);
+  const ledger = readExtra(claudeDir);
+  const providerOf = (profile) => {
+    const p = ledger && extraProfile(ledger, profile);
+    return p ? p.provider : null;
+  };
+
+  // Grouped BY PROFILE AND BAND, which is the pair a routing decision is made
+  // in — a per-provider total cannot tell you the [0,30) row was fine and the
+  // [30,70) row was a false economy.
+  const groups = new Map();
+  let priced = 0;
+  let unpriced = 0;
+  const missingRates = new Map();
+  for (const r of scan.rows) {
+    const key = `${r.profile}|${r.band}`;
+    if (!groups.has(key))
+      groups.set(key, {
+        profile: r.profile,
+        provider: providerOf(r.profile),
+        band: r.band,
+        engines: {},
+        models: {},
+        dispatches: 0,
+        outcomes: { done: 0, partial: 0, failed: 0, fallback: 0 },
+        usage: { input: 0, cache_write: 0, cache_read: 0, output: 0 },
+        // The count that keeps the vector honest: a total assembled from six of
+        // ten dispatches is not this band's cost, and saying so is the only way
+        // a reader can tell.
+        usage_reported: 0,
+        usage_missing: 0,
+        usd: null,
+      });
+    const g = groups.get(key);
+    g.dispatches++;
+    g.engines[r.engine] = (g.engines[r.engine] || 0) + 1;
+    g.models[r.model] = (g.models[r.model] || 0) + 1;
+    if (g.outcomes[r.outcome] === undefined) g.outcomes[r.outcome] = 0;
+    g.outcomes[r.outcome]++;
+    if (r.usage) {
+      g.usage = extraVectorAdd(g.usage, r.usage);
+      g.usage_reported++;
+      const rate = foreignRate(table, g.provider, r.model);
+      if (rate) {
+        const usd =
+          (r.usage.input * rate.input +
+            r.usage.cache_write * rate.cache_write +
+            r.usage.cache_read * rate.cache_read +
+            r.usage.output * rate.output) /
+          1e6;
+        g.usd = (g.usd || 0) + usd;
+        priced++;
+      } else {
+        unpriced++;
+        const k = `${g.provider || "?"}/${r.model}`;
+        missingRates.set(k, (missingRates.get(k) || 0) + 1);
+      }
+    } else g.usage_missing++;
+  }
+
+  const rows = [...groups.values()].sort((a, b) => b.dispatches - a.dispatches);
+  const total = scan.rows.length;
+  const payload = {
+    log_dir: scan.dir,
+    since: scan.since,
+    files_scanned: scan.files_scanned,
+    dispatches: total,
+    bands: rows,
+    // The three things that are ONLY visible here, and each is a different
+    // question. A substitution is "you did not get the model you asked for". A
+    // reroute is "you got the model and a different company served it". A
+    // fallback is "it did not work and Claude finished the job".
+    substitutions: scan.subs,
+    reroutes: scan.reroutes,
+    fallbacks: scan.fallbacks,
+    price_table: table ? { as_of: table.as_of, age_days: table._age_days, stale: table._stale, path: table._path } : null,
+    priced_dispatches: priced,
+    unpriced_dispatches: unpriced,
+    // NOT a warning ABOUT the user — every models map ships empty on purpose,
+    // because a wrong price gets believed. This is the pointer to the fix.
+    missing_rates: [...missingRates.entries()].map(([pair, n]) => ({ pair, dispatches: n })),
+    hint: total
+      ? "`orc extra rates` prints the JSON to paste for every provider/model pair with no rate."
+      : "no foreign dispatch has been traced yet. `orc extra route set <band> <profile>/<model>` and run a lane.",
+  };
+  if (asJson) emitJson(payload, total ? 0 : 1);
+
+  console.log(ui.header(`ORC · extra stats — ${scan.dir}`));
+  if (!total) {
+    console.log("\n  " + payload.hint + "\n");
+    process.exit(1);
+  }
+  console.log(
+    ui.color.gray(
+      `\n  ${plural(total, "foreign dispatch", "foreign dispatches")} across ${plural(scan.files_scanned, "trace")}` +
+        (scan.since ? ` since ${scan.since}` : "") +
+        "\n"
+    )
+  );
+  for (const g of rows) {
+    const oc = Object.entries(g.outcomes)
+      .filter(([, n]) => n)
+      .map(([k, n]) => `${k}:${n}`)
+      .join(" ");
+    console.log(
+      `  ${ui.color.cyan((g.profile + " " + g.band).padEnd(26))} ${String(g.dispatches).padStart(4)}  ${oc}` +
+        `   ${ui.color.gray(Object.keys(g.engines).join("+"))}`
+    );
+    const u = g.usage;
+    const tokLine =
+      g.usage_reported === g.dispatches
+        ? `in ${kTok(u.input)} · cache-w ${kTok(u.cache_write)} · cache-r ${kTok(u.cache_read)} · out ${kTok(u.output)}`
+        : // The honest form. Averaging a missing vector into the total would
+          // make an unknown cost look like a small one.
+          `in ${kTok(u.input)} · cache-w ${kTok(u.cache_write)} · cache-r ${kTok(u.cache_read)} · out ${kTok(u.output)}   ` +
+          ui.mark.warn(`from ${g.usage_reported}/${g.dispatches} dispatches — ${g.usage_missing} reported no counts`);
+    console.log("      " + ui.color.gray(tokLine));
+    console.log(
+      "      " +
+        (g.usd === null
+          ? ui.color.gray(`usd —  (no rate for ${g.provider || "?"} in the price table; a figure ORC did not price is never printed)`)
+          : ui.color.gray(`usd ${g.usd < 0.01 ? "<0.01" : g.usd.toFixed(2)}`))
+    );
+  }
+  const say = (label, arr, fmt) => {
+    if (!arr.length) return;
+    console.log("\n  " + ui.mark.warn(`${label}: ${arr.length}`));
+    for (const x of arr.slice(0, 8)) console.log("    " + ui.color.gray(fmt(x)));
+    if (arr.length > 8) console.log(ui.color.gray(`    … ${arr.length - 8} more`));
+  };
+  say("SUBSTITUTION — the endpoint answered with a different model", scan.subs, (x) => `${x.task}  requested ${x.requested} → reported ${x.reported}`);
+  say("REROUTE — the model id held and the serving provider changed", scan.reroutes, (x) => `${x.task}  ${x.providers.join(" → ")}`);
+  say("FALLBACK — the foreign dispatch failed and Claude finished it", scan.fallbacks, (x) => `${x.task}  ${x.reason} → ${x.agent}`);
+  if (payload.missing_rates.length) {
+    console.log(
+      "\n  " +
+        ui.mark.warn(
+          `${plural(payload.missing_rates.length, "provider/model pair has", "provider/model pairs have")} no rate, so ${payload.unpriced_dispatches} of ${total} dispatches are unpriced.`
+        )
+    );
+    console.log(ui.color.gray("     orc extra rates    prints the JSON to paste"));
+  }
+  console.log("");
+}
+
+// ── orc extra rates ────────────────────────────────────────────────────────
+// Every provider/model pair the traces have actually USED, and whether the
+// price table has a rate for it. This is the paste-the-JSON command, and it
+// exists because `bin/pricing.json` ships every `models` map EMPTY on purpose:
+// several of these vendors price by peak window or by tier, one sells a
+// subscription rather than tokens, and one is a passthrough with a surcharge.
+// A shipped figure that is wrong by 2x is worse than none, because a wrong
+// figure gets believed.
+function extraRates(claudeDir) {
+  const asJson = wantsJson();
+  const scan = extraStatsScan(claudeDir);
+  const table = readPricing(claudeDir);
+  const ledger = readExtra(claudeDir);
+  const providerOf = (profile) => {
+    const p = ledger && extraProfile(ledger, profile);
+    return p ? p.provider : null;
+  };
+  const pairs = new Map();
+  for (const r of scan.rows) {
+    const provider = providerOf(r.profile) || "custom";
+    const key = provider + "/" + r.model;
+    if (!pairs.has(key))
+      pairs.set(key, { provider, model: r.model, dispatches: 0, rate: foreignRate(table, provider, r.model) });
+    pairs.get(key).dispatches++;
+  }
+  const rows = [...pairs.values()].sort((a, b) => b.dispatches - a.dispatches);
+  const missing = rows.filter((r) => !r.rate);
+  const skeleton = {};
+  for (const r of missing) {
+    skeleton[r.provider] = skeleton[r.provider] || { models: {} };
+    skeleton[r.provider].models[r.model] = { input: 0, cache_write: 0, cache_read: 0, output: 0 };
+  }
+  const payload = {
+    price_table: table ? { as_of: table.as_of, age_days: table._age_days, stale: table._stale, path: table._path } : null,
+    pairs: rows,
+    missing: missing.map((r) => r.provider + "/" + r.model),
+    paste: Object.keys(skeleton).length ? { providers: skeleton } : null,
+    where: "point `orc config set budget_price_table <path>` at your own copy rather than editing the shipped file, so `orc update` never overwrites your rates",
+    caveats: rows
+      .map((r) => {
+        const b = table && table.providers && table.providers[r.provider];
+        return b && b.caveat ? { provider: r.provider, caveat: b.caveat } : null;
+      })
+      .filter(Boolean)
+      .filter((v, i, a) => a.findIndex((x) => x.provider === v.provider) === i),
+  };
+  if (asJson) emitJson(payload, missing.length ? 1 : 0);
+
+  console.log(ui.header("ORC · extra rates"));
+  if (!rows.length) {
+    console.log("\n  No foreign dispatch has been traced yet, so there is nothing to price.\n");
+    process.exit(0);
+  }
+  console.log("");
+  for (const r of rows)
+    console.log(
+      `  ${ui.color.cyan((r.provider + "/" + r.model).padEnd(40))} ${String(r.dispatches).padStart(4)} dispatches  ` +
+        (r.rate ? ui.mark.ok("rate present") : ui.mark.warn("NO RATE — usd will read —"))
+    );
+  for (const c of payload.caveats) console.log("\n  " + ui.mark.warn(`${c.provider}: ${c.caveat}`));
+  if (payload.paste) {
+    console.log("\n  Paste into your price table:\n");
+    console.log(
+      JSON.stringify(payload.paste, null, 2)
+        .split("\n")
+        .map((l) => "    " + l)
+        .join("\n")
+    );
+    console.log("\n  " + ui.color.gray(payload.where));
+  }
+  console.log("");
+  process.exit(missing.length ? 1 : 0);
+}
+
+function extraUsage() {
+  return (
+    "Usage: orc extra providers [--json]              the shipped, dated catalog\n" +
+    "       orc extra add <profile> --provider <id> --engine <api|claude-shim|cli>\n" +
+    "                               [--env-key NAME | --key-stdin] [--region <id>]\n" +
+    "                               [--base-url URL] [--anthropic-base-url URL]\n" +
+    "                               [--cli <bin>] [--cli-agent <name>]\n" +
+    "                               [--cli-attach http://localhost:4096] [--cli-args \"…\"]\n" +
+    "       orc extra list [--json]                   profiles + state, NEVER a secret\n" +
+    "       orc extra show <profile> [--json]\n" +
+    '       orc extra remove <profile> --reason "<why>"\n' +
+    "\n" +
+    "       orc extra ping <profile> [--deep] [--model <id>] [--json]\n" +
+    "                               [--key-stdin | --passphrase-stdin]\n" +
+    "                               the connection gate.  0 verified · 1 unreachable · 2 unknown profile\n" +
+    "                               --key-stdin        paste a NEW key (line 1 the key, optional line 2\n" +
+    "                                                  the passphrase that stores it after a green test)\n" +
+    "                               --passphrase-stdin re-test a STORED key: the passphrase decrypts it\n" +
+    "                                                  into memory for the probe and nothing else\n" +
+    "       orc extra models <profile> [--json]       cached from the last ping; never invented\n" +
+    "       orc extra unlock <profile>                prove the passphrase (the key is never printed)\n" +
+    "       orc extra rekey <profile>                 change the passphrase (needs the old one)\n" +
+    "\n" +
+    "       orc extra route [--json]                  the band table AND the Claude fall-through\n" +
+    "       orc extra route set <from>-<to> <profile>/<model>\n" +
+    "                               [--small-model <cheap-id>] [--max-turns N]\n" +
+    "       orc extra route rm <from>-<to>\n" +
+    "       orc extra resolve <score> [--role <r>] [--risk N] [--json]\n" +
+    "                               THE resolver.  0 = extra · 1 = claude\n" +
+    "       orc extra conform <profile> [--deep] [--json]\n" +
+    "                               measure the /anthropic shim: streams · tool round trip ·\n" +
+    "                               cache_control · the beta fields.  0 usable · 1 not\n" +
+    "       orc extra dispatch --task <slice.json> [--json]\n" +
+    "                               THE BRIDGE. 0 done · 1 failed · 2 bad slice ·\n" +
+    "                               3 not routed / capped · 4 partial\n" +
+    "       orc extra stats [--since YYYY-MM-DD] [--json]\n" +
+    "                               per profile per band, joined from the EXTRA trace lines:\n" +
+    "                               outcomes, substitutions, reroutes, fallbacks, tokens, usd\n" +
+    "       orc extra rates [--json]                  which provider/model pairs have a price, and\n" +
+    "                               the JSON to paste for the ones that do not.  0 all priced · 1 gaps\n" +
+    "       orc extra doctor [--json]                 0 clean · 1 findings"
+  );
+}
+
+async function extra() {
+  if (flag("--global")) {
+    console.error(
+      "❌ orc extra is project-scoped — a route table is this repo's. Run it from the project (or with --dir <path>)."
+    );
+    process.exit(1);
+  }
+  const claudeDir = resolveClaudeDir();
+  const pos = positionals(); // ["extra", <sub?>, <arg?>, …]
+  switch (pos[1]) {
+    case "providers":
+      extraProvidersCmd();
+      break;
+    case "add":
+      extraAdd(claudeDir, pos[2]);
+      break;
+    case undefined:
+    case "list":
+      extraList(claudeDir);
+      break;
+    case "show":
+      extraShow(claudeDir, pos[2]);
+      break;
+    case "remove":
+      extraRemove(claudeDir, pos[2]);
+      break;
+    case "ping":
+      await extraPing(claudeDir, pos[2]);
+      break;
+    case "models":
+      extraModels(claudeDir, pos[2]);
+      break;
+    case "unlock":
+      extraUnlock(claudeDir, pos[2]);
+      break;
+    case "route":
+      if (pos[2] === "set") extraRouteSet(claudeDir, pos[3], pos[4]);
+      else if (pos[2] === "rm") extraRouteRm(claudeDir, pos[3]);
+      else if (pos[2] === undefined || pos[2] === "list") extraRouteList(claudeDir);
+      else {
+        console.error(`Unknown: orc extra route ${pos[2]}\n` + extraUsage());
+        process.exit(1);
+      }
+      break;
+    case "resolve":
+      extraResolveCmd(claudeDir, pos[2]);
+      break;
+    case "privacy":
+      extraPrivacy(claudeDir, pos[2]);
+      break;
+    case "stats":
+      extraStats(claudeDir);
+      break;
+    case "rates":
+      extraRates(claudeDir);
+      break;
+    case "conform":
+      extraConform(claudeDir, pos[2]);
+      break;
+    case "dispatch":
+      await extraDispatch(claudeDir);
+      break;
+    case "doctor":
+      extraDoctor(claudeDir);
+      break;
+    default:
+      console.error(`Unknown: orc extra ${pos[1]}\n` + extraUsage());
+      process.exit(1);
+  }
+}
+
 // ── orc doctor (B6) — installed-side drift detector ────────────────────────
 // Read-only health report over a target .claude/ (respects --global / --dir).
 // `orc doctor --fix` = update + prune + settings re-merge (install overwrite).
@@ -16271,6 +21641,23 @@ function doctor() {
         { documents: dirty }
       );
     else if (docList(claudeDir).length) ok(`${plural(docList(claudeDir).length, "document")}, none drifted`);
+  } catch (_) {}
+
+  // 7) `orc extra` (v0.50.0). ONE line here, carrying the COUNT and the
+  // command that itemises it — the restraint is deliberate and the same call
+  // the two wiki findings made: a doctor that recites eleven finding ids for a
+  // subsystem most repos never arm is a doctor people learn to scroll past.
+  // Each id still gets its own FINDING_ROUTE row, because a caution routes to
+  // the panel that can CLEAR it.
+  try {
+    const ex = extraDoctorFindings(claudeDir);
+    if (ex.length)
+      warn(
+        "extra-findings",
+        `orc extra has ${plural(ex.length, "finding")} (${[...new Set(ex.map((f) => f.id))].join(", ")}) — \`orc extra doctor\` names each one`,
+        { count: ex.length, ids: [...new Set(ex.map((f) => f.id))], extra_findings: ex }
+      );
+    else if (readExtra(claudeDir)) ok("orc extra: profiles and routes clean");
   } catch (_) {}
 
   if (asJson) {
@@ -16807,6 +22194,37 @@ Usage:
     orc aftermath status [--since Nd]     churn · a deleted test · a revert · a broken promise
                                           (exit 0 clean / 1 churn / 2 a revert / 3 too shallow).
                                           Churn is a SIGNAL, never a verdict
+  orc extra [--dir <path>]                dispatch ORC's WORKERS to non-Claude agents — DeepSeek,
+                                          GLM, Kimi, MiniMax, Qwen, MiMo, a local Ollama, or any
+                                          endpoint you can name. The orchestrator stays Claude;
+                                          what changes is who executes a slice. Nothing happens
+                                          until \`extra_enabled\` is true (project-scoped; no --global)
+    orc extra providers [--json]          the shipped, DATED catalog. Providers, never models —
+                                          a shipped model list is wrong within a quarter
+    orc extra add <name> --provider <id> --engine <api|claude-shim|cli>
+                                          [--env-key NAME | --key-stdin] [--region <id>]
+                                          [--base-url URL] [--anthropic-base-url URL]
+                                          An env-var NAME is the recommended credential; a pasted
+                                          key goes to an encrypted vault. \`--key <value>\` is
+                                          refused — argv is world-readable
+    orc extra list | show <name> [--json] profiles + state, NEVER a secret
+    orc extra remove <name> --reason "…"  a reason is required; it names the routes it drops
+    orc extra ping <name> [--deep] [--model <id>] [--key-stdin] [--json]
+                                          THE CONNECTION GATE. Cheapest rung first, and the
+                                          profile records WHICH rung answered
+                                          (exit 0 verified / 1 unreachable / 2 unknown profile)
+    orc extra models <name> [--json]      cached from the last ping; never invented
+    orc extra unlock | rekey <name>       the vault. The key is never printed, and ten wrong
+                                          passphrases delete it on purpose
+    orc extra route [--json]              the band table AND the Claude fall-through — a gap is
+                                          not a hole, it is Claude, and it keeps its slot
+    orc extra route set <from>-<to> <profile>/<model> [--max-turns N]
+    orc extra route rm <from>-<to>
+    orc extra resolve <score> [--role <r>] [--risk N] [--json]
+                                          THE resolver — the ONLY thing that decides whether a
+                                          task goes foreign (exit 0 extra / 1 claude). It always
+                                          says WHY
+    orc extra doctor [--json]             (exit 0 clean / 1 findings)
   orc challenge [--dir <path>]            grade a FINISHED artifact against a goal you stated —
                                           ORC judges, you fix, ORC re-judges, and it never fixes
                                           what it judged (project-scoped; no --global)
@@ -17011,7 +22429,9 @@ Machine-readable output:
   challenge list | challenge status | challenge show | challenge diff | challenge expect |
   challenge lint | challenge outline | challenge record | challenge report |
   doc list | doc status | doc show | doc map | doc plan | doc outline | doc lint |
-  doc templates | doc targets.
+  doc templates | doc targets |
+  extra providers | extra list | extra show | extra ping | extra models |
+  extra route | extra resolve | extra doctor.
   It prints ONE object to stdout and keeps the command's normal exit code.
 
 Targets:
@@ -17122,6 +22542,12 @@ function jsonCrash(err) {
     // `splice` and `assemble`, which are doc.json's only writers.
     case "doc":
       doc();
+      break;
+    // v0.50.0 — dispatch ORC's workers to non-Claude agents. Every subcommand
+    // is a READ with an exit-code contract except `add`, `remove` and the
+    // route writers, which are extra.json's only writers.
+    case "extra":
+      await extra();
       break;
     case "ui":
       uiCmd();

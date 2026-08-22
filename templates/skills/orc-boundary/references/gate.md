@@ -69,6 +69,28 @@ case with a different cause.
 `boundary: unknown` on its dispatch line. Unknown is not REFUSE — refusing
 everything uncarded would make the first run after install useless.
 
+### Extra — a REFUSE area never goes foreign, in either mode
+
+A task whose area is **REFUSE never routes to a non-Claude worker** whatever the
+route table says (`extra_enabled`, `../../_shared/extra-dispatch.md`), and this
+holds in `warn` mode too — where the task still dispatches, but to Claude. It is
+the second hard hold-back beside the cited-risk one, and it is deliberately
+*wider* than the `block` mode it sits next to.
+
+The reason is that the two verdicts are answering different questions. `block`
+decides whether ORC should attempt the task at all, and `warn` says the user
+accepted that risk. Neither of them asked whether the work should leave the
+machine — and a REFUSE is, by construction, an area where ORC **cannot verify
+its own output** (that is one of the four questions the verdict is derived from).
+Handing exactly that work to the executor with the weakest fence and no
+`actual_model` line compounds the one condition the card was written about.
+
+Print it with the verdict, and name it in the `extra:` preflight's held-back
+count. **A card that caused a hold-back must say so on its own card**, so the
+next reader learns it from the boundary lane rather than from a routing table
+they were not looking at. `unknown` is not REFUSE here either — an uncarded area
+routes by the ordinary rules.
+
 ## `/orc-route`
 
 A plan with any REFUSE task **cannot route to `/orc-fast`**: fast has one executor

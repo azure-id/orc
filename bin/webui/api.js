@@ -53,7 +53,14 @@ function clearCache() {
 // `doctor` (1 = issues found), `resume` (1 = nothing waiting). So the exit code
 // is DATA here, never an error condition — a run counts as failed only when it
 // produced no parseable object.
-function runCli(argv, ctx, { json = false } = {}) {
+// `input` (v0.50.0) is stdin for the child, and it exists for exactly one
+// caller: the connection test, which takes a pasted API key on line 1 and an
+// optional passphrase on line 2. It is a parameter rather than a second spawn
+// helper because a secret must travel the SAME path everything else does —
+// never argv (world-readable in a process list), never a temp file, never a log
+// line. Nothing here ever echoes it back, and `command` below is built from
+// argv alone.
+function runCli(argv, ctx, { json = false, input = undefined } = {}) {
   const args = [...argv];
   if (json) args.push("--json");
   // Always target the project explicitly: the server's cwd is not a reliable
@@ -76,6 +83,7 @@ function runCli(argv, ctx, { json = false } = {}) {
     timeout: CLI_TIMEOUT_MS,
     windowsHide: true,
     env,
+    input,
   });
   const stdout = r.stdout || "";
   let data = null;
@@ -296,6 +304,24 @@ const READS = {
   "/api/doc/rules/one": (q) => ["doc", "rules", String(q.slug || "")],
   "/api/doc/forecast": (q) => ["doc", "forecast", String(q.slug || "")],
   "/api/doc/cost": (q) => ["doc", "cost", String(q.slug || "")],
+  // v0.50.0 — `orc extra`. Every one is a READ, and every one is a subprocess of
+  // the real command: the panel decides nothing about a provider, a model id, a
+  // verification state, a band or a price. It renders what the CLI computed.
+  //
+  // There is deliberately NO read that returns a credential. `orc extra list`
+  // and `orc extra show` go through `redactProfile`, which is an ALLOW-LIST, so
+  // a field added later that carries a secret has to be let through on purpose.
+  "/api/extra": () => ["extra", "list"],
+  "/api/extra/providers": () => ["extra", "providers"],
+  "/api/extra/show": (q) => ["extra", "show", String(q.profile || "")],
+  "/api/extra/models": (q) => ["extra", "models", String(q.profile || "")],
+  "/api/extra/route": () => ["extra", "route"],
+  // `stats` exits 1 with a real object when no foreign dispatch has been traced
+  // yet, and `rates` exits 1 when a pair has no price — both are exit-code-as-
+  // DATA, like `pattern status` and `wiki impact`, never an error.
+  "/api/extra/stats": (q) => (q.since ? ["extra", "stats", "--since", String(q.since)] : ["extra", "stats"]),
+  "/api/extra/rates": () => ["extra", "rates"],
+  "/api/extra/doctor": () => ["extra", "doctor"],
   "/api/patterns": () => ["pattern", "status"],
   "/api/gotchas": () => ["gotcha", "list"],
   "/api/stats": (q) => (q.since ? ["stats", "--since", String(q.since)] : ["stats"]),
@@ -408,6 +434,37 @@ const WRITES = {
   // it lives in `bin/cli.js`.
   "/api/run/close": (b) => ["run", "close", String(b.slug), "--reason", String(b.reason || "")],
   "/api/run/reopen": (b) => ["run", "reopen", String(b.slug)],
+  // v0.50.0 — `orc extra`. Adding a connection writes a PROFILE and nothing
+  // else: no key, no route, no change to how anything builds. Removing one
+  // REFUSES without a reason — the same rule the promise ledger retires an
+  // invariant under — and names the route rows it drops, so the form does not
+  // have to: there is one idea of a valid removal and it lives in bin/cli.js.
+  //
+  // The routing table (W12). Both are STAGED in the panel and applied one at a
+  // time in staged order, so a refused row never aborts the rest — and the CLI
+  // is still what refuses an overlap, an unverified profile or a bad band spec,
+  // BY NAME. There is deliberately no `--key <value>` anywhere, because the CLI
+  // refuses it BY NAME — argv is world-readable. A pasted key travels on the
+  // connection test's STDIN and nowhere else.
+  "/api/extra/add": (b) => {
+    const argv = ["extra", "add", String(b.name), "--provider", String(b.provider), "--engine", String(b.engine)];
+    if (b.region && b.region !== "default") argv.push("--region", String(b.region));
+    if (b.base_url) argv.push("--base-url", String(b.base_url));
+    if (b.anthropic_base_url) argv.push("--anthropic-base-url", String(b.anthropic_base_url));
+    if (b.cli_bin) argv.push("--cli", String(b.cli_bin));
+    if (b.cli_agent) argv.push("--cli-agent", String(b.cli_agent));
+    if (b.vault) argv.push("--key-stdin");
+    else if (b.env_key) argv.push("--env-key", String(b.env_key));
+    return argv;
+  },
+  "/api/extra/remove": (b) => ["extra", "remove", String(b.name), "--reason", String(b.reason || "")],
+  "/api/extra/route/set": (b) => {
+    const argv = ["extra", "route", "set", String(b.band), String(b.target)];
+    if (b.small_model) argv.push("--small-model", String(b.small_model));
+    if (b.max_turns) argv.push("--max-turns", String(b.max_turns));
+    return argv;
+  },
+  "/api/extra/route/rm": (b) => ["extra", "route", "rm", String(b.band)],
   "/api/crosslink/remove": (b) => ["crosslink", "remove", String(b.name)],
   // The UI assembles no YAML. It hands the CLI the same arguments the
   // interactive prompt collects, and every rejection the user sees is the
@@ -693,7 +750,27 @@ async function handleApi(req, res, url, ctx) {
   // spawn. This is what makes the STALE chip and the unhealthy doctor panel
   // designable on a machine where everything is green (see the plan, §9).
   if (ctx.fixtures) {
-    if (req.method !== "GET") return json(res, 200, { ok: true, fixture: true, command: "(fixtures — nothing ran)" });
+    if (req.method !== "GET") {
+      // Almost every mutation answers "nothing ran", which is the honest reply
+      // in a mode that runs nothing. The ONE exception is the connection test:
+      // its two outcomes are states the Extra panel is largely about, and a
+      // state with no fixture is a state nobody has ever looked at. A canned
+      // answer carries `data` and NOT the `fixture` flag, so the panel renders
+      // the real result shape — the command string is what says it was canned.
+      let body = {};
+      try {
+        body = await readBody(req);
+      } catch (_) {}
+      const canned = fixtures.post(route, body);
+      if (canned)
+        return json(res, 200, {
+          ok: true,
+          exit_code: canned.exit_code,
+          data: canned.data,
+          command: "(fixtures — nothing ran)",
+        });
+      return json(res, 200, { ok: true, fixture: true, command: "(fixtures — nothing ran)" });
+    }
     const canned = fixtures.get(route, q);
     if (canned === undefined) return json(res, 404, { error: "no fixture for " + route });
     return json(res, 200, { ok: true, exit_code: 0, data: canned, fixture: true });
@@ -809,6 +886,66 @@ async function handleApi(req, res, url, ctx) {
       type_this: lane ? lane.cmd : null,
       cwd: ctx.projectRoot,
     });
+  }
+
+  // v0.50.0 — THE CONNECTION TEST, and the one place this panel does something
+  // model-shaped. It is a DIAGNOSTIC in the same family as `orc doctor`: rung 1
+  // lists models and costs nothing, rung 2 sends a one-token completion and
+  // costs a fraction of a cent, and the CLI decides which — never this file.
+  //
+  // It is POST because it MUTATES: a green test writes `verified_at` onto the
+  // profile, and a red one on a never-verified profile REMOVES that profile
+  // (the CLI's own test-first-then-store lifecycle). A GET that did that would
+  // be reachable by a prefetch.
+  //
+  // A pasted key arrives in the BODY and leaves on the child's STDIN — line 1
+  // the key, an optional line 2 the passphrase that encrypts it. It is never in
+  // argv, never written here, and never echoed back: the response is the CLI's
+  // own `--json` object, which carries no credential by construction.
+  if (route === "/api/extra/ping") {
+    if (job && job.running) return json(res, 409, { error: "busy", job: jobView() });
+    const profile = String(body.profile || "");
+    if (!profile) return json(res, 400, { error: "missing argument" });
+    const argv = ["extra", "ping", profile];
+    let input;
+    if (body.key) {
+      // A NEW key: line 1 the key, an optional line 2 the passphrase that stores
+      // it after a green test.
+      argv.push("--key-stdin");
+      input = String(body.key) + chr10 + String(body.passphrase || "") + chr10;
+    } else if (body.passphrase) {
+      // A STORED key: the passphrase decrypts it into the CLI's memory for the
+      // probe. The two flags are mutually exclusive and the CLI refuses them
+      // together BY NAME, so this branch is an `else if` rather than a guess.
+      argv.push("--passphrase-stdin");
+      input = String(body.passphrase) + chr10;
+    }
+    const out = runCli(argv, ctx, { json: true, input });
+    clearCache();
+    // `ok` here is "did the CLI answer at all". Whether the CONNECTION worked is
+    // `data.ok` and the exit code, which are the CLI's answer and are passed
+    // through untouched — a failed probe is DATA, not a server error.
+    return json(res, out.ok ? 200 : 500, out.ok
+      ? { ok: true, exit_code: out.exit_code, data: out.data, command: out.command }
+      : { ...out, error: readFailReason(out) });
+  }
+
+  // v0.50.0 — proving a passphrase, which is the ONE action that clears the
+  // vault's countdown. It NEVER yields the key: `orc extra unlock` answers one
+  // question with a yes or a no, and its `attempt N of 10` message is the whole
+  // point of the feature, so it is passed back verbatim.
+  if (route === "/api/extra/unlock") {
+    if (job && job.running) return json(res, 409, { error: "busy", job: jobView() });
+    const profile = String(body.profile || "");
+    if (!profile) return json(res, 400, { error: "missing argument" });
+    const out = runCli(["extra", "unlock", profile], ctx, {
+      json: true,
+      input: String(body.passphrase || "") + chr10,
+    });
+    clearCache();
+    return json(res, out.ok ? 200 : 500, out.ok
+      ? { ok: true, exit_code: out.exit_code, data: out.data, command: out.command }
+      : { ...out, error: readFailReason(out) });
   }
 
   if (route === "/api/maintenance/apply") {

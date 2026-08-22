@@ -59,6 +59,7 @@ const NAMESPACES = [
   "handoff",
   "challenge",
   "docs",
+  "extra",
   "experiment",
   "tour",
 ];

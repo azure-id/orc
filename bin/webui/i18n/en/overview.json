@@ -78,5 +78,6 @@
   "overview.item.pactBroken.cta": "Open Promises",
   "overview.item.boundaryRefuse.cta": "Open Boundary",
   "overview.item.docDrifted.cta": "Open Docs",
-  "overview.item.wikiDebt.cta": "Open Knowledge"
+  "overview.item.wikiDebt.cta": "Open Knowledge",
+  "overview.item.extraFindings.cta": "Open Extra"
 }

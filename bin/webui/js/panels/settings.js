@@ -246,7 +246,13 @@ async function renderSettings(body) {
 function ladderCard(table) {
   const c = card(t("settings.ladder.title"));
   c.id = "ladder-card"; // the FLIP morph finds it by id, never by a :has() query
-  const active = table.active;
+  // `base` is the CLAUDE table that resolves. Since v0.50.0 `active` can be a
+  // COMPOSITE (`extra+opus5_only`) because an `orc extra` route row overlays
+  // the bands it covers — so branching on `active` here would fall through to
+  // the default arm and draw the WRONG ladder the moment Extra is armed. The
+  // overlay itself is the Extra panel's rail; this card stays the Claude
+  // ladder, which is exactly what it has always been.
+  const active = table.base || table.active;
   c.append(
     el(
       "div",

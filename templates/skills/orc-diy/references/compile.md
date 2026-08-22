@@ -23,8 +23,8 @@ second implementation, and the skill never stitches the flow itself.
    it, which is how `mock-example` went missing here for a whole release):
 
    `header` → `locked-blocks.md` (verbatim) → `trace` → `wiki` → `analyze` →
-   `planning` → `pattern` → `scoring` → `execution` → `review` → `security` →
-   `verify` → `testgen` → `mock-example` → `ship` → `summary`.
+   `planning` → `pattern` → `scoring` → `extra` → `execution` → `review` →
+   `security` → `verify` → `testgen` → `mock-example` → `ship` → `summary`.
 
    `trace` is UNCONDITIONAL — behavior tracing is permanent and is not a flow
    key, so every compiled flow carries the protocol (lane token `diy`) whatever

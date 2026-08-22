@@ -41,6 +41,13 @@ const FINDING_ROUTE = {
   // both, not merely the fallback.
   "wiki-unregistered": { panel: "knowledge", cta: "overview.item.wikiUnregistered.cta" },
   "wiki-debt": { panel: "knowledge", cta: "overview.item.wikiDebt.cta" },
+  // v0.50.0. `orc doctor` collapses the whole `orc extra` subsystem into ONE
+  // finding carrying the count and the ids — a doctor that recited eleven ids
+  // for a subsystem most repos never arm is a doctor people learn to scroll
+  // past. It routes to Extra because that is where every one of them is
+  // rendered beside the connection it is about, and where the connection test
+  // that clears most of them lives.
+  "extra-findings": { panel: "extra", cta: "overview.item.extraFindings.cta" },
 };
 const DEFAULT_FINDING_ROUTE = { panel: "maintenance", cta: "overview.item.doctor.cta" };
 const findingRoute = (id) => FINDING_ROUTE[id] || DEFAULT_FINDING_ROUTE;

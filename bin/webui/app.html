@@ -38,6 +38,7 @@
 <link rel="stylesheet" href="css/panels/handoff.css">
 <link rel="stylesheet" href="css/panels/challenge.css">
 <link rel="stylesheet" href="css/panels/docs.css">
+<link rel="stylesheet" href="css/panels/extra.css">
 <link rel="stylesheet" href="css/06-responsive.css">
 <link rel="stylesheet" href="css/04-motion.css">
 </head>
@@ -89,6 +90,13 @@
       <li><a href="#/pact"        data-panel="pact"        data-idx="p" data-i18n="nav.pact">Promises</a></li>
       <li><a href="#/boundary"    data-panel="boundary"    data-idx="b" data-i18n="nav.boundary">Boundary</a></li>
       <li><a href="#/handoff"     data-panel="handoff"     data-idx="h" data-i18n="nav.handoff">Self-serve</a></li>
+      <!--
+        v0.50.0. Extra sits directly above Flow because both answer the same
+        question — WHERE does a task run — and this is the one that can send it
+        off this machine. It is the last thing above the composer for that
+        reason, never buried under the reading panels.
+      -->
+      <li><a href="#/extra"       data-panel="extra"       data-idx="e" data-i18n="nav.extra">Extra</a></li>
       <li><a href="#/flow"        data-panel="flow"        data-idx="6" data-i18n="nav.flow">Flow</a></li>
       <li><a href="#/crosslink"   data-panel="crosslink"   data-idx="7" data-i18n="nav.crosslink">Crosslink</a></li>
       <li><a href="#/learn"       data-panel="learn"       data-idx="8" data-i18n="nav.learn">Learn</a></li>
@@ -182,6 +190,7 @@
 <script src="js/panels/handoff.js"></script>
 <script src="js/panels/challenge.js"></script>
 <script src="js/panels/docs.js"></script>
+<script src="js/panels/extra.js"></script>
 <script src="js/90-tour.js"></script>
 <script src="js/91-shortcuts.js"></script>
 <script src="js/99-boot.js"></script>

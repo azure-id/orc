@@ -186,7 +186,7 @@ first scan · STRUCTURAL · wide delta · a new exported symbol → **deep**; ot
 **light** (`orc-wiki-scanner-sonnet-5-high`). `always_deep` restores the old
 behaviour, `opus5_only` collapses BOTH tiers onto `orc-wiki-scanner-opus-5-med`
 (no new pair). **PRINT the resolved tier** — a cheaper model is never a quiet
-substitution. `wiki_refresh_budget` (0 = no cap) caps scan-tasks per run as a
+substitution. **Extra (`extra_enabled`, `../_shared/extra-dispatch.md`) is OPT-IN and reaches the SCANNER ONLY** — it needs `scanner` in `config.extra_roles`, which does not include it, and resolves against the tier just picked. A wiki doc is evidence-anchored and cheap to re-scan, which is what makes the scanner the one role here worth handing over; `orc wiki sync` never routes foreign (registration is CLI-derived — there is no model in it to replace). `wiki_refresh_budget` (0 = no cap) caps scan-tasks per run as a
 PLANNED stop, and `wiki_retire_after_runs` (0 = never) offers — never performs —
 retirement of a doc no run has sliced.
 Per scan-task: spawn `orc-wiki-scanner-opus-4-8-high` BY NAME (`orc-wiki-scanner-opus-5-med` under `opus5_only`, `orc-wiki-scanner-sonnet-5-high` at the light tier) with the area's file list + the

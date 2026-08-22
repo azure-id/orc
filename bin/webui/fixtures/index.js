@@ -33,6 +33,7 @@ const { docList, docParts, docStatuses, docMapSections, docMap, docLint, docPlan
 const { diy } = require("./flow.js");
 const { crosslink } = require("./crosslink.js");
 const { mockDetail } = require("./mockrun.js");
+const { extraProviders, extraList, extraDoctor, extraRoute, extraStats, extraRates, extraPingOk, extraPingBad, extraPingSaveOffer } = require("./extra.js");
 
 module.exports.get = function get(route, q) {
   switch (route) {
@@ -349,6 +350,29 @@ module.exports.get = function get(route, q) {
         waiting_runs: runs.runs.filter((r) => r.status === "waiting").map((r) => r.slug),
         dirty_tree: true,
       };
+    // v0.50.0 — `orc extra`. One of every state, including the ugly ones: a
+    // stale catalog, a vault part-way through its countdown, a vault that
+    // deleted itself, a missing environment key, overlapping route rows and a
+    // routed model the provider no longer lists.
+    case "/api/extra":
+      return extraList;
+    case "/api/extra/providers":
+      return extraProviders;
+    case "/api/extra/doctor":
+      return extraDoctor;
+    case "/api/extra/route":
+      return extraRoute;
+    case "/api/extra/stats":
+      return extraStats;
+    case "/api/extra/rates":
+      return extraRates;
+    case "/api/extra/show":
+      return {
+        ok: true,
+        profile: extraList.profiles.find((p) => p.name === (q && q.profile)) || extraList.profiles[0],
+        catalog: null,
+        history: [],
+      };
     case "/api/job":
       return { id: null, running: false };
     default:
@@ -357,3 +381,22 @@ module.exports.get = function get(route, q) {
 };
 
 // ── the states below are referenced above; declared after for readability ───
+
+// The POST half (v0.50.0). Almost every mutation in fixture mode answers "nothing
+// ran" and that is the honest answer — but the CONNECTION TEST'S OUTCOME is a
+// state this panel is largely about, and a state you cannot design if the wire
+// never lands. So exactly one route has canned answers, chosen deterministically
+// from the profile so they agree with what the list already claims.
+//
+// A route with no entry here still gets the ordinary "nothing ran" reply.
+module.exports.post = function post(route, body) {
+  // `add` answers OK so the CONNECT FLOW can be walked end to end in fixture
+  // mode — the add is only the step before the test, and the test's outcome is
+  // the state worth designing. Every other write still answers "nothing ran".
+  if (route === "/api/extra/add") return { exit_code: 0, data: { ok: true, next: "orc extra ping" } };
+  if (route !== "/api/extra/ping") return undefined;
+  const profile = String((body && body.profile) || "");
+  if (body && body.key && !body.passphrase) return { exit_code: 0, data: { ...extraPingSaveOffer, profile } };
+  if (profile === "router" || profile === "burned") return { exit_code: 1, data: { ...extraPingBad, profile } };
+  return { exit_code: 0, data: { ...extraPingOk, profile: profile || extraPingOk.profile } };
+};

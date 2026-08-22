@@ -27,5 +27,7 @@
   "tour.12.title": "The cheap part of the wiki",
   "tour.12.text": "Refreshing the whole wiki is expensive. This is the short, ranked list that actually matters - and the free repairs always come first.",
   "tour.13.title": "A long document, in one picture",
-  "tour.13.text": "Each block is a section, sized by how long it is and coloured by its state. Nothing here loads the document itself - ORC works from this map instead, which is why a long document does not end the session."
+  "tour.13.text": "Each block is a section, sized by how long it is and coloured by its state. Nothing here loads the document itself - ORC works from this map instead, which is why a long document does not end the session.",
+  "tour.14.title": "Work that runs somewhere else",
+  "tour.14.text": "One line from nothing to a hundred: how hard a task scored. Every part of it shows where that work actually runs — Claude in blue, a provider you connected in green. A range you have not connected keeps its slot, so \"I left the hard work on Claude on purpose\" never looks like \"there is no hard work\". Nothing leaves this machine until you connect something, test it, and press Apply."
 }

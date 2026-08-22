@@ -19,6 +19,7 @@ selector.
 | `pattern` | `ask` / `off` / `on` | Code-pattern gate on a cache miss |
 | `scoring` | `on` / `off` | Rubric scoring; `off` needs `fixed_executor` |
 | `fixed_executor` | (none) — an executor agent name | Used for every task when `scoring: off` |
+| `extra` | `off` / `on` | May this flow dispatch an executor to a non-Claude worker (`_shared/extra-dispatch.md`)? It decides WHETHER; `orc extra resolve` still decides WHERE, per task, at run time — route rows are NOT baked into the compiled flow, because the lock's staleness triggers cannot see the ledger change. `off` makes a globally-enabled Extra **INERT here**, announced once, so turning it on globally never silently changes a compiled flow |
 | `review` | `on` / `off` / `blocking-only` | Review phase strictness |
 | `security` | `off` / `ask` / `on` / `always` | Security pass; `always` drops the risk-floor trigger |
 | `verify` | `full` / `off` / `smoke` | Verify depth |

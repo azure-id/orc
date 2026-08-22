@@ -23,6 +23,50 @@ to the user as a ⛔ DOWNGRADE — never silently accepted. (A subagent can't
 exceed the MAIN session's tier, so a downgrade usually means the main session
 is on the wrong model.)
 
+## 2b. A FOREIGN return — the SUBSTITUTION check (v0.50.0)
+
+A foreign worker (`orc extra dispatch`, `_shared/extra-dispatch.md`) is not a
+Claude subagent. It has no injected system-prompt model-id line, so **it cannot
+carry `actual_model`** — and §2 must not be faked for it. A foreign return that
+claimed an `actual_model` would be claiming evidence that does not exist.
+
+It carries instead, and every one of these is quoted from the wire rather than
+assumed:
+
+- `engine` (`api` | `claude-shim` | `cli`), `provider`, `profile`
+- `model_requested` — what the route row asked for
+- **`model_reported`** — the `model` field the endpoint echoed back
+- `usage` — the four token kinds, never blended, **or `null`**
+
+**`model_reported != model_requested` is ⛔ SUBSTITUTION**, surfaced to the user
+exactly as ⛔ DOWNGRADE is today and never silently accepted. It is the only
+defence against an aggregator quietly serving something else. `unknown` is a
+valid, honest value and is reported as `unknown` — **never as a match**.
+
+**A clean model check is not a clean answer.** An aggregator's *provider-level*
+fallback is on by default and it PRESERVES the model id, so the substitution
+check reads clean while the code went to a different company. Engine `api`
+records the response's `provider` echo and reports **⚠ REROUTE**; the other two
+engines cannot see it at all, and their `served_by_note` says so. An absent
+measurement is never a pass.
+
+**`usage: null` is not four zeros.** A worker that reported no token counts
+(engine `cli` frequently) returns `null` plus a note. `{0,0,0,0}` would tell
+`/orc-budget` the run was free. Engine `api`'s `cache_write: 0` is the opposite
+case — a real measurement — so the two must never be normalised together.
+
+**The fence is per-engine, and the return says which one it had.** Engine `api`
+ENFORCES `declared_files`; engines `claude-shim` and `cli` ASK. A return
+carrying `fence: {declared_files: false}` means the list was an instruction, not
+a rule — treat §6 below as the only real check, and say so to the user rather
+than reporting a constraint that was never applied.
+
+Everything else in this file applies to a foreign return unchanged: the
+honest-status rules, the pattern attestation, the TDD attestation, the wiki
+attestation, and above all **§6, the worktree delta** — which is engine-blind
+because it reads the worktree rather than the return, and is therefore what
+makes a foreign executor safe at all.
+
 ## 3. Honest-status rules (executor returns)
 
 - `status=done` on a stack with a runnable build/test REQUIRES `evidence`

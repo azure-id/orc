@@ -23,6 +23,8 @@ pact:      11 holding · 2 drifted · 3 uncheckable
 bound:     9 execute · 2 escalate · 1 refuse (2 stale)
 after:     src/payments — 2 shipped files rewritten within 30 days of run store-credit
 crosslink: 2 boundaries (payments-api) — advisory
+extra:     ON — 4 of 9 tasks foreign · deepseek/deepseek-v4-flash via api [0,30)
+                · glm/glm-4.7 via cli [30,70) · 2 held back (risk: auth, money)
 scoring:   8-band default table
 tdd:       3 tasks with tests (T3, T6, T9) · 2 covered-by-existing · 2 no-behavior
            skipped: R4 translation strings (no-behavior) · R7 file split
@@ -65,6 +67,26 @@ waves:     3 planned — will pause after wave 2 (batch_pause_every=2)
 - **crosslink:** the crosslink line from `wiki-consult.md` when a probe hit
   (`cached` or `configured-no-cache`); omit the whole line when crosslink is
   not in play (state `none`).
+- **extra:** (v0.50.0) printed on **every** run where `config.extra_enabled` is
+  true — including a run where nothing routed foreign (`ON — 0 of 9 tasks
+  foreign; no route row covers this plan's scores`). This is the P0 line
+  (`a lane that sends work off Claude without saying so`), so unlike every other
+  line here it is not allowed a quiet branch. `extra_enabled: false` omits it
+  entirely — an off subsystem is not news.
+
+  One row per route row that MATCHED, each naming `provider/model via <engine>
+  [band]`, taken from `orc extra resolve --json` — never re-derived. Then, when
+  either applies and only then:
+
+  - `· <n> held back (risk: <the cited risks>)` — the cited-risk hold-back.
+    REQUIRED whenever it is non-zero, and it names the risks, because the whole
+    value of the count is that the user can tell it apart from a forgotten task.
+  - `· <profile> re-pinged: <result>` after a STALE verification was refreshed,
+    and `· <profile> LOCKED (vault) — falling back to <agent> for [band]` when a
+    vaulted key could not be opened at dispatch time. A locked vault is a cost
+    event, not just a routing one.
+
+  Canonical: `../../_shared/extra-dispatch.md`.
 - **scoring:** which executor table RESOLVED for this run — `8-band default
   table` · `Opus-5-only ladder (opus5_only)` · `custom
   (rubric_bands_override, <n> rows)`. An un-shown table is as unaccountable as
@@ -73,7 +95,10 @@ waves:     3 planned — will pause after wave 2 (batch_pause_every=2)
   first dispatch, not in a trace full of downgrades. When `opus5_only` is on,
   append ` · all fixed roles forced to Opus 5` and name any selector it
   shadowed (`rubric_bands_override` / `fable5_*` present but INERT) — a setting
-  the user tuned and the run then ignored has to be said out loud.
+  the user tuned and the run then ignored has to be said out loud. With Extra in
+  play the table is a COMPOSITE and reads as one (`8-band default table + extra
+  rows [0,30) [30,70)`) — Extra is an overlay, so naming only one of the two would
+  be naming the wrong half for every covered score.
 - **tdd:** ALWAYS printed on a lane whose TDD policy is on — BOTH branches, not
   only the exemption. Counted straight from the plan's `tdd_spec`, broken down
   by `disposition` so the user sees **what got no test and why** (v0.41.0):

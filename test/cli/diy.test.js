@@ -119,6 +119,10 @@ test("diy compile: the documented stitch order equals the compiler's order array
 
   assert.deepStrictEqual(seen, code, "compile.md and bin/cli.js must stitch the same blocks in the same order");
   assert.ok(code.includes("mock-example"), "the phase that went missing from the doc is in both");
+  // v0.50.0 — named explicitly so a REMOVAL is reported by name rather than as
+  // a diff of two lists. `extra` decides WHETHER a flow may send work off
+  // Claude; `orc extra resolve` still decides WHERE, per task, at run time.
+  assert.ok(code.includes("extra"), "the `extra` block is in the stitch order and in compile.md");
 });
 
 // The `orc ui` flow stepper draws `steps[]` and nothing else. If a block joins

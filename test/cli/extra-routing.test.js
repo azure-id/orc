@@ -1,0 +1,246 @@
+"use strict";
+// `orc extra` — the routing table and THE resolver.
+//
+// The load-bearing assertion here is the THREE-WAY agreement. `bin/cli.js` used
+// to hold two copies of the score ladder that had already drifted in NAME
+// (OPUS5_SCORE_TABLE vs OPUS5_BANDS), one feeding the config/UI view and one
+// feeding /orc-budget's forecast. Extra adds a third consumer — the dispatch
+// resolver — and a disagreement between them is not a cosmetic bug: it is a
+// forecast priced at Opus rates for a run that will execute on DeepSeek.
+//
+// So: for every band edge, what `orc config list --json` SHOWS, what
+// `orc extra resolve` DISPATCHES to, and what `orc extra route` prints as the
+// Claude fall-through must be the same agent.
+const { test } = require("node:test");
+const assert = require("node:assert");
+const fs = require("fs");
+const path = require("path");
+const { tmpdir, rmrf, cli } = require("../_helpers.js");
+const { start: fakeProvider } = require("./_fake-provider.js");
+
+const SECRET_KEY = "sk-live-PLANTEDSECRET0123456789";
+
+
+function project() {
+  const root = tmpdir();
+  const home = path.join(root, "home");
+  fs.mkdirSync(home, { recursive: true });
+  return { root, home, env: { HOME: home, USERPROFILE: home } };
+}
+const run = (p, args, env) => cli([...args, "--dir", p.root], { ...p.env, ...(env || {}) });
+const json = (r) => JSON.parse(r.stdout);
+const setCfg = (p, text) => {
+  fs.mkdirSync(path.join(p.root, ".claude"), { recursive: true });
+  fs.writeFileSync(path.join(p.root, ".claude", "orc.config.yaml"), text);
+};
+
+// A verified profile with one route row, without spending a cent.
+async function armed(p, band, model) {
+  const f = await fakeProvider("models");
+  run(p, ["extra", "add", "ds", "--provider", "custom", "--engine", "api", "--base-url", `http://127.0.0.1:${f.port}`, "--env-key", "K"]);
+  const ping = run(p, ["extra", "ping", "ds", "--json"], { K: SECRET_KEY });
+  assert.equal(ping.status, 0, "the fixture profile must verify: " + ping.stdout + ping.stderr);
+  if (band) {
+    const r = run(p, ["extra", "route", "set", band, `ds/${model || "fake-flash"}`, "--json"]);
+    assert.equal(r.status, 0, "route set failed: " + r.stdout + r.stderr);
+  }
+  f.stop();
+}
+
+// Every edge of the default 8-band table and of the opus5_only 3-band ladder.
+const EDGES = [0, 29, 30, 39, 40, 54, 55, 64, 65, 69, 70, 79, 80, 89, 90, 100];
+const agentAt = (rows, score) =>
+  (rows.find((r) => score >= r.from && (r.inclusive_to ? score <= r.to : score < r.to)) || {}).agent;
+
+test("GOLDEN: the config view, the resolver and the route fall-through name the SAME agent", () => {
+  for (const forced of [false, true]) {
+    const p = project();
+    if (forced) setCfg(p, "opus5_only: true\n");
+    const table = json(run(p, ["config", "list", "--json"])).score_table;
+    const shown = forced ? table.opus5_only : table.default;
+    assert.equal(table.active, forced ? "opus5_only" : "default");
+    assert.equal(table.extra, null, "no route rows, so no overlay");
+
+    // The fall-through rows `orc extra route` prints must tile 0-100 with the
+    // same agents — a table that showed only foreign bands would not be the
+    // routing table.
+    const fall = json(run(p, ["extra", "route", "--json"])).claude_fallthrough;
+    assert.equal(fall[0].from, 0);
+    assert.equal(fall[fall.length - 1].to, 100);
+
+    for (const score of EDGES) {
+      const resolved = json(run(p, ["extra", "resolve", String(score), "--json"]));
+      const expected = agentAt(shown, score);
+      assert.equal(resolved.claude.agent, expected, `score ${score} (${forced ? "opus5_only" : "default"}): resolver says ${resolved.claude.agent}, the config view says ${expected}`);
+      const gap = fall.find((g) => score >= g.from && (g.to >= 100 ? score <= 100 : score < g.to));
+      assert.equal(gap.agent, expected, `score ${score}: the route fall-through says ${gap.agent}`);
+      assert.equal(resolved.claude.table, forced ? "opus5_only" : "default");
+    }
+    rmrf(p.root);
+  }
+});
+
+test("route set: overlap is refused BY NAME; a gap is Claude and keeps its slot", async () => {
+  const p = project();
+  await armed(p, "0-30");
+
+  let r = run(p, ["extra", "route", "set", "20-50", "ds/fake-pro", "--json"]);
+  assert.equal(r.status, 1);
+  let j = json(r);
+  assert.equal(j.reason, "overlap");
+  assert.equal(j.conflicts_with.from, 0, "the refusal names the row it clashes with");
+  assert.match(j.error, /orc extra route rm 0-30/, "and names the command that clears it");
+
+  // Tiling is NOT required. The gaps are the point, and they are PRINTED —
+  // "I left the top band on Opus on purpose" and "there is no top band" must
+  // never look the same.
+  j = json(run(p, ["extra", "route", "--json"]));
+  assert.equal(j.foreign.length, 1);
+  assert.ok(j.claude_fallthrough.length > 0);
+  assert.equal(j.claude_fallthrough[0].from, 30, "the fall-through starts where the foreign row ends");
+  assert.equal(j.claude_fallthrough[j.claude_fallthrough.length - 1].to, 100);
+
+  // A band spec that is empty or backwards is refused with the shape it wanted.
+  for (const bad of ["50-50", "70-30", "banana", "0-200"]) {
+    const bad_r = run(p, ["extra", "route", "set", bad, "ds/fake-flash", "--json"]);
+    assert.equal(bad_r.status, 1, `"${bad}" must be refused`);
+  }
+  rmrf(p.root);
+});
+
+test("route set: an UNVERIFIED profile is refused; a model outside models_seen only WARNS", async () => {
+  const f = await fakeProvider("models");
+  const p = project();
+  run(p, ["extra", "add", "ds", "--provider", "custom", "--engine", "api", "--base-url", `http://127.0.0.1:${f.port}`, "--env-key", "K"]);
+
+  let r = run(p, ["extra", "route", "set", "0-30", "ds/fake-flash", "--json"]);
+  assert.equal(r.status, 1);
+  assert.equal(json(r).reason, "unverified", "nothing routes to an unproven endpoint");
+
+  run(p, ["extra", "ping", "ds", "--json"], { K: SECRET_KEY });
+  // A provider may add a model between pings. Refusing would make ORC's cache
+  // the authority on someone else's catalogue.
+  r = run(p, ["extra", "route", "set", "0-30", "ds/fake-turbo", "--json"]);
+  assert.equal(r.status, 0);
+  assert.equal(json(r).model_known, false);
+
+  // …but it IS a doctor finding, so it surfaces before a mid-wave 404.
+  const doc = run(p, ["extra", "doctor", "--json"]);
+  assert.equal(doc.status, 1);
+  assert.ok(json(doc).findings.some((x) => x.id === "extra-model-gone"));
+
+  f.stop();
+  rmrf(p.root);
+});
+
+test("THE RESOLVER explains every answer, and four gates can hold a task back", async () => {
+  const p = project();
+  await armed(p, "0-30");
+
+  // 1. The master gate. Nothing changes unless extra_enabled is true.
+  let j = json(run(p, ["extra", "resolve", "25", "--json"]));
+  assert.equal(j.resolved, "claude");
+  assert.match(j.why, /extra_enabled is false/);
+
+  setCfg(p, "extra_enabled: true\n");
+
+  // 2. The role gate — executor only by default.
+  j = json(run(p, ["extra", "resolve", "25", "--role", "reviewer", "--json"]));
+  assert.equal(j.resolved, "claude");
+  assert.equal(j.held_back, "role");
+
+  // Armed, in role, in band: it goes foreign — and says so.
+  const r = run(p, ["extra", "resolve", "25", "--json"]);
+  assert.equal(r.status, 0, "exit 0 = extra");
+  j = json(r);
+  assert.equal(j.resolved, "extra");
+  assert.equal(j.via, "extra:ds");
+  assert.match(j.announce, /sends the slice to a third party/, "P0's sentence is composed HERE, so no lane writes a second wording");
+  assert.ok(j.claude.agent, "the Claude answer it displaced is always carried, so a fallback needs no second lookup");
+
+  // 3. The risk gate. The SAME score, held back — and the hold-back is named,
+  // never silent.
+  const risky = run(p, ["extra", "resolve", "25", "--risk", "1", "--json"]);
+  assert.equal(risky.status, 1);
+  j = json(risky);
+  assert.equal(j.resolved, "claude");
+  assert.equal(j.held_back, "risk");
+  assert.equal(j.would_have_been.profile, "ds", "it says what it refused, not just that it refused");
+  assert.match(j.why, /extra_risk_tasks is off/);
+
+  // …and the gate opens when the user says so.
+  setCfg(p, "extra_enabled: true\nextra_risk_tasks: on\n");
+  assert.equal(json(run(p, ["extra", "resolve", "25", "--risk", "1", "--json"])).resolved, "extra");
+
+  // 4. Extra is an OVERLAY: a score no row covers falls straight through.
+  j = json(run(p, ["extra", "resolve", "85", "--json"]));
+  assert.equal(j.resolved, "claude");
+  assert.match(j.why, /OVERLAY/);
+  rmrf(p.root);
+});
+
+test("the shadow runs BOTH WAYS and is never silent", async () => {
+  const p = project();
+  await armed(p, "0-30");
+  setCfg(p, "extra_enabled: true\nopus5_only: true\n");
+
+  const cfg = json(run(p, ["config", "list", "--json"]));
+  // The truth is a composite, and a single word would be a lie about what the
+  // next dispatch does.
+  assert.equal(cfg.score_table.active, "extra+opus5_only");
+  assert.equal(cfg.score_table.base, "opus5_only");
+  assert.deepEqual(cfg.score_table.resolve_order, ["extra", "opus5_only", "rubric_bands_override", "default"]);
+  assert.equal(cfg.score_table.extra.length, 1);
+  assert.equal(cfg.score_table.extra[0].agent, null, "no Claude agent runs a foreign band");
+
+  const o5 = cfg.keys.find((k) => k.key === "opus5_only");
+  assert.equal(o5.is_shadowed, true);
+  assert.match(o5.shadow_reason, /partly shadowed by extra_enabled/);
+  assert.match(o5.shadow_reason, /\[0,30\)/, "the honest report is WHICH RANGES were taken");
+  assert.match(o5.shadow_reason, /every other score still resolves here/);
+
+  // And at SET time, both directions.
+  let r = run(p, ["config", "set", "opus5_only", "true"]);
+  assert.match(r.stderr, /\[0,30\).*routed to a non-Claude worker/s);
+  assert.match(r.stderr, /INERT in \/orc-quick/, "a shadowed setting must never be silent");
+  rmrf(p.root);
+});
+
+test("the nine config keys exist, with the defaults the contract states", () => {
+  const p = project();
+  const keys = json(run(p, ["config", "list", "--json"])).keys.filter((k) => k.key.startsWith("extra_"));
+  const by = Object.fromEntries(keys.map((k) => [k.key, k]));
+  assert.equal(keys.length, 9, "nine keys — the combinatorial part is a ledger, not YAML");
+  assert.equal(by.extra_enabled.default, false, "nothing changes unless it is armed");
+  assert.equal(by.extra_roles.default, "[executor]", "a reviewer you cannot trust is worse than no reviewer");
+  assert.equal(by.extra_risk_tasks.default, "off");
+  assert.equal(by.extra_on_failure.default, "fallback", "a failed foreign dispatch is never a dead run");
+  assert.equal(by.extra_max_concurrent.default, 1);
+  assert.equal(by.extra_unlock.default, "per-run");
+  assert.equal(by.extra_vault_max_attempts.default, 10);
+  assert.equal(by.extra_verify_max_days.default, 7);
+  assert.equal(by.extra_timeout_s.default, 900);
+
+  // The counter is inspectable, NOT disableable.
+  assert.equal(run(p, ["config", "set", "extra_vault_max_attempts", "0"]).status, 1);
+  assert.equal(run(p, ["config", "set", "extra_vault_max_attempts", "3"]).status, 0);
+  // A role that is not a dispatched role is refused by name.
+  assert.equal(run(p, ["config", "set", "extra_roles", "executor,orchestrator"]).status, 1);
+  assert.equal(run(p, ["config", "set", "extra_roles", "executor,reviewer"]).status, 0);
+  rmrf(p.root);
+});
+
+test("orc extra doctor: 0 clean / 1 findings, and an unrecoverable one says so", async () => {
+  const p = project();
+  // No ledger at all is not a finding — there is nothing to be wrong about.
+  assert.equal(run(p, ["extra", "doctor", "--json"]).status, 0);
+
+  const f = await fakeProvider("models");
+  run(p, ["extra", "add", "ds", "--provider", "custom", "--engine", "api", "--base-url", `http://127.0.0.1:${f.port}`, "--env-key", "NOT_SET_ANYWHERE"]);
+  const j = json(run(p, ["extra", "doctor", "--json"]));
+  const ids = j.findings.map((x) => x.id);
+  assert.ok(ids.includes("extra-unverified"), "a profile nothing can route to is worth saying");
+  assert.ok(ids.includes("extra-missing-key"));
+  f.stop();
+  rmrf(p.root);
+});

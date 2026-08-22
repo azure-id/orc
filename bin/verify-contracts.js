@@ -78,10 +78,12 @@ const CONTRACTS = [
       "agents/orc-wiki-scanner-opus-5-med.md",
       "agents/orc-wiki-scanner-sonnet-5-high.md",
       "hooks/orc-trace.js",
+      "skills/_shared/extra-dispatch.md",
       "skills/_shared/return-validation.md",
       "skills/orc-advisor/SKILL.md",
       "skills/orc-analyze-mini/SKILL.md",
       "skills/orc-boundary/SKILL.md",
+      "skills/orc-boundary/references/gate.md",
       "skills/orc-brainstorm/SKILL.md",
       "skills/orc-budget/SKILL.md",
       "skills/orc-budget/references/corpus.md",
@@ -154,6 +156,7 @@ const CONTRACTS = [
       "agents/orc-executor-sonnet-4-6-high.md",
       "agents/orc-executor-sonnet-4-6-med.md",
       "agents/orc-executor-sonnet-5-high.md",
+      "skills/_shared/extra-dispatch.md",
       "skills/orc-fast/SKILL.md",
       "skills/orc-mini/SKILL.md",
       "skills/orc-quick/SKILL.md",
@@ -217,6 +220,7 @@ const CONTRACTS = [
     token: "unmet[]",
     files: [
       // v0.40.0: a verifier unmet[] the same run CLOSED is a recordable gotcha.
+      "skills/_shared/extra-dispatch.md",
       "skills/_shared/gotchas.md",
       "agents/orc-executor-haiku-4-5.md",
       "agents/orc-executor-opus-4-7-high.md",
@@ -290,6 +294,43 @@ const CONTRACTS = [
       "skills/orc-quick/SKILL.md",
       "skills/orc/subskills/orc-review-verify/SKILL.md",
       "skills/orc/subskills/orc-review-verify/core.md",
+    ],
+  },
+  {
+    // v0.50.0 — the EXTRA trace verb. The wording is composed by
+    // `orc extra dispatch` and copied VERBATIM by the lane (the
+    // `orc challenge record` precedent), so the two halves live in two files
+    // and a rename on either side has to fail loudly.
+    name: "EXTRA trace verb — substitution continuation (v0.50.0)",
+    token: "EXTRA substitution",
+    binFiles: ["bin/cli.js"],
+    files: ["skills/orc/references/trace-protocol.md"],
+  },
+  {
+    // The additive tail on SCORE and DISPATCH. One token, two sides: the
+    // payload documents it, the CLI composes the profile half of it.
+    name: "foreign dispatch tail — via=extra:<profile> (v0.50.0)",
+    token: "via=extra:",
+    files: [
+      "hooks/orc-trace.js",
+      "skills/_shared/extra-dispatch.md",
+      "skills/orc/SKILL.md",
+      "skills/orc/references/trace-protocol.md",
+    ],
+  },
+  {
+    // The foreign return's downgrade check. `actual_model` cannot exist for a
+    // worker with no injected model-id line, so this is what replaces it — and
+    // it must never quietly become a synonym for a clean check.
+    name: "foreign return — SUBSTITUTION check replaces the downgrade check (v0.50.0)",
+    token: "SUBSTITUTION",
+    files: [
+      "skills/_shared/extra-dispatch.md",
+      "skills/_shared/return-validation.md",
+      "skills/orc-doc/SKILL.md",
+      "skills/orc-mini/SKILL.md",
+      "skills/orc-retro/SKILL.md",
+      "skills/orc/SKILL.md",
     ],
   },
   {
@@ -802,6 +843,7 @@ const CONTRACTS = [
     name: "interview decisions belong to the user (v0.42.0)",
     token: "a lane that answers its own interview question",
     files: [
+      "skills/_shared/extra-dispatch.md",
       "skills/_shared/interview.md",
       "skills/orc-brainstorm/SKILL.md",
       "skills/orc-challenge/SKILL.md",
@@ -819,6 +861,7 @@ const CONTRACTS = [
     name: "generated options belong to the user (v0.45.0 — the divergent mirror)",
     token: "a lane that picks its own favourite",
     files: [
+      "skills/_shared/extra-dispatch.md",
       "skills/_shared/interview.md",
       "skills/orc-brainstorm/SKILL.md",
       "skills/orc-challenge/SKILL.md",
@@ -834,6 +877,7 @@ const CONTRACTS = [
     name: "the grader never repairs (v0.47.0 — /orc-challenge)",
     token: "a lane that fixes what it judged",
     files: [
+      "skills/_shared/extra-dispatch.md",
       "skills/_shared/interview.md",
       "skills/orc-challenge/SKILL.md",
       "skills/orc-challenge/references/council.md",
@@ -915,6 +959,7 @@ const CONTRACTS = [
     name: "the council is the user's to pick (v0.49.1 — /orc-challenge)",
     token: "a lane that picks its own council",
     files: [
+      "skills/_shared/extra-dispatch.md",
       "skills/_shared/interview.md",
       "skills/orc-challenge/README.md",
       "skills/orc-challenge/SKILL.md",
@@ -1412,6 +1457,7 @@ const CONTRACTS = [
       "agents/orc-wiki-scanner-sonnet-5-high.md",
       "commands/orc-pattern.md",
       "skills/_shared/drift-recovery.md",
+      "skills/_shared/extra-dispatch.md",
       "skills/_shared/fable5-override.md",
       "skills/_shared/opus5-only.md",
       "skills/orc-analyze/references/deep-mode.md",
@@ -1421,6 +1467,7 @@ const CONTRACTS = [
       "skills/orc-challenge/references/intake.md",
       "skills/orc-claude/SKILL.md",
       "skills/orc-diy/README.md",
+      "skills/orc-diy/references/blocks/extra.md",
       "skills/orc-doc/README.md",
       "skills/orc-fast/SKILL.md",
       "skills/orc-mini/SKILL.md",
@@ -1564,6 +1611,7 @@ const CONTRACTS = [
     files: [
       "hooks/orc-effort-guard.js",
       "hooks/orc-statusline.js",
+      "skills/_shared/extra-dispatch.md",
       "skills/_shared/opus5-only.md",
       "skills/orc-diy/README.md",
       "skills/orc-diy/SKILL.md",
@@ -1606,6 +1654,7 @@ const CONTRACTS = [
     files: [
       "skills/orc-diy/references/blocks/analyze.md",
       "skills/orc-diy/references/blocks/execution.md",
+      "skills/orc-diy/references/blocks/extra.md",
       "skills/orc-diy/references/blocks/header.md",
       "skills/orc-diy/references/blocks/mock-example.md",
       "skills/orc-diy/references/blocks/pattern.md",
@@ -1946,6 +1995,7 @@ const CONTRACTS = [
     token: "tdd_spec",
     files: [
       // v0.40.0: a tdd_spec test driven red -> green is the primary record trigger.
+      "skills/_shared/extra-dispatch.md",
       "skills/_shared/gotchas.md",
       "agents/orc-executor-haiku-4-5.md",
       "agents/orc-executor-opus-4-7-high.md",
@@ -2048,6 +2098,7 @@ const CONTRACTS = [
     files: [
       "skills/orc-diy/references/blocks/execution.md",
       "skills/orc-mini/SKILL.md",
+      "skills/orc-retro/SKILL.md",
       "skills/orc/SKILL.md",
       "skills/orc/references/trace-protocol.md",
     ],
@@ -2263,6 +2314,7 @@ const CONTRACTS = [
     files: [
       "agents/orc-doc-writer-opus-5-med.md",
       "skills/_shared/README.md",
+      "skills/_shared/extra-dispatch.md",
       "skills/_shared/untrusted-input.md",
       "skills/orc-analyze/SKILL.md",
       "skills/orc-boundary/SKILL.md",
@@ -2485,6 +2537,7 @@ const CONTRACTS = [
     name: "the orchestrator never reads the document body (v0.48.0 — /orc-doc)",
     token: "a lane that reads its own document",
     files: [
+      "skills/_shared/extra-dispatch.md",
       "skills/orc-challenge/references/council.md",
       "skills/orc-doc/SKILL.md",
       "skills/orc-doc/references/chunking.md",
@@ -2864,7 +2917,24 @@ const BUDGETS = [
   // line printed VERBATIM, and a reference loaded later would arrive after the
   // planner already committed to building from a document that has not passed
   // its own review. Four lines, one probe, no new mechanics.
-  { file: "skills/orc/SKILL.md", maxLines: 494 },
+  // v0.50.0: deliberate raise 494→528 — Extra's four SEAMS, and every one of them
+  // is a decision the spine makes before (or instead of) loading a reference.
+  // (1) The subsystem header: the gate, the pointer, and `ONE resolver, and it is
+  // not you` — the rule a compacted orchestrator is most likely to lose, and the
+  // one whose loss produces a dispatch that does not match what the user was told.
+  // (2) The Phase-1 resolve+announce: it joins the probe block its five neighbours
+  // already occupy, and its `extra:` line is P0 — a run that crosses the boundary
+  // silently is the one failure this whole subsystem is shaped around, so it may
+  // not depend on a reference having been loaded. (3) The Phase-2 cited-risk
+  // HOLD-BACK: it changes WHETHER a task leaves Claude, which no reference loaded
+  // after scoring can do — the /orc-boundary-gate precedent exactly. (4) The
+  // Phase-3 transport switch (Bash, not the Task tool) plus §2b-instead-of-§2 on
+  // the return: a foreign worker emits no SPAWN/RETURN, so if the spine forgets
+  // the trace tail there is no record at all. Mechanics — the engine capability
+  // table, the five exit codes, the fence asymmetry, the fallback procedure —
+  // live in _shared/extra-dispatch.md, with the rendering rules in
+  // references/{preflight-report,effort-and-mode}.md.
+  { file: "skills/orc/SKILL.md", maxLines: 528 },
   // v0.33.0: deliberate raises 264→289 / 197→219 / 171→179 — orc-wiki gains the
   // crosslink-compile entry branch, the delta-refresh default (impact probe),
   // and the orientation/atlas assemble steps (detail in references/); mini
@@ -2896,7 +2966,13 @@ const BUDGETS = [
   // v0.40.0: deliberate raise 220→225 — the gotchas trigger (probe, inject,
   // append). Mini reads AND writes repair memory, and the write is the
   // orchestrator's alone; the trimmed mechanics live in _shared/gotchas.md §10.
-  { file: "skills/orc-mini/SKILL.md", maxLines: 225 },
+  // v0.50.0: deliberate raise 225→227 — Extra, as ONE paragraph beside the
+  // agent name-map, because that is the table it modifies. Mini has no score, so
+  // the resolve-the-BAND-at-both-edges rule decides WHETHER the single executor
+  // leaves Claude at all; it happens before any reference loads, and getting it
+  // wrong routes a whole run on a partially covering row. Mechanics in
+  // _shared/extra-dispatch.md.
+  { file: "skills/orc-mini/SKILL.md", maxLines: 227 },
   // v0.39.0: deliberate raises 195→201 / 179→182 — the analyst gains hard rules
   // 2b (a source it did not author is FOREIGN input) and 4a (the read ladder);
   // fast gains the ladder as a slice line. Both are hard rules by nature: they
@@ -2917,7 +2993,13 @@ const BUDGETS = [
   // v0.40.0: deliberate raise 182→187 — gotchas as an explicit NON-gate. It has
   // to be stated where the two prerequisites are stated, or a later reader adds
   // a third gate and breaks the lane's entire premise.
-  { file: "skills/orc-fast/SKILL.md", maxLines: 187 },
+  // v0.50.0: deliberate raise 187→189 — Extra, stated at the slice build beside
+  // the pinned executor name, with the same both-edges band rule mini uses and
+  // the explicit clause that Extra is ORTHOGONAL to the knowledge gate. That
+  // clause is the one a later reader would most plausibly get wrong — this lane
+  // is defined by having exactly two prerequisites, and a foreign executor is
+  // not a third one. Mechanics in _shared/extra-dispatch.md.
+  { file: "skills/orc-fast/SKILL.md", maxLines: 189 },
 ];
 
 function walk(dir, out) {

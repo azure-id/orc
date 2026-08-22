@@ -129,6 +129,18 @@ with the RESOLVED table's name** (`8-band default` / `Opus-5-only ladder
 (opus5_only)` / `custom (rubric_bands_override)`): the same logic
 applies to the mapping as to the number.
 
+**Extra (v0.50.0, `extra_enabled`) adds a `via` column and can make the head a
+PAIR.** An Extra route row is an OVERLAY that outranks the tables above **only
+for the scores it covers**, so a run can genuinely be running two tables at once
+and the head names both (`8-band default + extra rows [0,30) [30,70)`). The
+column reads `claude` or `extra:<profile> (<engine>)` and comes from
+`orc extra resolve --json` — the formula, the facets and the risk floor are
+untouched, and **the score is computed before the routing, never after it**. Two
+consequences the table has to show rather than imply: a cited `risk[]` HOLDS THE
+TASK BACK to its Claude band whatever the row says (`extra_risk_tasks: off`), and
+the `model` for a foreign task is the FOREIGN model id, not a Claude tier.
+Canonical: `../../_shared/extra-dispatch.md`.
+
 **4. Consistency check:** two tasks whose facet vectors differ in **≤1 facet must
 land in the same band** — or the SCORE line for the outlier **cites the one
 differing facet**. This is the specific fix for sibling tasks in the same domain

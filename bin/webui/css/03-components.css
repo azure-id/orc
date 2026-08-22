@@ -260,6 +260,12 @@ pre.block.wrap { white-space: pre-wrap; word-break: break-word; }
 
 .note { color: var(--text-dim); font-size: 12.5px; }
 .note + .note { margin-top: var(--sp-2); }
+/* `note bad` was written by six panels and styled by NONE of them (found at
+   v0.50.0): a malformed boundary card, a rejected house rule and an unpriced
+   band all rendered in the same grey as the sentence explaining them. The class
+   was always the intent; this is the rule that was missing. */
+.note.bad { color: var(--bad); }
+.note.warn { color: var(--warn); }
 .empty {
   padding: var(--sp-6) var(--sp-4);
   text-align: center;

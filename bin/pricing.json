@@ -11,7 +11,22 @@
     "",
     "`as_of` is load-bearing: a table older than 90 days makes every dollar",
     "figure print a staleness warning. Bump the date only when you have checked",
-    "the published rates."
+    "the published rates.",
+    "",
+    "`providers` (v0.50.0) is the same four-rate shape for a NON-CLAUDE endpoint",
+    "reached through `orc extra`. Every `models` map SHIPS EMPTY, on purpose, and",
+    "that is not an oversight: between this package's cutoff and any release the",
+    "lineup moves (DeepSeek V3.2 -> V4, Kimi K2 -> K2.7, GLM 4.6 -> 5.2), several",
+    "of these vendors price by PEAK/OFF-PEAK window or by tier, one is",
+    "subscription-only, and one is a passthrough with a surcharge. A shipped",
+    "figure that is wrong by 2x is worse than no figure, because a wrong figure",
+    "gets believed. So ORC ships the MECHANISM and no dollar figure without a",
+    "rate you put there yourself.",
+    "",
+    "Fill one in with `orc extra rates` — it lists every provider/model pair your",
+    "own traces have actually used, prints the JSON to paste, and says which ones",
+    "it has no rate for. A pair with no rate reports `usd: null` forever, never a",
+    "guess and never a family fallback."
   ],
   "as_of": "2026-08-01",
   "currency": "USD",
@@ -21,19 +36,74 @@
     "web_fetch_requests": 0.0
   },
   "models": {
-    "claude-opus-5": { "input": 15, "cache_write": 18.75, "cache_read": 1.5, "output": 75 },
-    "claude-opus-4-8": { "input": 15, "cache_write": 18.75, "cache_read": 1.5, "output": 75 },
-    "claude-opus-4-7": { "input": 15, "cache_write": 18.75, "cache_read": 1.5, "output": 75 },
-    "claude-fable-5": { "input": 15, "cache_write": 18.75, "cache_read": 1.5, "output": 75 },
-    "claude-sonnet-5": { "input": 3, "cache_write": 3.75, "cache_read": 0.3, "output": 15 },
-    "claude-sonnet-4-6": { "input": 3, "cache_write": 3.75, "cache_read": 0.3, "output": 15 },
-    "claude-haiku-4-5": { "input": 1, "cache_write": 1.25, "cache_read": 0.1, "output": 5 }
+    "claude-opus-5": {
+      "input": 15,
+      "cache_write": 18.75,
+      "cache_read": 1.5,
+      "output": 75
+    },
+    "claude-opus-4-8": {
+      "input": 15,
+      "cache_write": 18.75,
+      "cache_read": 1.5,
+      "output": 75
+    },
+    "claude-opus-4-7": {
+      "input": 15,
+      "cache_write": 18.75,
+      "cache_read": 1.5,
+      "output": 75
+    },
+    "claude-fable-5": {
+      "input": 15,
+      "cache_write": 18.75,
+      "cache_read": 1.5,
+      "output": 75
+    },
+    "claude-sonnet-5": {
+      "input": 3,
+      "cache_write": 3.75,
+      "cache_read": 0.3,
+      "output": 15
+    },
+    "claude-sonnet-4-6": {
+      "input": 3,
+      "cache_write": 3.75,
+      "cache_read": 0.3,
+      "output": 15
+    },
+    "claude-haiku-4-5": {
+      "input": 1,
+      "cache_write": 1.25,
+      "cache_read": 0.1,
+      "output": 5
+    }
   },
   "families": {
-    "opus": { "input": 15, "cache_write": 18.75, "cache_read": 1.5, "output": 75 },
-    "fable": { "input": 15, "cache_write": 18.75, "cache_read": 1.5, "output": 75 },
-    "sonnet": { "input": 3, "cache_write": 3.75, "cache_read": 0.3, "output": 15 },
-    "haiku": { "input": 1, "cache_write": 1.25, "cache_read": 0.1, "output": 5 }
+    "opus": {
+      "input": 15,
+      "cache_write": 18.75,
+      "cache_read": 1.5,
+      "output": 75
+    },
+    "fable": {
+      "input": 15,
+      "cache_write": 18.75,
+      "cache_read": 1.5,
+      "output": 75
+    },
+    "sonnet": {
+      "input": 3,
+      "cache_write": 3.75,
+      "cache_read": 0.3,
+      "output": 15
+    },
+    "haiku": {
+      "input": 1,
+      "cache_write": 1.25,
+      "cache_read": 0.1,
+      "output": 5
+    }
   },
   "_plans_readme": [
     "Quota view. A Pro/Max user does not pay per token — they burn a 5-hour",
@@ -44,9 +114,21 @@
     "renderer says so."
   ],
   "plans": {
-    "pro": { "label": "Pro", "window_weighted_tokens": 900000, "weekly_weighted_tokens": 9000000 },
-    "max5": { "label": "Max 5x", "window_weighted_tokens": 4500000, "weekly_weighted_tokens": 45000000 },
-    "max20": { "label": "Max 20x", "window_weighted_tokens": 18000000, "weekly_weighted_tokens": 180000000 }
+    "pro": {
+      "label": "Pro",
+      "window_weighted_tokens": 900000,
+      "weekly_weighted_tokens": 9000000
+    },
+    "max5": {
+      "label": "Max 5x",
+      "window_weighted_tokens": 4500000,
+      "weekly_weighted_tokens": 45000000
+    },
+    "max20": {
+      "label": "Max 20x",
+      "window_weighted_tokens": 18000000,
+      "weekly_weighted_tokens": 180000000
+    }
   },
   "context_windows": {
     "claude-opus-5": 200000,
@@ -56,5 +138,63 @@
     "claude-sonnet-5": 200000,
     "claude-sonnet-4-6": 200000,
     "claude-haiku-4-5": 200000
+  },
+  "providers": {
+    "_note": "Rates are USD per MILLION tokens, four per model, never one. `models` maps a provider's own model id EXACTLY as the endpoint reports it.",
+    "deepseek": {
+      "label": "DeepSeek",
+      "caveat": "Prices differ by PEAK and OFF-PEAK window, so one number cannot be right for both. Record the window you actually run in.",
+      "models": {}
+    },
+    "zai": {
+      "label": "Z.ai / GLM",
+      "caveat": "The current flagship is sold inside a Coding Plan subscription rather than per token, which a per-token table cannot express. Leave it empty and read your invoice.",
+      "models": {}
+    },
+    "moonshot": {
+      "label": "Moonshot / Kimi",
+      "caveat": null,
+      "models": {}
+    },
+    "minimax": {
+      "label": "MiniMax",
+      "caveat": null,
+      "models": {}
+    },
+    "qwen": {
+      "label": "Alibaba / Qwen",
+      "caveat": "Tiered by request size, so a single rate is an average rather than a price.",
+      "models": {}
+    },
+    "mimo": {
+      "label": "Xiaomi / MiMo",
+      "caveat": null,
+      "models": {}
+    },
+    "stepfun": {
+      "label": "StepFun",
+      "caveat": null,
+      "models": {}
+    },
+    "siliconflow": {
+      "label": "SiliconFlow",
+      "caveat": null,
+      "models": {}
+    },
+    "openrouter": {
+      "label": "OpenRouter",
+      "caveat": "A PASSTHROUGH: the rate is the upstream provider's, plus a surcharge on credit purchase. It also reroutes between providers by default while preserving the model id, so the model id alone does not identify who you paid.",
+      "models": {}
+    },
+    "ollama": {
+      "label": "Ollama (local)",
+      "caveat": "Local inference has no per-token price. Zero here would be true of the API bill and false of the electricity and the hardware, so it is left empty rather than asserted as free.",
+      "models": {}
+    },
+    "custom": {
+      "label": "Custom endpoint",
+      "caveat": null,
+      "models": {}
+    }
   }
 }

@@ -12,7 +12,7 @@
 // and unmodified: single keys, and ONLY when you are not typing into something.
 const SHORTCUTS = () => [
   ["1 – 9, 0", t("shortcuts.panels")],
-  ["d · c · p · b · h · m", t("shortcuts.panelsLetters")],
+  ["d · c · p · b · h · e · m", t("shortcuts.panelsLetters")],
   ["/", t("shortcuts.filter")],
   ["r", t("shortcuts.reload")],
   ["t", t("shortcuts.theme")],

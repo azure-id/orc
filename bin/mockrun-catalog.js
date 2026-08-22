@@ -77,6 +77,11 @@ const GROUP_OF = {
   "context-combiner": "decide",
   "orc-poly": "decide",
 
+  // v0.50.0. It sits with the TOOLS rather than the build lanes: `orc extra` is
+  // not a lane you invoke — it is a setting that changes where the lanes you
+  // already run send their work.
+  "orc-extra": "tools",
+
   "orc-wiki": "knowledge",
   "orc-pattern": "knowledge",
   "orc-learn": "knowledge",

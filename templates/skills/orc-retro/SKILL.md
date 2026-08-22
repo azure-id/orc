@@ -128,6 +128,47 @@ to `orc-retro-opus-5-med` when `opus5_only: true` forces it
      itself errors after the preflight passed, surface the error verbatim and
      point at the local report copy — never claim it was filed.
 
+## Foreign dispatches — the `EXTRA` verb (v0.50.0)
+
+A task can execute on a **non-Claude worker** (`_shared/extra-dispatch.md`). When
+it does, the trace carries an `EXTRA` line per dispatch and **no `SPAWN` /
+`RETURN` at all** — a foreign worker is not a Claude subagent, so the hook has
+nothing to observe (P7, the `/orc-quick` ad-hoc-recon precedent).
+
+**Read `EXTRA` or every foreign dispatch reads as a MISSING RETURN.** That is
+the concrete failure this section exists to prevent: a leak count inflated by
+work that completed perfectly well somewhere else. A foreign dispatch also
+contributes nothing to NARRATION COVERAGE, and must not be counted against it.
+
+Do not parse the lines yourself — **run `orc extra stats --json`** and report
+what it computed (the `computeWikiFreshness` rule: one engine, and the skill is
+not it). It groups **per profile per band**, which is the pair a routing decision
+was actually made in: a per-provider total cannot tell you the `[0,30)` row was
+fine and the `[30,70)` row was a false economy.
+
+Report four things beside the ordinary per-band table:
+
+| what | why it is its own number |
+|---|---|
+| outcome mix per band | `done` / `partial` / `failed` / `fallback`. The fallback rate IS the answer to "did routing this band off Claude work" |
+| **SUBSTITUTION** count | the endpoint answered with a **different model**. Never aggregate this into a failure rate — the dispatch may have succeeded; you got something you did not ask for |
+| **REROUTE** count | the model id held and a **different company** served it. Only engine `api` can see this at all; on the other two engines the absence of reroutes is **not** evidence there were none |
+| repairs AFTER a foreign dispatch | fix cycles, `TDD-RED` iterations, reviewer P0/P1 and `REPLAN` lines whose task id matches a foreign task. **This is the whole point.** A run that cost a tenth as much and then needed two repair rounds was not cheaper |
+
+**`tok=none` is a real value and must never be averaged as zero.** Engine `cli`
+often reports no token counts; `orc extra stats` reports the vector plus *how
+many dispatches it came from*, and the retro must carry that denominator through.
+A cost total assembled from six of ten dispatches is not that band's cost.
+
+**A dollar figure only where a rate exists.** Every `models` map in the shipped
+price table is EMPTY on purpose (`orc extra rates` explains why and prints the
+JSON to paste), so `usd: null` is the normal state and is reported as an em dash,
+never as zero and never as an estimate.
+
+**Never rank providers by quality.** `/orc-retro` reports outcomes and lets the
+user decide — a benchmark ORC ran itself would be a benchmark ORC was motivated
+to like.
+
 ## Report format (AI-readable — the PR/issue payload)
 
 The report is written so the ORC repo's maintainer OR an AI session reading
@@ -147,6 +188,7 @@ narration_coverage: {...}
 band_stats: [...]
 downgrades: [...]
 leaks: [...]
+extra_stats: {...}       # `orc extra stats --json` verbatim, or null when no EXTRA line exists
 recommendations: [...]   # each with finding, suggested_change, confidence
 actual_model: <...>
 actual_effort: <...>

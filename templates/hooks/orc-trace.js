@@ -61,6 +61,20 @@
  *      the `/^orc/` gate — the trace miner was generating trace data. `orc-retro`
  *      is now on an explicit ignore-list: never bootstraps, never SPAWN/RETURN.
  *
+ * A FOREIGN dispatch produces NOTHING here, and that is by design (v0.50.0).
+ * `orc extra dispatch` runs a non-Claude worker through Bash, so there is no
+ * `Agent`/`Task` call for this hook to observe: no SPAWN, no RETURN, no
+ * PHASE-EDGE, and therefore no contribution to NARRATION COVERAGE either. That
+ * is the same gap `/orc-quick`'s ad-hoc recon has (P7 — Extra ships zero new
+ * agents, so a foreign worker has no agent file to name).
+ *
+ * The record instead comes entirely from orchestrator-written lines: `DISPATCH
+ * … via=extra:<profile>`, `SCORE … via=extra:<profile>` and the `EXTRA` verb,
+ * whose text `orc extra dispatch --json` composes so no lane writes a second
+ * wording. NOTHING IS ADDED TO THIS FILE FOR THEM — a hook that tried to infer
+ * a foreign dispatch from a Bash command line would be guessing, and a guessed
+ * SPAWN is worse than an absent one because `/orc-retro` would count it.
+ *
  * Deterministic phase inference (v0.32.0): ORC agent NAMES encode their role, so
  * the hook can segment a run into phases with zero model cooperation. When a
  * SPAWN's role family differs from the previous SPAWN's, the hook writes one

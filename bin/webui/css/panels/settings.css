@@ -94,7 +94,8 @@
 .setting:last-child { border-bottom: 0; }
 .setting-name { display: flex; align-items: center; gap: var(--sp-2); font-family: var(--mono); font-size: 13px; }
 .setting-desc { color: var(--text-dim); font-size: 12.5px; margin-top: 3px; }
-.setting-control { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
+.setting-control { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; min-width: 0; }
+.setting-control > * { max-width: 100%; }
 
 /* the overridden dot animates in when a value is committed */
 .dot {
@@ -130,7 +131,11 @@
 }
 .shadow-why { font-size: 11.5px; color: var(--warn); margin-top: 4px; }
 
-.seg { display: inline-flex; border: 1px solid var(--line); border-radius: var(--radius-sm); overflow: hidden; }
+/* WRAPPING is not cosmetic here: the control column is a fixed 260px, and a
+   subset control with nine choices (`extra_roles`, v0.50.0) overflowed it and
+   printed straight over the description text. A segmented control has to fold
+   inside its own column, never past it. */
+.seg { display: inline-flex; flex-wrap: wrap; max-width: 100%; border: 1px solid var(--line); border-radius: var(--radius-sm); overflow: hidden; }
 .seg button {
   border: 0;
   background: var(--surface-2);

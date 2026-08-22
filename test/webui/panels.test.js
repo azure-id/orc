@@ -914,3 +914,183 @@ test("docs: the run map and the cost report render CLI numbers and compute none"
   assert.match(js, /docs\.forecast\.lowConfidence/);
   assert.match(js, /laneCommand\(`orc doc forecast \$\{slug\} --naive`/);
 });
+
+/* ================================================================= EXTRA ==
+   v0.50.0 — `orc ui ▸ Extra`. The panel that can send this repo's source code to
+   a third party, so the assertions here are about restraint rather than shape:
+   it names nothing the CLI owns, it computes no state, it writes nothing until
+   Apply, and a key never reaches argv. */
+
+test("extra panel: it names no provider, no model and no agent", () => {
+  const js = panelJs("extra");
+  const cat = JSON.parse(fs.readFileSync(path.join(REPO, "bin", "providers.json"), "utf8"));
+
+  // The Flow-stepper rule, applied to a catalog: the panel renders
+  // `orc extra providers --json` and derives nothing. A provider id in this file
+  // would be a second catalog, and a stale one within a quarter.
+  for (const row of cat.providers) {
+    assert.ok(!new RegExp('["\']' + row.id + '["\']').test(js), `the panel must not name provider ${row.id}`);
+    if (row.label) assert.ok(!js.includes(row.label), `the panel must not name the label ${row.label}`);
+  }
+  // Model ids are not shipped AT ALL (they rot within a quarter), and an agent
+  // name is the resolver's answer, never the panel's.
+  assert.ok(!/orc-executor-/.test(js), "an agent name is the CLI's answer, never the panel's");
+  assert.ok(!/claude-opus|claude-sonnet|claude-haiku/.test(js), "the panel names no model id");
+
+  // Neither does either string table.
+  for (const code of ["en", "id"]) {
+    const table = JSON.parse(fs.readFileSync(path.join(WEBUI, "i18n", code, "extra.json"), "utf8"));
+    for (const [k, v] of Object.entries(table)) {
+      if (typeof v !== "string") continue;
+      for (const row of cat.providers)
+        if (row.id !== "custom")
+          assert.ok(!new RegExp("\\b" + row.id + "\\b", "i").test(v), `${code}.extra.json ${k} names a provider`);
+    }
+  }
+});
+
+test("extra rail: an unmapped range keeps its slot, and a staged un-route invents no agent", () => {
+  const js = panelJs("extra");
+  const css = panelCss("extra").replace(/\/\*[\s\S]*?\*\//g, "");
+
+  // The v0.43.7 OFF-phase rule: filtering the gaps out would make "I left the
+  // top band on Opus on purpose" and "there is no top band" identical. The rail
+  // renders `rows`, which the CLI already fills with the Claude fall-through —
+  // so there is no filter here at all, and that is the assertion.
+  assert.ok(!/\.filter\([^)]*via === "claude"[^)]*\)\s*\)/.test(js), "the rail must not filter the Claude rows out");
+  assert.match(css, /\.ex-seg-claude\s*\{/, "a Claude range is DRAWN, in its own colour");
+
+  // Geometry solved from the box: a percentage of the axis with a readable
+  // FLOOR, inside a box that scrolls. A rail too narrow for its labels is never
+  // squeezed (the VAULT / ringRadii lesson).
+  assert.match(js, /seg\.style\.setProperty\("--w"/, "a segment is sized by a CUSTOM PROPERTY, never an inline width");
+  assert.match(css, /\.ex-seg\s*\{[\s\S]*?min-width:/, "a segment has a readable floor");
+  assert.match(css, /\.ex-rail-wrap\s*\{[\s\S]*?overflow-x:\s*auto/, "the rail scrolls inside its own box");
+
+  // THE ONE THE PREVIEW MUST NEVER GUESS. Un-routing a band hands it back to the
+  // Claude ladder, and which agent it lands on is `claudeGaps`'s answer, split
+  // at the resolving table's own edges. The panel does not know it and must not
+  // learn it: a staged un-route draws an em dash.
+  assert.match(js, /via: "claude", agent: null, staged: true/, "a staged un-route carries NO agent");
+  assert.match(js, /row\.agent \|\| "—"/, "and it renders as an em dash");
+});
+
+test("extra: nothing is written until Apply, and every staged edit is an ACTION", () => {
+  const js = panelJs("extra");
+
+  // The v0.44.1 rule. Staging repaints the BAR, not the panel: a full re-render
+  // per click re-fetches every endpoint and scrolls the list out from under the
+  // person using it.
+  assert.match(js, /editSet\(\(\) => EX_BAR && EX_BAR\.paint\(\)\)/);
+  assert.match(js, /await applyActions\(edits, btn\)/);
+  // Config edits stage as ACTIONS rather than through `applyEdits`, which is
+  // what lets ONE bar carry a routing change and a guardrail change together —
+  // and what left the shared helper untouched.
+  assert.match(js, /edits\.action\(key, "\/api\/config\/set"/);
+  assert.match(js, /edits\.action\(key, "\/api\/config\/reset"/);
+  // Staging a value back to what it was CLEARS the edit rather than staging a
+  // no-op, restated in the adapter because that is what `controlFor` now talks to.
+  assert.match(js, /if \(String\(value\) === String\(original\)\) edits\.drop\(key\)/);
+  // The guardrail rows come from the SHARED renderer: adding a tenth config key
+  // is still zero steps in this panel.
+  assert.match(js, /settingRow\(k, body, proxy\)/);
+});
+
+test("extra: the connection test is the CLI's, and a key never reaches argv", () => {
+  const api = fs.readFileSync(path.join(REPO, "bin", "webui", "api.js"), "utf8");
+  const js = panelJs("extra");
+  // COMMENTS ARE STRIPPED FOR EVERY NEGATIVE ASSERTION below. This suite has
+  // three greps that read a comment as code, and they have cost a debugging
+  // round each — a comment explaining why the panel does NOT do a thing is
+  // exactly the text a naive `!includes` trips on.
+  const bare = js.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+
+  // A ping MUTATES (a green test writes `verified_at`; a red one on a
+  // never-verified profile removes the profile), so it is POST-only — a GET that
+  // did that would be reachable by a prefetch.
+  assert.match(api, /if \(route === "\/api\/extra\/ping"\)/);
+  assert.ok(!/"\/api\/extra\/ping"/.test((api.match(/const READS = \{[\s\S]*?\n\};/) || [""])[0]), "ping is never a READ");
+
+  // The secret travels on STDIN. Never argv (world-readable in a process list),
+  // never a temp file, never a log line — and the CLI refuses `--key <value>` by
+  // name, so no route here can build one.
+  assert.match(api, /argv\.push\("--key-stdin"\)/);
+  assert.match(api, /argv\.push\("--passphrase-stdin"\)/);
+  assert.ok(!/"--key"[,\s]/.test(api), "`--key <value>` must never be built by the panel");
+  assert.match(api, /input = String\(body\.key\)/);
+
+  // And the panel drops it the moment it has been sent: never kept past the
+  // request, never in localStorage, never re-rendered as a field value.
+  assert.match(js, /key\.value = "";/);
+  assert.ok(!/localStorage/.test(bare), "no credential and no passphrase may be remembered in the browser");
+  assert.match(js, /i\.autocomplete = "off"/);
+});
+
+test("extra fixtures: one of every state, including the two the mode could not reach", () => {
+  const fixtures = require(path.join(REPO, "bin", "webui", "fixtures", "index.js"));
+  const list = fixtures.get("/api/extra", {});
+  const profiles = list.profiles;
+
+  // The vault's four states are DIFFERENT facts and must never collapse: no
+  // record, a clean stored key, a counter part-used, and a tombstone.
+  const vaultStates = profiles.map((p) => p.credential.vault && p.credential.vault.state).filter(Boolean);
+  for (const st of ["stored", "wiped"]) assert.ok(vaultStates.includes(st), `a ${st} vault must be designable`);
+  assert.ok(
+    profiles.some((p) => (p.credential.vault || {}).attempts_used > 0),
+    "a countdown toward a destructive action must be designable"
+  );
+  assert.ok(profiles.some((p) => !p.verified_at), "a never-tested connection");
+  assert.ok(profiles.some((p) => p.credential.source === "env" && !p.credential.present), "a missing environment key");
+  assert.ok(profiles.some((p) => p.engine === "cli"), "an engine with a binary rather than an endpoint");
+
+  // The routing states the doctor findings are about.
+  const route = fixtures.get("/api/extra/route", {});
+  assert.ok(route.rows.some((r) => r.via === "claude"), "an unmapped range keeps its slot");
+  assert.ok(route.rows.some((r) => r.via === "extra" && r.model_known === false), "a routed model the provider no longer lists");
+  assert.ok(route.rows.some((r) => r.verify_state === "STALE"), "a stale verification that STILL routes");
+
+  // The cost states: a vector assembled from fewer dispatches than were sent,
+  // and a provider with no rate at all so `usd` is null rather than 0.
+  const stats = fixtures.get("/api/extra/stats", {});
+  assert.ok(stats.bands.some((b) => b.usage_reported < b.dispatches), "a partial vector must be designable");
+  assert.ok(stats.bands.some((b) => b.usd === null), "an UNPRICED band must be designable");
+  for (const k of ["substitutions", "reroutes", "fallbacks"]) assert.ok(stats[k].length, `a ${k} row`);
+
+  // The POST half (v0.50.0). Fixture mode runs nothing, which made the
+  // connection test's OUTCOME undesignable — and that outcome is most of what
+  // this panel is about. Exactly three answers, chosen deterministically.
+  assert.equal(fixtures.post("/api/extra/ping", { profile: "cheap" }).data.ok, true);
+  assert.equal(fixtures.post("/api/extra/ping", { profile: "router" }).data.ok, false);
+  assert.equal(fixtures.post("/api/extra/ping", { profile: "router" }).data.profile_reverted, true);
+  assert.equal(fixtures.post("/api/extra/ping", { profile: "n", key: "k" }).data.vault.reason, "no-passphrase");
+  // Every OTHER write still answers "nothing ran", which is the honest reply in
+  // a mode that runs nothing.
+  assert.equal(fixtures.post("/api/config/set", { key: "x", value: "y" }), undefined);
+  assert.equal(fixtures.post("/api/extra/route/set", {}), undefined);
+});
+
+test("extra: the boundary card renders ALWAYS, and the countdown is never silent", () => {
+  const js = panelJs("extra");
+  const bare = js.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+  const css = panelCss("extra").replace(/\/\*[\s\S]*?\*\//g, "");
+
+  // The house-rules precedent: somebody about to send their source code to a
+  // third party should not have to go looking for the paragraph that says so.
+  // It is appended unconditionally, before anything that can fail to load.
+  assert.match(js, /out\.append\(exBoundaryCard\(\)\);/);
+  assert.ok(!/if \([^)]*\)\s*out\.append\(exBoundaryCard/.test(bare), "the boundary card has no condition");
+  assert.match(css, /\.ex-boundary\s*\{/);
+
+  // `attempt N of 10` is the point of the feature, so it is the CLI's message
+  // rendered verbatim — a panel that summarised it would delete the one number
+  // this exists to show. A zero countdown keeps its slot and reads as none used.
+  assert.match(js, /t\("extra\.vault\.attemptsNone"\)/);
+  assert.match(js, /d\.error \|\| t\("common\.loadFail"\)/);
+  assert.match(js, /if \(d\.honesty\) out\.append\(el\("div", "note", d\.honesty\)\)/);
+
+  // UNVERIFIED and STALE are the CLI's states, arriving as doctor findings keyed
+  // by profile. This panel has no idea what `extra_verify_max_days` means.
+  assert.ok(!/extra_verify_max_days/.test(bare), "the panel must not know the freshness edge");
+  assert.match(js, /f\.id === "extra-stale-verify"/);
+  assert.match(js, /counts\.verified/, "the verified COUNT is the CLI's, never a re-filter");
+});

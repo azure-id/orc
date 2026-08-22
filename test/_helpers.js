@@ -1,10 +1,26 @@
 "use strict";
-// Shared test helpers. NOT a *.test.js file, so `node --test test/` ignores it.
+// Shared test helpers.
+//
+// NOTE: `node --test test/` does NOT ignore this file — it executes every .js
+// under test/ as a test file, and this one simply has no side effects, so it
+// registers zero tests and passes. A helper that DOES something on load must
+// guard itself (see test/cli/_fake-provider.js, which cost a debugging round
+// before it did).
 const { spawnSync } = require("child_process");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
 
+// WHY `npm test` PINS `--test-concurrency=8` (v0.50.0). This box has 16 cores,
+// and node --test defaults to one worker per core. Several files here spawn real
+// child processes (the fake provider, the fake `claude`, the fake CLI) and one
+// derives scrypt at N=2^17 — 128 MB and a beat of wall clock, on purpose,
+// because that cost IS the vault's defence and must never be tuned down. At full
+// parallelism those starve each other: a local fake provider misses the probe's
+// 3s rung-1 timeout, the ping falls through to the 20s rung 2, and the file fails
+// at ~25s with `1 == 0` — which looks EXACTLY like a real regression and has
+// cost this repo three debugging rounds. Halving the peak costs ~11% wall clock
+// and buys a suite whose result means something.
 const REPO = path.join(__dirname, "..");
 const CLI = path.join(REPO, "bin", "cli.js");
 const HOOK_SRC = path.join(REPO, "templates", "hooks");

@@ -27,5 +27,7 @@
   "tour.12.title": "Bagian wiki yang murah",
   "tour.12.text": "Memperbarui seluruh wiki itu mahal. Ini daftar pendek dan terurut yang benar-benar penting - dan perbaikan gratis selalu didahulukan.",
   "tour.13.title": "Dokumen panjang, dalam satu gambar",
-  "tour.13.text": "Setiap blok adalah satu bagian, seukuran panjangnya dan diberi warna sesuai keadaannya. Tidak ada yang memuat dokumen itu sendiri di sini - ORC bekerja dari peta ini, dan itulah sebabnya dokumen panjang tidak menghabiskan sesi."
+  "tour.13.text": "Setiap blok adalah satu bagian, seukuran panjangnya dan diberi warna sesuai keadaannya. Tidak ada yang memuat dokumen itu sendiri di sini - ORC bekerja dari peta ini, dan itulah sebabnya dokumen panjang tidak menghabiskan sesi.",
+  "tour.14.title": "Pekerjaan yang berjalan di tempat lain",
+  "tour.14.text": "Satu garis dari nol sampai seratus: seberapa berat skor sebuah tugas. Setiap bagiannya menunjukkan di mana pekerjaan itu benar-benar berjalan — Claude berwarna biru, penyedia yang Anda hubungkan berwarna hijau. Rentang yang belum Anda hubungkan tetap punya tempatnya, jadi \"saya sengaja meninggalkan pekerjaan berat di Claude\" tidak pernah terlihat seperti \"tidak ada pekerjaan berat\". Tidak ada yang keluar dari mesin ini sampai Anda menghubungkan sesuatu, mengujinya, dan menekan Apply."
 }

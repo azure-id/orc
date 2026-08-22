@@ -1,0 +1,260 @@
+{
+  "_readme": [
+    "DATED provider catalog for `orc extra`. Providers, NEVER models.",
+    "",
+    "Between this package's cutoff and any given release the model lineup moves:",
+    "DeepSeek V3.2 -> V4, Kimi K2 -> K2.7, GLM 4.6 -> 5.2, MiniMax M2 -> M2.7,",
+    "Qwen 3 -> 3.6, MiMo v2 -> v2.5. A SHIPPED MODEL LIST IS WRONG WITHIN A",
+    "QUARTER, and wrong SILENTLY: a user picks from a stale dropdown and gets a",
+    "404 in the middle of a wave. So model ids come from the provider's own",
+    "/v1/models at ping time and are cached in the profile (`models_seen`).",
+    "",
+    "`as_of` is load-bearing, exactly like bin/pricing.json: a catalog older than",
+    "90 days prints a staleness warning beside every provider listing. Bump the",
+    "date only when you have re-checked the base URLs against each provider's",
+    "own docs.",
+    "",
+    "`auth_env` names the ENVIRONMENT VARIABLE, not a header. Claude Code picks",
+    "the header FROM the variable you set: ANTHROPIC_AUTH_TOKEN -> `Authorization:",
+    "Bearer`, ANTHROPIC_API_KEY -> `x-api-key`. Ollama's Anthropic endpoint",
+    "REJECTS x-api-key, so a row that said `bearer` plus a resolver that set",
+    "ANTHROPIC_API_KEY would fail at 401 with nothing on screen explaining why.",
+    "",
+    "`api_base` (OpenAI-compatible, engine `api`) and `anthropic_base` (the",
+    "/anthropic shim, engine `claude-shim`) are INDEPENDENTLY probeable: they are",
+    "different URLs with different capabilities, and `/v1/models` does not",
+    "necessarily live under the shim one.",
+    "",
+    "`custom` is a real row and is the escape hatch that keeps this catalog from",
+    "being a gate: anything OpenAI- or Anthropic-compatible works by typing a",
+    "base URL, with no entry here.",
+    "",
+    "`provider_routing` marks a provider that accepts an OpenRouter-style `provider` block in the request body (zdr, data_collection, require_parameters, only, allow_fallbacks). Only engine `api` composes a body, so this is the ONE enforceable privacy control in the whole subsystem — and it exists on the aggregator, plus `custom` because a custom base URL is routinely an aggregator-compatible gateway. Everything else gets `orc extra privacy` REFUSED BY NAME rather than an unknown body field that 400s mid-wave."
+  ],
+  "version": 1,
+  "as_of": "2026-08-21",
+  "providers": [
+    {
+      "id": "deepseek",
+      "label": "DeepSeek",
+      "engines": [
+        "api",
+        "claude-shim"
+      ],
+      "api_base": "https://api.deepseek.com",
+      "anthropic_base": "https://api.deepseek.com/anthropic",
+      "auth_env": "ANTHROPIC_AUTH_TOKEN",
+      "env_key_default": "DEEPSEEK_API_KEY",
+      "models_path": "/v1/models",
+      "context_tokens": null,
+      "regions": [],
+      "docs_url": "https://api-docs.deepseek.com/quick_start/agent_integrations/claude_code/",
+      "terms_url": "https://platform.deepseek.com/downloads/DeepSeek%20Open%20Platform%20Terms%20of%20Service.html",
+      "notes": "Peak / off-peak rates differ; the off-peak window is the cheap one."
+    },
+    {
+      "id": "zai",
+      "label": "Z.ai (GLM)",
+      "engines": [
+        "api",
+        "claude-shim"
+      ],
+      "api_base": "https://api.z.ai/api/paas/v4",
+      "anthropic_base": "https://api.z.ai/api/anthropic",
+      "auth_env": "ANTHROPIC_AUTH_TOKEN",
+      "env_key_default": "ZAI_API_KEY",
+      "models_path": "/v1/models",
+      "context_tokens": null,
+      "regions": [],
+      "docs_url": "https://docs.z.ai/",
+      "terms_url": "https://z.ai/terms",
+      "notes": "GLM Coding Plan is a subscription; a plan key and an API key are not the same credential."
+    },
+    {
+      "id": "moonshot",
+      "label": "Moonshot (Kimi)",
+      "engines": [
+        "api",
+        "claude-shim"
+      ],
+      "api_base": "https://api.moonshot.ai/v1",
+      "anthropic_base": "https://api.moonshot.ai/anthropic",
+      "auth_env": "ANTHROPIC_AUTH_TOKEN",
+      "env_key_default": "MOONSHOT_API_KEY",
+      "models_path": "/v1/models",
+      "context_tokens": null,
+      "regions": [
+        {
+          "id": "cn",
+          "label": "China",
+          "api_base": "https://api.moonshot.cn/v1",
+          "anthropic_base": "https://api.moonshot.cn/anthropic"
+        }
+      ],
+      "docs_url": "https://platform.moonshot.ai/docs",
+      "terms_url": "https://platform.moonshot.ai/docs/agreement",
+      "notes": null
+    },
+    {
+      "id": "minimax",
+      "label": "MiniMax",
+      "engines": [
+        "api",
+        "claude-shim"
+      ],
+      "api_base": "https://api.minimax.io/v1",
+      "anthropic_base": "https://api.minimax.io/anthropic",
+      "auth_env": "ANTHROPIC_AUTH_TOKEN",
+      "env_key_default": "MINIMAX_API_KEY",
+      "models_path": "/v1/models",
+      "context_tokens": null,
+      "regions": [
+        {
+          "id": "cn",
+          "label": "China",
+          "api_base": "https://api.minimaxi.com/v1",
+          "anthropic_base": "https://api.minimaxi.com/anthropic"
+        }
+      ],
+      "docs_url": "https://platform.minimax.io/docs/token-plan/claude-code",
+      "terms_url": "https://platform.minimax.io/document/Terms%20of%20Service",
+      "notes": "A key issued in one region does NOT work against the other region's host."
+    },
+    {
+      "id": "qwen",
+      "label": "Alibaba Qwen (DashScope)",
+      "engines": [
+        "api",
+        "claude-shim"
+      ],
+      "api_base": "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
+      "anthropic_base": "https://dashscope-intl.aliyuncs.com/apps/anthropic",
+      "auth_env": "ANTHROPIC_AUTH_TOKEN",
+      "env_key_default": "DASHSCOPE_API_KEY",
+      "models_path": "/models",
+      "context_tokens": null,
+      "regions": [
+        {
+          "id": "cn",
+          "label": "China (Beijing)",
+          "api_base": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+          "anthropic_base": "https://dashscope.aliyuncs.com/apps/anthropic"
+        }
+      ],
+      "docs_url": "https://www.alibabacloud.com/help/en/model-studio/compatibility-of-openai-with-dashscope",
+      "terms_url": "https://www.alibabacloud.com/help/en/legal",
+      "notes": "DashScope's OpenAI-compatible mode already carries /v1 in the base; models_path is /models."
+    },
+    {
+      "id": "mimo",
+      "label": "Xiaomi MiMo",
+      "engines": [
+        "api",
+        "claude-shim"
+      ],
+      "api_base": "https://api.xiaomimimo.com/v1",
+      "anthropic_base": "https://api.xiaomimimo.com/anthropic",
+      "auth_env": "ANTHROPIC_AUTH_TOKEN",
+      "env_key_default": "MIMO_API_KEY",
+      "models_path": "/v1/models",
+      "context_tokens": null,
+      "regions": [],
+      "docs_url": "https://api.xiaomimimo.com/docs",
+      "terms_url": "https://api.xiaomimimo.com/terms",
+      "notes": "Open weights; a self-hosted deployment is the `custom` row, not this one."
+    },
+    {
+      "id": "stepfun",
+      "label": "StepFun",
+      "engines": [
+        "api",
+        "claude-shim"
+      ],
+      "api_base": "https://api.stepfun.ai/v1",
+      "anthropic_base": "https://api.stepfun.ai/anthropic",
+      "auth_env": "ANTHROPIC_AUTH_TOKEN",
+      "env_key_default": "STEPFUN_API_KEY",
+      "models_path": "/v1/models",
+      "context_tokens": null,
+      "regions": [],
+      "docs_url": "https://platform.stepfun.com/docs",
+      "terms_url": "https://platform.stepfun.com/terms",
+      "notes": null
+    },
+    {
+      "id": "siliconflow",
+      "label": "SiliconFlow",
+      "engines": [
+        "api",
+        "claude-shim"
+      ],
+      "api_base": "https://api.siliconflow.com/v1",
+      "anthropic_base": "https://api.siliconflow.com/anthropic",
+      "auth_env": "ANTHROPIC_API_KEY",
+      "env_key_default": "SILICONFLOW_API_KEY",
+      "models_path": "/v1/models",
+      "context_tokens": null,
+      "regions": [],
+      "docs_url": "https://docs.siliconflow.com/",
+      "terms_url": "https://siliconflow.com/terms",
+      "notes": "An AGGREGATOR: the model id names an upstream. Verify model_reported on every return."
+    },
+    {
+      "id": "openrouter",
+      "label": "OpenRouter",
+      "engines": [
+        "api",
+        "claude-shim"
+      ],
+      "api_base": "https://openrouter.ai/api/v1",
+      "anthropic_base": "https://openrouter.ai/api",
+      "auth_env": "ANTHROPIC_AUTH_TOKEN",
+      "env_key_default": "OPENROUTER_API_KEY",
+      "models_path": "/models",
+      "context_tokens": null,
+      "regions": [],
+      "docs_url": "https://openrouter.ai/docs/guides/overview/models",
+      "terms_url": "https://openrouter.ai/terms",
+      "notes": "An AGGREGATOR with TWO fallback kinds. Model-level fallback changes the model id (visible). Provider-level fallback is ON BY DEFAULT and KEEPS the model id while changing who serves it — visible only on engine `api`, via the response's `provider` field.",
+      "provider_routing": true
+    },
+    {
+      "id": "ollama",
+      "label": "Ollama (local)",
+      "engines": [
+        "api",
+        "claude-shim"
+      ],
+      "api_base": "http://localhost:11434/v1",
+      "anthropic_base": "http://localhost:11434",
+      "auth_env": "ANTHROPIC_AUTH_TOKEN",
+      "env_key_default": "OLLAMA_API_KEY",
+      "models_path": "/v1/models",
+      "context_tokens": null,
+      "regions": [],
+      "docs_url": "https://docs.ollama.com/api/anthropic-compatibility",
+      "terms_url": "https://ollama.com/terms",
+      "notes": "Local: nothing leaves the machine, and the credential is a placeholder. Its /v1/messages REJECTS x-api-key, which is why auth_env is ANTHROPIC_AUTH_TOKEN and must stay that way."
+    },
+    {
+      "id": "custom",
+      "label": "Custom endpoint",
+      "engines": [
+        "api",
+        "claude-shim",
+        "cli"
+      ],
+      "api_base": null,
+      "anthropic_base": null,
+      "auth_env": "ANTHROPIC_AUTH_TOKEN",
+      "env_key_default": null,
+      "models_path": "/v1/models",
+      "context_tokens": null,
+      "regions": [],
+      "docs_url": null,
+      "terms_url": null,
+      "notes": "You supply the base URL and the auth shape. This row is why the catalog is not a gate.",
+      "provider_routing": true
+    }
+  ]
+}

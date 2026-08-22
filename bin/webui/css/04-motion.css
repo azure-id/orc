@@ -81,4 +81,11 @@
      from, which is worse than no animation at all. The wave rows and the health
      bars go the same way: a bar frozen part-way is a wrong number. */
   .doc-seg, .doc-seg-box, .doc-wave, .doc-bar-seg { animation: none !important; }
+  /* The Extra connect pulse (v0.50.0). A probe has no known duration, so the
+     dot loops until an answer arrives — the third INFINITE animation on the
+     page, and removed outright for the same reason as the other two: capped at
+     one iteration it would stop half way across the wire, which reads as a
+     request that hung. The wire itself still turns green or red, so the RESULT
+     of the test is never carried by motion alone. */
+  .ex-wire-dot { display: none; }
 }

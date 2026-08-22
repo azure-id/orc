@@ -83,7 +83,7 @@ Claude Code writes a JSONL transcript per session under
 requeued. **Neither is enough alone, and nobody else has the right-hand column.**
 Details and honesty rules: `references/corpus.md`.
 
-## Honesty rules — all five, always
+## Honesty rules — all six, always
 
 1. **No transcripts?** Forecast in **tokens only** from ORC trace metadata and
    print *"dollars and quota unavailable: no local usage data"*. Never invent a
@@ -99,6 +99,31 @@ Details and honesty rules: `references/corpus.md`.
    percentage.
 5. **A band below `budget_min_samples` (default 5) is printed as low-confidence.**
    The top of the range is soft and the output says so.
+
+6. **A foreign dispatch is priced from its OWN dated table, or not at all**
+   (v0.50.0). A task can execute on a non-Claude worker
+   (`_shared/extra-dispatch.md`); its four token kinds arrive the same way and
+   are never blended, but an Anthropic rate applied to somebody else's bill is
+   fiction — so `bin/pricing.json`'s `providers` block is the only source, and
+   **every `models` map in it ships EMPTY on purpose**. Several of these vendors
+   price by peak window or by tier, one sells a subscription rather than tokens,
+   and one is a passthrough with a surcharge; a shipped figure wrong by 2x is
+   worse than none, because a wrong figure gets believed. `orc extra rates`
+   lists the pairs your traces actually used and prints the JSON to paste.
+   Until then: **`usd` reads as an em dash, never zero and never an estimate.**
+
+   Two further foreign-only distinctions, and collapsing either is a wrong
+   number rather than a rounder one:
+
+   - **`usage: null` is not `{0,0,0,0}`.** Engine `cli` frequently reports no
+     token counts. Null means *unknown*; four zeros would mean *free*. Carry the
+     denominator (how many dispatches the vector came from) into every total.
+   - **`cache_write: 0` on engine `api` IS a measurement.** An
+     OpenAI-compatible endpoint caches implicitly and has no write charge to
+     report. That zero is true and must not be smoothed into an average.
+
+   `orc extra stats --json` computes all of this per profile per band. Render
+   it; do not recompute it.
 
 ## It refuses a sentence
 
