@@ -168,7 +168,12 @@ test("flow keys: a closed set renders as a dropdown built from the CLI's options
 
   // The CLI half: `options` is emitted straight off DIY_META.
   const show = cli.slice(cli.indexOf("function diyShow"), cli.indexOf("function diyInteractive"));
-  assert.match(show, /options: m\.options \? m\.options\.map\(String\) : null/, "diy show --json must publish each key's closed set");
+  // v0.52.0 (D8): `fixed_executor` may also name a FOREIGN target, so its list is
+  // DIY_META's plus the project's verified profiles. The rule is unchanged — the
+  // set is still the CLI's and the panel still names no value of its own.
+  assert.match(show, /options: m\.options$/m, "diy show --json must publish each key's closed set");
+  assert.match(show, /extraFixedTargets\(claudeDir\)/, "a foreign target is offered from the ledger, not from DIY_EXECUTORS");
+  assert.match(show, /m\.options\.map\(String\)/);
 });
 
 // v0.44.0 — the panel could tune a flow key by key but never START one from a
@@ -1143,6 +1148,94 @@ test("extra tools card: the panel switches on `state` and derives nothing, and n
   // The user installs in another window and comes back, so the card can be
   // re-read without a full page load.
   assert.match(js, /extra\.tools\.recheck/);
+});
+
+test("extra tools card: a CONNECTED tool has no Connect button, and the add form has three sources", () => {
+  const js = panelJs("extra");
+
+  // D1 — `connected` / `verified` arrive from `orc extra tools --json`. The
+  // panel switches on them and joins nothing: `d.list.profiles` was sitting
+  // right there and a second idea of "connected" is exactly the drift this
+  // panel exists to prevent.
+  assert.match(js, /if \(tool\.verified\) \{/);
+  assert.match(js, /\} else if \(tool\.connected\) \{/);
+  assert.match(js, /extra\.tools\.connectedAs/);
+  assert.match(js, /extra\.tools\.connectedUntested/);
+  // AN ABSENT CONTROL AND A DEAD CONTROL MUST NOT LOOK THE SAME. The verified
+  // branch removes Connect; it never disables it.
+  const ready = js.slice(js.indexOf("if (tool.verified) {"), js.indexOf("box.append(actions);"));
+  assert.ok(!/extra\.tools\.connect"/.test(ready.slice(0, ready.indexOf("} else {"))),
+    "a verified tool must not offer Connect at all");
+  assert.ok(!/disabled = true/.test(ready), "a dead Connect button is worse than none");
+  // A second connection to the same tool is legitimate, and it is a SECONDARY.
+  assert.match(js, /extra\.tools\.addAnother/);
+
+  // D3.1 — the THIRD credential source, offered only where it can be true, and
+  // asking for neither field when it is chosen. ORC never writes another tool's
+  // credential store.
+  assert.match(js, /extra\.add\.sourceTool/);
+  assert.match(js, /const toolable = isCli && !!\(r && r\.cli_bin\)/);
+  assert.match(js, /tool_auth: srcTool\.checked/);
+  // Pre-selected when the card the user pressed Connect on says the tool is
+  // already signed in — the form opens on the state they were looking at.
+  assert.match(js, /if \(tool\.authed\) srcTool\.checked = true/);
+});
+
+test("extra passphrase: the save modal has no exit but Save, and the panel names no TTL", () => {
+  const js = panelJs("extra");
+  const ui = appJs();
+
+  // D11. A green test on a vaulted connection opens a modal that cannot be
+  // walked away from half-done: no Escape handler, no backdrop click, and the
+  // Escape key swallowed in the CAPTURE phase (the `.tour-block` precedent).
+  assert.match(ui, /function modal\(\{ title, body, actions, dismissible \}\)/);
+  assert.match(ui, /const locked = dismissible === false/);
+  assert.match(ui, /document\.addEventListener\("keydown", onKey, true\)/);
+  assert.match(ui, /\$\("#modal-backdrop"\)\.onclick = locked \? null : closeModal/);
+
+  // EXACTLY ONE other button, and it is destructive and NAMED. A modal with
+  // genuinely no way out is a trap the first time a write fails; an escape that
+  // destroys what you were configuring cannot be pressed by accident.
+  assert.match(js, /extra\.session\.abandon/);
+  const modalFn = js.slice(js.indexOf("function exSessionModal("), js.indexOf("function exSessionForgetModal("));
+  assert.ok(!/common\.cancel/.test(modalFn.slice(modalFn.indexOf("const actions = []"), modalFn.indexOf("actions.push({ label: t(\"extra.session.save\")"))) ||
+    /if \(dismissible\) actions\.push/.test(modalFn), "a Cancel exists only when the modal is dismissible");
+
+  // THE PANEL NAMES NO NUMBER. The eight deadlines come from the config key's
+  // own `options`, the same rule the flow dropdowns are built under.
+  assert.match(js, /exConfigOptions\(cfg, "extra_passphrase_ttl_days"\)/);
+  for (const n of [14, 30, 90, 180, 360])
+    assert.ok(!new RegExp("\b" + n + "\b").test(modalFn.replace(/86400000/g, "")),
+      `the panel must not name the TTL value ${n} itself`);
+
+  // The deadline is shown as a DATE, live, because "30 days" is not something a
+  // person can plan around.
+  assert.match(js, /extra\.session\.until/);
+  // Four states, all the CLI's, and `not saved` KEEPS ITS SLOT on a vaulted
+  // connection — that is the state a run STOPS on.
+  for (const k of ["active", "expiring", "expired", "none"]) assert.match(js, new RegExp("extra\\.session\\." + k));
+  // TWO CALLS, because storing the KEY and caching the PASSPHRASE are two
+  // different acts and only one of them has a deadline.
+  assert.match(js, /\/api\/extra\/session\/save/);
+  assert.match(js, /\/api\/extra\/session\/forget/);
+  // NO AUTO-EXTEND: the only way to move a deadline is to set a new one, which
+  // is a write the user makes. (Comments are stripped first — this panel
+  // DOCUMENTS the rule, which is not the same as breaking it.)
+  const code = js.replace(/\/\/[^\n]*/g, "").replace(/\/\*[\s\S]*?\*\//g, "");
+  assert.ok(!/auto.?extend/i.test(code));
+});
+
+test("extra passphrase fixtures: one profile per state, and a tool profile with no row at all", () => {
+  const fixtures = require(path.join(REPO, "bin", "webui", "fixtures", "index.js"));
+  const profiles = fixtures.get("/api/extra", {}).profiles;
+  const states = profiles.map((p) => (p.session ? p.session.state : null));
+  for (const st of ["ACTIVE", "EXPIRING", "EXPIRED", "ABSENT"])
+    assert.ok(states.includes(st), `a ${st} passphrase must be designable`);
+  // A tool that signs itself in has NO passphrase row at all, and that is not a
+  // gap — it is the whole reason the third credential source exists.
+  const tool = profiles.find((p) => p.credential.source === "tool");
+  assert.ok(tool, "a tool-auth profile is designable");
+  assert.equal(tool.session, null);
 });
 
 test("extra gate: the sections below it are ABSENT, not hidden, until something has answered", () => {

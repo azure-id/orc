@@ -39,12 +39,13 @@ async function renderExtra(body) {
   // Four reads, in parallel. A read that FAILED is not a read that came back
   // empty (v0.49.4): the error is kept so the card can say which half is
   // missing instead of rendering as "you have nothing configured".
-  const [listRes, provRes, docRes, cfgRes, routeRes, statRes, rateRes, toolRes] = await Promise.all([
+  const [listRes, provRes, docRes, cfgRes, routeRes, laneRes, statRes, rateRes, toolRes] = await Promise.all([
     read("/api/extra").catch((e) => ({ data: null, error: e })),
     read("/api/extra/providers").catch((e) => ({ data: null, error: e })),
     read("/api/extra/doctor").catch((e) => ({ data: null, error: e })),
     read("/api/config").catch((e) => ({ data: null, error: e })),
     read("/api/extra/route").catch((e) => ({ data: null, error: e })),
+    read("/api/extra/lanes").catch((e) => ({ data: null, error: e })),
     read("/api/extra/stats").catch((e) => ({ data: null, error: e })),
     read("/api/extra/rates").catch((e) => ({ data: null, error: e })),
     // v0.51.0 — the LOCAL TOOLS read. It exits 1 when nothing is ready, which is
@@ -57,6 +58,7 @@ async function renderExtra(body) {
     doctor: docRes.data,
     config: cfgRes.data,
     route: routeRes.data,
+    lanes: laneRes.data,
     // `orc extra stats` exits 1 with a real object when nothing has been
     // dispatched yet — an ANSWER, not an error, so it is read like every other
     // exit-code-as-data command on this panel.
@@ -67,6 +69,7 @@ async function renderExtra(body) {
       list: listRes.error || null,
       providers: provRes.error || null,
       route: routeRes.error || null,
+      lanes: laneRes.error || null,
       tools: toolRes.error || null,
     },
   };
@@ -99,6 +102,9 @@ async function renderExtra(body) {
   out.append(exToolsCard(d, body));
   out.append(exProfilesCard(d, body));
   if (connected) {
+    // DIRECTLY ABOVE the routing table, because it is what the table's rows
+    // mean. A band is arithmetic; which lane it governs is the decision.
+    out.append(exLanesCard(d));
     out.append(exRoutingCard(d, body, edits));
     out.append(exGuardrailsCard(d, body, edits));
     out.append(exCostCard(d));
@@ -170,6 +176,14 @@ function exStrip(d) {
   item(t("extra.strip.verified"), counts ? String(counts.verified) : "—");
   item(t("extra.strip.routed"), d.list ? String((d.list.routes || []).length) : "—");
   item(t("extra.strip.findings"), d.doctor ? String((d.doctor.findings || []).length) : "—");
+  // The SOONEST deadline across every saved passphrase. An uncomputable value is
+  // an em dash, never a guess, and the date is the CLI's — this panel does no
+  // arithmetic on it.
+  const soon = ((d.list && d.list.profiles) || [])
+    .map((x) => x.session)
+    .filter((x) => x && x.expires_at)
+    .sort((a, b) => String(a.expires_at).localeCompare(String(b.expires_at)))[0];
+  item(t("extra.strip.passphrase"), soon ? String(soon.expires_at).slice(0, 10) : "—");
   item(t("extra.strip.catalog"), (d.list && d.list.catalog_as_of) || "—");
   return strip;
 }
@@ -182,7 +196,7 @@ function exProfilesCard(d, body) {
   const add = el("button", "btn btn-sm btn-primary", t("extra.add.button"));
   add.type = "button";
   add.disabled = !d.providers;
-  add.addEventListener("click", () => exAddModal(d.providers, body));
+  add.addEventListener("click", () => exAddModal(d.providers, body, null, d.config));
   const c = card(t("extra.profiles.title"), add);
   if (d.errors.list) {
     c.append(failBox(d.errors.list));
@@ -197,11 +211,11 @@ function exProfilesCard(d, body) {
   }
   const max = exConfigValue(d.config, "extra_vault_max_attempts");
   const byProfile = exFindingsByProfile(d.doctor);
-  for (const p of rows) c.append(exProfileRow(p, byProfile.get(p.name) || [], max, body));
+  for (const p of rows) c.append(exProfileRow(p, byProfile.get(p.name) || [], max, body, d.config));
   return c;
 }
 
-function exProfileRow(p, findings, maxAttempts, body) {
+function exProfileRow(p, findings, maxAttempts, body, cfg) {
   const row = el("div", "ex-profile");
 
   const top = el("div", "row-actions");
@@ -212,6 +226,8 @@ function exProfileRow(p, findings, maxAttempts, body) {
   top.append(exVerifyChip(p, findings));
   const vault = exVaultChip(p, maxAttempts);
   if (vault) top.append(vault);
+  const sess = exSessionChip(p);
+  if (sess) top.append(sess);
   row.append(top);
 
   const kv = [
@@ -244,7 +260,7 @@ function exProfileRow(p, findings, maxAttempts, body) {
   const actions = el("div", "row-actions");
   const test = el("button", "btn btn-sm", t("extra.test.button"));
   test.type = "button";
-  test.addEventListener("click", () => exTestModal(p, body));
+  test.addEventListener("click", () => exTestModal(p, body, cfg));
   actions.append(test);
   // The countdown is only actionable through the one command that can clear it:
   // a correct unlock proves the passphrase and resets the counter to zero. It is
@@ -255,12 +271,42 @@ function exProfileRow(p, findings, maxAttempts, body) {
     unlock.addEventListener("click", () => exUnlockModal(p, body));
     actions.append(unlock);
   }
+  // The passphrase's own two actions. EXTEND re-opens the picker with a new
+  // deadline measured from today — never an auto-extend on use, because a
+  // deadline that renews itself every time you use it is not a deadline.
+  if (p.session) {
+    const extend = el("button", "btn btn-ghost btn-sm", t("extra.session.extend"));
+    extend.type = "button";
+    extend.addEventListener("click", () => exSessionModal(p, body, cfg, true));
+    actions.append(extend);
+    if (p.session.state !== "ABSENT") {
+      const forget = el("button", "btn btn-ghost btn-sm", t("extra.session.forget"));
+      forget.type = "button";
+      forget.addEventListener("click", () => exSessionForgetModal(p, body));
+      actions.append(forget);
+    }
+  }
   const drop = el("button", "btn btn-ghost btn-sm", t("extra.remove.button"));
   drop.type = "button";
   drop.addEventListener("click", () => exRemoveModal(p, body));
   actions.append(drop);
   row.append(actions);
   return row;
+}
+
+// THE DEADLINE, beside the vault chip. Every word and every date is the CLI's:
+// the state is COMPUTED there on read and never stored, so this renders four
+// answers and decides none of them. `not saved` KEEPS ITS SLOT on a vaulted
+// connection — that is the state a run STOPS on, and a missing chip would make
+// it look like nothing was wrong.
+function exSessionChip(p) {
+  const sn = p.session;
+  if (!sn) return null;
+  if (sn.state === "ACTIVE") return chip(t("extra.session.active", { date: String(sn.expires_at).slice(0, 10) }), "ok");
+  if (sn.state === "EXPIRING")
+    return chip(t("extra.session.expiring", { date: String(sn.expires_at).slice(0, 10), days: sn.days_left }), "warn");
+  if (sn.state === "EXPIRED") return chip(t("extra.session.expired"), "bad");
+  return chip(t("extra.session.none"), "warn");
 }
 
 // UNVERIFIED and STALE are the CLI's states, and they arrive as doctor findings
@@ -403,6 +449,142 @@ function exLink(href, label) {
 function exConfigValue(cfg, key) {
   const row = ((cfg && cfg.keys) || []).find((k) => k.key === key);
   return row && row.value !== undefined && row.value !== null ? row.value : null;
+}
+
+// The legal values of a key, from `orc config list --json`. THE PANEL NAMES NO
+// NUMBER ITSELF — the same rule the flow dropdowns are built under, and the
+// same grep test enforces it.
+function exConfigOptions(cfg, key) {
+  const row = ((cfg && cfg.keys) || []).find((k) => k.key === key);
+  return (row && Array.isArray(row.options) ? row.options : []).map(String);
+}
+
+/* ------------------------------------------- the passphrase and its deadline
+
+   A passphrase stored on the same machine as the vault it opens is NOT A SECOND
+   FACTOR ANY MORE. It is a DEADLINE. Every surface that shows the countdown
+   repeats the CLI's own sentence saying so, because a promise the product does
+   not keep is worse than a feature it does not have.
+
+   At CONNECT TIME this modal is NOT DISMISSIBLE. It has exactly one other
+   button, and it is destructive and named — "do not save, disconnect this
+   connection" — because a modal with genuinely no way out is a trap the first
+   time a write fails, and an escape that DESTROYS the thing being configured
+   cannot be pressed by accident and leaves no half-configured state behind. */
+function exSessionModal(p, body, cfg, dismissible, pastedKey) {
+  const form = el("div", "stack stack-sm");
+  form.append(el("div", "note", p.name + " " + "·" + " " + p.provider + "/" + p.engine));
+
+  const pass = exInput(t("extra.save.passPh"), "password");
+  const again = exInput(t("extra.save.againPh"), "password");
+  form.append(exField(t("extra.save.pass"), pass, t("extra.save.passHint")));
+  form.append(exField(t("extra.save.again"), again));
+
+  const opts = exConfigOptions(cfg, "extra_passphrase_ttl_days");
+  const current = String(exConfigValue(cfg, "extra_passphrase_ttl_days") || "");
+  const ttl = exSelect(opts.map((v) => ({ value: v, label: t("extra.session.days", { n: v }) })));
+  if (opts.indexOf(current) !== -1) ttl.value = current;
+  form.append(exField(t("extra.session.keepFor"), ttl, t("extra.session.keepForHint")));
+
+  // THE DEADLINE AS A DATE, live under the picker. "30 days" is not something a
+  // person can plan around; a date is.
+  const when = el("div", "note");
+  const paint = () => {
+    const d = new Date(Date.now() + Number(ttl.value || 0) * 86400000);
+    when.textContent = t("extra.session.until", { date: d.toISOString().slice(0, 10) });
+  };
+  ttl.addEventListener("change", paint);
+  paint();
+  form.append(when);
+
+  form.append(el("div", "banner", t("extra.session.honesty")));
+  const out = el("div", "note");
+  form.append(out);
+
+  const save = async (close) => {
+    out.textContent = "";
+    if (!pass.value || pass.value !== again.value) {
+      out.textContent = t("extra.save.mismatch");
+      return;
+    }
+    setBusy(true);
+    try {
+      // TWO CALLS, because storing the KEY and caching the PASSPHRASE are two
+      // different acts and only one of them has a deadline.
+      if (pastedKey) {
+        const r = await post("/api/extra/ping", { profile: p.name, key: pastedKey, passphrase: pass.value });
+        const d = (r && r.data) || null;
+        if (!d || !d.vault || !d.vault.stored) {
+          out.textContent = (d && d.vault && d.vault.error) || (r && r.error) || t("common.loadFail");
+          return;
+        }
+      }
+      const r2 = await post("/api/extra/session/save", { profile: p.name, ttl_days: ttl.value, passphrase: pass.value });
+      const d2 = (r2 && r2.data) || null;
+      if (!d2 || !d2.ok) {
+        out.textContent = (d2 && d2.error) || (r2 && r2.error) || t("common.loadFail");
+        return;
+      }
+      close();
+      exRefresh(body);
+    } catch (e) {
+      out.textContent = String(e.message);
+    } finally {
+      setBusy(false);
+      pass.value = "";
+      again.value = "";
+    }
+  };
+
+  const actions = [];
+  if (dismissible) actions.push({ label: t("common.cancel"), onClick: (c) => c() });
+  else
+    actions.push({
+      // NOT a cancel. It deletes the key and the connection just made, and it
+      // says so in the label.
+      label: t("extra.session.abandon"),
+      cls: "btn-ghost",
+      onClick: async (c) => {
+        setBusy(true);
+        try {
+          await post("/api/extra/remove", { name: p.name, reason: "the passphrase was not saved" });
+        } catch (_) {
+        } finally {
+          setBusy(false);
+        }
+        c();
+        exRefresh(body);
+      },
+    });
+  actions.push({ label: t("extra.session.save"), cls: "btn-primary", onClick: (c) => save(c) });
+
+  modal({ title: t("extra.session.title"), body: form, actions, dismissible: dismissible !== false ? true : false });
+}
+
+function exSessionForgetModal(p, body) {
+  const form = el("div", "stack stack-sm");
+  form.append(el("div", "note", t("extra.session.forgetWhat", { name: p.name })));
+  modal({
+    title: t("extra.session.forget"),
+    body: form,
+    actions: [
+      { label: t("common.cancel"), onClick: (c) => c() },
+      {
+        label: t("extra.session.forget"),
+        cls: "btn-danger",
+        onClick: async (c) => {
+          c();
+          setBusy(true);
+          try {
+            await post("/api/extra/session/forget", { profile: p.name });
+          } finally {
+            setBusy(false);
+            exRefresh(body);
+          }
+        },
+      },
+    ],
+  });
 }
 
 /* ==================================== the connect modal and the wire (W11) ==
@@ -583,7 +765,13 @@ function exToolBox(tool, d, body) {
     [t("extra.tools.auth"), tool.auth_detail || (tool.authed === null ? "—" : tool.authed ? t("extra.tools.authYes") : t("extra.tools.authNo"))],
     [t("extra.tools.models"), tool.models_count === null ? "—" : String(tool.models_count)],
   ];
-  box.append(kvList(kv));
+  const kvDl = kvList(kv);
+  // The auth string is the one unbounded field on this card, so it is TAGGED and
+  // clamped in CSS — see `.ex-tool .kv dd.ex-auth-detail`. Found by its own
+  // label rather than by an index, because kvList drops empty rows.
+  const authDt = Array.from(kvDl.querySelectorAll("dt")).find((x) => x.textContent === t("extra.tools.auth"));
+  if (authDt && authDt.nextElementSibling) authDt.nextElementSibling.classList.add("ex-auth-detail");
+  box.append(kvDl);
   if (tool.bin_path) box.append(el("div", "note mono ex-tool-path", tool.bin_path));
   if (tool.probe_error) box.append(el("div", "note bad", tool.probe_error));
 
@@ -597,14 +785,51 @@ function exToolBox(tool, d, body) {
     box.append(exKeyhelpRow(tool, d, body));
     return box;
   }
-  // ready
+  // ready — and READY IS NOT THE SAME AS UNCONNECTED. `connected` / `verified`
+  // are computed by `orc extra tools`, never joined here.
   const actions = el("div", "row-actions");
-  const connect = el("button", "btn btn-sm btn-primary", t("extra.tools.connect"));
-  connect.type = "button";
-  connect.addEventListener("click", () => exAddModal(d.providers, body, tool));
-  actions.append(connect);
+  if (tool.verified) {
+    // A state must be VISIBLE, never re-offerable. There is NO Connect button
+    // here, not a disabled one: an absent control and a dead control must not
+    // look the same (the `no_install_alternative: null` rule).
+    const named = tool.connected_profiles.filter((x) => x.verified_at).map((x) => x.name).join(", ");
+    box.append(chip(t("extra.tools.connectedAs") + " " + named, "ok"));
+    actions.append(exToolTestBtn(tool, d, body));
+  } else if (tool.connected) {
+    // Configured and never tested — the setup gate's own state, in the setup
+    // gate's own words. The action is a test, not another connection.
+    box.append(el("div", "note", t("extra.tools.connectedUntested")));
+    actions.append(exToolTestBtn(tool, d, body));
+  } else {
+    const connect = el("button", "btn btn-sm btn-primary", t("extra.tools.connect"));
+    connect.type = "button";
+    connect.addEventListener("click", () => exAddModal(d.providers, body, tool, d.config));
+    actions.append(connect);
+  }
+  // A second connection to the same tool with a different model map is
+  // legitimate, so it stays available — as a SECONDARY, because it is not what
+  // someone looking at a connected card came for.
+  if (tool.connected) {
+    const again = el("button", "btn btn-sm", t("extra.tools.addAnother"));
+    again.type = "button";
+    again.addEventListener("click", () => exAddModal(d.providers, body, tool, d.config));
+    actions.append(again);
+  }
   box.append(actions);
   return box;
+}
+
+// The one action that can still tell you something about a connected tool. The
+// profile it opens on is the CLI's — the first one this tool's row names.
+function exToolTestBtn(tool, d, body) {
+  const btn = el("button", "btn btn-sm btn-primary", t("extra.tools.test"));
+  btn.type = "button";
+  btn.addEventListener("click", () => {
+    const first = tool.connected_profiles[0];
+    const full = ((d.list && d.list.profiles) || []).find((x) => x.name === first.name);
+    if (full) exTestModal(full, body, d.config);
+  });
+  return btn;
 }
 
 // PREVIEW THEN APPLY, unchanged: the exact command is visible ABOVE the button,
@@ -671,7 +896,7 @@ function exKeyhelpRow(tool, d, body) {
     wrap.append(el("div", "note", t("extra.tools.keyhelpNoProfile")));
     const connect = el("button", "btn btn-sm", t("extra.tools.connect"));
     connect.type = "button";
-    connect.addEventListener("click", () => exAddModal(d.providers, body, tool));
+    connect.addEventListener("click", () => exAddModal(d.providers, body, tool, d.config));
     wrap.append(connect);
     return wrap;
   }
@@ -689,9 +914,28 @@ function exKeyhelpRow(tool, d, body) {
         out.append(el("div", "action-cmd", k.cmd));
         out.append(el("div", "note", t("extra.tools.loginManual")));
       }
+      // v0.52.0 (D3 Part 2) — HOW to set the variable, per OS. Every command is
+      // the CLI's and carries a PLACEHOLDER, never a key, so nothing here can
+      // leak into a screenshot or a copy button. ORC does not run it: `setx`
+      // would put the key in argv and an `export` line writes it in plaintext.
+      exEnvSetBlock(out, k.env_set);
+      exEnvSetBlock(out, k.passphrase_env);
     })
     .catch((e) => out.append(failBox(e)));
   return wrap;
+}
+
+// The per-OS instruction, rendered. The panel names no command of its own — the
+// two lines and the note are all computed by `orc extra keyhelp`.
+function exEnvSetBlock(out, block) {
+  if (!block) return;
+  out.append(el("div", "field-label", t("extra.keyhelp.session")));
+  out.append(el("div", "action-cmd", block.session));
+  out.append(el("div", "field-label", t("extra.keyhelp.persist")));
+  out.append(el("div", "action-cmd", block.persist));
+  out.append(el("div", "note", block.persist_note));
+  // The honest half of the persistent form, when there is one.
+  if (block.warning) out.append(el("div", "note bad", block.warning));
 }
 
 /* THE SETUP GATE. Until one connection has answered, the routing table, the
@@ -719,7 +963,7 @@ function exGateNotice(d) {
 
 /* ---------------------------------------------------------- the add modal -- */
 
-function exAddModal(cat, body, tool) {
+function exAddModal(cat, body, tool, cfg) {
   const providers = (cat && cat.providers) || [];
   const form = el("div", "stack stack-sm");
 
@@ -751,14 +995,27 @@ function exAddModal(cat, body, tool) {
   const srcVault = el("input");
   srcVault.type = "radio";
   srcVault.name = "ex-cred";
+  // v0.52.0 — THE THIRD SOURCE, and the one that was missing. A local tool that
+  // already signed itself in holds its own credential, so it needs no key from
+  // ORC: no env var to set, no vault, no passphrase and no deadline. The CLI has
+  // had `--tool-auth` since v0.51.0; the panel offered two radios, so a
+  // signed-in tool was pushed into the vault and the vault then locked the run.
+  // Offered only where it can be true: engine `cli`, on a catalog row that has a
+  // binary.
+  const srcTool = el("input");
+  srcTool.type = "radio";
+  srcTool.name = "ex-cred";
   const srcRow = el("div", "ex-cred-choice");
   const lblEnv = el("label", "ex-cred-opt");
   lblEnv.append(srcEnv, el("span", null, t("extra.add.sourceEnv")));
   const lblVault = el("label", "ex-cred-opt");
   lblVault.append(srcVault, el("span", null, t("extra.add.sourceVault")));
-  srcRow.append(lblEnv, lblVault);
+  const lblTool = el("label", "ex-cred-opt");
+  lblTool.append(srcTool, el("span", null, t("extra.add.sourceTool")));
+  srcRow.append(lblEnv, lblVault, lblTool);
   srcEnv.addEventListener("change", () => sync());
   srcVault.addEventListener("change", () => sync());
+  srcTool.addEventListener("change", () => sync());
 
   const fName = exField(t("extra.add.name"), name, t("extra.add.nameHint"));
   const fProvider = exField(t("extra.add.provider"), provider);
@@ -780,6 +1037,8 @@ function exAddModal(cat, body, tool) {
   form.append(credGrid);
   const vaultWarn = el("div", "banner banner-bad ex-form-hide", t("extra.add.vaultWarn"));
   form.append(vaultWarn);
+  const toolNote = el("div", "banner ex-form-hide", t("extra.add.sourceToolHint"));
+  form.append(toolNote);
   // The rung ladder differs per engine and so does what it COSTS, so the note is
   // repainted whenever the engine changes rather than fixed at the top of a form
   // whose engine the user has not picked yet.
@@ -834,10 +1093,21 @@ function exAddModal(cat, body, tool) {
 
     probeNote.replaceChildren(exProbeNote(engine.value));
 
+    // The tool source only exists where a tool does. If the engine moves away
+    // from `cli` while it is selected, the choice falls back to the default
+    // rather than staying checked on a hidden radio.
+    const toolable = isCli && !!(r && r.cli_bin);
+    lblTool.hidden = !toolable;
+    if (!toolable && srcTool.checked) srcEnv.checked = true;
+
     const vault = srcVault.checked;
-    fEnvKey.hidden = vault;
+    const toolAuth = srcTool.checked && toolable;
+    // A tool that holds its own credential is asked for NEITHER field. Showing
+    // an empty env box beside it would read as something still to fill in.
+    fEnvKey.hidden = vault || toolAuth;
     fKey.hidden = !vault;
     vaultWarn.hidden = !vault;
+    toolNote.hidden = !toolAuth;
   }
   engine.addEventListener("change", () => sync());
   // Connect from a READY tool box pre-selects that provider and pre-fills the
@@ -848,6 +1118,10 @@ function exAddModal(cat, body, tool) {
     sync();
     if (Array.from(engine.options).some((o) => o.value === "cli")) engine.value = "cli";
     cliBin.value = tool.bin || "";
+    // Decision 2 — PRE-SELECT the tool source when the card the user pressed
+    // Connect on says the tool is signed in. The form opens on the state they
+    // were already looking at, and the hint says what the other two are for.
+    if (tool.authed) srcTool.checked = true;
   }
   sync();
 
@@ -871,8 +1145,9 @@ function exAddModal(cat, body, tool) {
         anthropic_base_url: engine.value === "claude-shim" ? baseUrl.value.trim() : "",
         cli_bin: engine.value === "cli" ? cliBin.value.trim() : "",
         cli_agent: engine.value === "cli" ? cliAgent.value.trim() : "",
+        tool_auth: srcTool.checked,
         vault: srcVault.checked,
-        env_key: srcVault.checked ? "" : envKey.value.trim(),
+        env_key: srcVault.checked || srcTool.checked ? "" : envKey.value.trim(),
       });
       if (added.fixture) {
         wire.settle(false);
@@ -890,7 +1165,7 @@ function exAddModal(cat, body, tool) {
         profile: name.value.trim(),
         key: srcVault.checked ? key.value : "",
       });
-      exPingResult(result, wire, ping, name.value.trim(), key.value, body);
+      exPingResult(result, wire, ping, name.value.trim(), key.value, body, cfg);
     } catch (e) {
       wire.settle(false);
       result.append(failBox(e));
@@ -920,7 +1195,7 @@ function exAddModal(cat, body, tool) {
 
 /* ------------------------------------------------- test an existing profile */
 
-function exTestModal(p, body) {
+function exTestModal(p, body, cfg) {
   const form = el("div", "stack stack-sm");
   form.append(el("div", "note", p.name + " · " + p.provider + "/" + p.engine));
   form.append(exProbeNote(p.engine));
@@ -966,7 +1241,7 @@ function exTestModal(p, body) {
         live: !!live,
         model: live ? box.value() : "",
       });
-      exPingResult(result, wire, r, p.name, vaulted ? key.value : "", body);
+      exPingResult(result, wire, r, p.name, vaulted ? key.value : "", body, cfg);
     } catch (e) {
       wire.settle(false);
       result.append(failBox(e));
@@ -1006,7 +1281,7 @@ function exTestModal(p, body) {
 // Everything rendered here is the CLI's `--json` object. The panel adds no
 // verdict of its own: `ok` is the CLI's, `verify_method` is which rung actually
 // answered, and `note` is its own caveat about what that rung did NOT prove.
-function exPingResult(result, wire, payload, profile, pastedKey, body) {
+function exPingResult(result, wire, payload, profile, pastedKey, body, cfg) {
   result.replaceChildren();
   if (payload && payload.fixture) {
     wire.settle(false);
@@ -1066,7 +1341,12 @@ function exPingResult(result, wire, payload, profile, pastedKey, body) {
     if (d.vault.honesty) box.append(el("div", "note", d.vault.honesty));
   } else if (d.vault && d.vault.error) {
     box.append(el("div", "note", d.vault.error));
-    if (pastedKey) box.append(exSaveRow(profile, pastedKey, body));
+    // v0.52.0 — THE HARD GATE. The save used to be an optional inline box the
+    // user could ignore, and ignoring it is what left a vaulted key with no
+    // passphrase and a run that locked at wave 1. A green test on a connection
+    // that will hold its key in the vault now opens a modal with no exit but
+    // Save and one destructive escape.
+    if (pastedKey) box.append(exSaveRow(profile, pastedKey, body, cfg));
   }
   result.append(box);
   exRefresh(body);
@@ -1124,7 +1404,20 @@ function exLiveBlock(box, d) {
 
 // Saving re-runs the test with the passphrase attached, because that is the only
 // way the CLI ever stores a key: proved by a live connection first, every time.
-function exSaveRow(profile, pastedKey, body) {
+//
+// v0.52.0 — the inline form is now the LAST RESORT rather than the route. When
+// the panel knows the config (and it does, everywhere the connect flow runs) the
+// key and its deadline are asked for together, in a modal that cannot be walked
+// away from half-done.
+function exSaveRow(profile, pastedKey, body, cfg) {
+  if (cfg) {
+    exSessionModal({ name: profile, provider: "", engine: "", session: null }, body, cfg, false, pastedKey);
+    return el("div", "note", t("extra.session.opened"));
+  }
+  return exSaveRowInline(profile, pastedKey, body);
+}
+
+function exSaveRowInline(profile, pastedKey, body) {
   const wrap = el("div", "ex-save");
   wrap.append(el("div", "ex-probe-head", t("extra.save.head")));
   wrap.append(el("div", "banner banner-bad", t("extra.save.warning")));
@@ -1293,6 +1586,58 @@ function exRefresh(body) {
 // Which band is open in the editor, so an Apply that re-renders does not throw
 // you back to the top of the list.
 let EX_OPEN_BAND = null;
+
+/* WHICH LANE DOES A BAND GOVERN (v0.52.0, D6).
+
+   The routing table says `[40,55) → opencode/big-pickle`. That is true for
+   `/orc`, which scores every task, and it is NOT how `/orc-fast` works: that
+   lane pins ONE executor and resolves the BAND its agent already encodes, at
+   BOTH EDGES, requiring them to agree. The rule was implemented and written
+   down and rendered nowhere, so a user reading this panel could not get from a
+   band to the decision it drives.
+
+   Every word here is `orc extra lanes --json`: the shape, the verdict, the
+   edges, whether they agreed, and the sentence underneath. The panel decides
+   nothing — a second idea of the routing is drift no lint can see. */
+function exLanesCard(d) {
+  const c = card(t("extra.lanes.title"));
+  c.append(el("div", "note", t("extra.lanes.sub")));
+  if (d.errors.lanes) {
+    c.append(failBox(d.errors.lanes));
+    return c;
+  }
+  const lanes = (d.lanes && d.lanes.lanes) || [];
+  if (!lanes.length) {
+    c.append(empty(t("extra.lanes.none"), ""));
+    return c;
+  }
+  const list = el("div", "ex-lanes");
+  for (const l of lanes) {
+    const row = el("div", "ex-lane");
+    const top = el("div", "row-actions");
+    top.append(el("span", "mono ex-lane-name", l.lane));
+    top.append(el("span", "note", l.shape));
+    // The verdict word is the CLI's own. A friendlier synonym would be a state
+    // that does not exist.
+    top.append(
+      chip(l.routes, l.routes === "foreign" || l.routes === "roles" || l.routes === "per-task" ? "ok" : l.routes === "never" ? "info" : "warn")
+    );
+    row.append(top);
+    // The disclosure `extra-dispatch.md` demands, finally rendered: both edges
+    // and whether they agreed.
+    if (l.band)
+      row.append(
+        el("div", "note mono", t("extra.lanes.edges", { band: l.band, edges: (l.edges || []).join(","), agree: String(l.agree) }))
+      );
+    row.append(el("div", "note", l.detail));
+    list.append(row);
+  }
+  c.append(list);
+  // A lane not listed does not route foreign. Absence is a `no`, never an
+  // omission to be interpreted.
+  if (d.lanes && d.lanes.note) c.append(el("div", "note", d.lanes.note));
+  return c;
+}
 
 function exRoutingCard(d, body, edits) {
   const c = card(t("extra.routing.title"));

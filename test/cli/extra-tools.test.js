@@ -140,6 +140,57 @@ test("extra tools: an installed tool climbs to ready, and an unparseable version
   rmrf(p.root);
 });
 
+test("extra tools: WHETHER A CONNECTION EXISTS is joined in the CLI, not in the panel", () => {
+  // v0.52.0 / D1. The panel rendered an unconditional Connect button on every
+  // `ready` card because it never consulted the profile list — so a tool you had
+  // already connected, tested and routed work to still offered to connect it.
+  // The join belongs HERE: a second idea of "connected" living in app.js is the
+  // drift this panel exists to prevent.
+  const p = project();
+  const dir = fakeBinDir([ROW.cli_bin]);
+
+  // An empty ledger: both false, and neither is null — absence is an ANSWER.
+  let row = json(run(p, ["extra", "tools", "--json"], withTool(dir))).tools.find((x) => x.provider === ROW.id);
+  assert.equal(row.connected, false);
+  assert.equal(row.verified, false);
+  assert.deepEqual(row.connected_profiles, []);
+
+  // Configured and NEVER TESTED is connected and not verified — two different
+  // cards, and the difference is the whole point of the field.
+  assert.equal(
+    run(p, ["extra", "add", "w", "--provider", ROW.id, "--engine", "cli", "--tool-auth"], withTool(dir)).status,
+    0
+  );
+  row = json(run(p, ["extra", "tools", "--json"], withTool(dir))).tools.find((x) => x.provider === ROW.id);
+  assert.equal(row.connected, true);
+  assert.equal(row.verified, false);
+  assert.deepEqual(row.connected_profiles.map((x) => x.name), ["w"]);
+  assert.equal(row.connected_profiles[0].credential_source, "tool");
+
+  // Once it has answered, verified follows — and the profile is NAMED, because a
+  // state must be visible rather than re-offerable.
+  assert.equal(run(p, ["extra", "ping", "w", "--json"], withTool(dir)).status, 0);
+  row = json(run(p, ["extra", "tools", "--json"], withTool(dir))).tools.find((x) => x.provider === ROW.id);
+  assert.equal(row.verified, true);
+  assert.ok(row.connected_profiles[0].verified_at, "the row carries WHEN it answered, not just that it did");
+  rmrf(p.root);
+});
+
+test("extra add --tool-auth: a tool that holds its own key needs NO credential from ORC", () => {
+  // D3 Part 1. This is the profile the reported run should have had: opencode
+  // reports `authed: true`, so it needed no env var, no vault, no passphrase and
+  // no deadline — and the panel offered two radios, pushed it into the vault,
+  // and the vault then locked the run.
+  const p = project();
+  const dir = fakeBinDir([ROW.cli_bin]);
+  const r = run(p, ["extra", "add", "w", "--provider", ROW.id, "--engine", "cli", "--tool-auth", "--json"], withTool(dir));
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  const prof = json(run(p, ["extra", "list", "--json"])).profiles[0];
+  assert.equal(prof.credential.source, "tool");
+  assert.equal(prof.credential.key_name, null);
+  rmrf(p.root);
+});
+
 test("extra add: a provider whose tool is ABSENT is refused BY NAME, with the install command", () => {
   const p = project();
   const r = run(p, ["extra", "add", "w", "--provider", ROW.id, "--engine", "cli", "--env-key", "K", "--json"], withoutTool());
@@ -294,6 +345,32 @@ test("keyhelp: the route is from a closed set, and env_var is non-null exactly o
   const prof = json(run(p, ["extra", "list", "--json"], env)).profiles.find((x) => x.name === "s");
   assert.equal(prof.credential.source, "tool");
   assert.equal(prof.credential.present, null);
+  rmrf(p.root);
+});
+
+test("keyhelp: it says HOW to set the variable, per OS, and never renders a real key", () => {
+  // v0.52.0 / D3 Part 2. `orc extra list` printed `no key (env DEEPSEEK_API_KEY)`
+  // and nothing anywhere said how to set that variable on Windows or on macOS.
+  const p = project();
+  const f = fakeBinDir([ROW.cli_bin]);
+  assert.equal(
+    run(p, ["extra", "add", "e", "--provider", ROW.id, "--engine", "cli", "--cli", ROW.cli_bin, "--env-key", "SOME_VAR"], withTool(f)).status,
+    0
+  );
+  const j = json(run(p, ["extra", "keyhelp", "e", "--json"], withTool(f)));
+  assert.ok(j.env_set, "an env credential gets the instruction");
+  assert.ok(j.env_set.session.includes("SOME_VAR"));
+  assert.ok(j.env_set.persist.includes("SOME_VAR"));
+  assert.ok(j.env_set.persist_note, "a persistent set has a caveat, on every platform");
+  // PLACEHOLDERS ONLY. The CLI never renders a real key into an instruction, so
+  // nothing here can leak into a screenshot, a copy button or a shell history.
+  assert.ok(/<your key>/.test(j.env_set.session));
+  // And ORC does not RUN it: `setx` would put the key in argv, which this
+  // subsystem refuses by name, and an `export` line writes it in plaintext.
+  assert.ok(!/setx/i.test(JSON.stringify(j)), "setx puts the key in argv");
+  // A vaulted profile gets the PASSPHRASE variable instead, with its own warning
+  // — it is a different thing and it is never presented as the same one.
+  assert.equal(j.passphrase_env, null);
   rmrf(p.root);
 });
 

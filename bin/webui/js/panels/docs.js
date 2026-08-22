@@ -153,6 +153,7 @@ async function loadDocDetail(pane, slug, body) {
   let rules = null;
   let forecast = null;
   let cost = null;
+  let docExtra = null;
   const q = "?slug=" + encodeURIComponent(slug);
   const soft = (route) => read(route).catch(() => ({ data: null }));
   try {
@@ -167,6 +168,7 @@ async function loadDocDetail(pane, slug, body) {
     rules = (await soft("/api/doc/rules/one" + q)).data;
     forecast = (await soft("/api/doc/forecast" + q)).data;
     cost = (await soft("/api/doc/cost" + q)).data;
+    docExtra = (await soft("/api/doc/extra" + q)).data;
   } catch (e) {
     pane.replaceChildren(failBox(e));
     return;
@@ -254,6 +256,12 @@ async function loadDocDetail(pane, slug, body) {
       pc.append(el("div", "note bad", t("docs.docStale", { ids: s.document_stale.map((x) => x.heading).join(", ") })));
     out.append(pc);
   }
+
+  // --- 10a2. WHICH MODEL WRITES THIS DOCUMENT (v0.52.0, D9). Per document,
+  //     because a global `extra_roles` turning on for a throwaway runbook also
+  //     turns on for the PRD you ship. Every word is the CLI's: the resolution
+  //     order, the shadowing sentence, the band and both its edges.
+  if (docExtra) out.append(docExtraCard(docExtra, slug, body));
 
   // --- 10b. the sections, as the COMPILED document sees them (line ranges)
   if (sections.length) {
@@ -814,12 +822,68 @@ function docPartList(rows, dir) {
   return list;
 }
 
+/* WHICH MODEL WRITES THIS DOCUMENT (v0.52.0, D9).
+
+   A document is the one artifact where the model choice is visible in the
+   OUTPUT, so this is a per-document decision and its default is `off`. The
+   panel offers the CLI's four values, renders the CLI's own resolution
+   sentence, and computes nothing: a document set to `both` while
+   `extra_roles` names neither role resolves to OFF, and that shadow is the
+   CLI's to announce. */
+function docExtraCard(dx, slug, body) {
+  const c = card(t("docs.extra.title"));
+  const top = el("div", "row-actions");
+  top.append(chip(dx.extra, dx.extra === "off" ? "" : "warn"));
+  if (dx.stored) top.append(el("span", "note", t("docs.extra.stored")));
+  else top.append(el("span", "note", t("docs.extra.fromConfig")));
+  c.append(top);
+  c.append(el("div", "note", dx.why));
+  // The disclosure the fixed-lane rule demands: this lane pins its agents, so
+  // it resolves the writer's BAND at both edges and requires them to agree.
+  if (dx.edges && dx.edges.band)
+    c.append(
+      el("div", "note mono", t("docs.extra.edges", { band: dx.edges.band, edges: (dx.edges.edges || []).join(","), agree: String(dx.edges.agree) }))
+    );
+  c.append(el("div", "note", t("docs.extra.order", { order: (dx.resolve_order || []).join("  >  ") })));
+
+  const pick = el("select", "setting-control");
+  for (const o of dx.options || []) {
+    const opt = el("option", null, o);
+    opt.value = o;
+    pick.append(opt);
+  }
+  pick.value = dx.stored || dx.extra;
+  const apply = el("button", "btn btn-sm btn-primary", t("edits.apply"));
+  apply.type = "button";
+  apply.addEventListener("click", async () => {
+    apply.disabled = true;
+    setBusy(true);
+    try {
+      await post("/api/doc/extra/set", { slug, mode: pick.value });
+      renderDocs(body);
+    } catch (e) {
+      c.append(failBox(e));
+    } finally {
+      apply.disabled = false;
+      setBusy(false);
+    }
+  });
+  const row = el("div", "row-actions");
+  row.append(pick, apply);
+  c.append(row);
+  return c;
+}
+
 // `K of N` comes from the CLI, which DERIVES it by counting waves whose
 // sections are all hash-confirmed. The panel never counts anything.
 function docWaveStrip(wave, s) {
   const wrap = el("div", "row-actions doc-wave-strip");
   wrap.append(chip(t("docs.waveOf", { k: wave.done, n: wave.total }), wave.done >= wave.total ? "ok" : "info"));
   if (s && s.write_mode) wrap.append(chip(s.write_mode, ""));
+  // v0.52.0 — a document whose sections are written by something other than
+  // Claude says so on the row. `off` gets no chip: it is the default and the
+  // quiet state.
+  if (s && s.extra && s.extra !== "off") wrap.append(chip("extra " + "·" + " " + s.extra, "warn"));
   wrap.append(el("span", "note", s ? s.where : ""));
   return wrap;
 }

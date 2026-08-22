@@ -6,14 +6,14 @@
 
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
-![Version](https://img.shields.io/badge/version-0.51.0-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.52.0-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
 ![Dependencies](https://img.shields.io/badge/dependencies-zero-lightgrey.svg?style=for-the-badge)
 ![GitHub stars](https://img.shields.io/github/stars/azure-id/orc?style=for-the-badge&color=yellow)
 
-**Latest: v0.51.0** · updated 2026-08-22 · [full changelog](CHANGELOG.md)
+**Latest: v0.52.0** · updated 2026-08-23 · [full changelog](CHANGELOG.md)
 
 **🇮🇩 [Baca dalam Bahasa Indonesia](README-id.md)**
 
@@ -440,33 +440,39 @@ a current audit: [EVAL-REPORT.md](EVAL-REPORT.md).
 **Full history: [CHANGELOG.md](CHANGELOG.md)** — or `orc changelog`, which prints
 only what is newer than the version you have.
 
-### v0.51.0 — the tools you already have, and a connection that proves itself _(2026-08-22)_
+### v0.52.0 — the connection that could not be used, and the routing nobody could see _(2026-08-23)_
 
-**`orc extra` connections.** The two coding tools ORC can hand work to are
-programs on your own machine, not websites — so they are first-class providers
-now, with a connect box each and a model dropdown built from what your account
-can really reach.
+**Eleven defects, one release.** Five came out of a real `/orc-fast` run against
+a verified, routed local tool — a run that fell back to Claude twice over, for
+two reasons that had nothing to do with the model.
 
-- **A program can simply not be installed, and the panel says that first** —
-  four states, computed every time, never remembered. An absent tool gets no
-  button that cannot succeed, and `orc extra add` refuses with the install
-  command.
-- **ORC opens your own terminal and runs the install there.** The command is on
-  screen before the button, the window is yours, and **ORC never asks for
-  administrator rights**. No terminal to open? You get the command to paste.
-- **The connection test is a ladder**: is it there · new enough · signed in ·
-  which models can this account reach · and, only if you ask, **does a real
-  message come back** — with the round trip, the reply and four token counts.
-- **A listed model is not a working model.** `orc extra models <name> --test
-  <id>` is the only thing that tells those apart.
-- **Neither local tool says which model answered**, so ORC prints that sentence
-  instead of an empty field.
-- **`extra_enabled` cannot be armed before something has answered** — it would
-  have read ON and meant OFF.
+- **`opencode` dispatch was dead on arrival.** `-f` is a greedy yargs array
+  flag, so it swallowed the message and the tool exited in its own parser —
+  looking exactly like a model problem. The message comes first now.
+- **A tool that signs itself in was forced into the vault.** The add form has a
+  third credential source now, and pre-selects it when the tool is already
+  signed in.
+- **The passphrase has a lifecycle.** Save it with a deadline (`orc extra
+  session <name> --save --ttl <days>`, on stdin), and **`orc extra preflight`
+  STOPS a run when it expires** rather than quietly falling back. The cache is
+  encrypted under a key in your home directory, so **a copy of the project
+  folder opens nothing**.
+- **Extra is visible outside its own panel.** `orc extra lanes` says which lane
+  a band actually governs, the Flow score table renders the composite, a
+  `fixed_executor` can name a foreign target, and **`/orc-doc` has its own
+  per-document switch** — a document's voice is the deliverable.
+- **Three panel fixes**: a connected tool no longer offers Connect, a modal no
+  longer scrolls the page behind it (every modal, not just Extra's), and two
+  tool cards line up row for row.
+- **Wording**: the panel's instruction text is Simplified Technical English with
+  a term list and a test. Rationale prose keeps its voice — and a CLI-computed
+  value is never simplified, because a simplified state word is a state that
+  does not exist.
 
 Setup per provider: **[`guides/extra-models.md`](guides/extra-models.md)**.
 
-Before that: **v0.49.5 — house rules are text, and the hand-back writes
+Before that: **v0.51.0 — the tools you already have, and a connection that
+proves itself**, **v0.49.5 — house rules are text, and the hand-back writes
 itself**, **v0.49.4 — the panel was being handed half an answer**,
 **v0.49.3 — coverage on a large repo**, and **v0.49.2 — house rules, a run map
 before you pay, and three defects**.

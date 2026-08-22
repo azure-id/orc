@@ -10,6 +10,101 @@ Format: `### v<version> — <title> _(<date>)_`.
 
 ---
 
+### v0.52.0 — the connection that could not be used, and the routing nobody could see _(2026-08-23)_
+
+**Eleven defects, one release.** Five came out of a real `/orc-fast` run against
+a verified, routed local tool — a run that fell back to Claude twice over, for
+two unrelated reasons, neither of which was the model. Six more came out of
+reading the panel afterwards, and they are one theme with several faces:
+**Extra was invisible to every surface that is not the Extra panel.**
+
+**The two that killed that run.**
+
+- **`opencode` dispatch was dead on arrival.** `-f` is a yargs **array** flag,
+  and a yargs array is **greedy**: every non-flag token after it is swallowed as
+  another file path. ORC pushed the message last, so `message..` arrived empty
+  and opencode exited 1 in its own parser — `dur=0m01s`, `tok=none`,
+  `outcome=failed`, looking exactly like a model problem. Engine `cli` on that
+  tool was 100% dead for a release. The message comes first now, `-f` comes
+  last where it has nothing left to eat, and the test fixture asserts **that a
+  message arrived** rather than that a flag was present.
+- **A tool that signs itself in was being forced into the vault.** `--tool-auth`
+  has existed in the CLI since v0.51.0 and the panel offered two radios, so a
+  connection that needed **no key from ORC at all** got a vault, and the vault
+  then locked the run. There is a third credential source in the form now,
+  offered only where it can be true, and pre-selected when the card you pressed
+  Connect on says the tool is already signed in.
+
+**The passphrase finally has a lifecycle, and a deadline.** A vaulted key needed
+`ORC_EXTRA_KEY` in the environment or nothing, so a green, verified, routed
+connection answered `locked` at wave 1 and the run announced a Claude fallback.
+
+- `orc extra session <name> --save --ttl <days>` saves it, **on stdin** —
+  `--passphrase <value>` is refused by name, like every other secret here. The
+  deadlines are a closed set (1 · 3 · 7 · 14 · 30 · 90 · 180 · 360): no `0`, no
+  "forever", and **no auto-extend on use** — a deadline that renews itself is
+  not a deadline.
+- The cache lives **in the project**, gitignored beside the vault, and is
+  encrypted under the pepper that lives in your home directory. **A copy of the
+  project folder opens nothing.** That is the one genuine property this file
+  has, and it is said out loud wherever the countdown appears — along with the
+  honest half: while it is saved, anything running as you on this computer can
+  open the connection.
+- **`orc extra preflight` is a P0 gate before wave 1.** Active is fine; expiring
+  is fine and names the date; **expired or missing STOPS the run**. It never
+  falls back — `extra_on_failure` is about an endpoint that failed, and a
+  deadline you set 30 days ago deserves a stop, not a substitution. The
+  credential is deleted and the connection stamped expired; **the routing rows
+  survive**, because the bands are work you did.
+- The save modal at connect time **has no exit but Save**, and one destructive
+  escape that is named rather than a Cancel.
+
+**Extra is visible outside its own panel now.**
+
+- **`orc extra lanes`** answers the question a band cannot: *which lane does this
+  govern?* `/orc` scores every task; `/orc-fast` pins one executor and resolves
+  its band **at both edges**, requiring them to agree. That rule was implemented
+  and written down and rendered nowhere. The lane table is code now, mirrored
+  against the markdown in both directions by a golden test.
+- **The Flow score table sees Extra.** With `extra: on` it renders the composite
+  instead of the Claude ladder — a band that cannot route **keeps its row** and
+  names its fall-through, and `extra: off` renders byte-identically to before.
+- **`fixed_executor` can name a foreign target** (`extra:<profile>/<provider>/<model>`),
+  offered only for verified connections. The session-tier rule is skipped for it
+  — it is not a Claude model — and **the compiled flow says so**, because a rule
+  silently disabled is worse than no rule.
+- **`/orc-doc` has its own switch.** `orc doc extra <slug> --set
+  off|writer|checker|both`, stored per document, default off. A global setting
+  turning Extra on for a throwaway runbook also turned it on for the PRD you
+  ship, and a document's voice is the deliverable. `orc doc next` names the
+  sections going off Claude **before** the wave.
+
+**Three panel defects, and one of them was in every modal.**
+
+- A **connected** tool no longer offers Connect. `connected` and `verified` are
+  computed by the CLI, never joined in the panel, and the verified card **has no
+  Connect button at all** rather than a disabled one.
+- **Scrolling inside a modal scrolled the page behind it** — every modal in the
+  app, not just Extra's. Fixed with scroll containment and a body lock.
+- **Two tool cards no longer sit at different heights.** A card declares its rows
+  now, so the button in one lines up with the button in the other.
+
+**Wording.** The Extra panel's instruction text — labels, hints, errors, gates,
+countdowns, the passphrase modal end to end — is Simplified Technical English,
+with a one-page term list at `bin/webui/i18n/TERMS.md` and a test for the cheap
+half. Rationale prose keeps its voice and only gets shorter: flattening *"it
+stops someone at your keyboard, not someone who copied the file"* makes it true
+and useless. One rule is not negotiable and now has a test: **never simplify a
+CLI-computed value** — a simplified state word is a state that does not exist.
+
+New: `orc extra session`, `orc extra preflight`, `orc extra lanes`, `orc doc
+extra`, `orc extra dispatch --passphrase-stdin`, and one config key
+(`extra_passphrase_ttl_days`, default 30). `orc extra keyhelp` now carries the
+per-OS command for setting an environment variable — with a placeholder, never a
+key, and ORC still refuses to run `setx` or write to your shell profile itself.
+
+---
+
 ### v0.51.0 — the tools you already have, and a connection that proves itself _(2026-08-22)_
 
 **`orc extra` connections.** Two of the things ORC can hand work to are not

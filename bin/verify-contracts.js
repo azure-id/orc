@@ -319,6 +319,28 @@ const CONTRACTS = [
     ],
   },
   {
+    // v0.52.0 (D6) — WHICH LANES ROUTE FOREIGN. The table was prose in one
+    // markdown file and nothing computed it, so the routing table could say
+    // `[40,55) → opencode/big-pickle` without ever saying that `/orc-fast`
+    // resolves a BAND rather than a score. `EXTRA_LANE_SHAPES` in bin/cli.js is
+    // the machine-readable copy; a golden test in test/cli/extra-routing.test.js
+    // compares the two lists in BOTH directions (the DIY_STEPS → stitch-order
+    // precedent), so a lane added to one and not the other fails.
+    name: "the lane table is CODE, not only prose (v0.52.0)",
+    token: "Which lanes route foreign",
+    binFiles: ["bin/cli.js"],
+    files: ["skills/_shared/extra-dispatch.md"],
+  },
+  {
+    // The rule a fixed-executor lane resolves with. Registered because
+    // `/orc-doc` was DECLARED as routing foreign while being absent from the
+    // rule's own list, so the lane had no defined way to resolve a band at all.
+    name: "a fixed lane resolves BOTH EDGES of its agent's band (v0.50.0, extended v0.52.0)",
+    token: "Resolve BOTH EDGES",
+    binFiles: ["bin/cli.js"],
+    files: ["skills/_shared/extra-dispatch.md"],
+  },
+  {
     // The foreign return's downgrade check. `actual_model` cannot exist for a
     // worker with no injected model-id line, so this is what replaces it — and
     // it must never quietly become a synonym for a clean check.

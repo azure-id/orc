@@ -120,7 +120,7 @@ orc extra keyhelp <profile>        # which of three routes applies, and why
 
 ## The credential
 
-Two sources, and **the first one is recommended**:
+Three sources, and **the right one depends on who already holds the key**:
 
 ```bash
 # 1. an environment variable your OS already protects   ← recommended
@@ -129,7 +129,16 @@ orc extra add cheap --provider deepseek --engine api --env-key DEEPSEEK_API_KEY
 # 2. the encrypted vault, for people who would rather not manage variables
 orc extra add cheap --provider deepseek --engine api --key-stdin
 printf '%s\n%s\n' "$KEY" "$PASSPHRASE" | orc extra ping cheap --key-stdin
+
+# 3. the tool signs itself in and holds its own key   ← engine `cli` only
+orc extra add local --provider opencode --engine cli --cli opencode --tool-auth
 ```
+
+**If `orc extra tools` says a program is signed in, use option 3.** It needs no
+key from ORC, no variable, no vault and no deadline — and ORC never writes
+another tool's credential store. The connect form in `orc ui` offers all three,
+and pre-selects this one when the tool you pressed Connect on is already signed
+in.
 
 There is deliberately **no `--key <value>`**. argv is world-readable in a process
 list and lands in shell history, so ORC refuses that flag by name.
@@ -156,6 +165,43 @@ orc extra ping cheap --passphrase-stdin   # re-test a stored key
 `extra_unlock` decides when you are asked. `per-run` (the default) asks ONCE at
 the Phase-1 stop the lane already has; `per-dispatch` asks every time and
 **refuses to start an unattended wave**, naming why.
+
+### Save the passphrase, with a deadline
+
+Without this, a vaulted key needs the passphrase every single time — and a run
+that cannot get it announces a fallback to Claude and carries on. That is safe,
+and it is also a decision being made for you.
+
+```bash
+printf '%s\n' "$PASSPHRASE" | orc extra session cheap --save --ttl 30
+orc extra session                       # every connection, and when each deadline falls
+orc extra session cheap --forget        # delete it now
+orc extra preflight                     # the gate that runs before wave 1
+```
+
+**Say the honest part out loud, because it is the whole shape of the feature:**
+a passphrase stored on the same machine as the vault it opens is **not a second
+factor any more — it is a deadline**. While it is saved, anything that can run
+as you on this computer can open the connection. The deadline is what limits
+that.
+
+One thing it does keep, and it is real: the passphrase is cached **in the
+project** and encrypted under a key that lives in **your home directory**, so
+**copying the project folder to another computer opens nothing**.
+
+- Deadlines are a closed set: **1 · 3 · 7 · 14 · 30 · 90 · 180 · 360 days.** There is
+  no `0` and no "forever" — "forever" is the option that makes every other one
+  pointless. `extra_passphrase_ttl_days` (default 30) is only what the picker
+  opens on; the deadline is stored per connection.
+- **Using it does not extend it.** A deadline that renews itself is not a
+  deadline.
+- **When it runs out, the next run STOPS.** It does not fall back to Claude:
+  `extra_on_failure` is about an endpoint that failed, and this is a deadline you
+  set yourself. The stored key is deleted and the connection is marked expired
+  — **but your routing rows survive**, so re-connecting is one step, not a
+  rebuild.
+- `--passphrase <value>` does not exist, for the same reason `--key <value>` does
+  not.
 
 ---
 
@@ -249,6 +295,31 @@ is wrong. Then read `orc extra stats` after a few runs and move the line.
 
 Rows may not overlap — ORC refuses one that would, and names the `route rm` that
 clears it. Rows do **not** have to tile.
+
+### A band is not the same thing as a lane
+
+```bash
+orc extra lanes                 # which lane each band actually governs
+```
+
+`/orc` scores every task, so a row covering `[40,55)` applies score by score.
+**`/orc-fast` does not work that way**: it pins ONE executor, so ORC resolves
+that agent's band at **both edges** and requires them to agree. One edge foreign
+and the other not — the lane stays on Claude, and `orc extra lanes` names the row
+that covered only part of it. A row covering three scores out of fifteen should
+not capture a whole lane.
+
+Some lanes never route at all, whatever the table says: `/orc-quick` asks which
+agent before every dispatch, and `/orc-challenge`'s lenses are measuring
+instruments. **A lane the list does not mention does not route foreign** —
+absence is a no, not an omission.
+
+`/orc-doc` is its own case: it is a per-document switch, because a document's
+voice is the deliverable.
+
+```bash
+orc doc extra <slug> --set writer   # off | writer | checker | both  (default off)
+```
 
 ---
 

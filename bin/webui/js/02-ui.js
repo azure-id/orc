@@ -116,7 +116,13 @@ function copy(text, label) {
 
 /* ----------------------------------------------------------------- modal -- */
 
-function modal({ title, body, actions }) {
+// `dismissible` defaults to TRUE, so nothing that already calls this changes.
+// FALSE is for a modal whose only legal exits are its own buttons — the
+// passphrase save, which is a procedure with a deadline attached and not a form
+// you can wander away from half-finished. It follows the `.tour-block`
+// precedent: no Escape handler, no backdrop click, and a CAPTURE-PHASE key
+// handler that swallows Escape before anything else can act on it.
+function modal({ title, body, actions, dismissible }) {
   const host = $("#modal-host");
   $("#modal-title").textContent = title;
   const b = $("#modal-body");
@@ -145,15 +151,31 @@ function modal({ title, body, actions }) {
     btn.addEventListener("click", () => a.onClick(closeModal));
     f.append(btn);
   }
+  const locked = dismissible === false;
   host.hidden = false;
+  host.classList.toggle("modal-locked", locked);
+  // THE BODY SCROLL LOCK. `closeModal` is already the single exit — Escape, the
+  // backdrop and every action button route through it — so there is exactly one
+  // add and one remove, and no path around either.
+  document.body.classList.add("modal-open");
   const onKey = (e) => {
-    if (e.key === "Escape") closeModal();
+    if (e.key !== "Escape") return;
+    if (locked) {
+      // Swallowed in the CAPTURE phase, so no other Escape handler on the page
+      // sees it either.
+      e.stopPropagation();
+      e.preventDefault();
+      return;
+    }
+    closeModal();
   };
-  document.addEventListener("keydown", onKey);
-  $("#modal-backdrop").onclick = closeModal;
+  document.addEventListener("keydown", onKey, true);
+  $("#modal-backdrop").onclick = locked ? null : closeModal;
   function closeModal() {
     host.hidden = true;
-    document.removeEventListener("keydown", onKey);
+    host.classList.remove("modal-locked");
+    document.body.classList.remove("modal-open");
+    document.removeEventListener("keydown", onKey, true);
   }
   return closeModal;
 }

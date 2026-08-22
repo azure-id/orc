@@ -81,6 +81,38 @@ test("js: every panel container carries the class that spaces its children", () 
 // its payload, so the blanket flag silenced the one command whose entire job is
 // to answer the question the UI was asking.
 
+test("css: a modal contains its own scroll, and the page behind it is locked", () => {
+  // v0.52.0 / D2. Scrolling inside a modal scrolled the page behind it, in every
+  // modal in the app — the Extra ones are simply the tallest. Two things were
+  // missing: the modal's scroll CHAINED to <body> at either end, and a wheel
+  // over the backdrop was never the modal's to begin with.
+  const css = appCss().replace(/\/\*[\s\S]*?\*\//g, "");
+  assert.match(css, /\.modal-host\s*\{[^}]*overscroll-behavior:\s*contain/);
+  assert.match(css, /\.modal\s*\{[^}]*overscroll-behavior:\s*contain/);
+  assert.match(css, /body\.modal-open\s*\{[^}]*overflow:\s*hidden/);
+  // The scroll position survives because the gutter never collapses — cheaper
+  // than saving a number and putting it back.
+  assert.match(css, /html\s*\{[^}]*scrollbar-gutter:\s*stable/);
+
+  // ONE add and ONE remove. `closeModal` is the single exit, so there is no path
+  // around either.
+  const js = appJs();
+  assert.match(js, /document\.body\.classList\.add\("modal-open"\)/);
+  assert.match(js, /document\.body\.classList\.remove\("modal-open"\)/);
+});
+
+test("css: a tool card declares its rows, so two cards line up row for row", () => {
+  // v0.52.0 / D4. `.ex-tool` sized every internal row to its own content, and
+  // two tools' content differs — so the button in one card sat lower than the
+  // button in the other, permanently. The `.run-card` lesson, one level down.
+  const css = panelCss("extra").replace(/\/\*[\s\S]*?\*\//g, "");
+  assert.match(css, /\.ex-tool\s*\{[^}]*grid-template-rows:/);
+  assert.match(css, /\.ex-tool > \.row-actions:last-child\s*\{[^}]*align-self:\s*end/);
+  // The one unbounded field is clamped rather than allowed to set the height.
+  assert.match(css, /dd\.ex-auth-detail/);
+  assert.ok(!/subgrid/.test(css), "subgrid breaks the moment a card in a different state joins the row");
+});
+
 test("changelog: the parser reads this repo's own CHANGELOG.md", () => {
   // The parser's contract is THIS file's format — the one CLAUDE.md mandates.
   // Testing it against the real CHANGELOG.md is what stops the two drifting.

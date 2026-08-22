@@ -122,6 +122,10 @@ const docStatuses = {
     version: 2,
     state: "in-progress",
     write_mode: "partial",
+    // v0.52.0 (D9) — this document's sections are WRITTEN off Claude, which is
+    // the state the row chip exists for. A document is the one artifact where
+    // the model choice is visible in the output.
+    extra: "writer",
     wave: { done: 5, total: 7, role: "write" },
     // document.md behind its own sections/ — coverage-relative, and NAMED.
     document_stale: [{ id: "04-goals-and-success-metrics", heading: "Goals and success metrics", reason: "changed" }],
@@ -154,6 +158,7 @@ const docStatuses = {
     version: 2,
     state: "complete",
     write_mode: "all",
+    extra: "off",
     wave: { done: 4, total: 4, role: "write" },
     document_stale: [],
     sections_dir: "orc/orc-doc/runbook-payout-freeze-110826/sections",
@@ -181,6 +186,7 @@ const docStatuses = {
     version: 1,
     state: "not-started",
     write_mode: null,
+    extra: "off",
     wave: null,
     document_stale: [],
     sections_dir: "orc/orc-doc/collab-risk-and-payments-130826/sections",

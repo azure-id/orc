@@ -206,11 +206,14 @@ test("the shadow runs BOTH WAYS and is never silent", async () => {
   rmrf(p.root);
 });
 
-test("the nine config keys exist, with the defaults the contract states", () => {
+test("the ten config keys exist, with the defaults the contract states", () => {
   const p = project();
   const keys = json(run(p, ["config", "list", "--json"])).keys.filter((k) => k.key.startsWith("extra_"));
   const by = Object.fromEntries(keys.map((k) => [k.key, k]));
-  assert.equal(keys.length, 9, "nine keys — the combinatorial part is a ledger, not YAML");
+  // v0.52.0 adds the TENTH: the deadline the passphrase picker opens on. The
+  // count is still the feature — the combinatorial part (providers x models x
+  // bands) is a LEDGER with a CLI and a panel, not eleven YAML keys.
+  assert.equal(keys.length, 10, "ten keys — the combinatorial part is a ledger, not YAML");
   assert.equal(by.extra_enabled.default, false, "nothing changes unless it is armed");
   assert.equal(by.extra_roles.default, "[executor]", "a reviewer you cannot trust is worse than no reviewer");
   assert.equal(by.extra_risk_tasks.default, "off");
@@ -220,6 +223,12 @@ test("the nine config keys exist, with the defaults the contract states", () => 
   assert.equal(by.extra_vault_max_attempts.default, 10);
   assert.equal(by.extra_verify_max_days.default, 7);
   assert.equal(by.extra_timeout_s.default, 900);
+  // A passphrase saved beside the vault it opens is a DEADLINE, not a second
+  // factor. There is no 0 and no "forever" in the set.
+  assert.equal(by.extra_passphrase_ttl_days.default, 30);
+  assert.deepEqual(by.extra_passphrase_ttl_days.options, [1, 3, 7, 14, 30, 90, 180, 360]);
+  assert.equal(run(p, ["config", "set", "extra_passphrase_ttl_days", "0"]).status, 1);
+  assert.equal(run(p, ["config", "set", "extra_passphrase_ttl_days", "90"]).status, 0);
 
   // The counter is inspectable, NOT disableable.
   assert.equal(run(p, ["config", "set", "extra_vault_max_attempts", "0"]).status, 1);
@@ -227,6 +236,86 @@ test("the nine config keys exist, with the defaults the contract states", () => 
   // A role that is not a dispatched role is refused by name.
   assert.equal(run(p, ["config", "set", "extra_roles", "executor,orchestrator"]).status, 1);
   assert.equal(run(p, ["config", "set", "extra_roles", "executor,reviewer"]).status, 0);
+  rmrf(p.root);
+});
+
+test("orc extra lanes: the lane table is CODE, and it matches the markdown BOTH WAYS", () => {
+  // D6. The routing table says `[40,55) -> opencode/big-pickle`, which is true
+  // for `/orc` and is not how `/orc-fast` works: that lane pins ONE executor and
+  // resolves its BAND at both edges. The rule was implemented and written down,
+  // and rendered nowhere. `EXTRA_LANE_SHAPES` is the machine-readable copy of
+  // the markdown table, and this is the DIY_STEPS <-> stitch-order golden test
+  // applied to it: a lane in one and not the other fails.
+  const cliSrc = fs.readFileSync(path.join(__dirname, "..", "..", "bin", "cli.js"), "utf8");
+  const md = fs.readFileSync(
+    path.join(__dirname, "..", "..", "templates", "skills", "_shared", "extra-dispatch.md"),
+    "utf8"
+  );
+
+  const constBlock = (cliSrc.match(/const EXTRA_LANE_SHAPES = \[([\s\S]*?)\n\];/) || ["", ""])[1];
+  const inCode = new Set([...constBlock.matchAll(/lane: "(\/[a-z-]+)"/g)].map((m) => m[1]));
+
+  const table = (md.match(/## Which lanes route foreign([\s\S]*?)\n---/) || ["", ""])[1];
+  const inMd = new Set();
+  for (const m of table.matchAll(/`(\/orc[a-z-]*)`/g)) inMd.add(m[1]);
+
+  for (const lane of inMd) assert.ok(inCode.has(lane), `${lane} is in the markdown table and not in EXTRA_LANE_SHAPES`);
+  for (const lane of inCode) assert.ok(inMd.has(lane), `${lane} is in EXTRA_LANE_SHAPES and not in the markdown table`);
+  assert.ok(inCode.size >= 12, "the table is the whole set of lanes, not a sample");
+});
+
+test("orc extra lanes: a fixed-executor lane resolves BOTH EDGES, and disagreement stays on Claude", async () => {
+  const p = project();
+  const f = await fakeProvider("models");
+  const base = `http://127.0.0.1:${f.port}`;
+
+  // Nothing armed: every lane answers, and none of them answers `foreign`.
+  let j = json(run(p, ["extra", "lanes", "--json"]));
+  assert.equal(j.ok, true);
+  assert.ok(j.lanes.every((l) => l.routes !== "foreign"));
+  // The lanes that NEVER route say so whatever the config is — a measuring
+  // instrument you swapped for a different model is measuring something else.
+  assert.equal(j.lanes.find((l) => l.lane === "/orc-challenge").routes, "never");
+  assert.equal(j.lanes.find((l) => l.lane === "/orc-quick").shape, "inert");
+
+  assert.equal(
+    run(p, ["extra", "add", "w", "--provider", "custom", "--engine", "api", "--base-url", base, "--env-key", "K"]).status,
+    0
+  );
+  const pinged = run(p, ["extra", "ping", "w", "--json"], { K: SECRET_KEY });
+  assert.equal(pinged.status, 0, pinged.stdout + pinged.stderr);
+  fs.writeFileSync(path.join(p.root, ".claude", "orc.config.yaml"), "extra_enabled: true\nextra_roles: [executor]\n");
+
+  // A row covering only PART of `/orc-fast`'s band [40,55): one edge foreign,
+  // one edge not. The lane stays on Claude and NAMES the row that partially
+  // covered it — a midpoint would have captured the whole lane on the strength
+  // of a few scores out of fifteen.
+  run(p, ["extra", "route", "set", "40-45", "w/m1", "--json"]);
+  j = json(run(p, ["extra", "lanes", "--json"]));
+  let fast = j.lanes.find((l) => l.lane === "/orc-fast");
+  assert.equal(fast.shape, "fixed-executor");
+  assert.deepEqual(fast.edges, [40, 54]);
+  assert.equal(fast.agree, false);
+  assert.equal(fast.routes, "claude");
+  assert.match(fast.detail, /covers only part of this band/);
+
+  // Widen it to the whole band and both edges agree, so the lane goes foreign.
+  run(p, ["extra", "route", "rm", "40-45", "--json"]);
+  run(p, ["extra", "route", "set", "40-55", "w/m1", "--json"]);
+  j = json(run(p, ["extra", "lanes", "--json"]));
+  fast = j.lanes.find((l) => l.lane === "/orc-fast");
+  assert.equal(fast.agree, true);
+  assert.equal(fast.routes, "foreign");
+  assert.equal(fast.resolved.profile, "w");
+  assert.equal(fast.resolved.model, "m1");
+  // `/orc` is SCORED, so it has no band and no edges — per-task is the answer.
+  assert.equal(j.lanes.find((l) => l.lane === "/orc").routes, "per-task");
+  // `/orc-doc` needs its ROLES named, and `extra_roles` names neither.
+  const doc = j.lanes.find((l) => l.lane === "/orc-doc");
+  assert.equal(doc.shape, "fixed-role");
+  assert.deepEqual(doc.roles_present, []);
+  assert.equal(doc.routes, "claude");
+  f.stop();
   rmrf(p.root);
 });
 

@@ -137,6 +137,31 @@ test("engine B / opencode: a clean run, and the CHILD confirms the prompt never 
   assert.match(fs.readFileSync(path.join(p.root, ".gitignore"), "utf8"), /\.orc-extra\//);
 });
 
+test("engine B / opencode: the MESSAGE survives the greedy -f, and comes first in argv", () => {
+  // v0.52.0 REGRESSION. `opencode run` is `run [message..]` with
+  // `-f, --file [array]`, and a yargs array is GREEDY: every following non-flag
+  // token is swallowed as another file path. ORC pushed the message LAST, so it
+  // was parsed as a SECOND FILE, `message..` arrived empty, and opencode exited
+  // 1 in its own parser — dur=0m01s, tok=none, outcome=failed, looking exactly
+  // like a model problem. Engine `cli` on opencode was 100% dead for a release.
+  const p = project();
+  armedCli(p, "opencode");
+  const r = dispatch(p, "opencode", "ok");
+  assert.ok(!r.stderr.includes("ORC-CONTRACT:"), "the child reported a broken contract: " + r.stderr);
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  const j = json(r);
+  assert.equal(j.outcome, "done");
+
+  const msg = j.argv.findIndex((x) => /whole brief/.test(x));
+  const f = j.argv.indexOf("-f");
+  assert.ok(msg !== -1, "the message must be in argv — it is ORC's own fixed text, not the slice");
+  assert.ok(f !== -1, "the task file must still be attached with -f");
+  // The ORDER is the fix: the message ahead of the array flag, and the array
+  // flag at the very end where it has nothing left to eat.
+  assert.ok(msg < f, "the message must come BEFORE -f or the greedy array swallows it");
+  assert.equal(f, j.argv.length - 2, "-f <file> must be the LAST pair in argv");
+});
+
 test("engine B: a tool that reports no tokens gets usage NULL, never four zeros", () => {
   const p = project();
   armedCli(p, "opencode");
