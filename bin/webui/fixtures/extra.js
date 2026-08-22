@@ -122,6 +122,10 @@ const extraProfiles = [
     auth_env: "ANTHROPIC_AUTH_TOKEN",
     credential: { source: "env", key_name: "DEEPSEEK_API_KEY", present: true, vault: null },
     verified_at: "2026-08-21T09:14:02.881Z",
+    // v0.52.0 — THE PASSPHRASE DEADLINE, computed by the CLI on read. One
+    // fixture per state including the ugly ones: you cannot design an EXPIRED
+    // chip, or the "not saved" one a run STOPS on, on a connection that is fine.
+    session: null,
     verify_method: "models",
     verify_base_url: "https://api.deepseek.com",
     latency_ms: 412,
@@ -145,6 +149,7 @@ const extraProfiles = [
     auth_env: "ANTHROPIC_AUTH_TOKEN",
     credential: { source: "vault", key_name: "glm", present: true, vault: { state: "stored", attempts_used: 0, wiped_at: null } },
     verified_at: "2026-07-30T16:41:55.002Z",
+    session: { state: "ACTIVE", days_left: 27, expires_at: "2026-09-18T09:14:00.000Z", ttl_days: 30, created_at: "2026-08-19T09:14:00.000Z", last_used_at: "2026-08-22T07:40:00.000Z" },
     verify_method: "completion",
     verify_base_url: "https://api.z.ai/api/anthropic",
     latency_ms: 1980,
@@ -168,6 +173,7 @@ const extraProfiles = [
     auth_env: "ANTHROPIC_AUTH_TOKEN",
     credential: { source: "vault", key_name: "kimi", present: true, vault: { state: "stored", attempts_used: 7, wiped_at: null } },
     verified_at: "2026-08-20T11:02:10.114Z",
+    session: { state: "EXPIRING", days_left: 2, expires_at: "2026-08-24T09:14:00.000Z", ttl_days: 7, created_at: "2026-08-17T09:14:00.000Z", last_used_at: null },
     verify_method: "models",
     verify_base_url: "https://api.moonshot.cn/v1",
     latency_ms: 733,
@@ -190,10 +196,37 @@ const extraProfiles = [
     auth_env: "ANTHROPIC_AUTH_TOKEN",
     credential: { source: "vault", key_name: "burned", present: false, vault: { state: "wiped", attempts_used: 10, wiped_at: "2026-08-18T20:55:03.900Z" } },
     verified_at: "2026-08-01T08:20:00.000Z",
+    session: { state: "EXPIRED", days_left: 0, expires_at: "2026-08-18T09:14:00.000Z", ttl_days: 14, created_at: "2026-08-04T09:14:00.000Z", last_used_at: "2026-08-16T11:00:00.000Z" },
     verify_method: "models",
     verify_base_url: "https://api.stepfun.com/v1",
     latency_ms: 610,
     models_seen: [],
+    model_map: null,
+    tool_fidelity: null,
+    privacy: null,
+    notes: null,
+  },
+  {
+    // A VAULTED KEY WITH NO SAVED PASSPHRASE — verified, routed, and the state a
+    // run STOPS on before wave 1. This is the connection the reported failure
+    // was: green everywhere the panel looked, and locked the moment work
+    // started. `not saved` KEEPS ITS SLOT for exactly that reason.
+    name: "glm-air",
+    provider: "zai",
+    engine: "api",
+    region: "default",
+    cli: null,
+    base_url: "https://api.z.ai/api/paas/v4",
+    anthropic_base_url: "https://api.z.ai/api/anthropic",
+    completions_path: null,
+    auth_env: "ANTHROPIC_AUTH_TOKEN",
+    credential: { source: "vault", key_name: "glm-air", present: true, vault: { state: "stored", attempts_used: 0, wiped_at: null } },
+    verified_at: "2026-08-21T18:02:00.000Z",
+    verify_method: "models",
+    verify_base_url: "https://api.z.ai/api/paas/v4",
+    session: { state: "ABSENT", days_left: null, expires_at: null, ttl_days: null, created_at: null, last_used_at: null },
+    latency_ms: 810,
+    models_seen: ["glm-4.5-air"],
     model_map: null,
     tool_fidelity: null,
     privacy: null,
@@ -213,6 +246,7 @@ const extraProfiles = [
     auth_env: "ANTHROPIC_AUTH_TOKEN",
     credential: { source: "env", key_name: "OPENROUTER_API_KEY", present: false, vault: null },
     verified_at: null,
+    session: null,
     verify_method: null,
     verify_base_url: null,
     latency_ms: null,
@@ -220,6 +254,58 @@ const extraProfiles = [
     model_map: null,
     // The one engine that can carry a policy at all.
     privacy: { zdr: true, data_collection: "deny", allow_fallbacks: false },
+    notes: null,
+  },
+  {
+    // v0.52.0 — THE THIRD CREDENTIAL SOURCE. The tool signs itself in, so ORC
+    // holds no key at all: no variable to set, no vault, no passphrase and no
+    // deadline. This is the profile the panel could not create until the add
+    // form grew its third radio, and it is the one a locked run never should
+    // have had.
+    name: "oc-tool",
+    provider: "opencode",
+    engine: "cli",
+    region: "default",
+    cli: { bin: "opencode", agent: "build", attach: null, args: [] },
+    base_url: null,
+    anthropic_base_url: null,
+    completions_path: null,
+    auth_env: null,
+    credential: { source: "tool", key_name: null, present: true, vault: null },
+    verified_at: "2026-08-22T13:21:58.522Z",
+    session: null,
+    verify_method: "cli-live",
+    verify_base_url: "/usr/local/bin/opencode",
+    latency_ms: 2140,
+    models_seen: ["opencode/big-pickle"],
+    model_map: null,
+    tool_fidelity: null,
+    privacy: null,
+    notes: null,
+  },
+  {
+    // CONNECTED AND NEVER TESTED, against a tool that is installed and ready.
+    // The card for this is not the Connect card and it is not the verified
+    // card — it is the one that says "test it before ORC routes work here".
+    name: "toole-new",
+    provider: "toole",
+    engine: "cli",
+    region: "default",
+    cli: { bin: "toole", agent: null, attach: null, args: [] },
+    base_url: null,
+    anthropic_base_url: null,
+    completions_path: null,
+    auth_env: null,
+    credential: { source: "tool", key_name: null, present: true, vault: null },
+    verified_at: null,
+    session: null,
+    verify_method: null,
+    verify_base_url: null,
+    latency_ms: null,
+    models_seen: [],
+    model_map: null,
+    tool_fidelity: null,
+    privacy: null,
     notes: null,
   },
   {
@@ -236,6 +322,7 @@ const extraProfiles = [
     auth_env: null,
     credential: { source: "env", key_name: "OPENCODE_API_KEY", present: true, vault: null },
     verified_at: "2026-08-19T07:31:44.000Z",
+    session: null,
     verify_method: "cli-bin",
     verify_base_url: "/usr/local/bin/opencode",
     latency_ms: null,
@@ -265,12 +352,12 @@ const extraList = {
     // Routed to a model the last ping did not list.
     { from: 60, to: 70, profile: "cheap", model: "deepseek-coder", small_model: null, max_turns: null },
   ],
-  counts: { profiles: 6, verified: 5, credential_present: 4 },
+  counts: { profiles: 9, verified: 7, credential_present: 7 },
   // v0.51.0 — THE SETUP GATE, as the CLI computes it. This fixture set has
   // verified connections, so the gate is open and every card below it renders;
   // `extraListUnconnected` below is the same object with the gate SHUT, which is
   // the only way the two floors are designable at all.
-  gate: { connected: true, floor: null, profiles: 6, verified: 5, why: null, next: null },
+  gate: { connected: true, floor: null, profiles: 9, verified: 7, why: null, next: null },
   extra_enabled: true,
 };
 
@@ -333,6 +420,11 @@ const extraTools = {
       label: "OpenCode",
       bin: "opencode",
       state: "ready",
+      // v0.52.0 — READY IS NOT UNCONNECTED. This row is what the "connected as"
+      // card is designed on, and it is why there is no Connect button on it.
+      connected_profiles: [{ name: "oc-tool", verified_at: "2026-08-22T13:21:58.522Z", credential_source: "tool" }],
+      connected: true,
+      verified: true,
       installed: true,
       bin_path: "/usr/local/bin/opencode",
       version: "1.17.4",
@@ -365,6 +457,9 @@ const extraTools = {
       // honest sentence and never as an empty slot — the two are different
       // facts and this is the row that proves the renderer knows it.
       provider: "codex",
+      connected_profiles: [],
+      connected: false,
+      verified: false,
       label: "Codex",
       bin: "codex",
       state: "absent",
@@ -400,6 +495,9 @@ const extraTools = {
       // OUTDATED — installed, and the two versions side by side, which is the
       // whole content of that box.
       provider: "toolc",
+      connected_profiles: [],
+      connected: false,
+      verified: false,
       label: "Tool C",
       bin: "toolc",
       state: "outdated",
@@ -430,6 +528,9 @@ const extraTools = {
       // broken one). Its model probe also timed out, so the box carries a real
       // probe error.
       provider: "toold",
+      connected_profiles: [],
+      connected: false,
+      verified: false,
       label: "Tool D",
       bin: "toold",
       state: "unauthenticated",
@@ -447,6 +548,32 @@ const extraTools = {
       no_install_alternative: null,
       docs_url: null,
       install: { docs_url: null, bin_name: "toold", platform: "darwin", cmds: [], all_cmds: [] },
+    },
+    {
+      // READY, and CONNECTED BUT NEVER TESTED — the state between "connect me"
+      // and "connected as". It gets a Test button and no Connect button, because
+      // another connection is not what this card is missing.
+      provider: "toole",
+      label: "Tool E",
+      bin: "toole",
+      state: "ready",
+      connected_profiles: [{ name: "toole-new", verified_at: null, credential_source: "tool" }],
+      connected: true,
+      verified: false,
+      installed: true,
+      bin_path: "/usr/local/bin/toole",
+      version: "3.2.0",
+      version_raw: "toole 3.2.0",
+      min_version: "3.0.0",
+      outdated: false,
+      authed: true,
+      auth_detail: "1 credential",
+      models_count: 4,
+      models: ["toole/one", "toole/two"],
+      probe_error: null,
+      no_install_alternative: null,
+      docs_url: null,
+      install: { docs_url: null, bin_name: "toole", platform: "darwin", cmds: [], all_cmds: [] },
     },
   ],
 };
@@ -467,6 +594,17 @@ const extraKeyhelp = {
     why: "nothing to set up. ORC puts the key in this tool's environment for every probe and every dispatch.",
     note: null,
     never: "ORC never writes another tool's credential store, and never puts a key in argv.",
+    // v0.52.0 — the per-OS instruction, PLACEHOLDER only. You cannot design this
+    // box on a machine whose platform you are not on, which is why it is canned.
+    env_set: {
+      platform: "darwin",
+      session: 'export DEEPSEEK_API_KEY="<your key>"',
+      persist: "echo 'export DEEPSEEK_API_KEY=\"<your key>\"' >> ~/.zshrc",
+      persist_note: "a new shell picks it up; the one you are in does not. This writes the value in PLAINTEXT to ~/.zshrc.",
+      shell_file: "~/.zshrc",
+      warning: null,
+    },
+    passphrase_env: null,
   },
   login: {
     ok: true,
@@ -659,6 +797,65 @@ const extraRoute = {
 };
 extraRoute.foreign = extraRoute.rows.filter((r) => r.via === "extra");
 extraRoute.claude_fallthrough = extraRoute.rows.filter((r) => r.via === "claude");
+
+/* `orc extra lanes --json` (v0.52.0, D6). ONE OF EVERY VERDICT, including the
+   two that are easy to forget: a fixed-executor lane whose band's two edges
+   DISAGREE (it stays on Claude and names the row that partially covered it),
+   and a fixed-role lane whose roles `extra_roles` does not name. You cannot
+   design "one edge went foreign and the other did not" on a config where every
+   band is covered. */
+const extraLanes = {
+  ok: true,
+  extra_enabled: true,
+  roles: ["executor"],
+  shapes: ["scored", "fixed-executor", "fixed-role", "inert", "never"],
+  routes: ["per-task", "foreign", "claude", "roles", "never"],
+  note: "A lane not in this list does not route foreign.",
+  lanes: [
+    {
+      lane: "/orc", shape: "scored", agent: null, routes: "per-task",
+      detail: "every task is scored, so the routing table below applies score by score.",
+    },
+    {
+      lane: "/orc-mini", shape: "fixed-executor", agent: "orc-executor-sonnet-5-high",
+      band: "[55,65)", edges: [55, 64], agree: false, routes: "claude", resolved: null,
+      detail: "one edge routes foreign and the other does not, so the lane stays on Claude. Row [30,55) covers only part of this band.",
+    },
+    {
+      lane: "/orc-fast", shape: "fixed-executor", agent: "orc-executor-sonnet-4-6-high",
+      band: "[40,55)", edges: [40, 54], agree: true, routes: "foreign",
+      resolved: { profile: "glm", model: "glm-4.6", engine: "claude-shim", provider: "zai" },
+      detail: "this lane pins one executor. Both edges of its band resolve to the same profile, so the whole lane goes foreign.",
+    },
+    {
+      lane: "/orc-diy", shape: "scored", agent: null, routes: "per-task",
+      detail: "every task is scored, so the routing table below applies score by score. The flow key decides WHETHER; the resolver still decides WHERE, so route rows are never baked into flow.lock.json.",
+    },
+    {
+      lane: "/orc-quick", shape: "inert", agent: null, routes: "never",
+      detail: "this lane asks which agent before every dispatch, so a config that answered it silently would break its premise. It is announced at the gate.",
+    },
+    {
+      lane: "/orc-doc", shape: "fixed-role", agent: "orc-doc-writer-opus-5-med",
+      roles_needed: ["doc-writer", "doc-checker"], roles_present: [], routes: "claude",
+      detail: "extra_roles names none of doc-writer, doc-checker, so this lane stays on Claude.",
+    },
+    {
+      lane: "/orc-challenge", shape: "never", agent: null, routes: "never",
+      detail: "this lane measures rather than produces, so nothing it dispatches may be swapped for a different model.",
+    },
+    {
+      lane: "/orc-wiki", shape: "fixed-role", agent: "orc-wiki-scanner-opus-4-8-high",
+      roles_needed: ["wiki-scanner"], roles_present: [], routes: "claude",
+      detail: "extra_roles names none of wiki-scanner, so this lane stays on Claude.",
+    },
+    { lane: "/orc-retro", shape: "never", agent: null, routes: "never", detail: "this lane measures rather than produces, so nothing it dispatches may be swapped for a different model." },
+    { lane: "/orc-budget", shape: "never", agent: null, routes: "never", detail: "this lane measures rather than produces, so nothing it dispatches may be swapped for a different model." },
+    { lane: "/orc-aftermath", shape: "never", agent: null, routes: "never", detail: "this lane measures rather than produces, so nothing it dispatches may be swapped for a different model." },
+    { lane: "/orc-boundary", shape: "never", agent: null, routes: "never", detail: "this lane measures rather than produces, so nothing it dispatches may be swapped for a different model." },
+    { lane: "/orc-pact", shape: "never", agent: null, routes: "never", detail: "this lane measures rather than produces, so nothing it dispatches may be swapped for a different model." },
+  ],
+};
 
 // `orc extra stats --json`. Joined from the EXTRA trace lines, grouped by the
 // pair a routing decision is made in — profile AND band.
@@ -896,6 +1093,7 @@ module.exports = {
   extraInstall,
   extraDoctor,
   extraRoute,
+  extraLanes,
   extraStats,
   extraRates,
   extraPingOk,

@@ -110,8 +110,14 @@ decision they will turn off.
 ### A lane with a FIXED executor resolves the BAND, not a score
 
 `/orc` scores every task, so it has a number to resolve with. `/orc-mini`,
-`/orc-fast` and a `scoring: off` `/orc-diy` flow do not — they pin ONE executor
-agent, and that agent's name already encodes a band.
+`/orc-fast`, `/orc-doc` and a `scoring: off` `/orc-diy` flow do not — they pin ONE
+agent per role, and that agent's name already encodes a band.
+
+`/orc-doc` belongs in this list and was missing from it for a release, which
+meant the lane was DECLARED as routing foreign with no defined way to resolve a
+band at all. Its writer is `orc-doc-writer-opus-5-med` and its checker is
+`orc-doc-checker-opus-5-low`; the writer's band is what a document resolves
+with.
 
 **Resolve BOTH EDGES of that band and require them to agree.** `[55,65)` →
 `orc extra resolve 55` and `orc extra resolve 64`; same profile and model on both
@@ -191,6 +197,46 @@ announced at the agent gate, because a shadowed setting must never be silent.
 
 A lane not in this table does not route foreign. Absence is a `no`, never an
 omission to be interpreted.
+
+**`orc extra lanes [--json]` RENDERS this table** (v0.52.0), computed through the
+same `extraResolveFor` every dispatch uses, and a fixed-executor lane shows both
+edges of its pinned agent's band and whether they agreed. The rows are mirrored
+in `EXTRA_LANE_SHAPES` in `bin/cli.js`, registered in `bin/verify-contracts.js`
+against this file, with a golden test comparing the two in both directions. A
+band with no lane attached is not a routing decision.
+
+---
+
+## The passphrase is a DEADLINE, and the deadline is a P0 gate
+
+A vault-stored key needs a passphrase at dispatch. Saving that passphrase on the
+same machine as the vault it opens means it is **not a second factor any more**:
+it is a **deadline**, the shape of `ssh-agent`. That is a real thing to build and
+it is described as what it is, everywhere it appears.
+
+- `orc extra session <profile> --save --ttl <days>` — the passphrase travels on
+  **STDIN**; `--passphrase <value>` is refused BY NAME. The set of deadlines is
+  closed: **1 · 3 · 7 · 14 · 30 · 90 · 180 · 360**. There is no `0` and no "forever" —
+  "forever" is the option that makes every other one pointless.
+- `extra_passphrase_ttl_days` (default 30) supplies the value the picker OPENS
+  ON. The deadline itself is stored **per profile**, because two connections may
+  legitimately expire on different days.
+- The state — `ACTIVE` · `EXPIRING` · `EXPIRED` · `ABSENT` — is **computed on read,
+  never stored**. A stored status word is a wrong status word the next day.
+- **`orc extra preflight` runs before wave 1.** `ACTIVE` ok · `EXPIRING` ok plus
+  the date · `EXPIRED` or `ABSENT` on a vaulted profile a route row names →
+  **STOP**. The vault record is deleted and the profile stamped expired; **its
+  route rows survive**, because the bands are work the user did.
+- **`extra_on_failure` does NOT cover this.** That key is about an endpoint that
+  FAILED. An expired credential is a deadline the user set, and letting
+  `fallback` cover it would defeat the gate. A deadline you set 30 days ago
+  deserves a stop, not a substitution.
+
+The honest sentence, required wherever the countdown appears: while the
+passphrase is saved, anything that can run as you on this computer can open the
+connection; the deadline is what limits that; copying the project folder to
+another computer does not open it (the cache lives in the project, the pepper
+lives in `$HOME`).
 
 ---
 

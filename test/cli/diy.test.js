@@ -167,3 +167,124 @@ test("diy show --json: steps[] is the stitch order (minus the locked rules)", ()
     rmrf(root);
   }
 });
+
+/* --------------------------------------------------------------------------
+   v0.52.0 (D7, D8) — EXTRA IS VISIBLE IN THE FLOW.
+
+   `diyScoreTable` read the Claude ladder unconditionally and knew nothing about
+   the route ledger, so a flow with `extra: on` and a row covering [40,55) still
+   printed `[40,55) | orc-executor-sonnet-4-6-high` — a phase list describing a
+   run that will not happen. And `fixed_executor` could not name a foreign target
+   at all, because its option list was `Object.keys(DIY_EXECUTORS)` and a foreign
+   target has no model tier.
+-------------------------------------------------------------------------- */
+
+// A verified profile with one route row, in a real install.
+function armedExtra(root, band, model) {
+  const base = "https://example.invalid/v1";
+  assert.strictEqual(
+    cli(["extra", "add", "w", "--provider", "custom", "--engine", "api", "--base-url", base, "--env-key", "K", "--dir", root]).status,
+    0
+  );
+  // Verified WITHOUT a network probe: the ledger is a plain JSON file and this
+  // suite is about the flow, not about the connection gate (which has its own).
+  const led = path.join(root, ".claude", "orc", "extra.json");
+  const j = JSON.parse(fs.readFileSync(led, "utf8"));
+  j.profiles[0].verified_at = new Date().toISOString();
+  j.profiles[0].verify_method = "models";
+  fs.writeFileSync(led, JSON.stringify(j, null, 2));
+  assert.strictEqual(cli(["extra", "route", "set", band, "w/" + model, "--dir", root]).status, 0);
+  fs.writeFileSync(path.join(root, ".claude", "orc.config.yaml"), "extra_enabled: true\nextra_roles: [executor]\n");
+}
+
+test("diy: the score table renders the COMPOSITE when extra is on, and is byte-identical when it is off", () => {
+  const { root } = freshInstall();
+  try {
+    assert.strictEqual(cli(["diy", "init", "--dir", root]).status, 0);
+    const before = JSON.parse(cli(["diy", "show", "--json", "--dir", root]).stdout).score_table;
+
+    armedExtra(root, "40-55", "big-pickle");
+    // `extra: off` still renders EXACTLY what will run — the flow key decides
+    // WHETHER, the resolver decides WHERE, and this must not blur the two.
+    assert.strictEqual(
+      JSON.parse(cli(["diy", "show", "--json", "--dir", root]).stdout).score_table,
+      before,
+      "extra: off must render byte-identically"
+    );
+
+    assert.strictEqual(cli(["diy", "set", "extra", "on", "--dir", root]).status, 0);
+    const j = JSON.parse(cli(["diy", "show", "--json", "--dir", root]).stdout);
+    assert.match(j.score_table, /\[40,55\) \| extra/, "the routed band names the connection, not a Claude agent");
+    assert.match(j.score_table, /big-pickle/);
+    // A gap is not a hole — it is Claude, and it keeps its own rows.
+    assert.match(j.score_table, /orc-executor-haiku-4-5/);
+    // The execution step says how many bands leave Claude, or a stepper reads
+    // `scored` on a flow routing half its work to a third party.
+    const exec = j.steps.find((x) => x.block === "execution");
+    assert.match(exec.note, /1 band\(s\) foreign/);
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("diy: a band that cannot route KEEPS ITS ROW and names its fall-through", () => {
+  const { root } = freshInstall();
+  try {
+    assert.strictEqual(cli(["diy", "init", "--dir", root]).status, 0);
+    armedExtra(root, "40-55", "big-pickle");
+    assert.strictEqual(cli(["diy", "set", "extra", "on", "--dir", root]).status, 0);
+    // Un-verify it: the row is still the user's routing decision, and it must
+    // not vanish — the OFF-phase-keeps-its-slot rule applied to a band.
+    const led = path.join(root, ".claude", "orc", "extra.json");
+    const j = JSON.parse(fs.readFileSync(led, "utf8"));
+    j.profiles[0].verified_at = null;
+    fs.writeFileSync(led, JSON.stringify(j, null, 2));
+
+    const table = JSON.parse(cli(["diy", "show", "--json", "--dir", root]).stdout).score_table;
+    assert.match(table, /\[40,55\) \| extra/, "the row keeps its slot");
+    assert.match(table, /unverified/);
+    assert.match(table, /stays on Claude: orc-executor-sonnet-4-6-high/);
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("diy: fixed_executor can name a FOREIGN target, and the skipped tier rule is announced", () => {
+  const { root, claudeDir } = freshInstall();
+  try {
+    assert.strictEqual(cli(["diy", "init", "--dir", root]).status, 0);
+    armedExtra(root, "40-55", "big-pickle");
+
+    // The option list is EXTENDED; DIY_EXECUTORS is not.
+    let opts = JSON.parse(cli(["diy", "show", "--json", "--dir", root]).stdout).keys.find((k) => k.key === "fixed_executor").options;
+    assert.ok(opts.includes("orc-executor-haiku-4-5"), "the Claude agents are still there");
+    assert.ok(opts.includes("extra:w/custom/big-pickle"), "a verified profile's routed model is offerable");
+
+    // TWO KEYS, TWO QUESTIONS. `scoring: off` plus a foreign executor still
+    // needs `extra: on`, refused BY NAME rather than inferred.
+    assert.strictEqual(cli(["diy", "set", "scoring", "off", "--dir", root]).status, 0);
+    assert.strictEqual(cli(["diy", "set", "fixed_executor", "extra:w/custom/big-pickle", "--dir", root]).status, 0);
+    let comp = cli(["diy", "compile", "--dir", root]);
+    assert.strictEqual(comp.status, 1, "a foreign executor with extra off must not compile");
+    assert.match(comp.stderr + comp.stdout, /extra is off/);
+
+    assert.strictEqual(cli(["diy", "set", "extra", "on", "--dir", root]).status, 0);
+    comp = cli(["diy", "compile", "--dir", root]);
+    assert.strictEqual(comp.status, 0, comp.stdout + comp.stderr);
+    // A RULE SILENTLY DISABLED IS WORSE THAN NO RULE.
+    assert.match(comp.stdout, /session_tier does not apply to this executor/);
+    const flow = fs.readFileSync(path.join(claudeDir, "orc", "diy", "FLOW-COMPILED.md"), "utf8");
+    assert.match(flow, /session_tier does not apply to this executor/);
+
+    // A DELETED profile fails the compile with the profile NAMED.
+    const led = path.join(root, ".claude", "orc", "extra.json");
+    const j = JSON.parse(fs.readFileSync(led, "utf8"));
+    j.profiles = [];
+    fs.writeFileSync(led, JSON.stringify(j, null, 2));
+    comp = cli(["diy", "compile", "--dir", root]);
+    assert.strictEqual(comp.status, 1);
+    assert.match(comp.stderr + comp.stdout, /"w", which no longer exists/);
+  } finally {
+    rmrf(root);
+  }
+});

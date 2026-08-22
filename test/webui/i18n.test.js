@@ -220,3 +220,80 @@ test("i18n: the string tables are served, and server code never is", () => {
 // WRONG for `diy-stale`: the flow is recompiled with `orc diy compile`, which
 // is a button on FLOW. The panel was telling people to go to a page with no
 // control for the thing it was complaining about.
+
+/* --------------------------------------------------------------------------
+   v0.52.0 (D10) — the Extra panel's INSTRUCTION text is Simplified Technical
+   English, and the rule that makes it safe.
+
+   THE DEFAULT IS STE. A new key is instruction text unless `TERMS.md` names it
+   in the ```prose-keys fence, which is the opt-out and is a deliberate line in a
+   diff somebody reads — the contract-lint table's shape.
+
+   The prose keys are the sentences this subsystem is built out of ("it stops
+   someone at your keyboard, not someone who copied the file"). STE has no
+   vocabulary for the distinction they draw; flattened, they become true and
+   useless.
+
+   There is NO full STE checker here and there is not going to be one: a real one
+   needs the licensed dictionary. This asserts the cheap half, which is worth
+   having, and `TERMS.md` plus review is the rest. A checker that half-works
+   would be worse than none, because people would trust it. */
+function proseKeys() {
+  const md = fs.readFileSync(path.join(WEBUI, "i18n", "TERMS.md"), "utf8");
+  const m = /```prose-keys\n([\s\S]*?)```/.exec(md);
+  assert.ok(m, "TERMS.md no longer carries the prose-keys fence");
+  return new Set(m[1].split("\n").map((l) => l.trim()).filter(Boolean));
+}
+
+test("wording: every instruction the user acts on is one short sentence", () => {
+  const prose = proseKeys();
+  const table = JSON.parse(fs.readFileSync(path.join(WEBUI, "i18n", "en", "extra.json"), "utf8"));
+  const words = (v) => (v.match(/[A-Za-z0-9'`{}\/.-]+/g) || []).length;
+  // Split on sentence ends AND on the em dash, which this panel uses as one.
+  const sentences = (v) => v.split(/(?<=[.!?:])\s+|\s+\u2014\s+/).filter((x) => x.trim());
+
+  const overLong = [];
+  for (const [k, v] of Object.entries(table)) {
+    if (prose.has(k)) continue;
+    for (const one of sentences(v)) if (words(one) > 20) overLong.push(`${k} (${words(one)} words)`);
+  }
+  assert.deepStrictEqual(overLong, [], "an instruction is one sentence of 20 words or fewer — or it is listed in TERMS.md");
+
+  // ONE WORD, ONE MEANING. The right-hand column of the term list, as a regex.
+  const BANNED = [
+    /\bset up\b/i, /\bhook up\b/i, /\bturn (on|off)\b/i, /\bswitch on\b/i,
+    /\bkick off\b/i, /\bbring up\b/i, /\bpull up\b/i,
+    /\babort\b/i, /\bhalt\b/i, /\bkill\b/i,
+    /\bpassword\b/i, /\bexpiry\b/i, /\btimeout\b/i, /\bre-fetch\b/i, /\bgrab\b/i,
+  ];
+  const banned = [];
+  for (const [k, v] of Object.entries(table))
+    for (const re of BANNED) if (re.test(v)) banned.push(`${k}: ${(v.match(re) || [])[0]}`);
+  assert.deepStrictEqual(banned, [], "one word, one meaning — see bin/webui/i18n/TERMS.md");
+
+  // Every prose key must EXIST. A stale opt-out silently exempts nothing and
+  // hides that the sentence it was written for is gone.
+  const missing = [...prose].filter((k) => !(k in table));
+  assert.deepStrictEqual(missing, [], "TERMS.md exempts a key that no longer exists");
+});
+
+test("wording: a CLI-COMPUTED VALUE is never simplified and never translated", () => {
+  // The rule that makes the whole pass safe, and the one that is not
+  // negotiable: a state word, an exit reason, a config key, a model id, a path,
+  // a band or a command is NOT prose. A simplified state word is a state that
+  // does not exist — the same failure as a translated config key.
+  const md = fs.readFileSync(path.join(WEBUI, "i18n", "TERMS.md"), "utf8");
+  assert.match(md, /NEVER simplify a CLI-computed value/);
+
+  // The states `orc extra tools --json` publishes must not appear as VALUES in
+  // either table: the panel renders the CLI's word, it does not name its own.
+  for (const code of ["en", "id"]) {
+    const table = JSON.parse(fs.readFileSync(path.join(WEBUI, "i18n", code, "extra.json"), "utf8"));
+    for (const [k, v] of Object.entries(table)) {
+      assert.ok(
+        !/^(absent|outdated|unauthenticated|ready|ACTIVE|EXPIRING|EXPIRED|ABSENT)$/.test(v.trim()),
+        `${code}/${k} is a CLI state word, which the panel must render rather than store`
+      );
+    }
+  }
+});

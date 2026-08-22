@@ -9,6 +9,12 @@
 
 *, *::before, *::after { box-sizing: border-box; }
 
+/* `scrollbar-gutter: stable` is here for the MODAL SCROLL LOCK. While a modal
+   is open the body stops scrolling, and a scrollbar that disappears reflows the
+   whole page underneath it. Reserving the gutter costs nothing and needs no
+   saved scroll position — cheaper and more robust than the `position: fixed` +
+   `top: -Npx` dance. */
+html { scrollbar-gutter: stable; }
 html, body { height: 100%; }
 
 body {

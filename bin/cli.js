@@ -845,6 +845,10 @@ const FABLE5_ROLES = ["analyze", "plan", "advisor", "judge", "review"];
 // Roles `orc extra` may hand to a non-Claude worker. Declared HERE, above
 // CONFIG_META, because CONFIG_META is evaluated at module load and a `const`
 // further down the file is still in its temporal dead zone at that moment.
+// v0.52.0 — THE CLOSED SET OF PASSPHRASE DEADLINES. There is deliberately no 0
+// and no "forever": "forever" is the option that makes every other one
+// pointless, and a deadline that renews itself on use is not a deadline.
+const EXTRA_TTL_DAYS = [1, 3, 7, 14, 30, 90, 180, 360];
 const EXTRA_ROLES_ALL = [
   "executor",
   "reviewer",
@@ -905,6 +909,7 @@ const CONFIG_META = [
   { key: "extra_unlock", def: "per-run", tier: "common", validate: vEnum("per-run", "per-dispatch"), options: ["per-run", "per-dispatch"], desc: "When a vault-stored key asks for its passphrase. `per-run` asks ONCE at the Phase-1 stop the lane already has, so an unattended wave can actually run. `per-dispatch` prompts every time and REFUSES to start an unattended wave, naming why — it is interactive-only by design. Irrelevant when the credential source is an environment variable, which is the recommended one." },
   { key: "extra_vault_max_attempts", def: 10, tier: "advanced", validate: vInt(3), desc: "Wrong passphrases before the encrypted key DELETES ITSELF. It is a key rather than a magic number so the count is inspectable and testable — NOT so it can be switched off; below 3 is refused. The counter stops someone at your keyboard; it does not stop someone who copies the vault file and tries offline, and scrypt's cost is the only defence there." },
   { key: "extra_timeout_s", def: 900, tier: "advanced", validate: vInt(30), desc: "Per-dispatch wall clock for a foreign worker. The child's own timeouts are DERIVED from this rather than set independently, so three timeouts cannot disagree about which one fires first." },
+  { key: "extra_passphrase_ttl_days", def: 30, tier: "common", validate: vEnum(...EXTRA_TTL_DAYS.map(String)), options: EXTRA_TTL_DAYS, desc: "The DEADLINE the passphrase picker opens on when you save a vault passphrase. A passphrase stored on the same machine as the vault it opens is not a second factor any more — it is a deadline, the shape of ssh-agent. This key supplies the default; the value is stored PER PROFILE, because two connections may legitimately expire on different days. `EXPIRED` on a vaulted profile STOPS the run before wave 1 — `extra_on_failure` does not cover it, because that key is about an endpoint that failed and this is a deadline you set yourself." },
   { key: "extra_verify_max_days", def: 7, tier: "advanced", validate: vInt(1), desc: "Past this a profile's verification reads STALE and is re-pinged before wave 1. A STALE profile STILL ROUTES — a stale check is not a failed one (the /orc-pact UNCHECKABLE rule) — and freshness is computed on read, never stored." },
   { key: "opus5_only", def: false, tier: "common", validate: vEnum("true", "false"), options: ["true", "false"], desc: "EVERY dispatched role uses ONE model — Opus 5 — with EFFORT as the cost dial (executors: [0,40) low · [40,80) medium · [80,100] high; each fixed role its own pinned effort). Deep SWE-benchmark work on cost vs efficiency across Claude models finds a single Opus 5 agent with the effort ladder the most efficient setup. It FORCES: while on it outranks fable5_* and a hand-written rubric_bands_override. Needs an Opus 5 main session or EVERY dispatch silently downgrades. Excludes the Haiku trace writer and orc-diy (compile-owned)." },
   // --- v0.46.0 — the six new lanes ------------------------------------------
@@ -1843,7 +1848,16 @@ const DIY_META = [
   { key: "planning", def: "auto", options: ["auto", "own-planner", "superpowers", "openspec"], validate: vEnum("auto", "own-planner", "superpowers", "openspec"), desc: "Planning route." },
   { key: "pattern", def: "ask", options: ["ask", "off", "on"], validate: vEnum("ask", "off", "on"), desc: "Code-pattern gate on a cache miss: ask | off | on." },
   { key: "scoring", def: "on", options: ["on", "off"], validate: vEnum("on", "off"), desc: "Rubric scoring; off sends every task to fixed_executor." },
-  { key: "fixed_executor", def: "", options: Object.keys(DIY_EXECUTORS), validate: vEnum(...Object.keys(DIY_EXECUTORS)), desc: "Executor used for every task when scoring is off." },
+  // v0.52.0 (D8) — a FOREIGN target may be named here too, spelled
+  // `extra:<profile>/<provider>/<model>` — the same `extra:` prefix every trace
+  // line already uses, so there is one spelling of a foreign target in the whole
+  // system. The OPTION LIST is extended and `DIY_EXECUTORS` is NOT: that map
+  // exists to feed `agentFitsTier`, and a foreign target has no model tier and
+  // no effort, so it cannot be a member of it. Only VERIFIED profiles are
+  // offered (an unverified one is a target that cannot run), and the compiled
+  // flow SAYS that `session_tier` was skipped — a rule silently disabled is
+  // worse than no rule.
+  { key: "fixed_executor", def: "", options: Object.keys(DIY_EXECUTORS), validate: vDiyExecutor, desc: "Executor used for every task when scoring is off. A foreign target is `extra:<profile>/<provider>/<model>` and needs `extra: on` as well — two keys, two questions." },
   // v0.50.0 — Extra is COMPILE-OWNED here, which is the whole point of this
   // lane: turning on `extra_enabled` globally must never silently change a
   // compiled flow. The key decides WHETHER this flow may route foreign; the
@@ -1889,7 +1903,10 @@ const DIY_STEPS = [
   { block: "pattern", label: "pattern", key: "pattern" },
   { block: "scoring", label: "score", key: "scoring" },
   { block: "extra", label: "extra", key: "extra" },
-  { block: "execution", label: "execute", key: null, note: (c) => (c.scoring === "off" ? c.fixed_executor || "(unset)" : "scored") },
+  // v0.52.0 — the note says how many bands leave Claude, because a stepper that
+  // reads `scored` on a flow routing half its work to a third party is drawing a
+  // run that will not happen.
+  { block: "execution", label: "execute", key: null, note: (c, x) => (c.scoring === "off" ? c.fixed_executor || "(unset)" : "scored") + (x ? ` · ${x} band(s) foreign` : "") },
   { block: "review", label: "review", key: "review" },
   { block: "security", label: "security", key: "security" },
   { block: "verify", label: "verify", key: "verify" },
@@ -1899,7 +1916,9 @@ const DIY_STEPS = [
   { block: "summary", label: "summary", key: "summary" },
 ];
 
-function diySteps(cfg) {
+function diySteps(cfg, claudeDir) {
+  const ex = diyExtraRows(cfg, claudeDir);
+  const foreignBands = ex ? ex.foreign : 0;
   return DIY_STEPS.map((s) => {
     const value = s.key ? String(cfg[s.key] === "" ? "" : cfg[s.key]) : "";
     return {
@@ -1910,7 +1929,7 @@ function diySteps(cfg) {
       // OFF is a first-class state, not an absence: a phase you switched off
       // still occupies its slot so the pipeline reads the same width either way.
       on: value !== "off",
-      note: s.note ? s.note(cfg) : value,
+      note: s.note ? s.note(cfg, foreignBands) : value,
     };
   });
 }
@@ -1947,6 +1966,45 @@ function readDiyConfig(claudeDir) {
   return Object.keys(map).length ? map : null;
 }
 
+// A Claude executor from the map, or a foreign target. The SHAPE is validated
+// here; whether the profile exists and is verified is checked at COMPILE time,
+// where the ledger is in hand — a validator that read the ledger would make
+// `orc diy set` fail on a machine that has not connected yet.
+function vDiyExecutor(v) {
+  const raw = String(v || "").trim();
+  if (!raw) return { value: "" };
+  if (Object.prototype.hasOwnProperty.call(DIY_EXECUTORS, raw)) return { value: raw };
+  if (/^extra:[^/]+\/[^/]+\/.+$/.test(raw)) return { value: raw };
+  return {
+    err:
+      `must be one of: ${Object.keys(DIY_EXECUTORS).join(" | ")}` +
+      ` — or a foreign target spelled extra:<profile>/<provider>/<model>.`,
+  };
+}
+const isExtraExecutor = (v) => /^extra:/.test(String(v || ""));
+
+// The foreign targets this project could name today: one per VERIFIED profile
+// crossed with the models its route rows already point at. Offered, never
+// invented — a model nothing has routed to is a model nobody has tested here.
+function extraFixedTargets(claudeDir) {
+  if (!claudeDir) return [];
+  let ledger = null;
+  try {
+    ledger = readExtra(claudeDir);
+  } catch (_) {
+    return [];
+  }
+  if (!ledger) return [];
+  const out = [];
+  for (const r of ledger.routes) {
+    const prof = extraProfile(ledger, r.profile);
+    if (!prof || !prof.verified_at) continue;
+    const id = `extra:${prof.name}/${prof.provider}/${r.model}`;
+    if (out.indexOf(id) === -1) out.push(id);
+  }
+  return out;
+}
+
 // Resolved view: defaults <- stored keys (per-key, like orc.config.yaml).
 function diyResolve(map) {
   const out = {};
@@ -1962,6 +2020,19 @@ function diyValidate(cfg) {
   if (cfg.scoring === "off") {
     if (!cfg.fixed_executor) {
       errors.push("scoring is off but fixed_executor is not set (required — every task needs an executor)");
+    } else if (isExtraExecutor(cfg.fixed_executor)) {
+      // A SESSION TIER IS A CLAUDE CEILING. It means nothing to a third party,
+      // so `agentFitsTier` is skipped — and the skip is ANNOUNCED, because a
+      // rule quietly disabled is worse than no rule.
+      warnings.push(
+        `session_tier does not apply to this executor — it is not a Claude model. ${cfg.fixed_executor} runs on a third-party endpoint.`
+      );
+      // Two keys, two questions: may this flow go foreign, and where. Neither is
+      // inferred from the other, and the combination is refused BY NAME.
+      if (String(cfg.extra) !== "on")
+        errors.push(
+          `fixed_executor names a foreign target (${cfg.fixed_executor}) but extra is off — set \`orc diy set extra on\` as well. The flow key decides WHETHER; the route table decides WHERE.`
+        );
     } else if (tier && !agentFitsTier(DIY_EXECUTORS[cfg.fixed_executor], tier)) {
       errors.push(`fixed_executor ${cfg.fixed_executor} exceeds session_tier ${cfg.session_tier} (subagents cannot exceed the main session)`);
     }
@@ -2008,19 +2079,85 @@ const DIY_SCORE_TABLE = [
 
 // Clip the table to the session tier: an over-tier agent collapses into the
 // highest executor the tier allows. Done at COMPILE time, never at runtime.
-function diyScoreTable(cfg) {
+//
+// v0.52.0 (D7) — AND IT NOW SEES EXTRA. This read `DIY_SCORE_TABLE`
+// unconditionally and knew nothing about the route ledger or about `cfg.extra`,
+// so a flow with `extra: on` and a row covering [40,55) still printed
+// `[40,55) | orc-executor-sonnet-4-6-high`: a phase list describing a run that
+// will not happen. The join already existed and was already correct
+// (`claudeGaps`); it was simply never called from here.
+//
+// Three rules, all inherited:
+//   · the TIER CLIP applies to Claude rows and NEVER to a foreign one. A session
+//     tier is a Claude-model ceiling and means nothing to a third party.
+//   · a band that cannot route KEEPS ITS ROW and names its fall-through — the
+//     OFF-phase-keeps-its-slot rule.
+//   · `extra: off` renders BYTE-IDENTICAL to before, because that is what will
+//     run. The flow key decides WHETHER; the resolver decides WHERE, and this
+//     must not blur the two.
+//
+// RENDERING ONLY. Route rows stay out of `flow.lock.json` for the reason
+// `DIY_META`'s own comment gives: a baked row goes stale in silence.
+function diyScoreTable(cfg, claudeDir) {
   const tier = DIY_TIERS[cfg.session_tier];
   const rows = DIY_SCORE_TABLE;
   const highestAllowed = Object.keys(DIY_EXECUTORS)
     .filter((a) => agentFitsTier(DIY_EXECUTORS[a], tier))
     .sort((a, b) => DIY_EXECUTORS[a].model - DIY_EXECUTORS[b].model || DIY_EXECUTORS[a].effort - DIY_EXECUTORS[b].effort)
     .pop();
-  const lines = ["| Score | Executor agent |", "|-------|----------------|"];
-  for (const [lo, hi, agent] of rows) {
+  const claudeRow = (lo, hi, agent) => {
     const use = agentFitsTier(DIY_EXECUTORS[agent], tier) ? agent : highestAllowed;
-    lines.push(`| [${lo},${hi === 101 ? "100]" : hi + ")"} | ${use} |`);
+    return `| [${lo},${hi === 101 || hi === 100 ? "100]" : hi + ")"} | ${use} |`;
+  };
+  const foreign = diyExtraRows(cfg, claudeDir);
+  if (!foreign) {
+    const lines = ["| Score | Executor agent |", "|-------|----------------|"];
+    for (const [lo, hi, agent] of rows) lines.push(claudeRow(lo, hi, agent));
+    return lines.join("\n");
+  }
+  const lines = ["| Score | Runs on |", "|-------|---------|"];
+  for (const r of foreign.rows) {
+    if (r.via === "claude") lines.push(claudeRow(r.from, r.to, r.agent));
+    else if (r.routes) lines.push(`| [${r.from},${r.to >= 100 ? "100]" : r.to + ")"} | extra · ${r.profile} · ${r.model} |`);
+    else lines.push(`| [${r.from},${r.to >= 100 ? "100]" : r.to + ")"} | extra · ${r.profile} (${r.why_short} — stays on Claude: ${r.claude_agent}) |`);
   }
   return lines.join("\n");
+}
+
+// The composite, or null when this flow will not use one. `extra: on` AND
+// `extra_enabled` — two keys, two questions, and neither is inferred from the
+// other.
+function diyExtraRows(cfg, claudeDir) {
+  if (!claudeDir || String(cfg.extra) !== "on") return null;
+  let ledger = null;
+  let map = {};
+  try {
+    if (!isTrue(resolvedConfig(claudeDir).extra_enabled)) return null;
+    ledger = readExtra(claudeDir);
+    map = readOverride(claudeDir).map;
+  } catch (_) {
+    return null;
+  }
+  if (!ledger || !ledger.routes.length) return null;
+  const rows = [];
+  for (const r of ledger.routes) {
+    const res = extraResolveFor(claudeDir, r.from, { role: "executor" });
+    rows.push({
+      from: r.from,
+      to: r.to,
+      via: "extra",
+      profile: r.profile,
+      model: r.model,
+      routes: res.resolved === "extra",
+      why_short: res.held_back || "not routed",
+      claude_agent: res.claude.agent,
+    });
+  }
+  // A gap is not a hole — it is Claude, split at the Claude table's own edges by
+  // the join that already exists.
+  for (const g of claudeGaps(ledger.routes, map)) rows.push({ from: g.from, to: g.to, via: "claude", agent: g.agent });
+  rows.sort((a, b) => a.from - b.from);
+  return { rows, foreign: rows.filter((x) => x.via === "extra" && x.routes).length };
 }
 
 function diyGenFlowMd(cfg) {
@@ -2159,6 +2296,19 @@ function diyCompile(claudeDir) {
   }
   const cfg = diyResolve(map);
   const { errors, warnings } = diyValidate(cfg);
+  // v0.52.0 (D8) — a foreign fixed executor is checked against the LEDGER here,
+  // where it is in hand. A STALE-but-verified profile is offered and compiles; a
+  // DELETED one fails the compile with the profile NAMED, which is the existing
+  // `flow.lock.json` staleness shape rather than a new mechanism.
+  if (isExtraExecutor(cfg.fixed_executor)) {
+    const m = /^extra:([^/]+)\/([^/]+)\/(.+)$/.exec(cfg.fixed_executor);
+    const prof = m ? extraProfile(readExtra(claudeDir), m[1]) : null;
+    if (!m) errors.push(`fixed_executor "${cfg.fixed_executor}" is not extra:<profile>/<provider>/<model>.`);
+    else if (!prof)
+      errors.push(`fixed_executor names profile "${m[1]}", which no longer exists in this project's connection ledger.`);
+    else if (!prof.verified_at)
+      errors.push(`fixed_executor names profile "${m[1]}", which has never verified — nothing dispatches to an unproven endpoint.`);
+  }
   for (const w of warnings) console.log("  ⚠ " + w);
   if (errors.length) {
     for (const e of errors) console.error("  ❌ " + e);
@@ -2192,8 +2342,12 @@ function diyCompile(claudeDir) {
     tier_effort: tier.effortName,
     max_wave_tasks: cfg.max_wave_tasks,
     batch_pause_every: cfg.batch_pause_every,
-    fixed_executor: cfg.fixed_executor || "(unset)",
-    score_table: diyScoreTable(cfg),
+    fixed_executor:
+      (cfg.fixed_executor || "(unset)") +
+      (isExtraExecutor(cfg.fixed_executor)
+        ? "  — session_tier does not apply to this executor: it is not a Claude model."
+        : ""),
+    score_table: diyScoreTable(cfg, claudeDir),
   };
   let out = order
     .map((name) => (name === null ? locked : diyApplyVariants(readBlock(name), cfg)))
@@ -2262,7 +2416,17 @@ function diyShow(claudeDir) {
         // own copy of them, and a copy of a closed set is drift by definition —
         // `orc ui` renders these as a dropdown so a flow key can never be
         // mistyped. `null` means the key is free text (flow_name is a slug).
-        options: m.options ? m.options.map(String) : null,
+        // v0.52.0 — the foreign targets are appended HERE rather than baked into
+        // DIY_META, because they are a property of THIS project's ledger and
+        // change whenever a connection does. A value the config holds but the
+        // set no longer offers still leads the list and renders disabled: the
+        // existing "visible, never re-offerable" rule handles a deleted profile
+        // with no new code.
+        options: m.options
+          ? m.key === "fixed_executor"
+            ? m.options.map(String).concat(extraFixedTargets(claudeDir))
+            : m.options.map(String)
+          : null,
       })),
       // The bootstrap catalog the interactive composer offers, in the SAME
       // order and with the same first option: an empty `name` is the wizard's
@@ -2286,10 +2450,10 @@ function diyShow(claudeDir) {
       errors: v.errors,
       warnings: v.warnings,
       // The compiled pipeline, in stitch order — see DIY_STEPS.
-      steps: cfg ? diySteps(cfg) : [],
+      steps: cfg ? diySteps(cfg, claudeDir) : [],
       // The tier-CLIPPED table this flow would actually compile — not the
       // canonical ladder. A DIY flow's executors are compile-owned.
-      score_table: cfg ? diyScoreTable(cfg) : null,
+      score_table: cfg ? diyScoreTable(cfg, claudeDir) : null,
     });
   }
   console.log(`\nORC-DIY  gate: ${st.state} — ${st.reason}\n`);
@@ -14446,6 +14610,104 @@ function docModeCmd(claudeDir, slugArg) {
   process.exit(0);
 }
 
+// ── orc doc extra <slug> — THE PER-DOCUMENT SWITCH (v0.52.0, D9) ──────────
+//
+// The mechanism already existed: `EXTRA_ROLES_ALL` carries `doc-writer` and
+// `doc-checker`, and orc-doc's SKILL already states the stance. It was GLOBAL,
+// and that is the defect: turning it on for a throwaway runbook turns it on for
+// the PRD you ship to a customer, and a document's VOICE is the deliverable.
+//
+// Stored in `doc.json`, which already has exactly one writer (`docWrite`) and
+// already stores `doc_write_mode` the same way. No new file, no new writer, and
+// `RESUME.md` regenerates for free.
+const DOC_EXTRA_MODES = ["off", "writer", "checker", "both"];
+const DOC_EXTRA_ROLE_OF = { writer: "doc-writer", checker: "doc-checker" };
+
+// Resolution, highest wins, and it is PRINTED:
+//
+//   doc.json.extra (this document) > config.extra_roles (the project) > off
+//
+// A document set to `both` when `extra_roles` names neither role resolves to
+// OFF and SAYS SO — a shadowed setting must never be silent, the same rule
+// `orc config set` follows when it names every key it makes inert.
+function docExtraResolve(claudeDir, d) {
+  const cfg = resolvedConfig(claudeDir);
+  const roles = INLINE_LIST(cfg.extra_roles).filter(Boolean);
+  const stored = DOC_EXTRA_MODES.includes(d.extra) ? d.extra : null;
+  const fromConfig = (roles.includes("doc-writer") ? 1 : 0) + (roles.includes("doc-checker") ? 2 : 0);
+  const configMode = ["off", "writer", "checker", "both"][fromConfig === 3 ? 3 : fromConfig === 1 ? 1 : fromConfig === 2 ? 2 : 0];
+  const wanted = stored || configMode;
+  const want = wanted === "both" ? ["writer", "checker"] : wanted === "off" ? [] : [wanted];
+  // The project list is a FLOOR the document cannot rise above: `extra_roles` is
+  // what the user told ORC it may hand over at all.
+  const granted = want.filter((w) => roles.includes(DOC_EXTRA_ROLE_OF[w]));
+  const resolved = granted.length === 2 ? "both" : granted.length === 1 ? granted[0] : "off";
+  const shadowed = want.filter((w) => granted.indexOf(w) === -1);
+  return {
+    resolved,
+    stored,
+    source: stored ? "doc.json" : roles.length ? "config.extra_roles" : "off",
+    config_roles: roles,
+    order: ["doc.json (this document)", "config.extra_roles (the project)", "off"],
+    // Never silent. The shadow is named, in both directions.
+    shadowed_by_config: shadowed,
+    why:
+      resolved === "off"
+        ? shadowed.length
+          ? `this document asks for ${shadowed.join(" and ")}, and extra_roles names ${shadowed.map((w) => DOC_EXTRA_ROLE_OF[w]).join(" nor ")} — so it resolves to OFF.`
+          : "nothing in this document goes off Claude."
+        : `${granted.join(" and ")} go off Claude for this document; every other role stays on Claude.`,
+    // A lane with a pinned agent has no score, so it resolves the BAND its agent
+    // encodes, AT BOTH EDGES, requiring them to agree. `/orc-doc` is in that
+    // rule's list as of v0.52.0 — before that it was declared as routing
+    // foreign with no defined way to resolve a band at all.
+    edges: resolved === "off" ? null : extraResolveEdges(claudeDir, "orc-doc-writer-opus-5-med", "doc-writer"),
+  };
+}
+
+function docExtraCmd(claudeDir, slugArg) {
+  const asJson = wantsJson();
+  const slug = docResolveSlug(claudeDir, slugArg);
+  const d = slug ? docRead(claudeDir, slug) : null;
+  if (!d) return docNoSuch(asJson, slugArg);
+  const set = docOpt("--set");
+  if (set) {
+    if (!DOC_EXTRA_MODES.includes(set)) {
+      const hint = `--set must be one of: ${DOC_EXTRA_MODES.join(", ")}`;
+      if (asJson) emitJson({ ok: false, reason: "bad-mode", slug, hint }, 2);
+      console.error("❌ " + hint);
+      process.exit(2);
+    }
+    d.extra = set;
+    docWrite(claudeDir, slug, d);
+  }
+  const r = docExtraResolve(claudeDir, d);
+  const payload = {
+    ok: true,
+    slug,
+    extra: r.resolved,
+    stored: r.stored,
+    source: r.source,
+    options: DOC_EXTRA_MODES,
+    resolve_order: r.order,
+    config_roles: r.config_roles,
+    shadowed_by_config: r.shadowed_by_config,
+    why: r.why,
+    edges: r.edges,
+    // DEFAULT OFF, AND IT STAYS OFF. A document is the one artifact where the
+    // model choice is visible in the output.
+    default: "off",
+  };
+  if (asJson) emitJson(payload, 0);
+  console.log(`extra for ${slug}: ${r.resolved}`);
+  console.log(ui.color.gray("  " + r.why));
+  if (r.edges && r.edges.band)
+    console.log(
+      ui.color.gray(`  band ${r.edges.band} · edges ${(r.edges.edges || []).join(",")} · both edges agree: ${r.edges.agree}`)
+    );
+  process.exit(0);
+}
+
 // ── gaps.md — DERIVED, CLI-written, never compiled in ───────────────────────
 // This is where an Open question and an Assumption go now. The deliverable
 // carries content only; ORC's uncertainty about it is real and is written down,
@@ -14713,6 +14975,9 @@ function docStatusCmd(claudeDir, slugArg) {
     cycle: d.cycle || 0,
     state,
     write_mode: d.write_mode || null,
+    // v0.52.0 (D9) - the RESOLVED per-document Extra answer, so the row chip and
+    // the header strip print the same word the CLI would.
+    extra: docExtraResolve(claudeDir, d).resolved,
     wave,
     shipped: d.shipped || null,
     drifted_sections: state === "shipped-drifted" ? drift : [],
@@ -15699,6 +15964,10 @@ function docNextCmd(claudeDir, slugArg) {
   const slug = docResolveSlug(claudeDir, slugArg);
   const next = slug ? docNextAction(claudeDir, slug) : null;
   if (!next) return docNoSuch(asJson, slugArg);
+  // v0.52.0 (D9) — BEFORE the wave, not after. A document's VOICE is the
+  // deliverable, so which sections are about to be written by something other
+  // than Claude is a thing the user has to be able to see and then find.
+  next.extra = docExtraNext(claudeDir, slug);
   const code = next.blocked_by ? 1 : 0;
   if (asJson) emitJson(next, code);
   console.log(ui.header(`ORC · doc next — ${slug}`));
@@ -15707,7 +15976,36 @@ function docNextCmd(claudeDir, slugArg) {
   if (next.command) console.log(`\n  ${next.paid ? "PAID  " : "free  "}${next.command}`);
   else console.log(`\n  ${ui.color.yellow("waiting on you: " + next.blocked_by)}`);
   if (next.alternatives.length) console.log(ui.color.gray("\n  also possible: " + next.alternatives.join("  ·  ")));
+  if (next.extra && next.extra.sentence) console.log("\n  " + next.extra.sentence);
   process.exit(code);
+}
+
+// Which sections of the NEXT write wave go off Claude, named. `off` is still an
+// answer and still gets a sentence — silence would make "nothing leaves Claude"
+// and "nobody checked" identical.
+function docExtraNext(claudeDir, slug) {
+  const d = docRead(claudeDir, slug);
+  if (!d) return null;
+  const r = docExtraResolve(claudeDir, d);
+  let sections = [];
+  if (r.resolved === "writer" || r.resolved === "both") {
+    try {
+      const shape = docPlanShape(claudeDir, slug, "write");
+      if (shape && shape.slices) sections = shape.slices.flatMap((x) => x.sections || []).map((x) => (x && x.id) || x);
+    } catch (_) {}
+  }
+  return {
+    resolved: r.resolved,
+    stored: r.stored,
+    source: r.source,
+    why: r.why,
+    shadowed_by_config: r.shadowed_by_config,
+    sections,
+    sentence:
+      r.resolved === "off"
+        ? "extra: off — every section of this document is written and checked on Claude."
+        : `extra: ${r.resolved} — ${sections.length ? "sections " + sections.join(", ") : "the next wave"} will be written off Claude. A document's voice is the deliverable, so this is said before the wave, not after it.`,
+  };
 }
 
 
@@ -16129,6 +16427,11 @@ function doc() {
     case "mode":
       docModeCmd(claudeDir, pos[2]);
       break;
+    // v0.52.0 (D9) — PER DOCUMENT, because a global switch turns Extra on for
+    // the PRD you ship as well as for the throwaway runbook.
+    case "extra":
+      docExtraCmd(claudeDir, pos[2]);
+      break;
     // v0.49.2 — the project's OWN standing instructions about what a document
     // says and how it reads, plus the per-document frozen set and its drift.
     case "rules":
@@ -16285,6 +16588,14 @@ function extraPaths(claudeDir) {
     dir: path.join(claudeDir, "orc"),
     ledger: path.join(claudeDir, "orc", EXTRA_LEDGER),
     vault: path.join(claudeDir, "orc", "extra-vault.json"),
+    // v0.52.0 — the passphrase cache. IN THE PROJECT, gitignored beside the
+    // vault, and encrypted under the pepper that lives in $HOME. That split is
+    // what makes "a copied project folder opens nothing" a property rather than
+    // a hope, and it is why the project is the RIGHT place for it. The name is
+    // STABLE and non-obvious, never random: a name that changes per write is a
+    // file nobody can find to delete, and "delete it whenever you like" is the
+    // whole point.
+    session: path.join(claudeDir, "orc", ".orc-ec-session"),
   };
 }
 
@@ -16378,6 +16689,11 @@ function redactProfile(prof, claudeDir) {
       vault: credentialVaultState(cred, claudeDir),
     },
     verified_at: prof.verified_at || null,
+    // v0.52.0 — the passphrase DEADLINE rides on the profile row, computed on
+    // read. A read's --json is the WHOLE computed object, and the panel draws a
+    // countdown chip beside the vault chip from exactly this.
+    session: (prof.credential || {}).source === "vault" ? extraSessionStateSwept(claudeDir, prof.name) : null,
+    expired_at: prof.expired_at || null,
     verify_method: prof.verify_method || null,
     verify_base_url: prof.verify_base_url || null,
     latency_ms: prof.latency_ms === undefined ? null : prof.latency_ms,
@@ -16434,6 +16750,10 @@ function credentialVaultState(cred, claudeDir) {
 // did not add.
 const EXTRA_GITIGNORE_LINES = [
   ".claude/orc/extra-vault.json",
+  // The cached PASSPHRASE, which opens the file above it. Same rule, same
+  // mechanism — this list is idempotent, so the line arrives on the next
+  // `orc extra` write with no migration of its own.
+  ".claude/orc/.orc-ec-session",
   // Engine `cli` writes the task text and reads the tool's final message
   // here, INSIDE the repo, because a workspace-write sandbox cannot write
   // outside the workspace. It is removed in a `finally`; this line is what
@@ -16643,13 +16963,31 @@ function extraInstallView(row) {
 // One tool row, computed. The order of the checks IS the state ladder: absent
 // beats outdated beats unauthenticated beats ready, because each one makes the
 // next unanswerable.
-function extraToolRow(row) {
+function extraToolRow(row, ledger) {
   const bin = row.cli_bin;
   const inst = extraInstallView(row);
+  // v0.52.0 — WHETHER A CONNECTION TO THIS TOOL EXISTS IS A FACT ABOUT THE
+  // LEDGER, and it is joined HERE. The panel used to render an unconditional
+  // Connect button on every `ready` card, because it never consulted
+  // `list.profiles` — so a tool you had already connected, tested and routed
+  // work to still offered to connect it. The panel may not do this join itself:
+  // a second idea of "connected" is exactly the drift this panel exists to
+  // prevent.
+  const mine = ((ledger && ledger.profiles) || []).filter((x) => x.provider === row.id);
   const out = {
     provider: row.id,
     label: row.label,
     bin,
+    connected_profiles: mine.map((x) => ({
+      name: x.name,
+      verified_at: x.verified_at || null,
+      credential_source: (x.credential && x.credential.source) || null,
+    })),
+    connected: mine.length > 0,
+    // "Has ever answered" — the same evidence the setup gate reads. A profile
+    // that was configured and never tested is CONNECTED and NOT VERIFIED, and
+    // those are two different cards.
+    verified: mine.some((x) => !!x.verified_at),
     state: "absent",
     installed: false,
     bin_path: null,
@@ -16747,7 +17085,8 @@ function extraTools(claudeDir) {
     process.exit(1);
   }
   const only = typeof flag("--provider") === "string" ? flag("--provider") : null;
-  const rows = cat.providers.filter((p) => p.cli_bin && (!only || p.id === only)).map((p) => extraToolRow(p));
+  const toolLedger = readExtra(claudeDir);
+  const rows = cat.providers.filter((p) => p.cli_bin && (!only || p.id === only)).map((p) => extraToolRow(p, toolLedger));
   const anyReady = rows.some((r) => r.state === "ready");
   const code = anyReady ? 0 : 1;
   if (asJson)
@@ -16779,6 +17118,12 @@ function extraTools(claudeDir) {
           ["floor", r.min_version || "—"],
           ["signed in", r.authed === null ? "—" : r.authed ? "yes" : "no"],
           ["models", r.models_count === null ? "—" : String(r.models_count)],
+          [
+            "connected",
+            !r.connected
+              ? ui.color.gray("no connection uses this tool yet")
+              : r.connected_profiles.map((x) => x.name + (x.verified_at ? "" : " (never tested)")).join(", "),
+          ],
         ])
       );
     else {
@@ -17031,6 +17376,44 @@ function extraInstallCmd(claudeDir, providerId) {
 
 const EXTRA_KEY_ROUTES = ["env", "stdin-login", "interactive-login", "none"];
 
+// v0.52.0 (D3 Part 2) — HOW TO SET IT, per OS, computed HERE.
+//
+// `orc extra list` printed `no key (env DEEPSEEK_API_KEY)` and nothing anywhere
+// said how to set that variable on Windows or on macOS. The instruction is the
+// CLI's to compose, because the panel must name no command of its own.
+//
+// PLACEHOLDERS ONLY. The CLI never renders a real key into an instruction
+// string, so nothing here can leak into a screenshot, a copy button, a shell
+// history or argv. And ORC still does NOT run `setx` or append to `~/.zshrc`
+// itself: `setx NAME <value>` puts the key IN ARGV, which this subsystem
+// refuses by name, and appending an `export` line writes the key in plaintext to
+// a file the vault exists to avoid.
+function extraEnvSetHelp(varName, opts) {
+  const o = opts || {};
+  const name = varName || "<VARIABLE>";
+  const value = o.value || "<your key>";
+  if (process.platform === "win32")
+    return {
+      platform: "win32",
+      session: `$env:${name} = "${value}"`,
+      persist: `[Environment]::SetEnvironmentVariable('${name}', '${value}', 'User')`,
+      persist_note: "a new terminal picks it up; the one you are in does not.",
+      shell_file: null,
+      // Said out loud wherever the persistent form appears.
+      warning: o.warning || null,
+    };
+  const shell = String(process.env.SHELL || "");
+  const file = /zsh/.test(shell) ? "~/.zshrc" : /bash/.test(shell) ? "~/.bashrc" : "~/.profile";
+  return {
+    platform: process.platform,
+    session: `export ${name}="${value}"`,
+    persist: `echo 'export ${name}="${value}"' >> ${file}`,
+    persist_note: `a new shell picks it up; the one you are in does not. This writes the value in PLAINTEXT to ${file}.`,
+    shell_file: file,
+    warning: o.warning || null,
+  };
+}
+
 function extraKeyhelp(claudeDir, name) {
   const asJson = wantsJson();
   const ledger = readExtra(claudeDir);
@@ -17085,6 +17468,20 @@ function extraKeyhelp(claudeDir, name) {
     why,
     note: (credRow && credRow.note) || null,
     never: "ORC never writes another tool's credential store, and never puts a key in argv.",
+    // The instruction, per OS. `env_set` is present exactly where there is a
+    // VARIABLE to set; `passphrase_env` is present exactly where the credential
+    // is vaulted, and it is a DIFFERENT thing with a different warning.
+    env_set: route === "env" && src === "env" ? extraEnvSetHelp(envVar) : null,
+    passphrase_env:
+      src === "vault"
+        ? extraEnvSetHelp("ORC_EXTRA_KEY", {
+            value: "<your passphrase>",
+            warning:
+              "This is the PASSPHRASE, not the key. Setting it persistently means anything running as you can open the vault. `orc extra session " +
+              prof.name +
+              " --save --ttl <days>` is the route with a deadline on it.",
+          })
+        : null,
   };
   if (asJson) emitJson(payload, 0);
   console.log("\n" + ui.header(`ORC · extra — ${prof.name} · credential route`));
@@ -17097,6 +17494,14 @@ function extraKeyhelp(claudeDir, name) {
   );
   console.log("\n  " + why);
   if (payload.note) console.log("  " + ui.color.gray(payload.note));
+  for (const block of [payload.env_set, payload.passphrase_env]) {
+    if (!block) continue;
+    console.log("");
+    console.log("  " + ui.color.bold("this session:  ") + block.session);
+    console.log("  " + ui.color.bold("to persist:    ") + block.persist);
+    console.log("  " + ui.color.gray("  " + block.persist_note));
+    if (block.warning) console.log("  " + ui.color.yellow("  " + block.warning));
+  }
   console.log("");
 }
 
@@ -17796,6 +18201,205 @@ const EXTRA_VAULT_WARNING = [
   "stored key on purpose.",
 ];
 
+// -- v0.52.0 - THE PASSPHRASE CACHE, and its deadline ----------------------
+//
+// One honest sentence first, because the whole design follows from it: a
+// passphrase stored on the same machine as the vault it opens is NOT A SECOND
+// FACTOR ANY MORE. It becomes a DEADLINE - the shape of ssh-agent and
+// gpg-agent, which is a real and respectable thing to build, but it is a
+// different promise from the one the vault makes. Everywhere this is described,
+// it is described as what it is.
+//
+// There is exactly one way to keep real value in it, and this uses it:
+//
+//   the vault      .claude/orc/extra-vault.json   the project, gitignored
+//   the pepper     ~/.claude/orc/extra-pepper     $HOME, 0600, never travels
+//   the cache      .claude/orc/.orc-ec-session    the project, gitignored, 0600
+//
+// The cache is encrypted UNDER THE PEPPER, so A COPY OF THE PROJECT DIRECTORY
+// OPENS NOTHING. That is a genuine property, it is worth saying out loud in
+// every surface that shows the countdown, and it is why the project is the
+// right place for the file rather than a compromise.
+const EXTRA_SESSION_HONESTY =
+  "While this passphrase is saved, anything that can run as you on this computer can open " +
+  "the connection. The deadline is what limits that. Copying the project folder to another " +
+  "computer does not open it.";
+// COMPUTED, never stored - a stored status word is a wrong status word the next
+// day (the computeWikiFreshness rule, and the /orc-pact rule). EXPIRING is the
+// larger of "3 days left" and "the last 20% of the TTL", so a 1-day deadline is
+// not permanently EXPIRING and a 360-day one warns with more than a weekend.
+const EXTRA_SESSION_STATES = ["ACTIVE", "EXPIRING", "EXPIRED", "ABSENT"];
+
+function readSession(claudeDir) {
+  try {
+    const v = JSON.parse(fs.readFileSync(extraPaths(claudeDir).session, "utf8"));
+    v.records = v.records && typeof v.records === "object" ? v.records : {};
+    return v;
+  } catch (_) {
+    return { version: 1, kdf: EXTRA_KDF, records: {} };
+  }
+}
+
+function writeSession(claudeDir, v) {
+  const p = extraPaths(claudeDir);
+  fs.mkdirSync(p.dir, { recursive: true });
+  v.version = 1;
+  v.kdf = EXTRA_KDF;
+  fs.writeFileSync(p.session, JSON.stringify(v, null, 2) + "\n", { mode: 0o600 });
+  try {
+    fs.chmodSync(p.session, 0o600);
+  } catch (_) {}
+  return p.session;
+}
+
+// The key is derived from the PEPPER and the profile name - there is no second
+// passphrase to open the passphrase. `N = 2^17` is not tuned down here either:
+// that cost IS the defence, and a cache that opens instantly on a copied disk
+// would have thrown away the one property this file has.
+function extraSessionDerive(pepper, profile, salt) {
+  return crypto.scryptSync(pepper + " ec " + profile, salt, EXTRA_KDF.len, {
+    N: EXTRA_KDF.N,
+    r: EXTRA_KDF.r,
+    p: EXTRA_KDF.p,
+    maxmem: EXTRA_KDF_MAXMEM,
+  });
+}
+
+function extraSessionTtl(cfg) {
+  const n = Number((cfg && cfg.extra_passphrase_ttl_days) || 30);
+  return EXTRA_TTL_DAYS.indexOf(n) === -1 ? 30 : n;
+}
+
+function extraSessionPut(claudeDir, profile, passphrase, ttlDays) {
+  const days = EXTRA_TTL_DAYS.indexOf(Number(ttlDays)) === -1 ? 30 : Number(ttlDays);
+  const pep = extraPepper("install", { create: true });
+  if (!pep.ok) return pep;
+  const salt = crypto.randomBytes(16);
+  const iv = crypto.randomBytes(12);
+  const key = extraSessionDerive(pep.value, profile, salt);
+  const c = crypto.createCipheriv("aes-256-gcm", key, iv);
+  const ct = Buffer.concat([c.update(Buffer.from(passphrase, "utf8")), c.final()]);
+  const tag = c.getAuthTag();
+  key.fill(0);
+  const now = new Date();
+  const v = readSession(claudeDir);
+  v.records[profile] = {
+    salt: salt.toString("base64"),
+    iv: iv.toString("base64"),
+    ciphertext: ct.toString("base64"),
+    tag: tag.toString("base64"),
+    pepper: "install",
+    created_at: now.toISOString(),
+    expires_at: new Date(now.getTime() + days * 86400000).toISOString(),
+    ttl_days: days,
+    last_used_at: null,
+  };
+  const file = writeSession(claudeDir, v);
+  return { ok: true, file, ttl_days: days, expires_at: v.records[profile].expires_at };
+}
+
+// The state, computed on read from `expires_at` and NOTHING ELSE. A record whose
+// deadline has passed reads EXPIRED without the file being rewritten - the
+// sweep is what removes it, and the sweep runs on an `orc extra` command.
+function extraSessionState(claudeDir, profile) {
+  const rec = readSession(claudeDir).records[profile];
+  if (!rec || !rec.expires_at) return { state: "ABSENT", days_left: null, expires_at: null, ttl_days: null };
+  const t = Date.parse(rec.expires_at);
+  if (isNaN(t)) return { state: "ABSENT", days_left: null, expires_at: null, ttl_days: null };
+  const msLeft = t - Date.now();
+  const daysLeft = Math.floor(msLeft / 86400000);
+  const ttl = Number(rec.ttl_days) || 30;
+  const warnAt = Math.max(3, Math.ceil(ttl * 0.2));
+  const state = msLeft <= 0 ? "EXPIRED" : daysLeft <= warnAt ? "EXPIRING" : "ACTIVE";
+  return {
+    state,
+    days_left: Math.max(0, daysLeft),
+    expires_at: rec.expires_at,
+    ttl_days: ttl,
+    created_at: rec.created_at || null,
+    last_used_at: rec.last_used_at || null,
+  };
+}
+
+function extraSessionGet(claudeDir, profile) {
+  const st = extraSessionState(claudeDir, profile);
+  if (st.state === "ABSENT") return { ok: false, reason: "absent" };
+  if (st.state === "EXPIRED") return { ok: false, reason: "expired", expires_at: st.expires_at };
+  const v = readSession(claudeDir);
+  const rec = v.records[profile];
+  const pep = extraPepper(rec.pepper);
+  if (!pep.ok) return { ok: false, reason: "pepper-missing", error: pep.error };
+  try {
+    const d = crypto.createDecipheriv(
+      "aes-256-gcm",
+      extraSessionDerive(pep.value, profile, Buffer.from(rec.salt, "base64")),
+      Buffer.from(rec.iv, "base64")
+    );
+    d.setAuthTag(Buffer.from(rec.tag, "base64"));
+    const out = Buffer.concat([d.update(Buffer.from(rec.ciphertext, "base64")), d.final()]).toString("utf8");
+    // NO AUTO-EXTEND. A deadline that renews itself every time you use it is not
+    // a deadline. `last_used_at` is recorded for the report and changes nothing.
+    rec.last_used_at = new Date().toISOString();
+    writeSession(claudeDir, v);
+    return { ok: true, value: out, state: st.state, days_left: st.days_left, expires_at: st.expires_at };
+  } catch (_) {
+    // The pepper is there and the record will not open: it was written under a
+    // different pepper. Unreadable is a REASON, never a silent absence.
+    return { ok: false, reason: "unreadable" };
+  }
+}
+
+function extraSessionForget(claudeDir, profile) {
+  const v = readSession(claudeDir);
+  const rec = v.records[profile];
+  if (!rec) return { ok: true, removed: false };
+  // Overwrite before unlinking, the vault's own rule.
+  try {
+    const len = Buffer.from(rec.ciphertext || "", "base64").length;
+    if (len) {
+      rec.ciphertext = crypto.randomBytes(len).toString("base64");
+      writeSession(claudeDir, v);
+    }
+  } catch (_) {}
+  delete v.records[profile];
+  writeSession(claudeDir, v);
+  return { ok: true, removed: true };
+}
+
+// Called at the top of EVERY `orc extra` command and at the P0 gate. There is
+// deliberately NO timer: a background process that deletes credentials is a
+// background process nobody can audit.
+//
+// MEMOISED FOR THE LIFE OF THE PROCESS, and that is load-bearing rather than an
+// optimisation: the sweep DESTROYS the evidence the gate needs. Swept and never
+// saved both read ABSENT off the disk, and those are different facts — one is a
+// deadline you set and missed, the other is a passphrase you never saved. So the
+// list of what this call dropped IS the record that it expired, and every later
+// reader in the same command gets the same answer.
+let extraSweptThisRun = null;
+function extraSessionSweep(claudeDir) {
+  if (extraSweptThisRun) return extraSweptThisRun;
+  const v = readSession(claudeDir);
+  const dropped = [];
+  for (const name of Object.keys(v.records)) {
+    if (extraSessionState(claudeDir, name).state === "EXPIRED") dropped.push(name);
+  }
+  for (const name of dropped) extraSessionForget(claudeDir, name);
+  extraSweptThisRun = dropped;
+  return dropped;
+}
+// What a reader should call. It answers EXPIRED for a record this command just
+// swept, rather than the ABSENT the disk now shows.
+function extraSessionStateSwept(claudeDir, profile) {
+  const st = extraSessionState(claudeDir, profile);
+  if (st.state !== "ABSENT") return st;
+  let swept = [];
+  try {
+    swept = extraSessionSweep(claudeDir);
+  } catch (_) {}
+  return swept.indexOf(profile) === -1 ? st : Object.assign({}, st, { state: "EXPIRED" });
+}
+
 // ── Reading a secret without it reaching argv, a log, or the screen ────────
 // Piped stdin: line 1 is the key, an OPTIONAL line 2 is the passphrase (the
 // only way an unattended shell can complete the save). A TTY gets a real
@@ -17950,8 +18554,18 @@ function extraCredentialValue(claudeDir, prof, opts) {
   if (cred.source === "tool") return { ok: true, value: null, source: "tool" };
   if (cred.source === "vault") {
     if (opts && opts.inMemory) return { ok: true, value: opts.inMemory, source: "memory" };
-    const pass = opts && opts.passphrase;
-    if (!pass) return { ok: false, reason: "locked", error: `"${prof.name}" is stored in the vault — a passphrase is required.` };
+    let pass = opts && opts.passphrase;
+    // v0.52.0 — THE SAVED PASSPHRASE, and this is the only place it is read.
+    // Every caller — dispatch, ping, conform — gets it by asking for the
+    // credential, so there is no second idea of where a passphrase comes from.
+    // An EXPIRED record never reaches here: `extraSessionGet` refuses it and the
+    // sweep removes it, which is what makes `orc extra preflight` the gate
+    // rather than one of two competing ones.
+    if (!pass && !(opts && opts.noSession)) {
+      const cached = extraSessionGet(claudeDir, prof.name);
+      if (cached.ok) pass = cached.value;
+    }
+    if (!pass) return { ok: false, reason: "locked", error: `"${prof.name}" is stored in the vault — a passphrase is required. Save one with a deadline: orc extra session ${prof.name} --save --ttl 30` };
     const got = extraVaultGet(claudeDir, cred.key_name || prof.name, pass, opts && opts.maxAttempts);
     if (!got.ok) return got;
     return { ok: true, value: got.value, source: "vault" };
@@ -19268,6 +19882,37 @@ function extraRouteList(claudeDir) {
         "  on Opus on purpose\" and \"there is no top band\" can never look the same.\n"
     )
   );
+
+// v0.52.0 (D6) — the SAME table `orc extra lanes` prints, under the bands, so
+// the terminal and the panel say the identical thing. A band with no lane
+// attached is not a routing decision, and this is the shortest place to see
+// which lane each row above actually governs.
+  extraLanesBrief(claudeDir);
+}
+
+// The lane verdicts, in one line each. Used by `orc extra route list`; the full
+// answer with both edges is `orc extra lanes`.
+function extraLanesBrief(claudeDir) {
+  const cfg = resolvedConfig(claudeDir);
+  if (!isTrue(cfg.extra_enabled)) return;
+  const roles = INLINE_LIST(cfg.extra_roles).filter(Boolean);
+  console.log(ui.color.bold("  which lane a band governs"));
+  for (const row of EXTRA_LANE_SHAPES) {
+    let verdict = "claude";
+    let extra = "";
+    if (row.shape === "never" || row.shape === "inert") verdict = "never";
+    else if (row.shape === "scored") verdict = roles.includes("executor") ? "per-task" : "claude";
+    else {
+      const named = row.shape === "fixed-role" ? (row.roles || []).filter((r) => roles.includes(r)) : ["executor"];
+      if (named.length) {
+        const e = extraResolveEdges(claudeDir, row.agent, named[0]);
+        verdict = e.agree ? (row.shape === "fixed-role" ? "roles" : "foreign") : "claude";
+        if (e.band) extra = ui.color.gray(`  ${e.band} edges ${(e.edges || []).join(",")} agreeing=${e.agree}`);
+      }
+    }
+    console.log(`    ${ui.color.cyan(row.lane.padEnd(16))} ${verdict}${extra}`);
+  }
+  console.log(ui.color.gray("    A lane not listed here does not route foreign.\n"));
 }
 
 // `orc extra route set <from>-<to> <profile>/<model> [--max-turns N]`
@@ -19513,6 +20158,191 @@ function extraResolveFor(claudeDir, score, opts) {
   };
 }
 
+// ─ orc extra lanes (v0.52.0, D6) ───────────────────
+//
+// A BAND WITH NO LANE ATTACHED IS NOT A ROUTING DECISION. The routing table
+// says `[40,55) → opencode/big-pickle`, which is true for `/orc` — and is not
+// how `/orc-fast` works at all. That lane pins ONE executor, and the rule that
+// governs it (resolve BOTH EDGES of the pinned agent's band and require them to
+// agree) was implemented, documented, and rendered NOWHERE.
+//
+// This is the machine-readable copy of the "Which lanes route foreign" table in
+// `templates/skills/_shared/extra-dispatch.md`, registered in
+// `bin/verify-contracts.js` against that file so the two cannot drift, with a
+// golden test comparing them in BOTH directions — the DIY_STEPS ↔- stitch-order
+// precedent. A lane in the markdown and not here fails; the reverse fails too.
+//
+// `agent` is the pinned executor whose BAND is resolved at both edges. A lane
+// with no pinned agent has no band, and that is an answer rather than a gap.
+const EXTRA_LANE_SHAPES = [
+  { lane: "/orc", shape: "scored", agent: null },
+  { lane: "/orc-mini", shape: "fixed-executor", agent: "orc-executor-sonnet-5-high" },
+  { lane: "/orc-fast", shape: "fixed-executor", agent: "orc-executor-sonnet-4-6-high" },
+  // Compile-owned: the flow decides WHETHER, the resolver still decides WHERE.
+  // Its shape depends on the compiled config, so it is computed per read.
+  { lane: "/orc-diy", shape: "scored", agent: null, compile_owned: true },
+  { lane: "/orc-quick", shape: "inert", agent: null },
+  { lane: "/orc-doc", shape: "fixed-role", agent: "orc-doc-writer-opus-5-med", roles: ["doc-writer", "doc-checker"] },
+  { lane: "/orc-challenge", shape: "never", agent: null },
+  { lane: "/orc-wiki", shape: "fixed-role", agent: "orc-wiki-scanner-opus-4-8-high", roles: ["wiki-scanner"] },
+  { lane: "/orc-retro", shape: "never", agent: null },
+  { lane: "/orc-budget", shape: "never", agent: null },
+  { lane: "/orc-aftermath", shape: "never", agent: null },
+  { lane: "/orc-boundary", shape: "never", agent: null },
+  { lane: "/orc-pact", shape: "never", agent: null },
+];
+const EXTRA_LANE_ROUTES = ["per-task", "foreign", "claude", "roles", "never"];
+
+// THE BAND OF A PINNED AGENT, from the SAME shipped ladders every other reader
+// uses. A lane with a fixed agent has no score, so there is nothing to resolve
+// with except the band its agent's MODEL AND EFFORT already encode.
+//
+// Matching is by the model+effort TAIL of the agent name, and that is not a
+// convenience: an agent's model change is ALWAYS a rename in this repo, so the
+// tail is the authoritative statement of what it runs on. `/orc-doc`'s writer is
+// `orc-doc-writer-opus-5-med`, which is opus-5 at medium — the same rung the
+// opus5_only ladder calls `orc-executor-opus-5-med`. Nothing is invented: a tail
+// no shipped row carries returns NULL, and a lane whose band cannot be resolved
+// stays on Claude and says so. A number ORC made up to satisfy an interface is
+// not a routing decision the user made.
+function extraAgentBand(agent) {
+  const name = String(agent || "");
+  const tail = name.replace(/^orc-[a-z]+(-[a-z]+)*?-(?=(haiku|sonnet|opus|fable)-)/, "");
+  for (const table of [DIY_SCORE_TABLE, OPUS5_SCORE_TABLE]) {
+    const row = table.find((r) => r[2] === name) || table.find((r) => tail && r[2].endsWith("-" + tail));
+    if (row) return { from: row[0], to: row[1] === 101 ? 100 : row[1], inclusive_to: row[1] === 101 };
+  }
+  return null;
+}
+
+// Resolve BOTH EDGES, and they must AGREE. The alternative was a midpoint, and it is
+// wrong for a reason worth restating here: a row covering [55,58) would capture
+// an entire mini run on the strength of three scores out of ten. A number ORC
+// invented to satisfy an interface is not a routing decision the user made.
+function extraResolveEdges(claudeDir, agent, role) {
+  const band = extraAgentBand(agent);
+  if (!band) return { band: null, edges: null, agree: null, resolved: null, partial: null };
+  const lo = band.from;
+  const hi = band.inclusive_to ? 100 : band.to - 1;
+  const a = extraResolveFor(claudeDir, lo, { role: role || "executor" });
+  const b = extraResolveFor(claudeDir, hi, { role: role || "executor" });
+  const same =
+    a.resolved === "extra" &&
+    b.resolved === "extra" &&
+    a.profile === b.profile &&
+    a.model === b.model;
+  return {
+    band: `[${lo},${band.inclusive_to ? "100]" : band.to + ")"}`,
+    edges: [lo, hi],
+    agree: same,
+    resolved: same ? { profile: a.profile, model: a.model, engine: a.engine, provider: a.provider } : null,
+    // The disclosure `extra-dispatch.md` already demands: WHICH row partially
+    // covered the band, when one edge went foreign and the other did not.
+    partial: same ? null : [a, b].filter((x) => x.resolved === "extra").map((x) => x.band)[0] || null,
+    why_a: a.why,
+    why_b: b.why,
+  };
+}
+
+function extraLanes(claudeDir) {
+  const asJson = wantsJson();
+  const cfg = resolvedConfig(claudeDir);
+  const enabled = isTrue(cfg.extra_enabled);
+  const roles = INLINE_LIST(cfg.extra_roles).filter(Boolean);
+
+  const lanes = EXTRA_LANE_SHAPES.map((row) => {
+    const out = { lane: row.lane, shape: row.shape, agent: row.agent || null };
+    if (row.shape === "never") {
+      out.routes = "never";
+      out.detail = "this lane measures rather than produces, so nothing it dispatches may be swapped for a different model.";
+      return out;
+    }
+    if (row.shape === "inert") {
+      out.routes = "never";
+      out.detail = "this lane asks which agent before every dispatch, so a config that answered it silently would break its premise. It is announced at the gate.";
+      return out;
+    }
+    if (!enabled) {
+      out.routes = "claude";
+      out.detail = "extra_enabled is false — the master gate. Nothing routes foreign until it is true.";
+      return out;
+    }
+    if (row.shape === "scored") {
+      out.routes = roles.includes("executor") ? "per-task" : "claude";
+      out.detail = roles.includes("executor")
+        ? "every task is scored, so the routing table below applies score by score."
+        : "extra_roles does not include `executor`, so no task in this lane leaves Claude.";
+      if (row.compile_owned)
+        out.detail += " The flow key decides WHETHER; the resolver still decides WHERE, so route rows are never baked into flow.lock.json.";
+      return out;
+    }
+    if (row.shape === "fixed-role") {
+      const named = (row.roles || []).filter((r) => roles.includes(r));
+      out.roles_needed = row.roles || [];
+      out.roles_present = named;
+      if (!named.length) {
+        out.routes = "claude";
+        out.detail = `extra_roles names none of ${(row.roles || []).join(", ")}, so this lane stays on Claude.`;
+        return out;
+      }
+      const e = extraResolveEdges(claudeDir, row.agent, named[0]);
+      out.band = e.band;
+      out.edges = e.edges;
+      out.agree = e.agree;
+      out.routes = e.agree ? "roles" : "claude";
+      out.resolved = e.resolved;
+      out.detail = e.agree
+        ? `this lane pins one agent per role. Both edges of its band resolve to the same profile, so ${named.join(" and ")} go foreign.`
+        : "one edge of the pinned agent's band routes foreign and the other does not, so the lane stays on Claude.";
+      return out;
+    }
+    // fixed-executor
+    const e = extraResolveEdges(claudeDir, row.agent, "executor");
+    out.band = e.band;
+    out.edges = e.edges;
+    out.agree = e.agree;
+    out.routes = e.agree ? "foreign" : "claude";
+    out.resolved = e.resolved;
+    out.detail = e.agree
+      ? "this lane pins one executor. Both edges of its band resolve to the same profile, so the whole lane goes foreign."
+      : e.partial
+        ? `one edge routes foreign and the other does not, so the lane stays on Claude. Row ${e.partial} covers only part of this band.`
+        : "no route row covers this lane's band, so it stays on the Claude ladder.";
+    return out;
+  });
+
+  if (asJson)
+    emitJson(
+      {
+        ok: true,
+        extra_enabled: enabled,
+        roles,
+        shapes: ["scored", "fixed-executor", "fixed-role", "inert", "never"],
+        routes: EXTRA_LANE_ROUTES,
+        // A lane whose shape is unknown is NOT listed as `claude`. Absence is a
+        // `no`, never an omission to be interpreted — the markdown's own rule.
+        note: "A lane not in this list does not route foreign.",
+        lanes,
+      },
+      0
+    );
+
+  console.log(ui.header("ORC " + "·" + " extra " + "—" + " which lane does a band govern"));
+  console.log("");
+  for (const l of lanes) {
+    const mark =
+      l.routes === "foreign" || l.routes === "roles" || l.routes === "per-task"
+        ? ui.mark.ok(l.routes)
+        : l.routes === "never"
+          ? ui.color.gray(l.routes)
+          : ui.mark.warn(l.routes);
+    console.log(`  ${ui.color.cyan(l.lane.padEnd(16))} ${l.shape.padEnd(15)} ${mark}`);
+    if (l.band) console.log(`      band ${l.band}  edges ${(l.edges || []).join(",")}  agreeing=${l.agree}`);
+    console.log("      " + ui.color.gray(l.detail));
+  }
+  console.log(ui.color.gray("\n  A lane not listed here does not route foreign.\n"));
+}
+
 function extraResolveCmd(claudeDir, scoreArg) {
   const asJson = wantsJson();
   const score = Number(scoreArg);
@@ -19604,6 +20434,26 @@ function extraDoctorFindings(claudeDir) {
           { profile: prof.name, source: c.source }
         );
     } else if ((prof.credential || {}).source === "vault") {
+      // v0.52.0 — THE DEADLINE. Two findings and no more, and the restraint is
+      // the design: there is deliberately NO finding for "you have not saved a
+      // passphrase". An `env` or `tool` credential never needs one, and a doctor
+      // that warns about a normal state is a doctor people learn to ignore (the
+      // `wiki-debt` rule).
+      const sess = extraSessionStateSwept(claudeDir, prof.name);
+      if (sess.state === "EXPIRING")
+        add(
+          "extra-passphrase-expiring",
+          `"${prof.name}" has its saved passphrase until ${String(sess.expires_at).slice(0, 10)} — ${sess.days_left} day(s) left. After that a run STOPS rather than falling back.`,
+          { profile: prof.name, days_left: sess.days_left, expires_at: sess.expires_at }
+        );
+      else if (sess.state === "EXPIRED")
+        out.push({
+          id: "extra-passphrase-expired",
+          severity: "bad",
+          message: `"${prof.name}" has a vaulted key and its saved passphrase reached its deadline. This is the one \`orc extra preflight\` STOPS on.`,
+          profile: prof.name,
+          expires_at: sess.expires_at,
+        });
       const vault = credentialVaultState(prof.credential, claudeDir);
       if (vault && vault.attempts_used > 0)
         add(
@@ -21306,9 +22156,18 @@ const EXTRA_CLI_ADAPTERS = {
     },
     // The paid rung: one fixed-constant prompt, in a scratch directory, against
     // one model id.
+    // THE MESSAGE COMES FIRST, here and in argv(), and the two must never
+    // diverge: `-f` is a yargs ARRAY flag and a yargs array is GREEDY — every
+    // non-flag token after it is swallowed as another file path. A trailing
+    // message therefore left `message..` EMPTY and opencode exited 1 before the
+    // network. Same family as the --auto rename above: a strict parser failing
+    // for free, looking exactly like a model problem. This probe has no `-f`
+    // today, and it is ordered this way so it cannot acquire the bug when one
+    // is added.
     probeArgv(a) {
       return [
         "run",
+        a.prompt,
         "--model",
         a.model,
         "--format",
@@ -21316,12 +22175,15 @@ const EXTRA_CLI_ADAPTERS = {
         EXTRA_CLI_ADAPTERS.opencode.permissionFlag(a.version),
         "--dir",
         a.dir,
-        a.prompt,
       ];
     },
     argv(a) {
       const v = [
         "run",
+        // FIRST, and first on purpose — see probeArgv above. The greedy `-f`
+        // array flag ate this message when it was last, so `message..` arrived
+        // empty and the dispatch died in the parser.
+        "Do the task described in the attached file. It is the whole brief; nothing else is implied.",
         "--model",
         a.model,
         "--format",
@@ -21333,15 +22195,13 @@ const EXTRA_CLI_ADAPTERS = {
       if (a.cli.agent) v.push("--agent", a.cli.agent);
       // R6. A running `opencode serve` is joined rather than booted.
       if (a.cli.attach) v.push("--attach", a.cli.attach);
-      // `-f` attaches a FILE to the message, which is how the whole task text
-      // stays out of argv — the same reasoning as engine A's stdin prompt:
-      // Windows caps a command line at 32,767 characters and a task slice is
-      // not ORC's own text.
-      v.push("-f", a.taskFile);
       v.push(...(a.cli.extra_args || []));
-      v.push(
-        "Do the task described in the attached file. It is the whole brief; nothing else is implied."
-      );
+      // LAST, and last on purpose: a greedy array flag at the END of argv has
+      // nothing left to swallow. `-f` attaches a FILE to the message, which is
+      // how the whole task text stays out of argv — the same reasoning as
+      // engine A's stdin prompt: Windows caps a command line at 32,767
+      // characters and a task slice is not ORC's own text.
+      v.push("-f", a.taskFile);
       return v;
     },
     env(a) {
@@ -21848,9 +22708,32 @@ async function extraDispatch(claudeDir) {
   // The credential. `inMemory` is how an unattended wave works: the lane
   // unlocked the vault ONCE at the Phase-1 stop and hands the value down
   // through env, never through argv and never back to disk.
+  // v0.52.0 — `--passphrase-stdin` survives the cache as the UN-CACHED escape
+  // hatch for `extra_unlock: per-dispatch`, where the whole point is that
+  // nothing is kept. It mirrors `extra ping`'s flag exactly, including the
+  // refusal to combine it with a key on the same stdin.
+  const dispatchPassStdin = args.includes("--passphrase-stdin");
+  if (dispatchPassStdin && args.includes("--key-stdin"))
+    bail(2, {
+      ok: false,
+      reason: "stdin-conflict",
+      error:
+        "--key-stdin and --passphrase-stdin cannot be combined: stdin's first line would be a key on one reading and a passphrase on the other.",
+    });
+  if (typeof flag("--passphrase") === "string")
+    bail(2, {
+      ok: false,
+      reason: "passphrase-in-argv",
+      error:
+        "`--passphrase <value>` does not exist on purpose: argv is world-readable in a process list and lands in shell history. Use --passphrase-stdin.",
+    });
   const cred = extraCredentialValue(claudeDir, prof, {
     inMemory: process.env.ORC_EXTRA_KEY || null,
-    passphrase: null,
+    passphrase: dispatchPassStdin ? (readStdinLines()[0] || "").trim() || null : null,
+    // A per-dispatch passphrase is used and DROPPED. No silent re-cache: only
+    // the save modal writes the cache, because only the save modal asked how
+    // long.
+    noSession: dispatchPassStdin,
     maxAttempts: cfg.extra_vault_max_attempts,
   });
   if (!cred.ok)
@@ -22805,8 +23688,298 @@ function extraUsage() {
     "                               outcomes, substitutions, reroutes, fallbacks, tokens, usd\n" +
     "       orc extra rates [--json]                  which provider/model pairs have a price, and\n" +
     "                               the JSON to paste for the ones that do not.  0 all priced · 1 gaps\n" +
+    "       orc extra session [<profile>] [--save --ttl <days> | --forget | --list | --sweep]\n" +
+    "                               the saved passphrase and its DEADLINE. The passphrase\n" +
+    "                               travels on STDIN; --passphrase <value> is refused by name.\n" +
+    "       orc extra lanes [--json]                  WHICH LANE each band governs. A\n" +
+    "                               fixed-executor lane shows both edges of its\n" +
+    "                               pinned agent's band and whether they agreed.\n" +
+    "       orc extra preflight [--json]              the P0 gate before wave 1.\n" +
+    "                               0 ok · 1 STOP (an expired or missing passphrase on a\n" +
+    "                               vaulted profile a route row names)\n" +
     "       orc extra doctor [--json]                 0 clean · 1 findings"
   );
+}
+
+// ── orc extra session / preflight (v0.52.0) ───────────────
+//
+// The lifecycle the passphrase never had. Before this, a vaulted key needed
+// ORC_EXTRA_KEY in the process environment or nothing, so a green, verified,
+// routed profile answered `locked` at dispatch and the run announced a Claude
+// fallback. That is safe and it is also a deadline you can miss without ever
+// choosing to miss it.
+
+// A DATE, never "in 27 days". A date is a thing a person can plan around.
+function extraSessionDate(iso) {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return null;
+  return d.toISOString().slice(0, 10);
+}
+
+function extraSessionRow(claudeDir, prof) {
+  const st = extraSessionStateSwept(claudeDir, prof.name);
+  const src = (prof.credential && prof.credential.source) || null;
+  return {
+    profile: prof.name,
+    credential_source: src,
+    // A profile that holds no vaulted key has no passphrase to cache, and that
+    // is NOT a gap. `needs_passphrase: false` is why there is deliberately no
+    // doctor finding for "you have not cached one".
+    needs_passphrase: src === "vault",
+    state: src === "vault" ? st.state : "ABSENT",
+    days_left: st.days_left,
+    expires_at: st.expires_at,
+    expires_on: extraSessionDate(st.expires_at),
+    ttl_days: st.ttl_days,
+    created_at: st.created_at || null,
+    last_used_at: st.last_used_at || null,
+  };
+}
+
+function extraSessionCmd(claudeDir, name) {
+  const asJson = wantsJson();
+  const fail = (reason, msg) => {
+    if (asJson) emitJson({ ok: false, reason, error: msg }, 1);
+    console.error("❌ " + msg);
+    process.exit(1);
+  };
+  const ledger = readExtra(claudeDir);
+  const profiles = (ledger && ledger.profiles) || [];
+  extraSessionSweep(claudeDir);
+  const cfg = resolvedConfig(claudeDir);
+
+  // A VALUE is refused BY NAME, with the same wording `--key <value>` uses.
+  // stdin only, and that is why there is no "just pass it in a script" path.
+  if (typeof flag("--passphrase") === "string")
+    fail(
+      "passphrase-in-argv",
+      "`--passphrase <value>` does not exist on purpose: argv is world-readable in a process list and lands in shell history.\n" +
+        "   The passphrase travels on STDIN: orc extra session <profile> --save --ttl <days>"
+    );
+
+  if (args.includes("--sweep")) {
+    const dropped = extraSessionSweep(claudeDir);
+    if (asJson) emitJson({ ok: true, swept: dropped }, 0);
+    console.log(dropped.length ? `Removed ${plural(dropped.length, "expired passphrase")}: ${dropped.join(", ")}` : "Nothing had expired.");
+    return;
+  }
+
+  if (args.includes("--list") || !name) {
+    const rows = profiles.map((x) => extraSessionRow(claudeDir, x));
+    if (asJson)
+      emitJson(
+        {
+          ok: true,
+          file: extraPaths(claudeDir).session,
+          states: EXTRA_SESSION_STATES,
+          ttl_options: EXTRA_TTL_DAYS,
+          default_ttl_days: extraSessionTtl(cfg),
+          honesty: EXTRA_SESSION_HONESTY,
+          sessions: rows,
+        },
+        0
+      );
+    if (!rows.length) {
+      console.log("No connections configured, so there is no passphrase to save.");
+      return;
+    }
+    console.log(ui.header("ORC · extra — saved passphrases"));
+    console.log("");
+    console.log(
+      ui.kv(
+        rows.map((r) => [
+          r.profile,
+          !r.needs_passphrase
+            ? ui.color.gray("no passphrase needed (" + (r.credential_source || "none") + ")")
+            : r.state === "ACTIVE"
+              ? ui.color.green(`saved until ${r.expires_on} (${r.days_left}d)`)
+              : r.state === "EXPIRING"
+                ? ui.color.yellow(`saved until ${r.expires_on} (${r.days_left}d left)`)
+                : ui.color.red("not saved"),
+        ])
+      )
+    );
+    console.log(ui.color.gray("\n  " + EXTRA_SESSION_HONESTY + "\n"));
+    return;
+  }
+
+  const prof = extraProfile(ledger, name);
+  if (!prof) {
+    const known = profiles.map((x) => x.name);
+    const hint = `unknown profile "${name}"${known.length ? ` - known: ${known.join(", ")}` : ""}`;
+    if (asJson) emitJson({ ok: false, reason: "unknown-profile", profile: name, known, hint }, 2);
+    console.error("❌ " + hint);
+    process.exit(2);
+  }
+
+  if (args.includes("--forget")) {
+    const r = extraSessionForget(claudeDir, prof.name);
+    const lf = readExtra(claudeDir);
+    if (lf) writeExtra(claudeDir, extraHistory(lf, "session-forget", { profile: prof.name }));
+    if (asJson) emitJson({ ok: true, profile: prof.name, removed: r.removed }, 0);
+    console.log(r.removed ? `Forgot the saved passphrase for "${prof.name}".` : `Nothing was saved for "${prof.name}".`);
+    return;
+  }
+
+  if (args.includes("--save")) {
+    if ((prof.credential || {}).source !== "vault") {
+      const hint = `"${prof.name}" does not use the vault (${(prof.credential || {}).source || "no credential"}), so there is no passphrase to save.`;
+      if (asJson) emitJson({ ok: false, reason: "not-vaulted", profile: prof.name, hint }, 1);
+      console.error("❌ " + hint);
+      process.exit(1);
+    }
+    const ttlArg = flag("--ttl");
+    const ttl = ttlArg === undefined ? extraSessionTtl(cfg) : Number(ttlArg);
+    if (EXTRA_TTL_DAYS.indexOf(ttl) === -1)
+      fail("bad-ttl", `--ttl must be one of: ${EXTRA_TTL_DAYS.join(" | ")}. There is no 0 and no "forever" - "forever" is the option that makes every other one pointless.`);
+    const pass = (readStdinLines()[0] || "").trim() || promptSecret("passphrase: ");
+    if (!pass) fail("no-passphrase", "nothing arrived on stdin. The passphrase travels on stdin and never in argv.");
+    // TEST BEFORE STORE, the vault's own rule: a passphrase that does not open
+    // the vault is a passphrase that will fail at wave 1 instead of here.
+    const got = extraVaultGet(claudeDir, (prof.credential || {}).key_name || prof.name, pass, cfg.extra_vault_max_attempts);
+    if (!got.ok) {
+      if (asJson) emitJson({ ok: false, reason: got.reason, profile: prof.name, error: got.error, attempts_used: got.attempts_used || null }, 1);
+      console.error("❌ " + (got.error || got.reason));
+      process.exit(1);
+    }
+    const put = extraSessionPut(claudeDir, prof.name, pass, ttl);
+    if (!put.ok) {
+      if (asJson) emitJson({ ok: false, reason: put.reason, error: put.error }, 1);
+      console.error("❌ " + (put.error || put.reason));
+      process.exit(1);
+    }
+    ensureExtraGitignore(extraPaths(claudeDir).root);
+    const ls = readExtra(claudeDir);
+    if (ls) writeExtra(claudeDir, extraHistory(ls, "session-save", { profile: prof.name, ttl_days: ttl, expires_at: put.expires_at }));
+    const row = extraSessionRow(claudeDir, prof);
+    if (asJson) emitJson({ ok: true, profile: prof.name, honesty: EXTRA_SESSION_HONESTY, session: row }, 0);
+    console.log(`Saved until ${row.expires_on}.`);
+    console.log(ui.color.gray("  " + EXTRA_SESSION_HONESTY));
+    return;
+  }
+
+  const row = extraSessionRow(claudeDir, prof);
+  if (asJson)
+    emitJson(
+      { ok: true, profile: prof.name, honesty: EXTRA_SESSION_HONESTY, ttl_options: EXTRA_TTL_DAYS, default_ttl_days: extraSessionTtl(cfg), session: row },
+      0
+    );
+  console.log(ui.header(`ORC · extra — ${prof.name}`));
+  console.log("");
+  console.log(
+    ui.kv([
+      ["credential", row.credential_source || "none"],
+      ["passphrase", row.needs_passphrase ? row.state : "not needed"],
+      ["saved until", row.expires_on || "-"],
+      ["days left", row.days_left === null ? "-" : String(row.days_left)],
+      ["last used", row.last_used_at ? row.last_used_at.slice(0, 10) : "-"],
+    ])
+  );
+  console.log(ui.color.gray("\n  " + EXTRA_SESSION_HONESTY + "\n"));
+}
+
+// THE P0 GATE. It runs before wave 1, and an EXPIRED or ABSENT passphrase on a
+// vaulted profile a route row names is a STOP - never a silent Claude
+// fallback. `extra_on_failure` does NOT apply: that key is about an endpoint
+// that failed, and letting `fallback` cover an expired credential would defeat
+// the gate. A deadline you set 30 days ago deserves a stop, not a substitution.
+//
+// exit 0 ok (with or without warnings) * 1 stop
+function extraPreflight(claudeDir) {
+  const asJson = wantsJson();
+  // The sweep runs FIRST and its answer is remembered, which is what lets the
+  // rows below tell "expired today" from "never saved". Both STOP; only the
+  // first one disconnects.
+  extraSessionSweep(claudeDir);
+  const ledger = readExtra(claudeDir);
+  const cfg = resolvedConfig(claudeDir);
+  const enabled = isTrue(cfg.extra_enabled);
+  const routes = (ledger && ledger.routes) || [];
+  const named = new Set(routes.map((r) => r.profile));
+  const profiles = ((ledger && ledger.profiles) || []).filter((x) => named.has(x.name));
+
+  const rows = [];
+  for (const prof of profiles) {
+    const row = extraSessionRow(claudeDir, prof);
+    const src = row.credential_source;
+    if (src !== "vault") {
+      rows.push(Object.assign(row, { verdict: "ok", why: "no passphrase is involved at all." }));
+      continue;
+    }
+    if (row.state === "ACTIVE") {
+      rows.push(Object.assign(row, { verdict: "ok", why: `saved until ${row.expires_on}.` }));
+      continue;
+    }
+    if (row.state === "EXPIRING") {
+      rows.push(Object.assign(row, { verdict: "warn", why: `saved until ${row.expires_on} - ${row.days_left} day(s) left.` }));
+      continue;
+    }
+    rows.push(
+      Object.assign(row, {
+        verdict: "stop",
+        why:
+          row.state === "EXPIRED"
+            ? "the saved passphrase reached its deadline. Connect again to route work here."
+            : "no passphrase is saved for this vaulted connection, so nothing can open it.",
+        next: `orc extra ping ${prof.name} --passphrase-stdin   (or reconnect in orc ui > Extra)`,
+      })
+    );
+  }
+
+  const stops = rows.filter((r) => r.verdict === "stop");
+  // Expiry DISCONNECTS: the vault record goes and the profile is stamped, so it
+  // can never route again. The ROUTE ROWS SURVIVE (Decision 4) - the bands and
+  // the model cache are work you did, and re-connecting should be one modal
+  // rather than rebuilding the routing table.
+  if (stops.length) {
+    const l = readExtra(claudeDir);
+    for (const st of stops) {
+      if (!l) break;
+      const prof = extraProfile(l, st.profile);
+      if (!prof || st.state !== "EXPIRED") continue;
+      const v = readVault(claudeDir);
+      if (v.records[(prof.credential || {}).key_name || prof.name]) {
+        delete v.records[(prof.credential || {}).key_name || prof.name];
+        writeVault(claudeDir, v);
+      }
+      if (prof.credential) prof.credential.present = false;
+      prof.verified_at = null;
+      prof.expired_at = new Date().toISOString();
+      extraHistory(l, "session-expired", { profile: prof.name });
+    }
+    if (l) writeExtra(claudeDir, l);
+  }
+
+  const code = stops.length ? 1 : 0;
+  if (asJson)
+    emitJson(
+      {
+        ok: !stops.length,
+        extra_enabled: enabled,
+        honesty: EXTRA_SESSION_HONESTY,
+        // `extra_on_failure` is named here so nobody reads the stop as
+        // something that key could have covered.
+        on_failure_note:
+          "extra_on_failure covers an endpoint that FAILED. An expired credential is a deadline you set, and it stops the run instead.",
+        profiles: rows,
+        stops: stops.map((x) => x.profile),
+        warnings: rows.filter((r) => r.verdict === "warn").map((x) => x.profile),
+      },
+      code
+    );
+  if (!rows.length) {
+    console.log("No routed connection needs a passphrase.");
+    return;
+  }
+  for (const r of rows) {
+    const mark = r.verdict === "ok" ? ui.mark.ok("ok") : r.verdict === "warn" ? ui.mark.warn("expiring") : ui.mark.bad("STOP");
+    console.log(`  ${ui.color.cyan(r.profile)}  ${mark}  ${r.why}`);
+    if (r.next) console.log("      " + ui.color.bold(r.next));
+  }
+  console.log("");
+  console.log(ui.color.gray("  " + EXTRA_SESSION_HONESTY));
+  if (code) process.exit(1);
 }
 
 async function extra() {
@@ -22818,6 +23991,13 @@ async function extra() {
   }
   const claudeDir = resolveClaudeDir();
   const pos = positionals(); // ["extra", <sub?>, <arg?>, …]
+  // v0.52.0 — THE SWEEP, and this is the only clock it has. A passphrase past
+  // its deadline is removed when an `orc extra` command runs and at the P0 gate,
+  // never on a timer: a background process that deletes credentials is a
+  // background process nobody can audit.
+  try {
+    extraSessionSweep(claudeDir);
+  } catch (_) {}
   switch (pos[1]) {
     case "providers":
       extraProvidersCmd();
@@ -22856,6 +24036,13 @@ async function extra() {
     case "unlock":
       extraUnlock(claudeDir, pos[2]);
       break;
+    // v0.52.0 - the passphrase LIFECYCLE, and the gate that reads it.
+    case "session":
+      extraSessionCmd(claudeDir, pos[2]);
+      break;
+    case "preflight":
+      extraPreflight(claudeDir);
+      break;
     case "route":
       if (pos[2] === "set") extraRouteSet(claudeDir, pos[3], pos[4]);
       else if (pos[2] === "rm") extraRouteRm(claudeDir, pos[3]);
@@ -22867,6 +24054,12 @@ async function extra() {
       break;
     case "resolve":
       extraResolveCmd(claudeDir, pos[2]);
+      break;
+    // v0.52.0 — WHICH LANE a band governs. The correct behaviour was already
+    // implemented and the reasoning already written down; none of it was
+    // rendered anywhere.
+    case "lanes":
+      extraLanes(claudeDir);
       break;
     case "privacy":
       extraPrivacy(claudeDir, pos[2]);

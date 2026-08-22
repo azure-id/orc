@@ -309,6 +309,192 @@ test("a STORED key is re-testable with its passphrase, and with nothing else", a
   rmrf(p.root);
 });
 
+/* ---------------------------------------------------------------------------
+   v0.52.0 — THE PASSPHRASE LIFECYCLE (D11, the P0).
+
+   A passphrase stored on the same machine as the vault it opens is not a second
+   factor any more. It is a DEADLINE — the ssh-agent shape — and the whole design
+   follows from saying that out loud. Before this, a vaulted key needed
+   ORC_EXTRA_KEY in the environment or nothing, so a green, verified, routed
+   profile answered `locked` at dispatch and the run announced a Claude fallback:
+   safe, and a deadline you can miss without ever choosing to miss it.
+--------------------------------------------------------------------------- */
+
+// Reach into the cache and move a deadline. A test cannot wait 30 days, and the
+// point of the state being COMPUTED is that moving the date is all it takes.
+function ageSession(p, profile, days) {
+  const f = path.join(p.root, ".claude", "orc", ".orc-ec-session");
+  const v = JSON.parse(fs.readFileSync(f, "utf8"));
+  v.records[profile].expires_at = new Date(Date.now() + days * 86400000).toISOString();
+  fs.writeFileSync(f, JSON.stringify(v, null, 2));
+  return f;
+}
+
+test("the passphrase cache: it round-trips, a copied project opens nothing, and the state is COMPUTED", async () => {
+  const { stop, port } = await fakeProvider("models");
+  const p = project();
+  const base = `http://127.0.0.1:${port}`;
+  run(p, ["extra", "add", "v", "--provider", "custom", "--engine", "api", "--base-url", base, "--key-stdin"]);
+  runIn(p, ["extra", "ping", "v", "--key-stdin", "--json"], `${SECRET_KEY}\n${SECRET_PASS}\n`);
+
+  // A VALUE is refused BY NAME, exactly as `--key <value>` is. There is no
+  // "just pass it in a script" path, and that is the point.
+  let r = runIn(p, ["extra", "session", "v", "--save", "--passphrase", SECRET_PASS, "--json"], "");
+  assert.equal(r.status, 1);
+  assert.equal(JSON.parse(r.stdout).reason, "passphrase-in-argv");
+
+  // TEST FIRST, THEN STORE — the vault's own rule. A passphrase that does not
+  // open the vault fails HERE rather than at wave 1.
+  r = runIn(p, ["extra", "session", "v", "--save", "--ttl", "30", "--json"], "not-the-passphrase\n");
+  assert.equal(r.status, 1);
+  assert.equal(JSON.parse(r.stdout).reason, "bad-passphrase");
+  assert.equal(JSON.parse(run(p, ["extra", "session", "v", "--json"]).stdout).session.state, "ABSENT");
+
+  // The real one saves, and the answer is a DATE. "30 days" is not something a
+  // person can plan around.
+  r = runIn(p, ["extra", "session", "v", "--save", "--ttl", "30", "--json"], `${SECRET_PASS}\n`);
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  const saved = JSON.parse(r.stdout);
+  assert.equal(saved.session.state, "ACTIVE");
+  assert.equal(saved.session.ttl_days, 30);
+  assert.match(saved.session.expires_on, /^\d{4}-\d{2}-\d{2}$/);
+  assert.match(saved.honesty, /Copying the project folder to another computer does not open it/);
+  assert.ok(!r.stdout.includes(SECRET_PASS), "the passphrase never reaches an output shape");
+
+  // …and it OPENS THE VAULT: a ping with no passphrase of its own now works,
+  // which is the entire defect this closes.
+  r = run(p, ["extra", "ping", "v", "--json"]);
+  assert.equal(r.status, 0, "a saved passphrase is what stops a run falling back for no reason");
+
+  // A COPIED PROJECT OPENS NOTHING. The cache lives in the project; the pepper
+  // lives in $HOME. That split is the one genuine property this file has.
+  const other = project();
+  fs.mkdirSync(path.join(other.root, ".claude", "orc"), { recursive: true });
+  for (const f of ["extra.json", "extra-vault.json", ".orc-ec-session"])
+    fs.copyFileSync(path.join(p.root, ".claude", "orc", f), path.join(other.root, ".claude", "orc", f));
+  r = run(other, ["extra", "ping", "v", "--json"]);
+  assert.notEqual(r.status, 0, "a copied project folder must not open the connection");
+
+  // THE STATE IS COMPUTED ON READ. Moving the deadline into the past is all it
+  // takes — nothing rewrote a status word, because none was ever stored.
+  const before = fs.readFileSync(ageSession(p, "v", -1), "utf8");
+  assert.equal(JSON.parse(run(p, ["extra", "session", "v", "--json"]).stdout).session.state, "EXPIRED");
+  stop();
+  rmrf(p.root);
+  rmrf(other.root);
+});
+
+test("the deadline STOPS a run — it never falls back, and the route rows survive", async () => {
+  const { stop, port } = await fakeProvider("models");
+  const p = project();
+  const base = `http://127.0.0.1:${port}`;
+  run(p, ["extra", "add", "v", "--provider", "custom", "--engine", "api", "--base-url", base, "--key-stdin"]);
+  runIn(p, ["extra", "ping", "v", "--key-stdin", "--json"], `${SECRET_KEY}\n${SECRET_PASS}\n`);
+  run(p, ["extra", "route", "set", "0-30", "v/some-model", "--json"]);
+  runIn(p, ["extra", "session", "v", "--save", "--ttl", "30", "--json"], `${SECRET_PASS}\n`);
+
+  // ACTIVE passes the gate.
+  let r = run(p, ["extra", "preflight", "--json"]);
+  assert.equal(r.status, 0);
+  assert.equal(JSON.parse(r.stdout).profiles[0].verdict, "ok");
+
+  // EXPIRING passes it too, WITH THE DATE. A warning that does not say when is
+  // a warning nobody acts on.
+  ageSession(p, "v", 1);
+  r = run(p, ["extra", "preflight", "--json"]);
+  assert.equal(r.status, 0);
+  let j = JSON.parse(r.stdout);
+  assert.equal(j.profiles[0].verdict, "warn");
+  assert.match(j.profiles[0].why, /\d{4}-\d{2}-\d{2}/);
+
+  // EXPIRED STOPS. `extra_on_failure` is about an endpoint that FAILED; letting
+  // `fallback` cover a deadline you set yourself would defeat the gate, and the
+  // payload says so rather than leaving it to be inferred.
+  ageSession(p, "v", -1);
+  r = run(p, ["extra", "preflight", "--json"]);
+  assert.equal(r.status, 1);
+  j = JSON.parse(r.stdout);
+  assert.equal(j.ok, false);
+  assert.deepEqual(j.stops, ["v"]);
+  assert.match(j.on_failure_note, /extra_on_failure covers an endpoint that FAILED/);
+
+  // DISCONNECTED, precisely: the vault record is gone and the profile can never
+  // route again…
+  const prof = JSON.parse(run(p, ["extra", "show", "v", "--json"]).stdout).profile;
+  assert.equal(prof.verified_at, null);
+  assert.equal(prof.credential.present, false);
+  const res = run(p, ["extra", "resolve", "10", "--json"]);
+  assert.equal(res.status, 1, "an expired profile cannot be resolved to");
+
+  // …AND ITS ROUTE ROWS SURVIVE (Decision 4). The bands are work the user did;
+  // re-connecting should be one modal, not rebuilding the routing table.
+  const list = JSON.parse(run(p, ["extra", "list", "--json"]).stdout);
+  assert.equal(list.routes.length, 1);
+  assert.equal(list.routes[0].profile, "v");
+
+  // The ledger records the save AND the expiry. A credential that disappeared
+  // with no entry is indistinguishable from one that was never there.
+  const actions = list.profiles && JSON.parse(fs.readFileSync(path.join(p.root, ".claude", "orc", "extra.json"), "utf8")).history.map((h) => h.action);
+  assert.ok(actions.includes("session-save"));
+  assert.ok(actions.includes("session-expired"));
+  stop();
+  rmrf(p.root);
+});
+
+test("the sweep drops what expired and keeps what did not, and there is no timer", async () => {
+  const { stop, port } = await fakeProvider("models");
+  const p = project();
+  const base = `http://127.0.0.1:${port}`;
+  for (const n of ["a", "b"]) {
+    run(p, ["extra", "add", n, "--provider", "custom", "--engine", "api", "--base-url", base, "--key-stdin"]);
+    runIn(p, ["extra", "ping", n, "--key-stdin", "--json"], `${SECRET_KEY}\n${SECRET_PASS}\n`);
+    runIn(p, ["extra", "session", n, "--save", "--ttl", "30", "--json"], `${SECRET_PASS}\n`);
+  }
+  ageSession(p, "a", -1);
+  const r = run(p, ["extra", "session", "--sweep", "--json"]);
+  assert.equal(r.status, 0);
+  assert.deepEqual(JSON.parse(r.stdout).swept, ["a"]);
+  const rows = JSON.parse(run(p, ["extra", "session", "--list", "--json"]).stdout).sessions;
+  assert.equal(rows.find((x) => x.profile === "a").state, "ABSENT");
+  assert.equal(rows.find((x) => x.profile === "b").state, "ACTIVE");
+
+  // An `env` or `tool` credential never needs a passphrase, and that is NOT a
+  // gap — which is why there is deliberately no doctor finding for it.
+  run(p, ["extra", "add", "e", "--provider", "custom", "--engine", "api", "--base-url", base, "--env-key", "SOME_VAR"]);
+  const e = JSON.parse(run(p, ["extra", "session", "e", "--json"]).stdout).session;
+  assert.equal(e.needs_passphrase, false);
+  const ids = JSON.parse(run(p, ["extra", "doctor", "--json"]).stdout).findings.map((f) => f.id);
+  assert.ok(!ids.includes("extra-passphrase-expiring"), "a normal state is not a finding");
+
+  // --forget is immediate, and it says whether anything was there.
+  assert.equal(JSON.parse(run(p, ["extra", "session", "b", "--forget", "--json"]).stdout).removed, true);
+  assert.equal(JSON.parse(run(p, ["extra", "session", "b", "--forget", "--json"]).stdout).removed, false);
+  stop();
+  rmrf(p.root);
+});
+
+test("the TTL set is closed: no 0, no forever, and the file is gitignored", async () => {
+  const { stop, port } = await fakeProvider("models");
+  const p = project();
+  const base = `http://127.0.0.1:${port}`;
+  run(p, ["extra", "add", "v", "--provider", "custom", "--engine", "api", "--base-url", base, "--key-stdin"]);
+  runIn(p, ["extra", "ping", "v", "--key-stdin", "--json"], `${SECRET_KEY}\n${SECRET_PASS}\n`);
+
+  for (const bad of ["0", "45", "9999"]) {
+    const r = runIn(p, ["extra", "session", "v", "--save", "--ttl", bad, "--json"], `${SECRET_PASS}\n`);
+    assert.equal(r.status, 1, `--ttl ${bad} must be refused`);
+    assert.equal(JSON.parse(r.stdout).reason, "bad-ttl");
+  }
+  const opts = JSON.parse(run(p, ["extra", "session", "--json"]).stdout).ttl_options;
+  assert.deepEqual(opts, [1, 3, 7, 14, 30, 90, 180, 360]);
+
+  runIn(p, ["extra", "session", "v", "--save", "--ttl", "1", "--json"], `${SECRET_PASS}\n`);
+  // The passphrase that opens the vault must never reach a commit either.
+  assert.match(fs.readFileSync(path.join(p.root, ".gitignore"), "utf8"), /\.claude\/orc\/\.orc-ec-session/);
+  stop();
+  rmrf(p.root);
+});
+
 test("P2: no `orc extra … --json` shape ever carries a key or a passphrase", async () => {
   const { stop, port } = await fakeProvider("models");
   const p = project();

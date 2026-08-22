@@ -317,6 +317,29 @@
   display: grid;
   gap: var(--sp-2);
   align-content: start;
+  /* v0.52.0 — A TOOL CARD DECLARES ITS ROWS. `.ex-tool-grid` stretched two
+     cards to the same OUTER height, but every internal row sized to its own
+     content, and two tools' content differs (a four-segment auth string against
+     a short one, 29 models against 4). So the kv block started at the same y
+     and ended at different ones, and every row below it — path, probe error,
+     the button — sat at a different height in each card. `1fr` is the slack
+     row: it absorbs the difference in ONE place instead of spreading it down
+     the card. The `.run-card` lesson, one level down. Not `subgrid`: that would
+     align two cards perfectly and break the moment a third card in a different
+     state joins the row, and the states deliberately carry different numbers of
+     children. */
+  grid-template-rows: auto auto auto 1fr auto;
+}
+.ex-tool > .row-actions:last-child { align-self: end; }
+.ex-tool .kv { align-content: start; }
+/* The one genuinely unbounded field. `auth_detail` is DIAGNOSTIC, not prose, so
+   it is clamped rather than allowed to make one card taller than its neighbour
+   on its own. */
+.ex-tool .kv dd.ex-auth-detail {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 .ex-tool-absent { border-color: var(--bad); }
 .ex-tool-outdated,
@@ -331,6 +354,19 @@
 .ex-keyhelp { display: grid; gap: var(--sp-2); justify-items: start; }
 .ex-install .action-cmd,
 .ex-keyhelp .action-cmd { width: 100%; user-select: text; }
+
+/* WHICH LANE A BAND GOVERNS (v0.52.0). One row per lane, and every row keeps
+   its slot whatever its verdict — filtering out the lanes that never route
+   would make "this lane cannot go foreign" and "I have not configured it yet"
+   look identical. The OFF-phase-keeps-its-slot rule, one panel over. */
+.ex-lanes { display: grid; gap: var(--sp-2); margin-top: var(--sp-2); }
+.ex-lane {
+  display: grid;
+  gap: 4px;
+  padding: var(--sp-2) var(--sp-3);
+  border-left: 2px solid var(--line-soft);
+}
+.ex-lane-name { font-weight: 600; }
 
 /* THE GATE. It is a banner rather than a card because it is not a thing you
    configure — it is the reason the things below it are missing. */

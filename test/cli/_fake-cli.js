@@ -47,6 +47,41 @@ const val = (f) => {
 };
 
 // ── opencode ───────────────────────────────────────────────────────────────
+// v0.52.0 — this fixture now parses argv THE WAY YARGS DOES, because the old
+// flag-spotting checks (`--format` present, `--model` present, `-f` followed by
+// a path) were all green while the dispatch was 100% dead. `opencode run` is
+// `run [message..]` with `-f, --file [array]`, and a yargs array is GREEDY: it
+// swallows every following non-flag token. With the message pushed LAST it was
+// parsed as a SECOND FILE, `message..` arrived empty, and opencode exited 1
+// before any network call. Nothing in this file noticed, so the assertion that
+// matters is: A MESSAGE ARRIVED.
+const OPENCODE_VALUE_FLAGS = ["--model", "--format", "--dir", "--agent", "--attach"];
+function opencodeParse() {
+  const message = [];
+  const files = [];
+  let i = 1; // ARGV[0] === "run"
+  while (i < ARGV.length) {
+    const tok = ARGV[i];
+    if (tok === "-f" || tok === "--file") {
+      i++;
+      // THE GREED: every non-flag token from here is another file path.
+      while (i < ARGV.length && !/^-/.test(ARGV[i])) files.push(ARGV[i++]);
+      continue;
+    }
+    if (OPENCODE_VALUE_FLAGS.indexOf(tok) !== -1) {
+      i += 2;
+      continue;
+    }
+    if (/^-/.test(tok)) {
+      i++;
+      continue;
+    }
+    message.push(tok);
+    i++;
+  }
+  return { message, files };
+}
+
 function opencode() {
   if (!has("--format") || val("--format") !== "json") die("opencode must be asked for --format json");
   // v0.51.0 — `--auto` was REMOVED and replaced by
@@ -60,11 +95,18 @@ function opencode() {
   if (has("--auto")) die("--auto was removed; passing it makes this tool print its help text and exit 1");
   if (!has("--model")) die("opencode needs --model provider/model");
   if (!has("--dir")) die("opencode needs --dir <repo root>");
-  const f = val("-f");
+  const parsed = opencodeParse();
+  // The one assertion this whole rewrite exists for. An empty `message..` is
+  // what a greedy `-f` leaves behind, and it is indistinguishable from a model
+  // problem once the process has exited.
+  if (!parsed.message.length)
+    die("opencode got no message: every token after -f was swallowed as a file path");
+  for (const cand of parsed.files) if (!fs.existsSync(cand)) die("the -f file does not exist: " + cand);
+  const f = parsed.files[0] || null;
   // v0.51.0 — the LIVE PROBE has no task file: its prompt is a fixed constant
   // ORC wrote, which is the one kind of text that may be in argv. A dispatch
   // still may not, and the check below is what proves it.
-  if (!f && has("--dir") && ARGV[ARGV.length - 1] === "Reply with exactly: OK") {
+  if (!f && has("--dir") && parsed.message.join(" ") === "Reply with exactly: OK") {
     process.stdout.write(
       JSON.stringify({ type: "message.done", text: "OK", tokens: { input: 15649, output: 48, cache: { write: 0, read: 64 } } }) + "\n"
     );

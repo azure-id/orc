@@ -100,6 +100,10 @@ const required = [
   // The string tables (v0.43.6). Named here for the same reason: English is the
   // FALLBACK table every other language falls back to, so a publish that drops
   // it renders raw dotted keys on every panel, in every language.
+  // v0.52.0 - the TERM LIST. It is not a string table and is never fetched by
+  // the page; it is the one page that keeps the next two hundred strings
+  // consistent, and without it a wording pass drifts back within two releases.
+  "bin/webui/i18n/TERMS.md",
   "bin/webui/i18n/en/common.json",
   "bin/webui/i18n/en/nav.json",
   "bin/webui/i18n/en/banner.json",

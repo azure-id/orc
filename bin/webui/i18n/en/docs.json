@@ -166,5 +166,10 @@
   "docs.forecast.waveNPlural": "{n} waves",
   "docs.forecast.stopNPlural": "{n} stops",
   "docs.forecast.agentNPlural": "{n} agents",
-  "docs.cost.runNPlural": "{n} sessions"
+  "docs.cost.runNPlural": "{n} sessions",
+  "docs.extra.title": "Which model writes this document",
+  "docs.extra.stored": "set for this document",
+  "docs.extra.fromConfig": "from the project setting",
+  "docs.extra.edges": "band {band} · edges {edges} · both edges agree: {agree}",
+  "docs.extra.order": "resolves in this order: {order}"
 }

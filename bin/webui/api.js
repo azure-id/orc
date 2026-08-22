@@ -297,6 +297,7 @@ const READS = {
   "/api/doc/audit": (q) => ["doc", "audit", String(q.slug || "")],
   "/api/doc/journal": (q) => ["doc", "journal", String(q.slug || "")],
   "/api/doc/context": (q) => ["doc", "context", String(q.slug || "")],
+  "/api/doc/extra": (q) => ["doc", "extra", String(q.slug || "")],
   // v0.49.2 — the project's own house rules, the frozen set of one document,
   // the run map and the cost report. All four are READS; the panel decides
   // nothing about a priority, an order, a wave shape or a number.
@@ -323,6 +324,10 @@ const READS = {
   "/api/extra/tools": () => ["extra", "tools"],
   "/api/extra/keyhelp": (q) => ["extra", "keyhelp", String(q.profile || "")],
   "/api/extra/route": () => ["extra", "route"],
+  // v0.52.0 (D6) — WHICH LANE a band governs, computed through the same
+  // resolver every dispatch uses. The panel renders it and derives nothing:
+  // a band with no lane attached is not a routing decision.
+  "/api/extra/lanes": () => ["extra", "lanes"],
   // `stats` exits 1 with a real object when no foreign dispatch has been traced
   // yet, and `rates` exits 1 when a pair has no price — both are exit-code-as-
   // DATA, like `pattern status` and `wiki impact`, never an error.
@@ -435,6 +440,10 @@ const WRITES = {
   // needs no escaping and no temp file.
   "/api/doc/rules/setAll": (b) => ["doc", "rules", "set-all", "--text", String(b.text || "")],
   "/api/doc/rules/sync": (b) => ["doc", "rules", String(b.slug), "--sync"],
+  // v0.52.0 (D9) — per document, because a document's voice is the deliverable.
+  // The CLI owns the resolution order and the shadowing announcement; the panel
+  // renders both and decides neither.
+  "/api/doc/extra/set": (b) => ["doc", "extra", String(b.slug), "--set", String(b.mode)],
   // v0.49.2. Closing a run is FREE, deterministic, reversible, and it DELETES
   // NOTHING — `RESUME.md` is moved aside, not removed. The CLI refuses without a
   // reason, so the form does not have to: there is one idea of a valid close and
@@ -460,11 +469,22 @@ const WRITES = {
     if (b.anthropic_base_url) argv.push("--anthropic-base-url", String(b.anthropic_base_url));
     if (b.cli_bin) argv.push("--cli", String(b.cli_bin));
     if (b.cli_agent) argv.push("--cli-agent", String(b.cli_agent));
-    if (b.vault) argv.push("--key-stdin");
+    // v0.52.0 — the THIRD credential source, checked FIRST. A local tool that
+    // already holds its own credential needs no key from ORC at all, and the
+    // panel forcing such a profile into the vault is what locked a run that had
+    // no business having a passphrase. ORC never writes another tool's
+    // credential store; `--tool-auth` is how that is said out loud.
+    if (b.tool_auth) argv.push("--tool-auth");
+    else if (b.vault) argv.push("--key-stdin");
     else if (b.env_key) argv.push("--env-key", String(b.env_key));
     return argv;
   },
   "/api/extra/remove": (b) => ["extra", "remove", String(b.name), "--reason", String(b.reason || "")],
+  // v0.52.0 — forgetting a saved passphrase carries no secret, so it is an
+  // ordinary argv write. SAVING one does, and has its own handler below: the
+  // passphrase travels on STDIN and `--passphrase <value>` is refused BY NAME in
+  // the CLI, so there is no argv path on either side.
+  "/api/extra/session/forget": (b) => ["extra", "session", String(b.profile), "--forget"],
   "/api/extra/route/set": (b) => {
     const argv = ["extra", "route", "set", String(b.band), String(b.target)];
     if (b.small_model) argv.push("--small-model", String(b.small_model));
@@ -971,6 +991,26 @@ async function handleApi(req, res, url, ctx) {
       input = String(body.passphrase) + chr10;
     }
     const out = runCli(argv, ctx, { json: true, input });
+    clearCache();
+    return json(res, out.ok ? 200 : 500, out.ok
+      ? { ok: true, exit_code: out.exit_code, data: out.data, command: out.command }
+      : { ...out, error: readFailReason(out) });
+  }
+
+  // v0.52.0 — SAVING THE PASSPHRASE WITH A DEADLINE. The CLI tests it against
+  // the vault before it stores anything (test first, then store), validates the
+  // TTL against the same closed set the config key publishes, and answers with
+  // the DATE. This route composes nothing: it hands over a profile, a number of
+  // days, and a passphrase on stdin.
+  if (route === "/api/extra/session/save") {
+    if (job && job.running) return json(res, 409, { error: "busy", job: jobView() });
+    const profile = String(body.profile || "");
+    const ttl = String(body.ttl_days || "");
+    if (!profile || !ttl) return json(res, 400, { error: "missing argument" });
+    const out = runCli(["extra", "session", profile, "--save", "--ttl", ttl], ctx, {
+      json: true,
+      input: String(body.passphrase || "") + chr10,
+    });
     clearCache();
     return json(res, out.ok ? 200 : 500, out.ok
       ? { ok: true, exit_code: out.exit_code, data: out.data, command: out.command }

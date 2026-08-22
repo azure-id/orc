@@ -33,7 +33,7 @@ const { docList, docParts, docStatuses, docMapSections, docMap, docLint, docPlan
 const { diy } = require("./flow.js");
 const { crosslink } = require("./crosslink.js");
 const { mockDetail } = require("./mockrun.js");
-const { extraProviders, extraList, extraListNoConnection, extraListNeverTested, extraTools, extraKeyhelp, extraModels, extraDoctor, extraRoute, extraStats, extraRates, extraPingOk, extraPingBad, extraPingSaveOffer, extraPingLive, extraPingDeadModel, extraPingNotInstalled, extraInstall } = require("./extra.js");
+const { extraProviders, extraList, extraListNoConnection, extraListNeverTested, extraTools, extraKeyhelp, extraModels, extraDoctor, extraRoute, extraLanes, extraStats, extraRates, extraPingOk, extraPingBad, extraPingSaveOffer, extraPingLive, extraPingDeadModel, extraPingNotInstalled, extraInstall } = require("./extra.js");
 
 module.exports.get = function get(route, q) {
   switch (route) {
@@ -80,6 +80,38 @@ module.exports.get = function get(route, q) {
       return docAudit[(q && q.slug) || ""] || docAudit["prd-checkout-refund-130826"];
     case "/api/doc/journal":
       return (q && q.slug) === "collab-risk-and-payments-130826" ? docJournalEmpty : docJournalRich;
+    // v0.52.0 (D9) — BOTH shapes: a document routed off Claude, and one that is
+    // not. `off` is a state with its own card, never a missing card.
+    case "/api/doc/extra":
+      return q && String(q.slug || "").indexOf("prd-") === 0
+        ? {
+            ok: true,
+            slug: String(q.slug),
+            extra: "writer",
+            stored: "writer",
+            source: "doc.json",
+            options: ["off", "writer", "checker", "both"],
+            resolve_order: ["doc.json (this document)", "config.extra_roles (the project)", "off"],
+            config_roles: ["executor", "doc-writer"],
+            shadowed_by_config: [],
+            why: "writer goes off Claude for this document; every other role stays on Claude.",
+            edges: { band: "[40,80)", edges: [40, 79], agree: true, resolved: { profile: "cheap", model: "deepseek-chat" } },
+            default: "off",
+          }
+        : {
+            ok: true,
+            slug: String(q && q.slug),
+            extra: "off",
+            stored: null,
+            source: "off",
+            options: ["off", "writer", "checker", "both"],
+            resolve_order: ["doc.json (this document)", "config.extra_roles (the project)", "off"],
+            config_roles: [],
+            shadowed_by_config: [],
+            why: "nothing in this document goes off Claude.",
+            edges: null,
+            default: "off",
+          };
     case "/api/doc/context":
       return docContext[(q && q.slug) || ""] || docContext["prd-checkout-refund-130826"];
     // v0.49.2. One of every state behind each: a populated ledger AND an empty
@@ -382,6 +414,8 @@ module.exports.get = function get(route, q) {
       return extraDoctor;
     case "/api/extra/route":
       return extraRoute;
+    case "/api/extra/lanes":
+      return extraLanes;
     case "/api/extra/stats":
       return extraStats;
     case "/api/extra/rates":

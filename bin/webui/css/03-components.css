@@ -388,7 +388,18 @@ pre.block.wrap { white-space: pre-wrap; word-break: break-word; }
   to   { opacity: 1; transform: none; }
 }
 
-.modal-host { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: var(--sp-4); }
+/* v0.52.0 — A MODAL MUST NOT SCROLL THE PAGE BEHIND IT, and this was every
+   modal in the app rather than an Extra defect. Two things were missing and
+   neither existed anywhere in bin/webui/: the modal's own scroll CHAINED to
+   <body> the moment it reached either end, and a wheel over the backdrop — most
+   of the screen — was never the modal's to begin with, so the page moved
+   immediately. `overscroll-behavior: contain` stops the chain; `body.modal-open`
+   stops the rest. The scroll position is preserved by `scrollbar-gutter: stable`
+   on <html> (01-base.css), so nothing here has to remember a number. */
+.modal-host { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: var(--sp-4); overscroll-behavior: contain; }
+body.modal-open { overflow: hidden; }
+/* A LOCKED modal: the backdrop is not a button, so it must not look like one. */
+.modal-host.modal-locked .modal-backdrop { cursor: default; }
 .modal-host[hidden] { display: none; }
 .modal-backdrop { position: absolute; inset: 0; background: rgba(0, 0, 0, .55); }
 .modal {
@@ -396,6 +407,7 @@ pre.block.wrap { white-space: pre-wrap; word-break: break-word; }
   width: min(720px, 100%);
   max-height: 84vh;
   overflow-y: auto;
+  overscroll-behavior: contain;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);

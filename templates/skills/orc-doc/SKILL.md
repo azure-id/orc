@@ -274,8 +274,18 @@ section stored as sub-parts. Validate every return per
 never guessed. Slice shape and the whole protocol: `references/chunking.md`.
 
 **Extra (`extra_enabled`, `../_shared/extra-dispatch.md`) reaches the WRITER and
-the CHECKER, and only if `config.extra_roles` NAMES them** — it does not by
-default. A foreign writer runs `return-validation.md` **§2b instead of §2**
+the CHECKER, and it is a PER-DOCUMENT decision** (v0.52.0): `orc doc extra
+<slug> --set off|writer|checker|both`, stored in `doc.json`, default **off**.
+Resolution is highest-wins and is PRINTED — `doc.json.extra` (this document)
+`>` `config.extra_roles` (the project) `>` off — and a document set to `both`
+when `extra_roles` names neither role resolves to **off and says so**, because a
+shadowed setting must never be silent. A global switch was the defect: turning it
+on for a throwaway runbook turned it on for the PRD you ship.
+
+This lane pins its agents, so it has no score to resolve with: it resolves
+`orc-doc-writer-opus-5-med`'s BAND **at both edges** and requires them to agree,
+exactly like `/orc-mini` and `/orc-fast`. `orc doc next` prints the answer, with
+the section ids, BEFORE the wave. A foreign writer runs `return-validation.md` **§2b instead of §2**
 (⛔ SUBSTITUTION replaces the downgrade check), and every other rule of this lane
 is unchanged: it still owns exactly ONE file, it still never opens `document.md`,
 and the free lint still runs before it. **Say which sections went off Claude

@@ -166,5 +166,10 @@
   "docs.forecast.waveNPlural": "{n} gelombang",
   "docs.forecast.stopNPlural": "{n} perhentian",
   "docs.forecast.agentNPlural": "{n} agen",
-  "docs.cost.runNPlural": "{n} sesi"
+  "docs.cost.runNPlural": "{n} sesi",
+  "docs.extra.title": "Model mana yang menulis dokumen ini",
+  "docs.extra.stored": "diatur untuk dokumen ini",
+  "docs.extra.fromConfig": "dari setelan proyek",
+  "docs.extra.edges": "band {band} · tepi {edges} · kedua tepi sepakat: {agree}",
+  "docs.extra.order": "diselesaikan dengan urutan ini: {order}"
 }

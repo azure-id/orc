@@ -2260,3 +2260,81 @@ test("doc plan --role edit: every finding names its FILE and its part-local line
     rmrf(root);
   }
 });
+
+/* --------------------------------------------------------------------------
+   v0.52.0 (D9) — /orc-doc's Extra switch is PER DOCUMENT.
+
+   The mechanism already existed (`EXTRA_ROLES_ALL` carries doc-writer and
+   doc-checker) and it was GLOBAL, which is the defect: turning it on for a
+   throwaway runbook turns it on for the PRD you ship to a customer, and a
+   document's VOICE is the deliverable.
+-------------------------------------------------------------------------- */
+
+test("doc extra: per document, default off, and the resolution order is PRINTED", () => {
+  const { root } = freshInstall();
+  try {
+    const slug = "p1";
+    assert.strictEqual(initDoc(root, slug, "prd").res.status, 0);
+    // DEFAULT OFF, AND IT STAYS OFF.
+    let j = JSON.parse(cli(["doc", "extra", slug, "--json", "--dir", root]).stdout);
+    assert.strictEqual(j.extra, "off");
+    assert.strictEqual(j.stored, null);
+    assert.strictEqual(j.default, "off");
+    assert.deepStrictEqual(j.options, ["off", "writer", "checker", "both"]);
+    assert.ok(j.resolve_order.length === 3, "the order is data, not prose");
+
+    // A document set to `both` while `extra_roles` names NEITHER role resolves
+    // to OFF — and SAYS SO. A shadowed setting must never be silent.
+    assert.strictEqual(cli(["doc", "extra", slug, "--set", "both", "--json", "--dir", root]).status, 0);
+    j = JSON.parse(cli(["doc", "extra", slug, "--json", "--dir", root]).stdout);
+    assert.strictEqual(j.stored, "both");
+    assert.strictEqual(j.extra, "off", "the project list is a floor the document cannot rise above");
+    assert.deepStrictEqual(j.shadowed_by_config, ["writer", "checker"]);
+    assert.match(j.why, /resolves to OFF/);
+
+    // Name the roles and it resolves.
+    fs.writeFileSync(
+      path.join(root, ".claude", "orc.config.yaml"),
+      "extra_enabled: true" + String.fromCharCode(10) + "extra_roles: [executor, doc-writer]" + String.fromCharCode(10)
+    );
+    j = JSON.parse(cli(["doc", "extra", slug, "--json", "--dir", root]).stdout);
+    assert.strictEqual(j.extra, "writer");
+    assert.deepStrictEqual(j.shadowed_by_config, ["checker"]);
+    // This lane pins its agents, so it resolves the writer's BAND at BOTH EDGES.
+    assert.ok(j.edges && j.edges.band, "a fixed lane resolves a band, not a score");
+    assert.strictEqual(j.edges.edges.length, 2);
+
+    // A second document is UNAFFECTED — that is the whole point of the change.
+    const other = "t1";
+    assert.strictEqual(initDoc(root, other, "tsd").res.status, 0);
+    assert.strictEqual(JSON.parse(cli(["doc", "extra", other, "--json", "--dir", root]).stdout).stored, null);
+
+    // A bad value is refused by name.
+    assert.strictEqual(cli(["doc", "extra", slug, "--set", "sometimes", "--json", "--dir", root]).status, 2);
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("doc next: which sections go off Claude is said BEFORE the wave", () => {
+  const { root } = freshInstall();
+  try {
+    const slug = "p1";
+    assert.strictEqual(initDoc(root, slug, "prd").res.status, 0);
+    // `off` still gets a sentence: silence would make "nothing leaves Claude"
+    // and "nobody checked" identical.
+    let j = JSON.parse(cli(["doc", "next", slug, "--json", "--dir", root]).stdout);
+    assert.strictEqual(j.extra.resolved, "off");
+    assert.match(j.extra.sentence, /every section of this document is written and checked on Claude/);
+
+    fs.writeFileSync(
+      path.join(root, ".claude", "orc.config.yaml"),
+      "extra_enabled: true" + String.fromCharCode(10) + "extra_roles: [executor, doc-writer]" + String.fromCharCode(10)
+    );
+    j = JSON.parse(cli(["doc", "next", slug, "--json", "--dir", root]).stdout);
+    assert.strictEqual(j.extra.resolved, "writer");
+    assert.match(j.extra.sentence, /before the wave, not after it/);
+  } finally {
+    rmrf(root);
+  }
+});
