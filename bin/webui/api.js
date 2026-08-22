@@ -315,6 +315,13 @@ const READS = {
   "/api/extra/providers": () => ["extra", "providers"],
   "/api/extra/show": (q) => ["extra", "show", String(q.profile || "")],
   "/api/extra/models": (q) => ["extra", "models", String(q.profile || "")],
+  // v0.51.0 — the LOCAL TOOLS read, and the credential-route read. Both are the
+  // real commands, so the panel decides nothing about an install command, a
+  // platform, a version floor or which of three credential routes applies.
+  // `tools` exits 1 when no tool is ready, which is exit-code-as-DATA like
+  // `pattern status` — never an error.
+  "/api/extra/tools": () => ["extra", "tools"],
+  "/api/extra/keyhelp": (q) => ["extra", "keyhelp", String(q.profile || "")],
   "/api/extra/route": () => ["extra", "route"],
   // `stats` exits 1 with a real object when no foreign dispatch has been traced
   // yet, and `rates` exits 1 when a pair has no price — both are exit-code-as-
@@ -465,6 +472,20 @@ const WRITES = {
     return argv;
   },
   "/api/extra/route/rm": (b) => ["extra", "route", "rm", String(b.band)],
+  // v0.51.0 — running the install in the USER'S OWN TERMINAL. It is a POST
+  // because it launches something; it writes no config, stores no state and
+  // never elevates. A launch that could not happen comes back exit 0 carrying
+  // the command to paste (the `openBrowser` rule), so there is no failure path
+  // that leaves the card without an answer.
+  "/api/extra/install": (b) => {
+    const argv = ["extra", "install", String(b.provider)];
+    if (b.manager) argv.push("--manager", String(b.manager));
+    return argv;
+  },
+  // A live model list is a FREE re-read of the provider's own catalogue, and a
+  // per-model test is the PAID rung scoped to one id — the only thing that tells
+  // a LISTED model from a WORKING one.
+  "/api/extra/models/refresh": (b) => ["extra", "models", String(b.profile), "--refresh"],
   "/api/crosslink/remove": (b) => ["crosslink", "remove", String(b.name)],
   // The UI assembles no YAML. It hands the CLI the same arguments the
   // interactive prompt collects, and every rejection the user sees is the
@@ -907,6 +928,11 @@ async function handleApi(req, res, url, ctx) {
     const profile = String(body.profile || "");
     if (!profile) return json(res, 400, { error: "missing argument" });
     const argv = ["extra", "ping", profile];
+    // v0.51.0 — the PAID rung, opt-in and never a default. The panel quotes what
+    // it costs before the button; the CLI is what decides the rung and what it
+    // reports back.
+    if (body.live) argv.push("--live");
+    if (body.model) argv.push("--model", String(body.model));
     let input;
     if (body.key) {
       // A NEW key: line 1 the key, an optional line 2 the passphrase that stores
@@ -925,6 +951,27 @@ async function handleApi(req, res, url, ctx) {
     // `ok` here is "did the CLI answer at all". Whether the CONNECTION worked is
     // `data.ok` and the exit code, which are the CLI's answer and are passed
     // through untouched — a failed probe is DATA, not a server error.
+    return json(res, out.ok ? 200 : 500, out.ok
+      ? { ok: true, exit_code: out.exit_code, data: out.data, command: out.command }
+      : { ...out, error: readFailReason(out) });
+  }
+
+  // v0.51.0 — F5's answer, scoped to ONE model id. A model that is LISTED can
+  // still be DEAD upstream, so a dropdown is a list of what is OFFERED and never
+  // a list of what WORKS. This is POST because it spends money.
+  if (route === "/api/extra/models/test") {
+    if (job && job.running) return json(res, 409, { error: "busy", job: jobView() });
+    const profile = String(body.profile || "");
+    const model = String(body.model || "");
+    if (!profile || !model) return json(res, 400, { error: "missing argument" });
+    const argv = ["extra", "models", profile, "--test", model];
+    let input;
+    if (body.passphrase) {
+      argv.push("--passphrase-stdin");
+      input = String(body.passphrase) + chr10;
+    }
+    const out = runCli(argv, ctx, { json: true, input });
+    clearCache();
     return json(res, out.ok ? 200 : 500, out.ok
       ? { ok: true, exit_code: out.exit_code, data: out.data, command: out.command }
       : { ...out, error: readFailReason(out) });

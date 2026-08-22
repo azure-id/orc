@@ -116,8 +116,20 @@ test("the connection gate: three rungs, each recorded as ITSELF", async () => {
   assert.deepEqual(j.models_seen, ["fake-flash", "fake-pro"]);
 
   // `orc extra models` reads the cache and never invents.
+  // v0.51.0 — `models` carries the rows a DROPDOWN needs (id, label, group), and
+  // `model_ids` keeps the plain list every existing caller reads. `entry` is the
+  // CLI's answer to "dropdown or text box" and the panel derives nothing from it.
   r = run(p, ["extra", "models", "f", "--json"], { K: SECRET_KEY });
-  assert.deepEqual(JSON.parse(r.stdout).models, ["fake-flash", "fake-pro"]);
+  const mj = JSON.parse(r.stdout);
+  assert.deepEqual(mj.model_ids, ["fake-flash", "fake-pro"]);
+  assert.deepEqual(
+    mj.models.map((m) => [m.id, m.label, m.group]),
+    [
+      ["fake-flash", "fake-flash", "custom"],
+      ["fake-pro", "fake-pro", "custom"],
+    ]
+  );
+  assert.equal(mj.entry, "free-text", "`custom` is the escape hatch, so its model box must stay typeable");
 
   // An unknown profile is exit 2, distinct from unreachable.
   assert.equal(run(p, ["extra", "ping", "nope", "--json"]).status, 2);

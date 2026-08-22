@@ -39,7 +39,7 @@ async function renderExtra(body) {
   // Four reads, in parallel. A read that FAILED is not a read that came back
   // empty (v0.49.4): the error is kept so the card can say which half is
   // missing instead of rendering as "you have nothing configured".
-  const [listRes, provRes, docRes, cfgRes, routeRes, statRes, rateRes] = await Promise.all([
+  const [listRes, provRes, docRes, cfgRes, routeRes, statRes, rateRes, toolRes] = await Promise.all([
     read("/api/extra").catch((e) => ({ data: null, error: e })),
     read("/api/extra/providers").catch((e) => ({ data: null, error: e })),
     read("/api/extra/doctor").catch((e) => ({ data: null, error: e })),
@@ -47,6 +47,9 @@ async function renderExtra(body) {
     read("/api/extra/route").catch((e) => ({ data: null, error: e })),
     read("/api/extra/stats").catch((e) => ({ data: null, error: e })),
     read("/api/extra/rates").catch((e) => ({ data: null, error: e })),
+    // v0.51.0 — the LOCAL TOOLS read. It exits 1 when nothing is ready, which is
+    // exit-code-as-DATA like every other gate command on this panel.
+    read("/api/extra/tools").catch((e) => ({ data: null, error: e })),
   ]);
   const d = {
     list: listRes.data,
@@ -59,7 +62,13 @@ async function renderExtra(body) {
     // exit-code-as-data command on this panel.
     stats: statRes.data,
     rates: rateRes.data,
-    errors: { list: listRes.error || null, providers: provRes.error || null, route: routeRes.error || null },
+    tools: toolRes.data,
+    errors: {
+      list: listRes.error || null,
+      providers: provRes.error || null,
+      route: routeRes.error || null,
+      tools: toolRes.error || null,
+    },
   };
 
   // ONE staged-edit set for the whole panel, and it OUTLIVES a re-render on
@@ -70,25 +79,40 @@ async function renderExtra(body) {
   // would re-fetch five endpoints and scroll the list out from under the person
   // using it — the exact fight that release was written to end.
   if (!EX_EDITS) EX_EDITS = editSet(() => EX_BAR && EX_BAR.paint());
+  // A render that gated the bar away must not leave the previous one behind as
+  // a live reference: paint() on a detached node is a write to nothing.
+  EX_BAR = null;
   const edits = EX_EDITS;
   // Which config keys this panel owns is the CLI's answer, read fresh every
   // render. A hard-coded list here would be a second registry.
   EX_CONFIG_KEYS = ((d.config && d.config.keys) || []).filter((k) => k.key.indexOf("extra_") === 0).map((k) => k.key);
 
+  // W8 (v0.51.0) — THE SETUP GATE. `connected` is the CLI's answer (it computes
+  // it once, and the config gate and the doctor finding read the same one), so
+  // there is no second idea here of what "has anything ever answered" means.
+  const connected = !!(d.list && d.list.gate && d.list.gate.connected);
   const out = frag();
   out.append(exBoundaryCard());
+  // The strip stays either way, so the panel never looks broken.
   out.append(exStrip(d));
+  if (!connected) out.append(exGateNotice(d));
+  out.append(exToolsCard(d, body));
   out.append(exProfilesCard(d, body));
-  out.append(exRoutingCard(d, body, edits));
-  out.append(exGuardrailsCard(d, body, edits));
-  out.append(exCostCard(d));
+  if (connected) {
+    out.append(exRoutingCard(d, body, edits));
+    out.append(exGuardrailsCard(d, body, edits));
+    out.append(exCostCard(d));
+  }
   out.append(exFindingsCard(d));
-  out.append(exProvidersCard(d));
+  if (connected) out.append(exProvidersCard(d));
   body.replaceChildren(out);
   // The bar sticks only while dirty, and Discard renders only while dirty —
-  // both are editBar's own rules, unchanged.
-  EX_BAR = exEditBar(edits, body);
-  body.append(EX_BAR);
+  // both are editBar's own rules, unchanged. It is GATED with the two cards it
+  // belongs to (v0.51.0): "Reset the guardrails" beside a panel that is not
+  // showing any guardrails is the same mistake as a Connect button on a tool
+  // that is not installed.
+  EX_BAR = connected ? exEditBar(edits, body) : null;
+  if (EX_BAR) body.append(EX_BAR);
 }
 
 // The panel's staged writes. EVERY entry here is an ACTION — a route with a
@@ -255,6 +279,10 @@ function exVerifyChip(p, findings) {
 
 function exCredentialLine(p) {
   const c = p.credential || {};
+  // v0.51.0 — a LOCAL TOOL may hold its own credential, and then ORC has nothing
+  // to send and nothing is missing. `found`/`not found` are both wrong, so the
+  // CLI answers `present: null` and this says what is actually true.
+  if (c.source === "tool") return t("extra.profile.credentialTool");
   const where =
     c.source === "vault"
       ? t("extra.profile.credentialVault")
@@ -398,9 +426,19 @@ function exConfigValue(cfg, key) {
 // What the probe will do and what it costs, said BEFORE the button — the CLI
 // picks the rung, so this describes its ladder and never predicts the outcome.
 // Which rung actually answered comes back as `verify_method`, verbatim.
-function exProbeNote() {
+function exProbeNote(engine) {
   const box = el("div", "ex-probe");
   box.append(el("div", "ex-probe-head", t("extra.probe.head")));
+  // v0.51.0 — a LOCAL TOOL climbs a different ladder from an endpoint, and its
+  // paid rung is not a cheap ping: the tool loads its own system prompt and tool
+  // schemas before it sends anything, which is thousands of input tokens against
+  // an endpoint probe's ten. The two are therefore quoted separately, and both
+  // BEFORE the button.
+  if (engine === "cli") {
+    box.append(el("div", "note", t("extra.probe.cliFree")));
+    box.append(el("div", "note", t("extra.probe.cliPaid")));
+    return box;
+  }
   box.append(el("div", "note", t("extra.probe.free")));
   box.append(el("div", "note", t("extra.probe.paid")));
   return box;
@@ -467,9 +505,221 @@ function exSelect(options, onChange) {
   return sel;
 }
 
+/* ================================ the native-tools card, and the setup gate ==
+   W6/W8 (v0.51.0). Some providers are a LOCAL TOOL rather than an endpoint, and
+   a local tool can simply not be installed. When it is absent this card is the
+   FIRST thing on the panel and the ONLY thing it offers — no Connect box, no
+   test button, no model list, because all three are buttons that cannot succeed.
+
+   THE PANEL SWITCHES ON `state` AND DERIVES NOTHING. Four states arrive from
+   `orc extra tools --json`, each with exactly one next action, and every label,
+   command, version, URL and alternative in this card came out of that JSON. The
+   card names no tool: it cannot, and a test asserts it cannot.
+
+   THE INSTALL OPENS THE USER'S OWN TERMINAL. Not a background job (a hidden
+   subprocess makes an elevation prompt, a permissions error, an 80 MB download
+   and a forty-second wait all look identical: nothing happened) and not merely a
+   string to copy. The exact command renders ABOVE the button — preview-then-
+   apply, unchanged — the window is theirs to read and Ctrl-C, and ORC never
+   elevates. A machine with no terminal to open degrades to the command, never to
+   a dead button. */
+
+function exToolsCard(d, body) {
+  const c = card(t("extra.tools.title"));
+  const tools = (d.tools && d.tools.tools) || [];
+  if (d.errors.tools) {
+    c.append(failBox(d.errors.tools));
+    return c;
+  }
+  if (!tools.length) {
+    c.append(el("div", "note", t("extra.tools.none")));
+    return c;
+  }
+  c.append(el("div", "note", t("extra.tools.sub")));
+  const grid = el("div", "ex-tool-grid");
+  for (const tool of tools) grid.append(exToolBox(tool, d, body));
+  c.append(grid);
+  // The user will install in another terminal and come back. A card that only
+  // refreshed on a full page load would send them away thinking it failed.
+  const re = el("button", "btn btn-sm", t("extra.tools.recheck"));
+  re.type = "button";
+  re.addEventListener("click", () => exRefresh(body));
+  const foot = el("div", "row-actions");
+  foot.append(re);
+  foot.append(el("span", "note", t("extra.tools.recheckWhy")));
+  c.append(foot);
+  return c;
+}
+
+function exToolBox(tool, d, body) {
+  const box = el("div", "ex-tool ex-tool-" + tool.state);
+  const top = el("div", "row-actions");
+  // The label and the binary name are catalog data: written as they arrived.
+  top.append(el("span", "ex-tool-name", tool.label));
+  top.append(el("span", "mono note", tool.bin));
+  top.append(chip(tool.state, tool.state === "ready" ? "ok" : tool.state === "absent" ? "bad" : "warn"));
+  box.append(top);
+
+  if (tool.state === "absent") {
+    box.append(el("div", "note", t("extra.tools.absentWhat")));
+    box.append(exInstallRow(tool, body));
+    // `null` MEANS THERE IS NONE — never that ORC forgot to look. The two cases
+    // must not render the same, and neither may render as an empty slot.
+    if (tool.no_install_alternative) {
+      const alt = el("div", "note");
+      alt.append(document.createTextNode(t("extra.tools.altYes") + " "));
+      alt.append(el("span", "mono", tool.no_install_alternative));
+      box.append(alt);
+    } else {
+      box.append(el("div", "note", t("extra.tools.altNone")));
+    }
+    if (tool.docs_url) box.append(exLink(tool.docs_url, t("extra.providers.docs")));
+    return box;
+  }
+
+  const kv = [
+    [t("extra.tools.version"), tool.version || t("extra.tools.versionUnknown")],
+    [t("extra.tools.floor"), tool.min_version || "—"],
+    [t("extra.tools.auth"), tool.auth_detail || (tool.authed === null ? "—" : tool.authed ? t("extra.tools.authYes") : t("extra.tools.authNo"))],
+    [t("extra.tools.models"), tool.models_count === null ? "—" : String(tool.models_count)],
+  ];
+  box.append(kvList(kv));
+  if (tool.bin_path) box.append(el("div", "note mono ex-tool-path", tool.bin_path));
+  if (tool.probe_error) box.append(el("div", "note bad", tool.probe_error));
+
+  if (tool.state === "outdated") {
+    box.append(el("div", "note", t("extra.tools.outdatedWhat")));
+    box.append(exInstallRow(tool, body));
+    return box;
+  }
+  if (tool.state === "unauthenticated") {
+    box.append(el("div", "note", t("extra.tools.unauthWhat")));
+    box.append(exKeyhelpRow(tool, d, body));
+    return box;
+  }
+  // ready
+  const actions = el("div", "row-actions");
+  const connect = el("button", "btn btn-sm btn-primary", t("extra.tools.connect"));
+  connect.type = "button";
+  connect.addEventListener("click", () => exAddModal(d.providers, body, tool));
+  actions.append(connect);
+  box.append(actions);
+  return box;
+}
+
+// PREVIEW THEN APPLY, unchanged: the exact command is visible ABOVE the button,
+// and the button is what runs it in a terminal the user can watch.
+function exInstallRow(tool, body) {
+  const wrap = el("div", "ex-install");
+  const inst = tool.install || {};
+  const cmds = (inst.cmds || []).length ? inst.cmds : inst.all_cmds || [];
+  if (!cmds.length) {
+    wrap.append(el("div", "note", t("extra.tools.noCommand")));
+    if (inst.docs_url) wrap.append(exLink(inst.docs_url, t("extra.providers.docs")));
+    return wrap;
+  }
+  // The CLI already filtered these to this platform, so the panel picks nothing.
+  const pick = cmds.length > 1 ? exSelect(cmds.map((x) => ({ value: x.manager, label: x.manager }))) : null;
+  const cmdLine = el("div", "action-cmd", cmds[0].cmd);
+  const setCmd = () => {
+    const chosen = cmds.find((x) => x.manager === (pick ? pick.value : cmds[0].manager)) || cmds[0];
+    cmdLine.textContent = chosen.cmd;
+  };
+  if (pick) pick.addEventListener("change", setCmd);
+  wrap.append(el("div", "note", t("extra.tools.willRun")));
+  if (pick) wrap.append(pick);
+  wrap.append(cmdLine);
+  const out = el("div", "note");
+  const btn = el("button", "btn btn-sm btn-primary", t("extra.tools.install"));
+  btn.type = "button";
+  btn.addEventListener("click", async () => {
+    btn.disabled = true;
+    out.textContent = "";
+    try {
+      const r = await post("/api/extra/install", {
+        provider: tool.provider,
+        manager: pick ? pick.value : cmds[0].manager,
+      });
+      const j = (r && r.data) || null;
+      if (!j) {
+        out.textContent = (r && r.error) || t("common.loadFail");
+        return;
+      }
+      // `launched: false` is an ANSWER, not an error — the command stays on
+      // screen and the user runs it themselves.
+      out.textContent = j.note;
+      wrap.append(el("div", "note", t("extra.tools.neverElevates")));
+    } catch (e) {
+      out.textContent = String(e.message);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+  wrap.append(btn, out);
+  return wrap;
+}
+
+// Whatever `orc extra keyhelp` returned, rendered. The panel does not decide
+// which of the three routes applies and never pipes a key itself.
+function exKeyhelpRow(tool, d, body) {
+  const wrap = el("div", "ex-keyhelp");
+  wrap.append(el("div", "note", t("extra.tools.keyhelpSub")));
+  const profiles = ((d.list && d.list.profiles) || []).filter((p) => p.provider === tool.provider);
+  if (!profiles.length) {
+    // The credential route is a property of a PROFILE (which variable, which
+    // key), so there is nothing to compute until one exists.
+    wrap.append(el("div", "note", t("extra.tools.keyhelpNoProfile")));
+    const connect = el("button", "btn btn-sm", t("extra.tools.connect"));
+    connect.type = "button";
+    connect.addEventListener("click", () => exAddModal(d.providers, body, tool));
+    wrap.append(connect);
+    return wrap;
+  }
+  const out = el("div", "stack stack-sm");
+  wrap.append(out);
+  read("/api/extra/keyhelp?profile=" + encodeURIComponent(profiles[0].name))
+    .then((r) => {
+      const k = r.data;
+      if (!k) return;
+      out.append(chip(k.route, k.route === "env" ? "ok" : "warn"));
+      out.append(el("div", "note", k.why));
+      if (k.env_var) out.append(el("div", "note mono", k.env_var));
+      if (k.note) out.append(el("div", "note", k.note));
+      if (k.cmd) {
+        out.append(el("div", "action-cmd", k.cmd));
+        out.append(el("div", "note", t("extra.tools.loginManual")));
+      }
+    })
+    .catch((e) => out.append(failBox(e)));
+  return wrap;
+}
+
+/* THE SETUP GATE. Until one connection has answered, the routing table, the
+   limits, the cost report and the full provider catalogue are NOT APPENDED —
+   not hidden, not disabled: absent. Every one of them is a control for work that
+   cannot happen yet, and a panel that offers them teaches somebody to configure
+   a routing table that will never fire.
+
+   It has TWO FLOORS and the CLI says which one you are on, because the
+   instruction differs: with nothing installed and no key the answer is an
+   INSTALL, and with a connection that has never answered the answer is TEST IT.
+   Someone with neither should never be shown a Connect box that cannot succeed. */
+function exGateNotice(d) {
+  const gate = (d.list && d.list.gate) || null;
+  const box = el("div", "banner ex-gate");
+  box.append(el("div", "ex-gate-head", t("extra.gate.title")));
+  box.append(
+    el("div", null, gate && gate.floor === "never-tested" ? t("extra.gate.neverTested") : t("extra.gate.noConnection"))
+  );
+  box.append(el("div", "note", t("extra.gate.hidden")));
+  // The CLI's own sentence about what to do next, in the CLI's own words.
+  if (gate && gate.next) box.append(el("div", "action-cmd", gate.next));
+  return box;
+}
+
 /* ---------------------------------------------------------- the add modal -- */
 
-function exAddModal(cat, body) {
+function exAddModal(cat, body, tool) {
   const providers = (cat && cat.providers) || [];
   const form = el("div", "stack stack-sm");
 
@@ -484,7 +734,10 @@ function exAddModal(cat, body) {
   const region = exSelect([]);
   const baseUrl = exInput("");
   const envKey = exInput("");
-  const cliBin = exInput(t("extra.add.cliBinPh"));
+  // v0.51.0 — this placeholder used to be a hard-coded tool name, which became
+  // a catalog id and therefore a provider this panel named. It is the selected
+  // provider's own `cli_bin` now, or empty.
+  const cliBin = exInput("");
   const cliAgent = exInput(t("extra.add.cliAgentPh"));
   const key = exInput(t("extra.add.keyPh"), "password");
 
@@ -527,7 +780,11 @@ function exAddModal(cat, body) {
   form.append(credGrid);
   const vaultWarn = el("div", "banner banner-bad ex-form-hide", t("extra.add.vaultWarn"));
   form.append(vaultWarn);
-  form.append(exProbeNote());
+  // The rung ladder differs per engine and so does what it COSTS, so the note is
+  // repainted whenever the engine changes rather than fixed at the top of a form
+  // whose engine the user has not picked yet.
+  const probeNote = el("div");
+  form.append(probeNote);
 
   const wire = exWire(t("extra.wire.you"), t("extra.wire.provider"));
   form.append(wire);
@@ -572,7 +829,10 @@ function exAddModal(cat, body) {
     // CLI will actually use, so an empty field means "the catalog's".
     fBase.hidden = isCli;
     baseUrl.placeholder = (engine.value === "claude-shim" ? r && r.anthropic_base : r && r.api_base) || "";
+    cliBin.placeholder = (r && r.cli_bin) || "";
     envKey.placeholder = (r && r.env_key_default) || "";
+
+    probeNote.replaceChildren(exProbeNote(engine.value));
 
     const vault = srcVault.checked;
     fEnvKey.hidden = vault;
@@ -580,6 +840,15 @@ function exAddModal(cat, body) {
     vaultWarn.hidden = !vault;
   }
   engine.addEventListener("change", () => sync());
+  // Connect from a READY tool box pre-selects that provider and pre-fills the
+  // binary, so the one thing the user was looking at is the one thing the form
+  // opens on. Both values are the CLI's — the panel names neither.
+  if (tool && providers.some((p) => p.id === tool.provider)) {
+    provider.value = tool.provider;
+    sync();
+    if (Array.from(engine.options).some((o) => o.value === "cli")) engine.value = "cli";
+    cliBin.value = tool.bin || "";
+  }
   sync();
 
   const run = async (btn) => {
@@ -654,7 +923,7 @@ function exAddModal(cat, body) {
 function exTestModal(p, body) {
   const form = el("div", "stack stack-sm");
   form.append(el("div", "note", p.name + " · " + p.provider + "/" + p.engine));
-  form.append(exProbeNote());
+  form.append(exProbeNote(p.engine));
 
   // A VAULTED KEY IS RE-PROBED WITH ITS PASSPHRASE (v0.50.0, W14): the CLI
   // decrypts the stored key into memory for the probe and nothing else. Pasting
@@ -669,14 +938,23 @@ function exTestModal(p, body) {
     form.append(exField(t("extra.test.replaceKey"), key, t("extra.test.replaceKeyHint")));
   }
 
+  // v0.51.0 — the PAID rung, and it is a button of its own so it can never be
+  // pressed by accident. The model comes from the same CLI-decided control the
+  // routing table uses, because a live test of a model you cannot name is not a
+  // test of anything.
+  const box = exModelBox(t("extra.routing.modelPh"));
+  box.load(p.name);
+  form.append(exField(t("extra.test.model"), box.node, t("extra.test.modelHint")));
+
   const wire = exWire(t("extra.wire.you"), t("extra.wire.provider"));
   form.append(wire);
   const result = el("div", "ex-result");
   form.append(result);
 
-  const run = async (btn) => {
+  const run = async (btn, live) => {
     result.replaceChildren();
     btn.disabled = true;
+    const label = btn.textContent;
     btn.textContent = t("extra.test.running");
     wire.arm();
     setBusy(true);
@@ -685,6 +963,8 @@ function exTestModal(p, body) {
         profile: p.name,
         key: vaulted ? key.value : "",
         passphrase: vaulted ? pass.value : "",
+        live: !!live,
+        model: live ? box.value() : "",
       });
       exPingResult(result, wire, r, p.name, vaulted ? key.value : "", body);
     } catch (e) {
@@ -692,7 +972,9 @@ function exTestModal(p, body) {
       result.append(failBox(e));
     } finally {
       btn.disabled = false;
-      btn.textContent = t("extra.test.button");
+      // Its OWN label back. The free rung and the paid rung are different acts
+      // and one of them costs money — they may never end up reading the same.
+      btn.textContent = label;
       setBusy(false);
       key.value = "";
       pass.value = "";
@@ -705,10 +987,15 @@ function exTestModal(p, body) {
     actions: [
       { label: t("common.close"), onClick: (c) => c() },
       {
+        label: t("extra.test.live"),
+        id: "ex-live-btn",
+        onClick: () => run(document.getElementById("ex-live-btn"), true),
+      },
+      {
         label: t("extra.test.button"),
         cls: "btn-primary",
         id: "ex-test-btn",
-        onClick: () => run(document.getElementById("ex-test-btn")),
+        onClick: () => run(document.getElementById("ex-test-btn"), false),
       },
     ],
   });
@@ -738,6 +1025,13 @@ function exPingResult(result, wire, payload, profile, pastedKey, body) {
     box.append(chip(d.reason || "unreachable", "bad"));
     if (d.error) box.append(el("div", "note", d.error));
     if (d.base_url) box.append(el("div", "note mono", d.base_url));
+    // v0.51.0 — a tool that is not installed is not an unreachable endpoint, and
+    // the fix is not a retry. The CLI carries the command; the panel prints it.
+    if (d.install_cmd) box.append(el("div", "action-cmd", d.install_cmd));
+    if (d.reason === "not-installed")
+      box.append(
+        el("div", "note", d.no_install_alternative ? t("extra.tools.altYes") + " " + d.no_install_alternative : t("extra.tools.altNone"))
+      );
     // The reset the CLI performed, said out loud: a failed test on a connection
     // that had never verified leaves NOTHING behind.
     if (d.profile_reverted) box.append(el("div", "note", t("extra.result.reverted")));
@@ -763,6 +1057,7 @@ function exPingResult(result, wire, payload, profile, pastedKey, body) {
   // the URL and the credential and NOTHING about a model. The CLI says so; it is
   // shown, never softened.
   if (d.note) box.append(el("div", "note", d.note));
+  exLiveBlock(box, d);
 
   // THE SAVE OPENS ONLY ON A GREEN TEST, and the self-destruct is named BEFORE
   // the save rather than after it.
@@ -775,6 +1070,56 @@ function exPingResult(result, wire, payload, profile, pastedKey, body) {
   }
   result.append(box);
   exRefresh(body);
+}
+
+/* THE LIVE RESULT. Everything here is the CLI's `--json` object and the panel
+   adds no verdict of its own.
+
+   TWO HONESTIES ARE NOT OPTIONAL CHROME.
+
+   `model_reported: null` WITH `reports_model: false` is a real pair, not a
+   missing field: neither local tool reports which model answered, so a
+   substitution is INVISIBLE on that engine. The renderer says that sentence and
+   never leaves a blank, because a blank reads as "nothing went wrong".
+
+   The reply is FOREIGN INPUT (`_shared/untrusted-input.md`): a third party's
+   text, capped by the CLI, rendered as DOM text and never as HTML, and never
+   acted on. It is evidence that something answered — nothing more. */
+function exLiveBlock(box, d) {
+  if (!d.reply_excerpt && !d.tokens && !d.model_requested) return;
+  const live = el("div", "ex-live");
+  const head = el("div", "row-actions");
+  if (d.latency_ms) head.append(chip(t("extra.profile.latency", { ms: d.latency_ms }), "info"));
+  if (d.model_requested) head.append(el("span", "mono note", d.model_requested));
+  live.append(head);
+
+  const kv = [[t("extra.live.requested"), d.model_requested || "—"]];
+  kv.push([
+    t("extra.live.reported"),
+    d.model_reported ? d.model_reported : d.reports_model === false ? t("extra.live.noReport") : "—",
+  ]);
+  live.append(kvList(kv));
+
+  if (d.reply_excerpt) {
+    live.append(el("div", "field-label", t("extra.live.reply")));
+    // DOM text, never HTML. The cap is the CLI's.
+    live.append(el("pre", "block wrap ex-live-reply", d.reply_excerpt));
+    if (d.reply_truncated) live.append(el("div", "note", t("extra.live.truncated")));
+    if (d.foreign_input) live.append(el("div", "note", d.foreign_input));
+  }
+  if (d.tokens) {
+    // FOUR KINDS, NEVER BLENDED (/orc-budget). A kind the tool has no concept of
+    // reads an em dash, never a zero — unknown is not zero.
+    const rows = [
+      [t("extra.live.input"), d.tokens.input],
+      [t("extra.live.cacheWrite"), d.tokens.cache_write],
+      [t("extra.live.cacheRead"), d.tokens.cache_read],
+      [t("extra.live.output"), d.tokens.output],
+    ];
+    live.append(kvList(rows.map(([k, v]) => [k, v === null || v === undefined ? "—" : String(v)])));
+  }
+  if (d.cost_note) live.append(el("div", "note", d.cost_note));
+  box.append(live);
 }
 
 // Saving re-runs the test with the passphrase attached, because that is the only
@@ -1138,23 +1483,17 @@ function exRouteControls(row, d, edits, key, paint) {
       }))
     )
   );
-  // A model name is the provider's, and ORC's cache is not the authority on
-  // somebody else's catalogue: the list is a SUGGESTION (`models_seen`) on a
-  // field you can type into, and the CLI warns rather than refuses when a model
-  // is not in it.
-  const model = exInput(t("extra.routing.modelPh"));
-  const listId = "ex-models-" + row.from + "-" + row.to;
-  const dl = el("datalist");
-  dl.id = listId;
-  model.setAttribute("list", listId);
+  // v0.51.0 — WHETHER THIS IS A DROPDOWN OR A TEXT BOX IS THE CLI'S ANSWER.
+  // `orc extra models --json` returns `entry: "list" | "free-text"` plus a
+  // `group` per row, and this renders it and derives nothing — the Flow-stepper
+  // rule (`steps[]`), applied to models. A list that came back empty and the
+  // escape-hatch provider are both free text, because a dropdown that cannot
+  // contain the answer is worse than a box.
+  const box = exModelBox(t("extra.routing.modelPh"));
+  const model = box.input;
   const fillModels = () => {
     const p = profiles.find((x) => x.name === sel.value);
-    dl.replaceChildren();
-    for (const m of (p && p.models_seen) || []) {
-      const o = el("option");
-      o.value = m;
-      dl.append(o);
-    }
+    box.load(p ? p.name : null);
   };
   sel.addEventListener("change", fillModels);
   fillModels();
@@ -1162,19 +1501,82 @@ function exRouteControls(row, d, edits, key, paint) {
   const add = el("button", "btn btn-sm", t("extra.routing.route"));
   add.type = "button";
   add.addEventListener("click", () => {
-    if (!sel.value || !model.value.trim()) return;
+    const chosen = box.value();
+    if (!sel.value || !chosen) return;
     edits.action(
       key,
       "/api/extra/route/set",
-      { band: row.from + "-" + row.to, target: sel.value + "/" + model.value.trim() },
-      t("extra.routing.stagedSet", { target: sel.value + "/" + model.value.trim() })
+      { band: row.from + "-" + row.to, target: sel.value + "/" + chosen },
+      t("extra.routing.stagedSet", { target: sel.value + "/" + chosen })
     );
     paint();
   });
 
   const controls = el("div", "ex-route-controls");
-  controls.append(sel, model, dl, add);
+  controls.append(sel, box.node, add);
   return controls;
+}
+
+/* ONE model control, and the CLI decides which shape it takes.
+
+   `entry: "list"` renders a real <select> grouped by the CLI's own `group`, each
+   option labelled `label (group)` from data the panel was HANDED. `free-text`
+   renders the box that was always here. The panel never decides which — and it
+   never composes a group from a string it does not own.
+
+   IT ALSO CARRIES F5's WARNING. A model being LISTED is not a model that WORKS:
+   a listed id can be dead upstream, and only a live call tells those two apart.
+   The caveat is the CLI's sentence, printed beside the picker, and the per-model
+   test is offered next to it. */
+function exModelBox(placeholder) {
+  const node = el("div", "ex-modelbox");
+  const input = exInput(placeholder);
+  const sel = exSelect([]);
+  const note = el("div", "note");
+  const api = { node, input, profile: null, entry: "free-text", value: () => (api.entry === "list" ? sel.value : input.value.trim()) };
+  const paint = () => {
+    node.replaceChildren(api.entry === "list" ? sel : input, note);
+  };
+  api.load = (profile) => {
+    api.profile = profile;
+    if (!profile) {
+      api.entry = "free-text";
+      note.textContent = "";
+      paint();
+      return;
+    }
+    read("/api/extra/models?profile=" + encodeURIComponent(profile))
+      .then((r) => {
+        const j = r.data || {};
+        api.entry = j.entry === "list" ? "list" : "free-text";
+        sel.replaceChildren();
+        const groups = new Map();
+        for (const m of j.models || []) {
+          const g = m.group || "";
+          if (!groups.has(g)) groups.set(g, []);
+          groups.get(g).push(m);
+        }
+        for (const [g, rows] of groups) {
+          const og = el("optgroup");
+          og.label = g;
+          for (const m of rows) {
+            const o = el("option", null, m.label + (m.group ? " (" + m.group + ")" : ""));
+            o.value = m.id;
+            og.append(o);
+          }
+          sel.append(og);
+        }
+        // The provider's own caveat, verbatim: OFFERED is not WORKING.
+        note.textContent = j.caveat || "";
+        paint();
+      })
+      .catch(() => {
+        api.entry = "free-text";
+        paint();
+      });
+  };
+  paint();
+  return api;
 }
 
 // Reset here is the GUARDRAILS, not the routes: `orc config reset <key>` removes

@@ -1302,6 +1302,22 @@ function configSet(claudeDir, key, rawValue) {
     process.exit(1);
   }
   if (res.warn) console.error(`  ${res.warn}`);
+  // W8 (v0.51.0) — THE SETUP GATE. `extra_enabled` is the master switch on a
+  // subsystem that sends this repo's source code to a third party, and arming it
+  // before any connection has ever answered arms nothing: every dispatch falls
+  // straight back to Claude, so the switch reads ON and means OFF. The refusal
+  // NAMES the command that fixes it — a gate that only says no is a wall.
+  if (key === "extra_enabled" && String(res.value) === "true") {
+    const gate = extraConnectedState(claudeDir);
+    if (!gate.connected) {
+      console.error(
+        `❌ extra_enabled cannot be turned on yet: ${gate.why}\n` +
+          `   ${gate.next}\n` +
+          "   Nothing routes to a connection that has never answered, so this switch would read ON and mean OFF."
+      );
+      process.exit(1);
+    }
+  }
   const { map } = readOverride(claudeDir);
   map[key] = res.value;
   const p = writeOverride(claudeDir, map);
@@ -16379,6 +16395,9 @@ function redactProfile(prof, claudeDir) {
 // Neither reads a value into a place it could be printed.
 function credentialPresent(cred, claudeDir) {
   const src = (cred && cred.source) || "env";
+  // The tool holds its own. ORC has nothing to send and nothing is missing, so
+  // neither `found` nor `not found` is the truth — null is.
+  if (src === "tool") return null;
   if (src === "env") return !!(cred.key_name && process.env[cred.key_name]);
   if (src === "vault") {
     try {
@@ -16466,6 +16485,17 @@ function extraProvidersCmd() {
     docs_url: p.docs_url || null,
     terms_url: p.terms_url || null,
     notes: p.notes || null,
+    // v0.51.0 — the three keys a renderer needs to tell a LOCAL TOOL from an
+    // endpoint. `cli_bin` names the binary a row's only surface is, `install`
+    // carries the dated command (filtered to this platform by the CLI, so the
+    // panel never picks), and `models_public` is why a 200 on /models is not
+    // always a credential proof.
+    cli_bin: p.cli_bin || null,
+    min_version: p.min_version || null,
+    models_public: p.models_public === true,
+    no_install_alternative: p.no_install_alternative === undefined ? null : p.no_install_alternative,
+    install: p.install ? extraInstallView(p) : null,
+    credential: p.credential || null,
   }));
   if (asJson)
     emitJson(
@@ -16510,6 +16540,563 @@ function extraProvidersCmd() {
             "a base URL may have moved. Check the provider's own docs before you trust a failure."
         )
     );
+  console.log("");
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// W0 — `orc extra tools`: THE INSTALL GATE (v0.51.0)
+//
+// Two of this catalog's providers are LOCAL TOOLS, and a local tool can simply
+// not be there. Today that surfaces as an `extra-engine-unavailable` doctor
+// finding — a report AFTER the fact, when the user has already added a profile
+// that cannot work. This is the refusal BEFORE it, and the read the panel makes
+// before it offers anything else.
+//
+// Every field is computed FRESH on every read and NOTHING is stored. There is
+// deliberately no "installing" state: the user may close the terminal window,
+// and a stored flag would be a lie from that moment on (the computeWikiFreshness
+// rule, applied to a binary).
+//
+// exit 0 when at least one tool is `ready`, 1 otherwise — the same exit-code-as-
+// data convention as `pattern status` and `diy status`.
+// ═══════════════════════════════════════════════════════════════════════════
+
+// The closed set, and it is the CLI's answer rather than the panel's. Each one
+// has exactly ONE next action, which is what lets a renderer switch on it and
+// derive nothing.
+const EXTRA_TOOL_STATES = ["absent", "outdated", "unauthenticated", "ready"];
+
+// A FREE tool probe is local and answers in milliseconds, so it is bounded
+// tightly: a hung `models` call must never hold a panel read open.
+const EXTRA_TOOL_TIMEOUT_MS = 15000;
+// THE PAID RUNG IS A DIFFERENT ANIMAL and must not inherit that bound. A local
+// agentic tool loads its own system prompt and tool schemas, then does a real
+// model round trip — the first live probe written against a real tool was killed
+// at 15s MID-ANSWER and reported as a flag problem, which is the exact
+// mis-blame this release exists to end. Measured: ~2.4s on a fast model, well
+// past 15s on a slow one.
+const EXTRA_LIVE_TIMEOUT_MS = 180000;
+
+const stripAnsi = (s) => String(s || "").replace(/\x1b\[[0-9;?]*[ -\/]*[@-~]/g, "");
+
+// LENIENT ON PURPOSE (R8): version output differs per tool and per install
+// method — an npm shim, a native binary and a winget package all print it
+// differently. The first `N.N.N` wins; unparseable is `null`, which reads as
+// "the version is unknown" and never as "too old".
+function parseVersion(text) {
+  const m = /(\d+)\.(\d+)\.(\d+)/.exec(stripAnsi(text));
+  return m ? m[0] : null;
+}
+function cmpVersion(a, b) {
+  const pa = String(a).split(".").map(Number);
+  const pb = String(b).split(".").map(Number);
+  for (let i = 0; i < 3; i++) {
+    const x = pa[i] || 0;
+    const y = pb[i] || 0;
+    if (x !== y) return x < y ? -1 : 1;
+  }
+  return 0;
+}
+
+// Run a local tool's own free command. Returns the SAME shape whatever happens,
+// because "it exited 1" and "it was not there" are different answers a caller
+// has to be able to tell apart.
+function runToolCmd(binPath, argv, env, timeoutMs) {
+  try {
+    const r = spawnCmdSafe(binPath, argv, {
+      encoding: "utf8",
+      timeout: timeoutMs || EXTRA_TOOL_TIMEOUT_MS,
+      windowsHide: true,
+      maxBuffer: 8 * 1024 * 1024,
+      env: Object.assign({}, process.env, env || {}),
+    });
+    return {
+      ran: true,
+      code: r.status === null ? null : r.status,
+      stdout: stripAnsi(r.stdout || ""),
+      stderr: stripAnsi(r.stderr || ""),
+      timed_out: !!((r.error && r.error.code === "ETIMEDOUT") || r.signal === "SIGTERM" || r.signal === "SIGKILL"),
+    };
+  } catch (e) {
+    return { ran: false, code: null, stdout: "", stderr: String((e && e.message) || e), timed_out: false };
+  }
+}
+
+// The install block, filtered to THIS platform by the CLI so no renderer ever
+// picks a command. An empty `cmds` after filtering is an honest answer: no
+// shipped package manager covers this platform, and the docs link is the route.
+function extraInstallView(row) {
+  const inst = row.install || {};
+  const cmds = (inst.cmds || []).filter((c) => (c.platforms || []).includes(process.platform));
+  return {
+    docs_url: inst.docs_url || row.docs_url || null,
+    bin_name: inst.bin_name || row.cli_bin || null,
+    platform: process.platform,
+    cmds: cmds.map((c) => ({ manager: c.manager, platforms: c.platforms || [], cmd: c.cmd })),
+    // Every command the catalog knows, so a machine whose platform matches none
+    // of them can still be told what exists elsewhere.
+    all_cmds: (inst.cmds || []).map((c) => ({ manager: c.manager, platforms: c.platforms || [], cmd: c.cmd })),
+  };
+}
+
+// One tool row, computed. The order of the checks IS the state ladder: absent
+// beats outdated beats unauthenticated beats ready, because each one makes the
+// next unanswerable.
+function extraToolRow(row) {
+  const bin = row.cli_bin;
+  const inst = extraInstallView(row);
+  const out = {
+    provider: row.id,
+    label: row.label,
+    bin,
+    state: "absent",
+    installed: false,
+    bin_path: null,
+    version: null,
+    version_raw: null,
+    min_version: row.min_version || null,
+    outdated: false,
+    authed: null,
+    auth_detail: null,
+    models_count: null,
+    models: [],
+    probe_error: null,
+    no_install_alternative: row.no_install_alternative === undefined ? null : row.no_install_alternative,
+    docs_url: row.docs_url || null,
+    install: inst,
+  };
+  const found = whichBin(bin);
+  if (!found) return out;
+  out.installed = true;
+  out.bin_path = found;
+
+  if (row.version_cmd) {
+    const v = runToolCmd(found, row.version_cmd);
+    out.version_raw = (v.stdout.trim() || v.stderr.trim() || "").split(/\r?\n/)[0] || null;
+    out.version = parseVersion(v.stdout + "\n" + v.stderr);
+  }
+  // A version we could not parse is NOT a version below the floor. Blocking on
+  // a guess would make an unusual install method look like a broken one.
+  if (out.version && row.min_version && cmpVersion(out.version, row.min_version) < 0) {
+    out.state = "outdated";
+    out.outdated = true;
+    return out;
+  }
+
+  if (row.auth_cmd) {
+    const a = runToolCmd(found, row.auth_cmd);
+    const text = (a.stdout + "\n" + a.stderr).trim();
+    out.authed = a.code === 0 && !/not logged in|no credentials|logged out|not authenticated/i.test(text);
+    out.auth_detail = text.split(/\r?\n/).filter(Boolean).slice(0, 4).join(" · ") || null;
+  }
+  if (row.models_cmd) {
+    const m = runToolCmd(found, row.models_cmd);
+    if (m.code === 0) {
+      const list = extraParseModelList(m.stdout);
+      out.models = list;
+      out.models_count = list.length;
+    } else if (m.timed_out) {
+      out.probe_error = "the model list did not answer in time";
+    }
+  }
+  // `authed` is only decidable where the tool has a command for it. A non-empty
+  // model list is the second piece of evidence there is a credential at all —
+  // and where there is neither, `authed` stays null and the state is `ready`
+  // rather than a verdict this read cannot support.
+  if (out.authed === false && !out.models_count) {
+    out.state = "unauthenticated";
+    return out;
+  }
+  out.state = "ready";
+  return out;
+}
+
+// The model list a local tool prints. One `provider/model` per line is the shape
+// on one of them; JSON is the shape on the other. Both are read defensively, and
+// a shape this does not recognise returns an EMPTY list rather than an invented
+// one — one of the two is documented, not verified (R1), so it must tolerate a
+// shape it has never seen.
+function extraParseModelList(text) {
+  const t = String(text || "").trim();
+  if (!t) return [];
+  if (t[0] === "{" || t[0] === "[") {
+    try {
+      const v = JSON.parse(t);
+      const arr = Array.isArray(v) ? v : Array.isArray(v.data) ? v.data : Array.isArray(v.models) ? v.models : [];
+      // `slug` is in this list because one shipped tool uses it and neither
+      // `id` nor `name` — verified against its real output, not assumed.
+      return arr.map((m) => (typeof m === "string" ? m : m && (m.id || m.slug || m.name))).filter(Boolean);
+    } catch (_) {
+      return [];
+    }
+  }
+  return t
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter((l) => l && !/\s/.test(l) && !/^[-=*#]/.test(l));
+}
+
+function extraTools(claudeDir) {
+  const asJson = wantsJson();
+  const cat = readCatalog();
+  if (!cat) {
+    const hint = `provider catalog missing or unreadable at ${EXTRA_CATALOG} — this is a packaging bug; reinstall orc.`;
+    if (asJson) emitJson({ ok: false, reason: "no-catalog", path: EXTRA_CATALOG, hint }, 1);
+    console.error("❌ " + hint);
+    process.exit(1);
+  }
+  const only = typeof flag("--provider") === "string" ? flag("--provider") : null;
+  const rows = cat.providers.filter((p) => p.cli_bin && (!only || p.id === only)).map((p) => extraToolRow(p));
+  const anyReady = rows.some((r) => r.state === "ready");
+  const code = anyReady ? 0 : 1;
+  if (asJson)
+    emitJson(
+      {
+        ok: true,
+        as_of: cat.as_of,
+        age_days: cat._age_days,
+        stale: cat._stale,
+        platform: process.platform,
+        states: EXTRA_TOOL_STATES,
+        ready: anyReady,
+        tools: rows,
+      },
+      code
+    );
+
+  console.log(ui.header(`ORC · extra — local tools (catalog dated ${cat.as_of})`));
+  console.log("");
+  for (const r of rows) {
+    const badge =
+      r.state === "ready" ? ui.mark.ok(r.state) : r.state === "absent" ? ui.mark.bad(r.state) : ui.mark.warn(r.state);
+    console.log(`  ${ui.color.cyan(r.provider)}  ${badge}`);
+    if (r.installed)
+      console.log(
+        ui.kv([
+          ["binary", r.bin_path],
+          ["version", r.version || ui.color.gray("unknown — the output did not parse; not treated as too old")],
+          ["floor", r.min_version || "—"],
+          ["signed in", r.authed === null ? "—" : r.authed ? "yes" : "no"],
+          ["models", r.models_count === null ? "—" : String(r.models_count)],
+        ])
+      );
+    else {
+      const cmds = r.install.cmds.length ? r.install.cmds : r.install.all_cmds;
+      console.log("    " + ui.color.gray(`\`${r.bin}\` is not on PATH. Install it with:`));
+      for (const c of cmds) console.log("      " + ui.color.bold(c.cmd) + ui.color.gray(`   (${c.manager})`));
+      console.log("    " + ui.color.gray(`or run: orc extra install ${r.provider}   — opens a terminal and runs it there`));
+      if (r.no_install_alternative)
+        console.log(
+          "    " +
+            ui.color.gray(
+              `no install needed if you use \`${r.no_install_alternative}\` instead — same models, an ordinary endpoint and a key.`
+            )
+        );
+      else
+        console.log(
+          "    " + ui.color.gray("there is no install-free alternative for this one — the install is the only route.")
+        );
+    }
+    if (r.probe_error) console.log("    " + ui.mark.warn(r.probe_error));
+    console.log("");
+  }
+  if (!rows.length) console.log(ui.color.gray("  no provider in the catalog is a local tool.\n"));
+  process.exit(code);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// W0.5 — `orc extra install <provider>`: THE TERMINAL LAUNCHER
+//
+// A global install can ask for elevation, hit an npm EACCES, pull 80 MB or take
+// forty seconds, and inside a hidden subprocess all four look identical:
+// NOTHING HAPPENED. So this is neither a silent background job nor a string to
+// copy — it is a REAL TERMINAL WINDOW, in the foreground, with the command on
+// screen before it runs, which the user can read, scroll and Ctrl-C.
+//
+// Three properties, all three load-bearing: it is VISIBLE (the failures are the
+// user's to see), it is THEIRS (their shell, their profile, their privileges —
+// ORC NEVER ELEVATES: no sudo, no runas), and it is FALLBACK-FIRST (the command
+// renders whether or not the launch worked, the `openBrowser` rule).
+//
+// The SCRIPT FILE is the design. ORC does not try to thread a command string
+// through a terminal host into a shell into a package manager; that nesting is
+// where cross-platform launchers break and the quoting is unreadable. It writes
+// a small script and opens a terminal ON THE FILE.
+// ═══════════════════════════════════════════════════════════════════════════
+
+const EXTRA_TMP_DIR = "tmp";
+
+function extraInstallScript(dir, provider, cmd, verifyCmd) {
+  fs.mkdirSync(dir, { recursive: true });
+  // Sweep scripts older than a week. Not on a shorter window and never on the
+  // one just written: the user may still have that terminal open, and deleting
+  // a script out from under a running install would be the one failure this
+  // whole command exists to make visible.
+  try {
+    for (const f of fs.readdirSync(dir)) {
+      const full = path.join(dir, f);
+      if (!/^install-.*.(ps1|sh)$/.test(f)) continue;
+      if (Date.now() - fs.statSync(full).mtimeMs > 7 * 86400000) fs.rmSync(full, { force: true });
+    }
+  } catch (_) {}
+  const ts = new Date().toISOString().replace(/[-:T]/g, "").slice(0, 14);
+  const win = process.platform === "win32";
+  const file = path.join(dir, `install-${provider}-${ts}.${win ? "ps1" : "sh"}`);
+  // Four things and nothing else: echo the command, run it, verify, STAY OPEN.
+  // A window that vanishes on failure is worse than no window. It carries NO
+  // CREDENTIAL, ever — this is an install, and ORC never writes another tool's
+  // credential store anyway.
+  const body = win
+    ? [
+        "$ErrorActionPreference = 'Continue'",
+        "Write-Host ''",
+        "Write-Host 'ORC is about to run this command. It is yours to read, scroll and Ctrl-C.'",
+        "Write-Host ''",
+        `Write-Host '  ${cmd.replace(/'/g, "''")}'`,
+        "Write-Host ''",
+        cmd,
+        "Write-Host ''",
+        "Write-Host 'Checking it landed:'",
+        verifyCmd,
+        "Write-Host ''",
+        "Write-Host 'Done. Go back to ORC and press Re-check.'",
+        "Write-Host ''",
+      ].join("\r\n") + "\r\n"
+    : [
+        "#!/bin/sh",
+        "echo",
+        "echo 'ORC is about to run this command. It is yours to read, scroll and Ctrl-C.'",
+        "echo",
+        `echo '  ${cmd.replace(/'/g, "'\\''")}'`,
+        "echo",
+        cmd,
+        "echo",
+        "echo 'Checking it landed:'",
+        verifyCmd,
+        "echo",
+        "echo 'Done. Go back to ORC and press Re-check.'",
+        // STAY OPEN. A terminal profile that closes the window on exit would
+        // have taught the user nothing about a failure.
+        "printf 'Press Enter to close this window. '",
+        "read _dummy",
+        "",
+      ].join("\n");
+  fs.writeFileSync(file, body, { mode: win ? 0o600 : 0o700 });
+  try {
+    fs.chmodSync(file, win ? 0o600 : 0o700);
+  } catch (_) {}
+  return file;
+}
+
+// Each rung is BEST EFFORT and falls through on a throw or a failed spawn.
+// A machine with no terminal to open — SSH, a locked-down policy, a headless
+// session — degrades to the copy-able command, never to a dead button.
+function extraLaunchTerminal(script) {
+  const attempts = [];
+  const { spawn } = require("child_process");
+  const tryOne = (name, cmd, argv) => {
+    try {
+      const child = spawn(cmd, argv, { detached: true, stdio: "ignore", windowsHide: false });
+      let failed = false;
+      child.on("error", () => {
+        failed = true;
+      });
+      child.unref();
+      attempts.push({ launcher: name, ok: !failed });
+      return !failed;
+    } catch (e) {
+      attempts.push({ launcher: name, ok: false, error: String((e && e.message) || e) });
+      return false;
+    }
+  };
+  const ladder =
+    process.platform === "win32"
+      ? [
+          ["wt", "wt.exe", ["-w", "0", "nt", "powershell", "-NoExit", "-File", script]],
+          ["powershell", "cmd.exe", ["/c", "start", "", "powershell", "-NoExit", "-File", script]],
+        ]
+      : process.platform === "darwin"
+        ? [
+            ["Terminal", "open", ["-a", "Terminal", script]],
+            ["osascript", "osascript", ["-e", `tell application "Terminal" to do script ${JSON.stringify(script)}`]],
+          ]
+        : [
+            ["x-terminal-emulator", "x-terminal-emulator", ["-e", "sh", script]],
+            ["gnome-terminal", "gnome-terminal", ["--", "sh", script]],
+            ["konsole", "konsole", ["-e", "sh", script]],
+            ["xterm", "xterm", ["-e", "sh", script]],
+          ];
+  for (const [name, cmd, argv] of ladder) {
+    // On win32 the two hosts are looked up by the shell, not by PATH walking.
+    if (process.platform !== "win32" && !whichBin(cmd)) {
+      attempts.push({ launcher: name, ok: false, error: "not on PATH" });
+      continue;
+    }
+    if (tryOne(name, cmd, argv)) return { launched: true, launcher: name, attempts };
+  }
+  return { launched: false, launcher: null, attempts };
+}
+
+function extraInstallCmd(claudeDir, providerId) {
+  const asJson = wantsJson();
+  const cat = readCatalog();
+  const row = catalogRow(cat, providerId);
+  const fail = (reason, msg, extra) => {
+    if (asJson) emitJson(Object.assign({ ok: false, reason, error: msg }, extra || {}), 1);
+    console.error("❌ " + msg);
+    process.exit(1);
+  };
+  if (!row || !row.cli_bin)
+    fail(
+      "not-a-tool",
+      `"${providerId || ""}" is not a local tool in the catalog. \`orc extra tools\` lists the ones that are.`,
+      { provider: providerId || null }
+    );
+  const view = extraInstallView(row);
+  const chosen =
+    (typeof flag("--manager") === "string" && view.cmds.find((c) => c.manager === flag("--manager"))) || view.cmds[0];
+  if (!chosen)
+    fail(
+      "no-command",
+      `the catalog has no install command for ${row.id} on ${process.platform}. Its documentation is at ${view.docs_url || "(none listed)"}.`,
+      { provider: row.id, install: view }
+    );
+  const verifyCmd = `${row.cli_bin} --version`;
+  const dir = path.join(claudeDir, "orc", EXTRA_TMP_DIR);
+  let script = null;
+  try {
+    script = extraInstallScript(dir, row.id, chosen.cmd, verifyCmd);
+  } catch (e) {
+    fail("script-failed", `could not write the install script under ${dir}: ${(e && e.message) || e}`, {
+      provider: row.id,
+      cmd: chosen.cmd,
+    });
+  }
+  const dry = flag("--dry-run") === true;
+  const launch = dry ? { launched: false, launcher: null, attempts: [] } : extraLaunchTerminal(script);
+  // A FAILED LAUNCH IS EXIT 0. It is an answer, not an error: the same object
+  // comes back carrying the command to paste.
+  const payload = {
+    ok: true,
+    provider: row.id,
+    launched: launch.launched,
+    launcher: launch.launcher,
+    attempts: launch.attempts,
+    dry_run: dry,
+    script,
+    cmd: chosen.cmd,
+    manager: chosen.manager,
+    verify_cmd: verifyCmd,
+    fallback_cmd: chosen.cmd,
+    docs_url: view.docs_url,
+    elevation: "never — ORC does not elevate. A package-manager permission problem is yours to see and fix.",
+    note: launch.launched
+      ? "a terminal window opened — come back and press Re-check when it finishes"
+      : "no terminal could be opened here. Run the command yourself; nothing about this is different if you do.",
+  };
+  if (asJson) emitJson(payload, 0);
+  console.log("");
+  console.log(
+    ui.box(["ORC will run this in YOUR terminal:", "", "  " + chosen.cmd, "", `then check it with: ${verifyCmd}`])
+  );
+  console.log("");
+  if (dry) console.log("  " + ui.color.gray(`--dry-run: the script was written to ${script} and nothing was opened.`));
+  else if (launch.launched) console.log("  " + ui.mark.ok(payload.note) + ui.color.gray(`  (${launch.launcher})`));
+  else console.log("  " + ui.mark.warn(payload.note));
+  console.log("");
+  process.exit(0);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// W0.6 — `orc extra keyhelp <profile>`: WHICH OF THREE ROUTES APPLIES
+//
+// The two shipped tools are OPPOSITES about credentials, so this command's whole
+// job is to say which route this profile is on and to make that one route one
+// click:
+//
+//   env                 the tool reads a per-provider variable → NOTHING to set
+//                       up. ORC injects the key at rungs 2-4 and at dispatch.
+//   stdin-login         the tool accepts a key on STDIN → the command is printed
+//                       and can be opened in a terminal. ORC NEVER PIPES THE KEY
+//                       ITSELF.
+//   interactive-login   the tool always prompts → open a terminal on its own
+//                       command and say plainly that it cannot be automated.
+//
+// ORC NEVER WRITES ANOTHER TOOL'S CREDENTIAL STORE. The key lives in ORC's vault
+// or in the user's own environment variable and is injected into the child
+// process — so nothing global is mutated, revoking in ORC actually revokes, and
+// a user who already ran the tool's own login is untouched.
+// ═══════════════════════════════════════════════════════════════════════════
+
+const EXTRA_KEY_ROUTES = ["env", "stdin-login", "interactive-login", "none"];
+
+function extraKeyhelp(claudeDir, name) {
+  const asJson = wantsJson();
+  const ledger = readExtra(claudeDir);
+  const prof = extraProfile(ledger, name);
+  if (!prof) {
+    const known = ledger ? ledger.profiles.map((x) => x.name) : [];
+    if (asJson) emitJson({ ok: false, reason: "unknown-profile", profile: name || null, known }, 2);
+    console.error(`❌ unknown profile "${name || ""}".`);
+    process.exit(2);
+  }
+  const cat = readCatalog();
+  const row = catalogRow(cat, prof.provider);
+  const credRow = (row && row.credential) || null;
+  const src = (prof.credential || {}).source || "env";
+  const keyName = (prof.credential || {}).key_name || null;
+
+  let route, envVar, cmd, why;
+  if (credRow && credRow.env_route && (src === "env" || src === "vault")) {
+    route = "env";
+    envVar = credRow.env_var || keyName || null;
+    cmd = null;
+    why =
+      "nothing to set up. ORC puts the key in this tool's environment for every probe and every dispatch, so the tool's own credential store is never touched and revoking it in ORC actually revokes it.";
+  } else if (credRow && credRow.stdin_login) {
+    route = "stdin-login";
+    envVar = null;
+    cmd = credRow.stdin_login;
+    why =
+      "this tool can take a key on stdin. ORC prints the command and can open a terminal on it — it never pipes your key itself, because a key ORC pipes is a key ORC has to hold.";
+  } else if (credRow && credRow.interactive_login) {
+    route = "interactive-login";
+    envVar = null;
+    cmd = credRow.interactive_login;
+    why =
+      "this tool's login always prompts and cannot be driven non-interactively. ORC opens a terminal on its own command and says so, rather than pretending to automate it.";
+  } else {
+    route = "none";
+    envVar = null;
+    cmd = null;
+    why = "this provider is not a local tool — its credential is the key on the profile and nothing else is needed.";
+  }
+  const payload = {
+    ok: true,
+    profile: prof.name,
+    provider: prof.provider,
+    engine: prof.engine,
+    routes: EXTRA_KEY_ROUTES,
+    route,
+    env_var: route === "env" ? envVar : null,
+    needs_terminal: route === "stdin-login" || route === "interactive-login",
+    cmd,
+    why,
+    note: (credRow && credRow.note) || null,
+    never: "ORC never writes another tool's credential store, and never puts a key in argv.",
+  };
+  if (asJson) emitJson(payload, 0);
+  console.log("\n" + ui.header(`ORC · extra — ${prof.name} · credential route`));
+  console.log(
+    ui.kv([
+      ["route", route],
+      ["variable", payload.env_var || "—"],
+      ["command", cmd || "—"],
+    ])
+  );
+  console.log("\n  " + why);
+  if (payload.note) console.log("  " + ui.color.gray(payload.note));
   console.log("");
 }
 
@@ -16562,11 +17149,31 @@ function extraAdd(claudeDir, name) {
   if (engine === "claude-shim" && !anthropicBase && !bases.anthropic_base)
     fail("no-base-url", `provider "${providerId}" has no /anthropic base URL in the catalog — pass --anthropic-base-url.`);
 
+  // v0.51.0 — A PROVIDER WHOSE ONLY SURFACE IS A LOCAL TOOL CANNOT BE ADDED
+  // WHILE THAT TOOL IS ABSENT. Today's `extra-engine-unavailable` doctor finding
+  // is a report AFTER the fact, when the user already has a profile that cannot
+  // work; this is the refusal before it, and it NAMES the install command rather
+  // than only saying no.
+  if (row.cli_bin && !whichBin(row.cli_bin)) {
+    const inst = extraInstallView(row);
+    const cmds = inst.cmds.length ? inst.cmds : inst.all_cmds;
+    fail(
+      "not-installed",
+      `"${providerId}" is a program that runs on this machine, and \`${row.cli_bin}\` is not on PATH.\n` +
+        (cmds.length ? `   Install it:  ${cmds[0].cmd}\n   or run:      orc extra install ${providerId}   (opens a terminal and runs it there)\n` : "") +
+        (row.no_install_alternative
+          ? `   Or use \`${row.no_install_alternative}\` instead — same models, an ordinary endpoint and a key, nothing to install.`
+          : "   There is no install-free alternative for this one; the install is the only route."),
+      { provider: providerId, bin: row.cli_bin, install: inst, no_install_alternative: row.no_install_alternative || null }
+    );
+  }
+
   let cli = null;
   if (engine === "cli") {
-    const bin = flag("--cli");
+    // The catalog's own binary is the default, so a native row needs no --cli.
+    const bin = typeof flag("--cli") === "string" ? flag("--cli") : row.cli_bin;
     if (typeof bin !== "string")
-      fail("no-cli", "--cli <bin> is required for --engine cli (e.g. --cli opencode --cli-agent build).");
+      fail("no-cli", "--cli <bin> is required for --engine cli on a provider that does not name one (`orc extra tools` lists the ones that do).");
     if (!EXTRA_CLI_ADAPTERS[bin])
       fail(
         "no-adapter",
@@ -16603,15 +17210,26 @@ function extraAdd(claudeDir, name) {
     );
   const envKey = flag("--env-key");
   const keyStdin = args.includes("--key-stdin");
+  // v0.51.0 — the THIRD source, and it exists because ORC never writes another
+  // tool's credential store (nothing global is mutated, revoking in ORC actually
+  // revokes, and a user who already ran the tool's own login is untouched). A
+  // local tool that holds its own credential needs no key from ORC at all, and
+  // `--tool-auth` is how that is said out loud instead of being faked with an
+  // environment variable nobody set.
+  const toolAuth = args.includes("--tool-auth");
   let credential;
-  if (keyStdin) {
+  if (toolAuth) {
+    if (engine !== "cli")
+      fail("tool-auth-not-cli", "--tool-auth means \"the tool signs itself in\", which only exists for --engine cli.");
+    credential = { source: "tool", key_name: null };
+  } else if (keyStdin) {
     credential = { source: "vault", key_name: name };
   } else {
     const kn = typeof envKey === "string" ? envKey : row.env_key_default;
     if (!kn)
       fail(
         "no-credential",
-        "no credential source. Pass --env-key <NAME> (recommended) or --key-stdin (stored in the encrypted vault)."
+        "no credential source. Pass --env-key <NAME> (recommended), --key-stdin (stored in the encrypted vault), or --tool-auth if this tool is already signed in and holds its own."
       );
     credential = { source: "env", key_name: kn };
   }
@@ -16726,6 +17344,12 @@ function extraList(claudeDir) {
           verified: rows.filter((r) => r.verified_at).length,
           credential_present: rows.filter((r) => r.credential.present).length,
         },
+        // W8 (v0.51.0) — THE SETUP GATE, computed here and nowhere else. It
+        // carries WHICH FLOOR you are on, because the instruction differs: no
+        // connection at all means install-or-add, and a connection that has
+        // never answered means test it.
+        gate: extraConnectedState(claudeDir),
+        extra_enabled: isTrue(resolvedConfig(claudeDir).extra_enabled),
       },
       0
     );
@@ -16749,7 +17373,9 @@ function extraList(claudeDir) {
         `${r.provider}/${r.engine}`,
         (r.verified_at ? ui.color.green("verified " + r.verified_at.slice(0, 10)) : ui.color.yellow("unverified")) +
           "  " +
-          (r.credential.present
+          (r.credential.source === "tool"
+          ? ui.color.gray("the tool holds its own key")
+          : r.credential.present
             ? ui.color.gray(`key ${r.credential.source}`)
             : ui.color.red(`no key (${r.credential.source} ${r.credential.key_name || "—"})`)),
       ])
@@ -17231,6 +17857,47 @@ function promptSecret(label) {
 // lies the moment the clock moves. And a STALE verification is not a FAILED
 // one: it still routes (the /orc-pact UNCHECKABLE rule), it just re-pings
 // before wave 1.
+// W8 — ONE definition of CONNECTED, and every consumer reads it: the config
+// gate, `orc extra doctor`, and the panel through `orc extra list --json`. A
+// second idea of "has anything ever answered" is exactly the drift this
+// subsystem's own rules forbid.
+//
+// It has TWO FLOORS and it says which one you are on, because the instruction
+// differs: with no tool installed and no key the answer is an INSTALL, and with
+// a profile that has never verified the answer is a TEST. Showing a Connect box
+// to someone who has neither is showing them a button that cannot succeed.
+function extraConnectedState(claudeDir) {
+  const ledger = readExtra(claudeDir);
+  const profiles = (ledger && ledger.profiles) || [];
+  const verified = profiles.filter((x) => x.verified_at);
+  if (verified.length)
+    return {
+      connected: true,
+      floor: null,
+      profiles: profiles.length,
+      verified: verified.length,
+      why: null,
+      next: null,
+    };
+  if (!profiles.length)
+    return {
+      connected: false,
+      floor: "no-connection",
+      profiles: 0,
+      verified: 0,
+      why: "no connection has been configured at all.",
+      next: "Add one with `orc extra add <name> --provider <id> --engine <api|claude-shim|cli>`, then test it with `orc extra ping <name>`.",
+    };
+  return {
+    connected: false,
+    floor: "never-tested",
+    profiles: profiles.length,
+    verified: 0,
+    why: `${plural(profiles.length, "connection")} configured and not one of them has ever answered.`,
+    next: `Test one: \`orc extra ping ${profiles[0].name}\``,
+  };
+}
+
 function extraVerifyState(prof, cfg) {
   const maxDays = Number((cfg && cfg.extra_verify_max_days) || EXTRA_VERIFY_MAX_DAYS_DEFAULT);
   if (!prof.verified_at) return { state: "UNVERIFIED", age_days: null, max_days: maxDays };
@@ -17280,6 +17947,7 @@ function extraCredentialValue(claudeDir, prof, opts) {
       };
     return { ok: true, value: v, source: "env" };
   }
+  if (cred.source === "tool") return { ok: true, value: null, source: "tool" };
   if (cred.source === "vault") {
     if (opts && opts.inMemory) return { ok: true, value: opts.inMemory, source: "memory" };
     const pass = opts && opts.passphrase;
@@ -17321,6 +17989,12 @@ async function extraPing(claudeDir, name) {
   const cfg = resolvedConfig(claudeDir);
   const cat = readCatalog();
   const deep = flag("--deep") === true;
+  // W5 (v0.51.0) — the PAID rung, forced, on every engine. It is opt-in
+  // everywhere because a CLI ping is NOT a cheap ping: a one-line prompt through
+  // a local agentic tool loads that tool's own system prompt and tool schemas
+  // first, which is fifteen thousand input tokens against an api-engine probe's
+  // ten. The panel quotes the two separately, before the button.
+  const live = flag("--live") === true;
   const modelArg = typeof flag("--model") === "string" ? flag("--model") : null;
   const keyStdin = args.includes("--key-stdin");
   // v0.50.0 — RE-PROBING A STORED KEY. Without this a vaulted profile could
@@ -17404,33 +18078,36 @@ async function extraPing(claudeDir, name) {
   };
 
   // Engine `cli` has no endpoint to probe — the thing that can be absent is the
-  // binary. Reported as its own verify_method so nobody reads it as a network
-  // proof it never was.
+  // binary, and after that a credential, and after that a model, and only after
+  // ALL THREE a working call. So it gets its own FOUR-RUNG LADDER plus a rung-0
+  // refusal, each rung its own `verify_method`, because `cli-bin` is not
+  // `cli-auth` is not `cli-models` is not `cli-live` and nothing may read
+  // stronger than it is.
   if (prof.engine === "cli") {
-    const bin = (prof.cli && prof.cli.bin) || null;
-    const found = bin ? whichBin(bin) : null;
-    if (!found)
-      return finish(
-        {
-          ok: false,
-          profile: name,
-          engine: "cli",
-          reason: "engine-unavailable",
-          error: `"${bin || "(no binary configured)"}" is not on PATH — engine \`cli\` dispatches by running it.`,
-          rung: "cli-bin",
-        },
-        1
-      );
-    prof.verified_at = new Date().toISOString();
-    prof.verify_method = "cli-bin";
-    prof.verify_base_url = found;
-    prof.latency_ms = null;
-    extraHistory(ledger, "ping", { profile: name, method: "cli-bin" });
-    writeExtra(claudeDir, ledger);
-    return finish(
-      { ok: true, profile: name, engine: "cli", rung: "cli-bin", verify_method: "cli-bin", bin: found, models_seen: prof.models_seen, note: "the binary exists; nothing about a model or a credential has been proven." },
-      0
-    );
+    const credCli = extraCredentialValue(claudeDir, prof, {
+      inMemory: pending,
+      passphrase: vaultPass,
+      maxAttempts: cfg.extra_vault_max_attempts,
+    });
+    return extraPingCli({
+      claudeDir,
+      ledger,
+      prof,
+      cat,
+      cfg,
+      name,
+      live,
+      modelArg,
+      finish,
+      // A missing credential is NOT fatal here: the tool may hold its own, which
+      // is exactly the case ORC refuses to break (it never writes another tool's
+      // credential store, so a user who already logged in is untouched).
+      key: credCli.ok ? credCli.value : null,
+      key_error: credCli.ok ? null : credCli.error || credCli.reason,
+      pending,
+      pendingPass,
+      asJson,
+    });
   }
 
   const probe = extraProbeBase(prof, cat);
@@ -17451,6 +18128,7 @@ async function extraPing(claudeDir, name) {
       1
     );
   const headers = extraAuthHeaders(prof, cred.value);
+  const catRow = catalogRow(cat, prof.provider);
   const attempts = [];
 
   // ── rung 1: the free one ────────────────────────────────────────────────
@@ -17466,7 +18144,24 @@ async function extraPing(claudeDir, name) {
       const data = Array.isArray(r.json.data) ? r.json.data : Array.isArray(r.json.models) ? r.json.models : [];
       models = data.map((m) => (typeof m === "string" ? m : m.id || m.name)).filter(Boolean);
     }
-    if (r.ok && models.length && !deep) {
+    // W3 (v0.51.0) — SOME PROVIDERS SERVE THEIR MODELS LIST WITHOUT A CREDENTIAL.
+    // Rung 1 treats a 200 on /models as verification, so on such a provider it
+    // would mark a profile VERIFIED WITH A GARBAGE KEY. A row that says its list
+    // is public fills models_seen and then falls THROUGH to the paid rung; the
+    // free answer is recorded on attempts[] as `models-public` and is never the
+    // profile's verification.
+    const modelsPublic = !!(catRow && catRow.models_public);
+    if (r.ok && models.length && modelsPublic)
+      attempts.push({
+        rung: "models-public",
+        url,
+        status: r.status || null,
+        ok: true,
+        ms: r.ms || null,
+        error: null,
+        note: "this provider serves its model list without a credential, so a 200 here proves the URL and nothing about the key.",
+      });
+    if (r.ok && models.length && !deep && !live && !modelsPublic) {
       prof.verified_at = new Date().toISOString();
       prof.verify_method = "models";
       prof.verify_base_url = probe.base;
@@ -17494,11 +18189,15 @@ async function extraPing(claudeDir, name) {
   const isProbeName = model === EXTRA_PROBE_UNKNOWN_MODEL;
   const url =
     probe.kind === "anthropic" ? joinUrl(probe.base, "/v1/messages") : joinUrl(probe.base, "/chat/completions");
-  const body =
-    probe.kind === "anthropic"
-      ? { model, max_tokens: 1, messages: [{ role: "user", content: "hi" }] }
-      : { model, max_tokens: 1, messages: [{ role: "user", content: "hi" }] };
-  const r2 = await extraHttp({ url, method: "POST", headers, body, timeoutMs: 20000 });
+  // `--live` sends a REAL message and reads the reply back; the ordinary rung
+  // still spends one token. The prompt is a FIXED CONSTANT in both cases — never
+  // task text, never anything a slice supplied.
+  const body = {
+    model,
+    max_tokens: live ? 32 : 1,
+    messages: [{ role: "user", content: live ? EXTRA_LIVE_PROMPT : "hi" }],
+  };
+  const r2 = await extraHttp({ url, method: "POST", headers, body, timeoutMs: live ? 60000 : 20000 });
   attempts.push({ rung: "completion", url, status: r2.status || null, ok: !!r2.ok, ms: r2.ms || null, error: r2.ok ? null : extraErrText(r2) });
 
   if (r2.ok) {
@@ -17510,11 +18209,43 @@ async function extraPing(claudeDir, name) {
     if (models.length) prof.models_seen = models;
     else if (reported && !prof.models_seen.includes(reported)) prof.models_seen = prof.models_seen.concat(reported);
     else if (modelArg && !prof.models_seen.includes(modelArg)) prof.models_seen = prof.models_seen.concat(modelArg);
+    if (live) prof.verify_method = "live";
     extraHistory(ledger, "ping", { profile: name, method: prof.verify_method });
     writeExtra(claudeDir, ledger);
     const saved = maybeStorePendingKey(claudeDir, ledger, prof, pending, pendingPass, asJson);
+    const excerpt = live ? extraReplyText(r2.json) : null;
     return finish(
-      { ok: true, profile: name, engine: prof.engine, base_url: probe.base, rung: "completion", verify_method: prof.verify_method, latency_ms: r2.ms, model_requested: model, model_reported: reported, models_seen: prof.models_seen, attempts, vault: saved },
+      Object.assign(
+        {
+          ok: true,
+          profile: name,
+          engine: prof.engine,
+          base_url: probe.base,
+          rung: live ? "live" : "completion",
+          verify_method: prof.verify_method,
+          latency_ms: r2.ms,
+          model_requested: model,
+          model_reported: reported,
+          // An `api` endpoint DOES report which model answered, and that
+          // difference from the local tools is worth carrying explicitly rather
+          // than leaving a reader to infer it from a null.
+          reports_model: true,
+          models_seen: prof.models_seen,
+          attempts,
+          vault: saved,
+        },
+        live
+          ? {
+              reply_excerpt: excerpt ? excerpt.slice(0, EXTRA_LIVE_EXCERPT_MAX) : null,
+              reply_truncated: !!(excerpt && excerpt.length > EXTRA_LIVE_EXCERPT_MAX),
+              foreign_input: EXTRA_FOREIGN_REPLY_NOTE,
+              // Four kinds, never blended (/orc-budget) — and NULL when the
+              // endpoint reported nothing, never four zeros.
+              tokens: r2.json && r2.json.usage ? extraApiUsageVector(r2.json.usage) : null,
+              cost_note: EXTRA_LIVE_COST_API,
+            }
+          : {}
+      ),
       0
     );
   }
@@ -17567,8 +18298,375 @@ async function extraPing(claudeDir, name) {
   );
 }
 
+
+// ═══════════════════════════════════════════════════════════════════════════
+// W2 (v0.51.0) — THE ENGINE-`cli` LADDER
+//
+// The old engine-`cli` probe returned after ONE check — is the binary on PATH —
+// and said so honestly: "the binary exists; nothing about a model or a
+// credential has been proven." Honest, and useless: `models_seen` stayed empty
+// forever, so the routing model box had nothing to offer and the user hand-typed
+// a `provider/model` string they had to go and find somewhere else.
+//
+//   rung 0  refusal   not on PATH → the install command, and the install-free
+//                     alternative when one exists (null MEANS there is none)
+//   rung 1  cli-bin   on PATH, and `--version` above the floor
+//   rung 2  cli-auth  the tool's own credential command answered
+//   rung 3  cli-models the tool's own model list → models_seen
+//   rung 4  cli-live  a real message to a real model            COSTS MONEY
+//
+// Rungs 1-3 are FREE and always run. Rung 4 is `--live` only.
+//
+// EVERY RUNG RUNS WITH ORC'S KEY IN THE CHILD'S ENVIRONMENT. Without that,
+// rung 3 lists whatever the user happened to log into the tool with rather than
+// what ORC's key can actually reach — and the account-scoped dropdown is the
+// entire point of reading a live list.
+//
+// A rung that fails does NOT erase the rungs below it: `verify_method` is the
+// strongest rung that answered, and the return says plainly what the ones above
+// it did not prove.
+// ═══════════════════════════════════════════════════════════════════════════
+
+function extraPingCli(ctx) {
+  const { claudeDir, ledger, prof, cat, cfg, name, live, modelArg, finish, key, key_error, pending, pendingPass, asJson } =
+    ctx;
+  const row = catalogRow(cat, prof.provider) || {};
+  const bin = (prof.cli && prof.cli.bin) || row.cli_bin || null;
+  const adapter = (bin && EXTRA_CLI_ADAPTERS[bin]) || null;
+  const attempts = [];
+  const found = bin ? whichBin(bin) : null;
+
+  // ── rung 0: the refusal ─────────────────────────────────────────────────
+  // Not a failure to connect — a failure to have anything to connect TO. It
+  // names the install command and, where one exists, the route that needs no
+  // install at all.
+  if (!found) {
+    const inst = row.cli_bin ? extraInstallView(row) : null;
+    const cmds = inst ? (inst.cmds.length ? inst.cmds : inst.all_cmds) : [];
+    attempts.push({ rung: "cli-bin", ok: false, error: `\`${bin || "(none)"}\` is not on PATH` });
+    return finish(
+      {
+        ok: false,
+        profile: name,
+        engine: "cli",
+        reason: "not-installed",
+        rung: "cli-bin",
+        bin,
+        error: `"${bin || "(no binary configured)"}" is not on PATH — engine \`cli\` dispatches by running it, so there is nothing here to authenticate and nothing to list.`,
+        install: inst,
+        install_cmd: cmds.length ? cmds[0].cmd : null,
+        install_cmds: cmds,
+        // `null` MEANS THERE IS NONE, never that ORC forgot to look.
+        no_install_alternative: row.no_install_alternative === undefined ? null : row.no_install_alternative,
+        attempts,
+      },
+      1
+    );
+  }
+
+  // The credential goes into the CHILD'S ENVIRONMENT and nowhere else — never
+  // into argv, and never into the tool's own credential store (D8). A profile
+  // whose key lives with the tool passes `key: null` and every rung below still
+  // runs; the tool authenticates itself.
+  const credRow = row.credential || {};
+  const env = {};
+  if (key) {
+    if (credRow.env_var) env[credRow.env_var] = key;
+    const kn = (prof.credential || {}).key_name;
+    if (kn) env[kn] = key;
+  }
+
+  // ── rung 1: cli-bin ─────────────────────────────────────────────────────
+  let version = null;
+  let versionRaw = null;
+  if (row.version_cmd) {
+    const v = runToolCmd(found, row.version_cmd, env);
+    versionRaw = (v.stdout.trim() || v.stderr.trim() || "").split(/\r?\n/)[0] || null;
+    version = parseVersion(v.stdout + "\n" + v.stderr);
+    attempts.push({ rung: "cli-bin", ok: true, cmd: row.version_cmd.join(" "), version, raw: versionRaw });
+  } else {
+    attempts.push({ rung: "cli-bin", ok: true, path: found });
+  }
+  // R2 — the flag rename that broke every opencode dispatch happened once
+  // already, so the floor is a VERSION rather than a hard-coded flag. An
+  // unparseable version is not a version below the floor.
+  if (version && row.min_version && cmpVersion(version, row.min_version) < 0)
+    return finish(
+      {
+        ok: false,
+        profile: name,
+        engine: "cli",
+        reason: "too-old",
+        rung: "cli-bin",
+        bin: found,
+        cli_version: version,
+        min_version: row.min_version,
+        error: `\`${bin}\` reports ${version} and ORC needs at least ${row.min_version} — an older build takes different flags, and the failure would look like a model problem instead of a version one.`,
+        install: extraInstallView(row),
+        attempts,
+      },
+      1
+    );
+
+  // The version is stored on the profile, because it is what picks the
+  // permission flag at dispatch time (W7).
+  prof.cli = Object.assign({}, prof.cli, { version, version_raw: versionRaw });
+
+  let method = "cli-bin";
+  let authed = null;
+  let authDetail = null;
+  let models = [];
+
+  // ── rung 2: cli-auth ────────────────────────────────────────────────────
+  if (row.auth_cmd) {
+    const a = runToolCmd(found, row.auth_cmd, env);
+    const text = (a.stdout + "\n" + a.stderr).trim();
+    authed = a.code === 0 && !/not logged in|no credentials|logged out|not authenticated/i.test(text);
+    authDetail = text.split(/\r?\n/).filter(Boolean).slice(0, 4).join(" · ") || null;
+    attempts.push({
+      rung: "cli-auth",
+      ok: !!authed,
+      cmd: row.auth_cmd.join(" "),
+      detail: authDetail,
+      error: authed ? null : "the tool reports no usable credential",
+    });
+    if (authed) method = "cli-auth";
+  }
+
+  // ── rung 3: cli-models ──────────────────────────────────────────────────
+  if (row.models_cmd) {
+    const m = runToolCmd(found, row.models_cmd, env);
+    models = m.code === 0 ? extraParseModelList(m.stdout) : [];
+    attempts.push({
+      rung: "cli-models",
+      ok: models.length > 0,
+      cmd: row.models_cmd.join(" "),
+      count: models.length,
+      error: models.length
+        ? null
+        : m.timed_out
+          ? "the model list did not answer in time"
+          : extraCliClassify(m.stderr, m.stdout) === "unknown"
+            ? "the tool listed no model ORC could read"
+            : extraCliClassify(m.stderr, m.stdout),
+    });
+    if (models.length) {
+      method = "cli-models";
+      prof.models_seen = models;
+    }
+  }
+
+  // ── rung 4: cli-live — REAL MONEY ───────────────────────────────────────
+  let liveResult = null;
+  if (live) {
+    const wanted = modelArg || models[0] || null;
+    if (!wanted)
+      return finish(
+        {
+          ok: false,
+          profile: name,
+          engine: "cli",
+          reason: "no-model",
+          rung: "cli-live",
+          bin: found,
+          cli_version: version,
+          models_seen: models,
+          error:
+            "a live test needs a model id and none is known: the model list came back empty, and no --model was given. Pass one, or fix the credential first.",
+          attempts,
+        },
+        1
+      );
+    liveResult = extraCliLiveProbe({ adapter, bin: found, prof, row, model: wanted, env, version, cfg, claudeDir });
+    attempts.push({
+      rung: "cli-live",
+      ok: !!liveResult.ok,
+      cmd: liveResult.cmd,
+      ms: liveResult.latency_ms,
+      error: liveResult.ok ? null : liveResult.error,
+    });
+    if (liveResult.ok) {
+      method = "cli-live";
+      if (!models.includes(wanted)) {
+        models = models.concat(wanted);
+        prof.models_seen = models;
+      }
+    }
+  }
+
+  const ok = !live || !!(liveResult && liveResult.ok);
+  if (ok) {
+    prof.verified_at = new Date().toISOString();
+    prof.verify_method = method;
+    prof.verify_base_url = found;
+    prof.latency_ms = liveResult ? liveResult.latency_ms : null;
+    extraHistory(ledger, "ping", { profile: name, method, models: models.length });
+    writeExtra(claudeDir, ledger);
+  }
+  const saved = ok ? maybeStorePendingKey(claudeDir, ledger, prof, pending, pendingPass, asJson) : null;
+
+  // What each rung did NOT prove, said out loud. A ladder whose top rung was
+  // never climbed must never read like one that was.
+  const notes = [];
+  if (method === "cli-bin")
+    notes.push(
+      "the binary exists and nothing else has been proven: no credential, no model list, no working call."
+    );
+  if (authed === false)
+    notes.push("the tool reports no credential of its own — ORC will inject the key it holds, but nothing has confirmed that key yet.");
+  if (key_error && !key) notes.push(key_error);
+  if (row.models_cmd && !models.length)
+    notes.push("no model list came back, so there is nothing to pick from yet and a route here still needs a hand-typed id.");
+  if (!live && models.length)
+    notes.push(
+      "a model being LISTED is not a model that WORKS — a listed id can be dead upstream. `orc extra models " +
+        name +
+        " --test <id>` is the only thing that tells those two apart."
+    );
+
+  return finish(
+    Object.assign(
+      {
+        ok,
+        profile: name,
+        engine: "cli",
+        rung: method,
+        verify_method: method,
+        bin: found,
+        cli_version: version,
+        cli_version_raw: versionRaw,
+        min_version: row.min_version || null,
+        authed,
+        auth_detail: authDetail,
+        models_seen: models,
+        // F6/F14c — NEITHER shipped tool reports which model answered, so a
+        // substitution is invisible on this engine. `reports_model: false` is
+        // the record of that, and every renderer prints the sentence rather
+        // than leaving a blank field.
+        reports_model: !!(adapter && adapter.supports && adapter.supports.reports_model),
+        attempts,
+        vault: saved,
+        note: notes.length ? notes.join(" ") : null,
+      },
+      liveResult
+        ? {
+            latency_ms: liveResult.latency_ms,
+            model_requested: liveResult.model_requested,
+            model_reported: liveResult.model_reported,
+            reply_excerpt: liveResult.reply_excerpt,
+            reply_truncated: liveResult.reply_truncated,
+            foreign_input: EXTRA_FOREIGN_REPLY_NOTE,
+            tokens: liveResult.tokens,
+            usage_kinds: (adapter && adapter.supports && adapter.supports.usage_kinds) || null,
+            cost_note: EXTRA_LIVE_COST_CLI,
+            error: liveResult.ok ? null : liveResult.error,
+            reason: liveResult.ok ? undefined : liveResult.reason,
+          }
+        : {}
+    ),
+    ok ? 0 : 1
+  );
+}
+
+// ONE real call to ONE real model, in a SCRATCH DIRECTORY with the most
+// restrictive sandbox the tool offers, carrying a fixed constant prompt. It is
+// the only thing that tells a LISTED model from a WORKING one.
+function extraCliLiveProbe(a) {
+  const { adapter, bin, model, env, version } = a;
+  if (!adapter || !adapter.probeArgv)
+    return { ok: false, reason: "no-adapter", error: `ORC has no live-probe recipe for \`${bin}\`.`, cmd: null, latency_ms: null };
+  let scratch = null;
+  try {
+    scratch = fs.mkdtempSync(path.join(os.tmpdir(), "orc-extra-probe-"));
+  } catch (e) {
+    return { ok: false, reason: "scratch-failed", error: String((e && e.message) || e), cmd: null, latency_ms: null };
+  }
+  const argv = adapter.probeArgv({ model, dir: scratch, prompt: EXTRA_LIVE_PROMPT, version });
+  const started = Date.now();
+  const r = runToolCmd(bin, argv, env, EXTRA_LIVE_TIMEOUT_MS);
+  const ms = Date.now() - started;
+  let parsed = null;
+  try {
+    parsed = adapter.parse({ stdout: r.stdout, stderr: r.stderr, lastMessage: null });
+  } catch (_) {}
+  try {
+    fs.rmSync(scratch, { recursive: true, force: true });
+  } catch (_) {}
+
+  // F3, MADE LEGIBLE. An exit whose output is the tool's own help text is a FLAG
+  // problem, not a model problem — that exact failure shipped for a release and
+  // read as "your model id is wrong" every single time.
+  const helpish = /^\s*(usage|Usage|Commands:|Options:)/m.test(r.stdout + "\n" + r.stderr);
+  if (r.timed_out)
+    return {
+      ok: false,
+      reason: "timeout",
+      cmd: [bin].concat(argv).join(" "),
+      latency_ms: ms,
+      model_requested: model,
+      error: `no answer in ${Math.round(EXTRA_LIVE_TIMEOUT_MS / 1000)}s. That is a slow or stuck model, NOT a wrong model id and NOT a wrong flag — the tool had already started answering.`,
+    };
+  if (r.code !== 0) {
+    const reason = helpish ? "invalid_request" : extraCliClassify(r.stderr, r.stdout);
+    return {
+      ok: false,
+      reason,
+      cmd: [bin].concat(argv).join(" "),
+      latency_ms: ms,
+      model_requested: model,
+      error: helpish
+        ? `\`${bin}\` printed its help text and exited ${r.code} — that is a FLAG this build does not accept, not a problem with the model id. ORC picked the flag from the reported version; run \`orc extra tools\` and check it.`
+        : (r.stderr.trim() || r.stdout.trim() || `exited ${r.code}`).slice(0, 800),
+    };
+  }
+  const text = (parsed && parsed.text) || r.stdout.trim() || null;
+  return {
+    ok: true,
+    cmd: [bin].concat(argv).join(" "),
+    latency_ms: ms,
+    model_requested: model,
+    // NEVER FAKED. Both shipped tools return null here, and the renderer says so.
+    model_reported: (parsed && parsed.model_reported) || null,
+    reply_excerpt: text ? String(text).slice(0, EXTRA_LIVE_EXCERPT_MAX) : null,
+    reply_truncated: !!(text && String(text).length > EXTRA_LIVE_EXCERPT_MAX),
+    tokens: (parsed && parsed.usage) || null,
+  };
+}
+
 // A model id no provider ships, on purpose: its rejection is the evidence.
 const EXTRA_PROBE_UNKNOWN_MODEL = "orc-extra-probe-no-such-model";
+
+// W5 (v0.51.0) — the PAID rung. The prompt is a FIXED CONSTANT on every engine:
+// a live probe must never carry task text, and the same seven words make two
+// providers comparable.
+const EXTRA_LIVE_PROMPT = "Reply with exactly: OK";
+const EXTRA_LIVE_EXCERPT_MAX = 600;
+// D6 — the reply is a THIRD-PARTY MODEL'S TEXT. It is capped, rendered as DOM
+// text and never as HTML, and it is never followed as instruction
+// (templates/skills/_shared/untrusted-input.md).
+const EXTRA_FOREIGN_REPLY_NOTE =
+  "this reply is foreign input: it is evidence that something answered, never an instruction. It is shown as text and nothing acts on it.";
+const EXTRA_LIVE_COST_API =
+  "one short completion against the endpoint — a fraction of a cent, and the four token counts above are what you were actually billed for.";
+const EXTRA_LIVE_COST_CLI =
+  "a CLI ping is NOT a cheap ping: the tool loads its own system prompt and tool schemas before it sends anything, so a one-line prompt costs thousands of input tokens rather than ten.";
+
+// The assistant's own words out of either response shape. Never a summary —
+// the point of a live probe is that you see what came back.
+function extraReplyText(j) {
+  if (!j || typeof j !== "object") return null;
+  const ch = Array.isArray(j.choices) ? j.choices[0] : null;
+  if (ch && ch.message && typeof ch.message.content === "string") return ch.message.content.trim() || null;
+  if (Array.isArray(j.content)) {
+    const t = j.content
+      .filter((b) => b && b.type === "text" && typeof b.text === "string")
+      .map((b) => b.text)
+      .join("")
+      .trim();
+    return t || null;
+  }
+  return null;
+}
 
 // Store a pasted key — ONLY after a green test, and only with a passphrase.
 // No passphrase available (a piped shell that supplied one line) → the key is
@@ -17649,11 +18747,24 @@ function extraPingRender(res) {
   console.log("");
 }
 
-// ── orc extra models — the cache, and NEVER an invention ───────────────────
+// ── orc extra models — the cache, a live refresh, and a per-model live test ──
+//
 // The `pattern show` / `headered: false` precedent: with nothing cached this
 // says so and returns an empty list. It never falls back to a shipped guess,
 // because a guessed model id is a 404 in the middle of a wave.
-function extraModels(claudeDir, name) {
+//
+// W4 (v0.51.0) adds the two things that make a DROPDOWN possible and honest:
+//
+//   --refresh        re-runs the free model-list rung and rewrites models_seen
+//   --test <id>      the PAID rung, scoped to ONE id
+//
+// The second one exists because F5 is the whole argument: a model that is
+// LISTED can still be DEAD. A dropdown is a list of what is OFFERED, never a
+// list of what WORKS, and only a live call tells those two apart.
+//
+// `entry` is the CLI's answer to "dropdown or text box", and the panel renders
+// it and derives nothing — the Flow-stepper rule (`steps[]`), applied to models.
+async function extraModels(claudeDir, name) {
   const asJson = wantsJson();
   const ledger = readExtra(claudeDir);
   const prof = extraProfile(ledger, name);
@@ -17664,36 +18775,238 @@ function extraModels(claudeDir, name) {
     process.exit(2);
   }
   const cfg = resolvedConfig(claudeDir);
-  const v = extraVerifyState(prof, cfg);
-  const models = Array.isArray(prof.models_seen) ? prof.models_seen : [];
-  if (asJson)
-    emitJson(
-      {
-        ok: true,
-        profile: name,
-        models,
-        source: models.length ? "cached from the last ping" : null,
-        verified_at: prof.verified_at,
-        verify_method: prof.verify_method,
-        verify_state: v.state,
-        verify_age_days: v.age_days,
-        hint: models.length ? null : "no model has been read from this provider yet — run `orc extra ping " + name + "`.",
-      },
-      0
-    );
-  if (!models.length) {
-    console.log(`\nNo models cached for ${name}. ORC never ships a model list — run \`orc extra ping ${name}\`.\n`);
-    return;
+  const cat = readCatalog();
+  const row = catalogRow(cat, prof.provider) || {};
+  const refresh = flag("--refresh") === true;
+  const testId = typeof flag("--test") === "string" ? flag("--test") : null;
+  const passStdin = args.includes("--passphrase-stdin");
+  const adapter = ((prof.cli && prof.cli.bin) || row.cli_bin) ? EXTRA_CLI_ADAPTERS[(prof.cli && prof.cli.bin) || row.cli_bin] : null;
+
+  // A vaulted profile needs its key for either of the live paths, and it is
+  // unlocked into MEMORY for that and nothing else — the same counter, the same
+  // rule as `orc extra ping --passphrase-stdin`.
+  let key = null;
+  let keyError = null;
+  if (refresh || testId) {
+    const pass = passStdin ? (process.stdin.isTTY ? promptSecret(`Passphrase for "${name}" (not shown): `) : (readStdinLines()[0] || "").trim()) : null;
+    const cred = extraCredentialValue(claudeDir, prof, { passphrase: pass, maxAttempts: cfg.extra_vault_max_attempts });
+    if (cred.ok) key = cred.value;
+    else keyError = cred.error || cred.reason;
   }
-  console.log(ui.header(`ORC · extra — ${name} · ${plural(models.length, "model")}`));
-  console.log("\n" + models.map((m) => "  " + m).join("\n"));
-  console.log(
-    ui.color.gray(
-      `\n  read from the provider at ${prof.verified_at} via ${prof.verify_method}` +
-        (v.state === "STALE" ? `  (${v.age_days}d old — STALE, still routes)` : "") +
-        "\n"
-    )
-  );
+
+  let refreshed = null;
+  let tested = null;
+  if (refresh) {
+    refreshed = await extraRefreshModels({ claudeDir, prof, row, key, cat });
+    if (refreshed.ok) {
+      prof.models_seen = refreshed.models;
+      prof.models_refreshed_at = new Date().toISOString();
+      extraHistory(ledger, "models-refresh", { profile: name, count: refreshed.models.length });
+      writeExtra(claudeDir, ledger);
+    }
+  }
+  if (testId) {
+    tested = await extraTestModel({ claudeDir, prof, row, adapter, key, cat, model: testId, cfg });
+  }
+
+  const models = Array.isArray(prof.models_seen) ? prof.models_seen : [];
+  const v = extraVerifyState(prof, cfg);
+  const rows = models.map((id) => extraModelView(id, prof));
+  // `custom` is the escape hatch that keeps the catalog from being a gate, and a
+  // list that came back empty is not a list. Both are FREE TEXT — the panel must
+  // never offer a dropdown that cannot contain the answer.
+  const entry = prof.provider === "custom" || !models.length ? "free-text" : "list";
+  const refreshedAt = prof.models_refreshed_at || prof.verified_at || null;
+  const staleDays = refreshedAt && !isNaN(Date.parse(refreshedAt)) ? Math.floor((Date.now() - Date.parse(refreshedAt)) / 86400000) : null;
+
+  const payload = {
+    ok: true,
+    profile: name,
+    provider: prof.provider,
+    engine: prof.engine,
+    entry,
+    source: refreshed && refreshed.ok ? refreshed.source : models.length ? "cached from the last ping" : null,
+    refreshed_at: refreshedAt,
+    stale_days: staleDays,
+    models: rows,
+    // The plain id list, kept for every caller that already reads it.
+    model_ids: models,
+    // F6/F14c — neither local tool reports which model answered, so a
+    // substitution is invisible on that engine. Carried here so a renderer that
+    // is about to draw a dropdown can say so beside it.
+    reports_model: prof.engine === "cli" ? !!(adapter && adapter.supports && adapter.supports.reports_model) : true,
+    verified_at: prof.verified_at,
+    verify_method: prof.verify_method,
+    verify_state: v.state,
+    verify_age_days: v.age_days,
+    key_error: keyError,
+    refresh: refreshed,
+    test: tested,
+    // F5, said out loud beside every list: OFFERED is not WORKING.
+    caveat:
+      "this is what the provider OFFERS. A listed id can still be dead upstream — `orc extra models " +
+      name +
+      " --test <id>` is the only thing that tells those two apart.",
+    hint: models.length ? null : "no model has been read from this provider yet — run `orc extra ping " + name + "` or `orc extra models " + name + " --refresh`.",
+  };
+  if (asJson) emitJson(payload, 0);
+
+  if (refreshed && !refreshed.ok) console.log("\n  " + ui.mark.warn(refreshed.error));
+  if (!rows.length) {
+    console.log(`\nNo models cached for ${name}. ORC never ships a model list — run \`orc extra ping ${name}\`.\n`);
+  } else {
+    console.log(ui.header(`ORC · extra — ${name} · ${plural(rows.length, "model")}`));
+    console.log("\n" + rows.map((m) => `  ${m.label}${m.group ? ui.color.gray(`  (${m.group})`) : ""}`).join("\n"));
+    console.log(
+      ui.color.gray(
+        `\n  ${payload.source || "cached"}${refreshedAt ? ` at ${refreshedAt}` : ""}` +
+          (v.state === "STALE" ? `  (${v.age_days}d old — STALE, still routes)` : "")
+      )
+    );
+    console.log("  " + ui.color.gray(payload.caveat));
+  }
+  if (tested) {
+    console.log("");
+    if (tested.ok) {
+      console.log("  " + ui.mark.ok(`${testId} answered in ${tested.latency_ms}ms`));
+      if (tested.reply_excerpt) console.log(ui.color.gray("  reply: " + tested.reply_excerpt.split(/\r?\n/)[0]));
+      if (!tested.reports_model)
+        console.log("  " + ui.color.gray("this tool does not report which model answered, so a substitution here would be invisible."));
+    } else {
+      console.log("  " + ui.mark.bad(`${testId} — ${tested.reason}`));
+      if (tested.error) console.log("  " + tested.error);
+    }
+  }
+  console.log("");
+}
+
+// One model id, viewed. `group` is the CLI's answer so a renderer can compose
+// `glm-5 (opencode-go)` from data it was HANDED rather than by splitting a
+// string it does not own.
+function extraModelView(id, prof) {
+  const s = String(id);
+  const i = s.indexOf("/");
+  return {
+    id: s,
+    label: i === -1 ? s : s.slice(i + 1),
+    group: i === -1 ? prof.provider : s.slice(0, i),
+    // A NAME HINT, never a price. ORC prices nothing it did not price itself
+    // (/orc-budget), and several catalogues put the word in the id — so this
+    // says what the NAME says and makes no claim about what you will be billed.
+    name_says_free: /(^|[-_/.])free($|[-_/.])/i.test(s),
+  };
+}
+
+// Re-run the FREE model-list rung for one profile. Engine `cli` asks the tool;
+// everything else asks the endpoint. Either way ORC'S OWN KEY is in play, which
+// is the whole point: a list read without it is whatever the user happened to
+// log in with, not what this profile can actually reach.
+async function extraRefreshModels(a) {
+  const { claudeDir, prof, row, key, cat } = a;
+  if (prof.engine === "cli") {
+    const bin = (prof.cli && prof.cli.bin) || row.cli_bin || null;
+    const found = bin ? whichBin(bin) : null;
+    if (!found) return { ok: false, reason: "not-installed", error: `\`${bin || "(none)"}\` is not on PATH.`, models: [] };
+    if (!row.models_cmd)
+      return { ok: false, reason: "no-list-command", error: `ORC has no model-list command for \`${bin}\` in the catalog.`, models: [] };
+    const env = {};
+    if (key) {
+      const credRow = row.credential || {};
+      if (credRow.env_var) env[credRow.env_var] = key;
+      const kn = (prof.credential || {}).key_name;
+      if (kn) env[kn] = key;
+    }
+    const m = runToolCmd(found, row.models_cmd, env);
+    const models = m.code === 0 ? extraParseModelList(m.stdout) : [];
+    if (!models.length)
+      return {
+        ok: false,
+        reason: m.timed_out ? "timeout" : "empty",
+        error: m.timed_out ? "the model list did not answer in time." : (m.stderr.trim() || "the tool listed no model ORC could read.").slice(0, 400),
+        models: [],
+        source: bin + " " + row.models_cmd.join(" "),
+      };
+    return { ok: true, models, source: bin + " " + row.models_cmd.join(" ") };
+  }
+  if (!key) return { ok: false, reason: "no-credential", error: "no key is available for this profile.", models: [] };
+  const probe = extraProbeBase(prof, cat);
+  if (!probe.base) return { ok: false, reason: "no-base-url", error: "this profile has no base URL to ask.", models: [] };
+  const url = joinUrl(probe.base, probe.models_path) + "?limit=1000";
+  const r = await extraHttp({ url, headers: extraAuthHeaders(prof, key), timeoutMs: 8000 });
+  if (!r.ok || !r.json) return { ok: false, reason: "unreachable", error: extraErrText(r), models: [], source: url };
+  const data = Array.isArray(r.json.data) ? r.json.data : Array.isArray(r.json.models) ? r.json.models : [];
+  const models = data.map((m) => (typeof m === "string" ? m : m.id || m.name)).filter(Boolean);
+  return { ok: !!models.length, models, source: url, error: models.length ? null : "the endpoint answered with no model ids." };
+}
+
+// F5's answer, scoped to ONE id: the paid rung for a single model, so a dead
+// entry in a live list can be found before a wave finds it.
+async function extraTestModel(a) {
+  const { claudeDir, prof, row, adapter, key, cat, model, cfg } = a;
+  if (prof.engine === "cli") {
+    const bin = (prof.cli && prof.cli.bin) || row.cli_bin || null;
+    const found = bin ? whichBin(bin) : null;
+    if (!found) return { ok: false, reason: "not-installed", error: `\`${bin || "(none)"}\` is not on PATH.` };
+    const env = {};
+    if (key) {
+      const credRow = row.credential || {};
+      if (credRow.env_var) env[credRow.env_var] = key;
+      const kn = (prof.credential || {}).key_name;
+      if (kn) env[kn] = key;
+    }
+    const out = extraCliLiveProbe({
+      adapter,
+      bin: found,
+      prof,
+      row,
+      model,
+      env,
+      version: (prof.cli && prof.cli.version) || null,
+      cfg,
+      claudeDir,
+    });
+    return Object.assign(
+      {
+        reports_model: !!(adapter && adapter.supports && adapter.supports.reports_model),
+        foreign_input: EXTRA_FOREIGN_REPLY_NOTE,
+        cost_note: EXTRA_LIVE_COST_CLI,
+      },
+      out
+    );
+  }
+  if (!key) return { ok: false, reason: "no-credential", error: "no key is available for this profile." };
+  const probe = extraProbeBase(prof, cat);
+  if (!probe.base) return { ok: false, reason: "no-base-url", error: "this profile has no base URL to ask." };
+  const url = probe.kind === "anthropic" ? joinUrl(probe.base, "/v1/messages") : joinUrl(probe.base, "/chat/completions");
+  const r = await extraHttp({
+    url,
+    method: "POST",
+    headers: extraAuthHeaders(prof, key),
+    body: { model, max_tokens: 32, messages: [{ role: "user", content: EXTRA_LIVE_PROMPT }] },
+    timeoutMs: 60000,
+  });
+  if (!r.ok)
+    return {
+      ok: false,
+      reason: r.status === 401 || r.status === 403 ? "auth-failed" : r.reason || "model-unavailable",
+      status: r.status || null,
+      error: extraErrText(r),
+      model_requested: model,
+      latency_ms: r.ms || null,
+    };
+  const text = extraReplyText(r.json);
+  return {
+    ok: true,
+    latency_ms: r.ms || null,
+    model_requested: model,
+    model_reported: (r.json && r.json.model) || null,
+    reports_model: true,
+    reply_excerpt: text ? text.slice(0, EXTRA_LIVE_EXCERPT_MAX) : null,
+    reply_truncated: !!(text && text.length > EXTRA_LIVE_EXCERPT_MAX),
+    foreign_input: EXTRA_FOREIGN_REPLY_NOTE,
+    tokens: r.json && r.json.usage ? extraApiUsageVector(r.json.usage) : null,
+    cost_note: EXTRA_LIVE_COST_API,
+  };
 }
 
 // ── orc extra unlock — prove the passphrase, and NEVER print the key ───────
@@ -18252,6 +19565,17 @@ function extraDoctorFindings(claudeDir) {
       { as_of: cat.as_of, age_days: cat._age_days }
     );
 
+  // W8 — the switch is ON and nothing has ever answered, so every dispatch
+  // falls back to Claude and the setting reads ON while meaning OFF. This is the
+  // report of a state `orc config set` now refuses to create, which still
+  // happens when a config file is hand-edited or copied between machines.
+  const gate = extraConnectedState(claudeDir);
+  if (isTrue(cfg.extra_enabled) && !gate.connected)
+    add("extra-enabled-unverified", `extra_enabled is true and ${gate.why} ${gate.next}`, {
+      floor: gate.floor,
+      profiles: gate.profiles,
+    });
+
   for (const prof of ledger.profiles) {
     const v = extraVerifyState(prof, cfg);
     if (v.state === "UNVERIFIED")
@@ -18262,7 +19586,7 @@ function extraDoctorFindings(claudeDir) {
         `"${prof.name}" last verified ${v.age_days}d ago (> extra_verify_max_days ${v.max_days}) — it still routes, and re-pings before wave 1.`,
         { profile: prof.name, age_days: v.age_days }
       );
-    if (!credentialPresent(prof.credential, claudeDir)) {
+    if ((prof.credential || {}).source !== "tool" && !credentialPresent(prof.credential, claudeDir)) {
       const c = prof.credential || {};
       const vault = credentialVaultState(c, claudeDir);
       if (vault && vault.state === "wiped")
@@ -19820,20 +21144,35 @@ const EXTRA_CLI_RETURN_SCHEMA = {
 // family INCLUDES the cached count, exactly as engine C's does, so fresh input
 // is the difference — and RETURNS NULL when there is nothing to read, which is
 // the whole point of this function existing separately.
-function extraCliUsageVector(u) {
+function extraCliUsageVector(u, kinds) {
   if (!u || typeof u !== "object") return null;
   const num = (...names) => {
     for (const n of names) if (u[n] !== undefined && u[n] !== null && !isNaN(Number(u[n]))) return Number(u[n]);
     return null;
   };
+  // W7 (v0.51.0) — the two shipped tools report a DIFFERENT NUMBER OF KINDS, so
+  // the adapter says which ones it can report and this function never invents
+  // the rest. A cache field the tool has no concept of reads NULL, never 0:
+  // unknown is not zero (/orc-budget).
+  const canWrite = !kinds || kinds.indexOf("cache_write") !== -1;
+  // opencode nests them: `tokens.cache.{write,read}` beside `tokens.{input,output}`.
+  const nest = u.cache && typeof u.cache === "object" ? u.cache : null;
+  const nestNum = (k) => (nest && nest[k] !== undefined && nest[k] !== null && !isNaN(Number(nest[k])) ? Number(nest[k]) : null);
   const cached = num("cached_input_tokens", "cache_read_input_tokens", "prompt_cache_hit_tokens", "cached_tokens");
+  const cacheRead = cached === null ? nestNum("read") : cached;
+  const written = num("cache_creation_input_tokens", "cache_write");
+  const cacheWrite = written === null ? nestNum("write") : written;
   const inp = num("input_tokens", "prompt_tokens", "input");
   const outp = num("output_tokens", "completion_tokens", "output");
   if (inp === null && outp === null) return null;
+  // The `input` family INCLUDES the cached count on both tools, exactly as
+  // engine A's does, so fresh input is the difference. A nested vector reports
+  // them separately already, so nothing is subtracted twice.
+  const fresh = cached === null && nest ? inp || 0 : Math.max(0, (inp || 0) - (cacheRead || 0));
   return {
-    input: Math.max(0, (inp || 0) - (cached || 0)),
-    cache_write: num("cache_creation_input_tokens", "cache_write") || 0,
-    cache_read: cached || 0,
+    input: fresh,
+    cache_write: canWrite ? cacheWrite || 0 : null,
+    cache_read: cacheRead || 0,
     output: outp || 0,
   };
 }
@@ -19908,6 +21247,27 @@ function extraCliClassify(stderr, stdout) {
   return "unknown";
 }
 
+// R16 — the effort a foreign worker runs at comes from the CLAUDE AGENT this
+// route displaced: that band was going to be `…-high`, so send `high`. A
+// number ORC invented to satisfy an interface would not be a routing decision
+// the user made.
+function extraEffortFromAgent(agent) {
+  const m = /-(xhigh|high|med|low)$/.exec(String(agent || ""));
+  if (!m) return null;
+  return m[1] === "med" ? "medium" : m[1];
+}
+// F14b — an unsupported level is coerced to the nearest supported one SILENTLY,
+// so ORC pins one from codex's own closed set and records it as REQUESTED. It
+// never claims the effort was honoured; nothing in the event stream could tell
+// it either way.
+function extraCodexEffort(effort) {
+  const set = EXTRA_CLI_ADAPTERS.codex.efforts;
+  const v = String(effort || "")
+    .toLowerCase()
+    .replace(/^extra[_-]high$/, "xhigh");
+  return set.indexOf(v) === -1 ? "medium" : v;
+}
+
 const EXTRA_CLI_ADAPTERS = {
   // ── opencode ─────────────────────────────────────────────────────────────
   // Built first for one concrete reason: `opencode serve` + `--attach` removes
@@ -19922,9 +21282,54 @@ const EXTRA_CLI_ADAPTERS = {
     // `deepseek/x` — already the shape opencode wants.
     model_note: "opencode wants provider/model, which is what a route target of <profile>/<provider>/<model> already produces",
     exit_codes: null,
-    supports: { attach: true, output_schema: false, usage: "undocumented", fence: false },
+    // F6 — opencode reports token counts and NEVER a model id: there is no
+    // `model`, `modelID` or `model_id` anywhere in its event stream. So the
+    // "you did not get the model you asked for" check is structurally
+    // unavailable here, and that is STATED rather than rendered as a blank.
+    supports: {
+      attach: true,
+      output_schema: false,
+      usage: "undocumented",
+      usage_kinds: ["input", "cache_write", "cache_read", "output"],
+      reports_model: false,
+      fence: false,
+    },
+    // F3 — A LIVE DEFECT, not a nice-to-have. `--auto` was replaced by
+    // `--dangerously-skip-permissions`, and opencode's argument parser is
+    // STRICT: an unknown flag prints the help text and exits 1 BEFORE any
+    // network call, so every dispatch on this adapter failed — and failed
+    // looking like a model problem. The flag is therefore picked from the
+    // PROBED VERSION rather than hard-coded, and an unknown version takes the
+    // current one (a rename happens once; a revert does not).
+    permissionFlag(version) {
+      return version && cmpVersion(version, "1.10.0") < 0 ? "--auto" : "--dangerously-skip-permissions";
+    },
+    // The paid rung: one fixed-constant prompt, in a scratch directory, against
+    // one model id.
+    probeArgv(a) {
+      return [
+        "run",
+        "--model",
+        a.model,
+        "--format",
+        "json",
+        EXTRA_CLI_ADAPTERS.opencode.permissionFlag(a.version),
+        "--dir",
+        a.dir,
+        a.prompt,
+      ];
+    },
     argv(a) {
-      const v = ["run", "--model", a.model, "--format", "json", "--auto", "--dir", a.root];
+      const v = [
+        "run",
+        "--model",
+        a.model,
+        "--format",
+        "json",
+        EXTRA_CLI_ADAPTERS.opencode.permissionFlag(a.cli && a.cli.version),
+        "--dir",
+        a.root,
+      ];
       if (a.cli.agent) v.push("--agent", a.cli.agent);
       // R6. A running `opencode serve` is joined rather than booted.
       if (a.cli.attach) v.push("--attach", a.cli.attach);
@@ -19952,7 +21357,9 @@ const EXTRA_CLI_ADAPTERS = {
     parse(out) {
       const events = extraCliJsonEvents(out.stdout);
       const usageHit = extraCliDig(events, ["usage", "tokens"], (v) => v && typeof v === "object");
-      const usage = usageHit ? extraCliUsageVector(usageHit.value) : null;
+      const usage = usageHit
+        ? extraCliUsageVector(usageHit.value, EXTRA_CLI_ADAPTERS.opencode.supports.usage_kinds)
+        : null;
       const modelHit = extraCliDig(events, ["model", "modelID", "model_id"], (v) => typeof v === "string");
       const textHit = extraCliDig(events, ["text", "content", "message", "output"], (v) => typeof v === "string" && v.trim());
       return {
@@ -19975,7 +21382,50 @@ const EXTRA_CLI_ADAPTERS = {
     docs_url: "https://learn.chatgpt.com/docs/non-interactive-mode.md",
     model_note: "codex takes a bare model id; WHICH PROVIDER serves it is decided by ~/.codex/config.toml, not by a flag",
     exit_codes: null,
-    supports: { attach: false, output_schema: true, usage: "documented (turn.completed.usage)", fence: false },
+    // F14c — A CORRECTION. An earlier reading of this adapter said codex reports
+    // its model. IT DOES NOT: `exec --json` emits thread.started, turn.started,
+    // item.completed, turn.completed, turn.failed and error, and NEITHER the
+    // model NOR the effort appears in any of them. Both shipped adapters are
+    // `reports_model: false`, and a substitution is therefore invisible on this
+    // engine — which is stated wherever it is rendered, never left blank.
+    //
+    // F14d — the usage vector has THREE numbers, not four: input_tokens,
+    // cached_input_tokens, output_tokens. There is no cache-write count, so
+    // `cache_write` reads NULL and never 0.
+    supports: {
+      attach: false,
+      output_schema: true,
+      usage: "documented (turn.completed.usage)",
+      usage_kinds: ["input", "cache_read", "output"],
+      reports_model: false,
+      fence: false,
+    },
+    // F14b — the closed set, and an unsupported level is coerced to the nearest
+    // supported one SILENTLY. So ORC records what it REQUESTED and never claims
+    // the effort was honoured.
+    // The documented set is minimal|low|medium|high|xhigh; the live model
+    // catalog on this machine also advertises `max` and `ultra` per model, so
+    // both are accepted rather than silently coerced down to medium.
+    efforts: ["minimal", "low", "medium", "high", "xhigh", "max", "ultra"],
+    // The paid rung: one fixed-constant prompt, in a scratch directory, with the
+    // most restrictive sandbox the tool offers.
+    probeArgv(a) {
+      return [
+        "exec",
+        "--json",
+        "--sandbox",
+        "read-only",
+        "--ephemeral",
+        "--skip-git-repo-check",
+        "-m",
+        a.model,
+        "-c",
+        'model_reasoning_effort="low"',
+        "-C",
+        a.dir,
+        a.prompt,
+      ];
+    },
     // A refusal that costs nothing, made before the binary is spawned.
     //
     // Codex reads custom providers from `model_providers` in the USER-LEVEL
@@ -20037,6 +21487,14 @@ const EXTRA_CLI_ADAPTERS = {
         a.outFile,
         "--model",
         a.model,
+        // F14a — `-m` sets the MODEL. It does not set the compute budget: that
+        // is `model_reasoning_effort`, an independent key that otherwise falls
+        // through to the user's own config and finally to `medium`. There is no
+        // dedicated flag, and `-c key=value` (parsed as TOML) is the only inline
+        // route. Deliberately NOT `--profile`: a profile is a file the user owns
+        // and can contain anything, so it is not a setting ORC can rely on.
+        "-c",
+        'model_reasoning_effort="' + extraCodexEffort(a.route && a.route.effort) + '"',
       ];
       // Only when there is no repo to check. Passing it unconditionally would
       // switch off a safety net that is doing its job everywhere else.
@@ -20064,7 +21522,10 @@ const EXTRA_CLI_ADAPTERS = {
       const completed = events.filter((e) => e && e.type === "turn.completed");
       const failed = events.filter((e) => e && (e.type === "turn.failed" || e.type === "error"));
       const last = completed[completed.length - 1] || null;
-      const usage = last ? extraCliUsageVector(last.usage) : null;
+      const usage = last ? extraCliUsageVector(last.usage, EXTRA_CLI_ADAPTERS.codex.supports.usage_kinds) : null;
+      // PROBED FOR, never assumed either way. The field is absent today (F14c)
+      // and the issue that asked for it is closed without saying it was added,
+      // so this reads it if it appears and reports null if it does not.
       const model = (last && last.model) || null;
       return {
         parsed: events.length ? "jsonl" : "text",
@@ -20437,7 +21898,23 @@ async function extraDispatch(claudeDir) {
     else if (prof.engine === "api")
       out = await runApiEngine({ prof, route, key: cred.value, cfg, slice, cwd, root, workDir, timeouts });
     else if (prof.engine === "cli")
-      out = runCliEngine({ prof, route, key: cred.value, cfg, slice, cwd, root, workDir, timeouts });
+      // R16 — the EFFORT a codex dispatch runs at is derived from the CLAUDE
+      // AGENT this route displaced. `-m` alone does not set the compute budget
+      // (model and model_reasoning_effort are two independent keys), so a
+      // dispatch that named only the model would run at whatever that user's
+      // config happens to say — a silent downgrade, the exact failure class the
+      // `expect=<model>/<effort>` trace design exists to catch.
+      out = runCliEngine({
+        prof,
+        route: Object.assign({}, route, { effort: route.effort || extraEffortFromAgent(res.claude && res.claude.agent) }),
+        key: cred.value,
+        cfg,
+        slice,
+        cwd,
+        root,
+        workDir,
+        timeouts,
+      });
     else
       out = {
         ok: false,
@@ -21275,7 +22752,7 @@ function extraUsage() {
   return (
     "Usage: orc extra providers [--json]              the shipped, dated catalog\n" +
     "       orc extra add <profile> --provider <id> --engine <api|claude-shim|cli>\n" +
-    "                               [--env-key NAME | --key-stdin] [--region <id>]\n" +
+    "                               [--env-key NAME | --key-stdin | --tool-auth] [--region <id>]\n" +
     "                               [--base-url URL] [--anthropic-base-url URL]\n" +
     "                               [--cli <bin>] [--cli-agent <name>]\n" +
     "                               [--cli-attach http://localhost:4096] [--cli-args \"…\"]\n" +
@@ -21283,14 +22760,31 @@ function extraUsage() {
     "       orc extra show <profile> [--json]\n" +
     '       orc extra remove <profile> --reason "<why>"\n' +
     "\n" +
-    "       orc extra ping <profile> [--deep] [--model <id>] [--json]\n" +
+    "       orc extra tools [--json] [--provider <id>]\n" +
+    "                               the LOCAL TOOLS in the catalog, computed fresh:\n" +
+    "                               absent · outdated · unauthenticated · ready\n" +
+    "                               0 at least one is ready · 1 none is\n" +
+    "       orc extra install <provider> [--manager <name>] [--dry-run] [--json]\n" +
+    "                               opens YOUR terminal and runs the install there — visible,\n" +
+    "                               never elevated, and the command is printed either way\n" +
+    "       orc extra keyhelp <profile> [--json]\n" +
+    "                               which of three credential routes applies:\n" +
+    "                               env · stdin-login · interactive-login\n" +
+    "\n" +
+    "       orc extra ping <profile> [--deep] [--live] [--model <id>] [--json]\n" +
     "                               [--key-stdin | --passphrase-stdin]\n" +
     "                               the connection gate.  0 verified · 1 unreachable · 2 unknown profile\n" +
     "                               --key-stdin        paste a NEW key (line 1 the key, optional line 2\n" +
     "                                                  the passphrase that stores it after a green test)\n" +
     "                               --passphrase-stdin re-test a STORED key: the passphrase decrypts it\n" +
     "                                                  into memory for the probe and nothing else\n" +
-    "       orc extra models <profile> [--json]       cached from the last ping; never invented\n" +
+    "                               --live             force the PAID rung: a real message to a real\n" +
+    "                                                  model, with the round trip, the reply and the\n" +
+    "                                                  four token counts. A CLI ping is NOT cheap\n" +
+    "       orc extra models <profile> [--json] [--refresh] [--test <id>]\n" +
+    "                               cached from the last ping; never invented.  --refresh re-reads\n" +
+    "                               the live list; --test <id> proves ONE model actually answers,\n" +
+    "                               because a LISTED model can still be dead upstream\n" +
     "       orc extra unlock <profile>                prove the passphrase (the key is never printed)\n" +
     "       orc extra rekey <profile>                 change the passphrase (needs the old one)\n" +
     "\n" +
@@ -21345,7 +22839,19 @@ async function extra() {
       await extraPing(claudeDir, pos[2]);
       break;
     case "models":
-      extraModels(claudeDir, pos[2]);
+      await extraModels(claudeDir, pos[2]);
+      break;
+    // v0.51.0 — the three commands that make a LOCAL TOOL a first-class
+    // connection: what is installed, running the install in the user's own
+    // terminal, and which of three credential routes this profile is on.
+    case "tools":
+      extraTools(claudeDir);
+      break;
+    case "install":
+      extraInstallCmd(claudeDir, pos[2]);
+      break;
+    case "keyhelp":
+      extraKeyhelp(claudeDir, pos[2]);
       break;
     case "unlock":
       extraUnlock(claudeDir, pos[2]);

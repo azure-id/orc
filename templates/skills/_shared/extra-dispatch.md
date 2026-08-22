@@ -208,7 +208,8 @@ rows below are safety promises.
 | **Enforces `declared_files`** | no | **no — it asks** | **yes** |
 | **Enforces a routing policy** | no | no | **yes** |
 | **Sees the provider echo** (⚠ REROUTE) | no | no | **yes** |
-| Token vector | from `result.usage` | codex yes, opencode often not | from `usage` |
+| Token vector | from `result.usage` | **yes, but not the same KINDS** (see below) | from `usage` |
+| **Says which model answered** | yes | **no — neither tool does** | yes |
 | Structured return enforced | `--json-schema`, behind a beta | codex: yes, `--output-schema` | ORC parses its own loop |
 | Provider work already done | no | **yes — 75+ behind one flag** | no |
 | Cold-boot cost per dispatch | one process | one process, or zero with `--attach` | zero |
@@ -230,6 +231,130 @@ So when a return carries `fence: {declared_files: false}`, **say so** — render
 as a warning, not a grey note, and never report a constraint that was never
 applied. The check that actually catches a stray write is the engine-blind one
 that already exists: the post-wave worktree delta.
+
+### Engine `cli` never says which model answered, and that is stated
+
+Neither shipped tool reports a model id anywhere in its output — one has no such
+field in its event stream at all, and the other's documented `exec --json` events
+carry the thread, the turn and the token usage and nothing else. So the "you did
+not get the model you asked for" check is **structurally unavailable on this
+engine**, and every return carries `reports_model: false` beside a
+`model_reported: null` so the pair reads as a measurement that could not be made
+rather than as a blank field. The same restraint as ⚠ REROUTE: **zero
+substitutions here is never evidence there were none.**
+
+The token vector differs too, and the difference is not cosmetic: one tool
+reports four kinds and the other reports three — there is no cache-write count
+in its usage block. That kind reads **`null`, never `0`** (`/orc-budget`:
+unknown is not zero), and the adapter declares which kinds it can report rather
+than letting a parser guess.
+
+One more asymmetry that is a silent-downgrade risk: on one tool the model flag
+does **not** set the compute budget — the reasoning effort is an independent
+config key that otherwise falls through to the user's own config and finally to
+a default. A dispatch that named only the model would run at an effort ORC never
+chose, which is exactly the failure class the `expect=<model>/<effort>` trace
+design exists to catch. So the effort is derived from **the Claude agent the
+route displaced** and passed explicitly on every dispatch — and because that tool
+coerces an unsupported level to the nearest supported one *silently*, ORC records
+the effort it REQUESTED and never claims it was honoured.
+
+---
+
+## Some providers are a LOCAL TOOL, not an endpoint
+
+A catalog row that carries `cli_bin` has no URL to point at: its only surface is
+a program on this machine, and a program can simply **not be there**. That is a
+STATE before it is a failure, and it has exactly four values —
+**`absent` · `outdated` · `unauthenticated` · `ready`** — computed fresh by
+`orc extra tools` on every read and **never stored**. There is deliberately no
+"installing" state: the user may close the terminal window, and a stored flag
+would be a lie from that moment on.
+
+Each state has exactly ONE next action, which is what lets any renderer switch on
+it and derive nothing:
+
+| state | what it means | the one next action |
+|---|---|---|
+| `absent` | the binary is not on PATH | install it — and `orc extra add` REFUSES until it is, naming the command |
+| `outdated` | below the version floor | the same install, as an upgrade |
+| `unauthenticated` | installed, no credential ORC can see | `orc extra keyhelp` says which of three routes applies |
+| `ready` | version, credential, and a model list | connect, or test |
+
+**`no_install_alternative` is an asymmetry made data.** One shipped tool has an
+install-free route — an ordinary endpoint serving the same models, reachable with
+a key and nothing to install — and the other has none at all. `null` **MEANS
+there is none**, never that ORC forgot to look, and the two must never render the
+same.
+
+**`orc extra install <provider>` opens the user's own terminal and runs it
+there.** Not a background job: inside a hidden subprocess an elevation prompt, a
+permissions error, an 80 MB download and a forty-second wait all look identical —
+*nothing happened*. Three properties, and all three are load-bearing: it is
+**visible** (the failures are the user's to see), it is **theirs** (their shell,
+their profile, their privileges — **ORC NEVER ELEVATES**), and it is
+**fallback-first** (the command renders whether or not the launch worked, so a
+machine with no terminal to open degrades to a paste, never to a dead button). A
+launch that could not happen is **exit 0**.
+
+**ORC never writes another tool's credential store.** The key lives in ORC's
+vault or in the user's own environment variable and is injected into the child
+process — at every probe rung and at dispatch, not only at dispatch, because a
+model list read without it is whatever the user happened to log in with rather
+than what this profile can actually reach. Consequences, all of them good:
+nothing global is mutated, revoking in ORC actually revokes, and a user who
+already ran the tool's own login is untouched. Where a tool's own login genuinely
+is the better route, ORC **opens a terminal on that command** and never pipes the
+key itself.
+
+---
+
+## The connection gate is a LADDER, and nothing may read stronger than it is
+
+`orc extra ping` is the gate, and its rungs are separate facts. Collapsing them
+into one green tick would be a lie:
+
+| rung | `verify_method` | endpoint (`api` / `claude-shim`) | local tool (`cli`) | cost |
+|---|---|---|---|---|
+| 0 | — | — | not on PATH → `not-installed` + the install command | none |
+| 1 | `cli-bin` / `models` | the models list answered | on PATH, and above the version floor | none |
+| 2 | `cli-auth` / `completion` | a `max_tokens: 1` completion | the tool's own credential command answered | a fraction of a cent / none |
+| 3 | `cli-models` | — | the tool's own model list → `models_seen` | none |
+| 4 | `live` / `cli-live` | a real message, with the reply | a real message, with the reply | **real** |
+
+Rungs 1–3 are free and always run; rung 4 is `--live` and is asked for. **A CLI
+ping is not a cheap ping** — the tool loads its own system prompt and tool
+schemas before it sends anything, so one short message costs thousands of input
+tokens against an endpoint probe's ten. The two are quoted separately, before the
+button.
+
+**`models_public: true` is why the cheapest rung is not always a credential
+proof.** Some providers serve their model list to anyone. On such a row a 200
+proves the URL and nothing about the key, so it fills `models_seen` and then
+falls THROUGH to the paid rung; the free answer is recorded as `models-public`
+and is never the profile's verification.
+
+**A model that is LISTED is not a model that WORKS.** A live list is what the
+provider OFFERS; an id in it can be dead upstream, and only a real call tells
+those two apart — which is what `orc extra models <profile> --test <id>` is for.
+Every list carries that caveat beside it, and `entry: "list" | "free-text"` is
+the CLI's answer to whether a renderer may draw a dropdown at all.
+
+### The setup gate: `extra_enabled` cannot be armed before something has answered
+
+Arming the master switch with nothing verified arms **nothing** — every dispatch
+falls straight back to Claude, so the setting reads ON and means OFF. So
+`orc config set extra_enabled true` **refuses by name** until one profile has
+verified, and names the command that would fix it. The state is computed in ONE
+place and read by the config gate, by `orc extra doctor`
+(`extra-enabled-unverified`) and by `orc extra list --json`'s `gate` — a second
+idea of "has anything ever answered" is exactly the drift this subsystem forbids
+everywhere else.
+
+It has **two floors** and says which one you are on, because the instruction
+differs: with nothing connected the answer is an install or a key, and with a
+connection that has never answered the answer is *test it*. Someone with neither
+should never be shown a control that cannot succeed.
 
 ---
 

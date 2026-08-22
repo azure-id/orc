@@ -6,7 +6,7 @@
 
 *Terima permintaan → pahami → rencanakan → beri nilai → kerjakan paralel → periksa → uji → kirim.*
 
-![Version](https://img.shields.io/badge/version-0.49.1-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.51.0-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
@@ -473,54 +473,39 @@ Bacalah sebagai catatan putaran itu, bukan sebagai audit terkini:
 **Riwayat lengkap: [CHANGELOG.md](CHANGELOG.md)** — atau `orc changelog`, yang
 hanya mencetak yang lebih baru dari versi yang Anda punya.
 
-### v0.49.1 — dewan penilai, dan `--json` yang berhenti membuang isinya _(18-08-2026)_
+### v0.51.0 — alat yang sudah Anda punya, dan koneksi yang membuktikan dirinya _(22-08-2026)_
 
-Dua pekerjaan, satu rilis. Keduanya adalah satu masalah yang sama, terlihat dua
-kali: **ORC menghitung jauh lebih banyak daripada yang ia tampilkan.**
+**Koneksi `orc extra`.** Dua alat coding yang bisa diberi pekerjaan oleh ORC
+adalah **program di komputer Anda sendiri**, bukan situs — jadi sekarang keduanya
+jadi penyedia kelas satu, punya kotak hubungkan masing-masing, dan daftar model
+yang dibangun dari apa yang benar-benar bisa dijangkau akun Anda.
 
-- **`/orc-challenge` dapat lima penilai tambahan — dan ANDA yang memilihnya.**
-  Si pembantah (*di mana cacat fatalnya?*), si orang luar (*halaman ini
-  menganggap saya sudah tahu apa?*), si pelaksana (*Senin pagi Anda mengerjakan
-  apa?*), si pemikir dari dasar (*apakah ini memang masalah yang tepat?*), dan si
-  pencari nilai lebih (*apa yang nilainya belum dihitung?*). ORC menyarankan
-  daftar penilai dari jenis dan tujuan dokumennya; **Anda yang memilih**, karena
-  memilih penilai berarti memilih jenis kritik apa yang boleh Anda dengar.
-  `--council` tidak punya nilai bawaan dan menolak dengan menyebut nama;
-  `none` memberi Anda persis review yang lama.
-- **Dua di antaranya tidak pernah memblokir apa pun, dan itu jawaban yang
-  jujur.** Si pencari nilai lebih kalau dipaksa menulis "temuan" harus mengarang
-  bagian tujuan untuk dilayaninya, jadi ia menulis **peluang** — tanpa tingkat
-  keparahan, selalu dengan langkah pertama dan tujuan berikutnya. Si pemikir dari
-  dasar mempersoalkan *tujuannya sendiri*, jadi ia menulis **sanggahan premis**,
-  yang hanya bisa diputuskan manusia dan yang tidak pernah dilihat sang hakim.
-- **Enam penilai tidak bisa diam-diam menyusut jadi satu.** `orc challenge
-  record` membaca tulisan setiap penilai **dari disk** dan menolak putusannya
-  kecuali sang hakim menjawab setiap id — diterima, digabung, ditolak, atau di
-  luar tujuan, masing-masing dengan alasannya. Temuan yang diterima **tetap
-  memakai id penemunya selamanya**, jadi setelah dua putaran Anda bisa melihat
-  jelas penilai mana yang sepadan dengan biayanya. Penilai yang tidak jalan
-  mengatakannya, beserta alasannya, di laporan *dan* di catatan jejak.
-- **`--json` sekarang adalah seluruh objek yang dihitung, bukan ringkasan.**
-  `orc wiki status --json` dulu hanya mengeluarkan lima angka, padahal keluaran
-  terminalnya sendiri sudah mencetak rincian per dokumen dan **nama dokumen yang
-  sebenarnya menentukan statusnya** — jadi panel tidak akan pernah bisa serinci
-  terminal. Sudah diperbaiki, plus pembacaan baru: `orc wiki docs`,
-  `wiki show <doc> [--body]`, `wiki coverage`, `pattern show <lang> [--body]`,
-  `gotcha show`, `gotcha list --archived`, dan `gotcha prune --dry-run`, yang
-  menyebutkan setiap entri yang akan diarsipkan.
-- **`orc ui ▸ Knowledge` jadi lima tab** — Wiki, Coverage, Code patterns, Memory,
-  Peers — jadi akhirnya Anda bisa melihat *isi* wiki, membaca pola kode yang
-  diberikan ke setiap agen, dan meninjau pengarsipan sebelum terjadi. Cakupan
-  menyatakan dengan lantang bahwa ia laporan, bukan target.
-- `orc doctor` dapat tepat dua peringatan wiki: `wiki-unregistered` (gratis
-  diperbaiki) dan `wiki-debt` — **hanya saat STALE, tidak pernah saat AGING**,
-  karena doctor yang memperingatkan keadaan normal adalah doctor yang lama-lama
-  Anda abaikan.
+- **Program bisa saja belum terpasang, dan panelnya mengatakan itu lebih dulu** —
+  empat keadaan, dihitung setiap kali, tidak pernah diingat. Alat yang belum
+  terpasang tidak diberi tombol yang tidak mungkin berhasil, dan `orc extra add`
+  menolak sambil menyebutkan perintah pemasangannya.
+- **ORC membuka terminal Anda sendiri dan menjalankan pemasangannya di sana.**
+  Bukan pekerjaan tersembunyi di latar — di dalamnya, permintaan hak
+  administrator, kegagalan izin, unduhan 80 MB, dan tunggu empat puluh detik
+  semuanya terlihat sama: *tidak terjadi apa-apa*. Perintahnya tampil sebelum
+  tombolnya, jendelanya milik Anda, dan **ORC tidak pernah meminta hak
+  administrator**. Tidak ada terminal yang bisa dibuka? Anda tetap dapat
+  perintahnya untuk disalin.
+- **Uji koneksi sekarang bertingkat**: programnya ada · cukup baru · sudah masuk
+  akun · model apa yang bisa dijangkau akun ini · dan, hanya kalau Anda minta,
+  **apakah pesan sungguhan benar-benar dijawab** — lengkap dengan waktu tempuh,
+  jawabannya, dan empat jenis hitungan token yang tidak pernah dicampur.
+- **Model yang terdaftar bukan berarti model yang bekerja.**
+  `orc extra models <nama> --test <id>` adalah satu-satunya cara membedakannya.
+- **Kedua alat lokal itu tidak memberi tahu model mana yang menjawab**, jadi ORC
+  menuliskan kalimat itu, bukan membiarkan kolom kosong.
+- **`extra_enabled` tidak bisa dinyalakan sebelum ada yang menjawab** — dulu ia
+  akan terbaca NYALA padahal artinya MATI.
 
-Sebelumnya: **v0.49.0 — dokumen itu folder, dan berkasnya hasil rakitan**
-(`/orc-doc`), **v0.48.1 — satu berkas untuk satu hal, dan dokumen yang bisa
-diselesaikan**, **v0.48.0 — dokumen sepanjang itu, tetap ditulis**, dan
-**v0.47.0 — lane yang menolak memproduksi apa pun**.
+Sebelumnya: **v0.50.0 — pekerjaan yang berjalan di tempat lain** (`orc extra`),
+**v0.49.1 — dewan penilai, dan `--json` yang berhenti membuang isinya**,
+**v0.49.0 — dokumen itu folder, dan berkasnya hasil rakitan** (`/orc-doc`), dan
+**v0.48.1 — satu berkas untuk satu hal, dan dokumen yang bisa diselesaikan**.
 [Baca semuanya di daftar perubahan](CHANGELOG.md).
 
 ---

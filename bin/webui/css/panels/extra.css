@@ -297,3 +297,80 @@
 }
 .ex-rates { margin-top: var(--sp-3); display: grid; gap: var(--sp-2); justify-items: start; }
 .ex-rates pre { max-height: 240px; overflow: auto; width: 100%; }
+
+/* --- the local tools, the gate and the live result (v0.51.0) -------------- */
+/* A tool box is a GRID and it DECLARES its shape per state, because the four
+   states carry different numbers of children — the `.run-card` lesson: a grid
+   that does not declare its columns prints one child on top of another. Every
+   state gets its own border colour so the card that needs an action is the one
+   your eye lands on. */
+.ex-tool-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: var(--sp-3);
+  margin-top: var(--sp-3);
+}
+.ex-tool {
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
+  padding: var(--sp-3);
+  display: grid;
+  gap: var(--sp-2);
+  align-content: start;
+}
+.ex-tool-absent { border-color: var(--bad); }
+.ex-tool-outdated,
+.ex-tool-unauthenticated { border-color: var(--warn); }
+.ex-tool-ready { border-color: var(--ok); }
+.ex-tool-name { font-weight: 600; }
+.ex-tool-path { word-break: break-all; }
+
+/* PREVIEW THEN APPLY: the exact command sits ABOVE the button that runs it, and
+   it is selectable so the paste-it-yourself path is always open. */
+.ex-install,
+.ex-keyhelp { display: grid; gap: var(--sp-2); justify-items: start; }
+.ex-install .action-cmd,
+.ex-keyhelp .action-cmd { width: 100%; user-select: text; }
+
+/* THE GATE. It is a banner rather than a card because it is not a thing you
+   configure — it is the reason the things below it are missing. */
+.ex-gate { display: grid; gap: var(--sp-2); }
+.ex-gate-head { font-weight: 600; }
+
+/* The model control. A dropdown and a text box occupy the same slot, so the row
+   does not change width when the CLI answers `list` instead of `free-text`. */
+/* `flex` belongs to the ROUTING ROW, which lays these out horizontally. Left on
+   the base class it also applied inside the test modal's `.field` — a COLUMN
+   flex container — where `flex-grow: 1` stretched the control to fill the form
+   and left a hand's width of dead space under the picker. */
+.ex-modelbox { display: grid; gap: 4px; min-width: 0; }
+.ex-route-controls .ex-modelbox { flex: 1 1 220px; }
+.ex-modelbox > .text-input { width: 100%; }
+
+/* THE LIVE RESULT. The reply is a third party's text: it scrolls inside its own
+   box and never widens the modal. */
+.ex-live {
+  border-top: 1px solid var(--line-soft);
+  margin-top: var(--sp-3);
+  padding-top: var(--sp-3);
+  display: grid;
+  gap: var(--sp-2);
+}
+.ex-live-reply { max-height: 200px; overflow: auto; }
+
+/* A tool box carries SENTENCES, not paths, so it opts out of the global
+   `word-break: break-all` that a base URL needs — that rule broke ordinary
+   words mid-syllable in the one card written to be read rather than scanned.
+   The binary PATH keeps the break, because a path has no word boundaries. */
+.ex-tool .kv dd { word-break: normal; overflow-wrap: anywhere; }
+.ex-tool-path { word-break: break-all; }
+
+/* A <select> inside a grid stretches to the row, which made the model picker a
+   120px-tall box with one line in it. It sizes itself. */
+.ex-modelbox > select.text-input { align-self: start; height: auto; }
+
+/* The live result is PROSE beside numbers — the honest "this tool does not say
+   which model answered" sentence lives in a `kv` value, and the global
+   `word-break: break-all` was hyphenating it mid-word. Same reasoning as
+   `.ex-tool`: a path breaks anywhere, a sentence breaks on spaces. */
+.ex-live .kv dd { word-break: normal; overflow-wrap: anywhere; }

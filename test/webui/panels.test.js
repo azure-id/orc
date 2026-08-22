@@ -1094,3 +1094,152 @@ test("extra: the boundary card renders ALWAYS, and the countdown is never silent
   assert.match(js, /f\.id === "extra-stale-verify"/);
   assert.match(js, /counts\.verified/, "the verified COUNT is the CLI's, never a re-filter");
 });
+
+/* ============================================ EXTRA · local tools (v0.51.0) ==
+   Some providers are a program on this machine rather than an endpoint, and a
+   program can simply not be there. The assertions here are all about the panel
+   REFUSING TO OFFER what cannot work — a Connect box on an absent tool, a
+   routing table before anything has answered, a model dropdown the CLI did not
+   build — because every one of those teaches somebody to configure something
+   that will never fire. */
+
+test("extra tools card: the panel switches on `state` and derives nothing, and names no tool", () => {
+  const js = panelJs("extra");
+  const cat = JSON.parse(fs.readFileSync(path.join(REPO, "bin", "providers.json"), "utf8"));
+
+  // The Flow-stepper rule, applied to a local tool. Four states arrive from
+  // `orc extra tools --json`; the panel renders them and computes none of them.
+  assert.match(js, /tool\.state === "absent"/);
+  assert.match(js, /tool\.state === "outdated"/);
+  assert.match(js, /tool\.state === "unauthenticated"/);
+  assert.match(js, /read\("\/api\/extra\/tools"\)/);
+
+  // The card names NO tool, NO binary and NO install command. Every one of them
+  // arrives in the JSON, which is the only thing that keeps this panel from
+  // becoming a second catalog that is stale within a quarter.
+  for (const row of cat.providers.filter((p) => p.cli_bin)) {
+    assert.ok(!new RegExp('["\']' + row.id + '["\']').test(js), `the panel must not name provider ${row.id}`);
+    assert.ok(!js.includes(row.cli_bin + '"'), `the panel must not name the binary ${row.cli_bin}`);
+  }
+  assert.ok(!/npm i -g|brew install|winget install|curl -fsSL/.test(js), "an install command is catalog data, never panel text");
+  // The launcher is the CLI's job too: the panel knows nothing about terminals.
+  assert.ok(!/wt\.exe|osascript|gnome-terminal|x-terminal-emulator/.test(js), "the terminal ladder belongs to bin/cli.js");
+  assert.ok(!/\bsudo\b|\brunas\b/i.test(js), "ORC never elevates, and the panel never suggests it");
+
+  // An ABSENT box offers the install and NOTHING else — no Connect, no Test, no
+  // model list. A button that cannot succeed is worse than no button.
+  const at = js.indexOf('if (tool.state === "absent")');
+  const absent = js.slice(at, js.indexOf("const kv = [", at));
+  assert.ok(!/exTestModal|exAddModal/.test(absent), "an absent tool gets no Connect and no Test control");
+  assert.match(absent, /exInstallRow/);
+  // `null` MEANS THERE IS NONE, and the two must not render the same. Neither
+  // may render as an empty slot.
+  assert.match(absent, /if \(tool\.no_install_alternative\) \{/);
+  assert.match(absent, /extra\.tools\.altNone/);
+
+  // PREVIEW THEN APPLY, unchanged: the exact command is on screen before the
+  // button that runs it.
+  assert.match(js, /el\("div", "action-cmd", cmds\[0\]\.cmd\)/);
+  // The user installs in another window and comes back, so the card can be
+  // re-read without a full page load.
+  assert.match(js, /extra\.tools\.recheck/);
+});
+
+test("extra gate: the sections below it are ABSENT, not hidden, until something has answered", () => {
+  const js = panelJs("extra");
+
+  // W8. `connected` is the CLI's answer — the same one the config gate and the
+  // doctor finding read — so there is no second idea of it in this panel.
+  assert.match(js, /const connected = !!\(d\.list && d\.list\.gate && d\.list\.gate\.connected\)/);
+  // The gated cards are inside the branch: not appended at all, never appended
+  // and then hidden. A disabled routing table still teaches you to fill it in.
+  const render = js.slice(js.indexOf("const out = frag();"), js.indexOf("body.replaceChildren(out);"));
+  assert.match(render, /if \(connected\) \{[\s\S]*exRoutingCard[\s\S]*exGuardrailsCard[\s\S]*exCostCard[\s\S]*\}/);
+  // The strip and the boundary card stay either way, so the panel never looks
+  // broken — and the tools card is what a first-time user is actually there for.
+  const before = render.slice(0, render.indexOf("if (connected)"));
+  assert.match(before, /exBoundaryCard\(\)/);
+  assert.match(before, /exStrip\(d\)/);
+  assert.match(before, /exToolsCard\(d, body\)/);
+  // The two FLOORS say different things, because the instruction differs.
+  assert.match(js, /gate\.floor === "never-tested"/);
+  assert.match(js, /extra\.gate\.noConnection/);
+});
+
+test("extra model box: the CLI decides dropdown vs text box, and a listed model is never assumed to work", () => {
+  const js = panelJs("extra");
+
+  // The Flow-stepper rule applied to models: `entry` is the CLI's answer.
+  assert.match(js, /j\.entry === "list" \? "list" : "free-text"/);
+  // Grouped by the CLI's own `group`, labelled from data the panel was handed —
+  // never by splitting a model id this panel does not own.
+  assert.match(js, /m\.label \+ \(m\.group \? " \(" \+ m\.group \+ "\)" : ""\)/);
+  assert.ok(!/\.split\("\/"\)/.test(js), "the panel must not derive a model's group itself");
+  // F5 — the caveat is the CLI's sentence and rides beside the picker.
+  assert.match(js, /note\.textContent = j\.caveat/);
+
+  // The PAID rung is its own button, so it can never be pressed by accident, and
+  // the two rungs are quoted separately BEFORE either one.
+  assert.match(js, /extra\.test\.live/);
+  assert.match(js, /live: !!live/);
+  assert.match(js, /extra\.probe\.cliPaid/);
+
+  // `model_reported: null` WITH `reports_model: false` is an honest PAIR and
+  // must render as a sentence. A blank reads as "nothing went wrong".
+  assert.match(js, /d\.reports_model === false \? t\("extra\.live\.noReport"\)/);
+  // Four token kinds, never blended, and a kind the tool cannot report reads an
+  // em dash rather than a zero.
+  assert.match(js, /extra\.live\.cacheWrite/);
+  assert.match(js, /v === null \|\| v === undefined \? "—"/);
+  // The reply is FOREIGN INPUT: DOM text, never HTML, and never acted on.
+  assert.match(js, /el\("pre", "block wrap ex-live-reply", d\.reply_excerpt\)/);
+  assert.ok(!/innerHTML/.test(js), "a third party's text is never HTML");
+});
+
+test("extra fixtures: one of every tool state, both gate floors, and the ugly live outcomes", () => {
+  const fixtures = require(path.join(REPO, "bin", "webui", "fixtures", "index.js"));
+  const tools = fixtures.get("/api/extra/tools", {});
+
+  // ONE FIXTURE PER STATE — you cannot design the "not installed" box on a
+  // machine where it is installed. A test per state is what stops a new state
+  // shipping without one.
+  for (const st of tools.states)
+    assert.ok(tools.tools.some((x) => x.state === st), `a ${st} tool must be designable`);
+  // Both halves of the install-free asymmetry, on screen at once.
+  assert.ok(tools.tools.some((x) => x.no_install_alternative), "a tool you can skip installing");
+  assert.ok(tools.tools.some((x) => x.no_install_alternative === null), "and one you cannot");
+  // A version ORC could not parse must read UNKNOWN, never too-old.
+  assert.ok(tools.tools.some((x) => x.installed && x.version === null && x.outdated === false), "an unreadable version");
+  assert.ok(tools.tools.some((x) => x.probe_error), "a probe that timed out");
+
+  // The gate's THREE states, because the panel a first-time user sees is the one
+  // that has never been designed.
+  assert.equal(fixtures.get("/api/extra", {}).gate.connected, true);
+  assert.equal(fixtures.get("/api/extra", { gate: "none" }).gate.floor, "no-connection");
+  assert.equal(fixtures.get("/api/extra", { gate: "untested" }).gate.floor, "never-tested");
+
+  // Both model-entry shapes.
+  assert.equal(fixtures.get("/api/extra/models", { profile: "local" }).entry, "list");
+  assert.equal(fixtures.get("/api/extra/models", { profile: "custom" }).entry, "free-text");
+  // `env_var` is non-null exactly on the env route, in the fixtures too.
+  for (const p of ["local", "toold"]) {
+    const k = fixtures.get("/api/extra/keyhelp", { profile: p });
+    assert.equal(k.route === "env", k.env_var !== null);
+  }
+
+  // The three live outcomes worth designing: it worked and STILL cannot say
+  // which model answered, the model was listed and is DEAD, and the tool is not
+  // installed at all.
+  const live = fixtures.post("/api/extra/ping", { profile: "local", live: true, model: "big-pickle" }).data;
+  assert.equal(live.model_reported, null);
+  assert.equal(live.reports_model, false);
+  assert.equal(live.tokens.cache_write, null, "a token kind the tool cannot report is null, never 0");
+  assert.equal(
+    fixtures.post("/api/extra/ping", { profile: "local", live: true, model: "x/y-free" }).data.reason,
+    "model_not_found"
+  );
+  assert.equal(fixtures.post("/api/extra/ping", { profile: "toolc", live: true, model: "m" }).data.reason, "not-installed");
+  // A launch that could NOT happen is exit 0 with the command still on the card.
+  assert.equal(fixtures.post("/api/extra/install", { provider: "codex" }).data.launched, false);
+  assert.ok(fixtures.post("/api/extra/install", { provider: "codex" }).data.fallback_cmd);
+});

@@ -20,6 +20,7 @@ them explicitly in `extra_roles`.
 
 ```bash
 orc extra providers                     # what ORC knows how to reach, and its date
+orc extra tools                         # ...and which of them are programs you must install
 orc extra add cheap --provider deepseek --engine api --env-key DEEPSEEK_API_KEY
 orc extra ping cheap                    # THE GATE. Nothing routes until this passes
 orc extra route set 0-30 cheap/deepseek-chat
@@ -46,7 +47,7 @@ orc extra remove cheap --reason "…"     # or the whole connection (a reason is
 |---|---|---|
 | `api` | ORC's own tool loop against an OpenAI-compatible endpoint | you want the **file fence** or a **privacy policy** — this is the only engine that composes the request body, so it is the only one that can enforce either |
 | `claude-shim` | a nested `claude -p` pointed at the provider's `/anthropic` base | you want the highest tool fidelity for the least setup — it is Claude Code's own agent loop, driven by somebody else's model |
-| `cli` | an agentic CLI you already have (`opencode`, `codex`) | you already trust that tool, or you want to attach to a server it is running |
+| `cli` | an agentic CLI you already have (`opencode`, `codex`) | you already trust that tool, or you want to attach to a server it is running. **These are programs on your machine** — see *Tools that live on this machine* below |
 
 **The asymmetry matters and ORC never hides it.** On `api`, a task's
 `declared_files` is a RULE the loop enforces. On the other two it is an
@@ -56,6 +57,64 @@ reported as kept.
 
 Not sure? Start with `claude-shim` if your provider publishes an `/anthropic`
 base (most in the catalog do), and switch to `api` the day you want the fence.
+
+---
+
+## Tools that live on this machine
+
+Two of the things ORC can hand work to are not websites — they are programs
+installed on your own computer. That means one thing no endpoint ever does:
+**it can simply not be there.**
+
+```bash
+orc extra tools            # what is installed, what version, signed in, how many models
+```
+
+Four states, and each one has exactly one next thing to do:
+
+| state | what it means | what to do |
+|---|---|---|
+| `absent` | the program is not on your PATH | install it (below) — `orc extra add` will refuse until you do, and it names the command |
+| `outdated` | older than the version ORC knows how to drive | the same install, as an upgrade |
+| `unauthenticated` | installed, but no sign-in ORC can see | `orc extra keyhelp <profile>` says what it takes |
+| `ready` | version, sign-in, and a live model list | connect, or test |
+
+One of the two has a route that needs no install at all — an ordinary endpoint
+serving the same models, reachable with a key. The other does not, and ORC says
+so plainly rather than leaving you looking for one.
+
+### Letting ORC run the install
+
+```bash
+orc extra install <provider>       # opens a terminal window and runs it there
+```
+
+**It runs in YOUR terminal, not in the background.** A global install can ask for
+a password, hit a permissions error, pull 80 MB or take a minute — and inside a
+hidden process all four look the same: nothing happened. So you get a real
+window, with the command printed on screen before it runs, which you can read,
+scroll and stop with Ctrl-C.
+
+**ORC never asks for administrator rights.** If your package manager needs them,
+you will see it ask, in your own window, and it is your call. If no terminal can
+be opened at all — over SSH, or on a locked-down machine — you get the command to
+paste and nothing pretends otherwise.
+
+Come back and press *Check again* (or re-run `orc extra tools`) when it is done.
+ORC stores no "installing" state, because you might close the window and that
+flag would be a lie from then on.
+
+### ORC never touches the tool's own sign-in
+
+Your key stays in ORC's vault or in your own environment variable, and ORC hands
+it to the program for each run. Nothing global changes, revoking it in ORC
+actually revokes it, and if you already signed that tool in yourself, ORC leaves
+it completely alone — say so with `--tool-auth` and ORC will not ask you for a
+key at all.
+
+```bash
+orc extra keyhelp <profile>        # which of three routes applies, and why
+```
 
 ---
 
@@ -113,6 +172,33 @@ orc extra models cheap        # what the last ping actually saw
 A route may name a model outside that list — ORC's cache is not the authority on
 somebody else's catalogue — but it becomes an `orc extra doctor` finding rather
 than a surprise later.
+
+### A model on the list is not a model that works
+
+This one costs people real time, so it is worth the paragraph. A model list is
+what the provider **offers**. An id can be on that list and still be dead: it
+answers *"model is unavailable"* the moment you actually call it. That has been
+seen on a live provider, with an id its own list returned.
+
+There is exactly one way to tell those apart:
+
+```bash
+orc extra models cheap --refresh              # re-read the live list
+orc extra models cheap --test <model-id>      # actually call it. THIS costs money
+orc extra ping cheap --live                   # or test the whole connection for real
+```
+
+`--live` sends one short fixed message and shows you the round trip, the reply,
+and what it cost — split into four token counts that are never added together.
+
+**A real message through a local tool is not a cheap test.** The tool loads its
+own instructions and tool definitions before it sends anything, so one short
+message costs thousands of words of input rather than a handful. ORC says which
+of the two you are about to spend before you press the button.
+
+**Neither local tool tells you which model actually answered.** So if one quietly
+served you something else, nothing here can detect it — ORC prints that sentence
+rather than leaving the field blank, because a blank reads as "all fine".
 
 ### Providers with regions
 

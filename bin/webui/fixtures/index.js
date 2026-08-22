@@ -33,7 +33,7 @@ const { docList, docParts, docStatuses, docMapSections, docMap, docLint, docPlan
 const { diy } = require("./flow.js");
 const { crosslink } = require("./crosslink.js");
 const { mockDetail } = require("./mockrun.js");
-const { extraProviders, extraList, extraDoctor, extraRoute, extraStats, extraRates, extraPingOk, extraPingBad, extraPingSaveOffer } = require("./extra.js");
+const { extraProviders, extraList, extraListNoConnection, extraListNeverTested, extraTools, extraKeyhelp, extraModels, extraDoctor, extraRoute, extraStats, extraRates, extraPingOk, extraPingBad, extraPingSaveOffer, extraPingLive, extraPingDeadModel, extraPingNotInstalled, extraInstall } = require("./extra.js");
 
 module.exports.get = function get(route, q) {
   switch (route) {
@@ -354,8 +354,28 @@ module.exports.get = function get(route, q) {
     // stale catalog, a vault part-way through its countdown, a vault that
     // deleted itself, a missing environment key, overlapping route rows and a
     // routed model the provider no longer lists.
-    case "/api/extra":
-      return extraList;
+    // v0.51.0 — the SETUP GATE has three states and each is reachable here:
+    // `?gate=none` is nothing connected, `?gate=untested` is a connection that
+    // has never answered, and the default is the gate open. Without all three
+    // you cannot design the panel a first-time user actually sees.
+    case "/api/extra": {
+      // The panel sends no query on this read, so a query-only switch would put
+      // the two shut-gate states somewhere nobody could ever look at them —
+      // which is the exact failure --fixtures exists to prevent. `ORC_UI_FIXTURE_GATE`
+      // makes both reachable in the running panel:
+      //   ORC_UI_FIXTURE_GATE=none      nothing connected at all
+      //   ORC_UI_FIXTURE_GATE=untested  connected, never answered
+      const g = (q && q.gate) || process.env.ORC_UI_FIXTURE_GATE || "";
+      return g === "none" ? extraListNoConnection : g === "untested" ? extraListNeverTested : extraList;
+    }
+    // v0.51.0 — the four LOCAL TOOL states, the three credential routes, and
+    // both model-entry shapes.
+    case "/api/extra/tools":
+      return extraTools;
+    case "/api/extra/keyhelp":
+      return q && q.profile === "local" ? extraKeyhelp.env : extraKeyhelp.login;
+    case "/api/extra/models":
+      return q && q.profile === "custom" ? extraModels.freeText : extraModels.list;
     case "/api/extra/providers":
       return extraProviders;
     case "/api/extra/doctor":
@@ -394,9 +414,27 @@ module.exports.post = function post(route, body) {
   // mode — the add is only the step before the test, and the test's outcome is
   // the state worth designing. Every other write still answers "nothing ran".
   if (route === "/api/extra/add") return { exit_code: 0, data: { ok: true, next: "orc extra ping" } };
+  // v0.51.0 — a launch that could NOT happen and one that did. Both are exit 0,
+  // because "no terminal here" is an ANSWER carrying the command to paste.
+  if (route === "/api/extra/install")
+    return {
+      exit_code: 0,
+      data: (body && body.provider) === "codex" ? extraInstall.refused : extraInstall.launched,
+    };
+  if (route === "/api/extra/models/test")
+    return { exit_code: 0, data: { ok: true, test: extraPingLive } };
   if (route !== "/api/extra/ping") return undefined;
   const profile = String((body && body.profile) || "");
   if (body && body.key && !body.passphrase) return { exit_code: 0, data: { ...extraPingSaveOffer, profile } };
+  // v0.51.0 — the PAID rung has THREE outcomes worth designing and each is
+  // reachable: it worked and still cannot say which model answered, the model
+  // was LISTED and is DEAD upstream, and the tool is not installed at all.
+  if (route === "/api/extra/ping" && body && body.live) {
+    if (profile === "toolc") return { exit_code: 1, data: { ...extraPingNotInstalled, profile } };
+    if (String(body.model || "").indexOf("free") !== -1)
+      return { exit_code: 1, data: { ...extraPingDeadModel, profile } };
+    return { exit_code: 0, data: { ...extraPingLive, profile: profile || extraPingLive.profile } };
+  }
   if (profile === "router" || profile === "burned") return { exit_code: 1, data: { ...extraPingBad, profile } };
   return { exit_code: 0, data: { ...extraPingOk, profile: profile || extraPingOk.profile } };
 };

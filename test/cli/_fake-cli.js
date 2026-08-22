@@ -18,6 +18,18 @@
 //   blocked   the structured answer says `blocked` and the tool still exits 0
 //   silent    exits 0 having said nothing parseable → malformed-return
 //   authfail  exits 1 with a 401 on stderr → classified, and NOT retried
+//
+// v0.51.0 — it also answers the FREE RUNGS of the connection ladder, because
+// "the binary exists" was never evidence of anything and the ladder is what
+// replaced it:
+//   --version      → rung 1 (cli-bin), and the version is what picks the
+//                    permission flag, so ORC_FAKE_CLI_VERSION can make this
+//                    build TOO OLD
+//   auth list      → rung 2 (cli-auth);  ORC_FAKE_CLI_MODE=noauth says no
+//   models         → rung 3 (cli-models); ORC_FAKE_CLI_MODE=nomodels says none
+// A run with the OLD permission flag prints the tool's own HELP TEXT and exits
+// 1 — which is the real failure mode ORC must classify as a FLAG problem and
+// never as a model problem.
 const fs = require("fs");
 const path = require("path");
 
@@ -37,10 +49,27 @@ const val = (f) => {
 // ── opencode ───────────────────────────────────────────────────────────────
 function opencode() {
   if (!has("--format") || val("--format") !== "json") die("opencode must be asked for --format json");
-  if (!has("--auto")) die("opencode needs --auto or it blocks on a permission prompt in headless mode");
+  // v0.51.0 — `--auto` was REMOVED and replaced by
+  // `--dangerously-skip-permissions`, and this tool's argument parser is STRICT:
+  // an unknown flag prints the help text and exits 1 before any network call. So
+  // every dispatch on this adapter failed for a release, and failed looking like
+  // a model problem. ORC picks the flag from the PROBED VERSION and takes the
+  // current one when the version is unknown — which is this case.
+  if (!has("--dangerously-skip-permissions"))
+    die("opencode needs --dangerously-skip-permissions (it replaced --auto) or it blocks on a permission prompt");
+  if (has("--auto")) die("--auto was removed; passing it makes this tool print its help text and exit 1");
   if (!has("--model")) die("opencode needs --model provider/model");
   if (!has("--dir")) die("opencode needs --dir <repo root>");
   const f = val("-f");
+  // v0.51.0 — the LIVE PROBE has no task file: its prompt is a fixed constant
+  // ORC wrote, which is the one kind of text that may be in argv. A dispatch
+  // still may not, and the check below is what proves it.
+  if (!f && has("--dir") && ARGV[ARGV.length - 1] === "Reply with exactly: OK") {
+    process.stdout.write(
+      JSON.stringify({ type: "message.done", text: "OK", tokens: { input: 15649, output: 48, cache: { write: 0, read: 64 } } }) + "\n"
+    );
+    process.exit(0);
+  }
   if (!f) die("the task text must be attached with -f, never pasted into argv");
   let task = "";
   try {
@@ -97,6 +126,13 @@ function codex() {
   const joined = ARGV.join(" ");
   if (/API_KEY|sk-live-/.test(joined)) die("a credential reached argv");
   if (!process.env.CODEX_API_KEY) die("CODEX_API_KEY must be in the child's env, not in its argv");
+  // v0.51.0 — `-m` sets the MODEL and NOT the compute budget: `model_reasoning_effort`
+  // is an independent key that otherwise falls through to this user's own config
+  // and finally to `medium`. A dispatch that named only the model would run at
+  // an effort ORC never chose — a SILENT DOWNGRADE, the exact failure class the
+  // `expect=<model>/<effort>` trace design exists to catch.
+  const eff = ARGV.filter((x, i) => ARGV[i - 1] === "-c").find((x) => /^model_reasoning_effort=/.test(x));
+  if (!eff) die("codex exec needs -c model_reasoning_effort=\"<effort>\" — the model alone does not set the compute budget");
 
   if (MODE === "silent") {
     process.stdout.write("\n");
@@ -126,8 +162,37 @@ function codex() {
   process.exit(0);
 }
 
+// ── the free rungs ─────────────────────────────────────────────────────────
+function freeRungs() {
+  if (has("--version")) {
+    process.stdout.write((process.env.ORC_FAKE_CLI_VERSION || "1.17.4") + "\n");
+    process.exit(0);
+  }
+  if (ARGV[0] === "auth" || (ARGV[0] === "login" && ARGV[1] === "status")) {
+    if (MODE === "noauth") {
+      process.stdout.write("not logged in\n");
+      process.exit(1);
+    }
+    process.stdout.write("Credentials\n  fake-provider api\n");
+    process.exit(0);
+  }
+  if (ARGV[0] === "models" || (ARGV[0] === "debug" && ARGV[1] === "models")) {
+    if (MODE === "nomodels") {
+      process.stdout.write("\n");
+      process.exit(0);
+    }
+    // One `provider/model` per line — the shape a grouped dropdown is built
+    // from, and the group falls out of the id's own prefix so the CLI computes
+    // it and no renderer splits a string it does not own.
+    process.stdout.write("fakeco/fake-flash\nfakeco/fake-pro\nfakeco-go/fake-free\n");
+    process.exit(0);
+  }
+  return false;
+}
+
 // Inert with no arguments — see the header. This is the load-bearing half.
 if (require.main === module && ARGV.length) {
+  freeRungs();
   if (ARGV[0] === "run") opencode();
   else if (ARGV[0] === "exec") codex();
   else die("unexpected first argument: " + ARGV[0]);

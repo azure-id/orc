@@ -40,12 +40,14 @@ $ orc extra providers
 ```
 
 > ```
-> ORC · extra — 11 providers (catalog dated 2026-08-21)
+> ORC · extra — 14 providers (catalog dated 2026-08-22)
 >
 >   deepseek     DeepSeek                api · claude-shim
 >   zai          Z.ai (GLM)              api · claude-shim
 >   moonshot     Moonshot (Kimi)  [cn]   api · claude-shim
 >   ollama       Ollama (local)          api · claude-shim
+>   opencode     OpenCode                cli
+>   codex        Codex                   cli
 >   custom       Custom endpoint         api · claude-shim · cli
 >
 >   Model ids are NOT shipped — they rot within a quarter.
@@ -119,6 +121,132 @@ $ orc extra route
 
 **Read that last line twice.** Everything you did not route is still shown, with
 the exact model it will use. You never have to remember what you left alone.
+
+---
+
+## 2b. When the provider is a program on your computer
+
+Two of these are not websites. They are tools you install, and a tool can simply
+not be there — so ORC checks first, every time, and never remembers the answer.
+
+```bash
+$ orc extra tools
+```
+
+> ```
+> ORC · extra — local tools (catalog dated 2026-08-22)
+>
+>   opencode  ✔ ready
+>   binary     /usr/local/bin/opencode
+>   version    1.17.4
+>   floor      1.10.0
+>   signed in  yes
+>   models     19
+>
+>   codex  ✖ absent
+>     `codex` is not on PATH. Install it with:
+>       npm i -g @openai/codex   (npm)
+>       brew install --cask codex   (brew)
+>     or run: orc extra install codex   — opens a terminal and runs it there
+>     there is no install-free alternative for this one — the install is the only route.
+> ```
+
+**Two things worth noticing.** The exact install command comes from ORC's dated
+catalog, not from memory — the common mistake here installs a completely
+unrelated package that has been sitting on npm since 2012. And the last line is
+not padding: one of these two tools *can* be used without installing anything,
+and this one cannot. ORC says which, rather than leaving you looking.
+
+If you try to connect anyway, it stops you before you have a broken connection
+rather than after:
+
+```bash
+$ orc extra add cx --provider codex --engine cli --env-key OPENAI_API_KEY
+```
+
+> ```
+> ❌ "codex" is a program that runs on this machine, and `codex` is not on PATH.
+>    Install it:  npm i -g @openai/codex
+>    or run:      orc extra install codex   (opens a terminal and runs it there)
+>    There is no install-free alternative for this one; the install is the only route.
+> ```
+
+### Letting ORC install it
+
+```bash
+$ orc extra install codex
+```
+
+> ```
+> ┌──────────────────────────────────────────────┐
+> │ ORC will run this in YOUR terminal:          │
+> │                                              │
+> │   npm i -g @openai/codex                     │
+> │                                              │
+> │ then check it with: codex --version          │
+> └──────────────────────────────────────────────┘
+>
+>   ✔ a terminal window opened — come back and press Re-check when it finishes
+> ```
+
+A window opens with the command printed in it before it runs. You can read it,
+scroll it, and stop it with Ctrl-C. **ORC never asks for administrator rights** —
+if the install needs them you will see it ask, in your own window, and that is
+yours to decide. If no window can be opened at all, you get the command to paste
+and nothing pretends it worked.
+
+### Testing it properly
+
+A connection to a program is not one question, it is five, and ORC keeps them
+apart:
+
+```bash
+$ orc extra ping oc
+```
+
+> ```
+> ✔ oc verified via cli-models
+>   /usr/local/bin/opencode
+>
+>   19 models: opencode/big-pickle, opencode-go/glm-5, opencode-go/kimi-k2.6, …
+>
+>   ⚠ a model being LISTED is not a model that WORKS — a listed id can be dead
+>     upstream. `orc extra models oc --test <id>` is the only thing that tells
+>     those two apart.
+> ```
+
+That warning is not boilerplate. A model can be on the provider's own list and
+still fail the moment you call it:
+
+```bash
+$ orc extra models oc --test opencode/deepseek-v4-flash-free
+```
+
+> ```
+>   ✖ opencode/deepseek-v4-flash-free — model_not_found
+>   Upstream request failed: Model is unavailable. (400)
+> ```
+
+And when one does work, you see what came back and what it cost:
+
+```bash
+$ orc extra ping oc --live
+```
+
+> ```
+> ✔ oc verified via cli-live   14733ms
+>
+>   reply: OK
+>   new input 131 · written to cache 0 · read from cache 15616 · output 14
+>
+>   ⚠ this tool does not say which model answered, so if it quietly used a
+>     different one there is no way to tell from here.
+> ```
+
+**Read the cache number again.** A one-line message cost fifteen thousand words
+of input, because the tool loads its own instructions before it sends anything.
+That is why sending a real message is a separate button with its own warning,
+and why the free checks above are the ones that run by default.
 
 ---
 

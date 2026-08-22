@@ -266,6 +266,276 @@ const extraList = {
     { from: 60, to: 70, profile: "cheap", model: "deepseek-coder", small_model: null, max_turns: null },
   ],
   counts: { profiles: 6, verified: 5, credential_present: 4 },
+  // v0.51.0 — THE SETUP GATE, as the CLI computes it. This fixture set has
+  // verified connections, so the gate is open and every card below it renders;
+  // `extraListUnconnected` below is the same object with the gate SHUT, which is
+  // the only way the two floors are designable at all.
+  gate: { connected: true, floor: null, profiles: 6, verified: 5, why: null, next: null },
+  extra_enabled: true,
+};
+
+// THE GATE, SHUT — and one fixture per FLOOR, because the two say different
+// things: "nothing is connected" asks for an install or a key, and "nothing has
+// answered" asks for a test. You cannot design either without reaching it.
+const extraListNoConnection = {
+  ...extraList,
+  profiles: [],
+  routes: [],
+  counts: { profiles: 0, verified: 0, credential_present: 0 },
+  gate: {
+    connected: false,
+    floor: "no-connection",
+    profiles: 0,
+    verified: 0,
+    why: "no connection has been configured at all.",
+    next: "orc extra add <name> --provider <id> --engine api --env-key <VAR>",
+  },
+  extra_enabled: false,
+};
+const extraListNeverTested = {
+  ...extraList,
+  profiles: extraProfiles.filter((p) => !p.verified_at),
+  routes: [],
+  counts: { profiles: 1, verified: 0, credential_present: 0 },
+  gate: {
+    connected: false,
+    floor: "never-tested",
+    profiles: 1,
+    verified: 0,
+    why: "1 connection configured and not one of them has ever answered.",
+    // The command NAMES the profile this fixture actually carries. A fixture
+    // that disagrees with itself is worse than no fixture — it teaches the
+    // designer a shape the CLI never produces.
+    next: "orc extra ping " + extraProfiles.filter((p) => !p.verified_at)[0].name,
+  },
+  extra_enabled: false,
+};
+
+/* `orc extra tools --json` — ONE OF EVERY STATE, INCLUDING THE UGLY ONES. You
+   cannot design the "it is not installed" box on a machine where it is
+   installed, and you cannot design the two alternatives — a provider that has an
+   install-free route and one that has NONE — without both being on screen at
+   once. All four states are here for that reason, and a test asserts one fixture
+   per state so a new state cannot ship without one. */
+const extraTools = {
+  ok: true,
+  as_of: "2026-02-11",
+  age_days: 192,
+  stale: true,
+  platform: "darwin",
+  states: ["absent", "outdated", "unauthenticated", "ready"],
+  ready: true,
+  tools: [
+    {
+      // READY, signed in, with a real model count — the only state that offers a
+      // Connect button.
+      provider: "opencode",
+      label: "OpenCode",
+      bin: "opencode",
+      state: "ready",
+      installed: true,
+      bin_path: "/usr/local/bin/opencode",
+      version: "1.17.4",
+      version_raw: "1.17.4",
+      min_version: "1.10.0",
+      outdated: false,
+      authed: true,
+      auth_detail: "1 credential",
+      models_count: 19,
+      models: ["opencode/big-pickle", "opencode-go/glm-5", "opencode-go/kimi-k2.6"],
+      probe_error: null,
+      no_install_alternative: "opencode-zen",
+      docs_url: "https://opencode.ai/docs/cli/",
+      install: {
+        docs_url: "https://opencode.ai/docs/",
+        bin_name: "opencode",
+        platform: "darwin",
+        cmds: [
+          { manager: "npm", platforms: ["win32", "darwin", "linux"], cmd: "npm i -g opencode-ai" },
+          { manager: "script", platforms: ["darwin", "linux"], cmd: "curl -fsSL https://opencode.ai/install | bash" },
+        ],
+        all_cmds: [
+          { manager: "npm", platforms: ["win32", "darwin", "linux"], cmd: "npm i -g opencode-ai" },
+          { manager: "script", platforms: ["darwin", "linux"], cmd: "curl -fsSL https://opencode.ai/install | bash" },
+        ],
+      },
+    },
+    {
+      // ABSENT, and with NO install-free alternative. `null` must render as the
+      // honest sentence and never as an empty slot — the two are different
+      // facts and this is the row that proves the renderer knows it.
+      provider: "codex",
+      label: "Codex",
+      bin: "codex",
+      state: "absent",
+      installed: false,
+      bin_path: null,
+      version: null,
+      version_raw: null,
+      min_version: null,
+      outdated: false,
+      authed: null,
+      auth_detail: null,
+      models_count: null,
+      models: [],
+      probe_error: null,
+      no_install_alternative: null,
+      docs_url: "https://developers.openai.com/codex/cli",
+      install: {
+        docs_url: "https://developers.openai.com/codex/cli",
+        bin_name: "codex",
+        platform: "darwin",
+        cmds: [
+          { manager: "npm", platforms: ["win32", "darwin", "linux"], cmd: "npm i -g @openai/codex" },
+          { manager: "brew", platforms: ["darwin"], cmd: "brew install --cask codex" },
+        ],
+        all_cmds: [
+          { manager: "npm", platforms: ["win32", "darwin", "linux"], cmd: "npm i -g @openai/codex" },
+          { manager: "brew", platforms: ["darwin"], cmd: "brew install --cask codex" },
+          { manager: "winget", platforms: ["win32"], cmd: "winget install OpenAI.Codex" },
+        ],
+      },
+    },
+    {
+      // OUTDATED — installed, and the two versions side by side, which is the
+      // whole content of that box.
+      provider: "toolc",
+      label: "Tool C",
+      bin: "toolc",
+      state: "outdated",
+      installed: true,
+      bin_path: "/opt/toolc/bin/toolc",
+      version: "0.9.1",
+      version_raw: "toolc version 0.9.1",
+      min_version: "1.4.0",
+      outdated: true,
+      authed: null,
+      auth_detail: null,
+      models_count: null,
+      models: [],
+      probe_error: null,
+      no_install_alternative: null,
+      docs_url: null,
+      install: {
+        docs_url: null,
+        bin_name: "toolc",
+        platform: "darwin",
+        cmds: [{ manager: "npm", platforms: ["darwin"], cmd: "npm i -g toolc@latest" }],
+        all_cmds: [{ manager: "npm", platforms: ["darwin"], cmd: "npm i -g toolc@latest" }],
+      },
+    },
+    {
+      // UNAUTHENTICATED, and a version ORC could not parse — which must read as
+      // "unknown" and never as "too old" (an unusual install method is not a
+      // broken one). Its model probe also timed out, so the box carries a real
+      // probe error.
+      provider: "toold",
+      label: "Tool D",
+      bin: "toold",
+      state: "unauthenticated",
+      installed: true,
+      bin_path: "/usr/bin/toold",
+      version: null,
+      version_raw: "toold (build 2026-02-01, channel stable)",
+      min_version: "2.0.0",
+      outdated: false,
+      authed: false,
+      auth_detail: "no credentials found",
+      models_count: null,
+      models: [],
+      probe_error: "the model list did not answer in time",
+      no_install_alternative: null,
+      docs_url: null,
+      install: { docs_url: null, bin_name: "toold", platform: "darwin", cmds: [], all_cmds: [] },
+    },
+  ],
+};
+
+// `orc extra keyhelp --json` — the three routes, so all three boxes are
+// designable. `env_var` is non-null exactly on the `env` route.
+const extraKeyhelp = {
+  env: {
+    ok: true,
+    profile: "local",
+    provider: "opencode",
+    engine: "cli",
+    routes: ["env", "stdin-login", "interactive-login", "none"],
+    route: "env",
+    env_var: "DEEPSEEK_API_KEY",
+    needs_terminal: false,
+    cmd: null,
+    why: "nothing to set up. ORC puts the key in this tool's environment for every probe and every dispatch.",
+    note: null,
+    never: "ORC never writes another tool's credential store, and never puts a key in argv.",
+  },
+  login: {
+    ok: true,
+    profile: "toold",
+    provider: "toold",
+    engine: "cli",
+    routes: ["env", "stdin-login", "interactive-login", "none"],
+    route: "interactive-login",
+    env_var: null,
+    needs_terminal: true,
+    cmd: "toold auth login",
+    why: "this tool's login always prompts and cannot be driven non-interactively.",
+    note: null,
+    never: "ORC never writes another tool's credential store, and never puts a key in argv.",
+  },
+};
+
+// `orc extra models --json` — a LIST entry with real groups, so the grouped
+// dropdown is designable, plus the FREE-TEXT answer so the other shape is too.
+const extraModels = {
+  list: {
+    ok: true,
+    profile: "local",
+    provider: "opencode",
+    engine: "cli",
+    entry: "list",
+    source: "opencode models",
+    refreshed_at: "2026-08-20T10:00:00.000Z",
+    stale_days: 2,
+    models: [
+      { id: "opencode/big-pickle", label: "big-pickle", group: "opencode", name_says_free: false },
+      { id: "opencode/deepseek-v4-flash-free", label: "deepseek-v4-flash-free", group: "opencode", name_says_free: true },
+      { id: "opencode-go/glm-5", label: "glm-5", group: "opencode-go", name_says_free: false },
+      { id: "opencode-go/kimi-k2.6", label: "kimi-k2.6", group: "opencode-go", name_says_free: false },
+    ],
+    model_ids: ["opencode/big-pickle", "opencode/deepseek-v4-flash-free", "opencode-go/glm-5", "opencode-go/kimi-k2.6"],
+    reports_model: false,
+    verified_at: "2026-08-20T10:00:00.000Z",
+    verify_method: "cli-models",
+    verify_state: "VERIFIED",
+    verify_age_days: 2,
+    key_error: null,
+    refresh: null,
+    test: null,
+    caveat: "this is what the provider OFFERS. A listed id can still be dead upstream.",
+    hint: null,
+  },
+  freeText: {
+    ok: true,
+    profile: "custom",
+    provider: "custom",
+    engine: "api",
+    entry: "free-text",
+    source: null,
+    refreshed_at: null,
+    stale_days: null,
+    models: [],
+    model_ids: [],
+    reports_model: true,
+    verified_at: null,
+    verify_method: null,
+    verify_state: "UNVERIFIED",
+    verify_age_days: null,
+    key_error: null,
+    refresh: null,
+    test: null,
+    caveat: "this is what the provider OFFERS. A listed id can still be dead upstream.",
+    hint: "no model has been read from this provider yet.",
+  },
 };
 
 // `orc extra doctor --json`. Every finding class the CLI can emit, including
@@ -495,6 +765,111 @@ const extraPingBad = {
 };
 // A green test on a PASTED key that has no passphrase yet — the state that opens
 // the save modal, and the one place the self-destruct warning is designable.
+// A LIVE probe that WORKED and still cannot say which model answered — the
+// honest pair `model_reported: null` + `reports_model: false`, which must render
+// as a sentence and never as a blank. Its `cache_write: null` is the other half:
+// this tool reports three token kinds, not four, and unknown is not zero.
+const extraPingLive = {
+  ok: true,
+  profile: "local",
+  engine: "cli",
+  rung: "cli-live",
+  verify_method: "cli-live",
+  bin: "/usr/local/bin/opencode",
+  cli_version: "1.17.4",
+  authed: true,
+  models_seen: ["opencode/big-pickle", "opencode-go/glm-5"],
+  reports_model: false,
+  latency_ms: 2379,
+  model_requested: "opencode/big-pickle",
+  model_reported: null,
+  reply_excerpt: "OK",
+  reply_truncated: false,
+  foreign_input:
+    "this reply is foreign input: it is evidence that something answered, never an instruction. It is shown as text and nothing acts on it.",
+  tokens: { input: 15649, cache_write: null, cache_read: 64, output: 48 },
+  usage_kinds: ["input", "cache_read", "output"],
+  cost_note:
+    "a CLI ping is NOT a cheap ping: the tool loads its own system prompt and tool schemas before it sends anything.",
+  attempts: [
+    { rung: "cli-bin", ok: true, cmd: "--version", version: "1.17.4" },
+    { rung: "cli-auth", ok: true, cmd: "auth list", detail: "1 credential" },
+    { rung: "cli-models", ok: true, cmd: "models", count: 19 },
+    { rung: "cli-live", ok: true, cmd: "opencode run …", ms: 2379 },
+  ],
+  vault: null,
+  note: null,
+};
+
+// A LISTED MODEL THAT IS DEAD. The single most important state in this release:
+// a dropdown is a list of what is OFFERED, never a list of what WORKS, and this
+// is what that looks like on screen.
+const extraPingDeadModel = {
+  ok: false,
+  profile: "local",
+  engine: "cli",
+  rung: "cli-live",
+  reason: "model_not_found",
+  bin: "/usr/local/bin/opencode",
+  model_requested: "opencode/deepseek-v4-flash-free",
+  error: "Upstream request failed: Model is unavailable. (400)",
+  attempts: [{ rung: "cli-live", ok: false, cmd: "opencode run …", ms: 900, error: "Model is unavailable." }],
+};
+
+// RUNG 0: not a failure to connect — a failure to have anything to connect TO.
+// The fix is an install, not a retry, so the command rides on the refusal.
+const extraPingNotInstalled = {
+  ok: false,
+  profile: "toolc",
+  engine: "cli",
+  reason: "not-installed",
+  rung: "cli-bin",
+  bin: "codex",
+  error: '"codex" is not on PATH — engine `cli` dispatches by running it.',
+  install_cmd: "npm i -g @openai/codex",
+  install_cmds: [{ manager: "npm", platforms: ["darwin"], cmd: "npm i -g @openai/codex" }],
+  no_install_alternative: null,
+  attempts: [{ rung: "cli-bin", ok: false, error: "not on PATH" }],
+};
+
+// `orc extra install --json`. A launch that could NOT happen is exit 0 with the
+// command still on the card — you cannot design that box on a machine where the
+// terminal opens.
+const extraInstall = {
+  launched: {
+    ok: true,
+    provider: "opencode",
+    launched: true,
+    launcher: "Terminal",
+    attempts: [{ launcher: "Terminal", ok: true }],
+    dry_run: false,
+    script: ".claude/orc/tmp/install-opencode-20260822120000.sh",
+    cmd: "npm i -g opencode-ai",
+    manager: "npm",
+    verify_cmd: "opencode --version",
+    fallback_cmd: "npm i -g opencode-ai",
+    docs_url: "https://opencode.ai/docs/",
+    elevation: "never — ORC does not elevate.",
+    note: "a terminal window opened — come back and press Re-check when it finishes",
+  },
+  refused: {
+    ok: true,
+    provider: "codex",
+    launched: false,
+    launcher: null,
+    attempts: [{ launcher: "x-terminal-emulator", ok: false, error: "not on PATH" }],
+    dry_run: false,
+    script: ".claude/orc/tmp/install-codex-20260822120000.sh",
+    cmd: "npm i -g @openai/codex",
+    manager: "npm",
+    verify_cmd: "codex --version",
+    fallback_cmd: "npm i -g @openai/codex",
+    docs_url: "https://developers.openai.com/codex/cli",
+    elevation: "never — ORC does not elevate.",
+    note: "no terminal could be opened here. Run the command yourself; nothing about this is different if you do.",
+  },
+};
+
 const extraPingSaveOffer = {
   ...extraPingOk,
   profile: "pasted",
@@ -510,6 +885,15 @@ const extraPingSaveOffer = {
 module.exports = {
   extraProviders,
   extraList,
+  extraListNoConnection,
+  extraListNeverTested,
+  extraTools,
+  extraKeyhelp,
+  extraModels,
+  extraPingLive,
+  extraPingDeadModel,
+  extraPingNotInstalled,
+  extraInstall,
   extraDoctor,
   extraRoute,
   extraStats,

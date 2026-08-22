@@ -116,7 +116,7 @@ test("engine B / opencode: a clean run, and the CHILD confirms the prompt never 
   // The route target's model string arrives already in opencode's own
   // provider/model shape, because `route set` splits on the FIRST slash.
   assert.equal(j.model_requested, "deepseek/fake-flash");
-  assert.ok(j.argv.includes("--auto") && j.argv.includes("--format"));
+  assert.ok(j.argv.includes("--dangerously-skip-permissions") && j.argv.includes("--format"));
   assert.ok(!j.argv.join(" ").includes(PROMPT_MARKER), "the slice prompt must never be in argv");
   assert.ok(!r.stdout.includes(SECRET_KEY) && !r.stderr.includes(SECRET_KEY));
 
@@ -205,7 +205,10 @@ test("engine B / codex: --output-schema carries ORC's contract, and the vector i
   // The DOCUMENTED shape is read by name, not dug for — a dig would silently
   // accept the wrong field the day the shape changes.
   assert.equal(j.usage_note, "token counts read from the tool's own `turn.completed.usage` field");
-  assert.deepEqual(j.usage, { input: 500, cache_write: 0, cache_read: 1500, output: 210 });
+  // v0.51.0 — codex reports THREE numbers (input_tokens, cached_input_tokens,
+  // output_tokens) and there is NO cache-write count. Unknown is not zero
+  // (/orc-budget), so this reads null and a renderer says so.
+  assert.deepEqual(j.usage, { input: 500, cache_write: null, cache_read: 1500, output: 210 });
   assert.equal(j.model_reported, "fake-codex-model");
   // The default sandbox is READ-ONLY; without workspace-write the worker cannot
   // edit and the run looks like a model that refused to work.

@@ -29,10 +29,42 @@
     "being a gate: anything OpenAI- or Anthropic-compatible works by typing a",
     "base URL, with no entry here.",
     "",
-    "`provider_routing` marks a provider that accepts an OpenRouter-style `provider` block in the request body (zdr, data_collection, require_parameters, only, allow_fallbacks). Only engine `api` composes a body, so this is the ONE enforceable privacy control in the whole subsystem — and it exists on the aggregator, plus `custom` because a custom base URL is routinely an aggregator-compatible gateway. Everything else gets `orc extra privacy` REFUSED BY NAME rather than an unknown body field that 400s mid-wave."
+    "`provider_routing` marks a provider that accepts an OpenRouter-style `provider` block in the request body (zdr, data_collection, require_parameters, only, allow_fallbacks). Only engine `api` composes a body, so this is the ONE enforceable privacy control in the whole subsystem — and it exists on the aggregator, plus `custom` because a custom base URL is routinely an aggregator-compatible gateway. Everything else gets `orc extra privacy` REFUSED BY NAME rather than an unknown body field that 400s mid-wave.",
+    "",
+    "`cli_bin` names the LOCAL BINARY a provider's only surface is. A row that",
+    "carries it is a tool that may simply not be installed, which is a state",
+    "before it is a failure: `orc extra tools` computes it fresh on every read",
+    "(never stored — a stored `installing` flag is a lie the moment the user hits",
+    "Ctrl-C), and `orc extra add --provider <that row>` REFUSES while it is",
+    "absent, naming the install command instead of creating a profile that cannot",
+    "work.",
+    "",
+    "`install` is per platform and per package manager and it AGES WITH THIS FILE.",
+    "The common failure is `npm i -g codex`, which installs an unrelated 2012",
+    "package — so the exact string has to come from here rather than from memory,",
+    "and it is dated for the same reason a base URL is.",
+    "",
+    "`no_install_alternative` is an asymmetry made data: a provider whose tool is",
+    "absent may have an install-free route (an ordinary `api` row serving the same",
+    "models), or it may not. `null` MEANS THERE IS NONE — never that the catalog",
+    "forgot to look — and a renderer must say the difference out loud.",
+    "",
+    "`models_public: true` says this provider's models list answers WITHOUT a",
+    "credential. It exists because `orc extra ping`'s cheapest rung treats a 200",
+    "on /models as verification, and on a provider whose list is public that would",
+    "mark a profile verified with a garbage key. Such a row fills models_seen and",
+    "then falls THROUGH to the paid rung; the free answer is recorded as",
+    "`models-public` and is never the profile's verification.",
+    "",
+    "`credential` on a cli row says how that tool takes a key, because the two",
+    "shipped ones are opposites: codex accepts a key on stdin and in an env var,",
+    "opencode's own login always prompts and cannot be driven — so ORC injects the",
+    "key into the child's environment instead and NEVER writes another tool's",
+    "credential store. `orc extra keyhelp` renders which of the three routes",
+    "applies."
   ],
   "version": 1,
-  "as_of": "2026-08-21",
+  "as_of": "2026-08-22",
   "providers": [
     {
       "id": "deepseek",
@@ -235,6 +267,151 @@
       "docs_url": "https://docs.ollama.com/api/anthropic-compatibility",
       "terms_url": "https://ollama.com/terms",
       "notes": "Local: nothing leaves the machine, and the credential is a placeholder. Its /v1/messages REJECTS x-api-key, which is why auth_env is ANTHROPIC_AUTH_TOKEN and must stay that way."
+    },
+    {
+      "id": "opencode",
+      "label": "OpenCode",
+      "engines": [
+        "cli"
+      ],
+      "api_base": null,
+      "anthropic_base": null,
+      "auth_env": "ANTHROPIC_AUTH_TOKEN",
+      "env_key_default": null,
+      "models_path": null,
+      "context_tokens": null,
+      "regions": [],
+      "docs_url": "https://opencode.ai/docs/cli/",
+      "terms_url": "https://opencode.ai/docs/",
+      "notes": "A LOCAL agentic CLI, so the thing that can be absent is the binary, not a URL. It reports token counts but NEVER which model answered — a substitution is invisible on this engine, and every render says so.",
+      "cli_bin": "opencode",
+      "min_version": "1.10.0",
+      "version_cmd": [
+        "--version"
+      ],
+      "auth_cmd": [
+        "auth",
+        "list"
+      ],
+      "models_cmd": [
+        "models"
+      ],
+      "no_install_alternative": "opencode-zen",
+      "credential": {
+        "env_route": true,
+        "env_var": null,
+        "stdin_login": null,
+        "interactive_login": "opencode auth login",
+        "note": "opencode reads a key from the environment or a .env file at startup, so ORC injects it into the child process and never touches ~/.local/share/opencode/auth.json. `opencode auth login` has no flag for the key itself and always prompts — it cannot be driven, and ORC says so rather than pretending."
+      },
+      "install": {
+        "docs_url": "https://opencode.ai/docs/",
+        "bin_name": "opencode",
+        "cmds": [
+          {
+            "manager": "npm",
+            "platforms": [
+              "win32",
+              "darwin",
+              "linux"
+            ],
+            "cmd": "npm i -g opencode-ai"
+          },
+          {
+            "manager": "script",
+            "platforms": [
+              "darwin",
+              "linux"
+            ],
+            "cmd": "curl -fsSL https://opencode.ai/install | bash"
+          }
+        ]
+      }
+    },
+    {
+      "id": "codex",
+      "label": "Codex",
+      "engines": [
+        "cli"
+      ],
+      "api_base": null,
+      "anthropic_base": null,
+      "auth_env": "ANTHROPIC_AUTH_TOKEN",
+      "env_key_default": "OPENAI_API_KEY",
+      "models_path": null,
+      "context_tokens": null,
+      "regions": [],
+      "docs_url": "https://developers.openai.com/codex/cli",
+      "terms_url": "https://openai.com/policies/terms-of-use",
+      "notes": "CLI-only: there is no endpoint to point ORC at, which is why no_install_alternative is null. Custom providers live in the USER-level ~/.codex/config.toml, which ORC reads and NEVER writes. `-m` alone does not set the compute budget — the dispatch always passes `-c model_reasoning_effort` too, and an unsupported level is coerced SILENTLY, so the effort is reported as requested and never as confirmed.",
+      "cli_bin": "codex",
+      "min_version": null,
+      "version_cmd": [
+        "--version"
+      ],
+      "auth_cmd": [
+        "login",
+        "status"
+      ],
+      "models_cmd": [
+        "debug",
+        "models"
+      ],
+      "no_install_alternative": null,
+      "credential": {
+        "env_route": true,
+        "env_var": "CODEX_API_KEY",
+        "stdin_login": "codex login --with-api-key",
+        "interactive_login": "codex login --device-auth",
+        "note": "Every codex login path reads the key from STDIN and never from an argument — the tool's own docs say so, which is ORC's rule arrived at independently. CODEX_API_KEY scopes a key to ONE invocation and writes nothing global, so it is the default route."
+      },
+      "install": {
+        "docs_url": "https://developers.openai.com/codex/cli",
+        "bin_name": "codex",
+        "cmds": [
+          {
+            "manager": "npm",
+            "platforms": [
+              "win32",
+              "darwin",
+              "linux"
+            ],
+            "cmd": "npm i -g @openai/codex"
+          },
+          {
+            "manager": "brew",
+            "platforms": [
+              "darwin"
+            ],
+            "cmd": "brew install --cask codex"
+          },
+          {
+            "manager": "winget",
+            "platforms": [
+              "win32"
+            ],
+            "cmd": "winget install OpenAI.Codex"
+          }
+        ]
+      }
+    },
+    {
+      "id": "opencode-zen",
+      "label": "OpenCode Zen",
+      "engines": [
+        "api"
+      ],
+      "api_base": "https://opencode.ai/zen/v1",
+      "anthropic_base": null,
+      "auth_env": "ANTHROPIC_AUTH_TOKEN",
+      "env_key_default": "OPENCODE_ZEN_API_KEY",
+      "models_path": "/models",
+      "context_tokens": null,
+      "regions": [],
+      "docs_url": "https://opencode.ai/docs/zen/",
+      "terms_url": "https://opencode.ai/docs/",
+      "notes": "The install-free route to the same catalogue: an ordinary OpenAI-compatible endpoint, reachable with a key and no local tool at all. Its /models answers WITHOUT a credential, which is why models_public is set — the free rung proves the URL and nothing else here.",
+      "models_public": true
     },
     {
       "id": "custom",

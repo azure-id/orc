@@ -10,6 +10,64 @@ Format: `### v<version> — <title> _(<date>)_`.
 
 ---
 
+### v0.51.0 — the tools you already have, and a connection that proves itself _(2026-08-22)_
+
+**`orc extra` connections.** Two of the things ORC can hand work to are not
+websites — they are **programs on your own machine**, and the last release could
+only reach them by hand-typing a binary name into a `custom` profile. They are
+first-class providers now, with a connect box each, a model dropdown built from
+what **your** account can actually reach, and a connection test that proves
+something answered rather than proving a file exists.
+
+- **A program can simply not be installed, and the panel says that FIRST.** Four
+  states, computed fresh every time and never remembered: `absent`,
+  `outdated`, `unauthenticated`, `ready`. An absent tool gets no Connect
+  button, no Test button and no model list — every one of those is a button that
+  cannot succeed. `orc extra add` refuses too, and names the install command
+  instead of leaving you a profile that will never work.
+- **ORC opens your own terminal and runs the install there.** Not a hidden
+  background job — inside one, an administrator prompt, a permissions error, an
+  80 MB download and a forty-second wait all look identical: *nothing happened*.
+  The exact command is on screen before the button, the window is yours to read
+  and Ctrl-C, **ORC never asks for administrator rights**, and if no terminal can
+  be opened you get the command to paste rather than a dead button.
+- **One tool has an install-free route and one does not**, and `null` means
+  *there is none* rather than *ORC did not look*. The two never render the same.
+- **The connection test is a ladder now, and every rung reads as itself.** Is the
+  program there · is it new enough · does it have a sign-in · which models can
+  this account reach · and — only when you ask — **does a real message actually
+  come back**, with the round trip, the reply, and the four token counts kept
+  separate. Free rungs always run; the paid one is its own button, and what it
+  costs is quoted before you press it.
+- **A model that is LISTED is not a model that WORKS.** A live list is what the
+  provider offers; an id in it can be dead upstream. `orc extra models <name>
+  --test <id>` is the only thing that tells those two apart, and the caveat rides
+  beside every dropdown.
+- **Neither local tool says which model answered**, so a quiet substitution is
+  invisible on that engine. ORC prints that sentence rather than an empty field —
+  and one of the two reports three token kinds, not four, so the missing one
+  reads as an em dash and never as a zero.
+- **A models list anyone can read is not proof of your key.** A provider that
+  serves its catalogue without a credential would otherwise mark a connection
+  verified with a typo'd key. That answer is now recorded for what it was and the
+  test carries on to something that actually needs the key.
+- **`extra_enabled` cannot be switched on before anything has answered.** It
+  would have armed nothing — every task would fall straight back to Claude, so
+  the switch read ON and meant OFF. The refusal names what to do next, and the
+  Extra panel shows only the connect surfaces until then: no routing table, no
+  limits, no cost report.
+- **A fix, not a feature:** every dispatch to one of the two local tools was
+  failing, and failing in a way that looked like a bad model id. One of them
+  renamed a permission flag and refuses unknown ones outright. ORC picks the flag
+  from the version it probed, and a tool that answers with its own help text is
+  now reported as a flag problem by name.
+- **ORC never writes another tool's credential store.** Your key stays in ORC's
+  vault or in your own environment variable and is handed to the program for each
+  run — so nothing global changes, revoking it in ORC actually revokes it, and if
+  you already signed that tool in yourself, ORC leaves it alone.
+
+---
+
 ### v0.50.0 — work that runs somewhere else _(2026-08-22)_
 
 **`orc extra`** — a band of ORC's score ladder can now be answered by a

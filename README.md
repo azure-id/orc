@@ -6,14 +6,14 @@
 
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
-![Version](https://img.shields.io/badge/version-0.50.0-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.51.0-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
 ![Dependencies](https://img.shields.io/badge/dependencies-zero-lightgrey.svg?style=for-the-badge)
 ![GitHub stars](https://img.shields.io/github/stars/azure-id/orc?style=for-the-badge&color=yellow)
 
-**Latest: v0.50.0** · updated 2026-08-22 · [full changelog](CHANGELOG.md)
+**Latest: v0.51.0** · updated 2026-08-22 · [full changelog](CHANGELOG.md)
 
 **🇮🇩 [Baca dalam Bahasa Indonesia](README-id.md)**
 
@@ -440,26 +440,29 @@ a current audit: [EVAL-REPORT.md](EVAL-REPORT.md).
 **Full history: [CHANGELOG.md](CHANGELOG.md)** — or `orc changelog`, which prints
 only what is newer than the version you have.
 
-### v0.50.0 — work that runs somewhere else _(2026-08-22)_
+### v0.51.0 — the tools you already have, and a connection that proves itself _(2026-08-22)_
 
-**`orc extra`** — a band of ORC's score ladder can now run on a **non-Claude
-model**: DeepSeek, GLM, Kimi, MiniMax, Qwen, a local Ollama, any compatible
-endpoint you name, or an agentic CLI you already have. ORC's own session never
-moves; this routes **workers**, not the conductor.
+**`orc extra` connections.** The two coding tools ORC can hand work to are
+programs on your own machine, not websites — so they are first-class providers
+now, with a connect box each and a model dropdown built from what your account
+can really reach.
 
-- **Off by default**, and a connection that has never answered a probe can never
-  be routed to. Two locks, not one.
-- **Every armed run says so before the work starts** — an `extra:` line in the
-  preflight, with no quiet version.
-- **A gap in the table is not a hole, it is Claude**, printed with the agent it
-  resolves to. **Risky work never leaves** — money, auth, security, or any area a
-  boundary card refuses.
-- **Your key never reaches a command line**, and the encrypted vault stores it
-  only after a green test.
-- **No shipped model ids and no shipped prices.** Both go stale and both get
-  believed; `usd` reads as an em dash until you supply a rate.
-- **New panel: `orc ui` ▸ Extra** — one 0→100 rail, every unrouted range keeping
-  its slot, and the boundary paragraph always on screen.
+- **A program can simply not be installed, and the panel says that first** —
+  four states, computed every time, never remembered. An absent tool gets no
+  button that cannot succeed, and `orc extra add` refuses with the install
+  command.
+- **ORC opens your own terminal and runs the install there.** The command is on
+  screen before the button, the window is yours, and **ORC never asks for
+  administrator rights**. No terminal to open? You get the command to paste.
+- **The connection test is a ladder**: is it there · new enough · signed in ·
+  which models can this account reach · and, only if you ask, **does a real
+  message come back** — with the round trip, the reply and four token counts.
+- **A listed model is not a working model.** `orc extra models <name> --test
+  <id>` is the only thing that tells those apart.
+- **Neither local tool says which model answered**, so ORC prints that sentence
+  instead of an empty field.
+- **`extra_enabled` cannot be armed before something has answered** — it would
+  have read ON and meant OFF.
 
 Setup per provider: **[`guides/extra-models.md`](guides/extra-models.md)**.
 

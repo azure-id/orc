@@ -14,6 +14,12 @@
 //   models     serves /v1/models  → rung 1
 //   nomodels   404s /v1/models    → rung 2, incl. the unknown-model escape
 //   redirect   302s everything    → the credential must never follow one
+//   publicmodels  serves /v1/models to ANYONE and 401s /chat/completions.
+//              This is the shape that breaks rung 1's assumption: a 200 on the
+//              model list is a URL proof and NOT a credential proof, so a
+//              profile probing this one must NOT end up verified with a
+//              garbage key. Verified against a real provider before it was
+//              written down (v0.51.0, F8).
 //
 // Engine C (`api`) modes. These serve /chat/completions with OpenAI function
 // calling, and each one exists to make ONE engine rule fail if it is broken:
@@ -110,6 +116,10 @@ const srv = http.createServer((req, res) => {
     res.writeHead(302, { location: "https://elsewhere.invalid/v1/models" });
     return res.end();
   }
+  // The models list answers BEFORE the credential check on this one, on
+  // purpose: that is exactly what a public catalogue looks like from outside.
+  if (MODE === "publicmodels" && /^\/(v1\/)?models/.test(req.url))
+    return send(200, { data: [{ id: "fake-flash" }, { id: "fake-pro" }] });
   if (!auth.includes(GOOD)) return send(401, { error: { message: "invalid api key" } });
   if (req.url.startsWith("/v1/models")) {
     if (MODE === "nomodels") return send(404, { error: { message: "no models endpoint" } });
