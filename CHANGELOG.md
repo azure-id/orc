@@ -10,6 +10,81 @@ Format: `### v<version> — <title> _(<date>)_`.
 
 ---
 
+### v0.53.0 — the schema the provider rejected, and a routing table you can read _(2026-08-23)_
+
+**One outage, one defect visible at a glance, and the Extra panel rebuilt.**
+
+**The outage.** Engine `cli` on **codex** had been 100% dead for a release, and
+the suite was green the whole time. ORC handed codex an `--output-schema` with
+`additionalProperties: true`; OpenAI structured outputs require a **closed**
+object at every level, so every dispatch was an **HTTP 400 raised before the
+model was ever reached** — fast, free, and reported as something vague. Flipping
+only that flag is a **second** 400, this time naming `files_changed`, because
+`required` must list every key in `properties`. An optional field is a nullable
+union now, never an omission from `required`, and the shape is documented as
+**provider-dictated rather than chosen** — the comment calling it "deliberately
+minimal" is what produced the bug.
+
+Three things went with it:
+
+- **The classifier was reading the wrong stream.** codex relays the upstream
+  `invalid_request_error` inside its own event stream on stdout while printing a
+  benign notice on stderr, so a precisely-diagnosable, non-retryable failure came
+  back as `unknown` and `retry: false` was reached by luck. The codex adapter
+  now classifies from **the provider's own error object** first, and
+  `classified_from` says which of the two answered — a field that reports where
+  a verdict came from must not lie about it.
+- **A measurement was being reported as unknown.** codex *does* report
+  `cache_write_input_tokens`; the adapter declared three usage kinds, so ORC
+  threw a real number away and then said it was never measured.
+  `reasoning_output_tokens` is still deliberately unread — the Responses API
+  counts it inside `output_tokens`, and an unproven pricing change is worse than
+  a missing one.
+- **And the reason it shipped green: the fake was more permissive than the
+  provider.** It asserted the schema existed and mentioned `status`, and modelled
+  none of OpenAI's rules. That is the **third release in a row** broken by the
+  same shape — `--auto` renamed, a greedy `-f` array, now an open schema. **A
+  strict third-party parser fails for free, and it looks like a model problem.**
+  The defence is the same every time: the fake must be at least as strict as the
+  real thing. It now rejects both 400s by name.
+
+**The ellipse.** A ready-and-verified tool card drew its "connected as" chip as a
+250px green ellipse. `.ex-tool` declared `grid-template-rows: auto auto auto 1fr
+auto` — but **four states carry four different numbers of children**, so the chip
+landed in the `1fr` slack row, stretched (a grid item's default), and a 999px
+radius did the rest. It hit whichever ready card had the shortest content in its
+row, so it was never about one tool. The card is a flex column now, with no row
+template at all. The old test asserted the property was *present* — which it was,
+while the panel drew an ellipse.
+
+**The Extra panel.** It was nine cards in one 8,786px scroll: no first step, no
+last step, no way to be *done* with a section.
+
+- **Five tabs** on the panel's own precedent — Setup, Routing, Limits, Spending,
+  Providers. The header strip and "what needs your attention" stay outside them,
+  because a caution you have to go looking for is a caution nobody reads. The
+  open tab survives a re-render, and the gate still decides what **exists**: with
+  nothing connected, three tabs are not rendered as empty shells.
+- **One vertical band ladder** replaces the horizontal rail *and* the duplicate
+  list of rows below it. The target is no longer truncated, the widths no longer
+  lie (a `min-width` floor was fighting the percentage), nothing is off-screen,
+  there is a **legend** — green means the work leaves your machine — and the row
+  you read is the row you edit.
+- **The plain-language range is the CLI's.** `orc extra route` gains `range`
+  ("scores 0 to 29") and `meaning` per row, printed on the human path as well.
+  Writing "simple work" beside a score in the panel would be the panel deciding
+  what a score means.
+- **One sentence and one control per tool state**, with the diagnostics behind a
+  disclosure.
+- **Wording**: the panel was serving **design rationale as user instruction**.
+  Six keys split — the instruction first, in Simplified Technical English, the
+  reasoning collapsed underneath. Nothing deleted, both languages, and the
+  rationale keeps its voice.
+
+Setup per provider: **[`guides/extra-models.md`](guides/extra-models.md)**.
+
+---
+
 ### v0.52.0 — the connection that could not be used, and the routing nobody could see _(2026-08-23)_
 
 **Eleven defects, one release.** Five came out of a real `/orc-fast` run against
