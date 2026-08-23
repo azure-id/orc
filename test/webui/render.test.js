@@ -128,7 +128,7 @@ test("css: a tool card has NO row template, and a chip in it can never be stretc
   const js = panelJs("extra");
   assert.match(js, /box\.append\(chip\(t\("extra\.tools\.connectedAs"\)/);
   // `.ex-tool` was the one `.ex-*` block with no narrow-viewport entry at all.
-  assert.match(appCss(), /\.ex-tool > \.row-actions:last-child \{[^}]*align-items:\s*stretch/);
+  assert.match(appCss(), /\.ex-tool > \.row-actions:not\(:first-child\) \{[^}]*align-items:\s*stretch/);
 });
 
 test("changelog: the parser reads this repo's own CHANGELOG.md", () => {

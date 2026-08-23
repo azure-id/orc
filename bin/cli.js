@@ -19777,6 +19777,49 @@ const bandLabel = (r) => `[${r.from},${r.to >= 100 ? "100]" : r.to + ")"}`;
 const bandCovers = (r, score) => score >= r.from && (r.to >= 100 ? score <= 100 : score < r.to);
 const bandsOverlap = (a, b) => a.from < b.to && b.from < a.to;
 
+// R17 — WHAT A BAND MEANS, IN WORDS, AND IT IS THE CLI'S ANSWER.
+//
+// `[0,30)` is developer notation and the half-open bracket is load-bearing, so
+// it stays exactly as it is. But it is not a thing a first-time reader knows,
+// and a routing table nobody can read is a routing table nobody sets. So every
+// row carries a PLAIN reading of its own range and a sentence about what a score
+// in it describes.
+//
+// IT IS COMPUTED HERE AND NOWHERE ELSE. Writing "simple work" beside `[0,30)`
+// in the panel would be the panel deciding what a score means — the
+// Flow-stepper rule, the computeWikiFreshness rule and the docPlanShape rule
+// applied a fifth time. And it goes in BOTH surfaces: a field the human path
+// prints and the JSON omits is drift no lint can see.
+//
+// Every phrase describes the SCORE FORMULA and never a model:
+// `score = breadth + novelty + logic + test_surface + fan + uncertainty`
+// (`effort-and-mode.md`), clamped 0..100, with a cited risk flooring it at 70.
+// That is why the 70+ anchor names the risk floor — it is the one thing about a
+// high band a reader cannot infer from the number.
+const EXTRA_BAND_MEANINGS = [
+  [0, 30, "mechanical work in one or two files, with no new logic"],
+  [30, 55, "a few files, following a pattern this repo already has"],
+  [55, 70, "several files, or a new surface, or logic that carries state"],
+  [70, 85, "wide reach or genuinely new work (a cited risk floors a task to 70, so it lands here or above)"],
+  [85, 101, "the hardest work: a novel algorithm, or wide reach with deep logic"],
+];
+// The half-open range, read out. Scores are integers (the formula sums integers
+// and clamps), so `[0,30)` is exactly 0 to 29 — this is a translation of the
+// notation, not an approximation of it.
+function bandPlain(from, to) {
+  const hi = to >= 100 ? 100 : to - 1;
+  return from === hi ? `score ${from}` : `scores ${from} to ${hi}`;
+}
+function bandMeaning(from, to) {
+  const top = to >= 100 ? 101 : to;
+  const hit = EXTRA_BAND_MEANINGS.filter((m) => from < m[1] && m[0] < top);
+  if (!hit.length) return null;
+  if (hit.length === 1) return hit[0][2];
+  // A user-set band can span several anchors. Naming the two ends is honest;
+  // concatenating every phrase in between reads as a list of unrelated claims.
+  return `${hit[0][2]} — ranging up to ${hit[hit.length - 1][2]}`;
+}
+
 // The Claude fall-through, expressed as rows. `orc extra route` ALWAYS prints
 // these: a table that showed only the foreign bands would not be the routing
 // table, it would be a list of exceptions to a table you cannot see.
@@ -19833,6 +19876,11 @@ function extraRouteRows(claudeDir) {
   const gaps = claudeGaps(ledger.routes, map).map((g) =>
     Object.assign({ band: `[${g.from},${g.to >= 100 ? "100]" : g.to + ")"}` }, g)
   );
+  // R17 — on EVERY row, foreign and Claude alike. A plain reading of the range
+  // and what a score in it describes; see EXTRA_BAND_MEANINGS.
+  const describe = (r) => Object.assign(r, { range: bandPlain(r.from, r.to), meaning: bandMeaning(r.from, r.to) });
+  foreign.forEach(describe);
+  gaps.forEach(describe);
   return { ledger, cfg, map, foreign, gaps, rows: [...foreign, ...gaps].sort((a, b) => a.from - b.from) };
 }
 
@@ -19850,6 +19898,9 @@ function extraRouteList(claudeDir) {
         foreign: t.foreign,
         claude_fallthrough: t.gaps,
         counts: { foreign: t.foreign.length, claude: t.gaps.length },
+        // R17 — the anchors the per-row `meaning` is built from, so a reader can
+        // see the whole ladder rather than only the rows they happen to have.
+        band_meanings: EXTRA_BAND_MEANINGS.map(([from, to, meaning]) => ({ from, to: to >= 100 ? 100 : to, meaning })),
         note: enabled
           ? null
           : "extra_enabled is false — every row below is inert and every score resolves on the Claude ladder.",
@@ -19870,12 +19921,21 @@ function extraRouteList(claudeDir) {
           ? [
               r.band,
               ui.color.cyan(`${r.profile}/${r.model}`),
-              `${r.engine || "?"} · ${r.verify_state}` + (r.model_known ? "" : ui.color.yellow("  · model not in models_seen")),
+              // R17 — the bracket read out, on the same line. It is in `--json`
+              // too: a field one surface prints and the other omits is drift no
+              // lint can see. `ui.kv` carries three columns, so it rides in the
+              // third rather than becoming a fourth that is silently dropped.
+              `${r.engine || "?"} · ${r.verify_state} · ${r.range}` + (r.model_known ? "" : ui.color.yellow("  · model not in models_seen")),
             ]
-          : [r.band, ui.color.gray(r.agent), ui.color.gray("claude")]
+          : [r.band, ui.color.gray(r.agent), ui.color.gray("claude · " + r.range)]
       )
     )
   );
+  // R17 — and what a score in each range describes. Printed once as a ladder
+  // rather than repeated per row: the anchors do not change with your routes.
+  console.log("\n  " + ui.color.bold("what a score in each range describes"));
+  for (const [from, to, meaning] of EXTRA_BAND_MEANINGS)
+    console.log("    " + ui.color.gray(bandPlain(from, to).padEnd(18)) + ui.color.gray(meaning));
   console.log(
     ui.color.gray(
       "\n  A gap is not a hole — it is Claude, and it is printed so \"I left the top band\n" +

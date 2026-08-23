@@ -80,6 +80,35 @@ test("GOLDEN: the config view, the resolver and the route fall-through name the 
   }
 });
 
+test("R17: every route row carries a plain reading of its range, in BOTH surfaces", async () => {
+  // `[0,30)` is developer notation. The half-open bracket is load-bearing so it
+  // stays, but a routing table nobody can read is a routing table nobody sets —
+  // and the plain-language label must be computed HERE, never written in the
+  // panel: prose beside a score is the panel deciding what a score means.
+  const p = project();
+  const j = json(run(p, ["extra", "route", "--json"]));
+  assert.ok(j.rows.length, "the Claude fall-through is always printed");
+  for (const r of j.rows) {
+    // Scores are integers, so the half-open edge translates EXACTLY. This is a
+    // reading of the notation, never an approximation of it.
+    const hi = r.to >= 100 ? 100 : r.to - 1;
+    assert.equal(r.range, r.from === hi ? `score ${r.from}` : `scores ${r.from} to ${hi}`, r.band);
+    assert.equal(typeof r.meaning, "string", `${r.band} says what a score in it describes`);
+    assert.ok(r.meaning.length > 10, r.band);
+  }
+  // The anchors the per-row meaning is built from, so a reader can see the whole
+  // ladder rather than only the rows they happen to have.
+  assert.ok(Array.isArray(j.band_meanings) && j.band_meanings.length >= 4);
+  assert.equal(j.band_meanings[0].from, 0);
+  assert.equal(j.band_meanings[j.band_meanings.length - 1].to, 100);
+
+  // "--json is not a summary" (v0.49.1), and it runs in BOTH directions: a field
+  // one surface prints and the other omits is drift no lint can see.
+  const human = run(p, ["extra", "route"]).stdout;
+  for (const r of j.rows) assert.ok(human.includes(r.range), `the human path prints ${r.band}'s range`);
+  for (const m of j.band_meanings) assert.ok(human.includes(m.meaning), "and every anchor's sentence");
+});
+
 test("route set: overlap is refused BY NAME; a gap is Claude and keeps its slot", async () => {
   const p = project();
   await armed(p, "0-30");

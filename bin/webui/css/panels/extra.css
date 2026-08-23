@@ -169,6 +169,18 @@
 }
 .ex-result-ok { border-left: 3px solid var(--ok); }
 .ex-result-bad { border-left: 3px solid var(--bad); }
+/* v0.53.0 — the verdict LANDS rather than appears. A probe has no known
+   duration, so the dot loops while it runs (`.ex-wire-dot`, removed outright
+   under reduced motion) and this is the punctuation at the end of it. ONE SHOT,
+   finishing at its resting state, so 04-motion.css can cap it without freezing
+   anything half way — and the border colour still carries the whole result with
+   motion off. */
+.ex-result-ok,
+.ex-result-bad { animation: ex-land var(--dur) var(--ease); }
+@keyframes ex-land {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: none; }
+}
 
 /* `hidden` LOSES to an author `display`, which is how a form ends up showing the
    fields it just hid: `.field` is a flex box and `.banner` is a flex box, and an
@@ -187,94 +199,93 @@
 
 .ex-save { display: grid; gap: var(--sp-2); margin-top: var(--sp-2); }
 
-/* --- the routing rail (W12) ---------------------------------------------- */
-/* One horizontal 0→100 axis. A segment is `var(--w)` of it with a readable
-   MINIMUM, so a rail too narrow for its labels SCROLLS inside its own box and is
-   never squeezed — geometry solved from the box, not from a fraction of the
-   container. An UNMAPPED range keeps its slot and is drawn in Claude's colour
-   with the agent it resolves to. */
+/* --- the band ladder (v0.53.0) ------------------------------------------- */
+/* ONE VERTICAL LADDER, and the row you read is the row you edit.
+   It replaces a horizontal 0→100 rail plus a separate list of editable rows —
+   the same data twice, with only the second copy interactive.
 
-.ex-rail-wrap {
-  overflow-x: auto;
-  padding-bottom: var(--sp-2);
-  scrollbar-width: thin;
-  scrollbar-color: var(--line) transparent;
-}
-.ex-rail-wrap::-webkit-scrollbar { width: 8px; height: 8px; }
-.ex-rail-wrap::-webkit-scrollbar-track { background: transparent; }
-.ex-rail-wrap::-webkit-scrollbar-thumb { background: var(--line); border-radius: 4px; }
+   The proportional bar is a width INSIDE the row rather than the row's own
+   width. That is the whole geometric fix: the old rail gave each segment
+   `flex: 0 0 var(--w)` with `min-width: 128px`, so the floor fought the
+   percentage and a 10-point band came out nearly as wide as a 30-point one
+   while the axis underneath promised they were to scale. A full-width track
+   holding a `var(--w)` bar is honest at every viewport, needs no floor, needs
+   no horizontal scroll, and can never clip a target name. */
 
-.ex-rail {
-  display: flex;
-  gap: 2px;
-  align-items: stretch;
-  margin: var(--sp-2) 0 var(--sp-1);
-}
-.ex-seg {
-  flex: 0 0 var(--w);
-  /* The floor that makes the rail scroll instead of collapsing: a 5-point band
-     is 5% of the axis and still has to fit the word `orc-executor-opus-5-high`
-     without being squeezed to a sliver. */
-  min-width: 128px;
-  padding: var(--sp-2);
-  border-radius: var(--radius-sm);
-  display: grid;
-  gap: 2px;
-  align-content: start;
-  overflow: hidden;
-}
-.ex-seg-claude { background: var(--accent-wash); border: 1px solid var(--accent-dim); }
-.ex-seg-extra { background: var(--ok-wash); border: 1px solid var(--ok); }
-.ex-seg-band { font-family: var(--mono); font-size: 11px; color: var(--text-faint); }
-.ex-seg-target {
-  font-family: var(--mono);
-  font-size: 12px;
-  color: var(--text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-/* R11's SECOND animation: a staged segment grows into its new colour, so the
-   trade is visible before anything is written. It runs ONCE and finishes at its
-   resting state, unlike the connect pulse — which is why 04-motion.css can leave
-   the rail alone and only remove the infinite one. The dashed edge is what
-   carries the meaning with motion off. */
-.ex-seg-staged {
-  border-style: dashed;
-  animation: ex-grow var(--dur-slow) var(--ease);
-}
-@keyframes ex-grow {
-  from { transform: scaleX(.55); transform-origin: left center; opacity: .35; }
-  to   { transform: none; opacity: 1; }
-}
-
-.ex-seg-sub { display: flex; flex-wrap: wrap; gap: 2px; align-items: center; }
-/* A chip must not push the segment wider than the geometry assumes — the same
-   guard the crosslink vault nodes needed. */
-.ex-seg-sub .chip { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ex-rail-axis {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  font-size: 11px;
-  color: var(--text-faint);
-  font-variant-numeric: tabular-nums;
-}
-.ex-rail-axis-label { text-transform: uppercase; letter-spacing: .04em; }
-
-.ex-route-rows { display: grid; gap: var(--sp-2); margin-top: var(--sp-3); }
-.ex-route-row {
+.ex-ladder { display: grid; gap: var(--sp-1); margin: var(--sp-3) 0 var(--sp-2); }
+.ex-band {
   border: 1px solid var(--line-soft);
   border-radius: var(--radius-sm);
-  padding: var(--sp-2) var(--sp-3);
-  display: grid;
-  gap: var(--sp-2);
+  overflow: hidden;
 }
-.ex-route-band { font-weight: 600; }
+.ex-band.open { border-color: var(--accent); }
+/* A GRID, and it DECLARES ITS COLUMNS — the .run-card lesson. Five children,
+   five columns, every one of them fixed except the two that hold text. */
+.ex-band-head {
+  display: grid;
+  grid-template-columns: minmax(0, 22%) minmax(0, auto) minmax(0, 1fr) auto 16px;
+  align-items: center;
+  gap: var(--sp-2);
+  width: 100%;
+  padding: var(--sp-2) var(--sp-3);
+  background: none;
+  border: 0;
+  text-align: left;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.ex-band-head:hover { background: var(--surface-2); }
+.ex-band.open > .ex-band-head { background: var(--surface-2); }
+.ex-band-track {
+  display: block;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--line-soft);
+  overflow: hidden;
+}
+/* The one-shot entrance: the bar grows to its width on first paint and FINISHES
+   at its resting state, so 04-motion.css can cap it without freezing anything
+   mid-way — the one-shot rule the staged-segment grow already followed. */
+.ex-band-bar {
+  display: block;
+  width: var(--w);
+  height: 100%;
+  border-radius: 999px;
+  animation: ex-grow var(--dur-slow) var(--ease);
+}
+.ex-band-claude { background: var(--accent-dim); }
+.ex-band-extra { background: var(--ok); }
+/* A staged bar is dashed as well as animated: the dashed edge is what carries
+   the meaning when motion is off. */
+.ex-band-staged { outline: 1px dashed var(--text-faint); outline-offset: 1px; }
+@keyframes ex-grow {
+  from { transform: scaleX(.15); transform-origin: left center; opacity: .35; }
+  to   { transform: none; opacity: 1; }
+}
+.ex-band-mid { display: grid; gap: 1px; min-width: 0; }
+.ex-band-label { font-size: 12px; font-weight: 600; white-space: nowrap; }
+.ex-band-range { font-size: 11px; white-space: nowrap; }
+/* NEVER TRUNCATED. The target is the most important fact in the row, and it was
+   the one thing the old rail clipped. It wraps instead. */
+.ex-band-target { font-size: 12px; min-width: 0; overflow-wrap: anywhere; }
+.ex-band-chips { display: flex; flex-wrap: wrap; gap: 2px; align-items: center; justify-content: flex-end; }
+.ex-band-caret { color: var(--text-faint); transition: transform var(--dur-fast) var(--ease); justify-self: end; }
+.ex-band.open .ex-band-caret { transform: rotate(90deg); }
+.ex-band-pane:not(:empty) {
+  padding: var(--sp-3);
+  border-top: 1px solid var(--line-soft);
+}
+
+/* THE LEGEND. Two colours were carrying the whole meaning of the picture and
+   neither was ever named anywhere on the page. */
+.ex-legend { display: flex; flex-wrap: wrap; gap: var(--sp-3); align-items: center; }
+.ex-legend-item { display: inline-flex; align-items: center; gap: var(--sp-2); }
+.ex-legend-swatch { width: 18px; height: 10px; border-radius: 999px; flex: 0 0 auto; }
+
 .ex-route-controls { display: flex; flex-wrap: wrap; gap: var(--sp-2); align-items: center; }
 .ex-route-controls .text-input { flex: 1 1 160px; min-width: 0; }
 .ex-route-staged { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
-.ex-route-slot:empty { display: none; }
 
 /* --- what it ran, and what it cost (W12) ---------------------------------- */
 /* Every routed band keeps its slot, including one nothing has run through — a
@@ -333,6 +344,10 @@
   gap: var(--sp-2);
 }
 .ex-tool > .row-actions:last-child { margin-top: auto; }
+/* v0.53.0 — and when the state's diagnostics disclosure is the last child, IT
+   absorbs the slack instead. Same rule, one child further down: whatever is at
+   the bottom of the card lines up across the row. */
+.ex-tool > .ex-more:last-child { margin-top: auto; }
 /* A CHIP STATES A FACT. It is never a layout element and it never stretches —
    in either axis. */
 .ex-tool > .chip { align-self: flex-start; flex: 0 0 auto; }
@@ -346,6 +361,20 @@
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+/* The disclosure a tool card's diagnostics live behind. A native <details>, so
+   the marker is the browser's — only the summary needs to read like the rest of
+   the panel. */
+.ex-more { margin-top: var(--sp-1); }
+.ex-more > summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text-dim);
+  list-style: revert;
+}
+.ex-more > summary:hover { color: var(--text); }
+.ex-more[open] > summary { margin-bottom: var(--sp-2); }
+.ex-more > *:not(summary) { margin-top: var(--sp-2); }
+
 .ex-tool-absent { border-color: var(--bad); }
 .ex-tool-outdated,
 .ex-tool-unauthenticated { border-color: var(--warn); }
