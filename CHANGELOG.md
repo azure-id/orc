@@ -10,6 +10,43 @@ Format: `### v<version> — <title> _(<date>)_`.
 
 ---
 
+### v0.53.1 — "up to date" now names what it checked _(2026-08-23)_
+
+**A one-line diagnostic for the update check that could not be questioned.**
+
+The update check was never broken, and that was the problem. `orc version` reads
+`package.json` from `UPDATE_URL`; `orc upgrade` installs from `TARBALL_SPEC`.
+They are two different URLs on what is *normally* the same branch — and only the
+second one was ever printed, on either surface. The Maintenance panel's `source`
+row shows the install tarball, so a reader concludes the version comparison read
+main too.
+
+That gap makes a true statement unfalsifiable. A maintainer who cut v0.53.0 on an
+unmerged release branch saw `✓ up to date` against a main that was still at
+0.52.0, with nothing on screen to distinguish "you are current" from "the release
+never reached the ref this reads". There is no way to tell those apart from the
+output, which is why it reads as a defect in the checker.
+
+So the number and the ref it came from now travel together, everywhere the number
+is reported:
+
+- **`orc version`** prints `✓ up to date (azure-id/orc@main is at 0.52.0)`, and
+  the offline branch names the unreachable ref rather than saying "source".
+- **`orc version --json`** gains `checked_source` (the URL) and `checked_ref` (the
+  `owner/repo@ref` label). This is not a new idea: `orc changelog --json` has
+  always carried its own `source`, and this is that field's missing twin — a
+  field the human path implied and the JSON omitted.
+- **`orc ui` ▸ Maintenance** gains a `version read from` row beside `source`, so
+  the two URLs are visibly two URLs. The fixture carries both fields.
+
+`checkSourceLabel()` shortens a `raw.githubusercontent.com` URL to
+`owner/repo@ref` and returns anything else verbatim — a custom `ORC_VERSION_URL`
+is shown as written rather than mangled into a label that does not describe it.
+
+**Nothing about the check itself changed.** No new request, no new cache, no
+change to the 24h TTL, `ORC_NO_UPDATE_CHECK` or the comparison. The only thing
+that is new is that the answer can now be checked.
+
 ### v0.53.0 — the schema the provider rejected, and a routing table you can read _(2026-08-23)_
 
 **One outage, one defect visible at a glance, and the Extra panel rebuilt.**

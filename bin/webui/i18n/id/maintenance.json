@@ -27,6 +27,7 @@
   "maintenance.available": "tersedia",
   "maintenance.availableUnknown": "tidak bisa diperiksa (luring?)",
   "maintenance.source": "sumber",
+  "maintenance.checkedAt": "versi dibaca dari",
   "maintenance.updateAvailable": "pembaruan tersedia",
   "maintenance.yes": "ya",
   "maintenance.no": "tidak",

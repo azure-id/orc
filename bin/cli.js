@@ -24626,6 +24626,21 @@ const CHANGELOG_URL =
 const CACHE_FILE = path.join(os.homedir(), ".orc-update-check.json");
 const CHECK_TTL_MS = 24 * 60 * 60 * 1000;
 
+// The version check and the install are two different URLs on (normally) the
+// same branch, and only the install one was ever printed. That gap is what makes
+// "it says up to date and it is not" undiagnosable: a maintainer reads
+// `source: …/heads/main.tar.gz`, concludes the check read main, and never learns
+// that the release they cut is still sitting on an unmerged branch. So say which
+// ref the NUMBER came from, on every surface that reports the number.
+// `orc changelog --json` has always carried its own `source`; this is that field's
+// missing twin, not a new idea.
+function checkSourceLabel(url) {
+  const m = String(url).match(
+    /^https:\/\/raw\.githubusercontent\.com\/([^/]+)\/([^/]+)\/([^/]+)\//
+  );
+  return m ? `${m[1]}/${m[2]}@${m[3]}` : String(url);
+}
+
 function currentVersion() {
   try {
     return require(path.join(PKG_ROOT, "package.json")).version || "0.0.0";
@@ -24752,18 +24767,24 @@ async function version() {
       // What `orc upgrade` would actually install — the resolved source matters
       // more than the version number when approving a network mutation.
       install_spec: process.env.ORC_INSTALL_SPEC || readLastGoodSpec() || TARBALL_SPEC,
+      // Where `latest` was read FROM. Not the same URL as install_spec, and the
+      // only thing that distinguishes "you are current" from "the release never
+      // reached the ref this reads".
+      checked_source: UPDATE_URL,
+      checked_ref: checkSourceLabel(UPDATE_URL),
       check_disabled: updateCheckDisabled(),
     });
   }
   console.log(`orc ${cur}`);
   if (updateCheckDisabled()) return;
   const latest = await getLatestVersion({ force: true });
+  const from = checkSourceLabel(UPDATE_URL);
   if (!latest) {
-    console.log("(couldn't check for updates — offline or source unreachable)");
+    console.log(`(couldn't check for updates — offline or ${from} unreachable)`);
   } else if (semverGt(latest, cur)) {
     console.log(`⬆  newer version available: ${latest} — run \`orc upgrade\``);
   } else {
-    console.log("✓ up to date");
+    console.log(`✓ up to date (${from} is at ${latest})`);
   }
 }
 

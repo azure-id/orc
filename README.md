@@ -6,14 +6,14 @@
 
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
-![Version](https://img.shields.io/badge/version-0.53.0-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.53.1-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
 ![Dependencies](https://img.shields.io/badge/dependencies-zero-lightgrey.svg?style=for-the-badge)
 ![GitHub stars](https://img.shields.io/github/stars/azure-id/orc?style=for-the-badge&color=yellow)
 
-**Latest: v0.53.0** · updated 2026-08-23 · [full changelog](CHANGELOG.md)
+**Latest: v0.53.1** · updated 2026-08-23 · [full changelog](CHANGELOG.md)
 
 **🇮🇩 [Baca dalam Bahasa Indonesia](README-id.md)**
 
@@ -439,6 +439,23 @@ a current audit: [EVAL-REPORT.md](EVAL-REPORT.md).
 
 **Full history: [CHANGELOG.md](CHANGELOG.md)** — or `orc changelog`, which prints
 only what is newer than the version you have.
+
+### v0.53.1 — "up to date" now names what it checked _(2026-08-23)_
+
+**A one-line diagnostic for the update check that could not be questioned.**
+
+- **`orc version` and the Maintenance panel print the ref the number came from.**
+  The update check reads `package.json` from one URL and `orc upgrade` installs
+  from another; only the install URL was ever shown. So a maintainer whose
+  release was still sitting on an unmerged branch read `source:
+  …/heads/main.tar.gz`, concluded the check had read main, and had no way to see
+  that main was a release behind. **The number and the ref it was read from now
+  travel together** — `up to date (azure-id/orc@main is at 0.52.0)` answers in one
+  line what previously took a debugging session.
+- **`orc version --json` gains `checked_source` + `checked_ref`.** Its sibling
+  `orc changelog --json` has carried its own `source` all along; this is that
+  field's missing twin. No behaviour changed — the check was always correct, it
+  just could not be falsified.
 
 ### v0.53.0 — the schema the provider rejected, and a routing table you can read _(2026-08-23)_
 

@@ -27,6 +27,7 @@
   "maintenance.available": "available",
   "maintenance.availableUnknown": "could not check (offline?)",
   "maintenance.source": "source",
+  "maintenance.checkedAt": "version read from",
   "maintenance.updateAvailable": "update available",
   "maintenance.yes": "yes",
   "maintenance.no": "no",

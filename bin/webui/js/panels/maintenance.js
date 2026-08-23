@@ -139,6 +139,10 @@ async function previewAction(action, body) {
         [t("maintenance.installed"), pv.version],
         [t("maintenance.available"), pv.latest || t("maintenance.availableUnknown")],
         [t("maintenance.source"), pv.install_spec],
+        // The install URL and the URL the version number was read from are two
+        // different things. Showing only the first is how "up to date" becomes
+        // unfalsifiable from this panel.
+        [t("maintenance.checkedAt"), pv.checked_ref || pv.checked_source || t("maintenance.availableUnknown")],
         [t("maintenance.updateAvailable"), pv.update_available ? t("maintenance.yes") : t("maintenance.no")],
       ])
     );
