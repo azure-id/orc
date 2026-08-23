@@ -240,7 +240,7 @@ test("i18n: the string tables are served, and server code never is", () => {
    would be worse than none, because people would trust it. */
 function proseKeys() {
   const md = fs.readFileSync(path.join(WEBUI, "i18n", "TERMS.md"), "utf8");
-  const m = /```prose-keys\n([\s\S]*?)```/.exec(md);
+  const m = /```prose-keys\r?\n([\s\S]*?)```/.exec(md);
   assert.ok(m, "TERMS.md no longer carries the prose-keys fence");
   return new Set(m[1].split("\n").map((l) => l.trim()).filter(Boolean));
 }
