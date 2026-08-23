@@ -44,5 +44,9 @@
   "maintenance.applyUpgrade": "Upgrade sekarang",
   "maintenance.apply": "Terapkan",
   "maintenance.started": "Menjalankan: {command}",
+  "maintenance.willRestart": "Ini mengubah kode yang dijalankan panel. Setelah selesai, panel dijalankan lagi pada alamat yang sama dan halaman ini dimuat ulang.",
+  "maintenance.restarting": "Selesai. Menjalankan panel lagi pada alamat yang sama, lalu memuat ulang halaman ini.",
+  "maintenance.restartFailed": "Panel tidak dapat dijalankan lagi sendiri. Panel masih bekerja, tetapi masih memakai kode lama. Jalankan dua perintah ini:",
+  "maintenance.restartTimeout": "Panel tidak menjawab lagi tepat waktu.",
   "maintenance.startFail": "Tidak bisa memulainya."
 }

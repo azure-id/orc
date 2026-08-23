@@ -23046,6 +23046,14 @@ async function extraDispatch(claudeDir) {
   );
   payload.trace_line = extraTraceLine(payload);
   payload.trace_extras = extraTraceExtras(payload);
+  // WRITTEN HERE, BY THE HAND THAT HOLDS THE NUMBERS. The trace line above is
+  // still the lane’s to relay, and it still should — but whether it does is now
+  // irrelevant to whether the spend was recorded. Best effort by construction:
+  // it never throws, and a record that could not be written never takes the
+  // dispatch down with it.
+  const logged = appendExtraSpend(claudeDir, payload);
+  payload.spend_logged = !!logged;
+  payload.spend_log = extraSpendPath(claudeDir);
   const code = payload.outcome === "done" ? 0 : payload.outcome === "partial" ? 4 : 1;
   if (asJson) emitJson(payload, code);
   extraDispatchRender(payload);
@@ -23065,10 +23073,11 @@ async function extraDispatch(claudeDir) {
 // engine api's `cw=0` is a MEASURED zero, which is the opposite fact. The two
 // must never be normalised together, so they are not rendered the same.
 function extraTraceLine(p) {
-  const secs = Math.max(0, Math.round((p.duration_ms || 0) / 1000));
-  const dur = `${Math.floor(secs / 60)}m${String(secs % 60).padStart(2, "0")}s`;
-  const u = p.usage;
-  const tok = u ? `${u.input}/${u.cache_write}/${u.cache_read}/${u.output}` : "none";
+  // Rendered through the SAME two helpers the spend log uses. One idea of how a
+  // token vector and a duration are written down, or the dedupe that joins the
+  // two sources would be comparing two spellings of the same dispatch.
+  const dur = extraDurStr(p.duration_ms);
+  const tok = extraTokStr(p.usage);
   return (
     `EXTRA ${p.profile}/${p.model_requested || "?"} engine=${p.engine} ` +
     `task=${p.task_id || "?"} band=${p.band || "?"} tok=${tok} outcome=${p.outcome} dur=${dur}`
@@ -23144,6 +23153,14 @@ function extraDispatchRender(p) {
     console.log(ui.color.gray("  trace   " + p.trace_line));
     for (const x of p.trace_extras || []) console.log(ui.color.gray("          " + x));
   }
+  // Say whether the durable record exists, every time. A dispatch that was NOT
+  // logged is one `orc extra stats` will never see, and the only moment anyone
+  // can act on that is now.
+  console.log(
+    p.spend_logged
+      ? ui.color.gray("  logged  " + p.spend_log)
+      : "  " + ui.mark.warn("NOT LOGGED — this dispatch could not be written to " + p.spend_log + "; orc extra stats will not count it.")
+  );
   console.log("");
 }
 
@@ -23515,6 +23532,166 @@ function extraPrivacy(claudeDir, name) {
   );
 }
 
+// ══ THE FOREIGN SPEND LOG — written by the CLI, never remembered ═══════════
+//
+// `extraTraceLine` composes the `EXTRA …` line and the lane is supposed to copy
+// it VERBATIM into the phase packet, which the trace writer then writes. That is
+// a RELAY, and a relay through a model is the remembered-not-dispatched pattern
+// this repo has already lost to twice (the v0.32.0 narration lesson). It lost to
+// it a third time here. Two graded runs, both real foreign dispatches:
+//
+//   · one reshaped the line — `EXTRA Codex/gpt-5.4-mini :: engine=cli …`, with
+//     the trace's own `verb … :: tail` separator inserted, which the parser did
+//     not accept. A logged dispatch that reads as zero.
+//   · one dropped the line entirely and folded the token vector into a free-form
+//     `VERIFY …` sentence. A dispatch that cost real money and left NO parsable
+//     record at all.
+//
+// Both surfaced identically: `orc extra stats` said "0 dispatches from 2
+// traces", `orc extra rates` had nothing to price, and the Spending tab read
+// `0 tasks sent`. A cost report that reads zero when money was spent is worse
+// than no report, because a zero gets believed.
+//
+// So the bridge writes it down ITSELF, at the moment it holds the numbers, on
+// the same principle as `RESUME.md` in v0.49.5: the fact is recorded by the hand
+// that computed it. One JSON object per line, appended, never rewritten.
+//
+// The trace line is NOT retired — it is the human-readable narrative, it is what
+// `/orc-retro` reads, and it is what a run's own file has to show. It is now the
+// SECOND source rather than the only one, and the two are DEDUPED on the same
+// eight fields the line itself carries, so a lane that relays correctly is
+// counted exactly once.
+const EXTRA_SPEND_LOG = "extra-spend.jsonl";
+
+function extraSpendPath(claudeDir) {
+  return path.join(claudeDir, "orc", EXTRA_SPEND_LOG);
+}
+
+// `tok=none` IS A REAL VALUE — see extraTraceLine. Both renderers live here so
+// the spend log and the trace line can never disagree about the same numbers.
+const extraTokStr = (u) => (u ? `${u.input}/${u.cache_write}/${u.cache_read}/${u.output}` : "none");
+const extraDurStr = (ms) => {
+  const secs = Math.max(0, Math.round((ms || 0) / 1000));
+  return `${Math.floor(secs / 60)}m${String(secs % 60).padStart(2, "0")}s`;
+};
+
+// The dedupe identity, and it is deliberately the EXACT field set the trace line
+// carries: anything the line cannot express cannot be used to tell two rows
+// apart, or a correctly-relayed dispatch would be counted twice.
+const extraRowKey = (r) =>
+  [r.profile, r.model, r.engine, r.task, r.band, extraTokStr(r.usage), r.outcome, r.dur].join("|");
+
+// Which run this dispatch belonged to. Read from the trace pointer, best effort:
+// an unattributed row is still a real cost, so a missing pointer must never
+// discard the record.
+function extraCurrentRun(claudeDir) {
+  try {
+    const dir = resolveLogDir(claudeDir);
+    const cur = fs.readFileSync(path.join(dir, ".current"), "utf8").trim();
+    if (!cur) return null;
+    const m = TRACE_NAME.exec(cur);
+    return { trace: cur, slug: m ? m[2] : null, lane: m ? m[1] : null };
+  } catch (_) {
+    return null;
+  }
+}
+
+// Best effort, ALWAYS. A spend record that could not be written must never take
+// the dispatch down with it — the work was done and the caller needs its answer.
+function appendExtraSpend(claudeDir, p) {
+  try {
+    const run = extraCurrentRun(claudeDir);
+    const now = new Date();
+    const rec = {
+      v: 1,
+      ts: now.toISOString(),
+      // LOCAL date, because `--since` filters trace FILENAMES, whose DDMMYY
+      // stamp is local. Two date bases in one report would silently drop rows
+      // near midnight.
+      date: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`,
+      run: run ? run.slug : null,
+      lane: run ? run.lane : null,
+      trace: run ? run.trace : null,
+      profile: p.profile,
+      provider: p.provider || null,
+      model: p.model_requested || "?",
+      model_reported: p.model_reported || null,
+      engine: p.engine,
+      task: p.task_id || "?",
+      band: p.band || "?",
+      score: typeof p.score === "number" ? p.score : null,
+      usage: p.usage || null,
+      outcome: p.outcome,
+      duration_ms: p.duration_ms || 0,
+      dur: extraDurStr(p.duration_ms),
+      reason: p.reason || null,
+      served_by: Array.isArray(p.served_by) && p.served_by.length ? p.served_by : null,
+      reroute: !!p.reroute,
+      // The line the lane is supposed to relay, stored beside the numbers it
+      // came from. A trace that never received it can still be reconciled.
+      trace_line: p.trace_line || null,
+      // The FALLBACK TARGET, not the fallback itself: only the caller knows
+      // whether it re-dispatched, so this records who it would have been.
+      fallback_to: !p.ok && p.fallback_to && p.fallback_to.agent ? p.fallback_to.agent : null,
+    };
+    fs.mkdirSync(path.dirname(extraSpendPath(claudeDir)), { recursive: true });
+    fs.appendFileSync(extraSpendPath(claudeDir), JSON.stringify(rec) + "\n");
+    return rec;
+  } catch (_) {
+    return null;
+  }
+}
+
+// Read it back. An unparseable line is SKIPPED and COUNTED, never fatal: this is
+// an append-only log written by concurrent dispatches, so one torn line must not
+// cost the report every row after it.
+function readExtraSpend(claudeDir, cutoff) {
+  const file = extraSpendPath(claudeDir);
+  let text = "";
+  try {
+    text = fs.readFileSync(file, "utf8");
+  } catch (_) {
+    return { file, rows: [], entries: 0, unreadable: 0 };
+  }
+  const rows = [];
+  let unreadable = 0;
+  for (const line of text.split(/\r?\n/)) {
+    if (!line.trim()) continue;
+    let r;
+    try {
+      r = JSON.parse(line);
+    } catch (_) {
+      unreadable++;
+      continue;
+    }
+    if (!r || !r.profile || !r.outcome) {
+      unreadable++;
+      continue;
+    }
+    const date = r.date || String(r.ts || "").slice(0, 10);
+    if (cutoff && date < cutoff) continue;
+    rows.push({
+      source: "spend-log",
+      run: r.trace || r.run || null,
+      date,
+      profile: r.profile,
+      provider: r.provider || null,
+      model: r.model || "?",
+      engine: r.engine || "?",
+      task: r.task || "?",
+      band: r.band || "?",
+      usage: r.usage || null,
+      outcome: r.outcome,
+      dur: r.dur || extraDurStr(r.duration_ms),
+      model_reported: r.model_reported || null,
+      served_by: r.served_by || null,
+      reroute: !!r.reroute,
+      fallback_to: r.fallback_to || null,
+    });
+  }
+  return { file, rows, entries: rows.length, unreadable };
+}
+
 // ══ orc extra stats / rates — THE FLYWHEEL ══════════════════════════════════
 //
 // The question this exists to answer, and it is the only one that matters about
@@ -23532,7 +23709,14 @@ function extraPrivacy(claudeDir, name) {
 // scan of an on-demand report is the cheaper mistake.
 
 // `EXTRA ds/deepseek-v4 engine=api task=T3 band=[0,30) tok=1/2/3/4 outcome=done dur=0m41s`
-const EXTRA_LINE_RE = /\bEXTRA\s+(\S+?)\/(\S+)\s+engine=(\S+)\s+task=(\S+)\s+band=(\S+)\s+tok=(\S+)\s+outcome=(\S+)\s+dur=(\S+)/;
+//
+// The ` :: ` is OPTIONAL, and accepting it is a real fix rather than a
+// courtesy. Every other verb in a trace is written `VERB … :: tail`, so a trace
+// writer handed this line reaches for that separator by reflex — one graded run
+// wrote `EXTRA Codex/gpt-5.4-mini :: engine=cli …` and the whole run reported as
+// zero foreign dispatches. A line that is faithful about the numbers and off by
+// two characters in its punctuation is a line that must still parse.
+const EXTRA_LINE_RE = /\bEXTRA\s+(\S+?)\/(\S+)\s+(?:::\s+)?engine=(\S+)\s+task=(\S+)\s+band=(\S+)\s+tok=(\S+)\s+outcome=(\S+)\s+dur=(\S+)/;
 const EXTRA_SUB_RE = /\bEXTRA\s+substitution\s+task=(\S+)\s*::\s*requested=(\S+)\s+reported=(\S+)/;
 const EXTRA_REROUTE_RE = /\bEXTRA\s+reroute\s+task=(\S+)\s*::\s*(\S+)/;
 const EXTRA_FALLBACK_RE = /\bEXTRA\s+fallback\s+task=(\S+)\s*::\s*(\S+)\s+→\s+(\S+)/;
@@ -23555,6 +23739,82 @@ function foreignRate(table, provider, model) {
   return null;
 }
 
+// A dispatch return the LANE saved to disk. Not a third opinion — it is the
+// bridge's OWN `--json` payload, written verbatim by whoever ran it, so reading
+// it back is reading the CLI's own arithmetic rather than a narrative about it.
+// This is what makes the two dispatches that predate the spend log recoverable
+// at all: both had a correct `trace_line` sitting in the run folder while the
+// trace, the stats report and the Spending tab all read zero.
+//
+// The shape check is deliberately strict: `dispatched: true` AND a `trace_line`
+// this parser accepts. Anything else in a run folder is ignored, so this can
+// never turn some other JSON into a cost figure.
+function readExtraReturns(claudeDir) {
+  const rows = [];
+  let files = 0;
+  let root;
+  try {
+    root = resolveRunDir(claudeDir);
+  } catch (_) {
+    return { rows, files };
+  }
+  let slugs = [];
+  try {
+    slugs = fs.readdirSync(root, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name);
+  } catch (_) {
+    return { rows, files };
+  }
+  for (const slug of slugs) {
+    let names = [];
+    try {
+      names = fs.readdirSync(path.join(root, slug)).filter((f) => f.endsWith(".json"));
+    } catch (_) {
+      continue;
+    }
+    for (const name of names) {
+      const full = path.join(root, slug, name);
+      let j;
+      try {
+        if (fs.statSync(full).size > 2_000_000) continue;
+        const text = fs.readFileSync(full, "utf8");
+        // Cheap pre-filter, the same shape as the traces' `indexOf("EXTRA ")`.
+        // A run folder holds slices, checkpoints and worktree snapshots, and
+        // parsing every one of them to find the two that are dispatch returns
+        // is the cost this avoids.
+        if (text.indexOf('"trace_line"') === -1) continue;
+        j = JSON.parse(text);
+      } catch (_) {
+        continue;
+      }
+      if (!j || j.dispatched !== true || typeof j.trace_line !== "string") continue;
+      if (!EXTRA_LINE_RE.test(j.trace_line)) continue;
+      files++;
+      rows.push({
+        source: "run-return",
+        // The RUN FOLDER names it, which is a fact on disk. There is no date in
+        // the payload and none is invented from an mtime — see below for what
+        // that costs a `--since` query.
+        run: slug + "/" + name,
+        date: null,
+        profile: j.profile,
+        provider: j.provider || null,
+        model: j.model_requested || "?",
+        engine: j.engine || "?",
+        task: j.task_id || "?",
+        band: j.band || "?",
+        usage: j.usage || null,
+        outcome: j.outcome,
+        dur: extraDurStr(j.duration_ms),
+        model_reported: j.model_reported || null,
+        served_by: Array.isArray(j.served_by) && j.served_by.length ? j.served_by : null,
+        reroute: !!j.reroute,
+        fallback_to: !j.ok && j.fallback_to && j.fallback_to.agent ? j.fallback_to.agent : null,
+      });
+    }
+  }
+  return { rows, files };
+}
+
 function extraStatsScan(claudeDir) {
   const dir = resolveLogDir(claudeDir);
   // Same convention as `orc stats`: --since filters on the FILENAME date,
@@ -23566,11 +23826,32 @@ function extraStatsScan(claudeDir) {
     names = fs.readdirSync(dir).filter((f) => f.endsWith(".txt"));
   } catch (_) {}
 
-  const rows = [];
+  // SOURCE 1 — the spend log, which is the one the CLI wrote itself. It is read
+  // FIRST so that a dispatch is counted whether or not the lane relayed its
+  // trace line, and so that its own richer fields (provider, reported model,
+  // serving providers) win over what a one-line regex can recover.
+  const spend = readExtraSpend(claudeDir, cutoff);
+  const rows = spend.rows.slice();
   const subs = [];
   const reroutes = [];
   const fallbacks = [];
+  const seen = new Set(rows.map(extraRowKey));
+  for (const r of spend.rows) {
+    if (r.model_reported && r.model_reported !== "unknown" && r.model_reported !== r.model)
+      subs.push({ run: r.run, task: r.task, requested: r.model, reported: r.model_reported, source: "spend-log" });
+    if (r.reroute && r.served_by && r.served_by.length)
+      reroutes.push({ run: r.run, task: r.task, providers: r.served_by, source: "spend-log" });
+    if (r.fallback_to)
+      fallbacks.push({ run: r.run, task: r.task, reason: r.outcome, agent: r.fallback_to, source: "spend-log" });
+  }
+
+  // SOURCE 2 — the traces. Still read, for three reasons: they cover every
+  // dispatch made before this log existed, they are the only place an `EXTRA
+  // fallback` line lands (the CALLER emits that, after it re-dispatches — the
+  // bridge cannot know it happened), and a run whose lane relayed correctly
+  // should reconcile rather than silently disagree.
   let filesRead = 0;
+  let recovered = 0;
   for (const name of names) {
     const m = TRACE_NAME.exec(name);
     const g = m ? null : TRACE_GENERIC.exec(name);
@@ -23591,7 +23872,8 @@ function extraStatsScan(claudeDir) {
     for (const line of text.split(/\r?\n/)) {
       const d = EXTRA_LINE_RE.exec(line);
       if (d) {
-        rows.push({
+        const row = {
+          source: "trace",
           run: name,
           date: stamp,
           profile: d[1],
@@ -23602,24 +23884,80 @@ function extraStatsScan(claudeDir) {
           usage: parseExtraTok(d[6]),
           outcome: d[7],
           dur: d[8],
-        });
+        };
+        // DEDUPE on the eight fields the line itself carries. A lane that
+        // relayed faithfully must be counted ONCE — double-counting a correct
+        // relay would punish exactly the behaviour the contract asks for.
+        const key = extraRowKey(row);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        rows.push(row);
+        recovered++;
         continue;
       }
       const su = EXTRA_SUB_RE.exec(line);
       if (su) {
-        subs.push({ run: name, task: su[1], requested: su[2], reported: su[3] });
+        subs.push({ run: name, task: su[1], requested: su[2], reported: su[3], source: "trace" });
         continue;
       }
       const rr = EXTRA_REROUTE_RE.exec(line);
       if (rr) {
-        reroutes.push({ run: name, task: rr[1], providers: rr[2].split(",") });
+        reroutes.push({ run: name, task: rr[1], providers: rr[2].split(","), source: "trace" });
         continue;
       }
       const fb = EXTRA_FALLBACK_RE.exec(line);
-      if (fb) fallbacks.push({ run: name, task: fb[1], reason: fb[2], agent: fb[3] });
+      if (fb) fallbacks.push({ run: name, task: fb[1], reason: fb[2], agent: fb[3], source: "trace" });
     }
   }
-  return { dir, rows, subs, reroutes, fallbacks, files_scanned: filesRead, since: cutoff };
+  // SOURCE 3 — the dispatch returns the lane saved into its own run folder.
+  // Pure backfill: it only ever ADDS a dispatch the other two sources did not
+  // already have, and it is how a run made before the spend log existed becomes
+  // visible instead of staying a permanent zero.
+  const ret = readExtraReturns(claudeDir);
+  let backfilled = 0;
+  let undatedSkipped = 0;
+  for (const r of ret.rows) {
+    const key = extraRowKey(r);
+    if (seen.has(key)) continue;
+    // A saved return carries no date, and NONE IS INVENTED — an mtime is when a
+    // file was touched, not when a model was billed (the /orc-pact UNCHECKABLE
+    // rule). Under `--since` these rows cannot be placed, so they are excluded
+    // and COUNTED rather than quietly included or quietly dropped.
+    if (cutoff) {
+      undatedSkipped++;
+      continue;
+    }
+    seen.add(key);
+    rows.push(r);
+    backfilled++;
+    if (r.model_reported && r.model_reported !== "unknown" && r.model_reported !== r.model)
+      subs.push({ run: r.run, task: r.task, requested: r.model, reported: r.model_reported, source: "run-return" });
+    if (r.reroute && r.served_by && r.served_by.length)
+      reroutes.push({ run: r.run, task: r.task, providers: r.served_by, source: "run-return" });
+  }
+
+  rows.sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")));
+  return {
+    dir,
+    rows,
+    subs,
+    reroutes,
+    fallbacks,
+    files_scanned: filesRead,
+    since: cutoff,
+    // WHERE EACH NUMBER CAME FROM, always printed. "the bridge logged it" and
+    // "only a trace mentions it" are different facts about how much the report
+    // can be trusted, and a reader who cannot tell them apart cannot tell a
+    // relay that broke from a lane that never ran.
+    spend_log: spend.file,
+    sources: {
+      spend_log: spend.rows.length,
+      traces_only: recovered,
+      run_returns: backfilled,
+      run_returns_undated_skipped: undatedSkipped,
+      unreadable_spend_lines: spend.unreadable,
+    },
+  };
 }
 
 function extraStats(claudeDir) {
@@ -23692,6 +24030,10 @@ function extraStats(claudeDir) {
     since: scan.since,
     files_scanned: scan.files_scanned,
     dispatches: total,
+    // `--json is not a summary` (v0.49.1): the human branch below prints where
+    // every row came from, so the JSON carries it too.
+    spend_log: scan.spend_log,
+    sources: scan.sources,
     bands: rows,
     // The three things that are ONLY visible here, and each is a different
     // question. A substitution is "you did not get the model you asked for". A
@@ -23708,7 +24050,7 @@ function extraStats(claudeDir) {
     missing_rates: [...missingRates.entries()].map(([pair, n]) => ({ pair, dispatches: n })),
     hint: total
       ? "`orc extra rates` prints the JSON to paste for every provider/model pair with no rate."
-      : "no foreign dispatch has been traced yet. `orc extra route set <band> <profile>/<model>` and run a lane.",
+      : "no foreign dispatch has been recorded yet. `orc extra route set <band> <profile>/<model>` and run a lane.",
   };
   if (asJson) emitJson(payload, total ? 0 : 1);
 
@@ -23719,11 +24061,34 @@ function extraStats(claudeDir) {
   }
   console.log(
     ui.color.gray(
-      `\n  ${plural(total, "foreign dispatch", "foreign dispatches")} across ${plural(scan.files_scanned, "trace")}` +
+      `\n  ${plural(total, "foreign dispatch", "foreign dispatches")}` +
         (scan.since ? ` since ${scan.since}` : "") +
+        `\n  ${scan.sources.spend_log} from the spend log · ${scan.sources.traces_only} from ${plural(
+          scan.files_scanned,
+          "trace"
+        )} · ${scan.sources.run_returns} backfilled from saved dispatch returns` +
         "\n"
     )
   );
+  // A torn line is named rather than absorbed. This log is appended to by
+  // concurrent dispatches, so one is possible — and a report quietly short by
+  // three rows is the failure this whole file exists to stop.
+  if (scan.sources.run_returns_undated_skipped)
+    console.log(
+      "  " +
+        ui.mark.warn(
+          `${scan.sources.run_returns_undated_skipped} saved dispatch return(s) carry no date and are excluded by --since. Drop --since to include them.`
+        ) +
+        "\n"
+    );
+  if (scan.sources.unreadable_spend_lines)
+    console.log(
+      "  " +
+        ui.mark.warn(
+          `${scan.sources.unreadable_spend_lines} unreadable line(s) in ${scan.spend_log} were skipped — those dispatches are NOT counted below.`
+        ) +
+        "\n"
+    );
   for (const g of rows) {
     const oc = Object.entries(g.outcomes)
       .filter(([, n]) => n)
@@ -23896,9 +24261,14 @@ function extraUsage() {
     "       orc extra dispatch --task <slice.json> [--json]\n" +
     "                               THE BRIDGE. 0 done · 1 failed · 2 bad slice ·\n" +
     "                               3 not routed / capped · 4 partial\n" +
+    "                               Writes every dispatch to .claude/orc/extra-spend.jsonl\n" +
+    "                               itself, so a cost report never depends on a run\n" +
+    "                               remembering to narrate what it spent.\n" +
     "       orc extra stats [--since YYYY-MM-DD] [--json]\n" +
-    "                               per profile per band, joined from the EXTRA trace lines:\n" +
-    "                               outcomes, substitutions, reroutes, fallbacks, tokens, usd\n" +
+    "                               per profile per band: outcomes, substitutions, reroutes,\n" +
+    "                               fallbacks, tokens, usd.  Merges the spend log, the EXTRA\n" +
+    "                               trace lines and saved dispatch returns, deduped, and\n" +
+    "                               always says how many came from each.\n" +
     "       orc extra rates [--json]                  which provider/model pairs have a price, and\n" +
     "                               the JSON to paste for the ones that do not.  0 all priced · 1 gaps\n" +
     "       orc extra session [<profile>] [--save --ttl <days> | --forget | --list | --sweep]\n" +

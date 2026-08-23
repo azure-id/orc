@@ -6,14 +6,14 @@
 
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
-![Version](https://img.shields.io/badge/version-0.53.1-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.53.2-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
 ![Dependencies](https://img.shields.io/badge/dependencies-zero-lightgrey.svg?style=for-the-badge)
 ![GitHub stars](https://img.shields.io/github/stars/azure-id/orc?style=for-the-badge&color=yellow)
 
-**Latest: v0.53.1** · updated 2026-08-23 · [full changelog](CHANGELOG.md)
+**Latest: v0.53.2** · updated 2026-08-24 · [full changelog](CHANGELOG.md)
 
 **🇮🇩 [Baca dalam Bahasa Indonesia](README-id.md)**
 
@@ -440,59 +440,44 @@ a current audit: [EVAL-REPORT.md](EVAL-REPORT.md).
 **Full history: [CHANGELOG.md](CHANGELOG.md)** — or `orc changelog`, which prints
 only what is newer than the version you have.
 
-### v0.53.1 — "up to date" now names what it checked _(2026-08-23)_
+### v0.53.2 — the cost that was paid and never written down _(2026-08-24)_
 
-**A one-line diagnostic for the update check that could not be questioned.**
+**Two foreign dispatches ran, cost real money, and every cost report read zero.**
 
-- **`orc version` and the Maintenance panel print the ref the number came from.**
-  The update check reads `package.json` from one URL and `orc upgrade` installs
-  from another; only the install URL was ever shown. So a maintainer whose
-  release was still sitting on an unmerged branch read `source:
-  …/heads/main.tar.gz`, concluded the check had read main, and had no way to see
-  that main was a release behind. **The number and the ref it was read from now
-  travel together** — `up to date (azure-id/orc@main is at 0.52.0)` answers in one
-  line what previously took a debugging session.
-- **`orc version --json` gains `checked_source` + `checked_ref`.** Its sibling
-  `orc changelog --json` has carried its own `source` all along; this is that
-  field's missing twin. No behaviour changed — the check was always correct, it
-  just could not be falsified.
-
-### v0.53.0 — the schema the provider rejected, and a routing table you can read _(2026-08-23)_
-
-**One outage, one defect visible at a glance, and the Extra panel rebuilt.**
-
-- **Engine `cli` on codex was 100% dead for a release, and the suite was green.**
-  ORC sent an `--output-schema` that OpenAI rejects outright, so every dispatch
-  was an **HTTP 400 raised before the model was reached** — fast, free, and
-  reported as something vague. The schema is fixed and documented as
-  **provider-dictated rather than chosen**.
-- **The reason it shipped green: the fake was more permissive than the
-  provider.** That is the third release in a row broken by the same shape. **A
-  strict third-party parser fails for free, and it looks like a model problem** —
-  so the fake now rejects exactly what the provider rejects, by name.
-- **Two more honesty fixes on that adapter**: a failure is classified from **the
-  provider's own error object** rather than from a stderr string, and codex's
-  cache-write count is no longer thrown away and then reported as never
-  measured.
-- **A chip was drawing as a 250px green ellipse.** A tool card declared five grid
-  rows while its four states carry four different numbers of children, so
-  whichever child landed in the slack row was stretched. No row template now.
-- **The Extra panel is five tabs and one readable band ladder.** It was nine
-  cards in one 8,786px scroll. The routing rail truncated the one fact that
-  mattered and its widths did not match its own axis; the ladder is full width,
-  to scale, has a **legend** — green means the work leaves your machine — and
-  the row you read is the row you edit.
-- **Wording**: the panel was serving design rationale as user instruction. The
-  instruction comes first now, in Simplified Technical English, with the
-  reasoning collapsed underneath.
+- **The bridge writes the spend down itself.** `orc extra dispatch` used to compose
+  an `EXTRA …` trace line and RELAY it through the orchestrator into a phase
+  packet — remembered-not-dispatched protocol, and it broke both ways on two
+  graded runs: one reshaped the line, one dropped it. Both dispatches succeeded,
+  both had complete four-kind token vectors sitting in `return.json`, and
+  `orc extra stats` said `0 dispatches from 2 traces` while the Spending tab read
+  `0 tasks sent`. Every dispatch now appends one record to
+  `.claude/orc/extra-spend.jsonl` at the moment the CLI holds the numbers — the
+  `RESUME.md` lesson applied to money. **A cost report that reads zero when money
+  was spent is worse than no report, because a zero gets believed.**
+- **The trace line is demoted, not retired,** and the two sources are deduped on
+  the eight fields the line carries, so a lane that relays correctly is counted
+  once. The parser also accepts the ` :: ` a trace writer reaches for by reflex.
+- **A saved dispatch return backfills the runs that predate all of this** — read
+  only when it carries `dispatched: true` and a parsable `trace_line`, so it is the
+  CLI's own payload read back rather than a narrative about it. No date is derived
+  from an mtime, so `--since` excludes those rows and says how many.
+- **Every count says which source it came from,** and the two ABSENT counts (a torn
+  log line, an undated row a filter dropped) are named rather than absorbed.
+- **`orc ui` survives its own upgrade.** After `update` / `prune` / `fix` /
+  `upgrade` succeeds, the panel restarts on the **same port and the same token** and
+  the tab reloads itself — no more stop-the-server, re-run, find-the-new-URL. The
+  token travels in the environment, never argv; the restart is client-triggered so
+  the job's output is read before the process leaves; and a failed handover leaves
+  the old panel working with the two commands printed.
 
 Setup per provider: **[`guides/extra-models.md`](guides/extra-models.md)**.
 
-Before that: **v0.52.0 — the connection that could not be used, and the routing
-nobody could see**, **v0.51.0 — the tools you already have, and a connection
-that proves itself**, **v0.49.5 — house rules are text, and the hand-back writes
-itself**, **v0.49.4 — the panel was being handed half an answer**, and
-**v0.49.3 — coverage on a large repo**.
+Before that: **v0.53.1 — "up to date" now names what it checked**, **v0.53.0 —
+the schema the provider rejected, and a routing table you can read**, **v0.52.0
+— the connection that could not be used, and the routing nobody could see**,
+**v0.51.0 — the tools you already have, and a connection that proves itself**,
+**v0.49.5 — house rules are text, and the hand-back writes itself**, and
+**v0.49.4 — the panel was being handed half an answer**.
 [Read them in the changelog](CHANGELOG.md).
 
 ---

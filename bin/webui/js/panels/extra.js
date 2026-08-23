@@ -2262,6 +2262,35 @@ function exCostCard(d) {
   if (st.since) head.append(el("span", "note", st.since));
   c.append(head);
 
+  // WHERE THE NUMBERS CAME FROM, and the panel decides none of it: the three
+  // counts are the CLI's own `sources` object. "ORC wrote this down itself" and
+  // "a trace happened to mention it" are different levels of confidence in the
+  // same total, and a reader who cannot tell them apart cannot tell a broken
+  // relay from a lane that never ran — which is the exact failure that had this
+  // card reading `0 tasks sent` while two dispatches had really been paid for.
+  const src = st.sources;
+  if (src) {
+    c.append(
+      el(
+        "div",
+        "note",
+        t("extra.cost.sources", {
+          log: src.spend_log,
+          traces: src.traces_only,
+          backfill: src.run_returns,
+        })
+      )
+    );
+    c.append(exWhy(t("extra.cost.sourcesWhy")));
+    // Both of these are ABSENT counts — rows that exist and are not in the
+    // totals. Neither is chrome: a silently short report is the thing this
+    // whole card is being fixed for.
+    if (src.unreadable_spend_lines)
+      c.append(el("div", "note bad", t("extra.cost.unreadable", { n: src.unreadable_spend_lines })));
+    if (src.run_returns_undated_skipped)
+      c.append(el("div", "note bad", t("extra.cost.undated", { n: src.run_returns_undated_skipped })));
+  }
+
   // The price table's own dating, and its own staleness word. No dollar figure
   // exists without one, and a stale table says so — a cost ORC did not price is
   // never printed as a number.

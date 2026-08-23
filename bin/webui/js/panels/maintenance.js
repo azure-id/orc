@@ -94,6 +94,11 @@ async function previewAction(action, body) {
   b.append(el("div", "action-cmd", d.command));
   b.append(el("div", "note", t("maintenance.previewFrom", { command: d.preview_command })));
 
+  // Said BEFORE the apply, not discovered after it. A panel that reloads itself
+  // with no warning reads as a crash, and the whole point of this note is that
+  // the reload is the thing the user wanted.
+  if (d.restarts_ui) b.append(el("div", "note", t("maintenance.willRestart")));
+
   // The one action that writes outside this project says so before it runs, and
   // the preview it is showing came from the SAME target — `orc doctor --global`,
   // not the project doctor.

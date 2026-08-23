@@ -109,6 +109,7 @@ extra.providers.stale
 extra.routing.gapWhy
 extra.gate.hiddenWhy
 extra.cost.noRate
+extra.cost.sourcesWhy
 extra.live.noReport
 extra.tools.subWhy
 extra.tools.altNone

@@ -276,3 +276,64 @@ test("a missing credential fails BEFORE spawning anything, and names the fallbac
   assert.ok(!r.stdout.includes(SECRET_KEY));
   rmrf(p.root);
 });
+
+// ── the spend log is written by the BRIDGE (v0.53.2) ───────────────────────
+//
+// The whole subsystem's cost report used to depend on the orchestrator relaying
+// `trace_line` into a trace packet. Two real graded runs proved that relay is
+// not reliable — one reshaped the line, one dropped it — and both dispatches
+// disappeared from `orc extra stats` while having really been paid for. The
+// bridge now writes the record itself, at the moment it holds the numbers.
+test("dispatch: the spend record is written by the CLI, not relayed by anybody", async () => {
+  const p = project();
+  await armedShim(p, "0-30", { small: "fake-pro" });
+  const r = dispatch(p, "ok");
+  const j = json(r);
+  assert.equal(j.spend_logged, true, "the dispatch says whether the durable record exists");
+
+  const f = path.join(p.root, ".claude", "orc", "extra-spend.jsonl");
+  const rows = fs
+    .readFileSync(f, "utf8")
+    .split(/\r?\n/)
+    .filter(Boolean)
+    .map((l) => JSON.parse(l));
+  assert.equal(rows.length, 1);
+  const rec = rows[0];
+  assert.equal(rec.profile, "ds");
+  assert.equal(rec.engine, "claude-shim");
+  assert.equal(rec.outcome, "done");
+  // The four token kinds land unblended and unrounded — this file is what
+  // /orc-budget and the Spending tab are then reading.
+  assert.deepEqual(rec.usage, { input: 1200, cache_write: 300, cache_read: 9000, output: 450 });
+  // The line the lane is SUPPOSED to relay, stored next to the numbers it came
+  // from, so a trace that never received it can still be reconciled.
+  assert.equal(rec.trace_line, j.trace_line);
+  // No secret ever reaches this file. It is written into the project.
+  assert.ok(!fs.readFileSync(f, "utf8").includes(SECRET_KEY), "a key must never land in the spend log");
+
+  // …and it is immediately visible to the report, with no trace on disk at all.
+  const st = JSON.parse(run(p, ["extra", "stats", "--json"]).stdout);
+  assert.equal(st.dispatches, 1);
+  assert.equal(st.sources.spend_log, 1);
+  assert.equal(st.files_scanned, 0, "no trace exists — and the dispatch is counted anyway");
+  rmrf(p.root);
+});
+
+test("dispatch: a FAILED dispatch is logged too — an unknown cost is not a free one", async () => {
+  const p = project();
+  await armedShim(p, "0-30");
+  const r = dispatch(p, "authfail");
+  assert.equal(r.status, 1);
+  const rows = fs
+    .readFileSync(path.join(p.root, ".claude", "orc", "extra-spend.jsonl"), "utf8")
+    .split(/\r?\n/)
+    .filter(Boolean)
+    .map((l) => JSON.parse(l));
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].outcome, "failed");
+  // `fallback_to` records WHO would have finished it. Whether anybody did is
+  // the caller's fact, not the bridge's — so the fallback LINE stays the
+  // caller's to emit and this field is only the target.
+  assert.ok(rows[0].fallback_to, "the recorded target is the agent that displaced this route");
+  rmrf(p.root);
+});

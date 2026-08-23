@@ -51,7 +51,63 @@ async function refreshJob() {
     setBusy(false);
     clearTimeout(jobPoll);
     jobPoll = null;
+    // The command that just succeeded replaced the code this page is running.
+    // The output is already rendered above, so nothing is lost by handing over
+    // now — and the reload is what makes an upgrade visible without the user
+    // stopping the server and starting it again.
+    if (j.restart_pending) handOver(host);
   }
+}
+
+/* ------------------------------------------------------- restarting in place -- */
+
+// Once per page. A second call while the handover is in flight would ask a
+// server that is already leaving.
+let handingOver = false;
+
+async function handOver(host) {
+  if (handingOver) return;
+  handingOver = true;
+  const box = el("div", "banner");
+  box.append(el("div", null, t("maintenance.restarting")));
+  host.append(box);
+  try {
+    await post("/api/ui/restart", {});
+  } catch (e) {
+    handingOver = false;
+    return handOverFailed(box, e);
+  }
+  // The successor takes the same port and the same token, so THIS url stays
+  // valid — waiting for /api/meta to answer again is waiting for the new
+  // process, not for a new address.
+  const deadline = Date.now() + 30000;
+  const tryOnce = async () => {
+    try {
+      await api("/api/meta");
+      location.reload();
+      return;
+    } catch (_) {}
+    if (Date.now() > deadline) {
+      handingOver = false;
+      return handOverFailed(box, new Error(t("maintenance.restartTimeout")));
+    }
+    setTimeout(tryOnce, 700);
+  };
+  // The old process needs a moment to close its socket before the new one
+  // answers; polling immediately just burns a failed request.
+  setTimeout(tryOnce, 900);
+}
+
+// A handover that did not happen leaves the OLD panel running and working. That
+// is the safe resting state, so this is a note plus the two commands to type —
+// never an error that takes the page down.
+function handOverFailed(box, e) {
+  box.className = "banner banner-bad";
+  box.replaceChildren();
+  box.append(el("div", null, t("maintenance.restartFailed")));
+  box.append(el("div", "action-cmd", "orc ui --stop"));
+  box.append(el("div", "action-cmd", "orc ui"));
+  if (e && e.message) box.append(el("div", "note", String(e.message)));
 }
 
 /* ==================================================================== tour == */

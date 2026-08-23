@@ -317,3 +317,99 @@ test("ui is project-scoped: --global is refused, never reinterpreted", () => {
 // A fixture that has drifted from the CLI is worse than no fixture: you design
 // against a shape that does not exist. This pins the shared routes' key sets to
 // what the live CLI actually emits.
+
+// ── restarting in place (v0.53.2) ──────────────────────────────────────────
+//
+// `orc upgrade` replaces the package this server is RUNNING FROM, and node
+// loaded bin/webui at require time while `STATIC` is a one-time walk at boot —
+// so an upgraded panel keeps serving the old bytes. The fix used to be three
+// manual steps: stop the server, re-run `orc ui`, open the new URL.
+//
+// The handover is only correct if the SAME port and the SAME token survive it.
+// A successor on a new address is not a restart, it is a second server, and the
+// tab the user is looking at would still be pointing at the corpse.
+test("server: /api/ui/restart hands over on the SAME port and token", async () => {
+  const { root } = freshInstall();
+  let srv;
+  let successorPid = null;
+  try {
+    srv = await startServer(root);
+    const { port, token, pid } = srv.lock;
+
+    // POST-only, like every other mutation.
+    assert.strictEqual(
+      (await request(port, "/api/ui/restart?t=" + token)).status,
+      404,
+      "a restart is a mutation and is never reachable by GET"
+    );
+
+    const r = await request(port, "/api/ui/restart", { token, method: "POST", body: {} });
+    assert.strictEqual(r.status, 200);
+    const out = JSON.parse(r.raw);
+    assert.strictEqual(out.ok, true);
+    assert.strictEqual(out.port, port, "a successor on a different port is not a restart");
+    successorPid = out.pid;
+    assert.ok(successorPid && successorPid !== pid, "a NEW process answers the next request");
+
+    // Wait for the lock to name the successor, then talk to it with the ORIGINAL
+    // token — which is the whole point: the URL already in the address bar has
+    // to keep working, so the tab only has to reload.
+    const deadline = Date.now() + 30000;
+    let lock = null;
+    for (;;) {
+      try {
+        lock = JSON.parse(fs.readFileSync(path.join(root, LOCK_REL), "utf8"));
+      } catch (_) {}
+      if (lock && lock.pid === successorPid) break;
+      if (Date.now() > deadline) throw new Error("the successor never wrote its lock");
+      await new Promise((res) => setTimeout(res, 200));
+    }
+    assert.strictEqual(lock.port, port);
+    assert.strictEqual(lock.token, token, "the token is inherited, so the open tab's URL stays valid");
+
+    const after = await request(port, "/api/meta", { token });
+    assert.strictEqual(after.status, 200, "the original token authenticates against the new process");
+  } finally {
+    for (const id of [srv && srv.lock && srv.lock.pid, successorPid]) {
+      if (!id) continue;
+      try {
+        process.kill(id);
+      } catch (_) {}
+    }
+    try {
+      srv && srv.child.kill();
+    } catch (_) {}
+    rmrf(root);
+  }
+});
+
+// The token authenticates a WRITE surface, which puts it in the same class as
+// the credentials `orc extra` refuses on a command line: argv is world-readable
+// in a process list and lands in shell history.
+test("server: the restart token travels in the environment, never in argv", () => {
+  const src = fs.readFileSync(path.join(WEBUI, "serve.js"), "utf8");
+  assert.match(src, /RESTART_ENV_TOKEN = "ORC_UI_TOKEN"/);
+  assert.ok(
+    !/argv\.push\((["'])--token/.test(src) && !src.includes('"--token"'),
+    "a --token flag would put a live credential in every process list on the machine"
+  );
+  // Read once and dropped, so no CLI subprocess this server shells out ever
+  // inherits it.
+  assert.match(src, /delete process\.env\[RESTART_ENV_TOKEN\]/);
+});
+
+// A restart is worth doing only after a command that replaced what the panel is
+// serving, and only if that command SUCCEEDED — a failed upgrade changed
+// nothing. `update-global` writes to ~/.claude, which is not what runs here.
+test("api: restarts_ui is DECLARED per maintenance action, never inferred", () => {
+  const src = fs.readFileSync(path.join(WEBUI, "api.js"), "utf8");
+  const block = src.slice(src.indexOf("const MAINTENANCE = {"), src.indexOf("// ── the Experiment panel"));
+  for (const id of ["update", "prune", "fix", "upgrade"]) {
+    const row = block.slice(block.indexOf("\n  " + id + ": {"));
+    assert.match(row.slice(0, 400), /restarts_ui: true/, id + " replaces what the panel serves");
+  }
+  const g = block.slice(block.indexOf('"update-global": {'));
+  assert.ok(!/restarts_ui/.test(g.slice(0, 400)), "update-global targets ~/.claude, not the running panel");
+  // Reported only on success, so a failed upgrade never reloads the page.
+  assert.match(src, /restart_pending: !!\(job\.restart_ui && !job\.running && job\.exit_code === 0\)/);
+});
