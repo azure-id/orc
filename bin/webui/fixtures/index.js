@@ -155,7 +155,7 @@ module.exports.get = function get(route, q) {
       // An update IS available here on purpose. "Up to date" is the state that
       // needs no design; you cannot lay out the update chip, the rail dot or
       // the upgrade row against a version that matches.
-      return { version: "0.43.2", latest: "0.44.0", update_available: true, install_spec: "github:azure-id/orc", check_disabled: false };
+      return { version: "0.43.2", latest: "0.44.0", update_available: true, install_spec: "github:azure-id/orc", checked_source: "https://raw.githubusercontent.com/azure-id/orc/main/package.json", checked_ref: "azure-id/orc@main", check_disabled: false };
     case "/api/where":
       return where;
     case "/api/doctor":

@@ -136,6 +136,51 @@ function urlFor(port, token) {
   return `http://127.0.0.1:${port}/?t=${token}`;
 }
 
+// ── restarting in place ─────────────────────────────────────────────────────
+//
+// `orc upgrade` replaces the package this process is RUNNING FROM. Node read
+// bin/webui into memory at require time, and `STATIC` is a one-time walk at
+// boot, so an upgraded panel keeps serving the old bytes until something
+// restarts it. Until now that something was the user: stop the server, re-run
+// `orc ui`, find the new URL, open it. Three manual steps to see the release
+// they just installed.
+//
+// So the server hands itself over. The successor is spawned DETACHED with the
+// SAME port and the SAME token, which is the whole trick — the URL in the
+// user's address bar stays valid, so the open tab only has to reload.
+//
+// THE TOKEN TRAVELS IN THE ENVIRONMENT, NEVER IN ARGV. It authenticates a write
+// surface, which puts it in the same class as the credentials `orc extra`
+// refuses to accept on a command line: argv is world-readable in a process
+// list and lands in shell history, while a child's environment is readable by
+// its owner. It is read ONCE at boot and deleted from process.env immediately,
+// so the CLI subprocesses this server shells out to never inherit it.
+const RESTART_ENV_TOKEN = "ORC_UI_TOKEN";
+const RESTART_ENV_FLAG = "ORC_UI_RESTART";
+// The successor binds the port its predecessor has only just released. A few
+// hundred milliseconds of EADDRINUSE is normal and is not an error worth
+// showing anybody.
+const RESTART_BIND_RETRIES = 20;
+const RESTART_BIND_WAIT_MS = 250;
+
+function spawnSuccessor({ claudeDir, projectRoot, port, token, idleMinutes }) {
+  const cli = path.join(__dirname, "..", "cli.js");
+  const argv = [cli, "ui", "--port", String(port), "--no-open", "--idle", String(idleMinutes)];
+  if (projectRoot) argv.push("--dir", projectRoot);
+  const env = Object.assign({}, process.env);
+  env[RESTART_ENV_TOKEN] = token;
+  env[RESTART_ENV_FLAG] = "1";
+  const child = spawn(process.execPath, argv, {
+    detached: true,
+    stdio: "ignore",
+    windowsHide: true,
+    cwd: projectRoot || undefined,
+    env,
+  });
+  child.unref();
+  return child.pid;
+}
+
 // ── open a browser ──────────────────────────────────────────────────────────
 // Best-effort and never fatal: the URL is always printed, so a failed open is
 // an inconvenience, not an error.
@@ -178,12 +223,23 @@ function stop(claudeDir) {
 // when the port was the default. An EXPLICIT --port never auto-increments: if
 // you asked for a specific port and it is taken, that is an error, not a silent
 // move to somewhere you are not looking.
-function listen(server, port, explicit) {
+function listen(server, port, explicit, retries = 0) {
   return new Promise((resolve, reject) => {
+    let left = retries;
     const tryPort = (p) => {
       const onError = (err) => {
         server.removeListener("listening", onOk);
         if (err.code !== "EADDRINUSE") return reject(err);
+        // A SUCCESSOR waits for the port rather than moving or failing. Its
+        // predecessor released it moments ago and the whole point of the
+        // handover is that the URL already in the user's address bar keeps
+        // working — walking to another port would break exactly what this is
+        // trying to preserve.
+        if (left > 0) {
+          left--;
+          setTimeout(() => tryPort(p), RESTART_BIND_WAIT_MS);
+          return;
+        }
         if (explicit)
           return reject(
             Object.assign(new Error(`port ${p} is already in use`), { code: "EADDRINUSE", port: p })
@@ -247,10 +303,22 @@ async function serve(opts) {
     version = "",
   } = opts;
 
+  // The handoff from a predecessor that is on its way out, read ONCE and then
+  // removed from the environment so no CLI subprocess ever inherits the token.
+  const inheritedToken = process.env[RESTART_ENV_TOKEN] || null;
+  const isSuccessor = process.env[RESTART_ENV_FLAG] === "1" && !!inheritedToken;
+  delete process.env[RESTART_ENV_TOKEN];
+  delete process.env[RESTART_ENV_FLAG];
+
   // Idempotent relaunch: a live server for THIS project is not replaced by a
   // second one — read its lock, verify the pid, and just open the browser at
   // the recorded port and token.
-  if (!fixtures) {
+  //
+  // A SUCCESSOR SKIPS THIS. The lock it would find names its own predecessor,
+  // which is either dying or already gone; treating that as "already running"
+  // would make the restart a silent no-op and leave the user on the old build
+  // with no way to tell.
+  if (!fixtures && !isSuccessor) {
     const existing = liveLock(claudeDir);
     if (existing) {
       const url = urlFor(existing.port, existing.token);
@@ -262,13 +330,16 @@ async function serve(opts) {
     }
   }
 
-  const token = crypto.randomBytes(32).toString("hex");
+  const token = inheritedToken || crypto.randomBytes(32).toString("hex");
   const startedMs = Date.now();
   let lastContact = Date.now();
   let boundPort = wantPort;
   // Has a browser ever talked to us? Until one has, only the idle timeout
   // applies — otherwise a `--no-open` launch would shut itself down in 60s.
   let sawClient = false;
+  // One handover per process. A second request while the successor is starting
+  // is answered with the same "yes, it is happening" rather than spawning two.
+  let restarting = false;
 
   const ctx = {
     claudeDir,
@@ -288,6 +359,40 @@ async function serve(opts) {
       // A beacon is a hint, not a command: another tab may still be open, so
       // the heartbeat window — not this call — decides the actual shutdown.
       lastContact = Date.now() - HEARTBEAT_GRACE_MS + 3000;
+    },
+    // Hand this project's panel over to a fresh process on the same port and
+    // token. CLIENT-TRIGGERED, always: the server never restarts itself the
+    // moment a job finishes, because the job's output lives in memory and a
+    // restart the user did not ask for would take the record of what just ran
+    // with it. It also means a tab that is already closed leaves the old
+    // process running the old code, which is the safe resting state.
+    restart() {
+      if (fixtures) return { ok: false, reason: "fixtures" };
+      if (restarting) return { ok: true, already: true, port: boundPort };
+      restarting = true;
+      // The lock is deliberately NOT removed. The successor overwrites it with
+      // the same port and token under its own pid; if the spawn fails instead,
+      // the lock names a dead pid and `liveLock` cleans it up on the next
+      // launch. Removing it here would open a window where `orc ui` sees no
+      // server and starts a second one somewhere else.
+      let pid = null;
+      try {
+        pid = spawnSuccessor({ claudeDir, projectRoot, port: boundPort, token, idleMinutes });
+      } catch (e) {
+        restarting = false;
+        return { ok: false, reason: "spawn-failed", error: String(e && e.message) };
+      }
+      // Stop listening FIRST so the successor can take the port, then leave.
+      // The delay is only long enough for this response to reach the browser
+      // that asked for it.
+      setTimeout(() => {
+        console.log("\norc ui — handing over to a fresh process on port " + boundPort + " (pid " + pid + ")");
+        try {
+          server.close();
+        } catch (_) {}
+        process.exit(0);
+      }, 250);
+      return { ok: true, pid, port: boundPort, url: urlFor(boundPort, token) };
     },
   };
 
@@ -390,7 +495,7 @@ async function serve(opts) {
   });
 
   try {
-    boundPort = await listen(server, wantPort, explicitPort);
+    boundPort = await listen(server, wantPort, explicitPort, isSuccessor ? RESTART_BIND_RETRIES : 0);
   } catch (e) {
     if (e.code === "EADDRINUSE")
       console.error(

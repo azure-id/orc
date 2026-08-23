@@ -486,7 +486,37 @@ the worktree delta.
 
 ---
 
+## The spend log — the CLI writes it, you do not
+
+**Every foreign dispatch is written to `.claude/orc/extra-spend.jsonl` by
+`orc extra dispatch` itself, at the moment it holds the numbers.** One JSON
+object per line, appended, never rewritten. You do not write it, you cannot
+write it, and nothing you do or forget to do changes whether it exists.
+
+This is the fix for a real failure. The `EXTRA` trace line below was, until
+v0.53.2, the *only* record of what a foreign worker cost — and it reached the
+trace by being RELAYED through the orchestrator into a phase packet. A relay
+through a model is remembered-not-dispatched protocol, and it broke both ways on
+two graded runs: one reshaped the line into the trace's own `verb … :: tail`
+shape, one dropped it and folded the token vector into a free-form `VERIFY`
+sentence. Both dispatches succeeded. Both cost real money. `orc extra stats`
+reported **0 dispatches**, `orc extra rates` had nothing to price, and the
+Spending panel read `0 tasks sent`. **A cost report that reads zero when money
+was spent is worse than no report, because a zero gets believed.**
+
+The dispatch return now carries `spend_logged` and `spend_log`, and the human
+output says which. **If a dispatch comes back `spend_logged: false`, say so to
+the user** — that dispatch is invisible to every cost report there is, and the
+only moment anyone can act on it is now.
+
+---
+
 ## The trace
+
+The trace line is still yours to relay, and it still matters: it is the
+human-readable narrative of the run, it is what `/orc-retro` reads, and the
+trace-cadence rule in `references/trace-protocol.md` still binds every phase.
+What changed is that the SPEND no longer depends on it.
 
 One `EXTRA` line per foreign dispatch, plus its continuations. **Copy
 `trace_line` and every entry of `trace_extras[]` from the dispatch return
@@ -494,6 +524,13 @@ VERBATIM into the phase packet** — the CLI composes them, exactly as
 `orc challenge record` does, so the lane never writes a second wording for the
 same numbers. Three readers parse that format (`orc stats`, `orc extra stats`,
 `/orc-retro`).
+
+**Verbatim means verbatim, and the punctuation is part of it.** Do not insert
+` :: ` after the model, do not re-order the fields, do not round the duration.
+The parser now tolerates that one separator because a graded run really did add
+it — but tolerance is a net under the contract, not a licence to reshape the
+line. Anything the parser cannot read is a dispatch the report will attribute to
+the spend log alone, with no run and no phase beside it.
 
 A foreign worker is not a Claude subagent, so the trace hook emits **no `SPAWN`
 and no `RETURN`** for it (the `/orc-quick` ad-hoc-recon precedent). This line and

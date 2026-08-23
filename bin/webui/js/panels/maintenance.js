@@ -94,6 +94,11 @@ async function previewAction(action, body) {
   b.append(el("div", "action-cmd", d.command));
   b.append(el("div", "note", t("maintenance.previewFrom", { command: d.preview_command })));
 
+  // Said BEFORE the apply, not discovered after it. A panel that reloads itself
+  // with no warning reads as a crash, and the whole point of this note is that
+  // the reload is the thing the user wanted.
+  if (d.restarts_ui) b.append(el("div", "note", t("maintenance.willRestart")));
+
   // The one action that writes outside this project says so before it runs, and
   // the preview it is showing came from the SAME target — `orc doctor --global`,
   // not the project doctor.
@@ -139,6 +144,10 @@ async function previewAction(action, body) {
         [t("maintenance.installed"), pv.version],
         [t("maintenance.available"), pv.latest || t("maintenance.availableUnknown")],
         [t("maintenance.source"), pv.install_spec],
+        // The install URL and the URL the version number was read from are two
+        // different things. Showing only the first is how "up to date" becomes
+        // unfalsifiable from this panel.
+        [t("maintenance.checkedAt"), pv.checked_ref || pv.checked_source || t("maintenance.availableUnknown")],
         [t("maintenance.updateAvailable"), pv.update_available ? t("maintenance.yes") : t("maintenance.no")],
       ])
     );

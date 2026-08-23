@@ -27,6 +27,7 @@
   "maintenance.available": "available",
   "maintenance.availableUnknown": "could not check (offline?)",
   "maintenance.source": "source",
+  "maintenance.checkedAt": "version read from",
   "maintenance.updateAvailable": "update available",
   "maintenance.yes": "yes",
   "maintenance.no": "no",
@@ -43,5 +44,9 @@
   "maintenance.applyUpgrade": "Upgrade now",
   "maintenance.apply": "Apply",
   "maintenance.started": "Running: {command}",
+  "maintenance.willRestart": "This changes the code the panel runs. When it finishes, the panel starts again on the same address and this page reloads.",
+  "maintenance.restarting": "Done. Starting the panel again on the same address, then reloading this page.",
+  "maintenance.restartFailed": "The panel could not start again on its own. It is still working, but it still runs the old code. Run these two commands:",
+  "maintenance.restartTimeout": "The panel did not answer again in time.",
   "maintenance.startFail": "Could not start it."
 }

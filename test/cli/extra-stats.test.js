@@ -57,7 +57,17 @@ test("extra stats: an empty log dir is an ANSWER, and still returns its object",
   const j = json(r);
   assert.equal(j.dispatches, 0);
   assert.deepEqual(j.bands, []);
-  assert.match(j.hint, /no foreign dispatch has been traced/);
+  assert.match(j.hint, /no foreign dispatch has been recorded/);
+  // Three sources, and all three report zero rather than being absent: an empty
+  // result is an ANSWER, and "nowhere to look" and "looked everywhere and found
+  // nothing" have to be the same shape.
+  assert.deepEqual(j.sources, {
+    spend_log: 0,
+    traces_only: 0,
+    run_returns: 0,
+    run_returns_undated_skipped: 0,
+    unreadable_spend_lines: 0,
+  });
 });
 
 test("extra stats: grouped per profile PER BAND, with the outcome mix", () => {
@@ -201,4 +211,169 @@ test("extra stats: a trace with no EXTRA line is skipped without being parsed", 
   const j = json(run(p, ["extra", "stats", "--json"]));
   assert.equal(j.files_scanned, 0, "the pre-filter is what keeps a whole-file scan affordable");
   assert.equal(j.dispatches, 0);
+});
+
+// ── the spend log (v0.53.2) ────────────────────────────────────────────────
+//
+// The failure this whole section exists for: `extraTraceLine` is composed by
+// the CLI and RELAYED by the lane into a trace packet. A relay through a model
+// is remembered-not-dispatched protocol, and it broke in both directions on two
+// real graded runs — one reshaped the line, one dropped it entirely — while the
+// dispatches themselves succeeded and cost real money. `orc extra stats` read
+// zero, and a zero gets believed.
+
+// One JSONL record, as `orc extra dispatch` writes it.
+function spend(p, recs) {
+  const f = path.join(p.root, ".claude", "orc", "extra-spend.jsonl");
+  fs.mkdirSync(path.dirname(f), { recursive: true });
+  fs.appendFileSync(f, recs.map((r) => JSON.stringify(r)).join("\n") + "\n");
+}
+const rec = (over) =>
+  Object.assign(
+    {
+      v: 1,
+      ts: "2026-08-22T12:00:00.000Z",
+      date: "2026-08-22",
+      run: "a",
+      profile: "ds",
+      provider: "deepseek",
+      model: "v4-flash",
+      engine: "api",
+      task: "T1",
+      band: "[0,30)",
+      usage: { input: 100, cache_write: 0, cache_read: 900, output: 50 },
+      outcome: "done",
+      duration_ms: 41000,
+      dur: "0m41s",
+    },
+    over || {}
+  );
+
+test("extra stats: the spend log is counted even when NO trace mentions the dispatch", () => {
+  const p = project();
+  profile(p, "ds", "deepseek");
+  spend(p, [rec({ task: "T1" }), rec({ task: "T2", outcome: "failed", usage: null, dur: "0m05s" })]);
+  const j = json(run(p, ["extra", "stats", "--json"]));
+  assert.equal(j.dispatches, 2, "both dispatches are counted with zero traces on disk");
+  assert.equal(j.sources.spend_log, 2);
+  assert.equal(j.sources.traces_only, 0);
+  assert.equal(j.files_scanned, 0);
+  const band = j.bands.find((b) => b.band === "[0,30)");
+  assert.equal(band.provider, "deepseek");
+  // The honest split survives the new source: one vector reported, one not.
+  assert.equal(band.usage_reported, 1);
+  assert.equal(band.usage_missing, 1);
+});
+
+test("extra stats: a relayed trace line and its spend record are ONE dispatch", () => {
+  const p = project();
+  profile(p, "ds", "deepseek");
+  spend(p, [rec({ task: "T1" })]);
+  // The same dispatch, relayed into the trace exactly as the CLI composed it.
+  trace(p, "run-orc-a-220826-120000.txt", [
+    "EXTRA ds/v4-flash engine=api task=T1 band=[0,30) tok=100/0/900/50 outcome=done dur=0m41s",
+  ]);
+  const j = json(run(p, ["extra", "stats", "--json"]));
+  assert.equal(j.dispatches, 1, "a lane that relayed correctly must not be double-charged");
+  assert.equal(j.sources.spend_log, 1);
+  assert.equal(j.sources.traces_only, 0);
+});
+
+test("extra stats: a trace line with the ` :: ` separator still parses", () => {
+  const p = project();
+  profile(p, "ds", "deepseek");
+  // Every other verb in a trace is `VERB … :: tail`, so a trace writer reaches
+  // for that separator by reflex. A real graded run wrote exactly this and the
+  // entire run reported as zero foreign dispatches.
+  trace(p, "run-orc-a-220826-120000.txt", [
+    "EXTRA ds/v4-flash :: engine=api task=T1 band=[0,30) tok=100/0/900/50 outcome=done dur=0m41s",
+  ]);
+  const j = json(run(p, ["extra", "stats", "--json"]));
+  assert.equal(j.dispatches, 1);
+  assert.equal(j.sources.traces_only, 1);
+  assert.equal(j.bands[0].models["v4-flash"], 1, "the model is parsed, not swallowed by the separator");
+});
+
+test("extra stats: a saved dispatch return backfills a run the log never saw", () => {
+  const p = project();
+  profile(p, "ds", "deepseek");
+  // What `orc extra dispatch --json` produced, saved into the run folder by the
+  // lane. It is the CLI's own payload, not a narrative about it — which is why
+  // reading it back is a recovery and not an invention.
+  const rd = path.join(p.root, ".claude", "orc", "run", "some-slug");
+  fs.mkdirSync(rd, { recursive: true });
+  fs.writeFileSync(
+    path.join(rd, "return.json"),
+    JSON.stringify({
+      dispatched: true,
+      profile: "ds",
+      provider: "deepseek",
+      engine: "api",
+      task_id: "T9",
+      band: "[0,30)",
+      model_requested: "v4-flash",
+      usage: { input: 7, cache_write: 0, cache_read: 8, output: 9 },
+      outcome: "done",
+      duration_ms: 1000,
+      trace_line: "EXTRA ds/v4-flash engine=api task=T9 band=[0,30) tok=7/0/8/9 outcome=done dur=0m01s",
+    })
+  );
+  // Some other JSON in the same folder must never become a cost figure.
+  fs.writeFileSync(path.join(rd, "checkpoint.json"), JSON.stringify({ phase: 4, waves: 2 }));
+  const j = json(run(p, ["extra", "stats", "--json"]));
+  assert.equal(j.dispatches, 1);
+  assert.equal(j.sources.run_returns, 1);
+  assert.equal(j.bands[0].usage.output, 9);
+});
+
+test("extra stats: a saved return carries no date, so --since EXCLUDES it and says so", () => {
+  const p = project();
+  profile(p, "ds", "deepseek");
+  const rd = path.join(p.root, ".claude", "orc", "run", "s");
+  fs.mkdirSync(rd, { recursive: true });
+  fs.writeFileSync(
+    path.join(rd, "return.json"),
+    JSON.stringify({
+      dispatched: true,
+      profile: "ds",
+      engine: "api",
+      task_id: "T9",
+      band: "[0,30)",
+      model_requested: "v4-flash",
+      usage: null,
+      outcome: "done",
+      duration_ms: 1000,
+      trace_line: "EXTRA ds/v4-flash engine=api task=T9 band=[0,30) tok=none outcome=done dur=0m01s",
+    })
+  );
+  const j = json(run(p, ["extra", "stats", "--json", "--since", "2026-01-01"]));
+  // NOT silently included and NOT silently dropped. No date is invented from an
+  // mtime — a file's timestamp is when it was touched, not when a model billed.
+  assert.equal(j.dispatches, 0);
+  assert.equal(j.sources.run_returns, 0);
+  assert.equal(j.sources.run_returns_undated_skipped, 1);
+});
+
+test("extra stats: a torn spend line is skipped, COUNTED, and never fatal", () => {
+  const p = project();
+  profile(p, "ds", "deepseek");
+  spend(p, [rec({ task: "T1" })]);
+  const f = path.join(p.root, ".claude", "orc", "extra-spend.jsonl");
+  fs.appendFileSync(f, '{"v":1,"profile":"ds","outc\n');
+  spend(p, [rec({ task: "T2" })]);
+  const j = json(run(p, ["extra", "stats", "--json"]));
+  assert.equal(j.dispatches, 2, "one torn line must not cost the report every row after it");
+  assert.equal(j.sources.unreadable_spend_lines, 1);
+});
+
+test("extra rates: a pair known only to the spend log is still priced-or-flagged", () => {
+  const p = project();
+  profile(p, "ds", "deepseek");
+  spend(p, [rec({ model: "v4-pro" })]);
+  const r = run(p, ["extra", "rates", "--json"]);
+  const j = JSON.parse(r.stdout);
+  const pair = j.pairs.find((x) => x.model === "v4-pro");
+  assert.ok(pair, "rates reads the same scan as stats, so the log feeds it too");
+  assert.equal(pair.provider, "deepseek");
+  assert.equal(pair.rate, null);
 });

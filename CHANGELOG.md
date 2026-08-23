@@ -10,6 +10,128 @@ Format: `### v<version> — <title> _(<date>)_`.
 
 ---
 
+### v0.53.2 — the cost that was paid and never written down _(2026-08-24)_
+
+**Two foreign dispatches ran, cost real money, and every cost report read zero.**
+
+`orc extra dispatch` composes an `EXTRA …` trace line and hands it back for the
+lane to copy into a phase packet. That is a RELAY THROUGH A MODEL — the
+remembered-not-dispatched pattern this repo has already lost to twice — and it
+broke in both directions on two graded runs of the same feature:
+
+- one wrote `EXTRA Codex/gpt-5.4-mini :: engine=cli …`, adding the trace's own
+  `verb … :: tail` separator, which the parser did not accept;
+- one dropped the line entirely and folded the token vector into a free-form
+  `VERIFY` sentence.
+
+Both dispatches SUCCEEDED. `return.json` and `return-fast.json` were sitting in
+the run folder with complete four-kind vectors — 27,029 / 0 / 159,616 / 1,895 for
+codex, 136 / 0 / 20,032 / 134 for opencode — and a perfectly formed `trace_line`
+inside each. `orc extra stats` reported **0 dispatches from 2 traces**, `orc extra
+rates` had no pair to price, and `orc ui ▸ Extra ▸ Spending` read **`0 tasks
+sent`**. A cost report that reads zero when money was spent is worse than no
+report, because a zero gets believed.
+
+- **THE BRIDGE WRITES THE SPEND DOWN ITSELF.** Every dispatch appends one JSON
+  object to `.claude/orc/extra-spend.jsonl` at the moment it holds the numbers —
+  profile, provider, model, engine, task, band, the four token kinds unblended,
+  outcome, duration, the run it belonged to, and the `trace_line` it composed.
+  The `RESUME.md` lesson from v0.49.5 applied to money: **the fact is recorded by
+  the hand that computed it.** Best effort by construction — a record that cannot
+  be written never takes a dispatch down — and the dispatch says `spend_logged`
+  either way, because a dispatch no cost report can see is worth one line now
+  rather than a mystery later.
+- **The trace line is NOT retired, it is DEMOTED to the second source.** It is
+  still the run's narrative and still what `/orc-retro` reads; it is no longer
+  what the money depends on. The two are DEDUPED on the eight fields the line
+  itself carries, so a lane that relays correctly is counted exactly once —
+  double-counting a correct relay would punish the behaviour the contract asks
+  for.
+- **The parser now accepts the ` :: ` a trace writer reaches for by reflex.**
+  Every other verb in a trace is `VERB … :: tail`. A line that is faithful about
+  the numbers and off by two characters in its punctuation must still parse.
+  Tolerance is a net under the contract, not a licence to reshape the line.
+- **A saved dispatch return backfills a run made before any of this existed.**
+  `{run_dir}/<slug>/*.json` is read as a THIRD source when — and only when — it
+  carries `dispatched: true` and a `trace_line` this parser accepts. That is the
+  CLI's own payload read back, not a narrative about it, which is what separates
+  a recovery from an invention. It carries no date and **none is derived from an
+  mtime** (the `/orc-pact` UNCHECKABLE rule), so `--since` excludes those rows and
+  says how many.
+- **Every count says which source it came from,** on both surfaces. "ORC wrote
+  this down itself" and "a trace happened to mention it" are different levels of
+  confidence in the same total. Two ABSENT counts are named rather than absorbed:
+  a torn log line, and an undated saved return a date filter dropped — a report
+  that is quietly short by three rows is the exact failure being fixed.
+
+**And the panel now survives its own upgrade.**
+
+`orc upgrade` replaces the package the running `orc ui` server was loaded from.
+Node read `bin/webui` at require time and `STATIC` is a one-time walk at boot, so
+an upgraded panel keeps serving the old bytes: the version in the rail does not
+move, a new panel does not appear, and a fixed bug is still there. The remedy was
+three manual steps nobody was told about — stop the server, re-run `orc ui`, open
+the new URL.
+
+- **The server hands itself over.** After a maintenance action DECLARED as
+  replacing the install (`update`, `prune`, `fix`, `upgrade` — never
+  `update-global`, which targets `~/.claude`) succeeds, the panel restarts on the
+  **same port and the same token** and the open tab reloads itself. A successor on
+  a new address is not a restart; it is a second server, and the tab you are
+  looking at would still point at the corpse.
+- **CLIENT-TRIGGERED, never automatic on the job's close handler.** The job's
+  output lives in the server's memory, so restarting the instant a command
+  finished would destroy the record of what it did before anyone read it. It also
+  means a tab that is already closed leaves the old process running, which is the
+  safe resting state.
+- **The token travels in the ENVIRONMENT, never in argv** — it authenticates a
+  write surface, which puts it in the same class as the credentials `orc extra`
+  refuses on a command line. It is read once at boot and deleted from
+  `process.env`, so no CLI subprocess the server shells out to inherits it.
+- **A failed handover is a note and two commands, never a broken page.** The old
+  panel keeps working; it just prints `orc ui --stop` and `orc ui`. And the
+  confirmation says the restart is coming BEFORE the apply — a panel that reloads
+  itself with no warning reads as a crash.
+
+---
+
+### v0.53.1 — "up to date" now names what it checked _(2026-08-23)_
+
+**A one-line diagnostic for the update check that could not be questioned.**
+
+The update check was never broken, and that was the problem. `orc version` reads
+`package.json` from `UPDATE_URL`; `orc upgrade` installs from `TARBALL_SPEC`.
+They are two different URLs on what is *normally* the same branch — and only the
+second one was ever printed, on either surface. The Maintenance panel's `source`
+row shows the install tarball, so a reader concludes the version comparison read
+main too.
+
+That gap makes a true statement unfalsifiable. A maintainer who cut v0.53.0 on an
+unmerged release branch saw `✓ up to date` against a main that was still at
+0.52.0, with nothing on screen to distinguish "you are current" from "the release
+never reached the ref this reads". There is no way to tell those apart from the
+output, which is why it reads as a defect in the checker.
+
+So the number and the ref it came from now travel together, everywhere the number
+is reported:
+
+- **`orc version`** prints `✓ up to date (azure-id/orc@main is at 0.52.0)`, and
+  the offline branch names the unreachable ref rather than saying "source".
+- **`orc version --json`** gains `checked_source` (the URL) and `checked_ref` (the
+  `owner/repo@ref` label). This is not a new idea: `orc changelog --json` has
+  always carried its own `source`, and this is that field's missing twin — a
+  field the human path implied and the JSON omitted.
+- **`orc ui` ▸ Maintenance** gains a `version read from` row beside `source`, so
+  the two URLs are visibly two URLs. The fixture carries both fields.
+
+`checkSourceLabel()` shortens a `raw.githubusercontent.com` URL to
+`owner/repo@ref` and returns anything else verbatim — a custom `ORC_VERSION_URL`
+is shown as written rather than mangled into a label that does not describe it.
+
+**Nothing about the check itself changed.** No new request, no new cache, no
+change to the 24h TTL, `ORC_NO_UPDATE_CHECK` or the comparison. The only thing
+that is new is that the answer can now be checked.
+
 ### v0.53.0 — the schema the provider rejected, and a routing table you can read _(2026-08-23)_
 
 **One outage, one defect visible at a glance, and the Extra panel rebuilt.**

@@ -140,10 +140,16 @@ function jobView() {
     exit_code: job.exit_code,
     output: job.output,
     started_ms: job.started_ms,
+    // THE PANEL IS SERVING CODE THAT THIS JOB MAY HAVE JUST REPLACED. Reported
+    // only on a job that SUCCEEDED and whose action is declared as touching the
+    // install — a failed upgrade changed nothing, so restarting after one would
+    // be motion with no reason. The client acts on it; the server does not
+    // restart itself, so the job's output survives long enough to be read.
+    restart_pending: !!(job.restart_ui && !job.running && job.exit_code === 0),
   };
 }
 
-function startJob(argv, ctx) {
+function startJob(argv, ctx, opts) {
   if (job && job.running) return { error: "busy", job: jobView() };
   const args = [...argv];
   if (ctx.projectRoot) args.push("--dir", ctx.projectRoot);
@@ -155,6 +161,7 @@ function startJob(argv, ctx) {
     exit_code: null,
     output: "",
     started_ms: Date.now(),
+    restart_ui: !!(opts && opts.restartUi),
   };
   const child = spawn(process.execPath, [CLI, ...args], {
     windowsHide: true,
@@ -525,9 +532,23 @@ const WRITES = {
 // never be reached without the UI having fetched the preview first, and the
 // exact command is part of the preview payload so it is always visible in the
 // confirmation, and always typeable by hand instead.
+// `restarts_ui` — DOES THIS ACTION REPLACE WHAT THE PANEL IS SERVING?
+//
+// `orc upgrade` installs a new package over the one this process is running
+// from, and `orc update` / `--prune` / `doctor --fix` rewrite the payload every
+// panel reads. Node loaded bin/webui at require time and `STATIC` is a one-time
+// walk at boot, so neither is visible until the server is replaced — which used
+// to mean stop the server, re-run `orc ui`, open the new URL. The flag is
+// DECLARED per action rather than inferred, because "this command changed the
+// code under me" is not something a command's output can be read for.
+//
+// `update-global` is deliberately FALSE: it re-copies the payload into
+// ~/.claude, which is not what this server is running and not what any panel
+// here reads.
 const MAINTENANCE = {
   update: {
     apply: ["update"],
+    restarts_ui: true,
     label: "Re-copy this package's payload over the installed one",
     // `orc doctor --json` already itemises exactly what an update would change
     // (version skew, missing files, orphans) — a preview with no second engine.
@@ -535,6 +556,7 @@ const MAINTENANCE = {
   },
   prune: {
     apply: ["update", "--prune"],
+    restarts_ui: true,
     label: "Update AND delete ORC-named orphans from a pre-manifest install",
     preview: ["doctor"],
     // A count is not consent for a deletion: the UI must name every file, and
@@ -543,11 +565,13 @@ const MAINTENANCE = {
   },
   fix: {
     apply: ["doctor", "--fix"],
+    restarts_ui: true,
     label: "Apply every fix orc doctor found (= update + prune + settings re-merge)",
     preview: ["doctor"],
   },
   upgrade: {
     apply: ["upgrade"],
+    restarts_ui: true,
     label: "Fetch the LATEST package from the network, then apply it",
     preview: ["version"],
     network: true,
@@ -864,6 +888,7 @@ async function handleApi(req, res, url, ctx) {
         network: !!m.network,
         names_files: !!m.names_files,
         advanced: !!m.advanced,
+        restarts_ui: !!m.restarts_ui,
       }));
       return json(res, 200, { ok: true, exit_code: 0, data: { actions } });
     }
@@ -881,6 +906,9 @@ async function handleApi(req, res, url, ctx) {
           network: !!m.network,
           names_files: !!m.names_files,
           advanced: !!m.advanced,
+          // Said in the confirmation, not discovered afterwards. A panel that
+          // reloads itself without warning reads as a crash.
+          restarts_ui: !!m.restarts_ui,
           preview_command: "orc " + m.preview.join(" "),
           preview: probe.data,
           // Only the UI can know a run is mid-flight; updating changes the
@@ -1035,10 +1063,27 @@ async function handleApi(req, res, url, ctx) {
       : { ...out, error: readFailReason(out) });
   }
 
+  // Hand the panel over to a fresh process on the SAME port and token, so the
+  // open tab only has to reload. POST-only like every other mutation, and it is
+  // a mutation: the process answering the next request is not this one.
+  //
+  // The CLIENT asks for this — never the job's own close handler. The job's
+  // output lives in this process's memory, so restarting the instant a command
+  // finished would destroy the record of what it did before anyone read it.
+  if (route === "/api/ui/restart") {
+    if (ctx.fixtures)
+      return json(res, 400, { ok: false, reason: "fixtures", error: "fixture mode serves canned data; there is nothing to restart into." });
+    if (job && job.running) return json(res, 409, { ok: false, reason: "busy", error: "a command is still running.", job: jobView() });
+    const out = typeof ctx.restart === "function" ? ctx.restart() : { ok: false, reason: "unsupported" };
+    // A failed handover is NOT fatal and never takes the running panel down:
+    // the old server keeps serving, and the client is told to do it by hand.
+    return json(res, out.ok ? 200 : 500, out);
+  }
+
   if (route === "/api/maintenance/apply") {
     const m = MAINTENANCE[String(body.action)];
     if (!m) return json(res, 400, { error: "unknown action" });
-    const started = startJob(m.apply, ctx);
+    const started = startJob(m.apply, ctx, { restartUi: !!m.restarts_ui });
     if (started.error) return json(res, 409, started);
     return json(res, 200, { ok: true, ...started });
   }

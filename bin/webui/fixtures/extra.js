@@ -875,11 +875,24 @@ const extraLanes = {
 // rate at all so `usd` is null, one substitution, one reroute and one fallback.
 // The `[65,70)` row is deliberately ABSENT so a routed band that nothing has run
 // through can be designed — it must read `—`, never `0`.
+//
+// `sources` carries its ugly states too: rows from all three sources at once,
+// plus a torn log line and an undated saved return. Both of those are ABSENT
+// counts — dispatches that are real and are NOT in the totals — and you cannot
+// design the warning for a short report against a clean one.
 const extraStats = {
   log_dir: ".claude/orc/logs",
   since: null,
   files_scanned: 14,
   dispatches: 23,
+  spend_log: ".claude/orc/extra-spend.jsonl",
+  sources: {
+    spend_log: 18,
+    traces_only: 3,
+    run_returns: 2,
+    run_returns_undated_skipped: 1,
+    unreadable_spend_lines: 1,
+  },
   bands: [
     {
       profile: "cheap",
