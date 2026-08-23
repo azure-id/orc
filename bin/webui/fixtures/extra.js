@@ -769,30 +769,40 @@ const extraRoute = {
   claude_table: "default",
   rows: [
     {
-      from: 0, to: 30, band: "[0,30)", via: "extra",
+      from: 0, to: 30, band: "[0,30)", range: "scores 0 to 29", meaning: "mechanical work in one or two files, with no new logic", via: "extra",
       profile: "cheap", model: "deepseek-chat", small_model: null, max_turns: null,
       engine: "api", provider: "deepseek", verify_state: "VERIFIED", model_known: true,
     },
     {
-      from: 30, to: 55, band: "[30,55)", via: "extra",
+      from: 30, to: 55, band: "[30,55)", range: "scores 30 to 54", meaning: "a few files, following a pattern this repo already has", via: "extra",
       profile: "glm", model: "glm-4.6", small_model: null, max_turns: null,
       engine: "claude-shim", provider: "zai", verify_state: "STALE", model_known: true,
     },
-    { from: 55, to: 65, band: "[55,65)", via: "claude", agent: "orc-executor-sonnet-5-high" },
+    { from: 55, to: 65, band: "[55,65)", range: "scores 55 to 64", meaning: "several files, or a new surface, or logic that carries state", via: "claude", agent: "orc-executor-sonnet-5-high" },
     {
       // A routed model the last ping did not list — the state that becomes a
       // 404 in the middle of a wave if nothing shows it first.
-      from: 65, to: 70, band: "[65,70)", via: "extra",
+      from: 65, to: 70, band: "[65,70)", range: "scores 65 to 69", meaning: "several files, or a new surface, or logic that carries state", via: "extra",
       profile: "cheap", model: "deepseek-coder", small_model: null, max_turns: null,
       engine: "api", provider: "deepseek", verify_state: "VERIFIED", model_known: false,
     },
-    { from: 70, to: 80, band: "[70,80)", via: "claude", agent: "orc-executor-opus-4-7-high" },
-    { from: 80, to: 90, band: "[80,90)", via: "claude", agent: "orc-executor-opus-4-8-high" },
-    { from: 90, to: 100, band: "[90,100]", via: "claude", agent: "orc-executor-opus-5-high" },
+    { from: 70, to: 80, band: "[70,80)", range: "scores 70 to 79", meaning: "wide reach or genuinely new work (a cited risk floors a task to 70, so it lands here or above)", via: "claude", agent: "orc-executor-opus-4-7-high" },
+    { from: 80, to: 90, band: "[80,90)", range: "scores 80 to 89", meaning: "wide reach or genuinely new work (a cited risk floors a task to 70, so it lands here or above) — ranging up to the hardest work: a novel algorithm, or wide reach with deep logic", via: "claude", agent: "orc-executor-opus-4-8-high" },
+    { from: 90, to: 100, band: "[90,100]", range: "scores 90 to 100", meaning: "the hardest work: a novel algorithm, or wide reach with deep logic", via: "claude", agent: "orc-executor-opus-5-high" },
   ],
   foreign: [],
   claude_fallthrough: [],
   counts: { foreign: 3, claude: 4 },
+  // R17 (v0.53.0) — the anchors every row's `meaning` is built from. The CLI
+  // computes this; a plain-language label written in the panel would be the
+  // panel deciding what a score means.
+  band_meanings: [
+    { from: 0, to: 30, meaning: "mechanical work in one or two files, with no new logic" },
+    { from: 30, to: 55, meaning: "a few files, following a pattern this repo already has" },
+    { from: 55, to: 70, meaning: "several files, or a new surface, or logic that carries state" },
+    { from: 70, to: 85, meaning: "wide reach or genuinely new work (a cited risk floors a task to 70, so it lands here or above)" },
+    { from: 85, to: 100, meaning: "the hardest work: a novel algorithm, or wide reach with deep logic" },
+  ],
   note: null,
 };
 extraRoute.foreign = extraRoute.rows.filter((r) => r.via === "extra");

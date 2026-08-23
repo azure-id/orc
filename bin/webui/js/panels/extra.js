@@ -95,23 +95,56 @@ async function renderExtra(body) {
   // there is no second idea here of what "has anything ever answered" means.
   const connected = !!(d.list && d.list.gate && d.list.gate.connected);
   const out = frag();
-  out.append(exBoundaryCard());
-  // The strip stays either way, so the panel never looks broken.
+
+  // THE HEADER STRIP AND "WHAT NEEDS YOUR ATTENTION" ARE ON EVERY TAB. The
+  // strip is the Knowledge precedent (v0.49.1), and the findings card is the
+  // one card that must not be behind a tab: a caution you have to go looking
+  // for is a caution nobody reads. Everything else is tabbed.
   out.append(exStrip(d));
-  if (!connected) out.append(exGateNotice(d));
-  out.append(exToolsCard(d, body));
-  out.append(exProfilesCard(d, body));
-  if (connected) {
-    // DIRECTLY ABOVE the routing table, because it is what the table's rows
-    // mean. A band is arithmetic; which lane it governs is the decision.
-    out.append(exLanesCard(d));
-    out.append(exRoutingCard(d, body, edits));
-    out.append(exGuardrailsCard(d, body, edits));
-    out.append(exCostCard(d));
-  }
   out.append(exFindingsCard(d));
-  if (connected) out.append(exProvidersCard(d));
+
+  const tabs = el("div", "tabs");
+  // `stack` as well as `tab-pane`: every tab holds several cards, and the
+  // container is what spaces panel blocks.
+  const pane = el("div", "tab-pane stack");
+  // THE GATE STILL DECIDES WHAT EXISTS. With nothing connected there is no
+  // routing to draw, no limits worth setting and nothing spent — so those tabs
+  // are NOT RENDERED AS EMPTY SHELLS. Setup is the only tab there is, and its
+  // own tab is spotlighted (the Crosslink "nothing linked" rule).
+  const views = connected
+    ? {
+        setup: () => exSetupTab(d, body),
+        routing: () => exRoutingTab(d, body, edits),
+        limits: () => exLimitsTab(d, body, edits),
+        spending: () => exSpendingTab(d),
+        providers: () => exProvidersTab(d),
+      }
+    : { setup: () => exSetupTab(d, body) };
+  const select = (which) => {
+    EX_TAB = which;
+    for (const b of tabs.children) b.setAttribute("aria-selected", String(b.dataset.tab === which));
+    pane.replaceChildren(views[which]());
+  };
+  // Keys are written out in full, never assembled from the tab id — a key built
+  // from a fragment is invisible to every check that looks for one.
+  for (const [which, label] of [
+    ["setup", t("extra.tab.setup")],
+    ["routing", t("extra.tab.routing")],
+    ["limits", t("extra.tab.limits")],
+    ["spending", t("extra.tab.spending")],
+    ["providers", t("extra.tab.providers")],
+  ]) {
+    if (!views[which]) continue;
+    const b = el("button", null, label);
+    b.type = "button";
+    b.dataset.tab = which;
+    if (!connected && which === "setup") b.classList.add("tab-spot");
+    b.addEventListener("click", () => select(which));
+    tabs.append(b);
+  }
+  out.append(tabs, pane);
   body.replaceChildren(out);
+  select(views[EX_TAB] ? EX_TAB : "setup");
   // The bar sticks only while dirty, and Discard renders only while dirty —
   // both are editBar's own rules, unchanged. It is GATED with the two cards it
   // belongs to (v0.51.0): "Reset the guardrails" beside a panel that is not
@@ -120,6 +153,55 @@ async function renderExtra(body) {
   EX_BAR = connected ? exEditBar(edits, body) : null;
   if (EX_BAR) body.append(EX_BAR);
 }
+
+/* THE FIVE TABS (v0.53.0).
+
+   This panel was nine cards in one 8,800px scroll — no first step, no last
+   step, and no way to be DONE with a section. Knowledge (five tabs, v0.49.1)
+   and Crosslink (two, v0.43.7) are the precedent, down to the shared `.tabs` /
+   `.tab-pane` in runs.css; Extra was the biggest panel in the app and the only
+   big one that never adopted it.
+
+   The grouping is what you DO, in the order you do it: connect something,
+   decide where work goes, set the rules, read what it cost, look a provider up.
+   Routing carries the band ladder AND the lane table together because a band is
+   arithmetic and the lane is the decision — they were two cards you scrolled
+   between. */
+function exSetupTab(d, body) {
+  const out = frag();
+  // THE BOUNDARY CARD RENDERS ALWAYS. It is the one thing a first-time reader
+  // has to see before they connect anything.
+  out.append(exBoundaryCard());
+  if (!(d.list && d.list.gate && d.list.gate.connected)) out.append(exGateNotice(d));
+  out.append(exToolsCard(d, body));
+  out.append(exProfilesCard(d, body));
+  return out;
+}
+function exRoutingTab(d, body, edits) {
+  const out = frag();
+  out.append(exRoutingCard(d, body, edits));
+  out.append(exLanesCard(d));
+  return out;
+}
+function exLimitsTab(d, body, edits) {
+  const out = frag();
+  out.append(exGuardrailsCard(d, body, edits));
+  return out;
+}
+function exSpendingTab(d) {
+  const out = frag();
+  out.append(exCostCard(d));
+  return out;
+}
+function exProvidersTab(d) {
+  const out = frag();
+  out.append(exProvidersCard(d));
+  return out;
+}
+
+// Which tab was open, so a write that re-renders the panel does not throw you
+// back to Setup — the KN_TAB rule.
+let EX_TAB = "setup";
 
 // The panel's staged writes. EVERY entry here is an ACTION — a route with a
 // body — including the config ones, which stage as `/api/config/set` rather than
@@ -401,6 +483,7 @@ function exProvidersCard(d) {
   }
   const cat = d.providers || {};
   c.append(el("div", "note", t("extra.providers.sub")));
+  c.append(exWhy(t("extra.providers.subWhy")));
   if (cat.stale) c.append(el("div", "banner banner-bad", t("extra.providers.stale")));
 
   const grid = el("div", "ex-provider-grid");
@@ -718,6 +801,7 @@ function exToolsCard(d, body) {
     return c;
   }
   c.append(el("div", "note", t("extra.tools.sub")));
+  c.append(exWhy(t("extra.tools.subWhy")));
   const grid = el("div", "ex-tool-grid");
   for (const tool of tools) grid.append(exToolBox(tool, d, body));
   c.append(grid);
@@ -742,20 +826,28 @@ function exToolBox(tool, d, body) {
   top.append(chip(tool.state, tool.state === "ready" ? "ok" : tool.state === "absent" ? "bad" : "warn"));
   box.append(top);
 
+  // v0.53.0 — ONE SENTENCE AND ONE CONTROL PER STATE. Four states carry four
+  // different shapes and exactly ONE action each, and the `absent` card used to
+  // stack five paragraphs above its button. Everything a state does not need in
+  // order to be acted on now lives behind `exToolMore`. Nothing is removed and
+  // nothing about the states, their colours or their next actions changes —
+  // those are all `orc extra tools`'s answers.
   if (tool.state === "absent") {
     box.append(el("div", "note", t("extra.tools.absentWhat")));
     box.append(exInstallRow(tool, body));
+    const more = exToolMore();
     // `null` MEANS THERE IS NONE — never that ORC forgot to look. The two cases
     // must not render the same, and neither may render as an empty slot.
     if (tool.no_install_alternative) {
       const alt = el("div", "note");
       alt.append(document.createTextNode(t("extra.tools.altYes") + " "));
       alt.append(el("span", "mono", tool.no_install_alternative));
-      box.append(alt);
+      more.append(alt);
     } else {
-      box.append(el("div", "note", t("extra.tools.altNone")));
+      more.append(el("div", "note", t("extra.tools.altNone")));
     }
-    if (tool.docs_url) box.append(exLink(tool.docs_url, t("extra.providers.docs")));
+    if (tool.docs_url) more.append(exLink(tool.docs_url, t("extra.providers.docs")));
+    box.append(more);
     return box;
   }
 
@@ -771,18 +863,25 @@ function exToolBox(tool, d, body) {
   // label rather than by an index, because kvList drops empty rows.
   const authDt = Array.from(kvDl.querySelectorAll("dt")).find((x) => x.textContent === t("extra.tools.auth"));
   if (authDt && authDt.nextElementSibling) authDt.nextElementSibling.classList.add("ex-auth-detail");
-  box.append(kvDl);
-  if (tool.bin_path) box.append(el("div", "note mono ex-tool-path", tool.bin_path));
+  // THE DIAGNOSTICS GO BEHIND THE DISCLOSURE. A version, a floor, an auth string
+  // and a model count are what you read when something is wrong; the state chip
+  // already told you whether it is. The PROBE ERROR stays out here — it is the
+  // reason for the state, not detail about it.
+  const more = exToolMore();
+  more.append(kvDl);
+  if (tool.bin_path) more.append(el("div", "note mono ex-tool-path", tool.bin_path));
   if (tool.probe_error) box.append(el("div", "note bad", tool.probe_error));
 
   if (tool.state === "outdated") {
     box.append(el("div", "note", t("extra.tools.outdatedWhat")));
     box.append(exInstallRow(tool, body));
+    box.append(more);
     return box;
   }
   if (tool.state === "unauthenticated") {
     box.append(el("div", "note", t("extra.tools.unauthWhat")));
     box.append(exKeyhelpRow(tool, d, body));
+    box.append(more);
     return box;
   }
   // ready — and READY IS NOT THE SAME AS UNCONNECTED. `connected` / `verified`
@@ -816,7 +915,45 @@ function exToolBox(tool, d, body) {
     actions.append(again);
   }
   box.append(actions);
+  box.append(more);
   return box;
+}
+
+/* THE "WHY" DISCLOSURE (v0.53.0).
+
+   The copy problem on this panel was never that it was untranslated — both
+   tables are complete. It was that DESIGN RATIONALE WAS BEING SERVED AS USER
+   INSTRUCTION. "A gap is not a hole … so 'I left the hardest work on Claude on
+   purpose' and 'there is no top band' can never look the same" is true, and it
+   belongs in knowledge.md; as the first thing under a table it tells a
+   first-time reader nothing about what to do.
+
+   So the shape is: the INSTRUCTION first, in Simplified Technical English (one
+   sentence, active, twenty words at most — bin/webui/i18n/TERMS.md), and the
+   REASONING underneath, collapsed. Nothing is deleted; the rationale keeps its
+   own voice, which is the one thing TERMS.md protects. It is just no longer in
+   the way. */
+function exWhy(text) {
+  const d = document.createElement("details");
+  d.className = "ex-more ex-why";
+  const s = document.createElement("summary");
+  s.textContent = t("extra.why");
+  d.append(s, el("div", "note", text));
+  return d;
+}
+
+/* THE DISCLOSURE. A native <details>, so the open/closed state, the keyboard
+   handling and the toggle are the browser's rather than a fourth hand-rolled
+   expander. It is CLOSED by default because a card whose whole content is
+   visible has no first thing to look at — and it holds only detail: a state
+   never hides the control that acts on it. */
+function exToolMore() {
+  const d = document.createElement("details");
+  d.className = "ex-more";
+  const s = document.createElement("summary");
+  s.textContent = t("extra.tools.more");
+  d.append(s);
+  return d;
 }
 
 // The one action that can still tell you something about a connected tool. The
@@ -956,6 +1093,7 @@ function exGateNotice(d) {
     el("div", null, gate && gate.floor === "never-tested" ? t("extra.gate.neverTested") : t("extra.gate.noConnection"))
   );
   box.append(el("div", "note", t("extra.gate.hidden")));
+  box.append(exWhy(t("extra.gate.hiddenWhy")));
   // The CLI's own sentence about what to do next, in the CLI's own words.
   if (gate && gate.next) box.append(el("div", "action-cmd", gate.next));
   return box;
@@ -1602,6 +1740,7 @@ let EX_OPEN_BAND = null;
 function exLanesCard(d) {
   const c = card(t("extra.lanes.title"));
   c.append(el("div", "note", t("extra.lanes.sub")));
+  c.append(exWhy(t("extra.lanes.subWhy")));
   if (d.errors.lanes) {
     c.append(failBox(d.errors.lanes));
     return c;
@@ -1651,166 +1790,244 @@ function exRoutingCard(d, body, edits) {
   // The CLI's own sentence when the master gate is off. Every row below is
   // inert and it says so — never a panel paraphrase.
   if (r.note) c.append(el("div", "banner", r.note));
-
-  // The rail is redrawn from the STAGED shape whenever a row stages or undoes —
-  // and by nothing else. Still no panel re-render and still no refetch: this is
-  // one element replacing its own children.
-  const railHost = el("div");
-  const drawRail = () => railHost.replaceChildren(exRail(exPreviewRows(rows, edits)));
-  drawRail();
-  c.append(railHost);
-  c.append(el("div", "note", t("extra.routing.gapNote")));
+  c.append(el("div", "note", t("extra.routing.sub")));
 
   // R10 — THE GATE. Nothing may be routed to a connection that has never
-  // answered, so the editor is closed until one has, and the ONE line that
-  // would open it is printed rather than implied.
+  // answered, so the editor stays shut until one has, and the ONE line that
+  // would open it is printed rather than implied. The LADDER still draws either
+  // way: what your bands resolve to today is worth reading before you can
+  // change it.
   const verified = ((d.list && d.list.counts) || {}).verified || 0;
-  if (!verified) {
-    c.append(empty(t("extra.routing.locked"), t("extra.routing.lockedHint")));
-    return c;
-  }
 
-  const table = el("div", "ex-route-rows");
-  for (const row of rows) table.append(exRouteRow(row, d, edits, drawRail));
-  c.append(table);
-  c.append(el("div", "note", t("extra.routing.editNote")));
+  c.append(exBandLadder(rows, d, edits, verified > 0));
+  c.append(exBandLegend());
+  c.append(el("div", "note", t("extra.routing.gapNote")));
+  c.append(exWhy(t("extra.routing.gapWhy")));
+  if (!verified) c.append(empty(t("extra.routing.locked"), t("extra.routing.lockedHint")));
+  else c.append(el("div", "note", t("extra.routing.editNote")));
   return c;
 }
 
-/* THE RAIL DRAWS WHAT YOU ARE ABOUT TO DO. R11's second animation: a segment
-   grows into the provider's colour when a band is staged and the displaced
-   Claude segment gives up its slot, so you SEE the trade you are making before
-   anything is written.
+/* THE BAND LADDER (v0.53.0) — ONE PICTURE, AND THE ROW YOU READ IS THE ROW YOU
+   EDIT.
+
+   What this replaces was a horizontal 0→100 rail ABOVE a separate list of
+   editable rows: the same data twice, and only the second copy was interactive.
+   Six things were wrong with the rail and every one of them is structural.
+
+     1. THE TARGET WAS TRUNCATED — clipped mid-word, three rows out of seven.
+        The single most important fact in the picture was the one you could not
+        read.
+     2. THE WIDTHS LIED. `min-width: 128px` fought `var(--w)`, so a 10-point
+        band and a 30-point band came out nearly the same width while the
+        `0 … 100` axis underneath promised they were to scale.
+     3. THE LAST BAND WAS OFF-SCREEN with no affordance that the rail scrolled.
+     4. NOTHING SAID WHAT THE COLOURS MEANT. Green versus blue was never
+        explained anywhere on the page, and green is "this work leaves your
+        machine" — see exBandLegend.
+     5. `[0,30)` IS DEVELOPER NOTATION. The half-open bracket is load-bearing so
+        it stays, but it now sits beside the CLI's plain reading of the same
+        range instead of instead of one.
+     6. AND IT WAS THE SAME DATA TWICE.
+
+   Vertical fixes all six at once: the proportional bar is a width INSIDE the
+   row, so scale is honest and nothing is ever squeezed or clipped; the target
+   gets the whole row; and the editor opens IN PLACE — the Runs-row and
+   Knowledge-doc rule, one row open at a time. */
+function exBandLadder(rows, d, edits, verified) {
+  const list = el("div", "ex-ladder");
+  // NO FILTER, and that is the assertion rather than the absence. A range with
+  // no connection of yours on it is a CLAUDE range and it keeps its row — the
+  // v0.43.7 OFF-phase rule. Filtering the gaps out would make "I left the top
+  // band on Claude on purpose" and "there is no top band" look identical.
+  const entries = [];
+  const openOnly = (which) => {
+    for (const e of entries) if (e !== which) e.close();
+  };
+  for (const row of rows) {
+    const e = exBandRow(row, d, edits, verified, openOnly);
+    entries.push(e);
+    list.append(e.node);
+  }
+  return list;
+}
+
+/* THE LEGEND — the fix for the single biggest comprehension gap on this panel.
+   Two colours were carrying the whole meaning of the picture and neither was
+   ever named. The words are the panel's own (they describe what the subsystem
+   does, not this repo's state), which is the same rule the boundary card is
+   written under. */
+function exBandLegend() {
+  const box = el("div", "ex-legend");
+  const item = (cls, label) => {
+    const s = el("span", "ex-legend-item");
+    s.append(el("span", "ex-legend-swatch " + cls));
+    s.append(el("span", "note", label));
+    box.append(s);
+  };
+  item("ex-band-extra", t("extra.routing.legendExtra"));
+  item("ex-band-claude", t("extra.routing.legendClaude"));
+  return box;
+}
+
+/* WHAT YOU ARE ABOUT TO DO, drawn from the STAGED shape rather than from disk.
+   Nothing re-renders until Apply (v0.44.1), so a row has to show its own staged
+   state and an undo has to put the control back without the panel reloading
+   underneath it.
 
    IT NEVER INVENTS THE OTHER HALF. Un-routing a band hands it back to the
    Claude ladder, and which agent it lands on is `claudeGaps`'s answer — split at
    the resolving table's own edges, which this panel does not know and must not
-   learn. A staged un-route therefore draws a Claude segment whose target is an
-   em dash, and says it is recomputed on Apply. A guessed agent name here would
-   be a picture of a run that is not going to happen. */
+   learn. A staged un-route therefore draws a Claude row whose target is an em
+   dash, and says it is recomputed on Apply. A guessed agent name here would be a
+   picture of a run that is not going to happen. */
+function exPreviewRow(r, edits) {
+  const staged = edits.map.get("route " + r.band);
+  if (!staged) return r;
+  if (staged.route === "/api/extra/route/rm")
+    return { from: r.from, to: r.to, band: r.band, range: r.range, meaning: r.meaning, via: "claude", agent: null, staged: true };
+  const target = String((staged.body && staged.body.target) || "");
+  const cut = target.indexOf("/");
+  return {
+    from: r.from,
+    to: r.to,
+    band: r.band,
+    range: r.range,
+    meaning: r.meaning,
+    via: "extra",
+    profile: cut > 0 ? target.slice(0, cut) : target,
+    model: cut > 0 ? target.slice(cut + 1) : "",
+    engine: null,
+    verify_state: null,
+    model_known: true,
+    staged: true,
+  };
+}
 function exPreviewRows(rows, edits) {
-  return rows.map((r) => {
-    const staged = edits.map.get("route " + r.band);
-    if (!staged) return r;
-    if (staged.route === "/api/extra/route/rm")
-      return { from: r.from, to: r.to, band: r.band, via: "claude", agent: null, staged: true };
-    const target = String((staged.body && staged.body.target) || "");
-    const cut = target.indexOf("/");
-    return {
-      from: r.from,
-      to: r.to,
-      band: r.band,
-      via: "extra",
-      profile: cut > 0 ? target.slice(0, cut) : target,
-      model: cut > 0 ? target.slice(cut + 1) : "",
-      engine: null,
-      verify_state: null,
-      model_known: true,
-      staged: true,
-    };
-  });
+  return rows.map((r) => exPreviewRow(r, edits));
 }
 
-function exRail(rows) {
-  const wrap = el("div", "ex-rail-wrap");
-  const rail = el("div", "ex-rail");
-  for (const row of rows) {
-    const seg = el(
-      "div",
-      "ex-seg " + (row.via === "extra" ? "ex-seg-extra" : "ex-seg-claude") + (row.staged ? " ex-seg-staged" : "")
+function exBandRow(raw, d, edits, verified, openOnly) {
+  const key = "route " + raw.band;
+  const node = el("div", "ex-band");
+  const headBtn = el("button", "ex-band-head");
+  headBtn.type = "button";
+  headBtn.setAttribute("aria-expanded", "false");
+  const pane = el("div", "ex-band-pane");
+  node.append(headBtn, pane);
+
+  const isOpen = () => node.classList.contains("open");
+  const setOpen = (open) => {
+    node.classList.toggle("open", open);
+    headBtn.setAttribute("aria-expanded", String(open));
+    if (open) EX_OPEN_BAND = raw.band;
+    else if (EX_OPEN_BAND === raw.band) EX_OPEN_BAND = null;
+    pane.replaceChildren(open ? editor() : frag());
+  };
+
+  const target = (p) => (p.via === "extra" ? p.profile + "/" + p.model : p.agent || "—");
+
+  const paint = () => {
+    const p = exPreviewRow(raw, edits);
+    headBtn.replaceChildren();
+    // The proportional bar, INSIDE the row. A CUSTOM PROPERTY and not an inline
+    // width: the panel's CSP is `style-src 'self'` and a style attribute is
+    // blocked outright. The track is full width, so `--w` is honest at every
+    // viewport and no band is ever squeezed to a sliver to make room for text.
+    const track = el("span", "ex-band-track");
+    const bar = el(
+      "span",
+      "ex-band-bar " + (p.via === "extra" ? "ex-band-extra" : "ex-band-claude") + (p.staged ? " ex-band-staged" : "")
     );
-    // A CUSTOM PROPERTY, not an inline width: the panel's CSP is
-    // `style-src 'self'` and a style attribute is blocked outright. Same
-    // technique as the Docs token bar and the Challenge convergence bar.
-    seg.style.setProperty("--w", (Math.max(0, row.to - row.from)).toFixed(2) + "%");
-    // The band label is the CLI's own `[from,to)` string, brackets included:
-    // the half-open edge is the whole point of the notation.
-    seg.append(el("div", "ex-seg-band", row.band));
-    const target = row.via === "extra" ? row.profile + "/" + row.model : row.agent || "—";
-    seg.append(el("div", "ex-seg-target", target));
-    const sub = el("div", "ex-seg-sub");
-    if (row.staged) sub.append(chip(t("extra.routing.staged"), "info"));
+    bar.style.setProperty("--w", Math.max(0, raw.to - raw.from).toFixed(2) + "%");
+    track.append(bar);
+    headBtn.append(track);
+    const mid = el("span", "ex-band-mid");
+    // The CLI's own `[from,to)` string, brackets included: the half-open edge is
+    // the whole point of the notation. And BESIDE it the CLI's plain reading of
+    // the same range — `range` is computed by `orc extra route`, never written
+    // here. "simple work" beside a score would be the panel deciding what a
+    // score means, which is the Flow-stepper rule.
+    mid.append(el("span", "mono ex-band-label", raw.band));
+    if (raw.range) mid.append(el("span", "note ex-band-range", raw.range));
+    headBtn.append(mid);
+    // THE FULL TARGET, never truncated. It is the most important fact in the row.
+    headBtn.append(el("span", "mono ex-band-target", target(p)));
+    const chips = el("span", "ex-band-chips");
+    if (p.staged) chips.append(chip(t("extra.routing.staged"), "info"));
+    if (p.via === "extra" && p.engine) chips.append(chip(p.engine, "info"));
     // The CLI's state word, verbatim — never a friendlier synonym. A STAGED row
     // has no state word yet, because nothing has been written for the CLI to
     // have an opinion about.
-    if (row.via === "extra" && row.verify_state)
-      sub.append(chip(row.verify_state, row.verify_state === "VERIFIED" ? "ok" : "warn"));
-    if (row.via === "extra" && !row.model_known) sub.append(chip(t("extra.routing.modelGone"), "warn"));
-    if (row.staged && row.via === "claude") sub.append(el("span", "note", t("extra.routing.recomputed")));
-    if (sub.childNodes.length) seg.append(sub);
-    seg.title = row.band + " → " + target;
-    rail.append(seg);
-  }
-  wrap.append(rail);
-  const axis = el("div", "ex-rail-axis");
-  axis.append(el("span", null, "0"));
-  axis.append(el("span", "ex-rail-axis-label", t("extra.routing.axis")));
-  axis.append(el("span", null, "100"));
-  wrap.append(axis);
-  return wrap;
-}
+    if (p.via === "extra" && p.verify_state)
+      chips.append(chip(p.verify_state, p.verify_state === "VERIFIED" ? "ok" : "warn"));
+    if (p.via === "extra" && !p.model_known) chips.append(chip(t("extra.routing.modelGone"), "warn"));
+    if (p.staged && p.via === "claude") chips.append(el("span", "note", t("extra.routing.recomputed")));
+    headBtn.append(chips);
+    headBtn.append(el("span", "ex-band-caret", "▸"));
+    headBtn.title = raw.band + " → " + target(p);
+    if (isOpen()) pane.replaceChildren(editor());
+  };
 
-function exRouteRow(row, d, edits, drawRail) {
-  const key = "route " + row.band;
-  const box = el("div", "ex-route-row");
-  const head = el("div", "row-actions");
-  // NOT named `slot`: that name is reserved for a PANEL container, which must
-  // carry "stack" (a test asserts it). This is a row-local swap area.
-  const ctl = el("div", "ex-route-slot");
-  box.append(head, ctl);
-
-  head.append(el("span", "mono ex-route-band", row.band));
-  head.append(
-    el("span", "note", row.via === "extra" ? row.profile + "/" + row.model : row.agent)
-  );
-  if (row.via === "extra" && row.engine) head.append(chip(row.engine, "info"));
-
-  // THE ROW REPAINTS ITSELF. Nothing re-renders until Apply, so a staged change
-  // has to show up here and nowhere else — and an undo has to put the control
-  // back without the panel reloading underneath it.
-  const paint = () => {
-    drawRail();
-    ctl.replaceChildren();
-    for (const b of [...head.querySelectorAll("button")]) b.remove();
+  const editor = () => {
+    const box = el("div", "stack stack-sm");
+    // WHAT A SCORE IN THIS RANGE DESCRIBES, in the CLI's words.
+    if (raw.meaning) box.append(el("div", "note", raw.meaning));
     const staged = edits.map.get(key);
     if (staged) {
-      const note = el("div", "note ex-route-staged");
-      note.append(chip(t("extra.routing.staged"), "info"));
-      note.append(document.createTextNode(" " + staged.value));
+      const line = el("div", "note ex-route-staged");
+      line.append(chip(t("extra.routing.staged"), "info"));
+      line.append(document.createTextNode(" " + staged.value));
       const undo = el("button", "btn btn-ghost btn-sm", t("extra.routing.undo"));
       undo.type = "button";
       undo.addEventListener("click", () => {
         edits.drop(key);
         paint();
       });
-      note.append(undo);
-      ctl.append(note);
-      return;
+      line.append(undo);
+      box.append(line);
+      return box;
     }
-    ctl.append(controls());
-  };
-
-  const controls = () => {
-    if (row.via === "extra") {
-      const clear = el("button", "btn btn-ghost btn-sm", t("extra.routing.clear"));
+    if (!verified) {
+      box.append(el("div", "note", t("extra.routing.lockedHint")));
+      return box;
+    }
+    if (raw.via === "extra") {
+      // The row's own detail, all of it the CLI's. It was never visible before:
+      // a small model and a turn cap decide what a wave actually does.
+      box.append(
+        kvList([
+          [t("extra.routing.kvProfile"), raw.profile],
+          [t("extra.routing.kvModel"), raw.model],
+          [t("extra.routing.kvSmall"), raw.small_model || "—"],
+          [t("extra.routing.kvTurns"), raw.max_turns === null || raw.max_turns === undefined ? "—" : String(raw.max_turns)],
+        ])
+      );
+      const clear = el("button", "btn btn-sm", t("extra.routing.clear"));
       clear.type = "button";
       clear.addEventListener("click", () => {
-        edits.action(
-          key,
-          "/api/extra/route/rm",
-          { band: row.from + "-" + row.to },
-          t("extra.routing.stagedClear")
-        );
+        edits.action(key, "/api/extra/route/rm", { band: raw.from + "-" + raw.to }, t("extra.routing.stagedClear"));
         paint();
       });
-      head.append(clear);
-      return el("div");
+      const acts = el("div", "row-actions");
+      acts.append(clear);
+      box.append(acts);
+      return box;
     }
-    return exRouteControls(row, d, edits, key, paint);
+    box.append(exRouteControls(raw, d, edits, key, paint));
+    return box;
   };
 
+  headBtn.addEventListener("click", () => {
+    const next = !isOpen();
+    if (next) openOnly(entry);
+    setOpen(next);
+  });
   paint();
-  return box;
+  const entry = { node, close: () => isOpen() && setOpen(false) };
+  // A re-render must not close the row you were working in.
+  if (EX_OPEN_BAND === raw.band) setOpen(true);
+  return entry;
 }
 
 function exRouteControls(row, d, edits, key, paint) {
@@ -2021,6 +2238,7 @@ function exGuardrailsCard(d, body, edits) {
     return c;
   }
   c.append(el("div", "note", t("extra.guard.sub")));
+  c.append(exWhy(t("extra.guard.subWhy")));
   const proxy = exConfigEdits(edits);
   const rows = el("div", "settings-list");
   for (const k of keys) rows.append(settingRow(k, body, proxy));

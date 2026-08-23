@@ -6,14 +6,14 @@
 
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
-![Version](https://img.shields.io/badge/version-0.52.0-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.53.0-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
 ![Dependencies](https://img.shields.io/badge/dependencies-zero-lightgrey.svg?style=for-the-badge)
 ![GitHub stars](https://img.shields.io/github/stars/azure-id/orc?style=for-the-badge&color=yellow)
 
-**Latest: v0.52.0** · updated 2026-08-23 · [full changelog](CHANGELOG.md)
+**Latest: v0.53.0** · updated 2026-08-23 · [full changelog](CHANGELOG.md)
 
 **🇮🇩 [Baca dalam Bahasa Indonesia](README-id.md)**
 
@@ -440,42 +440,42 @@ a current audit: [EVAL-REPORT.md](EVAL-REPORT.md).
 **Full history: [CHANGELOG.md](CHANGELOG.md)** — or `orc changelog`, which prints
 only what is newer than the version you have.
 
-### v0.52.0 — the connection that could not be used, and the routing nobody could see _(2026-08-23)_
+### v0.53.0 — the schema the provider rejected, and a routing table you can read _(2026-08-23)_
 
-**Eleven defects, one release.** Five came out of a real `/orc-fast` run against
-a verified, routed local tool — a run that fell back to Claude twice over, for
-two reasons that had nothing to do with the model.
+**One outage, one defect visible at a glance, and the Extra panel rebuilt.**
 
-- **`opencode` dispatch was dead on arrival.** `-f` is a greedy yargs array
-  flag, so it swallowed the message and the tool exited in its own parser —
-  looking exactly like a model problem. The message comes first now.
-- **A tool that signs itself in was forced into the vault.** The add form has a
-  third credential source now, and pre-selects it when the tool is already
-  signed in.
-- **The passphrase has a lifecycle.** Save it with a deadline (`orc extra
-  session <name> --save --ttl <days>`, on stdin), and **`orc extra preflight`
-  STOPS a run when it expires** rather than quietly falling back. The cache is
-  encrypted under a key in your home directory, so **a copy of the project
-  folder opens nothing**.
-- **Extra is visible outside its own panel.** `orc extra lanes` says which lane
-  a band actually governs, the Flow score table renders the composite, a
-  `fixed_executor` can name a foreign target, and **`/orc-doc` has its own
-  per-document switch** — a document's voice is the deliverable.
-- **Three panel fixes**: a connected tool no longer offers Connect, a modal no
-  longer scrolls the page behind it (every modal, not just Extra's), and two
-  tool cards line up row for row.
-- **Wording**: the panel's instruction text is Simplified Technical English with
-  a term list and a test. Rationale prose keeps its voice — and a CLI-computed
-  value is never simplified, because a simplified state word is a state that
-  does not exist.
+- **Engine `cli` on codex was 100% dead for a release, and the suite was green.**
+  ORC sent an `--output-schema` that OpenAI rejects outright, so every dispatch
+  was an **HTTP 400 raised before the model was reached** — fast, free, and
+  reported as something vague. The schema is fixed and documented as
+  **provider-dictated rather than chosen**.
+- **The reason it shipped green: the fake was more permissive than the
+  provider.** That is the third release in a row broken by the same shape. **A
+  strict third-party parser fails for free, and it looks like a model problem** —
+  so the fake now rejects exactly what the provider rejects, by name.
+- **Two more honesty fixes on that adapter**: a failure is classified from **the
+  provider's own error object** rather than from a stderr string, and codex's
+  cache-write count is no longer thrown away and then reported as never
+  measured.
+- **A chip was drawing as a 250px green ellipse.** A tool card declared five grid
+  rows while its four states carry four different numbers of children, so
+  whichever child landed in the slack row was stretched. No row template now.
+- **The Extra panel is five tabs and one readable band ladder.** It was nine
+  cards in one 8,786px scroll. The routing rail truncated the one fact that
+  mattered and its widths did not match its own axis; the ladder is full width,
+  to scale, has a **legend** — green means the work leaves your machine — and
+  the row you read is the row you edit.
+- **Wording**: the panel was serving design rationale as user instruction. The
+  instruction comes first now, in Simplified Technical English, with the
+  reasoning collapsed underneath.
 
 Setup per provider: **[`guides/extra-models.md`](guides/extra-models.md)**.
 
-Before that: **v0.51.0 — the tools you already have, and a connection that
-proves itself**, **v0.49.5 — house rules are text, and the hand-back writes
-itself**, **v0.49.4 — the panel was being handed half an answer**,
-**v0.49.3 — coverage on a large repo**, and **v0.49.2 — house rules, a run map
-before you pay, and three defects**.
+Before that: **v0.52.0 — the connection that could not be used, and the routing
+nobody could see**, **v0.51.0 — the tools you already have, and a connection
+that proves itself**, **v0.49.5 — house rules are text, and the hand-back writes
+itself**, **v0.49.4 — the panel was being handed half an answer**, and
+**v0.49.3 — coverage on a large repo**.
 [Read them in the changelog](CHANGELOG.md).
 
 ---

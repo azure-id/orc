@@ -18,6 +18,9 @@
 //   blocked   the structured answer says `blocked` and the tool still exits 0
 //   silent    exits 0 having said nothing parseable → malformed-return
 //   authfail  exits 1 with a 401 on stderr → classified, and NOT retried
+//   apireject codex relays the upstream API's own 400 in its event stream while
+//             printing something benign on STDERR → the classification must
+//             come from the PROVIDER'S ERROR OBJECT, not from the stderr string
 //
 // v0.51.0 — it also answers the FREE RUNGS of the connection ladder, because
 // "the binary exists" was never evidence of anything and the ladder is what
@@ -163,6 +166,35 @@ function codex() {
     die("the --output-schema file is missing or not JSON: " + sf);
   }
   if (!schema.properties || !schema.properties.status) die("the --output-schema does not describe ORC's return");
+  // v0.53.0 — AND IT MUST BE A SCHEMA THE REAL PROVIDER WOULD ACCEPT. The two
+  // checks above are the whole reason engine `cli` on codex was 100% dead for a
+  // release while this suite was green: they assert the schema EXISTS and
+  // MENTIONS status, and model not one of OpenAI's structured-output rules. A
+  // fake that is more permissive than the provider does not test the adapter,
+  // it certifies it. So the two rules that produced two consecutive HTTP 400s
+  // are enforced here, from the child's side, BY NAME.
+  const badSchema = (node, where) => {
+    if (!node || typeof node !== "object") return;
+    const types = [].concat(node.type || []);
+    if (types.indexOf("object") !== -1 || node.properties) {
+      if (node.additionalProperties !== false)
+        die("structured outputs require `additionalProperties: false` on every object — " + where + " does not set it");
+      const props = Object.keys(node.properties || {});
+      const req = [].concat(node.required || []);
+      const missing = props.filter((k) => req.indexOf(k) === -1);
+      if (missing.length)
+        die(
+          "structured outputs require `required` to list EVERY key in `properties` — " +
+            where +
+            " is missing " +
+            missing.map((k) => "'" + k + "'").join(", ") +
+            ". An optional field is a nullable union, not an omission from required"
+        );
+      for (const k of props) badSchema(node.properties[k], where + "." + k);
+    }
+    if (node.items) badSchema(node.items, where + "[]");
+  };
+  badSchema(schema, "the root object");
   const om = val("--output-last-message");
   if (!om) die("codex exec needs --output-last-message so the final answer is read from a file, not scraped");
   const joined = ARGV.join(" ");
@@ -184,6 +216,24 @@ function codex() {
     process.stderr.write("stream error: unexpected status 401 Unauthorized\n");
     process.exit(1);
   }
+  // The real thing, verbatim: the upstream error object on STDOUT and a benign
+  // notice on STDERR. Nothing in the stderr patterns can match this, which is
+  // exactly why the adapter classifies from the events first.
+  if (MODE === "apireject") {
+    process.stderr.write("Reading additional input from stdin...\n");
+    const err = {
+      error: { type: "invalid_request_error", code: "invalid_json_schema", message: "Invalid schema for response_format 'codex_output_schema'.", param: "text.format.schema" },
+      status: 400,
+    };
+    const ev = [
+      { type: "thread.started", thread_id: "t1" },
+      { type: "turn.started" },
+      Object.assign({ type: "error" }, err),
+      { type: "turn.failed", error: err.error },
+    ];
+    process.stdout.write(ev.map((x) => JSON.stringify(x)).join("\n") + "\n");
+    process.exit(1);
+  }
   const status = MODE === "partial" ? "partial" : MODE === "blocked" ? "blocked" : "done";
   const answer = JSON.stringify({ status, summary: "fake codex " + status, files_changed: ["src/a.js"], unmet: [], notes: "" });
   try {
@@ -196,7 +246,13 @@ function codex() {
     { type: "item.completed", item: { type: "file_change" } },
     {
       type: "turn.completed",
-      usage: { input_tokens: 2000, cached_input_tokens: 1500, output_tokens: 210 },
+      // v0.53.0 — FOUR numbers, not three. `cache_write_input_tokens` is
+      // reported by codex-cli 0.149.0 and was observed live; the adapter used to
+      // declare three kinds and threw this one away, which reported a real
+      // measurement as unknown. `reasoning_output_tokens` is emitted too and is
+      // deliberately NOT read — the Responses API counts it inside
+      // `output_tokens`, so reading it would double-count.
+      usage: { input_tokens: 2000, cached_input_tokens: 1500, cache_write_input_tokens: 640, output_tokens: 210, reasoning_output_tokens: 96 },
       model: "fake-codex-model",
     },
   ];

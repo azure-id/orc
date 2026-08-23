@@ -105,7 +105,7 @@ function makeV1(root, slug, opts) {
 
 test("doc: every shipped template's heading list IS the CLI's batching table", () => {
   const src = fs.readFileSync(path.join(REPO, "bin", "cli.js"), "utf8");
-  const m = src.match(/const DOC_TEMPLATES = (\[[\s\S]*?\n\]);\nconst DOC_TYPES/);
+  const m = src.match(/const DOC_TEMPLATES = (\[[\s\S]*?\r?\n\]);\r?\nconst DOC_TYPES/);
   assert.ok(m, "DOC_TEMPLATES is parseable");
   // eslint-disable-next-line no-eval
   const table = eval(m[1]);

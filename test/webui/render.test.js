@@ -101,16 +101,34 @@ test("css: a modal contains its own scroll, and the page behind it is locked", (
   assert.match(js, /document\.body\.classList\.remove\("modal-open"\)/);
 });
 
-test("css: a tool card declares its rows, so two cards line up row for row", () => {
-  // v0.52.0 / D4. `.ex-tool` sized every internal row to its own content, and
-  // two tools' content differs — so the button in one card sat lower than the
-  // button in the other, permanently. The `.run-card` lesson, one level down.
+test("css: a tool card has NO row template, and a chip in it can never be stretched", () => {
+  // v0.53.0. v0.52.0 gave `.ex-tool` `grid-template-rows: auto auto auto 1fr
+  // auto` and this test asserted the property was PRESENT — which it was, while
+  // the panel drew a 250px green ellipse. FOUR STATES CARRY FOUR DIFFERENT
+  // NUMBERS OF CHILDREN, so a ready+verified card's "connected as" chip landed
+  // in the `1fr` slack row, stretched (a grid item's default), and its 999px
+  // radius did the rest. A property-presence assertion cannot see which child
+  // is sitting in the stretch row, so these two assert the BEHAVIOUR instead.
   const css = panelCss("extra").replace(/\/\*[\s\S]*?\*\//g, "");
-  assert.match(css, /\.ex-tool\s*\{[^}]*grid-template-rows:/);
-  assert.match(css, /\.ex-tool > \.row-actions:last-child\s*\{[^}]*align-self:\s*end/);
+  const rule = /\.ex-tool\s*\{[^}]*\}/.exec(css);
+  assert.ok(rule, ".ex-tool must be styled");
+  assert.ok(
+    !/grid-template-rows:/.test(rule[0]),
+    "no positional row template on a card whose child count changes per state"
+  );
+  // The footer is pushed down by the FREE SPACE, not by a declared row.
+  assert.match(css, /\.ex-tool > \.row-actions:last-child\s*\{[^}]*margin-top:\s*auto/);
+  // A chip states a fact; it is never a layout element.
+  assert.match(css, /\.ex-tool > \.chip\s*\{[^}]*align-self:/);
   // The one unbounded field is clamped rather than allowed to set the height.
   assert.match(css, /dd\.ex-auth-detail/);
   assert.ok(!/subgrid/.test(css), "subgrid breaks the moment a card in a different state joins the row");
+  // …and the two files agree BY NAME: the verified branch appends a `chip` as a
+  // direct child of the card, which is what the selector above is written for.
+  const js = panelJs("extra");
+  assert.match(js, /box\.append\(chip\(t\("extra\.tools\.connectedAs"\)/);
+  // `.ex-tool` was the one `.ex-*` block with no narrow-viewport entry at all.
+  assert.match(appCss(), /\.ex-tool > \.row-actions:not\(:first-child\) \{[^}]*align-items:\s*stretch/);
 });
 
 test("changelog: the parser reads this repo's own CHANGELOG.md", () => {

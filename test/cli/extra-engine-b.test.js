@@ -230,15 +230,65 @@ test("engine B / codex: --output-schema carries ORC's contract, and the vector i
   // The DOCUMENTED shape is read by name, not dug for — a dig would silently
   // accept the wrong field the day the shape changes.
   assert.equal(j.usage_note, "token counts read from the tool's own `turn.completed.usage` field");
-  // v0.51.0 — codex reports THREE numbers (input_tokens, cached_input_tokens,
-  // output_tokens) and there is NO cache-write count. Unknown is not zero
-  // (/orc-budget), so this reads null and a renderer says so.
-  assert.deepEqual(j.usage, { input: 500, cache_write: null, cache_read: 1500, output: 210 });
+  // v0.53.0 — FOUR numbers. codex DOES report `cache_write_input_tokens`
+  // (observed live on codex-cli 0.149.0); the adapter used to declare three
+  // kinds, so a real measurement was thrown away and then reported as never
+  // measured. `reasoning_output_tokens` is emitted too and is deliberately NOT
+  // added to `output` — the Responses API counts it inside `output_tokens`, so
+  // reading it would double-count and over-price every codex run.
+  assert.deepEqual(j.usage, { input: 500, cache_write: 640, cache_read: 1500, output: 210 });
   assert.equal(j.model_reported, "fake-codex-model");
   // The default sandbox is READ-ONLY; without workspace-write the worker cannot
   // edit and the run looks like a model that refused to work.
   assert.ok(j.argv.includes("--sandbox") && j.argv.includes("workspace-write"));
   assert.ok(j.argv.includes("--ephemeral"));
+});
+
+test("engine B / codex: the schema codex is handed is one OpenAI would accept", () => {
+  // The regression that cost a release. `additionalProperties: true` is an HTTP
+  // 400 raised before the model is reached; flipping only that flag is a SECOND
+  // 400 naming `files_changed`. The fake now enforces both rules from the
+  // child's side, so this reads the file ORC actually wrote.
+  const p = project();
+  armedCli(p, "codex", { model: "fake-codex-model" });
+  const r = dispatch(p, "codex", "ok");
+  assert.ok(!r.stderr.includes("ORC-CONTRACT:"), "the child reported a broken contract: " + r.stderr);
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  // And the shape itself, read straight off the constant the dispatch writes.
+  const src = fs.readFileSync(path.join(__dirname, "..", "..", "bin", "cli.js"), "utf8");
+  const m = /const EXTRA_CLI_RETURN_SCHEMA = (\{[\s\S]*?\n\};)/.exec(src);
+  assert.ok(m, "EXTRA_CLI_RETURN_SCHEMA not found");
+  // eslint-disable-next-line no-eval
+  const schema = eval("(" + m[1].replace(/;\s*$/, "") + ")");
+  assert.equal(schema.additionalProperties, false);
+  assert.deepEqual(
+    Object.keys(schema.properties).filter((k) => schema.required.indexOf(k) === -1),
+    [],
+    "structured outputs require `required` to list EVERY key in `properties`"
+  );
+  // An optional field is a NULLABLE UNION, never an omission from `required`.
+  assert.deepEqual(schema.properties.files_changed.type, ["array", "null"]);
+  assert.deepEqual(schema.properties.notes.type, ["string", "null"]);
+});
+
+test("engine B / codex: the upstream error object classifies the failure, not the stderr string", () => {
+  // The exact live failure: codex relays the provider's own
+  // `invalid_request_error` in its event stream on STDOUT while printing the
+  // benign `Reading additional input from stdin...` on STDERR. Nothing in the
+  // stderr patterns matches that, so the old classifier said `unknown` about a
+  // failure ORC has a precise bucket for — and reached `retry: false` by luck.
+  const p = project();
+  armedCli(p, "codex", { model: "fake-codex-model" });
+  const r = dispatch(p, "codex", "apireject");
+  assert.equal(r.status, 1, r.stdout + r.stderr);
+  const j = json(r);
+  assert.equal(j.reason, "invalid_request");
+  assert.equal(j.retry, false);
+  // A field that says where a verdict came from must not lie about it.
+  assert.match(j.classified_from, /the provider's own error object/);
+  assert.doesNotMatch(j.classified_from, /stderr pattern/);
+  // And the message a human reads is the provider's, not the benign notice.
+  assert.match(j.error, /codex_output_schema/);
 });
 
 test("engine B / codex: wire_api = \"chat\" is a REFUSAL before the binary is spawned", () => {

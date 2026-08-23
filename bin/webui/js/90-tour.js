@@ -352,14 +352,17 @@ const TOUR_STEPS = [
      assembled — so `.lane-cmd` and `.doc-list` are the fallbacks, because an
      empty Docs panel still renders the /orc-doc command box. */
   { panel: "docs", selector: ".doc-ribbon-wrap, .doc-list, .lane-cmd", title: "tour.13.title", text: "tour.13.text" },
-  /* v0.50.0 — the routing rail. Same rule a third time: it must point at
-     something with a SIZE. `.ex-rail-wrap` renders on EVERY state of this panel,
-     including a project with no connection at all — the rail is drawn from the
-     Claude table, so its worst case is eight Claude segments rather than
-     nothing. `.ex-boundary` is the fallback for the one case where even the
-     route read failed, because the boundary card renders unconditionally and is
-     the paragraph a first-time reader most needs anyway. */
-  { panel: "extra", selector: ".ex-rail-wrap, .ex-boundary", title: "tour.14.title", text: "tour.14.text" },
+  /* v0.53.0 — Extra is TABBED now, and that moved this step's target. It used
+     to point at the routing rail, which was correct while the panel was one
+     scroll: the rail rendered in every state, because it is drawn from the
+     Claude table and its worst case is eight Claude rows rather than nothing.
+     The band ladder that replaced it lives on the Routing tab, and that tab is
+     NOT RENDERED until something has answered — so a step pointing at it would
+     highlight nothing on exactly the first-run panel this tour exists for. The
+     boundary card is on Setup, which always exists, and it renders
+     unconditionally; the header strip sits outside the tabs entirely and is the
+     fallback. Same rule a fourth time: point at something with a SIZE. */
+  { panel: "extra", selector: ".ex-boundary, .ex-strip", title: "tour.14.title", text: "tour.14.text" },
 ];
 
 function startFirstRunTour(root) {

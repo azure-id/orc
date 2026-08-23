@@ -954,30 +954,91 @@ test("extra panel: it names no provider, no model and no agent", () => {
   }
 });
 
-test("extra rail: an unmapped range keeps its slot, and a staged un-route invents no agent", () => {
+test("extra ladder: one vertical row per band, honest widths, and the row you read is the row you edit", () => {
   const js = panelJs("extra");
   const css = panelCss("extra").replace(/\/\*[\s\S]*?\*\//g, "");
 
   // The v0.43.7 OFF-phase rule: filtering the gaps out would make "I left the
-  // top band on Opus on purpose" and "there is no top band" identical. The rail
-  // renders `rows`, which the CLI already fills with the Claude fall-through —
-  // so there is no filter here at all, and that is the assertion.
-  assert.ok(!/\.filter\([^)]*via === "claude"[^)]*\)\s*\)/.test(js), "the rail must not filter the Claude rows out");
-  assert.match(css, /\.ex-seg-claude\s*\{/, "a Claude range is DRAWN, in its own colour");
+  // top band on Claude on purpose" and "there is no top band" identical. The
+  // ladder renders `rows`, which the CLI already fills with the Claude
+  // fall-through — so there is no filter here at all, and that is the assertion.
+  assert.ok(!/\.filter\([^)]*via === "claude"[^)]*\)\s*\)/.test(js), "the ladder must not filter the Claude rows out");
+  assert.match(css, /\.ex-band-claude\s*\{/, "a Claude range is DRAWN, in its own colour");
 
-  // Geometry solved from the box: a percentage of the axis with a readable
-  // FLOOR, inside a box that scrolls. A rail too narrow for its labels is never
-  // squeezed (the VAULT / ringRadii lesson).
-  assert.match(js, /seg\.style\.setProperty\("--w"/, "a segment is sized by a CUSTOM PROPERTY, never an inline width");
-  assert.match(css, /\.ex-seg\s*\{[\s\S]*?min-width:/, "a segment has a readable floor");
-  assert.match(css, /\.ex-rail-wrap\s*\{[\s\S]*?overflow-x:\s*auto/, "the rail scrolls inside its own box");
+  // v0.53.0 — THE GEOMETRY MOVED INSIDE THE ROW, and that is the whole fix. The
+  // old rail gave each segment `flex: 0 0 var(--w)` with `min-width: 128px`, so
+  // the floor fought the percentage: a 10-point band and a 30-point band came
+  // out nearly the same width while the axis underneath promised they were to
+  // scale. A full-width track holding a `var(--w)` bar needs no floor, needs no
+  // horizontal scroll, and can never clip the target name.
+  assert.match(js, /bar\.style\.setProperty\("--w"/, "the bar is sized by a CUSTOM PROPERTY, never an inline width");
+  assert.match(css, /\.ex-band-bar\s*\{[\s\S]*?width:\s*var\(--w\)/, "the bar is a width INSIDE the row");
+  assert.ok(!/min-width/.test(/\.ex-band-bar\s*\{[^}]*\}/.exec(css)[0]), "no floor may fight the percentage");
+  assert.ok(!/\.ex-rail\b/.test(css) && !/exRail\b/.test(js), "the horizontal rail is gone, not kept beside its replacement");
+  // The target is the most important fact in the row and was the one thing the
+  // old rail clipped. It must never be truncated.
+  assert.ok(
+    !/text-overflow:\s*ellipsis/.test(/\.ex-band-target\s*\{[^}]*\}/.exec(css)[0]),
+    "the target is never truncated"
+  );
+
+  // The Runs-row / Knowledge-doc rule: the row you read is the row you edit,
+  // one open at a time, and there is no second list of the same data below.
+  assert.match(js, /headBtn\.setAttribute\("aria-expanded"/, "a band row expands IN PLACE");
+  assert.ok(!/exRouteRow\b/.test(js), "the duplicate rows section is deleted, not hidden");
 
   // THE ONE THE PREVIEW MUST NEVER GUESS. Un-routing a band hands it back to the
   // Claude ladder, and which agent it lands on is `claudeGaps`'s answer, split
   // at the resolving table's own edges. The panel does not know it and must not
   // learn it: a staged un-route draws an em dash.
   assert.match(js, /via: "claude", agent: null, staged: true/, "a staged un-route carries NO agent");
-  assert.match(js, /row\.agent \|\| "—"/, "and it renders as an em dash");
+  assert.match(js, /p\.agent \|\| "—"/, "and it renders as an em dash");
+
+  // THE LEGEND. Green against blue carried the whole meaning of the picture and
+  // was never named anywhere on the page — green is "this work leaves your
+  // machine".
+  assert.match(js, /exBandLegend/, "the colours are explained");
+  assert.match(css, /\.ex-legend-swatch\s*\{/);
+
+  // AND THE PLAIN-LANGUAGE LABEL IS THE CLI'S. Writing "simple work" beside a
+  // score range here would be the panel deciding what a score means — the
+  // Flow-stepper rule. It renders `range` and `meaning` off the route row and
+  // composes neither.
+  assert.match(js, /raw\.range/, "the readable range comes from the CLI");
+  assert.match(js, /raw\.meaning/, "and so does what a score in it describes");
+  const jsCode = js.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+  assert.ok(!/simple work|mechanical work|hardest work/i.test(jsCode), "the panel writes no prose about a score");
+});
+
+test("extra tabs: five of them, the open one survives a re-render, and the gate decides what exists", () => {
+  const js = panelJs("extra");
+
+  // Knowledge (five tabs) and Crosslink (two) are the precedent, down to the
+  // shared `.tabs` / `.tab-pane` in runs.css. Extra was the largest panel in
+  // the app and the only big one that never adopted it — nine cards in one
+  // 8,800px scroll, with no first step and no way to be done with a section.
+  for (const key of ["setup", "routing", "limits", "spending", "providers"])
+    assert.match(js, new RegExp('t\\("extra\\.tab\\.' + key + '"\\)'), `the ${key} tab label is a key written out in full`);
+  // A write that re-renders must not throw you back to Setup — the KN_TAB rule.
+  assert.match(js, /let EX_TAB = "setup";/);
+  assert.match(js, /EX_TAB = which;/);
+  assert.match(js, /select\(views\[EX_TAB\] \? EX_TAB : "setup"\)/);
+
+  // THE GATE STILL DECIDES WHAT EXISTS. With nothing connected there is no
+  // routing, no limits and nothing spent, so those tabs are NOT RENDERED as
+  // empty shells — and Setup's own tab is spotlighted (the Crosslink
+  // "nothing linked" rule).
+  assert.match(js, /const views = connected\s*\?/);
+  assert.match(js, /: \{ setup: \(\) => exSetupTab\(d, body\) \};/);
+  assert.match(js, /if \(!connected && which === "setup"\) b\.classList\.add\("tab-spot"\)/);
+
+  // "What needs your attention" is the one card that must not be behind a tab.
+  const render = js.slice(js.indexOf("async function renderExtra"), js.indexOf("function exSetupTab"));
+  assert.ok(
+    render.indexOf("exFindingsCard(d)") < render.indexOf('el("div", "tabs")'),
+    "the findings card sits above the tabs, on every one of them"
+  );
+  assert.ok(render.indexOf("exStrip(d)") < render.indexOf('el("div", "tabs")'), "and so does the header strip");
 });
 
 test("extra: nothing is written until Apply, and every staged edit is an ACTION", () => {
@@ -1244,16 +1305,21 @@ test("extra gate: the sections below it are ABSENT, not hidden, until something 
   // W8. `connected` is the CLI's answer — the same one the config gate and the
   // doctor finding read — so there is no second idea of it in this panel.
   assert.match(js, /const connected = !!\(d\.list && d\.list\.gate && d\.list\.gate\.connected\)/);
-  // The gated cards are inside the branch: not appended at all, never appended
-  // and then hidden. A disabled routing table still teaches you to fill it in.
+  // v0.53.0 — the gated sections are now gated TABS, and the rule is unchanged:
+  // they are not built at all, never built and then hidden. A disabled routing
+  // table still teaches you to fill it in.
   const render = js.slice(js.indexOf("const out = frag();"), js.indexOf("body.replaceChildren(out);"));
-  assert.match(render, /if \(connected\) \{[\s\S]*exRoutingCard[\s\S]*exGuardrailsCard[\s\S]*exCostCard[\s\S]*\}/);
-  // The strip and the boundary card stay either way, so the panel never looks
-  // broken — and the tools card is what a first-time user is actually there for.
-  const before = render.slice(0, render.indexOf("if (connected)"));
-  assert.match(before, /exBoundaryCard\(\)/);
-  assert.match(before, /exStrip\(d\)/);
-  assert.match(before, /exToolsCard\(d, body\)/);
+  assert.match(render, /const views = connected\s*\?[\s\S]*routing:[\s\S]*limits:[\s\S]*spending:[\s\S]*providers:[\s\S]*\}\s*: \{ setup:/);
+  // The strip and "what needs your attention" stay OUTSIDE the tabs, so the
+  // panel never looks broken and a caution is never behind a tab.
+  assert.match(render, /exStrip\(d\)/);
+  assert.match(render, /exFindingsCard\(d\)/);
+  // …and the boundary card and the tools card are on the tab that always
+  // exists — the first-time user's whole path, in the order they walk it.
+  const setup = js.slice(js.indexOf("function exSetupTab"), js.indexOf("function exRoutingTab"));
+  assert.match(setup, /exBoundaryCard\(\)/);
+  assert.match(setup, /exToolsCard\(d, body\)/);
+  assert.match(setup, /exProfilesCard\(d, body\)/);
   // The two FLOORS say different things, because the instruction differs.
   assert.match(js, /gate\.floor === "never-tested"/);
   assert.match(js, /extra\.gate\.noConnection/);
