@@ -21972,20 +21972,29 @@ async function runApiEngine(ctx) {
 // rather than a staged one.
 const EXTRA_CLI_WORK = ".orc-extra";
 
-// The FLOOR of a structured foreign return. `codex --output-schema` enforces it
+// The shape of a structured foreign return. `codex --output-schema` enforces it
 // on the final message, which is how a foreign worker returns ORC's contract
-// instead of prose. Deliberately minimal — W8 owns the full foreign return
-// section, and a schema that guessed at it would have to be unpicked.
+// instead of prose.
+//
+// F14e — THIS SHAPE IS PROVIDER-DICTATED, NOT CHOSEN. It used to be documented
+// as "deliberately minimal", and that reasoning is what killed engine `cli` on
+// codex for a whole release: OpenAI structured outputs require a CLOSED object
+// at EVERY level (`additionalProperties: false`), and `required` must list
+// EVERY key in `properties`. A permissive floor is not on offer here —
+// `additionalProperties: true` is an HTTP 400 raised before the model is
+// reached, and flipping only that flag is a SECOND 400, naming
+// `files_changed`. An optional field is therefore expressed as a NULLABLE
+// UNION, never by omission from `required`.
 const EXTRA_CLI_RETURN_SCHEMA = {
   type: "object",
-  additionalProperties: true,
-  required: ["status", "summary"],
+  additionalProperties: false,
+  required: ["status", "summary", "files_changed", "unmet", "notes"],
   properties: {
     status: { type: "string", enum: ["done", "partial", "blocked"] },
     summary: { type: "string" },
-    files_changed: { type: "array", items: { type: "string" } },
-    unmet: { type: "array", items: { type: "string" } },
-    notes: { type: "string" },
+    files_changed: { type: ["array", "null"], items: { type: "string" } },
+    unmet: { type: ["array", "null"], items: { type: "string" } },
+    notes: { type: ["string", "null"] },
   },
 };
 
@@ -22010,7 +22019,7 @@ function extraCliUsageVector(u, kinds) {
   const nestNum = (k) => (nest && nest[k] !== undefined && nest[k] !== null && !isNaN(Number(nest[k])) ? Number(nest[k]) : null);
   const cached = num("cached_input_tokens", "cache_read_input_tokens", "prompt_cache_hit_tokens", "cached_tokens");
   const cacheRead = cached === null ? nestNum("read") : cached;
-  const written = num("cache_creation_input_tokens", "cache_write");
+  const written = num("cache_creation_input_tokens", "cache_write_input_tokens", "cache_write");
   const cacheWrite = written === null ? nestNum("write") : written;
   const inp = num("input_tokens", "prompt_tokens", "input");
   const outp = num("output_tokens", "completion_tokens", "output");
@@ -22095,6 +22104,100 @@ function extraCliClassify(stderr, stdout) {
   const t = String(stderr || "") + "\n" + String(stdout || "");
   for (const [re, key] of EXTRA_CLI_STDERR_PATTERNS) if (re.test(t)) return key;
   return "unknown";
+}
+
+// F14f — THE PROVIDER'S OWN ERROR OBJECT BEATS A STRING MATCH ON STDERR, and
+// this table is why. codex nests the upstream API's verbatim error inside its
+// `error` / `turn.failed` events, and that error's own `type` and `code` are
+// already the vocabulary EXTRA_FAILURES speaks. Reading stderr instead cost a
+// release: the real `invalid_request_error` sat inside a JSON string in
+// STDOUT while codex printed the benign `Reading additional input from
+// stdin...` on STDERR, nothing matched, and a precisely-diagnosable
+// non-retryable failure came back as `unknown` — `retry: false` reached by
+// luck rather than by diagnosis.
+const EXTRA_CLI_ERROR_TYPES = {
+  invalid_request_error: "invalid_request",
+  invalid_json_schema: "invalid_request",
+  invalid_schema: "invalid_request",
+  invalid_prompt: "invalid_request",
+  authentication_error: "authentication_failed",
+  invalid_api_key: "authentication_failed",
+  permission_error: "authentication_failed",
+  rate_limit_error: "rate_limit",
+  rate_limit_exceeded: "rate_limit",
+  insufficient_quota: "billing_error",
+  billing_error: "billing_error",
+  model_not_found: "model_not_found",
+  overloaded_error: "server_error",
+  api_error: "server_error",
+  server_error: "server_error",
+  timeout: "timeout",
+};
+const EXTRA_CLI_STATUS_KEYS = ["status", "status_code", "http_status"];
+function extraCliStatusKey(status) {
+  const n = Number(status);
+  if (!n || isNaN(n)) return null;
+  if (n === 401 || n === 403) return "authentication_failed";
+  if (n === 402) return "billing_error";
+  if (n === 404) return "model_not_found";
+  if (n === 408) return "timeout";
+  if (n === 429) return "rate_limit";
+  if (n >= 500) return "server_error";
+  if (n >= 400) return "invalid_request";
+  return null;
+}
+// Walks the FAILED events only, so a `status` field somewhere in the happy
+// path can never be read as an HTTP code. Returns an EXTRA_FAILURES key or
+// null — null means "ask the stderr patterns", never "there was no failure".
+function extraCliClassifyEvents(events) {
+  if (!Array.isArray(events) || !events.length) return null;
+  const seen = new Set();
+  let hit = null;
+  const consider = (o) => {
+    if (hit) return;
+    for (const k of ["type", "code"]) {
+      const v = String(o[k] || "").toLowerCase();
+      if (v && EXTRA_CLI_ERROR_TYPES[v]) {
+        hit = EXTRA_CLI_ERROR_TYPES[v];
+        return;
+      }
+    }
+    for (const k of EXTRA_CLI_STATUS_KEYS) {
+      const s = extraCliStatusKey(o[k]);
+      if (s) {
+        hit = s;
+        return;
+      }
+    }
+  };
+  const walk = (v, depth) => {
+    if (hit || !v || typeof v !== "object" || depth > 6 || seen.has(v)) return;
+    seen.add(v);
+    if (Array.isArray(v)) {
+      for (const x of v) walk(x, depth + 1);
+      return;
+    }
+    consider(v);
+    for (const k of Object.keys(v)) walk(v[k], depth + 1);
+  };
+  walk(events, 0);
+  return hit;
+}
+// The message a human reads, out of an event whose `error` may be a string, an
+// object, or nested one level deeper again.
+function extraCliEventMessage(ev) {
+  if (!ev || typeof ev !== "object") return null;
+  const pick = (v) => {
+    if (typeof v === "string" && v.trim()) return v.trim();
+    if (v && typeof v === "object") {
+      for (const k of ["message", "error", "detail", "reason"]) {
+        const s = pick(v[k]);
+        if (s) return s;
+      }
+    }
+    return null;
+  };
+  return pick(ev.message) || pick(ev.error) || null;
 }
 
 // R16 — the effort a foreign worker runs at comes from the CLAUDE AGENT this
@@ -22249,14 +22352,26 @@ const EXTRA_CLI_ADAPTERS = {
     // `reports_model: false`, and a substitution is therefore invisible on this
     // engine — which is stated wherever it is rendered, never left blank.
     //
-    // F14d — the usage vector has THREE numbers, not four: input_tokens,
-    // cached_input_tokens, output_tokens. There is no cache-write count, so
-    // `cache_write` reads NULL and never 0.
+    // F14d — A CORRECTION, and it is the mirror image of the bug it replaces.
+    // This adapter used to declare THREE numbers on the grounds that "there is
+    // no cache-write count", so `cache_write` read NULL. There is one:
+    // `turn.completed.usage` on codex-cli 0.149.0 carries input_tokens,
+    // cached_input_tokens, cache_write_input_tokens, output_tokens and
+    // reasoning_output_tokens — observed on two live turns, 23-08-2026. Declaring
+    // three kinds meant codex reported a real measurement and ORC threw it away
+    // and then said it was never reported: MEASURED RENDERED AS UNKNOWN, which
+    // is the same family of lie as unknown rendered as zero.
+    //
+    // `reasoning_output_tokens` is deliberately NOT read. The Responses API
+    // counts reasoning tokens INSIDE `output_tokens`, so adding them would
+    // double-count and /orc-budget would over-price every codex run. That is
+    // very likely but unproven, and an unproven pricing change is worse than a
+    // missing one.
     supports: {
       attach: false,
       output_schema: true,
       usage: "documented (turn.completed.usage)",
-      usage_kinds: ["input", "cache_read", "output"],
+      usage_kinds: ["input", "cache_write", "cache_read", "output"],
       reports_model: false,
       fence: false,
     },
@@ -22375,6 +22490,14 @@ const EXTRA_CLI_ADAPTERS = {
       if (a.cli_key_name && a.key) e[a.cli_key_name] = a.key;
       return e;
     },
+    // F14f — the adapter's own classifier, consulted BEFORE the stderr
+    // patterns. It reads the upstream error object codex relays verbatim, which
+    // is a diagnosis rather than a guess — so whatever it returns is labelled
+    // as coming from the provider's own error object, never as a stderr
+    // pattern. A field that says where a verdict came from must not lie.
+    classify(events) {
+      return extraCliClassifyEvents(events);
+    },
     parse(out) {
       const events = extraCliJsonEvents(out.stdout);
       // DOCUMENTED shape, so it is read by name rather than dug for. A dig
@@ -22390,10 +22513,14 @@ const EXTRA_CLI_ADAPTERS = {
       return {
         parsed: events.length ? "jsonl" : "text",
         events: events.length,
+        // The RAW failed events, kept so `classify` can read the provider's own
+        // error object. `turn_failed` below is the human sentence; this is the
+        // diagnosis.
+        failed_events: failed,
         usage,
         usage_source: usage ? "turn.completed.usage" : null,
         model_reported: model,
-        turn_failed: failed.length ? String(failed[failed.length - 1].message || failed[failed.length - 1].error || "turn failed") : null,
+        turn_failed: failed.length ? extraCliEventMessage(failed[failed.length - 1]) || "turn failed" : null,
         // The final message came from --output-last-message; the event stream
         // is only the telemetry.
         text: (out.lastMessage && out.lastMessage.trim()) || String(out.stdout || "").trim().slice(0, 4000) || null,
@@ -22445,7 +22572,10 @@ function runCliEngine(ctx) {
   const wdir = path.join(root, EXTRA_CLI_WORK);
   const taskFile = path.join(wdir, "task.md");
   const outFile = path.join(wdir, "last-message.txt");
-  const schemaFile = path.join(workDir, "return.schema.json");
+  // A7 — written ONLY for an adapter that consumes it. The shape is
+  // provider-dictated (F14e), so it belongs to the provider that dictates it;
+  // opencode declares `output_schema: false` and never reads the file.
+  const schemaFile = adapter.supports.output_schema ? path.join(workDir, "return.schema.json") : null;
 
   const declared = slice.declared_files || [];
   // The fence is an INSTRUCTION here, not a rule. Saying "you may only write
@@ -22475,7 +22605,7 @@ function runCliEngine(ctx) {
   try {
     fs.mkdirSync(wdir, { recursive: true });
     fs.writeFileSync(taskFile, task, "utf8");
-    fs.writeFileSync(schemaFile, JSON.stringify(EXTRA_CLI_RETURN_SCHEMA, null, 2), "utf8");
+    if (schemaFile) fs.writeFileSync(schemaFile, JSON.stringify(EXTRA_CLI_RETURN_SCHEMA, null, 2), "utf8");
 
     const a = {
       prof,
@@ -22600,18 +22730,40 @@ function runCliEngine(ctx) {
     preflight_remedy: preflightRemedy,
   };
 
+  // F14f — THE PROVIDER'S OWN ERROR OBJECT FIRST, the stderr patterns as the
+  // fallback. And `classified_from` says WHICH of the two answered, because a
+  // field that reports where a verdict came from must not lie about it.
+  const classifyOut = (stderr, stdout) => {
+    const fromEvents = adapter.classify ? adapter.classify(p.failed_events || []) : null;
+    if (fromEvents)
+      return {
+        reason: fromEvents,
+        from: `the provider's own error object — ${cli.bin} relays the upstream error verbatim in its event stream, so this is a diagnosis and not a guess`,
+      };
+    return {
+      reason: extraCliClassify(stderr, stdout),
+      from: "stderr pattern — neither adapter documents an exit-code table, so this is what the tool SAID, not what its exit code means",
+    };
+  };
+  const failedMessage = () =>
+    extraCliEventMessage(p.failed_events && p.failed_events[p.failed_events.length - 1]);
+
   if (out.status !== 0) {
-    const cls = extraCliClassify(out.stderr, out.stdout);
+    const cls = classifyOut(out.stderr, out.stdout);
     return Object.assign(base, {
       ok: false,
       outcome: "failed",
-      reason: cls,
-      retry: classifyFailure(cls).retry,
-      classified_from: "stderr pattern — neither adapter documents an exit-code table, so this is what the tool SAID, not what its exit code means",
+      reason: cls.reason,
+      retry: classifyFailure(cls.reason).retry,
+      classified_from: cls.from,
       error:
-        classifyFailure(cls).label +
+        classifyFailure(cls.reason).label +
         " — " +
-        (String(out.stderr).trim().split("\n").slice(-3).join(" ").slice(0, 300) || `exit ${out.status} with nothing on stderr`),
+        String(
+          failedMessage() ||
+            String(out.stderr).trim().split("\n").slice(-3).join(" ") ||
+            `exit ${out.status} with nothing on stderr`
+        ).slice(0, 300),
     });
   }
 
@@ -22621,12 +22773,13 @@ function runCliEngine(ctx) {
   // explicit they are: a `turn.failed` event, a structured `blocked`, and no
   // parseable output at all.
   if (p.turn_failed) {
-    const cls = extraCliClassify(p.turn_failed, "");
+    const cls = classifyOut(p.turn_failed, "");
     return Object.assign(base, {
       ok: false,
       outcome: "failed",
-      reason: cls,
-      retry: classifyFailure(cls).retry,
+      reason: cls.reason,
+      retry: classifyFailure(cls.reason).retry,
+      classified_from: cls.from,
       error: `${cli.bin} reported a failed turn and still exited ${out.status}: ${String(p.turn_failed).slice(0, 300)}`,
     });
   }
