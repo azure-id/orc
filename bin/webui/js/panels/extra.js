@@ -483,6 +483,7 @@ function exProvidersCard(d) {
   }
   const cat = d.providers || {};
   c.append(el("div", "note", t("extra.providers.sub")));
+  c.append(exWhy(t("extra.providers.subWhy")));
   if (cat.stale) c.append(el("div", "banner banner-bad", t("extra.providers.stale")));
 
   const grid = el("div", "ex-provider-grid");
@@ -800,6 +801,7 @@ function exToolsCard(d, body) {
     return c;
   }
   c.append(el("div", "note", t("extra.tools.sub")));
+  c.append(exWhy(t("extra.tools.subWhy")));
   const grid = el("div", "ex-tool-grid");
   for (const tool of tools) grid.append(exToolBox(tool, d, body));
   c.append(grid);
@@ -915,6 +917,29 @@ function exToolBox(tool, d, body) {
   box.append(actions);
   box.append(more);
   return box;
+}
+
+/* THE "WHY" DISCLOSURE (v0.53.0).
+
+   The copy problem on this panel was never that it was untranslated — both
+   tables are complete. It was that DESIGN RATIONALE WAS BEING SERVED AS USER
+   INSTRUCTION. "A gap is not a hole … so 'I left the hardest work on Claude on
+   purpose' and 'there is no top band' can never look the same" is true, and it
+   belongs in knowledge.md; as the first thing under a table it tells a
+   first-time reader nothing about what to do.
+
+   So the shape is: the INSTRUCTION first, in Simplified Technical English (one
+   sentence, active, twenty words at most — bin/webui/i18n/TERMS.md), and the
+   REASONING underneath, collapsed. Nothing is deleted; the rationale keeps its
+   own voice, which is the one thing TERMS.md protects. It is just no longer in
+   the way. */
+function exWhy(text) {
+  const d = document.createElement("details");
+  d.className = "ex-more ex-why";
+  const s = document.createElement("summary");
+  s.textContent = t("extra.why");
+  d.append(s, el("div", "note", text));
+  return d;
 }
 
 /* THE DISCLOSURE. A native <details>, so the open/closed state, the keyboard
@@ -1068,6 +1093,7 @@ function exGateNotice(d) {
     el("div", null, gate && gate.floor === "never-tested" ? t("extra.gate.neverTested") : t("extra.gate.noConnection"))
   );
   box.append(el("div", "note", t("extra.gate.hidden")));
+  box.append(exWhy(t("extra.gate.hiddenWhy")));
   // The CLI's own sentence about what to do next, in the CLI's own words.
   if (gate && gate.next) box.append(el("div", "action-cmd", gate.next));
   return box;
@@ -1714,6 +1740,7 @@ let EX_OPEN_BAND = null;
 function exLanesCard(d) {
   const c = card(t("extra.lanes.title"));
   c.append(el("div", "note", t("extra.lanes.sub")));
+  c.append(exWhy(t("extra.lanes.subWhy")));
   if (d.errors.lanes) {
     c.append(failBox(d.errors.lanes));
     return c;
@@ -1775,6 +1802,7 @@ function exRoutingCard(d, body, edits) {
   c.append(exBandLadder(rows, d, edits, verified > 0));
   c.append(exBandLegend());
   c.append(el("div", "note", t("extra.routing.gapNote")));
+  c.append(exWhy(t("extra.routing.gapWhy")));
   if (!verified) c.append(empty(t("extra.routing.locked"), t("extra.routing.lockedHint")));
   else c.append(el("div", "note", t("extra.routing.editNote")));
   return c;
@@ -2210,6 +2238,7 @@ function exGuardrailsCard(d, body, edits) {
     return c;
   }
   c.append(el("div", "note", t("extra.guard.sub")));
+  c.append(exWhy(t("extra.guard.subWhy")));
   const proxy = exConfigEdits(edits);
   const rows = el("div", "settings-list");
   for (const k of keys) rows.append(settingRow(k, body, proxy));

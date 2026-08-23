@@ -103,19 +103,20 @@ extra.boundary.whom
 extra.boundary.cannot
 extra.boundary.fence
 extra.boundary.probe
-extra.providers.sub
+extra.providers.subWhy
 extra.providers.noModels
 extra.providers.stale
-extra.routing.gapNote
-extra.gate.hidden
+extra.routing.gapWhy
+extra.gate.hiddenWhy
 extra.cost.noRate
 extra.live.noReport
-extra.tools.sub
+extra.tools.subWhy
 extra.tools.altNone
 extra.tools.neverElevates
 extra.add.vaultWarn
 extra.session.honesty
-extra.lanes.sub
+extra.lanes.subWhy
+extra.guard.subWhy
 ```
 
 ---

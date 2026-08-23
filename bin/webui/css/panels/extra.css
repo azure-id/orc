@@ -374,6 +374,10 @@
 .ex-more > summary:hover { color: var(--text); }
 .ex-more[open] > summary { margin-bottom: var(--sp-2); }
 .ex-more > *:not(summary) { margin-top: var(--sp-2); }
+/* The "why" disclosure sits under a card's instruction line, so it is indented
+   to read as a footnote to it rather than as another instruction. */
+.ex-why { margin-top: calc(var(--sp-1) * -1); }
+.ex-why > summary { font-size: 11px; }
 
 .ex-tool-absent { border-color: var(--bad); }
 .ex-tool-outdated,
