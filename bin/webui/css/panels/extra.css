@@ -310,27 +310,32 @@
   gap: var(--sp-3);
   margin-top: var(--sp-3);
 }
+/* v0.53.0 — A TOOL CARD IS CHILD-COUNT AGNOSTIC, AND THAT IS NOT A PREFERENCE.
+   v0.52.0 declared `grid-template-rows: auto auto auto 1fr auto` here to absorb
+   the height difference between two tools in ONE place, and the diagnosis was
+   right. The remedy was not: FOUR STATES CARRY FOUR DIFFERENT NUMBERS OF
+   CHILDREN, so a POSITIONAL row template cannot describe this card. A
+   ready-and-verified card has exactly five children — head, kv, path, the
+   "connected as" chip, actions — so the chip landed in the `1fr` slack row, a
+   grid item defaults to `align-self: stretch`, and `border-radius: 999px` on a
+   tall full-width box drew a ~250px green ELLIPSE. It hit whichever card had the
+   shortest content in its row, so it was never about one tool.
+
+   So: no row template at all. The footer is pushed down by the FREE SPACE, and
+   nothing can be stretched by a slot it was never meant to occupy. This cannot
+   break when a fifth state joins. */
 .ex-tool {
   border: 1px solid var(--line-soft);
   border-radius: var(--radius-sm);
   padding: var(--sp-3);
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: var(--sp-2);
-  align-content: start;
-  /* v0.52.0 — A TOOL CARD DECLARES ITS ROWS. `.ex-tool-grid` stretched two
-     cards to the same OUTER height, but every internal row sized to its own
-     content, and two tools' content differs (a four-segment auth string against
-     a short one, 29 models against 4). So the kv block started at the same y
-     and ended at different ones, and every row below it — path, probe error,
-     the button — sat at a different height in each card. `1fr` is the slack
-     row: it absorbs the difference in ONE place instead of spreading it down
-     the card. The `.run-card` lesson, one level down. Not `subgrid`: that would
-     align two cards perfectly and break the moment a third card in a different
-     state joins the row, and the states deliberately carry different numbers of
-     children. */
-  grid-template-rows: auto auto auto 1fr auto;
 }
-.ex-tool > .row-actions:last-child { align-self: end; }
+.ex-tool > .row-actions:last-child { margin-top: auto; }
+/* A CHIP STATES A FACT. It is never a layout element and it never stretches —
+   in either axis. */
+.ex-tool > .chip { align-self: flex-start; flex: 0 0 auto; }
 .ex-tool .kv { align-content: start; }
 /* The one genuinely unbounded field. `auth_detail` is DIAGNOSTIC, not prose, so
    it is clamped rather than allowed to make one card taller than its neighbour

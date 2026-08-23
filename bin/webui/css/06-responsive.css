@@ -59,6 +59,11 @@
   .ex-seg { min-width: 104px; }
   .ex-route-controls { align-items: stretch; }
   .ex-route-controls .btn { width: 100%; }
+  /* v0.53.0 — `.ex-tool` was the one `.ex-*` block with no entry here at all.
+     At this width a tool card's actions are the reason you opened the panel, so
+     they go full width rather than being squeezed onto the end of a row. */
+  .ex-tool > .row-actions:last-child { align-items: stretch; }
+  .ex-tool > .row-actions:last-child .btn { width: 100%; }
 }
 
 @media (max-width: 600px) {
@@ -80,4 +85,7 @@
   .ex-provider-grid { grid-template-columns: minmax(0, 1fr); }
   .ex-strip { gap: var(--sp-3); }
   .ex-route-controls > * { flex: 1 1 100%; }
+  /* The tool card's head stops being a row: a label, a binary name and a state
+     chip cannot share a line honestly below this. */
+  .ex-tool > .row-actions:first-child { flex-direction: column; align-items: flex-start; }
 }
