@@ -691,3 +691,117 @@ test("the challenge judge can never declare a pass", () => {
   assert.match(rubric, /PASS is computed, never declared/);
   assert.match(rubric, /can only find, or fail to find/, "the reason is stated, not just the rule");
 });
+
+// ── v0.54.0 — recovery: a failure is a POSITION, not a blank page ───────────
+
+test("the recovery token is the SIXTH member of its family, and it lives in ONE file", () => {
+  const shared = read("skills/_shared/extra-dispatch.md");
+  assert.match(shared, /`a lane that re-does work the worktree already contains` has broken this\s+contract/);
+  // The family is named, so a reader meets the rule as one of a set rather than
+  // as a slogan invented for this release.
+  for (const sibling of [
+    "a lane that answers its own interview question",
+    "a lane that picks its own favourite",
+    "a lane that fixes what it judged",
+    "a lane that picks its own council",
+    "a lane that reads its own document",
+    "a lane that sends work off Claude without saying so",
+  ])
+    assert.ok(shared.includes(sibling), "the family is incomplete without: " + sibling);
+
+  // ONE COPY. A spine keeps the token and a pointer; it never forks the prose.
+  const forked = ["skills/orc/SKILL.md", "skills/orc-mini/SKILL.md", "skills/orc-fast/SKILL.md"].filter((f) =>
+    read(f).includes("a lane that re-does work the worktree already contains")
+  );
+  assert.deepEqual(forked, [], "the canonical prose was forked back into a spine");
+});
+
+test("every lane that dispatches foreign points at reconcile FIRST — one sentence, no forked prose", () => {
+  for (const f of [
+    "skills/orc/SKILL.md",
+    "skills/orc-mini/SKILL.md",
+    "skills/orc-fast/SKILL.md",
+    "skills/orc-diy/references/blocks/extra.md",
+  ]) {
+    const md = read(f);
+    assert.ok(md.includes("orc extra reconcile"), `${f} never names the free first step`);
+    assert.match(md, /RESUMED, never re-done/, `${f} states the rule rather than only the command`);
+  }
+});
+
+test("`extra_resume` is INERT in /orc-quick, and the shadowing is announced on both sides", () => {
+  // A shadowed setting must never be silent — and the lane that asks which agent
+  // before every dispatch is exactly the lane a resume config would break.
+  const quick = read("skills/orc-quick/SKILL.md");
+  assert.match(quick, /These config keys \*\*do nothing here\*\*/);
+  for (const k of ["extra_enabled", "extra_resume", "opus5_only", "rubric_bands_override"])
+    assert.ok(quick.includes(k), "/orc-quick's INERT list is missing " + k);
+  const shared = read("skills/_shared/extra-dispatch.md");
+  assert.match(shared, /INERT in `\/orc-quick`/);
+  assert.match(shared, /`extra_resume` with it/, "the shared contract registers the same exception");
+});
+
+test("the config surface says ELEVEN keys, and names what it refused to add", () => {
+  const shared = read("skills/_shared/extra-dispatch.md");
+  assert.match(shared, /## The config surface — eleven keys/);
+  assert.ok(shared.includes("`config.extra_resume`"));
+  assert.ok(shared.includes("`config.extra_resume_max`"));
+  // The refusals are the interesting half: each one is a trap that was
+  // considered and declined, and a reader who cannot see them will propose it
+  // again.
+  assert.match(shared, /Keys deliberately NOT added/);
+  assert.match(shared, /a record you can switch off is off on the run you needed it for/);
+});
+
+test("the six refusals in the contract are the six the CLI can emit", () => {
+  const shared = read("skills/_shared/extra-dispatch.md");
+  const cli = fs.readFileSync(path.join(__dirname, "..", "bin", "cli.js"), "utf8");
+  const declared = /const EXTRA_RESUME_REFUSALS = \[([\s\S]*?)\];/.exec(cli);
+  assert.ok(declared, "EXTRA_RESUME_REFUSALS must exist in bin/cli.js");
+  const names = [...declared[1].matchAll(/"([a-z-]+)"/g)].map((m) => m[1]);
+  assert.equal(names.length, 6);
+  // BOTH DIRECTIONS — the DIY_STEPS precedent. A refusal the code can emit and
+  // the contract never names is a refusal the lane cannot render.
+  for (const n of names) assert.ok(shared.includes("`" + n + "`"), "the contract never names the refusal: " + n);
+});
+
+test("the attribution verdicts and the fidelity table match the CLI in both directions", () => {
+  const shared = read("skills/_shared/extra-dispatch.md");
+  const cli = fs.readFileSync(path.join(__dirname, "..", "bin", "cli.js"), "utf8");
+
+  const verdicts = /const EXTRA_ATTRIBUTION = \[([\s\S]*?)\];/.exec(cli);
+  const names = [...verdicts[1].matchAll(/"([a-z]+)"/g)].map((m) => m[1]);
+  assert.deepEqual(names, ["provider", "network", "local", "worker", "orc"]);
+  for (const n of names) assert.ok(shared.includes("| `" + n + "` |"), "the verdict table is missing a row for " + n);
+  // The one that changes the recovery.
+  assert.match(shared, /Attribution `network` HOLDS THE WAVE/);
+  assert.match(shared, /a report with no way to blame its own author is\s+not a report anybody should trust/);
+
+  const fid = /const EXTRA_JOURNAL_FIDELITY = \{([\s\S]*?)\};/.exec(cli);
+  assert.match(fid[1], /api: "per-turn"/);
+  assert.match(fid[1], /"claude-shim": "per-turn"/);
+  assert.match(fid[1], /cli: "streamed-opaque"/);
+  for (const row of ["| `api` |", "| `claude-shim` |", "| `cli` |"]) assert.ok(shared.includes(row));
+  assert.match(shared, /A gap that is not reported reads as a capability/);
+});
+
+test("a resumed return owes `resume_state`, and §6's before-side moves to the journal baseline", () => {
+  const rv = read("skills/_shared/return-validation.md");
+  for (const f of ["`resume_state`", "`preexisting_read[]`", "`journal_fidelity`"])
+    assert.ok(rv.includes(f), "§2b never mentions " + f);
+  assert.match(rv, /absent on a resume slice is MALFORMED/i);
+  // WITHOUT THIS SENTENCE the first resumed wave gates itself on the work it
+  // just recovered.
+  assert.match(rv, /On a RESUMED task the "before" side of the delta is the JOURNAL\s+BASELINE/);
+});
+
+test("the two new trace verbs are registered where the lane reads them", () => {
+  const proto = read("skills/orc/references/trace-protocol.md");
+  assert.ok(proto.includes("EXTRA resume task="));
+  assert.ok(proto.includes("EXTRA orphan task="));
+  assert.match(proto, /A resume that leaves no line cannot be counted/);
+  const shared = read("skills/_shared/extra-dispatch.md");
+  assert.ok(shared.includes("EXTRA resume task=T-2 attempt=2 :: from=stream-interrupted"));
+  // Ownership: the CLI composes, the LANE emits the two it alone can know about.
+  assert.match(shared, /`EXTRA fallback` and `EXTRA orphan` lines are the \*\*lane's\*\* to emit/);
+});

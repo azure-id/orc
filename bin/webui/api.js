@@ -341,6 +341,15 @@ const READS = {
   "/api/extra/stats": (q) => (q.since ? ["extra", "stats", "--since", String(q.since)] : ["extra", "stats"]),
   "/api/extra/rates": () => ["extra", "rates"],
   "/api/extra/doctor": () => ["extra", "doctor"],
+  // v0.54.0 — RECOVERY. Both are FREE reads (zero model tokens), which is why
+  // both are real buttons; `resume-slice` and the dispatch that follows it cost
+  // money and are copy-able commands instead. `reconcile` exits 0-4 as an
+  // exit-code-as-DATA contract like `pattern status`, so no state here is an
+  // error — including `in-flight`, which is a REFUSAL the panel must render as
+  // one rather than as a dead control.
+  "/api/extra/journal": () => ["extra", "journal", "list"],
+  "/api/extra/reconcile": (q) => ["extra", "reconcile", String(q.task || "")],
+  "/api/extra/journal/prune/preview": () => ["extra", "journal", "prune", "--dry-run"],
   "/api/patterns": () => ["pattern", "status"],
   "/api/gotchas": () => ["gotcha", "list"],
   "/api/stats": (q) => (q.since ? ["stats", "--since", String(q.since)] : ["stats"]),
@@ -513,6 +522,11 @@ const WRITES = {
   // per-model test is the PAID rung scoped to one id — the only thing that tells
   // a LISTED model from a WORKING one.
   "/api/extra/models/refresh": (b) => ["extra", "models", String(b.profile), "--refresh"],
+  // Preview-then-apply, and the preview NAMES EVERY DIRECTORY — a count is not
+  // consent. Only a journal whose every attempt closed `done` 30+ days ago is
+  // ever a candidate, so this can never delete the record of a dispatch that
+  // never reported back.
+  "/api/extra/journal/prune": () => ["extra", "journal", "prune"],
   "/api/crosslink/remove": (b) => ["crosslink", "remove", String(b.name)],
   // The UI assembles no YAML. It hands the CLI the same arguments the
   // interactive prompt collects, and every rejection the user sees is the
@@ -776,6 +790,10 @@ function overview(ctx) {
     pact: readCli(["pact", "status"], ctx).data,
     boundary: readCli(["boundary", "status"], ctx).data,
     wiki_debt: readCli(["wiki", "debt"], ctx).data,
+    // v0.54.0 — foreign dispatches that never reported back. Money spent and
+    // work half-done that nothing will look at again unless somebody is told.
+    // It is a FINDING, never a stop, and the Overview never resumes one.
+    extra_journal: readCli(["extra", "journal", "list"], ctx).data,
   };
 }
 

@@ -388,6 +388,51 @@ work: a missing install pepper (the stored key is unrecoverable) and managed
 settings that pin a login method (engine `claude-shim` cannot coexist with a
 third-party credential — switch that profile to `api`).
 
+### When it stops half-way
+
+A worker that is cut off mid-write has already changed files on your disk. ORC
+records what those files looked like **before** the dispatch started, so it can
+tell you what changed rather than starting the task again on top of it.
+
+```bash
+orc extra reconcile T-2                        # free. What changed, and whose fault it was
+orc extra resume-slice T-2 --out .orc/T-2.json # the continuation slice
+orc extra dispatch --task .orc/T-2.json --json # the ordinary bridge
+orc extra journal list                         # what was recorded, and what never came back
+```
+
+`orc extra reconcile` is **free and deterministic** — no model, no tokens — and
+it answers with one of five states: `resumable`, `nothing-to-resume`,
+`no-journal`, `complete`, or `in-flight` (which is a refusal: two workers on one
+file is worse than one lost worker).
+
+It also says **whose fault it was**, and that decides what happens next:
+
+| verdict | what you do |
+|---|---|
+| `provider` | send it to Claude instead — that works |
+| `network` | **fix your connection.** A Claude fallback would fail too, so ORC holds the wave rather than paying for a second failure |
+| `local` | something on this machine — a missing program, a disk error |
+| `worker` | the model ran out of turns or gave up. The band or the turn cap is wrong |
+| `orc` | an ORC bug, and ORC says so |
+
+ORC tells `provider` and `network` apart by making **one cheap request with no
+key attached**, with a three-second limit. Any answer at all — even a rejection —
+proves the wire is up.
+
+A resume **never widens the file list, never changes what "done" means, never
+changes the score, and refuses if the plan changed** between attempts. A
+non-retryable failure still goes to Claude — but as a *resume* slice, so the
+replacement is told what is already on disk instead of landing on it blind.
+
+**Nothing resumes on its own.** A dispatch that never reported back at all is
+reported before your next wave and left alone until you decide.
+
+| key | default | what it does |
+|---|---|---|
+| `extra_resume` | `on` | Continue a stopped dispatch instead of re-doing it. On by default, because off is the broken behaviour |
+| `extra_resume_max` | `2` | Resume attempts per task before the fallback takes over, with an honest report rather than a silent third loop |
+
 ---
 
 ## The part worth reading twice

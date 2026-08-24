@@ -86,6 +86,14 @@ waves:     3 planned — will pause after wave 2 (batch_pause_every=2)
     vaulted key could not be opened at dispatch time. A locked vault is a cost
     event, not just a routing one.
 
+  - `· <n> foreign dispatch(es) from an earlier run never reported back` —
+    the ORPHAN line, printed whenever `orc extra preflight --json` returns a
+    non-empty `orphans[]`, each row ending in its own `orc extra reconcile
+    <task>`. Render them VERBATIM: the CLI composes them, this
+    report renders them. It is a FINDING, never a stop — preflight's exit code
+    does not move — and ORC never resumes one on its own. Emit the pre-composed
+    `EXTRA orphan` line from `trace_extras[]` once you have reported it.
+
   Canonical: `../../_shared/extra-dispatch.md`.
 - **scoring:** which executor table RESOLVED for this run — `8-band default
   table` · `Opus-5-only ladder (opus5_only)` · `custom

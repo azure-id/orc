@@ -33,7 +33,7 @@ const { docList, docParts, docStatuses, docMapSections, docMap, docLint, docPlan
 const { diy } = require("./flow.js");
 const { crosslink } = require("./crosslink.js");
 const { mockDetail } = require("./mockrun.js");
-const { extraProviders, extraList, extraListNoConnection, extraListNeverTested, extraTools, extraKeyhelp, extraModels, extraDoctor, extraRoute, extraLanes, extraStats, extraRates, extraPingOk, extraPingBad, extraPingSaveOffer, extraPingLive, extraPingDeadModel, extraPingNotInstalled, extraInstall } = require("./extra.js");
+const { extraProviders, extraList, extraListNoConnection, extraListNeverTested, extraTools, extraKeyhelp, extraModels, extraDoctor, extraRoute, extraLanes, extraStats, extraRates, extraPingOk, extraPingBad, extraPingSaveOffer, extraJournal, extraReconcile, extraJournalPrune, extraPingLive, extraPingDeadModel, extraPingNotInstalled, extraInstall } = require("./extra.js");
 
 module.exports.get = function get(route, q) {
   switch (route) {
@@ -179,7 +179,7 @@ module.exports.get = function get(route, q) {
         scores: { "solo-fast": 0, paranoid: 3, "token-lean": 0 },
       };
     case "/api/overview":
-      return { where, doctor, wiki, patterns: patterns, runs_total: runs.total, waiting: runs.runs.filter((r) => r.status === "waiting").map((r) => ({ slug: r.slug, updated_ms: r.updated_ms, lane: r.lane })), diy, pact, boundary, wiki_debt: wikiDebt };
+      return { where, doctor, wiki, patterns: patterns, runs_total: runs.total, waiting: runs.runs.filter((r) => r.status === "waiting").map((r) => ({ slug: r.slug, updated_ms: r.updated_ms, lane: r.lane })), diy, pact, boundary, wiki_debt: wikiDebt, extra_journal: extraJournal };
     case "/api/pact":
       return pact;
     case "/api/boundary":
@@ -420,6 +420,16 @@ module.exports.get = function get(route, q) {
       return extraStats;
     case "/api/extra/rates":
       return extraRates;
+    // v0.54.0 — RECOVERY. One reconcile fixture per state, including the ugly
+    // ones: an `in-flight` REFUSAL, a `reverted` block, a `streamed-opaque`
+    // journal with no per-turn attribution to render, and a `no-journal` answer
+    // for a dispatch that predates the feature.
+    case "/api/extra/journal":
+      return extraJournal;
+    case "/api/extra/reconcile":
+      return extraReconcile[String((q && q.task) || "")] || extraReconcile["T-12"];
+    case "/api/extra/journal/prune/preview":
+      return extraJournalPrune;
     case "/api/extra/show":
       return {
         ok: true,

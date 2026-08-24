@@ -448,3 +448,69 @@
    `word-break: break-all` was hyphenating it mid-word. Same reasoning as
    `.ex-tool`: a path breaks anywhere, a sentence breaks on spaces. */
 .ex-live .kv dd { word-break: normal; overflow-wrap: anywhere; }
+
+/* ── RECOVERY (v0.54.0) ──────────────────────────────────────────────────────
+   One row per journal directory, EXPANDED IN PLACE — the Runs-row rule: there
+   is no detail box below the list.
+
+   A ROW IS A FLEX COLUMN, NOT A DECLARED GRID. Five states carry five different
+   numbers of children (an orphan has no outcome chip, a single attempt has no
+   attempt chip, engine `cli` has no per-turn note), and `.ex-tool`'s 250px
+   ellipse is what a declared row template does to a card whose child count
+   changes with its state. A chip states a FACT — it is never a layout element. */
+.ex-rec-list { display: flex; flex-direction: column; gap: var(--sp-2); }
+.ex-rec-row {
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-md);
+  background: var(--surface-1);
+  overflow: hidden;
+}
+.ex-rec-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  width: 100%;
+  padding: var(--sp-2) var(--sp-3);
+  background: none;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.ex-rec-head:hover { background: var(--surface-2); }
+.ex-rec-row.open > .ex-rec-head { background: var(--surface-2); }
+.ex-rec-task { font-weight: 600; flex: 0 0 auto; }
+/* The identity may be long and must not push the caret off the row. */
+.ex-rec-who { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ex-rec-chips { display: inline-flex; flex-wrap: wrap; gap: var(--sp-2); flex: 0 0 auto; }
+.ex-rec-caret { color: var(--text-faint); transition: transform var(--dur-fast) var(--ease); flex: 0 0 auto; }
+.ex-rec-row.open .ex-rec-caret { transform: rotate(90deg); }
+.ex-rec-pane:not(:empty) { padding: var(--sp-3); border-top: 1px solid var(--line-soft); }
+
+.ex-rec-attr,
+.ex-rec-files,
+.ex-rec-acc,
+.ex-rec-floor {
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-sm);
+  padding: var(--sp-2) var(--sp-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+/* A RECOVERED VECTOR IS A FLOOR and is drawn distinctly, so it can never be
+   mistaken for a measured total. */
+.ex-rec-floor { border-color: var(--warn-line, var(--line)); }
+.ex-rec-file { gap: var(--sp-2); }
+.ex-rec-file .mono { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+
+.ex-rel { display: flex; flex-direction: column; gap: var(--sp-2); }
+.ex-rel-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-sm);
+  padding: var(--sp-2) var(--sp-3);
+}

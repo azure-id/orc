@@ -67,6 +67,12 @@
      they go full width rather than being squeezed onto the end of a row. */
   .ex-tool > .row-actions:not(:first-child) { align-items: stretch; }
   .ex-tool > .row-actions:not(:first-child) .btn { width: 100%; }
+  /* v0.54.0 — a recovery row's identity is the longest thing in it, so at this
+     width it takes its own line rather than truncating a profile and a model
+     into nothing. The row is a FLEX COLUMN, so this is a wrap rather than a
+     second grid template. */
+  .ex-rec-head { flex-wrap: wrap; }
+  .ex-rec-who { flex: 1 1 100%; white-space: normal; }
 }
 
 @media (max-width: 600px) {
@@ -91,4 +97,7 @@
   /* The tool card's head stops being a row: a label, a binary name and a state
      chip cannot share a line honestly below this. */
   .ex-tool > .row-actions:first-child { flex-direction: column; align-items: flex-start; }
+  /* A per-file position line cannot hold a path, a state word and a line delta
+     on one row below this — and the path is the half that must stay readable. */
+  .ex-rec-file { flex-direction: column; align-items: flex-start; }
 }

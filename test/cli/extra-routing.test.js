@@ -235,14 +235,25 @@ test("the shadow runs BOTH WAYS and is never silent", async () => {
   rmrf(p.root);
 });
 
-test("the ten config keys exist, with the defaults the contract states", () => {
+test("the eleven config keys exist, with the defaults the contract states", () => {
   const p = project();
   const keys = json(run(p, ["config", "list", "--json"])).keys.filter((k) => k.key.startsWith("extra_"));
   const by = Object.fromEntries(keys.map((k) => [k.key, k]));
-  // v0.52.0 adds the TENTH: the deadline the passphrase picker opens on. The
-  // count is still the feature — the combinatorial part (providers x models x
-  // bands) is a LEDGER with a CLI and a panel, not eleven YAML keys.
-  assert.equal(keys.length, 10, "ten keys — the combinatorial part is a ledger, not YAML");
+  // v0.52.0 added the TENTH: the deadline the passphrase picker opens on.
+  // v0.54.0 adds the eleventh and twelfth — recovery — and BOTH are justified
+  // rather than assumed (the contract lists the four keys it refused to add).
+  // The count is still the feature: the combinatorial part (providers x models
+  // x bands) is a LEDGER with a CLI and a panel, not a YAML block.
+  assert.equal(keys.length, 12, "the combinatorial part is a ledger, not YAML");
+  // DEFAULT `on`, because `off` is what is broken: a from-scratch re-dispatch
+  // onto a half-written file either discards work already paid for or
+  // improvises against a stale mental model.
+  assert.equal(by.extra_resume.default, "on");
+  assert.deepEqual(by.extra_resume.options, ["on", "off"]);
+  // Bounded: the cap STOPS with an honest report, never a silent third loop.
+  assert.equal(by.extra_resume_max.default, 2);
+  assert.equal(run(p, ["config", "set", "extra_resume", "maybe"]).status, 1);
+  assert.equal(run(p, ["config", "set", "extra_resume", "off"]).status, 0);
   assert.equal(by.extra_enabled.default, false, "nothing changes unless it is armed");
   assert.equal(by.extra_roles.default, "[executor]", "a reviewer you cannot trust is worse than no reviewer");
   assert.equal(by.extra_risk_tasks.default, "off");

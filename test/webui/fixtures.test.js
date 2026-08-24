@@ -334,3 +334,83 @@ test("fixtures: the states v0.49.2 introduced are all designable", () => {
   assert.ok("unattributed" in cost, "unattributed is always present");
   assert.strictEqual(fixtures.get("/api/doc/cost", { slug: "collab-risk-and-payments-130826" }).ok, false);
 });
+
+// v0.54.0 — RECOVERY. One of every state the reconcile read can return, and the
+// count is asserted per state so a new state cannot ship without a fixture
+// nobody has ever looked at. You cannot design an `in-flight` REFUSAL against a
+// fixture set that only has clean rows.
+test("recovery fixtures carry one of every reconcile state, including the ugly ones", () => {
+  const fixtures = require(path.join(REPO, "bin", "webui", "fixtures", "index.js"));
+
+  const j = fixtures.get("/api/extra/journal");
+  assert.ok(j.journals.length >= 5, "several rows, or the list is not designable");
+  assert.strictEqual(j.orphans, 1, "an ORPHAN is the one state this listing exists to make visible");
+  assert.strictEqual(j.in_flight, 1);
+  assert.ok(j.retention_days > 0);
+  // Both fidelities, or `streamed-opaque` — a row with NO per-turn tool
+  // attribution to render — cannot be designed at all.
+  const fid = new Set(j.journals.map((r) => r.journal_fidelity));
+  assert.ok(fid.has("per-turn") && fid.has("streamed-opaque"));
+
+  const seen = new Map();
+  for (const r of j.journals) {
+    const v = fixtures.get("/api/extra/reconcile", { task: r.task_id });
+    assert.ok(v, "every listed journal must have a reconcile fixture: " + r.task_id);
+    seen.set(v.state, (seen.get(v.state) || 0) + 1);
+  }
+  // A pre-0.54.0 task somebody asks about is a state too, and it is not in the
+  // listing — so it is checked directly.
+  seen.set(fixtures.get("/api/extra/reconcile", { task: "T-12" }).state, 1);
+  for (const state of ["resumable", "nothing-to-resume", "complete", "in-flight", "no-journal"])
+    assert.ok(seen.get(state), "no fixture for the `" + state + "` state");
+
+  // THE ROW THIS RELEASE IS FOR. Attribution `network`, so a Claude fallback
+  // would fail too and the wave HOLDS.
+  const t2 = fixtures.get("/api/extra/reconcile", { task: "T-2" });
+  assert.strictEqual(t2.attribution.verdict, "network");
+  assert.strictEqual(t2.attribution.fallback_would_also_fail, true);
+  assert.strictEqual(t2.resume_target.kind, "hold");
+  assert.ok(t2.attribution.evidence.length, "a verdict with no evidence is folklore");
+  assert.strictEqual(t2.files.find((f) => f.path === "src/routes/health.js").numstat.added, 7);
+  // An UNTOUCHED file keeps its row — it is the strongest signal there is.
+  assert.ok(t2.files.some((f) => f.state === "untouched"));
+  assert.match(t2.partial_usage_note, /FLOOR/);
+
+  // UNKNOWN IS NOT ZERO: a line count that would mix two people's changes reads
+  // null, never `+0 −0`.
+  const t5 = fixtures.get("/api/extra/reconcile", { task: "T-5" });
+  assert.strictEqual(t5.files[0].numstat.added, null);
+  assert.strictEqual(t5.partial_usage, null, "no vector is NOT a zero vector");
+  assert.ok(t5.touched_undeclared.length, "a fence breach is designable");
+
+  // THE BLOCKED RESUME, naming the paths.
+  const t9 = fixtures.get("/api/extra/reconcile", { task: "T-9" });
+  assert.deepStrictEqual(t9.reverted, ["src/db/schema.sql"]);
+  assert.match(t9.blocked_by, /worse than starting over/);
+
+  // THE REFUSAL names the pid and the lease, never a disabled control with no
+  // explanation.
+  const t8 = fixtures.get("/api/extra/reconcile", { task: "T-8" });
+  assert.strictEqual(t8.liveness.live, true);
+  assert.match(t8.blocked_by, /pid \d+/);
+
+  // Prune: preview-then-apply, and it NAMES EVERY DIRECTORY. A count is not
+  // consent, and why a record is KEPT is as much of the answer.
+  const p = fixtures.get("/api/extra/journal/prune/preview");
+  assert.strictEqual(p.dry_run, true);
+  assert.deepStrictEqual(p.removed, [], "a preview deletes nothing");
+  assert.ok(p.candidates.every((c) => c.task_id && c.dir && c.why));
+  assert.ok(p.kept.some((k) => /orphan is never swept/.test(k.why)));
+
+  // RELIABILITY: one profile ABOVE the sample floor and one BELOW it, or the
+  // `sample too small` chip cannot be designed.
+  const rel = fixtures.get("/api/extra/stats").reliability;
+  assert.ok(rel, "the stats fixture must carry the reliability block");
+  assert.ok(rel.profiles.some((g) => g.sample_too_small === true));
+  assert.ok(rel.profiles.some((g) => g.sample_too_small === false && g.failure_rate !== null));
+  for (const g of rel.profiles) {
+    // `unattributed` is ALWAYS present, including when zero.
+    assert.strictEqual(typeof g.unattributed, "number");
+    assert.deepStrictEqual(Object.keys(g.attribution).sort(), ["local", "network", "orc", "provider", "worker"]);
+  }
+});

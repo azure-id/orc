@@ -31,6 +31,13 @@
 //   chat-route echoes a DIFFERENT `provider` on turn 2 → ⚠ REROUTE (U4)
 //   chat-429   429s twice, then answers  → the in-turn retry ladder
 //   chat-400   400s with a model complaint → model_not_found, retry:false
+//   chat-drop  THE USER'S OWN SCENARIO (v0.54.0). Turn 1 serves ONE Write of a
+//              six-line src/routes/health.js that is missing its last line; turn
+//              2 DROPS THE SOCKET MID-BODY, after the headers, which is how a
+//              real 502 / dead wifi / rate-limited stream actually ends. A fake
+//              that closed cleanly would certify the adapter rather than test
+//              it (the v0.53.0 rule), because a clean close parses as a
+//              malformed answer instead of a lost connection.
 //
 // Prints `PORT <n>` on stdout once listening; the parent reads that and starts.
 //
@@ -106,6 +113,20 @@ module.exports = { start };
 // inert under the runner and unchanged for their real callers.
 if (require.main !== module || !MODE) return;
 
+// The six lines the worker gets written before the wire dies. It is missing
+// `module.exports = router;` — nothing mounts the route, and the build may even
+// still pass, which is exactly why a half-finished write is worse than none.
+const HEALTH_PARTIAL = [
+  'const { Router } = require("express");',
+  "",
+  "const router = Router();",
+  "",
+  'router.get("/", (req, res) => {',
+  '  res.status(200).json({ status: "ok" });',
+  "});",
+  "",
+].join("\n");
+
 const srv = http.createServer((req, res) => {
   const auth = req.headers.authorization || req.headers["x-api-key"] || "";
   const send = (code, obj) => {
@@ -144,7 +165,7 @@ const srv = http.createServer((req, res) => {
     } catch (_) {}
     if (/no-such-model/.test(j.model || ""))
       return send(404, { error: { message: `model \`${j.model}\` does not exist` } });
-    if (/^chat/.test(MODE) && /chat\/completions/.test(req.url)) return chat(j, send);
+    if (/^chat/.test(MODE) && /chat\/completions/.test(req.url)) return chat(j, send, res);
     send(200, { model: j.model, choices: [{ message: { content: "hi" } }] });
   });
 });
@@ -162,7 +183,7 @@ const USAGE = {
   completion_tokens: 120,
   completion_tokens_details: { reasoning_tokens: 40 },
 };
-function chat(j, send) {
+function chat(j, send, res) {
   turn++;
   const tools = (j.tools || []).map((t) => t.function && t.function.name);
   const has = (n) => tools.includes(n);
@@ -207,6 +228,16 @@ function chat(j, send) {
   if (MODE === "chat-undec") {
     if (turn === 1) return send(200, call("Write", { path: "src/NOT-DECLARED.js", content: "x" }));
     return send(200, done("refused, stopping"));
+  }
+  // ONE Write, and then the wire dies. Headers first, then a partial body, then
+  // the socket is destroyed — a real 502 or a dropped link does not send a
+  // well-formed close, and a fake that did would be exercising the malformed-
+  // answer path instead of the lost-connection one.
+  if (MODE === "chat-drop") {
+    if (turn === 1) return send(200, call("Write", { path: "src/routes/health.js", content: HEALTH_PARTIAL }));
+    res.writeHead(200, { "content-type": "application/json" });
+    res.write('{"model":"' + (j.model || "") + '","choices":[{"message":{"role":"assist');
+    return res.socket.destroy();
   }
   if (MODE === "chat-loop") return send(200, call("Read", { path: "src/a.js" }));
   if (MODE === "chat-nowr") return send(200, done("I looked and decided nothing needed changing."));

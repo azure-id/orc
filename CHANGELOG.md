@@ -10,6 +10,137 @@ Format: `### v<version> — <title> _(<date>)_`.
 
 ---
 
+### v0.54.0 — a failed dispatch is a POSITION, not a blank page _(2026-08-25)_
+
+**A worker on another model wrote six of seven lines and lost its connection.
+ORC sent the same task to Claude from scratch — onto a file that was already
+two-thirds written.**
+
+`orc extra` had exactly one recovery move: re-dispatch the SAME slice to the
+Claude band. That move assumes the worktree is where the dispatch found it. **It
+usually is not.** The replacement executor's three plausible moves were all
+wrong: `Write` the file whole and discard work you already paid for · `Edit`
+against a stale mental model so `old_string` does not match and it improvises ·
+read first and then guess whether what is there is its own earlier work, a
+teammate's, or garbage. No field in the slice could have told it, and no field in
+the return contract could have carried it.
+
+**The registered token, sixth in its family:** `a lane that re-does work the
+worktree already contains` has broken this contract. It joins `a lane that
+answers its own interview question`, `a lane that picks its own favourite`, `a
+lane that fixes what it judged`, `a lane that picks its own council`, `a lane
+that reads its own document`, and `a lane that sends work off Claude without
+saying so`.
+
+- **THE JOURNAL IS THE CLI'S, AND IT IS WRITTEN BEFORE THE FIRST BYTE LEAVES THE
+  MACHINE.** `.claude/orc/extra-journal/<task_id>/` — a header carrying HEAD,
+  `git status --short` in full and a hash plus a line count for every
+  `declared_files` entry; a progress log appended as the dispatch runs; a result
+  written beside the spend append. It is written by `orc extra dispatch` itself,
+  which is the **fourth** time this repo has chosen a written-by-the-CLI fact
+  over a relayed one (v0.32.0 narration, v0.49.5's hand-back page, v0.53.2's
+  spend log). No lane writes it, no lane can forget it, and it is best effort by
+  construction: a journal that cannot be written never takes the dispatch down.
+  The header is the only record of what the repository looked like before a
+  third party touched it, which is the only thing that makes a reconciliation
+  possible at all.
+- **`orc extra reconcile <task_id>` — FREE, deterministic, and it runs before
+  anything paid.** Five states, five exit codes (0 `resumable` · 1
+  `nothing-to-resume` · 2 `no-journal` · 3 `complete` · 4 `in-flight`), and 0 is
+  the answer the command exists to give rather than "healthy". Per declared file:
+  `untouched` · `created` · `modified` · `deleted` · `reverted`, with line counts
+  where they can be computed EXACTLY and `null` where they cannot — **unknown is
+  not zero**. Plus `touched_undeclared[]` (a fence breach, surfaced here because
+  a crashed dispatch is exactly when the worktree delta never ran), the last
+  recorded action, and the partial token vector.
+- **It deliberately does NOT decide whether a file is finished.** No brace
+  counter, no truncation heuristic, no language sniffing — /orc-doc's house-rule
+  boundary verbatim: the CLI cannot parse intent, so it does not pretend to, and
+  **a fake validator would be worse than none.** The checks that answer "is this
+  done" already exist and are already engine-blind. Reconciliation's job is to
+  point them at the right thing.
+- **ATTRIBUTION — whose fault it was, with the evidence.** Five verdicts, each
+  carrying a different correct recovery: `provider` · `network` · `local` ·
+  `worker` · `orc`. **`network` HOLDS THE WAVE** — a Claude fallback cannot
+  succeed when the machine has no network, so falling back would be a second
+  failure and a second cost for nothing. The two are told apart by ONE
+  unauthenticated 3-second request on a path that has already failed, made only
+  on the reasons that cannot be separated without it. `orc` is on the list on
+  purpose: a report about a third party with no way to blame its own author is
+  not a report anybody should trust — v0.53.3 was exactly an ORC bug that
+  presented as a bad key.
+- **`orc extra resume-slice <task_id> --out <f>` composes the continuation, and
+  the CLI owns the wording.** It is a NEW DISPATCH OF A DERIVED SLICE through the
+  ordinary bridge — zero new engines, zero new dispatch paths, **zero new
+  agents** — so the fence, the concurrency cap, the credential rules, the spend
+  log and the worktree delta all come along unchanged. It **never widens
+  `declared_files`**, **never moves `acceptance[]`**, **never moves the score**
+  (a resume is not a discount), and **refuses on a drifted slice**, naming both
+  hashes.
+- **Where a resume goes is DERIVED, never a config key.** Retryable → the same
+  profile in a new session, up to `extra_resume_max`. Non-retryable → the Claude
+  band, **still as a RESUME slice** — which is what fixes the original bug: the
+  Claude fallback stops being a from-scratch dispatch, which it should never have
+  been. A key here would let somebody configure "always the same profile" and
+  then wait out the cap × a 401.
+- **Six refusals, each NAMED, each writing NOTHING** (`not-resumable` ·
+  `in-flight` · `reverted-file` · `slice-drifted` · `resume-cap` ·
+  `resume-disabled`). **A live attempt is never resumed:** a dropped socket does
+  not prove a provider stopped streaming, so a resume is gated on the pid being
+  gone OR the lease having expired — and past the lease a live pid is treated as
+  somebody else's process, stated as the honest bound it is rather than as proof.
+  **A `reverted` declared file blocks and names the paths:** resuming on top of a
+  possible destructive action is the one case where continuing is worse than
+  starting over, and ORC does not get to make that call.
+- **Two new failure classes make the recovery choosable.** `stream-interrupted`
+  (the connection was established and then died — `unreachable` means it never
+  opened, and those two want opposite recoveries) and `connection-lost-local`
+  (the same, with the probe also failing). A taxonomy that returned one word for
+  both could not pick either, which is why there was only ever one recovery.
+- **JOURNAL FIDELITY IS DECLARED PER ENGINE and never rendered stronger than it
+  is.** `api` and `claude-shim` are `per-turn`; engine `cli` is
+  `streamed-opaque` — its child's stdout now goes to a FILE DESCRIPTOR rather
+  than a buffer in a parent that dies, so a wall-clock kill leaves the bytes on
+  disk and `output_file` stops being `null`. ORC captured them and did not
+  interpret them, and **a gap that is not reported reads as a capability**.
+- **A killed dispatch's spend is recoverable.** `appendExtraSpend` runs after the
+  engine returns, so a killed parent left real money invisible to every cost
+  report — the v0.53.2 hole through a different door. Reconcile writes the
+  journal's running vector once, idempotently, as `recovered: true, complete:
+  false`. **Measured is not unknown; unknown is not zero; a recovered vector is a
+  FLOOR and says so.**
+- **Orphans are REPORTED at preflight and never resumed.** `orc extra preflight`
+  lists every journal with a header, no result and an expired lease — and does
+  **not** change its exit code, because an orphan is a finding, not a stop.
+  Silently continuing a third party's half-finished write into somebody's
+  repository is the same class of act as routing off Claude without saying so.
+- **Reliability becomes a MEASURED property of a profile.** `orc extra stats`
+  gains per-profile `dispatches` · `failed` · `resumed` · `orphaned` · mean time
+  to failure · the attribution split, and **below 10 dispatches there is no rate
+  at all** — a percentage from three tries is noise with a percent sign on it.
+  `orc extra doctor` gains `extra-orphan-dispatch` and `extra-profile-unreliable`
+  (never below the floor). Both ABSENT counts are named.
+- **`orc ui ▸ Extra ▸ Recovery`** — a sixth tab, not a tenth card. One row per
+  journal, **expanded in place** (the Runs-row rule), and the free/paid line is
+  visible: `reconcile` is a button, `resume-slice` is a copy-able command,
+  because the panel never runs a lane. A row with nothing to show KEEPS ITS SLOT;
+  `in-flight` renders as a refusal with its reason; prune is preview-then-apply
+  and **names every directory**. Spending gains the reliability strip. Overview
+  gets one line, only when there is something to say, and it never offers to
+  continue anything.
+- **Two new config keys, and the four that were refused are written down.**
+  `extra_resume` (`on`) and `extra_resume_max` (`2`) — nine keys became eleven.
+  Deliberately NOT added: a key for where a resume goes, a key for the retry
+  ladder (`extra_timeout_s` is already the budget), a key to disable the journal
+  or its 30-day retention (**a record you can switch off is off on the run you
+  needed it for**), and a key for the network probe. `extra_resume` is INERT in
+  `/orc-quick`, announced at the agent gate.
+- **New trace verbs** `EXTRA resume` and `EXTRA orphan`, composed by the CLI and
+  copied verbatim — a resume that leaves no line cannot be counted by
+  `orc extra stats` or `/orc-retro`. New mocked run: `mock-run/extra-recovery.md`.
+
+---
+
 ### v0.53.4 — the reload that dropped its own token _(2026-08-24)_
 
 **Every `orc update` from the panel ended on `This link is missing its session

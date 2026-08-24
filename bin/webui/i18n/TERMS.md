@@ -118,6 +118,7 @@ extra.add.vaultWarn
 extra.session.honesty
 extra.lanes.subWhy
 extra.guard.subWhy
+extra.recovery.noteWhy
 ```
 
 ---

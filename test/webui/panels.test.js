@@ -1010,14 +1010,15 @@ test("extra ladder: one vertical row per band, honest widths, and the row you re
   assert.ok(!/simple work|mechanical work|hardest work/i.test(jsCode), "the panel writes no prose about a score");
 });
 
-test("extra tabs: five of them, the open one survives a re-render, and the gate decides what exists", () => {
+test("extra tabs: six of them, the open one survives a re-render, and the gate decides what exists", () => {
   const js = panelJs("extra");
 
   // Knowledge (five tabs) and Crosslink (two) are the precedent, down to the
   // shared `.tabs` / `.tab-pane` in runs.css. Extra was the largest panel in
   // the app and the only big one that never adopted it — nine cards in one
   // 8,800px scroll, with no first step and no way to be done with a section.
-  for (const key of ["setup", "routing", "limits", "spending", "providers"])
+  // v0.54.0 adds the SIXTH — Recovery, not a tenth card.
+  for (const key of ["setup", "routing", "limits", "spending", "recovery", "providers"])
     assert.match(js, new RegExp('t\\("extra\\.tab\\.' + key + '"\\)'), `the ${key} tab label is a key written out in full`);
   // A write that re-renders must not throw you back to Setup — the KN_TAB rule.
   assert.match(js, /let EX_TAB = "setup";/);
@@ -1401,4 +1402,113 @@ test("extra fixtures: one of every tool state, both gate floors, and the ugly li
   // A launch that could NOT happen is exit 0 with the command still on the card.
   assert.equal(fixtures.post("/api/extra/install", { provider: "codex" }).data.launched, false);
   assert.ok(fixtures.post("/api/extra/install", { provider: "codex" }).data.fallback_cmd);
+});
+
+// ── v0.54.0 — RECOVERY ──────────────────────────────────────────────────────
+
+test("extra recovery: the free read is a button, the paid one is a copy-able command", () => {
+  const js = panelJs("extra");
+  const tab = js.slice(js.indexOf("function exRecoveryTab"), js.indexOf("function exReliabilityStrip"));
+
+  // The panel NEVER RUNS A LANE. `reconcile` costs nothing, so the row opening
+  // it is a real control; `resume-slice` composes a slice for a dispatch that
+  // will cost money, so it is a command you copy.
+  assert.match(tab, /laneCommand\("orc extra resume-slice /);
+  assert.match(tab, /laneCommand\("orc extra reconcile /);
+  assert.ok(!/post\("\/api\/extra\/dispatch/.test(js), "the panel never dispatches");
+  assert.ok(!/post\("\/api\/extra\/resume/.test(js), "and never composes a resume slice for you");
+
+  // EXPANDED IN PLACE — the Runs-row rule. One row open at a time, detail
+  // fetched on first open, and there is no detail box below the list.
+  assert.match(tab, /let EX_JOURNAL_OPEN = null;/);
+  assert.match(tab, /entry\.row\.classList\.toggle\("open", open\)/);
+  assert.match(tab, /if \(!open \|\| entry\.loaded\) return;/);
+
+  // A REFUSAL IS RENDERED AS A REFUSAL WITH ITS REASON, never as a dead control.
+  assert.match(tab, /t\("extra\.recovery\.blocked", \{ why: v\.blocked_by \}\)/);
+  // A HOLD says what it means, in the CLI's words.
+  assert.match(tab, /v\.attribution\.fallback_would_also_fail/);
+  assert.match(tab, /t\("extra\.recovery\.holdWave"\)/);
+
+  // EVERY STATE WORD DRAWN HERE IS THE CLI'S OWN STRING, passed straight
+  // through. The panel may branch on one to pick a colour — every card here
+  // already does — but it may never RENDER a word of its own for a state.
+  assert.match(tab, /chip\(v\.state,/, "the state chip is the CLI's own string");
+  assert.match(tab, /chip\(f\.state,/, "and so is each file's");
+  assert.match(tab, /chip\(v\.resume_target\.kind,/, "and the resume target's");
+  assert.match(tab, /chip\(v\.attribution\.verdict,/, "and the attribution verdict's");
+  // AND NEITHER STRING TABLE MAY CONTAIN ONE. A translated state word is a
+  // state that does not exist — the rule that keeps `resumable` from becoming
+  // a friendlier synonym on one surface and not the other.
+  for (const lang of ["en", "id"]) {
+    const table = JSON.stringify(i18nTable(lang));
+    for (const w of ["resumable", "nothing-to-resume", "no-journal", "in-flight", "streamed-opaque", "per-turn"])
+      assert.ok(!table.includes(w), `the ${lang} table must not contain the CLI state word \`${w}\``);
+  }
+
+  // UNKNOWN IS NOT ZERO: a line count ORC could not compute exactly reads as an
+  // em dash, never as `+0 −0`.
+  assert.match(tab, /f\.numstat\.added === null \? "—"/);
+
+  // A RECOVERED VECTOR IS A FLOOR, and the note is not optional chrome.
+  assert.match(tab, /v\.partial_usage_note/);
+  // FIDELITY IS NEVER RENDERED STRONGER THAN IT IS.
+  assert.match(tab, /r\.journal_fidelity/);
+  assert.match(tab, /v\.journal_fidelity_note/);
+
+  // Preview-then-apply, and the preview NAMES EVERY DIRECTORY. A count is not
+  // consent, and the apply stays disabled until a preview was fetched.
+  assert.match(tab, /apply\.disabled = true;/);
+  assert.match(tab, /read\("\/api\/extra\/journal\/prune\/preview"\)/);
+  assert.match(tab, /for \(const x of d\.candidates\) list\.append/);
+  assert.match(tab, /for \(const k of d\.kept \|\| \[\]\)/, "why a record is KEPT is as much of the answer");
+});
+
+test("extra recovery: reliability has no percentage below the sample floor, and unattributed is always drawn", () => {
+  const js = panelJs("extra");
+  // BOUNDED. A slice that ran to end-of-file would be testing the whole panel
+  // and would fail on the first unrelated number it met.
+  const strip = js.slice(js.indexOf("function exReliabilityStrip"), js.indexOf("// Which tab was open"));
+
+  // The FLOOR IS THE CLI'S NUMBER, never one written here.
+  assert.match(strip, /rel\.sample_floor/);
+  assert.ok(!/\b10\b/.test(strip.split("\n").filter((l) => !l.trim().startsWith("//")).join("\n")), "the floor is never hard-coded in the panel");
+  assert.match(strip, /if \(g\.sample_too_small\)/);
+  // `unattributed` is ALWAYS printed, including when zero — the /orc-budget
+  // rule, and `|| 0` is what keeps an absent count from vanishing.
+  assert.match(strip, /unattributed: g\.unattributed \|\| 0,/);
+  // The two ABSENT counts are named rather than absorbed.
+  assert.match(strip, /rel\.unreadable_journals/);
+  assert.match(strip, /rel\.journals_without_result/);
+
+  // It hangs on the SPENDING tab, beside the cost it belongs with.
+  assert.match(js, /if \(st\.reliability\) c\.append\(exReliabilityStrip\(st\.reliability\)\);/);
+});
+
+test("extra recovery: a card whose child count changes with its state does not declare its rows", () => {
+  const css = panelCss("extra");
+  const block = css.slice(css.indexOf(".ex-rec-list"));
+  // `.ex-tool`'s 250px ellipse: FOUR states carried four different numbers of
+  // children against a declared row template, and a chip stretched into an
+  // ellipse. A recovery row has five states, so it is a flex column.
+  assert.match(block, /\.ex-rec-head \{[^}]*display: flex;/s);
+  assert.ok(!/\.ex-rec-head \{[^}]*grid-template-rows/s.test(block), "a row with a variable child count may not declare its rows");
+  assert.ok(!/\.ex-rec-row \{[^}]*grid-template-rows/s.test(block));
+  // Every variant collapses EXPLICITLY at the narrow widths.
+  const resp = appCss();
+  assert.match(resp, /\.ex-rec-head \{ flex-wrap: wrap; \}/);
+  assert.match(resp, /\.ex-rec-file \{ flex-direction: column;/);
+});
+
+test("overview: an orphaned dispatch gets ONE line, and it navigates rather than expands", () => {
+  const js = panelJs("overview");
+  const block = js.slice(js.indexOf("const ej = d.extra_journal;"), js.indexOf("/* --- the raw doctor list"));
+  // ONLY WHEN THERE IS SOMETHING TO SAY.
+  assert.match(block, /if \(ej && ej\.orphans\) \{/);
+  // THE CARD CONTRACT: this row navigates, so it declares `.no-caret` and fills
+  // the three columns that variant has. One column short is the whole card.
+  assert.match(block, /el\("button", "run-card no-caret"\)/);
+  assert.match(block, /location\.hash = "#\/extra"/);
+  // It REPORTS. It never resumes.
+  assert.ok(!/resume/.test(block), "the Overview never offers to continue a dispatch");
 });

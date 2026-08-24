@@ -229,6 +229,34 @@ PANELS.overview = function (host) {
         out.append(c);
       }
 
+      /* --- v0.54.0: foreign dispatches that never reported back ------------
+         ONE LINE, and only when there is something to say. Money was spent and
+         work is half-done, and nothing will look at it again unless somebody is
+         told. It ROUTES to the panel that can clear it (Extra ▸ Recovery) — it
+         never resumes anything, because continuing a third party's unfinished
+         write without asking is the same class of act as routing off Claude
+         without saying so. */
+      const ej = d.extra_journal;
+      if (ej && ej.orphans) {
+        const c = card(t("overview.extraOrphan.title"));
+        c.append(el("div", "note", t("overview.extraOrphan.note")));
+        // `.no-caret` — this row NAVIGATES rather than expands, and every
+        // `.run-card` variant declares its own column count (v0.49.2). A card
+        // one column short is not a rounding error; it is the whole card.
+        const b = el("button", "run-card no-caret");
+        b.type = "button";
+        b.append(chip(tn(ej.orphans, "overview.extraOrphan.chip"), "bad"));
+        const mid = el("div", "run-mid");
+        mid.append(el("div", "run-slug", t("overview.extraOrphan.slug")));
+        mid.append(el("div", "run-where", t("overview.extraOrphan.where")));
+        b.append(mid, el("div", "run-age", ""));
+        b.addEventListener("click", () => {
+          location.hash = "#/extra";
+        });
+        c.append(b);
+        out.append(c);
+      }
+
       /* --- the raw doctor list -------------------------------------------
          Kept below the actionable card, because it is the EVIDENCE: the exact
          message the CLI printed, unedited and untranslated, so what you read
