@@ -81,6 +81,10 @@ const GROUP_OF = {
   // not a lane you invoke — it is a setting that changes where the lanes you
   // already run send their work.
   "orc-extra": "tools",
+  // v0.54.0. It sits beside `orc-extra` for the same reason: recovering a
+  // half-finished foreign dispatch is a thing you do at the terminal and in the
+  // panel, not a lane you invoke.
+  "extra-recovery": "tools",
 
   "orc-wiki": "knowledge",
   "orc-pattern": "knowledge",

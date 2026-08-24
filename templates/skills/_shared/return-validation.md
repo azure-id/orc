@@ -61,6 +61,23 @@ carrying `fence: {declared_files: false}` means the list was an instruction, not
 a rule — treat §6 below as the only real check, and say so to the user rather
 than reporting a constraint that was never applied.
 
+**A RESUMED foreign dispatch owes three more fields** (v0.54.0). The dispatch
+return sets `resume_expected: true`, so the obligation is never inferred:
+
+- **`resume_state`** — `continued` · `restarted` · `no-op`. Absent on a slice
+  with no `resumed_from` is correct; **absent on a resume slice is MALFORMED.**
+  A return claiming `restarted` while `preexisting[]` was non-empty is a
+  FINDING, not a failure — it is how `/orc-retro` learns which providers ignore
+  a resume preamble, so surface it rather than treating it as a bad return.
+- **`preexisting_read[]`** — which pre-existing files the worker actually
+  opened. Quoted like `wiki_used`: **what it did, never what the dispatcher
+  assumed.** An EMPTY list on a resume whose `preexisting[]` was not empty is an
+  honest and informative return — it says the worker ignored the preamble — and
+  it must be surfaced, never dropped.
+- **`journal_fidelity`** — relayed from the dispatch return (`per-turn` |
+  `streamed-opaque`), so a validator never reports `streamed-opaque` evidence as
+  if it had per-turn tool attribution.
+
 Everything else in this file applies to a foreign return unchanged: the
 honest-status rules, the pattern attestation, the TDD attestation, the wiki
 attestation, and above all **§6, the worktree delta** — which is engine-blind
@@ -109,6 +126,12 @@ including a file that became LESS modified, which is how a destructive `git`
 command inside a slice disguises itself as a clean tree. `actual_files` is a
 CLAIM; the worktree is the EVIDENCE. An unexplained delta gates the wave: name
 it, attribute it, and get a decision before closing.
+
+**On a RESUMED task the "before" side of the delta is the JOURNAL BASELINE**
+(`orc extra reconcile`, `_shared/extra-dispatch.md`), not the state at the top of
+this wave. A file the previous attempt created is already in the tree and is
+**not** an unexplained delta — it is explained, by the journal, by name. Without
+that the first resumed wave trips its own gate on the work it just recovered.
 
 ## 7. Gotcha capture (repair loops only — v0.40.0)
 

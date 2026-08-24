@@ -318,6 +318,81 @@ const CONTRACTS = [
       "skills/orc/references/trace-protocol.md",
     ],
   },
+  // ── v0.54.0 — RECOVERY. A failure is a POSITION, not a blank page ────────
+  {
+    // The sixth member of the family. It is what stops a fallback from landing
+    // a fresh executor on a file a dead worker already half-wrote.
+    name: "a resume CONTINUES; it never re-does what is already on disk (v0.54.0)",
+    token: "a lane that re-does work the worktree already contains",
+    files: ["skills/_shared/extra-dispatch.md"],
+  },
+  {
+    // The free, zero-token read that decides which recovery is even correct. It
+    // is named in the preflight report too, because the orphan line the report
+    // renders is the command's own output.
+    name: "reconcile runs BEFORE the fallback, and it is free (v0.54.0)",
+    token: "orc extra reconcile",
+    binFiles: ["bin/cli.js"],
+    files: [
+      "skills/_shared/extra-dispatch.md",
+      "skills/_shared/return-validation.md",
+      "skills/orc-diy/references/blocks/extra.md",
+      "skills/orc-fast/SKILL.md",
+      "skills/orc-mini/SKILL.md",
+      "skills/orc/SKILL.md",
+      "skills/orc/references/preflight-report.md",
+    ],
+  },
+  {
+    // The CLI composes the continuation slice. A lane that wrote its own resume
+    // wording would produce a second wording for the same facts.
+    name: "the resume slice is CLI-composed (v0.54.0)",
+    token: "orc extra resume-slice",
+    binFiles: ["bin/cli.js"],
+    files: ["skills/_shared/extra-dispatch.md"],
+  },
+  {
+    // WHERE the position lives. Renamed on either side and the lint fails — the
+    // `extra-spend.jsonl` precedent, for the same reason: a path a lane cannot
+    // find is a recovery that cannot happen.
+    name: "the journal is the CLI's, and it lives at ONE path (v0.54.0)",
+    token: ".claude/orc/extra-journal/",
+    binFiles: ["bin/cli.js"],
+    files: ["skills/_shared/extra-dispatch.md"],
+  },
+  {
+    // The field a resumed return owes. Absent on a resume slice is MALFORMED,
+    // and `restarted` on a non-empty preexisting[] is a finding — both are
+    // useless if the two copies of the field name drift.
+    name: "a resumed return owes `resume_state` (v0.54.0)",
+    token: "resume_state",
+    files: ["skills/_shared/extra-dispatch.md", "skills/_shared/return-validation.md"],
+  },
+  {
+    // A gap that is not reported reads as a capability. The validator has to be
+    // able to tell `streamed-opaque` evidence from per-turn evidence, and it can
+    // only do that if the field is spelled the same in all three places.
+    name: "journal fidelity is DECLARED and never rendered stronger (v0.54.0)",
+    token: "journal_fidelity",
+    binFiles: ["bin/cli.js"],
+    files: ["skills/_shared/extra-dispatch.md", "skills/_shared/return-validation.md"],
+  },
+  {
+    // Three readers parse the EXTRA verbs, so a resume that leaves no line
+    // cannot be counted by any of them.
+    name: "the resume trace verb, composed once (v0.54.0)",
+    token: "EXTRA resume",
+    binFiles: ["bin/cli.js"],
+    files: ["skills/_shared/extra-dispatch.md", "skills/orc/references/trace-protocol.md"],
+  },
+  {
+    // Whose fault it was. It is not decoration — a `network` verdict HOLDS the
+    // wave, so the word has to mean the same thing on both sides.
+    name: "attribution decides the recovery, and `network` HOLDS (v0.54.0)",
+    token: "fallback_would_also_fail",
+    binFiles: ["bin/cli.js"],
+    files: ["skills/_shared/extra-dispatch.md"],
+  },
   {
     // v0.52.0 (D6) — WHICH LANES ROUTE FOREIGN. The table was prose in one
     // markdown file and nothing computed it, so the routing table could say
@@ -412,6 +487,13 @@ const CONTRACTS = [
     ],
   },
   {
+    // NOTE — the token is a BARE ENGLISH WORD, so this row is a token->file-set
+    // map and not only a concept. v0.54.0 added a second, unrelated meaning: an
+    // ORPHANED FOREIGN DISPATCH, whose lowercase literals (`orphans[]`, the
+    // `EXTRA orphan` trace verb, `extra-orphan-dispatch`) cannot be spelled any
+    // other way. Those three files are registered here so the lint stays green;
+    // the row's real job — a PLAN file that drops the coverage-gate word — is
+    // unaffected, because that is caught by `missing`, not by `unregistered`.
     name: "plan coverage gate (v0.9.0 — orphan requirement = malformed plan)",
     token: "orphan",
     files: [
@@ -420,11 +502,14 @@ const CONTRACTS = [
       "agents/orc-planner-mini-sonnet-5-high.md",
       "agents/orc-planner-opus-5-med.md",
       "commands/orc-plan.md",
+      "skills/_shared/extra-dispatch.md",
       "skills/orc-mini/SKILL.md",
       "skills/orc-retro/SKILL.md",
       "skills/orc/SKILL.md",
       "skills/orc/references/analyst-gates.md",
       "skills/orc/references/plan-handoff.md",
+      "skills/orc/references/preflight-report.md",
+      "skills/orc/references/trace-protocol.md",
       "skills/orc/schemas/planning-output.md",
       "skills/orc/subskills/orc-planner-mini/SKILL.md",
       "skills/orc/subskills/orc-planner/SKILL.md",

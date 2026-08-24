@@ -66,6 +66,10 @@ const EXTRA_VALUE_FLAGS = new Set([
   "--require-parameters",
   "--only",
   "--allow-fallbacks",
+  // v0.54.0 — recovery. `--out` names a file and `--attempt` a number, and a
+  // value swallowed as a positional is a task id nobody asked about.
+  "--out",
+  "--attempt",
 ]);
 
 function flag(name) {
@@ -911,6 +915,17 @@ const CONFIG_META = [
   { key: "extra_timeout_s", def: 900, tier: "advanced", validate: vInt(30), desc: "Per-dispatch wall clock for a foreign worker. The child's own timeouts are DERIVED from this rather than set independently, so three timeouts cannot disagree about which one fires first." },
   { key: "extra_passphrase_ttl_days", def: 30, tier: "common", validate: vEnum(...EXTRA_TTL_DAYS.map(String)), options: EXTRA_TTL_DAYS, desc: "The DEADLINE the passphrase picker opens on when you save a vault passphrase. A passphrase stored on the same machine as the vault it opens is not a second factor any more — it is a deadline, the shape of ssh-agent. This key supplies the default; the value is stored PER PROFILE, because two connections may legitimately expire on different days. `EXPIRED` on a vaulted profile STOPS the run before wave 1 — `extra_on_failure` does not cover it, because that key is about an endpoint that failed and this is a deadline you set yourself." },
   { key: "extra_verify_max_days", def: 7, tier: "advanced", validate: vInt(1), desc: "Past this a profile's verification reads STALE and is re-pinged before wave 1. A STALE profile STILL ROUTES — a stale check is not a failed one (the /orc-pact UNCHECKABLE rule) — and freshness is computed on read, never stored." },
+  // --- v0.54.0 — recovery. Nine keys became ELEVEN, and both additions are
+  // justified rather than assumed. Deliberately NOT added: a key for where a
+  // resume goes (derived from the failure classification that already exists,
+  // or a user could configure "always the same profile" and then wait out the
+  // cap × a 401), a key for the retry ladder (`extra_timeout_s` is already the
+  // budget, and a second number that must stay smaller than the first is a bug
+  // generator), a key to disable the journal or its retention (the spend-log
+  // reasoning verbatim: a record you can switch off is off on the run you
+  // needed it for), and a key for the network probe.
+  { key: "extra_resume", def: "on", tier: "common", validate: vEnum("on", "off"), options: ["on", "off"], desc: "Whether a partial or crashed foreign dispatch is RESUMED rather than re-done. A worker cut off mid-write leaves a half-changed repository, and re-dispatching the SAME slice lands a fresh executor on a file that is already two-thirds written — it either discards work you paid for or improvises against a stale mental model. `on` reconciles the worktree against the journal baseline and composes a resume slice that says what is already there. Default `on`, because `off` is what is broken. INERT in /orc-quick, which asks which agent before every dispatch." },
+  { key: "extra_resume_max", def: 2, tier: "advanced", validate: vInt(0), desc: "Resume attempts per task before the fallback procedure takes over. Bounded like `tdd_loop_max`: hitting the cap STOPS with an honest report naming the Claude agent, never a silent third loop. A resume never widens `declared_files`, never moves `acceptance[]` and never moves the score — it is a continuation, not a discount." },
   { key: "opus5_only", def: false, tier: "common", validate: vEnum("true", "false"), options: ["true", "false"], desc: "EVERY dispatched role uses ONE model — Opus 5 — with EFFORT as the cost dial (executors: [0,40) low · [40,80) medium · [80,100] high; each fixed role its own pinned effort). Deep SWE-benchmark work on cost vs efficiency across Claude models finds a single Opus 5 agent with the effort ladder the most efficient setup. It FORCES: while on it outranks fable5_* and a hand-written rubric_bands_override. Needs an Opus 5 main session or EVERY dispatch silently downgrades. Excludes the Haiku trace writer and orc-diy (compile-owned)." },
   // --- v0.46.0 — the six new lanes ------------------------------------------
   { key: "pact_gate", def: "warn", tier: "common", validate: vEnum("off", "warn"), options: ["off", "warn"], desc: "Invariant ledger at Phase 1 + planning: warn = print the one pact line and inject a DRIFTED/BROKEN promise whose anchors intersect the plan's declared files as a planner constraint; off = nothing. NEVER blocks — a promise is advice with a receipt, not a gate. See /orc-pact." },
@@ -20670,6 +20685,43 @@ function extraDoctorFindings(claudeDir) {
     }
   }
 
+  // v0.54.0 — TWO recovery findings, and the restraint is the design.
+  //
+  // A dispatch that never reported back is money spent and work half-done that
+  // nothing will ever look at again unless somebody is told. It is reported
+  // here and at preflight, and it is NEVER resumed automatically.
+  for (const r of extraJournalListRows(claudeDir).rows) {
+    if (!r.orphan) continue;
+    add(
+      "extra-orphan-dispatch",
+      `"${r.task_id}" was dispatched to "${r.profile}" on ${String(r.started_at || "?").slice(0, 16).replace("T", " ")} and never reported back. Its lease has expired, so nothing is still running it: orc extra reconcile ${r.task_id}`,
+      { task_id: r.task_id, profile: r.profile, attempt: r.attempt, started_at: r.started_at }
+    );
+  }
+  {
+    // NEVER BELOW THE SAMPLE FLOOR. A rate computed from three dispatches is
+    // noise with a percent sign on it, and a doctor that warns about noise is a
+    // doctor people learn to ignore (the `wiki-debt` STALE-only restraint).
+    const rel = extraReliability(claudeDir, extraStatsScan(claudeDir));
+    for (const g of rel.profiles) {
+      if (g.sample_too_small || g.failure_rate === null || g.failure_rate <= EXTRA_UNRELIABLE_RATE) continue;
+      add(
+        "extra-profile-unreliable",
+        `"${g.profile}" failed or never reported back on ${g.failed + g.orphaned} of ${g.dispatches_total} dispatches (${Math.round(
+          g.failure_rate * 100
+        )}%). Attribution: provider ${g.attribution.provider} · network ${g.attribution.network} · local ${g.attribution.local} · worker ${g.attribution.worker} · orc ${g.attribution.orc}.`,
+        {
+          profile: g.profile,
+          dispatches: g.dispatches_total,
+          failed: g.failed,
+          orphaned: g.orphaned,
+          failure_rate: g.failure_rate,
+          attribution: g.attribution,
+        }
+      );
+    }
+  }
+
   for (let i = 0; i < ledger.routes.length; i++)
     for (let j = i + 1; j < ledger.routes.length; j++)
       if (bandsOverlap(ledger.routes[i], ledger.routes[j]))
@@ -20966,6 +21018,18 @@ const EXTRA_FAILURES = {
   // never sees. They live in the SAME taxonomy so `retry` means the same thing
   // whichever engine said it, and /orc-retro can aggregate across both.
   unreachable: { retry: true, label: "the endpoint could not be reached" },
+  // v0.54.0 — THE TWO ROWS THAT MAKE A RECOVERY CHOOSABLE.
+  //
+  // `unreachable` says the connection NEVER OPENED, which means nothing was
+  // written and a fresh dispatch is correct. A connection that opened, served
+  // three tool calls and then died leaves a half-changed repository, and those
+  // two want OPPOSITE recoveries. A taxonomy that returns the same word for both
+  // cannot pick either, which is why until now there was only one.
+  "stream-interrupted": { retry: true, label: "the connection was established and then died mid-response" },
+  // The same shape, with the unauthenticated network probe ALSO failing. This is
+  // the row that must never quietly fall back to Claude: a fallback that cannot
+  // succeed is a second failure and a second cost for nothing.
+  "connection-lost-local": { retry: true, label: "the connection dropped and this machine could not reach the network either" },
   "redirect-refused": { retry: false, label: "the endpoint redirected, and a credential must never follow one" },
   "response-truncated": { retry: true, label: "the reply exceeded the response ceiling" },
   unknown: { retry: false, label: "the worker failed and said nothing ORC can classify" },
@@ -20976,7 +21040,11 @@ const classifyFailure = (k) => EXTRA_FAILURES[k] || EXTRA_FAILURES.unknown;
 // nothing else: the final `result`, every `system`/`api_retry` (the classifier),
 // and whether a tool round trip ever completed (the fidelity measurement).
 function parseStreamJson(text) {
-  const out = { result: null, retries: [], tool_uses: 0, tool_results: 0, events: 0, init: null };
+  // `tool_names` is additive and exists for ONE consumer: the journal, which
+  // has to be able to say WHICH tool the worker last ran. It is collected in the
+  // walk that is already happening rather than in a second pass, because two
+  // walks over the same bytes is two ideas of what an event is.
+  const out = { result: null, retries: [], tool_uses: 0, tool_results: 0, events: 0, init: null, tool_names: [] };
   for (const line of String(text).split(/\r?\n/)) {
     const t = line.trim();
     if (!t || t[0] !== "{") continue;
@@ -21001,7 +21069,13 @@ function parseStreamJson(text) {
     const content = (e.message && e.message.content) || e.content;
     if (Array.isArray(content))
       for (const b of content) {
-        if (b && b.type === "tool_use") out.tool_uses++;
+        if (b && b.type === "tool_use") {
+          out.tool_uses++;
+          out.tool_names.push({
+            name: b.name || null,
+            path: (b.input && (b.input.file_path || b.input.path || b.input.notebook_path)) || null,
+          });
+        }
         if (b && b.type === "tool_result") out.tool_results++;
       }
   }
@@ -21020,6 +21094,1600 @@ function extraUsageVector(usage) {
     output: Number(u.output_tokens || 0),
   };
 }
+
+// ══ THE JOURNAL (v0.54.0) ══════════════════════════════════════════════════
+//
+// A failed foreign dispatch is a POSITION, not a blank page. `a lane that
+// re-does work the worktree already contains` has broken this contract — and
+// the only way any lane can know what the worktree already contains is if
+// somebody wrote down what it looked like BEFORE a third party touched it.
+//
+// WRITTEN BY `orc extra dispatch`, INCREMENTALLY, AND BY NOTHING ELSE. That is
+// the v0.53.2 spend-log rule applied a second time and for the same reason: a
+// fact that reaches disk by being relayed through a model's memory is a fact
+// this repo has already lost three times (v0.32.0 narration, v0.53.2 spend).
+// No lane writes the journal, no lane can forget it, no lane can reshape it.
+//
+// BEST EFFORT BY CONSTRUCTION. A journal that cannot be written never takes the
+// dispatch down with it — the same clause that already guards appendExtraSpend.
+// Every function here swallows its own errors and answers null/false.
+//
+// It lives in `.claude/orc/`, NOT under {run_dir}: the bridge does not know the
+// run slug, and a crashed session is exactly the moment nobody remembers it.
+// One directory, one reader, findable by task id alone. `isPrunable` can never
+// match it (the ui.lock rule) — this is run state ORC wrote, not payload the
+// installer owns.
+const EXTRA_JOURNAL_DIR = "extra-journal";
+const EXTRA_JOURNAL_TTL_DAYS = 30;
+
+// DECLARED PER ENGINE, AND NEVER RENDERED STRONGER THAN IT IS (the
+// `reports_model: false` restraint). Engine `cli` hands its own tools to its own
+// harness, so ORC can capture the bytes and cannot interpret them until the
+// adapter parses them. A gap that is not reported reads as a capability, so the
+// fidelity rides in the HEADER and every consumer prints it.
+const EXTRA_JOURNAL_FIDELITY = {
+  api: "per-turn",
+  "claude-shim": "per-turn",
+  cli: "streamed-opaque",
+};
+const EXTRA_JOURNAL_FIDELITY_NOTE = {
+  "per-turn": "every turn and every tool call was recorded as it happened.",
+  "streamed-opaque":
+    "the child's own output was captured verbatim; ORC did not interpret it, so there is NO per-turn tool attribution here — only bytes.",
+};
+
+const extraJournalRoot = (claudeDir) => path.join(claudeDir, "orc", EXTRA_JOURNAL_DIR);
+
+// A task id arrives on a slice FILE, so it is untrusted input about to become a
+// path segment. It is sanitised, never trusted — and an id that sanitises to
+// nothing gets NO journal rather than a directory called "".
+function extraJournalSlug(taskId) {
+  const safe = String(taskId == null ? "" : taskId)
+    .trim()
+    .replace(/[^A-Za-z0-9._-]+/g, "-")
+    .replace(/^[-.]+/, "")
+    .replace(/[-.]+$/, "")
+    .slice(0, 80);
+  return safe || null;
+}
+
+function extraJournalPathsIn(dir, attempt) {
+  const n = Math.max(1, Number(attempt) || 1);
+  const nn = String(n).padStart(2, "0");
+  return {
+    slug: path.basename(dir),
+    dir,
+    attempt: n,
+    header: path.join(dir, `attempt-${nn}.json`),
+    progress: path.join(dir, `attempt-${nn}.progress.jsonl`),
+    result: path.join(dir, `attempt-${nn}.result.json`),
+  };
+}
+
+function extraJournalPaths(claudeDir, taskId, attempt) {
+  const slug = extraJournalSlug(taskId);
+  if (!slug) return null;
+  return extraJournalPathsIn(path.join(extraJournalRoot(claudeDir), slug), attempt);
+}
+
+// A RESUME IS A NEW ATTEMPT, NEVER AN OVERWRITE. The previous attempt holds the
+// only record of what the repository looked like before anyone touched it, so
+// nothing may ever write over it.
+function extraJournalNextAttempt(claudeDir, taskId) {
+  const slug = extraJournalSlug(taskId);
+  if (!slug) return 1;
+  let max = 0;
+  try {
+    for (const name of fs.readdirSync(path.join(extraJournalRoot(claudeDir), slug))) {
+      const m = /^attempt-(\d+)\.json$/.exec(name);
+      if (m) max = Math.max(max, Number(m[1]));
+    }
+  } catch (_) {}
+  return max + 1;
+}
+
+// Line counts are the ones a human counts: a trailing newline TERMINATES the
+// last line, it does not begin an empty one.
+const extraCountLines = (s) => (s.length ? s.split("\n").length - (s.endsWith("\n") ? 1 : 0) : 0);
+
+function extraFileFacts(abs) {
+  try {
+    const buf = fs.readFileSync(abs);
+    return {
+      exists: true,
+      sha256: crypto.createHash("sha256").update(buf).digest("hex"),
+      lines: extraCountLines(buf.toString("utf8")),
+      bytes: buf.length,
+    };
+  } catch (_) {
+    return { exists: false, sha256: null, lines: 0, bytes: 0 };
+  }
+}
+
+// `gitIn` returns null for an EMPTY stdout, which is exactly what a clean
+// `git status --short` produces — so "clean tree" and "not a git repository"
+// would be the same answer, and a baseline cannot afford to confuse them.
+function extraGitLines(root, argv) {
+  const r = spawnSync("git", argv, { cwd: root, encoding: "utf8", maxBuffer: GIT_MAX_BUFFER });
+  if (r.error || r.status !== 0) return { ok: false, lines: [] };
+  return {
+    ok: true,
+    lines: String(r.stdout || "")
+      .split(/\r?\n/)
+      .filter((l) => l.trim().length),
+  };
+}
+
+// THE BASELINE — the file that makes a reconciliation possible at all.
+//
+// `files` covers `declared_files` ONLY. Hashing the whole worktree is unbounded
+// work for a question nobody asks; a change OUTSIDE the fence is §6's job, and
+// §6 reads `git status --short`, which is here in full.
+function extraBaseline(root, declaredFiles) {
+  const files = {};
+  for (const rel of Array.isArray(declaredFiles) ? declaredFiles : []) {
+    const p = String(rel);
+    files[p] = extraFileFacts(path.resolve(root, p));
+  }
+  // `--untracked-files=all`, NOT the default. `git status --short` COLLAPSES an
+  // untracked directory into a single `?? src/routes/` row, so a declared file
+  // created inside a new directory is never named — and the fence check then
+  // reports the directory as an undeclared change, which is a false breach on
+  // the single most ordinary thing a worker does. The baseline and the later
+  // comparison must use the SAME command, or the set difference between them is
+  // comparing two different questions.
+  const g = extraGitLines(root, ["status", "--short", "--untracked-files=all"]);
+  return {
+    head: gitIn(root, ["rev-parse", "HEAD"]) || null,
+    git: g.ok,
+    git_status: g.ok ? g.lines : null,
+    git_status_note: g.ok
+      ? null
+      : "not a git repository (or git is not on PATH), so a write OUTSIDE declared_files cannot be detected from here.",
+    files,
+  };
+}
+
+// Written AFTER the credential and the slot resolve and BEFORE the first byte
+// leaves the machine. Returns the paths, or null when the journal could not be
+// opened — in which case the dispatch proceeds exactly as it did in 0.53.4.
+function extraJournalHeader(claudeDir, hdr) {
+  const paths = extraJournalPaths(claudeDir, hdr && hdr.task_id, hdr && hdr.attempt);
+  if (!paths) return null;
+  try {
+    fs.mkdirSync(paths.dir, { recursive: true });
+    fs.writeFileSync(paths.header, JSON.stringify(hdr, null, 2) + "\n", "utf8");
+    // The progress file EXISTS from the header onward, empty. "the log is
+    // empty" and "the dispatch never got that far" are different facts and must
+    // never look the same on disk.
+    fs.appendFileSync(paths.progress, "", "utf8");
+    return paths;
+  } catch (_) {
+    return null;
+  }
+}
+
+function extraJournalAppend(paths, obj) {
+  if (!paths) return false;
+  try {
+    fs.appendFileSync(
+      paths.progress,
+      JSON.stringify(Object.assign({ t: new Date().toISOString() }, obj)) + "\n",
+      "utf8"
+    );
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+function extraJournalResult(paths, payload) {
+  if (!paths) return false;
+  try {
+    fs.writeFileSync(paths.result, JSON.stringify(payload, null, 2) + "\n", "utf8");
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+// ── Retention ──────────────────────────────────────────────────────────────
+// Swept on the next `orc extra dispatch`, memoised per process. FIXED at 30
+// days after a `done` close, no config key — the spend-log reasoning verbatim:
+// a record you can switch off is off on the run you needed it for, and 30 days
+// of a few kB per task is not a problem anyone has.
+//
+// A directory is a candidate ONLY when EVERY attempt in it closed `done`. An
+// attempt with a header and no result is an ORPHAN, which is the one thing this
+// whole subsystem exists to find, so it is never swept however old it is.
+function extraJournalAttemptList(dir) {
+  const out = [];
+  let names = [];
+  try {
+    names = fs.readdirSync(dir);
+  } catch (_) {
+    return out;
+  }
+  for (const name of names) {
+    const m = /^attempt-(\d+)\.json$/.exec(name);
+    if (m) out.push(extraJournalPathsIn(dir, Number(m[1])));
+  }
+  return out.sort((a, b) => a.attempt - b.attempt);
+}
+
+function extraJournalNewestMs(dir) {
+  let newest = 0;
+  try {
+    for (const name of fs.readdirSync(dir)) {
+      try {
+        newest = Math.max(newest, fs.statSync(path.join(dir, name)).mtimeMs);
+      } catch (_) {}
+    }
+  } catch (_) {}
+  return newest;
+}
+
+function extraJournalPrunable(dir, cutoffMs) {
+  const attempts = extraJournalAttemptList(dir);
+  const newest = extraJournalNewestMs(dir);
+  if (!attempts.length)
+    return { prunable: false, why: "no attempt header — this is not a journal directory", attempts: 0, newest_ms: newest };
+  for (const a of attempts) {
+    let r = null;
+    try {
+      r = JSON.parse(fs.readFileSync(a.result, "utf8"));
+    } catch (_) {}
+    if (!r)
+      return {
+        prunable: false,
+        why: `attempt ${a.attempt} never reported back — an orphan is never swept`,
+        attempts: attempts.length,
+        newest_ms: newest,
+      };
+    if (r.outcome !== "done")
+      return {
+        prunable: false,
+        why: `attempt ${a.attempt} closed \`${r.outcome}\`, not \`done\``,
+        attempts: attempts.length,
+        newest_ms: newest,
+      };
+  }
+  if (newest >= cutoffMs)
+    return {
+      prunable: false,
+      why: `every attempt closed \`done\`, but the newest file here is ${Math.floor(
+        (Date.now() - newest) / 86400000
+      )} days old and the floor is ${EXTRA_JOURNAL_TTL_DAYS}`,
+      attempts: attempts.length,
+      newest_ms: newest,
+    };
+  return {
+    prunable: true,
+    why: `every attempt closed \`done\` and nothing here has changed in ${EXTRA_JOURNAL_TTL_DAYS}+ days`,
+    attempts: attempts.length,
+    newest_ms: newest,
+  };
+}
+
+let EXTRA_JOURNAL_SWEPT = false;
+function extraJournalSweep(claudeDir) {
+  if (EXTRA_JOURNAL_SWEPT) return null;
+  EXTRA_JOURNAL_SWEPT = true;
+  const root = extraJournalRoot(claudeDir);
+  const cutoff = Date.now() - EXTRA_JOURNAL_TTL_DAYS * 86400000;
+  const removed = [];
+  let names = [];
+  try {
+    names = fs.readdirSync(root);
+  } catch (_) {
+    return { root, scanned: 0, removed };
+  }
+  for (const name of names) {
+    const dir = path.join(root, name);
+    try {
+      if (!fs.statSync(dir).isDirectory()) continue;
+    } catch (_) {
+      continue;
+    }
+    if (!extraJournalPrunable(dir, cutoff).prunable) continue;
+    try {
+      fs.rmSync(dir, { recursive: true, force: true });
+      removed.push(name);
+    } catch (_) {}
+  }
+  return { root, scanned: names.length, removed };
+}
+
+// ══ RECONCILE + ATTRIBUTION (v0.54.0) ══════════════════════════════════════
+//
+// ZERO TOKENS. DETERMINISTIC. The free check runs before the paid one — the
+// /orc-doc lint rule, applied here.
+//
+// WHAT THIS DELIBERATELY DOES NOT COMPUTE: whether a file is syntactically
+// complete. No brace counter, no "the last line looks unfinished" heuristic, no
+// language sniffing. /orc-doc's house-rule boundary applies verbatim — the CLI
+// cannot parse intent, so it does not pretend to — and A FAKE VALIDATOR WOULD BE
+// WORSE THAN NONE: a truncation detector that is right 80% of the time teaches
+// people to trust it the other 20%. The checks for "is this file finished"
+// already exist and are already engine-blind: the smoke gate, the TDD gate and
+// the reviewer. Reconciliation's job is to point them at the right thing.
+
+// The five verdicts, and each one carries a DIFFERENT correct recovery. That is
+// the whole reason the set is closed: a verdict nobody can act on differently is
+// decoration.
+//
+// `orc` is deliberately in the set. This subsystem asks the user to trust a
+// report about a third party, and a report with no way to blame its own author
+// is not a report anybody should trust — v0.53.3 was exactly an ORC bug that
+// presented as a bad key.
+const EXTRA_ATTRIBUTION = ["provider", "network", "local", "worker", "orc"];
+
+// WHOSE FAULT IT WAS, mapped from the failure taxonomy that already exists plus
+// the one new fact the probe supplies. Every row that could plausibly be two
+// things is decided by the probe, never by a guess.
+const EXTRA_ATTRIBUTION_OF = {
+  // The endpoint answered, and what it answered with was a refusal. A Claude
+  // fallback is unaffected by any of these.
+  server_error: "provider",
+  overloaded: "provider",
+  rate_limit: "provider",
+  authentication_failed: "provider",
+  billing_error: "provider",
+  model_not_found: "provider",
+  oauth_org_not_allowed: "provider",
+  "redirect-refused": "provider",
+  "response-truncated": "provider",
+  // The machine. Neither route works until somebody fixes it here.
+  "spawn-failed": "local",
+  "engine-unavailable": "local",
+  "managed-login-conflict": "local",
+  // ORC composed the thing that was refused.
+  invalid_request: "orc",
+  // The conversation was clean and the model under-performed. The band or the
+  // turn cap is wrong, which is a calibration fact and not a failure of anybody's
+  // infrastructure.
+  "max-turns": "worker",
+  "wall-clock": "worker",
+  max_output_tokens: "worker",
+  "empty-diff": "worker",
+  "malformed-return": "worker",
+  "worker-reported-partial": "worker",
+  unknown: "worker",
+};
+
+// THE THREE REASONS THAT CANNOT BE TOLD APART WITHOUT ASKING THE NETWORK.
+// "your wifi is down" and "deepseek is down" produce the same socket error and
+// have OPPOSITE correct responses, which is the entire justification for
+// spending one unauthenticated request on the answer.
+const EXTRA_PROBE_REASONS = new Set(["unreachable", "timeout", "stream-interrupted", "connection-lost-local"]);
+
+// ONE cheap UNAUTHENTICATED request, 3 seconds, and it asks exactly one
+// question: CAN THIS MACHINE REACH THAT HOST AT ALL. It is not a credential
+// check and must never be read as one — ANY HTTP answer, 401 and 404 included,
+// proves the network got there, which is the only thing being measured.
+//
+// No credential is attached, so this is the one `orc extra` request that cannot
+// leak one.
+async function extraNetworkProbe(prof, cat) {
+  const row = catalogRow(cat, prof && prof.provider);
+  const base =
+    (prof && prof.engine === "claude-shim" ? prof.anthropic_base_url : prof && prof.base_url) ||
+    (row && (row.api_base || row.anthropic_base)) ||
+    null;
+  if (!base)
+    return {
+      ran: false,
+      reachable: null,
+      url: null,
+      // ABSENT IS NOT FALSE. A profile with no endpoint to probe (engine `cli`
+      // on a tool that owns its own provider config) tells us NOTHING about the
+      // network, and reporting that as "unreachable" would attribute a failure
+      // to a user's internet on no evidence at all.
+      note: "this profile names no endpoint ORC can reach, so the network was NOT measured. Absent is not the same as unreachable.",
+    };
+  const url = joinUrl(base, (row && row.models_path) || "/v1/models");
+  const res = await extraHttp({ url, method: "GET", timeoutMs: 3000, maxBytes: 64 * 1024 });
+  // A REDIRECT IS A RESPONSE. extraHttp refuses to follow one, which is a
+  // credential rule — but the host answered, and reachability is what is being
+  // measured here.
+  const answered = typeof res.status === "number" || res.reason === "redirect-refused";
+  return {
+    ran: true,
+    reachable: answered,
+    url,
+    status: typeof res.status === "number" ? res.status : null,
+    ms: res.ms === undefined ? null : res.ms,
+    error: answered ? null : res.error || res.reason || "no answer",
+    note: answered
+      ? `the host answered (HTTP ${res.status || "3xx"}) without a credential, so this machine's network reached it. That says NOTHING about whether the key is good — only that the wire is up.`
+      : `no answer in 3000ms without a credential (${res.error || res.reason || "no answer"}).`,
+  };
+}
+
+// The verdict, the sentence, and the evidence that produced it. Never a verdict
+// with no evidence: a report that cannot show its work is folklore.
+function extraAttribution(header, result, probe) {
+  const reason = (result && result.reason) || null;
+  const outcome = (result && result.outcome) || null;
+  const evidence = [];
+  let verdict = null;
+  let why = null;
+
+  if (result && result.http_status) evidence.push(`the endpoint answered HTTP ${result.http_status}`);
+  if (result && Array.isArray(result.api_retries) && result.api_retries.length)
+    evidence.push(
+      `${result.api_retries.length} in-turn retry attempt(s), last: ${result.api_retries[result.api_retries.length - 1].error}`
+    );
+  if (result && typeof result.turns === "number") evidence.push(`${result.turns} turn(s) completed`);
+  if (result && Array.isArray(result.files_written) && result.files_written.length)
+    evidence.push(`${result.files_written.length} file(s) were written before it stopped`);
+
+  if (outcome === "done") {
+    return {
+      verdict: null,
+      why: "this attempt finished. There is nothing to attribute.",
+      evidence: [],
+      fallback_would_also_fail: false,
+      probe: probe || null,
+    };
+  }
+
+  if (EXTRA_PROBE_REASONS.has(reason)) {
+    // THE ROW THE WHOLE RELEASE IS SHAPED AROUND. The probe decides it, because
+    // nothing else can.
+    if (probe && probe.ran && probe.reachable === false) {
+      verdict = "network";
+      why = `the connection to ${header.provider || header.profile} failed, and an UNAUTHENTICATED probe of ${probe.url} also failed inside 3s. That points at this machine's network, not at the provider.`;
+      evidence.push(`network probe: ${probe.error} after ${probe.ms === null ? "3000" : probe.ms}ms`);
+    } else if (probe && probe.ran && probe.reachable === true) {
+      verdict = "provider";
+      why = `the dispatch could not complete, but an unauthenticated probe of ${probe.url} answered inside 3s — the wire is up, so this is the endpoint and not the network.`;
+      evidence.push(`network probe: HTTP ${probe.status} in ${probe.ms}ms`);
+    } else {
+      // NOT MEASURED. The honest answer is the ambiguity itself, because
+      // choosing one of the two on no evidence is how a report earns distrust.
+      verdict = "provider";
+      why = `the connection failed and the network was NOT measured (${(probe && probe.note) || "no probe was run"}), so this cannot be separated from a local network problem. It is reported as \`provider\` because that is the recovery that is safe to attempt — check your connection before reading it as the provider's fault.`;
+      evidence.push("network probe: not run");
+    }
+  } else if (reason && EXTRA_ATTRIBUTION_OF[reason]) {
+    verdict = EXTRA_ATTRIBUTION_OF[reason];
+    const label = classifyFailure(reason).label;
+    why =
+      verdict === "provider"
+        ? `${label} — the endpoint answered, and what it answered was a refusal.`
+        : verdict === "local"
+        ? `${label} — this is this machine, so neither a retry nor a Claude fallback fixes it until it is fixed here.`
+        : verdict === "orc"
+        ? `${label} — ORC composed the request that was refused, so this is an ORC defect and is reported as one.`
+        : `${label} — the HTTP conversation was clean and the worker under-performed inside it.`;
+  } else if (outcome === "partial") {
+    verdict = "worker";
+    why = `the dispatch was capped rather than broken (${reason || "no reason given"}): the conversation worked and the work did not finish inside it.`;
+  } else {
+    verdict = "worker";
+    why = `the worker failed with \`${reason || "no reason"}\` and nothing in the record points at the network, the endpoint or ORC.`;
+  }
+
+  // The credential SOURCE is evidence, never a verdict. v0.53.3 was a 401 caused
+  // by ORC sending a credential the profile never declared, so on a rejection the
+  // one field that could name that shape is put in front of the reader — and it
+  // is left to the reader, because ORC cannot tell its own bug from a bad key.
+  if (reason === "authentication_failed" && result && result.credential)
+    evidence.push(
+      `the rejected credential came from \`${result.credential.source}\`` +
+        (result.credential_override ? " — which is NOT the source this profile declares" : "")
+    );
+
+  return {
+    verdict,
+    why,
+    evidence,
+    // THE FIELD THAT CHANGES THE RECOVERY. A Claude fallback that cannot
+    // succeed is a second cost for nothing.
+    fallback_would_also_fail: verdict === "network" || verdict === "local",
+    probe: probe || null,
+  };
+}
+
+// ── The worktree, now, against the baseline ────────────────────────────────
+
+// The HEAD blob's hash, for the ONE comparison that needs it: `reverted`.
+function extraHeadBlobSha(root, rel) {
+  const r = spawnSync("git", ["show", `HEAD:${rel}`], { cwd: root, maxBuffer: GIT_MAX_BUFFER });
+  if (r.error || r.status !== 0 || !r.stdout) return null;
+  return crypto.createHash("sha256").update(r.stdout).digest("hex");
+}
+
+// added / removed, EXACT or absent — never estimated.
+//
+// `created` and `deleted` are exact from the baseline's own line count. A
+// `modified` file is exact only when the baseline WAS the HEAD blob, because
+// that is the only case where `git diff HEAD` describes the change this dispatch
+// made rather than that change plus somebody else's uncommitted edits. Anything
+// else answers null and says why: unknown is not zero.
+function extraNumstat(root, rel, before, now, headSha) {
+  if (!before.exists && now.exists)
+    return { added: now.lines, removed: 0, source: "the file did not exist at baseline, so every line in it is new" };
+  if (before.exists && !now.exists)
+    return { added: 0, removed: before.lines, source: "the file existed at baseline and is gone now" };
+  if (before.sha256 === now.sha256) return { added: 0, removed: 0, source: "the file is byte-identical to the baseline" };
+  if (headSha && before.sha256 === headSha) {
+    const r = spawnSync("git", ["diff", "--numstat", "HEAD", "--", rel], { cwd: root, encoding: "utf8", maxBuffer: GIT_MAX_BUFFER });
+    if (!r.error && r.status === 0) {
+      const m = /^(\d+|-)\t(\d+|-)\t/.exec(String(r.stdout || "").trim());
+      if (m && m[1] !== "-")
+        return {
+          added: Number(m[1]),
+          removed: Number(m[2]),
+          source: "the baseline WAS the committed blob, so `git diff --numstat HEAD` describes exactly this dispatch's change",
+        };
+    }
+  }
+  return {
+    added: null,
+    removed: null,
+    source:
+      "the file already differed from HEAD before this dispatch started, so a line count here would mix this dispatch's change with somebody else's uncommitted one. UNKNOWN, and unknown is not zero.",
+  };
+}
+
+// The header's own two liveness facts. A "disconnected" dispatch is NOT provably
+// dead: a client-side socket timeout does not stop a provider streaming, and a
+// SIGTERM'd child may still be mid-write(). So this asks for BOTH — the pid gone,
+// or the lease expired.
+//
+// PID REUSE IS REAL AND IS SAID OUT LOUD. Past the lease a live pid is treated
+// as somebody else's process. That is an honest bound, not a proof.
+function extraAttemptLive(header) {
+  const leaseMs = Date.parse((header && header.lease_expires_at) || "");
+  const leaseExpired = !isNaN(leaseMs) && Date.now() > leaseMs;
+  let pidAlive = false;
+  if (header && typeof header.pid === "number" && header.pid > 0 && header.pid !== process.pid) {
+    try {
+      process.kill(header.pid, 0);
+      pidAlive = true;
+    } catch (e) {
+      // EPERM means the pid EXISTS and belongs to somebody else — alive, and not
+      // ours to signal. ESRCH means it is gone.
+      pidAlive = e && e.code === "EPERM";
+    }
+  }
+  return {
+    live: pidAlive && !leaseExpired,
+    pid: (header && header.pid) || null,
+    pid_alive: pidAlive,
+    lease_expires_at: (header && header.lease_expires_at) || null,
+    lease_expired: leaseExpired,
+    note: leaseExpired
+      ? "the lease has expired, so a live pid here is treated as SOMEBODY ELSE'S process. Pid reuse is real; this is an honest bound, not a proof."
+      : null,
+  };
+}
+
+// The last thing anybody saw the worker do, rendered as a sentence rather than
+// as a record. `last_action` is what makes a resume preamble mean something.
+function extraLastAction(lines, fidelity) {
+  if (!lines.length)
+    return fidelity === "streamed-opaque"
+      ? "nothing was captured — this engine records BYTES, and none arrived."
+      : "no tool call was ever recorded.";
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const l = lines[i];
+    if (!l || !l.tool) continue;
+    const turn = l.turn ? `turn ${l.turn}${l.max_turns ? ` of ${l.max_turns}` : ""} · ` : "";
+    return `${turn}${l.tool}${l.path ? " " + l.path : ""}${l.ok === true ? " · ok" : l.ok === false ? " · REFUSED" : ""}`;
+  }
+  const last = lines[lines.length - 1];
+  if (last && last.event) return `the last recorded event was \`${last.event}\`; no tool call was ever recorded.`;
+  if (last && last.model) return `turn ${last.turn || "?"} answered, and no tool call was ever recorded.`;
+  return "no tool call was ever recorded.";
+}
+
+// Every parsable line, and the torn ones COUNTED. This is an append-only log a
+// killed process may have cut mid-write, so one torn line must never cost the
+// report every line before it.
+function extraReadProgress(file) {
+  let text = "";
+  try {
+    text = fs.readFileSync(file, "utf8");
+  } catch (_) {
+    return { lines: [], unreadable: 0, exists: false };
+  }
+  const lines = [];
+  let unreadable = 0;
+  for (const raw of text.split(/\r?\n/)) {
+    if (!raw.trim()) continue;
+    try {
+      lines.push(JSON.parse(raw));
+    } catch (_) {
+      unreadable++;
+    }
+  }
+  return { lines, unreadable, exists: true };
+}
+
+// THE READ. Returns the whole computed object and an exit code — one function,
+// so the human renderer and `--json` can never describe two different states.
+function extraReconcileCompute(claudeDir, taskId, attemptWanted) {
+  const root = repoRootOf(claudeDir);
+  const slug = extraJournalSlug(taskId);
+  const empty = (state, error) => ({
+    ok: false,
+    state,
+    task_id: taskId || null,
+    attempt: null,
+    attempts_total: 0,
+    error,
+    blocked_by: null,
+    _code: 2,
+  });
+  if (!slug) return empty("no-journal", "a task id is required: orc extra reconcile <task_id>");
+  const dir = path.join(extraJournalRoot(claudeDir), slug);
+  const all = extraJournalAttemptList(dir);
+  if (!all.length)
+    return empty(
+      "no-journal",
+      `no journal for task \`${taskId}\`. Either the id is wrong, or this dispatch predates the journal (orc 0.54.0) — in which case there is no baseline and today's fallback procedure is the whole of the answer.`
+    );
+
+  const paths = attemptWanted ? all.find((a) => a.attempt === Number(attemptWanted)) : all[all.length - 1];
+  if (!paths) return empty("no-journal", `task \`${taskId}\` has no attempt ${attemptWanted}. It has: ${all.map((a) => a.attempt).join(", ")}.`);
+
+  let header = null;
+  try {
+    header = JSON.parse(fs.readFileSync(paths.header, "utf8"));
+  } catch (e) {
+    return empty("no-journal", `the attempt header at ${paths.header} could not be read: ${e.message}`);
+  }
+  let result = null;
+  try {
+    result = JSON.parse(fs.readFileSync(paths.result, "utf8"));
+  } catch (_) {}
+
+  const prog = extraReadProgress(paths.progress);
+  const live = extraAttemptLive(header);
+  const fidelity = header.journal_fidelity || "none";
+
+  // The per-file table. This is the position.
+  const baseline = header.baseline || { files: {}, git_status: null };
+  const files = [];
+  const reverted = [];
+  for (const rel of Object.keys(baseline.files || {})) {
+    const before = baseline.files[rel];
+    const now = extraFileFacts(path.resolve(root, rel));
+    const headSha = baseline.git ? extraHeadBlobSha(root, rel) : null;
+    let state;
+    if (!before.exists && !now.exists) state = "untouched";
+    else if (!before.exists && now.exists) state = "created";
+    else if (before.exists && !now.exists) state = "deleted";
+    else if (before.sha256 === now.sha256) state = "untouched";
+    else if (headSha && now.sha256 === headSha && before.sha256 !== headSha) state = "reverted";
+    else state = "modified";
+    if (state === "reverted") reverted.push(rel);
+    files.push({
+      path: rel,
+      state,
+      baseline: { exists: before.exists, sha256: before.sha256, lines: before.lines },
+      now: { exists: now.exists, sha256: now.sha256, lines: now.lines },
+      numstat: extraNumstat(root, rel, before, now, headSha),
+    });
+  }
+
+  // A FENCE BREACH, surfaced here as well as at §6 — because a crashed dispatch
+  // is exactly the case where §6 never ran.
+  const declared = new Set(header.declared_files || []);
+  const beforeStatus = new Set(Array.isArray(baseline.git_status) ? baseline.git_status : []);
+  // THE SAME COMMAND the baseline used, flags included. Two different `git
+  // status` invocations answer two different questions, and a set difference
+  // across them is arithmetic on incomparable rows.
+  const nowStatus = baseline.git ? extraGitLines(root, ["status", "--short", "--untracked-files=all"]) : { ok: false, lines: [] };
+  const touchedUndeclared = [];
+  if (baseline.git && nowStatus.ok)
+    for (const line of nowStatus.lines) {
+      if (beforeStatus.has(line)) continue;
+      const rel = line.slice(3).trim().replace(/^"|"$/g, "").split(" -> ").pop();
+      if (declared.has(rel)) continue;
+      // ORC'S OWN BOOKKEEPING IS NOT THE WORKER'S STRAY WRITE. The journal, the
+      // spend log and engine `cli`'s work dir are all written BY THIS DISPATCH,
+      // between the baseline and this read, so every dispatch would otherwise
+      // report itself as a fence breach — and a fence warning that always fires
+      // is a fence warning nobody reads. The exclusion is by NAME and is narrow:
+      // it covers ORC's own two directories and nothing a worker could reach.
+      if (/^\.claude\//.test(rel) || rel === ".claude" || rel.split("/")[0] === EXTRA_CLI_WORK) continue;
+      touchedUndeclared.push({ path: rel, status_line: line });
+    }
+
+  const turnLines = prog.lines.filter((l) => typeof l.turn === "number");
+  const turnsUsed = turnLines.length ? Math.max(...turnLines.map((l) => l.turn)) : 0;
+  const maxTurns = (result && result.max_turns) || (turnLines.find((l) => l.max_turns) || {}).max_turns || null;
+
+  // THE FLOOR. Read from the journal's running vector, which is the only record
+  // a dispatch that never reached appendExtraSpend left behind.
+  let partialUsage = null;
+  for (let i = prog.lines.length - 1; i >= 0; i--)
+    if (prog.lines[i] && prog.lines[i].usage) {
+      partialUsage = prog.lines[i].usage;
+      break;
+    }
+
+  const moved = files.some((f) => f.state !== "untouched");
+  let state;
+  let code;
+  let blockedBy = null;
+  if (live.live) {
+    state = "in-flight";
+    code = 4;
+    blockedBy = `pid ${live.pid} is still alive and its lease does not expire until ${live.lease_expires_at}. A human decides whether that process is really working: two writers on one file is worse than a lost dispatch.`;
+  } else if (result && result.outcome === "done") {
+    state = "complete";
+    code = 3;
+  } else if (moved) {
+    state = "resumable";
+    code = 0;
+  } else {
+    state = "nothing-to-resume";
+    code = 1;
+  }
+  if (state === "resumable" && reverted.length)
+    blockedBy = `${reverted.join(", ")} came back CLOSER TO HEAD than the baseline — the §6 revert signature. A human decides whether to restore first: resuming on top of a possible destructive action is the one case where continuing is worse than starting over.`;
+
+  return {
+    ok: true,
+    state,
+    task_id: header.task_id || taskId || null,
+    attempt: paths.attempt,
+    attempts_total: all.length,
+    profile: header.profile || null,
+    provider: header.provider || null,
+    engine: header.engine || null,
+    model_requested: header.model_requested || null,
+    band: header.band || null,
+    score: typeof header.score === "number" ? header.score : null,
+    journal: paths.header,
+    journal_fidelity: fidelity,
+    journal_fidelity_note: header.journal_fidelity_note || null,
+    resumed_from: header.resumed_from || null,
+    slice_path: header.slice_path || null,
+    slice_sha256: header.slice_sha256 || null,
+    started_at: header.started_at || null,
+    ended_at: (result && result.ended_at) || null,
+    duration_ms: (result && result.duration_ms) || null,
+
+    outcome: (result && result.outcome) || null,
+    reason: (result && result.reason) || null,
+    retryable: result ? !!result.retry : null,
+    // A HEADER WITH NO RESULT IS THE ORPHAN. It is the one shape this whole
+    // subsystem exists to find, so it is named rather than inferred.
+    reported_back: !!result,
+    orphan: !result && !live.live,
+
+    liveness: live,
+    attribution: (result && result.attribution) || null,
+
+    files,
+    touched_undeclared: touchedUndeclared,
+    reverted,
+    git: !!baseline.git,
+    git_note: baseline.git_status_note || null,
+
+    last_action: extraLastAction(prog.lines, fidelity),
+    progress_lines: prog.lines.length,
+    // NAMED, ALWAYS. A report quietly short by three rows is exactly the failure
+    // the spend log's `unreadable_spend_lines` exists to prevent.
+    unreadable_progress_lines: prog.unreadable,
+    turns_used: turnsUsed,
+    max_turns: maxTurns,
+
+    partial_usage: partialUsage,
+    partial_usage_note: partialUsage
+      ? "read from the journal's per-turn vector. It is a FLOOR — the true total may be higher, because the dispatch died before it could report."
+      : "the journal recorded no usage vector, so there is NO figure here — not a zero one.",
+
+    acceptance: Array.isArray(header.acceptance) ? header.acceptance : [],
+    acceptance_note:
+      "carried forward unevaluated — whether these are met is not a question this command can answer.",
+
+    blocked_by: blockedBy,
+    _code: code,
+  };
+}
+
+const EXTRA_RECONCILE_MEANING = {
+  resumable: "the worktree moved off the baseline — there is a position",
+  "nothing-to-resume": "the worktree is exactly the baseline — nothing was written",
+  "no-journal": "unknown task id, or a dispatch that predates the journal",
+  complete: "the journal holds a `done` result",
+  "in-flight": "the attempt is still alive — REFUSED",
+};
+
+function extraReconcileCmd(claudeDir, taskId) {
+  const attempt = flag("--attempt");
+  const v = extraReconcileCompute(claudeDir, taskId, typeof attempt === "string" ? attempt : null);
+  const code = v._code;
+  delete v._code;
+
+  if (v.ok) {
+    const cfg = resolvedConfig(claudeDir);
+    let result = null;
+    try {
+      result = JSON.parse(fs.readFileSync(v.journal.replace(/\.json$/, ".result.json"), "utf8"));
+    } catch (_) {}
+    // WHO CONTINUES IT. Derived from the failure classification that already
+    // exists plus the attribution — never a config key.
+    v.resume_target = v.state === "resumable" ? extraResumeTarget(v, result, cfg) : null;
+    v.next =
+      v.state === "resumable" && v.resume_target && (v.resume_target.kind === "extra" || v.resume_target.kind === "claude") && !v.reverted.length
+        ? `orc extra resume-slice ${v.task_id} --out <file>`
+        : v.state === "nothing-to-resume"
+        ? "nothing was written — re-dispatch the ORIGINAL slice (the existing fallback procedure)."
+        : null;
+    // The spend a killed dispatch never got to record. Written ONCE, marked, and
+    // labelled a FLOOR wherever it is read.
+    v.spend_recovered = extraRecoverSpend(claudeDir, v);
+  }
+
+  // An empty result is an ANSWER, so it still returns its object.
+  if (wantsJson()) emitJson(v, code);
+
+  if (!v.ok) {
+    console.log("\n  " + ui.mark.warn(`${v.state} — ${EXTRA_RECONCILE_MEANING[v.state]}`));
+    console.log("  " + v.error + "\n");
+    process.exit(code);
+  }
+
+  const mark = v.state === "resumable" ? ui.mark.ok : v.state === "complete" ? ui.mark.ok : ui.mark.warn;
+  console.log(
+    "\n" +
+      mark(`${v.task_id} · attempt ${v.attempt} of ${v.attempts_total} — ${v.state.toUpperCase()}`) +
+      `\n  ${EXTRA_RECONCILE_MEANING[v.state]}`
+  );
+  console.log(`  ${v.profile}/${v.model_requested || "?"} · engine ${v.engine} · band ${v.band || "?"}`);
+  if (v.outcome) console.log(`  ended: ${v.outcome}${v.reason ? " · " + v.reason : ""}${v.retryable ? " (retryable)" : ""}`);
+  else console.log("  " + ui.mark.warn("this attempt NEVER REPORTED BACK — the process died before it could."));
+
+  if (v.attribution && v.attribution.verdict) {
+    console.log(`\n  attributed: ${v.attribution.verdict.toUpperCase()}`);
+    console.log("  " + v.attribution.why);
+    for (const e of v.attribution.evidence || []) console.log("    · " + e);
+    if (v.attribution.fallback_would_also_fail)
+      console.log(
+        "  " + ui.mark.warn("a Claude fallback would fail too — falling back here burns a second failure and a second cost for nothing.")
+      );
+  }
+
+  console.log("\n  the position:");
+  for (const f of v.files) {
+    const n = f.numstat.added === null ? "±?" : `+${f.numstat.added} −${f.numstat.removed}`;
+    console.log(`    ${f.path} — ${f.state}${f.state === "untouched" ? "" : ` (${n})`}`);
+  }
+  if (!v.git) console.log("    " + ui.mark.warn(v.git_note));
+  for (const t of v.touched_undeclared)
+    console.log("    " + ui.mark.warn(`${t.path} — CHANGED AND NEVER DECLARED (${t.status_line})`));
+  console.log(`  last action: ${v.last_action}`);
+  console.log(`  fidelity: ${v.journal_fidelity} — ${v.journal_fidelity_note || ""}`);
+  if (v.unreadable_progress_lines)
+    console.log("  " + ui.mark.warn(`${v.unreadable_progress_lines} progress line(s) were torn and could not be read.`));
+  if (v.partial_usage)
+    console.log(
+      `  tokens so far: ${extraTokStr(v.partial_usage)} — ${v.partial_usage_note}`
+    );
+  if (v.acceptance.length) {
+    console.log("\n  acceptance (carried forward, UNEVALUATED):");
+    for (const a of v.acceptance) console.log("    · " + a);
+  }
+  if (v.spend_recovered && !v.spend_recovered.already)
+    console.log(
+      "  " +
+        ui.mark.warn(
+          "this dispatch never reached the spend log, so its journal vector was recovered into it — recorded as a FLOOR (`recovered: true, complete: false`), never as a total."
+        )
+    );
+  if (v.resume_target) {
+    console.log(`\n  resume target: ${v.resume_target.kind}${v.resume_target.profile ? " " + v.resume_target.profile : v.resume_target.agent ? " " + v.resume_target.agent : ""}`);
+    console.log("  " + v.resume_target.why);
+  }
+  if (v.blocked_by) console.log("\n  " + ui.mark.bad("BLOCKED: " + v.blocked_by));
+  if (v.next) console.log("\n  " + ui.color.bold(v.next));
+  console.log("");
+  process.exit(code);
+}
+
+// ── orc extra journal ──────────────────────────────────────────────────────
+function extraJournalListRows(claudeDir) {
+  const root = extraJournalRoot(claudeDir);
+  const rows = [];
+  let names = [];
+  try {
+    names = fs.readdirSync(root);
+  } catch (_) {
+    return { root, rows };
+  }
+  const cutoff = Date.now() - EXTRA_JOURNAL_TTL_DAYS * 86400000;
+  for (const name of names.sort()) {
+    const dir = path.join(root, name);
+    try {
+      if (!fs.statSync(dir).isDirectory()) continue;
+    } catch (_) {
+      continue;
+    }
+    const attempts = extraJournalAttemptList(dir);
+    if (!attempts.length) continue;
+    const last = attempts[attempts.length - 1];
+    let header = null;
+    let result = null;
+    try {
+      header = JSON.parse(fs.readFileSync(last.header, "utf8"));
+    } catch (_) {}
+    try {
+      result = JSON.parse(fs.readFileSync(last.result, "utf8"));
+    } catch (_) {}
+    const live = extraAttemptLive(header || {});
+    const prune = extraJournalPrunable(dir, cutoff);
+    rows.push({
+      task_id: (header && header.task_id) || name,
+      dir,
+      attempts: attempts.length,
+      attempt: last.attempt,
+      profile: (header && header.profile) || null,
+      provider: (header && header.provider) || null,
+      engine: (header && header.engine) || null,
+      model_requested: (header && header.model_requested) || null,
+      started_at: (header && header.started_at) || null,
+      journal_fidelity: (header && header.journal_fidelity) || null,
+      declared_files: (header && header.declared_files) || [],
+      outcome: (result && result.outcome) || null,
+      reason: (result && result.reason) || null,
+      reported_back: !!result,
+      live: live.live,
+      // The one state this listing exists to make visible.
+      orphan: !result && !live.live,
+      prunable: prune.prunable,
+      prunable_why: prune.why,
+    });
+  }
+  return { root, rows };
+}
+
+function extraJournalCmd(claudeDir, sub, arg) {
+  const asJson = wantsJson();
+  if (sub === undefined || sub === "list") {
+    const { root, rows } = extraJournalListRows(claudeDir);
+    const obj = {
+      ok: true,
+      root,
+      entries: rows.length,
+      orphans: rows.filter((r) => r.orphan).length,
+      in_flight: rows.filter((r) => r.live).length,
+      prunable: rows.filter((r) => r.prunable).length,
+      retention_days: EXTRA_JOURNAL_TTL_DAYS,
+      journals: rows,
+    };
+    if (asJson) emitJson(obj, 0);
+    if (!rows.length) {
+      console.log(`\n  no foreign dispatch has been journalled yet.\n  ${root}\n`);
+      process.exit(0);
+    }
+    console.log(`\n  ${rows.length} journalled task(s) — ${root}\n`);
+    for (const r of rows) {
+      const state = r.live ? "IN FLIGHT" : r.orphan ? "NEVER REPORTED BACK" : (r.outcome || "?").toUpperCase();
+      console.log(
+        `    ${r.task_id} · ${r.profile}/${r.model_requested || "?"} · ${r.engine} · attempt ${r.attempt} of ${r.attempts} — ${state}`
+      );
+      console.log(`      started ${r.started_at || "?"} · ${r.declared_files.length} declared file(s) · fidelity ${r.journal_fidelity}`);
+      if (r.orphan) console.log("      " + ui.mark.warn(`orc extra reconcile ${r.task_id}`));
+    }
+    console.log("");
+    process.exit(0);
+  }
+
+  if (sub === "show") {
+    const slug = extraJournalSlug(arg);
+    const dir = slug ? path.join(extraJournalRoot(claudeDir), slug) : null;
+    const attempts = dir ? extraJournalAttemptList(dir) : [];
+    if (!attempts.length) {
+      const obj = { ok: false, reason: "no-journal", task_id: arg || null, error: `no journal for task \`${arg}\`.` };
+      if (asJson) emitJson(obj, 2);
+      console.error("❌ " + obj.error);
+      process.exit(2);
+    }
+    const want = flag("--attempt");
+    const paths = typeof want === "string" ? attempts.find((a) => a.attempt === Number(want)) || attempts[attempts.length - 1] : attempts[attempts.length - 1];
+    let header = null;
+    let result = null;
+    try {
+      header = JSON.parse(fs.readFileSync(paths.header, "utf8"));
+    } catch (_) {}
+    try {
+      result = JSON.parse(fs.readFileSync(paths.result, "utf8"));
+    } catch (_) {}
+    const prog = extraReadProgress(paths.progress);
+    // `--body` is OPT-IN, one artifact at a time — the `orc wiki show` rule.
+    const body = flag("--body") === true;
+    let raw = null;
+    if (body) {
+      try {
+        raw = fs.readFileSync(paths.progress, "utf8");
+      } catch (_) {}
+    }
+    const obj = {
+      ok: true,
+      task_id: (header && header.task_id) || arg,
+      attempt: paths.attempt,
+      attempts_total: attempts.length,
+      header,
+      result: result
+        ? {
+            outcome: result.outcome,
+            reason: result.reason,
+            retry: result.retry,
+            duration_ms: result.duration_ms,
+            usage: result.usage || null,
+            attribution: result.attribution || null,
+          }
+        : null,
+      reported_back: !!result,
+      progress_lines: prog.lines.length,
+      unreadable_progress_lines: prog.unreadable,
+      last_action: extraLastAction(prog.lines, (header && header.journal_fidelity) || "none"),
+      progress: prog.lines,
+      body: raw,
+      body_note: body ? null : "the raw progress log is opt-in: add --body.",
+    };
+    if (asJson) emitJson(obj, 0);
+    console.log(`\n  ${obj.task_id} · attempt ${paths.attempt} of ${attempts.length}`);
+    if (header)
+      console.log(
+        `  ${header.profile}/${header.model_requested || "?"} · ${header.engine} · started ${header.started_at} · fidelity ${header.journal_fidelity}`
+      );
+    console.log(`  ${obj.reported_back ? `ended ${result.outcome}${result.reason ? " · " + result.reason : ""}` : "NEVER REPORTED BACK"}`);
+    console.log(`\n  ${prog.lines.length} progress line(s)${prog.unreadable ? `, ${prog.unreadable} torn` : ""}:`);
+    for (const l of prog.lines.slice(-40))
+      console.log(
+        `    ${l.t || "?"} · ${l.tool ? `${l.tool}${l.path ? " " + l.path : ""}` : l.event || (l.model !== undefined ? `turn ${l.turn}` : "?")}`
+      );
+    if (raw !== null) console.log("\n" + raw);
+    console.log("");
+    process.exit(0);
+  }
+
+  if (sub === "prune") {
+    const { root, rows } = extraJournalListRows(claudeDir);
+    const candidates = rows.filter((r) => r.prunable);
+    const dry = flag("--dry-run") === true;
+    const removed = [];
+    if (!dry)
+      for (const c of candidates) {
+        try {
+          fs.rmSync(c.dir, { recursive: true, force: true });
+          removed.push(c.task_id);
+        } catch (_) {}
+      }
+    const obj = {
+      ok: true,
+      root,
+      dry_run: dry,
+      retention_days: EXTRA_JOURNAL_TTL_DAYS,
+      // NAMED, EVERY ONE. A count is not consent.
+      candidates: candidates.map((c) => ({ task_id: c.task_id, dir: c.dir, attempts: c.attempts, why: c.prunable_why })),
+      kept: rows.filter((r) => !r.prunable).map((r) => ({ task_id: r.task_id, why: r.prunable_why })),
+      removed,
+    };
+    if (asJson) emitJson(obj, 0);
+    if (!candidates.length) {
+      console.log(`\n  nothing to prune. Only a journal whose EVERY attempt closed \`done\` and whose newest file is ${EXTRA_JOURNAL_TTL_DAYS}+ days old is ever a candidate.\n`);
+      process.exit(0);
+    }
+    console.log(`\n  ${dry ? "would delete" : "deleted"} ${candidates.length} journal(s):\n`);
+    for (const c of candidates) console.log(`    ${c.task_id} — ${c.dir}\n      ${c.why}`);
+    if (dry) console.log("\n  run without --dry-run to delete them.");
+    console.log("");
+    process.exit(0);
+  }
+
+  console.error(`Unknown: orc extra journal ${sub}\n` + extraUsage());
+  process.exit(1);
+}
+
+// ══ THE RESUME SLICE (v0.54.0) ═════════════════════════════════════════════
+//
+// `a lane that re-does work the worktree already contains` has broken this
+// contract.
+//
+// A resume is A NEW DISPATCH OF A DERIVED SLICE — not a new engine, not a new
+// dispatch path, not a new agent. The lane's flow is:
+//
+//   orc extra reconcile   <task_id> --json          exit 0 → resumable
+//   orc extra resume-slice <task_id> --out <file>
+//   orc extra dispatch --task <file> --json         the ORDINARY bridge
+//
+// Every existing gate — the fence, the concurrency cap, the credential rules,
+// the spend log, §6 — comes along for free, because none of them ever asked
+// whether a slice was a first attempt.
+//
+// THE CLI COMPOSES THE PREAMBLE. Same rule as `trace_line` and `announce`: a
+// lane that wrote its own resume wording would produce a second wording for the
+// same facts, and the two would drift.
+
+// WHERE A RESUME GOES — DERIVED, never a config key.
+//
+// The user asked for "the same agent, in a new session". That is the default and
+// it is right, and it is wrong for a non-retryable failure — so the target comes
+// from the classification that already exists (`EXTRA_FAILURES[…].retry`) plus
+// the attribution. A key here would let somebody configure "always resume on the
+// same profile" and then wait out `extra_resume_max` × a 401.
+const EXTRA_RESUME_TARGETS = ["extra", "claude", "hold", "off"];
+
+// ONE idea of what "on" means. Two readers of the same key that disagree about
+// its default is the drift this repo lints for everywhere else.
+const extraResumeOn = (cfg) => String((cfg && cfg.extra_resume) === undefined ? "on" : cfg.extra_resume) !== "off";
+
+function extraResumeTarget(v, result, cfg) {
+  const resumesSoFar = Math.max(0, (v.attempts_total || 1) - 1);
+  const max = Math.max(0, Number(cfg.extra_resume_max) || 0);
+
+  if (!extraResumeOn(cfg))
+    return {
+      kind: "off",
+      profile: null,
+      agent: null,
+      why: "`extra_resume` is off, so this behaves exactly as it did before v0.54.0: the fallback procedure re-dispatches the ORIGINAL slice. Nothing here reads the position.",
+      resumes_so_far: resumesSoFar,
+      resume_max: max,
+    };
+
+  const verdict = v.attribution && v.attribution.verdict;
+  if (verdict === "network" || verdict === "local")
+    return {
+      kind: "hold",
+      profile: null,
+      agent: null,
+      // THE POINT OF THE WHOLE RELEASE. Fallback and resume are orthogonal, and
+      // ORC has been conflating them: today a failure means "start over, on
+      // Claude". A fallback that cannot succeed is a second cost for nothing.
+      why:
+        verdict === "network"
+          ? "attributed to this machine's NETWORK. A Claude fallback would fail too, so hold the wave and say why — do not spend a second failure finding that out."
+          : "attributed to this MACHINE (a missing binary, a managed-settings conflict, a disk error). Neither route works until it is fixed here.",
+      resumes_so_far: resumesSoFar,
+      resume_max: max,
+    };
+
+  if (resumesSoFar >= max)
+    return {
+      kind: "claude",
+      profile: null,
+      agent: (result && result.fallback_to && result.fallback_to.agent) || null,
+      why: `\`extra_resume_max\` is ${max} and this task has already been resumed ${resumesSoFar} time(s). The cap STOPS with an honest report rather than looping a third time — bounded like \`tdd_loop_max\`.`,
+      capped: true,
+      resumes_so_far: resumesSoFar,
+      resume_max: max,
+    };
+
+  const retryable = result ? !!result.retry : true;
+  if (retryable)
+    return {
+      kind: "extra",
+      profile: v.profile,
+      agent: null,
+      why: `\`${v.reason || "the failure"}\` is retryable, so the same profile gets it again in a NEW session — carrying the position it left behind.`,
+      resumes_so_far: resumesSoFar,
+      resume_max: max,
+    };
+
+  return {
+    kind: "claude",
+    profile: null,
+    agent: (result && result.fallback_to && result.fallback_to.agent) || null,
+    // THE CASE THAT FIXES GAP 1. A Claude executor receiving a resume slice gets
+    // the same preamble, the same `preexisting[]` table and the same instruction
+    // not to rewrite finished work. The Claude fallback stops being a
+    // from-scratch dispatch, which it should never have been.
+    why: `\`${v.reason || "the failure"}\` will not succeed on a retry, so this goes to the Claude band — STILL AS A RESUME SLICE. A from-scratch re-dispatch onto a half-written file is the failure this exists to remove.`,
+    resumes_so_far: resumesSoFar,
+    resume_max: max,
+  };
+}
+
+// ONE WORDING, composed here. Renderers print it; nobody writes a second one.
+function extraResumePreamble(v, target) {
+  const line = (f) => {
+    if (f.state === "untouched") return `\`${f.path}\` — **untouched**.`;
+    const n = f.numstat.added === null ? "line counts unknown" : `+${f.numstat.added} / −${f.numstat.removed} lines`;
+    return `\`${f.path}\` — **${f.state}** by the previous attempt (${n}).`;
+  };
+  const out = [
+    "This task was already started by a worker that was cut off before it finished.",
+    "**The repository already contains its partial work.** Do not start over and do",
+    "not rewrite a file that is already correct. Read each file listed below before",
+    "changing it. Finish the task; change nothing that is already done.",
+    "",
+  ];
+  for (const f of v.files) out.push(line(f));
+  out.push("");
+  out.push(`Last recorded action: ${v.last_action}`);
+  if (v.journal_fidelity === "streamed-opaque")
+    out.push(
+      "That record is BYTES the previous worker printed, not a per-turn tool log — ORC did not interpret it, so treat it as a hint and the files above as the fact."
+    );
+  out.push(
+    `The previous attempt ended: \`${v.reason || "it never reported back"}\`${
+      v.attribution && v.attribution.verdict ? ` (attributed: ${v.attribution.verdict})` : ""
+    }.`
+  );
+  if (v.touched_undeclared.length)
+    out.push(
+      `NOTE — ${v.touched_undeclared.length} file(s) outside this task's declared list changed while it ran: ${v.touched_undeclared
+        .map((t) => "`" + t.path + "`")
+        .join(", ")}. You may not change them. Say so if one blocks you.`
+    );
+  out.push("");
+  out.push(
+    "When you report back, say `resume_state`: `continued` if you built on what was there, `restarted` if you rewrote it, `no-op` if it was already finished — and list in `preexisting_read[]` which of the files above you actually opened."
+  );
+  return out.join("\n");
+}
+
+// SIX refusals, each NAMED — because a refusal the lane renders as a generic
+// error is a refusal the user cannot act on.
+//
+// Five are about the POSITION. The sixth (`resume-disabled`) is about the
+// SWITCH, and it is deliberately its own word rather than being folded into
+// `not-resumable`: "you turned this off" and "there is nothing to resume" are
+// different facts with different fixes, and a command that silently ignores a
+// config somebody set is worse than one that refuses by name.
+const EXTRA_RESUME_REFUSALS = [
+  "not-resumable",
+  "in-flight",
+  "reverted-file",
+  "slice-drifted",
+  "resume-cap",
+  "resume-disabled",
+];
+
+function extraResumeSlice(claudeDir, taskId) {
+  const asJson = wantsJson();
+  const outArg = flag("--out");
+  const cfg = resolvedConfig(claudeDir);
+  const attemptFlag = flag("--attempt");
+  const v = extraReconcileCompute(claudeDir, taskId, typeof attemptFlag === "string" ? attemptFlag : null);
+
+  const refuse = (reason, error, blockedBy, extra) => {
+    const obj = Object.assign(
+      {
+        ok: false,
+        reason,
+        task_id: taskId || null,
+        attempt: v.attempt || null,
+        state: v.state,
+        error,
+        blocked_by: blockedBy || null,
+        // WRITES NOTHING. The `orc doc splice` refusal shape: refuse, name it,
+        // write nothing.
+        slice_path: null,
+      },
+      extra || {}
+    );
+    if (asJson) emitJson(obj, reason === "no-journal" ? 2 : 1);
+    console.error("❌ " + error);
+    if (blockedBy) console.error("   " + blockedBy);
+    process.exit(reason === "no-journal" ? 2 : 1);
+  };
+
+  if (!v.ok) refuse("no-journal", v.error, null);
+
+  // The switch, first: nothing below is worth computing if the user turned this
+  // off.
+  if (!extraResumeOn(cfg))
+    refuse(
+      "resume-disabled",
+      "`extra_resume` is off, so ORC does not compose resume slices. The fallback procedure re-dispatches the ORIGINAL slice, exactly as it did before v0.54.0.",
+      "a human decides: `orc config set extra_resume on`, or accept the from-scratch re-dispatch."
+    );
+
+  if (v.state === "in-flight") refuse("in-flight", "that attempt is still alive. Two writers on one file is worse than a lost dispatch.", v.blocked_by);
+  if (v.state !== "resumable")
+    refuse(
+      "not-resumable",
+      `the reconciliation says \`${v.state}\` — ${EXTRA_RECONCILE_MEANING[v.state]}. There is no position to continue from.`,
+      v.state === "nothing-to-resume"
+        ? "nothing was written, so re-dispatching the ORIGINAL slice is the correct move — that is the existing fallback procedure and it is right here."
+        : v.state === "complete"
+        ? "this attempt finished. Resuming it would duplicate work; run the ordinary gates instead."
+        : null
+    );
+
+  // A `reverted` declared file STOPS the resume. Resuming on top of a possible
+  // destructive action is the one case where continuing is worse than starting
+  // over, and ORC does not get to make that call.
+  if (v.reverted.length)
+    refuse(
+      "reverted-file",
+      `${v.reverted.join(", ")} came back CLOSER TO HEAD than the baseline — the §6 revert signature, which is how a destructive git command inside a slice disguises itself.`,
+      v.blocked_by,
+      { reverted: v.reverted }
+    );
+
+  // THE SLICE IS IMMUTABLE ACROSS ATTEMPTS. If the plan moved between attempts,
+  // continuing quietly is how a resume produces work nobody asked for.
+  let sliceRaw = null;
+  try {
+    sliceRaw = fs.readFileSync(v.slice_path, "utf8");
+  } catch (e) {
+    refuse(
+      "slice-drifted",
+      `the original slice at ${v.slice_path} could not be read (${e.code || e.message}), so ORC cannot prove the task is still the task it was.`,
+      "a human decides whether the plan still stands. Re-plan, or dispatch a fresh slice."
+    );
+  }
+  const nowHash = sha256(sliceRaw);
+  if (nowHash !== v.slice_sha256)
+    refuse(
+      "slice-drifted",
+      `the plan changed between attempts: the slice at ${v.slice_path} now hashes ${nowHash.slice(0, 12)}…, and this attempt ran ${String(v.slice_sha256).slice(0, 12)}….`,
+      "a human decides. Continuing a stale task quietly is how a resume produces work nobody asked for.",
+      { slice_sha256_then: v.slice_sha256, slice_sha256_now: nowHash }
+    );
+
+  let original;
+  try {
+    original = JSON.parse(sliceRaw);
+  } catch (e) {
+    refuse("slice-drifted", `the original slice at ${v.slice_path} is not valid JSON (${e.message}).`, null);
+  }
+
+  let result = null;
+  try {
+    result = JSON.parse(fs.readFileSync(path.join(path.dirname(v.journal), path.basename(v.journal).replace(/\.json$/, ".result.json")), "utf8"));
+  } catch (_) {}
+
+  const target = extraResumeTarget(v, result, cfg);
+  if (target.kind === "hold")
+    refuse("not-resumable", `this failure is attributed to ${v.attribution.verdict} — ${target.why}`, v.attribution.why, {
+      resume_target: target,
+      attribution: v.attribution,
+    });
+  if (target.capped) {
+    // The cap is a STOP WITH AN HONEST REPORT, never a silent third loop. It
+    // still names the Claude agent, because the fallback procedure is what
+    // happens next and the lane should not have to look it up.
+    refuse("resume-cap", target.why, `a human decides: raise \`extra_resume_max\`, or let the fallback procedure hand this to ${target.agent || "the Claude band"}.`, {
+      resume_target: target,
+    });
+  }
+
+  if (typeof outArg !== "string")
+    refuse("not-resumable", "usage: orc extra resume-slice <task_id> --out <file.json>", "the derived slice needs somewhere to go.");
+
+  const preamble = extraResumePreamble(v, target);
+  const preexisting = v.files.map((f) => ({
+    path: f.path,
+    state: f.state,
+    lines: f.now.lines,
+    added: f.numstat.added,
+    removed: f.numstat.removed,
+  }));
+
+  // THE DERIVED SLICE differs from the original in exactly four ways, and every
+  // one of the things it does NOT change is a rule:
+  //
+  //   declared_files is NEVER widened — a resume that could add a path is a
+  //     fence expansion nobody approved, arriving through the one door where
+  //     nobody is watching. A genuine need is a `needs_context` return.
+  //   acceptance[] NEVER moves — the definition of done was set before any of
+  //     this happened; a resume that could relax it would let a failure rewrite
+  //     its own grade.
+  //   the score NEVER moves, so the resume resolves through the SAME
+  //     `extraResolveFor` call and lands on the same band. A resume is not a
+  //     discount.
+  const derived = Object.assign({}, original, {
+    prompt: preamble + "\n\n---\n\n" + original.prompt,
+    resumed_from: {
+      attempt: v.attempt,
+      reason: v.reason,
+      attribution: (v.attribution && v.attribution.verdict) || null,
+      at: v.started_at,
+      journal: v.journal,
+    },
+    preexisting,
+    // So a `Read` of them is obviously the first move.
+    resume_readonly_hint: v.files.filter((f) => f.state !== "untouched").map((f) => f.path),
+  });
+  derived.declared_files = original.declared_files || [];
+  derived.acceptance = original.acceptance || [];
+  derived.score = original.score;
+
+  const outPath = path.resolve(outArg);
+  try {
+    fs.mkdirSync(path.dirname(outPath), { recursive: true });
+    fs.writeFileSync(outPath, JSON.stringify(derived, null, 2) + "\n", "utf8");
+  } catch (e) {
+    refuse("not-resumable", `cannot write the resume slice to ${outPath}: ${e.code || e.message}`, null);
+  }
+
+  const announce =
+    target.kind === "extra"
+      ? `resuming ${v.task_id} on ${v.profile}/${v.model_requested || "?"} in a NEW session — ${preexisting.filter((p) => p.state !== "untouched").length} file(s) already changed on disk are carried into the slice, not re-done.`
+      : `resuming ${v.task_id} on ${target.agent || "the Claude band"} — still as a RESUME slice, so the executor is told what is already on disk instead of landing on it blind.`;
+
+  const obj = {
+    ok: true,
+    task_id: v.task_id,
+    attempt: v.attempt,
+    next_attempt: v.attempt + 1,
+    slice_path: outPath,
+    resume_target: target,
+    attribution: v.attribution,
+    preexisting,
+    resume_readonly_hint: derived.resume_readonly_hint,
+    preamble,
+    announce,
+    declared_files: derived.declared_files,
+    acceptance: derived.acceptance,
+    score: derived.score,
+    slice_sha256: v.slice_sha256,
+    next: `orc extra dispatch --task ${outPath} --json`,
+    blocked_by: null,
+  };
+  if (asJson) emitJson(obj, 0);
+  console.log("\n" + ui.mark.ok(announce));
+  console.log(`\n  target: ${target.kind}${target.profile ? " " + target.profile : target.agent ? " " + target.agent : ""}`);
+  console.log("  " + target.why);
+  console.log("\n  carried into the slice:");
+  for (const p of preexisting)
+    console.log(`    ${p.path} — ${p.state}${p.state === "untouched" ? "" : p.added === null ? " (±?)" : ` (+${p.added} −${p.removed})`}`);
+  console.log(`\n  ${outPath}`);
+  console.log("  " + ui.color.bold(obj.next) + "\n");
+  process.exit(0);
+}
+
+// ── The spend a killed dispatch never got to record ────────────────────────
+//
+// `appendExtraSpend` runs AFTER the engine returns, so a dispatch whose parent
+// was killed cost real money and is invisible to every cost report there is —
+// the exact hole v0.53.2 was released to close, re-opening through a different
+// door.
+//
+// The journal's running vector is the only record it left, so reconcile writes
+// it — ONCE, idempotently, marked. `/orc-budget`'s discipline holds: MEASURED IS
+// NOT UNKNOWN and UNKNOWN IS NOT ZERO. A recovered vector is a FLOOR and it says
+// so, in a field a renderer cannot miss.
+function extraRecoverSpend(claudeDir, v) {
+  if (v.reported_back || !v.partial_usage) return null;
+  const marker = v.journal.replace(/\.json$/, ".recovered");
+  try {
+    if (fs.existsSync(marker)) return { already: true, marker };
+  } catch (_) {}
+  const rec = appendExtraSpend(claudeDir, {
+    profile: v.profile,
+    provider: v.provider,
+    model_requested: v.model_requested,
+    engine: v.engine,
+    task_id: v.task_id,
+    band: v.band,
+    score: v.score,
+    usage: v.partial_usage,
+    // NOT `failed`. Nothing observed this dispatch end, and calling it failed
+    // would be a claim the disk cannot support.
+    outcome: "orphaned",
+    duration_ms: 0,
+    reason: "never-reported-back",
+    recovered: true,
+  });
+  if (!rec) return null;
+  try {
+    fs.writeFileSync(marker, new Date().toISOString() + "\n", "utf8");
+  } catch (_) {}
+  return { already: false, marker, record: rec };
+}
+
+// ── Reliability — a MEASURED property of a profile ─────────────────────────
+//
+// A provider that drops one dispatch in three is a fact that should be visible
+// WHEN THE USER IS CHOOSING A PROFILE, not folklore. It joins the spend/trace
+// rows (the cost side) to the journals (the position side), and — as
+// `extraStatsScan` already does — IT NAMES WHAT IT COULD NOT READ.
+function extraReliability(claudeDir, scan) {
+  const per = new Map();
+  const get = (name) => {
+    if (!per.has(name))
+      per.set(name, {
+        profile: name,
+        dispatches: 0,
+        failed: 0,
+        partial: 0,
+        resumed: 0,
+        orphaned: 0,
+        attribution: { provider: 0, network: 0, local: 0, worker: 0, orc: 0 },
+        // ALWAYS PRINTED, INCLUDING WHEN ZERO (the /orc-budget rule).
+        unattributed: 0,
+        failure_durations: [],
+        mean_time_to_failure_ms: null,
+        // BELOW THE FLOOR THERE IS NO RATE. A percentage computed from three
+        // dispatches is noise with a percent sign on it.
+        sample_floor: EXTRA_RELIABILITY_FLOOR,
+        sample_too_small: true,
+        failure_rate: null,
+      });
+    return per.get(name);
+  };
+
+  for (const r of scan.rows) {
+    if (!r.profile) continue;
+    const g = get(r.profile);
+    g.dispatches++;
+    if (r.outcome === "failed") {
+      g.failed++;
+      if (r.duration_ms) g.failure_durations.push(r.duration_ms);
+    } else if (r.outcome === "partial") g.partial++;
+    else if (r.outcome === "orphaned") g.orphaned++;
+  }
+
+  let unreadable = 0;
+  let withoutResult = 0;
+  const root = extraJournalRoot(claudeDir);
+  let names = [];
+  try {
+    names = fs.readdirSync(root);
+  } catch (_) {}
+  for (const name of names) {
+    const dir = path.join(root, name);
+    try {
+      if (!fs.statSync(dir).isDirectory()) continue;
+    } catch (_) {
+      continue;
+    }
+    for (const a of extraJournalAttemptList(dir)) {
+      let header = null;
+      try {
+        header = JSON.parse(fs.readFileSync(a.header, "utf8"));
+      } catch (_) {
+        unreadable++;
+        continue;
+      }
+      const g = get(header.profile || "?");
+      if (header.resumed_from) g.resumed++;
+      let result = null;
+      try {
+        result = JSON.parse(fs.readFileSync(a.result, "utf8"));
+      } catch (_) {}
+      if (!result) {
+        withoutResult++;
+        // An ORPHAN is one that also cannot still be running.
+        if (!extraAttemptLive(header).live) g.orphaned++;
+        continue;
+      }
+      const verdict = result.attribution && result.attribution.verdict;
+      if (result.outcome === "done") continue;
+      if (verdict && g.attribution[verdict] !== undefined) g.attribution[verdict]++;
+      else g.unattributed++;
+    }
+  }
+
+  for (const g of per.values()) {
+    const denom = g.dispatches + g.orphaned;
+    g.dispatches_total = denom;
+    if (g.failure_durations.length)
+      g.mean_time_to_failure_ms = Math.round(g.failure_durations.reduce((a, b) => a + b, 0) / g.failure_durations.length);
+    delete g.failure_durations;
+    g.sample_too_small = denom < EXTRA_RELIABILITY_FLOOR;
+    g.failure_rate = g.sample_too_small ? null : Math.round(((g.failed + g.orphaned) / denom) * 100) / 100;
+  }
+
+  return {
+    profiles: [...per.values()].sort((a, b) => b.dispatches_total - a.dispatches_total),
+    sample_floor: EXTRA_RELIABILITY_FLOOR,
+    // THE TWO ABSENT COUNTS, named — a report quietly short by three rows is the
+    // exact failure v0.53.2 was released to fix.
+    unreadable_journals: unreadable,
+    journals_without_result: withoutResult,
+  };
+}
+
+// Below this a rate is not reported at all — the `wiki-debt` STALE-only
+// restraint. A doctor that warns about noise is a doctor people learn to ignore.
+const EXTRA_RELIABILITY_FLOOR = 10;
+const EXTRA_UNRELIABLE_RATE = 0.3;
 
 // ── The engine ─────────────────────────────────────────────────────────────
 function runClaudeShim(ctx) {
@@ -21120,7 +22788,7 @@ function runClaudeShim(ctx) {
     // Anything else is a real answer and must not be retried in another shape.
     if (!text.trim() && r.status !== 0 && format === "stream-json") continue;
 
-    return interpretShimRun({ text, format, exit: r, started, models, timeouts, attempts, outFile, stderr: r.stderr || "" });
+    return interpretShimRun({ text, format, exit: r, started, models, timeouts, attempts, outFile, stderr: r.stderr || "", journal: ctx.journal });
   }
   return fail("spawn-failed", "the worker produced no output in either output format.", { attempts });
 }
@@ -21129,7 +22797,14 @@ function runClaudeShim(ctx) {
 function interpretShimRun(a) {
   const { text, format, exit, started, models, attempts, outFile, stderr } = a;
   const duration_ms = Date.now() - started;
-  const parsed = format === "stream-json" ? parseStreamJson(text) : { result: null, retries: [], tool_uses: 0, tool_results: 0, events: 0, init: null };
+  // The `json` shape must be the SAME shape parseStreamJson returns, field for
+  // field. A literal that is missing one of them is a crash in whichever
+  // consumer reaches for it — which is exactly how `tool_names` broke the
+  // degrade path the first time it was added.
+  const parsed =
+    format === "stream-json"
+      ? parseStreamJson(text)
+      : { result: null, retries: [], tool_uses: 0, tool_results: 0, events: 0, init: null, tool_names: [] };
   let result = parsed.result;
   if (!result && format === "json") {
     try {
@@ -21139,6 +22814,32 @@ function interpretShimRun(a) {
 
   const retries = parsed.retries;
   const lastRetry = retries.length ? retries[retries.length - 1] : null;
+
+  // ── The journal, for engine A ────────────────────────────────────────────
+  // HONEST LIMIT, said here rather than discovered later: this engine hands the
+  // conversation to a `claude` child through a BUFFERED spawnSync, so these
+  // lines are appended once the child has returned. The fidelity is per-turn —
+  // every turn and every tool round trip is here — but the durability is not:
+  // a parent killed mid-dispatch leaves a header, an empty progress log, and no
+  // result, which reads as the orphan it is.
+  if (a.journal) {
+    for (const r of retries) extraJournalAppend(a.journal, Object.assign({ event: "api_retry" }, r));
+    let n = 0;
+    for (const t of parsed.tool_names) extraJournalAppend(a.journal, { turn: ++n, tool: t.name, path: t.path, ok: null });
+    extraJournalAppend(a.journal, {
+      event: "result",
+      format,
+      exit_code: exit.status,
+      events: parsed.events,
+      tool_uses: parsed.tool_uses,
+      tool_results: parsed.tool_results,
+      is_error: !!(result && result.is_error),
+      subtype: (result && result.subtype) || null,
+      model: (result && result.model) || null,
+      usage: result ? extraUsageVector(result.usage) : null,
+    });
+  }
+
   const base = {
     engine: "claude-shim",
     format,
@@ -21517,6 +23218,19 @@ function apiToolSpecs(names) {
 // Returns { ok, text, error, wrote }. `text` is what goes back up the wire as
 // the tool result, and A REFUSAL IS A LEGITIMATE TOOL RESULT: the worker needs
 // to read it and try something else, not have the run torn down under it.
+// WHICH FILE, for the journal line only. Arguments arrive as a model-composed
+// string, so this parses defensively and answers null rather than guessing —
+// `Bash` has no path at all, and inventing one would be worse than an em dash.
+function apiToolPath(argsJson) {
+  try {
+    const a = typeof argsJson === "string" ? JSON.parse(argsJson || "{}") : argsJson || {};
+    const v = a.path || a.file_path || a.file || null;
+    return typeof v === "string" && v.trim() ? v.trim().slice(0, 300) : null;
+  } catch (_) {
+    return null;
+  }
+}
+
 function apiRunTool(ctx, name, argsJson, state) {
   const { root, cwd, slice, timeouts } = ctx;
   const clip = (s) => {
@@ -21880,13 +23594,19 @@ async function runApiEngine(ctx) {
   let finalText = null;
   let turns = 0;
   let cap = null; // "max-turns" | "wall-clock" | "output-cap"
+  // Did this endpoint EVER answer cleanly in this dispatch? It is the whole of
+  // the evidence separating `unreachable` from `stream-interrupted`.
+  let answered = false;
 
-  const transcript = path.join(workDir, "transcript.jsonl");
-  const record = (obj) => {
-    try {
-      fs.appendFileSync(transcript, JSON.stringify(obj) + "\n", "utf8");
-    } catch (_) {}
-  };
+  // THE TRANSCRIPT NOW GOES TO THE JOURNAL, NOT THE DOOMED TEMP DIR.
+  //
+  // This file was always good evidence and was always destroyed at the moment it
+  // mattered: it lived in `workDir`, which the bridge removes in its `finally`.
+  // It now lands in `.claude/orc/extra-journal/`, which survives the process
+  // that wrote it — and it carries the RUNNING usage vector on every line, so a
+  // dispatch that never reached appendExtraSpend still has a floor on what it
+  // cost.
+  const record = (obj) => extraJournalAppend(ctx.journal, Object.assign({}, obj, { usage: Object.assign({}, usage) }));
 
   for (turns = 1; ; turns++) {
     if (turns > maxTurns) {
@@ -21925,7 +23645,13 @@ async function runApiEngine(ctx) {
         timeoutMs: Math.min(timeouts.api_ms, remaining),
         maxBytes: EXTRA_API_RESP_BYTES,
       });
-      if (res.ok) break;
+      if (res.ok) {
+        answered = true;
+        break;
+      }
+      // A 4xx/5xx is still an ANSWER: the wire reached the host. Only a socket
+      // failure leaves `answered` false.
+      if (typeof res.status === "number") answered = true;
       const cls = apiClassifyHttp(res);
       apiRetries.push({
         error: cls,
@@ -21935,6 +23661,11 @@ async function runApiEngine(ctx) {
         detail: extraErrText(res).slice(0, 200),
         turn: turns,
       });
+      // A STRUGGLE THAT ENDS IN A KILLED PROCESS still leaves its record.
+      // `api_retries[]` only reaches anybody through a return the dispatch lived
+      // long enough to compose, which is precisely the case this journal exists
+      // for.
+      record({ turn: turns, max_turns: maxTurns, http_attempt: attempt, error: cls, status: res.status || null, detail: extraErrText(res).slice(0, 200) });
       if (!classifyFailure(cls).retry || attempt === 3) break;
       const waitMs = Math.min(4000, 400 * Math.pow(3, attempt - 1));
       if (deadline - Date.now() <= waitMs + 1000) break;
@@ -21942,7 +23673,14 @@ async function runApiEngine(ctx) {
     }
 
     if (!res || !res.ok) {
-      const cls = apiClassifyHttp(res);
+      // ESTABLISHED-THEN-DIED vs NEVER-OPENED. The only evidence ORC has is
+      // whether this dispatch ALREADY got a clean answer out of this endpoint:
+      // if it did, the host is reachable and something cut the conversation. It
+      // is an inference from a real fact, and it is bounded — it cannot tell a
+      // dropped socket from a host that went down between two turns, and does
+      // not claim to. The network probe below decides that half.
+      let cls = apiClassifyHttp(res);
+      if (cls === "unreachable" && answered) cls = "stream-interrupted";
       return fail(cls, classifyFailure(cls).label + " - " + extraErrText(res), {
         turns,
         api_retries: apiRetries,
@@ -21981,7 +23719,7 @@ async function runApiEngine(ctx) {
     // U4 - the provider echo. The ONLY way a provider-level reroute is visible
     // at all, and only a body-composing engine ever receives it.
     if (j.provider && !servedBy.includes(j.provider)) servedBy.push(j.provider);
-    record({ turn: turns, model: j.model || null, provider: j.provider || null, finish_reason: choice.finish_reason || null });
+    record({ turn: turns, max_turns: maxTurns, model: j.model || null, provider: j.provider || null, finish_reason: choice.finish_reason || null });
 
     const msg = choice.message;
     messages.push({
@@ -22006,7 +23744,10 @@ async function runApiEngine(ctx) {
       state.tool_results++;
       if (out.wrote) state.wrote.add(out.wrote);
       state.tool_calls.push({ turn: turns, name: fn, ok: out.ok, error: out.error || null });
-      record({ turn: turns, tool: fn, ok: out.ok, error: out.error || null });
+      // THE PATH, in the journal line and nowhere else. `last_action` has to
+      // read "Write src/routes/health.js", not "Write" — a reconciliation that
+      // cannot say WHICH file the worker last touched is not a position.
+      record({ turn: turns, max_turns: maxTurns, tool: fn, path: apiToolPath((c.function && c.function.arguments) || "{}"), ok: out.ok, error: out.error || null });
       messages.push({
         role: "tool",
         tool_call_id: c.id || fn,
@@ -22025,7 +23766,9 @@ async function runApiEngine(ctx) {
     turns: Math.min(turns, maxTurns),
     max_turns: maxTurns,
     api_retries: apiRetries,
-    output_file: transcript,
+    // A PATH THAT STILL EXISTS, or null. The journal outlives this process; the
+    // temp dir this used to point into did not.
+    output_file: (ctx.journal && ctx.journal.progress) || null,
     model_requested: route.model,
     // `unknown` is an honest value and is reported as `unknown`, never as a
     // match. The comparison itself is the return-validation wave's job.
@@ -22809,7 +24552,34 @@ function runCliEngine(ctx) {
 
     const argv = adapter.argv(a);
     argvUsed.push(...argv);
-    const r = spawnCmdSafe(bin, argv, {
+
+    // ── The child's stdout goes to a FILE DESCRIPTOR, not a buffer ─────────
+    //
+    // spawnSync buffers stdout in the PARENT, and the parent is what dies. With
+    // the bytes redirected onto the journal's progress file, a killed parent, a
+    // closed terminal or a sleeping machine leaves the child's whole output on
+    // disk — and a wall-clock kill leaves whatever it had produced by then.
+    //
+    // stderr stays a PIPE on purpose: `classifyOut` reads it separately, and
+    // blending the two streams into one file would feed stderr lines to an
+    // adapter's JSON-event parser.
+    //
+    // The child's bytes are read back from the OFFSET the file was at before the
+    // spawn. The progress file is ORC's own journal and may already hold ORC's
+    // own JSON lines; handing those to `extraCliJsonEvents` would let the
+    // adapter dig ORC's fields out of them and report ORC's own `usage` as the
+    // worker's.
+    let fd = null;
+    let offset = 0;
+    if (ctx.journal) {
+      try {
+        fd = fs.openSync(ctx.journal.progress, "a");
+        offset = fs.fstatSync(fd).size;
+      } catch (_) {
+        fd = null;
+      }
+    }
+    const spawnOpts = {
       cwd,
       env: Object.assign({}, process.env, adapter.env(a)),
       encoding: "utf8",
@@ -22817,11 +24587,34 @@ function runCliEngine(ctx) {
       killSignal: "SIGTERM",
       maxBuffer: EXTRA_MAX_OUTPUT_BYTES,
       windowsHide: true,
-    });
+    };
+    if (fd !== null) spawnOpts.stdio = ["ignore", fd, "pipe"];
+    const r = spawnCmdSafe(bin, argv, spawnOpts);
+    // READ BACK FIRST, before any early return. A timeout is exactly the case
+    // where the bytes matter most, and the old code discarded them.
+    let captured = null;
+    if (fd !== null) {
+      try {
+        fs.closeSync(fd);
+      } catch (_) {}
+      try {
+        const buf = fs.readFileSync(ctx.journal.progress);
+        captured = buf.slice(offset, offset + EXTRA_MAX_OUTPUT_BYTES).toString("utf8");
+      } catch (_) {
+        captured = null;
+      }
+    }
+    const childOut = captured === null ? r.stdout || "" : captured;
+
     if (r.error && r.error.code === "ETIMEDOUT")
       return fail("timeout", `no answer in ${Math.round(timeouts.wall_ms / 1000)}s (the dispatch wall clock).`, {
         adapter: cli.bin,
         argv: argvUsed,
+        // WHERE THE BYTES ARE. The child's output up to the kill is on disk, and
+        // a path to a file that exists is the difference between a bare
+        // `timeout` and a position somebody can look at.
+        output_file: (ctx.journal && ctx.journal.progress) || null,
+        captured_bytes: captured === null ? null : Buffer.byteLength(captured, "utf8"),
       });
     if (r.error) return fail("spawn-failed", r.error.message, { adapter: cli.bin, argv: argvUsed });
 
@@ -22829,7 +24622,7 @@ function runCliEngine(ctx) {
     try {
       lastMessage = fs.readFileSync(outFile, "utf8");
     } catch (_) {}
-    out = { stdout: r.stdout || "", stderr: r.stderr || "", status: r.status, lastMessage };
+    out = { stdout: childOut, stderr: r.stderr || "", status: r.status, lastMessage };
   } finally {
     try {
       fs.rmSync(wdir, { recursive: true, force: true });
@@ -22861,7 +24654,13 @@ function runCliEngine(ctx) {
     duration_ms: Date.now() - started,
     argv: argvUsed,
     attached: cli.attach || null,
-    output_file: null, // the work dir is gone by now, and a path to a deleted file is worse than none
+    // v0.54.0 — NO LONGER NULL. The comment this replaced was right about paths
+    // and wrong about the file: the answer was never to report a dead path, it
+    // was to stop deleting the evidence. The child's stdout is redirected onto
+    // the journal's progress file, which is outside the work dir and outlives
+    // this process. `streamed-opaque`: these are BYTES, and ORC did not
+    // interpret them.
+    output_file: (ctx.journal && ctx.journal.progress) || null,
     model_requested: route.model,
     model_reported: p.model_reported || "unknown",
     model_map: { primary: route.model, small: route.model, small_source: "n/a", small_note: null, context_tokens: null },
@@ -23002,8 +24801,13 @@ async function extraDispatch(claudeDir) {
     bail(2, { ok: false, reason: "no-slice", error: "usage: orc extra dispatch --task <slice.json> [--json]" });
 
   let slice;
+  // THE RAW BYTES, kept. The slice is IMMUTABLE across attempts, and the hash of
+  // what was actually read is the only thing that can later prove the plan did
+  // not move underneath a resume.
+  let sliceRaw = "";
   try {
-    slice = JSON.parse(fs.readFileSync(path.resolve(taskFile), "utf8"));
+    sliceRaw = fs.readFileSync(path.resolve(taskFile), "utf8");
+    slice = JSON.parse(sliceRaw);
   } catch (e) {
     bail(2, { ok: false, reason: "bad-slice", error: `cannot read the task slice at ${taskFile}: ${e.message}` });
   }
@@ -23099,13 +24903,60 @@ async function extraDispatch(claudeDir) {
   }
 
   const root = repoRootOf(claudeDir);
+
+  // ── THE JOURNAL HEADER ───────────────────────────────────────────────────
+  // Written HERE: after the credential and the slot resolve, and BEFORE the
+  // first byte leaves the machine. This is the only moment at which the
+  // repository is provably untouched by this dispatch, so it is the only moment
+  // at which a baseline means anything.
+  //
+  // The sweep runs first and once per process — its clock is a dispatch, never
+  // a timer: a background process that deletes run state is a background
+  // process nobody can audit.
+  try {
+    extraJournalSweep(claudeDir);
+  } catch (_) {}
+  const attempt = extraJournalNextAttempt(claudeDir, slice.task_id);
+  const fidelity = EXTRA_JOURNAL_FIDELITY[prof.engine] || "none";
+  const journal = extraJournalHeader(claudeDir, {
+    v: 1,
+    task_id: slice.task_id || null,
+    attempt,
+    // Non-null only on a resume. It is what lets a return be attributed to the
+    // attempt it continued rather than read as a fresh first try.
+    resumed_from: slice.resumed_from || null,
+    slice_path: path.resolve(taskFile),
+    slice_sha256: sha256(sliceRaw),
+    profile: prof.name,
+    provider: prof.provider || null,
+    engine: prof.engine,
+    model_requested: (route && route.model) || null,
+    band: res.band || null,
+    score,
+    role: slice.role || "executor",
+    declared_files: slice.declared_files || [],
+    acceptance: Array.isArray(slice.acceptance) ? slice.acceptance : [],
+    cwd: slice.cwd || null,
+    started_at: new Date().toISOString(),
+    // The two halves of the LIVENESS gate. A "disconnected" dispatch is not
+    // provably dead — a client-side socket timeout does not stop a provider
+    // streaming, and a SIGTERM'd child may still be mid-write() — so a resume is
+    // gated on the pid being gone OR this lease having expired, never on "the
+    // parent is not here any more".
+    pid: process.pid,
+    lease_expires_at: new Date(Date.now() + timeouts.wall_ms + 60000).toISOString(),
+    journal_fidelity: fidelity,
+    journal_fidelity_note: EXTRA_JOURNAL_FIDELITY_NOTE[fidelity] || "this engine records nothing.",
+    baseline: extraBaseline(root, slice.declared_files || []),
+  });
+
   const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "orc-extra-"));
   let out;
   try {
     const cwd = slice.cwd ? path.resolve(root, slice.cwd) : root;
-    if (prof.engine === "claude-shim") out = runClaudeShim({ prof, route, key: cred.value, cfg, slice, cwd, workDir });
+    if (prof.engine === "claude-shim") out = runClaudeShim({ prof, route, key: cred.value, cfg, slice, cwd, workDir, journal });
     else if (prof.engine === "api")
-      out = await runApiEngine({ prof, route, key: cred.value, cfg, slice, cwd, root, workDir, timeouts });
+      out = await runApiEngine({ prof, route, key: cred.value, cfg, slice, cwd, root, workDir, timeouts, journal });
     else if (prof.engine === "cli")
       // R16 — the EFFORT a codex dispatch runs at is derived from the CLAUDE
       // AGENT this route displaced. `-m` alone does not set the compute budget
@@ -23123,6 +24974,7 @@ async function extraDispatch(claudeDir) {
         root,
         workDir,
         timeouts,
+        journal,
       });
     else
       out = {
@@ -23163,6 +25015,53 @@ async function extraDispatch(claudeDir) {
     },
     out
   );
+  // THE POSITION, on the record. `journal` is null when it could not be written
+  // — best effort by construction — and that null is the honest answer, not an
+  // omission: a consumer that finds null knows there is nothing to reconcile
+  // against, which is a different fact from a journal it has not looked for.
+  payload.attempt = attempt;
+  payload.journal = journal ? journal.header : null;
+  payload.journal_fidelity = journal ? fidelity : null;
+  if (slice.resumed_from) {
+    payload.resumed_from = slice.resumed_from;
+    payload.preexisting = slice.preexisting || [];
+    payload.files_preexisting = (slice.preexisting || []).filter((x) => x && x.state !== "untouched").length;
+    // A RESUME RETURN OWES `resume_state`. Absent on a slice with no
+    // `resumed_from` is correct; absent on THIS one is malformed, and the lane
+    // validates it (`_shared/return-validation.md` §2b). Said here so the lane
+    // does not have to infer it from the presence of another field.
+    payload.resume_expected = true;
+  }
+
+  // ── ATTRIBUTION ──────────────────────────────────────────────────────────
+  // Whose fault was it. It is not decoration: it decides the recovery. "your
+  // internet is down" means a Claude fallback would fail too, so falling back
+  // burns a second failure and a second cost for nothing; "the provider is down"
+  // means the fallback is exactly right. ORC could not tell those apart and did
+  // the same thing either way.
+  //
+  // The probe runs ONLY on the three reasons that cannot be told apart without
+  // it, and it is ONE unauthenticated 3-second request on a path that has
+  // already failed.
+  let probe = null;
+  if (payload.outcome !== "done" && EXTRA_PROBE_REASONS.has(payload.reason)) {
+    try {
+      probe = await extraNetworkProbe(prof, readCatalog());
+    } catch (_) {
+      probe = null;
+    }
+    // RECLASSIFIED ONLY WHERE THE PROBE IS THE DISCRIMINATOR — a connection
+    // that dropped, with the network also down, is a different fact and a
+    // different recovery. A `timeout` keeps its word: a slow endpoint and a dead
+    // link are not the same failure, and the attribution says `network` either
+    // way without renaming what the engine saw.
+    if (probe && probe.ran && probe.reachable === false && (payload.reason === "unreachable" || payload.reason === "stream-interrupted")) {
+      payload.reason_original = payload.reason;
+      payload.reason = "connection-lost-local";
+      payload.retry = classifyFailure("connection-lost-local").retry;
+    }
+  }
+  payload.network_probe = probe;
   // A credential that did NOT come from the profile's declared source is said out
   // loud on every dispatch, pass or fail. An override nobody was told about is
   // the same class of silence as work leaving Claude without an `extra:` line.
@@ -23174,6 +25073,16 @@ async function extraDispatch(claudeDir) {
   // only ORC knows where that secret came from.
   if (payload.reason === "authentication_failed")
     payload.credential_hint = `the rejected credential came from ${extraCredSourceLabel(cred)}.`;
+  // AFTER `credential_override`, deliberately: the credential SOURCE is evidence
+  // on a rejection (v0.53.3 was a 401 caused by ORC sending a key the profile
+  // never declared), and evidence that is computed before the fact exists is not
+  // evidence.
+  payload.ended_at = new Date().toISOString();
+  payload.attribution = extraAttribution(
+    { profile: prof.name, provider: prof.provider, engine: prof.engine },
+    payload,
+    probe
+  );
   payload.trace_line = extraTraceLine(payload);
   payload.trace_extras = extraTraceExtras(payload);
   // WRITTEN HERE, BY THE HAND THAT HOLDS THE NUMBERS. The trace line above is
@@ -23184,6 +25093,10 @@ async function extraDispatch(claudeDir) {
   const logged = appendExtraSpend(claudeDir, payload);
   payload.spend_logged = !!logged;
   payload.spend_log = extraSpendPath(claudeDir);
+  // CLOSED, beside the spend append and by the same hand. A header with no
+  // result is what an orphan looks like on disk, so writing this is what makes
+  // "this dispatch never reported back" a detectable state rather than a guess.
+  extraJournalResult(journal, payload);
   const code = payload.outcome === "done" ? 0 : payload.outcome === "partial" ? 4 : 1;
   if (asJson) emitJson(payload, code);
   extraDispatchRender(payload);
@@ -23224,12 +25137,30 @@ function extraTraceExtras(p) {
     out.push(`EXTRA substitution task=${p.task_id || "?"} :: requested=${p.model_requested} reported=${p.model_reported}`);
   if (p.reroute && Array.isArray(p.served_by) && p.served_by.length)
     out.push(`EXTRA reroute task=${p.task_id || "?"} :: ${p.served_by.join(",")}`);
+  // v0.54.0 — A RESUME IS VISIBLE OR IT IS NOT MEASURABLE. `/orc-retro` cannot
+  // learn which providers ignore a resume preamble, and `orc extra stats` cannot
+  // count a resume, unless the run says one happened.
+  if (p.resumed_from)
+    out.push(
+      `EXTRA resume task=${p.task_id || "?"} attempt=${p.attempt || "?"} :: from=${p.resumed_from.reason || "?"} ` +
+        `attribution=${p.resumed_from.attribution || "none"} target=${p.via || "?"} files_preexisting=${p.files_preexisting === undefined ? 0 : p.files_preexisting}`
+    );
   // The fallback line is the CALLER's to emit AFTER it re-dispatches, because
   // only the caller knows whether it did. What the CLI can honestly supply is
   // the text, pre-composed, so the two wordings cannot diverge.
   if (!p.ok && p.fallback_to && p.fallback_to.agent)
     out.push(`EXTRA fallback task=${p.task_id || "?"} :: ${p.reason} → ${p.fallback_to.agent}`);
   return out;
+}
+
+// The ORPHAN line, pre-composed. It is the LANE's to emit, at preflight, after
+// it has decided to report — the same ownership rule as `EXTRA fallback`, and
+// for the same reason: only the lane knows whether it happened.
+function extraOrphanTraceLine(row) {
+  return (
+    `EXTRA orphan task=${row.task_id} :: attempt=${row.attempt} lease-expired ` +
+    `files_changed=${row.files_changed} state=${row.state}`
+  );
 }
 
 function extraDispatchRender(p) {
@@ -23765,6 +25696,14 @@ function appendExtraSpend(claudeDir, p) {
       // The FALLBACK TARGET, not the fallback itself: only the caller knows
       // whether it re-dispatched, so this records who it would have been.
       fallback_to: !p.ok && p.fallback_to && p.fallback_to.agent ? p.fallback_to.agent : null,
+      // v0.54.0 — A RECOVERED VECTOR IS A FLOOR AND SAYS SO. `orc extra
+      // reconcile` writes the journal's running vector for a dispatch whose
+      // parent was killed before it reached this function. MEASURED IS NOT
+      // UNKNOWN and UNKNOWN IS NOT ZERO: `complete: false` is what stops a
+      // renderer summing it into a total that reads as measured.
+      recovered: !!p.recovered,
+      complete: !p.recovered,
+      attribution: (p.attribution && p.attribution.verdict) || null,
     };
     fs.mkdirSync(path.dirname(extraSpendPath(claudeDir)), { recursive: true });
     fs.appendFileSync(extraSpendPath(claudeDir), JSON.stringify(rec) + "\n");
@@ -24174,6 +26113,11 @@ function extraStats(claudeDir) {
     substitutions: scan.subs,
     reroutes: scan.reroutes,
     fallbacks: scan.fallbacks,
+    // v0.54.0 — RELIABILITY, beside cost. A provider that drops one dispatch in
+    // three is a fact that belongs where the user chooses a profile, not in
+    // folklore. Below the sample floor there is NO rate: a percentage computed
+    // from three dispatches is noise with a percent sign on it.
+    reliability: extraReliability(claudeDir, scan),
     price_table: table ? { as_of: table.as_of, age_days: table._age_days, stale: table._stale, path: table._path } : null,
     priced_dispatches: priced,
     unpriced_dispatches: unpriced,
@@ -24255,6 +26199,34 @@ function extraStats(claudeDir) {
   say("SUBSTITUTION — the endpoint answered with a different model", scan.subs, (x) => `${x.task}  requested ${x.requested} → reported ${x.reported}`);
   say("REROUTE — the model id held and the serving provider changed", scan.reroutes, (x) => `${x.task}  ${x.providers.join(" → ")}`);
   say("FALLBACK — the foreign dispatch failed and Claude finished it", scan.fallbacks, (x) => `${x.task}  ${x.reason} → ${x.agent}`);
+
+  // RELIABILITY. Sample-floor restraint first, then the counts — and
+  // `unattributed` is printed including when it is zero.
+  const rel = payload.reliability;
+  if (rel.profiles.length) {
+    console.log("\n  " + ui.color.bold("reliability"));
+    for (const g of rel.profiles) {
+      console.log(
+        `    ${ui.color.cyan(g.profile.padEnd(16))} ${g.dispatches_total} dispatch(es) · ${g.failed} failed · ${g.resumed} resumed · ${g.orphaned} orphaned` +
+          (g.sample_too_small ? ui.color.gray(`   sample too small (floor ${rel.sample_floor})`) : `   failure rate ${Math.round(g.failure_rate * 100)}%`)
+      );
+      const a = g.attribution;
+      console.log(
+        ui.color.gray(
+          `      attribution: provider ${a.provider} · network ${a.network} · local ${a.local} · worker ${a.worker} · orc ${a.orc} · unattributed ${g.unattributed}`
+        )
+      );
+      if (g.mean_time_to_failure_ms !== null)
+        console.log(ui.color.gray(`      mean time to failure ${extraDurStr(g.mean_time_to_failure_ms)}`));
+    }
+    if (rel.unreadable_journals || rel.journals_without_result)
+      console.log(
+        "    " +
+          ui.mark.warn(
+            `${rel.unreadable_journals} unreadable journal header(s) · ${rel.journals_without_result} attempt(s) with no result — named rather than absorbed.`
+          )
+      );
+  }
   if (payload.missing_rates.length) {
     console.log(
       "\n  " +
@@ -24396,6 +26368,24 @@ function extraUsage() {
     "                               Writes every dispatch to .claude/orc/extra-spend.jsonl\n" +
     "                               itself, so a cost report never depends on a run\n" +
     "                               remembering to narrate what it spent.\n" +
+    "       orc extra reconcile <task_id> [--attempt N] [--json]\n" +
+    "                               THE POSITION a dead dispatch left on disk, free:\n" +
+    "                               the baseline vs the worktree now, the last recorded\n" +
+    "                               action, and WHOSE FAULT it was with the evidence.\n" +
+    "                               0 resumable · 1 nothing-to-resume · 2 no journal ·\n" +
+    "                               3 complete · 4 in-flight (REFUSED)\n" +
+    "       orc extra resume-slice <task_id> --out <file> [--attempt N] [--json]\n" +
+    "                               composes the CONTINUATION slice — the original slice\n" +
+    "                               plus a preamble naming what is already on disk. It\n" +
+    "                               never widens declared_files, never moves acceptance[]\n" +
+    "                               and never moves the score.  0 written · 1 REFUSED\n" +
+    "                               (not-resumable · in-flight · reverted-file ·\n" +
+    "                               slice-drifted · resume-cap · resume-disabled) · 2 no journal\n" +
+    "       orc extra journal [list | show <task_id> [--attempt N] [--body] | prune [--dry-run]]\n" +
+    "                               what was journalled, and which dispatches never\n" +
+    "                               reported back.  prune names EVERY directory before\n" +
+    "                               it deletes one, and only ever a journal whose every\n" +
+    "                               attempt closed `done` 30+ days ago\n" +
     "       orc extra stats [--since YYYY-MM-DD] [--json]\n" +
     "                               per profile per band: outcomes, substitutions, reroutes,\n" +
     "                               fallbacks, tokens, usd.  Merges the spend log, the EXTRA\n" +
@@ -24642,6 +26632,35 @@ function extraPreflight(claudeDir) {
     );
   }
 
+  // ── ORPHANED DISPATCHES — READ-ONLY, and it does NOT change the exit code ──
+  //
+  // An orphan is a FINDING, not a stop. It REPORTS; it never resumes. Silently
+  // continuing a third party's half-finished write into somebody's repository is
+  // the same class of act as routing off Claude without saying so, and it gets
+  // the same treatment: the user is told, and the user decides.
+  const orphans = [];
+  for (const r of extraJournalListRows(claudeDir).rows) {
+    if (!r.orphan) continue;
+    const v = extraReconcileCompute(claudeDir, r.task_id, r.attempt);
+    const changed = v.ok ? v.files.filter((f) => f.state !== "untouched").length : 0;
+    const row = {
+      task_id: r.task_id,
+      attempt: r.attempt,
+      profile: r.profile,
+      provider: r.provider,
+      engine: r.engine,
+      model_requested: r.model_requested,
+      started_at: r.started_at,
+      declared_files: r.declared_files.length,
+      files_changed: changed,
+      state: v.ok ? v.state : "no-journal",
+      journal_fidelity: r.journal_fidelity,
+      next: `orc extra reconcile ${r.task_id}`,
+    };
+    row.trace_line = extraOrphanTraceLine(row);
+    orphans.push(row);
+  }
+
   const stops = rows.filter((r) => r.verdict === "stop");
   // Expiry DISCONNECTS: the vault record goes and the profile is stamped, so it
   // can never route again. The ROUTE ROWS SURVIVE (Decision 4) - the bands and
@@ -24680,9 +26699,31 @@ function extraPreflight(claudeDir) {
         profiles: rows,
         stops: stops.map((x) => x.profile),
         warnings: rows.filter((r) => r.verdict === "warn").map((x) => x.profile),
+        // Reported, never acted on — and never a stop. The exit code above is
+        // unchanged.
+        orphans,
+        orphan_note:
+          "a foreign dispatch that never reported back. It is REPORTED here and never resumed: continuing a third party's half-finished write without asking is the same class of act as routing off Claude without saying so.",
+        trace_extras: orphans.map((o) => o.trace_line),
       },
       code
     );
+  if (orphans.length) {
+    console.log(
+      "  " +
+        ui.mark.warn(
+          `${orphans.length} foreign ${orphans.length === 1 ? "dispatch" : "dispatches"} from an earlier run never reported back`
+        )
+    );
+    for (const o of orphans) {
+      console.log(
+        `    ${o.task_id} · ${o.profile}/${o.model_requested || "?"} · started ${String(o.started_at || "?").slice(11, 16)} · ` +
+          `${o.declared_files} declared file(s), ${o.files_changed} changed on disk`
+      );
+      console.log("    " + ui.color.bold(o.next) + ui.color.gray(`   →   ${o.state}`));
+    }
+    console.log("");
+  }
   if (!rows.length) {
     console.log("No routed connection needs a passphrase.");
     return;
@@ -24790,6 +26831,18 @@ async function extra() {
       break;
     case "dispatch":
       await extraDispatch(claudeDir);
+      break;
+    // v0.54.0 — the two READS that turn a dead dispatch into a position. Both
+    // are zero-token and deterministic; neither writes anything but a prune the
+    // user asked for by name.
+    case "reconcile":
+      extraReconcileCmd(claudeDir, pos[2]);
+      break;
+    case "resume-slice":
+      extraResumeSlice(claudeDir, pos[2]);
+      break;
+    case "journal":
+      extraJournalCmd(claudeDir, pos[2], pos[3]);
       break;
     case "doctor":
       extraDoctor(claudeDir);

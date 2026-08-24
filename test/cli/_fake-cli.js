@@ -21,6 +21,8 @@
 //   apireject codex relays the upstream API's own 400 in its event stream while
 //             printing something benign on STDERR → the classification must
 //             come from the PROVIDER'S ERROR OBJECT, not from the stderr string
+//   slow      prints one real event and then blocks past the dispatch wall
+//             clock → the timeout must leave those bytes ON DISK (v0.54.0)
 //
 // v0.51.0 — it also answers the FREE RUNGS of the connection ladder, because
 // "the binary exists" was never evidence of anything and the ladder is what
@@ -131,6 +133,21 @@ function opencode() {
   if (marker && joined.includes(marker)) die("the task prompt reached argv");
   if (/API_KEY|sk-live-/.test(joined)) die("a credential reached argv");
 
+  // v0.54.0 — THE WALL-CLOCK CASE. It prints a real event FIRST and then blocks
+  // past the dispatch timeout, so the parent's kill lands on a child that has
+  // already produced bytes. That is the whole assertion: a timeout must leave a
+  // position on disk, not an empty failure. `fs.writeSync(1, …)` rather than
+  // process.stdout.write, because fd 1 is a FILE the parent redirected and the
+  // bytes have to be there before the kill, not after a flush that never comes.
+  //
+  // Atomics.wait blocks with no CPU and no JS handler, so the parent's SIGTERM
+  // takes the DEFAULT action and ends this process — a busy loop would peg a
+  // core for the whole timeout.
+  if (MODE === "slow") {
+    fs.writeSync(1, JSON.stringify({ type: "session.start", model: val("--model") }) + "\n");
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 45000);
+    process.exit(0);
+  }
   if (MODE === "silent") process.exit(0);
   if (MODE === "authfail") {
     process.stderr.write("error: 401 Unauthorized: invalid api key\n");

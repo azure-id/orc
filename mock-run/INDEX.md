@@ -84,6 +84,8 @@ All of it uses **easy English**, short sentences, and the same fake project.
 |---|---|
 | [orc-ui](orc-ui.md) | The local control panel for everything that is not ai (**video placeholder here**) |
 | [orc-cli](orc-cli.md) | The terminal commands: install, config, probes, run state, stats |
+| [orc-extra](orc-extra.md) | Run some of ORC's work on a different AI model, and still know what left your machine |
+| [extra-recovery](extra-recovery.md) | When that other model stops half-way: what it left on disk, whose fault it was, and how to continue |
 
 ---
 

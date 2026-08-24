@@ -6,14 +6,14 @@
 
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
-![Version](https://img.shields.io/badge/version-0.53.4-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.54.0-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
 ![Dependencies](https://img.shields.io/badge/dependencies-zero-lightgrey.svg?style=for-the-badge)
 ![GitHub stars](https://img.shields.io/github/stars/azure-id/orc?style=for-the-badge&color=yellow)
 
-**Latest: v0.53.4** · updated 2026-08-24 · [full changelog](CHANGELOG.md)
+**Latest: v0.54.0** · updated 2026-08-25 · [full changelog](CHANGELOG.md)
 
 **🇮🇩 [Baca dalam Bahasa Indonesia](README-id.md)**
 
@@ -440,29 +440,37 @@ a current audit: [EVAL-REPORT.md](EVAL-REPORT.md).
 **Full history: [CHANGELOG.md](CHANGELOG.md)** — or `orc changelog`, which prints
 only what is newer than the version you have.
 
-### v0.53.4 — the reload that dropped its own token _(2026-08-24)_
+### v0.54.0 — a failed dispatch is a POSITION, not a blank page _(2026-08-25)_
 
-**Every `orc update` from the panel ended on `This link is missing its session
-token.` — and the token was never missing.**
+**A worker on another model wrote six of seven lines and lost its connection.
+ORC sent the same task to Claude from scratch — onto a file that was already
+two-thirds written.**
 
-- **A reload is not `location.reload()` here.** v0.53.2 made the server hand
-  itself over to a fresh process on the same port and the **same token**, so the
-  open tab only has to reload. But the panel strips `?t=` out of the visible URL
-  at boot — deliberately, so it never lands in a screenshot or a pasted link — so
-  a plain `location.reload()` re-requested the **stripped** address. No token on
-  a document request, and the server correctly answered with the
-  un-authenticated page. Deterministic, on every maintenance action that declares
-  `restarts_ui`.
-- **`reloadWithToken()` re-attaches the in-memory token** and is now the only
-  reload route in the panel; a test fails on any bare `location.reload()` in
-  `app.js`. Nothing about the server, the successor, the lock or the token
-  changed — the upgrade had already installed by the time the page broke.
+- **Every foreign dispatch now writes a journal**, by the CLI, before the first
+  byte leaves the machine: what HEAD was, what git already saw, and a hash and a
+  line count for every file the task was allowed to touch. It survives the
+  process that wrote it, which is the whole point.
+- **`orc extra reconcile <task>` is free and deterministic** — five states, five
+  exit codes — and tells you which files changed, by how many lines, what the
+  worker last did, and **whose fault it was**: `provider` · `network` · `local` ·
+  `worker` · `orc`, each with its evidence. A `network` verdict **holds the
+  wave**: a Claude fallback would fail too, so ORC stops instead of paying for a
+  second failure.
+- **`orc extra resume-slice` continues instead of restarting.** An ordinary
+  dispatch of a derived slice — zero new engines, zero new agents — that never
+  widens `declared_files`, never moves `acceptance[]`, never moves the score, and
+  refuses on a drifted slice. A non-retryable failure still goes to Claude, but
+  **as a resume slice**, so the fallback stops being a from-scratch dispatch.
+- **Six refusals, each named, each writing nothing.** A live attempt is never
+  resumed; a file that moved *backwards* blocks and names the paths. Orphaned
+  dispatches are **reported** at preflight and never continued on their own.
+- **`orc ui ▸ Extra ▸ Recovery`**, per-profile reliability beside cost (no
+  percentage below 10 dispatches), two config keys, and a new mocked run.
 
-Before that: **v0.53.3 — the key it never sent**, **v0.53.2 — the cost that was
-paid and never written down**, **v0.53.1 — "up to date" now names what it
-checked**, **v0.53.0 — the schema the provider rejected, and a routing table you
-can read**, and **v0.52.0 — the connection that could not be used, and the
-routing nobody could see**.
+Before that: **v0.53.4 — the reload that dropped its own token**, **v0.53.3 — the
+key it never sent**, **v0.53.2 — the cost that was paid and never written down**,
+**v0.53.1 — "up to date" now names what it checked**, and **v0.53.0 — the schema
+the provider rejected, and a routing table you can read**.
 [Read them in the changelog](CHANGELOG.md).
 
 ---

@@ -79,5 +79,11 @@
   "overview.item.boundaryRefuse.cta": "Open Boundary",
   "overview.item.docDrifted.cta": "Open Docs",
   "overview.item.wikiDebt.cta": "Open Knowledge",
-  "overview.item.extraFindings.cta": "Open Extra"
+  "overview.item.extraFindings.cta": "Open Extra",
+  "overview.extraOrphan.title": "A dispatch did not report back",
+  "overview.extraOrphan.note": "ORC sent work to a non-Claude worker and never heard the result. Its changes may still be on disk.",
+  "overview.extraOrphan.chip": "{n} dispatch",
+  "overview.extraOrphan.chipPlural": "{n} dispatches",
+  "overview.extraOrphan.slug": "never reported back",
+  "overview.extraOrphan.where": "Extra · Recovery"
 }

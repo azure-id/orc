@@ -368,9 +368,9 @@ the codifier); hold resolved patterns in run state.
    **A FOREIGN return runs `_shared/return-validation.md` §2b INSTEAD of §2** — it
    has no injected model-id line, so it cannot carry `actual_model` and faking one
    claims evidence that does not exist; ⛔ SUBSTITUTION replaces the downgrade
-   check. A failure runs the fallback procedure (re-dispatch to
-   `fallback_to.agent`, or STOP on `extra_on_failure: stop`) — announced, never
-   quiet, and followed by the pre-composed `EXTRA fallback` line.
+   check. A failure runs the fallback procedure, which BEGINS with a free
+   `orc extra reconcile <task>` — a worktree that moved is RESUMED, never re-done
+   — then re-dispatches or STOPs, announced, with the `EXTRA fallback` line.
    `needs_context` → adjudicate → re-slice
    (cap 2 per task, then escalate). A `pattern` task must return
    `invariants_checked: true` + the matching `pattern_version`. **Evidence

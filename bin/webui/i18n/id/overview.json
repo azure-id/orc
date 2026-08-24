@@ -79,5 +79,11 @@
   "overview.item.boundaryRefuse.cta": "Buka Batas",
   "overview.item.docDrifted.cta": "Buka Dokumen",
   "overview.item.wikiDebt.cta": "Buka Pengetahuan",
-  "overview.item.extraFindings.cta": "Buka Extra"
+  "overview.item.extraFindings.cta": "Buka Extra",
+  "overview.extraOrphan.title": "Sebuah pengiriman tidak melapor kembali",
+  "overview.extraOrphan.note": "ORC mengirim pekerjaan ke pekerja non-Claude dan tidak pernah menerima hasilnya. Perubahannya mungkin masih ada di disk.",
+  "overview.extraOrphan.chip": "{n} pengiriman",
+  "overview.extraOrphan.chipPlural": "{n} pengiriman",
+  "overview.extraOrphan.slug": "tidak pernah melapor kembali",
+  "overview.extraOrphan.where": "Extra · Pemulihan"
 }

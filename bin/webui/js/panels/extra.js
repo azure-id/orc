@@ -39,7 +39,7 @@ async function renderExtra(body) {
   // Four reads, in parallel. A read that FAILED is not a read that came back
   // empty (v0.49.4): the error is kept so the card can say which half is
   // missing instead of rendering as "you have nothing configured".
-  const [listRes, provRes, docRes, cfgRes, routeRes, laneRes, statRes, rateRes, toolRes] = await Promise.all([
+  const [listRes, provRes, docRes, cfgRes, routeRes, laneRes, statRes, rateRes, toolRes, jourRes] = await Promise.all([
     read("/api/extra").catch((e) => ({ data: null, error: e })),
     read("/api/extra/providers").catch((e) => ({ data: null, error: e })),
     read("/api/extra/doctor").catch((e) => ({ data: null, error: e })),
@@ -51,6 +51,9 @@ async function renderExtra(body) {
     // v0.51.0 — the LOCAL TOOLS read. It exits 1 when nothing is ready, which is
     // exit-code-as-DATA like every other gate command on this panel.
     read("/api/extra/tools").catch((e) => ({ data: null, error: e })),
+    // v0.54.0 — the journal listing. It is a FREE read and its `orphans` count
+    // is the one thing the Recovery tab exists to surface.
+    read("/api/extra/journal").catch((e) => ({ data: null, error: e })),
   ]);
   const d = {
     list: listRes.data,
@@ -65,6 +68,7 @@ async function renderExtra(body) {
     stats: statRes.data,
     rates: rateRes.data,
     tools: toolRes.data,
+    journal: jourRes.data,
     errors: {
       list: listRes.error || null,
       providers: provRes.error || null,
@@ -117,6 +121,7 @@ async function renderExtra(body) {
         routing: () => exRoutingTab(d, body, edits),
         limits: () => exLimitsTab(d, body, edits),
         spending: () => exSpendingTab(d),
+        recovery: () => exRecoveryTab(d, body),
         providers: () => exProvidersTab(d),
       }
     : { setup: () => exSetupTab(d, body) };
@@ -132,6 +137,7 @@ async function renderExtra(body) {
     ["routing", t("extra.tab.routing")],
     ["limits", t("extra.tab.limits")],
     ["spending", t("extra.tab.spending")],
+    ["recovery", t("extra.tab.recovery")],
     ["providers", t("extra.tab.providers")],
   ]) {
     if (!views[which]) continue;
@@ -197,6 +203,318 @@ function exProvidersTab(d) {
   const out = frag();
   out.append(exProvidersCard(d));
   return out;
+}
+
+/* ── TAB 6 — RECOVERY (v0.54.0) ──────────────────────────────────────────────
+
+   A failed foreign dispatch is a POSITION, not a blank page. This tab renders
+   what the position IS and hands over the two commands that act on it.
+
+   THE FREE/PAID LINE IS VISIBLE HERE, not hidden. `orc extra journal list` and
+   `orc extra reconcile` are deterministic and cost no model tokens, so both are
+   real BUTTONS. `orc extra resume-slice` composes a slice for a dispatch that
+   WILL cost money, and the dispatch itself is a lane action — so Recovery ships
+   copy-able commands and NO Run button. The panel never runs a lane; that is the
+   founding boundary, narrowed in v0.50.0 and still binding.
+
+   EVERY STATE WORD IS THE CLI'S — `resumable`, `nothing-to-resume`,
+   `no-journal`, `complete`, `in-flight`. Never a friendlier synonym and never a
+   translated one: a simplified state word is a state that does not exist.
+
+   A ROW WITH NOTHING TO SHOW KEEPS ITS SLOT. `nothing-to-resume` and `complete`
+   render as rows, not as filtered-out entries — the `used 0/20` and `TOO_RECENT`
+   rule. Filtering them makes "there was nothing to resume" and "ORC did not
+   look" identical. */
+function exRecoveryTab(d, body) {
+  const out = frag();
+  out.append(exJournalCard(d, body));
+  out.append(exPruneCard(body));
+  return out;
+}
+
+// Which row is open, so a prune or a re-render does not close it — the Runs-row
+// rule. One row open at a time, detail fetched on first open, EXPANDED IN PLACE:
+// there is no detail box below the list.
+let EX_JOURNAL_OPEN = null;
+
+function exJournalCard(d, body) {
+  const c = card(t("extra.recovery.title"));
+  c.append(el("div", "note", t("extra.recovery.note")));
+  c.append(exWhy(t("extra.recovery.noteWhy")));
+
+  const j = d.journal;
+  if (!j) {
+    c.append(empty(t("extra.recovery.none"), t("extra.recovery.noneHint")));
+    return c;
+  }
+  const rows = j.journals || [];
+  const head = el("div", "row-actions");
+  head.append(chip(t("extra.recovery.count", { n: j.entries }), j.entries ? "info" : "idle"));
+  // The ONE state this listing exists to make visible. It renders even at zero,
+  // because an absent count and a healthy one must never look the same.
+  head.append(chip(t("extra.recovery.orphans", { n: j.orphans }), j.orphans ? "bad" : "ok"));
+  if (j.in_flight) head.append(chip(t("extra.recovery.inFlight", { n: j.in_flight }), "warn"));
+  head.append(el("span", "note", t("extra.recovery.retention", { days: j.retention_days })));
+  c.append(head);
+
+  if (!rows.length) {
+    c.append(empty(t("extra.recovery.none"), t("extra.recovery.noneHint")));
+    return c;
+  }
+
+  const list = el("div", "ex-rec-list");
+  const entries = [];
+  for (const r of rows) entries.push(exJournalRow(r, list, entries, body));
+  c.append(list);
+  return c;
+}
+
+function exJournalRow(r, list, entries, body) {
+  const row = el("div", "ex-rec-row");
+  const headBtn = el("button", "ex-rec-head");
+  headBtn.type = "button";
+  const pane = el("div", "ex-rec-pane");
+  const entry = { row, headBtn, pane, task: r.task_id, loaded: false };
+
+  headBtn.append(el("span", "mono ex-rec-task", r.task_id));
+  const who = el("span", "note ex-rec-who", `${r.profile || "—"}/${r.model_requested || "?"} · ${r.engine || "?"}`);
+  headBtn.append(who);
+  // The CLI computed these three; the panel repeats them.
+  const chips = el("span", "ex-rec-chips");
+  if (r.live) chips.append(chip(t("extra.recovery.chipLive"), "warn"));
+  else if (r.orphan) chips.append(chip(t("extra.recovery.chipOrphan"), "bad"));
+  else if (r.outcome) chips.append(chip(r.outcome, r.outcome === "done" ? "ok" : r.outcome === "partial" ? "warn" : "bad"));
+  if (r.attempts > 1) chips.append(chip(t("extra.recovery.chipAttempts", { n: r.attempts }), "info"));
+  // FIDELITY IS NEVER RENDERED STRONGER THAN IT IS. A `streamed-opaque` journal
+  // has no per-turn tool attribution, and a reader must be able to see that
+  // before they trust `last action`.
+  if (r.journal_fidelity) chips.append(chip(r.journal_fidelity, r.journal_fidelity === "per-turn" ? "info" : "idle"));
+  headBtn.append(chips);
+  headBtn.append(el("span", "ex-rec-caret", "▸"));
+
+  headBtn.addEventListener("click", () => {
+    const open = !row.classList.contains("open");
+    for (const e of entries) exJournalSetOpen(e, false);
+    exJournalSetOpen(entry, open, body);
+    EX_JOURNAL_OPEN = open ? r.task_id : null;
+  });
+
+  row.append(headBtn, pane);
+  list.append(row);
+  if (EX_JOURNAL_OPEN === r.task_id) exJournalSetOpen(entry, true, body);
+  return entry;
+}
+
+function exJournalSetOpen(entry, open, body) {
+  entry.row.classList.toggle("open", open);
+  entry.headBtn.setAttribute("aria-expanded", String(open));
+  if (!open || entry.loaded) return;
+  entry.loaded = true;
+  entry.pane.replaceChildren(skeleton(2));
+  read("/api/extra/reconcile?task=" + encodeURIComponent(entry.task))
+    .then((r) => entry.pane.replaceChildren(exReconcileView(r.data, entry.task, body)))
+    .catch((e) => entry.pane.replaceChildren(failBox(e)));
+}
+
+/* THE POSITION, rendered. Every line here is a field of `orc extra reconcile
+   --json`; the panel computes nothing — not the state, not the line counts, not
+   the verdict, and above all not the prose beside the verdict. Writing
+   "probably your wifi" next to `network` would be the panel deciding what a
+   verdict means, which is the Flow-stepper rule. */
+function exReconcileView(v, task, body) {
+  const out = el("div", "stack stack-sm");
+  if (!v) return failBox(new Error(t("extra.recovery.readFailed")));
+
+  // The state word, verbatim, with the CLI's own sentence under it.
+  const st = el("div", "row-actions");
+  st.append(chip(v.state, v.state === "resumable" ? "ok" : v.state === "complete" ? "info" : v.state === "in-flight" ? "bad" : "idle"));
+  if (v.attempt) st.append(el("span", "note", t("extra.recovery.attempt", { n: v.attempt, of: v.attempts_total })));
+  if (v.reason) st.append(el("span", "mono note", v.reason));
+  out.append(st);
+
+  if (!v.ok) {
+    out.append(el("div", "note", v.error || ""));
+    return out;
+  }
+
+  if (!v.reported_back) out.append(el("div", "note bad", t("extra.recovery.neverReported")));
+
+  // WHOSE FAULT IT WAS, in the CLI's words, with its evidence.
+  if (v.attribution && v.attribution.verdict) {
+    const a = el("div", "ex-rec-attr");
+    const h = el("div", "row-actions");
+    h.append(chip(v.attribution.verdict, v.attribution.verdict === "worker" ? "warn" : v.attribution.verdict === "orc" ? "bad" : "info"));
+    h.append(el("span", "ex-probe-head", t("extra.recovery.attribution")));
+    a.append(h);
+    a.append(el("div", "note", v.attribution.why));
+    for (const e of v.attribution.evidence || []) a.append(el("div", "note mono", e));
+    // THE FIELD THAT CHANGES THE RECOVERY.
+    if (v.attribution.fallback_would_also_fail) a.append(el("div", "note bad", t("extra.recovery.holdWave")));
+    out.append(a);
+  }
+
+  // THE PER-FILE POSITION. An untouched file keeps its row: it is the strongest
+  // signal there is, and hiding it would make "unchanged" and "not looked at"
+  // the same picture.
+  if ((v.files || []).length) {
+    const box = el("div", "ex-rec-files");
+    box.append(el("div", "ex-probe-head", t("extra.recovery.position")));
+    for (const f of v.files) {
+      const line = el("div", "row-actions ex-rec-file");
+      line.append(el("span", "mono", f.path));
+      line.append(chip(f.state, f.state === "created" || f.state === "modified" ? "warn" : f.state === "reverted" || f.state === "deleted" ? "bad" : "idle"));
+      // UNKNOWN IS NOT ZERO. A line count that would mix two people's changes
+      // reads as an em dash and never as `+0 −0`.
+      line.append(
+        el("span", "note mono", f.numstat.added === null ? "—" : `+${f.numstat.added} −${f.numstat.removed}`)
+      );
+      box.append(line);
+    }
+    out.append(box);
+  }
+
+  // A FENCE BREACH, surfaced here as well as at the worktree delta — because a
+  // crashed dispatch is exactly when that check never ran.
+  for (const u of v.touched_undeclared || [])
+    out.append(el("div", "note bad", t("extra.recovery.undeclared", { path: u.path })));
+
+  if (v.last_action) out.append(el("div", "note", t("extra.recovery.lastAction", { action: v.last_action })));
+  if (v.journal_fidelity_note) out.append(el("div", "note", v.journal_fidelity_note));
+  if (v.unreadable_progress_lines)
+    out.append(el("div", "note bad", t("extra.recovery.torn", { n: v.unreadable_progress_lines })));
+
+  // A RECOVERED VECTOR IS A FLOOR AND SAYS SO. It is drawn distinctly and its
+  // note is not optional chrome.
+  if (v.partial_usage) {
+    const u = el("div", "ex-rec-floor");
+    u.append(docTokenBar(v.partial_usage));
+    u.append(el("div", "note bad", v.partial_usage_note));
+    out.append(u);
+  }
+
+  // CARRIED FORWARD, UNEVALUATED.
+  if ((v.acceptance || []).length) {
+    const acc = el("div", "ex-rec-acc");
+    acc.append(el("div", "ex-probe-head", t("extra.recovery.acceptance")));
+    for (const a of v.acceptance) acc.append(el("div", "note mono", a));
+    acc.append(el("div", "note", v.acceptance_note));
+    out.append(acc);
+  }
+
+  // A REFUSAL IS RENDERED AS A REFUSAL WITH ITS REASON, never as a disabled
+  // control with no explanation.
+  if (v.blocked_by) out.append(el("div", "note bad", t("extra.recovery.blocked", { why: v.blocked_by })));
+
+  if (v.resume_target) {
+    const rt = el("div", "row-actions");
+    rt.append(chip(v.resume_target.kind, v.resume_target.kind === "extra" || v.resume_target.kind === "claude" ? "ok" : "warn"));
+    rt.append(el("span", "ex-probe-head", t("extra.recovery.target")));
+    out.append(rt);
+    out.append(el("div", "note", v.resume_target.why));
+  }
+
+  // THE TWO COMMANDS. `reconcile` is free and is the button that opened this
+  // row; the paid half is a command you copy and run where lanes run.
+  if (v.next && v.state === "resumable" && !(v.reverted || []).length)
+    out.append(laneCommand("orc extra resume-slice " + task + " --out .orc/" + task + ".resume.json", t("extra.recovery.resumeWhy")));
+  out.append(laneCommand("orc extra reconcile " + task, t("extra.recovery.reconcileWhy")));
+  return out;
+}
+
+/* Preview-then-apply, and the preview NAMES EVERY DIRECTORY. A count is not
+   consent, one mutation at a time, and nothing ever runs automatically. Only a
+   journal whose EVERY attempt closed `done` 30+ days ago is ever a candidate, so
+   the record of a dispatch that never reported back can never be swept. */
+function exPruneCard(body) {
+  const c = card(t("extra.recovery.prune.title"));
+  c.append(el("div", "note", t("extra.recovery.prune.note")));
+  const acts = el("div", "row-actions");
+  const preview = el("button", "btn btn-ghost btn-sm", t("extra.recovery.prune.preview"));
+  const apply = el("button", "btn btn-sm", t("extra.recovery.prune.apply"));
+  preview.type = "button";
+  apply.type = "button";
+  // The apply button stays disabled until a preview was fetched — the
+  // maintenance rule, and the reason the list below is not decoration.
+  apply.disabled = true;
+  const list = el("div", "stack stack-sm");
+  preview.addEventListener("click", async () => {
+    const r = await read("/api/extra/journal/prune/preview").catch((e) => ({ data: null, error: e }));
+    const d = r.data;
+    list.replaceChildren();
+    if (!d || !(d.candidates || []).length) {
+      list.append(el("div", "note ok", t("extra.recovery.prune.none")));
+      apply.disabled = true;
+      return;
+    }
+    list.append(el("div", "note warn", t("extra.recovery.prune.would", { n: d.candidates.length })));
+    for (const x of d.candidates) list.append(el("div", "note mono", `${x.task_id} · ${x.dir}`));
+    // WHY EACH ONE IS KEPT is as much of the answer as why one goes.
+    for (const k of d.kept || []) list.append(el("div", "note", `${k.task_id} — ${k.why}`));
+    apply.disabled = false;
+  });
+  apply.addEventListener("click", async () => {
+    const r = await post("/api/extra/journal/prune", {});
+    toast(r.command, r.ok ? "ok" : "bad", r.output);
+    renderExtra(body);
+  });
+  acts.append(preview, apply);
+  c.append(acts, list);
+  return c;
+}
+
+/* THE RELIABILITY STRIP (Spending tab). A provider that drops one dispatch in
+   three is a fact that belongs where the user CHOOSES a profile, not in
+   folklore.
+
+   BELOW THE SAMPLE FLOOR THERE IS NO PERCENTAGE — the counts render and the
+   panel says `sample too small`, the identical restraint to the doctor finding:
+   a rate computed from three dispatches is noise with a percent sign on it. The
+   floor is the CLI's number, never one written here. */
+function exReliabilityStrip(rel) {
+  const box = el("div", "ex-rel");
+  box.append(el("div", "ex-probe-head", t("extra.rel.title")));
+  if (!rel || !(rel.profiles || []).length) {
+    box.append(el("div", "note", t("extra.rel.none")));
+    return box;
+  }
+  for (const g of rel.profiles) {
+    const row = el("div", "ex-rel-row");
+    const h = el("div", "row-actions");
+    h.append(el("span", "mono ex-name", g.profile));
+    h.append(
+      el("span", "note", t("extra.rel.counts", { n: g.dispatches_total, failed: g.failed, resumed: g.resumed, orphaned: g.orphaned }))
+    );
+    // NO PERCENTAGE BELOW THE FLOOR.
+    if (g.sample_too_small) h.append(chip(t("extra.rel.tooSmall", { floor: rel.sample_floor }), "idle"));
+    else h.append(chip(t("extra.rel.rate", { pct: Math.round(g.failure_rate * 100) }), g.failure_rate > 0.3 ? "bad" : "ok"));
+    row.append(h);
+    const a = g.attribution || {};
+    // `unattributed` is ALWAYS printed, including when zero.
+    row.append(
+      el(
+        "div",
+        "note mono",
+        t("extra.rel.attribution", {
+          provider: a.provider || 0,
+          network: a.network || 0,
+          local: a.local || 0,
+          worker: a.worker || 0,
+          orc: a.orc || 0,
+          unattributed: g.unattributed || 0,
+        })
+      )
+    );
+    if (g.mean_time_to_failure_ms !== null && g.mean_time_to_failure_ms !== undefined)
+      row.append(el("div", "note", t("extra.rel.mttf", { s: Math.round(g.mean_time_to_failure_ms / 1000) })));
+    box.append(row);
+  }
+  // The two ABSENT counts, named rather than absorbed — the same rule the cost
+  // card's torn-line and undated-row warnings follow.
+  if (rel.unreadable_journals)
+    box.append(el("div", "note bad", t("extra.rel.unreadable", { n: rel.unreadable_journals })));
+  if (rel.journals_without_result)
+    box.append(el("div", "note bad", t("extra.rel.noResult", { n: rel.journals_without_result })));
+  return box;
 }
 
 // Which tab was open, so a write that re-renders the panel does not throw you
@@ -2296,6 +2614,11 @@ function exCostCard(d) {
     if (src.run_returns_undated_skipped)
       c.append(el("div", "note bad", t("extra.cost.undated", { n: src.run_returns_undated_skipped })));
   }
+
+  // v0.54.0 — RELIABILITY BESIDE COST. Whether a profile finishes what it was
+  // given is the other half of what it costs, and it belongs where the user is
+  // choosing one.
+  if (st.reliability) c.append(exReliabilityStrip(st.reliability));
 
   // The price table's own dating, and its own staleness word. No dollar figure
   // exists without one, and a stale table says so — a cost ORC did not price is

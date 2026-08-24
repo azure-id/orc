@@ -25,7 +25,15 @@ compile-time fact; a route row is a ledger the user edits independently, and
   `a lane that sends work off Claude without saying so`.
 - Dispatch through `orc extra dispatch --task <file> --json` with the IDENTICAL
   slice; validate the return with `return-validation.md` **§2b, not §2**; a
-  failure falls back to the Claude band it would have had, announced.
+  failure runs `orc extra reconcile <task_id>` FIRST — a worktree that moved is
+  RESUMED, never re-done (`a lane that re-does work the worktree already
+  contains` has broken the contract) — then falls back to the Claude band it
+  would have had, announced.
+- **Recovery is NOT compiled in.** The route rows already stay out of the
+  compiled lock file because they would go stale in silence; the same is true of
+  the recovery procedure. `orc extra reconcile` reads the journal at the moment
+  it is needed, and `config.extra_resume` decides whether a resume slice is
+  composed at all.
 - A cited-risk task never leaves Claude while `extra_risk_tasks` is `off`.
 <!-- /diy:when -->
 <!-- diy:when extra=off -->
