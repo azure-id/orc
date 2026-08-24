@@ -16696,6 +16696,11 @@ function redactProfile(prof, claudeDir) {
     expired_at: prof.expired_at || null,
     verify_method: prof.verify_method || null,
     verify_base_url: prof.verify_base_url || null,
+    // v0.53.3 — WHICH CREDENTIAL EARNED THE BADGE. A probe and a dispatch used
+    // to resolve the credential differently, so "verified" could be true of a
+    // path no wave ever runs. They resolve identically now; this field is how a
+    // reader can tell without taking that on trust.
+    verify_credential_source: prof.verify_credential_source || null,
     latency_ms: prof.latency_ms === undefined ? null : prof.latency_ms,
     models_seen: Array.isArray(prof.models_seen) ? prof.models_seen : [],
     model_map: prof.model_map || null,
@@ -17469,18 +17474,35 @@ function extraKeyhelp(claudeDir, name) {
     note: (credRow && credRow.note) || null,
     never: "ORC never writes another tool's credential store, and never puts a key in argv.",
     // The instruction, per OS. `env_set` is present exactly where there is a
-    // VARIABLE to set; `passphrase_env` is present exactly where the credential
-    // is vaulted, and it is a DIFFERENT thing with a different warning.
+    // VARIABLE to set.
     env_set: route === "env" && src === "env" ? extraEnvSetHelp(envVar) : null,
-    passphrase_env:
+    // v0.53.3 — THIS BLOCK USED TO NAME `ORC_EXTRA_KEY` AS THE PASSPHRASE, and
+    // `extraCredentialValue` reads that variable as THE KEY. One variable, two
+    // meanings, and the instruction was the wrong one: a user who followed it
+    // exported their vault passphrase into the variable dispatch sends in an
+    // Authorization header — i.e. handed the secret that opens the vault to a
+    // third-party provider. Nothing reads a passphrase from the environment, so
+    // there is no env route for one and this field is now always null.
+    passphrase_env: null,
+    // The KEY variable, described as the key. It is the unattended-wave escape
+    // hatch and it now LOSES to a vault that can be opened, so it is offered
+    // second, after the route that has a deadline on it.
+    key_env:
       src === "vault"
         ? extraEnvSetHelp("ORC_EXTRA_KEY", {
-            value: "<your passphrase>",
+            value: "<your key>",
             warning:
-              "This is the PASSPHRASE, not the key. Setting it persistently means anything running as you can open the vault. `orc extra session " +
-              prof.name +
-              " --save --ttl <days>` is the route with a deadline on it.",
+              "This is the KEY, not the passphrase — never put a passphrase here: dispatch sends this variable's value to the provider in an Authorization header. It applies only when the vault cannot be opened (an unattended wave with nothing cached); a vault ORC can open always wins.",
           })
+        : null,
+    // The route WITH A DEADLINE ON IT, which is the one to reach for first.
+    vault_unlock:
+      src === "vault"
+        ? {
+            cmd: `orc extra session ${prof.name} --save --ttl 30`,
+            why:
+              "the passphrase is a DEADLINE, not a second factor. Saving it with a TTL is what lets an unattended wave open the vault without a key sitting in your environment forever.",
+          }
         : null,
   };
   if (asJson) emitJson(payload, 0);
@@ -17494,7 +17516,11 @@ function extraKeyhelp(claudeDir, name) {
   );
   console.log("\n  " + why);
   if (payload.note) console.log("  " + ui.color.gray(payload.note));
-  for (const block of [payload.env_set, payload.passphrase_env]) {
+  if (payload.vault_unlock) {
+    console.log("\n  " + ui.color.bold("unlock:  ") + payload.vault_unlock.cmd);
+    console.log("  " + ui.color.gray(payload.vault_unlock.why));
+  }
+  for (const block of [payload.env_set, payload.key_env]) {
     if (!block) continue;
     console.log("");
     console.log("  " + ui.color.bold("this session:  ") + block.session);
@@ -18010,6 +18036,22 @@ function extraErrText(res) {
   return `HTTP ${res.status}`;
 }
 
+// Is this rejection ABOUT THE MODEL NAME? The unknown-model escape treats a
+// 400/404/422 as proof that the endpoint authenticated and then declined the id
+// ORC invented — which is only true if the endpoint is the one it was aiming at.
+// A gateway answering "Unknown request URL" with a 404 proves the opposite.
+//
+// The test is deliberately narrow: the body must NAME the model ORC asked for,
+// or say something about a model/engine/deployment. Anything else — a routing
+// error, an HTML error page, an empty body — is NOT evidence and does not get
+// to stand in for one.
+function extraErrAboutModel(res, model) {
+  const text = extraErrText(res);
+  if (!text) return false;
+  if (model && text.includes(model)) return true;
+  return /\b(model|engine|deployment)\b/i.test(text) && !/\b(url|path|endpoint|route)\b/i.test(text);
+}
+
 // ── The credential vault (P10) ─────────────────────────────────────────────
 //
 // `a key ORC can read without you` has broken this contract. The vault is
@@ -18523,6 +18565,19 @@ function extraProbeBase(prof, cat) {
   return { base: prof.base_url, kind: "openai", models_path: (row && row.models_path) || "/v1/models" };
 }
 
+// v0.53.3 — ONE completions URL, and the PROBES now speak it too. `ping` rung 2
+// and `models --test` hardcoded `{base}/chat/completions` while dispatch derived
+// `{base}/v1/chat/completions` and honoured `completions_path`; neither probe
+// honoured it at all. DeepSeek accepts both spellings, so this was not the 401 —
+// but on a provider that accepts only one it produces a profile that verifies
+// GREEN and dispatches into a 404, which is the same lie wearing a different
+// status code. A green badge is earned by the URL a wave will actually call, or
+// it is not earned.
+function extraProbeCompletionsUrl(prof, probe) {
+  if (probe.kind === "anthropic") return joinUrl(probe.base, "/v1/messages");
+  return apiCompletionsUrl(prof);
+}
+
 // The auth HEADER is decided by the variable NAME, exactly as Claude Code does
 // it. Ollama's Anthropic endpoint REJECTS x-api-key, which is why a catalog row
 // naming a header instead of a variable would have failed at 401 with nothing
@@ -18539,6 +18594,20 @@ const joinUrl = (base, p) => String(base).replace(/\/+$/, "") + (p.startsWith("/
 
 // Resolve a profile's credential VALUE. Never returns it to a printer — every
 // caller hands it straight to a request header or a child process's env.
+// The two in-memory options are DIFFERENT FACTS and were one option, which is
+// the whole of the v0.53.3 bug:
+//
+//   opts.inMemory    an EXPLICIT key supplied for THIS invocation (`--key-stdin`).
+//                    It is the key being tested and then stored, so it WINS.
+//   opts.ambientKey  a key found lying in the environment (`ORC_EXTRA_KEY`).
+//                    It is the UNATTENDED-WAVE fallback and nothing more, so it
+//                    only applies to a vault that cannot be opened here.
+//
+// Collapsing the second into the first meant `ORC_EXTRA_KEY` short-circuited the
+// vault branch on its first line. Only `dispatch` and `conform` passed it, so
+// `ping`, `models --test` and `preflight` opened the vault and went green while
+// every wave authenticated with whatever that variable happened to hold — and
+// died at 401 naming the vaulted key it never sent.
 function extraCredentialValue(claudeDir, prof, opts) {
   const cred = prof.credential || {};
   if (cred.source === "env") {
@@ -18549,11 +18618,14 @@ function extraCredentialValue(claudeDir, prof, opts) {
         reason: "missing-key",
         error: `${cred.key_name || "the credential variable"} is not set in this environment.`,
       };
-    return { ok: true, value: v, source: "env" };
+    return { ok: true, value: v, source: "env", key_name: cred.key_name || null };
   }
-  if (cred.source === "tool") return { ok: true, value: null, source: "tool" };
+  if (cred.source === "tool") return { ok: true, value: null, source: "tool", key_name: null };
   if (cred.source === "vault") {
-    if (opts && opts.inMemory) return { ok: true, value: opts.inMemory, source: "memory" };
+    // An explicit key for this invocation is the one being proved. It outranks
+    // the record it is about to replace, which is what makes
+    // `orc extra ping <name> --key-stdin` a re-key rather than a no-op.
+    if (opts && opts.inMemory) return { ok: true, value: opts.inMemory, source: "memory", key_name: null };
     let pass = opts && opts.passphrase;
     // v0.52.0 — THE SAVED PASSPHRASE, and this is the only place it is read.
     // Every caller — dispatch, ping, conform — gets it by asking for the
@@ -18565,12 +18637,38 @@ function extraCredentialValue(claudeDir, prof, opts) {
       const cached = extraSessionGet(claudeDir, prof.name);
       if (cached.ok) pass = cached.value;
     }
-    if (!pass) return { ok: false, reason: "locked", error: `"${prof.name}" is stored in the vault — a passphrase is required. Save one with a deadline: orc extra session ${prof.name} --save --ttl 30` };
+    const ambient = (opts && opts.ambientKey) || null;
+    if (!pass) {
+      // The vault cannot be opened HERE. This is the case `ORC_EXTRA_KEY` was
+      // written for — `extra_unlock: per-dispatch`, where nothing is cached on
+      // purpose — and it is the only case it applies to.
+      if (ambient) return { ok: true, value: ambient, source: "ambient", key_name: "ORC_EXTRA_KEY" };
+      return { ok: false, reason: "locked", error: `"${prof.name}" is stored in the vault — a passphrase is required. Save one with a deadline: orc extra session ${prof.name} --save --ttl 30` };
+    }
     const got = extraVaultGet(claudeDir, cred.key_name || prof.name, pass, opts && opts.maxAttempts);
+    // A passphrase was in hand and the vault refused it. That is a real answer
+    // ABOUT THE DECLARED SOURCE, not a reason to reach for a leftover variable:
+    // falling through would burn a vault attempt and then send the wrong secret
+    // anyway, which is the failure this ordering exists to end.
     if (!got.ok) return got;
-    return { ok: true, value: got.value, source: "vault" };
+    return { ok: true, value: got.value, source: "vault", key_name: cred.key_name || prof.name };
   }
   return { ok: false, reason: "no-credential", error: "this profile has no credential source." };
+}
+
+// WHICH SOURCE produced the secret that was just rejected. "your api key
+// ****w5f7 is invalid" is the provider describing what it saw; the user reads it
+// as the key they verified four minutes ago. Naming the source is what turns a
+// multi-step diagnosis into a sentence.
+function extraCredSourceLabel(cred) {
+  const src = cred && cred.source;
+  if (src === "ambient")
+    return "the ORC_EXTRA_KEY environment variable — NOT this profile's vault record";
+  if (src === "memory") return "the key supplied on stdin for this command";
+  if (src === "vault") return `the vault record "${(cred && cred.key_name) || "?"}"`;
+  if (src === "env") return `the ${(cred && cred.key_name) || "credential"} environment variable`;
+  if (src === "tool") return "the tool's own sign-in — ORC sent no key";
+  return "an unrecorded source";
 }
 
 // ── orc extra ping — THE CONNECTION GATE ───────────────────────────────────
@@ -18718,6 +18816,7 @@ async function extraPing(claudeDir, name) {
       // credential store, so a user who already logged in is untouched).
       key: credCli.ok ? credCli.value : null,
       key_error: credCli.ok ? null : credCli.error || credCli.reason,
+      credSource: credCli.ok ? credCli.source : null,
       pending,
       pendingPass,
       asJson,
@@ -18779,6 +18878,7 @@ async function extraPing(claudeDir, name) {
       prof.verified_at = new Date().toISOString();
       prof.verify_method = "models";
       prof.verify_base_url = probe.base;
+      prof.verify_credential_source = cred.source;
       prof.latency_ms = r.ms;
       prof.models_seen = models;
       extraHistory(ledger, "ping", { profile: name, method: "models", models: models.length });
@@ -18801,8 +18901,7 @@ async function extraPing(claudeDir, name) {
   // ── rung 2: a max_tokens:1 completion ───────────────────────────────────
   const model = modelArg || models[0] || EXTRA_PROBE_UNKNOWN_MODEL;
   const isProbeName = model === EXTRA_PROBE_UNKNOWN_MODEL;
-  const url =
-    probe.kind === "anthropic" ? joinUrl(probe.base, "/v1/messages") : joinUrl(probe.base, "/chat/completions");
+  const url = extraProbeCompletionsUrl(prof, probe);
   // `--live` sends a REAL message and reads the reply back; the ordinary rung
   // still spends one token. The prompt is a FIXED CONSTANT in both cases — never
   // task text, never anything a slice supplied.
@@ -18819,6 +18918,7 @@ async function extraPing(claudeDir, name) {
     prof.verified_at = new Date().toISOString();
     prof.verify_method = modelArg ? "manual" : "completion";
     prof.verify_base_url = probe.base;
+    prof.verify_credential_source = cred.source;
     prof.latency_ms = r2.ms;
     if (models.length) prof.models_seen = models;
     else if (reported && !prof.models_seen.includes(reported)) prof.models_seen = prof.models_seen.concat(reported);
@@ -18868,10 +18968,19 @@ async function extraPing(claudeDir, name) {
   // still proves the URL and the credential, because the endpoint had to
   // authenticate before it could reject anything. Recorded as its own method —
   // it is weaker evidence than a real completion and must never read the same.
-  if (isProbeName && (r2.status === 400 || r2.status === 404 || r2.status === 422)) {
+  //
+  // v0.53.3 — AND IT HAS TO BE ABOUT THE MODEL. A 404 from a wrong URL and a 404
+  // from an unknown model id are the same status code and nothing else about
+  // them is the same: the first authenticated nothing, because there was no
+  // endpoint there to authenticate. Reading one as the other is how a profile
+  // earns a green badge against a path that does not exist, which is the whole
+  // family of failure this release is closing. `extraErrAboutModel` is the
+  // guard, and when it says no the ping FAILS — honestly — instead of verifying.
+  if (isProbeName && (r2.status === 400 || r2.status === 404 || r2.status === 422) && extraErrAboutModel(r2, model)) {
     prof.verified_at = new Date().toISOString();
     prof.verify_method = "completion-unknown-model";
     prof.verify_base_url = probe.base;
+    prof.verify_credential_source = cred.source;
     prof.latency_ms = r2.ms;
     extraHistory(ledger, "ping", { profile: name, method: "completion-unknown-model" });
     writeExtra(claudeDir, ledger);
@@ -18942,7 +19051,7 @@ async function extraPing(claudeDir, name) {
 // ═══════════════════════════════════════════════════════════════════════════
 
 function extraPingCli(ctx) {
-  const { claudeDir, ledger, prof, cat, cfg, name, live, modelArg, finish, key, key_error, pending, pendingPass, asJson } =
+  const { claudeDir, ledger, prof, cat, cfg, name, live, modelArg, finish, key, key_error, credSource, pending, pendingPass, asJson } =
     ctx;
   const row = catalogRow(cat, prof.provider) || {};
   const bin = (prof.cli && prof.cli.bin) || row.cli_bin || null;
@@ -19113,6 +19222,7 @@ function extraPingCli(ctx) {
     prof.verified_at = new Date().toISOString();
     prof.verify_method = method;
     prof.verify_base_url = found;
+    prof.verify_credential_source = credSource || null;
     prof.latency_ms = liveResult ? liveResult.latency_ms : null;
     extraHistory(ledger, "ping", { profile: name, method, models: models.length });
     writeExtra(claudeDir, ledger);
@@ -19591,7 +19701,7 @@ async function extraTestModel(a) {
   if (!key) return { ok: false, reason: "no-credential", error: "no key is available for this profile." };
   const probe = extraProbeBase(prof, cat);
   if (!probe.base) return { ok: false, reason: "no-base-url", error: "this profile has no base URL to ask." };
-  const url = probe.kind === "anthropic" ? joinUrl(probe.base, "/v1/messages") : joinUrl(probe.base, "/chat/completions");
+  const url = extraProbeCompletionsUrl(prof, probe);
   const r = await extraHttp({
     url,
     method: "POST",
@@ -22918,9 +23028,12 @@ async function extraDispatch(claudeDir) {
   const route = ledger.routes.find((r) => bandCovers(r, score));
   const cfg = resolvedConfig(claudeDir);
 
-  // The credential. `inMemory` is how an unattended wave works: the lane
+  // The credential. `ambientKey` is how an unattended wave works: the lane
   // unlocked the vault ONCE at the Phase-1 stop and hands the value down
   // through env, never through argv and never back to disk.
+  // v0.53.3 — and it is a FALLBACK, not an override. It applies only where the
+  // vault cannot be opened here, so a variable left over from another profile
+  // can no longer outrank the key the user just verified.
   // v0.52.0 — `--passphrase-stdin` survives the cache as the UN-CACHED escape
   // hatch for `extra_unlock: per-dispatch`, where the whole point is that
   // nothing is kept. It mirrors `extra ping`'s flag exactly, including the
@@ -22941,7 +23054,7 @@ async function extraDispatch(claudeDir) {
         "`--passphrase <value>` does not exist on purpose: argv is world-readable in a process list and lands in shell history. Use --passphrase-stdin.",
     });
   const cred = extraCredentialValue(claudeDir, prof, {
-    inMemory: process.env.ORC_EXTRA_KEY || null,
+    ambientKey: process.env.ORC_EXTRA_KEY || null,
     passphrase: dispatchPassStdin ? (readStdinLines()[0] || "").trim() || null : null,
     // A per-dispatch passphrase is used and DROPPED. No silent re-cache: only
     // the save modal writes the cache, because only the save modal asked how
@@ -23041,9 +23154,26 @@ async function extraDispatch(claudeDir) {
       declared_files: slice.declared_files || [],
       fallback_to: res.claude,
       announce: res.announce,
+      // v0.53.3 — WHAT WAS ACTUALLY SENT, not what the profile declares. The
+      // return used to copy `credential.source: "vault"` off the profile while
+      // the request carried an environment variable, so the return was wrong
+      // about its own behaviour and the one field that could have named the bug
+      // confirmed the wrong story instead.
+      credential: { source: cred.source, key_name: cred.key_name || null },
     },
     out
   );
+  // A credential that did NOT come from the profile's declared source is said out
+  // loud on every dispatch, pass or fail. An override nobody was told about is
+  // the same class of silence as work leaving Claude without an `extra:` line.
+  if (cred.source === "ambient")
+    payload.credential_override =
+      `this dispatch authenticated with ${extraCredSourceLabel(cred)}, because the vault could not be opened here ` +
+      `(no passphrase in hand and none cached). Save one with a deadline: orc extra session ${prof.name} --save --ttl 30`;
+  // ATTRIBUTE THE REJECTION. The provider's message describes the secret it saw;
+  // only ORC knows where that secret came from.
+  if (payload.reason === "authentication_failed")
+    payload.credential_hint = `the rejected credential came from ${extraCredSourceLabel(cred)}.`;
   payload.trace_line = extraTraceLine(payload);
   payload.trace_extras = extraTraceExtras(payload);
   // WRITTEN HERE, BY THE HAND THAT HOLDS THE NUMBERS. The trace line above is
@@ -23144,6 +23274,8 @@ function extraDispatchRender(p) {
           (p.bash_calls && p.bash_calls.length ? `  ·  ${p.bash_calls.length} shell command(s), all recorded` : "")
       )
     );
+  if (p.credential_override) console.log("  " + ui.mark.warn(p.credential_override));
+  if (p.credential_hint) console.log("  " + ui.mark.warn(p.credential_hint));
   if (!p.ok && p.fallback_to)
     console.log(ui.color.gray(`  fallback: ${p.fallback_to.agent} ${p.fallback_to.band}`));
   // Copy this into the phase packet verbatim. It is printed rather than only
@@ -23269,7 +23401,7 @@ function extraConform(claudeDir, name) {
     process.exit(1);
   }
   const cfg = resolvedConfig(claudeDir);
-  const cred = extraCredentialValue(claudeDir, prof, { inMemory: process.env.ORC_EXTRA_KEY || null });
+  const cred = extraCredentialValue(claudeDir, prof, { ambientKey: process.env.ORC_EXTRA_KEY || null });
   if (!cred.ok) {
     if (asJson) emitJson(Object.assign({ ok: false, profile: name }, cred), 1);
     console.error("❌ " + cred.error);

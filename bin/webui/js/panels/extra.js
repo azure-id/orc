@@ -1056,7 +1056,13 @@ function exKeyhelpRow(tool, d, body) {
       // leak into a screenshot or a copy button. ORC does not run it: `setx`
       // would put the key in argv and an `export` line writes it in plaintext.
       exEnvSetBlock(out, k.env_set);
-      exEnvSetBlock(out, k.passphrase_env);
+      // v0.53.3 — the route WITH A DEADLINE first, then the variable. Both
+      // lines are the CLI's; the panel names no command of its own.
+      if (k.vault_unlock) {
+        out.append(el("div", "action-cmd", k.vault_unlock.cmd));
+        out.append(el("div", "note", k.vault_unlock.why));
+      }
+      exEnvSetBlock(out, k.key_env);
     })
     .catch((e) => out.append(failBox(e)));
   return wrap;

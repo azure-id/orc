@@ -605,6 +605,8 @@ const extraKeyhelp = {
       warning: null,
     },
     passphrase_env: null,
+    key_env: null,
+    vault_unlock: null,
   },
   login: {
     ok: true,

@@ -440,18 +440,45 @@ because per-provider rate limits are undocumented in aggregate.
 ### The locked vault is a DISPATCH-TIME state, and the lane must catch it FIRST
 
 `credential.present: true` on a vaulted profile means the key is **on disk**, not
-that the dispatch can open it. The bridge receives a passphrase from nowhere; it
-reads `ORC_EXTRA_KEY` from its own environment or it fails `locked`.
+that the dispatch can open it. So at Phase 1, for every profile a route row names
+whose `credential.source` is `vault`, the lane resolves ONE of three before
+wave 1 and prints which:
 
-So at Phase 1, for every profile a route row names whose `credential.source` is
-`vault`, the lane resolves ONE of three before wave 1 and prints which:
-
-1. `ORC_EXTRA_KEY` is already exported for this session → nothing to do;
-2. the user exports it (or switches the profile to an env-var credential with
-   `orc extra add --env-key NAME`) → re-check and proceed;
+1. a **saved passphrase** opens the vault (`orc extra session <name> --save --ttl
+   <days>`, and `orc extra preflight` is the gate that says so) → nothing to do.
+   This is the route to reach for: it has a deadline on it;
+2. `ORC_EXTRA_KEY` is exported → the vault stays shut and **that variable's value
+   is what gets sent**. See the ordering rule below;
 3. neither → **the run is announced as falling back to Claude for those bands**,
    and it proceeds. A locked vault never stops a run and never silently costs
    the user Anthropic rates without saying so.
+
+### `ORC_EXTRA_KEY` is a FALLBACK, not an override — and it is the KEY
+
+The ordering is fixed and it is not negotiable, because getting it backwards cost
+a release (v0.53.3):
+
+> **A vault ORC can open always wins. `ORC_EXTRA_KEY` applies only where the
+> vault cannot be opened here.**
+
+Before that, the variable short-circuited the vault on the resolver's first line,
+and only `dispatch` and `conform` passed it. `ping`, `models --test` and
+`preflight` all opened the vault and went **green**, while every wave
+authenticated with whatever that variable happened to hold and died at 401
+quoting the vaulted key it never sent. Four honest checks, each about a path a
+wave does not take.
+
+Two consequences for the lane:
+
+- **`ORC_EXTRA_KEY` holds the KEY, never a passphrase.** Its value goes to the
+  provider in an `Authorization` header. A passphrase put there is the secret
+  that opens the vault, handed to a third party. If a user asks where to put a
+  passphrase, the answer is `orc extra session`, never a variable.
+- **An override is never silent.** When the ambient variable is what was used,
+  the dispatch return carries `credential_override` and the human output prints
+  it — pass or fail. Relay it to the user the same way you relay the `extra:`
+  line: work authenticating with a secret the profile does not name is the same
+  class of fact as work leaving Claude.
 
 `config.extra_unlock: per-dispatch` is interactive-only by design: it **refuses
 to start an unattended wave**, naming why, rather than prompting into a stream
@@ -479,6 +506,14 @@ it.** What matters here is why each field exists:
   measurement is never a pass.
 - **`usage: null`** — the worker reported no counts. Not four zeros. Engine
   `api`'s `cache_write: 0` is a *measured* zero, which is the opposite fact.
+- **`credential.source`** — which secret this dispatch actually sent: `vault`,
+  `env`, `ambient` (`ORC_EXTRA_KEY`), `memory` or `tool`. It reports what
+  happened, **not what the profile declares** — the two disagreed for a release
+  and the return confirmed the wrong story. `credential_override` is present
+  whenever it was not the profile's declared source; on an
+  `authentication_failed`, `credential_hint` names the source the provider
+  rejected. **Relay both.** "Your api key ****w5f7 is invalid" is the provider
+  describing what it saw; only ORC knows where that came from.
 
 Everything else in `return-validation.md` applies unchanged — the honest-status
 rules, the evidence block, the pattern/TDD/wiki attestations, and above all §6,

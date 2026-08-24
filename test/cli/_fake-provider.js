@@ -125,6 +125,16 @@ const srv = http.createServer((req, res) => {
     if (MODE === "nomodels") return send(404, { error: { message: "no models endpoint" } });
     return send(200, { data: [{ id: "fake-flash" }, { id: "fake-pro" }] });
   }
+  // v0.53.3 — THE PATH IS PART OF THE CONTRACT, and a fake more permissive than
+  // the provider certifies the adapter instead of testing it. This one answered
+  // a completion on ANY path, which is exactly why `ping` rung 2 and
+  // `models --test` could hardcode `{base}/chat/completions` for three releases
+  // while dispatch derived `{base}/v1/chat/completions` — a profile that
+  // verifies GREEN and dispatches into a 404 on any provider that accepts only
+  // one spelling. The base here carries no version segment, so the ONE correct
+  // path is /v1/chat/completions.
+  if (/chat\/completions$/.test(req.url) && req.url !== "/v1/chat/completions")
+    return send(404, { error: { message: `Unknown request URL: POST ${req.url}` } });
   let body = "";
   req.on("data", (c) => (body += c));
   req.on("end", () => {

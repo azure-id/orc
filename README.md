@@ -6,14 +6,14 @@
 
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
-![Version](https://img.shields.io/badge/version-0.53.2-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.53.3-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
 ![Dependencies](https://img.shields.io/badge/dependencies-zero-lightgrey.svg?style=for-the-badge)
 ![GitHub stars](https://img.shields.io/github/stars/azure-id/orc?style=for-the-badge&color=yellow)
 
-**Latest: v0.53.2** · updated 2026-08-24 · [full changelog](CHANGELOG.md)
+**Latest: v0.53.3** · updated 2026-08-24 · [full changelog](CHANGELOG.md)
 
 **🇮🇩 [Baca dalam Bahasa Indonesia](README-id.md)**
 
@@ -440,44 +440,43 @@ a current audit: [EVAL-REPORT.md](EVAL-REPORT.md).
 **Full history: [CHANGELOG.md](CHANGELOG.md)** — or `orc changelog`, which prints
 only what is newer than the version you have.
 
-### v0.53.2 — the cost that was paid and never written down _(2026-08-24)_
+### v0.53.3 — the key it never sent _(2026-08-24)_
 
-**Two foreign dispatches ran, cost real money, and every cost report read zero.**
+**A vaulted, verified, routed connection authenticated every wave with the wrong
+secret, and four separate green checks agreed it was fine.**
 
-- **The bridge writes the spend down itself.** `orc extra dispatch` used to compose
-  an `EXTRA …` trace line and RELAY it through the orchestrator into a phase
-  packet — remembered-not-dispatched protocol, and it broke both ways on two
-  graded runs: one reshaped the line, one dropped it. Both dispatches succeeded,
-  both had complete four-kind token vectors sitting in `return.json`, and
-  `orc extra stats` said `0 dispatches from 2 traces` while the Spending tab read
-  `0 tasks sent`. Every dispatch now appends one record to
-  `.claude/orc/extra-spend.jsonl` at the moment the CLI holds the numbers — the
-  `RESUME.md` lesson applied to money. **A cost report that reads zero when money
-  was spent is worse than no report, because a zero gets believed.**
-- **The trace line is demoted, not retired,** and the two sources are deduped on
-  the eight fields the line carries, so a lane that relays correctly is counted
-  once. The parser also accepts the ` :: ` a trace writer reaches for by reflex.
-- **A saved dispatch return backfills the runs that predate all of this** — read
-  only when it carries `dispatched: true` and a parsable `trace_line`, so it is the
-  CLI's own payload read back rather than a narrative about it. No date is derived
-  from an mtime, so `--since` excludes those rows and says how many.
-- **Every count says which source it came from,** and the two ABSENT counts (a torn
-  log line, an undated row a filter dropped) are named rather than absorbed.
-- **`orc ui` survives its own upgrade.** After `update` / `prune` / `fix` /
-  `upgrade` succeeds, the panel restarts on the **same port and the same token** and
-  the tab reloads itself — no more stop-the-server, re-run, find-the-new-URL. The
-  token travels in the environment, never argv; the restart is client-triggered so
-  the job's output is read before the process leaves; and a failed handover leaves
-  the old panel working with the two commands printed.
+- **`ORC_EXTRA_KEY` short-circuited the vault.** `orc extra dispatch` passed it as
+  an *explicit* key, so it beat the vault on the resolver's first line — and only
+  `dispatch` and `conform` passed it. `ping`, `models --test` and `preflight` all
+  opened the vault and went green, then the wave died at 401 quoting the vaulted
+  key it never sent. **A vault ORC can open now always wins;** the variable keeps
+  the job it was written for — the unattended wave with nothing cached.
+- **The return reports the source it USED,** not what the profile declares
+  (`credential.source`: `vault` · `env` · `ambient` · `memory` · `tool`). An
+  override is printed pass or fail, and a 401 names which source produced the
+  rejected secret. It was a five-minute fix and a multi-step diagnosis.
+- **`orc extra keyhelp` told users to put their vault PASSPHRASE in the variable a
+  dispatch sends to the provider in an `Authorization` header.** That block is
+  gone. The route with a deadline on it (`orc extra session … --ttl 30`) renders
+  first, then the variable, described as the key.
+- **One completions URL.** The probes hardcoded `{base}/chat/completions` while
+  dispatch derived `{base}/v1/chat/completions` and honoured `completions_path`.
+  DeepSeek accepts both, so this was not the 401 — on a provider that accepts one
+  it verifies **green** and dispatches into a 404. Both probes now call the same
+  builder, and `verify_credential_source` records which credential earned the badge.
+- **The unknown-model escape has to be about the model.** A 404 saying
+  `Unknown request URL` authenticated nothing, and was being read as proof that it
+  had. The fake provider was more permissive than the provider — it answered a
+  completion on any path — which is why two probes held the wrong one for three
+  releases with a green suite.
 
 Setup per provider: **[`guides/extra-models.md`](guides/extra-models.md)**.
 
-Before that: **v0.53.1 — "up to date" now names what it checked**, **v0.53.0 —
-the schema the provider rejected, and a routing table you can read**, **v0.52.0
-— the connection that could not be used, and the routing nobody could see**,
-**v0.51.0 — the tools you already have, and a connection that proves itself**,
-**v0.49.5 — house rules are text, and the hand-back writes itself**, and
-**v0.49.4 — the panel was being handed half an answer**.
+Before that: **v0.53.2 — the cost that was paid and never written down**,
+**v0.53.1 — "up to date" now names what it checked**, **v0.53.0 — the schema
+the provider rejected, and a routing table you can read**, **v0.52.0 — the
+connection that could not be used, and the routing nobody could see**, and
+**v0.51.0 — the tools you already have, and a connection that proves itself**.
 [Read them in the changelog](CHANGELOG.md).
 
 ---

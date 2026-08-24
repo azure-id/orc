@@ -10,6 +10,91 @@ Format: `### v<version> — <title> _(<date>)_`.
 
 ---
 
+### v0.53.3 — the key it never sent _(2026-08-24)_
+
+**A vaulted, verified, routed connection authenticated every wave with the wrong
+secret, and four separate green checks agreed it was fine.**
+
+`orc extra dispatch` resolved the credential by passing `inMemory:
+process.env.ORC_EXTRA_KEY` into `extraCredentialValue`, and that option
+short-circuited the vault branch **on its first line**. So whenever
+`ORC_EXTRA_KEY` was set in the environment — a leftover from another profile,
+another provider, another day — dispatch sent *that* value and never opened the
+vault at all. The profile's real, verified, vaulted key was never consulted.
+
+Only `dispatch` and `conform` passed that option. `ping`, `models --test` and
+`preflight` all resolved without it, opened the vault, and succeeded. Hence the
+part that made this expensive to find:
+
+```
+orc extra doctor                          → nothing to report.
+orc extra list                            → dipkshit  deepseek/api  verified  key vault
+orc extra preflight                       → dipkshit ✔ ok  saved until 2027-08-19
+orc extra models dipkshit --test <model>  → ✔ answered in 1866ms
+```
+
+Four checks, each honest about the path it exercised, **none of them exercising
+the path a dispatch takes**. Then the wave died at HTTP 401 —
+`Your api key: ****w5f7 is invalid` — pointing at the vaulted key the user had
+verified four minutes earlier, while the key ORC actually sent came from an
+environment variable the message never named. Nothing was written and nothing was
+billed; the run halted at F2 under `extra_on_failure: stop`.
+
+- **The two in-memory options were one option, and they are different facts.**
+  `opts.inMemory` is an **explicit** key supplied for this invocation
+  (`--key-stdin`) — the key being tested and then stored, so it still wins.
+  `opts.ambientKey` is a key found lying in the environment, and it is now what
+  it was always written to be: the **unattended-wave fallback**, applying only to
+  a vault that cannot be opened here (`extra_unlock: per-dispatch`, where nothing
+  is cached on purpose). **A vault ORC can open always wins.**
+- **A passphrase in hand that the vault refuses is a real answer about the
+  declared source,** not a reason to reach for a leftover variable. It returns the
+  refusal rather than burning an attempt and then sending the wrong secret anyway.
+- **The return now reports the source it USED.** `credential.source` is one of
+  `vault` · `env` · `ambient` · `memory` · `tool`, and it describes what happened
+  rather than what the profile declares — the two disagreed for a release, so the
+  one field that could have named the bug confirmed the wrong story instead.
+  `credential_override` is printed whenever the profile's declared source was not
+  the one used, pass or fail: an override nobody was told about is the same class
+  of silence as work leaving Claude with no `extra:` line.
+- **A 401 names the source that produced the rejected secret.** The provider's
+  message describes what it saw; only ORC knows where that came from. It was a
+  five-minute fix and a multi-step diagnosis.
+
+**`ORC_EXTRA_KEY` holds the KEY, and `orc extra keyhelp` said it was the
+passphrase.** For a vaulted profile it rendered a per-OS instruction to export
+`ORC_EXTRA_KEY="<your passphrase>"` — into the exact variable a dispatch sends to
+the provider in an `Authorization` header. Following ORC's own instruction handed
+the secret that opens the vault to a third party. The block is gone. In its place
+the route **with a deadline on it** renders first (`orc extra session <name>
+--save --ttl 30`, the v0.52.0 design), then the variable, described as the key,
+with the warning that a passphrase must never go there. Nothing in ORC reads a
+passphrase from the environment, so `passphrase_env` is now always `null`.
+
+**One completions URL, and the probes speak it.** `ping` rung 2 and
+`models --test` hardcoded `{base}/chat/completions` while dispatch derived
+`{base}/v1/chat/completions` through `apiCompletionsUrl` — and neither probe
+honoured a profile's `completions_path` at all. DeepSeek accepts both spellings,
+so this was not the 401; on a provider that accepts only one it produces a
+profile that verifies **green** and dispatches into a 404, which is the same lie
+wearing a different status code. Both probes now call the same builder.
+
+**And the unknown-model escape has to be about the model.** A 400/404/422 on the
+probe's invented model id was read as proof that the endpoint authenticated
+before declining the name — which is only true if the endpoint is the one it was
+aiming at. A gateway answering `Unknown request URL` with a 404 authenticated
+nothing. The rejection must now name the model asked for, or say something about
+a model/engine/deployment; otherwise the ping fails honestly instead of
+verifying. `verify_credential_source` records which credential earned the badge.
+
+**The fake provider was more permissive than the provider.** It answered a
+completion on **any** path, which is precisely why two probes could hardcode the
+wrong one for three releases with a green suite. It now serves exactly the path
+`apiCompletionsUrl` derives and 404s the rest — the v0.53.0 rule, applied to the
+third surface in a row that broke on it.
+
+---
+
 ### v0.53.2 — the cost that was paid and never written down _(2026-08-24)_
 
 **Two foreign dispatches ran, cost real money, and every cost report read zero.**
