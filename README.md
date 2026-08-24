@@ -6,14 +6,14 @@
 
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
-![Version](https://img.shields.io/badge/version-0.53.3-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.53.4-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
 ![Dependencies](https://img.shields.io/badge/dependencies-zero-lightgrey.svg?style=for-the-badge)
 ![GitHub stars](https://img.shields.io/github/stars/azure-id/orc?style=for-the-badge&color=yellow)
 
-**Latest: v0.53.3** · updated 2026-08-24 · [full changelog](CHANGELOG.md)
+**Latest: v0.53.4** · updated 2026-08-24 · [full changelog](CHANGELOG.md)
 
 **🇮🇩 [Baca dalam Bahasa Indonesia](README-id.md)**
 
@@ -440,43 +440,29 @@ a current audit: [EVAL-REPORT.md](EVAL-REPORT.md).
 **Full history: [CHANGELOG.md](CHANGELOG.md)** — or `orc changelog`, which prints
 only what is newer than the version you have.
 
-### v0.53.3 — the key it never sent _(2026-08-24)_
+### v0.53.4 — the reload that dropped its own token _(2026-08-24)_
 
-**A vaulted, verified, routed connection authenticated every wave with the wrong
-secret, and four separate green checks agreed it was fine.**
+**Every `orc update` from the panel ended on `This link is missing its session
+token.` — and the token was never missing.**
 
-- **`ORC_EXTRA_KEY` short-circuited the vault.** `orc extra dispatch` passed it as
-  an *explicit* key, so it beat the vault on the resolver's first line — and only
-  `dispatch` and `conform` passed it. `ping`, `models --test` and `preflight` all
-  opened the vault and went green, then the wave died at 401 quoting the vaulted
-  key it never sent. **A vault ORC can open now always wins;** the variable keeps
-  the job it was written for — the unattended wave with nothing cached.
-- **The return reports the source it USED,** not what the profile declares
-  (`credential.source`: `vault` · `env` · `ambient` · `memory` · `tool`). An
-  override is printed pass or fail, and a 401 names which source produced the
-  rejected secret. It was a five-minute fix and a multi-step diagnosis.
-- **`orc extra keyhelp` told users to put their vault PASSPHRASE in the variable a
-  dispatch sends to the provider in an `Authorization` header.** That block is
-  gone. The route with a deadline on it (`orc extra session … --ttl 30`) renders
-  first, then the variable, described as the key.
-- **One completions URL.** The probes hardcoded `{base}/chat/completions` while
-  dispatch derived `{base}/v1/chat/completions` and honoured `completions_path`.
-  DeepSeek accepts both, so this was not the 401 — on a provider that accepts one
-  it verifies **green** and dispatches into a 404. Both probes now call the same
-  builder, and `verify_credential_source` records which credential earned the badge.
-- **The unknown-model escape has to be about the model.** A 404 saying
-  `Unknown request URL` authenticated nothing, and was being read as proof that it
-  had. The fake provider was more permissive than the provider — it answered a
-  completion on any path — which is why two probes held the wrong one for three
-  releases with a green suite.
+- **A reload is not `location.reload()` here.** v0.53.2 made the server hand
+  itself over to a fresh process on the same port and the **same token**, so the
+  open tab only has to reload. But the panel strips `?t=` out of the visible URL
+  at boot — deliberately, so it never lands in a screenshot or a pasted link — so
+  a plain `location.reload()` re-requested the **stripped** address. No token on
+  a document request, and the server correctly answered with the
+  un-authenticated page. Deterministic, on every maintenance action that declares
+  `restarts_ui`.
+- **`reloadWithToken()` re-attaches the in-memory token** and is now the only
+  reload route in the panel; a test fails on any bare `location.reload()` in
+  `app.js`. Nothing about the server, the successor, the lock or the token
+  changed — the upgrade had already installed by the time the page broke.
 
-Setup per provider: **[`guides/extra-models.md`](guides/extra-models.md)**.
-
-Before that: **v0.53.2 — the cost that was paid and never written down**,
-**v0.53.1 — "up to date" now names what it checked**, **v0.53.0 — the schema
-the provider rejected, and a routing table you can read**, **v0.52.0 — the
-connection that could not be used, and the routing nobody could see**, and
-**v0.51.0 — the tools you already have, and a connection that proves itself**.
+Before that: **v0.53.3 — the key it never sent**, **v0.53.2 — the cost that was
+paid and never written down**, **v0.53.1 — "up to date" now names what it
+checked**, **v0.53.0 — the schema the provider rejected, and a routing table you
+can read**, and **v0.52.0 — the connection that could not be used, and the
+routing nobody could see**.
 [Read them in the changelog](CHANGELOG.md).
 
 ---

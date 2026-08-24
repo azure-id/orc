@@ -72,6 +72,25 @@ test("tour: the spotlight always stacks above what it points at", () => {
   );
 });
 
+test("handover: the reload puts the token back on the URL", () => {
+  const js = appJs();
+
+  // The boot strips `?t=` out of the address bar, so a plain `location.reload()`
+  // re-requests an address with NO token and the server answers with the
+  // "missing its session token" page. Every post-update hand-over did that.
+  assert.match(js, /function reloadWithToken\(\)/, "a reload helper must exist");
+  assert.match(
+    js,
+    /location\.replace\(location\.pathname \+ q \+ location\.hash\)/,
+    "the helper must re-attach the token to the URL it reloads"
+  );
+  assert.ok(
+    !/location\.reload\(\)/.test(js),
+    "location.reload() drops the token — every reload must go through reloadWithToken()"
+  );
+  assert.match(js, /reloadWithToken\(\);/, "the hand-over must use it");
+});
+
 test("tour: it is per-project, skippable, and replayable", () => {
   const js = appJs();
 

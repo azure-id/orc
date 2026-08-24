@@ -32,6 +32,15 @@ try {
   if (TOKEN) history.replaceState(null, "", location.pathname + location.hash);
 } catch (_) {}
 
+// RELOADING IS NOT `location.reload()` HERE. The line above removed `?t=` from
+// the visible URL, so a plain reload re-requests an address with no token and
+// lands on the "missing its session token" page — which is what every
+// post-update hand-over did. Put the token back on the way out.
+function reloadWithToken() {
+  const q = TOKEN ? "?t=" + encodeURIComponent(TOKEN) : "";
+  location.replace(location.pathname + q + location.hash);
+}
+
 async function api(path, opts) {
   const res = await fetch(path, {
     method: (opts && opts.method) || "GET",

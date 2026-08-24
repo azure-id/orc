@@ -10,6 +10,33 @@ Format: `### v<version> — <title> _(<date>)_`.
 
 ---
 
+### v0.53.4 — the reload that dropped its own token _(2026-08-24)_
+
+**Every `orc update` from the panel ended on `This link is missing its session
+token.` — and the token was never missing.**
+
+v0.53.2 taught the server to hand itself over to a fresh process on the SAME
+port and the SAME token, so the URL in the address bar stays valid and the open
+tab only has to reload. That half worked. The reload did not: the panel strips
+`?t=` out of the visible URL at boot (`00-core.js`, so the token never lands in
+a screenshot or a pasted link), and the hand-over then called
+`location.reload()` — which re-requests **the stripped address**. No `?t=`, no
+`x-orc-token` header on a document request, and the server correctly answered
+with the un-authenticated page. Deterministic, on every maintenance action that
+declares `restarts_ui`.
+
+- **A reload is not `location.reload()` here.** `reloadWithToken()` re-attaches
+  the in-memory token and `location.replace()`s that URL. It is the only reload
+  route in the panel, and a test fails on any bare `location.reload()` in
+  `app.js` — the stripping is deliberate, so the fix has to be the reload, not
+  the strip.
+- Nothing about the server, the successor, the lock, the token generation or the
+  `restarts_ui` declaration changed. The upgrade had already installed by the
+  time the page broke; the user's recovery — `orc ui --stop` then `orc ui` — was
+  producing a *new* token for a server that was already the new build.
+
+---
+
 ### v0.53.3 — the key it never sent _(2026-08-24)_
 
 **A vaulted, verified, routed connection authenticated every wave with the wrong

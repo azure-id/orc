@@ -84,7 +84,7 @@ async function handOver(host) {
   const tryOnce = async () => {
     try {
       await api("/api/meta");
-      location.reload();
+      reloadWithToken();
       return;
     } catch (_) {}
     if (Date.now() > deadline) {
