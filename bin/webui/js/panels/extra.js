@@ -39,12 +39,15 @@ async function renderExtra(body) {
   // Four reads, in parallel. A read that FAILED is not a read that came back
   // empty (v0.49.4): the error is kept so the card can say which half is
   // missing instead of rendering as "you have nothing configured".
-  const [listRes, provRes, docRes, cfgRes, routeRes, laneRes, statRes, rateRes, toolRes, jourRes] = await Promise.all([
+  const [listRes, provRes, docRes, cfgRes, routeRes, roleRes, laneRes, statRes, rateRes, toolRes, jourRes] = await Promise.all([
     read("/api/extra").catch((e) => ({ data: null, error: e })),
     read("/api/extra/providers").catch((e) => ({ data: null, error: e })),
     read("/api/extra/doctor").catch((e) => ({ data: null, error: e })),
     read("/api/config").catch((e) => ({ data: null, error: e })),
     read("/api/extra/route").catch((e) => ({ data: null, error: e })),
+    // v0.55.0 — THE POSITIONS. It exits 1 when nothing routes, which is
+    // exit-code-as-DATA like every other gate command on this panel.
+    read("/api/extra/role").catch((e) => ({ data: null, error: e })),
     read("/api/extra/lanes").catch((e) => ({ data: null, error: e })),
     read("/api/extra/stats").catch((e) => ({ data: null, error: e })),
     read("/api/extra/rates").catch((e) => ({ data: null, error: e })),
@@ -61,6 +64,7 @@ async function renderExtra(body) {
     doctor: docRes.data,
     config: cfgRes.data,
     route: routeRes.data,
+    role: roleRes.data,
     lanes: laneRes.data,
     // `orc extra stats` exits 1 with a real object when nothing has been
     // dispatched yet — an ANSWER, not an error, so it is read like every other
@@ -73,6 +77,7 @@ async function renderExtra(body) {
       list: listRes.error || null,
       providers: provRes.error || null,
       route: routeRes.error || null,
+      role: roleRes.error || null,
       lanes: laneRes.error || null,
       tools: toolRes.error || null,
     },
@@ -186,6 +191,11 @@ function exSetupTab(d, body) {
 function exRoutingTab(d, body, edits) {
   const out = frag();
   out.append(exRoutingCard(d, body, edits));
+  // v0.55.0 — the second ladder, directly below the bands. One tab, two halves,
+  // no seventh tab: a band and a position are two answers to the same question
+  // and reading them apart from each other is how the doc checker ended up
+  // resolving the writer's band for a release.
+  out.append(exSlotCard(d, body, edits));
   out.append(exLanesCard(d));
   return out;
 }
@@ -2061,6 +2071,249 @@ let EX_OPEN_BAND = null;
    Every word here is `orc extra lanes --json`: the shape, the verdict, the
    edges, whether they agreed, and the sentence underneath. The panel decides
    nothing — a second idea of the routing is drift no lint can see. */
+/* ================================================ the POSITIONS (v0.55.0) ==
+
+   A SCORE IS WHAT A BAND NEEDS, AND FOUR LANES DO NOT HAVE ONE. The ladder
+   above this one is the SCORED half — `/orc`, `/orc-ultra`, `/orc-mini`,
+   `/orc-diy`. This one is the other half: `/orc-quick`, `/orc-fast`, `/orc-doc`
+   and `/orc-wiki` pin an agent to a POSITION, and a position is a point rather
+   than an interval.
+
+   EVERY STRING IN THIS CARD COMES FROM `orc extra role list --json`. The panel
+   names no slot meaning, no provider, no model and no agent of its own — the
+   Flow-stepper rule. Writing "cheap work" beside a slot would be the panel
+   deciding what a position means.
+
+   AN UNROUTED SLOT KEEPS ITS SLOT and is drawn as Claude with its pinned agent
+   — the OFF-phase rule. Filtering it out makes "I left the checker on Claude on
+   purpose" and "there is no checker" identical, and makes the ladder change
+   length every time a row is cleared.
+
+   NO PROPORTIONAL BAR. A band has a width because it covers a range of scores;
+   a position covers nothing, and drawing one a width would be the panel
+   inventing an interval the CLI never computed. */
+function exSlotCard(d, body, edits) {
+  const c = card(t("extra.slots.title"));
+  if (d.errors.role) {
+    c.append(failBox(d.errors.role));
+    return c;
+  }
+  const r = d.role || {};
+  const rows = r.slots || [];
+  c.append(el("div", "note", t("extra.slots.sub")));
+  c.append(exWhy(t("extra.slots.subWhy")));
+
+  const verified = ((d.list && d.list.counts) || {}).verified || 0;
+  const list = el("div", "ex-ladder");
+  const entries = [];
+  const openOnly = (which) => {
+    for (const e of entries) if (e !== which) e.close();
+  };
+  for (const row of rows) {
+    const e = exSlotRow(row, d, edits, verified > 0, openOnly);
+    entries.push(e);
+    list.append(e.node);
+  }
+  c.append(list);
+  // The CLI's own sentence: absence is not a hole.
+  if (r.note) c.append(el("div", "note", r.note));
+  c.append(exWhy(t("extra.slots.keepsSlotWhy")));
+
+  // The six `extra_roles` values nothing can resolve. REPORTED, not fixed — and
+  // reported in the CLI's own words, because "nothing resolves this" is a state
+  // and a state word is never the panel's to soften.
+  const un = r.unreachable_roles || [];
+  if (un.length) {
+    const box = el("div", "ex-unreachable");
+    box.append(el("div", "note", t("extra.slots.unreachable")));
+    const ul = el("div", "ex-unreachable-list");
+    for (const u of un) {
+      const row = el("div", "row-actions");
+      row.append(el("span", "mono", u.role));
+      row.append(el("span", "note", u.state));
+      ul.append(row);
+    }
+    box.append(ul);
+    c.append(box);
+  }
+  if (!verified) c.append(empty(t("extra.routing.locked"), t("extra.routing.lockedHint")));
+  return c;
+}
+
+// Which position is open in the editor, so an Apply that re-renders does not
+// throw the person out of the row they were working in — the Runs-row rule.
+let EX_OPEN_SLOT = null;
+
+function exSlotRow(raw, d, edits, verified, openOnly) {
+  const key = "role " + raw.slot;
+  const node = el("div", "ex-band ex-slot");
+  const headBtn = el("button", "ex-band-head ex-slot-head");
+  headBtn.type = "button";
+  headBtn.setAttribute("aria-expanded", "false");
+  const pane = el("div", "ex-band-pane");
+  node.append(headBtn, pane);
+
+  const isOpen = () => node.classList.contains("open");
+  const setOpen = (open) => {
+    node.classList.toggle("open", open);
+    headBtn.setAttribute("aria-expanded", String(open));
+    if (open) EX_OPEN_SLOT = raw.slot;
+    else if (EX_OPEN_SLOT === raw.slot) EX_OPEN_SLOT = null;
+    pane.replaceChildren(open ? editor() : frag());
+  };
+
+  // What a staged edit would make this row read as. `edits` holds the intent,
+  // never the write — nothing reaches disk until Apply.
+  const preview = () => {
+    const staged = edits.map.get(key);
+    if (!staged) return { routes: raw.resolved === "extra", profile: raw.profile, model: raw.model, staged: false };
+    if (staged.kind === "clear" || staged.url === "/api/extra/role/rm")
+      return { routes: false, profile: null, model: null, staged: true };
+    return { routes: true, profile: staged.profile || null, model: staged.model || null, staged: true };
+  };
+
+  const paint = () => {
+    const p = preview();
+    headBtn.replaceChildren();
+    const mid = el("span", "ex-band-mid");
+    mid.append(el("span", "mono ex-band-label", raw.slot));
+    // The LANE, and whether this position is asked for or announced — both the
+    // CLI's words. `announce_point` is where the sentence gets printed, which is
+    // the thing a person actually wants to know before routing a position.
+    mid.append(el("span", "note ex-band-range", raw.lane));
+    headBtn.append(mid);
+    headBtn.append(el("span", "note ex-slot-when", raw.asks ? t("extra.slots.asked") : raw.announce_point));
+    // THE TARGET, never truncated, and never guessed: a position that is not
+    // routed falls through to a NAMED agent, which the CLI hands over.
+    headBtn.append(
+      el("span", "mono ex-band-target", p.routes && p.profile ? p.profile + "/" + p.model : "claude · " + raw.claude.agent)
+    );
+    const chips = el("span", "ex-band-chips");
+    if (p.staged) chips.append(chip(t("extra.routing.staged"), "info"));
+    if (!p.staged && raw.resolved === "extra" && raw.engine) chips.append(chip(raw.engine, "info"));
+    // The CLI's state word, verbatim.
+    if (!p.staged && raw.routed && raw.verify_state)
+      chips.append(chip(raw.verify_state, raw.verify_state === "VERIFIED" ? "ok" : "warn"));
+    if (!p.staged && raw.routed && raw.model_known === false) chips.append(chip(t("extra.routing.modelGone"), "warn"));
+    // ROUTED BUT NOT RESOLVING. The row is held back and the CLI said why — a
+    // position that quietly fell back to Claude is the thing this chip exists
+    // to make impossible to miss.
+    if (!p.staged && raw.routed && raw.resolved !== "extra") chips.append(chip(raw.held_back || "claude", "warn"));
+    headBtn.append(chips);
+    headBtn.append(el("span", "ex-band-caret", "▸"));
+    headBtn.title = raw.slot + " → " + (p.routes && p.profile ? p.profile + "/" + p.model : raw.claude.agent);
+    if (isOpen()) pane.replaceChildren(editor());
+  };
+
+  const editor = () => {
+    const box = el("div", "stack stack-sm");
+    // WHAT THIS POSITION IS, in the CLI's words.
+    box.append(el("div", "note", raw.meaning));
+    box.append(el("div", "note", raw.why));
+    const staged = edits.map.get(key);
+    if (staged) {
+      const line = el("div", "note ex-route-staged");
+      line.append(chip(t("extra.routing.staged"), "info"));
+      line.append(document.createTextNode(" " + staged.value));
+      const undo = el("button", "btn btn-ghost btn-sm", t("extra.routing.undo"));
+      undo.type = "button";
+      undo.addEventListener("click", () => {
+        edits.drop(key);
+        paint();
+      });
+      line.append(undo);
+      box.append(line);
+      return box;
+    }
+    if (!verified) {
+      box.append(el("div", "note", t("extra.routing.lockedHint")));
+      return box;
+    }
+    if (raw.routed) {
+      box.append(
+        kvList([
+          [t("extra.routing.kvProfile"), raw.profile],
+          [t("extra.routing.kvModel"), raw.model],
+          [t("extra.routing.kvSmall"), raw.small_model || "—"],
+          [t("extra.routing.kvTurns"), raw.max_turns === null || raw.max_turns === undefined ? "—" : String(raw.max_turns)],
+          [t("extra.slots.kvDisplaces"), raw.claude.agents.join(" · ")],
+        ])
+      );
+      if (raw.next) box.append(el("div", "note", raw.next));
+      const clear = el("button", "btn btn-sm", t("extra.slots.clear"));
+      clear.type = "button";
+      clear.addEventListener("click", () => {
+        edits.action(key, "/api/extra/role/rm", { slot: raw.slot }, t("extra.slots.stagedClear", { agent: raw.claude.agent }));
+        paint();
+      });
+      const acts = el("div", "row-actions");
+      acts.append(clear);
+      box.append(acts);
+      return box;
+    }
+    box.append(el("div", "note", t("extra.slots.displaces", { agents: raw.claude.agents.join(" · ") })));
+    box.append(exSlotControls(raw, d, edits, key, paint));
+    return box;
+  };
+
+  headBtn.addEventListener("click", () => {
+    const next = !isOpen();
+    if (next) openOnly(entry);
+    setOpen(next);
+  });
+  paint();
+  const entry = { node, close: () => isOpen() && setOpen(false) };
+  if (EX_OPEN_SLOT === raw.slot) setOpen(true);
+  return entry;
+}
+
+function exSlotControls(row, d, edits, key, paint) {
+  // The same two controls the band editor uses, for the same reasons: a
+  // connection that has never answered is DISABLED and labelled rather than
+  // hidden, and whether the model control is a dropdown or a box is the CLI's
+  // answer, never this panel's.
+  const profiles = (d.list && d.list.profiles) || [];
+  const sel = exSelect(
+    [{ value: "", label: t("extra.routing.pickProfile") }].concat(
+      profiles.map((p) => ({
+        value: p.name,
+        label: p.name + (p.verified_at ? "" : "  " + t("extra.routing.untested")),
+        disabled: !p.verified_at,
+      }))
+    )
+  );
+  const box = exModelBox(t("extra.routing.modelPh"));
+  const fillModels = () => {
+    const p = profiles.find((x) => x.name === sel.value);
+    box.load(p ? p.name : null);
+  };
+  sel.addEventListener("change", fillModels);
+  fillModels();
+
+  const add = el("button", "btn btn-sm", t("extra.slots.hold"));
+  add.type = "button";
+  add.addEventListener("click", () => {
+    const chosen = box.value();
+    if (!sel.value || !chosen) return;
+    const target = sel.value + "/" + chosen;
+    // REPLACING A POSITION IS A ROUTING CHANGE, so the confirmation NAMES what
+    // it replaces. A count is not consent — and neither is a slot id.
+    if (row.routed && !confirm(t("extra.slots.confirmReplace", { slot: row.slot, old: row.profile + "/" + row.model, next: target })))
+      return;
+    edits.action(
+      key,
+      "/api/extra/role/set",
+      { slot: row.slot, target, profile: sel.value, model: chosen },
+      t("extra.slots.stagedSet", { slot: row.slot, target })
+    );
+    paint();
+  });
+
+  const controls = el("div", "ex-route-controls");
+  controls.append(sel, box.node, add);
+  return controls;
+}
+
 function exLanesCard(d) {
   const c = card(t("extra.lanes.title"));
   c.append(el("div", "note", t("extra.lanes.sub")));
@@ -2092,6 +2345,17 @@ function exLanesCard(d) {
       row.append(
         el("div", "note mono", t("extra.lanes.edges", { band: l.band, edges: (l.edges || []).join(","), agree: String(l.agree) }))
       );
+    // v0.55.0 — a SLOT lane has no band and no edges. It has one row per
+    // POSITION, each carrying the agent it displaces, and an unrouted one keeps
+    // its row: the whole point is that the two positions in a lane are two
+    // separate decisions.
+    for (const sl of l.slots || []) {
+      const line = el("div", "note mono ex-lane-slot");
+      line.append(el("span", "", sl.slot));
+      line.append(el("span", "", " → "));
+      line.append(el("span", "", sl.routes ? sl.profile + "/" + sl.model : "claude · " + sl.claude));
+      row.append(line);
+    }
     row.append(el("div", "note", l.detail));
     list.append(row);
   }

@@ -6,14 +6,14 @@
 
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
-![Version](https://img.shields.io/badge/version-0.54.0-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.55.0-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
 ![Dependencies](https://img.shields.io/badge/dependencies-zero-lightgrey.svg?style=for-the-badge)
 ![GitHub stars](https://img.shields.io/github/stars/azure-id/orc?style=for-the-badge&color=yellow)
 
-**Latest: v0.54.0** · updated 2026-08-25 · [full changelog](CHANGELOG.md)
+**Latest: v0.55.0** · updated 2026-08-26 · [full changelog](CHANGELOG.md)
 
 **🇮🇩 [Baca dalam Bahasa Indonesia](README-id.md)**
 
@@ -440,37 +440,36 @@ a current audit: [EVAL-REPORT.md](EVAL-REPORT.md).
 **Full history: [CHANGELOG.md](CHANGELOG.md)** — or `orc changelog`, which prints
 only what is newer than the version you have.
 
-### v0.54.0 — a failed dispatch is a POSITION, not a blank page _(2026-08-25)_
+### v0.55.0 — a score is what a band needs, and four lanes do not have one _(2026-08-26)_
 
-**A worker on another model wrote six of seven lines and lost its connection.
-ORC sent the same task to Claude from scratch — onto a file that was already
-two-thirds written.**
+**`/orc-quick`, `/orc-fast`, `/orc-doc` and `/orc-wiki` pin an agent to a
+position instead of scoring a task. `orc extra` routed them by reading that
+agent's score band — arithmetic on a number nobody chose. It was wrong twice and
+dead once.**
 
-- **Every foreign dispatch now writes a journal**, by the CLI, before the first
-  byte leaves the machine: what HEAD was, what git already saw, and a hash and a
-  line count for every file the task was allowed to touch. It survives the
-  process that wrote it, which is the whole point.
-- **`orc extra reconcile <task>` is free and deterministic** — five states, five
-  exit codes — and tells you which files changed, by how many lines, what the
-  worker last did, and **whose fault it was**: `provider` · `network` · `local` ·
-  `worker` · `orc`, each with its evidence. A `network` verdict **holds the
-  wave**: a Claude fallback would fail too, so ORC stops instead of paying for a
-  second failure.
-- **`orc extra resume-slice` continues instead of restarting.** An ordinary
-  dispatch of a derived slice — zero new engines, zero new agents — that never
-  widens `declared_files`, never moves `acceptance[]`, never moves the score, and
-  refuses on a drifted slice. A non-retryable failure still goes to Claude, but
-  **as a resume slice**, so the fallback stops being a from-scratch dispatch.
-- **Six refusals, each named, each writing nothing.** A live attempt is never
-  resumed; a file that moved *backwards* blocks and names the paths. Orphaned
-  dispatches are **reported** at preflight and never continued on their own.
-- **`orc ui ▸ Extra ▸ Recovery`**, per-profile reliability beside cost (no
-  percentage below 10 dispatches), two config keys, and a new mocked run.
+- **`orc extra role` holds six POSITIONS** — `quick-executor` · `fast-executor` ·
+  `doc-writer` · `doc-checker` · `wiki-scanner-deep` · `wiki-scanner-light`. One
+  connection and one model each, and a row's presence is the arming. All six are
+  always listed: an unrouted one keeps its slot and reads as the Claude agent it
+  falls back to.
+- **`orc extra resolve --slot` never touches a band**, and the Claude answer it
+  carries is a pinned NAME rather than an interval. Nine hold-backs, each named.
+- **Precedence, one sentence:** extra decides *whether* a Claude agent runs at
+  all; `opus5_only` and the score tables only decide *which* one runs where extra
+  did not take it. Under a taken position `opus5_only` is not consulted — and it
+  stays fully live for every position with no row.
+- **The bridge accepts a slot** (`band` becomes `slot:<slot>`, so cost reporting
+  splits per position for free) with **zero new engines, zero new dispatch paths
+  and zero new agents**. A doc checker now resolves its OWN position, `/orc-wiki`
+  can route at all, and `/orc-quick` gets a THIRD OPTION on its menu — never a
+  default, never sticky, re-asked after a failure.
+- **A second ladder in `orc ui ▸ Extra ▸ Routing`**, and **zero config keys
+  added**.
 
-Before that: **v0.53.4 — the reload that dropped its own token**, **v0.53.3 — the
-key it never sent**, **v0.53.2 — the cost that was paid and never written down**,
-**v0.53.1 — "up to date" now names what it checked**, and **v0.53.0 — the schema
-the provider rejected, and a routing table you can read**.
+Before that: **v0.54.0 — a failed dispatch is a POSITION, not a blank page**,
+**v0.53.4 — the reload that dropped its own token**, **v0.53.3 — the key it never
+sent**, **v0.53.2 — the cost that was paid and never written down**, and
+**v0.53.1 — "up to date" now names what it checked**.
 [Read them in the changelog](CHANGELOG.md).
 
 ---

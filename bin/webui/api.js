@@ -331,6 +331,10 @@ const READS = {
   "/api/extra/tools": () => ["extra", "tools"],
   "/api/extra/keyhelp": (q) => ["extra", "keyhelp", String(q.profile || "")],
   "/api/extra/route": () => ["extra", "route"],
+  // v0.55.0 — THE POSITIONS, the non-scored half of routing. It exits 1 when
+  // nothing routes, which is exit-code-as-DATA like `pattern status` — an empty
+  // result is an ANSWER and it still returns its whole object.
+  "/api/extra/role": () => ["extra", "role", "list"],
   // v0.52.0 (D6) — WHICH LANE a band governs, computed through the same
   // resolver every dispatch uses. The panel renders it and derives nothing:
   // a band with no lane attached is not a routing decision.
@@ -508,6 +512,16 @@ const WRITES = {
     return argv;
   },
   "/api/extra/route/rm": (b) => ["extra", "route", "rm", String(b.band)],
+  // A slot is a POINT, not an interval, so there is no overlap to refuse and
+  // `set` on an occupied one REPLACES — which is why the panel confirms it and
+  // names what it replaces. A count is not consent.
+  "/api/extra/role/set": (b) => {
+    const argv = ["extra", "role", "set", String(b.slot), String(b.target)];
+    if (b.small_model) argv.push("--small-model", String(b.small_model));
+    if (b.max_turns) argv.push("--max-turns", String(b.max_turns));
+    return argv;
+  },
+  "/api/extra/role/rm": (b) => ["extra", "role", "rm", String(b.slot)],
   // v0.51.0 — running the install in the USER'S OWN TERMINAL. It is a POST
   // because it launches something; it writes no config, stores no state and
   // never elevates. A launch that could not happen comes back exit 0 carrying

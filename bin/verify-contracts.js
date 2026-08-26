@@ -106,6 +106,7 @@ const CONTRACTS = [
       "skills/orc-retro/SKILL.md",
       "skills/orc-retro/examples/retro-mock.md",
       "skills/orc-wiki/SKILL.md",
+      "skills/orc-wiki/references/extra.md",
       "skills/orc/README.md",
       "skills/orc/SKILL.md",
       "skills/orc/references/trace-protocol.md",
@@ -318,6 +319,34 @@ const CONTRACTS = [
       "skills/orc/references/trace-protocol.md",
     ],
   },
+  // ── v0.55.0 — ROLE SLOTS. The non-scored half of routing ────────────────
+  {
+    // The command family that holds the six POSITIONS. It is named in every
+    // lane spine that has one, because a lane that says it routes foreign and
+    // cannot say HOW is the dead `/orc-wiki` row all over again.
+    name: "the POSITIONS are held by one command family (v0.55.0)",
+    token: "orc extra role",
+    binFiles: ["bin/cli.js"],
+    files: [
+      "skills/_shared/extra-dispatch.md",
+      "skills/orc-diy/references/blocks/extra.md",
+      "skills/orc-doc/SKILL.md",
+      "skills/orc-fast/SKILL.md",
+      "skills/orc-quick/references/dispatch-gate.md",
+      "skills/orc-quick/SKILL.md",
+      "skills/orc-wiki/SKILL.md",
+      "skills/orc-wiki/references/extra.md",
+    ],
+  },
+  {
+    // The trace band spelling for a position. The field NAME is unchanged, so
+    // the parser and the dedupe are untouched — but a rename of the PREFIX
+    // would silently split every slot dispatch out of `orc extra stats`.
+    name: "a slot dispatch's band is `slot:<slot>` (v0.55.0)",
+    token: "slot:<slot>",
+    binFiles: ["bin/cli.js"],
+    files: ["skills/_shared/extra-dispatch.md", "skills/orc/references/trace-protocol.md"],
+  },
   // ── v0.54.0 — RECOVERY. A failure is a POSITION, not a blank page ────────
   {
     // The sixth member of the family. It is what stops a fallback from landing
@@ -339,6 +368,8 @@ const CONTRACTS = [
       "skills/orc-diy/references/blocks/extra.md",
       "skills/orc-fast/SKILL.md",
       "skills/orc-mini/SKILL.md",
+      // v0.55.0 — /orc-wiki can finally route, so it finally owes the rule.
+      "skills/orc-wiki/references/extra.md",
       "skills/orc/SKILL.md",
       "skills/orc/references/preflight-report.md",
     ],
@@ -821,6 +852,7 @@ const CONTRACTS = [
       "skills/orc-pact/SKILL.md",
       "skills/orc-wiki/README.md",
       "skills/orc-wiki/SKILL.md",
+      "skills/orc-wiki/references/extra.md",
       "skills/orc-wiki/references/crosslink.md",
       "skills/orc-wiki/references/integrity-check.md",
       "skills/orc-wiki/references/orientation.md",
@@ -1584,6 +1616,7 @@ const CONTRACTS = [
       "skills/orc-quick/references/dispatch-gate.md",
       "skills/orc-retro/SKILL.md",
       "skills/orc-wiki/SKILL.md",
+      "skills/orc-wiki/references/extra.md",
       "skills/orc-wiki/references/partial-refresh.md",
       "skills/orc-wiki/references/pattern-prewarm.md",
       "skills/orc/SKILL.md",
@@ -2602,6 +2635,7 @@ const CONTRACTS = [
     token: "orc wiki plan",
     files: [
       "skills/orc-wiki/SKILL.md",
+      "skills/orc-wiki/references/extra.md",
       "skills/orc-wiki/references/partial-refresh.md",
     ],
     binFiles: ["bin/cli.js"],
@@ -2622,7 +2656,10 @@ const CONTRACTS = [
       "agents/MODEL-MAPPING.md",
       "agents/orc-wiki-scanner-sonnet-5-high.md",
       "skills/_shared/opus5-only.md",
+      // v0.55.0 — the slot table names the agent `wiki-scanner-light` displaces.
+      "skills/_shared/extra-dispatch.md",
       "skills/orc-wiki/SKILL.md",
+      "skills/orc-wiki/references/extra.md",
       "skills/orc-wiki/references/partial-refresh.md",
     ],
     binFiles: ["bin/cli.js"],
@@ -2632,6 +2669,7 @@ const CONTRACTS = [
     token: "wiki_scan_tier",
     files: [
       "skills/orc-wiki/SKILL.md",
+      "skills/orc-wiki/references/extra.md",
       "skills/orc-wiki/references/partial-refresh.md",
     ],
     binFiles: ["bin/cli.js"],

@@ -85,6 +85,10 @@ const GROUP_OF = {
   // half-finished foreign dispatch is a thing you do at the terminal and in the
   // panel, not a lane you invoke.
   "extra-recovery": "tools",
+  // v0.55.0. Same shelf again: the four lanes that pin an agent instead of
+  // scoring a task are a routing decision, and routing is where `orc-extra`
+  // already lives.
+  "extra-slots": "tools",
 
   "orc-wiki": "knowledge",
   "orc-pattern": "knowledge",

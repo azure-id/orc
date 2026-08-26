@@ -70,6 +70,12 @@ const EXTRA_VALUE_FLAGS = new Set([
   // value swallowed as a positional is a task id nobody asked about.
   "--out",
   "--attempt",
+  // v0.55.0 - the POSITIONS. `orc extra resolve --slot doc-writer` must not
+  // read "doc-writer" as the score positional: a value swallowed as a
+  // positional is a second shape of the question nobody asked for.
+  "--slot",
+  "--boundary",
+  "--risk",
 ]);
 
 function flag(name) {
@@ -864,6 +870,12 @@ const EXTRA_ROLES_ALL = [
   "doc-writer",
   "doc-checker",
 ];
+// v0.55.0 - `doc-writer` and `doc-checker` moved to the SLOT ledger (`orc extra
+// role`). They stay in the accepted set for ONE release as deprecated read+set
+// members - the `LEGACY_KEYS` precedent (`opus5_executor_only` -> `opus5_only`)
+// - so a renamed mechanism is NOT A SILENT REVERT: a config naming one is
+// accepted, WARNED BY NAME, pointed at the new command, and arms nothing.
+const LEGACY_EXTRA_ROLES = ["doc-writer", "doc-checker"];
 // CSV (or bracketed) subset validator → a normalized flow-array string
 // (`[analyze, plan]`), which serializeValue passes through as valid YAML.
 const vSubset = (allowed) =>
@@ -906,7 +918,7 @@ const CONFIG_META = [
   // providers x models x bands — is a LEDGER with a CLI and a panel
   // (`orc extra`), not eleven YAML keys nobody can hold in their head.
   { key: "extra_enabled", def: false, tier: "common", validate: vEnum("true", "false"), options: ["true", "false"], desc: "Master gate for `orc extra` — dispatching a scored task to a non-Claude worker (DeepSeek, GLM, Kimi, a local Ollama, any OpenAI-/Anthropic-compatible endpoint you can name). NOTHING changes unless true, the fable5_enabled precedent. The orchestrator always stays Claude; what moves is who executes a slice. Every run that will cross the boundary PRINTS it at Phase 1 — routing work off Claude silently is the failure mode this whole subsystem is shaped around." },
-  { key: "extra_roles", def: "[executor]", tier: "common", validate: vSubset(EXTRA_ROLES_ALL), options: EXTRA_ROLES_ALL, desc: "Which dispatched roles may go foreign (CSV). Executor only by default, deliberately: an executor's output is checked by the smoke gate, the TDD gate, the reviewer and the worktree-delta check, all of which are engine-blind — while a REVIEWER you cannot trust is worse than no reviewer at all, because it launders a finding nobody made." },
+  { key: "extra_roles", def: "[executor]", tier: "common", validate: vSubset(EXTRA_ROLES_ALL), options: EXTRA_ROLES_ALL.filter((r) => !LEGACY_EXTRA_ROLES.includes(r)), desc: "Which SCORED-LANE roles may go foreign (CSV). Executor only by default, deliberately: an executor's output is checked by the smoke gate, the TDD gate, the reviewer and the worktree-delta check, all of which are engine-blind — while a REVIEWER you cannot trust is worse than no reviewer at all, because it launders a finding nobody made. `executor` is the only value anything resolves today; reviewer/verifier/analyst/planner/scout/test-author are declared and nothing dispatches them yet (`orc extra role list` reports that honestly). doc-writer/doc-checker MOVED to `orc extra role` in v0.55.0 and are kept here for one release as deprecated no-ops." },
   { key: "extra_risk_tasks", def: "off", tier: "common", validate: vEnum("off", "on"), options: ["off", "on"], desc: "Whether a task with a non-empty cited `risk[]` (auth, money, migration, security, concurrency, data-integrity) may leave Claude. OFF holds it on the Claude ladder whatever the route table says, and the preflight NAMES it as held back. ORC already refuses to send a refund-endpoint change to a cheap model; this keeps Extra from becoming the hole in that rule." },
   { key: "extra_on_failure", def: "fallback", tier: "common", validate: vEnum("fallback", "stop"), options: ["fallback", "stop"], desc: "What an unreachable endpoint, a 401, a 429 past backoff, a timeout or a malformed return does. `fallback` re-dispatches the task to the Claude band it would have had, ANNOUNCED, and the run continues. `stop` is for people who would rather stop than silently start paying Anthropic rates. A failed foreign dispatch is never a dead run either way." },
   { key: "extra_max_concurrent", def: 1, tier: "common", validate: vInt(1), options: [1, 2, 3], desc: "Foreign dispatches in flight at once. Per-provider rate limits are undocumented in aggregate, so 1 is the honest default — a wave of 3 that 429s costs more in repairs than the parallelism saved." },
@@ -1103,7 +1115,14 @@ function configList(claudeDir) {
       const val = has ? map[m.key] : m.def;
       const src = has ? ui.color.green("overridden") : ui.color.gray("default   ");
       const opts = m.options ? ` ${ui.color.gray("[options: " + m.options.join(" | ") + "]")}` : "";
-      console.log(`  ${ui.color.cyan(m.key.padEnd(pad))}  ${String(val).padEnd(30)} ${src}  ${ui.color.gray(m.desc)}${opts}`);
+      // v0.55.0 — a DEPRECATED member of a live key is marked on the row that
+      // carries it, not only in the prose nobody re-reads.
+      const legacy =
+        m.key === "extra_roles" ? INLINE_LIST(val).filter((r) => LEGACY_EXTRA_ROLES.includes(r)) : [];
+      const mark = legacy.length
+        ? ui.color.yellow(`   (${legacy.join(", ")} moved to \`orc extra role\` — inert here)`)
+        : "";
+      console.log(`  ${ui.color.cyan(m.key.padEnd(pad))}  ${String(val).padEnd(30)} ${src}  ${ui.color.gray(m.desc)}${opts}${mark}`);
     }
   }
   // The resolve order, said out loud whenever it is a composite. A user
@@ -1111,9 +1130,11 @@ function configList(claudeDir) {
   // is no longer the whole answer for every score.
   if (isTrue(map.extra_enabled)) {
     let rows = [];
+    let slotRows = [];
     try {
       const l = readExtra(claudeDir);
       rows = l ? l.routes : [];
+      slotRows = l ? l.slots : [];
     } catch (_) {}
     console.log(ui.header("Resolve order  (highest wins)"));
     console.log(
@@ -1127,6 +1148,20 @@ function configList(claudeDir) {
       );
     else
       console.log("  " + ui.color.gray("no route row yet — extra_enabled is armed but nothing goes foreign."));
+    // v0.55.0 — THE POSITIONS, on the same ladder. Four lanes have no score, so
+    // a band table says nothing about them at all; a slot row outranks the
+    // pinned agent exactly as a band row outranks the table.
+    console.log(
+      "\n  extra slot row   >  opus5_only's variant of that slot's agent  >  the shipped agent\n"
+    );
+    if (slotRows.length)
+      console.log(
+        "  " +
+          ui.color.cyan(slotRows.map((r) => r.slot).join(", ")) +
+          ui.color.gray("  → a non-Claude worker.  `opus5_only` is NOT CONSULTED for those positions, and is fully live for every slot with no row.")
+      );
+    else
+      console.log("  " + ui.color.gray("no slot row yet — every position falls through to its pinned Claude agent. `orc extra role` holds them."));
     console.log("  " + ui.color.gray("INERT in /orc-quick, which asks which agent before every dispatch."));
   }
 
@@ -1158,12 +1193,24 @@ function shadowReason(key, map, claudeDir) {
   // would be a lie — the honest report is WHICH RANGES were taken.
   if (isTrue(map.extra_enabled) && claudeDir && (key === "opus5_only" || key === "rubric_bands_override")) {
     let taken = [];
+    let slots = [];
     try {
       const l = readExtra(claudeDir);
       taken = l ? l.routes.map((r) => `[${r.from},${r.to >= 100 ? "100]" : r.to + ")"}`) : [];
+      // v0.55.0 — AND THE POSITIONS. `opus5_only` is not "inert" under a taken
+      // slot, it is NOT CONSULTED for that slot — and it stays fully live for
+      // every slot with no row. That distinction is the whole reason this is
+      // printed rather than flattened into one word.
+      slots = l ? l.slots.map((r) => r.slot) : [];
     } catch (_) {}
-    if (taken.length)
-      return `partly shadowed by extra_enabled — ${taken.join(", ")} ${taken.length === 1 ? "is" : "are"} routed to a non-Claude worker; every other score still resolves here`;
+    if (taken.length || (slots.length && key === "opus5_only")) {
+      const parts = [];
+      if (taken.length)
+        parts.push(`${taken.join(", ")} ${taken.length === 1 ? "is" : "are"} routed to a non-Claude worker`);
+      if (slots.length && key === "opus5_only")
+        parts.push(`the ${slots.join(", ")} position${slots.length === 1 ? " is" : "s are"} held by one too (not consulted here)`);
+      return `partly shadowed by extra_enabled — ${parts.join("; ")}; every other score and position still resolves here`;
+    }
   }
   if (String(map.opus5_only) !== "true") return null;
   if (key.startsWith("fable5_"))
@@ -1205,9 +1252,27 @@ function scoreTableJson(map, claudeDir) {
   // COMPOSITE — because the truth is a composite, and a single word would be
   // a lie about what the next dispatch will do.
   let extra = null;
+  // v0.55.0 — THE POSITIONS ride beside the bands, never inside them. A slot is
+  // not a range, so it can never be rendered on the score ladder; a renderer
+  // that had to guess would draw a band nobody chose.
+  let extraSlots = null;
   if (isTrue(map.extra_enabled) && claudeDir) {
     try {
       const l = readExtra(claudeDir);
+      if (l && l.slots.length)
+        extraSlots = l.slots.map((r) => {
+          const row = extraSlotRow(r.slot);
+          return {
+            slot: r.slot,
+            lane: row ? row.lane : null,
+            via: `extra:${r.profile}`,
+            profile: r.profile,
+            model: r.model,
+            // The pinned agent this position takes off the board. A NAME, never
+            // an interval — which is why `opus5_only` is not consulted for it.
+            displaces: row ? extraSlotClaude(row, forced).agents : [],
+          };
+        });
       if (l && l.routes.length)
         extra = l.routes
           .slice()
@@ -1224,15 +1289,20 @@ function scoreTableJson(map, claudeDir) {
     } catch (_) {}
   }
   return {
-    active: extra ? `extra+${base}` : base,
+    active: extra || extraSlots ? `extra+${base}` : base,
     base,
     default: bandRows(DIY_SCORE_TABLE),
     opus5_only: bandRows(OPUS5_SCORE_TABLE),
     extra,
+    // Named separately from `extra` on purpose: a consumer that renders bands
+    // must not silently render a position as one.
+    extra_slots: extraSlots,
     // The one place the precedence is written down as data, so a renderer
     // never has to re-derive it (P5, applied to the table as well as to the
-    // dispatch).
+    // dispatch). The slot ladder is the same sentence with the tables replaced
+    // by the pinned agent: extra decides WHETHER a Claude agent runs at all.
     resolve_order: ["extra", "opus5_only", "rubric_bands_override", "default"],
+    slot_resolve_order: ["extra slot row", "opus5_only variant of that slot's agent", "the shipped agent"],
   };
 }
 
@@ -1346,9 +1416,25 @@ function configSet(claudeDir, key, rawValue) {
     const n = applyFable5Effort(claudeDir, res.value);
     if (n) console.log(`  ↳ rewrote effort: ${res.value} in ${n} Fable 5 agent file(s).`);
   }
+  // v0.55.0 — the two roles that moved to `orc extra role`. Accepted, WARNED BY
+  // NAME, pointed at the new command, and arming nothing. The `LEGACY_KEYS`
+  // precedent: a renamed mechanism must never be a silent revert.
+  if (key === "extra_roles") extraLegacyRoleWarn(res.value);
   if (key.startsWith("fable5")) fable5Warn(claudeDir);
   if (key === "opus5_only") opus5Notice(String(res.value) === "true", claudeDir);
   if (key === "opus5_only" || key === "extra_enabled") extraShadowNotice(claudeDir);
+}
+
+// The deprecation notice for the two roles that became POSITIONS. It fires on
+// the value the user just wrote, so it names exactly what they typed.
+function extraLegacyRoleWarn(value) {
+  const named = INLINE_LIST(value).filter((r) => LEGACY_EXTRA_ROLES.includes(r));
+  if (!named.length) return;
+  console.error(
+    `  ⚠ ${named.join(" and ")} no longer ${named.length === 1 ? "arms" : "arm"} anything from here — they moved to the slot ledger in v0.55.0.\n` +
+      named.map((r) => `    orc extra role set ${r} <profile>/<model>`).join("\n") +
+      "\n    The value is kept for one release so a renamed mechanism is not a silent revert."
+  );
 }
 
 // A shadowed setting must never be silent — the v0.36.0 rule, applied to a
@@ -4406,8 +4492,19 @@ const WIKI_TIER_LADDER = [
   { id: "small-delta", tier: "light", why: "small delta, no new surface" },
 ];
 
+// The POSITION each tier resolves to (v0.55.0). Two slots and ONE Opus 5 agent
+// is not a contradiction: a slot names the POSITION, not the model, and the
+// ladder already collapses both tiers onto that agent while `opus5_only` is on.
+const WIKI_TIER_SLOT = { deep: "wiki-scanner-deep", light: "wiki-scanner-light" };
+
 // `always_deep` restores pre-v0.46.0 behaviour exactly: every row returns deep.
-function wikiScanTier(input, cfg) {
+//
+// v0.55.0 — `claudeDir` is OPTIONAL and only decides the `extra` field. Passing
+// it asks the SLOT resolver whether this tier's position is held by a non-Claude
+// worker; omitting it answers the tier question alone. The resolved tier is
+// still ALWAYS printed, and so is its target: a cheaper model is never a quiet
+// substitution, and neither is a different company's.
+function wikiScanTier(input, cfg, claudeDir) {
   const always = String((cfg && cfg.wiki_scan_tier) || "ladder") === "always_deep";
   const deepFiles = Number((cfg && cfg.wiki_tier_deep_files) || 3);
   let rowId = "small-delta";
@@ -4422,11 +4519,31 @@ function wikiScanTier(input, cfg) {
     : tier === "deep"
       ? WIKI_SCANNER_DEEP
       : WIKI_SCANNER_LIGHT;
+  const slot = WIKI_TIER_SLOT[tier];
+  const ex = claudeDir ? extraResolveSlot(claudeDir, slot, {}) : null;
   return {
     tier,
     agent,
     rule: row.id,
     why: always && row.tier === "light" ? "wiki_scan_tier=always_deep overrides the ladder" : row.why,
+    slot,
+    // `null` when nobody asked; an object when they did. A row that routes
+    // carries the provider, the model and the agent it displaces, so the tier
+    // line can print its target without composing a second wording for it.
+    extra:
+      ex && ex.resolved === "extra"
+        ? {
+            routes: true,
+            profile: ex.profile,
+            provider: ex.provider,
+            model: ex.model,
+            engine: ex.engine,
+            displaces: ex.claude.agent,
+            announce: ex.announce,
+          }
+        : ex
+          ? { routes: false, claude: ex.claude.agent, why: ex.why }
+          : null,
   };
 }
 
@@ -4488,7 +4605,8 @@ function wikiPlanRows(claudeDir) {
     const newSurface = !structural && docHasNewSurface(paths.root, anchor, hits);
     const t = wikiScanTier(
       { first_scan: false, structural, touched: hits.length, new_surface: newSurface },
-      cfg
+      cfg,
+      claudeDir
     );
     const u = usageFor(usage, d.file);
     const est = budgetScanEstimate(rates, t.agent);
@@ -4505,6 +4623,10 @@ function wikiPlanRows(claudeDir) {
       agent: t.agent,
       tier_rule: t.rule,
       tier_why: t.why,
+      // THE POSITION this tier resolves to, and whether it is held. A scan that
+      // will run off Claude is named BEFORE it is paid for.
+      slot: t.slot,
+      extra: t.extra,
       new_surface: newSurface,
       estimate: est,
       // Priced HERE, so the JSON consumer (and `orc ui`) never has to know a
@@ -4636,6 +4758,14 @@ function wikiPlan(claudeDir) {
         `${used.padEnd(6)} ${r.tier.padEnd(7)} ${tok.padEnd(13)} ${usd}`
     );
     if (r.state === "STRUCTURAL") console.log(`      covered file gone: ${r.gone.slice(0, 3).join(", ")}`);
+    // v0.55.0 — THE TARGET, beside the tier that chose it. The tier line was
+    // already never silent; a scan going to a third party is the other half of
+    // the same promise.
+    if (r.extra && r.extra.routes)
+      console.log(
+        `      -> ${ui.color.cyan(r.extra.provider + "/" + r.extra.model)} via \`${r.extra.profile}\`  ` +
+          ui.color.gray(`(displaces ${r.extra.displaces})`)
+      );
     if (r.retire_hint)
       console.log(`      ⓘ never used in the last ${r.used_of} runs — consider retiring instead`);
   });
@@ -4652,9 +4782,11 @@ function wikiPlan(claudeDir) {
     console.log("\n  free repairs FIRST (a user must never pay for what a free step fixes):");
     for (const r of repairs) console.log(`    ${r.cmd.padEnd(46)} ${r.what}`);
   }
+  const foreign = rows.filter((r) => r.extra && r.extra.routes).length;
   console.log(
     `\n  tier: ${deep} deep · ${rows.length - deep} light` +
       (String(p.cfg.wiki_scan_tier || "ladder") === "always_deep" ? "   (wiki_scan_tier=always_deep)" : "") +
+      (foreign ? `\n  ` + ui.mark.warn(`${foreign} of these scan-tasks would run off Claude — see the -> lines above.`) : "") +
       `\n  Run:  /orc-wiki refresh --top ${Math.min(2, rows.length)}`
   );
   process.exit(code);
@@ -14640,43 +14772,70 @@ const DOC_EXTRA_ROLE_OF = { writer: "doc-writer", checker: "doc-checker" };
 
 // Resolution, highest wins, and it is PRINTED:
 //
-//   doc.json.extra (this document) > config.extra_roles (the project) > off
+//   doc.json.extra (this document) > the slot row exists > off
 //
-// A document set to `both` when `extra_roles` names neither role resolves to
-// OFF and SAYS SO — a shadowed setting must never be silent, the same rule
+// v0.55.0 — `config.extra_roles` IS NO LONGER CONSULTED. It was a project-wide
+// list that armed both roles at once, and its two doc members moved to the slot
+// ledger (`orc extra role`) where a POSITION is chosen with a profile and a
+// model. The per-document switch stays exactly as it was, because a runbook and
+// a customer-facing PRD are different documents.
+//
+// A document set to `both` when only ONE position is held resolves to that one
+// and SAYS SO — a shadowed setting must never be silent, the same rule
 // `orc config set` follows when it names every key it makes inert.
+//
+// AND EACH ROLE RESOLVES ITS OWN TARGET. Before this release the hardcoded
+// `edges:` field resolved `orc-doc-writer-opus-5-med` whatever `resolved` said,
+// so a document set to `checker` reported the WRITER's band — a band it was not
+// routing — while the checker actually runs at a different rung entirely.
 function docExtraResolve(claudeDir, d) {
   const cfg = resolvedConfig(claudeDir);
   const roles = INLINE_LIST(cfg.extra_roles).filter(Boolean);
   const stored = DOC_EXTRA_MODES.includes(d.extra) ? d.extra : null;
-  const fromConfig = (roles.includes("doc-writer") ? 1 : 0) + (roles.includes("doc-checker") ? 2 : 0);
-  const configMode = ["off", "writer", "checker", "both"][fromConfig === 3 ? 3 : fromConfig === 1 ? 1 : fromConfig === 2 ? 2 : 0];
-  const wanted = stored || configMode;
+  // The slot rows are the project-level floor now. A position with no row is
+  // Claude, which is a correct answer rather than a gap.
+  const held = {};
+  for (const w of ["writer", "checker"])
+    held[w] = extraResolveSlot(claudeDir, DOC_EXTRA_ROLE_OF[w], {});
+  const heldNames = ["writer", "checker"].filter((w) => held[w].resolved === "extra");
+  const slotMode = heldNames.length === 2 ? "both" : heldNames.length === 1 ? heldNames[0] : "off";
+  const wanted = stored || slotMode;
   const want = wanted === "both" ? ["writer", "checker"] : wanted === "off" ? [] : [wanted];
-  // The project list is a FLOOR the document cannot rise above: `extra_roles` is
-  // what the user told ORC it may hand over at all.
-  const granted = want.filter((w) => roles.includes(DOC_EXTRA_ROLE_OF[w]));
+  const granted = want.filter((w) => held[w].resolved === "extra");
   const resolved = granted.length === 2 ? "both" : granted.length === 1 ? granted[0] : "off";
   const shadowed = want.filter((w) => granted.indexOf(w) === -1);
+  // A config still naming one of the retired roles warns ONCE, by name, and
+  // arms nothing — the deprecation is visible where the decision is read.
+  const legacyRoles = roles.filter((r) => LEGACY_EXTRA_ROLES.includes(r));
   return {
     resolved,
     stored,
-    source: stored ? "doc.json" : roles.length ? "config.extra_roles" : "off",
+    source: stored ? "doc.json" : heldNames.length ? "slot rows" : "off",
     config_roles: roles,
-    order: ["doc.json (this document)", "config.extra_roles (the project)", "off"],
-    // Never silent. The shadow is named, in both directions.
-    shadowed_by_config: shadowed,
+    order: ["doc.json (this document)", "the slot row exists (orc extra role)", "off"],
+    // Never silent. The shadow is named, in both directions — and it now names
+    // the missing SLOT ROW rather than a config key that no longer decides.
+    shadowed_by_slots: shadowed,
+    legacy_config_roles: legacyRoles,
+    legacy_warning: legacyRoles.length
+      ? `extra_roles still names ${legacyRoles.join(" and ")}. That moved to \`orc extra role\` in v0.55.0 and arms nothing here.`
+      : null,
     why:
       resolved === "off"
         ? shadowed.length
-          ? `this document asks for ${shadowed.join(" and ")}, and extra_roles names ${shadowed.map((w) => DOC_EXTRA_ROLE_OF[w]).join(" nor ")} — so it resolves to OFF.`
+          ? `this document asks for ${shadowed.join(" and ")}, and no slot row holds ${shadowed.map((w) => DOC_EXTRA_ROLE_OF[w]).join(" or ")} — so it resolves to OFF.`
           : "nothing in this document goes off Claude."
-        : `${granted.join(" and ")} go off Claude for this document; every other role stays on Claude.`,
-    // A lane with a pinned agent has no score, so it resolves the BAND its agent
-    // encodes, AT BOTH EDGES, requiring them to agree. `/orc-doc` is in that
-    // rule's list as of v0.52.0 — before that it was declared as routing
-    // foreign with no defined way to resolve a band at all.
-    edges: resolved === "off" ? null : extraResolveEdges(claudeDir, "orc-doc-writer-opus-5-med", "doc-writer"),
+        : `${granted.join(" and ")} go off Claude for this document; every other role stays on Claude.` +
+          (shadowed.length
+            ? ` ${shadowed.join(" and ")} was asked for and no slot row holds ${shadowed.map((w) => DOC_EXTRA_ROLE_OF[w]).join(" or ")}, so it stays on Claude.`
+            : ""),
+    // ONE TARGET PER ROLE, each from its OWN slot. `null` where that role is not
+    // going foreign — an em dash on any surface that renders it, never a
+    // borrowed answer from the other role.
+    targets: {
+      writer: granted.includes("writer") ? held.writer : null,
+      checker: granted.includes("checker") ? held.checker : null,
+    },
   };
 }
 
@@ -14706,9 +14865,12 @@ function docExtraCmd(claudeDir, slugArg) {
     options: DOC_EXTRA_MODES,
     resolve_order: r.order,
     config_roles: r.config_roles,
-    shadowed_by_config: r.shadowed_by_config,
+    shadowed_by_slots: r.shadowed_by_slots,
+    legacy_config_roles: r.legacy_config_roles,
+    legacy_warning: r.legacy_warning,
     why: r.why,
-    edges: r.edges,
+    // One per role, each from its own POSITION. A `null` here is an answer.
+    targets: r.targets,
     // DEFAULT OFF, AND IT STAYS OFF. A document is the one artifact where the
     // model choice is visible in the output.
     default: "off",
@@ -14716,10 +14878,15 @@ function docExtraCmd(claudeDir, slugArg) {
   if (asJson) emitJson(payload, 0);
   console.log(`extra for ${slug}: ${r.resolved}`);
   console.log(ui.color.gray("  " + r.why));
-  if (r.edges && r.edges.band)
+  for (const role of ["writer", "checker"]) {
+    const t = r.targets[role];
     console.log(
-      ui.color.gray(`  band ${r.edges.band} · edges ${(r.edges.edges || []).join(",")} · both edges agree: ${r.edges.agree}`)
+      "  " +
+        role.padEnd(8) +
+        (t ? ui.color.cyan(`${t.provider}/${t.model}`) + ui.color.gray(`  via ${t.profile} — displaces ${t.claude.agent}`) : ui.color.gray("claude"))
     );
+  }
+  if (r.legacy_warning) console.log("  " + ui.mark.warn(r.legacy_warning));
   process.exit(0);
 }
 
@@ -16009,17 +16176,31 @@ function docExtraNext(claudeDir, slug) {
       if (shape && shape.slices) sections = shape.slices.flatMap((x) => x.sections || []).map((x) => (x && x.id) || x);
     } catch (_) {}
   }
+  // v0.55.0 — WHICH MODEL PER ROLE, not just "extra is on". "the writer went
+  // foreign" and "the checker went foreign" are different facts about a
+  // document, because a document's VOICE is the deliverable and only one of
+  // those two writes it.
+  const per = ["writer", "checker"]
+    .map((role) => {
+      const t = r.targets[role];
+      return t ? `${role} → ${t.provider}/${t.model} (via ${t.profile}, displaces ${t.claude.agent})` : null;
+    })
+    .filter(Boolean);
   return {
     resolved: r.resolved,
     stored: r.stored,
     source: r.source,
     why: r.why,
-    shadowed_by_config: r.shadowed_by_config,
+    shadowed_by_slots: r.shadowed_by_slots,
+    legacy_warning: r.legacy_warning,
+    targets: r.targets,
     sections,
     sentence:
       r.resolved === "off"
         ? "extra: off — every section of this document is written and checked on Claude."
-        : `extra: ${r.resolved} — ${sections.length ? "sections " + sections.join(", ") : "the next wave"} will be written off Claude. A document's voice is the deliverable, so this is said before the wave, not after it.`,
+        : `extra: ${r.resolved} — ${sections.length ? "sections " + sections.join(", ") : "the next wave"} will be written off Claude. ` +
+          per.join("; ") +
+          ". A document's voice is the deliverable, so this is said before the wave, not after it.",
   };
 }
 
@@ -16108,8 +16289,72 @@ function docForecastCmd(claudeDir, slugArg) {
   const checkAgents = checks.waves.reduce((a, w) => a + w.agents.length, 0);
   const p50 = sumVec(vecFor(writeRole, writeAgents, "p50"), vecFor(checkRole, checkAgents, "p50"));
   const p90 = sumVec(vecFor(writeRole, writeAgents, "p90"), vecFor(checkRole, checkAgents, "p90"));
+
+  // ── THE POSITIONS (v0.55.0) ────────────────────────────────────────────
+  // Slots are not scored, so `bandFor`'s ask-the-resolver-first comment cannot
+  // help here — this lane has to ask `extraResolveSlot` itself. Without it a
+  // document whose writer runs on DeepSeek is forecast at Opus rates, which is
+  // exactly the lie the honest-numbers lane exists to prevent.
+  //
+  // AND A FOREIGN ROLE IS PRICED FROM ITS OWN PROVIDER, or not at all: a cost
+  // figure ORC did not price itself is never printed, so `usd` reads as an em
+  // dash rather than as an Opus number for work Opus will not do.
+  const docExtra = docExtraResolve(claudeDir, d);
+  const roleParts = [
+    { role: "writer", agent: writeRole, n: writeAgents, target: docExtra.targets.writer },
+    { role: "checker", agent: checkRole, n: checkAgents, target: docExtra.targets.checker },
+  ];
+  let priceable = true;
+  const usdAt = (pct) => {
+    let total = 0;
+    for (const part of roleParts) {
+      const vec = vecFor(part.agent, part.n, pct);
+      if (!part.target) {
+        const m = priceVector(claudeDir, vec, "claude-opus-5");
+        if (m.usd === null) priceable = false;
+        else total += m.usd;
+        continue;
+      }
+      const rate = foreignRate(table, part.target.provider, part.target.model);
+      if (!rate) {
+        // `bin/pricing.json`'s provider maps ship EMPTY on purpose. This is the
+        // honest answer, not a gap ORC forgot to fill: `orc extra rates` prints
+        // the JSON to paste.
+        priceable = false;
+        continue;
+      }
+      total +=
+        (vec.input * rate.input +
+          vec.cache_write * rate.cache_write +
+          vec.cache_read * rate.cache_read +
+          vec.output * rate.output) /
+        1e6;
+    }
+    return priceable ? total : null;
+  };
+  const usd50 = usdAt("p50");
+  const usd90 = usdAt("p90");
   const money50 = priceVector(claudeDir, p50, "claude-opus-5");
   const money90 = priceVector(claudeDir, p90, "claude-opus-5");
+  const extraView = {
+    resolved: docExtra.resolved,
+    why: docExtra.why,
+    roles: roleParts.map((part) => ({
+      role: part.role,
+      agents: part.n,
+      via: part.target ? `extra:${part.target.profile}` : "claude",
+      provider: part.target ? part.target.provider : null,
+      model: part.target ? part.target.model : part.agent,
+      displaces: part.target ? part.target.claude.agent : null,
+      priced: part.target ? !!foreignRate(table, part.target.provider, part.target.model) : true,
+    })),
+    // The QUOTA half. A foreign dispatch does not touch the Anthropic session
+    // window at all, so counting it there would overstate the limit that
+    // actually bites.
+    quota_note: roleParts.some((x) => x.target)
+      ? "a role that runs off Claude does NOT consume the Claude session window — the quota figure below covers the Claude half only."
+      : null,
+  };
   const quota = quotaView(table, cfg, money50.weighted);
   const writeMode = d.write_mode || (cfg.doc_write_mode === "ask" ? null : cfg.doc_write_mode);
   // A STOP is a hand-back. In `partial` every wave is one; in `all` the whole
@@ -16131,7 +16376,11 @@ function docForecastCmd(claudeDir, slugArg) {
     tokens: { p50, p90 },
     raw: { p50: rawTokens(p50), p90: rawTokens(p90) },
     weighted: { p50: money50.weighted, p90: money90.weighted },
-    usd: { p50: money50.usd, p90: money90.usd },
+    // NULL when any part of the run cannot be priced from a DATED table, never
+    // an Opus figure standing in for a provider ORC has no rates for.
+    usd: { p50: usd50, p90: usd90 },
+    usd_claude_only: { p50: money50.usd, p90: money90.usd },
+    extra: extraView,
     price_table: table ? { as_of: table.as_of, age_days: table._age_days, stale: table._stale } : null,
     quota,
     min_samples: minSamples,
@@ -16179,9 +16428,24 @@ function docForecastCmd(claudeDir, slugArg) {
   );
   console.log(`          p90 in ${kTok(p90.input)} · cache-w ${kTok(p90.cache_write)} · cache-r ${kTok(p90.cache_read)} · out ${kTok(p90.output)}`);
   console.log(
-    `  USD     ` + (money50.usd === null ? "unavailable: no dated price table" : `$${money50.usd.toFixed(2)} → $${money90.usd.toFixed(2)}`)
+    `  USD     ` +
+      (usd50 === null
+        ? "—  (no dated rate for at least one of the models this run will use)"
+        : `$${usd50.toFixed(2)} → $${usd90.toFixed(2)}`)
   );
   console.log(`  QUOTA   ` + (quota.available ? `${quota.window_pct.toFixed(1)}% of a 5-hour window on ${quota.label}` : quota.reason));
+  // v0.55.0 — WHO RUNS WHICH HALF. Printed on BOTH surfaces: a field one
+  // surface prints and the other omits is drift no lint can see.
+  for (const r of extraView.roles)
+    console.log(
+      `  ${r.role.toUpperCase().padEnd(8)}` +
+        (r.via === "claude"
+          ? ui.color.gray(`claude · ${r.model} · ${plural(r.agents, "agent")}`)
+          : ui.color.cyan(`${r.provider}/${r.model}`) +
+            ui.color.gray(`  via ${r.via.slice(6)} · ${plural(r.agents, "agent")} · displaces ${r.displaces}`) +
+            (r.priced ? "" : ui.color.yellow("  · no dated rate for this model")))
+    );
+  if (extraView.quota_note) console.log("  " + ui.color.gray(extraView.quota_note));
   console.log(
     `\n  Every wave is a stop. ` +
       (writeMode === "partial"
@@ -16653,18 +16917,24 @@ function readExtra(claudeDir) {
     const l = JSON.parse(fs.readFileSync(p.ledger, "utf8"));
     l.profiles = Array.isArray(l.profiles) ? l.profiles : [];
     l.routes = Array.isArray(l.routes) ? l.routes : [];
+    // v0.55.0 — SLOT ROWS. A v1 ledger reads `slots: []` and is NEVER rewritten
+    // on read: lazy, free, idempotent, non-destructive (the /orc-doc migration
+    // rule). A reader of the old shape finds nothing missing, because the
+    // addition is additive — the `challenge.json` v2 precedent.
+    l.slots = Array.isArray(l.slots) ? l.slots : [];
     l.history = Array.isArray(l.history) ? l.history : [];
     return l;
   } catch (_) {
     return null;
   }
 }
-const emptyExtra = () => ({ version: 1, profiles: [], routes: [], history: [] });
+const emptyExtra = () => ({ version: 2, profiles: [], routes: [], slots: [], history: [] });
 
 function writeExtra(claudeDir, ledger) {
   const p = extraPaths(claudeDir);
   fs.mkdirSync(p.dir, { recursive: true });
-  ledger.version = 1;
+  ledger.slots = Array.isArray(ledger.slots) ? ledger.slots : [];
+  ledger.version = 2;
   ledger.updated_at = new Date().toISOString();
   fs.writeFileSync(p.ledger, JSON.stringify(ledger, null, 2) + "\n");
   return p.ledger;
@@ -20081,19 +20351,21 @@ function extraLanesBrief(claudeDir) {
   const cfg = resolvedConfig(claudeDir);
   if (!isTrue(cfg.extra_enabled)) return;
   const roles = INLINE_LIST(cfg.extra_roles).filter(Boolean);
-  console.log(ui.color.bold("  which lane a band governs"));
+  console.log(ui.color.bold("  which lane routes foreign, and how"));
   for (const row of EXTRA_LANE_SHAPES) {
     let verdict = "claude";
     let extra = "";
     if (row.shape === "never" || row.shape === "inert") verdict = "never";
     else if (row.shape === "scored") verdict = roles.includes("executor") ? "per-task" : "claude";
-    else {
-      const named = row.shape === "fixed-role" ? (row.roles || []).filter((r) => roles.includes(r)) : ["executor"];
-      if (named.length) {
-        const e = extraResolveEdges(claudeDir, row.agent, named[0]);
-        verdict = e.agree ? (row.shape === "fixed-role" ? "roles" : "foreign") : "claude";
-        if (e.band) extra = ui.color.gray(`  ${e.band} edges ${(e.edges || []).join(",")} agreeing=${e.agree}`);
-      }
+    else if (row.shape === "slot" || row.shape === "gated-choice") {
+      const on = (row.slots || []).filter((slot) => extraResolveSlot(claudeDir, slot, {}).resolved === "extra");
+      verdict = on.length ? (row.shape === "gated-choice" ? "offered" : "roles") : "claude";
+      if (on.length) extra = ui.color.gray("  " + on.join(", "));
+    } else {
+      // fixed-executor, and `/orc-mini` is the only lane on it.
+      const e = extraResolveEdges(claudeDir, row.agent, "executor");
+      verdict = e.agree ? "foreign" : "claude";
+      if (e.band) extra = ui.color.gray(`  ${e.band} edges ${(e.edges || []).join(",")} agreeing=${e.agree}`);
     }
     console.log(`    ${ui.color.cyan(row.lane.padEnd(16))} ${verdict}${extra}`);
   }
@@ -20359,24 +20631,266 @@ function extraResolveFor(claudeDir, score, opts) {
 //
 // `agent` is the pinned executor whose BAND is resolved at both edges. A lane
 // with no pinned agent has no band, and that is an answer rather than a gap.
+// ═══════════════════════════════════════════════════════════════════════════
+// v0.55.0 — ROLE SLOTS: THE NON-SCORED HALF OF ROUTING
+//
+// A SCORE IS WHAT A BAND NEEDS, AND FOUR LANES DO NOT HAVE ONE. `/orc`,
+// `/orc-ultra`, `/orc-mini` and `/orc-diy` score every task, so a band is a
+// routing decision the user made. `/orc-quick`, `/orc-fast`, `/orc-doc` and
+// `/orc-wiki` do not: they pin an agent to a POSITION. Resolving that agent's
+// band at both edges was arithmetic on a number nobody chose — and it was
+// wrong in two places and dead in a third (a doc CHECKER resolved against the
+// WRITER's band; `/orc-wiki` asked for a role spelling `extra_roles` refuses).
+//
+// So a slot is an explicit, named POSITION with one chosen `profile/model`.
+// A row's PRESENCE is the arming; there is no second master gate and no
+// per-lane key. ZERO CONFIG KEYS WERE ADDED.
+//
+// This is the machine-readable copy of the `## The slot table` section in
+// `templates/skills/_shared/extra-dispatch.md`, registered in
+// `bin/verify-contracts.js` against that file, with a golden test comparing
+// the two IN BOTH DIRECTIONS — the EXTRA_LANE_SHAPES / DIY_STEPS precedent. A
+// row in the markdown and not here fails, and the reverse fails too.
+//
+// `claude` is an ARRAY because `quick-executor` has two: a menu is what that
+// lane is. `claude_opus5` is the variant `opus5_only` would have used, derived
+// from the shipped ladders — NULL where the agent is already Opus 5, so two
+// wiki slots collapsing onto one Opus 5 scanner is not a contradiction: the
+// slot names the POSITION, not the model. NO AGENT IS ADDED by this release
+// and no pair is needed (the floor stays 51).
+const EXTRA_SLOTS = [
+  {
+    slot: "quick-executor",
+    lane: "/orc-quick",
+    claude: ["orc-executor-sonnet-4-6-med", "orc-executor-opus-5-low"],
+    claude_opus5: ["orc-executor-opus-5-low"],
+    asks: true,
+    announce: "the dispatch gate — offered as a third option, never a default",
+    why: "the user picks the agent for every entry anyway, so a foreign worker is one more option on a menu they already read.",
+  },
+  {
+    slot: "fast-executor",
+    lane: "/orc-fast",
+    claude: ["orc-executor-sonnet-4-6-high"],
+    claude_opus5: ["orc-executor-opus-5-med"],
+    asks: false,
+    announce: "the F0 preflight `extra:` line, before wave 1",
+    why: "one executor, one slice, a build+test smoke gate behind it — the checks that catch a bad implementation here are engine-blind.",
+  },
+  {
+    slot: "doc-writer",
+    lane: "/orc-doc",
+    claude: ["orc-doc-writer-opus-5-med"],
+    claude_opus5: null,
+    asks: false,
+    announce: "before the wave, naming the sections going off Claude",
+    why: "a writer owns ONE part file and invents no fact; its output is read by a checker and by you before it ships.",
+  },
+  {
+    slot: "doc-checker",
+    lane: "/orc-doc",
+    claude: ["orc-doc-checker-opus-5-low"],
+    claude_opus5: null,
+    asks: false,
+    announce: "before the wave",
+    why: "the checker reads one bounded part and reports; it rewrites nothing, so a finding it makes is a finding you read.",
+  },
+  {
+    slot: "wiki-scanner-deep",
+    lane: "/orc-wiki",
+    claude: ["orc-wiki-scanner-opus-4-8-high"],
+    claude_opus5: ["orc-wiki-scanner-opus-5-med"],
+    asks: false,
+    announce: "per scan-batch, beside the resolved tier",
+    why: "a scanner returns an evidence-anchored doc body the orchestrator writes; every claim in it is anchored to a file you can open.",
+  },
+  {
+    slot: "wiki-scanner-light",
+    lane: "/orc-wiki",
+    claude: ["orc-wiki-scanner-sonnet-5-high"],
+    claude_opus5: ["orc-wiki-scanner-opus-5-med"],
+    asks: false,
+    announce: "per scan-batch, beside the resolved tier",
+    why: "the LIGHT tier is already a small no-new-surface delta on an existing doc — the cheapest work the wiki does.",
+  },
+];
+const EXTRA_SLOT_IDS = EXTRA_SLOTS.map((s) => s.slot);
+const extraSlotRow = (slot) => EXTRA_SLOTS.find((s) => s.slot === slot) || null;
+
+// The Claude agents a slot displaces, AFTER `opus5_only`. Deterministic: a
+// pinned NAME, never an interval — which is why the displaced answer a slot
+// resolve carries is strictly more honest than what the scored half can offer.
+function extraSlotClaude(row, opus5) {
+  const agents = (opus5 && row.claude_opus5 ? row.claude_opus5 : row.claude).slice();
+  return {
+    via: "claude",
+    agent: agents[0],
+    agents,
+    // NOT "inert" — NOT CONSULTED. With one slot routed and another not,
+    // `opus5_only` is fully live for the one with no row, and that distinction
+    // must be printed rather than flattened.
+    table: opus5 ? "opus5_only" : "shipped",
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// `extraResolveSlot` — THE SECOND RESOLVER, AND IT NEVER TOUCHES A BAND
+//
+// The sibling of `extraResolveFor`, with the SAME answer shape (`ok`,
+// `resolved`, `why`, `held_back`, `announce`, `claude`) so every consumer
+// renders one thing. It never calls `extraAgentBand`, never calls
+// `extraResolveEdges`, and never reads a score.
+//
+// PRECEDENCE, one sentence: extra decides whether a Claude agent runs at all;
+// `opus5_only` and the score tables only decide WHICH Claude agent runs where
+// extra did not take it. For a slot that is: the slot row > `opus5_only`'s
+// variant of that slot's agent > the shipped agent.
+//
+// exit 0 = extra · 1 = claude · 2 = unknown slot
+// ═══════════════════════════════════════════════════════════════════════════
+function extraResolveSlot(claudeDir, slot, opts) {
+  const o = opts || {};
+  const row = extraSlotRow(slot);
+  // 1 — an unknown slot is REFUSED and the six are LISTED (the `orc pattern
+  // status` exit-2 precedent). A typo is not a routing decision.
+  if (!row)
+    return {
+      ok: false,
+      shape: "slot",
+      reason: "unknown-slot",
+      slot: slot === undefined || slot === null ? "" : String(slot),
+      known: EXTRA_SLOT_IDS,
+      error: `unknown slot "${slot === undefined || slot === null ? "" : slot}" (known: ${EXTRA_SLOT_IDS.join(", ")}).`,
+    };
+
+  const ledger = readExtra(claudeDir) || emptyExtra();
+  const cfg = resolvedConfig(claudeDir);
+  const { map } = readOverride(claudeDir);
+  const claude = extraSlotClaude(row, isTrue(map.opus5_only));
+  const base = {
+    ok: true,
+    shape: "slot",
+    slot: row.slot,
+    lane: row.lane,
+    asks: !!row.asks,
+    announce_point: row.announce,
+    claude,
+  };
+  const answer = (why, extra) =>
+    Object.assign({}, base, { resolved: "claude", why, held_back: null }, extra || {});
+
+  // 2 — the master gate.
+  if (!isTrue(cfg.extra_enabled))
+    return answer("extra_enabled is false — the master gate. Nothing routes foreign until it is true.");
+
+  // 3 — Extra is an OVERLAY. An unrouted slot falls straight through, exactly
+  // like an uncovered score. ABSENCE IS NOT A HOLE.
+  const sr = ledger.slots.find((x) => x.slot === row.slot);
+  if (!sr)
+    return answer(
+      `no slot row holds ${row.slot} — Extra is an OVERLAY, so an unrouted position falls straight through to ${claude.agent}.`
+    );
+
+  // 6 — a cited risk, IN THE SLICE. NEVER INVENT A RISK FACET: a wiki scan and
+  // a doc section do not have one, and a slot dispatch with no `risk` field is
+  // not a risk-free task — it is a task with no risk statement. Only
+  // /orc-quick and /orc-fast can legitimately carry one.
+  const risk = Number(o.risk || 0);
+  if (risk > 0 && String(cfg.extra_risk_tasks) !== "on")
+    return answer(
+      `this task carries ${plural(risk, "cited risk")} and extra_risk_tasks is off — it is HELD BACK to ${claude.agent}.`,
+      { held_back: "risk", would_have_been: { profile: sr.profile, model: sr.model } }
+    );
+
+  // 7 — a boundary REFUSE holds, and holds in `warn` too. `boundary_gate`
+  // decides whether ORC should attempt the task at all; neither mode ever
+  // asked whether the work should leave the machine.
+  if (o.boundary === "REFUSE")
+    return answer(
+      "the boundary card for this area says REFUSE — that holds in `warn` too, because boundary_gate never asked whether the work should leave the machine.",
+      { held_back: "boundary", would_have_been: { profile: sr.profile, model: sr.model } }
+    );
+
+  // 4 / 5 — the profile must exist and must have proven itself.
+  const prof = extraProfile(ledger, sr.profile);
+  if (!prof)
+    return answer(
+      `slot row ${row.slot} names profile "${sr.profile}", which no longer exists — falling through to ${claude.agent}.`,
+      { held_back: "missing-profile" }
+    );
+  if (!prof.verified_at)
+    return answer(
+      `"${sr.profile}" has never verified — nothing dispatches to an unproven endpoint.`,
+      { held_back: "unverified" }
+    );
+
+  // 8 — a STALE verification STILL ROUTES. A stale check is not a failed one
+  // (the /orc-pact UNCHECKABLE rule); it is re-pinged before the wave and said
+  // out loud. (9 — an EXPIRED/ABSENT vault passphrase is `orc extra
+  // preflight`'s stop, not this resolver's: the row is not the credential's
+  // problem, and a routing answer is not the place to report a deadline.)
+  const v = extraVerifyState(prof, cfg);
+  const cred = prof.credential || {};
+  return Object.assign({}, base, {
+    resolved: "extra",
+    via: `extra:${prof.name}`,
+    profile: prof.name,
+    provider: prof.provider,
+    engine: prof.engine,
+    model: sr.model,
+    small_model: sr.small_model || null,
+    model_known: (prof.models_seen || []).includes(sr.model),
+    max_turns: sr.max_turns === undefined ? null : sr.max_turns,
+    band: `slot:${row.slot}`,
+    verify_state: v.state,
+    verify_age_days: v.age_days,
+    needs_reping: v.state === "STALE",
+    credential: { source: cred.source || "env", key_name: cred.key_name || null, present: credentialPresent(cred, claudeDir) },
+    held_back: null,
+    why:
+      `slot row ${row.slot} holds this position and outranks ${claude.agent}` +
+      (v.state === "STALE" ? `; verification is ${v.age_days}d old (STALE — still routes, re-pinged before the wave)` : "") +
+      ".",
+    // The sentence, composed HERE so no lane writes a second wording for it.
+    announce: `${row.slot} (${row.lane}) → ${prof.provider}/${sr.model} via ${prof.engine} (profile ${prof.name}) — displaces ${claude.agent}; this sends the slice to a third party.`,
+  });
+}
+
 const EXTRA_LANE_SHAPES = [
   { lane: "/orc", shape: "scored", agent: null },
+  // v0.55.0 - ADDED. `/orc-ultra` runs the `orc` skill and writes its own
+  // `run-ultra-<slug>` trace, so its absence from this table was a gap: a lane
+  // the protocol declares must be a lane something OPENS, and a lane something
+  // opens must be a lane this table can answer for.
+  { lane: "/orc-ultra", shape: "scored", agent: null },
   { lane: "/orc-mini", shape: "fixed-executor", agent: "orc-executor-sonnet-5-high" },
-  { lane: "/orc-fast", shape: "fixed-executor", agent: "orc-executor-sonnet-4-6-high" },
+  // v0.55.0 - `/orc-fast` LOSES its band and gains a POSITION. `/orc-mini`
+  // KEEPS the band, and the asymmetry is deliberate: mini scores its tasks and
+  // then pins one executor over them, so both edges of that agent's band is a
+  // question about numbers the run actually produced. Fast produces none.
+  { lane: "/orc-fast", shape: "slot", agent: null, slots: ["fast-executor"] },
   // Compile-owned: the flow decides WHETHER, the resolver still decides WHERE.
   // Its shape depends on the compiled config, so it is computed per read.
   { lane: "/orc-diy", shape: "scored", agent: null, compile_owned: true },
-  { lane: "/orc-quick", shape: "inert", agent: null },
-  { lane: "/orc-doc", shape: "fixed-role", agent: "orc-doc-writer-opus-5-med", roles: ["doc-writer", "doc-checker"] },
+  // v0.55.0 - NOT INERT ANY MORE, and not silently armed either. The slot adds
+  // a THIRD OPTION to a menu the user already reads; it never becomes a
+  // default and never sticks.
+  { lane: "/orc-quick", shape: "gated-choice", agent: null, slots: ["quick-executor"] },
+  { lane: "/orc-doc", shape: "slot", agent: null, slots: ["doc-writer", "doc-checker"] },
   { lane: "/orc-challenge", shape: "never", agent: null },
-  { lane: "/orc-wiki", shape: "fixed-role", agent: "orc-wiki-scanner-opus-4-8-high", roles: ["wiki-scanner"] },
+  // v0.55.0 - the row was DEAD: it asked for a role spelling `extra_roles`
+  // refuses by name, so this lane could never route however it was configured.
+  { lane: "/orc-wiki", shape: "slot", agent: null, slots: ["wiki-scanner-deep", "wiki-scanner-light"] },
   { lane: "/orc-retro", shape: "never", agent: null },
   { lane: "/orc-budget", shape: "never", agent: null },
   { lane: "/orc-aftermath", shape: "never", agent: null },
   { lane: "/orc-boundary", shape: "never", agent: null },
   { lane: "/orc-pact", shape: "never", agent: null },
 ];
-const EXTRA_LANE_ROUTES = ["per-task", "foreign", "claude", "roles", "never"];
+// `offered` is `gated-choice`'s verdict and only ever that: the lane's premise
+// is that it asks, so "this lane routes foreign" would be a claim about a
+// decision only the user gets to make, per entry.
+const EXTRA_LANE_ROUTES = ["per-task", "foreign", "claude", "roles", "offered", "never"];
 
 // THE BAND OF A PINNED AGENT, from the SAME shipped ladders every other reader
 // uses. A lane with a fixed agent has no score, so there is nothing to resolve
@@ -20390,6 +20904,13 @@ const EXTRA_LANE_ROUTES = ["per-task", "foreign", "claude", "roles", "never"];
 // no shipped row carries returns NULL, and a lane whose band cannot be resolved
 // stays on Claude and says so. A number ORC made up to satisfy an interface is
 // not a routing decision the user made.
+// v0.55.0 - ONE CALLER LEFT. `/orc-fast` and `/orc-doc` used to resolve a band
+// here and both were REPOINTED at `extraResolveSlot`, not repaired: a slot is a
+// position the user chose, and both edges of a pinned agent's band was
+// arithmetic on a number nobody chose. `/orc-mini` keeps it, because mini
+// SCORES its tasks and then pins one executor over them - so its edges are a
+// question about numbers the run actually produced. Do not assume this pair is
+// load-bearing anywhere else.
 function extraAgentBand(agent) {
   const name = String(agent || "");
   const tail = name.replace(/^orc-[a-z]+(-[a-z]+)*?-(?=(haiku|sonnet|opus|fable)-)/, "");
@@ -20448,6 +20969,14 @@ function extraLanes(claudeDir) {
       return out;
     }
     if (!enabled) {
+      // A slot lane says the same thing, in its own words: what falls through
+      // is a NAMED agent per position, not a table.
+      if (row.shape === "slot" || row.shape === "gated-choice") {
+        out.slots = (row.slots || []).map((slot) => {
+          const r = extraResolveSlot(claudeDir, slot, {});
+          return { slot, routes: false, claude: r.claude.agent, why: r.why };
+        });
+      }
       out.routes = "claude";
       out.detail = "extra_enabled is false — the master gate. Nothing routes foreign until it is true.";
       return out;
@@ -20461,26 +20990,41 @@ function extraLanes(claudeDir) {
         out.detail += " The flow key decides WHETHER; the resolver still decides WHERE, so route rows are never baked into flow.lock.json.";
       return out;
     }
-    if (row.shape === "fixed-role") {
-      const named = (row.roles || []).filter((r) => roles.includes(r));
-      out.roles_needed = row.roles || [];
-      out.roles_present = named;
-      if (!named.length) {
-        out.routes = "claude";
-        out.detail = `extra_roles names none of ${(row.roles || []).join(", ")}, so this lane stays on Claude.`;
+    // v0.55.0 - THE POSITIONS. No band is resolved here at all: `slots[]` is
+    // the answer, one row per position, each carrying the agent it displaces.
+    if (row.shape === "slot" || row.shape === "gated-choice") {
+      const res = (row.slots || []).map((slot) => {
+        const r = extraResolveSlot(claudeDir, slot, {});
+        return {
+          slot,
+          routes: r.resolved === "extra",
+          profile: r.profile || null,
+          model: r.model || null,
+          claude: r.claude.agent,
+          held_back: r.held_back || null,
+          why: r.why,
+        };
+      });
+      out.slots = res;
+      const on = res.filter((x) => x.routes);
+      if (row.shape === "gated-choice") {
+        out.routes = on.length ? "offered" : "claude";
+        out.detail = on.length
+          ? `${on.map((x) => x.slot).join(" and ")} is OFFERED as one more option at the dispatch gate. It never becomes a default and never sticks — this lane asks before every dispatch.`
+          : "nothing holds this lane's position, so the gate offers its Claude agents only.";
         return out;
       }
-      const e = extraResolveEdges(claudeDir, row.agent, named[0]);
-      out.band = e.band;
-      out.edges = e.edges;
-      out.agree = e.agree;
-      out.routes = e.agree ? "roles" : "claude";
-      out.resolved = e.resolved;
-      out.detail = e.agree
-        ? `this lane pins one agent per role. Both edges of its band resolve to the same profile, so ${named.join(" and ")} go foreign.`
-        : "one edge of the pinned agent's band routes foreign and the other does not, so the lane stays on Claude.";
+      out.routes = on.length ? "roles" : "claude";
+      out.detail = on.length
+        ? `${on.map((x) => x.slot).join(" and ")} ${on.length === 1 ? "is" : "are"} held by a non-Claude worker; every position with no row stays on its pinned Claude agent.`
+        : "no position in this lane is held, so every one of them stays on its pinned Claude agent.";
       return out;
     }
+    // v0.55.0 - the `fixed-role` shape is GONE. It served `/orc-doc` and
+    // `/orc-wiki`, and both are POSITIONS now: a role that pins an agent has no
+    // score, so resolving that agent's band at both edges was arithmetic on a
+    // number nobody chose. A shape no row carries is a shape that does not
+    // exist, so it is deleted rather than left standing as a dead branch.
     // fixed-executor
     const e = extraResolveEdges(claudeDir, row.agent, "executor");
     out.band = e.band;
@@ -20502,7 +21046,8 @@ function extraLanes(claudeDir) {
         ok: true,
         extra_enabled: enabled,
         roles,
-        shapes: ["scored", "fixed-executor", "fixed-role", "inert", "never"],
+        shapes: ["scored", "fixed-executor", "slot", "gated-choice", "inert", "never"],
+        slots: EXTRA_SLOTS.map((r) => ({ slot: r.slot, lane: r.lane, asks: !!r.asks })),
         routes: EXTRA_LANE_ROUTES,
         // A lane whose shape is unknown is NOT listed as `claude`. Absence is a
         // `no`, never an omission to be interpreted — the markdown's own rule.
@@ -20512,7 +21057,7 @@ function extraLanes(claudeDir) {
       0
     );
 
-  console.log(ui.header("ORC " + "·" + " extra " + "—" + " which lane does a band govern"));
+  console.log(ui.header("ORC " + "·" + " extra " + "—" + " which lane routes foreign, and how"));
   console.log("");
   for (const l of lanes) {
     const mark =
@@ -20523,16 +21068,338 @@ function extraLanes(claudeDir) {
           : ui.mark.warn(l.routes);
     console.log(`  ${ui.color.cyan(l.lane.padEnd(16))} ${l.shape.padEnd(15)} ${mark}`);
     if (l.band) console.log(`      band ${l.band}  edges ${(l.edges || []).join(",")}  agreeing=${l.agree}`);
+    for (const sl of l.slots || [])
+      console.log(
+        `      ${sl.slot.padEnd(20)} ${sl.routes ? ui.color.cyan(sl.profile + "/" + sl.model) : ui.color.gray("claude · " + sl.claude)}`
+      );
     console.log("      " + ui.color.gray(l.detail));
   }
   console.log(ui.color.gray("\n  A lane not listed here does not route foreign.\n"));
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// `orc extra role` — THE SLOT LEDGER'S CLI (v0.55.0)
+//
+//   orc extra role [list] [--json]
+//   orc extra role set <slot> <profile>/<model> [--small-model <id>] [--max-turns N]
+//   orc extra role rm  <slot>
+//   orc extra role show <slot> [--json]
+//
+// Exit codes, the `orc pattern status` convention: 0 done / at least one slot
+// routes · 1 nothing routes (a read) or the write was REFUSED · 2 unknown slot,
+// NAMED, with the six listed.
+//
+// NO OVERLAP CONCEPT EXISTS. A slot is a point, not an interval, so the band
+// table's overlap refusal has no analogue here and none is invented; `set` on
+// an occupied slot REPLACES and says what it replaced.
+// ═══════════════════════════════════════════════════════════════════════════
+
+// One row's whole computed answer. `--json is not a summary`: every field the
+// TTY branch prints is here, including the displaced Claude agent, the verify
+// state and its age, `model_known` and the next action where one exists.
+function extraRoleRow(claudeDir, row, ledger, cfg) {
+  const res = extraResolveSlot(claudeDir, row.slot, {});
+  const sr = ledger.slots.find((x) => x.slot === row.slot) || null;
+  const prof = sr ? extraProfile(ledger, sr.profile) : null;
+  const v = prof ? extraVerifyState(prof, cfg) : null;
+  return {
+    slot: row.slot,
+    lane: row.lane,
+    routed: !!sr,
+    profile: sr ? sr.profile : null,
+    model: sr ? sr.model : null,
+    small_model: sr ? sr.small_model || null : null,
+    max_turns: sr ? (sr.max_turns === undefined ? null : sr.max_turns) : null,
+    added_at: sr ? sr.added_at || null : null,
+    provider: prof ? prof.provider : null,
+    engine: prof ? prof.engine : null,
+    verify_state: v ? v.state : null,
+    verify_age_days: v ? v.age_days : null,
+    model_known: prof && sr ? (prof.models_seen || []).includes(sr.model) : null,
+    // The POSITION, in plain words, composed by the CLI — the panel must never
+    // write its own meaning for one (the Flow-stepper rule).
+    meaning: row.why,
+    asks: !!row.asks,
+    announce_point: row.announce,
+    // The Claude answer this slot displaces, or would fall through to. A pinned
+    // NAME, never an interval.
+    claude: res.claude,
+    resolved: res.resolved,
+    why: res.why,
+    held_back: res.held_back || null,
+    announce: res.resolved === "extra" ? res.announce : null,
+    next:
+      res.resolved === "extra"
+        ? null
+        : sr
+          ? res.held_back === "unverified"
+            ? `orc extra ping ${sr.profile}`
+            : res.held_back === "missing-profile"
+              ? `orc extra role rm ${row.slot}`
+              : null
+          : `orc extra role set ${row.slot} <profile>/<model>`,
+  };
+}
+
+function extraRoleList(claudeDir) {
+  const asJson = wantsJson();
+  const ledger = readExtra(claudeDir) || emptyExtra();
+  const cfg = resolvedConfig(claudeDir);
+  const enabled = isTrue(cfg.extra_enabled);
+  // ALL SIX, ALWAYS. An unrouted slot KEEPS ITS SLOT and reads as Claude with
+  // its pinned agent — the OFF-phase rule. Filtering it out makes "I left the
+  // checker on Claude on purpose" and "there is no checker" identical.
+  const rows = EXTRA_SLOTS.map((r) => extraRoleRow(claudeDir, r, ledger, cfg));
+  const routing = rows.filter((r) => r.resolved === "extra");
+  // The honest report of `00-problem.md` P3: six values `extra_roles` accepts
+  // that no resolution path can ever reach, because every one of them needs a
+  // score and none of those roles has one. Reported, not fixed — a reviewer you
+  // cannot trust is worse than no reviewer, so that one needs its own decision.
+  const unreachable = EXTRA_ROLES_ALL.filter(
+    (r) => r !== "executor" && !LEGACY_EXTRA_ROLES.includes(r)
+  ).map((role) => ({ role, state: "declared · no slot · nothing resolves this" }));
+  const code = routing.length ? 0 : 1;
+  if (asJson)
+    emitJson(
+      {
+        ok: true,
+        extra_enabled: enabled,
+        slots: rows,
+        counts: { total: rows.length, routed: rows.filter((r) => r.routed).length, resolving: routing.length },
+        unreachable_roles: unreachable,
+        note: "a slot with no row KEEPS ITS SLOT and falls through to its pinned Claude agent. Absence is not a hole.",
+      },
+      code
+    );
+  console.log(ui.header("ORC · extra — the positions"));
+  if (!enabled)
+    console.log(
+      "\n  " +
+        ui.mark.warn("extra_enabled is false — every row below is INERT. `orc config set extra_enabled true` arms them.")
+    );
+  console.log("");
+  console.log(
+    ui.kv(
+      rows.map((r) =>
+        r.resolved === "extra"
+          ? [r.slot, ui.color.cyan(`${r.profile}/${r.model}`), `${r.lane} · ${r.engine || "?"} · ${r.verify_state}` + (r.model_known ? "" : ui.color.yellow(" · model not in models_seen"))]
+          : [r.slot, ui.color.gray("claude · " + r.claude.agent), ui.color.gray(r.lane + (r.routed ? " · " + (r.held_back || "held back") : ""))]
+      )
+    )
+  );
+  console.log("\n  " + ui.color.bold("what each position is"));
+  for (const r of rows) console.log("    " + ui.color.gray(r.slot.padEnd(20)) + ui.color.gray(r.asks ? "asked at the gate" : "announced: " + r.announce_point));
+  if (unreachable.length) {
+    console.log("\n  " + ui.color.bold("extra_roles values with no slot"));
+    for (const u of unreachable) console.log("    " + ui.color.gray(u.role.padEnd(20)) + ui.color.gray(u.state));
+  }
+  console.log(
+    ui.color.gray(
+      "\n  A slot with no row is not a hole — it is Claude, and it is printed so \"I left\n" +
+        "  the checker on Claude on purpose\" and \"there is no checker\" never look the same.\n"
+    )
+  );
+  process.exit(code);
+}
+
+function extraRoleShow(claudeDir, slotArg) {
+  const asJson = wantsJson();
+  const row = extraSlotRow(slotArg);
+  if (!row) {
+    const msg = `unknown slot "${slotArg === undefined ? "" : slotArg}" (known: ${EXTRA_SLOT_IDS.join(", ")}).`;
+    if (asJson) emitJson({ ok: false, reason: "unknown-slot", slot: slotArg || "", known: EXTRA_SLOT_IDS, error: msg }, 2);
+    console.error("❌ " + msg);
+    process.exit(2);
+  }
+  const ledger = readExtra(claudeDir) || emptyExtra();
+  const cfg = resolvedConfig(claudeDir);
+  const r = extraRoleRow(claudeDir, row, ledger, cfg);
+  const code = r.resolved === "extra" ? 0 : 1;
+  if (asJson) emitJson(Object.assign({ ok: true, extra_enabled: isTrue(cfg.extra_enabled) }, r), code);
+  console.log(`\n  ${ui.color.cyan(r.slot)}  ${ui.color.gray(r.lane)}`);
+  console.log("  " + ui.color.gray(r.meaning));
+  console.log(
+    r.resolved === "extra"
+      ? `  → ${ui.color.cyan(r.profile + "/" + r.model)}  (${r.engine}) · ${r.verify_state}`
+      : `  → claude  ${r.claude.agent}`
+  );
+  console.log("  " + ui.color.gray(r.why));
+  console.log("  " + ui.color.gray(r.asks ? "asked at the dispatch gate" : "announced at: " + r.announce_point));
+  if (r.announce) console.log("  " + ui.mark.warn(r.announce));
+  if (r.next) console.log("  " + ui.color.gray("next: " + r.next));
+  console.log("");
+  process.exit(code);
+}
+
+function extraRoleSet(claudeDir, slotArg, target) {
+  const asJson = wantsJson();
+  const fail = (reason, msg, extra, code) => {
+    if (asJson) emitJson(Object.assign({ ok: false, reason, error: msg }, extra || {}), code || 1);
+    console.error("❌ " + msg);
+    process.exit(code || 1);
+  };
+  const row = extraSlotRow(slotArg);
+  if (!row)
+    fail(
+      "unknown-slot",
+      `unknown slot "${slotArg === undefined ? "" : slotArg}" (known: ${EXTRA_SLOT_IDS.join(", ")}).`,
+      { slot: slotArg || "", known: EXTRA_SLOT_IDS },
+      2
+    );
+  const m = /^([^/]+)\/(.+)$/.exec(String(target || ""));
+  if (!m) fail("bad-target", `target must be <profile>/<model> (got "${target || ""}")`);
+  const [, profileName, model] = m;
+
+  const ledger = readExtra(claudeDir) || emptyExtra();
+  const prof = extraProfile(ledger, profileName);
+  if (!prof)
+    fail("unknown-profile", `unknown profile "${profileName}". \`orc extra list\` shows what exists.`, {
+      known: ledger.profiles.map((x) => x.name),
+    });
+  // ONLY VERIFIED PROFILES MAY HOLD A POSITION. `orc extra add` already refuses
+  // while a tool is absent; this is the same discipline one step later. A slot
+  // pointing at an unproven endpoint is a wave that dies at dispatch instead of
+  // at configuration time.
+  if (!prof.verified_at)
+    fail(
+      "unverified",
+      `"${profileName}" has never verified. Run \`orc extra ping ${profileName}\` first — only a verified profile may hold a position.`
+    );
+
+  // A model outside `models_seen` WARNS AND STORES — the route-row rule. It
+  // becomes an `orc extra doctor` finding rather than a mid-wave 404 nobody saw
+  // coming: a listed model can be dead and an unlisted one can work, and only
+  // `orc extra models --test <id>` tells them apart.
+  const known = (prof.models_seen || []).includes(model);
+  const maxTurns = flag("--max-turns");
+  const smallModel = flag("--small-model");
+  const replaced = ledger.slots.find((x) => x.slot === row.slot) || null;
+  const entry = {
+    slot: row.slot,
+    profile: profileName,
+    model,
+    small_model: typeof smallModel === "string" ? smallModel : null,
+    max_turns: typeof maxTurns === "string" && /^\d+$/.test(maxTurns) ? Number(maxTurns) : null,
+    added_at: new Date().toISOString(),
+  };
+  ledger.slots = ledger.slots.filter((x) => x.slot !== row.slot).concat([entry]);
+  ledger.slots.sort((a, b) => EXTRA_SLOT_IDS.indexOf(a.slot) - EXTRA_SLOT_IDS.indexOf(b.slot));
+  extraHistory(ledger, "role-set", {
+    slot: row.slot,
+    profile: profileName,
+    model,
+    replaced: replaced ? `${replaced.profile}/${replaced.model}` : null,
+  });
+  const file = writeExtra(claudeDir, ledger);
+  const cfg = resolvedConfig(claudeDir);
+  const claude = extraSlotClaude(row, isTrue(readOverride(claudeDir).map.opus5_only));
+  // A CREDENTIAL THE VAULT CANNOT OPEN HERE still stores the row and says the
+  // run will stop at preflight. The row is not the credential's problem.
+  const sess = extraSessionRow(claudeDir, prof);
+  const stopsAtPreflight = sess.credential_source === "vault" && (sess.state === "EXPIRED" || sess.state === "ABSENT");
+
+  if (asJson)
+    emitJson(
+      {
+        ok: true,
+        slot: row.slot,
+        lane: row.lane,
+        row: entry,
+        replaced: replaced || null,
+        model_known: known,
+        displaces: claude.agents,
+        extra_enabled: isTrue(cfg.extra_enabled),
+        stops_at_preflight: stopsAtPreflight,
+        ledger: file,
+      },
+      0
+    );
+  console.log(`\n${row.slot} → ${ui.color.cyan(profileName + "/" + model)}   ${ui.color.gray(row.lane)}`);
+  if (replaced)
+    console.log("  " + ui.mark.warn(`replaced ${replaced.profile}/${replaced.model} — that connection no longer holds this position.`));
+  console.log("  " + ui.color.gray("takes this position off: " + claude.agents.join(", ")));
+  if (!known)
+    console.log(
+      "  " +
+        ui.mark.warn(
+          `"${model}" is not in this profile's models_seen — ORC's cache is not the authority on someone else's catalogue, so this is allowed. Re-ping to refresh it.`
+        )
+    );
+  if (stopsAtPreflight)
+    console.log(
+      "  " + ui.mark.warn("this profile's vault passphrase has reached its deadline — the run will STOP at `orc extra preflight` until you connect again.")
+    );
+  if (!isTrue(cfg.extra_enabled))
+    console.log("  " + ui.mark.warn("extra_enabled is false — this row is inert until you set it."));
+  console.log("");
+}
+
+function extraRoleRm(claudeDir, slotArg) {
+  const asJson = wantsJson();
+  const row = extraSlotRow(slotArg);
+  if (!row) {
+    const msg = `unknown slot "${slotArg === undefined ? "" : slotArg}" (known: ${EXTRA_SLOT_IDS.join(", ")}).`;
+    if (asJson) emitJson({ ok: false, reason: "unknown-slot", slot: slotArg || "", known: EXTRA_SLOT_IDS, error: msg }, 2);
+    console.error("❌ " + msg);
+    process.exit(2);
+  }
+  const ledger = readExtra(claudeDir) || emptyExtra();
+  const gone = ledger.slots.find((x) => x.slot === row.slot) || null;
+  if (!gone) {
+    const msg = `${row.slot} has no row — it is already on ${extraSlotClaude(row, isTrue(readOverride(claudeDir).map.opus5_only)).agent}.`;
+    if (asJson) emitJson({ ok: false, reason: "no-such-row", slot: row.slot, error: msg }, 1);
+    console.error("❌ " + msg);
+    process.exit(1);
+  }
+  ledger.slots = ledger.slots.filter((x) => x.slot !== row.slot);
+  extraHistory(ledger, "role-rm", { slot: row.slot, profile: gone.profile, model: gone.model });
+  writeExtra(claudeDir, ledger);
+  const claude = extraSlotClaude(row, isTrue(readOverride(claudeDir).map.opus5_only));
+  if (asJson) emitJson({ ok: true, slot: row.slot, removed: gone, back_to: claude }, 0);
+  console.log(`\nRemoved ${row.slot} — that position is back on ${claude.agent}.\n`);
+}
+
 function extraResolveCmd(claudeDir, scoreArg) {
   const asJson = wantsJson();
+  // v0.55.0 — ONE COMMAND, TWO SHAPES. A score resolves a BAND; `--slot`
+  // resolves a POSITION. Both together is refused BY NAME: one invocation, one
+  // shape, because an answer that silently picked which of the two you meant is
+  // a routing decision the user did not make.
+  const slotFlag = flag("--slot");
+  if (typeof slotFlag === "string" || slotFlag === true) {
+    if (scoreArg !== undefined) {
+      const msg = "`orc extra resolve <score>` and `--slot <slot>` are two shapes of one question — pass one, not both.";
+      if (asJson) emitJson({ ok: false, reason: "two-shapes", error: msg }, 2);
+      console.error("❌ " + msg);
+      process.exit(2);
+    }
+    const riskF = flag("--risk");
+    const res = extraResolveSlot(claudeDir, slotFlag === true ? "" : slotFlag, {
+      risk: typeof riskF === "string" ? Number(riskF) : riskF === true ? 1 : 0,
+      boundary: typeof flag("--boundary") === "string" ? flag("--boundary") : null,
+    });
+    if (!res.ok) {
+      if (asJson) emitJson(res, 2);
+      console.error("❌ " + res.error);
+      console.error("   known slots: " + res.known.join(", "));
+      process.exit(2);
+    }
+    const code = res.resolved === "extra" ? 0 : 1;
+    if (asJson) emitJson(res, code);
+    if (res.resolved === "extra") {
+      console.log(`\n  ${ui.color.cyan(res.slot)}  →  ${ui.color.cyan(res.via)}  ${res.provider}/${res.model}  (${res.engine})`);
+      console.log(ui.color.gray(`  ${res.why}`));
+      console.log("  " + ui.mark.warn(res.announce));
+    } else {
+      console.log(`\n  ${ui.color.cyan(res.slot)}  →  claude  ${res.claude.agent}  ${ui.color.gray(res.claude.table)}`);
+      console.log(ui.color.gray(`  ${res.why}`));
+    }
+    console.log("");
+    process.exit(code);
+  }
   const score = Number(scoreArg);
   if (!Number.isFinite(score) || score < 0 || score > 100) {
-    const msg = `usage: orc extra resolve <score 0-100> [--role <r>] [--risk N] [--json]  (got "${scoreArg === undefined ? "" : scoreArg}")`;
+    const msg = `usage: orc extra resolve <score 0-100> [--role <r>] [--risk N] [--json]  |  orc extra resolve --slot <${EXTRA_SLOT_IDS.join("|")}>  (got "${scoreArg === undefined ? "" : scoreArg}")`;
     if (asJson) emitJson({ ok: false, reason: "bad-score", error: msg }, 1);
     console.error("❌ " + msg);
     process.exit(1);
@@ -20738,6 +21605,26 @@ function extraDoctorFindings(claudeDir) {
         "extra-model-gone",
         `${bandLabel(r)} routes to "${r.model}", which the last ping of "${r.profile}" did not list. A vanished model is a 404 in the middle of a wave.`,
         { band: bandLabel(r), profile: r.profile, model: r.model }
+      );
+  }
+
+  // v0.55.0 - THE POSITIONS. Exactly two findings, and the restraint is the
+  // design: there is deliberately NO `extra-slot-missing`. Nagging a user to
+  // route a slot they chose not to route is a doctor people learn to ignore -
+  // an unrouted slot is Claude, and Claude is a correct answer.
+  for (const sr of ledger.slots || []) {
+    const prof = extraProfile(ledger, sr.profile);
+    if (!prof || !prof.verified_at)
+      add(
+        "extra-slot-unverified-profile",
+        `the ${sr.slot} position names "${sr.profile}", which ${prof ? "has lost its verification" : "no longer exists"} - that position has fallen back to Claude without you asking it to.`,
+        { slot: sr.slot, profile: sr.profile, model: sr.model }
+      );
+    else if (prof.models_seen.length && !prof.models_seen.includes(sr.model))
+      add(
+        "extra-slot-model-unknown",
+        `the ${sr.slot} position uses "${sr.model}", which the last ping of "${sr.profile}" did not list. A vanished model is a 404 in the middle of a wave.`,
+        { slot: sr.slot, profile: sr.profile, model: sr.model }
       );
   }
   return out;
@@ -24813,13 +25700,40 @@ async function extraDispatch(claudeDir) {
   }
   if (!slice || typeof slice.prompt !== "string" || !slice.prompt.trim())
     bail(2, { ok: false, reason: "bad-slice", error: "the task slice needs a non-empty `prompt`." });
-  const score = Number(slice.score);
-  if (!Number.isFinite(score) || score < 0 || score > 100)
+  // v0.55.0 — TWO SHAPES, EXACTLY ONE OF THEM. A scored task carries a `score`
+  // and resolves a BAND; a slot task carries a `slot` and resolves a POSITION.
+  // Both present is `bad-slice`, refused BY NAME: a bridge that picked one for
+  // you would be making the routing decision the whole subsystem exists to make
+  // visible. Everything downstream of the resolve is UNTOUCHED — the fence, the
+  // cap, the credential triangle, the journal, the spend log, the resume ladder.
+  const hasSlot = typeof slice.slot === "string" && slice.slot.trim();
+  const hasScore = slice.score !== undefined && slice.score !== null;
+  if (hasSlot && hasScore)
+    bail(2, {
+      ok: false,
+      reason: "bad-slice",
+      error: "the task slice carries BOTH a `score` and a `slot` — those are two shapes of one question. Pass one.",
+    });
+  if (!hasSlot && !hasScore)
+    bail(2, {
+      ok: false,
+      reason: "bad-slice",
+      error: `the task slice needs a \`score\` between 0 and 100, or a \`slot\` (one of: ${EXTRA_SLOT_IDS.join(", ")}) — routing is what this command does.`,
+    });
+  // NOT DERIVED FROM ANYTHING. A slot dispatch has no score, and a number ORC
+  // invented to satisfy an interface is not a routing decision the user made.
+  const score = hasSlot ? null : Number(slice.score);
+  if (!hasSlot && (!Number.isFinite(score) || score < 0 || score > 100))
     bail(2, { ok: false, reason: "bad-slice", error: "the task slice needs a `score` between 0 and 100 — routing is what this command does." });
 
   // P5 — the SAME resolver the preflight printed. The bridge never re-derives
   // a band, so what runs is always what the user was told would run.
-  const res = extraResolveFor(claudeDir, score, { role: slice.role || "executor", risk: (slice.risk || []).length || slice.risk_count || 0 });
+  const riskCount = (slice.risk || []).length || slice.risk_count || 0;
+  const res = hasSlot
+    ? extraResolveSlot(claudeDir, slice.slot.trim(), { risk: riskCount, boundary: slice.boundary || null })
+    : extraResolveFor(claudeDir, score, { role: slice.role || "executor", risk: riskCount });
+  if (hasSlot && !res.ok)
+    bail(2, { ok: false, reason: "bad-slice", error: res.error, known: res.known });
   if (res.resolved !== "extra") {
     const obj = Object.assign({ ok: true, dispatched: false, reason: "not-routed" }, res);
     if (asJson) emitJson(obj, 3);
@@ -24829,7 +25743,12 @@ async function extraDispatch(claudeDir) {
 
   const ledger = readExtra(claudeDir);
   const prof = extraProfile(ledger, res.profile);
-  const route = ledger.routes.find((r) => bandCovers(r, score));
+  // The row that decided this dispatch. A band row for a score, a SLOT row for
+  // a position — the same field names (`model`, `small_model`, `max_turns`), so
+  // every engine below is untouched.
+  const route = hasSlot
+    ? ledger.slots.find((r) => r.slot === slice.slot.trim())
+    : ledger.routes.find((r) => bandCovers(r, score));
   const cfg = resolvedConfig(claudeDir);
 
   // The credential. `ambientKey` is how an unattended wave works: the lane
@@ -24886,15 +25805,18 @@ async function extraDispatch(claudeDir) {
   // now`), the same code as an unrouted task, rather than a failure.
   const timeouts = extraTimeouts(cfg);
   const cap = Math.max(1, Number(cfg.extra_max_concurrent) || 1);
-  const slot = takeSlot(claudeDir, cap, timeouts.wall_ms + 60000, slice.task_id);
-  if (!slot.ok) {
+  // NOTE the name: this is the CONCURRENCY slot (`extra_max_concurrent`), not a
+  // role SLOT. Two different things called "slot" in one function is how a
+  // future edit picks the wrong one.
+  const capSlot = takeSlot(claudeDir, cap, timeouts.wall_ms + 60000, slice.task_id);
+  if (!capSlot.ok) {
     const obj = {
       ok: true,
       dispatched: false,
       reason: "concurrency-cap",
       cap,
-      in_flight: slot.live,
-      error: `extra_max_concurrent is ${cap} and ${slot.live} foreign ${slot.live === 1 ? "dispatch is" : "dispatches are"} already running. Per-provider rate limits are undocumented in aggregate, so ORC does not queue past the cap.`,
+      in_flight: capSlot.live,
+      error: `extra_max_concurrent is ${cap} and ${capSlot.live} foreign ${capSlot.live === 1 ? "dispatch is" : "dispatches are"} already running. Per-provider rate limits are undocumented in aggregate, so ORC does not queue past the cap.`,
       fallback_to: res.claude,
     };
     if (asJson) emitJson(obj, 3);
@@ -24932,8 +25854,11 @@ async function extraDispatch(claudeDir) {
     engine: prof.engine,
     model_requested: (route && route.model) || null,
     band: res.band || null,
+    // `slot:<slot>` rides in `band`, so the journal, the trace parser, the
+    // eight-field dedupe and `extraStatsScan` are all untouched.
+    slot: hasSlot ? slice.slot.trim() : null,
     score,
-    role: slice.role || "executor",
+    role: hasSlot ? slice.slot.trim() : slice.role || "executor",
     declared_files: slice.declared_files || [],
     acceptance: Array.isArray(slice.acceptance) ? slice.acceptance : [],
     cwd: slice.cwd || null,
@@ -24997,8 +25922,10 @@ async function extraDispatch(claudeDir) {
     {
       dispatched: true,
       task_id: slice.task_id || null,
+      // NULL for a slot, and not derived from anything.
       score,
       band: res.band,
+      slot: hasSlot ? slice.slot.trim() : null,
       via: res.via,
       profile: prof.name,
       provider: prof.provider,
@@ -26357,7 +27284,16 @@ function extraUsage() {
     "       orc extra route set <from>-<to> <profile>/<model>\n" +
     "                               [--small-model <cheap-id>] [--max-turns N]\n" +
     "       orc extra route rm <from>-<to>\n" +
+    "\n" +
+    "       orc extra role [--json]                   the six POSITIONS - the non-scored half.\n" +
+    "                               A slot with no row keeps its slot and reads as its pinned\n" +
+    "                               Claude agent.  0 = at least one routes / 1 = none do\n" +
+    "       orc extra role set <slot> <profile>/<model>\n" +
+    "                               [--small-model <cheap-id>] [--max-turns N]\n" +
+    "       orc extra role rm <slot>\n" +
+    "       orc extra role show <slot> [--json]\n" +
     "       orc extra resolve <score> [--role <r>] [--risk N] [--json]\n" +
+    "       orc extra resolve --slot <slot> [--risk N] [--json]\n" +
     "                               THE resolver.  0 = extra · 1 = claude\n" +
     "       orc extra conform <profile> [--deep] [--json]\n" +
     "                               measure the /anthropic shim: streams · tool round trip ·\n" +
@@ -26601,7 +27537,12 @@ function extraPreflight(claudeDir) {
   const cfg = resolvedConfig(claudeDir);
   const enabled = isTrue(cfg.extra_enabled);
   const routes = (ledger && ledger.routes) || [];
-  const named = new Set(routes.map((r) => r.profile));
+  // v0.55.0 - THE SLOT ROWS WALK HERE TOO. A slot row that would stop wave 1
+  // and does not is the whole v0.52.0 deadline gate leaking through a new door:
+  // same stop, same wording, same "the credential goes, the profile is stamped
+  // expired, the rows survive" behaviour.
+  const slots = (ledger && ledger.slots) || [];
+  const named = new Set([...routes.map((r) => r.profile), ...slots.map((r) => r.profile)]);
   const profiles = ((ledger && ledger.profiles) || []).filter((x) => named.has(x.name));
 
   const rows = [];
@@ -26805,6 +27746,18 @@ async function extra() {
       else if (pos[2] === undefined || pos[2] === "list") extraRouteList(claudeDir);
       else {
         console.error(`Unknown: orc extra route ${pos[2]}\n` + extraUsage());
+        process.exit(1);
+      }
+      break;
+    // v0.55.0 - THE POSITIONS. A score is what a band needs, and four lanes do
+    // not have one; this is where their slots are held.
+    case "role":
+      if (pos[2] === "set") extraRoleSet(claudeDir, pos[3], pos[4]);
+      else if (pos[2] === "rm") extraRoleRm(claudeDir, pos[3]);
+      else if (pos[2] === "show") extraRoleShow(claudeDir, pos[3]);
+      else if (pos[2] === undefined || pos[2] === "list") extraRoleList(claudeDir);
+      else {
+        console.error(`Unknown: orc extra role ${pos[2]}\n` + extraUsage());
         process.exit(1);
       }
       break;
@@ -27708,10 +28661,17 @@ Usage:
                                           not a hole, it is Claude, and it keeps its slot
     orc extra route set <from>-<to> <profile>/<model> [--max-turns N]
     orc extra route rm <from>-<to>
+    orc extra role [--json]               the six POSITIONS - the non-scored half of routing,
+                                          for the lanes that pin an agent instead of scoring a
+                                          task (exit 0 any routes / 1 none)
+    orc extra role set <slot> <profile>/<model> [--small-model <id>] [--max-turns N]
+    orc extra role rm | show <slot>
     orc extra resolve <score> [--role <r>] [--risk N] [--json]
+    orc extra resolve --slot <slot> [--risk N] [--json]
                                           THE resolver — the ONLY thing that decides whether a
                                           task goes foreign (exit 0 extra / 1 claude). It always
-                                          says WHY
+                                          says WHY. A score resolves a BAND; --slot resolves a
+                                          POSITION; both together is refused by name
     orc extra doctor [--json]             (exit 0 clean / 1 findings)
   orc challenge [--dir <path>]            grade a FINISHED artifact against a goal you stated —
                                           ORC judges, you fix, ORC re-judges, and it never fixes

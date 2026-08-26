@@ -12,10 +12,17 @@ key decides WHETHER, the resolver decides WHERE**, per task, at run time:
 orc extra resolve <score> --role executor --risk <n> --json     # 0 foreign · 1 Claude
 ```
 
-Route rows are deliberately NOT baked into this compiled flow the way the score
-table is. The score table is clipped to this flow's session tier, so it is a
-compile-time fact; a route row is a ledger the user edits independently, and
-`orc diy status` cannot see it change. Baked rows would go stale in silence.
+Route rows — **and slot rows** — are deliberately NOT baked into this compiled
+flow the way the score table is. The score table is clipped to this flow's
+session tier, so it is a compile-time fact; a route row and a slot row are a
+ledger the user edits independently, and `orc diy status` cannot see either one
+change. Baked rows would go stale in silence.
+
+**A DIY flow is a SCORED lane, so it resolves BANDS, not positions.** The six
+POSITIONS (`orc extra role`) belong to `/orc-quick`, `/orc-fast`, `/orc-doc` and
+`/orc-wiki`; nothing here reads one, and `fixed_executor:
+extra:<profile>/<provider>/<model>` is unchanged and remains band-free by
+construction.
 
 - **`scoring: off`** — this flow pins ONE executor, so there is no score.
   Resolve that agent's **BAND at both edges and require them to agree**; a row

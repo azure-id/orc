@@ -33,7 +33,7 @@ const { docList, docParts, docStatuses, docMapSections, docMap, docLint, docPlan
 const { diy } = require("./flow.js");
 const { crosslink } = require("./crosslink.js");
 const { mockDetail } = require("./mockrun.js");
-const { extraProviders, extraList, extraListNoConnection, extraListNeverTested, extraTools, extraKeyhelp, extraModels, extraDoctor, extraRoute, extraLanes, extraStats, extraRates, extraPingOk, extraPingBad, extraPingSaveOffer, extraJournal, extraReconcile, extraJournalPrune, extraPingLive, extraPingDeadModel, extraPingNotInstalled, extraInstall } = require("./extra.js");
+const { extraProviders, extraList, extraListNoConnection, extraListNeverTested, extraTools, extraKeyhelp, extraModels, extraDoctor, extraRoute, extraRole, extraLanes, extraStats, extraRates, extraPingOk, extraPingBad, extraPingSaveOffer, extraJournal, extraReconcile, extraJournalPrune, extraPingLive, extraPingDeadModel, extraPingNotInstalled, extraInstall } = require("./extra.js");
 
 module.exports.get = function get(route, q) {
   switch (route) {
@@ -414,6 +414,8 @@ module.exports.get = function get(route, q) {
       return extraDoctor;
     case "/api/extra/route":
       return extraRoute;
+    case "/api/extra/role":
+      return extraRole;
     case "/api/extra/lanes":
       return extraLanes;
     case "/api/extra/stats":

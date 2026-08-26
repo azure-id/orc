@@ -277,6 +277,26 @@
   border-top: 1px solid var(--line-soft);
 }
 
+/* THE POSITIONS (v0.55.0) — the same row, minus the bar.
+
+   A band has a width because it covers a range of scores. A POSITION covers
+   nothing: it is a point. So this row reuses `.ex-band` wholesale and simply
+   DECLARES ONE FEWER COLUMN, rather than drawing a bar at some invented width
+   the CLI never computed. The `.run-card` lesson stated once more: a row whose
+   child count differs from another's must declare its own columns, never
+   inherit a template built for a different number of children. */
+.ex-slot-head { grid-template-columns: minmax(0, 22%) minmax(0, auto) minmax(0, 1fr) auto 16px; }
+.ex-slot-when { font-size: 11px; white-space: normal; overflow-wrap: anywhere; }
+/* The six `extra_roles` values nothing resolves. Reported, never fixed, and
+   visually quiet: a permanent honest gap is not a caution. */
+.ex-unreachable {
+  margin-top: var(--sp-3);
+  padding-top: var(--sp-2);
+  border-top: 1px solid var(--line-soft);
+}
+.ex-unreachable-list { display: grid; gap: 2px; margin-top: var(--sp-1); }
+.ex-lane-slot { display: flex; flex-wrap: wrap; gap: 4px; padding-left: var(--sp-2); }
+
 /* THE LEGEND. Two colours were carrying the whole meaning of the picture and
    neither was ever named anywhere on the page. */
 .ex-legend { display: flex; flex-wrap: wrap; gap: var(--sp-3); align-items: center; }

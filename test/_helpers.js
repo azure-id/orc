@@ -11,7 +11,23 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 
-// WHY `npm test` PINS `--test-concurrency=8` (v0.50.0). This box has 16 cores,
+// WHY `npm test` PINS `--test-concurrency=6` (v0.50.0; 8 until v0.55.0).
+//
+// v0.55.0 spent what was left of this budget, and BOTH halves of the fix were
+// needed. Two new `extra-*` files stood up a fake provider PER CASE, and two
+// consecutive full runs then failed a DIFFERENT five tests each, every one of
+// them green on its own file.
+//
+// First: neither file was testing the wire. Both now write their verified
+// profile straight into the ledger, and only the two cases that really dispatch
+// spawn anything — 16 child processes became 2. **If you add a file here, ask
+// which of its cases actually need a child process.** The answer is usually
+// "fewer than all of them", and that is cheaper than everyone else's wall clock.
+//
+// Second, the peak still came down 8 → 6. With the leaner files restored to 8,
+// a full run failed TWENTY-NINE tests — nearly the whole `extra-*` family — and
+// every one of them passed on its own file. 8 was already marginal here; two
+// more files is simply what made it visible. This box has 16 cores,
 // and node --test defaults to one worker per core. Several files here spawn real
 // child processes (the fake provider, the fake `claude`, the fake CLI) and one
 // derives scrypt at N=2^17 — 128 MB and a beat of wall clock, on purpose,
@@ -19,8 +35,8 @@ const path = require("path");
 // parallelism those starve each other: a local fake provider misses the probe's
 // 3s rung-1 timeout, the ping falls through to the 20s rung 2, and the file fails
 // at ~25s with `1 == 0` — which looks EXACTLY like a real regression and has
-// cost this repo three debugging rounds. Halving the peak costs ~11% wall clock
-// and buys a suite whose result means something.
+// cost this repo three debugging rounds. Cutting the peak costs wall clock and
+// buys a suite whose result means something.
 const REPO = path.join(__dirname, "..");
 const CLI = path.join(REPO, "bin", "cli.js");
 const HOOK_SRC = path.join(REPO, "templates", "hooks");
