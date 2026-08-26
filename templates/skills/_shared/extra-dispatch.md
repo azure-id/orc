@@ -96,10 +96,13 @@ to remove — see `Recovery — a failure is a POSITION, not a blank page` below
 
 ```
 orc extra resolve <score> [--role <r>] [--risk <n>] --json     # 0 = extra · 1 = claude
+orc extra resolve --slot <slot>       [--risk <n>] --json     # 0 = extra · 1 = claude · 2 = unknown slot
 ```
 
 That command is the **only** thing that decides whether a task goes foreign and
-to what. The lane **calls it and renders the answer** — it never re-derives the
+to what. It has **two shapes and exactly one of them per invocation** — a score
+resolves a BAND, `--slot` resolves a POSITION, and both together is refused by
+name. The lane **calls it and renders the answer** — it never re-derives the
 band from the config.
 
 This is the `computeWikiFreshness` rule, the Flow-stepper rule and the
@@ -111,28 +114,83 @@ rule held the task back, and whether the profile's verification is stale. Render
 that reason — a routing decision the user cannot account for is a routing
 decision they will turn off.
 
-### A lane with a FIXED executor resolves the BAND, not a score
+### A score is what a band needs, and four lanes do not have one
 
-`/orc` scores every task, so it has a number to resolve with. `/orc-mini`,
-`/orc-fast`, `/orc-doc` and a `scoring: off` `/orc-diy` flow do not — they pin ONE
-agent per role, and that agent's name already encodes a band.
+`/orc`, `/orc-ultra`, `/orc-mini` and `/orc-diy` score every task, so they have a
+number to resolve with. `/orc-quick`, `/orc-fast`, `/orc-doc` and `/orc-wiki` do
+not — they pin ONE agent to a POSITION.
 
-`/orc-doc` belongs in this list and was missing from it for a release, which
-meant the lane was DECLARED as routing foreign with no defined way to resolve a
-band at all. Its writer is `orc-doc-writer-opus-5-med` and its checker is
-`orc-doc-checker-opus-5-low`; the writer's band is what a document resolves
-with.
+Until v0.55.0 those lanes resolved the pinned agent's band at both edges, and
+that was **arithmetic on a number nobody chose**. It was also wrong twice and
+dead once: a doc CHECKER resolved against the WRITER's band, and `/orc-wiki`
+asked for a role spelling `extra_roles` refuses by name, so that lane could
+never route however it was configured.
 
-**Resolve BOTH EDGES of that band and require them to agree.** `[55,65)` →
-`orc extra resolve 55` and `orc extra resolve 64`; same profile and model on both
-→ the lane routes foreign. Anything else — one edge foreign, two different
-profiles — **stays on Claude**, and the preflight says which row partially
-covered the band.
+So each of those positions is an explicit **SLOT** — one named position, one
+chosen `profile/model`, set with `orc extra role` and resolved with
+`orc extra resolve --slot`. **A row's PRESENCE is the arming.** There is no
+second master gate, no per-lane on/off key and no per-slot model key: zero
+config keys were added by this release.
 
-The alternative was a midpoint, and it is wrong for a reason worth stating: a row
-covering `[55,58)` would capture an entire mini run on the strength of three
-scores out of ten. **A number ORC invented to satisfy an interface is not a
-routing decision the user made.** Two calls, no new CLI, and no invented score.
+**`/orc-mini` keeps the band, and the asymmetry is deliberate.** Mini SCORES its
+tasks and then pins one executor over them, so both edges of that agent's band is
+a question about numbers the run actually produced. `/orc-fast` produces none.
+Mini is the LAST caller of the both-edges rule, and that rule keeps its reason.
+**Resolve BOTH EDGES of the pinned agent's band and require them to agree** —
+`[55,65)` is `orc extra resolve 55` and `orc extra resolve 64`, same profile and
+model on both or the lane stays on Claude. The alternative was a midpoint, and a
+row covering `[55,58)` would then capture an entire mini run on the strength of
+three scores out of ten. **A number ORC invented to satisfy an
+interface is not a routing decision the user made.**
+
+---
+
+## The slot table
+
+The human copy of `EXTRA_SLOTS` in `bin/cli.js`, registered in
+`bin/verify-contracts.js` against this file, with a golden test comparing the two
+**in both directions** — a row here and not there fails, and the reverse fails
+too.
+
+| slot | lane | the Claude agent it displaces | asked or announced | why this position may be held by a foreign worker |
+|---|---|---|---|---|
+| `quick-executor` | `/orc-quick` | `orc-executor-sonnet-4-6-med` · `orc-executor-opus-5-low` | **asked**, at the dispatch gate | the user picks the agent for every entry anyway, so a foreign worker is one more option on a menu they already read |
+| `fast-executor` | `/orc-fast` | `orc-executor-sonnet-4-6-high` | announced, F0 preflight | one executor, one slice, a build+test smoke gate behind it — the checks that catch a bad implementation here are engine-blind |
+| `doc-writer` | `/orc-doc` | `orc-doc-writer-opus-5-med` | announced, before the wave, naming the sections | a writer owns ONE part file and invents no fact; its output is read by a checker and by you before it ships |
+| `doc-checker` | `/orc-doc` | `orc-doc-checker-opus-5-low` | announced, before the wave | the checker reads one bounded part and reports; it rewrites nothing |
+| `wiki-scanner-deep` | `/orc-wiki` | `orc-wiki-scanner-opus-4-8-high` | announced, per scan-batch, beside the resolved tier | a scanner returns an evidence-anchored doc body; every claim in it is anchored to a file you can open |
+| `wiki-scanner-light` | `/orc-wiki` | `orc-wiki-scanner-sonnet-5-high` | announced, per scan-batch, beside the resolved tier | the LIGHT tier is already a small no-new-surface delta on an existing doc |
+
+Both wiki slots collapse onto `orc-wiki-scanner-opus-5-med` while `opus5_only` is
+on, which is why this release **adds no agent and no pair**. Two slots and one
+Opus 5 agent is not a contradiction: **a slot names the POSITION, not the model.**
+
+A slot is a **point**, not an interval, so the band table's overlap refusal has
+no analogue here and none is invented. `orc extra role set` on an occupied slot
+REPLACES, and says what it replaced.
+
+### The nine hold-backs, each answered by name
+
+1. **unknown slot** — refused, exit 2, listing the six.
+2. **`extra_enabled` false** — claude. The master gate.
+3. **no slot row** — claude. Extra is an OVERLAY; an unrouted position falls
+   straight through, exactly like an uncovered score. **Absence is not a hole.**
+4. **the profile no longer exists** — claude, named.
+5. **the profile never verified** — claude. Nothing dispatches to an unproven
+   endpoint.
+6. **a cited `risk[]` in the SLICE, with `extra_risk_tasks: off`** — held back to
+   the pinned Claude agent, named. **Never invent a risk facet**: a wiki scan and
+   a doc section do not have one, and a slot dispatch with no `risk` field is not
+   a risk-free task, it is a task with no risk statement.
+7. **a boundary REFUSE on the area** — holds, and holds in `warn` too.
+   `boundary_gate` decides whether ORC should attempt the task at all; neither
+   mode ever asked whether the work should leave the machine.
+8. **STALE verification** — still ROUTES (a stale check is not a failed one, the
+   /orc-pact UNCHECKABLE rule), re-pinged before the wave, and said out loud.
+9. **a vaulted profile whose passphrase is EXPIRED / ABSENT** — `orc extra
+   preflight` STOPS the run. `extra_on_failure` never covers it: that key is
+   about an endpoint that failed, and a deadline you set 30 days ago deserves a
+   stop.
 
 ### What it hands back
 
@@ -141,9 +199,10 @@ routing decision the user made.** Two calls, no new CLI, and no invented score.
 | `resolved` | `extra` or `claude`. This is the decision |
 | `via` | `extra:<profile>` — the tail that goes on `SCORE` and `DISPATCH` |
 | `provider` · `profile` · `engine` · `model` | who runs it, and how |
-| `band` | the ROUTE row's band, not the Claude band |
+| `band` | the ROUTE row's band, not the Claude band. On a slot answer it is the string **`slot:<slot>`** — the field NAME is unchanged, so the trace parser, the eight-field dedupe and the ` :: ` tolerance keep working untouched |
+| `slot` · `lane` · `asks` | present on a slot answer only. `score` is `null` there, and **is not derived from anything** |
 | `claude` | `{via, band, agent, table}` — **always present**, on both answers. It is the fall-through target AND the fallback target, so nothing ever needs a second lookup |
-| `held_back` | `null` · `role` · `risk` · `missing-profile` · `unverified` |
+| `held_back` | `null` · `role` · `risk` · `boundary` · `missing-profile` · `unverified` |
 | `verify_state` · `needs_reping` | `FRESH` / `STALE`. **A STALE profile still routes** — a stale check is not a failed one |
 | `model_known` | whether the routed model id was in the last ping's `models_seen`. `false` is a WARNING, never a block: the list is a cache, not an authority |
 | `credential` | `{source, key_name, present}` — never a value |
@@ -156,9 +215,14 @@ the diff.
 
 ---
 
-## The resolve order
+## Precedence
 
-Highest wins:
+One sentence, and it is the same sentence for both shapes:
+
+> **Extra decides whether a Claude agent runs at all. `opus5_only` and the score
+> tables only decide WHICH Claude agent runs where extra did not take it.**
+
+**A scored task**, highest wins:
 
 ```
 an extra route row covering this score      (only for the scores it covers)
@@ -166,6 +230,24 @@ an extra route row covering this score      (only for the scores it covers)
   > rubric_bands_override
   > the default 8-band table
 ```
+
+**A slot**, highest wins:
+
+```
+an extra slot row holding this position
+  > opus5_only's variant of that slot's agent
+  > the shipped agent
+```
+
+`rubric_bands_override` sits inside the second level for scored work and is kept
+visible in every printout: a hand-written table hidden from its own author is
+worse than a longer list.
+
+**`opus5_only` is not "inert" under a taken slot — it is NOT CONSULTED for that
+slot.** With `doc-writer` routed and `doc-checker` not, it is fully live for the
+checker. `orc config list` and `shadowReason` say so and NAME the taken
+positions, exactly as they already name the taken bands. A shadowed setting must
+never be silent.
 
 **Extra is an OVERLAY, not a replacement.** A score no row covers falls straight
 through to whatever the Claude ladder resolves — including `opus5_only`. That is
@@ -178,38 +260,46 @@ it, `orc extra route set` names the Claude band each new row displaces, and
 `orc config list --json`'s `score_table.active` can read `extra+opus5_only` —
 a composite, because the truth is a composite and a single word would be a lie.
 
-**INERT in `/orc-quick`**, exactly like `opus5_only`, `fable5_*` and
-`rubric_bands_override` — and `extra_resume` with it, for the same reason. That
-lane asks *which agent* before every dispatch; a config that silently answered
-that question, or that silently continued the previous foreign worker's
-half-finished write, would break its entire premise. Both are announced at the
-agent gate, because a shadowed setting must never be silent.
+**`/orc-quick` is a GATED CHOICE, not a route.** `opus5_only`, `fable5_*`,
+`rubric_bands_override` and `extra_resume` stay INERT there — that lane asks
+*which agent* before every dispatch, so a config that silently answered that
+question, or that silently continued the previous foreign worker's half-finished
+write, would break its entire premise. **`extra_enabled` is no longer inert
+there: with a `quick-executor` row it ADDS AN OPTION and nothing else.** It never
+becomes a default (rule 1), never sticks (rule 2), and a failed foreign dispatch
+RE-OPENS the gate with the two Claude options and the reason — `extra_on_failure`
+is inert in that lane and is said to be. All of it is announced at the agent
+gate, because a shadowed setting must never be silent, and neither must an
+un-shadowed one.
 
 ---
 
 ## Which lanes route foreign
 
-| lane | routes foreign? | why |
-|---|---|---|
-| `/orc` | yes | the full pipeline; every guard exists |
-| `/orc-mini` | yes | same executor shape |
-| `/orc-fast` | yes | single executor, knowledge-gated |
-| `/orc-diy` | yes, **compile-owned** | the route is baked into `flow.lock.json` the way the score table already is — never chosen in-session |
-| `/orc-quick` | **never** | INERT by design — the lane asks which agent every time |
-| `/orc-doc` | writer/checker only, and only if `config.extra_roles` names them | a document's voice is the deliverable |
-| `/orc-challenge` | **never** | the council is a set of measurement instruments; swapping one out changes what is being measured |
-| `/orc-wiki` | scanner only, opt-in | a wiki doc is evidence-anchored and cheap to re-scan |
-| `/orc-retro` · `/orc-budget` · `/orc-aftermath` · `/orc-boundary` · `/orc-pact` | never | they measure; they do not produce |
+| lane | shape | routes foreign? | why |
+|---|---|---|---|
+| `/orc` | `scored` | yes | the full pipeline; every guard exists |
+| `/orc-ultra` | `scored` | yes | it runs the `orc` skill and writes its own `run-ultra-<slug>` trace, so its absence from this table was a gap |
+| `/orc-mini` | `fixed-executor` | yes | it scores its tasks and then pins one executor over them, so both edges of that agent's band is a question about real numbers. The LAST lane on this shape |
+| `/orc-fast` | `slot` | yes — `fast-executor` | single executor, knowledge-gated, and no score anywhere in the lane |
+| `/orc-diy` | `scored`, **compile-owned** | yes | the flow key decides WHETHER; the resolver still decides WHERE, so route rows and slot rows are never baked into `flow.lock.json` — they would go stale in silence |
+| `/orc-quick` | `gated-choice` | **offered, never applied** — `quick-executor` | the lane asks which agent every time, so a foreign worker is a THIRD OPTION on that menu and never a default |
+| `/orc-doc` | `slot` | yes — `doc-writer`, `doc-checker` | a document's voice is the deliverable, so each role is a separate decision and `orc doc extra <slug>` still decides WHICH roles for THIS document |
+| `/orc-challenge` | `never` | **never** | the council is a set of measurement instruments; swapping one out changes what is being measured |
+| `/orc-wiki` | `slot` | yes — `wiki-scanner-deep`, `wiki-scanner-light` | a wiki doc is evidence-anchored and cheap to re-scan |
+| `/orc-retro` · `/orc-budget` · `/orc-aftermath` · `/orc-boundary` · `/orc-pact` | `never` | never | they measure; they do not produce |
 
 A lane not in this table does not route foreign. Absence is a `no`, never an
 omission to be interpreted.
 
-**`orc extra lanes [--json]` RENDERS this table** (v0.52.0), computed through the
-same `extraResolveFor` every dispatch uses, and a fixed-executor lane shows both
-edges of its pinned agent's band and whether they agreed. The rows are mirrored
-in `EXTRA_LANE_SHAPES` in `bin/cli.js`, registered in `bin/verify-contracts.js`
+**`orc extra lanes [--json]` RENDERS this table**, computed through the same
+resolvers every dispatch uses: a `fixed-executor` lane shows both edges of its
+pinned agent's band and whether they agreed, and a `slot` lane shows one row per
+POSITION with the agent each one displaces. The rows are mirrored in
+`EXTRA_LANE_SHAPES` in `bin/cli.js`, registered in `bin/verify-contracts.js`
 against this file, with a golden test comparing the two in both directions. A
-band with no lane attached is not a routing decision.
+band with no lane attached is not a routing decision — and neither is a position
+with no lane attached.
 
 ---
 
@@ -425,8 +515,20 @@ Only the transport differs. That is the property that keeps every gate
 downstream engine-blind, and it is why a foreign task needs no second slice
 builder.
 
-The slice file adds only what the transport needs: `task_id`, `score`, `role`
-(default `executor`), `risk[]` (or `risk_count`), and an optional `cwd`.
+The slice file adds only what the transport needs: `task_id`, **exactly one of
+`score` or `slot`**, `role` (default `executor`), `risk[]` (or `risk_count`), an
+optional `boundary`, and an optional `cwd`. Both a score and a slot is
+`bad-slice`, refused by name — a bridge that picked one for you would be making
+the routing decision this whole subsystem exists to make visible. On a slot
+dispatch `score` is `null` and **is not derived from anything**, and `band` is
+the string `slot:<slot>`.
+
+Everything downstream is untouched by which shape arrived: the `declared_files`
+fence, `extra_max_concurrent`, the credential triangle and `credential.source`,
+`extraProbeCompletionsUrl`, the journal header written **before the first byte
+leaves the machine**, the spend log, the resume ladder, the failure attribution
+and the orphan sweep. **Zero new engines, zero new dispatch paths, zero new
+agents.**
 
 **Exit codes — every one of them is an ANSWER, not an error:**
 
@@ -657,6 +759,17 @@ A fallback is a cost event, not just a routing event: the user chose the cheap
 band and is now paying the expensive one. That is the whole reason it is
 announced rather than logged.
 
+**On a SLOT lane the fallback target is a NAME, not a band lookup** — the slot's
+pinned Claude agent, which `orc extra resolve --slot` already handed back as
+`claude.agent`. That is strictly more honest than what the scored half can offer,
+because it is a decision rather than an interval.
+
+**`/orc-quick` is the exception, and it is the lane's own rule 1.**
+`extra_on_failure` is INERT there and is announced as inert: a failed foreign
+dispatch **re-opens the gate** with the two Claude options and the reason,
+because a config that silently substituted an executor would be the exact
+failure that gate exists to prevent.
+
 ---
 
 ## Recovery — a failure is a POSITION, not a blank page
@@ -692,7 +805,7 @@ v0.49.5's CLI-written hand-back page, and v0.53.2's spend log — where two grad
 money and `orc extra stats` reported `0 dispatches`. A fact that reaches disk by
 being relayed through a model's memory is a fact this repo has already lost.
 
-The header is written **after the credential and the slot resolve and before the
+The header is written **after the credential and the concurrency slot resolve and before the
 first byte leaves the machine**, because that is the only moment at which the
 repository is provably untouched by this dispatch — and therefore the only moment
 at which a baseline means anything. It records HEAD, `git status --short` in
@@ -867,13 +980,25 @@ supplies it pre-composed in `trace_extras[]`.
 
 ## The config surface — eleven keys, and the count is still the point
 
-The combinatorial part — providers × models × bands — is a **ledger with a CLI
-and a panel** (`orc extra`), not a YAML block nobody can hold in their head.
+The combinatorial part — providers × models × bands **× positions** — is a
+**ledger with a CLI and a panel** (`orc extra`), not a YAML block nobody can hold
+in their head.
+
+**v0.55.0 added ZERO keys.** A slot row's presence is its arming, so the four
+that were proposed were all refused: **`extra_slots_enabled`** (a second master
+gate — `extra_enabled` is one), **per-lane on/off keys** (`extra_doc`,
+`extra_wiki`, … — a row you can park is a row you can delete, and `orc extra role
+rm` is one keystroke that leaves a history entry; `/orc-doc` already has the one
+per-document switch that genuinely needed to exist, because a runbook and a
+customer-facing PRD are different documents), **`extra_quick_ask`** (it would
+answer the one question that lane's gate exists to ask), and **a per-slot
+model/effort key** (the slot row IS that, validated against `models_seen` instead
+of being a string nobody checked).
 
 | key | default | what it does |
 |---|---|---|
 | `config.extra_enabled` | `false` | Master gate. Nothing changes unless true. |
-| `config.extra_roles` | `[executor]` | Which dispatched roles may go foreign. Executor only by default: an executor's output is checked by four engine-blind gates, while a reviewer you cannot trust launders a finding nobody made. |
+| `config.extra_roles` | `[executor]` | Which **SCORED-LANE** roles may go foreign. Executor only by default: an executor's output is checked by four engine-blind gates, while a reviewer you cannot trust launders a finding nobody made. `executor` is the only value anything resolves today — `reviewer`/`verifier`/`analyst`/`planner`/`scout`/`test-author` are declared and nothing dispatches them yet, which `orc extra role list` reports honestly instead of leaving as an undocumented hole. **`doc-writer` and `doc-checker` MOVED to `orc extra role` in v0.55.0** and are kept here for one release as deprecated read+set members (the `LEGACY_KEYS` precedent): a config naming one is accepted, WARNED BY NAME, pointed at the new command, and arms nothing. A renamed mechanism must never be a silent revert. |
 | `config.extra_risk_tasks` | `off` | Whether a cited-risk task may leave Claude. |
 | `config.extra_on_failure` | `fallback` | `fallback` \| `stop`. |
 | `config.extra_max_concurrent` | `1` | Foreign dispatches in flight. Per-provider rate limits are undocumented in aggregate, so 1 is the honest default. |

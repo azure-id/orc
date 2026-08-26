@@ -810,6 +810,117 @@ const extraRoute = {
 extraRoute.foreign = extraRoute.rows.filter((r) => r.via === "extra");
 extraRoute.claude_fallthrough = extraRoute.rows.filter((r) => r.via === "claude");
 
+/* `orc extra role list --json` (v0.55.0) — THE POSITIONS.
+
+   ONE OF EVERY STATE, including the ugly ones, because you cannot design a
+   STALE chip on a fresh connection:
+
+     · routed + VERIFIED                  doc-writer
+     · routed + STALE                     fast-executor
+     · routed, profile lost verification  wiki-scanner-light  (held_back: unverified)
+     · routed, model left models_seen     quick-executor      (model_known: false)
+     · UNROUTED, keeps its slot           doc-checker · wiki-scanner-deep
+
+   `quick-executor` is routed on purpose too, so the "offered, never applied"
+   wording is designable — that lane ASKS, and the row has to say so without
+   ever reading as "this is what runs". */
+const extraRole = {
+  ok: true,
+  extra_enabled: true,
+  slots: [
+    {
+      slot: "quick-executor", lane: "/orc-quick", routed: true,
+      profile: "cheap", model: "deepseek-coder", small_model: null, max_turns: null,
+      added_at: "2026-08-20T09:12:00Z", provider: "deepseek", engine: "api",
+      verify_state: "VERIFIED", verify_age_days: 1, model_known: false,
+      meaning: "the user picks the agent for every entry anyway, so a foreign worker is one more option on a menu they already read.",
+      asks: true, announce_point: "the dispatch gate — offered as a third option, never a default",
+      claude: { via: "claude", agent: "orc-executor-sonnet-4-6-med", agents: ["orc-executor-sonnet-4-6-med", "orc-executor-opus-5-low"], table: "shipped" },
+      resolved: "extra", held_back: null,
+      why: "slot row quick-executor holds this position and outranks orc-executor-sonnet-4-6-med.",
+      announce: "quick-executor (/orc-quick) → deepseek/deepseek-coder via api (profile cheap) — displaces orc-executor-sonnet-4-6-med; this sends the slice to a third party.",
+      next: null,
+    },
+    {
+      slot: "fast-executor", lane: "/orc-fast", routed: true,
+      profile: "glm", model: "glm-4.6", small_model: null, max_turns: null,
+      added_at: "2026-08-11T14:02:00Z", provider: "zai", engine: "claude-shim",
+      verify_state: "STALE", verify_age_days: 15, model_known: true,
+      meaning: "one executor, one slice, a build+test smoke gate behind it — the checks that catch a bad implementation here are engine-blind.",
+      asks: false, announce_point: "the F0 preflight `extra:` line, before wave 1",
+      claude: { via: "claude", agent: "orc-executor-sonnet-4-6-high", agents: ["orc-executor-sonnet-4-6-high"], table: "shipped" },
+      resolved: "extra", held_back: null,
+      why: "slot row fast-executor holds this position and outranks orc-executor-sonnet-4-6-high; verification is 15d old (STALE — still routes, re-pinged before the wave).",
+      announce: "fast-executor (/orc-fast) → zai/glm-4.6 via claude-shim (profile glm) — displaces orc-executor-sonnet-4-6-high; this sends the slice to a third party.",
+      next: null,
+    },
+    {
+      slot: "doc-writer", lane: "/orc-doc", routed: true,
+      profile: "cheap", model: "deepseek-chat", small_model: "deepseek-chat", max_turns: 12,
+      added_at: "2026-08-24T08:00:00Z", provider: "deepseek", engine: "api",
+      verify_state: "VERIFIED", verify_age_days: 1, model_known: true,
+      meaning: "a writer owns ONE part file and invents no fact; its output is read by a checker and by you before it ships.",
+      asks: false, announce_point: "before the wave, naming the sections going off Claude",
+      claude: { via: "claude", agent: "orc-doc-writer-opus-5-med", agents: ["orc-doc-writer-opus-5-med"], table: "shipped" },
+      resolved: "extra", held_back: null,
+      why: "slot row doc-writer holds this position and outranks orc-doc-writer-opus-5-med.",
+      announce: "doc-writer (/orc-doc) → deepseek/deepseek-chat via api (profile cheap) — displaces orc-doc-writer-opus-5-med; this sends the slice to a third party.",
+      next: null,
+    },
+    {
+      // UNROUTED, AND IT KEEPS ITS SLOT. Filtering it out would make "I left the
+      // checker on Claude on purpose" and "there is no checker" identical.
+      slot: "doc-checker", lane: "/orc-doc", routed: false,
+      profile: null, model: null, small_model: null, max_turns: null, added_at: null,
+      provider: null, engine: null, verify_state: null, verify_age_days: null, model_known: null,
+      meaning: "the checker reads one bounded part and reports; it rewrites nothing, so a finding it makes is a finding you read.",
+      asks: false, announce_point: "before the wave",
+      claude: { via: "claude", agent: "orc-doc-checker-opus-5-low", agents: ["orc-doc-checker-opus-5-low"], table: "shipped" },
+      resolved: "claude", held_back: null,
+      why: "no slot row holds doc-checker — Extra is an OVERLAY, so an unrouted position falls straight through to orc-doc-checker-opus-5-low.",
+      announce: null,
+      next: "orc extra role set doc-checker <profile>/<model>",
+    },
+    {
+      slot: "wiki-scanner-deep", lane: "/orc-wiki", routed: false,
+      profile: null, model: null, small_model: null, max_turns: null, added_at: null,
+      provider: null, engine: null, verify_state: null, verify_age_days: null, model_known: null,
+      meaning: "a scanner returns an evidence-anchored doc body the orchestrator writes; every claim in it is anchored to a file you can open.",
+      asks: false, announce_point: "per scan-batch, beside the resolved tier",
+      claude: { via: "claude", agent: "orc-wiki-scanner-opus-4-8-high", agents: ["orc-wiki-scanner-opus-4-8-high"], table: "shipped" },
+      resolved: "claude", held_back: null,
+      why: "no slot row holds wiki-scanner-deep — Extra is an OVERLAY, so an unrouted position falls straight through to orc-wiki-scanner-opus-4-8-high.",
+      announce: null,
+      next: "orc extra role set wiki-scanner-deep <profile>/<model>",
+    },
+    {
+      // ROUTED AND HELD BACK: the profile lost its verification, so the position
+      // fell back to Claude without the user asking it to.
+      slot: "wiki-scanner-light", lane: "/orc-wiki", routed: true,
+      profile: "gone", model: "glm-4.6", small_model: null, max_turns: null,
+      added_at: "2026-07-30T11:30:00Z", provider: "zai", engine: "api",
+      verify_state: "UNVERIFIED", verify_age_days: null, model_known: true,
+      meaning: "the LIGHT tier is already a small no-new-surface delta on an existing doc — the cheapest work the wiki does.",
+      asks: false, announce_point: "per scan-batch, beside the resolved tier",
+      claude: { via: "claude", agent: "orc-wiki-scanner-sonnet-5-high", agents: ["orc-wiki-scanner-sonnet-5-high"], table: "shipped" },
+      resolved: "claude", held_back: "unverified",
+      why: '"gone" has never verified — nothing dispatches to an unproven endpoint.',
+      announce: null,
+      next: "orc extra ping gone",
+    },
+  ],
+  counts: { total: 6, routed: 4, resolving: 3 },
+  unreachable_roles: [
+    { role: "reviewer", state: "declared · no slot · nothing resolves this" },
+    { role: "verifier", state: "declared · no slot · nothing resolves this" },
+    { role: "analyst", state: "declared · no slot · nothing resolves this" },
+    { role: "planner", state: "declared · no slot · nothing resolves this" },
+    { role: "scout", state: "declared · no slot · nothing resolves this" },
+    { role: "test-author", state: "declared · no slot · nothing resolves this" },
+  ],
+  note: "a slot with no row KEEPS ITS SLOT and falls through to its pinned Claude agent. Absence is not a hole.",
+};
+
 /* `orc extra lanes --json` (v0.52.0, D6). ONE OF EVERY VERDICT, including the
    two that are easy to forget: a fixed-executor lane whose band's two edges
    DISAGREE (it stays on Claude and names the row that partially covered it),
@@ -820,12 +931,24 @@ const extraLanes = {
   ok: true,
   extra_enabled: true,
   roles: ["executor"],
-  shapes: ["scored", "fixed-executor", "fixed-role", "inert", "never"],
-  routes: ["per-task", "foreign", "claude", "roles", "never"],
+  shapes: ["scored", "fixed-executor", "slot", "gated-choice", "inert", "never"],
+  routes: ["per-task", "foreign", "claude", "roles", "offered", "never"],
+  slots: [
+    { slot: "quick-executor", lane: "/orc-quick", asks: true },
+    { slot: "fast-executor", lane: "/orc-fast", asks: false },
+    { slot: "doc-writer", lane: "/orc-doc", asks: false },
+    { slot: "doc-checker", lane: "/orc-doc", asks: false },
+    { slot: "wiki-scanner-deep", lane: "/orc-wiki", asks: false },
+    { slot: "wiki-scanner-light", lane: "/orc-wiki", asks: false },
+  ],
   note: "A lane not in this list does not route foreign.",
   lanes: [
     {
       lane: "/orc", shape: "scored", agent: null, routes: "per-task",
+      detail: "every task is scored, so the routing table below applies score by score.",
+    },
+    {
+      lane: "/orc-ultra", shape: "scored", agent: null, routes: "per-task",
       detail: "every task is scored, so the routing table below applies score by score.",
     },
     {
@@ -834,32 +957,49 @@ const extraLanes = {
       detail: "one edge routes foreign and the other does not, so the lane stays on Claude. Row [30,55) covers only part of this band.",
     },
     {
-      lane: "/orc-fast", shape: "fixed-executor", agent: "orc-executor-sonnet-4-6-high",
-      band: "[40,55)", edges: [40, 54], agree: true, routes: "foreign",
-      resolved: { profile: "glm", model: "glm-4.6", engine: "claude-shim", provider: "zai" },
-      detail: "this lane pins one executor. Both edges of its band resolve to the same profile, so the whole lane goes foreign.",
+      lane: "/orc-fast", shape: "slot", agent: null, routes: "roles",
+      slots: [
+        { slot: "fast-executor", routes: true, profile: "glm", model: "glm-4.6", claude: "orc-executor-sonnet-4-6-high", held_back: null, why: "slot row fast-executor holds this position and outranks orc-executor-sonnet-4-6-high." },
+      ],
+      detail: "fast-executor is held by a non-Claude worker; every position with no row stays on its pinned Claude agent.",
     },
     {
       lane: "/orc-diy", shape: "scored", agent: null, routes: "per-task",
       detail: "every task is scored, so the routing table below applies score by score. The flow key decides WHETHER; the resolver still decides WHERE, so route rows are never baked into flow.lock.json.",
     },
     {
-      lane: "/orc-quick", shape: "inert", agent: null, routes: "never",
-      detail: "this lane asks which agent before every dispatch, so a config that answered it silently would break its premise. It is announced at the gate.",
+      // OFFERED, never applied. The verdict word is this lane's own, because
+      // "this lane routes foreign" would be a claim about a decision only the
+      // user gets to make, per entry.
+      lane: "/orc-quick", shape: "gated-choice", agent: null, routes: "offered",
+      slots: [
+        { slot: "quick-executor", routes: true, profile: "cheap", model: "deepseek-chat", claude: "orc-executor-sonnet-4-6-med", held_back: null, why: "slot row quick-executor holds this position and outranks orc-executor-sonnet-4-6-med." },
+      ],
+      detail: "quick-executor is OFFERED as one more option at the dispatch gate. It never becomes a default and never sticks — this lane asks before every dispatch.",
     },
     {
-      lane: "/orc-doc", shape: "fixed-role", agent: "orc-doc-writer-opus-5-med",
-      roles_needed: ["doc-writer", "doc-checker"], roles_present: [], routes: "claude",
-      detail: "extra_roles names none of doc-writer, doc-checker, so this lane stays on Claude.",
+      // ONE ROUTED, ONE NOT. This is the state that could not be designed
+      // before v0.55.0, because both roles resolved the WRITER's band.
+      lane: "/orc-doc", shape: "slot", agent: null, routes: "roles",
+      slots: [
+        { slot: "doc-writer", routes: true, profile: "cheap", model: "deepseek-chat", claude: "orc-doc-writer-opus-5-med", held_back: null, why: "slot row doc-writer holds this position and outranks orc-doc-writer-opus-5-med." },
+        { slot: "doc-checker", routes: false, profile: null, model: null, claude: "orc-doc-checker-opus-5-low", held_back: null, why: "no slot row holds doc-checker — Extra is an OVERLAY, so an unrouted position falls straight through to orc-doc-checker-opus-5-low." },
+      ],
+      detail: "doc-writer is held by a non-Claude worker; every position with no row stays on its pinned Claude agent.",
     },
     {
       lane: "/orc-challenge", shape: "never", agent: null, routes: "never",
       detail: "this lane measures rather than produces, so nothing it dispatches may be swapped for a different model.",
     },
     {
-      lane: "/orc-wiki", shape: "fixed-role", agent: "orc-wiki-scanner-opus-4-8-high",
-      roles_needed: ["wiki-scanner"], roles_present: [], routes: "claude",
-      detail: "extra_roles names none of wiki-scanner, so this lane stays on Claude.",
+      // NEITHER position held — the row that was DEAD before v0.55.0, now
+      // answering honestly instead of blaming a role name nobody could set.
+      lane: "/orc-wiki", shape: "slot", agent: null, routes: "claude",
+      slots: [
+        { slot: "wiki-scanner-deep", routes: false, profile: null, model: null, claude: "orc-wiki-scanner-opus-4-8-high", held_back: null, why: "no slot row holds wiki-scanner-deep — Extra is an OVERLAY, so an unrouted position falls straight through to orc-wiki-scanner-opus-4-8-high." },
+        { slot: "wiki-scanner-light", routes: false, profile: null, model: null, claude: "orc-wiki-scanner-sonnet-5-high", held_back: null, why: "no slot row holds wiki-scanner-light — Extra is an OVERLAY, so an unrouted position falls straight through to orc-wiki-scanner-sonnet-5-high." },
+      ],
+      detail: "no position in this lane is held, so every one of them stays on its pinned Claude agent.",
     },
     { lane: "/orc-retro", shape: "never", agent: null, routes: "never", detail: "this lane measures rather than produces, so nothing it dispatches may be swapped for a different model." },
     { lane: "/orc-budget", shape: "never", agent: null, routes: "never", detail: "this lane measures rather than produces, so nothing it dispatches may be swapped for a different model." },
@@ -1781,6 +1921,7 @@ module.exports = {
   extraInstall,
   extraDoctor,
   extraRoute,
+  extraRole,
   extraLanes,
   extraStats,
   extraRates,

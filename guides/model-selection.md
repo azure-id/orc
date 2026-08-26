@@ -78,6 +78,42 @@ table.
 
 ---
 
+## 2b. Four lanes have no score, so they have POSITIONS instead
+
+A band answers "which agent for a task that scored 62". `/orc-quick`,
+`/orc-fast`, `/orc-doc` and `/orc-wiki` never produce a score at all — they pin
+one agent to a job. So each of those jobs is a **position** you can point
+somewhere else (`orc extra role`, v0.55.0):
+
+| position | lane | the agent it takes the job from |
+|---|---|---|
+| `quick-executor` | `/orc-quick` | `orc-executor-sonnet-4-6-med` · `orc-executor-opus-5-low` |
+| `fast-executor` | `/orc-fast` | `orc-executor-sonnet-4-6-high` |
+| `doc-writer` | `/orc-doc` | `orc-doc-writer-opus-5-med` |
+| `doc-checker` | `/orc-doc` | `orc-doc-checker-opus-5-low` |
+| `wiki-scanner-deep` | `/orc-wiki` | `orc-wiki-scanner-opus-4-8-high` |
+| `wiki-scanner-light` | `/orc-wiki` | `orc-wiki-scanner-sonnet-5-high` |
+
+A position with no row stays on the agent above, and it **keeps its row** in
+`orc extra role` so "I left the checker on Claude on purpose" and "there is no
+checker" never look the same.
+
+`/orc-mini` is the one fixed-executor lane that keeps a band, and that is
+deliberate: mini scores its tasks and then pins one executor over them, so
+reading that agent's band is a question about numbers the run really produced.
+
+### The one precedence sentence
+
+> **Extra decides whether a Claude agent runs at all. `opus5_only` and the score
+> tables only decide WHICH Claude agent runs where extra did not take it.**
+
+Under a taken position `opus5_only` is **not consulted** — and it stays fully
+live for every position with no row. `orc config list` names the taken positions
+beside the taken bands, because a partly shadowed setting must not be flattened
+into one word.
+
+---
+
 ## 3. The models are pinned, so you can check them
 
 A dispatch names a real agent file in `.claude/agents/`, for example

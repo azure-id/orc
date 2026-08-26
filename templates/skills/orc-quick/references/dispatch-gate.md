@@ -10,7 +10,7 @@ what is about to be spent, before it is spent.
 
 | Kind | Offer | Traced by the hook | Downgrade check |
 |------|-------|--------------------|-----------------|
-| Writes code | `orc-executor-sonnet-4-6-med` · `orc-executor-opus-5-low` | yes | yes |
+| Writes code | `orc-executor-sonnet-4-6-med` · `orc-executor-opus-5-low` · **a third option when a `quick-executor` position is held** | yes | yes (a foreign return has no `actual_model` — §2b) |
 | Read only (recon) | ad-hoc **model + effort** | no | yes (self-report) |
 | Review | `orc-reviewer-opus-5-med` · or ad-hoc | yes / no | yes |
 | Build repair, round 1–2 | *reused — not asked* | yes | yes |
@@ -27,6 +27,40 @@ Which executor for entry 2 — "add retry header"?
 
 Give a short reason next to each one, based on what the dig found. The user
 should be able to answer without thinking hard.
+
+#### The third option
+
+Show a third line ONLY when all three are true:
+
+- `extra_enabled` is true, AND
+- a `quick-executor` position is held (`orc extra role set quick-executor
+  <profile>/<model>`), AND
+- `orc extra resolve --slot quick-executor --json` answers `extra`.
+
+```
+Which executor for entry 2 — "add retry header"?
+
+  1. orc-executor-sonnet-4-6-med    cheap, fits a 3-file change
+  2. orc-executor-opus-5-low        thinks harder, about 3× the cost
+  3. deepseek/deepseek-chat         via profile `ds` — sends this slice to a third party
+```
+
+**Line 3 is the CLI's own `announce` sentence, copied word for word.** This lane
+does not write a second wording for a fact the CLI already composed.
+
+If any of the three is false, there is no line 3. Do not explain a missing
+option — an option the user cannot pick is noise.
+
+Picking 3 runs `orc extra dispatch --task <file> --json` with
+`slot: "quick-executor"` and **no `score`**. Read the return with
+`../../_shared/return-validation.md` **§2b, not §2**: a foreign worker reports no
+`actual_model`, and that must never be faked. What it says it did is a CLAIM —
+check it against the worktree.
+
+**If the foreign dispatch fails, ASK AGAIN.** Show the two Claude options and the
+reason it failed. `extra_on_failure` is inert here and say so: a config that
+silently substituted an executor would be the exact failure this gate exists to
+prevent. `extra_resume` is inert here too (rule 4).
 
 ### Read-only work (recon)
 
@@ -65,19 +99,26 @@ orc-quick has no score bands to tune. Mark the row
 2. **Never sticky.** Do not carry the last answer into the next entry.
 3. **Already answered is not skipped.** If the user wrote "use opus 5 low", the
    gate is satisfied — say which one you are using, in one line.
-4. **No config can change this menu.** `opus5_only`, `fable5_enabled` /
-   `fable5_roles`, `rubric_bands_override` and **`extra_enabled` (v0.50.0,
-   `../../_shared/extra-dispatch.md`)** are all inert in this lane. If one is on,
-   say so at the gate so the user is not confused:
+4. **No config can ANSWER this menu.** `opus5_only`, `fable5_enabled` /
+   `fable5_roles`, `rubric_bands_override` and `extra_resume` are all inert in
+   this lane. If one is on, say so at the gate so the user is not confused:
    ```
    (orc-quick ignores opus5_only — both options are live)
-   (orc-quick ignores extra_enabled — nothing here runs off Claude)
    ```
-   Extra is inert for the same reason the other three are, and it is the reason
-   that matters most here: this lane's entire premise is asking WHICH AGENT
-   before every dispatch, and a config that silently answered "a DeepSeek worker"
-   would have answered the one question the gate exists to ask. A shadowed
-   setting must never be silent — hence the line.
+   They are inert for one reason: this lane's entire premise is asking WHICH
+   AGENT before every dispatch, and a config that silently answered "a DeepSeek
+   worker" would have answered the one question the gate exists to ask. A
+   shadowed setting must never be silent — hence the line.
+
+   **`extra_enabled` is the one exception, and it is not an answer — it is an
+   option** (v0.55.0, `../../_shared/extra-dispatch.md`). With a `quick-executor`
+   position held it ADDS line 3 to the menu and does nothing else.
+   **It never becomes a default** (rule 1), never sticks (rule 2), and it is
+   re-asked after a failure. Say what it is at the gate:
+   ```
+   (option 3 sends this slice to a third party — orc-quick still asks every time)
+   ```
+   A shadowed setting must never be silent, and neither must an un-shadowed one.
 5. **Warn about tier once.** If the chosen model is above the session's model,
    the subagent will quietly run at the session model. Say it at the gate, then
    report the real ⛔ DOWNGRADE after the return.

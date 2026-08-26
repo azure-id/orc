@@ -226,7 +226,8 @@ test("the shadow runs BOTH WAYS and is never silent", async () => {
   assert.equal(o5.is_shadowed, true);
   assert.match(o5.shadow_reason, /partly shadowed by extra_enabled/);
   assert.match(o5.shadow_reason, /\[0,30\)/, "the honest report is WHICH RANGES were taken");
-  assert.match(o5.shadow_reason, /every other score still resolves here/);
+  // v0.55.0 — the sentence names the taken POSITIONS beside the taken bands.
+  assert.match(o5.shadow_reason, /every other score and position still resolves here/);
 
   // And at SET time, both directions.
   let r = run(p, ["config", "set", "opus5_only", "true"]);
@@ -316,7 +317,10 @@ test("orc extra lanes: a fixed-executor lane resolves BOTH EDGES, and disagreeme
   // The lanes that NEVER route say so whatever the config is — a measuring
   // instrument you swapped for a different model is measuring something else.
   assert.equal(j.lanes.find((l) => l.lane === "/orc-challenge").routes, "never");
-  assert.equal(j.lanes.find((l) => l.lane === "/orc-quick").shape, "inert");
+  // v0.55.0 — /orc-quick is `gated-choice`, not inert: the slot adds a THIRD
+  // OPTION to the menu it already shows, and never a default.
+  assert.equal(j.lanes.find((l) => l.lane === "/orc-quick").shape, "gated-choice");
+  assert.equal(j.lanes.find((l) => l.lane === "/orc-quick").routes, "claude");
 
   assert.equal(
     run(p, ["extra", "add", "w", "--provider", "custom", "--engine", "api", "--base-url", base, "--env-key", "K"]).status,
@@ -326,35 +330,65 @@ test("orc extra lanes: a fixed-executor lane resolves BOTH EDGES, and disagreeme
   assert.equal(pinged.status, 0, pinged.stdout + pinged.stderr);
   fs.writeFileSync(path.join(p.root, ".claude", "orc.config.yaml"), "extra_enabled: true\nextra_roles: [executor]\n");
 
-  // A row covering only PART of `/orc-fast`'s band [40,55): one edge foreign,
+  // A row covering only PART of `/orc-mini`'s band [55,65): one edge foreign,
   // one edge not. The lane stays on Claude and NAMES the row that partially
   // covered it — a midpoint would have captured the whole lane on the strength
-  // of a few scores out of fifteen.
-  run(p, ["extra", "route", "set", "40-45", "w/m1", "--json"]);
+  // of a few scores out of ten.
+  //
+  // v0.55.0 — `/orc-mini` is the LAST lane on this shape, and deliberately so:
+  // mini SCORES its tasks and then pins one executor over them, so both edges
+  // of that agent's band is a question about numbers the run really produced.
+  // `/orc-fast` produces none, so it became a POSITION instead.
+  run(p, ["extra", "route", "set", "55-58", "w/m1", "--json"]);
   j = json(run(p, ["extra", "lanes", "--json"]));
-  let fast = j.lanes.find((l) => l.lane === "/orc-fast");
-  assert.equal(fast.shape, "fixed-executor");
-  assert.deepEqual(fast.edges, [40, 54]);
-  assert.equal(fast.agree, false);
-  assert.equal(fast.routes, "claude");
-  assert.match(fast.detail, /covers only part of this band/);
+  let mini = j.lanes.find((l) => l.lane === "/orc-mini");
+  assert.equal(mini.shape, "fixed-executor");
+  assert.deepEqual(mini.edges, [55, 64]);
+  assert.equal(mini.agree, false);
+  assert.equal(mini.routes, "claude");
+  assert.match(mini.detail, /covers only part of this band/);
 
   // Widen it to the whole band and both edges agree, so the lane goes foreign.
-  run(p, ["extra", "route", "rm", "40-45", "--json"]);
-  run(p, ["extra", "route", "set", "40-55", "w/m1", "--json"]);
+  run(p, ["extra", "route", "rm", "55-58", "--json"]);
+  run(p, ["extra", "route", "set", "55-65", "w/m1", "--json"]);
   j = json(run(p, ["extra", "lanes", "--json"]));
-  fast = j.lanes.find((l) => l.lane === "/orc-fast");
-  assert.equal(fast.agree, true);
-  assert.equal(fast.routes, "foreign");
-  assert.equal(fast.resolved.profile, "w");
-  assert.equal(fast.resolved.model, "m1");
+  mini = j.lanes.find((l) => l.lane === "/orc-mini");
+  assert.equal(mini.agree, true);
+  assert.equal(mini.routes, "foreign");
+  assert.equal(mini.resolved.profile, "w");
+  assert.equal(mini.resolved.model, "m1");
   // `/orc` is SCORED, so it has no band and no edges — per-task is the answer.
   assert.equal(j.lanes.find((l) => l.lane === "/orc").routes, "per-task");
-  // `/orc-doc` needs its ROLES named, and `extra_roles` names neither.
+  // v0.55.0 — /orc-ultra runs the `orc` skill and writes its own trace, so its
+  // absence from this table was a gap.
+  assert.equal(j.lanes.find((l) => l.lane === "/orc-ultra").routes, "per-task");
+
+  // A SLOT lane resolves POSITIONS, not a band: no `edges`, no `agree`, and one
+  // row per position each carrying the agent it displaces.
   const doc = j.lanes.find((l) => l.lane === "/orc-doc");
-  assert.equal(doc.shape, "fixed-role");
-  assert.deepEqual(doc.roles_present, []);
+  assert.equal(doc.shape, "slot");
+  assert.equal(doc.band, undefined, "a slot is a point, not an interval");
+  assert.deepEqual(doc.slots.map((x) => x.slot), ["doc-writer", "doc-checker"]);
+  assert.ok(doc.slots.every((x) => x.routes === false));
+  assert.equal(doc.slots[0].claude, "orc-doc-writer-opus-5-med");
+  assert.equal(doc.slots[1].claude, "orc-doc-checker-opus-5-low");
   assert.equal(doc.routes, "claude");
+
+  // And once a position is held, the lane says which one.
+  assert.equal(run(p, ["extra", "role", "set", "doc-writer", "w/m1", "--json"]).status, 0);
+  j = json(run(p, ["extra", "lanes", "--json"]));
+  const doc2 = j.lanes.find((l) => l.lane === "/orc-doc");
+  assert.equal(doc2.routes, "roles");
+  assert.equal(doc2.slots[0].routes, true);
+  assert.equal(doc2.slots[1].routes, false, "the checker resolves its OWN position, never the writer's");
+  assert.match(doc2.detail, /doc-writer/);
+
+  // /orc-quick is OFFERED, never applied: the verdict word is its own.
+  assert.equal(run(p, ["extra", "role", "set", "quick-executor", "w/m1", "--json"]).status, 0);
+  j = json(run(p, ["extra", "lanes", "--json"]));
+  const q = j.lanes.find((l) => l.lane === "/orc-quick");
+  assert.equal(q.routes, "offered");
+  assert.match(q.detail, /never becomes a default/);
   f.stop();
   rmrf(p.root);
 });

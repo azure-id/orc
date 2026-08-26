@@ -277,15 +277,30 @@ never guessed. Slice shape and the whole protocol: `references/chunking.md`.
 the CHECKER, and it is a PER-DOCUMENT decision** (v0.52.0): `orc doc extra
 <slug> --set off|writer|checker|both`, stored in `doc.json`, default **off**.
 Resolution is highest-wins and is PRINTED — `doc.json.extra` (this document)
-`>` `config.extra_roles` (the project) `>` off — and a document set to `both`
-when `extra_roles` names neither role resolves to **off and says so**, because a
-shadowed setting must never be silent. A global switch was the defect: turning it
-on for a throwaway runbook turned it on for the PRD you ship.
+`>` **the slot row exists** (`orc extra role`) `>` off — and a document set to
+`both` when only ONE position is held resolves to that one and **says so**,
+because a shadowed setting must never be silent. A global switch was the defect:
+turning it on for a throwaway runbook turned it on for the PRD you ship.
+`config.extra_roles` is **no longer consulted here** (v0.55.0); a config still
+naming `doc-writer` or `doc-checker` warns once by name and arms nothing.
 
-This lane pins its agents, so it has no score to resolve with: it resolves
-`orc-doc-writer-opus-5-med`'s BAND **at both edges** and requires them to agree,
-exactly like `/orc-mini` and `/orc-fast`. `orc doc next` prints the answer, with
-the section ids, BEFORE the wave. A foreign writer runs `return-validation.md` **§2b instead of §2**
+**This lane has no score anywhere, so it holds POSITIONS, not a band** — the
+document decides WHICH roles, the slot row decides WHERE they go:
+`orc extra role set doc-writer <profile>/<model>` and
+`orc extra role set doc-checker <profile>/<model>`, resolved with
+`orc extra resolve --slot <slot> --json`. **Each role resolves its OWN slot.**
+Until v0.55.0 both resolved `orc-doc-writer-opus-5-med`'s band whatever the mode
+said, so a document set to `checker` reported the WRITER's answer for a role it
+was not routing — and the checker's `low` is a MEASUREMENT choice, not a cost
+one, so mapping it onto a cheap band was a category error twice over.
+`orc doc next` prints the answer BEFORE the wave, with the section ids **and
+which model per role** — "the writer went foreign" and "the checker went foreign"
+are different facts about a document, because a document's VOICE is the
+deliverable and only one of those two writes it. Dispatch through
+`orc extra dispatch --task <file> --json` with `slot: "doc-writer"` /
+`"doc-checker"` and **no `score`**; `orc doc forecast` prices each half at its
+own provider's rates, and a model ORC cannot price reads as an **em dash**,
+never as an Opus number for work Opus will not do. A foreign writer runs `return-validation.md` **§2b instead of §2**
 (⛔ SUBSTITUTION replaces the downgrade check), and every other rule of this lane
 is unchanged: it still owns exactly ONE file, it still never opens `document.md`,
 and the free lint still runs before it. **Say which sections went off Claude

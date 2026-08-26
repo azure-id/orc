@@ -734,11 +734,19 @@ test("`extra_resume` is INERT in /orc-quick, and the shadowing is announced on b
   // before every dispatch is exactly the lane a resume config would break.
   const quick = read("skills/orc-quick/SKILL.md");
   assert.match(quick, /These config keys \*\*do nothing here\*\*/);
-  for (const k of ["extra_enabled", "extra_resume", "opus5_only", "rubric_bands_override"])
+  for (const k of ["extra_resume", "extra_on_failure", "opus5_only", "rubric_bands_override"])
     assert.ok(quick.includes(k), "/orc-quick's INERT list is missing " + k);
   const shared = read("skills/_shared/extra-dispatch.md");
-  assert.match(shared, /INERT in `\/orc-quick`/);
-  assert.match(shared, /`extra_resume` with it/, "the shared contract registers the same exception");
+  assert.match(shared, /INERT there/, "the shared contract registers the same exception");
+  assert.match(shared, /`extra_resume` stay INERT/, "and names the resume key in that list");
+
+  // v0.55.0 — `extra_enabled` is the ONE key that LEFT the inert list, and an
+  // un-shadowed setting must not be silent either. It is not an answer to the
+  // gate's question; it is one more option on the menu the gate already shows.
+  assert.ok(!/`extra_enabled`[^\n]*do nothing here/.test(quick));
+  assert.match(quick, /third option/i, "/orc-quick says what extra_enabled does here");
+  assert.match(shared, /GATED CHOICE/, "the shared contract says what shape that lane is");
+  assert.match(shared, /ADDS AN OPTION and nothing else/, "and that it adds an option, never an answer");
 });
 
 test("the config surface says ELEVEN keys, and names what it refused to add", () => {

@@ -49,19 +49,45 @@ test("extra: the canonical contract is ONE file, and the lanes point at it", () 
 // [55,58) capture an ENTIRE mini run on the strength of three scores out of ten
 // — a number ORC invented to satisfy an interface is not a routing decision the
 // user made.
-test("extra: a fixed-executor lane resolves the BAND at BOTH EDGES, and they must agree", () => {
+test("extra: /orc-mini is the LAST band lane, and it resolves BOTH EDGES", () => {
   const c = canon();
   assert.match(c, /BOTH EDGES/, "the canonical file states the rule");
   assert.ok(
     !/midpoint|mid-point/i.test(c) || /never|not|rejected/i.test(c),
     "a midpoint may only appear as the rejected alternative"
   );
-  for (const lane of ["orc-mini", "orc-fast"]) {
-    const s = read(lane, "SKILL.md");
-    assert.match(s, /BAND/, `${lane} names the band rule`);
-    assert.match(s, /both edges/i, `${lane} states that BOTH edges are resolved`);
-    assert.match(s, /agree/i, `${lane} states that the two edges must AGREE`);
+  const mini = read("orc-mini", "SKILL.md");
+  assert.match(mini, /BAND/, "orc-mini names the band rule");
+  assert.match(mini, /both edges/i, "orc-mini states that BOTH edges are resolved");
+  assert.match(mini, /agree/i, "orc-mini states that the two edges must AGREE");
+});
+
+// v0.55.0 — A SCORE IS WHAT A BAND NEEDS, AND FOUR LANES DO NOT HAVE ONE. Those
+// four hold a POSITION instead, and each one must NAME its slot: resolving a
+// pinned agent's band at both edges was arithmetic on a number nobody chose.
+test("extra: every slot lane names its POSITION and never a band", () => {
+  const c = canon();
+  assert.match(c, /## The slot table/, "the canonical file carries the slot table");
+  assert.match(c, /orc extra role/, "and the command family that holds them");
+  assert.match(c, /slot:<slot>/, "and the trace band spelling");
+  // ABSENCE IS NOT A HOLE: an unrouted position falls through to a NAMED agent.
+  assert.match(c, /OVERLAY/, "an unrouted position falls straight through");
+
+  const where = {
+    "fast-executor": read("orc-fast", "SKILL.md"),
+    "doc-writer": read("orc-doc", "SKILL.md"),
+    "doc-checker": read("orc-doc", "SKILL.md"),
+    "wiki-scanner-deep": read("orc-wiki", "references", "extra.md"),
+    "wiki-scanner-light": read("orc-wiki", "references", "extra.md"),
+    "quick-executor": read("orc-quick", "references", "dispatch-gate.md"),
+  };
+  for (const [slot, body] of Object.entries(where)) {
+    assert.ok(body.includes(slot), `the lane that owns ${slot} must name it`);
+    assert.ok(body.includes("orc extra role"), `the lane that owns ${slot} must say HOW it is held`);
   }
+  // And no slot lane may claim to resolve a band.
+  for (const lane of [read("orc-fast", "SKILL.md"), read("orc-doc", "SKILL.md")])
+    assert.ok(!/both edges/i.test(lane), "a slot lane resolves a POSITION, never a band");
 });
 
 // Two hard hold-backs sit beside the resolver, and NEITHER is a second
@@ -93,8 +119,14 @@ test("extra: the cited-risk hold-back is the other one, and it is config-named",
 // gate exists to ask.
 test("extra: the lanes that do NOT dispatch foreign each say so in exactly one place", () => {
   const quick = read("orc-quick", "references", "dispatch-gate.md");
-  assert.match(quick, /extra_enabled/, "/orc-quick names the key it is inert to");
-  assert.match(quick, /INERT|inert/, "/orc-quick says INERT out loud");
+  assert.match(quick, /INERT|inert/, "/orc-quick says INERT out loud for the keys that ARE");
+  // v0.55.0 — `extra_enabled` is the ONE exception, and it is not an answer, it
+  // is an OPTION. It never becomes a default and never sticks, and a shadowed
+  // setting must never be silent — nor must an un-shadowed one.
+  assert.match(quick, /extra_enabled/, "/orc-quick names the key");
+  assert.match(quick, /third option|option 3/i, "/orc-quick states what extra_enabled actually does here");
+  assert.match(quick, /never becomes a default/, "it is an option, never an answer");
+  assert.match(quick, /re-?ask|ASK AGAIN/i, "a failed foreign dispatch re-opens the gate");
 
   const ch = read("orc-challenge", "SKILL.md");
   assert.match(ch, /extra/i, "/orc-challenge states its stance");

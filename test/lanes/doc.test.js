@@ -2283,26 +2283,51 @@ test("doc extra: per document, default off, and the resolution order is PRINTED"
     assert.deepStrictEqual(j.options, ["off", "writer", "checker", "both"]);
     assert.ok(j.resolve_order.length === 3, "the order is data, not prose");
 
-    // A document set to `both` while `extra_roles` names NEITHER role resolves
+    // A document set to `both` while NO SLOT ROW holds either position resolves
     // to OFF — and SAYS SO. A shadowed setting must never be silent.
     assert.strictEqual(cli(["doc", "extra", slug, "--set", "both", "--json", "--dir", root]).status, 0);
     j = JSON.parse(cli(["doc", "extra", slug, "--json", "--dir", root]).stdout);
     assert.strictEqual(j.stored, "both");
-    assert.strictEqual(j.extra, "off", "the project list is a floor the document cannot rise above");
-    assert.deepStrictEqual(j.shadowed_by_config, ["writer", "checker"]);
+    assert.strictEqual(j.extra, "off", "a position with no row is Claude, and the document cannot rise above that");
+    assert.deepStrictEqual(j.shadowed_by_slots, ["writer", "checker"]);
     assert.match(j.why, /resolves to OFF/);
+    assert.strictEqual(j.targets.writer, null);
+    assert.strictEqual(j.targets.checker, null);
 
-    // Name the roles and it resolves.
+    // v0.55.0 — `config.extra_roles` no longer arms anything here. Naming the
+    // retired role WARNS BY NAME and changes nothing: a renamed mechanism must
+    // never be a silent revert, and it must never be a silent ARM either.
     fs.writeFileSync(
       path.join(root, ".claude", "orc.config.yaml"),
       "extra_enabled: true" + String.fromCharCode(10) + "extra_roles: [executor, doc-writer]" + String.fromCharCode(10)
     );
     j = JSON.parse(cli(["doc", "extra", slug, "--json", "--dir", root]).stdout);
+    assert.strictEqual(j.extra, "off", "extra_roles is not consulted any more");
+    assert.deepStrictEqual(j.legacy_config_roles, ["doc-writer"]);
+    assert.match(j.legacy_warning, /orc extra role/);
+
+    // A HELD POSITION is what arms it, and each role carries its OWN target.
+    const ex = path.join(root, ".claude", "orc", "extra.json");
+    fs.mkdirSync(path.dirname(ex), { recursive: true });
+    fs.writeFileSync(
+      ex,
+      JSON.stringify({
+        version: 2,
+        profiles: [{ name: "ds", provider: "custom", engine: "api", models_seen: ["m1"], verified_at: new Date().toISOString(), credential: { source: "env", key_name: "K" } }],
+        routes: [],
+        slots: [{ slot: "doc-writer", profile: "ds", model: "m1" }],
+        history: [],
+      })
+    );
+    j = JSON.parse(cli(["doc", "extra", slug, "--json", "--dir", root]).stdout);
     assert.strictEqual(j.extra, "writer");
-    assert.deepStrictEqual(j.shadowed_by_config, ["checker"]);
-    // This lane pins its agents, so it resolves the writer's BAND at BOTH EDGES.
-    assert.ok(j.edges && j.edges.band, "a fixed lane resolves a band, not a score");
-    assert.strictEqual(j.edges.edges.length, 2);
+    assert.deepStrictEqual(j.shadowed_by_slots, ["checker"]);
+    // NO BAND ANYWHERE. A slot is a position, not an interval — and the checker
+    // resolves its OWN position rather than borrowing the writer's answer.
+    assert.strictEqual(j.edges, undefined, "a slot lane never resolves a band");
+    assert.strictEqual(j.targets.writer.model, "m1");
+    assert.strictEqual(j.targets.writer.claude.agent, "orc-doc-writer-opus-5-med");
+    assert.strictEqual(j.targets.checker, null, "the checker is NOT routed, and never borrows the writer's band");
 
     // A second document is UNAFFECTED — that is the whole point of the change.
     const other = "t1";
@@ -2329,11 +2354,30 @@ test("doc next: which sections go off Claude is said BEFORE the wave", () => {
 
     fs.writeFileSync(
       path.join(root, ".claude", "orc.config.yaml"),
-      "extra_enabled: true" + String.fromCharCode(10) + "extra_roles: [executor, doc-writer]" + String.fromCharCode(10)
+      "extra_enabled: true" + String.fromCharCode(10)
+    );
+    const ex = path.join(root, ".claude", "orc", "extra.json");
+    fs.mkdirSync(path.dirname(ex), { recursive: true });
+    fs.writeFileSync(
+      ex,
+      JSON.stringify({
+        version: 2,
+        profiles: [{ name: "ds", provider: "deepseek", engine: "api", models_seen: ["m1"], verified_at: new Date().toISOString(), credential: { source: "env", key_name: "K" } }],
+        routes: [],
+        slots: [{ slot: "doc-writer", profile: "ds", model: "m1" }],
+        history: [],
+      })
     );
     j = JSON.parse(cli(["doc", "next", slug, "--json", "--dir", root]).stdout);
     assert.strictEqual(j.extra.resolved, "writer");
     assert.match(j.extra.sentence, /before the wave, not after it/);
+    // v0.55.0 — WHICH MODEL PER ROLE. "the writer went foreign" and "the checker
+    // went foreign" are different facts about a document, because a document's
+    // VOICE is the deliverable and only one of those two writes it.
+    assert.match(j.extra.sentence, /writer → deepseek\/m1/);
+    assert.match(j.extra.sentence, /orc-doc-writer-opus-5-med/);
+    assert.ok(!/checker →/.test(j.extra.sentence), "the checker is not routed, so it is not claimed to be");
+    assert.strictEqual(j.extra.targets.checker, null);
   } finally {
     rmrf(root);
   }

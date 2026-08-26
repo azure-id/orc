@@ -59,6 +59,11 @@
      ladder does need at this width is for its head to stop pretending it has
      five columns. */
   .ex-band-head { grid-template-columns: minmax(0, 30%) minmax(0, auto) minmax(0, 1fr) 16px; }
+  /* v0.55.0 — EVERY VARIANT COLLAPSES EXPLICITLY. A position row has no bar, so
+     its first column is the slot name rather than a track; leaving it on the
+     band template here would put the target under the caret. */
+  .ex-slot-head { grid-template-columns: minmax(0, 40%) minmax(0, 1fr) 16px; }
+  .ex-slot-when { grid-column: 1 / -1; }
   .ex-band-chips { grid-column: 1 / -1; justify-content: flex-start; }
   .ex-route-controls { align-items: stretch; }
   .ex-route-controls .btn { width: 100%; }

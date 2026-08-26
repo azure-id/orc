@@ -61,11 +61,18 @@ add steps.
 
 orc-quick is standalone. These config keys **do nothing here**:
 `opus5_only` · `fable5_enabled` / `fable5_roles` · `rubric_bands_override` ·
-`extra_enabled` · `extra_resume`.
+`extra_resume` · `extra_on_failure`.
 
 The user always picks the agent. See `../_shared/opus5-only.md` — orc-quick is
 listed there as the one exception. Say this at the gate if `opus5_only` is on,
 so the user is not confused.
+
+**`extra_enabled` is the one key that does something here, and it is small.**
+With a `quick-executor` position held (`orc extra role`), the code-writing menu
+gets a THIRD option that sends the slice to a third party. It is still an option:
+never a default, never sticky, and asked again after a failure. Recon and review
+stay on Claude. See `references/dispatch-gate.md` and
+`../_shared/extra-dispatch.md`.
 
 ---
 

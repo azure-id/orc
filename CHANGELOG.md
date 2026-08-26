@@ -10,6 +10,57 @@ Format: `### v<version> — <title> _(<date>)_`.
 
 ---
 
+### v0.55.0 — a score is what a band needs, and four lanes do not have one _(2026-08-26)_
+
+**A score is what a band needs, and four lanes do not have one.** `/orc-quick`,
+`/orc-fast`, `/orc-doc` and `/orc-wiki` pin an agent to a POSITION rather than
+scoring a task. `orc extra` routed them anyway — by resolving the pinned agent's
+score band at both edges, which is arithmetic on a number nobody chose.
+
+It was wrong twice and dead once. A document set to `checker` resolved the
+**writer's** band for a role it was not routing. `/orc-wiki` asked for a role
+named `scanner` that `extra_roles` refuses by name, so that lane could never
+route however it was configured — `orc extra lanes` printed `claude` forever,
+with a reason that read like a user's choice. And `orc extra dispatch` required a
+`score` unconditionally, so **no non-scored dispatch had ever reached the bridge
+at all** — not the fence, not the journal, not the spend log.
+
+- **`orc extra role` holds six POSITIONS**: `quick-executor` · `fast-executor` ·
+  `doc-writer` · `doc-checker` · `wiki-scanner-deep` · `wiki-scanner-light`. One
+  named position, one chosen `profile/model`, and **a row's presence is the
+  arming**. `list` prints all six always — an unrouted position keeps its slot
+  and reads as the Claude agent it falls through to, because "I left the checker
+  on Claude on purpose" and "there is no checker" must never look the same.
+- **A second resolver that never touches a band.** `orc extra resolve --slot
+  <slot>` is the sibling of the score shape, same answer, same exit codes, and
+  the Claude answer it carries is a **pinned NAME rather than an interval** —
+  strictly more honest than what the scored half can offer. Nine hold-backs, each
+  answered by name; a cited risk is never invented for a lane that has none.
+- **Precedence, one sentence for both shapes:** extra decides *whether* a Claude
+  agent runs at all; `opus5_only` and the score tables only decide *which* Claude
+  agent runs where extra did not take it. Under a taken slot `opus5_only` is **not
+  consulted** — and it stays fully live for every position with no row. `orc
+  config list` and `orc config set` now name the taken POSITIONS beside the taken
+  bands.
+- **The bridge accepts a slot.** Exactly one of `score` or `slot`; both is
+  refused by name; `band` becomes `slot:<slot>` so the trace parser, the
+  eight-field dedupe and `orc extra stats` are untouched and each position gets
+  its own cost row for free. **Zero new engines, zero new dispatch paths, zero new
+  agents** — the fence, the cap, the credential triangle, the journal, the spend
+  log and the resume ladder all come along unchanged.
+- **Per lane:** `/orc-doc` resolves each role against its OWN slot and `orc doc
+  next` names the model per role before the wave (a document's voice is the
+  deliverable); `/orc-wiki` prints its target beside the tier it already prints;
+  `/orc-fast` names the agent it displaced in the F0 line; **`/orc-quick` gets a
+  THIRD OPTION on its menu** — never a default, never sticky, re-asked after a
+  failure, because that gate's whole premise is asking.
+- **`orc ui ▸ Extra ▸ Routing` grows a second ladder** below the bands, and
+  **zero config keys were added** — a second master gate, per-lane switches,
+  `extra_quick_ask` and a per-slot model key were all considered and are written
+  down as refused.
+
+---
+
 ### v0.54.0 — a failed dispatch is a POSITION, not a blank page _(2026-08-25)_
 
 **A worker on another model wrote six of seven lines and lost its connection.

@@ -1512,3 +1512,54 @@ test("overview: an orphaned dispatch gets ONE line, and it navigates rather than
   // It REPORTS. It never resumes.
   assert.ok(!/resume/.test(block), "the Overview never offers to continue a dispatch");
 });
+
+test("extra positions: a slot is a POINT, it keeps its row, and the panel names none of it", () => {
+  const js = panelJs("extra");
+  const css = panelCss("extra").replace(/\/\*[\s\S]*?\*\//g, "");
+  const { extraRole } = require(path.join(WEBUI, "fixtures", "extra.js"));
+
+  // v0.55.0 — A SLOT IS A POINT, NOT AN INTERVAL. Drawing it a proportional bar
+  // would be the panel inventing a range the CLI never computed, so the row
+  // reuses `.ex-band` and simply declares one fewer column.
+  assert.match(js, /exSlotCard/, "the positions ladder exists");
+  assert.match(css, /\.ex-slot-head\s*\{[\s\S]*?grid-template-columns:/, "a row whose child count differs DECLARES its own columns");
+  const slotFns = js.slice(js.indexOf("function exSlotRow"), js.indexOf("function exLanesCard"));
+  assert.ok(!/setProperty\("--w"/.test(slotFns), "a position has no width — it covers nothing");
+
+  // EVERY STRING IS THE CLI'S. `meaning`, `why`, `announce_point` and the state
+  // words all come off the row — writing "cheap work" beside a position would be
+  // the panel deciding what a position means (the Flow-stepper rule).
+  for (const field of ["raw.meaning", "raw.why", "raw.announce_point", "raw.claude.agent", "raw.verify_state"])
+    assert.ok(slotFns.includes(field), "the row must render " + field);
+  const bare = slotFns.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+  assert.ok(!/orc-doc-|orc-wiki-|orc-executor-/.test(bare), "an agent name is the CLI's answer, never the panel's");
+  assert.ok(!/doc-writer|wiki-scanner|quick-executor|fast-executor/.test(bare), "and neither is a slot id");
+
+  // AN UNROUTED POSITION KEEPS ITS ROW — the OFF-phase rule. The card renders
+  // `slots` whole, so there is no filter at all, and that is the assertion.
+  assert.ok(!/slots\s*\|\|\s*\[\]\)\.filter\(/.test(js), "the positions ladder must not filter a row out");
+
+  // REPLACING A POSITION IS A ROUTING CHANGE, so the confirmation NAMES what it
+  // replaces. A count is not consent, and neither is a slot id on its own.
+  assert.match(js, /extra\.slots\.confirmReplace/, "a replace is confirmed");
+  for (const code of ["en", "id"]) {
+    const table = JSON.parse(fs.readFileSync(path.join(WEBUI, "i18n", code, "extra.json"), "utf8"));
+    assert.ok(/\{old\}/.test(table["extra.slots.confirmReplace"]), code + ": the confirmation must name what it replaces");
+    assert.ok(/\{next\}/.test(table["extra.slots.confirmReplace"]), code + ": and what it becomes");
+  }
+
+  // ONE OF EVERY STATE IN THE FIXTURES, including the ugly ones — you cannot
+  // design a STALE chip on a fresh connection.
+  const rows = extraRole.slots;
+  assert.equal(rows.length, 6, "all six positions, always");
+  const has = (fn) => rows.filter(fn).length;
+  assert.ok(has((r) => r.resolved === "extra" && r.verify_state === "VERIFIED") >= 1, "a routed + VERIFIED position");
+  assert.equal(has((r) => r.verify_state === "STALE"), 1, "a routed + STALE position");
+  assert.equal(has((r) => r.routed && r.held_back === "unverified"), 1, "a position whose profile lost its verification");
+  assert.equal(has((r) => r.routed && r.model_known === false), 1, "a position whose model left models_seen");
+  assert.ok(has((r) => !r.routed) >= 2, "and unrouted positions, which keep their slot");
+  assert.equal(has((r) => r.asks), 1, "exactly one lane ASKS — the other three announce");
+  // An unrouted position falls through to a NAMED agent. It is never null and it
+  // is never an interval.
+  for (const r of rows) assert.ok(r.claude && /^orc-/.test(r.claude.agent), r.slot + " must fall through to a named agent");
+});

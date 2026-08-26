@@ -88,6 +88,30 @@ only, never a preset selector, in both modes.
 The forcing is flat across every lane that HONORS the mode — `orc-quick` does
 not, per "Out of scope" above.
 
+### `orc extra` sits ABOVE the mode, and it is not a fourth thing it overrides
+
+Extra decides **whether a Claude agent runs at all**. `opus5_only` and the score
+tables only decide WHICH Claude agent runs where extra did not take it. So the
+mode is neither shadowed nor shadowing — it is simply **NOT CONSULTED** for the
+work extra took:
+
+- **a scored task** — an extra route row covering that score outranks the mode;
+  every score no row covers still resolves on the Opus 5 ladder.
+- **a POSITION** (v0.55.0 — `quick-executor`, `fast-executor`, `doc-writer`,
+  `doc-checker`, `wiki-scanner-deep`, `wiki-scanner-light`) — an extra slot row
+  holding that position outranks the mode's variant of that slot's agent; **a
+  position with no row is fully governed by the mode.** With `doc-writer` routed
+  and `doc-checker` not, `opus5_only` is entirely live for the checker.
+
+"Not consulted for that slot" and "inert" are different claims, and only the
+first one is true. `orc config list` and `orc config set` NAME the taken bands
+AND the taken positions for exactly that reason: a shadowed setting must never
+be silent, and neither must a partly shadowed one.
+
+Both wiki slots collapse onto `orc-wiki-scanner-opus-5-med` while the mode is on,
+which is why the slot table adds **no agent and no pair**. A slot names the
+POSITION, not the model.
+
 ## Tier honesty
 
 A subagent can never outrank the main session. With the mode ON, EVERY dispatch
