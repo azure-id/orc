@@ -10,6 +10,24 @@ Format: `### v<version> — <title> _(<date>)_`.
 
 ---
 
+### v0.55.1 — ORC is on npm _(2026-08-27)_
+
+**ORC is published as [`@azure-id/orc`](https://www.npmjs.com/package/@azure-id/orc).**
+The GitHub tarball still works and nothing about the payload changed — no skill,
+no agent, no CLI behaviour moved. This is the install path getting a name.
+
+- **`npm i -g @azure-id/orc`** is the install, and
+  **`npm i -g @azure-id/orc@latest`** is the update. `orc upgrade` already
+  fetched the newest package and then applied it, and it continues to;
+  `orc upgrade --from @azure-id/orc` names npm explicitly.
+- **The GitHub tarball is the fallback now**, not the headline — kept in the
+  Quick start behind a fold for forks and for anyone pinning a branch.
+- **`orc update` is unchanged**: it re-copies the package you already have and
+  never touches the network, so `npm i -g @azure-id/orc@latest && orc update`
+  is the manual spelling of `orc upgrade`.
+
+---
+
 ### v0.55.0 — a score is what a band needs, and four lanes do not have one _(2026-08-26)_
 
 **A score is what a band needs, and four lanes do not have one.** `/orc-quick`,

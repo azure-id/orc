@@ -6,13 +6,16 @@
 
 *Terima permintaan → pahami → rencanakan → beri nilai → kerjakan paralel → periksa → uji → kirim.*
 
-![Version](https://img.shields.io/badge/version-0.55.0-blue.svg?style=for-the-badge)
+![npm](https://img.shields.io/npm/v/%40azure-id%2Forc?style=for-the-badge&color=cb3837&logo=npm)
+![Version](https://img.shields.io/badge/version-0.55.1-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
 ![Dependencies](https://img.shields.io/badge/dependencies-zero-lightgrey.svg?style=for-the-badge)
 
-**Versi terbaru: v0.49.1** · diperbarui 18-08-2026 · [daftar perubahan lengkap](CHANGELOG.md)
+**Versi terbaru: v0.55.1** · diperbarui 27-08-2026 · [daftar perubahan lengkap](CHANGELOG.md)
+
+**Ada di npm: [`@azure-id/orc`](https://www.npmjs.com/package/@azure-id/orc)** — `npm i -g @azure-id/orc`
 
 **🇬🇧 [Read this in English](README.md)**
 
@@ -119,9 +122,23 @@ kedisiplinan itu sebagai skill:
 
 ## Cara mulai
 
+ORC ada di npm dengan nama **[`@azure-id/orc`](https://www.npmjs.com/package/@azure-id/orc)**.
+
+```bash
+npm i -g @azure-id/orc          # pasang
+npm i -g @azure-id/orc@latest   # perbarui ke rilis terbaru
+```
+
+<details>
+<summary>Atau pasang langsung dari GitHub</summary>
+
+<br>
+
 ```bash
 npm i -g https://github.com/azure-id/orc/archive/refs/heads/main.tar.gz
 ```
+
+</details>
 
 Lalu, di dalam sebuah proyek:
 
@@ -158,11 +175,19 @@ baru**: ia mengambil paket terbaru dulu, lalu memasangnya. Berkas
 `.claude/orc.config.yaml` Anda selamat di kedua perintah itu.
 
 ```bash
-orc version                  # versi Anda, dan apakah ada yang lebih baru
-orc changelog                # apa yang akan Anda DAPAT kalau upgrade
-orc upgrade                  # ambil yang terbaru, lalu perbarui proyek ini
-orc upgrade --global         # sama, tapi untuk ~/.claude
+orc version                              # versi Anda, dan apakah ada yang lebih baru
+orc changelog                            # apa yang akan Anda DAPAT kalau upgrade
+orc upgrade                              # ambil yang terbaru, lalu perbarui proyek ini
+orc upgrade --global                     # sama, tapi untuk ~/.claude
+orc upgrade --from @azure-id/orc         # dari npm, disebut jelas
 orc upgrade --from github:azure-id/orc   # dari fork, atau spesifikasi npm apa pun
+```
+
+Atau perbarui paketnya sendiri lalu pasang ulang:
+
+```bash
+npm i -g @azure-id/orc@latest
+orc update
 ```
 
 Pemeriksaan versi dilakukan lewat HTTPS, hasilnya disimpan 24 jam, dan gagal
@@ -472,6 +497,19 @@ Bacalah sebagai catatan putaran itu, bukan sebagai audit terkini:
 
 **Riwayat lengkap: [CHANGELOG.md](CHANGELOG.md)** — atau `orc changelog`, yang
 hanya mencetak yang lebih baru dari versi yang Anda punya.
+
+### v0.55.1 — ORC sudah ada di npm _(27-08-2026)_
+
+**ORC diterbitkan dengan nama [`@azure-id/orc`](https://www.npmjs.com/package/@azure-id/orc).**
+Pemasangan lewat GitHub tetap jalan, dan isi paketnya tidak berubah sama sekali —
+ini hanya soal cara memasangnya sekarang punya nama.
+
+- **`npm i -g @azure-id/orc`** untuk memasang, dan
+  **`npm i -g @azure-id/orc@latest`** untuk memperbarui. `orc upgrade` sudah
+  melakukan keduanya sejak dulu dan tetap begitu.
+- **Pemasangan dari GitHub sekarang jadi cadangan**, bukan cara utama — tetap ada
+  di bagian "Cara mulai", dilipat, untuk fork atau kalau Anda mengunci sebuah
+  branch.
 
 ### v0.51.0 — alat yang sudah Anda punya, dan koneksi yang membuktikan dirinya _(22-08-2026)_
 

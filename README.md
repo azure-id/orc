@@ -6,14 +6,17 @@
 
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
-![Version](https://img.shields.io/badge/version-0.55.0-blue.svg?style=for-the-badge)
+![npm](https://img.shields.io/npm/v/%40azure-id%2Forc?style=for-the-badge&color=cb3837&logo=npm)
+![Version](https://img.shields.io/badge/version-0.55.1-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
 ![Dependencies](https://img.shields.io/badge/dependencies-zero-lightgrey.svg?style=for-the-badge)
 ![GitHub stars](https://img.shields.io/github/stars/azure-id/orc?style=for-the-badge&color=yellow)
 
-**Latest: v0.55.0** · updated 2026-08-26 · [full changelog](CHANGELOG.md)
+**Latest: v0.55.1** · updated 2026-08-27 · [full changelog](CHANGELOG.md)
+
+**On npm: [`@azure-id/orc`](https://www.npmjs.com/package/@azure-id/orc)** — `npm i -g @azure-id/orc`
 
 **🇮🇩 [Baca dalam Bahasa Indonesia](README-id.md)**
 
@@ -102,9 +105,23 @@ written agreements. ORC writes that discipline down as skills:
 
 ## Quick start
 
+ORC is on npm as **[`@azure-id/orc`](https://www.npmjs.com/package/@azure-id/orc)**.
+
+```bash
+npm i -g @azure-id/orc          # install
+npm i -g @azure-id/orc@latest   # update to the newest release
+```
+
+<details>
+<summary>Install straight from GitHub instead</summary>
+
+<br>
+
 ```bash
 npm i -g https://github.com/azure-id/orc/archive/refs/heads/main.tar.gz
 ```
+
+</details>
 
 Then, inside a project:
 
@@ -139,11 +156,19 @@ newest package first, then applies it. Your `.claude/orc.config.yaml` survives
 both.
 
 ```bash
-orc version                  # what you have, and whether something newer exists
-orc changelog                # what you would GET by upgrading
-orc upgrade                  # fetch the latest, then update this project
-orc upgrade --global         # the same for ~/.claude
+orc version                              # what you have, and whether something newer exists
+orc changelog                            # what you would GET by upgrading
+orc upgrade                              # fetch the latest, then update this project
+orc upgrade --global                     # the same for ~/.claude
+orc upgrade --from @azure-id/orc         # explicitly from npm
 orc upgrade --from github:azure-id/orc   # a fork, or any npm spec
+```
+
+Or update the package yourself and re-apply it:
+
+```bash
+npm i -g @azure-id/orc@latest
+orc update
 ```
 
 The update check reads the source over HTTPS, is cached for 24 hours, and fails
@@ -439,6 +464,19 @@ a current audit: [EVAL-REPORT.md](EVAL-REPORT.md).
 
 **Full history: [CHANGELOG.md](CHANGELOG.md)** — or `orc changelog`, which prints
 only what is newer than the version you have.
+
+### v0.55.1 — ORC is on npm _(2026-08-27)_
+
+**ORC is published as [`@azure-id/orc`](https://www.npmjs.com/package/@azure-id/orc).**
+The GitHub tarball still works and nothing about the payload changed — this is
+the install path getting a name.
+
+- **`npm i -g @azure-id/orc`** is the install, and
+  **`npm i -g @azure-id/orc@latest`** is the update. `orc upgrade` already did
+  both steps for you and continues to; `--from @azure-id/orc` names npm
+  explicitly.
+- **The GitHub tarball is now the fallback**, not the headline — it is kept in
+  the Quick start behind a fold for forks and for anyone pinning a branch.
 
 ### v0.55.0 — a score is what a band needs, and four lanes do not have one _(2026-08-26)_
 
