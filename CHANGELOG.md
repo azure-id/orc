@@ -10,6 +10,35 @@ Format: `### v<version> — <title> _(<date>)_`.
 
 ---
 
+### v0.55.2 - a gate that is never probed is a gate that is always off _(2026-08-27)_
+
+**`/orc-quick` and `/orc-fast` documented the foreign-worker option and then
+never went and looked for it.** Both lanes carried the full `orc extra` slot
+contract - the menu line, the dispatch call, the failure path - but neither
+preflight ever RAN the probe that answers whether a position is held. orc-quick's
+Q0 said "read `log_dir` only, read no other key"; orc-fast's F0 had gates a, b
+and c and no extra step, while the F2 prose claimed the `extra:` line "joins the
+F0 preflight". So a user who armed `extra_enabled` and set
+`orc extra role set quick-executor ds/deepseek-chat` was still offered the two
+shipped Claude executors and nothing else, with no way to tell configuration
+from a bug.
+
+- **orc-quick Q0 gains one PROBE**, named as the single exception to
+  "read no other key": `orc extra resolve --slot quick-executor --json`. One
+  command answers the master gate, the position and the routing together, so the
+  code-writing menu can render line 3. It is still an OPTION - never a default,
+  never sticky, re-asked after a failure.
+- **orc-fast F0 gains gate `d`**, a probe rather than a gate:
+  `orc extra resolve --slot fast-executor --json`. Resolved `extra` prints the
+  P0 `extra:` line where the prose always said it would, naming the agent it
+  displaces (`orc-executor-sonnet-4-6-high`); resolved `claude` prints nothing
+  and never falls back - no row on a slot is an ANSWER, not a gap.
+- **`/orc-doc` was never affected.** Its targets are resolved by
+  `docExtraResolve` inside `orc doc next`, so the CLI computes them and no
+  preflight step can forget to ask. That is the shape the other two now borrow.
+
+No CLI change, no config key, no agent change.
+
 ### v0.55.1 — ORC is on npm _(2026-08-27)_
 
 **ORC is published as [`@azure-id/orc`](https://www.npmjs.com/package/@azure-id/orc).**

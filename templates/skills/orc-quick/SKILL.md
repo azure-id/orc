@@ -79,6 +79,13 @@ stay on Claude. See `references/dispatch-gate.md` and
 ## Q0 — Preflight (ONE time per session, silent, nothing can stop the run)
 
 1. **Config.** Read `log_dir` only. Read no other key.
+   **One exception, and it is a PROBE, not a key read:** run
+   `orc extra resolve --slot quick-executor --json` (exit 0 = extra, 1 = Claude).
+   That single command answers the master gate, the position and the routing in
+   one, so the code-writing menu can offer line 3. **A gate that is never probed
+   is a gate that is always off** — without this the third option can never
+   appear however the user configured it. Keep the answer for this session; it
+   is an OPTION on a menu, never a default (`references/dispatch-gate.md`).
 2. **Trace.** Write `log_dir/.current` =
    `run-quick-<slug>-<DDMMYY>-<HHMMSS>.txt` and `touch the trace file` of that
    name in the SAME step. Both, or neither.

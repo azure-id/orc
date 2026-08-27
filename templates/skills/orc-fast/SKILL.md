@@ -62,10 +62,9 @@ so a missing `postgres-pattern.md` never fails the gate or forces a fallback.
 **Any gate FAILED** → announce which prerequisite failed in one line, then
 hand off to orc-mini via the fallback contract below. Never stop the chat.
 
-**c. Gotchas — NOT a gate.** Two prerequisites stay two: a missing
-`.claude/orc/gotchas.md` never forces a fallback. Fast READS repair memory
-(`orc gotcha status`, then inject the SCOPE-MATCHING entries into the F2 slice,
-cap 3) and never WRITES it — `../_shared/gotchas.md` §10.
+**c. Gotchas — NOT a gate.** Two prerequisites stay two: a missing `.claude/orc/gotchas.md` never forces a fallback. Fast READS repair memory (`orc gotcha status`, then inject the SCOPE-MATCHING entries into the F2 slice, cap 3) and never WRITES it — `../_shared/gotchas.md` §10.
+
+**d. Extra — a PROBE, not a gate (P0).** Run `orc extra resolve --slot fast-executor --json` (0 = extra, 1 = Claude) — **a gate that is never probed is a gate that is always off**, and without this step the lane silently runs on Claude however `extra_enabled` and `orc extra role` were set. `extra` → print the `extra:` line HERE and carry the answer into F2; `claude` → print nothing, never fall back, never stop.
 
 ## Phase F1 — Fit gate + micro-intake (one pass, ONE user round-trip)
 

@@ -7,14 +7,14 @@
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
 ![npm](https://img.shields.io/npm/v/%40azure-id%2Forc?style=for-the-badge&color=cb3837&logo=npm)
-![Version](https://img.shields.io/badge/version-0.55.1-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.55.2-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
 ![Dependencies](https://img.shields.io/badge/dependencies-zero-lightgrey.svg?style=for-the-badge)
 ![GitHub stars](https://img.shields.io/github/stars/azure-id/orc?style=for-the-badge&color=yellow)
 
-**Latest: v0.55.1** · updated 2026-08-27 · [full changelog](CHANGELOG.md)
+**Latest: v0.55.2** · updated 2026-08-27 · [full changelog](CHANGELOG.md)
 
 **On npm: [`@azure-id/orc`](https://www.npmjs.com/package/@azure-id/orc)** — `npm i -g @azure-id/orc`
 
@@ -464,6 +464,23 @@ a current audit: [EVAL-REPORT.md](EVAL-REPORT.md).
 
 **Full history: [CHANGELOG.md](CHANGELOG.md)** — or `orc changelog`, which prints
 only what is newer than the version you have.
+
+### v0.55.2 - a gate that is never probed is a gate that is always off _(2026-08-27)_
+
+**`/orc-quick` and `/orc-fast` documented the foreign-worker option and then
+never went and looked for it.** Both carried the whole `orc extra` slot contract
+but neither preflight ever ran the probe that answers whether a position is
+held, so an armed `extra_enabled` plus a slot row still offered only the shipped
+Claude executors.
+
+- **orc-quick Q0 gains one PROBE** - `orc extra resolve --slot quick-executor
+  --json`, the single exception to "read no other key" - so the menu can render
+  line 3. Still an option: never a default, never sticky.
+- **orc-fast F0 gains gate `d`** - `orc extra resolve --slot fast-executor
+  --json` - and prints the P0 `extra:` line where the prose always said it
+  would, naming the agent it displaces.
+- **`/orc-doc` was never affected**: `orc doc next` resolves its targets in the
+  CLI, which is the shape the other two now borrow.
 
 ### v0.55.1 — ORC is on npm _(2026-08-27)_
 
