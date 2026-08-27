@@ -10,6 +10,81 @@ Format: `### v<version> — <title> _(<date>)_`.
 
 ---
 
+### v0.56.0 - a rename moved the command, and nobody could reach the fix _(2026-08-27)_
+
+**READ THIS FIRST IF YOUR `orc upgrade` IS FAILING.** If you are on a version
+before v0.56.0, this release cannot install itself - your `orc upgrade` is the
+OLD one and it fails the same way every other route does. Run these three lines
+once, by hand, and you are across for good:
+
+- **Step 1 - release the command from the old package:** `npm uninstall -g orc`
+- **Step 2 - install the current package:** `npm i -g @azure-id/orc`
+- **Step 3 - re-apply it to your project:** `orc update` (add `--global` to also
+  refresh `~/.claude`)
+
+Then check it worked: `orc version` should print 0.56.0 or newer, and
+`orc doctor` should no longer mention `legacy-global-package`. Nothing in your
+`.claude/` is touched by any of this, and your `orc.config.yaml` survives.
+**Do not use `npm i -g -f`** - `--force` overwrites the command file and leaves
+the old package installed underneath, owning nothing and never updated again.
+From v0.56.0 onward `orc upgrade` does all three steps for you, announced.
+
+**The package moved from the unscoped `orc` to `@azure-id/orc`, and every
+upgrade path in the field died at once.** Both names declare the same `orc` bin.
+npm links a bin only if the shim is unowned or owned by the installing package,
+so with the old `orc` package still on disk globally, installing the new scoped
+one failed with `EEXIST` on the command file itself. That error is about a FILE,
+not a source - which is exactly why swapping sources changed nothing: the
+tarball, the `github:` spec and the registry all failed identically, `orc
+upgrade` walked all three and then printed npm's error wall, and `orc ui`'s
+upgrade action did the same. `npm i -g -f` was the only thing that "worked", and
+only by overwriting the command file and leaving the superseded package
+installed underneath as a ghost that owns nothing and is never updated again.
+
+- **The legacy package is EVICTED BEFORE any source is tried.** `orc upgrade`
+  now looks for a globally-installed package that is not this one and whose
+  `bin` declares `orc`, and uninstalls it first. Ordering is the point: the
+  collision fails every source identically, so walking the ladder first only
+  spends three network round trips arriving at the same `EEXIST`. It is
+  announced, never silent - it is a global npm mutation on the user's machine,
+  and the only one ORC makes for them.
+- **Detection is by OWNERSHIP, never by directory name.** A directory called
+  `orc` that holds THIS package is not legacy, and a package that declares no
+  `orc` bin blocks nothing. A machine that never saw the rename land must not
+  have its working install uninstalled.
+- **`--force` survives, scoped to the one case it is right for.** If a
+  collision remains after the eviction there was nothing to uninstall - an
+  ORPHANED shim npm left behind with no package owning it. `--force` overwrites
+  a file that belongs to nobody, which is the case it exists for.
+  `isBinShimCollision` requires the `EEXIST` code AND a path component that IS
+  the bin name, so it never reaches for `--force` on an unrelated `EEXIST`
+  deeper in a dependency tree.
+- **The npm REGISTRY is now tried first**, then the tarball, then the `github:`
+  spec. The registry resolves a VERSION rather than a branch tip; the `github:`
+  spec shells out to git and fails under restricted git / NVM, so it stays last.
+  `--from` and `ORC_INSTALL_SPEC` still win outright, and the remembered
+  `last_good_spec` still leads.
+- **`freshCliPath()` resolves the SCOPED directory first.** It looked only under
+  `<npm root -g>/orc`, which after the rename is the LEGACY package - so on a
+  machine mid-rename it resolved a path that existed and step 2 re-applied the
+  very templates step 1 had just superseded. A hit is now accepted only if the
+  manifest there says the current package name: a directory that exists is not
+  proof of identity.
+- **`orc doctor` reports it by name.** `legacy-global-package` is the one
+  finding that explains why `orc upgrade` cannot fix anything else in the
+  report. It is deliberately NOT `--fix`-able: `orc doctor --fix` is scoped to
+  this project's `.claude/`, and evicting a global npm package is neither
+  project-scoped nor something to do without saying so - so its `fix_command`
+  points at `orc upgrade`, which does it announced. `FINDING_ROUTE` sends it to
+  Maintenance, where the upgrade action is.
+- **A CAUTION at the top of the README carries the one-time manual fix**, because
+  the fix cannot reach the people who need it most: a user still on the old
+  package does not have this code, so their `orc upgrade` still fails. Two lines
+  (`npm uninstall -g orc` then `npm i -g @azure-id/orc`) get them across once,
+  and from here `orc upgrade` handles it.
+
+---
+
 ### v0.55.2 - a gate that is never probed is a gate that is always off _(2026-08-27)_
 
 **`/orc-quick` and `/orc-fast` documented the foreign-worker option and then

@@ -7,20 +7,52 @@
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
 ![npm](https://img.shields.io/npm/v/%40azure-id%2Forc?style=for-the-badge&color=cb3837&logo=npm)
-![Version](https://img.shields.io/badge/version-0.55.2-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.56.0-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
 ![Dependencies](https://img.shields.io/badge/dependencies-zero-lightgrey.svg?style=for-the-badge)
 ![GitHub stars](https://img.shields.io/github/stars/azure-id/orc?style=for-the-badge&color=yellow)
 
-**Latest: v0.55.2** · updated 2026-08-27 · [full changelog](CHANGELOG.md)
+**Latest: v0.56.0** · updated 2026-08-27 · [full changelog](CHANGELOG.md)
 
 **On npm: [`@azure-id/orc`](https://www.npmjs.com/package/@azure-id/orc)** — `npm i -g @azure-id/orc`
 
 **🇮🇩 [Baca dalam Bahasa Indonesia](README-id.md)**
 
 </div>
+
+---
+
+> [!CAUTION]
+> **Upgrading from a version before v0.56.0? Do this once.**
+>
+> The package moved from the unscoped `orc` to **`@azure-id/orc`**. Both declare
+> the same `orc` command, and npm will not hand that command to the new package
+> while the old one still holds it — so **every** install source fails with the
+> same error, and `orc upgrade` cannot fix itself:
+>
+> ```text
+> npm error code EEXIST
+> npm error File exists: C:\Users\you\AppData\Roaming\npm\orc
+> ```
+>
+> Run these two lines once. Nothing in your `.claude/` is touched, and your
+> `orc.config.yaml` survives:
+>
+> ```bash
+> npm uninstall -g orc          # release the `orc` command from the old package
+> npm i -g @azure-id/orc        # install the current one
+> orc update                    # re-apply into this project (add --global for ~/.claude)
+> ```
+>
+> **From v0.56.0 onward `orc upgrade` handles this for you** — it removes the old
+> package first, then installs, and says so while it does it. `orc doctor` also
+> reports the old package by name if it is still there.
+>
+> Do **not** reach for `npm i -g -f`. `--force` overwrites the command file and
+> leaves the superseded package installed underneath, owning nothing and never
+> updated again.
 
 ---
 
@@ -178,8 +210,11 @@ You do not have to run a command to hear about it: the same notice appears
 inside Claude Code through ORC's hooks, at **zero model tokens** — hooks are
 scripts Claude Code runs, not model turns.
 
-If the GitHub spec fails to install (common under **NVM**), `orc upgrade` retries
-with a plain tarball by itself.
+`orc upgrade` tries the npm registry first, then a plain tarball, then the
+GitHub spec — and it remembers which one worked. If the old unscoped `orc`
+package is still installed, it removes that first (announced), because npm
+cannot give the `orc` command to `@azure-id/orc` while another package owns it.
+See the caution at the top of this README for the one-time manual version.
 
 </details>
 
@@ -464,6 +499,41 @@ a current audit: [EVAL-REPORT.md](EVAL-REPORT.md).
 
 **Full history: [CHANGELOG.md](CHANGELOG.md)** — or `orc changelog`, which prints
 only what is newer than the version you have.
+
+### v0.56.0 - a rename moved the command, and nobody could reach the fix _(2026-08-27)_
+
+**READ THIS FIRST IF YOUR `orc upgrade` IS FAILING.** On a version before
+v0.56.0, this release cannot install itself - your `orc upgrade` is the OLD one.
+Run these three lines once, by hand:
+
+- **Step 1 - release the command from the old package:** `npm uninstall -g orc`
+- **Step 2 - install the current package:** `npm i -g @azure-id/orc`
+- **Step 3 - re-apply it to your project:** `orc update` (add `--global` to also
+  refresh `~/.claude`)
+
+Then `orc version` should print 0.56.0 or newer. Your `.claude/` and your
+`orc.config.yaml` are untouched. **Do not use `npm i -g -f`.**
+
+**The package moved from the unscoped `orc` to `@azure-id/orc`, and every
+upgrade path in the field died at once.** Both names declare the same `orc` bin,
+and npm will not link it for the new package while the old one owns it - so the
+tarball, the `github:` spec and the registry all failed with the same `EEXIST`
+on the command file. It is a FILE conflict, not a source problem, which is why
+changing sources never helped and `npm i -g -f` was the only thing that worked.
+
+- **`orc upgrade` evicts the legacy package BEFORE trying any source**, because
+  the collision fails every source identically. Announced, never silent.
+  Detection is by OWNERSHIP - a package that does not declare the `orc` bin is
+  never touched.
+- **The npm registry is tried first**, then the tarball, then the `github:` spec.
+  `freshCliPath()` now resolves the SCOPED directory, so step 2 stops re-applying
+  the templates step 1 just superseded.
+- **`--force` is kept for the one case it fits** - an orphaned command file no
+  package owns - and never for an unrelated `EEXIST`.
+- **`orc doctor` reports `legacy-global-package` by name.** Not `--fix`-able on
+  purpose: `--fix` is scoped to this project's `.claude/`.
+- **A CAUTION at the top of this README** carries the one-time manual fix, since
+  anyone still on the old package does not have this code yet.
 
 ### v0.55.2 - a gate that is never probed is a gate that is always off _(2026-08-27)_
 

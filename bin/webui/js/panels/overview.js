@@ -48,6 +48,12 @@ const FINDING_ROUTE = {
   // rendered beside the connection it is about, and where the connection test
   // that clears most of them lives.
   "extra-findings": { panel: "extra", cta: "overview.item.extraFindings.cta" },
+  // v0.56.0. The rule again, and this time the finding is about the TOOL rather
+  // than the project: a legacy global `orc` package owns the `orc` command and
+  // blocks every install source. `orc upgrade` is the thing that clears it (it
+  // evicts the old package first), and `upgrade` is an action row on
+  // MAINTENANCE — so that is genuinely the panel that can clear it.
+  "legacy-global-package": { panel: "maintenance", cta: "overview.item.legacyGlobalPackage.cta" },
 };
 const DEFAULT_FINDING_ROUTE = { panel: "maintenance", cta: "overview.item.doctor.cta" };
 const findingRoute = (id) => FINDING_ROUTE[id] || DEFAULT_FINDING_ROUTE;

@@ -16,12 +16,18 @@
 // would mean an HTML sanitiser for text fetched over the network — the few
 // inline markers are stripped and it is shown as plain text. Nothing from the
 // network is ever parsed as HTML by this panel.
+// An inline span may WRAP in the source. CHANGELOG.md is hard-wrapped at ~78
+// columns, so a bold run or a code span routinely straddles a newline — and `.`
+// does not match a newline, so those spans survived unstripped: the panel showed
+// literal asterisks and, worse, a mispaired backtick run that swallowed the
+// prose between two unrelated code spans. `[\s\S]` is the whole fix; the
+// quantifiers stay non-greedy, so nothing runs past its next closing marker.
 function stripMd(s) {
   return String(s)
     .replace(/```[\s\S]*?```/g, (m) => m.replace(/```\w*\n?/g, "").trim())
-    .replace(/\*\*(.+?)\*\*/g, "$1")
-    .replace(/\*(.+?)\*/g, "$1")
-    .replace(/`(.+?)`/g, "$1")
+    .replace(/\*\*([\s\S]+?)\*\*/g, "$1")
+    .replace(/\*([\s\S]+?)\*/g, "$1")
+    .replace(/`([\s\S]+?)`/g, "$1")
     .replace(/^\s*[-*]\s+/gm, "• ")
     .replace(/\[(.+?)\]\((.+?)\)/g, "$1")
     .trim();

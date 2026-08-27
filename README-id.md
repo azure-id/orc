@@ -7,13 +7,13 @@
 *Terima permintaan → pahami → rencanakan → beri nilai → kerjakan paralel → periksa → uji → kirim.*
 
 ![npm](https://img.shields.io/npm/v/%40azure-id%2Forc?style=for-the-badge&color=cb3837&logo=npm)
-![Version](https://img.shields.io/badge/version-0.55.1-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.56.0-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
 ![Dependencies](https://img.shields.io/badge/dependencies-zero-lightgrey.svg?style=for-the-badge)
 
-**Versi terbaru: v0.55.1** · diperbarui 27-08-2026 · [daftar perubahan lengkap](CHANGELOG.md)
+**Versi terbaru: v0.56.0** · diperbarui 27-08-2026 · [daftar perubahan lengkap](CHANGELOG.md)
 
 **Ada di npm: [`@azure-id/orc`](https://www.npmjs.com/package/@azure-id/orc)** — `npm i -g @azure-id/orc`
 
@@ -30,6 +30,39 @@
 >
 > Kalau ada bagian yang terasa berbeda dengan versi Inggris, **[README.md](README.md)
 > yang berlaku**.
+
+---
+
+> [!CAUTION]
+> **Naik versi dari sebelum v0.56.0? Lakukan ini sekali saja.**
+>
+> Nama paket pindah dari `orc` (tanpa scope) menjadi **`@azure-id/orc`**.
+> Keduanya memakai nama perintah yang sama, yaitu `orc`. npm tidak mau
+> memberikan perintah itu kepada paket baru selama paket lama masih
+> memegangnya - jadi **semua** cara pasang gagal dengan pesan yang sama, dan
+> `orc upgrade` tidak bisa memperbaiki dirinya sendiri:
+>
+> ```text
+> npm error code EEXIST
+> npm error File exists: C:\Users\anda\AppData\Roaming\npm\orc
+> ```
+>
+> Jalankan tiga baris ini sekali saja. Isi folder `.claude/` Anda tidak
+> disentuh, dan `orc.config.yaml` Anda tetap aman:
+>
+> ```bash
+> npm uninstall -g orc          # lepaskan perintah `orc` dari paket lama
+> npm i -g @azure-id/orc        # pasang paket yang sekarang
+> orc update                    # pasang ulang ke proyek ini (pakai --global untuk ~/.claude)
+> ```
+>
+> **Mulai v0.56.0, `orc upgrade` mengurus ini untuk Anda** - paket lama dihapus
+> lebih dulu, lalu paket baru dipasang, dan ORC memberi tahu Anda saat
+> melakukannya. `orc doctor` juga menyebutkan nama paket lama kalau masih ada.
+>
+> **Jangan** memakai `npm i -g -f`. `--force` menimpa berkas perintah dan
+> membiarkan paket lama tetap terpasang di bawahnya - tidak memiliki apa pun,
+> dan tidak pernah diperbarui lagi.
 
 ---
 

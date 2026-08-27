@@ -22,11 +22,19 @@ const ui = require("./ui.js");
 const { SECTIONS: ONBOARDING } = require("./onboarding-content.js");
 
 // Where `orc upgrade` fetches a fresh package from. Override with --from <spec>
-// or ORC_INSTALL_SPEC (e.g. a fork, a tarball URL, or "orc" for the npm registry
-// once published). By default the tarball is tried FIRST (straight HTTPS, works
-// everywhere), the github: spec second — the github: spec shells out to git and
-// fails on machines with restricted git / NVM quirks, so leading with it burnt a
-// guaranteed failure + npm error wall on every upgrade.
+// or ORC_INSTALL_SPEC (e.g. a fork or a tarball URL).
+//
+// ORDER (v0.56.0): the npm REGISTRY first, then the tarball (straight HTTPS),
+// then the github: spec last. The registry is the published home of this
+// package and is the only source that resolves a VERSION rather than a branch
+// tip; the github: spec shells out to git and fails on machines with restricted
+// git / NVM quirks, so it stays last.
+//
+// PKG_NAME is this package's published name. It is NOT cosmetic: it moved from
+// the unscoped `orc` to the scoped `@azure-id/orc`, and that rename is what
+// broke every upgrade path in the field — see LEGACY_BIN_OWNERS below.
+const PKG_NAME = "@azure-id/orc";
+const NPM_SPEC = PKG_NAME;
 const GITHUB_SPEC = "github:azure-id/orc";
 
 const PKG_ROOT = path.join(__dirname, "..");
@@ -655,12 +663,109 @@ function targetFlags() {
 const TARBALL_SPEC =
   "https://github.com/azure-id/orc/archive/refs/heads/main.tar.gz";
 
+// ---------------------------------------------------------------------------
+// The bin-shim collision (v0.56.0) — why every upgrade path died at once.
+//
+// This package was published as the unscoped `orc` and is now `@azure-id/orc`.
+// Both declare the SAME bin name, `orc`. npm links a bin only if the shim is
+// unowned or owned by the package doing the linking, so with the old `orc`
+// package still on disk globally, installing the new scoped one fails with:
+//
+//   npm error code EEXIST
+//   npm error path <prefix>\orc
+//   npm error File exists: <prefix>\orc
+//
+// That error is about a FILE, not a source — which is why swapping sources did
+// nothing: the tarball, the github: spec and the registry all failed
+// identically, and `orc upgrade`'s fallback ladder walked all three and then
+// printed npm's wall. `npm i -g -f <spec>` "worked" only because --force
+// overwrites the shim recklessly, leaving the superseded package installed
+// underneath as a ghost that owns nothing and is never updated again.
+//
+// The fix is to remove the package that OWNS the shim before installing, not to
+// force over it. Detection is by ownership, never by name alone: we look for a
+// globally-installed package that is not us and whose `bin` declares `orc`.
+// ---------------------------------------------------------------------------
+
+// Names ORC has shipped under. Ordered oldest-first; PKG_NAME is excluded on
+// purpose — evicting ourselves is how an upgrade uninstalls the tool.
+const LEGACY_BIN_OWNERS = ["orc"];
+
+// `npm root -g`, cached for the life of the process (it shells out).
+let _npmRootG;
+function npmRootGlobal() {
+  if (_npmRootG !== undefined) return _npmRootG;
+  const r = spawnSync("npm root -g", { shell: true, encoding: "utf8" });
+  _npmRootG = r.status === 0 && r.stdout ? r.stdout.trim() : null;
+  return _npmRootG;
+}
+
+// Read <global node_modules>/<name>/package.json, or null.
+function globalPkgManifest(name) {
+  const root = npmRootGlobal();
+  if (!root) return null;
+  try {
+    const f = path.join(root, ...name.split("/"), "package.json");
+    return JSON.parse(fs.readFileSync(f, "utf8"));
+  } catch (_) {
+    return null;
+  }
+}
+
+// Any globally-installed package that is NOT this one but declares the `orc`
+// bin — i.e. the thing holding the shim hostage. Returns {name, version, dir}
+// or null. Fail-silent: if npm cannot be asked, we simply do not know, and
+// "unknown" must never be reported as "clean".
+function detectLegacyBinOwner() {
+  for (const name of LEGACY_BIN_OWNERS) {
+    if (name === PKG_NAME) continue;
+    const m = globalPkgManifest(name);
+    if (!m) continue;
+    // Same name AND same identity is not legacy — a package can legitimately
+    // still be called `orc` on a machine that never saw the rename land.
+    if (m.name === PKG_NAME) continue;
+    const bins = typeof m.bin === "string" ? { [m.name]: m.bin } : m.bin || {};
+    if (!Object.prototype.hasOwnProperty.call(bins, "orc")) continue;
+    return {
+      name,
+      version: m.version || "unknown",
+      dir: path.join(npmRootGlobal() || "", ...name.split("/")),
+    };
+  }
+  return null;
+}
+
+// Remove the legacy owner so the scoped package can link `orc` cleanly.
+// Returns { ok, output }. This is the ONLY global npm mutation ORC makes on the
+// user's behalf, and it is announced before it runs.
+function evictLegacyBinOwner(owner) {
+  console.log(
+    `  → npm uninstall -g ${owner.name}   (legacy ${owner.name}@${owner.version} owns the \`orc\` command)`
+  );
+  const r = spawnSync(`npm uninstall -g ${owner.name}`, { shell: true, encoding: "utf8" });
+  return { ok: r.status === 0, output: (r.stdout || "") + (r.stderr || "") };
+}
+
+// Does npm's output describe the bin-shim collision? Matching on the CODE plus
+// the shim path keeps this from firing on an unrelated EEXIST deeper in a tree.
+function isBinShimCollision(output) {
+  const o = String(output || "");
+  if (!/EEXIST/.test(o)) return false;
+  // Normalise separators first so the check needs no backslash character
+  // class, then require a path component that IS the bin name (plus the two
+  // Windows shim extensions). Matching the code alone would fire on an
+  // unrelated EEXIST deeper in a dependency tree.
+  const norm = o.split(String.fromCharCode(92)).join("/");
+  return new RegExp("/orc([.]cmd|[.]ps1)?([^A-Za-z0-9_-]|$)", "im").test(norm);
+}
+
 // Try `npm install -g <spec>`; return { ok, output }. Captures stdio (pipe)
 // instead of inheriting it, so a failed probe with a remaining fallback stays
 // quiet — the loud npm error wall is only shown if EVERY spec fails.
-function npmInstallGlobal(spec) {
-  console.log("  → npm install -g " + spec);
-  const r = spawnSync(`npm install -g ${spec}`, { shell: true, encoding: "utf8" });
+function npmInstallGlobal(spec, opts) {
+  const force = opts && opts.force ? " --force" : "";
+  console.log("  → npm install -g " + spec + force);
+  const r = spawnSync(`npm install -g ${spec}${force}`, { shell: true, encoding: "utf8" });
   return { ok: r.status === 0, output: (r.stdout || "") + (r.stderr || "") };
 }
 
@@ -688,11 +793,25 @@ function writeLastGoodSpec(spec) {
 // code regardless of how PATH resolves `orc` (important under NVM, where the
 // running shim and the global prefix can differ). Falls back to null if the path
 // can't be determined — the caller then spawns `orc` by name.
+//
+// v0.56.0: the SCOPED directory is checked first. This looked only under
+// `<root>/orc`, which after the rename is the LEGACY package — so on a machine
+// mid-rename it resolved a path that existed, and step 2 re-applied the OLD
+// templates from the very package step 1 had just superseded. A hit is accepted
+// only if the manifest there actually says PKG_NAME; a directory that exists is
+// not proof of identity.
 function freshCliPath() {
-  const r = spawnSync("npm root -g", { shell: true, encoding: "utf8" });
-  if (r.status !== 0 || !r.stdout) return null;
-  const p = path.join(r.stdout.trim(), "orc", "bin", "cli.js");
-  return fs.existsSync(p) ? p : null;
+  const root = npmRootGlobal();
+  if (!root) return null;
+  for (const name of [PKG_NAME, ...LEGACY_BIN_OWNERS]) {
+    const dir = path.join(root, ...name.split("/"));
+    const cli = path.join(dir, "bin", "cli.js");
+    if (!fs.existsSync(cli)) continue;
+    const m = globalPkgManifest(name);
+    if (m && m.name !== PKG_NAME) continue;
+    return cli;
+  }
+  return null;
 }
 
 // `orc upgrade` = fetch the latest package from the source, THEN apply it.
@@ -706,25 +825,60 @@ function upgrade() {
   const fromFlag = typeof flag("--from") === "string" ? flag("--from") : null;
   // Specs to try in order. `--from` and ORC_INSTALL_SPEC still win OUTRIGHT
   // (single spec, no fallback). Otherwise: the remembered last_good_spec first
-  // (if any), then the tarball (straight HTTPS — works everywhere), then the
-  // github: spec last. Deduped so a remembered tarball doesn't retry twice.
+  // (if any), then the npm REGISTRY, then the tarball (straight HTTPS), then
+  // the github: spec last. Deduped so a remembered spec doesn't retry twice.
   let specs;
   if (fromFlag) specs = [fromFlag];
   else if (process.env.ORC_INSTALL_SPEC) specs = [process.env.ORC_INSTALL_SPEC];
   else {
     const remembered = readLastGoodSpec();
-    specs = [...new Set([...(remembered ? [remembered] : []), TARBALL_SPEC, GITHUB_SPEC])];
+    specs = [...new Set([...(remembered ? [remembered] : []), NPM_SPEC, TARBALL_SPEC, GITHUB_SPEC])];
   }
 
   console.log("\norc upgrade — fetching the latest package, then applying it.");
   console.log("  step 1/2: refresh the global orc package");
 
+  // STEP 0 — evict the legacy bin owner. This runs BEFORE any source is tried,
+  // because the collision is on the `orc` shim and therefore fails every source
+  // identically: walking the whole ladder first would just spend three network
+  // round trips arriving at the same EEXIST. Announced, never silent — it is a
+  // global npm mutation on the user's machine, and the one ORC makes for them.
+  const legacy = detectLegacyBinOwner();
+  if (legacy) {
+    console.log(
+      `\n  ⚠  ${legacy.name}@${legacy.version} is installed globally and owns the \`orc\` command.\n` +
+        `     This package is now ${PKG_NAME}, so npm cannot link \`orc\` while that one\n` +
+        "     is there — every install source fails with the same EEXIST.\n" +
+        "     Removing it first."
+    );
+    const ev = evictLegacyBinOwner(legacy);
+    if (!ev.ok) {
+      console.log(
+        "  ⚠  couldn't remove it automatically — continuing anyway (the install\n" +
+          "     below falls back to --force if npm still reports the collision)."
+      );
+    }
+  }
+
   let installed = false;
   let lastOutput = "";
+  let usedSpec = null;
   for (let i = 0; i < specs.length; i++) {
-    const res = npmInstallGlobal(specs[i]);
+    let res = npmInstallGlobal(specs[i]);
+    // A SURVIVING shim collision means an ORPHANED shim — a file npm left
+    // behind with no package owning it, so there was nothing for step 0 to
+    // uninstall. --force is correct HERE and only here: the file it overwrites
+    // belongs to nobody, which is exactly the case --force is for.
+    if (!res.ok && isBinShimCollision(res.output)) {
+      console.log(
+        "  ⚠  npm still reports the `orc` command file as taken, and no package\n" +
+          "     claims it (an orphaned shim). Overwriting just that file."
+      );
+      res = npmInstallGlobal(specs[i], { force: true });
+    }
     if (res.ok) {
       installed = true;
+      usedSpec = specs[i];
       writeLastGoodSpec(specs[i]);
       break;
     }
@@ -742,14 +896,20 @@ function upgrade() {
     }
     console.error(
       "\n❌ upgrade failed at step 1 (npm install). Nothing was changed in .claude/.\n" +
-        "   Try the tarball bypass directly, then apply:\n" +
-        `     npm i -g ${TARBALL_SPEC}\n` +
+        "   Install directly, then apply:\n" +
+        `     npm i -g ${NPM_SPEC}\n` +
         "     orc update" +
         (tflags.length ? " " + tflags.join(" ") : "") +
-        "\n"
+        "\n" +
+        (isBinShimCollision(lastOutput)
+          ? "\n   npm says the `orc` command file is already taken. Clear it, then retry:\n" +
+            `     npm uninstall -g ${LEGACY_BIN_OWNERS.join(" ")}\n` +
+            `     npm i -g ${NPM_SPEC}\n`
+          : "")
     );
     process.exit(1);
   }
+  if (usedSpec) console.log(`  ✓ installed from ${usedSpec}`);
 
   const tflags = targetFlags();
   console.log(
@@ -768,7 +928,7 @@ function upgrade() {
         "     orc update" +
         (tflags.length ? " " + tflags.join(" ") : "") +
         "\n   If it still fails, install directly then apply:\n" +
-        `     npm i -g ${TARBALL_SPEC}  &&  orc update` +
+        `     npm i -g ${NPM_SPEC}  &&  orc update` +
         (tflags.length ? " " + tflags.join(" ") : "") +
         "\n"
     );
@@ -28061,6 +28221,32 @@ function doctor() {
         { documents: dirty }
       );
     else if (docList(claudeDir).length) ok(`${plural(docList(claudeDir).length, "document")}, none drifted`);
+  } catch (_) {}
+
+  // 6b) The legacy global package (v0.56.0). This is not a `.claude/` problem —
+  // it is a problem with the TOOL ITSELF, and it is the one finding that
+  // explains why `orc upgrade` cannot fix anything else in this report. It is
+  // NOT fixable by `orc doctor --fix`: that command's whole blast radius is
+  // this project's .claude/, and evicting a global npm package is neither
+  // project-scoped nor something to do without saying so. `orc upgrade` does it
+  // (announced), so the fix command points there.
+  try {
+    const legacyOwner = detectLegacyBinOwner();
+    if (legacyOwner)
+      warn(
+        "legacy-global-package",
+        `${legacyOwner.name}@${legacyOwner.version} is installed globally and owns the \`orc\` ` +
+          `command, but this package is now ${PKG_NAME} — npm refuses to link \`orc\` over it, ` +
+          "so EVERY install source fails with the same EEXIST. Run `orc upgrade` (it removes the " +
+          `old package first), or by hand: \`npm uninstall -g ${legacyOwner.name} && npm i -g ${NPM_SPEC}\``,
+        {
+          legacy_name: legacyOwner.name,
+          legacy_version: legacyOwner.version,
+          legacy_dir: legacyOwner.dir,
+          package_name: PKG_NAME,
+          fix_command: "orc upgrade",
+        }
+      );
   } catch (_) {}
 
   // 7) `orc extra` (v0.50.0). ONE line here, carrying the COUNT and the
