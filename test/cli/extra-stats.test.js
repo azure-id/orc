@@ -1,4 +1,5 @@
 "use strict";
+// @test-pool spawn  — shells node bin/cli.js; reads spend logs off disk
 // `orc extra stats` / `orc extra rates` — W8, the flywheel.
 //
 // The question the whole subsystem is judged on is "is the cheap model actually

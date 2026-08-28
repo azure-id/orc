@@ -1,4 +1,5 @@
 "use strict";
+// @test-pool net  — stands up the fake provider on loopback
 // `orc extra dispatch` — THE BRIDGE ACCEPTS A POSITION (v0.55.0).
 //
 // Before this release `bin/cli.js` required a `score` unconditionally, so a doc

@@ -1,4 +1,5 @@
 "use strict";
+// @test-pool heavy  — derives the vault key at scrypt N=2^17 — 128 MB and a beat of CPU, on purpose
 // `orc extra` — the SECRET DISCIPLINE (P2, P10) and the connection gate.
 //
 // The failure this file exists to prevent is not a bug, it is a leak: a key

@@ -1,4 +1,5 @@
 "use strict";
+// @test-pool net  — stands up the fake provider on loopback
 // `orc extra conform` — the conformance matrix — and the concurrency cap.
 //
 // `tool_fidelity` is a RECORD, not a boolean, because the difference between

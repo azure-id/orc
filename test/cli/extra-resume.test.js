@@ -1,4 +1,5 @@
 "use strict";
+// @test-pool net  — stands up the fake provider on loopback
 // `orc extra resume-slice` — the continuation, and the loop around it (v0.54.0).
 //
 // `a lane that re-does work the worktree already contains` has broken this

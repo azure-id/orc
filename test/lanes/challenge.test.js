@@ -1,4 +1,5 @@
 "use strict";
+// @test-pool spawn  — shells node bin/cli.js
 // v0.47.0 — /orc-challenge's deterministic half.
 //
 // The rules worth a test are the ones a model could route around if they lived

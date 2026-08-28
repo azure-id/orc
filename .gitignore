@@ -5,6 +5,11 @@ CLAUDE.md
 knowledge.md
 # Working-process docs / scratch — never committed (see CLAUDE.md commit rule)
 docs/
-.superpowers/# Eval harness — scenario specs + fixture (process artifact, never shipped)
+.superpowers/
+
+# Eval harness — scenario specs + fixture (process artifact, never shipped)
 eval/
 .claude
+
+# Per-file test timings — bin/test-run.js schedules longest-job-first from this
+test/.timings.json

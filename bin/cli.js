@@ -22306,7 +22306,22 @@ function spawnCmdSafe(bin, argv, opts) {
 // child timer happened to win — so the user tunes a number that does nothing.
 // Ordered here, once: idle < api < wall.
 function extraTimeouts(cfg) {
-  const wall = Math.max(30, Number(cfg.extra_timeout_s) || 900) * 1000;
+  // THE TEST SEAM, and it is deliberately the ONLY one (v1.0.0 W0).
+  //
+  // Two 30-second floors live in this function: the shortest wall clock a
+  // dispatch may have, and the shortest stall budget that may fire. They are
+  // product rules and they stay — but they also mean the two watchdog tests
+  // have to SLEEP for 37 s and 32 s to prove a classification, which was 77 s
+  // of the suite's 328 s wall clock and not one millisecond of it computing
+  // anything. What those tests assert is the DECISION, not the duration.
+  //
+  // So the floor — and the gap the stall clock must keep under the wall clock,
+  // which is derived from it — is injectable. Unset, this is byte-identical to
+  // the shipped behaviour: 30 000 and 15 000. Nothing in ORC ever sets it; only
+  // a test does, and it says so in its own words when it does.
+  const FLOOR_MS = Math.max(1, Number(process.env.ORC_TEST_BUDGET_FLOOR_MS) || 30000);
+  const GAP_MS = Math.floor(FLOOR_MS / 2);
+  const wall = Math.max(FLOOR_MS / 1000, Number(cfg.extra_timeout_s) || 900) * 1000;
   const api = Math.min(wall, Math.max(60000, wall - 60000));
   const idle = Math.max(10000, Math.min(300000, api - 30000, 1800000));
   // v0.56.1 — THE FOURTH TIMEOUT, and the only one that measures the WORKER
@@ -22328,8 +22343,8 @@ function extraTimeouts(cfg) {
   // timeouts disagreeing about which one fires first" bug this function exists
   // to prevent; the wall clock is the one that must win a tie, because it is
   // the budget the user set.
-  const fitted = Math.min(asked, wall - 15000);
-  const stall = asked === 0 || fitted < 30000 ? 0 : fitted;
+  const fitted = Math.min(asked, wall - GAP_MS);
+  const stall = asked === 0 || fitted < FLOOR_MS ? 0 : fitted;
   return {
     wall_ms: wall,
     api_ms: api,
@@ -22343,7 +22358,7 @@ function extraTimeouts(cfg) {
       asked > 0 && stall === 0
         ? `extra_stall_s (${Math.round(asked / 1000)}s) cannot fit under extra_timeout_s (${Math.round(
             wall / 1000
-          )}s) with the 30s floor, so the wall clock is the only stop.`
+          )}s) with the ${Math.round(FLOOR_MS / 1000)}s floor, so the wall clock is the only stop.`
         : null,
   };
 }

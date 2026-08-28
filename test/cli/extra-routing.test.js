@@ -1,4 +1,5 @@
 "use strict";
+// @test-pool net  — stands up the fake provider on loopback
 // `orc extra` — the routing table and THE resolver.
 //
 // The load-bearing assertion here is the THREE-WAY agreement. `bin/cli.js` used

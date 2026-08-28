@@ -16,9 +16,9 @@
   "scripts": {
     "postinstall": "node -e \"try{require('fs').accessSync(require('path').join(__dirname,'bin','cli.js'));console.log('\\nORC installed. Run: orc init  (or orc init --global)\\n')}catch(e){console.error('\\n[orc] WARNING: bin/cli.js missing from this install — the repo/publish was incomplete. Reinstall from a complete source.\\n')}\"",
     "build:agents": "node bin/build-agents.js",
-    "test": "node --test --test-concurrency=6 test/",
+    "test": "node bin/test-run.js",
     "verify": "node bin/build-agents.js --check && node bin/verify-package.js && node bin/verify-contracts.js",
-    "prepack": "node bin/build-agents.js --check && node bin/verify-package.js && node bin/verify-contracts.js && node --test --test-concurrency=6 test/"
+    "prepack": "node bin/build-agents.js --check && node bin/verify-package.js && node bin/verify-contracts.js && node bin/test-run.js"
   },
   "keywords": [
     "claude",

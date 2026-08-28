@@ -1,4 +1,5 @@
 "use strict";
+// @test-pool pure  — reads the shipped string tables
 // v0.43.0 — `orc ui` and the `--json` surface it stands on.
 //
 // Two failure modes drive every case here.

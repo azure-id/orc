@@ -1,4 +1,5 @@
 "use strict";
+// @test-pool spawn  — runs the installed hooks as child processes
 const { test } = require("node:test");
 const assert = require("node:assert");
 const fs = require("fs");

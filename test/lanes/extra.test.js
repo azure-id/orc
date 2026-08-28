@@ -1,4 +1,5 @@
 "use strict";
+// @test-pool pure  — greps the payload and evaluates pure functions out of cli.js
 // `orc extra` — THE PAYLOAD SIDE (v0.50.0).
 //
 // The CLI half is covered by test/cli/extra-*.test.js and the panel half by

@@ -1,4 +1,5 @@
 "use strict";
+// @test-pool pure  — a fixture the CHILD runs; registers zero tests here
 // A stand-in `claude` for the `orc extra` engine-A tests.
 //
 // `node --test test/` DOES execute this file — it runs every .js under test/ as

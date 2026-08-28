@@ -1,4 +1,5 @@
 "use strict";
+// @test-pool spawn  — spawns the fake CLI as a child; no socket
 // `orc extra` — ENGINE B (`cli`), driving a third-party agentic CLI.
 //
 // This is the engine with the LEAST control, so most of these assertions are

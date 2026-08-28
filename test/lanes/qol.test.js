@@ -1,4 +1,5 @@
 "use strict";
+// @test-pool spawn  — shells node bin/cli.js
 // v0.42.0 quality-of-life surface: `orc resume`, `orc run list|show`,
 // `orc stats`, `orc config profile|recommend`.
 //

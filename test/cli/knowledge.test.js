@@ -1,4 +1,5 @@
 "use strict";
+// @test-pool spawn  — shells node bin/cli.js
 // v0.49.1 — the reads that stopped discarding what the CLI already computed.
 //
 // THE RULE THIS FILE EXISTS FOR: a read's `--json` is the WHOLE computed

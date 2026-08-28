@@ -1,4 +1,5 @@
 "use strict";
+// @test-pool net  — stands up the fake provider on loopback
 // `orc extra` — ENGINE A (`claude-shim`) and the dispatch bridge.
 //
 // Every assertion here is about a rule that is cheap to state and expensive to

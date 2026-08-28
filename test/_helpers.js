@@ -1,4 +1,5 @@
 "use strict";
+// @test-pool pure  — shared helpers; registers zero tests
 // Shared test helpers.
 //
 // NOTE: `node --test test/` does NOT ignore this file — it executes every .js
@@ -11,7 +12,15 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 
-// WHY `npm test` PINS `--test-concurrency=6` (v0.50.0; 8 until v0.55.0).
+// WHY THE PARALLELISM HERE IS A NUMBER SOMEBODY CHOSE (v0.50.0; 8 until
+// v0.55.0; POOLS since v1.0.0).
+//
+// The number itself has MOVED — `npm test` is `node bin/test-run.js` now, and
+// each resource class carries its own concurrency in the POOLS table there.
+// This comment stays because it is the REASON those numbers exist, and a
+// reason orphaned from its numbers is how a suite gets "sped up" back into the
+// failure below. Every file declares its class in a `// @test-pool` pragma on
+// its second line.
 //
 // v0.55.0 spent what was left of this budget, and BOTH halves of the fix were
 // needed. Two new `extra-*` files stood up a fake provider PER CASE, and two

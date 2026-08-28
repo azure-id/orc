@@ -1,4 +1,5 @@
 "use strict";
+// @test-pool net  — stands up the fake provider on loopback
 // `orc extra reconcile` — THE POSITION, and whose fault it was (v0.54.0).
 //
 // Zero tokens, deterministic, and the free check runs before the paid one. Every

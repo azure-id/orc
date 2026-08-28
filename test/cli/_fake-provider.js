@@ -1,4 +1,5 @@
 "use strict";
+// @test-pool pure  — the loopback server runs in a CHILD; this file registers zero tests
 // A stand-in provider for the `orc extra` connection-gate tests.
 //
 // `node --test test/` DOES execute this file — it runs every .js under test/ as

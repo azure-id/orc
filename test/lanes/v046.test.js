@@ -1,4 +1,5 @@
 "use strict";
+// @test-pool spawn  — shells node bin/cli.js
 /**
  * v0.46.0 — the six new lanes, the wiki partial-refresh workstream, and the
  * panels that draw them.

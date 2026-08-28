@@ -1,4 +1,5 @@
 "use strict";
+// @test-pool pure  — reads shipped markdown only
 // The `§` pointer guard (v0.48.1).
 //
 // `knowledge.md` is referenced by `§4x` pointers from ~120 places across

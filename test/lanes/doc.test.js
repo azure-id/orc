@@ -1,4 +1,5 @@
 "use strict";
+// @test-pool spawn  — shells node bin/cli.js
 /**
  * /orc-doc (v0.48.0).
  *

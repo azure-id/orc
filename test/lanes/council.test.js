@@ -1,4 +1,5 @@
 "use strict";
+// @test-pool spawn  — shells node bin/cli.js
 // v0.49.1 — the /orc-challenge COUNCIL.
 //
 // The rules worth a test are the ones a model could route around if they lived

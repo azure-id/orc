@@ -1,4 +1,5 @@
 "use strict";
+// @test-pool pure  — a fixture the CHILD runs; registers zero tests here
 // A stand-in `opencode` / `codex` for the engine-B tests.
 //
 // It asserts ORC's half of the contract FROM THE CHILD'S SIDE and exits 90 with

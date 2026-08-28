@@ -1,4 +1,5 @@
 "use strict";
+// @test-pool net  — starts the real `orc ui` server on loopback
 // v0.43.0 — `orc ui` and the `--json` surface it stands on.
 //
 // Two failure modes drive every case here.
@@ -43,8 +44,11 @@ function startServer(root, extraArgs, until) {
       stdio: ["ignore", "pipe", "pipe"],
     });
     let err = "";
+    let out = "";
+    let exit = null;
     child.stderr.on("data", (d) => (err += d));
-    child.stdout.on("data", () => {});
+    child.stdout.on("data", (d) => (out += d));
+    child.on("exit", (c, sig) => (exit = sig || c));
     const started = Date.now();
     const poll = setInterval(() => {
       let lock = null;
@@ -53,15 +57,46 @@ function startServer(root, extraArgs, until) {
       } catch (_) {}
       if (lock && lock.port && (!until || until(lock))) {
         clearInterval(poll);
-        resolve({ child, lock });
+        resolve({
+          child,
+          lock,
+          // What the server said, for any assertion that fails later. A
+          // transport error on loopback is unreadable without knowing whether
+          // the process on the other end is still alive.
+          state: () => "exit=" + exit + " killed=" + child.killed + "\n--- stderr ---\n" + err.trim() + "\n--- stdout ---\n" + out.trim(),
+        });
         return;
       }
-      if (Date.now() - started > 20000) {
+      // THE BOOT BUDGET IS NOT PART OF THE CONTRACT (v1.0.0 W0).
+      //
+      // This was 20 s, and 20 s is how long `orc ui` takes to boot on an idle
+      // box times a comfortable margin — on a LOADED one it is a coin flip.
+      // That is the starvation class `_helpers.js` documents in its own words,
+      // and it is what made `server: every asset the shell references loads`
+      // the suite's one intermittent failure: a full run went red at 20.9 s
+      // with a message about the wrong thing entirely. What is under test here
+      // is that the server STARTS and answers correctly, never that it starts
+      // inside a particular number of seconds — the same reasoning that
+      // un-slept the two watchdog tests in the same wave.
+      //
+      // And when it does fail, it now says why: the child's exit code, its
+      // stderr and its stdout. "server never wrote its lock: " with an empty
+      // string after it has cost more than one debugging round.
+      if (Date.now() - started > 90000) {
         clearInterval(poll);
         try {
           child.kill();
         } catch (_) {}
-        reject(new Error("server never wrote its lock: " + err));
+        reject(
+          new Error(
+            "server never wrote its lock in 90s (exit=" +
+              exit +
+              ")\n--- stderr ---\n" +
+              err.trim() +
+              "\n--- stdout ---\n" +
+              out.trim()
+          )
+        );
       }
     }, 120);
   });
@@ -183,8 +218,12 @@ test("server: every asset the shell references loads as the browser requests it"
       );
     assert.strictEqual(refs.length, shipped.length, "every reference in the shell must be a stamped asset");
 
+    let i = 0;
     for (const ref of refs) {
-      const res = await request(port, "/" + ref.replace(/^\.?\//, ""));
+      i++;
+      const res = await request(port, "/" + ref.replace(/^\.?\//, "")).catch((e) => {
+        throw new Error("asset " + i + "/" + refs.length + " (" + ref + ") failed: " + e.code + " " + e.message + "\n" + srv.state());
+      });
       assert.strictEqual(res.status, 200, `${ref} must load with no extra credential — the browser has none to add`);
       assert.ok(res.raw.length > 0, `${ref} must not be empty`);
     }

@@ -1,4 +1,5 @@
 "use strict";
+// @test-pool net  — stands up the fake provider on loopback
 // `orc extra` — LOCAL TOOLS: the install gate, the four-rung ladder, the model
 // dropdown and the setup gate (v0.51.0).
 //

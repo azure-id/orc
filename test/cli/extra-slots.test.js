@@ -1,4 +1,5 @@
 "use strict";
+// @test-pool spawn  — shells node bin/cli.js; no provider, no socket
 // `orc extra role` — THE POSITIONS, the non-scored half of routing (v0.55.0).
 //
 // The load-bearing assertion in this file is that a slot resolve NEVER touches

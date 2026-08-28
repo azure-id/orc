@@ -1,4 +1,5 @@
 "use strict";
+// @test-pool pure  — evaluates pure functions out of cli.js; spawns nothing
 const { test } = require("node:test");
 const assert = require("node:assert");
 const fs = require("fs");

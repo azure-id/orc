@@ -1,4 +1,5 @@
 "use strict";
+// @test-pool heavy  — opens the vault at scrypt N=2^17 — 128 MB and a beat of CPU, on purpose
 // `orc extra` — WHICH SECRET A DISPATCH ACTUALLY SENDS (v0.53.3).
 //
 // The bug this file exists to prevent, in one sentence: a vaulted, verified,

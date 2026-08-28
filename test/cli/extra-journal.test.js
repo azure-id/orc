@@ -1,4 +1,5 @@
 "use strict";
+// @test-pool net  — stands up the fake provider on loopback; also drives the watchdog clocks
 // `orc extra` — THE JOURNAL (v0.54.0), write side.
 //
 // A failed foreign dispatch is a POSITION, not a blank page. Every assertion
@@ -367,14 +368,20 @@ test("engine cli: the child's stdout lands on DISK, and output_file names a file
 
 test("engine cli: a wall-clock kill leaves the child's output on disk", () => {
   const p = project();
-  // 30s is the FLOOR extraTimeouts enforces, so this is as short as a real
-  // dispatch timeout can be. The fixture prints one event and then blocks past
-  // it.
-  const PATHV = armedCli(p, "opencode", "extra_timeout_s: 30\n");
+  // THE BUDGET IS INJECTED, and it is the only thing that is (v1.0.0 W0).
+  // 30s is the FLOOR extraTimeouts enforces, so as written this test SLEPT for
+  // 32s to prove one classification. What is under test is the DECISION a
+  // wall-clock kill produces — the reason word, the retryability, and the bytes
+  // left on disk — none of which know how long they waited. So the floor drops
+  // to 1s for this child and the wall clock to 3s: the same code path, the same
+  // assertions, a tenth of the wall clock. The budget the PRODUCT enforces is
+  // unchanged, and is asserted by the pure-arithmetic test below.
+  const PATHV = armedCli(p, "opencode", "extra_timeout_s: 3\n");
   const r = run(p, ["extra", "dispatch", "--task", slice(p), "--json"], {
     K: SECRET_KEY,
     PATH: PATHV,
     ORC_FAKE_CLI_MODE: "slow",
+    ORC_TEST_BUDGET_FLOOR_MS: "1000",
   });
   assert.equal(r.status, 1, r.stdout + r.stderr);
   const j = json(r);
@@ -397,12 +404,17 @@ test("engine cli: a worker that goes quiet is `stalled`, not `timeout`", () => {
   // 30s is the stall floor; the wall clock is left far above it so the stall is
   // unambiguously what fired. A stall reported as a timeout reads as a budget
   // somebody should raise, when it is a POSITION somebody should resume from.
-  const PATHV = armedCli(p, "opencode", "extra_timeout_s: 300\nextra_stall_s: 30\n");
+  const PATHV = armedCli(p, "opencode", "extra_timeout_s: 30\nextra_stall_s: 3\n");
   const t0 = Date.now();
   const r = run(p, ["extra", "dispatch", "--task", slice(p), "--json"], {
     K: SECRET_KEY,
     PATH: PATHV,
     ORC_FAKE_CLI_MODE: "slow",
+    // Injected, as above: the 30s floor is what made this sleep for 37s. What
+    // these assertions are about is the RATIO — a stall budget an order of
+    // magnitude under the wall clock, so it is unambiguously the stall that
+    // fired — and a ratio does not care what the units are.
+    ORC_TEST_BUDGET_FLOOR_MS: "1000",
   });
   const elapsed = Date.now() - t0;
   assert.equal(r.status, 1, r.stdout + r.stderr);
@@ -413,15 +425,15 @@ test("engine cli: a worker that goes quiet is `stalled`, not `timeout`", () => {
   assert.equal(j.retry, true);
   // It stopped at the STALL budget, nowhere near the wall clock. Without this
   // the test would pass on a build where the stall clock does nothing.
-  assert.ok(elapsed < 120000, "the stall budget must fire long before the 300s wall clock (took " + elapsed + "ms)");
+  assert.ok(elapsed < 12000, "the stall budget must fire long before the 30s wall clock (took " + elapsed + "ms)");
   // The bytes the worker DID produce are still on disk — a stall is a position,
   // and a position you deleted is a blank page.
   assert.equal(j.output_file, path.join(journalDir(p, "T-2"), "attempt-01.progress.jsonl"));
   assert.match(fs.readFileSync(j.output_file, "utf8"), /"type":"session\.start"/);
   // THE TIMELINE, on the record. A budget you can only see when it fires is a
   // budget nobody can set before it does.
-  assert.equal(j.timeline.stall_budget_ms, 30000);
-  assert.equal(j.timeline.wall_budget_ms, 300000);
+  assert.equal(j.timeline.stall_budget_ms, 3000);
+  assert.equal(j.timeline.wall_budget_ms, 30000);
   assert.ok(j.timeline.first_byte_ms !== undefined);
   rmrf(p.root);
 });

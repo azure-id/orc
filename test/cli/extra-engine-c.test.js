@@ -1,4 +1,5 @@
 "use strict";
+// @test-pool net  — stands up the fake provider on loopback
 // `orc extra` — ENGINE C (`api`), ORC's own tool loop.
 //
 // Engine C exists for two things engine A structurally cannot do, and both are

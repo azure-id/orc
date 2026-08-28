@@ -1,4 +1,5 @@
 "use strict";
+// @test-pool pure  — walks templates/ and reads files only
 // Payload-contract tests: the parts of the shipped markdown whose SHAPE is a
 // contract (closed vocabularies, policy tables, mandated report lines). The
 // contract lint pins single tokens across files; these cover the grammar-shaped
