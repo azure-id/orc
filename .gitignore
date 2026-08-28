@@ -13,3 +13,11 @@ eval/
 
 # Per-file test timings — bin/test-run.js schedules longest-job-first from this
 test/.timings.json
+
+# Working-process build folders — the CLAUDE.md commit rule already says these
+# are never committed; naming them here is what makes that true, and it is what
+# keeps `node bin/test-run.js --since` from widening to the whole suite on every
+# untracked scratch file.
+orc-*-build/
+deepseek-dispatch-failure/
+deepseek-dispatch-failure-report.md
