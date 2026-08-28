@@ -229,6 +229,30 @@ test("the shadow runs BOTH WAYS and is never silent", async () => {
   assert.match(o5.shadow_reason, /\[0,30\)/, "the honest report is WHICH RANGES were taken");
   // v0.55.0 — the sentence names the taken POSITIONS beside the taken bands.
   assert.match(o5.shadow_reason, /every other score and position still resolves here/);
+  // v1.0.0 W1 — AND THE WHOLE SENTENCE, byte for byte. W2 rewrites
+  // `shadowReason()` to derive from a family table instead of branching on key
+  // names; the regexes above would keep passing through a re-word, and a
+  // re-word is the one thing that refactor is not allowed to be. The rest of
+  // the freeze is in test/goldens.test.js — this half lives here because it is
+  // the only shadow sentence that needs a verified profile to produce.
+  assert.strictEqual(
+    o5.shadow_reason,
+    "partly shadowed by extra_enabled — [0,30) is routed to a non-Claude worker; " +
+      "every other score and position still resolves here"
+  );
+  // The OTHER half of the both-ways case: a hand-edited table is partly
+  // shadowed by the same rows, and its sentence carries no position clause —
+  // `opus5_only` is the only key a taken SLOT can shadow.
+  setCfg(p, "extra_enabled: true\nrubric_bands_override: \"[[0,50]]\"\n");
+  const rb = json(run(p, ["config", "list", "--json"])).hand_edited.find(
+    (h) => h.key === "rubric_bands_override"
+  );
+  assert.strictEqual(
+    rb.shadow_reason,
+    "partly shadowed by extra_enabled — [0,30) is routed to a non-Claude worker; " +
+      "every other score and position still resolves here"
+  );
+  setCfg(p, "extra_enabled: true\nopus5_only: true\n");
 
   // And at SET time, both directions.
   let r = run(p, ["config", "set", "opus5_only", "true"]);

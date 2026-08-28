@@ -1,0 +1,367 @@
+[
+  {
+    "key": "max_wave_tasks",
+    "tier": "common",
+    "default": 3
+  },
+  {
+    "key": "batch_pause_every",
+    "tier": "common",
+    "default": 2
+  },
+  {
+    "key": "rubric_bands",
+    "tier": "common",
+    "default": 5
+  },
+  {
+    "key": "max_scouts",
+    "tier": "common",
+    "default": 3
+  },
+  {
+    "key": "default_analysis_depth",
+    "tier": "common",
+    "default": "standard"
+  },
+  {
+    "key": "generate_tests",
+    "tier": "common",
+    "default": false
+  },
+  {
+    "key": "pattern_findings",
+    "tier": "common",
+    "default": "ask"
+  },
+  {
+    "key": "gotchas",
+    "tier": "common",
+    "default": "on"
+  },
+  {
+    "key": "gotchas_max",
+    "tier": "common",
+    "default": 40
+  },
+  {
+    "key": "security_review",
+    "tier": "common",
+    "default": "off"
+  },
+  {
+    "key": "run_budget_dispatches",
+    "tier": "common",
+    "default": 0
+  },
+  {
+    "key": "mock_example",
+    "tier": "common",
+    "default": "ask"
+  },
+  {
+    "key": "tdd_loop_max",
+    "tier": "common",
+    "default": 3
+  },
+  {
+    "key": "stacked_pr",
+    "tier": "common",
+    "default": "ask"
+  },
+  {
+    "key": "stacked_pr_loc",
+    "tier": "common",
+    "default": 1000
+  },
+  {
+    "key": "stacked_pr_files",
+    "tier": "common",
+    "default": 20
+  },
+  {
+    "key": "stacked_pr_max_layers",
+    "tier": "common",
+    "default": 6
+  },
+  {
+    "key": "extra_enabled",
+    "tier": "common",
+    "default": false
+  },
+  {
+    "key": "extra_roles",
+    "tier": "common",
+    "default": "[executor]"
+  },
+  {
+    "key": "extra_risk_tasks",
+    "tier": "common",
+    "default": "off"
+  },
+  {
+    "key": "extra_on_failure",
+    "tier": "common",
+    "default": "fallback"
+  },
+  {
+    "key": "extra_max_concurrent",
+    "tier": "common",
+    "default": 1
+  },
+  {
+    "key": "extra_unlock",
+    "tier": "common",
+    "default": "per-run"
+  },
+  {
+    "key": "extra_vault_max_attempts",
+    "tier": "advanced",
+    "default": 10
+  },
+  {
+    "key": "extra_timeout_s",
+    "tier": "advanced",
+    "default": 900
+  },
+  {
+    "key": "extra_passphrase_ttl_days",
+    "tier": "common",
+    "default": 30
+  },
+  {
+    "key": "extra_verify_max_days",
+    "tier": "advanced",
+    "default": 7
+  },
+  {
+    "key": "extra_resume",
+    "tier": "common",
+    "default": "on"
+  },
+  {
+    "key": "extra_stall_s",
+    "tier": "common",
+    "default": 180
+  },
+  {
+    "key": "extra_fallback_agent",
+    "tier": "common",
+    "default": "band"
+  },
+  {
+    "key": "extra_resume_max",
+    "tier": "advanced",
+    "default": 2
+  },
+  {
+    "key": "opus5_only",
+    "tier": "common",
+    "default": false
+  },
+  {
+    "key": "pact_gate",
+    "tier": "common",
+    "default": "warn"
+  },
+  {
+    "key": "pact_recheck_on_verify",
+    "tier": "common",
+    "default": "true"
+  },
+  {
+    "key": "boundary_gate",
+    "tier": "common",
+    "default": "warn"
+  },
+  {
+    "key": "handoff_write",
+    "tier": "common",
+    "default": "true"
+  },
+  {
+    "key": "budget_min_samples",
+    "tier": "common",
+    "default": 5
+  },
+  {
+    "key": "budget_units",
+    "tier": "common",
+    "default": "auto"
+  },
+  {
+    "key": "budget_plan",
+    "tier": "common",
+    "default": "auto"
+  },
+  {
+    "key": "budget_price_table",
+    "tier": "advanced",
+    "default": ""
+  },
+  {
+    "key": "aftermath_window_days",
+    "tier": "advanced",
+    "default": 30
+  },
+  {
+    "key": "challenge_pass_severity",
+    "tier": "common",
+    "default": "p1"
+  },
+  {
+    "key": "challenge_stall_after",
+    "tier": "common",
+    "default": 3
+  },
+  {
+    "key": "challenge_reader",
+    "tier": "common",
+    "default": "on"
+  },
+  {
+    "key": "challenge_gate",
+    "tier": "common",
+    "default": "warn"
+  },
+  {
+    "key": "doc_max_lines_per_agent",
+    "tier": "common",
+    "default": 400
+  },
+  {
+    "key": "doc_max_parallel",
+    "tier": "common",
+    "default": 2
+  },
+  {
+    "key": "doc_write_mode",
+    "tier": "common",
+    "default": "ask"
+  },
+  {
+    "key": "doc_language",
+    "tier": "common",
+    "default": "en"
+  },
+  {
+    "key": "doc_local_refs",
+    "tier": "common",
+    "default": "error"
+  },
+  {
+    "key": "doc_dir",
+    "tier": "advanced",
+    "default": "orc/orc-doc"
+  },
+  {
+    "key": "wiki_scan_tier",
+    "tier": "advanced",
+    "default": "ladder"
+  },
+  {
+    "key": "wiki_tier_deep_files",
+    "tier": "advanced",
+    "default": 3
+  },
+  {
+    "key": "wiki_refresh_budget",
+    "tier": "advanced",
+    "default": 0
+  },
+  {
+    "key": "wiki_retire_after_runs",
+    "tier": "advanced",
+    "default": 0
+  },
+  {
+    "key": "fable5_enabled",
+    "tier": "fable5",
+    "default": false
+  },
+  {
+    "key": "fable5_effort",
+    "tier": "fable5",
+    "default": "medium"
+  },
+  {
+    "key": "fable5_roles",
+    "tier": "fable5",
+    "default": "[]"
+  },
+  {
+    "key": "orc_wiki_pattern_findings",
+    "tier": "advanced",
+    "default": false
+  },
+  {
+    "key": "crosslink_fresh_days",
+    "tier": "advanced",
+    "default": 10
+  },
+  {
+    "key": "crosslink_aging_days",
+    "tier": "advanced",
+    "default": 15
+  },
+  {
+    "key": "wiki_delta_full_threshold",
+    "tier": "advanced",
+    "default": 30
+  },
+  {
+    "key": "wiki_fresh_max",
+    "tier": "advanced",
+    "default": 10
+  },
+  {
+    "key": "wiki_aging_max",
+    "tier": "advanced",
+    "default": 30
+  },
+  {
+    "key": "wiki_refresh_ask_tasks",
+    "tier": "advanced",
+    "default": 3
+  },
+  {
+    "key": "wiki_refresh_ask_files",
+    "tier": "advanced",
+    "default": 10
+  },
+  {
+    "key": "retro_repo",
+    "tier": "advanced",
+    "default": "azure-id/orc"
+  },
+  {
+    "key": "log_dir",
+    "tier": "advanced",
+    "default": ".claude/orc/logs"
+  },
+  {
+    "key": "run_dir",
+    "tier": "advanced",
+    "default": ".claude/orc/run"
+  },
+  {
+    "key": "analyzer_dir",
+    "tier": "advanced",
+    "default": ".claude/skills/orc/analyzer"
+  },
+  {
+    "key": "planner_dir",
+    "tier": "advanced",
+    "default": ".claude/skills/orc/planner"
+  },
+  {
+    "key": "report_out_dir",
+    "tier": "advanced",
+    "default": "analyst_report"
+  },
+  {
+    "key": "orchestrator_model",
+    "tier": "advanced",
+    "default": "claude-opus-4-8"
+  }
+]
