@@ -236,7 +236,7 @@ test("the shadow runs BOTH WAYS and is never silent", async () => {
   rmrf(p.root);
 });
 
-test("the eleven config keys exist, with the defaults the contract states", () => {
+test("the thirteen config keys exist, with the defaults the contract states", () => {
   const p = project();
   const keys = json(run(p, ["config", "list", "--json"])).keys.filter((k) => k.key.startsWith("extra_"));
   const by = Object.fromEntries(keys.map((k) => [k.key, k]));
@@ -245,7 +245,24 @@ test("the eleven config keys exist, with the defaults the contract states", () =
   // rather than assumed (the contract lists the four keys it refused to add).
   // The count is still the feature: the combinatorial part (providers x models
   // x bands) is a LEDGER with a CLI and a panel, not a YAML block.
-  assert.equal(keys.length, 12, "the combinatorial part is a ledger, not YAML");
+  // v0.56.1 adds the thirteenth and fourteenth entries here — `extra_stall_s`
+  // and `extra_fallback_agent` — and both come from the same observed failure:
+  // a foreign worker that goes quiet mid-task. (The contract counts the keys a
+  // user configures; this list also carries the deprecated members.)
+  assert.equal(keys.length, 14, "the combinatorial part is a ledger, not YAML");
+  // THE STALL CLOCK. Not a second wall clock: it is reset by observable
+  // progress, so it never fires on a worker that is merely slow.
+  assert.equal(by.extra_stall_s.default, 180);
+  assert.ok(by.extra_stall_s.options.includes(0), "0 must be offered — it is how you turn the clock off");
+  assert.match(by.extra_stall_s.desc, /reset by observable progress/i);
+  // WHO PICKS THE TASK UP. `band` is the pre-v0.56.1 behaviour and stays the
+  // default: a fallback that changes tier is a re-plan nobody asked for.
+  assert.equal(by.extra_fallback_agent.default, "band");
+  assert.equal(run(p, ["config", "set", "extra_fallback_agent", "ask"]).status, 0);
+  assert.equal(run(p, ["config", "set", "extra_fallback_agent", "orc-executor-opus-5-low"]).status, 0);
+  // A typo must land as a refusal, never as a dispatch to a name nothing
+  // answers to.
+  assert.equal(run(p, ["config", "set", "extra_fallback_agent", "opus5"]).status, 1);
   // DEFAULT `on`, because `off` is what is broken: a from-scratch re-dispatch
   // onto a half-written file either discards work already paid for or
   // improvises against a stale mental model.

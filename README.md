@@ -14,7 +14,7 @@
 ![Dependencies](https://img.shields.io/badge/dependencies-zero-lightgrey.svg?style=for-the-badge)
 ![GitHub stars](https://img.shields.io/github/stars/azure-id/orc?style=for-the-badge&color=yellow)
 
-**Latest: v0.56.0** · updated 2026-08-27 · [full changelog](CHANGELOG.md)
+**Latest: v0.56.1** · updated 2026-08-28 · [full changelog](CHANGELOG.md)
 
 **On npm: [`@azure-id/orc`](https://www.npmjs.com/package/@azure-id/orc)** — `npm i -g @azure-id/orc`
 
@@ -359,6 +359,8 @@ orc ui --stop          # shut this project's server down
 | Crosslink | **Design** (the boundary as a graph) and **Settings** (each peer's freshness) | `crosslink add` / `remove` |
 | Promises · Boundary · Self-serve | the pact ledger, the boundary cards, and the surfaces a non-developer can change | `pact check`, `pact sync`, `handoff set` |
 | **Docs** | every `/orc-doc` document as a **ribbon** — one block per section, sized by its length and coloured by its state — plus the section files with their sub-parts, the wave strip, the lint health card and the wave preview | `doc compile` · `doc migrate` |
+| **Extra** | **six tabs**: the connection setup, the local tools and their state, the band ladder and the six positions, spending per profile per band, and **Recovery** — every dispatch that never reported back, with what it left on disk | `extra add` / `ping` / `route` / `role` |
+| **Challenge** | every `/orc-challenge` cycle: the frozen goal, the council roster and what each lens raised, the findings with their dispositions, and whether the pass is computed or blocked | `challenge record` · `accept` · `rebut` |
 | **Mocked Skill Use** | every mocked run that ships with ORC, grouped and searchable, with a reading pane | — |
 | Learn | the `orc onboarding` walkthrough, one section at a time | — |
 | Experiment | every lane with a copy button; opens a Claude session in a terminal | — |
@@ -381,6 +383,77 @@ orc ui --stop          # shut this project's server down
 
 Zero dependencies, zero build step: `node:http`, plain JavaScript, hand-written
 CSS.
+
+---
+
+## Running part of the ladder somewhere else — `orc extra`
+
+**The orchestrator is always Claude.** What Extra changes is *who executes a
+slice*: a score band you own, or one of six named positions, can point at
+DeepSeek, GLM, Kimi, MiniMax, Qwen, a local Ollama, or a coding CLI you already
+have signed in (opencode, codex). Everything downstream — the smoke gate, the TDD
+gate, the reviewer, the worktree-delta check — is engine-blind, so nothing learns
+the work was foreign.
+
+**Off by default, and it cannot be armed until something has actually answered.**
+
+```bash
+orc extra providers              # the shipped, dated catalog — providers, never models
+orc extra tools                  # local CLIs: absent · outdated · unauthenticated · ready
+orc extra add ds --provider deepseek --engine api --env-key DEEPSEEK_API_KEY
+orc extra ping ds                # the connection gate: a ladder, and nothing reads stronger than it is
+orc extra models ds --test <id>  # a LISTED model can still be dead upstream
+orc extra health ds --model <id> # …and a working model is not one that FINISHES
+orc extra route set 40-55 ds/deepseek-chat     # a score band
+orc extra role set doc-writer ds/deepseek-chat # or a named position
+orc config set extra_enabled true
+```
+
+- **The catalog ships providers and never models.** A shipped model id is wrong
+  within a quarter and wrong *silently* — a 404 mid-wave. `orc extra ping` reads
+  the live list and caches it; nothing invents a name. Same for price: a cost
+  figure ORC did not price itself is never printed, it reads as an em dash.
+- **Every armed run says so before wave 1.** Routing work off Claude silently is
+  the failure this whole subsystem is shaped around.
+- **Two hard hold-backs**: a task with a cited `risk[]` (auth, money, migration,
+  security, concurrency, data-integrity) stays on Claude unless you say
+  otherwise, and a `/orc-boundary` REFUSE area holds even in `warn`.
+- **A foreign return is foreign input.** It is the only foreign class that edits
+  your worktree, so what it says it did is a *claim*, checked against the tree.
+- **Your key never reaches a command line.** It travels on stdin into an
+  encrypted vault, or it stays in an environment variable, or the tool holds its
+  own — and the passphrase is a **deadline**, not a second factor.
+- **Six positions for the lanes that pin an agent instead of scoring a task**:
+  `quick-executor` · `fast-executor` · `doc-writer` · `doc-checker` ·
+  `wiki-scanner-deep` · `wiki-scanner-light`. A position with no row keeps its
+  slot and reads as its pinned Claude agent — "I left the checker on Claude on
+  purpose" and "there is no checker" must never look the same.
+
+**When a foreign worker fails, it is a position and not a blank page.** ORC
+journals the baseline *before the first byte leaves the machine*, so a worker cut
+off mid-write is **reconciled and resumed** — never re-dispatched from scratch
+onto a file that is already two-thirds written.
+
+- **`extra_stall_s` (default 180)** stops a worker that has produced nothing for
+  that long. It is reset by observable progress — the worker's stream, its
+  stderr, or a declared file that changed on disk — so it never fires on one that
+  is merely slow. `stalled` is retryable, which is what makes the resume ORC's
+  own spelling of typing `continue`.
+- **`extra_fallback_agent` (default `band`)** decides who picks the task up.
+  `ask` stops and puts the menu to you; any installed agent name pins one. It
+  changes *who*, never the score, the declared files or the acceptance criteria.
+- **Every dispatch writes its own spend record**, so a cost report never depends
+  on a run remembering to narrate what it spent. `orc extra stats` merges the
+  spend log, the traces and saved returns, and always says how many rows came
+  from each.
+
+**`/orc-quick` is inert here** and announces it — that lane asks which agent
+before every dispatch, so no setting may pre-answer it. **`/orc-challenge` never
+routes foreign**: swapping a lens for a different model does not make the lane
+cheaper, it changes what is being measured.
+
+**The whole subsystem, with every command and key:
+[guides/extra-models.md](guides/extra-models.md).**
 
 ---
 
@@ -424,12 +497,13 @@ clobbers. `orc ui` ▸ Settings edits the same keys through the same validators.
 
 ```
 templates/
-├── skills/       29 skills — the lanes above, plus the ones with no command of
-│                 their own: context-combiner, orc-advisor, orc-judge,
-│                 orc-analyze-mini, and _shared/ (cross-lane contract prose)
-├── commands/     27 slash commands
+├── skills/       31 skill folders, 38 SKILL.md files (a lane may ship subskills) —
+│                 the lanes above, plus the ones with no command of their own:
+│                 context-combiner, orc-advisor, orc-judge, orc-analyze-mini,
+│                 and _shared/ (cross-lane contract prose)
+├── commands/     29 slash commands
 ├── hooks/        effort guard (PreToolUse) · statusline warning · behavior trace
-└── agents/       40 model-pinned subagents + MODEL-MAPPING.md
+└── agents/       51 model-pinned subagents + MODEL-MAPPING.md
 bin/cli.js        installer, config editor, flow composer, run-state reader, and
                   the deterministic half of every lane. Every read speaks --json
 bin/webui/        `orc ui` — the local control panel: css/ + js/ + i18n/<lang>/ +
@@ -499,6 +573,41 @@ a current audit: [EVAL-REPORT.md](EVAL-REPORT.md).
 
 **Full history: [CHANGELOG.md](CHANGELOG.md)** — or `orc changelog`, which prints
 only what is newer than the version you have.
+
+### v0.56.1 - a worker that is alive and doing nothing _(2026-08-28)_
+
+**Still on the unscoped `orc` package?** Do this once before anything else -
+your `orc upgrade` is the pre-v0.56.0 one and it cannot install itself:
+
+- **Step 1 - release the command from the old package:** `npm uninstall -g orc`
+- **Step 2 - install the current package:** `npm i -g @azure-id/orc`
+- **Step 3 - re-apply it to your project:** `orc update`
+
+**Do not use `npm i -g -f`.** Full detail in v0.56.0 below.
+
+**An opencode dispatch that goes quiet mid-task used to burn the whole
+fifteen-minute wall clock and then report `timeout`.** That word is a statement
+about ORC's patience and reads as a budget somebody should raise. It was a
+POSITION somebody should resume from.
+
+- **`extra_stall_s` (default 180, `0` disables)** stops a foreign worker that
+  has produced NOTHING for that long. Reset by observable progress - the
+  worker's stream, its stderr, or a declared file that changed on disk - so it
+  never fires on a worker that is merely slow. Engine `cli` only.
+- **`stalled` is its own failure class and it is RETRYABLE**, so
+  `orc extra reconcile` reads the position and `extra_resume` continues from
+  what is on disk instead of starting over. That is ORC's spelling of typing
+  `continue`. There is deliberately no stdin nudge: `opencode run` is not an
+  interactive session, so a keystroke nobody reads would be a fake fix.
+- **Every engine-`cli` return carries a `timeline`** - first byte, last
+  progress, longest quiet gap, both budgets - on success as well as failure.
+- **`orc extra health <profile> [--model <id>]`** answers "does this model
+  stall", through the SAME watchdog a dispatch uses. A listed model is not a
+  working model, and a working model is not a model that finishes.
+- **`extra_fallback_agent` (default `band`)** decides who picks the task up.
+  `ask` STOPS and puts the menu to you; any installed agent name pins one. Under
+  `ask` the lane does not choose. It changes WHO, never the score, the declared
+  files or the acceptance criteria. INERT in `/orc-quick`.
 
 ### v0.56.0 - a rename moved the command, and nobody could reach the fix _(2026-08-27)_
 

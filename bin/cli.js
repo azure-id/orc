@@ -990,6 +990,22 @@ const vModel = tag((raw) => {
       : "⚠ below Opus/Fable — every opus-* agent silently falls back to a smaller model (tier ladder).";
   return { value: raw, warn };
 }, { kind: "enum", choices: KNOWN_MODELS });
+// The fallback target for a foreign dispatch that failed. Two WORDS and then a
+// free-text agent name — deliberately open rather than a closed enum, because
+// the agent roster is generated (`bin/build-agents.js`) and a closed list here
+// would go stale the next time a band moves. `orc-` is required so a typo lands
+// as a refusal rather than as a dispatch to a name nothing answers to.
+const vFallbackAgent = tag((raw) => {
+  const v = String(raw || "").trim();
+  if (v === "band" || v === "ask") return { value: v };
+  if (!/^orc-[a-z0-9-]+$/.test(v))
+    return { err: 'must be "band", "ask", or an ORC agent name (e.g. orc-executor-opus-5-med)' };
+  return {
+    value: v,
+    warn:
+      "pinned to one agent — this overrides the score table AND a slot's own pinned agent for every fallback, whatever the task. `band` is what keeps a fallback a change of WHO and not a change of tier.",
+  };
+}, { kind: "text", choices: ["band", "ask", "orc-executor-opus-5-med", "orc-executor-opus-5-low", "orc-executor-sonnet-4-6-high"] });
 const vPath = tag(
   (raw) => (raw && raw.trim() ? { value: raw } : { err: "must be a non-empty path" }),
   { kind: "path" }
@@ -1097,6 +1113,14 @@ const CONFIG_META = [
   // reasoning verbatim: a record you can switch off is off on the run you
   // needed it for), and a key for the network probe.
   { key: "extra_resume", def: "on", tier: "common", validate: vEnum("on", "off"), options: ["on", "off"], desc: "Whether a partial or crashed foreign dispatch is RESUMED rather than re-done. A worker cut off mid-write leaves a half-changed repository, and re-dispatching the SAME slice lands a fresh executor on a file that is already two-thirds written — it either discards work you paid for or improvises against a stale mental model. `on` reconciles the worktree against the journal baseline and composes a resume slice that says what is already there. Default `on`, because `off` is what is broken. INERT in /orc-quick, which asks which agent before every dispatch." },
+  // --- v0.56.1 — the stall. ELEVEN keys became THIRTEEN, and both additions
+  // come from the same observed failure: a foreign worker that goes quiet
+  // mid-task. Deliberately NOT added: a key to nudge the child on its stdin
+  // (`opencode run` is not an interactive session, so a keystroke nobody reads
+  // is a fake fix), a per-profile stall budget (the number describes ORC's
+  // patience, not a provider), and a key to disable the stall report.
+  { key: "extra_stall_s", def: 180, tier: "common", validate: vInt(0), options: [0, 60, 120, 180, 300, 600], desc: "Seconds a foreign worker may produce NOTHING before the dispatch is stopped as `stalled`. The clock is reset by observable progress — new bytes on the worker's stream, new bytes on stderr, or a declared file that changed on disk — so it never fires on a worker that is merely slow. This is what a wall clock cannot see: `extra_timeout_s` measures the whole dispatch, and an opencode that stops mid-task and waits for someone to type `continue` burns all 900 seconds looking like a timeout. A `stalled` dispatch is RETRYABLE, so `extra_resume` continues it from what is already on disk rather than starting over. 0 turns it off and the wall clock is the only stop again. Clamped below the wall clock, because a budget that can never fire is worse than none. Engine `cli` only — engine `api` already has a per-request inactivity timeout on its own socket." },
+  { key: "extra_fallback_agent", def: "band", tier: "common", validate: vFallbackAgent, options: ["band", "ask", "orc-executor-opus-5-med", "orc-executor-opus-5-low", "orc-executor-sonnet-4-6-high"], desc: "WHICH Claude agent picks up a task the foreign worker could not finish. `band` is the pre-v0.56.1 behaviour and stays the default: the exact agent the score table or the slot would have used, so a fallback changes WHO runs it and nothing else. `ask` STOPS and puts the choice to you with the failure and the position already on the table — right when a stall has just cost you fifteen minutes and you would rather pick than accept a default. Any installed agent name is accepted verbatim, for the case where you already know a stalled slice wants more (or less) than its band. It never changes the score, never widens `declared_files` and never moves `acceptance[]` — a fallback is not a re-plan." },
   { key: "extra_resume_max", def: 2, tier: "advanced", validate: vInt(0), desc: "Resume attempts per task before the fallback procedure takes over. Bounded like `tdd_loop_max`: hitting the cap STOPS with an honest report naming the Claude agent, never a silent third loop. A resume never widens `declared_files`, never moves `acceptance[]` and never moves the score — it is a continuation, not a discount." },
   { key: "opus5_only", def: false, tier: "common", validate: vEnum("true", "false"), options: ["true", "false"], desc: "EVERY dispatched role uses ONE model — Opus 5 — with EFFORT as the cost dial (executors: [0,40) low · [40,80) medium · [80,100] high; each fixed role its own pinned effort). Deep SWE-benchmark work on cost vs efficiency across Claude models finds a single Opus 5 agent with the effort ladder the most efficient setup. It FORCES: while on it outranks fable5_* and a hand-written rubric_bands_override. Needs an Opus 5 main session or EVERY dispatch silently downgrades. Excludes the Haiku trace writer and orc-diy (compile-owned)." },
   // --- v0.46.0 — the six new lanes ------------------------------------------
@@ -19871,6 +19895,202 @@ function maybeStorePendingKey(claudeDir, ledger, prof, pending, pendingPass, asJ
   };
 }
 
+// ── orc extra health — DOES THIS MODEL STALL? (v0.56.1) ────────────────────
+//
+// `orc extra ping --live` answers "did something come back". It cannot answer
+// the question a stall raises, which is "what was it DOING for those fifteen
+// minutes" — because a synchronous probe has no view of the child while it
+// runs, exactly the blindness runCliChild was built to remove.
+//
+// So health is the live probe run through THE SAME WATCHDOG A DISPATCH USES.
+// That matters: it is not a second idea of the path (the v0.53.3 rule — a green
+// badge must be earned by the path a wave actually runs), it is the dispatch's
+// own observer pointed at a one-line prompt. What it reports is a TIMELINE:
+// when the first byte arrived, the longest silence, and whether it ended by
+// answering, by stalling, or by running out of wall clock.
+//
+// Exit codes: 0 answered · 1 stalled or failed · 2 unknown profile.
+async function extraHealth(claudeDir, name) {
+  const asJson = wantsJson();
+  const ledger = readExtra(claudeDir) || emptyExtra();
+  const cfg = resolvedConfig(claudeDir);
+  const prof = extraProfile(ledger, name);
+  const fail = (reason, error, code) => {
+    if (asJson)
+      console.log(JSON.stringify({ ok: false, command: "extra health", profile: name || null, reason, error }, null, 2));
+    else console.error(`❌ ${error}`);
+    process.exit(code);
+  };
+  if (!prof)
+    return fail(
+      "unknown-profile",
+      name ? `no profile called "${name}". \`orc extra list\` has the names.` : "usage: orc extra health <profile> [--model <id>]",
+      2
+    );
+  if (prof.engine !== "cli")
+    return fail(
+      "engine-unsupported",
+      "`orc extra health` measures the STALL clock, and that clock only exists on engine `cli` — engine `" +
+        prof.engine +
+        "` has a per-request inactivity timeout on its own socket, which `orc extra ping " +
+        prof.name +
+        " --live` already exercises.",
+      1
+    );
+
+  const cat = readCatalog();
+  const row = catalogRow(cat, prof.provider) || {};
+  const bin = (prof.cli && prof.cli.bin) || row.cli_bin || null;
+  const adapter = (bin && EXTRA_CLI_ADAPTERS[bin]) || null;
+  const found = bin ? whichBin(bin) : null;
+  if (!adapter || !found)
+    return fail(
+      "engine-unavailable",
+      "`" + (bin || "(no binary configured)") + "` is not on PATH, or ORC ships no adapter for it.",
+      1
+    );
+
+  const modelArg = flag("--model");
+  const model = typeof modelArg === "string" ? modelArg : prof.default_model || (prof.models_seen || [])[0] || null;
+  if (!model)
+    return fail(
+      "no-model",
+      `no model to probe. Name one: \`orc extra health ${prof.name} --model <id>\` (\`orc extra models ${prof.name}\` lists what the provider offers).`,
+      1
+    );
+
+  // The credential goes into the CHILD'S ENVIRONMENT and nowhere else, exactly
+  // as a dispatch does it. A tool that holds its own key gets nothing and still
+  // authenticates.
+  const cred = extraCredentialValue(claudeDir, prof, { ambientKey: process.env.ORC_EXTRA_KEY || null });
+  const env = {};
+  if (cred.ok && cred.value) {
+    const credRow = row.credential || {};
+    if (credRow.env_var) env[credRow.env_var] = cred.value;
+    const kn = (prof.credential || {}).key_name;
+    if (kn) env[kn] = cred.value;
+  }
+
+  const timeouts = extraTimeouts(cfg);
+  let scratch = null;
+  try {
+    scratch = fs.mkdtempSync(path.join(os.tmpdir(), "orc-extra-health-"));
+  } catch (e) {
+    return fail("scratch-failed", String((e && e.message) || e), 1);
+  }
+  let version = null;
+  if (row.version_cmd) {
+    const v = runToolCmd(found, row.version_cmd, env);
+    version = parseVersion(v.stdout + "\n" + v.stderr);
+  }
+  const argv = adapter.probeArgv({ model, dir: scratch, prompt: EXTRA_LIVE_PROMPT, version });
+  const started = Date.now();
+  const r = await runCliChild(
+    found,
+    argv,
+    { cwd: scratch, env: Object.assign({}, process.env, env), windowsHide: true, stdio: ["ignore", "pipe", "pipe"] },
+    { started, wall_ms: timeouts.wall_ms, stall_ms: timeouts.stall_ms, progressFile: null, root: scratch, declared: [] }
+  );
+  const total = Date.now() - started;
+  let parsed = null;
+  try {
+    parsed = adapter.parse({ stdout: r.stdout || "", stderr: r.stderr || "", lastMessage: null });
+  } catch (_) {}
+  try {
+    fs.rmSync(scratch, { recursive: true, force: true });
+  } catch (_) {}
+
+  const verdict =
+    r.stopped_by === "stall"
+      ? "stalled"
+      : r.stopped_by === "wall"
+        ? "timeout"
+        : r.error
+          ? "spawn-failed"
+          : r.status === 0
+            ? "answered"
+            : "failed";
+  const text = (parsed && parsed.text) || String(r.stdout || "").trim() || null;
+  const out = {
+    ok: verdict === "answered",
+    command: "extra health",
+    profile: prof.name,
+    provider: prof.provider,
+    engine: "cli",
+    adapter: bin,
+    model,
+    verdict,
+    exit_code: r.status,
+    credential: { source: cred.source || null, ok: !!cred.ok },
+    timeline: {
+      total_ms: total,
+      first_byte_ms: r.first_byte_ms,
+      last_progress_ms: r.last_progress_ms,
+      longest_gap_ms: r.longest_gap_ms,
+      quiet_for_ms: r.stall_ms,
+      stall_budget_ms: timeouts.stall_ms,
+      wall_budget_ms: timeouts.wall_ms,
+      stall_budget_clamped: !!timeouts.stall_clamped,
+    },
+    // WHAT IT WAS DOING — the bytes, capped, never interpreted. On engine `cli`
+    // ORC did not compose the request and does not parse the tool's turns, so
+    // this is the log and nothing more (`journal_fidelity: streamed-opaque`).
+    log_excerpt: text ? String(text).slice(0, EXTRA_LIVE_EXCERPT_MAX) : null,
+    log_truncated: !!(text && String(text).length > EXTRA_LIVE_EXCERPT_MAX),
+    stderr_excerpt: String(r.stderr || "").trim().slice(0, EXTRA_LIVE_EXCERPT_MAX) || null,
+    events: (parsed && parsed.events) || 0,
+    tokens: (parsed && parsed.usage) || null,
+    foreign_reply_note: EXTRA_FOREIGN_REPLY_NOTE,
+    cost_note: EXTRA_LIVE_COST_CLI,
+  };
+  if (asJson) {
+    console.log(JSON.stringify(out, null, 2));
+    process.exit(out.ok ? 0 : 1);
+  }
+  const sec = (ms) => (ms === null || ms === undefined ? "—" : `${(ms / 1000).toFixed(1)}s`);
+  console.log("");
+  console.log(ui.color.bold(`ORC · extra — health · ${prof.name} · ${model}`));
+  console.log("─".repeat(40));
+  console.log("");
+  const mark = out.ok ? ui.color.green("✔") : ui.color.red("✖");
+  console.log(`  ${mark} ${verdict}${out.exit_code === null ? "" : ui.color.gray(`  exit ${out.exit_code}`)}`);
+  console.log("");
+  console.log(`  first byte        ${sec(out.timeline.first_byte_ms)}`);
+  console.log(`  last progress     ${sec(out.timeline.last_progress_ms)}`);
+  console.log(`  longest quiet gap ${sec(out.timeline.longest_gap_ms)}`);
+  console.log(`  total             ${sec(out.timeline.total_ms)}`);
+  console.log(
+    `  stall budget      ${
+      out.timeline.stall_budget_ms ? sec(out.timeline.stall_budget_ms) : ui.color.gray("off (extra_stall_s = 0)")
+    }` + (out.timeline.stall_budget_clamped ? ui.color.yellow("  ← clamped under the wall clock") : "")
+  );
+  if (verdict === "stalled") {
+    console.log("");
+    console.log(
+      ui.color.yellow(
+        `  This model went quiet for ${sec(out.timeline.quiet_for_ms)} and was still running. In a wave\n` +
+          "  that is a `stalled` dispatch: retryable, so `extra_resume` continues it from what\n" +
+          "  is on disk rather than starting over."
+      )
+    );
+  }
+  if (out.log_excerpt) {
+    console.log("");
+    console.log(ui.color.gray("  what it said"));
+    for (const line of out.log_excerpt.split(/\r?\n/).slice(0, 12)) console.log("    " + line);
+    if (out.log_truncated) console.log(ui.color.gray("    …"));
+    console.log("");
+    console.log(ui.color.gray("  " + EXTRA_FOREIGN_REPLY_NOTE));
+  } else if (out.stderr_excerpt) {
+    console.log("");
+    console.log(ui.color.gray("  stderr"));
+    for (const line of out.stderr_excerpt.split(/\r?\n/).slice(0, 8)) console.log("    " + line);
+  }
+  console.log("");
+  console.log(ui.color.gray("  " + EXTRA_LIVE_COST_CLI));
+  process.exit(out.ok ? 0 : 1);
+}
+
 function extraPingRender(res) {
   if (res.ok) {
     console.log(
@@ -21898,6 +22118,180 @@ const EXTRA_TOOLS_ALLOWED = new Set([
 //
 // Engine B needs exactly the same protection (`codex` is an npm shim too), which
 // is why this is named for what it does rather than for its first caller.
+// ── The stall watchdog (v0.56.1) ───────────────────────────────────────────
+//
+// `spawnSync` cannot have one. It blocks the event loop for the whole dispatch,
+// so nothing in this process can observe the child while it runs — which is why
+// a stalled worker could only ever be discovered by the wall clock, fifteen
+// minutes later, wearing the wrong name (`timeout`).
+//
+// So engine `cli` spawns ASYNCHRONOUSLY and something watches. What it watches
+// is deliberately not "is the process alive" — a stalled opencode is extremely
+// alive. It watches for OBSERVABLE PROGRESS, in the three places progress can
+// show up:
+//
+//   1. the child's stdout, which is redirected onto the journal's progress file
+//      (so the measurement is a `stat`, not a buffer this process holds),
+//   2. the child's stderr, which stays a pipe and is counted as it arrives,
+//   3. the DECLARED FILES on disk — a worker can think for four minutes and
+//      write nothing, but a worker that just wrote a file is working, whatever
+//      its stream is doing.
+//
+// Any one of the three resets the clock. All three quiet for the whole stall
+// budget is the finding.
+function spawnCmdParts(bin, argv) {
+  const needsShell = process.platform === "win32" && /\.(cmd|bat)$/i.test(bin);
+  if (!needsShell) return { cmd: bin, args: argv, shell: false };
+  const q = (s) => `"${String(s).replace(/"/g, '""')}"`;
+  return { cmd: q(bin) + " " + argv.map(q).join(" "), args: [], shell: true };
+}
+
+// A .cmd shim on Windows is `cmd.exe` with the real tool as a GRANDCHILD, and
+// killing cmd.exe leaves the tool running against the same repository the next
+// attempt is about to resume into. `taskkill /T` is the only thing that takes
+// the tree. On POSIX the child is spawned into its own process group and the
+// group is signalled.
+function killProcessTree(child) {
+  if (!child || child.pid === undefined || child.exitCode !== null) return;
+  if (process.platform === "win32") {
+    try {
+      spawnSync("taskkill", ["/pid", String(child.pid), "/T", "/F"], { windowsHide: true });
+      return;
+    } catch (_) {}
+  }
+  try {
+    process.kill(-child.pid, "SIGTERM");
+  } catch (_) {
+    try {
+      child.kill("SIGTERM");
+    } catch (_) {}
+  }
+}
+
+// The size of every declared file, plus its mtime. Cheap enough to run every
+// few seconds, and it is the ONE progress signal that does not depend on the
+// worker choosing to say anything.
+function declaredFilesFingerprint(root, declared) {
+  let acc = "";
+  for (const rel of declared || []) {
+    try {
+      const st = fs.statSync(path.resolve(root, rel));
+      acc += `${rel}:${st.size}:${st.mtimeMs};`;
+    } catch (_) {
+      acc += `${rel}:-;`;
+    }
+  }
+  return acc;
+}
+
+const EXTRA_STALL_POLL_MS = 5000;
+
+function runCliChild(bin, argv, opts, watch) {
+  return new Promise((resolve) => {
+    const parts = spawnCmdParts(bin, argv);
+    const spawnOpts = Object.assign({}, opts, { shell: parts.shell });
+    if (!parts.shell && process.platform !== "win32") spawnOpts.detached = true;
+    let child;
+    try {
+      child = require("child_process").spawn(parts.cmd, parts.args, spawnOpts);
+    } catch (e) {
+      return resolve({ error: e, status: null, stderr: "", stopped_by: null, stall_ms: null, last_progress_ms: null });
+    }
+
+    let stderr = "";
+    let stderrBytes = 0;
+    if (child.stderr)
+      child.stderr.on("data", (c) => {
+        stderrBytes += c.length;
+        if (stderr.length < 512 * 1024) stderr += c.toString("utf8");
+      });
+
+    // When there is no journal to redirect stdout onto, the bytes are collected
+    // HERE instead — never dropped. A journal is best effort by construction
+    // (it can be null), and a dispatch that silently produced no readable output
+    // because ORC could not write a log file would be a far worse failure than
+    // the missing log.
+    let stdout = "";
+    let stdoutBytes = 0;
+    if (child.stdout)
+      child.stdout.on("data", (c) => {
+        stdoutBytes += c.length;
+        if (stdout.length < EXTRA_MAX_OUTPUT_BYTES) stdout += c.toString("utf8");
+      });
+
+    let stoppedBy = null;
+    let lastProgress = Date.now();
+    let longestGap = 0;
+    let firstByteAt = null;
+    let seen = { out: -1, err: -1, files: null };
+
+    // `true` on the very first call: the baseline is what everything after it is
+    // compared AGAINST, so counting it as movement would report a first byte at
+    // 0ms on every dispatch — a timeline that always says the worker started
+    // instantly is a timeline nobody can read a stall out of.
+    const sample = (baseline) => {
+      let outSize = stdoutBytes;
+      if (watch.progressFile) {
+        try {
+          outSize = fs.statSync(watch.progressFile).size;
+        } catch (_) {}
+      }
+      const files = declaredFilesFingerprint(watch.root, watch.declared);
+      const moved =
+        outSize !== seen.out || stderrBytes !== seen.err || (seen.files !== null && files !== seen.files);
+      seen = { out: outSize, err: stderrBytes, files };
+      if (moved && !baseline) {
+        const now = Date.now();
+        longestGap = Math.max(longestGap, now - lastProgress);
+        if (firstByteAt === null) firstByteAt = now;
+        lastProgress = now;
+      }
+      return moved;
+    };
+    sample(true); // establish the baseline WITHOUT counting it as movement
+
+    const wall = setTimeout(() => {
+      stoppedBy = "wall";
+      killProcessTree(child);
+    }, watch.wall_ms);
+
+    let poll = null;
+    if (watch.stall_ms > 0) {
+      poll = setInterval(() => {
+        sample();
+        if (Date.now() - lastProgress >= watch.stall_ms) {
+          stoppedBy = "stall";
+          clearInterval(poll);
+          poll = null;
+          killProcessTree(child);
+        }
+      }, Math.min(EXTRA_STALL_POLL_MS, Math.max(1000, Math.floor(watch.stall_ms / 4))));
+    }
+
+    const done = (status, err) => {
+      clearTimeout(wall);
+      if (poll) clearInterval(poll);
+      sample();
+      resolve({
+        error: err || null,
+        status,
+        stdout,
+        stderr,
+        stopped_by: stoppedBy,
+        // The timeline, for `orc extra health` and for the failure report. A
+        // stall report that cannot say how long the worker was quiet is a
+        // report nobody can tune a budget from.
+        stall_ms: Date.now() - lastProgress,
+        longest_gap_ms: longestGap,
+        first_byte_ms: firstByteAt === null ? null : firstByteAt - watch.started,
+        last_progress_ms: lastProgress - watch.started,
+      });
+    };
+    child.on("error", (e) => done(null, e));
+    child.on("close", (code) => done(code === null ? null : code, null));
+  });
+}
+
 function spawnCmdSafe(bin, argv, opts) {
   const needsShell = process.platform === "win32" && /\.(cmd|bat)$/i.test(bin);
   if (!needsShell) return spawnSync(bin, argv, opts);
@@ -21915,7 +22309,43 @@ function extraTimeouts(cfg) {
   const wall = Math.max(30, Number(cfg.extra_timeout_s) || 900) * 1000;
   const api = Math.min(wall, Math.max(60000, wall - 60000));
   const idle = Math.max(10000, Math.min(300000, api - 30000, 1800000));
-  return { wall_ms: wall, api_ms: api, idle_ms: idle };
+  // v0.56.1 — THE FOURTH TIMEOUT, and the only one that measures the WORKER
+  // rather than a socket. A wall clock cannot tell a worker that is thinking
+  // hard from one that stopped: both look like 900 seconds of nothing. The
+  // stall clock is reset by OBSERVABLE PROGRESS — new bytes on the worker's own
+  // stream, new bytes on its stderr, or a declared file that changed on disk —
+  // so it fires only when nothing at all is happening.
+  //
+  // Ordered with the rest, once: stall < idle < api < wall. A stall budget at
+  // or past the wall clock can never fire, so it is CLAMPED rather than
+  // honoured, and the clamp is reported by `orc extra health`.
+  const raw = cfg.extra_stall_s === undefined ? 180 : Number(cfg.extra_stall_s);
+  const asked = !Number.isFinite(raw) || raw <= 0 ? 0 : raw * 1000;
+  // STRICTLY under the wall clock, and never below the 30s floor. Those two
+  // rules can disagree — a 30-second wall clock leaves no room for either — and
+  // when they do the stall clock is simply OFF. Two timers that fire at the same
+  // instant would report whichever won the race, which is exactly the "three
+  // timeouts disagreeing about which one fires first" bug this function exists
+  // to prevent; the wall clock is the one that must win a tie, because it is
+  // the budget the user set.
+  const fitted = Math.min(asked, wall - 15000);
+  const stall = asked === 0 || fitted < 30000 ? 0 : fitted;
+  return {
+    wall_ms: wall,
+    api_ms: api,
+    idle_ms: idle,
+    stall_ms: stall,
+    stall_clamped: asked > 0 && stall !== asked,
+    // WHY it is off, when it is off and the user asked for one. A budget that
+    // silently does nothing is the failure mode; a budget that says "your wall
+    // clock is too short for me" is a thing somebody can act on.
+    stall_off_reason:
+      asked > 0 && stall === 0
+        ? `extra_stall_s (${Math.round(asked / 1000)}s) cannot fit under extra_timeout_s (${Math.round(
+            wall / 1000
+          )}s) with the 30s floor, so the wall clock is the only stop.`
+        : null,
+  };
 }
 
 // ── Managed settings (F4, last row) ────────────────────────────────────────
@@ -22079,6 +22509,20 @@ const EXTRA_FAILURES = {
   "connection-lost-local": { retry: true, label: "the connection dropped and this machine could not reach the network either" },
   "redirect-refused": { retry: false, label: "the endpoint redirected, and a credential must never follow one" },
   "response-truncated": { retry: true, label: "the reply exceeded the response ceiling" },
+  // v0.56.1 — THE ROW FOR A WORKER THAT IS STILL ALIVE AND DOING NOTHING.
+  //
+  // `timeout` says the whole dispatch budget ran out, which is a statement
+  // about ORC's patience. `stalled` says the worker went quiet: no new bytes on
+  // its stream, no new bytes on stderr, and no declared file changed, for the
+  // whole stall budget. The process was up the entire time — an opencode
+  // session that stops mid-task and waits for a human to type "continue" looks
+  // exactly like this, and reporting it as `timeout` hid that it was a
+  // RESUMABLE position rather than a budget somebody should raise.
+  //
+  // Retryable, and that is the point: `extra_resume` turns it into a
+  // continuation slice carrying what is already on disk, which is ORC's own
+  // spelling of typing "continue".
+  stalled: { retry: true, label: "the worker went quiet and stopped changing anything" },
   unknown: { retry: false, label: "the worker failed and said nothing ORC can classify" },
 };
 const classifyFailure = (k) => EXTRA_FAILURES[k] || EXTRA_FAILURES.unknown;
@@ -23265,6 +23709,27 @@ function extraJournalCmd(claudeDir, sub, arg) {
 // same profile" and then wait out `extra_resume_max` × a 401.
 const EXTRA_RESUME_TARGETS = ["extra", "claude", "hold", "off"];
 
+// ONE reader of "which Claude agent takes this over". A resume that goes to
+// Claude and a fallback that goes to Claude must never disagree about the
+// answer, and before v0.56.1 there was only one place it could come from. Now
+// `extra_fallback_agent` can pin one or defer to the user, so the resolved
+// choice wins where it made one and `fallback_to` is still the floor. `null`
+// under `ask` is CORRECT and not a gap: nothing has been chosen yet.
+function extraFallbackAgentOf(result) {
+  const f = result && result.fallback;
+  // `ask` deliberately resolves to NULL — nothing has been chosen yet, and a
+  // resume report that named an agent would answer the question the setting
+  // exists to ask. The renderer prints the menu instead.
+  if (f && f.mode === "ask") return null;
+  // ONLY a PINNED setting overrides. Under `band` the two fields agree by
+  // construction (both are `res.claude`), and `fallback_to` keeps its name, its
+  // position and its meaning as the promise at the payload says — so it stays
+  // the authority for the default, and this function is the exception, not a
+  // replacement.
+  if (f && f.mode === "pinned" && f.agent) return f.agent;
+  return (result && result.fallback_to && result.fallback_to.agent) || (f && f.agent) || null;
+}
+
 // ONE idea of what "on" means. Two readers of the same key that disagree about
 // its default is the drift this repo lints for everywhere else.
 const extraResumeOn = (cfg) => String((cfg && cfg.extra_resume) === undefined ? "on" : cfg.extra_resume) !== "off";
@@ -23304,7 +23769,7 @@ function extraResumeTarget(v, result, cfg) {
     return {
       kind: "claude",
       profile: null,
-      agent: (result && result.fallback_to && result.fallback_to.agent) || null,
+      agent: extraFallbackAgentOf(result),
       why: `\`extra_resume_max\` is ${max} and this task has already been resumed ${resumesSoFar} time(s). The cap STOPS with an honest report rather than looping a third time — bounded like \`tdd_loop_max\`.`,
       capped: true,
       resumes_so_far: resumesSoFar,
@@ -23325,7 +23790,7 @@ function extraResumeTarget(v, result, cfg) {
   return {
     kind: "claude",
     profile: null,
-    agent: (result && result.fallback_to && result.fallback_to.agent) || null,
+    agent: extraFallbackAgentOf(result),
     // THE CASE THAT FIXES GAP 1. A Claude executor receiving a resume slice gets
     // the same preamble, the same `preexisting[]` table and the same instruction
     // not to rewrite finished work. The Claude fallback stops being a
@@ -23333,6 +23798,78 @@ function extraResumeTarget(v, result, cfg) {
     why: `\`${v.reason || "the failure"}\` will not succeed on a retry, so this goes to the Claude band — STILL AS A RESUME SLICE. A from-scratch re-dispatch onto a half-written file is the failure this exists to remove.`,
     resumes_so_far: resumesSoFar,
     resume_max: max,
+  };
+}
+
+// ── WHICH Claude agent picks up a failed foreign task (v0.56.1) ────────────
+//
+// `fallback_to` has always carried the band's (or the slot's) own Claude agent,
+// which is the right default and the only one ORC can compute: a fallback that
+// changes tier is a re-plan nobody asked for.
+//
+// What it could not do is let a human choose. A stall costs real minutes before
+// anybody hears about it, and by the time the wave stops the user often knows
+// something ORC does not — that this slice wants more thinking than its band
+// bought, or less. So `extra_fallback_agent` adds two words to the default:
+// `ask` STOPS with the menu, and a bare agent name pins one.
+//
+// The menu is COMPUTED, never a second idea of the ladder: the band's own agent
+// always leads it (it is what happens if the user just presses enter), and the
+// three named alternates are the ones a person actually reaches for. "Any other
+// installed agent" is the honest last row — the roster is generated, and a
+// closed list here would go stale the next time a band moves.
+const EXTRA_FALLBACK_ALTERNATES = [
+  { agent: "orc-executor-opus-5-med", why: "more thinking than most bands buy, without the top-tier cost." },
+  { agent: "orc-executor-opus-5-low", why: "the same model on the cheapest rung — right when the slice turned out to be mechanical." },
+  { agent: "orc-executor-sonnet-4-6-high", why: "a different model entirely, for a slice where Opus is not the constraint." },
+];
+
+function extraFallbackChoice(cfg, claude) {
+  const bandAgent = (claude && claude.agent) || null;
+  const setting = String((cfg && cfg.extra_fallback_agent) || "band").trim() || "band";
+  const options = [];
+  if (bandAgent)
+    options.push({
+      agent: bandAgent,
+      label: "the agent this task would have had",
+      why: "a fallback changes WHO runs the task and nothing else — the score, the declared files and the acceptance criteria are untouched.",
+      is_band: true,
+    });
+  for (const alt of EXTRA_FALLBACK_ALTERNATES)
+    if (alt.agent !== bandAgent) options.push({ agent: alt.agent, label: alt.agent, why: alt.why, is_band: false });
+
+  if (setting === "ask")
+    return {
+      mode: "ask",
+      agent: null,
+      band_agent: bandAgent,
+      options,
+      free_text: "any installed ORC agent name is also accepted",
+      // The lane STOPS here. It is a config the user set on purpose, so a lane
+      // that quietly picked the default for them would be answering the one
+      // question the setting exists to ask.
+      note: "`extra_fallback_agent` is `ask` — put these to the user and dispatch what they pick. Do not choose one for them.",
+    };
+  if (setting === "band")
+    return {
+      mode: "band",
+      agent: bandAgent,
+      band_agent: bandAgent,
+      options,
+      free_text: null,
+      note: bandAgent
+        ? `dispatch \`${bandAgent}\` — the agent this band or slot already resolves to.`
+        : "no Claude agent could be resolved for this task, so there is nothing to fall back to. Report that rather than guessing one.",
+    };
+  return {
+    mode: "pinned",
+    agent: setting,
+    band_agent: bandAgent,
+    options,
+    free_text: null,
+    note:
+      `\`extra_fallback_agent\` pins every fallback to \`${setting}\`` +
+      (bandAgent && bandAgent !== setting ? `, overriding this task's own \`${bandAgent}\`.` : "."),
   };
 }
 
@@ -25494,7 +26031,7 @@ const EXTRA_CLI_ADAPTERS = {
 // property that kept the bridge, the slot accounting, the render and every
 // downstream gate untouched across three engines, and it is worth more than any
 // one adapter.
-function runCliEngine(ctx) {
+async function runCliEngine(ctx) {
   const { prof, route, key, cfg, slice, cwd, root, workDir } = ctx;
   const started = Date.now();
   const timeouts = extraTimeouts(cfg);
@@ -25629,14 +26166,20 @@ function runCliEngine(ctx) {
     const spawnOpts = {
       cwd,
       env: Object.assign({}, process.env, adapter.env(a)),
-      encoding: "utf8",
-      timeout: timeouts.wall_ms,
-      killSignal: "SIGTERM",
-      maxBuffer: EXTRA_MAX_OUTPUT_BYTES,
       windowsHide: true,
     };
-    if (fd !== null) spawnOpts.stdio = ["ignore", fd, "pipe"];
-    const r = spawnCmdSafe(bin, argv, spawnOpts);
+    // stdout to the fd when there is one; a pipe we never read otherwise, so a
+    // journal-less dispatch cannot fill the OS buffer and deadlock the child.
+    spawnOpts.stdio = ["ignore", fd !== null ? fd : "pipe", "pipe"];
+    // v0.56.1 — ASYNCHRONOUS, so something can watch. See runCliChild.
+    const r = await runCliChild(bin, argv, spawnOpts, {
+      started,
+      wall_ms: timeouts.wall_ms,
+      stall_ms: timeouts.stall_ms,
+      progressFile: (ctx.journal && ctx.journal.progress) || null,
+      root,
+      declared,
+    });
     // READ BACK FIRST, before any early return. A timeout is exactly the case
     // where the bytes matter most, and the old code discarded them.
     let captured = null;
@@ -25653,23 +26196,50 @@ function runCliEngine(ctx) {
     }
     const childOut = captured === null ? r.stdout || "" : captured;
 
-    if (r.error && r.error.code === "ETIMEDOUT")
-      return fail("timeout", `no answer in ${Math.round(timeouts.wall_ms / 1000)}s (the dispatch wall clock).`, {
-        adapter: cli.bin,
-        argv: argvUsed,
-        // WHERE THE BYTES ARE. The child's output up to the kill is on disk, and
-        // a path to a file that exists is the difference between a bare
-        // `timeout` and a position somebody can look at.
-        output_file: (ctx.journal && ctx.journal.progress) || null,
-        captured_bytes: captured === null ? null : Buffer.byteLength(captured, "utf8"),
-      });
+    // WHERE THE BYTES ARE, on either stop. The child's output up to the kill is
+    // on disk, and a path to a file that exists is the difference between a bare
+    // verdict and a position somebody can look at.
+    const stopEvidence = {
+      adapter: cli.bin,
+      argv: argvUsed,
+      // NAMED on a stop, not only on a completion. The trace line falls back to
+      // `?` without it, and `orc extra stats` dedupes on the fields that line
+      // carries — so a stalled dispatch would be unjoinable to a price, a
+      // provider or another stall on a different model.
+      model_requested: route.model,
+      output_file: (ctx.journal && ctx.journal.progress) || null,
+      captured_bytes: captured === null ? null : Buffer.byteLength(captured, "utf8"),
+      timeline: {
+        first_byte_ms: r.first_byte_ms,
+        last_progress_ms: r.last_progress_ms,
+        longest_gap_ms: r.longest_gap_ms,
+        quiet_for_ms: r.stall_ms,
+        stall_budget_ms: timeouts.stall_ms,
+        wall_budget_ms: timeouts.wall_ms,
+      },
+    };
+    // THE STALL, NAMED. Reported before the wall clock because it is the more
+    // specific fact: a stall is a POSITION to resume from, a wall-clock timeout
+    // is a budget to raise, and calling the first one the second is what sent
+    // fifteen-minute stalls to a from-scratch Claude fallback.
+    if (r.stopped_by === "stall")
+      return fail(
+        "stalled",
+        `${cli.bin} produced nothing for ${Math.round(r.stall_ms / 1000)}s (the stall budget is ${Math.round(
+          timeouts.stall_ms / 1000
+        )}s) — no output, no stderr and no declared file changed. The process was still running; it had stopped working. ` +
+          "`orc extra reconcile` has the position it left, and `extra_resume` continues from it instead of starting over.",
+        stopEvidence
+      );
+    if (r.stopped_by === "wall")
+      return fail("timeout", `no answer in ${Math.round(timeouts.wall_ms / 1000)}s (the dispatch wall clock).`, stopEvidence);
     if (r.error) return fail("spawn-failed", r.error.message, { adapter: cli.bin, argv: argvUsed });
 
     let lastMessage = null;
     try {
       lastMessage = fs.readFileSync(outFile, "utf8");
     } catch (_) {}
-    out = { stdout: childOut, stderr: r.stderr || "", status: r.status, lastMessage };
+    out = { stdout: childOut, stderr: r.stderr || "", status: r.status, lastMessage, timeline: stopEvidence.timeline };
   } finally {
     try {
       fs.rmSync(wdir, { recursive: true, force: true });
@@ -25744,6 +26314,9 @@ function runCliEngine(ctx) {
     },
     preflight_warning: preflightWarn,
     preflight_remedy: preflightRemedy,
+    // The same timeline the stall report carries, on EVERY outcome. A budget you
+    // can only see when it fires is a budget nobody can set before it does.
+    timeline: out.timeline || null,
   };
 
   // F14f — THE PROVIDER'S OWN ERROR OBJECT FIRST, the stderr patterns as the
@@ -26049,7 +26622,7 @@ async function extraDispatch(claudeDir) {
       // dispatch that named only the model would run at whatever that user's
       // config happens to say — a silent downgrade, the exact failure class the
       // `expect=<model>/<effort>` trace design exists to catch.
-      out = runCliEngine({
+      out = await runCliEngine({
         prof,
         route: Object.assign({}, route, { effort: route.effort || extraEffortFromAgent(res.claude && res.claude.agent) }),
         key: cred.value,
@@ -26092,6 +26665,9 @@ async function extraDispatch(claudeDir) {
       engine: prof.engine,
       declared_files: slice.declared_files || [],
       fallback_to: res.claude,
+      // v0.56.1 — the same agent, plus WHETHER THE USER GETS A SAY. `fallback_to`
+      // keeps its name, its position and its meaning; this is beside it.
+      fallback: extraFallbackChoice(cfg, res.claude),
       announce: res.announce,
       // v0.53.3 — WHAT WAS ACTUALLY SENT, not what the profile declares. The
       // return used to copy `credential.source: "vault"` off the profile while
@@ -26235,8 +26811,17 @@ function extraTraceExtras(p) {
   // The fallback line is the CALLER's to emit AFTER it re-dispatches, because
   // only the caller knows whether it did. What the CLI can honestly supply is
   // the text, pre-composed, so the two wordings cannot diverge.
-  if (!p.ok && p.fallback_to && p.fallback_to.agent)
-    out.push(`EXTRA fallback task=${p.task_id || "?"} :: ${p.reason} → ${p.fallback_to.agent}`);
+  //
+  // v0.56.1 — under `extra_fallback_agent: ask` NOTHING HAS BEEN CHOSEN YET, so
+  // the line says `pending` rather than naming the band's agent. A trace that
+  // asserts an agent the user has not picked is a decision /orc-retro would
+  // aggregate as one that was made.
+  if (!p.ok) {
+    const chosen = extraFallbackAgentOf(p);
+    if (p.fallback && p.fallback.mode === "ask")
+      out.push(`EXTRA fallback task=${p.task_id || "?"} :: ${p.reason} → pending (extra_fallback_agent=ask)`);
+    else if (chosen) out.push(`EXTRA fallback task=${p.task_id || "?"} :: ${p.reason} → ${chosen}`);
+  }
   return out;
 }
 
@@ -26296,6 +26881,30 @@ function extraDispatchRender(p) {
   if (p.credential_hint) console.log("  " + ui.mark.warn(p.credential_hint));
   if (!p.ok && p.fallback_to)
     console.log(ui.color.gray(`  fallback: ${p.fallback_to.agent} ${p.fallback_to.band}`));
+  // v0.56.1 — the TIMELINE, on every engine-cli outcome. A stall budget you can
+  // only see when it fires is a budget nobody can set before it does.
+  if (p.timeline && p.timeline.stall_budget_ms) {
+    const sec = (ms) => (ms === null || ms === undefined ? "—" : `${Math.round(ms / 1000)}s`);
+    console.log(
+      ui.color.gray(
+        `  timeline: first byte ${sec(p.timeline.first_byte_ms)} · last progress ${sec(
+          p.timeline.last_progress_ms
+        )} · longest quiet gap ${sec(p.timeline.longest_gap_ms)} · stall budget ${sec(p.timeline.stall_budget_ms)}`
+      )
+    );
+  }
+  // The MENU, when the user asked to be the one who picks. Printed in full,
+  // because a lane that has to go and look the options up is a lane that will
+  // pick the first one.
+  if (!p.ok && p.fallback && p.fallback.mode === "ask") {
+    console.log("");
+    console.log(ui.color.yellow("  extra_fallback_agent is `ask` — choose who picks this task up:"));
+    for (const o of p.fallback.options)
+      console.log(`    ${ui.color.cyan(o.agent)}${o.is_band ? ui.color.gray("  (this task's own band)") : ""}  ${ui.color.gray(o.why)}`);
+    if (p.fallback.free_text) console.log(ui.color.gray(`    …or ${p.fallback.free_text}`));
+  } else if (!p.ok && p.fallback && p.fallback.mode === "pinned") {
+    console.log(ui.color.gray(`  ${p.fallback.note}`));
+  }
   // Copy this into the phase packet verbatim. It is printed rather than only
   // returned in --json because the orchestrator reads the human output too, and
   // a line it has to retype is a line it will retype differently.
@@ -27495,6 +28104,12 @@ function extraUsage() {
     "       orc extra lanes [--json]                  WHICH LANE each band governs. A\n" +
     "                               fixed-executor lane shows both edges of its\n" +
     "                               pinned agent's band and whether they agreed.\n" +
+    "       orc extra health <profile> [--model <id>] [--json]\n" +
+    "                               DOES THIS MODEL STALL. Runs the live probe through the\n" +
+    "                               SAME watchdog a dispatch uses and reports the timeline:\n" +
+    "                               first byte, longest quiet gap, and whether it answered,\n" +
+    "                               stalled or ran out of wall clock. Engine `cli` only.\n" +
+    "                               0 answered - 1 stalled or failed - 2 unknown profile\n" +
     "       orc extra preflight [--json]              the P0 gate before wave 1.\n" +
     "                               0 ok · 1 STOP (an expired or missing passphrase on a\n" +
     "                               vaulted profile a route row names)\n" +
@@ -27899,6 +28514,10 @@ async function extra() {
       break;
     case "preflight":
       extraPreflight(claudeDir);
+      break;
+    // v0.56.1 - the stall clock, measurable BEFORE a wave depends on it.
+    case "health":
+      await extraHealth(claudeDir, pos[2]);
       break;
     case "route":
       if (pos[2] === "set") extraRouteSet(claudeDir, pos[3], pos[4]);

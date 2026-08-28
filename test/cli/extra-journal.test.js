@@ -386,6 +386,203 @@ test("engine cli: a wall-clock kill leaves the child's output on disk", () => {
   rmrf(p.root);
 });
 
+// ── the stall clock (v0.56.1) ───────────────────────────────────────────────
+//
+// The failure a wall clock cannot see: the worker is ALIVE and doing nothing.
+// The `slow` fixture is exactly that shape — it prints one real event and then
+// blocks — so the difference between these two tests and the wall-clock one
+// above is only which budget is short enough to fire first.
+test("engine cli: a worker that goes quiet is `stalled`, not `timeout`", () => {
+  const p = project();
+  // 30s is the stall floor; the wall clock is left far above it so the stall is
+  // unambiguously what fired. A stall reported as a timeout reads as a budget
+  // somebody should raise, when it is a POSITION somebody should resume from.
+  const PATHV = armedCli(p, "opencode", "extra_timeout_s: 300\nextra_stall_s: 30\n");
+  const t0 = Date.now();
+  const r = run(p, ["extra", "dispatch", "--task", slice(p), "--json"], {
+    K: SECRET_KEY,
+    PATH: PATHV,
+    ORC_FAKE_CLI_MODE: "slow",
+  });
+  const elapsed = Date.now() - t0;
+  assert.equal(r.status, 1, r.stdout + r.stderr);
+  const j = json(r);
+  assert.equal(j.reason, "stalled");
+  // RETRYABLE is the whole point: it is what lets `extra_resume` continue from
+  // what is on disk instead of re-dispatching the slice from scratch.
+  assert.equal(j.retry, true);
+  // It stopped at the STALL budget, nowhere near the wall clock. Without this
+  // the test would pass on a build where the stall clock does nothing.
+  assert.ok(elapsed < 120000, "the stall budget must fire long before the 300s wall clock (took " + elapsed + "ms)");
+  // The bytes the worker DID produce are still on disk — a stall is a position,
+  // and a position you deleted is a blank page.
+  assert.equal(j.output_file, path.join(journalDir(p, "T-2"), "attempt-01.progress.jsonl"));
+  assert.match(fs.readFileSync(j.output_file, "utf8"), /"type":"session\.start"/);
+  // THE TIMELINE, on the record. A budget you can only see when it fires is a
+  // budget nobody can set before it does.
+  assert.equal(j.timeline.stall_budget_ms, 30000);
+  assert.equal(j.timeline.wall_budget_ms, 300000);
+  assert.ok(j.timeline.first_byte_ms !== undefined);
+  rmrf(p.root);
+});
+
+// ARITHMETIC, so it is tested as arithmetic. A live dispatch would hold a
+// process for a full wall clock to prove a comparison — and the pure function
+// pins the rule more precisely than an outcome word can, because it can name
+// the reason the clock stood down.
+test("the stall clock stands down when it cannot fit under the wall clock, and says why", () => {
+  // LF, always — the slice below looks for `\n}\n`, which a CRLF checkout
+  // never contains. Without this the test reports extraTimeouts as undefined.
+  const src = fs.readFileSync(path.join(__dirname, "..", "..", "bin", "cli.js"), "utf8").replace(/\r\n/g, "\n");
+  const i = src.indexOf("function extraTimeouts(cfg) {");
+  const extraTimeouts = new Function(
+    src.slice(i, src.indexOf("\n}\n", i) + 2) + "\nreturn extraTimeouts;"
+  )();
+
+  // The default: comfortably under a 900s wall clock, so it is honoured whole.
+  const d = extraTimeouts({});
+  assert.equal(d.stall_ms, 180000);
+  assert.equal(d.stall_clamped, false);
+  assert.equal(d.stall_off_reason, null);
+  // ORDERED, once: stall < idle < api < wall. Three timeouts that disagree
+  // about which one fires first is the bug this function exists to prevent.
+  assert.ok(d.stall_ms < d.idle_ms && d.idle_ms < d.api_ms && d.api_ms <= d.wall_ms);
+
+  // Asked for more than fits: CLAMPED, and it says it was.
+  const c = extraTimeouts({ extra_timeout_s: 120, extra_stall_s: 600 });
+  assert.equal(c.stall_ms, 105000, "min(asked, wall - 15s)");
+  assert.equal(c.stall_clamped, true);
+
+  // The wall clock at its own 30s floor leaves no room for the 30s stall floor.
+  // Two timers on the same instant would report whichever won the race, so the
+  // stall clock stands down and the WALL CLOCK — the budget the user set —
+  // wins the tie. A budget that silently does nothing is the failure mode; one
+  // that says why is something a person can act on.
+  const off = extraTimeouts({ extra_timeout_s: 30, extra_stall_s: 180 });
+  assert.equal(off.stall_ms, 0);
+  assert.equal(off.stall_clamped, true);
+  assert.match(off.stall_off_reason, /cannot fit under extra_timeout_s/);
+
+  // 0 is OFF, and it is not a clamp — the user asked for no stall clock.
+  const zero = extraTimeouts({ extra_stall_s: 0 });
+  assert.equal(zero.stall_ms, 0);
+  assert.equal(zero.stall_clamped, false);
+  assert.equal(zero.stall_off_reason, null);
+});
+
+test("a worker that keeps producing is never stalled, however long it takes", () => {
+  const p = project();
+  // The `ok` fixture answers immediately. The assertion that matters is the
+  // NEGATIVE one: an ordinary dispatch under a live stall clock must be
+  // untouched by it, or the clock would be firing on workers that are merely
+  // slow — which is the whole reason it measures progress and not the wall.
+  const PATHV = armedCli(p, "opencode", "extra_timeout_s: 300\nextra_stall_s: 30\n");
+  const r = run(p, ["extra", "dispatch", "--task", slice(p), "--json"], {
+    K: SECRET_KEY,
+    PATH: PATHV,
+    ORC_FAKE_CLI_MODE: "ok",
+  });
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  const j = json(r);
+  assert.equal(j.outcome, "done");
+  // The timeline rides on a SUCCESS too, not only on a failure.
+  assert.equal(j.timeline.stall_budget_ms, 30000);
+  assert.ok(j.timeline.first_byte_ms !== null, "a worker that answered produced a first byte");
+  rmrf(p.root);
+});
+
+// ── the watchdog itself, in seconds rather than in a wall clock ────────────
+//
+// `extraTimeouts` floors a CONFIGURED stall budget at 30s, because a budget
+// small enough to fire on a model's first token is a footgun. `runCliChild`
+// takes `stall_ms` directly and has no opinion about it — so the mechanism can
+// be pinned in two seconds, precisely, without waiting out a policy that is
+// already tested as arithmetic above.
+function watchdog() {
+  const src = fs.readFileSync(path.join(__dirname, "..", "..", "bin", "cli.js"), "utf8").replace(/\r\n/g, "\n");
+  const pick = (name) => {
+    const i = src.indexOf("function " + name + "(");
+    return src.slice(i, src.indexOf("\n}\n", i) + 2);
+  };
+  // `new Function` compiles in GLOBAL scope, which has no `require` — so the
+  // module's own is passed in rather than reached for.
+  return new Function(
+    "require",
+    'const fs = require("fs"); const path = require("path"); const { spawnSync } = require("child_process");\n' +
+      pick("spawnCmdParts") +
+      pick("killProcessTree") +
+      pick("declaredFilesFingerprint") +
+      "const EXTRA_MAX_OUTPUT_BYTES = 256 * 1024 * 1024;\nconst EXTRA_STALL_POLL_MS = 5000;\n" +
+      pick("runCliChild") +
+      "\nreturn runCliChild;"
+  )(require);
+}
+const NODE = process.execPath;
+
+test("the watchdog kills a QUIET child and reports how long it was quiet", async () => {
+  const runCliChild = watchdog();
+  const p = project();
+  const started = Date.now();
+  // Alive, doing nothing, saying nothing — the exact shape of the failure.
+  const r = await runCliChild(
+    NODE,
+    ["-e", "setTimeout(() => {}, 60000)"],
+    { cwd: p.root, stdio: ["ignore", "pipe", "pipe"], windowsHide: true },
+    { started, wall_ms: 60000, stall_ms: 2000, progressFile: null, root: p.root, declared: [] }
+  );
+  assert.equal(r.stopped_by, "stall");
+  assert.ok(Date.now() - started < 20000, "it must stop at the stall budget, not at the wall clock");
+  // Never said anything, so there is no first byte. NULL, and never 0 — those
+  // are different facts and /orc-budget must not read one as the other.
+  assert.equal(r.first_byte_ms, null);
+  assert.ok(r.stall_ms >= 2000, "it reports how long the worker was quiet");
+  rmrf(p.root);
+});
+
+test("a child that keeps TALKING is never stalled, however long it runs", async () => {
+  const runCliChild = watchdog();
+  const p = project();
+  const started = Date.now();
+  // Six seconds of work under a two-second stall budget: it survives ONLY
+  // because the clock measures progress. This is the assertion that proves the
+  // watchdog is not just a second wall clock.
+  const r = await runCliChild(
+    NODE,
+    ["-e", "let n = 0; const t = setInterval(() => { process.stdout.write('tick\\n'); if (++n > 11) { clearInterval(t); } }, 500);"],
+    { cwd: p.root, stdio: ["ignore", "pipe", "pipe"], windowsHide: true },
+    { started, wall_ms: 60000, stall_ms: 2000, progressFile: null, root: p.root, declared: [] }
+  );
+  assert.equal(r.stopped_by, null, "a talking worker must never be stopped");
+  assert.equal(r.status, 0);
+  assert.ok(r.first_byte_ms !== null);
+  assert.ok(r.stdout.includes("tick"));
+  rmrf(p.root);
+});
+
+test("a child that only WRITES A DECLARED FILE is never stalled either", async () => {
+  const runCliChild = watchdog();
+  const p = project();
+  const started = Date.now();
+  // SILENT the whole time — the third progress signal is the only thing keeping
+  // it alive. A worker can think for minutes and then write in one go, and a
+  // clock that watched only the stream would kill it mid-thought.
+  const target = path.join(p.root, "src", "a.js").replace(/\\/g, "/");
+  const r = await runCliChild(
+    NODE,
+    [
+      "-e",
+      "const fs = require('fs'); let n = 0; const t = setInterval(() => { fs.appendFileSync(" +
+        JSON.stringify(target) +
+        ", 'line\\n'); if (++n > 11) { clearInterval(t); } }, 500);",
+    ],
+    { cwd: p.root, stdio: ["ignore", "pipe", "pipe"], windowsHide: true },
+    { started, wall_ms: 60000, stall_ms: 2000, progressFile: null, root: p.root, declared: ["src/a.js"] }
+  );
+  assert.equal(r.stopped_by, null, "a worker that is writing is working, whatever its stream is doing");
+  assert.equal(r.stdout, "", "and it said nothing at all — the file is the ONLY signal here");
+  rmrf(p.root);
+});
+
 // ── the declared table, and the sweep ───────────────────────────────────────
 test("journal fidelity is DECLARED per engine and never rendered stronger than it is", async () => {
   const p = project();

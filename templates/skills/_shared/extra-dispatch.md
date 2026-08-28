@@ -978,11 +978,143 @@ supplies it pre-composed in `trace_extras[]`.
 
 ---
 
-## The config surface — eleven keys, and the count is still the point
+## The stall — a worker that is alive and doing nothing (v0.56.1)
+
+### `a lane that waits out a wall clock on a worker that stopped` has broken this contract
+
+A wall clock cannot tell a worker that is thinking hard from a worker that has
+stopped. Both look like fifteen minutes of nothing. So until v0.56.1 an opencode
+session that went quiet mid-task — the thing you fix by hand by typing
+`continue` into its window — burned the whole `extra_timeout_s` budget and then
+reported `timeout`, which is a statement about **ORC's patience** and not about
+what happened. It read as a budget somebody should raise. It was a **position
+somebody should resume from**.
+
+### What the stall clock measures
+
+`config.extra_stall_s` (default **180**, `0` disables) is the seconds a foreign
+worker may produce **nothing at all** before the dispatch is stopped. It is not
+a second wall clock: it is reset by **observable progress**, in the only three
+places progress can show up.
+
+| signal | why it counts |
+|---|---|
+| new bytes on the worker's own stream | it is talking |
+| new bytes on its stderr | it is complaining, which is still working |
+| a **declared file** changed size or mtime on disk | it just wrote something, whatever its stream is doing |
+
+Any one of the three resets the clock. All three quiet for the whole budget is
+the finding. That third row is what stops the clock firing on a worker that
+thinks for four minutes and then writes a file in one go.
+
+Ordered with the other three, once, in `extraTimeouts`: **stall < idle < api <
+wall**. A budget at or past the wall clock could never fire, so it is CLAMPED
+rather than honoured, and `orc extra health` reports the clamp.
+
+**Engine `cli` only.** Engine `api` already has a per-request inactivity timeout
+on its own socket, and engine `claude-shim` gets one from the child's own byte
+watchdog. Adding a fourth clock to either would be three timeouts disagreeing
+about which one fires first, which is the bug `extraTimeouts` exists to prevent.
+
+### `stalled` is its own failure class, and it is RETRYABLE
+
+`EXTRA_FAILURES.stalled` — *"the worker went quiet and stopped changing
+anything"*, `retry: true`. That is the whole point: a stall is retryable, so the
+recovery procedure above applies to it unchanged. `orc extra reconcile` reads the
+position out of the journal baseline; `orc extra resume-slice` composes the
+continuation carrying what is already on disk; `extra_resume` continues from
+there instead of starting over.
+
+**That IS ORC's spelling of typing `continue`.** There is deliberately no key
+that nudges the child on its stdin: `opencode run` is not an interactive session,
+so a keystroke nobody reads would be a fake fix — and a fake fix here is worse
+than none, because it would look like the problem was handled.
+
+### Every outcome carries a TIMELINE
+
+`timeline` rides on every engine-`cli` return, not only on a stall:
+`first_byte_ms` · `last_progress_ms` · `longest_gap_ms` · `quiet_for_ms` ·
+`stall_budget_ms` · `wall_budget_ms`. Print it. **A budget you can only see when
+it fires is a budget nobody can set before it does** — and `first_byte_ms: null`
+is the honest reading of a worker that never said anything, never `0`.
+
+### `orc extra health <profile> [--model <id>]` — does this model stall?
+
+Exit **0** answered · **1** stalled or failed · **2** unknown profile.
+
+It runs the live probe through **the same watchdog a dispatch uses** — not a
+second idea of the path, which is the v0.53.3 rule that a green badge must be
+earned by the path a wave actually runs. What it adds over
+`orc extra ping --live` is the timeline and the verdict: `answered` · `stalled` ·
+`timeout` · `failed` · `spawn-failed`, plus the bytes the worker produced, capped
+and rendered as text.
+
+A **listed** model is not a **working** model and a working model is not a model
+that **finishes**: those are three different facts and this is the command that
+tells the third one apart. Run it before routing a band at a model you have not
+used. A CLI ping is not a cheap ping — say so.
+
+---
+
+## Who picks the task up — `extra_fallback_agent` (v0.56.1)
+
+`fallback_to` has always carried the band's (or the slot's) own Claude agent.
+That is the right default and the only one ORC can compute on its own: **a
+fallback that changes tier is a re-plan nobody asked for.**
+
+What it could not do is let a human choose. A stall costs real minutes before
+anybody hears about it, and by the time the wave stops the user often knows
+something ORC does not — that this slice wants more thinking than its band
+bought, or less.
+
+| `extra_fallback_agent` | what the lane does |
+|---|---|
+| `band` (default) | dispatch `fallback.agent`, which is `fallback_to.agent`. Pre-v0.56.1 behaviour, unchanged. |
+| `ask` | **STOP and put `fallback.options[]` to the user.** Dispatch what they pick. |
+| any `orc-…` agent name | dispatch that one, and say it overrode the task's own agent. |
+
+The return carries `fallback` beside `fallback_to`: `mode`, `agent`,
+`band_agent`, `options[]` (each with `agent`, `why`, `is_band`) and a `note` that
+is already worded — print it rather than composing a second wording.
+
+Three rules hold it together.
+
+1. **Under `ask` the lane does not choose.** `fallback.agent` is `null` and the
+   trace line says `→ pending (extra_fallback_agent=ask)`. A lane that picked the
+   first option would be answering the one question the setting exists to ask,
+   and `/orc-retro` would aggregate a decision nobody made.
+2. **The menu is COMPUTED and the band's own agent LEADS it.** It is what
+   happens if the user just presses enter. The three alternates —
+   `orc-executor-opus-5-med`, `orc-executor-opus-5-low`,
+   `orc-executor-sonnet-4-6-high` — are offered, and so is any installed agent
+   name, because the roster is generated and a closed list here would go stale
+   the next time a band moves.
+3. **It changes WHO, never WHAT.** The score does not move, `declared_files` is
+   not widened, `acceptance[]` is not touched, and a resume slice stays a resume
+   slice. This is the `extra resume-slice` rule applied to the fallback.
+
+**`/orc-quick` is INERT here too,** and announces it at the agent gate — beside
+`extra_enabled`, `extra_on_failure`, `extra_resume`, `opus5_only`, `fable5_*` and
+`rubric_bands_override`. That lane asks which agent before every dispatch, so a
+config that pre-answered it would be the exact failure the gate exists to
+prevent.
+
+---
+
+## The config surface — thirteen keys, and the count is still the point
 
 The combinatorial part — providers × models × bands **× positions** — is a
 **ledger with a CLI and a panel** (`orc extra`), not a YAML block nobody can hold
 in their head.
+
+**v0.56.1 added TWO**, and both come from the same observed failure: a foreign
+worker that goes quiet mid-task. Three more were refused and are written down so
+nobody proposes them again — **a stdin nudge** (`opencode run` is not an
+interactive session, so a keystroke nobody reads is a fake fix, and a fake fix
+looks like the problem was handled), **a per-profile stall budget** (the number
+describes ORC's patience, not a provider), and **a key to disable the timeline**
+(the spend-log reasoning verbatim: a record you can switch off is off on the run
+you needed it for).
 
 **v0.55.0 added ZERO keys.** A slot row's presence is its arming, so the four
 that were proposed were all refused: **`extra_slots_enabled`** (a second master
@@ -1008,6 +1140,8 @@ of being a string nobody checked).
 | `config.extra_verify_max_days` | `7` | Past this a verification reads STALE and is re-pinged before wave 1. **A STALE profile still routes** — a stale check is not a failed one. |
 | `config.extra_resume` | `on` | Whether a partial or crashed foreign dispatch is RESUMED rather than re-done. **Default `on`, because `off` is what is broken.** INERT in `/orc-quick`. |
 | `config.extra_resume_max` | `2` | Resume attempts per task before P6 takes over. The cap STOPS with an honest report naming the Claude agent — never a silent third loop, the same shape as every other bounded repair loop in ORC. |
+| `config.extra_stall_s` | `180` | Seconds a foreign worker may produce NOTHING before the dispatch is stopped as `stalled`. Reset by observable progress — the worker's stream, its stderr, or a declared file that changed on disk — so it never fires on a worker that is merely slow. `0` disables and the wall clock is the only stop again. **Clamped below `extra_timeout_s`**, because a budget that can never fire is worse than none. Engine `cli` only. |
+| `config.extra_fallback_agent` | `band` | WHICH Claude agent picks up a task the foreign worker could not finish. `band` is the pre-v0.56.1 behaviour. `ask` STOPS and puts the menu to the user. Any installed agent name pins one. It changes WHO, never the score, the declared files or the acceptance criteria. INERT in `/orc-quick`. |
 
 **Keys deliberately NOT added, and why each one would be a trap:**
 

@@ -13,7 +13,7 @@
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
 ![Dependencies](https://img.shields.io/badge/dependencies-zero-lightgrey.svg?style=for-the-badge)
 
-**Versi terbaru: v0.56.0** · diperbarui 27-08-2026 · [daftar perubahan lengkap](CHANGELOG.md)
+**Versi terbaru: v0.56.1** · diperbarui 28-08-2026 · [daftar perubahan lengkap](CHANGELOG.md)
 
 **Ada di npm: [`@azure-id/orc`](https://www.npmjs.com/package/@azure-id/orc)** — `npm i -g @azure-id/orc`
 
@@ -377,6 +377,8 @@ orc ui --stop          # matikan server proyek ini
 | Crosslink | **Design** (batas antar repo sebagai gambar) dan **Settings** (kesegaran tiap tetangga) | `crosslink add` / `remove` |
 | Promises · Boundary · Self-serve | buku janji, kartu batas, dan permukaan yang boleh diubah orang non-teknis | `pact check`, `pact sync`, `handoff set` |
 | **Docs** | setiap dokumen `/orc-doc` sebagai **pita** — satu blok per bagian, lebarnya sesuai panjangnya dan warnanya sesuai statusnya — plus berkas tiap bagian, jalur gelombang, kartu kesehatan lint, dan pratinjau gelombang | `doc compile` · `doc migrate` |
+| **Extra** | **enam tab**: penyiapan koneksi, alat lokal beserta keadaannya, tangga rentang skor dan enam posisinya, pengeluaran per profil per rentang, dan **Recovery** — setiap pengiriman yang tidak pernah melapor kembali, beserta apa yang ia tinggalkan di disk | `extra add` / `ping` / `route` / `role` |
+| **Challenge** | setiap putaran `/orc-challenge`: tujuan yang dibekukan, daftar sudut pandang dan apa yang diangkat masing-masing, temuan beserta keputusannya, dan apakah kelulusannya dihitung atau tertahan | `challenge record` · `accept` · `rebut` |
 | **Mocked Skill Use** | semua contoh jalannya yang ikut dikirim bersama ORC, dikelompokkan dan bisa dicari, dengan panel baca | — |
 | Learn | panduan `orc onboarding`, satu bagian sekali baca | — |
 | Experiment | setiap lane dengan tombol salin; membuka sesi Claude di terminal | — |
@@ -402,6 +404,90 @@ orc ui --stop          # matikan server proyek ini
 
 Nol dependensi, tanpa langkah build: `node:http`, JavaScript biasa, dan CSS yang
 ditulis tangan.
+
+---
+
+## Menjalankan sebagian tangga di tempat lain — `orc extra`
+
+**Pengatur utamanya selalu Claude.** Yang diubah Extra adalah *siapa yang
+mengerjakan satu potong tugas*: satu rentang skor milik Anda, atau salah satu
+dari enam posisi bernama, bisa diarahkan ke DeepSeek, GLM, Kimi, MiniMax, Qwen,
+Ollama lokal, atau CLI pemrograman yang sudah Anda pakai (opencode, codex).
+Semua pemeriksaan setelahnya — gerbang asap, gerbang TDD, peninjau, pemeriksa
+selisih pohon kerja — buta terhadap mesin yang dipakai, jadi tak ada satu pun
+yang tahu pekerjaan itu dikerjakan di luar.
+
+**Mati secara bawaan, dan tidak bisa dinyalakan sebelum ada yang benar-benar
+menjawab.**
+
+```bash
+orc extra providers              # katalog bertanggal — penyedia, bukan model
+orc extra tools                  # CLI lokal: belum ada · terlalu lama · belum masuk · siap
+orc extra add ds --provider deepseek --engine api --env-key DEEPSEEK_API_KEY
+orc extra ping ds                # gerbang koneksi: bertingkat, dan tak ada yang dibaca lebih kuat dari kenyataannya
+orc extra models ds --test <id>  # model yang TERDAFTAR bisa saja sudah mati di sana
+orc extra health ds --model <id> # …dan model yang jalan belum tentu SELESAI
+orc extra route set 40-55 ds/deepseek-chat     # satu rentang skor
+orc extra role set doc-writer ds/deepseek-chat # atau satu posisi bernama
+orc config set extra_enabled true
+```
+
+- **Katalognya berisi penyedia, tidak pernah model.** Nama model yang ikut
+  dikirim akan salah dalam hitungan bulan, dan salahnya *diam-diam* — 404 di
+  tengah gelombang. `orc extra ping` membaca daftar aslinya lalu menyimpannya;
+  tidak ada yang mengarang nama. Begitu juga harga: angka biaya yang bukan ORC
+  sendiri yang hitung tidak pernah dicetak, melainkan muncul sebagai tanda
+  hubung panjang.
+- **Setiap pekerjaan yang aktif mengatakannya sebelum gelombang pertama.**
+  Mengirim pekerjaan keluar dari Claude tanpa memberi tahu adalah justru
+  kegagalan yang membentuk seluruh bagian ini.
+- **Dua penahan keras**: tugas dengan `risk[]` yang disebut (autentikasi, uang,
+  migrasi, keamanan, konkurensi, keutuhan data) tetap di Claude kecuali Anda
+  menyatakan lain, dan area REFUSE dari `/orc-boundary` tetap menahan bahkan
+  dalam mode `warn`.
+- **Balasan dari luar adalah masukan asing.** Ia satu-satunya jenis masukan
+  asing yang menyunting pohon kerja Anda, jadi apa yang ia katakan telah ia
+  kerjakan adalah *klaim*, yang diperiksa terhadap pohon kerja.
+- **Kunci Anda tidak pernah sampai ke baris perintah.** Ia lewat stdin menuju
+  brankas terenkripsi, atau tetap di variabel lingkungan, atau alatnya yang
+  menyimpannya sendiri — dan frasa sandinya adalah **tenggat waktu**, bukan
+  faktor kedua.
+- **Enam posisi untuk lane yang mengunci agen alih-alih menilai tugas**:
+  `quick-executor` · `fast-executor` · `doc-writer` · `doc-checker` ·
+  `wiki-scanner-deep` · `wiki-scanner-light`. Posisi tanpa baris tetap
+  ditampilkan dan terbaca sebagai agen Claude yang terkunci padanya — "saya
+  sengaja membiarkan pemeriksanya di Claude" dan "tidak ada pemeriksa" tidak
+  boleh terlihat sama.
+
+**Ketika pekerja luar gagal, yang tertinggal adalah sebuah posisi, bukan halaman
+kosong.** ORC mencatat keadaan awal *sebelum bita pertama meninggalkan mesin
+ini*, jadi pekerja yang terputus di tengah tulisan akan **dicocokkan lalu
+dilanjutkan** — tidak pernah dikirim ulang dari nol ke berkas yang sudah
+dua-pertiga jadi.
+
+- **`extra_stall_s` (bawaan 180)** menghentikan pekerja yang tidak menghasilkan
+  apa pun selama itu. Hitungannya direset oleh kemajuan yang terlihat — aliran
+  keluaran pekerja, keluaran kesalahannya, atau berkas yang dideklarasikan
+  berubah di disk — jadi ia tidak pernah memotong pekerja yang sekadar lambat.
+  `stalled` boleh diulang, dan itulah yang membuat pelanjutannya menjadi cara
+  ORC sendiri mengetik `continue`.
+- **`extra_fallback_agent` (bawaan `band`)** menentukan siapa yang mengambil alih
+  tugasnya. `ask` berhenti dan menyodorkan pilihannya kepada Anda; nama agen
+  apa pun yang terpasang bisa dikunci. Ia mengubah *siapa*, tidak pernah skornya,
+  daftar berkasnya, atau syarat penerimaannya.
+- **Setiap pengiriman menulis catatan biayanya sendiri**, jadi laporan biaya
+  tidak pernah bergantung pada sebuah pekerjaan yang harus ingat menceritakan
+  pengeluarannya. `orc extra stats` menggabungkan catatan biaya, jejak, dan
+  balasan yang tersimpan, dan selalu menyebut berapa baris berasal dari mana.
+
+**`/orc-quick` tidak terpengaruh di sini** dan mengatakannya — lane itu selalu
+bertanya agen mana sebelum setiap pengiriman, jadi tidak ada pengaturan yang
+boleh menjawabnya lebih dulu. **`/orc-challenge` tidak pernah keluar dari
+Claude**: mengganti satu sudut pandang dengan model lain tidak membuat lane itu
+lebih murah, ia mengubah apa yang sedang diukur.
+
+**Seluruh bagian ini, dengan setiap perintah dan kuncinya:
+[guides/extra-models.md](guides/extra-models.md).**
 
 ---
 
@@ -449,12 +535,13 @@ yang sama.
 
 ```
 templates/
-├── skills/       29 skill — lane di atas, plus yang tidak punya perintah
+├── skills/       31 folder skill, 38 berkas SKILL.md (satu lane boleh membawa
+│                 sub-skill) — lane di atas, plus yang tidak punya perintah
 │                 sendiri: context-combiner, orc-advisor, orc-judge,
 │                 orc-analyze-mini, dan _shared/ (kesepakatan lintas lane)
-├── commands/     27 perintah garis miring
+├── commands/     29 perintah garis miring
 ├── hooks/        penjaga effort (PreToolUse) · peringatan statusline · catatan jejak
-└── agents/       40 subagen dengan model terkunci + MODEL-MAPPING.md
+└── agents/       51 subagen dengan model terkunci + MODEL-MAPPING.md
 bin/cli.js        pemasang, penyunting pengaturan, penyusun alur, pembaca status
                   pekerjaan, dan separuh pasti dari setiap lane. Setiap pembacaan
                   bisa menjawab --json
@@ -462,7 +549,8 @@ bin/webui/        `orc ui` — panel kendali lokal: css/ + js/ + i18n/<bahasa>/ 
                   fixtures/, satu berkas per lapisan dan per panel. Nol dependensi
 bin/mockrun-catalog.js   katalog contoh jalannya (diturunkan dari berkas di disk)
 mock-run/         contoh-contoh jalannya itu sendiri — mulai dari INDEX.md
-guides/           pengaturan · pemilihan model · dokumen · pembacaan pengetahuan
+guides/           pengaturan · pemilihan model · dokumen · pembacaan pengetahuan ·
+                  model AI lain
 ```
 
 Skill `orc` sendiri hanyalah **tulang punggung** yang tipis: ia hanya memuat
@@ -530,6 +618,66 @@ Bacalah sebagai catatan putaran itu, bukan sebagai audit terkini:
 
 **Riwayat lengkap: [CHANGELOG.md](CHANGELOG.md)** — atau `orc changelog`, yang
 hanya mencetak yang lebih baru dari versi yang Anda punya.
+
+### v0.56.1 - pekerja yang hidup tapi tidak mengerjakan apa pun _(28-08-2026)_
+
+**Masih memakai paket `orc` yang tanpa awalan?** Lakukan ini sekali dulu -
+`orc upgrade` Anda adalah versi sebelum v0.56.0 dan tidak bisa memasang dirinya
+sendiri:
+
+- **Langkah 1 - lepaskan perintahnya dari paket lama:** `npm uninstall -g orc`
+- **Langkah 2 - pasang paket yang sekarang:** `npm i -g @azure-id/orc`
+- **Langkah 3 - terapkan lagi ke proyek Anda:** `orc update`
+
+**Jangan pakai `npm i -g -f`.** Rinciannya ada di v0.56.0 di bawah.
+
+**Pengiriman ke opencode yang diam di tengah jalan dulu menghabiskan seluruh
+batas waktu lima belas menit lalu melapor `timeout`.** Kata itu bercerita
+tentang kesabaran ORC, dan terbaca sebagai batas waktu yang perlu dinaikkan.
+Padahal yang tertinggal adalah sebuah POSISI yang perlu dilanjutkan seseorang.
+
+- **`extra_stall_s` (bawaan 180, `0` mematikannya)** menghentikan pekerja luar
+  yang tidak menghasilkan apa pun selama itu. Direset oleh kemajuan yang
+  terlihat - aliran keluaran pekerja, keluaran kesalahannya, atau berkas yang
+  dideklarasikan berubah di disk - jadi ia tidak pernah memotong pekerja yang
+  sekadar lambat. Hanya untuk mesin `cli`.
+- **`stalled` adalah jenis kegagalannya sendiri dan boleh diulang**, jadi
+  `orc extra reconcile` membaca posisinya dan `extra_resume` melanjutkan dari
+  apa yang sudah ada di disk, bukan mengulang dari nol. Itulah cara ORC sendiri
+  mengetik `continue`. Sengaja tidak ada dorongan lewat stdin: `opencode run`
+  bukan sesi percakapan, jadi ketikan yang tak dibaca siapa pun hanyalah
+  perbaikan palsu.
+- **Setiap balasan mesin `cli` membawa `timeline`** - bita pertama, kemajuan
+  terakhir, jeda diam terpanjang, dan kedua batas waktunya - baik saat berhasil
+  maupun gagal.
+- **`orc extra health <profil> [--model <id>]`** menjawab "apakah model ini suka
+  diam", lewat pengawas yang SAMA dengan yang dipakai pengiriman sungguhan.
+  Model yang terdaftar belum tentu jalan, dan model yang jalan belum tentu
+  selesai.
+- **`extra_fallback_agent` (bawaan `band`)** menentukan siapa yang mengambil
+  alih tugasnya. `ask` berhenti dan menyodorkan pilihannya kepada Anda; nama
+  agen apa pun yang terpasang bisa dikunci. Saat `ask`, lane-nya tidak memilih
+  sendiri. Ia mengubah siapa, bukan skor, daftar berkas, atau syarat
+  penerimaannya. Tidak berlaku di `/orc-quick`.
+
+### v0.56.0 - satu penggantian nama memindahkan perintahnya, dan tak seorang pun bisa meraih perbaikannya _(27-08-2026)_
+
+**Paketnya pindah dari `orc` tanpa awalan ke `@azure-id/orc`, dan semua jalur
+pemutakhiran di lapangan mati bersamaan.** Kedua nama itu mendaftarkan perintah
+`orc` yang sama, dan npm tidak mau menautkannya untuk paket baru selama paket
+lama masih memilikinya - jadi tarball, spesifikasi `github:`, dan registry
+semuanya gagal dengan `EEXIST` yang sama pada berkas perintahnya. Itu bentrokan
+BERKAS, bukan masalah sumber, dan itulah sebabnya berganti sumber tidak pernah
+menolong.
+
+- **`orc upgrade` mengusir paket lama SEBELUM mencoba sumber mana pun.**
+  Diumumkan, tidak pernah diam-diam. Pengenalannya lewat KEPEMILIKAN - paket
+  yang tidak mendaftarkan perintah `orc` tidak pernah disentuh.
+- **Registry npm dicoba lebih dulu**, lalu tarball, lalu spesifikasi `github:`.
+- **`--force` tetap ada untuk satu kasus yang cocok saja** - berkas perintah
+  yatim yang tidak dimiliki paket mana pun.
+- **`orc doctor` melaporkan `legacy-global-package` dengan namanya.** Sengaja
+  tidak bisa diperbaiki `--fix`: jangkauan `--fix` hanya `.claude/` proyek ini.
 
 ### v0.55.1 — ORC sudah ada di npm _(27-08-2026)_
 

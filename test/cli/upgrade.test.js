@@ -20,7 +20,13 @@ const { REPO } = require("../_helpers");
 // can never assume.
 
 const BS = String.fromCharCode(92);
-const cliSrc = () => fs.readFileSync(path.join(REPO, "bin", "cli.js"), "utf8");
+// LF, always. Several tests below lift a function out of a shipped file by
+// slicing to the next `\n}\n` — a needle a CRLF checkout never contains, which
+// collapses the slice to "" and then reports the function as UNDEFINED rather
+// than as absent. The rules being asserted are about the CODE; a line ending is
+// not one of them.
+const srcOf = (p) => fs.readFileSync(p, "utf8").replace(/\r\n/g, "\n");
+const cliSrc = () => srcOf(path.join(REPO, "bin", "cli.js"));
 
 // Lift one top-level function out of cli.js and evaluate it in isolation.
 // cli.js runs a CLI on require, so it cannot simply be imported.
@@ -201,16 +207,16 @@ test("doctor carries a finding for the legacy package, and it is not --fix-able"
 
 // The changelog parser and the panel's markdown helpers, lifted the same way.
 function changelogEntries() {
-  const src = fs.readFileSync(path.join(REPO, "bin", "cli.js"), "utf8");
+  const src = srcOf(path.join(REPO, "bin", "cli.js"));
   const i = src.indexOf("function parseChangelog(md) {");
   const fn = new Function(
     src.slice(i, src.indexOf("\n}\n", i) + 2) + "\nreturn parseChangelog;"
   )();
-  return fn(fs.readFileSync(path.join(REPO, "CHANGELOG.md"), "utf8"));
+  return fn(srcOf(path.join(REPO, "CHANGELOG.md")));
 }
 function mdHelpers() {
   return new Function(
-    fs.readFileSync(path.join(REPO, "bin", "webui", "js", "03-md.js"), "utf8") +
+    srcOf(path.join(REPO, "bin", "webui", "js", "03-md.js")) +
       "\nreturn { stripMd, reflowMd };"
   )();
 }

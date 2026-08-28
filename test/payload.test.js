@@ -749,9 +749,14 @@ test("`extra_resume` is INERT in /orc-quick, and the shadowing is announced on b
   assert.match(shared, /ADDS AN OPTION and nothing else/, "and that it adds an option, never an answer");
 });
 
-test("the config surface says ELEVEN keys, and names what it refused to add", () => {
+test("the config surface says THIRTEEN keys, and names what it refused to add", () => {
   const shared = read("skills/_shared/extra-dispatch.md");
-  assert.match(shared, /## The config surface — eleven keys/);
+  assert.match(shared, /## The config surface — thirteen keys/);
+  assert.ok(shared.includes("`config.extra_stall_s`"));
+  assert.ok(shared.includes("`config.extra_fallback_agent`"));
+  // The v0.56.1 refusals, written down for the same reason as every other set:
+  // a reader who cannot see them will propose them again.
+  assert.match(shared, /a keystroke nobody reads is a fake fix/);
   assert.ok(shared.includes("`config.extra_resume`"));
   assert.ok(shared.includes("`config.extra_resume_max`"));
   // The refusals are the interesting half: each one is a trap that was
@@ -759,6 +764,55 @@ test("the config surface says ELEVEN keys, and names what it refused to add", ()
   // again.
   assert.match(shared, /Keys deliberately NOT added/);
   assert.match(shared, /a record you can switch off is off on the run you needed it for/);
+});
+
+test("the stall contract: its own failure class, retryable, and engine cli only", () => {
+  const shared = read("skills/_shared/extra-dispatch.md");
+  const cli = fs.readFileSync(path.join(__dirname, "..", "bin", "cli.js"), "utf8");
+
+  // The registered token — a wall clock cannot tell a worker that is thinking
+  // hard from one that stopped, and reporting the second as the first hid that
+  // it was a POSITION rather than a budget somebody should raise.
+  assert.match(shared, /a lane that waits out a wall clock on a worker that stopped/);
+
+  // RETRYABLE is the whole point: it is what makes `extra_resume` — ORC's own
+  // spelling of typing `continue` — apply to a stall unchanged.
+  const row = /stalled: \{ retry: (true|false)/.exec(cli);
+  assert.ok(row, "EXTRA_FAILURES must carry a `stalled` row");
+  assert.equal(row[1], "true", "a stall is a position to continue from, not a dead end");
+
+  // Ordered once, in ONE function: stall < idle < api < wall. Three timeouts
+  // that disagree about which fires first is the bug extraTimeouts exists to
+  // prevent, and a budget at or past the wall clock could never fire at all.
+  assert.match(cli, /stall_clamped/);
+  assert.match(shared, /stall < idle < api <\s+wall/);
+  assert.match(shared, /Engine `cli` only/);
+
+  // THE THREE PROGRESS SIGNALS. The third is the one that stops the clock
+  // firing on a worker that thinks for four minutes and then writes in one go.
+  for (const sig of ["stream", "stderr", "declared file"])
+    assert.ok(shared.includes(sig), "the contract must name the progress signal: " + sig);
+  assert.match(cli, /function declaredFilesFingerprint/);
+});
+
+test("the fallback menu is computed, and `ask` never answers itself", () => {
+  const shared = read("skills/_shared/extra-dispatch.md");
+  const cli = fs.readFileSync(path.join(__dirname, "..", "bin", "cli.js"), "utf8");
+
+  // BOTH DIRECTIONS, the DIY_STEPS precedent: an alternate the CLI offers and
+  // the contract never names is an option the lane cannot explain.
+  const declared = /const EXTRA_FALLBACK_ALTERNATES = \[([\s\S]*?)\];/.exec(cli);
+  assert.ok(declared, "EXTRA_FALLBACK_ALTERNATES must exist in bin/cli.js");
+  const names = [...declared[1].matchAll(/agent: "([a-z0-9-]+)"/g)].map((m) => m[1]);
+  assert.equal(names.length, 3);
+  for (const n of names) assert.ok(shared.includes("`" + n + "`"), "the contract never names the alternate: " + n);
+
+  // Under `ask` NOTHING has been chosen. A trace line naming an agent would be
+  // a decision /orc-retro aggregates as one that was made.
+  assert.match(cli, /pending \(extra_fallback_agent=ask\)/);
+  assert.match(shared, /the lane does not choose/);
+  // It changes WHO, never WHAT.
+  assert.match(shared, /It changes WHO, never WHAT/);
 });
 
 test("the six refusals in the contract are the six the CLI can emit", () => {

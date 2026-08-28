@@ -60,7 +60,16 @@ check it against the worktree.
 **If the foreign dispatch fails, ASK AGAIN.** Show the two Claude options and the
 reason it failed. `extra_on_failure` is inert here and say so: a config that
 silently substituted an executor would be the exact failure this gate exists to
-prevent. `extra_resume` is inert here too (rule 4).
+prevent. `extra_resume` is inert here too (rule 4), and so is
+`extra_fallback_agent`: re-opening the gate IS the ask, so a second menu composed
+from a config key would be the same question twice in different words.
+
+A `stalled` return is read exactly like any other failure here — the gate
+re-opens. What changes is the WORDING: say the worker went quiet rather than
+that it timed out, and print the `timeline` the return carries. The user is
+deciding whether to try the same worker again, and "it produced nothing for
+three minutes" and "it ran out of a fifteen-minute budget" point at opposite
+answers.
 
 ### Read-only work (recon)
 

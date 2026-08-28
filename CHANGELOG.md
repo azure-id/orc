@@ -10,6 +10,85 @@ Format: `### v<version> — <title> _(<date>)_`.
 
 ---
 
+### v0.56.1 - a worker that is alive and doing nothing _(2026-08-28)_
+
+**Still on the unscoped `orc` package?** Do this once before anything else -
+your `orc upgrade` is the pre-v0.56.0 one and it cannot install itself:
+
+- **Step 1 - release the command from the old package:** `npm uninstall -g orc`
+- **Step 2 - install the current package:** `npm i -g @azure-id/orc`
+- **Step 3 - re-apply it to your project:** `orc update`
+
+**Do not use `npm i -g -f`.** Full detail in v0.56.0 below.
+
+**An opencode dispatch that goes quiet mid-task used to burn the whole
+fifteen-minute wall clock and then report `timeout`.** That word is a statement
+about ORC's patience, and it reads as a budget somebody should raise. It was a
+POSITION somebody should resume from - the thing you fix by hand by typing
+`continue` into the worker's window.
+
+A wall clock cannot tell a worker that is thinking hard from a worker that has
+stopped. Both look like fifteen minutes of nothing.
+
+- **`extra_stall_s` (default 180, `0` disables) is the fourth timeout, and the
+  only one that measures the WORKER rather than a socket.** It is reset by
+  observable progress in the three places progress can show up: new bytes on the
+  worker's stream, new bytes on its stderr, or a **declared file that changed on
+  disk**. That third signal is what stops it firing on a worker that thinks for
+  four minutes and then writes in one go. Engine `cli` only - engine `api`
+  already has a per-request inactivity timeout on its own socket.
+- **Engine `cli` spawns ASYNCHRONOUSLY now, because `spawnSync` cannot be
+  watched.** It blocks the event loop for the whole dispatch, so nothing could
+  observe the child while it ran. The child's stdout still lands on the journal's
+  progress file, so the measurement is a `stat` and not a buffer in a parent that
+  might die. On Windows a `.cmd` shim is killed with `taskkill /T`, or the real
+  tool survives as a grandchild and edits the repository the next attempt is
+  about to resume into.
+- **`stalled` is its own failure class and it is RETRYABLE.** That is the whole
+  point: `orc extra reconcile` reads the position out of the journal baseline and
+  `extra_resume` continues from what is already on disk instead of starting over.
+  **That is ORC's spelling of typing `continue`.** There is deliberately no key
+  that nudges the child on its stdin - `opencode run` is not an interactive
+  session, so a keystroke nobody reads would be a fake fix, and a fake fix looks
+  like the problem was handled.
+- **Ordered once: stall < idle < api < wall.** A stall budget that cannot fit
+  under the wall clock stands down entirely and says why, rather than racing it -
+  two timers on the same instant report whichever won, which is the exact bug
+  `extraTimeouts` exists to prevent.
+- **Every engine-`cli` return carries a `timeline`** - first byte, last progress,
+  longest quiet gap, and both budgets - on success as well as on failure. A
+  budget you can only see when it fires is a budget nobody can set before it
+  does. `first_byte_ms: null` is the honest reading of a worker that never said
+  anything, never `0`.
+
+**`orc extra health <profile> [--model <id>]` - does this model stall?**
+`0` answered - `1` stalled or failed - `2` unknown profile. It runs the live
+probe through the SAME watchdog a dispatch uses, so a green badge is earned by
+the path a wave actually runs. A **listed** model is not a **working** model, and
+a working model is not a model that **finishes**: three different facts, and this
+is the command that tells the third one apart.
+
+**`extra_fallback_agent` (default `band`) - who picks the task up.** `band` is
+the previous behaviour and stays the default, because a fallback that changes
+tier is a re-plan nobody asked for. `ask` STOPS and puts the menu to you with the
+failure and the position already on the table. Any installed agent name pins one.
+
+- Under `ask` the lane does **not** choose: `fallback.agent` is `null` and the
+  trace line says `pending (extra_fallback_agent=ask)`. A lane that picked the
+  first option would answer the one question the setting exists to ask, and
+  `/orc-retro` would aggregate a decision nobody made.
+- The menu is computed and the task's own agent leads it. The alternates are
+  `orc-executor-opus-5-med`, `orc-executor-opus-5-low` and
+  `orc-executor-sonnet-4-6-high`, and any installed agent name is accepted -
+  the roster is generated, so a closed list here would go stale.
+- It changes WHO, never WHAT: the score does not move, `declared_files` is not
+  widened, `acceptance[]` is not touched. **INERT in `/orc-quick`**, announced at
+  the gate - re-opening that gate IS the ask.
+- **A stop now NAMES the model.** The trace line read `profile/?` on a timeout,
+  and `orc extra stats` dedupes on the fields that line carries, so a stalled
+  dispatch could not be joined to a price, a provider, or another stall on a
+  different model.
+
 ### v0.56.0 - a rename moved the command, and nobody could reach the fix _(2026-08-27)_
 
 **READ THIS FIRST IF YOUR `orc upgrade` IS FAILING.** If you are on a version
