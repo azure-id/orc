@@ -13,14 +13,18 @@ is inert.
 
 ## The mapping (only when `opus5_only: true`)
 
-**Scored executors** — one model, EFFORT as the cost dial, replacing the 8-band
+**Scored executors** — one model, EFFORT as the cost dial, replacing the 6-band
 mixed-model table:
 
 | Score | Executor agent |
 |-----------|---------------------------|
-| `[0,40)`   | `orc-executor-opus-5-low`  |
-| `[40,80)`  | `orc-executor-opus-5-med`  |
-| `[80,100]` | `orc-executor-opus-5-high` |
+| `[0,90)`   | `orc-executor-opus-5-low`  |
+| `[90,100]` | `orc-executor-opus-5-med`  |
+
+Two bands, sharing the 90 edge with the default table's top two rows. Since
+v1.0.0 the default table's high end is ALREADY Opus 5 with effort as the dial,
+so this mode differs from it only below 65 — a third band here would be a
+distinction the default table stopped making.
 
 **Fixed roles** — dispatch the Opus 5 variant **instead of** the default role
 agent: same task slice, same return contract, same phase.

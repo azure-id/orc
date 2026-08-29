@@ -307,27 +307,37 @@ test("GOLDEN: the compiled DIY flow at the wizard's default config", () => {
 
 // ---- 5. The three score tables, as they are TODAY --------------------------
 //
-// W4 changes the ladder. These are the expected VALUES it edits, spelled out
-// here so the change is a visible diff of numbers and agent names rather than a
-// regex that keeps passing. `bin/cli.js` carries the opus5_only ladder TWICE
-// (OPUS5_BANDS feeds bandFor, OPUS5_SCORE_TABLE feeds scoreTableJson) - W4
-// collapses them, and the third assertion is the one that proves the collapse
-// lost nothing.
+// W4 CHANGED the ladder. These are the values it edited, spelled out here so
+// the change was a visible diff of numbers and agent names rather than a regex
+// that kept passing. `bin/cli.js` used to carry the opus5_only ladder TWICE
+// (OPUS5_BANDS fed bandFor, OPUS5_SCORE_TABLE fed scoreTableJson); W4 collapsed
+// them into one binding, and the identity assertion below is what proves they
+// can never drift apart again.
+//
+// The edge is 90 and it is ROUND (D13). Every other edge in the default table
+// is round and half-open, so a score of exactly 90 resolves to `med`.
 
-const DEFAULT_TABLE_TODAY = [
+const DEFAULT_TABLE = [
   [0, 30, "orc-executor-haiku-4-5"],
   [30, 40, "orc-executor-sonnet-4-6-med"],
   [40, 55, "orc-executor-sonnet-4-6-high"],
   [55, 65, "orc-executor-sonnet-5-high"],
-  [65, 70, "orc-executor-opus-4-7-med"],
-  [70, 80, "orc-executor-opus-4-7-high"],
-  [80, 90, "orc-executor-opus-4-8-high"],
-  [90, 101, "orc-executor-opus-5-high"],
+  [65, 90, "orc-executor-opus-5-low"],
+  [90, 101, "orc-executor-opus-5-med"],
 ];
-const OPUS5_LADDER_TODAY = [
-  [0, 40, "orc-executor-opus-5-low"],
-  [40, 80, "orc-executor-opus-5-med"],
-  [80, 101, "orc-executor-opus-5-high"],
+const OPUS5_LADDER = [
+  [0, 90, "orc-executor-opus-5-low"],
+  [90, 101, "orc-executor-opus-5-med"],
+];
+// Named by no band since W4, and still shipped (D14). They are reachable only
+// when a user names one explicitly, so the SET is frozen: an agent quietly
+// rejoining a default table, or quietly disappearing from disk, are both
+// changes somebody has to mean.
+const UNBANDED_EXECUTORS = [
+  "orc-executor-opus-4-7-high",
+  "orc-executor-opus-4-7-med",
+  "orc-executor-opus-4-8-high",
+  "orc-executor-opus-5-high",
 ];
 
 // The constants are read out of the source because bin/cli.js is a script, not
@@ -344,18 +354,48 @@ function constTable(name) {
   ]);
 }
 
-test("GOLDEN: DIY_SCORE_TABLE is the 8-band default ladder", () => {
-  assert.deepStrictEqual(constTable("DIY_SCORE_TABLE"), DEFAULT_TABLE_TODAY);
+test("GOLDEN: DIY_SCORE_TABLE is the 6-band default ladder", () => {
+  assert.deepStrictEqual(constTable("DIY_SCORE_TABLE"), DEFAULT_TABLE);
 });
 
-test("GOLDEN: both copies of the opus5_only ladder, and that they still agree", () => {
-  const view = constTable("OPUS5_SCORE_TABLE");
-  const forecast = constTable("OPUS5_BANDS");
-  assert.deepStrictEqual(view, OPUS5_LADDER_TODAY);
-  assert.deepStrictEqual(forecast, OPUS5_LADDER_TODAY);
-  // They already drifted in NAME once (v0.50.0's own comment says so). Until
-  // W4 collapses them, this is the only thing stopping them drifting in VALUE.
-  assert.deepStrictEqual(view, forecast, "one file, two constants, same three rows");
+test("GOLDEN: the opus5_only ladder is TWO bands, and there is now only ONE copy", () => {
+  assert.deepStrictEqual(constTable("OPUS5_SCORE_TABLE"), OPUS5_LADDER);
+  // W4's single-source gate. Before it, OPUS5_BANDS was a second array with the
+  // same rows — v0.50.0's own comment recorded that the two had already drifted
+  // in NAME. It is now an alias, asserted by IDENTITY (`===`) and not by deep
+  // equality: two arrays that happen to be equal today are exactly the state
+  // that produced the drift, so equality is not a strong enough assertion.
+  const s = src();
+  assert.match(
+    s,
+    /const OPUS5_BANDS = OPUS5_SCORE_TABLE;/,
+    "OPUS5_BANDS must be an alias binding, never a second array"
+  );
+  assert.strictEqual(
+    (s.match(/const OPUS5_BANDS = \[/g) || []).length,
+    0,
+    "OPUS5_BANDS was re-declared as an array — that is the drift W4 deleted"
+  );
+});
+
+test("GOLDEN: an executor no band names still ships, and the set is frozen", () => {
+  const { root } = freshInstall();
+  try {
+    const named = new Set([...DEFAULT_TABLE, ...OPUS5_LADDER].map((r) => r[2]));
+    const onDisk = fs
+      .readdirSync(path.join(root, ".claude", "agents"))
+      .filter((f) => f.startsWith("orc-executor-"))
+      .map((f) => f.replace(/\.md$/, ""));
+    const unbanded = onDisk.filter((a) => !named.has(a)).sort();
+    // D14: they are NOT deleted. A table change is not a model change, and an
+    // agent's model change is always a rename — conflating the two is how the
+    // downgrade check breaks.
+    assert.deepStrictEqual(unbanded, UNBANDED_EXECUTORS);
+    for (const a of UNBANDED_EXECUTORS)
+      assert.ok(onDisk.includes(a), a + " left disk — D14 says it stays");
+  } finally {
+    rmrf(root);
+  }
 });
 
 test("GOLDEN: the tables the CLI SHOWS are the tables the source declares", () => {
@@ -363,14 +403,43 @@ test("GOLDEN: the tables the CLI SHOWS are the tables the source declares", () =
   try {
     const t = json(cli(["config", "list", "--json", "--dir", root])).score_table;
     const rows = (band) => band.map((r) => [r.from, r.inclusive_to ? 101 : r.to, r.agent]);
-    assert.deepStrictEqual(rows(t.default), DEFAULT_TABLE_TODAY);
-    assert.deepStrictEqual(rows(t.opus5_only), OPUS5_LADDER_TODAY);
+    assert.deepStrictEqual(rows(t.default), DEFAULT_TABLE);
+    assert.deepStrictEqual(rows(t.opus5_only), OPUS5_LADDER);
     assert.strictEqual(t.active, "default");
     assert.strictEqual(t.base, "default");
     assert.strictEqual(t.extra, null);
     assert.strictEqual(t.extra_slots, null);
   } finally {
     rmrf(root);
+  }
+});
+
+test("GOLDEN: every band edge in the source appears in the two payload copies", () => {
+  // The cross-copy gate (design-04 §7.3). CLAUDE.md says this drift is
+  // "table-shaped rather than token-shaped" and so invisible to the contract
+  // lint. That is true of a whole table; it is NOT true of the edges, which are
+  // just numbers — so W4 gives the lint eyes for the part that can have them.
+  const payload = path.join(__dirname, "..", "templates");
+  const config = fs.readFileSync(path.join(payload, "skills", "orc", "config.md"), "utf8");
+  const mapping = fs.readFileSync(path.join(payload, "agents", "MODEL-MAPPING.md"), "utf8");
+  const label = ([lo, hi]) => `[${lo},${hi === 101 ? "100]" : hi + ")"}`;
+
+  for (const row of DEFAULT_TABLE) {
+    const band = label(row);
+    assert.ok(config.includes(band), `orc/config.md is missing the band ${band}`);
+    assert.ok(mapping.includes(band), `MODEL-MAPPING.md is missing the band ${band}`);
+    assert.ok(config.includes(row[2]), `orc/config.md is missing ${row[2]}`);
+    assert.ok(mapping.includes(row[2]), `MODEL-MAPPING.md is missing ${row[2]}`);
+  }
+  for (const row of OPUS5_LADDER) {
+    const band = label(row);
+    assert.ok(config.includes(band), `orc/config.md is missing the opus5_only band ${band}`);
+  }
+  // And the reverse: a RETIRED edge must not still be documented as live. This
+  // is the half that catches a half-finished table change.
+  for (const dead of ["[65,70)", "[70,80)", "[80,90)", "[40,80)", "[0,40)", "[80,100]"]) {
+    assert.ok(!config.includes(dead), `orc/config.md still documents the retired band ${dead}`);
+    assert.ok(!mapping.includes(dead), `MODEL-MAPPING.md still documents the retired band ${dead}`);
   }
 });
 

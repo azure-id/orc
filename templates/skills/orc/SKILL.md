@@ -81,7 +81,7 @@ Workers are model-pinned SUBAGENTS in `.claude/agents/` — the model is enforce
 not requested in prose. Score every task from the planner-emitted `facets` via
 the fixed arithmetic formula and SHOW the table with the facet vector + the
 arithmetic (`B+N+L+T+fan+U = raw`; an un-shown number is not scored); map the
-final score via the RESOLVED table in `config.md` — `opus5_only` (3-band Opus-5-only, FORCING) > `rubric_bands_override` > the default 8-band (`rubric_bands` = granularity only, never a preset); NAME it when you show scores; sibling tasks differing in ≤1 facet share a
+final score via the RESOLVED table in `config.md` — `opus5_only` (2-band Opus-5-only, FORCING) > `rubric_bands_override` > the default 6-band (`rubric_bands` = granularity only, never a preset); NAME it when you show scores; sibling tasks differing in ≤1 facet share a
 band or cite the differing facet (see `references/effort-and-mode.md`). EVERY
 dispatch is scored — fix-cycle dispatches (review-fix, verify-fix, P2-batch,
 requeue) run the same formula, inherit the original task's risk floor, and never

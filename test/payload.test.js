@@ -143,51 +143,62 @@ function bandTable(md, heading) {
   return rows.map((m) => ({ lo: +m[1], hi: +m[2], closed: m[3] === "]", agent: m[4] }));
 }
 
-test("the Opus-5-only ladder is 3 contiguous bands covering 0..100 with no gap or overlap", () => {
+test("the Opus-5-only ladder is 2 contiguous bands covering 0..100 with no gap or overlap", () => {
   const cfg = read("skills/orc/config.md");
   const rows = bandTable(cfg, "### The Opus-5-only ladder");
-  assert.strictEqual(rows.length, 3, "three bands");
+  assert.strictEqual(rows.length, 2, "two bands since v1.0.0 W4");
   assert.deepStrictEqual(
     rows.map((r) => [r.lo, r.hi, r.agent]),
     [
-      [0, 40, "orc-executor-opus-5-low"],
-      [40, 80, "orc-executor-opus-5-med"],
-      [80, 100, "orc-executor-opus-5-high"],
+      [0, 90, "orc-executor-opus-5-low"],
+      [90, 100, "orc-executor-opus-5-med"],
     ],
-    "the resolved 3-band table"
+    "the resolved 2-band table"
   );
-  // Contiguity is the property the requested edges got wrong (a 30–40 gap and a
-  // doubly-owned 80): each band starts where the previous ended, top is closed.
+  // Contiguity is the property a hand-edited table gets wrong (a gap, or a
+  // doubly-owned edge): each band starts where the previous ended, top closed.
   assert.strictEqual(rows[0].lo, 0, "starts at 0");
   for (let i = 1; i < rows.length; i++)
     assert.strictEqual(rows[i].lo, rows[i - 1].hi, `band ${i} starts where band ${i - 1} ends`);
-  assert.ok(rows[2].closed, "the top band is CLOSED at 100");
+  assert.ok(rows[rows.length - 1].closed, "the top band is CLOSED at 100");
 
-  // Band-edge exactness, stated as the resolution a scorer must perform.
+  // Band-edge exactness, stated as the resolution a scorer must perform. 90 is
+  // the D13 edge and it is round: a score of exactly 90 is MED.
   const resolve = (score) => {
     const hit = rows.find((r) => score >= r.lo && (r.closed ? score <= r.hi : score < r.hi));
     return hit && hit.agent;
   };
   for (const [score, want] of [
     [0, "orc-executor-opus-5-low"],
-    [39, "orc-executor-opus-5-low"],
-    [40, "orc-executor-opus-5-med"],
-    [79, "orc-executor-opus-5-med"],
-    [80, "orc-executor-opus-5-high"],
-    [100, "orc-executor-opus-5-high"],
+    [89, "orc-executor-opus-5-low"],
+    [90, "orc-executor-opus-5-med"],
+    [100, "orc-executor-opus-5-med"],
     // the risk floor raises the SCORE, then the table maps it
-    [70, "orc-executor-opus-5-med"],
+    [70, "orc-executor-opus-5-low"],
   ])
     assert.strictEqual(resolve(score), want, `score ${score}`);
 });
 
-test("the default 8-band table is untouched by the preset", () => {
+test("the default table is 6 bands, and shares its top edge with the preset", () => {
   const cfg = read("skills/orc/config.md");
   const rows = bandTable(cfg, "## Score → model table");
-  assert.strictEqual(rows.length, 8, "still eight default bands");
+  assert.strictEqual(rows.length, 6, "six default bands since v1.0.0 W4");
   assert.strictEqual(rows[0].agent, "orc-executor-haiku-4-5");
-  assert.strictEqual(rows[7].agent, "orc-executor-opus-5-high");
-  assert.ok(rows[7].closed, "top band closed at 100");
+  assert.strictEqual(rows[5].agent, "orc-executor-opus-5-med");
+  assert.ok(rows[5].closed, "top band closed at 100");
+  for (let i = 1; i < rows.length; i++)
+    assert.strictEqual(rows[i].lo, rows[i - 1].hi, `band ${i} starts where band ${i - 1} ends`);
+
+  // The two tables agree above 65, which is the whole reason the preset is two
+  // bands and not three: once the default's high end is already Opus 5 with
+  // effort as the dial, a third band here would be a distinction the default
+  // table stopped making.
+  const preset = bandTable(cfg, "### The Opus-5-only ladder");
+  assert.strictEqual(rows[4].lo, 65);
+  assert.strictEqual(rows[4].hi, 90);
+  assert.strictEqual(rows[4].agent, preset[0].agent);
+  assert.strictEqual(rows[5].lo, preset[1].lo);
+  assert.strictEqual(rows[5].agent, preset[1].agent);
 });
 
 test("table resolution states its precedence, and the pinned interactions", () => {
@@ -195,7 +206,7 @@ test("table resolution states its precedence, and the pinned interactions", () =
   const res = cfg.slice(cfg.indexOf("### Resolution — highest wins"), cfg.indexOf("### Override"));
   // v0.36.0 inverted the top two: opus5_only FORCES, so it outranks a
   // hand-written table instead of yielding to it.
-  const order = ["opus5_only", "rubric_bands_override", "default 8-band"];
+  const order = ["opus5_only", "rubric_bands_override", "default 6-band"];
   let at = -1;
   for (const t of order) {
     const i = res.indexOf(t);
@@ -207,7 +218,7 @@ test("table resolution states its precedence, and the pinned interactions", () =
   // Each interaction the preset could silently contradict.
   const eam = read("skills/orc/references/effort-and-mode.md");
   assert.match(eam, /risk floor still applies/i, "the risk floor still applies");
-  assert.match(eam, /opus-5-med.*not.*opus-4-7-high|not\s+`?opus-4-7-high/s, "…and where a floored task lands");
+  assert.match(eam, /floored task .*lands `opus-5-low`/s, "…and where a floored task lands");
 
   const ultra = read("skills/orc/references/ultra-mode.md");
   assert.match(ultra, /raises EFFORT, not model/, "ultra's floor is defined under the preset");

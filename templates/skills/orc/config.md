@@ -41,7 +41,7 @@ batch_pause_every: 2       # waves between MANDATORY stop-and-continue pauses.
 # --- Rubric width (the "metrix") ---
 rubric_bands: 5            # how many scoring bands the rubric REPORTS. Range 2–8.
                            # Granularity only — it no longer selects a preset.
-                           # The score→model mapping is the SINGLE 8-band table
+                           # The score→model mapping is the SINGLE 6-band table
                            # below, used regardless of this value.
 
 # --- Analysis (System Analyst) ---
@@ -175,7 +175,7 @@ wiki_delta_full_threshold: 30 # TOUCHED docs above this % of registered docs →
 ## Score → model table (executor agent dispatched by name)
 
 The orchestrator scores each task 0–100, then maps to a model via this SINGLE
-canonical 8-band table, and dispatches the matching **executor agent**. There is
+canonical 6-band table, and dispatches the matching **executor agent**. There is
 no longer a narrow/wide preset choice — `rubric_bands` sets scoring granularity
 only, never which table is used.
 
@@ -185,16 +185,24 @@ only, never which table is used.
 | [30,40)  | claude-sonnet-4-6 | medium | orc-executor-sonnet-4-6-med |
 | [40,55)  | claude-sonnet-4-6 | high   | orc-executor-sonnet-4-6-high |
 | [55,65)  | claude-sonnet-5   | high   | orc-executor-sonnet-5-high |
-| [65,70)  | claude-opus-4-7   | medium | orc-executor-opus-4-7-med |
-| [70,80)  | claude-opus-4-7   | high   | orc-executor-opus-4-7-high |
-| [80,90)  | claude-opus-4-8   | high   | orc-executor-opus-4-8-high |
-| [90,100] | claude-opus-5     | high   | orc-executor-opus-5-high |
+| [65,90)  | claude-opus-5     | low    | orc-executor-opus-5-low |
+| [90,100] | claude-opus-5     | medium | orc-executor-opus-5-med |
 
 (Haiku has no effort ladder — that agent carries no `effort:` field.) The risk
-floor (≥70) lands `orc-executor-opus-4-7-high` at minimum in THIS table — under
-the Opus-5-only preset below it lands `orc-executor-opus-5-med` instead. The top
-band dispatches **Opus 5 high** — it needs an Opus 5 MAIN session or it silently
-falls back to the session model (the tier-honesty rule reports the downgrade).
+floor (≥70) lands `orc-executor-opus-5-low` at minimum in THIS table. Above ~65
+the useful dial stopped being the model GENERATION and became the EFFORT, which
+is why the old four Opus rows are two: everything from 65 up is already Opus 5,
+so a run that used to cross three model generations now moves one notch of
+effort. **Every band from 65 needs an Opus 5 MAIN session** or it silently falls
+back to the session model (the tier-honesty rule reports the downgrade) — that
+is two bands where it used to be one, and it is the cost of this table.
+
+**Four executors are now named by NO band** — `orc-executor-opus-4-7-med`,
+`orc-executor-opus-4-7-high`, `orc-executor-opus-4-8-high` and
+`orc-executor-opus-5-high`. No band names them and they still ship: they remain
+reachable through `rubric_bands_override`, `orc diy`'s `fixed_executor`, and
+`extra_fallback_agent`. They are not deleted because this is a TABLE change, not
+a model change, and an agent's model change is always a rename.
 
 ### The Opus-5-only ladder (`opus5_only`, default **false**)
 
@@ -202,14 +210,18 @@ One model, EFFORT as the cost dial. Off by default; nothing changes until set.
 
 | Score | Model | Effort | Executor agent |
 |-------|-------|--------|----------------|
-| [0,40)   | claude-opus-5 | low    | orc-executor-opus-5-low |
-| [40,80)  | claude-opus-5 | medium | orc-executor-opus-5-med |
-| [80,100] | claude-opus-5 | high   | orc-executor-opus-5-high |
+| [0,90)   | claude-opus-5 | low    | orc-executor-opus-5-low |
+| [90,100] | claude-opus-5 | medium | orc-executor-opus-5-med |
+
+Two bands, and they share the 90 edge with the default table's top two rows.
+That symmetry is the point: once the default table's high end is already Opus 5
+with effort as the dial, this mode differs from it only BELOW 65, so a third
+band here would be a distinction the default table stopped making.
 
 Rationale (why the key exists): deep SWE-benchmark work on cost vs efficiency
 across Claude models finds a single Opus 5 agent with the effort ladder the
 most efficient setup — model-class variety traded for effort variety.
-**Tier cost:** today ONE band in eight needs an Opus 5 main session; with this
+**Tier cost:** today TWO bands in six need an Opus 5 main session; with this
 on, EVERY dispatch does, so a lower session downgrades every task (warn-only —
 a hook can gate effort, never model). **Scope:** this key is NOT executor-only.
 It also forces every fixed role (see below) across every lane. orc-diy's table
@@ -222,7 +234,7 @@ stays compile-owned and reads only `orc-diy.config.yaml`, never this file.
    `rubric_bands_override`.
 2. `rubric_bands_override` — hand-written `{min, max, agent}` rows (hand-edit
    only; deliberately not a CLI key). Wins over the default table.
-3. the default 8-band table.
+3. the default 6-band table.
 
 `rubric_bands` sets scoring GRANULARITY only, in every case — it never selects a
 table. Whichever table resolves, **show it** with the Phase 2 scoring table and
@@ -276,7 +288,7 @@ orc-diy) and the tier consequence are in `../_shared/opus5-only.md`.
   run still confirms; deep never auto-escalates without consent.
 - `rubric_bands` sets HOW MANY bands the rubric REPORTS (finer or coarser score
   granularity) — it no longer selects a preset. The score→model mapping is the
-  single 8-band table above, used regardless of `rubric_bands`.
+  single 6-band table above, used regardless of `rubric_bands`.
 - max_wave_tasks is a hard cap in wave-grouping.
 - `batch_pause_every` is a DETERMINISTIC hard gate, not a cadence hint: after
   wave W, `W % N == 0` with a later wave remaining forces the stop sequence

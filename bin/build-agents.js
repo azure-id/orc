@@ -22,24 +22,31 @@ const TEMPLATE = path.join(ROOT, "agents-src", "executor.template.md");
 const OUT_DIR = path.join(ROOT, "templates", "agents");
 
 // Score→model bands mirror templates/agents/MODEL-MAPPING.md and the single
-// 8-band score→model table in skills/orc/config.md (documented drift — change
+// score→model table in skills/orc/config.md (documented drift — change
 // together). `effort: null` = a model with NO effort ladder (haiku): the
 // generator omits the `effort:` frontmatter line entirely.
+//
+// v1.0.0 W4 — the table is SIX bands, not eight, and the `opus5_only` ladder is
+// TWO, not three. Four of these agents are named by NO default row:
+// names them, and they ship anyway (D14). They stay reachable through
+// `rubric_bands_override`, `orc diy` `fixed_executor` and `extra_fallback_agent`,
+// and deleting a generated file that no row happens to name today would be a
+// rename-shaped migration for what is only a table change. Their `band` string
+// says so rather than naming a range that no longer exists — a band label that
+// lies is worse than one that admits it is unreachable by default.
 const VARIANTS = [
-  { name: "orc-executor-opus-5-high",    model: "claude-opus-5",    effort: "high",   band: "highest-complexity [90,100]" },
-  { name: "orc-executor-opus-4-8-high",  model: "claude-opus-4-8",  effort: "high",   band: "very-high-complexity [80,90)" },
-  { name: "orc-executor-opus-4-7-high",  model: "claude-opus-4-7",  effort: "high",   band: "high-complexity [70,80)" },
-  { name: "orc-executor-opus-4-7-med",   model: "claude-opus-4-7",  effort: "medium", band: "upper-mid-complexity [65,70)" },
+  { name: "orc-executor-opus-5-med",     model: "claude-opus-5",     effort: "medium", band: "highest-complexity [90,100]" },
+  { name: "orc-executor-opus-5-low",     model: "claude-opus-5",     effort: "low",    band: "upper-complexity [65,90)" },
   { name: "orc-executor-sonnet-5-high",  model: "claude-sonnet-5",  effort: "high",   band: "mid-complexity [55,65)" },
   { name: "orc-executor-sonnet-4-6-high", model: "claude-sonnet-4-6", effort: "high",  band: "low-mid-complexity [40,55)" },
   { name: "orc-executor-sonnet-4-6-med", model: "claude-sonnet-4-6", effort: "medium", band: "low-complexity [30,40)" },
   { name: "orc-executor-haiku-4-5",      model: "claude-haiku-4-5",  effort: null,     band: "lowest-complexity [0,30)" },
-  // v0.35.0, widened v0.36.0 — the `opus5_only` ladder ONLY (default off). Same model,
-  // effort as the cost dial: [0,40) low · [40,80) medium · [80,100] high (the
-  // existing opus-5-high covers the top band in BOTH tables). These two are
-  // never dispatched by the default 8-band table.
-  { name: "orc-executor-opus-5-med",     model: "claude-opus-5",     effort: "medium", band: "opus5-only mid [40,80)" },
-  { name: "orc-executor-opus-5-low",     model: "claude-opus-5",     effort: "low",    band: "opus5-only low [0,40)" },
+  // NAMED BY NO BAND since v1.0.0 W4 (D14) — kept on disk, dispatched only when a
+  // user names one explicitly.
+  { name: "orc-executor-opus-5-high",    model: "claude-opus-5",    effort: "high",   band: "no default band — reachable via rubric_bands_override, orc diy fixed_executor, or extra_fallback_agent" },
+  { name: "orc-executor-opus-4-8-high",  model: "claude-opus-4-8",  effort: "high",   band: "no default band — reachable via rubric_bands_override, orc diy fixed_executor, or extra_fallback_agent" },
+  { name: "orc-executor-opus-4-7-high",  model: "claude-opus-4-7",  effort: "high",   band: "no default band — reachable via rubric_bands_override, orc diy fixed_executor, or extra_fallback_agent" },
+  { name: "orc-executor-opus-4-7-med",   model: "claude-opus-4-7",  effort: "medium", band: "no default band — reachable via rubric_bands_override, orc diy fixed_executor, or extra_fallback_agent" },
 ];
 
 function render(template, v) {

@@ -2,7 +2,7 @@
 name: orc-executor-opus-5-high
 description: >
   ORC executor — claude-opus-5, high effort. Dispatched by the ORC orchestrator to implement
-  a single task whose score falls in the highest-complexity [90,100] band. Single-role: execution only.
+  a single task whose score falls in the no default band — reachable via rubric_bands_override, orc diy fixed_executor, or extra_fallback_agent band. Single-role: execution only.
   Takes a task slice and implements exactly that task.
 model: claude-opus-5
 effort: high

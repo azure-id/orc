@@ -66,7 +66,7 @@ O: ✓ committed → pushed → run/merchant-notifications/DRP-482-add-merchant-
    Log deleted · checkpoint + dispatch log KEPT · completion dispatch report shown → "Run /usage to see your remaining limits."
 
 ## What this exercises
-always-spawn (even cheap tasks get a subagent) · facet-scored arithmetic · 8-band ladder ·
+always-spawn (even cheap tasks get a subagent) · facet-scored arithmetic · 6-band ladder ·
 per-run folder run/merchant-notifications/ · usage reminder (no programmatic /usage) ·
 planner grounding spot-check catching a hallucinated path · executor evidence (verbatim
 build/test proof) · reviewer quote spot-check before any P0/P1 action ·

@@ -2,7 +2,7 @@
 name: orc-executor-opus-4-7-med
 description: >
   ORC executor — claude-opus-4-7, medium effort. Dispatched by the ORC orchestrator to implement
-  a single task whose score falls in the upper-mid-complexity [65,70) band. Single-role: execution only.
+  a single task whose score falls in the no default band — reachable via rubric_bands_override, orc diy fixed_executor, or extra_fallback_agent band. Single-role: execution only.
   Takes a task slice and implements exactly that task.
 model: claude-opus-4-7
 effort: medium

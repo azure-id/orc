@@ -788,9 +788,12 @@ const extraRoute = {
       profile: "cheap", model: "deepseek-coder", small_model: null, max_turns: null,
       engine: "api", provider: "deepseek", verify_state: "VERIFIED", model_known: false,
     },
-    { from: 70, to: 80, band: "[70,80)", range: "scores 70 to 79", meaning: "wide reach or genuinely new work (a cited risk floors a task to 70, so it lands here or above)", via: "claude", agent: "orc-executor-opus-4-7-high" },
-    { from: 80, to: 90, band: "[80,90)", range: "scores 80 to 89", meaning: "wide reach or genuinely new work (a cited risk floors a task to 70, so it lands here or above) — ranging up to the hardest work: a novel algorithm, or wide reach with deep logic", via: "claude", agent: "orc-executor-opus-4-8-high" },
-    { from: 90, to: 100, band: "[90,100]", range: "scores 90 to 100", meaning: "the hardest work: a novel algorithm, or wide reach with deep logic", via: "claude", agent: "orc-executor-opus-5-high" },
+    // v1.0.0 W4 — the route row above splits the default table's [65,90) band,
+    // so the Claude remainder is [70,90) and it resolves to the SAME agent the
+    // routed part displaced. That is the honest picture of an overlay: a row
+    // takes a slice of a band, and what it did not take falls through.
+    { from: 70, to: 90, band: "[70,90)", range: "scores 70 to 89", meaning: "wide reach or genuinely new work (a cited risk floors a task to 70, so it lands here or above)", via: "claude", agent: "orc-executor-opus-5-low" },
+    { from: 90, to: 100, band: "[90,100]", range: "scores 90 to 100", meaning: "the hardest work: a novel algorithm, or wide reach with deep logic", via: "claude", agent: "orc-executor-opus-5-med" },
   ],
   foreign: [],
   claude_fallthrough: [],

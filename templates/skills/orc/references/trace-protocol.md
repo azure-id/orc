@@ -294,7 +294,7 @@ For each spawn the orchestrator:
 ## Announce-on-spawn
 
 When dispatching, announce the model to the user, derived from the agent NAME
-(e.g. "Spawning orc-executor-opus-4-7-high → claude-opus-4-7 / high"). Derive it
+(e.g. "Spawning orc-executor-opus-5-low → claude-opus-5 / low"). Derive it
 from the name — do NOT pass the coarse `sonnet|opus|haiku` dispatch arg, which
 cannot express 4-7 vs 4-8 and would override the frontmatter pin.
 

@@ -3,7 +3,7 @@
 Single-role, model-specific agents. The orchestrator dispatches BY AGENT NAME —
 model is pinned in frontmatter, not requested in prose. No agent is multi-role.
 
-## Executors (score-mapped by the single 8-band table in config.md)
+## Executors (score-mapped by the single 6-band table in config.md)
 
 | Score band | Agent | Model | Effort |
 |-----------|-------|-------|--------|
@@ -11,13 +11,19 @@ model is pinned in frontmatter, not requested in prose. No agent is multi-role.
 | [30,40)  | orc-executor-sonnet-4-6-med  | claude-sonnet-4-6 | medium |
 | [40,55)  | orc-executor-sonnet-4-6-high | claude-sonnet-4-6 | high |
 | [55,65)  | orc-executor-sonnet-5-high   | claude-sonnet-5   | high |
-| [65,70)  | orc-executor-opus-4-7-med    | claude-opus-4-7   | medium |
-| [70,80)  | orc-executor-opus-4-7-high   | claude-opus-4-7   | high |
-| [80,90)  | orc-executor-opus-4-8-high   | claude-opus-4-8   | high |
-| [90,100] | orc-executor-opus-5-high     | claude-opus-5     | high |
+| [65,90)  | orc-executor-opus-5-low      | claude-opus-5     | low |
+| [90,100] | orc-executor-opus-5-med      | claude-opus-5     | medium |
 
-Score→executor mapping lives in config.md (one canonical 8-band table;
+Score→executor mapping lives in config.md (one canonical 6-band table;
 `rubric_bands` is granularity only, not a preset selector).
+
+**Executors no band names — they still ship.**
+`orc-executor-opus-4-7-med`, `orc-executor-opus-4-7-high`,
+`orc-executor-opus-4-8-high` and `orc-executor-opus-5-high` are still generated
+and still installed. Since v1.0.0 they are reachable only when a user names one
+explicitly: `rubric_bands_override`, `orc diy`'s `fixed_executor`, or
+`extra_fallback_agent`. They are not deleted because a table change is not a
+model change, and an agent's model change is always a RENAME.
 
 ## Fixed-role agents
 
@@ -36,8 +42,8 @@ Score→executor mapping lives in config.md (one canonical 8-band table;
 | orc-retro-sonnet-5-high | claude-sonnet-5 | high | mine behavior traces → calibration report (/orc-retro; read-only) |
 | orc-wiki-scanner-opus-4-8-high | claude-opus-4-8 | high | scan ONE wiki coverage area → evidence-anchored doc body + crosslink tags (/orc-wiki only; read-only against the project). The DEEP half of the v0.46.0 tier ladder: first scan · STRUCTURAL · wide delta · a new exported symbol |
 | orc-wiki-scanner-sonnet-5-high | claude-sonnet-5 | high | the LIGHT half of the same ladder — an existing doc whose covered files moved by a small, no-new-surface delta. IDENTICAL return contract; it escalates with `needs_context` rather than under-delivering. Never used for a first scan |
-| orc-executor-opus-5-med | claude-opus-5 | medium | `opus5_only` ladder ONLY — the [40,80) band (never dispatched by the default 8-band table) |
-| orc-executor-opus-5-low | claude-opus-5 | low | `opus5_only` ladder ONLY — the [0,40) band, and the forced mini/fast executor (never dispatched by the default 8-band table) |
+| orc-executor-opus-5-med | claude-opus-5 | medium | the `[90,100]` band in BOTH tables |
+| orc-executor-opus-5-low | claude-opus-5 | low | the default table's `[65,90)`, `opus5_only`'s `[0,90)`, and the forced mini/fast executor |
 | orc-advisor-opus-5-xhigh | claude-opus-5 | xhigh | ultra Phase U0 advisory brief + rubric + clarification questions (read-only; /orc-ultra only) |
 | orc-judge-opus-5-xhigh | claude-opus-5 | xhigh | ultra judgment gates — analysis / plan / implementation (read-only; /orc-ultra only) |
 | orc-learn-writer-opus-5-low | claude-opus-5 | low | deepen ONE feature → learning-docs/<slug>/ (/orc-learn only; git-ignored output) |
@@ -64,9 +70,8 @@ these. Full mapping + precedence:
 
 | Agent | Model | Effort | Replaces |
 |-------|-------|--------|----------|
-| orc-executor-opus-5-low | claude-opus-5 | low | the `[0,40)` band · orc-mini's and orc-fast's fixed executor |
-| orc-executor-opus-5-med | claude-opus-5 | medium | the `[40,80)` band |
-| orc-executor-opus-5-high | claude-opus-5 | high | the `[80,100]` band |
+| orc-executor-opus-5-low | claude-opus-5 | low | the `[0,90)` band · orc-mini's and orc-fast's fixed executor |
+| orc-executor-opus-5-med | claude-opus-5 | medium | the `[90,100]` band |
 | orc-analyze-mini-opus-5-med | claude-opus-5 | medium | orc-analyze-mini-sonnet-5-high |
 | orc-planner-mini-opus-5-med | claude-opus-5 | medium | orc-planner-mini-sonnet-5-high |
 | orc-scout-opus-5-low | claude-opus-5 | low | orc-scout-sonnet-4-6-high |

@@ -16,13 +16,13 @@ Apply at Phase 0, on top of the normal config resolution:
   bypassed; `default_analysis_depth` is ignored; scouts dispatch as usual).
 - `pattern_findings` = on · `generate_tests` = on · `security_review` = on.
 - Executor **tier floor**: remap the resolved score→model table so no task
-  dispatches below `orc-executor-sonnet-5-high`; bands at/above the preset's
-  opus boundary rise to at least `orc-executor-opus-4-8-high` — the floor only
-  ever raises a band, so the top `[90,100]` band keeps `orc-executor-opus-5-high`.
-  **Under `opus5_only` the floor raises EFFORT, not model** (every band
-  is already Opus 5, so there is no model left to raise): the `[0,40)` band rises
-  low → medium, and the other two are already at/above it. It is still a floor —
-  it never lowers a band, and it never raises `[80,100]` past high.
+  dispatches below `orc-executor-sonnet-5-high`; bands at/above the opus
+  boundary (65) rise to at least `orc-executor-opus-5-low`. The floor only ever
+  raises a band, so the top `[90,100]` band keeps `orc-executor-opus-5-med`.
+  **Under `opus5_only` the floor raises EFFORT, not model** (every band is
+  already Opus 5, so there is no model left to raise): the `[0,90)` band rises
+  low → medium, which makes both bands medium. It is still a floor — it never
+  lowers a band, and it never raises `[90,100]` past medium.
   Show the remapped table with the Phase 2 scoring table.
 
 > Opus-5-only mode: if `opus5_only`, every role this lane dispatches is already

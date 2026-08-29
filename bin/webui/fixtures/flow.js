@@ -75,7 +75,7 @@ const diy = {
     { block: "ship", label: "ship", key: "ship_mode", value: "ask", on: true, note: "ask" },
     { block: "summary", label: "summary", key: "summary", value: "short", on: true, note: "short" },
   ],
-  score_table: "| Score | Executor agent |\n|-------|----------------|\n| [0,30) | orc-executor-haiku-4-5 |\n| [90,100] | orc-executor-opus-4-8-high |",
+  score_table: "| Score | Executor agent |\n|-------|----------------|\n| [0,30) | orc-executor-haiku-4-5 |\n| [90,100] | orc-executor-opus-5-med |",
 };
 
 module.exports = { diy };

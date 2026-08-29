@@ -156,9 +156,7 @@ substitute a preset from `config.md`:
 | [30,40) | orc-executor-sonnet-4-6-med |
 | [40,55) | orc-executor-sonnet-4-6-high |
 | [55,65) | orc-executor-sonnet-5-high |
-| [65,70) | orc-executor-opus-4-7-med |
-| [70,80) | orc-executor-opus-4-7-high |
-| [80,90) | orc-executor-opus-4-8-high |
+| [65,90) | orc-executor-opus-4-8-high |
 | [90,100] | orc-executor-opus-4-8-high |
 
 ## Phase: Extra — may an executor run OFF Claude?

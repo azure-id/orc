@@ -25,7 +25,7 @@ after:     src/payments — 2 shipped files rewritten within 30 days of run stor
 crosslink: 2 boundaries (payments-api) — advisory
 extra:     ON — 4 of 9 tasks foreign · deepseek/deepseek-v4-flash via api [0,30)
                 · glm/glm-4.7 via cli [30,70) · 2 held back (risk: auth, money)
-scoring:   8-band default table
+scoring:   6-band default table
 tdd:       3 tasks with tests (T3, T6, T9) · 2 covered-by-existing · 2 no-behavior
            skipped: R4 translation strings (no-behavior) · R7 file split
                     (covered-by-existing → test/api/health.test.js:41)
@@ -95,7 +95,7 @@ waves:     3 planned — will pause after wave 2 (batch_pause_every=2)
     `EXTRA orphan` line from `trace_extras[]` once you have reported it.
 
   Canonical: `../../_shared/extra-dispatch.md`.
-- **scoring:** which executor table RESOLVED for this run — `8-band default
+- **scoring:** which executor table RESOLVED for this run — `6-band default
   table` · `Opus-5-only ladder (opus5_only)` · `custom
   (rubric_bands_override, <n> rows)`. An un-shown table is as unaccountable as
   an un-shown number, and the Opus-5-only ladder in particular means EVERY
@@ -104,7 +104,7 @@ waves:     3 planned — will pause after wave 2 (batch_pause_every=2)
   append ` · all fixed roles forced to Opus 5` and name any selector it
   shadowed (a `rubric_bands_override` present but INERT) — a setting
   the user tuned and the run then ignored has to be said out loud. With Extra in
-  play the table is a COMPOSITE and reads as one (`8-band default table + extra
+  play the table is a COMPOSITE and reads as one (`6-band default table + extra
   rows [0,30) [30,70)`) — Extra is an overlay, so naming only one of the two would
   be naming the wrong half for every covered score.
 - **tdd:** ALWAYS printed on a lane whose TDD policy is on — BOTH branches, not

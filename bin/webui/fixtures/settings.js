@@ -51,7 +51,7 @@ const config = {
   ],
   // The registry-less, hand-written key — read-only everywhere, and shadowed here.
   hand_edited: [
-    { key: "rubric_bands_override", value: "[[0,50,'orc-executor-sonnet-5-high'],[50,100,'orc-executor-opus-5-high']]", is_shadowed: true, shadow_reason: "shadowed by opus5_only — executors use the fixed 3-band Opus 5 ladder", editable: false },
+    { key: "rubric_bands_override", value: "[[0,50,'orc-executor-sonnet-5-high'],[50,100,'orc-executor-opus-5-high']]", is_shadowed: true, shadow_reason: "shadowed by opus5_only — executors use the fixed 2-band Opus 5 ladder", editable: false },
   ],
   legacy_keys: [{ key: "opus5_executor_only", renamed_to: "opus5_only" }],
   // A key that was REMOVED, not renamed — the ugly state `--fixtures` exists to
@@ -73,15 +73,12 @@ const config = {
       { from: 30, to: 40, inclusive_to: false, agent: "orc-executor-sonnet-4-6-med" },
       { from: 40, to: 55, inclusive_to: false, agent: "orc-executor-sonnet-4-6-high" },
       { from: 55, to: 65, inclusive_to: false, agent: "orc-executor-sonnet-5-high" },
-      { from: 65, to: 70, inclusive_to: false, agent: "orc-executor-opus-4-7-med" },
-      { from: 70, to: 80, inclusive_to: false, agent: "orc-executor-opus-4-7-high" },
-      { from: 80, to: 90, inclusive_to: false, agent: "orc-executor-opus-4-8-high" },
-      { from: 90, to: 100, inclusive_to: true, agent: "orc-executor-opus-5-high" },
+      { from: 65, to: 90, inclusive_to: false, agent: "orc-executor-opus-5-low" },
+      { from: 90, to: 100, inclusive_to: true, agent: "orc-executor-opus-5-med" },
     ],
     opus5_only: [
-      { from: 0, to: 40, inclusive_to: false, agent: "orc-executor-opus-5-low" },
-      { from: 40, to: 80, inclusive_to: false, agent: "orc-executor-opus-5-med" },
-      { from: 80, to: 100, inclusive_to: true, agent: "orc-executor-opus-5-high" },
+      { from: 0, to: 90, inclusive_to: false, agent: "orc-executor-opus-5-low" },
+      { from: 90, to: 100, inclusive_to: true, agent: "orc-executor-opus-5-med" },
     ],
   },
   families: {

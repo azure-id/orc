@@ -1553,17 +1553,45 @@ function shadowReason(key, map, claudeDir) {
   return null;
 }
 
-// The score→model ladder, as data. Read from DIY_SCORE_TABLE so the UI adds no
-// SIXTH copy of a table already mirrored in five places (config.md,
-// MODEL-MAPPING.md, effort-and-mode.md, build-agents.js VARIANTS, and that
-// constant). `opus5_only` replaces it with the 3-band effort ladder.
+// The `opus5_only` ladder, as data. `opus5_only` replaces the default table
+// with this one.
+//
+// v1.0.0 W4 — TWO BANDS, not three, and the same 90 edge as the default table's
+// top two rows (D13). That symmetry is the point: once the default table's high
+// end is already Opus 5 with effort as the dial, the forcing mode differs from
+// it only BELOW 65, so a third band here would be a distinction the default
+// table stopped making.
+//
+// THIS IS THE ONLY COPY. Until W4 there were two arrays with these rows in this
+// one file — this one, read by `scoreTableJson()`, and `OPUS5_BANDS`, read by
+// `bandFor()`. v0.50.0's own comment recorded that they "had already drifted in
+// NAME" and left them as two constants; W4 collapses them, because two arrays
+// that must always be equal are a drift with a countdown on it. `OPUS5_BANDS`
+// is now an alias binding, kept only so a reader grepping the old name lands
+// here.
 const OPUS5_SCORE_TABLE = [
-  [0, 40, "orc-executor-opus-5-low"],
-  [40, 80, "orc-executor-opus-5-med"],
-  [80, 101, "orc-executor-opus-5-high"],
+  [0, 90, "orc-executor-opus-5-low"],
+  [90, 101, "orc-executor-opus-5-med"],
 ];
 const bandRows = (rows) =>
   rows.map(([lo, hi, agent]) => ({ from: lo, to: hi === 101 ? 100 : hi, inclusive_to: hi === 101, agent }));
+// The same rows as a terminal table. A ladder printed as hand-written prose is
+// a copy of a table this file already holds, and every copy of a table is a
+// table that will one day disagree with the code — so it is RENDERED, and the
+// `101`-means-100-inclusive convention lives in exactly one place.
+const ladderLabel = ([lo, hi]) => `[${lo},${hi === 101 ? "100]" : hi + ")"}`;
+function ladderTable(rows, indent = "    ") {
+  const bands = rows.map(ladderLabel);
+  const w1 = Math.max(5, ...bands.map((b) => b.length));
+  const w2 = Math.max(14, ...rows.map((r) => r[2].length));
+  const line = `${indent}|${"-".repeat(w1 + 2)}|${"-".repeat(w2 + 2)}|\n`;
+  return (
+    `${indent}| ${"Score".padEnd(w1)} | ${"Executor agent".padEnd(w2)} |\n` +
+    line +
+    rows.map((r, i) => `${indent}| ${bands[i].padEnd(w1)} | ${r[2].padEnd(w2)} |`).join("\n") +
+    "\n"
+  );
+}
 
 function scoreTableJson(map, claudeDir) {
   const forced = String(map.opus5_only) === "true";
@@ -1857,12 +1885,8 @@ function opus5Notice(on, claudeDir) {
       "\n  Why: deep SWE-benchmark work on cost vs efficiency across Claude models finds a\n" +
       "  single Opus 5 agent, with the EFFORT ladder as the cost dial, the most efficient\n" +
       "  configuration. You trade model-class variety for effort variety.\n" +
-      "\n  Scored executors (/orc + /orc-ultra):\n" +
-      "\n    | Score     | Executor agent            |\n" +
-      "    |-----------|---------------------------|\n" +
-      "    | [0,40)    | orc-executor-opus-5-low   |\n" +
-      "    | [40,80)   | orc-executor-opus-5-med   |\n" +
-      "    | [80,100]  | orc-executor-opus-5-high  |\n" +
+      "\n  Scored executors (/orc + /orc-ultra):\n\n" +
+      ladderTable(OPUS5_SCORE_TABLE) +
       "\n  Fixed roles now dispatched instead of their defaults:\n\n" + roleRows + "\n" +
       "\n  Already Opus 5, unchanged: analyst · planner · reviewer · verifier · test-author\n" +
       "  · combiner · learn-writer · advisor · judge.\n" +
@@ -2776,6 +2800,17 @@ const sha256 = (s) => crypto.createHash("sha256").update(s).digest("hex");
 // Model ranks: haiku 1 < sonnet-4-6 2 < sonnet-5 3 < opus-4-7 4 < opus-4-8 5 <
 // opus-5 6 (fable-5 sits at 7 as a session tier, above every executor). Effort
 // ranks: medium 1 < high 2 < xhigh 3 < max 4 (executors only ship medium/high).
+// The tier-clip roster. It must contain EVERY agent the default table names —
+// `diyScoreTable()` looks each row's agent up here, so a table row naming an
+// agent this map does not know is a crash, not a fallback. v1.0.0 W4 added the
+// two Opus 5 rows for exactly that reason.
+//
+// It also feeds `fixed_executor`'s option list, so every entry here is offerable
+// — which is what keeps the four agents no band names reachable (D14).
+//
+// Effort ranks `low(0) < medium(1) < high(2) < xhigh(3) < max(4)`. There is no
+// session tier at 0: an agent at low effort fits every tier of its own model,
+// which is correct — a low-effort child never exceeds its parent.
 const DIY_EXECUTORS = {
   "orc-executor-haiku-4-5": { model: 1, effort: 1 },
   "orc-executor-sonnet-4-6-med": { model: 2, effort: 1 },
@@ -2784,6 +2819,8 @@ const DIY_EXECUTORS = {
   "orc-executor-opus-4-7-med": { model: 4, effort: 1 },
   "orc-executor-opus-4-7-high": { model: 4, effort: 2 },
   "orc-executor-opus-4-8-high": { model: 5, effort: 2 },
+  "orc-executor-opus-5-low": { model: 6, effort: 0 },
+  "orc-executor-opus-5-med": { model: 6, effort: 1 },
   "orc-executor-opus-5-high": { model: 6, effort: 2 },
 };
 // Session-tier grid (C.5) — the user composes whatever tier they want; DIY is
@@ -3039,15 +3076,27 @@ function diyValidate(cfg) {
 // The single canonical 8-band score->model table (mirrors skills/orc/config.md
 // — documented drift). No more narrow/wide preset: rubric_bands is granularity
 // only, and this one table maps every score.
+//
+// v1.0.0 W4 — SIX BANDS, not eight. The bottom four are untouched; the top four
+// collapsed into two, because above ~65 the useful dial stopped being the model
+// generation and became the EFFORT. Every agent named here already ships, and
+// the four this table stopped naming (opus-4-7-med, opus-4-7-high,
+// opus-4-8-high, opus-5-high) STAY ON DISK: they are still reachable through
+// `rubric_bands_override`, `orc diy` `fixed_executor` and `extra_fallback_agent`
+// (D14). Deleting them would be a rename-shaped migration for what is only a
+// TABLE change, and an agent's model change is always a rename — conflating the
+// two is how a downgrade check breaks.
+//
+// THE EDGE IS 90, AND IT IS ROUND (D13). Every other edge in this table is
+// round and half-open, so `[65,90)` and `[90,101]` keep the shape; a score of
+// exactly 90 resolves to `med`.
 const DIY_SCORE_TABLE = [
   [0, 30, "orc-executor-haiku-4-5"],
   [30, 40, "orc-executor-sonnet-4-6-med"],
   [40, 55, "orc-executor-sonnet-4-6-high"],
   [55, 65, "orc-executor-sonnet-5-high"],
-  [65, 70, "orc-executor-opus-4-7-med"],
-  [70, 80, "orc-executor-opus-4-7-high"],
-  [80, 90, "orc-executor-opus-4-8-high"],
-  [90, 101, "orc-executor-opus-5-high"],
+  [65, 90, "orc-executor-opus-5-low"],
+  [90, 101, "orc-executor-opus-5-med"],
 ];
 
 // Clip the table to the session tier: an over-tier agent collapses into the
@@ -8199,11 +8248,11 @@ function scoreFromFacets(f, fanIn, fanOut) {
 // otherwise the default 8-band table. A hand-written `rubric_bands_override` is
 // registry-less by design, so the forecast reports it as UNKNOWN rather than
 // pretending to resolve it.
-const OPUS5_BANDS = [
-  [0, 40, "orc-executor-opus-5-low"],
-  [40, 80, "orc-executor-opus-5-med"],
-  [80, 101, "orc-executor-opus-5-high"],
-];
+// v1.0.0 W4 — an ALIAS, not a second array. See OPUS5_SCORE_TABLE's comment:
+// these were two copies of the same rows that had already drifted in name once.
+// A test asserts identity (`===`), not deep equality, so they cannot drift again
+// even by being edited to agree.
+const OPUS5_BANDS = OPUS5_SCORE_TABLE;
 function bandFor(score, cfg, claudeDir) {
   // P5 — THERE IS ONE RESOLVER. This function is the /orc-budget half of the
   // ladder, and `orc extra resolve` is the dispatch half; before v0.50.0 they
