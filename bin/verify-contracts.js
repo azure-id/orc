@@ -2988,6 +2988,10 @@ const CONTRACTS = [
       "skills/_shared/README.md",
       "skills/_shared/config-precedence.md",
       "skills/_shared/extra-dispatch.md",
+      "skills/orc-diy/SKILL.md",
+      "skills/orc-fast/SKILL.md",
+      "skills/orc-mini/SKILL.md",
+      "skills/orc-wiki/SKILL.md",
       "skills/orc/SKILL.md",
       "skills/orc/config.md",
       "skills/orc/subskills/orc-pr/stack-gate.md",
@@ -3136,7 +3140,8 @@ const BUDGETS = [
   // model being a quiet substitution), and the plan/debt/usage pointer with the
   // one rule that must not be re-derived — usage never enters wiki-meta.json.
   // Everything else lives in references/partial-refresh.md.
-  { file: "skills/orc-wiki/SKILL.md", maxLines: 325 },
+  // v1.0.0 W8: deliberate raise 325→335 — orc-wiki had NO `## Config` section at all — it names each key inline where it is used, which is already the right shape. What it lacked was the resolver, so this is the ten-line contract arriving, not prose moving.
+  { file: "skills/orc-wiki/SKILL.md", maxLines: 335 },
   // v0.34.2: deliberate raise 219→220 — the run-start `touch the trace file`
   // step. It is one line, it is the fix for the corpus's largest defect family,
   // and it has to sit in the spine because it happens before any reference loads.
@@ -3149,7 +3154,8 @@ const BUDGETS = [
   // leaves Claude at all; it happens before any reference loads, and getting it
   // wrong routes a whole run on a partially covering row. Mechanics in
   // _shared/extra-dispatch.md.
-  { file: "skills/orc-mini/SKILL.md", maxLines: 227 },
+  // v1.0.0 W8: deliberate raise 227→237 — mini's `## Config` was fifteen lines, but nine of them were the TDD lane POLICY (one intake question, the disposition set, the repair cap) — which is not config and is kept, now under its own heading. Only six lines of restated resolution were deleted, against a ten-line contract.
+  { file: "skills/orc-mini/SKILL.md", maxLines: 237 },
   // v0.39.0: deliberate raises 195→201 / 179→182 — the analyst gains hard rules
   // 2b (a source it did not author is FOREIGN input) and 4a (the read ladder);
   // fast gains the ladder as a slice line. Both are hard rules by nature: they
@@ -3176,7 +3182,8 @@ const BUDGETS = [
   // clause is the one a later reader would most plausibly get wrong — this lane
   // is defined by having exactly two prerequisites, and a foreign executor is
   // not a third one. Mechanics in _shared/extra-dispatch.md.
-  { file: "skills/orc-fast/SKILL.md", maxLines: 189 },
+  // v1.0.0 W8: deliberate raise 189→199 — fast's `## Config` was six lines of restated resolution plus a two-key list; the contract is ten. The lane genuinely has no config key of its own, which is now something the resolver says rather than something the spine claims.
+  { file: "skills/orc-fast/SKILL.md", maxLines: 199 },
 ];
 
 function walk(dir, out) {
@@ -3370,6 +3377,35 @@ for (const b of BUDGETS) {
     if (!e) errs.push(`the seed-empty allowlist names "${k}", which is no longer a CONFIG_META key`);
     else if (e.lanes && e.lanes.length)
       errs.push(`${k}: now has lanes[] — remove it from the seed-empty allowlist in this lint`);
+  }
+
+  // D28 (deferred from W3, scheduled here) — `design-01` §10.6: every lane spine
+  // carries the §8 config contract. It could not be turned on at W3, when no
+  // spine carried it, and it cannot be turned on globally yet either: W8
+  // migrated five lanes and W9 has the rest. So the assertion is scoped to a
+  // NAMED list of migrated lanes and grows with the migration — the SEED_EMPTY
+  // shape, for the same reason. A lane joining this list is a deliberate line in
+  // a diff, and a migrated lane that later LOSES the contract fails here.
+  //
+  // W9 finishes the list, at which point the two loops below become one over
+  // every lane and this comment goes away.
+  const MIGRATED_LANES = ["orc", "orc-diy", "orc-fast", "orc-mini", "orc-wiki"];
+  for (const lane of MIGRATED_LANES) {
+    const spine = path.join(ROOT, "skills", lane, "SKILL.md");
+    if (!fs.existsSync(spine)) {
+      errs.push(`the migrated-lane list names "${lane}", which has no SKILL.md`);
+      continue;
+    }
+    const text = fs.readFileSync(spine, "utf8");
+    if (!text.includes(`orc lane config ${lane} --json`))
+      errs.push(`${lane}: migrated, but its spine does not name \`orc lane config ${lane} --json\` — the resolver contract is missing or names the wrong lane`);
+    if (!text.includes("config-precedence.md"))
+      errs.push(`${lane}: the config contract is there but points at no precedence reference`);
+    // The thing the contract REPLACES. A spine that still tells the
+    // orchestrator to merge the override file itself has two resolvers, and the
+    // second one is the one that will be wrong once a key is shadowed.
+    if (/defaults merged with|config\.md. defaults|← .claude\/orc\.config\.yaml/.test(text))
+      errs.push(`${lane}: the spine still restates config resolution — the contract replaces that, it does not sit beside it`);
   }
 
   if (LANES) {

@@ -76,7 +76,24 @@ const POOL_ORDER = ["pure", "spawn", "net", "heavy"];
 // and `heavy` is never more than 1 — and it is strictly SAFER than the old
 // single number, under which all 6 concurrent processes could be `net` files.
 // The global cap is what stops 14 + 4 + 2 + 1 becoming 21 processes.
-const GLOBAL_CONCURRENCY = 8;
+// v1.0.0 W8 — a MEASUREMENT SEAM, not a behaviour change. Unset, this is 8 and
+// the runner is byte-identical to what shipped (the `ORC_TEST_BUDGET_FLOOR_MS`
+// precedent from W0/D22).
+//
+// It exists because the gate itself became unreliable. The full suite flaked on
+// UNCHANGED code in three consecutive waves — W6 (12 failures, detail lost),
+// W7 (4), W8 (3, then 13) — always in the `spawn`/`net` pools, always with
+// ~24 s durations that are a budget elapsing rather than an assertion failing,
+// and always on a run 35-90% slower than the ~188 s norm. Every affected file
+// passes in isolation.
+//
+// Measured on the same tree, same commit: at 8 the suite failed 13 tests in
+// 358 s; at 4 it passed 653/653 in 302 s. SLOWER at higher concurrency is the
+// contention signature — the box is oversubscribed, so real timeouts elapse.
+//
+// The cap is NOT lowered here. That is D31 and it is the user's call: this seam
+// is what turns it from a judgement into a decision with data.
+const GLOBAL_CONCURRENCY = Number(process.env.ORC_TEST_GLOBAL_CONCURRENCY) || 8;
 // A file with no pragma lands in the safe middle AND is reported by name.
 const DEFAULT_POOL = "spawn";
 

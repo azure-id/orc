@@ -59,6 +59,22 @@ as it says. Do not consult this stub again for the rest of the run, and do
 not load orc's SKILL.md as a spine (the compiled flow already references the
 exact orc subskills and schemas it needs).
 
+## Config
+
+**ONE resolver, and it is not you:** `orc lane config orc-diy --json`. Obey
+`effective`, print every line in `announce[]` VERBATIM at preflight, and honour
+`stops[]` before wave 1. Never re-derive a value, a precedence or an inertness
+from `.claude/orc.config.yaml` — a key this lane does not read is not in the
+answer, and a key another key shadows comes back already marked. Exit ≠ 0 → say
+the CLI is unavailable and fall back to `../_shared/config-precedence.md`'s
+documented defaults, out loud. Priorities and families:
+`../_shared/config-precedence.md`.
+
+The flow SHAPE is not in that answer: it is compile-owned and lives in
+`flow.lock.json`. The resolver answers for everything else this lane still
+reads, and `extra` is the same split — the flow decides WHETHER, the resolver
+still decides WHERE.
+
 ## Hard rules
 
 1. The compiled flow is a build artifact — NEVER edit

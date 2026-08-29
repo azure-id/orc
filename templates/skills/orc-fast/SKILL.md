@@ -168,10 +168,17 @@ zero new trace lines is a protocol violation — dispatch its packet NOW. The
 
 ## Config
 
-Resolve at run start (`../orc/config.md` ← `.claude/orc.config.yaml`):
-`wiki_fresh_max` / `wiki_aging_max` (tier edges) + `log_dir`. Fast has no
-config key of its own — command-entry only; wave/scoring/review keys never
-apply.
+**ONE resolver, and it is not you:** `orc lane config orc-fast --json`. Obey
+`effective`, print every line in `announce[]` VERBATIM at preflight, and honour
+`stops[]` before wave 1. Never re-derive a value, a precedence or an inertness
+from `.claude/orc.config.yaml` — a key this lane does not read is not in the
+answer, and a key another key shadows comes back already marked. Exit ≠ 0 → say
+the CLI is unavailable and fall back to `../_shared/config-precedence.md`'s
+documented defaults, out loud. Priorities and families:
+`../_shared/config-precedence.md`.
+
+Fast has no config key of its own — command-entry only; wave/scoring/review
+keys never apply, and the tier edges the F0 gate reads arrive resolved.
 
 ## Checkpoint (minimal, append-only)
 

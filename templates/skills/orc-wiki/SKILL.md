@@ -320,3 +320,14 @@ manifest (via `orc wiki sync`). Refresh modes (incremental with the coverage-gap
 + dead-doc + dead-tag sweeps · selective · pre-push), the per-doc
 `covered_files` signal, lazy `wiki_schema: 2` upgrades, and auto-flag /
 post-ship refresh-ask all live in staleness.md — load it, never act from memory.
+
+## Config
+
+**ONE resolver, and it is not you:** `orc lane config orc-wiki --json`. Obey
+`effective`, print every line in `announce[]` VERBATIM at preflight, and honour
+`stops[]` before wave 1. Never re-derive a value, a precedence or an inertness
+from `.claude/orc.config.yaml` — a key this lane does not read is not in the
+answer, and a key another key shadows comes back already marked. Exit ≠ 0 → say
+the CLI is unavailable and fall back to `../_shared/config-precedence.md`'s
+documented defaults, out loud. Priorities and families:
+`../_shared/config-precedence.md`.

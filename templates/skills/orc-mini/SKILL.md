@@ -163,12 +163,21 @@ Models pinned in `.claude/agents/`; look up here, never reconstruct a name (agen
 
 ## Config
 
-Resolve at run start: `../orc/config.md` defaults merged with
-`.claude/orc.config.yaml` — read `generate_tests` (the Phase T offer default),
-`mock_example`, `tdd_loop_max`, and `log_dir`. Wave/scoring/scout keys never
-apply to mini — never render or ask them.
+**ONE resolver, and it is not you:** `orc lane config orc-mini --json`. Obey
+`effective`, print every line in `announce[]` VERBATIM at preflight, and honour
+`stops[]` before wave 1. Never re-derive a value, a precedence or an inertness
+from `.claude/orc.config.yaml` — a key this lane does not read is not in the
+answer, and a key another key shadows comes back already marked. Exit ≠ 0 → say
+the CLI is unavailable and fall back to `../_shared/config-precedence.md`'s
+documented defaults, out loud. Priorities and families:
+`../_shared/config-precedence.md`.
 
-**TDD (ONE intake question — mini's whole TDD policy):** at intake ask once:
+Wave/scoring/scout keys never apply to mini — and they are not in the answer,
+so there is nothing to render or ask.
+
+## TDD (ONE intake question — mini's whole TDD policy)
+
+At intake ask once:
 *"Anchor this in plan-time acceptance tests (TDD — red tests first, implement
 to green)? [yes/no]"*. Yes → the planner slice carries `tdd: on` (the mini
 planner authors `tdd_spec` per requirement, **scoped by the same `disposition` set the full lane uses** — `new-surface | behavior-change | covered-by-existing | no-behavior | no-runner`, derived from the `facets`, same safety floor: a cited `risk[]` is never scoped out, so a constant or a translation string gets no test but an auth change always does). Mini keeps its SINGLE executor — no paired TDD task; that executor materializes the failing tests FIRST, then implements to green
