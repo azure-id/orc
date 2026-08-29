@@ -1067,42 +1067,162 @@ const vSubset = (allowed) =>
     return { value: `[${[...new Set(items)].join(", ")}]` };
   }, { kind: "subset", choices: allowed });
 
+// ── CONFIG_FAMILIES — the QUESTION each key answers (v1.0.0 W2) ─────────────
+//
+// A family is a question about one decision. Its `ranks[]` are the keys that
+// can answer it, highest first, and the rule the whole release turns on is:
+//
+//   **Read a family top-down and STOP at the first rank that resolves.**
+//   If the P0 key resolves, P1/P2/P3 are NOT READ AT ALL — not consulted, not
+//   defaulted, not mentioned as a fallback.
+//
+// `prio` is only comparable INSIDE a family. `log_dir` at P2 and `opus5_only`
+// at P1 says nothing: they never compete. A global ladder built out of these
+// ranks would be meaningless, and the reference says so in those words.
+//
+// `tier` (common / advanced / fable5) is untouched and stays a UI axis — it
+// drives the interactive menu and the panel's split. `prio` is a resolution
+// axis. Merging them breaks the menu (plan D1).
+//
+// THE LOWEST RANK OF A CONTESTED FAMILY IS TOTAL. Something has to answer when
+// nothing above resolved, and that terminal row is declared here as a ROW with
+// `key: null` rather than as a setting — a fall-through is not a setting
+// (v0.50.0: *a gap in the route table is not a hole — it is Claude*).
+//
+// `mode` is how a rank wins when it resolves:
+//   replace — the key is set to a truthy / non-default value; every lower rank
+//             in the family is shadowed, entirely.
+//   overlay — the key is on AND at least one row applies to THIS decision; the
+//             lower ranks are shadowed ONLY for the covered ranges/slots, and
+//             everything it did not cover falls through normally. `overlay` is
+//             what makes "stop at the first rank that resolves" survive contact
+//             with extra, whose honest report is WHICH ranges were taken.
+//   gate    — see `gated_by` on the key itself: a gate does not win a
+//             precedence contest, it makes its own dependants inert (§5).
+//
+// `shadow_note` is the sentence the CLI prints when a HIGHER `replace` rank
+// resolves over this row. It lives here rather than in shadowReason() because
+// a rank and the sentence explaining it are one fact; `{by}` is the shadowing
+// key's name. A key that is `gated_by` a shadowed key inherits its gate's
+// sentence — which is how all three `fable5_*` keys report identically.
+const CONFIG_FAMILIES = {
+  // ── the two CONTESTED families ────────────────────────────────────────────
+  "executor-band": {
+    contested: true,
+    question: "which model executes a SCORED task",
+    ranks: [
+      { prio: "P0", key: "extra_enabled", mode: "overlay" },
+      { prio: "P1", key: "opus5_only", mode: "replace" },
+      {
+        prio: "P2",
+        key: "rubric_bands_override",
+        mode: "replace",
+        // Hand-edited and registry-less BY DESIGN — it is named here as a rank
+        // without being a CONFIG_META key, because where it sits in the
+        // precedence is a fact even though `orc config set` refuses to write it.
+        registry_less: true,
+        shadow_note: "shadowed by {by} — executors use the fixed 3-band Opus 5 ladder",
+      },
+      { prio: "P3", key: null, terminal: "the shipped score→model table" },
+    ],
+  },
+  "fixed-role-model": {
+    contested: true,
+    question: "which model runs a role that has no score",
+    ranks: [
+      // the six EXTRA_SLOTS positions
+      { prio: "P0", key: "extra_enabled", mode: "overlay" },
+      // OPUS5_ONLY_ROLES
+      { prio: "P1", key: "opus5_only", mode: "replace" },
+      // fable5_roles
+      {
+        prio: "P2",
+        key: "fable5_enabled",
+        mode: "replace",
+        shadow_note:
+          "shadowed by {by} — every role dispatches its Opus 5 agent, so the Fable 5 override is inert",
+      },
+      { prio: "P3", key: null, terminal: "the agent shipped for that position" },
+    ],
+  },
+  // ── the uncontested families ──────────────────────────────────────────────
+  // Their keys do not compete, so every one of them is P2 — the neutral rank —
+  // and the lint asserts exactly that. Rank distinctness is required ONLY where
+  // `contested: true`.
+  waves: { contested: false, question: "how a run is broken into waves and when it pauses" },
+  scoring: { contested: false, question: "how finely a task is scored" },
+  analysis: { contested: false, question: "how wide the analyst sweeps before planning" },
+  testing: { contested: false, question: "which tests a run writes, and how long it repairs" },
+  patterns: { contested: false, question: "when the project's code conventions are learned" },
+  gotchas: { contested: false, question: "what repair memory is kept and injected" },
+  security: { contested: false, question: "when a security pass runs" },
+  mock: { contested: false, question: "when a runnable mocked example is produced" },
+  pr: { contested: false, question: "when a change ships as a stack instead of one PR" },
+  extra: { contested: false, question: "how a foreign dispatch behaves once extra is on" },
+  pact: { contested: false, question: "what a drifted promise does to a run" },
+  boundary: { contested: false, question: "what a refused area does to a wave" },
+  handoff: { contested: false, question: "whether a non-engineer may write a graded surface" },
+  budget: { contested: false, question: "how a cost forecast is computed and shown" },
+  aftermath: { contested: false, question: "how far back a run is graded from the repo's future" },
+  challenge: { contested: false, question: "what counts as a pass, and which lenses run" },
+  doc: { contested: false, question: "how a long document is written and checked" },
+  wiki: { contested: false, question: "how the project wiki is scanned and when it is stale" },
+  crosslink: { contested: false, question: "when a peer repo's wiki reads stale" },
+  fable5: { contested: false, question: "how the Fable 5 override behaves once it is enabled" },
+  retro: { contested: false, question: "where a retro is delivered" },
+  paths: { contested: false, question: "where ORC writes on disk" },
+  session: { contested: false, question: "what the main session itself runs as" },
+};
+
 // Ordered, tiered metadata. Common first, then advanced.
 // `options` (common tier only) is the pick-list shown in the interactive menu —
 // a friendly enum. Typed values are still allowed and re-checked by `validate`,
 // so the list guides without locking power users out.
+//
+// v1.0.0 W2 — every entry also declares `answers[]` (which family question it
+// answers, at which rank, in which mode), `lanes[]` (which lanes read it), and
+// `gated_by` where a master gate makes it inert. `answers` is an ARRAY because
+// two keys genuinely answer two questions each: `extra_enabled` and
+// `opus5_only` both decide the executor band AND the fixed-role model, and
+// forcing them into one family invents a contest between keys that are not
+// competing at all.
+//
+// `lanes[]` was SEEDED MECHANICALLY (orc-v1-build/findings/W2-lane-key-seed.md)
+// and is wrong in both directions on purpose. W8/W9 correct it lane by lane, so
+// that the correction is a diff against a recorded seed rather than an
+// invention nobody can review.
 const CONFIG_META = [
-  { key: "max_wave_tasks", def: 3, tier: "common", validate: vInt(1), options: [2, 3, 4, 5], desc: "Max parallel tasks per execution wave (higher = more parallelism, more collision risk)." },
-  { key: "batch_pause_every", def: 2, tier: "common", validate: vInt(1), options: [1, 2, 3, 4, 5], desc: "Waves between stop-and-continue pauses (1 = pause every wave)." },
-  { key: "rubric_bands", def: 5, tier: "common", validate: vRange(2, 8), options: [2, 3, 4, 5, 6, 7, 8], desc: "Scoring granularity (2-5 narrow preset, 6-8 wide preset)." },
-  { key: "max_scouts", def: 3, tier: "common", validate: vInt(1), options: [1, 2, 3, 4, 5], desc: "Max parallel code scouts fanned out in deep analysis." },
-  { key: "default_analysis_depth", def: "standard", tier: "common", validate: vEnum("standard", "deep"), options: ["standard", "deep"], desc: "Analyst depth gate default — deep = wider sweep + scouts (run still confirms)." },
-  { key: "generate_tests", def: false, tier: "common", validate: vEnum("true", "false"), options: ["true", "false"], desc: "Opt-in Phase 6.5: author test cases before ship (writes tests, never runs them). OFF by default." },
-  { key: "pattern_findings", def: "ask", tier: "common", validate: vEnum("ask", "on", "off"), options: ["ask", "on", "off"], desc: "Code-pattern gate on an FE/BE cache miss: ask = prompt, on = auto-codify, off = always agnostic." },
-  { key: "gotchas", def: "on", tier: "common", validate: vEnum("on", "off"), options: ["on", "off"], desc: "Repair memory: record a gotcha when a repair loop goes red → green, and inject the scope-matching ones into executor slices. Never injected unfiltered; see .claude/orc/gotchas.md." },
-  { key: "gotchas_max", def: 40, tier: "common", validate: vInt(5), options: [20, 40, 60, 100], desc: "Live gotcha entries kept before the lowest-value tail is archived to gotchas-archive.md (never deleted)." },
-  { key: "security_review", def: "off", tier: "common", validate: vEnum("off", "ask", "on"), options: ["off", "ask", "on"], desc: "Opt-in Phase 5.5 security pass on runs with a task scored >= 70 (risk floor). OFF by default." },
-  { key: "run_budget_dispatches", def: 0, tier: "common", validate: vInt(0), options: [0, 8, 12, 20, 30], desc: "Subagent budget for one run. The Phase-1 forecast estimates how many subagents the run will dispatch; if that exceeds this number the run STOPS before wave 1 (a hard gate like the batch pause, not a hint) and offers proceed / a cheaper lane / re-plan smaller. 0 = off, nothing changes." },
-  { key: "mock_example", def: "ask", tier: "common", validate: vEnum("ask", "on", "off"), options: ["ask", "on", "off"], desc: "Post-verify mocked runnable example (mock-examples/<slug>/, never committed): ask = offer after a green verify, on = always, off = never." },
-  { key: "tdd_loop_max", def: 3, tier: "common", validate: vInt(1), options: [1, 2, 3, 4, 5], desc: "Max implement→test→repair iterations per task in the TDD gate; cap hit → STOP SEQUENCE + honest red report." },
-  { key: "stacked_pr", def: "ask", tier: "common", validate: vEnum("ask", "on", "off"), options: ["ask", "on", "off"], desc: "Phase 8 stacked-PR gate (full /orc + /orc-ultra only): ask = ONE P0 question when the change trips the threshold below, on = take yes without asking, off = always one regular PR. Yes needs a ticket AND a resolved PR template, else it degrades to a regular PR. Hands off to /orc-pr-setup → /orc-pr-driver; never fires in orc-mini/orc-fast/orc-diy." },
-  { key: "stacked_pr_loc", def: 1000, tier: "common", validate: vInt(1), options: [500, 800, 1000, 1500, 2000], desc: "Change LoC (additions+deletions, exclusions applied) >= this trips the stacked-PR gate — and is ALSO the per-layer LoC ceiling: a change that cannot fit in one layer's budget is what is worth stacking." },
-  { key: "stacked_pr_files", def: 20, tier: "common", validate: vInt(1), options: [10, 15, 20, 30, 40], desc: "Changed-file count >= this trips the stacked-PR gate; also the per-layer hard max (soft target = half of it)." },
-  { key: "stacked_pr_max_layers", def: 6, tier: "common", validate: vInt(2), options: [4, 5, 6, 8, 10], desc: "Soft cap on layers per stack: <= cap proceed, cap+1..cap+2 warn + explicit override, beyond → STOP (multiple stacks or a phased release). N layers = N full CI runs." },
+  { key: "max_wave_tasks", def: 3, tier: "common", answers: [{ family: "waves", prio: "P2", mode: "replace" }], lanes: ["orc", "orc-diy"], validate: vInt(1), options: [2, 3, 4, 5], desc: "Max parallel tasks per execution wave (higher = more parallelism, more collision risk)." },
+  { key: "batch_pause_every", def: 2, tier: "common", answers: [{ family: "waves", prio: "P2", mode: "replace" }], lanes: ["orc", "orc-diy"], validate: vInt(1), options: [1, 2, 3, 4, 5], desc: "Waves between stop-and-continue pauses (1 = pause every wave)." },
+  { key: "rubric_bands", def: 5, tier: "common", answers: [{ family: "scoring", prio: "P2", mode: "replace" }], lanes: ["orc", "orc-diy"], validate: vRange(2, 8), options: [2, 3, 4, 5, 6, 7, 8], desc: "Scoring granularity (2-5 narrow preset, 6-8 wide preset)." },
+  { key: "max_scouts", def: 3, tier: "common", answers: [{ family: "analysis", prio: "P2", mode: "replace" }], lanes: ["orc", "orc-analyze"], validate: vInt(1), options: [1, 2, 3, 4, 5], desc: "Max parallel code scouts fanned out in deep analysis." },
+  { key: "default_analysis_depth", def: "standard", tier: "common", answers: [{ family: "analysis", prio: "P2", mode: "replace" }], lanes: ["orc", "orc-analyze"], validate: vEnum("standard", "deep"), options: ["standard", "deep"], desc: "Analyst depth gate default — deep = wider sweep + scouts (run still confirms)." },
+  { key: "generate_tests", def: false, tier: "common", answers: [{ family: "testing", prio: "P2", mode: "replace" }], lanes: ["orc", "orc-mini"], validate: vEnum("true", "false"), options: ["true", "false"], desc: "Opt-in Phase 6.5: author test cases before ship (writes tests, never runs them). OFF by default." },
+  { key: "pattern_findings", def: "ask", tier: "common", answers: [{ family: "patterns", prio: "P2", mode: "replace" }], lanes: ["orc", "orc-pattern", "orc-wiki"], validate: vEnum("ask", "on", "off"), options: ["ask", "on", "off"], desc: "Code-pattern gate on an FE/BE cache miss: ask = prompt, on = auto-codify, off = always agnostic." },
+  { key: "gotchas", def: "on", tier: "common", answers: [{ family: "gotchas", prio: "P2", mode: "replace" }], lanes: ["orc", "orc-brainstorm", "orc-claude", "orc-diy", "orc-doc", "orc-fast", "orc-learn", "orc-mini", "orc-retro", "orc-wiki"], validate: vEnum("on", "off"), options: ["on", "off"], desc: "Repair memory: record a gotcha when a repair loop goes red → green, and inject the scope-matching ones into executor slices. Never injected unfiltered; see .claude/orc/gotchas.md." },
+  { key: "gotchas_max", def: 40, tier: "common", answers: [{ family: "gotchas", prio: "P2", mode: "replace" }], lanes: ["orc"], validate: vInt(5), options: [20, 40, 60, 100], desc: "Live gotcha entries kept before the lowest-value tail is archived to gotchas-archive.md (never deleted)." },
+  { key: "security_review", def: "off", tier: "common", answers: [{ family: "security", prio: "P2", mode: "replace" }], lanes: ["orc"], validate: vEnum("off", "ask", "on"), options: ["off", "ask", "on"], desc: "Opt-in Phase 5.5 security pass on runs with a task scored >= 70 (risk floor). OFF by default." },
+  { key: "run_budget_dispatches", def: 0, tier: "common", answers: [{ family: "waves", prio: "P2", mode: "replace" }], lanes: ["orc", "orc-budget"], validate: vInt(0), options: [0, 8, 12, 20, 30], desc: "Subagent budget for one run. The Phase-1 forecast estimates how many subagents the run will dispatch; if that exceeds this number the run STOPS before wave 1 (a hard gate like the batch pause, not a hint) and offers proceed / a cheaper lane / re-plan smaller. 0 = off, nothing changes." },
+  { key: "mock_example", def: "ask", tier: "common", answers: [{ family: "mock", prio: "P2", mode: "replace" }], lanes: ["orc", "orc-brainstorm", "orc-diy", "orc-fast", "orc-grill", "orc-mini"], validate: vEnum("ask", "on", "off"), options: ["ask", "on", "off"], desc: "Post-verify mocked runnable example (mock-examples/<slug>/, never committed): ask = offer after a green verify, on = always, off = never." },
+  { key: "tdd_loop_max", def: 3, tier: "common", answers: [{ family: "testing", prio: "P2", mode: "replace" }], lanes: ["orc", "orc-diy", "orc-mini"], validate: vInt(1), options: [1, 2, 3, 4, 5], desc: "Max implement→test→repair iterations per task in the TDD gate; cap hit → STOP SEQUENCE + honest red report." },
+  { key: "stacked_pr", def: "ask", tier: "common", answers: [{ family: "pr", prio: "P2", mode: "replace" }], lanes: ["orc", "orc-pr-setup"], validate: vEnum("ask", "on", "off"), options: ["ask", "on", "off"], desc: "Phase 8 stacked-PR gate (full /orc + /orc-ultra only): ask = ONE P0 question when the change trips the threshold below, on = take yes without asking, off = always one regular PR. Yes needs a ticket AND a resolved PR template, else it degrades to a regular PR. Hands off to /orc-pr-setup → /orc-pr-driver; never fires in orc-mini/orc-fast/orc-diy." },
+  { key: "stacked_pr_loc", def: 1000, tier: "common", answers: [{ family: "pr", prio: "P2", mode: "replace" }], lanes: ["orc", "orc-pr-setup"], validate: vInt(1), options: [500, 800, 1000, 1500, 2000], desc: "Change LoC (additions+deletions, exclusions applied) >= this trips the stacked-PR gate — and is ALSO the per-layer LoC ceiling: a change that cannot fit in one layer's budget is what is worth stacking." },
+  { key: "stacked_pr_files", def: 20, tier: "common", answers: [{ family: "pr", prio: "P2", mode: "replace" }], lanes: ["orc", "orc-pr-setup"], validate: vInt(1), options: [10, 15, 20, 30, 40], desc: "Changed-file count >= this trips the stacked-PR gate; also the per-layer hard max (soft target = half of it)." },
+  { key: "stacked_pr_max_layers", def: 6, tier: "common", answers: [{ family: "pr", prio: "P2", mode: "replace" }], lanes: ["orc", "orc-pr-setup"], validate: vInt(2), options: [4, 5, 6, 8, 10], desc: "Soft cap on layers per stack: <= cap proceed, cap+1..cap+2 warn + explicit override, beyond → STOP (multiple stacks or a phased release). N layers = N full CI runs." },
   // --- v0.50.0 — orc extra: dispatch ORC's WORKERS to non-Claude agents -----
   // Nine keys, and the count is the feature: the combinatorial part —
   // providers x models x bands — is a LEDGER with a CLI and a panel
   // (`orc extra`), not eleven YAML keys nobody can hold in their head.
-  { key: "extra_enabled", def: false, tier: "common", validate: vEnum("true", "false"), options: ["true", "false"], desc: "Master gate for `orc extra` — dispatching a scored task to a non-Claude worker (DeepSeek, GLM, Kimi, a local Ollama, any OpenAI-/Anthropic-compatible endpoint you can name). NOTHING changes unless true, the fable5_enabled precedent. The orchestrator always stays Claude; what moves is who executes a slice. Every run that will cross the boundary PRINTS it at Phase 1 — routing work off Claude silently is the failure mode this whole subsystem is shaped around." },
-  { key: "extra_roles", def: "[executor]", tier: "common", validate: vSubset(EXTRA_ROLES_ALL), options: EXTRA_ROLES_ALL.filter((r) => !LEGACY_EXTRA_ROLES.includes(r)), desc: "Which SCORED-LANE roles may go foreign (CSV). Executor only by default, deliberately: an executor's output is checked by the smoke gate, the TDD gate, the reviewer and the worktree-delta check, all of which are engine-blind — while a REVIEWER you cannot trust is worse than no reviewer at all, because it launders a finding nobody made. `executor` is the only value anything resolves today; reviewer/verifier/analyst/planner/scout/test-author are declared and nothing dispatches them yet (`orc extra role list` reports that honestly). doc-writer/doc-checker MOVED to `orc extra role` in v0.55.0 and are kept here for one release as deprecated no-ops." },
-  { key: "extra_risk_tasks", def: "off", tier: "common", validate: vEnum("off", "on"), options: ["off", "on"], desc: "Whether a task with a non-empty cited `risk[]` (auth, money, migration, security, concurrency, data-integrity) may leave Claude. OFF holds it on the Claude ladder whatever the route table says, and the preflight NAMES it as held back. ORC already refuses to send a refund-endpoint change to a cheap model; this keeps Extra from becoming the hole in that rule." },
-  { key: "extra_on_failure", def: "fallback", tier: "common", validate: vEnum("fallback", "stop"), options: ["fallback", "stop"], desc: "What an unreachable endpoint, a 401, a 429 past backoff, a timeout or a malformed return does. `fallback` re-dispatches the task to the Claude band it would have had, ANNOUNCED, and the run continues. `stop` is for people who would rather stop than silently start paying Anthropic rates. A failed foreign dispatch is never a dead run either way." },
-  { key: "extra_max_concurrent", def: 1, tier: "common", validate: vInt(1), options: [1, 2, 3], desc: "Foreign dispatches in flight at once. Per-provider rate limits are undocumented in aggregate, so 1 is the honest default — a wave of 3 that 429s costs more in repairs than the parallelism saved." },
-  { key: "extra_unlock", def: "per-run", tier: "common", validate: vEnum("per-run", "per-dispatch"), options: ["per-run", "per-dispatch"], desc: "When a vault-stored key asks for its passphrase. `per-run` asks ONCE at the Phase-1 stop the lane already has, so an unattended wave can actually run. `per-dispatch` prompts every time and REFUSES to start an unattended wave, naming why — it is interactive-only by design. Irrelevant when the credential source is an environment variable, which is the recommended one." },
-  { key: "extra_vault_max_attempts", def: 10, tier: "advanced", validate: vInt(3), desc: "Wrong passphrases before the encrypted key DELETES ITSELF. It is a key rather than a magic number so the count is inspectable and testable — NOT so it can be switched off; below 3 is refused. The counter stops someone at your keyboard; it does not stop someone who copies the vault file and tries offline, and scrypt's cost is the only defence there." },
-  { key: "extra_timeout_s", def: 900, tier: "advanced", validate: vInt(30), desc: "Per-dispatch wall clock for a foreign worker. The child's own timeouts are DERIVED from this rather than set independently, so three timeouts cannot disagree about which one fires first." },
-  { key: "extra_passphrase_ttl_days", def: 30, tier: "common", validate: vEnum(...EXTRA_TTL_DAYS.map(String)), options: EXTRA_TTL_DAYS, desc: "The DEADLINE the passphrase picker opens on when you save a vault passphrase. A passphrase stored on the same machine as the vault it opens is not a second factor any more — it is a deadline, the shape of ssh-agent. This key supplies the default; the value is stored PER PROFILE, because two connections may legitimately expire on different days. `EXPIRED` on a vaulted profile STOPS the run before wave 1 — `extra_on_failure` does not cover it, because that key is about an endpoint that failed and this is a deadline you set yourself." },
-  { key: "extra_verify_max_days", def: 7, tier: "advanced", validate: vInt(1), desc: "Past this a profile's verification reads STALE and is re-pinged before wave 1. A STALE profile STILL ROUTES — a stale check is not a failed one (the /orc-pact UNCHECKABLE rule) — and freshness is computed on read, never stored." },
+  { key: "extra_enabled", def: false, tier: "common", answers: [{ family: "executor-band", prio: "P0", mode: "overlay" }, { family: "fixed-role-model", prio: "P0", mode: "overlay" }], lanes: ["orc", "orc-boundary", "orc-challenge", "orc-diy", "orc-doc", "orc-fast", "orc-mini", "orc-quick", "orc-wiki"], validate: vEnum("true", "false"), options: ["true", "false"], desc: "Master gate for `orc extra` — dispatching a scored task to a non-Claude worker (DeepSeek, GLM, Kimi, a local Ollama, any OpenAI-/Anthropic-compatible endpoint you can name). NOTHING changes unless true, the fable5_enabled precedent. The orchestrator always stays Claude; what moves is who executes a slice. Every run that will cross the boundary PRINTS it at Phase 1 — routing work off Claude silently is the failure mode this whole subsystem is shaped around." },
+  { key: "extra_roles", def: "[executor]", tier: "common", answers: [{ family: "extra", prio: "P2", mode: "replace" }], gated_by: "extra_enabled", lanes: ["orc-doc", "orc-wiki"], validate: vSubset(EXTRA_ROLES_ALL), options: EXTRA_ROLES_ALL.filter((r) => !LEGACY_EXTRA_ROLES.includes(r)), desc: "Which SCORED-LANE roles may go foreign (CSV). Executor only by default, deliberately: an executor's output is checked by the smoke gate, the TDD gate, the reviewer and the worktree-delta check, all of which are engine-blind — while a REVIEWER you cannot trust is worse than no reviewer at all, because it launders a finding nobody made. `executor` is the only value anything resolves today; reviewer/verifier/analyst/planner/scout/test-author are declared and nothing dispatches them yet (`orc extra role list` reports that honestly). doc-writer/doc-checker MOVED to `orc extra role` in v0.55.0 and are kept here for one release as deprecated no-ops." },
+  { key: "extra_risk_tasks", def: "off", tier: "common", answers: [{ family: "extra", prio: "P2", mode: "replace" }], gated_by: "extra_enabled", lanes: ["orc", "orc-diy", "orc-mini"], validate: vEnum("off", "on"), options: ["off", "on"], desc: "Whether a task with a non-empty cited `risk[]` (auth, money, migration, security, concurrency, data-integrity) may leave Claude. OFF holds it on the Claude ladder whatever the route table says, and the preflight NAMES it as held back. ORC already refuses to send a refund-endpoint change to a cheap model; this keeps Extra from becoming the hole in that rule." },
+  { key: "extra_on_failure", def: "fallback", tier: "common", answers: [{ family: "extra", prio: "P2", mode: "replace" }], gated_by: "extra_enabled", lanes: ["orc-quick", "orc-wiki"], validate: vEnum("fallback", "stop"), options: ["fallback", "stop"], desc: "What an unreachable endpoint, a 401, a 429 past backoff, a timeout or a malformed return does. `fallback` re-dispatches the task to the Claude band it would have had, ANNOUNCED, and the run continues. `stop` is for people who would rather stop than silently start paying Anthropic rates. A failed foreign dispatch is never a dead run either way." },
+  { key: "extra_max_concurrent", def: 1, tier: "common", answers: [{ family: "extra", prio: "P2", mode: "replace" }], gated_by: "extra_enabled", lanes: [], validate: vInt(1), options: [1, 2, 3], desc: "Foreign dispatches in flight at once. Per-provider rate limits are undocumented in aggregate, so 1 is the honest default — a wave of 3 that 429s costs more in repairs than the parallelism saved." },
+  { key: "extra_unlock", def: "per-run", tier: "common", answers: [{ family: "extra", prio: "P2", mode: "replace" }], gated_by: "extra_enabled", lanes: [], validate: vEnum("per-run", "per-dispatch"), options: ["per-run", "per-dispatch"], desc: "When a vault-stored key asks for its passphrase. `per-run` asks ONCE at the Phase-1 stop the lane already has, so an unattended wave can actually run. `per-dispatch` prompts every time and REFUSES to start an unattended wave, naming why — it is interactive-only by design. Irrelevant when the credential source is an environment variable, which is the recommended one." },
+  { key: "extra_vault_max_attempts", def: 10, tier: "advanced", answers: [{ family: "extra", prio: "P2", mode: "replace" }], gated_by: "extra_enabled", lanes: [], validate: vInt(3), desc: "Wrong passphrases before the encrypted key DELETES ITSELF. It is a key rather than a magic number so the count is inspectable and testable — NOT so it can be switched off; below 3 is refused. The counter stops someone at your keyboard; it does not stop someone who copies the vault file and tries offline, and scrypt's cost is the only defence there." },
+  { key: "extra_timeout_s", def: 900, tier: "advanced", answers: [{ family: "extra", prio: "P2", mode: "replace" }], gated_by: "extra_enabled", lanes: [], validate: vInt(30), desc: "Per-dispatch wall clock for a foreign worker. The child's own timeouts are DERIVED from this rather than set independently, so three timeouts cannot disagree about which one fires first." },
+  { key: "extra_passphrase_ttl_days", def: 30, tier: "common", answers: [{ family: "extra", prio: "P2", mode: "replace" }], gated_by: "extra_enabled", lanes: [], validate: vEnum(...EXTRA_TTL_DAYS.map(String)), options: EXTRA_TTL_DAYS, desc: "The DEADLINE the passphrase picker opens on when you save a vault passphrase. A passphrase stored on the same machine as the vault it opens is not a second factor any more — it is a deadline, the shape of ssh-agent. This key supplies the default; the value is stored PER PROFILE, because two connections may legitimately expire on different days. `EXPIRED` on a vaulted profile STOPS the run before wave 1 — `extra_on_failure` does not cover it, because that key is about an endpoint that failed and this is a deadline you set yourself." },
+  { key: "extra_verify_max_days", def: 7, tier: "advanced", answers: [{ family: "extra", prio: "P2", mode: "replace" }], gated_by: "extra_enabled", lanes: [], validate: vInt(1), desc: "Past this a profile's verification reads STALE and is re-pinged before wave 1. A STALE profile STILL ROUTES — a stale check is not a failed one (the /orc-pact UNCHECKABLE rule) — and freshness is computed on read, never stored." },
   // --- v0.54.0 — recovery. Nine keys became ELEVEN, and both additions are
   // justified rather than assumed. Deliberately NOT added: a key for where a
   // resume goes (derived from the failure classification that already exists,
@@ -1112,65 +1232,65 @@ const CONFIG_META = [
   // generator), a key to disable the journal or its retention (the spend-log
   // reasoning verbatim: a record you can switch off is off on the run you
   // needed it for), and a key for the network probe.
-  { key: "extra_resume", def: "on", tier: "common", validate: vEnum("on", "off"), options: ["on", "off"], desc: "Whether a partial or crashed foreign dispatch is RESUMED rather than re-done. A worker cut off mid-write leaves a half-changed repository, and re-dispatching the SAME slice lands a fresh executor on a file that is already two-thirds written — it either discards work you paid for or improvises against a stale mental model. `on` reconciles the worktree against the journal baseline and composes a resume slice that says what is already there. Default `on`, because `off` is what is broken. INERT in /orc-quick, which asks which agent before every dispatch." },
+  { key: "extra_resume", def: "on", tier: "common", answers: [{ family: "extra", prio: "P2", mode: "replace" }], gated_by: "extra_enabled", lanes: ["orc-diy", "orc-quick"], validate: vEnum("on", "off"), options: ["on", "off"], desc: "Whether a partial or crashed foreign dispatch is RESUMED rather than re-done. A worker cut off mid-write leaves a half-changed repository, and re-dispatching the SAME slice lands a fresh executor on a file that is already two-thirds written — it either discards work you paid for or improvises against a stale mental model. `on` reconciles the worktree against the journal baseline and composes a resume slice that says what is already there. Default `on`, because `off` is what is broken. INERT in /orc-quick, which asks which agent before every dispatch." },
   // --- v0.56.1 — the stall. ELEVEN keys became THIRTEEN, and both additions
   // come from the same observed failure: a foreign worker that goes quiet
   // mid-task. Deliberately NOT added: a key to nudge the child on its stdin
   // (`opencode run` is not an interactive session, so a keystroke nobody reads
   // is a fake fix), a per-profile stall budget (the number describes ORC's
   // patience, not a provider), and a key to disable the stall report.
-  { key: "extra_stall_s", def: 180, tier: "common", validate: vInt(0), options: [0, 60, 120, 180, 300, 600], desc: "Seconds a foreign worker may produce NOTHING before the dispatch is stopped as `stalled`. The clock is reset by observable progress — new bytes on the worker's stream, new bytes on stderr, or a declared file that changed on disk — so it never fires on a worker that is merely slow. This is what a wall clock cannot see: `extra_timeout_s` measures the whole dispatch, and an opencode that stops mid-task and waits for someone to type `continue` burns all 900 seconds looking like a timeout. A `stalled` dispatch is RETRYABLE, so `extra_resume` continues it from what is already on disk rather than starting over. 0 turns it off and the wall clock is the only stop again. Clamped below the wall clock, because a budget that can never fire is worse than none. Engine `cli` only — engine `api` already has a per-request inactivity timeout on its own socket." },
-  { key: "extra_fallback_agent", def: "band", tier: "common", validate: vFallbackAgent, options: ["band", "ask", "orc-executor-opus-5-med", "orc-executor-opus-5-low", "orc-executor-sonnet-4-6-high"], desc: "WHICH Claude agent picks up a task the foreign worker could not finish. `band` is the pre-v0.56.1 behaviour and stays the default: the exact agent the score table or the slot would have used, so a fallback changes WHO runs it and nothing else. `ask` STOPS and puts the choice to you with the failure and the position already on the table — right when a stall has just cost you fifteen minutes and you would rather pick than accept a default. Any installed agent name is accepted verbatim, for the case where you already know a stalled slice wants more (or less) than its band. It never changes the score, never widens `declared_files` and never moves `acceptance[]` — a fallback is not a re-plan." },
-  { key: "extra_resume_max", def: 2, tier: "advanced", validate: vInt(0), desc: "Resume attempts per task before the fallback procedure takes over. Bounded like `tdd_loop_max`: hitting the cap STOPS with an honest report naming the Claude agent, never a silent third loop. A resume never widens `declared_files`, never moves `acceptance[]` and never moves the score — it is a continuation, not a discount." },
-  { key: "opus5_only", def: false, tier: "common", validate: vEnum("true", "false"), options: ["true", "false"], desc: "EVERY dispatched role uses ONE model — Opus 5 — with EFFORT as the cost dial (executors: [0,40) low · [40,80) medium · [80,100] high; each fixed role its own pinned effort). Deep SWE-benchmark work on cost vs efficiency across Claude models finds a single Opus 5 agent with the effort ladder the most efficient setup. It FORCES: while on it outranks fable5_* and a hand-written rubric_bands_override. Needs an Opus 5 main session or EVERY dispatch silently downgrades. Excludes the Haiku trace writer and orc-diy (compile-owned)." },
+  { key: "extra_stall_s", def: 180, tier: "common", answers: [{ family: "extra", prio: "P2", mode: "replace" }], gated_by: "extra_enabled", lanes: [], validate: vInt(0), options: [0, 60, 120, 180, 300, 600], desc: "Seconds a foreign worker may produce NOTHING before the dispatch is stopped as `stalled`. The clock is reset by observable progress — new bytes on the worker's stream, new bytes on stderr, or a declared file that changed on disk — so it never fires on a worker that is merely slow. This is what a wall clock cannot see: `extra_timeout_s` measures the whole dispatch, and an opencode that stops mid-task and waits for someone to type `continue` burns all 900 seconds looking like a timeout. A `stalled` dispatch is RETRYABLE, so `extra_resume` continues it from what is already on disk rather than starting over. 0 turns it off and the wall clock is the only stop again. Clamped below the wall clock, because a budget that can never fire is worse than none. Engine `cli` only — engine `api` already has a per-request inactivity timeout on its own socket." },
+  { key: "extra_fallback_agent", def: "band", tier: "common", answers: [{ family: "extra", prio: "P2", mode: "replace" }], gated_by: "extra_enabled", lanes: ["orc-quick"], validate: vFallbackAgent, options: ["band", "ask", "orc-executor-opus-5-med", "orc-executor-opus-5-low", "orc-executor-sonnet-4-6-high"], desc: "WHICH Claude agent picks up a task the foreign worker could not finish. `band` is the pre-v0.56.1 behaviour and stays the default: the exact agent the score table or the slot would have used, so a fallback changes WHO runs it and nothing else. `ask` STOPS and puts the choice to you with the failure and the position already on the table — right when a stall has just cost you fifteen minutes and you would rather pick than accept a default. Any installed agent name is accepted verbatim, for the case where you already know a stalled slice wants more (or less) than its band. It never changes the score, never widens `declared_files` and never moves `acceptance[]` — a fallback is not a re-plan." },
+  { key: "extra_resume_max", def: 2, tier: "advanced", answers: [{ family: "extra", prio: "P2", mode: "replace" }], gated_by: "extra_enabled", lanes: [], validate: vInt(0), desc: "Resume attempts per task before the fallback procedure takes over. Bounded like `tdd_loop_max`: hitting the cap STOPS with an honest report naming the Claude agent, never a silent third loop. A resume never widens `declared_files`, never moves `acceptance[]` and never moves the score — it is a continuation, not a discount." },
+  { key: "opus5_only", def: false, tier: "common", answers: [{ family: "executor-band", prio: "P1", mode: "replace" }, { family: "fixed-role-model", prio: "P1", mode: "replace" }], lanes: ["orc", "orc-analyze", "orc-challenge", "orc-claude", "orc-diy", "orc-doc", "orc-fast", "orc-mini", "orc-pattern", "orc-quick", "orc-retro", "orc-wiki"], validate: vEnum("true", "false"), options: ["true", "false"], desc: "EVERY dispatched role uses ONE model — Opus 5 — with EFFORT as the cost dial (executors: [0,40) low · [40,80) medium · [80,100] high; each fixed role its own pinned effort). Deep SWE-benchmark work on cost vs efficiency across Claude models finds a single Opus 5 agent with the effort ladder the most efficient setup. It FORCES: while on it outranks fable5_* and a hand-written rubric_bands_override. Needs an Opus 5 main session or EVERY dispatch silently downgrades. Excludes the Haiku trace writer and orc-diy (compile-owned)." },
   // --- v0.46.0 — the six new lanes ------------------------------------------
-  { key: "pact_gate", def: "warn", tier: "common", validate: vEnum("off", "warn"), options: ["off", "warn"], desc: "Invariant ledger at Phase 1 + planning: warn = print the one pact line and inject a DRIFTED/BROKEN promise whose anchors intersect the plan's declared files as a planner constraint; off = nothing. NEVER blocks — a promise is advice with a receipt, not a gate. See /orc-pact." },
-  { key: "pact_recheck_on_verify", def: "true", tier: "common", validate: vEnum("true", "false"), options: ["true", "false"], desc: "Phase 6: re-run the cheap checks for ONLY the invariants the change touched (`orc pact check`), so a promise that just leaked is caught in the run that broke it." },
-  { key: "boundary_gate", def: "warn", tier: "common", validate: vEnum("off", "warn", "block"), options: ["off", "warn", "block"], desc: "Boundary verdicts at dispatch: warn = print the counts and the per-task verdict, off = ignore the cards, block = a REFUSE task is LIFTED OUT of its wave (the wave proceeds) and handed back with its checklist. `block` changes dispatch behaviour, which is why the default is warn. It gates ORC's own dispatch, never an explicit instruction from you." },
-  { key: "handoff_write", def: "true", tier: "common", validate: vEnum("true", "false"), options: ["true", "false"], desc: "Whether `orc handoff set` (and the Self-serve panel) may write a graded surface. false = MAP-ONLY, for teams that want no browser writes at all. A RED surface is never written either way." },
-  { key: "budget_min_samples", def: 5, tier: "common", validate: vInt(1), options: [3, 5, 8, 12], desc: "Dispatches a band needs before /orc-budget calls its forecast confident. Below it the band is printed as low-confidence — a forecast is a range WITH a sample count, never one number." },
-  { key: "budget_units", def: "auto", tier: "common", validate: vEnum("auto", "tokens", "usd", "quota", "all"), options: ["auto", "tokens", "usd", "quota", "all"], desc: "Primary unit for a forecast. auto picks from budget_plan: a Pro/Max user burns a session window, not dollars, so `$7.02` means nothing to them and `18% of your 5-hour window` means everything. Tokens are always available." },
-  { key: "budget_plan", def: "auto", tier: "common", validate: vEnum("auto", "pro", "max5", "max20", "api"), options: ["auto", "pro", "max5", "max20", "api"], desc: "Which Claude plan you are on, for the quota view. There is no reliable local signal for this, so it is ASKED ONCE at the first forecast and stored — never a wrong guess rendered as a percentage. api = billed per token, so USD is the primary unit." },
-  { key: "budget_price_table", def: "", tier: "advanced", validate: vPath, desc: "Path to your own dated price table (default: the shipped bin/pricing.json). A table older than 90 days prints a staleness warning beside every dollar figure." },
-  { key: "aftermath_window_days", def: 30, tier: "advanced", validate: vInt(1), desc: "How far back /orc-aftermath grades. A run younger than 7 days is `too recent to grade` — an answer, not a gap." },
+  { key: "pact_gate", def: "warn", tier: "common", answers: [{ family: "pact", prio: "P2", mode: "replace" }], lanes: ["orc", "orc-pact"], validate: vEnum("off", "warn"), options: ["off", "warn"], desc: "Invariant ledger at Phase 1 + planning: warn = print the one pact line and inject a DRIFTED/BROKEN promise whose anchors intersect the plan's declared files as a planner constraint; off = nothing. NEVER blocks — a promise is advice with a receipt, not a gate. See /orc-pact." },
+  { key: "pact_recheck_on_verify", def: "true", tier: "common", answers: [{ family: "pact", prio: "P2", mode: "replace" }], lanes: ["orc", "orc-pact"], validate: vEnum("true", "false"), options: ["true", "false"], desc: "Phase 6: re-run the cheap checks for ONLY the invariants the change touched (`orc pact check`), so a promise that just leaked is caught in the run that broke it." },
+  { key: "boundary_gate", def: "warn", tier: "common", answers: [{ family: "boundary", prio: "P2", mode: "replace" }], lanes: ["orc", "orc-boundary"], validate: vEnum("off", "warn", "block"), options: ["off", "warn", "block"], desc: "Boundary verdicts at dispatch: warn = print the counts and the per-task verdict, off = ignore the cards, block = a REFUSE task is LIFTED OUT of its wave (the wave proceeds) and handed back with its checklist. `block` changes dispatch behaviour, which is why the default is warn. It gates ORC's own dispatch, never an explicit instruction from you." },
+  { key: "handoff_write", def: "true", tier: "common", answers: [{ family: "handoff", prio: "P2", mode: "replace" }], lanes: ["orc-handoff"], validate: vEnum("true", "false"), options: ["true", "false"], desc: "Whether `orc handoff set` (and the Self-serve panel) may write a graded surface. false = MAP-ONLY, for teams that want no browser writes at all. A RED surface is never written either way." },
+  { key: "budget_min_samples", def: 5, tier: "common", answers: [{ family: "budget", prio: "P2", mode: "replace" }], lanes: ["orc-budget", "orc-route"], validate: vInt(1), options: [3, 5, 8, 12], desc: "Dispatches a band needs before /orc-budget calls its forecast confident. Below it the band is printed as low-confidence — a forecast is a range WITH a sample count, never one number." },
+  { key: "budget_units", def: "auto", tier: "common", answers: [{ family: "budget", prio: "P2", mode: "replace" }], lanes: ["orc-budget", "orc-route"], validate: vEnum("auto", "tokens", "usd", "quota", "all"), options: ["auto", "tokens", "usd", "quota", "all"], desc: "Primary unit for a forecast. auto picks from budget_plan: a Pro/Max user burns a session window, not dollars, so `$7.02` means nothing to them and `18% of your 5-hour window` means everything. Tokens are always available." },
+  { key: "budget_plan", def: "auto", tier: "common", answers: [{ family: "budget", prio: "P2", mode: "replace" }], lanes: ["orc-budget"], validate: vEnum("auto", "pro", "max5", "max20", "api"), options: ["auto", "pro", "max5", "max20", "api"], desc: "Which Claude plan you are on, for the quota view. There is no reliable local signal for this, so it is ASKED ONCE at the first forecast and stored — never a wrong guess rendered as a percentage. api = billed per token, so USD is the primary unit." },
+  { key: "budget_price_table", def: "", tier: "advanced", answers: [{ family: "budget", prio: "P2", mode: "replace" }], lanes: ["orc-budget"], validate: vPath, desc: "Path to your own dated price table (default: the shipped bin/pricing.json). A table older than 90 days prints a staleness warning beside every dollar figure." },
+  { key: "aftermath_window_days", def: 30, tier: "advanced", answers: [{ family: "aftermath", prio: "P2", mode: "replace" }], lanes: ["orc-aftermath"], validate: vInt(1), desc: "How far back /orc-aftermath grades. A run younger than 7 days is `too recent to grade` — an answer, not a gap." },
   // --- v0.47.0 — /orc-challenge ---------------------------------------------
-  { key: "challenge_pass_severity", def: "p1", tier: "common", validate: vEnum("p0", "p1", "p2"), options: ["p0", "p1", "p2"], desc: "The severity at or above which an open finding BLOCKS a pass. PASS is computed, never declared: the judge reports findings and `orc challenge record` decides, which removes leniency as a possibility — a judge can only find, or fail to find. Accepted exceptions are subtracted first." },
-  { key: "challenge_stall_after", def: 3, tier: "common", validate: vInt(2), options: [2, 3, 4, 5], desc: "Iterations with no net reduction in blocking findings before a cycle is flagged `stalled`. A FLAG, never a cap: each turn of this loop is a separate human sitting down to work, so refusing on iteration 6 would be refusing to review a hard document. It reports honestly and offers three options instead." },
-  { key: "challenge_reader", def: "on", tier: "common", validate: vEnum("on", "off"), options: ["on", "off"], desc: "The COLD READ dispatch that measures D4 (can a reader with no prior context follow this?). A grounded judge structurally cannot answer that — it has read the repo and will fill every gap the document leaves. off → D4 reports NOT-CHECKED with that reason, never silently." },
-  { key: "challenge_gate", def: "warn", tier: "common", validate: vEnum("off", "warn"), options: ["off", "warn"], desc: "Whether /orc's Phase-1 preflight prints one line when the document it is about to build from has an in-flight, failing challenge cycle. There is deliberately NO `block` — the /orc-pact precedent: the payoff is knowing, not gating." },
+  { key: "challenge_pass_severity", def: "p1", tier: "common", answers: [{ family: "challenge", prio: "P2", mode: "replace" }], lanes: ["orc-challenge"], validate: vEnum("p0", "p1", "p2"), options: ["p0", "p1", "p2"], desc: "The severity at or above which an open finding BLOCKS a pass. PASS is computed, never declared: the judge reports findings and `orc challenge record` decides, which removes leniency as a possibility — a judge can only find, or fail to find. Accepted exceptions are subtracted first." },
+  { key: "challenge_stall_after", def: 3, tier: "common", answers: [{ family: "challenge", prio: "P2", mode: "replace" }], lanes: ["orc-challenge"], validate: vInt(2), options: [2, 3, 4, 5], desc: "Iterations with no net reduction in blocking findings before a cycle is flagged `stalled`. A FLAG, never a cap: each turn of this loop is a separate human sitting down to work, so refusing on iteration 6 would be refusing to review a hard document. It reports honestly and offers three options instead." },
+  { key: "challenge_reader", def: "on", tier: "common", answers: [{ family: "challenge", prio: "P2", mode: "replace" }], lanes: ["orc-challenge"], validate: vEnum("on", "off"), options: ["on", "off"], desc: "The COLD READ dispatch that measures D4 (can a reader with no prior context follow this?). A grounded judge structurally cannot answer that — it has read the repo and will fill every gap the document leaves. off → D4 reports NOT-CHECKED with that reason, never silently." },
+  { key: "challenge_gate", def: "warn", tier: "common", answers: [{ family: "challenge", prio: "P2", mode: "replace" }], lanes: ["orc", "orc-challenge"], validate: vEnum("off", "warn"), options: ["off", "warn"], desc: "Whether /orc's Phase-1 preflight prints one line when the document it is about to build from has an in-flight, failing challenge cycle. There is deliberately NO `block` — the /orc-pact precedent: the payoff is knowing, not gating." },
   // --- v0.48.0 — /orc-doc ----------------------------------------------------
-  { key: "doc_max_lines_per_agent", def: 400, tier: "common", validate: vInt(40), options: [200, 400, 600, 800], desc: "Write/read budget per dispatched /orc-doc agent, in lines. It is what turns a 10,000-line document into ~25 slices the orchestrator never reads: a writer is given its own part file and a checker is given a line RANGE. A section is NEVER split to fit — a single section over this cap is reported as a planning smell and offered as a split at the outline gate instead." },
-  { key: "doc_max_parallel", def: 2, tier: "common", validate: vInt(1), options: [1, 2], desc: "Agents per /orc-doc wave. HARD CAP 2 — a larger value is clamped and the clamp is announced, because more parallel writers is more chances for the outline to drift and the compile is what has to reconcile them. Each agent owns exactly ONE file under sections/, so no two ever share one." },
-  { key: "doc_write_mode", def: "ask", tier: "common", validate: vEnum("ask", "partial", "all"), options: ["ask", "partial", "all"], desc: "How much of a /orc-doc document is bought at once. `partial` writes ONE wave, then stops so you can read those section files and redirect before the rest is paid for — the single biggest saving in the lane. `all` writes every wave. `ask` (default) makes it a question asked once per run and stored, so the choice is yours and never the model's to remember." },
-  { key: "doc_language", def: "en", tier: "common", validate: vText, options: ["en", "id", "es", "de", "fr", "ja"], desc: "Default output language for /orc-doc, always confirmable per run. A non-English document is held to the SAME plain-language bar in that language — short sentences, common words, acronyms expanded; technical terms with no natural translation stay in English and are glossed once." },
-  { key: "doc_local_refs", def: "error", tier: "common", validate: vEnum("off", "warn", "error"), options: ["off", "warn", "error"], desc: "How /orc-doc's free lint treats a LOCAL-ONLY reference in the deliverable — a `src/foo.ts:42` anchor, an absolute path, a `./relative` opener, localhost, a file:// URL, a relative .md link. The reader of a PRD or a TSD usually has no repository, so a path is a dead end for them. A genuinely internal runbook legitimately names local paths, which is why there are three values and not a rule with no switch; fenced code is always exempt, because a code example that SHOWS a path is content." },
-  { key: "doc_dir", def: DOC_DIR_DEFAULT, tier: "advanced", validate: vPath, desc: "Where /orc-doc folders live. Project root, not .claude/ — a document is a deliverable a human opens, and the same call /orc-quick, /orc-brainstorm and poly-repo-implementation/ already made." },
-  { key: "wiki_scan_tier", def: "ladder", tier: "advanced", validate: vEnum("ladder", "always_deep"), desc: "Wiki scan tier: ladder picks light/deep per delta (first scan, STRUCTURAL, wide delta or a new exported symbol → deep; otherwise light), always_deep restores pre-v0.46.0 behaviour. The resolved tier is always printed — a cheaper model is never a quiet substitution." },
-  { key: "wiki_tier_deep_files", def: 3, tier: "advanced", validate: vInt(1), desc: "Covered files touched at or above this count send the refresh to the DEEP scanner." },
-  { key: "wiki_refresh_budget", def: 0, tier: "advanced", validate: vInt(0), desc: "Max scan-tasks per refresh run; 0 = no cap. A capped refresh is a PLANNED stop, not an interrupt: sync has already run, so the wiki is registered and consistent, and the remaining docs are AGING, not broken. Separate from the fixed pause-every-5 rule — do not merge them." },
-  { key: "wiki_retire_after_runs", def: 0, tier: "advanced", validate: vInt(0), desc: "Offer to retire a doc no run put into a slice in this many runs (0 = never offer). Retiring MOVES it to wiki/retired/ and drops it from INDEX.md — reversible, never a delete." },
+  { key: "doc_max_lines_per_agent", def: 400, tier: "common", answers: [{ family: "doc", prio: "P2", mode: "replace" }], lanes: ["orc-doc"], validate: vInt(40), options: [200, 400, 600, 800], desc: "Write/read budget per dispatched /orc-doc agent, in lines. It is what turns a 10,000-line document into ~25 slices the orchestrator never reads: a writer is given its own part file and a checker is given a line RANGE. A section is NEVER split to fit — a single section over this cap is reported as a planning smell and offered as a split at the outline gate instead." },
+  { key: "doc_max_parallel", def: 2, tier: "common", answers: [{ family: "doc", prio: "P2", mode: "replace" }], lanes: ["orc-doc"], validate: vInt(1), options: [1, 2], desc: "Agents per /orc-doc wave. HARD CAP 2 — a larger value is clamped and the clamp is announced, because more parallel writers is more chances for the outline to drift and the compile is what has to reconcile them. Each agent owns exactly ONE file under sections/, so no two ever share one." },
+  { key: "doc_write_mode", def: "ask", tier: "common", answers: [{ family: "doc", prio: "P2", mode: "replace" }], lanes: ["orc-doc"], validate: vEnum("ask", "partial", "all"), options: ["ask", "partial", "all"], desc: "How much of a /orc-doc document is bought at once. `partial` writes ONE wave, then stops so you can read those section files and redirect before the rest is paid for — the single biggest saving in the lane. `all` writes every wave. `ask` (default) makes it a question asked once per run and stored, so the choice is yours and never the model's to remember." },
+  { key: "doc_language", def: "en", tier: "common", answers: [{ family: "doc", prio: "P2", mode: "replace" }], lanes: ["orc-doc"], validate: vText, options: ["en", "id", "es", "de", "fr", "ja"], desc: "Default output language for /orc-doc, always confirmable per run. A non-English document is held to the SAME plain-language bar in that language — short sentences, common words, acronyms expanded; technical terms with no natural translation stay in English and are glossed once." },
+  { key: "doc_local_refs", def: "error", tier: "common", answers: [{ family: "doc", prio: "P2", mode: "replace" }], lanes: ["orc-doc"], validate: vEnum("off", "warn", "error"), options: ["off", "warn", "error"], desc: "How /orc-doc's free lint treats a LOCAL-ONLY reference in the deliverable — a `src/foo.ts:42` anchor, an absolute path, a `./relative` opener, localhost, a file:// URL, a relative .md link. The reader of a PRD or a TSD usually has no repository, so a path is a dead end for them. A genuinely internal runbook legitimately names local paths, which is why there are three values and not a rule with no switch; fenced code is always exempt, because a code example that SHOWS a path is content." },
+  { key: "doc_dir", def: DOC_DIR_DEFAULT, tier: "advanced", answers: [{ family: "paths", prio: "P2", mode: "replace" }], lanes: ["orc-doc"], validate: vPath, desc: "Where /orc-doc folders live. Project root, not .claude/ — a document is a deliverable a human opens, and the same call /orc-quick, /orc-brainstorm and poly-repo-implementation/ already made." },
+  { key: "wiki_scan_tier", def: "ladder", tier: "advanced", answers: [{ family: "wiki", prio: "P2", mode: "replace" }], lanes: ["orc-wiki"], validate: vEnum("ladder", "always_deep"), desc: "Wiki scan tier: ladder picks light/deep per delta (first scan, STRUCTURAL, wide delta or a new exported symbol → deep; otherwise light), always_deep restores pre-v0.46.0 behaviour. The resolved tier is always printed — a cheaper model is never a quiet substitution." },
+  { key: "wiki_tier_deep_files", def: 3, tier: "advanced", answers: [{ family: "wiki", prio: "P2", mode: "replace" }], lanes: ["orc-wiki"], validate: vInt(1), desc: "Covered files touched at or above this count send the refresh to the DEEP scanner." },
+  { key: "wiki_refresh_budget", def: 0, tier: "advanced", answers: [{ family: "wiki", prio: "P2", mode: "replace" }], lanes: ["orc-wiki"], validate: vInt(0), desc: "Max scan-tasks per refresh run; 0 = no cap. A capped refresh is a PLANNED stop, not an interrupt: sync has already run, so the wiki is registered and consistent, and the remaining docs are AGING, not broken. Separate from the fixed pause-every-5 rule — do not merge them." },
+  { key: "wiki_retire_after_runs", def: 0, tier: "advanced", answers: [{ family: "wiki", prio: "P2", mode: "replace" }], lanes: ["orc-wiki"], validate: vInt(0), desc: "Offer to retire a doc no run put into a slice in this many runs (0 = never offer). Retiring MOVES it to wiki/retired/ and drops it from INDEX.md — reversible, never a delete." },
   // --- Fable 5 role override (HARD-GATED: nothing changes unless enabled: true) ---
-  { key: "fable5_enabled", def: false, tier: "fable5", validate: vEnum("true", "false"), options: ["true", "false"], desc: "Master gate — route selected roles to Fable 5 agents. Nothing changes unless true." },
-  { key: "fable5_effort", def: "medium", tier: "fable5", validate: vEnum("medium", "high", "xhigh", "max"), options: ["medium", "high", "xhigh", "max"], desc: "Effort for the Fable 5 role agents (the CLI rewrites their effort: frontmatter on set)." },
-  { key: "fable5_roles", def: "[]", tier: "fable5", validate: vSubset(FABLE5_ROLES), options: FABLE5_ROLES, desc: "Which roles use Fable 5 (CSV): analyze, plan, advisor, judge, review. Empty = no effect." },
+  { key: "fable5_enabled", def: false, tier: "fable5", answers: [{ family: "fixed-role-model", prio: "P2", mode: "replace" }], lanes: ["orc", "orc-quick"], validate: vEnum("true", "false"), options: ["true", "false"], desc: "Master gate — route selected roles to Fable 5 agents. Nothing changes unless true." },
+  { key: "fable5_effort", def: "medium", tier: "fable5", answers: [{ family: "fable5", prio: "P2", mode: "replace" }], gated_by: "fable5_enabled", lanes: ["orc"], validate: vEnum("medium", "high", "xhigh", "max"), options: ["medium", "high", "xhigh", "max"], desc: "Effort for the Fable 5 role agents (the CLI rewrites their effort: frontmatter on set)." },
+  { key: "fable5_roles", def: "[]", tier: "fable5", answers: [{ family: "fable5", prio: "P2", mode: "replace" }], gated_by: "fable5_enabled", lanes: ["orc", "orc-quick"], validate: vSubset(FABLE5_ROLES), options: FABLE5_ROLES, desc: "Which roles use Fable 5 (CSV): analyze, plan, advisor, judge, review. Empty = no effect." },
   // NOTE: behavior-trace logging is PERMANENT (always on) and intentionally NOT
   // a config key — the orc-trace.js hook always writes a persistent trace per
   // run under log_dir. Only the folder location (log_dir) is configurable.
-  { key: "orc_wiki_pattern_findings", def: false, tier: "advanced", validate: vEnum("true", "false"), desc: "orc-wiki also codifies ALL detected languages during its scan (pre-warms the pattern cache)." },
-  { key: "crosslink_fresh_days", def: 10, tier: "advanced", validate: vInt(1), desc: "Cross-repo crosslink snapshot: days since sync ≤ this → FRESH hint (Signal B; advisory)." },
-  { key: "crosslink_aging_days", def: 15, tier: "advanced", validate: vInt(1), desc: "Cross-repo crosslink snapshot: days since sync ≤ this → AGING; beyond → STALE (advisory, never blocks)." },
-  { key: "wiki_delta_full_threshold", def: 30, tier: "advanced", validate: vRange(1, 100), desc: "Wiki delta refresh: TOUCHED docs above this percent of registered docs → `orc wiki impact` recommends a FULL refresh (user decides)." },
-  { key: "wiki_fresh_max", def: 10, tier: "advanced", validate: vInt(1), desc: "Wiki freshness: commit distance < this → FRESH (computed on read, never stored)." },
-  { key: "wiki_aging_max", def: 30, tier: "advanced", validate: vInt(1), desc: "Wiki freshness: commit distance <= this → AGING; beyond → STALE." },
-  { key: "wiki_refresh_ask_tasks", def: 3, tier: "advanced", validate: vInt(1), desc: "Post-ship wiki refresh ask fires when the run's task count >= this." },
-  { key: "wiki_refresh_ask_files", def: 10, tier: "advanced", validate: vInt(1), desc: "…or when the run's touched-file count exceeds this (full/ultra lanes)." },
-  { key: "retro_repo", def: "azure-id/orc", tier: "advanced", validate: vRepo, desc: "GitHub owner/repo that receives /orc-retro reports (PR preferred, issue fallback)." },
-  { key: "log_dir", def: ".claude/orc/logs", tier: "advanced", validate: vPath, desc: "Persistent trace folder (never auto-deleted)." },
-  { key: "run_dir", def: RUN_DIR_DEFAULT, tier: "advanced", validate: vPath, desc: "Run artifact root (checkpoints/state-of-play) — outside the installer's blast radius." },
-  { key: "analyzer_dir", def: ".claude/skills/orc/analyzer", tier: "advanced", validate: vPath, desc: "Internal analyst artifact dir." },
-  { key: "planner_dir", def: ".claude/skills/orc/planner", tier: "advanced", validate: vPath, desc: "Internal planner artifact dir." },
-  { key: "report_out_dir", def: "analyst_report", tier: "advanced", validate: vPath, desc: "Project-root copy target on report-only." },
-  { key: "orchestrator_model", def: "claude-opus-4-8", tier: "advanced", validate: vModel, desc: "Main-session model (below Opus breaks the tier ladder)." },
+  { key: "orc_wiki_pattern_findings", def: false, tier: "advanced", answers: [{ family: "patterns", prio: "P2", mode: "replace" }], lanes: ["orc", "orc-pattern", "orc-wiki"], validate: vEnum("true", "false"), desc: "orc-wiki also codifies ALL detected languages during its scan (pre-warms the pattern cache)." },
+  { key: "crosslink_fresh_days", def: 10, tier: "advanced", answers: [{ family: "crosslink", prio: "P2", mode: "replace" }], lanes: ["orc", "orc-wiki"], validate: vInt(1), desc: "Cross-repo crosslink snapshot: days since sync ≤ this → FRESH hint (Signal B; advisory)." },
+  { key: "crosslink_aging_days", def: 15, tier: "advanced", answers: [{ family: "crosslink", prio: "P2", mode: "replace" }], lanes: ["orc", "orc-wiki"], validate: vInt(1), desc: "Cross-repo crosslink snapshot: days since sync ≤ this → AGING; beyond → STALE (advisory, never blocks)." },
+  { key: "wiki_delta_full_threshold", def: 30, tier: "advanced", answers: [{ family: "wiki", prio: "P2", mode: "replace" }], lanes: ["orc", "orc-wiki"], validate: vRange(1, 100), desc: "Wiki delta refresh: TOUCHED docs above this percent of registered docs → `orc wiki impact` recommends a FULL refresh (user decides)." },
+  { key: "wiki_fresh_max", def: 10, tier: "advanced", answers: [{ family: "wiki", prio: "P2", mode: "replace" }], lanes: ["orc", "orc-fast", "orc-learn", "orc-wiki"], validate: vInt(1), desc: "Wiki freshness: commit distance < this → FRESH (computed on read, never stored)." },
+  { key: "wiki_aging_max", def: 30, tier: "advanced", answers: [{ family: "wiki", prio: "P2", mode: "replace" }], lanes: ["orc", "orc-fast", "orc-learn", "orc-wiki"], validate: vInt(1), desc: "Wiki freshness: commit distance <= this → AGING; beyond → STALE." },
+  { key: "wiki_refresh_ask_tasks", def: 3, tier: "advanced", answers: [{ family: "wiki", prio: "P2", mode: "replace" }], lanes: ["orc", "orc-wiki"], validate: vInt(1), desc: "Post-ship wiki refresh ask fires when the run's task count >= this." },
+  { key: "wiki_refresh_ask_files", def: 10, tier: "advanced", answers: [{ family: "wiki", prio: "P2", mode: "replace" }], lanes: ["orc", "orc-wiki"], validate: vInt(1), desc: "…or when the run's touched-file count exceeds this (full/ultra lanes)." },
+  { key: "retro_repo", def: "azure-id/orc", tier: "advanced", answers: [{ family: "retro", prio: "P2", mode: "replace" }], lanes: ["orc", "orc-retro"], validate: vRepo, desc: "GitHub owner/repo that receives /orc-retro reports (PR preferred, issue fallback)." },
+  { key: "log_dir", def: ".claude/orc/logs", tier: "advanced", answers: [{ family: "paths", prio: "P2", mode: "replace" }], lanes: ["context-combiner", "orc", "orc-aftermath", "orc-analyze", "orc-analyze-mini", "orc-boundary", "orc-brainstorm", "orc-budget", "orc-challenge", "orc-claude", "orc-diy", "orc-doc", "orc-explain", "orc-export", "orc-fast", "orc-grill", "orc-handoff", "orc-learn", "orc-mini", "orc-pact", "orc-pattern", "orc-poly", "orc-pr-driver", "orc-pr-setup", "orc-quick", "orc-retro", "orc-route", "orc-verify", "orc-wiki"], validate: vPath, desc: "Persistent trace folder (never auto-deleted)." },
+  { key: "run_dir", def: RUN_DIR_DEFAULT, tier: "advanced", answers: [{ family: "paths", prio: "P2", mode: "replace" }], lanes: ["orc", "orc-challenge", "orc-doc", "orc-pact"], validate: vPath, desc: "Run artifact root (checkpoints/state-of-play) — outside the installer's blast radius." },
+  { key: "analyzer_dir", def: ".claude/skills/orc/analyzer", tier: "advanced", answers: [{ family: "paths", prio: "P2", mode: "replace" }], lanes: ["orc", "orc-analyze"], validate: vPath, desc: "Internal analyst artifact dir." },
+  { key: "planner_dir", def: ".claude/skills/orc/planner", tier: "advanced", answers: [{ family: "paths", prio: "P2", mode: "replace" }], lanes: ["orc"], validate: vPath, desc: "Internal planner artifact dir." },
+  { key: "report_out_dir", def: "analyst_report", tier: "advanced", answers: [{ family: "paths", prio: "P2", mode: "replace" }], lanes: ["context-combiner", "orc", "orc-analyze"], validate: vPath, desc: "Project-root copy target on report-only." },
+  { key: "orchestrator_model", def: "claude-opus-4-8", tier: "advanced", answers: [{ family: "session", prio: "P2", mode: "replace" }], lanes: ["orc"], validate: vModel, desc: "Main-session model (below Opus breaks the tier ladder)." },
 ];
 const metaFor = (key) => CONFIG_META.find((m) => m.key === key);
 const overridePath = (claudeDir) => path.join(claudeDir, "orc.config.yaml");
@@ -1368,6 +1488,40 @@ function configList(claudeDir) {
 // this is the same rule expressed as data, so a non-terminal caller can render
 // the shadow instead of parsing the sentence. ONE rule today: opus5_only
 // outranks the whole fable5_* block and a hand-written rubric_bands_override.
+// ── the family lookups shadowReason() derives from (v1.0.0 W2) ─────────────
+//
+// Before W2 this function branched on key NAMES: `key.startsWith("fable5_")`,
+// `key === "rubric_bands_override"`. That worked and said nothing — the reason
+// those keys are shadowed is that they sit BELOW a rank that resolved, and a
+// name test cannot express that. These three helpers are the whole derivation;
+// the sentences themselves are unchanged and W1's goldens pin them byte for
+// byte, because this is a refactor and a refactor is not allowed to be a
+// re-word.
+
+// Every { family, rank, row } this key occupies, plus the rows above it.
+function familyRanksOf(key) {
+  const out = [];
+  for (const [family, f] of Object.entries(CONFIG_FAMILIES)) {
+    if (!f.ranks) continue;
+    const at = f.ranks.findIndex((r) => r.key === key);
+    if (at === -1) continue;
+    out.push({ family, f, row: f.ranks[at], above: f.ranks.slice(0, at) });
+  }
+  return out;
+}
+
+// The key whose gate makes this one inert, and the row that gate occupies.
+// `fable5_effort` is not in `fixed-role-model` at all — it is gated by
+// `fable5_enabled`, which is, and it inherits that row's sentence. That
+// inheritance is why all three fable5_* keys report identically without any of
+// them being named anywhere in this function.
+function gateRowOf(key) {
+  const meta = metaFor(key);
+  if (!meta || !meta.gated_by) return null;
+  const rows = familyRanksOf(meta.gated_by);
+  return rows.length ? { gate: meta.gated_by, ...rows[0] } : null;
+}
+
 function shadowReason(key, map, claudeDir) {
   // v0.50.0 — the shadow now runs BOTH WAYS, because Extra is an OVERLAY on
   // top of whichever Claude table resolves, not a replacement for it. A score
@@ -1375,7 +1529,22 @@ function shadowReason(key, map, claudeDir) {
   // default table alike; a score no row covers falls straight through. So
   // neither key is wholly inert and neither is wholly live, and saying either
   // would be a lie — the honest report is WHICH RANGES were taken.
-  if (isTrue(map.extra_enabled) && claudeDir && (key === "opus5_only" || key === "rubric_bands_override")) {
+  //
+  // W2 derives WHICH KEYS can be reported this way instead of naming two of
+  // them: a key is a candidate when it sits below an `overlay` rank in
+  // `executor-band` — the family whose ranks are score RANGES, which is what
+  // this sentence reports. The slot clause is an addendum for a key that ALSO
+  // sits below the overlay rank in `fixed-role-model`, because only a key that
+  // loses POSITIONS has positions to name.
+  const bandsBelowOverlay = CONFIG_FAMILIES["executor-band"].ranks
+    .slice(CONFIG_FAMILIES["executor-band"].ranks.findIndex((r) => r.mode === "overlay") + 1)
+    .map((r) => r.key)
+    .filter(Boolean);
+  const slotsBelowOverlay = CONFIG_FAMILIES["fixed-role-model"].ranks
+    .slice(CONFIG_FAMILIES["fixed-role-model"].ranks.findIndex((r) => r.mode === "overlay") + 1)
+    .map((r) => r.key)
+    .filter(Boolean);
+  if (isTrue(map.extra_enabled) && claudeDir && bandsBelowOverlay.includes(key)) {
     let taken = [];
     let slots = [];
     try {
@@ -1387,20 +1556,32 @@ function shadowReason(key, map, claudeDir) {
       // printed rather than flattened into one word.
       slots = l ? l.slots.map((r) => r.slot) : [];
     } catch (_) {}
-    if (taken.length || (slots.length && key === "opus5_only")) {
+    const alsoLosesSlots = slotsBelowOverlay.includes(key);
+    if (taken.length || (slots.length && alsoLosesSlots)) {
       const parts = [];
       if (taken.length)
         parts.push(`${taken.join(", ")} ${taken.length === 1 ? "is" : "are"} routed to a non-Claude worker`);
-      if (slots.length && key === "opus5_only")
+      if (slots.length && alsoLosesSlots)
         parts.push(`the ${slots.join(", ")} position${slots.length === 1 ? " is" : "s are"} held by one too (not consulted here)`);
       return `partly shadowed by extra_enabled — ${parts.join("; ")}; every other score and position still resolves here`;
     }
   }
-  if (String(map.opus5_only) !== "true") return null;
-  if (key.startsWith("fable5_"))
-    return "shadowed by opus5_only — every role dispatches its Opus 5 agent, so the Fable 5 override is inert";
-  if (key === "rubric_bands_override")
-    return "shadowed by opus5_only — executors use the fixed 3-band Opus 5 ladder";
+  // The `replace` half, derived. For every family this key ranks in, look at
+  // the rows ABOVE it: if one of them is a `replace` rank whose key is on, this
+  // key is not read at all, and the row's own `shadow_note` says why. A key
+  // that ranks nowhere asks its GATE instead — that is the only indirection,
+  // and it is what makes `fable5_effort` report the same sentence as
+  // `fable5_enabled` without either being named here.
+  const own = familyRanksOf(key);
+  const gate = own.length ? null : gateRowOf(key);
+  for (const { row, above } of own.length ? own : gate ? [gate] : []) {
+    if (!row.shadow_note) continue;
+    for (const up of above) {
+      if (up.mode !== "replace" || !up.key) continue;
+      if (String(map[up.key]) !== "true") continue;
+      return row.shadow_note.replace("{by}", up.key);
+    }
+  }
   // /orc-quick asks WHICH AGENT before every dispatch, which is the lane's
   // entire premise — so a config that silently answered that question would
   // break it. Extra is INERT there, exactly like opus5_only and fable5_*, and
@@ -1502,6 +1683,21 @@ function configListJson(claudeDir) {
     return {
       key: m.key,
       tier: m.tier,
+      // v1.0.0 W2 — the resolution axis, beside the UI axis. `answers` is the
+      // truth: a key may answer more than one family question. `family` and
+      // `prio` are the FIRST answer, for a renderer that shows one chip — and a
+      // consumer that needs to be right reads `answers`, never these two.
+      answers: m.answers,
+      family: m.answers[0].family,
+      prio: m.answers[0].prio,
+      // Which lanes read this key. SEEDED MECHANICALLY in W2 and corrected lane
+      // by lane in W8/W9 — an empty array today means "no lane names it in its
+      // own prose", which for the extra_* operating keys means `_shared/` names
+      // them instead. It does not mean nothing reads it.
+      lanes: m.lanes,
+      // The master gate that makes this key inert. A gate does not win a
+      // precedence contest; it removes its dependants from the conversation.
+      gated_by: m.gated_by || null,
       value: has(m.key) ? map[m.key] : m.def,
       default: m.def,
       is_overridden: has(m.key),
@@ -1544,6 +1740,10 @@ function configListJson(claudeDir) {
     hand_edited: extra,
     legacy_keys: legacy,
     score_table: scoreTableJson(map, claudeDir),
+    // v1.0.0 W2 — the family table itself, so a renderer never re-derives a
+    // precedence it can be handed. `--json is not a summary`: the ranks, the
+    // terminal rows and the questions are all here, in resolution order.
+    families: CONFIG_FAMILIES,
     // Permanently on and deliberately not a key — say so, or a reader hunts for
     // the switch (only the folder is configurable).
     behavior_trace: { always_on: true, configurable_key: "log_dir" },

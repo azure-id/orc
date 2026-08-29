@@ -119,6 +119,10 @@ test("GOLDEN: the top-level shape of config list --json", () => {
   const { root } = freshInstall();
   try {
     const j = json(cli(["config", "list", "--json", "--dir", root]));
+    // CHANGED IN W2, deliberately and in the commit that changed it: `families`
+    // top-level, and `answers`/`family`/`prio`/`lanes`/`gated_by` per key. The
+    // rest of this file — the shadow sentences, the 73 keys, the tables — is
+    // unchanged, which is exactly the split a shape golden exists to show.
     assert.deepStrictEqual(Object.keys(j), [
       "config_path",
       "exists",
@@ -126,11 +130,17 @@ test("GOLDEN: the top-level shape of config list --json", () => {
       "hand_edited",
       "legacy_keys",
       "score_table",
+      "families",
       "behavior_trace",
     ]);
     assert.deepStrictEqual(Object.keys(j.keys[0]), [
       "key",
       "tier",
+      "answers",
+      "family",
+      "prio",
+      "lanes",
+      "gated_by",
       "value",
       "default",
       "is_overridden",

@@ -3264,6 +3264,124 @@ for (const b of BUDGETS) {
   }
 }
 
+// ── Config data model (C.4) ────────────────────────────────────────────────
+// v1.0.0 W2. Every CONFIG_META key declares WHICH QUESTION it answers, at which
+// rank, in which mode. This lint is what stops that from becoming decoration.
+//
+// It replaces nothing — C.3 above still asserts every key is referenced by the
+// payload. It adds the half C.3 cannot see: that the ranks are a real ladder.
+// A contested family with two P0 keys, or a key claiming a rank the family's
+// own `ranks[]` gives to somebody else, is a precedence that resolves
+// differently depending on which table you read.
+{
+  const cliText = fs.readFileSync(path.join(REPO_ROOT, "bin", "cli.js"), "utf8");
+  const errs = [];
+
+  // CONFIG_FAMILIES is pure data, so it is evaluated rather than regexed.
+  // CONFIG_META is not (`validate: vInt(1)`), so its three new fields are read
+  // per entry — the same technique C.3 uses on the same table.
+  let FAMILIES = null;
+  const famBlock = cliText.match(/const CONFIG_FAMILIES = \{[\s\S]*?\n\};/);
+  try {
+    FAMILIES = new Function("return " + famBlock[0].replace(/^const CONFIG_FAMILIES = /, "").replace(/;$/, ""))();
+  } catch (e) {
+    errs.push("could not evaluate CONFIG_FAMILIES from bin/cli.js: " + e.message);
+  }
+
+  const metaBlock = (cliText.match(/const CONFIG_META = \[([\s\S]*?)\n\];/) || [])[1] || "";
+  const entries = [];
+  for (const line of metaBlock.split(/\r?\n/)) {
+    const key = (line.match(/\{ key: "([a-z0-9_]+)", def: /) || [])[1];
+    if (!key) continue;
+    const answersSrc = (line.match(/ answers: (\[[^\]]*\}\])/) || [])[1];
+    const gatedBy = (line.match(/ gated_by: "([a-z0-9_]+)"/) || [])[1] || null;
+    let answers = null;
+    try {
+      answers = answersSrc ? new Function("return " + answersSrc)() : null;
+    } catch (_) {}
+    entries.push({ key, answers, gated_by: gatedBy, has_lanes: / lanes: \[/.test(line) });
+  }
+  const metaKeys = new Set(entries.map((e) => e.key));
+
+  const PRIOS = ["P0", "P1", "P2", "P3"];
+  const MODES = ["replace", "overlay", "gate"];
+
+  if (!entries.length) errs.push("could not parse CONFIG_META from bin/cli.js");
+  if (FAMILIES) {
+    for (const e of entries) {
+      if (!e.answers || !e.answers.length) {
+        errs.push(`${e.key}: no answers[] — every key must declare the question it answers`);
+        continue;
+      }
+      if (!e.has_lanes) errs.push(`${e.key}: no lanes[] (an empty array is fine; a missing one is not)`);
+      for (const a of e.answers) {
+        if (!FAMILIES[a.family]) {
+          errs.push(`${e.key}: answers a family "${a.family}" that CONFIG_FAMILIES does not declare`);
+          continue;
+        }
+        if (!PRIOS.includes(a.prio)) errs.push(`${e.key}: prio "${a.prio}" is not one of ${PRIOS.join("/")}`);
+        if (!MODES.includes(a.mode)) errs.push(`${e.key}: mode "${a.mode}" is not one of ${MODES.join("/")}`);
+        const fam = FAMILIES[a.family];
+        if (fam.contested) {
+          // The family's ranks[] IS the registry. A key may not claim a rank
+          // the family gives to someone else, and may not claim one at all
+          // without appearing in it.
+          const row = (fam.ranks || []).find((r) => r.key === e.key);
+          if (!row) errs.push(`${e.key}: claims contested family "${a.family}" but is not in its ranks[]`);
+          else if (row.prio !== a.prio)
+            errs.push(`${e.key}: says ${a.prio} in "${a.family}", whose ranks[] says ${row.prio}`);
+          else if (row.mode !== a.mode)
+            errs.push(`${e.key}: says mode ${a.mode} in "${a.family}", whose ranks[] says ${row.mode}`);
+        } else if (a.prio !== "P2") {
+          // Rank distinctness is meaningless where nothing competes, so the
+          // neutral rank is asserted instead — a P0 in an uncontested family
+          // is somebody inventing a ladder that does not exist.
+          errs.push(`${e.key}: "${a.family}" is uncontested, so every key in it must be P2 (got ${a.prio})`);
+        }
+      }
+      if (e.gated_by && !metaKeys.has(e.gated_by))
+        errs.push(`${e.key}: gated_by "${e.gated_by}" is not a CONFIG_META key`);
+    }
+
+    const answered = new Set(entries.flatMap((e) => (e.answers || []).map((a) => a.family)));
+    for (const [name, fam] of Object.entries(FAMILIES)) {
+      if (!answered.has(name)) errs.push(`family "${name}" is declared but no key answers it`);
+      if (!fam.question) errs.push(`family "${name}" has no question — a family IS a question`);
+      if (!fam.contested) {
+        if (fam.ranks) errs.push(`family "${name}" is uncontested but declares ranks[]`);
+        continue;
+      }
+      const ranks = fam.ranks || [];
+      if (!ranks.length) {
+        errs.push(`contested family "${name}" declares no ranks[]`);
+        continue;
+      }
+      const prios = ranks.map((r) => r.prio);
+      if (new Set(prios).size !== prios.length)
+        errs.push(`contested family "${name}" has duplicate ranks: ${prios.join(", ")}`);
+      if (prios.filter((p) => p === "P0").length !== 1)
+        errs.push(`contested family "${name}" must have exactly one P0`);
+      // THE LOWEST RANK MUST BE TOTAL. Something has to answer when nothing
+      // above resolved, and a fall-through is a ROW, never a setting.
+      const last = ranks[ranks.length - 1];
+      if (last.key !== null || !last.terminal)
+        errs.push(`contested family "${name}" has no terminal row (key: null + terminal: "…") at its lowest rank`);
+      for (const r of ranks.slice(0, -1)) {
+        if (!r.key) errs.push(`contested family "${name}": only the lowest rank may have key: null`);
+        else if (!metaKeys.has(r.key) && !r.registry_less)
+          errs.push(`contested family "${name}": rank ${r.prio} names "${r.key}", which is not a CONFIG_META key and is not flagged registry_less`);
+        if (!MODES.includes(r.mode)) errs.push(`contested family "${name}": rank ${r.prio} has no valid mode`);
+      }
+    }
+  }
+
+  if (errs.length) {
+    failures++;
+    console.error("\n❌ config data model drift:");
+    for (const e of errs) console.error("   - " + e);
+  }
+}
+
 if (failures) {
   console.error(
     `\n❌ ORC contract lint FAILED — ${failures} contract(s) drifted.` +

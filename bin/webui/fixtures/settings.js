@@ -9,7 +9,10 @@
    test asserts this, so a new state cannot ship without one.
 
    Shapes MUST match what `bin/cli.js --json` really emits — a drifted
-   fixture is worse than no fixture. */
+   fixture is worse than no fixture. The v1.0.0 W2 fields (answers/family/prio/
+   lanes/gated_by per key, and the `families` table) were copied straight from
+   the live registry for that reason — a shadow you can design against has to
+   carry the RANK that causes it, not just the sentence. */
 
 const { PROJECT } = require("./shell.js");
 
@@ -17,34 +20,34 @@ const config = {
   config_path: PROJECT + "/.claude/orc.config.yaml",
   exists: true,
   keys: [
-    { key: "max_wave_tasks", tier: "common", value: 4, default: 3, is_overridden: true, is_shadowed: false, shadow_reason: null, desc: "Max parallel tasks per execution wave (higher = more parallelism, more collision risk).", options: [2, 3, 4, 5], control: { kind: "int", choices: null, min: 1, max: null } },
-    { key: "batch_pause_every", tier: "common", value: 2, default: 2, is_overridden: false, is_shadowed: false, shadow_reason: null, desc: "Waves between stop-and-continue pauses (1 = pause every wave).", options: [1, 2, 3, 4, 5], control: { kind: "int", choices: null, min: 1, max: null } },
-    { key: "rubric_bands", tier: "common", value: 5, default: 5, is_overridden: false, is_shadowed: false, shadow_reason: null, desc: "Scoring granularity (2-5 narrow preset, 6-8 wide preset).", options: [2, 3, 4, 5, 6, 7, 8], control: { kind: "range", choices: null, min: 2, max: 8 } },
-    { key: "pattern_findings", tier: "common", value: "on", default: "ask", is_overridden: true, is_shadowed: false, shadow_reason: null, desc: "Code-pattern gate on an FE/BE cache miss.", options: ["ask", "on", "off"], control: { kind: "enum", choices: ["ask", "on", "off"], min: null, max: null } },
-    { key: "generate_tests", tier: "common", value: false, default: false, is_overridden: false, is_shadowed: false, shadow_reason: null, desc: "Opt-in Phase 6.5: author test cases before ship.", options: ["true", "false"], control: { kind: "enum", choices: ["true", "false"], min: null, max: null } },
+    { key: "max_wave_tasks", tier: "common", answers: [{"family":"waves","prio":"P2","mode":"replace"}], family: "waves", prio: "P2", lanes: ["orc","orc-diy"], gated_by: null, value: 4, default: 3, is_overridden: true, is_shadowed: false, shadow_reason: null, desc: "Max parallel tasks per execution wave (higher = more parallelism, more collision risk).", options: [2, 3, 4, 5], control: { kind: "int", choices: null, min: 1, max: null } },
+    { key: "batch_pause_every", tier: "common", answers: [{"family":"waves","prio":"P2","mode":"replace"}], family: "waves", prio: "P2", lanes: ["orc","orc-diy"], gated_by: null, value: 2, default: 2, is_overridden: false, is_shadowed: false, shadow_reason: null, desc: "Waves between stop-and-continue pauses (1 = pause every wave).", options: [1, 2, 3, 4, 5], control: { kind: "int", choices: null, min: 1, max: null } },
+    { key: "rubric_bands", tier: "common", answers: [{"family":"scoring","prio":"P2","mode":"replace"}], family: "scoring", prio: "P2", lanes: ["orc","orc-diy"], gated_by: null, value: 5, default: 5, is_overridden: false, is_shadowed: false, shadow_reason: null, desc: "Scoring granularity (2-5 narrow preset, 6-8 wide preset).", options: [2, 3, 4, 5, 6, 7, 8], control: { kind: "range", choices: null, min: 2, max: 8 } },
+    { key: "pattern_findings", tier: "common", answers: [{"family":"patterns","prio":"P2","mode":"replace"}], family: "patterns", prio: "P2", lanes: ["orc","orc-pattern","orc-wiki"], gated_by: null, value: "on", default: "ask", is_overridden: true, is_shadowed: false, shadow_reason: null, desc: "Code-pattern gate on an FE/BE cache miss.", options: ["ask", "on", "off"], control: { kind: "enum", choices: ["ask", "on", "off"], min: null, max: null } },
+    { key: "generate_tests", tier: "common", answers: [{"family":"testing","prio":"P2","mode":"replace"}], family: "testing", prio: "P2", lanes: ["orc","orc-mini"], gated_by: null, value: false, default: false, is_overridden: false, is_shadowed: false, shadow_reason: null, desc: "Opt-in Phase 6.5: author test cases before ship.", options: ["true", "false"], control: { kind: "enum", choices: ["true", "false"], min: null, max: null } },
     // ON, so the whole fable5_* block below renders shadowed — the animation
     // §6.2 calls the single best argument for the project.
-    { key: "opus5_only", tier: "common", value: "true", default: false, is_overridden: true, is_shadowed: false, shadow_reason: null, desc: "EVERY dispatched role uses ONE model — Opus 5 — with EFFORT as the cost dial.", options: ["true", "false"], control: { kind: "enum", choices: ["true", "false"], min: null, max: null } },
-    { key: "fable5_enabled", tier: "fable5", value: "true", default: false, is_overridden: true, is_shadowed: true, shadow_reason: "shadowed by opus5_only — every role dispatches its Opus 5 agent, so the Fable 5 override is inert", desc: "Master gate — route selected roles to Fable 5 agents.", options: ["true", "false"], control: { kind: "enum", choices: ["true", "false"], min: null, max: null } },
-    { key: "fable5_effort", tier: "fable5", value: "medium", default: "medium", is_overridden: false, is_shadowed: true, shadow_reason: "shadowed by opus5_only — every role dispatches its Opus 5 agent, so the Fable 5 override is inert", desc: "Effort for the Fable 5 role agents.", options: ["medium", "high", "xhigh", "max"], control: { kind: "enum", choices: ["medium", "high", "xhigh", "max"], min: null, max: null } },
-    { key: "fable5_roles", tier: "fable5", value: "[analyze, plan]", default: "[]", is_overridden: true, is_shadowed: true, shadow_reason: "shadowed by opus5_only — every role dispatches its Opus 5 agent, so the Fable 5 override is inert", desc: "Which roles use Fable 5 (CSV).", options: ["analyze", "plan", "advisor", "judge", "review"], control: { kind: "subset", choices: ["analyze", "plan", "advisor", "judge", "review"], min: null, max: null } },
-    { key: "wiki_fresh_max", tier: "advanced", value: 10, default: 10, is_overridden: false, is_shadowed: false, shadow_reason: null, desc: "Wiki freshness: commit distance < this → FRESH.", options: null, control: { kind: "int", choices: null, min: 1, max: null } },
-    { key: "wiki_aging_max", tier: "advanced", value: 30, default: 30, is_overridden: false, is_shadowed: false, shadow_reason: null, desc: "Wiki freshness: commit distance <= this → AGING; beyond → STALE.", options: null, control: { kind: "int", choices: null, min: 1, max: null } },
-    { key: "log_dir", tier: "advanced", value: ".claude/orc/logs", default: ".claude/orc/logs", is_overridden: false, is_shadowed: false, shadow_reason: null, desc: "Persistent trace folder (never auto-deleted).", options: null, control: { kind: "path", choices: null, min: null, max: null } },
-    { key: "retro_repo", tier: "advanced", value: "azure-id/orc", default: "azure-id/orc", is_overridden: false, is_shadowed: false, shadow_reason: null, desc: "GitHub owner/repo that receives /orc-retro reports.", options: null, control: { kind: "repo", choices: null, min: null, max: null } },
+    { key: "opus5_only", tier: "common", answers: [{"family":"executor-band","prio":"P1","mode":"replace"},{"family":"fixed-role-model","prio":"P1","mode":"replace"}], family: "executor-band", prio: "P1", lanes: ["orc","orc-analyze","orc-challenge","orc-claude","orc-diy","orc-doc","orc-fast","orc-mini","orc-pattern","orc-quick","orc-retro","orc-wiki"], gated_by: null, value: "true", default: false, is_overridden: true, is_shadowed: false, shadow_reason: null, desc: "EVERY dispatched role uses ONE model — Opus 5 — with EFFORT as the cost dial.", options: ["true", "false"], control: { kind: "enum", choices: ["true", "false"], min: null, max: null } },
+    { key: "fable5_enabled", tier: "fable5", answers: [{"family":"fixed-role-model","prio":"P2","mode":"replace"}], family: "fixed-role-model", prio: "P2", lanes: ["orc","orc-quick"], gated_by: null, value: "true", default: false, is_overridden: true, is_shadowed: true, shadow_reason: "shadowed by opus5_only — every role dispatches its Opus 5 agent, so the Fable 5 override is inert", desc: "Master gate — route selected roles to Fable 5 agents.", options: ["true", "false"], control: { kind: "enum", choices: ["true", "false"], min: null, max: null } },
+    { key: "fable5_effort", tier: "fable5", answers: [{"family":"fable5","prio":"P2","mode":"replace"}], family: "fable5", prio: "P2", lanes: ["orc"], gated_by: "fable5_enabled", value: "medium", default: "medium", is_overridden: false, is_shadowed: true, shadow_reason: "shadowed by opus5_only — every role dispatches its Opus 5 agent, so the Fable 5 override is inert", desc: "Effort for the Fable 5 role agents.", options: ["medium", "high", "xhigh", "max"], control: { kind: "enum", choices: ["medium", "high", "xhigh", "max"], min: null, max: null } },
+    { key: "fable5_roles", tier: "fable5", answers: [{"family":"fable5","prio":"P2","mode":"replace"}], family: "fable5", prio: "P2", lanes: ["orc","orc-quick"], gated_by: "fable5_enabled", value: "[analyze, plan]", default: "[]", is_overridden: true, is_shadowed: true, shadow_reason: "shadowed by opus5_only — every role dispatches its Opus 5 agent, so the Fable 5 override is inert", desc: "Which roles use Fable 5 (CSV).", options: ["analyze", "plan", "advisor", "judge", "review"], control: { kind: "subset", choices: ["analyze", "plan", "advisor", "judge", "review"], min: null, max: null } },
+    { key: "wiki_fresh_max", tier: "advanced", answers: [{"family":"wiki","prio":"P2","mode":"replace"}], family: "wiki", prio: "P2", lanes: ["orc","orc-fast","orc-learn","orc-wiki"], gated_by: null, value: 10, default: 10, is_overridden: false, is_shadowed: false, shadow_reason: null, desc: "Wiki freshness: commit distance < this → FRESH.", options: null, control: { kind: "int", choices: null, min: 1, max: null } },
+    { key: "wiki_aging_max", tier: "advanced", answers: [{"family":"wiki","prio":"P2","mode":"replace"}], family: "wiki", prio: "P2", lanes: ["orc","orc-fast","orc-learn","orc-wiki"], gated_by: null, value: 30, default: 30, is_overridden: false, is_shadowed: false, shadow_reason: null, desc: "Wiki freshness: commit distance <= this → AGING; beyond → STALE.", options: null, control: { kind: "int", choices: null, min: 1, max: null } },
+    { key: "log_dir", tier: "advanced", answers: [{"family":"paths","prio":"P2","mode":"replace"}], family: "paths", prio: "P2", lanes: ["context-combiner","orc","orc-aftermath","orc-analyze","orc-analyze-mini","orc-boundary","orc-brainstorm","orc-budget","orc-challenge","orc-claude","orc-diy","orc-doc","orc-explain","orc-export","orc-fast","orc-grill","orc-handoff","orc-learn","orc-mini","orc-pact","orc-pattern","orc-poly","orc-pr-driver","orc-pr-setup","orc-quick","orc-retro","orc-route","orc-verify","orc-wiki"], gated_by: null, value: ".claude/orc/logs", default: ".claude/orc/logs", is_overridden: false, is_shadowed: false, shadow_reason: null, desc: "Persistent trace folder (never auto-deleted).", options: null, control: { kind: "path", choices: null, min: null, max: null } },
+    { key: "retro_repo", tier: "advanced", answers: [{"family":"retro","prio":"P2","mode":"replace"}], family: "retro", prio: "P2", lanes: ["orc","orc-retro"], gated_by: null, value: "azure-id/orc", default: "azure-id/orc", is_overridden: false, is_shadowed: false, shadow_reason: null, desc: "GitHub owner/repo that receives /orc-retro reports.", options: null, control: { kind: "repo", choices: null, min: null, max: null } },
     // v0.50.0 — the nine `orc extra` keys, copied from the live registry so the
     // shapes cannot drift. `extra_enabled` is TRUE here on purpose: an ARMED
     // subsystem is the state that needs designing.
-    {"key": "extra_enabled", "tier": "common", "value": true, "default": false, "is_overridden": true, "is_shadowed": false, "shadow_reason": null, "desc": "Master gate for `orc extra` — dispatching a scored task to a non-Claude worker (DeepSeek, GLM, Kimi, a local Ollama, any OpenAI-/Anthropic-compatible endpoint you can name). NOTHING changes unless true, the fable5_enabled precedent. The orchestrator always stays Claude; what moves is who executes a slice. Every run that will cross the boundary PRINTS it at Phase 1 — routing work off Claude silently is the failure mode this whole subsystem is shaped around.", "options": ["true", "false"], "control": {"kind": "enum", "choices": ["true", "false"], "min": null, "max": null}},
-    {"key": "extra_roles", "tier": "common", "value": "[executor]", "default": "[executor]", "is_overridden": false, "is_shadowed": false, "shadow_reason": null, "desc": "Which dispatched roles may go foreign (CSV). Executor only by default, deliberately: an executor's output is checked by the smoke gate, the TDD gate, the reviewer and the worktree-delta check, all of which are engine-blind — while a REVIEWER you cannot trust is worse than no reviewer at all, because it launders a finding nobody made.", "options": ["executor", "reviewer", "verifier", "analyst", "planner", "scout", "test-author", "doc-writer", "doc-checker"], "control": {"kind": "subset", "choices": ["executor", "reviewer", "verifier", "analyst", "planner", "scout", "test-author", "doc-writer", "doc-checker"], "min": null, "max": null}},
-    {"key": "extra_risk_tasks", "tier": "common", "value": "off", "default": "off", "is_overridden": false, "is_shadowed": false, "shadow_reason": null, "desc": "Whether a task with a non-empty cited `risk[]` (auth, money, migration, security, concurrency, data-integrity) may leave Claude. OFF holds it on the Claude ladder whatever the route table says, and the preflight NAMES it as held back. ORC already refuses to send a refund-endpoint change to a cheap model; this keeps Extra from becoming the hole in that rule.", "options": ["off", "on"], "control": {"kind": "enum", "choices": ["off", "on"], "min": null, "max": null}},
-    {"key": "extra_on_failure", "tier": "common", "value": "fallback", "default": "fallback", "is_overridden": false, "is_shadowed": false, "shadow_reason": null, "desc": "What an unreachable endpoint, a 401, a 429 past backoff, a timeout or a malformed return does. `fallback` re-dispatches the task to the Claude band it would have had, ANNOUNCED, and the run continues. `stop` is for people who would rather stop than silently start paying Anthropic rates. A failed foreign dispatch is never a dead run either way.", "options": ["fallback", "stop"], "control": {"kind": "enum", "choices": ["fallback", "stop"], "min": null, "max": null}},
-    {"key": "extra_max_concurrent", "tier": "common", "value": 1, "default": 1, "is_overridden": false, "is_shadowed": false, "shadow_reason": null, "desc": "Foreign dispatches in flight at once. Per-provider rate limits are undocumented in aggregate, so 1 is the honest default — a wave of 3 that 429s costs more in repairs than the parallelism saved.", "options": [1, 2, 3], "control": {"kind": "int", "choices": null, "min": 1, "max": null}},
-    {"key": "extra_unlock", "tier": "common", "value": "per-run", "default": "per-run", "is_overridden": false, "is_shadowed": false, "shadow_reason": null, "desc": "When a vault-stored key asks for its passphrase. `per-run` asks ONCE at the Phase-1 stop the lane already has, so an unattended wave can actually run. `per-dispatch` prompts every time and REFUSES to start an unattended wave, naming why — it is interactive-only by design. Irrelevant when the credential source is an environment variable, which is the recommended one.", "options": ["per-run", "per-dispatch"], "control": {"kind": "enum", "choices": ["per-run", "per-dispatch"], "min": null, "max": null}},
-    {"key": "extra_vault_max_attempts", "tier": "advanced", "value": 10, "default": 10, "is_overridden": false, "is_shadowed": false, "shadow_reason": null, "desc": "Wrong passphrases before the encrypted key DELETES ITSELF. It is a key rather than a magic number so the count is inspectable and testable — NOT so it can be switched off; below 3 is refused. The counter stops someone at your keyboard; it does not stop someone who copies the vault file and tries offline, and scrypt's cost is the only defence there.", "options": null, "control": {"kind": "int", "choices": null, "min": 3, "max": null}},
-    {"key": "extra_timeout_s", "tier": "advanced", "value": 900, "default": 900, "is_overridden": false, "is_shadowed": false, "shadow_reason": null, "desc": "Per-dispatch wall clock for a foreign worker. The child's own timeouts are DERIVED from this rather than set independently, so three timeouts cannot disagree about which one fires first.", "options": null, "control": {"kind": "int", "choices": null, "min": 30, "max": null}},
-    {"key": "extra_verify_max_days", "tier": "advanced", "value": 7, "default": 7, "is_overridden": false, "is_shadowed": false, "shadow_reason": null, "desc": "Past this a profile's verification reads STALE and is re-pinged before wave 1. A STALE profile STILL ROUTES — a stale check is not a failed one (the /orc-pact UNCHECKABLE rule) — and freshness is computed on read, never stored.", "options": null, "control": {"kind": "int", "choices": null, "min": 1, "max": null}},
-    { key: "orchestrator_model", tier: "advanced", value: "claude-opus-4-8", tierNote: null, default: "claude-opus-4-8", is_overridden: false, is_shadowed: false, shadow_reason: null, desc: "Main-session model (below Opus breaks the tier ladder).", options: null, control: { kind: "enum", choices: ["claude-opus-5", "claude-opus-4-8", "claude-sonnet-5"], min: null, max: null } },
+    {"key": "extra_enabled", "tier": "common", answers: [{"family":"executor-band","prio":"P0","mode":"overlay"},{"family":"fixed-role-model","prio":"P0","mode":"overlay"}], family: "executor-band", prio: "P0", lanes: ["orc","orc-boundary","orc-challenge","orc-diy","orc-doc","orc-fast","orc-mini","orc-quick","orc-wiki"], gated_by: null, "value": true, "default": false, "is_overridden": true, "is_shadowed": false, "shadow_reason": null, "desc": "Master gate for `orc extra` — dispatching a scored task to a non-Claude worker (DeepSeek, GLM, Kimi, a local Ollama, any OpenAI-/Anthropic-compatible endpoint you can name). NOTHING changes unless true, the fable5_enabled precedent. The orchestrator always stays Claude; what moves is who executes a slice. Every run that will cross the boundary PRINTS it at Phase 1 — routing work off Claude silently is the failure mode this whole subsystem is shaped around.", "options": ["true", "false"], "control": {"kind": "enum", "choices": ["true", "false"], "min": null, "max": null}},
+    {"key": "extra_roles", "tier": "common", answers: [{"family":"extra","prio":"P2","mode":"replace"}], family: "extra", prio: "P2", lanes: ["orc-doc","orc-wiki"], gated_by: "extra_enabled", "value": "[executor]", "default": "[executor]", "is_overridden": false, "is_shadowed": false, "shadow_reason": null, "desc": "Which dispatched roles may go foreign (CSV). Executor only by default, deliberately: an executor's output is checked by the smoke gate, the TDD gate, the reviewer and the worktree-delta check, all of which are engine-blind — while a REVIEWER you cannot trust is worse than no reviewer at all, because it launders a finding nobody made.", "options": ["executor", "reviewer", "verifier", "analyst", "planner", "scout", "test-author", "doc-writer", "doc-checker"], "control": {"kind": "subset", "choices": ["executor", "reviewer", "verifier", "analyst", "planner", "scout", "test-author", "doc-writer", "doc-checker"], "min": null, "max": null}},
+    {"key": "extra_risk_tasks", "tier": "common", answers: [{"family":"extra","prio":"P2","mode":"replace"}], family: "extra", prio: "P2", lanes: ["orc","orc-diy","orc-mini"], gated_by: "extra_enabled", "value": "off", "default": "off", "is_overridden": false, "is_shadowed": false, "shadow_reason": null, "desc": "Whether a task with a non-empty cited `risk[]` (auth, money, migration, security, concurrency, data-integrity) may leave Claude. OFF holds it on the Claude ladder whatever the route table says, and the preflight NAMES it as held back. ORC already refuses to send a refund-endpoint change to a cheap model; this keeps Extra from becoming the hole in that rule.", "options": ["off", "on"], "control": {"kind": "enum", "choices": ["off", "on"], "min": null, "max": null}},
+    {"key": "extra_on_failure", "tier": "common", answers: [{"family":"extra","prio":"P2","mode":"replace"}], family: "extra", prio: "P2", lanes: ["orc-quick","orc-wiki"], gated_by: "extra_enabled", "value": "fallback", "default": "fallback", "is_overridden": false, "is_shadowed": false, "shadow_reason": null, "desc": "What an unreachable endpoint, a 401, a 429 past backoff, a timeout or a malformed return does. `fallback` re-dispatches the task to the Claude band it would have had, ANNOUNCED, and the run continues. `stop` is for people who would rather stop than silently start paying Anthropic rates. A failed foreign dispatch is never a dead run either way.", "options": ["fallback", "stop"], "control": {"kind": "enum", "choices": ["fallback", "stop"], "min": null, "max": null}},
+    {"key": "extra_max_concurrent", "tier": "common", answers: [{"family":"extra","prio":"P2","mode":"replace"}], family: "extra", prio: "P2", lanes: [], gated_by: "extra_enabled", "value": 1, "default": 1, "is_overridden": false, "is_shadowed": false, "shadow_reason": null, "desc": "Foreign dispatches in flight at once. Per-provider rate limits are undocumented in aggregate, so 1 is the honest default — a wave of 3 that 429s costs more in repairs than the parallelism saved.", "options": [1, 2, 3], "control": {"kind": "int", "choices": null, "min": 1, "max": null}},
+    {"key": "extra_unlock", "tier": "common", answers: [{"family":"extra","prio":"P2","mode":"replace"}], family: "extra", prio: "P2", lanes: [], gated_by: "extra_enabled", "value": "per-run", "default": "per-run", "is_overridden": false, "is_shadowed": false, "shadow_reason": null, "desc": "When a vault-stored key asks for its passphrase. `per-run` asks ONCE at the Phase-1 stop the lane already has, so an unattended wave can actually run. `per-dispatch` prompts every time and REFUSES to start an unattended wave, naming why — it is interactive-only by design. Irrelevant when the credential source is an environment variable, which is the recommended one.", "options": ["per-run", "per-dispatch"], "control": {"kind": "enum", "choices": ["per-run", "per-dispatch"], "min": null, "max": null}},
+    {"key": "extra_vault_max_attempts", "tier": "advanced", answers: [{"family":"extra","prio":"P2","mode":"replace"}], family: "extra", prio: "P2", lanes: [], gated_by: "extra_enabled", "value": 10, "default": 10, "is_overridden": false, "is_shadowed": false, "shadow_reason": null, "desc": "Wrong passphrases before the encrypted key DELETES ITSELF. It is a key rather than a magic number so the count is inspectable and testable — NOT so it can be switched off; below 3 is refused. The counter stops someone at your keyboard; it does not stop someone who copies the vault file and tries offline, and scrypt's cost is the only defence there.", "options": null, "control": {"kind": "int", "choices": null, "min": 3, "max": null}},
+    {"key": "extra_timeout_s", "tier": "advanced", answers: [{"family":"extra","prio":"P2","mode":"replace"}], family: "extra", prio: "P2", lanes: [], gated_by: "extra_enabled", "value": 900, "default": 900, "is_overridden": false, "is_shadowed": false, "shadow_reason": null, "desc": "Per-dispatch wall clock for a foreign worker. The child's own timeouts are DERIVED from this rather than set independently, so three timeouts cannot disagree about which one fires first.", "options": null, "control": {"kind": "int", "choices": null, "min": 30, "max": null}},
+    {"key": "extra_verify_max_days", "tier": "advanced", answers: [{"family":"extra","prio":"P2","mode":"replace"}], family: "extra", prio: "P2", lanes: [], gated_by: "extra_enabled", "value": 7, "default": 7, "is_overridden": false, "is_shadowed": false, "shadow_reason": null, "desc": "Past this a profile's verification reads STALE and is re-pinged before wave 1. A STALE profile STILL ROUTES — a stale check is not a failed one (the /orc-pact UNCHECKABLE rule) — and freshness is computed on read, never stored.", "options": null, "control": {"kind": "int", "choices": null, "min": 1, "max": null}},
+    { key: "orchestrator_model", tier: "advanced", answers: [{"family":"session","prio":"P2","mode":"replace"}], family: "session", prio: "P2", lanes: ["orc"], gated_by: null, value: "claude-opus-4-8", tierNote: null, default: "claude-opus-4-8", is_overridden: false, is_shadowed: false, shadow_reason: null, desc: "Main-session model (below Opus breaks the tier ladder).", options: null, control: { kind: "enum", choices: ["claude-opus-5", "claude-opus-4-8", "claude-sonnet-5"], min: null, max: null } },
   ],
   // The registry-less, hand-written key — read-only everywhere, and shadowed here.
   hand_edited: [
@@ -68,6 +71,155 @@ const config = {
       { from: 40, to: 80, inclusive_to: false, agent: "orc-executor-opus-5-med" },
       { from: 80, to: 100, inclusive_to: true, agent: "orc-executor-opus-5-high" },
     ],
+  },
+  families: {
+    "executor-band": {
+      "contested": true,
+      "question": "which model executes a SCORED task",
+      "ranks": [
+        {
+          "prio": "P0",
+          "key": "extra_enabled",
+          "mode": "overlay"
+        },
+        {
+          "prio": "P1",
+          "key": "opus5_only",
+          "mode": "replace"
+        },
+        {
+          "prio": "P2",
+          "key": "rubric_bands_override",
+          "mode": "replace",
+          "registry_less": true,
+          "shadow_note": "shadowed by {by} — executors use the fixed 3-band Opus 5 ladder"
+        },
+        {
+          "prio": "P3",
+          "key": null,
+          "terminal": "the shipped score→model table"
+        }
+      ]
+    },
+    "fixed-role-model": {
+      "contested": true,
+      "question": "which model runs a role that has no score",
+      "ranks": [
+        {
+          "prio": "P0",
+          "key": "extra_enabled",
+          "mode": "overlay"
+        },
+        {
+          "prio": "P1",
+          "key": "opus5_only",
+          "mode": "replace"
+        },
+        {
+          "prio": "P2",
+          "key": "fable5_enabled",
+          "mode": "replace",
+          "shadow_note": "shadowed by {by} — every role dispatches its Opus 5 agent, so the Fable 5 override is inert"
+        },
+        {
+          "prio": "P3",
+          "key": null,
+          "terminal": "the agent shipped for that position"
+        }
+      ]
+    },
+    "waves": {
+      "contested": false,
+      "question": "how a run is broken into waves and when it pauses"
+    },
+    "scoring": {
+      "contested": false,
+      "question": "how finely a task is scored"
+    },
+    "analysis": {
+      "contested": false,
+      "question": "how wide the analyst sweeps before planning"
+    },
+    "testing": {
+      "contested": false,
+      "question": "which tests a run writes, and how long it repairs"
+    },
+    "patterns": {
+      "contested": false,
+      "question": "when the project's code conventions are learned"
+    },
+    "gotchas": {
+      "contested": false,
+      "question": "what repair memory is kept and injected"
+    },
+    "security": {
+      "contested": false,
+      "question": "when a security pass runs"
+    },
+    "mock": {
+      "contested": false,
+      "question": "when a runnable mocked example is produced"
+    },
+    "pr": {
+      "contested": false,
+      "question": "when a change ships as a stack instead of one PR"
+    },
+    "extra": {
+      "contested": false,
+      "question": "how a foreign dispatch behaves once extra is on"
+    },
+    "pact": {
+      "contested": false,
+      "question": "what a drifted promise does to a run"
+    },
+    "boundary": {
+      "contested": false,
+      "question": "what a refused area does to a wave"
+    },
+    "handoff": {
+      "contested": false,
+      "question": "whether a non-engineer may write a graded surface"
+    },
+    "budget": {
+      "contested": false,
+      "question": "how a cost forecast is computed and shown"
+    },
+    "aftermath": {
+      "contested": false,
+      "question": "how far back a run is graded from the repo's future"
+    },
+    "challenge": {
+      "contested": false,
+      "question": "what counts as a pass, and which lenses run"
+    },
+    "doc": {
+      "contested": false,
+      "question": "how a long document is written and checked"
+    },
+    "wiki": {
+      "contested": false,
+      "question": "how the project wiki is scanned and when it is stale"
+    },
+    "crosslink": {
+      "contested": false,
+      "question": "when a peer repo's wiki reads stale"
+    },
+    "fable5": {
+      "contested": false,
+      "question": "how the Fable 5 override behaves once it is enabled"
+    },
+    "retro": {
+      "contested": false,
+      "question": "where a retro is delivered"
+    },
+    "paths": {
+      "contested": false,
+      "question": "where ORC writes on disk"
+    },
+    "session": {
+      "contested": false,
+      "question": "what the main session itself runs as"
+    }
   },
   behavior_trace: { always_on: true, configurable_key: "log_dir" },
 };
