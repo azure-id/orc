@@ -47,8 +47,49 @@ is a `needs_context` return, not permission to keep going.
    lint results — the smoke gate, the TDD gate, the verifier and orc-quick's
    build loop decide red vs green from those exact bytes. Read them whole.
 
+## Reading ORC's own payload — the partial-read discipline (v1.0.0 W10)
+
+Everything above is about reading the PROJECT. It applies unchanged to reading
+ORC's own files, and it has to: a lane manifest of pointers that every lane
+dutifully reads whole is MORE round-trips than the prose it replaced, for the
+same bytes. Centralizing prose and then reading all of it is a slower payload,
+not a smaller one.
+
+So every pointer a lane carries declares three things.
+
+| Declaration | Values | Means |
+|---|---|---|
+| `when` | `always` · `on-phase` · `on-state` · `on-demand` | WHETHER to open it at all |
+| `read` | `layer` · `section` · `whole` | HOW MUCH to open |
+| `layers` | `core` · `full` · `trim` · `composed` | WHICH part, when `read: layer` |
+
+### The four rules that make it honest
+
+1. **`on-phase` is the default, and `always` must be justified.** A file every
+   lane always loads has saved nothing by moving. Each `always` pointer is
+   named in the wave that adds it.
+2. **`read: section` names a HEADING, never a line number.** A stored line
+   number is a wrong line number one edit later; a heading anchor survives an
+   edit above it. This is why a shared file's headings are part of its
+   contract — renaming one breaks every pointer into it.
+3. **A trimmed lane reads `core` plus its OWN layer, and never the `full`
+   layer.** Reading a neighbouring layer "for context" is the bleed this rule
+   exists to stop: the layer boundary is the product promise, not a suggestion.
+4. **The two exceptions above carry over unchanged.** A file you will EDIT is
+   read in full, first, always; and output a gate parses is read whole.
+
+### The honest limit
+
+A partial read saves round-trips and bytes for the lanes that SKIP a phase. It
+does **not** make a phase cheaper for the lane that runs it — that lane reads
+its layers whole. Any claim otherwise has to show the measurement.
+
 ## Handoff
 
 The ladder governs HOW MUCH to read. It never decides WHETHER knowledge exists —
 that is `detecting-artifacts.md` — and it never overrides precedence:
 `code > fresh wiki > stale wiki (hints) > model priors`.
+
+What a lane INVOKES, and what each exit code means, is not here either: that is
+`orc lane calls <lane> --json`, whose catalogue is the one copy of every call
+two or more lanes share.

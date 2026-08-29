@@ -236,3 +236,95 @@ test("lane config: `--json is not a summary` runs BOTH ways", () => {
     rmrf(root);
   }
 });
+
+// ── `orc lane calls` — the call catalogue (v1.0.0 W10) ──────────────────────
+//
+// A CLI invocation restated per lane is an exit-code contract restated per
+// lane, and this repo has paid for that twice: `orc diy status` INVERTED its
+// exit code for a release (v0.34.7), and `orc pattern status` needed a third
+// code (v0.34.8) because lanes passed a file extension where a framework key
+// was required. The catalogue is the one copy; these tests are the contract
+// that makes reading it safe.
+
+test("lane calls: the exit-code contract — 0 answered, 2 unknown lane or no argument", () => {
+  const { root } = freshInstall();
+  try {
+    assert.strictEqual(cli(["lane", "calls", "orc-fast", "--dir", root]).status, 0);
+    assert.strictEqual(cli(["lane", "calls", "--all", "--dir", root]).status, 0);
+    assert.strictEqual(cli(["lane", "calls", "no-such-lane", "--dir", root]).status, 2);
+    assert.strictEqual(cli(["lane", "calls", "--dir", root]).status, 2, "no lane and no --all is a usage error");
+    // A lane that makes no CATALOGUED call still ANSWERS. An empty answer is an
+    // answer (v0.43.0) — and it is not the same as making no call at all.
+    const none = cli(["lane", "calls", "orc-advisor", "--dir", root]);
+    assert.strictEqual(none.status, 0);
+    assert.match(none.stdout, /No catalogued call/);
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("lane calls: --json is not a summary — every field the human branch prints", () => {
+  const { root } = freshInstall();
+  try {
+    const j = JSON.parse(cli(["lane", "calls", "orc-fast", "--json", "--dir", root]).stdout);
+    assert.deepStrictEqual(Object.keys(j), ["ok", "lane", "all", "count", "calls"]);
+    assert.strictEqual(j.lane, "orc-fast");
+    assert.ok(j.count > 0);
+    for (const c of j.calls) {
+      assert.deepStrictEqual(Object.keys(c), [
+        "id", "cmd", "what", "exits", "states", "cost", "when",
+        "on_absent", "never", "canonical", "lanes",
+      ]);
+      assert.ok(c.lanes.includes("orc-fast"), `${c.id} is listed for the lane that was asked`);
+      assert.ok(Object.keys(c.exits).length, `${c.id} documents at least one exit code`);
+    }
+    // `--all` is the whole catalogue and is a superset of any one lane's.
+    const all = JSON.parse(cli(["lane", "calls", "--all", "--json", "--dir", root]).stdout);
+    assert.strictEqual(all.lane, null);
+    assert.strictEqual(all.all, true);
+    assert.ok(all.count >= j.count);
+    const ids = new Set(all.calls.map((c) => c.id));
+    for (const c of j.calls) assert.ok(ids.has(c.id), `${c.id} is in the full catalogue`);
+  } finally {
+    rmrf(root);
+  }
+});
+
+// THE BEHAVIOUR TEST (design-05 §6). A documented exit code that the route
+// cannot actually return is worse than no documentation: a lane branches on a
+// number nothing produces. Exit codes are already gates in six places, and
+// every one of them is a decision some lane makes from a number.
+test("lane calls: a documented exit code is a code the route can really return", () => {
+  const { root, claudeDir } = freshInstall();
+  try {
+    const all = JSON.parse(cli(["lane", "calls", "--all", "--json", "--dir", root]).stdout);
+    const byId = Object.fromEntries(all.calls.map((c) => [c.id, c]));
+
+    // Each probe drives a REAL invocation into a state the catalogue documents,
+    // in a project where that state is reachable without paying for anything.
+    const probes = [
+      // absent everything, on a fresh install
+      ["pattern-status", ["pattern", "status", "nextjs"], 1],
+      ["pattern-status", ["pattern", "status", "not-a-framework"], 2],
+      ["diy-status", ["diy", "status"], 1], // UNCONFIGURED
+      ["lane-config", ["lane", "config", "orc"], 0],
+      ["lane-config", ["lane", "config", "nope"], 2],
+      ["wiki-status", ["wiki", "status"], 0], // answers in EVERY state
+      // 0/1 probe, not an "it answered" route — the catalogue claimed 0 only
+      // and this assertion is why we know otherwise.
+      ["gotcha-status", ["gotcha", "status"], 1],
+    ];
+    for (const [id, argv, code] of probes) {
+      assert.ok(byId[id], `${id} is catalogued`);
+      const got = cli([...argv, "--dir", root]).status;
+      assert.strictEqual(got, code, `${id}: \`orc ${argv.join(" ")}\` exited ${got}, expected ${code}`);
+      assert.ok(
+        Object.prototype.hasOwnProperty.call(byId[id].exits, String(code)),
+        `${id}: exit ${code} really happens but the catalogue does not document it`
+      );
+    }
+    assert.ok(fs.existsSync(claudeDir), "the probes ran against a real install");
+  } finally {
+    rmrf(root);
+  }
+});

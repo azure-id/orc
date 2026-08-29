@@ -3004,6 +3004,503 @@ function laneList(claudeDir) {
   return 0;
 }
 
+// ── The call catalogue (v1.0.0 W10 · design-05) ────────────────────────────
+//
+// A CLI invocation restated per lane is an exit-code contract restated per
+// lane, and this repo has already paid for that twice: `orc diy status`
+// INVERTED its exit code for a release (v0.34.7), and `orc pattern status`
+// needed a third code (2 = unknown language key, v0.34.8) because lanes were
+// passing a file extension where a framework key was required. Measured at
+// v0.56.1, `orc wiki sync` appeared 59 times and `orc pattern status` 20.
+//
+// So the contract is DATA here and rendered by `orc lane calls`. Six fields,
+// a hard cap — anything longer belongs in the call's `canonical` shared file,
+// and most calls have none. A catalogue that grew into a second CLI manual
+// would be a manual nobody reads.
+//
+// WHAT IS IN IT (design-05 §6.3, verbatim): a call made by **two or more
+// lanes**. A call one lane makes belongs to that lane and is NOT catalogued —
+// centralizing it would be centralizing for its own sake. Measured on the
+// payload: 33 calls qualify and 94 do not.
+//
+// `lanes` is the measured set, not an aspiration. `_shared` counts as a
+// declaring file but never as a lane.
+const LANE_CALLS = {
+  "lane-config": {
+    cmd: "orc lane config <lane> [--json]",
+    what: "what did this lane's config resolve to, with every shadow and inertness already worded",
+    exits: { 0: "answered", 2: "unknown lane" },
+    states: null,
+    cost: "free",
+    when: "once, at preflight, before the first decision that reads a setting",
+    on_absent: "exit ≠ 0 → say the CLI is unavailable and use the documented defaults, out loud, treating every P0 forcing mode as OFF",
+    canonical: "_shared/config-precedence.md",
+    never: "never merge `.claude/orc.config.yaml` yourself, and never re-derive a precedence — the answer already carries it",
+    lanes: ["context-combiner", "orc", "orc-aftermath", "orc-analyze", "orc-analyze-mini", "orc-boundary", "orc-brainstorm", "orc-budget", "orc-challenge", "orc-claude", "orc-diy", "orc-doc", "orc-explain", "orc-export", "orc-fast", "orc-grill", "orc-handoff", "orc-learn", "orc-mini", "orc-pact", "orc-pattern", "orc-poly", "orc-pr-driver", "orc-pr-setup", "orc-quick", "orc-retro", "orc-route", "orc-verify", "orc-wiki"],
+  },
+  "wiki-status": {
+    cmd: "orc wiki status [--json]",
+    what: "does a wiki EXIST, and how fresh is it",
+    exits: { 0: "answered in every state — read `tier`" },
+    states: ["none", "FRESH", "AGING", "STALE"],
+    cost: "free",
+    when: "once, at preflight, before any decision that needs project knowledge",
+    on_absent: "`none` means absent; say so in ONE user line and continue — a missing wiki is never a blocker",
+    canonical: "_shared/detecting-artifacts.md",
+    never: "never second-guess a positive probe with a raw `find` (the wiki lives under a dot-dir), and never compute the tier yourself — this command is its only executor",
+    lanes: ["orc", "orc-boundary", "orc-brainstorm", "orc-fast", "orc-grill", "orc-poly", "orc-quick", "orc-route", "orc-wiki"],
+  },
+  "pattern-status": {
+    cmd: "orc pattern status <lang>",
+    what: "is there a cached code-pattern for this FRAMEWORK key",
+    exits: { 0: "cached", 1: "absent", 2: "unknown language key" },
+    states: null,
+    cost: "free",
+    when: "at preflight, once per language the run will touch",
+    on_absent: "exit 1 → the `pattern_findings` gate decides; exit 2 → you passed something that is not a framework key, fix the call",
+    canonical: "_shared/detecting-artifacts.md",
+    never: "never pass a FILE EXTENSION — `<lang>` is a framework key from orc-pattern/references/INDEX.md, and passing `.ts` is what made exit 2 necessary",
+    lanes: ["orc", "orc-boundary", "orc-brainstorm", "orc-challenge", "orc-diy", "orc-doc", "orc-fast", "orc-grill", "orc-mini", "orc-pattern", "orc-quick", "orc-route", "orc-verify"],
+  },
+  "gotcha-status": {
+    cmd: "orc gotcha status [--json]",
+    what: "are there live repair-memory entries to inject",
+    // An EXIT-CODE PROBE, the `orc pattern status` shape — not an "it answered"
+    // route. Caught by W10's own behaviour test on its first run: the catalogue
+    // said 0 and an empty ledger exits 1, which is exactly the drift this wave
+    // exists to make impossible.
+    exits: { 0: "entries exist — inject the scope-matching ones", 1: "the ledger is empty" },
+    states: null,
+    cost: "free",
+    when: "at preflight, before composing the first executor slice",
+    on_absent: "exit 1 is an ANSWER, not a failure — inject nothing and move on",
+    canonical: "_shared/gotchas.md",
+    never: "never inject the ledger unfiltered — only the entries whose `scope` glob matches the slice",
+    lanes: ["orc", "orc-boundary", "orc-brainstorm", "orc-diy", "orc-fast", "orc-grill", "orc-mini", "orc-retro", "orc-route"],
+  },
+  "gotcha-list": {
+    cmd: "orc gotcha list [--archived] [--json]",
+    what: "the live repair-memory entries, or the archived tail",
+    exits: { 0: "answered" },
+    states: null,
+    cost: "free",
+    when: "on demand, when the user asks what this project has already gotten wrong",
+    on_absent: "an empty list is an ANSWER",
+    canonical: "_shared/gotchas.md",
+    never: "never write the ledger from a lane — a gotcha is recorded only on a red → green repair",
+    lanes: ["orc-boundary", "orc-brainstorm", "orc-grill"],
+  },
+  "extra-resolve": {
+    cmd: "orc extra resolve <score> [--json]",
+    what: "does this SCORE route to a non-Claude worker, and what is the Claude answer it displaced",
+    exits: { 0: "extra", 1: "claude" },
+    states: null,
+    cost: "free",
+    when: "per scored task, before dispatch",
+    on_absent: "a gap in the route table is not a hole — it is Claude, and the answer says which agent",
+    canonical: "_shared/extra-dispatch.md",
+    never: "never invent a score for a lane that has none — a position uses `orc extra role`, not a band",
+    lanes: ["orc", "orc-diy", "orc-doc", "orc-fast", "orc-quick", "orc-wiki"],
+  },
+  "extra-role": {
+    cmd: "orc extra role list|set|clear [--json]",
+    what: "which fixed POSITION is held by a non-Claude worker",
+    exits: { 0: "answered" },
+    states: null,
+    cost: "free",
+    when: "before dispatching a role that has no score",
+    on_absent: "an unrouted position KEEPS ITS SLOT and reads as its pinned Claude agent — never as absent",
+    canonical: "_shared/extra-dispatch.md",
+    never: "never resolve a position by band arithmetic; a slot names a POSITION, not a model",
+    lanes: ["orc-diy", "orc-doc", "orc-fast", "orc-quick", "orc-wiki"],
+  },
+  "extra-dispatch": {
+    cmd: "orc extra dispatch --slice <f> (--score N | --slot S) [--json]",
+    what: "send ONE task to a non-Claude worker and get a validated return",
+    exits: { 0: "dispatched (read `outcome`)", 1: "refused — read `reason`" },
+    states: null,
+    cost: "paid-per-task",
+    when: "per task, only after `extra resolve` or `extra role` said extra",
+    on_absent: "a refusal NAMES itself; relay the reason and fall back to Claude",
+    canonical: "_shared/extra-dispatch.md",
+    never: "never pass a credential in argv, never pass both `score` and `slot`, and never report a foreign return's model as measured — it carries no `actual_model`",
+    lanes: ["orc", "orc-diy", "orc-doc", "orc-fast", "orc-mini", "orc-quick", "orc-wiki"],
+  },
+  "extra-reconcile": {
+    cmd: "orc extra reconcile <task> [--json]",
+    what: "what did a failed foreign dispatch already leave in the worktree",
+    exits: { 0: "resumable", 1: "nothing-to-resume", 2: "no-journal", 3: "complete", 4: "in-flight" },
+    states: null,
+    cost: "free",
+    when: "FIRST, after any foreign failure — before composing any replacement slice",
+    on_absent: "exit 2 → there is no journal, so treat the worktree as unknown and read it before writing",
+    canonical: "_shared/extra-dispatch.md",
+    never: "never re-dispatch the original slice as if the repository were untouched — that is the failure this call exists to prevent",
+    lanes: ["orc", "orc-diy", "orc-fast", "orc-mini", "orc-wiki"],
+  },
+  "extra-stats": {
+    cmd: "orc extra stats [--since <d>] [--json]",
+    what: "what the foreign dispatches actually cost, per profile",
+    exits: { 0: "answered" },
+    states: null,
+    cost: "free",
+    when: "on demand, and at the end of a run that dispatched foreign",
+    on_absent: "zero dispatches is an ANSWER; both ABSENT counts are named and must be relayed",
+    canonical: "_shared/extra-dispatch.md",
+    never: "never blend the four token kinds, and never price a model ORC did not price itself",
+    lanes: ["orc", "orc-budget", "orc-retro"],
+  },
+  "extra-rates": {
+    cmd: "orc extra rates [--json]",
+    what: "the dated price table for foreign models, and what is missing from it",
+    exits: { 0: "answered" },
+    states: null,
+    cost: "free",
+    when: "before quoting any dollar figure for a foreign dispatch",
+    on_absent: "an unpriced model reads as an EM DASH, never as zero",
+    canonical: "_shared/extra-dispatch.md",
+    never: "never print a cost figure ORC did not price itself",
+    lanes: ["orc-budget", "orc-retro"],
+  },
+  "diy-status": {
+    cmd: "orc diy status [--json]",
+    what: "is the compiled DIY flow READY, or does it need recompiling",
+    exits: { 0: "READY", 1: "STALE or UNCONFIGURED" },
+    states: ["READY", "STALE", "UNCONFIGURED"],
+    cost: "free",
+    when: "at entry, before running a custom flow",
+    on_absent: "UNCONFIGURED and STALE both NEVER RUN the custom flow — offer plain `/orc`",
+    canonical: null,
+    never: "never treat exit 0 as 'it answered' — this route inverted its exit code for a release, so 0 means READY and nothing else",
+    lanes: ["orc-diy", "orc-doc", "orc-route"],
+  },
+  "diy-compile": {
+    cmd: "orc diy compile",
+    what: "rebuild FLOW-COMPILED.md and flow.lock.json from the DIY config",
+    exits: { 0: "compiled", 1: "refused" },
+    states: null,
+    cost: "free",
+    when: "only when the user asks, or after `diy status` reports STALE",
+    on_absent: "a refusal names its reason; never stitch a flow in-session",
+    canonical: null,
+    never: "never edit FLOW-COMPILED.md or flow.lock.json by hand, and never patch a flow conversationally",
+    lanes: ["orc-diy", "orc-wiki"],
+  },
+  "wiki-sync": {
+    cmd: "orc wiki sync [--check]",
+    what: "re-derive wiki/INDEX.md and wiki-meta.json from the doc headers",
+    exits: { 0: "in sync", 1: "--check found drift" },
+    states: null,
+    cost: "free",
+    when: "after every scan-task, at every pause, and at Phase 3",
+    on_absent: "registration is 100% derived — an unregistered doc is FREE to fix and never a reason to re-scan",
+    canonical: null,
+    never: "never write INDEX.md or wiki-meta.json from a model; this command is their only writer",
+    lanes: ["orc-export", "orc-pact", "orc-wiki"],
+  },
+  "wiki-impact": {
+    cmd: "orc wiki impact [--json]",
+    what: "does the wiki need a DELTA refresh or a FULL one",
+    exits: { 0: "fresh", 1: "delta", 2: "full recommended", 3: "structural" },
+    states: null,
+    cost: "free",
+    when: "before any refresh, to choose its shape",
+    on_absent: "delta is the DEFAULT; a full refresh is recommended, never silent",
+    canonical: null,
+    never: "never run a full refresh without saying why the impact probe recommended it",
+    lanes: ["orc", "orc-wiki"],
+  },
+  "wiki-debt": {
+    cmd: "orc wiki debt [--json]",
+    what: "what the wiki is missing, as a report",
+    exits: { 0: "answered" },
+    states: null,
+    cost: "free",
+    when: "on demand",
+    on_absent: "no debt is an ANSWER",
+    canonical: null,
+    never: "never turn a coverage percentage into a gate — a number people game is worse than no number",
+    lanes: ["orc", "orc-wiki"],
+  },
+  "wiki-usage": {
+    cmd: "orc wiki usage [--json]",
+    what: "which wiki docs are actually being read",
+    exits: { 0: "answered" },
+    states: null,
+    cost: "free",
+    when: "when planning a refresh or a retirement",
+    on_absent: "`used: null` is NOT zero-use — it means nothing has been recorded",
+    canonical: null,
+    never: "never retire a doc on `used: null`",
+    lanes: ["orc-budget", "orc-wiki"],
+  },
+  "config-set": {
+    cmd: "orc config set <key> <value>",
+    what: "write ONE user override",
+    exits: { 0: "written", 1: "refused — unknown key, invalid value, or a gate said no" },
+    states: null,
+    cost: "free",
+    when: "only when the user asks for it",
+    on_absent: "a refusal NAMES the key or the gate; relay it rather than retrying",
+    canonical: "_shared/config-precedence.md",
+    never: "never write a user's config as a side effect of a run — a run-scoped override is never persisted",
+    lanes: ["orc-analyze", "orc-pr-setup"],
+  },
+  "challenge-record": {
+    cmd: "orc challenge record <slug> --file <f>",
+    what: "record a judge verdict and RECOMPUTE the cycle's state",
+    exits: { 0: "recorded", 1: "refused" },
+    states: null,
+    cost: "free",
+    when: "after every judge return",
+    on_absent: "a refusal names the finding or the missing coverage; never re-word it",
+    canonical: "orc-challenge/references/conservation.md",
+    never: "never declare a PASS — this command computes it, and a judge can only find or fail to find",
+    lanes: ["orc", "orc-challenge"],
+  },
+  "challenge-status": {
+    cmd: "orc challenge status <slug> [--json]",
+    what: "where a challenge cycle stands right now",
+    exits: { 0: "answered" },
+    states: null,
+    cost: "free",
+    when: "at entry, and after any record",
+    on_absent: "an unreadable ledger degrades to a ROW, never to a crash",
+    canonical: null,
+    never: "never cache the state — it is recomputed live in both directions",
+    lanes: ["orc", "orc-analyze", "orc-challenge"],
+  },
+  "challenge-init": {
+    cmd: "orc challenge init <slug> --goal … --audience … --done-means … --council …",
+    what: "freeze the goal, the audience, the finish line and the council roster",
+    exits: { 0: "created", 1: "refused — a required answer is missing, BY NAME" },
+    states: null,
+    cost: "free",
+    when: "once per artifact, before any judging",
+    on_absent: "there is NO default for goal, audience, done-means or council; a refusal names the flag",
+    canonical: "orc-challenge/references/council.md",
+    never: "never guess the user's goal, and never pick the council yourself",
+    lanes: ["orc-challenge", "orc-doc"],
+  },
+  "challenge-report": {
+    cmd: "orc challenge report <slug> [--json]",
+    what: "the findings and the fix brief for a cycle",
+    exits: { 0: "answered" },
+    states: null,
+    cost: "free",
+    when: "after a verdict is recorded",
+    on_absent: "no findings is an ANSWER, and it is what a PASS looks like",
+    canonical: null,
+    never: "never fix what this lane judged — that is a different session",
+    lanes: ["orc-challenge", "orc-doc"],
+  },
+  "doc-cost": {
+    cmd: "orc doc cost <slug> [--json]",
+    what: "what a document has cost so far, per section",
+    exits: { 0: "answered" },
+    states: null,
+    cost: "free",
+    when: "on demand",
+    on_absent: "a section nothing joins reports `tokens: null` and reads as an EM DASH, never 0",
+    canonical: null,
+    never: "never blend the four token kinds",
+    lanes: ["orc", "orc-doc"],
+  },
+  "pact-status": {
+    cmd: "orc pact status [--json]",
+    what: "which promises this project makes, and which are in doubt",
+    exits: { 0: "answered" },
+    states: ["HOLDING", "DRIFTED", "UNCHECKABLE", "BROKEN"],
+    cost: "free",
+    when: "at preflight when the run will touch an anchored area",
+    on_absent: "an empty ledger is an ANSWER",
+    canonical: null,
+    never: "never invent a promise, never retire one automatically, and never report UNCHECKABLE as a failure",
+    lanes: ["orc", "orc-aftermath", "orc-pact"],
+  },
+  "pact-check": {
+    cmd: "orc pact check [--json]",
+    what: "re-check the anchored promises against what the code does now",
+    exits: { 0: "no drift", 1: "at least one DRIFTED or BROKEN" },
+    states: null,
+    cost: "free",
+    when: "before planning, and after a verify",
+    on_absent: "UNCHECKABLE never raises the exit code — it is the honest state",
+    canonical: null,
+    never: "never let a check invent an assumption; a low-confidence invariant is a manual check, not a second ledger",
+    lanes: ["orc", "orc-pact"],
+  },
+  "boundary-status": {
+    cmd: "orc boundary status [--area <a>] [--json]",
+    what: "may ORC attempt this area itself",
+    exits: { 0: "answered" },
+    states: ["EXECUTE", "ESCALATE", "REFUSE"],
+    cost: "free",
+    when: "at preflight, per area the run will touch",
+    on_absent: "an area with NO card is UNKNOWN — never assumed safe",
+    canonical: null,
+    never: "never gate an explicit user instruction on a verdict; this bounds ORC's own dispatch",
+    lanes: ["orc", "orc-boundary"],
+  },
+  "aftermath-status": {
+    cmd: "orc aftermath status [--json]",
+    what: "did what we shipped hold up",
+    exits: { 0: "answered" },
+    states: null,
+    cost: "free",
+    when: "at preflight, ONLY when there is a real churn signal in the area about to be touched",
+    on_absent: "a run under 7 days old is TOO_RECENT and KEEPS ITS SLOT — an answer, not a gap",
+    canonical: null,
+    never: "never call churn a verdict, and never name a person",
+    lanes: ["orc", "orc-aftermath"],
+  },
+  "budget-forecast": {
+    cmd: "orc budget forecast --plan <f> [--json]",
+    what: "what will this PLAN cost, as a range with a sample count",
+    exits: { 0: "answered", 1: "refused — no history to forecast from" },
+    states: null,
+    cost: "free",
+    when: "after planning, before the first wave",
+    on_absent: "no history → it REFUSES; `--naive` is the price-table floor, and a refusal is still shown once",
+    canonical: null,
+    never: "never quote dollars without a dated price table, a quota without a known plan, or a figure without its sample count",
+    lanes: ["orc-budget", "orc-route"],
+  },
+  "budget-actual": {
+    cmd: "orc budget actual [--since <d>] [--json]",
+    what: "what a run actually cost",
+    exits: { 0: "answered" },
+    states: null,
+    cost: "free",
+    when: "after a run, or on demand",
+    on_absent: "`unattributed` is ALWAYS printed, including when it is zero",
+    canonical: null,
+    never: "never blend the four token kinds, and never derive a date from an mtime",
+    lanes: ["orc-aftermath", "orc-budget", "orc-doc"],
+  },
+  "run-list": {
+    cmd: "orc run list [--json]",
+    what: "which runs are unfinished, and where each one stands",
+    exits: { 0: "answered" },
+    states: ["waiting", "closed"],
+    cost: "free",
+    when: "at entry, when resuming",
+    on_absent: "a listing may only claim what the disk proves — a missing `state-of-play.md` never means incomplete",
+    canonical: null,
+    never: "never open `checkpoint.json` to build a listing — the `Where it stands:` line is what it parses",
+    lanes: ["orc", "orc-challenge", "orc-doc"],
+  },
+  "pr-stack": {
+    cmd: "orc pr stack status [--json]",
+    what: "is this change ready to ship as a stack",
+    exits: { 0: "ready", 1: "not ready" },
+    states: null,
+    cost: "free",
+    when: "at the Phase 8 ship gate, only when the threshold trips",
+    on_absent: "not ready degrades to ONE regular PR — never a failure",
+    canonical: "_shared/stack-plan.md",
+    never: "never stack without a ticket and a resolved PR template",
+    lanes: ["orc-pr-driver", "orc-pr-setup"],
+  },
+  "handoff-surfaces": {
+    cmd: "orc handoff surfaces [--json]",
+    what: "which files a non-engineer can safely own, and how each one is graded",
+    exits: { 0: "answered" },
+    states: ["green", "amber", "red"],
+    cost: "free",
+    when: "at entry, and at preflight when the run will touch a graded surface",
+    on_absent: "no graded surface is an ANSWER — say so rather than offering an ungraded file",
+    canonical: null,
+    never: "never touch a RED surface, and never report an AMBER change as verified — its check is manual",
+    lanes: ["orc", "orc-handoff"],
+  },
+  "export-import": {
+    cmd: "orc export import [--json]",
+    what: "read an existing AGENTS.md or .cursorrules and say what is already wrong",
+    exits: { 0: "answered" },
+    states: null,
+    cost: "free",
+    when: "on demand, in a repo that never ran ORC",
+    on_absent: "nothing to import is an ANSWER",
+    canonical: null,
+    never: "never apply an import without the user's yes",
+    lanes: ["orc-export", "orc-pact"],
+  },
+};
+
+// `orc lane calls <lane>` / `--all` — the catalogue, rendered.
+//
+// `--json is not a summary`: the human branch prints the same fields, so a
+// panel can never be less detailed than the terminal.
+function laneCallsCmd(lane, claudeDir) {
+  const all = flag("--all") === true;
+  if (!lane && !all) {
+    console.error("Usage: orc lane calls <lane> [--json]   |   orc lane calls --all [--json]");
+    return 2;
+  }
+  let entries = Object.entries(LANE_CALLS);
+  if (!all) {
+    if (!LANES.some((l) => l.lane === lane)) {
+      console.error(`Unknown lane: ${lane}\n(orc lane list)`);
+      return 2;
+    }
+    entries = entries.filter(([, c]) => c.lanes.includes(lane));
+  }
+  const rows = entries.map(([id, c]) => ({
+    id,
+    cmd: c.cmd,
+    what: c.what,
+    exits: c.exits,
+    states: c.states || null,
+    cost: c.cost,
+    when: c.when,
+    on_absent: c.on_absent,
+    never: c.never,
+    canonical: c.canonical || null,
+    lanes: c.lanes,
+  }));
+  if (wantsJson()) {
+    emitJson({ ok: true, lane: all ? null : lane, all, count: rows.length, calls: rows });
+    return 0;
+  }
+  console.log(`\nORC calls  ${all ? ui.color.bold("(the whole catalogue)") : ui.color.bold(lane)}\n`);
+  if (!rows.length) {
+    // An empty answer is an ANSWER (v0.43.0). This lane makes no CATALOGUED
+    // call, which is not the same as making none: a call only this lane makes
+    // belongs to that lane and is deliberately not in the catalogue.
+    console.log(
+      ui.color.gray(
+        "  No catalogued call. A call only this lane makes belongs to this lane\n" +
+          "  and is not catalogued; the catalogue holds what two or more lanes share.\n"
+      )
+    );
+    return 0;
+  }
+  for (const r of rows) {
+    console.log("  " + ui.color.cyan(r.cmd));
+    console.log("    " + ui.color.gray(r.what));
+    console.log(
+      "    exit  " +
+        Object.entries(r.exits)
+          .map(([code, meaning]) => `${code} = ${meaning}`)
+          .join("  ·  ")
+    );
+    if (r.states) console.log("    states  " + r.states.join(" · "));
+    console.log(`    cost  ${r.cost}    when  ${r.when}`);
+    console.log("    empty answer  " + ui.color.gray(r.on_absent));
+    console.log("    " + ui.color.yellow("never  ") + ui.color.gray(r.never));
+    if (r.canonical) console.log("    canonical  " + ui.color.gray(r.canonical));
+    console.log("");
+  }
+  console.log(
+    ui.color.gray(
+      `  ${rows.length} call${rows.length === 1 ? "" : "s"}. The CLI's state words are the only state words —\n` +
+        "  never invent a spelling, re-word an exit code, or re-derive a state.\n"
+    )
+  );
+  return 0;
+}
+
 function laneConfigCmd(lane, claudeDir) {
   if (!lane) {
     console.error("Usage: orc lane config <lane>   (orc lane list)");
@@ -3100,11 +3597,14 @@ function lane() {
       process.exit(laneList(claudeDir));
     case "config":
       process.exit(laneConfigCmd(pos[2], claudeDir));
+    case "calls":
+      process.exit(laneCallsCmd(pos[2], claudeDir));
     default:
       console.error(
         `Unknown: orc lane ${pos[1]}\n` +
           "Usage: orc lane list [--json]\n" +
-          "       orc lane config <lane> [--json]"
+          "       orc lane config <lane> [--json]\n" +
+          "       orc lane calls <lane> [--json]   |   orc lane calls --all [--json]"
       );
       process.exit(2);
   }

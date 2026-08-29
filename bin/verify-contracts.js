@@ -2977,6 +2977,23 @@ const CONTRACTS = [
     binFiles: ["bin/cli.js"],
   },
   {
+    // v1.0.0 W10 — the call catalogue. `orc lane calls <lane> --json` is the one
+    // copy of every call two or more lanes make, with its exit-code contract.
+    // Pinned to the CLI because that is where the catalogue lives.
+    name: "the call catalogue (v1.0.0 W10)",
+    token: "orc lane calls",
+    files: ["skills/_shared/read-ladder.md"],
+    binFiles: ["bin/cli.js"],
+  },
+  {
+    // v1.0.0 W10 — the partial-read discipline. The sentence that stops pillar 2
+    // from making the payload SLOWER: a manifest of pointers read whole is more
+    // round-trips than the prose it replaced.
+    name: "a pointer declares how much of it to read (v1.0.0 W10)",
+    token: "on-phase",
+    files: ["skills/_shared/read-ladder.md"],
+  },
+  {
     // v1.0.0 W7 — ONE resolver per lane. A lane that re-derives a value from
     // `.claude/orc.config.yaml` has forked the resolver, and the fork is
     // invisible: it produces a plausible answer that is only wrong once a key
@@ -3686,6 +3703,135 @@ for (const b of BUDGETS) {
     failures++;
     console.error("\n❌ config data model drift:");
     for (const e of errs) console.error("   - " + e);
+  }
+}
+
+// ── The call catalogue (C.5) ───────────────────────────────────────────────
+// v1.0.0 W10 (design-05 §6). Three assertions, and the reason each exists is a
+// bug this repo has already shipped.
+//
+// A CLI invocation restated per lane is an exit-code contract restated per
+// lane. `orc diy status` INVERTED its exit code for a release (v0.34.7) and
+// `orc pattern status` needed a third code because lanes were passing a file
+// extension where a framework key was required (v0.34.8). Both were payload
+// prose disagreeing with the CLI, and no lint could see either.
+{
+  const errs = [];
+  const cliText = fs.readFileSync(path.join(REPO_ROOT, "bin", "cli.js"), "utf8");
+  const block = cliText.match(/const LANE_CALLS = \{[\s\S]*?\n\};/);
+  if (!block) {
+    console.error("\n❌ call catalogue: could not parse LANE_CALLS from bin/cli.js");
+    failures++;
+  }
+  let CALLS = null;
+  if (block) try {
+    CALLS = new Function("return " + block[0].replace(/^const LANE_CALLS = /, "").replace(/;$/, ""))();
+  } catch (e) {
+    console.error("\n❌ call catalogue: LANE_CALLS does not parse — " + e.message);
+    failures++;
+  }
+  if (CALLS) {
+
+  // The lane set, measured from the payload rather than believed. This is the
+  // check CONFIG_META's own `lanes[]` cannot have (W8 §4: applying the config
+  // contract removed the key names a grep would need), so the catalogue is
+  // built the other way round — the stored set must EQUAL the measured one, in
+  // both directions.
+  const skillsDir = path.join(ROOT, "skills");
+  const measured = {};
+  const walk = (dir, acc) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) walk(p, acc);
+      else if (e.name.endsWith(".md")) acc.push(p);
+    }
+    return acc;
+  };
+  for (const lane of fs
+    .readdirSync(skillsDir, { withFileTypes: true })
+    .filter((d) => d.isDirectory() && d.name !== "_shared")
+    .map((d) => d.name)) {
+    const text = walk(path.join(skillsDir, lane), [])
+      .map((f) => fs.readFileSync(f, "utf8"))
+      .join("\n");
+    for (const m of text.matchAll(/\borc ([a-z-]+) ([a-z-]+)/g)) {
+      const key = `orc ${m[1]} ${m[2]}`;
+      (measured[key] ||= new Set()).add(lane);
+    }
+  }
+  // The prefix a catalogue entry is measured by: the first three words of its
+  // `cmd`, which is the `orc <noun> <verb>` a payload grep can see.
+  const prefixOf = (cmd) => cmd.split(/\s+/).slice(0, 3).join(" ");
+
+  // 1. Every catalogued `cmd` is a real CLI route. A renamed command must fail
+  //    here rather than sending every lane that reads the catalogue at a
+  //    command that no longer exists — the v0.56.0 lesson at payload scale.
+  const routeNouns = new Set(
+    [...cliText.matchAll(/^    case "([a-z-]+)":/gm)].map((m) => m[1])
+  );
+  for (const [id, c] of Object.entries(CALLS)) {
+    const noun = c.cmd.split(/\s+/)[1];
+    if (!routeNouns.has(noun))
+      errs.push(`${id}: cmd "${c.cmd}" names \`orc ${noun}\`, which is not a top-level CLI route`);
+    for (const f of ["what", "cost", "when", "on_absent", "never"])
+      if (!c[f]) errs.push(`${id}: missing \`${f}\` — the six fields are the contract`);
+    if (!c.exits || !Object.keys(c.exits).length)
+      errs.push(`${id}: no exits — an exit code is a contract, not a detail`);
+    for (const code of Object.keys(c.exits || {}))
+      if (!/^\d+$/.test(code)) errs.push(`${id}: exit key "${code}" is not a number`);
+    if (!["free", "paid", "paid-per-task"].includes(c.cost))
+      errs.push(`${id}: cost "${c.cost}" is outside the closed set (free · paid · paid-per-task)`);
+    if (c.canonical && !fs.existsSync(path.join(ROOT, "skills", c.canonical)))
+      errs.push(`${id}: canonical "${c.canonical}" does not exist`);
+  }
+
+  // 2. THE TWO-WAY HALF. A call two or more lanes make must be catalogued, or a
+  //    call quietly grows back into several spines with a different wording of
+  //    its exit codes in each — which is the whole failure being prevented.
+  const ALLOW = new Set([
+    // Prose that happens to match `orc <word> <word>` and is not a command.
+    "orc or orc-mini",
+    "orc was updated",
+    "orc is installed",
+    "orc and orc-mini",
+    "orc lane calls", // the catalogue's own reader, named in read-ladder.md
+    "orc lane phases", // W12
+  ]);
+  const catalogued = new Set(Object.values(CALLS).map((c) => prefixOf(c.cmd)));
+  for (const [call, lanes] of Object.entries(measured)) {
+    if (lanes.size < 2) continue; // one lane's own call is deliberately not catalogued
+    if (catalogued.has(call) || ALLOW.has(call)) continue;
+    errs.push(
+      `"${call}" is named by ${lanes.size} lanes (${[...lanes].sort().join(", ")}) but is not in the catalogue — ` +
+        "catalogue it, or add it to the lint's ALLOW list if it is prose"
+    );
+  }
+
+  // 3. Every catalogued call has >= 2 lanes, and its stored set is the measured
+  //    one. design-05 §6.3: a call one lane makes belongs to that lane.
+  for (const [id, c] of Object.entries(CALLS)) {
+    const want = [...(measured[prefixOf(c.cmd)] || new Set())].sort();
+    if (want.length < 2)
+      errs.push(
+        `${id}: only ${want.length} lane names it — a call one lane makes belongs to that lane and is not catalogued`
+      );
+    const have = [...(c.lanes || [])].sort();
+    if (have.join(",") !== want.join(",")) {
+      const gained = want.filter((l) => !have.includes(l));
+      const lost = have.filter((l) => !want.includes(l));
+      errs.push(
+        `${id}: lanes[] disagrees with the payload` +
+          (gained.length ? ` — ${gained.join(", ")} name it and are not listed` : "") +
+          (lost.length ? ` — ${lost.join(", ")} are listed and no longer name it` : "")
+      );
+    }
+  }
+
+  if (errs.length) {
+    failures++;
+    console.error("\n❌ call catalogue drift:");
+    for (const e of errs) console.error("   - " + e);
+  }
   }
 }
 
