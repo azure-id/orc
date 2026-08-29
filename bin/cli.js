@@ -1231,6 +1231,17 @@ const CONFIG_META = [
   { key: "extra_stall_s", def: 180, tier: "common", answers: [{ family: "extra", prio: "P2", mode: "replace" }], gated_by: "extra_enabled", lanes: [], validate: vInt(0), options: [0, 60, 120, 180, 300, 600], desc: "Seconds a foreign worker may produce NOTHING before the dispatch is stopped as `stalled`. The clock is reset by observable progress — new bytes on the worker's stream, new bytes on stderr, or a declared file that changed on disk — so it never fires on a worker that is merely slow. This is what a wall clock cannot see: `extra_timeout_s` measures the whole dispatch, and an opencode that stops mid-task and waits for someone to type `continue` burns all 900 seconds looking like a timeout. A `stalled` dispatch is RETRYABLE, so `extra_resume` continues it from what is already on disk rather than starting over. 0 turns it off and the wall clock is the only stop again. Clamped below the wall clock, because a budget that can never fire is worse than none. Engine `cli` only — engine `api` already has a per-request inactivity timeout on its own socket." },
   { key: "extra_fallback_agent", def: "band", tier: "common", answers: [{ family: "extra", prio: "P2", mode: "replace" }], gated_by: "extra_enabled", lanes: ["orc-quick"], validate: vFallbackAgent, options: ["band", "ask", "orc-executor-opus-5-med", "orc-executor-opus-5-low", "orc-executor-sonnet-4-6-high"], desc: "WHICH Claude agent picks up a task the foreign worker could not finish. `band` is the pre-v0.56.1 behaviour and stays the default: the exact agent the score table or the slot would have used, so a fallback changes WHO runs it and nothing else. `ask` STOPS and puts the choice to you with the failure and the position already on the table — right when a stall has just cost you fifteen minutes and you would rather pick than accept a default. Any installed agent name is accepted verbatim, for the case where you already know a stalled slice wants more (or less) than its band. It never changes the score, never widens `declared_files` and never moves `acceptance[]` — a fallback is not a re-plan." },
   { key: "extra_resume_max", def: 2, tier: "advanced", answers: [{ family: "extra", prio: "P2", mode: "replace" }], gated_by: "extra_enabled", lanes: [], validate: vInt(0), desc: "Resume attempts per task before the fallback procedure takes over. Bounded like `tdd_loop_max`: hitting the cap STOPS with an honest report naming the Claude agent, never a silent third loop. A resume never widens `declared_files`, never moves `acceptance[]` and never moves the score — it is a continuation, not a discount." },
+  // --- v1.0.0 W5 — the stall DEMOTION. THIRTEEN keys became FIFTEEN, and both
+  // additions are numbers with a documented off value rather than a switch.
+  // Deliberately NOT added: `extra_demote` (on/off) — setting both of these to
+  // `0` already IS the off switch, and a master switch over two numbers is a
+  // third spelling of one thing, which is the drift this subsystem lints for
+  // everywhere else (v0.53.3); and `extra_promote_after` (an auto re-promote
+  // timer) — a timer that re-arms a provider which stalled twice is a timer
+  // that spends money on the evidence it already has. Promotion is a human
+  // decision with a recorded reason (the /orc-pact retirement rule).
+  { key: "extra_demote_after", def: 2, tier: "common", answers: [{ family: "extra", prio: "P2", mode: "replace" }], gated_by: "extra_enabled", lanes: [], validate: vInt(0), options: [0, 2, 3, 5], desc: "Consecutive `stalled` dispatches on ONE profile, inside one run, before that profile is DEMOTED to the bottom of the ladder for the rest of the run — so `opus5_only` (or the shipped score table) becomes the effective P0 and the work stays on Claude. Only `stalled` counts: a 401 or a rate limit has its own answer (`extra_on_failure`, the vault, `extra_resume`), and demoting on one would hide a credential problem behind a routing change. A resume of the same stalled attempt is the SAME stall, never a second one. A demotion is RUN state — it never writes your config — it is ANNOUNCED before the next dispatch, and it is never auto-promoted back: `orc extra promote <run> --reason \"<why>\"`. 0 turns this clock off and leaves only extra_demote_stale_min." },
+  { key: "extra_demote_stale_min", def: 20, tier: "common", answers: [{ family: "extra", prio: "P2", mode: "replace" }], gated_by: "extra_enabled", lanes: [], validate: vInt(0), options: [0, 10, 20, 45], desc: "Minutes a LIVE foreign attempt may show no observable progress before its profile is demoted. This is a different question from `extra_stall_s`, which stops ONE dispatch after 180s of silence: this clock is about the RUN — two workers in flight, both quiet, and a wave that is going nowhere — so the two have their own budgets and their own off values and neither is a simplification of the other. It reads the journal's own progress file on disk, never a remembered fact. 0 turns this clock off and leaves only extra_demote_after." },
   { key: "opus5_only", def: false, tier: "common", answers: [{ family: "executor-band", prio: "P1", mode: "replace" }, { family: "fixed-role-model", prio: "P1", mode: "replace" }], lanes: ["orc", "orc-analyze", "orc-challenge", "orc-claude", "orc-diy", "orc-doc", "orc-fast", "orc-mini", "orc-pattern", "orc-quick", "orc-retro", "orc-wiki"], validate: vEnum("true", "false"), options: ["true", "false"], desc: "EVERY dispatched role uses ONE model — Opus 5 — with EFFORT as the cost dial (executors: [0,40) low · [40,80) medium · [80,100] high; each fixed role its own pinned effort). Deep SWE-benchmark work on cost vs efficiency across Claude models finds a single Opus 5 agent with the effort ladder the most efficient setup. It FORCES: while on it outranks a hand-written rubric_bands_override. Needs an Opus 5 main session or EVERY dispatch silently downgrades. Excludes the Haiku trace writer and orc-diy (compile-owned)." },
   // --- v0.46.0 — the six new lanes ------------------------------------------
   { key: "pact_gate", def: "warn", tier: "common", answers: [{ family: "pact", prio: "P2", mode: "replace" }], lanes: ["orc", "orc-pact"], validate: vEnum("off", "warn"), options: ["off", "warn"], desc: "Invariant ledger at Phase 1 + planning: warn = print the one pact line and inject a DRIFTED/BROKEN promise whose anchors intersect the plan's declared files as a planner constraint; off = nothing. NEVER blocks — a promise is advice with a receipt, not a gate. See /orc-pact." },
@@ -2378,15 +2389,24 @@ function laneRankResolves(row, map, claudeDir) {
 // *nobody looked at this*, and rendering those three the same way is how a
 // panel starts lying.
 //
-// `demoted` is declared here and never emitted yet: W5's stall demotion is its
-// only producer. A state word that exists in the contract before its producer
-// is a slot a renderer can be built against; one invented later is a state a
-// renderer drops on the floor.
+// `demoted` was declared in W3 with no producer and got one in W5: a profile
+// that stalled twice in this run, or a human running `orc extra demote`. The
+// row KEEPS ITS SLOT and gets its own word — rendering a demoted overlay as
+// "extra: off" would make "I turned this off" and "this run left your provider
+// after two stalls" look identical, which is the one thing the announcement
+// rule exists to prevent.
 const LANE_RANK_STATES = ["resolved", "partly-resolved", "not-read", "inert", "demoted", "absent"];
 
 function laneFamilies(lane, map, claudeDir) {
   const inert = LANE_INERT[lane] || [];
   const out = {};
+  // v1.0.0 W5 — the run's demotion, read from disk like everything else here.
+  // A lane never asks for it: `orc lane config` is answering "what decides this
+  // in MY lane, right now", and right now is a fact about the open run.
+  let demotion = null;
+  try {
+    if (isTrue(map.extra_enabled)) demotion = extraDemotionCached(claudeDir, null);
+  } catch (_) {}
   for (const [name, fam] of Object.entries(CONFIG_FAMILIES)) {
     if (!fam.ranks) continue;
     const famInert = inert.find((i) => i.family === name);
@@ -2416,6 +2436,29 @@ function laneFamilies(lane, map, claudeDir) {
         resolvedBy = row.key;
         resolvedAt = row.prio;
         done = true;
+      } else if (r.how === "partly" && demotion && demotion.demoted) {
+        // DEMOTED. The rank is still ARMED — the config did not change and
+        // nothing was written to it — but for the rest of this run it is at the
+        // bottom of the family, so the next rank answers. Naming the profiles
+        // and the run is the whole point: a demotion nobody can see is a
+        // subsystem that went quiet.
+        const stillRouting = r.routes
+          .concat(r.slots)
+          .filter((x) => !demotion.demoted_profiles.includes(x.profile))
+          .length;
+        ranks.push({
+          prio: row.prio,
+          key: row.key,
+          terminal: null,
+          state: "demoted",
+          why:
+            `${demotion.demoted_profiles.join(", ")} demoted for run ${demotion.run} — ` +
+            demotion.reasons.map((x) => x.why).join(" ") +
+            (stillRouting
+              ? ` ${stillRouting} row(s) on another profile still route.`
+              : " Nothing routes foreign in this run until you promote it back.") +
+            ` orc extra promote ${demotion.run} --reason "<why>"`,
+        });
       } else if (r.how === "partly") {
         // An overlay takes only the ranges its route rows cover and only the
         // positions its slot rows name; everything it did not cover falls
@@ -2532,9 +2575,18 @@ function laneAnnounce(lane, map, claudeDir, families) {
       routes = l ? l.routes : [];
       slots = l ? l.slots : [];
     } catch (_) {}
+    let dem = null;
+    try {
+      dem = extraDemotionCached(claudeDir, null);
+    } catch (_) {}
     if (off) out.push(`extra: armed, and INERT in this lane — ${off.reason}`);
     else if (!routes.length && !slots.length)
       out.push("extra: armed, but no route or slot row exists — nothing goes off Claude");
+    // v1.0.0 W5 — MANDATORY, and it comes BEFORE the routing line, because a
+    // routing line that lists bands going off Claude while they are demoted is
+    // a sentence that is no longer true. The wording is the CLI's, composed
+    // once in `extraDemotionState`.
+    else if (dem && dem.demoted) out.push(dem.announce);
     else {
       const bits = [];
       if (routes.length) bits.push(`${routes.map((r) => `[${r.from},${r.to >= 100 ? "100]" : r.to + ")"}`).join(", ")} execute off Claude`);
@@ -21699,6 +21751,28 @@ function extraResolveFor(claudeDir, score, opts) {
       { held_back: "unverified" }
     );
 
+  // v1.0.0 W5 — THE DEMOTION, and it is a HOLD-BACK like every other one: the
+  // score does not move, `declared_files` is not widened, `acceptance[]` is not
+  // touched. The task runs at the SAME Claude agent it would have had, which is
+  // why this returns the ordinary `claude` answer rather than a new shape.
+  const dem = extraProfileDemoted(claudeDir, prof.name, cfg);
+  if (dem)
+    return answer(
+      `"${prof.name}" is DEMOTED for the rest of run ${dem.state.run} — ${dem.profile.why} It stays at the bottom of the ladder until you promote it back: orc extra promote ${dem.state.run} --reason "<why>"`,
+      {
+        held_back: "demoted",
+        demotion: {
+          run: dem.state.run,
+          profile: prof.name,
+          reason: dem.profile.reason,
+          why: dem.profile.why,
+          announce: dem.state.announce,
+          trace_line: dem.state.trace_line,
+        },
+        would_have_been: { profile: row.profile, model: row.model },
+      }
+    );
+
   // A STALE verification still ROUTES. A stale check is not a failed one (the
   // /orc-pact UNCHECKABLE rule); the lane re-pings before wave 1 and says so.
   const v = extraVerifyState(prof, cfg);
@@ -21939,6 +22013,29 @@ function extraResolveSlot(claudeDir, slot, opts) {
     return answer(
       `"${sr.profile}" has never verified — nothing dispatches to an unproven endpoint.`,
       { held_back: "unverified" }
+    );
+
+  // 10 — v1.0.0 W5, THE DEMOTION. The tenth hold-back, and the only one that is
+  // about the RUN rather than about the row: a profile that stalled twice is at
+  // the bottom of the ladder until a human promotes it back. The position falls
+  // through to the SAME pinned Claude agent it always had — a demotion changes
+  // WHERE the work runs and nothing else.
+  const demSlot = extraProfileDemoted(claudeDir, prof.name, cfg);
+  if (demSlot)
+    return answer(
+      `"${prof.name}" is DEMOTED for the rest of run ${demSlot.state.run} — ${demSlot.profile.why} ${row.slot} falls through to ${claude.agent} until you promote it back: orc extra promote ${demSlot.state.run} --reason "<why>"`,
+      {
+        held_back: "demoted",
+        demotion: {
+          run: demSlot.state.run,
+          profile: prof.name,
+          reason: demSlot.profile.reason,
+          why: demSlot.profile.why,
+          announce: demSlot.state.announce,
+          trace_line: demSlot.state.trace_line,
+        },
+        would_have_been: { profile: sr.profile, model: sr.model },
+      }
     );
 
   // 8 — a STALE verification STILL ROUTES. A stale check is not a failed one
@@ -22704,6 +22801,22 @@ function extraDoctorFindings(claudeDir) {
         }
       );
     }
+  }
+
+  // v1.0.0 W5 — THE DEMOTED RUN. One finding, and it is deliberately not two:
+  // a demotion is a state a human clears, so there is nothing to say about it
+  // beyond which run, which profile, and the command that clears it. It routes
+  // to the Extra panel's Recovery tab — the panel that can CLEAR it.
+  {
+    const dem = extraDemotionCached(claudeDir, cfg);
+    if (dem && dem.demoted)
+      add(
+        "extra-demoted-run",
+        `run ${dem.run} has DEMOTED ${dem.demoted_profiles.join(", ")} — ${dem.reasons
+          .map((r) => r.why)
+          .join(" ")} Foreign work in that run is staying on Claude until you promote it back: orc extra promote ${dem.run} --reason "<why>"`,
+        { run: dem.run, profiles: dem.demoted_profiles, reasons: dem.reasons, fix_command: `orc extra promote ${dem.run} --reason "<why>"` }
+      );
   }
 
   for (let i = 0; i < ledger.routes.length; i++)
@@ -24272,6 +24385,11 @@ function extraJournalListRows(claudeDir) {
       dir,
       attempts: attempts.length,
       attempt: last.attempt,
+      // v1.0.0 W5 — WHICH RUN. `null` on every journal written before W5 and on
+      // every dispatch made with no run open; the demotion counts those as
+      // skipped rather than folding them into whichever run asks.
+      run: (header && header.run) || null,
+      lane: (header && header.lane) || null,
       profile: (header && header.profile) || null,
       provider: (header && header.provider) || null,
       engine: (header && header.engine) || null,
@@ -24430,6 +24548,633 @@ function extraJournalCmd(claudeDir, sub, arg) {
 
   console.error(`Unknown: orc extra journal ${sub}\n` + extraUsage());
   process.exit(1);
+}
+
+// ══ THE STALL DEMOTION (v1.0.0 W5) ═════════════════════════════════════════
+//
+// THE PRIORITY LADDER MOVES AT RUNTIME, AND NOTHING ELSE ABOUT IT MOVES.
+//
+// Two consecutive `stalled` dispatches on one profile inside one run — or one
+// LIVE attempt that has shown no observable progress for `extra_demote_stale_min`
+// minutes — drop that profile to the BOTTOM of its families for the remainder of
+// the run. `opus5_only` (or the shipped score table) becomes the effective P0,
+// and the work stays on Claude.
+//
+// THIS WAVE WRITES NO NEW MEASUREMENT. Every fact the trigger reads already
+// ships and is already CLI-owned: `EXTRA_FAILURES.stalled` (v0.56.1), the
+// `timeline` block on every engine-`cli` return (v0.56.1), and the extra journal
+// written by `orc extra dispatch` itself before the first byte leaves the
+// machine (v0.54.0). The demotion READS the journal and decides.
+//
+// It is COMPUTED FROM DISK ON EVERY READ AND NEVER REMEMBERED. That is the
+// lesson this repo has now lost to four times — v0.32.0 narration, v0.49.5 the
+// hand-back, v0.53.2 the spend log, v0.54.0 the journal: a fact relayed through
+// a model's memory is a fact this repo has already lost. The only thing on disk
+// is the HUMAN half — a `promote` or a manual `demote`, with its reason — and
+// that is a decision, not a verdict.
+//
+// FOUR THINGS IT MUST NEVER DO, each with the rule that stops it:
+//
+//   1. NEVER writes `.claude/orc.config.yaml`. Run-scoped, like `/orc-ultra`'s
+//      `ultra_mode`. A run that had a bad afternoon must not silently turn off a
+//      subsystem the user paid to set up.
+//   2. NEVER auto-promotes inside the run. Two stalls is evidence.
+//      `orc extra promote <run> --reason "<why>"` is a human action and the
+//      reason is stored verbatim (the /orc-pact retirement rule).
+//   3. NEVER changes WHAT. The score does not move, `declared_files` is not
+//      widened, `acceptance[]` is not touched — `extra_fallback_agent`'s rule
+//      (v0.56.1) inherited verbatim. A demotion changes WHERE work runs.
+//   4. NEVER abandons the position. A demoted run still goes
+//      `orc extra reconcile` → `orc extra resume-slice` → an ORDINARY Claude
+//      dispatch. `a lane that re-does work the worktree already contains`
+//      (v0.54.0) applies here exactly as it applies to the fallback, and it is
+//      the same code path.
+//
+// And it is ANNOUNCED. The mirror of `a lane that sends work off Claude without
+// saying so` is a lane that quietly STOPS: a user who connected a provider
+// deserves to be told the run left it.
+const EXTRA_DEMOTE_FILE = "extra-demotion.json";
+const EXTRA_DEMOTE_AFTER_DEFAULT = 2;
+const EXTRA_DEMOTE_STALE_MIN_DEFAULT = 20;
+// The closed set. `manual` is its own word because "a human demoted this" and
+// "two dispatches stalled" are different facts with different fixes.
+const EXTRA_DEMOTE_REASONS = ["consecutive-stall", "stale-live-attempt", "manual"];
+
+const extraDemotePath = (claudeDir, slug) => path.join(resolveRunDir(claudeDir), slug, EXTRA_DEMOTE_FILE);
+
+// The run this is about. A slug the caller named wins; otherwise the trace
+// pointer answers, exactly as it does for the spend log. No third source — a
+// second spelling of "which run" is the drift this subsystem lints for.
+function extraDemoteRun(claudeDir, slugArg) {
+  if (slugArg) return { slug: String(slugArg), from: "argument", lane: null };
+  const cur = extraCurrentRun(claudeDir);
+  if (cur && cur.slug) return { slug: cur.slug, from: "trace pointer", lane: cur.lane };
+  return { slug: null, from: null, lane: null };
+}
+
+function extraDemoteOverride(claudeDir, slug) {
+  if (!slug) return null;
+  try {
+    const j = JSON.parse(fs.readFileSync(extraDemotePath(claudeDir, slug), "utf8"));
+    return j && (j.state === "demoted" || j.state === "promoted") ? j : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+// Best effort, and it says so. A run folder that does not exist yet is created —
+// this is run state beside `RESUME.md` and the checkpoint, and it is deleted
+// with the run.
+function extraDemoteWrite(claudeDir, slug, obj) {
+  try {
+    const p = extraDemotePath(claudeDir, slug);
+    fs.mkdirSync(path.dirname(p), { recursive: true });
+    fs.writeFileSync(p, JSON.stringify(obj, null, 2) + "\n", "utf8");
+    return p;
+  } catch (_) {
+    return null;
+  }
+}
+
+// Every CLOSED attempt this run made, oldest first, across every task. The
+// journal is keyed by task and a run spans many, so the sequence has to be
+// rebuilt chronologically or "consecutive" means nothing.
+function extraDemoteAttempts(claudeDir, slug) {
+  const root = extraJournalRoot(claudeDir);
+  const closed = [];
+  const live = [];
+  let skipped_unattributed = 0;
+  let names = [];
+  try {
+    names = fs.readdirSync(root);
+  } catch (_) {
+    return { closed, live, skipped_unattributed };
+  }
+  for (const name of names) {
+    const dir = path.join(root, name);
+    try {
+      if (!fs.statSync(dir).isDirectory()) continue;
+    } catch (_) {
+      continue;
+    }
+    for (const a of extraJournalAttemptList(dir)) {
+      let header = null;
+      try {
+        header = JSON.parse(fs.readFileSync(a.header, "utf8"));
+      } catch (_) {
+        continue;
+      }
+      // An attempt with no `run` is NOT folded into whichever run happens to be
+      // asking. It is counted and named — the v0.53.2 rule that both ABSENT
+      // counts are printed, because a report quietly short by three rows is the
+      // exact failure that rule exists to prevent.
+      if (!header.run) {
+        skipped_unattributed++;
+        continue;
+      }
+      if (header.run !== slug) continue;
+      let result = null;
+      try {
+        result = JSON.parse(fs.readFileSync(a.result, "utf8"));
+      } catch (_) {}
+      const row = {
+        task_id: header.task_id || name,
+        attempt: a.attempt,
+        profile: header.profile || null,
+        provider: header.provider || null,
+        engine: header.engine || null,
+        model_requested: header.model_requested || null,
+        started_at: header.started_at || null,
+        started_ms: Date.parse(header.started_at || "") || 0,
+        // A RESUME IS THE SAME STALL. It is carried so the counter can skip it
+        // without pretending it did not happen.
+        resumed_from: header.resumed_from || null,
+        outcome: result ? result.outcome || null : null,
+        reason: result ? result.reason || null : null,
+      };
+      if (result) closed.push(row);
+      else {
+        const l = extraAttemptLive(header);
+        row.live = l.live;
+        row.lease_expired = l.lease_expired;
+        // LAST OBSERVABLE PROGRESS, off the disk: the progress file is appended
+        // as the worker talks (engine `api` writes a line per turn; engine `cli`
+        // streams the child's own bytes into it), so its mtime is when anything
+        // last happened. `started_at` is the floor — a worker that has said
+        // nothing at all has been quiet since it started, not since never.
+        let mtime = 0;
+        try {
+          mtime = fs.statSync(a.progress).mtimeMs;
+        } catch (_) {}
+        row.last_progress_ms = Math.max(mtime, row.started_ms);
+        row.quiet_ms = row.last_progress_ms ? Math.max(0, Date.now() - row.last_progress_ms) : null;
+        live.push(row);
+      }
+    }
+  }
+  closed.sort((a, b) => a.started_ms - b.started_ms || a.attempt - b.attempt);
+  live.sort((a, b) => a.started_ms - b.started_ms);
+  return { closed, live, skipped_unattributed };
+}
+
+// THE TRIGGER, and the two clocks stay two clocks.
+//
+//   demote(profile, run) ⇔
+//         consecutive_stalls(profile, run) >= extra_demote_after
+//      OR a LIVE attempt quiet for >= extra_demote_stale_min
+//
+// The consecutive clock is about attempts that ENDED. The stale clock is about
+// an attempt that has NOT ended — `extra_stall_s` already stops one DISPATCH
+// after 180 seconds of silence; this is about the RUN. Different question,
+// different budget, and neither is a simplification of the other.
+//
+// ONLY `stalled` COUNTS. Not `timeout` (the budget was the operator's choice),
+// not `rate_limit`, not `authentication_failed` — each has its own answer, and a
+// demotion triggered by a 401 would hide a credential problem behind a routing
+// change where the user would never see the real fault.
+function extraDemotionState(claudeDir, slugArg, opts) {
+  const o = opts || {};
+  const cfg = o.cfg || resolvedConfig(claudeDir);
+  const run = extraDemoteRun(claudeDir, slugArg);
+  const after = Math.max(0, Number(cfg.extra_demote_after === undefined ? EXTRA_DEMOTE_AFTER_DEFAULT : cfg.extra_demote_after) || 0);
+  const staleMin = Math.max(
+    0,
+    Number(cfg.extra_demote_stale_min === undefined ? EXTRA_DEMOTE_STALE_MIN_DEFAULT : cfg.extra_demote_stale_min) || 0
+  );
+  const stallOff = Number(cfg.extra_stall_s === undefined ? 180 : cfg.extra_stall_s) === 0;
+  const clocks = {
+    consecutive: {
+      key: "extra_demote_after",
+      threshold: after,
+      on: after > 0,
+      // Both halves say this, because a user who turned the per-dispatch stall
+      // budget off has silently turned this clock off too: no `stalled`
+      // classification is ever produced, so the counter can never move.
+      note:
+        after === 0
+          ? "off — extra_demote_after is 0."
+          : stallOff
+          ? "extra_stall_s is 0, so no dispatch is ever classified `stalled` and this counter can never fire. Only the stale clock remains."
+          : null,
+    },
+    stale: {
+      key: "extra_demote_stale_min",
+      threshold_min: staleMin,
+      on: staleMin > 0,
+      note: staleMin === 0 ? "off — extra_demote_stale_min is 0." : null,
+    },
+  };
+
+  const base = {
+    ok: true,
+    run: run.slug,
+    run_from: run.from,
+    run_dir: run.slug ? path.join(resolveRunDir(claudeDir), run.slug) : null,
+    clocks,
+    profiles: [],
+    demoted: false,
+    demoted_profiles: [],
+    reasons: [],
+    override: null,
+    skipped_unattributed: 0,
+    announce: null,
+    trace_line: null,
+  };
+  if (!run.slug)
+    return Object.assign(base, {
+      known_run: false,
+      ladder: null,
+      why: "no run slug was given and the trace pointer names none, so there is no run to scope a demotion to.",
+    });
+  base.known_run = true;
+
+  const { closed, live, skipped_unattributed } = extraDemoteAttempts(claudeDir, run.slug);
+  base.skipped_unattributed = skipped_unattributed;
+  const override = extraDemoteOverride(claudeDir, run.slug);
+  base.override = override;
+  // A PROMOTE IS A WATERMARK, NOT A MUTE. Everything the promote had already
+  // seen is forgiven; a stall AFTER it is new evidence and may demote again.
+  // The alternative — a promote that suppresses the clock for the rest of the
+  // run — is an auto-off switch wearing a human's name.
+  const since = override && override.state === "promoted" ? Date.parse(override.at || "") || 0 : 0;
+
+  const byProfile = new Map();
+  const of = (name) => {
+    if (!byProfile.has(name))
+      byProfile.set(name, {
+        profile: name,
+        consecutive_stalls: 0,
+        stalls: [],
+        resumes_of_the_same_stall: 0,
+        reset_by: null,
+        stale: null,
+        demoted: false,
+        reason: null,
+        why: null,
+      });
+    return byProfile.get(name);
+  };
+
+  for (const a of closed) {
+    if (!a.profile) continue;
+    if (since && a.started_ms && a.started_ms <= since) continue;
+    const g = of(a.profile);
+    // A RESUME OF THE SAME STALLED ATTEMPT IS THE SAME STALL — it neither
+    // increments nor resets. A stall is a stall whether its continuation
+    // succeeded or not: a profile that needs a continuation twice in a row is
+    // costing more than it saves, and letting a successful resume erase the
+    // stall would make the counter unable to reach two by construction.
+    if (a.resumed_from) {
+      g.resumes_of_the_same_stall++;
+      continue;
+    }
+    if (a.reason === "stalled") {
+      g.consecutive_stalls++;
+      g.stalls.push({ task_id: a.task_id, attempt: a.attempt, started_at: a.started_at, model: a.model_requested });
+      g.reset_by = null;
+    } else {
+      // A COMPLETED DISPATCH THAT WAS NOT A STALL RESETS IT — including a 401.
+      // Only `stalled` counts, and it counts in both directions.
+      g.consecutive_stalls = 0;
+      g.stalls = [];
+      g.reset_by = { task_id: a.task_id, outcome: a.outcome, reason: a.reason };
+    }
+  }
+  for (const a of live) {
+    if (!a.profile || !a.live) continue;
+    const g = of(a.profile);
+    const quietMin = a.quiet_ms === null ? null : a.quiet_ms / 60000;
+    if (!g.stale || (g.stale.quiet_ms || 0) < (a.quiet_ms || 0))
+      g.stale = {
+        task_id: a.task_id,
+        attempt: a.attempt,
+        started_at: a.started_at,
+        quiet_ms: a.quiet_ms,
+        quiet_min: quietMin === null ? null : Math.floor(quietMin),
+        over_threshold: clocks.stale.on && quietMin !== null && quietMin >= staleMin,
+      };
+  }
+
+  for (const g of byProfile.values()) {
+    if (clocks.consecutive.on && g.consecutive_stalls >= after) {
+      g.demoted = true;
+      g.reason = "consecutive-stall";
+      g.why =
+        `${g.consecutive_stalls} consecutive stalled ${g.consecutive_stalls === 1 ? "dispatch" : "dispatches"} on "${g.profile}"` +
+        ` in this run (extra_demote_after is ${after}) — ${g.stalls.map((s) => s.task_id).join(", ")}.`;
+    } else if (g.stale && g.stale.over_threshold) {
+      g.demoted = true;
+      g.reason = "stale-live-attempt";
+      g.why = `"${g.profile}" has a live attempt (${g.stale.task_id}) that has shown no observable progress for ${g.stale.quiet_min}m (extra_demote_stale_min is ${staleMin}).`;
+    }
+  }
+
+  // THE MANUAL HALF. A user who knows the provider is down should not have to
+  // wait for two stalls, and a user who knows it is back should not have to
+  // finish the run on Claude. Both are recorded WITH THEIR REASON.
+  if (override && override.state === "demoted") {
+    let ledger = null;
+    try {
+      ledger = readExtra(claudeDir);
+    } catch (_) {}
+    for (const p of (ledger && ledger.profiles) || []) of(p.name);
+    for (const g of byProfile.values())
+      if (!g.demoted) {
+        g.demoted = true;
+        g.reason = "manual";
+        g.why = `demoted by hand on ${String(override.at || "").slice(0, 16).replace("T", " ")} — "${override.reason}".`;
+      }
+  }
+  if (override && override.state === "promoted")
+    for (const g of byProfile.values())
+      if (g.demoted)
+        // The watermark above already excluded everything the promote saw, so
+        // anything still demoted here is NEW evidence. Say that out loud rather
+        // than letting it look like the promote was ignored.
+        g.why = (g.why || "") + " This is evidence from AFTER the promote — a promote forgives what it saw, it does not mute the clock.";
+
+  const profiles = [...byProfile.values()].sort((a, b) => a.profile.localeCompare(b.profile));
+  base.profiles = profiles;
+  base.demoted_profiles = profiles.filter((p) => p.demoted).map((p) => p.profile);
+  base.demoted = base.demoted_profiles.length > 0;
+  base.reasons = profiles.filter((p) => p.demoted).map((p) => ({ profile: p.profile, reason: p.reason, why: p.why }));
+
+  // THE LADDER, BEFORE AND AFTER. `--json is not a summary`: the whole point of
+  // a demotion is which rank answers now, so the report carries both.
+  const hand = readOverride(claudeDir).map || {};
+  const table = isTrue(cfg.opus5_only) ? "opus5_only" : hand.rubric_bands_override ? "rubric_bands_override" : "default";
+  const effective = table === "default" ? "the shipped score→model table" : table;
+  base.ladder = {
+    before: ["extra_enabled (P0)", "opus5_only (P1)", "rubric_bands_override (P2)", "the shipped score→model table (P3)"],
+    after: base.demoted
+      ? ["opus5_only (P1)", "rubric_bands_override (P2)", "the shipped score→model table (P3)", `extra_enabled — DEMOTED for run ${run.slug}`]
+      : null,
+    effective_now: base.demoted ? effective : "extra_enabled (P0)",
+  };
+
+  if (base.demoted) {
+    base.announce =
+      `extra: DEMOTED for the rest of this run — ${base.demoted_profiles.join(", ")} ${
+        base.demoted_profiles.length === 1 ? "is" : "are"
+      } at the bottom of the ladder, so ${effective} answers instead. ` +
+      base.reasons.map((r) => r.why).join(" ") +
+      ` Nothing was written to your config, and it is not promoted back on its own: orc extra promote ${run.slug} --reason "<why>"`;
+    // CLI-COMPOSED, because a demotion that leaves no line cannot be counted
+    // (the v0.53.2 rule, restated). The lane copies it VERBATIM.
+    base.trace_line = extraDemoteTraceLine(base);
+  }
+  return base;
+}
+
+// One line, one wording, one owner. `n=` is the consecutive counter for a
+// `consecutive-stall`, and the quiet MINUTES for a stale live attempt — the two
+// clocks measure different things and the `reason=` field is what tells a reader
+// which number it is looking at.
+function extraDemoteTraceLine(st) {
+  const bits = st.reasons.map((r) => {
+    const g = st.profiles.find((p) => p.profile === r.profile);
+    const n = r.reason === "stale-live-attempt" ? (g && g.stale ? g.stale.quiet_min : "?") : g ? g.consecutive_stalls : "?";
+    return `profile=${r.profile} reason=${r.reason} n=${n}`;
+  });
+  return `EXTRA demote run=${st.run} :: ${bits.join(" · ")} → ${st.ladder.effective_now}`;
+}
+
+// PER PROFILE, ACROSS EVERY RUN THE JOURNAL STILL HOLDS. A provider that
+// demotes every run is a pattern; a provider that demoted once is an afternoon.
+// The difference is only visible if somebody counts, and this is the counter
+// `orc extra stats` and `/orc-retro` read.
+//
+// It re-runs the ONE engine per distinct run rather than re-deriving the rule,
+// which costs a journal walk per run and buys the guarantee that the history
+// and the live verdict can never disagree. The journal is swept at 30 days, so
+// the walk is bounded by construction.
+//
+// `runs_seen` counts runs that actually dispatched to that profile — not runs
+// that existed — so a rate here means "of the runs that used it", which is the
+// only question anybody asks.
+const EXTRA_DEMOTE_RATE_FLOOR = 3;
+function extraDemotionHistory(claudeDir, cfg) {
+  const runs = new Set();
+  let unattributed = 0;
+  const root = extraJournalRoot(claudeDir);
+  let names = [];
+  try {
+    names = fs.readdirSync(root);
+  } catch (_) {
+    // The SAME SHAPE in the empty case. A key that vanishes when there is
+    // nothing to report is a key every consumer has to guard, and an empty
+    // result is an ANSWER (`--json is not a summary`).
+    return { runs: 0, runs_unattributed: 0, rate_floor: EXTRA_DEMOTE_RATE_FLOOR, profiles: [] };
+  }
+  for (const name of names) {
+    const dir = path.join(root, name);
+    try {
+      if (!fs.statSync(dir).isDirectory()) continue;
+    } catch (_) {
+      continue;
+    }
+    for (const a of extraJournalAttemptList(dir)) {
+      let h = null;
+      try {
+        h = JSON.parse(fs.readFileSync(a.header, "utf8"));
+      } catch (_) {
+        continue;
+      }
+      if (h.run) runs.add(h.run);
+      else unattributed++;
+    }
+  }
+  const byProfile = new Map();
+  const of = (n) => {
+    if (!byProfile.has(n))
+      byProfile.set(n, {
+        profile: n,
+        runs_seen: 0,
+        runs_demoted: 0,
+        demote_rate: null,
+        reasons: { "consecutive-stall": 0, "stale-live-attempt": 0, manual: 0 },
+        runs: [],
+      });
+    return byProfile.get(n);
+  };
+  for (const slug of runs) {
+    const st = extraDemotionState(claudeDir, slug, { cfg });
+    for (const g of st.profiles) {
+      const row = of(g.profile);
+      row.runs_seen++;
+      if (!g.demoted) continue;
+      row.runs_demoted++;
+      if (row.reasons[g.reason] !== undefined) row.reasons[g.reason]++;
+      row.runs.push({ run: slug, reason: g.reason, why: g.why });
+    }
+  }
+  const profiles = [...byProfile.values()].sort((a, b) => b.runs_demoted - a.runs_demoted || a.profile.localeCompare(b.profile));
+  // NO RATE BELOW THE FLOOR, the `extra-profile-unreliable` restraint verbatim:
+  // one demotion out of one run is not a 100% demotion rate, it is one bad
+  // afternoon with a percent sign bolted on.
+  for (const g of profiles) g.demote_rate = g.runs_seen >= EXTRA_DEMOTE_RATE_FLOOR ? g.runs_demoted / g.runs_seen : null;
+  return {
+    runs: runs.size,
+    // Named, always. Both ABSENT counts are printed (v0.53.2) — an attempt with
+    // no run belongs to no run's history and saying nothing about it is how a
+    // report goes quietly short.
+    runs_unattributed: unattributed,
+    rate_floor: EXTRA_DEMOTE_RATE_FLOOR,
+    profiles,
+  };
+}
+
+// Is this profile held back RIGHT NOW? One reader, so the resolver, the
+// preflight, the doctor and `orc lane config` can never disagree about it.
+// Memoised per process: `extraResolveFor` is called once per task in a wave and
+// this walks the journal, and a wave of forty tasks must not walk it forty
+// times.
+let EXTRA_DEMOTE_MEMO = null;
+function extraDemotionCached(claudeDir, cfg) {
+  if (!EXTRA_DEMOTE_MEMO) EXTRA_DEMOTE_MEMO = extraDemotionState(claudeDir, null, { cfg });
+  return EXTRA_DEMOTE_MEMO;
+}
+function extraProfileDemoted(claudeDir, profile, cfg) {
+  const st = extraDemotionCached(claudeDir, cfg);
+  if (!st.demoted) return null;
+  const g = st.profiles.find((p) => p.profile === profile && p.demoted);
+  return g ? { state: st, profile: g } : null;
+}
+
+// ── The three commands ─────────────────────────────────────────────────────
+//
+//   orc extra demotion [<run>] [--json]   0 armed (not demoted) · 1 demoted · 2 unknown run
+//   orc extra promote  <run> --reason ""  0 promoted · 1 not demoted · 2 unknown run
+//   orc extra demote   <run> --reason ""  0 demoted  ·               · 2 unknown run
+//
+// `demotion` is a READ and its exit code is the ANSWER, the same convention as
+// `orc pattern status` and `orc diy status`. The reason on the two writes is
+// REQUIRED — a state change nobody wrote a reason for is a state nobody can
+// audit later (the /orc-pact retirement rule).
+function extraDemotionCmd(claudeDir, slugArg) {
+  const asJson = wantsJson();
+  const st = extraDemotionState(claudeDir, slugArg);
+  if (!st.known_run) {
+    const obj = { ok: false, reason: "unknown-run", run: null, why: st.why, hint: "orc run list names the runs that exist." };
+    if (asJson) emitJson(obj, 2);
+    console.error(st.why);
+    process.exit(2);
+  }
+  const code = st.demoted ? 1 : 0;
+  if (asJson) emitJson(st, code);
+
+  console.log(ui.header(`ORC · extra demotion — ${st.run}`));
+  console.log("");
+  if (!st.demoted) {
+    console.log("  " + ui.mark.ok(`armed — nothing is demoted in this run.`));
+  } else {
+    console.log("  " + ui.mark.warn(st.announce));
+  }
+  console.log("");
+  console.log(
+    ui.kv([
+      ["consecutive clock", st.clocks.consecutive.on ? `${st.clocks.consecutive.threshold} stalled dispatches` : "off"],
+      ["stale clock", st.clocks.stale.on ? `${st.clocks.stale.threshold_min} minutes with no progress` : "off"],
+      ["ladder now", st.ladder.effective_now],
+    ])
+  );
+  for (const note of [st.clocks.consecutive.note, st.clocks.stale.note]) if (note) console.log(ui.color.gray("  " + note));
+  console.log("");
+  if (!st.profiles.length) console.log(ui.color.gray("  no foreign dispatch in this run has reached the journal yet.\n"));
+  for (const p of st.profiles) {
+    const mark = p.demoted ? ui.mark.bad("DEMOTED") : ui.mark.ok("routing");
+    console.log(`  ${mark}  ${p.profile}  ${ui.color.gray(`stalls ${p.consecutive_stalls}/${st.clocks.consecutive.threshold || "off"}`)}`);
+    if (p.why) console.log("      " + p.why);
+    if (p.stale && !p.demoted) console.log(ui.color.gray(`      live attempt ${p.stale.task_id} quiet for ${p.stale.quiet_min}m`));
+    if (p.reset_by) console.log(ui.color.gray(`      counter reset by ${p.reset_by.task_id} (${p.reset_by.outcome})`));
+    if (p.resumes_of_the_same_stall)
+      console.log(ui.color.gray(`      ${p.resumes_of_the_same_stall} resume(s) of the same stall — not counted twice`));
+  }
+  // Both ABSENT counts are named. A report quietly short by three rows is the
+  // exact failure this rule exists to prevent (v0.53.2).
+  if (st.skipped_unattributed)
+    console.log(
+      ui.color.gray(
+        `\n  ${st.skipped_unattributed} journal attempt(s) carry no run and are counted by NO run's clock (dispatched with no run open, or written before v1.0.0).`
+      )
+    );
+  if (st.override)
+    console.log(
+      ui.color.gray(
+        `\n  ${st.override.state} by hand on ${String(st.override.at || "").slice(0, 16).replace("T", " ")} — "${st.override.reason}"`
+      )
+    );
+  console.log("");
+  process.exit(code);
+}
+
+function extraDemoteCmd(claudeDir, slugArg, want) {
+  const asJson = wantsJson();
+  const reason = flag("--reason");
+  const run = extraDemoteRun(claudeDir, slugArg);
+  const fail = (r, why, code) => {
+    if (asJson) emitJson({ ok: false, reason: r, run: run.slug, why }, code);
+    console.error(why);
+    process.exit(code);
+  };
+  if (!run.slug)
+    fail("unknown-run", "Name the run: orc extra " + want + ' <run-slug> --reason "<why>". `orc run list` shows the ones that exist.', 2);
+  if (!reason || !String(reason).trim())
+    fail(
+      "reason-required",
+      `A reason is REQUIRED: orc extra ${want} ${run.slug} --reason "<why>". A state change nobody wrote a reason for is a state nobody can audit later.`,
+      2
+    );
+
+  const before = extraDemotionState(claudeDir, run.slug);
+  if (!before.known_run) fail("unknown-run", before.why, 2);
+  if (want === "promote" && !before.demoted)
+    fail("not-demoted", `Nothing is demoted in run ${run.slug} — there is nothing to promote back.`, 1);
+
+  const rec = {
+    v: 1,
+    state: want === "promote" ? "promoted" : "demoted",
+    at: new Date().toISOString(),
+    reason: String(reason).trim(),
+    // WHAT THE DECISION SAW. A promote is a watermark, so the evidence it
+    // forgave is on the record beside it — otherwise a later demotion looks
+    // like the promote was ignored.
+    saw: {
+      demoted_profiles: before.demoted_profiles,
+      reasons: before.reasons,
+    },
+  };
+  const written = extraDemoteWrite(claudeDir, run.slug, rec);
+  const after = extraDemotionState(claudeDir, run.slug);
+  const obj = {
+    ok: true,
+    run: run.slug,
+    action: want,
+    reason: rec.reason,
+    file: written,
+    was_demoted: before.demoted,
+    now_demoted: after.demoted,
+    demoted_profiles: after.demoted_profiles,
+    ladder: after.ladder,
+    announce: after.announce,
+    trace_line: after.trace_line,
+    note:
+      want === "promote"
+        ? "A promote FORGIVES the evidence it saw; it does not mute the clock. Two more stalls in this run demote again."
+        : "Run-scoped. Nothing was written to your config, and it is never promoted back on its own.",
+  };
+  if (asJson) emitJson(obj, 0);
+  console.log("");
+  console.log(
+    "  " +
+      (want === "promote"
+        ? ui.mark.ok(`promoted — run ${run.slug} routes foreign again.`)
+        : ui.mark.warn(`demoted — run ${run.slug} keeps its work on Claude.`))
+  );
+  console.log(ui.color.gray(`  reason: ${rec.reason}`));
+  console.log(ui.color.gray("  " + obj.note));
+  console.log("");
+  process.exit(0);
 }
 
 // ══ THE RESUME SLICE (v0.54.0) ═════════════════════════════════════════════
@@ -27325,10 +28070,21 @@ async function extraDispatch(claudeDir) {
   } catch (_) {}
   const attempt = extraJournalNextAttempt(claudeDir, slice.task_id);
   const fidelity = EXTRA_JOURNAL_FIDELITY[prof.engine] || "none";
+  // WHICH RUN THIS BELONGED TO — read from the trace pointer on disk, exactly
+  // as `appendExtraSpend` already reads it, and never handed in by a caller.
+  // The journal lives outside {run_dir} on purpose (a crashed session is the
+  // moment nobody remembers the slug), but the stall DEMOTION counts
+  // consecutive stalls WITHIN one run, so the run has to be on the record at
+  // the moment of dispatch or the count is a guess later. `null` is the honest
+  // answer when no run is open, and an attempt with `run: null` is never
+  // counted into any run's clock — it is counted as SKIPPED and named.
+  const jrun = extraCurrentRun(claudeDir);
   const journal = extraJournalHeader(claudeDir, {
     v: 1,
     task_id: slice.task_id || null,
     attempt,
+    run: jrun ? jrun.slug : null,
+    lane: jrun ? jrun.lane : null,
     // Non-null only on a resume. It is what lets a return be attributed to the
     // attempt it continued rather than read as a fresh first try.
     resumed_from: slice.resumed_from || null,
@@ -28566,6 +29322,11 @@ function extraStats(claudeDir) {
     // folklore. Below the sample floor there is NO rate: a percentage computed
     // from three dispatches is noise with a percent sign on it.
     reliability: extraReliability(claudeDir, scan),
+    // v1.0.0 W5 — HOW OFTEN THIS PROFILE GETS DROPPED MID-RUN. Reliability
+    // counts dispatches; this counts RUNS, and they are different questions: a
+    // profile can fail one dispatch in ten and still stall twice in a row in
+    // every run that uses it.
+    demotions: extraDemotionHistory(claudeDir, resolvedConfig(claudeDir)),
     price_table: table ? { as_of: table.as_of, age_days: table._age_days, stale: table._stale, path: table._path } : null,
     priced_dispatches: priced,
     unpriced_dispatches: unpriced,
@@ -28604,6 +29365,28 @@ function extraStats(claudeDir) {
           `${scan.sources.run_returns_undated_skipped} saved dispatch return(s) carry no date and are excluded by --since. Drop --since to include them.`
         ) +
         "\n"
+    );
+  if (payload.demotions.profiles.some((g) => g.runs_demoted))
+    for (const g of payload.demotions.profiles) {
+      if (!g.runs_demoted) continue;
+      console.log(
+        "  " +
+          ui.mark.warn(
+            `${g.profile} was DEMOTED in ${g.runs_demoted} of ${g.runs_seen} run(s) that used it` +
+              (g.demote_rate === null
+                ? ` (no rate below ${payload.demotions.rate_floor} runs)`
+                : ` — ${Math.round(g.demote_rate * 100)}%`)
+          ) +
+          ui.color.gray(
+            `   consecutive-stall ${g.reasons["consecutive-stall"]} · stale ${g.reasons["stale-live-attempt"]} · by hand ${g.reasons.manual}`
+          )
+      );
+    }
+  if (payload.demotions.runs_unattributed)
+    console.log(
+      ui.color.gray(
+        `  ${payload.demotions.runs_unattributed} journal attempt(s) carry no run and are in no run's demotion history.`
+      )
     );
   if (scan.sources.unreadable_spend_lines)
     console.log(
@@ -28865,6 +29648,21 @@ function extraUsage() {
     "       orc extra preflight [--json]              the P0 gate before wave 1.\n" +
     "                               0 ok · 1 STOP (an expired or missing passphrase on a\n" +
     "                               vaulted profile a route row names)\n" +
+    "       orc extra demotion [<run-slug>] [--json]\n" +
+    "                               HAS THIS RUN LEFT ITS FOREIGN PROVIDER. Computed from\n" +
+    "                               the journal on every read, never stored as a verdict:\n" +
+    "                               2 consecutive `stalled` dispatches on one profile, or a\n" +
+    "                               live attempt quiet for extra_demote_stale_min minutes,\n" +
+    "                               drop that profile to the BOTTOM of the ladder for the\n" +
+    "                               rest of the run.  0 armed · 1 demoted · 2 unknown run\n" +
+    "       orc extra promote <run-slug> --reason \"<why>\"\n" +
+    "                               route foreign again in this run. Never automatic — two\n" +
+    "                               stalls is evidence, and a timer that re-arms a provider\n" +
+    "                               spends money on the evidence it already has.\n" +
+    "                               0 promoted · 1 nothing was demoted · 2 unknown run\n" +
+    "       orc extra demote <run-slug> --reason \"<why>\"\n" +
+    "                               the manual half: keep this run on Claude without waiting\n" +
+    "                               for two stalls.  0 demoted · 2 unknown run\n" +
     "       orc extra doctor [--json]                 0 clean · 1 findings"
   );
 }
@@ -29129,6 +29927,19 @@ function extraPreflight(claudeDir) {
     orphans.push(row);
   }
 
+  // ── THE DEMOTION — REPORTED, AND IT DOES NOT MOVE THE EXIT CODE ──────────
+  //
+  // The `extra-orphan-dispatch` precedent (v0.54.0), for the same reason: a
+  // demotion is a FINDING, not a stop. The run is fine — it is going to run on
+  // Claude, which is a correct answer — and stopping wave 1 over a routing
+  // decision the user can reverse in one command would be a gate nobody asked
+  // for. What it must never be is SILENT.
+  let demotion = null;
+  try {
+    demotion = extraDemotionCached(claudeDir, cfg);
+  } catch (_) {}
+  const demoted = demotion && demotion.demoted ? demotion : null;
+
   const stops = rows.filter((r) => r.verdict === "stop");
   // Expiry DISCONNECTS: the vault record goes and the profile is stamped, so it
   // can never route again. The ROUTE ROWS SURVIVE (Decision 4) - the bands and
@@ -29169,6 +29980,20 @@ function extraPreflight(claudeDir) {
         warnings: rows.filter((r) => r.verdict === "warn").map((x) => x.profile),
         // Reported, never acted on — and never a stop. The exit code above is
         // unchanged.
+        // Reported, never a stop — and the exit code above is unchanged.
+        demotion: demoted
+          ? {
+              run: demoted.run,
+              demoted_profiles: demoted.demoted_profiles,
+              reasons: demoted.reasons,
+              ladder: demoted.ladder,
+              announce: demoted.announce,
+              trace_line: demoted.trace_line,
+              promote: `orc extra promote ${demoted.run} --reason "<why>"`,
+            }
+          : null,
+        demotion_note:
+          "a demotion is a FINDING, not a stop: the run continues on Claude. It is never promoted back on its own, and nothing was written to your config.",
         orphans,
         orphan_note:
           "a foreign dispatch that never reported back. It is REPORTED here and never resumed: continuing a third party's half-finished write without asking is the same class of act as routing off Claude without saying so.",
@@ -29176,6 +30001,10 @@ function extraPreflight(claudeDir) {
       },
       code
     );
+  if (demoted) {
+    console.log("  " + ui.mark.warn(demoted.announce));
+    console.log("");
+  }
   if (orphans.length) {
     console.log(
       "  " +
@@ -29327,6 +30156,17 @@ async function extra() {
       break;
     case "journal":
       extraJournalCmd(claudeDir, pos[2], pos[3]);
+      break;
+    // v1.0.0 W5 — the stall demotion. A READ whose exit code is the answer, and
+    // two WRITES that each require a reason.
+    case "demotion":
+      extraDemotionCmd(claudeDir, pos[2]);
+      break;
+    case "promote":
+      extraDemoteCmd(claudeDir, pos[2], "promote");
+      break;
+    case "demote":
+      extraDemoteCmd(claudeDir, pos[2], "demote");
       break;
     case "doctor":
       extraDoctor(claudeDir);

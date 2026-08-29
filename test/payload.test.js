@@ -756,9 +756,15 @@ test("`extra_resume` is INERT in /orc-quick, and the shadowing is announced on b
   assert.match(shared, /ADDS AN OPTION and nothing else/, "and that it adds an option, never an answer");
 });
 
-test("the config surface says THIRTEEN keys, and names what it refused to add", () => {
+test("the config surface says FIFTEEN keys, and names what it refused to add", () => {
   const shared = read("skills/_shared/extra-dispatch.md");
-  assert.match(shared, /## The config surface — thirteen keys/);
+  assert.match(shared, /## The config surface — fifteen keys/);
+  assert.ok(shared.includes("`config.extra_demote_after`"));
+  assert.ok(shared.includes("`config.extra_demote_stale_min`"));
+  // v1.0.0 W5's two refusals, written down for the same reason as every other
+  // set: a reader who cannot see them will propose them again.
+  assert.match(shared, /REFUSED — `extra_demote` \(`on`\/`off`\)/);
+  assert.match(shared, /REFUSED — `extra_promote_after`/);
   assert.ok(shared.includes("`config.extra_stall_s`"));
   assert.ok(shared.includes("`config.extra_fallback_agent`"));
   // The v0.56.1 refusals, written down for the same reason as every other set:

@@ -127,10 +127,11 @@ test("GOLDEN: a hand-edited rubric_bands_override is reported shadowed, and read
 //
 // `--json is not a summary` (v0.49.1). W2 adds `answers`, `family`, `prio` and
 // `lanes` to every key; W3 REMOVES the three `fable5_*` keys and adds
-// `retired_keys`; W6 regroups the FILE. A key leaves this golden only when the
-// release that removed it says so — never in passing.
+// `retired_keys`; W5 ADDS the two demotion clocks; W6 regroups the FILE. A key
+// leaves this golden only when the release that removed it says so — never in
+// passing.
 
-test("GOLDEN: the 70 config keys, their tiers and their defaults", () => {
+test("GOLDEN: the 72 config keys, their tiers and their defaults", () => {
   const { root } = freshInstall();
   try {
     const j = json(cli(["config", "list", "--json", "--dir", root]));
@@ -139,7 +140,7 @@ test("GOLDEN: the 70 config keys, their tiers and their defaults", () => {
     // ORDER is part of it: CONFIG_META's order is the order the human menu
     // walks, and W6 regroups the FILE without reordering the registry.
     assert.deepStrictEqual(now, then);
-    assert.strictEqual(now.length, 70, "the key COUNT is a number the release reports");
+    assert.strictEqual(now.length, 72, "the key COUNT is a number the release reports");
   } finally {
     rmrf(root);
   }

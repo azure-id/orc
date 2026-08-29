@@ -81,6 +81,7 @@
   "overview.item.wikiDebt.cta": "Open Knowledge",
   "overview.item.extraFindings.cta": "Open Extra",
   "overview.item.legacyGlobalPackage.cta": "Open Maintenance",
+  "overview.item.extraDemotedRun.cta": "Open Extra",
   "overview.extraOrphan.title": "A dispatch did not report back",
   "overview.extraOrphan.note": "ORC sent work to a non-Claude worker and never heard the result. Its changes may still be on disk.",
   "overview.extraOrphan.chip": "{n} dispatch",

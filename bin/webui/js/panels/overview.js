@@ -54,6 +54,10 @@ const FINDING_ROUTE = {
   // evicts the old package first), and `upgrade` is an action row on
   // MAINTENANCE — so that is genuinely the panel that can clear it.
   "legacy-global-package": { panel: "maintenance", cta: "overview.item.legacyGlobalPackage.cta" },
+  // v1.0.0 W5. The rule again: a demoted run is cleared by `orc extra promote`,
+  // and Recovery is the Extra tab where every other journal-shaped state is
+  // already rendered — so that is genuinely the panel that can clear it.
+  "extra-demoted-run": { panel: "extra", cta: "overview.item.extraDemotedRun.cta" },
 };
 const DEFAULT_FINDING_ROUTE = { panel: "maintenance", cta: "overview.item.doctor.cta" };
 const findingRoute = (id) => FINDING_ROUTE[id] || DEFAULT_FINDING_ROUTE;

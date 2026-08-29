@@ -261,7 +261,7 @@ test("the shadow runs BOTH WAYS and is never silent", async () => {
   rmrf(p.root);
 });
 
-test("the thirteen config keys exist, with the defaults the contract states", () => {
+test("the fifteen config keys exist, with the defaults the contract states", () => {
   const p = project();
   const keys = json(run(p, ["config", "list", "--json"])).keys.filter((k) => k.key.startsWith("extra_"));
   const by = Object.fromEntries(keys.map((k) => [k.key, k]));
@@ -274,7 +274,23 @@ test("the thirteen config keys exist, with the defaults the contract states", ()
   // and `extra_fallback_agent` — and both come from the same observed failure:
   // a foreign worker that goes quiet mid-task. (The contract counts the keys a
   // user configures; this list also carries the deprecated members.)
-  assert.equal(keys.length, 14, "the combinatorial part is a ledger, not YAML");
+  // v1.0.0 W5 adds the fifteenth and sixteenth entries here —
+  // `extra_demote_after` and `extra_demote_stale_min` — and both are NUMBERS
+  // WITH A DOCUMENTED OFF VALUE rather than a switch: the two zeros already are
+  // the off switch, and a master key over them would be a third spelling of one
+  // thing.
+  assert.equal(keys.length, 16, "the combinatorial part is a ledger, not YAML");
+  // THE DEMOTION CLOCKS. Two clocks, because they measure different things: one
+  // counts attempts that ENDED, the other watches an attempt that has NOT.
+  assert.equal(by.extra_demote_after.default, 2);
+  assert.equal(by.extra_demote_stale_min.default, 20);
+  assert.ok(by.extra_demote_after.options.includes(0), "0 must be offered — it is half the off switch");
+  assert.ok(by.extra_demote_stale_min.options.includes(0), "and 0 here is the other half");
+  assert.equal(by.extra_demote_after.gated_by, "extra_enabled");
+  assert.equal(by.extra_demote_stale_min.gated_by, "extra_enabled");
+  // A demotion is RUN state. The description has to say so, or somebody reads
+  // it as a setting that turned their subsystem off.
+  assert.match(by.extra_demote_after.desc, /never writes your config|RUN state|run state/i);
   // THE STALL CLOCK. Not a second wall clock: it is reset by observable
   // progress, so it never fires on a worker that is merely slow.
   assert.equal(by.extra_stall_s.default, 180);

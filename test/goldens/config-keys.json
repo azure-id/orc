@@ -155,6 +155,16 @@
     "default": 2
   },
   {
+    "key": "extra_demote_after",
+    "tier": "common",
+    "default": 2
+  },
+  {
+    "key": "extra_demote_stale_min",
+    "tier": "common",
+    "default": 20
+  },
+  {
     "key": "opus5_only",
     "tier": "common",
     "default": false

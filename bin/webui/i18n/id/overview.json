@@ -81,6 +81,7 @@
   "overview.item.wikiDebt.cta": "Buka Pengetahuan",
   "overview.item.extraFindings.cta": "Buka Extra",
   "overview.item.legacyGlobalPackage.cta": "Buka Pemeliharaan",
+  "overview.item.extraDemotedRun.cta": "Buka Extra",
   "overview.extraOrphan.title": "Sebuah pengiriman tidak melapor kembali",
   "overview.extraOrphan.note": "ORC mengirim pekerjaan ke pekerja non-Claude dan tidak pernah menerima hasilnya. Perubahannya mungkin masih ada di disk.",
   "overview.extraOrphan.chip": "{n} pengiriman",

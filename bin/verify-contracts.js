@@ -408,6 +408,24 @@ const CONTRACTS = [
     files: ["skills/_shared/extra-dispatch.md", "skills/orc/references/trace-protocol.md"],
   },
   {
+    // v1.0.0 W5 — same shape, same reason: a demotion that leaves no line
+    // cannot be counted, so the CLI composes the wording and the lane copies it
+    // verbatim. Registered against both halves of the protocol.
+    name: "the demotion trace verb, composed once (v1.0.0)",
+    token: "EXTRA demote",
+    binFiles: ["bin/cli.js"],
+    files: ["skills/_shared/extra-dispatch.md", "skills/orc/references/trace-protocol.md"],
+  },
+  {
+    // The trigger's own sentence. It is the half a "simplification" would
+    // delete first — one clock instead of two — and the two clocks measure
+    // different things, so the sentence is the guard.
+    name: "the stall demotion trigger — two clocks, never merged (v1.0.0)",
+    token: "extra_demote_stale_min",
+    binFiles: ["bin/cli.js"],
+    files: ["skills/_shared/extra-dispatch.md"],
+  },
+  {
     // Whose fault it was. It is not decoration — a `network` verdict HOLDS the
     // wave, so the word has to mean the same thing on both sides.
     name: "attribution decides the recovery, and `network` HOLDS (v0.54.0)",
@@ -598,6 +616,11 @@ const CONTRACTS = [
     token: "ultra_mode",
     files: [
       "commands/orc-ultra.md",
+      // v1.0.0 W5 — the stall demotion is run-scoped state and names this as
+      // the precedent it copies. That is a real dependency: if `ultra_mode`
+      // ever stopped being run-scoped, the sentence justifying the demotion
+      // would be wrong.
+      "skills/_shared/extra-dispatch.md",
       "skills/orc/SKILL.md",
       "skills/orc/references/trace-protocol.md",
       "skills/orc/references/ultra-mode.md",
@@ -1073,6 +1096,10 @@ const CONTRACTS = [
     token: "--json is not a summary",
     files: [
       "skills/_shared/detecting-artifacts.md",
+      // v1.0.0 W5 — `orc extra demotion --json` carries both clocks, the
+      // counter, the evidence and the ladder before and after, because its TTY
+      // branch prints all of them.
+      "skills/_shared/extra-dispatch.md",
       "skills/orc-doc/references/house-rules.md",
     ],
     binFiles: ["bin/cli.js"],
@@ -1315,6 +1342,10 @@ const CONTRACTS = [
     token: "RESUME.md",
     binFiles: ["bin/cli.js"],
     files: [
+      // v1.0.0 W5 — the demotion's run-scoped record lives BESIDE it, in
+      // {run_dir}/{slug}/, and is deleted with the run. A move of one is a move
+      // of the other.
+      "skills/_shared/extra-dispatch.md",
       "skills/orc-challenge/SKILL.md",
       "skills/orc-challenge/examples/tsd-two-iterations.md",
       "skills/orc-challenge/references/fix-brief.md",
@@ -3261,11 +3292,17 @@ for (const b of BUDGETS) {
 
   if (!cliKeys.length) errs.push("could not parse CONFIG_META from bin/cli.js");
 
-  // 1. A NON-EMPTY lanes[]. The eight below are the v1.0.0 W2 mechanical seed's
+  // 1. A NON-EMPTY lanes[]. The ten below are the v1.0.0 W2 mechanical seed's
   // known gap: `_shared/extra-dispatch.md` names them, no lane spine does, and
   // W8/W9 assign them lane by lane. The allowlist is NAMED rather than implied
-  // so the exception is visible and shrinking; a ninth key joining it must be a
+  // so the exception is visible and shrinking; a key joining it must be a
   // deliberate line in a diff, not a silent pass.
+  //
+  // W5 added the last two knowingly. `extra_demote_after` and
+  // `extra_demote_stale_min` are OPERATING keys of the bridge in exactly the
+  // sense `extra_stall_s` is — every lane that dispatches foreign reads them
+  // through `orc extra resolve`, and none of them names them — so they join the
+  // list rather than being given a guessed lane set. W8/W9 empty it.
   const SEED_EMPTY = new Set([
     "extra_max_concurrent",
     "extra_unlock",
@@ -3275,6 +3312,8 @@ for (const b of BUDGETS) {
     "extra_verify_max_days",
     "extra_stall_s",
     "extra_resume_max",
+    "extra_demote_after",
+    "extra_demote_stale_min",
   ]);
   for (const e of metaEntries) {
     if (!e.lanes) {

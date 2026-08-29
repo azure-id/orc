@@ -226,7 +226,7 @@ test("config: every key answers a declared family, and the two contested ones ar
   const { root } = freshInstall();
   try {
     const j = JSON.parse(cli(["config", "list", "--json", "--dir", root]).stdout);
-    assert.strictEqual(j.keys.length, 70);
+    assert.strictEqual(j.keys.length, 72);
     for (const k of j.keys) {
       assert.ok(k.answers && k.answers.length, k.key + " declares no answers[]");
       for (const a of k.answers) assert.ok(j.families[a.family], k.key + " → unknown family " + a.family);
@@ -334,10 +334,14 @@ test("config: lanes[] is a mechanical seed, and says so by being empty where it 
     for (const k of j.keys) assert.ok(Array.isArray(k.lanes), k.key + " has no lanes[]");
     assert.ok(by.log_dir.lanes.length > 20, "a path every lane writes through is owned by every lane");
     assert.ok(by.doc_max_parallel.lanes.includes("orc-doc"));
-    // EIGHT keys are named by no lane's own prose — they live in
+    // TEN keys are named by no lane's own prose — they live in
     // _shared/extra-dispatch.md instead. An empty array is the SEED being
     // honest about what it measured, not a claim that nothing reads the key.
     // W8/W9 correct these lane by lane, against the recorded seed.
+    //
+    // W5 added the last two KNOWINGLY: they are operating keys of the bridge in
+    // exactly the sense `extra_stall_s` is, and giving them a guessed lane set
+    // would be inventing the measurement this list exists to be honest about.
     const orphans = j.keys.filter((k) => !k.lanes.length).map((k) => k.key);
     assert.deepStrictEqual(orphans, [
       "extra_max_concurrent",
@@ -348,6 +352,8 @@ test("config: lanes[] is a mechanical seed, and says so by being empty where it 
       "extra_verify_max_days",
       "extra_stall_s",
       "extra_resume_max",
+      "extra_demote_after",
+      "extra_demote_stale_min",
     ]);
   } finally {
     rmrf(root);

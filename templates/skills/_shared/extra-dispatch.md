@@ -169,7 +169,7 @@ A slot is a **point**, not an interval, so the band table's overlap refusal has
 no analogue here and none is invented. `orc extra role set` on an occupied slot
 REPLACES, and says what it replaced.
 
-### The nine hold-backs, each answered by name
+### The ten hold-backs, each answered by name
 
 1. **unknown slot** — refused, exit 2, listing the six.
 2. **`extra_enabled` false** — claude. The master gate.
@@ -191,6 +191,11 @@ REPLACES, and says what it replaced.
    preflight` STOPS the run. `extra_on_failure` never covers it: that key is
    about an endpoint that failed, and a deadline you set 30 days ago deserves a
    stop.
+10. **the profile is DEMOTED in this run** (v1.0.0) — claude, named, with the
+    promote command. The tenth hold-back and the only one that is about the RUN
+    rather than about the row: two consecutive stalls, a 20-minute stale live
+    attempt, or a human running `orc extra demote`. The position falls through
+    to the SAME pinned Claude agent it always had.
 
 ### What it hands back
 
@@ -202,7 +207,7 @@ REPLACES, and says what it replaced.
 | `band` | the ROUTE row's band, not the Claude band. On a slot answer it is the string **`slot:<slot>`** — the field NAME is unchanged, so the trace parser, the eight-field dedupe and the ` :: ` tolerance keep working untouched |
 | `slot` · `lane` · `asks` | present on a slot answer only. `score` is `null` there, and **is not derived from anything** |
 | `claude` | `{via, band, agent, table}` — **always present**, on both answers. It is the fall-through target AND the fallback target, so nothing ever needs a second lookup |
-| `held_back` | `null` · `role` · `risk` · `boundary` · `missing-profile` · `unverified` |
+| `held_back` | `null` · `role` · `risk` · `boundary` · `missing-profile` · `unverified` · `demoted` |
 | `verify_state` · `needs_reping` | `FRESH` / `STALE`. **A STALE profile still routes** — a stale check is not a failed one |
 | `model_known` | whether the routed model id was in the last ping's `models_seen`. `false` is a WARNING, never a block: the list is a cache, not an authority |
 | `credential` | `{source, key_name, present}` — never a value |
@@ -1056,6 +1061,146 @@ used. A CLI ping is not a cheap ping — say so.
 
 ---
 
+## The demotion — the ladder moves at runtime (v1.0.0)
+
+### `a lane that keeps paying a provider that stopped working` has broken this contract
+
+`extra_stall_s` stops ONE dispatch. It has nothing to say about the second one,
+or the third. A provider that goes quiet twice in a row is not having a bad
+minute — it is costing you a wave and buying nothing — and ORC used to keep
+handing it the next task anyway, because nothing counted.
+
+So it counts now. **Two consecutive `stalled` dispatches on one profile inside
+one run, or one live attempt with no observable progress for 20 minutes, drop
+that profile to the BOTTOM of its families for the rest of the run.**
+`opus5_only` — or the shipped score→model table — becomes the effective P0, and
+the work stays on Claude.
+
+### It writes no new measurement, and it is never remembered
+
+Every fact the trigger reads already shipped: `EXTRA_FAILURES.stalled` and the
+`timeline` block (v0.56.1), and the extra journal written by `orc extra dispatch`
+itself before the first byte leaves the machine (v0.54.0). The demotion READS
+the journal and decides — **computed by the CLI from disk on every read, never
+stored as a verdict and never carried in your head.** That is the lesson this
+repo has now lost to four times: v0.32.0 narration, v0.49.5 the hand-back,
+v0.53.2 the spend log, v0.54.0 the journal. **A fact relayed through a model's
+memory is a fact this repo has already lost.**
+
+The only thing written to disk is the HUMAN half — a promote or a manual demote,
+with its reason — under `{run_dir}/{slug}/extra-demotion.json`, beside
+`RESUME.md`. That is a decision, not a verdict, and it is deleted with the run.
+
+### The two clocks measure different things and stay two clocks
+
+```
+demote(profile, run) ⇔
+      consecutive_stalls(profile, run) >= extra_demote_after         (default 2)
+   OR a LIVE attempt quiet for >= extra_demote_stale_min minutes     (default 20)
+```
+
+- **The consecutive clock is about attempts that ENDED.** A stall is a stall
+  whether its resume succeeded or not: a profile that needs a continuation twice
+  in a row is costing more than it saves.
+- **The stale clock is about an attempt that has NOT ended.** `extra_stall_s`
+  already stops one dispatch after 180 seconds of silence. This one is about the
+  RUN — two workers in flight, both quiet, and a wave that is going nowhere.
+  Different question, different budget, its own key and its own off value.
+  **Neither is a simplification of the other**, and merging them "for
+  simplicity" is the failure this paragraph exists to prevent.
+- **The counter is per PROFILE**, not per provider and not global. Two profiles
+  on one provider can hold different keys, different models and different
+  reliability.
+- **A resume of the same stalled attempt is the SAME stall.** It neither
+  increments the counter nor resets it.
+- **`consecutive` resets on a completed dispatch that was not a stall** —
+  including a 401.
+- **ONLY `stalled` counts.** Not `timeout` (the budget was the operator's
+  choice), not `rate_limit`, not `authentication_failed`. Each of those has its
+  own answer — `extra_on_failure`, the vault, `extra_resume` — and **a demotion
+  triggered by a 401 would hide a credential problem behind a routing change**,
+  where the user would never see the real fault.
+- **`extra_stall_s: 0` silently turns the consecutive clock off too:** no
+  dispatch is ever classified `stalled`, so the counter can never move and only
+  the stale clock remains. `orc extra demotion` says so rather than reporting a
+  clock that cannot fire.
+
+### The four things it must never do
+
+1. **It never writes your config.** Run-scoped, like `/orc-ultra`'s
+   `ultra_mode`. A run that had a bad afternoon must not silently turn off a
+   subsystem you paid to set up.
+2. **It never auto-promotes inside the run.** Two stalls is evidence, and a
+   timer that re-arms a provider spends money on the evidence it already has.
+   `orc extra promote <run> --reason "<why>"` is a human action and the reason is
+   stored verbatim — the `/orc-pact` retirement rule. **A promote is a
+   WATERMARK, not a mute:** it forgives the evidence it saw, and two fresh stalls
+   after it demote again.
+3. **It never changes WHAT.** The score does not move, `declared_files` is not
+   widened, `acceptance[]` is not touched — `extra_fallback_agent`'s rule
+   inherited verbatim. **A demotion changes WHERE the work runs and nothing
+   else**, and the task lands on the SAME Claude agent it would have had.
+4. **It never abandons the position.** A demoted run still goes
+   `orc extra reconcile` → `orc extra resume-slice` → an ordinary Claude
+   dispatch. `a lane that re-does work the worktree already contains` applies
+   here exactly as it applies to the fallback, and it is the same code path.
+
+### It is ANNOUNCED, and that is not optional
+
+The mirror of `a lane that sends work off Claude without saying so` is **a lane
+that quietly STOPS.** A user who connected a provider deserves to be told the
+run left it. The line is CLI-worded (`announce` on the demotion state), it
+arrives in `orc lane config`'s `announce[]`, and it must be printed **before the
+next dispatch**. `orc lane config` renders the overlay rank as `state:
+"demoted"` — its own word, keeping its slot, because rendering it as
+`extra: off` would make *"I turned this off"* and *"this run left your provider
+after two stalls"* look identical.
+
+The trace verb is **CLI-composed and copied verbatim**, because **a demotion
+that leaves no line cannot be counted** (the v0.53.2 rule, restated):
+
+```
+EXTRA demote run=<slug> :: profile=<p> reason=<consecutive-stall|stale-live-attempt|manual> n=<k> → <the ladder that answers now>
+```
+
+### The three commands
+
+| command | exit codes | notes |
+|---|---|---|
+| `orc extra demotion [<run>] [--json]` | `0` armed · `1` demoted · `2` unknown run | a READ, and the exit code is the answer. `--json is not a summary`: it carries both clocks, the counter, the evidence task ids, the ladder before and after, and the announce line |
+| `orc extra promote <run> --reason "<why>"` | `0` promoted · `1` nothing was demoted · `2` unknown run | the reason is REQUIRED and stored verbatim |
+| `orc extra demote <run> --reason "<why>"` | `0` demoted · `2` unknown run | the manual half. Somebody who knows the provider is down should not have to wait for two stalls |
+
+`orc extra preflight` **reports a live demotion and does not move its exit
+code** — a demotion is a finding, not a stop, the `extra-orphan-dispatch`
+precedent. `orc doctor` gains **`extra-demoted-run`**, routed to the Extra
+panel's Recovery tab, which is where `orc extra promote` lives.
+
+`orc extra stats` aggregates it **per profile across every run the journal still
+holds** — a provider that demotes in every run is a pattern; one that demoted
+once is an afternoon, and the difference is only visible if somebody counts.
+There is **no rate below 3 runs**, the `extra-profile-unreliable` restraint
+verbatim.
+
+### The keys, and the two that were refused
+
+| key | default | off |
+|---|---:|---|
+| `config.extra_demote_after` | `2` | `0` — never demote on consecutive stalls |
+| `config.extra_demote_stale_min` | `20` | `0` — never demote on a stale live attempt |
+
+Both gated by `extra_enabled`. **Setting both to `0` is the honest off switch**,
+which is why there is no third key:
+
+- **REFUSED — `extra_demote` (`on`/`off`).** The two zeros already are it, and a
+  master switch over two numbers is a third spelling of one thing — the drift
+  this subsystem lints for everywhere else.
+- **REFUSED — `extra_promote_after` (an auto re-promote timer).** A timer that
+  re-arms a provider which stalled twice is a timer that spends money on the
+  evidence it already has. Promotion is a human decision with a recorded reason.
+
+---
+
 ## Who picks the task up — `extra_fallback_agent` (v0.56.1)
 
 `fallback_to` has always carried the band's (or the slot's) own Claude agent.
@@ -1101,11 +1246,16 @@ prevent.
 
 ---
 
-## The config surface — thirteen keys, and the count is still the point
+## The config surface — fifteen keys, and the count is still the point
 
 The combinatorial part — providers × models × bands **× positions** — is a
 **ledger with a CLI and a panel** (`orc extra`), not a YAML block nobody can hold
 in their head.
+
+**v1.0.0 added TWO** — `extra_demote_after` and `extra_demote_stale_min` — and
+both are NUMBERS WITH A DOCUMENTED OFF VALUE rather than a switch, because the
+two zeros already are the off switch and a master key over them would be a third
+spelling of one thing. Two more were refused and are written down above.
 
 **v0.56.1 added TWO**, and both come from the same observed failure: a foreign
 worker that goes quiet mid-task. Three more were refused and are written down so
@@ -1141,6 +1291,8 @@ of being a string nobody checked).
 | `config.extra_resume` | `on` | Whether a partial or crashed foreign dispatch is RESUMED rather than re-done. **Default `on`, because `off` is what is broken.** INERT in `/orc-quick`. |
 | `config.extra_resume_max` | `2` | Resume attempts per task before P6 takes over. The cap STOPS with an honest report naming the Claude agent — never a silent third loop, the same shape as every other bounded repair loop in ORC. |
 | `config.extra_stall_s` | `180` | Seconds a foreign worker may produce NOTHING before the dispatch is stopped as `stalled`. Reset by observable progress — the worker's stream, its stderr, or a declared file that changed on disk — so it never fires on a worker that is merely slow. `0` disables and the wall clock is the only stop again. **Clamped below `extra_timeout_s`**, because a budget that can never fire is worse than none. Engine `cli` only. |
+| `config.extra_demote_after` | `2` | Consecutive `stalled` dispatches on ONE profile inside one run before that profile is DEMOTED to the bottom of the ladder for the rest of the run. Only `stalled` counts; a resume of the same stall is the same stall; a completed dispatch that was not a stall resets it. Run state — it never writes your config, it is ANNOUNCED, and it is never promoted back on its own. `0` turns this clock off. |
+| `config.extra_demote_stale_min` | `20` | Minutes a LIVE attempt may show no observable progress before its profile is demoted. A different question from `extra_stall_s`, which stops ONE dispatch: this clock is about the RUN. `0` turns this clock off. |
 | `config.extra_fallback_agent` | `band` | WHICH Claude agent picks up a task the foreign worker could not finish. `band` is the pre-v0.56.1 behaviour. `ask` STOPS and puts the menu to the user. Any installed agent name pins one. It changes WHO, never the score, the declared files or the acceptance criteria. INERT in `/orc-quick`. |
 
 **Keys deliberately NOT added, and why each one would be a trap:**

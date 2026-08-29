@@ -336,7 +336,10 @@ test("GOLDEN: EXTRA_SLOTS matches the markdown slot table, in BOTH directions", 
   const inCode = [...constBlock.matchAll(/slot: "([a-z-]+)"/g)].map((m) => m[1]);
   assert.deepEqual(inCode, SLOTS, "EXTRA_SLOTS is the six, in order");
 
-  const table = (md.match(/## The slot table([\s\S]*?)\n### The nine hold-backs/) || ["", ""])[1];
+  // The closing anchor is the hold-back heading, whose COUNT moves when a
+  // hold-back is added (v1.0.0 W5 made it ten). Matching the number rather
+  // than the shape would make this golden fail for the wrong reason.
+  const table = (md.match(/## The slot table([\s\S]*?)\n### The \w+ hold-backs/) || ["", ""])[1];
   const inMd = new Set([...table.matchAll(/^\| `([a-z-]+)` \| `(\/orc[a-z-]*)`/gm)].map((m) => m[1]));
 
   for (const slot of inMd) assert.ok(inCode.includes(slot), `${slot} is in the markdown table and not in EXTRA_SLOTS`);
