@@ -233,7 +233,7 @@ One sentence, and it is the same sentence for both shapes:
 an extra route row covering this score      (only for the scores it covers)
   > opus5_only
   > rubric_bands_override
-  > the default 8-band table
+  > the default 6-band table
 ```
 
 **A slot**, highest wins:

@@ -136,7 +136,7 @@ test("config list --json marks rubric_bands_override shadowed, and a retired key
     assert.match(hand.shadow_reason, /opus5_only/, "and the reason names the rank that won");
     // Registry-less by design — the UI must never offer to write it.
     assert.strictEqual(hand.editable, false, "rubric_bands_override must be reported read-only");
-    assert.strictEqual(on.score_table.active, "opus5_only", "the 3-band ladder should resolve");
+    assert.strictEqual(on.score_table.active, "opus5_only", "the 2-band ladder should resolve");
 
     // W3 removed the Fable 5 block. A retired name on disk is a THIRD thing —
     // not a live key, not a hand-edited one — and the panel needs it that way

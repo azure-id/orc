@@ -19,6 +19,13 @@ is 5 and every other key (`batch_pause_every`, `rubric_bands`, `max_scouts`,
 override file is absent entirely, use these defaults unchanged. A per-run inline
 override still wins over both.
 
+The file is **grouped by the question each key answers**, and a rank compares
+only INSIDE a family — read a family top-down and stop at the first rank that
+resolves. `orc config set` regroups the file on the next write and regenerates
+its own group comments, but it **never rewrites a value it was not given**: a
+comment you wrote stays with the key it sits above, and a hand-edited
+multi-line block (`rubric_bands_override`) survives byte for byte.
+
 > Config editing is a CLI concern, not a slash command — it's pure file I/O, so
 > it runs deterministically with zero model tokens. Users run **`orc config`**
 > (interactive menu) or `orc config set <key> <value>` in their terminal; this
@@ -229,7 +236,7 @@ stays compile-owned and reads only `orc-diy.config.yaml`, never this file.
 
 ### Resolution — highest wins
 
-1. `opus5_only: true` — the 3-band preset above, and every fixed role forced to
+1. `opus5_only: true` — the 2-band preset above, and every fixed role forced to
    its Opus 5 variant. It FORCES: while on, it outranks a hand-written
    `rubric_bands_override`.
 2. `rubric_bands_override` — hand-written `{min, max, agent}` rows (hand-edit

@@ -95,7 +95,8 @@ test("config: opus5_only forces, warns about what it shadows, and honors the ret
     assert.strictEqual(legacy.status, 0, "retired name still accepted");
     assert.match(legacy.stderr, /renamed to opus5_only/, "deprecation is stated");
     const text = fs.readFileSync(ovr, "utf8");
-    assert.match(text, /^opus5_only:\s*true$/m, "written under the new name");
+    // W6 — a key in a CONTESTED family carries its rank as a trailing comment.
+    assert.match(text, /^opus5_only:\s*true(\s+# P1)?$/m, "written under the new name");
     assert.doesNotMatch(text, /^opus5_executor_only:/m, "retired name is not persisted");
 
     // Set-time notice: the roster + the tier cost, not just an "ok".
@@ -355,6 +356,65 @@ test("config: lanes[] is a mechanical seed, and says so by being empty where it 
       "extra_demote_after",
       "extra_demote_stale_min",
     ]);
+  } finally {
+    rmrf(root);
+  }
+});
+
+// ── W6 · the migration round trip ──────────────────────────────────────────
+//
+// The plan's W6 gate: a real FLAT file → regrouped by a write → re-read → the
+// map is IDENTICAL, with the hand-edited key and the legacy key both present.
+// The migration is the /orc-doc v0.49.0 shape — lazy (on the next `set`), free,
+// idempotent, non-destructive — so the assertion that matters is not what the
+// file looks like afterwards but that nothing about its MEANING moved.
+test("config: a flat file regroups on the next set and re-reads to the identical map", () => {
+  const root = tmpdir();
+  fs.mkdirSync(path.join(root, ".claude"), { recursive: true });
+  const cfg = path.join(root, ".claude", "orc.config.yaml");
+  fs.writeFileSync(
+    cfg,
+    "# my own header, two lines\n" +
+      "# and this is the second\n" +
+      "max_scouts: 5\n" +
+      "opus5_executor_only: true\n" + // the LEGACY spelling
+      "log_dir: .claude/orc/logs\n" +
+      "rubric_bands_override:\n" + // the documented HAND-EDITED block
+      "  - { min: 0, max: 50, agent: orc-executor-haiku-4-5 }\n" +
+      "gotchas_max: 40\n"
+  );
+  const readMap = () => {
+    const j = JSON.parse(cli(["config", "list", "--json", "--dir", root]).stdout);
+    const m = {};
+    for (const k of j.keys) if (k.is_overridden) m[k.key] = String(k.value);
+    for (const h of j.hand_edited) m[h.key] = String(h.value);
+    return m;
+  };
+  try {
+    const before = readMap();
+    // The flat file is read correctly BEFORE anything is migrated — a migration
+    // that needed a write to become correct would be a migration that changed
+    // the answer.
+    assert.strictEqual(before.max_scouts, "5");
+    assert.strictEqual(before.opus5_only, "true", "the legacy spelling resolves");
+    assert.match(before.rubric_bands_override, /min: 0, max: 50/);
+
+    assert.strictEqual(cli(["config", "set", "gotchas_max", "60", "--dir", root]).status, 0);
+    const after = readMap();
+
+    assert.deepStrictEqual(
+      { ...after, gotchas_max: "40" },
+      before,
+      "the regroup changes exactly the key that was set, and nothing else"
+    );
+    // The file really did regroup, and the user's own header really did survive.
+    const text = fs.readFileSync(cfg, "utf8");
+    assert.match(text, /^# ── paths · where ORC writes on disk/m);
+    assert.match(text, /^# my own header, two lines$/m);
+    assert.match(text, /^# and this is the second$/m);
+    // A second write is a no-op on everything but the value it was given.
+    assert.strictEqual(cli(["config", "set", "gotchas_max", "60", "--dir", root]).status, 0);
+    assert.strictEqual(fs.readFileSync(cfg, "utf8"), text, "the regroup is idempotent, byte for byte");
   } finally {
     rmrf(root);
   }

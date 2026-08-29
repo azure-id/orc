@@ -48,7 +48,7 @@ async function armed(p, band, model) {
   f.stop();
 }
 
-// Every edge of the default 8-band table and of the opus5_only 3-band ladder.
+// Every edge of the default 6-band table and of the opus5_only 2-band ladder.
 const EDGES = [0, 29, 30, 39, 40, 54, 55, 64, 65, 69, 70, 79, 80, 89, 90, 100];
 const agentAt = (rows, score) =>
   (rows.find((r) => score >= r.from && (r.inclusive_to ? score <= r.to : score < r.to)) || {}).agent;

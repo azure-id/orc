@@ -53,7 +53,7 @@ function project(configText) {
 // needs a verified profile, so it is frozen next to the fake provider in
 // test/cli/extra-routing.test.js instead of here.
 
-const RUBRIC_SHADOW = "shadowed by opus5_only — executors use the fixed 3-band Opus 5 ladder";
+const RUBRIC_SHADOW = "shadowed by opus5_only — executors use the fixed 2-band Opus 5 ladder";
 
 // W3 REMOVED the Fable 5 role override, and with it the three keys this golden
 // used to pin. A golden is deleted only when the behaviour it froze was
@@ -178,6 +178,15 @@ test("GOLDEN: the top-level shape of config list --json", () => {
       "is_overridden",
       "is_shadowed",
       "shadow_reason",
+      // CHANGED IN W6, deliberately and in the commit that changed it. The
+      // human table now prints a RESOLUTION state per row, and rule 10 says
+      // `--json is not a summary`, so the JSON carries the same computed
+      // fields. `source` keeps the old two-value source answer that
+      // `is_overridden` also carries; `state` is the one that can say a row is
+      // read by nothing at all.
+      "state",
+      "state_reason",
+      "source",
       "desc",
       "options",
       "control",
@@ -230,7 +239,10 @@ test("GOLDEN: `config set` resolves a legacy key away and drops its line", () =>
 
     const after = fs.readFileSync(path.join(root, ".claude", "orc.config.yaml"), "utf8");
     assert.ok(!/opus5_executor_only/.test(after), "the retired NAME does not survive a write");
-    assert.match(after, /^opus5_only: true$/m, "but the VALUE it resolved to does");
+    // W6 — the line now carries its RANK, because `opus5_only` sits in a
+    // contested family and a file grouped by family says where each key sits in
+    // it. The marker is appended, never stacked: a second write finds it there.
+    assert.match(after, /^opus5_only: true\s+# P1$/m, "but the VALUE it resolved to does");
     assert.match(after, /^max_scouts: 3$/m);
     j = json(cli(["config", "list", "--json", "--dir", root]));
     assert.deepStrictEqual(j.legacy_keys, [], "so the listing stops reporting it");
@@ -239,21 +251,17 @@ test("GOLDEN: `config set` resolves a legacy key away and drops its line", () =>
   }
 });
 
-// KNOWN DEFECT, FROZEN ON PURPOSE - do not read this test as approval.
+// W6 · D24 — THE DEFECT ABOVE, FIXED. This test replaces
+// `GOLDEN (known defect): a documented multi-line rubric_bands_override does
+// not survive a set`, which asserted, line by line, that a user's comment was
+// deleted, that the override came back as `""`, and that the file was left
+// invalid YAML. W1 froze it so the fixing wave would have to DELETE assertions
+// that named the loss rather than quietly make a golden pass; this is that
+// deletion, and these are the assertions that replace it.
 //
-// Plan hard rule 9 says a user's config file keeps working, untouched: "values
-// are never rewritten - only the comments around them". `writeOverride()` does
-// not do that. It rebuilds the WHOLE file from the parsed map, so one
-// `orc config set` deletes every comment the user wrote and re-serialises every
-// value. For the ONE documented hand-edit-only key that is worse than cosmetic:
-// `rubric_bands_override` is documented as a multi-line list of {min, max,
-// agent} rows, `readOverride()` is a single-line `key: value` parser, and the
-// round trip turns a valid file into an invalid one.
-//
-// W1 is a freeze wave, so nothing is fixed here. This test exists so that the
-// wave which DOES fix it (W6 owns the file) has to delete an assertion that
-// names the loss, rather than quietly making a golden pass.
-test("GOLDEN (known defect): a documented multi-line rubric_bands_override does not survive a set", () => {
+// The fixture is byte-identical to the one W1 measured
+// (orc-v1-build/findings/W1-baseline.md §3), so the two tests are comparable.
+test("GOLDEN: a hand-written config file survives a set — comments, blocks and all", () => {
   const root = project(
     "# a note the user wrote\n" +
       "max_scouts: 5\n" +
@@ -263,22 +271,77 @@ test("GOLDEN (known defect): a documented multi-line rubric_bands_override does 
   );
   const cfg = path.join(root, ".claude", "orc.config.yaml");
   try {
-    // Already wrong BEFORE any write: the line parser reads the two rows as a
-    // phantom key, and the real key as an empty value.
+    // The READ is right first. A block value is its own text — not `""` — so
+    // presence and truthiness now agree about the same file, and a list row is
+    // never reported as if it were a config key.
     const before = json(cli(["config", "list", "--json", "--dir", root]));
     const hand = Object.fromEntries(before.hand_edited.map((h) => [h.key, h.value]));
-    assert.strictEqual(hand.rubric_bands_override, "", "the value is lost on READ, not only on write");
-    assert.ok("- { min" in hand, "and a list row is reported as if it were a config key");
+    assert.match(hand.rubric_bands_override, /min: 0, max: 50/);
+    assert.ok(!("- { min" in hand), "a list row is not a config key");
+    assert.deepStrictEqual(Object.keys(hand), ["rubric_bands_override"]);
 
     assert.strictEqual(cli(["config", "set", "gotchas", "on", "--dir", root]).status, 0);
     const after = fs.readFileSync(cfg, "utf8");
 
-    assert.ok(!/a note the user wrote/.test(after), "the user's comment is gone");
-    assert.match(after, /^rubric_bands_override: ""$/m, "the override is now an empty string");
-    assert.match(after, /^- \{ min: /m, "and the file is no longer valid YAML");
-    // The keys the CLI does own are the part that works.
-    assert.match(after, /^max_scouts: 5$/m);
-    assert.match(after, /^gotchas: on$/m);
+    assert.match(after, /^# a note the user wrote$/m, "the user's comment survives");
+    assert.match(
+      after,
+      /^rubric_bands_override:\n {2}- \{ min: 0, max: 50, agent: orc-executor-haiku-4-5 \}\n {2}- \{ min: 50, max: 100, agent: orc-executor-opus-5-high \}$/m,
+      "the documented multi-line form survives BYTE FOR BYTE"
+    );
+    assert.match(after, /^max_scouts: 5$/m, "an untouched value is not re-serialised");
+    assert.match(after, /^gotchas: on$/m, "and the key that was set is written");
+    // The comment travels with the key it sits above, wherever the regroup puts
+    // it. Hard rule 9: only the comments AROUND a value may move.
+    assert.match(after, /# a note the user wrote\nmax_scouts: 5/);
+
+    // Idempotent: a second write does not stack a second copy of anything.
+    assert.strictEqual(cli(["config", "set", "gotchas", "off", "--dir", root]).status, 0);
+    const twice = fs.readFileSync(cfg, "utf8");
+    assert.strictEqual(
+      (twice.match(/# a note the user wrote/g) || []).length,
+      1,
+      "the comment is not duplicated by a regroup"
+    );
+    assert.strictEqual(twice.replace(/^gotchas: off$/m, "gotchas: on"), after);
+  } finally {
+    rmrf(root);
+  }
+});
+
+// The other half of D24: the group comments ORC writes are REGENERATED on every
+// write, never accumulated. W1's finding says the read path skips comments for
+// free while the WRITE path drops them — so a writer that emitted its headers
+// once would grow a stale header every time a key moved family.
+test("GOLDEN: ORC's own group comments are regenerated, never accumulated", () => {
+  const root = project("max_scouts: 5\n");
+  const cfg = path.join(root, ".claude", "orc.config.yaml");
+  try {
+    for (const [k, v] of [["gotchas", "on"], ["max_scouts", "4"], ["gotchas", "off"]])
+      assert.strictEqual(cli(["config", "set", k, v, "--dir", root]).status, 0);
+    const after = fs.readFileSync(cfg, "utf8");
+    const headers = after.split("\n").filter((l) => l.startsWith("# ──"));
+    assert.deepStrictEqual(
+      headers.length,
+      new Set(headers).size,
+      "no group header appears twice"
+    );
+    assert.strictEqual(
+      (after.match(/^# \.claude\/orc\.config\.yaml/gm) || []).length,
+      1,
+      "and the file header is written exactly once"
+    );
+    // Every group header names a family the registry knows, and the header
+    // sentence about ranks sits above a file that is grouped by family.
+    assert.match(after, /^# Grouped by the QUESTION each key answers\./m);
+    const declared = Object.keys(json(cli(["config", "list", "--json", "--dir", root])).families);
+    for (const h of headers) {
+      const name = h.replace(/^# ── /, "").split(" · ")[0].split(" — ")[0].trim();
+      assert.ok(
+        declared.includes(name) || ["hand-edited", "retired"].includes(name),
+        `${name} is a family the registry declares`
+      );
+    }
   } finally {
     rmrf(root);
   }

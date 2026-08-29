@@ -1119,7 +1119,7 @@ const CONFIG_FAMILIES = {
         // without being a CONFIG_META key, because where it sits in the
         // precedence is a fact even though `orc config set` refuses to write it.
         registry_less: true,
-        shadow_note: "shadowed by {by} — executors use the fixed 3-band Opus 5 ladder",
+        shadow_note: "shadowed by {by} — executors use the fixed 2-band Opus 5 ladder",
       },
       { prio: "P3", key: null, terminal: "the shipped score→model table" },
     ],
@@ -1323,28 +1323,151 @@ function retiredOnDisk(map) {
     .map((k) => ({ key: k, value: map[k], ...RETIRED_KEYS[k] }));
 }
 
-// Minimal flat `key: value` reader. Preserves unknown keys (e.g. an advanced
-// rubric_bands_override the user hand-edited) verbatim.
-function readOverride(claudeDir) {
+// ── The config file as a DOCUMENT (v1.0.0 W6 · D24 · D30) ──────────────────
+//
+// Before W6 this file was read as a flat map and REBUILT from that map on every
+// `orc config set`. Everything a map cannot hold was therefore deleted on the
+// next write: every comment the user wrote, and — because the reader was a
+// single-line `key: value` parser — the DOCUMENTED multi-line form of
+// `rubric_bands_override`, which came back as an empty string plus a phantom
+// key named `- { min` and left the file invalid YAML. Measured in
+// orc-v1-build/findings/W1-baseline.md §3, frozen as a known-defect golden, and
+// carried as D24 until the user answered it (a) — fix it here.
+//
+// So the file is now read as a document: a preamble, then entries that each
+// carry their own leading comments and their own RAW lines. Plan hard rule 9 —
+// "values are never rewritten, only the comments around them" — is enforced by
+// the writer emitting an entry's raw lines VERBATIM unless the value it was
+// handed differs from the one already on disk. A `set` therefore rewrites the
+// line it was asked to change and nothing else.
+//
+// The comments ORC itself wrote are the one exception: they are dropped on read
+// and REGENERATED on every write, or a file would accumulate a stale group
+// header every time a key moved. That is why this list is matched by full-line
+// literals ORC has written rather than by a shape a user's own comment could
+// wander into.
+const ORC_WRITTEN_COMMENTS = new Set([
+  "# .claude/orc.config.yaml — ORC user overrides (managed by `orc config`).",
+  "# Only changed keys appear here. Effective value = config.md default, then this.",
+  "# `orc update` / `orc upgrade` never touch this file.",
+  "# Grouped by the QUESTION each key answers. Ranks compare only INSIDE a family:",
+  "# read a family top-down and stop at the first rank that resolves.",
+  "# (no overrides set)",
+]);
+const isOrcComment = (line) => {
+  const t = line.trim();
+  return t.startsWith("# ──") || ORC_WRITTEN_COMMENTS.has(t);
+};
+
+// A continuation of the entry above it: an indented line, or a top-level
+// sequence item. This is the whole of the block support — enough to carry the
+// one documented multi-line value through a write intact, and deliberately not
+// a YAML parser (a half-parser that guesses would be worse than none).
+const isContinuation = (line) => /^\s+\S/.test(line) || /^-\s/.test(line);
+
+// The file, structured. `entries[]` is in FILE order; the writer regroups.
+function readOverrideDoc(claudeDir) {
   const p = overridePath(claudeDir);
-  const map = {};
-  if (fs.existsSync(p)) {
-    for (const line of fs.readFileSync(p, "utf8").split(/\r?\n/)) {
-      const t = line.trim();
-      if (!t || t.startsWith("#")) continue;
-      const i = t.indexOf(":");
-      if (i === -1) continue;
-      const k0 = t.slice(0, i).trim();
-      const k = LEGACY_KEYS[k0] || k0;
-      let v = t.slice(i + 1).trim();
-      if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'")))
-        v = v.slice(1, -1);
-      // A retired name never overwrites an explicit new-name line.
-      if (k !== k0 && Object.prototype.hasOwnProperty.call(map, k)) continue;
-      map[k] = v;
+  const doc = { path: p, exists: fs.existsSync(p), preamble: [], entries: [] };
+  if (!doc.exists) return doc;
+  const lines = fs.readFileSync(p, "utf8").split(/\r?\n/);
+  if (lines.length && lines[lines.length - 1] === "") lines.pop();
+  let pending = [];
+  let seenEntry = false;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const t = line.trim();
+    if (isOrcComment(line)) continue; // regenerated on write, never accumulated
+    if (!t) {
+      if (pending.length) pending.push(line);
+      continue;
     }
+    if (t.startsWith("#")) {
+      pending.push(line);
+      continue;
+    }
+    const colon = t.indexOf(":");
+    if (colon === -1) {
+      // Not a key line and not a continuation of one — a line ORC does not
+      // understand. It is kept verbatim rather than dropped: this reader's job
+      // is to lose nothing.
+      doc.entries.push({ kind: "orphan", key: null, comments: trimBlanks(pending), raw: [line] });
+      pending = [];
+      seenEntry = true;
+      continue;
+    }
+    const k0 = t.slice(0, colon).trim();
+    let v = t.slice(colon + 1).trim();
+    const quoted =
+      (v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"));
+    // A trailing `# …` on a value line. The writer puts the RANK there for the
+    // two contested keys, so the reader has to take it back off or the next
+    // read would hand the marker to a validator as part of the value. Only on
+    // an unquoted value: inside quotes a `#` is the user's.
+    let inline = "";
+    if (!quoted) {
+      const cut = v.match(/\s+#.*$/);
+      if (cut) {
+        inline = cut[0].trim();
+        v = v.slice(0, cut.index).trim();
+      }
+    } else v = v.slice(1, -1);
+    const raw = [line];
+    // A key with an empty value followed by continuation lines is a BLOCK — the
+    // shape `orc/config.md` documents for `rubric_bands_override`.
+    if (v === "") {
+      while (i + 1 < lines.length && isContinuation(lines[i + 1])) raw.push(lines[++i]);
+    }
+    const isBlock = raw.length > 1;
+    doc.entries.push({
+      kind: isBlock ? "block" : "scalar",
+      key: LEGACY_KEYS[k0] || k0,
+      wrote: k0,
+      // A block's value is its own text. Presence and truthiness then AGREE for
+      // a hand-edited table: before W6 the block read as "" — falsy — so the
+      // CLI reported it shadowed (a presence test) and simultaneously reported
+      // the default table as resolving (a truthiness test), about the same file.
+      value: isBlock ? raw.slice(1).join("\n") : v,
+      inline,
+      comments: trimBlanks(pending),
+      raw,
+    });
+    pending = [];
+    seenEntry = true;
   }
-  return { path: p, map };
+  // Comments left over with no key under them. A comment sitting directly above
+  // a key belongs TO that key and travels with it when the file regroups; these
+  // are the ones that belong to nothing, so they are kept as their own block —
+  // a trailing note if the file had entries, the whole file if it did not.
+  const tail = trimBlanks(pending);
+  if (tail.length) {
+    if (seenEntry) doc.entries.push({ kind: "comment", key: null, comments: [], raw: tail });
+    else doc.preamble = tail;
+  }
+  return doc;
+}
+
+function trimBlanks(lines) {
+  let a = 0;
+  let b = lines.length;
+  while (a < b && !lines[a].trim()) a++;
+  while (b > a && !lines[b - 1].trim()) b--;
+  return lines.slice(a, b);
+}
+
+// The flat map every caller since v0.10 has consumed. Unchanged contract:
+// `{ path, map }`, unknown keys preserved, a retired name never overwriting an
+// explicit new-name line. It is now DERIVED from the document, so a block value
+// arrives non-empty and a list row is no longer reported as if it were a key.
+function readOverride(claudeDir) {
+  const doc = readOverrideDoc(claudeDir);
+  const map = {};
+  for (const e of doc.entries) {
+    if (!e.key) continue;
+    if (e.key !== e.wrote && Object.prototype.hasOwnProperty.call(map, e.key)) continue;
+    map[e.key] = e.value;
+  }
+  return { path: doc.path, map };
 }
 
 function serializeValue(value) {
@@ -1356,19 +1479,164 @@ function serializeValue(value) {
   return `"${s.replace(/"/g, '\\"')}"`;
 }
 
+// Which GROUP a key belongs to in the written file. D30: the grouping is by
+// FAMILY — the question the key answers — and never by bare rank. `design-03`
+// §2 says cross-family rank comparison is meaningless in those words, and the
+// measurement is why it matters: at v1.0.0 exactly two keys are contested
+// (P0 · P1) and the other seventy are all at P2, the neutral rank. A file
+// grouped by bare priority would be a group of one, a group of one and a group
+// of seventy, under a header sentence about families.
+function configGroupOf(key) {
+  const m = metaFor(key);
+  if (m) return m.answers[0].family;
+  if (RETIRED_KEYS[key]) return "__retired";
+  return "__hand";
+}
+
+// A key's rank INSIDE a contested family, for ordering. Uncontested families
+// order by the registry's own declaration order, because their keys do not
+// compete and inventing an order between them would say something false.
+function configRankIn(family, key) {
+  const f = CONFIG_FAMILIES[family];
+  if (!f || !f.contested || !f.ranks) return -1;
+  return f.ranks.findIndex((r) => r.key === key);
+}
+
+const CONFIG_GROUP_TITLE = {
+  __hand: "hand-edited — ORC never writes these, and never rewrites them",
+  __retired: "retired — still on disk, no longer read by anything",
+};
+
+// Rebuild the file from the DOCUMENT plus the map it was handed.
+//
+// Hard rule 9: values are never rewritten, only the comments around them. So an
+// entry whose value still matches the map is emitted from its RAW lines, byte
+// for byte — quoting, spacing, block rows and all. Only a key whose value the
+// caller actually changed is re-serialised, and only that line.
 function writeOverride(claudeDir, map) {
   const p = overridePath(claudeDir);
   fs.mkdirSync(path.dirname(p), { recursive: true });
-  const keys = Object.keys(map);
-  let out =
-    "# .claude/orc.config.yaml — ORC user overrides (managed by `orc config`).\n" +
-    "# Only changed keys appear here. Effective value = config.md default, then this.\n" +
-    "# `orc update` / `orc upgrade` never touch this file.\n";
-  if (!keys.length) out += "# (no overrides set)\n";
-  for (const k of keys) out += `${k}: ${serializeValue(map[k])}\n`;
-  fs.writeFileSync(p, out);
+  const doc = readOverrideDoc(claudeDir);
+  const byKey = new Map();
+  const loose = [];
+  for (const e of doc.entries) {
+    if (e.key && !byKey.has(e.key)) byKey.set(e.key, e);
+    else if (!e.key) loose.push(e);
+  }
+
+  // Every key that must appear, in group order.
+  const groups = new Map();
+  for (const k of Object.keys(map)) {
+    const g = configGroupOf(k);
+    if (!groups.has(g)) groups.set(g, []);
+    groups.get(g).push(k);
+  }
+  const familyOrder = Object.keys(CONFIG_FAMILIES);
+  // NOT named `order`: `test/cli/diy.test.js` scrapes the FIRST `const order =`
+  // in this file as the compiler's stitch order, and a second one above it
+  // would silently become the list that test compares against compile.md.
+  const groupOrder = [
+    ...familyOrder.filter((f) => groups.has(f)),
+    ...[...groups.keys()].filter((g) => !familyOrder.includes(g) && !g.startsWith("__")).sort(),
+    ...["__hand", "__retired"].filter((g) => groups.has(g)),
+  ];
+
+  const lines = [
+    "# .claude/orc.config.yaml — ORC user overrides (managed by `orc config`).",
+    "# Only changed keys appear here. Effective value = config.md default, then this.",
+    "# `orc update` / `orc upgrade` never touch this file.",
+    "# Grouped by the QUESTION each key answers. Ranks compare only INSIDE a family:",
+    "# read a family top-down and stop at the first rank that resolves.",
+  ];
+  if (doc.preamble.length) lines.push("", ...doc.preamble);
+  if (!Object.keys(map).length) lines.push("# (no overrides set)");
+
+  for (const g of groupOrder) {
+    const keys = groups.get(g);
+    if (!keys || !keys.length) continue; // §9 rule 5 — an empty group is not printed
+    const f = CONFIG_FAMILIES[g];
+    if (f && f.contested)
+      keys.sort((a, b) => {
+        const ra = configRankIn(g, a);
+        const rb = configRankIn(g, b);
+        return (ra === -1 ? 99 : ra) - (rb === -1 ? 99 : rb);
+      });
+    else if (f)
+      keys.sort((a, b) => CONFIG_META.findIndex((m) => m.key === a) - CONFIG_META.findIndex((m) => m.key === b));
+    const title = f ? `${g} · ${f.question}` : CONFIG_GROUP_TITLE[g];
+    lines.push("", groupRule(title));
+    for (const k of keys) {
+      const e = byKey.get(k);
+      // A raw line is reused only when nothing about it has to change. A key
+      // written under its RETIRED spelling is rebuilt under the canonical name:
+      // the NAME is what is being repaired, and a renamed mechanism must never
+      // be a silent revert (the `LEGACY_KEYS` rule). The value is untouched.
+      const unchanged = e && e.key === e.wrote && String(e.value) === String(map[k]);
+      if (e && e.comments.length) lines.push(...e.comments);
+      if (unchanged) lines.push(...e.raw);
+      else lines.push(`${k}: ${serializeValue(map[k])}`);
+      // The rank, only where a rank means anything — inside a contested family.
+      // Appended rather than rebuilt so an untouched line stays byte-identical,
+      // and skipped when the line already carries a comment, so a second write
+      // does not stack a second marker.
+      if (f && f.contested && !(unchanged && e.inline)) {
+        const at = configRankIn(g, k);
+        if (at !== -1) lines[lines.length - 1] += `   # ${f.ranks[at].prio}`;
+      }
+    }
+  }
+  // Lines that belonged to no key. Never dropped — a reader that loses a line
+  // the user typed is the defect this whole path exists to fix.
+  if (loose.length) {
+    lines.push("");
+    for (const e of loose) lines.push(...e.raw);
+  }
+  fs.writeFileSync(p, lines.join("\n") + "\n");
   return p;
 }
+
+// A group header, padded to a constant width so the file reads as a table.
+function groupRule(title) {
+  const head = `# ── ${title} `;
+  return head.length >= 78 ? head.trimEnd() : head + "─".repeat(78 - head.length);
+}
+
+// The state of ONE key, on the resolution axis — not the source axis.
+//
+// `overridden` / `default` answer "where did this value come from". They do not
+// answer "does anything read it", and a row that prints `default` while its
+// gate is off is telling the user their setting is at its default when in fact
+// nothing consults it at all. W6 §3: a `not-read` row is marked `not-read`,
+// never `default`.
+//
+// The words are NOT new. `LANE_RANK_STATES` is the closed set W3 shipped, and
+// the two that apply to a single key mean exactly what they mean there —
+// `not-read`: a higher rank in this key's family resolved, so nobody looked;
+// `inert`: this key's master gate is off, which removes it from the
+// conversation rather than losing it a precedence contest (`design-03` §5).
+function configKeyState(m, map, claudeDir) {
+  const has = Object.prototype.hasOwnProperty.call(map, m.key);
+  if (m.gated_by) {
+    const g = metaFor(m.gated_by);
+    const gv = Object.prototype.hasOwnProperty.call(map, m.gated_by)
+      ? map[m.gated_by]
+      : g
+        ? g.def
+        : false;
+    if (!isTrue(gv))
+      return { state: "inert", reason: `${m.gated_by} is off — nothing reads this key`, source: has ? "overridden" : "default" };
+  }
+  const why = shadowReason(m.key, map, claudeDir);
+  if (why) return { state: "not-read", reason: why, source: has ? "overridden" : "default" };
+  return { state: has ? "overridden" : "default", reason: null, source: has ? "overridden" : "default" };
+}
+
+const STATE_PAINT = {
+  overridden: (s) => ui.color.green(s),
+  default: (s) => ui.color.gray(s),
+  "not-read": (s) => ui.color.yellow(s),
+  inert: (s) => ui.color.yellow(s),
+};
 
 function configList(claudeDir) {
   const { path: p, map } = readOverride(claudeDir);
@@ -1377,13 +1645,43 @@ function configList(claudeDir) {
   );
   const pad = Math.max(...CONFIG_META.map((m) => m.key.length));
   const forced = String(map.opus5_only) === "true";
-  const tierLabel = { common: "Common", advanced: "Advanced" };
-  for (const tier of ["common", "advanced"]) {
-    console.log(ui.header(tierLabel[tier]));
-    for (const m of CONFIG_META.filter((x) => x.tier === tier)) {
+  // W6/D30 — grouped by the QUESTION each key answers, because a rank compares
+  // only inside a family (`design-03` §2). The `tier` axis is untouched: it is a
+  // UI axis and it still drives the interactive menu, so it rides along as a row
+  // marker instead of being the table's spine.
+  const families = laneFamilies(null, map, claudeDir);
+  const byFamily = new Map();
+  for (const m of CONFIG_META) {
+    const f = m.answers[0].family;
+    if (!byFamily.has(f)) byFamily.set(f, []);
+    byFamily.get(f).push(m);
+  }
+  for (const [family, metas] of byFamily) {
+    const fam = CONFIG_FAMILIES[family];
+    console.log(ui.header(`${family} — ${fam ? fam.question : ""}`));
+    // The family's resolution line, printed from the SAME derivation
+    // `orc lane config` prints. Two renderings of one fact is how they drift.
+    const fj = families[family];
+    if (fj && fj.contested) {
+      const at = fj.resolved_at ? `${fj.resolved_at} ` : "";
+      console.log(
+        "  " +
+          ui.color.gray(
+            `resolves on ${at}${fj.resolved_by || "the shipped default"} — read top-down, stop at the first rank that resolves.`
+          )
+      );
+    }
+    if (fam && fam.contested)
+      metas.sort((a, b) => {
+        const ra = configRankIn(family, a.key);
+        const rb = configRankIn(family, b.key);
+        return (ra === -1 ? 99 : ra) - (rb === -1 ? 99 : rb);
+      });
+    for (const m of metas) {
+      const st = configKeyState(m, map, claudeDir);
       const has = Object.prototype.hasOwnProperty.call(map, m.key);
       const val = has ? map[m.key] : m.def;
-      const src = has ? ui.color.green("overridden") : ui.color.gray("default   ");
+      const src = (STATE_PAINT[st.state] || ((s) => s))(st.state.padEnd(10));
       const opts = m.options ? ` ${ui.color.gray("[options: " + m.options.join(" | ") + "]")}` : "";
       // v0.55.0 — a DEPRECATED member of a live key is marked on the row that
       // carries it, not only in the prose nobody re-reads.
@@ -1392,7 +1690,11 @@ function configList(claudeDir) {
       const mark = legacy.length
         ? ui.color.yellow(`   (${legacy.join(", ")} moved to \`orc extra role\` — inert here)`)
         : "";
-      console.log(`  ${ui.color.cyan(m.key.padEnd(pad))}  ${String(val).padEnd(30)} ${src}  ${ui.color.gray(m.desc)}${opts}${mark}`);
+      const adv = m.tier === "advanced" ? ui.color.gray(" (adv)") : "";
+      console.log(`  ${ui.color.cyan(m.key.padEnd(pad))}  ${String(val).padEnd(30)} ${src}  ${ui.color.gray(m.desc)}${opts}${mark}${adv}`);
+      // A row that is not read says WHY, on its own line — the reason is the
+      // part the user can act on, and it is the CLI's sentence, not a synonym.
+      if (st.reason) console.log(`  ${" ".repeat(pad)}  ${ui.color.yellow("└ " + st.state)}: ${ui.color.gray(st.reason)}`);
     }
   }
   // The resolve order, said out loud whenever it is a composite. A user
@@ -1408,7 +1710,7 @@ function configList(claudeDir) {
     } catch (_) {}
     console.log(ui.header("Resolve order  (highest wins)"));
     console.log(
-      "\n  extra route row  >  opus5_only  >  rubric_bands_override  >  the default 8-band table\n"
+      "\n  extra route row  >  opus5_only  >  rubric_bands_override  >  the default 6-band table\n"
     );
     if (rows.length)
       console.log(
@@ -1612,7 +1914,7 @@ function scoreTableJson(map, claudeDir) {
   //   an extra route row covering this score  (only for the scores it covers)
   //     > opus5_only
   //     > rubric_bands_override
-  //     > the default 8-band table
+  //     > the default 6-band table
   //
   // Extra is an OVERLAY, not a replacement, which is what makes "cheap grunt
   // work goes to DeepSeek, hard work stays on Opus 5" a two-command setup
@@ -1683,6 +1985,7 @@ function configListJson(claudeDir) {
   const keys = CONFIG_META.map((m) => {
     const v = m.validate || {};
     const why = shadowReason(m.key, map, claudeDir);
+    const st = configKeyState(m, map, claudeDir);
     return {
       key: m.key,
       tier: m.tier,
@@ -1706,6 +2009,13 @@ function configListJson(claudeDir) {
       is_overridden: has(m.key),
       is_shadowed: !!why,
       shadow_reason: why,
+      // v1.0.0 W6 — the RESOLUTION axis beside the source axis, because the
+      // human table now prints it and `--json is not a summary`. `source` keeps
+      // the old two-value answer ("where did this value come from"); `state`
+      // answers "does anything read it", from `LANE_RANK_STATES`' own words.
+      state: st.state,
+      state_reason: st.reason,
+      source: has(m.key) ? "overridden" : "default",
       desc: m.desc,
       options: m.options || null,
       control: {
@@ -1852,7 +2162,7 @@ function extraShadowNotice(claudeDir) {
     return;
   }
   const bands = rows.map((r) => `[${r.from},${r.to >= 100 ? "100]" : r.to + ")"}`).join(", ");
-  const base = isTrue(map.opus5_only) ? "opus5_only" : map.rubric_bands_override ? "rubric_bands_override" : "the default 8-band table";
+  const base = isTrue(map.opus5_only) ? "opus5_only" : map.rubric_bands_override ? "rubric_bands_override" : "the default 6-band table";
   console.error(
     `  ⚠ ${bands} ${rows.length === 1 ? "is routed to a non-Claude worker and no longer resolves" : "are routed to a non-Claude worker and no longer resolve"} on ${base}.\n` +
       "    Every other score still does — Extra is an overlay, not a replacement.\n" +
@@ -1882,7 +2192,7 @@ const OPUS5_ONLY_ROLES = [
 function opus5Notice(on, claudeDir) {
   if (!on) {
     console.log(
-      "\n  Every role is back to its default pin (executors → the 8-band mixed-model\n" +
+      "\n  Every role is back to its default pin (executors → the 6-band mixed-model\n" +
         "  table). A hand-written rubric_bands_override is live again."
     );
     return;
@@ -3125,7 +3435,7 @@ function diyValidate(cfg) {
   return { errors, warnings };
 }
 
-// The single canonical 8-band score->model table (mirrors skills/orc/config.md
+// The single canonical 6-band score->model table (mirrors skills/orc/config.md
 // — documented drift). No more narrow/wide preset: rubric_bands is granularity
 // only, and this one table maps every score.
 //
@@ -8297,7 +8607,7 @@ function scoreFromFacets(f, fanIn, fanOut) {
 }
 
 // The resolved score→model table. `opus5_only` outranks everything (3 bands);
-// otherwise the default 8-band table. A hand-written `rubric_bands_override` is
+// otherwise the default 6-band table. A hand-written `rubric_bands_override` is
 // registry-less by design, so the forecast reports it as UNKNOWN rather than
 // pretending to resolve it.
 // v1.0.0 W4 — an ALIAS, not a second array. See OPUS5_SCORE_TABLE's comment:

@@ -101,7 +101,7 @@ const config = {
           "key": "rubric_bands_override",
           "mode": "replace",
           "registry_less": true,
-          "shadow_note": "shadowed by {by} — executors use the fixed 3-band Opus 5 ladder"
+          "shadow_note": "shadowed by {by} — executors use the fixed 2-band Opus 5 ladder"
         },
         {
           "prio": "P3",
