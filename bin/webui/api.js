@@ -6,8 +6,8 @@
  * endpoint spawns `node bin/cli.js <cmd> --json` and forwards the parsed
  * object. That makes UI/CLI drift structurally impossible — the UI *is* the
  * CLI — and it means every write inherits the CLI's validators, the LEGACY_KEYS
- * aliasing, the shadowing announcements and the fable5_effort frontmatter
- * rewrite for free, with zero duplicated logic.
+ * aliasing and the shadowing announcements for free, with zero duplicated
+ * logic.
  *
  * The alternative (requiring cli.js as a library) is off the table: cli.js ends
  * with a bare IIFE, has no require.main guard, prints and process.exit()s

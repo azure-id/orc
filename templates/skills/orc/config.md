@@ -128,21 +128,11 @@ run_budget_dispatches: 0   # 0 = off. Above 0, the Phase-1 `forecast:` block
 
 # --- Opus-5-only dispatch (HARD-GATED, FORCING — default off) ---
 opus5_only: false          # true → EVERY dispatched role resolves to a claude-opus-5
-                           #   agent, effort as the only cost dial. Outranks BOTH
-                           #   rubric_bands_override and the whole fable5_* block.
+                           #   agent, effort as the only cost dial. Outranks a
+                           #   hand-written rubric_bands_override.
                            #   Never forced: the Haiku trace writer, orc-diy (compile-
                            #   owned). Needs an Opus 5 main session or every dispatch
                            #   downgrades. See _shared/opus5-only.md.
-
-# --- Fable 5 role override (HARD-GATED — nothing changes unless enabled) ---
-#     (entirely INERT while opus5_only: true)
-fable5_enabled: false      # master gate. false = inert (this whole block does nothing).
-fable5_effort: medium      # medium | high | xhigh | max — effort for the Fable 5 role agents.
-                           #   The `orc config set fable5_effort` CLI rewrites the effort:
-                           #   line in the installed orc-<role>-fable-5 agents.
-fable5_roles: []           # subset of [analyze, plan, advisor, judge, review]. Each listed
-                           #   role dispatches its orc-<role>-fable-5 variant instead of the
-                           #   default. advisor/judge are ultra-lane only. Empty = no effect.
 
 # --- Artifact locations (internal by default) ---
 run_dir: .claude/orc/run                  # run folders (checkpoint, state-of-play,
@@ -228,8 +218,8 @@ stays compile-owned and reads only `orc-diy.config.yaml`, never this file.
 ### Resolution — highest wins
 
 1. `opus5_only: true` — the 3-band preset above, and every fixed role forced to
-   its Opus 5 variant. It FORCES: while on, it outranks BOTH a hand-written
-   `rubric_bands_override` and the whole Fable 5 role override.
+   its Opus 5 variant. It FORCES: while on, it outranks a hand-written
+   `rubric_bands_override`.
 2. `rubric_bands_override` — hand-written `{min, max, agent}` rows (hand-edit
    only; deliberately not a CLI key). Wins over the default table.
 3. the default 8-band table.
@@ -264,16 +254,7 @@ mini analyst → `orc-analyze-mini-opus-5-med`, mini planner →
 pattern codifier → `orc-pattern-codifier-opus-5-med` — plus the roles owned by
 other lanes (scout, wiki scanner, CLAUDE.md writer, retro miner, fast
 executor). The full mapping, the two exclusions (the Haiku trace writer and
-orc-diy) and the tier consequence are in `../_shared/opus5-only.md`. It
-outranks the Fable 5 override below.
-
-**Fable 5 role override:** (INERT while `opus5_only: true`) when
-`fable5_enabled: true`, each role in
-`fable5_roles` dispatches its `orc-<role>-fable-5` variant INSTEAD of the default
-above (`analyze`→`orc-analyst-fable-5`, `plan`→`orc-planner-fable-5`,
-`advisor`→`orc-advisor-fable-5`, `judge`→`orc-judge-fable-5`,
-`review`→`orc-reviewer-fable-5`). Same slice, same contract. See
-`../_shared/fable5-override.md`.
+orc-diy) and the tier consequence are in `../_shared/opus5-only.md`.
 
 ## Rules
 - Read at run start via the resolution rule above (defaults ← `orc.config.yaml`
@@ -327,19 +308,10 @@ above (`analyze`→`orc-analyst-fable-5`, `plan`→`orc-planner-fable-5`,
   wiki's scan already has consent) makes `orc-wiki` codify ALL detected languages as
   a byproduct of its full scan, pre-warming the pattern cache so later `/orc` runs
   never hit the `pattern_findings` prompt.
-- `fable5_enabled` / `fable5_effort` / `fable5_roles` gate the **Fable 5 role
-  override** (default OFF — a hard P0 gate). Nothing changes unless
-  `fable5_enabled: true`. Then each role in `fable5_roles` (subset of
-  `analyze, plan, advisor, judge, review`) dispatches its `orc-<role>-fable-5`
-  agent instead of the default; `advisor`/`judge` apply only under `/orc-ultra`.
-  `fable5_effort` (medium default) sets those agents' effort — the CLI rewrites
-  their frontmatter on set. Enabled with empty `fable5_roles` = no effect (the
-  CLI warns). The whole block is INERT while `opus5_only: true`. See
-  `../_shared/fable5-override.md`.
 - `opus5_only` (default `false`) is a **forcing** dispatch mode: every scored
   executor AND every fixed role resolves to a `claude-opus-5` agent, with effort
-  as the only cost dial. While on it outranks `rubric_bands_override` and the
-  entire `fable5_*` block. Two things are never forced: the pinned Haiku trace
+  as the only cost dial. While on it outranks a hand-written
+  `rubric_bands_override`. Two things are never forced: the pinned Haiku trace
   writer, and orc-diy (compile-owned). Every dispatch then needs an Opus 5 main
   session — including `/orc-fast`, whose Sonnet-medium session premise holds
   only while this is off. See `../_shared/opus5-only.md`.

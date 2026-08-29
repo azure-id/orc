@@ -88,9 +88,7 @@ requeue) run the same formula, inherit the original task's risk floor, and never
 dispatch below the finding-task's band. Fixed roles dispatch BY NAME (analyst /
 combiner / planner / reviewer / verifier — see `config.md`'s fixed-role table +
 `.claude/agents/MODEL-MAPPING.md`). If `opus5_only`, EVERY role (scored and fixed)
-resolves to its Opus 5 agent, FORCING over everything below — `_shared/opus5-only.md`;
-else if `fable5_enabled`, roles in `fable5_roles` dispatch their
-`orc-<role>-fable-5` variant — `_shared/fable5-override.md`.
+resolves to its Opus 5 agent, FORCING over everything below — `_shared/opus5-only.md`.
 Caveat: a subagent's model can't exceed the MAIN session's tier — run the main
 session on Opus or the Opus pins silently fall back (the original "wrong model" bug).
 
@@ -220,7 +218,7 @@ task's `spec_invariants[]` is appended VERBATIM to that slice's
 ## Phase 1 — Planning · Trace: `PHASE planning`, `CONFIG`, `WIKI-CONSULT`, `CROSSLINK`, `GATE`
 
 Emit `PHASE planning start`, then emit ONE `CONFIG <key=value …>` line with the
-resolved values of every config key this run will consume (incl. `fable5_*` when enabled, and ALWAYS `opus5_only` — it selects the executor table AND every fixed role, so retro can segment per-band outcomes BY dispatch mode) — the runtime
+resolved values of every config key this run will consume (ALWAYS `opus5_only` — it selects the executor table AND every fixed role, so retro can segment per-band outcomes BY dispatch mode) — the runtime
 proof `/orc-retro` audits that the run honored the config.
 **Wiki consult (load `references/wiki-consult.md`;
 always report — no tier is silent):** read the FRESH/AGING/STALE tier from

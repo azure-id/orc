@@ -110,9 +110,9 @@
   to   { transform: none; opacity: 1; }
 }
 
-/* THE SHADOWING ANIMATION (plan §6.2). Flip opus5_only on and the fable5_*
-   rows desaturate, a lock slides in, and the reason is right there. The
-   animation teaches the precedence rule — that is the whole point. */
+/* THE SHADOWING ANIMATION (plan §6.2). A row a higher rank already answered
+   desaturates, a lock slides in, and the reason is right there. The animation
+   teaches the precedence rule — that is the whole point. */
 .setting.shadowed { opacity: .42; filter: saturate(.15); }
 .lock {
   display: inline-flex;

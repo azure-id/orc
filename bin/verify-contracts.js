@@ -27,9 +27,7 @@ const CONTRACTS = [
     token: "actual_model",
     files: [
       "agents/MODEL-MAPPING.md",
-      "agents/orc-advisor-fable-5.md",
       "agents/orc-advisor-opus-5-xhigh.md",
-      "agents/orc-analyst-fable-5.md",
       "agents/orc-analyze-mini-opus-5-med.md",
       "agents/orc-analyze-mini-sonnet-5-high.md",
       "agents/orc-challenge-advisor-opus-5-med.md",
@@ -55,18 +53,15 @@ const CONTRACTS = [
       "agents/orc-executor-sonnet-4-6-high.md",
       "agents/orc-executor-sonnet-4-6-med.md",
       "agents/orc-executor-sonnet-5-high.md",
-      "agents/orc-judge-fable-5.md",
       "agents/orc-judge-opus-5-xhigh.md",
       "agents/orc-learn-writer-opus-5-low.md",
       "agents/orc-pattern-codifier-opus-5-med.md",
       "agents/orc-pattern-codifier-sonnet-5-high.md",
-      "agents/orc-planner-fable-5.md",
       "agents/orc-planner-mini-opus-5-med.md",
       "agents/orc-planner-mini-sonnet-5-high.md",
       "agents/orc-planner-opus-5-med.md",
       "agents/orc-retro-opus-5-med.md",
       "agents/orc-retro-sonnet-5-high.md",
-      "agents/orc-reviewer-fable-5.md",
       "agents/orc-reviewer-opus-5-med.md",
       "agents/orc-scout-opus-5-low.md",
       "agents/orc-scout-sonnet-4-6-high.md",
@@ -183,7 +178,6 @@ const CONTRACTS = [
       "agents/orc-executor-sonnet-5-high.md",
       "agents/orc-pattern-codifier-opus-5-med.md",
       "agents/orc-pattern-codifier-sonnet-5-high.md",
-      "agents/orc-reviewer-fable-5.md",
       "agents/orc-reviewer-opus-5-med.md",
       "agents/orc-verifier-opus-5-med.md",
       "skills/orc-pattern/SKILL.md",
@@ -249,7 +243,6 @@ const CONTRACTS = [
     name: "planner grounding attestation (v0.7.0 — disposition: exists|new)",
     token: "disposition",
     files: [
-      "agents/orc-planner-fable-5.md",
       "agents/orc-planner-mini-opus-5-med.md",
       "agents/orc-planner-mini-sonnet-5-high.md",
       "agents/orc-planner-opus-5-med.md",
@@ -277,7 +270,6 @@ const CONTRACTS = [
     name: "findings evidence-or-advisory rule (v0.7.0 — unanchored => AUTO-P3)",
     token: "AUTO-P3",
     files: [
-      "agents/orc-reviewer-fable-5.md",
       "agents/orc-reviewer-opus-5-med.md",
       "agents/orc-verifier-opus-5-med.md",
       "skills/orc/subskills/orc-review-verify/SKILL.md",
@@ -289,7 +281,6 @@ const CONTRACTS = [
     name: "P0-P3 severity enum (findings shape)",
     token: "P0|P1|P2|P3",
     files: [
-      "agents/orc-reviewer-fable-5.md",
       "agents/orc-reviewer-opus-5-med.md",
       "agents/orc-verifier-opus-5-med.md",
       "skills/orc-quick/SKILL.md",
@@ -479,7 +470,6 @@ const CONTRACTS = [
     name: "analyst absence attestation (v0.9.0 — searched: notes on missing/buildable)",
     token: "searched:",
     files: [
-      "agents/orc-analyst-fable-5.md",
       "agents/orc-analyze-mini-opus-5-med.md",
       "agents/orc-analyze-mini-sonnet-5-high.md",
       "agents/orc-system-analyst-opus-5-high.md",
@@ -499,10 +489,8 @@ const CONTRACTS = [
     name: "spec staleness stamp (v0.9.0 — git_head recorded at analysis time)",
     token: "git_head",
     files: [
-      "agents/orc-analyst-fable-5.md",
       "agents/orc-analyze-mini-opus-5-med.md",
       "agents/orc-analyze-mini-sonnet-5-high.md",
-      "agents/orc-planner-fable-5.md",
       "agents/orc-planner-opus-5-med.md",
       "agents/orc-system-analyst-opus-5-high.md",
       "skills/orc-analyze-mini/SKILL.md",
@@ -528,7 +516,6 @@ const CONTRACTS = [
     name: "plan coverage gate (v0.9.0 — orphan requirement = malformed plan)",
     token: "orphan",
     files: [
-      "agents/orc-planner-fable-5.md",
       "agents/orc-planner-mini-opus-5-med.md",
       "agents/orc-planner-mini-sonnet-5-high.md",
       "agents/orc-planner-opus-5-med.md",
@@ -551,7 +538,6 @@ const CONTRACTS = [
     token: "spec_invariants",
     files: [
       "skills/orc-doc/SKILL.md",
-      "agents/orc-planner-fable-5.md",
       "agents/orc-planner-mini-opus-5-med.md",
       "agents/orc-planner-mini-sonnet-5-high.md",
       "agents/orc-planner-opus-5-med.md",
@@ -622,7 +608,6 @@ const CONTRACTS = [
     name: "ultra advisor brief handoff (v0.10.0 — brief_path return -> slice injection)",
     token: "brief_path",
     files: [
-      "agents/orc-advisor-fable-5.md",
       "agents/orc-advisor-opus-5-xhigh.md",
       "skills/orc-advisor/SKILL.md",
       "skills/orc/references/ultra-mode.md",
@@ -633,7 +618,6 @@ const CONTRACTS = [
     name: "ultra verdict discipline (v0.10.0 — blocking needs anchor + failure_consequence)",
     token: "failure_consequence",
     files: [
-      "agents/orc-judge-fable-5.md",
       "agents/orc-judge-opus-5-xhigh.md",
       "skills/orc-judge/SKILL.md",
       "skills/orc/references/ultra-mode.md",
@@ -780,7 +764,6 @@ const CONTRACTS = [
       "agents/MODEL-MAPPING.md",
       "agents/orc-trace-writer-haiku-4-5.md",
       "hooks/orc-trace.js",
-      "skills/_shared/fable5-override.md",
       "skills/_shared/opus5-only.md",
       "skills/orc-aftermath/SKILL.md",
       "skills/orc-boundary/SKILL.md",
@@ -1535,21 +1518,6 @@ const CONTRACTS = [
     ],
   },
   {
-    // v0.30.0: the Fable 5 role override. The shared paragraph is canonical
-    // under _shared/; the lint pins its pointer into every lane that honors it.
-    // The config keys themselves are pinned by the config-key coverage lint.
-    name: "fable5 role override (v0.30.0 — hard-gated role→fable-5 dispatch)",
-    token: "fable5-override.md",
-    files: [
-      "skills/_shared/README.md",
-      "skills/_shared/fable5-override.md",
-      "skills/_shared/opus5-only.md",
-      "skills/orc/SKILL.md",
-      "skills/orc/config.md",
-      "skills/orc/references/ultra-mode.md",
-    ],
-  },
-  {
     // v0.36.0: the Opus-5-only dispatch mode. Widened from v0.35.0's
     // executor-table-only key, so the pointer has to reach every lane with a
     // fixed-role dispatch — not just the ones that score.
@@ -1559,7 +1527,6 @@ const CONTRACTS = [
       "agents/MODEL-MAPPING.md",
       "skills/_shared/README.md",
       "skills/_shared/drift-recovery.md",
-      "skills/_shared/fable5-override.md",
       "skills/_shared/opus5-only.md",
       "skills/orc-analyze/references/deep-mode.md",
       "skills/orc-claude/SKILL.md",
@@ -1597,7 +1564,6 @@ const CONTRACTS = [
       "commands/orc-pattern.md",
       "skills/_shared/drift-recovery.md",
       "skills/_shared/extra-dispatch.md",
-      "skills/_shared/fable5-override.md",
       "skills/_shared/opus5-only.md",
       "skills/orc-analyze/references/deep-mode.md",
       "skills/orc-challenge/README.md",
@@ -1664,7 +1630,6 @@ const CONTRACTS = [
     name: "facet-scored rubric (v0.31.0 — planner-emitted facets, orchestrator arithmetic)",
     token: "facets",
     files: [
-      "agents/orc-planner-fable-5.md",
       "agents/orc-planner-mini-opus-5-med.md",
       "agents/orc-planner-mini-sonnet-5-high.md",
       "agents/orc-planner-opus-5-med.md",
@@ -1695,7 +1660,6 @@ const CONTRACTS = [
     name: "plan staleness stamp (v0.31.0 — plan_head drives the plan-handoff grounding re-check)",
     token: "plan_head",
     files: [
-      "agents/orc-planner-fable-5.md",
       "agents/orc-planner-mini-opus-5-med.md",
       "agents/orc-planner-mini-sonnet-5-high.md",
       "agents/orc-planner-opus-5-med.md",
@@ -1959,7 +1923,6 @@ const CONTRACTS = [
     name: "orc-poly handoff marker (v0.27.0 — planner splits per-repo on `orc-poly:spec`)",
     token: "orc-poly:spec",
     files: [
-      "agents/orc-planner-fable-5.md",
       "agents/orc-planner-opus-5-med.md",
       "commands/orc-plan.md",
       "commands/orc-poly.md",
@@ -1975,7 +1938,6 @@ const CONTRACTS = [
     name: "orc-poly output dir (v0.27.0 — source-of-truth docs + per-repo plans)",
     token: "poly-repo-implementation/",
     files: [
-      "agents/orc-planner-fable-5.md",
       "agents/orc-planner-opus-5-med.md",
       "commands/orc-poly.md",
       "skills/_shared/stack-plan.md",
@@ -1991,7 +1953,6 @@ const CONTRACTS = [
     name: "orc-poly frozen boundary (v0.27.0 — every per-repo plan pins interface-contract.md)",
     token: "interface-contract.md",
     files: [
-      "agents/orc-planner-fable-5.md",
       "agents/orc-planner-opus-5-med.md",
       "commands/orc-plan.md",
       "commands/orc-poly.md",
@@ -2147,7 +2108,6 @@ const CONTRACTS = [
       "agents/orc-executor-sonnet-4-6-high.md",
       "agents/orc-executor-sonnet-4-6-med.md",
       "agents/orc-executor-sonnet-5-high.md",
-      "agents/orc-planner-fable-5.md",
       "agents/orc-planner-mini-opus-5-med.md",
       "agents/orc-planner-mini-sonnet-5-high.md",
       "agents/orc-planner-opus-5-med.md",
@@ -2502,7 +2462,6 @@ const CONTRACTS = [
       "agents/orc-executor-sonnet-4-6-high.md",
       "agents/orc-executor-sonnet-4-6-med.md",
       "agents/orc-executor-sonnet-5-high.md",
-      "agents/orc-reviewer-fable-5.md",
       "agents/orc-reviewer-opus-5-med.md",
       "agents/orc-verifier-opus-5-med.md",
       "skills/_shared/gotchas.md",
@@ -3220,47 +3179,226 @@ for (const b of BUDGETS) {
   }
 }
 
-// ── Config-key coverage (C.3) ──────────────────────────────────────────────
-// Every key in bin/cli.js's CONFIG_META must be referenced somewhere under
-// templates/skills/**, and every `config.<key>` a skill references must be a
-// real CLI key. Catches a decorative config key (nothing reads it) and a skill
-// referencing a key the CLI can't actually write.
+// ── The two-way registry lint (C.3) ────────────────────────────────────────
+// v1.0.0 W3. REPLACES the old `config-key coverage` check, which asserted that
+// every CONFIG_META key appeared as a substring SOMEWHERE under
+// templates/skills/**. That test was already weak — a key mentioned in a
+// paragraph passed it — and centralization makes it vacuous: after W7 the keys
+// live in ONE registry doc, so a grep across the payload would pass forever
+// while every lane silently stopped reading anything. Replacing it in the same
+// wave that makes it vacuous is not optional; a lint nobody removed and nobody
+// can fail is worse than no lint, because it reads as coverage.
+//
+// Six assertions where there was one, and none of them can be satisfied by
+// mentioning a word in a paragraph:
+//
+//   1. every key declares a NON-EMPTY lanes[]  — a key no lane reads is
+//      decorative, which is the thing the old check was actually for;
+//   2. every lane named in any lanes[] is a real lane, against the LANES
+//      registry the `orc lane` noun serves;
+//   3. LANES itself matches the payload in BOTH directions — a skill with no
+//      row is a lane `orc lane config` cannot answer for, and a row with no
+//      skill is a lane that does not exist;
+//   4. every LANE_INERT lane and every LANE_STOPS key is real;
+//   5. every gate is a real key and gates are not chained;
+//   6. the answer tally accounts for every key.
+//
+// The half of the old check that was never vacuous SURVIVES: a skill naming
+// `config.<key>` for a key the CLI cannot write is still drift, and no registry
+// can see that from the CLI side.
 {
   const cliText = fs.readFileSync(path.join(REPO_ROOT, "bin", "cli.js"), "utf8");
-  const block = cliText.match(/const CONFIG_META = \[([\s\S]*?)\n\];/);
-  const cliKeys = block
-    ? [...block[1].matchAll(/\{\s*key:\s*"([a-z0-9_]+)"/g)].map((m) => m[1])
-    : [];
+  const errs = [];
+
+  const metaBlock = (cliText.match(/const CONFIG_META = \[([\s\S]*?)\n\];/) || [])[1] || "";
+  const metaEntries = [];
+  for (const line of metaBlock.split(/\r?\n/)) {
+    const key = (line.match(/\{ key: "([a-z0-9_]+)", def: /) || [])[1];
+    if (!key) continue;
+    const lanesSrc = (line.match(/ lanes: (\[[^\]]*\])/) || [])[1];
+    const answersSrc = (line.match(/ answers: (\[[^\]]*\}\])/) || [])[1];
+    let lanes = null;
+    let answers = null;
+    try {
+      lanes = lanesSrc ? new Function("return " + lanesSrc)() : null;
+    } catch (_) {}
+    try {
+      answers = answersSrc ? new Function("return " + answersSrc)() : null;
+    } catch (_) {}
+    metaEntries.push({
+      key,
+      lanes,
+      answers,
+      gated_by: (line.match(/ gated_by: "([a-z0-9_]+)"/) || [])[1] || null,
+    });
+  }
+  const cliKeys = metaEntries.map((e) => e.key);
+  const metaKeys = new Set(cliKeys);
+
+  let LANES = null;
+  let LANE_INERT = null;
+  let LANE_STOPS_KEYS = null;
+  try {
+    LANES = new Function(
+      "return " + cliText.match(/const LANES = \[[\s\S]*?\n\];/)[0].replace(/^const LANES = /, "").replace(/;$/, "")
+    )();
+  } catch (e) {
+    errs.push("could not evaluate LANES from bin/cli.js: " + e.message);
+  }
+  try {
+    LANE_INERT = new Function(
+      "return " + cliText.match(/const LANE_INERT = \{[\s\S]*?\n\};/)[0].replace(/^const LANE_INERT = /, "").replace(/;$/, "")
+    )();
+  } catch (e) {
+    errs.push("could not evaluate LANE_INERT from bin/cli.js: " + e.message);
+  }
+  try {
+    const src = cliText.match(/const LANE_STOPS = \[[\s\S]*?\n\];/)[0];
+    LANE_STOPS_KEYS = [...src.matchAll(/\n    key: "([a-z0-9_]+)",/g)].map((m) => m[1]);
+  } catch (e) {
+    errs.push("could not read LANE_STOPS from bin/cli.js: " + e.message);
+  }
+
+  if (!cliKeys.length) errs.push("could not parse CONFIG_META from bin/cli.js");
+
+  // 1. A NON-EMPTY lanes[]. The eight below are the v1.0.0 W2 mechanical seed's
+  // known gap: `_shared/extra-dispatch.md` names them, no lane spine does, and
+  // W8/W9 assign them lane by lane. The allowlist is NAMED rather than implied
+  // so the exception is visible and shrinking; a ninth key joining it must be a
+  // deliberate line in a diff, not a silent pass.
+  const SEED_EMPTY = new Set([
+    "extra_max_concurrent",
+    "extra_unlock",
+    "extra_vault_max_attempts",
+    "extra_timeout_s",
+    "extra_passphrase_ttl_days",
+    "extra_verify_max_days",
+    "extra_stall_s",
+    "extra_resume_max",
+  ]);
+  for (const e of metaEntries) {
+    if (!e.lanes) {
+      errs.push(`${e.key}: lanes[] is missing or unparseable`);
+      continue;
+    }
+    if (!e.lanes.length && !SEED_EMPTY.has(e.key))
+      errs.push(`${e.key}: lanes[] is empty — a key no lane reads is decorative; wire it or drop it`);
+  }
+  for (const k of SEED_EMPTY) {
+    const e = metaEntries.find((x) => x.key === k);
+    if (!e) errs.push(`the seed-empty allowlist names "${k}", which is no longer a CONFIG_META key`);
+    else if (e.lanes && e.lanes.length)
+      errs.push(`${k}: now has lanes[] — remove it from the seed-empty allowlist in this lint`);
+  }
+
+  if (LANES) {
+    const laneNames = new Set(LANES.map((l) => l.lane));
+
+    // 2. Every lane a key names is a real lane.
+    for (const e of metaEntries)
+      for (const l of e.lanes || [])
+        if (!laneNames.has(l)) errs.push(`${e.key}: lanes[] names "${l}", which is not a lane in LANES`);
+
+    // 3. LANES vs the payload, BOTH directions. `orc lane config <lane>` is the
+    // only config resolver a spine is allowed to ask, so a skill missing here
+    // is a spine with no answer, and a row here with no skill is a lane the
+    // panel would offer and the CLI could never serve.
+    const skillDirs = fs
+      .readdirSync(path.join(ROOT, "skills"), { withFileTypes: true })
+      .filter((d) => d.isDirectory() && d.name !== "_shared")
+      .map((d) => d.name);
+    for (const d of skillDirs)
+      if (!laneNames.has(d)) errs.push(`templates/skills/${d}/ has no row in LANES`);
+    for (const l of LANES) {
+      if (!skillDirs.includes(l.lane)) errs.push(`LANES declares "${l.lane}", which is not a directory under templates/skills/`);
+      // A lane with no command is a lane something else dispatches, and it has
+      // to SAY which — an unexplained null reads as an oversight.
+      if (l.command === null && !l.note) errs.push(`LANES "${l.lane}" has no command and no note explaining what opens it`);
+      if (l.command && !fs.existsSync(path.join(ROOT, "commands", l.command + ".md")))
+        errs.push(`LANES "${l.lane}" names command "${l.command}", which is not a file under templates/commands/`);
+    }
+
+    // 4. The two lane-keyed tables.
+    if (LANE_INERT)
+      for (const l of Object.keys(LANE_INERT))
+        if (!laneNames.has(l)) errs.push(`LANE_INERT names "${l}", which is not a lane in LANES`);
+  }
+  if (LANE_INERT) {
+    const famBlock = cliText.match(/const CONFIG_FAMILIES = \{[\s\S]*?\n\};/);
+    let FAM = null;
+    try {
+      FAM = new Function("return " + famBlock[0].replace(/^const CONFIG_FAMILIES = /, "").replace(/;$/, ""))();
+    } catch (_) {}
+    for (const [lane, rows] of Object.entries(LANE_INERT))
+      for (const r of rows) {
+        if (!r.reason) errs.push(`LANE_INERT ${lane}: a row with no reason — an inert key must say why, in words that survive`);
+        if (r.key && !metaKeys.has(r.key)) errs.push(`LANE_INERT ${lane}: key "${r.key}" is not a CONFIG_META key`);
+        if (r.family && FAM && !FAM[r.family]) errs.push(`LANE_INERT ${lane}: family "${r.family}" is not in CONFIG_FAMILIES`);
+        if (!r.key && !r.family) errs.push(`LANE_INERT ${lane}: a row names neither a key nor a family`);
+      }
+  }
+  if (LANE_STOPS_KEYS)
+    for (const k of LANE_STOPS_KEYS)
+      if (!metaKeys.has(k)) errs.push(`LANE_STOPS names "${k}", which is not a CONFIG_META key`);
+
+  // 5. Gates are real, and are not chained. A gate whose own gate is off would
+  // make `inert_reason` name a key that is itself inert, and the sentence stops
+  // being true one hop away from where it is read.
+  for (const e of metaEntries) {
+    if (!e.gated_by) continue;
+    if (!metaKeys.has(e.gated_by)) {
+      errs.push(`${e.key}: gated_by "${e.gated_by}" is not a CONFIG_META key`);
+      continue;
+    }
+    const gate = metaEntries.find((x) => x.key === e.gated_by);
+    if (gate && gate.gated_by)
+      errs.push(`${e.key}: gated_by "${e.gated_by}", which is itself gated by "${gate.gated_by}" — gates are not chained`);
+  }
+
+  // 6. The tally. Every key contributes at least one answer, and every answer
+  // lands in one of the four ranks — so a key cannot go missing from the
+  // precedence model by declaring nothing.
+  const tally = { P0: 0, P1: 0, P2: 0, P3: 0 };
+  let answersTotal = 0;
+  for (const e of metaEntries) {
+    if (!e.answers || !e.answers.length) {
+      errs.push(`${e.key}: no answers[] — it is in no family's tally`);
+      continue;
+    }
+    for (const a of e.answers) {
+      answersTotal++;
+      if (tally[a.prio] === undefined) errs.push(`${e.key}: prio "${a.prio}" is outside the closed set`);
+      else tally[a.prio]++;
+    }
+  }
+  const summed = tally.P0 + tally.P1 + tally.P2 + tally.P3;
+  if (summed !== answersTotal)
+    errs.push(`the prio tally sums to ${summed} but there are ${answersTotal} answers`);
+
+  // The surviving half of the old check: a skill naming a key the CLI cannot
+  // write. No registry sees this — it is a claim the payload makes about the
+  // CLI, and only a scan of the payload can check it.
   const skillFiles = allFiles.filter((f) => f.startsWith("skills/"));
-  const skillText = skillFiles
-    .map((f) => fs.readFileSync(path.join(ROOT, f), "utf8"))
-    .join("\n");
-  const orphanKeys = cliKeys.filter(
-    (k) => !new RegExp("\\b" + k + "\\b").test(skillText)
-  );
+  const skillText = skillFiles.map((f) => fs.readFileSync(path.join(ROOT, f), "utf8")).join("\n");
   const EXT = new Set(["md", "yaml", "yml", "json", "js", "txt"]);
   const ALLOW = new Set(["rubric_bands_override"]); // hand-edit-only advanced key
   const referenced = new Set();
-  for (const m of skillText.matchAll(/config\.([a-z][a-z0-9_]+)/g))
-    referenced.add(m[1]);
-  const unknownRefs = [...referenced].filter(
-    (k) => !cliKeys.includes(k) && !EXT.has(k) && !ALLOW.has(k)
-  );
-  if (!cliKeys.length) {
+  for (const m of skillText.matchAll(/config\.([a-z][a-z0-9_]+)/g)) referenced.add(m[1]);
+  for (const k of [...referenced].filter((k) => !metaKeys.has(k) && !EXT.has(k) && !ALLOW.has(k)))
+    errs.push(`templates reference config.${k} but no such CLI CONFIG_META key`);
+
+  // A key ORC REMOVED must not still be named as a live setting by the payload.
+  // The old coverage check could not see this at all: it only looked for keys
+  // that were MISSING from the payload, never for ones that should have left.
+  const retiredKeys = [...cliText.matchAll(/^  ([a-z0-9_]+): \{ removed_in:/gm)].map((m) => m[1]);
+  for (const k of retiredKeys)
+    if (new RegExp("\\b" + k + "\\b").test(skillText))
+      errs.push(`retired key "${k}" is still named under templates/skills/ — it was removed; the payload must not offer it`);
+
+  if (errs.length) {
     failures++;
-    console.error("\n❌ config-key coverage: could not parse CONFIG_META from bin/cli.js.");
-  }
-  if (orphanKeys.length || unknownRefs.length) {
-    failures++;
-    console.error("\n❌ config-key coverage drift:");
-    for (const k of orphanKeys)
-      console.error(
-        `   - CLI key "${k}" is never referenced under templates/skills/ (decorative — wire it or drop it)`
-      );
-    for (const k of unknownRefs)
-      console.error(
-        `   - templates reference config.${k} but no such CLI CONFIG_META key`
-      );
+    console.error("\n❌ config registry drift:");
+    for (const e of errs) console.error("   - " + e);
   }
 }
 
@@ -3268,8 +3406,8 @@ for (const b of BUDGETS) {
 // v1.0.0 W2. Every CONFIG_META key declares WHICH QUESTION it answers, at which
 // rank, in which mode. This lint is what stops that from becoming decoration.
 //
-// It replaces nothing — C.3 above still asserts every key is referenced by the
-// payload. It adds the half C.3 cannot see: that the ranks are a real ladder.
+// C.3 above asserts the REGISTRY is wired (lanes, gates, the tally). This adds
+// the half a registry check cannot see: that the ranks are a real ladder.
 // A contested family with two P0 keys, or a key claiming a rank the family's
 // own `ranks[]` gives to somebody else, is a precedence that resolves
 // differently depending on which table you read.

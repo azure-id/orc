@@ -60,8 +60,8 @@ add steps.
 ## Nothing can override this lane
 
 orc-quick is standalone. These config keys **do nothing here**:
-`opus5_only` · `fable5_enabled` / `fable5_roles` · `rubric_bands_override` ·
-`extra_resume` · `extra_on_failure` · `extra_fallback_agent`.
+`opus5_only` · `rubric_bands_override` · `extra_resume` · `extra_on_failure` ·
+`extra_fallback_agent`.
 
 The user always picks the agent. See `../_shared/opus5-only.md` — orc-quick is
 listed there as the one exception. Say this at the gate if `opus5_only` is on,

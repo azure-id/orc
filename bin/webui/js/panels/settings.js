@@ -17,8 +17,8 @@
 // keys stay GREPPABLE: a build of a string key from a fragment is a key no
 // coverage check can see, and the check is the only thing standing between a
 // renamed key and a raw dotted string on somebody's screen.
-const TIER_LABEL_KEY = { common: "settings.tier.common", fable5: "settings.tier.fable5", advanced: "settings.tier.advanced" };
-const TIER_DESC_KEY = { common: "settings.tierDesc.common", fable5: "settings.tierDesc.fable5", advanced: "settings.tierDesc.advanced" };
+const TIER_LABEL_KEY = { common: "settings.tier.common", advanced: "settings.tier.advanced" };
+const TIER_DESC_KEY = { common: "settings.tierDesc.common", advanced: "settings.tierDesc.advanced" };
 const TIER_LABEL = (tier) => (TIER_LABEL_KEY[tier] ? t(TIER_LABEL_KEY[tier]) : tier);
 const TIER_DESC = (tier) => (TIER_DESC_KEY[tier] ? t(TIER_DESC_KEY[tier]) : "");
 
@@ -169,7 +169,7 @@ async function renderSettings(body) {
   const tiers = [];
   out.append(settingsToolbar(d, tiers));
 
-  for (const tier of ["common", "fable5", "advanced"]) {
+  for (const tier of ["common", "advanced"]) {
     const keys = d.keys.filter((k) => k.tier === tier);
     if (!keys.length) continue;
 
@@ -228,6 +228,32 @@ async function renderSettings(body) {
       if (k.shadow_reason) left.append(el("div", "shadow-why", k.shadow_reason));
       const right = el("div", "setting-control");
       right.append(el("div", "readonly-value", String(k.value)));
+      row.append(left, right);
+      c.append(row);
+    }
+    out.append(c);
+  }
+
+  // A key ORC REMOVED, still sitting in the user's file. It is NOT an editable
+  // setting and it is NOT a hand-edited override, so it gets its own block —
+  // rendering it as either would tell the user a dead line still does
+  // something. The CLI computed the row; this only draws it.
+  if ((d.retired_keys || []).length) {
+    const c = card(t("settings.retired.title"));
+    c.append(el("div", "note", t("settings.retired.note")));
+    for (const r of d.retired_keys) {
+      const row = el("div", "setting shadowed");
+      const left = el("div");
+      const name = el("div", "setting-name");
+      name.append(document.createTextNode(r.key));
+      const lock = el("span", "lock");
+      lock.append(document.createTextNode("🔒 " + t("settings.retired.badge")));
+      name.append(lock);
+      left.append(name);
+      left.append(el("div", "setting-desc", t("settings.retired.readonly")));
+      left.append(el("div", "shadow-why", `${t("settings.retired.removedIn")} ${r.removed_in} — ${r.why}`));
+      const right = el("div", "setting-control");
+      right.append(el("div", "readonly-value", String(r.value)));
       row.append(left, right);
       c.append(row);
     }

@@ -108,9 +108,8 @@ orc-quick has no score bands to tune. Mark the row
 2. **Never sticky.** Do not carry the last answer into the next entry.
 3. **Already answered is not skipped.** If the user wrote "use opus 5 low", the
    gate is satisfied — say which one you are using, in one line.
-4. **No config can ANSWER this menu.** `opus5_only`, `fable5_enabled` /
-   `fable5_roles`, `rubric_bands_override` and `extra_resume` are all inert in
-   this lane. If one is on, say so at the gate so the user is not confused:
+4. **No config can ANSWER this menu.** `opus5_only`, `rubric_bands_override`
+   and `extra_resume` are all inert in this lane. If one is on, say so at the gate so the user is not confused:
    ```
    (orc-quick ignores opus5_only — both options are live)
    ```

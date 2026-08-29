@@ -123,7 +123,7 @@ test("config list --json exposes EVERY CONFIG_META key, with a control shape", (
 
 // Shadowing is the feature (plan §6.2): the CLI already announces it in prose,
 // and the JSON must carry the SAME rule as data or the lock icon lies.
-test("config list --json marks fable5_* and rubric_bands_override shadowed by opus5_only", () => {
+test("config list --json marks rubric_bands_override shadowed, and a retired key retired", () => {
   const { root, claudeDir } = freshInstall();
   try {
     fs.writeFileSync(
@@ -131,20 +131,25 @@ test("config list --json marks fable5_* and rubric_bands_override shadowed by op
       "opus5_only: true\nfable5_enabled: true\nrubric_bands_override: [[0,100,'orc-executor-opus-5-high']]\n"
     );
     const on = JSON.parse(cli(["config", "list", "--json", "--dir", root]).stdout);
-    for (const k of on.keys.filter((x) => x.tier === "fable5"))
-      assert.ok(k.is_shadowed && /opus5_only/.test(k.shadow_reason), `${k.key} should be shadowed`);
     const hand = on.hand_edited.find((h) => h.key === "rubric_bands_override");
     assert.ok(hand && hand.is_shadowed, "rubric_bands_override should be shadowed");
+    assert.match(hand.shadow_reason, /opus5_only/, "and the reason names the rank that won");
     // Registry-less by design — the UI must never offer to write it.
     assert.strictEqual(hand.editable, false, "rubric_bands_override must be reported read-only");
     assert.strictEqual(on.score_table.active, "opus5_only", "the 3-band ladder should resolve");
 
+    // W3 removed the Fable 5 block. A retired name on disk is a THIRD thing —
+    // not a live key, not a hand-edited one — and the panel needs it that way
+    // or it renders a dead setting as an editable row.
+    assert.deepStrictEqual(on.retired_keys.map((r) => r.key), ["fable5_enabled"]);
+    assert.ok(!on.hand_edited.some((h) => h.key === "fable5_enabled"), "never a hand-edited row");
+    assert.ok(!on.keys.some((k) => k.key === "fable5_enabled"), "never a registry row");
+
     fs.writeFileSync(path.join(claudeDir, "orc.config.yaml"), "fable5_enabled: true\n");
     const off = JSON.parse(cli(["config", "list", "--json", "--dir", root]).stdout);
-    assert.ok(
-      off.keys.filter((x) => x.tier === "fable5").every((k) => !k.is_shadowed),
-      "nothing is shadowed once opus5_only is off"
-    );
+    assert.ok(off.keys.every((k) => !k.is_shadowed), "nothing is shadowed once opus5_only is off");
+    assert.deepStrictEqual(off.retired_keys.map((r) => r.key), ["fable5_enabled"],
+      "retired is a fact about the key, not about what else is set");
     assert.strictEqual(off.score_table.active, "default");
   } finally {
     rmrf(root);

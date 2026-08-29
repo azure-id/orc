@@ -30,9 +30,8 @@ loaded on demand when the step fires.
   already gotten wrong, recorded only on a red → green repair, injected into a
   slice only when the `scope` glob matches. `orc-quick` is excluded entirely.
 - `drift-recovery.md` — the mock-example drift loop (`DRIFT-FROM`, cap 2).
-- `opus5-only.md` / `fable5-override.md` — dispatch-forcing modes and their role
-  tables. Both carve out `orc-quick`, whose user-facing dispatch gate they must
-  never collapse.
+- `opus5-only.md` — the dispatch-forcing mode and its role table. It carves out
+  `orc-quick`, whose user-facing dispatch gate it must never collapse.
 - `stack-plan.md` — stacked PRs: the plan location + schema, the size rules, the
   `STACK-FROM` handoff, and the two entry modes.
 - `gh-stack-commands.md` — the pinned `gh stack` command surface (a GitHub public

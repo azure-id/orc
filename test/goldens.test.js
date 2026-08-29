@@ -53,22 +53,51 @@ function project(configText) {
 // needs a verified profile, so it is frozen next to the fake provider in
 // test/cli/extra-routing.test.js instead of here.
 
-const FABLE5_SHADOW =
-  "shadowed by opus5_only — every role dispatches its Opus 5 agent, so the Fable 5 override is inert";
 const RUBRIC_SHADOW = "shadowed by opus5_only — executors use the fixed 3-band Opus 5 ladder";
 
-test("GOLDEN: opus5_only's shadow sentences, byte for byte", () => {
+// W3 REMOVED the Fable 5 role override, and with it the three keys this golden
+// used to pin. A golden is deleted only when the behaviour it froze was
+// deliberately removed, and then the removal itself gets frozen in its place —
+// otherwise the freeze quietly stops covering the thing that changed. So:
+// nothing in the registry is shadowed by a `replace` rank any more, and the
+// retired names have their own user-facing sentences, pinned below.
+test("GOLDEN: opus5_only shadows no registry key, and says why on the hand-written table", () => {
   const root = project("opus5_only: true\n");
   try {
     const j = json(cli(["config", "list", "--json", "--dir", root]));
-    const shadowed = j.keys.filter((k) => k.is_shadowed);
-    // The SET is part of the golden: a fourth key quietly becoming shadowed is
-    // exactly the kind of change a per-key assertion would not notice.
-    assert.deepStrictEqual(
-      shadowed.map((k) => k.key).sort(),
-      ["fable5_effort", "fable5_enabled", "fable5_roles"]
+    // The SET is the golden: a key quietly becoming shadowed is exactly the
+    // kind of change a per-key assertion would not notice.
+    assert.deepStrictEqual(j.keys.filter((k) => k.is_shadowed).map((k) => k.key), []);
+    assert.deepStrictEqual(j.families["fixed-role-model"].ranks.map((r) => r.key), [
+      "extra_enabled",
+      "opus5_only",
+      null,
+    ]);
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("GOLDEN: a retired key's sentences, byte for byte", () => {
+  const root = project("fable5_enabled: true\n");
+  try {
+    const j = json(cli(["config", "list", "--json", "--dir", root]));
+    assert.deepStrictEqual(j.retired_keys, [
+      {
+        key: "fable5_enabled",
+        value: "true",
+        removed_in: "1.0.0",
+        why: "the Fable 5 role override was removed — every role dispatches its shipped Claude agent, or the Opus 5 variant under opus5_only",
+      },
+    ]);
+
+    const set = cli(["config", "set", "fable5_enabled", "false", "--dir", root]);
+    assert.notStrictEqual(set.status, 0);
+    assert.strictEqual(
+      set.stderr.trim(),
+      "❌ fable5_enabled was removed in v1.0.0 — the Fable 5 role override was removed — every role dispatches its shipped Claude agent, or the Opus 5 variant under opus5_only.\n" +
+        "   Nothing reads it. A line already in orc.config.yaml is left alone; delete it when you like."
     );
-    for (const k of shadowed) assert.strictEqual(k.shadow_reason, FABLE5_SHADOW, k.key);
   } finally {
     rmrf(root);
   }
@@ -97,10 +126,11 @@ test("GOLDEN: a hand-edited rubric_bands_override is reported shadowed, and read
 // ---- 2. `orc config list --json`, the whole computed object ----------------
 //
 // `--json is not a summary` (v0.49.1). W2 adds `answers`, `family`, `prio` and
-// `lanes` to every key; W6 regroups the FILE. Neither may drop a key, move a
-// key between tiers, or change a default in passing.
+// `lanes` to every key; W3 REMOVES the three `fable5_*` keys and adds
+// `retired_keys`; W6 regroups the FILE. A key leaves this golden only when the
+// release that removed it says so — never in passing.
 
-test("GOLDEN: the 73 config keys, their tiers and their defaults", () => {
+test("GOLDEN: the 70 config keys, their tiers and their defaults", () => {
   const { root } = freshInstall();
   try {
     const j = json(cli(["config", "list", "--json", "--dir", root]));
@@ -109,7 +139,7 @@ test("GOLDEN: the 73 config keys, their tiers and their defaults", () => {
     // ORDER is part of it: CONFIG_META's order is the order the human menu
     // walks, and W6 regroups the FILE without reordering the registry.
     assert.deepStrictEqual(now, then);
-    assert.strictEqual(now.length, 73, "the key COUNT is a number the release reports");
+    assert.strictEqual(now.length, 70, "the key COUNT is a number the release reports");
   } finally {
     rmrf(root);
   }
@@ -129,6 +159,7 @@ test("GOLDEN: the top-level shape of config list --json", () => {
       "keys",
       "hand_edited",
       "legacy_keys",
+      "retired_keys",
       "score_table",
       "families",
       "behavior_trace",

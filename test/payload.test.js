@@ -74,7 +74,6 @@ test("the planners carry the vocabularies INLINE (values must not live one hop a
   const v = facetVocab();
   for (const agent of [
     "agents/orc-planner-opus-5-med.md",
-    "agents/orc-planner-fable-5.md",
     "agents/orc-planner-mini-sonnet-5-high.md",
   ]) {
     const md = read(agent);
@@ -209,7 +208,6 @@ test("table resolution states its precedence, and the pinned interactions", () =
   const eam = read("skills/orc/references/effort-and-mode.md");
   assert.match(eam, /risk floor still applies/i, "the risk floor still applies");
   assert.match(eam, /opus-5-med.*not.*opus-4-7-high|not\s+`?opus-4-7-high/s, "…and where a floored task lands");
-  assert.match(eam, /fable5_roles` never covers executors/, "fable5 is orthogonal");
 
   const ultra = read("skills/orc/references/ultra-mode.md");
   assert.match(ultra, /raises EFFORT, not model/, "ultra's floor is defined under the preset");
@@ -504,7 +502,6 @@ test("the TDD disposition vocabulary is identical everywhere it is stated", () =
     "skills/orc/references/analyst-gates.md",
     "skills/orc/subskills/orc-planner/SKILL.md",
     "agents/orc-planner-opus-5-med.md",
-    "agents/orc-planner-fable-5.md",
     "agents/orc-planner-mini-sonnet-5-high.md",
     "agents/orc-planner-mini-opus-5-med.md",
     "skills/orc/SKILL.md",
@@ -525,7 +522,6 @@ test("the facet -> disposition derivation is stated identically wherever it is d
     "skills/orc/schemas/planning-output.md",
     "skills/orc/subskills/orc-planner/SKILL.md",
     "agents/orc-planner-opus-5-med.md",
-    "agents/orc-planner-fable-5.md",
     "agents/orc-planner-mini-sonnet-5-high.md",
     "agents/orc-planner-mini-opus-5-med.md",
   ]) {
@@ -544,7 +540,6 @@ test("every place that can skip a test also states the risk safety floor", () =>
     "skills/orc/references/analyst-gates.md",
     "skills/orc/subskills/orc-planner/SKILL.md",
     "agents/orc-planner-opus-5-med.md",
-    "agents/orc-planner-fable-5.md",
     "agents/orc-planner-mini-sonnet-5-high.md",
     "agents/orc-planner-mini-opus-5-med.md",
     "skills/orc/SKILL.md",

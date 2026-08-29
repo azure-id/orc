@@ -377,11 +377,6 @@ const required = [
   // lint. Both are already Opus 5, so `opus5_only` adds no twin for either.
   "templates/agents/orc-doc-writer-opus-5-med.md",
   "templates/agents/orc-doc-checker-opus-5-low.md",
-  "templates/agents/orc-analyst-fable-5.md",
-  "templates/agents/orc-planner-fable-5.md",
-  "templates/agents/orc-advisor-fable-5.md",
-  "templates/agents/orc-judge-fable-5.md",
-  "templates/agents/orc-reviewer-fable-5.md",
   "templates/hooks/orc-effort-guard.js",
   "templates/hooks/orc-statusline.js",
   "templates/hooks/orc-trace.js",
@@ -448,8 +443,16 @@ const agentCount = walkCount(path.join(ROOT, "templates/agents"), ".md");
 // one, and a key that let either be tuned would be a key that let the
 // instrument be broken. All five are claude-opus-5, so `opus5_only` adds NO
 // pair and the floor moves by exactly five.
+// v1.0.0 W3: +0 skills and -5 agents — the Fable 5 role override is REMOVED.
+// It is the first time this floor has ever gone DOWN, and the reason it may is
+// that the five files are not a tier of anything: they were a whole second
+// answer to "which model runs a role", competing with `opus5_only` for the same
+// decision. Deleting them removes a rank from `fixed-role-model` rather than a
+// capability from a lane. Fable 5 survives as a SESSION model (the effort guard
+// and the statusline still clear it at medium) — that is a different question,
+// and this wave does not touch it.
 if (skillCount < 38) missing.push(`templates/skills (expected >=38 SKILL.md, found ${skillCount})`);
-if (agentCount < 51) missing.push(`templates/agents (expected >=51 .md, found ${agentCount})`);
+if (agentCount < 46) missing.push(`templates/agents (expected >=46 .md, found ${agentCount})`);
 
 // B4 — encoding/mojibake guard. The OneDrive corruption rule becomes a gate:
 // scan every shipped text file for the U+FFFD replacement char (invalid UTF-8

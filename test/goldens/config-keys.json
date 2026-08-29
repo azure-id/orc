@@ -275,21 +275,6 @@
     "default": 0
   },
   {
-    "key": "fable5_enabled",
-    "tier": "fable5",
-    "default": false
-  },
-  {
-    "key": "fable5_effort",
-    "tier": "fable5",
-    "default": "medium"
-  },
-  {
-    "key": "fable5_roles",
-    "tier": "fable5",
-    "default": "[]"
-  },
-  {
     "key": "orc_wiki_pattern_findings",
     "tier": "advanced",
     "default": false

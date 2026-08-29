@@ -23,10 +23,8 @@
   "settings.file.absent": "belum dibuat (semua kunci masih default)",
   "settings.file.traceNote": "Pencatatan behavior-trace SELALU aktif dan tidak bisa dikonfigurasi. Setiap run menulis satu trace; hanya foldernya (log_dir) yang merupakan pengaturan.",
   "settings.tier.common": "Umum",
-  "settings.tier.fable5": "Override peran Fable 5",
   "settings.tier.advanced": "Lanjutan",
   "settings.tierDesc.common": "Kunci yang paling sering disentuh. Kalau Anda hanya mengubah satu hal, kemungkinan besar ada di sini.",
-  "settings.tierDesc.fable5": "Override Fable 5 per peran. Seluruh blok ini mati selama opus5_only aktif — itu aturan presedensi, bukan bug.",
   "settings.tierDesc.advanced": "Sisa dari semua yang dikenal ORC. Default-nya disengaja; ubah kalau Anda punya alasan.",
   "settings.inert": "mati",
   "settings.shadowed": "tertutup",
@@ -34,7 +32,7 @@
   "settings.handEdited.note": "Kunci ini tidak ada di registry config, jadi `orc config set` menolaknya dan panel ini tidak akan menulisnya. rubric_bands_override memang dirancang begitu: ditulis tangan dengan sengaja. Edit langsung berkas YAML-nya.",
   "settings.handEdited.readonly": "hanya baca di sini — edit manual orc.config.yaml",
   "settings.ladder.title": "Tangga skor → model",
-  "settings.ladder.opus5": "opus5_only AKTIF — executor memakai tangga effort 3 pita yang tetap. Ini mengalahkan tabel default, rubric_bands_override, dan seluruh blok fable5_*.",
+  "settings.ladder.opus5": "opus5_only AKTIF — executor memakai tangga effort 3 pita yang tetap. Ini mengalahkan tabel default dan rubric_bands_override.",
   "settings.ladder.override": "Ada rubric_bands_override tulisan tangan di berkas. Itu menggantikan tabel default (dan sendirinya dikalahkan oleh opus5_only).",
   "settings.ladder.default": "Tabel default 8 pita. Tabel diselesaikan dengan yang tertinggi menang: opus5_only > rubric_bands_override > yang ini.",
   "settings.ladder.note": "Hanya baca — ini diagram, bukan editor. Datanya dari tabel milik CLI, jadi panel tidak menyimpan salinan kedua.",
@@ -45,5 +43,10 @@
   "profiles.noChange": "repo ini sudah memakai profil itu — tidak ada yang berubah",
   "recommend.title": "Profil yang disarankan",
   "recommend.note": "Hanya baca: ini melihat repo Anda dan menyarankan satu profil. Tidak ada yang diubah.",
-  "recommend.applyIt": "Terapkan {name}"
+  "recommend.applyIt": "Terapkan {name}",
+  "settings.retired.title": "Setelan yang sudah ditarik",
+  "settings.retired.note": "Kunci ini sudah dihapus dari ORC. Barisnya masih ada di berkas konfigurasi Anda. ORC tidak membacanya dan tidak mengubahnya. Anda boleh menghapus barisnya kapan saja.",
+  "settings.retired.badge": "tidak dibaca",
+  "settings.retired.readonly": "Sudah dihapus. ORC tidak lagi membaca kunci ini.",
+  "settings.retired.removedIn": "Dihapus di v"
 }

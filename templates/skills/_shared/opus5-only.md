@@ -77,12 +77,10 @@ exists to prevent. Ladder: `../orc-wiki/references/partial-refresh.md`.
 `opus5_only: true` outranks every other dispatch selector:
 
 - each role's default frontmatter pin;
-- **`fable5_enabled` / `fable5_roles`** — the Fable 5 role override is fully
-  INERT while the mode is on (`../_shared/fable5-override.md` does not apply);
 - **`rubric_bands_override`** — a hand-written executor table is ignored while
   the mode is on.
 
-Turning the mode off restores all three. `rubric_bands` remains granularity
+Turning the mode off restores both. `rubric_bands` remains granularity
 only, never a preset selector, in both modes.
 
 The forcing is flat across every lane that HONORS the mode — `orc-quick` does

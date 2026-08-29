@@ -102,7 +102,7 @@ waves:     3 planned — will pause after wave 2 (batch_pause_every=2)
   dispatch needs an Opus 5 main session — the user should see that before the
   first dispatch, not in a trace full of downgrades. When `opus5_only` is on,
   append ` · all fixed roles forced to Opus 5` and name any selector it
-  shadowed (`rubric_bands_override` / `fable5_*` present but INERT) — a setting
+  shadowed (a `rubric_bands_override` present but INERT) — a setting
   the user tuned and the run then ignored has to be said out loud. With Extra in
   play the table is a COMPOSITE and reads as one (`8-band default table + extra
   rows [0,30) [30,70)`) — Extra is an overlay, so naming only one of the two would

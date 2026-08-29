@@ -27,13 +27,7 @@ Apply at Phase 0, on top of the normal config resolution:
 
 > Opus-5-only mode: if `opus5_only`, every role this lane dispatches is already
 > Opus 5 (advisor and judge are pinned there by default) and the scouts rise to
-> `orc-scout-opus-5-low`. It FORCES — the Fable 5 note below does not apply
-> while it is on. See `../../_shared/opus5-only.md`.
-
-> Fable 5 role override: (INERT while `opus5_only`) if `fable5_enabled` and
-> `advisor` / `judge` are in `fable5_roles`, dispatch the `orc-advisor-fable-5` /
-> `orc-judge-fable-5` variant instead of the Opus 5 xhigh default — same slice,
-> same contract. See `../../_shared/fable5-override.md`.
+> `orc-scout-opus-5-low`. It FORCES. See `../../_shared/opus5-only.md`.
 
 ## Phase U0 — Advisor (after intake sign-off, before the analyst)
 

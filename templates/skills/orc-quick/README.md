@@ -383,8 +383,8 @@ Because two things were dispatched. A dig that turns into a fix is one entry
 with two agents — so two questions. The count follows dispatches, not requests.
 
 **"I have `opus5_only: true`. Why is Sonnet still offered?"**
-Because this lane ignores it. `opus5_only`, `fable5_*` and
-`rubric_bands_override` do nothing here. You always choose. A one-word typo fix
+Because this lane ignores it. `opus5_only` and `rubric_bands_override` do
+nothing here. You always choose. A one-word typo fix
 should not go to the biggest model because a global setting said so.
 
 **"It said DOWNGRADE. What happened?"**

@@ -1026,8 +1026,6 @@ const vRepo = tag(
   { kind: "repo" }
 );
 
-// Fable 5 role override (C.1). Roles that MAY be handed to a Fable 5 agent.
-const FABLE5_ROLES = ["analyze", "plan", "advisor", "judge", "review"];
 // Roles `orc extra` may hand to a non-Claude worker. Declared HERE, above
 // CONFIG_META, because CONFIG_META is evaluated at module load and a `const`
 // further down the file is still in its temporal dead zone at that moment.
@@ -1080,7 +1078,7 @@ const vSubset = (allowed) =>
 // at P1 says nothing: they never compete. A global ladder built out of these
 // ranks would be meaningless, and the reference says so in those words.
 //
-// `tier` (common / advanced / fable5) is untouched and stays a UI axis — it
+// `tier` (common / advanced) is untouched and stays a UI axis — it
 // drives the interactive menu and the panel's split. `prio` is a resolution
 // axis. Merging them breaks the menu (plan D1).
 //
@@ -1104,7 +1102,7 @@ const vSubset = (allowed) =>
 // resolves over this row. It lives here rather than in shadowReason() because
 // a rank and the sentence explaining it are one fact; `{by}` is the shadowing
 // key's name. A key that is `gated_by` a shadowed key inherits its gate's
-// sentence — which is how all three `fable5_*` keys report identically.
+// sentence, so a gated key never has to be named here.
 const CONFIG_FAMILIES = {
   // ── the two CONTESTED families ────────────────────────────────────────────
   "executor-band": {
@@ -1134,15 +1132,7 @@ const CONFIG_FAMILIES = {
       { prio: "P0", key: "extra_enabled", mode: "overlay" },
       // OPUS5_ONLY_ROLES
       { prio: "P1", key: "opus5_only", mode: "replace" },
-      // fable5_roles
-      {
-        prio: "P2",
-        key: "fable5_enabled",
-        mode: "replace",
-        shadow_note:
-          "shadowed by {by} — every role dispatches its Opus 5 agent, so the Fable 5 override is inert",
-      },
-      { prio: "P3", key: null, terminal: "the agent shipped for that position" },
+      { prio: "P2", key: null, terminal: "the agent shipped for that position" },
     ],
   },
   // ── the uncontested families ──────────────────────────────────────────────
@@ -1168,7 +1158,6 @@ const CONFIG_FAMILIES = {
   doc: { contested: false, question: "how a long document is written and checked" },
   wiki: { contested: false, question: "how the project wiki is scanned and when it is stale" },
   crosslink: { contested: false, question: "when a peer repo's wiki reads stale" },
-  fable5: { contested: false, question: "how the Fable 5 override behaves once it is enabled" },
   retro: { contested: false, question: "where a retro is delivered" },
   paths: { contested: false, question: "where ORC writes on disk" },
   session: { contested: false, question: "what the main session itself runs as" },
@@ -1213,7 +1202,7 @@ const CONFIG_META = [
   // Nine keys, and the count is the feature: the combinatorial part —
   // providers x models x bands — is a LEDGER with a CLI and a panel
   // (`orc extra`), not eleven YAML keys nobody can hold in their head.
-  { key: "extra_enabled", def: false, tier: "common", answers: [{ family: "executor-band", prio: "P0", mode: "overlay" }, { family: "fixed-role-model", prio: "P0", mode: "overlay" }], lanes: ["orc", "orc-boundary", "orc-challenge", "orc-diy", "orc-doc", "orc-fast", "orc-mini", "orc-quick", "orc-wiki"], validate: vEnum("true", "false"), options: ["true", "false"], desc: "Master gate for `orc extra` — dispatching a scored task to a non-Claude worker (DeepSeek, GLM, Kimi, a local Ollama, any OpenAI-/Anthropic-compatible endpoint you can name). NOTHING changes unless true, the fable5_enabled precedent. The orchestrator always stays Claude; what moves is who executes a slice. Every run that will cross the boundary PRINTS it at Phase 1 — routing work off Claude silently is the failure mode this whole subsystem is shaped around." },
+  { key: "extra_enabled", def: false, tier: "common", answers: [{ family: "executor-band", prio: "P0", mode: "overlay" }, { family: "fixed-role-model", prio: "P0", mode: "overlay" }], lanes: ["orc", "orc-boundary", "orc-challenge", "orc-diy", "orc-doc", "orc-fast", "orc-mini", "orc-quick", "orc-wiki"], validate: vEnum("true", "false"), options: ["true", "false"], desc: "Master gate for `orc extra` — dispatching a scored task to a non-Claude worker (DeepSeek, GLM, Kimi, a local Ollama, any OpenAI-/Anthropic-compatible endpoint you can name). NOTHING changes unless true. The orchestrator always stays Claude; what moves is who executes a slice. Every run that will cross the boundary PRINTS it at Phase 1 — routing work off Claude silently is the failure mode this whole subsystem is shaped around." },
   { key: "extra_roles", def: "[executor]", tier: "common", answers: [{ family: "extra", prio: "P2", mode: "replace" }], gated_by: "extra_enabled", lanes: ["orc-doc", "orc-wiki"], validate: vSubset(EXTRA_ROLES_ALL), options: EXTRA_ROLES_ALL.filter((r) => !LEGACY_EXTRA_ROLES.includes(r)), desc: "Which SCORED-LANE roles may go foreign (CSV). Executor only by default, deliberately: an executor's output is checked by the smoke gate, the TDD gate, the reviewer and the worktree-delta check, all of which are engine-blind — while a REVIEWER you cannot trust is worse than no reviewer at all, because it launders a finding nobody made. `executor` is the only value anything resolves today; reviewer/verifier/analyst/planner/scout/test-author are declared and nothing dispatches them yet (`orc extra role list` reports that honestly). doc-writer/doc-checker MOVED to `orc extra role` in v0.55.0 and are kept here for one release as deprecated no-ops." },
   { key: "extra_risk_tasks", def: "off", tier: "common", answers: [{ family: "extra", prio: "P2", mode: "replace" }], gated_by: "extra_enabled", lanes: ["orc", "orc-diy", "orc-mini"], validate: vEnum("off", "on"), options: ["off", "on"], desc: "Whether a task with a non-empty cited `risk[]` (auth, money, migration, security, concurrency, data-integrity) may leave Claude. OFF holds it on the Claude ladder whatever the route table says, and the preflight NAMES it as held back. ORC already refuses to send a refund-endpoint change to a cheap model; this keeps Extra from becoming the hole in that rule." },
   { key: "extra_on_failure", def: "fallback", tier: "common", answers: [{ family: "extra", prio: "P2", mode: "replace" }], gated_by: "extra_enabled", lanes: ["orc-quick", "orc-wiki"], validate: vEnum("fallback", "stop"), options: ["fallback", "stop"], desc: "What an unreachable endpoint, a 401, a 429 past backoff, a timeout or a malformed return does. `fallback` re-dispatches the task to the Claude band it would have had, ANNOUNCED, and the run continues. `stop` is for people who would rather stop than silently start paying Anthropic rates. A failed foreign dispatch is never a dead run either way." },
@@ -1242,7 +1231,7 @@ const CONFIG_META = [
   { key: "extra_stall_s", def: 180, tier: "common", answers: [{ family: "extra", prio: "P2", mode: "replace" }], gated_by: "extra_enabled", lanes: [], validate: vInt(0), options: [0, 60, 120, 180, 300, 600], desc: "Seconds a foreign worker may produce NOTHING before the dispatch is stopped as `stalled`. The clock is reset by observable progress — new bytes on the worker's stream, new bytes on stderr, or a declared file that changed on disk — so it never fires on a worker that is merely slow. This is what a wall clock cannot see: `extra_timeout_s` measures the whole dispatch, and an opencode that stops mid-task and waits for someone to type `continue` burns all 900 seconds looking like a timeout. A `stalled` dispatch is RETRYABLE, so `extra_resume` continues it from what is already on disk rather than starting over. 0 turns it off and the wall clock is the only stop again. Clamped below the wall clock, because a budget that can never fire is worse than none. Engine `cli` only — engine `api` already has a per-request inactivity timeout on its own socket." },
   { key: "extra_fallback_agent", def: "band", tier: "common", answers: [{ family: "extra", prio: "P2", mode: "replace" }], gated_by: "extra_enabled", lanes: ["orc-quick"], validate: vFallbackAgent, options: ["band", "ask", "orc-executor-opus-5-med", "orc-executor-opus-5-low", "orc-executor-sonnet-4-6-high"], desc: "WHICH Claude agent picks up a task the foreign worker could not finish. `band` is the pre-v0.56.1 behaviour and stays the default: the exact agent the score table or the slot would have used, so a fallback changes WHO runs it and nothing else. `ask` STOPS and puts the choice to you with the failure and the position already on the table — right when a stall has just cost you fifteen minutes and you would rather pick than accept a default. Any installed agent name is accepted verbatim, for the case where you already know a stalled slice wants more (or less) than its band. It never changes the score, never widens `declared_files` and never moves `acceptance[]` — a fallback is not a re-plan." },
   { key: "extra_resume_max", def: 2, tier: "advanced", answers: [{ family: "extra", prio: "P2", mode: "replace" }], gated_by: "extra_enabled", lanes: [], validate: vInt(0), desc: "Resume attempts per task before the fallback procedure takes over. Bounded like `tdd_loop_max`: hitting the cap STOPS with an honest report naming the Claude agent, never a silent third loop. A resume never widens `declared_files`, never moves `acceptance[]` and never moves the score — it is a continuation, not a discount." },
-  { key: "opus5_only", def: false, tier: "common", answers: [{ family: "executor-band", prio: "P1", mode: "replace" }, { family: "fixed-role-model", prio: "P1", mode: "replace" }], lanes: ["orc", "orc-analyze", "orc-challenge", "orc-claude", "orc-diy", "orc-doc", "orc-fast", "orc-mini", "orc-pattern", "orc-quick", "orc-retro", "orc-wiki"], validate: vEnum("true", "false"), options: ["true", "false"], desc: "EVERY dispatched role uses ONE model — Opus 5 — with EFFORT as the cost dial (executors: [0,40) low · [40,80) medium · [80,100] high; each fixed role its own pinned effort). Deep SWE-benchmark work on cost vs efficiency across Claude models finds a single Opus 5 agent with the effort ladder the most efficient setup. It FORCES: while on it outranks fable5_* and a hand-written rubric_bands_override. Needs an Opus 5 main session or EVERY dispatch silently downgrades. Excludes the Haiku trace writer and orc-diy (compile-owned)." },
+  { key: "opus5_only", def: false, tier: "common", answers: [{ family: "executor-band", prio: "P1", mode: "replace" }, { family: "fixed-role-model", prio: "P1", mode: "replace" }], lanes: ["orc", "orc-analyze", "orc-challenge", "orc-claude", "orc-diy", "orc-doc", "orc-fast", "orc-mini", "orc-pattern", "orc-quick", "orc-retro", "orc-wiki"], validate: vEnum("true", "false"), options: ["true", "false"], desc: "EVERY dispatched role uses ONE model — Opus 5 — with EFFORT as the cost dial (executors: [0,40) low · [40,80) medium · [80,100] high; each fixed role its own pinned effort). Deep SWE-benchmark work on cost vs efficiency across Claude models finds a single Opus 5 agent with the effort ladder the most efficient setup. It FORCES: while on it outranks a hand-written rubric_bands_override. Needs an Opus 5 main session or EVERY dispatch silently downgrades. Excludes the Haiku trace writer and orc-diy (compile-owned)." },
   // --- v0.46.0 — the six new lanes ------------------------------------------
   { key: "pact_gate", def: "warn", tier: "common", answers: [{ family: "pact", prio: "P2", mode: "replace" }], lanes: ["orc", "orc-pact"], validate: vEnum("off", "warn"), options: ["off", "warn"], desc: "Invariant ledger at Phase 1 + planning: warn = print the one pact line and inject a DRIFTED/BROKEN promise whose anchors intersect the plan's declared files as a planner constraint; off = nothing. NEVER blocks — a promise is advice with a receipt, not a gate. See /orc-pact." },
   { key: "pact_recheck_on_verify", def: "true", tier: "common", answers: [{ family: "pact", prio: "P2", mode: "replace" }], lanes: ["orc", "orc-pact"], validate: vEnum("true", "false"), options: ["true", "false"], desc: "Phase 6: re-run the cheap checks for ONLY the invariants the change touched (`orc pact check`), so a promise that just leaked is caught in the run that broke it." },
@@ -1269,10 +1258,6 @@ const CONFIG_META = [
   { key: "wiki_tier_deep_files", def: 3, tier: "advanced", answers: [{ family: "wiki", prio: "P2", mode: "replace" }], lanes: ["orc-wiki"], validate: vInt(1), desc: "Covered files touched at or above this count send the refresh to the DEEP scanner." },
   { key: "wiki_refresh_budget", def: 0, tier: "advanced", answers: [{ family: "wiki", prio: "P2", mode: "replace" }], lanes: ["orc-wiki"], validate: vInt(0), desc: "Max scan-tasks per refresh run; 0 = no cap. A capped refresh is a PLANNED stop, not an interrupt: sync has already run, so the wiki is registered and consistent, and the remaining docs are AGING, not broken. Separate from the fixed pause-every-5 rule — do not merge them." },
   { key: "wiki_retire_after_runs", def: 0, tier: "advanced", answers: [{ family: "wiki", prio: "P2", mode: "replace" }], lanes: ["orc-wiki"], validate: vInt(0), desc: "Offer to retire a doc no run put into a slice in this many runs (0 = never offer). Retiring MOVES it to wiki/retired/ and drops it from INDEX.md — reversible, never a delete." },
-  // --- Fable 5 role override (HARD-GATED: nothing changes unless enabled: true) ---
-  { key: "fable5_enabled", def: false, tier: "fable5", answers: [{ family: "fixed-role-model", prio: "P2", mode: "replace" }], lanes: ["orc", "orc-quick"], validate: vEnum("true", "false"), options: ["true", "false"], desc: "Master gate — route selected roles to Fable 5 agents. Nothing changes unless true." },
-  { key: "fable5_effort", def: "medium", tier: "fable5", answers: [{ family: "fable5", prio: "P2", mode: "replace" }], gated_by: "fable5_enabled", lanes: ["orc"], validate: vEnum("medium", "high", "xhigh", "max"), options: ["medium", "high", "xhigh", "max"], desc: "Effort for the Fable 5 role agents (the CLI rewrites their effort: frontmatter on set)." },
-  { key: "fable5_roles", def: "[]", tier: "fable5", answers: [{ family: "fable5", prio: "P2", mode: "replace" }], gated_by: "fable5_enabled", lanes: ["orc", "orc-quick"], validate: vSubset(FABLE5_ROLES), options: FABLE5_ROLES, desc: "Which roles use Fable 5 (CSV): analyze, plan, advisor, judge, review. Empty = no effect." },
   // NOTE: behavior-trace logging is PERMANENT (always on) and intentionally NOT
   // a config key — the orc-trace.js hook always writes a persistent trace per
   // run under log_dir. Only the folder location (log_dir) is configurable.
@@ -1304,6 +1289,28 @@ const overridePath = (claudeDir) => path.join(claudeDir, "orc.config.yaml");
 const LEGACY_KEYS = {
   opus5_executor_only: "opus5_only", // v0.36.0 — widened from executors to every role
 };
+
+// A key ORC used to have and REMOVED. Distinct from LEGACY_KEYS, which is a
+// RENAME and resolves to a live key: a retired key resolves to nothing, so
+// there is no value to carry forward and no new name to point at.
+//
+// It still has to be said out loud. `readOverride()` keeps an unknown key
+// verbatim (a user's file is never rewritten), so a retired name sits on disk
+// looking exactly like a setting that works — and a setting that silently
+// stopped being read is the same failure as a shadowed setting nobody named.
+// So `config list` prints them, `config list --json` carries them, and
+// `config set` refuses them BY NAME instead of with a generic unknown-key list.
+const RETIRED_KEYS = {
+  fable5_enabled: { removed_in: "1.0.0", why: "the Fable 5 role override was removed — every role dispatches its shipped Claude agent, or the Opus 5 variant under opus5_only" },
+  fable5_roles: { removed_in: "1.0.0", why: "the Fable 5 role override was removed" },
+  fable5_effort: { removed_in: "1.0.0", why: "the Fable 5 role override was removed" },
+};
+// The retired names actually present in the user's file.
+function retiredOnDisk(map) {
+  return Object.keys(map)
+    .filter((k) => RETIRED_KEYS[k])
+    .map((k) => ({ key: k, value: map[k], ...RETIRED_KEYS[k] }));
+}
 
 // Minimal flat `key: value` reader. Preserves unknown keys (e.g. an advanced
 // rubric_bands_override the user hand-edited) verbatim.
@@ -1352,56 +1359,6 @@ function writeOverride(claudeDir, map) {
   return p;
 }
 
-// The 5 Fable 5 role-override agents. Effort is written by the CLI (not
-// build-agents): `orc config set fable5_effort X` rewrites the `effort:`
-// frontmatter line in each INSTALLED copy, deterministically.
-const FABLE5_AGENTS = [
-  "orc-analyst-fable-5",
-  "orc-planner-fable-5",
-  "orc-advisor-fable-5",
-  "orc-judge-fable-5",
-  "orc-reviewer-fable-5",
-];
-function applyFable5Effort(claudeDir, effort) {
-  const dir = path.join(claudeDir, "agents");
-  let n = 0;
-  for (const name of FABLE5_AGENTS) {
-    const f = path.join(dir, name + ".md");
-    if (!fs.existsSync(f)) continue;
-    try {
-      const text = fs.readFileSync(f, "utf8");
-      const next = text.replace(/^effort:.*$/m, `effort: ${effort}`);
-      if (next !== text) {
-        fs.writeFileSync(f, next);
-        n++;
-      }
-    } catch (_) {}
-  }
-  return n;
-}
-// Cross-field sanity: enabled but no roles selected does nothing.
-function fable5Warn(claudeDir) {
-  const { map } = readOverride(claudeDir);
-  const enabled = String(map.fable5_enabled) === "true";
-  const roles = String(map.fable5_roles || metaFor("fable5_roles").def)
-    .replace(/^\[|\]$/g, "")
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
-  if (enabled && !roles.length)
-    console.error(
-      "  ⚠ fable5_enabled is true but fable5_roles is empty — no effect until you\n" +
-        "    select roles (e.g. `orc config set fable5_roles analyze,plan`)."
-    );
-  // opus5_only FORCES every role to Opus 5, so the whole Fable 5 block is inert
-  // while it is on. Saying nothing here leaves a user tuning a dead setting.
-  if (String(map.opus5_only) === "true")
-    console.error(
-      "  ⚠ opus5_only is true — the Fable 5 role override is INERT (every role\n" +
-        "    dispatches its Opus 5 agent). Reset opus5_only to use it."
-    );
-}
-
 function configList(claudeDir) {
   const { path: p, map } = readOverride(claudeDir);
   console.log(
@@ -1409,11 +1366,9 @@ function configList(claudeDir) {
   );
   const pad = Math.max(...CONFIG_META.map((m) => m.key.length));
   const forced = String(map.opus5_only) === "true";
-  const tierLabel = { common: "Common", fable5: "Fable 5 role override", advanced: "Advanced" };
-  for (const tier of ["common", "fable5", "advanced"]) {
-    console.log(
-      ui.header(tierLabel[tier] + (tier === "fable5" && forced ? "  (INERT — opus5_only is true)" : ""))
-    );
+  const tierLabel = { common: "Common", advanced: "Advanced" };
+  for (const tier of ["common", "advanced"]) {
+    console.log(ui.header(tierLabel[tier]));
     for (const m of CONFIG_META.filter((x) => x.tier === tier)) {
       const has = Object.prototype.hasOwnProperty.call(map, m.key);
       const val = has ? map[m.key] : m.def;
@@ -1469,7 +1424,8 @@ function configList(claudeDir) {
     console.log("  " + ui.color.gray("INERT in /orc-quick, which asks which agent before every dispatch."));
   }
 
-  const extra = Object.keys(map).filter((k) => !metaFor(k));
+  const retired = retiredOnDisk(map);
+  const extra = Object.keys(map).filter((k) => !metaFor(k) && !RETIRED_KEYS[k]);
   if (extra.length) {
     console.log("\nOther (hand-edited) overrides");
     for (const k of extra)
@@ -1480,18 +1436,26 @@ function configList(claudeDir) {
             : "")
       );
   }
+  if (retired.length) {
+    console.log(ui.header("Retired — still on disk, no longer read"));
+    for (const r of retired)
+      console.log(
+        `  ${ui.color.yellow(r.key)}: ${r.value}` +
+          ui.color.gray(`   (removed in v${r.removed_in} — ${r.why}. Left untouched; delete the line when you like.)`)
+      );
+  }
   console.log("");
 }
 
 // Which keys a currently-set key makes INERT. The CLI already announces this in
-// prose at `config set` time (opus5Notice / opus5ConflictWarn / fable5Warn);
-// this is the same rule expressed as data, so a non-terminal caller can render
-// the shadow instead of parsing the sentence. ONE rule today: opus5_only
-// outranks the whole fable5_* block and a hand-written rubric_bands_override.
+// prose at `config set` time (opus5Notice / opus5ConflictWarn); this is the
+// same rule expressed as data, so a non-terminal caller can render the shadow
+// instead of parsing the sentence. ONE rule today: opus5_only outranks a
+// hand-written rubric_bands_override.
 // ── the family lookups shadowReason() derives from (v1.0.0 W2) ─────────────
 //
-// Before W2 this function branched on key NAMES: `key.startsWith("fable5_")`,
-// `key === "rubric_bands_override"`. That worked and said nothing — the reason
+// Before W2 this function branched on key NAMES — `key === "rubric_bands_override"`
+// and a `fable5_` prefix test. That worked and said nothing — the reason
 // those keys are shadowed is that they sit BELOW a rank that resolved, and a
 // name test cannot express that. These three helpers are the whole derivation;
 // the sentences themselves are unchanged and W1's goldens pin them byte for
@@ -1510,11 +1474,11 @@ function familyRanksOf(key) {
   return out;
 }
 
-// The key whose gate makes this one inert, and the row that gate occupies.
-// `fable5_effort` is not in `fixed-role-model` at all — it is gated by
-// `fable5_enabled`, which is, and it inherits that row's sentence. That
-// inheritance is why all three fable5_* keys report identically without any of
-// them being named anywhere in this function.
+// The key whose gate makes this one inert, and the row that gate occupies. A
+// gated key (say `extra_roles`) usually ranks in no contested family at all —
+// its GATE does, and it inherits that row's sentence. That inheritance is what
+// lets a whole gated block report identically without any of its keys being
+// named anywhere in this function.
 function gateRowOf(key) {
   const meta = metaFor(key);
   if (!meta || !meta.gated_by) return null;
@@ -1570,8 +1534,8 @@ function shadowReason(key, map, claudeDir) {
   // the rows ABOVE it: if one of them is a `replace` rank whose key is on, this
   // key is not read at all, and the row's own `shadow_note` says why. A key
   // that ranks nowhere asks its GATE instead — that is the only indirection,
-  // and it is what makes `fable5_effort` report the same sentence as
-  // `fable5_enabled` without either being named here.
+  // and it is what lets a gated key report the same sentence as its gate
+  // without either being named here.
   const own = familyRanksOf(key);
   const gate = own.length ? null : gateRowOf(key);
   for (const { row, above } of own.length ? own : gate ? [gate] : []) {
@@ -1584,8 +1548,8 @@ function shadowReason(key, map, claudeDir) {
   }
   // /orc-quick asks WHICH AGENT before every dispatch, which is the lane's
   // entire premise — so a config that silently answered that question would
-  // break it. Extra is INERT there, exactly like opus5_only and fable5_*, and
-  // a shadowed setting must never be silent.
+  // break it. Extra is INERT there, exactly like opus5_only, and a shadowed
+  // setting must never be silent.
   return null;
 }
 
@@ -1717,7 +1681,7 @@ function configListJson(claudeDir) {
   // designed case. Reported as read-only: `orc config set` refuses them, so an
   // editor offering to write one would be lying about what happens next.
   const extra = Object.keys(map)
-    .filter((k) => !metaFor(k))
+    .filter((k) => !metaFor(k) && !RETIRED_KEYS[k])
     .map((k) => ({
       key: k,
       value: map[k],
@@ -1739,6 +1703,10 @@ function configListJson(claudeDir) {
     keys,
     hand_edited: extra,
     legacy_keys: legacy,
+    // A key that was REMOVED, not renamed. `--json is not a summary`: the human
+    // branch prints this section, so the JSON carries it, or a panel is
+    // structurally unable to be as honest as the terminal.
+    retired_keys: retiredOnDisk(map),
     score_table: scoreTableJson(map, claudeDir),
     // v1.0.0 W2 — the family table itself, so a renderer never re-derives a
     // precedence it can be handed. `--json is not a summary`: the ranks, the
@@ -1757,6 +1725,14 @@ function configSet(claudeDir, key, rawValue) {
         `    dispatched role, not just executors) — writing ${LEGACY_KEYS[key]}.`
     );
     key = LEGACY_KEYS[key];
+  }
+  if (RETIRED_KEYS[key]) {
+    const r = RETIRED_KEYS[key];
+    console.error(
+      `❌ ${key} was removed in v${r.removed_in} — ${r.why}.\n` +
+        `   Nothing reads it. A line already in orc.config.yaml is left alone; delete it when you like.`
+    );
+    process.exit(1);
   }
   const m = metaFor(key);
   if (!m) {
@@ -1796,15 +1772,10 @@ function configSet(claudeDir, key, rawValue) {
   map[key] = res.value;
   const p = writeOverride(claudeDir, map);
   console.log(`Set ${key} = ${res.value}  →  ${p}`);
-  if (key === "fable5_effort") {
-    const n = applyFable5Effort(claudeDir, res.value);
-    if (n) console.log(`  ↳ rewrote effort: ${res.value} in ${n} Fable 5 agent file(s).`);
-  }
   // v0.55.0 — the two roles that moved to `orc extra role`. Accepted, WARNED BY
   // NAME, pointed at the new command, and arming nothing. The `LEGACY_KEYS`
   // precedent: a renamed mechanism must never be a silent revert.
   if (key === "extra_roles") extraLegacyRoleWarn(res.value);
-  if (key.startsWith("fable5")) fable5Warn(claudeDir);
   if (key === "opus5_only") opus5Notice(String(res.value) === "true", claudeDir);
   if (key === "opus5_only" || key === "extra_enabled") extraShadowNotice(claudeDir);
 }
@@ -1873,7 +1844,7 @@ function opus5Notice(on, claudeDir) {
   if (!on) {
     console.log(
       "\n  Every role is back to its default pin (executors → the 8-band mixed-model\n" +
-        "  table). Any fable5_* / rubric_bands_override settings are live again."
+        "  table). A hand-written rubric_bands_override is live again."
     );
     return;
   }
@@ -1904,8 +1875,8 @@ function opus5Notice(on, claudeDir) {
       "  rule reports a downgrade on EVERY return instead of occasionally. Hooks cannot\n" +
       "  block on model (only on effort), so this notice is the only up-front warning.\n" +
       "  This also ends orc-fast's \"runs fine at Sonnet medium\" — while ON it needs Opus 5.\n" +
-      "\n  " + ui.color.bold("It FORCES.") + " While ON it outranks each role's default pin, the Fable 5\n" +
-      "  role override, and a hand-written rubric_bands_override.\n" +
+      "\n  " + ui.color.bold("It FORCES.") + " While ON it outranks each role's default pin\n" +
+      "  and a hand-written rubric_bands_override.\n" +
       "  Turn it off with: orc config reset opus5_only\n"
   );
   opus5ConflictWarn(claudeDir);
@@ -1916,8 +1887,6 @@ function opus5ConflictWarn(claudeDir) {
   if (!claudeDir) return;
   const { map } = readOverride(claudeDir);
   const shadowed = [];
-  if (String(map.fable5_enabled) === "true")
-    shadowed.push("fable5_enabled (+ fable5_roles / fable5_effort)");
   if (Object.prototype.hasOwnProperty.call(map, "rubric_bands_override"))
     shadowed.push("rubric_bands_override (hand-written executor table)");
   if (!shadowed.length) return;
@@ -1968,7 +1937,7 @@ function configInteractive(claudeDir) {
         const has = Object.prototype.hasOwnProperty.call(map, m.key);
         const val = has ? map[m.key] : m.def;
         const tag = has ? "overridden" : "default";
-        const adv = m.tier === "advanced" ? " (adv)" : m.tier === "fable5" ? " (fable5)" : "";
+        const adv = m.tier === "advanced" ? " (adv)" : "";
         console.log(
           `  ${String(i + 1).padStart(2)}) ${m.key.padEnd(pad)}  ${String(val).padEnd(28)} ${tag}${adv}`
         );
@@ -2020,11 +1989,6 @@ function configInteractive(claudeDir) {
       cur[m.key] = res.value;
       writeOverride(claudeDir, cur);
       console.log(`  ✓ ${m.key} = ${res.value}`);
-      if (m.key === "fable5_effort") {
-        const n = applyFable5Effort(claudeDir, res.value);
-        if (n) console.log(`  ↳ rewrote effort in ${n} Fable 5 agent file(s).`);
-      }
-      if (m.key.startsWith("fable5")) fable5Warn(claudeDir);
     }
     rl.close();
     console.log("done.");
@@ -2227,6 +2191,530 @@ function configRecommend(claudeDir) {
           "  This command only reads — nothing was changed."
       )
   );
+}
+
+// ── `orc lane` — ONE resolver, and it is not the lane (v1.0.0 W3) ──────────
+//
+// Pillar 1's payoff. Every lane spine used to carry its own `## Config`
+// section: a hand-written list of the keys it reads, the precedence between
+// them, and which of them go inert where. Three copies of a rule drift into
+// three rules, and a lane that re-derives a precedence will eventually disagree
+// with the CLI that wrote the value. So the lane stops deriving: it asks.
+//
+// THE LANE VOCABULARY IS THE SKILL NAME, and it is deliberately NOT the trace
+// lane enum. A trace pointer is `run-<lane>-<slug>` where `<lane>` is a RUN
+// token (`orc`, `ultra`, `mini`, `fast`, `wiki`, `quick`, `doc`, …) — `ultra`
+// is a run of the `orc` skill, and `combine` is a phase no skill opens. Config
+// is asked FOR A SKILL, which is what `CONFIG_META.lanes[]` names, so these two
+// sets are different on purpose and merging them would put a config question to
+// a token no skill answers.
+const LANES = [
+  { lane: "context-combiner", command: null, note: "a PHASE inside an orc-analyze run — dispatched, never invoked (v0.42.0)" },
+  { lane: "orc", command: "orc" },
+  { lane: "orc-advisor", command: null, note: "dispatched at ultra Phase U0 — no command of its own" },
+  { lane: "orc-aftermath", command: "orc-aftermath" },
+  { lane: "orc-analyze", command: "orc-analyze" },
+  { lane: "orc-analyze-mini", command: null, note: "orc-mini's analyst — dispatched by that lane" },
+  { lane: "orc-boundary", command: "orc-boundary" },
+  { lane: "orc-brainstorm", command: "orc-brainstorm" },
+  { lane: "orc-budget", command: "orc-budget" },
+  { lane: "orc-challenge", command: "orc-challenge" },
+  { lane: "orc-claude", command: "orc-claude" },
+  { lane: "orc-diy", command: "orc-diy" },
+  { lane: "orc-doc", command: "orc-doc" },
+  { lane: "orc-explain", command: "orc-explain" },
+  { lane: "orc-export", command: "orc-export" },
+  { lane: "orc-fast", command: "orc-fast" },
+  { lane: "orc-grill", command: "orc-grill" },
+  { lane: "orc-handoff", command: "orc-handoff" },
+  { lane: "orc-judge", command: null, note: "dispatched at the three ultra gates — no command of its own" },
+  { lane: "orc-learn", command: "orc-learn" },
+  { lane: "orc-mini", command: "orc-mini" },
+  { lane: "orc-pact", command: "orc-pact" },
+  { lane: "orc-pattern", command: "orc-pattern" },
+  { lane: "orc-poly", command: "orc-poly" },
+  { lane: "orc-pr-driver", command: "orc-pr-driver" },
+  { lane: "orc-pr-setup", command: "orc-pr-setup" },
+  { lane: "orc-quick", command: "orc-quick" },
+  { lane: "orc-retro", command: "orc-retro" },
+  { lane: "orc-route", command: "orc-route" },
+  { lane: "orc-verify", command: "orc-verify" },
+  { lane: "orc-wiki", command: "orc-wiki" },
+];
+const LANE_NAMES = LANES.map((l) => l.lane);
+// Commands that enter a lane rather than being one. `/orc-ultra` runs the `orc`
+// skill with `ultra_mode` forced run-scoped; `/orc-plan` runs its planner
+// subskill. Neither is a config lane, and asking `orc lane config ultra` has to
+// say so rather than exit 2 as if the name were a typo.
+const LANE_ALIAS = {
+  "orc-ultra": { lane: "orc", why: "`/orc-ultra` runs the orc skill with ultra_mode forced RUN-SCOPED — it is never written to config" },
+  "orc-plan": { lane: "orc", why: "`/orc-plan` runs orc's planner subskill" },
+  ultra: { lane: "orc", why: "`ultra` is a TRACE lane token; the config lane is `orc`" },
+  mini: { lane: "orc-mini", why: "`mini` is a TRACE lane token; the config lane is `orc-mini`" },
+  fast: { lane: "orc-fast", why: "`fast` is a TRACE lane token; the config lane is `orc-fast`" },
+  wiki: { lane: "orc-wiki", why: "`wiki` is a TRACE lane token; the config lane is `orc-wiki`" },
+  quick: { lane: "orc-quick", why: "`quick` is a TRACE lane token; the config lane is `orc-quick`" },
+  doc: { lane: "orc-doc", why: "`doc` is a TRACE lane token; the config lane is `orc-doc`" },
+  diy: { lane: "orc-diy", why: "`diy` is a TRACE lane token; the config lane is `orc-diy`" },
+};
+
+// LANE-LEVEL inertness is a THIRD thing (design-01 §5), beside a rank losing a
+// contest and a gate being off. Nothing in the config file is involved: the
+// LANE refuses to read the key. "Unaffected, not exempt" is a distinction the
+// docs make deliberately and `inert_reason` must carry it — a generic "not
+// applicable" loses the fact that turning the key on breaks nothing here.
+const LANE_INERT = {
+  "orc-quick": [
+    { family: "executor-band", reason: "this lane asks WHICH AGENT before every dispatch — a config that silently answered that question would break the lane's entire premise" },
+    { family: "fixed-role-model", reason: "this lane asks WHICH AGENT before every dispatch — a config that silently answered that question would break the lane's entire premise" },
+    { key: "extra_on_failure", reason: "the agent gate is re-asked after a failure, so a configured substitution would answer it for the user" },
+    { key: "extra_resume", reason: "the agent gate is re-asked after a failure — silently continuing a foreign worker's half-finished write would pre-answer it" },
+  ],
+  "orc-challenge": [
+    { key: "opus5_only", reason: "every agent in this lane is already claude-opus-5, so this is a no-op — the lane is unaffected, not exempt" },
+  ],
+  "orc-doc": [
+    { key: "opus5_only", reason: "both agents in this lane are already claude-opus-5, so this is a no-op — the lane is unaffected, not exempt" },
+  ],
+};
+
+// A value that can HARD-STOP a run, so a lane prints the gate without deciding
+// what a gate is. `when` and `action` are the CLI's words; a lane never invents
+// a friendlier synonym for either.
+const LANE_STOPS = [
+  {
+    key: "run_budget_dispatches",
+    arms: (v) => Number(v) > 0,
+    when: "the Phase-1 forecast exceeds this dispatch count",
+    action: "STOP before wave 1 and offer proceed / a cheaper lane / re-plan smaller",
+  },
+  {
+    key: "batch_pause_every",
+    arms: (v) => Number(v) > 0,
+    when: "after wave W, W % N == 0 with a later wave remaining",
+    action: "the STOP SEQUENCE — never dispatch W+1 past an unacknowledged boundary",
+  },
+  {
+    key: "boundary_gate",
+    arms: (v) => String(v) === "block",
+    when: "a task lands in an area a boundary card REFUSED",
+    action: "lift that ONE task out of its wave; the wave still runs the rest",
+  },
+  {
+    key: "wiki_refresh_budget",
+    arms: (v) => Number(v) > 0,
+    when: "the refresh reaches this many scan-tasks",
+    action: "a PLANNED stop — sync has already run, so the wiki is registered and the rest is AGING, not broken",
+  },
+  {
+    key: "tdd_loop_max",
+    arms: (v) => Number(v) > 0,
+    when: "the TDD repair loop hits this many rounds without going green",
+    action: "STOP and report the tests as honestly red",
+  },
+  {
+    key: "extra_passphrase_ttl_days",
+    arms: () => true,
+    when: "a vaulted profile a route or slot row names has an EXPIRED or ABSENT passphrase",
+    action: "`orc extra preflight` STOPS the run — the credential goes, the profile is stamped expired, the route rows survive",
+  },
+];
+
+// Does this key RESOLVE its family here? Mirrors CONFIG_FAMILIES' `mode`
+// column, and nothing else may re-answer it.
+function laneRankResolves(row, map, claudeDir) {
+  if (!row.key) return { how: "terminal" };
+  const meta = metaFor(row.key);
+  const set = Object.prototype.hasOwnProperty.call(map, row.key);
+  const value = set ? map[row.key] : meta ? meta.def : undefined;
+  if (row.mode === "overlay") {
+    if (!isTrue(value)) return { how: "no", value };
+    let routes = [];
+    let slots = [];
+    try {
+      const l = readExtra(claudeDir);
+      routes = l ? l.routes : [];
+      slots = l ? l.slots : [];
+    } catch (_) {}
+    if (!routes.length && !slots.length) return { how: "no", value };
+    return { how: "partly", value, routes, slots };
+  }
+  // `replace`: a key resolves when it is set to a truthy / non-default value.
+  // A registry-less rank (rubric_bands_override) resolves on PRESENCE — it has
+  // no default to differ from.
+  if (!meta) return set ? { how: "yes", value } : { how: "absent" };
+  if (!set) return { how: "no", value };
+  if (String(value) === String(meta.def)) return { how: "no", value };
+  return { how: "yes", value };
+}
+
+// The `state` closed set: resolved · partly-resolved · not-read · inert ·
+// demoted · absent. `not-read` is the field that makes the stop-at-first-
+// resolve rule VISIBLE — it is not "false" and it is not "default", it is
+// *nobody looked at this*, and rendering those three the same way is how a
+// panel starts lying.
+//
+// `demoted` is declared here and never emitted yet: W5's stall demotion is its
+// only producer. A state word that exists in the contract before its producer
+// is a slot a renderer can be built against; one invented later is a state a
+// renderer drops on the floor.
+const LANE_RANK_STATES = ["resolved", "partly-resolved", "not-read", "inert", "demoted", "absent"];
+
+function laneFamilies(lane, map, claudeDir) {
+  const inert = LANE_INERT[lane] || [];
+  const out = {};
+  for (const [name, fam] of Object.entries(CONFIG_FAMILIES)) {
+    if (!fam.ranks) continue;
+    const famInert = inert.find((i) => i.family === name);
+    const ranks = [];
+    let done = false;
+    let resolvedBy = null;
+    let resolvedAt = null;
+    for (const row of fam.ranks) {
+      const keyInert = row.key && inert.find((i) => i.key === row.key);
+      const why = famInert ? famInert.reason : keyInert ? keyInert.reason : null;
+      if (why) {
+        ranks.push({ prio: row.prio, key: row.key, terminal: row.terminal || null, state: "inert", why });
+        continue;
+      }
+      if (done) {
+        ranks.push({ prio: row.prio, key: row.key, terminal: row.terminal || null, state: "not-read", why: "a higher rank resolved" });
+        continue;
+      }
+      const r = laneRankResolves(row, map, claudeDir);
+      if (r.how === "terminal") {
+        ranks.push({ prio: row.prio, key: null, terminal: row.terminal, state: "resolved", why: "nothing above it resolved, and the lowest rank of a contested family is TOTAL" });
+        resolvedBy = resolvedBy || null;
+        resolvedAt = resolvedAt || row.prio;
+        done = true;
+      } else if (r.how === "yes") {
+        ranks.push({ prio: row.prio, key: row.key, terminal: null, state: "resolved", why: null });
+        resolvedBy = row.key;
+        resolvedAt = row.prio;
+        done = true;
+      } else if (r.how === "partly") {
+        // An overlay takes only the ranges its route rows cover and only the
+        // positions its slot rows name; everything it did not cover falls
+        // through to the next rank NORMALLY. That is what makes "stop at the
+        // first rank that resolves" survive contact with extra.
+        const taken = r.routes.map((x) => `[${x.from},${x.to >= 100 ? "100]" : x.to + ")"}`);
+        const slots = r.slots.map((x) => x.slot);
+        const bits = [];
+        if (taken.length) bits.push(`${taken.join(", ")} routed off Claude`);
+        if (slots.length) bits.push(`${slots.join(", ")} held by a slot row`);
+        ranks.push({
+          prio: row.prio,
+          key: row.key,
+          terminal: null,
+          state: "partly-resolved",
+          why: bits.join("; ") + "; every other score and position falls through",
+        });
+      } else if (r.how === "absent") {
+        ranks.push({ prio: row.prio, key: row.key, terminal: null, state: "absent", why: "not present in the config file" });
+      } else {
+        // Consulted, and it declined. That is NOT `not-read`, which means
+        // nobody looked — this rank was looked at and had no answer, so the
+        // ladder carried on to the next one. Rendering the two the same way
+        // would erase the difference between "your setting did nothing" and
+        // "your setting was never consulted", which is the whole reason this
+        // state set exists.
+        ranks.push({
+          prio: row.prio,
+          key: row.key,
+          terminal: null,
+          state: "absent",
+          why: Object.prototype.hasOwnProperty.call(map, row.key)
+            ? "set, but to its default — it has no answer for this decision"
+            : "not present in the config file",
+        });
+      }
+    }
+    out[name] = {
+      question: fam.question,
+      contested: !!fam.contested,
+      resolved_by: resolvedBy,
+      resolved_at: resolvedAt,
+      inert: !!famInert,
+      inert_reason: famInert ? famInert.reason : null,
+      ranks,
+    };
+  }
+  for (const [name, fam] of Object.entries(CONFIG_FAMILIES)) {
+    if (fam.ranks) continue;
+    out[name] = { question: fam.question, contested: false, resolved_by: null, resolved_at: null, inert: false, inert_reason: null, ranks: null };
+  }
+  return out;
+}
+
+// The fixed roles this lane dispatches, already resolved. A lane never maps a
+// role to an agent itself — an agent's model change is always a RENAME, so a
+// lane holding its own table is a lane that will name an agent that no longer
+// exists.
+function laneRoles(lane, map, claudeDir) {
+  const forced = isTrue(map.opus5_only) && !(LANE_INERT[lane] || []).some((i) => i.key === "opus5_only" || i.family === "fixed-role-model");
+  const byName = { orc: "orc", "orc-mini": "mini", "orc-fast": "fast" };
+  const out = {};
+  const fixed = LANE_FIXED_ROLES[byName[lane]] || [];
+  for (const agent of fixed) {
+    const row = OPUS5_ONLY_ROLES.find((r) => r[1] === agent);
+    out[agent] = {
+      agent: forced && row ? row[2] : agent,
+      forced_by: forced && row ? "opus5_only" : null,
+      shipped: agent,
+    };
+  }
+  let slotRows = [];
+  try {
+    const l = readExtra(claudeDir);
+    slotRows = l ? l.slots : [];
+  } catch (_) {}
+  for (const s of EXTRA_SLOTS) {
+    if (s.lane !== "/" + lane) continue;
+    const taken = slotRows.find((r) => r.slot === s.slot);
+    const laneInert = (LANE_INERT[lane] || []).some((i) => i.family === "fixed-role-model");
+    const shipped = (forced && s.claude_opus5 ? s.claude_opus5 : s.claude)[0];
+    out[s.slot] = {
+      agent: taken && !laneInert ? `extra:${taken.profile}/${taken.model}` : shipped,
+      forced_by: taken && !laneInert ? "extra slot row" : forced && s.claude_opus5 ? "opus5_only" : null,
+      shipped,
+    };
+  }
+  return out;
+}
+
+// The exact user-facing lines, ALREADY WORDED. The boundary (design-01 §7):
+// anything derivable from config + disk state the CLI already reads goes here;
+// anything needing a per-task or per-run value the CLI cannot know — a score, a
+// task id, a slug, a file count, a wave index — stays with the lane. Half a
+// sentence from the CLI and half from the model is worse than either: it is a
+// sentence nobody owns.
+function laneAnnounce(lane, map, claudeDir, families) {
+  const out = [];
+  const inert = LANE_INERT[lane] || [];
+  if (isTrue(map.opus5_only)) {
+    const off = inert.find((i) => i.key === "opus5_only" || i.family === "fixed-role-model" || i.family === "executor-band");
+    out.push(
+      off
+        ? `opus5_only: ON, and INERT in this lane — ${off.reason}`
+        : "opus5_only: ON — every dispatched role uses Opus 5, with effort as the only cost dial"
+    );
+  }
+  if (isTrue(map.extra_enabled)) {
+    const off = inert.find((i) => i.family === "executor-band" || i.family === "fixed-role-model");
+    let routes = [];
+    let slots = [];
+    try {
+      const l = readExtra(claudeDir);
+      routes = l ? l.routes : [];
+      slots = l ? l.slots : [];
+    } catch (_) {}
+    if (off) out.push(`extra: armed, and INERT in this lane — ${off.reason}`);
+    else if (!routes.length && !slots.length)
+      out.push("extra: armed, but no route or slot row exists — nothing goes off Claude");
+    else {
+      const bits = [];
+      if (routes.length) bits.push(`${routes.map((r) => `[${r.from},${r.to >= 100 ? "100]" : r.to + ")"}`).join(", ")} execute off Claude`);
+      if (slots.length) bits.push(`${slots.map((r) => r.slot).join(", ")} held by a non-Claude worker`);
+      out.push(`extra: ${bits.join("; ")} — this sends work to a third party`);
+    }
+  }
+  // A shadowed setting must never be silent, and neither must an inert one.
+  const shadowed = [];
+  for (const f of Object.values(families))
+    if (f.ranks)
+      for (const r of f.ranks)
+        if (r.state === "not-read" && r.key && Object.prototype.hasOwnProperty.call(map, r.key)) shadowed.push(r.key);
+  if (shadowed.length)
+    out.push(`shadowed here: ${[...new Set(shadowed)].join(", ")} — set in your config, not read by this lane's resolution`);
+  const retired = retiredOnDisk(map);
+  if (retired.length)
+    out.push(`retired keys still in your config: ${retired.map((r) => r.key).join(", ")} — removed, left untouched, and not read`);
+  return out;
+}
+
+function laneConfig(lane, claudeDir) {
+  const { path: p, map } = readOverride(claudeDir);
+  const rows = CONFIG_META.filter((m) => (m.lanes || []).includes(lane));
+  const inert = LANE_INERT[lane] || [];
+  const families = laneFamilies(lane, map, claudeDir);
+  const has = (k) => Object.prototype.hasOwnProperty.call(map, k);
+  const keys = rows.map((m) => {
+    const why = shadowReason(m.key, map, claudeDir);
+    const hit =
+      inert.find((i) => i.key === m.key) ||
+      inert.find((i) => m.answers.some((a) => a.family === i.family)) ||
+      (m.gated_by ? inert.find((i) => i.key === m.gated_by) : null);
+    const gate = m.gated_by && !isTrue(map[m.gated_by] === undefined ? metaFor(m.gated_by).def : map[m.gated_by]);
+    return {
+      key: m.key,
+      value: has(m.key) ? map[m.key] : m.def,
+      default: m.def,
+      prio: m.answers[0].prio,
+      family: m.answers[0].family,
+      answers: m.answers,
+      tier: m.tier,
+      gated_by: m.gated_by || null,
+      is_overridden: has(m.key),
+      is_shadowed: !!why,
+      shadow_reason: why,
+      is_inert: !!hit || !!gate,
+      inert_reason: hit ? hit.reason : gate ? `${m.gated_by} is off, so nothing in its block is consulted` : null,
+    };
+  });
+  const effective = {};
+  for (const k of keys) effective[k.key] = k.value;
+  return {
+    lane,
+    command: (LANES.find((l) => l.lane === lane) || {}).command || null,
+    command_note: (LANES.find((l) => l.lane === lane) || {}).note || null,
+    config_path: p,
+    exists: fs.existsSync(p),
+    keys,
+    // The flat answer. A lane obeys this and reasons about nothing.
+    effective,
+    families,
+    roles: laneRoles(lane, map, claudeDir),
+    announce: laneAnnounce(lane, map, claudeDir, families),
+    stops: LANE_STOPS.filter((s) => rows.some((m) => m.key === s.key))
+      .filter((s) => s.arms(has(s.key) ? map[s.key] : metaFor(s.key).def))
+      .map((s) => ({ key: s.key, value: has(s.key) ? map[s.key] : metaFor(s.key).def, when: s.when, action: s.action })),
+    // The keys this lane deliberately ignores. An empty answer is an ANSWER
+    // (v0.43.0): "this lane does not read doc_language" is information, and it
+    // is what makes the two-way lint possible at all.
+    not_read: CONFIG_META.filter((m) => !(m.lanes || []).includes(lane)).map((m) => m.key),
+    rank_states: LANE_RANK_STATES,
+  };
+}
+
+function laneList(claudeDir) {
+  const rows = LANES.map((l) => ({
+    lane: l.lane,
+    command: l.command ? "/" + l.command : null,
+    command_note: l.note || null,
+    keys: CONFIG_META.filter((m) => (m.lanes || []).includes(l.lane)).length,
+    inert: (LANE_INERT[l.lane] || []).length,
+  }));
+  if (wantsJson()) {
+    emitJson({ ok: true, count: rows.length, lanes: rows, aliases: LANE_ALIAS, rank_states: LANE_RANK_STATES });
+    return 0;
+  }
+  console.log(`\nORC lanes  (${rows.length})\n`);
+  const pad = Math.max(...rows.map((r) => r.lane.length));
+  for (const r of rows)
+    console.log(
+      `  ${ui.color.cyan(r.lane.padEnd(pad))}  ${String(r.command || "—").padEnd(16)} ` +
+        ui.color.gray(`${r.keys} key${r.keys === 1 ? "" : "s"}`) +
+        (r.inert ? ui.color.yellow(`  ${r.inert} inert rule${r.inert === 1 ? "" : "s"}`) : "") +
+        (r.command_note ? ui.color.gray("   " + r.command_note) : "")
+    );
+  console.log("");
+  return 0;
+}
+
+function laneConfigCmd(lane, claudeDir) {
+  if (!lane) {
+    console.error("Usage: orc lane config <lane>   (orc lane list)");
+    return 2;
+  }
+  if (!LANE_NAMES.includes(lane)) {
+    const alias = LANE_ALIAS[lane];
+    if (alias) {
+      // An entry point is not a typo. Saying "unknown lane" here would send the
+      // user looking for a spelling mistake in a name that is real.
+      const msg = `\`${lane}\` is an entry point, not a config lane — ${alias.why}. Try: orc lane config ${alias.lane}`;
+      if (wantsJson()) emitJson({ ok: false, reason: "alias", lane, resolves_to: alias.lane, why: alias.why });
+      else console.error("  " + msg);
+      return 2;
+    }
+    if (wantsJson()) emitJson({ ok: false, reason: "unknown-lane", lane, known: LANE_NAMES });
+    else console.error(`Unknown lane: ${lane}\nKnown lanes: ${LANE_NAMES.join(", ")}`);
+    return 2;
+  }
+  const d = laneConfig(lane, claudeDir);
+  if (wantsJson()) {
+    emitJson({ ok: true, ...d });
+    return 0;
+  }
+  // `--json is not a summary` runs BOTH ways: every field the JSON carries is
+  // printed here, or the terminal is the half-blind surface instead.
+  console.log(`\nORC lane  ${ui.color.cyan(d.lane)}${d.command ? "  /" + d.command : ""}`);
+  if (d.command_note) console.log(ui.color.gray("  " + d.command_note));
+  console.log(ui.color.gray(`  config: ${d.config_path}${d.exists ? "" : "  — not created yet"}\n`));
+
+  if (d.announce.length) {
+    console.log(ui.header("Announce  (print these VERBATIM at preflight)"));
+    for (const a of d.announce) console.log("  " + a);
+    console.log("");
+  }
+
+  console.log(ui.header(`Keys this lane reads  (${d.keys.length})`));
+  if (!d.keys.length) console.log(ui.color.gray("  none — this lane reads no config key."));
+  const pad = d.keys.length ? Math.max(...d.keys.map((k) => k.key.length)) : 0;
+  for (const k of d.keys) {
+    const mark = k.is_inert
+      ? ui.color.yellow("  INERT")
+      : k.is_shadowed
+        ? ui.color.yellow("  shadowed")
+        : k.is_overridden
+          ? ui.color.green("  overridden")
+          : ui.color.gray("  default");
+    console.log(`  ${ui.color.cyan(k.key.padEnd(pad))}  ${String(k.value).padEnd(24)} ${k.prio} ${k.family}${mark}`);
+    if (k.inert_reason) console.log(ui.color.gray(`      ↳ ${k.inert_reason}`));
+    else if (k.shadow_reason) console.log(ui.color.gray(`      ↳ ${k.shadow_reason}`));
+  }
+
+  console.log(ui.header("Families  (read top-down; STOP at the first rank that resolves)"));
+  for (const [name, f] of Object.entries(d.families)) {
+    if (!f.ranks) continue;
+    console.log(`\n  ${ui.color.bold(name)} — ${f.question}`);
+    for (const r of f.ranks) {
+      const label = r.key || `(terminal: ${r.terminal})`;
+      console.log(`    ${r.prio}  ${String(label).padEnd(24)} ${r.state}${r.why ? ui.color.gray("  — " + r.why) : ""}`);
+    }
+  }
+
+  const roleNames = Object.keys(d.roles);
+  console.log(ui.header(`Fixed roles  (${roleNames.length})`));
+  if (!roleNames.length) console.log(ui.color.gray("  none — this lane dispatches no fixed role."));
+  for (const [k, v] of Object.entries(d.roles))
+    console.log(
+      `  ${k.padEnd(34)} ${v.agent}` + (v.forced_by ? ui.color.gray(`   (${v.forced_by}; ships ${v.shipped})`) : "")
+    );
+
+  console.log(ui.header(`Stops  (${d.stops.length})`));
+  if (!d.stops.length) console.log(ui.color.gray("  none armed — nothing in this config can hard-stop this lane."));
+  for (const s of d.stops) {
+    console.log(`  ${ui.color.cyan(s.key)} = ${s.value}`);
+    console.log(ui.color.gray(`      when: ${s.when}`));
+    console.log(ui.color.gray(`      then: ${s.action}`));
+  }
+
+  console.log(ui.header(`Not read here  (${d.not_read.length})`));
+  console.log(ui.color.gray("  " + (d.not_read.join(", ") || "none — this lane reads every key")));
+  console.log("");
+  return 0;
+}
+
+
+// `orc lane` — the noun. `list` and `config` today; `phases` lands in W12 and
+// `calls` in W10.
+function lane() {
+  const claudeDir = resolveClaudeDir();
+  const pos = positionals(); // ["lane", <sub?>, <lane?>]
+  switch (pos[1]) {
+    case undefined:
+    case "list":
+      process.exit(laneList(claudeDir));
+    case "config":
+      process.exit(laneConfigCmd(pos[2], claudeDir));
+    default:
+      console.error(
+        `Unknown: orc lane ${pos[1]}\n` +
+          "Usage: orc lane list [--json]\n" +
+          "       orc lane config <lane> [--json]"
+      );
+      process.exit(2);
+  }
 }
 
 function config() {
@@ -29599,6 +30087,12 @@ Usage:
     orc config recommend                  read-only: probe this repo (tests? CI? size?
                                           wiki? monorepo?) and suggest ONE profile, with
                                           the reasons it decided from
+  orc lane list                           every lane, its command, and how many keys it reads
+    orc lane config <lane>                ONE resolver for that lane: effective values, the
+                                          family ranks with their state, announce[], stops[],
+                                          the fixed roles, and what it does NOT read
+                                          (exit 0 in every state; 2 unknown lane)
+
   orc diy [--dir <path>]                  compose your own flow — INTERACTIVE menu (project-scoped; no --global)
     orc diy init [--preset <name>]        create the flow config (presets: lean, paranoid, solo-fast)
     orc diy set <key> <value>             change one flow key (requires recompile)
@@ -29953,6 +30447,11 @@ function jsonCrash(err) {
       break;
     case "config":
       config();
+      break;
+    // v1.0.0 W3 — ONE resolver per lane, so a spine never re-derives a
+    // precedence the CLI already computed.
+    case "lane":
+      lane();
       break;
     case "diy":
       diy();

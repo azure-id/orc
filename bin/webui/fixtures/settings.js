@@ -25,12 +25,12 @@ const config = {
     { key: "rubric_bands", tier: "common", answers: [{"family":"scoring","prio":"P2","mode":"replace"}], family: "scoring", prio: "P2", lanes: ["orc","orc-diy"], gated_by: null, value: 5, default: 5, is_overridden: false, is_shadowed: false, shadow_reason: null, desc: "Scoring granularity (2-5 narrow preset, 6-8 wide preset).", options: [2, 3, 4, 5, 6, 7, 8], control: { kind: "range", choices: null, min: 2, max: 8 } },
     { key: "pattern_findings", tier: "common", answers: [{"family":"patterns","prio":"P2","mode":"replace"}], family: "patterns", prio: "P2", lanes: ["orc","orc-pattern","orc-wiki"], gated_by: null, value: "on", default: "ask", is_overridden: true, is_shadowed: false, shadow_reason: null, desc: "Code-pattern gate on an FE/BE cache miss.", options: ["ask", "on", "off"], control: { kind: "enum", choices: ["ask", "on", "off"], min: null, max: null } },
     { key: "generate_tests", tier: "common", answers: [{"family":"testing","prio":"P2","mode":"replace"}], family: "testing", prio: "P2", lanes: ["orc","orc-mini"], gated_by: null, value: false, default: false, is_overridden: false, is_shadowed: false, shadow_reason: null, desc: "Opt-in Phase 6.5: author test cases before ship.", options: ["true", "false"], control: { kind: "enum", choices: ["true", "false"], min: null, max: null } },
-    // ON, so the whole fable5_* block below renders shadowed — the animation
-    // §6.2 calls the single best argument for the project.
-    { key: "opus5_only", tier: "common", answers: [{"family":"executor-band","prio":"P1","mode":"replace"},{"family":"fixed-role-model","prio":"P1","mode":"replace"}], family: "executor-band", prio: "P1", lanes: ["orc","orc-analyze","orc-challenge","orc-claude","orc-diy","orc-doc","orc-fast","orc-mini","orc-pattern","orc-quick","orc-retro","orc-wiki"], gated_by: null, value: "true", default: false, is_overridden: true, is_shadowed: false, shadow_reason: null, desc: "EVERY dispatched role uses ONE model — Opus 5 — with EFFORT as the cost dial.", options: ["true", "false"], control: { kind: "enum", choices: ["true", "false"], min: null, max: null } },
-    { key: "fable5_enabled", tier: "fable5", answers: [{"family":"fixed-role-model","prio":"P2","mode":"replace"}], family: "fixed-role-model", prio: "P2", lanes: ["orc","orc-quick"], gated_by: null, value: "true", default: false, is_overridden: true, is_shadowed: true, shadow_reason: "shadowed by opus5_only — every role dispatches its Opus 5 agent, so the Fable 5 override is inert", desc: "Master gate — route selected roles to Fable 5 agents.", options: ["true", "false"], control: { kind: "enum", choices: ["true", "false"], min: null, max: null } },
-    { key: "fable5_effort", tier: "fable5", answers: [{"family":"fable5","prio":"P2","mode":"replace"}], family: "fable5", prio: "P2", lanes: ["orc"], gated_by: "fable5_enabled", value: "medium", default: "medium", is_overridden: false, is_shadowed: true, shadow_reason: "shadowed by opus5_only — every role dispatches its Opus 5 agent, so the Fable 5 override is inert", desc: "Effort for the Fable 5 role agents.", options: ["medium", "high", "xhigh", "max"], control: { kind: "enum", choices: ["medium", "high", "xhigh", "max"], min: null, max: null } },
-    { key: "fable5_roles", tier: "fable5", answers: [{"family":"fable5","prio":"P2","mode":"replace"}], family: "fable5", prio: "P2", lanes: ["orc","orc-quick"], gated_by: "fable5_enabled", value: "[analyze, plan]", default: "[]", is_overridden: true, is_shadowed: true, shadow_reason: "shadowed by opus5_only — every role dispatches its Opus 5 agent, so the Fable 5 override is inert", desc: "Which roles use Fable 5 (CSV).", options: ["analyze", "plan", "advisor", "judge", "review"], control: { kind: "subset", choices: ["analyze", "plan", "advisor", "judge", "review"], min: null, max: null } },
+    // ON, and PARTLY SHADOWED by the extra overlay above it — the animation
+    // §6.2 calls the single best argument for the project. Since v1.0.0 W3
+    // removed the Fable 5 block, the overlay is the ONLY way a registry key
+    // reaches `is_shadowed`, so this row is the fixture set's whole coverage of
+    // that state. Do not quietly make it false.
+    { key: "opus5_only", tier: "common", answers: [{"family":"executor-band","prio":"P1","mode":"replace"},{"family":"fixed-role-model","prio":"P1","mode":"replace"}], family: "executor-band", prio: "P1", lanes: ["orc","orc-analyze","orc-challenge","orc-claude","orc-diy","orc-doc","orc-fast","orc-mini","orc-pattern","orc-quick","orc-retro","orc-wiki"], gated_by: null, value: "true", default: false, is_overridden: true, is_shadowed: true, shadow_reason: "partly shadowed by extra_enabled — [0,30), [30,55), [50,60), [60,70) are routed to a non-Claude worker; the quick-executor, doc-writer position is held by one too (not consulted here); every other score and position still resolves here", desc: "EVERY dispatched role uses ONE model — Opus 5 — with EFFORT as the cost dial.", options: ["true", "false"], control: { kind: "enum", choices: ["true", "false"], min: null, max: null } },
     { key: "wiki_fresh_max", tier: "advanced", answers: [{"family":"wiki","prio":"P2","mode":"replace"}], family: "wiki", prio: "P2", lanes: ["orc","orc-fast","orc-learn","orc-wiki"], gated_by: null, value: 10, default: 10, is_overridden: false, is_shadowed: false, shadow_reason: null, desc: "Wiki freshness: commit distance < this → FRESH.", options: null, control: { kind: "int", choices: null, min: 1, max: null } },
     { key: "wiki_aging_max", tier: "advanced", answers: [{"family":"wiki","prio":"P2","mode":"replace"}], family: "wiki", prio: "P2", lanes: ["orc","orc-fast","orc-learn","orc-wiki"], gated_by: null, value: 30, default: 30, is_overridden: false, is_shadowed: false, shadow_reason: null, desc: "Wiki freshness: commit distance <= this → AGING; beyond → STALE.", options: null, control: { kind: "int", choices: null, min: 1, max: null } },
     { key: "log_dir", tier: "advanced", answers: [{"family":"paths","prio":"P2","mode":"replace"}], family: "paths", prio: "P2", lanes: ["context-combiner","orc","orc-aftermath","orc-analyze","orc-analyze-mini","orc-boundary","orc-brainstorm","orc-budget","orc-challenge","orc-claude","orc-diy","orc-doc","orc-explain","orc-export","orc-fast","orc-grill","orc-handoff","orc-learn","orc-mini","orc-pact","orc-pattern","orc-poly","orc-pr-driver","orc-pr-setup","orc-quick","orc-retro","orc-route","orc-verify","orc-wiki"], gated_by: null, value: ".claude/orc/logs", default: ".claude/orc/logs", is_overridden: false, is_shadowed: false, shadow_reason: null, desc: "Persistent trace folder (never auto-deleted).", options: null, control: { kind: "path", choices: null, min: null, max: null } },
@@ -38,7 +38,7 @@ const config = {
     // v0.50.0 — the nine `orc extra` keys, copied from the live registry so the
     // shapes cannot drift. `extra_enabled` is TRUE here on purpose: an ARMED
     // subsystem is the state that needs designing.
-    {"key": "extra_enabled", "tier": "common", answers: [{"family":"executor-band","prio":"P0","mode":"overlay"},{"family":"fixed-role-model","prio":"P0","mode":"overlay"}], family: "executor-band", prio: "P0", lanes: ["orc","orc-boundary","orc-challenge","orc-diy","orc-doc","orc-fast","orc-mini","orc-quick","orc-wiki"], gated_by: null, "value": true, "default": false, "is_overridden": true, "is_shadowed": false, "shadow_reason": null, "desc": "Master gate for `orc extra` — dispatching a scored task to a non-Claude worker (DeepSeek, GLM, Kimi, a local Ollama, any OpenAI-/Anthropic-compatible endpoint you can name). NOTHING changes unless true, the fable5_enabled precedent. The orchestrator always stays Claude; what moves is who executes a slice. Every run that will cross the boundary PRINTS it at Phase 1 — routing work off Claude silently is the failure mode this whole subsystem is shaped around.", "options": ["true", "false"], "control": {"kind": "enum", "choices": ["true", "false"], "min": null, "max": null}},
+    {"key": "extra_enabled", "tier": "common", answers: [{"family":"executor-band","prio":"P0","mode":"overlay"},{"family":"fixed-role-model","prio":"P0","mode":"overlay"}], family: "executor-band", prio: "P0", lanes: ["orc","orc-boundary","orc-challenge","orc-diy","orc-doc","orc-fast","orc-mini","orc-quick","orc-wiki"], gated_by: null, "value": true, "default": false, "is_overridden": true, "is_shadowed": false, "shadow_reason": null, "desc": "Master gate for `orc extra` — dispatching a scored task to a non-Claude worker (DeepSeek, GLM, Kimi, a local Ollama, any OpenAI-/Anthropic-compatible endpoint you can name). NOTHING changes unless true. The orchestrator always stays Claude; what moves is who executes a slice. Every run that will cross the boundary PRINTS it at Phase 1 — routing work off Claude silently is the failure mode this whole subsystem is shaped around.", "options": ["true", "false"], "control": {"kind": "enum", "choices": ["true", "false"], "min": null, "max": null}},
     {"key": "extra_roles", "tier": "common", answers: [{"family":"extra","prio":"P2","mode":"replace"}], family: "extra", prio: "P2", lanes: ["orc-doc","orc-wiki"], gated_by: "extra_enabled", "value": "[executor]", "default": "[executor]", "is_overridden": false, "is_shadowed": false, "shadow_reason": null, "desc": "Which dispatched roles may go foreign (CSV). Executor only by default, deliberately: an executor's output is checked by the smoke gate, the TDD gate, the reviewer and the worktree-delta check, all of which are engine-blind — while a REVIEWER you cannot trust is worse than no reviewer at all, because it launders a finding nobody made.", "options": ["executor", "reviewer", "verifier", "analyst", "planner", "scout", "test-author", "doc-writer", "doc-checker"], "control": {"kind": "subset", "choices": ["executor", "reviewer", "verifier", "analyst", "planner", "scout", "test-author", "doc-writer", "doc-checker"], "min": null, "max": null}},
     {"key": "extra_risk_tasks", "tier": "common", answers: [{"family":"extra","prio":"P2","mode":"replace"}], family: "extra", prio: "P2", lanes: ["orc","orc-diy","orc-mini"], gated_by: "extra_enabled", "value": "off", "default": "off", "is_overridden": false, "is_shadowed": false, "shadow_reason": null, "desc": "Whether a task with a non-empty cited `risk[]` (auth, money, migration, security, concurrency, data-integrity) may leave Claude. OFF holds it on the Claude ladder whatever the route table says, and the preflight NAMES it as held back. ORC already refuses to send a refund-endpoint change to a cheap model; this keeps Extra from becoming the hole in that rule.", "options": ["off", "on"], "control": {"kind": "enum", "choices": ["off", "on"], "min": null, "max": null}},
     {"key": "extra_on_failure", "tier": "common", answers: [{"family":"extra","prio":"P2","mode":"replace"}], family: "extra", prio: "P2", lanes: ["orc-quick","orc-wiki"], gated_by: "extra_enabled", "value": "fallback", "default": "fallback", "is_overridden": false, "is_shadowed": false, "shadow_reason": null, "desc": "What an unreachable endpoint, a 401, a 429 past backoff, a timeout or a malformed return does. `fallback` re-dispatches the task to the Claude band it would have had, ANNOUNCED, and the run continues. `stop` is for people who would rather stop than silently start paying Anthropic rates. A failed foreign dispatch is never a dead run either way.", "options": ["fallback", "stop"], "control": {"kind": "enum", "choices": ["fallback", "stop"], "min": null, "max": null}},
@@ -54,6 +54,18 @@ const config = {
     { key: "rubric_bands_override", value: "[[0,50,'orc-executor-sonnet-5-high'],[50,100,'orc-executor-opus-5-high']]", is_shadowed: true, shadow_reason: "shadowed by opus5_only — executors use the fixed 3-band Opus 5 ladder", editable: false },
   ],
   legacy_keys: [{ key: "opus5_executor_only", renamed_to: "opus5_only" }],
+  // A key that was REMOVED, not renamed — the ugly state `--fixtures` exists to
+  // carry. You cannot design the "still on disk, no longer read" row against a
+  // clean config, and a panel that renders it as an editable setting is the
+  // failure this field prevents.
+  retired_keys: [
+    {
+      key: "fable5_enabled",
+      value: "true",
+      removed_in: "1.0.0",
+      why: "the Fable 5 role override was removed — every role dispatches its shipped Claude agent, or the Opus 5 variant under opus5_only",
+    },
+  ],
   score_table: {
     active: "opus5_only",
     default: [
@@ -117,12 +129,6 @@ const config = {
         },
         {
           "prio": "P2",
-          "key": "fable5_enabled",
-          "mode": "replace",
-          "shadow_note": "shadowed by {by} — every role dispatches its Opus 5 agent, so the Fable 5 override is inert"
-        },
-        {
-          "prio": "P3",
           "key": null,
           "terminal": "the agent shipped for that position"
         }
@@ -203,10 +209,6 @@ const config = {
     "crosslink": {
       "contested": false,
       "question": "when a peer repo's wiki reads stale"
-    },
-    "fable5": {
-      "contested": false,
-      "question": "how the Fable 5 override behaves once it is enabled"
     },
     "retro": {
       "contested": false,

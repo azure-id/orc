@@ -108,10 +108,8 @@ test("config: opus5_only forces, warns about what it shadows, and honors the ret
 
     // A setting the run will now ignore has to be called out, not left to rot.
     fs.appendFileSync(ovr, "rubric_bands_override: [{min: 0, max: 100}]\n");
-    cli(["config", "set", "fable5_enabled", "true", "--dir", root]);
     const again = cli(["config", "set", "opus5_only", "true", "--dir", root]);
     assert.match(again.stderr, /INERT while opus5_only/, "shadowed keys are reported");
-    assert.match(again.stderr, /fable5_enabled/, "fable5 named as shadowed");
     assert.match(again.stderr, /rubric_bands_override/, "hand-written table named as shadowed");
 
     const list = cli(["config", "list", "--dir", root]);
@@ -125,25 +123,42 @@ test("config: opus5_only forces, warns about what it shadows, and honors the ret
   }
 });
 
-test("config: fable5_roles subset validator + fable5_effort rewrites the agents", () => {
+test("config: a RETIRED key is refused by name, survives on disk, and is reported", () => {
   const { root, claudeDir } = freshInstall();
   try {
     const ovr = path.join(claudeDir, "orc.config.yaml");
 
-    // valid CSV subset persists as a flow array
-    const ok = cli(["config", "set", "fable5_roles", "analyze,review", "--dir", root]);
-    assert.strictEqual(ok.status, 0);
-    assert.match(fs.readFileSync(ovr, "utf8"), /fable5_roles:\s*\[analyze, review\]/);
+    // A key ORC REMOVED is not the same thing as a key ORC never had. A
+    // generic "unknown config key" list would send the user hunting for a typo
+    // in a name that was correct until this release, so the refusal names it.
+    const set = cli(["config", "set", "fable5_roles", "analyze,review", "--dir", root]);
+    assert.notStrictEqual(set.status, 0, "a retired key is refused");
+    assert.match(set.stderr, /fable5_roles was removed in v1\.0\.0/, "refused BY NAME, with the version");
+    assert.match(set.stderr, /Fable 5 role override was removed/, "and with the reason");
+    assert.doesNotMatch(set.stderr, /Unknown config key/, "never the generic unknown-key list");
 
-    // an unknown role is rejected
-    const bad = cli(["config", "set", "fable5_roles", "analyze,bogus", "--dir", root]);
-    assert.notStrictEqual(bad.status, 0, "unknown role rejected");
+    // A line already on disk is LEFT ALONE — a user's file is never rewritten
+    // — but it must not read as a setting that works. Both surfaces say so.
+    fs.appendFileSync(ovr, "fable5_enabled: true\nfable5_effort: xhigh\n");
+    const list = cli(["config", "list", "--dir", root]);
+    assert.strictEqual(list.status, 0);
+    assert.match(list.stdout, /Retired — still on disk, no longer read/, "human branch has the section");
+    assert.match(list.stdout, /fable5_enabled/, "and names the key");
+    assert.doesNotMatch(list.stdout, /Other \(hand-edited\) overrides[\s\S]*fable5_enabled/,
+      "a retired key is never filed as a hand-edited override");
 
-    // fable5_effort set rewrites the effort: line of every fable agent
-    const setEff = cli(["config", "set", "fable5_effort", "xhigh", "--dir", root]);
-    assert.strictEqual(setEff.status, 0);
-    const agent = fs.readFileSync(path.join(claudeDir, "agents", "orc-analyst-fable-5.md"), "utf8");
-    assert.match(agent, /^effort: xhigh$/m, "installed fable agent effort rewritten");
+    // `--json is not a summary`: the human branch prints it, so the JSON
+    // carries it, or a panel is structurally unable to be as honest.
+    const j = JSON.parse(cli(["config", "list", "--json", "--dir", root]).stdout);
+    const names = j.retired_keys.map((r) => r.key).sort();
+    assert.deepStrictEqual(names, ["fable5_effort", "fable5_enabled"]);
+    for (const r of j.retired_keys) {
+      assert.strictEqual(r.removed_in, "1.0.0");
+      assert.ok(r.why && r.why.length, r.key + " carries no reason");
+    }
+    assert.ok(!j.keys.some((k) => k.key.startsWith("fable5")), "not a registry key any more");
+    assert.ok(!j.hand_edited.some((k) => k.key.startsWith("fable5")), "not a hand-edited key either");
+    assert.match(fs.readFileSync(ovr, "utf8"), /^fable5_enabled: true$/m, "the user's line is untouched");
   } finally {
     rmrf(root);
   }
@@ -211,7 +226,7 @@ test("config: every key answers a declared family, and the two contested ones ar
   const { root } = freshInstall();
   try {
     const j = JSON.parse(cli(["config", "list", "--json", "--dir", root]).stdout);
-    assert.strictEqual(j.keys.length, 73);
+    assert.strictEqual(j.keys.length, 70);
     for (const k of j.keys) {
       assert.ok(k.answers && k.answers.length, k.key + " declares no answers[]");
       for (const a of k.answers) assert.ok(j.families[a.family], k.key + " → unknown family " + a.family);
@@ -240,7 +255,20 @@ test("config: every key answers a declared family, and the two contested ones ar
     // The lowest rank is TOTAL, and it is a ROW rather than a setting: a
     // fall-through is not something a user configures.
     assert.strictEqual(band.ranks[3].terminal, "the shipped score→model table");
-    assert.strictEqual(j.families["fixed-role-model"].ranks[2].key, "fable5_enabled");
+    // W3 removed the Fable 5 override, so this family's terminal row moved UP a
+    // rank. The rank it vacated is not backfilled: a fall-through is not a
+    // setting, and inventing a P2 to keep the shape would be a ladder nobody
+    // configured.
+    const role = j.families["fixed-role-model"];
+    assert.deepStrictEqual(
+      role.ranks.map((r) => [r.prio, r.key]),
+      [
+        ["P0", "extra_enabled"],
+        ["P1", "opus5_only"],
+        ["P2", null],
+      ]
+    );
+    assert.strictEqual(role.ranks[2].terminal, "the agent shipped for that position");
     // Every other family is uncontested, and its keys are all at the neutral
     // rank — a P0 where nothing competes is a ladder somebody invented.
     for (const [name, f] of Object.entries(j.families)) {
@@ -255,28 +283,37 @@ test("config: every key answers a declared family, and the two contested ones ar
   }
 });
 
-test("config: a shadow is a RANK — the gated fable5 keys inherit their gate's sentence", () => {
+test("config: a shadow is a RANK, and after W3 only the hand-written table is under one", () => {
   const root = tmpdir();
   try {
     fs.mkdirSync(path.join(root, ".claude"), { recursive: true });
-    fs.writeFileSync(path.join(root, ".claude", "orc.config.yaml"), "opus5_only: true\n");
+    fs.writeFileSync(
+      path.join(root, ".claude", "orc.config.yaml"),
+      "opus5_only: true\nrubric_bands_override: [{min: 0, max: 100}]\n"
+    );
     const j = JSON.parse(cli(["config", "list", "--json", "--dir", root]).stdout);
     const by = Object.fromEntries(j.keys.map((k) => [k.key, k]));
 
-    // fable5_enabled is P2 in fixed-role-model, under opus5_only at P1 — so it
-    // is shadowed by a rank, not by its name.
-    assert.strictEqual(by.fable5_enabled.prio, "P2");
-    assert.strictEqual(by.fable5_enabled.family, "fixed-role-model");
-    assert.strictEqual(by.fable5_enabled.is_shadowed, true);
+    // W3 removed the Fable 5 override, which was the only REGISTRY key sitting
+    // below a `replace` rank. So the replace-shadow path is now reachable only
+    // through the hand-written table — which is registry-less by design and
+    // therefore reported in hand_edited[], not in keys[]. Asserting the
+    // emptiness is the point: it is the fact a future reader needs before
+    // wondering why gateRowOf() has no live example.
+    const shadowedKeys = j.keys.filter((k) => k.is_shadowed).map((k) => k.key);
+    assert.deepStrictEqual(shadowedKeys, [], "no registry key sits below a replace rank any more");
 
-    // fable5_effort and fable5_roles are not in that family AT ALL. They are
-    // gated_by fable5_enabled and inherit its sentence — which is how all three
-    // report identically without any of them being named in shadowReason().
-    for (const k of ["fable5_effort", "fable5_roles"]) {
-      assert.strictEqual(by[k].family, "fable5");
-      assert.strictEqual(by[k].gated_by, "fable5_enabled");
-      assert.strictEqual(by[k].shadow_reason, by.fable5_enabled.shadow_reason);
-    }
+    const table = j.hand_edited.find((k) => k.key === "rubric_bands_override");
+    assert.ok(table, "the hand-written table is reported");
+    assert.strictEqual(table.is_shadowed, true);
+    assert.match(table.shadow_reason, /shadowed by opus5_only/, "the reason names the rank that won");
+    assert.strictEqual(table.editable, false, "config set refuses it, so it is not offered as editable");
+
+    // The RANK is what does the shadowing, and the ladder still says so.
+    const band = j.families["executor-band"];
+    assert.strictEqual(band.ranks[1].key, "opus5_only");
+    assert.strictEqual(band.ranks[2].key, "rubric_bands_override");
+    assert.match(band.ranks[2].shadow_note, /shadowed by \{by\}/, "the sentence lives on the rank");
 
     // A gate whose gate is NOT shadowed stays silent. The extra_* operating
     // keys are gated by extra_enabled, which ranks P0 and is shadowed by

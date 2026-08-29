@@ -58,8 +58,8 @@ Score→executor mapping lives in config.md (one canonical 8-band table;
 
 `opus5_only` FORCES every dispatched role onto `claude-opus-5`, with effort as
 the only cost dial. Each agent below replaces its default with the same slice
-and the same return contract. Effort is PINNED per role (unlike `fable5_effort`,
-no CLI rewrites these). Full mapping + precedence:
+and the same return contract. Effort is PINNED per role — no CLI rewrites
+these. Full mapping + precedence:
 `../skills/_shared/opus5-only.md`.
 
 | Agent | Model | Effort | Replaces |
@@ -80,22 +80,6 @@ verifier, test-author, combiner, learn-writer, advisor, judge — dispatch
 unchanged under this mode. **Never forced:** `orc-trace-writer-haiku-4-5` (it
 transcribes a packet, no reasoning) and orc-diy (its table is compile-owned).
 
-## Fable 5 role-override agents (hard-gated; dispatched only when configured)
-
-*(Entirely INERT while `opus5_only: true` — that mode outranks this one.)*
-
-Used ONLY when `fable5_enabled: true` and the role is in `fable5_roles` — each
-replaces its default role agent with the same slice/contract. Effort defaults to
-`medium` and is rewritten in-place by `orc config set fable5_effort <v>`.
-
-| Agent | Model | Effort | Replaces |
-|-------|-------|--------|----------|
-| orc-analyst-fable-5 | claude-fable-5 | fable5_effort | orc-system-analyst-opus-5-high |
-| orc-planner-fable-5 | claude-fable-5 | fable5_effort | orc-planner-opus-5-med |
-| orc-advisor-fable-5 | claude-fable-5 | fable5_effort | orc-advisor-opus-5-xhigh (ultra) |
-| orc-judge-fable-5 | claude-fable-5 | fable5_effort | orc-judge-opus-5-xhigh (ultra) |
-| orc-reviewer-fable-5 | claude-fable-5 | fable5_effort | orc-reviewer-opus-5-med |
-
 Mini execution reuses orc-executor-sonnet-5-high. Fast-lane (orc-fast)
 execution reuses orc-executor-sonnet-4-6-high — no dedicated agent. Under
 `opus5_only` both reuse orc-executor-opus-5-low.
@@ -114,8 +98,7 @@ agent to spawn before EVERY dispatch, and reuses shipped agents:
 The only dispatch it does not re-ask is build-repair rounds 1–2, which reuse the
 executor the user already chose for that entry; round 3 asks again.
 
-**`opus5_only`, `fable5_enabled`/`fable5_roles`, and `rubric_bands_override` are
-all INERT in this lane** — they would silently collapse the user's choice. It is
+**`opus5_only` and `rubric_bands_override` are both INERT in this lane** — they would silently collapse the user's choice. It is
 the one exception to `opus5_only`'s otherwise flat precedence. See
 `skills/_shared/opus5-only.md` and `skills/orc-quick/references/dispatch-gate.md`.
 
@@ -136,12 +119,12 @@ The orchestrator (main session) is NOT an agent file.
 Model IDs use the Platform/API dateless format (confirmed at
 platform.claude.com/docs/en/about-claude/models/model-ids-and-versions):
 claude-haiku-4-5, claude-sonnet-4-6, claude-sonnet-5, claude-opus-4-7,
-claude-opus-4-8, claude-opus-5 (the top executor band + the core fixed roles),
-and claude-fable-5 (the Fable 5 role-override agents).
+claude-opus-4-8 and claude-opus-5 (the top executor band + the core fixed
+roles).
 
 1. **Run `/agents`** to confirm Claude Code accepts these full IDs in agent
-   frontmatter — in particular `claude-haiku-4-5` and `claude-fable-5`, the two
-   newest ids. If it wants short aliases (opus/sonnet/haiku) or dated IDs, adjust
+   frontmatter — in particular `claude-haiku-4-5` and `claude-opus-5`. If it
+   wants short aliases (opus/sonnet/haiku) or dated IDs, adjust
    each `model:` field. The full IDs are valid at the API level but Claude Code
    may normalize differently.
 2. **Confirm `effort:` is a valid CLI frontmatter field.** If the CLI ignores

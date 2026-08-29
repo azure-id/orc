@@ -117,10 +117,7 @@ re-derives them per run:
   maps it. Under the Opus-5-only preset a floored task lands `opus-5-med`, not
   `opus-4-7-high`.
 - **`opus5_only` FORCES** — while on, a hand-written `rubric_bands_override` is
-  ignored, and so is the entire Fable 5 block. It is the one selector that can
-  shadow another; that is deliberate.
-- **`fable5_roles` never covers executors** (analyze/plan/advisor/judge/review
-  only), so those two features are orthogonal and cannot disagree on a band.
+  ignored. It is the one selector that can shadow another; that is deliberate.
 
 Show the user the full table (task, the facet vector, the arithmetic
 `B+N+L+T+fan+U = raw`, any risk floor, final, override+reason if any, dispatched

@@ -260,7 +260,7 @@ it, `orc extra route set` names the Claude band each new row displaces, and
 `orc config list --json`'s `score_table.active` can read `extra+opus5_only` —
 a composite, because the truth is a composite and a single word would be a lie.
 
-**`/orc-quick` is a GATED CHOICE, not a route.** `opus5_only`, `fable5_*`,
+**`/orc-quick` is a GATED CHOICE, not a route.** `opus5_only`,
 `rubric_bands_override` and `extra_resume` stay INERT there — that lane asks
 *which agent* before every dispatch, so a config that silently answered that
 question, or that silently continued the previous foreign worker's half-finished
@@ -1094,7 +1094,7 @@ Three rules hold it together.
    slice. This is the `extra resume-slice` rule applied to the fallback.
 
 **`/orc-quick` is INERT here too,** and announces it at the agent gate — beside
-`extra_enabled`, `extra_on_failure`, `extra_resume`, `opus5_only`, `fable5_*` and
+`extra_enabled`, `extra_on_failure`, `extra_resume`, `opus5_only` and
 `rubric_bands_override`. That lane asks which agent before every dispatch, so a
 config that pre-answered it would be the exact failure the gate exists to
 prevent.
