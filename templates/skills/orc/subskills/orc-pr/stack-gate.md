@@ -23,7 +23,10 @@ a LISTED bucket, never silently dropped. `test-generator/` deliverables count;
 
 ## Step 2 — the threshold (config, not vibes)
 
-Read from `../../config.md` (← `.claude/orc.config.yaml`):
+Resolve with `orc lane config orc --json` and read `effective` (v1.0.0 W7 —
+the defaults live in the CLI registry, never in a second table here). The
+Default column below is what the registry ships today, for orientation only:
+a disagreement means the registry is right.
 
 | Key | Default | Meaning here |
 |---|---|---|

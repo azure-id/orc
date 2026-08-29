@@ -94,10 +94,14 @@ session on Opus or the Opus pins silently fall back (the original "wrong model" 
 
 ## Config (read at run start)
 
-Read `config.md` defaults, merge the user override `.claude/orc.config.yaml` on
-top (written by the `orc config` CLI; survives `orc update`; per-run overrides
-allowed). Keys: `max_wave_tasks`, `batch_pause_every`, `max_scouts`,
-`default_analysis_depth`, `generate_tests`, `pattern_findings`, `security_review`, `log_dir`.
+**ONE resolver, and it is not you:** `orc lane config orc --json`. Obey
+`effective`, print every line in `announce[]` VERBATIM at preflight, and honour
+`stops[]` before wave 1. Never re-derive a value, a precedence or an inertness
+from `.claude/orc.config.yaml` — a key this lane does not read is not in the
+answer, and a key another key shadows comes back already marked. Exit ≠ 0 → say
+the CLI is unavailable and fall back to `../_shared/config-precedence.md`'s
+documented defaults, out loud. Priorities and families:
+`../_shared/config-precedence.md`.
 
 ## Behavior trace (PERMANENT — always on, no config toggle)
 

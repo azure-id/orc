@@ -102,7 +102,7 @@ not to reimplement). The full block still travels with the spec via `spec_ref`.
 
 Resolve `max_wave_tasks` and `batch_pause_every` the standard way — `config.md`
 defaults with the user override `.claude/orc.config.yaml` merged on top per key
-(see config.md's "Config resolution" rule). You don't apply them (the
+(see config.md's "Resolution" rule). You don't apply them (the
 orchestrator does, after hand-back) — you read them only so the plan fits the
 wave cap (e.g. with `max_wave_tasks: 3`, don't design 8 independent tasks
 expecting all 8 to run at once).

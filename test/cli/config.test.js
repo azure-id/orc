@@ -14,24 +14,34 @@ const { cli, rmrf, freshInstall, tmpdir, REPO, FAKE_HOME, webuiFiles } = require
 // Split out of cli.test.js in v0.48.1: a suite you have to scroll
 // past 1 200 lines of to find one case is a suite nobody adds a case to.
 
-test("every config key documented in config.md resolves through the CLI registry", () => {
-  const cliKeys = new Set(
-    [
-      ...fs
-        .readFileSync(path.join(REPO, "bin", "cli.js"), "utf8")
-        .matchAll(/\{\s*key:\s*"([a-z0-9_]+)"/g),
-    ].map((m) => m[1])
-  );
+// W7 REPLACES "every config key documented in config.md resolves through the CLI
+// registry". That test parsed a yaml defaults fence in `orc/config.md` and
+// asserted no documented key was unsettable. The fence is gone: the registry in
+// `bin/cli.js` is the one copy of every default, and the payload points at
+// `_shared/config-precedence.md` for the model instead of restating 72 values.
+//
+// A test whose subject was deliberately removed is replaced by one asserting the
+// removal holds - otherwise the defaults quietly grow back and nothing notices.
+test("config.md restates no defaults, and points at the one resolver", () => {
   const md = fs
     .readFileSync(path.join(REPO, "templates", "skills", "orc", "config.md"), "utf8")
     .replace(/\r\n/g, "\n");
-  // the documented defaults block: `key: value` lines inside the yaml fence
   const fence = (md.match(/```yaml\n([\s\S]*?)```/) || [])[1] || "";
-  const ALLOW = new Set(["rubric_bands_override"]); // hand-edit-only advanced key
-  const documented = [...fence.matchAll(/^([a-z][a-z0-9_]+):/gm)].map((m) => m[1]);
-  assert.ok(documented.length > 10, "parsed the documented config block");
-  const phantom = documented.filter((k) => !cliKeys.has(k) && !ALLOW.has(k));
-  assert.deepStrictEqual(phantom, [], "no documented key is unsettable via `orc config`");
+  assert.strictEqual(fence, "", "no yaml defaults fence came back");
+
+  // The score->model table is the ONE table that stays: it is not a default, it
+  // is a mapping the CLI does not own, and it is a pinned copy in its own right.
+  assert.match(md, /orc-executor-opus-5-med/, "the score table stays");
+  assert.match(md, /orc lane config orc --json/, "and the resolver is named");
+  assert.match(md, /_shared\/config-precedence\.md/, "with the model one pointer away");
+
+  // Every pointer in the table has to resolve. A row pointing at a file that
+  // does not exist is worse than the prose it replaced - it reads as an answer.
+  const base = path.join(REPO, "templates", "skills", "orc");
+  const targets = [...md.matchAll(/`((?:\.\.\/|references\/|schemas\/)[A-Za-z0-9_/.-]+\.md)`/g)].map((m) => m[1]);
+  assert.ok(targets.length > 10, "the table points somewhere");
+  for (const t of new Set(targets))
+    assert.ok(fs.existsSync(path.join(base, t)), `config.md points at ${t}, which must exist`);
 });
 
 

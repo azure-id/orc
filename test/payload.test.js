@@ -203,17 +203,22 @@ test("the default table is 6 bands, and shares its top edge with the preset", ()
 
 test("table resolution states its precedence, and the pinned interactions", () => {
   const cfg = read("skills/orc/config.md");
-  const res = cfg.slice(cfg.indexOf("### Resolution — highest wins"), cfg.indexOf("### Override"));
-  // v0.36.0 inverted the top two: opus5_only FORCES, so it outranks a
-  // hand-written table instead of yielding to it.
-  const order = ["opus5_only", "rubric_bands_override", "default 6-band"];
+  // v1.0.0 W7 - the precedence MOVED. `orc/config.md` stopped carrying a
+  // hand-written "highest wins" list; the ranks live once, in the shared
+  // contract, as the executor-band family table. The invariant is the same and
+  // the table is strictly richer: the old list could not see `extra_enabled`,
+  // which has outranked `opus5_only` since v0.50.0 and was simply absent here.
+  const prec = read("skills/_shared/config-precedence.md");
+  const band = prec.slice(prec.indexOf("`executor-band`"), prec.indexOf("`fixed-role-model`"));
+  const order = ["extra_enabled", "opus5_only", "rubric_bands_override", "terminal"];
   let at = -1;
   for (const t of order) {
-    const i = res.indexOf(t);
+    const i = band.indexOf(t);
     assert.ok(i > at, `${t} appears, after the higher-precedence entry`);
     at = i;
   }
-  assert.match(res, /FORCES/, "the resolution section says the mode forces");
+  assert.match(prec, /stop at the first rank that resolves/, "the rule the ranks mean something under");
+  assert.match(prec, /compares only INSIDE its family/, "...and the limit on comparing them");
 
   // Each interaction the preset could silently contradict.
   const eam = read("skills/orc/references/effort-and-mode.md");
@@ -398,7 +403,8 @@ test("the report handoff checklist marks its post-confirmation items", () => {
 
 test("every lane has a TDD policy row, and the preflight block defines a rule per printed key", () => {
   const cfg = read("skills/orc/config.md");
-  const policy = cfg.slice(cfg.indexOf("Lane policy (fixed"), cfg.indexOf("# --- Security pass"));
+  // W7 - the same sentence, no longer inside the deleted yaml defaults fence.
+  const policy = cfg.slice(cfg.indexOf("Lane policy (fixed"), cfg.indexOf("**Behavior-trace logging"));
   for (const lane of ["orc", "ultra", "orc-mini", "orc-fast", "orc-diy", "/orc-plan"])
     assert.ok(policy.includes(lane), `TDD policy names ${lane}`);
 
@@ -426,9 +432,13 @@ test("every lane has a TDD policy row, and the preflight block defines a rule pe
 // ── v0.37.0 stacked PRs ────────────────────────────────────────────────────
 
 test("the stacked-PR config defaults agree between the CLI and the documented config", () => {
-  // Documented drift the token lint cannot see: it asserts a key is REFERENCED,
-  // never that the two sides agree on its VALUE. A CLI default of 1000 beside a
-  // documented 2000 makes the ship gate fire at a threshold nobody expects.
+  // W7 DELETED the second side. This used to compare the CLI default against a
+  // documented one, because "a CLI default of 1000 beside a documented 2000
+  // makes the ship gate fire at a threshold nobody expects" - a drift the token
+  // lint cannot see, since it asserts a key is REFERENCED and never that two
+  // copies agree on its VALUE. The fix for that class of drift is not a better
+  // comparison, it is ONE copy. So this asserts both halves of the removal: the
+  // CLI still holds the values, and the payload does not hold them any more.
   const cli = fs.readFileSync(path.join(__dirname, "..", "bin", "cli.js"), "utf8");
   const cfg = read("skills/orc/config.md");
   const defs = { stacked_pr: "ask", stacked_pr_loc: "1000", stacked_pr_files: "20", stacked_pr_max_layers: "6" };
@@ -436,10 +446,15 @@ test("the stacked-PR config defaults agree between the CLI and the documented co
     const m = new RegExp('\\{\\s*key:\\s*"' + key + '",\\s*def:\\s*"?([^",]+)"?,').exec(cli);
     assert.ok(m, `${key} is a CONFIG_META row`);
     assert.strictEqual(m[1].trim(), want, `${key} CLI default`);
-    const doc = new RegExp("^" + key + ":\\s*(\\S+)", "m").exec(cfg);
-    assert.ok(doc, `${key} is documented in config.md`);
-    assert.strictEqual(doc[1], want, `${key} documented default matches the CLI`);
+    assert.doesNotMatch(
+      cfg,
+      new RegExp("^" + key + ":\s*\S", "m"),
+      `${key} must not be given a value in config.md - the registry is the one copy`
+    );
   }
+  // The keys are still NAMED there, as the rule they participate in. Naming a
+  // key without restating its value is the whole point of the split.
+  assert.match(cfg, /stacked_pr\*` keys/, "the payload still says which subsystem the keys belong to");
 });
 
 test("the ship gate is an OR of two thresholds, degrades to a regular PR, and never lives in a speed lane", () => {

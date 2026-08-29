@@ -300,6 +300,13 @@ const required = [
   "templates/skills/orc-route/SKILL.md",
   "templates/skills/orc-explain/SKILL.md",
   "templates/skills/orc-analyze/references/thin-input.md",
+  // v1.0.0 W7 — the ONE config doc. `orc/config.md` stopped restating 72 key
+  // defaults and now points here for the ranks, the families, the gates, the
+  // `announce[]` boundary and the CLI-absent floor. A publish missing this file
+  // leaves every lane's `## Config` section pointing at nothing — and the
+  // fallback that is supposed to fire when the CLI cannot answer is exactly the
+  // moment there is no CLI to ask instead.
+  "templates/skills/_shared/config-precedence.md",
   "templates/commands/orc-grill.md",
   "templates/commands/orc-route.md",
   "templates/commands/orc-explain.md",

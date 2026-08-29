@@ -423,7 +423,10 @@ const CONTRACTS = [
     name: "the stall demotion trigger — two clocks, never merged (v1.0.0)",
     token: "extra_demote_stale_min",
     binFiles: ["bin/cli.js"],
-    files: ["skills/_shared/extra-dispatch.md"],
+    files: [
+      "skills/_shared/config-precedence.md",
+      "skills/_shared/extra-dispatch.md",
+    ],
   },
   {
     // Whose fault it was. It is not decoration — a `network` verdict HOLDS the
@@ -1624,6 +1627,7 @@ const CONTRACTS = [
       "skills/orc/references/preflight-report.md",
       "skills/orc/references/trace-protocol.md",
       "skills/orc/references/ultra-mode.md",
+          "skills/_shared/config-precedence.md",
     ],
   },
   {
@@ -2972,6 +2976,35 @@ const CONTRACTS = [
     ],
     binFiles: ["bin/cli.js"],
   },
+  {
+    // v1.0.0 W7 — ONE resolver per lane. A lane that re-derives a value from
+    // `.claude/orc.config.yaml` has forked the resolver, and the fork is
+    // invisible: it produces a plausible answer that is only wrong once a key
+    // is shadowed. W8/W9 add every migrated lane spine to this list, which is
+    // what turns "the lane should ask the CLI" into something a lint can see.
+    name: "one config resolver per lane (v1.0.0 W7)",
+    token: "orc lane config",
+    files: [
+      "skills/_shared/README.md",
+      "skills/_shared/config-precedence.md",
+      "skills/_shared/extra-dispatch.md",
+      "skills/orc/SKILL.md",
+      "skills/orc/config.md",
+      "skills/orc/subskills/orc-pr/stack-gate.md",
+    ],
+    binFiles: ["bin/cli.js"],
+  },
+  {
+    // The sentence the whole precedence model rests on. It is pinned to the CLI
+    // as well as the payload because the CLI is where it is IMPLEMENTED — the
+    // config file's own header says it, `orc config list` prints it per family,
+    // and a payload that described a different rule would be describing a
+    // pipeline that does not run.
+    name: "read a family top-down, stop at the first rank that resolves (v1.0.0 W7)",
+    token: "stop at the first rank that resolves",
+    files: ["skills/_shared/config-precedence.md", "skills/orc/config.md"],
+    binFiles: ["bin/cli.js"],
+  },
 ];
 
 // Spine size budgets (v0.19.0). These SKILL.md files are ALWAYS loaded when
@@ -3069,7 +3102,16 @@ const BUDGETS = [
   // table, the five exit codes, the fence asymmetry, the fallback procedure —
   // live in _shared/extra-dispatch.md, with the rendering rules in
   // references/{preflight-report,effort-and-mode}.md.
-  { file: "skills/orc/SKILL.md", maxLines: 528 },
+  // v1.0.0 W7: deliberate raise 528→532 — the spine's hand-rolled `## Config`
+  // (six lines: read config.md, merge the override, then a key list that was
+  // already wrong) is replaced by the VERBATIM shared contract from
+  // `_shared/config-precedence.md` §8, which is ten. Four lines up, and the
+  // trade is the point: the old section told the orchestrator to read a table
+  // of defaults that W7 deleted, and its key list is the exact hand-maintained
+  // artefact `orc lane config` exists to replace. The contract is identical in
+  // every lane by design, so it is never shortened to fit one budget. W8/W9
+  // take this back down — they delete the same section from thirty more lanes.
+  { file: "skills/orc/SKILL.md", maxLines: 532 },
   // v0.33.0: deliberate raises 264→289 / 197→219 / 171→179 — orc-wiki gains the
   // crosslink-compile entry branch, the delta-refresh default (impact probe),
   // and the orientation/atlas assemble steps (detail in references/); mini

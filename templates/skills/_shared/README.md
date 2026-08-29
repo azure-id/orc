@@ -39,6 +39,11 @@ loaded on demand when the step fires.
 - `pr-templates.md` — where a PR description comes from (ORC template → project
   → CLAUDE.md → three recommended options), shared by the stacked and regular
   ship paths.
+- `config-precedence.md` — how a lane learns what it is configured to do: ONE
+  resolver (`orc lane config <lane> --json`), and the rule that gives ranks
+  their meaning — read a family top-down and stop at the first rank that
+  resolves. Also the two contested families, gates vs inertness, the
+  `announce[]` boundary, and what a lane does when the CLI cannot answer.
 
 Human guides live in the skills themselves: `../orc-pr-setup/README.md` (plan the
 layers), `../orc-pr-driver/README.md` (build, submit, merge them), and
