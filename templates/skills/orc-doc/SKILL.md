@@ -442,3 +442,14 @@ guess a line number · never split a section across agents · one file per secti
 · never overwrite a human's paragraph · never invent a fact · never put ORC's
 bookkeeping in the document · every wave is a stop · never pay for what the lint
 answers free · never stage, never commit.
+
+## Config
+
+**ONE resolver, and it is not you:** `orc lane config orc-doc --json`. Obey
+`effective`, print every line in `announce[]` VERBATIM at preflight, and honour
+`stops[]` before wave 1. Never re-derive a value, a precedence or an inertness
+from `.claude/orc.config.yaml` — a key this lane does not read is not in the
+answer, and a key another key shadows comes back already marked. Exit ≠ 0 → say
+the CLI is unavailable and fall back to `../_shared/config-precedence.md`'s
+documented defaults, out loud. Priorities and families:
+`../_shared/config-precedence.md`.

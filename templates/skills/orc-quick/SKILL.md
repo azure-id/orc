@@ -301,8 +301,18 @@ downgrade check still works from the agent's own report.
 
 ## Config
 
-Read `log_dir` only. orc-quick has no config key of its own and ignores every
-dispatch-forcing key. Command entry only.
+**ONE resolver, and it is not you:** `orc lane config orc-quick --json`. Obey
+`effective`, print every line in `announce[]` VERBATIM at preflight, and honour
+`stops[]` before wave 1. Never re-derive a value, a precedence or an inertness
+from `.claude/orc.config.yaml` — a key this lane does not read is not in the
+answer, and a key another key shadows comes back already marked. Exit ≠ 0 → say
+the CLI is unavailable and fall back to `../_shared/config-precedence.md`'s
+documented defaults, out loud. Priorities and families:
+`../_shared/config-precedence.md`.
+
+orc-quick has no config key of its own and ignores every dispatch-forcing key —
+which is why five of them come back INERT with a reason. Say that at the gate;
+see "Nothing can override this lane" above.
 
 ## Rules this lane always keeps
 

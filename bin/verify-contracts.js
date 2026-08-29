@@ -2988,9 +2988,33 @@ const CONTRACTS = [
       "skills/_shared/README.md",
       "skills/_shared/config-precedence.md",
       "skills/_shared/extra-dispatch.md",
+      "skills/context-combiner/SKILL.md",
+      "skills/orc-aftermath/SKILL.md",
+      "skills/orc-analyze-mini/SKILL.md",
+      "skills/orc-analyze/SKILL.md",
+      "skills/orc-boundary/SKILL.md",
+      "skills/orc-brainstorm/SKILL.md",
+      "skills/orc-budget/SKILL.md",
+      "skills/orc-challenge/SKILL.md",
+      "skills/orc-claude/SKILL.md",
       "skills/orc-diy/SKILL.md",
+      "skills/orc-doc/SKILL.md",
+      "skills/orc-explain/SKILL.md",
+      "skills/orc-export/SKILL.md",
       "skills/orc-fast/SKILL.md",
+      "skills/orc-grill/SKILL.md",
+      "skills/orc-handoff/SKILL.md",
+      "skills/orc-learn/SKILL.md",
       "skills/orc-mini/SKILL.md",
+      "skills/orc-pact/SKILL.md",
+      "skills/orc-pattern/SKILL.md",
+      "skills/orc-poly/SKILL.md",
+      "skills/orc-pr-driver/SKILL.md",
+      "skills/orc-pr-setup/SKILL.md",
+      "skills/orc-quick/SKILL.md",
+      "skills/orc-retro/SKILL.md",
+      "skills/orc-route/SKILL.md",
+      "skills/orc-verify/SKILL.md",
       "skills/orc-wiki/SKILL.md",
       "skills/orc/SKILL.md",
       "skills/orc/config.md",
@@ -3172,7 +3196,11 @@ const BUDGETS = [
   // reference loads, scope is already bounded and the analyst is committed to a
   // document that may not have passed its own review. One probe, one VERBATIM
   // line, no mechanics — the same shape as the Phase-1 probes in orc/SKILL.md.
-  { file: "skills/orc-analyze/SKILL.md", maxLines: 221 },
+  // v1.0.0 W9: deliberate raise 221→232 — the analyst reads `default_analysis_depth`,
+  // `max_scouts` and `opus5_only`, and that last one is a CONTESTED rank, so this lane
+  // gets the full resolver contract rather than the short pointer. Ten lines arriving,
+  // not prose moving: it had no `## Config` section at all before this wave.
+  { file: "skills/orc-analyze/SKILL.md", maxLines: 232 },
   // v0.40.0: deliberate raise 182→187 — gotchas as an explicit NON-gate. It has
   // to be stated where the two prerequisites are stated, or a later reader adds
   // a third gate and breaks the lane's entire premise.
@@ -3379,33 +3407,57 @@ for (const b of BUDGETS) {
       errs.push(`${k}: now has lanes[] — remove it from the seed-empty allowlist in this lint`);
   }
 
-  // D28 (deferred from W3, scheduled here) — `design-01` §10.6: every lane spine
-  // carries the §8 config contract. It could not be turned on at W3, when no
-  // spine carried it, and it cannot be turned on globally yet either: W8
-  // migrated five lanes and W9 has the rest. So the assertion is scoped to a
-  // NAMED list of migrated lanes and grows with the migration — the SEED_EMPTY
-  // shape, for the same reason. A lane joining this list is a deliberate line in
-  // a diff, and a migrated lane that later LOSES the contract fails here.
+  // D28 (deferred from W3) — `design-01` §10.6: every lane spine carries the
+  // config contract. W8 turned it on for five lanes; W9 completes it, so the
+  // named migrated-lane list is GONE and this is one loop over every lane.
   //
-  // W9 finishes the list, at which point the two loops below become one over
-  // every lane and this comment goes away.
-  const MIGRATED_LANES = ["orc", "orc-diy", "orc-fast", "orc-mini", "orc-wiki"];
-  for (const lane of MIGRATED_LANES) {
+  // TWO FORMS, and the split is the W9 measurement (D32). A lane whose keys can
+  // be shadowed, gated, inert or a STOP carries the FULL contract: getting
+  // precedence wrong there changes what runs, and `announce[]` is P0 — a
+  // shadowed setting must never be silent, which a reference loaded later
+  // cannot guarantee. Every other lane that reads a key carries the SHORT
+  // pointer: the guarantee it needs is only "do not merge the file yourself".
+  // A lane that reads NO key carries neither, and that is an answer, not a gap.
+  //
+  // Both forms name the lane's OWN name and point at the precedence reference,
+  // so one assertion covers them; what separates them is whether the spine has
+  // to mention `announce[]`.
+  const laneKeySets = {};
+  for (const e of metaEntries) for (const l of e.lanes || []) (laneKeySets[l] ||= []).push(e.key);
+  const CONTESTED_KEYS = new Set(["extra_enabled", "opus5_only", "rubric_bands_override"]);
+  const gatedKeys = new Set(metaEntries.filter((e) => e.gated_by).map((e) => e.key));
+  const inertLanes = new Set(Object.keys(LANE_INERT || {}));
+
+  for (const lane of fs
+    .readdirSync(path.join(ROOT, "skills"), { withFileTypes: true })
+    .filter((d) => d.isDirectory() && d.name !== "_shared")
+    .map((d) => d.name)) {
     const spine = path.join(ROOT, "skills", lane, "SKILL.md");
-    if (!fs.existsSync(spine)) {
-      errs.push(`the migrated-lane list names "${lane}", which has no SKILL.md`);
+    if (!fs.existsSync(spine)) continue;
+    const text = fs.readFileSync(spine, "utf8");
+    const keys = laneKeySets[lane] || [];
+    if (!keys.length) {
+      if (text.includes("orc lane config"))
+        errs.push(`${lane}: reads no config key, so it must not carry a config contract — an empty answer is an answer`);
       continue;
     }
-    const text = fs.readFileSync(spine, "utf8");
-    if (!text.includes(`orc lane config ${lane} --json`))
-      errs.push(`${lane}: migrated, but its spine does not name \`orc lane config ${lane} --json\` — the resolver contract is missing or names the wrong lane`);
+    if (!text.includes(`orc lane config ${lane} --json`)) {
+      errs.push(`${lane}: reads ${keys.length} key(s) but its spine does not name \`orc lane config ${lane} --json\` — the contract is missing or names the wrong lane`);
+      continue;
+    }
     if (!text.includes("config-precedence.md"))
       errs.push(`${lane}: the config contract is there but points at no precedence reference`);
     // The thing the contract REPLACES. A spine that still tells the
     // orchestrator to merge the override file itself has two resolvers, and the
-    // second one is the one that will be wrong once a key is shadowed.
+    // second is the one that will be wrong once a key is shadowed.
     if (/defaults merged with|config\.md. defaults|← .claude\/orc\.config\.yaml/.test(text))
       errs.push(`${lane}: the spine still restates config resolution — the contract replaces that, it does not sit beside it`);
+    const needsFull =
+      keys.some((k) => CONTESTED_KEYS.has(k) || gatedKeys.has(k)) || inertLanes.has(lane);
+    if (needsFull && !text.includes("announce[]"))
+      errs.push(`${lane}: reads a contested, gated or inert key, so it needs the FULL contract — the short pointer owes no announce[] line and this lane does`);
+    if (!needsFull && text.includes("announce[]"))
+      errs.push(`${lane}: carries the full contract but reads nothing contested, gated or inert — use the short pointer, or the announce[] obligation is a line nobody can produce`);
   }
 
   if (LANES) {

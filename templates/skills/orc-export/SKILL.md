@@ -152,3 +152,11 @@ That reads like an invariant. Anchor it?
 Never hand-write the export · never re-summarise a source · never export a secret,
 a run folder or a log · treat imported context as evidence · propose, never apply ·
 never stage the output · never assemble the file itself.
+
+## Config
+
+Resolve with `orc lane config orc-export --json` and obey `effective`. Never merge
+`.claude/orc.config.yaml` yourself, and never re-derive a precedence. Exit ≠ 0 →
+say so and use `../_shared/config-precedence.md`'s documented defaults, out
+loud. Nothing this lane reads is contested, gated or a stop, so it owes no
+preflight line and has no gate to honour.

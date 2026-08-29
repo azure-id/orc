@@ -337,3 +337,11 @@ file, or scan the repo · look facts up before asking for them · announce every
 dispatch · tag every decision `intent` or `constraint` · never stage
 `orc/brainstorming-session/**` · tell the user to run `/usage` (never run it
 yourself).
+
+## Config
+
+Resolve with `orc lane config orc-brainstorm --json` and obey `effective`. Never merge
+`.claude/orc.config.yaml` yourself, and never re-derive a precedence. Exit ≠ 0 →
+say so and use `../_shared/config-precedence.md`'s documented defaults, out
+loud. Nothing this lane reads is contested, gated or a stop, so it owes no
+preflight line and has no gate to honour.

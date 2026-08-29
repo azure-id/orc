@@ -197,3 +197,14 @@ traces the full cycle (ending `FINISH :: noop`) and still deletes `.current`.
 - Version bumps are always exactly +0.0.1; dates are always DD-MM-YYYY.
 - Reminder: to see usage limits, tell the user to run `/usage` (never invoke
   it programmatically).
+
+## Config
+
+**ONE resolver, and it is not you:** `orc lane config orc-claude --json`. Obey
+`effective`, print every line in `announce[]` VERBATIM at preflight, and honour
+`stops[]` before wave 1. Never re-derive a value, a precedence or an inertness
+from `.claude/orc.config.yaml` — a key this lane does not read is not in the
+answer, and a key another key shadows comes back already marked. Exit ≠ 0 → say
+the CLI is unavailable and fall back to `../_shared/config-precedence.md`'s
+documented defaults, out loud. Priorities and families:
+`../_shared/config-precedence.md`.

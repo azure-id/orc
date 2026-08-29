@@ -223,3 +223,11 @@ Zero new agents. There is nothing to dispatch: the whole forecast is determinist
 Never one number · never a blended headline · never an invented price · never a
 guessed plan · never drop `unattributed` · never forecast from prose · never block ·
 never compute what the CLI computes.
+
+## Config
+
+Resolve with `orc lane config orc-budget --json` and obey `effective`. Never merge
+`.claude/orc.config.yaml` yourself, and never re-derive a precedence. Exit ≠ 0 →
+say so and use `../_shared/config-precedence.md`'s documented defaults, out
+loud. Nothing this lane reads is contested, gated or a stop, so it owes no
+preflight line and has no gate to honour.

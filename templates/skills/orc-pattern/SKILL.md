@@ -122,3 +122,14 @@ If the user declines codification (config `pattern_findings: off`, or "no" at th
 the executor applies the playbook **invariants** (still blocking) and imitates the
 1–2 neighboring files it already reads for its slice. Cheap by construction,
 persists nothing. See `../orc/config.md`.
+
+## Config
+
+**ONE resolver, and it is not you:** `orc lane config orc-pattern --json`. Obey
+`effective`, print every line in `announce[]` VERBATIM at preflight, and honour
+`stops[]` before wave 1. Never re-derive a value, a precedence or an inertness
+from `.claude/orc.config.yaml` — a key this lane does not read is not in the
+answer, and a key another key shadows comes back already marked. Exit ≠ 0 → say
+the CLI is unavailable and fall back to `../_shared/config-precedence.md`'s
+documented defaults, out loud. Priorities and families:
+`../_shared/config-precedence.md`.

@@ -163,3 +163,11 @@ Routes a plan, refuses anything else · zero agents, nothing dispatched · reuse
 `plan-handoff.md`'s plan definition, never a second one · deterministic probes
 only, never an ad-hoc `find` · reads no source file · never starts a lane the
 user did not accept · never edits config or any project file.
+
+## Config
+
+Resolve with `orc lane config orc-route --json` and obey `effective`. Never merge
+`.claude/orc.config.yaml` yourself, and never re-derive a precedence. Exit ≠ 0 →
+say so and use `../_shared/config-precedence.md`'s documented defaults, out
+loud. Nothing this lane reads is contested, gated or a stop, so it owes no
+preflight line and has no gate to honour.

@@ -205,3 +205,11 @@ scan the repo · never force a lane on the user (exit 2 is an offer) · look fac
 up before asking for them · announce every dispatch · tag every decision `intent`
 or `constraint` · never stage `orc-grill/**` · tell the user to run `/usage`
 (never run it yourself).
+
+## Config
+
+Resolve with `orc lane config orc-grill --json` and obey `effective`. Never merge
+`.claude/orc.config.yaml` yourself, and never re-derive a precedence. Exit ≠ 0 →
+say so and use `../_shared/config-precedence.md`'s documented defaults, out
+loud. Nothing this lane reads is contested, gated or a stop, so it owes no
+preflight line and has no gate to honour.
