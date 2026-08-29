@@ -9,7 +9,7 @@ SKILL.md exactly.
 
 If the input IS a plan (pasted planning-output, a `plan-{name}.md` path, or an
 `orc/planner/{name}/` checkpoint) rather than a request, the skill switches to
-its plan-handoff entry contract (`references/plan-handoff.md`) — it re-grounds
+its plan-handoff entry contract (`skills/_shared/phases/plan-handoff.md`) — it re-grounds
 and re-scores the plan in this session, then runs Phase 2–8; it never executes a
 handed-off plan task-by-task ad hoc.
 

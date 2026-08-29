@@ -3,7 +3,7 @@
 Canonical file: `_shared/interview.md`. THE canonical way any ORC lane
 interrogates a human until an idea is sharp enough to act on. Load it wherever a
 lane must ask more than a fixed questionnaire's worth of questions: `/orc-grill`
-runs it end to end, and `references/intake.md` borrows its round format when a
+runs it end to end, and `phases/intake.md` borrows its round format when a
 tier's question set runs long.
 
 This is not "ask good questions". It is a specific mechanic with a termination

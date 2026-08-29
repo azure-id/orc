@@ -15,7 +15,7 @@ for a PRD includes the two lenses that never block.
 > /orc-challenge docs/prd-self-serve.md
 ```
 
-The first six questions are unchanged (`references/intake.md`). Question 7 is
+The first six questions are unchanged (`../../_shared/phases/intake.md`). Question 7 is
 rendered from `orc challenge roles --kind prd --json` — **the skill never
 hand-lists the lenses**:
 

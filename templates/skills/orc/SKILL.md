@@ -76,7 +76,7 @@ into ONE combined spec; build only on `handoff_ready` with `coverage_pct` =
 100; full lane only. **Planner** `subskills/orc-planner` (Opus 5 medium):
 request or spec → planning-output. Scout dispatch, analyst-return gates,
 combiner tracking, the `git_head` staleness valve, and the Phase 1 exit gate
-are YOURS and deterministic — load `references/analyst-gates.md` at their
+are YOURS and deterministic — load `../_shared/phases/analyst-gates.md` at their
 trigger points; emit `GATE` trace lines.
 
 ## Dispatch via named agents (not prose)
@@ -170,17 +170,17 @@ them; they are never dispatched as subagents).
 ## Constellation map (load on demand only)
 
 - Run start → `../_shared/phases/trace.md` (always)
-- Phase 0 → `references/intake.md`; **plan input → `references/plan-handoff.md`**;
+- Phase 0 → `../_shared/phases/intake.md`; **plan input → `../_shared/phases/plan-handoff.md`**;
   ultra_mode → `references/ultra-mode.md`
-- Phase 0/1 analyst-planner gates → `references/analyst-gates.md`
-- Phase 1 wiki grounding → `references/wiki-consult.md` + `references/preflight-report.md`
+- Phase 0/1 analyst-planner gates → `../_shared/phases/analyst-gates.md`
+- Phase 1 wiki grounding → `../_shared/phases/wiki-consult.md` + `references/preflight-report.md`
 - Phase 2 → `references/effort-and-mode.md`; tagging → `references/pattern-gate.md`
-- Phase 3 → `references/wave-grouping.md` + `log-protocol.md` + `house-rules.md`
+- Phase 3 → `../_shared/phases/wave-grouping.md` + `log-protocol.md` + `house-rules.md`
   + `pattern-gate.md` (resolve gate); workers → `subskills/orc-execution/`;
   stops → `subskills/orc-checkpoint/SKILL.md` + `../_shared/phases/stop-resume.md`
 - Phase 5–6 → `subskills/orc-review-verify/`; FE tasks →
   `../orc-pattern/references/fe-a11y.md` + `fe-perf.md` (as `fe_rules[]`)
-- Phase 5.5 → `references/security-checklist.md`; 6.5 → `subskills/orc-testgen/`
+- Phase 5.5 → `../_shared/phases/security-checklist.md`; 6.5 → `subskills/orc-testgen/`
 - Phase 8 → `subskills/orc-pr/SKILL.md` (template `subskills/orc-pr/pr.md`);
   stack gate → `subskills/orc-pr/stack-gate.md` + `_shared/pr-templates.md`
 - Schemas (you own; pass slices only): `schemas/intent-spec.md`,
@@ -189,344 +189,34 @@ them; they are never dispatched as subagents).
 
 ---
 
-## Phase 0 — Intake (load references/intake.md) · Trace: `PHASE intake`
+## Phases
 
-**Plan-input trigger (check FIRST — load `references/plan-handoff.md`):** if the
-run input IS a plan (pasted planning-output, a `plan-{name}.md` path, or an
-`orc/planner/{name}/` checkpoint), follow that reference: bootstrap the trace,
-schema-validate, apply the `plan_head` staleness valve, RE-RUN the full Phase 1
-exit gate here (the deterministic catch for phantom-file drift), relay
-`open_questions[]`, then continue at Phase 2. A plan input never skips Phase 2/3
-nor executes task-by-task ad hoc.
+`orc lane phases orc --json` **is** the pipeline — the CLI owns the list and
+its order, and this table is the human index of it. Never derive the order
+from these filenames; a second idea of the pipeline is the drift the manifest
+exists to prevent.
 
-**Analyst auto-trigger:** on a document (PDF path, pasted doc, audit sheet)
-OR an ambiguous/underspecified requirement, FIRST dispatch the System Analyst
-(doc-optional — with no doc the request itself is the source). Offer
-standard/deep (`config.default_analysis_depth` presets it; mention `orc
-config set default_analysis_depth deep`); deep → you dispatch the scouts. On
-return run the analyst-return gates (analyst-gates.md); on build, continue at
-Phase 1 with the Requirement Planner.
+**Read a row when its phase fires, not on activation.** Every row is
+`on-phase` — this spine deliberately carries no `always` phase pointer. Every
+file below is this lane's OWN: each has one consumer today, and a file with
+one consumer stays home. W13 (`orc-diy`) and W14 (`orc-mini`/`orc-fast`) give
+the shared ones a second reader; each then moves to `_shared/phases/` and
+gains a `composed` or `trim` layer beside its `full` one.
 
-Emit `PHASE intake start` FIRST, then create `run/{run-slug}/` (slug from the
-intent). Then: rough-size →
-question tier (2/4/6) → ONE batched question round → draft the intent-spec
-(`schemas/intent-spec.md`) → **repo cross-check** (intake Step 3.5:
-Glob/Grep-confirm everything the spec names, or tag `UNVERIFIED`; tags become
-ONE batched sign-off question; >3 tags → recommend `orc-analyze`) → sign-off
-preference (gate/soft; DEFAULT GATE) → show spec → approval or edits. **No
-planning until approved (gate mode) and no unresolved `UNVERIFIED` tags
-either way.** On approval, emit `PHASE intake end`.
+| # | Phase | File | Read | Trace |
+|---|-------|------|------|-------|
+| 0 | Intake | `references/phases/intake.md` | `full` | `PHASE intake` |
+| 1 | Planning | `references/phases/planning.md` | `full` | `PHASE planning`, `CONFIG`, `WIKI-CONSULT`, `CROSSLINK`, `GATE` |
+| 2 | Effort & scoring | `references/phases/scoring.md` | `full` | `PHASE scoring`, `SCORE` |
+| 3 | Execution | `references/phases/execution.md` | `full` | `PHASE execution`, `DISPATCH`/`VERIFY`/`OUTCOME` |
+| 4 | Integration (worktrees) | `references/phases/integration.md` | `full` | `PHASE integration` |
+| 5 | Review | `references/phases/review.md` | `full` | `PHASE review`, `FINDING` |
+| 5.5 | Security pass (opt-in) | `references/phases/security.md` | `full` | `FINDING` |
+| 6 | Verify — TDD gate + adversarial review | `references/phases/verify.md` | `full` | `PHASE verify`, `VERDICT`, `TDD-RED`/`TDD-GREEN` |
+| 6.5 | Test authoring (opt-in) | `references/phases/testgen.md` | `full` | `DISPATCH`/`VERIFY` |
+| 6.7 | Mock example + drift recovery | `references/phases/mock-example.md` | `full` | `PHASE mock-example`, `DRIFT` |
+| 7 | Summary | `references/phases/summary.md` | `full` | `PHASE summary` |
+| 8 | Ship | `references/phases/ship.md` | `full` | `PHASE ship`, `FINISH` |
 
-The intent-spec's definition-of-done becomes Phase 6's acceptance criteria;
-its constraints become hard rules in every slice — at slice-assembly each
-task's `spec_invariants[]` is appended VERBATIM to that slice's
-`constraints[]`. Offer the opt-in **Test Authoring** (Phase 6.5; default
-`config.generate_tests`) in the sign-off round.
-
-## Phase 1 — Planning · Trace: `PHASE planning`, `CONFIG`, `WIKI-CONSULT`, `CROSSLINK`, `GATE`
-
-Emit `PHASE planning start`, then emit ONE `CONFIG <key=value …>` line with the
-resolved values of every config key this run will consume (ALWAYS `opus5_only` — it selects the executor table AND every fixed role, so retro can segment per-band outcomes BY dispatch mode) — the runtime
-proof `/orc-retro` audits that the run honored the config.
-**Wiki consult (load `references/wiki-consult.md`;
-always report — no tier is silent):** read the FRESH/AGING/STALE tier from
-**`orc wiki status`** (v0.41.0 — deterministic; never hand-compute it from `wiki-meta.json`), pull the relevant pages (incl. cross-cutting maps like `orc-reference-api-surface`), apply
-`code > fresh wiki > stale wiki (hints) > model priors`, emit
-`WIKI-CONSULT <tier> :: docs=<pages>`, print the one-line tier report (every tier, `absent` included), and attribute per-dispatch too — `wiki:` on the `DISPATCH` line + a `wiki_used` return (wiki-consult.md Step 5). **Crosslink:** per wiki-consult.md, inject
-the cached `.claude/orc/crosslink/needs.json` contract into any boundary-touching
-task (advisory) and print + emit `CROSSLINK <state> :: boundaries=<n> peers=<names>`
-— `configured-no-cache` prints the "cache not built" warning (full orc reads
-only pre-built needs/cache, never peer source live). **Gotchas (repair memory,
-config `gotchas`):** probe ONCE with `orc gotcha status` (exit 0 = entries exist,
-1 = none — never a `find`); canonical `_shared/gotchas.md`.
-**Pact / boundary / aftermath / wiki debt (v0.46.0 — all CONSUMED here, never
-written here):** probe `orc pact status --json` (`pact_gate`, default `warn`),
-`orc boundary status --json` (`boundary_gate`, default `warn`), `orc wiki debt
---json`, and — only to decide whether the preflight's `after:` line fires at all —
-`orc aftermath status --json`. Print each probe's own `line` VERBATIM; never
-recount or re-word one. Gates: `../orc-pact/references/gate.md` +
-`../orc-boundary/references/gate.md`. **Challenge (v0.47.0, `challenge_gate`,
-default `warn`):** when the run's INPUT DOCUMENT has a cycle, print
-`orc challenge status <slug> --json`'s `preflight_line` verbatim — building from
-a document that has not passed its own review is worth one line. There is no
-`block` mode (the `/orc-pact` precedent). **Extra (v0.50.0, `extra_enabled`) —
-resolved HERE, announced HERE, never silent:** load `../_shared/extra-dispatch.md`;
-per task run `orc extra resolve <score> --role executor --risk <n> --json`, and
-before wave 1 settle its two pre-dispatch states, both PRINTED — a `needs_reping`
-profile (re-ping; a STALE profile still routes) and a vaulted credential, which is
-**LOCKED AT DISPATCH TIME whatever `credential.present` says** and falls back to
-Claude rather than stopping the run. **Preflight:** print the compact block per
-`references/preflight-report.md` once wiki + crosslink (+ pattern/waves) resolve.
-
-Ask which planner: **Superpowers / OpenSpec / Requirement Planner / ORC
-(self)**. With an analyst requirement-spec present, the Requirement Planner
-is the natural choice (consumes the spec; does NOT re-question scope); apply
-the `git_head` staleness valve first (analyst-gates.md). Dispatch the planner
-as a subagent — never plan yourself.
-
-**CRITICAL — planning always hands back here.** However a plan was produced,
-control returns to THIS orchestrator, which runs Phase 2 → 3 → … → 8 — never
-jump from a plan straight to implementation. **ONE exception — a poly-spec
-(`orc-poly:spec`, from `/orc-poly`):** the planner runs poly-split mode (one
-plan per repo, each pinned to the frozen contract, each written into its own
-repo); present the per-repo plans + build handoff and STOP — a poly-spec is the
-only input that does NOT proceed to Phase 2 (each repo builds later, in its own
-`/orc` session). The plan must satisfy
-`schemas/planning-output.md` (per-task `declared_files` incl. tests,
-`grounding[]`, `acceptance[]`, `requirements[]`, `spec_invariants[]`,
-`depends_on`, `owns_area`, `spec_ref`, + a `coverage` echo, + `tdd_spec` —
-TDD is ALWAYS ON in full orc/ultra but **SCOPED to what can actually fail (v0.41.0)**: a `disposition` per entry (`new-surface | behavior-change | covered-by-existing | no-behavior | no-runner`) DERIVED from the planner's facets — constants/translations/file-splits get NO test, a cited `risk[]` is never scoped out, and a PAIRED task materializes it, never a Wave 0 (schema notes 7-8; gate check 5);
-missing declared files → extract and confirm before leaving this phase.
-
-**Phase 1 exit gate** (deterministic — full checks in analyst-gates.md; emit
-`GATE` lines): Glob every `disposition: exists` path, recompute coverage (no
-`orphan` requirements), cycle + same-file collision checks. Any miss →
-bounce to the planner (one retry), then escalate. **After the gate passes,
-relay the plan's `open_questions[]` in ONE batch:** blocking questions must be
-answered before Phase 2; non-blocking show their `proposed_default` for tacit
-approval. **Step-back valve:** `plan_confidence: low` OR >3 blocking questions →
-recommend stepping back to `orc-analyze` (user may override and proceed).
-**Pact injection (`pact_gate: warn`) — the payoff, and it happens HERE:** a
-DRIFTED or BROKEN promise whose `anchors` intersect a task's `declared_files` is
-appended VERBATIM to that task's `constraints[]` (the `spec_invariants[]`
-channel — no new plumbing) and PRINTED per task. HOLDING entries are never
-injected. Last month's decision constrains this month's plan, automatically. On
-pass, emit `PHASE planning end`.
-
-**Then print the `forecast:` block, BEFORE the Phase-2 pause question**
-(`references/preflight-report.md`) — tasks · waves · estimated subagents · model
-mix · a measured time RANGE · one cheaper lane and what it costs. This is the
-earliest instant every number is real and the last cheap moment to walk away.
-Presentation only, no new probes. When `config.run_budget_dispatches` > 0 and the
-forecast exceeds it, this is a **hard stop** with the batch pause's discipline
-(`GATE budget stop`) offering proceed · cheaper lane · re-plan smaller — never
-dispatch wave 1 past it.
-
-## Phase 2 — Effort, dispatch style, scoring (load references/effort-and-mode.md) · Trace: `PHASE scoring`, `SCORE`
-
-Emit `PHASE scoring start`. Refine effort; recommend **sequential** vs
-**parallel** dispatch (worktrees for high-effort independent features) — user
-confirms. Dispatch style is **intra-wave concurrency only**: waves are computed
-regardless of style (sequential runs have waves too, see wave-grouping.md), so
-the batch pause always binds to wave numbers. **Batch-pause schedule (deterministic, not a cadence hint):** the plan
-has K waves — ask "pause after every wave / every 2nd / run straight through?"
-and SHOW the resulting stop list ("will pause after waves [list]"); a 2-wave
-plan plainly offers "pause after wave 1". Store it as `pause_schedule`, recompute
-each wave's `is_batch_pause` (last wave never pauses). **Facet-validation gate
-(deterministic):** recompute `breadth` + `fan_in`/`fan_out` from the plan; a
-mismatch or an uncited `risk` entry bounces the plan (grounding mechanics).
-**Score every task** from its `facets` via the fixed formula, map to the model
-ladder, show the facet vector + arithmetic table, and emit `SCORE task=<id>
-score=<n> band=<band> model=<m> facets=<vector> :: <reason>` per task; a score
-override needs a written reason (logged). **With `extra_enabled`** the table gains
-a `via` column and its head can name TWO tables (effort-and-mode.md); a foreign
-task's `SCORE` appends `via=extra:<profile>` and `model=` is the FOREIGN model id.
-**Cited-risk hold-back (deterministic, beside the facet gate):** a foreign-routed
-task with a non-empty `risk[]` is HELD BACK to its Claude band (`extra_risk_tasks`
-defaults to `off`) and every one is LISTED with its cited risk — a silently
-held-back task is indistinguishable from a forgotten one. Use the wiki's "Notes for planning" to sharpen
-core/isolated + risk factors. **Tag each task's pattern domain+language**
-(+ secondary `db: postgres`) per `references/pattern-gate.md`. Ask: "Any
-anticipated escalations, or run straight through?" Emit `PHASE scoring end`.
-
-## Phase 3 — Execution (load wave-grouping.md + log-protocol.md) · Trace: `PHASE execution`, `DISPATCH`/`VERIFY`/`OUTCOME` per task
-
-Emit `PHASE execution start`. Build the conflict graph from `declared_files` →
-group waves (cap `max_wave_tasks`, mark `is_batch_pause` from `pause_schedule`;
-waves are computed for BOTH dispatch styles — sequential fires a wave's tasks
-one at a time, parallel fires them together) → SHOW the wave plan (wave → tasks →
-pause marks) to the user BEFORE wave 1 → write checkpoint + state-of-play BEFORE
-dispatching. **Boundary gate, per wave (`boundary_gate`; emit `BOUNDARY`):**
-`warn` prints each task's verdict; `block` additionally LIFTS a REFUSE task out of
-the wave — **the wave still runs the rest** — and hands it back with its checklist
-plus the "not blocked for you" line (it gates ORC's dispatch, never an explicit
-instruction). ESCALATE dispatches but gates ship on the named human, riding the
-EXISTING pause machinery. An uncarded area is `unknown`, never REFUSE. **Pattern-resolve gate
-(once, before the first wave):** resolve each tagged language per
-`references/pattern-gate.md` and report ONE user line per language (cache hit →
-apply cached; miss → codify/agnostic per `pattern_findings`; learn → dispatch
-the codifier); hold resolved patterns in run state.
-
-**TDD red proof — PAIRED TASKS, not a Wave 0 (v0.41.0):** TDD tasks are ORDINARY planner-emitted tasks the impl task `depends_on`, so they wave and score like any other (mechanics in `wave-grouping.md`); no `new-surface`/`behavior-change` entries → no TDD task at all. Each materializes its skeletons into real FAILING tests and returns the red evidence; emit `TDD-RED task=<id> iter=0` per requirement.
-**Pre-implementation green is read per `disposition`:** a `new-surface` entry that PASSES is a spec bug → block that requirement's dispatch and surface it; a `behavior-change` regression-guard passing is EXPECTED and blocks nothing; anything else → adjudicate with the user, recorded in `decisions`. Then per implementation wave:
-1. Dispatch EVERY task as a spawned subagent (emit `DISPATCH <agent> :: <task>
-   expect=<model>/<effort>` BEFORE the Task call; subagent wrapper framing + the
-   task's INPUT SLICE per orc-execution/core.md + its scored model). Every
-   slice carries the task's `acceptance[]`, its `tdd_spec` tests (the executor
-   implements to green: implement→test→repair, cap `tdd_loop_max`, emitting
-   `TDD-RED`/`TDD-GREEN` per iteration; cap hit → STOP SEQUENCE + honest red
-   report) and the `house_rules` card lines
-   (`references/house-rules.md`, injected LITERALLY — read once per run, never
-   a pointer); FE/BE and `db:postgres` tasks get the resolved `pattern`
-   injected literally (pattern-gate.md), and — with `gotchas: on` — the
-   SCOPE-MATCHING gotchas beside it (glob vs this task's `declared_files`, cap 3,
-   highest `hits` first; zero matches = NO block, never an empty one — NEVER
-   inject unfiltered: `_shared/gotchas.md` §7).
-   **A FOREIGN task uses Bash, not the Task tool:** write the IDENTICAL slice to a
-   file and run `orc extra dispatch --task <file> --json` (exit codes + the
-   fallback procedure: `../_shared/extra-dispatch.md`). Append `via=extra:<profile>`
-   to the `DISPATCH` line and copy the return's `trace_line` + every
-   `trace_extras[]` entry VERBATIM into the packet — the CLI composes them, and the
-   hook emits NO `SPAWN`/`RETURN` for a foreign worker, so they are the whole record.
-2. Record worker milestone pings (they bound what a mid-wave stop can save).
-3. Collect returns; VALIDATE each (emit `VERIFY <task> actual=<model>/<effort>`
-   ✅ MATCH / ⛔ DOWNGRADE per return — surface any downgrade to the user).
-   **A FOREIGN return runs `_shared/return-validation.md` §2b INSTEAD of §2** — it
-   has no injected model-id line, so it cannot carry `actual_model` and faking one
-   claims evidence that does not exist; ⛔ SUBSTITUTION replaces the downgrade
-   check. A failure runs the fallback procedure, which BEGINS with a free
-   `orc extra reconcile <task>` — a worktree that moved is RESUMED, never re-done
-   — then re-dispatches or STOPs, announced, with the `EXTRA fallback` line.
-   `needs_context` → adjudicate → re-slice
-   (cap 2 per task, then escalate). A `pattern` task must return
-   `invariants_checked: true` + the matching `pattern_version`. **Evidence
-   check:** `status=done` on a stack with a runnable build/test REQUIRES
-   `evidence` {command, exit_code, tail} — a missing block or false
-   `no_runner_detected` is malformed (requeue); `done` with non-empty
-   `unmet[]` is `partial`.
-4. **Post-wave worktree audit (GATE, `_shared/return-validation.md` §6):** diff `git status --short` before/after the wave — a changed path in NO task's `declared_files`, INCLUDING one that became less modified (the revert signature), blocks the close until named and decided.
-   Overlap → `failure_reason: "file-collision:<file> with <agent>"`, requeue later wave.
-5. Append worker `log_entries` to the decision log; regenerate the digest.
-   **Gotcha capture (`gotchas: on`):** a return that CLOSED a repair loop carries
-   `gotcha_recorded` (`_shared/return-validation.md` §7) — dedupe on
-   `symptom`+`scope` (a match bumps `hits`/`last_seen` and appends nothing), else
-   append the block to `.claude/orc/gotchas.md`. YOU write it, never a subagent;
-   a capped-and-stopped loop records NOTHING.
-6. Update checkpoint + state-of-play; emit `OUTCOME task=<id> score=<n>
-   band=<range> model=<m> retries=<n> requeues=<n> needs_context=<n> unmet=<n>`
-   as each task closes.
-7. **Wave-boundary gate (deterministic — NOT judgment):** after wave W, if the
-   wave's `is_batch_pause` is true (W in `pause_schedule`) AND a later wave
-   remains, emit `GATE wave-boundary :: wave=W of K → STOP (batch_pause_every=N)`
-   and run the MANDATORY STOP SEQUENCE — never dispatch wave W+1 past an
-   unacknowledged boundary. Token pressure → same STOP SEQUENCE (judgment).
-   Last wave closes → emit `PHASE execution end`. (../_shared/phases/stop-resume.md)
-
-**User escalations:** relay question → broadcast answer to log; an answer that
-invalidates a DONE task → re-run once, then set every reverse-`depends_on`
-consumer to `stale_review`. **Worker failure/garbage/timeout:** flag +
-continue the wave; audit and re-dispatch at the next batch checkpoint
-(`requeued`, retry_count++). Hard retry cap 2 → STOP and surface.
-
-## Phase 4 — Integration (worktrees only) · Trace: `PHASE integration`
-
-Emit `PHASE integration start`. Merge worker branches; conflicts → resolver
-subagent (Opus 4.8 medium) given BOTH tasks' specs/intents, not just the diff.
-Record merge state in checkpoint; emit `PHASE integration end`.
-
-## Phase 5 — Review (load subskills/orc-review-verify/, spawned) · Trace: `PHASE review`, `FINDING`
-
-Emit `PHASE review start`. Superpowers path: its review skill incl. tests
-(Sonnet 4.6 medium). OpenSpec/self path: review worker (Opus 5 medium). Pass the resolved
-`code_pattern` + its invariants + gate lines for the re-check
-(pattern-gate.md); no resolved pattern → FIRST ask for one (paste/md/none).
-FE tasks in run → pass `fe_rules[]` from `../orc-pattern/references/` fe-a11y
-+ fe-perf. Findings arrive on the **P0–P3 ladder** (invariant violation or
-unmet gate line = P0; every P0–P2 carries `file:line` + VERBATIM `quote`;
-unanchored → P3). Apply hard rule 5 INCLUDING the quote spot-check: P0 →
-auto-fix once · P1 → ask, then fix once · P2/P3 → record for Phase 7. Emit
-`FINDING p0=<n> p1=<n> p2=<n> p3=<n>` on the return, then `PHASE review end`.
-
-## Phase 5.5 — Security pass (opt-in) · Trace: `FINDING`
-
-Only when config `security_review` is `on`/`ask` (default `off`) AND a task
-scored **≥ 70** (reuses the risk floor). `ask` → one P0 prompt; `on` →
-silent. Dispatch the reviewer with `phase=security` + changed files +
-`references/security-checklist.md` (load only now). Same ladder, same
-hard-rule-5 handling; report-only.
-
-## Phase 6 — Verify: TDD gate + adversarial review (same subskill, phase=verify) · Trace: `PHASE verify`, `VERDICT`, `TDD-RED`/`TDD-GREEN`
-
-Emit `PHASE verify start`. TWO halves in the SAME dispatched verifier slot
-(subskills/orc-review-verify/ — Phase 5's reviewer stays separate):
-**1) TDD gate (deterministic):** run the plan's TDD suite — green IS the
-definition-of-done for non-exempt requirements; red → repair loop (implement→
-test→repair, cap `tdd_loop_max`; cap hit → STOP SEQUENCE + honest red report).
-**2) Adversarial review:** attack the green implementation — edge cases the
-spec missed, error paths, contract violations, race/ordering, workflow breaks
-(dead wiring, broken commands) — findings on the existing P0–P3 ladder. The
-verifier also checks the intent-spec's
-definition-of-done PLUS the pattern's `validation_gate[]` lines (each a
-criterion; unmet = P0). The return carries `criteria[]` {criterion, pass|fail,
-evidence} — every criterion needs evidence. Quote spot-check P0/P1 first, then:
-P0 → auto-fix once → re-verify once → second failure STOPS; P1 → ask before the
-one fix attempt, then re-verify (same single-retry cap).
-**Pact recheck (`pact_recheck_on_verify`, default true; emit `PACT recheck`):**
-after GREEN, run `orc pact check` scoped to the promises whose anchors intersect
-this run's CHANGED files. A promise that flips to BROKEN is a **P1 finding with its
-check output** — reported, never an automatic abort: the ledger may simply have
-outgrown the code, and that is the user's call. Emit
-`VERDICT pass|fail :: <detail>`, then `PHASE verify end`.
-
-## Phase 6.5 — Test Authoring (opt-in; load subskills/orc-testgen/) · Trace: `DISPATCH`/`VERIFY`
-
-Only when `config.generate_tests` is on (confirmed at intake). ORC **writes**
-test cases and **runs nothing** — never gates the ship. Dispatch
-`orc-test-author-opus-5-med` (run's `actual_files`, definition-of-done,
-touched flows, constraints, stack); it returns test files + a `TEST-PLAN.md` + a
-Postman-importable `test-cases.http` (HTTP APIs), the two manual deliverables
-written to **`test-generator/<change-slug>/` at the project root**. Validate the
-returned `test_plan_path`/`curl_bundle_path` are under that folder (else
-malformed → re-dispatch); state the exact path in the summary — discoverability
-is the point.
-
-## Phase 6.7 — Mock example + drift recovery (config `mock_example`) · Trace: `PHASE mock-example`, `DRIFT`
-
-Load `../_shared/drift-recovery.md` (canonical). Only after a GREEN Phase 6,
-before ship: `ask` (default) → the offer is MANDATORY (never silently skipped,
-never silently run); `on` → build; `off` → skip. Deliverable:
-`mock-examples/<change-slug>/` at the project root (`EXAMPLE.md` + one minimal
-runnable artifact; mocked inputs only) — **NEVER committed**. After the user
-runs it, ONE question: matches expectation? [yes / drift: <describe>]. On
-drift → `DRIFT-FROM` handoff → analyze-mini gap analysis → mini planner patch
-plan → scored dispatch → re-verify → re-offer; **hard cap 2 loops**, then an
-honest unresolved report. Emit `DRIFT loop=<n>` per loop; end-of-phase packet.
-
-## Phase 7 — Summary · Trace: `PHASE summary`
-
-Emit `PHASE summary start`. Report: tasks/waves/dispatches (scores + overrides), escalations,
-needs_context events, findings by severity (P0/P1 resolved; P2 itemized; P3
-counted), verify result, authored tests when 6.5 ran, repo state + branch,
-stale_review flags. Then ONE question: **"Apply the P2 fix-batch? The P3
-cosmetics too?"** — never fix unasked. Emit `PHASE summary end`.
-
-## Phase 8 — Ship (load subskills/orc-pr/SKILL.md) · Trace: `PHASE ship`, `FINISH`
-
-Emit `PHASE ship start`. Show current branch.
-
-**Stacked-PR gate FIRST (deterministic; full `/orc` + `/orc-ultra` only — load
-`subskills/orc-pr/stack-gate.md`; never mini/fast/diy).** Measure the change
-(`git diff --numstat`, exclusions applied) vs config `stacked_pr_loc`/
-`stacked_pr_files`. Under threshold or `stacked_pr: off` → silent, ship normally
-(`GATE stack-gate pass :: under-threshold`). Tripped → surface report + ONE P0
-question (stack into layers? or one regular PR?) in the SAME round as its two
-prerequisites — **a ticket** and a resolved PR template
-(`_shared/pr-templates.md`; none found → recommend three options). No ticket, no
-template, or "no" → **one regular PR, never re-asked**. "Yes" → commit on the
-current branch (the driver's snapshot), write `stacked-pr/<slug>/STACK-FROM.md`
-(`_shared/stack-plan.md`, `ENTRY-MODE: orc-run`, this run's `RUN-DIR`), then hand
-off **`/orc-pr-setup`** → **`/orc-pr-driver`**. ORC never cuts layers itself.
-
-**Handoff seam (one sentence, only when it applies):** if any changed file is a
-GREEN surface in `orc handoff surfaces --json`, say so —
-*"2 of these were changes a PM could have made alone — `/orc-handoff` next time."*
-That sentence is how anyone finds out that lane exists.
-
-Then ask together: **commit? push? create PR?** (PR: ticket +
-title + target branch; generate from `subskills/orc-pr/pr.md`). If Phase 6.5 ran,
-commit `test-generator/<change-slug>/` too (a user deliverable, never gitignored).
-**`mock-examples/` is NEVER staged** (drift-recovery.md; no `.gitignore` edit —
-just never `git add` it).
-On success: delete the ephemeral decision log; KEEP checkpoint + dispatch log.
-**Wiki stale-flag:** flag (never re-scan) wiki docs whose covered files this
-run changed; point at `/orc-wiki`. **Post-ship refresh ask** (BIG runs, /orc +
-/orc-ultra — the `wiki_refresh_ask_tasks`/`_files` triggers and full rules in
-`../orc-wiki/references/staleness.md`): upgrade the passive note to **"Refresh
-wiki now?"**; on "later" print the prominent stale warning and stamp
-`wiki_refresh_declined` in the checkpoint. Then ALWAYS show the completion
-usage report — /usage limits + the full dispatch log (model/effort/score per
-subagent). The user must always know what the run cost. Finally emit
-`PHASE ship end`, then the one-line `STATS lane=… dispatches=… downgrades=…`
-summary (trace.md — what `orc stats` reads), then `FINISH :: <detail>`,
-and in ONE step delete BOTH `log_dir/.current` and the run's `RESUME.md` (that
-file existing is what marks a run unfinished — stop-resume.md).
+Phase 4 runs only in worktree mode. Phases 5.5, 6.5 and 6.7 are opt-in and
+their config key is resolved by `orc lane config orc --json`, never read raw.

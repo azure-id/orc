@@ -35,7 +35,7 @@ Any path in `git status --short` that is missing from that diff → **STOP**. Do
 proceed with a partial snapshot.
 
 Note the excluded-but-listed paths (generated code, lockfiles, vendored trees —
-`../_shared/stack-plan.md`): they are still real files that must land in some
+`../../_shared/stack-plan.md`): they are still real files that must land in some
 layer, they just do not count toward a budget.
 
 ## Step 2 — start the stack from the trunk

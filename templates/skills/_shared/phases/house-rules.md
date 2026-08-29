@@ -1,4 +1,14 @@
-# ORC House Rules (standing behavioral card)
+# Phase — House rules   (id: `house-rules`)
+
+> **Library file.** Canonical since v1.0.0 W12; it was under the `orc` skill's
+> private `references/`, and other lanes already reached across into it. Read
+> by `orc`, `orc-mini`, `orc-fast`, `orc-quick`, `orc-doc`. Layers declared:
+> `core` only — single-layer because it is a standing card injected VERBATIM
+> into a slice — a layered card would be a different card. `orc lane phases
+> <lane> --json` names the file and the layers to read.
+
+<!-- orc:layer core -->
+## ORC House Rules (standing behavioral card)
 
 Injected LITERALLY into every executor slice as `house_rules` — never a file
 pointer. Keep the card ≤ 10 lines: it rides in EVERY dispatch, so every
@@ -18,3 +28,5 @@ HOUSE RULES (standing, apply to every change):
 6. An honest partial beats a false done — report what's unmet, never round up.
 7. Never revert, discard or rewrite files you did not write — `git checkout/restore/reset/stash/clean` are forbidden in your slice; an impossible assertion is `unmet`, never something to make true.
 <!-- card-end -->
+
+<!-- /orc:layer -->

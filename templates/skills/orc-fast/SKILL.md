@@ -90,7 +90,7 @@ pinned in the agent file). **Under `opus5_only` it is `orc-executor-opus-5-low`*
 
 - the task (intent spec) + acceptance bullets as definition-of-done
 - **wiki pointers, not content** (fast's lane-delta in
-  `../orc/references/wiki-consult.md`): the PATHS of 1–3 relevant pages
+  `../_shared/phases/wiki-consult.md`): the PATHS of 1–3 relevant pages
   selected from `wiki/INDEX.md` by keyword match — prefer the cross-cutting
   maps (`orc-reference-api-surface` etc.) when the domain matches. Instruct
   the executor to READ them first, and include the precedence line verbatim:
@@ -113,7 +113,7 @@ pinned in the agent file). **Under `opus5_only` it is `orc-executor-opus-5-low`*
 - **the read ladder** (`../_shared/read-ladder.md`): read only as far up as the
   question needs — a file the task will EDIT is read in full first. Precomputed
   knowledge REPLACING exploration is this lane; a directory sweep is not.
-- the standing `house_rules` card (`../orc/references/house-rules.md`,
+- the standing `house_rules` card (`../_shared/phases/house-rules.md`,
   injected literally, same as full/mini)
 - constraints from the intent spec
 - **terse-return rule:** standard contract fields, NO narrative prose — files

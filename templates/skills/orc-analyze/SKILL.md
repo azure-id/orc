@@ -193,7 +193,7 @@ the adjacent scope.
 ## Phase F — Gates, then branch
 
 **Orchestrator gates (deterministic — full detail in
-`../orc/references/analyst-gates.md`).** Evidence spot-check (Glob every
+`../_shared/phases/analyst-gates.md`).** Evidence spot-check (Glob every
 `files[]` path; Grep-verify quotes on `status: exists|conflict`) + derivation
 lint (R# ids, statuses, context-anchor set match between report.md and
 requirement-spec.md; a context `anchor` that isn't an in-scope R# → reject).

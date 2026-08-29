@@ -1,9 +1,19 @@
-# Reference — Analyst, Combiner & Plan Gates (orchestrator side)
+# Phase — Analyst & plan gates   (id: `analyst-gates`)
+
+> **Library file.** Canonical since v1.0.0 W12; it was under the `orc` skill's
+> private `references/`, and other lanes already reached across into it. Read
+> by `orc`, `orc-analyze`, `orc-mini`. Layers declared: `core` only — single-
+> layer because these are the orchestrator-side gates on a returned analysis
+> or plan, and a trimmed lane runs fewer of them rather than different ones.
+> `orc lane phases <lane> --json` names the file and the layers to read.
+
+<!-- orc:layer core -->
+## Reference — Analyst, Combiner & Plan Gates (orchestrator side)
 
 The orchestrator's deterministic gates around the analyst, the
 context-combiner, and the planner. The roles themselves are defined in
 `../../orc-analyze/SKILL.md`, `../../context-combiner/SKILL.md`, and
-`../subskills/orc-planner/SKILL.md` — this file is what YOU do around their
+`../../orc/subskills/orc-planner/SKILL.md` — this file is what YOU do around their
 dispatches and returns. Load at Phase 0 (analyst dispatch) and Phase 1
 (planner return). Emit a `GATE` trace line (pass|bounce) per check when
 logging.
@@ -113,7 +123,7 @@ proceed-with-flagged.
    - `new-surface` / `behavior-change` missing `skeleton` or `given_when_then`
      → miss.
    - A disposition that DEVIATES from the derivation table in
-     `../schemas/planning-output.md` without a `reason` → miss. The derivation
+     `../../orc/schemas/planning-output.md` without a `reason` → miss. The derivation
      is the default; departing from it is the thing that needs justifying.
 
 Any miss → the plan is malformed: bounce it back to the planner WITH the miss
@@ -122,3 +132,5 @@ pre-v0.7.0 plan resumed from an old checkpoint has no `grounding[]`
 (pre-v0.9.0: no `requirements[]`/`spec_invariants[]`; pre-v0.41.0: no
 `disposition`) — resume it without the
 missing checks; never bounce an old plan.
+
+<!-- /orc:layer -->

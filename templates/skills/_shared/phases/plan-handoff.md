@@ -1,8 +1,19 @@
-# Reference — Plan Handoff (executing a plan from another session)
+# Phase — Plan handoff   (id: `plan-handoff`)
+
+> **Library file.** Canonical since v1.0.0 W12; it was under the `orc` skill's
+> private `references/`, and another lane already reached across into it. Read
+> by `orc`, `orc-route`. Layers declared: `core` only — single-layer because
+> executing a plan another session wrote is the same procedure wherever it is
+> done, and /orc-route reads it to DEFINE what a plan is (v0.42.0 — a second
+> definition is drift the lint cannot see). `orc lane phases <lane> --json`
+> names the file and the layers to read.
+
+<!-- orc:layer core -->
+## Reference — Plan Handoff (executing a plan from another session)
 
 The entry contract for the case ORC had no defined path for: **the run input
 IS a plan**, not a request. A plan was produced in one session (or saved to a
-file) and handed to a fresh session to build. Load `references/plan-handoff.md`
+file) and handed to a fresh session to build. Load `plan-handoff.md`
 at Phase 0 the moment you recognise a plan input; it turns a pasted plan into a
 real ORC run instead of an ad-hoc task-by-task improvisation.
 
@@ -82,3 +93,5 @@ violation.
 - **Not** a poly-spec path. A poly-spec (`orc-poly:spec`) is split-and-STOP at
   Phase 1 (see SKILL.md) — that is a different input than a per-repo
   planning-output handed here to build.
+
+<!-- /orc:layer -->

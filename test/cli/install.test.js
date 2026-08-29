@@ -103,7 +103,8 @@ test("prune: an unowned ORC-named file is REPORTED with a manifest present, dele
 test("house-rules card: markers intact, <=10 lines, and the destructive-git rule present", () => {
   const card = fs
     .readFileSync(
-      path.join(REPO, "templates", "skills", "orc", "references", "house-rules.md"),
+      // v1.0.0 W12: the card is read by five lanes, so it moved to the library.
+      path.join(REPO, "templates", "skills", "_shared", "phases", "house-rules.md"),
       "utf8"
     )
     .replace(/\r\n/g, "\n");

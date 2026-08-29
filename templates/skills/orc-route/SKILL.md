@@ -27,7 +27,7 @@ always right, instead of a broad one that is sometimes wrong.
 
 ## Input contract — reuse, never reinvent
 
-A valid input is **exactly** what `../orc/references/plan-handoff.md` already
+A valid input is **exactly** what `../_shared/phases/plan-handoff.md` already
 defines as a plan input:
 
 - pasted planning-output (a block matching `../orc/schemas/planning-output.md` —

@@ -3526,6 +3526,44 @@ const PHASE_FILES = {
     layers: ["core", "full"],
     why_single_layer: null,
   },
+  intake: {
+    file: "_shared/phases/intake.md",
+    layers: ["core"],
+    why_single_layer:
+      "the intake procedure is the same wherever it runs; /orc's own Phase 0 additions live in its own phase file until a second lane needs them",
+  },
+  "plan-handoff": {
+    file: "_shared/phases/plan-handoff.md",
+    layers: ["core"],
+    why_single_layer:
+      "executing a plan another session wrote is one procedure, and /orc-route READS it to define what a plan is — a second definition is drift the lint cannot see (v0.42.0)",
+  },
+  "wave-grouping": {
+    file: "_shared/phases/wave-grouping.md",
+    layers: ["core"],
+    why_single_layer: "the conflict graph is arithmetic; a lane that groups waves at all groups them this way",
+  },
+  "analyst-gates": {
+    file: "_shared/phases/analyst-gates.md",
+    layers: ["core"],
+    why_single_layer:
+      "these are the orchestrator-side gates on a returned analysis or plan, and a trimmed lane runs fewer of them rather than different ones",
+  },
+  "wiki-consult": {
+    file: "_shared/phases/wiki-consult.md",
+    layers: ["core"],
+    why_single_layer: "the precedence ladder (code > fresh wiki > stale wiki > model priors) does not bend for a faster lane",
+  },
+  "security-checklist": {
+    file: "_shared/phases/security-checklist.md",
+    layers: ["core"],
+    why_single_layer: "an opt-in pass either runs its checklist or does not run",
+  },
+  "house-rules": {
+    file: "_shared/phases/house-rules.md",
+    layers: ["core"],
+    why_single_layer: "it is a standing card injected VERBATIM into a slice — a layered card would be a different card",
+  },
   "stop-resume": {
     file: "_shared/phases/stop-resume.md",
     layers: ["core"],
@@ -3604,12 +3642,54 @@ const LANE_PHASES = {
     "orc-quick",
   ],
   "stop-resume": ["orc", "orc-wiki", "orc-diy"],
+  intake: ["orc", "orc-mini", "orc-diy", "orc-challenge"],
+  "plan-handoff": ["orc", "orc-route"],
+  "wave-grouping": ["orc", "orc-diy"],
+  "analyst-gates": ["orc", "orc-analyze", "orc-mini"],
+  "wiki-consult": ["orc", "orc-mini", "orc-fast"],
+  "security-checklist": ["orc", "orc-diy"],
+  "house-rules": ["orc", "orc-mini", "orc-fast", "orc-quick", "orc-doc"],
 };
 
 // The ORDER a lane runs the shared phases in. Preflight before trace only
 // where the lane's preflight is what bootstraps the pointer; everywhere else
 // the trace pointer is the first thing written.
-const PHASE_ORDER = ["preflight", "trace", "stop-resume"];
+const PHASE_ORDER = [
+  "preflight",
+  "trace",
+  "intake",
+  "plan-handoff",
+  "wiki-consult",
+  "analyst-gates",
+  "house-rules",
+  "wave-grouping",
+  "security-checklist",
+  "stop-resume",
+];
+
+// A lane's OWN phases — the pipeline it does not share with anybody yet. They
+// are declared here rather than left as prose because /orc's spine stopped
+// carrying them at W12: the spine is loaded IN FULL on activation and a phase
+// file is loaded when its phase fires, so the manifest is now the only thing
+// that knows the order. A file here has ONE consumer today (design-02 §2 — a
+// file with one consumer stays home); when W13/W14 gives it a second, it moves
+// to _shared/phases/ and gains a `composed` or `trim` layer beside its `full`.
+const LANE_OWN_PHASES = {
+  orc: [
+    { ord: 0, id: "intake", file: "orc/references/phases/intake.md", layers: ["full"], trace_verbs: ["PHASE"] },
+    { ord: 1, id: "planning", file: "orc/references/phases/planning.md", layers: ["full"], trace_verbs: ["PHASE", "CONFIG", "WIKI-CONSULT", "CROSSLINK", "GATE"] },
+    { ord: 2, id: "scoring", file: "orc/references/phases/scoring.md", layers: ["full"], trace_verbs: ["PHASE", "SCORE"] },
+    { ord: 3, id: "execution", file: "orc/references/phases/execution.md", layers: ["full"], trace_verbs: ["PHASE", "DISPATCH", "VERIFY", "OUTCOME"] },
+    { ord: 4, id: "integration", file: "orc/references/phases/integration.md", layers: ["full"], trace_verbs: ["PHASE"] },
+    { ord: 5, id: "review", file: "orc/references/phases/review.md", layers: ["full"], trace_verbs: ["PHASE", "FINDING"] },
+    { ord: 5.5, id: "security", file: "orc/references/phases/security.md", layers: ["full"], trace_verbs: ["FINDING"] },
+    { ord: 6, id: "verify", file: "orc/references/phases/verify.md", layers: ["full"], trace_verbs: ["PHASE", "VERDICT", "TDD-RED", "TDD-GREEN"] },
+    { ord: 6.5, id: "testgen", file: "orc/references/phases/testgen.md", layers: ["full"], trace_verbs: ["DISPATCH", "VERIFY"] },
+    { ord: 6.7, id: "mock-example", file: "orc/references/phases/mock-example.md", layers: ["full"], trace_verbs: ["PHASE", "DRIFT"] },
+    { ord: 7, id: "summary", file: "orc/references/phases/summary.md", layers: ["full"], trace_verbs: ["PHASE"] },
+    { ord: 8, id: "ship", file: "orc/references/phases/ship.md", layers: ["full"], trace_verbs: ["PHASE", "FINISH"] },
+  ],
+};
 
 function lanePhaseRows(lane) {
   const laneCallIds = Object.entries(LANE_CALLS)
@@ -3627,7 +3707,10 @@ function lanePhaseRows(lane) {
       file: def.file,
       layers,
       read: "whole",
-      when: id === "stop-resume" ? "on-phase" : "always",
+      // `always` must be justified (read-ladder.md, W10): a lane reads the
+      // config resolver and opens its trace pointer before it can do anything
+      // at all. Every other phase is `on-phase` — most runs skip most phases.
+      when: id === "preflight" || id === "trace" ? "always" : "on-phase",
       optional_when: null,
       calls: id === "preflight" ? laneCallIds.filter((c) => PREFLIGHT_CALL_IDS.has(c)) : [],
     });
@@ -3667,10 +3750,12 @@ function lanePhasesCmd(lane, claudeDir) {
       trace_token: t ? t.token : null,
       phases,
       shared_phase_count: phases.length,
-      // NOT an empty array: this lane's own pipeline is real and is declared in
-      // its spine. W12 moves the build spine into the library; W14 the rest.
-      own_phases: null,
-      own_phases_status: "in-spine",
+      // `null` is NOT `[]`: a lane whose own pipeline is still declared in its
+      // spine has one, and claiming an empty array would say it does not.
+      // `declared` means this manifest names the files; `in-spine` means the
+      // lane's SKILL.md still carries the procedure itself.
+      own_phases: LANE_OWN_PHASES[l] || null,
+      own_phases_status: LANE_OWN_PHASES[l] ? "declared" : "in-spine",
     };
   });
   if (wantsJson()) {
@@ -3718,9 +3803,19 @@ function lanePhasesCmd(lane, claudeDir) {
         "      calls  " + (p.calls.length ? p.calls.join(" · ") : ui.color.gray("none catalogued"))
       );
     }
+    if (r.own_phases) {
+      console.log("\n  " + ui.color.bold("own phases") + ui.color.gray("  (this lane only — one consumer, so they stay home)"));
+      for (const p of r.own_phases)
+        console.log(
+          `      ${String(p.ord).padStart(4)}  ${ui.color.cyan(p.id.padEnd(13))} ${p.file}   ` +
+            ui.color.gray("layers " + p.layers.map((x) => "`" + x + "`").join(", "))
+        );
+    }
     console.log(
       ui.color.gray(
-        `\n  own_phases: ${r.own_phases_status} — this lane's own pipeline is in its spine.\n  Layer set is CLOSED: ${PHASE_LAYERS.join(" · ")}. A fifth layer is a lint failure.\n`
+        `\n  own_phases: ${r.own_phases_status}${
+          r.own_phases ? "" : " — this lane's own pipeline is declared in its spine, not here"
+        }.\n  Layer set is CLOSED: ${PHASE_LAYERS.join(" · ")}. A fifth layer is a lint failure.\n`
       )
     );
   }

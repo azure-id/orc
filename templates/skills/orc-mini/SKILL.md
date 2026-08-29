@@ -35,7 +35,7 @@ a read-only build+test run, not implementation — you still never write code.
 3. **No dispatch-style and no batch-pause questions** — a single subagent
    makes both meaningless; never ask them.
 4. **Lighter intake.** Ask only the **Always + medium tier** (Q1–Q4 in
-   `../orc/references/intake.md`); skip the high tier (Q5/Q6). Run the Step
+   `../_shared/phases/intake.md`); skip the high tier (Q5/Q6). Run the Step
    3.5 repo cross-check at NAMES-ONLY depth (Glob/Grep-confirm what the draft
    names, tag the rest `UNVERIFIED`, resolve tags in the sign-off line; >3
    tags → recommend the full flow or `orc-analyze`). Sign-off **defaults to
@@ -52,7 +52,7 @@ Phase 0  intake (Q1–Q4, soft sign-off) + run folder + intent-spec
 Phase 1  planning (dispatch orc-planner-mini; analyst first only on real docs)
          → one-line complexity read (mini-ok? or recommend switch-to-full)
 Phase 3  dispatch ONE executor (orc-executor-sonnet-5-high) — slice carries
-         the standing `house_rules` card (../orc/references/house-rules.md,
+         the standing `house_rules` card (../_shared/phases/house-rules.md,
          injected literally) + the cached `postgres` pattern on a data-access
          task (cache HIT only) — collect + validate return
 Phase M  SMOKE GATE — run build+test → GREEN proceed · RED block ship + surface
@@ -195,7 +195,7 @@ mode, no scouts**; it escalates to `/orc-analyze` deep on its concrete
 thresholds and the user chooses. You never analyze or plan yourself.
 
 **Mini-lane gates (yours, deterministic — same as full; full detail in
-`../orc/references/analyst-gates.md`; emit `GATE` trace lines).** On
+`../_shared/phases/analyst-gates.md`; emit `GATE` trace lines).** On
 mini-analyst return: evidence spot-check + derivation lint; refuse
 take-into-build on open `UNVERIFIED`/missing `scope_closed`; `git_head` ≠
 HEAD at plan time → re-run the spot-check first. On mini-planner return: Glob
@@ -206,7 +206,7 @@ escalate). At dispatch, append the task's `spec_invariants` to the slice's
 
 ## Wiki consult (if present)
 
-Same rule as the full skill — load `../orc/references/wiki-consult.md` at the
+Same rule as the full skill — load `../_shared/phases/wiki-consult.md` at the
 planning/complexity-read step: compute the FRESH / AGING / STALE tier from
 `.claude/orc/wiki-meta.json`, pull the relevant pages (incl. cross-cutting
 maps like `orc-reference-api-surface` when their domain applies), apply

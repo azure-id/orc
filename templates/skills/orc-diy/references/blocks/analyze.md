@@ -20,5 +20,5 @@ planning. No doc → go straight to planning.
 <!-- diy:when analyze=auto -->
 Route doc intake exactly as the full lane does: a document present triggers
 the System Analyst per the intake rules in
-`.claude/skills/orc/references/intake.md`; otherwise proceed to planning.
+`.claude/skills/_shared/phases/intake.md`; otherwise proceed to planning.
 <!-- /diy:when -->

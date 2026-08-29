@@ -29,7 +29,7 @@ never in `.claude/`, never in the run folder):
 **Who builds it: NOT you.** The example is DISPATCHED like any task (orc hard
 rule 1 — the orchestrator never implements, not even the smallest task). It is
 an orchestrator-SYNTHESIZED task, so it is scored from a DERIVED vector, never a
-judged one — see `orc/references/wave-grouping.md` "Orchestrator-synthesized
+judged one — see `_shared/phases/wave-grouping.md` "Orchestrator-synthesized
 tasks".
 
 **Git: NEVER committed.** The ship phase explicitly excludes `mock-examples/`

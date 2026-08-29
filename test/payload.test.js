@@ -98,21 +98,23 @@ test("tdd_spec entries carry a disposition, and both branches of pre-implementat
   assert.match(spec, /regression-guard/, "the regression-guard half of behavior-change survives the rename");
 
   // …and the orchestrator's red-proof step must READ the disposition, not blanket-block.
-  const spine = read("skills/orc/SKILL.md");
+  // v1.0.0 W12: Phase 3's procedure left the spine for its phase file. The
+  // spine now carries the manifest row; the rule lives where the phase does.
+  const spine = read("skills/orc/references/phases/execution.md");
   const proof = spine.slice(spine.indexOf("TDD red proof"), spine.indexOf("1. Dispatch EVERY task"));
   assert.match(proof, /per `disposition`/, "the red proof reads the entry disposition");
   assert.match(proof, /regression-guard.*EXPECTED|EXPECTED.*regression-guard/s, "a regression guard passing blocks nothing");
 });
 
 test("the Phase 1 exit gate bounces a tdd_spec / new-tests task collision", () => {
-  const gates = read("skills/orc/references/analyst-gates.md");
+  const gates = read("skills/_shared/phases/analyst-gates.md");
   const exit = gates.slice(gates.indexOf("## Phase 1 exit gate"));
   assert.match(exit, /tdd_spec/, "the gate knows about tdd_spec");
   assert.match(exit, /new-tests/, "…and about a new-tests task targeting the same file");
 });
 
 test("orchestrator-synthesized tasks have ONE derived scoring rule, referenced from both sites", () => {
-  const wg = read("skills/orc/references/wave-grouping.md");
+  const wg = read("skills/_shared/phases/wave-grouping.md");
   const sec = wg.slice(wg.indexOf("## Orchestrator-synthesized tasks"));
   assert.ok(sec, "the general rule exists");
   assert.match(sec, /DERIVED, never judged/, "the vector is derived");
@@ -378,7 +380,7 @@ test("no shipped schema template names a model/effort pair that no agent has", (
 });
 
 test("the analyst evidence gate verifies EVERY quote-anchored ref, not one status pair", () => {
-  const gates = read("skills/orc/references/analyst-gates.md");
+  const gates = read("skills/_shared/phases/analyst-gates.md");
   const spot = gates.slice(gates.indexOf("1. **Evidence spot-check:"), gates.indexOf("2. **Derivation lint:"));
   assert.match(spot, /EVERY quote-anchored ref/, "coverage is status-independent");
   // The old restriction must not survive as the operative rule.
@@ -459,7 +461,7 @@ test("the stacked-PR config defaults agree between the CLI and the documented co
 
 test("the ship gate is an OR of two thresholds, degrades to a regular PR, and never lives in a speed lane", () => {
   const gate = read("skills/orc/subskills/orc-pr/stack-gate.md");
-  const spine = read("skills/orc/SKILL.md");
+  const spine = read("skills/orc/references/phases/ship.md"); // W12: Phase 8's own file
   // The trigger is OR, not AND: a 40-file / 300-LoC change is just as unreviewable.
   assert.match(gate, /LoC >= stacked_pr_loc`? OR `?files >= stacked_pr_files/);
   // Both prerequisites degrade to one regular PR — neither is a failure.
@@ -525,12 +527,12 @@ test("the TDD disposition vocabulary is identical everywhere it is stated", () =
 
   // Every file that decides or enforces the disposition must know all five.
   for (const rel of [
-    "skills/orc/references/analyst-gates.md",
+    "skills/_shared/phases/analyst-gates.md",
     "skills/orc/subskills/orc-planner/SKILL.md",
     "agents/orc-planner-opus-5-med.md",
     "agents/orc-planner-mini-sonnet-5-high.md",
     "agents/orc-planner-mini-opus-5-med.md",
-    "skills/orc/SKILL.md",
+    "skills/orc/references/phases/planning.md", // W12: was the spine's Phase 1
     "skills/orc-mini/SKILL.md",
   ]) {
     const md = read(rel);
@@ -563,19 +565,19 @@ test("every place that can skip a test also states the risk safety floor", () =>
   // requirement must never ride on another test's coincidence.
   for (const rel of [
     "skills/orc/schemas/planning-output.md",
-    "skills/orc/references/analyst-gates.md",
+    "skills/_shared/phases/analyst-gates.md",
     "skills/orc/subskills/orc-planner/SKILL.md",
     "agents/orc-planner-opus-5-med.md",
     "agents/orc-planner-mini-sonnet-5-high.md",
     "agents/orc-planner-mini-opus-5-med.md",
-    "skills/orc/SKILL.md",
+    "skills/orc/references/phases/planning.md", // W12: was the spine's Phase 1
     "skills/orc-mini/SKILL.md",
   ]) {
     const md = read(rel);
     assert.match(md, /risk\[\]/, `${rel} names the risk facet in its skip rule`);
   }
   // The gate is the only party that ENFORCES it, so it must say so in full.
-  const gate = read("skills/orc/references/analyst-gates.md");
+  const gate = read("skills/_shared/phases/analyst-gates.md");
   assert.match(gate, /covered_by/, "the gate resolves the cited existing test");
   assert.match(gate.replace(/\s+/g, " "),
     /Auth, money, migration, security, concurrency and data-integrity/i,
@@ -588,8 +590,10 @@ test("the monolithic Wave-0 red proof is gone from every lane that had one", () 
   // dependency the planner now emits.
   for (const rel of [
     "skills/orc/SKILL.md",
+    "skills/orc/references/phases/execution.md", // W12
+    "skills/orc/references/phases/planning.md", // W12
     "skills/orc/schemas/planning-output.md",
-    "skills/orc/references/wave-grouping.md",
+    "skills/_shared/phases/wave-grouping.md",
     "skills/orc/subskills/orc-planner/SKILL.md",
     "skills/orc/subskills/orc-execution/core.md",
     "skills/orc-diy/references/blocks/execution.md",
@@ -599,7 +603,7 @@ test("the monolithic Wave-0 red proof is gone from every lane that had one", () 
     assert.doesNotMatch(md, /Wave-0-materialized/, `${rel} no longer refers to Wave-0 materialization`);
   }
   // …and the replacement is stated where the waves are actually computed.
-  const waves = read("skills/orc/references/wave-grouping.md");
+  const waves = read("skills/_shared/phases/wave-grouping.md");
   assert.match(waves, /depends_on/, "the ordering guarantee is the dependency, not a special wave");
   assert.match(waves, /share a wave/, "independent red proofs are allowed to parallelize");
 });
@@ -610,15 +614,15 @@ test("the freshness tier is read from the CLI probe, never hand-computed", () =>
   // A model-computed tier is one that gets skipped under load or measured from
   // the wrong anchor — the failure this release fixed on the CLI side.
   for (const rel of [
-    "skills/orc/references/wiki-consult.md",
+    "skills/_shared/phases/wiki-consult.md",
     "skills/_shared/detecting-artifacts.md",
     "skills/orc-wiki/references/staleness.md",
-    "skills/orc/SKILL.md",
+    "skills/orc/references/phases/planning.md", // W12: was the spine's Phase 1
   ]) {
     const md = read(rel);
     assert.match(md, /orc wiki status/, `${rel} names the probe`);
   }
-  const consult = read("skills/orc/references/wiki-consult.md");
+  const consult = read("skills/_shared/phases/wiki-consult.md");
   assert.match(consult, /never/i, "the consult forbids the hand-computed path");
   assert.doesNotMatch(
     consult,
@@ -628,7 +632,7 @@ test("the freshness tier is read from the CLI probe, never hand-computed", () =>
 });
 
 test("wiki use is attested per dispatch, not assumed from the Phase-1 line", () => {
-  const consult = read("skills/orc/references/wiki-consult.md");
+  const consult = read("skills/_shared/phases/wiki-consult.md");
   assert.match(consult, /wiki_used/, "the consult names the return field");
   assert.match(consult, /DISPATCH/, "attribution rides the dispatch line");
 
@@ -740,7 +744,7 @@ test("the recovery token is the SIXTH member of its family, and it lives in ONE 
 
 test("every lane that dispatches foreign points at reconcile FIRST — one sentence, no forked prose", () => {
   for (const f of [
-    "skills/orc/SKILL.md",
+    "skills/orc/references/phases/execution.md", // W12: was the spine's Phase 3
     "skills/orc-mini/SKILL.md",
     "skills/orc-fast/SKILL.md",
     "skills/orc-diy/references/blocks/extra.md",

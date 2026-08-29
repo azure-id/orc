@@ -318,6 +318,32 @@ const required = [
   "templates/skills/_shared/phases/trace.md",
   "templates/skills/_shared/phases/preflight.md",
   "templates/skills/_shared/phases/stop-resume.md",
+  // v1.0.0 W12 — the seven files that were already SHARED while living in one
+  // lane's private `references/`. Their consumers are measured, not believed:
+  // the C.6 lint asserts every declared reader really points at the file.
+  "templates/skills/_shared/phases/intake.md",
+  "templates/skills/_shared/phases/plan-handoff.md",
+  "templates/skills/_shared/phases/wave-grouping.md",
+  "templates/skills/_shared/phases/analyst-gates.md",
+  "templates/skills/_shared/phases/wiki-consult.md",
+  "templates/skills/_shared/phases/security-checklist.md",
+  "templates/skills/_shared/phases/house-rules.md",
+  // v1.0.0 W12 — /orc's twelve phase bodies. The spine is loaded IN FULL on
+  // activation and these are loaded when their phase fires; a publish missing
+  // one leaves the manifest naming a file that is not there, which is a phase
+  // that silently does nothing.
+  "templates/skills/orc/references/phases/intake.md",
+  "templates/skills/orc/references/phases/planning.md",
+  "templates/skills/orc/references/phases/scoring.md",
+  "templates/skills/orc/references/phases/execution.md",
+  "templates/skills/orc/references/phases/integration.md",
+  "templates/skills/orc/references/phases/review.md",
+  "templates/skills/orc/references/phases/security.md",
+  "templates/skills/orc/references/phases/verify.md",
+  "templates/skills/orc/references/phases/testgen.md",
+  "templates/skills/orc/references/phases/mock-example.md",
+  "templates/skills/orc/references/phases/summary.md",
+  "templates/skills/orc/references/phases/ship.md",
   "templates/commands/orc-grill.md",
   "templates/commands/orc-route.md",
   "templates/commands/orc-explain.md",

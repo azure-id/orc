@@ -1,4 +1,14 @@
-# Reference — Wave Grouping & Conflict Graph
+# Phase — Wave grouping   (id: `wave-grouping`)
+
+> **Library file.** Canonical since v1.0.0 W12; it was under the `orc` skill's
+> private `references/`, and another lane already reached across into it. Read
+> by `orc`, `orc-diy`. Layers declared: `core` only — single-layer because the
+> conflict graph is arithmetic, and a lane that groups waves at all groups
+> them this way. `orc lane phases <lane> --json` names the file and the layers
+> to read.
+
+<!-- orc:layer core -->
+## Reference — Wave Grouping & Conflict Graph
 
 Turn the tagged task list into conflict-free waves. Load during Phase 3.
 
@@ -119,3 +129,5 @@ after every task returns, then diff the two:
   `git status` is the AUDIT — same instruction → contract → attestation →
   spot-check pattern the plan applies to `grounding[]`.
 - Canonical cross-lane wording: `_shared/return-validation.md` §6.
+
+<!-- /orc:layer -->

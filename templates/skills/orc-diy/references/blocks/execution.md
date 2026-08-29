@@ -7,7 +7,7 @@ validated against the contract) with these compiled overrides:
 
 - Max parallel tasks per wave: **{{max_wave_tasks}}** (hard cap; overflow →
   next wave; wave grouping per
-  `.claude/skills/orc/references/wave-grouping.md`).
+  `.claude/skills/_shared/phases/wave-grouping.md`).
 - Stop-and-continue pause every **{{batch_pause_every}}** waves (checkpoint
   confirmed BEFORE announcing any stop; resume per
   `.claude/skills/_shared/phases/stop-resume.md`).

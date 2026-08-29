@@ -1,4 +1,15 @@
-# Reference — Phase 0 Intake
+# Phase — Intake   (id: `intake`)
+
+> **Library file.** Canonical since v1.0.0 W12; it was under the `orc` skill's
+> private `references/`, and other lanes already reached across into it. Read
+> by `orc`, `orc-mini`, `orc-diy`, `orc-challenge`. Layers: `core` and `full`
+> — `core` is the intake procedure every lane runs; `full` is /orc's own Phase
+> 0, which adds the analyst branch, the poly-spec split-and-STOP and the run-
+> folder open. `orc lane phases <lane> --json` names the file and the layers
+> to read.
+
+<!-- orc:layer core -->
+## Reference — Phase 0 Intake
 
 Goal: extract just enough that the intent-spec can't be misread, then get out of
 the way. A wrong understanding parallelized is worse than a wrong understanding
@@ -7,7 +18,7 @@ done serially. Never interrogate; never ask what the repo can tell you.
 **Before anything — plan-input trigger (see `plan-handoff.md`):** if the run
 input IS a plan (pasted planning-output, a `plan-{name}.md` path, or an
 `orc/planner/{name}/` checkpoint), do NOT run intake — switch to the plan-handoff
-entry contract (`references/plan-handoff.md`): bootstrap the trace, schema-
+entry contract (`plan-handoff.md`): bootstrap the trace, schema-
 validate, apply the `plan_head` staleness valve, re-run the full Phase 1 exit
 gate in this session, relay `open_questions[]`, then continue at Phase 2. A plain
 prose request is not a plan — run intake normally.
@@ -118,3 +129,5 @@ showing unless the user objects.
 When resuming a run in a fresh session, show a ONE-LINE reconfirm of the
 intent-spec's scope ("Resuming: <one-line scope>. Still correct?") before
 continuing. Catches requirements that changed between sessions, costs one line.
+
+<!-- /orc:layer -->

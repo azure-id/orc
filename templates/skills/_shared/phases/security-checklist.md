@@ -1,4 +1,13 @@
-# Reference — Security-Pass Checklist (Phase 5.5, opt-in)
+# Phase — Security pass   (id: `security-checklist`)
+
+> **Library file.** Canonical since v1.0.0 W12; it was under the `orc` skill's
+> private `references/`, and another lane already reached across into it. Read
+> by `orc`, `orc-diy`. Layers declared: `core` only — single-layer because an
+> opt-in pass either runs its checklist or does not run. `orc lane phases
+> <lane> --json` names the file and the layers to read.
+
+<!-- orc:layer core -->
+## Reference — Security-Pass Checklist (Phase 5.5, opt-in)
 
 Loaded ONLY when the Phase 5.5 security pass fires (config `security_review`
 `on`/`ask` + a task scored ≥ 70 in the run). Passed to the reviewer as
@@ -37,3 +46,5 @@ a hardening gap on a touched path = P1 · defense-in-depth suggestions = P2/P3.
     surfaced to callers by the new error handling.
 12. **Crypto misuse** — home-rolled hashing/encryption, weak algorithms (MD5,
     SHA1 for passwords), missing salts, static IVs in the diff.
+
+<!-- /orc:layer -->

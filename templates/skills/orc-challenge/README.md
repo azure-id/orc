@@ -135,7 +135,7 @@ one.
 
 ## Reading order for a new maintainer
 
-`references/intake.md` (it defines what every later file grades against) →
+`../_shared/phases/intake.md` (it defines what every later file grades against) →
 `council.md` → `sealed-slice.md` → `rubric.md` → `conservation.md` →
 `cycle-state.md` → `fix-brief.md`. Then `examples/tsd-two-iterations.md` for the
 whole thing end to end, and `examples/council-full-roster.md` for a run where

@@ -112,7 +112,13 @@ test("extra: a REFUSE area never goes foreign, and it holds in `warn` too", () =
 test("extra: the cited-risk hold-back is the other one, and it is config-named", () => {
   const c = canon();
   assert.match(c, /extra_risk_tasks/, "the risk gate names its key");
-  assert.match(read("orc", "SKILL.md"), /extra_risk_tasks|cited risk/i, "the spine carries the trigger");
+  // v1.0.0 W12: scoring left the spine for its phase file, and the hold-back
+  // is a scoring-time decision, so it went with it.
+  assert.match(
+    read("orc", "references", "phases", "scoring.md"),
+    /extra_risk_tasks|cited risk/i,
+    "the scoring phase carries the trigger"
+  );
 });
 
 // A lane that is INERT has to SAY it is inert. A config that silently answered

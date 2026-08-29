@@ -110,11 +110,13 @@ X4  close                one end-of-run trace packet
 
 **This lane deliberately traces.** It is a lane the protocol declares, so it must be
 a lane something OPENS (v0.42.0) — otherwise every counting tool reports it as a
-permanent zero. Write `log_dir/.current` = `run-export-<slug>-<DDMMYY>-<HHMMSS>.txt`
-AND `touch the trace file` in the SAME step. Lane name `export`. **Single-dispatch:
-exactly ONE end-of-run packet** to `orc-trace-writer-haiku-4-5` before `.current` is
-deleted. A run that ends with
-`zero new trace lines is a protocol violation`.
+permanent zero. Read `../_shared/phases/trace.md` (`core`, at run start; `orc lane
+phases` names the file and the layers). Lane token `export`, tier
+**Single-dispatch** — exactly ONE end-of-run packet, dispatched solo before
+`.current` is deleted. At run start write `log_dir/.current` =
+`run-export-<slug>-<DDMMYY>-<HHMMSS>.txt` AND `touch the trace file` of that name
+in the SAME step. Nothing else about the protocol is restated here; a run that ends
+with `zero new trace lines is a protocol violation`.
 
 Zero new agents. Zero new config keys.
 

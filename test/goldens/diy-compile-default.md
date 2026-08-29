@@ -122,7 +122,7 @@ wiki; judged by final task/file counts at ship time).
 
 Route doc intake exactly as the full lane does: a document present triggers
 the System Analyst per the intake rules in
-`.claude/skills/orc/references/intake.md`; otherwise proceed to planning.
+`.claude/skills/_shared/phases/intake.md`; otherwise proceed to planning.
 
 ## Phase: Planning
 
@@ -179,7 +179,7 @@ validated against the contract) with these compiled overrides:
 
 - Max parallel tasks per wave: **3** (hard cap; overflow →
   next wave; wave grouping per
-  `.claude/skills/orc/references/wave-grouping.md`).
+  `.claude/skills/_shared/phases/wave-grouping.md`).
 - Stop-and-continue pause every **2** waves (checkpoint
   confirmed BEFORE announcing any stop; resume per
   `.claude/skills/_shared/phases/stop-resume.md`).

@@ -194,7 +194,7 @@ Rules:
 
 Put in the slice: the change sketch, the Q2 answers, 2–3 acceptance bullets,
 the wiki **paths**, the cached pattern (whole text), the `house_rules` card
-(`../orc/references/house-rules.md`, whole text), PR comments with their
+(`../_shared/phases/house-rules.md`, whole text), PR comments with their
 `file:line`, and a short-return rule (fields only, no long prose).
 
 For an **ad-hoc** dispatch, also tell the agent to report its own

@@ -107,7 +107,7 @@ themselves are this lane's own and stay here.
 ## C1 — Intake (ONE round, ASK — never guess)
 
 Full field list, the round format and the "I don't know yet" exit:
-`references/intake.md`. It ends by running `orc challenge init`, which **freezes
+`../_shared/phases/intake.md`. It ends by running `orc challenge init`, which **freezes
 `goals.md`, `template.md` and the COUNCIL ROSTER**.
 
 **Question 7 is the P0 council ask**, rendered from `orc challenge roles --kind

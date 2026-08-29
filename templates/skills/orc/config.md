@@ -104,7 +104,7 @@ value participates in, and each has exactly one canonical copy.
 
 | Subsystem | The rule, in one line | Canonical prose |
 |---|---|---|
-| Wave grouping | `max_wave_tasks` is a hard cap, never a target | `references/wave-grouping.md` |
+| Wave grouping | `max_wave_tasks` is a hard cap, never a target | `../_shared/phases/wave-grouping.md` |
 | Batch pause | `batch_pause_every` is a DETERMINISTIC hard gate, not a cadence hint: after wave W, `W % N == 0` with a later wave remaining forces the stop sequence. Computed and confirmed at Phase 2 intake, persisted as `pause_schedule` so a resume enforces it too | `../_shared/phases/stop-resume.md` |
 | Run budget | `run_budget_dispatches` turns the Phase-1 forecast into a hard stop BEFORE wave 1 and emits `` `GATE budget stop\|pass ``. At `0` no line is emitted at all. The estimate is a FLOOR — repairs push the real count up, never down | `references/preflight-report.md` |
 | Analysis depth | `default_analysis_depth` only presets the standard/deep gate; the run still confirms, and deep never auto-escalates without consent. `max_scouts` caps the parallel scouts the same way a wave is capped | `../orc-analyze/SKILL.md` |
@@ -113,7 +113,7 @@ value participates in, and each has exactly one canonical copy.
 | Mock example | `mock_example` gates the post-verify runnable example under `mock-examples/`, which is NEVER committed; on drift, `drift-recovery.md` (`DRIFT-FROM`) is capped at 2 loops | `../_shared/drift-recovery.md` |
 | Code patterns | `pattern_findings` gates the codifier on an FE/BE cache MISS; a cache HIT is used silently regardless. `orc_wiki_pattern_findings` pre-warms the cache during a wiki scan | `../orc-pattern/SKILL.md` |
 | Repair memory | `gotchas` / `gotchas_max` govern `.claude/orc/gotchas.md` — recorded only on a red → green repair, injected scope-matched, never unfiltered | `../_shared/gotchas.md` |
-| Security | `security_review` gates the opt-in Phase 5.5, and can only fire on a run with a task scored ≥ 70 | `references/security-checklist.md` |
+| Security | `security_review` gates the opt-in Phase 5.5, and can only fire on a run with a task scored ≥ 70 | `../_shared/phases/security-checklist.md` |
 | Wiki freshness | `wiki_fresh_max` / `wiki_aging_max` set the tier edges. The tier is COVERAGE-RELATIVE and computed on read, and `orc wiki status` is the only thing that computes it — never hand-run a `git rev-list` against `wiki-meta.json`. A STRUCTURAL blind spot degrades ONE step and never past `AGING` | `../orc-wiki/references/staleness.md` |
 | Wiki refresh | `wiki_refresh_ask_tasks` / `wiki_refresh_ask_files` set the big-run post-ship ask, judged by FINAL counts. `orc wiki impact` decides delta vs full, and `wiki_delta_full_threshold` is when a FULL refresh is recommended — never silent | `../orc-wiki/references/staleness.md` |
 | Crosslink | `crosslink_fresh_days` / `crosslink_aging_days` are DAY-based (two repos share no commit axis); the effective tier is `min(provider-wiki tier, snapshot age)`, advisory only — a stale crosslink warns, never blocks | `../orc-wiki/references/crosslink.md` |

@@ -374,10 +374,22 @@ test("lane phases: --json is not a summary — every field the human branch prin
     ]);
     assert.strictEqual(l.trace_tier, "Build lanes");
     assert.strictEqual(l.trace_token, "orc");
-    // own_phases is NOT an empty array: this lane's own pipeline is real and
-    // still declared in its spine. Claiming [] would be claiming it has none.
-    assert.strictEqual(l.own_phases, null);
-    assert.strictEqual(l.own_phases_status, "in-spine");
+    // own_phases is never an empty ARRAY: a lane whose own pipeline is still in
+    // its spine reports `null` + `in-spine`, because `[]` would claim it has
+    // none. /orc's twelve left the spine at W12, so it reports them.
+    assert.strictEqual(l.own_phases_status, "declared");
+    assert.ok(Array.isArray(l.own_phases) && l.own_phases.length === 12, "/orc declares its twelve phases");
+    const oo = l.own_phases.map((p) => p.ord);
+    assert.deepStrictEqual(oo, [...oo].sort((a, b) => a - b), "own phases are in run order");
+    for (const p of l.own_phases) {
+      assert.deepStrictEqual(Object.keys(p), ["ord", "id", "file", "layers", "trace_verbs"]);
+      assert.ok(p.file.startsWith("orc/"), p.id + " stays in its own lane");
+      assert.ok(!/:\d/.test(p.file), "a manifest never carries a line number");
+    }
+    // A lane that has NOT moved its pipeline still says so honestly.
+    const mini = JSON.parse(cli(["lane", "phases", "orc-mini", "--json", "--dir", root]).stdout).lanes[0];
+    assert.strictEqual(mini.own_phases, null);
+    assert.strictEqual(mini.own_phases_status, "in-spine");
     for (const p of l.phases) {
       assert.deepStrictEqual(Object.keys(p), [
         "ord", "id", "file", "layers", "read", "when", "optional_when", "calls",
@@ -409,6 +421,21 @@ test("lane phases: every manifested file is INSTALLED and carries the layers it 
   try {
     const j = JSON.parse(cli(["lane", "phases", "--all", "--json", "--dir", root]).stdout);
     const seen = new Set();
+    // A lane's OWN phases are installed too — /orc's spine stopped carrying the
+    // procedure at W12, so a missing file here is a phase that silently does
+    // nothing, with no error message anywhere.
+    for (const l of j.lanes)
+      for (const p of l.own_phases || []) {
+        const abs = path.join(claudeDir, "skills", p.file);
+        assert.ok(fs.existsSync(abs), `${p.file} is INSTALLED, not just in the repo`);
+        assert.ok(p.file.startsWith(l.lane + "/"), `${p.file} stays in ${l.lane}`);
+        const body = fs.readFileSync(abs, "utf8");
+        for (const layer of p.layers)
+          assert.ok(
+            body.includes(`<!-- orc:layer ${layer} -->`),
+            `${p.file} carries the \`${layer}\` layer ${l.lane} is told to read`
+          );
+      }
     for (const l of j.lanes)
       for (const p of l.phases) {
         const abs = path.join(claudeDir, "skills", p.file);

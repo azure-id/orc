@@ -1,4 +1,14 @@
-# Reference — Wiki Consult (shared by orc / orc-mini / orc-fast)
+# Phase — Wiki consult   (id: `wiki-consult`)
+
+> **Library file.** Canonical since v1.0.0 W12; it was under the `orc` skill's
+> private `references/`, and other lanes already reached across into it. Read
+> by `orc`, `orc-mini`, `orc-fast`, `orc-wiki`. Layers declared: `core` only —
+> single-layer because the precedence ladder (`code > fresh wiki > stale wiki
+> > model priors`) does not bend for a faster lane. `orc lane phases <lane>
+> --json` names the file and the layers to read.
+
+<!-- orc:layer core -->
+## Reference — Wiki Consult (shared by orc / orc-mini / orc-fast)
 
 The ONE canonical description of how a lane grounds itself in the project wiki.
 Load at the consult point (full/mini: Phase 1 planning; fast: F0 gate + F2
@@ -175,3 +185,5 @@ After a run that changed code, flag (do NOT re-scan) any wiki docs whose
 covered files this run changed and point the user at `/orc-wiki`. Mini/fast
 keep this passive note only; the full/ultra post-ship refresh ASK is defined in
 `../../orc-wiki/references/staleness.md`.
+
+<!-- /orc:layer -->

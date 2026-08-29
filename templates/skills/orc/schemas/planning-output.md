@@ -20,7 +20,7 @@ run:
   created_at: timestamp    # DDMMYY HH:MM:SS.mmm
   plan_head: string        # HEAD sha at plan time (mirror of the requirement-
                            #   spec's git_head). The plan-handoff entry contract
-                           #   (references/plan-handoff.md) compares it to the
+                           #   (../../_shared/phases/plan-handoff.md) compares it to the
                            #   executing session's HEAD: a mismatch (or an absent
                            #   field, a pre-v0.31.0 plan) makes the Phase 1 exit
                            #   gate grounding spot-check COMPULSORY.

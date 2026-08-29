@@ -47,7 +47,7 @@ A report can pass the up-front gate and still come back mostly unanchored. That
 is this gate firing after the fact, and it deserves the same offer rather than a
 twenty-question relay.
 
-**Use numbers already in hand — add no probe.** `references/analyst-gates.md`
+**Use numbers already in hand — add no probe.** `../../_shared/phases/analyst-gates.md`
 already recomputes coverage on return; compare the count of rows tagged
 `ASSUMPTION`/`UNVERIFIED` against the total requirement rows. When the tagged
 rows are the majority, offer:

@@ -6,7 +6,7 @@ Use the **orc-route** skill. Zero agents, nothing is built.
 
 **It routes a PLAN, and only a plan** — pasted ORC planning-output, a
 `plan-<name>.md` path, or a saved `orc/planner/<name>/` checkpoint (the same
-definition `references/plan-handoff.md` already uses). A plan carries real
+definition `skills/_shared/phases/plan-handoff.md` already uses). A plan carries real
 numbers: tasks, files per task, dependencies, facets, scores. Routing from those
 is arithmetic; routing from a sentence is guessing, so a request in words gets a
 refusal and a pointer to `/orc-plan`, not a guess.
