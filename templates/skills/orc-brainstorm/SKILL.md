@@ -113,6 +113,10 @@ and the lane has NARROWED the space it exists to widen. Two rules ride with it:
    `knowledge probes: n/a — non-code topic` — and move on. A stale-wiki warning on
    "what should we call the product" is noise that teaches users to skip preflight.
 
+The SHAPE of these steps — the order, and the four rules that make it worth
+having — is `../_shared/phases/preflight.md` (`core`). The probes
+themselves are this lane's own and stay here.
+
 ## B1 — Frame (the only phase that can hand off before generating)
 
 Establish four things, in the user's own words: **the problem** (what is wrong or
@@ -299,21 +303,23 @@ answers a round with "I do not even know what the options are".
 
 ---
 
-## Behavior trace (always on — same as every lane)
+## Behavior trace (always on)
 
-Follow `../orc/references/trace-protocol.md`. Lane name `brainstorm`. This is a
-**single-dispatch** lane: **exactly ONE end-of-run packet**, dispatched solo to
-`orc-trace-writer-haiku-4-5` after the exit choice and BEFORE you delete
-`log_dir/.current`. It carries `run_meta`, the phase-by-phase event list
-(candidates generated per lens, directions formed, the pick), the tagged decisions
-as `decisions` (the WHY layer), any suspend/resume, the exit taken, and `FINISH`.
-A run that ends with `zero new trace lines is a protocol violation`.
+`../_shared/phases/trace.md` (`core`, at run start; `orc lane phases` names
+the file and the layers). Lane token `brainstorm`, tier **Single-dispatch** —
+exactly ONE end-of-run packet, dispatched solo after the exit choice.
+Nothing else about the protocol is restated here; a phase that ends with
+`zero new trace lines is a protocol violation`.
 
-Read-only recon is an **ad-hoc dispatch by model + effort** (the `/orc-quick` and
-`/orc-grill` precedent), never a pinned agent — so no agent ships for this lane
-and the hook writes no `SPAWN`/`RETURN` for it. Announce it on one line before it
-goes out, emit `DISPATCH … adhoc=true` and `VERIFY` yourself, and the agent
-reports its own `actual_model` / `actual_effort`.
+That packet carries `run_meta`, the phase-by-phase events (candidates per
+lens, directions formed, the pick), the tagged decisions as `decisions`, any
+suspend/resume, and the exit taken.
+
+Read-only recon is an **ad-hoc dispatch by model + effort** (the `/orc-quick`
+and `/orc-grill` precedent), never a pinned agent — so no agent ships for this
+lane and the hook writes no `SPAWN`/`RETURN` for it. Announce it on one line
+before it goes out, emit `DISPATCH … adhoc=true` and `VERIFY` yourself, and the
+agent reports its own `actual_model` / `actual_effort`.
 
 ## How this lane fails — and the rule that prevents each
 

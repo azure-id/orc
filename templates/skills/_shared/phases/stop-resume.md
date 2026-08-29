@@ -1,4 +1,11 @@
-# Reference — Stop Sequence, Usage Report, and Fresh-Session Resume
+# Phase — Stop, usage report, resume   (id: `stop-resume`)
+
+> **Library file.** Canonical since v1.0.0 W11; it was
+> the `orc` skill's own `stop-and-resume` reference. Layers declared: `core` only — the stop
+> sequence is identical in every lane that stops, and the lane-specific half
+> (which moments are MANDATORY stops) is already a per-lane rule in the spine.
+
+<!-- orc:layer core -->
 
 The token-saving heart of ORC. Load whenever a stop fires (batch
 boundary, token pressure, phase transition worth guarding, or user request).
@@ -158,3 +165,5 @@ the slug in front of them.
    review pass.
 5. Re-attach the decision log, regenerate the digest, continue from the
    checkpoint's phase.
+
+<!-- /orc:layer -->

@@ -1,4 +1,14 @@
-# Reference — Behavior-Trace Protocol
+# Phase — Behavior trace   (id: `trace`)
+
+> **Library file.** Canonical since v1.0.0 W11; it was
+> the `orc` skill's own `trace-protocol` reference, and 26 lanes reached
+> across into one lane's private folder to read it. Layers declared: `core` only — the protocol
+> is identical in every lane that traces, and this phase's per-lane variation is
+> the TIER TABLE below, which is DATA, not a layer. `orc lane phases <lane>
+> --json` names the file and the layers to read; `README.md` in this folder
+> holds the closed layer set.
+
+<!-- orc:layer core -->
 
 How ORC records its own behavior for later review. **Behavior-trace logging is
 PERMANENT (always on) — there is no config toggle.** Every ORC run traces.
@@ -88,7 +98,7 @@ decisions: >              # free text — the WHY layer
 | Multi-dispatch | `orc-wiki`, `orc-pr-driver` (lane `prdriver`) | orc-wiki: one per scan-batch boundary (the points that already run the registration sync / offer the pause) + the end-of-run packet. orc-pr-driver: one per LAYER boundary (each layer's green gate closes) + the end-of-run packet |
 | Composed | `orc-diy` | one packet per ENABLED phase group, **minimum 2** — the flow shape is user-composed, so the count is too (the compiled flow carries this block automatically) |
 | Iterative | `orc-quick`, `orc-challenge` (lane `challenge`), `orc-doc` (lane `doc`) | **one packet per completed numbered entry** + the end-of-run `FINISH` packet — the lane loops on user requests, so the count follows entries, not phases. For `orc-challenge` the unit is one completed ITERATION (C2→C8), and the packet goes out at the stop; on a PASS it is the `FINISH` packet. **Several trace files for one cycle is CORRECT** — several sessions ran, and `orc stats` counts several. For `orc-doc` the unit is one completed WAVE, and the packet is the LAST step of the stop sequence |
-| Single-dispatch | `orc-claude`, `orc-plan`, `orc-analyze` (+ mini), `orc-pattern`, `orc-verify`, `orc-learn`, `orc-poly`, `orc-pr-setup` (lane `prsetup`), `orc-grill`, `orc-route`, `orc-brainstorm` (lane `brainstorm`), `orc-pact` (lane `pact`), `orc-boundary` (lane `boundary`), `orc-handoff` (lane `handoff`), `orc-budget` (lane `budget`), `orc-aftermath` (lane `aftermath`), `orc-export` (lane `export`) | **exactly ONE mandatory end-of-run packet** |
+| Single-dispatch | `orc-claude`, `orc-plan`, `orc-analyze` + `orc-analyze-mini` (both lane token `analyze`), `orc-pattern`, `orc-verify`, `orc-learn`, `orc-poly`, `orc-pr-setup` (lane `prsetup`), `orc-grill`, `orc-route`, `orc-brainstorm` (lane `brainstorm`), `orc-pact` (lane `pact`), `orc-boundary` (lane `boundary`), `orc-handoff` (lane `handoff`), `orc-budget` (lane `budget`), `orc-aftermath` (lane `aftermath`), `orc-export` (lane `export`) | **exactly ONE mandatory end-of-run packet** |
 
 **`context-combiner` is NOT a lane — it is a PHASE inside the analyze run.** It
 has no slash command and no entry point of its own: `orc-analyze` Phase F
@@ -312,3 +322,5 @@ orc's plus the U0/judge ones.
 - Append-only; one whole block per append (never edit prior lines).
 - The trace records behavior faithfully — including the ugly bits (over-asking,
   downgrades, failed waves). That honesty is the whole value.
+
+<!-- /orc:layer -->

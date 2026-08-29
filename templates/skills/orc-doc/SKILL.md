@@ -104,6 +104,10 @@ that recomputes one of these has forked it.**
    rules live. Never compute that line yourself.
 5. If a slug was given, go straight to **Resuming** below.
 
+The SHAPE of these steps — the order, and the four rules that make it worth
+having — is `../_shared/phases/preflight.md` (`core`). The probes
+themselves are this lane's own and stay here.
+
 ## D1 — The context gate (P0 — the only blocking one)
 
 `references/gates.md`. One question, and **nothing is created until it is
@@ -399,13 +403,16 @@ is the most expensive possible way to do nothing.
 
 ## Behavior trace (always on)
 
-`../orc/references/trace-protocol.md`. Lane name `doc`. **Iterative tier: ONE
-packet per completed cycle — and a completed WAVE is a completed cycle.** So the
-packet is dispatched at the end of every wave (last in the stop sequence) and at
-D9, not at D9 only: a run that dies at wave 3 must not leave a trace with
-nothing but the hook's `SPAWN`/`RETURN` lines. Verb `DOC` with
-`cycle=N sections=K/M wave=K/N`. A phase that ends with
+`../_shared/phases/trace.md` (`core`, at run start; `orc lane phases` names
+the file and the layers). Lane token `doc`, tier **Iterative** —
+ONE packet per completed cycle — **and a completed WAVE is a completed
+cycle**, so the packet goes out at the end of every wave (last in the stop
+sequence) and at D9, not at D9 only.
+Nothing else about the protocol is restated here; a phase that ends with
 `zero new trace lines is a protocol violation`.
+
+A run that dies at wave 3 must not leave a trace holding nothing but the
+hook's `SPAWN`/`RETURN` lines. Verb `DOC` with `cycle=N sections=K/M wave=K/N`.
 
 ## How this lane fails — and the rule that prevents each
 

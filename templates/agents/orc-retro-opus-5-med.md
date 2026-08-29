@@ -17,7 +17,7 @@ never spawn subagents.
 
 ## Input
 - trace_files[] — the `.txt` paths to mine
-- verb_reference — path to trace-protocol.md (the CLOSED verb set; parse ONLY
+- verb_reference — path to `_shared/phases/trace.md` (the CLOSED verb set; parse ONLY
   these verbs, skip unknown lines rather than guessing)
 
 ## Procedure

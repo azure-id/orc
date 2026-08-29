@@ -162,6 +162,10 @@ staged.
 3. **Probe.** `orc handoff surfaces --json` (exit 1 = no map yet, which is normal
    on a first run). Use `../_shared/detecting-artifacts.md`, never a raw `find`.
 
+The SHAPE of these steps — the order, and the four rules that make it worth
+having — is `../_shared/phases/preflight.md` (`core`). The probes
+themselves are this lane's own and stay here.
+
 ## Where this shows up in `/orc`
 
 At ship, if any changed file was a GREEN surface:
@@ -174,15 +178,11 @@ exists.
 
 ## Behavior trace (always on)
 
-Follow `../orc/references/trace-protocol.md`. Lane name `handoff`.
-**Single-dispatch lane: exactly ONE end-of-run packet** to
-`orc-trace-writer-haiku-4-5`, after the last entry and BEFORE `.current` is
-deleted. It carries `run_meta`, the events (mapped, confirmed, edited, checked) and
-the confirmations as `decisions`. A run that ends with
+`../_shared/phases/trace.md` (`core`, at run start; `orc lane phases` names
+the file and the layers). Lane token `handoff`, tier **Single-dispatch** —
+exactly ONE end-of-run packet, dispatched solo before `.current` is deleted.
+Nothing else about the protocol is restated here; a phase that ends with
 `zero new trace lines is a protocol violation`.
-
-Any reading it needs is an **ad-hoc dispatch by model + effort**, never a pinned
-agent — **zero new agents ship for this lane**. Announce it in one line first.
 
 ## How this lane fails — and the rule that stops it
 

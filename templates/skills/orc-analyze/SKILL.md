@@ -77,21 +77,18 @@ the user meant.
    gate) — R# ids, statuses, and context anchors must match exactly.
 7. Usage: report dispatch + remind the user to run `/usage`. Never invoke it.
 
-## Behavior trace (PERMANENT — every ORC entry point traces; always on)
+## Behavior trace (always on)
 
-When run standalone (`/orc-analyze`, not inside an /orc run that already owns
-a trace — never open a second one), follow
-`../orc/references/trace-protocol.md`: write `log_dir/.current` =
-`run-analyze-<slug>-<DDMMYY>-<HHMMSS>.txt` BEFORE the first dispatch. Narration
-is **dispatched, never remembered** — as a single-dispatch lane you owe exactly
-ONE end-of-run packet (that reference's canonical section): collect every event
-with its REAL timestamp (each phase A→F `PHASE` line, `DISPATCH`/`VERIFY` per
-analyst/scout spawn, `GATE` at the evidence/derivation gates, `FINISH`) plus
-`decisions` (the WHY, incl. the user's answers verbatim), dispatch the trace
-writer SOLO after the analyst return validates, and delete `.current` only once
-it returns. A run ending with
-zero new trace lines is a protocol violation. At run start write `.current` =
-`run-analyze-<slug>-….txt` AND `touch the trace file` of that name in ONE step.
+`../_shared/phases/trace.md` (`core`, at run start; `orc lane phases` names
+the file and the layers). Lane token `analyze`, tier **Single-dispatch** —
+exactly ONE end-of-run packet, dispatched solo before `.current` is deleted.
+At run start write `log_dir/.current` = `run-analyze-<slug>-<DDMMYY>-<HHMMSS>.txt` AND
+`touch the trace file` of that name in the SAME step.
+Nothing else about the protocol is restated here; a phase that ends with
+`zero new trace lines is a protocol violation`.
+
+`context-combiner` is a PHASE of this run, not a lane: its `DISPATCH`/`RETURN`,
+its Phase D verdicts and its conservation-gate result fold into THIS packet.
 
 ## Phase A — Ingest & detect source mode
 

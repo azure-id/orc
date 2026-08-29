@@ -308,7 +308,7 @@ test("trace: context-combiner opens its own PHASE-EDGE (combine), not analysis",
 test("payload: every GATE name and lane token used in the payload is a declared member", () => {
   const proto = fs
     .readFileSync(
-      path.join(__dirname, "..", "templates", "skills", "orc", "references", "trace-protocol.md"),
+      path.join(__dirname, "..", "templates", "skills", "_shared", "phases", "trace.md"),
       "utf8"
     )
     .replace(/\r\n/g, "\n");
@@ -332,10 +332,10 @@ test("payload: every GATE name and lane token used in the payload is a declared 
   assert.ok(!/\bcombine\b/.test(laneRow[1]), "`combine` is a phase, not a lane");
 });
 
-test("payload: every lane in the trace-protocol enum is one some skill actually opens", () => {
+test("payload: every lane in the trace.md lane enum is one some skill actually opens", () => {
   const skillsRoot = path.join(__dirname, "..", "templates", "skills");
   const proto = fs
-    .readFileSync(path.join(skillsRoot, "orc", "references", "trace-protocol.md"), "utf8")
+    .readFileSync(path.join(skillsRoot, "_shared", "phases", "trace.md"), "utf8")
     .replace(/\r\n/g, "\n");
   const laneRow = proto.match(/lane: orc {2,}#([\s\S]*?)\n\S/);
   const declared = laneRow[1]
@@ -360,7 +360,7 @@ test("payload: every lane in the trace-protocol enum is one some skill actually 
   assert.deepStrictEqual(
     phantom,
     [],
-    `these lanes are declared in trace-protocol.md but no skill writes a run-<lane>-<slug> pointer for them: ${phantom.join(", ")}. ` +
+    `these lanes are declared in _shared/phases/trace.md but no skill writes a run-<lane>-<slug> pointer for them: ${phantom.join(", ")}. ` +
       "A lane nothing opens is counted as permanently zero by orc stats and /orc-retro."
   );
 });

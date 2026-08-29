@@ -49,7 +49,7 @@ fields). Then:
 
 The advisor runs once; it is never re-dispatched. Record `ADVISE` into the U0
 packet — ultra adds ONE writer packet for U0 and one per judge gate on top of
-orc's phase packets (`../references/trace-protocol.md`), so the advisory brief,
+orc's phase packets (`../../_shared/phases/trace.md`), so the advisory brief,
 the questions relayed, and each verdict round are narrated like any other phase.
 
 ## The three judgment gates (dispatch `orc-judge-opus-5-xhigh`)

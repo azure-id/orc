@@ -94,17 +94,15 @@ const CONTRACTS = [
       "skills/orc-judge/SKILL.md",
       "skills/orc-learn/SKILL.md",
       "skills/orc-learn/examples/learn-run-mock.md",
-      "skills/orc-mini/SKILL.md",
       "skills/orc-mini/examples/mini-run-mock.md",
       "skills/orc-quick/SKILL.md",
       "skills/orc-quick/references/dispatch-gate.md",
       "skills/orc-retro/SKILL.md",
       "skills/orc-retro/examples/retro-mock.md",
-      "skills/orc-wiki/SKILL.md",
       "skills/orc-wiki/references/extra.md",
       "skills/orc/README.md",
       "skills/orc/SKILL.md",
-      "skills/orc/references/trace-protocol.md",
+      "skills/_shared/phases/trace.md",
       "skills/orc/schemas/checkpoint.md",
       "skills/orc/subskills/orc-execution/SKILL.md",
       "skills/orc/subskills/orc-execution/core.md",
@@ -296,7 +294,7 @@ const CONTRACTS = [
     name: "EXTRA trace verb — substitution continuation (v0.50.0)",
     token: "EXTRA substitution",
     binFiles: ["bin/cli.js"],
-    files: ["skills/orc/references/trace-protocol.md"],
+    files: ["skills/_shared/phases/trace.md"],
   },
   {
     // The additive tail on SCORE and DISPATCH. One token, two sides: the
@@ -307,7 +305,7 @@ const CONTRACTS = [
       "hooks/orc-trace.js",
       "skills/_shared/extra-dispatch.md",
       "skills/orc/SKILL.md",
-      "skills/orc/references/trace-protocol.md",
+      "skills/_shared/phases/trace.md",
     ],
   },
   // ── v0.55.0 — ROLE SLOTS. The non-scored half of routing ────────────────
@@ -336,7 +334,7 @@ const CONTRACTS = [
     name: "a slot dispatch's band is `slot:<slot>` (v0.55.0)",
     token: "slot:<slot>",
     binFiles: ["bin/cli.js"],
-    files: ["skills/_shared/extra-dispatch.md", "skills/orc/references/trace-protocol.md"],
+    files: ["skills/_shared/extra-dispatch.md", "skills/_shared/phases/trace.md"],
   },
   // ── v0.54.0 — RECOVERY. A failure is a POSITION, not a blank page ────────
   {
@@ -405,7 +403,7 @@ const CONTRACTS = [
     name: "the resume trace verb, composed once (v0.54.0)",
     token: "EXTRA resume",
     binFiles: ["bin/cli.js"],
-    files: ["skills/_shared/extra-dispatch.md", "skills/orc/references/trace-protocol.md"],
+    files: ["skills/_shared/extra-dispatch.md", "skills/_shared/phases/trace.md"],
   },
   {
     // v1.0.0 W5 — same shape, same reason: a demotion that leaves no line
@@ -414,7 +412,7 @@ const CONTRACTS = [
     name: "the demotion trace verb, composed once (v1.0.0)",
     token: "EXTRA demote",
     binFiles: ["bin/cli.js"],
-    files: ["skills/_shared/extra-dispatch.md", "skills/orc/references/trace-protocol.md"],
+    files: ["skills/_shared/extra-dispatch.md", "skills/_shared/phases/trace.md"],
   },
   {
     // The trigger's own sentence. It is the half a "simplification" would
@@ -548,7 +546,7 @@ const CONTRACTS = [
       "skills/orc/references/analyst-gates.md",
       "skills/orc/references/plan-handoff.md",
       "skills/orc/references/preflight-report.md",
-      "skills/orc/references/trace-protocol.md",
+      "skills/_shared/phases/trace.md",
       "skills/orc/schemas/planning-output.md",
       "skills/orc/subskills/orc-planner-mini/SKILL.md",
       "skills/orc/subskills/orc-planner/SKILL.md",
@@ -589,7 +587,6 @@ const CONTRACTS = [
     files: [
       "agents/orc-retro-opus-5-med.md",
       "agents/orc-retro-sonnet-5-high.md",
-      "skills/orc-analyze-mini/SKILL.md",
       "skills/orc-analyze/SKILL.md",
       "skills/orc-diy/references/blocks/trace.md",
       "skills/orc-fast/SKILL.md",
@@ -602,16 +599,14 @@ const CONTRACTS = [
       "skills/orc/references/analyst-gates.md",
       "skills/orc/references/effort-and-mode.md",
       "skills/orc/references/plan-handoff.md",
-      "skills/orc/references/stop-and-resume.md",
-      "skills/orc/references/trace-protocol.md",
+      "skills/_shared/phases/stop-resume.md",
+      "skills/_shared/phases/trace.md",
       "skills/orc/references/ultra-mode.md",
       "skills/orc-pr-driver/SKILL.md",
-      "skills/orc-pr-setup/SKILL.md",
       "skills/orc/subskills/orc-pr/stack-gate.md",
-      // v0.42.0: the run_budget_dispatches gate — a forecast over budget STOPS
-      // before wave 1 with the batch pause`s discipline, and says so in the trace.
       "skills/orc/config.md",
       "skills/orc/references/preflight-report.md",
+      "skills/_shared/phases/preflight.md",
     ],
   },
   {
@@ -625,7 +620,7 @@ const CONTRACTS = [
       // would be wrong.
       "skills/_shared/extra-dispatch.md",
       "skills/orc/SKILL.md",
-      "skills/orc/references/trace-protocol.md",
+      "skills/_shared/phases/trace.md",
       "skills/orc/references/ultra-mode.md",
       "skills/orc/schemas/checkpoint.md",
     ],
@@ -683,7 +678,11 @@ const CONTRACTS = [
       "skills/orc-verify/SKILL.md",
       "skills/orc-wiki/SKILL.md",
       "skills/orc/SKILL.md",
-      "skills/orc/references/trace-protocol.md",
+      "skills/_shared/phases/trace.md",
+      "skills/orc-analyze-mini/SKILL.md",
+      "skills/orc-challenge/SKILL.md",
+      "skills/orc-pattern/SKILL.md",
+      "skills/orc/subskills/orc-planner/SKILL.md",
     ],
   },
   {
@@ -727,8 +726,9 @@ const CONTRACTS = [
       "skills/orc-wiki/SKILL.md",
       "skills/orc/SKILL.md",
       "skills/orc/references/plan-handoff.md",
-      "skills/orc/references/trace-protocol.md",
+      "skills/_shared/phases/trace.md",
       "skills/orc/subskills/orc-planner/SKILL.md",
+      "skills/_shared/phases/preflight.md",
     ],
   },
   {
@@ -771,9 +771,10 @@ const CONTRACTS = [
       "skills/orc-wiki/SKILL.md",
       "skills/orc/SKILL.md",
       "skills/orc/references/plan-handoff.md",
-      "skills/orc/references/stop-and-resume.md",
-      "skills/orc/references/trace-protocol.md",
+      "skills/_shared/phases/stop-resume.md",
+      "skills/_shared/phases/trace.md",
       "skills/orc/subskills/orc-planner/SKILL.md",
+      "skills/_shared/phases/preflight.md",
     ],
   },
   {
@@ -782,7 +783,7 @@ const CONTRACTS = [
     // close. Pinned to the canonical protocol + the three build-lane spines +
     // orc-wiki's (the multi-dispatch lane) + the roster. Single-dispatch lanes
     // (orc-claude/plan/analyze/pattern/verify/learn/poly/combiner) inherit the
-    // one-packet obligation from trace-protocol.md's canonical section, so they
+    // one-packet obligation from _shared/phases/trace.md's canonical section, so they
     // are DELIBERATELY not in this set — do not add them.
     name: "trace narration writer (v0.32.0 — every phase close dispatches the writer)",
     token: "orc-trace-writer-haiku-4-5",
@@ -791,25 +792,13 @@ const CONTRACTS = [
       "agents/orc-trace-writer-haiku-4-5.md",
       "hooks/orc-trace.js",
       "skills/_shared/opus5-only.md",
-      "skills/orc-aftermath/SKILL.md",
-      "skills/orc-boundary/SKILL.md",
       "skills/orc-boundary/references/gate.md",
-      "skills/orc-brainstorm/SKILL.md",
-      "skills/orc-budget/SKILL.md",
       "skills/orc-diy/references/blocks/trace.md",
       "skills/orc-export/SKILL.md",
-      "skills/orc-fast/SKILL.md",
-      "skills/orc-grill/SKILL.md",
-      "skills/orc-handoff/SKILL.md",
-      "skills/orc-mini/SKILL.md",
-      "skills/orc-pact/SKILL.md",
       "skills/orc-pact/references/gate.md",
-      "skills/orc-quick/SKILL.md",
-      "skills/orc-route/SKILL.md",
-      "skills/orc-wiki/SKILL.md",
       "skills/orc/SKILL.md",
-      "skills/orc/references/trace-protocol.md",
-        ],
+      "skills/_shared/phases/trace.md",
+    ],
   },
   {
     // v0.32.0: the hook's zero-model-dependence phase segmentation. Producer
@@ -824,7 +813,7 @@ const CONTRACTS = [
       "skills/orc-retro/SKILL.md",
       "skills/orc/SKILL.md",
       "skills/orc/config.md",
-      "skills/orc/references/trace-protocol.md",
+      "skills/_shared/phases/trace.md",
       // v0.42.0: the combiner is segmented as its own PHASE-EDGE family INSIDE the
       // analyze trace — the reason it needs no lane of its own.
       "skills/context-combiner/SKILL.md",
@@ -842,8 +831,9 @@ const CONTRACTS = [
       "agents/orc-trace-writer-haiku-4-5.md",
       "hooks/orc-trace.js",
       "skills/orc-retro/SKILL.md",
-      "skills/orc/references/trace-protocol.md",
+      "skills/_shared/phases/trace.md",
       "skills/orc/schemas/checkpoint.md",
+      "skills/_shared/phases/preflight.md",
     ],
   },
   {
@@ -957,6 +947,7 @@ const CONTRACTS = [
       "skills/orc-wiki/references/staleness.md",
       "skills/orc/references/pattern-gate.md",
       "skills/orc/references/wiki-consult.md",
+      "skills/_shared/phases/preflight.md",
     ],
   },
   {
@@ -1259,7 +1250,7 @@ const CONTRACTS = [
       "skills/orc-challenge/examples/council-full-roster.md",
       "skills/orc-challenge/examples/tsd-two-iterations.md",
       "skills/orc-challenge/references/council.md",
-      "skills/orc/references/trace-protocol.md",
+      "skills/_shared/phases/trace.md",
     ],
     binFiles: ["bin/cli.js"],
   },
@@ -1277,7 +1268,7 @@ const CONTRACTS = [
       "skills/orc-doc/SKILL.md",
       "skills/orc-doc/references/gates.md",
       "skills/orc-grill/SKILL.md",
-      "skills/orc/references/trace-protocol.md",
+      "skills/_shared/phases/trace.md",
     ],
   },
   {
@@ -1294,7 +1285,7 @@ const CONTRACTS = [
       "skills/orc-doc/SKILL.md",
       "skills/orc-doc/references/gates.md",
       "skills/orc-grill/SKILL.md",
-      "skills/orc/references/trace-protocol.md",
+      "skills/_shared/phases/trace.md",
     ],
   },
   {
@@ -1357,7 +1348,7 @@ const CONTRACTS = [
       "skills/orc-doc/references/gates.md",
       "skills/orc-doc/references/resume-protocol.md",
       "skills/orc/SKILL.md",
-      "skills/orc/references/stop-and-resume.md",
+      "skills/_shared/phases/stop-resume.md",
       "skills/orc-doc/README.md",
       "skills/orc-doc/references/chunking.md",
       // v0.49.5 — the lane's own blurb now promises the hand-back by name.
@@ -1373,7 +1364,7 @@ const CONTRACTS = [
     binFiles: ["bin/cli.js"],
     files: [
       "skills/orc/SKILL.md",
-      "skills/orc/references/trace-protocol.md",
+      "skills/_shared/phases/trace.md",
     ],
   },
   {
@@ -1534,7 +1525,7 @@ const CONTRACTS = [
       "skills/orc-poly/examples/poly-run-mock.md",
       "skills/orc-quick/SKILL.md",
       "skills/orc/SKILL.md",
-      "skills/orc/references/trace-protocol.md",
+      "skills/_shared/phases/trace.md",
       "skills/orc/references/wiki-consult.md",
     ],
   },
@@ -1547,7 +1538,7 @@ const CONTRACTS = [
     token: "`CROSSLINK ",
     files: [
       "skills/orc/SKILL.md",
-      "skills/orc/references/trace-protocol.md",
+      "skills/_shared/phases/trace.md",
       "skills/orc/references/wiki-consult.md",
     ],
   },
@@ -1625,7 +1616,7 @@ const CONTRACTS = [
       "skills/orc/references/effort-and-mode.md",
       "skills/orc/references/pattern-gate.md",
       "skills/orc/references/preflight-report.md",
-      "skills/orc/references/trace-protocol.md",
+      "skills/_shared/phases/trace.md",
       "skills/orc/references/ultra-mode.md",
           "skills/_shared/config-precedence.md",
     ],
@@ -1635,7 +1626,7 @@ const CONTRACTS = [
     token: "`CONFIG ",
     files: [
       "skills/orc/SKILL.md",
-      "skills/orc/references/trace-protocol.md",
+      "skills/_shared/phases/trace.md",
     ],
   },
   {
@@ -1679,7 +1670,7 @@ const CONTRACTS = [
       "skills/orc/references/analyst-gates.md",
       "skills/orc/references/effort-and-mode.md",
       "skills/orc/references/plan-handoff.md",
-      "skills/orc/references/trace-protocol.md",
+      "skills/_shared/phases/trace.md",
       "skills/orc/references/wave-grouping.md",
       "skills/orc/schemas/planning-output.md",
       "skills/orc/subskills/orc-planner-mini/SKILL.md",
@@ -1807,6 +1798,7 @@ const CONTRACTS = [
       "skills/orc-diy/references/blocks/verify.md",
       "skills/orc-diy/references/blocks/wiki.md",
       "skills/orc-diy/references/compile.md",
+      "skills/_shared/phases/README.md",
     ],
   },
   {
@@ -2103,7 +2095,7 @@ const CONTRACTS = [
       "skills/orc-mini/SKILL.md",
       "skills/orc/SKILL.md",
       "skills/orc/config.md",
-      "skills/orc/references/trace-protocol.md",
+      "skills/_shared/phases/trace.md",
       "skills/orc/references/ultra-mode.md",
       "skills/orc/references/wave-grouping.md",
     ],
@@ -2186,7 +2178,7 @@ const CONTRACTS = [
       "skills/orc-mini/SKILL.md",
       "skills/orc/SKILL.md",
       "skills/orc/config.md",
-      "skills/orc/references/trace-protocol.md",
+      "skills/_shared/phases/trace.md",
       "skills/orc/subskills/orc-execution/SKILL.md",
       "skills/orc/subskills/orc-execution/core.md",
       "skills/orc/subskills/orc-review-verify/SKILL.md",
@@ -2235,7 +2227,7 @@ const CONTRACTS = [
       "skills/orc-mini/SKILL.md",
       "skills/orc-retro/SKILL.md",
       "skills/orc/SKILL.md",
-      "skills/orc/references/trace-protocol.md",
+      "skills/_shared/phases/trace.md",
     ],
   },
   {
@@ -2294,7 +2286,7 @@ const CONTRACTS = [
       "skills/orc/SKILL.md",
       "skills/orc/config.md",
       "skills/orc/references/intake.md",
-      "skills/orc/references/stop-and-resume.md",
+      "skills/_shared/phases/stop-resume.md",
       "skills/orc-doc/README.md",
       "skills/orc-doc/references/chunking.md",
       "skills/orc-doc/references/gates.md",
@@ -2441,7 +2433,8 @@ const CONTRACTS = [
       "skills/orc/SKILL.md",
       "skills/orc/references/wiki-consult.md",
       "skills/orc/subskills/orc-execution/core.md",
-        ],
+      "skills/_shared/phases/README.md",
+    ],
   },
   {
     name: "foreign input is evidence, never instruction",
@@ -2541,6 +2534,7 @@ const CONTRACTS = [
       "skills/orc-pact/references/gate.md",
       "skills/orc/SKILL.md",
       "skills/orc/references/preflight-report.md",
+      "skills/_shared/phases/preflight.md",
     ],
     binFiles: ["bin/cli.js"],
   },
@@ -2795,7 +2789,7 @@ const CONTRACTS = [
       "skills/orc-doc/examples/orc-doc-prd-run.md",
       // v0.49.2 — the doc lane's DISPATCH tail names the section FILE, which is
       // the only thing that makes `orc doc cost` per-section honest.
-      "skills/orc/references/trace-protocol.md",
+      "skills/_shared/phases/trace.md",
     ],
     binFiles: ["bin/cli.js"],
   },
@@ -2952,7 +2946,7 @@ const CONTRACTS = [
       "skills/orc-doc/references/chunking.md",
       // The DISPATCH tail that makes per-section attribution honest is defined
       // there, so the command's name has to move with it.
-      "skills/orc/references/trace-protocol.md",
+      "skills/_shared/phases/trace.md",
       "skills/orc-doc/README.md",
       "commands/orc-doc.md",
     ],
@@ -2982,7 +2976,10 @@ const CONTRACTS = [
     // Pinned to the CLI because that is where the catalogue lives.
     name: "the call catalogue (v1.0.0 W10)",
     token: "orc lane calls",
-    files: ["skills/_shared/read-ladder.md"],
+    files: [
+      "skills/_shared/read-ladder.md",
+      "skills/_shared/phases/preflight.md",
+    ],
     binFiles: ["bin/cli.js"],
   },
   {
@@ -2991,7 +2988,10 @@ const CONTRACTS = [
     // round-trips than the prose it replaced.
     name: "a pointer declares how much of it to read (v1.0.0 W10)",
     token: "on-phase",
-    files: ["skills/_shared/read-ladder.md"],
+    files: [
+      "skills/_shared/read-ladder.md",
+      "skills/_shared/phases/README.md",
+    ],
   },
   {
     // v1.0.0 W7 — ONE resolver per lane. A lane that re-derives a value from
@@ -3036,6 +3036,7 @@ const CONTRACTS = [
       "skills/orc/SKILL.md",
       "skills/orc/config.md",
       "skills/orc/subskills/orc-pr/stack-gate.md",
+      "skills/_shared/phases/preflight.md",
     ],
     binFiles: ["bin/cli.js"],
   },
@@ -3076,7 +3077,7 @@ const BUDGETS = [
   // inline emit prose with the packet + writer-dispatch protocol (packet fields,
   // the pairing rule, the solo first/last packet). Net +7: the narration
   // contract is the one thing that must survive compaction in the spine itself,
-  // and the packet SCHEMA + per-lane packet counts live in trace-protocol.md.
+  // and the packet SCHEMA + per-lane packet counts live in _shared/phases/trace.md.
   // v0.33.0: deliberate raise 392→424 — the knowledge-deepening + verification
   // revamp adds three spine-level contracts that must survive compaction: the
   // TDD anchor (tdd_spec in the plan gate, Wave-0 red proof, the tdd_loop_max
@@ -3107,7 +3108,7 @@ const BUDGETS = [
   // as a plain /orc run forever. (3) Phase 8 now closes BOTH open-run markers —
   // .current and the run’s RESUME.md — and emits the one STATS line orc stats
   // reads; all three are run-end facts a reference loaded earlier cannot carry.
-  // Mechanics live in references/{preflight-report,stop-and-resume,trace-protocol}.md.
+  // Mechanics live in references/preflight-report.md + _shared/phases/{stop-resume,trace}.md.
   // v0.46.0: deliberate raise 462→490 — the six new lanes' CONSUMER seams. Every
   // one is a spine fact by the same test the earlier raises used: it happens at a
   // decision point the spine owns, before (or instead of) any reference load.
@@ -3156,7 +3157,10 @@ const BUDGETS = [
   // artefact `orc lane config` exists to replace. The contract is identical in
   // every lane by design, so it is never shortened to fit one budget. W8/W9
   // take this back down — they delete the same section from thirty more lanes.
-  { file: "skills/orc/SKILL.md", maxLines: 532 },
+  // v1.0.0 W11: 532→535. The preflight section gained the three-line pointer at
+  // `_shared/phases/preflight.md`; W12 turns this spine into a manifest and the
+  // budget comes down properly then.
+  { file: "skills/orc/SKILL.md", maxLines: 535 },
   // v0.33.0: deliberate raises 264→289 / 197→219 / 171→179 — orc-wiki gains the
   // crosslink-compile entry branch, the delta-refresh default (impact probe),
   // and the orientation/atlas assemble steps (detail in references/); mini
@@ -3386,17 +3390,19 @@ for (const b of BUDGETS) {
 
   if (!cliKeys.length) errs.push("could not parse CONFIG_META from bin/cli.js");
 
-  // 1. A NON-EMPTY lanes[]. The ten below are the v1.0.0 W2 mechanical seed's
-  // known gap: `_shared/extra-dispatch.md` names them, no lane spine does, and
-  // W8/W9 assign them lane by lane. The allowlist is NAMED rather than implied
-  // so the exception is visible and shrinking; a key joining it must be a
-  // deliberate line in a diff, not a silent pass.
+  // 1. A NON-EMPTY lanes[]. The ten below are PERMANENTLY empty, and that is an
+  // answer rather than a gap. They are OPERATING keys of the BRIDGE: a lane
+  // calls `orc extra dispatch` and the CLI reads `extra_timeout_s` — the lane
+  // never names the key and has no reason to. Under this registry's own
+  // definition (`lanes[] = which lanes READ it`) that set stays empty however
+  // many waves pass over it.
   //
-  // W5 added the last two knowingly. `extra_demote_after` and
-  // `extra_demote_stale_min` are OPERATING keys of the bridge in exactly the
-  // sense `extra_stall_s` is — every lane that dispatches foreign reads them
-  // through `orc extra resolve`, and none of them names them — so they join the
-  // list rather than being given a guessed lane set. W8/W9 empty it.
+  // W8 §4 measured this and W9 §7 recorded it; the v1.0.0 W8/W9 lane-config
+  // migration DID complete without touching any of them. Do not read this list
+  // as a to-do — it is a documented boundary between what a lane reads and what
+  // the bridge reads. The allowlist stays NAMED rather than implied so a key
+  // joining it is a deliberate line in a diff, not a silent pass, and so a key
+  // that later grows a real lane set fails the check below instead of drifting.
   const SEED_EMPTY = new Set([
     "extra_max_concurrent",
     "extra_unlock",
@@ -3795,7 +3801,6 @@ for (const b of BUDGETS) {
     "orc is installed",
     "orc and orc-mini",
     "orc lane calls", // the catalogue's own reader, named in read-ladder.md
-    "orc lane phases", // W12
   ]);
   const catalogued = new Set(Object.values(CALLS).map((c) => prefixOf(c.cmd)));
   for (const [call, lanes] of Object.entries(measured)) {
@@ -3832,6 +3837,175 @@ for (const b of BUDGETS) {
     console.error("\n❌ call catalogue drift:");
     for (const e of errs) console.error("   - " + e);
   }
+  }
+}
+
+// ── The phase library (C.6) ────────────────────────────────────────────────
+// v1.0.0 W11 (design-02 §7). Two assertions, and both describe the situation
+// this release found rather than one it imagines.
+//
+// 1. NO CROSS-LANE POINTER. A file under `skills/<lane>/` may not be pointed at
+//    from a file under a DIFFERENT lane. That is exactly how the shared phase
+//    material ended up in one lane's private folder with 26 other lanes reaching
+//    across into it — so linting it means the situation cannot recur.
+//
+//    W11 measured 24 such target files and moved the biggest. The rest are named
+//    in ALLOW below, which is the migration's progress bar: W12 takes the build
+//    spine, W13 DIY, W14 the remainder. A NEW cross-lane pointer fails today.
+//    Unlike the config lint's seed-empty list, this one really is temporary —
+//    every row has a wave that removes it.
+//
+// 2. THE MANIFEST RESOLVES. Every LANE_PHASES file exists, is claimed by >= 2
+//    lanes, declares only layers from the CLOSED set, and CONTAINS every layer
+//    it declares. A file with one consumer belongs in that lane (design-02 §2),
+//    and a declared layer that is not in the file is a lane reading nothing.
+{
+  const errs = [];
+  const skillsDir = path.join(ROOT, "skills");
+  const lanes = fs
+    .readdirSync(skillsDir, { withFileTypes: true })
+    .filter((d) => d.isDirectory())
+    .map((d) => d.name);
+  const laneSet = new Set(lanes.filter((l) => l !== "_shared"));
+  const walkMd = (dir, acc) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) walkMd(p, acc);
+      else if (e.name.endsWith(".md")) acc.push(p);
+    }
+    return acc;
+  };
+
+  // 1. Cross-lane pointers. Every row here is a MIGRATION DEBT with a named
+  //    wave, not a permanent exception.
+  const ALLOW = new Set([
+    "orc-wiki/references/staleness.md", // W14
+    "orc-wiki/references/crosslink.md", // W14
+    "orc-wiki/references/partial-refresh.md", // W14
+    "orc/schemas/planning-output.md", // W12
+    "orc/subskills/orc-planner/SKILL.md", // W12
+    "orc/subskills/orc-review-verify/SKILL.md", // W12
+    "orc/subskills/orc-pr/SKILL.md", // W12
+    "orc/subskills/orc-pr/pr.md", // W12
+    "orc/subskills/orc-testgen/SKILL.md", // W12
+    "orc/subskills/orc-execution/SKILL.md", // W12
+    "orc/references/security-checklist.md", // W12
+    "orc/references/analyst-gates.md", // W12
+    "orc/references/intake.md", // W12
+    "orc/references/wiki-consult.md", // W12
+    "orc/references/wave-grouping.md", // W12
+    "orc/references/plan-handoff.md", // W12
+    "orc/references/house-rules.md", // W12
+    "orc/references/preflight-report.md", // stays home (1 lane) — W14 drops the pointer
+    "orc-boundary/references/gate.md", // W14
+    "orc-pact/references/gate.md", // W14
+    "orc-pattern/references/INDEX.md", // W14
+    "orc-pattern/references/fe-a11y.md", // W14
+  ]);
+  const PTR = /(?:\.\.\/|skills\/|\/)(([a-z0-9-]+)\/(?:references|subskills|schemas)\/[A-Za-z0-9._/-]+\.md)/g;
+  const seen = new Set();
+  for (const lane of lanes) {
+    for (const f of walkMd(path.join(skillsDir, lane), [])) {
+      const text = fs.readFileSync(f, "utf8");
+      for (const m of text.matchAll(PTR)) {
+        const target = m[1];
+        if (!laneSet.has(m[2]) || m[2] === lane) continue;
+        if (ALLOW.has(target)) continue;
+        const key = lane + " -> " + target;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        errs.push(
+          `cross-lane pointer: ${path.relative(ROOT, f).replace(/\\/g, "/")} points at "${target}", which belongs to lane "${m[2]}" — ` +
+            "a file two lanes read belongs in _shared/phases/ (design-02 §2); if it really has one consumer, the pointer is what is wrong"
+        );
+      }
+    }
+  }
+  // A row that no longer fires is debt that was PAID and must leave the list,
+  // or the progress bar stops meaning anything.
+  const live = new Set();
+  for (const lane of lanes)
+    for (const f of walkMd(path.join(skillsDir, lane), []))
+      for (const m of fs.readFileSync(f, "utf8").matchAll(PTR))
+        if (laneSet.has(m[2]) && m[2] !== lane) live.add(m[1]);
+  for (const a of ALLOW)
+    if (!live.has(a))
+      errs.push(`the cross-lane ALLOW list names "${a}", which no other lane points at any more — remove the row`);
+
+  // 2. The manifest resolves.
+  const cliText = fs.readFileSync(path.join(REPO_ROOT, "bin", "cli.js"), "utf8");
+  let LAYERS = null, FILES = null, PHASES = null, TRACE = null;
+  try {
+    TRACE = new Function("return " + cliText.match(/const LANE_TRACE = \{[\s\S]*?\n\};/)[0].replace(/^const LANE_TRACE = /, "").replace(/;$/, ""))();
+    LAYERS = new Function("return " + cliText.match(/const PHASE_LAYERS = \[[\s\S]*?\];/)[0].replace(/^const PHASE_LAYERS = /, "").replace(/;$/, ""))();
+    FILES = new Function("return " + cliText.match(/const PHASE_FILES = \{[\s\S]*?\n\};/)[0].replace(/^const PHASE_FILES = /, "").replace(/;$/, ""))();
+    PHASES = new Function("const LANE_TRACE = " + JSON.stringify(TRACE) + "; return " + cliText.match(/const LANE_PHASES = \{[\s\S]*?\n\};/)[0].replace(/^const LANE_PHASES = /, "").replace(/;$/, ""))();
+  } catch (e) {
+    errs.push("could not parse PHASE_LAYERS / PHASE_FILES / LANE_PHASES from bin/cli.js: " + e.message);
+  }
+  if (LAYERS && FILES && PHASES) {
+    const CLOSED = ["core", "full", "trim", "composed"];
+    if (LAYERS.join(",") !== CLOSED.join(","))
+      errs.push(`PHASE_LAYERS is ${LAYERS.join(", ")} — the set is CLOSED (${CLOSED.join(" · ")}); a fifth layer is a lint failure, not a feature`);
+    for (const [id, def] of Object.entries(FILES)) {
+      const abs = path.join(skillsDir, def.file);
+      if (!fs.existsSync(abs)) {
+        errs.push(`phase "${id}" names ${def.file}, which does not exist`);
+        continue;
+      }
+      if (!def.file.startsWith("_shared/phases/"))
+        errs.push(`phase "${id}" lives at ${def.file} — a shared phase belongs under _shared/phases/`);
+      const body = fs.readFileSync(abs, "utf8");
+      for (const l of def.layers) {
+        if (!CLOSED.includes(l))
+          errs.push(`phase "${id}" declares layer "${l}", which is outside the closed set`);
+        else if (!body.includes(`<!-- orc:layer ${l} -->`))
+          errs.push(`phase "${id}" declares layer "${l}" but ${def.file} contains no \`<!-- orc:layer ${l} -->\` marker`);
+      }
+      for (const m of body.matchAll(/<!-- orc:layer ([a-z]+) -->/g))
+        if (!def.layers.includes(m[1]))
+          errs.push(`${def.file} contains a layer "${m[1]}" that PHASE_FILES does not declare`);
+      const claimed = (PHASES[id] || []).length;
+      if (claimed < 2)
+        errs.push(
+          `phase "${id}" is claimed by ${claimed} lane(s) — a file with one consumer stays in that lane (design-02 §2)`
+        );
+      for (const l of PHASES[id] || [])
+        if (!laneSet.has(l)) errs.push(`LANE_PHASES["${id}"] names "${l}", which is not a lane`);
+    }
+    for (const id of Object.keys(PHASES))
+      if (!FILES[id]) errs.push(`LANE_PHASES has a phase "${id}" with no PHASE_FILES entry`);
+
+    // 2b. LANE_TRACE is the DATA behind the tier table a human reads in
+    //     _shared/phases/trace.md. Two copies of one fact is exactly what this
+    //     release exists to remove, so assert they agree: every lane the CLI
+    //     puts in a tier appears in THAT tier's row, by lane name or by its
+    //     trace token. A lane in one and not the other is a lane whose packet
+    //     cadence two sources disagree about.
+    const tracePath = path.join(skillsDir, "_shared", "phases", "trace.md");
+    if (fs.existsSync(tracePath)) {
+      const rows = {};
+      for (const line of fs.readFileSync(tracePath, "utf8").split(/\r?\n/)) {
+        const m = line.match(/^\| (Build lanes|Multi-dispatch|Composed|Iterative|Single-dispatch) \|/);
+        if (m) rows[m[1]] = line;
+      }
+      for (const t of ["Build lanes", "Multi-dispatch", "Composed", "Iterative", "Single-dispatch"])
+        if (!rows[t]) errs.push(`_shared/phases/trace.md has no tier row for "${t}"`);
+      for (const [lane, d] of Object.entries(TRACE)) {
+        const row = rows[d.tier];
+        if (!row) continue;
+        if (!row.includes(`\`${lane}\``) && !row.includes(`\`${d.token}\``))
+          errs.push(
+            `LANE_TRACE puts "${lane}" in tier "${d.tier}", but that row in _shared/phases/trace.md names neither the lane nor its token \`${d.token}\``
+          );
+      }
+    }
+  }
+
+  if (errs.length) {
+    failures++;
+    console.error("\n❌ phase library drift:");
+    for (const e of errs) console.error("   - " + e);
   }
 }
 

@@ -71,6 +71,10 @@ becomes a real number) · merge queue present? Report the block in a few lines.
 Any hard fail → say which check failed and recommend ONE regular PR. Do not
 plan a stack that cannot be submitted.
 
+The SHAPE of these steps — the order, and the four rules that make it worth
+having — is `../_shared/phases/preflight.md` (`core`). The probes
+themselves are this lane's own and stay here.
+
 ## Phase S1 — Intake (ticket, entry mode, template)
 
 1. **Ticket** — ask for it if it was not given. Required (hard rule 6).
@@ -159,17 +163,14 @@ exceptions`. Then:
    to run **`/orc-pr-driver`** — human approval sits exactly here, before any git
    surgery.
 
-## Behavior trace (PERMANENT — every ORC entry point traces; always on)
+## Behavior trace (always on)
 
-Resolve `log_dir` (`../orc/config.md` default ← `.claude/orc.config.yaml`) at
-start and follow `../orc/references/trace-protocol.md`: write
-`log_dir/.current` = `run-prsetup-<slug>-<DDMMYY>-<HHMMSS>.txt` and
-`touch the trace file` of that name in the SAME step, first. Narration is
-dispatched, not remembered — collect the events with their REAL timestamps
-(`PHASE S0..S6`, `GATE stack-certainty pass|bounce` per seam decision,
-`QUESTION count=<n>`, `FINISH`) plus `decisions` (the WHY: every boundary the
-user chose, verbatim), dispatch the trace writer ONCE at run end (the
-single-dispatch-lane packet), then delete `.current`. A phase ending with
+`../_shared/phases/trace.md` (`core`, at run start; `orc lane phases` names
+the file and the layers). Lane token `prsetup`, tier **Single-dispatch** —
+exactly ONE end-of-run packet, dispatched solo before `.current` is deleted.
+At run start write `log_dir/.current` = `run-prsetup-<slug>-<DDMMYY>-<HHMMSS>.txt` AND
+`touch the trace file` of that name in the SAME step.
+Nothing else about the protocol is restated here; a phase that ends with
 `zero new trace lines is a protocol violation`.
 
 ## Boundaries

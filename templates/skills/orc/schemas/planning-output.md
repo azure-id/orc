@@ -224,7 +224,7 @@ open_questions: [object]   # [] or [{question, proposed_default, blocking: bool}
   is_batch_pause: bool     # recomputed from the Phase 2 pause schedule: true
                            # when wave.number % N == 0 AND a later wave exists
                            # (last wave is never a pause). A true here is a HARD
-                           # stop gate (stop-and-resume.md), not a hint.
+                           # stop gate (stop-resume.md), not a hint.
 ```
 
 ## Status semantics

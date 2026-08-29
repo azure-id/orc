@@ -3038,6 +3038,18 @@ const LANE_CALLS = {
     never: "never merge `.claude/orc.config.yaml` yourself, and never re-derive a precedence — the answer already carries it",
     lanes: ["context-combiner", "orc", "orc-aftermath", "orc-analyze", "orc-analyze-mini", "orc-boundary", "orc-brainstorm", "orc-budget", "orc-challenge", "orc-claude", "orc-diy", "orc-doc", "orc-explain", "orc-export", "orc-fast", "orc-grill", "orc-handoff", "orc-learn", "orc-mini", "orc-pact", "orc-pattern", "orc-poly", "orc-pr-driver", "orc-pr-setup", "orc-quick", "orc-retro", "orc-route", "orc-verify", "orc-wiki"],
   },
+  "lane-phases": {
+    cmd: "orc lane phases <lane> [--json]",
+    what: "which SHARED phases this lane runs, in order — the file, the layers to read, and when",
+    exits: { 0: "answered", 2: "unknown lane, an entry point rather than a lane, or no argument" },
+    states: null,
+    cost: "free",
+    when: "once, when a lane needs to know which phase file and which layers to open",
+    on_absent: "a lane with no shared phase gets an EMPTY phases[] — that is an answer, not a gap: its pipeline is in its own spine (`own_phases: in-spine`)",
+    canonical: "_shared/phases/README.md",
+    never: "never derive the phase list, its order or its layers from the filenames in `_shared/phases/` — a second idea of the pipeline is the drift this exists to prevent",
+    lanes: ["orc", "orc-aftermath", "orc-analyze", "orc-analyze-mini", "orc-boundary", "orc-brainstorm", "orc-budget", "orc-challenge", "orc-claude", "orc-doc", "orc-fast", "orc-grill", "orc-handoff", "orc-learn", "orc-mini", "orc-pact", "orc-pattern", "orc-poly", "orc-pr-driver", "orc-pr-setup", "orc-quick", "orc-route", "orc-verify", "orc-wiki"],
+  },
   "wiki-status": {
     cmd: "orc wiki status [--json]",
     what: "does a wiki EXIST, and how fresh is it",
@@ -3148,7 +3160,7 @@ const LANE_CALLS = {
     on_absent: "zero dispatches is an ANSWER; both ABSENT counts are named and must be relayed",
     canonical: "_shared/extra-dispatch.md",
     never: "never blend the four token kinds, and never price a model ORC did not price itself",
-    lanes: ["orc", "orc-budget", "orc-retro"],
+    lanes: ["orc-budget", "orc-retro"],
   },
   "extra-rates": {
     cmd: "orc extra rates [--json]",
@@ -3246,18 +3258,6 @@ const LANE_CALLS = {
     never: "never write a user's config as a side effect of a run — a run-scoped override is never persisted",
     lanes: ["orc-analyze", "orc-pr-setup"],
   },
-  "challenge-record": {
-    cmd: "orc challenge record <slug> --file <f>",
-    what: "record a judge verdict and RECOMPUTE the cycle's state",
-    exits: { 0: "recorded", 1: "refused" },
-    states: null,
-    cost: "free",
-    when: "after every judge return",
-    on_absent: "a refusal names the finding or the missing coverage; never re-word it",
-    canonical: "orc-challenge/references/conservation.md",
-    never: "never declare a PASS — this command computes it, and a judge can only find or fail to find",
-    lanes: ["orc", "orc-challenge"],
-  },
   "challenge-status": {
     cmd: "orc challenge status <slug> [--json]",
     what: "where a challenge cycle stands right now",
@@ -3293,18 +3293,6 @@ const LANE_CALLS = {
     canonical: null,
     never: "never fix what this lane judged — that is a different session",
     lanes: ["orc-challenge", "orc-doc"],
-  },
-  "doc-cost": {
-    cmd: "orc doc cost <slug> [--json]",
-    what: "what a document has cost so far, per section",
-    exits: { 0: "answered" },
-    states: null,
-    cost: "free",
-    when: "on demand",
-    on_absent: "a section nothing joins reports `tokens: null` and reads as an EM DASH, never 0",
-    canonical: null,
-    never: "never blend the four token kinds",
-    lanes: ["orc", "orc-doc"],
   },
   "pact-status": {
     cmd: "orc pact status [--json]",
@@ -3388,7 +3376,7 @@ const LANE_CALLS = {
     on_absent: "a listing may only claim what the disk proves — a missing `state-of-play.md` never means incomplete",
     canonical: null,
     never: "never open `checkpoint.json` to build a listing — the `Where it stands:` line is what it parses",
-    lanes: ["orc", "orc-challenge", "orc-doc"],
+    lanes: ["orc-challenge", "orc-doc"],
   },
   "pr-stack": {
     cmd: "orc pr stack status [--json]",
@@ -3501,6 +3489,244 @@ function laneCallsCmd(lane, claudeDir) {
   return 0;
 }
 
+// ── The phase library manifest (v1.0.0 W11 · design-02) ────────────────────
+//
+// The shared phase material already existed and was already shared — it just
+// lived in ONE lane's private folder, and 26 other lanes reached across into
+// \`orc/references/\` to read it. \`templates/skills/_shared/phases/\` is now its
+// home, and THIS TABLE is the pipeline: the CLI owns the phase list and its
+// order, exactly like \`DIY_STEPS\`. A skill never derives either from the
+// filenames — a second idea of the pipeline is the drift this exists to make
+// impossible (the Flow-stepper rule).
+//
+// Per phase: \`file\` + \`layers\` (never a line number — /orc-doc rule 2, a
+// stored line number is a wrong line number one edit later), \`when\` and
+// \`read\` (the partial-read declarations registered in \`_shared/read-ladder.md\`
+// at W10), \`optional_when\` (a config KEY, resolved through the priority ladder
+// by \`orc lane config\`, never read raw), and \`calls\` — catalogue ids from
+// \`LANE_CALLS\`, DERIVED rather than restated, so a lane can ask for one
+// phase's calls instead of its whole catalogue.
+//
+// SCOPE, stated so the shape is not mistaken for a claim: W11 moved the three
+// MECHANICAL phases. A lane's own pipeline (orc's Phases 0–8, /orc-doc's
+// D0–D9, /orc-challenge's C0–C8) is still declared in that lane's spine, and
+// \`own_phases\` says so with \`in-spine\` rather than pretending an empty array
+// is the answer. W12 moves the build spine; W14 the rest.
+const PHASE_LAYERS = ["core", "full", "trim", "composed"];
+
+const PHASE_FILES = {
+  trace: {
+    file: "_shared/phases/trace.md",
+    layers: ["core"],
+    why_single_layer:
+      "the protocol is identical in every lane that traces; the per-lane variation is the TIER TABLE, which is DATA, not a layer",
+  },
+  preflight: {
+    file: "_shared/phases/preflight.md",
+    layers: ["core", "full"],
+    why_single_layer: null,
+  },
+  "stop-resume": {
+    file: "_shared/phases/stop-resume.md",
+    layers: ["core"],
+    why_single_layer:
+      "the stop sequence is identical in every lane that stops; which moments are MANDATORY stops is already a per-lane rule in the spine",
+  },
+};
+
+// A call id in this set is made AT preflight. The per-lane set is intersected
+// out of LANE_CALLS rather than typed here — LANE_CALLS.lanes[] is the MEASURED
+// set (W10 §4), and a second hand-kept copy of it would be the exact drift the
+// catalogue exists to remove.
+const PREFLIGHT_CALL_IDS = new Set([
+  "lane-config",
+  "wiki-status",
+  "pattern-status",
+  "gotcha-status",
+  "pact-status",
+  "boundary-status",
+  "aftermath-status",
+  "challenge-status",
+  "handoff-surfaces",
+  "diy-status",
+  "run-list",
+]);
+
+// tier + packet cadence per trace-owning lane. This is the same data the tier
+// table in \`_shared/phases/trace.md\` renders for a human; the lint asserts the
+// two agree, so a lane cannot be in one and absent from the other.
+const LANE_TRACE = {
+  orc: { tier: "Build lanes", token: "orc" },
+  "orc-mini": { tier: "Build lanes", token: "mini" },
+  "orc-fast": { tier: "Build lanes", token: "fast" },
+  "orc-wiki": { tier: "Multi-dispatch", token: "wiki" },
+  "orc-pr-driver": { tier: "Multi-dispatch", token: "prdriver" },
+  "orc-diy": { tier: "Composed", token: "diy" },
+  "orc-quick": { tier: "Iterative", token: "quick" },
+  "orc-challenge": { tier: "Iterative", token: "challenge" },
+  "orc-doc": { tier: "Iterative", token: "doc" },
+  "orc-claude": { tier: "Single-dispatch", token: "claude" },
+  "orc-analyze": { tier: "Single-dispatch", token: "analyze" },
+  "orc-analyze-mini": { tier: "Single-dispatch", token: "analyze" },
+  "orc-pattern": { tier: "Single-dispatch", token: "pattern" },
+  "orc-verify": { tier: "Single-dispatch", token: "verify" },
+  "orc-learn": { tier: "Single-dispatch", token: "learn" },
+  "orc-poly": { tier: "Single-dispatch", token: "poly" },
+  "orc-pr-setup": { tier: "Single-dispatch", token: "prsetup" },
+  "orc-grill": { tier: "Single-dispatch", token: "grill" },
+  "orc-route": { tier: "Single-dispatch", token: "route" },
+  "orc-brainstorm": { tier: "Single-dispatch", token: "brainstorm" },
+  "orc-pact": { tier: "Single-dispatch", token: "pact" },
+  "orc-boundary": { tier: "Single-dispatch", token: "boundary" },
+  "orc-handoff": { tier: "Single-dispatch", token: "handoff" },
+  "orc-budget": { tier: "Single-dispatch", token: "budget" },
+  "orc-aftermath": { tier: "Single-dispatch", token: "aftermath" },
+  "orc-export": { tier: "Single-dispatch", token: "export" },
+};
+
+// Which lanes run which SHARED phase. A lane absent from a row does not run
+// that phase — \`/orc-retro\` is in no trace row because it mines traces and
+// writes none (its hard rule 4), and \`context-combiner\` is in none because it
+// is a PHASE of the analyze run, not a lane (v0.42.0).
+const LANE_PHASES = {
+  trace: Object.keys(LANE_TRACE),
+  preflight: [
+    "orc",
+    "orc-boundary",
+    "orc-brainstorm",
+    "orc-challenge",
+    "orc-doc",
+    "orc-fast",
+    "orc-grill",
+    "orc-handoff",
+    "orc-pact",
+    "orc-pr-setup",
+    "orc-quick",
+  ],
+  "stop-resume": ["orc", "orc-wiki", "orc-diy"],
+};
+
+// The ORDER a lane runs the shared phases in. Preflight before trace only
+// where the lane's preflight is what bootstraps the pointer; everywhere else
+// the trace pointer is the first thing written.
+const PHASE_ORDER = ["preflight", "trace", "stop-resume"];
+
+function lanePhaseRows(lane) {
+  const laneCallIds = Object.entries(LANE_CALLS)
+    .filter(([, c]) => c.lanes.includes(lane))
+    .map(([id]) => id);
+  const rows = [];
+  let ord = 0;
+  for (const id of PHASE_ORDER) {
+    if (!(LANE_PHASES[id] || []).includes(lane)) continue;
+    const def = PHASE_FILES[id];
+    const layers = id === "preflight" && lane !== "orc" ? ["core"] : def.layers;
+    rows.push({
+      ord: ++ord,
+      id,
+      file: def.file,
+      layers,
+      read: "whole",
+      when: id === "stop-resume" ? "on-phase" : "always",
+      optional_when: null,
+      calls: id === "preflight" ? laneCallIds.filter((c) => PREFLIGHT_CALL_IDS.has(c)) : [],
+    });
+  }
+  return rows;
+}
+
+// \`orc lane phases <lane>\` / \`--all\`. Exit 0 in every state; 2 for an unknown
+// lane or no argument — the \`orc lane calls\` contract, unchanged.
+//
+// \`--json is not a summary\`: the human branch prints no field the JSON omits.
+function lanePhasesCmd(lane, claudeDir) {
+  const all = flag("--all") === true;
+  if (!lane && !all) {
+    console.error("Usage: orc lane phases <lane> [--json]   |   orc lane phases --all [--json]");
+    return 2;
+  }
+  const names = all ? LANE_NAMES : [lane];
+  if (!all && !LANE_NAMES.includes(lane)) {
+    const alias = LANE_ALIAS[lane];
+    if (alias) {
+      const msg = `\`${lane}\` is an entry point, not a lane — ${alias.why}. Try: orc lane phases ${alias.lane}`;
+      if (wantsJson()) emitJson({ ok: false, reason: "alias", lane, resolves_to: alias.lane, why: alias.why });
+      else console.error("  " + msg);
+      return 2;
+    }
+    if (wantsJson()) emitJson({ ok: false, reason: "unknown-lane", lane, known: LANE_NAMES });
+    else console.error(`Unknown lane: ${lane}\n(orc lane list)`);
+    return 2;
+  }
+  const out = names.map((l) => {
+    const t = LANE_TRACE[l] || null;
+    const phases = lanePhaseRows(l);
+    return {
+      lane: l,
+      trace_tier: t ? t.tier : null,
+      trace_token: t ? t.token : null,
+      phases,
+      shared_phase_count: phases.length,
+      // NOT an empty array: this lane's own pipeline is real and is declared in
+      // its spine. W12 moves the build spine into the library; W14 the rest.
+      own_phases: null,
+      own_phases_status: "in-spine",
+    };
+  });
+  if (wantsJson()) {
+    emitJson({
+      ok: true,
+      lane: all ? null : lane,
+      all,
+      count: out.length,
+      layer_set: PHASE_LAYERS,
+      phase_files: PHASE_FILES,
+      lanes: out,
+    });
+    return 0;
+  }
+  for (const r of out) {
+    console.log(`\nORC phases  ${ui.color.bold(r.lane)}`);
+    console.log(
+      "  trace  " +
+        (r.trace_tier
+          ? ui.color.gray(`tier ${r.trace_tier} · lane token \`${r.trace_token}\``)
+          : ui.color.gray("this lane owns no trace (it is not a run entry point)"))
+    );
+    if (!r.phases.length) {
+      // An empty answer is an ANSWER: this lane runs no SHARED phase yet.
+      console.log(
+        ui.color.gray("\n  No shared phase. Its pipeline is declared in its own spine (own_phases: in-spine).\n")
+      );
+      continue;
+    }
+    console.log("");
+    for (const p of r.phases) {
+      console.log(
+        `  ${String(p.ord).padStart(2)}. ${ui.color.cyan(p.id.padEnd(13))} ${p.file}`
+      );
+      console.log(
+        "      read  layers " +
+          p.layers.map((x) => "\`" + x + "\`").join(", ") +
+          "  ·  " +
+          p.read +
+          "      when  " +
+          p.when +
+          (p.optional_when ? "  ·  only when \`" + p.optional_when + "\` resolves on" : "")
+      );
+      console.log(
+        "      calls  " + (p.calls.length ? p.calls.join(" · ") : ui.color.gray("none catalogued"))
+      );
+    }
+    console.log(
+      ui.color.gray(
+        `\n  own_phases: ${r.own_phases_status} — this lane's own pipeline is in its spine.\n  Layer set is CLOSED: ${PHASE_LAYERS.join(" · ")}. A fifth layer is a lint failure.\n`
+      )
+    );
+  }
+  return 0;
+}
+
 function laneConfigCmd(lane, claudeDir) {
   if (!lane) {
     console.error("Usage: orc lane config <lane>   (orc lane list)");
@@ -3599,12 +3825,15 @@ function lane() {
       process.exit(laneConfigCmd(pos[2], claudeDir));
     case "calls":
       process.exit(laneCallsCmd(pos[2], claudeDir));
+    case "phases":
+      process.exit(lanePhasesCmd(pos[2], claudeDir));
     default:
       console.error(
         `Unknown: orc lane ${pos[1]}\n` +
           "Usage: orc lane list [--json]\n" +
           "       orc lane config <lane> [--json]\n" +
-          "       orc lane calls <lane> [--json]   |   orc lane calls --all [--json]"
+          "       orc lane calls <lane> [--json]   |   orc lane calls --all [--json]\n" +
+          "       orc lane phases <lane> [--json]  |   orc lane phases --all [--json]"
       );
       process.exit(2);
   }
@@ -8024,7 +8253,7 @@ function relAge(ms) {
   return `${d} ${d === 1 ? "day" : "days"} ago`;
 }
 
-// The ONE line RESUME.md guarantees (references/stop-and-resume.md):
+// The ONE line RESUME.md guarantees (_shared/phases/stop-resume.md):
 //   Where it stands:  /orc · phase execution · wave 2 of 4 done
 // Parsing this is why a listing never has to open checkpoint.json.
 function parseStands(text) {
@@ -8494,7 +8723,7 @@ function readTail(file, bytes = 8192) {
 // Parses the run summary the orchestrator appends at FINISH, e.g.
 //   [080826 12:00:00.000] orc  STATS lane=orc slug=merchant-notifications \
 //        dispatches=17 waves=4 tasks=7 bands=high:2,med:3,low:1 downgrades=0
-// Contract copy lives in templates/skills/orc/references/trace-protocol.md.
+// Contract copy lives in templates/skills/_shared/phases/trace.md.
 function parseStatsLine(text) {
   const m = /^.*\bSTATS\s+(.+)$/m.exec(text || "");
   if (!m) return null;

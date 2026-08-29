@@ -92,6 +92,10 @@ named in the JSON.
    Both are read from the repo's own manifest, never assumed.
 4. **One line each.** A probe whose answer is silent is a probe that gets skipped.
 
+The SHAPE of these steps — the order, and the four rules that make it worth
+having — is `../_shared/phases/preflight.md` (`core`). The probes
+themselves are this lane's own and stay here.
+
 ## B1 — Scope (ONE question)
 
 ```
@@ -180,12 +184,14 @@ default. Say which mode is active whenever a verdict is printed.
 
 ## Behavior trace (always on)
 
-Follow `../orc/references/trace-protocol.md`. Lane name `boundary`.
-**Single-dispatch lane: exactly ONE end-of-run packet**, dispatched solo to
-`orc-trace-writer-haiku-4-5` after B4 and BEFORE `.current` is deleted. It carries
-`run_meta`, the events (probes, recon, verdicts, cards written) and the four-answer
-derivations as `decisions`. A run that ends with
+`../_shared/phases/trace.md` (`core`, at run start; `orc lane phases` names
+the file and the layers). Lane token `boundary`, tier **Single-dispatch** —
+exactly ONE end-of-run packet, dispatched solo after B4.
+Nothing else about the protocol is restated here; a phase that ends with
 `zero new trace lines is a protocol violation`.
+
+That packet carries `run_meta`, the events (probes, recon, verdicts, cards
+written) and the four-answer derivations as `decisions`.
 
 ## How this lane fails — and the rule that prevents each
 

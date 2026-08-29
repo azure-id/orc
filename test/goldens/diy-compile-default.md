@@ -83,7 +83,7 @@ including hands-off autonomy — ever overrides a locked rule.
 ## Behavior trace (PERMANENT — always on, no flow key)
 
 Tracing is NOT composable: every ORC run traces, this one included. Follow
-`.claude/skills/orc/references/trace-protocol.md` (load it at run start) — this
+`.claude/skills/_shared/phases/trace.md` (load it at run start) — this
 block is stitched into every compiled flow so a user-composed pipeline can never
 be the one lane that runs blind.
 
@@ -182,7 +182,7 @@ validated against the contract) with these compiled overrides:
   `.claude/skills/orc/references/wave-grouping.md`).
 - Stop-and-continue pause every **2** waves (checkpoint
   confirmed BEFORE announcing any stop; resume per
-  `.claude/skills/orc/references/stop-and-resume.md`).
+  `.claude/skills/_shared/phases/stop-resume.md`).
 - Executor selection comes from this flow's scoring section above — never
   from the shipped presets.
 

@@ -70,7 +70,7 @@ to `orc-retro-opus-5-med` when `opus5_only: true` forces it
    date range from `$ARGUMENTS`). Show the count and ask nothing else.
 2. Dispatch `orc-retro-sonnet-5-high` (or `orc-retro-opus-5-med` under
    `opus5_only`) with the slice: trace file paths + the
-   verb reference (`../orc/references/trace-protocol.md`). The agent mines the
+   verb reference (`../_shared/phases/trace.md`). The agent mines the
    `<trace>.jsonl` sidecar first when present (structured — no regex over free
    text) and falls back to `.txt` parsing for pre-v0.32.0 traces, merging the
    hook's `.txt`-only skeleton lines by timestamp. It parses the CLOSED verb set

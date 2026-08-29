@@ -66,6 +66,10 @@ hand off to orc-mini via the fallback contract below. Never stop the chat.
 
 **d. Extra — a PROBE, not a gate (P0).** Run `orc extra resolve --slot fast-executor --json` (0 = extra, 1 = Claude) — **a gate that is never probed is a gate that is always off**, and without this step the lane silently runs on Claude however `extra_enabled` and `orc extra role` were set. `extra` → print the `extra:` line HERE and carry the answer into F2; `claude` → print nothing, never fall back, never stop.
 
+The SHAPE of these steps — the order, and the four rules that make it worth
+having — is `../_shared/phases/preflight.md` (`core`). The probes
+themselves are this lane's own and stay here.
+
 ## Phase F1 — Fit gate + micro-intake (one pass, ONE user round-trip)
 
 Draft a 3–5 line intent spec + 2–3 acceptance bullets. Judge fit: more than
@@ -153,18 +157,16 @@ failed gate in one line, write the `FALLBACK-FROM` block into the run folder
 smoke-red-escalation), and invoke orc-mini pointing at it. The run folder is
 already in the shared format — no migration.
 
-## Behavior trace (PERMANENT — same rule as every lane; always on)
+## Behavior trace (always on)
 
-Follow `../orc/references/trace-protocol.md`: at run start write
-`log_dir/.current` = `run-fast-<slug>-<DDMMYY>-<HHMMSS>.txt`, `touch the trace file`
-of that name in the SAME step, + store `trace_path`. Narration is **dispatched, never remembered**: record each event
-with its REAL timestamp into a packet (F0–F4 `PHASE`, `GATE` at the preflight/
-fit/smoke verdicts, `DISPATCH`/`VERIFY` — `actual_model`/`actual_effort` vs
-expected — `OUTCOME`, `FINISH`, plus `decisions` = the WHY), then dispatch
-`orc-trace-writer-haiku-4-5` PAIRED with the next dispatch; fast batches to
-**2 packets** (preflight+dispatch, gate+ship). A phase ending with
-zero new trace lines is a protocol violation — dispatch its packet NOW. The
-`FINISH` packet returns BEFORE you delete `log_dir/.current`.
+`../_shared/phases/trace.md` (`core`, at run start; `orc lane phases` names
+the file and the layers). Lane token `fast`, tier **Build lanes** —
+per phase, batched to **2 packets** (preflight+dispatch · gate+ship), each
+paired with the next phase's first dispatch.
+At run start write `log_dir/.current` = `run-fast-<slug>-<DDMMYY>-<HHMMSS>.txt` AND
+`touch the trace file` of that name in the SAME step.
+Nothing else about the protocol is restated here; a phase that ends with
+`zero new trace lines is a protocol violation`.
 
 ## Config
 

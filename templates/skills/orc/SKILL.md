@@ -31,6 +31,10 @@ is hard-blocked by the `orc-effort-guard.js` PreToolUse hook; the model cannot b
 and tell the user to switch the main session and re-run — never intake below it
 (subagents cannot exceed the main tier, so the Opus executors silently downgrade).
 
+The SHAPE of these steps — the order, and the four rules that make it worth
+having — is `../_shared/phases/preflight.md` (`core` + `full`). The probes
+themselves are this lane's own and stay here.
+
 ## Hard rules (never violate)
 
 1. **You NEVER implement. You coordinate.** All execution, review, and verify
@@ -105,7 +109,7 @@ documented defaults, out loud. Priorities and families:
 
 ## Behavior trace (PERMANENT — always on, no config toggle)
 
-Follow `references/trace-protocol.md` (ALWAYS load it at run start). The
+Follow `../_shared/phases/trace.md` (ALWAYS load it at run start). The
 `orc-trace.js` hook writes the `SPAWN`/`RETURN`/`PHASE-EDGE` skeleton
 deterministically; the rich narrative is **dispatched, never remembered** — every
 `emit <VERB>` step below means RECORD that event, with its REAL timestamp, into
@@ -165,7 +169,7 @@ them; they are never dispatched as subagents).
 
 ## Constellation map (load on demand only)
 
-- Run start → `references/trace-protocol.md` (always)
+- Run start → `../_shared/phases/trace.md` (always)
 - Phase 0 → `references/intake.md`; **plan input → `references/plan-handoff.md`**;
   ultra_mode → `references/ultra-mode.md`
 - Phase 0/1 analyst-planner gates → `references/analyst-gates.md`
@@ -173,7 +177,7 @@ them; they are never dispatched as subagents).
 - Phase 2 → `references/effort-and-mode.md`; tagging → `references/pattern-gate.md`
 - Phase 3 → `references/wave-grouping.md` + `log-protocol.md` + `house-rules.md`
   + `pattern-gate.md` (resolve gate); workers → `subskills/orc-execution/`;
-  stops → `subskills/orc-checkpoint/SKILL.md` + `references/stop-and-resume.md`
+  stops → `subskills/orc-checkpoint/SKILL.md` + `../_shared/phases/stop-resume.md`
 - Phase 5–6 → `subskills/orc-review-verify/`; FE tasks →
   `../orc-pattern/references/fe-a11y.md` + `fe-perf.md` (as `fe_rules[]`)
 - Phase 5.5 → `references/security-checklist.md`; 6.5 → `subskills/orc-testgen/`
@@ -396,7 +400,7 @@ the codifier); hold resolved patterns in run state.
    remains, emit `GATE wave-boundary :: wave=W of K → STOP (batch_pause_every=N)`
    and run the MANDATORY STOP SEQUENCE — never dispatch wave W+1 past an
    unacknowledged boundary. Token pressure → same STOP SEQUENCE (judgment).
-   Last wave closes → emit `PHASE execution end`. (references/stop-and-resume.md)
+   Last wave closes → emit `PHASE execution end`. (../_shared/phases/stop-resume.md)
 
 **User escalations:** relay question → broadcast answer to log; an answer that
 invalidates a DONE task → re-run once, then set every reverse-`depends_on`
@@ -523,6 +527,6 @@ wiki now?"**; on "later" print the prominent stale warning and stamp
 usage report — /usage limits + the full dispatch log (model/effort/score per
 subagent). The user must always know what the run cost. Finally emit
 `PHASE ship end`, then the one-line `STATS lane=… dispatches=… downgrades=…`
-summary (trace-protocol.md — what `orc stats` reads), then `FINISH :: <detail>`,
+summary (trace.md — what `orc stats` reads), then `FINISH :: <detail>`,
 and in ONE step delete BOTH `log_dir/.current` and the run's `RESUME.md` (that
-file existing is what marks a run unfinished — stop-and-resume.md).
+file existing is what marks a run unfinished — stop-resume.md).

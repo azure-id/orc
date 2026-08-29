@@ -72,18 +72,15 @@ for the formats; this skill does not duplicate them.
   which continues with the mini planner) — orc-mini runs the same evidence
   spot-check + derivation lint gates as the full lane before building.
 
-## Behavior trace (PERMANENT — every ORC entry point traces; always on)
+## Behavior trace (always on)
 
-Same rule as the full analyst: standalone `/orc-analyze-mini` resolves
-`log_dir` at start and follows
-`../orc/references/trace-protocol.md` — write `log_dir/.current` =
-`run-analyze-<slug>-<DDMMYY>-<HHMMSS>.txt` and `touch the trace file` of that
-name in the SAME step, before the first dispatch; collect
-`PHASE`/`DISPATCH`/`VERIFY`/`GATE`/`FINISH` events with their REAL timestamps
-plus `decisions` (the WHY) and dispatch the trace writer ONCE at run end (the
-single-dispatch-lane packet), then delete `.current` (the hook bootstraps
-`.current` + the skeleton on the first dispatch regardless). Inside an orc-mini
-run, the mini orchestrator's trace already covers this — never open a second one.
+`../_shared/phases/trace.md` (`core`, at run start; `orc lane phases` names
+the file and the layers). Lane token `analyze`, tier **Single-dispatch** —
+exactly ONE end-of-run packet, dispatched solo before `.current` is deleted.
+At run start write `log_dir/.current` = `run-analyze-<slug>-<DDMMYY>-<HHMMSS>.txt` AND
+`touch the trace file` of that name in the SAME step.
+Nothing else about the protocol is restated here; a phase that ends with
+`zero new trace lines is a protocol violation`.
 
 ## Workflow checkpoint (gate before deriving the spec)
 

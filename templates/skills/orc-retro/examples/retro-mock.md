@@ -70,7 +70,7 @@ packet; its meaningful signal is the writer's tier honesty):
 
 ```
 C: Spawning orc-retro-sonnet-5-high → claude-sonnet-5 / high
-   slice: trace_files=[3 paths] + verb_reference=orc/references/trace-protocol.md
+   slice: trace_files=[3 paths] + verb_reference=_shared/phases/trace.md
    (This lane writes NO run pointer and emits NO markers — tracing the retro
     would pollute the very data it mines.)
 ```

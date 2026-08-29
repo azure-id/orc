@@ -51,7 +51,7 @@ Not inside a git repo / no project root findable → say so and stop.
 
 Behavior-trace logging is permanent (always on). Resolve `log_dir`
 (`../orc/config.md` default + `.claude/orc.config.yaml`) at start and follow
-`../orc/references/trace-protocol.md`; the marker set is in "Behavior trace"
+`../_shared/phases/trace.md`; the marker set is in "Behavior trace"
 below. Weave the **Trace:** steps in as each event happens.
 
 1. **Topic pick (wiki-first).** Read `wiki/INDEX.md` +
@@ -107,34 +107,27 @@ below. Weave the **Trace:** steps in as each event happens.
    feature headers. Relay the combined report. **Trace:**
    `FINISH :: refresh <n> features`, then delete `log_dir/.current`.
 
-## Behavior trace (PERMANENT — minimal dispatch-lane protocol; always on)
+## Behavior trace (always on)
 
-orc-learn owns the trace for its run like every trace-owning lane, but it is
-a dispatch-only lane: it emits ONLY markers it can truthfully witness — no
-phase/score/finding/verdict markers (deepening and writing happen inside the
-writer, which self-traces nothing and only returns `actual_model`/
-`actual_effort`). The marker set, in order (actor `orc`, plus the hook's
-`SPAWN`/`RETURN`):
+`../_shared/phases/trace.md` (`core`, at run start; `orc lane phases` names
+the file and the layers). Lane token `learn`, tier **Single-dispatch** —
+exactly ONE end-of-run packet, dispatched solo after the writer return
+validates and BEFORE `.current` is deleted.
+At run start write `log_dir/.current` = `run-learn-<slug>-<DDMMYY>-<HHMMSS>.txt` AND
+`touch the trace file` of that name in the SAME step.
+Nothing else about the protocol is restated here; a phase that ends with
+`zero new trace lines is a protocol violation`.
 
-1. `WIKI-CONSULT tier=<tier> :: <topic-pick|refresh>` — at every wiki read
-   (orc-learn is a wiki-grounding lane; the consult is always traced, absent
-   wiki included).
-2. `log_dir/.current` = `run-learn-<slug>-<DDMMYY>-<HHMMSS>.txt` — before the first spawn.
-3. `DISPATCH orc-learn-writer :: <mode> <slug> expect=opus-5/low` — one
-   per spawn; REFRESH runs one per selected feature.
-4. `VERIFY writer actual=<model>/<effort> ✅ MATCH` or
-   `⛔ DOWNGRADE expected=opus-5/low` — from the returned
-   `actual_model`/`actual_effort` (this lane's honesty signal for
-   `/orc-retro`).
-5. `FINISH :: <init <slug>|refresh <n> features>`, then delete `.current`.
-
-Narration is **dispatched, never remembered**: record each marker with its REAL
-timestamp as its event happens, then — as a single-dispatch lane — dispatch the
-trace writer ONCE with the whole event list plus `decisions` (the WHY: which
-feature was picked and why, the user's answer verbatim) after the writer return
-validates and BEFORE you delete `.current`. Stamps are the run's timeline, never
-the write time, and a run that
-ends with zero new trace lines is a protocol violation.
+Dispatch-only lane: emit ONLY the markers it can truthfully witness — no
+`PHASE`/`SCORE`/`FINDING`/`VERDICT`, because deepening and writing happen
+inside the writer, which self-traces nothing and returns only
+`actual_model`/`actual_effort`. The marker set, in order (actor `orc`, plus the
+hook's `SPAWN`/`RETURN`): `WIKI-CONSULT tier=<tier> :: <topic-pick|refresh>` at
+every wiki read · `DISPATCH orc-learn-writer :: <mode> <slug> expect=opus-5/low`
+per spawn (REFRESH runs one per selected feature) · `VERIFY writer
+actual=<model>/<effort>` · `FINISH :: <init <slug>|refresh <n> features>`.
+`decisions` carries which feature was picked and why, plus the user's answer
+verbatim.
 
 ## Boundaries
 

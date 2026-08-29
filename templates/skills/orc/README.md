@@ -70,10 +70,8 @@ orc/
 │   ├── effort-and-mode.md       # dispatch-style gate + scoring rubric
 │   ├── wave-grouping.md
 │   ├── log-protocol.md
-│   ├── stop-and-resume.md       # stop sequence, /usage, resume block
 │   ├── house-rules.md           # standing behavioral card, injected into every slice
-│   ├── security-checklist.md    # Phase 5.5 OWASP/STRIDE items (opt-in)
-│   └── trace-protocol.md        # behavior trace (PERMANENT — always on)
+│   └── security-checklist.md    # Phase 5.5 OWASP/STRIDE items (opt-in)
 ├── subskills/
 │   ├── orc-execution/           # SKILL.md + core.md + subagent.md (always spawned)
 │   ├── orc-review-verify/       # review / verify / security modes (always spawned)

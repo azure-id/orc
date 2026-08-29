@@ -107,15 +107,13 @@ At ship it feeds `/orc-retro` alongside `orc budget actual`.
 
 ## Behavior trace (always on)
 
-Follow `../orc/references/trace-protocol.md`. Lane name `aftermath`.
-**Single-dispatch lane: exactly ONE end-of-run packet** to
-`orc-trace-writer-haiku-4-5` after A3 and BEFORE `.current` is deleted. It carries
-`run_meta`, the events (runs graded, signals found) and the scope choice as
-`decisions`. A run that ends with
+`../_shared/phases/trace.md` (`core`, at run start; `orc lane phases` names
+the file and the layers). Lane token `aftermath`, tier **Single-dispatch** —
+exactly ONE end-of-run packet, dispatched solo before `.current` is deleted.
+At run start write `log_dir/.current` = `run-aftermath-<slug>-<DDMMYY>-<HHMMSS>.txt` AND
+`touch the trace file` of that name in the SAME step.
+Nothing else about the protocol is restated here; a phase that ends with
 `zero new trace lines is a protocol violation`.
-
-Zero new agents — the grading is deterministic and the rendering is this lane's own
-work.
 
 ## How this lane fails — and the rule that prevents each
 

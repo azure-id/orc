@@ -76,7 +76,7 @@ it were a single analysis — with PROOF that no source requirement was lost.
     packet — the hook segments your work as its own `PHASE-EDGE` family
     (`combine`) inside that same file. Bootstrapping here would split the
     analyze run across two files and invent a lane nothing can open. See
-    `../orc/references/trace-protocol.md`.
+    `../_shared/phases/trace.md`.
 
 ## Phase A — Load sources
 Read every source `requirement-spec.md` (2+) the orchestrator hands you, plus

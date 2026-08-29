@@ -152,38 +152,25 @@ Fill in the P0 / Gotchas / Glossary placeholders yourself — orc-claude never
 writes them for you.
 ```
 
-## Behavior trace (PERMANENT — a minimal one-dispatch orchestrator; always on)
+## Behavior trace (always on)
 
-orc-claude owns the trace protocol for its run exactly
-like the full orchestrator — but it is a SINGLE-DISPATCH lane, so it emits ONLY
-the markers it can truthfully witness. It does **not** emit `PHASE`/`SCORE`/
-`FINDING`/`VERDICT`: the scan/generate/report phases run INSIDE the writer
-sub-agent (which self-traces nothing — it only returns `actual_model`/
-`actual_effort`), and there is no scoring or review in this lane. Resolve
-`log_dir` (`../orc/config.md` default + `.claude/orc.config.yaml`)
-at start and follow `../orc/references/trace-protocol.md`. The marker set, in
-order (all under actor `orc`, plus the hook's `SPAWN`/`RETURN`):
+`../_shared/phases/trace.md` (`core`, at run start; `orc lane phases` names
+the file and the layers). Lane token `claude`, tier **Single-dispatch** —
+exactly ONE end-of-run packet, dispatched solo after the writer return
+validates and BEFORE `.current` is deleted.
+At run start write `log_dir/.current` = `run-claude-<slug>-<DDMMYY>-<HHMMSS>.txt` AND
+`touch the trace file` of that name in the SAME step.
+Nothing else about the protocol is restated here; a phase that ends with
+`zero new trace lines is a protocol violation`.
 
-1. `log_dir/.current` = `run-claude-<slug>-<DDMMYY>-<HHMMSS>.txt` — written FIRST
-   (the hook also bootstraps it on the writer dispatch, so the skeleton is never
-   lost, and the end-of-run packet renames a bootstrapped file).
-2. `DISPATCH orc-claude-writer :: <mode> expect=opus-4-8/high` — before the
-   spawn. The hook then appends `SPAWN`/`RETURN` around the dispatch. The mode
-   rides in this line's tail (and in `FINISH`), so no separate mode marker.
-3. `VERIFY writer actual=<model>/<effort> ✅ MATCH` or
-   `⛔ DOWNGRADE expected=opus-4-8/high` — from the writer's returned
-   `actual_model`/`actual_effort` (the one honesty signal this lane feeds
-   `/orc-retro`).
-4. `FINISH :: <mode_ran> CLAUDE.md v<X.Y.Z>` (mode_ran may be `noop`), then
-   delete `.current`.
-
-Narration is **dispatched, never remembered**: record each marker with its REAL
-timestamp as its event happens, then — as a single-dispatch lane — dispatch the
-trace writer ONCE with the whole event list plus `decisions` (the WHY: mode
-choice, what the user asked) after the writer return validates and BEFORE you
-delete `.current`. Stamps are the run's timeline, never the write time, and a run
-that ends with zero new trace lines is a protocol violation. A noop refresh still
-traces the full cycle (ending `FINISH :: noop`) and still deletes `.current`.
+Dispatch-only lane: emit ONLY the markers it can truthfully witness — **not**
+`PHASE`/`SCORE`/`FINDING`/`VERDICT`, because scan/generate/report run INSIDE
+the writer sub-agent and there is no scoring or review here. The marker set, in
+order (actor `orc`, plus the hook's `SPAWN`/`RETURN`): `DISPATCH
+orc-claude-writer :: <mode> expect=opus-4-8/high` before the spawn (the mode
+rides in this tail and in `FINISH`, so no separate mode marker) · `VERIFY writer
+actual=<model>/<effort>` · `FINISH :: <mode_ran> CLAUDE.md v<X.Y.Z>`, where
+`mode_ran` may be `noop`. A noop refresh still traces the full cycle.
 
 ## Boundaries
 

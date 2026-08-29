@@ -59,21 +59,15 @@ conflict, HOST wins — the same rule extended across the repository boundary.
 `examples/poly-run-mock.md`. Gathering + question-loop protocol:
 `references/gather.md`. Doc-set + poly-spec schema: `references/poly-spec.md`.
 
-## Behavior trace (PERMANENT — always on)
+## Behavior trace (always on)
 
-Resolve `log_dir` (`../orc/config.md` default ← `.claude/orc.config.yaml`) at
-start and follow `../orc/references/trace-protocol.md`. Write
-`log_dir/.current` = `run-poly-<slug>-<DDMMYY>-<HHMMSS>.txt` and
-`touch the trace file` of that name in the SAME step, before the first
-sub-dispatch (a pointer to a missing file reads as dangling and the hook
-rotates away). Record each marker
-with its REAL timestamp AS ITS EVENT HAPPENS; a step ending with
-**zero new trace lines is a protocol violation**. Marker set (actor `orc`): `PHASE P0..P5`,
-`GATE` (per-repo knowledge probe verdict), `WIKI-CONSULT tier=<tier> ::
-<repo>` (every wiki read), `DISPATCH`/`VERIFY` (around the planner in P5),
-`FINISH`. Narration is dispatched, not remembered — as a single-dispatch lane,
-dispatch the trace writer ONCE at run end with that event list plus `decisions`
-(the WHY: peers resolved, what the contract froze), then delete `.current`.
+`../_shared/phases/trace.md` (`core`, at run start; `orc lane phases` names
+the file and the layers). Lane token `poly`, tier **Single-dispatch** —
+exactly ONE end-of-run packet, dispatched solo before `.current` is deleted.
+At run start write `log_dir/.current` = `run-poly-<slug>-<DDMMYY>-<HHMMSS>.txt` AND
+`touch the trace file` of that name in the SAME step.
+Nothing else about the protocol is restated here; a phase that ends with
+`zero new trace lines is a protocol violation`.
 
 ## Phase P0 — Intake (identify HOST + PEERs + the change)
 

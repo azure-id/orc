@@ -64,6 +64,10 @@ dispatch-forcing key applies, because it has no scored dispatch to force.
 
 ---
 
+The SHAPE of these steps — the order, and the four rules that make it worth
+having — is `../_shared/phases/preflight.md` (`core`). The probes
+themselves are this lane's own and stay here.
+
 ## G1 — The interview (the whole lane)
 
 **Follow `../_shared/interview.md` exactly.** It is the canonical mechanic and
@@ -189,14 +193,17 @@ Shape, and what each part is for: `references/grill-doc.md`. The top carries a
 delimited `<!-- orc-grill:context -->` block so a later session reads the summary
 without reading the whole file.
 
-## Behavior trace (always on — same as every lane)
+## Behavior trace (always on)
 
-Follow `../orc/references/trace-protocol.md`. Lane name `grill`. This is a
-**single-dispatch** lane: **exactly ONE end-of-run packet**, dispatched solo to
-`orc-trace-writer-haiku-4-5` after the exit choice and BEFORE you delete
-`log_dir/.current`. It carries `run_meta`, the round-by-round event list, the
-settled decisions as `decisions` (the WHY layer), the exit taken, and `FINISH`. A
-run that ends with `zero new trace lines is a protocol violation`.
+`../_shared/phases/trace.md` (`core`, at run start; `orc lane phases` names
+the file and the layers). Lane token `grill`, tier **Single-dispatch** —
+exactly ONE end-of-run packet, dispatched solo before `.current` is deleted.
+Nothing else about the protocol is restated here; a phase that ends with
+`zero new trace lines is a protocol violation`.
+
+Read-only recon is an **ad-hoc dispatch by model + effort**, never a pinned
+agent — so the hook writes no `SPAWN`/`RETURN` for it. Emit `DISPATCH …
+adhoc=true` and `VERIFY` yourself.
 
 ## Rules this lane always keeps
 

@@ -111,20 +111,18 @@ Validate the returned `test_plan_path`/`curl_bundle_path` are under that folder
 (else malformed → re-dispatch); relay + state the exact path (committed on ship,
 not gitignored). No → ship. Either way this NEVER runs tests.
 
-## Behavior trace (PERMANENT — same rule as full; always on)
+## Behavior trace (always on)
 
-Mini does NOT drop the trace. Follow `../orc/references/trace-protocol.md` (load
-at run start): create `log_dir`, write `.current` =
-`run-mini-<slug>-<DDMMYY>-<HHMMSS>.txt` AND `touch the trace file` of that name
-in the SAME step, store `trace_path`. Narration is
-**dispatched, never remembered**: record each event with its REAL timestamp into
-a packet (`PHASE`, `DISPATCH`, `VERIFY` per return — `actual_model`/
-`actual_effort` vs expected, surface any ⛔ DOWNGRADE — `OUTCOME … band=mini`,
-`VERDICT`, plus `decisions` = the WHY), then dispatch
-`orc-trace-writer-haiku-4-5` PAIRED with the next dispatch; mini batches to
-**3 packets** (intake+plan, execution, ship). A phase with
-zero new trace lines is a protocol violation — dispatch its packet NOW.
-Run end: the `FINISH` packet returns, then delete `log_dir/.current`.
+`../_shared/phases/trace.md` (`core`, at run start; `orc lane phases` names
+the file and the layers). Lane token `mini`, tier **Build lanes** —
+per phase, batched to **3 packets** (intake+plan · execution · ship), each
+paired with the next phase's first dispatch.
+At run start write `log_dir/.current` = `run-mini-<slug>-<DDMMYY>-<HHMMSS>.txt` AND
+`touch the trace file` of that name in the SAME step.
+Nothing else about the protocol is restated here; a phase that ends with
+`zero new trace lines is a protocol violation`.
+
+Mini does NOT drop the trace. `OUTCOME … band=mini` per task.
 
 ## Complexity read (replaces the scoring table)
 

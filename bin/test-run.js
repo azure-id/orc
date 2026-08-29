@@ -91,9 +91,11 @@ const POOL_ORDER = ["pure", "spawn", "net", "heavy"];
 // 358 s; at 4 it passed 653/653 in 302 s. SLOWER at higher concurrency is the
 // contention signature — the box is oversubscribed, so real timeouts elapse.
 //
-// The cap is NOT lowered here. That is D31 and it is the user's call: this seam
-// is what turns it from a judgement into a decision with data.
-const GLOBAL_CONCURRENCY = Number(process.env.ORC_TEST_GLOBAL_CONCURRENCY) || 8;
+// ANSWERED at v1.0.0 W11: the default is 4, on that measurement. A cap that is
+// both slower and red is not buying anything, and a green run at 8 on an idle
+// box (W9, W10) is evidence about the box rather than about the cap. The seam
+// stays — `ORC_TEST_GLOBAL_CONCURRENCY=8` reproduces the old behaviour exactly.
+const GLOBAL_CONCURRENCY = Number(process.env.ORC_TEST_GLOBAL_CONCURRENCY) || 4;
 // A file with no pragma lands in the safe middle AND is reported by name.
 const DEFAULT_POOL = "spawn";
 

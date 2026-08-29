@@ -36,7 +36,7 @@ Do these IN ORDER before any dispatch. Skipping any step is a protocol
 violation.
 
 1. **This IS a run — bootstrap it.** Load the spine (`orc/SKILL.md`) and
-   `references/trace-protocol.md`; create `log_dir`, write `log_dir/.current` =
+   `../../_shared/phases/trace.md`; create `log_dir`, write `log_dir/.current` =
    `run-orc-<slug>-<DDMMYY>-<HHMMSS>.txt` AND `touch the trace file` of that name
    in the SAME step (both, or neither — a pointer naming a file that does not
    exist is what splits a run across two files), store `trace_path` in the

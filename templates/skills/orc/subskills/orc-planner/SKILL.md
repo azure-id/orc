@@ -213,17 +213,13 @@ at plan time) so the executing session can detect cross-session drift.
 
 ## Behavior trace (PERMANENT — every ORC entry point traces; always on)
 
-Standalone `/orc-plan` traces too: the orchestrator resolves `log_dir` at start
-and follows `../../references/trace-protocol.md` —
-write `log_dir/.current` = `run-plan-<slug>-<DDMMYY>-<HHMMSS>.txt` and
-`touch the trace file` of that name in the SAME step, before dispatching the
-planner (a pointer to a missing file reads as dangling and the hook rotates); collect `PHASE`/`DISPATCH`/`VERIFY`/`FINISH` events with
-their REAL timestamps plus `decisions` (the WHY), dispatch the trace writer ONCE
-at run end (the single-dispatch-lane packet), then delete `.current`
-(on take-into-build the trace stays open and the full run continues it; the hook
-bootstraps `.current` + the skeleton on dispatch regardless).
-Inside an /orc run, the run's trace already covers planning — never open a
-second one.
+`../../../_shared/phases/trace.md` (`core`, at run start; `orc lane phases` names
+the file and the layers). Lane token `plan`, tier **Single-dispatch** —
+exactly ONE end-of-run packet, dispatched solo before `.current` is deleted.
+At run start write `log_dir/.current` = `run-plan-<slug>-<DDMMYY>-<HHMMSS>.txt` AND
+`touch the trace file` of that name in the SAME step.
+Nothing else about the protocol is restated here; a phase that ends with
+`zero new trace lines is a protocol violation`.
 
 ## Checkpoint before branching
 

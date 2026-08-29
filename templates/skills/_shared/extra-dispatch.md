@@ -691,7 +691,7 @@ only moment anyone can act on it is now.
 
 The trace line is still yours to relay, and it still matters: it is the
 human-readable narrative of the run, it is what `/orc-retro` reads, and the
-trace-cadence rule in `references/trace-protocol.md` still binds every phase.
+trace-cadence rule in `phases/trace.md` still binds every phase.
 What changed is that the SPEND no longer depends on it.
 
 One `EXTRA` line per foreign dispatch, plus its continuations. **Copy

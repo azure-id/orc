@@ -103,6 +103,10 @@ stay on Claude. See `references/dispatch-gate.md` and
 
 ---
 
+The SHAPE of these steps — the order, and the four rules that make it worth
+having — is `../_shared/phases/preflight.md` (`core`). The probes
+themselves are this lane's own and stay here.
+
 ## Q1 — LOOK (silent — no questions here)
 
 **Sort the request.** Does it only read, or does it write? What needs to be
@@ -286,14 +290,14 @@ One folder per thread. **One file inside. Never a second file.**
   re-open a thread, and when the user asks you to read it.
 - Full shape and examples: `references/context-doc.md`.
 
-## Behavior trace (always on — same as every lane)
+## Behavior trace (always on)
 
-Follow `../orc/references/trace-protocol.md`. orc-quick is the **Iterative**
-tier: **one packet per finished numbered entry**, plus the `FINISH` packet at
-the end. Build the packet as the entry closes, with each event's REAL time, then
-dispatch `orc-trace-writer-haiku-4-5` paired with the next entry's first
-dispatch. The `FINISH` packet must come back BEFORE you delete `.current`. An
-entry that ends with zero new trace lines is a protocol violation.
+`../_shared/phases/trace.md` (`core`, at run start; `orc lane phases` names
+the file and the layers). Lane token `quick`, tier **Iterative** —
+ONE packet per finished numbered entry, paired with the next entry's first
+dispatch, plus the `FINISH` packet.
+Nothing else about the protocol is restated here; a phase that ends with
+`zero new trace lines is a protocol violation`.
 
 Ad-hoc dispatches are not named `orc-*`, so the hook writes no `SPAWN`/`RETURN`
 for them. You still emit `DISPATCH … adhoc=true` and `VERIFY` yourself, and the

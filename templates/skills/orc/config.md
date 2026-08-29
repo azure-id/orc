@@ -105,7 +105,7 @@ value participates in, and each has exactly one canonical copy.
 | Subsystem | The rule, in one line | Canonical prose |
 |---|---|---|
 | Wave grouping | `max_wave_tasks` is a hard cap, never a target | `references/wave-grouping.md` |
-| Batch pause | `batch_pause_every` is a DETERMINISTIC hard gate, not a cadence hint: after wave W, `W % N == 0` with a later wave remaining forces the stop sequence. Computed and confirmed at Phase 2 intake, persisted as `pause_schedule` so a resume enforces it too | `references/stop-and-resume.md` |
+| Batch pause | `batch_pause_every` is a DETERMINISTIC hard gate, not a cadence hint: after wave W, `W % N == 0` with a later wave remaining forces the stop sequence. Computed and confirmed at Phase 2 intake, persisted as `pause_schedule` so a resume enforces it too | `../_shared/phases/stop-resume.md` |
 | Run budget | `run_budget_dispatches` turns the Phase-1 forecast into a hard stop BEFORE wave 1 and emits `` `GATE budget stop\|pass ``. At `0` no line is emitted at all. The estimate is a FLOOR — repairs push the real count up, never down | `references/preflight-report.md` |
 | Analysis depth | `default_analysis_depth` only presets the standard/deep gate; the run still confirms, and deep never auto-escalates without consent. `max_scouts` caps the parallel scouts the same way a wave is capped | `../orc-analyze/SKILL.md` |
 | TDD | every plan carries `tdd_spec`; each entry's `disposition` is DERIVED from the planner's `facets`, and a task with a cited `facets.risk[]` can never be scoped out. `tdd_loop_max` caps the repair loop, then STOP + an honest red report. There is deliberately no key for the scoping — one would restore the tautological tests it removes | `SKILL.md` Phase 6 · `schemas/planning-output.md` |
@@ -134,4 +134,4 @@ persistent trace under `log_dir`; the `orc-trace.js` hook is the deterministic
 guarantee, bootstrapping the pointer itself and segmenting the run with
 `PHASE-EDGE` lines, so a usable trace exists even if the orchestrator never
 narrates. The rich narration is DISPATCHED per phase to the pinned Haiku trace
-writer — never appended from memory. See `references/trace-protocol.md`.
+writer — never appended from memory. See `../_shared/phases/trace.md`.

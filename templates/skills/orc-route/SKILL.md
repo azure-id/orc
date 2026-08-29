@@ -146,15 +146,14 @@ stop** ONLY, it asks:
 split & stop* never asks — it has its own per-repo handoff. One question, in
 exactly one branch.
 
-## Behavior trace (always on — same as every lane)
+## Behavior trace (always on)
 
-Follow `../orc/references/trace-protocol.md`. Lane name `route`. Single-dispatch
-tier: **exactly ONE end-of-run packet** to `orc-trace-writer-haiku-4-5`, solo,
-after the offer is answered and BEFORE `log_dir/.current` is deleted. Run start
-writes `log_dir/.current` = `run-route-<slug>-<DDMMYY>-<HHMMSS>.txt` AND
-`touch the trace file` of that name in the SAME step. The packet carries the
-probe results, the signals read from the plan, the recommendation, and — as
-`decisions` — why the runners-up lost. A run that ends with
+`../_shared/phases/trace.md` (`core`, at run start; `orc lane phases` names
+the file and the layers). Lane token `route`, tier **Single-dispatch** —
+exactly ONE end-of-run packet, dispatched solo before `.current` is deleted.
+At run start write `log_dir/.current` = `run-route-<slug>-<DDMMYY>-<HHMMSS>.txt` AND
+`touch the trace file` of that name in the SAME step.
+Nothing else about the protocol is restated here; a phase that ends with
 `zero new trace lines is a protocol violation`.
 
 ## Rules this lane always keeps

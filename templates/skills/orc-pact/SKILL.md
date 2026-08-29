@@ -94,6 +94,10 @@ is indistinguishable from a promise that was never made.
    `pact: 11 holding · 2 drifted · 3 uncheckable`. A ledger whose state is silent
    is a ledger nobody trusts.
 
+The SHAPE of these steps — the order, and the four rules that make it worth
+having — is `../_shared/phases/preflight.md` (`core`). The probes
+themselves are this lane's own and stay here.
+
 ## P1 — Intake (ONE question)
 
 ```
@@ -190,12 +194,13 @@ advice with a receipt, not a gate.
 
 ## Behavior trace (always on)
 
-Follow `../orc/references/trace-protocol.md`. Lane name `pact`. **Single-dispatch
-lane: exactly ONE end-of-run packet**, dispatched solo to
-`orc-trace-writer-haiku-4-5` after P4 and BEFORE `.current` is deleted. It carries
-`run_meta`, the events (harvested, checked, reconciled, retired), and the
-reconcile decisions as `decisions` — the WHY layer, which for this lane is the
-whole point. A run that ends with `zero new trace lines is a protocol violation`.
+`../_shared/phases/trace.md` (`core`, at run start; `orc lane phases` names
+the file and the layers). Lane token `pact`, tier **Single-dispatch** —
+exactly ONE end-of-run packet, dispatched solo before `.current` is deleted.
+Nothing else about the protocol is restated here; a phase that ends with
+`zero new trace lines is a protocol violation`.
+
+Verb tail `PACT …` — see `references/gate.md` for the line the CLI composes.
 
 ## How this lane fails — and the rule that prevents each
 

@@ -328,3 +328,108 @@ test("lane calls: a documented exit code is a code the route can really return",
     rmrf(root);
   }
 });
+
+// ── `orc lane phases` — the phase library manifest (v1.0.0 W11) ─────────────
+//
+// The CLI owns the pipeline, not the prose (design-02 §6, the Flow-stepper
+// rule). These tests are about the three things a lane bets on when it stops
+// carrying its own copy: the exit code never varies, the manifest points at a
+// file that really contains the layers it declares, and the human branch is
+// never less detailed than the JSON.
+
+test("lane phases: the exit-code contract — 0 answered, 2 unknown lane, alias, or no argument", () => {
+  const { root } = freshInstall();
+  try {
+    assert.strictEqual(cli(["lane", "phases", "orc", "--dir", root]).status, 0);
+    assert.strictEqual(cli(["lane", "phases", "--all", "--dir", root]).status, 0);
+    assert.strictEqual(cli(["lane", "phases", "no-such-lane", "--dir", root]).status, 2);
+    assert.strictEqual(cli(["lane", "phases", "--dir", root]).status, 2, "no lane and no --all is a usage error");
+    // An entry point is not a typo — the `orc lane config` precedent.
+    const alias = cli(["lane", "phases", "ultra", "--dir", root]);
+    assert.strictEqual(alias.status, 2);
+    assert.match(alias.stderr, /entry point, not a lane/);
+    // A lane that runs NO shared phase still ANSWERS. /orc-retro mines traces
+    // and writes none (its hard rule 4), so it is in no trace row on purpose.
+    const none = cli(["lane", "phases", "orc-retro", "--dir", root]);
+    assert.strictEqual(none.status, 0);
+    assert.match(none.stdout, /No shared phase/);
+    assert.match(none.stdout, /owns no trace/);
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("lane phases: --json is not a summary — every field the human branch prints", () => {
+  const { root } = freshInstall();
+  try {
+    const j = JSON.parse(cli(["lane", "phases", "orc", "--json", "--dir", root]).stdout);
+    assert.deepStrictEqual(Object.keys(j), [
+      "ok", "lane", "all", "count", "layer_set", "phase_files", "lanes",
+    ]);
+    assert.deepStrictEqual(j.layer_set, ["core", "full", "trim", "composed"]);
+    const l = j.lanes[0];
+    assert.deepStrictEqual(Object.keys(l), [
+      "lane", "trace_tier", "trace_token", "phases", "shared_phase_count",
+      "own_phases", "own_phases_status",
+    ]);
+    assert.strictEqual(l.trace_tier, "Build lanes");
+    assert.strictEqual(l.trace_token, "orc");
+    // own_phases is NOT an empty array: this lane's own pipeline is real and
+    // still declared in its spine. Claiming [] would be claiming it has none.
+    assert.strictEqual(l.own_phases, null);
+    assert.strictEqual(l.own_phases_status, "in-spine");
+    for (const p of l.phases) {
+      assert.deepStrictEqual(Object.keys(p), [
+        "ord", "id", "file", "layers", "read", "when", "optional_when", "calls",
+      ]);
+      assert.ok(p.file.startsWith("_shared/phases/"), p.id + " lives in the library");
+      assert.ok(p.layers.includes("core"), p.id + " always carries core");
+      // /orc-doc rule 2 — a manifest names a FILE and a LAYER, never a line.
+      assert.ok(!/:\d/.test(p.file), "a manifest never carries a line number");
+    }
+    const ords = l.phases.map((p) => p.ord);
+    assert.deepStrictEqual(ords, [...ords].sort((a, b) => a - b), "ord is the run order");
+    assert.strictEqual(l.shared_phase_count, l.phases.length);
+
+    const all = JSON.parse(cli(["lane", "phases", "--all", "--json", "--dir", root]).stdout);
+    assert.strictEqual(all.lane, null);
+    assert.strictEqual(all.all, true);
+    assert.ok(all.count >= 30, "every lane is in --all");
+  } finally {
+    rmrf(root);
+  }
+});
+
+// THE BEHAVIOUR TEST. A manifest is only worth reading if what it names is
+// really on disk with really those layers — the failure it prevents has no
+// error message: a lane opens a file and finds nothing under the marker it was
+// told to read, and improvises.
+test("lane phases: every manifested file is INSTALLED and carries the layers it declares", () => {
+  const { root, claudeDir } = freshInstall();
+  try {
+    const j = JSON.parse(cli(["lane", "phases", "--all", "--json", "--dir", root]).stdout);
+    const seen = new Set();
+    for (const l of j.lanes)
+      for (const p of l.phases) {
+        const abs = path.join(claudeDir, "skills", p.file);
+        assert.ok(fs.existsSync(abs), `${p.file} is INSTALLED, not just in the repo`);
+        const body = fs.readFileSync(abs, "utf8");
+        for (const layer of p.layers) {
+          assert.ok(j.layer_set.includes(layer), `${layer} is in the closed set`);
+          assert.ok(
+            body.includes(`<!-- orc:layer ${layer} -->`),
+            `${p.file} carries the \`${layer}\` layer ${l.lane} is told to read`
+          );
+        }
+        seen.add(p.file);
+      }
+    // Every file in the library is claimed by the manifest — a file nothing
+    // points at is a file nobody reads.
+    const dir = path.join(claudeDir, "skills", "_shared", "phases");
+    for (const f of fs.readdirSync(dir))
+      if (f !== "README.md")
+        assert.ok(seen.has("_shared/phases/" + f), `_shared/phases/${f} is claimed by LANE_PHASES`);
+  } finally {
+    rmrf(root);
+  }
+});

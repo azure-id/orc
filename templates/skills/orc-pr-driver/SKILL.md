@@ -140,19 +140,21 @@ After each merge: confirm the upper layers auto-retargeted and their CI re-ran.
 Never merge a middle layer with unmerged layers below it. When the last layer
 lands, delete the snapshot branch (ask first) and report the final state.
 
-## Behavior trace (PERMANENT — every ORC entry point traces; always on)
+## Behavior trace (always on)
 
-Resolve `log_dir` (`../orc/config.md` default ← `.claude/orc.config.yaml`) at
-start and follow `../orc/references/trace-protocol.md`: write
-`log_dir/.current` = `run-prdriver-<slug>-<DDMMYY>-<HHMMSS>.txt` and
-`touch the trace file` of that name in the SAME step, first. Narration is
-dispatched, not remembered: dispatch the trace writer at every **layer
-boundary** (one packet per layer close, per the multi-dispatch tier) and once at
-run end. Events with their REAL timestamps: `PHASE D0..D5`,
-`GATE layer-green pass|bounce :: L<n> <step>`, `QUESTION count=<n>`,
-`GATE stack-certainty` on a mid-run re-cut, `FINISH`; `decisions` carries the WHY
-(seam calls, accepted exceptions, the user's answers verbatim). A phase ending
-with `zero new trace lines is a protocol violation`.
+`../_shared/phases/trace.md` (`core`, at run start; `orc lane phases` names
+the file and the layers). Lane token `prdriver`, tier **Multi-dispatch** —
+one packet per LAYER boundary (each layer's green gate closes) + the
+end-of-run packet.
+At run start write `log_dir/.current` = `run-prdriver-<slug>-<DDMMYY>-<HHMMSS>.txt` AND
+`touch the trace file` of that name in the SAME step.
+Nothing else about the protocol is restated here; a phase that ends with
+`zero new trace lines is a protocol violation`.
+
+Events: `PHASE D0..D5`, `GATE layer-green pass|bounce :: L<n> <step>`,
+`QUESTION count=<n>`, `GATE stack-certainty` on a mid-run re-cut, `FINISH`;
+`decisions` carries the WHY (seam calls, accepted exceptions, the user's
+answers verbatim).
 
 ## Boundaries
 

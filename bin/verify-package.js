@@ -307,6 +307,17 @@ const required = [
   // fallback that is supposed to fire when the CLI cannot answer is exactly the
   // moment there is no CLI to ask instead.
   "templates/skills/_shared/config-precedence.md",
+  // v1.0.0 W11 — the phase library. The shared phase material already existed
+  // and was already shared; it just lived in ONE lane's private folder with 26
+  // other lanes reaching across into it. A publish missing any of these leaves
+  // every one of those lanes pointing at nothing — and `trace.md` in particular
+  // is the file that says how a run records itself, so its absence is silent by
+  // construction. README.md carries the CLOSED layer set, which is what stops a
+  // trimmed lane reading a full-lane procedure.
+  "templates/skills/_shared/phases/README.md",
+  "templates/skills/_shared/phases/trace.md",
+  "templates/skills/_shared/phases/preflight.md",
+  "templates/skills/_shared/phases/stop-resume.md",
   "templates/commands/orc-grill.md",
   "templates/commands/orc-route.md",
   "templates/commands/orc-explain.md",

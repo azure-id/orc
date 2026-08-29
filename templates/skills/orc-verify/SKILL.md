@@ -62,20 +62,15 @@ P2/P3 (advisory):
 Verdict: <READY / NEEDS FIXES>
 ```
 
-## Behavior trace (PERMANENT — every ORC entry point traces; always on)
+## Behavior trace (always on)
 
-Standalone verify traces too — appended as each event happens, never batched
-at the end (a phase ending with
-`zero new trace lines is a protocol violation`). Resolve `log_dir`
-(`../orc/config.md` default + `.claude/orc.config.yaml`) at start and follow
-`../orc/references/trace-protocol.md`: write
-`log_dir/.current` = `run-verify-<slug>-<DDMMYY>-<HHMMSS>.txt` and
-`touch the trace file` of that name in the SAME step, first. Narration
-is dispatched, not remembered: collect `PHASE` lines, `FINDING p0=… p1=… p2=…
-p3=…`, `VERDICT pass|fail` and `FINISH` with their REAL timestamps plus
-`decisions` (the WHY), dispatch the trace writer ONCE at run end (the
-single-dispatch-lane packet), then delete `.current` (the hook bootstraps
-`.current` + the skeleton on dispatch regardless).
+`../_shared/phases/trace.md` (`core`, at run start; `orc lane phases` names
+the file and the layers). Lane token `verify`, tier **Single-dispatch** —
+exactly ONE end-of-run packet, dispatched solo before `.current` is deleted.
+At run start write `log_dir/.current` = `run-verify-<slug>-<DDMMYY>-<HHMMSS>.txt` AND
+`touch the trace file` of that name in the SAME step.
+Nothing else about the protocol is restated here; a phase that ends with
+`zero new trace lines is a protocol violation`.
 
 ## Boundaries
 

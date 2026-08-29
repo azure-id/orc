@@ -10,7 +10,7 @@ validated against the contract) with these compiled overrides:
   `.claude/skills/orc/references/wave-grouping.md`).
 - Stop-and-continue pause every **{{batch_pause_every}}** waves (checkpoint
   confirmed BEFORE announcing any stop; resume per
-  `.claude/skills/orc/references/stop-and-resume.md`).
+  `.claude/skills/_shared/phases/stop-resume.md`).
 - Executor selection comes from this flow's scoring section above — never
   from the shipped presets.
 

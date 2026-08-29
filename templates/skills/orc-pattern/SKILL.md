@@ -63,20 +63,15 @@ Reconciliation is therefore cheap: you only ever override the *soft* half.
 3. **Manual** — `/orc-pattern` (all detected langs, or a named one),
    `/orc-pattern --refresh` to force-regenerate.
 
-## Behavior trace (PERMANENT — every ORC entry point traces; always on)
+## Behavior trace (always on)
 
-When run standalone (`/orc-pattern`, not inside an /orc or orc-wiki run that
-already owns a trace), resolve `log_dir` (`../orc/config.md`
-default + `.claude/orc.config.yaml`) at start and follow
-`../orc/references/trace-protocol.md`: write `log_dir/.current` =
-`run-pattern-<slug>-<DDMMYY>-<HHMMSS>.txt` and `touch the trace file` of that
-name in the SAME step, BEFORE dispatching the codifier.
-Narration is dispatched, not remembered: collect `PHASE`/`DISPATCH`/`VERIFY`
-(claimed-vs-actual)/`FINISH` events with their REAL timestamps plus `decisions`
-(the WHY), dispatch the trace writer ONCE at run end (the single-dispatch-lane
-packet), then delete `.current` (the hook bootstraps `.current` + the skeleton on
-dispatch regardless). Inside another ORC run, that run's trace covers this —
-never open a second one.
+`../_shared/phases/trace.md` (`core`, at run start; `orc lane phases` names
+the file and the layers). Lane token `pattern`, tier **Single-dispatch** —
+exactly ONE end-of-run packet, dispatched solo before `.current` is deleted.
+At run start write `log_dir/.current` = `run-pattern-<slug>-<DDMMYY>-<HHMMSS>.txt` AND
+`touch the trace file` of that name in the SAME step.
+Nothing else about the protocol is restated here; a phase that ends with
+`zero new trace lines is a protocol violation`.
 
 ## Phase 0 — Entry & auto-branch (on /orc-pattern)
 

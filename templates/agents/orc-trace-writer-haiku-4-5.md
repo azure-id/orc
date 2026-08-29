@@ -29,7 +29,7 @@ so your only job is a faithful, complete, append-only write of the packet.
   Absent on later packets. Drives the rename duty below.
 - `events[]` — each `{ts, actor, verb, tail}`. `ts` is the event's REAL time
   (`DDMMYY HH:MM:SS.mmm`), `verb` is from the CLOSED verb set in
-  `references/trace-protocol.md`, `actor` defaults to `orc` when absent (use the
+  `skills/_shared/phases/trace.md`, `actor` defaults to `orc` when absent (use the
   EVENT's actor in the line you write — `writer` is only ever your own `NOTE`).
 - `decisions` — free text: WHY this phase went the way it did (scoring rationale,
   the user's answers VERBATIM, replan reasons, what was chosen and rejected).

@@ -41,7 +41,7 @@ negotiated at runtime.
    answer — mark `is_batch_pause: true` on wave W when `W % N == 0` AND a later
    wave exists (`W < total_waves`); the last wave is NEVER a pause (nothing
    remains to gate). The resulting wave indices are the `pause_schedule` stored
-   in the checkpoint. A pause so marked is a HARD gate (stop-and-resume.md), not
+   in the checkpoint. A pause so marked is a HARD gate (stop-resume.md), not
    an orchestrator judgment call.
 
 ## Same-feature collision

@@ -100,6 +100,10 @@ findings are ORC's, the work and the decision are the user's:
 5. **Resolve the roster.** `orc challenge council <slug> --json` — exit 1 means
    UNSET (a cycle opened before v0.49.1), and C1 asks. Never default it.
 
+The SHAPE of these steps — the order, and the four rules that make it worth
+having — is `../_shared/phases/preflight.md` (`core`). The probes
+themselves are this lane's own and stay here.
+
 ## C1 — Intake (ONE round, ASK — never guess)
 
 Full field list, the round format and the "I don't know yet" exit:
@@ -220,12 +224,16 @@ options: narrow the rubric, accept the gaps, or keep going.
 
 ## Behavior trace (always on)
 
-`../orc/references/trace-protocol.md`. Lane name `challenge`. **Iterative tier:
-ONE packet per completed iteration**, dispatched at C8 (and at C7 on PASS, as the
-`FINISH` packet). One `CHALLENGE iter=<n> …` line per iteration boundary,
-carrying `orc challenge record`'s own `trace_line` VERBATIM — never a second
-wording for a number the CLI already computed. A phase that ends with `zero new
-trace lines is a protocol violation`.
+`../_shared/phases/trace.md` (`core`, at run start; `orc lane phases` names
+the file and the layers). Lane token `challenge`, tier **Iterative** —
+ONE packet per completed iteration, dispatched at C8 — and at C7 on PASS, as
+the `FINISH` packet.
+Nothing else about the protocol is restated here; a phase that ends with
+`zero new trace lines is a protocol violation`.
+
+One `CHALLENGE iter=<n> …` line per iteration boundary, carrying `orc challenge
+record`'s own `trace_line` VERBATIM — never a second wording for a number the
+CLI already computed.
 
 ## How this lane fails — and the rule that prevents each
 

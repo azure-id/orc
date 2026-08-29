@@ -886,7 +886,7 @@ test("a resumed return owes `resume_state`, and §6's before-side moves to the j
 });
 
 test("the two new trace verbs are registered where the lane reads them", () => {
-  const proto = read("skills/orc/references/trace-protocol.md");
+  const proto = read("skills/_shared/phases/trace.md");
   assert.ok(proto.includes("EXTRA resume task="));
   assert.ok(proto.includes("EXTRA orphan task="));
   assert.match(proto, /A resume that leaves no line cannot be counted/);

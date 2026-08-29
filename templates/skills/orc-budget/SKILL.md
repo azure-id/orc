@@ -195,14 +195,13 @@ not part of this lane.
 
 ## Behavior trace (always on)
 
-Follow `../orc/references/trace-protocol.md`. Lane name `budget`.
-**Single-dispatch lane: exactly ONE end-of-run packet** to
-`orc-trace-writer-haiku-4-5` after U4 and BEFORE `.current` is deleted. It carries
-`run_meta`, the events (probe, forecast, the units rendered) and the U3 answer as
-`decisions`. A run that ends with
+`../_shared/phases/trace.md` (`core`, at run start; `orc lane phases` names
+the file and the layers). Lane token `budget`, tier **Single-dispatch** —
+exactly ONE end-of-run packet, dispatched solo before `.current` is deleted.
+At run start write `log_dir/.current` = `run-budget-<slug>-<DDMMYY>-<HHMMSS>.txt` AND
+`touch the trace file` of that name in the SAME step.
+Nothing else about the protocol is restated here; a phase that ends with
 `zero new trace lines is a protocol violation`.
-
-Zero new agents. There is nothing to dispatch: the whole forecast is deterministic.
 
 ## How this lane fails — and the rule that prevents each
 
