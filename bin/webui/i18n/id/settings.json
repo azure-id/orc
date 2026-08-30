@@ -48,5 +48,13 @@
   "settings.retired.note": "Kunci ini sudah dihapus dari ORC. Barisnya masih ada di berkas konfigurasi Anda. ORC tidak membacanya dan tidak mengubahnya. Anda boleh menghapus barisnya kapan saja.",
   "settings.retired.badge": "tidak dibaca",
   "settings.retired.readonly": "Sudah dihapus. ORC tidak lagi membaca kunci ini.",
-  "settings.retired.removedIn": "Dihapus di v"
+  "settings.retired.removedIn": "Dihapus di v",
+  "settings.ranks.title": "Apa yang menentukan",
+  "settings.ranks.note": "Beberapa pengaturan menjawab pertanyaan yang sama. Baca satu keluarga dari atas ke bawah dan berhenti di peringkat pertama yang menjawab. Ini yang dilakukan berkas konfigurasi Anda, bukan yang bisa dilakukannya.",
+  "settings.ranks.none": "Tidak ada keluarga yang bersaing — setiap pengaturan di sini menjawab pertanyaannya sendiri.",
+  "settings.ranks.answeredBy": "Dijawab di {prio} oleh {key}.",
+  "settings.ranks.answeredByDefault": "Dijawab di {prio} oleh bawaan bawaan paket — tidak ada peringkat di atasnya yang menjawab.",
+  "settings.ranks.legend": "Status:",
+  "settings.lanes.label": "Dibaca oleh:",
+  "settings.lanes.none": "tidak ada lane — jembatan orc extra yang membacanya"
 }

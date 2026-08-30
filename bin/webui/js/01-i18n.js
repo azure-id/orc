@@ -46,6 +46,7 @@ const NAMESPACES = [
   "banner",
   "overview",
   "settings",
+  "lanes",
   "runs",
   "knowledge",
   "stats",

@@ -2061,6 +2061,25 @@ function configListJson(claudeDir) {
     // precedence it can be handed. `--json is not a summary`: the ranks, the
     // terminal rows and the questions are all here, in resolution order.
     families: CONFIG_FAMILIES,
+    // v1.0.0 W16 — the family table RESOLVED, project-wide. `families` above is
+    // the static registry: which ranks exist and in what order. This is what
+    // those ranks actually did against the config on disk right now — per rank
+    // a `state` from the closed set and a `why`, plus which rank answered.
+    //
+    // It closes a `--json is not a summary` gap the release exists to find: the
+    // human branch has always PRINTED the resolution ("resolves on P3 the
+    // shipped default — read top-down, stop at the first rank that resolves"),
+    // and `--json` carried only the registry the reader would have to re-run
+    // the precedence over. Both halves live in one function, so no lint could
+    // have seen it.
+    //
+    // PROJECT-WIDE, so it is resolved with NO lane: inertness is a fact about a
+    // lane ("/orc-quick does not read this"), and claiming it here would be
+    // claiming a lane's answer for the whole project. A reader who wants the
+    // lane-scoped answer asks `orc lane config <lane> --json`, which is the
+    // command that owns it.
+    families_resolved: laneFamilies(null, map, claudeDir),
+    rank_states: LANE_RANK_STATES,
     // Permanently on and deliberately not a key — say so, or a reader hunts for
     // the switch (only the folder is configurable).
     behavior_trace: { always_on: true, configurable_key: "log_dir" },
@@ -4394,7 +4413,19 @@ const DIY_META = [
   { key: "summary", def: "full", options: ["full", "off", "short"], validate: vEnum("full", "off", "short"), desc: "Summary depth." },
   { key: "autonomy", def: "interactive", options: ["interactive", "semi", "hands-off"], validate: vEnum("interactive", "semi", "hands-off"), desc: "Who answers routine asks: interactive | semi | hands-off." },
   { key: "ship_mode", def: "ask", options: ["ask", "commit", "pr", "report-only"], validate: vEnum("ask", "commit", "pr", "report-only"), desc: "Terminal ship behavior." },
-  { key: "session_tier", def: "opus-4-8-high", options: Object.keys(DIY_TIERS), validate: vEnum(...Object.keys(DIY_TIERS)), desc: "Required main-session model+effort (guard-enforced effort, statusline-warned model)." },
+  // D29, answered at v1.0.0 W16. The wizard default was `opus-4-8-high`, which
+  // was right while exactly one band was Opus 5. W4 made the top TWO bands Opus
+  // 5, so a default tier that cannot outrank one band now cannot outrank two,
+  // and a wizard-built flow arrived with a THIRD of its ladder collapsed onto a
+  // single agent before the user had chosen anything. The clip itself is
+  // correct, announced in the compiled flow and pinned by a regression test —
+  // but a DEFAULT that clips is a default that quietly hands most users a
+  // narrower ladder than the one the release ships. `opus-5-high` outranks
+  // every band in both tables, so the wizard now starts unclipped and the clip
+  // becomes what it should always have been: something you opt into by naming a
+  // lower tier. Existing configs are untouched — this is a default, not a
+  // migration, and `diy show` still reports whatever the file says.
+  { key: "session_tier", def: "opus-5-high", options: Object.keys(DIY_TIERS), validate: vEnum(...Object.keys(DIY_TIERS)), desc: "Required main-session model+effort (guard-enforced effort, statusline-warned model)." },
   { key: "max_wave_tasks", def: 3, options: [2, 3, 4, 5], validate: vInt(1), desc: "Max parallel tasks per wave." },
   { key: "batch_pause_every", def: 2, options: [1, 2, 3, 4, 5], validate: vInt(1), desc: "Waves between stop-and-continue pauses." },
   { key: "rubric_bands", def: 5, options: [2, 3, 4, 5, 6, 7, 8], validate: vRange(2, 8), desc: "Scoring granularity (scoring on only)." },
@@ -31928,6 +31959,60 @@ function doctor() {
           );
         else ok(`wiki STALE but nothing pending a refresh (${plural(ws.docs, "doc")})`);
       } else ok(`wiki ${f.tier} (${plural(ws.docs, "doc")}${f.distance === null ? "" : ", " + f.distance + "c on the worst doc"})`);
+    }
+  } catch (_) {}
+
+  // 5c) THE LANE CONFIG CONTRACT, ON DISK (v1.0.0 W16). `bin/verify-contracts.js`
+  // asserts this both ways in the SOURCE tree; this is the same assertion
+  // against the payload that is actually INSTALLED, which is the only copy a
+  // run ever reads. It fires when the two halves of an install are out of step
+  // — a CLI that knows a lane reads keys sitting on a spine from before that
+  // lane had the contract — and that is precisely the state in which a lane
+  // falls back to merging `.claude/orc.config.yaml` itself and gets a shadowed
+  // key wrong, silently.
+  //
+  // Both directions, because an empty answer is an ANSWER (v0.43.0): a spine
+  // that names the contract while the CLI says the lane reads nothing is drift
+  // in the other direction, and it promises an answer the CLI would refuse.
+  // `version-skew` may well fire alongside this — it says the numbers differ,
+  // this says what a run would get wrong because of it. FIXABLE: `orc update`
+  // re-copies the payload, which is what `orc doctor --fix` does.
+  try {
+    const skillsDir = path.join(claudeDir, "skills");
+    if (fs.existsSync(skillsDir)) {
+      const drifted = [];
+      for (const l of LANES) {
+        const spine = path.join(skillsDir, l.lane, "SKILL.md");
+        // A spine that is not on disk at all belongs to `missing-files`, which
+        // already names it. Reporting it twice is a doctor being loud.
+        if (!fs.existsSync(spine)) continue;
+        const text = fs.readFileSync(spine, "utf8");
+        const keys = CONFIG_META.filter((m) => (m.lanes || []).includes(l.lane)).map((m) => m.key);
+        const names = text.includes(`orc lane config ${l.lane} --json`);
+        if (keys.length && !names)
+          drifted.push({
+            lane: l.lane,
+            keys: keys.length,
+            direction: "spine-behind",
+            why: `reads ${plural(keys.length, "key")} but the installed spine does not name \`orc lane config ${l.lane} --json\``,
+          });
+        else if (!keys.length && text.includes("orc lane config"))
+          drifted.push({
+            lane: l.lane,
+            keys: 0,
+            direction: "spine-ahead",
+            why: "reads no config key, but the installed spine still carries a config contract",
+          });
+      }
+      if (drifted.length)
+        warn(
+          "lane-keys-drifted",
+          `${plural(drifted.length, "lane")} out of step with this CLI's config model: ${drifted
+            .map((d) => d.lane)
+            .join(", ")} — a lane with no contract resolves config itself, and gets a shadowed key wrong. Run \`orc update\``,
+          { lanes: drifted, fixable: true, fix_command: "orc update" }
+        );
+      else ok(`lane config contract intact on all ${LANES.length} lanes`);
     }
   } catch (_) {}
 

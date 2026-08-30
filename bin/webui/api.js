@@ -199,6 +199,16 @@ const READS = {
   "/api/config": () => ["config", "list"],
   "/api/config/profiles": () => ["config", "profile"],
   "/api/config/recommend": () => ["config", "recommend"],
+  // v1.0.0 W16 — the `orc lane` noun, rendered. All three are READS and all
+  // three are answers the CLI already computes in full: which lanes exist and
+  // how many keys each reads, which SHARED phases a lane runs and in what
+  // order, and the whole call catalogue. The panel draws them and decides
+  // nothing about them — the Flow-stepper rule, applied to the lane model.
+  // `lane phases` and `lane config` both exit 2 on an unknown lane, which is
+  // DATA here exactly like `pattern status` and `wiki impact` above.
+  "/api/lanes": () => ["lane", "list"],
+  "/api/lane/phases": (q) => ["lane", "phases", String(q.lane || "")],
+  "/api/lane/calls": (q) => (q.lane ? ["lane", "calls", String(q.lane)] : ["lane", "calls", "--all"]),
   "/api/runs": (q) => ["run", "list", "--limit", String(Math.min(200, Number(q.limit) || 40))],
   "/api/run": (q) => ["run", "show", String(q.slug || "")],
   "/api/wiki": () => ["wiki", "status"],
@@ -352,6 +362,11 @@ const READS = {
   // error — including `in-flight`, which is a REFUSAL the panel must render as
   // one rather than as a dead control.
   "/api/extra/journal": () => ["extra", "journal", "list"],
+  // v1.0.0 W16 — the RUN DEMOTION, read. Exit 0 armed · 1 demoted · 2 unknown
+  // run, which is exit-code-as-DATA like every other gate command here. The
+  // run is optional: with none given the CLI reads the trace pointer, which is
+  // exactly what a panel wants — "the run that is open right now".
+  "/api/extra/demotion": (q) => ["extra", "demotion", ...(q.run ? [String(q.run)] : [])],
   "/api/extra/reconcile": (q) => ["extra", "reconcile", String(q.task || "")],
   "/api/extra/journal/prune/preview": () => ["extra", "journal", "prune", "--dry-run"],
   "/api/patterns": () => ["pattern", "status"],
@@ -541,6 +556,14 @@ const WRITES = {
   // ever a candidate, so this can never delete the record of a dispatch that
   // never reported back.
   "/api/extra/journal/prune": () => ["extra", "journal", "prune"],
+  // A PROMOTE IS A HUMAN ACTION AND A REASON IS REQUIRED (v1.0.0 W5). The CLI
+  // refuses without one — exit 2, `reason-required` — so the panel does not
+  // validate it a second time; it collects it and lets the CLI decide, which is
+  // the same contract every other write on this server keeps. There is
+  // deliberately NO demote route: demoting by hand is a diagnostic somebody
+  // reaches for at a terminal, and a button for it would invite muting a
+  // provider instead of fixing it.
+  "/api/extra/promote": (b) => ["extra", "promote", String(b.run || ""), "--reason", String(b.reason || "")],
   "/api/crosslink/remove": (b) => ["crosslink", "remove", String(b.name)],
   // The UI assembles no YAML. It hands the CLI the same arguments the
   // interactive prompt collects, and every rejection the user sees is the

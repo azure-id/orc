@@ -10,6 +10,155 @@ Format: `### v<version> — <title> _(<date>)_`.
 
 ---
 
+### v1.0.0 - config, phases and calls stop being prose _(2026-08-30)_
+
+**Still on the unscoped `orc` package?** Do this once before anything else -
+your `orc upgrade` is the pre-v0.56.0 one and it cannot install itself:
+
+- **Step 1 - release the command from the old package:** `npm uninstall -g orc`
+- **Step 2 - install the current package:** `npm i -g @azure-id/orc`
+- **Step 3 - re-apply it to your project:** `orc update`
+
+**Do not use `npm i -g -f`.** It overwrites the command file and leaves the
+superseded package installed underneath, owning nothing and updated by nothing.
+Full detail in v0.56.0 below.
+
+**Nothing you configure changes meaning, and no command you run is renamed.**
+The user-visible half of this release is three: a wider Opus 5 band in the score
+table, a foreign worker that stalls twice now steps aside for the rest of the
+run, and `orc diy init` starts on `opus-5-high` instead of `opus-4-8-high`.
+Everything else is ORC finally reading its own payload the way it has been
+telling you to read yours.
+
+**Start with what it cost, because the framing was wrong.** This release was
+planned as a deduplication, and it is not one. The payload went from **208 files
+/ 26,507 lines to 291 files / 33,204 lines** — bigger on both counts. Of the
+sixteen waves, four measured as the class they were declared (fewer lines) and
+**most measured as C: correctness, at a small cost in lines**. The prose that
+was copied 14-59 times did not disappear; it moved into one canonical file per
+phase and the copies became pointers, and pointers plus a manifest cost more
+bytes than the duplication did. What changed is not the size. **It is that there
+is now exactly one place to fix each of these things, and a lint that fails when
+a copy grows back.**
+
+**Config stops being prose.** Every lane used to restate the config it reads and
+re-derive the precedence around it, and `orc/SKILL.md` declared 8 keys while the
+`/orc` directory referenced 32 - so the per-lane key list already existed and
+was already 75% wrong. Config is now a **rank-ordered registry with declared
+families**, and a lane asks ONE command what resolved:
+
+- **`orc lane config <lane> [--json]`** answers "what did this lane's config
+  resolve to", with every shadow and inertness ALREADY WORDED. A lane never
+  merges `.claude/orc.config.yaml` itself again, and never re-derives a
+  precedence. **A rank below a resolved rank is not read at all.**
+- **Six rank states, and they are the CLI's**: `resolved`, `partly-resolved`,
+  `not-read`, `inert`, `demoted`, `absent`. `absent` and `not-read` are
+  different facts - one rank was consulted and declined, the other was never
+  looked at - and rendering them the same way erases the difference between
+  "your setting did nothing" and "your setting was never read".
+- A **two-way lint**: a key no lane reads is an error, and so is a lane naming a
+  key the CLI cannot write. Ten keys are permanently empty and are on a NAMED
+  allowlist - they are operating keys of the `orc extra` bridge, which a lane
+  never names - so an empty list is an ANSWER and not a to-do.
+- The **config file is grouped by family**, ranked inside a contested one, with
+  the sentence that makes the grouping mean anything: *ranks compare only inside
+  a family.* Your existing `orc.config.yaml` is untouched - only the comments
+  around it move, and only on your next `orc config set`.
+- The `fable5_*` role override is **removed**. It held exactly three keys, and
+  the retired-key mechanism reports them by name rather than silently ignoring
+  them.
+
+**Phases stop being copied.** One canonical copy per phase in
+`_shared/phases/`, and each lane spine becomes a **manifest** over that library:
+
+- **`orc lane phases <lane> [--json]`** answers which shared phases a lane runs,
+  in what order, which layers to read, and when. A row names a FILE **or** a
+  HEADING - never both, never neither - and a two-way lint means neither a
+  missing row nor a phase-shaped heading nobody declared can survive a commit.
+- **A manifest names a file, a layer and at most a heading. Never a line
+  number** - a stored line number is a wrong line number one edit later.
+- **`orc-diy` became a consumer of that library** rather than a parallel copy of
+  it.
+
+**Calls stop being restated.** Eleven CLI invocations were re-described 14-59
+times each, every copy re-wording its own exit codes:
+
+- **`orc lane calls [--all] [--json]`** is the one catalogue: the command, what
+  it answers, its exit codes, its cost, when to call it, **what a lane must do
+  when the answer is empty**, and what it must never do.
+- `_shared/read-ladder.md` - "reading more is not understanding more", which ORC
+  has told you about your code since v0.4.0 - now covers reading **ORC's own
+  payload**, so a manifest of pointers does not become more round trips than the
+  prose it replaced.
+
+**The three things that actually change behaviour.**
+
+- **The score to model table is six bands and ends `opus-5-low [65,90)` ·
+  `opus-5-med [90,100]`.** Two bands in six now need an Opus 5 main session
+  where one in eight did. The `opus5_only` ladder is two bands, `[0,90)` low and
+  `[90,100]` medium, sharing that same round-90 edge.
+- **A foreign worker that stalls twice in one run is DEMOTED** to the bottom of
+  its families for the rest of that run - or once a live attempt has been quiet
+  for `extra_demote_stale_min` minutes. **Two clocks, never merged**, each with
+  its own key and its own zero, and setting either to `0` disables that clock
+  and says so. It **writes no new measurement**: every fact comes from the
+  journal already on disk, the verdict is recomputed from disk on every read,
+  and the only thing stored is the human half - a promote or a hand demotion,
+  with its reason, deleted with the run. It never writes your config, never
+  auto-promotes, and never changes WHAT runs: same score, same declared files,
+  same acceptance criteria, same Claude agent. Two keys, `extra_demote_after`
+  and `extra_demote_stale_min`; a promote is a **watermark, not a mute**.
+- **`orc diy init` now defaults `session_tier` to `opus-5-high`.** The old
+  default could not outrank the top two bands, so a wizard-built flow arrived
+  with a third of its ladder already collapsed onto one agent before you had
+  chosen anything. The clip itself was correct and announced - it is now
+  something you opt into by naming a lower tier. Existing configs are untouched.
+
+**`orc ui` renders all of it, and decides none of it.**
+
+- **Settings gains "Who decides what"** - the rank ladder for every contested
+  family, showing which rank ANSWERED and why every other one did not. The panel
+  never walks the ladder itself and never names a contested key.
+- **Every setting row now names the lanes that read it**, so "I changed this,
+  so what did I just change?" has an answer on the same screen. An empty list is
+  an answer and keeps its row.
+- **A new Lanes panel** with two tabs: the shared phases a lane runs, in order,
+  and the whole call catalogue with its exit codes. A lane that keeps its
+  pipeline in its own spine says so - a blank card would read as a failed load.
+- **Extra ▸ Recovery gains the demotion row**: the counter (at zero too), both
+  clocks, the evidence, and **Promote, which requires a reason**. There is
+  deliberately no Demote button.
+- **`orc doctor` gains `lane-keys-drifted`** - an installed spine out of step
+  with this CLI's config model, which is precisely the state in which a lane
+  falls back to resolving config itself and gets a shadowed key wrong, silently.
+
+**The test suite, and an honest caveat.** `npm test` went from 596 to **669
+tests** and from a single global concurrency to **pools by resource class**
+(pure 14 / spawn 4 / net 2 / heavy 1) under one global cap. A flake that cost
+four waves their gate was diagnosed: every `extra` test arms its fixture with a
+real `orc extra ping`, and rung 1 of that ping is a hardcoded 3-second wall
+clock in product code with no test seam - so on a loaded box a loopback answer
+misses it, the ping falls through to the 20-second rung 2, and the assertion
+fails at ~23 s on a different file every run. There is now one seam over every
+probe budget; unset, shipped behaviour is byte-identical, and nothing in ORC
+ever sets it. **The caveat that travels with that fix:** three consecutive green
+full runs are the gate, not proof. The same box is green with the seam OFF, so
+an idle run cannot tell a fixed flake from a quiet afternoon.
+
+**Two things this release deliberately did NOT do**, both measured before being
+refused:
+
+- **`orc-diy/references/blocks/` was not deleted.** The plan said 448 lines
+  would go. Counted: 270 relocate, **178 stay**, 0 delete. Five of those blocks
+  have no counterpart anywhere in the payload, and 233 of the 448 lines are
+  composition prose describing what a phase becomes under each config value -
+  something no shared phase file contains, because `/orc` has no such choice to
+  express.
+- **20 of 21 lane spines did not move their phase prose out.** The saving was
+  measured and refused: those lanes loop, everything genuinely shared had
+  already left, and relocating their own wording would have bought a round trip
+  per phase for the same bytes. Only `orc-wiki` qualified, and it moved.
+
 ### v0.56.1 - a worker that is alive and doing nothing _(2026-08-28)_
 
 **Still on the unscoped `orc` package?** Do this once before anything else -

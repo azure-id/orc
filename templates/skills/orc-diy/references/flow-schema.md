@@ -32,7 +32,7 @@ selector.
 | `summary` | `full` / `off` / `short` | Summary depth |
 | `autonomy` | `interactive` / `semi` / `hands-off` | Who answers routine asks |
 | `ship_mode` | `ask` / `commit` / `pr` / `report-only` | Terminal ship behavior |
-| `session_tier` | `sonnet-4-6-{med,high}` / `opus-4-7-{med,high}` / `opus-4-8-{med,high,xhigh,max}` / `opus-5-{med,high,xhigh,max}` / `fable-5-{med,high,xhigh,max}` | Required main-session model+effort (default `opus-4-8-high`) |
+| `session_tier` | `sonnet-4-6-{med,high}` / `opus-4-7-{med,high}` / `opus-4-8-{med,high,xhigh,max}` / `opus-5-{med,high,xhigh,max}` / `fable-5-{med,high,xhigh,max}` | Required main-session model+effort (default `opus-5-high`) |
 | `max_wave_tasks` | `3` (integer ≥ 1) | Wave hard cap |
 | `batch_pause_every` | `2` (integer ≥ 1) | Waves between pauses |
 | `rubric_bands` | `5` (2–8) | Scoring granularity (`scoring: on` only) |
@@ -67,7 +67,7 @@ Warnings (written, reported):
 ```json
 {
   "flow_name": "my-flow",
-  "session_tier": "opus-4-8-high",
+  "session_tier": "opus-5-high",
   "config_hash": "sha256 of orc-diy.config.yaml",
   "flow_hash": "sha256 of flow.md",
   "compiled_hash": "sha256 of FLOW-COMPILED.md (null until compiled)",

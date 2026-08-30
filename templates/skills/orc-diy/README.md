@@ -68,7 +68,8 @@ The full key table lives in `references/flow-schema.md`. Highlights:
   full grid: `sonnet-4-6-{med,high}`, `opus-4-7-{med,high}`,
   `opus-4-8-{med,high,xhigh,max}`, `opus-5-{med,high,xhigh,max}`,
   `fable-5-{med,high,xhigh,max}` (default
-  `opus-4-8-high`). The effort guard enforces the effort half deterministically
+  `opus-5-high` — D29 moved it there at v1.0.0 so the wizard's own default
+  does not clip the two Opus 5 bands the score table ships). The effort guard enforces the effort half deterministically
   (the compiled effort OR higher on the ladder); the statusline warns on the
   model half. Executor choices above the tier are rejected at validate time; the
   score table is clipped to the tier at compile time.

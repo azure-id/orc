@@ -119,6 +119,7 @@ extra.session.honesty
 extra.lanes.subWhy
 extra.guard.subWhy
 extra.recovery.noteWhy
+extra.demotion.noteWhy
 extra.slots.subWhy
 extra.slots.keepsSlotWhy
 ```

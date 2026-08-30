@@ -29,28 +29,33 @@ test("diy: compile roundtrip with a fable-5 session_tier (all executors fit)", (
   }
 });
 
-test("diy: an opus-4-8 session_tier clips BOTH opus-5 bands, an opus-5 tier keeps them", () => {
+test("diy: the DEFAULT tier keeps both opus-5 bands, and an opus-4-8 tier clips them", () => {
   const { root, claudeDir } = freshInstall();
   const compiled = path.join(claudeDir, "orc", "diy", "FLOW-COMPILED.md");
   try {
     assert.strictEqual(cli(["diy", "init", "--dir", root]).status, 0);
-    // The default session_tier is opus-4-8-high. Since v1.0.0 W4 the default
-    // table's TOP TWO bands are Opus 5, so a tier that could not outrank one
-    // band now cannot outrank two — and both collapse into the highest allowed
-    // agent. Two adjacent rows naming the same agent is not a rendering bug: it
-    // is what a clip looks like, and the compiled flow says it is clipped.
+    // D29, answered at v1.0.0 W16: the wizard default moved opus-4-8-high ->
+    // opus-5-high. It matters because W4 made the top TWO bands Opus 5, so the
+    // old default handed a wizard-built flow a ladder with a third of it already
+    // collapsed — before the user had chosen anything. The default now outranks
+    // every band in the table, so nothing is clipped out of the box.
+    assert.strictEqual(cli(["diy", "compile", "--dir", root]).status, 0);
+    const onDefault = fs.readFileSync(compiled, "utf8");
+    assert.match(onDefault, /\| \[65,90\) \| orc-executor-opus-5-low \|/, "the default tier keeps the low opus-5 band");
+    assert.match(onDefault, /\| \[90,100\] \| orc-executor-opus-5-med \|/, "the default tier keeps the top band");
+
+    // THE CLIP ITSELF IS STILL THE THING UNDER TEST. Moving a default must not
+    // retire the mechanism it stopped triggering: naming a lower tier still
+    // collapses both Opus 5 bands onto the highest allowed agent, and the
+    // compiled flow still SAYS so. Two adjacent rows naming one agent is not a
+    // rendering bug — it is what a clip looks like.
+    assert.strictEqual(cli(["diy", "set", "session_tier", "opus-4-8-high", "--dir", root]).status, 0);
     assert.strictEqual(cli(["diy", "compile", "--dir", root]).status, 0);
     const clipped = fs.readFileSync(compiled, "utf8");
     assert.doesNotMatch(clipped, /orc-executor-opus-5-(low|med|high)/, "every opus-5 band clipped under an opus-4-8 tier");
     assert.match(clipped, /\| \[65,90\) \| orc-executor-opus-4-8-high \|/, "the [65,90) band falls back");
     assert.match(clipped, /\| \[90,100\] \| orc-executor-opus-4-8-high \|/, "the top band falls back");
     assert.match(clipped, /already clipped to this flow's session tier/, "and the clip is stated, never silent");
-
-    assert.strictEqual(cli(["diy", "set", "session_tier", "opus-5-high", "--dir", root]).status, 0);
-    assert.strictEqual(cli(["diy", "compile", "--dir", root]).status, 0);
-    const onOpus5 = fs.readFileSync(compiled, "utf8");
-    assert.match(onOpus5, /\| \[65,90\) \| orc-executor-opus-5-low \|/, "opus-5 tier keeps the low band");
-    assert.match(onOpus5, /\| \[90,100\] \| orc-executor-opus-5-med \|/, "opus-5 tier keeps the top band");
   } finally {
     rmrf(root);
   }

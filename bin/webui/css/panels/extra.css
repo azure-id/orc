@@ -534,3 +534,32 @@
   border-radius: var(--r-sm);
   padding: var(--sp-2) var(--sp-3);
 }
+
+/* ── the run demotion (v1.0.0 W16) ────────────────────────────────────────────
+   A FLEX COLUMN, never a declared grid. Four evidence lines are optional —
+   `why`, a live stale attempt, a counter reset, a resume count — so the child
+   count changes with the state, and a card whose child count changes with its
+   state must not declare its rows. That is exactly what stretched `.ex-tool`'s
+   chip into a 250px ellipse in v0.53.0. */
+.ex-dem-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--surface-2);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
+  margin-top: 4px;
+}
+.ex-dem-row.is-demoted { border-color: var(--bad); background: var(--bad-wash, var(--surface-2)); }
+.ex-dem-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.ex-dem-profile { font-family: var(--mono); font-size: 13px; color: var(--text); }
+/* The counter renders at zero too, so it is a stated fact and never a badge
+   that only appears when something is wrong. */
+.ex-dem-count { font-family: var(--mono); font-size: 11px; color: var(--text-faint); margin-left: auto; }
+.ex-dem-why { font-size: 12px; color: var(--text-faint); overflow-wrap: anywhere; }

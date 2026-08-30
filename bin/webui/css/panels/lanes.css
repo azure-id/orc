@@ -1,0 +1,134 @@
+/* panels/lanes.css — the `orc lane` noun, rendered.
+   Loaded by app.html in the order its <link> names, which for CSS is the
+   cascade order. Every colour is a token from 00-tokens.css. */
+
+/* ── the lane picker ──────────────────────────────────────────────────────── */
+.lane-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: var(--sp-3);
+}
+.lane-meta-label { font-size: 12px; color: var(--text-faint); }
+
+/* ── a phase row ──────────────────────────────────────────────────────────────
+   A GRID that DECLARES its columns, and whose child count never varies with
+   state: ordinal · body · right-hand facts. `optional_when` is an optional
+   FOURTH child, so it takes a full-width line of its own rather than a column
+   it usually leaves empty — the `.ex-tool` lesson (v0.53.0), where a card
+   declaring rows its states did not all have stretched a chip into an ellipse. */
+.phase-row {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--surface-2);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
+  margin-bottom: 4px;
+}
+.phase-ord {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text-faint);
+  text-align: right;
+}
+.phase-mid { min-width: 0; }
+.phase-id { font-family: var(--mono); font-size: 13px; color: var(--text); }
+.phase-file {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-faint);
+  overflow-wrap: anywhere;
+  margin-top: 2px;
+}
+.phase-calls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+}
+.phase-calls-label { font-size: 11px; color: var(--text-faint); }
+.phase-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+.phase-read,
+.phase-layers { font-family: var(--mono); font-size: 11px; color: var(--text-faint); }
+.phase-why {
+  grid-column: 1 / -1;
+  font-size: 12px;
+  color: var(--text-faint);
+  overflow-wrap: anywhere;
+}
+
+/* ── a call row ───────────────────────────────────────────────────────────────
+   Expands IN PLACE, one at a time (the Runs-row rule, v0.43.6). The head is a
+   FLEX row rather than a grid: its child count genuinely varies — `cost` is
+   optional — and a card whose child count changes with its state must not
+   declare its columns. */
+.call-row {
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  margin-bottom: 4px;
+  overflow: hidden;
+}
+.call-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  width: 100%;
+  padding: var(--sp-2) var(--sp-3);
+  background: none;
+  border: 0;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+.call-head:hover { background: var(--surface-3, var(--surface-2)); }
+.call-caret {
+  color: var(--text-faint);
+  transition: transform 140ms ease;
+  flex: 0 0 auto;
+}
+.call-head[aria-expanded="true"] .call-caret { transform: rotate(90deg); }
+.call-cmd {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text);
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.call-lanes-n { font-size: 11px; color: var(--text-faint); flex: 0 0 auto; }
+.call-detail {
+  padding: 0 var(--sp-3) var(--sp-3) calc(var(--sp-3) + 20px);
+  border-top: 1px solid var(--line-soft);
+}
+.call-exits,
+.call-lane-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin-top: var(--sp-2);
+}
+.call-exits-label { font-size: 12px; color: var(--text-faint); }
+/* An exit code is a CONTRACT a lane branches on, so it is drawn as a fixed
+   token rather than folded into the surrounding prose. */
+.call-exit {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  background: var(--surface-1, var(--surface-2));
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
+  padding: 2px 6px;
+}

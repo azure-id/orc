@@ -48,5 +48,13 @@
   "settings.retired.note": "These keys were removed from ORC. The lines are still in your config file. ORC does not read them and does not change them. You can delete the lines when you want.",
   "settings.retired.badge": "not read",
   "settings.retired.readonly": "Removed. ORC no longer reads this key.",
-  "settings.retired.removedIn": "Removed in v"
+  "settings.retired.removedIn": "Removed in v",
+  "settings.ranks.title": "Who decides what",
+  "settings.ranks.note": "Some settings answer the same question. Read a family top-down and stop at the first rank that resolves. This is what your config file did, not what it could do.",
+  "settings.ranks.none": "No contested families — every setting here answers a question of its own.",
+  "settings.ranks.answeredBy": "Answered at {prio} by {key}.",
+  "settings.ranks.answeredByDefault": "Answered at {prio} by the shipped default — nothing above it resolved.",
+  "settings.ranks.legend": "States:",
+  "settings.lanes.label": "Read by:",
+  "settings.lanes.none": "no lane — the orc extra bridge reads it"
 }

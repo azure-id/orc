@@ -7,13 +7,13 @@
 *Terima permintaan → pahami → rencanakan → beri nilai → kerjakan paralel → periksa → uji → kirim.*
 
 ![npm](https://img.shields.io/npm/v/%40azure-id%2Forc?style=for-the-badge&color=cb3837&logo=npm)
-![Version](https://img.shields.io/badge/version-0.56.0-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-1.0.0-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
 ![Dependencies](https://img.shields.io/badge/dependencies-zero-lightgrey.svg?style=for-the-badge)
 
-**Versi terbaru: v0.56.1** · diperbarui 28-08-2026 · [daftar perubahan lengkap](CHANGELOG.md)
+**Versi terbaru: v1.0.0** · diperbarui 30-08-2026 · [daftar perubahan lengkap](CHANGELOG.md)
 
 **Ada di npm: [`@azure-id/orc`](https://www.npmjs.com/package/@azure-id/orc)** — `npm i -g @azure-id/orc`
 
@@ -619,113 +619,55 @@ Bacalah sebagai catatan putaran itu, bukan sebagai audit terkini:
 **Riwayat lengkap: [CHANGELOG.md](CHANGELOG.md)** — atau `orc changelog`, yang
 hanya mencetak yang lebih baru dari versi yang Anda punya.
 
-### v0.56.1 - pekerja yang hidup tapi tidak mengerjakan apa pun _(28-08-2026)_
+### v1.0.0 - konfigurasi, fase, dan panggilan berhenti jadi prosa _(30-08-2026)_
 
-**Masih memakai paket `orc` yang tanpa awalan?** Lakukan ini sekali dulu -
+**Masih memakai paket `orc` yang tanpa awalan?** Lakukan ini sekali dulu —
 `orc upgrade` Anda adalah versi sebelum v0.56.0 dan tidak bisa memasang dirinya
-sendiri:
+sendiri. Rincian lengkapnya ada di blok PERHATIAN di bagian atas berkas ini.
 
-- **Langkah 1 - lepaskan perintahnya dari paket lama:** `npm uninstall -g orc`
-- **Langkah 2 - pasang paket yang sekarang:** `npm i -g @azure-id/orc`
-- **Langkah 3 - terapkan lagi ke proyek Anda:** `orc update`
+- **Langkah 1 — lepaskan perintahnya dari paket lama:** `npm uninstall -g orc`
+- **Langkah 2 — pasang paket yang sekarang:** `npm i -g @azure-id/orc`
+- **Langkah 3 — terapkan lagi ke proyek Anda:** `orc update`
 
-**Jangan pakai `npm i -g -f`.** Rinciannya ada di v0.56.0 di bawah.
+**Tidak ada pengaturan yang berubah artinya, dan tidak ada perintah yang diganti
+namanya.** Tiga hal benar-benar mengubah perilaku; sisanya adalah ORC yang
+akhirnya membaca muatannya sendiri dengan cara yang selama ini ia ajarkan kepada
+Anda untuk membaca kode Anda.
 
-**Pengiriman ke opencode yang diam di tengah jalan dulu menghabiskan seluruh
-batas waktu lima belas menit lalu melapor `timeout`.** Kata itu bercerita
-tentang kesabaran ORC, dan terbaca sebagai batas waktu yang perlu dinaikkan.
-Padahal yang tertinggal adalah sebuah POSISI yang perlu dilanjutkan seseorang.
+- **Tabel skor ke model berakhir di `opus-5-low [65,90)` · `opus-5-med
+  [90,100]`.** Dua dari enam pita kini ingin sesi utama Opus 5, dari sebelumnya
+  satu dari delapan.
+- **Pekerja luar yang macet dua kali dalam satu run akan menepi** untuk sisa run
+  itu. Dua jam, tidak pernah digabung; ia tidak menulis pengukuran baru dan tidak
+  pernah menulis konfigurasi Anda; sebuah promote adalah tanda batas, bukan
+  membisukan, dan perlu alasan.
+- **`orc diy init` kini berbawaan `opus-5-high`.** Bawaan yang lama diam-diam
+  meruntuhkan sepertiga atas tangga Anda ke satu agen sebelum Anda memilih
+  apa pun.
 
-- **`extra_stall_s` (bawaan 180, `0` mematikannya)** menghentikan pekerja luar
-  yang tidak menghasilkan apa pun selama itu. Direset oleh kemajuan yang
-  terlihat - aliran keluaran pekerja, keluaran kesalahannya, atau berkas yang
-  dideklarasikan berubah di disk - jadi ia tidak pernah memotong pekerja yang
-  sekadar lambat. Hanya untuk mesin `cli`.
-- **`stalled` adalah jenis kegagalannya sendiri dan boleh diulang**, jadi
-  `orc extra reconcile` membaca posisinya dan `extra_resume` melanjutkan dari
-  apa yang sudah ada di disk, bukan mengulang dari nol. Itulah cara ORC sendiri
-  mengetik `continue`. Sengaja tidak ada dorongan lewat stdin: `opencode run`
-  bukan sesi percakapan, jadi ketikan yang tak dibaca siapa pun hanyalah
-  perbaikan palsu.
-- **Setiap balasan mesin `cli` membawa `timeline`** - bita pertama, kemajuan
-  terakhir, jeda diam terpanjang, dan kedua batas waktunya - baik saat berhasil
-  maupun gagal.
-- **`orc extra health <profil> [--model <id>]`** menjawab "apakah model ini suka
-  diam", lewat pengawas yang SAMA dengan yang dipakai pengiriman sungguhan.
-  Model yang terdaftar belum tentu jalan, dan model yang jalan belum tentu
-  selesai.
-- **`extra_fallback_agent` (bawaan `band`)** menentukan siapa yang mengambil
-  alih tugasnya. `ask` berhenti dan menyodorkan pilihannya kepada Anda; nama
-  agen apa pun yang terpasang bisa dikunci. Saat `ask`, lane-nya tidak memilih
-  sendiri. Ia mengubah siapa, bukan skor, daftar berkas, atau syarat
-  penerimaannya. Tidak berlaku di `/orc-quick`.
+Bagian strukturalnya - **konfigurasi, fase, dan panggilan berhenti jadi prosa**:
 
-### v0.56.0 - satu penggantian nama memindahkan perintahnya, dan tak seorang pun bisa meraih perbaikannya _(27-08-2026)_
+- **`orc lane config <lane>`** menjawab konfigurasi sebuah lane sudah menjadi
+  apa, dengan setiap bayangan sudah dikalimatkan. Sebuah lane tidak pernah lagi
+  menggabungkan berkas konfigurasi sendiri, dan **peringkat di bawah peringkat
+  yang sudah menjawab tidak dibaca sama sekali**.
+- **`orc lane phases <lane>`** dan **`orc lane calls --all`** melakukan hal yang
+  sama untuk pustaka fase bersama dan katalog panggilan CLI - masing-masing satu
+  salinan kanonis, dari sebelumnya 14-59 pengulangan per panggilan.
+- **`orc ui` menampilkan semuanya**: tangga peringkat yang menunjukkan
+  pengaturan mana yang MENJAWAB, lane mana yang membaca tiap kunci, panel Lane
+  baru, dan baris penurunan di Extra ▸ Recovery beserta tombol Promote.
+  `orc doctor` mendapat `lane-keys-drifted`.
 
-**Paketnya pindah dari `orc` tanpa awalan ke `@azure-id/orc`, dan semua jalur
-pemutakhiran di lapangan mati bersamaan.** Kedua nama itu mendaftarkan perintah
-`orc` yang sama, dan npm tidak mau menautkannya untuk paket baru selama paket
-lama masih memilikinya - jadi tarball, spesifikasi `github:`, dan registry
-semuanya gagal dengan `EEXIST` yang sama pada berkas perintahnya. Itu bentrokan
-BERKAS, bukan masalah sumber, dan itulah sebabnya berganti sumber tidak pernah
-menolong.
+**Ini tidak membuat muatannya lebih kecil** - 208 berkas menjadi 291, 26.507
+baris menjadi 33.204. Sebagian besar gelombang terukur sebagai kebenaran, bukan
+penghapusan duplikasi. Yang berubah adalah kini ada satu tempat untuk memperbaiki
+masing-masing hal ini, dan ada lint yang gagal saat sebuah salinan tumbuh
+kembali. Dua penghapusan yang direncanakan **diukur lalu ditolak**, dan flake
+yang membuat empat gelombang gagal akhirnya didiagnosis - dengan catatan jujur
+bahwa tiga run hijau adalah gerbangnya, bukan buktinya.
 
-- **`orc upgrade` mengusir paket lama SEBELUM mencoba sumber mana pun.**
-  Diumumkan, tidak pernah diam-diam. Pengenalannya lewat KEPEMILIKAN - paket
-  yang tidak mendaftarkan perintah `orc` tidak pernah disentuh.
-- **Registry npm dicoba lebih dulu**, lalu tarball, lalu spesifikasi `github:`.
-- **`--force` tetap ada untuk satu kasus yang cocok saja** - berkas perintah
-  yatim yang tidak dimiliki paket mana pun.
-- **`orc doctor` melaporkan `legacy-global-package` dengan namanya.** Sengaja
-  tidak bisa diperbaiki `--fix`: jangkauan `--fix` hanya `.claude/` proyek ini.
-
-### v0.55.1 — ORC sudah ada di npm _(27-08-2026)_
-
-**ORC diterbitkan dengan nama [`@azure-id/orc`](https://www.npmjs.com/package/@azure-id/orc).**
-Pemasangan lewat GitHub tetap jalan, dan isi paketnya tidak berubah sama sekali —
-ini hanya soal cara memasangnya sekarang punya nama.
-
-- **`npm i -g @azure-id/orc`** untuk memasang, dan
-  **`npm i -g @azure-id/orc@latest`** untuk memperbarui. `orc upgrade` sudah
-  melakukan keduanya sejak dulu dan tetap begitu.
-- **Pemasangan dari GitHub sekarang jadi cadangan**, bukan cara utama — tetap ada
-  di bagian "Cara mulai", dilipat, untuk fork atau kalau Anda mengunci sebuah
-  branch.
-
-### v0.51.0 — alat yang sudah Anda punya, dan koneksi yang membuktikan dirinya _(22-08-2026)_
-
-**Koneksi `orc extra`.** Dua alat coding yang bisa diberi pekerjaan oleh ORC
-adalah **program di komputer Anda sendiri**, bukan situs — jadi sekarang keduanya
-jadi penyedia kelas satu, punya kotak hubungkan masing-masing, dan daftar model
-yang dibangun dari apa yang benar-benar bisa dijangkau akun Anda.
-
-- **Program bisa saja belum terpasang, dan panelnya mengatakan itu lebih dulu** —
-  empat keadaan, dihitung setiap kali, tidak pernah diingat. Alat yang belum
-  terpasang tidak diberi tombol yang tidak mungkin berhasil, dan `orc extra add`
-  menolak sambil menyebutkan perintah pemasangannya.
-- **ORC membuka terminal Anda sendiri dan menjalankan pemasangannya di sana.**
-  Bukan pekerjaan tersembunyi di latar — di dalamnya, permintaan hak
-  administrator, kegagalan izin, unduhan 80 MB, dan tunggu empat puluh detik
-  semuanya terlihat sama: *tidak terjadi apa-apa*. Perintahnya tampil sebelum
-  tombolnya, jendelanya milik Anda, dan **ORC tidak pernah meminta hak
-  administrator**. Tidak ada terminal yang bisa dibuka? Anda tetap dapat
-  perintahnya untuk disalin.
-- **Uji koneksi sekarang bertingkat**: programnya ada · cukup baru · sudah masuk
-  akun · model apa yang bisa dijangkau akun ini · dan, hanya kalau Anda minta,
-  **apakah pesan sungguhan benar-benar dijawab** — lengkap dengan waktu tempuh,
-  jawabannya, dan empat jenis hitungan token yang tidak pernah dicampur.
-- **Model yang terdaftar bukan berarti model yang bekerja.**
-  `orc extra models <nama> --test <id>` adalah satu-satunya cara membedakannya.
-- **Kedua alat lokal itu tidak memberi tahu model mana yang menjawab**, jadi ORC
-  menuliskan kalimat itu, bukan membiarkan kolom kosong.
-- **`extra_enabled` tidak bisa dinyalakan sebelum ada yang menjawab** — dulu ia
-  akan terbaca NYALA padahal artinya MATI.
-
-Sebelumnya: **v0.50.0 — pekerjaan yang berjalan di tempat lain** (`orc extra`),
-**v0.49.1 — dewan penilai, dan `--json` yang berhenti membuang isinya**,
-**v0.49.0 — dokumen itu folder, dan berkasnya hasil rakitan** (`/orc-doc`), dan
-**v0.48.1 — satu berkas untuk satu hal, dan dokumen yang bisa diselesaikan**.
-[Baca semuanya di daftar perubahan](CHANGELOG.md).
+**Entri lengkap: [CHANGELOG.md](CHANGELOG.md).**
 
 ---
 

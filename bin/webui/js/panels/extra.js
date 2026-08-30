@@ -39,7 +39,7 @@ async function renderExtra(body) {
   // Four reads, in parallel. A read that FAILED is not a read that came back
   // empty (v0.49.4): the error is kept so the card can say which half is
   // missing instead of rendering as "you have nothing configured".
-  const [listRes, provRes, docRes, cfgRes, routeRes, roleRes, laneRes, statRes, rateRes, toolRes, jourRes] = await Promise.all([
+  const [listRes, provRes, docRes, cfgRes, routeRes, roleRes, laneRes, statRes, rateRes, toolRes, jourRes, demRes] = await Promise.all([
     read("/api/extra").catch((e) => ({ data: null, error: e })),
     read("/api/extra/providers").catch((e) => ({ data: null, error: e })),
     read("/api/extra/doctor").catch((e) => ({ data: null, error: e })),
@@ -57,6 +57,10 @@ async function renderExtra(body) {
     // v0.54.0 — the journal listing. It is a FREE read and its `orphans` count
     // is the one thing the Recovery tab exists to surface.
     read("/api/extra/journal").catch((e) => ({ data: null, error: e })),
+    // v1.0.0 W16 — the run demotion. It exits 1 when a run IS demoted and 2
+    // when no run is open, both of which are answers rather than errors, so
+    // it is read exactly like every other exit-code-as-data command here.
+    read("/api/extra/demotion").catch((e) => ({ data: null, error: e })),
   ]);
   const d = {
     list: listRes.data,
@@ -73,6 +77,7 @@ async function renderExtra(body) {
     rates: rateRes.data,
     tools: toolRes.data,
     journal: jourRes.data,
+    demotion: demRes.data,
     errors: {
       list: listRes.error || null,
       providers: provRes.error || null,
@@ -237,9 +242,192 @@ function exProvidersTab(d) {
    look" identical. */
 function exRecoveryTab(d, body) {
   const out = frag();
+  // The demotion is FIRST. It is the one thing on this tab that changes what
+  // the next wave DOES — the journal below it is a record of what already
+  // happened, and a state that is still in force outranks a history.
+  out.append(exDemotionCard(d, body));
   out.append(exJournalCard(d, body));
   out.append(exPruneCard(body));
   return out;
+}
+
+// THE RUN DEMOTION (v1.0.0 W16) — the counter, both clocks, the evidence, and
+// Promote.
+//
+// EVERY NUMBER HERE IS THE CLI'S. `orc extra demotion` recomputes the verdict
+// FROM DISK on every read and stores only the human half, so this card renders
+// what that command answered and derives nothing. A second idea of when a
+// profile is demoted is the drift this panel exists to make impossible.
+//
+// The mirror of `a lane that sends work off Claude without saying so` is a lane
+// that quietly STOPS. A demotion nobody can see is a subsystem that went quiet,
+// which is why this card renders even when nothing is demoted.
+function exDemotionCard(d, body) {
+  const c = card(t("extra.demotion.title"));
+  c.append(el("div", "note", t("extra.demotion.note")));
+  c.append(exWhy(t("extra.demotion.noteWhy")));
+
+  const st = d.demotion;
+  // `unknown-run` is exit 2 and it is an ANSWER: no run is open, so there is no
+  // clock to report. Rendering it as a failure would teach people that a quiet
+  // machine is a broken one.
+  if (!st || st.ok === false) {
+    c.append(empty(t("extra.demotion.noRun"), (st && st.why) || t("extra.demotion.noRunHint")));
+    return c;
+  }
+
+  const head = el("div", "row-actions");
+  head.append(chip(st.run, "lane"));
+  head.append(
+    chip(st.demoted ? t("extra.demotion.stateDemoted") : t("extra.demotion.stateArmed"), st.demoted ? "bad" : "ok")
+  );
+  c.append(head);
+  // `announce` is the CLI's own sentence, printed verbatim — it is the wording
+  // the trace verb and `orc doctor` both already carry.
+  if (st.demoted && st.announce) c.append(el("div", "note bad", st.announce));
+
+  // BOTH CLOCKS, NEVER MERGED. One is about attempts that ENDED and one about
+  // an attempt that has NOT; each has its own key and its own `0`, and a `0`
+  // silently disables that clock — so `off` is STATED rather than rendered as a
+  // blank, or "nothing stalled" and "nothing is counting" look identical.
+  const clocks = st.clocks || {};
+  const rows = [];
+  if (clocks.consecutive)
+    rows.push([
+      t("extra.demotion.clockConsecutive"),
+      clocks.consecutive.on
+        ? t("extra.demotion.clockStalls", { n: clocks.consecutive.threshold })
+        : t("extra.demotion.clockOff"),
+    ]);
+  if (clocks.stale)
+    rows.push([
+      t("extra.demotion.clockStale"),
+      clocks.stale.on ? t("extra.demotion.clockMinutes", { n: clocks.stale.threshold_min }) : t("extra.demotion.clockOff"),
+    ]);
+  if (st.ladder && st.ladder.effective_now) rows.push([t("extra.demotion.ladder"), st.ladder.effective_now]);
+  if (rows.length) c.append(kvList(rows));
+  for (const note of [clocks.consecutive && clocks.consecutive.note, clocks.stale && clocks.stale.note])
+    if (note) c.append(el("div", "note", note));
+
+  const profiles = st.profiles || [];
+  if (!profiles.length) c.append(empty(t("extra.demotion.noProfiles"), t("extra.demotion.noProfilesHint")));
+  for (const p of profiles) {
+    // A FLEX column, not a declared grid: the evidence lines below vary with
+    // state, and a card whose child count changes with its state must not
+    // declare its rows (the `.ex-tool` 250px ellipse, v0.53.0).
+    const row = el("div", "ex-dem-row" + (p.demoted ? " is-demoted" : ""));
+    const h = el("div", "ex-dem-head");
+    h.append(el("span", "ex-dem-profile", p.profile));
+    h.append(chip(p.demoted ? t("extra.demotion.chipDemoted") : t("extra.demotion.chipRouting"), p.demoted ? "bad" : "ok"));
+    // THE COUNTER, ALWAYS — including at zero, and `off` when the clock is off.
+    h.append(
+      el(
+        "span",
+        "ex-dem-count",
+        t("extra.demotion.stalls", {
+          n: p.consecutive_stalls,
+          of: (clocks.consecutive && clocks.consecutive.threshold) || t("extra.demotion.clockOff"),
+        })
+      )
+    );
+    row.append(h);
+
+    // THE EVIDENCE. Every line is CLI prose naming task ids, outcomes and
+    // minutes — never translated, never summarised.
+    if (p.why) row.append(el("div", "ex-dem-why", p.why));
+    if (p.stale && !p.demoted)
+      row.append(el("div", "ex-dem-why", t("extra.demotion.quiet", { task: p.stale.task_id, min: p.stale.quiet_min })));
+    if (p.reset_by)
+      row.append(el("div", "ex-dem-why", t("extra.demotion.resetBy", { task: p.reset_by.task_id, outcome: p.reset_by.outcome })));
+    if (p.resumes_of_the_same_stall)
+      row.append(el("div", "ex-dem-why", t("extra.demotion.resumes", { n: p.resumes_of_the_same_stall })));
+    c.append(row);
+  }
+
+  // BOTH ABSENT COUNTS ARE NAMED (v0.53.2). A report quietly short by three
+  // rows is the exact failure that rule exists to prevent.
+  if (st.skipped_unattributed)
+    c.append(el("div", "note", t("extra.demotion.unattributed", { n: st.skipped_unattributed })));
+  if (st.override)
+    c.append(
+      el(
+        "div",
+        "note",
+        t("extra.demotion.override", {
+          state: st.override.state,
+          at: String(st.override.at || "").slice(0, 16).replace("T", " "),
+          reason: st.override.reason,
+        })
+      )
+    );
+
+  // PROMOTE IS A HUMAN ACTION AND A REASON IS REQUIRED. The button exists only
+  // while something IS demoted — a disabled button for an action that cannot
+  // apply is what this panel refuses everywhere else (the connected-tool rule).
+  // There is deliberately NO Demote button: demoting by hand is a diagnostic
+  // somebody reaches for at a terminal, and a button would invite muting a
+  // provider instead of fixing it.
+  if (st.demoted) {
+    const actions = el("div", "row-actions");
+    const b = el("button", "btn", t("extra.demotion.promote"));
+    b.type = "button";
+    b.addEventListener("click", () => exPromoteModal(st, body));
+    actions.append(b);
+    actions.append(el("span", "note", t("extra.demotion.promoteHint")));
+    c.append(actions);
+  }
+  return c;
+}
+
+function exPromoteModal(st, body) {
+  const wrap = el("div", "stack");
+  wrap.append(
+    el("div", "note", t("extra.demotion.promoteWhat", { run: st.run, profiles: (st.demoted_profiles || []).join(", ") }))
+  );
+  // A PROMOTE IS A WATERMARK, NOT A MUTE — said before the click, not after.
+  wrap.append(el("div", "note", t("extra.demotion.promoteWatermark")));
+  const input = el("input", "text-input");
+  input.type = "text";
+  input.placeholder = t("extra.demotion.reasonPlaceholder");
+  input.setAttribute("aria-label", t("extra.demotion.reasonAria"));
+  wrap.append(input);
+  const err = el("div", "note bad");
+  err.hidden = true;
+  wrap.append(err);
+
+  modal({
+    title: t("extra.demotion.promoteTitle"),
+    body: wrap,
+    actions: [
+      { label: t("common.cancel"), onClick: (close) => close() },
+      {
+        label: t("extra.demotion.promote"),
+        cls: "btn-primary",
+        onClick: async (close) => {
+          const reason = input.value.trim();
+          // The CLI refuses an empty reason (exit 2, `reason-required`) and it
+          // is the authority. This check only saves a round trip — it never
+          // becomes a second rule, and the CLI's own refusal is what renders if
+          // anything slips past it.
+          if (!reason) {
+            err.textContent = t("extra.demotion.reasonRequired");
+            err.hidden = false;
+            return;
+          }
+          try {
+            await post("/api/extra/promote", { run: st.run, reason });
+            close();
+            toast(t("extra.demotion.promoted", { run: st.run }));
+            renderExtra(body);
+          } catch (e) {
+            err.textContent = String((e && e.message) || e);
+            err.hidden = false;
+          }
+        },
+      },
+    ],
+  });
+  setTimeout(() => input.focus(), 0);
 }
 
 // Which row is open, so a prune or a re-render does not close it — the Runs-row

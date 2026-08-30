@@ -415,3 +415,108 @@ test("recovery fixtures carry one of every reconcile state, including the ugly o
     assert.deepStrictEqual(Object.keys(g.attribution).sort(), ["local", "network", "orc", "provider", "worker"]);
   }
 });
+
+
+// v1.0.0 W16 — THE LANE NOUN AND THE RUN DEMOTION. Same rule: one of every
+// state, including the ugly ones. None of these is reachable on a healthy
+// machine, which is exactly why they need a fixture — you cannot design a
+// demotion row on a project where nothing was ever demoted.
+test("lane fixtures carry one of every state the Lanes panel can draw", () => {
+  const fixtures = require(path.join(REPO, "bin", "webui", "fixtures", "index.js"));
+
+  const list = fixtures.get("/api/lanes", {});
+  assert.ok(list.lanes.some((l) => l.command === null && l.command_note), "a lane with no command must SAY what opens it");
+  assert.ok(list.lanes.some((l) => l.command), "and one with a command");
+  assert.ok(list.lanes.some((l) => l.inert > 0), "a lane with inert rules must be designable");
+
+  // A FULL pipeline and an IN-SPINE lane are two different pictures, and
+  // "no shared phases" has to read as an ANSWER rather than as a failed read.
+  const orc = fixtures.get("/api/lane/phases", { lane: "orc" }).lanes[0];
+  const mini = fixtures.get("/api/lane/phases", { lane: "orc-mini" }).lanes[0];
+  assert.ok(orc.phases.length, "a lane with a real pipeline");
+  assert.strictEqual(mini.phases.length, 0, "and one that keeps its pipeline in its own spine");
+
+  // A row names a FILE or a HEADING, never both and never neither.
+  assert.ok(orc.phases.some((p) => p.file && !p.heading), "a file-backed phase");
+  assert.ok(orc.phases.some((p) => p.heading && !p.file), "and a heading-backed one");
+  assert.ok(!orc.phases.some((p) => p.file && p.heading), "never both");
+  assert.ok(!orc.phases.some((p) => !p.file && !p.heading), "and never neither");
+
+  assert.ok(orc.phases.some((p) => p.when === "always"), "an always phase");
+  assert.ok(orc.phases.some((p) => p.when !== "always"), "and one that is not");
+  assert.ok(orc.phases.some((p) => p.optional_when), "an optional phase must SAY when it runs");
+  assert.ok(orc.phases.some((p) => (p.calls || []).length === 0), "a phase that catalogues no call");
+  assert.ok(orc.phases.some((p) => (p.calls || []).length > 1), "beside one that catalogues several");
+
+  // A panel where every cost chip says the same word teaches nothing.
+  const calls = fixtures.get("/api/lane/calls", {}).calls;
+  assert.ok(calls.some((c) => c.cost === "free"), "a free call");
+  assert.ok(calls.some((c) => c.cost !== "free"), "and one that costs something");
+  assert.ok(calls.some((c) => (c.states || []).length), "a call whose answer is a state set");
+  assert.ok(calls.some((c) => !c.states), "and one whose answer is not");
+});
+
+test("the demotion fixture carries a demoted profile, a live one, and a reset counter", () => {
+  const fixtures = require(path.join(REPO, "bin", "webui", "fixtures", "index.js"));
+  const d = fixtures.get("/api/extra/demotion", {});
+
+  // `demoted: true` is what makes the Promote button reachable at all. With it
+  // false the button correctly does not render, and the modal behind it — the
+  // one place a required reason is collected — could never be designed.
+  assert.strictEqual(d.demoted, true, "something must be demoted, or Promote is undesignable");
+  assert.ok(d.announce, "the CLI's own sentence rides along");
+
+  // BOTH CLOCKS, each with its own threshold and its own note. They are never
+  // merged, here or anywhere else.
+  assert.ok(d.clocks.consecutive && d.clocks.stale, "both clocks are present");
+  assert.ok(d.clocks.consecutive.threshold && d.clocks.stale.threshold_min, "each carries its own threshold");
+
+  // THREE ROWS THAT MUST NEVER LOOK ALIKE.
+  const p = d.profiles;
+  assert.ok(p.some((x) => x.demoted && x.why), "a demoted profile, with its evidence");
+  assert.ok(p.some((x) => !x.demoted && x.stale), "one still routing with a live attempt going quiet");
+  assert.ok(p.some((x) => !x.demoted && x.reset_by), "and one whose counter was RESET by a dispatch that came back");
+  // The counter renders at zero, so a zero has to exist to render.
+  assert.ok(p.some((x) => x.consecutive_stalls === 0), "a counter at zero must be designable");
+  assert.ok(p.some((x) => x.resumes_of_the_same_stall > 0), "a resume of the same stall is not counted twice, and says so");
+
+  // Both ABSENT counts (v0.53.2) and the human half.
+  assert.ok(d.skipped_unattributed > 0, "attempts belonging to no run must be designable");
+  assert.ok(d.override && d.override.reason, "a hand override carries its reason");
+
+  // The other side of the same command: no run open, which is exit 2 and an
+  // ANSWER rather than an error.
+  const extra = require(path.join(REPO, "bin", "webui", "fixtures", "extra.js"));
+  assert.strictEqual(extra.extraDemotionNoRun.ok, false);
+  assert.strictEqual(extra.extraDemotionNoRun.reason, "unknown-run");
+  assert.ok(extra.extraDemotionNoRun.why, "and it says why, so the empty state is designable too");
+});
+
+// The rank ladder on Settings. `absent` and `inert` are deliberately NOT here —
+// the real CLI cannot emit either in this fixture's state, and a fixture
+// carrying a state its own command cannot produce is a fixture lying about the
+// thing it stands in for.
+test("the settings fixture resolves its contested families, with the reachable states", () => {
+  const fixtures = require(path.join(REPO, "bin", "webui", "fixtures", "index.js"));
+  const c = fixtures.get("/api/config", {});
+  assert.ok(c.families_resolved, "the resolved families ride alongside the static registry");
+  assert.ok(Array.isArray(c.rank_states) && c.rank_states.length === 6, "the CLI's closed set is published for the legend");
+
+  const seen = new Set();
+  for (const fam of Object.values(c.families_resolved)) for (const r of fam.ranks) seen.add(r.state);
+  for (const state of ["resolved", "not-read", "demoted", "partly-resolved"])
+    assert.ok(seen.has(state), `a ${state} rank must be designable`);
+
+  // `partly-resolved` does NOT answer a family — an overlay takes only what its
+  // rows cover and the ladder carries on. A fixture that got this wrong would
+  // teach the panel to render a contradiction.
+  for (const fam of Object.values(c.families_resolved)) {
+    const answering = fam.ranks.find((r) => r.state === "resolved");
+    if (fam.resolved_by) assert.strictEqual(fam.resolved_by, answering.key, "resolved_by names the rank that RESOLVED");
+  }
+
+  // An empty `lanes[]` is an ANSWER — ten keys are permanently like this — and
+  // the row that renders it needs one to render.
+  assert.ok(c.keys.some((k) => (k.lanes || []).length === 0), "a key no lane reads must be designable");
+  assert.ok(c.keys.some((k) => (k.lanes || []).length > 1), "beside one several lanes read");
+});

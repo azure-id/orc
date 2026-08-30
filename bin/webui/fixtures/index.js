@@ -30,13 +30,30 @@ const { handoff } = require("./handoff.js");
 const { exportState, mocks } = require("./maintenance.js");
 const { chGoals, chDims, challengeRoles, challengeCouncil, challengeCycles, challengeList, challengeShow, challengeDiff, challengeDiffMissing, challengeLint } = require("./challenge.js");
 const { docList, docParts, docStatuses, docMapSections, docMap, docLint, docPlan, docShow, docSection, docShipped, docShippedDrifted, docNext, docAudit, docJournalRich, docJournalEmpty, docContext, docRules, docRulesFrozen, docForecast, docCost } = require("./docs.js");
+const { laneList, lanePhases, laneCalls } = require("./lanes.js");
 const { diy } = require("./flow.js");
 const { crosslink } = require("./crosslink.js");
 const { mockDetail } = require("./mockrun.js");
-const { extraProviders, extraList, extraListNoConnection, extraListNeverTested, extraTools, extraKeyhelp, extraModels, extraDoctor, extraRoute, extraRole, extraLanes, extraStats, extraRates, extraPingOk, extraPingBad, extraPingSaveOffer, extraJournal, extraReconcile, extraJournalPrune, extraPingLive, extraPingDeadModel, extraPingNotInstalled, extraInstall } = require("./extra.js");
+const { extraProviders, extraList, extraListNoConnection, extraListNeverTested, extraTools, extraKeyhelp, extraModels, extraDoctor, extraRoute, extraRole, extraLanes, extraStats, extraRates, extraPingOk, extraPingBad, extraPingSaveOffer, extraJournal, extraReconcile, extraJournalPrune, extraPingLive, extraPingDeadModel, extraPingNotInstalled, extraInstall, extraDemotion } = require("./extra.js");
 
 module.exports.get = function get(route, q) {
   switch (route) {
+    // v1.0.0 W16 — the `orc lane` noun. `phases` is keyed by lane so the
+    // picker reaches BOTH designable states: a lane with a full pipeline and
+    // one that keeps its pipeline in its own spine. An unknown lane falls to
+    // the `orc` entry rather than returning nothing, because a fixture that
+    // 404s teaches the panel a state the CLI does not have (it exits 2).
+    // The run demotion. `demoted: true` on purpose — with it false the Promote
+    // button correctly does not render, and the modal behind it (the one place
+    // a required reason is collected) could never be designed.
+    case "/api/extra/demotion":
+      return extraDemotion;
+    case "/api/lanes":
+      return laneList;
+    case "/api/lane/phases":
+      return lanePhases[(q && q.lane) || "orc"] || lanePhases.orc;
+    case "/api/lane/calls":
+      return laneCalls;
     case "/api/doc":
       return docList;
     case "/api/doc/one":

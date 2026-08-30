@@ -220,6 +220,82 @@ const config = {
       "question": "what the main session itself runs as"
     }
   },
+  // THE FAMILY TABLE RESOLVED (v1.0.0 W16), and the state set is why it is here.
+  // `families` above is the static registry; this is what those ranks actually
+  // did. Shapes copied from `orc config list --json`'s `families_resolved`.
+  //
+  // ONE OF EVERY REACHABLE STATE, per this folder's standing rule. `demoted` is
+  // the ugly one and the reason the fixture is shaped this way at all: you
+  // cannot design a demotion row against a project where nothing was ever
+  // demoted, and the wording has to carry the run, the profiles and the command
+  // that clears it.
+  //
+  // TWO of the six states are DELIBERATELY not here, each because the real CLI
+  // could not emit it either — a fixture carrying a state its own command
+  // cannot produce is a fixture lying about the thing it stands in for.
+  //
+  //   `inert`  — inertness is a fact about a LANE ("/orc-quick does not read
+  //              this"), and `families_resolved` resolves project-wide with no
+  //              lane. It IS on this panel, on the per-key rows, where
+  //              `state: "inert"` genuinely occurs; `orc lane config <lane>
+  //              --json` is the command that produces it in a family.
+  //   `absent` — a rank is `absent` only when it was CONSULTED and declined.
+  //              Here `opus5_only` is on and resolves at P1, so everything
+  //              below it is `not-read` instead. It is the state a project with
+  //              nothing configured shows for every rank — the default `orc ui`
+  //              experience — and it renders as a plain chip exactly like
+  //              `not-read`, so there is no styling it hides.
+  //
+  // The legend still shows the CLI's whole closed set, because that is what
+  // `rank_states` publishes and the legend's job is to explain the vocabulary,
+  // not to inventory this page.
+  families_resolved: {
+    "executor-band": {
+      contested: true,
+      question: "which model executes a SCORED task",
+      resolved_by: "opus5_only",
+      resolved_at: "P1",
+      inert: false,
+      inert_reason: null,
+      ranks: [
+        {
+          prio: "P0",
+          key: "extra_enabled",
+          terminal: null,
+          state: "demoted",
+          why: 'deepseek demoted for run add-oauth-login — 2 consecutive stalled dispatches. 1 row(s) on another profile still route. orc extra promote add-oauth-login --reason "<why>"',
+        },
+        { prio: "P1", key: "opus5_only", terminal: null, state: "resolved", why: null },
+        { prio: "P2", key: "rubric_bands_override", terminal: null, state: "not-read", why: "a higher rank resolved" },
+        { prio: "P3", key: null, terminal: "the shipped score→model table", state: "not-read", why: "a higher rank resolved" },
+      ],
+    },
+    "fixed-role-model": {
+      contested: true,
+      question: "which model runs a role that has no score",
+      // `partly-resolved` does NOT set `resolved_by` — an overlay takes only
+      // the positions its slot rows name, so the ladder carries on and the rank
+      // BELOW it is the one that answered. Getting this wrong in a fixture
+      // would teach the panel to render a contradiction.
+      resolved_by: "opus5_only",
+      resolved_at: "P1",
+      inert: false,
+      inert_reason: null,
+      ranks: [
+        {
+          prio: "P0",
+          key: "extra_enabled",
+          terminal: null,
+          state: "partly-resolved",
+          why: "the quick-executor and doc-writer positions are held by a route row; every other position falls through",
+        },
+        { prio: "P1", key: "opus5_only", terminal: null, state: "resolved", why: null },
+        { prio: "P2", key: null, terminal: "the agent shipped for that position", state: "not-read", why: "a higher rank resolved" },
+      ],
+    },
+  },
+  // The CLI's closed set, published so the legend never invents a word.
+  rank_states: ["resolved", "partly-resolved", "not-read", "inert", "demoted", "absent"],
   behavior_trace: { always_on: true, configurable_key: "log_dir" },
 };
 

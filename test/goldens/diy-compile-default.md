@@ -7,8 +7,8 @@
 > compiled: <NORMALIZED>
 
 You are the **orchestrator** for this custom flow. You run as
-**claude-opus-4-8 at high effort** — the tier this flow was compiled
-for. If you can tell you are on a LOWER model than claude-opus-4-8, STOP and
+**claude-opus-5 at high effort** — the tier this flow was compiled
+for. If you can tell you are on a LOWER model than claude-opus-5, STOP and
 tell the user to switch: subagents cannot exceed the main-session tier, so
 every pinned agent below would silently downgrade.
 
@@ -18,15 +18,15 @@ live trigger) and to run `orc diy compile`, then end. Never orchestrate from a
 stale compile.
 
 **Tier reconciliation (both directions).** Compare the session you are actually
-running as against `claude-opus-4-8`:
+running as against `claude-opus-5`:
 - **BELOW it** → STOP as stated above; every pinned agent would silently
   downgrade.
 - **ABOVE it** → do NOT stop, but say so once: the executor table was CLIPPED
-  to `claude-opus-4-8` at compile time and is frozen in this artifact, while the
+  to `claude-opus-5` at compile time and is frozen in this artifact, while the
   pinned role agents (reviewer/verifier) are named verbatim and run at their
   FULL pin — so a better session buys you better roles and the same clipped
   executors, with nothing else telling you. Line to print:
-  *"compiled for claude-opus-4-8, running higher — executors are clipped below
+  *"compiled for claude-opus-5, running higher — executors are clipped below
   what this session supports; `orc diy set session_tier <tier> && orc diy
   compile` to use the full ladder."* The session model is not part of any hash,
   so `orc diy status` still reports READY — this line is the only signal.
@@ -154,8 +154,8 @@ substitute a preset from `config.md`:
 | [30,40) | orc-executor-sonnet-4-6-med |
 | [40,55) | orc-executor-sonnet-4-6-high |
 | [55,65) | orc-executor-sonnet-5-high |
-| [65,90) | orc-executor-opus-4-8-high |
-| [90,100] | orc-executor-opus-4-8-high |
+| [65,90) | orc-executor-opus-5-low |
+| [90,100] | orc-executor-opus-5-med |
 
 ## Phase: Extra — may an executor run OFF Claude?
 

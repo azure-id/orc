@@ -24,6 +24,7 @@
 <link rel="stylesheet" href="css/panels/overview.css">
 <link rel="stylesheet" href="css/05-tour.css">
 <link rel="stylesheet" href="css/panels/settings.css">
+<link rel="stylesheet" href="css/panels/lanes.css">
 <link rel="stylesheet" href="css/panels/runs.css">
 <link rel="stylesheet" href="css/panels/knowledge.css">
 <link rel="stylesheet" href="css/panels/stats.css">
@@ -69,6 +70,13 @@
     <ul class="nav" id="nav">
       <li><a href="#/overview"    data-panel="overview"    data-idx="1" data-i18n="nav.overview">Overview</a></li>
       <li><a href="#/settings"    data-panel="settings"    data-idx="2" data-i18n="nav.settings">Settings</a></li>
+      <!--
+        v1.0.0 W16. Lanes sits directly under Settings because it answers the
+        other half of the same question. Settings says what a key resolves to
+        and which lanes read it; this says what those lanes then DO with it —
+        which shared phases they run, in order, and which CLI calls they make.
+      -->
+      <li><a href="#/lanes"       data-panel="lanes"       data-idx="l" data-i18n="nav.lanes">Lanes</a></li>
       <li><a href="#/runs"        data-panel="runs"        data-idx="3" data-i18n="nav.runs">Runs</a></li>
       <li><a href="#/knowledge"   data-panel="knowledge"   data-idx="4" data-i18n="nav.knowledge">Knowledge</a></li>
       <li><a href="#/stats"       data-panel="stats"       data-idx="5" data-i18n="nav.stats">Stats</a></li>
@@ -176,6 +184,7 @@
 <script src="js/06-edit.js"></script>
 <script src="js/panels/overview.js"></script>
 <script src="js/panels/settings.js"></script>
+<script src="js/panels/lanes.js"></script>
 <script src="js/panels/runs.js"></script>
 <script src="js/panels/knowledge.js"></script>
 <script src="js/panels/stats.js"></script>

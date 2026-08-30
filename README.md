@@ -7,14 +7,14 @@
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
 ![npm](https://img.shields.io/npm/v/%40azure-id%2Forc?style=for-the-badge&color=cb3837&logo=npm)
-![Version](https://img.shields.io/badge/version-0.56.0-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-1.0.0-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
 ![Dependencies](https://img.shields.io/badge/dependencies-zero-lightgrey.svg?style=for-the-badge)
 ![GitHub stars](https://img.shields.io/github/stars/azure-id/orc?style=for-the-badge&color=yellow)
 
-**Latest: v0.56.1** · updated 2026-08-28 · [full changelog](CHANGELOG.md)
+**Latest: v1.0.0** · updated 2026-08-30 · [full changelog](CHANGELOG.md)
 
 **On npm: [`@azure-id/orc`](https://www.npmjs.com/package/@azure-id/orc)** — `npm i -g @azure-id/orc`
 
@@ -574,137 +574,49 @@ a current audit: [EVAL-REPORT.md](EVAL-REPORT.md).
 **Full history: [CHANGELOG.md](CHANGELOG.md)** — or `orc changelog`, which prints
 only what is newer than the version you have.
 
-### v0.56.1 - a worker that is alive and doing nothing _(2026-08-28)_
+### v1.0.0 - config, phases and calls stop being prose _(2026-08-30)_
 
-**Still on the unscoped `orc` package?** Do this once before anything else -
-your `orc upgrade` is the pre-v0.56.0 one and it cannot install itself:
+**Still on the unscoped `orc` package?** Do this once first — your `orc upgrade`
+is the pre-v0.56.0 one and cannot install itself. Full detail in the CAUTION at
+the top of this file.
 
-- **Step 1 - release the command from the old package:** `npm uninstall -g orc`
-- **Step 2 - install the current package:** `npm i -g @azure-id/orc`
-- **Step 3 - re-apply it to your project:** `orc update`
+- **Step 1 — release the command from the old package:** `npm uninstall -g orc`
+- **Step 2 — install the current package:** `npm i -g @azure-id/orc`
+- **Step 3 — re-apply it to your project:** `orc update`
 
-**Do not use `npm i -g -f`.** Full detail in v0.56.0 below.
+**Nothing you configure changes meaning, and no command you run is renamed.**
+Three things actually change behaviour; everything else is ORC finally reading
+its own payload the way it has been telling you to read yours.
 
-**An opencode dispatch that goes quiet mid-task used to burn the whole
-fifteen-minute wall clock and then report `timeout`.** That word is a statement
-about ORC's patience and reads as a budget somebody should raise. It was a
-POSITION somebody should resume from.
+- **The score to model table ends `opus-5-low [65,90)` · `opus-5-med [90,100]`.**
+  Two bands in six now want an Opus 5 main session where one in eight did.
+- **A foreign worker that stalls twice in one run steps aside** for the rest of
+  that run. Two clocks, never merged; it writes no new measurement and never
+  writes your config; a promote is a watermark, not a mute, and needs a reason.
+- **`orc diy init` defaults to `opus-5-high`.** The old default silently
+  collapsed the top third of your ladder onto one agent before you chose
+  anything.
 
-- **`extra_stall_s` (default 180, `0` disables)** stops a foreign worker that
-  has produced NOTHING for that long. Reset by observable progress - the
-  worker's stream, its stderr, or a declared file that changed on disk - so it
-  never fires on a worker that is merely slow. Engine `cli` only.
-- **`stalled` is its own failure class and it is RETRYABLE**, so
-  `orc extra reconcile` reads the position and `extra_resume` continues from
-  what is on disk instead of starting over. That is ORC's spelling of typing
-  `continue`. There is deliberately no stdin nudge: `opencode run` is not an
-  interactive session, so a keystroke nobody reads would be a fake fix.
-- **Every engine-`cli` return carries a `timeline`** - first byte, last
-  progress, longest quiet gap, both budgets - on success as well as failure.
-- **`orc extra health <profile> [--model <id>]`** answers "does this model
-  stall", through the SAME watchdog a dispatch uses. A listed model is not a
-  working model, and a working model is not a model that finishes.
-- **`extra_fallback_agent` (default `band`)** decides who picks the task up.
-  `ask` STOPS and puts the menu to you; any installed agent name pins one. Under
-  `ask` the lane does not choose. It changes WHO, never the score, the declared
-  files or the acceptance criteria. INERT in `/orc-quick`.
+The structural half - **config, phases and calls stop being prose**:
 
-### v0.56.0 - a rename moved the command, and nobody could reach the fix _(2026-08-27)_
+- **`orc lane config <lane>`** answers what a lane's config resolved to, with
+  every shadow already worded. A lane never merges the config file itself again,
+  and **a rank below a resolved rank is not read at all**.
+- **`orc lane phases <lane>`** and **`orc lane calls --all`** do the same for the
+  shared phase library and the CLI call catalogue - one canonical copy each,
+  where there were 14-59 restatements per call.
+- **`orc ui` renders all of it**: a rank ladder showing which setting ANSWERED,
+  the lanes that read each key, a Lanes panel, and Extra ▸ Recovery's demotion
+  row with Promote. `orc doctor` gains `lane-keys-drifted`.
 
-**READ THIS FIRST IF YOUR `orc upgrade` IS FAILING.** On a version before
-v0.56.0, this release cannot install itself - your `orc upgrade` is the OLD one.
-Run these three lines once, by hand:
+**It did not make the payload smaller** - 208 files became 291, 26,507 lines
+became 33,204. Most waves measured as correctness, not deduplication. What
+changed is that there is now one place to fix each of these, and a lint that
+fails when a copy grows back. Two planned deletions were **measured and
+refused**, and the test suite's four-wave flake was diagnosed - with the honest
+caveat that three green runs are the gate and not proof.
 
-- **Step 1 - release the command from the old package:** `npm uninstall -g orc`
-- **Step 2 - install the current package:** `npm i -g @azure-id/orc`
-- **Step 3 - re-apply it to your project:** `orc update` (add `--global` to also
-  refresh `~/.claude`)
-
-Then `orc version` should print 0.56.0 or newer. Your `.claude/` and your
-`orc.config.yaml` are untouched. **Do not use `npm i -g -f`.**
-
-**The package moved from the unscoped `orc` to `@azure-id/orc`, and every
-upgrade path in the field died at once.** Both names declare the same `orc` bin,
-and npm will not link it for the new package while the old one owns it - so the
-tarball, the `github:` spec and the registry all failed with the same `EEXIST`
-on the command file. It is a FILE conflict, not a source problem, which is why
-changing sources never helped and `npm i -g -f` was the only thing that worked.
-
-- **`orc upgrade` evicts the legacy package BEFORE trying any source**, because
-  the collision fails every source identically. Announced, never silent.
-  Detection is by OWNERSHIP - a package that does not declare the `orc` bin is
-  never touched.
-- **The npm registry is tried first**, then the tarball, then the `github:` spec.
-  `freshCliPath()` now resolves the SCOPED directory, so step 2 stops re-applying
-  the templates step 1 just superseded.
-- **`--force` is kept for the one case it fits** - an orphaned command file no
-  package owns - and never for an unrelated `EEXIST`.
-- **`orc doctor` reports `legacy-global-package` by name.** Not `--fix`-able on
-  purpose: `--fix` is scoped to this project's `.claude/`.
-- **A CAUTION at the top of this README** carries the one-time manual fix, since
-  anyone still on the old package does not have this code yet.
-
-### v0.55.2 - a gate that is never probed is a gate that is always off _(2026-08-27)_
-
-**`/orc-quick` and `/orc-fast` documented the foreign-worker option and then
-never went and looked for it.** Both carried the whole `orc extra` slot contract
-but neither preflight ever ran the probe that answers whether a position is
-held, so an armed `extra_enabled` plus a slot row still offered only the shipped
-Claude executors.
-
-- **orc-quick Q0 gains one PROBE** - `orc extra resolve --slot quick-executor
-  --json`, the single exception to "read no other key" - so the menu can render
-  line 3. Still an option: never a default, never sticky.
-- **orc-fast F0 gains gate `d`** - `orc extra resolve --slot fast-executor
-  --json` - and prints the P0 `extra:` line where the prose always said it
-  would, naming the agent it displaces.
-- **`/orc-doc` was never affected**: `orc doc next` resolves its targets in the
-  CLI, which is the shape the other two now borrow.
-
-### v0.55.1 — ORC is on npm _(2026-08-27)_
-
-**ORC is published as [`@azure-id/orc`](https://www.npmjs.com/package/@azure-id/orc).**
-The GitHub tarball still works and nothing about the payload changed — this is
-the install path getting a name.
-
-- **`npm i -g @azure-id/orc`** is the install, and
-  **`npm i -g @azure-id/orc@latest`** is the update. `orc upgrade` already did
-  both steps for you and continues to; `--from @azure-id/orc` names npm
-  explicitly.
-- **The GitHub tarball is now the fallback**, not the headline — it is kept in
-  the Quick start behind a fold for forks and for anyone pinning a branch.
-
-### v0.55.0 — a score is what a band needs, and four lanes do not have one _(2026-08-26)_
-
-**`/orc-quick`, `/orc-fast`, `/orc-doc` and `/orc-wiki` pin an agent to a
-position instead of scoring a task. `orc extra` routed them by reading that
-agent's score band — arithmetic on a number nobody chose. It was wrong twice and
-dead once.**
-
-- **`orc extra role` holds six POSITIONS** — `quick-executor` · `fast-executor` ·
-  `doc-writer` · `doc-checker` · `wiki-scanner-deep` · `wiki-scanner-light`. One
-  connection and one model each, and a row's presence is the arming. All six are
-  always listed: an unrouted one keeps its slot and reads as the Claude agent it
-  falls back to.
-- **`orc extra resolve --slot` never touches a band**, and the Claude answer it
-  carries is a pinned NAME rather than an interval. Nine hold-backs, each named.
-- **Precedence, one sentence:** extra decides *whether* a Claude agent runs at
-  all; `opus5_only` and the score tables only decide *which* one runs where extra
-  did not take it. Under a taken position `opus5_only` is not consulted — and it
-  stays fully live for every position with no row.
-- **The bridge accepts a slot** (`band` becomes `slot:<slot>`, so cost reporting
-  splits per position for free) with **zero new engines, zero new dispatch paths
-  and zero new agents**. A doc checker now resolves its OWN position, `/orc-wiki`
-  can route at all, and `/orc-quick` gets a THIRD OPTION on its menu — never a
-  default, never sticky, re-asked after a failure.
-- **A second ladder in `orc ui ▸ Extra ▸ Routing`**, and **zero config keys
-  added**.
-
-Before that: **v0.54.0 — a failed dispatch is a POSITION, not a blank page**,
-**v0.53.4 — the reload that dropped its own token**, **v0.53.3 — the key it never
-sent**, **v0.53.2 — the cost that was paid and never written down**, and
-**v0.53.1 — "up to date" now names what it checked**.
-[Read them in the changelog](CHANGELOG.md).
+**Full entry: [CHANGELOG.md](CHANGELOG.md).**
 
 ---
 

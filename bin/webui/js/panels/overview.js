@@ -58,6 +58,12 @@ const FINDING_ROUTE = {
   // and Recovery is the Extra tab where every other journal-shaped state is
   // already rendered — so that is genuinely the panel that can clear it.
   "extra-demoted-run": { panel: "extra", cta: "overview.item.extraDemotedRun.cta" },
+  // v1.0.0 W16. An INSTALL-FOOTPRINT finding, so it takes the documented
+  // default rather than an interesting exception: the thing that clears it is
+  // `orc update`, which is an action row on MAINTENANCE. It is spelled out
+  // rather than left to DEFAULT_FINDING_ROUTE because the CTA is specific --
+  // a reader who sees "lane config drifted" should be told which button.
+  "lane-keys-drifted": { panel: "maintenance", cta: "overview.item.laneKeysDrifted.cta" },
 };
 const DEFAULT_FINDING_ROUTE = { panel: "maintenance", cta: "overview.item.doctor.cta" };
 const findingRoute = (id) => FINDING_ROUTE[id] || DEFAULT_FINDING_ROUTE;

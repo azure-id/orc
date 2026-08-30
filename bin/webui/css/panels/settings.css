@@ -225,3 +225,79 @@
 .rung-bar { height: 4px; border-radius: 2px; background: var(--accent); opacity: .55; }
 .rung-agent { color: var(--text-dim); }
 .ladder-note { font-size: 12px; color: var(--text-faint); margin-top: var(--sp-2); }
+
+/* ── who decides what: the contested families, resolved (v1.0.0 W16) ────────
+   A precedence LADDER, drawn the same way the score ladder above it is drawn
+   — one row per rank, in resolution order, top-down. The row that answered is
+   the only one given weight, because "read down and stop at the first one that
+   resolves" is a rule a picture can teach and a paragraph cannot. */
+.rank-family { margin-top: var(--sp-4); }
+.rank-family:first-of-type { margin-top: var(--sp-2); }
+.rank-family-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sp-2);
+  margin-bottom: 4px;
+}
+.rank-family-name { font-family: var(--mono); font-size: 12px; color: var(--text-dim); }
+.rank-family-q { font-size: 12px; color: var(--text-faint); }
+.rank-answer { font-size: 12px; color: var(--text-faint); margin-bottom: 6px; }
+
+/* A GRID whose column count never changes with state. `.ex-tool`'s 250px
+   ellipse (v0.53.0) was a card DECLARING rows its states did not all have; the
+   `why` here is an optional FOURTH child, so it is given its own full-width
+   line rather than a column it sometimes leaves empty. */
+.rank-row {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: 5px var(--sp-3);
+  background: var(--surface-2);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
+  margin-bottom: 4px;
+}
+.rank-row.is-resolved { border-color: var(--ok); background: var(--ok-wash); }
+.rank-prio { font-family: var(--mono); font-size: 12px; color: var(--text-faint); }
+.rank-key { font-family: var(--mono); font-size: 12px; color: var(--text-dim); overflow-wrap: anywhere; }
+/* The terminal floor is not a key and must not read as one, or somebody goes
+   looking for it in the config file. */
+.rank-key.is-terminal { font-family: inherit; font-style: italic; color: var(--text-faint); }
+.rank-why {
+  grid-column: 1 / -1;
+  font-size: 12px;
+  color: var(--text-faint);
+  overflow-wrap: anywhere;
+}
+.rank-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: var(--sp-3);
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--line-soft);
+}
+.rank-legend-label { font-size: 12px; color: var(--text-faint); }
+
+/* which lanes read a key — chips, because the list is short and unordered */
+.setting-lanes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+}
+.setting-lanes-label { font-size: 12px; color: var(--text-faint); }
+.chip-lane {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-faint);
+  background: var(--surface-2);
+  border-color: var(--line-soft);
+}
+/* "no lane reads this" is an ANSWER, so it is styled as a stated fact rather
+   than as a missing chip. */
+.setting-lanes-none { font-size: 11px; color: var(--text-faint); font-style: italic; }

@@ -39,6 +39,18 @@
   .main { padding: var(--sp-4); }
   .setting { grid-template-columns: 1fr; }
   .setting-control { align-items: flex-start; }
+  /* The rank ladder keeps its prio column — it is 34px and it is the thing
+     that makes the row readable as a ladder rather than a list. The state
+     chip wraps under instead, which is the only child that can spare the
+     line. Declared explicitly, like every `.run-card` variant below. */
+  .rank-row { grid-template-columns: 34px minmax(0, 1fr); }
+  .rank-row > .chip { grid-column: 2; justify-self: start; }
+  /* A phase row drops its right-hand column under the body rather than
+     squeezing it: `read`, `when` and the layer list are facts, and a fact
+     wrapped to one character per line is not readable. Declared explicitly. */
+  .phase-row { grid-template-columns: 28px minmax(0, 1fr); }
+  .phase-right { grid-column: 2; flex-direction: row; flex-wrap: wrap; align-items: center; }
+  .call-detail { padding-left: var(--sp-3); }
   /* Every `.run-card` VARIANT collapses explicitly. A variant that inherits a
      column count it does not have is the v0.49.2 Overview collision again, just
      at a narrower width. */

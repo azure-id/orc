@@ -162,6 +162,12 @@ async function renderSettings(body) {
   // flips — which is how the precedence rule gets taught rather than described.
   out.append(ladderCard(d.score_table));
 
+  // WHO DECIDES WHAT (v1.0.0 W16). The ladder above answers one family;
+  // this answers all of them, and it is the picture a flat key list cannot
+  // draw: a contested setting is not decided by the key you are looking at,
+  // it is decided by the highest rank that resolved.
+  out.append(ranksCard(d.families, d.families_resolved, d.rank_states));
+
   // 36 keys in three flat lists is a wall, and the answer to "where is the one
   // I want" was scrolling. Each tier is now its own collapsible card, and the
   // toolbar filters across ALL of them at once — so finding a key never depends
@@ -269,6 +275,99 @@ async function renderSettings(body) {
   body.replaceChildren(out);
 }
 
+// WHO DECIDES WHAT (v1.0.0 W16) — the contested families, resolved.
+//
+// THE PANEL DECIDES NOTHING HERE. `families` is the CLI's static registry (which
+// ranks exist, in which order, and the question each family answers) and
+// `families_resolved` is what those ranks actually did against the config on
+// disk right now. Re-deriving a precedence in the browser is the exact drift
+// this panel exists to make impossible — the Flow-stepper rule, applied to
+// config.
+//
+// Only CONTESTED families are drawn. A family with one rank has no precedence
+// to teach, and a card that lists thirty uncontested rows to show two
+// interesting ones is a card nobody reads to the bottom of.
+//
+// Every state word is the CLI's own, from the closed set it publishes as
+// `rank_states` — never a friendlier synonym (`resolved`, `not-read`, `inert`,
+// `demoted`, `absent`, `partly-resolved`). A `why` is CLI prose and is never
+// translated: it names keys, runs, profiles and commands by their real ids.
+const RANK_STATE_KIND = {
+  resolved: "ok",
+  "partly-resolved": "ok",
+  "not-read": null,
+  inert: "warn",
+  demoted: "warn",
+  absent: null,
+};
+
+function ranksCard(families, resolved, states) {
+  const c = card(t("settings.ranks.title"));
+  c.id = "ranks-card";
+  c.append(el("div", "note", t("settings.ranks.note")));
+
+  const names = Object.keys(families || {}).filter((n) => (families[n] || {}).contested);
+  if (!names.length) {
+    c.append(el("div", "empty", t("settings.ranks.none")));
+    return c;
+  }
+
+  for (const name of names) {
+    const fam = families[name] || {};
+    const res = (resolved || {})[name] || {};
+    const block = el("div", "rank-family");
+
+    const h = el("div", "rank-family-head");
+    // The family id is a CLI id. The QUESTION beside it is the CLI's too —
+    // it is the whole reason the grouping means anything.
+    h.append(el("span", "rank-family-name", name));
+    h.append(el("span", "rank-family-q", fam.question || ""));
+    block.append(h);
+
+    // WHAT ANSWERED, stated before the ladder rather than left to be inferred
+    // from which row happens to be green. `resolved_by` is null on a terminal
+    // rank, which is not a gap: it means nothing above the floor resolved.
+    if (res.resolved_at) {
+      const by = el("div", "rank-answer");
+      by.append(
+        document.createTextNode(
+          res.resolved_by
+            ? t("settings.ranks.answeredBy", { prio: res.resolved_at, key: res.resolved_by })
+            : t("settings.ranks.answeredByDefault", { prio: res.resolved_at })
+        )
+      );
+      block.append(by);
+    }
+
+    for (const r of res.ranks || fam.ranks || []) {
+      const row = el("div", "rank-row" + (r.state === "resolved" ? " is-resolved" : ""));
+      row.append(el("span", "rank-prio", r.prio));
+      // A rank is either a KEY or the family's terminal floor. The floor has no
+      // key on purpose — it is "the thing that happens when nobody chose" — and
+      // rendering it as a key would invite somebody to look for it in the file.
+      row.append(el("span", "rank-key" + (r.key ? "" : " is-terminal"), r.key || r.terminal || ""));
+      const st = r.state || "absent";
+      // An unknown state is RENDERED, not swallowed: the CLI owns this set, and
+      // a panel that silently drops a word it does not recognise is a panel that
+      // hides the next state somebody adds.
+      row.append(chip(st, RANK_STATE_KIND[st] === undefined ? null : RANK_STATE_KIND[st]));
+      if (r.why) row.append(el("div", "rank-why", r.why));
+      block.append(row);
+    }
+    c.append(block);
+  }
+
+  // The closed set, once, at the bottom. It is what makes an unfamiliar chip
+  // above readable without leaving the page.
+  if ((states || []).length) {
+    const legend = el("div", "rank-legend");
+    legend.append(el("span", "rank-legend-label", t("settings.ranks.legend")));
+    for (const s of states) legend.append(chip(s, RANK_STATE_KIND[s] === undefined ? null : RANK_STATE_KIND[s]));
+    c.append(legend);
+  }
+  return c;
+}
+
 function ladderCard(table) {
   const c = card(t("settings.ladder.title"));
   c.id = "ladder-card"; // the FLIP morph finds it by id, never by a :has() query
@@ -350,6 +449,27 @@ function settingRow(k, panelBody, edits) {
   // translated. They name keys, values and precedence rules by their real ids.
   left.append(el("div", "setting-desc", k.desc));
   if (k.shadow_reason) left.append(el("div", "shadow-why", k.shadow_reason));
+  // WHICH LANES READ THIS (v1.0.0 W16). `k.lanes[]` is the CLI's own
+  // `CONFIG_META[].lanes[]` — the same list `orc lane config` filters on, and
+  // the same list a two-way lint already refuses to let drift. It answers the
+  // question a settings screen otherwise leaves you guessing at: I changed
+  // this, so what did I just change? A lane name is a CLI id and is never
+  // translated.
+  //
+  // AN EMPTY LIST IS AN ANSWER AND KEEPS ITS ROW. Ten keys are permanently
+  // empty and the lint has an allowlist naming every one of them: they are
+  // OPERATING keys of the `orc extra` bridge — a lane calls `orc extra
+  // dispatch` and the CLI reads `extra_timeout_s`, so no lane ever names it.
+  // Skipping the line would make "no lane reads this" look identical to "we
+  // did not render it", which is the distinction this whole row exists to
+  // draw.
+  {
+    const lanes = el("div", "setting-lanes");
+    lanes.append(el("span", "setting-lanes-label", t("settings.lanes.label")));
+    if ((k.lanes || []).length) for (const lane of k.lanes) lanes.append(chip(lane, "lane"));
+    else lanes.append(el("span", "setting-lanes-none", t("settings.lanes.none")));
+    left.append(lanes);
+  }
 
   const right = el("div", "setting-control");
   right.append(controlFor(k, edits));

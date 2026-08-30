@@ -1564,3 +1564,121 @@ test("extra positions: a slot is a POINT, it keeps its row, and the panel names 
   // is never an interval.
   for (const r of rows) assert.ok(r.claude && /^orc-/.test(r.claude.agent), r.slot + " must fall through to a named agent");
 });
+
+
+/* ── v1.0.0 W16 ──────────────────────────────────────────────────────────────
+   The Config panel's rank ladder, the Lanes panel, and Extra's demotion row.
+   Every one of them renders something the CLI already computes, so every test
+   here is a version of the same assertion: the panel must not have a second
+   idea of it. That is the Flow-stepper rule above, applied three more times. */
+
+// The rank ladder answers "which setting actually decided this", which a flat
+// key list structurally cannot. The CLI resolves it; the panel draws it.
+test("settings ranks: the panel renders families_resolved, it never re-derives a precedence", () => {
+  const js = appJs();
+  const i = js.indexOf("function ranksCard");
+  assert.ok(i > 0, "the rank card must exist");
+  const fn = js.slice(i, js.indexOf("function ladderCard"));
+
+  assert.match(fn, /res\.ranks \|\| fam\.ranks/, "it must iterate the CLI's resolved ranks");
+  // A precedence re-implemented in the browser is exactly the drift this panel
+  // exists to make impossible. None of these may be decided here.
+  assert.ok(!/\bfor\s*\(.*of.*\)\s*\{[^}]*break/.test(fn), "the panel must not walk the ladder itself");
+  for (const key of ["extra_enabled", "opus5_only", "rubric_bands_override"]) {
+    assert.ok(!fn.includes(key), `the panel must not name the contested key "${key}" itself`);
+  }
+  // A state word is the CLI's. A friendlier synonym is a state that does not exist.
+  assert.match(fn, /RANK_STATE_KIND\[st\]/, "the chip kind is looked up per state, never invented");
+  assert.match(js, /const RANK_STATE_KIND = \{[\s\S]*?"not-read":[\s\S]*?demoted:/, "the map must cover the CLI's closed set");
+  // An unknown state RENDERS. A panel that silently drops a word it does not
+  // recognise hides the next state somebody adds.
+  assert.match(fn, /RANK_STATE_KIND\[st\] === undefined \? null : RANK_STATE_KIND\[st\]/, "an unknown state is drawn, not swallowed");
+  // The terminal floor is not a key and must not read as one.
+  assert.match(fn, /is-terminal/, "the terminal rank is marked so it cannot be mistaken for a key");
+
+  const css = appCss().replace(/\/\*[\s\S]*?\*\//g, "");
+  assert.match(css, /\.rank-row\.is-resolved\s*\{[^}]*border-color:\s*var\(--ok\)/, "the rank that answered is the one given weight");
+  // A grid whose child count varies must not put an optional child in a column.
+  assert.match(css, /\.rank-why\s*\{[^}]*grid-column:\s*1 \/ -1/, "the optional `why` takes its own line, never a column it leaves empty");
+});
+
+// `lanes[]` answers "I changed this, so what did I just change?".
+test("settings lanes: an EMPTY lanes[] is an answer and keeps its row", () => {
+  const js = appJs();
+  const i = js.indexOf("function settingRow");
+  const fn = js.slice(i, js.indexOf("function controlFor"));
+  assert.match(fn, /k\.lanes/, "the row must render the CLI's lanes[]");
+  // Ten keys are permanently empty — they are operating keys of the `orc extra`
+  // bridge. Skipping the line makes "no lane reads this" and "we did not render
+  // it" identical, which is the distinction the row exists to draw.
+  assert.match(fn, /settings\.lanes\.none/, "an empty lanes[] must render its own stated answer");
+  assert.ok(
+    !/if \(\(k\.lanes \|\| \[\]\)\.length\) \{\s*const lanes/.test(fn),
+    "the row must not be skipped when lanes[] is empty"
+  );
+});
+
+// The two commands behind the Lanes panel already existed; the panel is the
+// half that was missing. It may render them and decide nothing about them.
+test("lanes panel: it renders the CLI's phases and calls, and names neither itself", () => {
+  const js = appJs();
+  assert.ok(js.indexOf("PANELS.lanes") > 0, "the panel must register itself");
+  const i = js.indexOf("function phasesCard");
+  const fn = js.slice(i, js.indexOf("function callsTab"));
+
+  assert.match(fn, /one\.phases \|\| \[\]/, "it must iterate the CLI's phases[]");
+  // A hardcoded phase or lane list in the panel is the Flow-stepper drift again.
+  for (const phase of ["preflight", "intake", "plan-handoff", "wiki-consult", "stop-resume"]) {
+    assert.ok(!fn.includes(`"${phase}"`), `the panel must not name the phase "${phase}" itself`);
+  }
+  // NO SHARED PHASES is an ANSWER — five lanes are deliberately like this, and
+  // a blank card would make it look like the read failed.
+  assert.match(fn, /lanes\.phases\.inSpine/, "a lane with no shared phase must say so");
+  // `when` is one of the CLI's own words (`always`, `on-phase`, `compile-time`)
+  // and is rendered verbatim. A lookup table mapping it to friendlier words
+  // would be a state word the CLI does not have.
+  assert.match(fn, /chip\(p\.when,/, "the CLI's `when` is chipped verbatim");
+  assert.ok(!/WHEN_LABEL|whenLabel|t\("lanes\.when\./.test(fn), "the panel must not translate or relabel `when`");
+
+  const calls = js.slice(js.indexOf("function callsCard"));
+  assert.match(calls, /d\.calls \|\| \[\]/, "the catalogue comes from the CLI");
+  // EXPANDS IN PLACE, one row at a time — the Runs-row rule.
+  assert.match(calls, /aria-expanded='true'/, "only one row stays open");
+  assert.ok(!calls.includes("showCall"), "there is no detail box below the list");
+});
+
+// The mirror of `a lane that sends work off Claude without saying so` is a lane
+// that quietly STOPS.
+test("extra demotion: both clocks, the counter at zero, and Promote needs a reason", () => {
+  const js = appJs();
+  const i = js.indexOf("function exDemotionCard");
+  assert.ok(i > 0, "the demotion card must exist");
+  const fn = js.slice(i, js.indexOf("function exPromoteModal"));
+
+  // TWO CLOCKS, NEVER MERGED: one about attempts that ended, one about an
+  // attempt that has not. Each has its own key and its own zero.
+  assert.match(fn, /clocks\.consecutive/, "the consecutive clock is rendered");
+  assert.match(fn, /clocks\.stale/, "the stale clock is rendered");
+  assert.ok(!/consecutive \+ |clocks\.consecutive\.threshold \+ clocks\.stale/.test(fn), "the two clocks must never be combined");
+  // A `0` silently disables a clock, so `off` is STATED rather than blank.
+  assert.match(fn, /extra\.demotion\.clockOff/, "an off clock says so");
+  // THE COUNTER RENDERS AT ZERO. A badge that only appears when something is
+  // wrong cannot tell you the clock is running.
+  assert.match(fn, /extra\.demotion\.stalls/, "the counter is always rendered");
+  assert.ok(!/if \(p\.consecutive_stalls\)/.test(fn), "the counter must not be hidden at zero");
+  // Both ABSENT counts are named (v0.53.2).
+  assert.match(fn, /skipped_unattributed/, "attempts belonging to no run are named");
+  // The card renders even when nothing is demoted — a demotion nobody can see
+  // is a subsystem that went quiet.
+  assert.match(fn, /stateArmed/, "an armed run is rendered too, not only a demoted one");
+  // A disabled button for an action that cannot apply is what this panel
+  // refuses everywhere else.
+  assert.match(fn, /if \(st\.demoted\) \{/, "Promote exists only while something is demoted");
+  // There is deliberately NO demote button.
+  assert.ok(!/extra\.demotion\.demoteButton|"\/api\/extra\/demote"/.test(js), "there is no hand-demote button");
+
+  const modal = js.slice(js.indexOf("function exPromoteModal"));
+  assert.match(modal, /reasonRequired/, "an empty reason is refused");
+  assert.match(modal, /promoteWatermark/, "a promote is a watermark, and it says so before the click");
+  assert.match(modal, /"\/api\/extra\/promote"/, "it posts to the CLI, which is the authority");
+});

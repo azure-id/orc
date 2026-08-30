@@ -154,6 +154,16 @@ test("GOLDEN: the top-level shape of config list --json", () => {
     // top-level, and `answers`/`family`/`prio`/`lanes`/`gated_by` per key. The
     // rest of this file — the shadow sentences, the 73 keys, the tables — is
     // unchanged, which is exactly the split a shape golden exists to show.
+    //
+    // CHANGED AGAIN IN W16, deliberately: `families_resolved` and `rank_states`.
+    // `families` above is the static REGISTRY — which ranks exist and in what
+    // order; the new key is what those ranks actually DID against the config on
+    // disk. It closes a `--json is not a summary` gap in the release that named
+    // the rule: the human branch has always printed the resolution ("resolves on
+    // P3 the shipped default"), while `--json` carried only the registry a
+    // reader would have had to re-run the precedence over. Both halves live in
+    // one function, so no lint could have seen it — which is what a shape golden
+    // is for. Every pre-existing key keeps its NAME and its POSITION.
     assert.deepStrictEqual(Object.keys(j), [
       "config_path",
       "exists",
@@ -163,6 +173,8 @@ test("GOLDEN: the top-level shape of config list --json", () => {
       "retired_keys",
       "score_table",
       "families",
+      "families_resolved",
+      "rank_states",
       "behavior_trace",
     ]);
     assert.deepStrictEqual(Object.keys(j.keys[0]), [

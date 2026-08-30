@@ -1910,7 +1910,106 @@ const extraJournalPrune = {
   removed: [],
 };
 
+// THE RUN DEMOTION (v1.0.0 W16). Shape copied from `orc extra demotion --json`.
+//
+// ONE OF EVERY STATE that matters here, because none of them is reachable on a
+// healthy machine: a profile that IS demoted with its evidence, one still
+// routing with a live attempt going quiet, and one whose counter was RESET by a
+// dispatch that came back — three rows that must never look alike. Both ABSENT
+// counts are populated (`skipped_unattributed`, and a hand override), because a
+// report quietly short by three rows is the v0.53.2 failure this card exists to
+// avoid.
+//
+// `demoted: true` is what makes the Promote button reachable at all. With this
+// at `false` the button correctly does not render, and the modal behind it —
+// the one place a required reason is collected — could never be designed.
+const extraDemotion = {
+  ok: true,
+  known_run: true,
+  run: "add-oauth-login",
+  demoted: true,
+  demoted_profiles: ["deepseek"],
+  announce:
+    "deepseek is DEMOTED for run add-oauth-login — 2 consecutive stalled dispatches. Foreign work stays on Claude until you promote it back.",
+  reasons: [
+    {
+      profile: "deepseek",
+      clock: "consecutive",
+      why: "2 consecutive stalled dispatches (T-14, T-17) with no completed dispatch between them.",
+    },
+  ],
+  clocks: {
+    consecutive: {
+      on: true,
+      threshold: 2,
+      note: "Only a `stalled` outcome counts, in both directions — a 401 RESETS it, because demoting on one would hide a credential problem behind a routing change.",
+    },
+    stale: {
+      on: true,
+      threshold_min: 20,
+      note: "The stale clock is about an attempt that has NOT ended. It never merges with the consecutive clock and has its own zero.",
+    },
+  },
+  ladder: { effective_now: "opus5_only — the 2-band Opus 5 executor ladder" },
+  profiles: [
+    {
+      profile: "deepseek",
+      demoted: true,
+      consecutive_stalls: 2,
+      why: "2 consecutive stalled dispatches (T-14, T-17) with no completed dispatch between them.",
+      stale: null,
+      reset_by: null,
+      resumes_of_the_same_stall: 1,
+    },
+    // STILL ROUTING, with a live attempt going quiet. The stale clock has not
+    // fired yet, so this row is the one that shows a counter mid-count.
+    {
+      profile: "glm",
+      demoted: false,
+      consecutive_stalls: 1,
+      why: null,
+      stale: { task_id: "T-21", quiet_min: 12 },
+      reset_by: null,
+      resumes_of_the_same_stall: 0,
+    },
+    // COUNTER RESET. A dispatch came back, so the clock went to zero — the
+    // state that proves the counter is not a running total.
+    {
+      profile: "kimi",
+      demoted: false,
+      consecutive_stalls: 0,
+      why: null,
+      stale: null,
+      reset_by: { task_id: "T-19", outcome: "done" },
+      resumes_of_the_same_stall: 0,
+    },
+  ],
+  // An ABSENT count, always printed. These attempts belong to NO run's clock.
+  skipped_unattributed: 3,
+  // The human half — the only thing this subsystem stores, and it is deleted
+  // with the run.
+  override: {
+    state: "promoted",
+    at: "2026-08-28T14:31:00.000Z",
+    reason: "provider had a regional outage, confirmed on their status page",
+  },
+  trace_line: "EXTRA demote profile=deepseek run=add-oauth-login clock=consecutive n=2",
+};
+
+// The other side of the same command: NO RUN OPEN, which is exit 2 and an
+// ANSWER rather than an error. Not wired to a route — it is here so the empty
+// state can be dropped into `/api/extra/demotion` by hand while designing it.
+const extraDemotionNoRun = {
+  ok: false,
+  reason: "unknown-run",
+  run: null,
+  why: "no run slug was given and the trace pointer names none, so there is no run to scope a demotion to.",
+  hint: "orc run list names the runs that exist.",
+};
+
 module.exports = {
+  extraDemotion,
+  extraDemotionNoRun,
   extraProviders,
   extraList,
   extraListNoConnection,

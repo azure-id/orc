@@ -41,7 +41,7 @@ const diy = {
     { key: "summary", value: "short", default: "full", is_set: true, desc: "Summary depth.", options: ["full", "off", "short"] },
     { key: "tdd", value: "on", default: "on", is_set: false, desc: "TDD gate.", options: ["on", "off"] },
     { key: "rubric_bands", value: 5, default: 5, is_set: false, desc: "Scoring granularity (scoring on only).", options: [2, 3, 4, 5, 6, 7, 8] },
-    { key: "session_tier", value: "opus-4-8-high", default: "opus-4-8-high", is_set: false, desc: "Declared main-session tier.", options: ["sonnet-4-6-high", "opus-4-7-high", "opus-4-8-high", "opus-5-high", "opus-5-max", "fable-5-high"] },
+    { key: "session_tier", value: "opus-4-8-high", default: "opus-5-high", is_set: true, desc: "Declared main-session tier.", options: ["sonnet-4-6-high", "opus-4-7-high", "opus-4-8-high", "opus-5-high", "opus-5-max", "fable-5-high"] },
   ],
   // The bootstrap catalog, empty name first (= full-lane defaults, no --preset
   // flag). `lean` is ACTIVE here even though this flow was renamed away from

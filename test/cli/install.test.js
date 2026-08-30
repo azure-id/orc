@@ -311,3 +311,73 @@ test("pre-manifest install warns, and only deletes with --prune", () => {
 
 // A FILLED plan, mirroring the schema in _shared/stack-plan.md. The driver's
 // hard gate branches on `orc pr stack status`, so READY must be reachable.
+
+
+// v1.0.0 W16 — THE LANE CONFIG CONTRACT, ON DISK.
+//
+// `bin/verify-contracts.js` asserts this both ways in the SOURCE tree. This is
+// the same assertion against the payload that is actually INSTALLED, which is
+// the only copy a run ever reads, and it fires in the state that matters: a CLI
+// that knows a lane reads config keys sitting on a spine from before that lane
+// had the contract. That is precisely when a lane falls back to merging
+// `.claude/orc.config.yaml` itself and gets a shadowed key wrong, silently.
+test("doctor: a lane spine that lost its config contract is named, in both directions", () => {
+  const { root, claudeDir } = freshInstall();
+  try {
+    // CLEAN FIRST. A finding that cannot go quiet is a finding nobody reads.
+    const clean = cli(["doctor", "--dir", root]);
+    assert.match(clean.stdout, /lane config contract intact/, "a fresh payload reports intact");
+    assert.doesNotMatch(clean.stdout, /out of step with this CLI/, "and reports no drift");
+
+    // DIRECTION 1 — the spine is BEHIND: the CLI knows `orc` reads keys, and
+    // the installed spine no longer names the contract.
+    const spine = path.join(claudeDir, "skills", "orc", "SKILL.md");
+    const before = fs.readFileSync(spine, "utf8");
+    assert.ok(before.includes("orc lane config orc --json"), "the fixture must start from a real contract");
+    fs.writeFileSync(spine, before.replace(/orc lane config orc --json/g, "orc config list"));
+
+    const r = cli(["doctor", "--dir", root]);
+    assert.strictEqual(r.status, 1, "drift is an issue, not a pass");
+    assert.match(r.stdout, /out of step with this CLI/, "the drift is reported");
+    assert.match(r.stdout, /\borc\b/, "and the lane is named");
+
+    const j = JSON.parse(cli(["doctor", "--json", "--dir", root]).stdout);
+    const f = j.findings.find((x) => x.id === "lane-keys-drifted");
+    assert.ok(f, "the finding carries a stable id");
+    // `--json is not a summary`: the human line names the lanes, so the JSON
+    // carries the per-lane rows the line was summarising.
+    assert.ok(Array.isArray(f.lanes) && f.lanes.length, "every drifted lane is carried, not just counted");
+    const orc = f.lanes.find((x) => x.lane === "orc");
+    assert.ok(orc, "the drifted lane is named in the object too");
+    assert.strictEqual(orc.direction, "spine-behind", "the DIRECTION of the drift is stated");
+    assert.ok(orc.keys > 0, "and how many keys the lane reads");
+    // FIXABLE: `orc update` re-copies the payload, which is what `--fix` does.
+    assert.strictEqual(f.fixable, true, "the finding says it is fixable");
+    assert.strictEqual(f.fix_command, "orc update", "and names the command");
+
+    // DIRECTION 2 — the spine is AHEAD: it promises an answer for a lane the
+    // CLI says reads nothing. An empty answer is an ANSWER, so this is drift
+    // too, and reporting only the first direction would let half of it through.
+    fs.writeFileSync(spine, before);
+    const noKeys = LANES_WITH_NO_KEYS(root);
+    if (noKeys) {
+      const p = path.join(claudeDir, "skills", noKeys, "SKILL.md");
+      fs.writeFileSync(p, fs.readFileSync(p, "utf8") + "\n\nSee `orc lane config " + noKeys + " --json`.\n");
+      const r2 = cli(["doctor", "--json", "--dir", root]);
+      const f2 = JSON.parse(r2.stdout).findings.find((x) => x.id === "lane-keys-drifted");
+      assert.ok(f2, "the other direction is reported too");
+      assert.strictEqual(f2.lanes[0].direction, "spine-ahead", "and is labelled as the other direction");
+    }
+  } finally {
+    rmrf(root);
+  }
+});
+
+// A lane the CLI says reads NO config key — the only shape that can produce
+// `spine-ahead`. Read from the CLI rather than hardcoded: a lane list in a test
+// is one more copy of the registry to drift.
+function LANES_WITH_NO_KEYS(root) {
+  const list = JSON.parse(cli(["lane", "list", "--json", "--dir", root]).stdout);
+  const zero = (list.lanes || []).find((l) => l.keys === 0);
+  return zero ? zero.lane : null;
+}
