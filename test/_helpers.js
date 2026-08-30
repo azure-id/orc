@@ -61,6 +61,35 @@ const BASE_ENV = {
   CI: "true",
   HOME: FAKE_HOME,
   USERPROFILE: FAKE_HOME,
+  // THE PROBE BUDGET IS ENVIRONMENT, NOT BEHAVIOUR (v1.0.0 W15).
+  //
+  // The paragraph above this one has described the failure since v0.55.0 —
+  // "a local fake provider misses the probe's 3s rung-1 timeout, the ping falls
+  // through to the 20s rung 2, and the file fails at ~25s with `1 == 0`". It was
+  // TRUE, it was WRITTEN DOWN, and the suite went on flaking through W6, W7, W8
+  // and W14 anyway, because the only thing ever done about it was to move the
+  // concurrency cap. The cap could not fix it: `net` is pinned at 2 by the POOLS
+  // table whatever `ORC_TEST_GLOBAL_CONCURRENCY` says, 9 of its 10 files are the
+  // `extra` family, and 515 s of net work at 2 IS the suite's critical path — so
+  // two loopback-server files are in flight for essentially the whole run, and
+  // lowering the global cap only makes that window LONGER. W14 measured exactly
+  // that: the cap at 2 ran 2.2x slower and still failed 3.
+  //
+  // So the budget is set here instead, once, for every `cli()` call. It belongs
+  // in the same list as HOME and CI for the same reason they are: each one stops
+  // the DEVELOPER'S BOX from deciding a result. 60000 is the largest budget any
+  // probe already asks for, so nothing is shortened — a loopback answer simply
+  // stops racing the scheduler, and the assertions go back to being about which
+  // RUNG answered, which is what every one of them is written to say.
+  //
+  // Proved in both directions before it was trusted (W15): at `1` the family
+  // fails with the documented signature — `1 == 0` in extra-secrets, `fixture
+  // must verify` in extra-engine-c — and at 60000 the full suite is green.
+  // A shell value WINS, so the forcing direction stays reproducible by anyone:
+  // `ORC_TEST_PROBE_MS=1 node --test test/cli/extra-secrets.test.js` puts the
+  // flake back, by name, in about a second. A seam nobody can turn the other way
+  // is a seam whose claim cannot be checked.
+  ORC_TEST_PROBE_MS: process.env.ORC_TEST_PROBE_MS || "60000",
 };
 
 function tmpdir() {

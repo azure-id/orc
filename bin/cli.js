@@ -20693,6 +20693,31 @@ function extraVaultForget(claudeDir, name) {
 //
 //   The TIMEOUT is short and explicit. A probe that hangs is a connect modal
 //   that hangs, and a profile is either reachable now or it is not.
+// THE PROBE SEAM (v1.0.0 W15), and it is deliberately the ONLY one for the
+// PROBES, exactly as `ORC_TEST_BUDGET_FLOOR_MS` is the only one for a dispatch.
+//
+// Every budget below is a WALL CLOCK, and a wall clock is a fact about the box
+// rather than about the decision these probes make. That distinction is what
+// the suite kept tripping over: on a loaded box a LOCAL fake provider misses
+// rung 1's 3 s, the ping falls THROUGH to rung 2, and a test asserting
+// `verify_method: "models"` fails with `'completion' !== 'models'` at ~23 s.
+// It looks exactly like a regression, it lands on a different file every run,
+// and every affected file passes on its own. `test/_helpers.js` recorded three
+// debugging rounds of it, `test/cli/extra-slots.test.js` and
+// `test/cli/extra-demotion.test.js` each recorded the diagnosis, and the whole
+// v1.0.0 build gated on a suite that flaked this way in W6, W7, W8 and W14.
+//
+// The budgets themselves are PRODUCT RULES and they do not move: a probe that
+// hangs is a connect modal that hangs. What moves is that a test can now say
+// "give this loopback answer the headroom a real network call would have", so
+// the assertion is about the RUNG THAT ANSWERED and never about the scheduler.
+// Unset, this returns its argument and the shipped behaviour is byte-identical.
+// Nothing in ORC ever sets it; only a test does.
+function extraProbeMs(ms) {
+  const v = Number(process.env.ORC_TEST_PROBE_MS);
+  return Number.isFinite(v) && v > 0 ? v : ms;
+}
+
 function extraHttp(opts) {
   return new Promise((resolve) => {
     let url;
@@ -20758,9 +20783,9 @@ function extraHttp(opts) {
         });
       }
     );
-    req.setTimeout(opts.timeoutMs || 3000, () => {
+    req.setTimeout(opts.timeoutMs || extraProbeMs(3000), () => {
       req.destroy();
-      resolve({ ok: false, reason: "timeout", error: `no answer in ${opts.timeoutMs || 3000}ms`, ms: Date.now() - started });
+      resolve({ ok: false, reason: "timeout", error: `no answer in ${opts.timeoutMs || extraProbeMs(3000)}ms`, ms: Date.now() - started });
     });
     req.on("error", (e) =>
       resolve({ ok: false, reason: "unreachable", error: e.message, code: e.code, ms: Date.now() - started })
@@ -21598,7 +21623,7 @@ async function extraPing(claudeDir, name) {
   let models = [];
   if (!modelArg) {
     const url = joinUrl(probe.base, probe.models_path) + "?limit=1000";
-    const r = await extraHttp({ url, headers, timeoutMs: 3000 });
+    const r = await extraHttp({ url, headers, timeoutMs: extraProbeMs(3000) });
     attempts.push({ rung: "models", url, status: r.status || null, ok: !!r.ok, ms: r.ms || null, error: r.ok ? null : extraErrText(r) });
     if (r.ok && r.json) {
       // DELIBERATELY NOT Claude Code's filter. Its discovery keeps only ids
@@ -21660,7 +21685,7 @@ async function extraPing(claudeDir, name) {
     max_tokens: live ? 32 : 1,
     messages: [{ role: "user", content: live ? EXTRA_LIVE_PROMPT : "hi" }],
   };
-  const r2 = await extraHttp({ url, method: "POST", headers, body, timeoutMs: live ? 60000 : 20000 });
+  const r2 = await extraHttp({ url, method: "POST", headers, body, timeoutMs: extraProbeMs(live ? 60000 : 20000) });
   attempts.push({ rung: "completion", url, status: r2.status || null, ok: !!r2.ok, ms: r2.ms || null, error: r2.ok ? null : extraErrText(r2) });
 
   if (r2.ok) {
@@ -22602,7 +22627,7 @@ async function extraRefreshModels(a) {
   const probe = extraProbeBase(prof, cat);
   if (!probe.base) return { ok: false, reason: "no-base-url", error: "this profile has no base URL to ask.", models: [] };
   const url = joinUrl(probe.base, probe.models_path) + "?limit=1000";
-  const r = await extraHttp({ url, headers: extraAuthHeaders(prof, key), timeoutMs: 8000 });
+  const r = await extraHttp({ url, headers: extraAuthHeaders(prof, key), timeoutMs: extraProbeMs(8000) });
   if (!r.ok || !r.json) return { ok: false, reason: "unreachable", error: extraErrText(r), models: [], source: url };
   const data = Array.isArray(r.json.data) ? r.json.data : Array.isArray(r.json.models) ? r.json.models : [];
   const models = data.map((m) => (typeof m === "string" ? m : m.id || m.name)).filter(Boolean);
@@ -22653,7 +22678,7 @@ async function extraTestModel(a) {
     method: "POST",
     headers: extraAuthHeaders(prof, key),
     body: { model, max_tokens: 32, messages: [{ role: "user", content: EXTRA_LIVE_PROMPT }] },
-    timeoutMs: 60000,
+    timeoutMs: extraProbeMs(60000),
   });
   if (!r.ok)
     return {
@@ -25334,7 +25359,7 @@ async function extraNetworkProbe(prof, cat) {
       note: "this profile names no endpoint ORC can reach, so the network was NOT measured. Absent is not the same as unreachable.",
     };
   const url = joinUrl(base, (row && row.models_path) || "/v1/models");
-  const res = await extraHttp({ url, method: "GET", timeoutMs: 3000, maxBytes: 64 * 1024 });
+  const res = await extraHttp({ url, method: "GET", timeoutMs: extraProbeMs(3000), maxBytes: 64 * 1024 });
   // A REDIRECT IS A RESPONSE. extraHttp refuses to follow one, which is a
   // credential rule — but the host answered, and reachability is what is being
   // measured here.

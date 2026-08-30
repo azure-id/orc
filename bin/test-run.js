@@ -37,6 +37,8 @@ const os = require("os");
 const path = require("path");
 const { spawn, spawnSync } = require("child_process");
 
+// Run start, so every file reports WHEN it ran and not only for how long.
+let T0 = Date.now();
 const REPO = path.join(__dirname, "..");
 const TEST_DIR = path.join(REPO, "test");
 const TIMINGS = path.join(TEST_DIR, ".timings.json");
@@ -161,6 +163,41 @@ function counters(tap) {
   return { tests: num("tests"), pass: num("pass"), fail: num("fail"), skipped: num("skipped"), todo: num("todo") };
 }
 
+// THE FAILING TESTS, BY NAME AND BY DURATION (v1.0.0 W15).
+//
+// `--json is not a summary` (plan sec5 rule 10, which says in terms that it
+// binds this file). Until W15 the human branch printed a failing file's WHOLE
+// TAP - every test name, its duration and the assertion - and `--json` carried
+// `{file, status, fail}`. A field the human path prints and the JSON omits is
+// drift no lint can see, because both halves live in one function.
+//
+// It was not a theoretical gap. W14 recorded four full runs with four different
+// failure sets and could not say WHICH tests failed or how long they took -
+// which is precisely the evidence that separates a budget elapsing from an
+// assertion failing, the two hypotheses that were open. Four runs, no durations
+// kept, and the wave had to hand the question on.
+function failedTests(tap) {
+  const out = [];
+  const re = /^not ok \d+ - (.+)$((?:\n[ ]+.*)*)/gm;
+  let m;
+  while ((m = re.exec(tap))) {
+    const body = m[2] || "";
+    const dur = /duration_ms:\s*(\d+(?:\.[0-9]+)?)/.exec(body);
+    const loc = /location:\s*'([^']*)'/.exec(body);
+    // The FIRST line of the error is the assertion. The YAML diff under it is
+    // for the human branch; a report field that carried it would be a wall of
+    // text in every consumer.
+    const err = /error:\s*[|-]*\s*'?([^\n]*)/.exec(body);
+    out.push({
+      name: m[1].trim(),
+      duration_s: dur ? +(Number(dur[1]) / 1000).toFixed(1) : null,
+      location: loc ? loc[1] : null,
+      error: err ? err[1].replace(/'$/, "").trim().slice(0, 300) : null,
+    });
+  }
+  return out;
+}
+
 function runFile(rel) {
   return new Promise((resolve) => {
     const started = Date.now();
@@ -178,6 +215,11 @@ function runFile(rel) {
       resolve({
         file: rel,
         ms: Date.now() - started,
+        // WHEN a file ran, not only how long it took. Two loopback files being
+        // in flight together IS the contention question, and a report with no
+        // start offset cannot answer it however many times it is re-run.
+        started_at: started,
+        failed_tests: failedTests(out),
         status: code,
         ok: code === 0,
         ...c,
@@ -356,6 +398,7 @@ async function main(argv) {
           .join(" · ")
     );
   const t0 = Date.now();
+  T0 = t0;
   const pools = await runAll(byPool, timings, opts);
   const wall_ms = Date.now() - t0;
   if (!opts.json && selected.length) process.stdout.write("\n");
@@ -399,9 +442,9 @@ async function main(argv) {
       concurrency: p.concurrency,
       wall_clock_s: +(p.ms / 1000).toFixed(1),
       why: POOLS[p.pool].why,
-      files: p.files.map((f) => ({ file: f.file, ms: f.ms, tests: f.tests, pass: f.pass, fail: f.fail, ok: f.ok })),
+      files: p.files.map((f) => ({ file: f.file, ms: f.ms, started_s: +((f.started_at - T0) / 1000).toFixed(1), tests: f.tests, pass: f.pass, fail: f.fail, ok: f.ok })),
     })),
-    failures: failed.map((f) => ({ file: f.file, status: f.status, fail: f.fail })),
+    failures: failed.map((f) => ({ file: f.file, status: f.status, fail: f.fail, pool: f.pool, ms: f.ms, started_s: +((f.started_at - T0) / 1000).toFixed(1), tests: f.failed_tests })),
   };
 
   if (opts.json) {

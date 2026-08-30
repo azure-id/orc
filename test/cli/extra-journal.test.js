@@ -482,6 +482,50 @@ test("the stall clock stands down when it cannot fit under the wall clock, and s
   assert.equal(zero.stall_off_reason, null);
 });
 
+// THE PROBE SEAM, tested as arithmetic for the same reason (v1.0.0 W15).
+//
+// This one is load-bearing in a way the others are not: the whole `extra`
+// family arms its fixtures through a real `orc extra ping`, and every rung of
+// that ping is a WALL CLOCK. On a loaded box rung 1 misses its 3 s, the ping
+// falls through to rung 2, and a test asserting which rung answered fails with
+// `1 == 0` or `fixture must verify` - on a different file every run. That flake
+// cost W6, W7, W8 and W14 their gate. `test/_helpers.js` now hands every child
+// a 60 s budget, and this asserts the two properties that makes safe: UNSET it
+// changes nothing, and SET it is honoured everywhere rather than in some rungs.
+test("the probe seam: unset it is the shipped budget, set it is honoured", () => {
+  // LF, always - the slice looks for `\n}\n`, which a CRLF checkout never contains.
+  const src = fs.readFileSync(path.join(__dirname, "..", "..", "bin", "cli.js"), "utf8").replace(/\r\n/g, "\n");
+  const i = src.indexOf("function extraProbeMs(ms) {");
+  assert.ok(i > 0, "extraProbeMs must exist - every probe budget reads through it");
+  const make = () =>
+    new Function(src.slice(i, src.indexOf("\n}\n", i) + 2) + "\nreturn extraProbeMs;")();
+
+  const had = process.env.ORC_TEST_PROBE_MS;
+  try {
+    // UNSET: byte-identical to what ships. Every real budget comes back whole.
+    delete process.env.ORC_TEST_PROBE_MS;
+    const shipped = make();
+    for (const ms of [3000, 8000, 20000, 60000]) assert.equal(shipped(ms), ms);
+
+    // SET: honoured, and honoured for EVERY budget. A seam that reached only
+    // the rung it was written for would leave the fall-through raced, which is
+    // the failure itself rather than a smaller version of it.
+    process.env.ORC_TEST_PROBE_MS = "60000";
+    const seamed = make();
+    for (const ms of [3000, 8000, 20000, 60000]) assert.equal(seamed(ms), 60000);
+
+    // Junk and zero are NOT a budget of zero - they fall back to the shipped
+    // number. A typo in an env var must never silently disable a probe.
+    for (const bad of ["", "0", "-1", "abc"]) {
+      process.env.ORC_TEST_PROBE_MS = bad;
+      assert.equal(make()(3000), 3000, "a bad value is ignored, never obeyed: " + JSON.stringify(bad));
+    }
+  } finally {
+    if (had === undefined) delete process.env.ORC_TEST_PROBE_MS;
+    else process.env.ORC_TEST_PROBE_MS = had;
+  }
+});
+
 test("a worker that keeps producing is never stalled, however long it takes", () => {
   const p = project();
   // The `ok` fixture answers immediately. The assertion that matters is the

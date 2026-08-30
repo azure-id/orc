@@ -73,7 +73,13 @@ function start(mode, key) {
     CHILDREN.add(child);
     child.on("exit", () => CHILDREN.delete(child));
     let buf = "";
-    const t = setTimeout(() => reject(new Error("fake provider never reported a port")), 10000);
+    // The SECOND wall clock in this fixture, and the same rule as the first
+    // (v1.0.0 W15): 10 s for a node process to boot is a fact about the box.
+    // It has never been the observed failure — that one is the probe budget, in
+    // `test/_helpers.js` — but it is the same defect, so it honours the same
+    // seam as a FLOOR. Never shortened, only given headroom under load.
+    const bootMs = Math.max(10000, Number(process.env.ORC_TEST_PROBE_MS) || 0);
+    const t = setTimeout(() => reject(new Error("fake provider never reported a port")), bootMs);
     child.stdout.on("data", (d) => {
       buf += d;
       const m = /PORT (\d+)/.exec(buf);
