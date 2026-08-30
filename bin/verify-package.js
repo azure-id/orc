@@ -348,6 +348,15 @@ const required = [
   // that is not there, which is a phase that silently does nothing.
   "templates/skills/orc/references/phases/intake.md",
   "templates/skills/orc/references/phases/integration.md",
+  // v1.0.0 W14 — orc-wiki's five phase bodies. A wiki run reaches FEW of them
+  // (Phase 0 auto-branches into fresh / resume / refresh / repair, 3c is a legacy
+  // backfill), which is what makes a file per phase pay here and not elsewhere.
+  // A publish missing one leaves the manifest naming a file that is not there.
+  "templates/skills/orc-wiki/references/phases/phase-0.md",
+  "templates/skills/orc-wiki/references/phases/phase-1.md",
+  "templates/skills/orc-wiki/references/phases/phase-2.md",
+  "templates/skills/orc-wiki/references/phases/phase-3.md",
+  "templates/skills/orc-wiki/references/phases/phase-3c.md",
   "templates/commands/orc-grill.md",
   "templates/commands/orc-route.md",
   "templates/commands/orc-explain.md",

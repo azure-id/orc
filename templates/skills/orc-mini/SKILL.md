@@ -173,6 +173,17 @@ documented defaults, out loud. Priorities and families:
 Wave/scoring/scout keys never apply to mini — and they are not in the answer,
 so there is nothing to render or ask.
 
+## Calls
+
+**ONE catalogue, and it is not you:** `orc lane calls orc-mini --json` names every
+CLI call this lane makes, each with its exit-code contract, its cost, when to run
+it, and what an EMPTY answer means. Never invent a spelling, never re-word an
+exit code, and never re-derive a state word — the CLI's state words are the only
+state words, and **an exit code is an ANSWER wherever that contract says so, not
+a failure**. A call the answer does not name is a call this lane does not make.
+Exit ≠ 0 from the catalogue itself → say the CLI is unavailable and name the
+command you are about to run, out loud, before running it.
+
 ## TDD (ONE intake question — mini's whole TDD policy)
 
 At intake ask once:

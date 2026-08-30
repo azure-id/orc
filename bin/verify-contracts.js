@@ -327,7 +327,7 @@ const CONTRACTS = [
       "skills/orc-fast/SKILL.md",
       "skills/orc-quick/references/dispatch-gate.md",
       "skills/orc-quick/SKILL.md",
-      "skills/orc-wiki/SKILL.md",
+      "skills/orc-wiki/references/phases/phase-2.md",
       "skills/orc-wiki/references/extra.md",
     ],
   },
@@ -860,6 +860,10 @@ const CONTRACTS = [
       "skills/orc-pact/SKILL.md",
       "skills/orc-wiki/README.md",
       "skills/orc-wiki/SKILL.md",
+      "skills/orc-wiki/references/phases/phase-0.md",
+      "skills/orc-wiki/references/phases/phase-2.md",
+      "skills/orc-wiki/references/phases/phase-3.md",
+      "skills/orc-wiki/references/phases/phase-3c.md",
       "skills/orc-wiki/references/extra.md",
       "skills/orc-wiki/references/crosslink.md",
       "skills/orc-wiki/references/integrity-check.md",
@@ -876,7 +880,8 @@ const CONTRACTS = [
     files: [
       "commands/orc-wiki.md",
       "skills/orc-wiki/README.md",
-      "skills/orc-wiki/SKILL.md",
+      "skills/orc-wiki/references/phases/phase-0.md",
+      "skills/orc-wiki/references/phases/phase-3c.md",
       "skills/orc-wiki/references/crosslink.md",
     ],
   },
@@ -886,7 +891,7 @@ const CONTRACTS = [
     files: [
       "hooks/orc-statusline.js",
       "skills/orc-wiki/README.md",
-      "skills/orc-wiki/SKILL.md",
+      "skills/orc-wiki/references/phases/phase-0.md",
       "skills/orc-wiki/references/crosslink.md",
       "skills/orc-wiki/references/partial-refresh.md",
       "skills/orc-wiki/references/staleness.md",
@@ -909,6 +914,7 @@ const CONTRACTS = [
       "skills/orc-quick/SKILL.md",
       "skills/orc-wiki/README.md",
       "skills/orc-wiki/SKILL.md",
+      "skills/orc-wiki/references/phases/phase-3.md",
       "skills/orc-wiki/references/crosslink.md",
       "skills/orc-wiki/references/integrity-check.md",
       "skills/orc-wiki/references/partial-refresh.md",
@@ -1499,6 +1505,7 @@ const CONTRACTS = [
       "skills/orc-learn/references/refresh.md",
       "skills/orc-learn/references/template-knowledge.md",
       "skills/orc-wiki/SKILL.md",
+      "skills/orc-wiki/references/phases/phase-2.md",
       "skills/orc-wiki/references/integrity-check.md",
       "skills/orc-wiki/references/staleness.md",
       "skills/orc-wiki/schemas/wiki-doc.md",
@@ -1519,6 +1526,8 @@ const CONTRACTS = [
     token: "WIKI-CHECK",
     files: [
       "skills/orc-wiki/SKILL.md",
+      "skills/orc-wiki/references/phases/phase-3.md",
+      "skills/orc-wiki/references/phases/phase-3c.md",
       "skills/orc-wiki/references/integrity-check.md",
     ],
   },
@@ -1617,6 +1626,7 @@ const CONTRACTS = [
       "skills/orc-quick/references/dispatch-gate.md",
       "skills/orc-retro/SKILL.md",
       "skills/orc-wiki/SKILL.md",
+      "skills/orc-wiki/references/phases/phase-2.md",
       "skills/orc-wiki/references/extra.md",
       "skills/orc-wiki/references/partial-refresh.md",
       "skills/orc-wiki/references/pattern-prewarm.md",
@@ -1719,7 +1729,7 @@ const CONTRACTS = [
       "skills/_shared/phases/wiki-consult.md",
       "skills/orc-fast/SKILL.md",
       "skills/orc-mini/SKILL.md",
-      "skills/orc-wiki/SKILL.md",
+      "skills/orc-wiki/references/phases/phase-1.md",
       "skills/orc-wiki/references/crosslink.md",
       "skills/orc-wiki/references/staleness.md",
     ],
@@ -1828,6 +1838,8 @@ const CONTRACTS = [
       "skills/orc-poly/SKILL.md",
       "skills/orc-wiki/README.md",
       "skills/orc-wiki/SKILL.md",
+      "skills/orc-wiki/references/phases/phase-3.md",
+      "skills/orc-wiki/references/phases/phase-3c.md",
       "skills/orc-wiki/references/claude-md-injection.md",
       "skills/orc-wiki/references/crosslink-compile.md",
       "skills/orc-wiki/references/crosslink.md",
@@ -1858,7 +1870,7 @@ const CONTRACTS = [
     binFiles: ["bin/cli.js"],
     files: [
       "skills/orc-wiki/README.md",
-      "skills/orc-wiki/SKILL.md",
+      "skills/orc-wiki/references/phases/phase-3.md",
       "skills/orc-wiki/references/crosslink.md",
       "skills/orc-wiki/references/orientation.md",
       "skills/orc-wiki/references/staleness.md",
@@ -1878,6 +1890,10 @@ const CONTRACTS = [
       "skills/orc-poly/references/gather.md",
       "skills/orc-wiki/README.md",
       "skills/orc-wiki/SKILL.md",
+      "skills/orc-wiki/references/phases/phase-0.md",
+      "skills/orc-wiki/references/phases/phase-2.md",
+      "skills/orc-wiki/references/phases/phase-3.md",
+      "skills/orc-wiki/references/phases/phase-3c.md",
       "skills/orc-wiki/references/claude-md-injection.md",
       "skills/orc-wiki/references/crosslink-compile.md",
       "skills/orc-wiki/references/crosslink.md",
@@ -1899,6 +1915,7 @@ const CONTRACTS = [
       "agents/orc-wiki-scanner-sonnet-5-high.md",
       "skills/orc-wiki/README.md",
       "skills/orc-wiki/SKILL.md",
+      "skills/orc-wiki/references/phases/phase-3.md",
       "skills/orc-wiki/references/crosslink.md",
       "skills/orc-wiki/references/integrity-check.md",
       "skills/orc-wiki/schemas/crosslink-tag.md",
@@ -1915,6 +1932,7 @@ const CONTRACTS = [
       "agents/orc-wiki-scanner-opus-5-med.md",
       "agents/orc-wiki-scanner-sonnet-5-high.md",
       "skills/orc-wiki/SKILL.md",
+      "skills/orc-wiki/references/phases/phase-2.md",
       "skills/orc-wiki/references/crosslink.md",
       "skills/orc-wiki/references/integrity-check.md",
       "skills/orc-wiki/references/staleness.md",
@@ -2016,7 +2034,7 @@ const CONTRACTS = [
     token: "orc wiki impact",
     binFiles: ["bin/cli.js"],
     files: [
-      "skills/orc-wiki/SKILL.md",
+      "skills/orc-wiki/references/phases/phase-0.md",
       "skills/orc-wiki/references/partial-refresh.md",
       "skills/orc-wiki/references/staleness.md",
       "skills/orc/config.md",
@@ -2033,7 +2051,7 @@ const CONTRACTS = [
       "skills/orc-poly/SKILL.md",
       "skills/orc-poly/references/gather.md",
       "skills/orc-wiki/README.md",
-      "skills/orc-wiki/SKILL.md",
+      "skills/orc-wiki/references/phases/phase-3.md",
       "skills/orc-wiki/references/claude-md-injection.md",
       "skills/orc-wiki/references/crosslink-compile.md",
       "skills/orc-wiki/references/crosslink.md",
@@ -2049,7 +2067,7 @@ const CONTRACTS = [
     files: [
       "commands/orc-wiki.md",
       "skills/orc-wiki/README.md",
-      "skills/orc-wiki/SKILL.md",
+      "skills/orc-wiki/references/phases/phase-0.md",
       "skills/orc-wiki/references/claude-md-injection.md",
       "skills/orc-wiki/references/crosslink-compile.md",
       "skills/orc-wiki/references/crosslink.md",
@@ -2064,7 +2082,7 @@ const CONTRACTS = [
     files: [
       "skills/orc-explain/SKILL.md",
       "skills/orc-export/SKILL.md",
-      "skills/orc-wiki/SKILL.md",
+      "skills/orc-wiki/references/phases/phase-3.md",
       "skills/orc-wiki/references/claude-md-injection.md",
       "skills/orc-wiki/references/integrity-check.md",
       "skills/orc-wiki/references/orientation.md",
@@ -2636,6 +2654,7 @@ const CONTRACTS = [
     token: "orc wiki plan",
     files: [
       "skills/orc-wiki/SKILL.md",
+      "skills/orc-wiki/references/phases/phase-0.md",
       "skills/orc-wiki/references/extra.md",
       "skills/orc-wiki/references/partial-refresh.md",
     ],
@@ -2659,7 +2678,7 @@ const CONTRACTS = [
       "skills/_shared/opus5-only.md",
       // v0.55.0 — the slot table names the agent `wiki-scanner-light` displaces.
       "skills/_shared/extra-dispatch.md",
-      "skills/orc-wiki/SKILL.md",
+      "skills/orc-wiki/references/phases/phase-2.md",
       "skills/orc-wiki/references/extra.md",
       "skills/orc-wiki/references/partial-refresh.md",
     ],
@@ -2669,7 +2688,7 @@ const CONTRACTS = [
     name: "wiki scan tier mode (v0.46.0 — ladder | always_deep; the tier is never silent)",
     token: "wiki_scan_tier",
     files: [
-      "skills/orc-wiki/SKILL.md",
+      "skills/orc-wiki/references/phases/phase-2.md",
       "skills/orc-wiki/references/extra.md",
       "skills/orc-wiki/references/partial-refresh.md",
     ],
@@ -2992,6 +3011,38 @@ const CONTRACTS = [
     files: [
       "skills/_shared/read-ladder.md",
       "skills/_shared/phases/preflight.md",
+      // v1.0.0 W14 — every lane that makes a catalogued call carries the
+      // `## Calls` contract. orc-advisor and orc-judge make none, so they
+      // have no block: an empty pointer is worse than no pointer.
+      "skills/context-combiner/SKILL.md",
+      "skills/orc-aftermath/SKILL.md",
+      "skills/orc-analyze-mini/SKILL.md",
+      "skills/orc-analyze/SKILL.md",
+      "skills/orc-boundary/SKILL.md",
+      "skills/orc-brainstorm/SKILL.md",
+      "skills/orc-budget/SKILL.md",
+      "skills/orc-challenge/SKILL.md",
+      "skills/orc-claude/SKILL.md",
+      "skills/orc-diy/SKILL.md",
+      "skills/orc-doc/SKILL.md",
+      "skills/orc-explain/SKILL.md",
+      "skills/orc-export/SKILL.md",
+      "skills/orc-fast/SKILL.md",
+      "skills/orc-grill/SKILL.md",
+      "skills/orc-handoff/SKILL.md",
+      "skills/orc-learn/SKILL.md",
+      "skills/orc-mini/SKILL.md",
+      "skills/orc-pact/SKILL.md",
+      "skills/orc-pattern/SKILL.md",
+      "skills/orc-poly/SKILL.md",
+      "skills/orc-pr-driver/SKILL.md",
+      "skills/orc-pr-setup/SKILL.md",
+      "skills/orc-quick/SKILL.md",
+      "skills/orc-retro/SKILL.md",
+      "skills/orc-route/SKILL.md",
+      "skills/orc-verify/SKILL.md",
+      "skills/orc-wiki/SKILL.md",
+      "skills/orc/SKILL.md",
     ],
     binFiles: ["bin/cli.js"],
   },
@@ -3214,7 +3265,16 @@ const BUDGETS = [
   // wrong routes a whole run on a partially covering row. Mechanics in
   // _shared/extra-dispatch.md.
   // v1.0.0 W8: deliberate raise 227→237 — mini's `## Config` was fifteen lines, but nine of them were the TDD lane POLICY (one intake question, the disposition set, the repair cap) — which is not config and is kept, now under its own heading. Only six lines of restated resolution were deleted, against a ten-line contract.
-  { file: "skills/orc-mini/SKILL.md", maxLines: 237 },
+  // v1.0.0 W14: deliberate raise 237→250 — the two POINTER CONTRACTS this
+  // wave adds to every lane: `## Calls` (the `orc lane calls <lane> --json`
+  // catalogue) and, where the lane's pipeline is section-headed, `## Phases`
+  // (the `orc lane phases` manifest). Neither is prose creeping back — which is
+  // what this budget guards against — and neither REPLACES anything: W10
+  // measured zero `## CLI` sections in the payload and W8 found `## Config` in
+  // 4 of 31 lanes. The shrinking in this release happens by moving prose to
+  // `_shared/phases/` (W11–W13) or to a lane's own `references/phases/`, which
+  // is what orc-wiki did this wave: 352 → 172.
+  { file: "skills/orc-mini/SKILL.md", maxLines: 250 },
   // v0.39.0: deliberate raises 195→201 / 179→182 — the analyst gains hard rules
   // 2b (a source it did not author is FOREIGN input) and 4a (the read ladder);
   // fast gains the ladder as a slice line. Both are hard rules by nature: they
@@ -3235,7 +3295,16 @@ const BUDGETS = [
   // `max_scouts` and `opus5_only`, and that last one is a CONTESTED rank, so this lane
   // gets the full resolver contract rather than the short pointer. Ten lines arriving,
   // not prose moving: it had no `## Config` section at all before this wave.
-  { file: "skills/orc-analyze/SKILL.md", maxLines: 232 },
+  // v1.0.0 W14: deliberate raise 232→255 — the two POINTER CONTRACTS this
+  // wave adds to every lane: `## Calls` (the `orc lane calls <lane> --json`
+  // catalogue) and, where the lane's pipeline is section-headed, `## Phases`
+  // (the `orc lane phases` manifest). Neither is prose creeping back — which is
+  // what this budget guards against — and neither REPLACES anything: W10
+  // measured zero `## CLI` sections in the payload and W8 found `## Config` in
+  // 4 of 31 lanes. The shrinking in this release happens by moving prose to
+  // `_shared/phases/` (W11–W13) or to a lane's own `references/phases/`, which
+  // is what orc-wiki did this wave: 352 → 172.
+  { file: "skills/orc-analyze/SKILL.md", maxLines: 255 },
   // v0.40.0: deliberate raise 182→187 — gotchas as an explicit NON-gate. It has
   // to be stated where the two prerequisites are stated, or a later reader adds
   // a third gate and breaks the lane's entire premise.
@@ -3246,7 +3315,16 @@ const BUDGETS = [
   // is defined by having exactly two prerequisites, and a foreign executor is
   // not a third one. Mechanics in _shared/extra-dispatch.md.
   // v1.0.0 W8: deliberate raise 189→199 — fast's `## Config` was six lines of restated resolution plus a two-key list; the contract is ten. The lane genuinely has no config key of its own, which is now something the resolver says rather than something the spine claims.
-  { file: "skills/orc-fast/SKILL.md", maxLines: 199 },
+  // v1.0.0 W14: deliberate raise 199→225 — the two POINTER CONTRACTS this
+  // wave adds to every lane: `## Calls` (the `orc lane calls <lane> --json`
+  // catalogue) and, where the lane's pipeline is section-headed, `## Phases`
+  // (the `orc lane phases` manifest). Neither is prose creeping back — which is
+  // what this budget guards against — and neither REPLACES anything: W10
+  // measured zero `## CLI` sections in the payload and W8 found `## Config` in
+  // 4 of 31 lanes. The shrinking in this release happens by moving prose to
+  // `_shared/phases/` (W11–W13) or to a lane's own `references/phases/`, which
+  // is what orc-wiki did this wave: 352 → 172.
+  { file: "skills/orc-fast/SKILL.md", maxLines: 225 },
 ];
 
 function walk(dir, out) {
@@ -4061,7 +4139,25 @@ for (const b of BUDGETS) {
             continue;
           }
           const body = fs.readFileSync(abs, "utf8");
-          for (const l of r.layers) {
+          // A row is EITHER a phase file with layers, OR a section of the lane's
+          // own spine named by its heading. Never both, and never neither — a row
+          // that declares no way to find the prose is a phase that silently does
+          // nothing, which is the failure this whole assertion exists to catch.
+          if (r.heading && r.layers)
+            errs.push(`LANE_OWN_PHASES["${lane}"] phase "${r.id}" declares BOTH a heading and layers — a phase is a file or a section, not both`);
+          if (!r.heading && !r.layers)
+            errs.push(`LANE_OWN_PHASES["${lane}"] phase "${r.id}" declares neither a heading nor layers — nothing tells the lane where to read it`);
+          if (r.heading) {
+            // /orc-doc rule 2 and read-ladder.md rule 2: a section anchor is a
+            // HEADING, never a line number. Assert the heading really is there,
+            // verbatim — a renamed heading is a pointer into nothing.
+            if (r.read !== "section")
+              errs.push(`LANE_OWN_PHASES["${lane}"] phase "${r.id}" names a heading, so it must declare \`read: "section"\``);
+            const lines = body.replace(/\r\n/g, "\n").split("\n");
+            if (!lines.includes(r.heading))
+              errs.push(`LANE_OWN_PHASES["${lane}"] phase "${r.id}" names heading ${JSON.stringify(r.heading)}, which is not in ${r.file} — a renamed heading is a pointer into nothing`);
+          }
+          for (const l of r.layers || []) {
             if (!CLOSED.includes(l))
               errs.push(`LANE_OWN_PHASES["${lane}"] phase "${r.id}" declares layer "${l}", outside the closed set`);
             else if (!body.includes(`<!-- orc:layer ${l} -->`))
@@ -4075,8 +4171,42 @@ for (const b of BUDGETS) {
           if (!t.includes(`orc lane phases ${lane}`))
             errs.push(`skills/${lane}/SKILL.md declares own phases but does not name \`orc lane phases ${lane}\` — the CLI owns the order`);
           for (const r of rows)
-            if (!t.includes(r.file.split("/").slice(1).join("/")))
+            if (!r.heading && !t.includes(r.file.split("/").slice(1).join("/")))
               errs.push(`skills/${lane}/SKILL.md's phase table does not name ${r.file}`);
+        // TWO-WAY. Without this, LANE_OWN_PHASES is 95 rows of hand-kept
+        // data with no check that it stays COMPLETE — which is exactly how
+        // CONFIG_META.lanes[] became a claim nothing verified (W10 §4). A
+        // phase-shaped heading in a declaring lane's spine must be declared,
+        // or the manifest quietly describes a shorter pipeline than the one
+        // that runs.
+        //
+        // NAMED_NOT_PHASES is the escape hatch and it is deliberately tiny: a
+        // lane may label a HARD RULE with a phase-shaped designator, and two
+        // do — both colliding with that lane's real P0 phase. Every row is a
+        // heading that must still exist, so a stale exemption fails too.
+        {
+          const NAMED_NOT_PHASES = {
+            "orc-brainstorm": ["## P0 — the lane STOPS and ASKS before it writes anything"],
+            "orc-pact": ["## P0 — never invent a promise"],
+          };
+          const declared = new Set(rows.filter((r) => r.heading).map((r) => r.heading));
+          const exempt = NAMED_NOT_PHASES[lane] || [];
+          if (fs.existsSync(spine) && rows.some((r) => r.heading)) {
+            const spineLines = fs.readFileSync(spine, "utf8").replace(/\r\n/g, "\n").split("\n");
+            const SHAPED = /^## +(?:Phase\s+\S+|Mode\s+\d+|[A-Z]\d+(?:\.\d+)?)\b/;
+            for (const l of spineLines) {
+              if (!SHAPED.test(l)) continue;
+              if (declared.has(l) || exempt.includes(l)) continue;
+              errs.push(
+                `skills/${lane}/SKILL.md has a phase-shaped heading LANE_OWN_PHASES does not declare: ${JSON.stringify(l)} — ` +
+                  "declare it, or add it to NAMED_NOT_PHASES if it is a rule rather than a phase"
+              );
+            }
+            for (const h of exempt)
+              if (!spineLines.includes(h))
+                errs.push(`NAMED_NOT_PHASES["${lane}"] names ${JSON.stringify(h)}, which is no longer a heading in that spine — remove the row`);
+          }
+        }
         }
       }
 

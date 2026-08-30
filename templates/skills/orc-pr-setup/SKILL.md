@@ -60,6 +60,14 @@ how any of this works; never load it to drive the run.
 6. **A ticket is required.** Branch names and layer titles derive from it. No
    ticket after asking once → stop and recommend one regular PR.
 
+## Phases
+
+`orc lane phases orc-pr-setup --json` is this lane's pipeline: the ordered list, where
+each phase lives, and how much of it to read. **The CLI owns the order** — never
+derive it from the headings below, and never renumber or rename one without the
+manifest, because a `read: section` pointer names a HEADING and a renamed heading
+is a pointer into nothing.
+
 ## Phase S0 — Preflight (probe, never assume)
 
 Per `../_shared/gh-stack-commands.md`: `gh` present and ≥ 2.0 · authed ·
@@ -191,3 +199,14 @@ Resolve with `orc lane config orc-pr-setup --json` and obey `effective`. Never m
 say so and use `../_shared/config-precedence.md`'s documented defaults, out
 loud. Nothing this lane reads is contested, gated or a stop, so it owes no
 preflight line and has no gate to honour.
+
+## Calls
+
+**ONE catalogue, and it is not you:** `orc lane calls orc-pr-setup --json` names every
+CLI call this lane makes, each with its exit-code contract, its cost, when to run
+it, and what an EMPTY answer means. Never invent a spelling, never re-word an
+exit code, and never re-derive a state word — the CLI's state words are the only
+state words, and **an exit code is an ANSWER wherever that contract says so, not
+a failure**. A call the answer does not name is a call this lane does not make.
+Exit ≠ 0 from the catalogue itself → say the CLI is unavailable and name the
+command you are about to run, out loud, before running it.

@@ -30,6 +30,14 @@ No analyst, planner, scoring, waves, reviewer, verifier, test-author, or
 summary. One executor, one smoke gate, one repair round. More than that → the
 fit gate hands it to orc-mini.
 
+## Phases
+
+`orc lane phases orc-fast --json` is this lane's pipeline: the ordered list, where
+each phase lives, and how much of it to read. **The CLI owns the order** — never
+derive it from the headings below, and never renumber or rename one without the
+manifest, because a `read: section` pointer names a HEADING and a renamed heading
+is a pointer into nothing.
+
 ## Phase F0 — Preflight (the two prerequisite gates; no spawn)
 
 Emit a `GATE` trace line per check when logging.
@@ -181,6 +189,17 @@ documented defaults, out loud. Priorities and families:
 
 Fast has no config key of its own — command-entry only; wave/scoring/review
 keys never apply, and the tier edges the F0 gate reads arrive resolved.
+
+## Calls
+
+**ONE catalogue, and it is not you:** `orc lane calls orc-fast --json` names every
+CLI call this lane makes, each with its exit-code contract, its cost, when to run
+it, and what an EMPTY answer means. Never invent a spelling, never re-word an
+exit code, and never re-derive a state word — the CLI's state words are the only
+state words, and **an exit code is an ANSWER wherever that contract says so, not
+a failure**. A call the answer does not name is a call this lane does not make.
+Exit ≠ 0 from the catalogue itself → say the CLI is unavailable and name the
+command you are about to run, out loud, before running it.
 
 ## Checkpoint (minimal, append-only)
 

@@ -73,6 +73,14 @@ At run start write `log_dir/.current` = `run-pattern-<slug>-<DDMMYY>-<HHMMSS>.tx
 Nothing else about the protocol is restated here; a phase that ends with
 `zero new trace lines is a protocol violation`.
 
+## Phases
+
+`orc lane phases orc-pattern --json` is this lane's pipeline: the ordered list, where
+each phase lives, and how much of it to read. **The CLI owns the order** — never
+derive it from the headings below, and never renumber or rename one without the
+manifest, because a `read: section` pointer names a HEADING and a renamed heading
+is a pointer into nothing.
+
 ## Phase 0 — Entry & auto-branch (on /orc-pattern)
 
 Detect the project's frontend/backend languages from deps + file extensions
@@ -128,3 +136,14 @@ answer, and a key another key shadows comes back already marked. Exit ≠ 0 → 
 the CLI is unavailable and fall back to `../_shared/config-precedence.md`'s
 documented defaults, out loud. Priorities and families:
 `../_shared/config-precedence.md`.
+
+## Calls
+
+**ONE catalogue, and it is not you:** `orc lane calls orc-pattern --json` names every
+CLI call this lane makes, each with its exit-code contract, its cost, when to run
+it, and what an EMPTY answer means. Never invent a spelling, never re-word an
+exit code, and never re-derive a state word — the CLI's state words are the only
+state words, and **an exit code is an ANSWER wherever that contract says so, not
+a failure**. A call the answer does not name is a call this lane does not make.
+Exit ≠ 0 from the catalogue itself → say the CLI is unavailable and name the
+command you are about to run, out loud, before running it.

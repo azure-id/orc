@@ -444,7 +444,18 @@ test("lane phases: every manifested file is INSTALLED and carries the layers it 
         assert.ok(fs.existsSync(abs), `${p.file} is INSTALLED, not just in the repo`);
         assert.ok(p.file.startsWith(l.lane + "/"), `${p.file} stays in ${l.lane}`);
         const body = fs.readFileSync(abs, "utf8");
-        for (const layer of p.layers)
+        // A row is a FILE with layers, or a SECTION of the lane's own spine
+        // named by its heading. For a heading row the stronger assertion is
+        // that the INSTALLED spine really contains it: a renamed heading is a
+        // pointer into nothing, and nothing at runtime would say so.
+        if (p.heading) {
+          assert.strictEqual(p.read, "section", `${p.id} names a heading, so it reads a section`);
+          assert.ok(
+            body.replace(/\r\n/g, "\n").split("\n").includes(p.heading),
+            `${p.file} still carries the heading ${l.lane} is told to read: ${p.heading}`
+          );
+        }
+        for (const layer of p.layers || [])
           assert.ok(
             body.includes(`<!-- orc:layer ${layer} -->`),
             `${p.file} carries the \`${layer}\` layer ${l.lane} is told to read`

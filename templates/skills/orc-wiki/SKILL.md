@@ -94,196 +94,24 @@ Store `trace_path` in the checkpoint — a resume re-anchors from it. `.current`
 STAYS in place across the 5-task pauses; it is deleted only when Phase 3 is
 done or the run aborts, after the `FINISH` packet returns.
 
-## Phase 0 — Entry & auto-branch (on /orc-wiki)
+## Phases
 
-**FIRST, always: run `orc wiki sync --check`** (read-only, instant, costs
-nothing). It answers "is what's on disk registered?" before you branch on
-anything else. If it reports out-of-sync, the REPAIR branch below takes
-precedence over REFRESH — a wiki can be perfectly current and still unreadable.
+`orc lane phases orc-wiki --json` is this lane's pipeline: the ordered list, the
+file each phase lives in, and how much of it to read. **The CLI owns the order**
+— never derive it from these filenames.
 
-Then detect state and branch:
-- **`wiki/` has docs but registration is missing or drifted** → **REPAIR**
-  (`orc wiki sync --check` exits non-zero; `orc wiki status` names it
-  UNREGISTERED / corrupt / out-of-sync). The docs are fine; nothing indexed
-  them. Do NOT offer a refresh or re-scan — both cost real money and neither
-  is the problem. Offer the free fix ("I can register the {N} docs you
-  already have: instant, free, nothing re-scanned, no doc changes. Fix it
-  now?"); on consent run `orc wiki sync`, report, then re-branch below.
-  **Never bundle a scan into repair.** REPAIR can coexist with RESUME (a
-  paused scan is the usual cause): register first, THEN offer the resume as a
-  separate, clearly-priced choice.
-- **`/orc-wiki crosslink compile` (explicit)** → **CROSSLINK COMPILE**
-  (references/crosslink-compile.md) — one-shot: resolve/consume → generate the
-  LOCAL atlas → write it into each linked repo → inject the CLAUDE.md pointer
-  block locally AND in each peer (in-place, byte-preserving). Hard
-  precondition: a crosslink config with ≥1 edge (else explain `orc crosslink`
-  and stop). Each step warn-only; never a re-scan, never a doc rewrite; one
-  end-of-run trace packet.
-- **`/orc-wiki crosslink` (explicit), OR a LEGACY wiki (docs predate v0.24.0,
-  `wiki/crosslink/` absent) whose docs show an outward boundary** →
-  **CROSSLINK-ONLY** (Phase 3c) — a legacy BACKFILL: publish/resolve the
-  boundary from existing docs, no re-scan, no doc rewrite. On a wiki scanned at
-  ≥v0.24.0, missing tags are NOT this branch — the `orc wiki sync --check`
-  boundary guard fired and already names the real fix. Auto-detect OFFERS it in
-  one line with a small cost note; never start unasked.
-- **Empty/absent `wiki/` AND no wiki checkpoint** → FRESH. Show the generic
-  cost warning ("scans your code with Opus 4.8 high — expensive, likely
-  multi-session, fixed pause every 5 areas; nothing scanned until you
-  confirm") and wait for explicit consent. Only THEN Phase 1.
-- **Wiki checkpoint exists (mid-scan)** → RESUME. Re-anchor from
-  state-of-play + checkpoint; show "X of Y areas done, ~Z remaining"; light
-  cost note; continue where it stopped.
-- **`/orc-wiki refresh <doc> | --only <glob> | --top N | --all-touched`
-  (explicit)** → **TARGETED REFRESH** (references/partial-refresh.md). Skips
-  branch detection AND area planning — the doc exists, so its coverage area is
-  already in its own header. Probe with `orc wiki plan --json` (free, ranked,
-  priced), confirm the doc + delta + resolved TIER + estimate in ONE turn, scan,
-  `orc wiki sync`, integrity-check that doc. **Free repairs are always offered
-  before anything that costs money** — sync, then the orientation doc, then a
-  crosslink backfill, and only then a paid scan.
-- **Complete wiki, no active checkpoint** → REFRESH. **Run `orc wiki impact`
-  FIRST** (deterministic probe — exit 0 clean / 2 delta / 3 full recommended;
-  staleness.md mode 1). **Delta is the default path**: on exit 2, offer to
-  re-scan only the TOUCHED docs; on exit 3, present the impact table and let
-  the user choose (never silently full). Other modes on request: full
-  regenerate · selective (stale-flagged docs) · pre-push git-diff scan ·
-  nothing — each with a cost note; scan only on consent. Every mode
-  re-publishes crosslink tags in the same pass (hard rule 11), preserves the
-  folder (rule 12), and ends by regenerating the orientation doc + atlas
-  (derived, cheap). A LEGACY wiki with unpublished tags is a backfill, not a
-  refresh — route to CROSSLINK-ONLY.
+**Read a row when its phase fires, not on activation.** A wiki run reaches FEW
+of them: Phase 0 auto-branches into fresh / resume / refresh / repair, and Phase
+3c is a legacy backfill for pre-v0.24.0 wikis. Each file is this lane's own —
+one consumer, so it stays home.
 
-## Phase 1 — Area planning (after consent)
-
-Infer the knowledge slicing from repo structure (directories, services,
-modules, routes, domains) plus cross-cutting topics (auth, data model, API
-conventions, deployment, build). Produce a scan plan: scan-tasks, each = one
-area/topic with the files it covers. Show the plan (areas, count, where the
-5-task pauses fall). Doc types:
-- `wiki/orc-feature-{x}-overview.md` — a feature/domain area
-- `wiki/orc-reference-{topic}.md` — cross-cutting reference/convention
-- `wiki/orc-architecture-overview.md` — the top-level map tying them together
-
-**Standard cross-cutting reference docs** — plan these four as scan-tasks
-whenever the project has the surface (they count toward the 5-task pause
-cadence; SKIP any that don't apply — never fabricate one):
-- `wiki/orc-reference-api-surface.md` — full route/endpoint inventory: method,
-  path, handler file, owning area (the single best planning input for API work)
-- `wiki/orc-reference-data-model.md` — cross-area DB/entity map: every
-  table/model, owning area, key relations
-- `wiki/orc-reference-glossary.md` — domain terms → meaning → where defined in
-  code (kills the #1 cause of AI misreads: project jargon)
-- `wiki/orc-reference-config-env.md` — every env var/config key: where read,
-  default, effect
-
-## Phase 2 — Scan (spawned agents, 5-task pauses)
-
-Write checkpoint + state-of-play into the run subfolder BEFORE dispatching.
-**Resolve the scan TIER per task first** (`wiki_scan_tier`, default `ladder`;
-`wiki_tier_deep_files`, default 3 — full ladder in references/partial-refresh.md):
-first scan · STRUCTURAL · wide delta · a new exported symbol → **deep**; otherwise
-**light** (`orc-wiki-scanner-sonnet-5-high`). `always_deep` restores the old
-behaviour, `opus5_only` collapses BOTH tiers onto `orc-wiki-scanner-opus-5-med`
-(no new pair). **PRINT the resolved tier** — a cheaper model is never a quiet
-substitution. **Extra (`extra_enabled`) reaches the SCANNER ONLY, and it is a POSITION per tier** — `wiki-scanner-deep` / `wiki-scanner-light`, held by `orc extra role` and resolved for the tier JUST PICKED. The resolved tier already prints; PRINT ITS TARGET with it. Load `references/extra.md` at the scan phase when the gate is on; `orc wiki sync` never routes foreign (registration is CLI-derived — there is no model in it to replace). A wiki doc is evidence-anchored and cheap to re-scan, which is what makes the scanner the one role here worth handing over; `orc wiki sync` never routes foreign (registration is CLI-derived — there is no model in it to replace). `wiki_refresh_budget` (0 = no cap) caps scan-tasks per run as a
-PLANNED stop, and `wiki_retire_after_runs` (0 = never) offers — never performs —
-retirement of a doc no run has sliced.
-Per scan-task: spawn `orc-wiki-scanner-opus-4-8-high` BY NAME (`orc-wiki-scanner-opus-5-med` under `opus5_only`, `orc-wiki-scanner-sonnet-5-high` at the light tier) with the area's file list + the
-doc-writing contract (schemas/wiki-doc.md — v2: evidence anchors in contract
-sections, `keywords[]` + per-file `covered_files` hashes, AND `crosslink_tags`
-= one tag body per OUTWARD boundary point in the area's files, or `none`+reason)
-**+ the kind catalog** (references/crosslink-kinds.md — an agent never shown it cannot "prefer an existing kind", and a near-synonym like `route` beside `rest-endpoint` is a PERMANENT duplicate: refresh never bulk-deletes).
-YOU write BOTH the doc (to `wiki/`, staleness metadata) AND its tags (to
-`wiki/crosslink/<kind>/<slug>.md` — the kind DIRECTORY sanitizes `/`→`-`, the header keeps it verbatim; schemas/crosslink-tag.md), then run
-**`orc wiki sync`** (hard rule 8) — docs and boundary are indexed from the first
-scan-task on, however the run ends; the boundary accumulates in the SAME pass as
-the docs (hard rule 11), so a paused run has a live partial boundary. A return
-missing keywords/covered_files/`crosslink_tags`, or with unanchored contract
-sections, is malformed (requeue). Trace each scan-task's `DISPATCH`/`VERIFY`
-with a `tags:N` count (or `tags:none`).
-
-Every 5 completed scan-tasks → STOP SEQUENCE
-(`../_shared/phases/stop-resume.md`): checkpoint → state-of-play →
-dispatch report → "/usage" reminder → resume block → wait for continue.
-Multi-session resume is expected and normal.
-
-**A pause must never read as a finish.** The stop sequence looks exactly like
-Phase 3's completion report, and users have walked away from a half-scanned
-repo believing it was done. At every pause, lead with the coverage line:
-> ⏸ **PAUSED — not finished.** {N} of {M} areas scanned, {M−N} remaining.
-> The {N} docs so far are registered and usable now. Reply **continue** to scan
-> the rest.
-At completion, say **✅ Wiki complete — all {M} areas scanned.** The two must be
-impossible to confuse at a glance.
-
-## Phase 3 — Assemble & inject
-
-Phase 3 assembles the whole; it is NOT where registration or crosslink first
-happen (both ran per scan-task — hard rules 8, 11). If the user stopped early,
-the docs + tags are already registered and this phase simply hasn't run yet.
-
-1. After all areas are scanned, write/update
-   `wiki/orc-architecture-overview.md` linking the feature + reference docs. **OPTIONAL** — a wiki without one registers cleanly, and its CLAUDE.md pointer is conditional on the file existing.
-2. **Derive `wiki/orc-orientation.md`** (references/orientation.md) from the
-   already-written docs + the overview WHEN IT EXISTS (absent → say so in the doc; degrade explicitly, never silently) — NEVER a new scan
-   area; one assemble-time write. Sections: Repo identity · Reading order · Journeys (each step
-   anchored `file:line`; unanchored = omitted) · Neighbors (only when
-   crosslink is configured AND the cache/atlas exists; else the explicit
-   "no outward boundary"-style line). Standard doc header → registered by sync.
-   Regenerate it (free, derived) whenever any doc it points to refreshes.
-3. **Crosslink resolve + dead-tag sweep + ATLAS** (references/crosslink.md):
-   publish already happened per scan-task (hard rule 11) — here only, if
-   `.claude/orc-crosslink.config.yaml` exists, resolve consumed needs +
-   `.claude/orc/crosslink/cache/` (warn on per-point drift), run the
-   dead-tag sweep (references/staleness.md) — retire per-point ONLY tags whose
-   anchor vanished; never bulk-delete `wiki/crosslink/` — then generate the
-   federation atlas (`wiki/crosslink/atlas.md`) and write the SAME file into
-   each linked repo (sanctioned peer FILE write — never commit/push, warn-only
-   on failure; crosslink.md ATLAS section).
-4. **Run `orc wiki sync`** (hard rule 8) — re-derives `wiki/INDEX.md` +
-   `.claude/orc/wiki-meta.json` from every doc header, including the
-   architecture + orientation docs and the `crosslink_provided` index of the
-   per-scan-task tags (`atlas.md` is derived — sync never registers it). The
-   build/test `commands` you discovered during the scan are the
-   ONE thing no header carries: if the manifest's `commands` is absent or wrong,
-   fix that key by hand — it is the only part of the manifest you ever touch.
-5. **Run the integrity self-check** (hard rule 9 — references/
-   integrity-check.md): registration (`sync --check`), covers-resolve,
-   coverage, anchor + crosslink spot-checks, orientation pointers resolve.
-   Runs AFTER sync (validates the derivation). Fix failures first; emit
-   `WIKI-CHECK` when logging.
-6. Inject/update the managed pointer block in `CLAUDE.md`
-   (see references/claude-md-injection.md) — includes the orientation
-   "read this first" pointer and, when crosslink is configured, the atlas
-   pointer. Pointer only — no summaries; in-place block update, never
-   duplicated.
-7. Final report: lead with **✅ Wiki complete — all {M} areas scanned**
-   (unmistakably distinct from a pause), then the dispatch log + "/usage"
-   reminder. Keep the checkpoint for audit.
-
-## Phase 3c — CROSSLINK-ONLY (legacy backfill: publish/resolve, NO area scan)
-
-Entry: `/orc-wiki crosslink`, or the Phase 0 CROSSLINK-ONLY branch. A LEGACY
-BACKFILL — for wikis whose docs predate v0.24.0 (docs exist, `wiki/crosslink/`
-absent); the boundary is already on disk in the docs' `Contracts & shapes` rows.
-On a ≥v0.24.0 wiki tags publish per scan-task, so missing tags mean the
-`orc wiki sync --check` boundary guard fired — not this branch. **Never a
-re-scan.** **Consent** is small and honest, NOT the scan warning: "reads
-existing docs' rows, opens only the {N} anchored files, no repo scan, no doc
-changes. Proceed?" (Prereq: `wiki/` has docs.)
-
-**Steps:** collect boundary points from the docs' `Contracts & shapes` rows
-(read DOCS, not source) → dispatch Opus 4.8 high over the anchored files ONLY
-(tag bodies per schemas/crosslink-tag.md; unanchorable row = SKIPPED + reported)
-→ write `wiki/crosslink/<kind>/<slug>.md` → resolve the consume half when
-`.claude/orc-crosslink.config.yaml` exists → `orc wiki sync` → crosslink
-integrity (`WIKI-CHECK crosslink …`). **Never** re-scan, rewrite a doc, or touch
-coverage/`pages` — coverage is a scan question; the boundary is not.
-
-**Zero-tag outcome is always explicit + reasoned, never a bare finish:** rows
-too thin/absent to tag → SAY so + recommend an incremental refresh of just those
-areas (an honest cost, not "never a refresh"); pure consumer (inbound-only, no
-API of its own) → valid no-op but NAME the inbound-only edges (references/crosslink.md).
+| # | Phase | File | Read |
+|---|-------|------|------|
+| 0 | Phase 0 | `references/phases/phase-0.md` | `full` |
+| 1 | Phase 1 | `references/phases/phase-1.md` | `full` |
+| 2 | Phase 2 | `references/phases/phase-2.md` | `full` |
+| 3 | Phase 3 | `references/phases/phase-3.md` | `full` |
+| 4 | Phase 3c | `references/phases/phase-3c.md` | `full` |
 
 ## Code-pattern pre-warm (opt-in — only when config `orc_wiki_pattern_findings: on`)
 
@@ -330,3 +158,14 @@ answer, and a key another key shadows comes back already marked. Exit ≠ 0 → 
 the CLI is unavailable and fall back to `../_shared/config-precedence.md`'s
 documented defaults, out loud. Priorities and families:
 `../_shared/config-precedence.md`.
+
+## Calls
+
+**ONE catalogue, and it is not you:** `orc lane calls orc-wiki --json` names every
+CLI call this lane makes, each with its exit-code contract, its cost, when to run
+it, and what an EMPTY answer means. Never invent a spelling, never re-word an
+exit code, and never re-derive a state word — the CLI's state words are the only
+state words, and **an exit code is an ANSWER wherever that contract says so, not
+a failure**. A call the answer does not name is a call this lane does not make.
+Exit ≠ 0 from the catalogue itself → say the CLI is unavailable and name the
+command you are about to run, out loud, before running it.

@@ -3048,7 +3048,7 @@ const LANE_CALLS = {
     on_absent: "a lane with no shared phase gets an EMPTY phases[] — that is an answer, not a gap: its pipeline is in its own spine (`own_phases: in-spine`)",
     canonical: "_shared/phases/README.md",
     never: "never derive the phase list, its order or its layers from the filenames in `_shared/phases/` — a second idea of the pipeline is the drift this exists to prevent",
-    lanes: ["orc", "orc-aftermath", "orc-analyze", "orc-analyze-mini", "orc-boundary", "orc-brainstorm", "orc-budget", "orc-challenge", "orc-claude", "orc-diy", "orc-doc", "orc-fast", "orc-grill", "orc-handoff", "orc-learn", "orc-mini", "orc-pact", "orc-pattern", "orc-poly", "orc-pr-driver", "orc-pr-setup", "orc-quick", "orc-route", "orc-verify", "orc-wiki"],
+    lanes: ["context-combiner", "orc", "orc-aftermath", "orc-analyze", "orc-analyze-mini", "orc-boundary", "orc-brainstorm", "orc-budget", "orc-challenge", "orc-claude", "orc-diy", "orc-doc", "orc-fast", "orc-grill", "orc-handoff", "orc-learn", "orc-mini", "orc-pact", "orc-pattern", "orc-poly", "orc-pr-driver", "orc-pr-setup", "orc-quick", "orc-route", "orc-verify", "orc-wiki"],
   },
   "wiki-status": {
     cmd: "orc wiki status [--json]",
@@ -3827,22 +3827,160 @@ const LANE_PHASE_ORDER = {
   ],
 };
 
-// A lane's OWN phases — the pipeline it does not share with anybody. They are
-// declared here rather than left as prose because /orc's spine stopped carrying
-// them at W12: the spine is loaded IN FULL on activation and a phase file is
-// loaded when its phase fires, so the manifest is now the only thing that knows
-// the order. A file here has ONE consumer (design-02 §2 — a file with one
-// consumer stays home).
+// A lane's OWN phases — the pipeline it does not share with anybody. The CLI
+// owns the pipeline, not the prose: `orc lane phases <lane>` is the ordered
+// list, and a spine never re-derives it (the Flow-stepper rule).
 //
-// W13 emptied most of this. Ten of /orc's twelve build phases gained `orc-diy`
-// as a second reader and moved to _shared/phases/ with a `composed` layer, so
-// they are LANE_PHASES rows now. The two left are the two nothing else runs:
-// `intake` (/orc's own Phase 0 additions on top of the shared intake) and
-// `integration` (worktree mode, which no other lane has).
+// A row names a FILE and, when the phase still lives in that lane's spine, the
+// HEADING inside it (plan rule: a manifest names a file, a layer and at most a
+// heading — never a line number, /orc-doc rule 2). `read: "section"` is the
+// partial-read declaration registered in `_shared/read-ladder.md`.
+//
+// WHY MOST ROWS NAME A HEADING RATHER THAN A FILE (v1.0.0 W14, measured):
+// moving a phase into its own file pays only when a run does NOT reach it —
+// that is /orc's case (worktrees, three opt-in phases, an early gate), and it
+// is why W12 moved twelve. It is NOT these lanes' case. Their pipelines are
+// short, linear, and mostly LOOPED (`/orc-quick` runs its three steps per
+// request, `/orc-doc` D6-D9 per wave), and everything genuinely shared already
+// left for `_shared/` in W11-W13. What remains in these spines is each lane's
+// OWN wording, which design-02 §2 says stays home. Relocating it would buy a
+// round-trip per phase for the same bytes — the exact failure
+// `_shared/read-ladder.md` warns about.
+//
+// So the PIPELINE becomes data here without the PROSE moving, and a two-way
+// lint keeps the two honest: every declared heading must exist, and every
+// phase-shaped heading in a spine must be declared.
 const LANE_OWN_PHASES = {
   orc: [
     { ord: 0, id: "intake", file: "orc/references/phases/intake.md", layers: ["full"], trace_verbs: ["PHASE"] },
     { ord: 4, id: "integration", file: "orc/references/phases/integration.md", layers: ["full"], trace_verbs: ["PHASE"] },
+  ],
+  "context-combiner": [
+    { ord: 0, id: "phase-a", file: "context-combiner/SKILL.md", heading: "## Phase A — Load sources", read: "section", trace_verbs: [] },
+    { ord: 1, id: "phase-b", file: "context-combiner/SKILL.md", heading: "## Phase B — Verify relatedness", read: "section", trace_verbs: [] },
+    { ord: 2, id: "phase-c", file: "context-combiner/SKILL.md", heading: "## Phase C — Pool, then reconcile", read: "section", trace_verbs: [] },
+    { ord: 3, id: "phase-d", file: "context-combiner/SKILL.md", heading: "## Phase D — Challenge (interactive, recommended options, one at a time)", read: "section", trace_verbs: [] },
+    { ord: 4, id: "phase-e", file: "context-combiner/SKILL.md", heading: "## Phase E — Conservation gate (before any artifact is written)", read: "section", trace_verbs: [] },
+    { ord: 5, id: "phase-f", file: "context-combiner/SKILL.md", heading: "## Phase F — Write combined artifacts", read: "section", trace_verbs: [] },
+    { ord: 6, id: "phase-g", file: "context-combiner/SKILL.md", heading: "## Phase G — Return & branch", read: "section", trace_verbs: [] },
+  ],
+  "orc-analyze": [
+    { ord: 0, id: "phase-a", file: "orc-analyze/SKILL.md", heading: "## Phase A — Ingest & detect source mode", read: "section", trace_verbs: [] },
+    { ord: 1, id: "phase-a-analyzable", file: "orc-analyze/SKILL.md", heading: "## Phase A″ — Is this even analyzable? (the reverse trigger)", read: "section", trace_verbs: [] },
+    { ord: 2, id: "phase-a-deep-gate", file: "orc-analyze/SKILL.md", heading: "## Phase A′ — Standard vs Deep gate (default STANDARD)", read: "section", trace_verbs: [] },
+    { ord: 3, id: "phase-b", file: "orc-analyze/SKILL.md", heading: "## Phase B — Bound scope", read: "section", trace_verbs: [] },
+    { ord: 4, id: "phase-c", file: "orc-analyze/SKILL.md", heading: "## Phase C — Reconcile against code (mode-specific)", read: "section", trace_verbs: [] },
+    { ord: 5, id: "phase-d", file: "orc-analyze/SKILL.md", heading: "## Phase D — Challenge (interactive, triaged per hard rule 5)", read: "section", trace_verbs: [] },
+    { ord: 6, id: "phase-e", file: "orc-analyze/SKILL.md", heading: "## Phase E — Write report, derive spec", read: "section", trace_verbs: [] },
+    { ord: 7, id: "phase-f", file: "orc-analyze/SKILL.md", heading: "## Phase F — Gates, then branch", read: "section", trace_verbs: ["GATE"] },
+  ],
+  "orc-boundary": [
+    { ord: 0, id: "b0", file: "orc-boundary/SKILL.md", heading: "## B0 — Preflight (ONE time, silent)", read: "section", trace_verbs: [] },
+    { ord: 1, id: "b1", file: "orc-boundary/SKILL.md", heading: "## B1 — Scope (ONE question)", read: "section", trace_verbs: [] },
+    { ord: 2, id: "b2", file: "orc-boundary/SKILL.md", heading: "## B2 — Evidence", read: "section", trace_verbs: ["DISPATCH", "VERIFY"] },
+    { ord: 3, id: "b3", file: "orc-boundary/SKILL.md", heading: "## B3 — Verdict (per unit, each with its missing precondition)", read: "section", trace_verbs: [] },
+    { ord: 4, id: "b4", file: "orc-boundary/SKILL.md", heading: "## B4 — Card", read: "section", trace_verbs: [] },
+  ],
+  "orc-brainstorm": [
+    { ord: 0, id: "b0", file: "orc-brainstorm/SKILL.md", heading: "## B0 — Preflight (ONE time, silent, nothing here can stop the run)", read: "section", trace_verbs: [] },
+    { ord: 1, id: "b1", file: "orc-brainstorm/SKILL.md", heading: "## B1 — Frame (the only phase that can hand off before generating)", read: "section", trace_verbs: [] },
+    { ord: 2, id: "b2", file: "orc-brainstorm/SKILL.md", heading: "## B2 — Diverge (quantity first, judgment deferred)", read: "section", trace_verbs: [] },
+    { ord: 3, id: "b3", file: "orc-brainstorm/SKILL.md", heading: "## B3 — Cluster and shape", read: "section", trace_verbs: [] },
+    { ord: 4, id: "b4", file: "orc-brainstorm/SKILL.md", heading: "## B4 — Stress (judgment switched back on)", read: "section", trace_verbs: [] },
+    { ord: 5, id: "b5", file: "orc-brainstorm/SKILL.md", heading: "## B5 — Converge (the user picks; ORC never does)", read: "section", trace_verbs: [] },
+    { ord: 6, id: "b6", file: "orc-brainstorm/SKILL.md", heading: "## B6 — Exit (ONE question)", read: "section", trace_verbs: [] },
+  ],
+  "orc-challenge": [
+    { ord: 0, id: "c0", file: "orc-challenge/SKILL.md", heading: "## C0 — Preflight (ONE time, silent)", read: "section", trace_verbs: [] },
+    { ord: 1, id: "c1", file: "orc-challenge/SKILL.md", heading: "## C1 — Intake (ONE round, ASK — never guess)", read: "section", trace_verbs: [] },
+    { ord: 2, id: "c2", file: "orc-challenge/SKILL.md", heading: "## C2 — Lint (deterministic, ZERO tokens)", read: "section", trace_verbs: [] },
+    { ord: 3, id: "c3", file: "orc-challenge/SKILL.md", heading: "## C3 — The council (parallel)", read: "section", trace_verbs: [] },
+    { ord: 4, id: "c4", file: "orc-challenge/SKILL.md", heading: "## C4 — Judge", read: "section", trace_verbs: [] },
+    { ord: 5, id: "c5", file: "orc-challenge/SKILL.md", heading: "## C5 — Verdict", read: "section", trace_verbs: [] },
+    { ord: 6, id: "c6", file: "orc-challenge/SKILL.md", heading: "## C6 — Advise (FAIL only)", read: "section", trace_verbs: [] },
+    { ord: 7, id: "c7", file: "orc-challenge/SKILL.md", heading: "## C7 — Final report (PASS only)", read: "section", trace_verbs: ["CHALLENGE", "FINISH"] },
+    { ord: 8, id: "c8", file: "orc-challenge/SKILL.md", heading: "## C8 — STOP (FAIL)", read: "section", trace_verbs: [] },
+  ],
+  "orc-claude": [
+    { ord: 0, id: "phase-1", file: "orc-claude/SKILL.md", heading: "## Phase 1 — ground-truth scan (facts, never guesses)", read: "section", trace_verbs: [] },
+    { ord: 1, id: "phase-2", file: "orc-claude/SKILL.md", heading: "## Phase 2 — generate / merge", read: "section", trace_verbs: [] },
+    { ord: 2, id: "phase-3", file: "orc-claude/SKILL.md", heading: "## Phase 3 — report", read: "section", trace_verbs: [] },
+  ],
+  "orc-doc": [
+    { ord: 0, id: "d0", file: "orc-doc/SKILL.md", heading: "## D0 — Preflight (ONE time, silent)", read: "section", trace_verbs: [] },
+    { ord: 1, id: "d1", file: "orc-doc/SKILL.md", heading: "## D1 — The context gate (P0 — the only blocking one)", read: "section", trace_verbs: [] },
+    { ord: 2, id: "d2", file: "orc-doc/SKILL.md", heading: "## D2 — Supporting documents (asking is mandatory, answering is not)", read: "section", trace_verbs: [] },
+    { ord: 3, id: "d3", file: "orc-doc/SKILL.md", heading: "## D3 — Your template (asking is mandatory)", read: "section", trace_verbs: [] },
+    { ord: 4, id: "d4", file: "orc-doc/SKILL.md", heading: "## D4 — Purpose (must be answered)", read: "section", trace_verbs: [] },
+    { ord: 5, id: "d5", file: "orc-doc/SKILL.md", heading: "## D5 — Outline (confirmed BEFORE a word is written)", read: "section", trace_verbs: [] },
+    { ord: 6, id: "d5-5", file: "orc-doc/SKILL.md", heading: "## D5.5 — The run map, ONCE, before the first paid wave", read: "section", trace_verbs: ["FINISH"] },
+    { ord: 7, id: "d6-d9", file: "orc-doc/SKILL.md", heading: "## D6–D9 — run `orc doc next`, do what it says", read: "section", trace_verbs: [] },
+    { ord: 8, id: "d6", file: "orc-doc/SKILL.md", heading: "## D6 — Write, one wave at a time", read: "section", trace_verbs: [] },
+    { ord: 9, id: "d7", file: "orc-doc/SKILL.md", heading: "## D7 — Compile → lint → map → check", read: "section", trace_verbs: [] },
+    { ord: 10, id: "d8", file: "orc-doc/SKILL.md", heading: "## D8 — Edit (cap 2 rounds)", read: "section", trace_verbs: [] },
+    { ord: 11, id: "d9", file: "orc-doc/SKILL.md", heading: "## D9 — Handoff, SHIP, and STOP", read: "section", trace_verbs: [] },
+  ],
+  "orc-fast": [
+    { ord: 0, id: "phase-f0", file: "orc-fast/SKILL.md", heading: "## Phase F0 — Preflight (the two prerequisite gates; no spawn)", read: "section", trace_verbs: ["GATE"] },
+    { ord: 1, id: "phase-f1", file: "orc-fast/SKILL.md", heading: "## Phase F1 — Fit gate + micro-intake (one pass, ONE user round-trip)", read: "section", trace_verbs: ["GATE"] },
+    { ord: 2, id: "phase-f2", file: "orc-fast/SKILL.md", heading: "## Phase F2 — Slice build + dispatch (ONE executor)", read: "section", trace_verbs: ["GATE", "VERIFY", "WIKI-CONSULT"] },
+    { ord: 3, id: "phase-f3", file: "orc-fast/SKILL.md", heading: "## Phase F3 — Smoke gate (build + test; blocks ship on red)", read: "section", trace_verbs: [] },
+    { ord: 4, id: "phase-f3-5", file: "orc-fast/SKILL.md", heading: "## Phase F3.5 — Mock example (config `mock_example`, default ask)", read: "section", trace_verbs: ["DRIFT", "PHASE"] },
+    { ord: 5, id: "phase-f4", file: "orc-fast/SKILL.md", heading: "## Phase F4 — Ship", read: "section", trace_verbs: ["FINISH", "OUTCOME"] },
+  ],
+  "orc-learn": [
+    { ord: 0, id: "mode-a", file: "orc-learn/SKILL.md", heading: "## Mode A — INIT", read: "section", trace_verbs: ["DISPATCH", "FINISH", "VERIFY", "WIKI-CONSULT"] },
+    { ord: 1, id: "mode-b", file: "orc-learn/SKILL.md", heading: "## Mode B — REFRESH", read: "section", trace_verbs: ["DISPATCH", "FINISH", "VERIFY", "WIKI-CONSULT"] },
+  ],
+  "orc-pact": [
+    { ord: 0, id: "p0", file: "orc-pact/SKILL.md", heading: "## P0 — Preflight (ONE time, silent)", read: "section", trace_verbs: [] },
+    { ord: 1, id: "p1", file: "orc-pact/SKILL.md", heading: "## P1 — Intake (ONE question)", read: "section", trace_verbs: [] },
+    { ord: 2, id: "p2", file: "orc-pact/SKILL.md", heading: "## P2 — Recheck (cheap, deterministic, no model)", read: "section", trace_verbs: [] },
+    { ord: 3, id: "p3", file: "orc-pact/SKILL.md", heading: "## P3 — Reconcile (ONE promise at a time)", read: "section", trace_verbs: [] },
+    { ord: 4, id: "p4", file: "orc-pact/SKILL.md", heading: "## P4 — Write", read: "section", trace_verbs: ["PACT"] },
+  ],
+  "orc-pattern": [
+    { ord: 0, id: "phase-0", file: "orc-pattern/SKILL.md", heading: "## Phase 0 — Entry & auto-branch (on /orc-pattern)", read: "section", trace_verbs: [] },
+    { ord: 1, id: "phase-1", file: "orc-pattern/SKILL.md", heading: "## Phase 1 — Codify (spawned subagent, per language)", read: "section", trace_verbs: [] },
+    { ord: 2, id: "phase-2", file: "orc-pattern/SKILL.md", heading: "## Phase 2 — Report", read: "section", trace_verbs: [] },
+  ],
+  "orc-poly": [
+    { ord: 0, id: "phase-p0", file: "orc-poly/SKILL.md", heading: "## Phase P0 — Intake (identify HOST + PEERs + the change)", read: "section", trace_verbs: ["PHASE"] },
+    { ord: 1, id: "phase-p1", file: "orc-poly/SKILL.md", heading: "## Phase P1 — Knowledge gate (per repo; NON-blocking)", read: "section", trace_verbs: ["GATE", "WIKI-CONSULT"] },
+    { ord: 2, id: "phase-p2", file: "orc-poly/SKILL.md", heading: "## Phase P2 — Recon + gather (read-only, all repos)", read: "section", trace_verbs: [] },
+    { ord: 3, id: "phase-p3", file: "orc-poly/SKILL.md", heading: "## Phase P3 — Write the source-of-truth doc set", read: "section", trace_verbs: [] },
+    { ord: 4, id: "phase-p4", file: "orc-poly/SKILL.md", heading: "## Phase P4 — Iterate (ask exactly these three, every iteration)", read: "section", trace_verbs: [] },
+    { ord: 5, id: "phase-p5", file: "orc-poly/SKILL.md", heading: "## Phase P5 — Split handoff (dispatch the planner in poly mode)", read: "section", trace_verbs: ["DISPATCH", "VERIFY"] },
+  ],
+  "orc-pr-driver": [
+    { ord: 0, id: "phase-d0", file: "orc-pr-driver/SKILL.md", heading: "## Phase D0 — Read the plan + hard gate", read: "section", trace_verbs: [] },
+    { ord: 1, id: "phase-d1", file: "orc-pr-driver/SKILL.md", heading: "## Phase D1 — Snapshot (entry mode `orc-run` only)", read: "section", trace_verbs: [] },
+    { ord: 2, id: "phase-d2", file: "orc-pr-driver/SKILL.md", heading: "## Phase D2 — Build the stack, layer by layer", read: "section", trace_verbs: [] },
+    { ord: 3, id: "phase-d3", file: "orc-pr-driver/SKILL.md", heading: "## Phase D3 — Submit", read: "section", trace_verbs: [] },
+    { ord: 4, id: "phase-d4", file: "orc-pr-driver/SKILL.md", heading: "## Phase D4 — Maintain", read: "section", trace_verbs: [] },
+    { ord: 5, id: "phase-d5", file: "orc-pr-driver/SKILL.md", heading: "## Phase D5 — Merge (bottom-up, gated)", read: "section", trace_verbs: [] },
+  ],
+  "orc-pr-setup": [
+    { ord: 0, id: "phase-s0", file: "orc-pr-setup/SKILL.md", heading: "## Phase S0 — Preflight (probe, never assume)", read: "section", trace_verbs: [] },
+    { ord: 1, id: "phase-s1", file: "orc-pr-setup/SKILL.md", heading: "## Phase S1 — Intake (ticket, entry mode, template)", read: "section", trace_verbs: [] },
+    { ord: 2, id: "phase-s2", file: "orc-pr-setup/SKILL.md", heading: "## Phase S2 — Inventory (the real numbers)", read: "section", trace_verbs: [] },
+    { ord: 3, id: "phase-s3", file: "orc-pr-setup/SKILL.md", heading: "## Phase S3 — Tier-assign", read: "section", trace_verbs: [] },
+    { ord: 4, id: "phase-s4", file: "orc-pr-setup/SKILL.md", heading: "## Phase S4 — Cut (the P0 gate lives here)", read: "section", trace_verbs: [] },
+    { ord: 5, id: "phase-s5", file: "orc-pr-setup/SKILL.md", heading: "## Phase S5 — Validate the plan (all seven, explicitly)", read: "section", trace_verbs: [] },
+    { ord: 6, id: "phase-s6", file: "orc-pr-setup/SKILL.md", heading: "## Phase S6 — Emit the plan, then stop", read: "section", trace_verbs: [] },
+  ],
+  "orc-quick": [
+    { ord: 0, id: "q0", file: "orc-quick/SKILL.md", heading: "## Q0 — Preflight (ONE time per session, silent, nothing can stop the run)", read: "section", trace_verbs: ["GATE"] },
+    { ord: 1, id: "q1", file: "orc-quick/SKILL.md", heading: "## Q1 — LOOK (silent — no questions here)", read: "section", trace_verbs: ["GATE", "WIKI-CONSULT"] },
+    { ord: 2, id: "q2", file: "orc-quick/SKILL.md", heading: "## Q2 — ASK (ONE user turn: questions + the gate together)", read: "section", trace_verbs: [] },
+    { ord: 3, id: "q3", file: "orc-quick/SKILL.md", heading: "## Q3 — DO (dispatch → build/test → write the doc → offer)", read: "section", trace_verbs: ["FINISH", "OUTCOME", "VERIFY"] },
+  ],
+  "orc-wiki": [
+    { ord: 0, id: "phase-0", file: "orc-wiki/references/phases/phase-0.md", layers: ["full"], trace_verbs: [] },
+    { ord: 1, id: "phase-1", file: "orc-wiki/references/phases/phase-1.md", layers: ["full"], trace_verbs: [] },
+    { ord: 2, id: "phase-2", file: "orc-wiki/references/phases/phase-2.md", layers: ["full"], trace_verbs: ["DISPATCH", "VERIFY"] },
+    { ord: 3, id: "phase-3", file: "orc-wiki/references/phases/phase-3.md", layers: ["full"], trace_verbs: [] },
+    { ord: 4, id: "phase-3c", file: "orc-wiki/references/phases/phase-3c.md", layers: ["full"], trace_verbs: [] },
   ],
 };
 
@@ -3976,7 +4114,13 @@ function lanePhasesCmd(lane, claudeDir) {
       for (const p of r.own_phases)
         console.log(
           `      ${String(p.ord).padStart(4)}  ${ui.color.cyan(p.id.padEnd(13))} ${p.file}   ` +
-            ui.color.gray("layers " + p.layers.map((x) => "`" + x + "`").join(", "))
+            // A row names a FILE, and where the phase is still a section of
+            // that lane's spine it names the HEADING too. Never a line number.
+            ui.color.gray(
+              p.heading
+                ? "section " + p.heading.replace(/^#+\s*/, "")
+                : "layers " + (p.layers || []).map((x) => "`" + x + "`").join(", ")
+            )
         );
     }
     console.log(
