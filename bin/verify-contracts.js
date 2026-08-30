@@ -86,7 +86,7 @@ const CONTRACTS = [
       "skills/orc-challenge/references/council.md",
       "skills/orc-claude/SKILL.md",
       "skills/orc-claude/examples/claude-run-mock.md",
-      "skills/orc-diy/references/blocks/trace.md",
+      "skills/_shared/phases/trace.md",
       "skills/orc-doc/SKILL.md",
       "skills/orc-doc/examples/orc-doc-prd-run.md",
       "skills/orc-fast/SKILL.md",
@@ -110,7 +110,7 @@ const CONTRACTS = [
       "skills/orc/subskills/orc-review-verify/SKILL.md",
       "skills/orc/subskills/orc-review-verify/core.md",
       "skills/orc/subskills/orc-testgen/core.md",
-      "skills/orc/references/phases/execution.md",
+      "skills/_shared/phases/execution.md",
     ],
   },
   {
@@ -135,7 +135,7 @@ const CONTRACTS = [
       "skills/orc/references/pattern-gate.md",
       "skills/orc/subskills/orc-execution/SKILL.md",
       "skills/orc/subskills/orc-execution/core.md",
-      "skills/orc/references/phases/execution.md",
+      "skills/_shared/phases/execution.md",
     ],
   },
   {
@@ -156,7 +156,7 @@ const CONTRACTS = [
       "skills/orc-fast/SKILL.md",
       "skills/orc-mini/SKILL.md",
       "skills/orc-quick/SKILL.md",
-      "skills/orc/references/phases/execution.md",
+      "skills/_shared/phases/execution.md",
       "skills/_shared/phases/house-rules.md",
       "skills/orc/subskills/orc-execution/SKILL.md",
       "skills/orc/subskills/orc-execution/core.md",
@@ -188,7 +188,7 @@ const CONTRACTS = [
       "skills/orc/subskills/orc-execution/core.md",
       "skills/orc/subskills/orc-review-verify/SKILL.md",
       "skills/orc/subskills/orc-review-verify/core.md",
-      "skills/orc/references/phases/verify.md",
+      "skills/_shared/phases/verify.md",
     ],
   },
   {
@@ -206,7 +206,7 @@ const CONTRACTS = [
       "agents/orc-executor-sonnet-4-6-med.md",
       "agents/orc-executor-sonnet-5-high.md",
       "skills/_shared/return-validation.md",
-      "skills/orc/references/phases/execution.md",
+      "skills/_shared/phases/execution.md",
       "skills/orc/subskills/orc-execution/SKILL.md",
       "skills/orc/subskills/orc-execution/core.md",
     ],
@@ -234,7 +234,7 @@ const CONTRACTS = [
       "skills/orc-mini/examples/mini-run-mock.md",
       "skills/orc-quick/SKILL.md",
       "skills/orc/README.md",
-      "skills/orc/references/phases/execution.md",
+      "skills/_shared/phases/execution.md",
       "skills/orc/examples/full-run-mock.md",
       "skills/orc/subskills/orc-execution/SKILL.md",
       "skills/orc/subskills/orc-execution/core.md",
@@ -253,11 +253,10 @@ const CONTRACTS = [
       "skills/orc-challenge/references/council.md",
       "skills/orc-challenge/references/cycle-state.md",
       "skills/orc-challenge/references/verdict-doc.md",
-      "skills/orc-diy/references/blocks/execution.md",
+      "skills/_shared/phases/execution.md",
       "skills/orc-diy/references/flow-schema.md",
       "skills/orc-explain/SKILL.md",
       "skills/orc-mini/SKILL.md",
-      "skills/orc/references/phases/execution.md",
       "skills/orc/config.md",
       "skills/_shared/phases/analyst-gates.md",
       "skills/_shared/phases/plan-handoff.md",
@@ -265,7 +264,7 @@ const CONTRACTS = [
       "skills/orc/schemas/planning-output.md",
       "skills/orc/subskills/orc-planner-mini/SKILL.md",
       "skills/orc/subskills/orc-planner/SKILL.md",
-      "skills/orc/references/phases/planning.md",
+      "skills/_shared/phases/planning.md",
     ],
   },
   {
@@ -308,9 +307,9 @@ const CONTRACTS = [
     files: [
       "hooks/orc-trace.js",
       "skills/_shared/extra-dispatch.md",
-      "skills/orc/references/phases/execution.md",
+      "skills/_shared/phases/execution.md",
       "skills/_shared/phases/trace.md",
-      "skills/orc/references/phases/scoring.md",
+      "skills/_shared/phases/scoring.md",
     ],
   },
   // ── v0.55.0 — ROLE SLOTS. The non-scored half of routing ────────────────
@@ -364,7 +363,7 @@ const CONTRACTS = [
       "skills/orc-mini/SKILL.md",
       // v0.55.0 — /orc-wiki can finally route, so it finally owes the rule.
       "skills/orc-wiki/references/extra.md",
-      "skills/orc/references/phases/execution.md",
+      "skills/_shared/phases/execution.md",
       "skills/orc/references/preflight-report.md",
     ],
   },
@@ -473,7 +472,7 @@ const CONTRACTS = [
       "skills/orc-doc/SKILL.md",
       "skills/orc-mini/SKILL.md",
       "skills/orc-retro/SKILL.md",
-      "skills/orc/references/phases/execution.md",
+      "skills/_shared/phases/execution.md",
     ],
   },
   {
@@ -527,7 +526,7 @@ const CONTRACTS = [
       "skills/_shared/phases/plan-handoff.md",
       "skills/orc/schemas/planning-output.md",
       "skills/orc/subskills/orc-planner/SKILL.md",
-      "skills/orc/references/phases/planning.md",
+      "skills/_shared/phases/planning.md",
     ],
   },
   {
@@ -548,7 +547,7 @@ const CONTRACTS = [
       "skills/_shared/extra-dispatch.md",
       "skills/orc-mini/SKILL.md",
       "skills/orc-retro/SKILL.md",
-      "skills/orc/references/phases/planning.md",
+      "skills/_shared/phases/planning.md",
       "skills/_shared/phases/analyst-gates.md",
       "skills/_shared/phases/plan-handoff.md",
       "skills/orc/references/preflight-report.md",
@@ -585,7 +584,7 @@ const CONTRACTS = [
       "skills/orc/subskills/orc-execution/core.md",
       "skills/orc/subskills/orc-planner-mini/SKILL.md",
       "skills/orc/subskills/orc-planner/SKILL.md",
-      "skills/orc/references/phases/planning.md",
+      "skills/_shared/phases/planning.md",
     ],
   },
   {
@@ -595,7 +594,7 @@ const CONTRACTS = [
       "agents/orc-retro-opus-5-med.md",
       "agents/orc-retro-sonnet-5-high.md",
       "skills/orc-analyze/SKILL.md",
-      "skills/orc-diy/references/blocks/trace.md",
+      "skills/_shared/phases/trace.md",
       "skills/orc-fast/SKILL.md",
       "skills/orc-mini/SKILL.md",
       "skills/orc-poly/SKILL.md",
@@ -614,9 +613,9 @@ const CONTRACTS = [
       "skills/orc/config.md",
       "skills/orc/references/preflight-report.md",
       "skills/_shared/phases/preflight.md",
-      "skills/orc/references/phases/execution.md",
-      "skills/orc/references/phases/planning.md",
-      "skills/orc/references/phases/ship.md",
+      "skills/_shared/phases/execution.md",
+      "skills/_shared/phases/planning.md",
+      "skills/_shared/phases/ship.md",
     ],
   },
   {
@@ -671,7 +670,7 @@ const CONTRACTS = [
       "skills/orc-brainstorm/SKILL.md",
       "skills/orc-budget/SKILL.md",
       "skills/orc-claude/SKILL.md",
-      "skills/orc-diy/references/blocks/trace.md",
+      "skills/_shared/phases/trace.md",
       "skills/orc-doc/SKILL.md",
       "skills/orc-export/SKILL.md",
       "skills/orc-fast/SKILL.md",
@@ -717,7 +716,7 @@ const CONTRACTS = [
       "skills/orc-challenge/SKILL.md",
       "skills/orc-challenge/references/intake.md",
       "skills/orc-claude/SKILL.md",
-      "skills/orc-diy/references/blocks/trace.md",
+      "skills/_shared/phases/trace.md",
       "skills/orc-doc/SKILL.md",
       "skills/orc-export/SKILL.md",
       "skills/orc-fast/SKILL.md",
@@ -761,7 +760,7 @@ const CONTRACTS = [
       "skills/orc-challenge/references/fix-brief.md",
       "skills/orc-challenge/references/intake.md",
       "skills/orc-claude/SKILL.md",
-      "skills/orc-diy/references/blocks/trace.md",
+      "skills/_shared/phases/trace.md",
       "skills/orc-doc/SKILL.md",
       "skills/orc-doc/examples/orc-doc-prd-run.md",
       "skills/orc-export/SKILL.md",
@@ -785,7 +784,7 @@ const CONTRACTS = [
       "skills/_shared/phases/trace.md",
       "skills/orc/subskills/orc-planner/SKILL.md",
       "skills/_shared/phases/preflight.md",
-      "skills/orc/references/phases/ship.md",
+      "skills/_shared/phases/ship.md",
     ],
   },
   {
@@ -804,7 +803,7 @@ const CONTRACTS = [
       "hooks/orc-trace.js",
       "skills/_shared/opus5-only.md",
       "skills/orc-boundary/references/gate.md",
-      "skills/orc-diy/references/blocks/trace.md",
+      "skills/_shared/phases/trace.md",
       "skills/orc-pact/references/gate.md",
       "skills/orc/SKILL.md",
       "skills/_shared/phases/trace.md",
@@ -915,7 +914,7 @@ const CONTRACTS = [
       "skills/orc-wiki/references/partial-refresh.md",
       "skills/orc-wiki/references/staleness.md",
       "skills/orc-wiki/schemas/crosslink-tag.md",
-      "skills/orc/references/phases/planning.md",
+      "skills/_shared/phases/planning.md",
       "skills/orc/config.md",
       "skills/_shared/phases/wiki-consult.md",
     ],
@@ -1357,7 +1356,7 @@ const CONTRACTS = [
       "skills/orc-doc/examples/orc-doc-prd-run.md",
       "skills/orc-doc/references/gates.md",
       "skills/orc-doc/references/resume-protocol.md",
-      "skills/orc/references/phases/ship.md",
+      "skills/_shared/phases/ship.md",
       "skills/_shared/phases/stop-resume.md",
       "skills/orc-doc/README.md",
       "skills/orc-doc/references/chunking.md",
@@ -1373,7 +1372,7 @@ const CONTRACTS = [
     token: "STATS lane=",
     binFiles: ["bin/cli.js"],
     files: [
-      "skills/orc/references/phases/ship.md",
+      "skills/_shared/phases/ship.md",
       "skills/_shared/phases/trace.md",
     ],
   },
@@ -1396,7 +1395,7 @@ const CONTRACTS = [
       "skills/orc-wiki/references/crosslink.md",
       "skills/orc-wiki/references/partial-refresh.md",
       "skills/orc-wiki/references/staleness.md",
-      "skills/orc/references/phases/planning.md",
+      "skills/_shared/phases/planning.md",
       "skills/orc/config.md",
       "skills/_shared/phases/wiki-consult.md",
         ],
@@ -1405,7 +1404,7 @@ const CONTRACTS = [
     name: "post-ship wiki refresh ask (v0.11.0 — BIG-run trigger, full+ultra lanes)",
     token: "wiki_refresh_ask",
     files: [
-      "skills/orc/references/phases/ship.md",
+      "skills/_shared/phases/ship.md",
       "skills/orc/config.md",
       "skills/orc-wiki/references/staleness.md",
     ],
@@ -1537,7 +1536,7 @@ const CONTRACTS = [
       "skills/orc/SKILL.md",
       "skills/_shared/phases/trace.md",
       "skills/_shared/phases/wiki-consult.md",
-      "skills/orc/references/phases/planning.md",
+      "skills/_shared/phases/planning.md",
     ],
   },
   {
@@ -1548,7 +1547,7 @@ const CONTRACTS = [
     name: "crosslink trace verb + run-time report (v0.28.0 — peer-knowledge visibility)",
     token: "`CROSSLINK ",
     files: [
-      "skills/orc/references/phases/planning.md",
+      "skills/_shared/phases/planning.md",
       "skills/_shared/phases/trace.md",
       "skills/_shared/phases/wiki-consult.md",
     ],
@@ -1630,14 +1629,14 @@ const CONTRACTS = [
       "skills/_shared/phases/trace.md",
       "skills/orc/references/ultra-mode.md",
           "skills/_shared/config-precedence.md",
-      "skills/orc/references/phases/planning.md",
+      "skills/_shared/phases/planning.md",
     ],
   },
   {
     name: "CONFIG trace verb (v0.30.0 — Phase 1 resolved-config runtime proof)",
     token: "`CONFIG ",
     files: [
-      "skills/orc/references/phases/planning.md",
+      "skills/_shared/phases/planning.md",
       "skills/_shared/phases/trace.md",
     ],
   },
@@ -1691,8 +1690,8 @@ const CONTRACTS = [
       "commands/orc-route.md",
       "skills/orc-route/SKILL.md",
       "skills/orc/references/preflight-report.md",
-      "skills/orc/references/phases/planning.md",
-      "skills/orc/references/phases/scoring.md",
+      "skills/_shared/phases/planning.md",
+      "skills/_shared/phases/scoring.md",
     ],
   },
   {
@@ -1716,7 +1715,7 @@ const CONTRACTS = [
     name: "wiki cross-cutting reference maps (v0.15.0 — consumers pull by name)",
     token: "orc-reference-api-surface",
     files: [
-      "skills/orc/references/phases/planning.md",
+      "skills/_shared/phases/planning.md",
       "skills/_shared/phases/wiki-consult.md",
       "skills/orc-fast/SKILL.md",
       "skills/orc-mini/SKILL.md",
@@ -1743,7 +1742,7 @@ const CONTRACTS = [
       "skills/orc-wiki/SKILL.md",
       "skills/orc-wiki/references/claude-md-injection.md",
       "skills/orc-wiki/references/staleness.md",
-      "skills/orc/references/phases/planning.md",
+      "skills/_shared/phases/planning.md",
       "skills/_shared/phases/wiki-consult.md",
       // v0.41.0: the `wiki` slice field states the precedence to the executor.
       "skills/orc/subskills/orc-execution/core.md",
@@ -1773,6 +1772,9 @@ const CONTRACTS = [
       "hooks/orc-statusline.js",
       "skills/orc-diy/README.md",
       "skills/orc-diy/SKILL.md",
+      // v1.0.0 W13 — read-ladder.md rule 5 names this artifact to explain why
+      // orc-diy reads its phases at `compile-time` and never during a run.
+      "skills/_shared/read-ladder.md",
       "skills/orc-diy/references/compile.md",
       "skills/orc-diy/references/flow-schema.md",
     ],
@@ -1798,19 +1800,19 @@ const CONTRACTS = [
     token: "diy:when",
     files: [
       "skills/orc-diy/references/blocks/analyze.md",
-      "skills/orc-diy/references/blocks/execution.md",
+      "skills/_shared/phases/execution.md",
       "skills/orc-diy/references/blocks/extra.md",
       "skills/orc-diy/references/blocks/header.md",
-      "skills/orc-diy/references/blocks/mock-example.md",
+      "skills/_shared/phases/mock-example.md",
       "skills/orc-diy/references/blocks/pattern.md",
-      "skills/orc-diy/references/blocks/planning.md",
-      "skills/orc-diy/references/blocks/review.md",
-      "skills/orc-diy/references/blocks/scoring.md",
-      "skills/orc-diy/references/blocks/security.md",
-      "skills/orc-diy/references/blocks/ship.md",
-      "skills/orc-diy/references/blocks/summary.md",
-      "skills/orc-diy/references/blocks/testgen.md",
-      "skills/orc-diy/references/blocks/verify.md",
+      "skills/_shared/phases/planning.md",
+      "skills/_shared/phases/review.md",
+      "skills/_shared/phases/scoring.md",
+      "skills/_shared/phases/security.md",
+      "skills/_shared/phases/ship.md",
+      "skills/_shared/phases/summary.md",
+      "skills/_shared/phases/testgen.md",
+      "skills/_shared/phases/verify.md",
       "skills/orc-diy/references/blocks/wiki.md",
       "skills/orc-diy/references/compile.md",
       "skills/_shared/phases/README.md",
@@ -1844,7 +1846,7 @@ const CONTRACTS = [
       "skills/orc-wiki/references/crosslink-compile.md",
       "skills/orc-wiki/references/crosslink.md",
       "skills/orc-wiki/schemas/crosslink-tag.md",
-      "skills/orc/references/phases/planning.md",
+      "skills/_shared/phases/planning.md",
       "skills/_shared/phases/wiki-consult.md",
       "skills/orc/subskills/orc-execution/SKILL.md",
       "skills/orc/subskills/orc-execution/core.md",
@@ -1933,7 +1935,7 @@ const CONTRACTS = [
       "skills/orc-mini/examples/mini-run-mock.md",
       "skills/orc-quick/references/context-doc.md",
       "skills/orc/README.md",
-      "skills/orc/references/phases/ship.md",
+      "skills/_shared/phases/ship.md",
       "skills/orc/config.md",
       "skills/orc/schemas/planning-output.md",
       "skills/orc/subskills/orc-testgen/SKILL.md",
@@ -1943,7 +1945,7 @@ const CONTRACTS = [
       // v0.42.0: named as a sibling project-root deliverable, so the grill doc lands
       // in the same visible place and not inside .claude/.
       "skills/orc-grill/references/grill-doc.md",
-      "skills/orc/references/phases/testgen.md",
+      "skills/_shared/phases/testgen.md",
     ],
   },
   {
@@ -1969,7 +1971,7 @@ const CONTRACTS = [
       "agents/orc-planner-opus-5-med.md",
       "commands/orc-plan.md",
       "commands/orc-poly.md",
-      "skills/orc/references/phases/planning.md",
+      "skills/_shared/phases/planning.md",
       "skills/_shared/phases/plan-handoff.md",
       "skills/orc/subskills/orc-planner/SKILL.md",
       "skills/orc-poly/SKILL.md",
@@ -2079,11 +2081,10 @@ const CONTRACTS = [
     binFiles: ["bin/cli.js"],
     files: [
       "skills/_shared/drift-recovery.md",
-      "skills/orc-diy/references/blocks/mock-example.md",
+      "skills/_shared/phases/mock-example.md",
       "skills/orc-diy/references/flow-schema.md",
       "skills/orc-fast/SKILL.md",
       "skills/orc-mini/SKILL.md",
-      "skills/orc/references/phases/mock-example.md",
       "skills/orc/config.md",
       "skills/orc/subskills/orc-pr/stack-gate.md",
       // v0.42.0: the interview names the mock-example phase as the instrument for a
@@ -2096,7 +2097,7 @@ const CONTRACTS = [
       // either.
       "skills/orc-brainstorm/SKILL.md",
       "skills/orc-brainstorm/references/brainstorm-doc.md",
-      "skills/orc/references/phases/ship.md",
+      "skills/_shared/phases/ship.md",
     ],
   },
   {
@@ -2105,17 +2106,16 @@ const CONTRACTS = [
     token: "drift-recovery.md",
     files: [
       "skills/_shared/README.md",
-      "skills/orc-diy/references/blocks/mock-example.md",
+      "skills/_shared/phases/mock-example.md",
       "skills/orc-doc/SKILL.md",
       "skills/orc-doc/references/chunking.md",
       "skills/orc-fast/SKILL.md",
       "skills/orc-mini/SKILL.md",
-      "skills/orc/references/phases/mock-example.md",
       "skills/orc/config.md",
       "skills/_shared/phases/trace.md",
       "skills/orc/references/ultra-mode.md",
       "skills/_shared/phases/wave-grouping.md",
-      "skills/orc/references/phases/ship.md",
+      "skills/_shared/phases/ship.md",
     ],
   },
   {
@@ -2127,10 +2127,9 @@ const CONTRACTS = [
       // v0.40.0: a resolved DRIFT-FROM round is one of the four record triggers.
       "skills/_shared/gotchas.md",
       "skills/_shared/drift-recovery.md",
-      "skills/orc-diy/references/blocks/mock-example.md",
+      "skills/_shared/phases/mock-example.md",
       "skills/orc-fast/SKILL.md",
       "skills/orc-mini/SKILL.md",
-      "skills/orc/references/phases/mock-example.md",
       "skills/orc/config.md",
       "skills/_shared/README.md",
     ],
@@ -2157,11 +2156,10 @@ const CONTRACTS = [
       "agents/orc-planner-mini-sonnet-5-high.md",
       "agents/orc-planner-opus-5-med.md",
       "skills/_shared/return-validation.md",
-      "skills/orc-diy/references/blocks/execution.md",
-      "skills/orc-diy/references/blocks/planning.md",
+      "skills/_shared/phases/execution.md",
+      "skills/_shared/phases/planning.md",
       "skills/orc-diy/references/flow-schema.md",
       "skills/orc-mini/SKILL.md",
-      "skills/orc/references/phases/execution.md",
       "skills/orc/config.md",
       "skills/_shared/phases/analyst-gates.md",
       "skills/orc/references/preflight-report.md",
@@ -2171,7 +2169,6 @@ const CONTRACTS = [
       "skills/orc/subskills/orc-execution/core.md",
       "skills/orc/subskills/orc-planner-mini/SKILL.md",
       "skills/orc/subskills/orc-planner/SKILL.md",
-      "skills/orc/references/phases/planning.md",
     ],
   },
   {
@@ -2192,17 +2189,15 @@ const CONTRACTS = [
       "agents/orc-executor-sonnet-5-high.md",
       "agents/orc-verifier-opus-5-med.md",
       "skills/_shared/return-validation.md",
-      "skills/orc-diy/references/blocks/execution.md",
-      "skills/orc-diy/references/blocks/verify.md",
+      "skills/_shared/phases/execution.md",
+      "skills/_shared/phases/verify.md",
       "skills/orc-mini/SKILL.md",
-      "skills/orc/references/phases/execution.md",
       "skills/orc/config.md",
       "skills/_shared/phases/trace.md",
       "skills/orc/subskills/orc-execution/SKILL.md",
       "skills/orc/subskills/orc-execution/core.md",
       "skills/orc/subskills/orc-review-verify/SKILL.md",
       "skills/orc/subskills/orc-review-verify/core.md",
-      "skills/orc/references/phases/verify.md",
     ],
   },
   {
@@ -2221,7 +2216,7 @@ const CONTRACTS = [
       "agents/orc-executor-sonnet-4-6-med.md",
       "agents/orc-executor-sonnet-5-high.md",
       "skills/_shared/return-validation.md",
-      "skills/orc-diy/references/blocks/execution.md",
+      "skills/_shared/phases/execution.md",
       "skills/orc/subskills/orc-execution/SKILL.md",
       "skills/orc/subskills/orc-execution/core.md",
     ],
@@ -2232,7 +2227,7 @@ const CONTRACTS = [
     token: "tdd_suite",
     files: [
       "agents/orc-verifier-opus-5-med.md",
-      "skills/orc-diy/references/blocks/verify.md",
+      "skills/_shared/phases/verify.md",
       "skills/orc/subskills/orc-review-verify/SKILL.md",
       "skills/orc/subskills/orc-review-verify/core.md",
     ],
@@ -2243,12 +2238,11 @@ const CONTRACTS = [
     name: "TDD trace verbs (v0.33.0 — TDD-RED/TDD-GREEN per iteration)",
     token: "TDD-RED",
     files: [
-      "skills/orc-diy/references/blocks/execution.md",
+      "skills/_shared/phases/execution.md",
       "skills/orc-mini/SKILL.md",
       "skills/orc-retro/SKILL.md",
       "skills/orc/SKILL.md",
       "skills/_shared/phases/trace.md",
-      "skills/orc/references/phases/execution.md",
     ],
   },
   {
@@ -2259,11 +2253,10 @@ const CONTRACTS = [
     binFiles: ["bin/cli.js"],
     files: [
       "skills/_shared/drift-recovery.md",
-      "skills/orc-diy/references/blocks/mock-example.md",
+      "skills/_shared/phases/mock-example.md",
       "skills/orc-diy/references/flow-schema.md",
       "skills/orc-fast/SKILL.md",
       "skills/orc-mini/SKILL.md",
-      "skills/orc/references/phases/mock-example.md",
       "skills/orc/config.md",
       "skills/orc/references/ultra-mode.md",
       // v0.42.0: the interview + the grill name mock_example as the INSTRUMENT for
@@ -2330,7 +2323,7 @@ const CONTRACTS = [
       "skills/_shared/stack-plan.md",
       "skills/orc-pr-driver/SKILL.md",
       "skills/orc-pr-setup/SKILL.md",
-      "skills/orc/references/phases/ship.md",
+      "skills/_shared/phases/ship.md",
       "skills/orc/subskills/orc-pr/SKILL.md",
       "skills/orc/subskills/orc-pr/stack-gate.md",
       "skills/orc-pr-driver/README.md",
@@ -2356,7 +2349,7 @@ const CONTRACTS = [
       "skills/orc-pr-driver/references/orc-run-split.md",
       "skills/orc-pr-setup/README.md",
       "skills/orc-pr-setup/SKILL.md",
-      "skills/orc/references/phases/ship.md",
+      "skills/_shared/phases/ship.md",
       "skills/orc/subskills/orc-pr/stack-gate.md",
     ],
   },
@@ -2371,7 +2364,7 @@ const CONTRACTS = [
       "skills/_shared/stack-plan.md",
       "skills/orc-pr-driver/SKILL.md",
       "skills/orc-pr-setup/SKILL.md",
-      "skills/orc/references/phases/ship.md",
+      "skills/_shared/phases/ship.md",
       "skills/orc/subskills/orc-pr/SKILL.md",
       "skills/orc/subskills/orc-pr/stack-gate.md",
       "skills/_shared/README.md",
@@ -2409,7 +2402,7 @@ const CONTRACTS = [
       "skills/orc-pr-driver/README.md",
       "skills/orc-pr-setup/README.md",
       "skills/_shared/README.md",
-      "skills/orc/references/phases/ship.md",
+      "skills/_shared/phases/ship.md",
     ],
   },
   {
@@ -2488,11 +2481,10 @@ const CONTRACTS = [
     files: [
       "skills/_shared/README.md",
       "skills/_shared/gotchas.md",
-      "skills/orc-diy/references/blocks/execution.md",
+      "skills/_shared/phases/execution.md",
       "skills/orc-fast/SKILL.md",
       "skills/orc-mini/SKILL.md",
       "skills/orc-retro/SKILL.md",
-      "skills/orc/references/phases/execution.md",
       "skills/orc/config.md",
       "skills/orc/references/preflight-report.md",
     ],
@@ -2516,9 +2508,8 @@ const CONTRACTS = [
       "agents/orc-verifier-opus-5-med.md",
       "skills/_shared/gotchas.md",
       "skills/_shared/return-validation.md",
-      "skills/orc-diy/references/blocks/execution.md",
+      "skills/_shared/phases/execution.md",
       "skills/orc-mini/SKILL.md",
-      "skills/orc/references/phases/execution.md",
       "skills/orc/subskills/orc-execution/core.md",
       "skills/orc/subskills/orc-review-verify/core.md",
     ],
@@ -2554,7 +2545,7 @@ const CONTRACTS = [
       "skills/orc-aftermath/SKILL.md",
       "skills/orc-pact/SKILL.md",
       "skills/orc-pact/references/gate.md",
-      "skills/orc/references/phases/planning.md",
+      "skills/_shared/phases/planning.md",
       "skills/orc/references/preflight-report.md",
       "skills/_shared/phases/preflight.md",
     ],
@@ -2579,7 +2570,7 @@ const CONTRACTS = [
       "skills/orc-boundary/SKILL.md",
       "skills/orc-boundary/references/card.md",
       "skills/orc-boundary/references/gate.md",
-      "skills/orc/references/phases/planning.md",
+      "skills/_shared/phases/planning.md",
       "skills/orc/references/preflight-report.md",
     ],
     binFiles: ["bin/cli.js"],
@@ -3873,10 +3864,13 @@ for (const b of BUDGETS) {
 //    across into it — so linting it means the situation cannot recur.
 //
 //    W11 measured 24 such target files and moved the biggest. The rest are named
-//    in ALLOW below, which is the migration's progress bar: W12 takes the build
-//    spine, W13 DIY, W14 the remainder. A NEW cross-lane pointer fails today.
+//    in ALLOW below, which is the migration's progress bar: 22 rows after W11,
+//    15 after W12 moved the seven that were ALREADY shared, and 15 after W13 —
+//    DIY consumes the library rather than being pointed into, so it clears no
+//    row. W14 takes the remainder. A NEW cross-lane pointer fails today.
 //    Unlike the config lint's seed-empty list, this one really is temporary —
-//    every row has a wave that removes it.
+//    every row has a wave that removes it, and a row whose wave has SHIPPED is
+//    a comment that lies: relabel it the moment the wave passes it by.
 //
 // 2. THE MANIFEST RESOLVES. Every LANE_PHASES file exists, is claimed by >= 2
 //    lanes, declares only layers from the CLOSED set, and CONTAINS every layer
@@ -3899,19 +3893,59 @@ for (const b of BUDGETS) {
     return acc;
   };
 
+  // The manifest is parsed FIRST because assertion 1 needs it: a pointer that
+  // sits inside a LAYER only one lane reads is not a cross-lane pointer, and
+  // deciding that requires knowing who reads which layer.
+  const cliText = fs.readFileSync(path.join(REPO_ROOT, "bin", "cli.js"), "utf8");
+  let LAYERS = null, FILES = null, PHASES = null, TRACE = null, OWN = null;
+  try {
+    TRACE = new Function("return " + cliText.match(/const LANE_TRACE = \{[\s\S]*?\n\};/)[0].replace(/^const LANE_TRACE = /, "").replace(/;$/, ""))();
+    LAYERS = new Function("return " + cliText.match(/const PHASE_LAYERS = \[[\s\S]*?\];/)[0].replace(/^const PHASE_LAYERS = /, "").replace(/;$/, ""))();
+    FILES = new Function("return " + cliText.match(/const PHASE_FILES = \{[\s\S]*?\n\};/)[0].replace(/^const PHASE_FILES = /, "").replace(/;$/, ""))();
+    OWN = new Function("return " + cliText.match(/const LANE_OWN_PHASES = \{[\s\S]*?\n\};/)[0].replace(/^const LANE_OWN_PHASES = /, "").replace(/;$/, ""))();
+    PHASES = new Function("const LANE_TRACE = " + JSON.stringify(TRACE) + "; return " + cliText.match(/const LANE_PHASES = \{[\s\S]*?\n\};/)[0].replace(/^const LANE_PHASES = /, "").replace(/;$/, ""))();
+  } catch (e) {
+    errs.push("could not parse PHASE_LAYERS / PHASE_FILES / LANE_PHASES from bin/cli.js: " + e.message);
+  }
+
+  // Which lanes actually read a given layer of a given shared phase file.
+  // v1.0.0 W13 — the cross-lane rule is about who READS a pointer, and after
+  // W13 a shared phase file holds two layers with DIFFERENT readers. Judging
+  // the file as a whole reports `/orc`'s own `full`-layer pointer into its own
+  // lane as cross-lane, which it is not; recording that in the ALLOW list would
+  // put a permanent row in a list whose entire meaning is "debt with a wave".
+  const layerReaders = (relPath, offset) => {
+    if (!FILES || !PHASES) return null;
+    const entry = Object.entries(FILES).find(([, d]) => d.file === relPath);
+    if (!entry) return null;
+    const [id, def] = entry;
+    if (!def.lane_layers) return null;
+    const text = fs.readFileSync(path.join(skillsDir, relPath), "utf8");
+    let layer = null;
+    for (const ln of def.layers || []) {
+      const open = text.indexOf("<!-- orc:layer " + ln + " -->");
+      if (open === -1 || open > offset) continue;
+      const close = text.indexOf("<!-- /orc:layer -->", open);
+      if (close === -1 || close < offset) continue;
+      layer = ln;
+    }
+    if (!layer) return null;
+    return (PHASES[id] || []).filter((l) => ((def.lane_layers[l] || def.lane_layers.default || def.layers) || []).includes(layer));
+  };
+
   // 1. Cross-lane pointers. Every row here is a MIGRATION DEBT with a named
   //    wave, not a permanent exception.
   const ALLOW = new Set([
     "orc-wiki/references/staleness.md", // W14
     "orc-wiki/references/crosslink.md", // W14
     "orc-wiki/references/partial-refresh.md", // W14
-    "orc/schemas/planning-output.md", // W12
-    "orc/subskills/orc-planner/SKILL.md", // W12
-    "orc/subskills/orc-review-verify/SKILL.md", // W12
-    "orc/subskills/orc-pr/SKILL.md", // W12
-    "orc/subskills/orc-pr/pr.md", // W12
-    "orc/subskills/orc-testgen/SKILL.md", // W12
-    "orc/subskills/orc-execution/SKILL.md", // W12
+    "orc/schemas/planning-output.md", // W14
+    "orc/subskills/orc-planner/SKILL.md", // W14
+    "orc/subskills/orc-review-verify/SKILL.md", // W14
+    "orc/subskills/orc-pr/SKILL.md", // W14
+    "orc/subskills/orc-pr/pr.md", // W14
+    "orc/subskills/orc-testgen/SKILL.md", // W14
+    "orc/subskills/orc-execution/SKILL.md", // W14
     "orc/references/preflight-report.md", // stays home (1 lane) — W14 drops the pointer
     "orc-boundary/references/gate.md", // W14
     "orc-pact/references/gate.md", // W14
@@ -3927,6 +3961,11 @@ for (const b of BUDGETS) {
         const target = m[1];
         if (!laneSet.has(m[2]) || m[2] === lane) continue;
         if (ALLOW.has(target)) continue;
+        // A pointer inside a layer that ONLY the target lane reads is that
+        // lane pointing at its own file. Not cross-lane, and not debt.
+        const rel = path.relative(skillsDir, f).replace(/\\/g, "/");
+        const readers = layerReaders(rel, m.index);
+        if (readers && readers.length && readers.every((l) => l === m[2])) continue;
         const key = lane + " -> " + target;
         if (seen.has(key)) continue;
         seen.add(key);
@@ -3949,17 +3988,6 @@ for (const b of BUDGETS) {
       errs.push(`the cross-lane ALLOW list names "${a}", which no other lane points at any more — remove the row`);
 
   // 2. The manifest resolves.
-  const cliText = fs.readFileSync(path.join(REPO_ROOT, "bin", "cli.js"), "utf8");
-  let LAYERS = null, FILES = null, PHASES = null, TRACE = null, OWN = null;
-  try {
-    TRACE = new Function("return " + cliText.match(/const LANE_TRACE = \{[\s\S]*?\n\};/)[0].replace(/^const LANE_TRACE = /, "").replace(/;$/, ""))();
-    LAYERS = new Function("return " + cliText.match(/const PHASE_LAYERS = \[[\s\S]*?\];/)[0].replace(/^const PHASE_LAYERS = /, "").replace(/;$/, ""))();
-    FILES = new Function("return " + cliText.match(/const PHASE_FILES = \{[\s\S]*?\n\};/)[0].replace(/^const PHASE_FILES = /, "").replace(/;$/, ""))();
-    OWN = new Function("return " + cliText.match(/const LANE_OWN_PHASES = \{[\s\S]*?\n\};/)[0].replace(/^const LANE_OWN_PHASES = /, "").replace(/;$/, ""))();
-    PHASES = new Function("const LANE_TRACE = " + JSON.stringify(TRACE) + "; return " + cliText.match(/const LANE_PHASES = \{[\s\S]*?\n\};/)[0].replace(/^const LANE_PHASES = /, "").replace(/;$/, ""))();
-  } catch (e) {
-    errs.push("could not parse PHASE_LAYERS / PHASE_FILES / LANE_PHASES from bin/cli.js: " + e.message);
-  }
   if (LAYERS && FILES && PHASES) {
     const CLOSED = ["core", "full", "trim", "composed"];
     if (LAYERS.join(",") !== CLOSED.join(","))

@@ -3048,7 +3048,7 @@ const LANE_CALLS = {
     on_absent: "a lane with no shared phase gets an EMPTY phases[] — that is an answer, not a gap: its pipeline is in its own spine (`own_phases: in-spine`)",
     canonical: "_shared/phases/README.md",
     never: "never derive the phase list, its order or its layers from the filenames in `_shared/phases/` — a second idea of the pipeline is the drift this exists to prevent",
-    lanes: ["orc", "orc-aftermath", "orc-analyze", "orc-analyze-mini", "orc-boundary", "orc-brainstorm", "orc-budget", "orc-challenge", "orc-claude", "orc-doc", "orc-fast", "orc-grill", "orc-handoff", "orc-learn", "orc-mini", "orc-pact", "orc-pattern", "orc-poly", "orc-pr-driver", "orc-pr-setup", "orc-quick", "orc-route", "orc-verify", "orc-wiki"],
+    lanes: ["orc", "orc-aftermath", "orc-analyze", "orc-analyze-mini", "orc-boundary", "orc-brainstorm", "orc-budget", "orc-challenge", "orc-claude", "orc-diy", "orc-doc", "orc-fast", "orc-grill", "orc-handoff", "orc-learn", "orc-mini", "orc-pact", "orc-pattern", "orc-poly", "orc-pr-driver", "orc-pr-setup", "orc-quick", "orc-route", "orc-verify", "orc-wiki"],
   },
   "wiki-status": {
     cmd: "orc wiki status [--json]",
@@ -3088,7 +3088,7 @@ const LANE_CALLS = {
     on_absent: "exit 1 is an ANSWER, not a failure — inject nothing and move on",
     canonical: "_shared/gotchas.md",
     never: "never inject the ledger unfiltered — only the entries whose `scope` glob matches the slice",
-    lanes: ["orc", "orc-boundary", "orc-brainstorm", "orc-diy", "orc-fast", "orc-grill", "orc-mini", "orc-retro", "orc-route"],
+    lanes: ["orc", "orc-boundary", "orc-brainstorm", "orc-fast", "orc-grill", "orc-mini", "orc-retro", "orc-route"],
   },
   "gotcha-list": {
     cmd: "orc gotcha list [--archived] [--json]",
@@ -3136,7 +3136,7 @@ const LANE_CALLS = {
     on_absent: "a refusal NAMES itself; relay the reason and fall back to Claude",
     canonical: "_shared/extra-dispatch.md",
     never: "never pass a credential in argv, never pass both `score` and `slot`, and never report a foreign return's model as measured — it carries no `actual_model`",
-    lanes: ["orc", "orc-diy", "orc-doc", "orc-fast", "orc-mini", "orc-quick", "orc-wiki"],
+    lanes: ["orc-diy", "orc-doc", "orc-fast", "orc-mini", "orc-quick", "orc-wiki"],
   },
   "extra-reconcile": {
     cmd: "orc extra reconcile <task> [--json]",
@@ -3268,7 +3268,7 @@ const LANE_CALLS = {
     on_absent: "an unreadable ledger degrades to a ROW, never to a crash",
     canonical: null,
     never: "never cache the state — it is recomputed live in both directions",
-    lanes: ["orc", "orc-analyze", "orc-challenge"],
+    lanes: ["orc-analyze", "orc-challenge"],
   },
   "challenge-init": {
     cmd: "orc challenge init <slug> --goal … --audience … --done-means … --council …",
@@ -3305,18 +3305,6 @@ const LANE_CALLS = {
     canonical: null,
     never: "never invent a promise, never retire one automatically, and never report UNCHECKABLE as a failure",
     lanes: ["orc", "orc-aftermath", "orc-pact"],
-  },
-  "pact-check": {
-    cmd: "orc pact check [--json]",
-    what: "re-check the anchored promises against what the code does now",
-    exits: { 0: "no drift", 1: "at least one DRIFTED or BROKEN" },
-    states: null,
-    cost: "free",
-    when: "before planning, and after a verify",
-    on_absent: "UNCHECKABLE never raises the exit code — it is the honest state",
-    canonical: null,
-    never: "never let a check invent an assumption; a low-confidence invariant is a manual check, not a second ledger",
-    lanes: ["orc", "orc-pact"],
   },
   "boundary-status": {
     cmd: "orc boundary status [--area <a>] [--json]",
@@ -3389,18 +3377,6 @@ const LANE_CALLS = {
     canonical: "_shared/stack-plan.md",
     never: "never stack without a ticket and a resolved PR template",
     lanes: ["orc-pr-driver", "orc-pr-setup"],
-  },
-  "handoff-surfaces": {
-    cmd: "orc handoff surfaces [--json]",
-    what: "which files a non-engineer can safely own, and how each one is graded",
-    exits: { 0: "answered" },
-    states: ["green", "amber", "red"],
-    cost: "free",
-    when: "at entry, and at preflight when the run will touch a graded surface",
-    on_absent: "no graded surface is an ANSWER — say so rather than offering an ungraded file",
-    canonical: null,
-    never: "never touch a RED surface, and never report an AMBER change as verified — its check is manual",
-    lanes: ["orc", "orc-handoff"],
   },
   "export-import": {
     cmd: "orc export import [--json]",
@@ -3517,13 +3493,25 @@ const PHASE_LAYERS = ["core", "full", "trim", "composed"];
 const PHASE_FILES = {
   trace: {
     file: "_shared/phases/trace.md",
-    layers: ["core"],
-    why_single_layer:
-      "the protocol is identical in every lane that traces; the per-lane variation is the TIER TABLE, which is DATA, not a layer",
+    layers: ["core", "composed"],
+    // W11 declared this single-layer, and for the 27 lanes that RUN the protocol
+    // that is still exactly right: the per-lane variation is the TIER TABLE,
+    // which is DATA, not a layer. W13 added `composed` for one reason only —
+    // orc-diy does not READ this phase at run time, it STITCHES it into a
+    // compiled artifact, and what gets stitched is a flow-shaped restatement
+    // (lane token `diy`, one packet per ENABLED phase group) rather than the
+    // protocol itself. That is a different job, so it is a different layer.
+    lane_layers: { "orc-diy": ["composed"], default: ["core"] },
+    why_single_layer: null,
+    why_two_layers:
+      "every other lane READS the protocol; orc-diy STITCHES a flow-shaped restatement of it into FLOW-COMPILED.md, and a composed flow owes one packet per ENABLED phase group rather than per phase",
   },
   preflight: {
     file: "_shared/phases/preflight.md",
     layers: ["core", "full"],
+    // W13 moved this off a hardcoded `lane !== "orc"` branch and onto the same
+    // lane->layer map the build phases use — one mechanism, not two.
+    lane_layers: { orc: ["core", "full"], default: ["core"] },
     why_single_layer: null,
   },
   intake: {
@@ -3569,6 +3557,127 @@ const PHASE_FILES = {
     layers: ["core"],
     why_single_layer:
       "the stop sequence is identical in every lane that stops; which moments are MANDATORY stops is already a per-lane rule in the spine",
+  },
+
+  "planning": {
+    file: "_shared/phases/planning.md",
+    layers: ["full", "composed"],
+    // v1.0.0 W13 — orc-diy became the second reader, so the phase left
+    // orc/references/phases/ for the library. `full` is /orc's procedure;
+    // `composed` is what `orc diy compile` stitches. They are DIFFERENT
+    // CONTENT for the same phase, not two copies of one procedure, which is
+    // why the lane->layer map below is not decoration.
+    lane_layers: { orc: ["full"], "orc-diy": ["composed"] },
+    why_single_layer: null,
+    why_two_layers: "the plan is where /orc grounds a run and where orc-diy composes a planner ROUTE; the shape of the artifact is the same, the procedure around it is not",
+  },
+  "scoring": {
+    file: "_shared/phases/scoring.md",
+    layers: ["full", "composed"],
+    // v1.0.0 W13 — orc-diy became the second reader, so the phase left
+    // orc/references/phases/ for the library. `full` is /orc's procedure;
+    // `composed` is what `orc diy compile` stitches. They are DIFFERENT
+    // CONTENT for the same phase, not two copies of one procedure, which is
+    // why the lane->layer map below is not decoration.
+    lane_layers: { orc: ["full"], "orc-diy": ["composed"] },
+    why_single_layer: null,
+    why_two_layers: "/orc scores every task; a DIY flow may pin one executor and skip the rubric entirely",
+  },
+  "execution": {
+    file: "_shared/phases/execution.md",
+    layers: ["full", "composed"],
+    // v1.0.0 W13 — orc-diy became the second reader, so the phase left
+    // orc/references/phases/ for the library. `full` is /orc's procedure;
+    // `composed` is what `orc diy compile` stitches. They are DIFFERENT
+    // CONTENT for the same phase, not two copies of one procedure, which is
+    // why the lane->layer map below is not decoration.
+    lane_layers: { orc: ["full"], "orc-diy": ["composed"] },
+    why_single_layer: null,
+    why_two_layers: "the wave machinery is shared; the overrides (max_wave_tasks, batch_pause_every, the executor source) are compiled per flow",
+  },
+  "review": {
+    file: "_shared/phases/review.md",
+    layers: ["full", "composed"],
+    // v1.0.0 W13 — orc-diy became the second reader, so the phase left
+    // orc/references/phases/ for the library. `full` is /orc's procedure;
+    // `composed` is what `orc diy compile` stitches. They are DIFFERENT
+    // CONTENT for the same phase, not two copies of one procedure, which is
+    // why the lane->layer map below is not decoration.
+    lane_layers: { orc: ["full"], "orc-diy": ["composed"] },
+    why_single_layer: null,
+    why_two_layers: "/orc always reviews; a DIY flow may switch review OFF, and saying so is part of the phase",
+  },
+  "security": {
+    file: "_shared/phases/security.md",
+    layers: ["full", "composed"],
+    // v1.0.0 W13 — orc-diy became the second reader, so the phase left
+    // orc/references/phases/ for the library. `full` is /orc's procedure;
+    // `composed` is what `orc diy compile` stitches. They are DIFFERENT
+    // CONTENT for the same phase, not two copies of one procedure, which is
+    // why the lane->layer map below is not decoration.
+    lane_layers: { orc: ["full"], "orc-diy": ["composed"] },
+    why_single_layer: null,
+    why_two_layers: "the opt-in trigger differs (a risk floor vs a flow key that can force it on every run); the checklist does not",
+  },
+  "verify": {
+    file: "_shared/phases/verify.md",
+    layers: ["full", "composed"],
+    // v1.0.0 W13 — orc-diy became the second reader, so the phase left
+    // orc/references/phases/ for the library. `full` is /orc's procedure;
+    // `composed` is what `orc diy compile` stitches. They are DIFFERENT
+    // CONTENT for the same phase, not two copies of one procedure, which is
+    // why the lane->layer map below is not decoration.
+    lane_layers: { orc: ["full"], "orc-diy": ["composed"] },
+    why_single_layer: null,
+    why_two_layers: "/orc runs the TDD gate plus adversarial review; a DIY flow may run a smoke verify or none",
+  },
+  "testgen": {
+    file: "_shared/phases/testgen.md",
+    layers: ["full", "composed"],
+    // v1.0.0 W13 — orc-diy became the second reader, so the phase left
+    // orc/references/phases/ for the library. `full` is /orc's procedure;
+    // `composed` is what `orc diy compile` stitches. They are DIFFERENT
+    // CONTENT for the same phase, not two copies of one procedure, which is
+    // why the lane->layer map below is not decoration.
+    lane_layers: { orc: ["full"], "orc-diy": ["composed"] },
+    why_single_layer: null,
+    why_two_layers: "the same never-run deliverable, offered on a flow key instead of a config key",
+  },
+  "mock-example": {
+    file: "_shared/phases/mock-example.md",
+    layers: ["full", "composed"],
+    // v1.0.0 W13 — orc-diy became the second reader, so the phase left
+    // orc/references/phases/ for the library. `full` is /orc's procedure;
+    // `composed` is what `orc diy compile` stitches. They are DIFFERENT
+    // CONTENT for the same phase, not two copies of one procedure, which is
+    // why the lane->layer map below is not decoration.
+    lane_layers: { orc: ["full"], "orc-diy": ["composed"] },
+    why_single_layer: null,
+    why_two_layers: "the same drift-recovery contract, gated by a flow key instead of the config default",
+  },
+  "ship": {
+    file: "_shared/phases/ship.md",
+    layers: ["full", "composed"],
+    // v1.0.0 W13 — orc-diy became the second reader, so the phase left
+    // orc/references/phases/ for the library. `full` is /orc's procedure;
+    // `composed` is what `orc diy compile` stitches. They are DIFFERENT
+    // CONTENT for the same phase, not two copies of one procedure, which is
+    // why the lane->layer map below is not decoration.
+    lane_layers: { orc: ["full"], "orc-diy": ["composed"] },
+    why_single_layer: null,
+    why_two_layers: "the ship decision is the flow's to compose (ask / commit / pr / report-only); the never-ship-on-red rule is not",
+  },
+  "summary": {
+    file: "_shared/phases/summary.md",
+    layers: ["full", "composed"],
+    // v1.0.0 W13 — orc-diy became the second reader, so the phase left
+    // orc/references/phases/ for the library. `full` is /orc's procedure;
+    // `composed` is what `orc diy compile` stitches. They are DIFFERENT
+    // CONTENT for the same phase, not two copies of one procedure, which is
+    // why the lane->layer map below is not decoration.
+    lane_layers: { orc: ["full"], "orc-diy": ["composed"] },
+    why_single_layer: null,
+    why_two_layers: "/orc reports in full; a composed flow must additionally name the phases it SKIPPED",
   },
 };
 
@@ -3649,6 +3758,19 @@ const LANE_PHASES = {
   "wiki-consult": ["orc", "orc-mini", "orc-fast"],
   "security-checklist": ["orc", "orc-diy"],
   "house-rules": ["orc", "orc-mini", "orc-fast", "orc-quick", "orc-doc"],
+  // v1.0.0 W13 — the build phases. `orc-diy` reads the `composed` layer, which
+  // `orc diy compile` stitches; `/orc` reads `full`. Two readers is what moved
+  // these out of orc/references/phases/ (design-02 §2, the >=2-lane rule).
+  planning: ["orc", "orc-diy"],
+  scoring: ["orc", "orc-diy"],
+  execution: ["orc", "orc-diy"],
+  review: ["orc", "orc-diy"],
+  security: ["orc", "orc-diy"],
+  verify: ["orc", "orc-diy"],
+  testgen: ["orc", "orc-diy"],
+  "mock-example": ["orc", "orc-diy"],
+  ship: ["orc", "orc-diy"],
+  summary: ["orc", "orc-diy"],
 };
 
 // The ORDER a lane runs the shared phases in. Preflight before trace only
@@ -3661,33 +3783,66 @@ const PHASE_ORDER = [
   "plan-handoff",
   "wiki-consult",
   "analyst-gates",
+  "planning",
   "house-rules",
   "wave-grouping",
+  "scoring",
+  "execution",
+  "review",
   "security-checklist",
+  "security",
+  "verify",
+  "testgen",
+  "mock-example",
+  "summary",
+  "ship",
   "stop-resume",
 ];
 
-// A lane's OWN phases — the pipeline it does not share with anybody yet. They
-// are declared here rather than left as prose because /orc's spine stopped
-// carrying them at W12: the spine is loaded IN FULL on activation and a phase
-// file is loaded when its phase fires, so the manifest is now the only thing
-// that knows the order. A file here has ONE consumer today (design-02 §2 — a
-// file with one consumer stays home); when W13/W14 gives it a second, it moves
-// to _shared/phases/ and gains a `composed` or `trim` layer beside its `full`.
+// A lane whose pipeline genuinely runs in a DIFFERENT order says so here.
+// v1.0.0 W13 found the first real one: /orc summarizes and then ships (Phases
+// 7, 8), while a compiled DIY flow ships and then summarizes — its summary
+// block must name the phases the flow skipped, which is not knowable until the
+// ship action is taken. One global order would have to print one of the two
+// lanes a pipeline it does not run, and that is the Flow-stepper failure this
+// manifest exists to prevent. The order below is asserted against the
+// compiler's own `order` array by a golden test, so the two cannot drift.
+const LANE_PHASE_ORDER = {
+  "orc-diy": [
+    "trace",
+    "intake",
+    "planning",
+    "wave-grouping",
+    "scoring",
+    "execution",
+    "review",
+    "security-checklist",
+    "security",
+    "verify",
+    "testgen",
+    "mock-example",
+    "ship",
+    "summary",
+    "stop-resume",
+  ],
+};
+
+// A lane's OWN phases — the pipeline it does not share with anybody. They are
+// declared here rather than left as prose because /orc's spine stopped carrying
+// them at W12: the spine is loaded IN FULL on activation and a phase file is
+// loaded when its phase fires, so the manifest is now the only thing that knows
+// the order. A file here has ONE consumer (design-02 §2 — a file with one
+// consumer stays home).
+//
+// W13 emptied most of this. Ten of /orc's twelve build phases gained `orc-diy`
+// as a second reader and moved to _shared/phases/ with a `composed` layer, so
+// they are LANE_PHASES rows now. The two left are the two nothing else runs:
+// `intake` (/orc's own Phase 0 additions on top of the shared intake) and
+// `integration` (worktree mode, which no other lane has).
 const LANE_OWN_PHASES = {
   orc: [
     { ord: 0, id: "intake", file: "orc/references/phases/intake.md", layers: ["full"], trace_verbs: ["PHASE"] },
-    { ord: 1, id: "planning", file: "orc/references/phases/planning.md", layers: ["full"], trace_verbs: ["PHASE", "CONFIG", "WIKI-CONSULT", "CROSSLINK", "GATE"] },
-    { ord: 2, id: "scoring", file: "orc/references/phases/scoring.md", layers: ["full"], trace_verbs: ["PHASE", "SCORE"] },
-    { ord: 3, id: "execution", file: "orc/references/phases/execution.md", layers: ["full"], trace_verbs: ["PHASE", "DISPATCH", "VERIFY", "OUTCOME"] },
     { ord: 4, id: "integration", file: "orc/references/phases/integration.md", layers: ["full"], trace_verbs: ["PHASE"] },
-    { ord: 5, id: "review", file: "orc/references/phases/review.md", layers: ["full"], trace_verbs: ["PHASE", "FINDING"] },
-    { ord: 5.5, id: "security", file: "orc/references/phases/security.md", layers: ["full"], trace_verbs: ["FINDING"] },
-    { ord: 6, id: "verify", file: "orc/references/phases/verify.md", layers: ["full"], trace_verbs: ["PHASE", "VERDICT", "TDD-RED", "TDD-GREEN"] },
-    { ord: 6.5, id: "testgen", file: "orc/references/phases/testgen.md", layers: ["full"], trace_verbs: ["DISPATCH", "VERIFY"] },
-    { ord: 6.7, id: "mock-example", file: "orc/references/phases/mock-example.md", layers: ["full"], trace_verbs: ["PHASE", "DRIFT"] },
-    { ord: 7, id: "summary", file: "orc/references/phases/summary.md", layers: ["full"], trace_verbs: ["PHASE"] },
-    { ord: 8, id: "ship", file: "orc/references/phases/ship.md", layers: ["full"], trace_verbs: ["PHASE", "FINISH"] },
   ],
 };
 
@@ -3697,10 +3852,13 @@ function lanePhaseRows(lane) {
     .map(([id]) => id);
   const rows = [];
   let ord = 0;
-  for (const id of PHASE_ORDER) {
+  for (const id of LANE_PHASE_ORDER[lane] || PHASE_ORDER) {
     if (!(LANE_PHASES[id] || []).includes(lane)) continue;
     const def = PHASE_FILES[id];
-    const layers = id === "preflight" && lane !== "orc" ? ["core"] : def.layers;
+    // A lane reads the layer written FOR it. Getting this wrong is the failure
+    // `_shared/phases/README.md` names at the point of definition: a lane
+    // running a phase the way a different lane's product promise defines it.
+    const layers = def.lane_layers ? def.lane_layers[lane] || def.lane_layers.default || def.layers : def.layers;
     rows.push({
       ord: ++ord,
       id,
@@ -3710,7 +3868,17 @@ function lanePhaseRows(lane) {
       // `always` must be justified (read-ladder.md, W10): a lane reads the
       // config resolver and opens its trace pointer before it can do anything
       // at all. Every other phase is `on-phase` — most runs skip most phases.
-      when: id === "preflight" || id === "trace" ? "always" : "on-phase",
+      // `compile-time` is orc-diy and only orc-diy: it opens none of these
+      // during a run. `orc diy compile` reads the `composed` layer once and
+      // stitches it into FLOW-COMPILED.md, which is the only spine that run
+      // follows. Calling that `on-phase` would describe a read that never
+      // happens (read-ladder.md rule 5).
+      when:
+        lane === "orc-diy" && (PHASE_FILES[id].lane_layers || {})["orc-diy"]
+          ? "compile-time"
+          : id === "preflight" || id === "trace"
+            ? "always"
+            : "on-phase",
       optional_when: null,
       calls: id === "preflight" ? laneCallIds.filter((c) => PREFLIGHT_CALL_IDS.has(c)) : [],
     });
@@ -4490,6 +4658,32 @@ function diyBlocksDir(claudeDir) {
   return fs.existsSync(path.join(installed, "blocks")) ? installed : path.join(SRC_SKILLS, "orc-diy", "references");
 }
 
+// v1.0.0 W13 — a stitched block comes from ONE of two places, and which one is
+// not a compiler decision: it is `LANE_PHASES`. A block whose phase orc-diy is a
+// declared reader of lives in `_shared/phases/<id>.md` and the compiler stitches
+// that file's `composed` LAYER. Everything else is a DIY-only block with no
+// counterpart anywhere in the payload and stays in `blocks/`.
+//
+// This is what "DIY consumes the phase library" means in practice, and it is
+// deliberately NOT a list typed here: derive it, or it becomes a second idea of
+// which phases are shared (the Flow-stepper rule).
+const diyComposedPhases = () =>
+  new Set(Object.keys(PHASE_FILES).filter((id) => (LANE_PHASES[id] || []).includes("orc-diy") && (PHASE_FILES[id].layers || []).includes("composed")));
+
+// Pull ONE layer's body out of a phase file. A missing layer is a hard error at
+// the call site, never a silently empty block — an empty stitch is a phase that
+// vanishes from a compiled flow without saying so.
+function phaseLayer(text, layer) {
+  // Index-based on purpose: the marker is a fixed string, and a constructed
+  // RegExp here would need its backslashes escaped twice to survive.
+  const open = "<!-- orc:layer " + layer + " -->";
+  const a = text.indexOf(open);
+  if (a === -1) return null;
+  const b = text.indexOf("<!-- /orc:layer -->", a);
+  if (b === -1) return null;
+  return text.slice(a + open.length, b).replace(/^[\r\n]+/, "").replace(/\s*$/, "");
+}
+
 // Keep text outside markers; keep a `<!-- diy:when key=a|b -->` section only
 // when the config value matches.
 function diyApplyVariants(text, cfg) {
@@ -4532,14 +4726,27 @@ function diyCompile(claudeDir) {
   }
 
   const refDir = diyBlocksDir(claudeDir);
+  const sharedDir = fs.existsSync(path.join(claudeDir, "skills", "_shared", "phases"))
+    ? path.join(claudeDir, "skills", "_shared", "phases")
+    : path.join(SRC_SKILLS, "_shared", "phases");
+  const composed = diyComposedPhases();
   let missingBlock = null;
   const readBlock = (name) => {
-    const f = path.join(refDir, "blocks", name + ".md");
+    const f = composed.has(name) ? path.join(sharedDir, name + ".md") : path.join(refDir, "blocks", name + ".md");
     if (!fs.existsSync(f)) {
       missingBlock = f;
       return "";
     }
-    return fs.readFileSync(f, "utf8");
+    const text = fs.readFileSync(f, "utf8");
+    if (!composed.has(name)) return text;
+    const body = phaseLayer(text, "composed");
+    if (body === null) {
+      // The file is there and the layer is not. That is a payload bug, not a
+      // user error, and it must NOT compile to an empty phase.
+      missingBlock = f + " (no `composed` layer)";
+      return "";
+    }
+    return body + "\n";
   };
   const locked = fs.readFileSync(path.join(refDir, "locked-blocks.md"), "utf8");
 

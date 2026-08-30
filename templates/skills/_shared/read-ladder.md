@@ -59,7 +59,7 @@ So every pointer a lane carries declares three things.
 
 | Declaration | Values | Means |
 |---|---|---|
-| `when` | `always` · `on-phase` · `on-state` · `on-demand` | WHETHER to open it at all |
+| `when` | `always` · `on-phase` · `on-state` · `on-demand` · `compile-time` | WHETHER to open it at all |
 | `read` | `layer` · `section` · `whole` | HOW MUCH to open |
 | `layers` | `core` · `full` · `trim` · `composed` | WHICH part, when `read: layer` |
 
@@ -77,6 +77,13 @@ So every pointer a lane carries declares three things.
    exists to stop: the layer boundary is the product promise, not a suggestion.
 4. **The two exceptions above carry over unchanged.** A file you will EDIT is
    read in full, first, always; and output a gate parses is read whole.
+5. **`compile-time` is not a run-time read at all.** `orc-diy` is a declared
+   reader of ten shared phases and opens none of them during a run: the `orc
+   diy compile` CLI reads their `composed` layer once and stitches it into
+   `FLOW-COMPILED.md`, which is the only spine that run then follows. Saying
+   `on-phase` there would describe a read that never happens, and a manifest
+   that describes a run nobody performs is the drift it exists to prevent
+   (v1.0.0 W13).
 
 ### The honest limit
 

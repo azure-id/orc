@@ -113,9 +113,11 @@ test("extra: the cited-risk hold-back is the other one, and it is config-named",
   const c = canon();
   assert.match(c, /extra_risk_tasks/, "the risk gate names its key");
   // v1.0.0 W12: scoring left the spine for its phase file, and the hold-back
-  // is a scoring-time decision, so it went with it.
+  // is a scoring-time decision, so it went with it. W13: orc-diy became the
+  // phase's second reader, so the file moved to the shared library — the
+  // hold-back is in the `full` layer, which is still /orc's and only /orc's.
   assert.match(
-    read("orc", "references", "phases", "scoring.md"),
+    read("_shared", "phases", "scoring.md"),
     /extra_risk_tasks|cited risk/i,
     "the scoring phase carries the trigger"
   );

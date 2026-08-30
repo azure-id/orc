@@ -175,7 +175,7 @@ them; they are never dispatched as subagents).
 - Phase 0/1 analyst-planner gates → `../_shared/phases/analyst-gates.md`
 - Phase 1 wiki grounding → `../_shared/phases/wiki-consult.md` + `references/preflight-report.md`
 - Phase 2 → `references/effort-and-mode.md`; tagging → `references/pattern-gate.md`
-- Phase 3 → `../_shared/phases/wave-grouping.md` + `log-protocol.md` + `house-rules.md`
+- Phase 3 → `../_shared/phases/wave-grouping.md` + `log-protocol.md` + `../_shared/phases/house-rules.md`
   + `pattern-gate.md` (resolve gate); workers → `subskills/orc-execution/`;
   stops → `subskills/orc-checkpoint/SKILL.md` + `../_shared/phases/stop-resume.md`
 - Phase 5–6 → `subskills/orc-review-verify/`; FE tasks →
@@ -197,26 +197,31 @@ from these filenames; a second idea of the pipeline is the drift the manifest
 exists to prevent.
 
 **Read a row when its phase fires, not on activation.** Every row is
-`on-phase` — this spine deliberately carries no `always` phase pointer. Every
-file below is this lane's OWN: each has one consumer today, and a file with
-one consumer stays home. W13 (`orc-diy`) and W14 (`orc-mini`/`orc-fast`) give
-the shared ones a second reader; each then moves to `_shared/phases/` and
-gains a `composed` or `trim` layer beside its `full` one.
+`on-phase` — this spine deliberately carries no `always` phase pointer. **Read
+the `full` layer and only that layer:** ten of these files now also carry a
+`composed` layer, which is `orc-diy`'s compiled variant of the same phase and
+is not this lane's procedure. `orc lane phases orc --json` names the layer for
+each row.
+
+W13 gave those ten a second reader (`orc-diy`), so they moved to
+`_shared/phases/`. Intake and Integration have one consumer each and stay home
+— a file with one consumer stays home. W14 (`orc-mini`/`orc-fast`) is what adds
+a `trim` layer beside the `full` one.
 
 | # | Phase | File | Read | Trace |
 |---|-------|------|------|-------|
 | 0 | Intake | `references/phases/intake.md` | `full` | `PHASE intake` |
-| 1 | Planning | `references/phases/planning.md` | `full` | `PHASE planning`, `CONFIG`, `WIKI-CONSULT`, `CROSSLINK`, `GATE` |
-| 2 | Effort & scoring | `references/phases/scoring.md` | `full` | `PHASE scoring`, `SCORE` |
-| 3 | Execution | `references/phases/execution.md` | `full` | `PHASE execution`, `DISPATCH`/`VERIFY`/`OUTCOME` |
+| 1 | Planning | `../_shared/phases/planning.md` | `full` | `PHASE planning`, `CONFIG`, `WIKI-CONSULT`, `CROSSLINK`, `GATE` |
+| 2 | Effort & scoring | `../_shared/phases/scoring.md` | `full` | `PHASE scoring`, `SCORE` |
+| 3 | Execution | `../_shared/phases/execution.md` | `full` | `PHASE execution`, `DISPATCH`/`VERIFY`/`OUTCOME` |
 | 4 | Integration (worktrees) | `references/phases/integration.md` | `full` | `PHASE integration` |
-| 5 | Review | `references/phases/review.md` | `full` | `PHASE review`, `FINDING` |
-| 5.5 | Security pass (opt-in) | `references/phases/security.md` | `full` | `FINDING` |
-| 6 | Verify — TDD gate + adversarial review | `references/phases/verify.md` | `full` | `PHASE verify`, `VERDICT`, `TDD-RED`/`TDD-GREEN` |
-| 6.5 | Test authoring (opt-in) | `references/phases/testgen.md` | `full` | `DISPATCH`/`VERIFY` |
-| 6.7 | Mock example + drift recovery | `references/phases/mock-example.md` | `full` | `PHASE mock-example`, `DRIFT` |
-| 7 | Summary | `references/phases/summary.md` | `full` | `PHASE summary` |
-| 8 | Ship | `references/phases/ship.md` | `full` | `PHASE ship`, `FINISH` |
+| 5 | Review | `../_shared/phases/review.md` | `full` | `PHASE review`, `FINDING` |
+| 5.5 | Security pass (opt-in) | `../_shared/phases/security.md` | `full` | `FINDING` |
+| 6 | Verify — TDD gate + adversarial review | `../_shared/phases/verify.md` | `full` | `PHASE verify`, `VERDICT`, `TDD-RED`/`TDD-GREEN` |
+| 6.5 | Test authoring (opt-in) | `../_shared/phases/testgen.md` | `full` | `DISPATCH`/`VERIFY` |
+| 6.7 | Mock example + drift recovery | `../_shared/phases/mock-example.md` | `full` | `PHASE mock-example`, `DRIFT` |
+| 7 | Summary | `../_shared/phases/summary.md` | `full` | `PHASE summary` |
+| 8 | Ship | `../_shared/phases/ship.md` | `full` | `PHASE ship`, `FINISH` |
 
 Phase 4 runs only in worktree mode. Phases 5.5, 6.5 and 6.7 are opt-in and
 their config key is resolved by `orc lane config orc --json`, never read raw.

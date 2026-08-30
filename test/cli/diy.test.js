@@ -133,6 +133,45 @@ test("diy compile: the documented stitch order equals the compiler's order array
   assert.ok(code.includes("extra"), "the `extra` block is in the stitch order and in compile.md");
 });
 
+// v1.0.0 W13 — orc-diy stitches ELEVEN of its blocks out of the shared phase
+// library, so `orc lane phases orc-diy` and the compiler's `order` array are
+// two views of one pipeline. They are allowed to differ in CONTENT (the
+// manifest also lists phases that are pointed at from inside a stitched layer
+// rather than stitched themselves) but never in ORDER: a manifest that prints
+// a different sequence from the one the flow runs is the Flow-stepper failure
+// this library exists to prevent — and `/orc` genuinely runs summary->ship
+// while a compiled flow runs ship->summary, so one global order cannot be
+// right for both.
+test("diy: the manifest order for orc-diy matches the compiler's stitch order", () => {
+  const cliSrc = fs.readFileSync(path.join(REPO, "bin", "cli.js"), "utf8");
+  const order = cliSrc
+    .match(/const order = \[([^\]]+)\]/)[1]
+    .split(",")
+    .map((x) => x.trim().replace(/^"|"$/g, ""))
+    .filter((x) => x !== "null");
+
+  const d = JSON.parse(cli(["lane", "phases", "orc-diy", "--json"]).stdout);
+  const manifest = d.lanes[0].phases.map((p) => p.id);
+
+  // Every phase the compiler stitches out of the library must be in the
+  // manifest, in the same relative order.
+  const stitched = manifest.filter((id) => order.includes(id));
+  const expected = order.filter((id) => manifest.includes(id));
+  assert.deepStrictEqual(stitched, expected, "the manifest and the stitch order disagree about the pipeline");
+  assert.ok(stitched.includes("ship") && stitched.includes("summary"), "the two that forced a per-lane order are both present");
+  assert.ok(
+    stitched.indexOf("ship") < stitched.indexOf("summary"),
+    "a compiled flow ships and THEN summarizes — its summary names the phases the flow skipped"
+  );
+
+  // And every stitched row really is declared `compile-time`: orc-diy opens
+  // none of these during a run, it follows FLOW-COMPILED.md.
+  for (const row of d.lanes[0].phases.filter((p) => order.includes(p.id))) {
+    assert.strictEqual(row.when, "compile-time", `${row.id} is stitched, so it is read at compile time, not on-phase`);
+    assert.deepStrictEqual(row.layers, ["composed"], `${row.id} must stitch the composed layer, never /orc's full one`);
+  }
+});
+
 // The `orc ui` flow stepper draws `steps[]` and nothing else. If a block joins
 // the stitch order without a DIY_STEPS row, the picture silently stops being
 // the pipeline — a phase would run that the panel never draws.

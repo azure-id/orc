@@ -1,16 +1,20 @@
 # Phase — Effort & scoring   (id: `scoring`)
 
-> **`/orc` phase file.** Moved out of `orc/SKILL.md` at v1.0.0 W12. The spine is
-> loaded IN FULL when the skill activates; this is loaded when the phase fires,
-> and most runs skip most phases. ONE consumer today, so it stays in this lane —
-> `../../../_shared/phases/README.md`'s rule: a file with one consumer stays home.
-> When a second lane reads it (W13 `orc-diy`, W14 `orc-mini`/`orc-fast`) it moves
-> to `_shared/phases/` and gains a `composed` or `trim` layer beside this one.
-> `orc lane phases orc --json` names the file and the layers.
+> **Shared phase file.** Moved out of `orc/SKILL.md` at v1.0.0 W12, and into
+> this library at W13 when `orc-diy` became its second reader. A spine is loaded
+> IN FULL when its skill activates; this is loaded when the phase fires, and most
+> runs skip most phases.
+>
+> **Two layers, and a lane reads exactly one.** `full` is `/orc`'s procedure.
+> `composed` is what `orc diy compile` stitches — the same phase expressed as
+> `<!-- diy:when -->` variants over a composed flow, NOT a second copy of the
+> procedure. Reading the wrong one is the failure `README.md` names: a lane
+> doing a phase its product promise says it does differently.
+> `orc lane phases <lane> --json` names the layer for each lane.
 
 <!-- orc:layer full -->
 
-## Effort, dispatch style, scoring (load ../effort-and-mode.md)
+## Effort, dispatch style, scoring (load ../../orc/references/effort-and-mode.md)
 
 Emit `PHASE scoring start`. Refine effort; recommend **sequential** vs
 **parallel** dispatch (worktrees for high-effort independent features) — user
@@ -34,7 +38,28 @@ task with a non-empty `risk[]` is HELD BACK to its Claude band (`extra_risk_task
 defaults to `off`) and every one is LISTED with its cited risk — a silently
 held-back task is indistinguishable from a forgotten one. Use the wiki's "Notes for planning" to sharpen
 core/isolated + risk factors. **Tag each task's pattern domain+language**
-(+ secondary `db: postgres`) per `../pattern-gate.md`. Ask: "Any
+(+ secondary `db: postgres`) per `../../orc/references/pattern-gate.md`. Ask: "Any
 anticipated escalations, or run straight through?" Emit `PHASE scoring end`.
+
+<!-- /orc:layer -->
+
+<!-- orc:layer composed -->
+
+## Phase: Task scoring → executor selection
+
+<!-- diy:when scoring=on -->
+Score each task 0–100 with the full lane's rubric (see the scoring section of
+`.claude/skills/orc/SKILL.md`), then dispatch the executor agent from THIS
+compiled table — it is already clipped to this flow's session tier; never
+substitute a preset from `config.md`:
+
+{{score_table}}
+<!-- /diy:when -->
+<!-- diy:when scoring=off -->
+Scoring is DISABLED in this flow. Skip the rubric entirely: EVERY execution
+task dispatches to **{{fixed_executor}}**. Wave grouping, declared-files
+conflict rules, and slice construction are unchanged — scoring off changes
+model selection only, never scheduling.
+<!-- /diy:when -->
 
 <!-- /orc:layer -->

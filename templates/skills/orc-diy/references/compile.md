@@ -10,13 +10,27 @@ second implementation, and the skill never stitches the flow itself.
 
 1. **Validate.** Load `.claude/orc-diy.config.yaml`; run the full cross-key
    validation from `flow-schema.md`. Any hard error aborts the compile.
-2. **Resolve sources.** Block templates come from the installed stub
-   (`.claude/skills/orc-diy/references/blocks/`). Cherry-picked orc material
-   is REFERENCED in place, never copied: the compiler verifies that every
-   orc file a chosen variant points at actually exists under
-   `.claude/skills/` (project first, `~/.claude/skills/` fallback for a
-   global orc install) and aborts naming the missing file if orc is absent
-   or incomplete.
+2. **Resolve sources.** A block comes from ONE of two places, and which one
+   is not the compiler's choice — it is `LANE_PHASES` (`orc lane phases
+   orc-diy --json`).
+
+   - **Eleven come from the shared phase library** as that file's `composed`
+     LAYER: `.claude/skills/_shared/phases/<block>.md`. The `composed` layer
+     is this lane's variant of the phase; the `full` layer in the same file is
+     `/orc`'s procedure and is NEVER stitched here. A file whose `composed`
+     layer is missing aborts the compile naming the file — it must never
+     compile to an empty phase.
+   - **Five stay this lane's own** in the installed stub
+     (`.claude/skills/orc-diy/references/blocks/`): `header`, `wiki`,
+     `analyze`, `pattern`, `extra`. They are composition prose about a
+     decision only a composed flow makes, so there is nothing to share them
+     with.
+
+   Cherry-picked orc material is REFERENCED in place, never copied: the
+   compiler verifies that every orc file a chosen variant points at actually
+   exists under `.claude/skills/` (project first, `~/.claude/skills/`
+   fallback for a global orc install) and aborts naming the missing file if
+   orc is absent or incomplete.
 3. **Stitch.** Concatenate in fixed order — this list and the `order` array in
    `bin/cli.js` are ONE contract; change them together (a golden test compares
    them, because the drift is grammar-shaped and the contract lint cannot see

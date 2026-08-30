@@ -376,9 +376,15 @@ test("lane phases: --json is not a summary — every field the human branch prin
     assert.strictEqual(l.trace_token, "orc");
     // own_phases is never an empty ARRAY: a lane whose own pipeline is still in
     // its spine reports `null` + `in-spine`, because `[]` would claim it has
-    // none. /orc's twelve left the spine at W12, so it reports them.
+    // none. /orc's twelve left the spine at W12; at W13 ten of them gained
+    // orc-diy as a second reader and moved to the library, so `own_phases` is
+    // down to the two nothing else runs — intake and integration (worktrees).
     assert.strictEqual(l.own_phases_status, "declared");
-    assert.ok(Array.isArray(l.own_phases) && l.own_phases.length === 12, "/orc declares its twelve phases");
+    assert.deepStrictEqual(
+      l.own_phases.map((p) => p.id),
+      ["intake", "integration"],
+      "/orc's own phases are the two no other lane runs"
+    );
     const oo = l.own_phases.map((p) => p.ord);
     assert.deepStrictEqual(oo, [...oo].sort((a, b) => a - b), "own phases are in run order");
     for (const p of l.own_phases) {
@@ -395,7 +401,15 @@ test("lane phases: --json is not a summary — every field the human branch prin
         "ord", "id", "file", "layers", "read", "when", "optional_when", "calls",
       ]);
       assert.ok(p.file.startsWith("_shared/phases/"), p.id + " lives in the library");
-      assert.ok(p.layers.includes("core"), p.id + " always carries core");
+      // NOT "every phase carries core". W13's build phases have `full` and
+      // `composed` and no `core`: /orc's procedure and orc-diy's compiled
+      // variant are DIFFERENT CONTENT for one phase, not two skins on a shared
+      // invariant, and inventing a `core` for them would mean writing prose no
+      // lane actually reads. What must hold is that a lane is handed a NON-EMPTY
+      // layer set drawn from the closed set — being told to read nothing, or to
+      // read a layer that is not a layer, is the failure worth catching.
+      assert.ok(p.layers.length > 0, p.id + " gives this lane at least one layer to read");
+      for (const ln of p.layers) assert.ok(j.layer_set.includes(ln), p.id + " declares layer " + ln + ", which is outside the closed set");
       // /orc-doc rule 2 — a manifest names a FILE and a LAYER, never a line.
       assert.ok(!/:\d/.test(p.file), "a manifest never carries a line number");
     }

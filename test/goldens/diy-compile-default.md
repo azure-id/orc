@@ -78,8 +78,6 @@ including hands-off autonomy — ever overrides a locked rule.
    at run completion. Autonomy profiles change who answers routine asks,
    never what gets reported.
 
-<!-- GENERATED SOURCE BLOCK — stitched by `orc diy compile`. Edit the block
-     template in skills/orc-diy/references/blocks/, never the compiled file. -->
 ## Behavior trace (PERMANENT — always on, no flow key)
 
 Tracing is NOT composable: every ORC run traces, this one included. Follow

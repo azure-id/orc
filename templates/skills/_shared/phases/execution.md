@@ -1,12 +1,16 @@
 # Phase — Execution   (id: `execution`)
 
-> **`/orc` phase file.** Moved out of `orc/SKILL.md` at v1.0.0 W12. The spine is
-> loaded IN FULL when the skill activates; this is loaded when the phase fires,
-> and most runs skip most phases. ONE consumer today, so it stays in this lane —
-> `../../../_shared/phases/README.md`'s rule: a file with one consumer stays home.
-> When a second lane reads it (W13 `orc-diy`, W14 `orc-mini`/`orc-fast`) it moves
-> to `_shared/phases/` and gains a `composed` or `trim` layer beside this one.
-> `orc lane phases orc --json` names the file and the layers.
+> **Shared phase file.** Moved out of `orc/SKILL.md` at v1.0.0 W12, and into
+> this library at W13 when `orc-diy` became its second reader. A spine is loaded
+> IN FULL when its skill activates; this is loaded when the phase fires, and most
+> runs skip most phases.
+>
+> **Two layers, and a lane reads exactly one.** `full` is `/orc`'s procedure.
+> `composed` is what `orc diy compile` stitches — the same phase expressed as
+> `<!-- diy:when -->` variants over a composed flow, NOT a second copy of the
+> procedure. Reading the wrong one is the failure `README.md` names: a lane
+> doing a phase its product promise says it does differently.
+> `orc lane phases <lane> --json` names the layer for each lane.
 
 <!-- orc:layer full -->
 
@@ -24,7 +28,7 @@ plus the "not blocked for you" line (it gates ORC's dispatch, never an explicit
 instruction). ESCALATE dispatches but gates ship on the named human, riding the
 EXISTING pause machinery. An uncarded area is `unknown`, never REFUSE. **Pattern-resolve gate
 (once, before the first wave):** resolve each tagged language per
-`../pattern-gate.md` and report ONE user line per language (cache hit →
+`../../orc/references/pattern-gate.md` and report ONE user line per language (cache hit →
 apply cached; miss → codify/agnostic per `pattern_findings`; learn → dispatch
 the codifier); hold resolved patterns in run state.
 
@@ -37,7 +41,7 @@ the codifier); hold resolved patterns in run state.
    implements to green: implement→test→repair, cap `tdd_loop_max`, emitting
    `TDD-RED`/`TDD-GREEN` per iteration; cap hit → STOP SEQUENCE + honest red
    report) and the `house_rules` card lines
-   (`../../../_shared/phases/house-rules.md`, injected LITERALLY — read once per run, never
+   (`house-rules.md`, injected LITERALLY — read once per run, never
    a pointer); FE/BE and `db:postgres` tasks get the resolved `pattern`
    injected literally (pattern-gate.md), and — with `gotchas: on` — the
    SCOPE-MATCHING gotchas beside it (glob vs this task's `declared_files`, cap 3,
@@ -45,7 +49,7 @@ the codifier); hold resolved patterns in run state.
    inject unfiltered: `_shared/gotchas.md` §7).
    **A FOREIGN task uses Bash, not the Task tool:** write the IDENTICAL slice to a
    file and run `orc extra dispatch --task <file> --json` (exit codes + the
-   fallback procedure: `../../../_shared/extra-dispatch.md`). Append `via=extra:<profile>`
+   fallback procedure: `../extra-dispatch.md`). Append `via=extra:<profile>`
    to the `DISPATCH` line and copy the return's `trace_line` + every
    `trace_extras[]` entry VERBATIM into the packet — the CLI composes them, and the
    hook emits NO `SPAWN`/`RETURN` for a foreign worker, so they are the whole record.
@@ -81,12 +85,59 @@ the codifier); hold resolved patterns in run state.
    remains, emit `GATE wave-boundary :: wave=W of K → STOP (batch_pause_every=N)`
    and run the MANDATORY STOP SEQUENCE — never dispatch wave W+1 past an
    unacknowledged boundary. Token pressure → same STOP SEQUENCE (judgment).
-   Last wave closes → emit `PHASE execution end`. (../../../_shared/phases/stop-resume.md)
+   Last wave closes → emit `PHASE execution end`. (stop-resume.md)
 
 **User escalations:** relay question → broadcast answer to log; an answer that
 invalidates a DONE task → re-run once, then set every reverse-`depends_on`
 consumer to `stale_review`. **Worker failure/garbage/timeout:** flag +
 continue the wave; audit and re-dispatch at the next batch checkpoint
 (`requeued`, retry_count++). Hard retry cap 2 → STOP and surface.
+
+<!-- /orc:layer -->
+
+<!-- orc:layer composed -->
+
+## Phase: Execution (waves)
+
+Run execution exactly as the full lane's execution subskill defines it —
+follow `.claude/skills/orc/subskills/orc-execution/SKILL.md` (slices
+constructed by you, standing rules injected, evidence-bearing returns
+validated against the contract) with these compiled overrides:
+
+- Max parallel tasks per wave: **{{max_wave_tasks}}** (hard cap; overflow →
+  next wave; wave grouping per
+  `.claude/skills/_shared/phases/wave-grouping.md`).
+- Stop-and-continue pause every **{{batch_pause_every}}** waves (checkpoint
+  confirmed BEFORE announcing any stop; resume per
+  `.claude/skills/_shared/phases/stop-resume.md`).
+- Executor selection comes from this flow's scoring section above — never
+  from the shipped presets.
+
+<!-- diy:when tdd=on -->
+TDD execution: `tdd_spec` is SCOPED by each entry's `disposition` — only
+`new-surface` and `behavior-change` get tests; `covered-by-existing` (cited
+existing test) and `no-behavior` (constants, translation strings, docs, config)
+get none, and a task with cited `risk[]` is never scoped out. A PAIRED TDD task
+(never a Wave 0) materializes the remaining skeletons into real
+FAILING tests (red proven before implementation; a `new-surface` pre-implementation
+pass is a spec bug → block that requirement). Each implementation slice carries its
+`tdd_spec`; executors implement to green (implement→test→repair, cap
+`tdd_loop_max`; `TDD-RED`/`TDD-GREEN` per iteration) and return `tdd_state`
+per `.claude/skills/_shared/return-validation.md` — including §6's worktree
+delta: `git status --short` before/after each dispatch, any changed path
+outside `declared_files` (a revert included) gates the wave close.
+<!-- /diy:when -->
+
+<!-- diy:when gotchas=on -->
+Repair memory: probe `orc gotcha status` once at preflight (exit 0 = entries,
+1 = none — never a `find`) and print one line either way. Inject the
+SCOPE-MATCHING entries into each slice beside `pattern` — glob vs that task's
+`declared_files`, cap 3, highest `hits` first; zero matches = NO block, never an
+empty one, and NEVER unfiltered. A return that CLOSED a repair loop carries
+`gotcha_recorded`; dedupe it on `symptom`+`scope` (a match bumps `hits` and
+`last_seen`) and append it to `.claude/orc/gotchas.md` YOURSELF — a subagent never
+writes that file, and a loop that hit its cap and stopped records nothing. Full
+contract: `.claude/skills/_shared/gotchas.md`.
+<!-- /diy:when -->
 
 <!-- /orc:layer -->

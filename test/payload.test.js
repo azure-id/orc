@@ -100,7 +100,7 @@ test("tdd_spec entries carry a disposition, and both branches of pre-implementat
   // …and the orchestrator's red-proof step must READ the disposition, not blanket-block.
   // v1.0.0 W12: Phase 3's procedure left the spine for its phase file. The
   // spine now carries the manifest row; the rule lives where the phase does.
-  const spine = read("skills/orc/references/phases/execution.md");
+  const spine = read("skills/_shared/phases/execution.md");
   const proof = spine.slice(spine.indexOf("TDD red proof"), spine.indexOf("1. Dispatch EVERY task"));
   assert.match(proof, /per `disposition`/, "the red proof reads the entry disposition");
   assert.match(proof, /regression-guard.*EXPECTED|EXPECTED.*regression-guard/s, "a regression guard passing blocks nothing");
@@ -461,7 +461,7 @@ test("the stacked-PR config defaults agree between the CLI and the documented co
 
 test("the ship gate is an OR of two thresholds, degrades to a regular PR, and never lives in a speed lane", () => {
   const gate = read("skills/orc/subskills/orc-pr/stack-gate.md");
-  const spine = read("skills/orc/references/phases/ship.md"); // W12: Phase 8's own file
+  const spine = read("skills/_shared/phases/ship.md"); // W12: Phase 8's own file
   // The trigger is OR, not AND: a 40-file / 300-LoC change is just as unreviewable.
   assert.match(gate, /LoC >= stacked_pr_loc`? OR `?files >= stacked_pr_files/);
   // Both prerequisites degrade to one regular PR — neither is a failure.
@@ -532,7 +532,7 @@ test("the TDD disposition vocabulary is identical everywhere it is stated", () =
     "agents/orc-planner-opus-5-med.md",
     "agents/orc-planner-mini-sonnet-5-high.md",
     "agents/orc-planner-mini-opus-5-med.md",
-    "skills/orc/references/phases/planning.md", // W12: was the spine's Phase 1
+    "skills/_shared/phases/planning.md", // W12: was the spine's Phase 1
     "skills/orc-mini/SKILL.md",
   ]) {
     const md = read(rel);
@@ -570,7 +570,7 @@ test("every place that can skip a test also states the risk safety floor", () =>
     "agents/orc-planner-opus-5-med.md",
     "agents/orc-planner-mini-sonnet-5-high.md",
     "agents/orc-planner-mini-opus-5-med.md",
-    "skills/orc/references/phases/planning.md", // W12: was the spine's Phase 1
+    "skills/_shared/phases/planning.md", // W12: was the spine's Phase 1
     "skills/orc-mini/SKILL.md",
   ]) {
     const md = read(rel);
@@ -590,13 +590,13 @@ test("the monolithic Wave-0 red proof is gone from every lane that had one", () 
   // dependency the planner now emits.
   for (const rel of [
     "skills/orc/SKILL.md",
-    "skills/orc/references/phases/execution.md", // W12
-    "skills/orc/references/phases/planning.md", // W12
+    "skills/_shared/phases/execution.md", // W12
+    "skills/_shared/phases/planning.md", // W12
     "skills/orc/schemas/planning-output.md",
     "skills/_shared/phases/wave-grouping.md",
     "skills/orc/subskills/orc-planner/SKILL.md",
     "skills/orc/subskills/orc-execution/core.md",
-    "skills/orc-diy/references/blocks/execution.md",
+    "skills/_shared/phases/execution.md",
   ]) {
     const md = read(rel);
     assert.doesNotMatch(md, /Wave 0 materializes/, `${rel} no longer dispatches a monolithic Wave 0`);
@@ -617,7 +617,7 @@ test("the freshness tier is read from the CLI probe, never hand-computed", () =>
     "skills/_shared/phases/wiki-consult.md",
     "skills/_shared/detecting-artifacts.md",
     "skills/orc-wiki/references/staleness.md",
-    "skills/orc/references/phases/planning.md", // W12: was the spine's Phase 1
+    "skills/_shared/phases/planning.md", // W12: was the spine's Phase 1
   ]) {
     const md = read(rel);
     assert.match(md, /orc wiki status/, `${rel} names the probe`);
@@ -744,7 +744,7 @@ test("the recovery token is the SIXTH member of its family, and it lives in ONE 
 
 test("every lane that dispatches foreign points at reconcile FIRST — one sentence, no forked prose", () => {
   for (const f of [
-    "skills/orc/references/phases/execution.md", // W12: was the spine's Phase 3
+    "skills/_shared/phases/execution.md", // W12: was the spine's Phase 3
     "skills/orc-mini/SKILL.md",
     "skills/orc-fast/SKILL.md",
     "skills/orc-diy/references/blocks/extra.md",
