@@ -237,7 +237,7 @@ test("config: every key answers a declared family, and the two contested ones ar
   const { root } = freshInstall();
   try {
     const j = JSON.parse(cli(["config", "list", "--json", "--dir", root]).stdout);
-    assert.strictEqual(j.keys.length, 72);
+    assert.strictEqual(j.keys.length, 77);
     for (const k of j.keys) {
       assert.ok(k.answers && k.answers.length, k.key + " declares no answers[]");
       for (const a of k.answers) assert.ok(j.families[a.family], k.key + " → unknown family " + a.family);
@@ -355,6 +355,11 @@ test("config: lanes[] is a mechanical seed, and says so by being empty where it 
     // would be inventing the measurement this list exists to be honest about.
     const orphans = j.keys.filter((k) => !k.lanes.length).map((k) => k.key);
     assert.deepStrictEqual(orphans, [
+      // v1.1.0 — the two operating keys of the WAIT. A lane runs `orc wait plan`
+      // and the CLI reads these two; no spine reads either, which is the same
+      // shape as the extra bridge's keys below.
+      "wait_hop_minutes",
+      "wait_max_hops",
       "extra_max_concurrent",
       "extra_unlock",
       "extra_vault_max_attempts",

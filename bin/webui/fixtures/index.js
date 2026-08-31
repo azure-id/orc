@@ -26,6 +26,7 @@ const { runs, runDetail, runDetailClosed, aftermath } = require("./runs.js");
 const { stats, budgetForecast, budgetRates } = require("./stats.js");
 const { pact } = require("./pact.js");
 const { boundary } = require("./boundary.js");
+const { usage, waitLanes, waitStatus } = require("./wait.js");
 const { handoff } = require("./handoff.js");
 const { exportState, mocks } = require("./maintenance.js");
 const { chGoals, chDims, challengeRoles, challengeCouncil, challengeCycles, challengeList, challengeShow, challengeDiff, challengeDiffMissing, challengeLint } = require("./challenge.js");
@@ -199,6 +200,12 @@ module.exports.get = function get(route, q) {
       return { where, doctor, wiki, patterns: patterns, runs_total: runs.total, waiting: runs.runs.filter((r) => r.status === "waiting").map((r) => ({ slug: r.slug, updated_ms: r.updated_ms, lane: r.lane })), diy, pact, boundary, wiki_debt: wikiDebt, extra_journal: extraJournal };
     case "/api/pact":
       return pact;
+    case "/api/usage":
+      return usage;
+    case "/api/wait/lanes":
+      return waitLanes;
+    case "/api/wait/status":
+      return waitStatus;
     case "/api/boundary":
       return boundary;
     case "/api/handoff":

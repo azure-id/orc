@@ -237,6 +237,14 @@ const READS = {
   // Preview-then-apply: A COUNT IS NOT CONSENT. The Apply button stays disabled
   // until this has been fetched, and it names every entry eviction would touch.
   "/api/gotcha/prune/preview": () => ["gotcha", "prune", "--dry-run"],
+  // v1.1.0 — the wait. Three READS, and every one of them is a state the panel
+  // renders and never derives: `usage check` 0/1/2 (and `unknown` is a state,
+  // not a failure), the lane table, and the run's block. The panel CANNOT start
+  // a wait — a wait lives in a Claude Code session, and `orc ui` never runs a
+  // lane. It configures the defaults, shows a wait, and cancels one.
+  "/api/usage": () => ["usage", "check"],
+  "/api/wait/lanes": () => ["wait", "lanes"],
+  "/api/wait/status": (q) => (q.slug ? ["wait", "status", String(q.slug)] : ["wait", "status"]),
   "/api/pact": () => ["pact", "status"],
   "/api/boundary": (q) => (q.path ? ["boundary", "status", String(q.path)] : ["boundary", "status"]),
   "/api/handoff": () => ["handoff", "surfaces"],
@@ -408,6 +416,13 @@ const WRITES = {
     if (b.name) argv.push("--preset", String(b.name));
     return argv;
   },
+  // v1.1.0 — the only two wait mutations this panel may make, and neither
+  // starts one. `unblock` restores a gate the user vetoed; `cancel` ends a wait
+  // already running. A BLOCK cannot be created here on purpose: it needs a
+  // reason typed in the moment, and a reason typed into a settings page days
+  // later is not the record that makes the risk demonstrably the user's.
+  "/api/wait/unblock": (b) => (b.slug ? ["wait", "unblock", String(b.slug)] : ["wait", "unblock"]),
+  "/api/wait/cancel": (b) => (b.slug ? ["wait", "cancel", String(b.slug)] : ["wait", "cancel"]),
   "/api/wiki/sync": () => ["wiki", "sync"],
   "/api/wiki/usage/rebuild": () => ["wiki", "usage", "--rebuild"],
   "/api/gotcha/prune": () => ["gotcha", "prune"],

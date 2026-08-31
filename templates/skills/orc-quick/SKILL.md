@@ -344,3 +344,8 @@ return (broken = failure) · never offer commit while tests are red · never und
 the user's files · write the doc before the offers · stage only the task's files
 · never write anything to GitHub · tell the user to run `/usage` (never run it
 yourself).
+
+## Waiting mid-run (`/orc-wait`)
+
+Canonical: `../_shared/wait.md`. **`a lane that waits without a hand-back` has broken this contract.**
+Checkpoint **entry** · safe point **after an entry closes**. `soft` FORCES that checkpoint and does NOT stop if the write fails; `hard` skips it and can lose an in-flight return. Never begin a wait between a dispatch and its validated return, or before the smoke gate has reported.

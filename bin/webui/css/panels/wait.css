@@ -1,0 +1,123 @@
+/* wait.css — the usage window and the wait.
+   Loaded from app.html in manifest order; every colour here is a token from
+   00-tokens.css, defined once on bare :root. */
+
+/* The window rows. A FLEX COLUMN, not a declared grid: the card's child count
+   changes with its state (unknown has no bars at all), and a card whose child
+   count changes must not declare its rows — that is the `.ex-tool` 250px
+   ellipse, and it hit whichever card had the shortest content. */
+.wait-windows {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 10px 0;
+}
+
+.wait-win {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.wait-win-label {
+  flex: 0 0 2.5rem;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+/* THE BAR IS A WIDTH INSIDE THE ROW. A proportional bar that shares the row
+   with a min-width floor ends up fighting it, and something gets clipped. */
+.wait-bar-wrap {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.wait-bar {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+
+.wait-bar-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 4px;
+}
+
+.wait-bar.low .wait-bar-fill {
+  background: var(--warn);
+}
+
+.wait-bar-text {
+  flex: 0 0 auto;
+  font-size: 12px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* The block. It is a standing decision with a reason, so it reads as a quoted
+   record rather than as an error. */
+.wait-block {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-left: 3px solid var(--warn);
+  background: var(--surface-2);
+  border-radius: 0 6px 6px 0;
+}
+
+.wait-block-head {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-dim);
+  margin-bottom: 4px;
+}
+
+/* VERBATIM, and it can be long — a reason nobody can read is not a record. */
+.wait-block-reason {
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+/* The lane table. Every row keeps its slot, including `none`. */
+.wait-lanes {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 10px 0;
+}
+
+.wait-lane {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.wait-lane:last-child {
+  border-bottom: 0;
+}
+
+.wait-lane-name {
+  flex: 0 0 10rem;
+  font-size: 12px;
+}
+
+.wait-lane-safe {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.wait-lane-detail {
+  flex: 1 1 100%;
+  margin: 0;
+}

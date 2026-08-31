@@ -1682,3 +1682,78 @@ test("extra demotion: both clocks, the counter at zero, and Promote needs a reas
   assert.match(modal, /promoteWatermark/, "a promote is a watermark, and it says so before the click");
   assert.match(modal, /"\/api\/extra\/promote"/, "it posts to the CLI, which is the authority");
 });
+
+// ── the Wait panel (v1.1.0 W6) ─────────────────────────────────────────────
+//
+// Same rule as every panel above: it RENDERS what the CLI COMPUTES. And one
+// rule of its own — `orc ui` never runs a lane, so this panel CANNOT start a
+// wait. It shows one, cancels one, and lifts a block.
+
+test("wait: the panel owns no state word, no mode and no lane name", () => {
+  const panel = panelJs("wait");
+  // The states, the modes and the checkpoint kinds all come from the CLI. A
+  // literal here would be a second idea of the mechanic.
+  for (const lit of ['"safe"', '"soft"', '"hard"', '"full"', '"docset"', '"snapshot"', '"/orc-mini"', '"/orc-doc"'])
+    assert.ok(!panel.includes(lit), `the panel must not own the literal ${lit}`);
+  // It reads the three CLI routes and derives nothing else.
+  assert.match(panel, /\/api\/usage/);
+  assert.match(panel, /\/api\/wait\/status/);
+  assert.match(panel, /\/api\/wait\/lanes/);
+});
+
+test("wait: the panel cannot START a wait or CREATE a block", () => {
+  const panel = panelJs("wait");
+  const api = fs.readFileSync(path.join(WEBUI, "api.js"), "utf8");
+  // The only two wait mutations that exist are the two that undo something.
+  assert.match(api, /"\/api\/wait\/unblock"/);
+  assert.match(api, /"\/api\/wait\/cancel"/);
+  assert.ok(!/"\/api\/wait\/start"/.test(api), "a wait lives in a Claude Code session, never here");
+  assert.ok(!/"\/api\/wait\/block"/.test(api), "a block needs a reason typed in the moment");
+  // And the panel offers the block as a COPY-ABLE COMMAND instead.
+  assert.match(panel, /laneCommand\("\/orc-wait block <reason>"/);
+});
+
+test("wait: `unknown` is a STATE with its own card, never an empty one", () => {
+  const panel = panelJs("wait");
+  assert.match(panel, /state === "unknown"/, "unknown must be rendered, not filtered");
+  // And the string table must carry the sentence that says it never stops a run.
+  for (const lang of ["en", "id"]) {
+    const table = TABLES[lang];
+    assert.ok(table["wait.gateOff"], `${lang} is missing wait.gateOff`);
+    assert.ok(table["wait.zeroTokens"], `${lang} is missing wait.zeroTokens`);
+  }
+});
+
+test("wait: a `none` lane row keeps its slot", () => {
+  const panel = panelJs("wait");
+  // No filter on modes_differ anywhere — a lane with nothing to checkpoint
+  // must not look like a lane that does not support a wait.
+  assert.ok(
+    !/filter\([^)]*modes_differ/.test(panel),
+    "a `none` row is an ANSWER and keeps its slot"
+  );
+  const fx = fixtureSrc("wait");
+  assert.match(fx, /modes_differ: false/, "the fixtures must carry the `none` state");
+  assert.match(fx, /state: "unknown"/, "and the unknown reading — you cannot design a state you cannot reach");
+});
+
+test("wait: the block's AGE is rendered, because there is no auto-expiry", () => {
+  const panel = panelJs("wait");
+  assert.match(panel, /block_age_minutes/);
+  for (const lang of ["en", "id"]) {
+    assert.ok(TABLES[lang]["wait.blockAge"], `${lang} is missing wait.blockAge`);
+    assert.ok(TABLES[lang]["wait.blockAgePlural"], `${lang} is missing wait.blockAgePlural`);
+  }
+});
+
+test("wait: the CSS is a FLEX column, not a declared grid", () => {
+  const css = panelCss("wait");
+  // A card whose child count changes with its state must not declare its rows
+  // — the `.ex-tool` 250px ellipse, one release earlier.
+  assert.ok(!/grid-template-rows/.test(css), "this card's child count changes with its state");
+  assert.match(css, /\.wait-windows\s*\{[^}]*flex-direction:\s*column/);
+  // Every colour is a token from 00-tokens.css.
+  const tokens = fs.readFileSync(path.join(WEBUI, "css", "00-tokens.css"), "utf8");
+  for (const m of css.matchAll(/var\((--[a-z0-9-]+)\)/g))
+    assert.ok(tokens.includes(m[1] + ":"), `${m[1]} is not defined in 00-tokens.css`);
+});

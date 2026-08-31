@@ -90,6 +90,45 @@ process.stdin.on("end", () => {
     }
   } catch (_) {}
 
+  // ── Usage bridge (v1.1.0 W4, fail-silent) ─────────────────────────────────
+  // The `rate_limits` block below reaches ONLY this process: the statusline
+  // renders a string and exits, so nothing else in ORC has ever been able to
+  // see how full the window is. A lane therefore started a wave with no idea it
+  // was about to run out, and the wave stopped in the middle.
+  //
+  // Persist the RAW numbers (never a computed word like `LOW` — a stored state
+  // is wrong one minute later; `orc usage check` computes it on read) plus
+  // `context_window`, which the wait needs to decide whether continuing
+  // in-session is cheaper than a fresh one. Same fail-silent contract as the
+  // session-model bridge above: any error is swallowed, and a reading older
+  // than its freshness window reads as `unknown`, never as `low`.
+  try {
+    const rl0 = d.rate_limits;
+    const cw0 = d.context_window;
+    if (rl0 || cw0) {
+      const fs = require("fs");
+      const path = require("path");
+      const projectDir =
+        (d.workspace && d.workspace.project_dir) || d.cwd || process.cwd();
+      const orcDir = path.join(projectDir, ".claude", "orc");
+      const win = (o) =>
+        o && typeof o.used_percentage === "number"
+          ? { used_percentage: o.used_percentage, resets_at: o.resets_at == null ? null : o.resets_at }
+          : null;
+      fs.mkdirSync(orcDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(orcDir, "usage.json"),
+        JSON.stringify({
+          five_hour: win(rl0 && rl0.five_hour),
+          seven_day: win(rl0 && rl0.seven_day),
+          context_used_percentage:
+            cw0 && typeof cw0.used_percentage === "number" ? cw0.used_percentage : null,
+          written_at: Date.now(),
+        }) + "\n"
+      );
+    }
+  } catch (_) {}
+
   // ── Subscription usage (Claude Code v2.1.80+) ──────────────────────────────
   // Official 5-hour + 7-day usage, surfaced by Claude Code straight from
   // Anthropic's API headers into this payload's `rate_limits`. Display-only,

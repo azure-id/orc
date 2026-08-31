@@ -55,6 +55,28 @@ never a fifth step before step 2.
   ledger yet, this is a first run"; `orc gotcha status` exit 1 is an empty
   ledger. Say what it means, not that it failed.
 
+## The usage line (v1.1.0) — printed whenever `usage_gate` is armed
+
+`usage_gate` resolves in step 1 like any other key. When it is anything but
+`off`, run `orc usage check --json` in step 3 and print ONE line:
+
+```
+usage:    5h 71% · wk 38% · gate at 10% left · warn
+usage:    unknown (no reading in the last 30 minutes) · a run is never stopped on this
+```
+
+Both spellings are mandatory in their state. A gate that prints only when it
+fires is a gate the user cannot tell from a gate that is not running — and the
+`unknown` line is what stops someone believing they are protected when Claude
+Code is sending no usage headers at all.
+
+**Exit 2 (`unknown`) NEVER stops a run.** Absent is not low.
+
+A `blocked` run (`orc wait status --json`) prints the block and its AGE here too,
+and again at every gate it suppresses. The rest of the mechanic — the modes, the
+hops, what `stop` and `wait` actually do — is `../wait.md`; this file only says
+that the line is printed and when.
+
 <!-- /orc:layer -->
 
 <!-- orc:layer full -->

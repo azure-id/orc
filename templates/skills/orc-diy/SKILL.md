@@ -127,3 +127,8 @@ command you are about to run, out loud, before running it.
 2. Fail closed: any gate ambiguity = STALE, with the reason shown.
 3. The fallback ask is ONE question with two outcomes (`/orc` or stop) —
    never a menu, never a silent fallback.
+
+## Waiting mid-run (`/orc-wait`)
+
+Canonical: `../_shared/wait.md`. **`a lane that waits without a hand-back` has broken this contract.**
+Checkpoint **full** · safe point **compiled phase edge**. `soft` FORCES that checkpoint and does NOT stop if the write fails; `hard` skips it and can lose an in-flight return. Never begin a wait between a dispatch and its validated return, or before the smoke gate has reported.

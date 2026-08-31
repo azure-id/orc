@@ -10,6 +10,76 @@ Format: `### v<version> — <title> _(<date>)_`.
 
 ---
 
+### v1.1.0 - the wait, and a window ORC can finally see _(2026-08-31)_
+
+**Still on the unscoped `orc` package?** Do this once first — your `orc upgrade`
+is the pre-v0.56.0 one and cannot install itself. Full detail in the CAUTION at
+the top of this file.
+
+- **Step 1 — release the command from the old package:** `npm uninstall -g orc`
+- **Step 2 — install the current package:** `npm i -g @azure-id/orc`
+- **Step 3 — re-apply it to your project:** `orc update`
+
+**Do not use `npm i -g -f`.** Full detail in v0.56.0 below.
+
+Until now the only thing in ORC that could see how full your 5-hour and 7-day
+windows were was the statusline, which drew a string and threw the numbers away.
+So a lane started a wave with no idea it was about to run out, and the wave
+stopped in the middle.
+
+- **`/orc-wait`** - a wall-clock pause that does not lose the run. Type
+  `/orc-wait 30` and ORC writes the hand-back, waits in detached hops, and picks
+  the run up where it stopped. **The waiting costs zero tokens** - a detached
+  command does it, and no model runs. It never dispatches an agent to wait,
+  because an agent would spend the very window you are waiting for.
+- **Three modes, and they differ in one thing only: how much finishes first.**
+  `safe` finishes the current wave and loses nothing. `soft` stops at the next
+  turn but **forces** the checkpoint - and if that write fails it does not stop.
+  `hard` stops at the next turn with the hand-back alone.
+- **`/orc-wait block <reason>`** - the veto. It tells ORC not to stop this run at
+  all. The reason is required, it is never written to your config, and it is
+  re-printed with its age at every gate it suppresses.
+- **`orc usage check`** - one reader, three answers: `0` ok, `1` low, `2`
+  unknown. **The worst window decides.** A weekly window at 96% is not a green
+  light because the 5-hour one is at 20%.
+- **`orc ui` gains a Wait panel** - your windows, a wait in progress, a standing
+  block and its age. It cannot start a wait: a wait lives in a Claude Code
+  session, and the panel never runs a lane.
+- **Every lane supports it, in one release.** 24 spines carry the contract, each
+  naming what it checkpoints and where its safe point is - generated from one
+  registry, so a spine cannot disagree with the CLI.
+
+> [!CAUTION]
+> **`/orc-wait ... hard` can lose work.** It stops at the first moment ORC can
+> act - it does not wait for the current wave, phase or gate to finish, and it
+> dispatches nothing, so it writes `RESUME.md` and skips the checkpoint. What
+> you can lose: a dispatch that was in flight (its file writes may still land,
+> but its return is never validated), the checkpoint, and that phase's trace
+> packet. Use `hard` when losing the current wave is cheaper than losing the
+> window; use `soft` when you can spare a few seconds; use no keyword at all
+> when you can wait for the wave to end.
+>
+> **A wait longer than one hour ends the prompt cache.** The first turn after it
+> re-reads your whole context at full input price, exactly when your quota is
+> lowest. When the context is large ORC stops and offers a fresh session
+> instead - **it cannot clear its own context**, only offer the swap.
+>
+> **`/orc-wait block` moves the risk to you, deliberately.** It suppresses every
+> computed stop for the rest of the run. If the window empties mid-wave, the
+> wave stops in the middle and you keep the pieces.
+>
+> **Nothing here is on by default.** `usage_gate` ships `off` and
+> `wait_default_mode` ships `ask`. A fresh install behaves exactly as it did
+> before this release. You choose every stop.
+
+**Five new config keys**, every default off or ask: `usage_gate` (`off`),
+`usage_stop_pct` (`10`), `wait_default_mode` (`ask`), `wait_hop_minutes` (`30`),
+`wait_max_hops` (`5`).
+
+**One honest limit:** a reading is only as fresh as the last statusline render,
+so during a long dispatch it goes stale. Anything older than 30 minutes reads as
+`unknown`, and **unknown never stops a run**.
+
 ### v1.0.0 - config, phases and calls stop being prose _(2026-08-30)_
 
 **Still on the unscoped `orc` package?** Do this once before anything else -

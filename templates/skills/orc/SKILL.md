@@ -236,3 +236,8 @@ a `trim` layer beside the `full` one.
 
 Phase 4 runs only in worktree mode. Phases 5.5, 6.5 and 6.7 are opt-in and
 their config key is resolved by `orc lane config orc --json`, never read raw.
+
+## Waiting mid-run (`/orc-wait`)
+
+Canonical: `../_shared/wait.md`. **`a lane that waits without a hand-back` has broken this contract.**
+Checkpoint **full** · safe point **wave or phase edge**. `soft` FORCES that checkpoint and does NOT stop if the write fails; `hard` skips it and can lose an in-flight return. Never begin a wait between a dispatch and its validated return, or before the smoke gate has reported.

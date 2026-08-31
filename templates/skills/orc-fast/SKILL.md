@@ -213,3 +213,8 @@ Never implement yourself (smoke gate = read-only build+test) · all artifacts
 in the run subfolder, never project root · validate the subagent return
 (malformed = failure) · never offer commit on a red build · report the
 dispatch + remind the user to run `/usage` (never invoke it programmatically).
+
+## Waiting mid-run (`/orc-wait`)
+
+Canonical: `../_shared/wait.md`. **`a lane that waits without a hand-back` has broken this contract.**
+Checkpoint **full** · safe point **after the executor returns**. `soft` FORCES that checkpoint and does NOT stop if the write fails; `hard` skips it and can lose an in-flight return. Never begin a wait between a dispatch and its validated return, or before the smoke gate has reported.

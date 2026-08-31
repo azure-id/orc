@@ -439,6 +439,65 @@ const CONTRACTS = [
     files: ["skills/_shared/extra-dispatch.md"],
   },
   {
+    // v1.1.0 W1 — THE WAIT. A wait is a stop, and every stop in ORC writes its
+    // hand-back before it ends, because the thing that resumes the run may not
+    // be this session: the wake-up message is a Claude Code behaviour ORC
+    // cannot promise. Registered as the eighth member of the family with
+    // `a lane that answers its own interview question`, `a lane that picks its
+    // own favourite`, `a lane that fixes what it judged`, `a lane that picks
+    // its own council`, `a lane that reads its own document`, `a lane that
+    // sends work off Claude without saying so` and `a lane that re-does work
+    // the worktree already contains`.
+    //
+    // W3 adds every lane spine in WAIT_LANE_SHAPES to `files` — the token plus
+    // a pointer, never a forked copy of the prose.
+    name: "a wait is a stop, and a stop writes its hand-back (v1.1.0)",
+    token: "a lane that waits without a hand-back",
+    files: [
+      "commands/orc-wait.md",
+      "skills/_shared/wait.md",
+      "skills/orc-wait/SKILL.md",
+      // v1.1.0 W3 — EVERY lane in WAIT_LANE_SHAPES, in one release. A wait
+      // whose behaviour depends on which lane you are in is worse than no wait,
+      // so a half-rolled-out contract was never an option. /orc-ultra and
+      // /orc-plan are covered by skills/orc/SKILL.md — neither has a spine.
+      "skills/orc/SKILL.md",
+      "skills/orc-aftermath/SKILL.md",
+      "skills/orc-analyze/SKILL.md",
+      "skills/orc-boundary/SKILL.md",
+      "skills/orc-brainstorm/SKILL.md",
+      "skills/orc-budget/SKILL.md",
+      "skills/orc-challenge/SKILL.md",
+      "skills/orc-claude/SKILL.md",
+      "skills/orc-diy/SKILL.md",
+      "skills/orc-doc/SKILL.md",
+      "skills/orc-explain/SKILL.md",
+      "skills/orc-export/SKILL.md",
+      "skills/orc-fast/SKILL.md",
+      "skills/orc-grill/SKILL.md",
+      "skills/orc-learn/SKILL.md",
+      "skills/orc-mini/SKILL.md",
+      "skills/orc-pact/SKILL.md",
+      "skills/orc-pattern/SKILL.md",
+      "skills/orc-poly/SKILL.md",
+      "skills/orc-quick/SKILL.md",
+      "skills/orc-retro/SKILL.md",
+      "skills/orc-route/SKILL.md",
+      "skills/orc-verify/SKILL.md",
+      "skills/orc-wiki/SKILL.md",
+    ],
+  },
+  {
+    // v1.1.0 W1 — the lane table is CODE, not only prose. Same shape and same
+    // reason as the `orc extra` row below it: `WAIT_LANE_SHAPES` in bin/cli.js
+    // is the machine-readable copy, and a golden test in test/cli/wait.test.js
+    // compares the two IN BOTH DIRECTIONS.
+    name: "the wait lane table is CODE, not only prose (v1.1.0)",
+    token: "Which lanes support a wait",
+    binFiles: ["bin/cli.js"],
+    files: ["skills/_shared/wait.md"],
+  },
+  {
     // v0.52.0 (D6) — WHICH LANES ROUTE FOREIGN. The table was prose in one
     // markdown file and nothing computed it, so the routing table could say
     // `[40,55) → opencode/big-pickle` without ever saying that `/orc-fast`
@@ -1295,6 +1354,9 @@ const CONTRACTS = [
       "commands/orc-brainstorm.md",
       "skills/_shared/README.md",
       "skills/_shared/lane-suspend.md",
+      // v1.1.0: wait.md contrasts itself with BOTH leaving shapes in one table.
+      // If a suspend's obligations change, that table is wrong.
+      "skills/_shared/wait.md",
       "skills/orc-brainstorm/SKILL.md",
       "skills/orc-challenge/references/intake.md",
       "skills/orc-doc/SKILL.md",
@@ -1355,6 +1417,10 @@ const CONTRACTS = [
       // {run_dir}/{slug}/, and is deleted with the run. A move of one is a move
       // of the other.
       "skills/_shared/extra-dispatch.md",
+      // v1.1.0 — a wait is a stop, so it owes the same hand-back. The whole
+      // contract token `a lane that waits without a hand-back` rests on this.
+      "skills/_shared/wait.md",
+      "skills/orc-wait/SKILL.md",
       "skills/orc-challenge/SKILL.md",
       "skills/orc-challenge/examples/tsd-two-iterations.md",
       "skills/orc-challenge/references/fix-brief.md",
@@ -1425,6 +1491,9 @@ const CONTRACTS = [
       // v0.45.0: lane-suspend.md defines itself AGAINST this contract — leaving
       // and returning vs leaving for good. Naming the sibling is the point.
       "skills/_shared/lane-suspend.md",
+      // v1.1.0: and wait.md against BOTH of them — a third shape, where nothing
+      // runs at all.
+      "skills/_shared/wait.md",
     ],
   },
   {
@@ -3506,6 +3575,11 @@ for (const b of BUDGETS) {
     "extra_resume_max",
     "extra_demote_after",
     "extra_demote_stale_min",
+    // v1.1.0 — operating keys of the WAIT itself. A lane runs `orc wait plan`
+    // and the CLI reads these two; no spine ever reads them, exactly as no
+    // spine reads `extra_timeout_s`. An empty lanes[] here is an ANSWER.
+    "wait_hop_minutes",
+    "wait_max_hops",
   ]);
   for (const e of metaEntries) {
     if (!e.lanes) {

@@ -57,6 +57,7 @@ const NAMESPACES = [
   "maintenance",
   "pact",
   "boundary",
+  "wait",
   "handoff",
   "challenge",
   "docs",

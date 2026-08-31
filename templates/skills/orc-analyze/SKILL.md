@@ -245,3 +245,8 @@ state words, and **an exit code is an ANSWER wherever that contract says so, not
 a failure**. A call the answer does not name is a call this lane does not make.
 Exit ≠ 0 from the catalogue itself → say the CLI is unavailable and name the
 command you are about to run, out loud, before running it.
+
+## Waiting mid-run (`/orc-wait`)
+
+Canonical: `../_shared/wait.md`. **`a lane that waits without a hand-back` has broken this contract.**
+Checkpoint **full** · safe point **after the analyst returns**. `soft` FORCES that checkpoint and does NOT stop if the write fails; `hard` skips it and can lose an in-flight return. Never begin a wait between a dispatch and its validated return, or before the smoke gate has reported.

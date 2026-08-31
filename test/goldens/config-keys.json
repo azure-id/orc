@@ -85,6 +85,31 @@
     "default": 6
   },
   {
+    "key": "usage_gate",
+    "tier": "common",
+    "default": "off"
+  },
+  {
+    "key": "usage_stop_pct",
+    "tier": "common",
+    "default": 10
+  },
+  {
+    "key": "wait_default_mode",
+    "tier": "common",
+    "default": "ask"
+  },
+  {
+    "key": "wait_hop_minutes",
+    "tier": "advanced",
+    "default": 30
+  },
+  {
+    "key": "wait_max_hops",
+    "tier": "advanced",
+    "default": 5
+  },
+  {
     "key": "extra_enabled",
     "tier": "common",
     "default": false

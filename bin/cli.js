@@ -105,6 +105,12 @@ function positionals() {
       i++; // skip the flag's value
       continue;
     }
+    // v1.1.0 W1 — `orc wait plan 5h --max-hops 3` must not read "3" as part of
+    // the spec: "5h 3" parses as 5h3m, so the wait silently gains three minutes.
+    if (a === "--hop" || a === "--max-hops") {
+      i++;
+      continue;
+    }
     // `orc extra` takes value-flags that can legally precede a positional
     // (`orc extra add --provider deepseek deepseek`), and a value swallowed
     // as a positional is a profile named after a provider id.
@@ -1161,6 +1167,10 @@ const CONFIG_FAMILIES = {
   retro: { contested: false, question: "where a retro is delivered" },
   paths: { contested: false, question: "where ORC writes on disk" },
   session: { contested: false, question: "what the main session itself runs as" },
+  // v1.1.0 — when ORC stops for wall-clock time, and how much it finishes
+  // first. EVERY default here is off or ask: nothing in this family may stop a
+  // run the user did not ask it to stop.
+  wait: { contested: false, question: "when a run stops to wait for quota, and how much it finishes first" },
 };
 
 // Ordered, tiered metadata. Common first, then advanced.
@@ -1198,6 +1208,17 @@ const CONFIG_META = [
   { key: "stacked_pr_loc", def: 1000, tier: "common", answers: [{ family: "pr", prio: "P2", mode: "replace" }], lanes: ["orc", "orc-pr-setup"], validate: vInt(1), options: [500, 800, 1000, 1500, 2000], desc: "Change LoC (additions+deletions, exclusions applied) >= this trips the stacked-PR gate — and is ALSO the per-layer LoC ceiling: a change that cannot fit in one layer's budget is what is worth stacking." },
   { key: "stacked_pr_files", def: 20, tier: "common", answers: [{ family: "pr", prio: "P2", mode: "replace" }], lanes: ["orc", "orc-pr-setup"], validate: vInt(1), options: [10, 15, 20, 30, 40], desc: "Changed-file count >= this trips the stacked-PR gate; also the per-layer hard max (soft target = half of it)." },
   { key: "stacked_pr_max_layers", def: 6, tier: "common", answers: [{ family: "pr", prio: "P2", mode: "replace" }], lanes: ["orc", "orc-pr-setup"], validate: vInt(2), options: [4, 5, 6, 8, 10], desc: "Soft cap on layers per stack: <= cap proceed, cap+1..cap+2 warn + explicit override, beyond → STOP (multiple stacks or a phased release). N layers = N full CI runs." },
+  // --- v1.1.0 — the usage gate and the wait ---------------------------------
+  // EVERY DEFAULT IS OFF. A fresh install behaves exactly as it did before this
+  // release: `usage_gate: off` means the automatic half does nothing at all,
+  // and `wait_default_mode: ask` means there is no stop behaviour the user did
+  // not choose. `/orc-wait` needs none of these keys to work — a typed wait is
+  // the user's decision and no config may pre-empt it.
+  { key: "usage_gate", def: "off", tier: "common", answers: [{ family: "wait", prio: "P2", mode: "replace" }], lanes: ["orc", "orc-diy", "orc-doc", "orc-fast", "orc-mini", "orc-quick", "orc-wiki"], validate: vEnum("off", "warn", "stop", "wait"), options: ["off", "warn", "stop", "wait"], desc: "What ORC does when the 5-hour or 7-day window is nearly full, checked before a wave: off = nothing (the default — ORC never stops you until you ask it to), warn = print the reading and continue, stop = write the hand-back and stop, wait = hand back, then wait out the reset in detached hops that cost zero tokens. A missing or stale reading is `unknown` and NEVER stops a run. `/orc-wait block <reason>` suppresses this for one run; a typed `/orc-wait` is never suppressed." },
+  { key: "usage_stop_pct", def: 10, tier: "common", answers: [{ family: "wait", prio: "P2", mode: "replace" }], gated_by: "usage_gate", lanes: ["orc", "orc-diy", "orc-doc", "orc-fast", "orc-mini", "orc-quick", "orc-wiki"], validate: vInt(1), options: [5, 10, 15, 20, 30], desc: "How much of a window must REMAIN for a wave to start. The WORST of the two windows decides — a 7-day window at 96% is not a green light because the 5-hour one is at 20%. Inert while usage_gate is off." },
+  { key: "wait_default_mode", def: "ask", tier: "common", answers: [{ family: "wait", prio: "P2", mode: "replace" }], lanes: ["orc", "orc-diy", "orc-doc", "orc-fast", "orc-mini", "orc-quick", "orc-wiki"], validate: vEnum("ask", "safe", "soft", "hard"), options: ["ask", "safe", "soft", "hard"], desc: "The mode a wait uses when you do not name one: ask = ONE question with the cost of each spelled out (the default — there is no stop behaviour you did not choose), safe = finish the current wave first and lose nothing, soft = stop at the next model turn but FORCE the checkpoint (and do not stop if that write fails), hard = stop at the next model turn with the hand-back only, which can lose an in-flight return. A mode named on the command line always wins." },
+  { key: "wait_hop_minutes", def: 30, tier: "advanced", answers: [{ family: "wait", prio: "P2", mode: "replace" }], lanes: [], validate: vInt(1), options: [5, 10, 15, 30], desc: "How long ONE detached hop waits before ORC re-reads the window. Short on purpose: each wake-up is session activity, and session activity is the only thing that makes the statusline write a fresh reading. One long sleep wakes into a reading as stale as the sleep was long." },
+  { key: "wait_max_hops", def: 5, tier: "advanced", answers: [{ family: "wait", prio: "P2", mode: "replace" }], lanes: [], validate: vInt(1), options: [1, 2, 3, 5, 8, 12], desc: "How many hops before ORC gives up and stops with the hand-back. A wrong reset time must cost you a bounded wait, never a session that never comes back." },
   // --- v0.50.0 — orc extra: dispatch ORC's WORKERS to non-Claude agents -----
   // Nine keys, and the count is the feature: the combinatorial part —
   // providers x models x bands — is a LEDGER with a CLI and a panel
@@ -2603,6 +2624,9 @@ const LANES = [
   { lane: "orc-retro", command: "orc-retro" },
   { lane: "orc-route", command: "orc-route" },
   { lane: "orc-verify", command: "orc-verify" },
+  // v1.1.0 W2 — command-entry only, and it opens no run of its own: it waits
+  // INSIDE whatever run is already in flight, or with none at all.
+  { lane: "orc-wait", command: "orc-wait" },
   { lane: "orc-wiki", command: "orc-wiki" },
 ];
 const LANE_NAMES = LANES.map((l) => l.lane);
@@ -2646,6 +2670,16 @@ const LANE_INERT = {
   ],
   "orc-doc": [
     { key: "opus5_only", reason: "both agents in this lane are already claude-opus-5, so this is a no-op — the lane is unaffected, not exempt" },
+  ],
+  // v1.1.0 W2 — this lane DISPATCHES NOTHING. A detached command does the
+  // waiting, so every family that answers "which model runs this" has no work
+  // to name here. Reporting an executor band as live for a lane that never
+  // executes is the mirror of a shadowed setting being silent: a setting that
+  // does nothing must never be reported as live.
+  "orc-wait": [
+    { family: "executor-band", reason: "this lane dispatches nothing — a detached command does the waiting, and no model runs during it" },
+    { family: "fixed-role-model", reason: "this lane dispatches nothing — there is no role here to pin a model to" },
+    { key: "opus5_only", reason: "this lane dispatches nothing, so there is no agent for a forcing mode to replace" },
   ],
 };
 
@@ -32847,6 +32881,12 @@ Usage:
     orc run reopen <slug|n>               put it back — it is waiting again  [--json]
   orc stats [--since YYYY-MM-DD] [--json] how much you actually use each lane and agent, counted
                                           from the trace filenames — no model, instant, free
+  orc wait                                the deterministic half of /orc-wait — a wait costs zero
+                                          tokens, because a detached command does it, not a model
+    orc wait lanes [--json]               which lanes support a wait, what each one checkpoints,
+                                          and where its safe point is
+    orc wait plan <spec> [--json]         turn 30 · 90m · 2h · until 18:41 · reset into hops
+      [--hop <min>] [--max-hops <n>]      (exit 0 planned / 1 unparsable / 2 no usage reading)
   orc onboarding [<topic>]                guided walkthrough (menu on a TTY; prints all when piped)
                                           topics: overview, install, first-run, lanes,
                                           config, knowledge, upgrade, troubleshooting
@@ -32899,6 +32939,592 @@ update vs upgrade:
            overrides survive either way.
 
 Skills installed: ${listSkillNames().join(", ")}`);
+}
+
+// ── `orc wait` (v1.1.0 W1) ──────────────────────────────────────────────────
+// The deterministic half of `/orc-wait`. The skill never does this arithmetic
+// itself: a pipeline the model recomputes is a pipeline that drifts (the
+// `orc doc next` / Flow-stepper rule). Canonical prose is
+// `templates/skills/_shared/wait.md`, and WAIT_LANE_SHAPES below is the
+// machine-readable copy of its `## Which lanes support a wait` table — a golden
+// test compares the two IN BOTH DIRECTIONS, the EXTRA_LANE_SHAPES precedent.
+//
+// `checkpoint: "none"` is an ANSWER, not a gap: a single-dispatch lane has
+// nothing to checkpoint, so all three modes collapse to the same plain wait
+// there and this table says so rather than omitting the row.
+const WAIT_LANE_SHAPES = [
+  { lane: "/orc", checkpoint: "full", safe_point: "wave or phase edge" },
+  { lane: "/orc-ultra", checkpoint: "full", safe_point: "wave or judge gate" },
+  { lane: "/orc-mini", checkpoint: "full", safe_point: "after the executor returns" },
+  { lane: "/orc-fast", checkpoint: "full", safe_point: "after the executor returns" },
+  { lane: "/orc-diy", checkpoint: "full", safe_point: "compiled phase edge" },
+  { lane: "/orc-doc", checkpoint: "full", safe_point: "wave edge" },
+  { lane: "/orc-wiki", checkpoint: "full", safe_point: "scan-task boundary" },
+  { lane: "/orc-analyze", checkpoint: "full", safe_point: "after the analyst returns" },
+  { lane: "/orc-poly", checkpoint: "docset", safe_point: "after a per-repo plan is written" },
+  { lane: "/orc-quick", checkpoint: "entry", safe_point: "after an entry closes" },
+  { lane: "/orc-challenge", checkpoint: "cycle", safe_point: "after a cycle records" },
+  { lane: "/orc-brainstorm", checkpoint: "snapshot", safe_point: "phase edge" },
+  { lane: "/orc-grill", checkpoint: "snapshot", safe_point: "round edge" },
+  { lane: "/orc-learn", checkpoint: "none", safe_point: "single dispatch" },
+  { lane: "/orc-plan", checkpoint: "none", safe_point: "single dispatch" },
+  { lane: "/orc-verify", checkpoint: "none", safe_point: "single dispatch" },
+  { lane: "/orc-pattern", checkpoint: "none", safe_point: "single dispatch" },
+  { lane: "/orc-claude", checkpoint: "none", safe_point: "single dispatch" },
+  { lane: "/orc-explain", checkpoint: "none", safe_point: "read-only, seconds long" },
+  { lane: "/orc-route", checkpoint: "none", safe_point: "read-only, seconds long" },
+  { lane: "/orc-boundary", checkpoint: "none", safe_point: "read-only, seconds long" },
+  { lane: "/orc-budget", checkpoint: "none", safe_point: "read-only, seconds long" },
+  { lane: "/orc-aftermath", checkpoint: "none", safe_point: "read-only, seconds long" },
+  { lane: "/orc-export", checkpoint: "none", safe_point: "read-only, seconds long" },
+  { lane: "/orc-retro", checkpoint: "none", safe_point: "read-only, seconds long" },
+  { lane: "/orc-pact", checkpoint: "none", safe_point: "read-only, seconds long" },
+];
+const WAIT_MODES = ["safe", "soft", "hard"];
+const WAIT_CHECKPOINTS = ["full", "docset", "entry", "cycle", "snapshot", "none"];
+const WAIT_HOP_DEFAULT_MIN = 30;
+const WAIT_MAX_HOPS_DEFAULT = 5;
+// The same freshness window the effort guard already uses for the session-model
+// bridge. A reading older than this is `unknown`, and unknown never blocks.
+const WAIT_BRIDGE_MAX_AGE_MS = 30 * 60 * 1000;
+
+// The reader half of the statusline usage bridge. The WRITER lands in W4; until
+// then every caller correctly reports `unknown`, which is the honest answer and
+// never a stop. Unknown is not zero.
+function readUsageBridge(claudeDir, now) {
+  const t = typeof now === "number" ? now : Date.now();
+  const file = path.join(claudeDir, "orc", "usage.json");
+  try {
+    const j = JSON.parse(fs.readFileSync(file, "utf8"));
+    if (!j || typeof j.written_at !== "number") return null;
+    if (t - j.written_at > WAIT_BRIDGE_MAX_AGE_MS) return null;
+    return j;
+  } catch (_) {
+    return null;
+  }
+}
+
+// `30` `90m` `2h` `2h30m` `until 18:41` `reset` → minutes.
+// Returns { ok, kind, minutes, ... } or { ok:false, reason }.
+function waitParseSpec(spec, now) {
+  const t = typeof now === "number" ? now : Date.now();
+  const s = String(spec == null ? "" : spec).trim().toLowerCase().replace(/\s+/g, " ");
+  if (!s) return { ok: false, reason: "empty", hint: "say how long. Example: orc wait plan 30" };
+  if (s === "reset") return { ok: true, kind: "reset", minutes: null };
+  let m = /^until (\d{1,2}):(\d{2})$/.exec(s);
+  if (m) {
+    const hh = Number(m[1]);
+    const mm = Number(m[2]);
+    if (hh > 23 || mm > 59)
+      return { ok: false, reason: "bad-time", hint: `${m[1]}:${m[2]} is not a time of day` };
+    const d = new Date(t);
+    const target = new Date(d.getFullYear(), d.getMonth(), d.getDate(), hh, mm, 0, 0);
+    // A time already past today means the next one — never a negative wait.
+    if (target.getTime() <= t) target.setDate(target.getDate() + 1);
+    return {
+      ok: true,
+      kind: "until",
+      minutes: Math.max(1, Math.round((target.getTime() - t) / 60000)),
+      until: target.toISOString(),
+    };
+  }
+  m = /^(\d+) ?h(?: ?(\d+) ?m?)?$/.exec(s);
+  if (m) {
+    const mins = Number(m[1]) * 60 + Number(m[2] || 0);
+    return mins > 0
+      ? { ok: true, kind: "duration", minutes: mins }
+      : { ok: false, reason: "zero", hint: "a wait of zero is not a wait" };
+  }
+  m = /^(\d+) ?m$/.exec(s) || /^(\d+)$/.exec(s);
+  if (m) {
+    const mins = Number(m[1]);
+    return mins > 0
+      ? { ok: true, kind: "duration", minutes: mins }
+      : { ok: false, reason: "zero", hint: "a wait of zero is not a wait" };
+  }
+  return {
+    ok: false,
+    reason: "unparsable",
+    hint: "use 30 · 90m · 2h · 2h30m · until 18:41 · reset",
+  };
+}
+
+// The LAST hop is the remainder, never a full hop. A wait that overshoots its
+// own reset time has waited for nothing.
+function waitHops(totalMinutes, hopMinutes, maxHops) {
+  const hop = Math.max(1, Number(hopMinutes) || WAIT_HOP_DEFAULT_MIN);
+  const cap = Math.max(1, Number(maxHops) || WAIT_MAX_HOPS_DEFAULT);
+  const hops = [];
+  let left = Math.max(0, Math.round(Number(totalMinutes) || 0));
+  while (left > 0 && hops.length < cap) {
+    const h = Math.min(hop, left);
+    hops.push(h);
+    left -= h;
+  }
+  return { hops, uncovered_minutes: left, truncated: left > 0 };
+}
+
+function waitPlanCmd(claudeDir) {
+  const asJson = wantsJson();
+  const pos = positionals().slice(2);
+  const spec = pos.join(" ");
+  const now = Date.now();
+  const cfg = resolvedConfig(claudeDir);
+  const hopMin = Number(flag("--hop")) || Number(cfg.wait_hop_minutes) || WAIT_HOP_DEFAULT_MIN;
+  const maxHops = Number(flag("--max-hops")) || Number(cfg.wait_max_hops) || WAIT_MAX_HOPS_DEFAULT;
+
+  const parsed = waitParseSpec(spec, now);
+  if (!parsed.ok) {
+    if (asJson) emitJson({ ok: false, reason: parsed.reason, spec, hint: parsed.hint }, 1);
+    console.error(ui.mark.err(`I cannot read "${spec}" as a wait.`));
+    console.error("  " + parsed.hint);
+    process.exit(1);
+  }
+
+  let minutes = parsed.minutes;
+  let source = parsed.kind;
+  let reading = null;
+  if (parsed.kind === "reset") {
+    reading = readUsageBridge(claudeDir, now);
+    const resets = reading && reading.five_hour && reading.five_hour.resets_at;
+    const at = resets == null ? NaN : Number(resets) < 1e12 ? Number(resets) * 1000 : Number(resets);
+    if (!Number.isFinite(at) || at <= now) {
+      const why = reading
+        ? "the reading has no usable reset time"
+        : "there is no reading in the last 30 minutes";
+      if (asJson)
+        emitJson(
+          { ok: false, reason: "no-reading", spec, hint: `${why}. Type a time instead. Example: orc wait plan 45` },
+          2
+        );
+      console.error(ui.mark.err("I cannot read the reset time."));
+      console.error("  " + why + ".");
+      console.error("  Type a time instead. Example: " + ui.color.cyan("orc wait plan 45"));
+      process.exit(2);
+    }
+    minutes = Math.max(1, Math.round((at - now) / 60000));
+    source = "reset";
+  }
+
+  const h = waitHops(minutes, hopMin, maxHops);
+  const endsAt = new Date(now + minutes * 60000);
+  const out = {
+    ok: true,
+    spec,
+    source,
+    minutes,
+    hop_minutes: hopMin,
+    max_hops: maxHops,
+    hops: h.hops,
+    hop_count: h.hops.length,
+    uncovered_minutes: h.uncovered_minutes,
+    truncated: h.truncated,
+    ends_at: endsAt.toISOString(),
+    // A wait longer than the prompt cache TTL re-reads the whole context on the
+    // next turn, at full input price. The caller must be able to say so.
+    crosses_cache_ttl: minutes > 60,
+    modes: WAIT_MODES,
+    note: "A detached command does the waiting. No model runs, and no tokens are spent.",
+  };
+  if (asJson) emitJson(out, 0);
+
+  console.log(ui.header("ORC · wait — the plan"));
+  console.log("");
+  console.log(`  ${ui.color.cyan("length")}    ${minutes} min  (from ${source})`);
+  console.log(`  ${ui.color.cyan("ends at")}   ${endsAt.toTimeString().slice(0, 5)}`);
+  console.log(`  ${ui.color.cyan("hops")}      ${h.hops.join(" + ")}  (${h.hops.length} of ${maxHops} max)`);
+  if (h.truncated)
+    console.log(
+      ui.mark.warn(`  ${h.uncovered_minutes} min are NOT covered — wait_max_hops is ${maxHops}.`)
+    );
+  if (out.crosses_cache_ttl)
+    console.log(
+      ui.color.gray(
+        "  Longer than one hour: the prompt cache expires, so the next turn re-reads\n" +
+          "  your whole context at full input price. A fresh session is cheaper."
+      )
+    );
+  console.log(ui.color.gray("\n  " + out.note + "\n"));
+}
+
+function waitLanesCmd() {
+  const asJson = wantsJson();
+  const lanes = WAIT_LANE_SHAPES.map((row) => {
+    const plain = row.checkpoint === "none";
+    return {
+      lane: row.lane,
+      checkpoint: row.checkpoint,
+      safe_point: row.safe_point,
+      // On a lane with nothing to checkpoint the three modes ARE the same
+      // thing. Saying so is the point; pretending to a distinction is not.
+      modes: WAIT_MODES,
+      modes_differ: !plain,
+      detail: plain
+        ? "nothing to checkpoint — one dispatch, or a read. safe, soft and hard behave identically here."
+        : `soft forces the ${row.checkpoint} checkpoint before it stops; hard writes RESUME.md only and can lose an in-flight return.`,
+    };
+  });
+  if (asJson)
+    emitJson(
+      {
+        ok: true,
+        modes: WAIT_MODES,
+        checkpoints: WAIT_CHECKPOINTS,
+        lanes,
+        note: "A lane not in this list does not support a wait.",
+      },
+      0
+    );
+
+  console.log(ui.header("ORC · wait — which lanes support a wait, and what they save"));
+  console.log("");
+  for (const l of lanes) {
+    // Pad the PLAIN text, then colour it — an ANSI escape has width 0 on screen
+    // and width 5+ to padEnd, so colouring first mis-aligns every row.
+    const cp = l.checkpoint.padEnd(9);
+    const mark = l.modes_differ ? ui.color.cyan(cp) : ui.color.gray(cp);
+    console.log(`  ${ui.color.cyan(l.lane.padEnd(17))} ${mark}  ${l.safe_point}`);
+    console.log("      " + ui.color.gray(l.detail));
+  }
+  console.log(ui.color.gray("\n  A lane not listed here does not support a wait.\n"));
+}
+
+// ── `orc usage check` (v1.1.0 W4) ───────────────────────────────────────────
+// THE one reader of the statusline's usage bridge. No skill reads that file, so
+// the threshold and the freshness rule exist in exactly one place.
+//
+// Exit codes are the contract, and the third one carries the whole design:
+//   0 ok       — enough quota. Continue.
+//   1 low      — at or below usage_stop_pct on the WORST window.
+//   2 unknown  — no reading, or one older than the freshness window.
+//
+// UNKNOWN IS NOT LOW, and it never stops a run. An absent number is an absent
+// number: older Claude Code, no headers, or simply no statusline render since
+// the last dispatch. A gate that blocks on a missing reading is a gate people
+// switch off.
+function usageResetMs(v) {
+  if (v == null) return NaN;
+  const n = Number(v);
+  if (Number.isFinite(n)) return n < 1e12 ? n * 1000 : n;
+  const p = Date.parse(String(v));
+  return Number.isFinite(p) ? p : NaN;
+}
+
+function usageCheckCmd(claudeDir) {
+  const asJson = wantsJson();
+  const now = Date.now();
+  const cfg = resolvedConfig(claudeDir);
+  const stopPct = Math.min(50, Math.max(1, Number(cfg.usage_stop_pct) || 10));
+  const gate = String(cfg.usage_gate || "off");
+  const j = readUsageBridge(claudeDir, now);
+
+  const view = (o, label) => {
+    if (!o || typeof o.used_percentage !== "number") return null;
+    const used = Math.round(o.used_percentage);
+    const at = usageResetMs(o.resets_at);
+    const mins = Number.isFinite(at) && at > now ? Math.round((at - now) / 60000) : null;
+    return {
+      window: label,
+      used_percentage: used,
+      remaining_percentage: Math.max(0, 100 - used),
+      resets_at: Number.isFinite(at) ? new Date(at).toISOString() : null,
+      resets_in_minutes: mins,
+      low: 100 - used <= stopPct,
+    };
+  };
+
+  if (!j) {
+    const out = {
+      ok: true,
+      state: "unknown",
+      reason: "no reading in the last 30 minutes",
+      five_hour: null,
+      seven_day: null,
+      context: null,
+      stop_pct: stopPct,
+      gate,
+      // Say what unknown MEANS, every time. Silence here is what makes a user
+      // believe the gate is watching when it is not.
+      note: "unknown is not low — a run is never stopped on a missing reading. Claude Code before v2.1.80 sends no usage headers.",
+    };
+    if (asJson) emitJson(out, 2);
+    console.log(ui.color.gray("usage: unknown (no reading in the last 30 minutes) · a run is never stopped on this"));
+    process.exit(2);
+  }
+
+  const fh = view(j.five_hour, "5h");
+  const sd = view(j.seven_day, "wk");
+  const windows = [fh, sd].filter(Boolean);
+  if (!windows.length) {
+    const out = { ok: true, state: "unknown", reason: "the reading carries no window", stop_pct: stopPct, gate };
+    if (asJson) emitJson(out, 2);
+    console.log(ui.color.gray("usage: unknown (the reading carries no window)"));
+    process.exit(2);
+  }
+
+  // THE WORST WINDOW DECIDES. A 7-day window at 96% with a 5-hour window at 20%
+  // is not a green light: the run continues and dies twenty minutes later.
+  const worst = windows.reduce((a, b) => (a.remaining_percentage <= b.remaining_percentage ? a : b));
+  const low = windows.some((w) => w.low);
+  const out = {
+    ok: true,
+    state: low ? "low" : "ok",
+    five_hour: fh,
+    seven_day: sd,
+    worst: worst.window,
+    context: typeof j.context_used_percentage === "number" ? j.context_used_percentage : null,
+    stop_pct: stopPct,
+    gate,
+    reading_age_minutes: Math.round((now - j.written_at) / 60000),
+    note: "read BEFORE a wave; the wave then spends tokens, so this is a reading and not a promise.",
+  };
+  if (asJson) emitJson(out, low ? 1 : 0);
+
+  const fmt = (w) =>
+    w ? `${w.window} ${w.used_percentage}%${w.resets_in_minutes != null ? ` (${w.resets_in_minutes}m)` : ""}` : null;
+  const line = [fmt(fh), fmt(sd)].filter(Boolean).join(" · ");
+  console.log((low ? ui.mark.warn("usage: " + line) : ui.color.gray("usage: " + line)) +
+    ui.color.gray(` · gate at ${stopPct}% left · ${gate}`));
+  process.exit(low ? 1 : 0);
+}
+
+// ── the wait's run state (v1.1.0 W2) ────────────────────────────────────────
+// ONE file, ONE writer — this CLI. The skill never writes it, so it can never
+// be behind the disk: the v0.49.5 hand-back lesson, and the fifth time this
+// repo has applied it (v0.32.0 narration · v0.53.2 spend log · v0.54.0 journal
+// · v1.0.0 W5 demotion).
+//
+// It lives BESIDE RESUME.md in {run_dir}/{slug}/, so it is deleted with the run
+// and can never outlive the decision it records.
+const WAIT_STATE_FILE = "wait.json";
+
+function waitStatePath(claudeDir, slug) {
+  return path.join(resolveRunDir(claudeDir), slug, WAIT_STATE_FILE);
+}
+
+function readWaitState(claudeDir, slug) {
+  try {
+    const j = JSON.parse(fs.readFileSync(waitStatePath(claudeDir, slug), "utf8"));
+    return j && typeof j === "object" ? j : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function writeWaitState(claudeDir, slug, patch) {
+  const file = waitStatePath(claudeDir, slug);
+  const cur = readWaitState(claudeDir, slug) || { v: 1, slug };
+  const next = { ...cur, ...patch, v: 1, slug };
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, JSON.stringify(next, null, 2) + "\n");
+  return next;
+}
+
+// The run this command is about. An explicit slug always wins; otherwise the
+// trace pointer names the run in flight. NEVER guess from "the newest folder" —
+// a wrong run is worse than no run, because the block would silently protect
+// something the user is not looking at.
+function waitResolveRun(claudeDir, slug) {
+  if (slug) {
+    const dir = path.join(resolveRunDir(claudeDir), slug);
+    return fs.existsSync(dir) ? { slug, dir } : null;
+  }
+  const cur = extraCurrentRun(claudeDir);
+  if (!cur || !cur.slug) return null;
+  const dir = path.join(resolveRunDir(claudeDir), cur.slug);
+  return fs.existsSync(dir) ? { slug: cur.slug, dir } : null;
+}
+
+// CLI-COMPOSED AND CLI-WRITTEN. A wait that leaves no line cannot be counted,
+// and a block that leaves no line hides that a run continued through a gate on
+// the user's authority. Best effort ALWAYS: a trace that cannot be written must
+// never take the command down with it.
+function waitTraceLine(claudeDir, verb, tail) {
+  try {
+    const cur = extraCurrentRun(claudeDir);
+    if (!cur || !cur.trace) return null;
+    const dir = resolveLogDir(claudeDir);
+    const d = new Date();
+    const p = (n, w) => String(n).padStart(w || 2, "0");
+    const stamp =
+      `${p(d.getDate())}${p(d.getMonth() + 1)}${p(d.getFullYear() % 100)} ` +
+      `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}.${p(d.getMilliseconds(), 3)}`;
+    const line = `[${stamp}] ${"cli".padEnd(8)} ${verb}${tail ? ` :: ${tail}` : ""}\n`;
+    fs.appendFileSync(path.join(dir, cur.trace), line);
+    return line.trimEnd();
+  } catch (_) {
+    return null;
+  }
+}
+
+function waitBlockCmd(claudeDir, unblock) {
+  const asJson = wantsJson();
+  const slug = positionals()[2];
+  const reason = typeof flag("--reason") === "string" ? String(flag("--reason")).trim() : "";
+  const run = waitResolveRun(claudeDir, slug);
+
+  if (!run) {
+    const hint = slug
+      ? `no run named "${slug}" under ${resolveRunDir(claudeDir)}`
+      : "no run is in flight, and no slug was given";
+    if (asJson) emitJson({ ok: false, reason: "no-run", slug: slug || null, hint }, 2);
+    console.error(ui.mark.err("I cannot find the run this is about."));
+    console.error("  " + hint + ".");
+    process.exit(2);
+  }
+
+  if (unblock) {
+    const cur = readWaitState(claudeDir, run.slug);
+    if (!cur || !cur.blocked_at) {
+      if (asJson) emitJson({ ok: false, reason: "not-blocked", slug: run.slug }, 1);
+      console.error(ui.mark.warn(`${run.slug} is not blocked.`));
+      process.exit(1);
+    }
+    const st = writeWaitState(claudeDir, run.slug, {
+      blocked_at: null,
+      block_reason: null,
+      unblocked_at: new Date().toISOString(),
+    });
+    const trace = waitTraceLine(claudeDir, "WAIT", "unblock");
+    if (asJson) emitJson({ ok: true, slug: run.slug, blocked: false, trace_line: trace }, 0);
+    console.log(ui.mark.ok(`${run.slug}: the gate is live again.`));
+    return;
+  }
+
+  // THE REASON IS REQUIRED. A recorded reason is what makes the risk
+  // demonstrably the user's — the same rule the run-close and doc-ship writers
+  // already follow. Refuse BY NAME rather than storing an empty string.
+  if (!reason) {
+    if (asJson)
+      emitJson(
+        {
+          ok: false,
+          reason: "no-reason",
+          slug: run.slug,
+          hint: 'a block records why you accepted the risk. Pass --reason "<why>".',
+        },
+        1
+      );
+    console.error(ui.mark.err("A block needs a reason."));
+    console.error('  orc wait block ' + run.slug + ' --reason "window resets in 5m, task needs 10"');
+    process.exit(1);
+  }
+
+  const st = writeWaitState(claudeDir, run.slug, {
+    blocked_at: new Date().toISOString(),
+    block_reason: reason,
+    unblocked_at: null,
+  });
+  const trace = waitTraceLine(claudeDir, "WAIT", `block reason="${reason}" by=user`);
+  if (asJson)
+    emitJson(
+      { ok: true, slug: run.slug, blocked: true, blocked_at: st.blocked_at, reason, trace_line: trace },
+      0
+    );
+  console.log(ui.mark.warn(`${run.slug}: computed waits are blocked for the rest of this run.`));
+  console.log("  reason  " + reason);
+  console.log(
+    ui.color.gray(
+      "  The risk is yours: if the window empties mid-wave, the wave stops in the\n" +
+        "  middle. A typed `/orc-wait` still waits. `orc wait unblock` restores the gate."
+    )
+  );
+}
+
+function waitCancelCmd(claudeDir) {
+  const asJson = wantsJson();
+  const run = waitResolveRun(claudeDir, positionals()[2]);
+  if (!run) {
+    if (asJson) emitJson({ ok: false, reason: "no-run", hint: "no run is in flight" }, 1);
+    console.error(ui.mark.warn("No run is in flight, so there is no wait to cancel."));
+    process.exit(1);
+  }
+  const cur = readWaitState(claudeDir, run.slug);
+  if (!cur || !cur.wait_started_at || cur.wait_ended_at) {
+    if (asJson) emitJson({ ok: false, reason: "no-wait", slug: run.slug }, 1);
+    console.error(ui.mark.warn(`${run.slug} has no wait running.`));
+    process.exit(1);
+  }
+  writeWaitState(claudeDir, run.slug, { cancel_requested_at: new Date().toISOString() });
+  if (asJson) emitJson({ ok: true, slug: run.slug, cancelled: true }, 0);
+  console.log(ui.mark.ok(`${run.slug}: the wait stops at the next hop.`));
+  console.log(ui.color.gray("  The hand-back is already on disk, so nothing is lost either way."));
+}
+
+function waitStatusCmd(claudeDir) {
+  const asJson = wantsJson();
+  const run = waitResolveRun(claudeDir, positionals()[2]);
+  if (!run) {
+    // An empty result is an ANSWER, so it still returns its object.
+    if (asJson)
+      emitJson({ ok: true, run: null, waiting: false, blocked: false, note: "no run is in flight" }, 1);
+    console.log(ui.color.gray("No run is in flight."));
+    process.exit(1);
+  }
+  const st = readWaitState(claudeDir, run.slug) || {};
+  const blocked = !!st.blocked_at;
+  const waiting = !!st.wait_started_at && !st.wait_ended_at;
+  const ageMin = blocked ? Math.round((Date.now() - Date.parse(st.blocked_at)) / 60000) : null;
+  const out = {
+    ok: true,
+    run: run.slug,
+    waiting,
+    mode: st.mode || null,
+    hop: st.hop || null,
+    hops_done: st.hops_done || 0,
+    hops_planned: st.hops_planned || null,
+    ends_at: st.ends_at || null,
+    cancel_requested: !!st.cancel_requested_at,
+    blocked,
+    block_reason: blocked ? st.block_reason : null,
+    blocked_at: st.blocked_at || null,
+    // The AGE is what keeps an old block from applying invisibly — there is no
+    // auto-expiry, because ORC does not decide a user's reason stopped being true.
+    block_age_minutes: ageMin,
+  };
+  if (asJson) emitJson(out, 0);
+
+  console.log(ui.header("ORC · wait — " + run.slug));
+  console.log("");
+  console.log(
+    `  ${ui.color.cyan("wait")}      ` +
+      (waiting
+        ? `${st.mode || "?"} · hop ${out.hops_done} of ${out.hops_planned || "?"} · ends ${out.ends_at || "?"}`
+        : ui.color.gray("none"))
+  );
+  console.log(
+    `  ${ui.color.cyan("block")}     ` +
+      (blocked ? ui.mark.warn(`${ageMin}m ago — "${st.block_reason}"`) : ui.color.gray("not blocked"))
+  );
+  if (out.cancel_requested) console.log(ui.color.gray("  a cancel is pending — the wait ends at the next hop"));
+  console.log("");
+}
+
+function waitCmd() {
+  const claudeDir = resolveClaudeDir();
+  const sub = positionals()[1];
+  switch (sub) {
+    case "lanes":
+      return waitLanesCmd();
+    case "plan":
+      return waitPlanCmd(claudeDir);
+    case "status":
+      return waitStatusCmd(claudeDir);
+    case "block":
+      return waitBlockCmd(claudeDir, false);
+    case "unblock":
+      return waitBlockCmd(claudeDir, true);
+    case "cancel":
+      return waitCancelCmd(claudeDir);
+    default:
+      console.error(`usage: orc wait lanes [--json]
+       orc wait plan <30|90m|2h|until 18:41|reset> [--hop <min>] [--max-hops <n>] [--json]
+       orc wait status [<slug>] [--json]
+       orc wait block <slug> --reason "<why>" [--json]
+       orc wait unblock [<slug>] [--json]
+       orc wait cancel [<slug>] [--json]`);
+      process.exit(1);
+  }
 }
 
 // ── the `--json` crash envelope (v0.49.2) ───────────────────────────────────
@@ -33006,6 +33632,19 @@ function jsonCrash(err) {
     // route writers, which are extra.json's only writers.
     case "extra":
       await extra();
+      break;
+    // v1.1.0 W1 — the deterministic half of `/orc-wait`. The skill asks; it
+    // never computes hops or the lane table itself.
+    case "wait":
+      waitCmd();
+      break;
+    // v1.1.0 W4 — the ONE reader of the statusline's usage bridge.
+    case "usage":
+      if (positionals()[1] === "check") usageCheckCmd(resolveClaudeDir());
+      else {
+        console.error("usage: orc usage check [--json]");
+        process.exit(1);
+      }
       break;
     case "ui":
       uiCmd();

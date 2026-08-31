@@ -242,3 +242,8 @@ which lands at the project root by design) · validate every
 subagent return (malformed = failure) · report the dispatch log + remind the
 user to run `/usage` (never invoke it programmatically) · **never offer commit
 on a red build** (enforced by Phase M).
+
+## Waiting mid-run (`/orc-wait`)
+
+Canonical: `../_shared/wait.md`. **`a lane that waits without a hand-back` has broken this contract.**
+Checkpoint **full** · safe point **after the executor returns**. `soft` FORCES that checkpoint and does NOT stop if the write fails; `hard` skips it and can lose an in-flight return. Never begin a wait between a dispatch and its validated return, or before the smoke gate has reported.
