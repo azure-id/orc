@@ -282,6 +282,10 @@ suspend.
 **`orc-doc-writer-opus-5-med`** BY NAME, one per agent slice; **each agent owns
 exactly ONE file** — `sections/<id>.md`, or `sections/<id>/<NN>-<sub>.md` for a
 section stored as sub-parts. Validate every return per
+**`orc run inflight` before ANY re-dispatch** (0 clear · 1 in-flight · 2 unknown).
+A Task error does not kill the agent behind it, and exit 2 REFUSES by default —
+`a lane that re-dispatches over a live attempt` has broken the contract. Canonical: `../_shared/return-validation.md` §0.
+
 `../_shared/return-validation.md` — `actual_model` and `actual_effort`, quoted,
 never guessed. Slice shape and the whole protocol: `references/chunking.md`.
 

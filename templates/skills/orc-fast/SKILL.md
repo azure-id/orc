@@ -132,6 +132,8 @@ honesty, `pattern_version` + `invariants_checked` attestation, `actual_model`
 / `actual_effort` downgrade check (emit the `VERIFY` trace line), and §6's worktree delta (`git status --short` before/after; a path changed outside `declared_files` is a violation whatever the return said). Malformed
 return = failure (one re-dispatch, then fallback offer).
 
+**Before any re-dispatch, run `orc run inflight`** (0 clear · 1 in-flight · 2 unknown). A Task error does not kill the agent behind it, and exit 2 REFUSES by default — `a lane that re-dispatches over a live attempt` has broken the contract. Canonical: `../_shared/return-validation.md`.
+
 ## Phase F3 — Smoke gate (build + test; blocks ship on red)
 
 Run the gate per `../_shared/smoke-gate.md`, sourcing commands **from

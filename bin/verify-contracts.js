@@ -385,6 +385,43 @@ const CONTRACTS = [
     files: ["skills/_shared/extra-dispatch.md"],
   },
   {
+    // v1.2.0. A Task error does not kill the subagent behind it. Every lane's
+    // retry rule assumed it did, and one graded /orc-quick entry put THREE
+    // opus-5-low executors on one task for 266 minutes combined. The guard is
+    // only real if every lane that re-dispatches carries the same sentence and
+    // the CLI keeps the command it names.
+    name: "a re-dispatch is refused over a live attempt (v1.2.0)",
+    token: "a lane that re-dispatches over a live attempt",
+    binFiles: ["bin/cli.js"],
+    files: [
+      "skills/_shared/return-validation.md",
+      "skills/_shared/phases/execution.md",
+      "skills/orc/SKILL.md",
+      "skills/orc-doc/SKILL.md",
+      "skills/orc-wiki/SKILL.md",
+      "skills/orc-quick/SKILL.md",
+      "skills/orc-mini/SKILL.md",
+      "skills/orc-fast/SKILL.md",
+    ],
+  },
+  {
+    // The command the contract above names. A rename on either side silently
+    // turns the guard into prose nobody can run.
+    name: "the in-flight read is ONE command (v1.2.0)",
+    token: "orc run inflight",
+    binFiles: ["bin/cli.js"],
+    files: [
+      "skills/_shared/return-validation.md",
+      "skills/_shared/phases/execution.md",
+      "skills/orc/SKILL.md",
+      "skills/orc-doc/SKILL.md",
+      "skills/orc-wiki/SKILL.md",
+      "skills/orc-quick/SKILL.md",
+      "skills/orc-mini/SKILL.md",
+      "skills/orc-fast/SKILL.md",
+    ],
+  },
+  {
     // The field a resumed return owes. Absent on a resume slice is MALFORMED,
     // and `restarted` on a non-empty preexisting[] is a finding — both are
     // useless if the two copies of the field name drift.
@@ -3343,7 +3380,7 @@ const BUDGETS = [
   // 4 of 31 lanes. The shrinking in this release happens by moving prose to
   // `_shared/phases/` (W11–W13) or to a lane's own `references/phases/`, which
   // is what orc-wiki did this wave: 352 → 172.
-  { file: "skills/orc-mini/SKILL.md", maxLines: 250 },
+  { file: "skills/orc-mini/SKILL.md", maxLines: 253 },
   // v0.39.0: deliberate raises 195→201 / 179→182 — the analyst gains hard rules
   // 2b (a source it did not author is FOREIGN input) and 4a (the read ladder);
   // fast gains the ladder as a slice line. Both are hard rules by nature: they

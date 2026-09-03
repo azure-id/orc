@@ -81,6 +81,10 @@ trigger points; emit `GATE` trace lines.
 
 ## Dispatch via named agents (not prose)
 
+**`orc run inflight` before ANY re-dispatch** (0 clear · 1 in-flight · 2 unknown).
+A Task error does not kill the agent behind it, and exit 2 REFUSES by default —
+`a lane that re-dispatches over a live attempt` has broken the contract. Canonical: `_shared/return-validation.md` §0.
+
 Workers are model-pinned SUBAGENTS in `.claude/agents/` — the model is enforced,
 not requested in prose. Score every task from the planner-emitted `facets` via
 the fixed arithmetic formula and SHOW the table with the facet vector + the

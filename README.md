@@ -7,14 +7,14 @@
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
 ![npm](https://img.shields.io/npm/v/%40azure-id%2Forc?style=for-the-badge&color=cb3837&logo=npm)
-![Version](https://img.shields.io/badge/version-1.0.0-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-1.2.0-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
 ![Dependencies](https://img.shields.io/badge/dependencies-zero-lightgrey.svg?style=for-the-badge)
 ![GitHub stars](https://img.shields.io/github/stars/azure-id/orc?style=for-the-badge&color=yellow)
 
-**Latest: v1.0.0** · updated 2026-08-30 · [full changelog](CHANGELOG.md)
+**Latest: v1.2.0** · updated 2026-09-04 · [full changelog](CHANGELOG.md)
 
 **On npm: [`@azure-id/orc`](https://www.npmjs.com/package/@azure-id/orc)** — `npm i -g @azure-id/orc`
 
@@ -575,7 +575,7 @@ a current audit: [EVAL-REPORT.md](EVAL-REPORT.md).
 **Full history: [CHANGELOG.md](CHANGELOG.md)** — or `orc changelog`, which prints
 only what is newer than the version you have.
 
-### v1.1.0 - the wait, and a window ORC can finally see _(2026-08-31)_
+### v1.2.0 - a retry that cloned the agent, and a window you can watch empty _(2026-09-04)_
 
 **Still on the unscoped `orc` package?** Do this once first — your `orc upgrade`
 is the pre-v0.56.0 one and cannot install itself. Full detail in the CAUTION at
@@ -587,99 +587,86 @@ the top of this file.
 
 **Do not use `npm i -g -f`.** Full detail in v0.56.0 below.
 
-Until now the only thing in ORC that could see how full your 5-hour and 7-day
-windows were was the statusline, which drew a string and threw the numbers away.
-So a lane started a wave with no idea it was about to run out, and the wave
-stopped in the middle.
+A Task error does not kill the subagent behind it. Every lane's retry rule
+assumed it did. One graded `/orc-quick` entry put **three** `orc-executor-opus-5-low`
+agents on the same task — 50m19s, 115m22s and 100m53s, **266 minutes of Opus 5
+for one authorised dispatch**, all editing the same files inside a 2h04m window.
+The trace hook had recorded every one of them. Nothing had ever read it.
 
-- **`/orc-wait`** - a wall-clock pause that does not lose the run. Type
-  `/orc-wait 30` and ORC writes the hand-back, waits in detached hops, and picks
-  the run up where it stopped. **The waiting costs zero tokens** - a detached
-  command does it, and no model runs. It never dispatches an agent to wait,
-  because an agent would spend the very window you are waiting for.
-- **Three modes, and they differ in one thing only: how much finishes first.**
-  `safe` finishes the current wave and loses nothing. `soft` stops at the next
-  turn but **forces** the checkpoint - and if that write fails it does not stop.
-  `hard` stops at the next turn with the hand-back alone.
-- **`/orc-wait block <reason>`** - the veto. It tells ORC not to stop this run at
-  all. The reason is required, it is never written to your config, and it is
-  re-printed with its age at every gate it suppresses.
-- **`orc usage check`** - one reader, three answers: `0` ok, `1` low, `2`
-  unknown. **The worst window decides.** A weekly window at 96% is not a green
-  light because the 5-hour one is at 20%.
-- **`orc ui` gains a Wait panel** - your windows, a wait in progress, a standing
-  block and its age. It cannot start a wait: a wait lives in a Claude Code
-  session, and the panel never runs a lane.
-- **Every lane supports it, in one release.** 24 spines carry the contract, each
-  naming what it checkpoints and where its safe point is - generated from one
-  registry, so a spine cannot disagree with the CLI.
+- **`orc run inflight`** — the one reader of the pending sidecar the trace hook
+  has written on every `SPAWN` since v0.34. `0` clear · `1` in-flight ·
+  `2` unknown. Every lane that re-dispatches now asks it first.
+- **A re-dispatch is refused over a live attempt.** New registered contract
+  token, `_shared/return-validation.md` **§0**, placed above every existing rule
+  because every one of them ends in "re-dispatch". The refusal names the agent,
+  the task and its age, and always offers "dispatch anyway" — never as the
+  default.
+- **Exit 2 refuses, and it is the one place in ORC where an absent reading
+  blocks.** `orc usage check` exit 2 never stops a run; an UNCHECKABLE pact
+  never raises an exit code. It inverts here because the two errors are not the
+  same size: a wrongly-refused dispatch costs one question, a wrongly-issued one
+  costs a second Opus agent for an hour.
+- **An interrupted turn is UNKNOWN, never FAILED.** A usage limit, an API error
+  or a `Ctrl+C` between a dispatch and its return says nothing about the agent.
+  Classifying that as a failure is what made the incident compound: it paid
+  twice, hit the limit sooner, and retried again.
+- **Unknown is not zero.** A missing sidecar, an unreadable one, records older
+  than six hours, or a sidecar that disagrees with the trace's own SPAWN/RETURN
+  balance all read `unknown` — never `clear`.
+- **The honest limit is stated, not papered over.** It cannot see an *ad-hoc*
+  dispatch (`/orc-quick` recon, dispatched by model+effort rather than a pinned
+  `orc-*` agent): the hook writes no `SPAWN` for one, so no record exists. Those
+  are read-only and short, and a lane must never read `clear` as proof one
+  finished.
 
-> [!CAUTION]
-> **`/orc-wait ... hard` can lose work.** It stops at the first moment ORC can
-> act - it does not wait for the current wave, phase or gate to finish, and it
-> dispatches nothing, so it writes `RESUME.md` and skips the checkpoint. What
-> you can lose: a dispatch that was in flight (its file writes may still land,
-> but its return is never validated), the checkpoint, and that phase's trace
-> packet. Use `hard` when losing the current wave is cheaper than losing the
-> window; use `soft` when you can spare a few seconds; use no keyword at all
-> when you can wait for the wave to end.
->
-> **A wait longer than one hour ends the prompt cache.** The first turn after it
-> re-reads your whole context at full input price, exactly when your quota is
-> lowest. When the context is large ORC stops and offers a fresh session
-> instead - **it cannot clear its own context**, only offer the swap.
->
-> **`/orc-wait block` moves the risk to you, deliberately.** It suppresses every
-> computed stop for the rest of the run. If the window empties mid-wave, the
-> wave stops in the middle and you keep the pieces.
->
-> **Nothing here is on by default.** `usage_gate` ships `off` and
-> `wait_default_mode` ships `ask`. A fresh install behaves exactly as it did
-> before this release. You choose every stop.
+The other half — **you can now watch the window empty**:
 
-### v1.0.0 - config, phases and calls stop being prose _(2026-08-30)_
+- **`orc usage report`** — 5-hour, 7-day and context in one place, plus the line
+  the snapshot could never give you: **"This session has consumed 59% of the
+  5-hour window and is still counting"**, with the caveat that other sessions on
+  the same account share that window.
+- **A window reset mid-session is not a refund.** The statusline keeps a
+  per-session ledger beside `usage.json` — raw numbers only, never a computed
+  word — and banks what was spent before a reset so the running total keeps
+  counting across the boundary. A new session re-baselines.
+- **The statusline grew a second line, and a `sess +X%` segment on the first.**
 
-**Still on the unscoped `orc` package?** Do this once first — your `orc upgrade`
-is the pre-v0.56.0 one and cannot install itself. Full detail in the CAUTION at
-the top of this file.
+```
+🚀 ORC-boosted Opus 5/high · 22% ctx · 5h 69% (1h30m) ↔ wk 30% · sess +59%
+   agents 4 (1 running) · orc-extra: on · lanes: mini, quick · 41m
+```
 
-- **Step 1 — release the command from the old package:** `npm uninstall -g orc`
-- **Step 2 — install the current package:** `npm i -g @azure-id/orc`
-- **Step 3 — re-apply it to your project:** `orc update`
+  `agents` counts what this session spawned and **never hides what is still
+  running** — the thing that was invisible while three agents worked on one
+  task. Dispatches are attributed by the trace's **own line timestamps**, not
+  the file's mtime, so a run that was already going when the session started is
+  not counted twice. A lane is named only if it actually dispatched, and
+  `lanes: none yet` keeps its slot rather than vanishing. The scan is throttled
+  to once every 5s, because a statusline re-renders on every keystroke.
 
-**Nothing you configure changes meaning, and no command you run is renamed.**
-Three things actually change behaviour; everything else is ORC finally reading
-its own payload the way it has been telling you to read yours.
+- **Top 5 by measured wall time, and it says that is what it is.** Claude Code
+  records **no token usage for a dispatched subagent** — `isSidechain` is never
+  set and no sidechain message carries a usage block — so a per-agent token
+  figure cannot be measured. Every Claude row reports `tokens: null` and the
+  reason, **never `0`**, which would tell you the work was free. Only
+  `orc extra` foreign workers report real four-kind vectors, and those rows say
+  so. Inventing the rest would be the same class of bug as the one above.
 
-- **The score to model table ends `opus-5-low [65,90)` · `opus-5-med [90,100]`.**
-  Two bands in six now want an Opus 5 main session where one in eight did.
-- **A foreign worker that stalls twice in one run steps aside** for the rest of
-  that run. Two clocks, never merged; it writes no new measurement and never
-  writes your config; a promote is a watermark, not a mute, and needs a reason.
-- **`orc diy init` defaults to `opus-5-high`.** The old default silently
-  collapsed the top third of your ladder onto one agent before you chose
-  anything.
-
-The structural half - **config, phases and calls stop being prose**:
-
-- **`orc lane config <lane>`** answers what a lane's config resolved to, with
-  every shadow already worded. A lane never merges the config file itself again,
-  and **a rank below a resolved rank is not read at all**.
-- **`orc lane phases <lane>`** and **`orc lane calls --all`** do the same for the
-  shared phase library and the CLI call catalogue - one canonical copy each,
-  where there were 14-59 restatements per call.
-- **`orc ui` renders all of it**: a rank ladder showing which setting ANSWERED,
-  the lanes that read each key, a Lanes panel, and Extra ▸ Recovery's demotion
-  row with Promote. `orc doctor` gains `lane-keys-drifted`.
-
-**It did not make the payload smaller** - 208 files became 291, 26,507 lines
-became 33,204. Most waves measured as correctness, not deduplication. What
-changed is that there is now one place to fix each of these, and a lint that
-fails when a copy grows back. Two planned deletions were **measured and
-refused**, and the test suite's four-wave flake was diagnosed - with the honest
-caveat that three green runs are the gate and not proof.
+**Nothing here is on by default that was not already.** `usage_gate` still ships
+`off`. The in-flight guard adds one free CLI read before a re-dispatch — it
+changes no dispatch that was already correct.
 
 **Full entry: [CHANGELOG.md](CHANGELOG.md).**
+
+<details>
+<summary>Earlier releases</summary>
+
+- **v1.1.0 - the wait, and a window ORC can finally see — _(2026-08-31)_**
+- **v1.0.0 - config, phases and calls stop being prose — _(2026-08-30)_**
+
+Full bodies for every one of these are in [CHANGELOG.md](CHANGELOG.md).
+
+</details>
 
 ---
 

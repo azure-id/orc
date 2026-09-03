@@ -216,6 +216,8 @@ changed outside `declared_files` is a violation, whatever the return said.
 
 A broken return = a failure. Re-dispatch once. Then offer the fallback.
 
+**Before any re-dispatch, run `orc run inflight`** (0 clear · 1 in-flight · 2 unknown). A Task error does not kill the agent behind it, and exit 2 REFUSES by default — `a lane that re-dispatches over a live attempt` has broken the contract. Canonical: `../_shared/return-validation.md`.
+
 ### 3.2 Build and tests — there is NO smoke gate
 
 Run them **once, on their own, after every dispatch that writes code** —

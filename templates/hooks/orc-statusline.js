@@ -126,7 +126,46 @@ process.stdin.on("end", () => {
           written_at: Date.now(),
         }) + "\n"
       );
+      // -- Session consumption (v1.2.0) -------------------------------------
+      // `usage.json` is a SNAPSHOT of the window. It cannot answer "how much
+      // has THIS session eaten", which is the question a user actually asks
+      // mid-run -- and the one they could otherwise only answer by remembering
+      // what the number was an hour ago.
+      //
+      // So keep a per-session ledger beside it: the reading when this session
+      // first rendered, and the reading now. Same rules as every other bridge
+      // here -- RAW numbers only, never a computed word, fail-silent, and the
+      // reader decides what it means.
+      //
+      // A window RESET mid-session (used_percentage drops) is not a refund:
+      // bank what was consumed before the reset into `accumulated` and
+      // re-baseline, so the running total keeps counting across the boundary.
+      const sid = String(d.session_id || d.sessionId || "");
+      const sfile = path.join(orcDir, "usage-session.json");
+      let led = null;
+      try { led = JSON.parse(fs.readFileSync(sfile, "utf8")); } catch (_) {}
+      const pctOf = (o) => (o && typeof o.used_percentage === "number" ? o.used_percentage : null);
+      const track = (prev, cur) => {
+        if (cur == null) return prev || null;
+        if (!prev) return { baseline: cur, last: cur, accumulated: 0, resets: 0 };
+        if (cur < prev.baseline)
+          return {
+            baseline: cur,
+            last: cur,
+            accumulated: prev.accumulated + Math.max(0, prev.last - prev.baseline),
+            resets: prev.resets + 1,
+          };
+        return { baseline: prev.baseline, last: cur, accumulated: prev.accumulated, resets: prev.resets };
+      };
+      if (!led || led.session_id !== sid) led = { session_id: sid, started_at: Date.now() };
+      led.five_hour = track(led.five_hour, pctOf(rl0 && rl0.five_hour));
+      led.seven_day = track(led.seven_day, pctOf(rl0 && rl0.seven_day));
+      led.context_used_percentage =
+        cw0 && typeof cw0.used_percentage === "number" ? cw0.used_percentage : null;
+      led.updated_at = Date.now();
+      fs.writeFileSync(sfile, JSON.stringify(led) + "\n");
     }
+
   } catch (_) {}
 
   // ── Subscription usage (Claude Code v2.1.80+) ──────────────────────────────
@@ -236,6 +275,24 @@ process.stdin.on("end", () => {
   // older Claude Code that doesn't surface `rate_limits`.
   if (rlSeg) line += " · " + rlSeg;
 
+  // How far the window moved while THIS session ran (v1.2.0). The ledger below
+  // keeps the raw numbers; this renders the delta. Never shown as "this session
+  // used X%" — the window is per ACCOUNT, and a second terminal moves it too.
+  try {
+    const fs = require("fs");
+    const path = require("path");
+    const projectDir =
+      (d.workspace && d.workspace.project_dir) || d.cwd || process.cwd();
+    const led = JSON.parse(
+      fs.readFileSync(path.join(projectDir, ".claude", "orc", "usage-session.json"), "utf8")
+    );
+    const w = led && led.five_hour;
+    if (w && typeof w.last === "number" && typeof w.baseline === "number") {
+      const used = Math.max(0, (w.accumulated || 0) + Math.max(0, w.last - w.baseline));
+      if (used > 0) line += " · sess +" + used + "%";
+    }
+  } catch (_) {}
+
   // Wiki freshness tier (computed on read from wiki-meta.json — zero model
   // tokens; the manifest is written only by `orc wiki sync`). Fail-silent: no
   // wiki / no git / any error → no segment. Thresholds mirror the config
@@ -340,5 +397,135 @@ process.stdin.on("end", () => {
     } catch (_) {}
   }
 
-  process.stdout.write(line);
+  // ── Session line (v1.2.0) ──────────────────────────────────────────────────
+  // Line 1 answers "what tier am I on and how full is the window". This second
+  // line answers "what has this session actually been DOING" — how many agents
+  // it spawned, which lanes ran, whether work can leave Claude, and how long it
+  // has been going. All of it is read from disk; none of it costs a model call.
+  //
+  // The dispatch count is the one that earns its place. v1.2.0 exists because a
+  // retry cloned a live agent three times over and nothing surfaced it. A count
+  // that says `7 (2 running)` makes that visible from the status bar.
+  //
+  // Fail-silent and THROTTLED: the statusline re-renders on every keystroke, so
+  // the trace scan runs at most every 5s and its answer is cached in the same
+  // per-session ledger. Any error → no second line, never a broken one.
+  let line2 = "";
+  try {
+    const fs = require("fs");
+    const path = require("path");
+    const projectDir =
+      (d.workspace && d.workspace.project_dir) || d.cwd || process.cwd();
+    const orcDir = path.join(projectDir, ".claude", "orc");
+    const sfile = path.join(orcDir, "usage-session.json");
+    const sid = String(d.session_id || d.sessionId || "");
+
+    let led = null;
+    try { led = JSON.parse(fs.readFileSync(sfile, "utf8")); } catch (_) {}
+    if (!led || led.session_id !== sid) led = { session_id: sid, started_at: Date.now() };
+
+    // The hook cannot read the RESOLVED config — that is the lane resolver's
+    // job, and a hook has no lane — so this reads the two raw keys it needs
+    // straight from the file and takes the documented default
+    // otherwise — the same caveat the wiki segment above already carries. A
+    // user override shifts skill behaviour; this label follows the file.
+    let logRel = ".claude/orc/logs";
+    let extraOn = false;
+    try {
+      const raw = fs.readFileSync(path.join(projectDir, ".claude", "orc.config.yaml"), "utf8");
+      const ld = /^[ \t]*log_dir:[ \t]*["']?([^"'#\r\n]+)/m.exec(raw);
+      if (ld) logRel = ld[1].trim();
+      extraOn = /^[ \t]*extra_enabled:[ \t]*true[ \t]*$/m.test(raw);
+    } catch (_) {}
+
+    const now = Date.now();
+    // The scan interval is the ONE seam over this budget, on the
+    // ORC_TEST_PROBE_MS precedent: a test that proves the throttle by SLEEPING
+    // past it is a test that fails on a loaded machine, and a flake is recorded
+    // and removed, never retried away. Unset, this is byte-identical to a
+    // hardcoded 5000, and nothing in ORC ever sets it.
+    const scanEvery = (() => {
+      const n = Number(process.env.ORC_STATUSLINE_SCAN_MS);
+      return Number.isFinite(n) && n >= 0 ? n : 5000;
+    })();
+    const stale = !led.dispatch || typeof led.dispatch.scanned_at !== "number" ||
+      now - led.dispatch.scanned_at >= scanEvery;
+    if (stale) {
+      const logDir = path.isAbsolute(logRel) ? logRel : path.join(projectDir, logRel);
+      const sessionFloor = Math.floor((led.started_at || 0) / 1000) * 1000;
+      let spawns = 0;
+      let running = 0;
+      const lanes = [];
+      try {
+        for (const f of fs.readdirSync(logDir)) {
+          if (!f.startsWith("run-") || !f.endsWith(".txt")) continue;
+          const full = path.join(logDir, f);
+          // Only traces touched since this session began. A trace from last
+          // week is not this session's spend.
+          let st;
+          try { st = fs.statSync(full); } catch (_) { continue; }
+          if (st.mtimeMs < (led.started_at || 0)) continue;
+          const text = fs.readFileSync(full, "utf8");
+          // Count by the trace's OWN line timestamps, not the file's mtime. A
+          // run that was already going when this session started shares its
+          // file with the session before it, and mtime cannot tell the two
+          // apart — it would attribute the whole file to whoever looked last.
+          let mine = 0;
+          for (const raw of text.split("\n")) {
+            const t = /^\[(\d{2})(\d{2})(\d{2}) (\d{2}):(\d{2}):(\d{2})/.exec(raw);
+            if (!t) continue;
+            if (raw.indexOf("] hook") === -1 || raw.indexOf(" SPAWN ") === -1) continue;
+            const at = new Date(
+              2000 + Number(t[3]), Number(t[2]) - 1, Number(t[1]),
+              Number(t[4]), Number(t[5]), Number(t[6])
+            ).getTime();
+            // Trace stamps have SECOND resolution and started_at has
+            // milliseconds, so a dispatch in the same second as the
+            // session start compares as earlier than it. Floor the
+            // boundary to the second the trace could actually express.
+            if (at >= sessionFloor) mine += 1;
+          }
+          spawns += mine;
+          let openHere = 0;
+          try {
+            const pend = JSON.parse(fs.readFileSync(full + ".pending.json", "utf8"));
+            if (Array.isArray(pend)) openHere = pend.length;
+          } catch (_) {}
+          running += openHere;
+          // A lane earns its name by having actually dispatched in this
+          // session — listing a lane that contributed nothing is noise.
+          if (mine > 0 || openHere > 0) {
+            const m = /^run-([a-z0-9-]+?)-.+-\d{6}-\d{6}\.txt$/.exec(f);
+            if (m && lanes.indexOf(m[1]) === -1) lanes.push(m[1]);
+          }
+        }
+      } catch (_) {}
+      led.dispatch = { spawns, running, lanes, scanned_at: now };
+    }
+
+    led.updated_at = now;
+    try {
+      fs.mkdirSync(orcDir, { recursive: true });
+      fs.writeFileSync(sfile, JSON.stringify(led) + "\n");
+    } catch (_) {}
+
+    const dsp = led.dispatch || { spawns: 0, running: 0, lanes: [] };
+    const parts = [];
+    // `running` is never hidden, because an agent still in flight is the thing
+    // a user most needs to see (v1.2.0). Zero is simply not printed.
+    parts.push(
+      "agents " + dsp.spawns + (dsp.running ? " (" + dsp.running + " running)" : "")
+    );
+    parts.push("orc-extra: " + (extraOn ? "on" : "off"));
+    // An empty lane list means no ORC lane has dispatched yet this session —
+    // an ANSWER, not a gap, so it keeps its slot and says so.
+    parts.push("lanes: " + (dsp.lanes.length ? dsp.lanes.join(", ") : "none yet"));
+    if (led.started_at)
+      parts.push(Math.max(0, Math.round((now - led.started_at) / 60000)) + "m");
+    line2 = "   " + parts.join(" · ");
+  } catch (_) {
+    line2 = "";
+  }
+
+  process.stdout.write(line2 ? line + "\n" + line2 : line);
 });

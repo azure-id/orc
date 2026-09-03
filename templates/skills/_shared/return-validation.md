@@ -4,6 +4,83 @@ Canonical procedure for validating a spawned agent's return. Every ORC lane
 (full, mini, fast, wiki, diy) runs this on EVERY return; a malformed return is
 a failure (requeue/re-dispatch with reason — lane sets the retry cap).
 
+## 0. Is the previous attempt still ALIVE? (v1.2.0) — BEFORE anything else
+
+> **`a lane that re-dispatches over a live attempt` has broken this contract.**
+
+**A Task error does not kill the agent behind it.** Claude Code's tool call can
+fail, time out, or be cut off mid-turn while the subagent it started keeps
+running — and keeps writing files. Every rule below this line ends in
+"re-dispatch", and every one of them silently assumed a failed call meant a dead
+agent. It does not.
+
+What that costs, measured: one graded `/orc-quick` entry put THREE
+`orc-executor-opus-5-low` agents on the SAME task — 50m19s, 115m22s and
+100m53s, **266 minutes of Opus 5 for one authorised dispatch**, all editing the
+same files, inside a 2h04m window. The second was dispatched 4m19s after the
+first, while the first was still working. The hook had recorded all three; no
+lane had ever read that record.
+
+### The rule
+
+Before ANY re-dispatch, requeue or repair round — and before the first dispatch
+of a resumed run — run:
+
+```
+orc run inflight --json      # 0 clear · 1 in-flight · 2 unknown
+```
+
+| exit | meaning | what the lane does |
+|---|---|---|
+| 0 | provably nothing in flight | dispatch |
+| 1 | ≥1 dispatch has not returned | **REFUSE. Name the agent, the task and its age.** Ask the user. |
+| 2 | cannot prove either way | **REFUSE by default.** Say why, and let the USER decide. |
+
+**Exit 2 refuses, and that is deliberate.** Everywhere else in ORC an absent
+reading is treated as absent and never blocks — `orc usage check` exit 2 never
+stops a run, an UNCHECKABLE pact never raises the exit code. This is the one
+place the default inverts, because the two outcomes are not symmetrical: a
+wrongly-refused dispatch costs one question, and a wrongly-issued one costs a
+second Opus agent for an hour. Refusing on `unknown` is the cheap error.
+
+### An interrupted turn is UNKNOWN, never FAILED
+
+A usage limit, an API error, a dropped connection or a `Ctrl+C` between a
+dispatch and its return says **nothing** about the agent. Treat it as §0 exit 2
+and ask. A lane that classifies an interruption as a failure re-dispatches into
+a live agent, gets interrupted again sooner because it is now paying twice, and
+the loop tightens on itself — which is exactly how the 266-minute entry
+happened.
+
+### What refusing looks like
+
+```
+⛔ 1 dispatch is still in flight — not re-dispatching.
+
+   orc-executor-opus-5-low   started 4m ago
+   "Fix approval flow defects"
+
+   A Task error does not kill the agent behind it. It may still be writing.
+   1. wait for it     2. dispatch anyway (2 agents on one task)     3. stop
+```
+
+Option 2 must always be offered and never be the default: the user is allowed
+to overrule this, and an unreadable sidecar must never trap a run.
+
+### The evidence, and its one honest limit
+
+`orc run inflight` reads the pending sidecar that `orc-trace.js` writes on every
+`SPAWN`, cross-checked against the trace's own SPAWN/RETURN balance. It reports
+`unknown` — never `clear` — when the sidecar is missing, unreadable, or holds
+only records older than six hours, and when the sidecar and the trace disagree.
+**Unknown is not zero.**
+
+It cannot see an **ad-hoc** dispatch (`/orc-quick` recon, model+effort rather
+than a pinned `orc-*` agent): the hook writes no `SPAWN` for one, so no record
+exists. Those are read-only and short, so the exposure is small — but the limit
+is stated rather than papered over, and a lane must not report `clear` as proof
+that an ad-hoc read is finished.
+
 ## 1. Contract shape
 
 The return must carry every field its agent contract names. Missing or extra

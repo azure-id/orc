@@ -91,6 +91,8 @@ the codifier); hold resolved patterns in run state.
 invalidates a DONE task → re-run once, then set every reverse-`depends_on`
 consumer to `stale_review`. **Worker failure/garbage/timeout:** flag +
 continue the wave; audit and re-dispatch at the next batch checkpoint
+
+**Before any re-dispatch, run `orc run inflight`** (0 clear · 1 in-flight · 2 unknown). A Task error does not kill the agent behind it, and exit 2 REFUSES by default — `a lane that re-dispatches over a live attempt` has broken the contract. Canonical: `../return-validation.md`.
 (`requeued`, retry_count++). Hard retry cap 2 → STOP and surface.
 
 <!-- /orc:layer -->

@@ -31,6 +31,10 @@ makes the consent gate mandatory.
    proceed. No pre-scan, not even to estimate area count.
 2. **You never scan-and-write yourself — you spawn.** Dispatch scans BY NAME — `orc-wiki-scanner-opus-4-8-high`
    (pinned in the agent file: the model is enforced, and the trace hook can see it); you plan, dispatch, assemble. Under `opus5_only` the scanner is `orc-wiki-scanner-opus-5-med` — forced, and a full scan is many batches, so it is the costliest place that mode lands (`../_shared/opus5-only.md`).
+**`orc run inflight` before ANY re-dispatch** (0 clear · 1 in-flight · 2 unknown).
+A Task error does not kill the agent behind it, and exit 2 REFUSES by default —
+`a lane that re-dispatches over a live attempt` has broken the contract. Canonical: `../_shared/return-validation.md` §0.
+
 3. **Fixed pause every 5 scan-tasks** — not user-configurable; multi-session
    resume via the inherited checkpoint.
 4. **Wiki docs are persistent** in `wiki/` (project root); run artifacts stay

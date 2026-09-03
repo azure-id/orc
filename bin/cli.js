@@ -3091,6 +3091,18 @@ const LANE_CALLS = {
     never: "never merge `.claude/orc.config.yaml` yourself, and never re-derive a precedence — the answer already carries it",
     lanes: ["context-combiner", "orc", "orc-aftermath", "orc-analyze", "orc-analyze-mini", "orc-boundary", "orc-brainstorm", "orc-budget", "orc-challenge", "orc-claude", "orc-diy", "orc-doc", "orc-explain", "orc-export", "orc-fast", "orc-grill", "orc-handoff", "orc-learn", "orc-mini", "orc-pact", "orc-pattern", "orc-poly", "orc-pr-driver", "orc-pr-setup", "orc-quick", "orc-retro", "orc-route", "orc-verify", "orc-wiki"],
   },
+  "run-inflight": {
+    cmd: "orc run inflight [--json]",
+    what: "is a dispatch from this run still alive — the ONE reader of the trace's pending sidecar",
+    exits: { 0: "clear — provably nothing in flight", 1: "in-flight — at least one dispatch has not returned", 2: "unknown — cannot prove either way" },
+    states: ["clear", "in-flight", "unknown"],
+    cost: "free",
+    when: "before ANY re-dispatch, requeue or repair round, and before the first dispatch of a resumed run",
+    on_absent: "exit 2 REFUSES by default — the one place an absent reading blocks, because a wrongly-refused dispatch costs a question and a wrongly-issued one costs a second Opus agent for an hour",
+    canonical: "_shared/return-validation.md",
+    never: "never read `clear` as proof that an AD-HOC dispatch finished — the hook writes no SPAWN for one, so no record exists",
+    lanes: ["orc", "orc-doc", "orc-fast", "orc-mini", "orc-quick", "orc-wiki"],
+  },
   "lane-phases": {
     cmd: "orc lane phases <lane> [--json]",
     what: "which SHARED phases this lane runs, in order — the file, the layers to read, and when",
@@ -9006,6 +9018,149 @@ function resume() {
 }
 
 // `orc run list` / `orc run show <slug|n>`
+// ── `orc run inflight` — is a previous dispatch still alive? (v1.2.0) ───────
+//
+// WHY THIS EXISTS. Claude Code's Task tool returning an error does NOT kill the
+// subagent behind it. The agent keeps running and keeps writing files. Every
+// lane's retry rule ("a broken return = a failure, re-dispatch") silently
+// assumed the opposite, so an interrupted turn produced a SECOND agent on the
+// same task while the first was still working. A graded run put THREE
+// `orc-executor-opus-5-low` agents on one task for 50m19s + 115m22s + 100m53s
+// — 266 minutes of Opus 5 for one authorised dispatch, all editing the same
+// files. The hook already recorded every one of them; nothing ever READ it.
+//
+// The pending sidecar (`<trace>.pending.json`, written by orc-trace.js on every
+// SPAWN) is the evidence. This command makes it authoritative:
+// `a lane that re-dispatches over a live attempt` has broken the contract in
+// `_shared/return-validation.md` §0.
+//
+// UNKNOWN IS NOT ZERO. A missing pointer, an unreadable sidecar or a record too
+// old to trust all exit 2 — never 0. "I cannot prove anything is running" and
+// "I proved nothing is running" are different facts, and re-dispatching on the
+// first one is exactly the bug. Only a readable sidecar that is EMPTY *and* a
+// trace whose SPAWN/RETURN counts agree earns exit 0.
+//
+//   exit 0  clear      — provably nothing in flight
+//   exit 1  in-flight  — >=1 dispatch has not returned
+//   exit 2  unknown    — cannot prove either way
+const INFLIGHT_STALE_MS = 6 * 60 * 60 * 1000;
+
+function runInflightCmd(claudeDir) {
+  const dir = resolveLogDir(claudeDir);
+  const out = {
+    ok: true,
+    state: "unknown",
+    reason: null,
+    count: 0,
+    entries: [],
+    trace: null,
+    lane: null,
+    slug: null,
+    log_dir: dir,
+    sidecar: null,
+    sidecar_readable: false,
+    spawns: null,
+    returns: null,
+    balance_agrees: null,
+    stale_entries: 0,
+  };
+
+  const finish = (state, reason, code) => {
+    out.state = state;
+    out.reason = reason;
+    if (wantsJson()) emitJson(out);
+    else renderInflight(out);
+    process.exit(code);
+  };
+
+  // 1. The run pointer. No pointer = no open run we can reason about.
+  let cur = null;
+  try {
+    cur = fs.readFileSync(path.join(dir, ".current"), "utf8").trim();
+  } catch (_) {}
+  if (!cur) return finish("unknown", "no trace pointer — no run is open, or the pointer was never written", 2);
+  out.trace = cur;
+  const m = TRACE_NAME.exec(cur);
+  if (m) { out.lane = m[1]; out.slug = m[2]; }
+
+  // 2. The trace's own SPAWN/RETURN balance — an independent second opinion.
+  //    Counted from the hook's own skeleton lines only.
+  const tracePath = path.join(dir, cur);
+  try {
+    const text = fs.readFileSync(tracePath, "utf8");
+    out.spawns = (text.match(/\] hook\s+SPAWN /g) || []).length;
+    const all = (text.match(/\] hook\s+RETURN /g) || []).length;
+    const loose = (text.match(/\] hook\s+RETURN ~agent :: unattributed/g) || []).length;
+    out.returns = all - loose;
+  } catch (_) {
+    return finish("unknown", `trace pointer names "${cur}" but it cannot be read`, 2);
+  }
+
+  // 3. The pending sidecar — the record of what was dispatched and never closed.
+  const side = path.join(dir, cur + ".pending.json");
+  out.sidecar = side;
+  let pend = null;
+  try {
+    const raw = JSON.parse(fs.readFileSync(side, "utf8"));
+    if (Array.isArray(raw)) { pend = raw; out.sidecar_readable = true; }
+  } catch (_) {}
+
+  const now = Date.now();
+  if (pend) {
+    out.entries = pend.map((r) => {
+      const ts = typeof r.ts === "number" ? r.ts : null;
+      const age = ts == null ? null : Math.round((now - ts) / 1000);
+      return {
+        agent: r.agent == null ? null : String(r.agent),
+        desc: r.desc == null ? null : String(r.desc),
+        started_ms: ts,
+        age_s: age,
+        stale: ts != null && now - ts > INFLIGHT_STALE_MS,
+      };
+    });
+    out.count = out.entries.length;
+    out.stale_entries = out.entries.filter((e) => e.stale).length;
+  }
+
+  const balance = out.spawns != null && out.returns != null ? out.spawns - out.returns : null;
+  out.balance_agrees = balance == null || pend == null ? null : balance === out.count;
+
+  // 4. Verdict. Conservative in every direction.
+  if (!out.sidecar_readable) {
+    if (balance != null && balance > 0)
+      return finish("in-flight", `sidecar unreadable, but the trace shows ${balance} SPAWN(s) with no RETURN`, 1);
+    return finish("unknown", "the pending sidecar is missing or unreadable — cannot prove a dispatch finished", 2);
+  }
+  if (out.count > 0) {
+    if (out.stale_entries === out.count)
+      return finish(
+        "unknown",
+        `${out.count} record(s), all older than 6h — the run probably died without closing them`,
+        2
+      );
+    return finish("in-flight", `${out.count} dispatch(es) have not returned`, 1);
+  }
+  // Sidecar empty. Only trust it when the trace agrees.
+  if (balance != null && balance > 0)
+    return finish("unknown", `sidecar is empty but the trace shows ${balance} unmatched SPAWN(s) — they disagree`, 2);
+  return finish("clear", "no dispatch is in flight", 0);
+}
+
+function renderInflight(o) {
+  const head =
+    o.state === "clear" ? "clear" : o.state === "in-flight" ? `IN FLIGHT (${o.count})` : "unknown";
+  console.log(`${ui.color.bold("dispatch:")} ${head}`);
+  console.log(`  ${o.reason}`);
+  if (o.trace) console.log(`  trace   ${o.trace}`);
+  for (const e of o.entries) {
+    const age = e.age_s == null ? "age unknown" : `${Math.floor(e.age_s / 60)}m${e.age_s % 60}s ago`;
+    console.log(`  - ${e.agent || "(unnamed)"}  ${age}${e.stale ? "  [stale]" : ""}`);
+    if (e.desc) console.log(`      ${e.desc}`);
+  }
+  if (o.state === "in-flight")
+    console.log("\n  Do NOT re-dispatch these tasks. A Task error does not kill the agent behind it.");
+}
+
 function runCmd() {
   const claudeDir = resolveClaudeDir();
   const pos = positionals(); // ["run", <sub?>, <arg?>]
@@ -9015,6 +9170,9 @@ function runCmd() {
   // The only two WRITES in `orc run`, and both are a human's decision recorded
   // on disk. Neither deletes anything.
   if (sub === "close" || sub === "reopen") return runCloseCmd(claudeDir, runs, sub, pos[2]);
+
+  // Read-only, and the ONE reader of the pending sidecar. 0 clear / 1 in-flight / 2 unknown.
+  if (sub === "inflight") return runInflightCmd(claudeDir);
 
   if (sub === "show") {
     const arg = pos[2];
@@ -33210,6 +33368,318 @@ function usageResetMs(v) {
   return Number.isFinite(p) ? p : NaN;
 }
 
+// ── `orc usage report` — where the window went (v1.2.0) ─────────────────────
+//
+// `orc usage check` answers "is there room". This answers the question a user
+// actually asks mid-run: "how much has THIS session eaten, and what ate it".
+//
+// THE HONEST PART, and it decides the whole shape of this command. Claude Code
+// records NO token usage for a dispatched subagent — `isSidechain` is never set
+// and no sidechain message carries a usage block, in any transcript on disk. So
+// a per-executor TOKEN figure cannot be measured, and inventing one would be
+// the same class of bug as a fake validator. What IS measured, exactly, is WALL
+// TIME, from the trace hook's own SPAWN/RETURN lines. Foreign workers are the
+// one exception: `orc extra` records real four-kind vectors, so those rows
+// carry tokens and say so. Every other row reports `tokens: null` plus the
+// reason — never 0. Unknown is not zero.
+const USAGE_TOP_N = 5;
+
+// "12m43s" | "1m7s" | "45s" → seconds. Anything else → null, never 0.
+function usageDurSeconds(s) {
+  if (!s) return null;
+  const m = /^(?:(\d+)m)?(\d+)s$/.exec(String(s).trim());
+  if (!m) return null;
+  return (m[1] ? Number(m[1]) * 60 : 0) + Number(m[2]);
+}
+
+// Per-agent wall time for the run the trace pointer names. Returns null when
+// there is no open run — an absent trace is an absent measurement, not zero.
+function usageRunConsumers(claudeDir) {
+  const dir = resolveLogDir(claudeDir);
+  let cur = null;
+  try {
+    cur = fs.readFileSync(path.join(dir, ".current"), "utf8").trim();
+  } catch (_) {}
+  if (!cur) return null;
+  let text = "";
+  try {
+    text = fs.readFileSync(path.join(dir, cur), "utf8");
+  } catch (_) {
+    return null;
+  }
+  const nameMatch = TRACE_NAME.exec(cur);
+  const by = new Map();
+  const bump = (agent, secs, running) => {
+    const k = agent || "(unnamed)";
+    const r = by.get(k) || { agent: k, dispatches: 0, wall_seconds: 0, running: 0, unmeasured: 0 };
+    r.dispatches += 1;
+    if (running) r.running += 1;
+    if (secs == null) r.unmeasured += 1;
+    else r.wall_seconds += secs;
+    by.set(k, r);
+  };
+  for (const line of text.split("\n")) {
+    // Only the hook's own skeleton lines. `~agent :: unattributed` is a
+    // bookkeeping artefact of >=2 in flight and is never a dispatch.
+    const r = /\] hook\s+RETURN ~?([^\s:]+) :: /.exec(line);
+    if (!r) continue;
+    if (r[1] === "agent") continue;
+    const d = /\bdur=(\S+)/.exec(line);
+    bump(r[1], usageDurSeconds(d && d[1]), false);
+  }
+  // Anything still open is real spend happening RIGHT NOW — the exact case the
+  // v1.2.0 in-flight guard exists for, and the one a user most wants to see.
+  let pending = [];
+  try {
+    const raw = JSON.parse(fs.readFileSync(path.join(dir, cur + ".pending.json"), "utf8"));
+    if (Array.isArray(raw)) pending = raw;
+  } catch (_) {}
+  const now = Date.now();
+  for (const p of pending) {
+    const secs = typeof p.ts === "number" ? Math.round((now - p.ts) / 1000) : null;
+    bump(p.agent, secs, true);
+  }
+  return {
+    trace: cur,
+    lane: nameMatch ? nameMatch[1] : null,
+    slug: nameMatch ? nameMatch[2] : null,
+    agents: [...by.values()],
+    in_flight: pending.length,
+  };
+}
+
+// Foreign dispatches DO carry measured tokens. Same file the spend report reads.
+function usageForeignSpend(claudeDir) {
+  const f = path.join(claudeDir, "orc", "extra-spend.jsonl");
+  let lines = [];
+  try {
+    lines = fs.readFileSync(f, "utf8").split("\n").filter(Boolean);
+  } catch (_) {
+    return { rows: [], unreadable: 0 };
+  }
+  const rows = [];
+  let unreadable = 0;
+  for (const l of lines) {
+    try {
+      rows.push(JSON.parse(l));
+    } catch (_) {
+      unreadable += 1;
+    }
+  }
+  return { rows, unreadable };
+}
+
+function usageReportCmd(claudeDir) {
+  const asJson = wantsJson();
+  const now = Date.now();
+  const cfg = resolvedConfig(claudeDir);
+  const stopPct = Math.min(50, Math.max(1, Number(cfg.usage_stop_pct) || 10));
+
+  // Read the bridge RAW here rather than through readUsageBridge: a stale
+  // reading is still worth SHOWING, with its age, where a gate would rightly
+  // discard it. The state word still comes from freshness — age is displayed,
+  // never ignored.
+  let raw = null;
+  try {
+    raw = JSON.parse(fs.readFileSync(path.join(claudeDir, "orc", "usage.json"), "utf8"));
+  } catch (_) {}
+  const ageMin =
+    raw && typeof raw.written_at === "number" ? Math.round((now - raw.written_at) / 60000) : null;
+  const stale = ageMin == null ? true : now - raw.written_at > WAIT_BRIDGE_MAX_AGE_MS;
+
+  const view = (o, label) => {
+    if (!o || typeof o.used_percentage !== "number") return null;
+    const used = Math.round(o.used_percentage);
+    const at = usageResetMs(o.resets_at);
+    return {
+      window: label,
+      used_percentage: used,
+      remaining_percentage: Math.max(0, 100 - used),
+      resets_at: Number.isFinite(at) ? new Date(at).toISOString() : null,
+      resets_in_minutes: Number.isFinite(at) && at > now ? Math.round((at - now) / 60000) : null,
+      low: 100 - used <= stopPct,
+    };
+  };
+  const fh = raw ? view(raw.five_hour, "5h") : null;
+  const sd = raw ? view(raw.seven_day, "wk") : null;
+
+  // Session consumption — the ledger the statusline keeps.
+  let led = null;
+  try {
+    led = JSON.parse(fs.readFileSync(path.join(claudeDir, "orc", "usage-session.json"), "utf8"));
+  } catch (_) {}
+  const consumed = (w) =>
+    !w
+      ? null
+      : {
+          baseline_percentage: w.baseline,
+          now_percentage: w.last,
+          consumed_percentage: Math.max(0, w.accumulated + Math.max(0, w.last - w.baseline)),
+          window_resets: w.resets,
+        };
+  const session = !led
+    ? null
+    : {
+        session_id: led.session_id || null,
+        started_at: led.started_at ? new Date(led.started_at).toISOString() : null,
+        running_minutes: led.started_at ? Math.round((now - led.started_at) / 60000) : null,
+        five_hour: consumed(led.five_hour),
+        seven_day: consumed(led.seven_day),
+        still_counting: true,
+        // Never overclaim. The window is per ACCOUNT: a second Claude Code
+        // window, a cloud session, or anyone else on the same key moves it too.
+        caveat:
+          "this is how far the window moved while this session ran — other sessions on the same account share it",
+      };
+
+  const run = usageRunConsumers(claudeDir);
+  const foreign = usageForeignSpend(claudeDir);
+
+  // Rank by measured wall time. A row with nothing measured keeps its slot.
+  const top = [];
+  if (run) {
+    const sorted = run.agents.slice().sort((a, b) => b.wall_seconds - a.wall_seconds);
+    for (const a of sorted.slice(0, USAGE_TOP_N))
+      top.push({
+        agent: a.agent,
+        dispatches: a.dispatches,
+        running: a.running,
+        wall_seconds: a.wall_seconds,
+        unmeasured_dispatches: a.unmeasured,
+        tokens: null,
+        tokens_source: "unavailable",
+      });
+  }
+  for (const r of foreign.rows.slice(-USAGE_TOP_N)) {
+    top.push({
+      agent: "extra:" + (r.profile || "?") + "/" + (r.model || "?"),
+      dispatches: 1,
+      running: 0,
+      wall_seconds: usageDurSeconds(r.dur),
+      unmeasured_dispatches: 0,
+      tokens: r.usage || null,
+      tokens_source: r.usage ? "measured" : "not reported by the worker",
+    });
+  }
+
+  const windows = [fh, sd].filter(Boolean);
+  const state = !windows.length || stale ? "unknown" : windows.some((w) => w.low) ? "low" : "ok";
+  const code = state === "low" ? 1 : state === "unknown" ? 2 : 0;
+  const out = {
+    ok: true,
+    state,
+    five_hour: fh,
+    seven_day: sd,
+    context_used_percentage:
+      raw && typeof raw.context_used_percentage === "number" ? raw.context_used_percentage : null,
+    reading_age_minutes: ageMin,
+    reading_stale: stale,
+    stop_pct: stopPct,
+    gate: String(cfg.usage_gate || "off"),
+    session,
+    run: run
+      ? {
+          trace: run.trace,
+          lane: run.lane,
+          slug: run.slug,
+          dispatches: run.agents.reduce((n, a) => n + a.dispatches, 0),
+          in_flight: run.in_flight,
+          wall_seconds: run.agents.reduce((n, a) => n + a.wall_seconds, 0),
+        }
+      : null,
+    top,
+    foreign_spend_rows: foreign.rows.length,
+    unreadable_spend_lines: foreign.unreadable,
+    // Say it on every emission. A reader who does not know this reads a
+    // wall-time ranking as a token ranking.
+    tokens_note:
+      "Claude Code records no token usage for a dispatched subagent, so a Claude agent's tokens are null and never 0. Rows are ranked by MEASURED WALL TIME. Only `orc extra` foreign workers report real token vectors.",
+  };
+  if (asJson) emitJson(out, code);
+
+  console.log(ui.header("ORC · usage"));
+  console.log("");
+  const pctLine = (w) =>
+    !w
+      ? ui.color.gray("      —  (no reading)")
+      : "      " +
+        String(w.used_percentage).padStart(3) +
+        "% used · " +
+        w.remaining_percentage +
+        "% left" +
+        (w.resets_in_minutes != null ? " · resets in " + w.resets_in_minutes + "m" : "") +
+        (w.low ? "  " + ui.color.yellow("LOW") : "");
+  console.log("  5 hours");
+  console.log(pctLine(fh));
+  console.log("  7 days");
+  console.log(pctLine(sd));
+  if (out.context_used_percentage != null)
+    console.log("  context   " + out.context_used_percentage + "% of the window");
+  if (stale)
+    console.log(
+      ui.color.gray(
+        "  reading   " +
+          (ageMin == null ? "none" : ageMin + "m old") +
+          " — treated as unknown, and a run is never stopped on it"
+      )
+    );
+  console.log("");
+  if (session && session.five_hour) {
+    const c = session.five_hour;
+    console.log(
+      "  " +
+        ui.color.bold(
+          "This session has consumed " +
+            c.consumed_percentage +
+            "% of the 5-hour window and is still counting"
+        )
+    );
+    console.log(
+      ui.color.gray(
+        "      " +
+          c.baseline_percentage +
+          "% → " +
+          c.now_percentage +
+          "%" +
+          (c.window_resets ? " across " + c.window_resets + " window reset(s)" : "") +
+          (session.running_minutes != null ? " · " + session.running_minutes + "m in session" : "")
+      )
+    );
+    console.log(ui.color.gray("      " + session.caveat));
+  } else {
+    console.log(ui.color.gray("  session consumption: no reading yet (the statusline writes it)"));
+  }
+  console.log("");
+  if (top.length) {
+    console.log("  " + ui.color.bold("Top " + USAGE_TOP_N + " by measured wall time"));
+    for (const t of top.slice(0, USAGE_TOP_N)) {
+      const secs = t.wall_seconds;
+      const w =
+        secs == null
+          ? "—"
+          : Math.floor(secs / 60) + "m" + String(secs % 60).padStart(2, "0") + "s";
+      const tok = t.tokens ? "tokens measured" : ui.color.gray("tokens —");
+      console.log(
+        "      " +
+          w.padStart(8) +
+          "  " +
+          t.agent +
+          "  " +
+          ui.color.gray("x" + t.dispatches) +
+          (t.running ? "  " + ui.color.yellow(t.running + " RUNNING") : "") +
+          "  " +
+          tok
+      );
+    }
+    console.log(
+      ui.color.gray("      wall time, not tokens — Claude Code does not record a subagent's tokens")
+    );
+  } else {
+    console.log(ui.color.gray("  no dispatches in the open run (or no run is open)"));
+  }
+  process.exit(code);
+}
+
 function usageCheckCmd(claudeDir) {
   const asJson = wantsJson();
   const now = Date.now();
@@ -33641,8 +34111,9 @@ function jsonCrash(err) {
     // v1.1.0 W4 — the ONE reader of the statusline's usage bridge.
     case "usage":
       if (positionals()[1] === "check") usageCheckCmd(resolveClaudeDir());
+      else if (positionals()[1] === "report") usageReportCmd(resolveClaudeDir());
       else {
-        console.error("usage: orc usage check [--json]");
+        console.error("usage: orc usage check|report [--json]");
         process.exit(1);
       }
       break;

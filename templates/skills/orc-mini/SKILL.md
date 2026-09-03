@@ -84,6 +84,9 @@ including `done` with non-empty `unmet[]` = partial, and §6's worktree delta: a
 per `../_shared/smoke-gate.md`: read-only build+test. **GREEN** →
 test-authoring ask, then ship. **RED** → never offer commit/ship; one repair
 re-dispatch, second red → STOP and surface. Docs-only → gate N/A, say so.
+`orc run inflight` FIRST — exit 2 REFUSES, because
+`a lane that re-dispatches over a live attempt` has broken the contract
+(`../_shared/return-validation.md` §0).
 
 ## Phase X — Mock example + drift recovery (config `mock_example`, default ask)
 

@@ -10,6 +10,87 @@ Format: `### v<version> — <title> _(<date>)_`.
 
 ---
 
+### v1.2.0 - a retry that cloned the agent, and a window you can watch empty _(2026-09-04)_
+
+**Still on the unscoped `orc` package?** Do this once first — your `orc upgrade`
+is the pre-v0.56.0 one and cannot install itself. Full detail in the CAUTION at
+the top of this file.
+
+- **Step 1 — release the command from the old package:** `npm uninstall -g orc`
+- **Step 2 — install the current package:** `npm i -g @azure-id/orc`
+- **Step 3 — re-apply it to your project:** `orc update`
+
+**Do not use `npm i -g -f`.** Full detail in v0.56.0 below.
+
+A Task error does not kill the subagent behind it. Every lane's retry rule
+assumed it did. One graded `/orc-quick` entry put **three** `orc-executor-opus-5-low`
+agents on the same task — 50m19s, 115m22s and 100m53s, **266 minutes of Opus 5
+for one authorised dispatch**, all editing the same files inside a 2h04m window.
+The trace hook had recorded every one of them. Nothing had ever read it.
+
+- **`orc run inflight`** — the one reader of the pending sidecar the trace hook
+  has written on every `SPAWN` since v0.34. `0` clear · `1` in-flight ·
+  `2` unknown. Every lane that re-dispatches now asks it first.
+- **A re-dispatch is refused over a live attempt.** New registered contract
+  token, `_shared/return-validation.md` **§0**, placed above every existing rule
+  because every one of them ends in "re-dispatch". The refusal names the agent,
+  the task and its age, and always offers "dispatch anyway" — never as the
+  default.
+- **Exit 2 refuses, and it is the one place in ORC where an absent reading
+  blocks.** `orc usage check` exit 2 never stops a run; an UNCHECKABLE pact
+  never raises an exit code. It inverts here because the two errors are not the
+  same size: a wrongly-refused dispatch costs one question, a wrongly-issued one
+  costs a second Opus agent for an hour.
+- **An interrupted turn is UNKNOWN, never FAILED.** A usage limit, an API error
+  or a `Ctrl+C` between a dispatch and its return says nothing about the agent.
+  Classifying that as a failure is what made the incident compound: it paid
+  twice, hit the limit sooner, and retried again.
+- **Unknown is not zero.** A missing sidecar, an unreadable one, records older
+  than six hours, or a sidecar that disagrees with the trace's own SPAWN/RETURN
+  balance all read `unknown` — never `clear`.
+- **The honest limit is stated, not papered over.** It cannot see an *ad-hoc*
+  dispatch (`/orc-quick` recon, dispatched by model+effort rather than a pinned
+  `orc-*` agent): the hook writes no `SPAWN` for one, so no record exists. Those
+  are read-only and short, and a lane must never read `clear` as proof one
+  finished.
+
+The other half — **you can now watch the window empty**:
+
+- **`orc usage report`** — 5-hour, 7-day and context in one place, plus the line
+  the snapshot could never give you: **"This session has consumed 59% of the
+  5-hour window and is still counting"**, with the caveat that other sessions on
+  the same account share that window.
+- **A window reset mid-session is not a refund.** The statusline keeps a
+  per-session ledger beside `usage.json` — raw numbers only, never a computed
+  word — and banks what was spent before a reset so the running total keeps
+  counting across the boundary. A new session re-baselines.
+- **The statusline grew a second line, and a `sess +X%` segment on the first.**
+
+```
+🚀 ORC-boosted Opus 5/high · 22% ctx · 5h 69% (1h30m) ↔ wk 30% · sess +59%
+   agents 4 (1 running) · orc-extra: on · lanes: mini, quick · 41m
+```
+
+  `agents` counts what this session spawned and **never hides what is still
+  running** — the thing that was invisible while three agents worked on one
+  task. Dispatches are attributed by the trace's **own line timestamps**, not
+  the file's mtime, so a run that was already going when the session started is
+  not counted twice. A lane is named only if it actually dispatched, and
+  `lanes: none yet` keeps its slot rather than vanishing. The scan is throttled
+  to once every 5s, because a statusline re-renders on every keystroke.
+
+- **Top 5 by measured wall time, and it says that is what it is.** Claude Code
+  records **no token usage for a dispatched subagent** — `isSidechain` is never
+  set and no sidechain message carries a usage block — so a per-agent token
+  figure cannot be measured. Every Claude row reports `tokens: null` and the
+  reason, **never `0`**, which would tell you the work was free. Only
+  `orc extra` foreign workers report real four-kind vectors, and those rows say
+  so. Inventing the rest would be the same class of bug as the one above.
+
+**Nothing here is on by default that was not already.** `usage_gate` still ships
+`off`. The in-flight guard adds one free CLI read before a re-dispatch — it
+changes no dispatch that was already correct.
+
 ### v1.1.0 - the wait, and a window ORC can finally see _(2026-08-31)_
 
 **Still on the unscoped `orc` package?** Do this once first — your `orc upgrade`
