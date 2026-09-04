@@ -188,6 +188,43 @@ The branch you are on. A detached HEAD shows as `@a1b2c3d`.
 
 ---
 
+## Your own status line
+
+You can build your own instead of this one. It is **off** by default, and while
+it is off this file describes exactly what you see.
+
+Open the panel:
+
+```
+orc ui
+```
+
+Then go to **CLI Hook Interface**. You put components into three lines and drag
+them where you want them. One rule decides where a component may go:
+
+> A line may hold a component only if every line above it holds at least one.
+
+So line 1 must hold something before line 2 can, and line 2 before line 3. Each
+line holds at most five components. The panel will not let you make an illegal
+move, and it tells you why.
+
+Every component can be changed: its words, its colour, its shape, how wide it
+is, and when it is allowed to disappear.
+
+**Three things a terminal cannot do**, said plainly so you do not look for them:
+
+| You may want | What you get |
+|---|---|
+| A bigger font | The terminal owns the font size. Use **bold**, or make a component wider — a bar at width 12 is a big object. |
+| A blinking part | Refused. Half of terminals turn it off, and no part of a status line needs it. |
+| Icon-font symbols | Not shipped. They need a font we cannot check for, and they draw as empty boxes without it. |
+
+There is a command-line half (`orc statusline`). It exists so the panel has
+something to run. Building a three-line layout by typing flags is harder than
+dragging, so the panel is the recommended way.
+
+---
+
 ## For maintainers
 
 - The hook is `orc-statusline.js`. `orc init` installs it and wires it into
@@ -206,6 +243,12 @@ The branch you are on. A detached HEAD shows as `@a1b2c3d`.
   `node` alone takes about 285 ms of that. So the hook has about 15 ms to do all
   its work. This is why nothing here starts a process, and why every answer is
   cached.
+- The custom layout is COMPILED. `orc statusline` turns what you composed into a
+  flat render program (`statusline-compiled.json`) with every colour worked out
+  in advance, and the hook only walks it. The hook never reads the layout you
+  authored. If the compiled file is missing, stale, or does not pass a cheap
+  shape check, the hook silently renders the shipped lines instead and
+  `orc doctor` names the reason.
 - The cache file is `.claude/orc/usage-session.json`. The hook reads it once and
   writes it once, after the text is ready. It stores raw numbers only — never a
   word like `fresh` or `STALE`, which is computed each time it is shown.

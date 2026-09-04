@@ -451,6 +451,12 @@ const required = [
   "templates/hooks/README.md",
   "templates/hooks/orc-effort-guard.js",
   "templates/hooks/orc-statusline.js",
+  // v1.3.0 — THE RENDER ENGINE, and it is required by BOTH halves: the hook
+  // requires it as a sibling out of .claude/hooks/, and bin/cli.js requires it
+  // out of templates/hooks/ for `orc statusline preview`. That is what makes
+  // the panel's preview and the bar's real output byte-identical BY
+  // CONSTRUCTION. A missing file here breaks the status line AND the panel.
+  "templates/hooks/orc-statusline-render.js",
   "templates/hooks/orc-trace.js",
 ];
 

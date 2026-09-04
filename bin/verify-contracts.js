@@ -838,6 +838,26 @@ const CONTRACTS = [
     ],
   },
   {
+    // v1.3.0 W1 — the CLI Hook Interface. The compiled program is the ONE thing
+    // that crosses the wall between the CLI and the hook, so both halves have
+    // to name the same file. The AUTHORED layout is deliberately NOT registered
+    // here: the hook must never name it, because it must never read it.
+    name: "the compiled status-line program (the CLI compiles, the hook renders)",
+    token: "statusline-compiled.json",
+    binFiles: ["bin/cli.js"],
+    files: ["hooks/orc-statusline.js", "hooks/orc-statusline-render.js", "hooks/README.md"],
+  },
+  {
+    // The board rule, stated ONCE so the CLI, the hook and the panel all cite
+    // the same sentence. It is the thing a user most needs to understand about
+    // the board and the thing most likely to be paraphrased into three
+    // different half-truths.
+    name: "the dense-prefix invariant (the status-line board)",
+    token: "A line may hold a component only if every line above it holds at least one.",
+    binFiles: ["bin/cli.js"],
+    files: ["hooks/README.md", "hooks/orc-statusline.js"],
+  },
+  {
     name: "behavior-trace run pointer (every ORC entry point writes .current)",
     token: ".current",
     files: [
@@ -3642,6 +3662,11 @@ for (const b of BUDGETS) {
     // spine reads `extra_timeout_s`. An empty lanes[] here is an ANSWER.
     "wait_hop_minutes",
     "wait_max_hops",
+    // v1.3.0 — an operating key of the STATUSLINE HOOK. A hook has no lane and
+    // cannot resolve config, so no spine reads this; the hook reads the raw key
+    // off the file, exactly as it already does for `log_dir` and
+    // `extra_enabled`. An empty lanes[] here is an ANSWER.
+    "statusline_custom",
   ]);
   for (const e of metaEntries) {
     if (!e.lanes) {

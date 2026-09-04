@@ -357,6 +357,18 @@ function fmtTokens(tok) {
 let LED = null;
 let LED_FILE = null;
 
+// The scan's own answers, in ONE shape, so a composed layout (v1.3.0) reads
+// exactly what the shipped lines read. It is populated as the blocks below
+// compute their segments — never by a second pass over the disk. A provider
+// nothing binds is simply never filled in, and every binding over it answers
+// null, which renders an em dash. UNKNOWN IS NOT ZERO.
+const SCAN = {
+  spawns: 0, running: 0, lanes: [], phase: null, slug: null,
+  branch: null, head: null, wiki: null, diy: null,
+  extra_enabled: false, update_version: null, inflight: null,
+  trace_age_min: null, trace_state: null, last_agent: null, retries: null,
+};
+
 function ledger(projectDir, sid) {
   if (LED) return LED;
   const fs = require("fs");
@@ -714,6 +726,20 @@ process.stdin.on("end", () => {
       led.wiki = w;
     }
     const w = led.wiki;
+    if (w) {
+      SCAN.wiki = {
+        distance: typeof w.distance === "number" ? w.distance : null,
+        tier: w.unregistered
+          ? "unregistered"
+          : typeof w.distance !== "number"
+            ? null
+            : w.distance > 30
+              ? "stale"
+              : w.distance >= 10
+                ? "aging"
+                : "fresh",
+      };
+    }
     if (w && w.unregistered) line += " · wiki: UNREGISTERED (run `orc wiki sync`)";
     else if (w && typeof w.distance === "number") {
       if (w.distance >= 10 && w.distance <= 30) line += ` · wiki: AGING (${w.distance}c)`;
@@ -897,6 +923,13 @@ process.stdin.on("end", () => {
     }
 
     const dsp = led.dispatch || { spawns: 0, running: 0, lanes: [], phase: null };
+    // The composed layout reads THESE — the same numbers the shipped line
+    // below prints, from the same scan.
+    SCAN.spawns = dsp.spawns || 0;
+    SCAN.running = dsp.running || 0;
+    SCAN.lanes = dsp.lanes || [];
+    SCAN.phase = dsp.phase || null;
+    SCAN.extra_enabled = !!extraOn;
     const parts = [];
     // `status:` leads, because what ORC is doing right now is the one thing on
     // this line that changes minute to minute. It is also the ONE segment
@@ -920,6 +953,7 @@ process.stdin.on("end", () => {
     // would say the session was free, and that is a different claim.
     parts.push("MTok " + (fmtTokens(led.tok) || "—"));
     const branch = gitBranch(projectDir);
+    SCAN.branch = branch || null;
     if (branch) parts.push(branch);
     line2 = "   " + parts.join(" · ");
   } catch (_) {
@@ -931,5 +965,143 @@ process.stdin.on("end", () => {
   // ledger that could not be written never takes the status line down with it.
   ledgerFlush();
 
+  // ── THE CUSTOM LAYOUT (v1.3.0) ──────────────────────────────────────────
+  // Everything above is the SHIPPED status line, and it is what renders unless
+  // the user composed their own. `custom()` returns null in every state but
+  // one, and each of its gates is a FALLBACK rather than a throw: a hook cannot
+  // refuse, so a bad layout must degrade to something correct rather than paint
+  // garbage. The ladder is documented on the function itself.
+  const composed = custom(d, {
+    payload: d,
+    ledger: LED || {},
+    scan: SCAN,
+    derived: { verdict, reasons, version: ver },
+    now: Date.now(),
+  });
+  if (composed != null) {
+    process.stdout.write(composed);
+    return;
+  }
+
   process.stdout.write(line2 ? line + "\n" + line2 : line);
 });
+
+// ── The six-rung gate ladder ────────────────────────────────────────────────
+// In order, and EVERY RUNG IS A FALLBACK, never a throw:
+//
+//   1  statusline_custom is not `on`        the shipped lines. BYTE-IDENTICAL.
+//   2  statusline-compiled.json missing /   default + statusline-layout-unreadable
+//      unparseable / schema mismatch
+//   3  orc_version or catalog_hash moved    default + statusline-layout-stale
+//   4  an unknown op or an unknown binding  default + statusline-layout-skew
+//   5  the cheap shape guard fails          default + statusline-layout-invalid
+//   6  otherwise                            run the program
+//
+// Rungs 3 and 4 are why the lock file exists. Rung 5 is this hook RE-CHECKING
+// rather than trusting the file, because a hand-edited compiled file is a file
+// nobody validated. Every fallback RECORDS ITSELF in the ledger so `orc doctor`
+// can name it: a status line that quietly went back to the default and never
+// said why is a bug the user cannot report.
+function custom(d, ctx) {
+  try {
+    const fs = require("fs");
+    const path = require("path");
+    const projectDir =
+      (d.workspace && d.workspace.project_dir) || d.cwd || process.cwd();
+    const orcDir = path.join(projectDir, ".claude", "orc");
+
+    // Rung 1. The hook cannot resolve config — that is the lane resolver's job,
+    // and a hook has no lane — so it reads the raw key off the file and takes
+    // the documented default otherwise, exactly as it already does for
+    // `log_dir` and `extra_enabled`.
+    let on = false;
+    try {
+      const raw = fs.readFileSync(path.join(projectDir, ".claude", "orc.config.yaml"), "utf8");
+      // The trailing \r is tolerated on purpose: a config file written on
+      // Windows carries CRLF, and a $-anchored match silently never fires
+      // there — which is a feature that is ON in the file and OFF on the bar.
+      on = /^[ \t]*statusline_custom:[ \t]*["']?on["']?[ \t]*\r?$/m.test(raw);
+    } catch (_) {}
+    if (!on) return null;
+
+    // Rung 2. THE HOOK NEVER READS THE AUTHORED LAYOUT — not as a fallback, not
+    // on a cache miss, not ever. One consumer per file.
+    let prog = null;
+    try {
+      prog = JSON.parse(fs.readFileSync(path.join(orcDir, "statusline-compiled.json"), "utf8"));
+    } catch (_) {}
+    if (!prog || prog.schema !== 1) return slFallback(orcDir, "statusline-layout-unreadable");
+
+    // Rung 3. An ORC upgrade that adds, removes or changes a component
+    // invalidates every compiled layout on the machine. Better the shipped
+    // lines than a program compiled against a catalogue that no longer exists.
+    let lock = null;
+    try {
+      lock = JSON.parse(fs.readFileSync(path.join(orcDir, "statusline.lock.json"), "utf8"));
+    } catch (_) {}
+    let installed = null;
+    try {
+      installed = JSON.parse(fs.readFileSync(path.join(__dirname, "orc-version.json"), "utf8")).version;
+    } catch (_) {}
+    if (!lock || (installed && lock.orc_version !== installed))
+      return slFallback(orcDir, "statusline-layout-stale");
+
+    const engine = require("./orc-statusline-render.js");
+
+    // Rung 4. A binding this build does not have is an INSTALL SKEW, not a
+    // rendering problem, and it must not be papered over one item at a time.
+    for (const b of lock.bindings || []) {
+      if (!engine.BINDINGS[b]) return slFallback(orcDir, "statusline-layout-skew");
+    }
+
+    // Rung 5. The cheap shape guard: at most three lines, at most five
+    // components on any of them, and the dense-prefix rule —
+    // A line may hold a component only if every line above it holds at least one.
+    if (!Array.isArray(prog.lines) || prog.lines.length > 3)
+      return slFallback(orcDir, "statusline-layout-invalid");
+    let seenEmpty = false;
+    for (const l of prog.lines) {
+      const n = (l.ops || []).filter((o) => o.op === "item").length;
+      if (n > 5) return slFallback(orcDir, "statusline-layout-invalid");
+      if (n === 0) seenEmpty = true;
+      else if (seenEmpty) return slFallback(orcDir, "statusline-layout-invalid");
+    }
+
+    // Rung 6. Run the program. Failure isolation lives inside the engine: one
+    // throwing item emits its unknown form and the rest of the line survives.
+    const out = engine.render(prog, {
+      payload: ctx.payload,
+      ledger: ctx.ledger,
+      scan: ctx.scan,
+      derived: ctx.derived,
+      now: ctx.now,
+      cols: Number(process.env.COLUMNS) || 0,
+      env: process.env,
+    });
+    if (out.errors && out.errors.length) slNote(orcDir, "statusline-item-failed", out.errors[0]);
+    return out.text;
+  } catch (_) {
+    // Even the ladder must not throw. A status line that crashes is a status
+    // line that is simply absent, with no way to find out why.
+    return null;
+  }
+}
+
+// A fallback RECORDS ITSELF. `orc doctor` reads this file and names the finding
+// with the exact command that clears it.
+function slFallback(orcDir, finding) {
+  slNote(orcDir, finding, null);
+  return null;
+}
+function slNote(orcDir, finding, detail) {
+  try {
+    const fs = require("fs");
+    const path = require("path");
+    fs.mkdirSync(orcDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(orcDir, "statusline-state.json"),
+      JSON.stringify({ finding, detail: detail || null, at: Date.now() }) + "\n"
+    );
+  } catch (_) {}
+}
+

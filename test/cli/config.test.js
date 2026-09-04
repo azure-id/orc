@@ -237,7 +237,7 @@ test("config: every key answers a declared family, and the two contested ones ar
   const { root } = freshInstall();
   try {
     const j = JSON.parse(cli(["config", "list", "--json", "--dir", root]).stdout);
-    assert.strictEqual(j.keys.length, 77);
+    assert.strictEqual(j.keys.length, 78);
     for (const k of j.keys) {
       assert.ok(k.answers && k.answers.length, k.key + " declares no answers[]");
       for (const a of k.answers) assert.ok(j.families[a.family], k.key + " → unknown family " + a.family);
@@ -353,8 +353,14 @@ test("config: lanes[] is a mechanical seed, and says so by being empty where it 
     // W5 added the last two KNOWINGLY: they are operating keys of the bridge in
     // exactly the sense `extra_stall_s` is, and giving them a guessed lane set
     // would be inventing the measurement this list exists to be honest about.
+    //
+    // v1.3.0 adds a THIRTEENTH, and for the same reason: `statusline_custom` is
+    // an operating key of a HOOK, and a hook has no lane — it cannot resolve
+    // config at all, so it reads the raw key off the file exactly as it already
+    // does for `log_dir` and `extra_enabled`.
     const orphans = j.keys.filter((k) => !k.lanes.length).map((k) => k.key);
     assert.deepStrictEqual(orphans, [
+      "statusline_custom",
       // v1.1.0 — the two operating keys of the WAIT. A lane runs `orc wait plan`
       // and the CLI reads these two; no spine reads either, which is the same
       // shape as the extra bridge's keys below.
