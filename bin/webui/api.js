@@ -483,6 +483,17 @@ const WRITES = {
   },
   // A preset REPLACES the layout, so the panel always confirms it and names
   // the loss — the `orc diy init --force` rule.
+  // THE DOCUMENT-LEVEL SETTINGS. `line` is per-LINE and `doc` is the whole
+  // layout; the colour set is a document fact, and routing it through `line`
+  // wrote one third of the bar while the picker read the other value back.
+  "/api/statusline/doc": (b) => {
+    const argv = ["statusline", "doc"];
+    if (b.theme) argv.push("--theme", String(b.theme));
+    if (b.glyphs) argv.push("--glyphs", String(b.glyphs));
+    if (b.ansi) argv.push("--ansi", String(b.ansi));
+    if (b.align_columns !== undefined) argv.push("--align-columns", b.align_columns ? "on" : "off");
+    return argv.concat(slBoard(b));
+  },
   "/api/statusline/apply": (b) => ["statusline", "apply", String(b.name), ...slBoard(b)],
   // v1.3.0 W5. `group` wraps 2-4 as one object, `expand` is its inverse and is
   // also how a composite becomes editable, `clone` is for two `config` chips on

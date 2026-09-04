@@ -3,9 +3,12 @@
    Every colour comes from a token defined once, on bare :root, in
    00-tokens.css. This file defines none.
 
-   Nothing here declares an animation, deliberately: the motion rules live in
-   04-motion.css and nowhere else. The board's affordances are borders and
-   opacity, and both survive a reader who has asked for less motion. */
+   Nothing here declares an animation or a @keyframes, deliberately: the motion
+   rules live in 04-motion.css and nowhere else, because THE ONE reduced-motion
+   media block lives there and a rule in this file — which loads BEFORE it —
+   could not be switched off from there at equal specificity. What is here is
+   state that survives a reader who asked for less motion: borders, opacity and
+   a drop marker drawn as a real edge. */
 
 /* ── the preview ───────────────────────────────────────────────────────── */
 /* A terminal is a monospaced grid, so the preview has to be one too. Anything
@@ -89,13 +92,20 @@
 
 /* ── the board ─────────────────────────────────────────────────────────── */
 .hk-line-wrap {
-  margin-bottom: 16px;
+  margin-bottom: 18px;
 }
 .hk-line-head {
   display: flex;
   justify-content: space-between;
-  align-items: baseline;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
   margin-bottom: 6px;
+}
+.hk-line-title {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
 }
 .hk-line-name {
   font-size: 12px;
@@ -113,12 +123,22 @@
 .hk-zone {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  padding: 10px;
+  gap: 10px;
+  padding: 12px;
   border: 1px dashed var(--line);
   border-radius: 10px;
-  min-height: 64px;
+  min-height: 84px;
   align-items: stretch;
+}
+/* The zone under a chip being dragged over it. A border change, not a glow:
+   the affordance has to survive a reader who asked for less motion. */
+.hk-zone-hot {
+  border-color: var(--accent);
+  border-style: solid;
+  background: var(--bg-sunken);
+}
+.hk-zone-why {
+  flex-basis: 100%;
 }
 /* An illegal line is DISABLED with its reason on the zone itself — never a
    toast after the fact, never a validation error on Apply. A user should not be
@@ -142,82 +162,125 @@
   padding: 8px;
 }
 
-/* A chip's child count CHANGES with its state — an open editor adds a whole
-   drawer — so it is a FLEX COLUMN and never declares its rows. A card whose
-   child count changes with its state must not have a row template; that is what
-   put a 250px ellipse on the Extra panel. */
+/* A chip's child count CHANGES with its state — a part with no description is
+   one row shorter — so it is a FLEX COLUMN and never declares its rows. A card
+   whose child count changes with its state must not have a row template; that
+   is what put a 250px ellipse on the Extra panel. */
 .hk-chip {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 8px;
+  gap: 5px;
+  padding: 9px 10px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 9px;
   background: var(--bg-raised);
-  min-width: 120px;
+  min-width: 150px;
+  max-width: 280px;
+  cursor: grab;
+  /* The drop marker is drawn on this edge, so the space for it is reserved
+     always — a border that appears on hover would shift every chip to its
+     right by two pixels at the moment of the drop decision. */
+  box-shadow: inset 0 0 0 0 var(--accent);
 }
 .hk-chip:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
-.hk-chip-open {
+.hk-chip:active {
+  cursor: grabbing;
+}
+.hk-chip-dragging {
+  opacity: 0.4;
+  border-style: dashed;
+}
+/* WHERE IT WILL LAND, on the edge it will land on. A gap that opens up would
+   move every other chip while the pointer is deciding. */
+.hk-drop-before {
+  box-shadow: inset 3px 0 0 0 var(--accent);
+}
+.hk-drop-after {
+  box-shadow: inset -3px 0 0 0 var(--accent);
+}
+/* Staged, not written. The dashed accent edge is the same language the edit bar
+   uses at the bottom of the page. */
+.hk-chip-new {
   border-color: var(--accent);
-  width: 100%;
+  border-style: dashed;
 }
 .hk-chip-face {
-  min-height: 24px;
-}
-.hk-chip-foot {
   display: flex;
-  justify-content: space-between;
   align-items: center;
   gap: 6px;
+  min-height: 24px;
+}
+.hk-grip {
+  color: var(--fg-dim);
+  font-size: 14px;
+  line-height: 1;
+  cursor: grab;
+  user-select: none;
 }
 .hk-chip-id {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 11px;
   color: var(--fg-dim);
 }
-.hk-icon {
-  background: none;
-  border: none;
+/* "What is this thing" is the first question anybody asks of a bar full of
+   symbols, and until v1.4.1 the answer lived only in a tooltip. */
+.hk-chip-desc {
+  font-size: 11px;
+  line-height: 1.45;
   color: var(--fg-dim);
-  cursor: pointer;
-  font-size: 14px;
-  line-height: 1;
-  padding: 2px 4px;
-  border-radius: 4px;
 }
-.hk-icon:hover {
-  background: var(--bg-sunken);
-  color: var(--fg);
-}
-.hk-move {
+.hk-chip-acts {
   display: flex;
   gap: 4px;
   flex-wrap: wrap;
+  margin-top: 2px;
 }
+.hk-act {
+  font-size: 11px;
+  padding: 3px 8px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--bg-sunken);
+  color: var(--fg-dim);
+  cursor: pointer;
+}
+.hk-act:hover {
+  border-color: var(--accent);
+  color: var(--fg);
+}
+.hk-act-remove:hover {
+  border-color: var(--bad);
+  color: var(--bad);
+}
+
 .hk-add {
   border: 1px dashed var(--line);
   background: none;
   color: var(--fg-dim);
-  border-radius: 8px;
-  padding: 8px 14px;
+  border-radius: 9px;
+  padding: 10px 18px;
   cursor: pointer;
   font-size: 12px;
+  min-width: 150px;
 }
-.hk-add:hover {
+.hk-add:hover:not(:disabled) {
   border-color: var(--accent);
   color: var(--fg);
+}
+.hk-add:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
 }
 
 .hk-line-opts {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-top: 6px;
 }
-.hk-sep,
+.hk-select,
 .hk-input {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 12px;
@@ -226,34 +289,132 @@
   border-radius: 6px;
   background: var(--bg-sunken);
   color: var(--fg);
-  max-width: 200px;
+  max-width: 260px;
 }
 
-/* ── the editor drawer ─────────────────────────────────────────────────── */
-.hk-drawer {
-  border-top: 1px solid var(--line);
-  margin-top: 8px;
-  padding-top: 10px;
-  display: grid;
-  gap: 8px;
+/* ── the part picker ───────────────────────────────────────────────────── */
+.hk-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: min(560px, 76vw);
 }
-.hk-drawer-head {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-weight: 600;
-  font-size: 13px;
+.hk-picker-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.hk-picker-input {
+  flex: 1 1 auto;
+  max-width: none;
+}
+.hk-picker-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 46vh;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+.hk-picker-list::-webkit-scrollbar {
+  width: 8px;
+}
+.hk-picker-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+.hk-picker-list::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border-radius: 4px;
+}
+/* One click, one part. A refused row is drawn as a plain div and gets NO button
+   at all — never a disabled one: "we decided against this" and "we forgot" must
+   not look the same. */
+.hk-pick-row {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  width: 100%;
+  padding: 9px 11px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg-raised);
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+}
+button.hk-pick-row:hover {
+  border-color: var(--accent);
+  background: var(--bg-sunken);
+}
+.hk-pick-row-off {
+  cursor: default;
+  opacity: 0.7;
+  background: none;
+}
+.hk-pick-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.hk-pick-desc {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--fg-dim);
+}
+
+/* ── move ──────────────────────────────────────────────────────────────── */
+.hk-move-line {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--line);
+}
+.hk-move-slots {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+/* ── the part editor ───────────────────────────────────────────────────── */
+.hk-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  min-width: min(620px, 78vw);
+}
+.hk-editor-live {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--bg-raised);
+  padding-bottom: 4px;
+}
+/* The editor is a flex COLUMN that stretches its children, which turned a small
+   secondary button into a full-width box that read as a text field. */
+.hk-swap {
+  align-self: flex-start;
+}
+.hk-section-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-top: 10px;
 }
 .hk-section {
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--fg-dim);
-  margin-top: 8px;
   border-bottom: 1px solid var(--line);
   padding-bottom: 3px;
 }
 /* THE SHAPE PICKER IS A GALLERY, NOT A DROPDOWN: every option drawn with this
-   component's real value. A dropdown containing the word `braille-bar` tells
-   nobody anything. */
+   component's real value. A dropdown containing a renderer's name tells nobody
+   anything. */
 .hk-gallery {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
@@ -271,6 +432,9 @@
   cursor: pointer;
   text-align: left;
 }
+.hk-sample:hover {
+  border-color: var(--accent);
+}
 .hk-sample-on {
   border-color: var(--accent);
   background: var(--bg-raised);
@@ -281,15 +445,24 @@
   color: var(--fg-dim);
 }
 
+/* A control, its name, and the sentence that says what it does. The sentence is
+   why this is a two-line left column rather than a label. */
 .hk-field {
   display: grid;
-  grid-template-columns: 110px 1fr;
-  gap: 10px;
-  align-items: center;
+  grid-template-columns: 190px 1fr;
+  gap: 12px;
+  align-items: start;
+  padding: 5px 0;
+}
+.hk-field-left {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 .hk-field-name {
   font-size: 12px;
-  color: var(--fg-dim);
+  font-weight: 600;
+  color: var(--fg);
 }
 .hk-picks {
   display: flex;
@@ -305,6 +478,9 @@
   background: var(--bg-sunken);
   color: var(--fg-dim);
   cursor: pointer;
+}
+.hk-pick:hover {
+  border-color: var(--accent);
 }
 .hk-pick-on {
   border-color: var(--accent);
@@ -323,30 +499,33 @@
   font-size: 12px;
 }
 
-/* ── the palette ───────────────────────────────────────────────────────── */
+/* ── the reference list ────────────────────────────────────────────────── */
 .hk-palette-search {
-  font-size: 12px;
-  padding: 4px 10px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: var(--bg-sunken);
-  color: var(--fg);
   min-width: 180px;
 }
-/* A row's child count changes with its state — a refused row carries a reason
-   and no buttons — so it is a flex column, not a grid with declared columns. */
+/* A row's child count changes with its state — a refused row carries a reason —
+   so it is a flex column, not a grid with declared columns. */
 .hk-prow {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 4px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--line);
+}
+.hk-prow-head {
+  display: flex;
   align-items: center;
   gap: 10px;
-  padding: 7px 0;
-  border-bottom: 1px solid var(--line);
+  flex-wrap: wrap;
 }
 .hk-prow-id {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 12px;
-  min-width: 150px;
+}
+.hk-prow-desc {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--fg-dim);
 }
 .hk-prow-why {
   flex-basis: 100%;
@@ -363,6 +542,43 @@
   display: flex;
   gap: 8px;
   align-items: center;
+}
+
+/* ── the colour set picker ─────────────────────────────────────────────── */
+/* Each option carries the CLI's own sentence about what it is FOR, so it is a
+   card and not a word in a row of words. */
+.hk-theme-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.hk-theme {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  flex: 1 1 220px;
+  max-width: 320px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg-sunken);
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+}
+.hk-theme:hover {
+  border-color: var(--accent);
+}
+.hk-theme-on {
+  border-color: var(--accent);
+  background: var(--bg-raised);
+}
+.hk-theme-name {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--fg);
 }
 
 /* A number field is a NUMBER field: wide enough for three digits and its

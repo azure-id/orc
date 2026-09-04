@@ -37,6 +37,43 @@
   from { opacity: 0; transform: translateY(8px); }
   to   { opacity: 1; transform: none; }
 }
+/* ── the CLI Hook Interface (v1.4.1) ─────────────────────────────────────── */
+/* The board is a thing you BUILD, so it moves the way a thing you build moves:
+   a chip arrives, a chip you just staged breathes once so you can find it, and
+   a row in the part picker slides in as the list narrows under your typing.
+   Every one of them is a FINITE animation with a real end state, so the cap in
+   the reduced-motion block below leaves each one at rest rather than frozen
+   part-way. */
+.hk-chip { animation: hk-chip-in 200ms var(--ease) backwards; }
+@keyframes hk-chip-in {
+  from { opacity: 0; transform: translateY(6px) scale(0.97); }
+  to   { opacity: 1; transform: none; }
+}
+/* Staged, not written — and the one thing on the board that has to be findable
+   the instant it appears. Three pulses and it stops: an infinite one would have
+   to be REMOVED below rather than capped, and this one reads correctly at rest.
+   */
+.hk-chip-new { animation: hk-chip-in 200ms var(--ease) backwards, hk-chip-mark 900ms var(--ease) 3; }
+@keyframes hk-chip-mark {
+  0%, 100% { box-shadow: inset 0 0 0 0 var(--accent); }
+  50%      { box-shadow: inset 0 0 0 2px var(--accent); }
+}
+/* Position, drop marker, and the zone's own border: transitions rather than
+   animations, so an interrupted drag never leaves a chip mid-flight. */
+.hk-chip, .hk-zone, .hk-add, .hk-act, .hk-pick-row, .hk-theme, .hk-sample {
+  transition: border-color var(--dur) var(--ease), background var(--dur) var(--ease),
+              box-shadow var(--dur) var(--ease), opacity var(--dur) var(--ease),
+              transform var(--dur) var(--ease);
+}
+.hk-chip:hover:not(.hk-chip-dragging) { transform: translateY(-2px); }
+.hk-add:hover:not(:disabled) { transform: translateY(-2px); }
+.hk-pick-row { animation: hk-row-in 160ms var(--ease) backwards; }
+@keyframes hk-row-in {
+  from { opacity: 0; transform: translateX(-6px); }
+  to   { opacity: 1; transform: none; }
+}
+button.hk-pick-row:hover { transform: translateX(3px); }
+
 /* ---------------------------------------------------------- REDUCED MOTION */
 /* Non-negotiable: every animation and transition above is off. */
 
@@ -55,6 +92,12 @@
      nudges are removed outright rather than sped up. */
   .nav a:hover, .btn:active:not(:disabled), .action:hover,
   .todo:hover, .stat-link:hover, button.step:hover { transform: none !important; }
+  /* The board's own nudges, removed rather than shortened — a chip that lifts
+     under the pointer is an affordance, and a fast lift is still a lift. The
+     border and box-shadow changes stay: THEY are what says where a drop lands,
+     and a drop marker carried by motion alone would not exist here at all. */
+  .hk-chip:hover:not(.hk-chip-dragging), .hk-add:hover:not(:disabled),
+  button.hk-pick-row:hover { transform: none !important; }
   /* The vault pulse is one of two INFINITE animations on the page. Capping it to
      a single 1ms run would still leave a dash frozen mid-edge, so it is removed
      outright and the edge reads as a plain line. */

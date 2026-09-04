@@ -10,6 +10,99 @@ Format: `### v<version> — <title> _(<date>)_`.
 
 ---
 
+### v1.4.1 - the board you can actually use _(2026-09-05)_
+
+**Still on the unscoped `orc` package?** Do this once first — your `orc upgrade`
+is the pre-v0.56.0 one and cannot install itself. Full detail in the CAUTION at
+the top of this file.
+
+- **Step 1 — release the command from the old package:** `npm uninstall -g orc`
+- **Step 2 — install the current package:** `npm i -g @azure-id/orc`
+- **Step 3 — re-apply it to your project:** `orc update`
+
+**Do not use `npm i -g -f`.** Full detail in v0.56.0 below.
+
+Four defects in `orc ui` ▸ **CLI Hook Interface**, and the revamp they asked
+for. Reported by the person who designed it, which is the useful kind of report:
+*"this is massive, what the heck is this UI, so plain and not interactive."*
+
+**ADDING THREE PARTS PRODUCED ONE, AND THAT WAS ARITHMETIC, NOT A UI COMPLAINT.**
+Every `+ line N` button in the old palette computed its write's position from the
+**saved** layout rather than from the layout being staged. Three staged adds all
+carried position 1 — and `orc statusline set <line> <pos>` with an item already
+at that position is an **EDIT**, by design. So the second write changed the first
+part's type, the third changed it again, and one part appeared where three were
+asked for. The five-slot cap counted the same stale layout, so it never fired
+either.
+
+The fix is structural rather than careful. A staged change is now a **semantic op
+against a stable ref** — `add` · `remove` · `move` · `set` · `sep` · `doc` — and
+one function, `hkPlan`, replays them in order to produce **both** the board you
+are looking at **and** the writes that produce it, deriving every position at the
+moment that write will run. A second idea of where a part will land is exactly
+the bug this replaces: the board drew one arrangement and the writes made
+another, silently. The cap, the dense-prefix rule and the "line is full" refusal
+all read that same effective board now.
+
+**THE COLOUR SET WROTE ONE LINE AND READ THE WHOLE DOCUMENT.** The picker shelled
+`orc statusline line 1 --theme`, which sets **line 1's** override, while
+`statusline show --json` reports `layout.theme`. So the selected button never
+moved and only a third of the bar changed colour — half working, which is worse
+than not working. New command `orc statusline doc [--theme] [--glyphs] [--ansi]
+[--align-columns]` writes document-level settings, and **clears the per-line
+overrides that would otherwise shadow the choice** — a setting silently shadowed
+is the failure this command exists to fix. One command per scope, and the panel
+calls the one that matches the control.
+
+**THE PREVIEW HAD NEVER HAD COLOUR.** `orc ui` serves under
+`style-src 'self'`, which blocks a parsed `style` **attribute** outright — so
+every SGR colour `ansiBlock` computed was thrown away by the browser, with the
+reason only in a console nobody had open. The properties are assigned through
+CSSOM now, which is not a parse and is not blocked. Loosening the policy to
+`unsafe-inline` for a preview is not a trade worth making.
+
+**AND "WHAT IS THIS THING" NOW HAS AN ANSWER ON THE PAGE.** Every part carries
+its one-line description on the chip, in the picker and in the reference list;
+every control in the editor carries the sentence that says what it does; the
+`80 / 120 / 160` buttons say they are **terminal widths in character cells**;
+and each colour set carries the CLI's own sentence about what it is for.
+
+**The revamp itself, five changes:**
+
+- **The board is the only place anything is applied.** The palette's three
+  `+ line N` buttons are gone. It is a **reference** now — what each part shows
+  and nothing else — because the act of building the bar belongs next to the bar.
+- **Add · Change · Move · Remove are buttons on the chip**, and each opens a
+  **modal that says what it is about to do**. The part picker is one modal, one
+  search box, one click, and it is the only place a part is ever chosen — for a
+  new slot and for swapping an existing one.
+- **Drag and drop**, with the drop edge marked on the chip it will land beside
+  rather than by opening a gap that shoves every other chip sideways while the
+  pointer is still deciding. It is the **shortcut, never the mechanism**: every
+  move has a button and a keyboard equivalent, and drag is switched **off for
+  real** below 600px, where a drop gap stops being a target.
+- **The separator is a dropdown of twelve**, published by the CLI
+  (`separators` in `statusline components --json`) so the panel still names none
+  of them. A value the layout already carries that is not in the set keeps its
+  slot, leads the list and is disabled — the `fixed_executor` rule.
+- **Motion, in `04-motion.css` and nowhere else:** a chip arrives, a chip you
+  just staged pulses three times so you can find it, a picker row slides in as
+  the list narrows under your typing. Every one is FINITE, so the reduced-motion
+  cap leaves each at rest rather than frozen part-way — and the drop marker,
+  the refusal and the staged-edge are borders, never motion.
+
+A refusal is never a shrug: "line 3 is full, it already holds 5 parts" and
+"put something on line 2 first" are two different facts and stay two sentences.
+A line that cannot take a part **says so once** rather than printing the same
+refusal on six identical disabled slots.
+
+`statusline components --json` gains `separators`, `themes_about` and a
+per-component `structural` flag — the panel cannot know which parts do not eat
+one of the five without a second idea of the catalogue, which is the drift this
+panel exists to make impossible.
+
+---
+
 ### v1.4.0 - the agent panel, and the number that was missing _(2026-09-04)_
 
 **Still on the unscoped `orc` package?** Do this once first — your `orc upgrade`

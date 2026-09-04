@@ -138,6 +138,20 @@
   .hk-prow-id {
     min-width: 0;
   }
+  /* v1.4.1 — the editor's two-column field (a name plus the sentence that
+     explains it, then the control) stacks; and DRAG IS OFF below this width. A
+     40-pixel drop gap on a phone is not a target, so the three buttons on every
+     chip are the path — which is why they are buttons on the chip and not a
+     menu behind one. */
+  .hk-chip {
+    max-width: none;
+    flex-basis: 100%;
+    cursor: default;
+  }
+  .hk-grip { display: none; }
+  .hk-add { flex-basis: 100%; }
+  .hk-picker, .hk-editor { min-width: 0; }
+  .hk-theme { flex-basis: 100%; max-width: none; }
   /* The caution KEEPS its two columns. The mark and the sentence belong to each
      other, and stacking them puts a lone ✕ on a line of its own above the text
      it is about. The mark column narrows instead. */

@@ -34533,6 +34533,38 @@ const STATUSLINE_HIDE_WHEN = [
   { id: "wide", says: "hide above this component's max_cols" },
 ];
 
+// The separators a line can put BETWEEN its parts. A free-text box asked the
+// user to invent a rhythm and to type a character their keyboard may not have;
+// this is the closed set, and the panel renders it as a dropdown because the
+// panel names none of these itself. `value` is what is written into the layout,
+// `name` is what a person reads. A layout may still carry any string — a value
+// outside this set is kept and offered back, the way an unset `fixed_executor`
+// leads its own dropdown.
+const SL_SEPARATORS = [
+  { value: " · ", name: "middle dot" },
+  { value: " ", name: "one space" },
+  { value: "  ", name: "two spaces" },
+  { value: " │ ", name: "upright line" },
+  { value: " — ", name: "long dash" },
+  { value: " - ", name: "hyphen" },
+  { value: " / ", name: "slash" },
+  { value: " • ", name: "bullet" },
+  { value: " ▸ ", name: "small arrow" },
+  { value: " » ", name: "double arrow" },
+  { value: ", ", name: "comma" },
+  { value: " | ", name: "pipe" },
+];
+
+// What each colour set is FOR. The names are the CLI's own and are never
+// translated; this sentence is why a person would pick one, and without it the
+// picker is four words with no meaning.
+const SL_THEME_ABOUT = {
+  terminal: "the default: your terminal's own colours, one accent",
+  dim: "everything quiet — labels and values both greyed",
+  "high-contrast": "the brightest slot of every colour, for a pale terminal",
+  mono: "no colour at all; weight and shape carry every state",
+};
+
 const SL_FORMATS = ["percent", "ratio", "fraction", "decimal", "plain"];
 const SL_COMPACT = ["off", "si", "bytes"];
 const SL_CASES = ["none", "upper", "lower", "title"];
@@ -36055,6 +36087,8 @@ function statusline() {
       return slRemoveCmd(claudeDir, p);
     case "line":
       return slLineCmd(claudeDir, p);
+    case "doc":
+      return slDocCmd(claudeDir, p);
     case "presets":
       return slPresetsCmd(claudeDir);
     case "apply":
@@ -36075,6 +36109,7 @@ function statusline() {
        orc statusline move <from-line>:<pos> <to-line>:<pos>
        orc statusline remove <line>:<pos>
        orc statusline line <n> --separator "…" [--max-width N] [--theme T]
+       orc statusline doc [--theme T] [--glyphs G] [--ansi auto|off] [--align-columns on|off]
        orc statusline group <line>:<pos> <line>:<pos> [...]   wrap 2-4 as one object
        orc statusline expand <line>:<pos>                     a composite, or a group, back into its parts
        orc statusline clone <line>:<pos>
@@ -36113,6 +36148,10 @@ function slComponentsCmd() {
       binding: c.binding,
       composite: c.composite || null,
       time_based: !!c.time_based,
+      // Whether this one eats a slot. A spacer is not a thing the line SAYS, so
+      // it does not count against the five — and the panel cannot work that out
+      // for itself without owning a second idea of the catalogue.
+      structural: slIsStructural(c.id),
       previews: slRendererPreviews(c),
     };
     out.push(row);
@@ -36138,6 +36177,8 @@ function slComponentsCmd() {
       emphasis: Object.keys(SL_EMPHASIS),
       refused_emphasis: SL_REFUSED_EMPHASIS,
       colors: Object.keys(SL_ANSI_SLOTS),
+      separators: SL_SEPARATORS,
+      themes_about: SL_THEME_ABOUT,
       board: board.id,
       boards: Object.keys(SL_BOARDS),
       max_per_line: 5,
@@ -36497,6 +36538,51 @@ function slLineCmd(claudeDir, p) {
     line.theme = th;
   }
   return slSaveAndCompile(claudeDir, layout, { action: "line", line: n });
+}
+
+// THE DOCUMENT-LEVEL SETTINGS, and they are a separate command on purpose.
+// `line <n> --theme` sets ONE line's override; the colour set a user picks in
+// the panel is the WHOLE layout's, and writing it onto line 1 changed one third
+// of the bar while `show --json` kept reporting the document theme — so the
+// picker looked dead and was in fact half working, which is worse. One command
+// per scope, and the panel calls the one that matches the control.
+function slDocCmd(claudeDir, p) {
+  const layout = slLoadOrDefault(claudeDir);
+  const th = flag("--theme");
+  if (typeof th === "string") {
+    if (!STATUSLINE_THEMES[th]) {
+      if (wantsJson()) return emitJson({ ok: false, reason: "unknown-theme", theme: th, known: Object.keys(STATUSLINE_THEMES) }, 2);
+      console.error(`unknown colour set "${th}" — known: ${Object.keys(STATUSLINE_THEMES).join(", ")}`);
+      process.exit(2);
+    }
+    layout.theme = th;
+    // A per-LINE override outranks the document, so a colour set chosen here
+    // would be invisible on any line that carries one. The overrides are
+    // cleared and the answer NAMES the lines it cleared — a setting silently
+    // shadowed is the one failure this whole command exists to fix.
+    for (const l of layout.lines) l.theme = null;
+  }
+  const gl = flag("--glyphs");
+  if (typeof gl === "string") {
+    if (!STATUSLINE_GLYPHSETS[gl]) {
+      if (wantsJson()) return emitJson({ ok: false, reason: "unknown-glyphs", glyphs: gl, known: Object.keys(STATUSLINE_GLYPHSETS) }, 2);
+      console.error(`unknown symbol set "${gl}" — known: ${Object.keys(STATUSLINE_GLYPHSETS).join(", ")}`);
+      process.exit(2);
+    }
+    layout.glyphs = gl;
+  }
+  const an = flag("--ansi");
+  if (typeof an === "string") {
+    if (!["auto", "off"].includes(an)) {
+      if (wantsJson()) return emitJson({ ok: false, reason: "unknown-ansi", ansi: an, known: ["auto", "off"] }, 2);
+      console.error(`--ansi takes auto or off`);
+      process.exit(2);
+    }
+    layout.ansi = an;
+  }
+  const align = flag("--align-columns");
+  if (typeof align === "string") layout.align_columns = align === "on";
+  return slSaveAndCompile(claudeDir, layout, { action: "doc", theme: layout.theme, glyphs: layout.glyphs, ansi: layout.ansi, align_columns: !!layout.align_columns });
 }
 
 function slPresetsCmd(claudeDir) {
