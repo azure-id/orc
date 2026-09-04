@@ -34566,6 +34566,67 @@ const STATUSLINE_COMPONENTS = [
   slRow({ id: "divider", group: "I", summary: "A styled break between GROUPS of components — the second separator kind. Does not count against the 5-per-line limit.", renderers: ["bare"], defaults: { render: "bare" }, unknown: "hide", params: { text: { free: true, dflt: " │ " } }, binding: "static.text" }),
   slRow({ id: "fill", group: "I", summary: "Pushes everything after it to the right edge. Exact, because Claude Code sets COLUMNS before the script runs. Does not count against the 5-per-line limit.", renderers: ["bare"], defaults: { render: "bare" }, unknown: "hide", params: { weight: { options: [1, 2, 3], dflt: 1 } }, binding: "static.text" }),
 
+
+  // ── Group D — Knowledge. Every row here comes out of wiki-meta.json, the
+  //    pattern cache or the crosslink config: small JSON files on a 60-second
+  //    clock. None of them shells out.
+  slRow({ id: "wiki", group: "D", label: "wiki", summary: "How old the project wiki is, from the wiki's own oldest anchor. The tier is COMPUTED on read — a stored status word goes stale. This is the FLOOR: `orc wiki status` computes the coverage-relative tier, which needs one git walk per document and cannot ride on this surface.", renderers: ["word", "shape", "dot", "badge", "traffic"], defaults: { render: "word" }, states: ["fresh", "aging", "stale", "unregistered", "none"], shapes: { fresh: "●", aging: "◐", stale: "○", unregistered: "?", none: "·" }, cost: "new-read", binding: "wiki.tier", state_binding: "wiki.tier" }),
+  slRow({ id: "wiki-distance", group: "D", label: "c", summary: "Commits since the wiki was scanned.", renderers: ["bare", "plain", "label-value", "paren"], defaults: { render: "paren", suffix: "c" }, states: ["fresh", "aging", "stale"], cost: "new-read", binding: "wiki.distance", state_binding: "wiki.tier" }),
+  slRow({ id: "wiki-worst", group: "D", label: "worst", summary: "The wiki document deciding its tier.", renderers: ["bare", "plain", "label-value"], defaults: { render: "bare", truncate: "middle", max_len: 24 }, unknown: "hide", cost: "refused", refused_reason: "freshness is COVERAGE-RELATIVE, so finding the worst document means one `git rev-list` PER DOCUMENT against that document's own covered files. `orc wiki status` computes it; a status line cannot afford N subprocesses on a surface that redraws on every keystroke." }),
+  slRow({ id: "wiki-coverage", group: "D", label: "cov", summary: "How much of the repo the wiki covers.", renderers: ["plain", "bare", "label-value"], defaults: { render: "plain", format: "percent" }, cost: "refused", refused_reason: "coverage is COMPUTED, not stored: it needs the tracked-file list, which is a `git ls-files` subprocess, and then a match per document. `orc wiki coverage` is where that answer lives. A status line reading a field wiki-meta.json does not have would render a confident number nobody measured." }),
+  slRow({ id: "wiki-docs", group: "D", label: "docs", summary: "How many wiki documents are registered.", renderers: ["plain", "label-value", "bare"], defaults: { render: "plain" }, cost: "new-read", binding: "wiki.docs" }),
+  slRow({ id: "wiki-blindspot", group: "D", label: "blind", summary: "Whether the wiki has a STRUCTURAL blind spot. That is a coverage gap, not doc rot.", renderers: ["plain", "bare"], defaults: { render: "plain" }, unknown: "hide", cost: "refused", refused_reason: "a blind spot is files changed since the floor that NO document covers — the same per-document git walk `wiki-worst` needs. `orc wiki status` reports it, and `orc wiki impact` escalates it, which is the right place for that signal." }),
+  slRow({ id: "pattern", group: "D", label: "pattern", summary: "Whether a code pattern is cached for this project.", renderers: ["word", "plain", "label-value", "bare", "shape"], defaults: { render: "plain" }, states: ["cached", "none"], shapes: { cached: "●", none: "○" }, cost: "new-read", binding: "pattern.state", state_binding: "pattern.state" }),
+  slRow({ id: "crosslink", group: "D", label: "peers", summary: "How many peer repositories are linked.", renderers: ["plain", "label-value", "bare", "dots"], defaults: { render: "plain" }, states: ["linked", "none"], shapes: { linked: "●", none: "○" }, cost: "new-read", binding: "crosslink.peers", state_binding: "crosslink.state" }),
+  slRow({ id: "gotchas", group: "D", label: "gotchas", summary: "How many repair memories are kept.", renderers: ["plain", "label-value", "bare"], defaults: { render: "plain" }, cost: "new-read", binding: "gotchas.count" }),
+
+  // ── Group E — Extra (foreign dispatch) ──────────────────────────────────
+  slRow({ id: "extra", group: "E", label: "orc-extra", summary: "Whether foreign dispatch is armed. A run that sends work off Claude says so.", renderers: ["word", "plain", "label-value", "dot", "shape", "badge"], defaults: { render: "label-value" }, states: ["on", "off"], shapes: { on: "●", off: "○" }, cost: "scan", binding: "extra.state", state_binding: "extra.state" }),
+  slRow({ id: "extra-profile", group: "E", summary: "The extra profile a wave would use.", renderers: ["bare", "plain", "badge", "pill"], defaults: { render: "bare" }, unknown: "hide", cost: "new-read", binding: "extra.profile" }),
+  slRow({ id: "extra-provider", group: "E", summary: "The provider behind that profile.", renderers: ["bare", "badge", "pill"], defaults: { render: "badge" }, unknown: "hide", cost: "new-read", binding: "extra.provider" }),
+  slRow({ id: "extra-spend", group: "E", label: "extra", summary: "What foreign dispatch has cost. A figure ORC did not price itself is never printed — it reads as an em dash.", renderers: ["plain", "label-value", "bare", "spark"], defaults: { render: "plain", prefix: "$", precision: 2 }, series: "extraspend", cost: "new-read", binding: "extra.spend" }),
+  slRow({ id: "extra-tasks", group: "E", label: "sent", summary: "How many tasks went off Claude.", renderers: ["plain", "label-value", "bare"], defaults: { render: "plain" }, cost: "new-read", binding: "extra.tasks" }),
+  slRow({ id: "extra-inflight", group: "E", summary: "Whether a foreign dispatch is open.", renderers: ["dot", "shape", "dots", "pulse"], defaults: { render: "shape" }, states: ["idle", "running"], shapes: { idle: "○", running: "●" }, cost: "new-read", binding: "extra.inflight", state_binding: "extra.inflight" }),
+  slRow({ id: "extra-demoted", group: "E", label: "demoted", summary: "Whether a provider was demoted this run. A lane that quietly stops is the mirror of one that quietly sends work away.", renderers: ["word", "shape", "badge"], defaults: { render: "shape" }, states: ["none", "demoted"], shapes: { none: "·", demoted: "▼" }, unknown: "hide", cost: "new-read", binding: "extra.demoted", state_binding: "extra.demoted" }),
+  slRow({ id: "extra-passphrase", group: "E", label: "key", summary: "The vault deadline. It is a DEADLINE, not a second factor.", renderers: ["word", "shape", "badge", "traffic"], defaults: { render: "shape" }, states: ["active", "expiring", "expired", "absent"], shapes: { active: "●", expiring: "◐", expired: "○", absent: "·" }, cost: "new-read", binding: "extra.passphrase", state_binding: "extra.passphrase" }),
+  slRow({ id: "extra-orphans", group: "E", label: "orphans", summary: "Dispatches nothing observed ending.", renderers: ["plain", "label-value", "bare"], defaults: { render: "plain" }, cost: "new-read", binding: "extra.unended" }),
+  slRow({ id: "extra-reliability", group: "E", label: "rel", summary: "Per-profile reliability. NEVER a rate below 10 dispatches — it reads as an em dash instead.", renderers: ["plain", "bar", "dots", "bare", "blocks"], defaults: { render: "plain", format: "percent", min_width: 3, align: "right" }, bounded: true, cost: "new-read", binding: "extra.reliability" }),
+
+  // ── Group F — Flow and lanes ────────────────────────────────────────────
+  slRow({ id: "diy", group: "F", label: "diy", summary: "Your custom flow's compile state.", renderers: ["word", "plain", "label-value", "badge", "shape"], defaults: { render: "label-value" }, states: ["ready", "stale", "unconfigured"], shapes: { ready: "●", stale: "◐", unconfigured: "○" }, unknown: "hide", cost: "scan", binding: "diy.state", state_binding: "diy.state" }),
+  slRow({ id: "diy-tier", group: "F", summary: "Whether the session tier matches the compiled flow's.", renderers: ["bare", "plain", "shape", "word"], defaults: { render: "shape" }, states: ["match", "mismatch"], shapes: { match: "·", mismatch: "▲" }, unknown: "hide", cost: "scan", binding: "diy.tier_state", state_binding: "diy.tier_state" }),
+  slRow({ id: "diy-step", group: "F", summary: "Where the compiled flow is in its own step list.", renderers: ["dots", "traffic", "marker", "bare", "plain"], defaults: { render: "dots" }, bounded: true, unknown: "hide", cost: "scan", binding: "diy.step" }),
+  slRow({ id: "wait", group: "F", label: "wait", summary: "Whether a wait is running or blocked. Nothing runs during a wait.", renderers: ["word", "shape", "icon", "badge", "pulse"], defaults: { render: "shape" }, states: ["none", "waiting", "blocked"], shapes: { none: "·", waiting: "◐", blocked: "▲" }, unknown: "hide", cost: "new-read", binding: "wait.state", state_binding: "wait.state" }),
+  slRow({ id: "preset-name", group: "F", summary: "Which status-line preset this layout came from.", renderers: ["bare", "badge", "pill"], defaults: { render: "badge" }, unknown: "hide", cost: "new-read", binding: "preset.name" }),
+
+  // ── Group C remainder — the run's own progress, from RESUME.md's one
+  //    byte-stable line. Reading that line is how a listing never has to open
+  //    a checkpoint.
+  slRow({ id: "wave", group: "C", label: "wave", summary: "Which wave the run is in.", renderers: ["plain", "label-value", "bare", "bar", "blocks", "dots", "fraction", "fine"], defaults: { render: "plain" }, bounded: true, unknown: "hide", cost: "new-read", binding: "run.wave" }),
+  slRow({ id: "task-progress", group: "C", summary: "Waves done out of waves planned.", renderers: ["bar", "blocks", "dots", "fraction", "fine", "plain"], defaults: { render: "dots" }, bounded: true, unknown: "hide", cost: "new-read", binding: "run.wave_total" }),
+  slRow({ id: "resume", group: "C", label: "resume", summary: "Whether a run is waiting to be picked up. RESUME.md existing IS the flag.", renderers: ["word", "shape", "icon", "badge"], defaults: { render: "shape" }, states: ["none", "waiting"], shapes: { none: "·", waiting: "◐" }, unknown: "hide", cost: "new-read", binding: "run.resume", state_binding: "run.resume" }),
+  slRow({ id: "open-runs", group: "C", label: "runs", summary: "How many runs are open. A CLOSED run is never counted.", renderers: ["plain", "label-value", "bare"], defaults: { render: "plain" }, cost: "new-read", binding: "run.open" }),
+  slRow({ id: "pause-next", group: "C", label: "pause", summary: "How many waves until the next batch pause.", renderers: ["plain", "label-value", "fraction", "bare"], defaults: { render: "plain" }, unknown: "hide", cost: "new-read", binding: "run.wave" }),
+  slRow({ id: "phase-step", group: "C", summary: "Where the run is in its own phase list.", renderers: ["bare", "traffic", "dots", "marker", "plain"], defaults: { render: "dots" }, bounded: true, unknown: "hide", cost: "new-read", binding: "run.wave" }),
+
+  // ── Group G — Health and gates. One small ledger each, on the slow clock:
+  //    a pact does not drift between keystrokes.
+  slRow({ id: "update", group: "G", summary: "Whether a newer ORC exists. Cache-only — never a network call on this surface.", renderers: ["word", "badge", "icon", "shape"], defaults: { render: "badge" }, states: ["current", "available"], shapes: { current: "·", available: "▲" }, unknown: "hide", cost: "scan", binding: "update.version", state_binding: "update.state" }),
+  slRow({ id: "pact", group: "G", label: "pact", summary: "Promises in doubt. UNCHECKABLE is the honest state and never reads as a failure.", renderers: ["plain", "label-value", "shape", "dots", "traffic", "word"], defaults: { render: "plain" }, states: ["holding", "drifted", "broken", "uncheckable"], shapes: { holding: "●", drifted: "◐", broken: "▲", uncheckable: "?" }, cost: "new-read", binding: "pact.drifted", state_binding: "pact.state" }),
+  slRow({ id: "boundary", group: "G", label: "boundary", summary: "Refused areas. An area with no card is UNKNOWN, never assumed safe.", renderers: ["plain", "label-value", "shape", "word"], defaults: { render: "plain" }, states: ["clear", "refused", "unknown"], shapes: { clear: "·", refused: "▲", unknown: "?" }, cost: "new-read", binding: "boundary.refused", state_binding: "boundary.state" }),
+  slRow({ id: "challenge", group: "G", label: "challenge", summary: "Open findings on the artefact being judged. PASS is computed, never declared.", renderers: ["plain", "label-value", "shape", "fraction", "word"], defaults: { render: "plain" }, states: ["pass", "open", "stalled"], shapes: { pass: "●", open: "◐", stalled: "○" }, unknown: "hide", cost: "new-read", binding: "challenge.open", state_binding: "challenge.state" }),
+  slRow({ id: "doc", group: "G", label: "doc", summary: "The document's state. `shipped-drifted` names the sections that moved.", renderers: ["plain", "label-value", "badge", "shape", "word"], defaults: { render: "label-value" }, states: ["draft", "shipped", "shipped-drifted"], shapes: { draft: "◐", shipped: "●", "shipped-drifted": "▲" }, unknown: "hide", cost: "new-read", binding: "doc.state", state_binding: "doc.state" }),
+  slRow({ id: "doc-progress", group: "G", summary: "Sections written out of sections planned.", renderers: ["bar", "blocks", "dots", "fraction", "fine", "plain"], defaults: { render: "fraction" }, bounded: true, unknown: "hide", cost: "new-read", binding: "doc.progress" }),
+  slRow({ id: "usage-gate", group: "B", label: "usage", summary: "Whether a wave would be allowed to start. UNKNOWN IS NOT LOW, and it never stops a run.", renderers: ["word", "shape", "dot", "badge", "traffic"], defaults: { render: "shape" }, states: ["ok", "low", "unknown"], shapes: { ok: "●", low: "▲", unknown: "?" }, cost: "new-read", binding: "usage.state", state_binding: "usage.state" }),
+
+  // ── Group I remainder ───────────────────────────────────────────────────
+  slRow({ id: "config", group: "I", summary: "Any ORC config key, as a component. It shows what is IN THE FILE — a hook has no lane, so it cannot resolve a key the way a lane would.", renderers: ["plain", "label-value", "bare", "badge"], defaults: { render: "label-value" }, cost: "new-read", params: { key: { free: true, dflt: "extra_enabled" } }, binding: "config.value" }),
+  slRow({ id: "icon-static", group: "I", summary: "One glyph you choose, from the shipped sets. Not an icon font — ORC ships none, because it cannot detect one.", renderers: ["bare"], defaults: { render: "bare" }, unknown: "hide", params: { glyph: { free: true, dflt: "●" } }, binding: "static.text" }),
+
+  // ── REFUSED, with the measurement recorded ──────────────────────────────
+  slRow({ id: "doctor", group: "G", label: "doctor", summary: "How many findings `orc doctor` has.", renderers: ["plain", "label-value"], defaults: { render: "plain" }, cost: "refused", refused_reason: "`orc doctor` is a whole subprocess that walks the install, the payload, the manifest and the settings. W0 measured a single `git` subprocess at 53ms against roughly 15ms of headroom, and this is far larger than that. Run `orc doctor` when you want the answer; a status line is not the place for it." }),
+  slRow({ id: "aftermath", group: "G", label: "churn", summary: "Whether recent runs held up.", renderers: ["plain", "bare"], defaults: { render: "plain" }, cost: "refused", refused_reason: "it needs `git log` over a date range — a subprocess whose cost grows with the repository. Churn is a signal that wants reading once, not three times a second: run `/orc-aftermath`." }),
+
   // ── Group J — Composite shortcuts. One slot, several facts. ─────────────
   slRow({ id: "tier-block", group: "J", summary: "Verdict + version + model/effort as one object.", renderers: ["plain", "badge", "pill"], defaults: { render: "pill" }, states: ["ready", "boosted", "degrade"], binding: "tier.text", state_binding: "verdict.state", composite: ["verdict", "orc-version", "tier"] }),
   slRow({ id: "quota-block", group: "J", label: "quota", summary: "Both windows as one object.", renderers: ["plain", "badge", "pill"], defaults: { render: "plain" }, states: ["ok", "warn", "critical"], binding: "quota.worst.pct", state_binding: "quota.worst.state", composite: ["quota-5h", "quota-week"] }),
@@ -34951,11 +35012,16 @@ function slCompile(layout) {
         : b.startsWith("diy.") ? "scan.diy"
           : b.startsWith("update.") ? "scan.update"
             : "scan.trace";
+  // W3's groups all read files the shipped status line never opens, so they
+  // share one gate — the extended scan — and each sub-read inside it carries
+  // its own TTL. One gate, many clocks.
+  const EXTENDED = /^(wiki\.(coverage|docs|worst|blindspot)|pattern\.|crosslink\.|gotchas\.|extra\.(profile|provider|spend|tasks|inflight|demoted|passphrase|orphans|reliability)|wait\.|preset\.|run\.(wave|wave_total|resume|open)|pact\.|boundary\.|challenge\.|doc\.|usage\.|config\.)/;
   const note = (comp) => {
     for (const b of [comp.binding, comp.state_binding]) {
       if (!b) continue;
       bindings.add(b);
-      if (comp.cost === "scan" || comp.cost === "new-read") providers.add(providerOf(b));
+      if (comp.cost === "scan") providers.add(providerOf(b));
+      else if (comp.cost === "new-read") providers.add(EXTENDED.test(b) ? "scan.extended" : providerOf(b));
     }
     if (comp.series) seriesWanted.add(comp.series);
     if (comp.time_based) timeBased = true;
@@ -35033,6 +35099,10 @@ function slCompile(layout) {
     orc_version: currentVersion(),
     compiled_at: new Date().toISOString(),
     ansi: layout.ansi === "off" ? "off" : "auto",
+    // The preset RIDES IN THE COMPILED FILE. `preset-name` needs it and the
+    // hook must never open the authored layout — one consumer per file, and
+    // there is no exception for a field that would be convenient.
+    preset: layout.preset || null,
     formats,
     glyphsets,
     statemaps,
@@ -35718,6 +35788,10 @@ const SL_GROUP_NAMES = {
   C: "Run state",
   K: "Cache health",
   L: "Session mode and identity",
+  D: "Knowledge",
+  E: "Extra (foreign dispatch)",
+  F: "Flow and lanes",
+  G: "Health and gates",
   H: "Project and VCS",
   I: "Static and structural",
   J: "Composite shortcuts",

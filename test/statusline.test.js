@@ -585,32 +585,15 @@ test("statusline: the registry and the catalogue file agree, in both directions"
   const { root } = freshInstall();
   try {
     const inCode = new Set(slj(root, ["components"]).json.components.map((c) => c.id));
+    // W3 emptied this. It stays as a NAMED, EMPTY set rather than being
+    // deleted, because a row that lands in neither place must still fail — and
+    // the next time something is deferred, this is where it says so.
     const PENDING = new Set([
-      // Group D — knowledge. Each needs a read of its own inside the throttled
-      // scan, with a declared TTL.
-      "wiki", "wiki-distance", "wiki-worst", "wiki-coverage", "wiki-docs",
-      "wiki-blindspot", "pattern", "crosslink", "gotchas",
-      // Group E — extra.
-      "extra", "extra-profile", "extra-provider", "extra-spend", "extra-tasks",
-      "extra-inflight", "extra-demoted", "extra-passphrase", "extra-orphans",
-      "extra-reliability",
-      // Group F — flow and lanes.
-      "diy", "diy-tier", "diy-step", "wait", "preset-name",
-      // Group G — health and gates.
-      "update", "doctor", "pact", "boundary", "challenge", "doc",
-      "doc-progress", "aftermath",
-      // Group B/C — the remaining new reads.
-      "usage-gate", "wave", "task-progress", "resume", "open-runs", "pause-next",
-      // Group I — takes a config key as a parameter, so it needs the config read.
-      "config",
-      // Group I — deferred with `group` nesting.
-      "icon-static",
-      // Needs the wave/task counts, which are a read of their own.
-      "phase-step",
       // `group` adds NESTING to the layout schema, which is the one thing that
       // makes both the validator and the drag-and-drop board meaningfully
-      // harder. It is deferred to W5 on purpose, so nesting is added to a board
-      // that already works rather than designed into one that does not exist.
+      // harder. It is deferred to W5 ON PURPOSE, so nesting is added to a board
+      // that already works rather than designed into one that does not exist
+      // yet. Every other row shipped in W1 or W3.
       "group",
     ]);
     const missing = [...inCatalog].filter((id) => !inCode.has(id) && !PENDING.has(id));
@@ -691,4 +674,93 @@ test("statusline: ORC_STATUSLINE_SCAN_MS still overrides EVERY provider's TTL", 
     /process\.env\.ORC_STATUSLINE_SCAN_MS !== undefined \? scanEveryMs\(\)/,
     "the one seam wins over every per-provider TTL"
   );
+});
+
+// ── the series ledger (W3) ─────────────────────────────────────────────────
+
+test("statusline: a sparkline keeps 16 samples, and only for a series something binds", () => {
+  // No new read and no new timer: a series is a side effect of the scan that
+  // already ran, never a reason for one. And a series nothing binds is not
+  // kept, so the ledger does not grow for a user with no sparkline on their
+  // layout.
+  const { root, claudeDir } = freshInstall();
+  const orc = path.join(claudeDir, "orc");
+  const led = () => JSON.parse(fs.readFileSync(path.join(orc, "usage-session.json"), "utf8"));
+  const payload = (pct) => ({
+    cwd: root,
+    session_id: "s",
+    model: { id: "claude-opus-5" },
+    effort: { level: "high" },
+    rate_limits: { five_hour: { used_percentage: pct } },
+  });
+  try {
+    // A layout with no sparkline: nothing is kept.
+    cli(["statusline", "apply", "minimal", "--dir", root, "--json"]);
+    cli(["config", "set", "statusline_custom", "on", "--dir", root]);
+    runHook(claudeDir, "orc-statusline.js", payload(10));
+    assert.ok(!led().series, "a layout with no series kept one anyway");
+
+    // One with a quota sparkline: it is.
+    cli(["statusline", "apply", "cost-watch", "--dir", root, "--json"]);
+    cli(["statusline", "set", "2", "1", "quota-5h", "--render", "spark", "--dir", root, "--json"]);
+    fs.rmSync(path.join(orc, "usage-session.json"), { force: true });
+    runHook(claudeDir, "orc-statusline.js", payload(10));
+    const j = led();
+    assert.ok(j.series && Array.isArray(j.series.quota5h), "the quota series is kept: " + JSON.stringify(j.series));
+    assert.deepStrictEqual(j.series.quota5h, [10]);
+    assert.ok(typeof j.series_at === "number", "the sample is stamped, so it can be paced");
+    // The sample is PACED, not per-render: sixteen samples at the render rate
+    // would be five seconds of history, which is the same number sixteen times.
+    runHook(claudeDir, "orc-statusline.js", payload(11));
+    assert.deepStrictEqual(led().series.quota5h, [10], "a second render in the same window does not resample");
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("statusline: the series is capped at 16 and never grows past it", () => {
+  const src = fs.readFileSync(path.join(REPO, "templates", "hooks", "orc-statusline.js"), "utf8");
+  assert.match(src, /const SERIES_MAX = 16;/);
+  assert.match(src, /while \(arr\.length > SERIES_MAX\) arr\.shift\(\);/, "the cap is enforced on every push");
+});
+
+// ── W3's refusals ──────────────────────────────────────────────────────────
+
+test("statusline: an expensive component is REFUSED, and the reason is the measurement", () => {
+  // The catalogue's `refused` bucket is not only for the impossible. On the
+  // constrained platform it is also for the merely expensive: W0 measured one
+  // extra subprocess at 53ms against roughly 15ms of headroom.
+  const { root } = freshInstall();
+  try {
+    const comps = slj(root, ["components"]).json.components;
+    const refused = comps.filter((c) => c.cost === "refused").map((c) => c.id).sort();
+    // W3's refusals are the interesting half. THREE of them are not "expensive"
+    // but "not a stored fact at all": wiki-meta.json holds `docs[]` with a file
+    // and a commit, and NOTHING else — so coverage, the worst doc and the blind
+    // spot each need a git walk PER DOCUMENT. Reading a field that is not there
+    // would have rendered a confident number nobody measured, forever.
+    assert.deepStrictEqual(refused, [
+      "aftermath", "ahead-behind", "doctor", "git-dirty", "staged",
+      "wiki-blindspot", "wiki-coverage", "wiki-worst",
+    ]);
+    for (const id of refused) {
+      const c = comps.find((x) => x.id === id);
+      assert.match(c.refused_reason, /subprocess|git |per document|PER DOCUMENT/, id + "'s reason does not name the cost");
+      assert.strictEqual(slj(root, ["set", "1", "1", id]).status, 1, id + " can be placed");
+    }
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("statusline: every `new read` component declares a TTL, and the table says why", () => {
+  // "A `new read` component that cannot declare a TTL does not ship" — the
+  // catalogue's cost column, made enforceable.
+  const src = fs.readFileSync(path.join(REPO, "templates", "hooks", "orc-statusline.js"), "utf8");
+  const m = /const TTL = \{([\s\S]*?)\n\};/.exec(src);
+  assert.ok(m, "the TTL table exists");
+  const rows = m[1].split("\n").filter((l) => /^\s+\w+:/.test(l));
+  assert.ok(rows.length >= 8, "every provider has a clock");
+  for (const r of rows)
+    assert.match(r, /\/\/ ./, "a TTL with no reason is a number somebody will 'optimise': " + r.trim());
 });

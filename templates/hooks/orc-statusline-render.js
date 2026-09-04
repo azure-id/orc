@@ -184,10 +184,63 @@ const BINDINGS = {
   "diy.state": (c) => (c.scan.diy ? c.scan.diy.state : null),
   "diy.name": (c) => (c.scan.diy ? c.scan.diy.name : null),
   "diy.tier_state": (c) => (c.scan.diy ? c.scan.diy.tier_state : null),
+  "diy.step": (c) => num(c.scan.diy && c.scan.diy.step_pct),
   "update.state": (c) => (c.scan.update_version ? "available" : "current"),
   "update.version": (c) => c.scan.update_version || null,
   "git.branch": (c) => c.scan.branch || null,
   "git.head": (c) => c.scan.head || null,
+
+
+  // — the extended scan (v1.3.0 W3): knowledge, extra, flow, health gates ——
+  // Every one of these is a `new read` with its own TTL, and every one answers
+  // null when its file is absent — which renders an em dash. UNKNOWN IS NOT
+  // ZERO: `pact 0 drifted` and "there is no pact ledger" are different facts.
+  "wiki.docs": (c) => num(c.scan.wiki_meta && c.scan.wiki_meta.docs),
+  "pattern.state": (c) => c.scan.pattern || null,
+  "crosslink.state": (c) => (c.scan.crosslink && c.scan.crosslink.state) || null,
+  "crosslink.peers": (c) => num(c.scan.crosslink && c.scan.crosslink.peers),
+  "gotchas.count": (c) => num(c.scan.gotchas),
+  "extra.profile": (c) => (c.scan.extra && c.scan.extra.profile) || null,
+  "extra.provider": (c) => (c.scan.extra && c.scan.extra.provider) || null,
+  "extra.spend": (c) => num(c.scan.extra_spend && c.scan.extra_spend.usd),
+  "extra.tasks": (c) => num(c.scan.extra_spend && c.scan.extra_spend.tasks),
+  "extra.inflight": (c) => (c.scan.extra_inflight ? "running" : c.scan.extra ? "idle" : null),
+  "extra.demoted": (c) => (c.scan.extra_demoted ? "demoted" : c.scan.extra ? "none" : null),
+  "extra.passphrase": (c) => c.scan.extra_passphrase || null,
+  // "unended" says what it MEASURES: a dispatch nothing observed ending.
+  "extra.unended": (c) => num(c.scan.extra_unended),
+  "extra.reliability": (c) => num(c.scan.extra_reliability),
+  "wait.state": (c) => c.scan.wait || null,
+  "preset.name": (c) => c.scan.preset || null,
+  "run.wave": (c) => num(c.scan.runs && c.scan.runs.wave),
+  "run.wave_total": (c) => num(c.scan.runs && c.scan.runs.waves),
+  "run.resume": (c) => (c.scan.runs ? c.scan.runs.resume : null),
+  "run.open": (c) => num(c.scan.runs && c.scan.runs.open),
+  "pact.state": (c) => (c.scan.pact && c.scan.pact.state) || null,
+  "pact.drifted": (c) => num(c.scan.pact && c.scan.pact.drifted),
+  "boundary.state": (c) => (c.scan.boundary && c.scan.boundary.state) || null,
+  "boundary.refused": (c) => num(c.scan.boundary && c.scan.boundary.refused),
+  "challenge.state": (c) => (c.scan.challenge && c.scan.challenge.state) || null,
+  "challenge.open": (c) => num(c.scan.challenge && c.scan.challenge.open),
+  "doc.state": (c) => (c.scan.doc && c.scan.doc.state) || null,
+  "doc.done": (c) => num(c.scan.doc && c.scan.doc.done),
+  "doc.total": (c) => num(c.scan.doc && c.scan.doc.total),
+  "doc.progress": (c) => {
+    const d = c.scan.doc;
+    if (!d || !d.total) return null;
+    return Math.round((d.done / d.total) * 100);
+  },
+  "usage.state": (c) => c.scan.usage || null,
+  // A CONFIG KEY as a component. It reads the raw file, because a hook has no
+  // lane and therefore cannot resolve config — so this shows what is IN THE
+  // FILE, which is a different and honest claim from what a lane would resolve.
+  "config.value": (c) => {
+    const raw = c.scan.config_raw;
+    const key = c.param && c.param.key;
+    if (!raw || !key) return null;
+    const m = new RegExp("^[ \\t]*" + String(key).replace(/[^a-z0-9_]/gi, "") + ":[ \\t]*([^#\\r\\n]+)", "m").exec(raw);
+    return m ? m[1].trim() : null;
+  },
 
   // — static and clock ————————————————————————————————————————————————
   "clock.now": (c) => c.now,

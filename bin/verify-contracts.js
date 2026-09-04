@@ -1391,7 +1391,11 @@ const CONTRACTS = [
     // wiki-meta.json lives under.
     name: "the challenge ledger (v0.47.0 — CLI-only writer)",
     token: "challenge.json",
-    files: ["skills/orc-challenge/references/cycle-state.md"],
+    files: [
+      "skills/orc-challenge/references/cycle-state.md",
+      // the `challenge` component reads it (v1.3.0)
+      "hooks/orc-statusline.js",
+    ],
     binFiles: ["bin/cli.js"],
   },
   {
@@ -1494,6 +1498,8 @@ const CONTRACTS = [
     token: "RESUME.md",
     binFiles: ["bin/cli.js"],
     files: [
+      // the `resume` / `open-runs` components read its one byte-stable line (v1.3.0)
+      "hooks/orc-statusline.js",
       // v1.0.0 W5 — the demotion's run-scoped record lives BESIDE it, in
       // {run_dir}/{slug}/, and is deleted with the run. A move of one is a move
       // of the other.
@@ -1986,6 +1992,8 @@ const CONTRACTS = [
     token: "orc-crosslink.config.yaml",
     binFiles: ["bin/cli.js"],
     files: [
+      // the `crosslink` component counts its peers (v1.3.0)
+      "hooks/orc-statusline.js",
       "skills/orc-poly/SKILL.md",
       "skills/orc-wiki/README.md",
       "skills/orc-wiki/SKILL.md",

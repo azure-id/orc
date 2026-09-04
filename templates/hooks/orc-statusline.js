@@ -407,7 +407,17 @@ function scanEveryMs() {
 // `ORC_STATUSLINE_SCAN_MS` still overrides ALL of them — it stays the ONE seam
 // over this budget, and a seam that only covered one provider would be a seam
 // tests could not use.
-const TTL = { trace: 5000, wiki: 60000, config: 30000, diy: 30000 };
+const TTL = {
+  trace: 5000, // a run moves; this is the one thing that really is that fast
+  git: 5000, // .git/HEAD, no subprocess
+  wiki: 60000, // a wiki tier does not move in five seconds
+  config: 30000, // a config file is edited by hand
+  diy: 30000, // a flow lock moves when somebody runs a command
+  knowledge: 60000, // a pattern cache, a peer list, a gotcha count
+  extra: 15000, // a spend log DOES move during a wave
+  run: 10000, // RESUME.md is rewritten at every stop
+  gates: 60000, // a pact does not drift between keystrokes
+};
 
 // `at` is a ledger `scanned_at` stamp. Absent is stale — unknown is not fresh.
 function scanStale(at, now, ttl) {
@@ -436,7 +446,11 @@ function readPlan(d) {
       fs.readFileSync(path.join(projectDir, ".claude", "orc", "statusline.lock.json"), "utf8")
     );
     if (!lock || !Array.isArray(lock.bindings)) return null;
-    return { bindings: new Set(lock.bindings), providers: new Set(lock.providers || []) };
+    return {
+      bindings: new Set(lock.bindings),
+      providers: new Set(lock.providers || []),
+      series: new Set(lock.series || []),
+    };
   } catch (_) {
     return null;
   }
@@ -881,6 +895,12 @@ process.stdin.on("end", () => {
     } catch (_) {}
   }
 
+  // The extended scan (v1.3.0 W3). Only a composed layout can reach it, and
+  // only for the providers its own lock names.
+  extendedScan(d, wants, wantsProvider);
+  // The sparkline series, sampled during the scan that already ran.
+  sampleSeries(d, PLAN);
+
   // ── Session line (v1.2.0) ──────────────────────────────────────────────────
   // Line 1 answers "what tier am I on and how full is the window". This second
   // line answers "what has this session actually been DOING" — how many agents
@@ -1142,6 +1162,7 @@ function custom(d, ctx) {
 
     // Rung 6. Run the program. Failure isolation lives inside the engine: one
     // throwing item emits its unknown form and the rest of the line survives.
+    SCAN.preset = prog.preset || null;
     const out = engine.render(prog, {
       payload: ctx.payload,
       ledger: ctx.ledger,
@@ -1178,3 +1199,336 @@ function slNote(orcDir, finding, detail) {
   } catch (_) {}
 }
 
+// ── THE EXTENDED SCAN (v1.3.0 W3) ──────────────────────────────────────────
+// Groups D, E, F and G — knowledge, extra, flow and the health gates. Every one
+// of them is a `new read`: a read that does not exist in the shipped status
+// line and only happens when a layout asks for it.
+//
+// THE BAR IS 15 MILLISECONDS, NOT 300. W0 measured node startup at ~285 ms of a
+// 300 ms budget, so a component here has to be answerable from a small JSON
+// file, on its own clock, or it does not ship. Two are refused for that reason
+// and say so in the catalogue.
+//
+// Every read below is:
+//   - gated on a BINDING the compiled lock names (the read planner);
+//   - cached in the per-session ledger under its own key;
+//   - given its OWN TTL, because a pact ledger and a spend log do not move at
+//     the same rate.
+//
+// A read that throws leaves its slot null, and a null renders an em dash.
+// UNKNOWN IS NOT ZERO — a `0` would say the thing was measured and found empty.
+function extendedScan(d, wants, wantsProvider) {
+  if (!wantsProvider("scan.extended")) return;
+  let fs, path, projectDir, led, now;
+  try {
+    fs = require("fs");
+    path = require("path");
+    projectDir = (d.workspace && d.workspace.project_dir) || d.cwd || process.cwd();
+    led = ledger(projectDir, String(d.session_id || d.sessionId || ""));
+    now = Date.now();
+  } catch (_) {
+    return;
+  }
+  const orc = path.join(projectDir, ".claude", "orc");
+  const readJson = (p) => {
+    try {
+      return JSON.parse(fs.readFileSync(p, "utf8").replace(/^﻿/, ""));
+    } catch (_) {
+      return null;
+    }
+  };
+  // One cached sub-scan. `key` is its ledger slot, `ttl` its own clock.
+  const cached = (key, ttl, fn) => {
+    const slot = led.ext && led.ext[key];
+    if (slot && !scanStale(slot.at, now, ttl)) return slot.v;
+    let v = null;
+    try {
+      v = fn();
+    } catch (_) {
+      v = null;
+    }
+    led.ext = led.ext || {};
+    led.ext[key] = { v, at: now };
+    return v;
+  };
+
+  // ── Group D — knowledge. All of it comes out of wiki-meta.json, which is
+  //    written ONLY by `orc wiki sync` and is 100% doc-header-derived. A wiki
+  //    tier does not move in a minute, so the TTL is generous.
+  if (wants("wiki.docs")) {
+    const w = cached("wiki_meta", TTL.wiki, () => {
+      const meta = readJson(path.join(orc, "wiki-meta.json"));
+      if (!meta) return null;
+      const docs = Array.isArray(meta.docs) ? meta.docs : [];
+      return {
+        docs: docs.length,
+      };
+    });
+    SCAN.wiki_meta = w;
+  }
+  if (wants("pattern.state")) {
+    // EXISTENCE only, and by the deterministic probe's own rule: the cache
+    // lives under the hidden .claude/ dir, so a raw filesystem search
+    // false-negatives from the wrong cwd.
+    SCAN.pattern = cached("pattern", TTL.knowledge, () => {
+      const dir = path.join(orc, "patterns");
+      try {
+        return fs.readdirSync(dir).some((f) => f.endsWith("-pattern.md")) ? "cached" : "none";
+      } catch (_) {
+        return "none";
+      }
+    });
+  }
+  if (wants("crosslink.state") || wants("crosslink.peers")) {
+    const c = cached("crosslink", TTL.knowledge, () => {
+      const raw = (() => {
+        try {
+          return fs.readFileSync(path.join(projectDir, ".claude", "orc-crosslink.config.yaml"), "utf8");
+        } catch (_) {
+          return null;
+        }
+      })();
+      if (!raw) return null;
+      const n = (raw.match(/^[ \t]*-[ \t]*name:/gm) || []).length;
+      return { peers: n, state: n ? "linked" : "none" };
+    });
+    SCAN.crosslink = c;
+  }
+  if (wants("gotchas.count")) {
+    SCAN.gotchas = cached("gotchas", TTL.knowledge, () => {
+      try {
+        return fs.readdirSync(path.join(orc, "gotchas")).filter((f) => f.endsWith(".md")).length;
+      } catch (_) {
+        return null;
+      }
+    });
+  }
+
+  // ── Group E — extra. `extra.json` is small; the SPEND LOG is not, so it is
+  //    read by TAIL and on its own faster clock, because a spend log is the one
+  //    thing here that moves during a wave.
+  if (wants("extra.profile") || wants("extra.provider") || wants("extra.inflight") || wants("extra.passphrase") || wants("extra.demoted")) {
+    SCAN.extra = cached("extra", TTL.extra, () => {
+      const j = readJson(path.join(orc, "extra.json"));
+      if (!j) return null;
+      const profiles = j.profiles || {};
+      const names = Object.keys(profiles);
+      const first = names.length ? profiles[names[0]] : null;
+      return {
+        profile: names.length ? names[0] : null,
+        provider: first && first.provider ? first.provider : null,
+        profiles: names.length,
+      };
+    });
+  }
+  if (wants("extra.spend") || wants("extra.tasks")) {
+    SCAN.extra_spend = cached("extra_spend", TTL.extra, () => {
+      // The tail only. A spend log grows for the life of a project and reading
+      // all of it on a per-keystroke surface is the hazard this whole subsystem
+      // is shaped around.
+      const p = path.join(orc, "extra-spend.jsonl");
+      let st;
+      try {
+        st = fs.statSync(p);
+      } catch (_) {
+        return null;
+      }
+      const want = Math.min(st.size, 64 * 1024);
+      const buf = Buffer.alloc(want);
+      const fd = fs.openSync(p, "r");
+      try {
+        fs.readSync(fd, buf, 0, want, st.size - want);
+      } finally {
+        fs.closeSync(fd);
+      }
+      const lines = buf.toString("utf8").split("\n").slice(1).filter(Boolean);
+      let tasks = 0;
+      let usd = 0;
+      let priced = false;
+      for (const l of lines) {
+        try {
+          const r = JSON.parse(l);
+          tasks++;
+          if (typeof r.usd === "number") {
+            usd += r.usd;
+            priced = true;
+          }
+        } catch (_) {}
+      }
+      // A cost figure ORC did not price itself is never printed: `usd` stays
+      // null rather than becoming a confident 0.
+      return { tasks, usd: priced ? usd : null, partial: st.size > want };
+    });
+  }
+
+  // ── Group F — flow and lanes. The diy lock is already read for the shipped
+  //    segment; `wait` is a small run-state file.
+  if (wants("wait.state")) {
+    SCAN.wait = cached("wait", TTL.run, () => {
+      const j = readJson(path.join(orc, "wait.json"));
+      if (!j) return "none";
+      if (j.block_reason) return "blocked";
+      return j.until || j.hops ? "waiting" : "none";
+    });
+  }
+  // `preset.name` is NOT read here: it rides in the compiled program, which is
+  // the only file that crosses the wall. The hook never opens the authored
+  // layout, and a field being convenient is not an exception to that.
+
+  // ── Group C remainder — the run's own progress, from RESUME.md, which is the
+  //    ONE line `orc resume` and `orc run list` parse. Reading the same line is
+  //    how a listing never has to open a checkpoint.
+  if (wants("run.wave") || wants("run.wave_total") || wants("run.resume") || wants("run.open")) {
+    SCAN.runs = cached("runs", TTL.run, () => {
+      let logRel = ".claude/orc/logs";
+      try {
+        const raw = fs.readFileSync(path.join(projectDir, ".claude", "orc.config.yaml"), "utf8");
+        const m = /^[ \t]*run_dir:[ \t]*["']?([^"'#\r\n]+)/m.exec(raw);
+        if (m) logRel = m[1].trim();
+      } catch (_) {}
+      const runDir = path.isAbsolute(logRel) ? logRel : path.join(projectDir, ".claude", "orc", "run");
+      let open = 0;
+      let wave = null;
+      let waves = null;
+      try {
+        for (const slug of fs.readdirSync(runDir)) {
+          const rp = path.join(runDir, slug, "RESUME.md");
+          if (!fs.existsSync(rp)) continue;
+          if (fs.existsSync(path.join(runDir, slug, "closed.json"))) continue;
+          open++;
+          // The byte-stable `Where it stands:` line, at column 0. It is the one
+          // line two other commands already parse, which is exactly why this
+          // does not open a checkpoint.
+          const m = /^Where it stands:.*wave (\d+) of (\d+)/m.exec(fs.readFileSync(rp, "utf8"));
+          if (m && wave == null) {
+            wave = Number(m[1]);
+            waves = Number(m[2]);
+          }
+        }
+      } catch (_) {
+        return null;
+      }
+      return { open, wave, waves, resume: open > 0 ? "waiting" : "none" };
+    });
+  }
+
+  // ── Group G — the health gates. Each is one small ledger, each on the slow
+  //    clock: a pact does not drift between keystrokes.
+  const gate = (key, file, fn) => {
+    if (!wants(key)) return null;
+    return cached(key.replace(/\./g, "_"), TTL.gates, () => fn(readJson(path.join(orc, file))));
+  };
+  SCAN.pact = gate("pact.state", "pact.json", (j) => {
+    if (!j || !Array.isArray(j.entries)) return null;
+    const live = j.entries.filter((e) => e.state !== "retired");
+    const broken = live.filter((e) => e.state === "broken").length;
+    const drifted = live.filter((e) => e.state === "drifted").length;
+    // UNCHECKABLE is the honest state and it never reads as a failure.
+    return { state: broken ? "broken" : drifted ? "drifted" : "holding", drifted, broken, total: live.length };
+  });
+  SCAN.boundary = gate("boundary.state", "boundary.json", (j) => {
+    if (!j || !Array.isArray(j.cards)) return null;
+    const refused = j.cards.filter((c) => c.verdict === "REFUSE").length;
+    // An area with no card is UNKNOWN, never assumed safe.
+    return { state: refused ? "refused" : "clear", refused, cards: j.cards.length };
+  });
+  SCAN.challenge = gate("challenge.state", "challenge.json", (j) => {
+    if (!j) return null;
+    const open = Array.isArray(j.findings) ? j.findings.filter((f) => !f.resolved).length : 0;
+    return { state: j.state || (open ? "open" : "pass"), open, iteration: j.iteration || null };
+  });
+  SCAN.doc = gate("doc.state", "doc.json", (j) => {
+    if (!j) return null;
+    const outline = Array.isArray(j.outline) ? j.outline : [];
+    const done = outline.filter((s) => s.hash).length;
+    return { state: j.shipped ? "shipped" : "draft", done, total: outline.length };
+  });
+
+  // `usage-gate` reads the usage bridge this hook already writes — so it is the
+  // cheapest `new read` in the set, and it is the only one that can say
+  // `unknown`, which is a real answer and never a stop.
+  if (wants("usage.state")) {
+    SCAN.usage = cached("usage", TTL.trace, () => {
+      const j = readJson(path.join(orc, "usage.json"));
+      if (!j || !j.written_at) return "unknown";
+      if (now - j.written_at > 30 * 60 * 1000) return "unknown";
+      const w = [j.five_hour, j.seven_day].filter(Boolean).map((x) => x.used_percentage);
+      if (!w.length) return "unknown";
+      return Math.max(...w) >= 90 ? "low" : "ok";
+    });
+  }
+
+  // A config key as a component. The config file is edited by hand, so 30s.
+  if (wants("config.value")) {
+    SCAN.config_raw = cached("config", TTL.config, () => {
+      try {
+        return fs.readFileSync(path.join(projectDir, ".claude", "orc.config.yaml"), "utf8");
+      } catch (_) {
+        return null;
+      }
+    });
+  }
+}
+
+// ── THE SERIES LEDGER (v1.3.0 W3) ──────────────────────────────────────────
+// `spark`, `spark-braille`, `trend` and `delta` need history, and a status line
+// has none: it is a fresh process every render. So the LAST 16 SAMPLES per
+// series live in the per-session ledger, appended during the throttled scan
+// that already ran.
+//
+// NO NEW READ, NO NEW TIMER. Every value sampled here was already computed for
+// something else this render; the series is a side effect of the scan, never a
+// reason for one.
+//
+// SIXTEEN, and only for the series a compiled layout actually names — the read
+// planner again. A series nothing binds is not kept, so the ledger does not
+// grow for a user whose layout has no sparkline on it.
+const SERIES_MAX = 16;
+const SERIES_MIN_GAP_MS = 20000;
+
+function sampleSeries(d, plan) {
+  try {
+    if (!plan || !plan.series || !plan.series.size) return;
+    const led = LED;
+    if (!led) return;
+    const now = Date.now();
+    // A sample every 20 seconds, not every render. Sixteen samples at the
+    // render rate would be five seconds of history, which is not history — it
+    // is the same number sixteen times.
+    if (led.series_at && now - led.series_at < SERIES_MIN_GAP_MS) return;
+    led.series_at = now;
+    led.series = led.series || {};
+    const push = (key, v) => {
+      if (!plan.series.has(key)) return;
+      if (typeof v !== "number" || !Number.isFinite(v)) return;
+      const arr = led.series[key] || [];
+      arr.push(Math.round(v));
+      while (arr.length > SERIES_MAX) arr.shift();
+      led.series[key] = arr;
+    };
+    const rl = d.rate_limits || {};
+    const w = led.five_hour;
+    push("quota5h", rl.five_hour && rl.five_hour.used_percentage);
+    push("quotawk", rl.seven_day && rl.seven_day.used_percentage);
+    push("ucs", w && typeof w.last === "number" && typeof w.baseline === "number"
+      ? Math.max(0, (w.accumulated || 0) + Math.max(0, w.last - w.baseline))
+      : null);
+    const tok = led.tok;
+    if (tok) {
+      push("mtok", (tok.input || 0) + (tok.cache_write || 0) + (tok.cache_read || 0) + (tok.output || 0));
+      push("mtokkind", tok.cache_read || 0);
+    }
+    push("agents", SCAN.spawns);
+    push("cost", d.cost && d.cost.total_cost_usd != null ? d.cost.total_cost_usd * 100 : null);
+    push("cachehit", d.prompt_cache && d.prompt_cache.hit_ratio != null
+      ? (d.prompt_cache.hit_ratio <= 1 ? d.prompt_cache.hit_ratio * 100 : d.prompt_cache.hit_ratio)
+      : null);
+    push("cachewrite", d.prompt_cache && d.prompt_cache.cache_write_tokens);
+    push("lines", d.cost && d.cost.total_lines_added != null
+      ? (d.cost.total_lines_added || 0) - (d.cost.total_lines_removed || 0)
+      : null);
+    push("extraspend", SCAN.extra_spend && SCAN.extra_spend.usd != null ? SCAN.extra_spend.usd * 100 : null);
+  } catch (_) {
+    // A series is a nicety. It never takes the status line down with it.
+  }
+}
