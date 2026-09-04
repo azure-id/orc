@@ -195,8 +195,17 @@ The branch you are on. A detached HEAD shows as `@a1b2c3d`.
 - The phase list is **not** in the hook. `orc init` and `orc update` write it to
   `hooks/orc-lane-rails.json` from the CLI registries. Run `orc lane rails` to
   read it. The hook renders that file and decides nothing about it.
-- Line 2 reads the disk once every 5 seconds and caches the answer, because a
+- The hook reads the disk once every 5 seconds and caches the answer, because a
   status line redraws on every keystroke. `MTok` reads only the new bytes of the
-  transcript.
+  transcript. The wiki part joined that scan in v1.3.0: it used to start a `git`
+  process on every redraw.
 - `ORC_STATUSLINE_SCAN_MS` is the one seam over that budget. It exists for
   tests. Nothing in ORC sets it.
+- **The budget is small.** Claude Code waits 300 ms between redraws and stops a
+  script that is still running when the next redraw starts. On Windows, starting
+  `node` alone takes about 285 ms of that. So the hook has about 15 ms to do all
+  its work. This is why nothing here starts a process, and why every answer is
+  cached.
+- The cache file is `.claude/orc/usage-session.json`. The hook reads it once and
+  writes it once, after the text is ready. It stores raw numbers only — never a
+  word like `fresh` or `STALE`, which is computed each time it is shown.

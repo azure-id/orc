@@ -1,0 +1,35 @@
+### empty payload
+✅ ORC v<VERSION> - unknown
+   agents 0 · orc-extra: off · Dur 0m · MTok —
+
+### ready — opus 4.8 high
+✅ ORC v<VERSION> - Opus 4.8/high
+   agents 0 · orc-extra: off · Dur 0m · MTok —
+
+### boosted — opus 5 medium
+🚀 ORC v<VERSION> - Opus 5/medium
+   agents 0 · orc-extra: off · Dur 0m · MTok —
+
+### degrade — sonnet 5 high, every reason named
+⛔ ORC v<VERSION> - Sonnet 5/high (model≠Opus5/Opus4.8/Fable5)
+   agents 0 · orc-extra: off · Dur 0m · MTok —
+
+### degrade — right model, sub-baseline effort
+⛔ ORC v<VERSION> - Opus 4.8/low (effort≠high)
+   agents 0 · orc-extra: off · Dur 0m · MTok —
+
+### context keeps its slot at 0%
+🚀 ORC v<VERSION> - Opus 5/high · context (0%)
+   agents 0 · orc-extra: off · Dur 0m · MTok —
+
+### both usage windows
+🚀 ORC v<VERSION> - Opus 5/high · context (34%) · 5h 42% (<RESET>) ↔ wk 7% · ucs 0%
+   agents 0 · orc-extra: off · Dur 0m · MTok —
+
+### a window at 90% folds into the verdict
+⛔ ORC v<VERSION> - Opus 5/high (5h≥90%) · ⛔5h 91% (<RESET>) · ucs 49%
+   agents 0 · orc-extra: off · Dur 0m · MTok —
+
+### unknown model, unknown effort — never a guess
+✅ ORC v<VERSION> - unknown · context (12%) · ucs 49%
+   agents 0 · orc-extra: off · Dur 0m · MTok —

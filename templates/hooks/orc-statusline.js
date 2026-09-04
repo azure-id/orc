@@ -339,6 +339,59 @@ function fmtTokens(tok) {
   return String(n);
 }
 
+// ── The per-session ledger: ONE read, ONE write, ONE throttle (v1.3.0 W0) ───
+// `.claude/orc/usage-session.json` is the per-session ledger, and three
+// separate blocks below want it: the rate-limit tracker, `ucs`, and the
+// throttled line-2 scan. Each used to open the file itself and two of them
+// wrote it, so one render cost three reads and two writes — on a surface that
+// re-renders on every keystroke. It is memoised here instead: loaded at most
+// once per process, mutated in place by whoever needs it, and flushed exactly
+// once at the end. Same rules as before — RAW numbers only, never a computed
+// word, fail-silent, and the reader decides what it means.
+//
+// The scan interval is the ONE seam over this budget, on the ORC_TEST_PROBE_MS
+// precedent: a test that proves the throttle by SLEEPING past it is a test that
+// fails on a loaded machine, and a flake is recorded and removed, never retried
+// away. Unset, this is byte-identical to a hardcoded 5000, and nothing in ORC
+// ever sets it.
+let LED = null;
+let LED_FILE = null;
+
+function ledger(projectDir, sid) {
+  if (LED) return LED;
+  const fs = require("fs");
+  const path = require("path");
+  LED_FILE = path.join(projectDir, ".claude", "orc", "usage-session.json");
+  let led = null;
+  try {
+    led = JSON.parse(fs.readFileSync(LED_FILE, "utf8"));
+  } catch (_) {}
+  if (!led || led.session_id !== sid) led = { session_id: sid, started_at: Date.now() };
+  LED = led;
+  return LED;
+}
+
+function ledgerFlush() {
+  if (!LED || !LED_FILE) return;
+  try {
+    const fs = require("fs");
+    const path = require("path");
+    LED.updated_at = Date.now();
+    fs.mkdirSync(path.dirname(LED_FILE), { recursive: true });
+    fs.writeFileSync(LED_FILE, JSON.stringify(LED) + "\n");
+  } catch (_) {}
+}
+
+function scanEveryMs() {
+  const n = Number(process.env.ORC_STATUSLINE_SCAN_MS);
+  return Number.isFinite(n) && n >= 0 ? n : 5000;
+}
+
+// `at` is a ledger `scanned_at` stamp. Absent is stale — unknown is not fresh.
+function scanStale(at, now) {
+  return typeof at !== "number" || now - at >= scanEveryMs();
+}
+
 let raw = "";
 process.stdin.on("data", (c) => (raw += c));
 process.stdin.on("end", () => {
@@ -431,9 +484,7 @@ process.stdin.on("end", () => {
       // bank what was consumed before the reset into `accumulated` and
       // re-baseline, so the running total keeps counting across the boundary.
       const sid = String(d.session_id || d.sessionId || "");
-      const sfile = path.join(orcDir, "usage-session.json");
-      let led = null;
-      try { led = JSON.parse(fs.readFileSync(sfile, "utf8")); } catch (_) {}
+      const led = ledger(projectDir, sid);
       const pctOf = (o) => (o && typeof o.used_percentage === "number" ? o.used_percentage : null);
       const track = (prev, cur) => {
         if (cur == null) return prev || null;
@@ -447,13 +498,10 @@ process.stdin.on("end", () => {
           };
         return { baseline: prev.baseline, last: cur, accumulated: prev.accumulated, resets: prev.resets };
       };
-      if (!led || led.session_id !== sid) led = { session_id: sid, started_at: Date.now() };
       led.five_hour = track(led.five_hour, pctOf(rl0 && rl0.five_hour));
       led.seven_day = track(led.seven_day, pctOf(rl0 && rl0.seven_day));
       led.context_used_percentage =
         cw0 && typeof cw0.used_percentage === "number" ? cw0.used_percentage : null;
-      led.updated_at = Date.now();
-      fs.writeFileSync(sfile, JSON.stringify(led) + "\n");
     }
 
   } catch (_) {}
@@ -597,13 +645,9 @@ process.stdin.on("end", () => {
   // And it is still a delta of an ACCOUNT-WIDE window, not a private meter: a
   // second terminal moves it too.
   try {
-    const fs = require("fs");
-    const path = require("path");
     const projectDir =
       (d.workspace && d.workspace.project_dir) || d.cwd || process.cwd();
-    const led = JSON.parse(
-      fs.readFileSync(path.join(projectDir, ".claude", "orc", "usage-session.json"), "utf8")
-    );
+    const led = ledger(projectDir, String(d.session_id || d.sessionId || ""));
     const w = led && led.five_hour;
     if (w && typeof w.last === "number" && typeof w.baseline === "number") {
       const used = Math.max(0, (w.accumulated || 0) + Math.max(0, w.last - w.baseline));
@@ -616,43 +660,65 @@ process.stdin.on("end", () => {
   // wiki / no git / any error → no segment. Thresholds mirror the config
   // defaults (wiki_fresh_max 10 / wiki_aging_max 30); the hook can't read the
   // resolved config, so a user override shifts skill behavior, not this label.
+  //
+  // The git distance rides in the SAME throttled scan as everything on line 2
+  // (v1.3.0 W0). It used to be an `execSync` on every render — one child
+  // process PER KEYSTROKE in any repo with a wiki, which is the exact hazard
+  // the throttle exists to prevent. The ledger caches the RAW facts (a commit
+  // count, a boolean) and never the word: `fresh` / `AGING` / `STALE` is
+  // computed here, on read, every time.
   try {
     const fs = require("fs");
     const path = require("path");
-    const { execSync } = require("child_process");
     const projectDir =
       (d.workspace && d.workspace.project_dir) || d.cwd || process.cwd();
-    const metaPath = path.join(projectDir, ".claude", "orc", "wiki-meta.json");
-    if (!fs.existsSync(metaPath)) {
-      // Docs but no manifest = UNREGISTERED: a real wiki nothing has indexed
-      // (usually a scan stopped at a 5-area pause). It is otherwise invisible —
-      // consumers and `orc crosslink` read the manifest — so surface it here,
-      // with the free fix. Never say "no wiki": these docs are already paid for.
-      const wikiDir = path.join(projectDir, "wiki");
-      const docs =
-        fs.existsSync(wikiDir) &&
-        fs.readdirSync(wikiDir).some((f) => f.startsWith("orc-") && f.endsWith(".md"));
-      if (docs) line += " · wiki: UNREGISTERED (run `orc wiki sync`)";
-    } else {
-      const meta = JSON.parse(fs.readFileSync(metaPath, "utf8"));
-      if (meta && meta.scan_commit) {
-        const distance = parseInt(
-          execSync(`git rev-list --count ${meta.scan_commit}..HEAD`, {
-            cwd: projectDir,
-            timeout: 3000,
-            stdio: ["ignore", "pipe", "ignore"],
-          })
-            .toString()
-            .trim(),
-          10
-        );
-        if (Number.isFinite(distance)) {
-          if (distance >= 10 && distance <= 30)
-            line += ` · wiki: AGING (${distance}c)`;
-          else if (distance > 30) line += ` · wiki: STALE (${distance}c)`;
-          else line += " · wiki: fresh";
+    const led = ledger(projectDir, String(d.session_id || d.sessionId || ""));
+    const now = Date.now();
+    if (scanStale(led.wiki && led.wiki.scanned_at, now)) {
+      const w = { unregistered: false, distance: null, scanned_at: now };
+      const metaPath = path.join(projectDir, ".claude", "orc", "wiki-meta.json");
+      if (!fs.existsSync(metaPath)) {
+        // Docs but no manifest = UNREGISTERED: a real wiki nothing has indexed
+        // (usually a scan stopped at a 5-area pause). It is otherwise invisible
+        // — consumers and `orc crosslink` read the manifest — so surface it
+        // here, with the free fix. Never say "no wiki": these docs are already
+        // paid for.
+        const wikiDir = path.join(projectDir, "wiki");
+        w.unregistered =
+          fs.existsSync(wikiDir) &&
+          fs.readdirSync(wikiDir).some((f) => f.startsWith("orc-") && f.endsWith(".md"));
+      } else {
+        const meta = JSON.parse(fs.readFileSync(metaPath, "utf8"));
+        if (meta && meta.scan_commit) {
+          // A FAILED probe is a fact, and it is cached like any other. No git,
+          // a detached commit, a timeout — without this inner catch the whole
+          // block aborts before the ledger is stamped, and the subprocess runs
+          // again on the very next keystroke. The segment stays absent either
+          // way; what changes is that it costs nothing to stay absent.
+          try {
+            const { execSync } = require("child_process");
+            const n = parseInt(
+              execSync(`git rev-list --count ${meta.scan_commit}..HEAD`, {
+                cwd: projectDir,
+                timeout: 3000,
+                stdio: ["ignore", "pipe", "ignore"],
+              })
+                .toString()
+                .trim(),
+              10
+            );
+            if (Number.isFinite(n)) w.distance = n;
+          } catch (_) {}
         }
       }
+      led.wiki = w;
+    }
+    const w = led.wiki;
+    if (w && w.unregistered) line += " · wiki: UNREGISTERED (run `orc wiki sync`)";
+    else if (w && typeof w.distance === "number") {
+      if (w.distance >= 10 && w.distance <= 30) line += ` · wiki: AGING (${w.distance}c)`;
+      else if (w.distance > 30) line += ` · wiki: STALE (${w.distance}c)`;
+      else line += " · wiki: fresh";
     }
   } catch (_) {}
 
@@ -734,13 +800,7 @@ process.stdin.on("end", () => {
     const path = require("path");
     const projectDir =
       (d.workspace && d.workspace.project_dir) || d.cwd || process.cwd();
-    const orcDir = path.join(projectDir, ".claude", "orc");
-    const sfile = path.join(orcDir, "usage-session.json");
-    const sid = String(d.session_id || d.sessionId || "");
-
-    let led = null;
-    try { led = JSON.parse(fs.readFileSync(sfile, "utf8")); } catch (_) {}
-    if (!led || led.session_id !== sid) led = { session_id: sid, started_at: Date.now() };
+    const led = ledger(projectDir, String(d.session_id || d.sessionId || ""));
 
     // The hook cannot read the RESOLVED config — that is the lane resolver's
     // job, and a hook has no lane — so this reads the two raw keys it needs
@@ -757,18 +817,7 @@ process.stdin.on("end", () => {
     } catch (_) {}
 
     const now = Date.now();
-    // The scan interval is the ONE seam over this budget, on the
-    // ORC_TEST_PROBE_MS precedent: a test that proves the throttle by SLEEPING
-    // past it is a test that fails on a loaded machine, and a flake is recorded
-    // and removed, never retried away. Unset, this is byte-identical to a
-    // hardcoded 5000, and nothing in ORC ever sets it.
-    const scanEvery = (() => {
-      const n = Number(process.env.ORC_STATUSLINE_SCAN_MS);
-      return Number.isFinite(n) && n >= 0 ? n : 5000;
-    })();
-    const stale = !led.dispatch || typeof led.dispatch.scanned_at !== "number" ||
-      now - led.dispatch.scanned_at >= scanEvery;
-    if (stale) {
+    if (scanStale(led.dispatch && led.dispatch.scanned_at, now)) {
       const logDir = path.isAbsolute(logRel) ? logRel : path.join(projectDir, logRel);
       const sessionFloor = Math.floor((led.started_at || 0) / 1000) * 1000;
       let spawns = 0;
@@ -847,12 +896,6 @@ process.stdin.on("end", () => {
       led.tok = scanTokens(led, d.transcript_path || null);
     }
 
-    led.updated_at = now;
-    try {
-      fs.mkdirSync(orcDir, { recursive: true });
-      fs.writeFileSync(sfile, JSON.stringify(led) + "\n");
-    } catch (_) {}
-
     const dsp = led.dispatch || { spawns: 0, running: 0, lanes: [], phase: null };
     const parts = [];
     // `status:` leads, because what ORC is doing right now is the one thing on
@@ -882,6 +925,11 @@ process.stdin.on("end", () => {
   } catch (_) {
     line2 = "";
   }
+
+  // ONE write, after every block that touches the ledger has had its say. It is
+  // last on purpose: a render that throws half way through still prints, and a
+  // ledger that could not be written never takes the status line down with it.
+  ledgerFlush();
 
   process.stdout.write(line2 ? line + "\n" + line2 : line);
 });

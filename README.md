@@ -14,7 +14,7 @@
 ![Dependencies](https://img.shields.io/badge/dependencies-zero-lightgrey.svg?style=for-the-badge)
 ![GitHub stars](https://img.shields.io/github/stars/azure-id/orc?style=for-the-badge&color=yellow)
 
-**Latest: v1.2.1** · updated 2026-09-04 · [full changelog](CHANGELOG.md)
+**Latest: v1.3.0** · updated 2026-09-04 · [full changelog](CHANGELOG.md)
 
 **On npm: [`@azure-id/orc`](https://www.npmjs.com/package/@azure-id/orc)** — `npm i -g @azure-id/orc`
 
@@ -575,7 +575,7 @@ a current audit: [EVAL-REPORT.md](EVAL-REPORT.md).
 **Full history: [CHANGELOG.md](CHANGELOG.md)** — or `orc changelog`, which prints
 only what is newer than the version you have.
 
-### v1.2.1 - the status line says what ORC is doing _(2026-09-04)_
+### v1.3.0 - the status line stops costing what it does not spend _(2026-09-04)_
 
 **Still on the unscoped `orc` package?** Do this once first — your `orc upgrade`
 is the pre-v0.56.0 one and cannot install itself. Full detail in the CAUTION at
@@ -587,70 +587,28 @@ the top of this file.
 
 **Do not use `npm i -g -f`.** Full detail in v0.56.0 below.
 
-The second line arrived in v1.2.0 saying which lanes had run. It could not say
-what any of them was doing *now*. This release puts the running phase in front —
-with a small animated mark per kind of phase, borrowed from `orc-cli`'s lane
-menu — and finishes the line with the two facts a terminal should always carry:
-what the session has cost, and which branch it is on.
+The first half of the **CLI Hook Interface** — the feature that makes the status
+line user-composed. This release lands the groundwork it stands on, and the
+groundwork turned out to be a fix worth shipping on its own.
 
-```
-🚀 ORC v1.2.1 - Opus 5/high · context (34%) · 5h 41% (2h13m) ↔ wk 12% · ucs 6% · wiki: fresh
-   ▰ status: quick · Q3 DO · agents 7 (2 running) · orc-extra: on · Dur 48m · MTok 412K · main
-```
+The wiki freshness segment shelled `git rev-list --count` on **every** render,
+outside the 5-second scan everything else already rides in. That call is 53 ms,
+and a Node process start is ~285 ms of a **300 ms** budget after which Claude
+Code cancels the in-flight script — so in any project with a wiki, a fast typist
+was pushing the render past the cancel line and getting no status line at all
+while they typed.
 
-- **The phase is CLI-computed and rendered, never derived.** `orc init` /
-  `orc update` stamps `hooks/orc-lane-rails.json` from the same registries
-  `orc lane phases` reads; the hook holds no idea of its own about what ORC's
-  phases are. Inspect it with the new `orc lane rails [--json]`. A second phase
-  table in a hook would be the Flow-stepper failure on a second surface, and no
-  lint could see it — so it is a registered contract token instead.
-- **A phase the disk cannot prove is HIDDEN.** The floor is the trace hook's
-  own `PHASE-EDGE`, written with zero model cooperation; a narrated verb the
-  lane's rail publishes may only *refine* it, never invent one. The cost is
-  stated rather than papered over: a phase that dispatches nothing and narrates
-  nothing — `/orc-quick` `Q1 LOOK`, `Q2 ASK`, every ask-the-user gate — shows
-  no segment at all. **Asking 24 spines to write a phase marker would have
-  covered those, and it is the remembered-not-dispatched bet this repo has
-  already lost five times.** A stale phase word gets believed.
-- **The animation is a liveness tell, not a progress bar.** A statusline is a
-  pull surface, so the frame comes off the wall clock: it moves while you type
-  and while ORC works, and freezes when the session is idle. `ORC_STATUSLINE_MOTION=0`
-  **removes** the motion rather than slowing it (a frozen frame of a cycling
-  animation is a bug that looks like a hang), and `ORC_STATUSLINE_ASCII=1`
-  swaps in the ASCII twin every motif ships with.
-- **`MTok` — MAIN token — is honest about what it cannot see.** All four token
-  kinds summed, read incrementally from the session transcript. **Claude Code
-  records no token usage for a dispatched subagent**, so an hour of Opus
-  executors adds almost nothing: this is your conversation's cost, not the
-  run's. Unreadable renders `—`, **never `0`**, which would say the session was
-  free. `orc usage report` and `/orc-budget` remain the four-kind truth.
-- **The rest of the line.** The verdict WORD becomes the installed version and
-  the ICON keeps the verdict — the ⛔ branch still names every reason, because a
-  warning with no reason is an emoji. `ctx` → `context (N%)`. `sess +X%` → `ucs
-  X%`, which now keeps its slot at zero. `Dur` labels the duration, and the
-  branch comes off `.git/HEAD` with **no subprocess** on a per-keystroke
-  surface.
-- **`lanes:` is replaced by `status:`.** The running lane is its first word;
-  `orc stats` and `orc run list` still hold the session's whole history.
-- **The status line now explains itself.** `.claude/hooks/README.md` documents
-  every segment in Simplified Technical English, including what each absent
-  segment means.
+- **The wiki distance is inside the throttled scan.** The ledger caches the raw
+  commit count; `fresh` / `AGING` / `STALE` is still computed on every read. A
+  **failed** probe is cached too, so an absent segment costs nothing to stay
+  absent.
+- **One ledger, one read, one write** — flushed after the output is composed, so
+  a ledger that cannot be written never takes the status line down with it.
+- **The rendered bytes are frozen** across nine states. The CLI Hook Interface
+  is off by default and off is specified as byte-identical to today; this is
+  what makes that checkable.
 
-Everything rides in the one 5-second scan v1.2.0 already added. No new config
-key — a status line is display, and a hook cannot resolve a lane's config anyway.
-
-**Full entry: [CHANGELOG.md](CHANGELOG.md).**
-
-<details>
-<summary>Earlier releases</summary>
-
-- **v1.2.0 - a retry that cloned the agent, and a window you can watch empty — _(2026-09-04)_**
-- **v1.1.0 - the wait, and a window ORC can finally see — _(2026-08-31)_**
-- **v1.0.0 - config, phases and calls stop being prose — _(2026-08-30)_**
-
-Full bodies for every one of these are in [CHANGELOG.md](CHANGELOG.md).
-
-</details>
+Nothing about the output moved. That is the point.
 
 ---
 

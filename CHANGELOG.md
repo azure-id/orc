@@ -10,6 +10,56 @@ Format: `### v<version> — <title> _(<date>)_`.
 
 ---
 
+### v1.3.0 - the status line stops costing what it does not spend _(2026-09-04)_
+
+**Still on the unscoped `orc` package?** Do this once first — your `orc upgrade`
+is the pre-v0.56.0 one and cannot install itself. Full detail in the CAUTION at
+the top of this file.
+
+- **Step 1 — release the command from the old package:** `npm uninstall -g orc`
+- **Step 2 — install the current package:** `npm i -g @azure-id/orc`
+- **Step 3 — re-apply it to your project:** `orc update`
+
+**Do not use `npm i -g -f`.** Full detail in v0.56.0 below.
+
+The first half of the **CLI Hook Interface** — the feature that makes the status
+line user-composed. This release lands the groundwork it stands on, and the
+groundwork turned out to be a fix worth shipping on its own.
+
+**The status line was spending a subprocess per keystroke.** The wiki freshness
+segment shelled `git rev-list --count` on *every* render, outside the 5-second
+scan v1.2.0 put everything else inside. Measured on Windows: that call is 53 ms,
+and a Node process start is ~285 ms of a **300 ms** render budget after which
+Claude Code cancels the in-flight script. So in any project with a wiki, a fast
+typist was pushing the render to ~358 ms — past the cancel line — and getting no
+status line at all while they typed. It looked like a flicker, not like a bug
+with a cause.
+
+- **The wiki distance rides inside the throttled scan now.** The per-session
+  ledger caches the RAW commit count and a boolean; the word — `fresh` /
+  `AGING` / `STALE` — is still computed on every read, because a stored status
+  word is a status word that goes stale. Sixteen subprocesses per five seconds
+  became one.
+- **A failed probe is a fact, and it is cached like any other.** No git, an
+  unreachable commit, a timeout: the segment stays absent either way, but it
+  costs nothing to stay absent.
+- **One ledger: one read, one write.** Three blocks wanted
+  `.claude/orc/usage-session.json` — the rate-limit tracker, `ucs`, and the
+  line-2 scan — and each opened the file itself while two of them wrote it. It
+  is loaded at most once per process now and flushed once, **after** the output
+  is composed, so a render that throws half way through still prints and a
+  ledger that cannot be written never takes the status line down with it.
+  `ORC_STATUSLINE_SCAN_MS` remains the one seam over the budget.
+- **The rendered bytes are frozen.** Nine named states —
+  `test/goldens/statusline-baseline.txt` — pinned byte for byte: every glyph,
+  every separator, the em dash, the three-space indent. The CLI Hook Interface
+  is **off by default and off is specified as byte-identical to today**, and
+  this is what makes that claim checkable instead of aspirational.
+
+Nothing about the output moved. That is the point.
+
+---
+
 ### v1.2.1 - the status line says what ORC is doing _(2026-09-04)_
 
 **Still on the unscoped `orc` package?** Do this once first — your `orc upgrade`
