@@ -682,9 +682,20 @@ test("panel: state words come from the CLI — the panel never invents a synonym
   assert.match(js, /chip\(c\.verdict \|\| "MALFORMED"/, "boundary chips render the CLI's word");
   assert.match(js, /chip\(r\.state, r\.state === "STRUCTURAL"/, "wiki plan renders the CLI's word");
   // The kind MAPS are keyed on those words, which is legitimate; what must not
-  // exist is a rendered label that replaces one.
+  // exist is a rendered LABEL that replaces one.
+  //
+  // COMPARING against a state word is legitimate too, and v1.3.0 is where that
+  // stopped being hypothetical: the hookui palette branches on
+  // `cost === "refused"` because a refused row gets NO BUTTON AT ALL rather
+  // than a disabled one, which is a real design rule and needs the CLI's word
+  // to express. So the comparisons are stripped before the check — what is
+  // being looked for is the word appearing as CONTENT.
+  const rendered = js
+    .replace(/[=!]==\s*"[a-z-]+"/g, "")
+    .replace(/\.includes\("[a-z-]+"\)/g, "")
+    .replace(/case "[a-z-]+":/g, "");
   for (const bad of ['"holding"', '"drifted"', '"refused"', '"blocked"', '"unsafe"'])
-    assert.ok(!js.includes(bad), `${bad} is a synonym the panel must not invent`);
+    assert.ok(!rendered.includes(bad), `${bad} is a synonym the panel must not invent`);
 });
 
 test("panel: the wiki plan order, tier and estimate are never computed in the browser", () => {

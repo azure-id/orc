@@ -243,6 +243,24 @@ const READS = {
   // a wait — a wait lives in a Claude Code session, and `orc ui` never runs a
   // lane. It configures the defaults, shows a wait, and cancels one.
   "/api/usage": () => ["usage", "check"],
+  // v1.3.0 — the CLI Hook Interface. THE PANEL DRAWS THE CATALOGUE AND DERIVES
+  // NONE OF IT: the groups, the renderers, their option sets and the rendered
+  // sample per renderer all come from `statusline components --json`, and a
+  // test greps the panel for component ids, renderer names, glyph-set names,
+  // ramp names, colour tokens and state words. It must name none of them.
+  //
+  // `preview` is the one that earns the panel its place: it renders through the
+  // SAME engine the hook does, so what you see is what the bar will print.
+  "/api/statusline/components": () => ["statusline", "components"],
+  "/api/statusline/show": () => ["statusline", "show"],
+  "/api/statusline/presets": () => ["statusline", "presets"],
+  "/api/statusline/preview": (q) => {
+    const argv = ["statusline", "preview"];
+    if (q.width) argv.push("--width", String(q.width));
+    if (q.state) argv.push("--state", String(q.state));
+    return argv;
+  },
+  "/api/statusline/explain": (q) => ["statusline", "explain", String(q.at || "1:1")],
   "/api/wait/lanes": () => ["wait", "lanes"],
   "/api/wait/status": (q) => (q.slug ? ["wait", "status", String(q.slug)] : ["wait", "status"]),
   "/api/pact": () => ["pact", "status"],
@@ -421,6 +439,42 @@ const WRITES = {
   // already running. A BLOCK cannot be created here on purpose: it needs a
   // reason typed in the moment, and a reason typed into a settings page days
   // later is not the record that makes the risk demonstrably the user's.
+  // v1.3.0 — the layout's writers. Every one shells the same validator the CLI
+  // uses, so an illegal placement is refused BY NAME here exactly as it is
+  // there. The board makes the illegal drop impossible; this is the guarantee.
+  "/api/statusline/set": (b) => {
+    const argv = ["statusline", "set", String(b.line), String(b.pos)];
+    if (b.type) argv.push(String(b.type));
+    for (const [k, f] of [
+      ["render", "--render"], ["label", "--label"], ["color", "--color"],
+      ["label_color", "--label-color"], ["value_color", "--value-color"],
+      ["bg", "--bg"], ["ramp", "--ramp"], ["glyphs", "--glyphs"],
+      ["format", "--format"], ["case", "--case"], ["truncate", "--truncate"],
+      ["compact", "--compact"], ["prefix", "--prefix"], ["suffix", "--suffix"],
+      ["emphasis", "--emphasis"], ["hide_when", "--hide-when"],
+      ["width", "--width"], ["precision", "--precision"],
+      ["min_width", "--min-width"], ["min_cols", "--min-cols"],
+      ["max_cols", "--max-cols"], ["priority", "--priority"],
+    ]) {
+      if (b[k] !== undefined && b[k] !== null && b[k] !== "") argv.push(f, String(b[k]));
+    }
+    if (b.draw_empty) argv.push("--draw-empty");
+    return argv;
+  },
+  "/api/statusline/move": (b) => ["statusline", "move", String(b.from), String(b.to)],
+  "/api/statusline/remove": (b) => ["statusline", "remove", String(b.at)],
+  "/api/statusline/line": (b) => {
+    const argv = ["statusline", "line", String(b.line)];
+    if (b.separator !== undefined) argv.push("--separator", String(b.separator));
+    if (b.theme) argv.push("--theme", String(b.theme));
+    if (b.max_width !== undefined) argv.push("--max-width", String(b.max_width));
+    return argv;
+  },
+  // A preset REPLACES the layout, so the panel always confirms it and names
+  // the loss — the `orc diy init --force` rule.
+  "/api/statusline/apply": (b) => ["statusline", "apply", String(b.name)],
+  "/api/statusline/reset": () => ["statusline", "reset"],
+  "/api/statusline/compile": () => ["statusline", "compile"],
   "/api/wait/unblock": (b) => (b.slug ? ["wait", "unblock", String(b.slug)] : ["wait", "unblock"]),
   "/api/wait/cancel": (b) => (b.slug ? ["wait", "cancel", String(b.slug)] : ["wait", "cancel"]),
   "/api/wiki/sync": () => ["wiki", "sync"],

@@ -1,0 +1,366 @@
+/* css/panels/hookui.css — the CLI Hook Interface.
+
+   Every colour comes from a token defined once, on bare :root, in
+   00-tokens.css. This file defines none.
+
+   Nothing here declares an animation, deliberately: the motion rules live in
+   04-motion.css and nowhere else. The board's affordances are borders and
+   opacity, and both survive a reader who has asked for less motion. */
+
+/* ── the preview ───────────────────────────────────────────────────────── */
+/* A terminal is a monospaced grid, so the preview has to be one too. Anything
+   proportional here would misrepresent every width decision the user makes. */
+.hk-preview {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.55;
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--line);
+  /* A wide line SCROLLS inside its own box. The page body must never scroll
+     sideways — and squeezing a status line to fit would misreport its width,
+     which is the one thing this preview exists to get right. */
+  overflow-x: auto;
+  white-space: pre;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+.hk-preview::-webkit-scrollbar {
+  height: 8px;
+}
+.hk-preview::-webkit-scrollbar-track {
+  background: transparent;
+}
+.hk-preview::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border-radius: 4px;
+}
+.hk-preview-sm {
+  font-size: 12px;
+  padding: 6px 10px;
+}
+.hk-preview-chip {
+  font-size: 12px;
+  padding: 4px 8px;
+  border: none;
+  background: transparent;
+}
+.hk-line {
+  min-height: 1.55em;
+}
+.hk-fixtures {
+  margin-bottom: 10px;
+}
+
+.hk-degrade {
+  margin-top: 14px;
+  display: grid;
+  gap: 6px;
+}
+.hk-degrade-row {
+  display: grid;
+  grid-template-columns: 90px 1fr;
+  gap: 10px;
+  align-items: center;
+}
+.hk-degrade-label {
+  font-size: 11px;
+  color: var(--fg-dim);
+  text-align: right;
+}
+
+/* ── cautions ──────────────────────────────────────────────────────────── */
+.hk-caution {
+  display: grid;
+  grid-template-columns: 20px 1fr;
+  gap: 8px;
+  align-items: start;
+  padding: 6px 0;
+  font-size: 13px;
+}
+.hk-caution-mark {
+  color: var(--warn);
+}
+.hk-caution-bad .hk-caution-mark {
+  color: var(--bad);
+}
+
+/* ── the board ─────────────────────────────────────────────────────────── */
+.hk-line-wrap {
+  margin-bottom: 16px;
+}
+.hk-line-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 6px;
+}
+.hk-line-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--fg-dim);
+}
+.hk-line-count {
+  font-size: 11px;
+  color: var(--fg-dim);
+}
+.hk-full {
+  color: var(--warn);
+}
+
+.hk-zone {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px;
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+  min-height: 64px;
+  align-items: stretch;
+}
+/* An illegal line is DISABLED with its reason on the zone itself — never a
+   toast after the fact, never a validation error on Apply. A user should not be
+   able to do the wrong thing and then be told off for it. */
+.hk-line-blocked .hk-zone {
+  opacity: 0.55;
+  background: repeating-linear-gradient(
+    45deg,
+    transparent,
+    transparent 6px,
+    var(--bg-sunken) 6px,
+    var(--bg-sunken) 12px
+  );
+}
+.hk-blocked {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 12px;
+  color: var(--fg-dim);
+  padding: 8px;
+}
+
+/* A chip's child count CHANGES with its state — an open editor adds a whole
+   drawer — so it is a FLEX COLUMN and never declares its rows. A card whose
+   child count changes with its state must not have a row template; that is what
+   put a 250px ellipse on the Extra panel. */
+.hk-chip {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg-raised);
+  min-width: 120px;
+}
+.hk-chip:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.hk-chip-open {
+  border-color: var(--accent);
+  width: 100%;
+}
+.hk-chip-face {
+  min-height: 24px;
+}
+.hk-chip-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+}
+.hk-chip-id {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  color: var(--fg-dim);
+}
+.hk-icon {
+  background: none;
+  border: none;
+  color: var(--fg-dim);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+.hk-icon:hover {
+  background: var(--bg-sunken);
+  color: var(--fg);
+}
+.hk-move {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.hk-add {
+  border: 1px dashed var(--line);
+  background: none;
+  color: var(--fg-dim);
+  border-radius: 8px;
+  padding: 8px 14px;
+  cursor: pointer;
+  font-size: 12px;
+}
+.hk-add:hover {
+  border-color: var(--accent);
+  color: var(--fg);
+}
+
+.hk-line-opts {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+.hk-sep,
+.hk-input {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg-sunken);
+  color: var(--fg);
+  max-width: 200px;
+}
+
+/* ── the editor drawer ─────────────────────────────────────────────────── */
+.hk-drawer {
+  border-top: 1px solid var(--line);
+  margin-top: 8px;
+  padding-top: 10px;
+  display: grid;
+  gap: 8px;
+}
+.hk-drawer-head {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-weight: 600;
+  font-size: 13px;
+}
+.hk-section {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--fg-dim);
+  margin-top: 8px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 3px;
+}
+/* THE SHAPE PICKER IS A GALLERY, NOT A DROPDOWN: every option drawn with this
+   component's real value. A dropdown containing the word `braille-bar` tells
+   nobody anything. */
+.hk-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 6px;
+}
+.hk-sample {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg-sunken);
+  cursor: pointer;
+  text-align: left;
+}
+.hk-sample-on {
+  border-color: var(--accent);
+  background: var(--bg-raised);
+}
+.hk-sample-id {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 10px;
+  color: var(--fg-dim);
+}
+
+.hk-field {
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  gap: 10px;
+  align-items: center;
+}
+.hk-field-name {
+  font-size: 12px;
+  color: var(--fg-dim);
+}
+.hk-picks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.hk-pick {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  padding: 3px 7px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--bg-sunken);
+  color: var(--fg-dim);
+  cursor: pointer;
+}
+.hk-pick-on {
+  border-color: var(--accent);
+  color: var(--fg);
+  background: var(--bg-raised);
+}
+.hk-checks {
+  display: grid;
+  gap: 4px;
+}
+.hk-check {
+  display: grid;
+  grid-template-columns: 20px 90px 1fr;
+  gap: 6px;
+  align-items: center;
+  font-size: 12px;
+}
+
+/* ── the palette ───────────────────────────────────────────────────────── */
+.hk-palette-search {
+  font-size: 12px;
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg-sunken);
+  color: var(--fg);
+  min-width: 180px;
+}
+/* A row's child count changes with its state — a refused row carries a reason
+   and no buttons — so it is a flex column, not a grid with declared columns. */
+.hk-prow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--line);
+}
+.hk-prow-id {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  min-width: 150px;
+}
+.hk-prow-why {
+  flex-basis: 100%;
+}
+
+/* ── presets ───────────────────────────────────────────────────────────── */
+.hk-preset {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+  display: grid;
+  gap: 6px;
+}
+.hk-preset-head {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}

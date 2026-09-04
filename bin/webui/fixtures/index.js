@@ -27,6 +27,7 @@ const { stats, budgetForecast, budgetRates } = require("./stats.js");
 const { pact } = require("./pact.js");
 const { boundary } = require("./boundary.js");
 const { usage, waitLanes, waitStatus } = require("./wait.js");
+const hookui = require("./hookui.js");
 const { handoff } = require("./handoff.js");
 const { exportState, mocks } = require("./maintenance.js");
 const { chGoals, chDims, challengeRoles, challengeCouncil, challengeCycles, challengeList, challengeShow, challengeDiff, challengeDiffMissing, challengeLint } = require("./challenge.js");
@@ -202,6 +203,20 @@ module.exports.get = function get(route, q) {
       return pact;
     case "/api/usage":
       return usage;
+    // v1.3.0 — the CLI Hook Interface. ONE OF EVERY STATE, including the ugly
+    // ones: the feature off with a layout saved, a line at 5/5, a line 3 the
+    // dense-prefix rule blocks, one hard error and two warnings, a refused
+    // palette row, and a component rendering an em dash.
+    case "/api/statusline/show":
+      return hookui.show;
+    case "/api/statusline/components":
+      return hookui.components;
+    case "/api/statusline/presets":
+      return hookui.presets;
+    case "/api/statusline/preview":
+      return hookui.preview;
+    case "/api/statusline/explain":
+      return hookui.explain;
     case "/api/wait/lanes":
       return waitLanes;
     case "/api/wait/status":

@@ -17,5 +17,6 @@
   "nav.challenge": "Challenge",
   "nav.extra": "Extra",
   "nav.wait": "Tunggu",
-  "nav.docs": "Dokumen"
+  "nav.docs": "Dokumen",
+  "nav.hookui": "Antarmuka CLI Hook"
 }

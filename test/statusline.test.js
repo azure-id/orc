@@ -764,3 +764,123 @@ test("statusline: every `new read` component declares a TTL, and the table says 
   for (const r of rows)
     assert.match(r, /\/\/ ./, "a TTL with no reason is a number somebody will 'optimise': " + r.trim());
 });
+
+// ── the panel (W4) ─────────────────────────────────────────────────────────
+
+test("statusline panel: it names no component, renderer, glyph set, ramp, colour or state", () => {
+  // The Flow-stepper rule on a fourth surface. The board's palette, its groups,
+  // its option sets and its per-component samples all come from
+  // `statusline components --json`; a second idea of the catalogue in the panel
+  // is exactly the drift this design exists to make impossible.
+  const { panelJs, i18nTable } = require("./_helpers.js");
+  const js = panelJs("hookui");
+  const en = JSON.stringify(i18nTable("en"));
+  const id = JSON.stringify(i18nTable("id"));
+
+  const { root } = freshInstall();
+  try {
+    const cat = slj(root, ["components"]).json;
+    const forbidden = [
+      ...cat.components.map((c) => c.id),
+      ...Object.keys(cat.renderers),
+      ...cat.glyph_sets,
+      ...Object.keys(cat.ramps),
+      ...Object.keys(cat.themes),
+      ...cat.colors,
+      ...cat.formats,
+      ...cat.cases,
+    ];
+    // Words that are also ordinary English are excluded: the test is about the
+    // panel OWNING a catalogue, and a class name containing "text" proves
+    // nothing. Every multi-word, hyphenated or otherwise distinctive literal is
+    // still checked, which is where a real duplicate would appear.
+    const AMBIGUOUS = new Set([
+      "text", "plain", "bare", "word", "icon", "shape", "dot", "dots", "bar",
+      "fill", "clock", "model", "effort", "tier", "context", "project", "cwd",
+      "branch", "wave", "resume", "doc", "pact", "wait", "update", "config",
+      "spacer", "divider", "group", "agents", "lane", "lanes", "status",
+      "phase", "elapsed", "none", "upper", "lower", "title", "default",
+      "blue", "green", "red", "cyan", "magenta", "yellow", "white", "black",
+      "percent", "decimal", "ratio", "fraction", "mono", "state", "link",
+      "blocks", "meter", "fine", "ring", "micro", "gradient", "marker", "split",
+      "spark", "trend", "delta", "motif", "pulse", "badge", "pill", "bracket",
+      "paren", "angle", "stack", "gauge", "traffic", "cache", "extra", "wiki",
+      "pattern", "crosslink", "gotchas", "diy", "challenge", "boundary",
+      "terminal", "dim", "heat", "cool", "bars", "pipes", "braille", "shade",
+      "minimal", "ascii", "verdict", "duration", "inflight", "thinking",
+    ]);
+    const found = [];
+    for (const lit of new Set(forbidden)) {
+      if (AMBIGUOUS.has(lit)) continue;
+      const q = '"' + lit + '"';
+      if (js.includes(q)) found.push("panel: " + lit);
+      if (en.includes(q) || id.includes(q)) found.push("i18n: " + lit);
+    }
+    assert.deepStrictEqual(found, [], "the panel or a string table names the CLI's own vocabulary");
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("statusline panel: every string it asks for exists in BOTH languages", () => {
+  const { i18nTable } = require("./_helpers.js");
+  const en = i18nTable("en");
+  const id = i18nTable("id");
+  const js = require("./_helpers.js").panelJs("hookui");
+  const used = [...js.matchAll(/\bt\("(hookui\.[a-zA-Z0-9.]+)"/g)].map((m) => m[1]);
+  const usedN = [...js.matchAll(/\btn\([^,]+,\s*"(hookui\.[a-zA-Z0-9.]+)"/g)].map((m) => m[1]);
+  const missingEn = [];
+  const missingId = [];
+  for (const k of new Set(used)) {
+    if (!(k in en)) missingEn.push(k);
+    if (!(k in id)) missingId.push(k);
+  }
+  // A count-aware lookup needs BOTH forms, or the plural silently renders the
+  // key name.
+  for (const k of new Set(usedN)) {
+    for (const form of [k, k + "Plural"]) {
+      if (!(form in en)) missingEn.push(form);
+      if (!(form in id)) missingId.push(form);
+    }
+  }
+  assert.deepStrictEqual(missingEn, [], "keys used but missing from en");
+  assert.deepStrictEqual(missingId, [], "keys used but missing from id");
+});
+
+// A panel documents the things it must not do, so a grep for a forbidden API
+// has to read the CODE and not the prose about it. Strip comments first.
+function panelCode(name) {
+  return require("./_helpers.js")
+    .panelJs(name)
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/(^|[^:])\/\/.*$/gm, "$1");
+}
+
+test("statusline panel: the ANSI preview is rendered as DOM, never as HTML", () => {
+  // The preview string comes from the CLI and carries escape sequences. The
+  // rule every other rendered artefact in this panel follows holds here too.
+  const js = panelCode("hookui");
+  assert.ok(js.indexOf("innerHTML") === -1, "the panel writes innerHTML");
+  assert.match(require("./_helpers.js").panelJs("hookui"), /function ansiBlock/, "the ANSI reader exists");
+});
+
+test("statusline panel: the illegal drop is impossible, and the reason travels with it", () => {
+  // A user should never be able to do the wrong thing and then be told off for
+  // it. The zone is disabled AND says why; the CLI still validates, because the
+  // board is a convenience and never the guarantee.
+  const js = require("./_helpers.js").panelJs("hookui");
+  assert.match(js, /function lineLegal/, "the board knows which lines are legal");
+  assert.match(js, /return \{ ok: false, why:/, "an illegal line carries its reason");
+  assert.match(js, /b\.disabled = true;\s*\n\s*b\.title = legal\.why;/, "a blocked button says why on hover");
+});
+
+test("statusline panel: every drag has a keyboard equivalent and a menu", () => {
+  // A board only reachable by mouse is a board a lot of people cannot use, and
+  // pointer drag is unusable for a real fraction of them.
+  const js = panelCode("hookui");
+  for (const key of ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Delete", "Backspace"])
+    assert.ok(js.includes('"' + key + '"'), "the keyboard path is missing " + key);
+  assert.match(js, /aria-live/, "state is announced through a live region");
+  assert.ok(js.indexOf("aria-grabbed") === -1, "aria-grabbed is deprecated and must not be used");
+  assert.match(js, /function announce/, "the live region has one writer");
+});
