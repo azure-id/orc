@@ -306,6 +306,31 @@ function installGuards(claudeDir) {
     );
   }
 
+  // 2b) subagentStatusLine — the SECOND board (v1.4.0). Same non-destructive
+  //     rule: set only if the user has none, update only if it is already ours.
+  //
+  //     Wiring it is always safe even with the board OFF, and that is the
+  //     point: the hook writes the per-agent TOKEN COUNT it is handed whether
+  //     or not the custom row is rendering. v1.2.0 concluded that number could
+  //     not be measured — it cannot, from the transcript; Claude Code hands it
+  //     to the agent panel live, and `orc usage report` reads what this records.
+  const subCmd = nodeCmd(path.join(hooksDest, "orc-subagent-line.js"));
+  if (!settings.subagentStatusLine) {
+    settings.subagentStatusLine = { type: "command", command: subCmd };
+    console.log("  add   settings.json → subagentStatusLine (per-agent token record)");
+  } else if (
+    settings.subagentStatusLine.command &&
+    settings.subagentStatusLine.command.includes("orc-subagent-line")
+  ) {
+    settings.subagentStatusLine.command = subCmd;
+    console.log("  upd   settings.json → subagentStatusLine path");
+  } else {
+    console.log(
+      "  skip  settings.json → subagentStatusLine (you already have one; to record\n" +
+        `        per-agent tokens, add: ${subCmd})`
+    );
+  }
+
   // 3) Trace hook — PreToolUse(Task|Agent) SPAWN + SubagentStop RETURN
   //    skeleton. Idempotent; non-destructive. Behavior-trace logging is
   //    PERMANENT (always on); the hook bootstraps log_dir + the run pointer
@@ -1256,6 +1281,10 @@ const CONFIG_META = [
   // operating key of a HOOK, and a hook has no lane. That is an answer, not a
   // to-do. Enabled with nothing saved is not a state — the config write is
   // REFUSED when the layout does not validate, naming the reason.
+  // v1.4.0 — the SECOND board. Same shape, same reason for an empty lanes[]:
+  // it is an operating key of a hook. Off by default, and off means Claude
+  // Code's own agent-panel row, unchanged.
+  { key: "subagent_line_custom", def: "off", tier: "common", answers: [{ family: "statusline", prio: "P2", mode: "replace" }], lanes: [], validate: vEnum("off", "on"), options: ["off", "on"], desc: "Whether the agent panel renders YOUR composed row for each subagent instead of Claude Code's own. Off is Claude Code's row, unchanged. Compose it in `orc ui` > CLI Hook Interface, on the subagent board. INDEPENDENT of the per-agent token record: ORC writes what the agent panel reports whether this is on or off, because that measurement is handed over either way and throwing it out because a display setting is off would be the wrong trade." },
   { key: "statusline_custom", def: "off", tier: "common", answers: [{ family: "statusline", prio: "P2", mode: "replace" }], lanes: [], validate: vEnum("off", "on"), options: ["off", "on"], desc: "Whether the status line renders YOUR composed layout instead of the shipped two lines. Off is byte-identical to what ships. Compose the layout in `orc ui` > CLI Hook Interface (the CLI half exists so the panel has something to shell). Turning this on with an invalid or missing layout is refused, naming the reason; a layout that later becomes unreadable falls back to the shipped lines silently and is reported by `orc doctor`." },
   { key: "wait_hop_minutes", def: 30, tier: "advanced", answers: [{ family: "wait", prio: "P2", mode: "replace" }], lanes: [], validate: vInt(1), options: [5, 10, 15, 30], desc: "How long ONE detached hop waits before ORC re-reads the window. Short on purpose: each wake-up is session activity, and session activity is the only thing that makes the statusline write a fresh reading. One long sleep wakes into a reading as stale as the sleep was long." },
   { key: "wait_max_hops", def: 5, tier: "advanced", answers: [{ family: "wait", prio: "P2", mode: "replace" }], lanes: [], validate: vInt(1), options: [1, 2, 3, 5, 8, 12], desc: "How many hops before ORC gives up and stops with the hand-back. A wrong reset time must cost you a bounded wait, never a session that never comes back." },
@@ -33640,6 +33669,35 @@ function usageResetMs(v) {
 // reason — never 0. Unknown is not zero.
 const USAGE_TOP_N = 5;
 
+// The per-agent token record (v1.4.0), written by `orc-subagent-line.js` from
+// what the agent panel hands it. THREE honest limits ride with every number
+// this returns, and each is a field rather than a footnote:
+//
+//   - it is a FLOOR (`floor: true` per task). The hook sees a task only while
+//     it is in the panel, so an agent that started and finished between two
+//     renders is invisible, and a count read just before an agent finished is
+//     short by whatever came after.
+//   - `wired` says whether the hook is installed at all. Without it, "no rows"
+//     and "no agents ran" are the same shape and different facts — so a row
+//     reads `unavailable` rather than `not-seen`.
+//   - it is SESSION-SCOPED, like every other bridge in these hooks. A record
+//     from another session is not this session's spend.
+function usageSubagentTokens(claudeDir, sessionId) {
+  const out = { wired: false, byAgent: {}, tasks: 0, floor: true };
+  try {
+    out.wired = fs.existsSync(path.join(claudeDir, "hooks", "orc-subagent-line.js"));
+    const j = JSON.parse(fs.readFileSync(path.join(claudeDir, "orc", "subagent-usage.json"), "utf8"));
+    if (!j || !j.tasks) return out;
+    if (sessionId && j.session_id && j.session_id !== sessionId) return out;
+    for (const t of Object.values(j.tasks)) {
+      if (!t || !t.name || typeof t.tokens !== "number") continue;
+      out.byAgent[t.name] = (out.byAgent[t.name] || 0) + t.tokens;
+      out.tasks++;
+    }
+  } catch (_) {}
+  return out;
+}
+
 // "12m43s" | "1m7s" | "45s" → seconds. Anything else → null, never 0.
 function usageDurSeconds(s) {
   if (!s) return null;
@@ -33790,6 +33848,11 @@ function usageReportCmd(claudeDir) {
 
   const run = usageRunConsumers(claudeDir);
   const foreign = usageForeignSpend(claudeDir);
+  // v1.4.0 — the number this command has been reporting as `null` since v1.2.0.
+  // It still cannot be read from the transcript, and that half of the v1.2.0
+  // finding stands. Claude Code hands it to the AGENT PANEL, and
+  // `orc-subagent-line.js` writes down what it was handed.
+  const observed = usageSubagentTokens(claudeDir, led && led.session_id);
 
   // Rank by measured wall time. A row with nothing measured keeps its slot.
   const top = [];
@@ -33802,8 +33865,14 @@ function usageReportCmd(claudeDir) {
         running: a.running,
         wall_seconds: a.wall_seconds,
         unmeasured_dispatches: a.unmeasured,
-        tokens: null,
-        tokens_source: "unavailable",
+        // A FLOOR, NOT A TOTAL, and it says so in its own field. The subagent
+        // hook only sees a task while it is in the agent panel: an agent that
+        // started and finished between two renders is never seen, and a count
+        // read at the last render before an agent finished is short by whatever
+        // came after. A floor reported as a total is the same class of lie as a
+        // zero reported for an unknown.
+        tokens: observed.byAgent[a.agent] != null ? observed.byAgent[a.agent] : null,
+        tokens_source: observed.byAgent[a.agent] != null ? "agent-panel-floor" : observed.wired ? "not-seen" : "unavailable",
       });
   }
   for (const r of foreign.rows.slice(-USAGE_TOP_N)) {
@@ -33848,8 +33917,15 @@ function usageReportCmd(claudeDir) {
     unreadable_spend_lines: foreign.unreadable,
     // Say it on every emission. A reader who does not know this reads a
     // wall-time ranking as a token ranking.
-    tokens_note:
-      "Claude Code records no token usage for a dispatched subagent, so a Claude agent's tokens are null and never 0. Rows are ranked by MEASURED WALL TIME. Only `orc extra` foreign workers report real token vectors.",
+    // v1.4.0 — the note changed because the FACT changed, and it says exactly
+    // which half moved. The transcript still records nothing; the AGENT PANEL
+    // always did, and ORC now writes down what it is handed. What comes back is
+    // a FLOOR, and it is labelled one everywhere it appears.
+    tokens_note: observed.wired
+      ? "A Claude agent's tokens are a FLOOR, not a total: the transcript records none, so this is what the agent panel reported while each agent was visible in it — an agent that started and finished between two renders is not counted, and a count read just before an agent finished is short by whatever came after. `not-seen` means exactly that and never 0. Rows are ranked by MEASURED WALL TIME. Only `orc extra` foreign workers report a real four-kind vector."
+      : "Claude Code records no token usage for a dispatched subagent in the transcript, so a Claude agent's tokens are null and never 0. The AGENT PANEL does report one — run `orc update` to wire `subagentStatusLine`, and this becomes a measured floor. Rows are ranked by MEASURED WALL TIME. Only `orc extra` foreign workers report real token vectors.",
+    tokens_floor: observed.wired,
+    tokens_observed_tasks: observed.tasks,
   };
   if (asJson) emitJson(out, code);
 
@@ -34488,6 +34564,11 @@ function slRow(o) {
   return Object.assign(
     {
       group: "A",
+      // Which BOARD this component belongs to. `status` is the main line;
+      // `subagent` is the per-agent row. A component that binds one task means
+      // nothing on the main line and vice versa, so the palette and the
+      // validator both read this rather than guessing from the binding name.
+      board: "status",
       label: null,
       renderers: ["bare"],
       defaults: {},
@@ -34672,6 +34753,21 @@ const STATUSLINE_COMPONENTS = [
   slRow({ id: "doctor", group: "G", label: "doctor", summary: "How many findings `orc doctor` has.", renderers: ["plain", "label-value"], defaults: { render: "plain" }, cost: "refused", refused_reason: "`orc doctor` is a whole subprocess that walks the install, the payload, the manifest and the settings. W0 measured a single `git` subprocess at 53ms against roughly 15ms of headroom, and this is far larger than that. Run `orc doctor` when you want the answer; a status line is not the place for it." }),
   slRow({ id: "aftermath", group: "G", label: "churn", summary: "Whether recent runs held up.", renderers: ["plain", "bare"], defaults: { render: "plain" }, cost: "refused", refused_reason: "it needs `git log` over a date range — a subprocess whose cost grows with the repository. Churn is a signal that wants reading once, not three times a second: run `/orc-aftermath`." }),
 
+  // ── Group T — ONE SUBAGENT. The second board only (v1.4.0). ────────────
+  //    Every row here binds the TASK the row is about, so none of them means
+  //    anything on the main status line — `board: "subagent"` is how the
+  //    palette and the validator know.
+  slRow({ id: "task-name", group: "T", board: "subagent", summary: "The agent's name.", renderers: ["bare", "plain", "badge", "pill", "label-value"], defaults: { render: "bare", truncate: "middle", max_len: 28 }, binding: "task.name" }),
+  slRow({ id: "task-tier", group: "T", board: "subagent", summary: "The model and effort this agent is ACTUALLY running at — observed, not derived from its name and not self-reported. It is the only one of ORC's three readings nobody had to be trusted for.", renderers: ["bare", "plain", "label-value", "badge", "pill"], defaults: { render: "bare" }, binding: "task.tier" }),
+  slRow({ id: "task-model", group: "T", board: "subagent", summary: "The model this agent resolved to.", renderers: ["bare", "plain", "badge", "pill"], defaults: { render: "bare" }, binding: "task.model" }),
+  slRow({ id: "task-effort", group: "T", board: "subagent", summary: "The effort level this agent resolved to.", renderers: ["bare", "plain", "label-value"], defaults: { render: "bare" }, states: ["low", "medium", "high", "xhigh", "max"], binding: "task.effort", state_binding: "task.effort" }),
+  slRow({ id: "task-status", group: "T", board: "subagent", summary: "What this agent is doing.", renderers: ["word", "shape", "badge", "bare"], defaults: { render: "word" }, states: ["pending", "running", "completed", "failed"], shapes: { pending: "○", running: "●", completed: "✓", failed: "▲" }, binding: "task.status", state_binding: "task.status" }),
+  slRow({ id: "task-tokens", group: "T", board: "subagent", summary: "How many tokens this agent has used. THE NUMBER v1.2.0 SAID COULD NOT BE MEASURED — it cannot, from the transcript; Claude Code hands it to the agent panel live.", renderers: ["plain", "label-value", "bare"], defaults: { render: "plain", compact: "si" }, binding: "task.tokens" }),
+  slRow({ id: "task-context", group: "T", board: "subagent", summary: "How full this agent's own context window is.", renderers: SL_PROP.concat(["plain", "label-value", "bare"]), defaults: { render: "fine", width: 8, format: "percent", min_width: 3, align: "right", ramp: "heat" }, states: ["ok", "warn", "full"], shapes: { ok: "●", warn: "◐", full: "○" }, bounded: true, binding: "task.ctx_pct", state_binding: "task.ctx_state" }),
+  slRow({ id: "task-window", group: "T", board: "subagent", summary: "The size of this agent's context window.", renderers: ["plain", "label-value", "bare"], defaults: { render: "plain", compact: "si" }, unknown: "hide", binding: "task.ctx_size" }),
+  slRow({ id: "task-elapsed", group: "T", board: "subagent", label: "for", summary: "How long this agent has been running.", renderers: ["plain", "label-value", "bare"], defaults: { render: "plain", min_width: 3, align: "right", suffix: "m" }, binding: "task.elapsed_min", time_based: true }),
+  slRow({ id: "task-what", group: "T", board: "subagent", summary: "What this agent was asked to do.", renderers: ["bare", "plain"], defaults: { render: "bare", truncate: "end", max_len: 40 }, unknown: "hide", binding: "task.description" }),
+
   // ── Group J — Composite shortcuts. One slot, several facts. ─────────────
   slRow({ id: "tier-block", group: "J", summary: "Verdict + version + model/effort as one object.", renderers: ["plain", "badge", "pill"], defaults: { render: "pill" }, states: ["ready", "boosted", "degrade"], binding: "tier.text", state_binding: "verdict.state", composite: ["verdict", "orc-version", "tier"] }),
   slRow({ id: "quota-block", group: "J", label: "quota", summary: "Both windows as one object.", renderers: ["plain", "badge", "pill"], defaults: { render: "plain" }, states: ["ok", "warn", "critical"], binding: "quota.worst.pct", state_binding: "quota.worst.state", composite: ["quota-5h", "quota-week"] }),
@@ -34686,42 +34782,76 @@ const SL_BY_ID = new Map(STATUSLINE_COMPONENTS.map((c) => [c.id, c]));
 // the machine runs. THE HOOK NEVER READS THE AUTHORED FILE. Not as a fallback,
 // not on a cache miss, not ever: one consumer per file, the rule `doc.json` and
 // `wiki-meta.json` already follow.
-function slPaths(claudeDir) {
+// TWO BOARDS, ONE COMPILER (v1.4.0). `status` is the main line; `subagent` is
+// the per-agent row Claude Code renders in the agent panel. They share the
+// compiler, the IR, every renderer, the glyph sets, the colour model and the
+// validator — what differs is the component set, the file names and the config
+// key. A second compiler is exactly what this table exists to prevent.
+const SL_BOARDS = {
+  status: {
+    id: "status",
+    lines: 3,
+    key: "statusline_custom",
+    files: ["statusline-layout.json", "statusline-compiled.json", "statusline.lock.json"],
+    setting: "statusLine",
+  },
+  subagent: {
+    id: "subagent",
+    // ONE line by construction: Claude Code renders one row per task, so the
+    // three-line board and its dense-prefix rule simply do not apply here.
+    lines: 1,
+    key: "subagent_line_custom",
+    files: ["subagent-layout.json", "subagent-compiled.json", "subagent.lock.json"],
+    setting: "subagentStatusLine",
+  },
+};
+
+function slBoard() {
+  const b = String(flag("--board") || "status");
+  return SL_BOARDS[b] || SL_BOARDS.status;
+}
+
+function slPaths(claudeDir, board) {
+  const b = board || slBoard();
   const dir = path.join(claudeDir, "orc");
   return {
     dir,
-    layout: path.join(dir, "statusline-layout.json"),
-    compiled: path.join(dir, "statusline-compiled.json"),
-    lock: path.join(dir, "statusline.lock.json"),
+    board: b,
+    layout: path.join(dir, b.files[0]),
+    compiled: path.join(dir, b.files[1]),
+    lock: path.join(dir, b.files[2]),
   };
 }
 
-function slBlankLayout() {
+function slBlankLayout(board) {
+  const b = board || slBoard();
+  const lines = [];
+  for (let i = 0; i < b.lines; i++)
+    lines.push({ separator: " · ", max_width: 0, theme: null, prefix: i ? "   " : "", items: [] });
   return {
     schema: SL_SCHEMA,
+    board: b.id,
     orc_version: currentVersion(),
     preset: null,
     ansi: "auto",
     theme: "terminal",
     glyphs: "blocks",
     align_columns: false,
-    lines: [
-      { separator: " · ", max_width: 0, theme: null, prefix: "", items: [] },
-      { separator: " · ", max_width: 0, theme: null, prefix: "   ", items: [] },
-      { separator: " · ", max_width: 0, theme: null, prefix: "   ", items: [] },
-    ],
+    lines,
   };
 }
 
-function slReadLayout(claudeDir) {
-  const p = slPaths(claudeDir).layout;
+function slReadLayout(claudeDir, board) {
+  const p = slPaths(claudeDir, board).layout;
   try {
     const j = JSON.parse(fs.readFileSync(p, "utf8").replace(/^﻿/, ""));
     if (!j || j.schema !== SL_SCHEMA) return null;
     // A layout with fewer than three lines is a layout from a smaller board.
     // Pad rather than refuse — the dense-prefix rule only cares about what is
     // FILLED, and an absent line 3 and an empty line 3 are the same fact.
-    while (j.lines.length < 3) j.lines.push({ separator: " · ", max_width: 0, theme: null, prefix: "   ", items: [] });
+    const want = (SL_BOARDS[j.board] || slBoard()).lines;
+    while (j.lines.length < want) j.lines.push({ separator: " · ", max_width: 0, theme: null, prefix: "   ", items: [] });
+    j.lines.length = Math.min(j.lines.length, want);
     return j;
   } catch (_) {
     return null;
@@ -34729,7 +34859,7 @@ function slReadLayout(claudeDir) {
 }
 
 function slWriteLayout(claudeDir, layout) {
-  const p = slPaths(claudeDir);
+  const p = slPaths(claudeDir, SL_BOARDS[layout.board] || SL_BOARDS.status);
   fs.mkdirSync(p.dir, { recursive: true });
   layout.orc_version = currentVersion();
   fs.writeFileSync(p.layout, JSON.stringify(layout, null, 2) + "\n");
@@ -34829,7 +34959,9 @@ function slValidate(layout) {
   if (!layout || !Array.isArray(layout.lines)) {
     return { ok: false, errors: ["the layout has no lines[] — it is not a layout"], warnings: [] };
   }
-  if (layout.lines.length > 3) E(`the board holds 3 lines; this layout has ${layout.lines.length}`);
+  const board = SL_BOARDS[layout.board] || SL_BOARDS.status;
+  if (layout.lines.length > board.lines)
+    E(`this board holds ${board.lines} line${board.lines === 1 ? "" : "s"}; this layout has ${layout.lines.length}`);
 
   // ── Tier 1 — structural (the board rules). These are REFUSALS. ──────────
   const counts = layout.lines.map((l) => (l.items || []).filter((it) => !slIsStructural(it.type)).length);
@@ -34857,6 +34989,12 @@ function slValidate(layout) {
         E(`unknown component "${item.type}" on ${where}${slDidYouMean(item.type)}`);
         return;
       }
+      // A component that binds ONE TASK means nothing on the main line, and a
+      // session-wide component means nothing on a per-agent row. Refused by
+      // name, with the board it belongs to — the two catalogues are one
+      // catalogue with a column, not two lists somebody has to keep in step.
+      if (comp.board !== board.id)
+        E(`"${comp.id}" belongs to the ${comp.board === "subagent" ? "subagent" : "status"} board — this is the ${board.id} board`);
       const r = item.render || (comp.defaults && comp.defaults.render) || comp.renderers[0];
       if (!comp.renderers.includes(r))
         E(`component "${comp.id}" does not offer renderer "${r}" — it offers: ${comp.renderers.join(", ")}`);
@@ -35177,6 +35315,7 @@ function slCompile(layout) {
     orc_version: currentVersion(),
     compiled_at: new Date().toISOString(),
     ansi: layout.ansi === "off" ? "off" : "auto",
+    board: layout.board || "status",
     // The preset RIDES IN THE COMPILED FILE. `preset-name` needs it and the
     // hook must never open the authored layout — one consumer per file, and
     // there is no exception for a field that would be convenient.
@@ -35601,6 +35740,22 @@ const STATUSLINE_PRESETS = {
       [],
     ],
   },
+  // ── the second board (v1.4.0) ──────────────────────────────────────────
+  "agent-default": {
+    board: "subagent",
+    summary: "What the agent is, what it is running at, and what it has cost so far.",
+    build: () => [[slItem("task-name"), slItem("task-tier"), slItem("task-tokens"), slItem("task-elapsed")]],
+  },
+  "agent-watch": {
+    board: "subagent",
+    summary: "For a run you are watching: status, its own context window, and the clock.",
+    build: () => [[slItem("task-status"), slItem("task-name"), slItem("task-context", { render: "fine", width: 8 }), slItem("task-elapsed")]],
+  },
+  "agent-tier": {
+    board: "subagent",
+    summary: "The downgrade check, made visible: the model and effort ORC actually got, per agent.",
+    build: () => [[slItem("task-name"), slItem("task-model"), slItem("task-effort"), slItem("task-status")]],
+  },
   mono: {
     summary: "No colour anywhere — shapes and emphasis only. Proves R4 by being shipped, and it is the right preset for a README screenshot.",
     theme: "mono",
@@ -35616,7 +35771,7 @@ const STATUSLINE_PRESETS = {
 function slBuildPreset(name) {
   const p = STATUSLINE_PRESETS[name];
   if (!p) return null;
-  const layout = slBlankLayout();
+  const layout = slBlankLayout(SL_BOARDS[p.board || "status"]);
   layout.preset = name;
   if (p.theme) layout.theme = p.theme;
   if (p.ansi) layout.ansi = p.ansi;
@@ -35634,6 +35789,10 @@ function slBuildPreset(name) {
 // A preset carries `active` from the CLI, matched on the ITEM SET and ignoring
 // cosmetic-only fields — the `orc diy` presets rule, so renaming a colour does
 // not lose the shape.
+function slPresetsFor(boardId) {
+  return Object.entries(STATUSLINE_PRESETS).filter(([, p]) => (p.board || "status") === boardId);
+}
+
 function slPresetActive(layout, name) {
   const p = slBuildPreset(name);
   if (!p) return false;
@@ -35758,6 +35917,15 @@ function slEngine() {
 // The fixture states the preview renders against. `--state <k>=<v>` overrides
 // any field. They carry ONE OF EVERY STATE including the ugly ones — you cannot
 // design a STALE chip on a fresh wiki.
+// The task a subagent-board preview is drawn against. It carries what the agent
+// panel really hands over — including `tokenCount`, which is the number v1.2.0
+// concluded could not be measured.
+const SL_TASK_FIXTURES = {
+  healthy: { id: "t1", name: "orc-executor-opus-5-low", type: "orc-executor-opus-5-low", description: "wire the retry ladder", status: "running", model: "claude-opus-5", effort: "low", tokenCount: 84000, contextWindowSize: 200000, startTime: 1767225600000 - 17 * 60000 },
+  degraded: { id: "t2", name: "orc-executor-sonnet-4-6-med", type: "orc-executor-sonnet-4-6-med", description: "rename two files", status: "failed", model: "claude-sonnet-4-6", effort: "medium", tokenCount: 191000, contextWindowSize: 200000, startTime: 1767225600000 - 96 * 60000 },
+  empty: { id: "t3" },
+};
+
 const SL_FIXTURES = {
   healthy: {
     label: "a healthy session mid-run",
@@ -35840,6 +36008,7 @@ function slPreview(compiled, fixtureName, cols, overrides) {
     ledger: Object.assign({ started_at: now - 2880000 }, fx.ledger),
     scan: fx.scan || {},
     derived: slDerived(payload),
+    task: SL_TASK_FIXTURES[fixtureName] || SL_TASK_FIXTURES.healthy,
     now,
     cols: cols || 0,
     env: Object.assign({}, process.env, { COLUMNS: String(cols || 120) }),
@@ -35920,9 +36089,11 @@ has something to shell — typing a three-line layout is worse than the board.`)
 // THE PANEL DRAWS THIS AND DERIVES NONE OF IT. Groups, renderers, states, cost,
 // availability in this project, and a rendered preview string per renderer.
 function slComponentsCmd() {
+  const board = slBoard();
   const groups = {};
   const out = [];
   for (const c of STATUSLINE_COMPONENTS) {
+    if (c.board !== board.id) continue;
     const row = {
       id: c.id,
       group: c.group,
@@ -35936,6 +36107,7 @@ function slComponentsCmd() {
       series: c.series,
       unknown: c.unknown,
       cost: c.cost,
+      board: c.board,
       refused_reason: c.refused_reason,
       params: c.params || null,
       binding: c.binding,
@@ -35966,8 +36138,12 @@ function slComponentsCmd() {
       emphasis: Object.keys(SL_EMPHASIS),
       refused_emphasis: SL_REFUSED_EMPHASIS,
       colors: Object.keys(SL_ANSI_SLOTS),
+      board: board.id,
+      boards: Object.keys(SL_BOARDS),
       max_per_line: 5,
-      lines: 3,
+      lines: board.lines,
+      config_key: board.key,
+      setting: board.setting,
       dense_prefix: "A line may hold a component only if every line above it holds at least one.",
     }, 0);
   }
@@ -35985,7 +36161,7 @@ function slComponentsCmd() {
     }
   }
   console.log("");
-  console.log(ui.color.gray(`  ${STATUSLINE_COMPONENTS.length} components · compose them in \`orc ui\` ▸ CLI Hook Interface`));
+  console.log(ui.color.gray(`  ${out.length} components on the ${board.id} board · compose them in \`orc ui\` ▸ CLI Hook Interface`));
   console.log("");
 }
 
@@ -35999,6 +36175,7 @@ const SL_GROUP_NAMES = {
   E: "Extra (foreign dispatch)",
   F: "Flow and lanes",
   G: "Health and gates",
+  T: "One subagent (the agent-panel row)",
   H: "Project and VCS",
   I: "Static and structural",
   J: "Composite shortcuts",
@@ -36023,7 +36200,8 @@ function slRendererPreviews(comp) {
 }
 
 function slLoadOrDefault(claudeDir) {
-  return slReadLayout(claudeDir) || slBuildPreset("orc-default");
+  const b = slBoard();
+  return slReadLayout(claudeDir, b) || slBuildPreset(b.id === "subagent" ? "agent-default" : "orc-default");
 }
 
 function slShowCmd(claudeDir) {
@@ -36170,6 +36348,7 @@ function slPreviewCmd(claudeDir) {
       ledger: Object.assign({ started_at: now - 2880000 }, fx.ledger),
       scan: fx.scan || {},
       derived: slDerived(payload),
+      task: SL_TASK_FIXTURES[state] || SL_TASK_FIXTURES.healthy,
       now,
       cols,
       env: Object.assign({}, process.env, { COLUMNS: String(cols) }, env),
@@ -36322,12 +36501,12 @@ function slLineCmd(claudeDir, p) {
 
 function slPresetsCmd(claudeDir) {
   const layout = slReadLayout(claudeDir);
-  const rows = Object.entries(STATUSLINE_PRESETS).map(([name, p]) => {
+  const rows = slPresetsFor(slBoard().id).map(([name, p]) => {
     let preview = null;
     try {
       preview = slPreview(slCompile(slBuildPreset(name)).compiled, "healthy", 120, {}).text;
     } catch (_) {}
-    return { name, summary: p.summary, active: layout ? slPresetActive(layout, name) : name === "orc-default", preview };
+    return { name, summary: p.summary, board: p.board || "status", active: layout ? slPresetActive(layout, name) : false, preview };
   });
   if (wantsJson()) return emitJson({ ok: true, presets: rows }, 0);
   console.log("");
@@ -36341,9 +36520,19 @@ function slPresetsCmd(claudeDir) {
 }
 
 function slApplyCmd(claudeDir, name) {
+  const mine = slPresetsFor(slBoard().id).map(([n]) => n);
   if (!name || !STATUSLINE_PRESETS[name]) {
-    if (wantsJson()) return emitJson({ ok: false, reason: "unknown-preset", known: Object.keys(STATUSLINE_PRESETS) }, 2);
-    console.error(`usage: orc statusline apply <${Object.keys(STATUSLINE_PRESETS).join("|")}>`);
+    if (wantsJson()) return emitJson({ ok: false, reason: "unknown-preset", known: mine }, 2);
+    console.error(`usage: orc statusline apply <${mine.join("|")}>`);
+    process.exit(2);
+  }
+  // A preset from the OTHER board is refused by name, with the flag that would
+  // have worked. Applying it would replace this board's layout with components
+  // it cannot hold, and the validator would then refuse every one of them.
+  if ((STATUSLINE_PRESETS[name].board || "status") !== slBoard().id) {
+    const other = STATUSLINE_PRESETS[name].board || "status";
+    if (wantsJson()) return emitJson({ ok: false, reason: "wrong-board", preset: name, board: other, hint: `orc statusline apply ${name} --board ${other}` }, 2);
+    console.error(`"${name}" is a ${other}-board preset — try: orc statusline apply ${name} --board ${other}`);
     process.exit(2);
   }
   // `apply` REPLACES the layout, so the loss is NAMED. A count is not consent.
@@ -36357,7 +36546,8 @@ function slApplyCmd(claudeDir, name) {
 function slResetCmd(claudeDir) {
   const before = slReadLayout(claudeDir);
   const lost = before ? before.lines.reduce((n, l) => n + (l.items || []).length, 0) : 0;
-  return slSaveAndCompile(claudeDir, slBuildPreset("orc-default"), { action: "reset", replaced_items: lost });
+  const dflt = slBoard().id === "subagent" ? "agent-default" : "orc-default";
+  return slSaveAndCompile(claudeDir, slBuildPreset(dflt), { action: "reset", replaced_items: lost });
 }
 
 // `compile` runs AUTOMATICALLY after every mutating command, so there is no
@@ -36380,7 +36570,7 @@ function slSaveAndCompile(claudeDir, layout, info, skipWrite) {
     console.error(ui.color.gray("  nothing was written."));
     process.exit(1);
   }
-  const paths = slPaths(claudeDir);
+  const paths = slPaths(claudeDir, SL_BOARDS[layout.board] || SL_BOARDS.status);
   const { compiled, lock } = slCompile(layout);
   lock.warnings = v.warnings;
   fs.mkdirSync(paths.dir, { recursive: true });

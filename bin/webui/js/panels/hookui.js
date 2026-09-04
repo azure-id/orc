@@ -37,6 +37,11 @@ let HK_OPEN = null;
 // the same reason.
 let HK_SEARCH = "";
 let HK_GROUP = null;
+// WHICH BOARD. The main status line, or the row Claude Code draws per subagent
+// in the agent panel. The panel does not know what boards exist — `components
+// --json` carries the list — it only remembers which one you are looking at, so
+// a re-render does not put you back on the other one.
+let HK_BOARD = "status";
 
 PANELS.hookui = function (host) {
   head(host, t("hookui.title"), t("hookui.sub"));
@@ -45,10 +50,10 @@ PANELS.hookui = function (host) {
     host,
     () =>
       Promise.all([
-        read("/api/statusline/show").then((r) => r.data),
-        read("/api/statusline/components").then((r) => r.data),
-        read("/api/statusline/presets").then((r) => r.data),
-        read("/api/statusline/preview?width=" + HK_WIDTH + "&state=" + HK_STATE).then((r) => r.data),
+        read("/api/statusline/show?board=" + HK_BOARD).then((r) => r.data),
+        read("/api/statusline/components?board=" + HK_BOARD).then((r) => r.data),
+        read("/api/statusline/presets?board=" + HK_BOARD).then((r) => r.data),
+        read("/api/statusline/preview?board=" + HK_BOARD + "&width=" + HK_WIDTH + "&state=" + HK_STATE).then((r) => r.data),
       ]),
     ([show, cat, presets, prev]) => {
       const out = frag();
@@ -71,7 +76,8 @@ PANELS.hookui = function (host) {
         resetLabel: t("hookui.resetLayout"),
       });
 
-      out.append(gateCard(show, edits));
+      out.append(boardTabs(cat));
+      out.append(gateCard(show, cat, edits));
       // A caution renders ABOVE the preview, never inside a tab — a caution you
       // have to hunt for is a caution nobody reads.
       if (show.errors.length || show.warnings.length) out.append(cautionCard(show, edits));
@@ -86,6 +92,44 @@ PANELS.hookui = function (host) {
   );
 };
 
+// EVERY write carries the board it is about. Forgetting it on one route would
+// edit the other board's layout, which is the one mistake here that is silent.
+function bd(body) {
+  return Object.assign({ board: HK_BOARD }, body);
+}
+
+// The two boards. Named by the CLI (`boards` in the catalogue), labelled by the
+// panel — the id is data and the label is prose, which is the split everywhere
+// else in this file too.
+//
+// The keys are SPELLED OUT rather than assembled from the id, for the same
+// reason the tier labels are: a key built from a fragment is invisible to the
+// coverage check that keeps the two string tables honest.
+const HK_BOARD_LABEL = { status: "hookui.boardStatus", subagent: "hookui.boardSubagent" };
+const HK_BOARD_SUB = { status: "hookui.boardStatusSub", subagent: "hookui.boardSubagentSub" };
+function boardTabs(cat) {
+  const c = card(null);
+  const row = el("div", "row-actions hk-boards");
+  for (const b of cat.boards || ["status"]) {
+    const btn = el("button", "btn btn-sm" + (HK_BOARD === b ? " btn-primary" : " btn-ghost"),
+      t(HK_BOARD_LABEL[b] || HK_BOARD_LABEL.status));
+    btn.type = "button";
+    btn.addEventListener("click", () => {
+      if (HK_BOARD === b) return;
+      HK_BOARD = b;
+      // Opening the other board with a chip's editor still open would open a
+      // drawer for an item that is not there.
+      HK_OPEN = null;
+      HK_SEARCH = "";
+      rerender();
+    });
+    row.append(btn);
+  }
+  c.append(row);
+  c.append(el("div", "note", t(HK_BOARD_SUB[HK_BOARD] || HK_BOARD_SUB.status)));
+  return c;
+}
+
 function rerender() {
   const h = location.hash;
   location.hash = "#/";
@@ -96,7 +140,7 @@ function rerender() {
 // INVERTED from the Extra panel's. There, nothing exists until you connect;
 // here the board is LIVE WHILE OFF, because you must be able to compose before
 // you arm. What is gated is the switch, not the work.
-function gateCard(show, edits) {
+function gateCard(show, cat, edits) {
   const c = card(t("hookui.gate"));
   const row = el("div", "row-actions");
   row.append(chip(show.enabled ? t("hookui.on") : t("hookui.off"), show.enabled ? "ok" : null));
@@ -116,7 +160,9 @@ function gateCard(show, edits) {
     c.append(el("div", "note note-warn", show.errors[0] || ""));
   }
   b.addEventListener("click", async () => {
-    const r = await post("/api/config/set", { key: "statusline_custom", value: show.enabled ? "off" : "on" });
+    // The KEY IS THE CLI'S. Naming it here would be a second idea of which
+    // switch belongs to which board.
+    const r = await post("/api/config/set", { key: cat.config_key, value: show.enabled ? "off" : "on" });
     if (!r.ok) toast(t("hookui.switchFailed"), "bad", (r.output || "").trim());
     rerender();
   });
@@ -325,7 +371,7 @@ function boardCard(show, cat, edits) {
     sep.setAttribute("aria-label", t("hookui.separator"));
     sep.addEventListener("change", () => {
       edits.action("line" + line.line, "/api/statusline/line",
-        { line: line.line, separator: sep.value },
+        bd({ line: line.line, separator: sep.value }),
         t("hookui.sepChange", { n: line.line, s: sep.value }));
     });
     opts.append(el("span", "note", t("hookui.separator")), sep);
@@ -372,7 +418,7 @@ function chipEl(item, line, show, cat, edits) {
   rm.title = t("hookui.remove");
   rm.addEventListener("click", () => {
     edits.action("rm" + item.id, "/api/statusline/remove",
-      { at: line.line + ":" + item.pos },
+      bd({ at: line.line + ":" + item.pos }),
       t("hookui.removed", { id: item.type }));
   });
   foot.append(edit, rm);
@@ -415,7 +461,7 @@ function chipEl(item, line, show, cat, edits) {
   cl.type = "button";
   cl.addEventListener("click", () =>
     edits.action("cl" + item.id, "/api/statusline/clone",
-      { at: line.line + ":" + item.pos }, t("hookui.cloned", { id: item.type })));
+      bd({ at: line.line + ":" + item.pos }), t("hookui.cloned", { id: item.type })));
   menu.append(cl);
   // EXPAND turns a composite or a group back into its parts — which is how a
   // three-in-one chip becomes three chips the moment you want to restyle one.
@@ -424,7 +470,7 @@ function chipEl(item, line, show, cat, edits) {
     ex.type = "button";
     ex.addEventListener("click", () =>
       edits.action("ex" + item.id, "/api/statusline/expand",
-        { at: line.line + ":" + item.pos }, t("hookui.expanded", { id: item.type })));
+        bd({ at: line.line + ":" + item.pos }), t("hookui.expanded", { id: item.type })));
     menu.append(ex);
   }
   wrap.append(menu);
@@ -435,7 +481,7 @@ function chipEl(item, line, show, cat, edits) {
     if (ev.key === "Delete" || ev.key === "Backspace") {
       ev.preventDefault();
       edits.action("rm" + item.id, "/api/statusline/remove",
-        { at: line.line + ":" + item.pos }, t("hookui.removed", { id: item.type }));
+        bd({ at: line.line + ":" + item.pos }), t("hookui.removed", { id: item.type }));
     } else if (ev.key === "e" || ev.key === "E") {
       ev.preventDefault();
       HK_OPEN = HK_OPEN === item.id ? null : item.id;
@@ -464,7 +510,7 @@ function chipEl(item, line, show, cat, edits) {
 
 function moveTo(item, line, toLine, toPos, edits) {
   edits.action("mv" + item.id, "/api/statusline/move",
-    { from: line.line + ":" + item.pos, to: toLine + ":" + toPos },
+    bd({ from: line.line + ":" + item.pos, to: toLine + ":" + toPos }),
     t("hookui.moved", { id: item.type, n: toLine }));
   announce(t("hookui.moved", { id: item.type, n: toLine }));
 }
@@ -500,7 +546,7 @@ function editorDrawer(item, line, comp, cat, edits) {
   }
   const stage = (field, value, label) => {
     edits.action("set" + item.id + field, "/api/statusline/set",
-      Object.assign({ line: line.line, pos: item.pos }, { [field]: value }),
+      bd(Object.assign({ line: line.line, pos: item.pos }, { [field]: value })),
       label);
   };
 
@@ -617,7 +663,7 @@ function editorDrawer(item, line, comp, cat, edits) {
   const ex = el("button", "btn btn-xs btn-ghost", t("hookui.explain"));
   ex.type = "button";
   ex.addEventListener("click", async () => {
-    const r = await read("/api/statusline/explain?at=" + line.line + ":" + item.pos);
+    const r = await read("/api/statusline/explain?board=" + HK_BOARD + "&at=" + line.line + ":" + item.pos);
     if (!r.data || !r.data.ok) return toast(t("hookui.explainFailed"), "bad");
     const rows = r.data.resolved.map((x) => [x.field, x.source]);
     modal({ title: comp.id, body: kvList(rows), actions: [] });
@@ -752,7 +798,7 @@ function paletteRow(comp, show, cat, edits) {
     } else {
       b.addEventListener("click", () =>
         edits.action("add" + comp.id + n, "/api/statusline/set",
-          { line: n, pos: line.items.length + 1, type: comp.id },
+          bd({ line: n, pos: line.items.length + 1, type: comp.id }),
           t("hookui.added", { id: comp.id, n })));
     }
     acts.append(b);
@@ -797,7 +843,7 @@ function confirmApply(name) {
         label: t("hookui.apply"),
         kind: "primary",
         onClick: async () => {
-          const r = await post("/api/statusline/apply", { name });
+          const r = await post("/api/statusline/apply", bd({ name }));
           if (!r.ok) toast(t("hookui.applyFailed"), "bad", (r.output || "").trim());
           rerender();
         },
@@ -816,7 +862,7 @@ function confirmReset() {
         label: t("hookui.resetLayout"),
         kind: "primary",
         onClick: async () => {
-          await post("/api/statusline/reset", {});
+          await post("/api/statusline/reset", bd({}));
           rerender();
         },
       },
@@ -828,12 +874,12 @@ function confirmReset() {
 function advancedCard(show, cat, edits) {
   const c = card(t("hookui.advanced"));
   c.append(labelled(t("hookui.theme"), pickRow(Object.keys(cat.themes), show.theme, (v) =>
-    edits.action("theme", "/api/statusline/line", { line: 1, theme: v }, t("hookui.themeChange", { v })))));
+    edits.action("theme", "/api/statusline/line", bd({ line: 1, theme: v }), t("hookui.themeChange", { v })))));
 
   const re = el("button", "btn btn-sm btn-ghost", t("hookui.recompile"));
   re.type = "button";
   re.addEventListener("click", async () => {
-    const r = await post("/api/statusline/compile", {});
+    const r = await post("/api/statusline/compile", bd({}));
     toast(r.ok ? t("hookui.recompiled") : t("hookui.recompileFailed"), r.ok ? "ok" : "bad");
     rerender();
   });

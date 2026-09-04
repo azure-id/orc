@@ -371,3 +371,9 @@
 .hk-num {
   max-width: 90px;
 }
+
+/* The board switch. Two buttons, and the card holds nothing else — a heading
+   above two tabs would just say "boards" twice. */
+.hk-boards {
+  margin-bottom: 4px;
+}

@@ -45,6 +45,14 @@ function clearCache() {
   cache.clear();
 }
 
+// v1.4.0 — the board a statusline request is about. A value this server does
+// not recognise is DROPPED rather than forwarded: the CLI would refuse it, and
+// a query string is user input like any other.
+function slBoard(q) {
+  const b = q && q.board ? String(q.board) : "";
+  return b === "subagent" ? ["--board", "subagent"] : [];
+}
+
 // ── running the CLI ─────────────────────────────────────────────────────────
 
 // Several commands use a NON-ZERO exit as a normal answer, not a failure:
@@ -251,16 +259,19 @@ const READS = {
   //
   // `preview` is the one that earns the panel its place: it renders through the
   // SAME engine the hook does, so what you see is what the bar will print.
-  "/api/statusline/components": () => ["statusline", "components"],
-  "/api/statusline/show": () => ["statusline", "show"],
-  "/api/statusline/presets": () => ["statusline", "presets"],
+  // v1.4.0 — TWO BOARDS through one set of routes. `--board` is passed
+  // through verbatim; the CLI owns which boards exist and which components
+  // each may hold, and the panel — as everywhere else — decides none of it.
+  "/api/statusline/components": (q) => ["statusline", "components", ...slBoard(q)],
+  "/api/statusline/show": (q) => ["statusline", "show", ...slBoard(q)],
+  "/api/statusline/presets": (q) => ["statusline", "presets", ...slBoard(q)],
   "/api/statusline/preview": (q) => {
-    const argv = ["statusline", "preview"];
+    const argv = ["statusline", "preview", ...slBoard(q)];
     if (q.width) argv.push("--width", String(q.width));
     if (q.state) argv.push("--state", String(q.state));
     return argv;
   },
-  "/api/statusline/explain": (q) => ["statusline", "explain", String(q.at || "1:1")],
+  "/api/statusline/explain": (q) => ["statusline", "explain", String(q.at || "1:1"), ...slBoard(q)],
   "/api/wait/lanes": () => ["wait", "lanes"],
   "/api/wait/status": (q) => (q.slug ? ["wait", "status", String(q.slug)] : ["wait", "status"]),
   "/api/pact": () => ["pact", "status"],
@@ -459,28 +470,28 @@ const WRITES = {
       if (b[k] !== undefined && b[k] !== null && b[k] !== "") argv.push(f, String(b[k]));
     }
     if (b.draw_empty) argv.push("--draw-empty");
-    return argv;
+    return argv.concat(slBoard(b));
   },
-  "/api/statusline/move": (b) => ["statusline", "move", String(b.from), String(b.to)],
-  "/api/statusline/remove": (b) => ["statusline", "remove", String(b.at)],
+  "/api/statusline/move": (b) => ["statusline", "move", String(b.from), String(b.to), ...slBoard(b)],
+  "/api/statusline/remove": (b) => ["statusline", "remove", String(b.at), ...slBoard(b)],
   "/api/statusline/line": (b) => {
     const argv = ["statusline", "line", String(b.line)];
     if (b.separator !== undefined) argv.push("--separator", String(b.separator));
     if (b.theme) argv.push("--theme", String(b.theme));
     if (b.max_width !== undefined) argv.push("--max-width", String(b.max_width));
-    return argv;
+    return argv.concat(slBoard(b));
   },
   // A preset REPLACES the layout, so the panel always confirms it and names
   // the loss — the `orc diy init --force` rule.
-  "/api/statusline/apply": (b) => ["statusline", "apply", String(b.name)],
+  "/api/statusline/apply": (b) => ["statusline", "apply", String(b.name), ...slBoard(b)],
   // v1.3.0 W5. `group` wraps 2-4 as one object, `expand` is its inverse and is
   // also how a composite becomes editable, `clone` is for two `config` chips on
   // different keys — a normal thing to want.
-  "/api/statusline/group": (b) => ["statusline", "group", ...(b.refs || [])].map(String),
-  "/api/statusline/expand": (b) => ["statusline", "expand", String(b.at)],
-  "/api/statusline/clone": (b) => ["statusline", "clone", String(b.at)],
-  "/api/statusline/reset": () => ["statusline", "reset"],
-  "/api/statusline/compile": () => ["statusline", "compile"],
+  "/api/statusline/group": (b) => ["statusline", "group", ...(b.refs || []).map(String), ...slBoard(b)],
+  "/api/statusline/expand": (b) => ["statusline", "expand", String(b.at), ...slBoard(b)],
+  "/api/statusline/clone": (b) => ["statusline", "clone", String(b.at), ...slBoard(b)],
+  "/api/statusline/reset": (b) => ["statusline", "reset", ...slBoard(b)],
+  "/api/statusline/compile": (b) => ["statusline", "compile", ...slBoard(b)],
   "/api/wait/unblock": (b) => (b.slug ? ["wait", "unblock", String(b.slug)] : ["wait", "unblock"]),
   "/api/wait/cancel": (b) => (b.slug ? ["wait", "cancel", String(b.slug)] : ["wait", "cancel"]),
   "/api/wiki/sync": () => ["wiki", "sync"],

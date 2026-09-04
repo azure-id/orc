@@ -111,5 +111,9 @@
   "hookui.minColsChange": "{id} tampil di atas {v} kolom",
   "hookui.priority": "Urutan dilepas",
   "hookui.priorityChange": "urutan dilepas {id} = {v}",
-  "hookui.priorityWhy": "Saat baris tidak muat, 1 dilepas dulu dan 5 terakhir. Anda yang memilih apa yang bertahan, bukan tepi kanan."
+  "hookui.priorityWhy": "Saat baris tidak muat, 1 dilepas dulu dan 5 terakhir. Anda yang memilih apa yang bertahan, bukan tepi kanan.",
+  "hookui.boardStatus": "Baris status",
+  "hookui.boardSubagent": "Satu baris per agen",
+  "hookui.boardStatusSub": "Dua baris di bawah terminal Anda.",
+  "hookui.boardSubagentSub": "Baris yang digambar Claude Code untuk tiap subagen di panel agen. Satu baris, dan menunjukkan agen itu berjalan di model apa dan sudah memakai berapa."
 }

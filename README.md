@@ -14,7 +14,7 @@
 ![Dependencies](https://img.shields.io/badge/dependencies-zero-lightgrey.svg?style=for-the-badge)
 ![GitHub stars](https://img.shields.io/github/stars/azure-id/orc?style=for-the-badge&color=yellow)
 
-**Latest: v1.3.0** · updated 2026-09-04 · [full changelog](CHANGELOG.md)
+**Latest: v1.4.0** · updated 2026-09-04 · [full changelog](CHANGELOG.md)
 
 **On npm: [`@azure-id/orc`](https://www.npmjs.com/package/@azure-id/orc)** — `npm i -g @azure-id/orc`
 
@@ -575,7 +575,7 @@ a current audit: [EVAL-REPORT.md](EVAL-REPORT.md).
 **Full history: [CHANGELOG.md](CHANGELOG.md)** — or `orc changelog`, which prints
 only what is newer than the version you have.
 
-### v1.3.0 - build your own status line _(2026-09-04)_
+### v1.4.0 - the agent panel, and the number that was missing _(2026-09-04)_
 
 **Still on the unscoped `orc` package?** Do this once first — your `orc upgrade`
 is the pre-v0.56.0 one and cannot install itself. Full detail in the CAUTION at
@@ -587,73 +587,62 @@ the top of this file.
 
 **Do not use `npm i -g -f`.** Full detail in v0.56.0 below.
 
-The status line becomes **yours**. Three lines, each holding one to five parts
-from a catalogue ORC ships, each drawn through one of 35 shapes and restyled by
-you: two colours, a colour that follows the value, its own words, its own
-symbols, a stable width, and when it is allowed to appear at all.
-
-**It is off by default, and off is byte-identical to what shipped.** That is a
-test — nine states frozen glyph for glyph — not an intention.
-
-Compose it in **`orc ui` ▸ CLI Hook Interface**. A CLI half exists so the panel
-has something to run, and `orc statusline --help` says plainly that typing a
-three-line layout is worse than dragging one.
+The second board. Claude Code renders a custom row for every subagent in the
+agent panel, and that surface is ORC's exact domain: one row per dispatched
+agent, live, while it runs.
 
 ```
-🚀 ORC v1.3.0 · Opus 5/high · CTX ████▊░░░░░ 47% · 5h 61%          main
-◐ orc · execution · agents 7 (2 running) · Dur 34m · MTok 312K
-cache ● ███████▊░░ 91% · $0.42 · wiki ◐ 14c
+● orc-executor-opus-5-low   O5/low   84K   ███▎░░░░  42%   for 17m
+✓ orc-reviewer-opus-5-med   O5/med   31K   █▌░░░░░░  16%   for  4m
 ```
 
-- **THE CLI COMPILES, THE HOOK RENDERS.** The layout you author is lowered into
-  a flat render program with every colour worked out in advance; the hook walks
-  it and resolves nothing. Three reasons, any one sufficient. Claude Code
-  debounces at 300 ms and **cancels** a script still running — and on Windows a
-  bare `node` start is 285 ms of that, so the hook has **about 15 ms**, and
-  resolving themes and ramps per keystroke is the wrong trade by four orders of
-  magnitude. Two ideas of what inheritance means would otherwise sit either side
-  of the one surface where you compare them. And a hook cannot refuse; it can
-  only fail silently or paint garbage, so validation has to happen where a
-  refusal is possible.
-- **The preview IS the bar.** `orc statusline preview` and the hook require the
-  SAME render module, so what the panel draws and what your terminal prints
-  cannot diverge — by construction, not by a test that would eventually drift.
-  All three degraded forms sit under it and are always visible: you cannot
-  design a plain-text fallback you cannot see.
-- **The illegal drop is made impossible.** A line may hold a part only if every
-  line above it holds at least one — so line 3 renders hatched and disabled with
-  the reason ON THE ZONE while line 2 is empty. Never a message after the fact.
-  Every drag has a keyboard path and a menu; a board only reachable by mouse is
-  a board a lot of people cannot use.
-- **A composed layout can be FASTER than the built-in one.** The compiler
-  records which readings a layout needs, and the hook reads nothing else.
-  Measured on the cold path: 346.7 ms for the built-in lines, **298.2 ms** for a
-  composed `minimal` — which is the difference between rendering and being
-  cancelled.
-- **Eight parts are REFUSED, each with the measurement.** `git status` is 53 ms
-  against 15 ms of headroom; three wiki numbers need a git walk PER DOCUMENT.
-  Reading a value that is not stored would have rendered a confident number
-  nobody measured, forever. `unknown` renders an em dash — **never `0`**, which
-  would say the thing was free.
-- **Three things a terminal cannot do, said plainly** rather than offered as a
-  picker that does nothing: the terminal owns the font size (bold reads bigger,
-  and a part gets visually larger by taking more cells), blinking is refused,
-  and icon-font symbols are not shipped because ORC cannot check for the font
-  and will not put an empty box on your bar.
-- **`orc doctor` gains three findings**, and only while the feature is armed — a
-  layout you built and never enabled is a draft, not a problem. An orphaned part
-  after an upgrade is REPORTED, never auto-repaired: which part replaces a
-  retired one is your decision.
-- **A fix that shipped with it:** the wiki freshness segment used to run
-  `git rev-list` on EVERY redraw, outside the throttle everything else rides in.
-  In a repo with a wiki that pushed the render past the cancel line, so a fast
-  typist got no status line at all while they typed.
+**AND IT ANSWERS A QUESTION v1.2.0 SAID COULD NOT BE ANSWERED.** That release
+established that Claude Code records no token usage for a dispatched subagent —
+`isSidechain` is never set, no sidechain message carries a usage block, verified
+across every transcript on two machines — so `orc usage report` has reported
+`tokens: null` for every Claude row ever since, and said why.
 
-One config key, `statusline_custom`, default `off`. No key for a colour scheme —
-the layout carries its own — and none for the parts: those are a document, not a
-setting.
+That is still true **of the transcript**. It is not true of the agent panel,
+which carries `tokenCount` per task along with the resolved `model` and
+`effort`. So the hook writes down what it is handed, and `orc usage report`
+reads it.
 
-**Full detail: [`guides/status-line.md`](guides/status-line.md).**
+- **It is a FLOOR, and it is labelled one everywhere it appears.** The hook sees
+  a task only while it is in the panel: an agent that started and finished
+  between two renders is never seen, and a count read just before an agent
+  finished is short by whatever came after. `not-seen` means exactly that and
+  is never `0`. A floor reported as a total would be the same class of lie as a
+  zero reported for an unknown.
+- **The record is written even with the board OFF.** It is not part of the
+  display feature — it is a measurement Claude Code hands over either way, and
+  throwing it out because a display setting is off would be the wrong trade by a
+  wide margin. `orc init` and `orc update` wire `subagentStatusLine` for that
+  reason alone, and never clobber one you already have.
+- **A count can only go up**, so a lower reading is a stale one and never
+  overwrites a higher one.
+- **The model and effort are OBSERVED.** ORC's downgrade check has two readings
+  — one derived from the agent's name, one the agent reports about itself. This
+  is the third, and the only one nobody had to be trusted for.
+
+**ONE COMPILER, TWO BOARDS.** The second board reuses the compiler, the render
+program, every shape, every glyph set, the colour model, the validator and the
+gate ladder. What differs is a component set, three filenames and a config key —
+a table, not a fork. A test asserts there is exactly one compiler and that the
+new hook grew no renderer of its own, because that is the cheap mistake this
+whole design exists to avoid.
+
+- **A component belongs to one board**, and the other refuses it by name with
+  the board it belongs to. Two catalogues would be two lists somebody has to
+  keep in step; this is one catalogue with a column.
+- **A subagent row is one line by construction** — Claude Code renders one per
+  task — so the three-line board and its dense-prefix rule simply do not apply.
+- **Three presets**: what the agent is and what it has cost, a watch view with
+  its own context window, and the downgrade check made visible per agent.
+- Every gate rung falls back to **Claude Code's own row**, which is a real
+  answer and a better one than a blank. An empty render hides a task entirely,
+  which is almost never what anybody meant — so it is never emitted.
+
+`subagent_line_custom`, default `off`. Off is Claude Code's row, unchanged.
 
 ---
 

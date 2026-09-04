@@ -237,7 +237,7 @@ test("config: every key answers a declared family, and the two contested ones ar
   const { root } = freshInstall();
   try {
     const j = JSON.parse(cli(["config", "list", "--json", "--dir", root]).stdout);
-    assert.strictEqual(j.keys.length, 78);
+    assert.strictEqual(j.keys.length, 79);
     for (const k of j.keys) {
       assert.ok(k.answers && k.answers.length, k.key + " declares no answers[]");
       for (const a of k.answers) assert.ok(j.families[a.family], k.key + " → unknown family " + a.family);
@@ -360,6 +360,9 @@ test("config: lanes[] is a mechanical seed, and says so by being empty where it 
     // does for `log_dir` and `extra_enabled`.
     const orphans = j.keys.filter((k) => !k.lanes.length).map((k) => k.key);
     assert.deepStrictEqual(orphans, [
+      // v1.4.0 — the SECOND board's switch, and the same answer for the same
+      // reason: a hook has no lane.
+      "subagent_line_custom",
       "statusline_custom",
       // v1.1.0 — the two operating keys of the WAIT. A lane runs `orc wait plan`
       // and the CLI reads these two; no spine reads either, which is the same

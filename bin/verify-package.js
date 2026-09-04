@@ -462,6 +462,10 @@ const required = [
   // the panel's preview and the bar's real output byte-identical BY
   // CONSTRUCTION. A missing file here breaks the status line AND the panel.
   "templates/hooks/orc-statusline-render.js",
+  // v1.4.0 — the SECOND board, and the per-agent token record that rides with
+  // it. Wired even with the board off, because the measurement is handed over
+  // either way.
+  "templates/hooks/orc-subagent-line.js",
   "templates/hooks/orc-trace.js",
 ];
 

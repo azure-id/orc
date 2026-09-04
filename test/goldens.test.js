@@ -131,7 +131,7 @@ test("GOLDEN: a hand-edited rubric_bands_override is reported shadowed, and read
 // leaves this golden only when the release that removed it says so — never in
 // passing.
 
-test("GOLDEN: the 78 config keys, their tiers and their defaults", () => {
+test("GOLDEN: the 79 config keys, their tiers and their defaults", () => {
   const { root } = freshInstall();
   try {
     const j = json(cli(["config", "list", "--json", "--dir", root]));
@@ -140,7 +140,7 @@ test("GOLDEN: the 78 config keys, their tiers and their defaults", () => {
     // ORDER is part of it: CONFIG_META's order is the order the human menu
     // walks, and W6 regroups the FILE without reordering the registry.
     assert.deepStrictEqual(now, then);
-    assert.strictEqual(now.length, 78, "the key COUNT is a number the release reports");
+    assert.strictEqual(now.length, 79, "the key COUNT is a number the release reports");
   } finally {
     rmrf(root);
   }

@@ -207,12 +207,14 @@ module.exports.get = function get(route, q) {
     // ones: the feature off with a layout saved, a line at 5/5, a line 3 the
     // dense-prefix rule blocks, one hard error and two warnings, a refused
     // palette row, and a component rendering an em dash.
+    // v1.4.0 — TWO BOARDS. The fixture set carries both, because a designer
+    // cannot lay out a per-agent row against the status line's components.
     case "/api/statusline/show":
-      return hookui.show;
+      return q && q.board === "subagent" ? hookui.subShow : hookui.show;
     case "/api/statusline/components":
-      return hookui.components;
+      return q && q.board === "subagent" ? hookui.subComponents : hookui.components;
     case "/api/statusline/presets":
-      return hookui.presets;
+      return q && q.board === "subagent" ? hookui.subPresets : hookui.presets;
     case "/api/statusline/preview":
       return hookui.preview;
     case "/api/statusline/explain":

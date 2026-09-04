@@ -3675,6 +3675,7 @@ for (const b of BUDGETS) {
     // off the file, exactly as it already does for `log_dir` and
     // `extra_enabled`. An empty lanes[] here is an ANSWER.
     "statusline_custom",
+    "subagent_line_custom",
   ]);
   for (const e of metaEntries) {
     if (!e.lanes) {

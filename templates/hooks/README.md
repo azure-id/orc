@@ -225,6 +225,32 @@ dragging, so the panel is the recommended way.
 
 ---
 
+## The agent panel
+
+When ORC sends work to a subagent, Claude Code shows a row for it in the agent
+panel. ORC can draw that row too — `orc ui` ▸ **CLI Hook Interface**, then pick
+the **subagent** board.
+
+```
+● orc-executor-opus-5-low   O5/low   84K   ███▎░░░░  42%   for 17m
+```
+
+It is off by default, and while it is off you see Claude Code's own row.
+
+**One thing here runs whether the row is on or off**, and it is worth knowing
+about. Claude Code tells this hook **how many tokens each agent has used**.
+Nothing else tells ORC that: the conversation file records no token use for a
+subagent at all. So ORC writes down what the panel reports, and `orc usage
+report` shows it.
+
+**It is a floor, not a total.** ORC only sees an agent while it is in the panel.
+An agent that starts and ends between two redraws is never seen, and a number
+read just before an agent ended is short by whatever came after. `orc usage
+report` says so on every one of these numbers. It never shows `0` for something
+it did not see.
+
+---
+
 ## For maintainers
 
 - The hook is `orc-statusline.js`. `orc init` installs it and wires it into

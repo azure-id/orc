@@ -111,5 +111,9 @@
   "hookui.minColsChange": "{id} show above {v} columns",
   "hookui.priority": "Drop order",
   "hookui.priorityChange": "{id} drop order = {v}",
-  "hookui.priorityWhy": "When the line does not fit, 1 goes first and 5 goes last. You choose what survives, not the right edge."
+  "hookui.priorityWhy": "When the line does not fit, 1 goes first and 5 goes last. You choose what survives, not the right edge.",
+  "hookui.boardStatus": "The status line",
+  "hookui.boardSubagent": "One row per agent",
+  "hookui.boardStatusSub": "The two lines at the bottom of your terminal.",
+  "hookui.boardSubagentSub": "The row Claude Code draws for each subagent in the agent panel. One line, and it shows what that agent is running at and what it has cost so far."
 }

@@ -291,4 +291,119 @@ const explain = {
   order: ["catalogue", "theme", "file", "line", "item"],
 };
 
-module.exports = { show, components, presets, preview, explain };
+
+// ── the SECOND board (v1.4.0) ──────────────────────────────────────────────
+// A designer cannot lay out a per-agent row against the status line's
+// components, so the fixture set carries both boards. Same rule as everywhere
+// else here: one of every state, including the ugly ones — a failed agent, an
+// agent whose window size is unknown, and one whose token count has not been
+// seen yet.
+const subComponents = {
+  ok: true,
+  schema: 1,
+  catalog_hash: components.catalog_hash,
+  count: 4,
+  board: "subagent",
+  boards: ["status", "subagent"],
+  config_key: "subagent_line_custom",
+  setting: "subagentStatusLine",
+  groups: { T: "One subagent (the agent-panel row)" },
+  components: [
+    {
+      id: "task-name", group: "T", board: "subagent", label: null,
+      summary: "The agent's name.",
+      renderers: ["bare", "plain", "badge", "pill"],
+      defaults: { render: "bare", truncate: "middle", max_len: 28 },
+      states: null, shapes: null, bounded: false, series: null,
+      unknown: "dash", cost: "free", refused_reason: null, params: null,
+      binding: "task.name", composite: null, time_based: false,
+      previews: { bare: "orc-executor-opus-5-low", plain: dim("task-name ") + "orc-executor-opus-5-low", badge: "▏orc-executor-opus-5-low▕", pill: E + "[7mTASK" + R + "orc-executor-opus-5-low" },
+    },
+    {
+      id: "task-tier", group: "T", board: "subagent", label: null,
+      summary: "The model and effort this agent is ACTUALLY running at — observed, not derived from its name and not self-reported.",
+      renderers: ["bare", "plain", "label-value", "badge"],
+      defaults: { render: "bare" },
+      states: null, shapes: null, bounded: false, series: null,
+      unknown: "dash", cost: "free", refused_reason: null, params: null,
+      binding: "task.tier", composite: null, time_based: false,
+      previews: { bare: "O5/low", plain: dim("tier ") + "O5/low", "label-value": dim("TIER: ") + "O5/low", badge: "▏O5/low▕" },
+    },
+    {
+      id: "task-tokens", group: "T", board: "subagent", label: null,
+      summary: "How many tokens this agent has used. THE NUMBER v1.2.0 SAID COULD NOT BE MEASURED.",
+      renderers: ["plain", "label-value", "bare"],
+      defaults: { render: "plain", compact: "si" },
+      states: null, shapes: null, bounded: false, series: null,
+      unknown: "dash", cost: "free", refused_reason: null, params: null,
+      binding: "task.tokens", composite: null, time_based: false,
+      previews: { plain: "84K", "label-value": dim("TOKENS: ") + "84K", bare: "84K" },
+    },
+    {
+      id: "task-status", group: "T", board: "subagent", label: null,
+      summary: "What this agent is doing.",
+      renderers: ["word", "shape", "badge", "bare"],
+      defaults: { render: "word" },
+      states: ["pending", "running", "completed", "failed"],
+      shapes: { pending: "○", running: "●", completed: "✓", failed: "▲" },
+      bounded: false, series: null, unknown: "dash", cost: "free",
+      refused_reason: null, params: null, binding: "task.status",
+      composite: null, time_based: false,
+      previews: { word: amber("running"), shape: amber("●"), badge: "▏" + amber("running") + "▕", bare: "running" },
+    },
+  ],
+  renderers: components.renderers,
+  glyph_sets: components.glyph_sets,
+  ramps: components.ramps,
+  themes: components.themes,
+  hide_when: components.hide_when,
+  formats: components.formats,
+  compact: components.compact,
+  cases: components.cases,
+  truncate: components.truncate,
+  emphasis: components.emphasis,
+  refused_emphasis: components.refused_emphasis,
+  colors: components.colors,
+  max_per_line: 5,
+  // ONE LINE by construction: Claude Code renders one row per task.
+  lines: 1,
+  dense_prefix: components.dense_prefix,
+};
+
+const subShow = {
+  ok: true,
+  enabled: true,
+  saved: true,
+  preset: "agent-default",
+  theme: "terminal",
+  glyphs: "blocks",
+  ansi: "auto",
+  align_columns: false,
+  lines: [
+    {
+      line: 1, separator: " · ", theme: null, max_width: 0, count: 4, counted: 4, full: false,
+      items: [
+        { pos: 1, id: "s1", type: "task-status", render: "shape", label: null, label_color: "bright-black", value_color: "default", ramp: null, emphasis: [], hide_when: [], unknown: "dash", known: true },
+        { pos: 2, id: "s2", type: "task-name", render: "bare", label: null, label_color: "bright-black", value_color: "default", ramp: null, emphasis: [], hide_when: [], unknown: "dash", known: true },
+        { pos: 3, id: "s3", type: "task-tier", render: "bare", label: null, label_color: "bright-black", value_color: "default", ramp: null, emphasis: ["dim"], hide_when: [], unknown: "dash", known: true },
+        { pos: 4, id: "s4", type: "task-tokens", render: "plain", label: null, label_color: "bright-black", value_color: "default", ramp: null, emphasis: [], hide_when: [], unknown: "dash", known: true },
+      ],
+    },
+  ],
+  errors: [],
+  // A layout can be perfectly valid and still worth a caution.
+  warnings: ["task-tokens is a FLOOR: an agent that finishes between two redraws is never counted"],
+  preview: amber("●") + " orc-executor-opus-5-low · " + dim("O5/low") + " · 84K",
+  dense_prefix: components.dense_prefix,
+};
+
+const subPresets = {
+  ok: true,
+  presets: [
+    { name: "agent-default", board: "subagent", summary: "What the agent is, what it is running at, and what it has cost so far.", active: true, preview: "orc-executor-opus-5-low · " + dim("O5/low") + " · 84K · " + dim("for ") + " 17m" },
+    { name: "agent-watch", board: "subagent", summary: "For a run you are watching: status, its own context window, and the clock.", active: false, preview: amber("●") + " orc-executor-opus-5-low · " + green("███▎░░░░") + " · " + dim("for ") + " 17m" },
+    { name: "agent-tier", board: "subagent", summary: "The downgrade check, made visible: the model and effort ORC actually got, per agent.", active: false, preview: "orc-executor-opus-5-low · claude-opus-5 · low · " + amber("running") },
+  ],
+};
+
+module.exports = { show, components, presets, preview, explain, subShow, subComponents, subPresets };

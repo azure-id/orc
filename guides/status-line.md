@@ -255,3 +255,65 @@ orc config set statusline_custom on
 
 The switch refuses while the layout does not validate, and names the reason.
 Enabled with nothing saved is not a state.
+
+---
+
+## 13. The second board — one row per agent (v1.4.0)
+
+Claude Code draws a row for every subagent in the agent panel. ORC can draw that
+row too. Open the same panel and switch to **One row per agent**.
+
+```
+● orc-executor-opus-5-low   O5/low   84K   ███▎░░░░  42%   for 17m
+✓ orc-reviewer-opus-5-med   O5/med   31K   █▌░░░░░░  16%   for  4m
+```
+
+Everything above still applies — the same shapes, the same colours, the same
+editor, the same preview. Three things differ:
+
+1. **A row is one line.** Claude Code renders one per agent, so there is no
+   second or third line and no rule about filling one before another.
+2. **The parts are about ONE AGENT**: its name, what it is running at, its
+   status, its own context window, how long it has been going, and how many
+   tokens it has used. A part from the status line cannot go here, and the
+   panel says so if you try.
+3. **It is a separate switch** — `subagent_line_custom` — so you can have one
+   board on and the other off.
+
+### The number that was missing
+
+ORC has never been able to tell you what a subagent cost. The conversation file
+records no token use for one at all, so `orc usage report` has said `tokens:
+null` and explained why.
+
+**The agent panel reports one.** So ORC writes down what it is handed, and
+`orc usage report` shows it.
+
+**It is a floor, not a total.** ORC only sees an agent while it is in the panel.
+An agent that starts and finishes between two redraws is never seen, and a
+number read just before an agent ended is short by whatever came after. Every
+one of these numbers says so, and a number ORC did not see reads `not-seen` —
+**never `0`**, which would mean the work was free.
+
+**This part runs whether the row is on or off.** It is not part of the display:
+it is a measurement Claude Code hands over either way, and throwing it out
+because a display setting is off would be the wrong trade. `orc init` and
+`orc update` wire it for that reason, and never replace a `subagentStatusLine`
+you already have.
+
+### Presets
+
+| Preset | What it is |
+|---|---|
+| `agent-default` | what the agent is, what it runs at, and what it has cost |
+| `agent-watch` | status, its own context window, and the clock |
+| `agent-tier` | the model and effort ORC actually got, per agent |
+
+```
+orc statusline apply agent-default --board subagent
+orc config set subagent_line_custom on
+```
+
+Every command above takes `--board subagent`. Without it you are editing the
+status line, and a preset from the wrong board is refused by name with the flag
+that would have worked.

@@ -242,6 +242,51 @@ const BINDINGS = {
     return m ? m[1].trim() : null;
   },
 
+  // — THE SECOND BOARD (v1.4.0): one task, per row ————————————————————
+  // These are the ONLY difference between the two boards. Same compiler, same
+  // IR, same renderers, same colour model — a different binding table, and
+  // that is the whole of it.
+  //
+  // `tokens` is the number v1.2.0 concluded could not be measured. It could
+  // not, from the TRANSCRIPT; Claude Code hands it to the agent panel live.
+  "task.name": (c) => (c.task && (c.task.name || c.task.type)) || null,
+  "task.type": (c) => (c.task && c.task.type) || null,
+  "task.description": (c) => (c.task && (c.task.description || c.task.label)) || null,
+  "task.status": (c) => (c.task && c.task.status) || null,
+  "task.model": (c) => (c.task && c.task.model) || null,
+  "task.model_short": (c) => shortModel(c.task && c.task.model),
+  "task.effort": (c) => lower(c.task && c.task.effort),
+  "task.tokens": (c) => num(c.task && c.task.tokenCount),
+  "task.ctx_size": (c) => num(c.task && c.task.contextWindowSize),
+  // A percentage needs BOTH, so an unknown window size answers null rather
+  // than dividing by a guess.
+  "task.ctx_pct": (c) => {
+    const t = num(c.task && c.task.tokenCount);
+    const w = num(c.task && c.task.contextWindowSize);
+    return t == null || !w ? null : Math.round((t / w) * 100);
+  },
+  "task.ctx_state": (c) => {
+    const t = num(c.task && c.task.tokenCount);
+    const w = num(c.task && c.task.contextWindowSize);
+    return t == null || !w ? null : bandState(Math.round((t / w) * 100), 75, 90, ["ok", "warn", "full"]);
+  },
+  "task.elapsed_min": (c) => {
+    const st = c.task && c.task.startTime;
+    if (st == null) return null;
+    const ms = typeof st === "number" ? (st > 1e12 ? st : st * 1000) : Date.parse(st);
+    return Number.isFinite(ms) ? Math.max(0, Math.round((c.now - ms) / 60000)) : null;
+  },
+  "task.cwd": (c) => (c.task && c.task.cwd) || null,
+  // THE OBSERVED tier, and it is a THIRD reading: ORC's downgrade check has one
+  // from the agent's NAME and one the agent REPORTS about itself. This is the
+  // only one of the three nobody had to be trusted for.
+  "task.tier": (c) => {
+    const m = (c.task && c.task.model) || null;
+    const e = lower(c.task && c.task.effort);
+    if (!m && !e) return null;
+    return (shortModel(m) || "unknown") + (e ? "/" + e : "");
+  },
+
   // — static and clock ————————————————————————————————————————————————
   "clock.now": (c) => c.now,
   "session.elapsed_min": (c) => (c.ledger.started_at ? Math.max(0, Math.round((c.now - c.ledger.started_at) / 60000)) : null),
@@ -622,6 +667,10 @@ function render(prog, ctx) {
     // `ascii` rides in the binding context because ONE binding composes two
     // facts and therefore owns a separator (see runStatus).
     ascii,
+    // The SECOND BOARD binds ONE task per row. Absent on the main status line,
+    // where every `task.*` binding therefore answers null and renders an em
+    // dash — which is correct: there is no task there.
+    task: ctx.task || null,
     payload: ctx.payload || {},
     ledger: ctx.ledger || {},
     scan: ctx.scan || {},

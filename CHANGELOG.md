@@ -10,6 +10,77 @@ Format: `### v<version> — <title> _(<date>)_`.
 
 ---
 
+### v1.4.0 - the agent panel, and the number that was missing _(2026-09-04)_
+
+**Still on the unscoped `orc` package?** Do this once first — your `orc upgrade`
+is the pre-v0.56.0 one and cannot install itself. Full detail in the CAUTION at
+the top of this file.
+
+- **Step 1 — release the command from the old package:** `npm uninstall -g orc`
+- **Step 2 — install the current package:** `npm i -g @azure-id/orc`
+- **Step 3 — re-apply it to your project:** `orc update`
+
+**Do not use `npm i -g -f`.** Full detail in v0.56.0 below.
+
+The second board. Claude Code renders a custom row for every subagent in the
+agent panel, and that surface is ORC's exact domain: one row per dispatched
+agent, live, while it runs.
+
+```
+● orc-executor-opus-5-low   O5/low   84K   ███▎░░░░  42%   for 17m
+✓ orc-reviewer-opus-5-med   O5/med   31K   █▌░░░░░░  16%   for  4m
+```
+
+**AND IT ANSWERS A QUESTION v1.2.0 SAID COULD NOT BE ANSWERED.** That release
+established that Claude Code records no token usage for a dispatched subagent —
+`isSidechain` is never set, no sidechain message carries a usage block, verified
+across every transcript on two machines — so `orc usage report` has reported
+`tokens: null` for every Claude row ever since, and said why.
+
+That is still true **of the transcript**. It is not true of the agent panel,
+which carries `tokenCount` per task along with the resolved `model` and
+`effort`. So the hook writes down what it is handed, and `orc usage report`
+reads it.
+
+- **It is a FLOOR, and it is labelled one everywhere it appears.** The hook sees
+  a task only while it is in the panel: an agent that started and finished
+  between two renders is never seen, and a count read just before an agent
+  finished is short by whatever came after. `not-seen` means exactly that and
+  is never `0`. A floor reported as a total would be the same class of lie as a
+  zero reported for an unknown.
+- **The record is written even with the board OFF.** It is not part of the
+  display feature — it is a measurement Claude Code hands over either way, and
+  throwing it out because a display setting is off would be the wrong trade by a
+  wide margin. `orc init` and `orc update` wire `subagentStatusLine` for that
+  reason alone, and never clobber one you already have.
+- **A count can only go up**, so a lower reading is a stale one and never
+  overwrites a higher one.
+- **The model and effort are OBSERVED.** ORC's downgrade check has two readings
+  — one derived from the agent's name, one the agent reports about itself. This
+  is the third, and the only one nobody had to be trusted for.
+
+**ONE COMPILER, TWO BOARDS.** The second board reuses the compiler, the render
+program, every shape, every glyph set, the colour model, the validator and the
+gate ladder. What differs is a component set, three filenames and a config key —
+a table, not a fork. A test asserts there is exactly one compiler and that the
+new hook grew no renderer of its own, because that is the cheap mistake this
+whole design exists to avoid.
+
+- **A component belongs to one board**, and the other refuses it by name with
+  the board it belongs to. Two catalogues would be two lists somebody has to
+  keep in step; this is one catalogue with a column.
+- **A subagent row is one line by construction** — Claude Code renders one per
+  task — so the three-line board and its dense-prefix rule simply do not apply.
+- **Three presets**: what the agent is and what it has cost, a watch view with
+  its own context window, and the downgrade check made visible per agent.
+- Every gate rung falls back to **Claude Code's own row**, which is a real
+  answer and a better one than a blank. An empty render hides a task entirely,
+  which is almost never what anybody meant — so it is never emitted.
+
+`subagent_line_custom`, default `off`. Off is Claude Code's row, unchanged.
+
+---
+
 ### v1.3.0 - build your own status line _(2026-09-04)_
 
 **Still on the unscoped `orc` package?** Do this once first — your `orc upgrade`
