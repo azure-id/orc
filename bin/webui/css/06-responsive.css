@@ -117,4 +117,32 @@
   /* A per-file position line cannot hold a path, a state word and a line delta
      on one row below this — and the path is the half that must stay readable. */
   .ex-rec-file { flex-direction: column; align-items: flex-start; }
+
+  /* v1.3.0 — the CLI Hook Interface. Every variant that DECLARES columns
+     collapses explicitly; the ones that do not (the chip, the palette row) are
+     flex and wrap on their own, which is exactly why they were written that
+     way. The PREVIEW never collapses: it is a monospaced grid and squeezing it
+     would misreport the width the user is deciding. It scrolls instead. */
+  .hk-degrade-row,
+  .hk-field,
+  .hk-check {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+  .hk-degrade-label {
+    text-align: left;
+  }
+  .hk-gallery {
+    grid-template-columns: 1fr 1fr;
+  }
+  .hk-prow-id {
+    min-width: 0;
+  }
+  /* The caution KEEPS its two columns. The mark and the sentence belong to each
+     other, and stacking them puts a lone ✕ on a line of its own above the text
+     it is about. The mark column narrows instead. */
+  .hk-caution {
+    grid-template-columns: 14px 1fr;
+    gap: 6px;
+  }
 }

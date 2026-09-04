@@ -32331,6 +32331,48 @@ function doctor() {
   else if (dstat.state === "STALE") warn("diy-stale", `orc-diy flow STALE: ${dstat.reason}`, { reason: dstat.reason });
   else ok(`orc-diy flow READY (${dstat.reason})`);
 
+  // 5a) the composed status line (v1.3.0). THREE findings, and only when the
+  // feature is ARMED: a layout somebody built and never turned on is not a
+  // problem, it is a draft, and a doctor that warns about a normal state is a
+  // doctor people learn to ignore.
+  //
+  // The hook FALLS BACK silently — it has to, because a hook cannot refuse —
+  // so it records WHY in `statusline-state.json`, and this is where that
+  // recording becomes a sentence. A status line that quietly went back to the
+  // default and never said why is a bug the user cannot report.
+  try {
+    const cfg = resolvedConfig(claudeDir);
+    if (String(cfg.statusline_custom || "off") !== "on") {
+      ok("custom status line off (fine — ORC's built-in two lines are rendering)");
+    } else {
+      const st = (() => {
+        try {
+          return JSON.parse(fs.readFileSync(path.join(claudeDir, "orc", "statusline-state.json"), "utf8"));
+        } catch (_) {
+          return null;
+        }
+      })();
+      const v = slValidate(slLoadOrDefault(claudeDir));
+      // An ORPHANED component — a layout naming an id this ORC no longer ships
+      // — is REPORTED, NEVER AUTO-REPAIRED, and the fix names the item. Which
+      // component replaces a retired one is a design decision, not a repair.
+      const orphan = v.errors.find((e) => /^unknown component/.test(e));
+      if (orphan)
+        warn("statusline-layout-orphaned", `status line: ${orphan}`, {
+          fix: "orc statusline remove <line>:<pos>  (or place a component that says the same thing)",
+        });
+      else if (!v.ok)
+        warn("statusline-layout-invalid", `status line: ${v.errors[0]}`, {
+          fix: "orc statusline validate",
+        });
+      else if (st && st.finding && Date.now() - (st.at || 0) < 24 * 60 * 60 * 1000)
+        warn("statusline-layout-unreadable", `status line: the hook fell back to ORC's built-in lines (${st.finding})`, {
+          fix: "orc statusline compile",
+        });
+      else ok("custom status line armed and valid");
+    }
+  } catch (_) {}
+
   // 5b) the wiki (v0.49.1). Exactly TWO findings, and the restraint is the
   // design: a doctor that warns about normal states teaches people to ignore
   // doctor. Both route to the Knowledge panel via FINDING_ROUTE — a caution

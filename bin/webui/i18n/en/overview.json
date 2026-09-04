@@ -88,5 +88,8 @@
   "overview.extraOrphan.chip": "{n} dispatch",
   "overview.extraOrphan.chipPlural": "{n} dispatches",
   "overview.extraOrphan.slug": "never reported back",
-  "overview.extraOrphan.where": "Extra · Recovery"
+  "overview.extraOrphan.where": "Extra · Recovery",
+  "overview.item.statuslineOrphaned.cta": "Open the CLI Hook Interface",
+  "overview.item.statuslineInvalid.cta": "Open the CLI Hook Interface",
+  "overview.item.statuslineUnreadable.cta": "Open the CLI Hook Interface"
 }

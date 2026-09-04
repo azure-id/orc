@@ -88,5 +88,8 @@
   "overview.extraOrphan.chip": "{n} pengiriman",
   "overview.extraOrphan.chipPlural": "{n} pengiriman",
   "overview.extraOrphan.slug": "tidak pernah melapor kembali",
-  "overview.extraOrphan.where": "Extra · Pemulihan"
+  "overview.extraOrphan.where": "Extra · Pemulihan",
+  "overview.item.statuslineOrphaned.cta": "Buka Antarmuka CLI Hook",
+  "overview.item.statuslineInvalid.cta": "Buka Antarmuka CLI Hook",
+  "overview.item.statuslineUnreadable.cta": "Buka Antarmuka CLI Hook"
 }

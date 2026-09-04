@@ -64,6 +64,13 @@ const FINDING_ROUTE = {
   // rather than left to DEFAULT_FINDING_ROUTE because the CTA is specific --
   // a reader who sees "lane config drifted" should be told which button.
   "lane-keys-drifted": { panel: "maintenance", cta: "overview.item.laneKeysDrifted.cta" },
+  // v1.3.0. The rule again, and cleanly: every one of these is cleared on the
+  // CLI Hook Interface panel — the board is where an orphaned component is
+  // removed, the caution strip is where an invalid layout is named, and the
+  // Rebuild button is where a stale compile is fixed.
+  "statusline-layout-orphaned": { panel: "hookui", cta: "overview.item.statuslineOrphaned.cta" },
+  "statusline-layout-invalid": { panel: "hookui", cta: "overview.item.statuslineInvalid.cta" },
+  "statusline-layout-unreadable": { panel: "hookui", cta: "overview.item.statuslineUnreadable.cta" },
 };
 const DEFAULT_FINDING_ROUTE = { panel: "maintenance", cta: "overview.item.doctor.cta" };
 const findingRoute = (id) => FINDING_ROUTE[id] || DEFAULT_FINDING_ROUTE;

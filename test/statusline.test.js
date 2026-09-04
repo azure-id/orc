@@ -1013,3 +1013,74 @@ test("statusline: THE PREVIEW IS THE HOOK. Same layout, same bytes.", () => {
     rmrf(root);
   }
 });
+
+// ── W6: doctor, routing, the tour ──────────────────────────────────────────
+
+test("statusline: doctor says nothing while the feature is off", () => {
+  // A layout somebody built and never armed is a DRAFT, not a problem — and a
+  // doctor that warns about a normal state is a doctor people learn to ignore.
+  const { root } = freshInstall();
+  try {
+    slj(root, ["apply", "minimal"]);
+    const r = cli(["doctor", "--dir", root, "--json"]);
+    const j = JSON.parse(r.stdout);
+    const ids = (j.findings || []).map((f) => f.id);
+    assert.ok(!ids.some((i) => String(i).startsWith("statusline-")), "doctor warned about an unarmed layout: " + ids.join(", "));
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("statusline: an ORPHANED component is reported, never auto-repaired, and the fix names the item", () => {
+  // Which component replaces a retired one is a DESIGN DECISION, not a repair.
+  const { root } = freshInstall();
+  try {
+    slj(root, ["apply", "minimal"]);
+    cli(["config", "set", "statusline_custom", "on", "--dir", root]);
+    const lp = path.join(root, ".claude", "orc", "statusline-layout.json");
+    const layout = JSON.parse(fs.readFileSync(lp, "utf8"));
+    layout.lines[0].items[0].type = "retired-thing";
+    fs.writeFileSync(lp, JSON.stringify(layout, null, 2));
+
+    const j = JSON.parse(cli(["doctor", "--dir", root, "--json"]).stdout);
+    const f = (j.findings || []).find((x) => x.id === "statusline-layout-orphaned");
+    assert.ok(f, "the orphan is reported: " + (j.findings || []).map((x) => x.id).join(", "));
+    assert.match(f.message, /retired-thing/, "the finding names the item, not just the count");
+    // NOT `--fix`-able: the layout is still exactly as the user left it.
+    cli(["doctor", "--fix", "--dir", root]);
+    assert.match(fs.readFileSync(lp, "utf8"), /retired-thing/, "doctor --fix silently edited the layout");
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("statusline: every doctor finding routes to the panel that can CLEAR it", () => {
+  const src = fs.readFileSync(path.join(REPO, "bin", "webui", "js", "panels", "overview.js"), "utf8");
+  for (const id of ["statusline-layout-orphaned", "statusline-layout-invalid", "statusline-layout-unreadable"]) {
+    const re = new RegExp('"' + id + '": \{ panel: "hookui"');
+    assert.match(src, re, id + " does not route to the panel that clears it");
+  }
+});
+
+test("statusline: the tour step points at something with a SIZE, in every state", () => {
+  // The rule a fifth time. `.hk-zone` renders on the FIRST RUN — an empty line
+  // 1 still draws its zone, because a drop target that only appears once
+  // something is in it is a drop target nobody finds.
+  const tour = fs.readFileSync(path.join(REPO, "bin", "webui", "js", "90-tour.js"), "utf8");
+  assert.match(tour, /panel: "hookui", selector: "\.hk-zone, \.card"/);
+  const panel = require("./_helpers.js").panelJs("hookui");
+  assert.match(panel, /el\("div", "hk-zone"\)/, "the zone is drawn unconditionally");
+  const css = require("./_helpers.js").panelCss("hookui");
+  assert.match(css, /\.hk-zone\s*\{[^}]*min-height/, "and it has a height with nothing in it");
+});
+
+test("statusline: every grid the panel declares collapses on a narrow screen", () => {
+  // A grid that declares columns and never collapses is a horizontal scrollbar
+  // on somebody's laptop. The flex variants are deliberately absent: they wrap
+  // on their own, which is why they were written that way.
+  const css = require("./_helpers.js").panelCss("hookui");
+  const resp = fs.readFileSync(path.join(REPO, "bin", "webui", "css", "06-responsive.css"), "utf8");
+  const declared = [...css.matchAll(/\.(hk-[a-z-]+)\s*\{[^}]*grid-template-columns/g)].map((m) => m[1]);
+  const missing = declared.filter((c) => !new RegExp("\\." + c + "\\b").test(resp));
+  assert.deepStrictEqual(missing, [], "these declare columns and never collapse: " + missing.join(", "));
+});

@@ -419,6 +419,12 @@ const TOUR_STEPS = [
      unconditionally; the header strip sits outside the tabs entirely and is the
      fallback. Same rule a fourth time: point at something with a SIZE. */
   { panel: "extra", selector: ".ex-boundary, .ex-strip", title: "tour.14.title", text: "tour.14.text" },
+  /* v1.3.0 — the board. Same rule a fifth time: it must point at something with
+     a SIZE. `.hk-zone` is the one element on this panel that renders in EVERY
+     state, including the first run — an empty line 1 still draws its zone,
+     because a drop target that only appears once something is in it is a drop
+     target nobody finds. The gate card is the fallback. */
+  { panel: "hookui", selector: ".hk-zone, .card", title: "tour.15.title", text: "tour.15.text" },
 ];
 
 function startFirstRunTour(root) {
