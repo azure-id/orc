@@ -10,6 +10,151 @@ Format: `### v<version> — <title> _(<date>)_`.
 
 ---
 
+### v1.2.1 - the status line says what ORC is doing _(2026-09-04)_
+
+**Still on the unscoped `orc` package?** Do this once first — your `orc upgrade`
+is the pre-v0.56.0 one and cannot install itself. Full detail in the CAUTION at
+the top of this file.
+
+- **Step 1 — release the command from the old package:** `npm uninstall -g orc`
+- **Step 2 — install the current package:** `npm i -g @azure-id/orc`
+- **Step 3 — re-apply it to your project:** `orc update`
+
+**Do not use `npm i -g -f`.** Full detail in v0.56.0 below.
+
+v1.2.0 gave the status line a second row and it said which lanes had run. It
+could not say what any of them was doing *now* — which is the one thing you look
+down at a status bar to find out. This release puts the running phase in front
+of that row, gives each kind of phase its own small animated mark (the `orc-cli`
+lane-menu badge, keyed to the phase instead of the lane), and closes the row with
+the two facts a terminal should always carry: what the session has cost and which
+branch it is on.
+
+```
+🚀 ORC v1.2.1 - Opus 5/high · context (34%) · 5h 41% (2h13m) ↔ wk 12% · ucs 6% · wiki: fresh
+   ▰ status: quick · Q3 DO · agents 7 (2 running) · orc-extra: on · Dur 48m · MTok 412K · main
+```
+
+#### The phase is computed by the CLI and rendered by the hook
+
+`orc init` / `orc update` now stamps **`hooks/orc-lane-rails.json`** beside
+`hooks/orc-version.json`, built from the same `LANE_PHASES` / `LANE_OWN_PHASES`
+/ `LANE_TRACE` registries `orc lane phases` reads. The hook renders it and
+derives nothing — the Flow-stepper rule (`orc ui` v0.43.7) on a second surface.
+
+The hook cannot call the CLI: a status line re-renders on every keystroke, so a
+subprocess per render is not on the table. The alternative was a phase table
+hardcoded in the hook, which is a **second source of truth no lint could see**.
+The manifest is a registered contract token instead, plus three goldens: every
+phase has a label and a kind from the closed set, the rail names every traced
+lane **and no lane it does not**, and its role families are asserted against the
+trace hook's own `roleFamily()` **by source text** (the `OPUS5_BANDS` technique
+— the two live in different files, so no import can tie them).
+
+New read: **`orc lane rails [--json]`**, which prints the whole object.
+
+#### A phase the disk cannot prove is HIDDEN
+
+Four rungs, most recent line wins, and the floor is deterministic:
+
+1. the active run comes from `.current` — not "the newest file", which is a
+   different and wrong answer during a lane suspend, when two traces are live;
+2. a narrated trace verb **this lane's rail publishes** resolves the own-phase
+   (`Q3 DO`) — but only when it is later in the file than the edge below it, so
+   it can sharpen the answer and can never invent one;
+3. the trace hook's `PHASE-EDGE <family>` resolves the shared phase
+   (`execution`) with **zero model cooperation**;
+4. nothing, or a trace whose newest line is over 10 minutes old → **hidden**.
+
+**The cost is stated rather than papered over.** A phase that dispatches nothing
+and narrates nothing is invisible: `/orc-quick` `Q1 LOOK` and `Q2 ASK`, and every
+ask-the-user gate in every lane. Covering those would mean asking 24 spines to
+write a phase marker at phase open — the **remembered-not-dispatched** bet this
+repo has already lost five times (v0.32.0 narration, v0.49.5 hand-back, v0.53.2
+spend log, v0.54.0 journal, v1.0.0 W5 demotion). A `status:` that is right when
+the model is diligent and silently wrong when it is not is worse than one that is
+sometimes blank, because **a stale phase word gets believed** — the same
+reasoning as *unknown is not low* and *unknown is not zero*.
+
+Two more limits inherited and restated: a **continued** agent emits no
+PreToolUse/SubagentStop pair, so the skeleton is a floor and never a census; and
+`orc extra` runs its worker through Bash, so a foreign wave writes no `SPAWN` and
+resolves only through its narrated `EXTRA` verb, or hides.
+
+#### The animation is a liveness tell, not a progress bar
+
+Eight motif kinds — `look` · `ask` · `plan` · `do` · `check` · `ship` · `wait` ·
+`generic` — each one cell wide, each with an ASCII twin. A phase the kind table
+does not name gets `generic`, the honest sweep, **not a guess**.
+
+A status line is a **pull** surface: Claude Code re-renders it, ORC cannot. So
+the frame is picked off the wall clock. It advances while you type and while
+turns land, and it **freezes when the session is idle** — which is true, and is
+why frame 0 is designed as a still frame.
+
+- `ORC_STATUSLINE_MOTION=0` **removes** the motion rather than slowing it. A
+  frozen frame of a cycling animation is a bug that looks like a hang; the web
+  panel learned that at v0.44.0 and we are not learning it twice.
+- `ORC_STATUSLINE_ASCII=1` swaps the glyph set.
+
+#### `MTok` — MAIN token, and what it cannot see
+
+The tokens **this session's own turns** consumed, summed from the session
+transcript's `usage` blocks and read **incrementally** (only the bytes the file
+has grown by — a transcript reaches tens of megabytes and this loop runs every
+five seconds).
+
+**Claude Code records no token usage for a dispatched subagent** — v1.2.0
+verified that across every transcript on two machines — so an hour of Opus
+executors adds almost nothing here. `MTok` is what your conversation costs, not
+what a run costs; `orc usage report` and `/orc-budget` remain the truth for that.
+An unreadable transcript renders **`—`, never `0`**, because a zero would say the
+session was free.
+
+All four kinds are summed. That is a deliberate exception to `/orc-budget`'s
+*four kinds, never blended*, and it holds only because this is one cell on a
+status bar and not a report: any subset ORC picked would be a weighting **ORC
+invented**, which is worse. The ledger keeps all four apart regardless.
+
+#### The rest of the line
+
+- **The verdict word becomes the version, the ICON keeps the verdict.** The ⛔
+  branch still names every reason — a warning with no reason is an emoji. A
+  version ORC cannot read renders as plain `ORC`, never `ORC vnull`.
+- `34% ctx` → **`context (34%)`**.
+- `sess +6%` → **`ucs 6%`** (usage, current session), and it now **keeps its
+  slot at zero**: "nothing consumed yet" and "this build has no ucs segment" are
+  different facts. It is still a delta of an **account-wide** window.
+- **`Dur 48m`** labels the duration.
+- **The branch** comes from `.git/HEAD` with **no subprocess** — including the
+  `gitdir:` pointer file a worktree or submodule uses. Detached HEAD reads as
+  `@a1b2c3d`. Not a repository → the segment is absent, not empty.
+- **`lanes:` is replaced by `status:`.** The running lane is its first word, and
+  `orc stats` / `orc run list` still hold the session's whole history.
+
+#### The status line explains itself
+
+**`.claude/hooks/README.md`** ships next to the hook and documents every segment
+in Simplified Technical English (`bin/webui/i18n/TERMS.md` is the term list),
+including what each **absent** segment means — because a user who cannot find a
+segment needs to know whether it is broken or answering.
+
+#### Deliberately absent
+
+- **A config key.** A status line is display, and a hook cannot resolve a lane's
+  config anyway (it has no lane) — the caveat the `log_dir` and wiki segments
+  already carry. The two env seams exist for tests and terminals, and nothing in
+  ORC ever sets them.
+- **A second throttle.** Everything new rides in v1.2.0's one 5-second scan;
+  `ORC_STATUSLINE_SCAN_MS` stays the only seam over it.
+- **A `git` subprocess**, on a per-keystroke surface.
+- **A token estimate for dispatched subagents.** Claude Code records none, and a
+  fake measurement would be worse than none.
+- **An `orc ui` panel.** The statusline is not a panel surface; nothing in
+  `bin/webui/` moved.
+
+---
+
 ### v1.2.0 - a retry that cloned the agent, and a window you can watch empty _(2026-09-04)_
 
 **Still on the unscoped `orc` package?** Do this once first — your `orc upgrade`

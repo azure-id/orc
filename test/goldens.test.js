@@ -621,3 +621,76 @@ test("GOLDEN: the watchdog's own return fields, and null as the honest first byt
   // proof is in test/cli/extra-journal.test.js; this pins the expression.
   assert.match(block, /first_byte_ms: firstByteAt === null \? null :/);
 });
+
+
+// ---------------------------------------------------------------------------
+// v1.2.1 — the statusline phase rail.
+//
+// `orc-lane-rails.json` is the CLI's answer to a hook that cannot shell out. It
+// is generated at install from LANE_PHASES / LANE_OWN_PHASES / LANE_TRACE, and
+// `templates/hooks/orc-statusline.js` RENDERS it and derives nothing — the
+// Flow-stepper rule on a second surface. That makes the manifest a MIRROR, and
+// a mirror is a drift surface: these tests are what stops it going quiet.
+// ---------------------------------------------------------------------------
+
+test("GOLDEN: every rail phase has a label and a kind from the closed set", () => {
+  const m = json(cli(["lane", "rails", "--json"]));
+  assert.ok(m.ok);
+  assert.ok(Object.keys(m.lanes).length > 20, "every trace-owning lane is on the rail");
+  for (const [token, row] of Object.entries(m.lanes)) {
+    assert.ok(row.phases.length, token + " has phases");
+    for (const ph of row.phases) {
+      assert.ok(ph.label && ph.label.length, token + "/" + ph.id + " has a label");
+      assert.ok(ph.label.length <= 18, token + "/" + ph.id + " label fits the status bar");
+      assert.ok(m.kinds.includes(ph.kind), token + "/" + ph.id + " kind is in the closed set");
+    }
+  }
+});
+
+test("GOLDEN: the rail names every lane the CLI traces, and no lane it does not", () => {
+  const m = json(cli(["lane", "rails", "--json"]));
+  const list = json(cli(["lane", "list", "--json"]));
+  const traced = new Set();
+  for (const l of list.lanes || []) {
+    const ph = json(cli(["lane", "phases", l.id || l.lane || l, "--json"]));
+    const row = (ph.lanes || [])[0];
+    if (row && row.trace_token) traced.add(row.trace_token);
+  }
+  // BOTH directions. A lane that starts tracing and never reaches the manifest
+  // shows a blank `status:` forever; a manifest row for a lane nothing opens is
+  // a phase nobody can ever be in.
+  for (const tok of traced) assert.ok(m.lanes[tok], "missing from the rail: " + tok);
+  for (const tok of Object.keys(m.lanes)) assert.ok(traced.has(tok), "not a traced lane: " + tok);
+});
+
+test("GOLDEN: the rail's role families mirror the trace hook's roleFamily()", () => {
+  // The producer is a HOOK and the mirror is in the CLI, so no import can tie
+  // them together — the assertion is on source text, the OPUS5_BANDS technique.
+  const hook = fs
+    .readFileSync(path.join(__dirname, "..", "templates", "hooks", "orc-trace.js"), "utf8")
+    .replace(/\r\n/g, "\n");
+  const fn = hook.slice(hook.indexOf("function roleFamily(agent) {"));
+  const body = fn.slice(0, fn.indexOf("\n}"));
+  const emitted = [...body.matchAll(/return "([a-z-]+)";/g)].map((x) => x[1]);
+  const m = json(cli(["lane", "rails", "--json"]));
+  assert.deepStrictEqual(
+    Object.keys(m.families).sort(),
+    [...new Set(emitted)].sort(),
+    "a family the hook writes that the rail cannot name renders no phase at all"
+  );
+  for (const f of Object.values(m.families))
+    assert.ok(m.kinds.includes(f.kind), f.label + " has a kind");
+});
+
+test("GOLDEN: the statusline's motif table covers exactly the rail's kinds", () => {
+  const hook = fs
+    .readFileSync(path.join(__dirname, "..", "templates", "hooks", "orc-statusline.js"), "utf8")
+    .replace(/\r\n/g, "\n");
+  const tbl = hook.slice(hook.indexOf("const MOTIFS = {"));
+  const keys = [...tbl.slice(0, tbl.indexOf("\n};")).matchAll(/^  ([a-z]+): \{/gm)].map((x) => x[1]);
+  const m = json(cli(["lane", "rails", "--json"]));
+  assert.deepStrictEqual(keys.sort(), m.kinds.slice().sort(), "a kind with no frames draws nothing");
+  // `generic` is the fall-through and must exist: a phase the table does not
+  // name gets the honest sweep, never a guess and never a blank cell.
+  assert.ok(keys.includes("generic"));
+});

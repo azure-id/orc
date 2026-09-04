@@ -154,8 +154,11 @@ anything you already have:
   Opus 4.8 baseline. This is the half Claude Code lets a hook enforce.
 - **Model — a warning only.** Claude Code does not expose the model id to a
   blocking hook, so the tier cannot be hard-stopped. `hooks/orc-statusline.js`
-  shows `✅ ORC-ready`, `🚀 ORC-boosted`, or `⛔ ORC WILL DEGRADE`, and the
-  orchestrator checks itself at startup. If you already run a statusline,
+  carries the verdict in its ICON — `✅` good, `🚀` better, `⛔` ORC will degrade,
+  the last of which always names its reason in brackets — and the orchestrator
+  checks itself at startup. (Before v1.2.1 the verdict was a WORD; the words are
+  now the installed ORC version. Every segment is documented in
+  `.claude/hooks/README.md`.) If you already run a statusline,
   `orc init` leaves it alone and prints the snippet for you to merge.
 
 The guard matches the **exact** skill name `orc`. `/orc-fast` legitimately runs

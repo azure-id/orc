@@ -20,10 +20,34 @@
  * `rate_limits.{five_hour,seven_day}` (Anthropic API headers, not estimated).
  * A window ≥90% folds into the DEGRADE verdict; fail-silent when absent.
  *
- * Three-tier verdict (the "ORC-ready" acceptance matrix):
- *   ✅ ORC-ready       Opus 4.8 high (the baseline)
- *   🚀 ORC-boosted     Opus 4.8 xhigh/max, or Opus 5 / Fable 5 medium…max
- *   ⛔ ORC WILL DEGRADE everything below (wrong model, sub-baseline effort, quota)
+ * Three-tier verdict (the "ORC-ready" acceptance matrix). Since v1.2.1 the
+ * ICON carries the verdict and the words carry the installed ORC version — but
+ * the degrade branch still names every reason, because a warning with no reason
+ * is an emoji:
+ *   ✅ ORC v1.2.1 - Opus 5/high          Opus 4.8 high (the baseline)
+ *   🚀 ORC v1.2.1 - Opus 5/high          Opus 4.8 xhigh/max, or Opus 5 / Fable 5 medium…max
+ *   ⛔ ORC v1.2.1 - Sonnet 5/high (why)  everything below (wrong model, sub-baseline effort, quota)
+ *
+ * The two lines, in full (v1.2.1):
+ *
+ *   {icon} ORC v{version} - {model}/{effort} · context (N%) · 5h N% (reset) ↔ wk N%
+ *          · ucs N% · wiki: … · diy:… · orc N.N.N available
+ *   {glyph} status: {lane} · {phase} · agents N (M running) · orc-extra: on|off
+ *          · Dur Nm · MTok NNNK · {branch}
+ *
+ * Line 1 answers "what tier am I on, and how full is the window". Line 2
+ * answers "what is this session DOING". Every segment on both is read from
+ * disk or from the payload; none of it costs a model call.
+ *
+ * Three segments on line 2 carry a rule worth stating here, because each is a
+ * place where the easy version would lie:
+ *   - `status:` is the ONLY segment allowed to vanish. A phase the disk cannot
+ *     prove is HIDDEN, never guessed — see the phase-rail block below for what
+ *     that costs and why it is still the right trade.
+ *   - `MTok` is MAIN TOKEN: this session's own turns. Claude Code records no
+ *     token usage for a dispatched subagent, so an hour of Opus executors adds
+ *     almost nothing. An em dash means not measured; `0` would mean free.
+ *   - `ucs` is a delta of an ACCOUNT-WIDE window, not a private meter.
  *
  * This is the ONLY place Claude Code exposes the live model id, so it also
  * writes a fail-silent session-model bridge (.claude/orc/session-model.json)
@@ -34,6 +58,12 @@
  * Also appends a "newer orc version available" hint from the 24h update cache
  * (cache-only here — never a network call in the statusline hot path; the
  * PreToolUse guard refreshes the cache when /orc is invoked).
+ *
+ * Everything on line 2 rides in ONE scan, throttled to 5s and cached in the
+ * per-session ledger, because a statusline re-renders on every keystroke and
+ * anything unthrottled here is a per-keystroke disk scan. `MTok` additionally
+ * reads only the bytes the transcript has GROWN by. There is exactly one seam
+ * over that budget — ORC_STATUSLINE_SCAN_MS — and nothing in ORC ever sets it.
  */
 
 // Opus 4.8 / Opus 5 / Fable 5 are matched by tolerant regexes below (accept
@@ -47,6 +77,266 @@ try {
   updater = require("./orc-update-lib.js");
 } catch (_) {
   updater = null;
+}
+
+// ── The phase rail, the motifs, and the two seams (v1.2.1) ──────────────────
+// `status:` says which phase an ORC run is in. Three rules hold it up.
+//
+// 1. THE CLI COMPUTES, THIS FILE RENDERS. The phase ids, their order, their
+//    labels and their motif kind all come from `orc-lane-rails.json`, which
+//    `orc init` / `orc update` generates from the CLI's own registries. This
+//    hook holds no idea of what ORC's phases are. A second phase table here
+//    would be the Flow-stepper failure on a second surface, and no lint could
+//    see it. Frames are the exception and belong here: they are presentation,
+//    and a motif change must not need a reinstall.
+//
+// 2. A PHASE THE DISK CANNOT PROVE IS HIDDEN. Never guessed, never carried
+//    over from a minute ago. A stale phase word gets believed — the same
+//    reasoning as `unknown is not low` and `unknown is not zero`.
+//
+// 3. THE FLOOR IS HOOK-WRITTEN. `PHASE-EDGE <family>` and `SPAWN <agent>` are
+//    written by orc-trace.js with zero model cooperation. A trace verb the
+//    orchestrator narrated is allowed to REFINE that (it is more specific:
+//    `Q3 DO` rather than `execution`) but only when it is later in the file,
+//    and only when that lane's own rail publishes the verb — so it can sharpen
+//    the answer and can never invent one.
+//
+// What this cannot see, stated so nobody reads a blank as a bug:
+//   - a phase that dispatches nothing AND narrates nothing is INVISIBLE
+//     (/orc-quick Q1 LOOK and Q2 ASK, and every ask-the-user gate);
+//   - a CONTINUED agent emits no PreToolUse/SubagentStop pair, so the skeleton
+//     is a floor, never a census (orc-trace.js documents this);
+//   - `orc extra` runs a worker through Bash, so a foreign wave writes no
+//     SPAWN and resolves only through its narrated `EXTRA` verb, or hides.
+//
+// The animation is a LIVENESS TELL, not a driven animation. A statusline is a
+// pull surface — Claude Code re-renders it, ORC cannot — so the frame is picked
+// off the wall clock. It advances while you type and while turns land, and it
+// FREEZES when the session is idle, which is true and is the point.
+//
+// Two env seams, for tests and for terminals, and nothing in ORC ever sets
+// either: ORC_STATUSLINE_ASCII=1 swaps the glyph set, ORC_STATUSLINE_MOTION=0
+// REMOVES motion rather than slowing it (a frozen frame of a cycling animation
+// is a bug that looks like a hang — the web panel learned this at v0.44.0, and
+// so the still frame is designed as a still frame: frame 0 of each set).
+
+const PHASE_STALE_MS = 10 * 60 * 1000;
+
+const MOTIFS = {
+  look: { u: ["◔", "◑", "◕", "●"], a: [".", "o", "O", "0"], ms: 260 },
+  ask: { u: ["?", "¿", "?", "·"], a: ["?", "?", "?", "."], ms: 500 },
+  plan: { u: ["▁", "▃", "▅", "▇"], a: ["_", "-", "=", "#"], ms: 220 },
+  do: { u: ["▰", "▱", "▰", "▱"], a: ["=", "-", "=", "-"], ms: 180 },
+  check: { u: ["◇", "◈", "◆", "◈"], a: ["<", "=", ">", "="], ms: 240 },
+  ship: { u: ["›", "»", "≫", "»"], a: [">", ">", "=", ">"], ms: 200 },
+  wait: { u: ["·", "˙", "·", "˙"], a: [".", "'", ".", "'"], ms: 700 },
+  generic: {
+    u: ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"],
+    a: ["-", "\\", "|", "/"],
+    ms: 90,
+  },
+};
+
+function motifFrame(kind) {
+  const m = MOTIFS[kind] || MOTIFS.generic;
+  const frames = process.env.ORC_STATUSLINE_ASCII === "1" ? m.a : m.u;
+  if (process.env.ORC_STATUSLINE_MOTION === "0") return frames[0];
+  return frames[Math.floor(Date.now() / m.ms) % frames.length];
+}
+
+// The rail manifest, read once per process. Absent (a pre-1.2.1 install, or a
+// write that failed) → null → `status:` hides. Never throws.
+let RAILS = undefined;
+function rails() {
+  if (RAILS !== undefined) return RAILS;
+  RAILS = null;
+  try {
+    const j = JSON.parse(
+      require("fs").readFileSync(
+        require("path").join(__dirname, "orc-lane-rails.json"),
+        "utf8"
+      )
+    );
+    if (j && j.lanes) RAILS = j;
+  } catch (_) {}
+  return RAILS;
+}
+
+// Which phase is the run in? Called once per throttled scan, over text the scan
+// has already read, so it costs one regex pass and no extra I/O.
+//
+// `text` is the active trace, `laneToken` its filename's lane. Returns
+// {lane, label, kind} or null — and null is a real answer.
+function resolvePhase(laneToken, text) {
+  const r = rails();
+  if (!r || !laneToken) return null;
+  const row = r.lanes[laneToken];
+  if (!row) return null;
+
+  // Every line carries its own timestamp; the newest one dates the run. A trace
+  // whose last line is old is not a run in progress, whatever it says.
+  const at = (l) => {
+    const t = /^\[(\d{2})(\d{2})(\d{2}) (\d{2}):(\d{2}):(\d{2})/.exec(l);
+    if (!t) return 0;
+    return new Date(
+      2000 + Number(t[3]), Number(t[2]) - 1, Number(t[1]),
+      Number(t[4]), Number(t[5]), Number(t[6])
+    ).getTime();
+  };
+
+  const lines = text.split("\n");
+  let newest = 0;
+  let edgeIdx = -1;
+  let edgeFam = null;
+  let verbIdx = -1;
+  let verbPhase = null;
+  for (let i = 0; i < lines.length; i++) {
+    const l = lines[i];
+    if (!l) continue;
+    const ts = at(l);
+    if (ts > newest) newest = ts;
+    const e = /PHASE-EDGE ([a-z-]+)/.exec(l);
+    if (e && r.families[e[1]]) {
+      edgeIdx = i;
+      edgeFam = e[1];
+    }
+    // A verb line is the orchestrator's. It counts only when this lane's own
+    // rail published that verb — the rail is what stops a narrated word from
+    // inventing a phase the lane does not have.
+    const body = l.replace(/^\[[^\]]*\]\s*\S+\s*/, "");
+    for (const p of row.phases) {
+      for (const v of p.verbs) {
+        if (body.indexOf(v) === 0) {
+          verbIdx = i;
+          verbPhase = p;
+        }
+      }
+    }
+  }
+
+  if (!newest || Date.now() - newest > PHASE_STALE_MS) return null;
+
+  if (verbPhase && verbIdx > edgeIdx)
+    return { lane: laneToken, label: verbPhase.label, kind: verbPhase.kind };
+  if (edgeFam) {
+    const fam = r.families[edgeFam];
+    return { lane: laneToken, label: fam.label, kind: fam.kind };
+  }
+  if (verbPhase) return { lane: laneToken, label: verbPhase.label, kind: verbPhase.kind };
+  return null;
+}
+
+// The current branch, without a subprocess. A statusline re-renders on every
+// keystroke, so `git rev-parse` here would be one process per keystroke.
+// Anything unrecognised returns null and the segment is simply absent.
+function gitBranch(projectDir) {
+  const fs = require("fs");
+  const path = require("path");
+  try {
+    const dot = path.join(projectDir, ".git");
+    let gitDir = dot;
+    if (fs.statSync(dot).isFile()) {
+      // A worktree or a submodule: `.git` is a pointer file.
+      const m = /gitdir:\s*(.+)/.exec(fs.readFileSync(dot, "utf8"));
+      if (!m) return null;
+      const g = m[1].trim();
+      gitDir = path.isAbsolute(g) ? g : path.join(projectDir, g);
+    }
+    const head = fs.readFileSync(path.join(gitDir, "HEAD"), "utf8").trim();
+    const ref = /^ref:\s*refs\/heads\/(.+)$/.exec(head);
+    const name = ref
+      ? ref[1]
+      : /^[0-9a-f]{40}$/.test(head)
+        ? "@" + head.slice(0, 7)
+        : null;
+    if (!name) return null;
+    return name.length > 24 ? name.slice(0, 23) + "…" : name;
+  } catch (_) {
+    return null;
+  }
+}
+
+// MTok — MAIN TOKEN. The tokens THIS session's own turns consumed, summed from
+// the session transcript's `usage` blocks.
+//
+// Two honesty rules ship with it.
+//
+// It is the MAIN session only. Claude Code records NO token usage for a
+// dispatched subagent (v1.2.0 verified that across every transcript on two
+// machines), so a wave of three Opus executors adds almost nothing here. That
+// is why an unreadable transcript renders an em dash and NEVER `0` — a zero
+// would say the session was free.
+//
+// It is all four kinds summed. `/orc-budget`'s rule is four kinds never
+// blended, and that rule is about REPORTS; this is one cell on a status bar.
+// Any subset ORC picked would be a weighting ORC invented, which is worse. The
+// vector stays authoritative in `orc usage report`, and the ledger below keeps
+// all four kinds so it always can be.
+//
+// The read is INCREMENTAL. A transcript is append-only and reaches tens of
+// megabytes; re-reading it inside a 5-second loop is the per-keystroke disk
+// hazard the throttle exists to prevent. Only bytes past the stored offset are
+// read, and the offset resets when the file shrinks or the path changes.
+function scanTokens(led, transcriptPath) {
+  const fs = require("fs");
+  const fresh = (p) => ({
+    path: p, offset: 0, size: 0, input: 0, cache_write: 0, cache_read: 0, output: 0,
+  });
+  if (!transcriptPath) return led.tok || null;
+  let prev = led.tok && led.tok.path === transcriptPath ? led.tok : fresh(transcriptPath);
+  let st;
+  try {
+    st = fs.statSync(transcriptPath);
+  } catch (_) {
+    return prev.offset ? prev : null; // never read it → em dash, not 0
+  }
+  // Truncated or rotated under us: everything counted so far is unprovable.
+  if (st.size < prev.size) prev = fresh(transcriptPath);
+  if (st.size > prev.offset) {
+    let chunk = "";
+    try {
+      const fd = fs.openSync(transcriptPath, "r");
+      const len = st.size - prev.offset;
+      const buf = Buffer.alloc(len);
+      fs.readSync(fd, buf, 0, len, prev.offset);
+      fs.closeSync(fd);
+      chunk = buf.toString("utf8");
+    } catch (_) {
+      return prev.offset ? prev : null;
+    }
+    // The final line may be half-written. Stop at the last newline and leave
+    // the remainder for the next scan.
+    const cut = chunk.lastIndexOf("\n");
+    if (cut >= 0) {
+      const whole = chunk.slice(0, cut);
+      prev.offset += Buffer.byteLength(whole, "utf8") + 1;
+      for (const l of whole.split("\n")) {
+        if (!l || l.indexOf('"usage"') === -1) continue;
+        let u = null;
+        try {
+          const j = JSON.parse(l);
+          u = (j && j.message && j.message.usage) || (j && j.usage) || null;
+        } catch (_) {}
+        if (!u) continue;
+        prev.input += Number(u.input_tokens) || 0;
+        prev.cache_write += Number(u.cache_creation_input_tokens) || 0;
+        prev.cache_read += Number(u.cache_read_input_tokens) || 0;
+        prev.output += Number(u.output_tokens) || 0;
+      }
+    }
+  }
+  prev.size = st.size;
+  return prev;
+}
+
+function fmtTokens(tok) {
+  if (!tok) return null;
+  const n =
+    (tok.input || 0) + (tok.cache_write || 0) + (tok.cache_read || 0) + (tok.output || 0);
+  if (n <= 0) return null;
+  if (n >= 1e6) return (n / 1e6).toFixed(1).replace(/\.0$/, "") + "M";
+  if (n >= 1000) return Math.round(n / 1000) + "K";
+  return String(n);
 }
 
 let raw = "";
@@ -64,7 +354,7 @@ process.stdin.on("end", () => {
   const effort = String((d.effort && d.effort.level) || "").toLowerCase();
   const pct =
     d.context_window && typeof d.context_window.used_percentage === "number"
-      ? `${d.context_window.used_percentage}% ctx`
+      ? `context (${d.context_window.used_percentage}%)`
       : "";
 
   // ── Session-model bridge (fail-silent) ─────────────────────────────────────
@@ -262,22 +552,50 @@ process.stdin.on("end", () => {
     for (const u of usageBad) reasons.push(u);
   }
 
+  // The installed ORC version (v1.2.1). It replaces the verdict WORD, not the
+  // verdict: the icon still carries that, and the degrade branch still names
+  // every reason — dropping those would turn the loudest safety segment in ORC
+  // into an emoji. A version we cannot read renders as plain `ORC`, never
+  // `ORC vnull`: the statusline never prints a word for a thing it does not know.
+  let ver = null;
+  try {
+    ver = updater ? updater.installedVersion(__dirname) : null;
+  } catch (_) {}
+  if (!ver) {
+    try {
+      ver = JSON.parse(
+        require("fs").readFileSync(
+          require("path").join(__dirname, "orc-version.json"),
+          "utf8"
+        )
+      ).version || null;
+    } catch (_) {}
+  }
+  const brand = "ORC" + (ver ? " v" + ver : "");
+
   let line;
   if (verdict === "ready") {
-    line = `✅ ORC-ready ${tier}${pct ? " · " + pct : ""}`;
+    line = `✅ ${brand} - ${tier}${pct ? " · " + pct : ""}`;
   } else if (verdict === "boosted") {
-    line = `🚀 ORC-boosted ${tier}${pct ? " · " + pct : ""}`;
+    line = `🚀 ${brand} - ${tier}${pct ? " · " + pct : ""}`;
   } else {
-    line = `⛔ ORC WILL DEGRADE (${reasons.join(", ")}) — now: ${tier}${pct ? " · " + pct : ""}`;
+    line = `⛔ ${brand} - ${tier} (${reasons.join(", ")})${pct ? " · " + pct : ""}`;
   }
 
   // Subscription-usage segment (rendered after ctx, before wiki). Empty on
   // older Claude Code that doesn't surface `rate_limits`.
   if (rlSeg) line += " · " + rlSeg;
 
-  // How far the window moved while THIS session ran (v1.2.0). The ledger below
-  // keeps the raw numbers; this renders the delta. Never shown as "this session
-  // used X%" — the window is per ACCOUNT, and a second terminal moves it too.
+  // ucs — USAGE, CURRENT SESSION. How far the 5-hour window moved while THIS
+  // session ran (v1.2.0; renamed v1.2.1). The ledger below keeps the raw
+  // numbers; this renders the delta.
+  //
+  // It KEEPS ITS SLOT at zero. "This session has consumed nothing measurable
+  // yet" and "this build has no ucs segment" are different facts and must not
+  // look the same — the same rule as `lanes: none yet` and `used 0/20`.
+  //
+  // And it is still a delta of an ACCOUNT-WIDE window, not a private meter: a
+  // second terminal moves it too.
   try {
     const fs = require("fs");
     const path = require("path");
@@ -289,7 +607,7 @@ process.stdin.on("end", () => {
     const w = led && led.five_hour;
     if (w && typeof w.last === "number" && typeof w.baseline === "number") {
       const used = Math.max(0, (w.accumulated || 0) + Math.max(0, w.last - w.baseline));
-      if (used > 0) line += " · sess +" + used + "%";
+      line += " · ucs " + used + "%";
     }
   } catch (_) {}
 
@@ -456,15 +774,32 @@ process.stdin.on("end", () => {
       let spawns = 0;
       let running = 0;
       const lanes = [];
+      // The ACTIVE run, for `status:` (v1.2.1). `.current` is the pointer the
+      // lanes and the trace hook both write, so it — not "the newest file" — is
+      // what names the run in progress. A pointer naming a file that is not
+      // there answers nothing, and a pointer nobody deleted is not a run: the
+      // resolver's own staleness gate settles that from the trace's last line.
+      let activeFile = null;
+      try {
+        const cur = fs.readFileSync(path.join(logDir, ".current"), "utf8").trim();
+        if (cur) activeFile = cur;
+      } catch (_) {}
+      let phase = null;
       try {
         for (const f of fs.readdirSync(logDir)) {
           if (!f.startsWith("run-") || !f.endsWith(".txt")) continue;
           const full = path.join(logDir, f);
-          // Only traces touched since this session began. A trace from last
-          // week is not this session's spend.
           let st;
           try { st = fs.statSync(full); } catch (_) { continue; }
-          if (st.mtimeMs < (led.started_at || 0)) continue;
+          const active = f === activeFile;
+          // Only traces touched since this session began count towards the
+          // session's SPEND — a trace from last week is not this session's.
+          // The ACTIVE run is exempt from that filter: `status:` answers "what
+          // is ORC doing", which has nothing to do with who paid for it, and a
+          // run already going when this session opened would otherwise be
+          // invisible until it happened to write its next line. Its own
+          // staleness gate decides whether it is still running.
+          if (!active && st.mtimeMs < (led.started_at || 0)) continue;
           const text = fs.readFileSync(full, "utf8");
           // Count by the trace's OWN line timestamps, not the file's mtime. A
           // run that was already going when this session started shares its
@@ -486,6 +821,12 @@ process.stdin.on("end", () => {
             if (at >= sessionFloor) mine += 1;
           }
           spawns += mine;
+          // The phase comes off the text this loop already read — one more
+          // regex pass, no second file read.
+          if (active) {
+            const lm = /^run-([a-z0-9-]+?)-.+-\d{6}-\d{6}\.txt$/.exec(f);
+            if (lm) phase = resolvePhase(lm[1], text);
+          }
           let openHere = 0;
           try {
             const pend = JSON.parse(fs.readFileSync(full + ".pending.json", "utf8"));
@@ -500,7 +841,10 @@ process.stdin.on("end", () => {
           }
         }
       } catch (_) {}
-      led.dispatch = { spawns, running, lanes, scanned_at: now };
+      led.dispatch = { spawns, running, lanes, phase, scanned_at: now };
+      // MTok rides in the same throttled pass, and reads only the bytes the
+      // transcript has grown by since the last one.
+      led.tok = scanTokens(led, d.transcript_path || null);
     }
 
     led.updated_at = now;
@@ -509,19 +853,31 @@ process.stdin.on("end", () => {
       fs.writeFileSync(sfile, JSON.stringify(led) + "\n");
     } catch (_) {}
 
-    const dsp = led.dispatch || { spawns: 0, running: 0, lanes: [] };
+    const dsp = led.dispatch || { spawns: 0, running: 0, lanes: [], phase: null };
     const parts = [];
+    // `status:` leads, because what ORC is doing right now is the one thing on
+    // this line that changes minute to minute. It is also the ONE segment
+    // allowed to vanish: a phase the disk cannot prove is hidden rather than
+    // guessed, and the glyph goes with it. It replaces v1.2.0's `lanes:` list —
+    // the running lane is its first word, and `orc stats` / `orc run list`
+    // still hold the whole session's history.
+    if (dsp.phase && dsp.phase.label)
+      parts.push(
+        motifFrame(dsp.phase.kind) + " status: " + dsp.phase.lane + " · " + dsp.phase.label
+      );
     // `running` is never hidden, because an agent still in flight is the thing
     // a user most needs to see (v1.2.0). Zero is simply not printed.
     parts.push(
       "agents " + dsp.spawns + (dsp.running ? " (" + dsp.running + " running)" : "")
     );
     parts.push("orc-extra: " + (extraOn ? "on" : "off"));
-    // An empty lane list means no ORC lane has dispatched yet this session —
-    // an ANSWER, not a gap, so it keeps its slot and says so.
-    parts.push("lanes: " + (dsp.lanes.length ? dsp.lanes.join(", ") : "none yet"));
     if (led.started_at)
-      parts.push(Math.max(0, Math.round((now - led.started_at) / 60000)) + "m");
+      parts.push("Dur " + Math.max(0, Math.round((now - led.started_at) / 60000)) + "m");
+    // MTok keeps its slot in every state. An em dash says "not measured"; a `0`
+    // would say the session was free, and that is a different claim.
+    parts.push("MTok " + (fmtTokens(led.tok) || "—"));
+    const branch = gitBranch(projectDir);
+    if (branch) parts.push(branch);
     line2 = "   " + parts.join(" · ");
   } catch (_) {
     line2 = "";

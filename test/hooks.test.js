@@ -683,17 +683,24 @@ test("statusline: verdict matrix — boosted for opus-4.8 xhigh/max and opus-5/f
       effort: { level: effort },
     }).stdout;
   try {
-    assert.match(render("claude-opus-4-8", "high"), /ORC-ready/, "opus-4.8/high = ready");
-    assert.match(render("claude-opus-4-8", "xhigh"), /ORC-boosted/, "opus-4.8/xhigh = boosted");
-    assert.match(render("claude-opus-4-8", "max"), /ORC-boosted/, "opus-4.8/max = boosted");
-    assert.match(render("claude-fable-5", "medium"), /ORC-boosted/, "fable-5/medium = boosted");
-    assert.match(render("claude-fable-5", "max"), /ORC-boosted/, "fable-5/max = boosted");
-    assert.match(render("claude-fable-5", "low"), /DEGRADE/, "fable-5/low = degrade");
-    assert.match(render("claude-opus-5", "medium"), /ORC-boosted/, "opus-5/medium = boosted");
-    assert.match(render("claude-opus-5", "max"), /ORC-boosted/, "opus-5/max = boosted");
-    assert.match(render("claude-opus-5", "low"), /DEGRADE/, "opus-5/low = degrade");
-    assert.match(render("claude-sonnet-5", "high"), /DEGRADE/, "sonnet-5/high = degrade");
-    assert.match(render("claude-opus-4-7", "high"), /DEGRADE/, "opus-4.7 never reads as opus-5");
+    // v1.2.1: the verdict WORD moved out to make room for the version, so the
+    // ICON is what is asserted. The degrade branch is asserted on its REASONS
+    // too, further down — an icon with no reason is not a warning.
+    assert.match(render("claude-opus-4-8", "high"), /^✅ ORC /, "opus-4.8/high = ready");
+    assert.match(render("claude-opus-4-8", "xhigh"), /^🚀 ORC /, "opus-4.8/xhigh = boosted");
+    assert.match(render("claude-opus-4-8", "max"), /^🚀 ORC /, "opus-4.8/max = boosted");
+    assert.match(render("claude-fable-5", "medium"), /^🚀 ORC /, "fable-5/medium = boosted");
+    assert.match(render("claude-fable-5", "max"), /^🚀 ORC /, "fable-5/max = boosted");
+    assert.match(render("claude-fable-5", "low"), /^⛔ ORC /, "fable-5/low = degrade");
+    assert.match(render("claude-opus-5", "medium"), /^🚀 ORC /, "opus-5/medium = boosted");
+    assert.match(render("claude-opus-5", "max"), /^🚀 ORC /, "opus-5/max = boosted");
+    assert.match(render("claude-opus-5", "low"), /^⛔ ORC /, "opus-5/low = degrade");
+    assert.match(render("claude-sonnet-5", "high"), /^⛔ ORC /, "sonnet-5/high = degrade");
+    assert.match(render("claude-opus-4-7", "high"), /^⛔ ORC /, "opus-4.7 never reads as opus-5");
+    // The version is the brand now, and it is the INSTALLED one.
+    const v = require("../package.json").version;
+    assert.match(render("claude-opus-5", "high"), new RegExp("ORC v" + v.replace(/\./g, "\\.") + " - "),
+      "the installed version is the brand");
   } finally {
     rmrf(root);
   }
@@ -732,11 +739,13 @@ test("statusline: never prints 'undefined'; renders a rate-limit segment", () =>
       model: { id: "claude-opus-4-8", display_name: "Opus 4.8" },
       effort: { level: "high" },
       rate_limits: { five_hour: { used_percentage: 42, resets_at: resetEpochS } },
+      context_window: { used_percentage: 34 },
     });
     assert.strictEqual(ok.status, 0);
     assert.doesNotMatch(ok.stdout, /undefined/);
     assert.match(ok.stdout, /5h 42%/, "renders the 5h usage segment");
-    assert.match(ok.stdout, /ORC-ready/, "Opus 4.8/high reads as ORC-ready");
+    assert.match(ok.stdout, /^✅ ORC v/, "Opus 4.8/high reads as ready");
+    assert.match(ok.stdout, /context \(/, "the context segment is named, not abbreviated");
   } finally {
     rmrf(root);
   }
@@ -752,7 +761,27 @@ test("statusline: a non-Opus model reads as DEGRADE, still no 'undefined'", () =
     });
     assert.strictEqual(r.status, 0);
     assert.doesNotMatch(r.stdout, /undefined/);
-    assert.match(r.stdout, /DEGRADE/, "wrong tier warns");
+    assert.match(r.stdout, /^⛔ ORC /, "wrong tier warns");
+    // The reasons are the whole warning. Losing them would leave an emoji.
+    assert.match(r.stdout, /\(model≠/, "the degrade branch still names why");
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("statusline: a version it cannot read renders `ORC`, never `ORC vnull`", () => {
+  const { root, claudeDir } = freshInstall();
+  try {
+    // A pre-1.2.1 install, or a stamp that failed to write.
+    fs.rmSync(path.join(claudeDir, "hooks", "orc-version.json"), { force: true });
+    const r = runHook(claudeDir, "orc-statusline.js", {
+      cwd: root,
+      model: { id: "claude-opus-5", display_name: "Opus 5" },
+      effort: { level: "high" },
+    });
+    assert.strictEqual(r.status, 0);
+    assert.doesNotMatch(r.stdout, /undefined|vnull|v null/, "never a word for a thing it does not know");
+    assert.match(r.stdout, /^🚀 ORC - /, "plain ORC, no version");
   } finally {
     rmrf(root);
   }

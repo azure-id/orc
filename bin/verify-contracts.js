@@ -411,6 +411,7 @@ const CONTRACTS = [
     token: "orc run inflight",
     binFiles: ["bin/cli.js"],
     files: [
+      "hooks/README.md",
       "skills/_shared/return-validation.md",
       "skills/_shared/phases/execution.md",
       "skills/orc/SKILL.md",
@@ -842,6 +843,10 @@ const CONTRACTS = [
     files: [
       "agents/orc-trace-writer-haiku-4-5.md",
       "hooks/orc-trace.js",
+      // v1.2.1: the statusline READS the pointer to decide which run `status:`
+      // is about. "The newest file" would be a different, wrong answer during
+      // a lane suspend, when two traces are live and only one is the run.
+      "hooks/orc-statusline.js",
       "skills/_shared/lane-suspend.md",
       "skills/context-combiner/SKILL.md",
       "skills/orc-aftermath/SKILL.md",
@@ -906,6 +911,18 @@ const CONTRACTS = [
     ],
   },
   {
+    // v1.2.1 — the statusline's phase rail. The CLI COMPUTES the phase list
+    // (labels, order, motif kind) and stamps it at install; the hook RENDERS it
+    // and derives nothing, the same way `orc ui` renders the Flow stepper. The
+    // two halves live in two files, so a rename of the manifest silently blanks
+    // `status:` unless it fails here.
+    name: "statusline phase rail (v1.2.1 — orc-lane-rails.json)",
+    token: "orc-lane-rails.json",
+    binFiles: ["bin/cli.js"],
+    files: [
+      "hooks/README.md","hooks/orc-statusline.js"],
+  },
+  {
     // v0.32.0: the hook's zero-model-dependence phase segmentation. Producer
     // (the hook) and both consumers (retro skill + its miner) must agree on the
     // verb and its role families.
@@ -922,6 +939,11 @@ const CONTRACTS = [
       // v0.42.0: the combiner is segmented as its own PHASE-EDGE family INSIDE the
       // analyze trace — the reason it needs no lane of its own.
       "skills/context-combiner/SKILL.md",
+      // v1.2.1: the statusline READS these edges to render `status:`. It is the
+      // deterministic floor under that segment — the model-narrated verb can
+      // only refine it — so a rename of this verb would silently blank the one
+      // segment on line 2 that changes minute to minute.
+      "hooks/orc-statusline.js",
     ],
   },
   {
@@ -946,6 +968,7 @@ const CONTRACTS = [
     token: "orc wiki sync",
     binFiles: ["bin/cli.js"],
     files: [
+      "hooks/README.md",
       "agents/orc-wiki-scanner-opus-4-8-high.md",
       "agents/orc-wiki-scanner-opus-5-med.md",
       "agents/orc-wiki-scanner-sonnet-5-high.md",
@@ -985,6 +1008,7 @@ const CONTRACTS = [
     name: "wiki UNREGISTERED state (v0.18.0 — docs without a manifest ≠ no wiki; sync, never re-scan)",
     token: "UNREGISTERED",
     files: [
+      "hooks/README.md",
       "hooks/orc-statusline.js",
       "skills/orc-wiki/README.md",
       "skills/orc-wiki/references/phases/phase-0.md",
@@ -1489,6 +1513,7 @@ const CONTRACTS = [
     name: "wiki freshness tier enum (v0.11.0 — FRESH/AGING/STALE, computed on read)",
     token: "AGING",
     files: [
+      "hooks/README.md",
       "hooks/orc-statusline.js",
       "skills/_shared/gotchas.md",
       "skills/_shared/interview.md",

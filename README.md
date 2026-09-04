@@ -14,7 +14,7 @@
 ![Dependencies](https://img.shields.io/badge/dependencies-zero-lightgrey.svg?style=for-the-badge)
 ![GitHub stars](https://img.shields.io/github/stars/azure-id/orc?style=for-the-badge&color=yellow)
 
-**Latest: v1.2.0** · updated 2026-09-04 · [full changelog](CHANGELOG.md)
+**Latest: v1.2.1** · updated 2026-09-04 · [full changelog](CHANGELOG.md)
 
 **On npm: [`@azure-id/orc`](https://www.npmjs.com/package/@azure-id/orc)** — `npm i -g @azure-id/orc`
 
@@ -575,7 +575,7 @@ a current audit: [EVAL-REPORT.md](EVAL-REPORT.md).
 **Full history: [CHANGELOG.md](CHANGELOG.md)** — or `orc changelog`, which prints
 only what is newer than the version you have.
 
-### v1.2.0 - a retry that cloned the agent, and a window you can watch empty _(2026-09-04)_
+### v1.2.1 - the status line says what ORC is doing _(2026-09-04)_
 
 **Still on the unscoped `orc` package?** Do this once first — your `orc upgrade`
 is the pre-v0.56.0 one and cannot install itself. Full detail in the CAUTION at
@@ -587,80 +587,64 @@ the top of this file.
 
 **Do not use `npm i -g -f`.** Full detail in v0.56.0 below.
 
-A Task error does not kill the subagent behind it. Every lane's retry rule
-assumed it did. One graded `/orc-quick` entry put **three** `orc-executor-opus-5-low`
-agents on the same task — 50m19s, 115m22s and 100m53s, **266 minutes of Opus 5
-for one authorised dispatch**, all editing the same files inside a 2h04m window.
-The trace hook had recorded every one of them. Nothing had ever read it.
-
-- **`orc run inflight`** — the one reader of the pending sidecar the trace hook
-  has written on every `SPAWN` since v0.34. `0` clear · `1` in-flight ·
-  `2` unknown. Every lane that re-dispatches now asks it first.
-- **A re-dispatch is refused over a live attempt.** New registered contract
-  token, `_shared/return-validation.md` **§0**, placed above every existing rule
-  because every one of them ends in "re-dispatch". The refusal names the agent,
-  the task and its age, and always offers "dispatch anyway" — never as the
-  default.
-- **Exit 2 refuses, and it is the one place in ORC where an absent reading
-  blocks.** `orc usage check` exit 2 never stops a run; an UNCHECKABLE pact
-  never raises an exit code. It inverts here because the two errors are not the
-  same size: a wrongly-refused dispatch costs one question, a wrongly-issued one
-  costs a second Opus agent for an hour.
-- **An interrupted turn is UNKNOWN, never FAILED.** A usage limit, an API error
-  or a `Ctrl+C` between a dispatch and its return says nothing about the agent.
-  Classifying that as a failure is what made the incident compound: it paid
-  twice, hit the limit sooner, and retried again.
-- **Unknown is not zero.** A missing sidecar, an unreadable one, records older
-  than six hours, or a sidecar that disagrees with the trace's own SPAWN/RETURN
-  balance all read `unknown` — never `clear`.
-- **The honest limit is stated, not papered over.** It cannot see an *ad-hoc*
-  dispatch (`/orc-quick` recon, dispatched by model+effort rather than a pinned
-  `orc-*` agent): the hook writes no `SPAWN` for one, so no record exists. Those
-  are read-only and short, and a lane must never read `clear` as proof one
-  finished.
-
-The other half — **you can now watch the window empty**:
-
-- **`orc usage report`** — 5-hour, 7-day and context in one place, plus the line
-  the snapshot could never give you: **"This session has consumed 59% of the
-  5-hour window and is still counting"**, with the caveat that other sessions on
-  the same account share that window.
-- **A window reset mid-session is not a refund.** The statusline keeps a
-  per-session ledger beside `usage.json` — raw numbers only, never a computed
-  word — and banks what was spent before a reset so the running total keeps
-  counting across the boundary. A new session re-baselines.
-- **The statusline grew a second line, and a `sess +X%` segment on the first.**
+The second line arrived in v1.2.0 saying which lanes had run. It could not say
+what any of them was doing *now*. This release puts the running phase in front —
+with a small animated mark per kind of phase, borrowed from `orc-cli`'s lane
+menu — and finishes the line with the two facts a terminal should always carry:
+what the session has cost, and which branch it is on.
 
 ```
-🚀 ORC-boosted Opus 5/high · 22% ctx · 5h 69% (1h30m) ↔ wk 30% · sess +59%
-   agents 4 (1 running) · orc-extra: on · lanes: mini, quick · 41m
+🚀 ORC v1.2.1 - Opus 5/high · context (34%) · 5h 41% (2h13m) ↔ wk 12% · ucs 6% · wiki: fresh
+   ▰ status: quick · Q3 DO · agents 7 (2 running) · orc-extra: on · Dur 48m · MTok 412K · main
 ```
 
-  `agents` counts what this session spawned and **never hides what is still
-  running** — the thing that was invisible while three agents worked on one
-  task. Dispatches are attributed by the trace's **own line timestamps**, not
-  the file's mtime, so a run that was already going when the session started is
-  not counted twice. A lane is named only if it actually dispatched, and
-  `lanes: none yet` keeps its slot rather than vanishing. The scan is throttled
-  to once every 5s, because a statusline re-renders on every keystroke.
+- **The phase is CLI-computed and rendered, never derived.** `orc init` /
+  `orc update` stamps `hooks/orc-lane-rails.json` from the same registries
+  `orc lane phases` reads; the hook holds no idea of its own about what ORC's
+  phases are. Inspect it with the new `orc lane rails [--json]`. A second phase
+  table in a hook would be the Flow-stepper failure on a second surface, and no
+  lint could see it — so it is a registered contract token instead.
+- **A phase the disk cannot prove is HIDDEN.** The floor is the trace hook's
+  own `PHASE-EDGE`, written with zero model cooperation; a narrated verb the
+  lane's rail publishes may only *refine* it, never invent one. The cost is
+  stated rather than papered over: a phase that dispatches nothing and narrates
+  nothing — `/orc-quick` `Q1 LOOK`, `Q2 ASK`, every ask-the-user gate — shows
+  no segment at all. **Asking 24 spines to write a phase marker would have
+  covered those, and it is the remembered-not-dispatched bet this repo has
+  already lost five times.** A stale phase word gets believed.
+- **The animation is a liveness tell, not a progress bar.** A statusline is a
+  pull surface, so the frame comes off the wall clock: it moves while you type
+  and while ORC works, and freezes when the session is idle. `ORC_STATUSLINE_MOTION=0`
+  **removes** the motion rather than slowing it (a frozen frame of a cycling
+  animation is a bug that looks like a hang), and `ORC_STATUSLINE_ASCII=1`
+  swaps in the ASCII twin every motif ships with.
+- **`MTok` — MAIN token — is honest about what it cannot see.** All four token
+  kinds summed, read incrementally from the session transcript. **Claude Code
+  records no token usage for a dispatched subagent**, so an hour of Opus
+  executors adds almost nothing: this is your conversation's cost, not the
+  run's. Unreadable renders `—`, **never `0`**, which would say the session was
+  free. `orc usage report` and `/orc-budget` remain the four-kind truth.
+- **The rest of the line.** The verdict WORD becomes the installed version and
+  the ICON keeps the verdict — the ⛔ branch still names every reason, because a
+  warning with no reason is an emoji. `ctx` → `context (N%)`. `sess +X%` → `ucs
+  X%`, which now keeps its slot at zero. `Dur` labels the duration, and the
+  branch comes off `.git/HEAD` with **no subprocess** on a per-keystroke
+  surface.
+- **`lanes:` is replaced by `status:`.** The running lane is its first word;
+  `orc stats` and `orc run list` still hold the session's whole history.
+- **The status line now explains itself.** `.claude/hooks/README.md` documents
+  every segment in Simplified Technical English, including what each absent
+  segment means.
 
-- **Top 5 by measured wall time, and it says that is what it is.** Claude Code
-  records **no token usage for a dispatched subagent** — `isSidechain` is never
-  set and no sidechain message carries a usage block — so a per-agent token
-  figure cannot be measured. Every Claude row reports `tokens: null` and the
-  reason, **never `0`**, which would tell you the work was free. Only
-  `orc extra` foreign workers report real four-kind vectors, and those rows say
-  so. Inventing the rest would be the same class of bug as the one above.
-
-**Nothing here is on by default that was not already.** `usage_gate` still ships
-`off`. The in-flight guard adds one free CLI read before a re-dispatch — it
-changes no dispatch that was already correct.
+Everything rides in the one 5-second scan v1.2.0 already added. No new config
+key — a status line is display, and a hook cannot resolve a lane's config anyway.
 
 **Full entry: [CHANGELOG.md](CHANGELOG.md).**
 
 <details>
 <summary>Earlier releases</summary>
 
+- **v1.2.0 - a retry that cloned the agent, and a window you can watch empty — _(2026-09-04)_**
 - **v1.1.0 - the wait, and a window ORC can finally see — _(2026-08-31)_**
 - **v1.0.0 - config, phases and calls stop being prose — _(2026-08-30)_**
 

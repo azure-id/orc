@@ -444,6 +444,11 @@ const required = [
   // lint. Both are already Opus 5, so `opus5_only` adds no twin for either.
   "templates/agents/orc-doc-writer-opus-5-med.md",
   "templates/agents/orc-doc-checker-opus-5-low.md",
+  // v1.2.1 — the status line explained for the person reading it, in
+  // Simplified Technical English. It ships INTO .claude/hooks/ next to the hook
+  // it describes, because that is where somebody looking at a segment they do
+  // not recognise will look for it.
+  "templates/hooks/README.md",
   "templates/hooks/orc-effort-guard.js",
   "templates/hooks/orc-statusline.js",
   "templates/hooks/orc-trace.js",
