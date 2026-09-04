@@ -10,7 +10,7 @@ Format: `### v<version> — <title> _(<date>)_`.
 
 ---
 
-### v1.3.0 - the status line stops costing what it does not spend _(2026-09-04)_
+### v1.3.0 - build your own status line _(2026-09-04)_
 
 **Still on the unscoped `orc` package?** Do this once first — your `orc upgrade`
 is the pre-v0.56.0 one and cannot install itself. Full detail in the CAUTION at
@@ -22,41 +22,71 @@ the top of this file.
 
 **Do not use `npm i -g -f`.** Full detail in v0.56.0 below.
 
-The first half of the **CLI Hook Interface** — the feature that makes the status
-line user-composed. This release lands the groundwork it stands on, and the
-groundwork turned out to be a fix worth shipping on its own.
+The status line becomes **yours**. Three lines, each holding one to five parts
+from a catalogue ORC ships, each drawn through one of 35 shapes and restyled by
+you: two colours, a colour that follows the value, its own words, its own
+symbols, a stable width, and when it is allowed to appear at all.
 
-**The status line was spending a subprocess per keystroke.** The wiki freshness
-segment shelled `git rev-list --count` on *every* render, outside the 5-second
-scan v1.2.0 put everything else inside. Measured on Windows: that call is 53 ms,
-and a Node process start is ~285 ms of a **300 ms** render budget after which
-Claude Code cancels the in-flight script. So in any project with a wiki, a fast
-typist was pushing the render to ~358 ms — past the cancel line — and getting no
-status line at all while they typed. It looked like a flicker, not like a bug
-with a cause.
+**It is off by default, and off is byte-identical to what shipped.** That is a
+test — nine states frozen glyph for glyph — not an intention.
 
-- **The wiki distance rides inside the throttled scan now.** The per-session
-  ledger caches the RAW commit count and a boolean; the word — `fresh` /
-  `AGING` / `STALE` — is still computed on every read, because a stored status
-  word is a status word that goes stale. Sixteen subprocesses per five seconds
-  became one.
-- **A failed probe is a fact, and it is cached like any other.** No git, an
-  unreachable commit, a timeout: the segment stays absent either way, but it
-  costs nothing to stay absent.
-- **One ledger: one read, one write.** Three blocks wanted
-  `.claude/orc/usage-session.json` — the rate-limit tracker, `ucs`, and the
-  line-2 scan — and each opened the file itself while two of them wrote it. It
-  is loaded at most once per process now and flushed once, **after** the output
-  is composed, so a render that throws half way through still prints and a
-  ledger that cannot be written never takes the status line down with it.
-  `ORC_STATUSLINE_SCAN_MS` remains the one seam over the budget.
-- **The rendered bytes are frozen.** Nine named states —
-  `test/goldens/statusline-baseline.txt` — pinned byte for byte: every glyph,
-  every separator, the em dash, the three-space indent. The CLI Hook Interface
-  is **off by default and off is specified as byte-identical to today**, and
-  this is what makes that claim checkable instead of aspirational.
+Compose it in **`orc ui` ▸ CLI Hook Interface**. A CLI half exists so the panel
+has something to run, and `orc statusline --help` says plainly that typing a
+three-line layout is worse than dragging one.
 
-Nothing about the output moved. That is the point.
+```
+🚀 ORC v1.3.0 · Opus 5/high · CTX ████▊░░░░░ 47% · 5h 61%          main
+◐ orc · execution · agents 7 (2 running) · Dur 34m · MTok 312K
+cache ● ███████▊░░ 91% · $0.42 · wiki ◐ 14c
+```
+
+- **THE CLI COMPILES, THE HOOK RENDERS.** The layout you author is lowered into
+  a flat render program with every colour worked out in advance; the hook walks
+  it and resolves nothing. Three reasons, any one sufficient. Claude Code
+  debounces at 300 ms and **cancels** a script still running — and on Windows a
+  bare `node` start is 285 ms of that, so the hook has **about 15 ms**, and
+  resolving themes and ramps per keystroke is the wrong trade by four orders of
+  magnitude. Two ideas of what inheritance means would otherwise sit either side
+  of the one surface where you compare them. And a hook cannot refuse; it can
+  only fail silently or paint garbage, so validation has to happen where a
+  refusal is possible.
+- **The preview IS the bar.** `orc statusline preview` and the hook require the
+  SAME render module, so what the panel draws and what your terminal prints
+  cannot diverge — by construction, not by a test that would eventually drift.
+  All three degraded forms sit under it and are always visible: you cannot
+  design a plain-text fallback you cannot see.
+- **The illegal drop is made impossible.** A line may hold a part only if every
+  line above it holds at least one — so line 3 renders hatched and disabled with
+  the reason ON THE ZONE while line 2 is empty. Never a message after the fact.
+  Every drag has a keyboard path and a menu; a board only reachable by mouse is
+  a board a lot of people cannot use.
+- **A composed layout can be FASTER than the built-in one.** The compiler
+  records which readings a layout needs, and the hook reads nothing else.
+  Measured on the cold path: 346.7 ms for the built-in lines, **298.2 ms** for a
+  composed `minimal` — which is the difference between rendering and being
+  cancelled.
+- **Eight parts are REFUSED, each with the measurement.** `git status` is 53 ms
+  against 15 ms of headroom; three wiki numbers need a git walk PER DOCUMENT.
+  Reading a value that is not stored would have rendered a confident number
+  nobody measured, forever. `unknown` renders an em dash — **never `0`**, which
+  would say the thing was free.
+- **Three things a terminal cannot do, said plainly** rather than offered as a
+  picker that does nothing: the terminal owns the font size (bold reads bigger,
+  and a part gets visually larger by taking more cells), blinking is refused,
+  and icon-font symbols are not shipped because ORC cannot check for the font
+  and will not put an empty box on your bar.
+- **`orc doctor` gains three findings**, and only while the feature is armed — a
+  layout you built and never enabled is a draft, not a problem. An orphaned part
+  after an upgrade is REPORTED, never auto-repaired: which part replaces a
+  retired one is your decision.
+- **A fix that shipped with it:** the wiki freshness segment used to run
+  `git rev-list` on EVERY redraw, outside the throttle everything else rides in.
+  In a repo with a wiki that pushed the render past the cancel line, so a fast
+  typist got no status line at all while they typed.
+
+One config key, `statusline_custom`, default `off`. No key for a colour scheme —
+the layout carries its own — and none for the parts: those are a document, not a
+setting.
 
 ---
 

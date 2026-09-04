@@ -619,6 +619,50 @@ Bacalah sebagai catatan putaran itu, bukan sebagai audit terkini:
 **Riwayat lengkap: [CHANGELOG.md](CHANGELOG.md)** — atau `orc changelog`, yang
 hanya mencetak yang lebih baru dari versi yang Anda punya.
 
+### v1.3.0 - bangun sendiri baris status Anda _(04-09-2026)_
+
+**Masih memakai paket `orc` yang tanpa awalan?** Lakukan ini sekali dulu —
+`orc upgrade` Anda adalah versi sebelum v0.56.0 dan tidak dapat memasang
+dirinya sendiri.
+
+- **Langkah 1 — lepaskan perintahnya dari paket lama:** `npm uninstall -g orc`
+- **Langkah 2 — pasang paket saat ini:** `npm i -g @azure-id/orc`
+- **Langkah 3 — terapkan lagi ke proyek Anda:** `orc update`
+
+**Jangan pakai `npm i -g -f`.**
+
+Baris status kini **milik Anda**. Tiga baris, tiap baris memuat satu sampai lima
+bagian dari katalog yang dikirim ORC, tiap bagian digambar lewat salah satu dari
+35 bentuk dan Anda beri gaya sendiri: dua warna, warna yang mengikuti nilai,
+kata-katanya sendiri, simbolnya sendiri, lebar yang tetap, dan kapan bagian itu
+boleh muncul.
+
+**Fitur ini mati secara bawaan, dan saat mati hasilnya sama persis byte per byte
+dengan sebelumnya.** Itu sebuah tes — sembilan keadaan dibekukan simbol demi
+simbol — bukan sekadar niat.
+
+Susun di **`orc ui` ▸ CLI Hook Interface**.
+
+- **CLI YANG MENYUSUN, HOOK YANG MENGGAMBAR.** Tata letak Anda diturunkan jadi
+  daftar instruksi datar dengan setiap warna sudah dihitung; hook menjalankannya
+  dan tidak memutuskan apa pun. Claude Code menggambar ulang paling cepat tiap
+  300 md dan **membatalkan** skrip yang masih berjalan — di Windows memulai
+  `node` saja sudah 285 md dari jatah itu, jadi hook hanya punya sekitar 15 md.
+- **Pratinjau ITU bilahnya.** Pratinjau dan hook memakai modul penggambar yang
+  SAMA, jadi keduanya tidak mungkin berbeda.
+- **Peletakan yang tidak sah dibuat MUSTAHIL.** Sebuah baris hanya boleh memuat
+  bagian jika setiap baris di atasnya sudah terisi. Setiap seret juga punya
+  jalur papan tombol dan menu.
+- **Tata letak susunan Anda bisa LEBIH CEPAT** daripada bawaan: 346,7 md untuk
+  bawaan, **298,2 md** untuk `minimal` susunan sendiri.
+- **Delapan bagian DITOLAK**, tiap-tiap dengan hasil pengukurannya. Nilai yang
+  tidak dapat dihitung tampil sebagai tanda pisah — **bukan `0`**, yang berarti
+  gratis.
+
+**Rincian lengkap: [`guides/status-line.md`](guides/status-line.md).**
+
+---
+
 ### v1.0.0 - konfigurasi, fase, dan panggilan berhenti jadi prosa _(30-08-2026)_
 
 **Masih memakai paket `orc` yang tanpa awalan?** Lakukan ini sekali dulu —
