@@ -399,9 +399,47 @@ function scanEveryMs() {
   return Number.isFinite(n) && n >= 0 ? n : 5000;
 }
 
+// Per-provider TTL (v1.3.0 W2), replacing the single global throttle for
+// everything but the trace scan. A wiki tier does not move in five seconds and
+// a flow lock moves when somebody runs a command, so paying the 5-second rate
+// for either is paying for a change that cannot have happened.
+//
+// `ORC_STATUSLINE_SCAN_MS` still overrides ALL of them — it stays the ONE seam
+// over this budget, and a seam that only covered one provider would be a seam
+// tests could not use.
+const TTL = { trace: 5000, wiki: 60000, config: 30000, diy: 30000 };
+
 // `at` is a ledger `scanned_at` stamp. Absent is stale — unknown is not fresh.
-function scanStale(at, now) {
-  return typeof at !== "number" || now - at >= scanEveryMs();
+function scanStale(at, now, ttl) {
+  const budget = process.env.ORC_STATUSLINE_SCAN_MS !== undefined ? scanEveryMs() : ttl == null ? scanEveryMs() : ttl;
+  return typeof at !== "number" || now - at >= budget;
+}
+
+// The read plan, from the compiled layout's lock. Returns null in EVERY state
+// but one — the feature off, no lock, an unparseable lock — and null means
+// "read everything", which is what makes `off` byte-identical.
+//
+// It deliberately does NOT re-run the gate ladder. This is a question about
+// what to READ, and the ladder is a question about what to RENDER; a layout
+// that later fails the ladder falls back to the shipped lines and simply has a
+// segment or two missing for one render. That is a far better failure than
+// reading the disk twice on a surface that re-renders on every keystroke.
+function readPlan(d) {
+  try {
+    const fs = require("fs");
+    const path = require("path");
+    const projectDir =
+      (d.workspace && d.workspace.project_dir) || d.cwd || process.cwd();
+    const raw = fs.readFileSync(path.join(projectDir, ".claude", "orc.config.yaml"), "utf8");
+    if (!/^[ \t]*statusline_custom:[ \t]*["']?on["']?[ \t]*\r?$/m.test(raw)) return null;
+    const lock = JSON.parse(
+      fs.readFileSync(path.join(projectDir, ".claude", "orc", "statusline.lock.json"), "utf8")
+    );
+    if (!lock || !Array.isArray(lock.bindings)) return null;
+    return { bindings: new Set(lock.bindings), providers: new Set(lock.providers || []) };
+  } catch (_) {
+    return null;
+  }
 }
 
 let raw = "";
@@ -421,6 +459,23 @@ process.stdin.on("end", () => {
     d.context_window && typeof d.context_window.used_percentage === "number"
       ? `context (${d.context_window.used_percentage}%)`
       : "";
+
+  // ── THE READ PLAN (v1.3.0 W2) ──────────────────────────────────────────────
+  // The compiler knows exactly which bindings a layout uses, therefore exactly
+  // which providers it needs, and it records both in the lock. So: A PROVIDER
+  // NOTHING BINDS IS NOT READ.
+  //
+  // That is the claim this feature has to earn — the shipped status line pays
+  // for the wiki read, the diy read and the trace scan unconditionally, and a
+  // user whose layout names none of them should pay for none of them. Composing
+  // your own line is allowed to make the bar FASTER than the hardcoded one it
+  // replaces, and here is where that happens.
+  //
+  // `null` means the feature is off, and then everything below runs exactly as
+  // it always has. That is what keeps `off` byte-identical.
+  const PLAN = readPlan(d);
+  const wants = (b) => !PLAN || PLAN.bindings.has(b);
+  const wantsProvider = (p) => !PLAN || PLAN.providers.has(p);
 
   // ── Session-model bridge (fail-silent) ─────────────────────────────────────
   // The PreToolUse effort guard cannot see the model id; it can only read
@@ -684,9 +739,15 @@ process.stdin.on("end", () => {
     const path = require("path");
     const projectDir =
       (d.workspace && d.workspace.project_dir) || d.cwd || process.cwd();
+    // A layout that names no wiki component performs ZERO wiki reads — not a
+    // cheaper one, none. This is the read planner's whole point.
+    if (!wants("wiki.tier") && !wants("wiki.distance")) throw new Error("not needed");
     const led = ledger(projectDir, String(d.session_id || d.sessionId || ""));
     const now = Date.now();
-    if (scanStale(led.wiki && led.wiki.scanned_at, now)) {
+    // A wiki tier does not move in five seconds. Per-provider TTL replaces the
+    // single global throttle for everything but the trace scan, which is the
+    // one thing that really does move that fast.
+    if (scanStale(led.wiki && led.wiki.scanned_at, now, TTL.wiki)) {
       const w = { unregistered: false, distance: null, scanned_at: now };
       const metaPath = path.join(projectDir, ".claude", "orc", "wiki-meta.json");
       if (!fs.existsSync(metaPath)) {
@@ -757,6 +818,8 @@ process.stdin.on("end", () => {
     const crypto = require("crypto");
     const projectDir =
       (d.workspace && d.workspace.project_dir) || d.cwd || process.cwd();
+    if (!wants("diy.state") && !wants("diy.name") && !wants("diy.tier_state"))
+      throw new Error("not needed");
     const lockPath = path.join(projectDir, ".claude", "orc", "diy", "flow.lock.json");
     if (fs.existsSync(lockPath)) {
       const lock = JSON.parse(
@@ -807,6 +870,17 @@ process.stdin.on("end", () => {
     } catch (_) {}
   }
 
+  // The branch is its OWN provider: `.git/HEAD` with no subprocess, on a
+  // different clock from the trace scan, and a layout that shows a branch and
+  // nothing else must not pay for a trace scan to get it.
+  if (wantsProvider("scan.git")) {
+    try {
+      const projectDir =
+        (d.workspace && d.workspace.project_dir) || d.cwd || process.cwd();
+      SCAN.branch = gitBranch(projectDir) || null;
+    } catch (_) {}
+  }
+
   // ── Session line (v1.2.0) ──────────────────────────────────────────────────
   // Line 1 answers "what tier am I on and how full is the window". This second
   // line answers "what has this session actually been DOING" — how many agents
@@ -843,7 +917,8 @@ process.stdin.on("end", () => {
     } catch (_) {}
 
     const now = Date.now();
-    if (scanStale(led.dispatch && led.dispatch.scanned_at, now)) {
+    if (!wantsProvider("scan.trace")) throw new Error("not needed");
+    if (scanStale(led.dispatch && led.dispatch.scanned_at, now, TTL.trace)) {
       const logDir = path.isAbsolute(logRel) ? logRel : path.join(projectDir, logRel);
       const sessionFloor = Math.floor((led.started_at || 0) / 1000) * 1000;
       let spawns = 0;
@@ -952,9 +1027,7 @@ process.stdin.on("end", () => {
     // MTok keeps its slot in every state. An em dash says "not measured"; a `0`
     // would say the session was free, and that is a different claim.
     parts.push("MTok " + (fmtTokens(led.tok) || "—"));
-    const branch = gitBranch(projectDir);
-    SCAN.branch = branch || null;
-    if (branch) parts.push(branch);
+    if (SCAN.branch) parts.push(SCAN.branch);
     line2 = "   " + parts.join(" · ");
   } catch (_) {
     line2 = "";

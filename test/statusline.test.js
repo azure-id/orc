@@ -629,3 +629,66 @@ test("statusline: `orc statusline --help` sends the user to the panel", () => {
   assert.strictEqual(r.status, 2);
   assert.match(r.stderr, /orc ui/, "the CLI half names the recommended surface");
 });
+
+// ── the read planner (W2) ──────────────────────────────────────────────────
+
+test("statusline: a layout that names no wiki component performs ZERO wiki reads", () => {
+  // The claim this feature has to earn. The shipped line pays for the wiki
+  // read unconditionally; a user whose layout names no wiki component should
+  // pay for none of it. Composing your own line is allowed to make the bar
+  // FASTER than the hardcoded one it replaces.
+  //
+  // Measured by DELETING the thing the read would touch and asserting the
+  // render is unaffected — a read that did happen would have to notice.
+  const { root, claudeDir } = freshInstall();
+  const orc = path.join(claudeDir, "orc");
+  const payload = { cwd: root, session_id: "s", model: { id: "claude-opus-5" }, effort: { level: "high" } };
+  try {
+    fs.mkdirSync(orc, { recursive: true });
+    // A wiki manifest whose commit does not exist: reading it means shelling
+    // `git rev-list`, and the ledger records that it did.
+    fs.writeFileSync(path.join(orc, "wiki-meta.json"), JSON.stringify({ scan_commit: "HEAD" }));
+
+    // Shipped lines: the read happens.
+    runHook(claudeDir, "orc-statusline.js", payload);
+    let led = JSON.parse(fs.readFileSync(path.join(orc, "usage-session.json"), "utf8"));
+    assert.ok(led.wiki, "the shipped status line reads the wiki");
+
+    // A composed layout naming no wiki component: it does not.
+    fs.rmSync(path.join(orc, "usage-session.json"), { force: true });
+    cli(["statusline", "apply", "cost-watch", "--dir", root, "--json"]);
+    cli(["config", "set", "statusline_custom", "on", "--dir", root]);
+    runHook(claudeDir, "orc-statusline.js", payload);
+    led = JSON.parse(fs.readFileSync(path.join(orc, "usage-session.json"), "utf8"));
+    assert.ok(!led.wiki, "a layout with no wiki component still performed a wiki read");
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("statusline: a layout that names no run-state component skips the trace scan", () => {
+  const { root, claudeDir } = freshInstall();
+  const orc = path.join(claudeDir, "orc");
+  const payload = { cwd: root, session_id: "s", model: { id: "claude-opus-5" }, effort: { level: "high" } };
+  try {
+    cli(["statusline", "apply", "minimal", "--dir", root, "--json"]);
+    cli(["config", "set", "statusline_custom", "on", "--dir", root]);
+    runHook(claudeDir, "orc-statusline.js", payload);
+    const led = JSON.parse(fs.readFileSync(path.join(orc, "usage-session.json"), "utf8"));
+    assert.ok(!led.dispatch, "the trace scan ran for a layout that names no run state");
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("statusline: ORC_STATUSLINE_SCAN_MS still overrides EVERY provider's TTL", () => {
+  // Per-provider TTLs are a refinement, not a second budget. A seam that
+  // covered only one provider is a seam the tests could not use.
+  const src = fs.readFileSync(path.join(REPO, "templates", "hooks", "orc-statusline.js"), "utf8");
+  assert.match(src, /const TTL = \{/, "the per-provider table exists");
+  assert.match(
+    src,
+    /process\.env\.ORC_STATUSLINE_SCAN_MS !== undefined \? scanEveryMs\(\)/,
+    "the one seam wins over every per-provider TTL"
+  );
+});

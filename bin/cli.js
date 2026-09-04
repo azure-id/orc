@@ -34940,11 +34940,23 @@ function slCompile(layout) {
     return arr.length - 1;
   };
 
+  // The PROVIDER is derived from the BINDING, not from the cost. `branch` and
+  // `wiki` are both `scan`, but they are two different reads with two different
+  // TTLs, and lumping them together means a layout with a branch on it pays for
+  // a trace scan it never asked for — which is precisely the waste the read
+  // planner exists to remove.
+  const providerOf = (b) =>
+    b.startsWith("git.") ? "scan.git"
+      : b.startsWith("wiki.") ? "scan.wiki"
+        : b.startsWith("diy.") ? "scan.diy"
+          : b.startsWith("update.") ? "scan.update"
+            : "scan.trace";
   const note = (comp) => {
-    if (comp.binding) bindings.add(comp.binding);
-    if (comp.state_binding) bindings.add(comp.state_binding);
-    if (comp.cost === "scan") providers.add("scan.trace");
-    if (comp.cost === "new-read") providers.add("scan.extended");
+    for (const b of [comp.binding, comp.state_binding]) {
+      if (!b) continue;
+      bindings.add(b);
+      if (comp.cost === "scan" || comp.cost === "new-read") providers.add(providerOf(b));
+    }
     if (comp.series) seriesWanted.add(comp.series);
     if (comp.time_based) timeBased = true;
   };
