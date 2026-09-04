@@ -364,3 +364,10 @@
   gap: 8px;
   align-items: center;
 }
+
+/* A number field is a NUMBER field: wide enough for three digits and its
+   spinner, and no wider. A 200px box for a value between 0 and 8 reads as a
+   free-text field somebody has to think about. */
+.hk-num {
+  max-width: 90px;
+}

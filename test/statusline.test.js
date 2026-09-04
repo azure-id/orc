@@ -884,3 +884,132 @@ test("statusline panel: every drag has a keyboard equivalent and a menu", () => 
   assert.ok(js.indexOf("aria-grabbed") === -1, "aria-grabbed is deprecated and must not be used");
   assert.match(js, /function announce/, "the live region has one writer");
 });
+
+// ── W5: groups, composites, and the test that makes the panel trustworthy ──
+
+test("statusline: a group holds 2 to 4, counts as ONE slot, and never nests", () => {
+  // The limit is about how much a line SAYS, and a group says one thing.
+  const { root } = freshInstall();
+  try {
+    slj(root, ["apply", "cost-watch"]);
+    // Line 2 is at 5/5; grouping two of them takes it to 4.
+    let r = slj(root, ["group", "2:1", "2:2"]);
+    assert.strictEqual(r.status, 0, JSON.stringify(r.json && r.json.errors));
+    let show = slj(root, ["show"]).json;
+    assert.strictEqual(show.lines[1].counted, 4, "a group is one slot, not two");
+
+    // GROUPS DO NOT NEST. One level is a visual object; two is a layout engine.
+    r = slj(root, ["group", "2:1", "2:2"]);
+    assert.strictEqual(r.status, 1);
+    assert.match(r.json.errors.join(" "), /groups do not nest/);
+
+    // Cross-line is refused: a group that spanned two lines would not be a
+    // visual object, it would be two.
+    r = slj(root, ["group", "1:1", "2:1"]);
+    assert.strictEqual(r.status, 2);
+    assert.strictEqual(r.json.reason, "cross-line");
+
+    // And 2..4, named.
+    r = slj(root, ["group", "1:1"]);
+    assert.strictEqual(r.status, 2);
+    assert.strictEqual(r.json.reason, "bad-count");
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("statusline: a composite expands into its parts, and a group expands back", () => {
+  const { root } = freshInstall();
+  try {
+    slj(root, ["apply", "minimal"]);
+    for (let i = 0; i < 3; i++) slj(root, ["remove", "1:2"]);
+    slj(root, ["set", "1", "1", "tier-block"]);
+    const r = slj(root, ["expand", "1:1"]);
+    assert.strictEqual(r.status, 0);
+    assert.deepStrictEqual(r.json.into, ["verdict", "orc-version", "tier"]);
+    const show = slj(root, ["show"]).json;
+    assert.deepStrictEqual(show.lines[0].items.map((i) => i.type), ["verdict", "orc-version", "tier"]);
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("statusline: an expand that would overflow a line is REFUSED, naming the count", () => {
+  // Losing a component to make room is the one thing an expand must never do.
+  const { root } = freshInstall();
+  try {
+    slj(root, ["apply", "minimal"]);
+    slj(root, ["set", "1", "1", "tier-block"]);
+    const before = slj(root, ["show"]).json.lines[0].items.length;
+    const r = slj(root, ["expand", "1:1"]);
+    assert.strictEqual(r.status, 1);
+    assert.strictEqual(r.json.wrote, false);
+    assert.match(r.json.errors.join(" "), /line 1 holds 6 components \(max 5\)/);
+    assert.strictEqual(slj(root, ["show"]).json.lines[0].items.length, before, "nothing moved");
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("statusline: a group's children are READS — the planner fetches what it draws", () => {
+  // Without this a group would render an em dash per child, which is exactly
+  // the silent failure the read planner exists to avoid.
+  const { root } = freshInstall();
+  try {
+    slj(root, ["apply", "cost-watch"]);
+    slj(root, ["group", "2:1", "2:2"]);
+    const lock = JSON.parse(fs.readFileSync(path.join(root, ".claude", "orc", "statusline.lock.json"), "utf8"));
+    assert.ok(lock.bindings.includes("quota.5h.pct"), "the group's first child is in the read set");
+    assert.ok(lock.bindings.includes("quota.week.pct"), "and its second");
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("statusline: THE PREVIEW IS THE HOOK. Same layout, same bytes.", () => {
+  // The test that makes the panel trustworthy. If the preview is not what the
+  // hook prints, this panel is worse than editing JSON, because it is
+  // confidently wrong.
+  //
+  // It cannot drift, because both sides require the SAME module — but the
+  // property is worth asserting, because the day somebody adds a second
+  // renderer path this is what fails.
+  const { root, claudeDir } = freshInstall();
+  try {
+    slj(root, ["apply", "mono"]); // no colour: the comparison is about SHAPE
+    cli(["config", "set", "statusline_custom", "on", "--dir", root]);
+
+    const engine = require(path.join(REPO, "templates", "hooks", "orc-statusline-render.js"));
+    const prog = JSON.parse(fs.readFileSync(path.join(root, ".claude", "orc", "statusline-compiled.json"), "utf8"));
+
+    // The SAME context the CLI's preview builds, rendered through the SAME
+    // engine the hook loads. A divergence here is a second renderer.
+    const now = 1767225600000;
+    const payload = {
+      model: { id: "claude-opus-5", display_name: "Opus 5" },
+      effort: { level: "high" },
+      context_window: { used_percentage: 38 },
+      workspace: { project_dir: root },
+    };
+    const direct = engine.render(prog, {
+      payload,
+      ledger: { started_at: now - 2880000 },
+      scan: { spawns: 7, running: 2, phase: { lane: "quick", label: "Q3 DO", kind: "do" }, branch: "main" },
+      derived: { verdict: "boosted", reasons: [], version: require("../package.json").version },
+      now,
+      cols: 120,
+      env: { COLUMNS: "120", NO_COLOR: "1" },
+    });
+
+    const shown = slj(root, ["preview", "--width", "120"]).json;
+    // The CLI's own no-colour stripping renders through the same path, so the
+    // two must agree on every glyph and every space.
+    assert.strictEqual(
+      direct.text.replace(/\s+$/gm, ""),
+      shown.strippings.no_color.replace(/\s+$/gm, ""),
+      "the preview and a direct render of the same program disagree — there are two renderers"
+    );
+  } finally {
+    rmrf(root);
+  }
+});

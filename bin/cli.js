@@ -34452,6 +34452,8 @@ function slRow(o) {
       states: null,
       shapes: null,
       bounded: false,
+      // [min, max] when this component WRAPS others. `group` is the only one.
+      children: null,
       series: null,
       unknown: "dash",
       cost: "free",
@@ -34621,6 +34623,7 @@ const STATUSLINE_COMPONENTS = [
 
   // ── Group I remainder ───────────────────────────────────────────────────
   slRow({ id: "config", group: "I", summary: "Any ORC config key, as a component. It shows what is IN THE FILE — a hook has no lane, so it cannot resolve a key the way a lane would.", renderers: ["plain", "label-value", "bare", "badge"], defaults: { render: "label-value" }, cost: "new-read", params: { key: { free: true, dflt: "extra_enabled" } }, binding: "config.value" }),
+  slRow({ id: "group", group: "I", summary: "Two to four parts drawn as ONE object — shared brackets, one background, one emphasis. It counts as ONE slot against the five, because the limit is about how much a line SAYS and a group says one thing.", renderers: ["bracket", "badge", "pill", "angle"], defaults: { render: "pill" }, unknown: "hide", children: [2, 4], binding: "static.text" }),
   slRow({ id: "icon-static", group: "I", summary: "One glyph you choose, from the shipped sets. Not an icon font — ORC ships none, because it cannot detect one.", renderers: ["bare"], defaults: { render: "bare" }, unknown: "hide", params: { glyph: { free: true, dflt: "●" } }, binding: "static.text" }),
 
   // ── REFUSED, with the measurement recorded ──────────────────────────────
@@ -34815,6 +34818,30 @@ function slValidate(layout) {
       const r = item.render || (comp.defaults && comp.defaults.render) || comp.renderers[0];
       if (!comp.renderers.includes(r))
         E(`component "${comp.id}" does not offer renderer "${r}" — it offers: ${comp.renderers.join(", ")}`);
+
+      // GROUPS DO NOT NEST. One level is a visual object; two is a layout
+      // engine, and a status line is not the place for one.
+      if (comp.children) {
+        const kids = item.children || [];
+        const [lo, hi] = comp.children;
+        if (kids.length < lo || kids.length > hi)
+          E(`group "${item.id}" holds ${kids.length} components — a group holds ${lo} to ${hi}`);
+        for (const k of kids) {
+          const kc = SL_BY_ID.get(k.type);
+          if (!kc) {
+            E(`unknown component "${k.type}" inside group "${item.id}"${slDidYouMean(k.type)}`);
+            continue;
+          }
+          if (kc.children) E(`group "${item.id}" contains group "${k.id}" — groups do not nest`);
+          if (kc.cost === "refused") E(`"${kc.id}" is refused: ${kc.refused_reason}`);
+          if (k.id) {
+            if (seenIds.has(k.id)) E(`duplicate instance id "${k.id}" (inside group "${item.id}")`);
+            else seenIds.add(k.id);
+          }
+        }
+      } else if (item.children && item.children.length) {
+        E(`"${comp.id}" does not hold other components — only a group does`);
+      }
 
       // ── Tier 2 — semantic. Does this component support this? ───────────
       if (comp.cost === "refused")
@@ -35016,7 +35043,16 @@ function slCompile(layout) {
   // share one gate — the extended scan — and each sub-read inside it carries
   // its own TTL. One gate, many clocks.
   const EXTENDED = /^(wiki\.(coverage|docs|worst|blindspot)|pattern\.|crosslink\.|gotchas\.|extra\.(profile|provider|spend|tasks|inflight|demoted|passphrase|orphans|reliability)|wait\.|preset\.|run\.(wave|wave_total|resume|open)|pact\.|boundary\.|challenge\.|doc\.|usage\.|config\.)/;
-  const note = (comp) => {
+  const note = (comp, item) => {
+    // A GROUP'S CHILDREN ARE READS TOO. Without this the read planner would
+    // fetch nothing for a group and every child would render an em dash — the
+    // exact class of silent failure the planner exists to avoid.
+    if (comp.children && item && Array.isArray(item.children)) {
+      for (const k of item.children) {
+        const kc = SL_BY_ID.get(k.type);
+        if (kc) note(kc, k);
+      }
+    }
     for (const b of [comp.binding, comp.state_binding]) {
       if (!b) continue;
       bindings.add(b);
@@ -35041,7 +35077,7 @@ function slCompile(layout) {
       const r = slResolveItem(item, layout, line);
       if (!r) return;
       const comp = r._comp;
-      note(comp);
+      note(comp, item);
 
       // The separator rides INSIDE the item's `cond`, so a vanished component
       // takes its separator with it. This is Starship's conditional group, and
@@ -35196,6 +35232,25 @@ function slLowerItem(r, comp, T) {
     ops.push(slLit(applyCase(text) + sep));
     if (labelSgr) ops.push({ op: "reset" });
   };
+
+  // A GROUP: its children are lowered inside its brackets and share its
+  // background, so a run of chips reads as one object. It is the one place an
+  // item op has an item op inside it, and the nesting stops there.
+  if (comp.children) {
+    if (open) ops.push(slLit(open));
+    const inner = [];
+    (r.children || []).forEach((k, i) => {
+      const kc = SL_BY_ID.get(k.type);
+      if (!kc) return;
+      if (i) inner.push(slLit(" "));
+      const kr = slResolveItem(Object.assign({ id: k.id || "g" + i }, k), T.layout, { theme: r.theme || null });
+      if (!kr) return;
+      for (const o of slLowerItem(kr, kc, T)) inner.push(o);
+    });
+    for (const o of inner) ops.push(o);
+    if (close) ops.push(slLit(close));
+    return ops;
+  }
 
   if (open) ops.push(slLit(open));
 
@@ -35545,6 +35600,107 @@ function slPresetActive(layout, name) {
 }
 
 
+
+// ── group and expand (v1.3.0 W5) ───────────────────────────────────────────
+// A GROUP wraps 2-4 placed components into one visual object and counts as ONE
+// slot. EXPAND is its inverse, and it is also how a composite becomes editable:
+// `tier-block` is three components in one chip until you want to restyle just
+// the version, at which point it becomes three chips.
+function slGroupCmd(claudeDir, p) {
+  const layout = slLoadOrDefault(claudeDir);
+  const refs = p.slice(2).map(slParseRef).filter(Boolean);
+  if (refs.length < 2 || refs.length > 4) {
+    if (wantsJson()) return emitJson({ ok: false, reason: "bad-count", hint: "a group holds 2 to 4 components" }, 2);
+    console.error("usage: orc statusline group <line>:<pos> <line>:<pos> [...]  (2 to 4)");
+    process.exit(2);
+  }
+  // ONE LINE. A group that spanned two lines would not be a visual object; it
+  // would be two.
+  const lines = new Set(refs.map((r) => r.line));
+  if (lines.size !== 1) {
+    if (wantsJson()) return emitJson({ ok: false, reason: "cross-line", hint: "a group is one visual object, so its parts are on one line" }, 2);
+    console.error("a group's components must all be on the same line");
+    process.exit(2);
+  }
+  const li = refs[0].line;
+  const line = layout.lines[li - 1];
+  const picked = refs
+    .map((r) => (line.items || [])[r.pos - 1])
+    .filter(Boolean);
+  if (picked.length !== refs.length) {
+    if (wantsJson()) return emitJson({ ok: false, reason: "no-item" }, 1);
+    console.error("one of those positions is empty");
+    process.exit(1);
+  }
+  const at = Math.min(...refs.map((r) => r.pos)) - 1;
+  // The id is claimed BEFORE the children leave the line. Taking it afterwards
+  // would hand the group the id one of its own children still holds — the
+  // children are nested, not deleted, so their ids are still in use.
+  const gid = slNewId(layout);
+  for (const it of picked) line.items.splice(line.items.indexOf(it), 1);
+  const g = { id: gid, type: "group", children: picked.map((it) => Object.assign({}, it)) };
+  line.items.splice(at, 0, g);
+  return slSaveAndCompile(claudeDir, layout, { action: "group", id: g.id, line: li, held: picked.map((x) => x.type) });
+}
+
+function slExpandCmd(claudeDir, p) {
+  const layout = slLoadOrDefault(claudeDir);
+  const at = slParseRef(p[2]);
+  if (!at) {
+    if (wantsJson()) return emitJson({ ok: false, reason: "bad-ref" }, 2);
+    console.error("usage: orc statusline expand <line>:<pos>");
+    process.exit(2);
+  }
+  const line = layout.lines[at.line - 1];
+  const item = line && (line.items || [])[at.pos - 1];
+  if (!item) {
+    if (wantsJson()) return emitJson({ ok: false, reason: "no-item", line: at.line, pos: at.pos }, 1);
+    console.error(`there is no component at line ${at.line} position ${at.pos}`);
+    process.exit(1);
+  }
+  const comp = SL_BY_ID.get(item.type);
+  const parts = item.children && item.children.length
+    ? item.children
+    : comp && comp.composite
+      ? comp.composite.map((tid) => ({ type: tid }))
+      : null;
+  if (!parts) {
+    if (wantsJson()) return emitJson({ ok: false, reason: "not-composite", type: item.type, hint: "only a group or a composite shortcut expands" }, 1);
+    console.error(`"${item.type}" is not a group and holds no parts`);
+    process.exit(1);
+  }
+  // Expanding can take a line past five. That is a REFUSAL with the count
+  // named, not a silent truncation — losing a component to make room is the
+  // one thing an expand must never do.
+  line.items.splice(at.pos - 1, 1, ...parts.map((k) => Object.assign({}, k, { id: null })));
+  let n = 1;
+  for (const l of layout.lines) for (const it of l.items) if (!it.id) it.id = "i" + (n++ + 900);
+  return slSaveAndCompile(claudeDir, layout, { action: "expand", line: at.line, pos: at.pos, into: parts.map((k) => k.type) });
+}
+
+// Two `config` components on different keys, or two `mtok-kind` components on
+// different kinds, is a normal thing to want.
+function slCloneCmd(claudeDir, p) {
+  const layout = slLoadOrDefault(claudeDir);
+  const at = slParseRef(p[2]);
+  if (!at) {
+    if (wantsJson()) return emitJson({ ok: false, reason: "bad-ref" }, 2);
+    console.error("usage: orc statusline clone <line>:<pos>");
+    process.exit(2);
+  }
+  const line = layout.lines[at.line - 1];
+  const item = line && (line.items || [])[at.pos - 1];
+  if (!item) {
+    if (wantsJson()) return emitJson({ ok: false, reason: "no-item" }, 1);
+    console.error(`there is no component at line ${at.line} position ${at.pos}`);
+    process.exit(1);
+  }
+  const copy = JSON.parse(JSON.stringify(item));
+  copy.id = slNewId(layout);
+  line.items.splice(at.pos, 0, copy);
+  return slSaveAndCompile(claudeDir, layout, { action: "clone", id: copy.id, type: item.type, line: at.line });
+}
+
 // ── The preview: ONE engine, two callers ───────────────────────────────────
 // `orc statusline preview` renders through the SAME module the hook does
 // (`templates/hooks/orc-statusline-render.js`), so the panel's preview and the
@@ -35694,6 +35850,12 @@ function statusline() {
       return slApplyCmd(claudeDir, p[2]);
     case "reset":
       return slResetCmd(claudeDir);
+    case "group":
+      return slGroupCmd(claudeDir, p);
+    case "expand":
+      return slExpandCmd(claudeDir, p);
+    case "clone":
+      return slCloneCmd(claudeDir, p);
     case "compile":
       return slCompileCmd(claudeDir, true);
     default:
@@ -35702,6 +35864,9 @@ function statusline() {
        orc statusline move <from-line>:<pos> <to-line>:<pos>
        orc statusline remove <line>:<pos>
        orc statusline line <n> --separator "…" [--max-width N] [--theme T]
+       orc statusline group <line>:<pos> <line>:<pos> [...]   wrap 2-4 as one object
+       orc statusline expand <line>:<pos>                     a composite, or a group, back into its parts
+       orc statusline clone <line>:<pos>
        orc statusline presets [--json] | apply <name> | reset | compile
 
 COMPOSE THIS IN \`orc ui\` ▸ CLI Hook Interface. These flags exist so the panel

@@ -409,6 +409,24 @@ function chipEl(item, line, show, cat, edits) {
     b.addEventListener("click", () => moveTo(item, line, line.line, item.pos + 1, edits));
     menu.append(b);
   }
+  // CLONE is on every chip: two `config` chips on different keys, or two
+  // token-kind chips on different kinds, is a normal thing to want.
+  const cl = el("button", "btn btn-xs btn-ghost", t("hookui.clone"));
+  cl.type = "button";
+  cl.addEventListener("click", () =>
+    edits.action("cl" + item.id, "/api/statusline/clone",
+      { at: line.line + ":" + item.pos }, t("hookui.cloned", { id: item.type })));
+  menu.append(cl);
+  // EXPAND turns a composite or a group back into its parts — which is how a
+  // three-in-one chip becomes three chips the moment you want to restyle one.
+  if ((comp && comp.composite) || item.type === "group") {
+    const ex = el("button", "btn btn-xs btn-ghost", t("hookui.expand"));
+    ex.type = "button";
+    ex.addEventListener("click", () =>
+      edits.action("ex" + item.id, "/api/statusline/expand",
+        { at: line.line + ":" + item.pos }, t("hookui.expanded", { id: item.type })));
+    menu.append(ex);
+  }
   wrap.append(menu);
 
   // Keyboard: the settled pattern, and every drag has an equivalent here. A
@@ -563,6 +581,36 @@ function editorDrawer(item, line, comp, cat, edits) {
   }
   d.append(checks);
 
+  // The rest of the number controls. `min_width` is not cosmetic: a value that
+  // changes width shifts every component to its right on the keystroke it
+  // happens, and that jitter is the main reason people turn a status line off.
+  if (comp.bounded || comp.defaults.format) {
+    d.append(labelled(t("hookui.minWidth"), numField(item.min_width, 0, 8, (v) =>
+      stage("min_width", v, t("hookui.minWidthChange", { id: comp.id, v })))));
+    d.append(labelled(t("hookui.precision"), numField(item.precision, 0, 2, (v) =>
+      stage("precision", v, t("hookui.precisionChange", { id: comp.id, v })))));
+  }
+  const rend = cat.renderers[item.render];
+  if (rend && rend.width) {
+    d.append(labelled(t("hookui.width"), numField(item.width, rend.width[0], rend.width[1], (v) =>
+      stage("width", v, t("hookui.widthChange", { id: comp.id, v })))));
+    d.append(el("div", "note", t("hookui.widthWhy")));
+  }
+  d.append(labelled(t("hookui.before"), textField(item.prefix, (v) =>
+    stage("prefix", v, t("hookui.beforeChange", { id: comp.id, v })))));
+  d.append(labelled(t("hookui.after"), textField(item.suffix, (v) =>
+    stage("suffix", v, t("hookui.afterChange", { id: comp.id, v })))));
+
+  // RESPONSIVE WIDTH: the range of terminal widths in which this part is worth
+  // its cells. Strictly better than truncating the right of an overflowing
+  // line, because the USER chooses what survives a narrow terminal.
+  d.append(el("div", "hk-section", t("hookui.narrow")));
+  d.append(labelled(t("hookui.minCols"), numField(item.min_cols, 0, 200, (v) =>
+    stage("min_cols", v, t("hookui.minColsChange", { id: comp.id, v })))));
+  d.append(labelled(t("hookui.priority"), numField(item.priority, 1, 5, (v) =>
+    stage("priority", v, t("hookui.priorityChange", { id: comp.id, v })))));
+  d.append(el("div", "note", t("hookui.priorityWhy")));
+
   // WHERE EACH VALUE CAME FROM. It is how a user finds their own overrides
   // again after a theme change — `orc lane config`'s problem, at component
   // scale.
@@ -576,6 +624,24 @@ function editorDrawer(item, line, comp, cat, edits) {
   });
   d.append(ex);
   return d;
+}
+
+function numField(value, lo, hi, onSet) {
+  const i = el("input", "hk-input hk-num");
+  i.type = "number";
+  i.min = String(lo);
+  i.max = String(hi);
+  if (value !== null && value !== undefined) i.value = String(value);
+  i.addEventListener("change", () => onSet(i.value));
+  return i;
+}
+
+function textField(value, onSet) {
+  const i = el("input", "hk-input");
+  i.type = "text";
+  i.value = value == null ? "" : String(value);
+  i.addEventListener("change", () => onSet(i.value));
+  return i;
 }
 
 function labelled(name, node) {

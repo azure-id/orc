@@ -473,6 +473,12 @@ const WRITES = {
   // A preset REPLACES the layout, so the panel always confirms it and names
   // the loss — the `orc diy init --force` rule.
   "/api/statusline/apply": (b) => ["statusline", "apply", String(b.name)],
+  // v1.3.0 W5. `group` wraps 2-4 as one object, `expand` is its inverse and is
+  // also how a composite becomes editable, `clone` is for two `config` chips on
+  // different keys — a normal thing to want.
+  "/api/statusline/group": (b) => ["statusline", "group", ...(b.refs || [])].map(String),
+  "/api/statusline/expand": (b) => ["statusline", "expand", String(b.at)],
+  "/api/statusline/clone": (b) => ["statusline", "clone", String(b.at)],
   "/api/statusline/reset": () => ["statusline", "reset"],
   "/api/statusline/compile": () => ["statusline", "compile"],
   "/api/wait/unblock": (b) => (b.slug ? ["wait", "unblock", String(b.slug)] : ["wait", "unblock"]),

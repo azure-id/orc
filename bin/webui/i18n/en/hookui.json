@@ -2,7 +2,6 @@
   "hookui.title": "CLI Hook Interface",
   "hookui.sub": "Build the ORC status line. Three lines. Each line holds 1 to 5 parts.",
   "hookui.noData": "The status line cannot be read.",
-
   "hookui.gate": "Status",
   "hookui.on": "on",
   "hookui.off": "off",
@@ -12,9 +11,7 @@
   "hookui.turnOn": "Enable",
   "hookui.turnOff": "Disable",
   "hookui.switchFailed": "The switch could not be changed.",
-
   "hookui.cautions": "Cautions",
-
   "hookui.preview": "Preview",
   "hookui.previewUnavailable": "The preview cannot be drawn until the layout is valid.",
   "hookui.degrades": "The same layout, in the three forms a terminal can force.",
@@ -23,7 +20,6 @@
   "hookui.degNoMotion": "no motion",
   "hookui.cells": "{n} cell wide",
   "hookui.cellsPlural": "{n} cells wide",
-
   "hookui.board": "The board",
   "hookui.lineN": "Line {n}",
   "hookui.lineNPlural": "Line {n}",
@@ -43,7 +39,6 @@
   "hookui.removed": "{id} removed",
   "hookui.moved": "{id} moved to line {n}",
   "hookui.added": "{id} added to line {n}",
-
   "hookui.unknownComponent": "This ORC version does not have this part.",
   "hookui.shape": "Shape",
   "hookui.shapeChange": "{id} shape = {r}",
@@ -75,13 +70,11 @@
   "hookui.hideChange": "{id} hide when = {v}",
   "hookui.explain": "Where these came from",
   "hookui.explainFailed": "That cannot be read right now.",
-
   "hookui.palette": "Parts you can add",
   "hookui.searchPlaceholder": "search",
   "hookui.matches": "{n} match",
   "hookui.matchesPlural": "{n} matches",
   "hookui.noMatch": "Nothing matches that.",
-
   "hookui.presets": "Ready-made layouts",
   "hookui.active": "in use",
   "hookui.apply": "Use this",
@@ -91,12 +84,32 @@
   "hookui.resetLayout": "Start again",
   "hookui.resetTitle": "Start again?",
   "hookui.resetWarn": "This REPLACES your layout with ORC's built-in one. Every part you placed is removed. This cannot be undone.",
-
   "hookui.advanced": "More",
   "hookui.theme": "Colour set",
   "hookui.themeChange": "colour set = {v}",
   "hookui.recompile": "Rebuild",
   "hookui.recompiled": "Rebuilt.",
   "hookui.recompileFailed": "The rebuild failed.",
-  "hookui.compileNote": "ORC rebuilds the layout after every change, so you never have to. This button is for after you upgrade ORC."
+  "hookui.compileNote": "ORC rebuilds the layout after every change, so you never have to. This button is for after you upgrade ORC.",
+  "hookui.clone": "Copy",
+  "hookui.cloned": "{id} copied",
+  "hookui.expand": "Split",
+  "hookui.expanded": "{id} split into its parts",
+  "hookui.minWidth": "Least width",
+  "hookui.minWidthChange": "{id} least width = {v}",
+  "hookui.precision": "Decimals",
+  "hookui.precisionChange": "{id} decimals = {v}",
+  "hookui.width": "Cells",
+  "hookui.widthChange": "{id} cells = {v}",
+  "hookui.widthWhy": "More cells is the only kind of bigger a terminal has.",
+  "hookui.before": "Before",
+  "hookui.beforeChange": "{id} before = \"{v}\"",
+  "hookui.after": "After",
+  "hookui.afterChange": "{id} after = \"{v}\"",
+  "hookui.narrow": "On a narrow terminal",
+  "hookui.minCols": "Show above",
+  "hookui.minColsChange": "{id} show above {v} columns",
+  "hookui.priority": "Drop order",
+  "hookui.priorityChange": "{id} drop order = {v}",
+  "hookui.priorityWhy": "When the line does not fit, 1 goes first and 5 goes last. You choose what survives, not the right edge."
 }
