@@ -1147,16 +1147,27 @@ function custom(d, ctx) {
       if (!engine.BINDINGS[b]) return slFallback(orcDir, "statusline-layout-skew");
     }
 
-    // Rung 5. The cheap shape guard: at most three lines, at most five
+    // Rung 5. The cheap shape guard: at most three lines, at most `max_per_line`
     // components on any of them, and the dense-prefix rule —
     // A line may hold a component only if every line above it holds at least one.
+    //
+    // THE CAP AND THE COUNTING RULE ARE BOTH THE COMPILER'S (v1.4.2). This held
+    // its own `5` and counted EVERY item op, so it disagreed with the validator
+    // twice: it bounced a legal six-part line, and it bounced a legal five plus
+    // a spacer. Both fell silently back to the shipped lines with the reason
+    // only in a ledger file, which reads exactly like "my sixth part reset the
+    // bar to the default". The cap rides on the lock (already gated on
+    // `orc_version` at rung 3, so a stale copy cannot outlive its build) and
+    // the compiler marks a structural op `s` — this cannot know that on its
+    // own, because a compiled op carries an INSTANCE id and never a type.
     if (!Array.isArray(prog.lines) || prog.lines.length > 3)
       return slFallback(orcDir, "statusline-layout-invalid");
+    const cap = Number(lock.max_per_line) > 0 ? Number(lock.max_per_line) : 6;
     let seenEmpty = false;
     for (const l of prog.lines) {
-      const n = (l.ops || []).filter((o) => o.op === "item").length;
-      if (n > 5) return slFallback(orcDir, "statusline-layout-invalid");
-      if (n === 0) seenEmpty = true;
+      const ops = (l.ops || []).filter((o) => o.op === "item");
+      if (ops.filter((o) => !o.s).length > cap) return slFallback(orcDir, "statusline-layout-invalid");
+      if (ops.length === 0) seenEmpty = true;
       else if (seenEmpty) return slFallback(orcDir, "statusline-layout-invalid");
     }
 

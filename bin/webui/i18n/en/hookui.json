@@ -1,6 +1,6 @@
 {
   "hookui.title": "CLI Hook Interface",
-  "hookui.sub": "Build the ORC status line. Three lines. Each line holds up to five parts.",
+  "hookui.sub": "Build the ORC status line. Three lines. Each line holds up to six parts.",
   "hookui.noData": "The status line cannot be read.",
   "hookui.gate": "Status",
   "hookui.on": "on",
@@ -77,7 +77,7 @@
 
   "hookui.unknownComponent": "This ORC version does not have this part.",
   "hookui.shape": "Shape",
-  "hookui.shapeAbout": "How this part is drawn. Every option below is drawn with this part's real value, so you can see it before you choose. Picking one closes this window.",
+  "hookui.shapeAbout": "How this part is drawn. Every option below is drawn with this part's real value, so you can see it before you choose. Picking one marks it here and redraws the sample above; the window stays open.",
   "hookui.shapeChange": "{id} shape = {r}",
   "hookui.glyphs": "Symbols",
   "hookui.glyphsAbout": "Which set of symbols the bars and marks are drawn from. Some terminals and fonts cannot draw all of them.",
@@ -176,5 +176,19 @@
   "hookui.boardStatus": "The status line",
   "hookui.boardSubagent": "One row per agent",
   "hookui.boardStatusSub": "The two lines at the bottom of your terminal.",
-  "hookui.boardSubagentSub": "The row Claude Code draws for each subagent in the agent panel. One line, and it shows what that agent is running at and what it has cost so far."
+  "hookui.boardSubagentSub": "The row Claude Code draws for each subagent in the agent panel. One line, and it shows what that agent is running at and what it has cost so far.",
+
+  "hookui.previewStaleN": "One change is staged and is NOT in this picture. This window shows the layout that is saved on disk. Press Apply at the bottom of the page to write your change and redraw it.",
+  "hookui.previewStaleNPlural": "{n} changes are staged and are NOT in this picture. This window shows the layout that is saved on disk. Press Apply at the bottom of the page to write them and redraw it.",
+  "hookui.termTitle": "terminal, {n} cell wide",
+  "hookui.termTitlePlural": "terminal, {n} cells wide",
+  "hookui.compare": "See it in other setups",
+  "hookui.compareAbout": "The same bar under every colour set and every symbol set. It opens when you ask, because each row is a real render.",
+  "hookui.compareThemes": "Colour sets",
+  "hookui.compareGlyphs": "Symbol sets",
+  "hookui.editorLive": "The shape this part will take. It shows the shape only — never the words or the numbers it will carry when it runs.",
+  "hookui.editorStaged": "Nothing here is written until you press Apply at the bottom of the page. A dot next to a control name means the value is yours, not an inherited one.",
+  "hookui.shapeIgnores": "The shape you picked above does not use this. It is here so you can see what is set, and it is switched off because it would do nothing.",
+  "hookui.shapeIgnoresLabel": "The shape you picked above does not draw a name. These shapes do: {shapes}.",
+  "hookui.shapeDecides": "The shape decides which of the settings below do anything. Only these shapes draw a name: {shapes}. A bar, an icon or a bare value has no room for one, so the Name box is switched off for them."
 }

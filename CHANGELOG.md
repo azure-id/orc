@@ -10,6 +10,142 @@ Format: `### v<version> — <title> _(<date>)_`.
 
 ---
 
+### v1.4.2 - the panel that stops reloading, and the fields you could not read back _(2026-09-05)_
+
+**Still on the unscoped `orc` package?** Do this once first - your `orc upgrade`
+is the pre-v0.56.0 one and cannot install itself. Full detail in the CAUTION at
+the top of this file.
+
+- **Step 1 - release the command from the old package:** `npm uninstall -g orc`
+- **Step 2 - install the current package:** `npm i -g @azure-id/orc`
+- **Step 3 - re-apply it to your project:** `orc update`
+
+**Do not use `npm i -g -f`.** Full detail in v0.56.0 below.
+
+Four more defects in `orc ui` ▸ **CLI Hook Interface**, reported by the person
+who uses it. Three of them turned out to be **the same defect wearing three
+faces**, which is why the fix is one idea rather than four patches.
+
+**STAGING A CHANGE RELOADED THE WHOLE PANEL, AND THAT IS WHY EDITING LOOKED
+BROKEN.** Every staged op re-entered the router: the panel was thrown away, four
+endpoints were refetched, and everything was rebuilt from a skeleton. Move a
+chip, pick a colour, type a name - the page visibly reloaded each time. That is
+bad on its own, and it produced two worse things.
+
+The first is that **a staged change looked like an applied one.** The picture came
+back looking different, so there was nothing left to tell you the write had not
+happened. The second is that **the open editor went stale.** The dialog stayed on
+screen while the panel behind it was replaced, so every control in it was still
+showing the value from BEFORE the change you had just made. You picked a shape,
+the sample did not move; you typed a name, the box did not keep it. The only
+reasonable conclusion was that editing did not work.
+
+Nothing is fetched now until something actually moves the disk - Apply, a
+preset, the reset, the switch, a board change, a recompile. A staged op paints
+from the cache it already has: **zero requests**, the scroll position kept by
+hand. The open editor is registered for that repaint and re-finds its part by
+its stable ref, so what is on screen is always the effective value - **and the
+caret survives**, because an editor that rebuilds on every keystroke and drops
+focus after one letter is not an editor. A name now stages per keystroke rather
+than on blur, which is what made a name typed and then clicked away from race
+the close and sometimes never stage at all.
+
+**AND THE FIELDS THEMSELVES COULD NOT BE READ BACK: `--json is not a summary`,
+found again.** `orc statusline show --json` emitted **twelve** of the
+twenty-four fields a part can carry. So `case`, `prefix`, `suffix`, `glyphs`,
+`format`, `compact`, `min_width`, `precision`, `width`, `min_cols`, `max_cols`
+and `priority` were written to disk correctly by a CLI that has always accepted
+them - and were then **invisible to the panel that wrote them**. Reopen the
+editor and the control was blank. Colour worked; almost nothing else appeared to.
+Every resolved field ships now, plus `authored` - the raw item as the user wrote
+it - so a control can finally say **which values are yours** rather than
+inherited from the catalogue or the colour set. A dot beside a control name is
+that answer.
+
+**SIX PARTS PER LINE, NOT FIVE**, and the cap moved in ONE place
+(`SL_MAX_PER_LINE`), because a slot limit spelled out at each of its five call
+sites is a limit that drifts on the first change. The limit is about reading
+rather than rendering: a line is scanned at a glance, and six is where people
+stopped asking for one more. A spacer, a divider and a fill still do not count -
+they are not things the line SAYS.
+
+**THE DROPDOWN NOBODY COULD READ WAS A PANEL WITH NO COLOURS AT ALL.**
+`hookui.css` had been written against `--bg-sunken`, `--bg-raised`, `--fg` and
+`--fg-dim`, and **none of those tokens exist** - the real names are
+`--surface-2`, `--surface-3`, `--text` and `--text-dim`. Every one of those
+declarations was silently dropped by the browser, which is why the "Between
+parts" select had no background of its own and its open list rendered near-white
+on near-white. All 34 are mapped onto real tokens, and the option list now
+states BOTH halves plus `color-scheme`, because a native popup is drawn by the
+platform and inherits only the half you leave to chance.
+
+**THE PREVIEW IS DRAWN AS A TERMINAL NOW**, because that is the claim it is
+making. A status line in a bare grey box is a string; the same string inside a
+window of the stated width, on a terminal ground, with a **column ruler** under
+it, is a picture of the thing. The bytes did not change - it is still
+`templates/hooks/orc-statusline-render.js`, the hook's own engine - what changed
+is that you can believe it. Each line's cell count sits under the window it
+belongs to instead of in a row of chips a long way from it.
+
+**And you can now see what you are choosing.** `orc statusline preview` takes
+`--theme` and `--glyphs` as a **render-only** override: the same saved layout,
+drawn under a different colour set or symbol set, **writing nothing**. The panel
+uses it for one drawer - *See it in other setups* - holding the three strippings
+(no colour, plain text, no motion), all four colour sets and all seven symbol
+sets. Picking a colour set from its name is a guess; picking it from its picture
+is a decision. The drawer is **closed by default and its rows are fetched only
+when it is opened**: eleven extra renders nobody asked to see is eleven
+subprocesses nobody asked to pay for.
+
+**AND THE SIXTH PART STILL RESET THE BAR TO THE DEFAULT, BECAUSE THE CAP WAS IN
+THREE PLACES.** Raising it in the validator was not enough. The hook has a cheap
+shape guard of its own — it re-checks the compiled file rather than trusting it,
+because a hand-edited compiled file is a file nobody validated — and that guard
+held its own `5`. So a legal six-part line fell straight through to the shipped
+two lines, with the reason recorded in a ledger file nobody was looking at. It
+also counted **every** item, including spacers and fills, which the validator
+never has: a legal five plus a fill fell back too, and always had.
+
+A hook cannot call this CLI — a status line re-renders on every keystroke — so
+the cap now travels ON the lock file (already gated on `orc_version`, so a stale
+copy cannot outlive its build) and the compiler marks each structural item,
+because a compiled op carries an instance id and never a component type. Both
+hooks read both. One cap, one counting rule, three readers.
+
+**AND A NAME YOU TYPED SOMETIMES WENT NOWHERE, WHICH WAS TRUE AND UNSAID.**
+Seven of the thirty-five shapes draw a name: `plain`, `label-value`, `bracket`,
+`angle`, `badge`, `pill`, `stack`. The other twenty-eight — every bar, every
+icon, every bare value — ignore it entirely, and that is the design: a bar with
+a word in front of it is a different shape. But the Name box was offered on all
+thirty-five. It took the text, the CLI wrote it to disk correctly, and nothing
+ever appeared on the bar or in the preview. The same was true of the number and
+text settings on a bar, which lowers a width and a colour ramp and no format at
+all.
+
+Each renderer now publishes the item fields it actually **uses**, and the editor
+greys out the ones this shape ignores — **keeping the slot**, with the reason and
+the list of shapes that do use it, because "this shape cannot use it" and "we
+forgot to offer it" must not look the same, and a value already set has to stay
+readable. The sentence sits under the shape gallery too, since the shape is what
+decides it. A golden test reads the compiler's own switch and fails if the two
+lists disagree.
+
+**AND IT STILL BLINKED, WITH THE NETWORK TAB EMPTY.** Removing the refetch was
+half the fix. `hkPaint` still replaces every child of the panel, and the
+stylesheet fades and slides each one in on a 30ms stagger — so a staged change
+still read as a page reload, on every keystroke, exactly as reported. Entrance
+animations are now removed from the second paint onward, and inside the part
+editor on every rebuild. The transitions are untouched: hover, the drop marker
+and the staged edge are about the pointer rather than about arriving.
+
+One more honesty fix rode along: the sample in the part editor is labelled for
+what it is. `previews` is a per-renderer sample the CLI drew from its own
+fixture, so it shows the **shape** a part will take and never the words or the
+numbers it will carry at run time. It used to say it was drawn with your changes
+in it, and for a label it was not.
+
+---
+
 ### v1.4.1 - the board you can actually use _(2026-09-05)_
 
 **Still on the unscoped `orc` package?** Do this once first — your `orc upgrade`

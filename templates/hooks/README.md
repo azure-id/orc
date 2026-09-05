@@ -205,11 +205,18 @@ them where you want them. One rule decides where a component may go:
 > A line may hold a component only if every line above it holds at least one.
 
 So line 1 must hold something before line 2 can, and line 2 before line 3. Each
-line holds at most five components. The panel will not let you make an illegal
+line holds at most six components. The panel will not let you make an illegal
 move, and it tells you why.
 
 Every component can be changed: its words, its colour, its shape, how wide it
 is, and when it is allowed to disappear.
+
+**The shape decides what the other settings can do.** Only these shapes print a
+short name in front of the value: `plain`, `label-value`, `bracket`, `angle`,
+`badge`, `pill` and `stack`. A bar, an icon and a bare value have no room for
+one, so the panel switches the Name box off for them and says so. The same is
+true of the number settings: a bar has a width and a colour ramp, and no number
+format at all.
 
 **Three things a terminal cannot do**, said plainly so you do not look for them:
 

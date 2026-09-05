@@ -73,73 +73,151 @@ function hkCanDrag() {
   }
 }
 
+// THE LAST FETCH, AND THE NODE IT IS PAINTED INTO (v1.4.2). Staging an edit
+// used to re-enter the router — which threw the panel away, refetched four
+// endpoints and rebuilt everything from a skeleton. Every click "refreshed the
+// page", and worse: because the picture came back looking different, a staged
+// change read as an applied one. Nothing is fetched now until Apply, the switch
+// or a preset; a staged op repaints from THIS cache.
+let HK_DATA = null;
+// The node this panel paints into. `section` owns the skeleton and the error
+// box; after the first load, everything goes through here.
+let HK_SLOT = null;
+// The open part editor, if there is one, so a staged edit updates the control
+// the user is looking at instead of leaving it showing the old value.
+let HK_MODAL = null;
+// The comparison drawer's open state and its answers, both surviving a repaint:
+// it costs one render per colour set and per symbol set, so it is fetched once
+// and only when somebody opens it.
+let HK_COMPARE = false;
+let HK_COMPARE_DATA = null;
+// Whether this panel has drawn once. The FIRST paint animates in; every one
+// after it is instant, because nothing arrived — the same cards are still there
+// with one value different.
+let HK_PAINTED = false;
+
 PANELS.hookui = function (host) {
   head(host, t("hookui.title"), t("hookui.sub"));
-
-  section(
-    host,
-    () =>
-      Promise.all([
-        read("/api/statusline/show?board=" + HK_BOARD).then((r) => r.data),
-        read("/api/statusline/components?board=" + HK_BOARD).then((r) => r.data),
-        read("/api/statusline/presets?board=" + HK_BOARD).then((r) => r.data),
-        read("/api/statusline/preview?board=" + HK_BOARD + "&width=" + HK_WIDTH + "&state=" + HK_STATE).then((r) => r.data),
-      ]),
-    ([show, cat, presets, prev]) => {
-      const out = frag();
-      if (!show || !cat) {
-        out.append(empty(t("hookui.noData")));
-        return out;
-      }
-      // The effective board: what it WILL be once the staged ops run. Every
-      // count, every slot cap and every legality question downstream reads this
-      // and never `show.lines` directly.
-      const plan = hkPlan(show, cat);
-
-      const edits = editSet(() => bar.paint());
-      const bar = editBar(edits, {
-        onApply: async (b) => {
-          await applyActions(edits, b);
-          HK_OPS = [];
-          rerender();
-        },
-        onReset: () => confirmReset(),
-        onCancel: () => {
-          HK_OPS = [];
-          rerender();
-        },
-        resetLabel: t("hookui.resetLayout"),
-      });
-      // Filled AFTER the bar exists: `editSet`'s onChange paints it, and a
-      // paint before that binding is assigned throws.
-      for (const a of plan.actions) edits.action(a.key, a.route, a.body, a.label);
-
-      out.append(boardTabs(cat));
-      out.append(gateCard(show, cat));
-      // A caution renders ABOVE the preview, never inside a tab — a caution you
-      // have to hunt for is a caution nobody reads.
-      if (show.errors.length || show.warnings.length) out.append(cautionCard(show));
-      out.append(previewCard(prev, plan));
-      out.append(boardCard(cat, plan));
-      out.append(referenceCard(cat));
-      out.append(presetsCard(presets, plan));
-      out.append(advancedCard(cat, plan));
-      out.append(bar);
-      return out;
-    }
-  );
+  HK_DATA = null;
+  HK_SLOT = null;
+  HK_MODAL = null;
+  HK_PAINTED = false;
+  section(host, hkLoad, (data) => {
+    HK_DATA = data;
+    // `stack` is what spaces the cards; `section` gives it to its own slot, and
+    // this node lives inside that slot, so it needs its own.
+    const slot = el("div", "stack");
+    HK_SLOT = slot;
+    hkPaint();
+    return slot;
+  });
 };
+
+function hkPreviewUrl() {
+  return "/api/statusline/preview?board=" + HK_BOARD + "&width=" + HK_WIDTH + "&state=" + HK_STATE;
+}
+
+function hkLoad() {
+  return Promise.all([
+    read("/api/statusline/show?board=" + HK_BOARD).then((r) => r.data),
+    read("/api/statusline/components?board=" + HK_BOARD).then((r) => r.data),
+    read("/api/statusline/presets?board=" + HK_BOARD).then((r) => r.data),
+    read(hkPreviewUrl()).then((r) => r.data),
+  ]).then(([show, cat, presets, prev]) => ({ show, cat, presets, prev }));
+}
+
+// THE ONLY PAINT. No fetch, no skeleton, no router. The scroll position is
+// kept by hand: a board you are halfway down must not jump to the top because
+// you moved one chip.
+function hkPaint() {
+  if (!HK_SLOT || !HK_DATA) return;
+  const y = window.scrollY;
+  // NO ENTRANCE ANIMATION ON A REPAINT. `.stack > *` fades and slides each
+  // child in on a 30ms stagger, and `.hk-chip` does the same per chip — which
+  // is right the first time the panel arrives and is exactly the "the screen
+  // blinked like it reloaded" the user reported, on every keystroke, with the
+  // network tab empty. `hk-quiet` switches those entrances off; the transitions
+  // (hover, the drop marker, the staged edge) are untouched, because they are
+  // about the pointer rather than about arriving.
+  if (HK_PAINTED) HK_SLOT.classList.add("hk-quiet");
+  HK_PAINTED = true;
+  const { show, cat, presets, prev } = HK_DATA;
+  HK_SLOT.replaceChildren();
+  if (!show || !cat) {
+    HK_SLOT.append(empty(t("hookui.noData")));
+    return;
+  }
+  // The effective board: what it WILL be once the staged ops run. Every count,
+  // every slot cap and every legality question downstream reads this and never
+  // `show.lines` directly.
+  const plan = hkPlan(show, cat);
+
+  const edits = editSet(() => bar.paint());
+  const bar = editBar(edits, {
+    onApply: async (b) => {
+      await applyActions(edits, b);
+      HK_OPS = [];
+      HK_COMPARE_DATA = null;
+      await hkReload();
+    },
+    onReset: () => confirmReset(),
+    onCancel: () => {
+      HK_OPS = [];
+      hkPaint();
+    },
+    resetLabel: t("hookui.resetLayout"),
+  });
+  // Filled AFTER the bar exists: `editSet`'s onChange paints it, and a paint
+  // before that binding is assigned throws.
+  for (const a of plan.actions) edits.action(a.key, a.route, a.body, a.label);
+
+  HK_SLOT.append(boardTabs(cat));
+  HK_SLOT.append(gateCard(show, cat));
+  // A caution renders ABOVE the preview, never inside a tab — a caution you
+  // have to hunt for is a caution nobody reads.
+  if (show.errors.length || show.warnings.length) HK_SLOT.append(cautionCard(show));
+  HK_SLOT.append(previewCard(prev, plan, cat));
+  HK_SLOT.append(boardCard(cat, plan));
+  HK_SLOT.append(referenceCard(cat));
+  HK_SLOT.append(presetsCard(presets, plan));
+  HK_SLOT.append(advancedCard(cat, plan));
+  HK_SLOT.append(bar);
+
+  // The open editor follows the staged state. A modal the page has stopped
+  // showing is not repainted — it is forgotten.
+  if (HK_MODAL) {
+    const host = document.getElementById("modal-host");
+    if (host && host.hidden) HK_MODAL = null;
+    else HK_MODAL.repaint(plan);
+  }
+  window.scrollTo(0, y);
+}
+
+// A REFETCH. Used where the disk actually moved: Apply, a preset, the reset,
+// the switch, a board change and a recompile. Never on a staged edit.
+async function hkReload() {
+  try {
+    HK_DATA = await hkLoad();
+  } catch (_) {
+    /* the last good data stays on screen — a failed poll is not a blank page */
+  }
+  hkPaint();
+}
+
+// The preview is the ONLY thing a width or fixture change moves, so it is the
+// only thing refetched. Four endpoints for a picture is three too many.
+async function hkPreviewReload() {
+  try {
+    const r = await read(hkPreviewUrl());
+    if (HK_DATA) HK_DATA.prev = r.data;
+  } catch (_) {}
+  hkPaint();
+}
 
 // EVERY write carries the board it is about. Forgetting it on one route would
 // edit the other board's layout, which is the one mistake here that is silent.
 function bd(body) {
   return Object.assign({ board: HK_BOARD }, body);
-}
-
-function rerender() {
-  const h = location.hash;
-  location.hash = "#/";
-  location.hash = h || "#/hookui";
 }
 
 /* ══ the staged plan ══════════════════════════════════════════════════════
@@ -159,7 +237,10 @@ function hkOp(op) {
   if (op.op === "sep") HK_OPS = HK_OPS.filter((o) => !(o.op === "sep" && o.line === op.line));
   if (op.op === "doc") HK_OPS = HK_OPS.filter((o) => !(o.op === "doc" && o.field === op.field));
   HK_OPS.push(op);
-  rerender();
+  // A REPAINT, NEVER A REFETCH. Nothing has been written, so nothing on disk
+  // has moved — and re-entering the router here is what made every click look
+  // like a save.
+  hkPaint();
 }
 
 function hkPlan(show, cat) {
@@ -283,7 +364,8 @@ function boardTabs(cat) {
       if (HK_OPS.length) return toast(t("hookui.applyFirst"), "bad");
       HK_BOARD = b;
       HK_SEARCH = "";
-      rerender();
+      HK_COMPARE_DATA = null;
+      hkReload();
     });
     row.append(btn);
   }
@@ -320,7 +402,7 @@ function gateCard(show, cat) {
     // switch belongs to which board.
     const r = await post("/api/config/set", { key: cat.config_key, value: show.enabled ? "off" : "on" });
     if (!r.ok) toast(t("hookui.switchFailed"), "bad", (r.output || "").trim());
-    rerender();
+    hkReload();
   });
   const acts = el("div", "row-actions");
   acts.append(b);
@@ -348,37 +430,54 @@ function cautionCard(show) {
   return c;
 }
 
-/* ══ the preview ══════════════════════════════════════════════════════════ */
-// Pinned above the board and never scrolled away. `orc statusline preview
-// --json`'s output, rendered as DOM and never as HTML.
-//
-// IT DRAWS THE SAVED LAYOUT, and while anything is staged it SAYS SO. The
-// preview renders through the hook's own engine, which reads the file — so a
-// preview of unsaved edits would need a second engine, which is the one thing
-// this design refuses. "These changes are not in the picture yet" is the honest
-// version, and it is also the answer to "I pressed Apply and nothing happened":
-// something did, and this is where it shows up.
-function previewCard(prev, plan) {
+/* == the preview ==========================================================
+   Pinned above the board and never scrolled away. `orc statusline preview
+   --json`'s output, rendered as DOM and never as HTML.
+
+   v1.4.2 - IT IS DRAWN AS A TERMINAL, because that is the claim it is making.
+   A status line in a bare grey box is a string; the same string inside a
+   window of the stated width, on a terminal ground, with a ruler that shows
+   where column 80 falls, is a picture of the thing. Nothing about the bytes
+   changed - the engine is still the hook's own - what changed is that the
+   reader can now believe it.
+
+   IT DRAWS THE SAVED LAYOUT, and while anything is staged it SAYS SO. The
+   preview renders through the hook's own engine, which reads the file - so a
+   preview of unsaved edits would need a second engine, which is the one thing
+   this design refuses. "These changes are not in the picture yet" is the honest
+   version, and it is also the answer to "I pressed Apply and nothing happened":
+   something did, and this is where it shows up.
+
+   THE HEIGHT IS THE OTHER HALF. Three strippings, four colour sets and seven
+   symbol sets is a wall of terminal, and it pushed the board - the thing the
+   user is actually working in - off the screen. All of it lives in ONE drawer
+   now, closed by default, and its rows are FETCHED ONLY WHEN IT IS OPENED:
+   eleven extra renders nobody asked to see is eleven subprocesses nobody asked
+   to pay for. */
+function previewCard(prev, plan, cat) {
   const right = el("div", "row-actions");
   for (const w of HK_WIDTHS) {
     const b = el("button", "btn btn-xs" + (HK_WIDTH === w ? " btn-primary" : " btn-ghost"), tn(w, "hookui.cols"));
     b.type = "button";
     b.addEventListener("click", () => {
       HK_WIDTH = w;
-      rerender();
+      HK_COMPARE_DATA = null;
+      hkPreviewReload();
     });
     right.append(b);
   }
   const c = card(t("hookui.preview"), right);
   c.append(el("div", "note", t("hookui.previewAbout")));
-  if (plan.dirty) c.append(el("div", "note note-warn", t("hookui.previewStale")));
+  // THE STAGED BANNER IS AN INSTRUCTION, not a disclaimer. It says what is
+  // missing from the picture AND what to press to put it there.
+  if (plan.dirty) c.append(el("div", "note note-warn", tn(plan.actions.length, "hookui.previewStaleN")));
   if (!prev || !prev.ok) {
     c.append(el("div", "note", t("hookui.previewUnavailable")));
     return c;
   }
 
   // The fixture picker. `--fixtures` must carry one of every state INCLUDING
-  // the ugly ones — you cannot design a degraded line on a healthy session.
+  // the ugly ones - you cannot design a degraded line on a healthy session.
   c.append(el("div", "note", t("hookui.fixturesAbout")));
   const states = el("div", "row-actions hk-fixtures");
   for (const [k, label] of Object.entries(prev.fixtures || {})) {
@@ -386,35 +485,156 @@ function previewCard(prev, plan) {
     b.type = "button";
     b.addEventListener("click", () => {
       HK_STATE = k;
-      rerender();
+      HK_COMPARE_DATA = null;
+      hkPreviewReload();
     });
     states.append(b);
   }
   c.append(states);
 
-  c.append(ansiBlock(prev.text, "hk-preview"));
+  c.append(termWindow(prev.text, {
+    title: tn(HK_WIDTH, "hookui.termTitle"),
+    // The colour set and the symbol set the picture was drawn with are the
+    // CLI's answer, carried on the preview itself. Naming them here would be a
+    // second idea of what is in force.
+    tags: [prev.theme, prev.glyphs].filter(Boolean),
+    ruler: true,
+  }));
 
-  // THE THREE STRIPPINGS, always visible — not an afterthought tab. You cannot
-  // design an ASCII fallback you cannot see, and a design whose only
-  // distinction is colour becomes ambiguous the moment NO_COLOR is set.
-  const deg = el("div", "hk-degrade");
-  deg.append(el("div", "note", t("hookui.degrades")));
+  // WHAT EACH LINE COSTS IN CELLS, under the window it belongs to. A number in
+  // a row of chips a long way from the picture is a number nobody reads.
+  const meta = el("div", "row-actions hk-widths");
+  (prev.static_width || []).forEach((w, i) => {
+    if (!w) return;
+    meta.append(chip(tn(i + 1, "hookui.lineN") + " " + tn(w, "hookui.cells"), null));
+  });
+  if (meta.childNodes.length) c.append(meta);
+
+  c.append(compareDrawer(prev, cat));
+  return c;
+}
+
+// A TERMINAL, drawn as one. The chrome is not decoration: the title bar states
+// the width the picture was rendered at, and the ruler shows where that width
+// falls - which is the whole question a status line asks.
+function termWindow(text, { title, tags, ruler, small }) {
+  const box = el("div", "hk-term" + (small ? " hk-term-sm" : ""));
+  const bar = el("div", "hk-term-bar");
+  const dots = el("div", "hk-term-dots");
+  for (let i = 0; i < 3; i++) dots.append(el("span", "hk-term-dot"));
+  bar.append(dots);
+  if (title) bar.append(el("span", "hk-term-title", title));
+  const tagRow = el("div", "hk-term-tags");
+  for (const g of tags || []) tagRow.append(el("span", "hk-term-tag", g));
+  bar.append(tagRow);
+  box.append(bar);
+
+  const screen = el("div", "hk-term-screen");
+  if (ruler) screen.append(rulerRow(HK_WIDTH));
+  screen.append(ansiBlock(text, "hk-preview hk-preview-flat"));
+  box.append(screen);
+  return box;
+}
+
+// The column ruler. Ten-cell ticks with the count at each, in the SAME
+// monospaced grid as the line under it - so "this is 44 cells" stops being a
+// number and becomes a place on the picture.
+function rulerRow(cols) {
+  const row = el("div", "hk-ruler");
+  let out = "";
+  for (let i = 0; i < cols; i++) {
+    if (i % 10 === 0) {
+      const n = String(i);
+      out += n;
+      i += n.length - 1;
+    } else out += i % 5 === 0 ? "+" : "\u00b7";
+  }
+  row.textContent = out.slice(0, cols);
+  return row;
+}
+
+/* == the comparison drawer ================================================
+   Three strippings, every colour set and every symbol set - the same layout,
+   the same fixture, the same width, through the same engine. A colour set
+   picked from its NAME is a guess; picked from its picture it is a decision.
+
+   It is CLOSED by default and its rows are fetched on the first open, because
+   each one is a real render. */
+function compareDrawer(prev, cat) {
+  const wrap = el("div", "hk-compare");
+  const head = el("button", "hk-compare-head");
+  head.type = "button";
+  head.setAttribute("aria-expanded", String(HK_COMPARE));
+  head.append(el("span", "tier-caret", "\u25b8"));
+  head.append(el("span", "hk-compare-title", t("hookui.compare")));
+  head.append(el("span", "note", t("hookui.compareAbout")));
+  // NOT named `body`: that name is reserved for a panel's own card container,
+  // which must carry `stack`. This is a drawer's contents and spaces itself.
+  const drawer = el("div", "hk-compare-body");
+  wrap.classList.toggle("hk-compare-open", HK_COMPARE);
+  head.addEventListener("click", () => {
+    HK_COMPARE = !HK_COMPARE;
+    wrap.classList.toggle("hk-compare-open", HK_COMPARE);
+    head.setAttribute("aria-expanded", String(HK_COMPARE));
+    if (HK_COMPARE && !HK_COMPARE_DATA) loadCompare(drawer, cat, prev);
+  });
+  wrap.append(head, drawer);
+  if (HK_COMPARE) {
+    if (HK_COMPARE_DATA) paintCompare(drawer, prev);
+    else loadCompare(drawer, cat, prev);
+  }
+  return wrap;
+}
+
+async function loadCompare(body, cat, prev) {
+  body.replaceChildren(skeleton(3));
+  const themes = Object.keys(cat.themes || {});
+  const glyphs = cat.glyph_sets || [];
+  const one = (extra) => read(hkPreviewUrl() + extra).then((r) => r.data).catch(() => null);
+  try {
+    const [themeRows, glyphRows] = await Promise.all([
+      Promise.all(themes.map((n) => one("&theme=" + encodeURIComponent(n)).then((d) => [n, d]))),
+      Promise.all(glyphs.map((n) => one("&glyphs=" + encodeURIComponent(n)).then((d) => [n, d]))),
+    ]);
+    HK_COMPARE_DATA = { themes: themeRows, glyphs: glyphRows };
+  } catch (_) {
+    HK_COMPARE_DATA = { themes: [], glyphs: [] };
+  }
+  paintCompare(body, prev);
+}
+
+function paintCompare(body, prev) {
+  body.replaceChildren();
+  // THE THREE STRIPPINGS FIRST. You cannot design an ASCII fallback you cannot
+  // see, and a design whose only distinction is colour becomes ambiguous the
+  // moment NO_COLOR is set.
+  body.append(el("div", "hk-compare-group", t("hookui.degrades")));
   for (const [key, label] of [
     ["no_color", t("hookui.degNoColor")],
     ["ascii", t("hookui.degAscii")],
     ["no_motion", t("hookui.degNoMotion")],
   ]) {
-    const row = el("div", "hk-degrade-row");
-    row.append(el("span", "hk-degrade-label", label));
-    row.append(ansiBlock(prev.strippings[key], "hk-preview hk-preview-sm"));
-    deg.append(row);
+    body.append(compareRow(label, (prev.strippings || {})[key]));
   }
-  c.append(deg);
+  const d = HK_COMPARE_DATA || { themes: [], glyphs: [] };
+  if (d.themes.length) {
+    body.append(el("div", "hk-compare-group", t("hookui.compareThemes")));
+    // The NAME is the CLI's word, printed verbatim - a translated colour set is
+    // a colour set that does not exist.
+    for (const [name, row] of d.themes) body.append(compareRow(name, row && row.ok ? row.text : null));
+  }
+  if (d.glyphs.length) {
+    body.append(el("div", "hk-compare-group", t("hookui.compareGlyphs")));
+    for (const [name, row] of d.glyphs) body.append(compareRow(name, row && row.ok ? row.text : null));
+  }
+}
 
-  const meta = el("div", "row-actions");
-  for (const w of prev.static_width || []) if (w) meta.append(chip(tn(w, "hookui.cells"), null));
-  c.append(meta);
-  return c;
+function compareRow(label, text) {
+  const row = el("div", "hk-compare-row");
+  row.append(el("div", "hk-compare-label", label));
+  if (text == null) row.append(el("div", "note", t("hookui.previewUnavailable")));
+  else row.append(termWindow(text, { title: label, tags: [], ruler: false, small: true }));
+  return row;
 }
 
 // ANSI → DOM. Never innerHTML: this string comes from the CLI, and the rule for
@@ -758,6 +978,7 @@ function announce(msg) {
 //
 // `replace` names the chip whose part is being swapped; absent, this is an add.
 function partPicker(cat, plan, line, replace) {
+  HK_MODAL = null;
   let q = "";
   // NOT named `body`: that name is reserved for a panel's own card container,
   // which must carry `stack`. This is a modal's contents and spaces itself.
@@ -850,6 +1071,7 @@ function matches(comp, q) {
 // ONLY way to move a chip, because drag is off below the width at which a drop
 // gap stops being a target.
 function moveModal(item, line, plan) {
+  HK_MODAL = null;
   const body = el("div", "stack");
   body.append(el("div", "note", t("hookui.moveAbout", { id: item.type })));
 
@@ -896,6 +1118,7 @@ function moveModal(item, line, plan) {
 
 /* ══ remove ═══════════════════════════════════════════════════════════════ */
 function removeModal(item, comp) {
+  HK_MODAL = null;
   const body = el("div", "stack");
   body.append(el("div", "note", t("hookui.removeAbout", { id: item.type })));
   if (comp && comp.summary) body.append(el("div", "note", comp.summary));
@@ -926,134 +1149,243 @@ function removeModal(item, comp) {
 // it does. The JSON is for the diff, the editor is for the person — and the
 // ids, renderers and state words that DO appear are the CLI's own and are never
 // translated.
-function editModal(item, line, comp, cat) {
+function editModal(item0, line0, comp, cat) {
   // NOT named `body`: that name is reserved for a panel's own card container,
   // which must carry `stack`. This is a modal's contents and spaces itself.
   const pane = el("div", "hk-editor");
   if (!comp) {
     pane.append(el("div", "note", t("hookui.unknownComponent")));
-    modal({ title: item.type, body: pane, actions: [{ label: t("common.close"), cls: "btn-ghost", onClick: (c) => c() }] });
+    modal({ title: item0.type, body: pane, actions: [{ label: t("common.close"), cls: "btn-ghost", onClick: (c) => c() }] });
     return;
   }
-  const val = (field, dflt) => (field in item.over ? item.over[field] : item.src && item.src[field] !== undefined && item.src[field] !== null ? item.src[field] : dflt);
-  const stage = (field, value, label) => hkOp({ op: "set", ref: item.ref, field, value, label });
 
-  const live = el("div", "hk-editor-live");
-  live.append(ansiBlock(chipSample(item, comp), "hk-preview hk-preview-sm"));
-  pane.append(live);
-  if (comp.summary) pane.append(el("div", "note", comp.summary));
+  // THE EDITOR FOLLOWS THE STAGED STATE (v1.4.2). It used to be built once and
+  // then left standing while the panel behind it was thrown away and rebuilt,
+  // so every control it showed was the value from BEFORE the change the user
+  // had just made: you picked a colour, the swatch did not move, and the only
+  // reasonable conclusion was that the editor did not work. The part is
+  // re-found by its stable ref on every repaint, so what is on screen is always
+  // the effective value.
+  let ref = item0.ref;
+  let item = item0;
+  let line = line0;
 
-  // Swapping the part itself, from inside the editor: "this slot, but a
-  // different thing" is a real edit and it should not need a remove and an add.
-  const swap = el("button", "btn btn-xs btn-ghost hk-swap", t("hookui.swap"));
-  swap.type = "button";
-  swap.addEventListener("click", () => {
-    close();
-    partPicker(cat, HK_NO_LINES, 0, item);
-  });
-  pane.append(swap);
+  const paint = (plan) => {
+    if (plan) {
+      let found = null;
+      for (const l of plan.lines) {
+        const hit = l.items.find((x) => x.ref === ref);
+        if (hit) {
+          found = { l, hit };
+          break;
+        }
+      }
+      // The part is gone — a staged remove, or an Apply that took it away.
+      // Closing is the only honest answer; editing something that no longer
+      // exists is worse than losing the dialog.
+      if (!found) return close();
+      item = found.hit;
+      line = found.l;
+    }
+    // THE CARET SURVIVES THE REPAINT. The editor rebuilds on every keystroke
+    // now, and a text box that loses focus after one letter is not a text box.
+    // The path is positional because the controls are the same controls in the
+    // same order across a repaint; when they are not, focus is simply not
+    // restored, which is the right failure.
+    const keep = focusPath(pane);
+    pane.replaceChildren();
+    // Same rule inside the dialog: it rebuilds on every keystroke, and a
+    // shape gallery that fades in each time you type a letter is the blink
+    // again in a smaller box.
+    pane.classList.add("hk-quiet");
+    build();
+    restoreFocus(pane, keep);
+  };
 
-  // THE SHAPE PICKER IS A GALLERY, NOT A DROPDOWN. Every renderer the component
-  // declares, drawn with this component's real current value. A dropdown
-  // containing a renderer's name tells nobody anything, and this is the
-  // difference between a feature people use and a settings form they close.
-  pane.append(sectionHead(t("hookui.shape"), t("hookui.shapeAbout")));
-  const gallery = el("div", "hk-gallery");
-  const curRender = val("render", (comp.defaults && comp.defaults.render) || comp.renderers[0]);
-  for (const r of comp.renderers) {
-    const b = el("button", "hk-sample" + (curRender === r ? " hk-sample-on" : ""));
-    b.type = "button";
-    b.title = r;
-    b.append(ansiBlock(comp.previews && comp.previews[r] ? comp.previews[r] : r, "hk-preview hk-preview-chip"));
-    b.append(el("span", "hk-sample-id", r));
-    b.addEventListener("click", () => {
+  // The value in force for one field: what is staged, else what the CLI
+  // resolved, else the fallback. `show --json` now carries EVERY field, so this
+  // can finally answer for all of them — before v1.4.2 it emitted twelve of
+  // twenty-four and a control for one of the other twelve always read blank.
+  const val = (field, dflt) =>
+    field in item.over
+      ? item.over[field]
+      : item.src && item.src[field] !== undefined && item.src[field] !== null
+      ? item.src[field]
+      : dflt;
+  // Whether the USER set this one, as opposed to inheriting it from the
+  // catalogue, the colour set or the file. A control that cannot tell those
+  // apart cannot say what it is about to change.
+  const mine = (field) => field in item.over || !!(item.src && item.src.authored && field in item.src.authored);
+  const stage = (field, value, label) => hkOp({ op: "set", ref, field, value, label });
+  // A field name, plus a mark when the value is the user's own.
+  const fieldName = (name, field) => (mine(field) ? name + " \u2022" : name);
+
+  // WHETHER THE CURRENT SHAPE USES THIS FIELD AT ALL. The CLI's answer, per
+  // renderer, carried on the renderer table — the panel does not know which
+  // shapes draw a label any more than it knows what a label is. Twenty-eight of
+  // the thirty-five renderers ignore `label` entirely, and before this the Name
+  // box was offered on every one of them: it took the text, the CLI wrote it to
+  // disk correctly, and nothing ever appeared on the bar.
+  //
+  // The control is DISABLED and keeps its slot with the reason on it, never
+  // hidden — "this shape cannot use it" and "we forgot to offer it" must not
+  // look the same, and a value already set has to stay visible.
+  const usesOf = (field) => {
+    const rend = cat.renderers[val("render", (comp.defaults && comp.defaults.render) || comp.renderers[0])];
+    if (!rend || !rend.uses) return true;
+    return rend.uses.includes(field);
+  };
+  // Wraps a control that this shape ignores: greyed, inert, and carrying the
+  // sentence that says which shapes DO use it.
+  const gated = (field, node, shapes) => {
+    if (usesOf(field)) return node;
+    const box = el("div", "hk-inert");
+    for (const b of node.querySelectorAll ? node.querySelectorAll("button, input, select") : []) b.disabled = true;
+    if (node.tagName === "INPUT" || node.tagName === "SELECT") node.disabled = true;
+    box.append(node);
+    box.append(el("div", "note note-warn", shapes
+      ? t("hookui.shapeIgnoresLabel", { shapes: shapes.join(", ") })
+      : t("hookui.shapeIgnores")));
+    return box;
+  };
+
+  function build() {
+    const live = el("div", "hk-editor-live");
+    // WHAT THIS IS, EXACTLY. `previews` is a per-renderer sample the CLI drew
+    // from its own fixture, so it shows the SHAPE this part will take - never
+    // the words or the numbers this component will carry at run time. Claiming
+    // otherwise would make the one picture in this dialog a lie.
+    live.append(el("div", "note", t("hookui.editorLive")));
+    live.append(termWindow(chipSample(item, comp), { title: comp.id, tags: [], ruler: false, small: true }));
+    pane.append(live);
+    if (comp.summary) pane.append(el("div", "note", comp.summary));
+    pane.append(el("div", "note", t("hookui.editorStaged")));
+
+    // Swapping the part itself, from inside the editor: "this slot, but a
+    // different thing" is a real edit and it should not need a remove and an add.
+    const swap = el("button", "btn btn-xs btn-ghost hk-swap", t("hookui.swap"));
+    swap.type = "button";
+    swap.addEventListener("click", () => {
       close();
-      stage("render", r, t("hookui.shapeChange", { id: comp.id, r }));
+      partPicker(cat, HK_NO_LINES, 0, item);
     });
-    gallery.append(b);
+    pane.append(swap);
+
+    // THE SHAPE PICKER IS A GALLERY, NOT A DROPDOWN. Every renderer the component
+    // declares, drawn with this component's real current value. A dropdown
+    // containing a renderer's name tells nobody anything, and this is the
+    // difference between a feature people use and a settings form they close.
+    pane.append(sectionHead(t("hookui.shape"), t("hookui.shapeAbout")));
+    const gallery = el("div", "hk-gallery");
+    const curRender = val("render", (comp.defaults && comp.defaults.render) || comp.renderers[0]);
+    for (const r of comp.renderers) {
+      const b = el("button", "hk-sample" + (curRender === r ? " hk-sample-on" : ""));
+      b.type = "button";
+      b.title = r;
+      b.append(ansiBlock(comp.previews && comp.previews[r] ? comp.previews[r] : r, "hk-preview hk-preview-chip"));
+      b.append(el("span", "hk-sample-id", r));
+      // IT NO LONGER CLOSES. Closing was how the old editor hid the fact that
+      // it could not update itself; now the gallery marks the new shape and the
+      // sample above redraws, which is what a person expects a picker to do.
+      b.addEventListener("click", () => stage("render", r, t("hookui.shapeChange", { id: comp.id, r })));
+      gallery.append(b);
+    }
+    pane.append(gallery);
+    // AT THE CONTROL, at the moment the choice is made. Which shape you pick
+    // decides whether the Name box below is live at all, so the sentence
+    // belongs here rather than in a surprise further down the dialog.
+    pane.append(el("div", "note", t("hookui.shapeDecides", { shapes: (cat.label_renderers || []).join(", ") })));
+
+    pane.append(sectionHead(t("hookui.glyphs"), t("hookui.glyphsAbout")));
+    pane.append(pickRow(cat.glyph_sets, val("glyphs", null), (v) => stage("glyphs", v, t("hookui.glyphChange", { id: comp.id, v }))));
+
+    pane.append(sectionHead(t("hookui.words"), t("hookui.wordsAbout")));
+    const label = el("input", "hk-input");
+    label.type = "text";
+    const cur = val("label", "");
+    label.value = cur == null ? "" : String(cur);
+    label.placeholder = t("hookui.labelPlaceholder");
+    // BOTH EVENTS. `change` alone fires on blur, so a name typed and then
+    // followed by a click on Close raced the close and was sometimes never
+    // staged at all. `input` stages every keystroke; `hkOp` already collapses
+    // repeated edits of one field into one decision, so the pending list still
+    // reads as a list of decisions.
+    const push = () => stage("label", label.value, t("hookui.labelChange", { id: comp.id, v: label.value }));
+    label.addEventListener("change", push);
+    label.addEventListener("input", push);
+    pane.append(labelled(fieldName(t("hookui.label"), "label"), gated("label", label, cat.label_renderers), t("hookui.labelAbout")));
+    pane.append(labelled(fieldName(t("hookui.case"), "case"), gated("case", pickRow(cat.cases, val("case", null), (v) => stage("case", v, t("hookui.caseChange", { id: comp.id, v })))), t("hookui.caseAbout")));
+    pane.append(labelled(fieldName(t("hookui.before"), "prefix"), gated("prefix", textField(val("prefix", ""), (v) => stage("prefix", v, t("hookui.beforeChange", { id: comp.id, v })))), t("hookui.beforeAbout")));
+    pane.append(labelled(fieldName(t("hookui.after"), "suffix"), gated("suffix", textField(val("suffix", ""), (v) => stage("suffix", v, t("hookui.afterChange", { id: comp.id, v })))), t("hookui.afterAbout")));
+
+    pane.append(sectionHead(t("hookui.colour"), t("hookui.colourAbout")));
+    pane.append(labelled(fieldName(t("hookui.labelColour"), "label_color"), pickRow(cat.colors, val("label_color", null), (v) => stage("label_color", v, t("hookui.colourChange", { id: comp.id, v }))), t("hookui.labelColourAbout")));
+    pane.append(labelled(fieldName(t("hookui.valueColour"), "value_color"), pickRow(cat.colors, val("value_color", null), (v) => stage("value_color", v, t("hookui.colourChange", { id: comp.id, v }))), t("hookui.valueColourAbout")));
+    if (comp.bounded)
+      pane.append(labelled(fieldName(t("hookui.ramp"), "ramp"), pickRow(Object.keys(cat.ramps), val("ramp", null), (v) => stage("ramp", v, t("hookui.rampChange", { id: comp.id, v }))), t("hookui.rampAbout")));
+    // R3, AT THE CONTROL, at the moment the choice is made - never in a
+    // validation summary later.
+    if (comp.states) pane.append(el("div", "note note-warn", t("hookui.stateColourWarn", { s: comp.states.join(", ") })));
+
+    // "Weight", never "font size". A terminal owns its font, and a picker that
+    // did nothing would be worse than not offering one.
+    pane.append(labelled(fieldName(t("hookui.emphasis"), "emphasis"), pickRow((cat.emphasis || []).filter((e) => !(cat.refused_emphasis || []).includes(e)), (val("emphasis", []) || [])[0], (v) => stage("emphasis", v, t("hookui.emphasisChange", { id: comp.id, v }))), t("hookui.emphasisAbout")));
+    pane.append(el("div", "note", t("hookui.fontWhy")));
+
+    if (comp.bounded || (comp.defaults && comp.defaults.format)) {
+      pane.append(sectionHead(t("hookui.numbers"), t("hookui.numbersAbout")));
+      pane.append(labelled(fieldName(t("hookui.format"), "format"), gated("format", pickRow(cat.formats, val("format", null), (v) => stage("format", v, t("hookui.formatChange", { id: comp.id, v })))), t("hookui.formatAbout")));
+      pane.append(labelled(fieldName(t("hookui.compact"), "compact"), gated("compact", pickRow(cat.compact, val("compact", null), (v) => stage("compact", v, t("hookui.compactChange", { id: comp.id, v })))), t("hookui.compactAbout")));
+      // `min_width` is not cosmetic: a value that changes width shifts every part
+      // to its right on the keystroke it happens, and that jitter is the main
+      // reason people turn a status line off again.
+      pane.append(labelled(fieldName(t("hookui.minWidth"), "min_width"), gated("min_width", numField(val("min_width", null), 0, 8, (v) => stage("min_width", v, t("hookui.minWidthChange", { id: comp.id, v })))), t("hookui.minWidthWarn")));
+      pane.append(labelled(fieldName(t("hookui.precision"), "precision"), gated("precision", numField(val("precision", null), 0, 2, (v) => stage("precision", v, t("hookui.precisionChange", { id: comp.id, v })))), t("hookui.precisionAbout")));
+    }
+
+    const rend = cat.renderers[curRender];
+    if (rend && rend.width)
+      pane.append(labelled(fieldName(t("hookui.width"), "width"), numField(val("width", null), rend.width[0], rend.width[1], (v) => stage("width", v, t("hookui.widthChange", { id: comp.id, v }))), t("hookui.widthWhy")));
+
+    // A CHECKLIST, not an enum: "hide when zero" and "hide when there is no run"
+    // are independent facts and a user wants both at once.
+    pane.append(sectionHead(t("hookui.whenToShow"), t("hookui.whenToShowAbout")));
+    const checks = el("div", "hk-checks");
+    const active = new Set(val("hide_when", []) || []);
+    for (const h of cat.hide_when) {
+      if (h.id === "never") continue;
+      const lab = el("label", "hk-check");
+      const box = el("input");
+      box.type = "checkbox";
+      box.checked = active.has(h.id);
+      box.addEventListener("change", () => {
+        const next = new Set(active);
+        if (box.checked) next.add(h.id);
+        else next.delete(h.id);
+        const v = next.size ? [...next].join(",") : "never";
+        stage("hide_when", v, t("hookui.hideChange", { id: comp.id, v }));
+      });
+      lab.append(box, el("span", null, h.id), el("span", "note", h.says));
+      checks.append(lab);
+    }
+    pane.append(checks);
+
+    // RESPONSIVE WIDTH: the range of terminal widths in which this part is worth
+    // its cells. Strictly better than truncating the right of an overflowing
+    // line, because the USER chooses what survives a narrow terminal.
+    pane.append(sectionHead(t("hookui.narrow"), t("hookui.narrowAbout")));
+    pane.append(labelled(fieldName(t("hookui.minCols"), "min_cols"), numField(val("min_cols", null), 0, 200, (v) => stage("min_cols", v, t("hookui.minColsChange", { id: comp.id, v }))), t("hookui.minColsAbout")));
+    pane.append(labelled(fieldName(t("hookui.priority"), "priority"), numField(val("priority", null), 1, 5, (v) => stage("priority", v, t("hookui.priorityChange", { id: comp.id, v }))), t("hookui.priorityWhy")));
   }
-  pane.append(gallery);
 
-  pane.append(sectionHead(t("hookui.glyphs"), t("hookui.glyphsAbout")));
-  pane.append(pickRow(cat.glyph_sets, val("glyphs", null), (v) => stage("glyphs", v, t("hookui.glyphChange", { id: comp.id, v }))));
-
-  pane.append(sectionHead(t("hookui.words"), t("hookui.wordsAbout")));
-  const label = el("input", "hk-input");
-  label.type = "text";
-  const cur = val("label", "");
-  label.value = cur == null ? "" : String(cur);
-  label.placeholder = t("hookui.labelPlaceholder");
-  label.addEventListener("change", () => stage("label", label.value, t("hookui.labelChange", { id: comp.id, v: label.value })));
-  pane.append(labelled(t("hookui.label"), label, t("hookui.labelAbout")));
-  pane.append(labelled(t("hookui.case"), pickRow(cat.cases, val("case", null), (v) => stage("case", v, t("hookui.caseChange", { id: comp.id, v }))), t("hookui.caseAbout")));
-  pane.append(labelled(t("hookui.before"), textField(val("prefix", ""), (v) => stage("prefix", v, t("hookui.beforeChange", { id: comp.id, v }))), t("hookui.beforeAbout")));
-  pane.append(labelled(t("hookui.after"), textField(val("suffix", ""), (v) => stage("suffix", v, t("hookui.afterChange", { id: comp.id, v }))), t("hookui.afterAbout")));
-
-  pane.append(sectionHead(t("hookui.colour"), t("hookui.colourAbout")));
-  pane.append(labelled(t("hookui.labelColour"), pickRow(cat.colors, val("label_color", null), (v) => stage("label_color", v, t("hookui.colourChange", { id: comp.id, v }))), t("hookui.labelColourAbout")));
-  pane.append(labelled(t("hookui.valueColour"), pickRow(cat.colors, val("value_color", null), (v) => stage("value_color", v, t("hookui.colourChange", { id: comp.id, v }))), t("hookui.valueColourAbout")));
-  if (comp.bounded)
-    pane.append(labelled(t("hookui.ramp"), pickRow(Object.keys(cat.ramps), val("ramp", null), (v) => stage("ramp", v, t("hookui.rampChange", { id: comp.id, v }))), t("hookui.rampAbout")));
-  // R3, AT THE CONTROL, at the moment the choice is made — never in a
-  // validation summary later.
-  if (comp.states) pane.append(el("div", "note note-warn", t("hookui.stateColourWarn", { s: comp.states.join(", ") })));
-
-  // "Weight", never "font size". A terminal owns its font, and a picker that
-  // did nothing would be worse than not offering one.
-  pane.append(labelled(t("hookui.emphasis"), pickRow((cat.emphasis || []).filter((e) => !(cat.refused_emphasis || []).includes(e)), (val("emphasis", []) || [])[0], (v) => stage("emphasis", v, t("hookui.emphasisChange", { id: comp.id, v }))), t("hookui.emphasisAbout")));
-  pane.append(el("div", "note", t("hookui.fontWhy")));
-
-  if (comp.bounded || (comp.defaults && comp.defaults.format)) {
-    pane.append(sectionHead(t("hookui.numbers"), t("hookui.numbersAbout")));
-    pane.append(labelled(t("hookui.format"), pickRow(cat.formats, val("format", null), (v) => stage("format", v, t("hookui.formatChange", { id: comp.id, v }))), t("hookui.formatAbout")));
-    pane.append(labelled(t("hookui.compact"), pickRow(cat.compact, val("compact", null), (v) => stage("compact", v, t("hookui.compactChange", { id: comp.id, v }))), t("hookui.compactAbout")));
-    // `min_width` is not cosmetic: a value that changes width shifts every part
-    // to its right on the keystroke it happens, and that jitter is the main
-    // reason people turn a status line off again.
-    pane.append(labelled(t("hookui.minWidth"), numField(val("min_width", null), 0, 8, (v) => stage("min_width", v, t("hookui.minWidthChange", { id: comp.id, v }))), t("hookui.minWidthWarn")));
-    pane.append(labelled(t("hookui.precision"), numField(val("precision", null), 0, 2, (v) => stage("precision", v, t("hookui.precisionChange", { id: comp.id, v }))), t("hookui.precisionAbout")));
-  }
-
-  const rend = cat.renderers[curRender];
-  if (rend && rend.width)
-    pane.append(labelled(t("hookui.width"), numField(val("width", null), rend.width[0], rend.width[1], (v) => stage("width", v, t("hookui.widthChange", { id: comp.id, v }))), t("hookui.widthWhy")));
-
-  // A CHECKLIST, not an enum: "hide when zero" and "hide when there is no run"
-  // are independent facts and a user wants both at once.
-  pane.append(sectionHead(t("hookui.whenToShow"), t("hookui.whenToShowAbout")));
-  const checks = el("div", "hk-checks");
-  const active = new Set(val("hide_when", []) || []);
-  for (const h of cat.hide_when) {
-    if (h.id === "never") continue;
-    const lab = el("label", "hk-check");
-    const box = el("input");
-    box.type = "checkbox";
-    box.checked = active.has(h.id);
-    box.addEventListener("change", () => {
-      const next = new Set(active);
-      if (box.checked) next.add(h.id);
-      else next.delete(h.id);
-      const v = next.size ? [...next].join(",") : "never";
-      stage("hide_when", v, t("hookui.hideChange", { id: comp.id, v }));
-    });
-    lab.append(box, el("span", null, h.id), el("span", "note", h.says));
-    checks.append(lab);
-  }
-  pane.append(checks);
-
-  // RESPONSIVE WIDTH: the range of terminal widths in which this part is worth
-  // its cells. Strictly better than truncating the right of an overflowing
-  // line, because the USER chooses what survives a narrow terminal.
-  pane.append(sectionHead(t("hookui.narrow"), t("hookui.narrowAbout")));
-  pane.append(labelled(t("hookui.minCols"), numField(val("min_cols", null), 0, 200, (v) => stage("min_cols", v, t("hookui.minColsChange", { id: comp.id, v }))), t("hookui.minColsAbout")));
-  pane.append(labelled(t("hookui.priority"), numField(val("priority", null), 1, 5, (v) => stage("priority", v, t("hookui.priorityChange", { id: comp.id, v }))), t("hookui.priorityWhy")));
+  paint(null);
 
   const close = modal({
     title: comp.id,
     body: pane,
     actions: [
       // WHERE EACH VALUE CAME FROM. It is how a user finds their own overrides
-      // again after a colour set change — `orc lane config`'s problem, at part
+      // again after a colour set change - `orc lane config`'s problem, at part
       // scale. It reads the SAVED item, so it is offered only for one.
       ...(item.src
         ? [{
@@ -1062,23 +1394,67 @@ function editModal(item, line, comp, cat) {
             onClick: async () => {
               const r = await read("/api/statusline/explain?board=" + HK_BOARD + "&at=" + line.line + ":" + (line.items.indexOf(item) + 1));
               if (!r.data || !r.data.ok) return toast(t("hookui.explainFailed"), "bad");
+              HK_MODAL = null;
               modal({
                 title: comp.id,
-                pane: kvList(r.data.resolved.map((x) => [x.field, x.source])),
+                body: kvList(r.data.resolved.map((x) => [x.field, x.source])),
                 actions: [{ label: t("common.close"), cls: "btn-ghost", onClick: (c) => c() }],
               });
             },
           }]
         : []),
-      { label: t("common.close"), cls: "btn-ghost", onClick: (c) => c() },
+      {
+        label: t("common.close"),
+        cls: "btn-ghost",
+        onClick: (c) => {
+          HK_MODAL = null;
+          c();
+        },
+      },
     ],
   });
+  // Registered LAST, so a repaint that fires during construction cannot reach a
+  // half-built pane.
+  HK_MODAL = { repaint: paint };
 }
 
 // `partPicker` reads a board only to answer "can a part go on that line". A
 // SWAP changes nothing about where the part sits, so it is handed a board with
 // no lines and never asks.
-const HK_NO_LINES = { lines: [], max: 5 };
+const HK_NO_LINES = { lines: [], max: 0 };
+
+// Where the caret is, as a path of child indexes from the editor's own root,
+// plus the selection inside the field. Not an id: a control here has no
+// identity of its own, and inventing one for every field would be a second
+// idea of what the editor holds.
+function focusPath(root) {
+  const a = document.activeElement;
+  if (!a || !root.contains(a)) return null;
+  const path = [];
+  let n = a;
+  while (n && n !== root) {
+    path.unshift([...n.parentNode.childNodes].indexOf(n));
+    n = n.parentNode;
+  }
+  const sel = "selectionStart" in a && a.selectionStart !== null ? [a.selectionStart, a.selectionEnd] : null;
+  return { path, sel };
+}
+
+function restoreFocus(root, keep) {
+  if (!keep) return;
+  let n = root;
+  for (const i of keep.path) {
+    n = n && n.childNodes[i];
+    if (!n) return;
+  }
+  if (!n.focus) return;
+  n.focus();
+  if (keep.sel && "setSelectionRange" in n) {
+    try {
+      n.setSelectionRange(keep.sel[0], keep.sel[1]);
+    } catch (_) {}
+  }
+}
 
 function sectionHead(name, about) {
   const w = el("div", "hk-section-wrap");
@@ -1244,7 +1620,8 @@ function confirmApply(name) {
           const r = await post("/api/statusline/apply", bd({ name }));
           if (!r.ok) toast(t("hookui.applyFailed"), "bad", (r.output || "").trim());
           HK_OPS = [];
-          rerender();
+          HK_COMPARE_DATA = null;
+          hkReload();
         },
       },
     ],
@@ -1264,7 +1641,8 @@ function confirmReset() {
           c();
           await post("/api/statusline/reset", bd({}));
           HK_OPS = [];
-          rerender();
+          HK_COMPARE_DATA = null;
+          hkReload();
         },
       },
     ],
@@ -1303,7 +1681,7 @@ function advancedCard(cat, plan) {
   re.addEventListener("click", async () => {
     const r = await post("/api/statusline/compile", bd({}));
     toast(r.ok ? t("hookui.recompiled") : t("hookui.recompileFailed"), r.ok ? "ok" : "bad");
-    rerender();
+    hkReload();
   });
   const acts = el("div", "row-actions");
   acts.append(re);

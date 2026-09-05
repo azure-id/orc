@@ -7,14 +7,14 @@
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
 ![npm](https://img.shields.io/npm/v/%40azure-id%2Forc?style=for-the-badge&color=cb3837&logo=npm)
-![Version](https://img.shields.io/badge/version-1.2.0-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-1.4.2-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
 ![Dependencies](https://img.shields.io/badge/dependencies-zero-lightgrey.svg?style=for-the-badge)
 ![GitHub stars](https://img.shields.io/github/stars/azure-id/orc?style=for-the-badge&color=yellow)
 
-**Latest: v1.4.1** · updated 2026-09-05 · [full changelog](CHANGELOG.md)
+**Latest: v1.4.2** · updated 2026-09-05 · [full changelog](CHANGELOG.md)
 
 **On npm: [`@azure-id/orc`](https://www.npmjs.com/package/@azure-id/orc)** — `npm i -g @azure-id/orc`
 
@@ -575,46 +575,62 @@ a current audit: [EVAL-REPORT.md](EVAL-REPORT.md).
 **Full history: [CHANGELOG.md](CHANGELOG.md)** — or `orc changelog`, which prints
 only what is newer than the version you have.
 
-### v1.4.1 - the board you can actually use _(2026-09-05)_
+### v1.4.2 - the panel that stops reloading, and the fields you could not read back _(2026-09-05)_
 
-**Still on the unscoped `orc` package?** Do this once first — your `orc upgrade`
+**Still on the unscoped `orc` package?** Do this once first - your `orc upgrade`
 is the pre-v0.56.0 one and cannot install itself. Full detail in the CAUTION at
 the top of this file.
 
-- **Step 1 — release the command from the old package:** `npm uninstall -g orc`
-- **Step 2 — install the current package:** `npm i -g @azure-id/orc`
-- **Step 3 — re-apply it to your project:** `orc update`
+- **Step 1 - release the command from the old package:** `npm uninstall -g orc`
+- **Step 2 - install the current package:** `npm i -g @azure-id/orc`
+- **Step 3 - re-apply it to your project:** `orc update`
 
 **Do not use `npm i -g -f`.** Full detail in v0.56.0 below.
 
-Four defects in `orc ui` ▸ **CLI Hook Interface**, and the revamp they asked
-for.
+Four more defects in `orc ui` ▸ **CLI Hook Interface**. Three were the same
+defect wearing three faces.
 
-**Adding three parts produced one**, and that was arithmetic rather than a UI
-complaint: every `+ line N` button computed its write's position from the
-**saved** layout instead of the one being staged, so three adds all carried
-position 1 — and `statusline set` at an occupied position is an EDIT by design.
-A staged change is now a semantic op against a stable ref, replayed by one
-function that produces both the board you see and the writes that make it,
-deriving every position at the moment that write runs. The five-slot cap counts
-the staged board too, and refuses by name.
+**Staging a change reloaded the whole panel** - every staged op re-entered the
+router, so four endpoints were refetched and everything was rebuilt from a
+skeleton. That made a staged change look like an applied one, and it left the
+open editor showing values from before the change you had just made: you picked
+a shape and nothing moved. Nothing is fetched now until something actually moves
+the disk; a staged op repaints from cache with **zero requests**, keeps your
+scroll position, and the open editor repaints with it - caret and all.
 
-**The colour set wrote one line and read the whole document** — it shelled
-`statusline line 1 --theme`, so the button never moved and a third of the bar
-changed. New `orc statusline doc [--theme] [--glyphs] [--ansi]
-[--align-columns]`, which also clears the per-line overrides that would shadow
-the choice. **And the preview had never had colour at all:** `orc ui` serves
-under `style-src 'self'`, which blocks a parsed `style` attribute outright, so
-every colour was thrown away silently. It goes through CSSOM now.
+**And the fields could not be read back.** `orc statusline show --json` emitted
+twelve of the twenty-four fields a part can carry, so `case`, `prefix`,
+`min_cols`, `precision` and seven more were written to disk correctly and then
+were invisible to the panel that wrote them. Every field ships now, plus
+`authored`, so a control can say **which values are yours** rather than
+inherited. `--json is not a summary`, found again.
 
-The revamp: the board is the **only** place anything is applied (the palette is
-a reference now — what each part shows, nothing else) · **Add · Change · Move ·
-Remove** are buttons on the chip, each opening a modal that says what it will do
-· one part picker with a search box, one click · **drag and drop**, marked on the
-edge it will land beside, off for real below 600px where a drop gap stops being
-a target · the separator is a **dropdown of twelve**, published by the CLI · and
-every part, every control and every colour set now carries the sentence that
-says what it is.
+**Six parts per line, not five.** **The dropdown nobody could read** turned out
+to be a panel with no colours at all: `hookui.css` was written against four CSS tokens that do not
+exist, so every one of those declarations was silently dropped.
+
+**The preview is drawn as a terminal now** - a window of the stated width with a
+column ruler - and `orc statusline preview` takes `--theme` and `--glyphs` as a
+**render-only** override, so a new drawer shows the same bar under all four
+colour sets and all seven symbol sets. Picking a colour set from its name is a
+guess; picking it from its picture is a decision.
+
+**And the sixth part still reset the bar to the default**, because the cap was in
+three places: the hook re-checks the compiled file with a cheap shape guard of
+its own, and that guard held its own `5` — and counted spacers, which the
+validator never has. The cap now travels on the lock file and the compiler marks
+each structural item, so one cap and one counting rule serve all three readers.
+
+**And a name you typed sometimes went nowhere.** Seven of the thirty-five shapes
+draw a name; the other twenty-eight ignore it, which is the design — a bar with a
+word in front of it is a different shape. The Name box was offered on all
+thirty-five anyway. Each renderer now publishes the fields it **uses**, and the
+editor greys out what this shape ignores, keeping the slot and naming the shapes
+that do.
+
+**And it still blinked with the network tab empty:** `hkPaint` replaces every
+child, and the stylesheet faded each one in on a stagger. Entrance animations are
+off from the second paint onward.
 
 Full detail in [CHANGELOG.md](CHANGELOG.md).
 

@@ -269,6 +269,11 @@ const READS = {
     const argv = ["statusline", "preview", ...slBoard(q)];
     if (q.width) argv.push("--width", String(q.width));
     if (q.state) argv.push("--state", String(q.state));
+    // v1.4.2 — a RENDER-ONLY override, so the panel can draw the same layout
+    // under each colour set and each symbol set. It writes nothing: the CLI
+    // applies these to a copy of the saved layout before it compiles.
+    if (q.theme) argv.push("--theme", String(q.theme));
+    if (q.glyphs) argv.push("--glyphs", String(q.glyphs));
     return argv;
   },
   "/api/statusline/explain": (q) => ["statusline", "explain", String(q.at || "1:1"), ...slBoard(q)],

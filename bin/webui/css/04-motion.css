@@ -74,6 +74,24 @@
 }
 button.hk-pick-row:hover { transform: translateX(3px); }
 
+/* NOTHING ARRIVES ON A REPAINT (v1.4.2). The CLI Hook Interface rebuilds its
+   whole panel when a change is STAGED — no request, no navigation, the same
+   cards with one value different — and the entrance animations above replayed
+   every time, on a 30ms stagger. With the network tab empty it read exactly
+   like the page reloading, on every keystroke.
+
+   `hk-quiet` is added by `hkPaint` from the SECOND paint onward and by the part
+   editor before every rebuild. It removes the ENTRANCES only: the transitions
+   further up are about the pointer rather than about arriving, so hover, the
+   drop marker and the staged edge are untouched. It must load after the rules
+   it switches off, which is why it is here and not in the panel's own file. */
+.hk-quiet > *,
+.hk-quiet .hk-chip,
+.hk-quiet .hk-chip-new,
+.hk-quiet .hk-pick-row {
+  animation: none;
+}
+
 /* ---------------------------------------------------------- REDUCED MOTION */
 /* Non-negotiable: every animation and transition above is off. */
 

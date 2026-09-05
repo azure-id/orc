@@ -124,12 +124,14 @@
      way. The PREVIEW never collapses: it is a monospaced grid and squeezing it
      would misreport the width the user is deciding. It scrolls instead. */
   .hk-degrade-row,
+  .hk-compare-row,
   .hk-field,
   .hk-check {
     grid-template-columns: 1fr;
     gap: 4px;
   }
-  .hk-degrade-label {
+  .hk-degrade-label,
+  .hk-compare-label {
     text-align: left;
   }
   .hk-gallery {

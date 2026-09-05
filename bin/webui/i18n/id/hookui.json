@@ -1,6 +1,6 @@
 {
   "hookui.title": "Antarmuka CLI Hook",
-  "hookui.sub": "Bangun baris status ORC. Tiga baris. Tiap baris memuat sampai lima bagian.",
+  "hookui.sub": "Bangun baris status ORC. Tiga baris. Tiap baris memuat sampai enam bagian.",
   "hookui.noData": "Baris status tidak dapat dibaca.",
   "hookui.gate": "Status",
   "hookui.on": "hidup",
@@ -77,7 +77,7 @@
 
   "hookui.unknownComponent": "Versi ORC ini tidak memiliki bagian tersebut.",
   "hookui.shape": "Bentuk",
-  "hookui.shapeAbout": "Bagaimana bagian ini digambar. Setiap pilihan di bawah digambar dengan nilai asli bagian ini, jadi Anda bisa melihatnya sebelum memilih. Memilih satu akan menutup jendela ini.",
+  "hookui.shapeAbout": "Bagaimana bagian ini digambar. Setiap pilihan di bawah digambar dengan nilai asli bagian ini, jadi Anda bisa melihatnya sebelum memilih. Memilih satu akan menandainya di sini dan menggambar ulang contoh di atas; jendela tetap terbuka.",
   "hookui.shapeChange": "bentuk {id} = {r}",
   "hookui.glyphs": "Simbol",
   "hookui.glyphsAbout": "Dari kumpulan simbol mana batang dan tanda digambar. Sebagian terminal dan huruf tidak dapat menggambar semuanya.",
@@ -176,5 +176,19 @@
   "hookui.boardStatus": "Baris status",
   "hookui.boardSubagent": "Satu baris per agen",
   "hookui.boardStatusSub": "Dua baris di bagian bawah terminal Anda.",
-  "hookui.boardSubagentSub": "Baris yang digambar Claude Code untuk setiap subagen di panel agen. Satu baris, dan ia menunjukkan agen itu berjalan pada apa dan sudah menghabiskan berapa."
+  "hookui.boardSubagentSub": "Baris yang digambar Claude Code untuk setiap subagen di panel agen. Satu baris, dan ia menunjukkan agen itu berjalan pada apa dan sudah menghabiskan berapa.",
+
+  "hookui.previewStaleN": "Satu perubahan sudah disiapkan dan BELUM ada di gambar ini. Jendela ini menampilkan tata letak yang tersimpan di disk. Tekan Terapkan di bagian bawah halaman untuk menuliskannya dan menggambar ulang.",
+  "hookui.previewStaleNPlural": "{n} perubahan sudah disiapkan dan BELUM ada di gambar ini. Jendela ini menampilkan tata letak yang tersimpan di disk. Tekan Terapkan di bagian bawah halaman untuk menuliskannya dan menggambar ulang.",
+  "hookui.termTitle": "terminal, lebar {n} sel",
+  "hookui.termTitlePlural": "terminal, lebar {n} sel",
+  "hookui.compare": "Lihat dalam pengaturan lain",
+  "hookui.compareAbout": "Bar yang sama di bawah setiap set warna dan setiap set simbol. Terbuka saat Anda meminta, karena setiap baris adalah render sungguhan.",
+  "hookui.compareThemes": "Set warna",
+  "hookui.compareGlyphs": "Set simbol",
+  "hookui.editorLive": "Bentuk yang akan diambil bagian ini. Hanya bentuknya — bukan kata atau angka yang akan dibawanya saat berjalan.",
+  "hookui.editorStaged": "Tidak ada yang ditulis di sini sampai Anda menekan Terapkan di bagian bawah halaman. Titik di samping nama kontrol berarti nilai itu milik Anda, bukan warisan.",
+  "hookui.shapeIgnores": "Bentuk yang Anda pilih di atas tidak memakai ini. Ini tetap ditampilkan agar Anda bisa melihat nilainya, dan dimatikan karena tidak akan berpengaruh.",
+  "hookui.shapeIgnoresLabel": "Bentuk yang Anda pilih di atas tidak menggambar nama. Bentuk berikut menggambarnya: {shapes}.",
+  "hookui.shapeDecides": "Bentuk menentukan pengaturan mana di bawah ini yang berpengaruh. Hanya bentuk berikut yang menggambar nama: {shapes}. Bar, ikon, atau nilai polos tidak punya ruang untuk itu, jadi kotak Nama dimatikan untuk mereka."
 }

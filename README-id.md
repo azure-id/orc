@@ -7,13 +7,13 @@
 *Terima permintaan → pahami → rencanakan → beri nilai → kerjakan paralel → periksa → uji → kirim.*
 
 ![npm](https://img.shields.io/npm/v/%40azure-id%2Forc?style=for-the-badge&color=cb3837&logo=npm)
-![Version](https://img.shields.io/badge/version-1.0.0-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-1.4.2-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
 ![Dependencies](https://img.shields.io/badge/dependencies-zero-lightgrey.svg?style=for-the-badge)
 
-**Versi terbaru: v1.0.0** · diperbarui 30-08-2026 · [daftar perubahan lengkap](CHANGELOG.md)
+**Versi terbaru: v1.4.2** · diperbarui 05-09-2026 · [daftar perubahan lengkap](CHANGELOG.md)
 
 **Ada di npm: [`@azure-id/orc`](https://www.npmjs.com/package/@azure-id/orc)** — `npm i -g @azure-id/orc`
 
@@ -618,6 +618,43 @@ Bacalah sebagai catatan putaran itu, bukan sebagai audit terkini:
 
 **Riwayat lengkap: [CHANGELOG.md](CHANGELOG.md)** — atau `orc changelog`, yang
 hanya mencetak yang lebih baru dari versi yang Anda punya.
+
+### v1.4.2 - panel yang berhenti memuat ulang, dan bidang yang tidak bisa dibaca kembali _(05-09-2026)_
+
+Empat cacat lagi di `orc ui` ▸ **Antarmuka CLI Hook**. Tiga di antaranya adalah
+cacat yang sama dengan tiga wajah berbeda.
+
+**Menyiapkan satu perubahan memuat ulang seluruh panel** - tiap operasi yang
+disiapkan masuk kembali ke router, jadi empat endpoint diambil ulang dan semua
+dibangun lagi dari kerangka. Itu membuat perubahan yang baru disiapkan tampak
+seperti sudah diterapkan, dan meninggalkan editor yang terbuka menampilkan nilai
+sebelum perubahan yang baru saja Anda buat: Anda memilih bentuk, tidak ada yang
+bergerak. Sekarang tidak ada yang diambil sampai sesuatu benar-benar mengubah
+disk; satu operasi yang disiapkan menggambar ulang dari cache dengan **nol
+permintaan**, menjaga posisi gulir Anda, dan editor yang terbuka ikut digambar
+ulang - beserta kursornya.
+
+**Dan bidangnya tidak bisa dibaca kembali.** `orc statusline show --json`
+mengirim dua belas dari dua puluh empat bidang yang bisa dibawa sebuah bagian,
+jadi `case`, `prefix`, `min_cols`, `precision` dan tujuh lainnya ditulis ke disk
+dengan benar lalu tidak terlihat oleh panel yang menulisnya. Sekarang semua
+bidang dikirim, ditambah `authored`, sehingga sebuah kontrol bisa menyebut
+**nilai mana yang milik Anda** dan mana yang warisan.
+
+**Enam bagian per baris, bukan lima** - dipindahkan di satu tempat, dan pemisah
+tetap tidak dihitung. **Menu tarik-turun yang tidak terbaca** ternyata adalah
+panel tanpa warna sama sekali: `hookui.css` ditulis memakai empat token CSS yang
+tidak ada, jadi setiap deklarasi itu dibuang diam-diam oleh peramban.
+
+**Pratinjau kini digambar sebagai terminal** - jendela selebar yang disebutkan
+dengan penggaris kolom - dan `orc statusline preview` menerima `--theme` dan
+`--glyphs` sebagai penimpaan **khusus gambar**, jadi laci baru menampilkan bar
+yang sama di bawah keempat set warna dan ketujuh set simbol. Memilih set warna
+dari namanya adalah tebakan; memilihnya dari gambarnya adalah keputusan.
+
+Detail lengkap di [CHANGELOG.md](CHANGELOG.md).
+
+---
 
 ### v1.3.0 - bangun sendiri baris status Anda _(04-09-2026)_
 

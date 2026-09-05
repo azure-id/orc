@@ -153,26 +153,180 @@ test("statusline: the dense-prefix rule is enforced, and every violation is NAME
   }
 });
 
-test("statusline: six on a line is refused, naming the line and the count", () => {
+test("statusline: SIX fit on a line, and the seventh is refused by name (v1.4.2)", () => {
+  // The cap moved 5 -> 6, and it moved in ONE place: `SL_MAX_PER_LINE`. This
+  // asserts BOTH halves — that the sixth is accepted and that the seventh is
+  // refused naming the line and the count — because a cap raised in the
+  // validator and left at five in the payload is a board that offers a slot the
+  // CLI then rejects.
   const { root } = freshInstall();
   try {
     slj(root, ["apply", "orc-default"]); // line 1 already holds 5
-    const r = slj(root, ["set", "1", "6", "cost-usd"]);
-    assert.strictEqual(r.status, 1);
-    assert.ok(r.json.errors.some((e) => /line 1 holds 6 components \(max 5\)/.test(e)), JSON.stringify(r.json.errors));
+    const six = slj(root, ["set", "1", "6", "cost-usd"]);
+    assert.strictEqual(six.status, 0, "the sixth is legal: " + JSON.stringify(six.json && six.json.errors));
+    const seven = slj(root, ["set", "1", "7", "branch"]);
+    assert.strictEqual(seven.status, 1);
+    assert.ok(seven.json.errors.some((e) => /line 1 holds 7 components \(max 6\)/.test(e)), JSON.stringify(seven.json.errors));
+    // The panel reads the cap rather than knowing it.
+    const cat = slj(root, ["components"]).json;
+    assert.strictEqual(cat.max_per_line, 6, "the catalogue carries the same cap the validator enforces");
+    assert.strictEqual(slj(root, ["show"]).json.lines[0].full, true, "six is full");
   } finally {
     rmrf(root);
   }
 });
 
-test("statusline: spacer, divider and fill do not count against the five", () => {
+test("statusline: spacer, divider and fill do not count against the six", () => {
   // The limit is about how much a line SAYS, and none of the three says
   // anything.
   const { root } = freshInstall();
   try {
     slj(root, ["apply", "orc-default"]);
-    const r = slj(root, ["set", "1", "6", "fill"]);
+    slj(root, ["set", "1", "6", "cost-usd"]); // now genuinely full
+    const r = slj(root, ["set", "1", "7", "fill"]);
     assert.strictEqual(r.status, 0, "a fill on a full line is legal: " + JSON.stringify(r.json && r.json.errors));
+    assert.strictEqual(slj(root, ["show"]).json.lines[0].counted, 6, "the fill is not counted");
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("statusline: the HOOK draws six, and counts structural parts the way the validator does", () => {
+  // THE CAP LIVED IN THREE PLACES AND THIS ONE WAS THE LAST. The hook's cheap
+  // shape guard held its own `5` and counted EVERY item op, so it disagreed
+  // with the validator twice — a legal six-part line, and a legal five plus a
+  // spacer — and BOTH fell silently back to the shipped lines. From the user's
+  // side that reads as "adding a sixth part reset my bar to the default".
+  const { root, claudeDir } = freshInstall();
+  const orc = path.join(claudeDir, "orc");
+  const payload = { cwd: root, session_id: "s", model: { id: "claude-opus-5" }, effort: { level: "high" } };
+  try {
+    cli(["statusline", "apply", "orc-default", "--dir", root, "--json"]);
+    cli(["statusline", "set", "1", "6", "cost-usd", "--dir", root, "--json"]);
+    cli(["statusline", "set", "1", "7", "fill", "--dir", root, "--json"]); // structural
+    cli(["config", "set", "statusline_custom", "on", "--dir", root]);
+
+    // The cap travels on the LOCK — a hook cannot call this CLI, so a
+    // hardcoded number there is a second idea of how much one line may say.
+    const lock = JSON.parse(fs.readFileSync(path.join(orc, "statusline.lock.json"), "utf8"));
+    assert.strictEqual(lock.max_per_line, 6, "the lock carries the cap");
+    // And the compiler marks the structural op, because a compiled op carries
+    // an INSTANCE id and never a component type.
+    const prog = JSON.parse(fs.readFileSync(path.join(orc, "statusline-compiled.json"), "utf8"));
+    const items = prog.lines[0].ops.filter((o) => o.op === "item");
+    assert.strictEqual(items.length, 7);
+    assert.strictEqual(items.filter((o) => !o.s).length, 6, "six count, the fill does not");
+
+    const r = runHook(claudeDir, "orc-statusline.js", payload);
+    assert.strictEqual(r.status, 0);
+    assert.ok(!r.stdout.includes("agents 0"), "it fell back to the shipped lines: " + JSON.stringify(r.stdout));
+    assert.ok(!fs.existsSync(path.join(orc, "statusline-state.json")),
+      "a fallback records itself, and there must not be one here");
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("statusline components --json: a renderer says which item fields it USES", () => {
+  // Twenty-eight of the thirty-five renderers ignore `label` entirely — a bar
+  // with a word in front of it is a different renderer, which is the design.
+  // The panel offered the Name box on every shape anyway: it took the text, the
+  // CLI wrote it to disk correctly, and nothing ever appeared on the bar. A
+  // control that cannot do anything must SAY so, and the panel cannot know
+  // which shapes those are without a second idea of the catalogue.
+  const { root } = freshInstall();
+  try {
+    const cat = slj(root, ["components"]).json;
+    assert.deepStrictEqual(cat.label_renderers.slice().sort(),
+      ["angle", "badge", "bracket", "label-value", "pill", "plain", "stack"]);
+    for (const r of cat.label_renderers) assert.ok(cat.renderers[r].uses.includes("label"), r + " must use label");
+    assert.ok(!cat.renderers.bare.uses.includes("label"), "bare draws no label");
+    assert.ok(!cat.renderers.icon.uses.includes("label"), "an icon draws no label");
+    // Only a text renderer lowers the FORMAT, which is where case, prefix,
+    // suffix, precision and the rest ride.
+    assert.ok(cat.renderers.bare.uses.includes("case"), "a text renderer formats its value");
+    assert.ok(!cat.renderers.blocks.uses.includes("case"), "a bar has no text to case");
+    assert.ok(cat.renderers.blocks.uses.includes("width"), "a bar has a width");
+    assert.deepStrictEqual(cat.renderers.icon.uses, [], "a state glyph uses none of them");
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("statusline: SL_LABEL_RENDERERS is exactly the set the compiler draws a label for", () => {
+  // The mirror, pinned. Adding a `pushLabel` branch without adding the name to
+  // the set ships a control that lies — the `DIY_STEPS` shape.
+  const src = fs.readFileSync(path.join(REPO, "bin", "cli.js"), "utf8");
+  const declared = /const SL_LABEL_RENDERERS = new Set\(\[([^\]]*)\]\)/.exec(src);
+  assert.ok(declared, "the set exists");
+  const names = [...declared[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]).sort();
+
+  // Read the compiler's own switch: every `case "x":` that falls through to a
+  // branch which pushes a label.
+  const swAt = src.indexOf("  switch (r.render) {");
+  const sw = src.slice(swAt, src.indexOf("  if (close) ops.push(slLit(close));", swAt));
+  assert.ok(swAt > 0 && sw.length > 200, "the compiler switch was not found - this test is reading the wrong thing");
+  const drawn = new Set();
+  let pending = [];
+  for (const line of sw.split("\n")) {
+    const c = /^\s*case "([^"]+)":\s*$/.exec(line);
+    if (c) {
+      pending.push(c[1]);
+      continue;
+    }
+    if (/pushLabel\(|slLit\(applyCase\(label\)\)/.test(line)) for (const n of pending) drawn.add(n);
+    if (/break;/.test(line)) pending = [];
+  }
+  assert.deepStrictEqual(names, [...drawn].sort(),
+    "SL_LABEL_RENDERERS and the compiler's switch disagree");
+});
+
+test("statusline show --json: EVERY item field ships, or a control cannot read its own value back", () => {
+  // `--json is not a summary` (v0.49.1), found again at v1.4.2. `show` emitted
+  // twelve of the fields a chip can carry, so a `case`, a `prefix`, a
+  // `min_cols` or a `precision` was written to disk and then invisible to the
+  // editor that wrote it: the control reopened blank and the change read as
+  // having done nothing at all.
+  const { root } = freshInstall();
+  try {
+    slj(root, ["apply", "orc-default"]);
+    slj(root, ["set", "1", "2", "--case", "upper", "--prefix", "[", "--suffix", "]",
+      "--min-cols", "90", "--precision", "1", "--min-width", "4", "--priority", "2",
+      "--label", "ZZZ", "--glyphs", "ascii", "--compact", "off"]);
+    const it = slj(root, ["show"]).json.lines[0].items[1];
+    for (const [k, v] of [["case", "upper"], ["prefix", "["], ["suffix", "]"], ["min_cols", 90],
+      ["precision", 1], ["min_width", 4], ["priority", 2], ["label", "ZZZ"], ["glyphs", "ascii"],
+      ["compact", "off"]])
+      assert.strictEqual(it[k], v, "show --json dropped " + k);
+    // AUTHORED is the other half: a control that cannot tell "you picked the
+    // colour set's value" from "you picked nothing" cannot offer to clear it.
+    assert.strictEqual(it.authored.case, "upper", "the raw item is carried too");
+    assert.ok(!("value_color" in it.authored), "an inherited field is not reported as the user's");
+    // An absent LIST is an empty list, never null: a control that iterates it
+    // throws, and a null would read as "unknown" when it means "nothing set".
+    assert.deepStrictEqual(it.hide_when, []);
+    assert.deepStrictEqual(it.emphasis, []);
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("statusline preview: --theme and --glyphs are RENDER-ONLY, and never write", () => {
+  // The panel draws the same bar under every colour set and every symbol set.
+  // If that override touched the layout, looking at the options would change
+  // the answer.
+  const { root } = freshInstall();
+  try {
+    slj(root, ["apply", "orc-default"]);
+    const before = slj(root, ["show"]).json;
+    const a = slj(root, ["preview", "--theme", "mono"]).json;
+    const b = slj(root, ["preview", "--glyphs", "ascii"]).json;
+    assert.strictEqual(a.theme, "mono", "the picture says what it was drawn with");
+    assert.strictEqual(b.glyphs, "ascii");
+    assert.notStrictEqual(a.text, slj(root, ["preview"]).json.text, "a colour set that changes nothing is not a colour set");
+    const after = slj(root, ["show"]).json;
+    assert.strictEqual(after.theme, before.theme, "the override wrote the layout");
+    assert.strictEqual(after.glyphs, before.glyphs, "the override wrote the layout");
   } finally {
     rmrf(root);
   }
@@ -449,12 +603,13 @@ test("statusline: the hook falls back — every gate rung, and none of them thro
     assert.strictEqual(r.status, 0);
     assert.strictEqual(state(), "statusline-layout-skew");
 
-    // Rung 5 — a hand-edited compiled file with six items on a line.
+    // Rung 5 — a hand-edited compiled file with SEVEN items on a line. Six is
+    // legal as of v1.4.2, and the cap the guard uses is the one on the lock.
     fs.writeFileSync(lockPath, JSON.stringify(lock));
     const cpath = path.join(orc, "statusline-compiled.json");
     const prog = JSON.parse(fs.readFileSync(cpath, "utf8"));
     const one = prog.lines[0].ops.find((o) => o.op === "item");
-    prog.lines[0].ops = [one, one, one, one, one, one];
+    prog.lines[0].ops = [one, one, one, one, one, one, one];
     fs.writeFileSync(cpath, JSON.stringify(prog));
     r = runHook(claudeDir, "orc-statusline.js", payload);
     assert.strictEqual(r.status, 0);
@@ -874,6 +1029,82 @@ test("statusline panel: the illegal drop is impossible, and the reason travels w
   assert.match(js, /b\.disabled = true;\s*\n\s*b\.title = legal\.why;/, "a blocked button says why on hover");
 });
 
+test("statusline panel: a staged edit REPAINTS and never refetches (v1.4.2)", () => {
+  // Staging used to re-enter the router, which threw the panel away and
+  // refetched four endpoints — so every click looked like a page reload, and
+  // worse, a staged change looked like an applied one. `hkOp` paints from the
+  // cache; only the things that actually move the disk reload.
+  const js = panelCode("hookui");
+  assert.ok(js.indexOf("function rerender") === -1, "the router re-entry is gone");
+  assert.match(js, /HK_OPS\.push\(op\);\s*\n[\s\S]{0,400}?hkPaint\(\);/, "hkOp repaints");
+  assert.match(js, /function hkPaint\(\)/, "there is exactly one paint");
+  assert.match(js, /function hkReload\(\)/, "a refetch exists for the writes that need one");
+  // The scroll position is kept by hand: a board you are halfway down must not
+  // jump to the top because you moved one chip.
+  assert.match(js, /window\.scrollTo\(0, y\)/, "the paint keeps the scroll position");
+});
+
+test("statusline panel: the open editor follows the staged state, caret and all", () => {
+  // The editor used to be built once and left standing while the panel behind
+  // it was rebuilt, so every control showed the value from BEFORE the change
+  // the user had just made. It repaints now — which means the caret has to
+  // survive, or a name is one letter long.
+  const js = panelCode("hookui");
+  assert.match(js, /HK_MODAL = \{ repaint: paint \}/, "the open editor is registered for repaint");
+  assert.match(js, /function focusPath/, "the caret is recorded before the repaint");
+  assert.match(js, /function restoreFocus/, "and put back after it");
+  assert.match(js, /label\.addEventListener\("input", push\)/, "a name stages per keystroke, not on blur");
+});
+
+test("statusline panel: nothing ARRIVES on a repaint, so a staged edit does not blink", () => {
+  // v1.4.2. Removing the refetch was not enough: `hkPaint` still replaces every
+  // child of a `.stack`, and `.stack > *` fades and slides each one in on a
+  // 30ms stagger — so with the network tab EMPTY the panel still read as
+  // reloading, on every keystroke. `hk-quiet` removes the ENTRANCES from the
+  // second paint onward and leaves the transitions alone, because those are
+  // about the pointer rather than about arriving.
+  const js = panelCode("hookui");
+  assert.match(js, /if \(HK_PAINTED\) HK_SLOT\.classList\.add\("hk-quiet"\)/, "the second paint is quiet");
+  assert.match(js, /pane\.classList\.add\("hk-quiet"\)/, "and so is the editor, which rebuilds per keystroke");
+  // The rule lives in 04-motion.css and nowhere else — the standing rule — and
+  // it must load AFTER the entrances it turns off, or it loses on order.
+  const motion = fs.readFileSync(path.join(REPO, "bin", "webui", "css", "04-motion.css"), "utf8");
+  assert.match(motion, /\.hk-quiet > \*[\s\S]{0,160}animation: none/, "the quiet rule is in the motion file");
+  assert.ok(motion.indexOf(".stack > * { animation: block-in") < motion.indexOf(".hk-quiet > *"),
+    "it must come after the entrance it switches off");
+  const css = require("./_helpers.js").panelCss("hookui");
+  assert.ok(css.indexOf("hk-quiet") === -1, "motion lives in 04-motion.css and nowhere else");
+});
+
+test("statusline panel: a control the SHAPE cannot use is disabled and says why", () => {
+  // Twenty-eight of the thirty-five renderers draw no label at all. The Name
+  // box was offered on every one of them, took the text, and the CLI wrote it
+  // to disk correctly — where nothing ever read it back onto the bar. The
+  // control keeps its slot (a value already set has to stay visible) and is
+  // switched off with the reason, and the panel gets that answer from the CLI's
+  // per-renderer `uses` rather than knowing which shapes those are.
+  const js = panelCode("hookui");
+  assert.match(js, /const usesOf = /, "the panel asks the renderer what it uses");
+  assert.match(js, /rend\.uses\.includes\(field\)/, "and it is the CLI's list");
+  assert.match(js, /const gated = /, "there is one wrapper for an unusable control");
+  for (const field of ['gated("label"', 'gated("case"', 'gated("prefix"', 'gated("suffix"', 'gated("format"', 'gated("min_width"'])
+    assert.ok(js.includes(field), "this control is not gated: " + field);
+  assert.ok(js.indexOf('"plain"') === -1 && js.indexOf('"label-value"') === -1,
+    "the panel must not name the shapes that draw a label — that is cat.label_renderers");
+});
+
+test("statusline panel: the preview is a TERMINAL, and the comparison is on request", () => {
+  // A status line in a bare grey box is a string. The same string inside a
+  // window of the stated width, with a ruler, is a picture of the thing. And
+  // eleven more terminals is a wall of them, so they live in one drawer that is
+  // closed by default and fetched on the first open.
+  const js = panelCode("hookui");
+  assert.match(js, /function termWindow/, "the preview draws a terminal");
+  assert.match(js, /function rulerRow/, "the width has a place on the picture");
+  assert.match(js, /let HK_COMPARE = false/, "the drawer is closed by default");
+  assert.match(js, /if \(HK_COMPARE && !HK_COMPARE_DATA\) loadCompare/, "its rows are fetched only when it is opened");
+});
+
 test("statusline panel: every drag has a keyboard equivalent and a menu", () => {
   // A board only reachable by mouse is a board a lot of people cannot use, and
   // pointer drag is unusable for a real fraction of them.
@@ -940,11 +1171,14 @@ test("statusline: an expand that would overflow a line is REFUSED, naming the co
   try {
     slj(root, ["apply", "minimal"]);
     slj(root, ["set", "1", "1", "tier-block"]);
+    // Five on the line, one of them a three-part composite: expanding it asks
+    // for seven, which is one past the cap.
+    slj(root, ["set", "1", "5", "cost-usd"]);
     const before = slj(root, ["show"]).json.lines[0].items.length;
     const r = slj(root, ["expand", "1:1"]);
     assert.strictEqual(r.status, 1);
     assert.strictEqual(r.json.wrote, false);
-    assert.match(r.json.errors.join(" "), /line 1 holds 6 components \(max 5\)/);
+    assert.match(r.json.errors.join(" "), /line 1 holds 7 components \(max 6\)/);
     assert.strictEqual(slj(root, ["show"]).json.lines[0].items.length, before, "nothing moved");
   } finally {
     rmrf(root);

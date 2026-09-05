@@ -31,5 +31,5 @@
   "tour.14.title": "Work that runs somewhere else",
   "tour.14.text": "One line from nothing to a hundred: how hard a task scored. Every part of it shows where that work actually runs — Claude in blue, a provider you connected in green. A range you have not connected keeps its slot, so \"I left the hard work on Claude on purpose\" never looks like \"there is no hard work\". Nothing leaves this machine until you connect something, test it, and press Apply.",
   "tour.15.title": "Build your own status line",
-  "tour.15.text": "Three lines, each holding up to five parts. Line 1 must have something before line 2 can. The preview at the top is exactly what your terminal will show — it is drawn by the same code the bar runs."
+  "tour.15.text": "Three lines, each holding up to six parts. Line 1 must have something before line 2 can. The preview at the top is exactly what your terminal will show — it is drawn by the same code the bar runs."
 }

@@ -20,7 +20,7 @@
   margin: 0;
   padding: 10px 12px;
   border-radius: 8px;
-  background: var(--bg-sunken);
+  background: var(--surface-2);
   border: 1px solid var(--line);
   /* A wide line SCROLLS inside its own box. The page body must never scroll
      sideways — and squeezing a status line to fit would misreport its width,
@@ -57,21 +57,183 @@
   margin-bottom: 10px;
 }
 
-.hk-degrade {
-  margin-top: 14px;
-  display: grid;
-  gap: 6px;
+/* ── the terminal window (v1.4.2) ──────────────────────────────────────── */
+/* The preview is a claim about what a terminal will print, so it is drawn as a
+   terminal. The chrome is not decoration: the title bar states the width the
+   picture was rendered at, and the ruler under it shows where that width falls.
+   Everything inside stays on the same monospaced grid - anything proportional
+   here would misrepresent every width decision the user makes. */
+.hk-term {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--surface-2);
 }
-.hk-degrade-row {
+.hk-term-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-3);
+}
+.hk-term-dots {
+  display: flex;
+  gap: 5px;
+  flex: 0 0 auto;
+}
+.hk-term-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--line);
+}
+.hk-term-title {
+  font-size: 11px;
+  color: var(--text-dim);
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.hk-term-tags {
+  display: flex;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+/* The colour set and the symbol set the picture was drawn with. The words are
+   the CLI's own and are printed verbatim. */
+.hk-term-tag {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 10px;
+  color: var(--text-dim);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 1px 7px;
+}
+.hk-term-screen {
+  padding: 10px 12px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+.hk-term-screen::-webkit-scrollbar {
+  height: 8px;
+}
+.hk-term-screen::-webkit-scrollbar-track {
+  background: transparent;
+}
+.hk-term-screen::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border-radius: 4px;
+}
+/* The line inside a window has no box of its own: the window IS the box, and a
+   second border around the same string reads as a second thing. */
+.hk-preview-flat {
+  border: none;
+  background: transparent;
+  padding: 0;
+  overflow-x: visible;
+}
+.hk-term-sm .hk-term-screen {
+  padding: 7px 10px;
+}
+.hk-term-sm .hk-preview {
+  font-size: 12px;
+}
+.hk-ruler {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre;
+  color: var(--text-dim);
+  opacity: 0.55;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 6px;
+  padding-bottom: 2px;
+}
+.hk-widths {
+  margin-top: 8px;
+}
+
+/* ── the comparison drawer ─────────────────────────────────────────────── */
+/* Eleven more terminals is a wall of them, and it pushed the board off the
+   screen. One drawer, closed by default, fetched on the first open. */
+.hk-compare {
+  margin-top: 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.hk-compare-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  padding: 9px 12px;
+  border: none;
+  background: var(--surface-3);
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+}
+.hk-compare-head .tier-caret {
+  color: var(--text-dim);
+}
+.hk-compare-open .hk-compare-head .tier-caret {
+  transform: rotate(90deg);
+}
+.hk-compare-title {
+  font-weight: 600;
+  font-size: 13px;
+}
+.hk-compare-body {
+  display: none;
+  padding: 12px;
+  gap: 10px;
+}
+.hk-compare-open .hk-compare-body {
   display: grid;
-  grid-template-columns: 90px 1fr;
+}
+.hk-compare-group {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-top: 4px;
+}
+.hk-compare-row {
+  display: grid;
+  grid-template-columns: 110px 1fr;
   gap: 10px;
   align-items: center;
+  min-width: 0;
 }
-.hk-degrade-label {
+.hk-compare-label {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 11px;
-  color: var(--fg-dim);
+  color: var(--text-dim);
   text-align: right;
+}
+.hk-compare-row .hk-term-bar {
+  display: none;
+}
+/* A control this SHAPE cannot use. It keeps its slot and carries the reason —
+   "this shape cannot use it" and "we forgot to offer it" must never look the
+   same, and a value already set has to stay readable. */
+.hk-inert {
+  display: grid;
+  gap: 4px;
+}
+.hk-inert > :first-child {
+  opacity: 0.45;
+  pointer-events: none;
+}
+.hk-editor-live {
+  display: grid;
+  gap: 6px;
 }
 
 /* ── cautions ──────────────────────────────────────────────────────────── */
@@ -110,11 +272,11 @@
 .hk-line-name {
   font-size: 12px;
   font-weight: 600;
-  color: var(--fg-dim);
+  color: var(--text-dim);
 }
 .hk-line-count {
   font-size: 11px;
-  color: var(--fg-dim);
+  color: var(--text-dim);
 }
 .hk-full {
   color: var(--warn);
@@ -135,7 +297,7 @@
 .hk-zone-hot {
   border-color: var(--accent);
   border-style: solid;
-  background: var(--bg-sunken);
+  background: var(--surface-2);
 }
 .hk-zone-why {
   flex-basis: 100%;
@@ -149,8 +311,8 @@
     45deg,
     transparent,
     transparent 6px,
-    var(--bg-sunken) 6px,
-    var(--bg-sunken) 12px
+    var(--surface-2) 6px,
+    var(--surface-2) 12px
   );
 }
 .hk-blocked {
@@ -158,7 +320,7 @@
   gap: 8px;
   align-items: center;
   font-size: 12px;
-  color: var(--fg-dim);
+  color: var(--text-dim);
   padding: 8px;
 }
 
@@ -173,7 +335,7 @@
   padding: 9px 10px;
   border: 1px solid var(--line);
   border-radius: 9px;
-  background: var(--bg-raised);
+  background: var(--surface-3);
   min-width: 150px;
   max-width: 280px;
   cursor: grab;
@@ -214,7 +376,7 @@
   min-height: 24px;
 }
 .hk-grip {
-  color: var(--fg-dim);
+  color: var(--text-dim);
   font-size: 14px;
   line-height: 1;
   cursor: grab;
@@ -223,14 +385,14 @@
 .hk-chip-id {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 11px;
-  color: var(--fg-dim);
+  color: var(--text-dim);
 }
 /* "What is this thing" is the first question anybody asks of a bar full of
    symbols, and until v1.4.1 the answer lived only in a tooltip. */
 .hk-chip-desc {
   font-size: 11px;
   line-height: 1.45;
-  color: var(--fg-dim);
+  color: var(--text-dim);
 }
 .hk-chip-acts {
   display: flex;
@@ -243,13 +405,13 @@
   padding: 3px 8px;
   border: 1px solid var(--line);
   border-radius: 5px;
-  background: var(--bg-sunken);
-  color: var(--fg-dim);
+  background: var(--surface-2);
+  color: var(--text-dim);
   cursor: pointer;
 }
 .hk-act:hover {
   border-color: var(--accent);
-  color: var(--fg);
+  color: var(--text);
 }
 .hk-act-remove:hover {
   border-color: var(--bad);
@@ -259,7 +421,7 @@
 .hk-add {
   border: 1px dashed var(--line);
   background: none;
-  color: var(--fg-dim);
+  color: var(--text-dim);
   border-radius: 9px;
   padding: 10px 18px;
   cursor: pointer;
@@ -268,7 +430,7 @@
 }
 .hk-add:hover:not(:disabled) {
   border-color: var(--accent);
-  color: var(--fg);
+  color: var(--text);
 }
 .hk-add:disabled {
   cursor: not-allowed;
@@ -287,9 +449,26 @@
   padding: 4px 8px;
   border: 1px solid var(--line);
   border-radius: 6px;
-  background: var(--bg-sunken);
-  color: var(--fg);
+  background: var(--surface-2);
+  color: var(--text);
   max-width: 260px;
+}
+/* THE OPEN LIST IS NOT THE CLOSED BOX (v1.4.2). A native <select> popup is
+   drawn by the platform, and it inherits the control's `color` while taking its
+   background from the system - so a light `--fg` on a dark panel arrived as
+   near-white text on the platform's near-white menu, and the values could not
+   be read at all. `color-scheme` tells the platform which menu to draw, and the
+   option rule states both halves rather than leaving one of them to chance. */
+.hk-select {
+  color-scheme: light dark;
+}
+.hk-select option,
+.hk-select optgroup {
+  background: var(--surface-3);
+  color: var(--text);
+}
+.hk-select option:disabled {
+  color: var(--text-dim);
 }
 
 /* ── the part picker ───────────────────────────────────────────────────── */
@@ -339,14 +518,14 @@
   padding: 9px 11px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: var(--bg-raised);
+  background: var(--surface-3);
   text-align: left;
   cursor: pointer;
   color: inherit;
 }
 button.hk-pick-row:hover {
   border-color: var(--accent);
-  background: var(--bg-sunken);
+  background: var(--surface-2);
 }
 .hk-pick-row-off {
   cursor: default;
@@ -362,7 +541,7 @@ button.hk-pick-row:hover {
 .hk-pick-desc {
   font-size: 12px;
   line-height: 1.5;
-  color: var(--fg-dim);
+  color: var(--text-dim);
 }
 
 /* ── move ──────────────────────────────────────────────────────────────── */
@@ -390,7 +569,7 @@ button.hk-pick-row:hover {
   position: sticky;
   top: 0;
   z-index: 1;
-  background: var(--bg-raised);
+  background: var(--surface-3);
   padding-bottom: 4px;
 }
 /* The editor is a flex COLUMN that stretches its children, which turned a small
@@ -408,7 +587,7 @@ button.hk-pick-row:hover {
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: var(--fg-dim);
+  color: var(--text-dim);
   border-bottom: 1px solid var(--line);
   padding-bottom: 3px;
 }
@@ -428,7 +607,7 @@ button.hk-pick-row:hover {
   padding: 6px 8px;
   border: 1px solid var(--line);
   border-radius: 6px;
-  background: var(--bg-sunken);
+  background: var(--surface-2);
   cursor: pointer;
   text-align: left;
 }
@@ -437,12 +616,12 @@ button.hk-pick-row:hover {
 }
 .hk-sample-on {
   border-color: var(--accent);
-  background: var(--bg-raised);
+  background: var(--surface-3);
 }
 .hk-sample-id {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 10px;
-  color: var(--fg-dim);
+  color: var(--text-dim);
 }
 
 /* A control, its name, and the sentence that says what it does. The sentence is
@@ -462,7 +641,7 @@ button.hk-pick-row:hover {
 .hk-field-name {
   font-size: 12px;
   font-weight: 600;
-  color: var(--fg);
+  color: var(--text);
 }
 .hk-picks {
   display: flex;
@@ -475,8 +654,8 @@ button.hk-pick-row:hover {
   padding: 3px 7px;
   border: 1px solid var(--line);
   border-radius: 5px;
-  background: var(--bg-sunken);
-  color: var(--fg-dim);
+  background: var(--surface-2);
+  color: var(--text-dim);
   cursor: pointer;
 }
 .hk-pick:hover {
@@ -484,8 +663,8 @@ button.hk-pick-row:hover {
 }
 .hk-pick-on {
   border-color: var(--accent);
-  color: var(--fg);
-  background: var(--bg-raised);
+  color: var(--text);
+  background: var(--surface-3);
 }
 .hk-checks {
   display: grid;
@@ -525,7 +704,7 @@ button.hk-pick-row:hover {
 .hk-prow-desc {
   font-size: 12px;
   line-height: 1.5;
-  color: var(--fg-dim);
+  color: var(--text-dim);
 }
 .hk-prow-why {
   flex-basis: 100%;
@@ -562,7 +741,7 @@ button.hk-pick-row:hover {
   padding: 8px 10px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: var(--bg-sunken);
+  background: var(--surface-2);
   cursor: pointer;
   text-align: left;
   color: inherit;
@@ -572,13 +751,13 @@ button.hk-pick-row:hover {
 }
 .hk-theme-on {
   border-color: var(--accent);
-  background: var(--bg-raised);
+  background: var(--surface-3);
 }
 .hk-theme-name {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 12px;
   font-weight: 600;
-  color: var(--fg);
+  color: var(--text);
 }
 
 /* A number field is a NUMBER field: wide enough for three digits and its

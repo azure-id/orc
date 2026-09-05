@@ -182,10 +182,13 @@ function render(d, tasks) {
 
     // Rung 5. A subagent row is ONE line by construction — Claude Code renders
     // one row per task — so the board's three-line shape does not apply and the
-    // cheap guard is simply "one line, at most five things on it".
+    // cheap guard is simply "one line, at most `max_per_line` things on it".
     if (!Array.isArray(prog.lines) || !prog.lines.length) return null;
     const line = prog.lines[0];
-    if ((line.ops || []).filter((o) => o.op === "item").length > 5) return null;
+    // The same cap, from the same place, counted the same way (v1.4.2). A
+    // hardcoded number here is a second idea of how much one line may say.
+    const cap = Number(lock && lock.max_per_line) > 0 ? Number(lock.max_per_line) : 6;
+    if ((line.ops || []).filter((o) => o.op === "item" && !o.s).length > cap) return null;
 
     // Rung 6. One row per task, each rendered with THAT TASK bound.
     const now = Date.now();

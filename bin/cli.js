@@ -34405,6 +34405,43 @@ const STATUSLINE_RENDERERS = {
   pulse: { kind: "motif", sub: "pulse", needs: "motif" },
 };
 
+// WHICH RENDERERS DRAW A LABEL. Seven of thirty-five, and the other
+// twenty-eight ignore `label` entirely — a bar with a word in front of it is a
+// different renderer (`plain`), which is the design. That was invisible in the
+// panel: the Name box was offered on every shape, took the text, wrote it to
+// disk correctly, and then nothing appeared on the bar. A control that cannot
+// do anything must SAY so.
+//
+// It is a mirror of the switch in `slLowerItem`, and a golden test reads that
+// switch and compares — the `DIY_STEPS` shape. Adding a `pushLabel` branch
+// without adding the name here fails the test rather than shipping a control
+// that lies.
+const SL_LABEL_RENDERERS = new Set(["plain", "label-value", "bracket", "angle", "badge", "pill", "stack"]);
+
+// The item fields a renderer CONSUMES. Everything else on the chip is ignored
+// by that shape, and the panel greys it out with this as the reason.
+//
+// The split is the compiler's own: only a `text` (and `link`) renderer lowers
+// the FORMAT — `case`, `prefix`, `suffix`, `format`, `compact`, `min_width`,
+// `precision`, `truncate` all ride inside it — while a bar takes `width`,
+// `ramp` and `threshold`, a series takes `width`, and a state or a motif takes
+// neither. Colour and emphasis apply everywhere, so they are never listed as
+// unusable.
+function slRendererUses(name) {
+  const rend = STATUSLINE_RENDERERS[name];
+  if (!rend) return [];
+  const out = [];
+  if (SL_LABEL_RENDERERS.has(name)) out.push("label");
+  if (rend.kind === "text" || rend.kind === "link")
+    out.push("case", "prefix", "suffix", "format", "compact", "min_width", "precision", "truncate");
+  if (rend.width) out.push("width");
+  if (rend.kind === "bar" || name === "bar") {
+    out.push("ramp");
+    if (!out.includes("width")) out.push("width");
+  }
+  return out;
+}
+
 // ── The glyph sets (design-language.md §2) ──────────────────────────────────
 // R1: every glyph here is EXACTLY one column in a monospaced terminal, and a
 // test walks all of them. Fullwidth forms, bare emoji and combining marks are
@@ -34819,6 +34856,15 @@ const SL_BY_ID = new Map(STATUSLINE_COMPONENTS.map((c) => [c.id, c]));
 // compiler, the IR, every renderer, the glyph sets, the colour model and the
 // validator — what differs is the component set, the file names and the config
 // key. A second compiler is exactly what this table exists to prevent.
+// HOW MUCH ONE LINE MAY SAY (v1.4.2). Six, not five. The limit is about
+// reading, not about rendering: a line is scanned at a glance, and past about
+// half a dozen facts the glance becomes a read. Six is where people actually
+// stopped asking for one more — and it is ONE number, here, because a slot cap
+// spelled out at each of its five call sites is a cap that drifts on the first
+// change. A structural part (a spacer, a divider, a fill) is not a thing the
+// line SAYS and still does not count against it.
+const SL_MAX_PER_LINE = 6;
+
 const SL_BOARDS = {
   status: {
     id: "status",
@@ -35005,7 +35051,7 @@ function slValidate(layout) {
       E(`line ${i + 1} holds ${rawCounts[i]} component${rawCounts[i] === 1 ? "" : "s"} but line ${i} is empty — fill line ${i} first`);
   }
   layout.lines.forEach((l, i) => {
-    if (counts[i] > 5) E(`line ${i + 1} holds ${counts[i]} components (max 5) — remove one`);
+    if (counts[i] > SL_MAX_PER_LINE) E(`line ${i + 1} holds ${counts[i]} components (max ${SL_MAX_PER_LINE}) — remove one`);
   });
 
   const seenIds = new Set();
@@ -35312,6 +35358,13 @@ function slCompile(layout) {
         pad_r: (r.padding && r.padding[1]) || 0,
         children,
       };
+      // WHETHER THIS ONE COUNTS AGAINST THE LINE'S CAP (v1.4.2). The hook's
+      // cheap shape guard has to count the same way the validator does, and it
+      // cannot: the compiled op carries an INSTANCE id, never a component type.
+      // So the compiler — which is the one place that knows — says so. Without
+      // it the guard counted spacers too, and a legal line of six plus a fill
+      // fell back to the shipped lines with no visible reason.
+      if (slIsStructural(item.type)) itemOp.s = 1;
       if (r.min_cols) itemOp.min_cols = r.min_cols;
       if (r.max_cols) itemOp.max_cols = r.max_cols;
       ops.push(itemOp);
@@ -35375,6 +35428,13 @@ function slCompile(layout) {
     providers: [...providers].sort(),
     series: [...seriesWanted].sort(),
     needs_refresh_interval: timeBased ? 5 : null,
+    // THE CAP TRAVELS WITH THE PROGRAM (v1.4.2). A hook cannot call this CLI —
+    // a status line re-renders on every keystroke — so before this it simply
+    // held its own `5`, and raising the cap here left every legal six-part line
+    // falling back to the shipped lines with the reason only in a ledger file.
+    // The lock is already gated on `orc_version`, so a stale copy cannot
+    // outlive the build that wrote it.
+    max_per_line: SL_MAX_PER_LINE,
     warnings: [],
   };
   return { compiled, lock };
@@ -36165,7 +36225,12 @@ function slComponentsCmd() {
       count: out.length,
       groups: SL_GROUP_NAMES,
       components: out,
-      renderers: Object.fromEntries(Object.entries(STATUSLINE_RENDERERS).map(([k, v]) => [k, { kind: v.kind, form: v.form || null, needs: v.needs, width: v.width || null, decoration: !!v.decoration }])),
+      // `uses` is the field list this shape actually consumes. The panel greys
+    // out the controls it does not, rather than offering a Name box on a bar.
+    renderers: Object.fromEntries(Object.entries(STATUSLINE_RENDERERS).map(([k, v]) => [k, { kind: v.kind, form: v.form || null, needs: v.needs, width: v.width || null, decoration: !!v.decoration, uses: slRendererUses(k) }])),
+    // Which shapes DO draw a label, so a refusal can name them instead of
+    // saying "not here".
+    label_renderers: [...SL_LABEL_RENDERERS],
       glyph_sets: Object.keys(STATUSLINE_GLYPHSETS),
       ramps: Object.fromEntries(Object.entries(STATUSLINE_RAMPS).map(([k, v]) => [k, { stops: v.stops, colors: v.colors, why: v.why }])),
       themes: STATUSLINE_THEMES,
@@ -36181,7 +36246,7 @@ function slComponentsCmd() {
       themes_about: SL_THEME_ABOUT,
       board: board.id,
       boards: Object.keys(SL_BOARDS),
-      max_per_line: 5,
+      max_per_line: SL_MAX_PER_LINE,
       lines: board.lines,
       config_key: board.key,
       setting: board.setting,
@@ -36245,6 +36310,31 @@ function slLoadOrDefault(claudeDir) {
   return slReadLayout(claudeDir, b) || slBuildPreset(b.id === "subagent" ? "agent-default" : "orc-default");
 }
 
+// EVERY field a chip can carry, in the order the editor asks about them. It is
+// ONE list: `show --json` emits all of them, and the panel's editor reads them
+// back. A field that is settable and not listed here is a write with no way to
+// see it again, which is the v1.4.2 defect this exists to make impossible.
+const SL_ITEM_FIELDS = [
+  "render", "label", "color", "label_color", "value_color", "bg", "ramp",
+  "glyphs", "format", "case", "truncate", "compact", "prefix", "suffix",
+  "emphasis", "hide_when", "width", "precision", "min_width", "min_cols",
+  "max_cols", "priority", "max_len", "align", "draw_empty", "unknown",
+];
+// The ones whose absence is an empty LIST rather than a null — a control that
+// iterates a null throws, and a null here would read as "unknown" when it means
+// "nothing selected".
+const SL_ITEM_LIST_FIELDS = new Set(["emphasis", "hide_when"]);
+
+function slAuthoredFields(it) {
+  const out = {};
+  for (const k of Object.keys(it || {})) {
+    if (k === "id" || k === "type" || k === "children") continue;
+    if (it[k] === null || it[k] === undefined) continue;
+    out[k] = it[k];
+  }
+  return out;
+}
+
 function slShowCmd(claudeDir) {
   const layout = slReadLayout(claudeDir);
   const eff = layout || slBuildPreset("orc-default");
@@ -36262,23 +36352,29 @@ function slShowCmd(claudeDir) {
     max_width: l.max_width || 0,
     count: (l.items || []).length,
     counted: (l.items || []).filter((it) => !slIsStructural(it.type)).length,
-    full: (l.items || []).filter((it) => !slIsStructural(it.type)).length >= 5,
+    full: (l.items || []).filter((it) => !slIsStructural(it.type)).length >= SL_MAX_PER_LINE,
+    // `--json is not a summary` (v0.49.1), found once more (v1.4.2). This
+    // emitted TWELVE of the twenty-four fields a chip can carry, so a user who
+    // set `case`, `prefix`, `min_cols` or `precision` got a write that landed on
+    // disk and a panel that could never read it back — the editor reopened with
+    // the control blank and the change looked like it had done nothing. Every
+    // resolved field ships now, and `authored` carries the raw item so a
+    // control can say which values are the USER'S rather than inherited.
     items: (l.items || []).map((it, pi) => {
       const r = slResolveItem(it, eff, l);
-      return {
+      const row = {
         pos: pi + 1,
         id: it.id,
         type: it.type,
-        render: r ? r.render : it.render,
-        label: r ? r.label : null,
-        label_color: r ? r.label_color || null : null,
-        value_color: r ? r.value_color || null : null,
-        ramp: r ? r.ramp || null : null,
-        emphasis: r ? r.emphasis || [] : [],
-        hide_when: r ? r.hide_when || [] : [],
-        unknown: r ? r.unknown : null,
         known: SL_BY_ID.has(it.type),
+        // WHAT THE USER SET, verbatim — never the resolution. A control that
+        // cannot tell "you chose the theme's colour" from "you chose nothing"
+        // cannot offer to clear it.
+        authored: slAuthoredFields(it),
       };
+      for (const k of SL_ITEM_FIELDS) row[k] = r && r[k] !== undefined && r[k] !== null ? r[k] : SL_ITEM_LIST_FIELDS.has(k) ? [] : null;
+      if (it.children) row.children = it.children.map((k) => ({ id: k.id, type: k.type, authored: slAuthoredFields(k) }));
+      return row;
     }),
   }));
   if (wantsJson())
@@ -36303,7 +36399,7 @@ function slShowCmd(claudeDir) {
   console.log("");
   for (const l of lines) {
     const cells = l.items.map((i) => ui.color.cyan(i.type) + ui.color.gray("/" + i.render)).join(ui.color.gray("  ·  "));
-    console.log(`  ${ui.color.gray("line " + l.line)}  ${cells || ui.color.gray("(empty)")}   ${l.full ? ui.color.yellow("5/5") : ui.color.gray(l.counted + "/5")}`);
+    console.log(`  ${ui.color.gray("line " + l.line)}  ${cells || ui.color.gray("(empty)")}   ${l.full ? ui.color.yellow(l.counted + "/" + SL_MAX_PER_LINE) : ui.color.gray(l.counted + "/" + SL_MAX_PER_LINE)}`);
   }
   if (preview) {
     console.log("");
@@ -36359,7 +36455,17 @@ function slValidateCmd(claudeDir) {
 }
 
 function slPreviewCmd(claudeDir) {
-  const layout = slLoadOrDefault(claudeDir);
+  const saved = slLoadOrDefault(claudeDir);
+  // A RENDER-ONLY OVERRIDE (v1.4.2). `--theme` and `--glyphs` draw the SAVED
+  // layout under a different colour set or symbol set WITHOUT writing one — so
+  // the panel can show what each choice actually looks like instead of asking
+  // somebody to pick a colour set from its name. It is the same engine and the
+  // same layout; only the two document fields move, on a copy.
+  const layout = JSON.parse(JSON.stringify(saved));
+  const asTheme = flag("--theme");
+  const asGlyphs = flag("--glyphs");
+  if (typeof asTheme === "string" && STATUSLINE_THEMES[asTheme]) layout.theme = asTheme;
+  if (typeof asGlyphs === "string" && STATUSLINE_GLYPHSETS[asGlyphs]) layout.glyphs = asGlyphs;
   const v = slValidate(layout);
   if (!v.ok) {
     if (wantsJson()) return emitJson({ ok: false, reason: "invalid", errors: v.errors }, 1);
@@ -36398,6 +36504,11 @@ function slPreviewCmd(claudeDir) {
   const out = {
     ok: true,
     width: cols,
+    // WHAT THIS PICTURE WAS DRAWN WITH. The panel compares colour sets by
+    // asking for the same layout several times; without these two it could not
+    // label the answers.
+    theme: layout.theme,
+    glyphs: layout.glyphs,
     state,
     fixture: (SL_FIXTURES[state] || SL_FIXTURES.healthy).label,
     fixtures: Object.fromEntries(Object.entries(SL_FIXTURES).map(([k, f]) => [k, f.label])),

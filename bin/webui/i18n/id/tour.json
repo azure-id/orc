@@ -31,5 +31,5 @@
   "tour.14.title": "Pekerjaan yang berjalan di tempat lain",
   "tour.14.text": "Satu garis dari nol sampai seratus: seberapa berat skor sebuah tugas. Setiap bagiannya menunjukkan di mana pekerjaan itu benar-benar berjalan — Claude berwarna biru, penyedia yang Anda hubungkan berwarna hijau. Rentang yang belum Anda hubungkan tetap punya tempatnya, jadi \"saya sengaja meninggalkan pekerjaan berat di Claude\" tidak pernah terlihat seperti \"tidak ada pekerjaan berat\". Tidak ada yang keluar dari mesin ini sampai Anda menghubungkan sesuatu, mengujinya, dan menekan Apply.",
   "tour.15.title": "Bangun baris status Anda sendiri",
-  "tour.15.text": "Tiga baris, tiap baris memuat sampai lima bagian. Baris 1 harus terisi sebelum baris 2 bisa. Pratinjau di atas persis seperti yang akan tampil di terminal Anda - digambar oleh kode yang sama dengan yang dijalankan bilah itu."
+  "tour.15.text": "Tiga baris, tiap baris memuat sampai enam bagian. Baris 1 harus terisi sebelum baris 2 bisa. Pratinjau di atas persis seperti yang akan tampil di terminal Anda - digambar oleh kode yang sama dengan yang dijalankan bilah itu."
 }
