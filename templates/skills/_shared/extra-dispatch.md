@@ -158,8 +158,16 @@ too.
 | `fast-executor` | `/orc-fast` | `orc-executor-sonnet-4-6-high` | announced, F0 preflight | one executor, one slice, a build+test smoke gate behind it — the checks that catch a bad implementation here are engine-blind |
 | `doc-writer` | `/orc-doc` | `orc-doc-writer-opus-5-med` | announced, before the wave, naming the sections | a writer owns ONE part file and invents no fact; its output is read by a checker and by you before it ships |
 | `doc-checker` | `/orc-doc` | `orc-doc-checker-opus-5-low` | announced, before the wave | the checker reads one bounded part and reports; it rewrites nothing |
+| `test-designer` | `/orc-test` | `orc-test-designer-opus-5-high` | announced, the T1 `extra:` line, before any case runs | the designer writes a FILE the CLI reads back through a validating command, and a row that fails validation is refused BY NAME — so its output is checked before anything is sent |
 | `wiki-scanner-deep` | `/orc-wiki` | `orc-wiki-scanner-opus-4-8-high` | announced, per scan-batch, beside the resolved tier | a scanner returns an evidence-anchored doc body; every claim in it is anchored to a file you can open |
 | `wiki-scanner-light` | `/orc-wiki` | `orc-wiki-scanner-sonnet-5-high` | announced, per scan-batch, beside the resolved tier | the LIGHT tier is already a small no-new-surface delta on an existing doc |
+
+**`/orc-test`'s INTERPRETER deliberately has NO SLOT, and that refusal is the
+point.** Its slice is captured response bodies from the user's real system — the
+most sensitive payload ORC composes — and the `api` engine's `declared_files`
+fence fences FILES, not a request body. There is no version of that route this
+repo could describe honestly, so there is none. It is the `/orc-challenge never`
+shape, for a stronger reason than cost.
 
 Both wiki slots collapse onto `orc-wiki-scanner-opus-5-med` while `opus5_only` is
 on, which is why this release **adds no agent and no pair**. Two slots and one
@@ -291,6 +299,7 @@ un-shadowed one.
 | `/orc-quick` | `gated-choice` | **offered, never applied** — `quick-executor` | the lane asks which agent every time, so a foreign worker is a THIRD OPTION on that menu and never a default |
 | `/orc-doc` | `slot` | yes — `doc-writer`, `doc-checker` | a document's voice is the deliverable, so each role is a separate decision and `orc doc extra <slug>` still decides WHICH roles for THIS document |
 | `/orc-challenge` | `never` | **never** | the council is a set of measurement instruments; swapping one out changes what is being measured |
+| `/orc-test` | `slot` | yes — `test-designer` ONLY | the designer's output is a file the CLI validates before anything is sent; the INTERPRETER may never be routed, because its slice is captured response bodies from a real system and the `declared_files` fence fences files, not a request body |
 | `/orc-wiki` | `slot` | yes — `wiki-scanner-deep`, `wiki-scanner-light` | a wiki doc is evidence-anchored and cheap to re-scan |
 | `/orc-retro` · `/orc-budget` · `/orc-aftermath` · `/orc-boundary` · `/orc-pact` | `never` | never | they measure; they do not produce |
 

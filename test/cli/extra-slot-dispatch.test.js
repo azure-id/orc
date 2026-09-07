@@ -167,19 +167,19 @@ test("NEITHER a score nor a slot is refused, and the message LISTS the slots", (
   assert.equal(r.status, 2);
   const j = json(r);
   assert.equal(j.reason, "bad-slice");
-  for (const s of ["quick-executor", "fast-executor", "doc-writer", "doc-checker", "wiki-scanner-deep", "wiki-scanner-light"])
+  for (const s of ["quick-executor", "fast-executor", "doc-writer", "doc-checker", "test-designer", "wiki-scanner-deep", "wiki-scanner-light"])
     assert.ok(j.error.includes(s), "the refusal must name " + s);
   rmrf(p.root);
 });
 
-test("an unknown slot on a slice is refused with exit 2 and the six are listed", () => {
+test("an unknown slot on a slice is refused with exit 2 and every slot is listed", () => {
   const p = project();
   armedNoWire(p, "doc-writer");
   const r = dispatch(p, { slot: "not-a-slot" });
   assert.equal(r.status, 2);
   const j = json(r);
   assert.equal(j.reason, "bad-slice");
-  assert.deepEqual(j.known.length, 6);
+  assert.deepEqual(j.known.length, 7);
   rmrf(p.root);
 });
 

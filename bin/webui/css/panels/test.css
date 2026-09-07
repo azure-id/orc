@@ -1,0 +1,132 @@
+/* panels/test.css — the Test panel (v1.5.0).
+
+   /orc-test: five tabs' worth of surface. Loaded by app.html in the order its
+   <link> sits in that manifest, and for CSS the load order IS the cascade
+   order — which is why 06-responsive and 04-motion come after every panel
+   sheet.
+
+   NO COLOUR TOKEN IS DEFINED HERE. Every one of them is declared once, on bare
+   :root, in 00-tokens.css.
+
+   NO MOTION IS DEFINED HERE either. The run rows reuse `.run-row` / `.run-card`
+   from panels/runs.css, so the fold and its reduced-motion behaviour are
+   already one implementation rather than two. */
+
+/* --- the header strip ---------------------------------------------------- */
+/* Above the tabs, on every one of them: what this run measured, in one line.
+   Every value is the CLI's. */
+.ts-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-4);
+  padding: var(--sp-3);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
+  margin-bottom: var(--sp-3);
+}
+.ts-strip-item { display: grid; gap: 2px; }
+.ts-strip-value { font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.ts-strip-label { font-size: 11px; color: var(--text-faint); text-transform: uppercase; letter-spacing: .04em; }
+.ts-strip-item.ts-ok .ts-strip-value { color: var(--ok); }
+.ts-strip-item.ts-warn .ts-strip-value { color: var(--warn); }
+.ts-strip-item.ts-bad .ts-strip-value { color: var(--bad); }
+
+/* --- the caution --------------------------------------------------------- */
+/* OUTSIDE the tabs, because a caution you must hunt for is a caution nobody
+   reads. It fires only on something the run actually MEASURED. */
+.ts-caution {
+  padding: var(--sp-3);
+  border: 1px solid var(--bad);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  margin-bottom: var(--sp-3);
+}
+.ts-caution-line { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); }
+
+/* --- the authorization block --------------------------------------------- */
+/* It renders ALWAYS and verbatim. A statement nobody filled in is a STATE, and
+   it is drawn as one — never as an empty row. */
+.ts-auth {
+  display: grid;
+  gap: 2px;
+  padding: var(--sp-3);
+  border-left: 3px solid var(--ok);
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+  margin: var(--sp-3) 0;
+}
+.ts-auth-empty { border-left-color: var(--warn); }
+.ts-auth-label { font-size: 11px; color: var(--text-faint); text-transform: uppercase; letter-spacing: .04em; }
+.ts-auth-value { font-size: 14px; }
+.ts-auth-empty .ts-auth-value { color: var(--warn); }
+
+/* The hand-back. ORC does not repair the system it is testing, and the sentence
+   that says so is not decoration. */
+.ts-handback {
+  padding: var(--sp-2) var(--sp-3);
+  border-left: 3px solid var(--warn);
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  margin: var(--sp-2) 0;
+}
+
+.ts-label { font-size: 11px; color: var(--text-faint); text-transform: uppercase; letter-spacing: .04em; }
+.ts-where { color: var(--text-dim); font-family: var(--mono); font-size: 12px; }
+
+/* --- the surface --------------------------------------------------------- */
+/* A ROUTE ROW DECLARES ITS COLUMNS. Every route carries the same five children
+   in every state — method, path, two chips, and where it came from — so the
+   template is fixed and a chip can never land in a slack row. */
+.ts-route {
+  display: grid;
+  grid-template-columns: 60px minmax(0, 1fr) auto auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) 0;
+  border-top: 1px solid var(--line-soft);
+}
+.ts-route:first-of-type { border-top: 0; }
+.ts-method { font-family: var(--mono); font-size: 12px; font-weight: 600; color: var(--accent); }
+.ts-path { font-family: var(--mono); font-size: 13px; overflow-wrap: anywhere; }
+.ts-route-min { font-family: var(--mono); font-size: 12px; color: var(--text-dim); padding: 2px 0; overflow-wrap: anywhere; }
+.ts-bad { color: var(--bad); }
+
+/* --- the case matrix ----------------------------------------------------- */
+/* Same rule as the route row: FIXED columns, and the tail is a container that
+   is always present even when it holds nothing. A card whose child count
+   changes with its state must not declare its rows (`.ex-tool`'s 250px
+   ellipse), so the count here does not change. */
+.ts-case {
+  display: grid;
+  grid-template-columns: 64px auto auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--sp-2);
+  padding: var(--sp-2) 0;
+  border-top: 1px solid var(--line-soft);
+}
+.ts-case:first-of-type { border-top: 0; }
+.ts-case-id { font-family: var(--mono); font-size: 12px; font-weight: 600; }
+.ts-case-mid { display: grid; gap: 2px; min-width: 0; }
+.ts-case-target { font-family: var(--mono); font-size: 13px; overflow-wrap: anywhere; }
+.ts-case-why { font-size: 12px; color: var(--text-dim); overflow-wrap: anywhere; }
+.ts-case-gap { font-size: 12px; color: var(--warn); overflow-wrap: anywhere; }
+.ts-case-ev { font-family: var(--mono); font-size: 11px; color: var(--text-faint); overflow-wrap: anywhere; }
+.ts-case-tail { display: flex; flex-wrap: wrap; gap: var(--sp-1); justify-content: flex-end; }
+
+/* --- the closed OWASP set ------------------------------------------------ */
+/* TEN ROWS, ALWAYS. An `unchecked` row keeps its slot and carries its reason;
+   it is drawn quieter than a FOUND row and it is never drawn as absent. */
+.ts-owasp {
+  display: grid;
+  grid-template-columns: 64px auto minmax(0, 1fr);
+  align-items: start;
+  gap: var(--sp-2);
+  padding: var(--sp-2) 0;
+  border-top: 1px solid var(--line-soft);
+}
+.ts-owasp:first-of-type { border-top: 0; }
+.ts-owasp-id { font-family: var(--mono); font-size: 12px; font-weight: 600; }
+.ts-owasp-mid { display: grid; gap: 3px; min-width: 0; }
+.ts-owasp-name { font-size: 13px; }
+.ts-owasp-unchecked { font-size: 12px; color: var(--text-dim); overflow-wrap: anywhere; }

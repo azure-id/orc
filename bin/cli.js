@@ -1229,6 +1229,11 @@ const CONFIG_FAMILIES = {
   // config — it lives in its own file with one writer — because a colour and a
   // renderer are not settings, they are a document.
   statusline: { contested: false, question: "whether the status line renders your composed layout or the shipped one" },
+  // v1.5.0 — /orc-test. NOTHING here names a target and nothing here permits a
+  // destructive probe: both are per-run, per-target decisions with a recorded
+  // reason, because a config that once said yes is on for the run you needed it
+  // off.
+  test: { contested: false, question: "how far a live test run goes, and how hard it pushes" },
 };
 
 // Ordered, tiered metadata. Common first, then advanced.
@@ -1354,6 +1359,19 @@ const CONFIG_META = [
   { key: "doc_write_mode", def: "ask", tier: "common", answers: [{ family: "doc", prio: "P2", mode: "replace" }], lanes: ["orc-doc"], validate: vEnum("ask", "partial", "all"), options: ["ask", "partial", "all"], desc: "How much of a /orc-doc document is bought at once. `partial` writes ONE wave, then stops so you can read those section files and redirect before the rest is paid for — the single biggest saving in the lane. `all` writes every wave. `ask` (default) makes it a question asked once per run and stored, so the choice is yours and never the model's to remember." },
   { key: "doc_language", def: "en", tier: "common", answers: [{ family: "doc", prio: "P2", mode: "replace" }], lanes: ["orc-doc"], validate: vText, options: ["en", "id", "es", "de", "fr", "ja"], desc: "Default output language for /orc-doc, always confirmable per run. A non-English document is held to the SAME plain-language bar in that language — short sentences, common words, acronyms expanded; technical terms with no natural translation stay in English and are glossed once." },
   { key: "doc_local_refs", def: "error", tier: "common", answers: [{ family: "doc", prio: "P2", mode: "replace" }], lanes: ["orc-doc"], validate: vEnum("off", "warn", "error"), options: ["off", "warn", "error"], desc: "How /orc-doc's free lint treats a LOCAL-ONLY reference in the deliverable — a `src/foo.ts:42` anchor, an absolute path, a `./relative` opener, localhost, a file:// URL, a relative .md link. The reader of a PRD or a TSD usually has no repository, so a path is a dead end for them. A genuinely internal runbook legitimately names local paths, which is why there are three values and not a rule with no switch; fenced code is always exempt, because a code example that SHOWS a path is content." },
+  // --- v1.5.0 — /orc-test ----------------------------------------------------
+  // FIVE keys, and the five that were REFUSED are written down in
+  // `_shared/live-target.md` so nobody proposes them again: `test_auto_fix`
+  // (the lane's premise), `test_destructive` (a permission must be per-run with
+  // a recorded reason), `test_target_url` (a stored default target is how a
+  // scan reaches the wrong host), `test_retries` (a flake is recorded, never
+  // retried away) and `test_skip_auth_probe` (a switch on a check is a switch
+  // that turns off the check people most need).
+  { key: "test_gate", def: "warn", tier: "common", answers: [{ family: "test", prio: "P2", mode: "replace" }], lanes: ["orc", "orc-mini", "orc-test"], validate: vEnum("off", "warn"), options: ["off", "warn"], desc: "Whether /orc's and /orc-mini's Phase-1 preflight prints one line when a /orc-test case that came back RED covers the area the plan is about to touch. It fires only on a real signal in that area — the /orc-aftermath shape. There is deliberately NO `block`: the payoff is knowing, not gating (the pact_gate precedent), and this lane is standalone." },
+  { key: "test_security_tier", def: "safe", tier: "common", answers: [{ family: "test", prio: "P2", mode: "replace" }], lanes: ["orc-test"], validate: vEnum("off", "safe", "full"), options: ["off", "safe", "full"], desc: "How far the OWASP API Top-10 (2023) tier goes. `safe` (default) runs every NON-mutating probe and needs no destructive decision, so it runs anywhere including a remote target. `full` adds the mutating probes (mass assignment write-back, the BFLA method swap, business-flow repetition) and requires `--destructive allow` WITH a recorded reason, on this run, for this target. `off` is happy and edge only. Every probe demonstrates a CONDITION, never an extraction." },
+  { key: "test_max_rps", def: 4, tier: "common", answers: [{ family: "test", prio: "P2", mode: "replace" }], lanes: [], validate: vInt(1), options: [1, 2, 4, 8], desc: "Requests per second the runner is allowed to send, with a fixed small concurrency beside it. The CLI PACES — this is not a suggestion, because ORC's own run must never be the incident. A 429 is a RESULT and not an error: it means rate limiting works, so the runner records it and backs off rather than pushing through." },
+  { key: "test_case_budget", def: 200, tier: "common", answers: [{ family: "test", prio: "P2", mode: "replace" }], lanes: ["orc-test"], validate: vInt(1), options: [50, 100, 200, 500], desc: "Cases one run may expand to before it STOPS expanding. A PLANNED stop, not an interrupt (the wiki_refresh_budget shape): the matrix is combinatorial, and a run that silently grows to 4,000 cases against a staging box is a denial of service you wrote yourself. On reaching it the CLI names the targets it did not finish and offers `--budget`." },
+  { key: "test_ui_driver", def: "playwright", tier: "common", answers: [{ family: "test", prio: "P2", mode: "replace" }], lanes: ["orc-test"], validate: vEnum("playwright", "none"), options: ["playwright", "none"], desc: "What drives the front-end half. `playwright` authors a journey SCRIPT and runs it — a step an LLM took is not a step you can re-run, and the artifacts (trace.zip, video, HAR) are the evidence. `none` skips the FE half entirely. ORC ships zero dependencies and NEVER installs Playwright into your project: an absent driver is a STATE with a named install command, not a failure." },
   { key: "doc_dir", def: DOC_DIR_DEFAULT, tier: "advanced", answers: [{ family: "paths", prio: "P2", mode: "replace" }], lanes: ["orc-doc"], validate: vPath, desc: "Where /orc-doc folders live. Project root, not .claude/ — a document is a deliverable a human opens, and the same call /orc-quick, /orc-brainstorm and poly-repo-implementation/ already made." },
   { key: "wiki_scan_tier", def: "ladder", tier: "advanced", answers: [{ family: "wiki", prio: "P2", mode: "replace" }], lanes: ["orc-wiki"], validate: vEnum("ladder", "always_deep"), desc: "Wiki scan tier: ladder picks light/deep per delta (first scan, STRUCTURAL, wide delta or a new exported symbol → deep; otherwise light), always_deep restores pre-v0.46.0 behaviour. The resolved tier is always printed — a cheaper model is never a quiet substitution." },
   { key: "wiki_tier_deep_files", def: 3, tier: "advanced", answers: [{ family: "wiki", prio: "P2", mode: "replace" }], lanes: ["orc-wiki"], validate: vInt(1), desc: "Covered files touched at or above this count send the refresh to the DEEP scanner." },
@@ -2693,6 +2711,9 @@ const LANES = [
   { lane: "orc-retro", command: "orc-retro" },
   { lane: "orc-route", command: "orc-route" },
   { lane: "orc-verify", command: "orc-verify" },
+  // v1.5.0 — the lane that RUNS the test. The CLI executes and measures; the
+  // model designs and interprets. A model never sends a request.
+  { lane: "orc-test", command: "orc-test" },
   // v1.1.0 W2 — command-entry only, and it opens no run of its own: it waits
   // INSIDE whatever run is already in flight, or with none at all.
   { lane: "orc-wait", command: "orc-wait" },
@@ -2713,6 +2734,7 @@ const LANE_ALIAS = {
   quick: { lane: "orc-quick", why: "`quick` is a TRACE lane token; the config lane is `orc-quick`" },
   doc: { lane: "orc-doc", why: "`doc` is a TRACE lane token; the config lane is `orc-doc`" },
   diy: { lane: "orc-diy", why: "`diy` is a TRACE lane token; the config lane is `orc-diy`" },
+  test: { lane: "orc-test", why: "`test` is a TRACE lane token; the config lane is `orc-test`" },
 };
 
 // LANE-LEVEL inertness is a THIRD thing (design-01 §5), beside a rank losing a
@@ -2738,6 +2760,13 @@ const LANE_INERT = {
     { key: "opus5_only", reason: "every agent in this lane is already claude-opus-5, so this is a no-op — the lane is unaffected, not exempt" },
   ],
   "orc-doc": [
+    { key: "opus5_only", reason: "both agents in this lane are already claude-opus-5, so this is a no-op — the lane is unaffected, not exempt" },
+  ],
+  // v1.5.0 — both agents in this lane ship as claude-opus-5, and the
+  // interpreter's `low` is a MEASUREMENT choice rather than a cost one: a
+  // harder-thinking interpreter reasons its way to why a leaked stack trace is
+  // probably fine in staging, which is exactly the gap it exists to find.
+  "orc-test": [
     { key: "opus5_only", reason: "both agents in this lane are already claude-opus-5, so this is a no-op — the lane is unaffected, not exempt" },
   ],
   // v1.1.0 W2 — this lane DISPATCHES NOTHING. A detached command does the
@@ -2785,6 +2814,17 @@ const LANE_STOPS = [
     arms: (v) => Number(v) > 0,
     when: "the TDD repair loop hits this many rounds without going green",
     action: "STOP and report the tests as honestly red",
+  },
+  {
+    // v1.5.0 — the matrix is COMBINATORIAL. A run that silently expands to
+    // 4,000 cases against a staging box is a denial of service you wrote
+    // yourself, so this is a PLANNED stop (the `wiki_refresh_budget` shape):
+    // expansion halts, the targets it did not finish are NAMED, and `--budget`
+    // is offered.
+    key: "test_case_budget",
+    arms: (v) => Number(v) > 0,
+    when: "case expansion reaches this many cases",
+    action: "a PLANNED stop — stop expanding, NAME the targets left unfinished, and offer `--budget`",
   },
   {
     key: "extra_passphrase_ttl_days",
@@ -3158,7 +3198,7 @@ const LANE_CALLS = {
     on_absent: "exit ≠ 0 → say the CLI is unavailable and use the documented defaults, out loud, treating every P0 forcing mode as OFF",
     canonical: "_shared/config-precedence.md",
     never: "never merge `.claude/orc.config.yaml` yourself, and never re-derive a precedence — the answer already carries it",
-    lanes: ["context-combiner", "orc", "orc-aftermath", "orc-analyze", "orc-analyze-mini", "orc-boundary", "orc-brainstorm", "orc-budget", "orc-challenge", "orc-claude", "orc-diy", "orc-doc", "orc-explain", "orc-export", "orc-fast", "orc-grill", "orc-handoff", "orc-learn", "orc-mini", "orc-pact", "orc-pattern", "orc-poly", "orc-pr-driver", "orc-pr-setup", "orc-quick", "orc-retro", "orc-route", "orc-verify", "orc-wiki"],
+    lanes: ["context-combiner", "orc", "orc-aftermath", "orc-analyze", "orc-analyze-mini", "orc-boundary", "orc-brainstorm", "orc-budget", "orc-challenge", "orc-claude", "orc-diy", "orc-doc", "orc-explain", "orc-export", "orc-fast", "orc-grill", "orc-handoff", "orc-learn", "orc-mini", "orc-pact", "orc-pattern", "orc-poly", "orc-pr-driver", "orc-pr-setup", "orc-quick", "orc-retro", "orc-route", "orc-test", "orc-verify", "orc-wiki"],
   },
   "run-inflight": {
     cmd: "orc run inflight [--json]",
@@ -3170,7 +3210,7 @@ const LANE_CALLS = {
     on_absent: "exit 2 REFUSES by default — the one place an absent reading blocks, because a wrongly-refused dispatch costs a question and a wrongly-issued one costs a second Opus agent for an hour",
     canonical: "_shared/return-validation.md",
     never: "never read `clear` as proof that an AD-HOC dispatch finished — the hook writes no SPAWN for one, so no record exists",
-    lanes: ["orc", "orc-doc", "orc-fast", "orc-mini", "orc-quick", "orc-wiki"],
+    lanes: ["orc", "orc-doc", "orc-fast", "orc-mini", "orc-quick", "orc-test", "orc-wiki"],
   },
   "lane-phases": {
     cmd: "orc lane phases <lane> [--json]",
@@ -3182,7 +3222,7 @@ const LANE_CALLS = {
     on_absent: "a lane with no shared phase gets an EMPTY phases[] — that is an answer, not a gap: its pipeline is in its own spine (`own_phases: in-spine`)",
     canonical: "_shared/phases/README.md",
     never: "never derive the phase list, its order or its layers from the filenames in `_shared/phases/` — a second idea of the pipeline is the drift this exists to prevent",
-    lanes: ["context-combiner", "orc", "orc-aftermath", "orc-analyze", "orc-analyze-mini", "orc-boundary", "orc-brainstorm", "orc-budget", "orc-challenge", "orc-claude", "orc-diy", "orc-doc", "orc-fast", "orc-grill", "orc-handoff", "orc-learn", "orc-mini", "orc-pact", "orc-pattern", "orc-poly", "orc-pr-driver", "orc-pr-setup", "orc-quick", "orc-route", "orc-verify", "orc-wiki"],
+    lanes: ["context-combiner", "orc", "orc-aftermath", "orc-analyze", "orc-analyze-mini", "orc-boundary", "orc-brainstorm", "orc-budget", "orc-challenge", "orc-claude", "orc-diy", "orc-doc", "orc-fast", "orc-grill", "orc-handoff", "orc-learn", "orc-mini", "orc-pact", "orc-pattern", "orc-poly", "orc-pr-driver", "orc-pr-setup", "orc-quick", "orc-route", "orc-test", "orc-verify", "orc-wiki"],
   },
   "wiki-status": {
     cmd: "orc wiki status [--json]",
@@ -3246,7 +3286,7 @@ const LANE_CALLS = {
     on_absent: "a gap in the route table is not a hole — it is Claude, and the answer says which agent",
     canonical: "_shared/extra-dispatch.md",
     never: "never invent a score for a lane that has none — a position uses `orc extra role`, not a band",
-    lanes: ["orc", "orc-diy", "orc-doc", "orc-fast", "orc-quick", "orc-wiki"],
+    lanes: ["orc", "orc-diy", "orc-doc", "orc-fast", "orc-quick", "orc-test", "orc-wiki"],
   },
   "extra-role": {
     cmd: "orc extra role list|set|clear [--json]",
@@ -3846,6 +3886,7 @@ const LANE_TRACE = {
   "orc-quick": { tier: "Iterative", token: "quick" },
   "orc-challenge": { tier: "Iterative", token: "challenge" },
   "orc-doc": { tier: "Iterative", token: "doc" },
+  "orc-test": { tier: "Iterative", token: "test" },
   "orc-claude": { tier: "Single-dispatch", token: "claude" },
   "orc-analyze": { tier: "Single-dispatch", token: "analyze" },
   "orc-analyze-mini": { tier: "Single-dispatch", token: "analyze" },
@@ -3883,8 +3924,9 @@ const LANE_PHASES = {
     "orc-pact",
     "orc-pr-setup",
     "orc-quick",
+    "orc-test",
   ],
-  "stop-resume": ["orc", "orc-wiki", "orc-diy"],
+  "stop-resume": ["orc", "orc-wiki", "orc-diy", "orc-test"],
   intake: ["orc", "orc-mini", "orc-diy", "orc-challenge"],
   "plan-handoff": ["orc", "orc-route"],
   "wave-grouping": ["orc", "orc-diy"],
@@ -23869,6 +23911,21 @@ const EXTRA_SLOTS = [
     announce: "before the wave",
     why: "the checker reads one bounded part and reports; it rewrites nothing, so a finding it makes is a finding you read.",
   },
+  // v1.5.0 - `/orc-test`'s DESIGNER, and only the designer. The interpreter
+  // deliberately gets NO slot: its slice is CAPTURED RESPONSE BODIES FROM THE
+  // USER'S REAL SYSTEM - the most sensitive payload ORC composes - and the
+  // `api` engine's `declared_files` fence fences FILES, not a request body, so
+  // there is no version of that route this table could describe honestly. That
+  // is the `/orc-challenge never` shape, for a stronger reason than cost.
+  {
+    slot: "test-designer",
+    lane: "/orc-test",
+    claude: ["orc-test-designer-opus-5-high"],
+    claude_opus5: null,
+    asks: false,
+    announce: "the T1 `extra:` line, before any case runs",
+    why: "the designer writes a FILE the CLI reads back through a validating command, and a row that fails validation is refused by name - so its output is checked before anything is sent.",
+  },
   {
     slot: "wiki-scanner-deep",
     lane: "/orc-wiki",
@@ -24075,6 +24132,9 @@ const EXTRA_LANE_SHAPES = [
   { lane: "/orc-quick", shape: "gated-choice", agent: null, slots: ["quick-executor"] },
   { lane: "/orc-doc", shape: "slot", agent: null, slots: ["doc-writer", "doc-checker"] },
   { lane: "/orc-challenge", shape: "never", agent: null },
+  // v1.5.0 - slot-shaped, no score. The DESIGNER may be routed; the
+  // INTERPRETER may not, and that refusal is the row's whole point.
+  { lane: "/orc-test", shape: "slot", agent: null, slots: ["test-designer"] },
   // v0.55.0 - the row was DEAD: it asked for a role spelling `extra_roles`
   // refuses by name, so this lane could never route however it was configured.
   { lane: "/orc-wiki", shape: "slot", agent: null, slots: ["wiki-scanner-deep", "wiki-scanner-light"] },
@@ -32556,6 +32616,97 @@ function doctor() {
     else if (readExtra(claudeDir)) ok("orc extra: profiles and routes clean");
   } catch (_) {}
 
+  // 8) /orc-test (v1.5.0). FOUR findings, and every one of them is read off the
+  // LEDGER — this section sends no request and starts no process. That is not a
+  // performance choice: `orc doctor` is a read-only report, and a report that
+  // probes somebody's staging box because they opened it is exactly
+  // `a lane that sends traffic to a target nobody authorized`.
+  //
+  // Each id gets its own FINDING_ROUTE row and all four route to the Test
+  // panel, which is where every command that clears them lives.
+  try {
+    const testRuns = listTestRuns(claudeDir).runs.filter((r) => r.state !== "UNREADABLE");
+    const evUnhealthy = [];
+    const red = [];
+    const unchecked = [];
+    for (const row of testRuns) {
+      const t = readTestRun(claudeDir, row.slug);
+      if (!t) continue;
+      // NOT "the environment is unhealthy" — nothing here measured that. It is
+      // "the last time anybody looked it answered wrong", and the timestamp is
+      // part of the sentence rather than a detail beside it.
+      if (t.env_observed && t.env_observed.state === "unhealthy") evUnhealthy.push({ slug: row.slug, at: t.env_observed.at });
+      const fails = (t.cases || []).filter((c) => c.verdict === "fail");
+      if (fails.length) red.push({ slug: row.slug, red: fails.length, cases: fails.map((c) => c.id) });
+      // RESTRAINT, the wiki-debt rule: an unchecked OWASP row is the NORMAL
+      // state of a run in progress, and a doctor that warns about a normal
+      // state is a doctor people learn to ignore. It only becomes a caution
+      // once a REPORT exists — that is the artifact somebody shares, and an
+      // unmeasured category inside a shared report is the single most damaging
+      // thing this lane could let past.
+      const pth = testPaths(claudeDir, row.slug);
+      if (!fs.existsSync(pth.report)) continue;
+      const rows = testSecurityRows(claudeDir, t).rows.filter((r) => r.state === "unchecked");
+      if (rows.length) unchecked.push({ slug: row.slug, count: rows.length, owasp: rows.map((r) => r.owasp) });
+    }
+    if (evUnhealthy.length)
+      warn(
+        "test-env-unhealthy",
+        plural(evUnhealthy.length, "test run") +
+          " last saw an UNHEALTHY environment (" +
+          evUnhealthy.map((x) => x.slug + " at " + x.at).join(", ") +
+          ") — that is the last OBSERVATION, not the state now. ORC does not repair the system it is testing: " +
+          "fix it yourself, then `orc test env <slug>` takes a fresh reading",
+        { runs: evUnhealthy }
+      );
+    if (red.length)
+      warn(
+        "test-run-red",
+        plural(red.length, "test run") +
+          " ha" +
+          (red.length === 1 ? "s" : "ve") +
+          " a FAILED case (" +
+          red.map((x) => x.slug + ": " + x.cases.join(", ")).join(" · ") +
+          ") — `orc test report <slug>` renders what was observed, with the evidence path for each one",
+        { runs: red }
+      );
+    if (unchecked.length)
+      warn(
+        "test-unchecked-owasp",
+        plural(unchecked.length, "test report") +
+          " carr" +
+          (unchecked.length === 1 ? "ies" : "y") +
+          " an UNCHECKABLE OWASP category (" +
+          unchecked.map((x) => x.slug + ": " + x.owasp.join(", ")).join(" · ") +
+          ") — each keeps its slot and none of them is a pass. `orc test security <slug>` names what each one needs",
+        { reports: unchecked }
+      );
+    // THE EVIDENCE FENCE. The run folder holds real response bodies from a real
+    // system — the most sensitive thing ORC writes to disk — and ORC does not
+    // edit your .gitignore, so the only thing it can do is SAY SO. Checked with
+    // git's own answer rather than by parsing .gitignore, because the rules
+    // that file supports are git's and re-implementing them would be a second,
+    // worse parser.
+    if (testRuns.length) {
+      const dir = path.relative(repoRootOf(claudeDir), testDirRoot(claudeDir)).split(path.sep).join("/");
+      let ignored = null;
+      try {
+        const r = spawnSync("git", ["check-ignore", "-q", dir + "/"], { cwd: repoRootOf(claudeDir) });
+        // 0 ignored · 1 not ignored · anything else (no git, no repo) is UNKNOWN,
+        // and unknown is never reported as a problem.
+        ignored = r.status === 0 ? true : r.status === 1 ? false : null;
+      } catch (_) {}
+      if (ignored === false)
+        warn(
+          "test-evidence-unstaged",
+          "`" + dir + "/` is NOT git-ignored, and it holds real response bodies from a real system — " +
+            "the most sensitive thing ORC writes to disk. Add that line to `.gitignore` yourself; ORC does not edit that file",
+          { dir, fixable: false }
+        );
+      else if (ignored === true) ok(plural(testRuns.length, "test run") + ", evidence folder git-ignored");
+    }
+  } catch (_) {}
+
   if (asJson) {
     // Exactly one object, then the same exit code the human path would use.
     process.stdout.write(
@@ -32971,6 +33122,5363 @@ function onboarding() {
 // exactly like `orc diy` / `orc crosslink` / `orc wiki` / `orc pattern`. There
 // is no --global. `--dir` still points at ONE other project; it does not make
 // the panel span several.
+// ── /orc-test — the lane that RUNS the test (v1.5.0) ────────────────────────
+//
+// THE SPLIT this whole family is built on:
+//
+//   The CLI EXECUTES and MEASURES. The model DESIGNS and INTERPRETS.
+//
+// A model never sends a request; the CLI never decides what a response means.
+// Canonical prose: templates/skills/_shared/live-target.md.
+//
+// Three contract tokens live here, and every command below is shaped by one of
+// them:
+//   · `a lane that reports a result it did not observe` — three verdicts and no
+//     fourth, and `unknown` is the honest one.
+//   · `a lane that sends traffic to a target nobody authorized` — the target is
+//     FROZEN at init, there is no config key that names one, and a remote target
+//     needs an authorization statement that is stored verbatim.
+//   · `a lane that fixes the system under test` — nothing here ever edits the
+//     project.
+const TEST_DIR = "orc/orc-test/";
+const TEST_DIR_DEFAULT = TEST_DIR.replace(/\/$/, "");
+const TEST_LEDGER = "test.json";
+const TEST_TARGET_DOC = "target.md";
+const TEST_STATE_VERSION = 1;
+
+const TEST_KINDS = ["be", "fe", "both"];
+const TEST_ENVS = ["local", "remote"];
+const TEST_DESTRUCTIVE = ["allow", "deny"];
+// The case tiers, IN LADDER ORDER. `orc test run` walks them in this order and
+// STOPS on a red happy path: if the happy path is red the edge cases are
+// meaningless and the security tier is noise — a 500 on every request will
+// "prove" a dozen vulnerabilities that are one bug.
+const TEST_TIERS = ["happy", "edge", "abuse", "security"];
+// THREE verdicts, and there is no fourth. `unknown` means NOT OBSERVED, it
+// keeps its slot in every report, and it never becomes a pass.
+const TEST_VERDICTS = ["pass", "fail", "unknown"];
+// Where an identity's credential comes from. `login` is this lane's own leg of
+// the credential triangle: ORC performs the login flow the repo declares and
+// stores only the resulting token. The other two are `orc extra`'s, verbatim —
+// a second credential store is the drift this repo lints for everywhere else.
+const TEST_IDENTITY_SOURCES = ["env", "vault", "login"];
+
+// Value-taking flags, so `orc test init api --kind be` never reads "be" as a
+// positional. A value swallowed as a positional is a slug named after a kind.
+const TEST_VALUE_FLAGS = new Set([
+  "--kind",
+  "--env",
+  "--base-url",
+  "--authorized",
+  "--destructive",
+  "--start",
+  "--role",
+  "--source",
+  "--env-var",
+  "--login-url",
+  "--login-method",
+  "--user-field",
+  "--pass-field",
+  "--username",
+  "--token-path",
+  "--tail",
+  "--from",
+  "--target",
+  "--only",
+  "--tier",
+  "--budget",
+  "--identity",
+  "--security",
+]);
+
+const testSlugOf = (raw) =>
+  String(raw || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48);
+
+function testDirRoot(claudeDir) {
+  let rel = TEST_DIR_DEFAULT;
+  try {
+    rel = readOverride(claudeDir).map.test_dir || TEST_DIR_DEFAULT;
+  } catch (_) {}
+  return path.isAbsolute(rel) ? rel : path.join(repoRootOf(claudeDir), ...rel.split("/").filter(Boolean));
+}
+
+function testPaths(claudeDir, slug) {
+  const dir = testDirRoot(claudeDir);
+  const run = slug ? path.join(dir, slug) : null;
+  return {
+    root: repoRootOf(claudeDir),
+    dir,
+    run,
+    ledger: run ? path.join(run, TEST_LEDGER) : null,
+    target: run ? path.join(run, TEST_TARGET_DOC) : null,
+    flows: run ? path.join(run, "flow") : null,
+    runs: run ? path.join(run, "runs") : null,
+    report: run ? path.join(run, "REPORT.md") : null,
+    findings: run ? path.join(run, "findings.md") : null,
+    changes: run ? path.join(run, "changes.md") : null,
+    surface: run ? path.join(run, "surface.md") : null,
+  };
+}
+
+// THE ORIGIN FENCE's own definition, and the only one. Every request the runner
+// sends is checked against this, so a redirect that leaves it is followed by
+// nothing — it is recorded as a finding and dropped.
+function testOriginOf(url) {
+  try {
+    const u = new URL(String(url));
+    if (u.protocol !== "http:" && u.protocol !== "https:") return null;
+    return u.protocol + "//" + u.host;
+  } catch (_) {
+    return null;
+  }
+}
+
+function testIsLoopback(url) {
+  try {
+    const h = new URL(String(url)).hostname.toLowerCase();
+    return h === "localhost" || h === "127.0.0.1" || h === "::1" || h === "[::1]" || h.endsWith(".localhost");
+  } catch (_) {
+    return false;
+  }
+}
+
+function readTestRun(claudeDir, slug) {
+  const p = testPaths(claudeDir, slug);
+  if (!p.ledger || !fs.existsSync(p.ledger)) return null;
+  try {
+    const t = JSON.parse(fs.readFileSync(p.ledger, "utf8"));
+    t.version = Number(t.version) || 1;
+    t.identities = Array.isArray(t.identities) ? t.identities : [];
+    t.cases = Array.isArray(t.cases) ? t.cases : [];
+    t.runs = Array.isArray(t.runs) ? t.runs : [];
+    t.findings = Array.isArray(t.findings) ? t.findings : [];
+    t.events = Array.isArray(t.events) ? t.events : [];
+    t.flows = t.flows && typeof t.flows === "object" ? t.flows : {};
+    t.selected = Array.isArray(t.selected) ? t.selected : [];
+    // A ledger written by a session that died mid-init has no target. It is
+    // rendered as a gap, never invented: `orc test status` must be able to say
+    // "this run has no frozen target" rather than take a listing down with it
+    // (the /orc-challenge readCycle lesson).
+    t.target = t.target && typeof t.target === "object" ? t.target : null;
+    t.surface = t.surface && typeof t.surface === "object" ? t.surface : null;
+    return t;
+  } catch (_) {
+    return null;
+  }
+}
+
+// Why a ledger would not read. `null` from readTestRun means one of two very
+// different things — the run does not exist, or its ledger is corrupt — and a
+// listing that cannot tell them apart cannot report the second one honestly.
+function readTestRunWhy(claudeDir, slug) {
+  const p = testPaths(claudeDir, slug);
+  if (!p.ledger || !fs.existsSync(p.ledger)) return null;
+  try {
+    JSON.parse(fs.readFileSync(p.ledger, "utf8"));
+    return null;
+  } catch (e) {
+    return { reason: "unreadable", error: e.message };
+  }
+}
+
+// The `Where it stands:` line. ONE generator, shared by `orc test status` and
+// the hand-back, at COLUMN 0 — `orc run list` parses it line-anchored, which is
+// how a listing never has to open the ledger. The PREFIX is byte-stable;
+// anything new is a SUFFIX.
+function testWhereLine(t, extra) {
+  const e = extra || {};
+  const tot = (t.cases || []).length;
+  const ran = (t.runs || []).length;
+  const base =
+    `Where it stands:  /orc-test · ${t.target ? t.target.kind : "?"}/${t.target ? t.target.env : "?"}` +
+    ` · ${plural(tot, "case")} · ${plural(ran, "run")}`;
+  let line = base;
+  if (e.phase) line += ` · phase ${e.phase}`;
+  if (e.env) line += ` · env ${e.env}`;
+  if (e.red) line += ` · ${plural(e.red, "case")} red`;
+  return line;
+}
+
+// THE HAND-BACK IS THE CLI'S, ON EVERY STATE CHANGE (v0.49.5's rule, applied
+// here from the first release rather than after losing it once). It hangs off
+// the single writer, so it exists from `orc test init` onward and can never be
+// behind the disk. Three guards, all of them the ones that release named:
+//   · re-entrancy — the writer may not call back into itself
+//   · a CLOSED run is never re-opened
+//   · best effort always — a hand-back that cannot be written never takes the
+//     command that produced it down
+let TEST_RESUME_REENTRANT = false;
+function testWriteResume(claudeDir, slug, t, extra) {
+  if (TEST_RESUME_REENTRANT) return null;
+  TEST_RESUME_REENTRANT = true;
+  try {
+    const runDir = path.join(resolveRunDir(claudeDir), slug);
+    if (fs.existsSync(path.join(runDir, RESUME_CLOSED_FILE))) return null;
+    const p = testPaths(claudeDir, slug);
+    const tgt = t.target || {};
+    const red = (t.cases || []).filter((c) => c.verdict === "fail").length;
+    const body =
+      `# RESUME — /orc-test · ${slug}\n\n` +
+      testWhereLine(t, Object.assign({ red: red || undefined }, extra || {})) +
+      `\n\n` +
+      `## What this is\n\n` +
+      `A live test run against a real system. ORC ran the requests and wrote down what it saw.\n` +
+      `It never edits the system it is testing.\n\n` +
+      `## The target (frozen — never asked again)\n\n` +
+      (t.target
+        ? `- kind: ${tgt.kind}\n- where: ${tgt.env}\n- base URL: ${tgt.base_url || "(detected at start)"}\n` +
+          `- origin fence: ${tgt.origin || "—"}\n` +
+          `- destructive: ${tgt.destructive ? tgt.destructive.mode : "—"}` +
+          (tgt.destructive && tgt.destructive.reason ? ` — ${tgt.destructive.reason}` : "") +
+          `\n` +
+          (tgt.authorized ? `- authorized: ${tgt.authorized}\n` : "")
+        : `- **no frozen target.** Run \`orc test init ${slug}\` again — it refuses rather than guesses.\n`) +
+      `\n## Pick it up here\n\n` +
+      "```\n" +
+      `orc test status ${slug}\n` +
+      "```\n\n" +
+      `Then follow what it says. Everything below is on disk already:\n\n` +
+      `- \`${path.relative(p.root, p.run).split(path.sep).join("/")}/\` — the run folder. **Never staged.**\n` +
+      `  It holds real response bodies from a real system.\n`;
+    fs.mkdirSync(runDir, { recursive: true });
+    fs.writeFileSync(path.join(runDir, RESUME_FILE), body);
+    return path.join(runDir, RESUME_FILE);
+  } catch (_) {
+    return null;
+  } finally {
+    TEST_RESUME_REENTRANT = false;
+  }
+}
+
+// `target.md` — the FROZEN statement, quoted verbatim thereafter and reprinted
+// at the head of every report. A session resumed three weeks later reads this
+// and never re-interviews (`a lane that re-asks a frozen question`).
+function testWriteTargetDoc(claudeDir, slug, t) {
+  const p = testPaths(claudeDir, slug);
+  const g = t.target;
+  if (!g) return null;
+  const body =
+    `# Target — ${slug}\n\n` +
+    `> FROZEN at \`orc test init\`. Quoted verbatim from here on. Nothing in this\n` +
+    `> file is re-asked, and no config key may name a target.\n\n` +
+    `| | |\n|---|---|\n` +
+    `| kind | \`${g.kind}\` |\n` +
+    `| environment | \`${g.env}\` |\n` +
+    `| base URL | \`${g.base_url || "(detected by `orc test env`)"}\` |\n` +
+    `| origin fence | \`${g.origin || "—"}\` |\n` +
+    `| start command | ${g.start ? "`" + g.start + "`" : "—"} |\n` +
+    `| destructive | \`${g.destructive.mode}\` |\n` +
+    (g.destructive.reason ? `| reason | ${g.destructive.reason} |\n` : "") +
+    `| frozen at | ${g.frozen_at} |\n\n` +
+    `## Authorization\n\n` +
+    (g.authorized
+      ? `> ${g.authorized}\n\n` +
+        `ORC cannot verify this and does not pretend to. It records that the user\n` +
+        `asserted it, and makes the assertion impossible to skip.\n`
+      : `Not required: this is a **local** target on this machine.\n`) +
+    `\n## The fence\n\n` +
+    `Every request is fenced to \`${g.origin || "the declared origin"}\`. A redirect that\n` +
+    `leaves it is followed by nothing — it is recorded as a finding and dropped.\n`;
+  fs.mkdirSync(p.run, { recursive: true });
+  fs.writeFileSync(p.target, body);
+  return p.target;
+}
+
+// THE ONE WRITER of the ledger. Everything that changes state goes through
+// here, so the hand-back and the frozen target document can never be behind
+// the disk.
+function testWrite(claudeDir, slug, t, extra) {
+  const p = testPaths(claudeDir, slug);
+  fs.mkdirSync(p.run, { recursive: true });
+  t.version = TEST_STATE_VERSION;
+  t.slug = slug;
+  t.updated_at = new Date().toISOString();
+  fs.writeFileSync(p.ledger, JSON.stringify(t, null, 2) + "\n");
+  testWriteTargetDoc(claudeDir, slug, t);
+  testWriteResume(claudeDir, slug, t, extra);
+  return p.ledger;
+}
+
+function listTestRuns(claudeDir) {
+  const dir = testDirRoot(claudeDir);
+  let entries = [];
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true });
+  } catch (_) {
+    return { dir, runs: [] };
+  }
+  const runs = [];
+  for (const e of entries) {
+    if (!e.isDirectory()) continue;
+    const t = readTestRun(claudeDir, e.name);
+    if (!t) {
+      const why = readTestRunWhy(claudeDir, e.name);
+      // An unreadable ledger is a ROW, never a crash and never a silent gap —
+      // `challengeList`'s UNREADABLE rule. A listing that drops it is a listing
+      // that hides the one run that needs attention.
+      if (why) runs.push({ slug: e.name, state: "UNREADABLE", error: why.error, target: null });
+      continue;
+    }
+    runs.push(testRowOf(t));
+  }
+  runs.sort((a, b) => String(b.updated_at || "").localeCompare(String(a.updated_at || "")));
+  return { dir, runs };
+}
+
+// The per-run summary EVERY surface renders — the terminal, `--json`, and the
+// panel. One computation, three renderers (the Flow-stepper rule): a panel that
+// derived its own state word would be a second idea of what a run is.
+function testRowOf(t) {
+  const cases = t.cases || [];
+  const counts = { pass: 0, fail: 0, unknown: 0, unrun: 0 };
+  for (const c of cases) {
+    if (c.verdict && counts[c.verdict] !== undefined) counts[c.verdict]++;
+    else counts.unrun++;
+  }
+  return {
+    slug: t.slug,
+    state: testStateOf(t),
+    target: t.target
+      ? {
+          kind: t.target.kind,
+          env: t.target.env,
+          base_url: t.target.base_url,
+          origin: t.target.origin,
+          authorized: t.target.authorized || null,
+          destructive: t.target.destructive,
+        }
+      : null,
+    identities: (t.identities || []).map((i) => ({ name: i.name, role: i.role, source: i.source, verified_at: i.verified_at || null })),
+    counts,
+    cases: cases.length,
+    runs: (t.runs || []).length,
+    last_run: (t.runs || []).length ? t.runs[t.runs.length - 1].at : null,
+    findings: (t.findings || []).length,
+    updated_at: t.updated_at || null,
+    where: testWhereLine(t, { red: counts.fail || undefined }),
+  };
+}
+
+// The state word list. COMPUTED on every read and never stored — the
+// computeWikiFreshness rule, and the reason a status word cannot lie the moment
+// the disk moves.
+function testStateOf(t) {
+  if (!t.target) return "NO-TARGET";
+  if (!(t.identities || []).length && t.target.kind !== "fe") return "AWAITING-IDENTITY";
+  if (!t.surface) return "AWAITING-SURFACE";
+  if (!(t.selected || []).length) return "AWAITING-SELECTION";
+  if (!(t.cases || []).length) return "AWAITING-CASES";
+  if (!(t.runs || []).length) return "AWAITING-RUN";
+  const red = (t.cases || []).filter((c) => c.verdict === "fail").length;
+  if (red) return "RED";
+  if ((t.cases || []).some((c) => !c.verdict)) return "PARTIAL";
+  return "OBSERVED";
+}
+
+// ── the `orc test` command surface ──────────────────────────────────────────
+
+function tPositionals() {
+  const out = [];
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (TEST_VALUE_FLAGS.has(a)) {
+      i++;
+      continue;
+    }
+    if (a === "--dir" || a === "--reason") {
+      i++;
+      continue;
+    }
+    if (a.startsWith("-")) continue;
+    out.push(a);
+  }
+  return out;
+}
+const tOpt = (name) => {
+  const i = args.indexOf(name);
+  if (i === -1) return undefined;
+  const v = args[i + 1];
+  return v !== undefined && !String(v).startsWith("--") ? String(v) : true;
+};
+
+function testFail(asJson, reason, hint, code) {
+  const exit = code === undefined ? 1 : code;
+  if (asJson) emitJson({ ok: false, reason, hint }, exit);
+  console.error("❌ " + hint);
+  process.exit(exit);
+}
+
+// T1 — the target, and the authorization. NO DEFAULTS, and it refuses BY NAME
+// (the `orc challenge init --goal` rule). Everything here is frozen and never
+// asked again.
+function testInit(claudeDir) {
+  const asJson = wantsJson();
+  const pos = tPositionals(); // ["test","init",<slug>]
+  const slug = testSlugOf(pos[2]);
+  const fail = (r, h) => testFail(asJson, r, h);
+
+  if (!slug) fail("no-slug", "orc test init needs a slug. Example: orc test init checkout-api");
+
+  const p = testPaths(claudeDir, slug);
+  if (fs.existsSync(p.ledger))
+    fail("exists", `a test run named ${slug} already exists at ${p.run}. The target is FROZEN — read it with \`orc test status ${slug}\`.`);
+
+  const kind = String(tOpt("--kind") || "").toLowerCase();
+  if (!kind) fail("missing-kind", `--kind is required and has no default: ${TEST_KINDS.join(" | ")}. ORC never guesses what it is testing.`);
+  if (!TEST_KINDS.includes(kind)) fail("bad-kind", `--kind must be one of: ${TEST_KINDS.join(", ")}`);
+
+  const env = String(tOpt("--env") || "").toLowerCase();
+  if (!env) fail("missing-env", `--env is required and has no default: ${TEST_ENVS.join(" | ")}. Local and remote are different lanes in a trench coat.`);
+  if (!TEST_ENVS.includes(env)) fail("bad-env", `--env must be one of: ${TEST_ENVS.join(", ")}`);
+
+  const start = tOpt("--start");
+  const baseUrlRaw = tOpt("--base-url");
+  if (!baseUrlRaw && !(env === "local" && start))
+    fail(
+      "missing-base-url",
+      "--base-url is required and has no default. There is deliberately no config key that names a target: " +
+        "a stored default target is how a scan reaches the wrong host. " +
+        "(On a LOCAL target you may pass --start auto instead and let `orc test env` detect the URL.)"
+    );
+  let baseUrl = null;
+  let origin = null;
+  if (baseUrlRaw && baseUrlRaw !== true) {
+    baseUrl = String(baseUrlRaw).replace(/\/+$/, "");
+    origin = testOriginOf(baseUrl);
+    if (!origin) fail("bad-base-url", `--base-url must be an absolute http(s) URL. Got: ${baseUrlRaw}`);
+    if (env === "local" && !testIsLoopback(baseUrl))
+      fail(
+        "not-local",
+        `--env local but ${origin} is not a loopback address. A remote host needs --env remote, which requires --authorized.`
+      );
+  }
+
+  // THE AUTHORIZATION STATEMENT. ORC cannot verify it and does not pretend to;
+  // it records that the user ASSERTED it, and makes the assertion impossible to
+  // skip. Stored verbatim and reprinted at the head of every report.
+  // (`a lane that sends traffic to a target nobody authorized`)
+  const authorizedRaw = tOpt("--authorized");
+  const authorized = authorizedRaw && authorizedRaw !== true ? String(authorizedRaw).trim() : "";
+  if (env === "remote" && !authorized)
+    fail(
+      "missing-authorization",
+      '--authorized "<who authorized this, and where it is recorded>" is REQUIRED on a remote target and has no default. ' +
+        "ORC cannot verify authorization and does not pretend to — it records that you asserted it. " +
+        "(a lane that sends traffic to a target nobody authorized has broken this contract)"
+    );
+
+  const destructive = String(tOpt("--destructive") || "").toLowerCase();
+  if (!destructive)
+    fail(
+      "missing-destructive",
+      `--destructive is required and has no default: ${TEST_DESTRUCTIVE.join(" | ")}. ` +
+        "It is a PER-RUN, PER-TARGET decision and never a config key — a config that once said yes " +
+        "is on for the run you needed it off."
+    );
+  if (!TEST_DESTRUCTIVE.includes(destructive)) fail("bad-destructive", `--destructive must be one of: ${TEST_DESTRUCTIVE.join(", ")}`);
+  const reasonRaw = flag("--reason");
+  const reason = typeof reasonRaw === "string" ? reasonRaw.trim() : "";
+  if (destructive === "allow" && !reason)
+    fail(
+      "missing-reason",
+      '--destructive allow requires --reason "<why>". The reason is recorded verbatim and reprinted ' +
+        "wherever the decision is shown, because a permission nobody can explain later is a permission nobody should have given."
+    );
+
+  const t = {
+    version: TEST_STATE_VERSION,
+    slug,
+    created_at: new Date().toISOString(),
+    target: {
+      kind,
+      env,
+      base_url: baseUrl,
+      origin,
+      start: start === true ? "auto" : start ? String(start) : null,
+      authorized: authorized || null,
+      destructive: { mode: destructive, reason: reason || null },
+      frozen_at: new Date().toISOString(),
+    },
+    identities: [],
+    surface: null,
+    selected: [],
+    flows: {},
+    cases: [],
+    runs: [],
+    findings: [],
+    events: [{ at: new Date().toISOString(), what: "init", detail: `${kind}/${env}` }],
+  };
+  testWrite(claudeDir, slug, t, { phase: "T1" });
+
+  const rel = path.relative(p.root, p.run).split(path.sep).join("/");
+  if (asJson)
+    emitJson({ ok: true, slug, dir: rel, target: t.target, state: testStateOf(t), next: `orc test surface ${slug} --json` }, 0);
+  console.log(ui.color.bold(`\n  /orc-test · ${slug}`));
+  console.log(`  target FROZEN at ${rel}/${TEST_TARGET_DOC}\n`);
+  console.log(`    kind          ${kind}`);
+  console.log(`    environment   ${env}`);
+  console.log(`    base URL      ${baseUrl || ui.color.gray("(detected by `orc test env`)")}`);
+  console.log(`    origin fence  ${origin || ui.color.gray("—")}`);
+  console.log(`    destructive   ${destructive}${reason ? " — " + reason : ""}`);
+  if (authorized) console.log(`    authorized    ${authorized}`);
+  console.log("");
+  console.log(ui.color.yellow("  This folder is NEVER staged. It will hold real response bodies from a real"));
+  console.log(ui.color.yellow("  system. Add this line to .gitignore yourself — ORC does not edit it:"));
+  console.log(`      ${rel.replace(/\/[^/]+$/, "")}/`);
+  console.log("");
+  console.log(`  Next:  orc test surface ${slug}`);
+}
+
+// T0's reader, and the one every other surface renders. Exit 0 in EVERY state —
+// an empty answer is an ANSWER (`orc wiki status`'s rule): a run that has not
+// started is a fact, not a failure.
+function testStatus(claudeDir) {
+  const asJson = wantsJson();
+  const pos = tPositionals();
+  const slug = pos[2] ? testSlugOf(pos[2]) : null;
+  const all = listTestRuns(claudeDir);
+
+  if (!slug) {
+    const open = all.runs.filter((r) => r.state !== "OBSERVED");
+    if (asJson)
+      emitJson({ ok: true, dir: path.relative(all.dir ? repoRootOf(claudeDir) : ".", all.dir).split(path.sep).join("/"), count: all.runs.length, open: open.length, runs: all.runs }, 0);
+    if (!all.runs.length) {
+      console.log("\n  /orc-test — no run here yet.");
+      console.log("  Start one:  orc test init <slug> --kind be --env local --start auto --destructive deny\n");
+      return;
+    }
+    console.log("");
+    for (const r of all.runs) testPrintRow(r);
+    console.log("");
+    return;
+  }
+
+  const t = readTestRun(claudeDir, slug);
+  if (!t) {
+    const why = readTestRunWhy(claudeDir, slug);
+    if (why) {
+      // UNREADABLE is a LIST-level state. It never reaches a verdict and it is
+      // never silently dropped.
+      if (asJson) emitJson({ ok: true, slug, state: "UNREADABLE", error: why.error }, 0);
+      console.log(`\n  ${slug}  ${ui.color.red("UNREADABLE")} — ${why.error}\n`);
+      return;
+    }
+    if (asJson) emitJson({ ok: true, slug, state: "none", runs: [] }, 0);
+    console.log(`\n  no test run named ${slug}. \`orc test status\` lists what is here.\n`);
+    return;
+  }
+  const row = testRowOf(t);
+  if (asJson) emitJson(Object.assign({ ok: true }, row), 0);
+  console.log("");
+  testPrintRow(row);
+  if (t.target && t.target.authorized) {
+    console.log("");
+    console.log("  authorization (recorded verbatim, never verified by ORC):");
+    console.log("    " + t.target.authorized);
+  }
+  console.log("\n  " + row.where + "\n");
+}
+
+function testPrintRow(r) {
+  const colour =
+    r.state === "RED" || r.state === "UNREADABLE" ? ui.color.red : r.state === "OBSERVED" ? ui.color.green : ui.color.yellow;
+  const tgt = r.target ? `${r.target.kind}/${r.target.env}  ${r.target.origin || "—"}` : ui.color.gray("no frozen target");
+  console.log(`  ${ui.color.bold(r.slug)}  ${colour(r.state)}`);
+  console.log(`    ${tgt}`);
+  if (r.counts)
+    console.log(
+      `    ${r.cases} case(s) — ` +
+        `${ui.color.green(r.counts.pass + " pass")} · ${ui.color.red(r.counts.fail + " fail")} · ` +
+        `${ui.color.yellow(r.counts.unknown + " unknown")} · ${r.counts.unrun} not run`
+    );
+  if (r.error) console.log(`    ${ui.color.red(r.error)}`);
+}
+
+// `orc test show` — THE STORED LEDGER, RENDERED. A pure READ: it re-scans
+// nothing, probes nothing, sends nothing and writes nothing. Every other
+// command here MEASURES and then writes what it measured; this one renders
+// what those measurements left behind, which is what a second surface (the
+// panel) has to stand on. Re-running `surface` or `env` to draw a page would
+// make opening a page a measurement — and a measurement nobody asked for is
+// traffic nobody authorized.
+//
+// `--json is not a summary` (v0.49.1): the object below is the WHOLE computed
+// view, and the terminal branch prints from the same object. A field one half
+// carries and the other omits is drift no lint can see, because both halves
+// live in this function.
+function testShowCmd(claudeDir) {
+  const asJson = wantsJson();
+  const slug = testSlugOf(tPositionals()[2]);
+  if (!slug) testFail(asJson, "no-slug", "orc test show <slug> [--json]", 2);
+  const t = readTestRun(claudeDir, slug);
+  if (!t) {
+    const why = readTestRunWhy(claudeDir, slug);
+    // UNREADABLE is a LIST-level state (the `challengeList` rule): it degrades
+    // into a row, it never reaches a verdict, and it is never silently dropped.
+    if (why) {
+      if (asJson) emitJson({ ok: true, slug, state: "UNREADABLE", error: why.error }, 0);
+      console.log(`\n  ${slug}  ${ui.color.red("UNREADABLE")} — ${why.error}\n`);
+      return;
+    }
+    testFail(asJson, "no-run", `no test run named ${slug}. \`orc test status\` lists what is here.`, 2);
+  }
+  const p = testPaths(claudeDir, slug);
+  const row = testRowOf(t);
+  const sec = testSecurityRows(claudeDir, t);
+  const rel = (abs) => path.relative(p.root, abs).split(path.sep).join("/");
+  const surface = t.surface || null;
+
+  const out = {
+    ok: true,
+    slug,
+    state: row.state,
+    target: row.target,
+    // The recorded authorization, VERBATIM. ORC never verified it and says so
+    // wherever it appears — a statement nobody filled in is an empty string
+    // here, never a cheerful default.
+    authorized: (t.target && t.target.authorized) || null,
+    // `{mode, reason}` as `init` froze it, passed through whole. The panel
+    // renders the decision AND the reason the user gave for it, verbatim.
+    destructive: (t.target && t.target.destructive) || null,
+    identities: row.identities,
+    // Stated wherever the count is shown, because it decides what the security
+    // tier can honestly report.
+    two_identities: (t.identities || []).length >= 2,
+    selected: t.selected || [],
+    flows: Object.keys(t.flows || {}),
+    counts: row.counts,
+    cases: (t.cases || []).map((c) => ({
+      id: c.id,
+      target: c.target,
+      tier: c.tier,
+      kind: c.kind || null,
+      source: c.source,
+      why: c.why,
+      owasp: c.owasp || null,
+      identity: c.identity || null,
+      mutates: !!c.mutates,
+      gaps: c.gaps || [],
+      verdict: c.verdict || null,
+      verdict_why: c.verdict_why || null,
+      last_status: c.last_status === undefined ? null : c.last_status,
+      evidence: c.evidence || null,
+    })),
+    case_budget: t.case_budget || null,
+    // The surface SUMMARY plus its routes. The code-vs-live diff rides along
+    // whole: a `null` there means NOT MEASURED and carries its own reason,
+    // which is the one thing that must never be rendered as "nothing found".
+    surface: surface
+      ? {
+          at: surface.at,
+          spec_on_disk: surface.spec_on_disk,
+          spec_at_target: surface.spec_at_target,
+          frameworks: surface.frameworks,
+          files_scanned: surface.files_scanned,
+          routes: surface.routes,
+          mounts: surface.mounts,
+          unresolved: surface.unresolved,
+          diff: surface.diff,
+        }
+      : null,
+    // THE ENVIRONMENT IS NOT IN THE LEDGER, and this says so rather than
+    // inventing a word. `orc test env` computes the state fresh on every read
+    // and never stores it (the computeWikiFreshness rule), so the honest
+    // answer here is `null` with the command that takes a reading — never a
+    // stale word a page would render as if it were current.
+    // A HEALTH STATE IS NEVER STORED, so `state` here is always null. What IS
+    // stored is the last OBSERVATION and the moment it was made — a fact about
+    // the past, which does not go stale, it only gets older. Every surface that
+    // renders it must say WHEN, and none may render it as the state now.
+    env: {
+      state: null,
+      stored: false,
+      last_observed: t.env_observed || null,
+      note: "not stored — a health state is computed fresh on every read. `orc test env <slug>` takes a reading.",
+    },
+    security: { tier: sec.res.tier, tier_source: sec.res.requested, notes: sec.res.notes, rows: sec.rows, statics: sec.statics, found: sec.found },
+    runs: (t.runs || []).map((r) => ({ n: r.n, at: r.at, counts: r.counts, stopped: r.stopped || null, dir: r.dir })),
+    findings: t.findings || [],
+    flakes: t.flakes || [],
+    events: (t.events || []).slice(-40),
+    paths: { run: rel(p.run), report: rel(p.report), findings: rel(p.findings), surface: rel(p.surface), changes: rel(p.changes) },
+    report_exists: fs.existsSync(p.report),
+    where: row.where,
+    never_staged: "This folder holds real response bodies from a real system. It is never staged, and ORC does not edit your .gitignore.",
+  };
+  if (asJson) emitJson(out, 0);
+
+  console.log("");
+  testPrintRow(row);
+  console.log("");
+  console.log(`    authorized     ${out.authorized || ui.color.yellow("nobody filled this in")}   ${ui.color.gray("recorded verbatim, never verified by ORC")}`);
+  console.log(
+    `    destructive    ${(out.destructive && out.destructive.mode) || "—"}` +
+      (out.destructive && out.destructive.reason ? ui.color.gray("   " + out.destructive.reason) : "")
+  );
+  console.log(`    identities     ${out.identities.length}${out.two_identities ? "" : ui.color.yellow("   fewer than two — API1 and API5 are UNCHECKABLE")}`);
+  console.log(`    selected       ${out.selected.length}`);
+  console.log(`    surface        ${surface ? `${surface.routes.length} routes` : ui.color.gray("not taken yet")}`);
+  console.log(
+    "    environment    " +
+      (out.env.last_observed
+        ? ui.color.gray(`last observed ${out.env.last_observed.state} at ${out.env.last_observed.at} — not the state now`)
+        : ui.color.gray("never observed")) +
+      ui.color.gray("   " + "`orc test env " + slug + "` takes a reading")
+  );
+  console.log(`    security       ${out.security.tier}   ${out.security.found ? ui.color.red(out.security.found + " FOUND") : ui.color.gray("nothing found")}`);
+  console.log(`    runs           ${out.runs.length}`);
+  console.log(`    findings       ${out.findings.length}   ${ui.color.gray(out.findings.filter((f) => f.observed).length + " observed")}`);
+  if (out.flakes.length) console.log(`    flakes         ${ui.color.yellow(String(out.flakes.length))}   ${ui.color.gray("recorded, never retried away")}`);
+  console.log("");
+  console.log(ui.color.gray("  Nothing was measured to print this. It renders the ledger and re-scans nothing."));
+  console.log("\n  " + out.where + "\n");
+}
+
+// The identity store. It is `orc extra`'s vault, NOT a second one — a second
+// credential store is the drift this repo lints for everywhere else. What is
+// new here is the third leg of the credential triangle: `login`, where ORC
+// performs the login flow the repo declares and stores only the resulting
+// token, with the token's own expiry.
+function testIdentity(claudeDir) {
+  const asJson = wantsJson();
+  const pos = tPositionals(); // ["test","identity",<verb>,<slug>,<name>]
+  const verb = (pos[2] || "list").toLowerCase();
+  const slug = testSlugOf(pos[3]);
+  const fail = (r, h, c) => testFail(asJson, r, h, c);
+
+  if (!slug) fail("no-slug", "orc test identity <add|list|remove> needs the run slug.");
+  const t = readTestRun(claudeDir, slug);
+  if (!t) fail("no-run", `no test run named ${slug}. Run \`orc test init ${slug} …\` first.`, 2);
+
+  if (verb === "list") {
+    const rows = (t.identities || []).map((i) => ({
+      name: i.name,
+      role: i.role,
+      source: i.source,
+      env_var: i.env_var || null,
+      verified_at: i.verified_at || null,
+      last_error: i.last_error || null,
+    }));
+    if (asJson) emitJson({ ok: true, slug, identities: rows, two_identities: rows.length >= 2 }, 0);
+    console.log("");
+    if (!rows.length) console.log("  no identity yet.");
+    for (const r of rows)
+      console.log(
+        `  ${ui.color.bold(r.name)}  role=${r.role}  via ${r.source}` +
+          (r.verified_at ? ui.color.green("  verified") : ui.color.yellow("  never verified"))
+      );
+    // Stated at every surface that shows the count, because it decides what the
+    // security tier can honestly report.
+    if (rows.length < 2)
+      console.log(
+        "\n  " +
+          ui.color.yellow("With fewer than two identities, BOLA (API1) and BFLA (API5) are UNCHECKABLE.") +
+          "\n  They keep their slot in the report and never become a pass."
+      );
+    console.log("");
+    return;
+  }
+
+  if (verb === "remove") {
+    const name = String(pos[4] || "").trim();
+    if (!name) fail("no-name", "orc test identity remove <slug> <name>");
+    const before = t.identities.length;
+    t.identities = t.identities.filter((i) => i.name !== name);
+    if (t.identities.length === before) fail("no-such-identity", `no identity named ${name} in ${slug}.`, 2);
+    testWrite(claudeDir, slug, t);
+    if (asJson) emitJson({ ok: true, slug, removed: name }, 0);
+    console.log(`  removed identity ${name}. The stored credential, if any, stays in the vault until you clear it.`);
+    return;
+  }
+
+  if (verb !== "add") fail("bad-verb", "orc test identity <add|list|remove>", 2);
+
+  const name = String(pos[4] || "").trim();
+  if (!name) fail("no-name", "orc test identity add <slug> <name> --role <role> --source env|vault|login");
+  if (t.identities.some((i) => i.name === name)) fail("exists", `an identity named ${name} already exists in ${slug}.`);
+
+  // THE ROLE IS DECLARED, NEVER INFERRED. BFLA depends entirely on knowing
+  // which identity is supposed to be DENIED; guessing it produces confident
+  // nonsense in both directions.
+  const role = tOpt("--role");
+  if (!role || role === true)
+    fail(
+      "missing-role",
+      '--role is required and has no default (for example: user, admin, viewer). ORC never infers a role — ' +
+        "BFLA depends on knowing which identity is supposed to be refused, and a guess is confident nonsense in both directions."
+    );
+
+  // A CREDENTIAL NEVER REACHES ARGV. Refused BY NAME, exactly as `orc extra`
+  // refuses `--key <value>`.
+  for (const bad of ["--token", "--password", "--secret", "--key"])
+    if (args.includes(bad) && typeof flagValueAfter(bad) === "string")
+      fail(
+        "credential-in-argv",
+        `${bad} <value> is refused BY NAME: a credential must never reach a command line — it lands in your shell history, ` +
+          `your process table and every log that records a command. Use ${bad}-stdin, or --source env --env-var <NAME>.`
+      );
+
+  const source = String(tOpt("--source") || "").toLowerCase();
+  if (!source) fail("missing-source", `--source is required and has no default: ${TEST_IDENTITY_SOURCES.join(" | ")}.`);
+  if (!TEST_IDENTITY_SOURCES.includes(source)) fail("bad-source", `--source must be one of: ${TEST_IDENTITY_SOURCES.join(", ")}`);
+
+  const id = { name, role: String(role), source, added_at: new Date().toISOString(), verified_at: null, last_error: null };
+
+  if (source === "env") {
+    const v = tOpt("--env-var");
+    if (!v || v === true) fail("missing-env-var", "--source env needs --env-var <NAME> — the variable ORC reads the token from at dispatch time.");
+    id.env_var = String(v);
+  } else if (source === "vault") {
+    if (!args.includes("--token-stdin"))
+      fail("no-token", "--source vault needs --token-stdin. The token is read from STDIN and stored encrypted; it never reaches argv.");
+    const token = (readStdinLines()[0] || "").trim();
+    if (!token) fail("empty-token", "nothing arrived on STDIN.");
+    const pass = promptSecret("passphrase for the vault: ");
+    if (!pass) fail("no-passphrase", "a passphrase is required to store a credential, and it must be typed — it never travels in argv.");
+    const put = extraVaultPut(claudeDir, `test:${slug}:${name}`, token, pass, "install");
+    if (!put.ok) fail(put.reason || "vault-write-failed", put.error || "could not write the vault.");
+    id.vault_ref = `test:${slug}:${name}`;
+  } else {
+    // `login` — the answer to "start from login example". It makes the login a
+    // FLOW rather than a field. The shape comes from T4's `auth_shape`; what is
+    // stored here is where to send it, never the resulting token's plaintext.
+    const url = tOpt("--login-url");
+    if (!url || url === true) fail("missing-login-url", "--source login needs --login-url <path or absolute URL> — the endpoint T4 found.");
+    const abs = String(url).startsWith("http") ? String(url) : (t.target && t.target.base_url ? t.target.base_url : "") + String(url);
+    const o = testOriginOf(abs);
+    if (t.target && t.target.origin && o && o !== t.target.origin)
+      fail(
+        "off-origin",
+        `the login URL resolves to ${o}, which is outside the frozen target origin ${t.target.origin}. ` +
+          "Every request this lane sends is fenced to that origin."
+      );
+    id.login = {
+      url: String(url),
+      method: String(tOpt("--login-method") || "POST").toUpperCase(),
+      user_field: tOpt("--user-field") === true || !tOpt("--user-field") ? "username" : String(tOpt("--user-field")),
+      pass_field: tOpt("--pass-field") === true || !tOpt("--pass-field") ? "password" : String(tOpt("--pass-field")),
+      username: tOpt("--username") === true ? null : tOpt("--username") ? String(tOpt("--username")) : null,
+      token_path: tOpt("--token-path") === true || !tOpt("--token-path") ? "token" : String(tOpt("--token-path")),
+    };
+    if (args.includes("--password-stdin")) {
+      const pw = (readStdinLines()[0] || "").trim();
+      if (!pw) fail("empty-password", "nothing arrived on STDIN.");
+      const pass = promptSecret("passphrase for the vault: ");
+      if (!pass) fail("no-passphrase", "a passphrase is required to store a credential, and it must be typed — it never travels in argv.");
+      const put = extraVaultPut(claudeDir, `test:${slug}:${name}:pw`, pw, pass, "install");
+      if (!put.ok) fail(put.reason || "vault-write-failed", put.error || "could not write the vault.");
+      id.login.password_ref = `test:${slug}:${name}:pw`;
+    }
+  }
+
+  t.identities.push(id);
+  t.events.push({ at: new Date().toISOString(), what: "identity-add", detail: `${name} (${role}) via ${source}` });
+  testWrite(claudeDir, slug, t);
+
+  if (asJson) emitJson({ ok: true, slug, identity: id, two_identities: t.identities.length >= 2 }, 0);
+  console.log(`\n  added ${ui.color.bold(name)} — role ${role}, via ${source}.`);
+  console.log(ui.color.gray("  Not verified yet: a credential is TESTED before it is trusted, at the first run that uses it."));
+  if (t.identities.length < 2)
+    console.log(
+      "\n  " +
+        ui.color.yellow("One identity. BOLA (API1) and BFLA (API5) will report UNCHECKABLE") +
+        "\n  — an honest state that keeps its slot and never becomes a pass."
+    );
+  console.log("");
+}
+
+
+// ── T2 — SURFACE (the free pass, zero model tokens) ─────────────────────────
+//
+// Four sources, IN THIS ORDER, and each one is cheaper than the next:
+//   1. a spec ON DISK          — the best case: everything is already declared
+//   2. a spec AT THE TARGET    — one request, only when a base URL exists
+//   3. ROUTE EXTRACTION        — deterministic patterns per detected framework
+//   4. FE ROUTER config        — the same idea for the front end
+//
+// THE CLI ONLY CLAIMS WHAT ITS PATTERN MATCHED. A route whose path is not a
+// string literal — `app.get(BASE + '/x')`, a path built in a loop, a router
+// mounted under a variable — is returned in `unresolved[]` with its file:line
+// and the line itself, and is NEVER guessed at. `unresolved[]` is the ONLY
+// thing that costs money afterwards: it, and the semantics, go to a dispatched
+// ad-hoc recon. *The free check always runs before the paid one.*
+const TEST_SURFACE_SKIP = EXTRA_API_SKIP_DIRS;
+const TEST_SURFACE_MAX_FILES = 4000;
+const TEST_SURFACE_MAX_BYTES = 512 * 1024;
+const TEST_HTTP_VERBS = ["get", "post", "put", "patch", "delete", "options", "head"];
+
+// A spec sitting in the repo. Checked by NAME — the first hit wins for its
+// kind, because two OpenAPI files in one repo are usually the same document in
+// two formats.
+const TEST_SPEC_FILES = [
+  { kind: "openapi", names: ["openapi.json", "openapi.yaml", "openapi.yml"] },
+  { kind: "swagger", names: ["swagger.json", "swagger.yaml", "swagger.yml", "api-docs.json"] },
+  { kind: "postman", names: ["postman_collection.json"] },
+];
+const TEST_SPEC_DIRS = ["", "docs", "api", "spec", "openapi", "public", "static"];
+
+// The spec paths a framework serves. ONE GET each, and a miss is a FACT rather
+// than a failure — most services serve none of these.
+const TEST_SPEC_URLS = ["/openapi.json", "/swagger.json", "/v3/api-docs", "/api-docs", "/swagger/v1/swagger.json"];
+
+// The framework fingerprints. A manifest dependency is proof; for everything
+// else a content probe on the file's own text is the fingerprint. Route
+// extraction is accurate here precisely because the syntax is rigid — a route
+// registration is a call with a literal first argument, and anything less
+// rigid than that goes to `unresolved[]`.
+const TEST_FRAMEWORKS = [
+  { id: "express", manifest: true, dep: /"(express|fastify|koa-router|@koa\/router|restify)"\s*:/, exts: [".js", ".ts", ".mjs", ".cjs"] },
+  { id: "nest", manifest: true, dep: /"@nestjs\/(core|common)"\s*:/, exts: [".ts"] },
+  { id: "hapi", manifest: true, dep: /"@hapi\/hapi"\s*:/, exts: [".js", ".ts"] },
+  { id: "fastapi", exts: [".py"], probe: /\bfrom\s+fastapi\b|\bFastAPI\s*\(/ },
+  { id: "flask", exts: [".py"], probe: /\bfrom\s+flask\b|\bFlask\s*\(/ },
+  { id: "django", exts: [".py"], probe: /\bfrom\s+django\.urls\b|\burlpatterns\s*=/ },
+  { id: "spring", exts: [".java", ".kt"], probe: /@(Rest)?Controller\b|@RequestMapping\b/ },
+  { id: "rails", exts: [".rb"], probe: /Rails\.application\.routes\.draw|ActionController/ },
+  { id: "laravel", exts: [".php"], probe: /\bRoute::(get|post|put|patch|delete|apiResource|resource)\b/ },
+  { id: "go-http", exts: [".go"], probe: /github\.com\/(go-chi\/chi|gin-gonic\/gin|gorilla\/mux)/ },
+  { id: "aspnet", exts: [".cs"], probe: /\[(Http(Get|Post|Put|Patch|Delete)|ApiController)\b/ },
+];
+
+const TEST_V = TEST_HTTP_VERBS.join("|");
+const TEST_VU = TEST_HTTP_VERBS.join("|").toUpperCase();
+
+// `recv` names the capture that holds the CALL RECEIVER. On express and
+// go-http a route registration is shaped exactly like `map.get("k")`, so the
+// receiver has to look like a router or the match is dropped; `slash` then
+// requires the path to start with `/`, which is what a route path does and an
+// ordinary map key does not. Without those two filters the extractor reports
+// confident nonsense, which is worse than reporting nothing.
+const TEST_ROUTER_RE = /router|app|api|server|route|mux|engine/i;
+const TEST_ROUTE_PATTERNS = {
+  express: [
+    { re: new RegExp("\\b([A-Za-z_$][\\w$.]*)\\s*\\.\\s*(" + TEST_V + "|all)\\s*\\(\\s*['\"`]([^'\"`]*)['\"`]", "gi"), recv: 1, method: 2, path: 3, slash: true },
+  ],
+  hapi: [{ re: /method\s*:\s*['"`](GET|POST|PUT|PATCH|DELETE)['"`][\s\S]{0,120}?path\s*:\s*['"`]([^'"`]*)['"`]/gi, method: 1, path: 2 }],
+  nest: [
+    { re: new RegExp("@(" + TEST_V + ")\\s*\\(\\s*['\"`]([^'\"`]*)['\"`]\\s*\\)", "gi"), method: 1, path: 2 },
+    { re: new RegExp("@(" + TEST_V + ")\\s*\\(\\s*\\)", "gi"), method: 1, path: null },
+  ],
+  fastapi: [{ re: new RegExp("@\\w+\\.(" + TEST_V + ")\\s*\\(\\s*['\"]([^'\"]*)['\"]", "gi"), method: 1, path: 2 }],
+  flask: [{ re: /@\w+\.route\s*\(\s*['"]([^'"]*)['"](?:[\s\S]{0,140}?methods\s*=\s*\[([^\]]*)\])?/gi, method: 2, path: 1, methodList: true }],
+  django: [{ re: /\b(?:re_path|path)\s*\(\s*r?['"]([^'"]*)['"]/gi, method: null, path: 1 }],
+  spring: [
+    { re: /@(Get|Post|Put|Patch|Delete)Mapping\s*\(\s*(?:value\s*=\s*)?['"]([^'"]*)['"]/gi, method: 1, path: 2 },
+    { re: /@RequestMapping\s*\(\s*(?:value\s*=\s*)?['"]([^'"]*)['"]/gi, method: null, path: 1 },
+  ],
+  rails: [{ re: new RegExp("^\\s*(" + TEST_V + ")\\s+['\"]([^'\"]*)['\"]", "gim"), method: 1, path: 2 }],
+  laravel: [{ re: new RegExp("Route::(" + TEST_V + ")\\s*\\(\\s*['\"]([^'\"]*)['\"]", "gi"), method: 1, path: 2 }],
+  "go-http": [
+    { re: new RegExp("\\b([A-Za-z_$][\\w$.]*)\\s*\\.\\s*(" + TEST_VU + ")\\s*\\(\\s*\"([^\"]*)\"", "g"), recv: 1, method: 2, path: 3, slash: true },
+    { re: new RegExp("\\b([A-Za-z_$][\\w$.]*)\\s*\\.\\s*(" + TEST_V.replace(/(^|\|)(\w)/g, (m, a, b) => a + b.toUpperCase()) + ")\\s*\\(\\s*\"([^\"]*)\"", "g"), recv: 1, method: 2, path: 3, slash: true },
+  ],
+  aspnet: [{ re: /\[Http(Get|Post|Put|Patch|Delete)\s*\(\s*"([^"]*)"\s*\)\]/gi, method: 1, path: 2 }],
+};
+
+// The SAME call shapes with a NON-literal first argument. Everything these
+// match is `unresolved[]`: reported, never guessed. Dropping such a line
+// silently is indistinguishable from the route not existing.
+const TEST_UNRESOLVED_PATTERNS = [
+  { id: "express", re: new RegExp("\\b([A-Za-z_$][\\w$.]*)\\s*\\.\\s*(?:" + TEST_V + "|all)\\s*\\(\\s*(?!['\"`])[A-Za-z_$\\[(]", "g"), recv: 1 },
+  { id: "fastapi", re: new RegExp("@\\w+\\.(?:" + TEST_V + ")\\s*\\(\\s*(?!['\"])[A-Za-z_]", "g") },
+  { id: "laravel", re: new RegExp("Route::(?:" + TEST_V + ")\\s*\\(\\s*(?!['\"])[A-Za-z_$]", "g") },
+];
+
+// A mounted router. Its prefix cannot be attached to a child route
+// deterministically — the child lives in another file and may be mounted
+// twice — so the mount is REPORTED beside the routes rather than folded into
+// them. A path this command printed with a prefix it inferred would be a path
+// nobody can check.
+const TEST_MOUNT_RE = /\b[A-Za-z_$][\w$.]*\s*\.\s*use\s*\(\s*['"`](\/[^'"`]*)['"`]/g;
+
+const testLineAt = (text, idx) => text.slice(0, idx).split("\n").length;
+
+// Every route, normalised to ONE key so a code route and a live route can be
+// compared without either side being re-derived. The path is normalised only
+// for COMPARISON — `:id`, `{id}` and `<int:id>` all become `{}` — and the
+// route's own spelling is kept verbatim for display.
+const testRouteKey = (r) =>
+  `${String(r.method || "ANY").toUpperCase()} ` +
+  (String(r.path || "/")
+    .replace(/\{[^}]*\}/g, "{}")
+    .replace(/\(\?P?<[^>]*>[^)]*\)/g, "{}")
+    .replace(/<[^>]*>/g, "{}")
+    .replace(/:[A-Za-z_]\w*/g, "{}")
+    .replace(/\/+$/, "") || "/");
+
+// Source 1 — a spec on disk. A file we cannot parse is REPORTED as unparseable
+// rather than dropped: "there is no spec" and "the spec did not parse" want
+// different next actions.
+function testSpecOnDisk(root) {
+  for (const grp of TEST_SPEC_FILES) {
+    for (const name of grp.names) {
+      for (const dir of TEST_SPEC_DIRS) {
+        const abs = path.join(root, dir, name);
+        if (!fs.existsSync(abs)) continue;
+        const rel = path.relative(root, abs).split(path.sep).join("/");
+        if (!/\.json$/i.test(name))
+          return {
+            kind: grp.kind,
+            file: rel,
+            routes: [],
+            parsed: false,
+            why: "YAML — ORC ships zero dependencies and does not parse YAML. Point the run at the JSON your server serves, or convert it.",
+          };
+        let doc = null;
+        try {
+          doc = JSON.parse(fs.readFileSync(abs, "utf8"));
+        } catch (e) {
+          return { kind: grp.kind, file: rel, routes: [], parsed: false, why: `did not parse: ${e.message}` };
+        }
+        return { kind: grp.kind, file: rel, parsed: true, routes: testRoutesFromSpec(doc, rel) };
+      }
+    }
+  }
+  return null;
+}
+
+// A `$ref` inside the SAME document, one hop at a time and depth-capped. A
+// ref ORC cannot resolve is returned as `null` rather than as an empty schema:
+// an empty schema derives no cases and looks exactly like a parameter with no
+// constraints, which is a different and much more misleading fact.
+function testResolveRef(doc, node, depth) {
+  let n = node;
+  for (let i = 0; i < (depth || 8); i++) {
+    if (!n || typeof n !== "object" || typeof n.$ref !== "string") return n || null;
+    const parts = n.$ref.replace(/^#\//, "").split("/");
+    let cur = doc;
+    for (const p of parts) {
+      cur = cur && typeof cur === "object" ? cur[p.replace(/~1/g, "/").replace(/~0/g, "~")] : undefined;
+      if (cur === undefined) return null;
+    }
+    n = cur;
+  }
+  return null;
+}
+
+// The constraint fields the free matrix can actually DERIVE a case from, and
+// nothing else. A field this list does not name is not copied forward — a
+// schema key ORC keeps but never reads is a schema key someone later assumes
+// is being honoured.
+const TEST_SCHEMA_KEYS = ["type", "format", "enum", "minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum", "minLength", "maxLength", "pattern", "default", "example", "nullable", "items", "properties", "required"];
+
+function testTrimSchema(doc, raw, depth) {
+  const sc = testResolveRef(doc, raw, 8);
+  if (!sc || typeof sc !== "object") return null;
+  const out = {};
+  for (const k of TEST_SCHEMA_KEYS) {
+    if (sc[k] === undefined) continue;
+    if (k === "items") out.items = (depth || 0) < 3 ? testTrimSchema(doc, sc.items, (depth || 0) + 1) : null;
+    else if (k === "properties") {
+      if ((depth || 0) >= 3) continue;
+      out.properties = {};
+      for (const [pk, pv] of Object.entries(sc.properties || {})) out.properties[pk] = testTrimSchema(doc, pv, (depth || 0) + 1);
+    } else out[k] = sc[k];
+  }
+  return out;
+}
+
+// OpenAPI/Swagger `paths`, and a Postman collection's `item` tree. Anything
+// else returns nothing rather than a guess.
+function testRoutesFromSpec(doc, file) {
+  const out = [];
+  if (doc && doc.paths && typeof doc.paths === "object") {
+    const base = String((doc.servers && doc.servers[0] && doc.servers[0].url) || doc.basePath || "")
+      .replace(/^https?:\/\/[^/]+/, "")
+      .replace(/\/+$/, "");
+    for (const [p, ops] of Object.entries(doc.paths)) {
+      if (!ops || typeof ops !== "object") continue;
+      for (const verb of Object.keys(ops)) {
+        if (!TEST_HTTP_VERBS.includes(String(verb).toLowerCase())) continue;
+        const op = ops[verb] || {};
+        // Path-level parameters apply to every operation on that path — a
+        // spec that declares `{id}` once at the path level and nowhere else
+        // is the common shape, and missing it loses the id parameter for the
+        // whole resource.
+        const rawParams = [].concat(Array.isArray(ops.parameters) ? ops.parameters : [], Array.isArray(op.parameters) ? op.parameters : []);
+        const params = [];
+        for (const rp of rawParams) {
+          const pr = testResolveRef(doc, rp, 8);
+          if (!pr || !pr.name || !pr.in) continue;
+          params.push({ name: pr.name, in: pr.in, required: !!pr.required || pr.in === "path", schema: testTrimSchema(doc, pr.schema || pr, 0) });
+        }
+        let body = null;
+        const rb = testResolveRef(doc, op.requestBody, 8);
+        const media = rb && rb.content && (rb.content["application/json"] || rb.content["application/*+json"]);
+        if (media) body = { required: !!(rb && rb.required), schema: testTrimSchema(doc, media.schema, 0) };
+        // THE SUCCESS RESPONSE SCHEMA. Captured because BOPLA's read half
+        // (API3a — excessive data exposure) is the difference between a
+        // category ORC MEASURED and a category it reported UNCHECKABLE: with
+        // no declared response there is no such thing as an undeclared field.
+        // A response ORC cannot resolve stays `null` — never an empty schema,
+        // which declares no properties and would mark every real field as
+        // leaked.
+        let response = null;
+        for (const code of ["200", "201", "default"]) {
+          const rs = testResolveRef(doc, (op.responses || {})[code], 8);
+          const rmedia = rs && rs.content && (rs.content["application/json"] || rs.content["application/*+json"]);
+          if (!rmedia || !rmedia.schema) continue;
+          const sc = testTrimSchema(doc, rmedia.schema, 0);
+          if (sc) response = { status: code === "default" ? null : Number(code), schema: sc };
+          break;
+        }
+        out.push({
+          method: verb.toUpperCase(),
+          path: base + p,
+          source: "spec",
+          file,
+          line: null,
+          framework: null,
+          summary: op.summary || null,
+          params,
+          body,
+          response,
+        });
+      }
+    }
+    return out;
+  }
+  const walkItems = (items) => {
+    for (const it of items || []) {
+      if (Array.isArray(it.item)) {
+        walkItems(it.item);
+        continue;
+      }
+      const rq = it.request;
+      if (!rq) continue;
+      const raw = typeof rq.url === "string" ? rq.url : rq.url && rq.url.raw;
+      if (!raw) continue;
+      const p = String(raw)
+        .replace(/^https?:\/\/[^/]+/, "")
+        .replace(/^\{\{[^}]*\}\}/, "")
+        .split("?")[0];
+      out.push({ method: String(rq.method || "GET").toUpperCase(), path: p || "/", source: "spec", file, line: null, framework: null, summary: it.name || null });
+    }
+  };
+  if (Array.isArray(doc && doc.item)) walkItems(doc.item);
+  return out;
+}
+
+// Source 2 — a spec AT the target. Best effort by construction: this half only
+// works once the env is up, so it re-runs after T5, and a miss is never a
+// failure of the command.
+async function testSpecAtTarget(baseUrl) {
+  if (!baseUrl) return { tried: [], found: null, reachable: null };
+  const base = String(baseUrl).replace(/\/+$/, "");
+  const tried = [];
+  let reachable = false;
+  for (const p of TEST_SPEC_URLS) {
+    const res = await extraHttp({ url: base + p, timeoutMs: extraProbeMs(3000), maxBytes: 8 * 1024 * 1024 });
+    tried.push({ path: p, status: res.status || null, reason: res.reason || null });
+    // ANY HTTP answer means the wire is up, and that is all it means — the
+    // `orc extra` reachability rule, honestly labelled.
+    if (res.status) reachable = true;
+    if (res.ok && res.json && (res.json.paths || res.json.openapi || res.json.swagger))
+      return { tried, reachable: true, found: { url: base + p, routes: testRoutesFromSpec(res.json, p) } };
+  }
+  return { tried, reachable, found: null };
+}
+
+// Source 4 — FE routes. A file-system router (Next.js, SvelteKit) is read from
+// the PATHS THEMSELVES, which is the most reliable signal those frameworks
+// have; a config router is read from its `path:` entries.
+function testFeRoutes(root, files) {
+  const out = [];
+  const add = (p, file, line, framework) => out.push({ method: "GET", path: p || "/", source: "fe-router", file, line, framework });
+  const seg = (s) =>
+    "/" +
+    s
+      .replace(/\([^/)]+\)\//g, "")
+      .replace(/\[\.\.\.(\w+)\]/g, ":$1*")
+      .replace(/\[(\w+)\]/g, ":$1");
+  for (const rel of files) {
+    let m = rel.match(/^(?:src\/)?app\/(.*)\/page\.(?:tsx|jsx|ts|js)$/);
+    if (m) { add(seg(m[1]), rel, 1, "next"); continue; }
+    if (/^(?:src\/)?app\/page\.(?:tsx|jsx|ts|js)$/.test(rel)) { add("/", rel, 1, "next"); continue; }
+    m = rel.match(/^(?:src\/)?pages\/(.*)\.(?:tsx|jsx|ts|js)$/);
+    if (m && !m[1].startsWith("api/") && !path.basename(m[1]).startsWith("_")) {
+      add(seg(m[1].replace(/\/index$/, "").replace(/^index$/, "")), rel, 1, "next");
+      continue;
+    }
+    m = rel.match(/^src\/routes\/(.*)\/\+page\.svelte$/);
+    if (m) { add(seg(m[1]), rel, 1, "sveltekit"); continue; }
+    if (rel === "src/routes/+page.svelte") { add("/", rel, 1, "sveltekit"); continue; }
+    if (!/(router|routes)\.(?:t|j)sx?$/i.test(rel) && !/^src\/(?:router|routes)\//i.test(rel)) continue;
+    let text = "";
+    try {
+      const abs = path.join(root, rel.split("/").join(path.sep));
+      if (fs.statSync(abs).size > TEST_SURFACE_MAX_BYTES) continue;
+      text = fs.readFileSync(abs, "utf8");
+    } catch (_) { continue; }
+    const re = /(?:\bpath\s*:\s*|<Route\s[^>]*?\bpath\s*=\s*\{?)\s*['"]([^'"]*)['"]/g;
+    let mm;
+    while ((mm = re.exec(text))) add(mm[1], rel, testLineAt(text, mm.index), "config-router");
+  }
+  return out;
+}
+
+// Source 3 — route extraction. ONE walk, matched per detected framework.
+function testExtractRoutes(root) {
+  const files = [];
+  const walk = (dir, depth) => {
+    if (files.length >= TEST_SURFACE_MAX_FILES || depth > 12) return;
+    let ents = [];
+    try {
+      ents = fs.readdirSync(dir, { withFileTypes: true });
+    } catch (_) { return; }
+    for (const e of ents) {
+      if (e.name.startsWith(".")) continue;
+      if (e.isDirectory()) { if (!TEST_SURFACE_SKIP.has(e.name)) walk(path.join(dir, e.name), depth + 1); }
+      else if (e.isFile()) files.push(path.relative(root, path.join(dir, e.name)).split(path.sep).join("/"));
+    }
+  };
+  walk(root, 0);
+
+  const frameworks = new Set();
+  let manifest = "";
+  try { manifest = fs.readFileSync(path.join(root, "package.json"), "utf8"); } catch (_) {}
+  for (const fw of TEST_FRAMEWORKS) if (fw.manifest && fw.dep && fw.dep.test(manifest)) frameworks.add(fw.id);
+
+  const byExt = new Map();
+  for (const fw of TEST_FRAMEWORKS) for (const ext of fw.exts) { if (!byExt.has(ext)) byExt.set(ext, []); byExt.get(ext).push(fw); }
+
+  const routes = [];
+  const unresolved = [];
+  const mounts = [];
+  for (const rel of files) {
+    const cands = byExt.get(path.extname(rel));
+    if (!cands) continue;
+    let text = "";
+    try {
+      const abs = path.join(root, rel.split("/").join(path.sep));
+      if (fs.statSync(abs).size > TEST_SURFACE_MAX_BYTES) continue;
+      text = fs.readFileSync(abs, "utf8");
+    } catch (_) { continue; }
+    const lines = text.split("\n");
+
+    for (const fw of cands) {
+      const present = fw.manifest ? frameworks.has(fw.id) : fw.probe ? fw.probe.test(text) : false;
+      if (!present) continue;
+      frameworks.add(fw.id);
+      for (const pat of TEST_ROUTE_PATTERNS[fw.id] || []) {
+        pat.re.lastIndex = 0;
+        let m;
+        while ((m = pat.re.exec(text))) {
+          if (pat.recv && !TEST_ROUTER_RE.test(m[pat.recv])) continue;
+          const rawPath = pat.path === null ? "" : m[pat.path];
+          if (pat.path !== null && rawPath === undefined) continue;
+          if (pat.slash && !String(rawPath).startsWith("/")) continue;
+          let methods = ["ANY"];
+          if (pat.methodList) {
+            methods = m[pat.method]
+              ? m[pat.method].split(",").map((s) => s.replace(/['"\s]/g, "").toUpperCase()).filter(Boolean)
+              : ["GET"];
+          } else if (pat.method !== null && m[pat.method]) {
+            const v = String(m[pat.method]).toLowerCase();
+            methods = v === "all" ? ["ANY"] : [v.toUpperCase()];
+          }
+          const line = testLineAt(text, m.index);
+          const p = rawPath === "" ? "/" : String(rawPath).startsWith("/") ? String(rawPath) : "/" + rawPath;
+          for (const method of methods) routes.push({ method, path: p, source: "code", file: rel, line, framework: fw.id });
+        }
+      }
+    }
+    for (const up of TEST_UNRESOLVED_PATTERNS) {
+      if (!frameworks.has(up.id)) continue;
+      up.re.lastIndex = 0;
+      let m;
+      while ((m = up.re.exec(text))) {
+        if (up.recv && !TEST_ROUTER_RE.test(m[up.recv])) continue;
+        const line = testLineAt(text, m.index);
+        unresolved.push({
+          file: rel,
+          line,
+          framework: up.id,
+          text: String(lines[line - 1] || "").trim().slice(0, 160),
+          why: "the path is not a string literal — ORC does not guess a route it cannot read",
+        });
+      }
+    }
+    if (frameworks.has("express")) {
+      TEST_MOUNT_RE.lastIndex = 0;
+      let m;
+      while ((m = TEST_MOUNT_RE.exec(text))) mounts.push({ prefix: m[1], file: rel, line: testLineAt(text, m.index) });
+    }
+  }
+  return { files, routes, unresolved, mounts, frameworks: [...frameworks] };
+}
+
+// Dedupe by the comparison key, keeping the FIRST anchor. Two registrations of
+// one route in two files is a real thing, and both anchors are kept in `also[]`
+// — a lane that reported one of them would have hidden the other.
+function testDedupe(routes) {
+  const seen = new Map();
+  for (const r of routes) {
+    const k = testRouteKey(r);
+    if (!seen.has(k)) seen.set(k, Object.assign({ key: k, also: [] }, r));
+    else if (r.file) seen.get(k).also.push({ file: r.file, line: r.line });
+  }
+  return [...seen.values()];
+}
+
+// THE EXIT-CODE CONTRACT
+//   0  a surface was found
+//   1  nothing named a route — the lane has to ASK, which is a BRANCH and not
+//      an error. The object is emitted either way: an empty result is an ANSWER.
+//   2  no such run, or a run with no frozen target
+function testSurfaceCmd(claudeDir) {
+  const asJson = wantsJson();
+  const pos = tPositionals();
+  const slug = pos[2] ? testSlugOf(pos[2]) : null;
+  const fail = (r, h) => testFail(asJson, r, h, 2);
+  if (!slug) fail("no-slug", "orc test surface <slug> [--json] [--no-live]");
+  const t = readTestRun(claudeDir, slug);
+  if (!t) fail("no-run", `no test run named ${slug}. Run \`orc test init ${slug} ...\` first.`);
+  if (!t.target) fail("no-target", `${slug} has no frozen target — its ledger was written by a session that died mid-init.`);
+
+  const p = testPaths(claudeDir, slug);
+  const root = p.root;
+  const live = !flag("--no-live") && !!t.target.base_url;
+
+  const disk = testSpecOnDisk(root);
+  const ext = testExtractRoutes(root);
+  const fe = t.target.kind === "be" ? [] : testFeRoutes(root, ext.files);
+
+  testSpecAtTarget(live ? t.target.base_url : null).then((atTarget) => {
+    const codeRoutes = testDedupe([].concat(disk && disk.parsed ? disk.routes : [], ext.routes, fe));
+    const liveRoutes = atTarget.found ? testDedupe(atTarget.found.routes) : null;
+
+    // THE CODE-VS-LIVE DIFF, a FIRST-CLASS OUTPUT. It is derived from the two
+    // SPECS and from nothing else: this command never probes a route to see
+    // whether it answers, because that would be sending traffic under a command
+    // the user ran to look at their own repository.
+    //
+    // With no live spec the diff is null WITH A REASON. An empty array here
+    // would read as "no shadow APIs", which is a claim nobody measured —
+    // `a lane that reports a result it did not observe`.
+    // THE UNION. A live-only route keeps every field the live spec declared,
+    // so the free case matrix can derive from it exactly as it would from a
+    // route in the repository.
+    const allRoutes = testDedupe([].concat(codeRoutes, liveRoutes || []));
+    const codeKeySet = new Set(codeRoutes.map((r) => r.key));
+    const liveKeySet = new Set((liveRoutes || []).map((r) => r.key));
+    for (const r of allRoutes) {
+      r.in_code = codeKeySet.has(r.key);
+      // `null` when there was no live spec: "we did not look" and "it is not
+      // there" are different facts, and only one of them is a finding.
+      r.live = liveRoutes ? liveKeySet.has(r.key) : null;
+    }
+
+    let diff;
+    if (liveRoutes) {
+      const codeKeys = codeKeySet;
+      const liveKeys = liveKeySet;
+      diff = {
+        source: "spec-vs-spec",
+        code_only: codeRoutes.filter((r) => !liveKeys.has(r.key)).map((r) => ({ key: r.key, file: r.file || null, line: r.line || null })),
+        live_only: liveRoutes.filter((r) => !codeKeys.has(r.key)).map((r) => ({ key: r.key })),
+        note: "derived from the two specs — no route was probed to produce it",
+      };
+    } else {
+      diff = {
+        source: null,
+        code_only: null,
+        live_only: null,
+        why: live
+          ? "no spec answered at the target, so there is nothing to compare the code against. This is NOT 'no shadow APIs' — it is 'not measured'."
+          : "the live half was skipped (--no-live, or the target has no base URL yet). Re-run this after `orc test env`.",
+      };
+    }
+
+    const surface = {
+      at: new Date().toISOString(),
+      spec_on_disk: disk
+        ? { kind: disk.kind, file: disk.file, parsed: disk.parsed, why: disk.why || null, routes: disk.parsed ? disk.routes.length : 0 }
+        : null,
+      spec_at_target: { probed: live, reachable: atTarget.reachable, tried: atTarget.tried, found: atTarget.found ? atTarget.found.url : null },
+      frameworks: ext.frameworks,
+      files_scanned: ext.files.length,
+      routes: allRoutes.map((r) => ({
+        key: r.key,
+        method: r.method,
+        path: r.path,
+        source: r.source,
+        file: r.file || null,
+        line: r.line || null,
+        framework: r.framework || null,
+        also: r.also,
+        // Present only on a spec route. A code-extracted route has no declared
+        // schema, and an EMPTY params[] there would claim the route takes no
+        // parameters — which nobody measured. `null` says "not declared".
+        params: r.params || null,
+        body: r.body || null,
+        // The declared SUCCESS response. `null` means the spec declared none —
+        // and with none declared there is no such thing as an undeclared field,
+        // so BOPLA's read half reports UNCHECKABLE rather than inventing a
+        // baseline to measure against.
+        response: r.response || null,
+        in_code: r.in_code,
+        live: r.live,
+      })),
+      live_routes: liveRoutes ? liveRoutes.map((r) => ({ key: r.key, method: r.method, path: r.path })) : null,
+      mounts: ext.mounts,
+      unresolved: ext.unresolved,
+      diff,
+    };
+
+    t.surface = surface;
+    t.events.push({ at: surface.at, what: "surface", detail: `${surface.routes.length} routes, ${surface.unresolved.length} unresolved` });
+    testWrite(claudeDir, slug, t, { phase: "T2" });
+    testWriteSurfaceDoc(claudeDir, slug, surface);
+
+    const code = surface.routes.length ? 0 : 1;
+    if (asJson) emitJson({ ok: true, slug, surface, next: surface.routes.length ? `orc test env ${slug} --json` : null }, code);
+
+    const rel = path.relative(root, p.surface).split(path.sep).join("/");
+    console.log(ui.color.bold(`\n  /orc-test · ${slug} · surface`));
+    console.log(ui.color.gray(`  the free pass — zero model tokens. Written to ${rel}\n`));
+    console.log(
+      `    spec on disk   ${disk ? (disk.parsed ? `${disk.file}  (${disk.routes.length} routes)` : ui.color.yellow(`${disk.file} — ${disk.why}`)) : ui.color.gray("none found")}`
+    );
+    console.log(`    spec at target ${surface.spec_at_target.found || ui.color.gray(live ? "none answered" : "not probed")}`);
+    console.log(`    frameworks     ${ext.frameworks.length ? ext.frameworks.join(", ") : ui.color.gray("none fingerprinted")}`);
+    console.log(
+      `    routes         ${surface.routes.length}   ` +
+        ui.color.gray(`(${ext.files.length} files scanned${liveRoutes ? `, ${surface.routes.filter((r) => !r.in_code).length} live-only` : ""})`)
+    );
+    console.log(`    mounted at     ${ext.mounts.length ? ext.mounts.map((m) => m.prefix).join(", ") : ui.color.gray("—")}`);
+    console.log(`    unresolved     ${surface.unresolved.length ? ui.color.yellow(String(surface.unresolved.length)) : "0"}`);
+    console.log("");
+    if (diff.source) {
+      console.log(`    in code, not live   ${diff.code_only.length}   ${ui.color.gray("dead or unshipped")}`);
+      console.log(
+        `    live, not in code   ${diff.live_only.length ? ui.color.red(String(diff.live_only.length)) : "0"}   ` +
+          ui.color.gray("shadow / zombie APIs — OWASP API9:2023")
+      );
+      for (const r of diff.live_only.slice(0, 10)) console.log(`        ${ui.color.red(r.key)}`);
+    } else {
+      console.log(ui.color.gray(`    code-vs-live diff   NOT MEASURED — ${diff.why}`));
+    }
+    if (ext.mounts.length) {
+      console.log("");
+      console.log(ui.color.gray("  A mounted router's prefix is listed, never folded into a child route:"));
+      console.log(ui.color.gray("  the child lives in another file and may be mounted twice."));
+    }
+    if (surface.unresolved.length) {
+      console.log("");
+      console.log("  " + ui.color.yellow("Not guessed at — these need a look:"));
+      for (const u of surface.unresolved.slice(0, 8)) console.log(`    ${u.file}:${u.line}  ${ui.color.gray(u.text)}`);
+      if (surface.unresolved.length > 8) console.log(ui.color.gray(`    … and ${surface.unresolved.length - 8} more, all of them in ${rel}`));
+      console.log(ui.color.gray("  Only these, and the semantics, cost anything: they go to an ad-hoc recon"));
+      console.log(ui.color.gray("  you pick the model and effort for. No pinned agent, so no SPAWN line — say so."));
+    }
+    console.log("");
+    if (!surface.routes.length) {
+      console.log("  " + ui.color.yellow("No route was found, and ORC does not invent one."));
+      console.log("  Point it at the surface yourself: a spec file, or the folder the routes live in.\n");
+      process.exit(1);
+    }
+    console.log(`  Next:  orc test env ${slug}\n`);
+  });
+}
+
+// surface.md — a human's copy of the same object. DERIVED, rewritten on every
+// pass, and it decides nothing.
+function testWriteSurfaceDoc(claudeDir, slug, s) {
+  const p = testPaths(claudeDir, slug);
+  const rows = s.routes
+    .map((r) => `| \`${r.method}\` | \`${r.path}\` | ${r.source} | ${r.file ? `\`${r.file}:${r.line || "?"}\`` : "—"} |`)
+    .join("\n");
+  const body =
+    `# Surface — \`${slug}\`\n\n` +
+    `> DERIVED by \`orc test surface\` at ${s.at}. Rewritten on every pass, and nothing reads it back.\n\n` +
+    `Frameworks: ${s.frameworks.length ? s.frameworks.join(", ") : "none fingerprinted"} · ${s.files_scanned} files scanned\n\n` +
+    `## Routes (${s.routes.length})\n\n` +
+    (s.routes.length ? `| method | path | source | anchor |\n|---|---|---|---|\n${rows}\n` : "_none found — ORC does not invent one._\n") +
+    (s.mounts.length
+      ? `\n## Mounted routers (${s.mounts.length})\n\nA prefix is listed here and never folded into a child route.\n\n` +
+        s.mounts.map((m) => `- \`${m.prefix}\` — \`${m.file}:${m.line}\``).join("\n") +
+        "\n"
+      : "") +
+    `\n## Code vs live\n\n` +
+    (s.diff.source
+      ? `In code, not live: **${s.diff.code_only.length}** — dead or unshipped.\n\n` +
+        `Live, not in code: **${s.diff.live_only.length}** — shadow / zombie APIs, OWASP API9:2023.\n\n` +
+        (s.diff.live_only.length ? s.diff.live_only.map((r) => `- \`${r.key}\``).join("\n") + "\n" : "")
+      : `**NOT MEASURED.** ${s.diff.why}\n`) +
+    `\n## Unresolved (${s.unresolved.length})\n\n` +
+    (s.unresolved.length
+      ? "A route whose path is not a string literal. Reported, never guessed.\n\n" +
+        s.unresolved.map((u) => `- \`${u.file}:${u.line}\` — \`${u.text}\``).join("\n") +
+        "\n"
+      : "_none_\n");
+  try {
+    fs.writeFileSync(p.surface, body);
+  } catch (_) {}
+  return p.surface;
+}
+
+// ── T5 — ENVIRONMENT (local only; the user fixes what breaks) ───────────────
+//
+// State is COMPUTED FRESH ON EVERY READ AND NEVER STORED — the `orc extra
+// tools` rule, verbatim. There is no "starting" flag on disk, because the user
+// can close the window: a stored state word is a state word that is wrong the
+// moment the disk moves (the computeWikiFreshness lesson, applied to a process).
+//
+// FIVE states, ONE next action each, and the hand-back is the whole point of
+// the phase:
+//
+//   absent      no start command could be detected  → name what was looked for
+//   down        detected, not running               → `orc test env up`
+//   starting    process alive, health not answering → wait, within budget
+//   unhealthy   process alive, health answering wrong → STOP — hand back
+//   ready       health answering                    → proceed
+//
+// `a lane that fixes the system under test` has broken this contract. Nothing
+// below edits the project: `up` runs the command the REPO declares, and every
+// failure ends in a hand-back rather than a repair.
+const TEST_ENV_STATES = ["absent", "down", "starting", "unhealthy", "ready"];
+const TEST_HEALTH_PATHS = ["/health", "/healthz", "/readyz", "/api/health", "/_health", "/status"];
+const TEST_ENV_UP_WAIT_MS = 90 * 1000;
+const TEST_ENV_LOG_TAIL = 40;
+
+// THE DETECTION LADDER, in this order and for this reason: a compose service
+// with a `healthcheck` block is the healthiest signal available — a zero exit
+// inside the container, with `depends_on: service_healthy` already expressing
+// the ordering — and everything below it is a weaker guess about the same
+// question. The FIRST rung that answers wins, and the rung that answered is
+// always printed: a start command ORC chose silently is a start command nobody
+// can check.
+const TEST_ENV_LADDER = [
+  { id: "compose", files: ["docker-compose.yml", "docker-compose.yaml", "compose.yml", "compose.yaml"] },
+  { id: "package-json", files: ["package.json"] },
+  { id: "procfile", files: ["Procfile"] },
+  { id: "makefile", files: ["Makefile", "makefile"] },
+];
+
+// The `scripts` keys we will run, in preference order. Nothing else is ever
+// run: a script named `deploy` is not a dev server, and guessing wrong here
+// costs more than asking.
+const TEST_ENV_NPM_SCRIPTS = ["dev", "start:dev", "serve", "start"];
+const TEST_ENV_MAKE_TARGETS = ["dev", "run", "up", "start", "serve"];
+
+// The pid file lives beside the ledger, and it is EVIDENCE, not state: it
+// records what was launched and when. The STATE is still recomputed from
+// whether that pid is alive and what the health endpoint says, every time.
+const testEnvPidFile = (claudeDir, slug) => path.join(testPaths(claudeDir, slug).run, "env.pid.json");
+const testEnvLogFile = (claudeDir, slug) => path.join(testPaths(claudeDir, slug).run, "env.log");
+
+function testEnvReadPid(claudeDir, slug) {
+  try {
+    const j = JSON.parse(fs.readFileSync(testEnvPidFile(claudeDir, slug), "utf8"));
+    return j && j.pid ? j : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+// Alive, as far as a pid can prove it. Stated as a BOUND rather than a proof —
+// pid reuse is real, and `orc extra`'s journal says so in the same words.
+function testEnvAlive(pid) {
+  if (!pid) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (e) {
+    return e.code === "EPERM";
+  }
+}
+
+// Which rung answered, and with what command. Everything it returns is quoted
+// from the repo's own files — ORC never composes a start command of its own.
+function testEnvDetect(root) {
+  const looked = [];
+  for (const rung of TEST_ENV_LADDER) {
+    for (const f of rung.files) {
+      const abs = path.join(root, f);
+      looked.push(f);
+      if (!fs.existsSync(abs)) continue;
+      let text = "";
+      try {
+        text = fs.readFileSync(abs, "utf8");
+      } catch (_) { continue; }
+
+      if (rung.id === "compose") {
+        // We do not parse YAML (zero dependencies), and we do not have to: the
+        // command is `docker compose up -d` whatever the services are. What we
+        // DO read is whether a `healthcheck:` block exists anywhere, because
+        // that changes which health signal is the strongest one available.
+        return {
+          rung: "compose",
+          file: f,
+          cmd: "docker compose up -d",
+          shell: true,
+          healthcheck: /^\s*healthcheck\s*:/m.test(text),
+          looked,
+        };
+      }
+      if (rung.id === "package-json") {
+        let pkg = null;
+        try {
+          pkg = JSON.parse(text);
+        } catch (_) { continue; }
+        const scripts = (pkg && pkg.scripts) || {};
+        const pick = TEST_ENV_NPM_SCRIPTS.find((s) => scripts[s]);
+        if (!pick) continue;
+        return { rung: "package-json", file: f, cmd: `npm run ${pick}`, shell: true, script: pick, script_body: scripts[pick], looked };
+      }
+      if (rung.id === "procfile") {
+        const line = text.split("\n").find((l) => /^(web|api|app)\s*:/.test(l));
+        if (!line) continue;
+        return { rung: "procfile", file: f, cmd: line.split(":").slice(1).join(":").trim(), shell: true, looked };
+      }
+      if (rung.id === "makefile") {
+        const pick = TEST_ENV_MAKE_TARGETS.find((tg) => new RegExp("^" + tg + "\\s*:", "m").test(text));
+        if (!pick) continue;
+        return { rung: "makefile", file: f, cmd: `make ${pick}`, shell: true, target: pick, looked };
+      }
+    }
+  }
+  return { rung: null, file: null, cmd: null, looked };
+}
+
+// THE HEALTH LADDER. A declared compose healthcheck first, then a detected
+// health path, then ANY HTTP answer on the base URL — which measures the WIRE
+// and is labelled as measuring only that (the `orc extra` reachability-probe
+// reasoning). A weaker signal reported as a stronger one is the failure this
+// whole subsystem exists to avoid.
+async function testEnvHealth(baseUrl, detect) {
+  if (!baseUrl) return { rung: null, ok: false, why: "no base URL to probe — pass --base-url at init, or let this command detect one" };
+  const base = String(baseUrl).replace(/\/+$/, "");
+  const tried = [];
+  for (const p of TEST_HEALTH_PATHS) {
+    const res = await extraHttp({ url: base + p, timeoutMs: extraProbeMs(3000), maxBytes: 64 * 1024 });
+    tried.push({ path: p, status: res.status || null, reason: res.reason || null });
+    if (res.status && res.status < 400)
+      return { rung: "health-endpoint", ok: true, url: base + p, status: res.status, tried, measures: "the service answered its own health endpoint" };
+    if (res.status && res.status >= 500)
+      return { rung: "health-endpoint", ok: false, url: base + p, status: res.status, tried, measures: "the health endpoint answered, and answered wrong" };
+  }
+  const res = await extraHttp({ url: base + "/", timeoutMs: extraProbeMs(3000), maxBytes: 64 * 1024 });
+  tried.push({ path: "/", status: res.status || null, reason: res.reason || null });
+  if (res.status)
+    return {
+      rung: "any-http",
+      ok: res.status < 500,
+      url: base + "/",
+      status: res.status,
+      tried,
+      // Said out loud, every time. This rung proves the wire and nothing else.
+      measures: "ANY HTTP answer on the base URL — this measures the wire, not the application",
+    };
+  return { rung: null, ok: false, tried, why: res.error || "nothing answered", measures: "nothing answered on the base URL" };
+}
+
+// THE STATE, computed. Never stored, and never a word this function did not
+// derive on this call.
+async function testEnvState(claudeDir, slug, t) {
+  const root = testPaths(claudeDir, slug).root;
+  const detect = testEnvDetect(root);
+  const rec = testEnvReadPid(claudeDir, slug);
+  const alive = rec ? testEnvAlive(rec.pid) : false;
+  const health = await testEnvHealth(t.target.base_url, detect);
+
+  let state;
+  if (health.ok) state = "ready";
+  else if (alive) {
+    // A process we launched is up and health is not answering yet. Within the
+    // launch budget that is `starting`; past it, something is wrong and the
+    // honest word is `unhealthy` — a wait that never ends is a wait that hides
+    // a broken boot.
+    const age = rec && rec.at ? Date.now() - Date.parse(rec.at) : Infinity;
+    const answered = health.tried && health.tried.some((x) => x.status);
+    state = answered ? "unhealthy" : age < TEST_ENV_UP_WAIT_MS ? "starting" : "unhealthy";
+  } else if (health.tried && health.tried.some((x) => x.status)) state = "unhealthy";
+  else if (detect.cmd) state = "down";
+  else state = "absent";
+
+  return { state, detect, health, pid: rec ? { pid: rec.pid, at: rec.at, cmd: rec.cmd, alive } : null, root };
+}
+
+// The next action per state. ONE table, so the terminal, `--json` and the panel
+// cannot disagree about what to do next.
+const TEST_ENV_NEXT = {
+  absent: { action: "tell ORC the command", cmd: null, why: "no start command could be detected — see `looked_for`" },
+  down: { action: "start it", cmd: "orc test env up <slug>", why: "a start command was detected and nothing is answering" },
+  starting: { action: "wait", cmd: "orc test env <slug>", why: "the process is alive and health has not answered yet" },
+  unhealthy: { action: "STOP — hand back", cmd: null, why: "the process is up and answering wrong. ORC does not fix the system it is testing." },
+  ready: { action: "proceed", cmd: "orc test case <slug>", why: "health answered" },
+};
+
+// The `.env.example` diff. It NAMES the absent keys and INVENTS NO VALUE for
+// one — a placeholder written into a real environment is a credential-shaped
+// lie, and the user is the only one who knows the right value.
+function testEnvVars(root) {
+  for (const name of [".env.example", ".env.sample", ".env.template"]) {
+    const abs = path.join(root, name);
+    if (!fs.existsSync(abs)) continue;
+    let text = "";
+    try {
+      text = fs.readFileSync(abs, "utf8");
+    } catch (_) { continue; }
+    const keys = [];
+    for (const line of text.split("\n")) {
+      const m = line.match(/^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=/);
+      if (m) keys.push(m[1]);
+    }
+    // A local .env counts: the process will read it even though this one did
+    // not. Reported as its own source so nobody reads "present" as "exported".
+    const dotenv = new Set();
+    const dotenvPath = path.join(root, ".env");
+    if (fs.existsSync(dotenvPath)) {
+      try {
+        for (const line of fs.readFileSync(dotenvPath, "utf8").split("\n")) {
+          const m = line.match(/^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=/);
+          if (m) dotenv.add(m[1]);
+        }
+      } catch (_) {}
+    }
+    const absent = keys.filter((k) => process.env[k] === undefined && !dotenv.has(k));
+    return {
+      file: name,
+      declared: keys.length,
+      in_env: keys.filter((k) => process.env[k] !== undefined).length,
+      in_dotenv: keys.filter((k) => dotenv.has(k)).length,
+      absent,
+      note: "ORC names the absent keys and never invents a value for one.",
+    };
+  }
+  return null;
+}
+
+// The tail of what the launched process said. It is the single most useful
+// thing in a hand-back and the reason `up` writes a log at all.
+function testEnvLogTail(claudeDir, slug, n) {
+  try {
+    const text = fs.readFileSync(testEnvLogFile(claudeDir, slug), "utf8");
+    const lines = text.split("\n").filter((l) => l.length);
+    return lines.slice(-(n || TEST_ENV_LOG_TAIL));
+  } catch (_) {
+    return [];
+  }
+}
+
+// THE EXIT-CODE CONTRACT
+//   0  ready
+//   1  absent | down | starting | unhealthy — every one of them an ANSWER, and
+//      the object is emitted in all of them
+//   2  no such run, a run with no frozen target, or a remote target (there is
+//      no environment here for ORC to bring up, and pretending otherwise is
+//      how a lane starts touching a host it does not own)
+function testEnvCmd(claudeDir) {
+  const asJson = wantsJson();
+  const pos = tPositionals();
+  const verb = (pos[2] || "").toLowerCase();
+  const sub = verb === "up" || verb === "logs" ? verb : null;
+  const slug = testSlugOf(sub ? pos[3] : pos[2]);
+  const fail = (r, h) => testFail(asJson, r, h, 2);
+  if (!slug) fail("no-slug", "orc test env [up|logs] <slug> [--json]");
+  const t = readTestRun(claudeDir, slug);
+  if (!t) fail("no-run", `no test run named ${slug}.`);
+  if (!t.target) fail("no-target", `${slug} has no frozen target.`);
+  if (t.target.env === "remote")
+    fail(
+      "remote-target",
+      `${slug} is a REMOTE target. There is no environment here for ORC to bring up, and it will not try: ` +
+        "starting or stopping something on a host you do not own is not this lane's business. Check the target yourself, then `orc test run`."
+    );
+
+  if (sub === "logs") return testEnvLogs(claudeDir, slug, asJson);
+  if (sub === "up") return testEnvUp(claudeDir, slug, t, asJson);
+
+  testEnvState(claudeDir, slug, t).then((st) => {
+    const vars = testEnvVars(st.root);
+    const next = TEST_ENV_NEXT[st.state];
+    const tail = st.state === "unhealthy" || st.state === "starting" ? testEnvLogTail(claudeDir, slug) : [];
+    const out = {
+      ok: true,
+      slug,
+      state: st.state,
+      next,
+      detected: { rung: st.detect.rung, file: st.detect.file, command: st.detect.cmd, healthcheck: st.detect.healthcheck || false },
+      looked_for: st.detect.looked,
+      health: st.health,
+      process: st.pid,
+      env_vars: vars,
+      log_tail: tail,
+    };
+    // The hand-back is CLI-written, on every state change (v0.49.5's rule),
+    // because a hand-back relayed through a model's memory is a fact this repo
+    // has lost five times.
+    // THE OBSERVATION IS STORED; THE STATE IS NOT. These are different facts and
+    // the difference is the whole point: a health state is COMPUTED on every
+    // read and never stored (the computeWikiFreshness rule), but "the last time
+    // anybody looked, at this timestamp, it answered wrong" is a fact ABOUT THE
+    // PAST and it does not go stale — it just gets older. It is what lets
+    // `orc doctor` say something true about an environment without sending a
+    // request of its own, and every surface that renders it must say WHEN.
+    t.env_observed = { state: st.state, at: new Date().toISOString() };
+    testWrite(claudeDir, slug, t, { phase: "T5", env: st.state });
+
+    const code = st.state === "ready" ? 0 : 1;
+    if (asJson) emitJson(out, code);
+    testEnvPrint(slug, out);
+    process.exit(code);
+  });
+}
+
+function testEnvPrint(slug, out) {
+  const colorOf = { ready: ui.color.green, starting: ui.color.yellow, down: ui.color.yellow, unhealthy: ui.color.red, absent: ui.color.red };
+  const c = colorOf[out.state] || ((s) => s);
+  console.log(ui.color.bold(`\n  /orc-test · ${slug} · environment`));
+  console.log(`  state  ${c(out.state.toUpperCase())}   ${ui.color.gray(out.next.why)}\n`);
+  console.log(`    detected   ${out.detected.command ? `${out.detected.command}   ${ui.color.gray(`(${out.detected.rung} — ${out.detected.file})`)}` : ui.color.gray("nothing")}`);
+  if (out.detected.healthcheck) console.log(ui.color.gray("               a compose healthcheck is declared — the strongest signal available"));
+  console.log(
+    `    health     ${out.health.rung ? `${out.health.url}  →  ${out.health.status || out.health.why}` : ui.color.gray(out.health.why || "not probed")}`
+  );
+  if (out.health.measures) console.log(ui.color.gray(`               ${out.health.measures}`));
+  if (out.process) console.log(`    process    pid ${out.process.pid} ${out.process.alive ? "alive" : ui.color.gray("gone")}   ${ui.color.gray("started " + out.process.at)}`);
+
+  if (out.state === "absent") {
+    console.log("");
+    console.log("  Looked for: " + ui.color.gray(out.looked_for.join(", ")));
+    console.log("  None of them named a start command. Tell ORC what starts this, or start it yourself.");
+  }
+  if (out.env_vars && out.env_vars.absent.length) {
+    console.log("");
+    console.log(`  ${ui.color.yellow(`${out.env_vars.absent.length} of ${out.env_vars.declared} keys in ${out.env_vars.file} are not set`)}`);
+    for (const k of out.env_vars.absent.slice(0, 12)) console.log(`    ${k}`);
+    if (out.env_vars.absent.length > 12) console.log(ui.color.gray(`    … and ${out.env_vars.absent.length - 12} more`));
+    console.log(ui.color.gray("  ORC names them and invents no value for one."));
+  }
+  if (out.log_tail.length) {
+    console.log("");
+    console.log("  last output");
+    for (const l of out.log_tail.slice(-12)) console.log(ui.color.gray("    " + l.slice(0, 160)));
+  }
+  console.log("");
+  // THE HAND-BACK. `a lane that fixes the system under test` has broken this
+  // contract, so this is what the lane does instead: print what it ran, print
+  // what came back, and stop.
+  if (out.state === "unhealthy") {
+    console.log("  " + ui.color.red("The system did not come up."));
+    console.log("");
+    console.log("  ORC does not fix the system it is testing. Fix this, then:");
+    console.log(`      orc test env up ${slug} && orc test run ${slug}`);
+    console.log("");
+  } else if (out.next.cmd) {
+    console.log(`  Next:  ${out.next.cmd.replace("<slug>", slug)}\n`);
+  }
+}
+
+// `orc test env up` — runs the command THE REPO DECLARED, detached, with its
+// output on disk. It never composes a command of its own, never edits a file,
+// and never installs anything.
+function testEnvUp(claudeDir, slug, t, asJson) {
+  const p = testPaths(claudeDir, slug);
+  const detect = testEnvDetect(p.root);
+  if (!detect.cmd)
+    testFail(
+      asJson,
+      "absent",
+      "no start command could be detected. Looked for: " + detect.looked.join(", ") + ". Start it yourself, then re-run `orc test env " + slug + "`.",
+      1
+    );
+
+  const existing = testEnvReadPid(claudeDir, slug);
+  if (existing && testEnvAlive(existing.pid)) {
+    if (asJson) emitJson({ ok: true, slug, state: "already-running", pid: existing.pid, cmd: existing.cmd }, 0);
+    console.log(`\n  already running — pid ${existing.pid}, started ${existing.at}`);
+    console.log(`  ${ui.color.gray(existing.cmd)}\n`);
+    return;
+  }
+
+  const logPath = testEnvLogFile(claudeDir, slug);
+  fs.mkdirSync(p.run, { recursive: true });
+  const fd = fs.openSync(logPath, "a");
+  // TWO requirements pull in opposite directions here, and the relay is what
+  // satisfies both.
+  //
+  //   · The process must OUTLIVE this command. The user owns it; ORC only
+  //     launched it. That needs `detached`, or the shell that started ORC
+  //     takes the whole process group down with it.
+  //   · The output must land ON DISK, not in a buffer inside a parent that
+  //     may die — v0.54.0's rule, and the tail of it is the single most
+  //     useful thing in the hand-back.
+  //
+  // On Windows those two cannot both be had directly: `detached` creates a
+  // new console, and a `cmd.exe` child re-attaches its standard handles to
+  // that console, so the file descriptor is silently ignored. Measured on
+  // this platform: detached + shell writes NOTHING to the fd, in every
+  // combination of `windowsHide`, an explicit `cmd.exe` argv, and a
+  // redirect written into the command line itself.
+  //
+  // So the DETACHED child is node, which honours the descriptor, and node
+  // runs the shell command as an ordinary attached child that inherits it.
+  // One code path on every platform — a second idea of how a start command
+  // runs is exactly the drift this repo lints for.
+  const relay =
+    'const cp=require("child_process");' +
+    'const c=cp.spawn(process.argv[1],{shell:true,stdio:"inherit",cwd:process.argv[2]});' +
+    'c.on("exit",x=>process.exit(x||0));';
+  const child = require("child_process").spawn(process.execPath, ["-e", relay, detect.cmd, p.root], {
+    cwd: p.root,
+    detached: true,
+    windowsHide: true,
+    stdio: ["ignore", fd, fd],
+  });
+  child.unref();
+
+  const rec = { pid: child.pid, at: new Date().toISOString(), cmd: detect.cmd, rung: detect.rung, file: detect.file, log: path.relative(p.root, logPath).split(path.sep).join("/") };
+  try {
+    fs.writeFileSync(testEnvPidFile(claudeDir, slug), JSON.stringify(rec, null, 2) + "\n");
+  } catch (_) {}
+  t.events.push({ at: rec.at, what: "env-up", detail: `${detect.cmd} (pid ${child.pid})` });
+  testWrite(claudeDir, slug, t, { phase: "T5", env: "starting" });
+
+  if (asJson) emitJson({ ok: true, slug, state: "starting", pid: child.pid, cmd: detect.cmd, rung: detect.rung, log: rec.log, next: `orc test env ${slug} --json` }, 0);
+  console.log(ui.color.bold(`\n  /orc-test · ${slug} · env up`));
+  console.log(`  ran   ${detect.cmd}   ${ui.color.gray(`(${detect.rung} — ${detect.file})`)}`);
+  console.log(`  pid   ${child.pid}`);
+  console.log(`  log   ${rec.log}\n`);
+  console.log(ui.color.gray("  ORC ran the command your repo declares and nothing else. It did not edit a file."));
+  console.log(`\n  Next:  orc test env ${slug}    ${ui.color.gray("(health is computed fresh, never stored)")}\n`);
+}
+
+function testEnvLogs(claudeDir, slug, asJson) {
+  const n = Number(tOpt("--tail")) || TEST_ENV_LOG_TAIL;
+  const lines = testEnvLogTail(claudeDir, slug, n);
+  if (asJson) emitJson({ ok: true, slug, lines, file: testEnvLogFile(claudeDir, slug) }, 0);
+  if (!lines.length) {
+    console.log("\n  no output recorded. `orc test env up " + slug + "` writes it.\n");
+    return;
+  }
+  for (const l of lines) console.log(l);
+}
+
+
+// ── T3 — SELECT, T4 — FLOW TRACE, T6 — CASES ────────────────────────────────
+//
+// The split holds all the way through here. The MODEL chooses the targets (T3
+// is a user turn) and traces the flow (T4 is a dispatched read-only agent); the
+// CLI writes both artifacts and derives every case a schema can already answer.
+//
+// `orc test select` is the writer for the user's picks. It never picks one: a
+// selection ORC made for you is a target nobody chose, and the whole run is
+// fenced to what is selected.
+function testSelectCmd(claudeDir) {
+  const asJson = wantsJson();
+  const pos = tPositionals();
+  const slug = pos[2] ? testSlugOf(pos[2]) : null;
+  const fail = (r, h, c) => testFail(asJson, r, h, c === undefined ? 2 : c);
+  if (!slug) fail("no-slug", 'orc test select <slug> --target "GET /users" [--target ...] [--clear]');
+  const t = readTestRun(claudeDir, slug);
+  if (!t) fail("no-run", `no test run named ${slug}.`);
+  if (!t.surface) fail("no-surface", `${slug} has no surface yet. Run \`orc test surface ${slug}\` — it is free.`);
+
+  const wanted = [];
+  for (let i = 0; i < args.length; i++) if (args[i] === "--target" && args[i + 1] !== undefined) wanted.push(String(args[i + 1]));
+  if (flag("--clear")) {
+    t.selected = [];
+    t.events.push({ at: new Date().toISOString(), what: "select", detail: "cleared" });
+    testWrite(claudeDir, slug, t, { phase: "T3" });
+    if (asJson) emitJson({ ok: true, slug, selected: [] }, 0);
+    console.log("\n  selection cleared.\n");
+    return;
+  }
+  if (!wanted.length)
+    fail(
+      "no-target",
+      'orc test select <slug> --target "GET /users" [--target ...]. ORC never picks a target for you — ' +
+        "the menu is yours, and the run is fenced to what you selected.",
+      1
+    );
+
+  // A target names a route the surface FOUND, or it is refused BY NAME. A
+  // selection ORC accepted and then could not find is a run that quietly tests
+  // nothing.
+  const known = new Map(t.surface.routes.map((r) => [r.key, r]));
+  const norm = (raw) => {
+    const s = String(raw).trim();
+    if (known.has(s)) return s;
+    const k = testRouteKey({ method: s.split(/\s+/)[0], path: s.split(/\s+/).slice(1).join(" ") });
+    return known.has(k) ? k : null;
+  };
+  const resolved = [];
+  const unknown = [];
+  for (const w of wanted) {
+    const k = norm(w);
+    if (k) resolved.push(k);
+    else unknown.push(w);
+  }
+  if (unknown.length)
+    fail(
+      "unknown-target",
+      `not in the surface: ${unknown.join(", ")}. Run \`orc test surface ${slug} --json\` and pick a \`key\`. ` +
+        "A target ORC accepted and could not find is a run that quietly tests nothing.",
+      1
+    );
+
+  t.selected = [...new Set([].concat(t.selected || [], resolved))];
+  t.events.push({ at: new Date().toISOString(), what: "select", detail: `${resolved.length} target(s)` });
+  testWrite(claudeDir, slug, t, { phase: "T3" });
+  if (asJson) emitJson({ ok: true, slug, selected: t.selected, next: `orc test case derive ${slug} --json` }, 0);
+  console.log(ui.color.bold(`\n  /orc-test · ${slug} · selected ${t.selected.length}`));
+  for (const k of t.selected) console.log(`    ${k}`);
+  console.log(`\n  Next:  orc test case derive ${slug}\n`);
+}
+
+// ── T4 — the flow trace ARTIFACT ────────────────────────────────────────────
+//
+// The tracing is DISPATCHED (read-only, per selected target). This command is
+// the WRITER: it takes the agent's returned object and writes `flow/<target>.md`
+// plus the ledger row.
+//
+// EVERY CLAIM IS ANCHORED, and an unanchored one is OMITTED — never guessed at.
+// That is the wiki's evidence rule and it is enforced here mechanically rather
+// than asked for in prose: an entry with no `file:line` is DROPPED and COUNTED,
+// exactly as `orc challenge record` drops a finding that serves nothing. The
+// count is reported, because a silently dropped entry is indistinguishable from
+// a flow that had no middleware.
+const TEST_FLOW_ANCHORED = ["middleware", "calls", "writes"];
+const testAnchorOf = (e) => (e && typeof e === "object" && e.file && (e.line || e.line === 0) ? `${e.file}:${e.line}` : null);
+
+function testFlowCmd(claudeDir) {
+  const asJson = wantsJson();
+  const pos = tPositionals();
+  const slug = pos[2] ? testSlugOf(pos[2]) : null;
+  const fail = (r, h, c) => testFail(asJson, r, h, c === undefined ? 2 : c);
+  if (!slug) fail("no-slug", 'orc test flow <slug> --target "GET /users" --from <file.json>');
+  const t = readTestRun(claudeDir, slug);
+  if (!t) fail("no-run", `no test run named ${slug}.`);
+
+  const target = tOpt("--target");
+  if (!target || target === true) fail("no-target", '--target "GET /users" names which selected target this trace is for.');
+  const key = String(target).trim();
+  if ((t.selected || []).length && !t.selected.includes(key))
+    fail("not-selected", `${key} is not one of the selected targets. Select it first, or pass a target from \`orc test select --json\`.`, 1);
+
+  const from = tOpt("--from");
+  if (!from || from === true)
+    fail("no-from", "--from <file.json> — the traced flow, as the dispatched agent returned it. The CLI writes the artifact; the model does the tracing.");
+  let raw;
+  try {
+    raw = JSON.parse(fs.readFileSync(String(from), "utf8"));
+  } catch (e) {
+    fail("unreadable", `could not read ${from}: ${e.message}`, 1);
+  }
+
+  const dropped = [];
+  const flow = {
+    target: key,
+    at: new Date().toISOString(),
+    entry: testAnchorOf(raw.entry) ? raw.entry : null,
+    handler: testAnchorOf(raw.handler) ? raw.handler : null,
+    preconditions: Array.isArray(raw.preconditions) ? raw.preconditions.map(String) : [],
+    object_ids: Array.isArray(raw.object_ids) ? raw.object_ids.map(String) : [],
+    auth_shape: raw.auth_shape && typeof raw.auth_shape === "object" ? raw.auth_shape : null,
+  };
+  if (raw.entry && !flow.entry) dropped.push("entry");
+  if (raw.handler && !flow.handler) dropped.push("handler");
+  for (const k of TEST_FLOW_ANCHORED) {
+    const list = Array.isArray(raw[k]) ? raw[k] : [];
+    flow[k] = list.filter((e) => {
+      if (testAnchorOf(e)) return true;
+      dropped.push(`${k}: ${(e && (e.name || e.what)) || "unnamed"}`);
+      return false;
+    });
+  }
+
+  const p = testPaths(claudeDir, slug);
+  fs.mkdirSync(p.flows, { recursive: true });
+  const fileName = key.replace(/[^A-Za-z0-9]+/g, "-").replace(/^-+|-+$/g, "").toLowerCase() + ".md";
+  const abs = path.join(p.flows, fileName);
+  fs.writeFileSync(abs, testFlowDoc(slug, flow, dropped));
+  flow.doc = path.relative(p.root, abs).split(path.sep).join("/");
+
+  t.flows[key] = flow;
+  t.events.push({ at: flow.at, what: "flow", detail: `${key} — ${flow.middleware.length} middleware, ${flow.writes.length} writes, ${dropped.length} dropped` });
+  testWrite(claudeDir, slug, t, { phase: "T4" });
+
+  if (asJson) emitJson({ ok: true, slug, target: key, flow, dropped, doc: flow.doc }, 0);
+  console.log(ui.color.bold(`\n  /orc-test · ${slug} · flow · ${key}`));
+  console.log(`  written to ${flow.doc}\n`);
+  console.log(`    entry        ${flow.entry ? testAnchorOf(flow.entry) : ui.color.gray("—")}`);
+  console.log(`    middleware   ${flow.middleware.length}`);
+  console.log(`    handler      ${flow.handler ? testAnchorOf(flow.handler) : ui.color.gray("—")}`);
+  console.log(`    calls        ${flow.calls.length}`);
+  console.log(`    writes       ${flow.writes.length}${flow.writes.length ? ui.color.gray("   ← this target MUTATES") : ""}`);
+  console.log(`    object ids   ${flow.object_ids.length ? flow.object_ids.join(", ") : ui.color.gray("—")}`);
+  console.log(`    auth shape   ${flow.auth_shape ? flow.auth_shape.url || "declared" : ui.color.gray("—")}`);
+  if (dropped.length) {
+    console.log("");
+    console.log("  " + ui.color.yellow(`${dropped.length} unanchored entr${dropped.length === 1 ? "y" : "ies"} DROPPED`) + ui.color.gray(" — unanchored = omitted, never guessed"));
+    for (const d of dropped.slice(0, 8)) console.log(ui.color.gray(`    ${d}`));
+  }
+  console.log("");
+}
+
+function testFlowDoc(slug, f, dropped) {
+  const row = (e) => `- \`${testAnchorOf(e)}\` — ${e.name || e.what || ""}${e.note ? ` · ${e.note}` : ""}`;
+  return (
+    `# Flow — \`${f.target}\`\n\n` +
+    `> Traced for \`${slug}\` at ${f.at}. Every claim below is anchored to a real file:line;\n` +
+    `> an unanchored claim was OMITTED, never guessed. ${dropped.length} dropped.\n\n` +
+    `**entry** — ${f.entry ? `\`${testAnchorOf(f.entry)}\`` : "_not anchored_"}\n\n` +
+    `**middleware** (in order)\n\n${f.middleware.length ? f.middleware.map(row).join("\n") : "_none anchored_"}\n\n` +
+    `**handler** — ${f.handler ? `\`${testAnchorOf(f.handler)}\`` : "_not anchored_"}\n\n` +
+    `**calls**\n\n${f.calls.length ? f.calls.map(row).join("\n") : "_none anchored_"}\n\n` +
+    `**writes** — what this target MUTATES. This is what gates a destructive case.\n\n${f.writes.length ? f.writes.map(row).join("\n") : "_none anchored_"}\n\n` +
+    `**preconditions** — what must be TRUE before this can succeed\n\n${f.preconditions.length ? f.preconditions.map((x) => `- ${x}`).join("\n") : "_none stated_"}\n\n` +
+    `**object ids** — the request fields that name an object. This is what drives the BOLA probe.\n\n${f.object_ids.length ? f.object_ids.map((x) => `- \`${x}\``).join("\n") : "_none stated_"}\n\n` +
+    `**auth shape** — the login flow itself\n\n` +
+    (f.auth_shape ? "```json\n" + JSON.stringify(f.auth_shape, null, 2) + "\n```\n" : "_not traced_\n")
+  );
+}
+
+// ── T6 — the case matrix ────────────────────────────────────────────────────
+//
+// THE CLI DERIVES EVERY CASE IT CAN, FOR FREE. That is the bulk of the matrix,
+// and deriving it mechanically is what makes "every case from the happy path to
+// the edges" tractable instead of a model writing a hundred plausible rows
+// nobody can check. *The free check always runs before the paid one.*
+//
+// `orc test case` is the ONE writer of a case row. The rows live in the run
+// ledger (`test.json`), which W2 established as the single writer for this
+// lane; `cases.json` is DERIVED from it on every write, for a human and for any
+// tool that wants the matrix without the rest of the ledger. A second
+// authoritative store would be the drift this repo lints for everywhere else.
+const TEST_CASE_SOURCES = ["derived", "designed", "user"];
+const TEST_NEG_VERBS = ["GET", "POST", "PUT", "PATCH", "DELETE"];
+
+// A value a schema can actually justify. Nothing here is invented: `example`
+// and `default` are the author's own, an enum's first member is the author's
+// own, and a type default is the narrowest legal value for that type. When
+// none of those exist the case is still emitted and the GAP is named, because
+// a case ORC quietly filled with "test" is a case that passes for the wrong
+// reason.
+function testSampleValue(sc) {
+  if (!sc || typeof sc !== "object") return { value: null, gap: "no schema declared" };
+  if (sc.example !== undefined) return { value: sc.example, gap: null };
+  if (sc.default !== undefined) return { value: sc.default, gap: null };
+  if (Array.isArray(sc.enum) && sc.enum.length) return { value: sc.enum[0], gap: null };
+  switch (sc.type) {
+    case "integer":
+    case "number": {
+      const lo = sc.minimum !== undefined ? Number(sc.minimum) : 1;
+      return { value: lo, gap: null };
+    }
+    case "boolean":
+      return { value: true, gap: null };
+    case "array":
+      return { value: [], gap: null };
+    case "object": {
+      const o = {};
+      const req = Array.isArray(sc.required) ? sc.required : [];
+      for (const k of req) {
+        const r = testSampleValue((sc.properties || {})[k]);
+        o[k] = r.value;
+      }
+      return { value: o, gap: req.length ? null : "object with no required properties — the body may be incomplete" };
+    }
+    case "string": {
+      if (sc.format === "uuid") return { value: "00000000-0000-4000-8000-000000000000", gap: null };
+      if (sc.format === "email") return { value: "orc-test@example.invalid", gap: null };
+      if (sc.format === "date-time") return { value: "2020-01-01T00:00:00Z", gap: null };
+      const n = sc.minLength !== undefined ? Number(sc.minLength) : 1;
+      return { value: "a".repeat(Math.max(1, Math.min(n, 64))), gap: null };
+    }
+    default:
+      return { value: null, gap: "no type declared — a semantically valid value needs the designer" };
+  }
+}
+
+// BOUNDARY VALUES. Faults cluster at boundaries because off-by-one and an
+// inverted comparison are the highest-density defect class in threshold logic,
+// so this is the highest-yield free expansion there is.
+function testBoundaries(sc) {
+  const out = [];
+  if (!sc || typeof sc !== "object") return out;
+  const num = sc.type === "integer" || sc.type === "number";
+  if (num && sc.minimum !== undefined) {
+    out.push({ value: Number(sc.minimum) - 1, why: "one below the declared minimum", expect_reject: true });
+    out.push({ value: Number(sc.minimum), why: "the declared minimum", expect_reject: false });
+  }
+  if (num && sc.maximum !== undefined) {
+    out.push({ value: Number(sc.maximum), why: "the declared maximum", expect_reject: false });
+    out.push({ value: Number(sc.maximum) + 1, why: "one above the declared maximum", expect_reject: true });
+  }
+  if (sc.type === "string" && sc.minLength !== undefined && Number(sc.minLength) > 0) {
+    out.push({ value: "a".repeat(Math.max(0, Number(sc.minLength) - 1)), why: "one character below minLength", expect_reject: true });
+    out.push({ value: "a".repeat(Number(sc.minLength)), why: "exactly minLength", expect_reject: false });
+  }
+  if (sc.type === "string" && sc.maxLength !== undefined) {
+    const m = Math.min(Number(sc.maxLength), 4096);
+    out.push({ value: "a".repeat(m), why: "exactly maxLength", expect_reject: false });
+    out.push({ value: "a".repeat(m + 1), why: "one character above maxLength", expect_reject: true });
+  }
+  if (Array.isArray(sc.enum) && sc.enum.length) out.push({ value: "__orc_not_in_enum__", why: "a value outside the declared enum", expect_reject: true });
+  return out;
+}
+
+// EQUIVALENCE PARTITIONS: valid / invalid-type / absent / null / empty. The
+// four negatives are the partitions a declared type makes checkable for free.
+function testPartitions(sc, required, where) {
+  const t = (sc && sc.type) || null;
+  const out = [
+    { kind: "invalid-type", value: t === "string" ? 12345 : "not-a-" + (t || "value"), why: `a value of the wrong type for a declared ${t || "untyped"} parameter`, expect_reject: true },
+    { kind: "null", value: null, why: "an explicit null", expect_reject: !(sc && sc.nullable) },
+  ];
+  if (t === "string") out.push({ kind: "empty", value: "", why: "an empty string", expect_reject: !!(sc && sc.minLength) });
+  // A PATH parameter cannot be absent — omit it and the route simply does not
+  // match, so the case would measure the router rather than the handler. Only a
+  // query or header parameter has a real "absent" partition.
+  if (required && where !== "path") out.push({ kind: "absent", value: undefined, why: "a required parameter, absent", expect_reject: true });
+  return out;
+}
+
+// Build a request from a route plus a set of parameter values. Path params are
+// substituted; query and header params go where they were declared. What is
+// NOT declared is not invented.
+function testBuildRequest(route, values, bodyValue) {
+  let p = route.path;
+  const query = [];
+  const headers = {};
+  for (const prm of route.params || []) {
+    const v = values && Object.prototype.hasOwnProperty.call(values, prm.name) ? values[prm.name] : testSampleValue(prm.schema).value;
+    if (v === undefined) continue;
+    if (prm.in === "path") p = p.replace(new RegExp("\\{" + prm.name + "\\}", "g"), encodeURIComponent(String(v)));
+    else if (prm.in === "query") query.push(encodeURIComponent(prm.name) + "=" + encodeURIComponent(String(v)));
+    else if (prm.in === "header") headers[prm.name] = String(v);
+  }
+  // A path placeholder nobody declared still has to become something. It is
+  // filled with a marker that is obviously ORC's rather than a plausible id:
+  // a case that failed because the id did not exist must not look like a case
+  // that failed because the handler is broken.
+  p = p.replace(/\{([^}]+)\}/g, "__orc_$1__").replace(/:([A-Za-z_]\w*)/g, "__orc_$1__");
+  const req = { method: route.method === "ANY" ? "GET" : route.method, path: p + (query.length ? "?" + query.join("&") : ""), headers };
+  if (bodyValue !== undefined) {
+    req.headers["content-type"] = "application/json";
+    req.body = bodyValue;
+  }
+  return req;
+}
+
+// Does this target MUTATE. Two sources, and the flow's `writes[]` wins: a POST
+// that only reads is still a POST, and a GET that enqueues a job is still a
+// write. The method is the fallback when no flow was traced.
+function testMutates(route, flow) {
+  if (flow && Array.isArray(flow.writes) && flow.writes.length) return true;
+  return ["POST", "PUT", "PATCH", "DELETE"].includes(String(route.method).toUpperCase());
+}
+
+function testDeriveCases(t, budget) {
+  const routes = (t.surface && t.surface.routes) || [];
+  const selected = (t.selected || []).length ? new Set(t.selected) : null;
+  const targets = routes.filter((r) => !selected || selected.has(r.key));
+  const cases = [];
+  const unfinished = [];
+  let n = 0;
+  const nextId = () => "C-" + String(++n).padStart(3, "0");
+  const room = () => cases.length < budget;
+
+  const declaredByPath = new Map();
+  for (const r of routes) {
+    if (!declaredByPath.has(r.path)) declaredByPath.set(r.path, new Set());
+    declaredByPath.get(r.path).add(String(r.method).toUpperCase());
+  }
+
+  for (const r of targets) {
+    const flow = (t.flows || {})[r.key] || null;
+    const mutates = testMutates(r, flow);
+    const before = cases.length;
+
+    // 1 — HAPPY. One per target, and the gaps are NAMED rather than filled.
+    if (room()) {
+      const gaps = [];
+      const values = {};
+      for (const prm of r.params || []) {
+        const s = testSampleValue(prm.schema);
+        if (s.gap) gaps.push(`${prm.in} \`${prm.name}\`: ${s.gap}`);
+        values[prm.name] = s.value;
+      }
+      let bodyVal;
+      if (r.body && r.body.schema) {
+        const s = testSampleValue(r.body.schema);
+        if (s.gap) gaps.push(`body: ${s.gap}`);
+        bodyVal = s.value;
+      }
+      if (!r.params && !r.body) gaps.push("no schema was declared for this route — the designer fills what a schema cannot know");
+      cases.push({
+        id: nextId(),
+        target: r.key,
+        tier: "happy",
+        why: "the declared happy path",
+        source: "derived",
+        identity: null,
+        request: testBuildRequest(r, values, bodyVal),
+        expect: { status: [200, 201, 202, 204], not_body_contains: TEST_LEAK_MARKERS },
+        mutates,
+        owasp: null,
+        gaps,
+      });
+    }
+
+    // 2 — EQUIVALENCE PARTITIONS and BOUNDARY VALUES, per declared parameter.
+    for (const prm of r.params || []) {
+      for (const part of testPartitions(prm.schema, prm.required, prm.in)) {
+        if (!room()) break;
+        const values = {};
+        values[prm.name] = part.value;
+        cases.push({
+          id: nextId(),
+          target: r.key,
+          tier: "edge",
+          why: `${prm.in} \`${prm.name}\`: ${part.why}`,
+          source: "derived",
+          identity: null,
+          request: testBuildRequest(r, values, r.body && r.body.schema ? testSampleValue(r.body.schema).value : undefined),
+          expect: part.expect_reject ? { status: [400, 404, 422], not_body_contains: TEST_LEAK_MARKERS } : { status: [200, 201, 202, 204], not_body_contains: TEST_LEAK_MARKERS },
+          mutates,
+          owasp: null,
+        });
+      }
+      for (const b of testBoundaries(prm.schema)) {
+        if (!room()) break;
+        const values = {};
+        values[prm.name] = b.value;
+        cases.push({
+          id: nextId(),
+          target: r.key,
+          tier: "edge",
+          why: `${prm.in} \`${prm.name}\`: ${b.why}`,
+          source: "derived",
+          identity: null,
+          request: testBuildRequest(r, values, r.body && r.body.schema ? testSampleValue(r.body.schema).value : undefined),
+          expect: b.expect_reject ? { status: [400, 422], not_body_contains: TEST_LEAK_MARKERS } : { status: [200, 201, 202, 204], not_body_contains: TEST_LEAK_MARKERS },
+          mutates,
+          owasp: null,
+        });
+      }
+    }
+
+    // 3 — METHOD AND CONTENT-TYPE NEGATIVES. The verbs this path does not
+    // declare, a wrong content type, and a malformed body.
+    const declared = declaredByPath.get(r.path) || new Set();
+    for (const verb of TEST_NEG_VERBS) {
+      if (declared.has(verb) || declared.has("ANY")) continue;
+      if (!room()) break;
+      const req = testBuildRequest(r, {}, undefined);
+      req.method = verb;
+      cases.push({
+        id: nextId(),
+        target: r.key,
+        tier: "abuse",
+        why: `\`${verb}\` is not declared on this path`,
+        source: "derived",
+        identity: null,
+        request: req,
+        expect: { status: [404, 405], not_body_contains: TEST_LEAK_MARKERS },
+        // A method negative on an undeclared verb is NOT a mutation of this
+        // target — but it may still be one of another. It inherits the
+        // conservative answer rather than the cheap one.
+        mutates: ["POST", "PUT", "PATCH", "DELETE"].includes(verb),
+        owasp: null,
+      });
+    }
+    if (r.body && room()) {
+      const bad = testBuildRequest(r, {}, undefined);
+      bad.headers["content-type"] = "text/plain";
+      bad.body_raw = "orc-test";
+      cases.push({
+        id: nextId(),
+        target: r.key,
+        tier: "abuse",
+        why: "a body with the wrong Content-Type",
+        source: "derived",
+        identity: null,
+        request: bad,
+        expect: { status: [400, 415], not_body_contains: TEST_LEAK_MARKERS },
+        mutates,
+        owasp: null,
+      });
+    }
+    if (r.body && room()) {
+      const mal = testBuildRequest(r, {}, undefined);
+      mal.headers["content-type"] = "application/json";
+      mal.body_raw = '{"orc-test": ';
+      cases.push({
+        id: nextId(),
+        target: r.key,
+        tier: "abuse",
+        why: "a malformed JSON body",
+        source: "derived",
+        identity: null,
+        request: mal,
+        expect: { status: [400, 422], not_body_contains: TEST_LEAK_MARKERS },
+        mutates,
+        owasp: null,
+      });
+    }
+
+    if (cases.length >= budget && targets.indexOf(r) < targets.length - 1) {
+      unfinished.push(...targets.slice(targets.indexOf(r) + (cases.length > before ? 1 : 0)).map((x) => x.key));
+      break;
+    }
+  }
+
+  // 4 — STATEFUL SEQUENCES, where order-dependent defects live. Detected from
+  // the surface's own shape: a collection that accepts a POST and an item path
+  // under it that answers GET / PUT / PATCH / DELETE.
+  for (const r of targets) {
+    if (!room()) break;
+    if (String(r.method).toUpperCase() !== "POST") continue;
+    const item = routes.filter((x) => x.path.replace(/\/+$/, "").startsWith(r.path.replace(/\/+$/, "") + "/") && /\{|:/.test(x.path));
+    const verbs = new Set(item.map((x) => String(x.method).toUpperCase()));
+    if (!verbs.has("GET")) continue;
+    const steps = ["POST " + r.path, "GET (the created item)"];
+    if (verbs.has("PUT") || verbs.has("PATCH")) steps.push((verbs.has("PUT") ? "PUT" : "PATCH") + " (the created item)");
+    if (verbs.has("DELETE")) steps.push("DELETE (the created item)");
+    cases.push({
+      id: nextId(),
+      target: r.key,
+      tier: "edge",
+      why: "a stateful sequence — create, then read back, then change, then remove. Order-dependent defects live here.",
+      source: "derived",
+      identity: null,
+      sequence: steps,
+      request: testBuildRequest(r, {}, r.body && r.body.schema ? testSampleValue(r.body.schema).value : undefined),
+      expect: { status: [200, 201], not_body_contains: TEST_LEAK_MARKERS },
+      mutates: true,
+      owasp: null,
+      // The follow-up steps need the id the first step returns, which no
+      // schema declares. It is named as a gap rather than guessed.
+      gaps: ["the id returned by the create step drives every later step — the runner carries it forward, and the designer confirms the field it lives in"],
+    });
+  }
+
+  return { cases, unfinished: [...new Set(unfinished)] };
+}
+
+// The strings that mean "this response leaked its own internals". Checked on
+// EVERY case, not only the security tier: a stack trace on the happy path is
+// still a stack trace.
+const TEST_LEAK_MARKERS = ["Traceback (most recent call last)", "at Object.", "java.lang.", "System.NullReferenceException", "SQLSTATE", "ORA-0", "PG::", "org.hibernate", "Microsoft.Data.SqlClient"];
+
+function testCaseCmd(claudeDir) {
+  const asJson = wantsJson();
+  const pos = tPositionals();
+  const verb = (pos[2] || "").toLowerCase();
+  const slug = pos[3] ? testSlugOf(pos[3]) : null;
+  const fail = (r, h, c) => testFail(asJson, r, h, c === undefined ? 2 : c);
+  if (!["derive", "add", "list", "clear"].includes(verb)) fail("bad-verb", "orc test case <derive|add|list|clear> <slug>");
+  if (!slug) fail("no-slug", `orc test case ${verb} <slug>`);
+  const t = readTestRun(claudeDir, slug);
+  if (!t) fail("no-run", `no test run named ${slug}.`);
+
+  if (verb === "list") {
+    const byTier = {};
+    for (const c of t.cases) byTier[c.tier] = (byTier[c.tier] || 0) + 1;
+    if (asJson) emitJson({ ok: true, slug, cases: t.cases, by_tier: byTier }, 0);
+    console.log(ui.color.bold(`\n  /orc-test · ${slug} · ${plural(t.cases.length, "case")}`));
+    for (const tier of TEST_TIERS) if (byTier[tier]) console.log(`    ${tier.padEnd(9)} ${byTier[tier]}`);
+    console.log("");
+    for (const c of t.cases.slice(0, 40)) console.log(`    ${c.id}  ${c.tier.padEnd(9)} ${c.request.method} ${c.request.path}   ${ui.color.gray(c.why)}`);
+    if (t.cases.length > 40) console.log(ui.color.gray(`    … and ${t.cases.length - 40} more — \`orc test case list ${slug} --json\``));
+    console.log("");
+    return;
+  }
+
+  if (verb === "clear") {
+    t.cases = [];
+    t.events.push({ at: new Date().toISOString(), what: "case-clear", detail: "cleared" });
+    testWrite(claudeDir, slug, t, { phase: "T6" });
+    testWriteCasesDoc(claudeDir, slug, t);
+    if (asJson) emitJson({ ok: true, slug, cases: 0 }, 0);
+    console.log("\n  cases cleared.\n");
+    return;
+  }
+
+  if (verb === "derive") {
+    if (!t.surface) fail("no-surface", `${slug} has no surface yet. Run \`orc test surface ${slug}\` — it is free.`, 1);
+    // `test_case_budget` is a PLANNED STOP, not an interrupt — the
+    // `wiki_refresh_budget` shape. The matrix is combinatorial, and a run that
+    // silently expands to four thousand cases against a staging box is a
+    // denial of service you wrote yourself.
+    const meta = metaFor("test_case_budget");
+    let budget = Number(tOpt("--budget"));
+    if (!Number.isFinite(budget) || budget < 1) {
+      const ovr = readOverride(claudeDir).map.test_case_budget;
+      budget = Number(ovr !== undefined ? ovr : meta ? meta.def : 200);
+    }
+    const { cases, unfinished } = testDeriveCases(t, budget);
+
+    // THE SECURITY TIER, derived alongside and under the same budget. It is
+    // not a second engine: these are ordinary case rows carrying an `owasp`
+    // tag, and the same runner sends them under the same fence, the same pace
+    // and the same caps. The tier it may reach is resolved here, and a CLIP is
+    // ANNOUNCED — a shadowed setting must never be silent.
+    const sec = testResolveSecurityTier(claudeDir, t, tOpt("--security"));
+    if (!sec.tier) fail("bad-security-tier", `--security / test_security_tier must be one of: off, safe, full (got "${sec.bad}").`);
+    const room = Math.max(0, budget - cases.length);
+    const built = testSecurityCases(t, sec.tier, cases.length);
+    const secCases = built.cases.slice(0, room);
+    const secDropped = built.cases.length - secCases.length;
+    // A probe the budget cut is NOT silently absent: it joins the unchecked
+    // list with the reason, because a category that ran out of room and a
+    // category that had nothing to check must never read the same.
+    if (secDropped)
+      built.unchecked.push({
+        owasp: [...new Set(built.cases.slice(secCases.length).map((c) => c.owasp))].join(", "),
+        name: "cut by the case budget",
+        why: `${secDropped} security probe${secDropped === 1 ? " was" : "s were"} derived and did not fit inside \`test_case_budget\` (${budget}). Raise it with --budget <n> — nothing was silently dropped.`,
+      });
+    t.security = { tier: sec.tier, requested: sec.requested, notes: sec.notes, unchecked: built.unchecked, statics: built.statics, at: new Date().toISOString() };
+    cases.push(...secCases);
+
+    // Derivation REPLACES the derived rows and keeps every designed and user
+    // row — a re-derive after a wider surface must not silently delete the
+    // cases a paid designer wrote.
+    const kept = t.cases.filter((c) => c.source !== "derived" || c.kind === "ui");
+    let n = cases.length;
+    for (const c of kept) c.id = "C-" + String(++n).padStart(3, "0");
+    t.cases = cases.concat(kept);
+    t.case_budget = { budget, reached: cases.length >= budget, unfinished };
+    t.events.push({ at: new Date().toISOString(), what: "case-derive", detail: `${cases.length} derived, ${kept.length} kept` });
+    testWrite(claudeDir, slug, t, { phase: "T6" });
+    testWriteCasesDoc(claudeDir, slug, t);
+
+    const byTier = {};
+    for (const c of t.cases) byTier[c.tier] = (byTier[c.tier] || 0) + 1;
+    const gaps = t.cases.filter((c) => (c.gaps || []).length).length;
+    if (asJson)
+      emitJson(
+        { ok: true, slug, derived: cases.length, kept: kept.length, total: t.cases.length, by_tier: byTier, budget: t.case_budget, gaps, security: t.security, next: `orc test run ${slug}` },
+        0
+      );
+    console.log(ui.color.bold(`\n  /orc-test · ${slug} · cases`));
+    console.log(ui.color.gray("  derived for free — zero model tokens\n"));
+    for (const tier of TEST_TIERS) console.log(`    ${tier.padEnd(9)} ${byTier[tier] || 0}`);
+    console.log(`    ${"total".padEnd(9)} ${t.cases.length}   ${ui.color.gray(`(${kept.length} designed or user-written, kept)`)}`);
+    if (t.case_budget.reached) {
+      console.log("");
+      console.log("  " + ui.color.yellow(`Budget reached at ${budget} cases — a PLANNED stop, not an interrupt.`));
+      if (unfinished.length) {
+        console.log("  Not expanded:");
+        for (const k of unfinished.slice(0, 10)) console.log(`    ${k}`);
+        if (unfinished.length > 10) console.log(ui.color.gray(`    … and ${unfinished.length - 10} more`));
+      }
+      console.log(ui.color.gray(`  Raise it for this run with --budget <n>, or set test_case_budget.`));
+    }
+    if (gaps) {
+      console.log("");
+      console.log(`  ${ui.color.yellow(plural(gaps, "case") + " carr" + (gaps === 1 ? "ies" : "y") + " a GAP")}${ui.color.gray(" — what a schema could not answer.")}`);
+      console.log(ui.color.gray("  This is what the designer agent is for, and it is the only part that costs anything."));
+    }
+    // THE SECURITY TIER IS ALWAYS REPORTED, in every state including `off` —
+    // a tier nobody derived and a tier that found nothing must never look the
+    // same, and the `unchecked` list is what keeps them apart.
+    console.log("");
+    console.log(`  security tier  ${ui.color.bold(sec.tier)}   ${ui.color.gray("(" + sec.requested.source + ")")}`);
+    for (const note of sec.notes) console.log("  " + ui.color.yellow(note));
+    if (built.unchecked.length) {
+      console.log(`  ${ui.color.yellow(plural(built.unchecked.length, "OWASP row") + " UNCHECKABLE")}${ui.color.gray(" — each keeps its slot, and none of them will ever become a pass:")}`);
+      for (const u of built.unchecked.slice(0, 12)) console.log(ui.color.gray(`    ${u.owasp}  ${u.why}`));
+      if (built.unchecked.length > 12) console.log(ui.color.gray(`    … and ${built.unchecked.length - 12} more — \`orc test security ${slug}\``));
+    }
+    console.log(ui.color.gray(`  The set is CLOSED (OWASP API Top 10, 2023) and is never extended ad hoc.  orc test security ${slug}`));
+
+    console.log(`\n  Next:  orc test run ${slug}\n`);
+    return;
+  }
+
+  // `add` — the designer's rows, and the user's own. Validated against the same
+  // shape as a derived row, and a row that fails validation is REFUSED BY NAME
+  // rather than written half-formed.
+  const from = tOpt("--from");
+  if (!from || from === true) fail("no-from", "orc test case add <slug> --from <file.json> — an array of case rows, as the designer returned them.");
+  let rows;
+  try {
+    rows = JSON.parse(fs.readFileSync(String(from), "utf8"));
+  } catch (e) {
+    fail("unreadable", `could not read ${from}: ${e.message}`, 1);
+  }
+  if (!Array.isArray(rows)) rows = [rows];
+  const known = new Set(((t.surface && t.surface.routes) || []).map((r) => r.key));
+  const refused = [];
+  const added = [];
+  let n = t.cases.length;
+  for (const raw of rows) {
+    const why = [];
+    if (!raw || typeof raw !== "object") why.push("not an object");
+    else {
+      if (!raw.target || (known.size && !known.has(String(raw.target)))) why.push(`target \`${raw && raw.target}\` is not in the surface`);
+      if (!TEST_TIERS.includes(String(raw.tier))) why.push(`tier must be one of: ${TEST_TIERS.join(", ")}`);
+      if (!raw.why) why.push("no `why` — a case nobody can explain later is a case nobody should run");
+      if (!raw.request || !raw.request.method || !raw.request.path) why.push("request needs a method and a path");
+    }
+    if (why.length) {
+      refused.push({ id: (raw && raw.id) || "(unnamed)", why });
+      continue;
+    }
+    const c = {
+      id: "C-" + String(++n).padStart(3, "0"),
+      target: String(raw.target),
+      tier: String(raw.tier),
+      why: String(raw.why),
+      source: TEST_CASE_SOURCES.includes(String(raw.source)) && raw.source !== "derived" ? String(raw.source) : "designed",
+      identity: raw.identity ? String(raw.identity) : null,
+      request: raw.request,
+      expect: raw.expect && typeof raw.expect === "object" ? raw.expect : { status: [200], not_body_contains: TEST_LEAK_MARKERS },
+      mutates: raw.mutates === undefined ? ["POST", "PUT", "PATCH", "DELETE"].includes(String(raw.request.method).toUpperCase()) : !!raw.mutates,
+      owasp: raw.owasp || null,
+    };
+    if (Array.isArray(raw.sequence)) c.sequence = raw.sequence.map(String);
+    t.cases.push(c);
+    added.push(c.id);
+  }
+  t.events.push({ at: new Date().toISOString(), what: "case-add", detail: `${added.length} added, ${refused.length} refused` });
+  testWrite(claudeDir, slug, t, { phase: "T6" });
+  testWriteCasesDoc(claudeDir, slug, t);
+
+  if (asJson) emitJson({ ok: true, slug, added, refused, total: t.cases.length }, refused.length ? 1 : 0);
+  console.log(`\n  added ${added.length}, total ${t.cases.length}.`);
+  if (refused.length) {
+    console.log("\n  " + ui.color.yellow(`${refused.length} REFUSED, by name:`));
+    for (const r of refused) console.log(`    ${r.id}  ${ui.color.gray(r.why.join("; "))}`);
+    console.log(ui.color.gray("  Nothing half-formed was written."));
+    console.log("");
+    process.exit(1);
+  }
+  console.log("");
+}
+
+// cases.json — DERIVED from the ledger on every write. The ledger is
+// `test.json` and `orc test case` is the only command that puts a row in it;
+// this file exists so a human, or a tool, can read the matrix without the rest
+// of the ledger. It is never read back.
+function testWriteCasesDoc(claudeDir, slug, t) {
+  const p = testPaths(claudeDir, slug);
+  const out = {
+    derived_from: "test.json",
+    note: "DERIVED. `orc test case` is the only writer of a case row, and it writes them into the ledger. Nothing reads this file back.",
+    at: new Date().toISOString(),
+    budget: t.case_budget || null,
+    cases: t.cases,
+  };
+  try {
+    fs.writeFileSync(path.join(p.run, "cases.json"), JSON.stringify(out, null, 2) + "\n");
+  } catch (_) {}
+}
+
+
+// ── the SECURITY TIER — a CLOSED SET, mapped to mechanical probes ───────────
+//
+// The user asked to "try to break the endpoint with security vu." Free-form
+// attacking is not something a plan can make safe or repeatable, so this is
+// grounded in OWASP API Security Top 10 (2023) — the current edition, which
+// merged excessive data exposure and mass assignment into BOPLA and added SSRF
+// and unsafe consumption.
+//
+//   · THE SET IS CLOSED. Ten rows, and NEVER extended ad hoc. A probe that is
+//     not in this table is not a probe this lane runs.
+//   · DETECTION, NEVER EXPLOITATION. Every probe demonstrates the CONDITION and
+//     stops there. It never sends a payload that extracts or destroys.
+//     Confirming an exploit is a human's decision on a human's authority, and
+//     the finding says so.
+//   · A CATEGORY IT COULD NOT MEASURE REPORTS `unchecked`, KEEPS ITS SLOT, and
+//     NEVER RAISES THE EXIT CODE — `/orc-pact`'s UNCHECKABLE rule, verbatim.
+//     Reporting an unmeasured category as a pass is the single most damaging
+//     thing a security report can do.
+//
+// `a lane that reports a result it did not observe` has broken this contract.
+const TEST_OWASP = [
+  {
+    id: "API1",
+    name: "Broken object level authorization (BOLA)",
+    needs: "two identities",
+    mutates: false,
+    probe: "replay a successful request as a SECOND identity against an object it does not own",
+  },
+  {
+    id: "API2",
+    name: "Broken authentication",
+    needs: "a route a traced flow shows as authenticated",
+    mutates: false,
+    probe: "the same request with no token · a malformed token · an algorithm-swapped JWT · an expired JWT",
+  },
+  {
+    id: "API3",
+    name: "Broken object property level authorization (BOPLA)",
+    needs: "a declared response schema (a) · a declared body schema (b)",
+    mutates: "the write half only",
+    probe: "(a) a response carrying fields the schema does not declare; (b) a write with an extra privileged field",
+  },
+  {
+    id: "API4",
+    name: "Unrestricted resource consumption",
+    needs: "nothing",
+    mutates: false,
+    probe: "an oversized body · a huge page size · deep nesting · a long array — EACH CAPPED BY ORC",
+  },
+  {
+    id: "API5",
+    name: "Broken function level authorization (BFLA)",
+    needs: "two identities with different roles",
+    mutates: "the method swap only",
+    probe: "a non-admin identity on an admin-shaped route, and a method swap on a resource",
+  },
+  {
+    id: "API6",
+    name: "Unrestricted access to sensitive business flows",
+    needs: "a destructive decision",
+    mutates: true,
+    probe: "a rapid, capped repeat of ONE state-changing flow",
+  },
+  {
+    id: "API7",
+    name: "Server side request forgery (SSRF)",
+    needs: "a URL-shaped input",
+    mutates: false,
+    probe: "a URL-shaped input pointed at a LOOPBACK callback listener ORC started and owns",
+  },
+  {
+    id: "API8",
+    name: "Security misconfiguration",
+    needs: "nothing",
+    mutates: false,
+    probe: "security headers · CORS `*` with credentials · TRACE · verbose errors (checked on EVERY tier)",
+  },
+  {
+    id: "API9",
+    name: "Improper inventory management",
+    needs: "both surfaces — a code spec AND a live spec",
+    mutates: false,
+    probe: "the T2 code-vs-live diff: a route that ANSWERS and no code in this repo declares",
+  },
+  {
+    id: "API10",
+    name: "Unsafe consumption of APIs",
+    needs: "a traced flow",
+    mutates: false,
+    probe: "STATIC ONLY — what the app calls OUT to, from the flow's `calls[]`. Nothing is probed.",
+  },
+];
+const TEST_OWASP_IDS = TEST_OWASP.map((o) => o.id);
+
+// The caps. Every one of them is ORC's, not the target's: a probe that is not
+// capped by the tool that sends it is a load test somebody will call an outage.
+const TEST_ABUSE_BODY_BYTES = 256 * 1024;
+const TEST_ABUSE_NESTING = 200;
+const TEST_ABUSE_ARRAY = 5000;
+const TEST_ABUSE_PAGE_SIZE = 1000000;
+const TEST_FLOW_REPEAT = 5;
+
+// The placeholder the SSRF probe carries. The listener's port is not known
+// until the run starts, so the case stores a marker and the RUNNER substitutes
+// the address of the listener it just opened. A case that hardcoded a port
+// would either be wrong or would send traffic somewhere ORC does not own.
+const TEST_CALLBACK_TOKEN = "__ORC_CALLBACK__";
+
+// Two JWTs that are STRUCTURALLY interesting and cryptographically worthless.
+// Neither carries a secret, neither is signed, and neither will authenticate
+// anything that checks. That is the whole point: a server that accepts one has
+// told you it does not check.
+const testB64u = (o) => Buffer.from(JSON.stringify(o)).toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+const TEST_JWT_ALG_NONE = `${testB64u({ alg: "none", typ: "JWT" })}.${testB64u({ sub: "orc-test", role: "admin", iat: 1600000000 })}.`;
+const TEST_JWT_EXPIRED = `${testB64u({ alg: "HS256", typ: "JWT" })}.${testB64u({ sub: "orc-test", exp: 1600000000 })}.b3JjLXRlc3Q`;
+
+const TEST_ADMIN_PATH_RE = /(^|\/)(admin|administrator|internal|manage|management|superuser|root|_debug|debug|actuator|console)(\/|$)/i;
+const TEST_URLISH_RE = /(^|_|-)(url|uri|link|callback|webhook|endpoint|redirect|next|target|src|image|avatar|proxy)(_|-|$)/i;
+const TEST_PAGE_PARAM_RE = /^(limit|size|per_?page|page_?size|count|top|max|offset|skip)$/i;
+const TEST_AUTH_MW_RE = /auth|jwt|token|session|guard|passport|authenticate|authoriz|bearer|oidc|oauth/i;
+// Header names a response ought to carry. Absence is a LOW finding on its own —
+// it is a hardening gap, not a breach, and the derived severity says so.
+const TEST_SEC_HEADERS = ["x-content-type-options", "x-frame-options", "content-security-policy", "referrer-policy"];
+const TEST_CORS_PROBE_ORIGIN = "https://orc-test.invalid";
+
+// Property names a client must never be able to set. Not a guess: these are the
+// fields whose acceptance IS the mass-assignment finding.
+const TEST_PRIVILEGED_FIELDS = ["role", "roles", "isAdmin", "is_admin", "admin", "id", "ownerId", "owner_id", "userId", "user_id", "createdAt", "created_at", "verified", "permissions"];
+
+// Does a traced flow say this route is behind authentication? DECLARED, never
+// assumed: on a PUBLIC route a 200 with no token is the correct answer, and
+// reporting it as broken authentication is a confident lie in the direction
+// that wastes the most of somebody's afternoon.
+function testAuthenticated(flow) {
+  if (!flow) return false;
+  if (flow.auth_shape) return true;
+  return (flow.middleware || []).some((m) => TEST_AUTH_MW_RE.test(String((m && (m.name || m.what)) || "")));
+}
+
+function testDeepBody(n) {
+  let o = { orc_test: true };
+  for (let i = 0; i < n; i++) o = { n: o };
+  return o;
+}
+
+// The tier this run may reach, and WHY it may not reach further. `full` is not a
+// setting that can quietly grant itself a permission: it needs a destructive
+// decision made for THIS run and THIS target, with a recorded reason. Without
+// one the tier is CLIPPED to `safe` and the clip is ANNOUNCED — a shadowed
+// setting must never be silent.
+function testResolveSecurityTier(claudeDir, t, requested) {
+  const meta = metaFor("test_security_tier");
+  const ovr = readOverride(claudeDir).map.test_security_tier;
+  const from =
+    requested && requested !== true
+      ? { value: String(requested).toLowerCase(), source: "--security (this run only)" }
+      : ovr !== undefined
+      ? { value: String(ovr).toLowerCase(), source: "test_security_tier" }
+      : { value: String((meta && meta.def) || "safe"), source: "the shipped default" };
+  const notes = [];
+  let tier = from.value;
+  if (!["off", "safe", "full"].includes(tier)) return { tier: null, bad: from.value, notes, requested: from };
+  const d = (t.target && t.target.destructive) || { mode: "deny", reason: null };
+  if (tier === "full" && d.mode !== "allow") {
+    notes.push(
+      "`full` was asked for and this run was initialised `--destructive deny`, so the tier is CLIPPED to `safe`. " +
+        "The mutating probes (API3b, the API5 method swap, API6) are not derived. A permission is per-run and " +
+        'per-target, never a config key: re-init with `--destructive allow --reason "<why>"` if that is what you mean.'
+    );
+    tier = "safe";
+  } else if (tier === "full") {
+    notes.push(`\`full\` is armed — the mutating probes are derived. Recorded reason: "${d.reason}"`);
+  }
+  return { tier, notes, requested: from, destructive: d };
+}
+
+// THE PROBES. Every case returned here is an ORDINARY case row — same shape,
+// same ledger, same runner, same three verdicts — carrying an `owasp` tag. The
+// security tier is not a second engine; it is a set of rows the same runner
+// sends under the same fence, the same pace and the same caps.
+//
+// It returns `unchecked[]` beside them, and that list is not an apology: it is
+// the half of the report that stops a category nobody measured from reading
+// like a category that passed.
+function testSecurityCases(t, tier, startId) {
+  const cases = [];
+  const unchecked = [];
+  const statics = [];
+  let n = startId || 0;
+  const nextId = () => "C-" + String(++n).padStart(3, "0");
+  const nameOf = (id) => (TEST_OWASP.find((o) => o.id === id) || {}).name || id;
+  if (tier === "off") {
+    for (const o of TEST_OWASP) unchecked.push({ owasp: o.id, name: o.name, why: "`test_security_tier` is `off` — the tier was not derived at all." });
+    return { cases, unchecked, statics };
+  }
+
+  const routes = ((t.surface && t.surface.routes) || []).slice();
+  const selected = (t.selected || []).length ? new Set(t.selected) : null;
+  const targets = routes.filter((r) => !selected || selected.has(r.key));
+  const ids = t.identities || [];
+  const roles = [...new Set(ids.map((i) => String(i.role).toLowerCase()))];
+  const admin = ids.find((i) => /admin|owner|super|root|staff/i.test(String(i.role)));
+  const lesser = ids.find((i) => i !== admin);
+  const full = tier === "full";
+  const add = (c) => cases.push(Object.assign({ id: nextId(), source: "derived", tier: "security", identity: null, mutates: false }, c));
+  const skip = (id, why) => unchecked.push({ owasp: id, name: nameOf(id), why });
+  const sample = (r) => (r.body && r.body.schema ? testSampleValue(r.body.schema).value : undefined);
+
+  // ── API1 · BOLA ──────────────────────────────────────────────────────────
+  // Two identities or nothing. Most of the Top 10 is meaningless against a
+  // single identity, because there is no access-control boundary to cross.
+  if (ids.length < 2) {
+    skip(
+      "API1",
+      `${ids.length === 1 ? "only one identity is" : "no identity is"} declared. BOLA is a boundary between TWO callers; ` +
+        "with one credential there is no boundary to cross, and any result would be an assertion about a check nobody performed."
+    );
+  } else {
+    const owner = ids[0];
+    const other = ids[1];
+    const objRoutes = targets.filter((r) => /\{|:/.test(r.path) || (((t.flows || {})[r.key] || {}).object_ids || []).length);
+    if (!objRoutes.length) skip("API1", "no selected target names an object — no path placeholder, and no `object_ids[]` on a traced flow. There is no object for a second identity to reach for.");
+    for (const r of objRoutes) {
+      const flow = (t.flows || {})[r.key] || null;
+      add({
+        target: r.key,
+        why: `BOLA — the same object, requested as \`${other.name}\` (${other.role}) instead of \`${owner.name}\` (${owner.role})`,
+        identity: other.name,
+        request: testBuildRequest(r, {}, sample(r)),
+        expect: { status: [401, 403, 404], not_body_contains: TEST_LEAK_MARKERS },
+        mutates: testMutates(r, flow),
+        owasp: "API1",
+        // The object must be one `owner` owns and `other` does not. ORC cannot
+        // know that from a schema and it does not pretend to: the value here is
+        // the declared example, and the gap is NAMED rather than filled with a
+        // plausible id that would make the case pass for the wrong reason.
+        gaps: [
+          `the id in this request is the schema's own example. For this case to MEAN anything it must name an object \`${owner.name}\` owns and \`${other.name}\` does not — confirm it, or hand the designer the real id.` +
+            (flow && (flow.object_ids || []).length ? ` The traced flow names: ${flow.object_ids.join(", ")}.` : ""),
+        ],
+      });
+    }
+  }
+
+  // ── API2 · Broken authentication ─────────────────────────────────────────
+  // Only on a route a TRACED FLOW shows as authenticated.
+  const authed = targets.filter((r) => testAuthenticated((t.flows || {})[r.key]));
+  if (!authed.length) {
+    skip(
+      "API2",
+      Object.keys(t.flows || {}).length
+        ? "no traced flow shows an authentication middleware or a login shape on a selected target. On a PUBLIC route a 200 with no token is the correct answer, so ORC has nothing to assert."
+        : "no flow has been traced yet, so no route is KNOWN to be authenticated. Run T4 (`orc test flow`) on a selected target and re-derive."
+    );
+  }
+  for (const r of authed) {
+    const flow = (t.flows || {})[r.key] || null;
+    const mut = testMutates(r, flow);
+    const variants = [
+      { why: "no credential at all", h: null },
+      { why: "a malformed token", h: "Bearer orc-test-not-a-token" },
+      { why: "an algorithm-swapped JWT (`alg: none`) — a server that accepts this is not verifying the signature", h: "Bearer " + TEST_JWT_ALG_NONE },
+      { why: "an expired JWT", h: "Bearer " + TEST_JWT_EXPIRED },
+    ];
+    for (const v of variants) {
+      const req = testBuildRequest(r, {}, sample(r));
+      if (v.h) req.headers["authorization"] = v.h;
+      add({
+        target: r.key,
+        why: `broken authentication — ${v.why}`,
+        identity: null,
+        request: req,
+        expect: { status: [401, 403], not_body_contains: TEST_LEAK_MARKERS },
+        mutates: mut,
+        owasp: "API2",
+      });
+    }
+  }
+
+  // ── API3 · BOPLA ─────────────────────────────────────────────────────────
+  // (a) EXCESSIVE EXPOSURE. Checkable only against a DECLARED response schema:
+  // with none declared there is no such thing as an undeclared field, and a
+  // baseline ORC invented would mark every real field as a leak.
+  const withResponse = targets.filter((r) => r.response && r.response.schema && r.response.schema.properties);
+  if (!withResponse.length) skip("API3", "no selected target declares a success response schema, so there is no baseline to call a field UNDECLARED against. That is a missing declaration, not a clean result.");
+  for (const r of withResponse) {
+    add({
+      target: r.key,
+      why: "BOPLA (a) — does the response carry fields the schema never declared",
+      identity: ids.length ? ids[0].name : null,
+      request: testBuildRequest(r, {}, sample(r)),
+      expect: { no_undeclared_fields: Object.keys(r.response.schema.properties || {}), not_body_contains: TEST_LEAK_MARKERS },
+      mutates: false,
+      owasp: "API3",
+    });
+  }
+  // (b) MASS ASSIGNMENT. A WRITE, so it is `full` only and it lands in
+  // changes.md like every other mutation.
+  const writable = targets.filter((r) => r.body && r.body.schema && r.body.schema.properties && ["POST", "PUT", "PATCH"].includes(String(r.method).toUpperCase()));
+  if (!full) {
+    if (writable.length)
+      unchecked.push({
+        owasp: "API3b",
+        name: "BOPLA — mass assignment",
+        why: "this probe WRITES, and the tier is `safe`. It needs `test_security_tier: full` AND `--destructive allow` with a recorded reason.",
+      });
+  } else {
+    for (const r of writable) {
+      const declared = new Set(Object.keys(r.body.schema.properties || {}));
+      const extra = TEST_PRIVILEGED_FIELDS.filter((f) => !declared.has(f)).slice(0, 6);
+      if (!extra.length) continue;
+      const body = Object.assign({}, testSampleValue(r.body.schema).value);
+      for (const f of extra) body[f] = /id$/i.test(f) ? "__orc_test__" : true;
+      add({
+        target: r.key,
+        why: `BOPLA (b) — mass assignment: a write carrying ${extra.map((x) => "`" + x + "`").join(", ")}, none of which this body declares`,
+        identity: ids.length ? ids[0].name : null,
+        request: testBuildRequest(r, {}, body),
+        expect: { status: [400, 403, 422], not_body_contains: TEST_LEAK_MARKERS },
+        mutates: true,
+        owasp: "API3",
+        undo: null,
+        gaps: ["accepting the write is the CONDITION, not the proof. Reading the object back to confirm the privileged field stuck is a second step, and it is a human's call on a human's authority."],
+      });
+    }
+  }
+
+  // ── API4 · Unrestricted resource consumption ─────────────────────────────
+  let api4 = 0;
+  for (const r of targets) {
+    const mut = testMutates(r, (t.flows || {})[r.key]);
+    for (const p of (r.params || []).filter((x) => x.in === "query" && TEST_PAGE_PARAM_RE.test(x.name))) {
+      const vals = {};
+      vals[p.name] = TEST_ABUSE_PAGE_SIZE;
+      add({
+        target: r.key,
+        why: `unrestricted consumption — \`${p.name}=${TEST_ABUSE_PAGE_SIZE}\`, ORC's cap`,
+        request: testBuildRequest(r, vals, sample(r)),
+        expect: { status: [400, 413, 422], not_body_contains: TEST_LEAK_MARKERS },
+        mutates: mut,
+        owasp: "API4",
+      });
+      api4++;
+    }
+    if (!r.body) continue;
+    const big = testBuildRequest(r, {}, undefined);
+    big.headers["content-type"] = "application/json";
+    big.body_raw = JSON.stringify({ orc_test: "a".repeat(TEST_ABUSE_BODY_BYTES) });
+    add({
+      target: r.key,
+      why: `unrestricted consumption — a body of ${Math.round(TEST_ABUSE_BODY_BYTES / 1024)}KB, ORC's cap`,
+      request: big,
+      expect: { status: [400, 413, 422], not_body_contains: TEST_LEAK_MARKERS },
+      mutates: mut,
+      owasp: "API4",
+    });
+    add({
+      target: r.key,
+      why: `unrestricted consumption — a body nested ${TEST_ABUSE_NESTING} deep, ORC's cap`,
+      request: testBuildRequest(r, {}, testDeepBody(TEST_ABUSE_NESTING)),
+      expect: { status: [400, 413, 422], not_body_contains: TEST_LEAK_MARKERS },
+      mutates: mut,
+      owasp: "API4",
+    });
+    add({
+      target: r.key,
+      why: `unrestricted consumption — an array of ${TEST_ABUSE_ARRAY} members, ORC's cap`,
+      request: testBuildRequest(r, {}, new Array(TEST_ABUSE_ARRAY).fill("orc")),
+      expect: { status: [400, 413, 422], not_body_contains: TEST_LEAK_MARKERS },
+      mutates: mut,
+      owasp: "API4",
+    });
+    api4 += 3;
+  }
+  if (!api4) skip("API4", "no selected target declares a request body or a page-size parameter, so there is nothing whose size ORC can push against.");
+
+  // ── API5 · BFLA ──────────────────────────────────────────────────────────
+  // Two identities AND two roles. The role is DECLARED at `identity add` and
+  // never inferred, because BFLA depends entirely on knowing which identity is
+  // supposed to be REFUSED.
+  if (ids.length < 2 || roles.length < 2 || !admin || !lesser) {
+    skip(
+      "API5",
+      ids.length < 2
+        ? `${ids.length === 1 ? "only one identity is" : "no identity is"} declared. BFLA asks whether a caller who should be REFUSED is refused; with one credential there is nobody to refuse.`
+        : `${ids.length} identities are declared but they do not carry two distinguishable roles (${roles.join(", ") || "none"}). ORC never infers a role — a guess is confident nonsense in both directions.`
+    );
+  } else {
+    const adminRoutes = targets.filter((r) => TEST_ADMIN_PATH_RE.test(r.path));
+    if (!adminRoutes.length)
+      unchecked.push({ owasp: "API5a", name: "BFLA — an admin-shaped route", why: "no selected target has an admin-shaped path, so there is no privileged function for a lesser identity to reach for." });
+    for (const r of adminRoutes) {
+      add({
+        target: r.key,
+        why: `BFLA — an admin-shaped route called as \`${lesser.name}\` (${lesser.role})`,
+        identity: lesser.name,
+        request: testBuildRequest(r, {}, sample(r)),
+        expect: { status: [401, 403, 404], not_body_contains: TEST_LEAK_MARKERS },
+        mutates: testMutates(r, (t.flows || {})[r.key]),
+        owasp: "API5",
+      });
+    }
+    // THE METHOD SWAP — the canonical BFLA test, and a WRITE.
+    const swappable = targets.filter((r) => String(r.method).toUpperCase() === "GET" && /\{|:/.test(r.path));
+    if (!full) {
+      if (swappable.length)
+        unchecked.push({
+          owasp: "API5b",
+          name: "BFLA — the method swap",
+          why: "the method swap WRITES, and the tier is `safe`. It needs `test_security_tier: full` AND `--destructive allow` with a recorded reason.",
+        });
+    } else {
+      const declaredByPath = new Map();
+      for (const r of routes) {
+        if (!declaredByPath.has(r.path)) declaredByPath.set(r.path, new Set());
+        declaredByPath.get(r.path).add(String(r.method).toUpperCase());
+      }
+      for (const r of swappable)
+        for (const verb of ["PUT", "DELETE"]) {
+          if ((declaredByPath.get(r.path) || new Set()).has(verb)) continue;
+          const req = testBuildRequest(r, {}, undefined);
+          req.method = verb;
+          add({
+            target: r.key,
+            why: `BFLA — a method swap to \`${verb}\` on a read route, as \`${lesser.name}\` (${lesser.role})`,
+            identity: lesser.name,
+            request: req,
+            expect: { status: [401, 403, 404, 405], not_body_contains: TEST_LEAK_MARKERS },
+            mutates: true,
+            owasp: "API5",
+            undo: null,
+          });
+        }
+    }
+  }
+
+  // ── API6 · Sensitive business flows ──────────────────────────────────────
+  const flows = targets.filter((r) => testMutates(r, (t.flows || {})[r.key]));
+  if (!full) {
+    unchecked.push({
+      owasp: "API6",
+      name: nameOf("API6"),
+      why: "a business-flow probe REPEATS a state-changing request, so it is `full` only. It needs `test_security_tier: full` AND `--destructive allow` with a recorded reason.",
+    });
+  } else if (!flows.length) {
+    skip("API6", "no selected target mutates — there is no state-changing flow to repeat.");
+  } else {
+    const r = flows[0];
+    add({
+      target: r.key,
+      why: `sensitive business flow — the same state-changing request ${TEST_FLOW_REPEAT} times in a row, ORC's cap. Something should stop it.`,
+      identity: ids.length ? ids[0].name : null,
+      request: testBuildRequest(r, {}, sample(r)),
+      repeat: TEST_FLOW_REPEAT,
+      expect: { throttled_within: TEST_FLOW_REPEAT, not_body_contains: TEST_LEAK_MARKERS },
+      mutates: true,
+      owasp: "API6",
+      undo: null,
+      gaps: [
+        `${TEST_FLOW_REPEAT} is ORC's cap, not a threshold this system declared. Whether ${TEST_FLOW_REPEAT} repeats SHOULD be refused is a product decision — the finding reports what happened, not what ought to.`,
+      ],
+    });
+  }
+
+  // ── API7 · SSRF ──────────────────────────────────────────────────────────
+  // The callback listener is ORC's own, on loopback, opened for the run and
+  // closed at the end. Nothing about this probe reaches a third party: the only
+  // address it hands the target is one ORC is listening on itself.
+  const urlish = [];
+  for (const r of targets)
+    for (const p of r.params || []) {
+      const sc = p.schema || {};
+      if (TEST_URLISH_RE.test(p.name) || sc.format === "uri" || sc.format === "url") urlish.push({ r, p });
+    }
+  if (!urlish.length)
+    skip("API7", "no selected target declares a URL-shaped input (a `url`/`uri`/`callback`/`webhook`-named parameter, or one with `format: uri`). Nothing here takes an address for the server to fetch.");
+  for (const { r, p } of urlish.slice(0, 12)) {
+    const vals = {};
+    vals[p.name] = TEST_CALLBACK_TOKEN;
+    add({
+      target: r.key,
+      why: `SSRF — \`${p.in} ${p.name}\` pointed at a loopback listener ORC opened and owns. If it is hit, the server fetched an address a caller chose.`,
+      request: testBuildRequest(r, vals, sample(r)),
+      expect: { callback_not_hit: true, not_body_contains: TEST_LEAK_MARKERS },
+      mutates: testMutates(r, (t.flows || {})[r.key]),
+      owasp: "API7",
+    });
+  }
+
+  // ── API8 · Security misconfiguration ─────────────────────────────────────
+  // Needs nothing, so it always runs. The verbose-error half of this row is
+  // already checked on EVERY case on EVERY tier: a stack trace on the happy
+  // path is still a stack trace.
+  const probe = targets[0] || routes[0] || null;
+  if (!probe) skip("API8", "no route at all was found, so there is nothing to send a header probe at.");
+  else {
+    const g = () => {
+      const q = testBuildRequest(probe, {}, undefined);
+      q.method = "GET";
+      return q;
+    };
+    add({
+      target: probe.key,
+      why: "misconfiguration — the response security headers",
+      request: g(),
+      expect: { headers_present: TEST_SEC_HEADERS, not_body_contains: TEST_LEAK_MARKERS },
+      owasp: "API8",
+    });
+    const cors = g();
+    cors.headers["origin"] = TEST_CORS_PROBE_ORIGIN;
+    add({
+      target: probe.key,
+      why: `misconfiguration — CORS, asked from \`${TEST_CORS_PROBE_ORIGIN}\`. A wildcard origin WITH credentials, or an echoed attacker origin with credentials, is the finding.`,
+      request: cors,
+      expect: { cors_safe: TEST_CORS_PROBE_ORIGIN, not_body_contains: TEST_LEAK_MARKERS },
+      owasp: "API8",
+    });
+    const tr = g();
+    tr.method = "TRACE";
+    add({
+      target: probe.key,
+      why: "misconfiguration — `TRACE`, which no API needs and which reflects the request back",
+      request: tr,
+      expect: { status: [400, 401, 403, 404, 405, 501], not_body_contains: TEST_LEAK_MARKERS },
+      owasp: "API8",
+    });
+  }
+
+  // ── API9 · Improper inventory ────────────────────────────────────────────
+  // Straight off the T2 diff, and it is the ONE row that needs both surfaces. A
+  // live-only route is a route that ANSWERS and that no code in this repository
+  // declares — the shadow API, which is exactly the case a code-only surface
+  // would have called "not found".
+  const diff = (t.surface && t.surface.diff) || null;
+  if (!diff || !diff.live_only) {
+    skip(
+      "API9",
+      (diff && diff.why) ||
+        "there is no code-vs-live diff yet. Run `orc test surface` with the target up — with one surface there is nothing to compare, and an empty answer here would read as 'no shadow APIs', which nobody measured."
+    );
+  } else if (!diff.live_only.length) {
+    unchecked.push({
+      owasp: "API9",
+      name: nameOf("API9"),
+      why: "both surfaces were compared and the live spec declares nothing the code does not. This one IS measured — it is listed here because there was no probe left to run, not because it was skipped.",
+      measured: true,
+    });
+  } else {
+    for (const lo of diff.live_only.slice(0, 20)) {
+      const r = routes.find((x) => x.key === lo.key);
+      if (!r) continue;
+      add({
+        target: r.key,
+        why: "improper inventory — this route answers at the target and NO code in this repository declares it. A shadow route is the case a code-only surface calls 'not found'.",
+        identity: ids.length ? ids[0].name : null,
+        request: testBuildRequest(r, {}, sample(r)),
+        expect: { status: [401, 403, 404, 410], not_body_contains: TEST_LEAK_MARKERS },
+        mutates: testMutates(r, (t.flows || {})[r.key]),
+        owasp: "API9",
+      });
+    }
+  }
+
+  // ── API10 · Unsafe consumption ───────────────────────────────────────────
+  // STATIC ONLY, by design. Nothing is probed: what this application calls OUT
+  // to is somebody else's system, and this run's authorization statement covers
+  // the target and nothing beyond it.
+  const calls = [];
+  for (const [key, f] of Object.entries(t.flows || {})) for (const c of (f && f.calls) || []) calls.push({ target: key, at: testAnchorOf(c), what: c.name || c.what || "unnamed" });
+  if (!calls.length)
+    skip(
+      "API10",
+      "no traced flow names an outbound call. This row is STATIC ONLY — nothing is probed, because what this application calls out to belongs to somebody else and this run's authorization covers the target alone."
+    );
+  else statics.push({ owasp: "API10", what: "outbound calls, from the traced flows. Reviewed, never probed.", rows: calls });
+
+  return { cases, unchecked, statics };
+}
+
+// SEVERITY IS DERIVED, NOT DECLARED — from the OWASP category plus what was
+// actually OBSERVED, with the reasoning printed beside it. A CVSS vector is
+// offered ONLY for a finding with a confirmed observation: the pentest
+// reporting convention is that a candidate pending verification does not get a
+// score, and a score on an `unknown` is a number that will be quoted long after
+// the caveat is lost.
+const TEST_SEV_BASE = { API1: "high", API2: "critical", API3: "high", API4: "medium", API5: "high", API6: "medium", API7: "high", API8: "low", API9: "medium", API10: "info" };
+const TEST_SEV_ORDER = ["info", "low", "medium", "high", "critical"];
+const TEST_CVSS = {
+  API1: "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:N/A:N",
+  API2: "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N",
+  API3: "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:N",
+  API4: "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H",
+  API5: "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:N",
+  API6: "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:N/I:L/A:L",
+  API7: "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:L/A:N",
+  API8: "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N",
+  API9: "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:L/A:N",
+};
+
+function testSeverityOf(owasp, observed, opts) {
+  const o = String(owasp || "").replace(/[ab]$/, "");
+  const base = TEST_SEV_BASE[o] || "medium";
+  const why = [`OWASP ${o} carries a base severity of ${base}.`];
+  if (!observed)
+    return {
+      severity: base,
+      derived: false,
+      why: why.concat("NOT OBSERVED — that base is the CATEGORY's severity, not this finding's. No CVSS vector is offered for a finding nobody confirmed.").join(" "),
+      cvss: null,
+      cvss_note: null,
+    };
+  let i = TEST_SEV_ORDER.indexOf(base);
+  if (opts && opts.crossed_identity) {
+    i = Math.min(TEST_SEV_ORDER.length - 1, i + 1);
+    why.push("Raised one step: the observation crossed an identity boundary, so the condition is reachable by a caller who is not the owner.");
+  }
+  if (opts && opts.mutating) {
+    i = Math.min(TEST_SEV_ORDER.length - 1, i + 1);
+    why.push("Raised one step: the observed request MUTATED state rather than only reading it.");
+  }
+  if (opts && opts.unauthenticated) {
+    i = Math.min(TEST_SEV_ORDER.length - 1, i + 1);
+    why.push("Raised one step: no credential was presented, so the condition is reachable by anyone who can reach the host.");
+  }
+  return {
+    severity: TEST_SEV_ORDER[i],
+    derived: true,
+    why: why.join(" "),
+    cvss: TEST_CVSS[o] || null,
+    cvss_note: TEST_CVSS[o] ? "A vector, not a score somebody else computed. ORC demonstrated the CONDITION; confirming an exploit is a human's decision on a human's authority." : null,
+  };
+}
+
+// `orc test security <slug>` — the closed set, ROW BY ROW, and what happened to
+// each one. Every row keeps its slot: `unchecked` is printed as loudly as
+// `FOUND`, because a category nobody measured must never read like a category
+// that passed.
+//
+//   0  the set was reported and nothing was FOUND
+//   1  at least one security case came back `fail`
+//   2  no such run
+// ONE computation of the closed set's state, and both surfaces render it:
+// `orc test security` and `orc test report`. A second idea of what an OWASP row
+// currently says would be exactly the drift this repo lints for everywhere
+// else — the Flow-stepper rule, applied to a security table.
+function testSecurityRows(claudeDir, t) {
+  // THE TIER THE CASES WERE BUILT UNDER, not the one the config says today.
+  // Re-resolving here would report a run at a tier it never ran at the moment
+  // somebody changed the setting afterwards — the stored fact wins, and a
+  // setting that has since moved is NAMED rather than silently applied.
+  const now = testResolveSecurityTier(claudeDir, t, tOpt("--security"));
+  const stored = t.security && t.security.tier ? t.security : null;
+  const res = stored
+    ? { tier: stored.tier, requested: stored.requested || { source: "the derive that built these cases" }, notes: (stored.notes || []).slice(), destructive: (t.target || {}).destructive }
+    : now;
+  if (stored && now.tier && now.tier !== stored.tier)
+    res.notes.push(
+      `The cases below were derived at tier \`${stored.tier}\`. The setting now resolves to \`${now.tier}\` (${now.requested.source}) — that has NOT been applied to this run. Re-derive to move it: \`orc test case derive ${t.slug}\`.`
+    );
+  const unchecked = Array.isArray(t.security && t.security.unchecked) ? t.security.unchecked : [];
+  const statics = Array.isArray(t.security && t.security.statics) ? t.security.statics : [];
+  const byId = new Map();
+  for (const o of TEST_OWASP) byId.set(o.id, { owasp: o.id, name: o.name, needs: o.needs, probe: o.probe, cases: [], found: 0, unknown: 0, pass: 0, unchecked: null });
+  for (const c of t.cases || []) {
+    if (c.tier !== "security" || !c.owasp) continue;
+    const row = byId.get(String(c.owasp).replace(/[ab]$/, ""));
+    if (!row) continue;
+    row.cases.push({ id: c.id, target: c.target, why: c.why, verdict: c.verdict || null, verdict_why: c.verdict_why || null, evidence: c.evidence || null, identity: c.identity || null, mutates: !!c.mutates });
+    if (c.verdict === "fail") row.found++;
+    else if (c.verdict === "unknown") row.unknown++;
+    else if (c.verdict === "pass") row.pass++;
+  }
+  for (const u of unchecked) {
+    const row = byId.get(String(u.owasp).replace(/[ab]$/, ""));
+    if (row) row.unchecked = [].concat(row.unchecked || [], [{ scope: u.owasp, why: u.why, measured: !!u.measured }]);
+  }
+  const rows = [...byId.values()].map((r) => {
+    // The state word, COMPUTED on every read and never stored. `unchecked`
+    // never becomes a pass and never raises the exit code.
+    let state = "not-run";
+    if (r.found) state = "FOUND";
+    else if (r.cases.length && r.pass && r.pass + r.unknown === r.cases.length) state = r.unknown ? "partly-observed" : "observed-clean";
+    else if (r.cases.length && r.unknown === r.cases.length) state = "not-observed";
+    else if (!r.cases.length && r.unchecked) state = "unchecked";
+    const sev = r.found
+      ? testSeverityOf(r.owasp, true, {
+          crossed_identity: r.cases.some((c) => c.verdict === "fail" && c.identity),
+          mutating: r.cases.some((c) => c.verdict === "fail" && c.mutates),
+          // "no credential was presented" only MEANS something when this run
+          // had a credential to present. On a run with no identity at all
+          // every case is anonymous, so raising on it would inflate every
+          // category for a reason nobody chose.
+          unauthenticated: (t.identities || []).length > 0 && r.cases.some((c) => c.verdict === "fail" && !c.identity),
+        })
+      : testSeverityOf(r.owasp, false);
+    return Object.assign(r, { state, severity: sev });
+  });
+
+  return { res, rows, statics, found: rows.reduce((a, r) => a + r.found, 0) };
+}
+
+function testSecurityCmd(claudeDir) {
+  const asJson = wantsJson();
+  const slug = testSlugOf(tPositionals()[2]);
+  if (!slug) testFail(asJson, "no-slug", "orc test security <slug> [--json]", 2);
+  const t = readTestRun(claudeDir, slug);
+  if (!t) testFail(asJson, "no-run", `no test run named ${slug}.`, 2);
+
+  const { res, rows, statics, found } = testSecurityRows(claudeDir, t);
+  const code = found ? 1 : 0;
+  if (asJson)
+    emitJson(
+      {
+        ok: true,
+        slug,
+        tier: res.tier,
+        tier_source: res.requested,
+        notes: res.notes,
+        closed_set: TEST_OWASP,
+        rows,
+        statics,
+        found,
+        never_extended: "The set is CLOSED. A probe that is not in this table is not a probe this lane runs.",
+      },
+      code
+    );
+
+  console.log(ui.color.bold(`\n  /orc-test · ${slug} · security · OWASP API Top 10 (2023)`));
+  console.log(ui.color.gray(`  tier ${res.tier} (${res.requested.source}) · the set is CLOSED and is never extended ad hoc\n`));
+  for (const note of res.notes) console.log("  " + ui.color.yellow(note) + "\n");
+  for (const r of rows) {
+    const mark =
+      r.state === "FOUND"
+        ? ui.color.red("FOUND         ")
+        : r.state === "observed-clean"
+        ? ui.color.green("observed-clean")
+        : r.state === "unchecked"
+        ? ui.color.yellow("unchecked     ")
+        : ui.color.gray(r.state.padEnd(14));
+    console.log(`    ${ui.color.bold(r.owasp.padEnd(6))} ${mark}  ${r.name}`);
+    if (r.state === "FOUND") {
+      console.log(`           ${ui.color.red("severity " + r.severity.severity)}  ${ui.color.gray(r.severity.why)}`);
+      if (r.severity.cvss) console.log(`           ${ui.color.gray(r.severity.cvss)}`);
+      for (const c of r.cases.filter((x) => x.verdict === "fail").slice(0, 4)) {
+        console.log(`           ${c.id}  ${c.why}`);
+        if (c.evidence) console.log(ui.color.gray(`           ${c.evidence}/`));
+      }
+    }
+    for (const u of r.unchecked || []) console.log(ui.color.gray(`           ${u.why}`));
+  }
+  for (const s of statics) {
+    console.log("");
+    console.log(`  ${ui.color.bold(s.owasp)} — ${s.what}`);
+    for (const row of s.rows.slice(0, 12)) console.log(ui.color.gray(`    ${row.at || "—"}  ${row.what}   (${row.target})`));
+  }
+  console.log("");
+  console.log(ui.color.gray("  DETECTION, NEVER EXPLOITATION. Every probe demonstrates the CONDITION and stops there."));
+  console.log(ui.color.gray("  Confirming an exploit is a human's decision on a human's authority."));
+  console.log(ui.color.gray("  `unchecked` keeps its slot, never becomes a pass, and never raises the exit code."));
+  console.log("");
+  process.exit(code);
+}
+
+// ── T7 — RUN (the CLI sends the traffic; zero model tokens) ─────────────────
+//
+// This is the only place in ORC that sends a request to a system it did not
+// start. Everything below exists so ORC's own runner is never the incident.
+//
+//   · THE TIERS ARE A LADDER WITH A STOP. A red happy path makes the edge cases
+//     meaningless and the security tier noise — a 500 on every request will
+//     "prove" a dozen vulnerabilities that are one bug. Happy red → stop,
+//     report, hand back. The user fixes and re-runs for free.
+//   · THE PACE IS THE TARGET'S, NOT ORC'S. `test_max_rps` and a fixed small
+//     concurrency, and the CLI paces — it is not a suggestion.
+//   · A 429 IS A RESULT. It means rate limiting works. Record it, back off, and
+//     do not push through: pushing through is how a staging scan becomes a
+//     lockout.
+//   · FAILED AUTH IS CAPPED per identity. Account lockout would end the run and,
+//     on preproduction, someone's afternoon.
+//   · THE ORIGIN FENCE. A request whose resolved URL leaves the frozen origin is
+//     NOT SENT. Recorded, reported, dropped.
+//   · REDACTION IS STRUCTURAL. Every credential and every auth-bearing header is
+//     replaced BEFORE the bytes reach disk — not in a review step afterwards.
+//
+// `a lane that reports a result it did not observe` has broken this contract:
+// three verdicts, and `unknown` is the honest one.
+const TEST_UA = "orc-test/1.0 (+https://github.com/azure-id/orc)";
+const TEST_RUN_HEADER = "X-Orc-Test-Run";
+const TEST_CONCURRENCY = 2;
+const TEST_AUTH_FAIL_CAP = 5;
+const TEST_REQ_TIMEOUT_MS = 15000;
+const TEST_BODY_CAP = 256 * 1024;
+// Header names whose VALUE is a secret whatever it looks like. Replaced whole —
+// ORC does not do the "last six characters" convention, because a report is
+// meant to be readable in a PR and a tail is still a secret when the vault is
+// small.
+const TEST_SECRET_HEADERS = ["authorization", "cookie", "set-cookie", "set-cookie2", "proxy-authorization", "x-api-key", "x-auth-token", "api-key"];
+const TEST_REDACTED = "«redacted by orc»";
+
+// One request, and it does exactly what it was told. No redirect is followed —
+// the origin fence decides where traffic may go, and a 3xx is recorded AS THE
+// RESPONSE rather than chased.
+function testRequest(url, spec, timeoutMs) {
+  return new Promise((resolve) => {
+    let u;
+    try {
+      u = new URL(url);
+    } catch (e) {
+      return resolve({ ok: false, reason: "bad-url", error: String(e.message) });
+    }
+    const lib = u.protocol === "https:" ? require("https") : require("http");
+    const headers = Object.assign({}, spec.headers || {});
+    headers["user-agent"] = TEST_UA;
+    headers[TEST_RUN_HEADER.toLowerCase()] = spec.run_id;
+    headers.accept = headers.accept || "*/*";
+    let body = null;
+    if (spec.body_raw !== undefined) body = Buffer.from(String(spec.body_raw), "utf8");
+    else if (spec.body !== undefined) body = Buffer.from(JSON.stringify(spec.body), "utf8");
+    if (body) headers["content-length"] = String(body.length);
+    const started = Date.now();
+    const req = lib.request(
+      { protocol: u.protocol, hostname: u.hostname, port: u.port || undefined, path: u.pathname + u.search, method: spec.method, headers },
+      (res) => {
+        const chunks = [];
+        let size = 0;
+        let truncated = false;
+        res.on("data", (c) => {
+          size += c.length;
+          if (size <= TEST_BODY_CAP) chunks.push(c);
+          else truncated = true;
+        });
+        res.on("end", () =>
+          resolve({
+            ok: true,
+            status: res.statusCode,
+            headers: res.headers,
+            body: Buffer.concat(chunks).toString("utf8"),
+            bytes: size,
+            truncated,
+            ms: Date.now() - started,
+            sent: { method: spec.method, url, headers, body: body ? body.toString("utf8") : null },
+          })
+        );
+      }
+    );
+    req.setTimeout(timeoutMs || TEST_REQ_TIMEOUT_MS, () => {
+      req.destroy();
+      resolve({ ok: false, reason: "timeout", error: `no answer in ${timeoutMs || TEST_REQ_TIMEOUT_MS}ms`, ms: Date.now() - started });
+    });
+    req.on("error", (e) => resolve({ ok: false, reason: "unreachable", error: e.message, code: e.code, ms: Date.now() - started }));
+    if (body) req.write(body);
+    req.end();
+  });
+}
+
+// The redaction table. Built once per run from every credential this run can
+// resolve, and applied to every byte before it is written. A value shorter than
+// six characters is NOT added — it would match ordinary prose and redact the
+// evidence into uselessness.
+function testRedactor(secrets) {
+  const list = [...new Set((secrets || []).filter((s) => typeof s === "string" && s.length >= 6))].sort((a, b) => b.length - a.length);
+  return (text) => {
+    let out = String(text === undefined || text === null ? "" : text);
+    for (const s of list) out = out.split(s).join(TEST_REDACTED);
+    return out;
+  };
+}
+
+function testRedactHeaders(headers, redact) {
+  const out = {};
+  for (const [k, v] of Object.entries(headers || {})) {
+    const val = Array.isArray(v) ? v.join(", ") : String(v === undefined ? "" : v);
+    out[k] = TEST_SECRET_HEADERS.includes(String(k).toLowerCase()) ? TEST_REDACTED : redact(val);
+  }
+  return out;
+}
+
+// Resolve an identity's credential. `env` reads the variable; `vault` needs a
+// passphrase, and without one the identity is UNAVAILABLE — which makes every
+// case that needs it `unknown`, never a pass and never a fail.
+function testResolveIdentity(claudeDir, id, passphrase) {
+  if (!id) return { ok: false, why: "no identity" };
+  if (id.source === "env") {
+    const v = process.env[id.env_var];
+    if (!v) return { ok: false, why: `${id.env_var} is not set in this environment` };
+    return { ok: true, token: v, source: "env" };
+  }
+  if (id.source === "vault") {
+    if (!passphrase) return { ok: false, why: "the vault needs a passphrase, and it is never read from the environment — use --passphrase-stdin" };
+    const got = extraVaultGet(claudeDir, id.vault_ref, passphrase);
+    if (!got || !got.ok) return { ok: false, why: (got && (got.error || got.reason)) || "the vault would not open" };
+    return { ok: true, token: got.value, source: "vault" };
+  }
+  // `login` is performed by the runner at start-up, and its result is held in
+  // memory for the run only. It is never written to the ledger.
+  return { ok: false, why: "a login identity is resolved by the runner at run start" };
+}
+
+// The header an identity's token goes into. Declared, never sniffed: a token
+// ORC put in the wrong header produces a run of confident 401s that look like
+// a broken endpoint.
+function testAuthHeaders(id, token) {
+  if (!id || !token) return {};
+  const h = {};
+  const name = id.auth_header || "Authorization";
+  const scheme = id.auth_scheme === undefined ? "Bearer" : id.auth_scheme;
+  h[name.toLowerCase()] = scheme ? `${scheme} ${token}` : token;
+  return h;
+}
+
+// THE VERDICT, and there are three. `unknown` means NOT OBSERVED and it never
+// becomes a pass — `/orc-pact`'s UNCHECKABLE rule, and like UNCHECKABLE it
+// keeps its slot in every report.
+function testVerdict(c, res, ctx) {
+  if (!res.ok) return { verdict: "unknown", why: res.reason === "timeout" ? "timed out — not observed" : `not observed: ${res.error}` };
+  const e = c.expect || {};
+  const leaks = [];
+  for (const m of e.not_body_contains || []) if (res.body && res.body.indexOf(m) !== -1) leaks.push(m);
+  if (leaks.length) return { verdict: "fail", why: `the response body carries ${leaks.map((x) => JSON.stringify(x)).join(", ")} — an internal error surfaced to the caller`, leaks };
+  // A 429 IS A RESULT. Rate limiting worked; the case was not observed under
+  // the conditions it describes, so the honest verdict is `unknown` and the
+  // runner backs off rather than pushing through.
+  if (res.status === 429 && e.throttled_within === undefined)
+    return { verdict: "unknown", why: "429 — rate limited. That is the control working; the case itself was not observed.", rate_limited: true };
+
+  // ── the security clauses ─────────────────────────────────────────────────
+  // Each one is DEFINITIVE for its own case, so they are checked before the
+  // status. Every one of them can also answer `unknown`, and that is the point:
+  // a clause that could not be evaluated reports so rather than defaulting to
+  // the answer that makes the report look clean.
+
+  // API7 — SSRF. The listener is ORC's own, on loopback. A hit means the target
+  // fetched an address the CALLER chose, which is the condition. It is not
+  // proof of what that reachability is worth, and the finding says so.
+  if (e.callback_not_hit) {
+    if (!ctx || !ctx.callback) return { verdict: "unknown", why: "the loopback callback listener could not be opened, so an outbound fetch could not be observed either way" };
+    const hits = ctx.callback.hitsFor(c.id);
+    if (hits.length)
+      return {
+        verdict: "fail",
+        why: `the target fetched ORC's loopback listener ${hits.length} time${hits.length === 1 ? "" : "s"} — the server followed an address the caller supplied. That is the CONDITION; what it can reach from inside is a human's call.`,
+        callback_hits: hits,
+      };
+    return { verdict: "pass", why: "the loopback listener was never contacted — the supplied address was not fetched" };
+  }
+
+  // API8 — CORS. A wildcard origin WITH credentials, or the probe origin echoed
+  // back with credentials, is the finding. A wildcard on its own is not: it is
+  // a public API answering the way a public API answers.
+  if (e.cors_safe) {
+    const acao = String(res.headers["access-control-allow-origin"] || "");
+    const creds = /^true$/i.test(String(res.headers["access-control-allow-credentials"] || ""));
+    if (!acao) return { verdict: "pass", why: "no `Access-Control-Allow-Origin` was returned to an unknown origin" };
+    if (acao === "*" && creds) return { verdict: "fail", why: "`Access-Control-Allow-Origin: *` together with `Access-Control-Allow-Credentials: true` — a combination browsers refuse and servers should not offer" };
+    if (acao === String(e.cors_safe) && creds) return { verdict: "fail", why: `the probe origin ${e.cors_safe} was echoed back with credentials allowed — any origin that asks is trusted` };
+    if (acao === String(e.cors_safe)) return { verdict: "fail", why: `the probe origin ${e.cors_safe} was echoed back. Nothing declares that origin; the allow-list is reflecting whatever it is sent.` };
+    return { verdict: "pass", why: `\`Access-Control-Allow-Origin: ${acao}\`, which is neither the probe origin nor a credentialed wildcard` };
+  }
+
+  // API8 — hardening headers. Only meaningful on a response the server meant to
+  // return; on a 4xx/5xx the absence says nothing.
+  if (Array.isArray(e.headers_present)) {
+    if (res.status >= 400) return { verdict: "unknown", why: `the probe answered ${res.status}, so its headers are not the ones a caller would receive — not observed` };
+    const missing = e.headers_present.filter((h) => !res.headers[h]);
+    // `content-security-policy` and `x-frame-options` overlap; one of the two
+    // is the honest bar for an API rather than both.
+    const clickjack = ["x-frame-options", "content-security-policy"];
+    const hasOne = clickjack.some((h) => res.headers[h]);
+    const real = missing.filter((h) => !(clickjack.includes(h) && hasOne));
+    if (real.length) return { verdict: "fail", why: `missing hardening headers: ${real.join(", ")}. A gap, not a breach — the derived severity says so.`, missing: real };
+    return { verdict: "pass", why: "every hardening header this probe looks for was present" };
+  }
+
+  // API3a — excessive data exposure, against the DECLARED response schema.
+  if (Array.isArray(e.no_undeclared_fields)) {
+    if (res.status >= 400) return { verdict: "unknown", why: `the request answered ${res.status}, so no successful response body was observed to inspect` };
+    let doc;
+    try {
+      doc = JSON.parse(res.body);
+    } catch (_) {
+      return { verdict: "unknown", why: "the response was not JSON, so a declared field could not be told from an undeclared one" };
+    }
+    const obj = Array.isArray(doc) ? doc.find((x) => x && typeof x === "object") : doc;
+    if (!obj || typeof obj !== "object") return { verdict: "unknown", why: "the response carried no JSON object to compare against the declared schema" };
+    const declared = new Set(e.no_undeclared_fields);
+    const extra = Object.keys(obj).filter((k) => !declared.has(k));
+    if (extra.length)
+      return {
+        verdict: "fail",
+        why: `the response carries ${extra.map((x) => "`" + x + "`").join(", ")}, which the declared response schema does not. Either the field is leaking or the schema is out of date — both are findings.`,
+        undeclared: extra,
+      };
+    return { verdict: "pass", why: "every field in the response is one the schema declares" };
+  }
+
+  // API6 — a sensitive flow, repeated. Something should stop it inside ORC's
+  // cap. What SHOULD stop it and at which count is a product decision; this
+  // reports only what happened.
+  if (e.throttled_within !== undefined) {
+    const codes = (res.repeat_statuses || [res.status]).filter((x) => x !== null && x !== undefined);
+    const stopped = codes.some((s) => s === 429 || s >= 400);
+    if (stopped) return { verdict: "pass", why: `the repeat was refused — statuses ${codes.join(", ")}. Something stopped it inside ORC's cap of ${e.throttled_within}.` };
+    return { verdict: "fail", why: `${codes.length} identical state-changing requests all succeeded (${codes.join(", ")}). Nothing refused the repeat inside ORC's cap of ${e.throttled_within}.`, statuses: codes };
+  }
+
+  const want = Array.isArray(e.status) ? e.status : null;
+  if (!want) return { verdict: "unknown", why: "the case declared no expected status, so nothing could be checked" };
+  if (want.includes(res.status)) return { verdict: "pass", why: `${res.status} is one of ${want.join(", ")}` };
+  return { verdict: "fail", why: `${res.status}, expected one of ${want.join(", ")}` };
+}
+
+// THE SSRF CALLBACK LISTENER. Loopback, ephemeral port, opened for the run and
+// closed at the end. It is the only address this lane ever hands a target to
+// fetch, and it is one ORC is listening on itself — nothing about the probe
+// reaches a third party. It records that it was hit and by what; it serves a
+// single flat byte and never a redirect.
+function testCallbackListener() {
+  return new Promise((resolve) => {
+    const hits = [];
+    let srv;
+    try {
+      srv = require("http").createServer((req, res) => {
+        hits.push({ at: new Date().toISOString(), path: req.url, method: req.method, ua: String(req.headers["user-agent"] || "") });
+        res.writeHead(200, { "content-type": "text/plain" });
+        res.end("orc-test callback\n");
+      });
+    } catch (_) {
+      return resolve(null);
+    }
+    srv.on("error", () => resolve(null));
+    srv.listen(0, "127.0.0.1", () => {
+      const port = srv.address() && srv.address().port;
+      if (!port) return resolve(null);
+      resolve({
+        url: (caseId) => `http://127.0.0.1:${port}/orc-test/${encodeURIComponent(caseId)}`,
+        hitsFor: (caseId) => hits.filter((h) => String(h.path || "").indexOf(encodeURIComponent(caseId)) !== -1),
+        all: () => hits.slice(),
+        close: () => {
+          try {
+            srv.close();
+          } catch (_) {}
+        },
+      });
+    });
+  });
+}
+
+const testSleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+function testRunCmd(claudeDir) {
+  const asJson = wantsJson();
+  const pos = tPositionals();
+  const slug = pos[2] ? testSlugOf(pos[2]) : null;
+  const fail = (r, h, c) => testFail(asJson, r, h, c === undefined ? 2 : c);
+  if (!slug) fail("no-slug", "orc test run <slug> [--tier happy|edge|abuse|security] [--only C-014] [--json]");
+  const t = readTestRun(claudeDir, slug);
+  if (!t) fail("no-run", `no test run named ${slug}.`);
+  if (!t.target) fail("no-target", `${slug} has no frozen target.`);
+  if (!t.target.base_url) fail("no-base-url", `${slug} has no base URL yet. Run \`orc test env ${slug}\` first, or re-init with --base-url.`);
+  if (!t.cases.length) fail("no-cases", `${slug} has no cases. Run \`orc test case derive ${slug}\` — it is free.`, 1);
+
+  const onlyTier = tOpt("--tier");
+  const only = [];
+  for (let i = 0; i < args.length; i++) if (args[i] === "--only" && args[i + 1] !== undefined) only.push(String(args[i + 1]).toUpperCase());
+
+  const ovr = readOverride(claudeDir).map;
+  const rpsMeta = metaFor("test_max_rps");
+  const rps = Math.max(0.1, Number(ovr.test_max_rps !== undefined ? ovr.test_max_rps : rpsMeta ? rpsMeta.def : 4));
+  const gapMs = Math.ceil(1000 / rps);
+
+  const passphrase = args.includes("--passphrase-stdin") ? (readStdinLines()[0] || "").trim() : null;
+
+  // Resolve every identity ONCE. An identity that will not resolve does not
+  // stop the run — it makes every case that needs it `unknown`, which is the
+  // honest answer and is reported with its reason.
+  const identities = {};
+  const secrets = [];
+  for (const id of t.identities) {
+    const r = testResolveIdentity(claudeDir, id, passphrase);
+    identities[id.name] = { id, ...r, auth_fails: 0, locked: false };
+    if (r.ok) secrets.push(r.token);
+  }
+  const redact = testRedactor(secrets);
+
+  const p = testPaths(claudeDir, slug);
+  // ONE FOLDER PER SLUG, EVER, and a re-run APPENDS. It never overwrites the
+  // last run, because comparing two runs is how you see the flake.
+  fs.mkdirSync(p.runs, { recursive: true });
+  let nn = 1;
+  try {
+    const used = fs.readdirSync(p.runs).filter((d) => /^\d+$/.test(d)).map(Number);
+    if (used.length) nn = Math.max(...used) + 1;
+  } catch (_) {}
+  const runNo = String(nn).padStart(2, "0");
+  const runDir = path.join(p.runs, runNo);
+  const evDir = path.join(runDir, "evidence");
+  fs.mkdirSync(evDir, { recursive: true });
+  const runId = `${slug}-${runNo}`;
+
+  const origin = t.target.origin;
+  const base = String(t.target.base_url).replace(/\/+$/, "");
+
+  const go = async () => {
+    const results = [];
+    const changes = [];
+    const stopped = { at: null, why: null };
+    let backoffMs = 0;
+
+    // The SSRF listener is opened only when a case actually needs one. A run
+    // with no URL-shaped input opens no socket at all.
+    const needsCallback = t.cases.some((c) => JSON.stringify(c.request || {}).indexOf(TEST_CALLBACK_TOKEN) !== -1);
+    const callback = needsCallback ? await testCallbackListener() : null;
+    const ctx = { callback };
+
+    const tiers = onlyTier && onlyTier !== true ? [String(onlyTier)] : TEST_TIERS;
+    for (const tier of tiers) {
+      // A FRONT-END JOURNEY IS NOT AN HTTP REQUEST. It carries `kind: "ui"`,
+      // it lives in the same ledger with the same three verdicts, and it is
+      // run by `orc test ui run` — this runner never touches it, and never
+      // marks it skipped either, because it was never this command's to run.
+      const batch = t.cases.filter((c) => c.kind !== "ui" && c.tier === tier && (!only.length || only.includes(c.id.toUpperCase())));
+      if (!batch.length) continue;
+
+      // Paced, at a fixed small concurrency. The pace belongs to the target.
+      for (let i = 0; i < batch.length; i += TEST_CONCURRENCY) {
+        const slice = batch.slice(i, i + TEST_CONCURRENCY);
+        const done = await Promise.all(slice.map((c) => runOne(c)));
+        results.push(...done);
+        for (const d of done) if (d.rate_limited) backoffMs = Math.min(30000, Math.max(2000, backoffMs * 2 || 2000));
+        await testSleep(gapMs * slice.length + backoffMs);
+        if (backoffMs) backoffMs = Math.floor(backoffMs / 2);
+      }
+
+      // THE LADDER'S STOP.
+      if (tier === "happy" && results.some((r) => r.verdict === "fail")) {
+        stopped.at = "happy";
+        stopped.why =
+          "the happy path is red. Every later tier would be measuring the same bug: a 500 on every request " +
+          'will "prove" a dozen vulnerabilities that are one defect. Fix this and re-run — re-running is free.';
+        break;
+      }
+    }
+
+    async function runOne(c) {
+      const idRec = c.identity ? identities[c.identity] : null;
+      const row = { id: c.id, target: c.target, tier: c.tier, why: c.why, identity: c.identity || null, mutates: !!c.mutates, owasp: c.owasp || null };
+
+      // The identity gate, before anything is sent.
+      if (c.identity && !idRec) return finish(row, null, { verdict: "unknown", why: `identity \`${c.identity}\` is not declared on this run` });
+      if (idRec && !idRec.ok) return finish(row, null, { verdict: "unknown", why: `identity \`${c.identity}\` unavailable — ${idRec.why}` });
+      if (idRec && idRec.locked)
+        return finish(row, null, { verdict: "unknown", why: `identity \`${c.identity}\` was withdrawn after ${TEST_AUTH_FAIL_CAP} failed authentications — an account lockout would end the run` });
+
+      // THE DESTRUCTIVE GATE. A mutating case runs only under a decision made
+      // for THIS run and THIS target, with a recorded reason.
+      if (c.mutates && t.target.destructive.mode !== "allow")
+        return finish(row, null, { verdict: "unknown", why: "this case MUTATES and this run was initialised --destructive deny. Not sent." });
+
+      // THE SSRF CALLBACK. The listener's port is not known until the run
+      // starts, so the case carries a marker and it is substituted HERE — a
+      // case that hardcoded a port would either be wrong or would point a
+      // target at an address ORC does not own.
+      if (JSON.stringify(c.request).indexOf(TEST_CALLBACK_TOKEN) !== -1) {
+        if (!callback) return finish(row, null, { verdict: "unknown", why: "this probe needs a loopback listener ORC owns, and one could not be opened. NOT SENT — a URL-shaped input is never pointed anywhere else." });
+        c = JSON.parse(JSON.stringify(c).split(TEST_CALLBACK_TOKEN).join(callback.url(c.id).replace(/"/g, '\\"')));
+      }
+
+      // THE ORIGIN FENCE. Resolved before the socket opens.
+      let url;
+      try {
+        url = new URL(c.request.path, base + "/").toString();
+      } catch (_) {
+        return finish(row, null, { verdict: "unknown", why: `the case path did not resolve against ${base}` });
+      }
+      if (testOriginOf(url) !== origin)
+        return finish(row, null, {
+          verdict: "unknown",
+          why: `NOT SENT — the resolved URL ${testOriginOf(url)} leaves the frozen target origin ${origin}. Recorded, reported, dropped.`,
+          fenced: true,
+        });
+
+      const headers = Object.assign({}, c.request.headers || {}, idRec && idRec.ok ? testAuthHeaders(idRec.id, idRec.token) : {});
+      const spec = { method: c.request.method, headers, body: c.request.body, body_raw: c.request.body_raw, run_id: runId };
+      const res = await testRequest(url, spec, TEST_REQ_TIMEOUT_MS);
+
+      // A REPEATED case (API6). The repeat is CAPPED by ORC, it is paced like
+      // everything else, and it stops the moment something refuses — pushing
+      // past a refusal to "confirm" it is exactly the exploitation this lane
+      // does not do. The LAST response is the evidence; every status is the
+      // measurement.
+      if (c.repeat && res.ok) {
+        res.repeat_statuses = [res.status];
+        for (let k = 1; k < Math.min(Number(c.repeat), TEST_FLOW_REPEAT); k++) {
+          if (res.repeat_statuses.some((s) => s === 429 || s >= 400)) break;
+          await testSleep(gapMs);
+          const again = await testRequest(url, spec, TEST_REQ_TIMEOUT_MS);
+          if (!again.ok) break;
+          res.repeat_statuses.push(again.status);
+          if (c.mutates && again.status < 400) changes.push({ at: new Date().toISOString(), case: c.id, what: `${c.request.method} ${c.request.path} → ${again.status} (repeat ${k + 1})`, undo: c.undo || null });
+        }
+      }
+
+      // A failed authentication is COUNTED and CAPPED. The cap is not a
+      // politeness setting: an account lockout ends the run and, on
+      // preproduction, someone's afternoon.
+      if (idRec && res.ok && (res.status === 401 || res.status === 403)) {
+        idRec.auth_fails++;
+        if (idRec.auth_fails >= TEST_AUTH_FAIL_CAP) idRec.locked = true;
+      }
+      if (c.mutates && res.ok && res.status < 400)
+        changes.push({ at: new Date().toISOString(), case: c.id, what: `${c.request.method} ${c.request.path} → ${res.status}`, undo: c.undo || null });
+
+      const v = testVerdict(c, res, ctx);
+      return finish(row, res, v);
+    }
+
+    // EVIDENCE IS WRITTEN REDACTED. The replacement happens here, before the
+    // bytes reach disk — never as a review step afterwards.
+    function finish(row, res, v) {
+      const dir = path.join(evDir, row.id);
+      fs.mkdirSync(dir, { recursive: true });
+      const sent = res && res.sent ? res.sent : null;
+      const reqText = sent
+        ? `${sent.method} ${redact(sent.url)}\n` +
+          Object.entries(testRedactHeaders(sent.headers, redact)).map(([k, val]) => `${k}: ${val}`).join("\n") +
+          (sent.body ? `\n\n${redact(sent.body)}` : "\n")
+        : `NOT SENT\n\n${v.why}\n`;
+      fs.writeFileSync(path.join(dir, "request.txt"), reqText);
+      const resText =
+        res && res.ok
+          ? `HTTP ${res.status}  (${res.ms}ms, ${res.bytes} bytes${res.truncated ? ", TRUNCATED" : ""})\n` +
+            Object.entries(testRedactHeaders(res.headers, redact)).map(([k, val]) => `${k}: ${val}`).join("\n") +
+            `\n\n${redact(res.body)}\n`
+          : `NOT OBSERVED\n\n${v.why}\n`;
+      fs.writeFileSync(path.join(dir, "response.txt"), resText);
+      // A reproducible curl. It carries the redacted header VALUE, so it is
+      // safe to paste into a PR and will not run until a human puts the real
+      // credential back — which is the correct trade.
+      if (sent) {
+        const h = testRedactHeaders(sent.headers, redact);
+        const curl =
+          `#!/bin/sh\n# ${row.id} — ${row.why}\n# Every credential below is redacted. Put yours back before running this.\n` +
+          `curl -i -X ${sent.method} ${JSON.stringify(redact(sent.url))} \\\n` +
+          Object.entries(h).map(([k, val]) => `  -H ${JSON.stringify(k + ": " + val)}`).join(" \\\n") +
+          (sent.body ? ` \\\n  --data ${JSON.stringify(redact(sent.body))}` : "") +
+          "\n";
+        fs.writeFileSync(path.join(dir, "repro.sh"), curl);
+      }
+      const evidence = path.relative(p.root, dir).split(path.sep).join("/");
+      return Object.assign(row, {
+        verdict: v.verdict,
+        verdict_why: v.why,
+        status: res && res.ok ? res.status : null,
+        ms: res ? res.ms : null,
+        evidence,
+        fenced: !!v.fenced,
+        rate_limited: !!v.rate_limited,
+      });
+    }
+
+    // Write the run, then fold the verdicts back into the ledger.
+    const counts = { pass: 0, fail: 0, unknown: 0 };
+    for (const r of results) counts[r.verdict]++;
+    const skipped = t.cases.filter((c) => c.kind !== "ui" && !results.some((r) => r.id === c.id)).map((c) => c.id);
+    const result = {
+      run: runNo,
+      run_id: runId,
+      at: new Date().toISOString(),
+      target: t.target,
+      pace: { max_rps: rps, concurrency: TEST_CONCURRENCY, gap_ms: gapMs },
+      counts,
+      // A skipped case is NOT a pass and is not silently absent. It keeps its
+      // slot with the reason the ladder never reached it.
+      skipped,
+      stopped: stopped.at ? stopped : null,
+      results,
+    };
+    // The listener closes with the run. It existed only for the probes that
+    // needed it, and every hit it saw is recorded beside the results.
+    if (callback) {
+      result.callback = { hits: callback.all(), note: "a loopback listener ORC opened and owns. A hit means the target fetched an address the CALLER supplied — the SSRF condition, not a measure of what it can reach." };
+      callback.close();
+    }
+    fs.writeFileSync(path.join(runDir, "result.json"), JSON.stringify(result, null, 2) + "\n");
+    testWriteChangesDoc(claudeDir, slug, runNo, changes);
+
+    // A FLAKE IS RECORDED, NEVER RETRIED AWAY. There is no retry count here.
+    // If the same case answers differently across two runs, the ledger holds
+    // both and that INSTABILITY IS THE FINDING.
+    const flakes = [];
+    for (const r of results) {
+      const c = t.cases.find((x) => x.id === r.id);
+      if (!c) continue;
+      if (c.verdict && c.verdict !== r.verdict) flakes.push({ id: r.id, was: c.verdict, now: r.verdict });
+      c.verdict = r.verdict;
+      c.verdict_why = r.verdict_why;
+      c.evidence = r.evidence;
+      c.last_status = r.status;
+    }
+    for (const id of skipped) {
+      const c = t.cases.find((x) => x.id === id);
+      // A case the ladder never reached is `unknown`, with the reason. It is
+      // not left at its previous verdict, which would report a stale pass.
+      if (c) {
+        c.verdict = stopped.at ? "unknown" : c.verdict;
+        if (stopped.at) c.verdict_why = `not observed — the ladder stopped at the ${stopped.at} tier`;
+      }
+    }
+    t.runs.push({ n: runNo, at: result.at, counts, stopped: stopped.at || null, dir: path.relative(p.root, runDir).split(path.sep).join("/") });
+    if (flakes.length) t.flakes = [].concat(t.flakes || [], flakes.map((f) => Object.assign({ run: runNo }, f)));
+    t.events.push({ at: result.at, what: "run", detail: `run ${runNo}: ${counts.pass} pass, ${counts.fail} fail, ${counts.unknown} unknown` });
+    testWrite(claudeDir, slug, t, { phase: "T7", red: counts.fail || undefined });
+
+    // EXIT CODES: 0 nothing red · 1 at least one case FAILED · 2 refused before
+    // any traffic was sent. `unknown` never raises the exit code — it is the
+    // honest state, and a run that exits red because it could not observe
+    // something teaches people to stop believing the exit code.
+    const code = counts.fail ? 1 : 0;
+    if (asJson) emitJson({ ok: true, slug, run: runNo, counts, stopped: result.stopped, flakes, dir: result.dir, results }, code);
+    testRunPrint(slug, runNo, result, flakes, path.relative(p.root, runDir).split(path.sep).join("/"));
+    process.exit(code);
+  };
+  go();
+}
+
+function testRunPrint(slug, runNo, r, flakes, dir) {
+  console.log(ui.color.bold(`\n  /orc-test · ${slug} · run ${runNo}`));
+  console.log(ui.color.gray(`  ${r.pace.max_rps} req/s, concurrency ${r.pace.concurrency} · ${TEST_RUN_HEADER}: ${r.run_id} · written to ${dir}\n`));
+  console.log(`    pass      ${r.counts.pass ? ui.color.green(String(r.counts.pass)) : "0"}`);
+  console.log(`    fail      ${r.counts.fail ? ui.color.red(String(r.counts.fail)) : "0"}`);
+  console.log(`    unknown   ${r.counts.unknown}   ${ui.color.gray("not observed — never a pass, and it keeps its slot")}`);
+  if (r.skipped.length) console.log(`    skipped   ${r.skipped.length}   ${ui.color.gray("the ladder never reached them")}`);
+  console.log("");
+  const red = r.results.filter((x) => x.verdict === "fail");
+  for (const x of red.slice(0, 20)) {
+    console.log(`    ${ui.color.red(x.id)}  ${x.target}`);
+    console.log(`        ${x.verdict_why}`);
+    console.log(ui.color.gray(`        ${x.evidence}/`));
+  }
+  const fenced = r.results.filter((x) => x.fenced);
+  if (fenced.length) {
+    console.log("");
+    console.log("  " + ui.color.yellow(`${fenced.length} request(s) NOT SENT — the origin fence`));
+    for (const x of fenced.slice(0, 5)) console.log(ui.color.gray(`    ${x.id}  ${x.verdict_why}`));
+  }
+  // The security tier, rolled up BY CATEGORY. A run that sent security probes
+  // and says nothing about them reads as a run that found nothing.
+  const sec = r.results.filter((x) => x.owasp);
+  if (sec.length) {
+    const by = {};
+    for (const x of sec) {
+      const k = String(x.owasp).replace(/[ab]$/, "");
+      by[k] = by[k] || { fail: 0, unknown: 0, pass: 0 };
+      by[k][x.verdict]++;
+    }
+    console.log("");
+    const nc = Object.keys(by).length;
+    console.log(`  OWASP API Top 10 (2023) — ${plural(sec.length, "probe")} across ${nc} categor${nc === 1 ? "y" : "ies"}`);
+    for (const id of TEST_OWASP_IDS) {
+      if (!by[id]) continue;
+      const b = by[id];
+      const mark = b.fail ? ui.color.red(`FOUND (${b.fail})`) : b.pass && !b.unknown ? ui.color.green("observed-clean") : ui.color.gray(`${b.pass} pass · ${b.unknown} not observed`);
+      console.log(`    ${id.padEnd(6)} ${mark}`);
+    }
+    console.log(ui.color.gray(`    A category with no probe is UNCHECKABLE and keeps its slot:  orc test security ${slug}`));
+  }
+  const limited = r.results.filter((x) => x.rate_limited);
+  if (limited.length) {
+    console.log("");
+    console.log(`  ${ui.color.yellow(`${limited.length} case(s) rate limited`)} ${ui.color.gray("— that is the control WORKING. ORC backed off and did not push through.")}`);
+  }
+  if (flakes.length) {
+    console.log("");
+    console.log("  " + ui.color.yellow(`${flakes.length} case(s) answered differently than last run:`));
+    for (const f of flakes.slice(0, 10)) console.log(`    ${f.id}  ${f.was} → ${f.now}`);
+    console.log(ui.color.gray("  Recorded, never retried away. The instability IS the finding."));
+  }
+  if (r.stopped) {
+    console.log("");
+    console.log("  " + ui.color.red(`STOPPED at the ${r.stopped.at} tier.`));
+    console.log("  " + r.stopped.why);
+    console.log("");
+    console.log("  ORC does not fix the system it is testing.");
+  }
+  console.log("");
+  console.log(ui.color.yellow("  Evidence holds real response bodies from a real system. NEVER stage this folder."));
+  console.log(ui.color.gray("  Credentials and every auth-bearing header were replaced before the bytes reached disk."));
+  console.log("");
+}
+
+// changes.md — EVERY mutation, in order, with its undo. When there is no undo,
+// it says so: "no undo exists" is a fact the person cleaning up needs, and a
+// blank column reads as "nothing to do".
+function testWriteChangesDoc(claudeDir, slug, runNo, changes) {
+  const p = testPaths(claudeDir, slug);
+  let prev = "";
+  try {
+    prev = fs.readFileSync(p.changes, "utf8");
+  } catch (_) {
+    prev = `# Changes — \`${slug}\`\n\n> Every mutation this lane made, in order, with its undo. Appended per run.\n`;
+  }
+  const body =
+    `\n## Run ${runNo}\n\n` +
+    (changes.length
+      ? `| when | case | what | undo |\n|---|---|---|---|\n` +
+        changes.map((c) => `| ${c.at} | ${c.case} | ${c.what} | ${c.undo ? "`" + c.undo + "`" : "**no undo exists**"} |`).join("\n") +
+        "\n"
+      : "_nothing was mutated._\n");
+  try {
+    fs.writeFileSync(p.changes, prev + body);
+  } catch (_) {}
+}
+
+// The value that FOLLOWS a flag, or true when the flag stands alone. Used only
+// to detect a credential sitting in argv, which is refused by name.
+function flagValueAfter(name) {
+  const i = args.indexOf(name);
+  if (i === -1) return undefined;
+  const v = args[i + 1];
+  return v !== undefined && !String(v).startsWith("--") ? String(v) : true;
+}
+
+
+
+// ── the FE half — Playwright, driven as a SCRIPT ────────────────────────────
+//
+// "find a way to do e2e real test can be using script with render capabilites
+// or anything that simulate real things."
+//
+//   · A STEP AN LLM TOOK IS NOT A STEP YOU CAN RE-RUN. The designer AUTHORS a
+//     Playwright script, this CLI runs it, and Playwright's own artifacts are
+//     the evidence. Re-running is free and identical. An agent loop costs ~114K
+//     tokens against ~27K for the same journey as a script, and the expensive
+//     one leaves nothing behind you can run again.
+//   · PLAYWRIGHT IS A TOOL, AND A TOOL CAN SIMPLY BE ABSENT. Four states,
+//     computed FRESH on every read and never stored, straight off the
+//     `orc extra tools` shape. ORC ships zero dependencies and NEVER installs
+//     anything into the user's project: it NAMES the command and stops.
+//   · A STORAGE STATE IS SAVED ONLY AFTER A DECLARED LOGGED-IN ASSERTION
+//     PASSES. A storageState captured from a failed login is a silent, total
+//     run failure — every journey after it fails for a reason none of them
+//     contains. And the failed login is itself the FIRST FINDING.
+//   · HAR REPLAY IS FOR ISOLATING A FLAKE, NEVER FOR A REPORTED RESULT. A pass
+//     recorded against a replayed HAR is a pass against a JSON file, not
+//     against the system, so a replayed run produces NO passes at all: every
+//     result is `unknown`, tagged `replayed`, excluded from the summary, with
+//     the observed status printed beside it for the person reading the trace.
+//
+// `a lane that reports a result it did not observe` has broken this contract.
+const TEST_UI_STATES = ["absent", "outdated", "unauthenticated", "ready"];
+const TEST_PW_MIN = "1.40.0";
+const TEST_UI_TIMEOUT_MS = 10 * 60 * 1000;
+const TEST_UI_VERDICTS = { expected: "pass", unexpected: "fail", timedOut: "fail", flaky: "pass", skipped: "unknown", interrupted: "unknown" };
+
+// Where Playwright keeps its downloaded browsers. Checked on disk rather than
+// by running a browser, because "the browsers are not downloaded" must be
+// answerable in milliseconds and without launching anything.
+function testPwBrowsersDir() {
+  if (process.env.PLAYWRIGHT_BROWSERS_PATH && process.env.PLAYWRIGHT_BROWSERS_PATH !== "0") return process.env.PLAYWRIGHT_BROWSERS_PATH;
+  const home = process.env.USERPROFILE || process.env.HOME || "";
+  if (process.platform === "win32") return path.join(process.env.LOCALAPPDATA || path.join(home, "AppData", "Local"), "ms-playwright");
+  if (process.platform === "darwin") return path.join(home, "Library", "Caches", "ms-playwright");
+  return path.join(home, ".cache", "ms-playwright");
+}
+
+// THE FOUR STATES, and the order of the checks IS the ladder: absent beats
+// outdated beats unauthenticated beats ready, because each one makes the next
+// unanswerable.
+function testUiTools(claudeDir) {
+  const root = repoRootOf(claudeDir);
+  const ovr = readOverride(claudeDir).map;
+  const meta = metaFor("test_ui_driver");
+  const driver = String(ovr.test_ui_driver !== undefined ? ovr.test_ui_driver : (meta && meta.def) || "playwright");
+  const out = {
+    driver,
+    tool: "playwright",
+    states: TEST_UI_STATES,
+    state: "absent",
+    installed: false,
+    bin: null,
+    from: null,
+    version: null,
+    min_version: TEST_PW_MIN,
+    outdated: false,
+    browsers_dir: testPwBrowsersDir(),
+    browsers: [],
+    // There is genuinely no way to drive a real browser without a browser, so
+    // `null` here MEANS there is none — never that ORC forgot to look.
+    no_install_alternative: null,
+    install: null,
+    next: null,
+    why: null,
+  };
+  if (driver === "none") {
+    out.state = "absent";
+    out.why = "`test_ui_driver` is `none`, so the front-end half is skipped entirely. That is a setting, not a missing tool.";
+    out.next = "set `test_ui_driver: playwright` to turn it on";
+    out.disabled = true;
+    return out;
+  }
+
+  // Resolution order: the PROJECT's own install first — that is the one a
+  // committed journey will run under — then whatever is on PATH.
+  const localBin = path.join(root, "node_modules", ".bin", process.platform === "win32" ? "playwright.cmd" : "playwright");
+  let bin = null;
+  if (fs.existsSync(localBin)) {
+    bin = localBin;
+    out.from = "the project's own node_modules";
+  } else {
+    const onPath = whichBin("playwright");
+    if (onPath) {
+      bin = onPath;
+      out.from = "PATH";
+    }
+  }
+  out.install = {
+    docs_url: "https://playwright.dev/docs/intro",
+    // NAMED, NEVER RUN. ORC does not install into somebody else's project.
+    cmds: [
+      { manager: "npm", cmd: "npm i -D @playwright/test" },
+      { manager: "browsers", cmd: "npx playwright install chromium" },
+    ],
+  };
+  if (!bin) {
+    out.why = "no `playwright` is resolvable — not in this project's node_modules and not on PATH.";
+    out.next = "npm i -D @playwright/test && npx playwright install chromium";
+    return out;
+  }
+  out.installed = true;
+  out.bin = bin;
+
+  const r = runToolCmd(bin, ["--version"], {}, EXTRA_TOOL_TIMEOUT_MS);
+  out.version = parseVersion(r.stdout || r.stderr);
+  // LENIENT ON PURPOSE: an unparseable version reads as "unknown" and NEVER as
+  // "too old" — the `orc extra` rule, and for the same reason.
+  if (out.version && cmpVersion(out.version, TEST_PW_MIN) < 0) {
+    out.state = "outdated";
+    out.outdated = true;
+    out.why = `playwright ${out.version} is below the floor ${TEST_PW_MIN}.`;
+    out.next = "npm i -D @playwright/test@latest";
+    return out;
+  }
+
+  try {
+    out.browsers = fs
+      .readdirSync(out.browsers_dir)
+      .filter((d) => /^(chromium|firefox|webkit)/.test(d))
+      .sort();
+  } catch (_) {
+    out.browsers = [];
+  }
+  // ASK PLAYWRIGHT WHICH BUILD IT NEEDS, rather than looking for any browser
+  // at all. "A chromium directory exists" is not the same fact as "the build
+  // THIS playwright launches is downloaded": a browser one minor version behind
+  // reports `ready` and then dies at launch with `Executable doesn't exist`,
+  // which reads as a broken journey rather than a missing download. Measured
+  // exactly that on a real box — 1228 present, 1243 wanted.
+  const dry = runToolCmd(bin, ["install", "--dry-run", "chromium"], {}, EXTRA_TOOL_TIMEOUT_MS);
+  const wanted = [];
+  for (const m of String(dry.stdout + "\n" + dry.stderr).matchAll(/Install location:\s*(\S.*?)\s*$/gm)) {
+    const loc = m[1].trim();
+    if (/chromium/i.test(path.basename(loc))) wanted.push(loc);
+  }
+  out.needs = wanted.map((w) => ({ path: w, present: fs.existsSync(w) }));
+  const missing = out.needs.filter((w) => !w.present);
+  // An unparseable dry-run falls back to the directory listing rather than
+  // claiming a gap it did not measure — LENIENT the same way the version parse
+  // is, and in the same direction.
+  const noBrowser = out.needs.length ? missing.length > 0 : !out.browsers.some((d) => /^chromium/.test(d));
+  if (noBrowser) {
+    out.state = "unauthenticated";
+    out.why = out.needs.length
+      ? `playwright ${out.version || "(version unknown)"} launches ${missing.map((w) => path.basename(w.path)).join(", ")}, and that build is not downloaded (looked in ${out.browsers_dir}${out.browsers.length ? "; found " + out.browsers.join(", ") : ""}).`
+      : `playwright ${out.version || "(version unknown)"} is installed and no browser is downloaded (looked in ${out.browsers_dir}).`;
+    out.next = "npx playwright install chromium";
+    return out;
+  }
+  out.state = "ready";
+  out.why = `playwright ${out.version || "(version unknown)"} from ${out.from}, ${out.browsers.length} browser build(s) downloaded.`;
+  out.next = "orc test ui init <slug>";
+  return out;
+}
+
+// The Playwright config ORC writes into the RUN FOLDER. It is a plain object on
+// purpose: `defineConfig` would require `@playwright/test` to resolve from the
+// project, and a PATH-only install is a legitimate state this lane already
+// reports as `ready`.
+function testUiConfig(runDir, journeyFile, outDir, harPath, baseUrl, storageState) {
+  const j = (x) => JSON.stringify(x);
+  return (
+    `// WRITTEN BY \`orc test ui\`. Regenerated on every run — do not hand-edit.\n` +
+    `// A plain object, not defineConfig(): a PATH-only playwright install is a\n` +
+    `// state this lane reports as ready, and defineConfig would need the module\n` +
+    `// to resolve from the project.\n` +
+    `module.exports = {\n` +
+    `  testDir: ${j(path.dirname(journeyFile))},\n` +
+    `  testMatch: ${j(path.basename(journeyFile))},\n` +
+    `  outputDir: ${j(outDir)},\n` +
+    `  fullyParallel: false,\n` +
+    `  workers: 1,\n` +
+    // NO RETRIES, EVER. A flake is recorded, never retried away — the same rule
+    // the BE half holds, and for the same reason: the instability IS the
+    // finding.
+    `  retries: 0,\n` +
+    `  timeout: 60000,\n` +
+    `  reporter: [["json", { outputFile: ${j(path.join(outDir, "report.json"))} }], ["line"]],\n` +
+    `  use: {\n` +
+    (baseUrl ? `    baseURL: ${j(baseUrl)},\n` : "") +
+    (storageState ? `    storageState: ${j(storageState)},\n` : "") +
+    `    trace: "on",\n` +
+    `    video: "on",\n` +
+    `    screenshot: "on",\n` +
+    (harPath ? `    contextOptions: { recordHar: { path: ${j(harPath)}, content: "omit" } },\n` : "") +
+    `  },\n` +
+    `};\n`
+  );
+}
+
+// The login setup script. GENERATED, never authored by a model — it is the one
+// FE script whose correctness decides whether every later journey means
+// anything, and its assertion is DECLARED by the user rather than guessed.
+function testUiLoginScript(id, assertKind, assertValue, statePath) {
+  const j = (x) => JSON.stringify(x);
+  const l = id.login || {};
+  const assertLine =
+    assertKind === "selector"
+      ? `  await page.waitForSelector(${j(assertValue)}, { timeout: 20000 });`
+      : `  await page.waitForFunction((t) => document.body && document.body.innerText.includes(t), ${j(assertValue)}, { timeout: 20000 });`;
+  return (
+    `// WRITTEN BY \`orc test ui login\`. Regenerated every time — do not hand-edit.\n` +
+    `const { test, expect } = require("@playwright/test");\n\n` +
+    `test("orc-test login: ${id.name}", async ({ page, context }) => {\n` +
+    `  await page.goto(${j(l.page || l.url || "/")});\n` +
+    `  await page.fill(${j(l.user_selector || `[name="${l.user_field || "username"}"]`)}, String(process.env.ORC_TEST_USER || ""));\n` +
+    `  await page.fill(${j(l.pass_selector || `[name="${l.pass_field || "password"}"]`)}, String(process.env.ORC_TEST_PASS || ""));\n` +
+    `  await page.click(${j(l.submit_selector || 'button[type="submit"]')});\n` +
+    `  // THE DECLARED LOGGED-IN ASSERTION. The storage state is written ONLY\n` +
+    `  // after this passes — a state captured from a failed login is a silent,\n` +
+    `  // total run failure, and every journey after it fails for a reason none\n` +
+    `  // of them contains.\n` +
+    assertLine +
+    `\n  await context.storageState({ path: ${j(statePath)} });\n` +
+    `});\n`
+  );
+}
+
+function testUiPaths(claudeDir, slug) {
+  const p = testPaths(claudeDir, slug);
+  return Object.assign(p, {
+    ui: path.join(p.run, "ui"),
+    journeys: path.join(p.run, "ui", "journeys"),
+    auth: path.join(p.run, "ui", "auth"),
+    uiwork: path.join(p.run, "ui", ".work"),
+  });
+}
+
+// Run one Playwright invocation and return the SAME shape whatever happened.
+// Journeys run ONE AT A TIME: a per-journey outputDir and a per-journey HAR
+// path are exact, and a shared HAR across parallel tests overwrites itself.
+function testUiSpawn(bin, cfg, root, env) {
+  const r = runToolCmd(bin, ["test", "-c", cfg], Object.assign({ FORCE_COLOR: "0" }, env), TEST_UI_TIMEOUT_MS);
+  return r;
+}
+
+function testUiReadReport(outDir) {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(outDir, "report.json"), "utf8"));
+  } catch (_) {
+    return null;
+  }
+}
+
+// Playwright's JSON report, flattened to the three verdicts this lane has. A
+// status this CLI does not know maps to `unknown` and SAYS SO — never to a
+// pass, which is the one direction that would lie.
+function testUiResults(rep) {
+  const out = [];
+  const walk = (suite, trail) => {
+    for (const s of suite.suites || []) walk(s, trail.concat([s.title]));
+    for (const spec of suite.specs || [])
+      for (const t of spec.tests || []) {
+        const last = (t.results || [])[t.results.length - 1] || {};
+        const status = t.status || last.status || "interrupted";
+        out.push({
+          title: trail.concat([spec.title]).filter(Boolean).join(" › "),
+          status,
+          verdict: TEST_UI_VERDICTS[status] || "unknown",
+          why:
+            TEST_UI_VERDICTS[status] === undefined
+              ? `playwright reported \`${status}\`, which this CLI does not have a verdict for — recorded as not observed rather than guessed`
+              : status === "flaky"
+              ? "passed on a repeat within one invocation — recorded as a FLAKE, never retried away"
+              : status === "skipped"
+              ? "skipped — not observed, and it is not a pass"
+              : status === "timedOut"
+              ? "timed out"
+              : null,
+          ms: last.duration || null,
+          // The reporter's own message carries colour escapes even under a JSON
+          // reporter. They are stripped here so the report and the ledger hold
+          // text a person can read in a PR.
+          error: last.error ? stripAnsi(String(last.error.message || "")).split("\n").slice(0, 6).join("\n") : null,
+          flaky: status === "flaky",
+          attachments: (last.attachments || []).map((a) => ({ name: a.name, path: a.path || null, contentType: a.contentType })),
+        });
+      }
+  };
+  for (const s of (rep && rep.suites) || []) walk(s, [s.title]);
+  return out;
+}
+
+// R1 — THE DEPLOYED BUILD IS NOT THIS COMMIT. On a REMOTE target a failing
+// `data-testid` locator is reported as a build mismatch BEFORE it is treated as
+// a defect: a testid derived from source is only trustworthy when the source is
+// what is running.
+const TEST_TESTID_RE = /data-testid|getByTestId/;
+function testUiBuildMismatch(env, r) {
+  if (env !== "remote" || r.verdict !== "fail" || !r.error) return null;
+  if (!TEST_TESTID_RE.test(r.error)) return null;
+  return (
+    "this failed on a `data-testid` locator against a REMOTE target. A testid derived from source is only trustworthy when the source is what is running, " +
+    "so the first thing to rule out is that the deployed build is not this commit. It is reported as a build mismatch before it is treated as a defect."
+  );
+}
+
+function testUiFail(asJson, reason, hint, code) {
+  return testFail(asJson, reason, hint, code === undefined ? 2 : code);
+}
+
+//   0  ready
+//   1  absent | outdated | unauthenticated — every one of them an ANSWER
+//   2  the driver is `none`, or no such run
+function testUiCmd(claudeDir) {
+  const asJson = wantsJson();
+  const pos = tPositionals();
+  const verb = (pos[2] || "tools").toLowerCase();
+  if (!["tools", "init", "login", "journey", "run"].includes(verb)) testUiFail(asJson, "bad-verb", "orc test ui <tools|init|login|journey|run>");
+
+  if (verb === "tools") {
+    const tools = testUiTools(claudeDir);
+    const code = tools.disabled ? 2 : tools.state === "ready" ? 0 : 1;
+    if (asJson) emitJson({ ok: true, ui: tools }, code);
+    console.log(ui.color.bold("\n  /orc-test · the front-end driver"));
+    console.log(ui.color.gray("  computed fresh on every read and never stored\n"));
+    const mark = tools.state === "ready" ? ui.color.green("ready") : tools.disabled ? ui.color.gray("off") : ui.color.yellow(tools.state);
+    console.log(`    playwright   ${mark}`);
+    console.log(`    ${ui.color.gray(tools.why)}`);
+    if (tools.bin) console.log(`    binary       ${tools.bin}   ${ui.color.gray("(" + tools.from + ")")}`);
+    if (tools.version) console.log(`    version      ${tools.version}   ${ui.color.gray("floor " + tools.min_version)}`);
+    if (tools.browsers.length) console.log(`    browsers     ${tools.browsers.join(", ")}`);
+    if (tools.state !== "ready" && !tools.disabled) {
+      console.log("");
+      console.log(`  Next:  ${tools.next}`);
+      console.log(ui.color.gray("  ORC NAMES that command and never runs it — it does not install into your project."));
+      console.log(ui.color.gray("  There is no alternative that avoids a browser download. `no_install_alternative: null`"));
+      console.log(ui.color.gray("  MEANS there is none, not that ORC forgot to look."));
+    }
+    console.log("");
+    process.exit(code);
+  }
+
+  const slug = pos[3] ? testSlugOf(pos[3]) : null;
+  if (!slug) testUiFail(asJson, "no-slug", `orc test ui ${verb} <slug> …`);
+  const t = readTestRun(claudeDir, slug);
+  if (!t) testUiFail(asJson, "no-run", `no test run named ${slug}.`);
+  if (t.target && t.target.kind === "be")
+    testUiFail(asJson, "be-only", `${slug} was initialised \`--kind be\`. The front-end half does not apply — the kind is FROZEN at init and this lane does not re-decide it.`);
+
+  const tools = testUiTools(claudeDir);
+  if (tools.disabled) testUiFail(asJson, "driver-none", "`test_ui_driver` is `none`, so the front-end half is skipped entirely. That is a setting, not a missing tool.");
+  // IT REFUSES WHILE ABSENT, NAMING THE COMMAND. It never installs.
+  if (tools.state !== "ready")
+    testUiFail(
+      asJson,
+      "tool-" + tools.state,
+      `playwright is \`${tools.state}\` — ${tools.why} Run this yourself:\n     ${tools.next}\n   ORC names the command and never runs it: it does not install into your project.`,
+      1
+    );
+
+  const p = testUiPaths(claudeDir, slug);
+  if (verb === "init") return testUiInit(claudeDir, slug, t, p, tools, asJson);
+  if (verb === "login") return testUiLogin(claudeDir, slug, t, p, tools, asJson);
+  if (verb === "journey") return testUiJourney(claudeDir, slug, t, p, asJson);
+  return testUiRun(claudeDir, slug, t, p, tools, asJson);
+}
+
+function testUiInit(claudeDir, slug, t, p, tools, asJson) {
+  for (const d of [p.ui, p.journeys, p.auth, p.uiwork]) fs.mkdirSync(d, { recursive: true });
+  // THE SELECTOR POLICY, decided by the ENVIRONMENT and recorded here so the
+  // designer's slice carries it. Local: a testid derived from source is
+  // trustworthy, because the source is what is running. Remote: role and
+  // accessible name FIRST, always.
+  const remote = t.target.env === "remote";
+  t.ui = {
+    at: new Date().toISOString(),
+    driver: "playwright",
+    version: tools.version,
+    selector_policy: remote ? "role-first" : "testid-ok",
+    selector_why: remote
+      ? "REMOTE. Role + accessible name first, always. A source-derived `data-testid` is used only after it has been seen on the live page — and when it is absent, that is a BUILD MISMATCH reported before it is treated as a defect."
+      : "LOCAL. A `data-testid` derived from source is trustworthy here, because the source is what is running.",
+    journeys: (t.ui && t.ui.journeys) || [],
+    states: (t.ui && t.ui.states) || {},
+  };
+  t.events.push({ at: t.ui.at, what: "ui-init", detail: `playwright ${tools.version || "?"}, ${t.ui.selector_policy}` });
+  testWrite(claudeDir, slug, t, { phase: "T5" });
+
+  const rel = (x) => path.relative(p.root, x).split(path.sep).join("/");
+  if (asJson) emitJson({ ok: true, slug, ui: t.ui, dirs: { journeys: rel(p.journeys), auth: rel(p.auth) }, next: `orc test ui journey ${slug} add --name <n> --from <file.js>` }, 0);
+  console.log(ui.color.bold(`\n  /orc-test · ${slug} · front-end`));
+  console.log(`    driver           playwright ${tools.version || ""}`);
+  console.log(`    journeys         ${rel(p.journeys)}`);
+  console.log(`    login states     ${rel(p.auth)}   ${ui.color.gray("one storageState per role — the same identity store the BE half uses")}`);
+  console.log(`    selectors        ${ui.color.bold(t.ui.selector_policy)}`);
+  console.log(ui.color.gray(`    ${t.ui.selector_why}`));
+  console.log("");
+  console.log(ui.color.gray("  The designer AUTHORS the journey; this CLI runs it. A step an LLM took is not a"));
+  console.log(ui.color.gray("  step you can re-run, and re-running the script is free and identical."));
+  console.log(`\n  Next:  orc test ui journey ${slug} add --name <name> --from <file.js>\n`);
+}
+
+// `orc test ui login <slug> <identity>` — performs the login flow and saves the
+// storageState. The logged-in assertion is DECLARED and has no default: ORC
+// cannot know what "logged in" looks like here, and a guess would write a state
+// file from a failed login.
+function testUiLogin(claudeDir, slug, t, p, tools, asJson) {
+  const name = String(tPositionals()[4] || "").trim();
+  if (!name) testUiFail(asJson, "no-identity", `orc test ui login ${slug} <identity> --assert-selector "<css>" | --assert-text "<text>"`);
+  const id = (t.identities || []).find((x) => x.name === name);
+  if (!id) testUiFail(asJson, "no-such-identity", `no identity named \`${name}\` in ${slug}. \`orc test identity list ${slug}\``);
+  if (!id.login)
+    testUiFail(
+      asJson,
+      "not-a-login-identity",
+      `\`${name}\` was added with \`--source ${id.source}\`, so there is no login flow to perform. Add it with \`--source login --login-url <page>\` — that is what makes the login a FLOW rather than a field.`
+    );
+
+  const sel = tOpt("--assert-selector");
+  const txt = tOpt("--assert-text");
+  if ((!sel || sel === true) && (!txt || txt === true))
+    testUiFail(
+      asJson,
+      "no-assertion",
+      '--assert-selector "<css>" or --assert-text "<text>" is REQUIRED and has no default. It is the logged-in assertion, and the storage state is written ONLY after it passes: ' +
+        "a state captured from a failed login is a silent, total run failure — every journey after it fails for a reason none of them contains."
+    );
+
+  // THE CREDENTIAL NEVER REACHES ARGV. Same rule as `orc test identity add`,
+  // same rule as `orc extra`.
+  for (const bad of ["--password", "--pass", "--token", "--secret"])
+    if (args.includes(bad) && typeof flagValueAfter(bad) === "string")
+      testUiFail(asJson, "credential-in-argv", `${bad} <value> is refused BY NAME: a credential must never reach a command line. Use --password-stdin.`);
+
+  let user = id.login.username || null;
+  let pass = null;
+  if (args.includes("--password-stdin")) pass = (readStdinLines()[0] || "").trim();
+  else if (id.login.password_ref) {
+    const phrase = promptSecret("passphrase for the vault: ");
+    if (!phrase) testUiFail(asJson, "no-passphrase", "a passphrase is required, and it must be typed — it never travels in argv.", 1);
+    const got = extraVaultGet(claudeDir, id.login.password_ref, phrase);
+    if (!got || !got.ok) testUiFail(asJson, "vault", (got && (got.error || got.reason)) || "the vault would not open.", 1);
+    pass = got.value;
+  }
+  if (!user || !pass)
+    testUiFail(
+      asJson,
+      "no-credential",
+      `a username and a password are needed to perform this login. The username comes from \`--username\` at \`identity add\`; the password from \`--password-stdin\` here, or from the vault if it was stored at \`identity add\`.`,
+      1
+    );
+
+  fs.mkdirSync(p.uiwork, { recursive: true });
+  fs.mkdirSync(p.auth, { recursive: true });
+  const statePath = path.join(p.auth, `${name}.json`);
+  const specPath = path.join(p.uiwork, `login-${name}.spec.js`);
+  const outDir = path.join(p.uiwork, `login-${name}-out`);
+  fs.writeFileSync(specPath, testUiLoginScript(id, sel && sel !== true ? "selector" : "text", sel && sel !== true ? String(sel) : String(txt), statePath));
+  fs.writeFileSync(path.join(p.uiwork, `login-${name}.config.cjs`), testUiConfig(p.run, specPath, outDir, null, t.target.base_url, null));
+
+  // TEST FIRST, THEN STORE — the `orc extra` rule. A state file is only ever
+  // written by a run whose declared assertion passed.
+  try {
+    fs.unlinkSync(statePath);
+  } catch (_) {}
+  const r = testUiSpawn(tools.bin, path.join(p.uiwork, `login-${name}.config.cjs`), p.root, { ORC_TEST_USER: user, ORC_TEST_PASS: pass });
+  const res = testUiResults(testUiReadReport(outDir));
+  const ok = res.length && res.every((x) => x.verdict === "pass") && fs.existsSync(statePath);
+
+  t.ui = t.ui || { journeys: [], states: {} };
+  t.ui.states = t.ui.states || {};
+  const rel = (x) => path.relative(p.root, x).split(path.sep).join("/");
+  t.ui.states[name] = ok
+    ? { at: new Date().toISOString(), path: rel(statePath), role: id.role, assertion: sel && sel !== true ? `selector ${sel}` : `text ${txt}` }
+    : null;
+  if (ok) id.verified_at = new Date().toISOString();
+  else id.last_error = (res[0] && res[0].error) || "the login did not reach its declared assertion";
+
+  // A FAILED LOGIN IS ITSELF THE FIRST FINDING, recorded with its evidence, not
+  // an error message that scrolls away.
+  if (!ok) {
+    t.findings = [].concat(t.findings || [], [
+      {
+        id: "F-" + String((t.findings || []).length + 1).padStart(3, "0"),
+        title: `The login flow for \`${name}\` did not reach its declared logged-in assertion`,
+        what: `\`orc test ui login\` ran the login flow and the assertion (${sel && sel !== true ? "selector " + sel : "text " + txt}) never passed. No storage state was written, so every journey that needs \`${name}\` is unrunnable rather than silently logged out.`,
+        evidence: rel(outDir),
+        case: null,
+        target: id.login.url || null,
+        owasp: null,
+        observed: true,
+        claimed_severity: null,
+        severity: "high",
+        severity_why: "A login that does not complete makes every authenticated journey unrunnable, and a storage state captured from it would make them all fail for a reason none of them contains.",
+        cvss: null,
+        cvss_note: "Not a vulnerability finding — a blocked run.",
+        confidence: "observed",
+        impact: null,
+        fix: null,
+        at: new Date().toISOString(),
+      },
+    ]);
+    testWriteFindingsDoc(claudeDir, slug, t);
+  }
+  t.events.push({ at: new Date().toISOString(), what: "ui-login", detail: `${name}: ${ok ? "state saved" : "FAILED"}` });
+  testWrite(claudeDir, slug, t, { phase: "T5" });
+
+  const code = ok ? 0 : 1;
+  if (asJson) emitJson({ ok, slug, identity: name, state: ok ? rel(statePath) : null, results: res, evidence: rel(outDir), exit: r.code }, code);
+  console.log(ui.color.bold(`\n  /orc-test · ${slug} · login · ${name}`));
+  if (ok) {
+    console.log(`  ${ui.color.green("the declared assertion passed")} — storage state written to ${rel(statePath)}`);
+    console.log(ui.color.gray("  One state file per ROLE. Every journey for this identity starts from it."));
+  } else {
+    console.log(`  ${ui.color.red("the declared assertion never passed, so NO storage state was written.")}`);
+    console.log(ui.color.gray("  A state captured from a failed login is a silent, total run failure."));
+    for (const x of res) if (x.error) console.log(ui.color.gray(`    ${x.error.split("\n")[0]}`));
+    console.log(`  Recorded as a finding, with its evidence: ${rel(outDir)}`);
+  }
+  console.log("");
+  process.exit(code);
+}
+
+function testUiJourney(claudeDir, slug, t, p, asJson) {
+  const sub = String(tPositionals()[4] || "list").toLowerCase();
+  t.ui = t.ui || { journeys: [], states: {} };
+  const rel = (x) => path.relative(p.root, x).split(path.sep).join("/");
+
+  if (sub === "list") {
+    if (asJson) emitJson({ ok: true, slug, journeys: t.ui.journeys || [] }, 0);
+    console.log(ui.color.bold(`\n  /orc-test · ${slug} · journeys`));
+    if (!(t.ui.journeys || []).length) console.log(ui.color.gray("  none authored yet."));
+    for (const jn of t.ui.journeys || []) console.log(`    ${jn.name.padEnd(24)} ${ui.color.gray(jn.file)}${jn.identity ? ui.color.gray("  as " + jn.identity) : ""}`);
+    console.log("");
+    return;
+  }
+  if (sub === "remove") {
+    const name = String(tOpt("--name") || "").trim();
+    if (!name || name === "true") testUiFail(asJson, "no-name", `orc test ui journey ${slug} remove --name <name>`);
+    const before = (t.ui.journeys || []).length;
+    t.ui.journeys = (t.ui.journeys || []).filter((x) => x.name !== name);
+    t.cases = (t.cases || []).filter((c) => !(c.kind === "ui" && c.journey === name));
+    if (t.ui.journeys.length === before) testUiFail(asJson, "no-such-journey", `no journey named \`${name}\`.`);
+    testWrite(claudeDir, slug, t, { phase: "T6" });
+    testWriteCasesDoc(claudeDir, slug, t);
+    if (asJson) emitJson({ ok: true, slug, removed: name }, 0);
+    console.log(`\n  removed journey ${name}. Its recorded artifacts stay — they belong to the run that produced them.\n`);
+    return;
+  }
+  if (sub !== "add") testUiFail(asJson, "bad-verb", `orc test ui journey ${slug} <add|list|remove>`);
+
+  const name = String(tOpt("--name") || "").trim();
+  if (!name || name === "true") testUiFail(asJson, "no-name", `orc test ui journey ${slug} add --name <name> --from <file.js>`);
+  const from = tOpt("--from");
+  if (!from || from === true)
+    testUiFail(asJson, "no-from", "--from <file.js> — the Playwright spec the designer authored. The CLI runs it; the model wrote it, and it stays on disk so re-running is free and identical.");
+  let body;
+  try {
+    body = fs.readFileSync(String(from), "utf8");
+  } catch (e) {
+    testUiFail(asJson, "unreadable", `could not read ${from}: ${e.message}`, 1);
+  }
+  if (!/\btest\s*\(/.test(body))
+    testUiFail(asJson, "not-a-spec", `${from} does not contain a \`test(\` call, so Playwright would run it and report NOTHING — which is indistinguishable from a journey that passed.`, 1);
+
+  fs.mkdirSync(p.journeys, { recursive: true });
+  const file = path.join(p.journeys, `${name.replace(/[^A-Za-z0-9_-]+/g, "-")}.spec.js`);
+  fs.writeFileSync(file, body);
+  const identity = tOpt("--identity") && tOpt("--identity") !== true ? String(tOpt("--identity")) : null;
+  if (identity && !(t.identities || []).some((x) => x.name === identity)) testUiFail(asJson, "no-such-identity", `no identity named \`${identity}\` in ${slug}.`);
+
+  t.ui.journeys = (t.ui.journeys || []).filter((x) => x.name !== name);
+  t.ui.journeys.push({ name, file: rel(file), identity, at: new Date().toISOString() });
+
+  // A journey becomes a CASE ROW like everything else — one ledger, one verdict
+  // vocabulary, one report. It carries `kind: "ui"`, which is what keeps the BE
+  // runner from trying to send it as an HTTP request.
+  const n = (t.cases || []).length + 1;
+  t.cases = (t.cases || []).filter((c) => !(c.kind === "ui" && c.journey === name));
+  t.cases.push({
+    id: "C-" + String(n).padStart(3, "0"),
+    kind: "ui",
+    journey: name,
+    target: "ui:" + name,
+    tier: "happy",
+    why: `front-end journey \`${name}\`${identity ? ` as \`${identity}\`` : ""} — a SCRIPT, so re-running it is free and identical`,
+    source: "designed",
+    identity,
+    request: null,
+    expect: null,
+    mutates: true,
+    owasp: null,
+  });
+  t.events.push({ at: new Date().toISOString(), what: "ui-journey", detail: `${name} added` });
+  testWrite(claudeDir, slug, t, { phase: "T6" });
+  testWriteCasesDoc(claudeDir, slug, t);
+
+  if (asJson) emitJson({ ok: true, slug, journey: { name, file: rel(file), identity }, next: `orc test ui run ${slug}` }, 0);
+  console.log(`\n  journey ${ui.color.bold(name)} → ${rel(file)}`);
+  if (identity) console.log(ui.color.gray(`  starts from the storage state for \`${identity}\`.`));
+  console.log(`\n  Next:  orc test ui run ${slug}\n`);
+}
+
+//   0  nothing red
+//   1  a journey FAILED
+//   2  refused before anything was driven
+function testUiRun(claudeDir, slug, t, p, tools, asJson) {
+  const journeys = (t.ui && t.ui.journeys) || [];
+  if (!journeys.length) testUiFail(asJson, "no-journeys", `${slug} has no journey yet. \`orc test ui journey ${slug} add --name <n> --from <file.js>\``, 1);
+  const only = tOpt("--journey");
+  const wanted = only && only !== true ? journeys.filter((j) => j.name === String(only)) : journeys;
+  if (!wanted.length) testUiFail(asJson, "no-such-journey", `no journey named \`${only}\`.`);
+
+  // HAR REPLAY IS FOR ISOLATING A FLAKE, NEVER FOR A REPORTED RESULT. A
+  // replayed run produces NO passes at all: every result is `unknown`, tagged
+  // `replayed`, and excluded from the verdict summary — because a pass against
+  // a recorded HAR is a pass against a JSON file, not against the system.
+  const replayRaw = tOpt("--replay-har");
+  const replay = replayRaw && replayRaw !== true ? String(replayRaw) : null;
+  if (replay && !fs.existsSync(replay)) testUiFail(asJson, "no-har", `no HAR at ${replay}.`);
+
+  fs.mkdirSync(p.runs, { recursive: true });
+  let nn = 1;
+  try {
+    const used = fs.readdirSync(p.runs).filter((d) => /^\d+$/.test(d)).map(Number);
+    if (used.length) nn = Math.max(...used) + 1;
+  } catch (_) {}
+  const runNo = String(nn).padStart(2, "0");
+  const runDir = path.join(p.runs, runNo);
+  const uiDir = path.join(runDir, "ui");
+  fs.mkdirSync(uiDir, { recursive: true });
+  const rel = (x) => path.relative(p.root, x).split(path.sep).join("/");
+
+  const rows = [];
+  for (const j of wanted) {
+    const out = path.join(uiDir, j.name);
+    fs.mkdirSync(out, { recursive: true });
+    const har = path.join(out, "network.har");
+    const state = j.identity && t.ui.states && t.ui.states[j.identity] ? path.join(p.root, t.ui.states[j.identity].path) : null;
+    // A journey that needs an identity nobody logged in for is NOT RUN. It is
+    // `unknown` with the reason, never a fail — the run never happened.
+    if (j.identity && !state) {
+      rows.push({
+        journey: j.name,
+        identity: j.identity,
+        verdict: "unknown",
+        why: `no storage state for \`${j.identity}\` — \`orc test ui login ${slug} ${j.identity}\` has not passed its declared assertion. NOT RUN.`,
+        evidence: null,
+        replayed: !!replay,
+      });
+      continue;
+    }
+    // THE CONFIG LIVES OUTSIDE `outputDir`. Playwright CLEANS outputDir before
+    // it runs, so a config written into it is deleted before it is read — and
+    // the failure reads as "cannot find module", which looks like a broken
+    // journey rather than a broken harness.
+    fs.mkdirSync(p.uiwork, { recursive: true });
+    const cfg = path.join(p.uiwork, `${j.name.replace(/[^A-Za-z0-9_-]+/g, "-")}.config.cjs`);
+    fs.writeFileSync(cfg, testUiConfig(p.run, path.join(p.root, j.file), out, replay ? null : har, t.target.base_url, state));
+    const env = { ORC_TEST_RUN: `${slug}-${runNo}` };
+    if (replay) env.ORC_TEST_REPLAY_HAR = path.resolve(replay);
+    const r = testUiSpawn(tools.bin, cfg, p.root, env);
+    const res = testUiResults(testUiReadReport(out));
+    if (!res.length) {
+      rows.push({
+        journey: j.name,
+        identity: j.identity || null,
+        verdict: "unknown",
+        why: `playwright produced no report (exit ${r.code === null ? "killed" : r.code}${r.timed_out ? ", timed out" : ""}). Not observed — and NOT a pass.`,
+        stderr: String(r.stderr || "").split("\n").slice(0, 8).join("\n"),
+        evidence: rel(out),
+        replayed: !!replay,
+      });
+      continue;
+    }
+    for (const x of res) {
+      const mismatch = testUiBuildMismatch(t.target.env, x);
+      rows.push({
+        journey: j.name,
+        title: x.title,
+        identity: j.identity || null,
+        // Under replay NOTHING becomes a pass. The status Playwright reported
+        // is kept beside it for the person reading the trace — that is what a
+        // flake-isolation run is FOR.
+        verdict: replay ? "unknown" : x.verdict,
+        observed_status: x.status,
+        why: replay
+          ? `replayed against a recorded HAR, so this is NOT a result: playwright reported \`${x.status}\`, but a pass here is a pass against a JSON file rather than against the system. Excluded from the summary.`
+          : x.why || (x.verdict === "pass" ? "passed" : x.error ? x.error.split("\n")[0] : null),
+        ms: x.ms,
+        error: x.error,
+        flaky: x.flaky,
+        build_mismatch: mismatch,
+        evidence: rel(out),
+        replayed: !!replay,
+      });
+    }
+  }
+
+  const counted = rows.filter((r) => !r.replayed);
+  const counts = { pass: 0, fail: 0, unknown: 0 };
+  for (const r of counted) counts[r.verdict]++;
+  const result = {
+    run: runNo,
+    at: new Date().toISOString(),
+    kind: "ui",
+    replayed: !!replay,
+    replay_har: replay ? path.resolve(replay) : null,
+    selector_policy: (t.ui && t.ui.selector_policy) || null,
+    counts,
+    excluded_from_counts: rows.length - counted.length,
+    rows,
+  };
+  fs.writeFileSync(path.join(uiDir, "result.json"), JSON.stringify(result, null, 2) + "\n");
+
+  // Fold the verdicts back into the ledger's ui case rows, and record a flake
+  // rather than retrying it away.
+  const flakes = [];
+  for (const j of wanted) {
+    const mine = rows.filter((r) => r.journey === j.name);
+    if (!mine.length) continue;
+    const c = (t.cases || []).find((x) => x.kind === "ui" && x.journey === j.name);
+    if (!c) continue;
+    const v = mine.some((r) => r.verdict === "fail") ? "fail" : mine.every((r) => r.verdict === "pass") ? "pass" : "unknown";
+    if (c.verdict && c.verdict !== v && !replay) flakes.push({ id: c.id, was: c.verdict, now: v });
+    if (mine.some((r) => r.flaky)) flakes.push({ id: c.id, was: "pass", now: "flaky within one invocation" });
+    if (!replay) {
+      c.verdict = v;
+      c.verdict_why = mine.map((r) => r.why).filter(Boolean)[0] || null;
+      c.evidence = mine[0].evidence;
+    }
+  }
+  if (flakes.length) t.flakes = [].concat(t.flakes || [], flakes.map((f) => Object.assign({ run: runNo }, f)));
+  t.runs.push({ n: runNo, at: result.at, kind: "ui", counts, replayed: !!replay, dir: rel(uiDir) });
+  t.events.push({ at: result.at, what: "ui-run", detail: `run ${runNo}: ${counts.pass} pass, ${counts.fail} fail, ${counts.unknown} unknown${replay ? " (REPLAYED — excluded)" : ""}` });
+  testWrite(claudeDir, slug, t, { phase: "T7", red: counts.fail || undefined });
+
+  const code = counts.fail ? 1 : 0;
+  if (asJson) emitJson({ ok: true, slug, run: runNo, ui: result, flakes, dir: rel(uiDir) }, code);
+
+  console.log(ui.color.bold(`\n  /orc-test · ${slug} · front-end run ${runNo}`));
+  console.log(ui.color.gray(`  playwright ${tools.version || ""} · selectors ${result.selector_policy} · written to ${rel(uiDir)}\n`));
+  if (replay) {
+    console.log("  " + ui.color.yellow("REPLAYED against a recorded HAR — this run produced NO results."));
+    console.log(ui.color.gray("  A pass against a recorded HAR is a pass against a JSON file, not against the"));
+    console.log(ui.color.gray("  system. Every row below is `unknown` and excluded from the summary; the status"));
+    console.log(ui.color.gray("  playwright reported is kept beside it, which is what a flake-isolation run is for."));
+    console.log("");
+  }
+  console.log(`    pass      ${counts.pass ? ui.color.green(String(counts.pass)) : "0"}`);
+  console.log(`    fail      ${counts.fail ? ui.color.red(String(counts.fail)) : "0"}`);
+  console.log(`    unknown   ${counts.unknown}   ${ui.color.gray("not observed — never a pass, and it keeps its slot")}`);
+  if (result.excluded_from_counts) console.log(`    excluded  ${result.excluded_from_counts}   ${ui.color.gray("replayed, so not a result")}`);
+  console.log("");
+  for (const r of rows.filter((x) => x.verdict === "fail" || x.build_mismatch).slice(0, 20)) {
+    console.log(`    ${ui.color.red(r.journey)}${r.title ? ui.color.gray(" › " + r.title) : ""}`);
+    if (r.why) console.log(`        ${r.why}`);
+    if (r.build_mismatch) console.log(`        ${ui.color.yellow("BUILD MISMATCH SUSPECTED")} ${ui.color.gray(r.build_mismatch)}`);
+    if (r.evidence) console.log(ui.color.gray(`        ${r.evidence}/   trace.zip · video · screenshots${replay ? "" : " · network.har"}`));
+  }
+  if (flakes.length) {
+    console.log("");
+    console.log("  " + ui.color.yellow(`${flakes.length} journey result(s) unstable:`));
+    for (const f of flakes.slice(0, 10)) console.log(`    ${f.id}  ${f.was} → ${f.now}`);
+    console.log(ui.color.gray("  Recorded, never retried away. There are no retries in the generated config."));
+  }
+  console.log("");
+  console.log(ui.color.gray("  A trace answers \"did login succeed, and where exactly did it stop\" without a model"));
+  console.log(ui.color.gray("  looking at anything.  npx playwright show-trace <the trace.zip above>"));
+  console.log(ui.color.yellow("  This folder is NEVER staged — a video and a HAR hold whatever was on the screen."));
+  console.log("");
+  process.exit(code);
+}
+
+// ── T8/T9 — RECORD and REPORT ───────────────────────────────────────────────
+//
+// The interpreter is a dispatched agent with a SEALED slice: it reads evidence
+// files and nothing else. This is the half that takes what it returns and puts
+// it in the ledger — and it is the half that refuses.
+//
+//   · EVERY FINDING CITES AN EVIDENCE PATH OR IT IS DROPPED. The `serves` rule
+//     from `/orc-challenge`, same mechanism: a claim about a system nobody can
+//     open the proof of is a claim this lane does not carry. The drop is BY
+//     NAME and it is counted — a silently dropped finding and a finding nobody
+//     wrote look identical, and one of them means the interpreter is not being
+//     heard.
+//   · THE CITED PATH MUST RESOLVE ON DISK. A path that names a file that is not
+//     there is not a citation, it is a sentence shaped like one.
+//   · SEVERITY IS THE CLI'S, NOT THE MODEL'S. A model-declared severity is
+//     recorded as `claimed_severity` and never used. The one ORC reports is
+//     derived from the OWASP category plus what the run actually OBSERVED,
+//     with the reasoning printed.
+//   · A FINDING WHOSE CASE CAME BACK `unknown` IS NOT OBSERVED. It keeps its
+//     slot, it gets no CVSS vector, and it says so in the report.
+//
+// `a lane that reports a result it did not observe` has broken this contract.
+const TEST_CONFIDENCE = ["observed", "inferred", "suspected"];
+
+function testRecordCmd(claudeDir) {
+  const asJson = wantsJson();
+  const pos = tPositionals();
+  const slug = pos[2] ? testSlugOf(pos[2]) : null;
+  const fail = (r, h, c) => testFail(asJson, r, h, c === undefined ? 2 : c);
+  if (!slug) fail("no-slug", "orc test record <slug> --from <file.json> [--clear] [--json]");
+  const t = readTestRun(claudeDir, slug);
+  if (!t) fail("no-run", `no test run named ${slug}.`);
+  const p = testPaths(claudeDir, slug);
+
+  if (flag("--clear") === true) {
+    t.findings = [];
+    t.events.push({ at: new Date().toISOString(), what: "record-clear", detail: "findings cleared" });
+    testWrite(claudeDir, slug, t, { phase: "T8" });
+    testWriteFindingsDoc(claudeDir, slug, t);
+    if (asJson) emitJson({ ok: true, slug, findings: 0 }, 0);
+    console.log("\n  findings cleared. The evidence they cited is untouched — it belongs to the run, not to the interpretation.\n");
+    return;
+  }
+
+  const from = tOpt("--from");
+  if (!from || from === true)
+    fail("no-from", "orc test record <slug> --from <file.json> — the findings, as the interpreter returned them. The CLI records; the model interprets.");
+  let rows;
+  try {
+    rows = JSON.parse(fs.readFileSync(String(from), "utf8"));
+  } catch (e) {
+    fail("unreadable", `could not read ${from}: ${e.message}`, 1);
+  }
+  if (rows && !Array.isArray(rows) && Array.isArray(rows.findings)) rows = rows.findings;
+  if (!Array.isArray(rows)) rows = [rows];
+
+  const byCase = new Map();
+  for (const c of t.cases || []) byCase.set(String(c.id).toUpperCase(), c);
+  const dropped = [];
+  const kept = [];
+  let n = (t.findings || []).length;
+
+  for (const raw of rows) {
+    const why = [];
+    if (!raw || typeof raw !== "object") {
+      dropped.push({ id: "(unnamed)", why: ["not an object"] });
+      continue;
+    }
+    const title = raw.title ? String(raw.title).trim() : "";
+    if (!title) why.push("no `title` — a finding nobody can name is a finding nobody will act on");
+    const what = raw.what || raw.observed ? String(raw.what || raw.observed).trim() : "";
+    if (!what) why.push("no `what` — the observation itself is the finding; a conclusion without one is an opinion");
+
+    // THE CITATION. Missing → DROPPED. Present but unopenable → DROPPED, and
+    // for the same reason: this lane will not carry a claim whose proof
+    // nobody can reach.
+    const cite = raw.evidence ? String(raw.evidence).trim() : "";
+    if (!cite) why.push("no `evidence` path. Every finding must cite one — a claim about a live system whose proof nobody can open is not a finding this lane carries");
+    else {
+      const abs = path.isAbsolute(cite) ? cite : path.join(p.root, cite);
+      if (!fs.existsSync(abs)) why.push(`the cited evidence \`${cite}\` does not exist on disk. A path that names nothing is not a citation, it is a sentence shaped like one`);
+    }
+
+    const caseId = raw.case ? String(raw.case).toUpperCase() : null;
+    const c = caseId ? byCase.get(caseId) : null;
+    if (caseId && !c) why.push(`case \`${caseId}\` is not in this run's ledger`);
+
+    const owasp = raw.owasp ? String(raw.owasp).toUpperCase().replace(/[AB]$/, "") : c && c.owasp ? String(c.owasp).replace(/[ab]$/, "") : null;
+    if (owasp && !TEST_OWASP_IDS.includes(owasp))
+      why.push(`\`${raw.owasp}\` is not in the closed OWASP API Top 10 (2023) set. The set is CLOSED and is never extended ad hoc: ${TEST_OWASP_IDS.join(", ")}`);
+
+    if (why.length) {
+      dropped.push({ id: raw.id || title || "(unnamed)", why });
+      continue;
+    }
+
+    // OBSERVED means the case this finding cites came back with a verdict ORC
+    // watched happen. `unknown` is not observed, and `pass` is not a finding.
+    const observed = !!(c && c.verdict === "fail");
+    const sev = testSeverityOf(owasp || "API8", observed, {
+      crossed_identity: !!(c && c.identity),
+      mutating: !!(c && c.mutates),
+      unauthenticated: (t.identities || []).length > 0 && !!c && !c.identity,
+    });
+
+    kept.push({
+      id: "F-" + String(++n).padStart(3, "0"),
+      title,
+      what,
+      evidence: cite,
+      case: c ? c.id : null,
+      target: (c && c.target) || (raw.target ? String(raw.target) : null),
+      owasp: owasp || null,
+      observed,
+      // The model's own severity is KEPT and never used. Recording it is what
+      // makes a later disagreement visible instead of invisible.
+      claimed_severity: raw.severity ? String(raw.severity) : null,
+      severity: sev.severity,
+      severity_why: sev.why,
+      cvss: observed ? sev.cvss : null,
+      cvss_note: observed ? sev.cvss_note : "No CVSS vector: this finding was not OBSERVED, and a candidate pending verification does not get a score.",
+      confidence: TEST_CONFIDENCE.includes(String(raw.confidence)) ? String(raw.confidence) : observed ? "observed" : "suspected",
+      impact: raw.impact ? String(raw.impact) : null,
+      fix: raw.fix ? String(raw.fix) : null,
+      at: new Date().toISOString(),
+    });
+  }
+
+  t.findings = [].concat(t.findings || [], kept);
+  t.events.push({ at: new Date().toISOString(), what: "record", detail: `${kept.length} recorded, ${dropped.length} dropped` });
+  testWrite(claudeDir, slug, t, { phase: "T8" });
+  testWriteFindingsDoc(claudeDir, slug, t);
+
+  const code = dropped.length ? 1 : 0;
+  if (asJson) emitJson({ ok: true, slug, recorded: kept.map((f) => f.id), findings: kept, dropped, total: t.findings.length, doc: path.relative(p.root, p.findings).split(path.sep).join("/") }, code);
+
+  console.log(ui.color.bold(`\n  /orc-test · ${slug} · findings`));
+  console.log(`  ${kept.length} recorded, ${t.findings.length} in the ledger. Written to ${path.relative(p.root, p.findings).split(path.sep).join("/")}\n`);
+  for (const f of kept.slice(0, 20)) {
+    const mark = f.observed ? ui.color.red(f.severity.toUpperCase()) : ui.color.yellow("not observed");
+    console.log(`    ${f.id}  ${mark}  ${f.title}`);
+    console.log(ui.color.gray(`          ${f.evidence}`));
+    if (f.claimed_severity && String(f.claimed_severity).toLowerCase() !== f.severity)
+      console.log(ui.color.gray(`          the interpreter said "${f.claimed_severity}"; ORC derives ${f.severity}. ${f.severity_why}`));
+  }
+  if (dropped.length) {
+    console.log("");
+    console.log("  " + ui.color.yellow(`${dropped.length} DROPPED, by name:`));
+    for (const d of dropped) console.log(`    ${d.id}  ${ui.color.gray(d.why.join("; "))}`);
+    console.log(ui.color.gray("  A finding with no reachable proof is not carried. Re-run the interpreter with the evidence paths in its slice."));
+  }
+  console.log("");
+  process.exit(code);
+}
+
+// findings.md — DERIVED from the ledger on every record, like `cases.json` and
+// `surface.md`. Nothing reads it back.
+function testWriteFindingsDoc(claudeDir, slug, t) {
+  const p = testPaths(claudeDir, slug);
+  const f = t.findings || [];
+  let out =
+    `# Findings — \`${slug}\`\n\n` +
+    `> DERIVED from the run ledger. Every finding below cites an evidence path that\n` +
+    `> EXISTED on disk when it was recorded; one that did not was DROPPED by name.\n` +
+    `> Severity is ORC's, derived from the OWASP category and what the run OBSERVED —\n` +
+    `> never the interpreter's own word for it.\n\n`;
+  if (!f.length) out += "_nothing recorded yet._\n";
+  for (const x of f) {
+    out +=
+      `## ${x.id} — ${x.title}\n\n` +
+      `| | |\n|---|---|\n` +
+      `| severity | **${x.severity}** ${x.observed ? "" : "(the CATEGORY's, not this finding's — see below)"} |\n` +
+      `| observed | ${x.observed ? "yes — ORC watched this happen" : "**NO**. Not observed; it keeps its slot and it is not a pass."} |\n` +
+      `| confidence | ${x.confidence} |\n` +
+      `| OWASP | ${x.owasp || "—"} |\n` +
+      `| case | ${x.case || "—"} |\n` +
+      `| target | ${x.target || "—"} |\n` +
+      `| evidence | \`${x.evidence}\` |\n` +
+      `| CVSS | ${x.cvss ? "`" + x.cvss + "`" : "_none_"} |\n\n` +
+      `**What was observed.** ${x.what}\n\n` +
+      `**Why that severity.** ${x.severity_why}${x.cvss_note ? " " + x.cvss_note : ""}\n\n` +
+      (x.claimed_severity && String(x.claimed_severity).toLowerCase() !== x.severity
+        ? `**The interpreter said \`${x.claimed_severity}\`.** ORC does not take a severity from a model; it is recorded here so the disagreement is visible rather than invisible.\n\n`
+        : "") +
+      (x.impact ? `**Impact.** ${x.impact}\n\n` : "") +
+      (x.fix ? `**Suggested fix.** ${x.fix}\n\n` : "");
+  }
+  try {
+    fs.writeFileSync(p.findings, out);
+  } catch (_) {}
+}
+
+// `orc test report <slug>` — RENDERS FROM THE LEDGER AND DERIVES NOTHING. Every
+// number here was computed by the command that produced it: the runner wrote
+// the verdicts, `orc test record` wrote the findings, and the closed set comes
+// out of the ONE `testSecurityRows`. This function decides nothing.
+//
+// REPORT.md is the ONE file here written to be SHARED, and it is written for
+// someone who does not read code.
+//
+//   0  nothing red
+//   1  a case FAILED, or an OBSERVED finding was recorded
+//   2  no such run
+function testReportCmd(claudeDir) {
+  const asJson = wantsJson();
+  const slug = testSlugOf(tPositionals()[2]);
+  if (!slug) testFail(asJson, "no-slug", "orc test report <slug> [--json]", 2);
+  const t = readTestRun(claudeDir, slug);
+  if (!t) testFail(asJson, "no-run", `no test run named ${slug}.`, 2);
+  const p = testPaths(claudeDir, slug);
+
+  const counts = { pass: 0, fail: 0, unknown: 0, unrun: 0 };
+  for (const c of t.cases || []) {
+    if (c.verdict && counts[c.verdict] !== undefined) counts[c.verdict]++;
+    else counts.unrun++;
+  }
+  const sec = testSecurityRows(claudeDir, t);
+  const findings = t.findings || [];
+  const observed = findings.filter((f) => f.observed);
+  const flakes = t.flakes || [];
+  const lastRun = (t.runs || []).length ? t.runs[t.runs.length - 1] : null;
+  const code = counts.fail || observed.length ? 1 : 0;
+
+  const body = testReportDoc(slug, t, { counts, sec, findings, observed, flakes, lastRun });
+  try {
+    fs.writeFileSync(p.report, body);
+  } catch (e) {
+    testFail(asJson, "unwritable", `could not write REPORT.md: ${e.message}`, 2);
+  }
+  const rel = path.relative(p.root, p.report).split(path.sep).join("/");
+  testWrite(claudeDir, slug, t, { phase: "T9", red: counts.fail || undefined });
+
+  if (asJson)
+    emitJson(
+      {
+        ok: true,
+        slug,
+        state: testStateOf(t),
+        report: rel,
+        counts,
+        runs: (t.runs || []).length,
+        security: { tier: sec.res.tier, found: sec.found, rows: sec.rows.map((r) => ({ owasp: r.owasp, state: r.state, severity: r.severity.severity, found: r.found })) },
+        findings,
+        flakes,
+        derived_nothing: "Every number here was computed by the command that produced it. This one renders.",
+      },
+      code
+    );
+
+  console.log(ui.color.bold(`\n  /orc-test · ${slug} · report`));
+  console.log(ui.color.gray(`  rendered from the ledger — nothing here was derived by this command. Written to ${rel}\n`));
+  console.log(`    cases     ${(t.cases || []).length}   ${ui.color.gray(`${counts.pass} pass · ${counts.fail} fail · ${counts.unknown} not observed · ${counts.unrun} never run`)}`);
+  console.log(`    runs      ${(t.runs || []).length}${lastRun ? ui.color.gray("   last: " + lastRun.at) : ""}`);
+  console.log(`    findings  ${findings.length}   ${ui.color.gray(`${observed.length} observed · ${findings.length - observed.length} not observed, and none of those is a pass`)}`);
+  console.log(`    security  ${sec.res.tier}   ${sec.found ? ui.color.red(sec.found + " FOUND") : ui.color.gray("nothing found")}`);
+  if (flakes.length) console.log(`    flakes    ${ui.color.yellow(String(flakes.length))}   ${ui.color.gray("recorded, never retried away — the instability IS the finding")}`);
+  console.log("");
+  console.log("  " + ui.color.yellow("This folder is NEVER staged.") + " It holds real response bodies from a real system —");
+  console.log("  the most sensitive thing ORC writes to disk. Add this line to `.gitignore` yourself;");
+  console.log("  ORC does not edit that file:");
+  console.log(`      ${TEST_DIR_DEFAULT}/`);
+  console.log("");
+  console.log("  Then STOP. Nothing proceeds on its own from here. What is on offer:");
+  console.log("    · re-run a tier            orc test run " + slug + " --tier <t>");
+  console.log("    · widen the surface        orc test select " + slug + ' --target "…"');
+  console.log("    · record the invariant     /orc-pact");
+  console.log("    · challenge the report     /orc-challenge");
+  console.log("");
+  process.exit(code);
+}
+
+// REPORT.md — THE SHAREABLE ARTIFACT, written for someone who does not read
+// code. It leads with what was measured and what was NOT, because the second
+// half is the half a reader will otherwise assume.
+function testReportDoc(slug, t, d) {
+  const g = t.target || {};
+  const esc = (x) => String(x === undefined || x === null ? "—" : x);
+  let out =
+    `# Test report — \`${slug}\`\n\n` +
+    `> Rendered by \`orc test report\` at ${new Date().toISOString()} from this run's ledger.\n` +
+    `> Nothing in this file was derived here: every number was computed by the command\n` +
+    `> that produced it.\n\n` +
+    `## What was tested, and with whose permission\n\n` +
+    `| | |\n|---|---|\n` +
+    `| kind | ${esc(g.kind)} |\n` +
+    `| environment | ${esc(g.env)} |\n` +
+    `| base URL | \`${esc(g.base_url)}\` |\n` +
+    `| origin fence | \`${esc(g.origin)}\` — every request that resolved outside this was NOT SENT |\n` +
+    `| authorization | ${g.authorized ? "asserted by the person who started this run: _" + g.authorized + "_" : "not asserted (a local target)"} |\n` +
+    `| changes allowed | **${esc(g.destructive && g.destructive.mode)}**${g.destructive && g.destructive.reason ? " — _" + g.destructive.reason + "_" : ""} |\n` +
+    `| identities | ${(t.identities || []).length ? t.identities.map((i) => `\`${i.name}\` (${i.role})`).join(", ") : "none"} |\n\n` +
+    `ORC cannot verify authorization and does not pretend to. It records that somebody asserted it.\n\n` +
+    `## The result\n\n` +
+    `| | count | what it means |\n|---|---|---|\n` +
+    `| passed | ${d.counts.pass} | observed, and it matched what the case expected |\n` +
+    `| failed | ${d.counts.fail} | observed, and it did not |\n` +
+    `| **not observed** | ${d.counts.unknown} | ORC could not watch this happen. **It is not a pass.** |\n` +
+    `| never run | ${d.counts.unrun} | the ladder did not reach it |\n\n`;
+
+  const stopped = (t.runs || []).filter((r) => r.stopped).slice(-1)[0];
+  if (stopped)
+    out +=
+      `**The run STOPPED at the \`${stopped.stopped}\` tier.** A red happy path makes every later tier\n` +
+      `meaningless — one defect will "prove" a dozen findings that are all the same bug. Fix it and\n` +
+      `re-run; re-running costs nothing.\n\n`;
+
+  if (d.flakes.length) {
+    out += `### Cases that answered differently than the run before\n\n| case | was | now |\n|---|---|---|\n`;
+    for (const f of d.flakes) out += `| ${f.id} | ${f.was} | ${f.now} |\n`;
+    out += `\nRecorded, never retried away. There is no retry count in this lane and there will not be one: **the instability IS the finding.**\n\n`;
+  }
+
+  out += `## Security — OWASP API Security Top 10 (2023)\n\n`;
+  out += `The set is **CLOSED** and is never extended ad hoc. Every probe DETECTS a condition and stops there; none of them exploits one. Confirming an exploit is a person's decision on a person's authority.\n\n`;
+  out += `Tier: **${esc(d.sec.res.tier)}** (${esc(d.sec.res.requested && d.sec.res.requested.source)})\n\n`;
+  for (const note of d.sec.res.notes || []) out += `> ${note}\n\n`;
+  out += `| | category | state | severity |\n|---|---|---|---|\n`;
+  for (const r of d.sec.rows)
+    out += `| ${r.owasp} | ${r.name} | ${r.state === "FOUND" ? "**FOUND**" : r.state} | ${r.state === "FOUND" ? "**" + r.severity.severity + "**" : "—"} |\n`;
+  out += `\n**A category ORC could not measure reads \`unchecked\`. It keeps its slot, it never becomes a pass, and it never raises the exit code** — reporting an unmeasured category as clean is the single most damaging thing a security report can do. Here is why each one was unchecked:\n\n`;
+  let anyUnchecked = false;
+  for (const r of d.sec.rows)
+    for (const u of r.unchecked || []) {
+      anyUnchecked = true;
+      out += `- **${u.scope}** — ${u.why}\n`;
+    }
+  if (!anyUnchecked) out += `_every category in the set had something to check._\n`;
+  out += `\n`;
+  // A category that HAD probes and could not watch any of them is a different
+  // fact from one that had none, and it needs its own reason printed. Leaving
+  // it at a bare state word is how `not observed` gets read as `fine`.
+  const notObs = d.sec.rows.filter((r) => r.state === "not-observed" || r.state === "partly-observed");
+  if (notObs.length) {
+    out += `And why the probes that DID run were not observed:\n\n`;
+    for (const r of notObs) {
+      const first = r.cases.find((c) => c.verdict === "unknown" && c.verdict_why);
+      out += `- **${r.owasp}** — ${first ? first.verdict_why : "no reason was recorded, which is itself worth chasing."}\n`;
+    }
+    out += `\n`;
+  }
+  for (const s of d.sec.statics || []) {
+    out += `### ${s.owasp} — ${s.what}\n\n`;
+    for (const row of s.rows) out += `- \`${row.at || "—"}\` — ${row.what} _(${row.target})_\n`;
+    out += `\n`;
+  }
+
+  const uiCases = (t.cases || []).filter((c) => c.kind === "ui");
+  if (uiCases.length || (t.ui && (t.ui.journeys || []).length)) {
+    out += `## The front end\n\n`;
+    out += `Every journey below is a **Playwright script on disk**, not a sequence an agent improvised. Re-running one is free and identical — a step an LLM took is not a step you can re-run.\n\n`;
+    out += `Selector policy: **${esc(t.ui && t.ui.selector_policy)}** — ${esc(t.ui && t.ui.selector_why)}\n\n`;
+    out += `| journey | as | verdict | why |\n|---|---|---|---|\n`;
+    for (const c of uiCases)
+      out += `| ${esc(c.journey)} | ${c.identity ? "`" + c.identity + "`" : "—"} | ${c.verdict ? (c.verdict === "fail" ? "**fail**" : c.verdict) : "not run"} | ${esc(c.verdict_why)} |\n`;
+    out += `\n`;
+    const states = (t.ui && t.ui.states) || {};
+    const named = Object.keys(states);
+    if (named.length) {
+      out += `Logged-in states, each written **only after its declared assertion passed**:\n\n`;
+      for (const k of named) out += `- \`${k}\` — ${states[k] ? "saved (" + states[k].assertion + ")" : "**not saved.** Every journey needing it is unrunnable rather than silently logged out."}\n`;
+      out += `\n`;
+    }
+    out += `Artifacts per journey: \`trace.zip\`, video, a screenshot at every assertion, and the HAR. Open a trace with \`npx playwright show-trace\` — it answers "where exactly did it stop" without a model looking at anything.\n\n`;
+    if ((t.runs || []).some((r) => r.replayed))
+      out += `> One or more runs here were **replayed against a recorded HAR**. Those produced no results at all: a pass against a recorded HAR is a pass against a JSON file, not against the system. They are excluded from every count above.\n\n`;
+  }
+
+  out += `## Findings\n\n`;
+  if (!d.findings.length) out += `_none recorded._ A run with failed cases and no findings means the interpreter has not been dispatched yet — it is not a clean result.\n\n`;
+  for (const f of d.findings) {
+    out +=
+      `### ${f.id} — ${f.title}\n\n` +
+      `**${f.observed ? f.severity.toUpperCase() : "NOT OBSERVED"}**${f.owasp ? " · " + f.owasp : ""}${f.case ? " · case " + f.case : ""}\n\n` +
+      `${f.what}\n\n` +
+      `- evidence: \`${f.evidence}\`\n` +
+      `- why that severity: ${f.severity_why}\n` +
+      (f.cvss ? `- CVSS vector: \`${f.cvss}\`\n` : `- no CVSS vector — ${f.cvss_note}\n`) +
+      (f.impact ? `- impact: ${f.impact}\n` : "") +
+      (f.fix ? `- suggested fix: ${f.fix}\n` : "") +
+      `\n`;
+  }
+
+  out +=
+    `## What this report is not\n\n` +
+    `- It is **not** a claim that anything here was exploited. Every probe demonstrates a\n` +
+    `  CONDITION and stops.\n` +
+    `- It is **not** a clean bill of health for anything marked \`unchecked\` or \`not observed\`.\n` +
+    `  Those are states, not results.\n` +
+    `- ORC does **not** fix the system it is testing, and it did not change any code here.\n\n` +
+    `## Where the proof is\n\n` +
+    `Every case has a folder under \`runs/<NN>/evidence/<case-id>/\` holding the exact request,\n` +
+    `the exact response, and a \`repro.sh\` you can run yourself. Credentials and every\n` +
+    `auth-bearing header were replaced **before the bytes reached disk** — put your own\n` +
+    `credential back before running a repro.\n\n` +
+    `**Never commit this folder.** It holds real response bodies from a real system.\n`;
+  return out;
+}
+
+// The hand-back on demand. It is already written on every state change; this is
+// for a session that wants to point at it without changing anything.
+function testResumeFile(claudeDir) {
+  const asJson = wantsJson();
+  const slug = testSlugOf(tPositionals()[2]);
+  if (!slug) testFail(asJson, "no-slug", "orc test resume-file <slug>");
+  const t = readTestRun(claudeDir, slug);
+  if (!t) testFail(asJson, "no-run", `no test run named ${slug}.`, 2);
+  const written = testWriteResume(claudeDir, slug, t);
+  if (asJson) emitJson({ ok: !!written, slug, path: written }, written ? 0 : 1);
+  if (!written) {
+    console.error("could not write the hand-back (a closed run is never re-opened).");
+    process.exit(1);
+  }
+  console.log(written);
+}
+
+function testHelp() {
+  console.log(`
+  orc test — the lane that RUNS the test
+
+    The CLI EXECUTES and MEASURES. The model DESIGNS and INTERPRETS.
+    A model never sends a request; the CLI never decides what a response means.
+
+    orc test init <slug> --kind be|fe|both --env local|remote
+                         [--base-url <url> | --start auto]
+                         [--authorized "<who authorized this>"]   (REQUIRED on remote)
+                         --destructive allow|deny [--reason "<why>"]
+    orc test status [<slug>] [--json]
+    orc test show <slug> [--json]                     the stored ledger, rendered — it
+                                                     re-scans nothing and sends nothing
+    orc test surface <slug> [--json] [--no-live]     0 found · 1 nothing named a route · 2 no run
+    orc test env [up|logs] <slug> [--json]           0 ready · 1 not ready · 2 no run, or remote
+    orc test select <slug> --target "GET /users" [--target ...] [--clear]
+    orc test flow <slug> --target "<key>" --from <file.json>
+    orc test case derive|add|list|clear <slug> [--from <f>] [--budget n]
+                                               [--security off|safe|full] [--json]
+    orc test security <slug> [--json]                0 nothing FOUND · 1 a category FOUND · 2 no run
+    orc test ui tools [--json]                       0 ready · 1 absent|outdated|unauthenticated · 2 driver is none
+    orc test ui init <slug> [--json]
+    orc test ui login <slug> <identity> --assert-selector "<css>" | --assert-text "<t>"
+                                        [--password-stdin]        0 the assertion passed · 1 it did not
+    orc test ui journey <slug> add|list|remove --name <n> [--from <f.js>] [--identity <i>]
+    orc test ui run <slug> [--journey <n>] [--replay-har <f.har>]  0 nothing red · 1 a journey FAILED
+    orc test record <slug> --from <file.json> [--clear] [--json]
+                                                     0 all recorded · 1 one was DROPPED · 2 no run
+    orc test report <slug> [--json]                  0 nothing red · 1 a case FAILED or a finding was OBSERVED · 2 no run
+    orc test run <slug> [--tier <t>] [--only C-014] [--passphrase-stdin] [--json]
+                                                     0 nothing red · 1 a case FAILED · 2 refused before any traffic
+    orc test identity add <slug> <name> --role <role> --source env|vault|login [...]
+    orc test identity list|remove <slug> [<name>] [--json]
+    orc test resume-file <slug>
+
+    Nothing here has a default it could guess, and there is no config key that
+    names a target. The run folder is NEVER staged: it holds real response
+    bodies from a real system.
+
+    The security tier is the CLOSED OWASP API Top 10 (2023) set and is never
+    extended ad hoc. It DETECTS and never exploits. A category it could not
+    measure reports UNCHECKABLE, keeps its slot, and never raises the exit code
+    — reporting an unmeasured category as a pass is the single most damaging
+    thing a security report can do. "full" adds the MUTATING probes and needs
+    --destructive allow with a recorded reason, on this run, for this target.
+`);
+}
+
+function testCmd() {
+  const claudeDir = resolveClaudeDir();
+  const verb = (tPositionals()[1] || "").toLowerCase();
+  switch (verb) {
+    case "init":
+      return testInit(claudeDir);
+    case "status":
+      return testStatus(claudeDir);
+    case "show":
+      return testShowCmd(claudeDir);
+    case "surface":
+      return testSurfaceCmd(claudeDir);
+    case "env":
+      return testEnvCmd(claudeDir);
+    case "select":
+      return testSelectCmd(claudeDir);
+    case "flow":
+      return testFlowCmd(claudeDir);
+    case "case":
+      return testCaseCmd(claudeDir);
+    case "run":
+      return testRunCmd(claudeDir);
+    case "security":
+      return testSecurityCmd(claudeDir);
+    case "ui":
+      return testUiCmd(claudeDir);
+    case "record":
+      return testRecordCmd(claudeDir);
+    case "report":
+      return testReportCmd(claudeDir);
+    case "identity":
+      return testIdentity(claudeDir);
+    case "resume-file":
+      return testResumeFile(claudeDir);
+    case "":
+    case "help":
+      return testHelp();
+    default:
+      if (wantsJson()) emitJson({ ok: false, reason: "unknown-subcommand", command: verb }, 2);
+      console.error(`unknown: orc test ${verb}`);
+      testHelp();
+      process.exit(2);
+  }
+}
+
 const UI_DEFAULT_PORT = 9921;
 
 function uiCmd() {
@@ -33407,6 +38915,10 @@ const WAIT_LANE_SHAPES = [
   { lane: "/orc-poly", checkpoint: "docset", safe_point: "after a per-repo plan is written" },
   { lane: "/orc-quick", checkpoint: "entry", safe_point: "after an entry closes" },
   { lane: "/orc-challenge", checkpoint: "cycle", safe_point: "after a cycle records" },
+  // v1.5.0 — the safe point is a CASE BOUNDARY. A long `orc test run` is the
+  // first ORC operation that legitimately takes minutes with no model in it,
+  // so the hand-back is written between cases and never mid-request.
+  { lane: "/orc-test", checkpoint: "cycle", safe_point: "case boundary" },
   { lane: "/orc-brainstorm", checkpoint: "snapshot", safe_point: "phase edge" },
   { lane: "/orc-grill", checkpoint: "snapshot", safe_point: "round edge" },
   { lane: "/orc-learn", checkpoint: "none", safe_point: "single dispatch" },
@@ -36923,6 +42435,12 @@ function jsonCrash(err) {
     // what makes UI/CLI drift structurally impossible.
     case "statusline":
       statusline();
+      break;
+    // v1.5.0 — the lane that RUNS the test. Every subcommand is a READ with an
+    // exit-code contract except `init`, `identity` and the run writers, which
+    // are the ledger's only writers.
+    case "test":
+      testCmd();
       break;
     case "ui":
       uiCmd();

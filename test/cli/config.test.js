@@ -237,7 +237,7 @@ test("config: every key answers a declared family, and the two contested ones ar
   const { root } = freshInstall();
   try {
     const j = JSON.parse(cli(["config", "list", "--json", "--dir", root]).stdout);
-    assert.strictEqual(j.keys.length, 79);
+    assert.strictEqual(j.keys.length, 84);
     for (const k of j.keys) {
       assert.ok(k.answers && k.answers.length, k.key + " declares no answers[]");
       for (const a of k.answers) assert.ok(j.families[a.family], k.key + " → unknown family " + a.family);
@@ -379,6 +379,10 @@ test("config: lanes[] is a mechanical seed, and says so by being empty where it 
       "extra_resume_max",
       "extra_demote_after",
       "extra_demote_stale_min",
+      // v1.5.0 — an operating key of the /orc-test RUNNER. The lane calls
+      // `orc test run` and the CLI paces the requests; no spine reads the
+      // number, exactly as no spine reads `extra_timeout_s`.
+      "test_max_rps",
     ]);
   } finally {
     rmrf(root);

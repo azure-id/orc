@@ -18,6 +18,7 @@ const { test } = require("node:test");
 const assert = require("node:assert");
 const fs = require("fs");
 const http = require("http");
+const zlib = require("zlib");
 const path = require("path");
 const { spawn } = require("child_process");
 const { cli, rmrf, tmpdir, freshInstall, REPO, WEBUI, appJs, appCss, appHtml, assetRefs, panelJs, panelCss, fixtureSrc, i18nNamespaces, i18nTable, webuiFiles } = require("../_helpers");
@@ -119,16 +120,33 @@ function request(port, pathname, { token, method = "GET", host, body } = {}) {
         // request, closed with the response, and the file is deterministic.
         agent: false,
         headers: Object.assign(
-          {},
+          // A BROWSER ALWAYS SENDS THIS, so the test client does too — it is
+          // what makes this exercise the path the panel actually takes. It is
+          // also load-bearing: an uncompressed `/api/config` is ~69 KB, and on
+          // Windows loopback a response over the 64 KiB socket buffer loses its
+          // tail roughly one time in six (measured with a plain twenty-line
+          // http.createServer — it is a platform bug, not this server's). The
+          // gzip path answers in ~8 KB, well under that line.
+          { "accept-encoding": "gzip" },
           token ? { "x-orc-token": token } : {},
           host ? { host } : {},
           body ? { "content-type": "application/json" } : {}
         ),
       },
       (res) => {
-        let raw = "";
-        res.on("data", (c) => (raw += c));
-        res.on("end", () => resolve({ status: res.statusCode, raw }));
+        const chunks = [];
+        res.on("data", (c) => chunks.push(c));
+        res.on("end", () => {
+          const buf = Buffer.concat(chunks);
+          const enc = String(res.headers["content-encoding"] || "");
+          let raw;
+          try {
+            raw = enc === "gzip" ? zlib.gunzipSync(buf).toString("utf8") : buf.toString("utf8");
+          } catch (e) {
+            return reject(e);
+          }
+          resolve({ status: res.statusCode, raw, headers: res.headers });
+        });
       }
     );
     req.on("error", reject);
@@ -170,7 +188,7 @@ test("server: rejects a missing/bad token, a non-loopback Host, and a bad method
 
     // No CORS headers at all — a cross-origin page must not read a byte.
     const raw = await new Promise((res) =>
-      http.get({ host: "127.0.0.1", port, path: "/api/config?t=" + token, agent: false }, (r) => {
+      http.get({ host: "127.0.0.1", port, path: "/api/config?t=" + token, agent: false, headers: { "accept-encoding": "gzip" } }, (r) => {
         r.resume();
         // Resolve on `end`, not on the headers: resolving early lets the test
         // finish while the body is still arriving, which is the same
@@ -179,6 +197,62 @@ test("server: rejects a missing/bad token, a non-loopback Host, and a bad method
       })
     );
     assert.ok(!Object.keys(raw).some((h) => h.startsWith("access-control-")), "no CORS headers may be sent");
+  } finally {
+    if (srv) srv.child.kill();
+    rmrf(root);
+  }
+});
+
+// v1.5.0 — EVERY BODY THIS SERVER WRITES DECLARES ITS LENGTH, and a large one
+// is compressed for a client that asked. Both are the answer to a measured
+// Windows-loopback failure: a response over the 64 KiB socket buffer loses its
+// tail roughly one time in six and the client sees ECONNRESET nineteen seconds
+// later with nothing logged. It reproduces on a plain twenty-line
+// `http.createServer`, so it is not this server's bug — but `/api/config` was
+// 64,934 bytes, six hundred short of the line, and one release's config keys
+// crossed it. The fix is not a cap on what the API may say: it is that a JSON
+// answer says how long it is, and that the browser's own `accept-encoding`
+// takes the big ones far below the cliff.
+test("server: every response declares its length, and a big one gzips for a client that asks", async () => {
+  const { root } = freshInstall();
+  let srv;
+  try {
+    srv = await startServer(root);
+    const { port, token } = srv.lock;
+
+    const small = await request(port, "/api/meta", { token });
+    assert.strictEqual(small.status, 200);
+    assert.ok(small.headers["content-length"], "a JSON response must carry content-length");
+    assert.ok(!small.headers["content-encoding"], "a small body is not worth compressing");
+
+    // The big one. `request()` sends `accept-encoding: gzip` exactly as a
+    // browser does, and gunzips what comes back.
+    const big = await request(port, "/api/config", { token });
+    assert.strictEqual(big.status, 200);
+    assert.ok(big.headers["content-length"], "a JSON response must carry content-length");
+    const parsed = JSON.parse(big.raw);
+    assert.ok(parsed.data.keys.length > 20, "the gzip path must round-trip the real object");
+    if (parsed.data.keys.length && Buffer.byteLength(big.raw, "utf8") >= 32 * 1024) {
+      assert.strictEqual(big.headers["content-encoding"], "gzip", "a body over 32 KiB is compressed when asked");
+      assert.match(String(big.headers["vary"] || ""), /accept-encoding/i, "a compressed answer varies on accept-encoding");
+      assert.ok(
+        Number(big.headers["content-length"]) < Buffer.byteLength(big.raw, "utf8"),
+        "content-length describes the bytes on the wire, not the bytes after gunzip"
+      );
+    }
+
+    // And a client that did NOT ask is still served — identity, correct length.
+    const plain = await new Promise((res, rej) => {
+      const r = http.request({ host: "127.0.0.1", port, path: "/api/meta?t=" + token, agent: false }, (x) => {
+        let n = 0;
+        x.on("data", (c) => (n += c.length));
+        x.on("end", () => res({ headers: x.headers, n }));
+      });
+      r.on("error", rej);
+      r.end();
+    });
+    assert.ok(!plain.headers["content-encoding"], "a client that did not ask never gets gzip");
+    assert.strictEqual(Number(plain.headers["content-length"]), plain.n, "content-length must match the bytes sent");
   } finally {
     if (srv) srv.child.kill();
     rmrf(root);
@@ -451,4 +525,94 @@ test("api: restarts_ui is DECLARED per maintenance action, never inferred", () =
   assert.ok(!/restarts_ui/.test(g.slice(0, 400)), "update-global targets ~/.claude, not the running panel");
   // Reported only on success, so a failed upgrade never reloads the page.
   assert.match(src, /restart_pending: !!\(job\.restart_ui && !job\.running && job\.exit_code === 0\)/);
+});
+
+// v1.5.0 — THE 64 KiB CLIFF APPLIES TO STATIC FILES TOO.
+//
+// `api.js` learned this on `/api/config` and fixed the JSON path: on Windows
+// loopback a response over the socket buffer loses its tail roughly one time in
+// six, with nothing in any log to say so. The static path kept a comment saying
+// "no asset is over 64 KiB today" — and that had been FALSE for two releases:
+// `js/panels/extra.js` is 138 KB and `js/panels/hookui.js` is 76 KB.
+//
+// The symptom was an intermittent ECONNRESET in the asset walk above, which is
+// the harmless half. The other half is a real browser receiving a panel script
+// that stops in the middle of a function.
+test("server: a large asset is COMPRESSED, so nothing rides the 64 KiB cliff", async () => {
+  const { root } = freshInstall();
+  let srv;
+  try {
+    srv = await startServer(root);
+    const { port, token } = srv.lock;
+
+    // The two files this was found on. Asserted BY NAME, because the point is
+    // not that some file is big — it is that the biggest ones this app ships
+    // must not go out raw.
+    const CLIFF = 64 * 1024;
+    for (const rel of ["js/panels/extra.js", "js/panels/hookui.js"]) {
+      const onDisk = fs.statSync(path.join(WEBUI, ...rel.split("/"))).size;
+      assert.ok(onDisk > CLIFF, `${rel} is the case this test exists for — it must still be over ${CLIFF}`);
+
+      const res = await request(port, "/" + rel + "?t=" + token);
+      assert.strictEqual(res.status, 200);
+      assert.strictEqual(
+        String(res.headers["content-encoding"] || ""),
+        "gzip",
+        `${rel} is ${onDisk} bytes and must be compressed — raw, it is intermittently truncated`
+      );
+      // The wire length is what actually has to clear the cliff.
+      assert.ok(
+        Number(res.headers["content-length"]) < CLIFF,
+        `${rel} must go out under ${CLIFF} bytes on the wire`
+      );
+      // A cache keyed on the URL alone would hand a gzip body to a client that
+      // cannot read one.
+      assert.match(String(res.headers.vary || ""), /accept-encoding/i);
+    }
+
+    // A SMALL file is NOT compressed — the CPU is not worth it, and a rule that
+    // gzips everything is a rule nobody can reason about.
+    const small = await request(port, "/css/00-tokens.css?t=" + token);
+    assert.strictEqual(small.status, 200);
+    assert.ok(!small.headers["content-encoding"], "a small asset goes out as-is");
+
+    // And a client that did NOT ask for gzip never gets it, whatever the size.
+    const raw = await new Promise((resolve, reject) => {
+      const r = http.request(
+        {
+          host: "127.0.0.1",
+          port,
+          path: "/js/panels/extra.js?t=" + token,
+          agent: false,
+          headers: { "accept-encoding": "identity" },
+        },
+        (res) => {
+          res.resume();
+          res.on("end", () => resolve(res.headers));
+        }
+      );
+      r.on("error", reject);
+      r.end();
+    });
+    assert.ok(!raw["content-encoding"], "a client that did not ask never receives gzip");
+  } finally {
+    if (srv) srv.child.kill();
+    rmrf(root);
+  }
+});
+
+test("server: the static path and the JSON path share ONE encoder", () => {
+  // A second implementation is how the two drift apart again — which is exactly
+  // what happened: the JSON path was fixed and the static path was not, for two
+  // releases, with a stale comment standing where the fix should have been.
+  const serve = fs.readFileSync(path.join(WEBUI, "serve.js"), "utf8");
+  const api = fs.readFileSync(path.join(WEBUI, "api.js"), "utf8");
+  assert.match(serve, /const \{ handleApi, encodeBody \} = require\("\.\/api\.js"\)/);
+  assert.match(serve, /encodeBody\(body, req\.headers\["accept-encoding"\]\)/);
+  assert.match(api, /module\.exports = \{[^}]*encodeBody/);
+  // One definition, one threshold, one accept check.
+  assert.strictEqual((api.match(/function encodeBody\(/g) || []).length, 1);
+  assert.ok(!/zlib\.gzipSync/.test(serve), "serve.js must not gzip on its own");
+  // And the stale claim that guarded the bug is gone for good.
+  assert.ok(!/No asset is over 64 KiB today/.test(serve), "that sentence was false and is what hid the bug");
 });

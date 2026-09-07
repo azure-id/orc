@@ -76,6 +76,20 @@
      band template here would put the target under the caret. */
   .ex-slot-head { grid-template-columns: minmax(0, 40%) minmax(0, 1fr) 16px; }
   .ex-slot-when { grid-column: 1 / -1; }
+  /* v1.5.0 — /orc-test. Every grid here DECLARES its columns, so every one of
+     them collapses explicitly rather than inheriting a template it no longer
+     has the width for. The route, the case row and the OWASP row all keep the
+     SAME child count in every state (that is the `.ex-tool` lesson), so the
+     collapse is a template change and never a hidden child. */
+  .ts-route { grid-template-columns: 56px minmax(0, 1fr); }
+  .ts-route > .chip { grid-column: 2; justify-self: start; }
+  .ts-where { grid-column: 1 / -1; }
+  .ts-case { grid-template-columns: 56px minmax(0, 1fr); }
+  .ts-case > .chip { grid-column: 2; justify-self: start; }
+  .ts-case-mid { grid-column: 1 / -1; }
+  .ts-case-tail { grid-column: 1 / -1; justify-content: flex-start; }
+  .ts-owasp { grid-template-columns: 56px minmax(0, 1fr); }
+  .ts-owasp-mid { grid-column: 1 / -1; }
   .ex-band-chips { grid-column: 1 / -1; justify-content: flex-start; }
   .ex-route-controls { align-items: stretch; }
   .ex-route-controls .btn { width: 100%; }

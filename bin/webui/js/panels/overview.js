@@ -71,6 +71,16 @@ const FINDING_ROUTE = {
   "statusline-layout-orphaned": { panel: "hookui", cta: "overview.item.statuslineOrphaned.cta" },
   "statusline-layout-invalid": { panel: "hookui", cta: "overview.item.statuslineInvalid.cta" },
   "statusline-layout-unreadable": { panel: "hookui", cta: "overview.item.statuslineUnreadable.cta" },
+  // v1.5.0. The rule again, and all four the same way: every command that
+  // clears one of these — `orc test env`, `orc test report`, `orc test
+  // security` — is on the TEST panel, beside the run it is about.
+  // `test-evidence-unstaged` goes there too even though the fix is a line in
+  // .gitignore that ORC will not write: Test is where the sentence explaining
+  // WHY that folder must never be staged already lives.
+  "test-env-unhealthy": { panel: "test", cta: "overview.item.testEnvUnhealthy.cta" },
+  "test-run-red": { panel: "test", cta: "overview.item.testRunRed.cta" },
+  "test-unchecked-owasp": { panel: "test", cta: "overview.item.testUncheckedOwasp.cta" },
+  "test-evidence-unstaged": { panel: "test", cta: "overview.item.testEvidenceUnstaged.cta" },
 };
 const DEFAULT_FINDING_ROUTE = { panel: "maintenance", cta: "overview.item.doctor.cta" };
 const findingRoute = (id) => FINDING_ROUTE[id] || DEFAULT_FINDING_ROUTE;

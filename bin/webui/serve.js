@@ -20,7 +20,7 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 const { spawn } = require("child_process");
-const { handleApi } = require("./api.js");
+const { handleApi, encodeBody } = require("./api.js");
 
 const DEFAULT_PORT = 9921;
 const PORT_WALK_MAX = 9930;
@@ -458,7 +458,22 @@ async function serve(opts) {
           "utf8"
         );
       }
-      res.writeHead(200, {
+      // THE SAME TWO FIXES THE JSON PATH GOT, through the SAME function
+      // (v1.5.0). The comment that used to stand here said "no asset is over
+      // 64 KiB today" and guarded only the length header — and it had been
+      // false for two releases: `js/panels/extra.js` is 138 KB and
+      // `js/panels/hookui.js` is 76 KB. Both rode the uncompressed path, which
+      // on Windows loopback loses its tail roughly one time in six. That is the
+      // intermittent ECONNRESET the asset-walk test kept seeing, and in a real
+      // browser it is a panel script that stops in the middle of a function
+      // with nothing in any log to say so.
+      //
+      // So the length is DECLARED and the body is COMPRESSED when the client
+      // asked — and it comes from api.js's `encodeBody`, because a second
+      // implementation of this is how the two paths drift apart again.
+      const enc = encodeBody(body, req.headers["accept-encoding"]);
+      body = enc.body;
+      res.writeHead(200, Object.assign({
         "content-type": stat.type,
         "cache-control": "no-store",
         "x-content-type-options": "nosniff",
@@ -467,7 +482,7 @@ async function serve(opts) {
         "content-security-policy":
           "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'none'",
         "referrer-policy": "no-referrer",
-      });
+      }, enc.headers));
       res.end(body);
       return;
     }

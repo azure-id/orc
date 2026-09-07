@@ -96,6 +96,10 @@ const GROUP_OF = {
   "orc-claude": "knowledge",
   "orc-export": "knowledge",
 
+  // v1.5.0. It sits with the CHECKING lanes rather than the build ones:
+  // /orc-test makes nothing. It runs the requests, writes down what came back,
+  // and hands the machine back — the same shape as /orc-verify beside it.
+  "orc-test": "check",
   "orc-verify": "check",
   "orc-challenge": "check",
   // v0.49.1. It sits beside the lane it belongs to, and it is a SEPARATE

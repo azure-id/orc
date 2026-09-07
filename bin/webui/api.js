@@ -24,6 +24,7 @@ const { spawn, spawnSync } = require("child_process");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
+const zlib = require("zlib");
 const fixtures = require("./fixtures/index.js");
 
 const CLI = path.join(__dirname, "..", "cli.js");
@@ -411,6 +412,21 @@ const READS = {
   "/api/extra/demotion": (q) => ["extra", "demotion", ...(q.run ? [String(q.run)] : [])],
   "/api/extra/reconcile": (q) => ["extra", "reconcile", String(q.task || "")],
   "/api/extra/journal/prune/preview": () => ["extra", "journal", "prune", "--dry-run"],
+  // v1.5.0 — /orc-test, the lane that RUNS the test. THREE reads, and every one
+  // of them is a READ in the strict sense this lane needs: none re-scans the
+  // repository, none probes the target, and none writes the ledger. Opening a
+  // page must never be a measurement — a measurement nobody asked for is
+  // traffic nobody authorized.
+  //
+  // `orc test show` is the whole computed view (`--json is not a summary`), so
+  // the surface, the case matrix, the closed OWASP set, the runs and the
+  // findings all arrive in ONE object the panel renders and derives nothing
+  // from: not a state word, not a severity, not an OWASP id, not the tier.
+  // `status` 0 always, `show` 0 / 2 no run, `ui tools` 0 ready / 1 not ready /
+  // 2 the driver is `none` — and 2 there is a SETTING, not a missing tool.
+  "/api/test": () => ["test", "status"],
+  "/api/test/one": (q) => ["test", "show", String(q.slug || "")],
+  "/api/test/ui": () => ["test", "ui", "tools"],
   "/api/patterns": () => ["pattern", "status"],
   "/api/gotchas": () => ["gotcha", "list"],
   "/api/stats": (q) => (q.since ? ["stats", "--since", String(q.since)] : ["stats"]),
@@ -671,6 +687,24 @@ const WRITES = {
   // interactive prompt collects, and every rejection the user sees is the
   // CLI's own validator speaking — there is no second idea of a valid slug,
   // a valid kind or a valid edge target anywhere in this panel.
+  // v1.5.0 — the THREE /orc-test mutations this panel may make, and NONE of
+  // them sends a request to the system under test. `orc test run` is where the
+  // traffic is, and it is a COPY-ABLE COMMAND here and never a button: a page
+  // that can start a scan against a live host is a page that can start one by
+  // accident.
+  //
+  //   · `surface` is the FREE PASS — it reads the repository and the target's
+  //     own spec document, and it is what every later step is derived from.
+  //   · `env` is a HEALTH PROBE, the /orc-test equivalent of `orc extra ping`:
+  //     it asks the target whether it is up. It never starts, stops or fixes
+  //     anything, and on a REMOTE target it refuses BY NAME.
+  //   · `report` RENDERS the ledger into REPORT.md and derives nothing.
+  //
+  // Every one costs zero model tokens, which is the line this panel does not
+  // cross. Nothing here dispatches an agent.
+  "/api/test/surface": (b) => ["test", "surface", String(b.slug)],
+  "/api/test/env": (b) => ["test", "env", String(b.slug)],
+  "/api/test/report": (b) => ["test", "report", String(b.slug)],
   "/api/crosslink/add": (b) => {
     const argv = ["crosslink", "add", String(b.name), String(b.repo_path), "--kinds", String(b.kinds)];
     if (b.direction) argv.push("--direction", String(b.direction));
@@ -875,14 +909,80 @@ function launchClaude(ctx) {
 
 // ── request handling ────────────────────────────────────────────────────────
 
+// A RESPONSE OVER 64 KiB IS A HAZARD ON WINDOWS LOOPBACK (v1.5.0).
+//
+// Measured, and NOT an ORC bug: a twenty-line plain `http.createServer` on this
+// platform loses the tail of a response larger than the 64 KiB socket buffer
+// roughly one time in six, after a handful of short-lived connections. The
+// client receives ~65,077 of 69,177 bytes, the server's `finish` fires and
+// `writableFinished` is true, and nineteen seconds later the client gets
+// ECONNRESET with nothing in any log to say why. Under 60,000 bytes it never
+// happened in any run.
+//
+// `/api/config` was 64,934 bytes — six hundred short of that line — so the
+// Settings tab was one config key away from failing with no message, and it
+// crossed on the release that added five. Two things answer it, and neither is
+// a size limit on what this API may say (`--json is not a summary`):
+//
+//   1. DECLARE THE LENGTH. Without `content-length` Node falls back to chunked
+//      encoding, which is a worse shape for a body of known size and gives the
+//      client no way to tell a truncated read from a complete one.
+//   2. COMPRESS IT WHEN THE CLIENT ASKS. Every browser sends
+//      `accept-encoding: gzip`, and the panel IS a browser — gzip takes that
+//      69 KB answer to about 8 KB, far below the cliff. It is skipped for a
+//      small body, where the CPU is not worth it, and skipped entirely for a
+//      client that did not ask.
+const GZIP_MIN_BYTES = 32 * 1024;
+// `gzip` as a WHOLE token in the header's comma list, so `x-gzip-not-really`
+// never matches. Written out rather than with a regex word boundary, which is
+// not one beside a hyphen.
+const GZIP_ACCEPTED = /(^|,)\s*gzip\s*(;|,|$)/;
+
+// ONE implementation, and serve.js uses it for STATIC files too (v1.5.0). The
+// 64 KiB cliff is a property of the SOCKET, not of the content type: it does not
+// care whether the bytes are an API answer or a panel script. Leaving the static
+// path uncompressed left the two largest files in the app — `extra.js` at 138 KB
+// and `hookui.js` at 76 KB — riding the exact path this was written to fix. It
+// showed up as an intermittent ECONNRESET in the asset-walk test, and it would
+// show up in a real browser as a panel script that stops mid-function.
+//
+// Returns the bytes to send plus the headers that describe them. A caller that
+// forgets to declare the length is the other half of the same bug, so the length
+// is set HERE rather than left to each call site.
+function encodeBody(raw, acceptEncoding) {
+  const headers = {};
+  let body = raw;
+  if (raw.length >= GZIP_MIN_BYTES && GZIP_ACCEPTED.test(String(acceptEncoding || ""))) {
+    try {
+      body = zlib.gzipSync(raw);
+      headers["content-encoding"] = "gzip";
+      // A cache keyed on the URL alone would hand a gzip body to a client that
+      // cannot read one. Nothing caches on loopback today; saying so costs one
+      // header and removes the whole class.
+      headers["vary"] = "accept-encoding";
+    } catch (_) {
+      body = raw;
+    }
+  }
+  headers["content-length"] = String(body.length);
+  return { body, headers };
+}
+
 function json(res, status, obj) {
-  const body = JSON.stringify(obj);
-  res.writeHead(status, {
-    "content-type": "application/json; charset=utf-8",
-    "cache-control": "no-store",
-    // Belt and braces on top of the loopback + token checks in serve.js.
-    "x-content-type-options": "nosniff",
-  });
+  const raw = Buffer.from(JSON.stringify(obj), "utf8");
+  const { body, headers } = encodeBody(raw, res.req && res.req.headers && res.req.headers["accept-encoding"]);
+  res.writeHead(
+    status,
+    Object.assign(
+      {
+        "content-type": "application/json; charset=utf-8",
+        "cache-control": "no-store",
+        // Belt and braces on top of the loopback + token checks in serve.js.
+        "x-content-type-options": "nosniff",
+      },
+      headers
+    )
+  );
   res.end(body);
 }
 
@@ -1285,4 +1385,4 @@ function isDirtyTree(ctx) {
   }
 }
 
-module.exports = { handleApi, clearCache, READS, WRITES, MAINTENANCE };
+module.exports = { handleApi, clearCache, encodeBody, READS, WRITES, MAINTENANCE };

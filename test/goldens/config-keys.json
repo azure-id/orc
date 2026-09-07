@@ -295,6 +295,31 @@
     "default": "error"
   },
   {
+    "key": "test_gate",
+    "tier": "common",
+    "default": "warn"
+  },
+  {
+    "key": "test_security_tier",
+    "tier": "common",
+    "default": "safe"
+  },
+  {
+    "key": "test_max_rps",
+    "tier": "common",
+    "default": 4
+  },
+  {
+    "key": "test_case_budget",
+    "tier": "common",
+    "default": 200
+  },
+  {
+    "key": "test_ui_driver",
+    "tier": "common",
+    "default": "playwright"
+  },
+  {
     "key": "doc_dir",
     "tier": "advanced",
     "default": "orc/orc-doc"

@@ -63,7 +63,7 @@ run_meta:                 # FIRST packet of the run ONLY; omit thereafter
                           # plan | claude | poly | learn | verify | pattern |
                           # prsetup | prdriver | quick | grill | route |
                           # brainstorm | pact | boundary | handoff | budget |
-                          # aftermath | export | challenge | doc
+                          # aftermath | export | challenge | doc | test
                           # (`ultra` = an /orc-ultra run; the ONLY lane the orc
                           #  spine can emit besides `orc`. No other value here
                           #  is legal — a lane no entry point opens is a lane
@@ -97,7 +97,7 @@ decisions: >              # free text — the WHY layer
 | Build lanes | `orc` (incl. ultra), `orc-mini`, `orc-fast` | per phase — full orc ≈ 7–9 (ultra adds U0 + judge packets); orc-mini batches to 3 (intake+plan, execution, ship); orc-fast to 2 (preflight+dispatch, gate+ship) |
 | Multi-dispatch | `orc-wiki`, `orc-pr-driver` (lane `prdriver`) | orc-wiki: one per scan-batch boundary (the points that already run the registration sync / offer the pause) + the end-of-run packet. orc-pr-driver: one per LAYER boundary (each layer's green gate closes) + the end-of-run packet |
 | Composed | `orc-diy` | one packet per ENABLED phase group, **minimum 2** — the flow shape is user-composed, so the count is too (the compiled flow carries this block automatically) |
-| Iterative | `orc-quick`, `orc-challenge` (lane `challenge`), `orc-doc` (lane `doc`) | **one packet per completed numbered entry** + the end-of-run `FINISH` packet — the lane loops on user requests, so the count follows entries, not phases. For `orc-challenge` the unit is one completed ITERATION (C2→C8), and the packet goes out at the stop; on a PASS it is the `FINISH` packet. **Several trace files for one cycle is CORRECT** — several sessions ran, and `orc stats` counts several. For `orc-doc` the unit is one completed WAVE, and the packet is the LAST step of the stop sequence |
+| Iterative | `orc-quick`, `orc-challenge` (lane `challenge`), `orc-doc` (lane `doc`), `orc-test` (lane `test`) | **one packet per completed numbered entry** + the end-of-run `FINISH` packet — the lane loops on user requests, so the count follows entries, not phases. For `orc-challenge` the unit is one completed ITERATION (C2→C8), and the packet goes out at the stop; on a PASS it is the `FINISH` packet. **Several trace files for one cycle is CORRECT** — several sessions ran, and `orc stats` counts several. For `orc-doc` the unit is one completed WAVE, and the packet is the LAST step of the stop sequence. For `orc-test` the unit is one completed CYCLE (T2→T9), and the packet goes out at the stop |
 | Single-dispatch | `orc-claude`, `orc-plan`, `orc-analyze` + `orc-analyze-mini` (both lane token `analyze`), `orc-pattern`, `orc-verify`, `orc-learn`, `orc-poly`, `orc-pr-setup` (lane `prsetup`), `orc-grill`, `orc-route`, `orc-brainstorm` (lane `brainstorm`), `orc-pact` (lane `pact`), `orc-boundary` (lane `boundary`), `orc-handoff` (lane `handoff`), `orc-budget` (lane `budget`), `orc-aftermath` (lane `aftermath`), `orc-export` (lane `export`) | **exactly ONE mandatory end-of-run packet** |
 
 **`context-combiner` is NOT a lane — it is a PHASE inside the analyze run.** It

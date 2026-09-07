@@ -1757,3 +1757,169 @@ test("wait: the CSS is a FLEX column, not a declared grid", () => {
   for (const m of css.matchAll(/var\((--[a-z0-9-]+)\)/g))
     assert.ok(tokens.includes(m[1] + ":"), `${m[1]} is not defined in 00-tokens.css`);
 });
+
+/* ══════════════════════════════════════════════════════════ v1.5.0 ═══════
+   `orc ui ▸ Test` — the panel for the lane that RUNS the test.
+
+   It has the tightest action boundary of any panel here, and every case below
+   is one edge of it. */
+
+test("test panel: five tabs, and every tab key is written out in full", () => {
+  const js = panelJs("test");
+  for (const key of [
+    "test.tab.targets",
+    "test.tab.surface",
+    "test.tab.cases",
+    "test.tab.runs",
+    "test.tab.findings",
+  ])
+    assert.ok(js.includes(`"${key}"`), `the tab key ${key} is written out in full`);
+  // The tab survives a re-render — `KN_TAB`'s rule — and so does the selected
+  // run, because a write that re-renders must not throw you back to the first
+  // of either.
+  assert.match(js, /let TEST_TAB = /);
+  assert.match(js, /let TEST_SLUG = /);
+});
+
+test("test panel: `orc test run` is a COPY-ABLE COMMAND and never a button", () => {
+  const js = panelJs("test");
+  const api = fs.readFileSync(path.join(WEBUI, "api.js"), "utf8");
+
+  // It costs ZERO model tokens, so the usual free/paid line would make it a
+  // button. The TRAFFIC line makes it a command: a page that can start a scan
+  // against a live host is a page that can start one by accident.
+  assert.match(js, /laneCommand\("orc test run "/, "the run is a copy-able command");
+  assert.ok(!/post\("\/api\/test\/run"/.test(js), "the panel must never POST a run");
+
+  // And there is no route behind it either — the boundary is in the server, not
+  // only in the panel that would have to call it.
+  const writes = (api.match(/const WRITES = \{[\s\S]*?\n\};/) || [""])[0];
+  assert.ok(!/"\/api\/test\/run"/.test(writes), "no write route may run the runner");
+  assert.ok(!/"test", "run"/.test(writes), "and none may shell it either");
+
+  // The three writes it DOES make all cost nothing and touch nobody else's box.
+  for (const r of ["/api/test/surface", "/api/test/env", "/api/test/report"])
+    assert.ok(writes.includes(r), `${r} is a free action and gets a button`);
+});
+
+test("test panel: the reads are READS — opening the page re-scans and probes nothing", () => {
+  const api = fs.readFileSync(path.join(WEBUI, "api.js"), "utf8");
+  const reads = (api.match(/const READS = \{[\s\S]*?\n\};/) || [""])[0];
+  // `orc test show` was added FOR this panel precisely so a GET never has to
+  // re-take the surface: a measurement nobody asked for is traffic nobody
+  // authorized.
+  assert.match(reads, /"\/api\/test\/one":.*"test", "show"/);
+  assert.match(reads, /"\/api\/test":.*"test", "status"/);
+  assert.match(reads, /"\/api\/test\/ui":.*"test", "ui", "tools"/);
+  // The two commands that WRITE the ledger must not be reachable by GET.
+  assert.ok(!/"\/api\/test\/surface"/.test(reads), "surface writes — it cannot be a GET");
+  assert.ok(!/"\/api\/test\/env"/.test(reads), "env probes the target — it cannot be a GET");
+});
+
+test("test panel: it names no state word, no OWASP id, no severity and no model", () => {
+  const js = panelJs("test");
+  // The kind MAPS are keyed on the CLI's words, which is legitimate — a colour
+  // per state is the panel's. What must not exist is a rendered LABEL that
+  // replaces one, so the maps and the comparisons are stripped first.
+  const rendered = js
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/^\s*\/\/.*$/gm, "")
+    .replace(/const TEST_\w+_KIND = \{[^}]*\};/g, "")
+    .replace(/[=!]==\s*"[A-Za-z0-9-]+"/g, "")
+    .replace(/\[\s*"[A-Za-z0-9-]+"\s*\]/g, "");
+
+  // Never an OWASP id: the closed set is the CLI's and the panel prints
+  // `r.owasp`.
+  for (const id of ["API1", "API5", "API9", "API10"])
+    assert.ok(!rendered.includes(id), `${id} is the CLI's — the panel must render it, not name it`);
+  // Never a severity word, never a verdict word, never a state word as CONTENT.
+  for (const bad of ['"critical"', '"observed-clean"', '"AWAITING-CASES"', '"not-observed"'])
+    assert.ok(!rendered.includes(bad), `${bad} is a CLI-computed value the panel must not own`);
+  // Never a model id or an agent name: this panel dispatches nothing.
+  assert.ok(!/claude-opus|claude-sonnet|orc-test-designer|orc-test-interpreter/.test(js));
+});
+
+test("test panel: an evidence PATH is rendered and a body never is", () => {
+  const js = panelJs("test");
+  const api = fs.readFileSync(path.join(WEBUI, "api.js"), "utf8");
+  // A captured response body is the most sensitive payload this lane writes to
+  // disk. The panel names where it is and does not open it — and there is no
+  // route that could, which is the half that matters.
+  assert.ok(!/innerHTML/.test(js), "nothing is ever rendered as HTML");
+  assert.ok(!/body=1/.test(js), "there is no --body read here");
+  assert.ok(!/"\/api\/test\/evidence"/.test(api), "and no endpoint that would stream one");
+});
+
+test("test panel: a health state is never rendered as current", () => {
+  const js = panelJs("test");
+  // `orc test show` reports `state: null` always; what it carries is the last
+  // OBSERVATION. The panel keeps its own reading in page memory only, so a
+  // stale word can never be persisted and re-rendered as the state now.
+  assert.match(js, /const TEST_ENV_SEEN = \{\}/);
+  assert.match(js, /test\.env\.notStored/, "and it says a health state is not stored");
+  // A refusal is rendered with the CLI's OWN reason and no fallback word.
+  assert.match(js, /if \(seen\.reason\)/, "no invented state word when the CLI named none");
+});
+
+test("test panel: every declared grid keeps the SAME child count in every state", () => {
+  const css = panelCss("test");
+  const responsive = fs.readFileSync(path.join(WEBUI, "css", "06-responsive.css"), "utf8");
+  // `.ex-tool`'s 250px ellipse: a card whose child count changes with its state
+  // must not declare its rows. These three DO declare their columns, so the
+  // panel keeps the child count fixed instead — and each collapses explicitly.
+  for (const sel of [".ts-route", ".ts-case", ".ts-owasp"]) {
+    assert.ok(new RegExp("\\" + sel + "\\s*\\{[^}]*grid-template-columns").test(css), `${sel} declares its columns`);
+    assert.ok(responsive.includes(sel + " {"), `${sel} collapses explicitly at the breakpoint`);
+  }
+  // Every colour is a token from 00-tokens.css, and none is defined here.
+  const tokens = fs.readFileSync(path.join(WEBUI, "css", "00-tokens.css"), "utf8");
+  for (const m of css.matchAll(/var\((--[a-z0-9-]+)\)/g))
+    assert.ok(tokens.includes(m[1] + ":"), `${m[1]} is not defined in 00-tokens.css`);
+  assert.ok(!/^\s*--[a-z0-9-]+:/m.test(css), "no colour token is defined in a panel sheet");
+  // Motion lives in 04-motion.css and nowhere else.
+  assert.ok(!/@keyframes|animation:/.test(css), "no animation in a panel sheet");
+});
+
+test("test panel: the four doctor findings route to the panel that can CLEAR them", () => {
+  const js = panelJs("overview");
+  for (const id of ["test-env-unhealthy", "test-run-red", "test-unchecked-owasp", "test-evidence-unstaged"])
+    assert.ok(
+      new RegExp(`"${id}":\\s*\\{\\s*panel:\\s*"test"`).test(js),
+      `${id} must route to the Test panel — every command that clears it is there`
+    );
+  // And every CTA key exists in BOTH tables, or the caution renders with no
+  // button text in one language.
+  for (const lang of ["en", "id"])
+    for (const key of [
+      "overview.item.testEnvUnhealthy.cta",
+      "overview.item.testRunRed.cta",
+      "overview.item.testUncheckedOwasp.cta",
+      "overview.item.testEvidenceUnstaged.cta",
+    ])
+      assert.ok(TABLES[lang][key], `${lang} is missing ${key}`);
+});
+
+test("test panel: the fixtures carry one of every state, including the ugly ones", () => {
+  const fx = fixtureSrc();
+  // You cannot DESIGN a state you cannot reach. Each of these is unreachable on
+  // a healthy machine with one green run.
+  const want = [
+    ['state: "RED"', "a run with a failed case"],
+    ['state: "PARTIAL"', "a run with unknowns"],
+    ['state: "AWAITING-IDENTITY"', "a run that got no further than its target"],
+    ['state: "UNREADABLE"', "a ledger that did not parse"],
+    ['state: "unhealthy"', "the environment where ORC stops and hands back"],
+    ['state: "absent"', "no start command, and no Playwright"],
+    ['reason: "remote-target"', "the refusal on a host you do not own"],
+    ['stopped: "edge"', "a ladder that stopped"],
+    ['state: "unchecked"', "an OWASP row nobody could measure"],
+    ['state: "FOUND"', "one that was"],
+    ["authorized: null", "a target nobody filled the authorization in for"],
+    ["report_exists: false", "a run with no report written yet"],
+    ["observed: false", "a finding that was NOT observed"],
+    ["flakes: [{", "a recorded flake"],
+    ["source: null", "a code-vs-live diff that was NOT measured"],
+  ];
+  for (const [needle, why] of want)
+    assert.ok(fx.includes(needle), `the fixtures must carry ${why} (${needle})`);
+});

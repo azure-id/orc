@@ -747,10 +747,15 @@ function challengeOpportunityCard(s, slug, body) {
 }
 
 /* A paid action is a COMMAND, never a button. This renders one, with the reason
-   it is not a button — making the boundary visible rather than hiding it. */
-function laneCommand(cmd, why) {
+   it is not a button — making the boundary visible rather than hiding it.
+
+   `head` is optional and defaults to the Claude Code line every existing caller
+   wants. /orc-test needs the other one: `orc test run` and a Playwright install
+   are TERMINAL commands, and telling somebody to paste a shell command into
+   Claude Code is an instruction that does not work. */
+function laneCommand(cmd, why, head) {
   const box = el("div", "lane-cmd");
-  box.append(el("div", "lane-cmd-head", t("common.runInClaude")));
+  box.append(el("div", "lane-cmd-head", head || t("common.runInClaude")));
   const row = el("div", "row-actions");
   row.append(el("pre", "cmd", cmd));
   const b = el("button", "btn btn-ghost btn-sm", t("common.copy"));

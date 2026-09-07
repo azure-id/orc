@@ -36,6 +36,7 @@ const { laneList, lanePhases, laneCalls } = require("./lanes.js");
 const { diy } = require("./flow.js");
 const { crosslink } = require("./crosslink.js");
 const { mockDetail } = require("./mockrun.js");
+const { testList, testShows, testShowToy, testUiTools, testEnvUnhealthy, testEnvAbsent, testEnvRemote } = require("./test.js");
 const { extraProviders, extraList, extraListNoConnection, extraListNeverTested, extraTools, extraKeyhelp, extraModels, extraDoctor, extraRoute, extraRole, extraLanes, extraStats, extraRates, extraPingOk, extraPingBad, extraPingSaveOffer, extraJournal, extraReconcile, extraJournalPrune, extraPingLive, extraPingDeadModel, extraPingNotInstalled, extraInstall, extraDemotion } = require("./extra.js");
 
 module.exports.get = function get(route, q) {
@@ -50,6 +51,15 @@ module.exports.get = function get(route, q) {
     // a required reason is collected) could never be designed.
     case "/api/extra/demotion":
       return extraDemotion;
+    // v1.5.0 — /orc-test. An unknown slug falls to the RED run rather than
+    // returning nothing: a fixture that 404s teaches the panel a state the CLI
+    // does not have (`orc test show` exits 2 and says so in words).
+    case "/api/test":
+      return testList;
+    case "/api/test/one":
+      return testShows[(q && q.slug) || ""] || testShowToy;
+    case "/api/test/ui":
+      return testUiTools;
     case "/api/lanes":
       return laneList;
     case "/api/lane/phases":
@@ -496,11 +506,23 @@ module.exports.get = function get(route, q) {
 // from the profile so they agree with what the list already claims.
 //
 // A route with no entry here still gets the ordinary "nothing ran" reply.
+// v1.5.0 — the /orc-test environment probe. Its OUTCOME is the state worth
+// designing — `unhealthy` is the one where ORC stops and hands the machine back
+// — so it answers with canned data rather than "nothing ran", on the
+// `orc extra ping` precedent. Keyed by slug so `absent` and the REMOTE refusal
+// are reachable too. `surface` and `report` still answer "nothing ran": their
+// outcome is a file on disk, not a state.
+const TEST_ENV = { "api-users": [1, testEnvUnhealthy], "orders-api": [1, testEnvAbsent], "staging-checkout": [2, testEnvRemote] };
+
 module.exports.post = function post(route, body) {
   // `add` answers OK so the CONNECT FLOW can be walked end to end in fixture
   // mode — the add is only the step before the test, and the test's outcome is
   // the state worth designing. Every other write still answers "nothing ran".
-  if (route === "/api/extra/add") return { exit_code: 0, data: { ok: true, next: "orc extra ping" } };
+  if (route === "/api/test/env") {
+    const [exit_code, data] = TEST_ENV[String((body && body.slug) || "")] || TEST_ENV["api-users"];
+    return { exit_code, data };
+  }
+    if (route === "/api/extra/add") return { exit_code: 0, data: { ok: true, next: "orc extra ping" } };
   // v0.51.0 — a launch that could NOT happen and one that did. Both are exit 0,
   // because "no terminal here" is an ANSWER carrying the command to paste.
   if (route === "/api/extra/install")

@@ -14,11 +14,16 @@ const fs = require("fs");
 const path = require("path");
 const { tmpdir, rmrf, cli } = require("../_helpers.js");
 
+// v1.5.0 - SEVEN. `/orc-test` added `test-designer` and deliberately added no
+// slot for its INTERPRETER: that role's slice is captured response bodies from
+// the user's real system, and the `api` engine's `declared_files` fence fences
+// FILES, not a request body.
 const SLOTS = [
   "quick-executor",
   "fast-executor",
   "doc-writer",
   "doc-checker",
+  "test-designer",
   "wiki-scanner-deep",
   "wiki-scanner-light",
 ];
@@ -76,7 +81,7 @@ test("EVERY slot keeps its slot on an empty ledger, and each falls through to a 
   // Nothing routes, so the READ exits 1 — the `orc pattern status` convention.
   assert.equal(r.status, 1);
   const j = json(r);
-  assert.deepEqual(j.slots.map((s) => s.slot), SLOTS, "all six, always — an unrouted slot is not filtered out");
+  assert.deepEqual(j.slots.map((s) => s.slot), SLOTS, "every one of them, always — an unrouted slot is not filtered out");
   for (const s of j.slots) {
     assert.equal(s.resolved, "claude");
     assert.equal(s.routed, false);
@@ -87,7 +92,7 @@ test("EVERY slot keeps its slot on an empty ledger, and each falls through to a 
   // `quick-executor` is a MENU, which is what that lane is.
   assert.equal(j.slots[0].claude.agents.length, 2);
   assert.equal(j.slots[0].asks, true);
-  assert.equal(j.slots.filter((s) => s.asks).length, 1, "only /orc-quick asks; the other three lanes announce");
+  assert.equal(j.slots.filter((s) => s.asks).length, 1, "only /orc-quick asks; every other lane announces");
   rmrf(p.root);
 });
 
@@ -102,7 +107,7 @@ test("the SIX unreachable extra_roles values are reported honestly, not fixed", 
   rmrf(p.root);
 });
 
-test("an unknown slot is REFUSED with exit 2 and the message LISTS the six", () => {
+test("an unknown slot is REFUSED with exit 2 and the message LISTS every slot", () => {
   const p = project();
   for (const argv of [["extra", "role", "show", "nope"], ["extra", "role", "set", "nope", "ds/m"], ["extra", "role", "rm", "nope"]]) {
     const r = run(p, argv);

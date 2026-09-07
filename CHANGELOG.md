@@ -10,6 +10,117 @@ Format: `### v<version> — <title> _(<date>)_`.
 
 ---
 
+### v1.5.0 - the lane that runs the test _(2026-09-07)_
+
+**Still on the unscoped `orc` package?** Do this once first - your `orc upgrade`
+is the pre-v0.56.0 one and cannot install itself. Full detail in the CAUTION at
+the top of this file.
+
+- **Step 1 - release the command from the old package:** `npm uninstall -g orc`
+- **Step 2 - install the current package:** `npm i -g @azure-id/orc`
+- **Step 3 - re-apply it to your project:** `orc update`
+
+**Do not use `npm i -g -f`.** Full detail in v0.56.0 below.
+
+Every other testing surface in ORC **writes** tests. `/orc-test` **runs** them.
+
+It points at a running API - yours, on your laptop, or one you were given
+permission to touch - sends real requests, writes down what came back, and
+stops. The split is the whole design:
+
+> **The CLI executes and measures. The model designs and interprets.**
+> A model never sends a request. The CLI never decides what a response means.
+
+That split is what makes the report worth reading. A number in it was measured
+by a program. A sentence in it was written by a model that only ever saw
+evidence on disk.
+
+**Three rules hold it together**, each a registered contract:
+
+- **`a lane that reports a result it did not observe`** - three verdicts, and
+  `unknown` is the honest one. A case nobody ran is never a pass.
+- **`a lane that sends traffic to a target nobody authorized`** - the target is
+  frozen once, a remote one **requires** a written statement of who said yes,
+  and every request is fenced to one origin.
+- **`a lane that fixes the system under test`** - it reports and hands back. Not
+  to fix a boot failure, not to add a `data-testid`, not to relax a check.
+
+**The free pass runs first, and always.** `orc test surface` reads your
+repository and the target's own spec document for zero model tokens, and the
+**code-vs-live diff** falls out of it: a route that answers at the target and is
+in **no file in your repository** is undocumented surface nobody reviews and
+nobody patches. It is derived from the two spec documents and from nothing else
+- no route is ever called to produce it. With no spec at the target the diff
+reads **NOT MEASURED, with the reason**, because an empty list there would say
+"no shadow APIs", which is a claim nobody made.
+
+**The case matrix derives itself.** The tiers come out of the schema for free.
+What costs anything is a **gap** - what a schema cannot know, like what a valid
+email looks like in your business, or which order two calls have to happen in.
+That is the only part a model is paid for.
+
+**The security tier is a closed set** - the OWASP API Top 10 (2023), ten rows,
+never extended on the fly, and **all ten render in every state**. A category ORC
+could not measure says `UNCHECKABLE`, **keeps its slot**, carries its own
+reason, never becomes a pass, and never changes the exit code. Reporting an
+unmeasured category as clean is the single most damaging thing a security report
+can do, because somebody then ships on it. It **detects and never exploits**:
+every probe shows the condition and stops there.
+
+**When your app is broken, it stops.** `orc test env` finds the start command,
+sees the process is alive, reads the exact line in the log - and **will not open
+that file**. It names the environment values that are absent and writes a value
+for none of them, because a placeholder in a real environment is a
+credential-shaped lie and only you know the right one.
+
+**The runner is the only place in ORC that sends a request to a system it did
+not start**, so everything in it exists to make sure ORC's own run is never the
+incident. A red happy path **stops the ladder** - a 500 on every request will
+"prove" a dozen vulnerabilities that are one bug. The pace is the target's, and
+the CLI applies it. **A 429 is a result**: it means rate limiting works, so ORC
+records it and backs off rather than pushing through, which is how a staging
+scan becomes a lockout. Failed logins are capped per identity. **Redaction is
+structural** - every credential is replaced before the bytes reach disk, not in
+a review step afterwards.
+
+**A finding has to point at something.** One that cites evidence which does not
+resolve on disk is **dropped by name and counted**. Severity is ORC's; if the
+interpreting model disagrees, its word is kept beside ORC's and printed, so a
+disagreement is visible instead of invisible. **A flake is recorded, never
+retried away** - the instability is the finding.
+
+**The front end drives Playwright as a script**, not as an agent loop: a step an
+LLM took is not a step you can re-run. ORC **names** the install command and
+never runs it - it does not install into your project.
+
+**`orc ui` ▸ Test** renders all of it and works out none of it. Five tabs, a
+button for every free action, and **`orc test run` as a command you copy** -
+never a button. It costs no model tokens, so the usual rule would make it one;
+it sends real traffic, and a page that can start a scan against a live host is a
+page that can start one by accident.
+
+**The run folder is never staged.** It holds real response bodies from a real
+system - the most sensitive thing ORC writes to disk. `orc doctor` tells you if
+it is not git-ignored, and it will not edit `.gitignore` for you.
+
+Five config keys: `test_gate` (warn only - the payoff is knowing, not gating),
+`test_security_tier`, `test_max_rps`, `test_case_budget`, `test_ui_driver`. Five
+more were **refused**, with the reasons written down so nobody proposes them
+again - among them `test_retries`, because a flake is recorded rather than
+retried away, and `test_auto_fix`, which is this lane's premise inverted.
+
+**And one bug that was not in this lane.** Writing the tests isolated an
+intermittent failure that turned out to be real: `orc ui` compressed its API
+answers but not its **static files**, guarded by a comment reading *"No asset is
+over 64 KiB today"* that had been false for two releases. `js/panels/extra.js`
+is 138 KB. Over a Windows loopback socket a response that size loses its tail
+roughly one time in six - which in a browser is a panel script that stops in the
+middle of a function, with nothing in any log to say so. Both paths now share
+one encoder. **A stale comment can guard a live bug for longer than the bug
+would have survived alone.**
+
+---
+
 ### v1.4.2 - the panel that stops reloading, and the fields you could not read back _(2026-09-05)_
 
 **Still on the unscoped `orc` package?** Do this once first - your `orc upgrade`

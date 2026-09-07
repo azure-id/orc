@@ -64,6 +64,7 @@
   "setting.resetTo": "kembalikan ke {value}",
   "common.open": "Buka",
   "common.writeFail": "Gagal dijalankan",
+  "common.runInTerminal": "Jalankan ini di terminal Anda",
   "common.runInClaude": "Jalankan ini di Claude Code",
   "shortcuts.panelsLetters": "Janji, Batas, Ubah Sendiri, Extra, Contoh Penggunaan Skill",
   "common.confirm": "Konfirmasi"

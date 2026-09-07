@@ -17,6 +17,7 @@
   "nav.challenge": "Challenge",
   "nav.extra": "Extra",
   "nav.wait": "Wait",
+  "nav.test": "Test",
   "nav.docs": "Docs",
   "nav.hookui": "CLI Hook Interface"
 }

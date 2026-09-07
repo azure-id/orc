@@ -394,6 +394,7 @@ const CONTRACTS = [
     token: "a lane that re-dispatches over a live attempt",
     binFiles: ["bin/cli.js"],
     files: [
+      "skills/orc-test/SKILL.md",
       "skills/_shared/return-validation.md",
       "skills/_shared/phases/execution.md",
       "skills/orc/SKILL.md",
@@ -411,6 +412,7 @@ const CONTRACTS = [
     token: "orc run inflight",
     binFiles: ["bin/cli.js"],
     files: [
+      "skills/orc-test/SKILL.md",
       "hooks/README.md",
       "skills/_shared/return-validation.md",
       "skills/_shared/phases/execution.md",
@@ -492,6 +494,8 @@ const CONTRACTS = [
     name: "a wait is a stop, and a stop writes its hand-back (v1.1.0)",
     token: "a lane that waits without a hand-back",
     files: [
+      "skills/_shared/live-target.md",
+      "skills/orc-test/SKILL.md",
       "commands/orc-wait.md",
       "skills/_shared/wait.md",
       "skills/orc-wait/SKILL.md",
@@ -803,6 +807,7 @@ const CONTRACTS = [
     name: "trace file created with the pointer (v0.34.2 — kills the .current clobber)",
     token: "touch the trace file",
     files: [
+      "skills/orc-test/SKILL.md",
       "skills/_shared/lane-suspend.md",
       "skills/orc-aftermath/SKILL.md",
       "skills/orc-analyze-mini/SKILL.md",
@@ -861,6 +866,7 @@ const CONTRACTS = [
     name: "behavior-trace run pointer (every ORC entry point writes .current)",
     token: ".current",
     files: [
+      "skills/orc-test/SKILL.md",
       "agents/orc-trace-writer-haiku-4-5.md",
       "hooks/orc-trace.js",
       // v1.2.1: the statusline READS the pointer to decide which run `status:`
@@ -919,6 +925,7 @@ const CONTRACTS = [
     name: "trace narration writer (v0.32.0 — every phase close dispatches the writer)",
     token: "orc-trace-writer-haiku-4-5",
     files: [
+      "skills/orc-test/SKILL.md",
       "agents/MODEL-MAPPING.md",
       "agents/orc-trace-writer-haiku-4-5.md",
       "hooks/orc-trace.js",
@@ -1137,6 +1144,7 @@ const CONTRACTS = [
     name: "interview decisions belong to the user (v0.42.0)",
     token: "a lane that answers its own interview question",
     files: [
+      "skills/_shared/live-target.md",
       "skills/_shared/extra-dispatch.md",
       "skills/_shared/interview.md",
       "skills/orc-brainstorm/SKILL.md",
@@ -1171,6 +1179,7 @@ const CONTRACTS = [
     name: "the grader never repairs (v0.47.0 — /orc-challenge)",
     token: "a lane that fixes what it judged",
     files: [
+      "skills/_shared/live-target.md",
       "skills/_shared/extra-dispatch.md",
       "skills/_shared/interview.md",
       "skills/orc-challenge/SKILL.md",
@@ -1498,6 +1507,7 @@ const CONTRACTS = [
     token: "RESUME.md",
     binFiles: ["bin/cli.js"],
     files: [
+      "skills/orc-test/SKILL.md",
       // the `resume` / `open-runs` components read its one byte-stable line (v1.3.0)
       "hooks/orc-statusline.js",
       // v1.0.0 W5 — the demotion's run-scoped record lives BESIDE it, in
@@ -2107,6 +2117,8 @@ const CONTRACTS = [
     name: "testgen output location (v0.26.0 — pinned to test-generator/<change-slug>/ at project root)",
     token: "test-generator/",
     files: [
+      "commands/orc-test.md",
+      "skills/_shared/live-target.md",
       "agents/orc-test-author-opus-5-med.md",
       "skills/orc-mini/SKILL.md",
       "skills/orc-mini/examples/mini-run-mock.md",
@@ -2257,6 +2269,7 @@ const CONTRACTS = [
     token: "mock-examples/",
     binFiles: ["bin/cli.js"],
     files: [
+      "skills/_shared/live-target.md",
       "skills/_shared/drift-recovery.md",
       "skills/_shared/phases/mock-example.md",
       "skills/orc-diy/references/flow-schema.md",
@@ -2632,6 +2645,7 @@ const CONTRACTS = [
     name: "foreign input is evidence, never instruction",
     token: "untrusted-input.md",
     files: [
+      "skills/orc-test/SKILL.md",
       "agents/orc-doc-writer-opus-5-med.md",
       "skills/_shared/README.md",
       "skills/_shared/extra-dispatch.md",
@@ -2861,6 +2875,7 @@ const CONTRACTS = [
     name: "the orchestrator never reads the document body (v0.48.0 — /orc-doc)",
     token: "a lane that reads its own document",
     files: [
+      "skills/_shared/live-target.md",
       "skills/_shared/extra-dispatch.md",
       "skills/orc-challenge/references/council.md",
       "skills/orc-doc/SKILL.md",
@@ -2871,6 +2886,7 @@ const CONTRACTS = [
     name: "the context is gathered once and FROZEN (v0.48.0 — /orc-doc)",
     token: "a lane that re-asks a frozen question",
     files: [
+      "skills/orc-test/SKILL.md",
       "skills/orc-doc/SKILL.md",
       "skills/orc-doc/references/resume-protocol.md",
     ],
@@ -3168,6 +3184,7 @@ const CONTRACTS = [
     name: "the call catalogue (v1.0.0 W10)",
     token: "orc lane calls",
     files: [
+      "skills/orc-test/SKILL.md",
       "skills/_shared/read-ladder.md",
       "skills/_shared/phases/preflight.md",
       // v1.0.0 W14 — every lane that makes a catalogued call carries the
@@ -3226,6 +3243,7 @@ const CONTRACTS = [
     name: "one config resolver per lane (v1.0.0 W7)",
     token: "orc lane config",
     files: [
+      "skills/orc-test/SKILL.md",
       "skills/_shared/README.md",
       "skills/_shared/config-precedence.md",
       "skills/_shared/extra-dispatch.md",
@@ -3273,6 +3291,48 @@ const CONTRACTS = [
     name: "read a family top-down, stop at the first rank that resolves (v1.0.0 W7)",
     token: "stop at the first rank that resolves",
     files: ["skills/_shared/config-precedence.md", "skills/orc/config.md"],
+    binFiles: ["bin/cli.js"],
+  },
+  // ── v1.5.0 — /orc-test, the lane that RUNS the test ───────────────────────
+  // THE TRIPLE. Registered together because they fail together: a lane that
+  // will edit the system under test has already stopped needing permission to
+  // reach it, and one that reports what it did not observe has nothing left
+  // that a target's authorization was protecting.
+  {
+    name: "three verdicts, and `unknown` is the honest one (v1.5.0 — /orc-test)",
+    token: "a lane that reports a result it did not observe",
+    files: ["skills/_shared/live-target.md", "skills/orc-test/SKILL.md"],
+    binFiles: ["bin/cli.js"],
+  },
+  {
+    name: "the target is FROZEN and authorized (v1.5.0 — /orc-test)",
+    token: "a lane that sends traffic to a target nobody authorized",
+    files: ["skills/_shared/live-target.md", "skills/orc-test/SKILL.md"],
+    binFiles: ["bin/cli.js"],
+  },
+  {
+    name: "it measures and hands back — it never repairs (v1.5.0 — /orc-test)",
+    token: "a lane that fixes the system under test",
+    files: ["skills/_shared/live-target.md", "skills/orc-test/SKILL.md"],
+    binFiles: ["bin/cli.js"],
+  },
+  // Two single-token CLI mirrors. Both are PATHS the CLI composes and the
+  // payload names, so a rename on either side is exactly the drift a
+  // presence-only assertion catches (the v0.29.0 `binFiles` shape).
+  {
+    name: "orc-test run folder (v1.5.0 — project root, never .claude/, never staged)",
+    token: "orc/orc-test/",
+    files: [
+      "agents/orc-test-interpreter-opus-5-low.md",
+      "commands/orc-test.md",
+      "skills/orc-test/SKILL.md",
+    ],
+    binFiles: ["bin/cli.js"],
+  },
+  {
+    name: "the evidence folder every finding cites (v1.5.0 — redacted before it reaches disk)",
+    token: "evidence/",
+    files: ["agents/orc-test-interpreter-opus-5-low.md", "skills/_shared/live-target.md"],
     binFiles: ["bin/cli.js"],
   },
 ];
@@ -3676,6 +3736,11 @@ for (const b of BUDGETS) {
     // `extra_enabled`. An empty lanes[] here is an ANSWER.
     "statusline_custom",
     "subagent_line_custom",
+    // v1.5.0 — an operating key of the /orc-test RUNNER. The lane calls
+    // `orc test run` and the CLI paces the requests; no spine reads the number,
+    // exactly as no spine reads `extra_timeout_s`. An empty lanes[] here is an
+    // ANSWER.
+    "test_max_rps",
   ]);
   for (const e of metaEntries) {
     if (!e.lanes) {

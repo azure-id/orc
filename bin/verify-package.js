@@ -52,6 +52,7 @@ const required = [
   "bin/webui/css/panels/challenge.css",
   "bin/webui/css/panels/docs.css",
   "bin/webui/css/panels/extra.css",
+  "bin/webui/css/panels/test.css",
   "bin/webui/css/panels/experiment.css",
   // The client modules (v0.48.1). The <script> order in app.html is the load
   // order and the numeric prefix is that order; 99-boot.js must be last.
@@ -82,6 +83,7 @@ const required = [
   "bin/webui/js/panels/challenge.js",
   "bin/webui/js/panels/docs.js",
   "bin/webui/js/panels/extra.js",
+  "bin/webui/js/panels/test.js",
   "bin/webui/js/90-tour.js",
   "bin/webui/js/91-shortcuts.js",
   "bin/webui/js/99-boot.js",
@@ -106,6 +108,7 @@ const required = [
   "bin/webui/fixtures/crosslink.js",
   "bin/webui/fixtures/mockrun.js",
   "bin/webui/fixtures/extra.js",
+  "bin/webui/fixtures/test.js",
   // The string tables (v0.43.6). Named here for the same reason: English is the
   // FALLBACK table every other language falls back to, so a publish that drops
   // it renders raw dotted keys on every panel, in every language.
@@ -135,6 +138,7 @@ const required = [
   "bin/webui/i18n/en/challenge.json",
   "bin/webui/i18n/en/docs.json",
   "bin/webui/i18n/en/extra.json",
+  "bin/webui/i18n/en/test.json",
   "bin/webui/i18n/en/experiment.json",
   "bin/webui/i18n/en/tour.json",
   "bin/webui/i18n/id/common.json",
@@ -159,6 +163,7 @@ const required = [
   "bin/webui/i18n/id/challenge.json",
   "bin/webui/i18n/id/docs.json",
   "bin/webui/i18n/id/extra.json",
+  "bin/webui/i18n/id/test.json",
   "bin/webui/i18n/id/experiment.json",
   "bin/webui/i18n/id/tour.json",
   // The mocked runs (v0.46.x): the catalogue module plus the folder it reads.
@@ -449,6 +454,15 @@ const required = [
   // lint. Both are already Opus 5, so `opus5_only` adds no twin for either.
   "templates/agents/orc-doc-writer-opus-5-med.md",
   "templates/agents/orc-doc-checker-opus-5-low.md",
+  // v1.5.0 - /orc-test's two agents, and they are two INSTRUMENTS rather than
+  // two tiers of one. The designer is `high` because the cheap answer to
+  // "design some test cases" is the list the CLI already derived for free; the
+  // interpreter is `low` because a harder-thinking interpreter reasons its way
+  // to why a leaked stack trace is probably fine in staging, which is exactly
+  // the gap it exists to find. Nothing may ever upgrade the interpreter. Both
+  // are claude-opus-5, so `opus5_only` adds NO pair and the floor moves by two.
+  "templates/agents/orc-test-designer-opus-5-high.md",
+  "templates/agents/orc-test-interpreter-opus-5-low.md",
   // v1.2.1 — the status line explained for the person reading it, in
   // Simplified Technical English. It ships INTO .claude/hooks/ next to the hook
   // it describes, because that is where somebody looking at a segment they do
@@ -538,8 +552,13 @@ const agentCount = walkCount(path.join(ROOT, "templates/agents"), ".md");
 // capability from a lane. Fable 5 survives as a SESSION model (the effort guard
 // and the statusline still clear it at medium) — that is a different question,
 // and this wave does not touch it.
-if (skillCount < 38) missing.push(`templates/skills (expected >=38 SKILL.md, found ${skillCount})`);
-if (agentCount < 46) missing.push(`templates/agents (expected >=46 .md, found ${agentCount})`);
+// v1.5.0: +1 skill (orc-test) and +2 agents - the designer and the interpreter.
+// The lane's recon (T2's `unresolved[]`, T4's flow trace) is dispatched AD-HOC
+// by model+effort and earns no agent, the v0.38.0/v0.45.0 precedent, and that
+// limit is stated in the skill: no `SPAWN` line, so `/orc-retro` cannot
+// aggregate it.
+if (skillCount < 39) missing.push(`templates/skills (expected >=39 SKILL.md, found ${skillCount})`);
+if (agentCount < 48) missing.push(`templates/agents (expected >=48 .md, found ${agentCount})`);
 
 // B4 — encoding/mojibake guard. The OneDrive corruption rule becomes a gate:
 // scan every shipped text file for the U+FFFD replacement char (invalid UTF-8

@@ -42,6 +42,7 @@
 <link rel="stylesheet" href="css/panels/challenge.css">
 <link rel="stylesheet" href="css/panels/docs.css">
 <link rel="stylesheet" href="css/panels/extra.css">
+<link rel="stylesheet" href="css/panels/test.css">
 <link rel="stylesheet" href="css/06-responsive.css">
 <link rel="stylesheet" href="css/04-motion.css">
 </head>
@@ -97,6 +98,13 @@
       -->
       <li><a href="#/docs"        data-panel="docs"        data-idx="d" data-i18n="nav.docs">Docs</a></li>
       <li><a href="#/challenge"   data-panel="challenge"   data-idx="c" data-i18n="nav.challenge">Challenge</a></li>
+      <!--
+        v1.5.0. Test sits directly under Challenge because it is the same kind
+        of thing one step further on: Challenge grades what you WROTE, this
+        reports what a running system actually DID. Both stop and hand back
+        rather than fixing what they measured.
+      -->
+      <li><a href="#/test"        data-panel="test"        data-idx="t" data-i18n="nav.test">Test</a></li>
       <li><a href="#/pact"        data-panel="pact"        data-idx="p" data-i18n="nav.pact">Promises</a></li>
       <li><a href="#/boundary"    data-panel="boundary"    data-idx="b" data-i18n="nav.boundary">Boundary</a></li>
       <li><a href="#/wait"        data-panel="wait"        data-idx="w" data-i18n="nav.wait">Wait</a></li>
@@ -206,6 +214,7 @@
 <script src="js/panels/extra.js"></script>
 <script src="js/panels/wait.js"></script>
 <script src="js/panels/hookui.js"></script>
+<script src="js/panels/test.js"></script>
 <script src="js/90-tour.js"></script>
 <script src="js/91-shortcuts.js"></script>
 <script src="js/99-boot.js"></script>

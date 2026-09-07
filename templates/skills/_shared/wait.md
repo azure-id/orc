@@ -101,6 +101,7 @@ the other fails the suite.
 | `/orc-poly` | docset | after a per-repo plan is written |
 | `/orc-quick` | entry | after an entry closes |
 | `/orc-challenge` | cycle | after a cycle records |
+| `/orc-test` | cycle | case boundary |
 | `/orc-brainstorm` | snapshot | phase edge |
 | `/orc-grill` | snapshot | round edge |
 | `/orc-learn` | none | single dispatch |

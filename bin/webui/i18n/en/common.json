@@ -63,6 +63,7 @@
   "setting.resetTo": "reset to {value}",
   "common.open": "Open",
   "common.writeFail": "That did not work",
+  "common.runInTerminal": "Run this in your terminal",
   "common.runInClaude": "Run this in Claude Code",
   "shortcuts.panelsLetters": "Promises, Boundary, Self-serve, Extra, Mocked Skill Use",
   "common.confirm": "Confirm"
