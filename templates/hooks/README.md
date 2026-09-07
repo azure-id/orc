@@ -1,7 +1,10 @@
-# The ORC status line
+# The ORC hooks
 
 > This page is written in Simplified Technical English. Short sentences, one
 > idea each, plain words. See `bin/webui/i18n/TERMS.md` for the term list.
+
+This page covers the two hooks you can see. The STATUS LINE, which shows what
+is happening, and the READ GATE, which can stop an oversized read.
 
 ORC shows two lines at the bottom of your terminal. Claude Code draws them.
 ORC writes them.
@@ -258,6 +261,91 @@ it did not see.
 
 ---
 
+## The read gate
+
+This is a different hook. It is off when you install ORC.
+
+ORC has a rule about reading. The main session reads a file to FIND things.
+To UNDERSTAND a file, ORC sends an agent to read it and report back. The agent
+uses its own context, not yours. The rule was written in three guide files and
+nothing checked it. The read gate is the part that can say no.
+
+Turn it on like this:
+
+```
+orc config set read_gate warn     # it tells you, and still reads the file
+orc config set read_gate block    # it stops the read
+orc config set read_gate off      # the default
+```
+
+### What it does
+
+It looks at one thing: a `Read` of a whole file, by the main session, during an
+ORC run, when the file is 1000 lines or more.
+
+In `warn` it shows you a note and reads the file anyway. In `block` it stops the
+read and tells you three other ways to get what you need:
+
+- Read the file with `offset` and `limit`. This is never stopped.
+- Search the file first, then read that part.
+- Send an agent to read it. An agent's reads are never stopped.
+
+**A block always names another way.** A gate that only says no is a gate people
+turn off.
+
+### When it says nothing
+
+This list is the important part. The gate is quiet in all of these states, and
+each one is on purpose:
+
+| State | Why |
+|---|---|
+| An agent is reading | An agent must read a file in full before it edits it. If it could not, it would guess the old text and damage the file. |
+| `read_gate` is `off` | This is the default. With `off`, the hook does nothing at all. |
+| No ORC run is open | The gate is about ORC's own reading. It is not a rule for your session. Outside a run it never stops anything. |
+| You used `offset` or `limit` | This is the behaviour the gate wants. It can never stop it. |
+| The file is under 1000 lines | See the next part. |
+| The file is a build log, a test result, or `.jsonl` | ORC reads these to decide pass or fail. A cut-short failing build looks like a passing build. That is worse than any saving. |
+| The gate hit an error | It always lets the read through. Then it writes down what went wrong. |
+
+**The gate cannot see a file you read with a shell command** such as `cat` or
+`head`. It only sees the `Read` tool.
+
+### Why 1000 lines
+
+Sending an agent is not free. One real agent read cost about 13,000 tokens and
+about 76 seconds. A line in this project is about 55 characters. So a file must
+be near 1000 lines before sending an agent costs less than reading it yourself.
+
+Below that number, sending an agent costs more than it saves.
+
+You can change it:
+
+```
+orc config set read_gate_max_lines 500
+```
+
+### What it never does
+
+- It never stops an agent's read.
+- It never stops a read outside an ORC run.
+- It never stops a `Bash` command.
+- It never reads the file to you. It only counts the lines.
+- It never fails closed. If the hook breaks, your read still happens.
+
+### Where to look when it acts
+
+Every `warn` and every `block` writes one line in the run trace:
+
+```
+[070926 14:22:01.220] hook     READ-GATE block :: lines=2400 max=1000 file=big-plan.md
+```
+
+An allowed read writes nothing. `orc doctor` tells you if the gate is on but not
+wired, and if it ever had to let a read through because it could not judge it.
+
+---
+
 ## For maintainers
 
 - The hook is `orc-statusline.js`. `orc init` installs it and wires it into
@@ -285,3 +373,24 @@ it did not see.
 - The cache file is `.claude/orc/usage-session.json`. The hook reads it once and
   writes it once, after the text is ready. It stores raw numbers only — never a
   word like `fresh` or `STALE`, which is computed each time it is shown.
+
+### The read gate
+
+- The hook is `orc-read-gate.js`, on `PreToolUse` with matcher `Read`. `orc
+  init` wires it even though `read_gate` defaults to `off`, so arming it is a
+  config edit and never an install step somebody has to find.
+- **`off` is byte-identical to not having the hook**, and a test asserts it.
+- **`agent_id` is the only way to tell a subagent's read from the main
+  session's, and this was MEASURED, not assumed.** `PreToolUse` does fire
+  inside a dispatched subagent, and `session_id` and `transcript_path` are
+  identical in both. A gate written against either would block the full read an
+  executor must do before it edits, and a reconstructed `old_string` corrupts
+  files. Test for the PRESENCE of `agent_id`. Never test for the absence of
+  another key — that is not a positive statement about anything.
+- The threshold is measured, not borrowed. See `read_gate_max_lines`.
+- It fails open on every path, and each failure it can name writes
+  `.claude/orc/read-gate-fallback.json` for `orc doctor` to turn into a
+  sentence — only while the feature is armed.
+- It writes one trace line per `warn` and per `block`, never on an allow. That
+  is affordable here for a structural reason: the gate only acts while a run is
+  open, so a trace always exists.

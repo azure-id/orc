@@ -77,6 +77,14 @@ const FINDING_ROUTE = {
   // `test-evidence-unstaged` goes there too even though the fix is a line in
   // .gitignore that ORC will not write: Test is where the sentence explaining
   // WHY that folder must never be staged already lives.
+  // v1.6.0. An INSTALL-FOOTPRINT finding takes the documented default:
+  // `read-gate-unwired` is cleared by `orc update`, which is an action row on
+  // MAINTENANCE. `read-gate-fallback` is NOT a button anywhere — the record
+  // ages out on its own and there is nothing to press — so it gets
+  // `panel: null` rather than a button that would do nothing, the same call
+  // `trace-pointer-dangling` made.
+  "read-gate-unwired": { panel: "maintenance", cta: "overview.item.readGateUnwired.cta" },
+  "read-gate-fallback": { panel: null },
   "test-env-unhealthy": { panel: "test", cta: "overview.item.testEnvUnhealthy.cta" },
   "test-run-red": { panel: "test", cta: "overview.item.testRunRed.cta" },
   "test-unchecked-owasp": { panel: "test", cta: "overview.item.testUncheckedOwasp.cta" },

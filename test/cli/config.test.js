@@ -237,7 +237,7 @@ test("config: every key answers a declared family, and the two contested ones ar
   const { root } = freshInstall();
   try {
     const j = JSON.parse(cli(["config", "list", "--json", "--dir", root]).stdout);
-    assert.strictEqual(j.keys.length, 84);
+    assert.strictEqual(j.keys.length, 86); // v1.6.0: +read_gate, +read_gate_max_lines
     for (const k of j.keys) {
       assert.ok(k.answers && k.answers.length, k.key + " declares no answers[]");
       for (const a of k.answers) assert.ok(j.families[a.family], k.key + " → unknown family " + a.family);
@@ -363,6 +363,13 @@ test("config: lanes[] is a mechanical seed, and says so by being empty where it 
       // v1.4.0 — the SECOND board's switch, and the same answer for the same
       // reason: a hook has no lane.
       "subagent_line_custom",
+      // v1.6.0 — the read gate's two operating keys, and the SAME answer for
+      // the SAME reason as the two above it: a hook has no lane and cannot
+      // resolve config, so it reads the raw key off the file exactly as it
+      // already does for `log_dir`. Nothing here is a to-do — the gate acts on
+      // the MAIN session's reads, which no lane is in a position to mediate.
+      "read_gate",
+      "read_gate_max_lines",
       "statusline_custom",
       // v1.1.0 — the two operating keys of the WAIT. A lane runs `orc wait plan`
       // and the CLI reads these two; no spine reads either, which is the same

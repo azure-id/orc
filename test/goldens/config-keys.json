@@ -105,6 +105,16 @@
     "default": "off"
   },
   {
+    "key": "read_gate",
+    "tier": "common",
+    "default": "off"
+  },
+  {
+    "key": "read_gate_max_lines",
+    "tier": "advanced",
+    "default": 1000
+  },
+  {
     "key": "statusline_custom",
     "tier": "common",
     "default": "off"

@@ -7,14 +7,14 @@
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
 ![npm](https://img.shields.io/npm/v/%40azure-id%2Forc?style=for-the-badge&color=cb3837&logo=npm)
-![Version](https://img.shields.io/badge/version-1.4.2-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-1.6.0-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
 ![Dependencies](https://img.shields.io/badge/dependencies-zero-lightgrey.svg?style=for-the-badge)
 ![GitHub stars](https://img.shields.io/github/stars/azure-id/orc?style=for-the-badge&color=yellow)
 
-**Latest: v1.5.0** · updated 2026-09-07 · [full changelog](CHANGELOG.md)
+**Latest: v1.6.0** · updated 2026-09-07 · [full changelog](CHANGELOG.md)
 
 **On npm: [`@azure-id/orc`](https://www.npmjs.com/package/@azure-id/orc)** — `npm i -g @azure-id/orc`
 
@@ -576,7 +576,7 @@ a current audit: [EVAL-REPORT.md](EVAL-REPORT.md).
 **Full history: [CHANGELOG.md](CHANGELOG.md)** — or `orc changelog`, which prints
 only what is newer than the version you have.
 
-### v1.5.0 - the lane that runs the test _(2026-09-07)_
+### v1.6.0 - the rule that can finally say no _(2026-09-07)_
 
 **Still on the unscoped `orc` package?** Do this once first - your `orc upgrade`
 is the pre-v0.56.0 one and cannot install itself. Full detail in the CAUTION at
@@ -588,53 +588,66 @@ the top of this file.
 
 **Do not use `npm i -g -f`.** Full detail in v0.56.0 below.
 
-Every other testing surface in ORC **writes** tests. `/orc-test` **runs** them.
 
-It points at a running API - yours, on your laptop, or one you were given
-permission to touch - sends real requests, writes down what came back, and
-stops.
+ORC's read discipline has always said the same thing in three places: the main
+session reads to **find**, and dispatches an agent to **understand**. It was
+prose in `_shared/read-ladder.md`, in `/orc-doc` hard rule 0, and on line 21 of
+`/orc-quick` - and **nothing checked any of it**.
 
-> **The CLI executes and measures. The model designs and interprets.**
-> A model never sends a request. The CLI never decides what a response means.
+`orc-read-gate.js` is a `PreToolUse` hook on `Read` that can refuse. It ships
+**off**, and `off` is byte-identical to not having it - asserted by a test, not
+by intention.
 
-That split is what makes the report worth reading: a number in it was measured
-by a program, and a sentence in it was written by a model that only ever saw
-evidence on disk.
+**The threshold is ORC's own number, measured.** The pattern this came from uses
+350 lines, derived from a 10-30 second delegation round trip. ORC's round trip
+is nothing like that: a dispatch measured **p50 76s, p90 188s** (n=125), and one
+real read-only dispatch cost **13,276 tokens** to read a four-line file. At the
+measured 55.2 chars/line across 316 sampled reads, break-even is **~1000 lines**.
+Copying 350 would delegate work whose overhead exceeds its saving.
 
-**The free pass runs first.** `orc test surface` reads your repository and the
-target's own spec document for zero model tokens, and the **code-vs-live diff**
-falls out of it - a route that answers at the target and is in **no file in your
-repository** is surface nobody reviews and nobody patches. With no spec at the
-target it reads **NOT MEASURED, with the reason**, because an empty list there
-would say "no shadow APIs", which is a claim nobody made.
+**`agent_id` is the only discriminator, and that was MEASURED, not assumed.**
+`PreToolUse` **does** fire inside a dispatched subagent - the assumption that
+hooks are session-level was wrong. `session_id` and `transcript_path` are
+**identical** in both contexts, so a gate written against either would block the
+full read an executor must perform before an `Edit`, and a reconstructed
+`old_string` corrupts files. The gate tests for the **presence** of `agent_id`,
+never for the absence of some other key, which asserts nothing.
 
-**The security tier is a closed set** - the OWASP API Top 10 (2023), and all ten
-rows render in every state. A category ORC could not measure says `UNCHECKABLE`,
-keeps its slot, and **never becomes a pass**. It detects and never exploits.
+**Everything it stays silent on, and each one is deliberate:** any read by a
+subagent - outside an open ORC run - a targeted `offset`/`limit` read - a file
+under the threshold - build logs, test results and `.jsonl` that a gate parses
+whole, because a truncated red build reads **green** - and any error at all,
+because **a read gate that throws and blocks a read has broken the tool.**
 
-**When your app is broken it stops.** It finds the start command, sees the
-process is alive, reads the exact line in the log - and will not open that file.
+**A block always names the cheaper path.** A gate that only refuses is a gate
+people switch off. It names the targeted read, the agent dispatch, and the
+config key that turns it down.
 
-**A red happy path stops the ladder**, because a 500 on every request will
-"prove" a dozen vulnerabilities that are one bug. A **429 is a result** - it
-means rate limiting works, so ORC backs off rather than pushing through. Every
-credential is replaced **before the bytes reach disk**. A finding that cannot
-point at evidence on disk is **dropped by name**. A flake is **recorded, never
-retried away**.
+**Every `warn` and `block` writes one trace line** (`READ-GATE`), an allow
+writes none. That is affordable here for a structural reason: the gate only acts
+while a run is open, so a trace always exists. `orc doctor` gains
+`read-gate-unwired` and `read-gate-fallback`, both reported **only while the
+feature is armed** - a doctor that warns about the default is one people learn
+to ignore.
 
-**`orc ui` ▸ Test** renders all of it and works out none of it - and `orc test
-run` is a command you **copy**, never a button: a page that can start a scan
-against a live host is a page that can start one by accident.
+**Two config keys**, both on the `SEED_EMPTY` allowlist with an empty `lanes[]`,
+because a hook has no lane and cannot resolve config: `read_gate`
+(`off`|`warn`|`block`, default `off`) and `read_gate_max_lines` (default 1000).
 
-**And one bug that was not in this lane.** Writing the tests isolated a real
-one: `orc ui` compressed its API answers but not its static files, guarded by a
-comment reading *"No asset is over 64 KiB today"* that had been false for two
-releases. Over a Windows loopback socket a 138 KB panel script loses its tail
-roughly one time in six. Both paths share one encoder now.
+**What this release deliberately does NOT do**, with the reasons recorded so
+nobody re-proposes them: no gate on `Bash` reads (`cat`/`head`/`tail`) - it is
+several times the false-positive surface, and the measurement says the `Read`
+tool is only about 7.5% of the actual read surface here - and no
+`context-reader` slot in `EXTRA_SLOTS`, because at a 1000-line threshold the
+addressable population is five reads across 239 sampled sessions, which is
+infrastructure for nothing.
 
-Full detail in [CHANGELOG.md](CHANGELOG.md).
-
----
+**An honest note on the measurement.** The audit behind this release found the
+existing prose is largely *working*: median full read is 85 lines, p90 is 288,
+and 46% of reads already use `offset`/`limit` without being told. Oversized
+reads are about **1% of price-weighted main-session ingest** at a generous upper
+bound. This hook is a guardrail on a road most runs already stay on - it is off
+by default for exactly that reason.
 
 ## Requirements
 

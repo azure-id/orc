@@ -10,6 +10,81 @@ Format: `### v<version> — <title> _(<date>)_`.
 
 ---
 
+### v1.6.0 - the rule that can finally say no _(2026-09-07)_
+
+**Still on the unscoped `orc` package?** Do this once first - your `orc upgrade`
+is the pre-v0.56.0 one and cannot install itself. Full detail in the CAUTION at
+the top of this file.
+
+- **Step 1 - release the command from the old package:** `npm uninstall -g orc`
+- **Step 2 - install the current package:** `npm i -g @azure-id/orc`
+- **Step 3 - re-apply it to your project:** `orc update`
+
+**Do not use `npm i -g -f`.** Full detail in v0.56.0 below.
+
+
+ORC's read discipline has always said the same thing in three places: the main
+session reads to **find**, and dispatches an agent to **understand**. It was
+prose in `_shared/read-ladder.md`, in `/orc-doc` hard rule 0, and on line 21 of
+`/orc-quick` - and **nothing checked any of it**.
+
+`orc-read-gate.js` is a `PreToolUse` hook on `Read` that can refuse. It ships
+**off**, and `off` is byte-identical to not having it - asserted by a test, not
+by intention.
+
+**The threshold is ORC's own number, measured.** The pattern this came from uses
+350 lines, derived from a 10-30 second delegation round trip. ORC's round trip
+is nothing like that: a dispatch measured **p50 76s, p90 188s** (n=125), and one
+real read-only dispatch cost **13,276 tokens** to read a four-line file. At the
+measured 55.2 chars/line across 316 sampled reads, break-even is **~1000 lines**.
+Copying 350 would delegate work whose overhead exceeds its saving.
+
+**`agent_id` is the only discriminator, and that was MEASURED, not assumed.**
+`PreToolUse` **does** fire inside a dispatched subagent - the assumption that
+hooks are session-level was wrong. `session_id` and `transcript_path` are
+**identical** in both contexts, so a gate written against either would block the
+full read an executor must perform before an `Edit`, and a reconstructed
+`old_string` corrupts files. The gate tests for the **presence** of `agent_id`,
+never for the absence of some other key, which asserts nothing.
+
+**Everything it stays silent on, and each one is deliberate:** any read by a
+subagent - outside an open ORC run - a targeted `offset`/`limit` read - a file
+under the threshold - build logs, test results and `.jsonl` that a gate parses
+whole, because a truncated red build reads **green** - and any error at all,
+because **a read gate that throws and blocks a read has broken the tool.**
+
+**A block always names the cheaper path.** A gate that only refuses is a gate
+people switch off. It names the targeted read, the agent dispatch, and the
+config key that turns it down.
+
+**Every `warn` and `block` writes one trace line** (`READ-GATE`), an allow
+writes none. That is affordable here for a structural reason: the gate only acts
+while a run is open, so a trace always exists. `orc doctor` gains
+`read-gate-unwired` and `read-gate-fallback`, both reported **only while the
+feature is armed** - a doctor that warns about the default is one people learn
+to ignore.
+
+**Two config keys**, both on the `SEED_EMPTY` allowlist with an empty `lanes[]`,
+because a hook has no lane and cannot resolve config: `read_gate`
+(`off`|`warn`|`block`, default `off`) and `read_gate_max_lines` (default 1000).
+
+**What this release deliberately does NOT do**, with the reasons recorded so
+nobody re-proposes them: no gate on `Bash` reads (`cat`/`head`/`tail`) - it is
+several times the false-positive surface, and the measurement says the `Read`
+tool is only about 7.5% of the actual read surface here - and no
+`context-reader` slot in `EXTRA_SLOTS`, because at a 1000-line threshold the
+addressable population is five reads across 239 sampled sessions, which is
+infrastructure for nothing.
+
+**An honest note on the measurement.** The audit behind this release found the
+existing prose is largely *working*: median full read is 85 lines, p90 is 288,
+and 46% of reads already use `offset`/`limit` without being told. Oversized
+reads are about **1% of price-weighted main-session ingest** at a generous upper
+bound. This hook is a guardrail on a road most runs already stay on - it is off
+by default for exactly that reason.
+
+---
+
 ### v1.5.0 - the lane that runs the test _(2026-09-07)_
 
 **Still on the unscoped `orc` package?** Do this once first - your `orc upgrade`

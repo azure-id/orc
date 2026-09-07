@@ -869,6 +869,10 @@ const CONTRACTS = [
       "skills/orc-test/SKILL.md",
       "agents/orc-trace-writer-haiku-4-5.md",
       "hooks/orc-trace.js",
+      // v1.6.0: the read gate READS the pointer to decide whether an ORC run
+      // is open at all. Outside a run it refuses nothing — the gate constrains
+      // ORC's own reading, never the user's session.
+      "hooks/orc-read-gate.js",
       // v1.2.1: the statusline READS the pointer to decide which run `status:`
       // is about. "The newest file" would be a different, wrong answer during
       // a lane suspend, when two traces are live and only one is the run.
@@ -2616,6 +2620,12 @@ const CONTRACTS = [
     name: "read ladder (escalating read discipline for read-heavy roles)",
     token: "read-ladder.md",
     files: [
+      // v1.6.0 — the ENFORCEMENT half. The ladder was advisory prose in three
+      // places and enforced in none; this hook is the layer that can refuse.
+      // It cites the ladder by name because its two carve-outs ARE the
+      // ladder's two exceptions — rename the file and the gate's reason text
+      // stops naming anything real.
+      "hooks/orc-read-gate.js",
       "agents/orc-executor-haiku-4-5.md",
       "agents/orc-executor-opus-4-7-high.md",
       "agents/orc-executor-opus-4-7-med.md",
@@ -3741,6 +3751,14 @@ for (const b of BUDGETS) {
     // exactly as no spine reads `extra_timeout_s`. An empty lanes[] here is an
     // ANSWER.
     "test_max_rps",
+    // v1.6.0 — operating keys of the READ GATE HOOK, and the same answer as
+    // `statusline_custom` for the same reason: a hook has no lane and cannot
+    // resolve config, so it reads the raw key off the file exactly as it
+    // already does for `log_dir`. No spine reads either of these — the gate
+    // acts on the MAIN session's reads, which no lane is in a position to
+    // mediate. An empty lanes[] here is an ANSWER, not a to-do.
+    "read_gate",
+    "read_gate_max_lines",
   ]);
   for (const e of metaEntries) {
     if (!e.lanes) {

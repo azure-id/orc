@@ -364,6 +364,31 @@ function installGuards(claudeDir) {
   wireTrace("PreToolUse", "Task|Agent");
   wireTrace("SubagentStop", null);
 
+  // 5) PreToolUse read gate (v1.6.0) — add once, or refresh its path on update.
+  // Wired even though `read_gate` defaults to OFF: the hook's first act is to
+  // read that key and exit 0, so an unarmed gate is byte-identical to not
+  // having it (asserted by a test). Wiring it here means arming the feature is
+  // a config edit, never an install step the user has to discover.
+  const readGateCmd = nodeCmd(path.join(hooksDest, "orc-read-gate.js"));
+  let readGated = false;
+  for (const entry of settings.hooks.PreToolUse) {
+    for (const h of entry.hooks || []) {
+      if (typeof h.command === "string" && h.command.includes("orc-read-gate")) {
+        h.command = readGateCmd; // keep the path current
+        readGated = true;
+      }
+    }
+  }
+  if (!readGated) {
+    settings.hooks.PreToolUse.push({
+      matcher: "Read",
+      hooks: [{ type: "command", command: readGateCmd }],
+    });
+    console.log("  add   settings.json → PreToolUse read gate (off by default)");
+  } else {
+    console.log("  upd   settings.json → PreToolUse read gate path");
+  }
+
   fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + "\n");
 }
 
@@ -1234,6 +1259,10 @@ const CONFIG_FAMILIES = {
   // reason, because a config that once said yes is on for the run you needed it
   // off.
   test: { contested: false, question: "how far a live test run goes, and how hard it pushes" },
+  // v1.6.0 — the read gate. UNCONTESTED: no forcing mode reaches it, because
+  // the gate acts on the MAIN session's reads and `opus5_only` / `extra_*`
+  // decide which MODEL runs a dispatched role. Nothing shadows these two.
+  read: { contested: false, question: "whether an oversized full read by the main session is refused" },
 };
 
 // Ordered, tiered metadata. Common first, then advanced.
@@ -1290,6 +1319,8 @@ const CONFIG_META = [
   // it is an operating key of a hook. Off by default, and off means Claude
   // Code's own agent-panel row, unchanged.
   { key: "subagent_line_custom", def: "off", tier: "common", answers: [{ family: "statusline", prio: "P2", mode: "replace" }], lanes: [], validate: vEnum("off", "on"), options: ["off", "on"], desc: "Whether the agent panel renders YOUR composed row for each subagent instead of Claude Code's own. Off is Claude Code's row, unchanged. Compose it in `orc ui` > CLI Hook Interface, on the subagent board. INDEPENDENT of the per-agent token record: ORC writes what the agent panel reports whether this is on or off, because that measurement is handed over either way and throwing it out because a display setting is off would be the wrong trade." },
+  { key: "read_gate", def: "off", tier: "common", answers: [{ family: "read", prio: "P2", mode: "replace" }], lanes: [], validate: vEnum("off", "warn", "block"), options: ["off", "warn", "block"], desc: "Whether the PreToolUse read gate acts on an oversized full read by the MAIN session. Off is byte-identical to not having the hook. `warn` allows and says so; `block` refuses and names the cheaper path. It is SILENT on every read a subagent makes (so an executor's read-before-edit is never touched), outside an open ORC run, on a targeted offset/limit read, on output a gate parses, and under `read_gate_max_lines`." },
+  { key: "read_gate_max_lines", def: 1000, tier: "advanced", answers: [{ family: "read", prio: "P2", mode: "replace" }], lanes: [], validate: vInt(1), options: [500, 1000, 2000], desc: "Line count at or above which `read_gate` acts. The default 1000 is MEASURED, not borrowed: a read-only dispatch costs ~13k tokens and p50 76s, which at 55.2 chars/line across 316 sampled reads puts break-even near 1000 lines. A lower number delegates work whose overhead exceeds its saving." },
   { key: "statusline_custom", def: "off", tier: "common", answers: [{ family: "statusline", prio: "P2", mode: "replace" }], lanes: [], validate: vEnum("off", "on"), options: ["off", "on"], desc: "Whether the status line renders YOUR composed layout instead of the shipped two lines. Off is byte-identical to what ships. Compose the layout in `orc ui` > CLI Hook Interface (the CLI half exists so the panel has something to shell). Turning this on with an invalid or missing layout is refused, naming the reason; a layout that later becomes unreadable falls back to the shipped lines silently and is reported by `orc doctor`." },
   { key: "wait_hop_minutes", def: 30, tier: "advanced", answers: [{ family: "wait", prio: "P2", mode: "replace" }], lanes: [], validate: vInt(1), options: [5, 10, 15, 30], desc: "How long ONE detached hop waits before ORC re-reads the window. Short on purpose: each wake-up is session activity, and session activity is the only thing that makes the statusline write a fresh reading. One long sleep wakes into a reading as stale as the sleep was long." },
   { key: "wait_max_hops", def: 5, tier: "advanced", answers: [{ family: "wait", prio: "P2", mode: "replace" }], lanes: [], validate: vInt(1), options: [1, 2, 3, 5, 8, 12], desc: "How many hops before ORC gives up and stops with the hand-back. A wrong reset time must cost you a bounded wait, never a session that never comes back." },
@@ -32459,6 +32490,56 @@ function doctor() {
           fix: "orc statusline compile",
         });
       else ok("custom status line armed and valid");
+    }
+  } catch (_) {}
+
+  // 5a-bis) the read gate (v1.6.0). Same two rules as the status line above,
+  // for the same reasons. ONLY WHILE ARMED: `read_gate: off` is the default and
+  // the overwhelmingly common state, and a doctor that warns about the default
+  // is a doctor people learn to scroll past. And the hook FAILS OPEN — it must,
+  // because a read gate that throws and blocks a read has broken the tool — so
+  // it records WHY, and this is where that recording becomes a sentence. A gate
+  // that quietly stopped gating is exactly the bug a user cannot report.
+  try {
+    const cfg = resolvedConfig(claudeDir);
+    const mode = String(cfg.read_gate || "off").toLowerCase();
+    if (mode === "off") {
+      ok("read gate off (fine — the default; the read ladder stays advisory)");
+    } else {
+      // Armed but never wired: the hook exists and the key is on, yet nothing
+      // in settings.json matches `Read`, so the gate has never once fired.
+      const wired = (() => {
+        try {
+          const s = JSON.parse(fs.readFileSync(path.join(claudeDir, "settings.json"), "utf8"));
+          return (s.hooks && s.hooks.PreToolUse ? s.hooks.PreToolUse : []).some((e) =>
+            (e.hooks || []).some((h) => String(h.command || "").includes("orc-read-gate"))
+          );
+        } catch (_) {
+          return false;
+        }
+      })();
+      const st = (() => {
+        try {
+          return JSON.parse(
+            fs.readFileSync(path.join(claudeDir, "orc", "read-gate-fallback.json"), "utf8")
+          );
+        } catch (_) {
+          return null;
+        }
+      })();
+      if (!wired)
+        warn(
+          "read-gate-unwired",
+          `read_gate is '${mode}' but .claude/settings.json has no PreToolUse hook on Read — the gate has never fired`,
+          { fix: "orc update", fix_command: "orc update" }
+        );
+      else if (st && st.rung && Date.now() - (st.at || 0) < 24 * 60 * 60 * 1000)
+        warn(
+          "read-gate-fallback",
+          `read gate: it allowed a read it could not judge (${st.rung}${st.detail ? ": " + st.detail : ""}) — fail-open worked, but the gate was blind for that read`,
+          { fix: "orc doctor  (the record clears itself after 24h)" }
+        );
+      else ok(`read gate armed (${mode}) and wired`);
     }
   } catch (_) {}
 

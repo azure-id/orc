@@ -786,3 +786,276 @@ test("statusline: a version it cannot read renders `ORC`, never `ORC vnull`", ()
     rmrf(root);
   }
 });
+
+// ── the read gate (v1.6.0) ──────────────────────────────────────────────────
+// The gate refuses a read the ORCHESTRATOR asked for. Almost every test below
+// is about a state in which it must NOT refuse — that asymmetry is the design:
+// a false ALLOW costs tokens, a false BLOCK costs correctness.
+
+// Arm the gate and open a run, so the tests exercise the blocking path rather
+// than the (default) silent one.
+function armReadGate(root, claudeDir, mode, extra) {
+  fs.writeFileSync(
+    path.join(claudeDir, "orc.config.yaml"),
+    "read_gate: " + mode + "\n" + (extra || "")
+  );
+  const logs = path.join(claudeDir, "orc", "logs");
+  fs.mkdirSync(logs, { recursive: true });
+  fs.writeFileSync(path.join(logs, "run-orc-t-010126-000000.txt"), "trace\n");
+  fs.writeFileSync(path.join(logs, ".current"), "run-orc-t-010126-000000.txt\n");
+}
+
+function bigFile(root, name, lines) {
+  const p = path.join(root, name || "big.md");
+  fs.writeFileSync(p, Array.from({ length: lines }, (_, i) => "line " + i).join("\n"));
+  return p;
+}
+
+function readPayload(file, extra) {
+  return Object.assign(
+    { hook_event_name: "PreToolUse", tool_name: "Read", tool_input: { file_path: file } },
+    extra || {}
+  );
+}
+
+test("read gate: off is byte-identical to not having the hook", () => {
+  const { root, claudeDir } = freshInstall();
+  try {
+    const file = bigFile(root, "huge.md", 5000);
+    // No config at all — `off` is the default.
+    const bare = runHook(claudeDir, "orc-read-gate.js", readPayload(file));
+    assert.strictEqual(bare.status, 0, "default off never blocks");
+    assert.strictEqual(bare.stdout, "", "default off emits nothing at all");
+    assert.strictEqual(bare.stderr, "", "default off writes no reason");
+
+    // Explicitly off, with a run open — still nothing.
+    armReadGate(root, claudeDir, "off");
+    const explicit = runHook(claudeDir, "orc-read-gate.js", readPayload(file));
+    assert.strictEqual(explicit.status, 0);
+    assert.strictEqual(explicit.stdout, "", "explicit off is silent");
+    assert.strictEqual(explicit.stderr, "");
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("read gate: a SUBAGENT read is never gated, however big", () => {
+  const { root, claudeDir } = freshInstall();
+  try {
+    armReadGate(root, claudeDir, "block");
+    const file = bigFile(root, "huge.md", 5000);
+    // W1 measured this: PreToolUse DOES fire inside a subagent, and
+    // session_id/transcript_path are IDENTICAL there. `agent_id` is the only
+    // discriminator. If this regresses, an executor's pre-Edit full read gets
+    // blocked and its reconstructed old_string corrupts the file.
+    const r = runHook(
+      claudeDir,
+      "orc-read-gate.js",
+      readPayload(file, { agent_id: "a77fe7356ca53e093", agent_type: "Explore" })
+    );
+    assert.strictEqual(r.status, 0, "a subagent read is always allowed");
+    assert.strictEqual(r.stderr, "", "and not even warned about");
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("read gate: a targeted read (offset/limit) always passes", () => {
+  const { root, claudeDir } = freshInstall();
+  try {
+    armReadGate(root, claudeDir, "block");
+    const file = bigFile(root, "huge.md", 5000);
+    for (const extra of [{ offset: 100 }, { limit: 50 }, { offset: 10, limit: 20 }]) {
+      const p = readPayload(file);
+      Object.assign(p.tool_input, extra);
+      const r = runHook(claudeDir, "orc-read-gate.js", p);
+      assert.strictEqual(
+        r.status, 0,
+        "ladder step 3 is the behaviour we want: " + JSON.stringify(extra)
+      );
+    }
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("read gate: output a gate parses passes whole", () => {
+  const { root, claudeDir } = freshInstall();
+  try {
+    armReadGate(root, claudeDir, "block");
+    // read-ladder exception 2. A truncated red build reads GREEN — worse than
+    // any token saving, so this carve-out is deliberately generous.
+    for (const name of ["build.log", "results.xml", "run.tap", "trace.jsonl"]) {
+      const file = bigFile(root, name, 5000);
+      const r = runHook(claudeDir, "orc-read-gate.js", readPayload(file));
+      assert.strictEqual(r.status, 0, name + " must pass whole");
+    }
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("read gate: with no open run, nothing is ever blocked", () => {
+  const { root, claudeDir } = freshInstall();
+  try {
+    fs.writeFileSync(path.join(claudeDir, "orc.config.yaml"), "read_gate: block\n");
+    const file = bigFile(root, "huge.md", 5000);
+    const r = runHook(claudeDir, "orc-read-gate.js", readPayload(file));
+    assert.strictEqual(r.status, 0, "the gate constrains ORC's reading, not the user's session");
+    assert.strictEqual(r.stderr, "");
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("read gate: a STALE run pointer does not count as an open run", () => {
+  const { root, claudeDir } = freshInstall();
+  try {
+    armReadGate(root, claudeDir, "block");
+    const logs = path.join(claudeDir, "orc", "logs");
+    // Older than STALE_MS (6h) on BOTH halves — the trace file and the pointer.
+    const old = new Date(Date.now() - 7 * 60 * 60 * 1000);
+    for (const f of ["run-orc-t-010126-000000.txt", ".current"]) {
+      fs.utimesSync(path.join(logs, f), old, old);
+    }
+    const file = bigFile(root, "huge.md", 5000);
+    const r = runHook(claudeDir, "orc-read-gate.js", readPayload(file));
+    assert.strictEqual(r.status, 0, "an ended run is not an open one");
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("read gate: warn never exits 2, and says so without spending context", () => {
+  const { root, claudeDir } = freshInstall();
+  try {
+    armReadGate(root, claudeDir, "warn");
+    const file = bigFile(root, "huge.md", 5000);
+    const r = runHook(claudeDir, "orc-read-gate.js", readPayload(file));
+    assert.strictEqual(r.status, 0, "warn allows");
+    assert.strictEqual(r.stderr, "", "warn never writes a block reason");
+    // systemMessage is shown to the user and NOT added to model context.
+    const j = JSON.parse(r.stdout);
+    assert.match(j.systemMessage, /read gate/i);
+    assert.match(j.systemMessage, /offset\/limit|dispatch/, "warn names the cheaper path too");
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("read gate: block refuses an oversized read and NAMES the alternative", () => {
+  const { root, claudeDir } = freshInstall();
+  try {
+    armReadGate(root, claudeDir, "block");
+    const file = bigFile(root, "huge.md", 5000);
+    const r = runHook(claudeDir, "orc-read-gate.js", readPayload(file));
+    assert.strictEqual(r.status, 2, "block exits 2");
+    // A block that only refuses teaches people to switch it off.
+    assert.match(r.stderr, /offset\/limit/, "names the targeted read");
+    assert.match(r.stderr, /[Dd]ispatch an agent/, "names delegation");
+    assert.match(r.stderr, /orc config set read_gate/, "names the way out");
+    assert.match(r.stderr, /silent outside an ORC run/, "states its own honest limits");
+    assert.match(r.stderr, /5000 lines/, "says how big the file actually was");
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("read gate: the default threshold is 1000 lines, and it is configurable", () => {
+  const { root, claudeDir } = freshInstall();
+  try {
+    armReadGate(root, claudeDir, "block");
+    // 999 passes, 1001 blocks — the MEASURED break-even, not the borrowed 350.
+    const under = bigFile(root, "under.md", 999);
+    assert.strictEqual(runHook(claudeDir, "orc-read-gate.js", readPayload(under)).status, 0);
+    const over = bigFile(root, "over.md", 1001);
+    assert.strictEqual(runHook(claudeDir, "orc-read-gate.js", readPayload(over)).status, 2);
+
+    // A 400-line file — around the borrowed constant — passes at ORC's threshold,
+    // because ORC's delegation overhead is not theirs.
+    const theirs = bigFile(root, "theirs.md", 400);
+    assert.strictEqual(runHook(claudeDir, "orc-read-gate.js", readPayload(theirs)).status, 0);
+
+    armReadGate(root, claudeDir, "block", "read_gate_max_lines: 300\n");
+    assert.strictEqual(runHook(claudeDir, "orc-read-gate.js", readPayload(theirs)).status, 2);
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("read gate: fails OPEN on garbage, a missing file, and a directory", () => {
+  const { root, claudeDir } = freshInstall();
+  try {
+    armReadGate(root, claudeDir, "block");
+    // Unparseable payload.
+    const bad = runHook(claudeDir, "orc-read-gate.js", "{not json");
+    assert.strictEqual(bad.status, 0, "a throwing gate still allows");
+    // A path that does not exist — unknown is not "big".
+    const missing = runHook(
+      claudeDir, "orc-read-gate.js", readPayload(path.join(root, "nope.md"))
+    );
+    assert.strictEqual(missing.status, 0);
+    // A directory.
+    const dir = runHook(claudeDir, "orc-read-gate.js", readPayload(root));
+    assert.strictEqual(dir.status, 0);
+    // And a fallback RECORDED itself.
+    const rec = path.join(claudeDir, "orc", "read-gate-fallback.json");
+    assert.ok(fs.existsSync(rec), "a fallback records itself");
+    assert.ok(JSON.parse(fs.readFileSync(rec, "utf8")).rung, "the record names the rung");
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("read gate: a non-Read tool is never touched", () => {
+  const { root, claudeDir } = freshInstall();
+  try {
+    armReadGate(root, claudeDir, "block");
+    const file = bigFile(root, "huge.md", 5000);
+    for (const tool of ["Bash", "Edit", "Write", "Grep"]) {
+      const r = runHook(claudeDir, "orc-read-gate.js", {
+        hook_event_name: "PreToolUse",
+        tool_name: tool,
+        tool_input: { file_path: file },
+      });
+      assert.strictEqual(r.status, 0, tool + " is out of scope for this hook");
+    }
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("read gate: a gate decision leaves a trace line that can be counted", () => {
+  const { root, claudeDir } = freshInstall();
+  try {
+    const traceOf = () =>
+      fs.readFileSync(
+        path.join(claudeDir, "orc", "logs", "run-orc-t-010126-000000.txt"),
+        "utf8"
+      );
+
+    // D10. This is cheap for a STRUCTURAL reason: the gate only ever acts while
+    // a run is open, so a trace to write into is guaranteed to exist. There is
+    // no "a read happened with no run" case — that read was already allowed.
+    armReadGate(root, claudeDir, "block");
+    const file = bigFile(root, "huge.md", 5000);
+    runHook(claudeDir, "orc-read-gate.js", readPayload(file));
+    assert.match(traceOf(), /READ-GATE block/, "a block is counted");
+    assert.match(traceOf(), /lines=5000/, "and carries what it measured");
+
+    // A warn is counted too — that is how you find out whether to move to block.
+    armReadGate(root, claudeDir, "warn");
+    runHook(claudeDir, "orc-read-gate.js", readPayload(file));
+    assert.match(traceOf(), /READ-GATE warn/, "a warn is counted");
+
+    // An ALLOW is not a decision worth a line: every read the gate passes
+    // through would write one, which is noise in the file /orc-retro mines.
+    armReadGate(root, claudeDir, "block");
+    const small = bigFile(root, "small.md", 10);
+    const before = traceOf();
+    runHook(claudeDir, "orc-read-gate.js", readPayload(small));
+    assert.strictEqual(traceOf(), before, "a pass-through writes nothing");
+  } finally {
+    rmrf(root);
+  }
+});

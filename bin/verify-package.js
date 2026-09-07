@@ -480,6 +480,9 @@ const required = [
   // it. Wired even with the board off, because the measurement is handed over
   // either way.
   "templates/hooks/orc-subagent-line.js",
+  // v1.6.0 — the read gate. The one layer that can refuse an oversized read by
+  // the ORCHESTRATOR. Ships wired but OFF; `read_gate` arms it.
+  "templates/hooks/orc-read-gate.js",
   "templates/hooks/orc-trace.js",
 ];
 
