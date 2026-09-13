@@ -10,6 +10,116 @@ Format: `### v<version> — <title> _(<date>)_`.
 
 ---
 
+### v1.7.0 - the rules that keep the slop out _(2026-09-13)_
+
+**Still on the unscoped `orc` package?** Do this once first - your `orc upgrade`
+is the pre-v0.56.0 one and cannot install itself. Full detail in the CAUTION at
+the top of this file.
+
+- **Step 1 - release the command from the old package:** `npm uninstall -g orc`
+- **Step 2 - install the current package:** `npm i -g @azure-id/orc`
+- **Step 3 - re-apply it to your project:** `orc update`
+
+**Do not use `npm i -g -f`.** Full detail in v0.56.0 below.
+
+
+ORC writes a lot of prose and a lot of code, and both came out carrying the same
+recognisable defaults: sentences that say nothing in a confident shape, and code
+that is longer, more defensive and more abstract than the task asked for. There
+was one standing card against it - the seven-line house rules - and it is about
+CODE. Nothing said anything about the words.
+
+**`orc rules` is a second rule surface, and it has two halves that never mix.**
+
+- **ORC rules** - 65 rules in four packs, shipped, tagged, **read-only**. They
+  change with `orc update` and with nothing else. `orc rules set --pack ...` is
+  refused BY NAME, with the command that replaces it.
+- **Your rules** - `.claude/orc/rules.md`. Plain text, three headings, as much
+  under each as you want. **They beat an ORC rule outright.**
+
+The packs: **`OSW` writing (23)**, **`OSC` code (22)**, **`OSD` delivery (10)** -
+what an agent reports about its OWN work - and **`OSU` UI (10)**, which rides per
+TASK rather than per lane, because a UI rule in a backend slice is tokens paid on
+every spawn for a rule that cannot apply.
+
+Three tiers, taken from `anti-slop`: **HARD** absolute, **PURPOSE** allowed with
+a written one-line reason, **LOCK** a consistency check. The purpose gate is the
+mechanism that matters - a ban list alone leaves a void, and a model fills a void
+with its most generic output.
+
+**Credit is a shipped artifact here, not a line in a commit message.** Every pack
+opens with its sources; `orc rules credits` prints author, handle, repository,
+licence, and what ORC took from each. Adapted from
+[`petergyang/no-ai-slop`](https://github.com/petergyang/no-ai-slop) (MIT),
+[`miqdadbadjuber/anti-slop`](https://github.com/miqdadbadjuber/anti-slop) (MIT),
+[`ehmo/slopkit`](https://github.com/ehmo/slopkit),
+[`BioInfo/slopless`](https://github.com/BioInfo/slopless), Andrej Karpathy's
+`CLAUDE.md`, Matty Cartwright's Anti-Slop Writing Rules, and three papers on LLM
+code smells.
+
+**Precedence: house rules > your rules > ORC rules.** The house card is CODE and
+BEHAVIOUR only - it says nothing about the words an agent writes, so it never
+overrules a writing rule. A project rule beats an ORC rule OUTRIGHT: the rule is
+removed from the slice and the removal is stated inside it.
+
+**An override is counted the only honest way.** The CLI counts ORC rule ids you
+NAMED, and says that is what it counted. A conflict you did not name is found by
+the agent at dispatch and comes back as `rules_conflicts[]` - a gap, never a
+silent choice. The CLI cannot parse intent, so it does not pretend to: the same
+decision `orc doc rules` made about its structural boundary, for the same reason.
+
+**`orc rules lint` is free, deterministic, and small on purpose.** It checks 13
+of the 65 - banned lexicon and phrases, em dash DENSITY (a dose rule, measured
+per file, because ORC's own docs use them), emoji headings, six comment shapes,
+artifact filenames, `outline: none`, UI buzzwords - and it prints, in every mode
+including `--json`: `not checked here: 52 rules. They need a reader, not a
+matcher.` A clean exit that stands in for a review nobody did is the failure that
+line prevents. It skips the rule packs themselves (a rule that bans a word has to
+print that word to define it) and anything marked `orc-rules-ignore`, and counts
+both rather than staying quiet.
+
+**Findings are advisory. There is no gate.** A style preference that fails a
+build gets switched off within a week, and then nothing is enforced at all.
+
+The card rides in every slice of **28 lanes** - every one that writes words or
+code. **`/orc-doc` is excluded by design**; it has `orc doc rules`. One assembler
+(`orc rules slice`), because a card built in twenty-eight spines is
+twenty-eight ideas of the precedence order, and because it is the only place the
+per-spawn token weight can be measured. Measured: **~3 600 tokens** per
+build-lane slice, ~2 200 for a prose lane.
+
+**`orc ui` gains a Rules panel** - the ladder, your textarea, the 65 read-only
+rows behind a filter, the credit table, and the lint.
+
+---
+
+**`orc wiki`, one doc at a time.** Targeted refresh has existed since v0.33.0 and
+is not rebuilt. What was missing is the other half: **adding one topic** to a
+wiki that already exists. Until now a new coverage area only appeared as a
+by-product of the coverage-gap sweep during a delta refresh, so "add the
+remittance feature" had no path that did not re-plan every area in the repo.
+
+- **`/orc-wiki update <doc-or-topic>`** - the targeted refresh, under the name
+  people actually type. A topic resolves to a doc first.
+- **`/orc-wiki add "<topic>"`** - A0-A7: resolve, scope, confirm, reserve, scan,
+  write, sweep, check. Nothing spawns before the one confirmation turn.
+- **`orc wiki resolve <topic>`** - free, no scan. A MATCH must beat the runner-up
+  by half again plus one; anything closer is **AMBIGUOUS and becomes a question**,
+  because two docs a point apart is exactly where guessing costs a scan of the
+  wrong area.
+- **`orc wiki add <slug> --covers ...`** - reserves a stub carrying
+  `status: reserved` and a body that says nothing in it is evidence. A doc that
+  lies is worse than a doc that is missing.
+- **`orc wiki refs [--check]`** - the DERIVED-REFERENCE sweep. After one doc
+  changes, six surfaces are behind it: the registration, reserved rows, the
+  orientation page, the architecture overview, the CLAUDE.md pointer's doc COUNT,
+  and any crosslink tag anchored to a file that is gone. It **repairs only the
+  registration**, because `orc wiki sync` is free and already the single writer.
+  Everything else is reported with its command - a sweep that silently
+  regenerated prose would be spending money nobody asked it to spend.
+
+The Knowledge panel gains a **One doc at a time** card for both halves.
+
 ### v1.6.0 - the rule that can finally say no _(2026-09-07)_
 
 **Still on the unscoped `orc` package?** Do this once first - your `orc upgrade`

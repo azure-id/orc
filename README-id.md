@@ -7,13 +7,13 @@
 *Terima permintaan → pahami → rencanakan → beri nilai → kerjakan paralel → periksa → uji → kirim.*
 
 ![npm](https://img.shields.io/npm/v/%40azure-id%2Forc?style=for-the-badge&color=cb3837&logo=npm)
-![Version](https://img.shields.io/badge/version-1.4.2-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-1.7.0-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
 ![Dependencies](https://img.shields.io/badge/dependencies-zero-lightgrey.svg?style=for-the-badge)
 
-**Versi terbaru: v1.4.2** · diperbarui 05-09-2026 · [daftar perubahan lengkap](CHANGELOG.md)
+**Versi terbaru: v1.7.0** · diperbarui 13-09-2026 · [daftar perubahan lengkap](CHANGELOG.md)
 
 **Ada di npm: [`@azure-id/orc`](https://www.npmjs.com/package/@azure-id/orc)** — `npm i -g @azure-id/orc`
 
@@ -322,6 +322,62 @@ pemakaian 5 jam, pemakaian mingguan, dan beberapa hal lain.
 
 ---
 
+## Aturan yang menahan slop
+
+ORC menulis banyak prosa dan banyak kode. Keduanya keluar membawa bawaan yang
+sama dan mudah dikenali: kalimat yang terdengar yakin tetapi tidak mengatakan
+apa-apa, dan kode yang lebih panjang, lebih defensif, dan lebih abstrak daripada
+yang diminta tugasnya. `orc rules` adalah saringannya, dan saringan itu punya
+**dua bagian yang tidak pernah bercampur**.
+
+| Bagian | Siapa yang menulis | Di mana | Berubah kapan |
+|---|---|---|---|
+| **Aturan ORC** | ORC | `.claude/skills/_shared/rules/` | `orc update` |
+| **Aturan Anda** | Anda | `.claude/orc/rules.md` | Anda mengetik |
+
+**65 aturan kiriman, hanya-baca**, dalam empat paket: `OSW` penulisan (23) ·
+`OSC` kode (22) · `OSD` pelaporan (10), yaitu apa yang dilaporkan agen tentang
+pekerjaannya SENDIRI · `OSU` antarmuka (10), yang ikut per TUGAS, bukan per
+lane. Tiga tingkat — **HARD** mutlak, **PURPOSE** boleh dengan satu baris alasan
+tertulis, **LOCK** pemeriksaan konsistensi.
+
+**Aturan Anda berupa teks biasa**, tiga judul, sebanyak apa pun di bawah
+masing-masing — dan **aturan Anda mengalahkan aturan ORC secara langsung**:
+
+```
+aturan rumah  >  aturan Anda  >  aturan ORC
+```
+
+Aturan rumah hanya tentang KODE dan perilaku. Aturan itu tidak berbicara tentang
+kata-kata yang ditulis agen, jadi tidak pernah mengalahkan aturan penulisan.
+Untuk mematikan satu aturan ORC, sebut id-nya di dalam aturan Anda sendiri;
+penggantian itu lalu dihitung, dicetak saat preflight, dan dinyatakan di dalam
+setiap slice. **Tidak pernah diam-diam.**
+
+```bash
+orc rules                                   # kedua bagian, urutan kuasa, jumlahnya
+orc rules add --priority P0 --text "..."    # aturan Anda, dengan kata-kata Anda
+orc rules lint src/ README.md               # gratis, nol token
+orc rules credits                           # tiap sumber, penulis, dan lisensinya
+```
+
+`orc rules lint` memeriksa **13 dari 65** — yang dapat dibuktikan pencocokan
+teks — dan selalu mencetak `not checked here: 52 rules. They need a reader, not a
+matcher.` Lint yang bersih bukan tinjauan yang bersih, dan perintah itu
+mengatakannya.
+
+**Aturan ini adalah karya orang lain, dan kreditnya ikut dikirim.** Diadaptasi
+dari [`petergyang/no-ai-slop`](https://github.com/petergyang/no-ai-slop) (MIT),
+[`miqdadbadjuber/anti-slop`](https://github.com/miqdadbadjuber/anti-slop) (MIT),
+[`ehmo/slopkit`](https://github.com/ehmo/slopkit),
+[`BioInfo/slopless`](https://github.com/BioInfo/slopless), `CLAUDE.md` milik
+Andrej Karpathy, Anti-Slop Writing Rules milik Matty Cartwright, dan tiga makalah
+tentang bau kode LLM.
+
+**Penjelasan lengkap: [`guides/rules.md`](guides/rules.md).**
+
+---
+
 ## Dokumen yang benar-benar bisa dipindahkan
 
 `/orc-doc` menulis dokumen panjang — dan Markdown dipilih justru karena berkas
@@ -566,6 +622,7 @@ bahasa yang sederhana:
 
 | Panduan | Baca kalau |
 |---|---|
+| [Aturan](guides/rules.md) | Anda ingin 65 aturan anti-slop, urutan kuasanya, dan lint-nya |
 | [ORC-QUICK](templates/skills/orc-quick/README.md) | Anda ingin contoh lengkap lane cepat |
 | [ORC-DIY](templates/skills/orc-diy/README.md) | Anda ingin meracik lane sendiri |
 | [ORC-WIKI](templates/skills/orc-wiki/README.md) | Anda ingin basis pengetahuan, dan pengaturan crosslink antar repo |
@@ -619,138 +676,162 @@ Bacalah sebagai catatan putaran itu, bukan sebagai audit terkini:
 **Riwayat lengkap: [CHANGELOG.md](CHANGELOG.md)** — atau `orc changelog`, yang
 hanya mencetak yang lebih baru dari versi yang Anda punya.
 
-### v1.4.2 - panel yang berhenti memuat ulang, dan bidang yang tidak bisa dibaca kembali _(05-09-2026)_
+### v1.7.0 - aturan yang menahan slop _(13-09-2026)_
 
-Empat cacat lagi di `orc ui` ▸ **Antarmuka CLI Hook**. Tiga di antaranya adalah
-cacat yang sama dengan tiga wajah berbeda.
+ORC menulis banyak prosa dan banyak kode, dan keduanya keluar membawa bawaan yang
+sama dan mudah dikenali. Selama ini hanya ada satu kartu tetap yang melawannya —
+aturan rumah tujuh baris — dan kartu itu tentang KODE. Tidak ada yang mengatakan
+apa pun tentang kata-katanya.
 
-**Menyiapkan satu perubahan memuat ulang seluruh panel** - tiap operasi yang
-disiapkan masuk kembali ke router, jadi empat endpoint diambil ulang dan semua
-dibangun lagi dari kerangka. Itu membuat perubahan yang baru disiapkan tampak
-seperti sudah diterapkan, dan meninggalkan editor yang terbuka menampilkan nilai
-sebelum perubahan yang baru saja Anda buat: Anda memilih bentuk, tidak ada yang
-bergerak. Sekarang tidak ada yang diambil sampai sesuatu benar-benar mengubah
-disk; satu operasi yang disiapkan menggambar ulang dari cache dengan **nol
-permintaan**, menjaga posisi gulir Anda, dan editor yang terbuka ikut digambar
-ulang - beserta kursornya.
+**`orc rules` adalah permukaan aturan kedua, dan punya dua bagian yang tidak
+pernah bercampur.** 65 aturan ORC yang dikirim dan **hanya-baca** (`orc rules set
+--pack ...` ditolak dengan menyebut nama perintah penggantinya), dan aturan milik
+proyek Anda di `.claude/orc/rules.md`, yang **menang secara langsung**.
 
-**Dan bidangnya tidak bisa dibaca kembali.** `orc statusline show --json`
-mengirim dua belas dari dua puluh empat bidang yang bisa dibawa sebuah bagian,
-jadi `case`, `prefix`, `min_cols`, `precision` dan tujuh lainnya ditulis ke disk
-dengan benar lalu tidak terlihat oleh panel yang menulisnya. Sekarang semua
-bidang dikirim, ditambah `authored`, sehingga sebuah kontrol bisa menyebut
-**nilai mana yang milik Anda** dan mana yang warisan.
+Empat paket: `OSW` penulisan (23), `OSC` kode (22), `OSD` pelaporan (10), dan
+`OSU` antarmuka (10) yang ikut per TUGAS. Tiga tingkat: **HARD**, **PURPOSE**
+(boleh, dengan satu baris alasan tertulis), **LOCK**.
 
-**Enam bagian per baris, bukan lima** - dipindahkan di satu tempat, dan pemisah
-tetap tidak dihitung. **Menu tarik-turun yang tidak terbaca** ternyata adalah
-panel tanpa warna sama sekali: `hookui.css` ditulis memakai empat token CSS yang
-tidak ada, jadi setiap deklarasi itu dibuang diam-diam oleh peramban.
+**Kredit adalah berkas yang ikut dikirim, bukan satu baris di pesan commit.**
+`orc rules credits` menyebut penulis, repositori, lisensi, dan apa yang diambil
+ORC dari masing-masing.
 
-**Pratinjau kini digambar sebagai terminal** - jendela selebar yang disebutkan
-dengan penggaris kolom - dan `orc statusline preview` menerima `--theme` dan
-`--glyphs` sebagai penimpaan **khusus gambar**, jadi laci baru menampilkan bar
-yang sama di bawah keempat set warna dan ketujuh set simbol. Memilih set warna
-dari namanya adalah tebakan; memilihnya dari gambarnya adalah keputusan.
+**Urutan kuasa: aturan rumah > aturan Anda > aturan ORC.** Penggantian dihitung
+dari id yang Anda SEBUT, dan perintahnya mengatakan bahwa itulah yang dihitung;
+pertentangan yang tidak Anda sebut ditemukan agen saat bekerja dan kembali
+sebagai celah, bukan pilihan diam-diam. CLI tidak dapat membaca maksud, jadi CLI
+tidak berpura-pura bisa.
 
-Detail lengkap di [CHANGELOG.md](CHANGELOG.md).
+**`orc rules lint` gratis dan sengaja kecil**: memeriksa 13 dari 65 dan selalu
+mencetak berapa yang tidak diperiksanya. Temuannya bersifat saran; tidak ada
+gerbang.
 
----
+**`orc wiki`, satu dokumen sekaligus.** `/orc-wiki update <dokumen-atau-topik>`
+dan `/orc-wiki add "<topik>"` menambah satu dokumen ke wiki yang sudah ada tanpa
+merencanakan ulang area lain. `orc wiki resolve` gratis dan tidak memindai;
+hasil **AMBIGUOUS menjadi pertanyaan, bukan tebakan**. `orc wiki refs` menyapu
+enam rujukan turunan setelah satu dokumen berubah, dan hanya memperbaiki
+pendaftarannya — sisanya dilaporkan beserta perintahnya.
 
-### v1.3.0 - bangun sendiri baris status Anda _(04-09-2026)_
+<details>
+<summary><strong>Rilis sebelumnya</strong> — 114 rilis, hanya judulnya. Teks lengkapnya (dalam bahasa Inggris) ada di <a href="CHANGELOG.md">CHANGELOG.md</a>.</summary>
 
-**Masih memakai paket `orc` yang tanpa awalan?** Lakukan ini sekali dulu —
-`orc upgrade` Anda adalah versi sebelum v0.56.0 dan tidak dapat memasang
-dirinya sendiri.
+- **v1.6.0** — the rule that can finally say no · _2026-09-07_
+- **v1.5.0** — the lane that runs the test · _2026-09-07_
+- **v1.4.2** — the panel that stops reloading, and the fields you could not read back · _2026-09-05_
+- **v1.4.1** — the board you can actually use · _2026-09-05_
+- **v1.4.0** — the agent panel, and the number that was missing · _2026-09-04_
+- **v1.3.0** — build your own status line · _2026-09-04_
+- **v1.2.1** — the status line says what ORC is doing · _2026-09-04_
+- **v1.2.0** — a retry that cloned the agent, and a window you can watch empty · _2026-09-04_
+- **v1.1.0** — the wait, and a window ORC can finally see · _2026-08-31_
+- **v1.0.0** — config, phases and calls stop being prose · _2026-08-30_
+- **v0.56.1** — a worker that is alive and doing nothing · _2026-08-28_
+- **v0.56.0** — a rename moved the command, and nobody could reach the fix · _2026-08-27_
+- **v0.55.2** — a gate that is never probed is a gate that is always off · _2026-08-27_
+- **v0.55.1** — ORC is on npm · _2026-08-27_
+- **v0.55.0** — a score is what a band needs, and four lanes do not have one · _2026-08-26_
+- **v0.54.0** — a failed dispatch is a POSITION, not a blank page · _2026-08-25_
+- **v0.53.4** — the reload that dropped its own token · _2026-08-24_
+- **v0.53.3** — the key it never sent · _2026-08-24_
+- **v0.53.2** — the cost that was paid and never written down · _2026-08-24_
+- **v0.53.1** — "up to date" now names what it checked · _2026-08-23_
+- **v0.53.0** — the schema the provider rejected, and a routing table you can read · _2026-08-23_
+- **v0.52.0** — the connection that could not be used, and the routing nobody could see · _2026-08-23_
+- **v0.51.0** — the tools you already have, and a connection that proves itself · _2026-08-22_
+- **v0.50.0** — work that runs somewhere else · _2026-08-22_
+- **v0.49.5** — house rules are text, and the hand-back writes itself · _2026-08-21_
+- **v0.49.4** — the panel was being handed half an answer · _2026-08-20_
+- **v0.49.3** — coverage on a large repo · _2026-08-19_
+- **v0.49.2** — house rules, a run map before you pay, and three defects · _2026-08-18_
+- **v0.49.1** — the challenge council, and a `--json` that stops throwing things away · _2026-08-18_
+- **v0.49.0** — the document is a folder, and the file is a build artifact · _2026-08-17_
+- **v0.48.1** — one file per thing, and a document that can be finished · _2026-08-16_
+- **v0.48.0** — a document long enough to end a session, written anyway · _2026-08-13_
+- **v0.47.0** — the lane that refuses to produce · _2026-08-12_
+- **v0.46.1** — see a lane run before you pay for one · _2026-08-12_
+- **v0.46.0** — a lane that remembers, a lane that declines, and a lane that measures · _2026-08-10_
+- **v0.45.0** — `/orc-brainstorm`: for when you do not have the idea yet · _2026-08-10_
+- **v0.44.1** — apply when you say so, and a spotlight that survives a banner · _2026-08-09_
+- **v0.44.0** — the panel stops making you type what it already knows · _2026-08-09_
+- **v0.43.7** — the flow you can see, and a boundary you can read · _2026-08-09_
+- **v0.43.6** — `orc ui` in two languages, and panels that point at the right page · _2026-08-08_
+- **v0.43.5** — the update check works, and the UI teaches itself · _2026-08-08_
+- **v0.43.4** — a warning that finally clears, an Experiment panel, crosslink from the UI · _2026-08-08_
+- **v0.43.3** — `orc ui`: it tells you about updates, and 36 keys stop being a wall · _2026-08-08_
+- **v0.43.2** — `orc ui`: boxes stop colliding, because the container owns the gap · _2026-08-08_
+- **v0.43.1** — the panel's stylesheet and script actually reach the browser · _2026-08-08_
+- **v0.43.0** — `orc ui`: a control panel for everything that is not ai · _2026-08-08_
+- **v0.42.0** — Say what you mean, see what it costs, find your way back · _2026-08-08_
+- **v0.41.0** — A wiki that can tell you it is fresh, and TDD only where it can fail · _2026-08-06_
+- **v0.40.0** — Gotchas: repair memory that outlives the run · _2026-08-06_
+- **v0.39.0** — The read ladder, and foreign input that is evidence rather than instruction · _2026-08-06_
+- **v0.38.1** — `orc doctor --json` + handoff carry-over that says what is re-derived · _2026-08-06_
+- **v0.38.0** — `/orc-quick`: the quick lane, and the gate no config can collapse · _2026-08-05_
+- **v0.37.0** — Stacked pull requests: a measured ship gate + two standalone lanes · _2026-08-03_
+- **v0.36.0** — `opus5_only`: one model for every role, not just executors · _2026-08-02_
+- **v0.35.0** — `opus5_executor_only`: one model, effort as the cost dial · _2026-08-02_
+- **v0.34.8** — `orc pattern status` rejects a language key the payload has never heard of · _2026-08-01_
+- **v0.34.7** — DIY: a usable status contract, and compile docs that match the compiler · _2026-08-01_
+- **v0.34.6** — Analyze: the evidence gate now covers the rows a good analysis produces · _2026-08-01_
+- **v0.34.5** — Wiki: stop losing tags silently, let a delta clear its own delta · _2026-08-01_
+- **v0.34.4** — Planner: scorable facets, and TDD rules scoped to reality · _2026-08-01_
+- **v0.34.3** — Slice boundary: the worktree, not the editor · _2026-08-01_
+- **v0.34.2** — Trace subsystem: the pointer clobber, and a writer contract that holds · _2026-08-01_
+- **v0.34.1** — Install integrity: run state survives `orc update` · _2026-08-01_
+- **v0.34.0** — Opus 5: top scoring band, every core role, medium-effort session tier · _2026-07-25_
+- **v0.33.0** — Knowledge deepening + verification revamp · _2026-07-25_
+- **v0.32.0** — Trace revamp: narration is dispatched, not remembered · _2026-07-24_
+- **v0.31.0** — Execution-integrity revamp: plan handoff, attributable traces, facet scoring · _2026-07-23_
+- **v0.30.0** — Scoring revamp, Fable 5 role override, tier-aware guards, `orc onboarding` · _2026-07-23_
+- **v0.29.0** — Drift-prevention hardening: install manifest + prune, `orc doctor`, a real test suite · _2026-07-22_
+- **v0.28.1** — Defect fixes: package encoding, trace event routing, count/doc drift · _2026-07-22_
+- **v0.28.0** — Run integrity: rich full-lane traces, deterministic wave stop, visible knowledge gates · _2026-07-21_
+- **v0.27.0** — `/orc-poly`: plan one change across two-or-more repos without drift · _2026-07-20_
+- **v0.26.0** — Test-gen output pinned to a visible `test-generator/<change-slug>/` deliverable · _2026-07-19_
+- **v0.25.1** — Eval report: the full 17-lane suite graded against the v0.25.0 payload · _2026-07-18_
+- **v0.25.0** — Deterministic artifact detection: a generated wiki/pattern is never missed · _2026-07-18_
+- **v0.24.0** — Crosslink fused into wiki generation: always-on, per-scan-task, never wiped · _2026-07-18_
+- **v0.23.0** — Trace fix: SPAWN restored on the `Agent` tool, stale runs rotate to fresh files · _2026-07-18_
+- **v0.22.0** — `/orc-learn`: per-feature onboarding docs — learning.md + knowledge.md, wiki-deep, git-ignored · _2026-07-17_
+- **v0.21.0** — Statusline shows live subscription usage: 5h ↔ weekly, official numbers · _2026-07-16_
+- **v0.20.0** — One source of truth: generated executor agents + shared cross-lane contracts · _2026-07-16_
+- **v0.19.0** — Thin spines: skill compaction, budget lint, and a trace that logs every phase · _2026-07-16_
+- **v0.18.0** — `orc wiki sync`: the wiki registers itself — a paused scan is no longer an invisible wiki · _2026-07-15_
+- **v0.17.3** — Trace the wiki consult: Phase 1 now logs whether the run grounded in the wiki (and if it was stale) · _2026-07-14_
+- **v0.17.2** — Behavior-trace logging is permanent + the trace folder is now created deterministically · _2026-07-14_
+- **v0.17.1** — Complete cross-repo crosslink setup guide in the orc-wiki README · _2026-07-14_
+- **v0.17.0** — `orc crosslink`: cross-repo wiki references — advisory boundary contracts · _2026-07-14_
+- **v0.16.1** — Interactive `orc diy` composer + numbered picks in `orc config` · _2026-07-14_
+- **v0.16.0** — `/orc-diy`: build your own lane — CLI-composed flow, compiled, hard-gated · _2026-07-14_
+- **v0.15.0** — Wiki v2: evidence-anchored docs · per-file staleness registry · integrity gate · _2026-07-14_
+- **v0.14.0** — Postgres data-access playbook: cross-cutting query grounding · _2026-07-13_
+- **v0.13.0** — `/orc-claude`: local CLAUDE.md builder — fenced sections, fingerprint refresh, zero questions · _2026-07-12_
+- **v0.12.0** — Lossless context-combiner: conservation gate · overlap taxonomy · evidence freshness · _2026-07-12_
+- **v0.11.0** — `/orc-fast`: knowledge-gated speed lane + wiki freshness infrastructure · _2026-07-12_
+- **v0.10.1** — README: a fuller "Why ORC exists" · _2026-07-12_
+- **v0.10.0** — `/orc-ultra`: max-effort advisor + three judgment gates for ultra-complex work · _2026-07-12_
+- **v0.9.0** — Trust-but-verify the analyst→planner chain: quote-anchored evidence · coverage gate · anchored judgment · _2026-07-12_
+- **v0.8.1** — /orc-retro delivers upstream: PR/issue to the ORC repo, channel-gated · _2026-07-12_
+- **v0.8.0** — Close the loop: grounded intake · scoring anchors · OUTCOME marker · /orc-retro trace miner · eval harness · _2026-07-12_
+- **v0.7.0** — Evidence everywhere: grounded plans · verbatim proof · anchored findings · contract lint · trace fixes · _2026-07-12_
+- **v0.6.0** — P0–P3 ladder · house rules · deep playbooks + wired gates · 3 new languages · FE rule packs · security pass · _2026-07-11_
+- **v0.5.1** — Statusline false-degrade fix · _2026-07-11_
+- v0.5.0 — Code-pattern findings: executors match your house style, invariants always enforced
+- v0.4.5 — Rewrite weak worker descriptions (the real score lever)
+- v0.4.4 — Act on external review: raise sub-70 workers, fix cross-spine paths
+- v0.4.3 — `orc-analyze`: trim description under the 1024-char skill-spec limit
+- v0.4.2 — External-review pass: worked examples + sharper mini-analyst activation
+- v0.4.1 — `orc-mini`: faster, safer fast-lane — smoke gate, opt-in tests, trimmed ceremony
+- v0.4.0 — Opt-in Phase 6.5 Test Authoring (writes test cases, never runs them)
+- v0.3.0 — Opt-in behavior-trace logging + claimed-vs-actual model verification
+- v0.2.4 — `orc-analyze`: gather anchored adjacent-scope context (non-actionable)
+- v0.2.3 — Context Combiner: merge 2+ related analyses into one combined spec
+- v0.2.2 — Config: enforce per-key override-first resolution
+- v0.2.1 — Move config editing into the `orc config` CLI (zero-token); drop `/orc-config`
+- v0.2.0 — Doc-optional evidence-backed analyst + deep mode
 
-- **Langkah 1 — lepaskan perintahnya dari paket lama:** `npm uninstall -g orc`
-- **Langkah 2 — pasang paket saat ini:** `npm i -g @azure-id/orc`
-- **Langkah 3 — terapkan lagi ke proyek Anda:** `orc update`
-
-**Jangan pakai `npm i -g -f`.**
-
-Baris status kini **milik Anda**. Tiga baris, tiap baris memuat satu sampai lima
-bagian dari katalog yang dikirim ORC, tiap bagian digambar lewat salah satu dari
-35 bentuk dan Anda beri gaya sendiri: dua warna, warna yang mengikuti nilai,
-kata-katanya sendiri, simbolnya sendiri, lebar yang tetap, dan kapan bagian itu
-boleh muncul.
-
-**Fitur ini mati secara bawaan, dan saat mati hasilnya sama persis byte per byte
-dengan sebelumnya.** Itu sebuah tes — sembilan keadaan dibekukan simbol demi
-simbol — bukan sekadar niat.
-
-Susun di **`orc ui` ▸ CLI Hook Interface**.
-
-- **CLI YANG MENYUSUN, HOOK YANG MENGGAMBAR.** Tata letak Anda diturunkan jadi
-  daftar instruksi datar dengan setiap warna sudah dihitung; hook menjalankannya
-  dan tidak memutuskan apa pun. Claude Code menggambar ulang paling cepat tiap
-  300 md dan **membatalkan** skrip yang masih berjalan — di Windows memulai
-  `node` saja sudah 285 md dari jatah itu, jadi hook hanya punya sekitar 15 md.
-- **Pratinjau ITU bilahnya.** Pratinjau dan hook memakai modul penggambar yang
-  SAMA, jadi keduanya tidak mungkin berbeda.
-- **Peletakan yang tidak sah dibuat MUSTAHIL.** Sebuah baris hanya boleh memuat
-  bagian jika setiap baris di atasnya sudah terisi. Setiap seret juga punya
-  jalur papan tombol dan menu.
-- **Tata letak susunan Anda bisa LEBIH CEPAT** daripada bawaan: 346,7 md untuk
-  bawaan, **298,2 md** untuk `minimal` susunan sendiri.
-- **Delapan bagian DITOLAK**, tiap-tiap dengan hasil pengukurannya. Nilai yang
-  tidak dapat dihitung tampil sebagai tanda pisah — **bukan `0`**, yang berarti
-  gratis.
-
-**Rincian lengkap: [`guides/status-line.md`](guides/status-line.md).**
-
----
-
-### v1.0.0 - konfigurasi, fase, dan panggilan berhenti jadi prosa _(30-08-2026)_
-
-**Masih memakai paket `orc` yang tanpa awalan?** Lakukan ini sekali dulu —
-`orc upgrade` Anda adalah versi sebelum v0.56.0 dan tidak bisa memasang dirinya
-sendiri. Rincian lengkapnya ada di blok PERHATIAN di bagian atas berkas ini.
-
-- **Langkah 1 — lepaskan perintahnya dari paket lama:** `npm uninstall -g orc`
-- **Langkah 2 — pasang paket yang sekarang:** `npm i -g @azure-id/orc`
-- **Langkah 3 — terapkan lagi ke proyek Anda:** `orc update`
-
-**Tidak ada pengaturan yang berubah artinya, dan tidak ada perintah yang diganti
-namanya.** Tiga hal benar-benar mengubah perilaku; sisanya adalah ORC yang
-akhirnya membaca muatannya sendiri dengan cara yang selama ini ia ajarkan kepada
-Anda untuk membaca kode Anda.
-
-- **Tabel skor ke model berakhir di `opus-5-low [65,90)` · `opus-5-med
-  [90,100]`.** Dua dari enam pita kini ingin sesi utama Opus 5, dari sebelumnya
-  satu dari delapan.
-- **Pekerja luar yang macet dua kali dalam satu run akan menepi** untuk sisa run
-  itu. Dua jam, tidak pernah digabung; ia tidak menulis pengukuran baru dan tidak
-  pernah menulis konfigurasi Anda; sebuah promote adalah tanda batas, bukan
-  membisukan, dan perlu alasan.
-- **`orc diy init` kini berbawaan `opus-5-high`.** Bawaan yang lama diam-diam
-  meruntuhkan sepertiga atas tangga Anda ke satu agen sebelum Anda memilih
-  apa pun.
-
-Bagian strukturalnya - **konfigurasi, fase, dan panggilan berhenti jadi prosa**:
-
-- **`orc lane config <lane>`** menjawab konfigurasi sebuah lane sudah menjadi
-  apa, dengan setiap bayangan sudah dikalimatkan. Sebuah lane tidak pernah lagi
-  menggabungkan berkas konfigurasi sendiri, dan **peringkat di bawah peringkat
-  yang sudah menjawab tidak dibaca sama sekali**.
-- **`orc lane phases <lane>`** dan **`orc lane calls --all`** melakukan hal yang
-  sama untuk pustaka fase bersama dan katalog panggilan CLI - masing-masing satu
-  salinan kanonis, dari sebelumnya 14-59 pengulangan per panggilan.
-- **`orc ui` menampilkan semuanya**: tangga peringkat yang menunjukkan
-  pengaturan mana yang MENJAWAB, lane mana yang membaca tiap kunci, panel Lane
-  baru, dan baris penurunan di Extra ▸ Recovery beserta tombol Promote.
-  `orc doctor` mendapat `lane-keys-drifted`.
-
-**Ini tidak membuat muatannya lebih kecil** - 208 berkas menjadi 291, 26.507
-baris menjadi 33.204. Sebagian besar gelombang terukur sebagai kebenaran, bukan
-penghapusan duplikasi. Yang berubah adalah kini ada satu tempat untuk memperbaiki
-masing-masing hal ini, dan ada lint yang gagal saat sebuah salinan tumbuh
-kembali. Dua penghapusan yang direncanakan **diukur lalu ditolak**, dan flake
-yang membuat empat gelombang gagal akhirnya didiagnosis - dengan catatan jujur
-bahwa tiga run hijau adalah gerbangnya, bukan buktinya.
-
-**Entri lengkap: [CHANGELOG.md](CHANGELOG.md).**
-
----
+</details>
 
 ## Yang dibutuhkan
 

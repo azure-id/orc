@@ -33,10 +33,32 @@ linked repo (in-place, user content byte-preserved). Requires a crosslink
 config with ≥1 edge; every step warn-only; never a re-scan. Peer writes are
 FILE writes only — never a commit or push.
 
+**`/orc-wiki update <doc-or-topic>`** → ONE doc, re-scanned. A filename goes
+straight into the targeted refresh. A topic ("the remittance feature") is
+resolved first with `orc wiki resolve` — free, no scan — and an AMBIGUOUS result
+is a question for you, never a guess. Branch detection and area planning are both
+skipped: the doc exists, so its coverage area is already in its own header.
+
+**`/orc-wiki add "<topic>"`** → ONE new doc, in a wiki that already exists, with
+no other area re-planned. It resolves the topic first (if something already
+covers it, that is an `update` and it says so), proposes a coverage scope from
+path names for you to correct, confirms the slug, the covers, the tier and the
+cost in ONE turn, and scans nothing until you say yes. It ends with
+`orc wiki refs`, the derived-reference sweep — adding a doc moves more derived
+surfaces than changing one does: the registration, the orientation page, the
+architecture overview, the CLAUDE.md pointer's doc count, and any crosslink tag
+left anchored to a file that is gone. Only the registration is repaired for you;
+the rest is reported with its command, because a sweep that silently regenerated
+prose would be spending money nobody asked it to spend.
+
 | Argument | Branch |
 |---|---|
 | *(none)* | Phase 0 auto-branch: repair / fresh / resume / refresh (delta default) |
+| `update <doc>` | targeted refresh of ONE doc (skips branch detection + area planning) |
+| `update "<topic>"` | resolve the topic to a doc, then refresh it |
+| `add "<topic>"` | reserve + scan + write ONE new doc, then sweep every derived reference |
 | `crosslink` | Phase 3c legacy backfill (publish tags from existing docs) |
 | `crosslink compile` | one-shot resolve + atlas + CLAUDE.md injection (local + peers) |
 
-Optional focus (or `crosslink` / `crosslink compile`): $ARGUMENTS
+Optional focus (`update <doc>` · `add "<topic>"` · `crosslink` ·
+`crosslink compile`): $ARGUMENTS

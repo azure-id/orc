@@ -52,6 +52,7 @@ All of it uses **easy English**, short sentences, and the same fake project.
 
 | Doc | Lane | One line |
 |---|---|---|
+| [orc-rules](orc-rules.md) | `orc rules` | The anti-slop rules: 65 shipped read-only, plus your own, which win |
 | [orc-wiki](../templates/skills/orc-wiki/examples/wiki-run-mock.md) | `/orc-wiki` | Scan the codebase into an evidence-anchored knowledge base |
 | [orc-pattern](orc-pattern.md) | `/orc-pattern` | Learn your real conventions so executors match your house style |
 | [orc-learn](../templates/skills/orc-learn/examples/learn-run-mock.md) | `/orc-learn` | Onboarding docs for a human, per feature |

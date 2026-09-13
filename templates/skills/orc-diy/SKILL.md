@@ -128,6 +128,13 @@ command you are about to run, out loud, before running it.
 3. The fallback ask is ONE question with two outcomes (`/orc` or stop) —
    never a menu, never a silent fallback.
 
+## Rules — the anti-slop card (`../_shared/phases/rules.md`)
+
+`orc rules slice --lane orc-diy --json` is the ONLY assembler; never build
+the card here. It rides under the house rules and above the task —
+**house rules > your project's rules > ORC's own packs** — and its `line` prints
+VERBATIM at preflight. Returns gain `rules_applied[]`, `rules_conflicts[]` (a gap,
+never a silent choice) and `rules_overridden[]`.
 ## Waiting mid-run (`/orc-wait`)
 
 Canonical: `../_shared/wait.md`. **`a lane that waits without a hand-back` has broken this contract.**

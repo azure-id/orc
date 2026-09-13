@@ -194,6 +194,34 @@ shipped into every slice and read by nobody is the failure mode this field
 exists to make visible, and it is invisible if `none` is quietly dropped. Absent
 on a slice that carried wiki material is malformed. Not required otherwise.
 
+## 5c. Rules attestation (when the anti-slop card was injected — v1.7.0)
+
+A slice assembled by `orc rules slice` (`phases/rules.md`) must return three
+fields. All three may be empty; **absent is malformed**, because an empty array
+and a missing one are the difference between "nothing applied" and "nobody
+looked".
+
+| Field | What it holds | Empty means |
+|---|---|---|
+| `rules_applied[]` | the rule ids the agent acted on | it changed nothing for this task |
+| `rules_conflicts[]` | two rules that disagree, each named by id or quote | none collided |
+| `rules_overridden[]` | an ORC id a project rule replaced | the project replaced none |
+
+**A `rules_conflicts[]` entry is a GAP, never a resolution.** Relay it through
+the lane's own gap channel and let the user decide. An agent that quietly picks
+a winner has made a standing decision for the project in a slice nobody will
+read again.
+
+`rules_overridden[]` is cross-checked against the `overrides` the CLI already
+computed. The agent may return MORE than the CLI counted — the CLI only counts
+ids a user NAMED, and the agent is the only reader that can spot an unnamed
+contradiction — but an id the CLI listed and the return omits means the card was
+not read.
+
+A rule the slice could not honour because this lane structurally cannot do it
+comes back as `unsupported_request`, relayed as a gap. **Never a guessed
+compromise.**
+
 ## 6. Worktree delta (post-wave, every lane that dispatches executors)
 
 Compare `git status --short` before and after each dispatch. A path that

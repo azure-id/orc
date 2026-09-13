@@ -77,6 +77,7 @@ release's findings; a `read:` names a HEADING and **never a line number**
 | `trace.md` | `trace` | `core` | every trace-owning lane (28) |
 | `preflight.md` | `preflight` | `core`, `full` | the silent-probe lanes (15) |
 | `stop-resume.md` | `stop-resume` | `core` | `orc`, `orc-wiki`, `orc-diy` |
+| `rules.md` | `rules` | `core` | every lane that writes words or code (28) — **never `orc-doc`** |
 
 `orc lane phases --all --json` is the authoritative list; this table is a
 human index of it.

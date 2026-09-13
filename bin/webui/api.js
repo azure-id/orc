@@ -363,6 +363,21 @@ const READS = {
   // nothing about a priority, an order, a wave shape or a number.
   "/api/doc/rules": () => ["doc", "rules"],
   "/api/doc/rules/one": (q) => ["doc", "rules", String(q.slug || "")],
+  // v1.7.0 — the anti-slop rule surface. Five READS. The panel decides nothing:
+  // not the precedence order, not a rule's tier, not the override count, and
+  // not which of the 65 rules the lint can actually prove.
+  //
+  // `lint` takes a path from the query string. It is user input like any other,
+  // so it is forwarded as ONE argv element and never through a shell — the same
+  // reason every other route here spawns an array rather than a string.
+  "/api/rules": () => ["rules"],
+  "/api/rules/user": () => ["rules", "user"],
+  "/api/rules/packs": () => ["rules", "packs"],
+  "/api/rules/credits": () => ["rules", "credits"],
+  "/api/rules/lint": (q) => ["rules", "lint", String(q.path || ".")],
+  // v1.7.0 — the wiki's one-doc-at-a-time probes. Both free, neither scans.
+  "/api/wiki/resolve": (q) => ["wiki", "resolve", String(q.topic || "")],
+  "/api/wiki/refs": () => ["wiki", "refs", "--check"],
   "/api/doc/forecast": (q) => ["doc", "forecast", String(q.slug || "")],
   "/api/doc/cost": (q) => ["doc", "cost", String(q.slug || "")],
   // v0.50.0 — `orc extra`. Every one is a READ, and every one is a subprocess of
@@ -592,6 +607,17 @@ const WRITES = {
   // house rule looks like, and the argv is a plain array, so a multi-line value
   // needs no escaping and no temp file.
   "/api/doc/rules/setAll": (b) => ["doc", "rules", "set-all", "--text", String(b.text || "")],
+  // v1.7.0 — the project's own anti-slop rules. ONE write route, for the same
+  // reason the doc ledger has one: it is a plain text config, so the panel
+  // writes the whole file from one textarea and the CLI is still the only
+  // writer and the only validator.
+  //
+  // There is deliberately NO route for the SHIPPED packs. They are read-only,
+  // `orc rules set --pack …` is refused by name, and a route that existed only
+  // to be refused would be a control that lies about what it can do.
+  // `--reset` also has no route: throwing away a project's standing rules is a
+  // CLI act.
+  "/api/rules/setAll": (b) => ["rules", "set-all", "--text", String(b.text || "")],
   "/api/doc/rules/sync": (b) => ["doc", "rules", String(b.slug), "--sync"],
   // v0.52.0 (D9) — per document, because a document's voice is the deliverable.
   // The CLI owns the resolution order and the shadowing announcement; the panel

@@ -25,6 +25,7 @@
 <link rel="stylesheet" href="css/05-tour.css">
 <link rel="stylesheet" href="css/panels/settings.css">
 <link rel="stylesheet" href="css/panels/lanes.css">
+<link rel="stylesheet" href="css/panels/rules.css">
 <link rel="stylesheet" href="css/panels/runs.css">
 <link rel="stylesheet" href="css/panels/knowledge.css">
 <link rel="stylesheet" href="css/panels/stats.css">
@@ -80,6 +81,14 @@
         which shared phases they run, in order, and which CLI calls they make.
       -->
       <li><a href="#/lanes"       data-panel="lanes"       data-idx="l" data-i18n="nav.lanes">Lanes</a></li>
+      <!--
+        v1.7.0. Rules sits directly under Lanes because it is the other half of
+        the same answer: Lanes says which phases a lane runs, this says which
+        rules ride in every slice it builds — and it is the one panel here where
+        a project can change what ORC writes, so it belongs with Settings and
+        Lanes rather than down among the reading panels.
+      -->
+      <li><a href="#/rules"       data-panel="rules"       data-idx="r" data-i18n="nav.rules">Rules</a></li>
       <li><a href="#/runs"        data-panel="runs"        data-idx="3" data-i18n="nav.runs">Runs</a></li>
       <li><a href="#/knowledge"   data-panel="knowledge"   data-idx="4" data-i18n="nav.knowledge">Knowledge</a></li>
       <li><a href="#/stats"       data-panel="stats"       data-idx="5" data-i18n="nav.stats">Stats</a></li>
@@ -197,6 +206,7 @@
 <script src="js/panels/overview.js"></script>
 <script src="js/panels/settings.js"></script>
 <script src="js/panels/lanes.js"></script>
+<script src="js/panels/rules.js"></script>
 <script src="js/panels/runs.js"></script>
 <script src="js/panels/knowledge.js"></script>
 <script src="js/panels/stats.js"></script>

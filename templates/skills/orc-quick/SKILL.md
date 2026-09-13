@@ -328,6 +328,13 @@ orc-quick has no config key of its own and ignores every dispatch-forcing key �
 which is why five of them come back INERT with a reason. Say that at the gate;
 see "Nothing can override this lane" above.
 
+## Rules — the anti-slop card (`../_shared/phases/rules.md`)
+
+`orc rules slice --lane orc-quick --json` is the ONLY assembler; never build
+the card here. It rides under the house rules and above the task —
+**house rules > your project's rules > ORC's own packs** — and its `line` prints
+VERBATIM at preflight. Returns gain `rules_applied[]`, `rules_conflicts[]` (a gap,
+never a silent choice) and `rules_overridden[]`.
 ## Calls
 
 **ONE catalogue, and it is not you:** `orc lane calls orc-quick --json` names every

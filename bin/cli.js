@@ -3595,6 +3595,25 @@ const LANE_CALLS = {
     never: "never apply an import without the user's yes",
     lanes: ["orc-export", "orc-pact"],
   },
+  // v1.7.0 — the anti-slop card. One assembler, because a card built in
+  // twenty-eight spines is twenty-eight ideas of the precedence order, and
+  // because this is the only place its per-spawn token weight can be measured.
+  "rules-slice": {
+    cmd: "orc rules slice --lane <lane> [--pack ui] [--json]",
+    what: "THE anti-slop card for a slice: your project rules first, then ORC's own packs, in precedence order",
+    exits: { 0: "answered", 2: "no --lane, a lane that carries no rules (orc-doc), or an unknown pack" },
+    states: null,
+    cost: "free",
+    when: "once per dispatch, for every slice that writes words or code — and with `--pack ui` only when the task's declared files are front-end",
+    on_absent: "an empty user ledger is an ANSWER: the ORC packs still ride, and the line still prints `yours none`",
+    canonical: "_shared/phases/rules.md",
+    never: "never assemble this card in a skill, and never let a lane trim its own copy to save tokens",
+    // Spelled out rather than derived from RULE_LANE_PACKS: that table is
+    // declared far below this catalogue, and reading it here is a temporal dead
+    // zone that crashes the CLI on every command. `test/cli/rules.test.js`
+    // asserts the two agree.
+    lanes: ["context-combiner", "orc", "orc-aftermath", "orc-analyze", "orc-analyze-mini", "orc-boundary", "orc-brainstorm", "orc-budget", "orc-challenge", "orc-claude", "orc-diy", "orc-explain", "orc-export", "orc-fast", "orc-grill", "orc-handoff", "orc-learn", "orc-mini", "orc-pact", "orc-poly", "orc-pr-driver", "orc-pr-setup", "orc-quick", "orc-retro", "orc-route", "orc-test", "orc-verify", "orc-wiki"],
+  },
 };
 
 // `orc lane calls <lane>` / `--all` — the catalogue, rendered.
@@ -3756,6 +3775,15 @@ const PHASE_FILES = {
     file: "_shared/phases/house-rules.md",
     layers: ["core"],
     why_single_layer: "it is a standing card injected VERBATIM into a slice — a layered card would be a different card",
+  },
+  // v1.7.0 — the anti-slop card. Single-layer for the SAME reason as
+  // house-rules: what varies between lanes is DATA (which packs, whether a task
+  // is front-end), not prose, and a layered standing card is a different card.
+  rules: {
+    file: "_shared/phases/rules.md",
+    layers: ["core"],
+    why_single_layer:
+      "a standing card assembled by ONE command (`orc rules slice`) and injected verbatim — the per-lane variation is which packs it carries, which is data the CLI already resolves",
   },
   "stop-resume": {
     file: "_shared/phases/stop-resume.md",
@@ -3965,6 +3993,17 @@ const LANE_PHASES = {
   "wiki-consult": ["orc", "orc-mini", "orc-fast"],
   "security-checklist": ["orc", "orc-diy"],
   "house-rules": ["orc", "orc-mini", "orc-fast", "orc-quick", "orc-doc"],
+  // v1.7.0 — every lane that writes words or code, and `orc-doc` is absent BY
+  // DESIGN: it has its own ledger (`orc doc rules`) and its own frozen-per-
+  // document mechanic. This list is the same set as RULE_LANE_PACKS, which
+  // `test/cli/rules.test.js` holds together.
+  rules: [
+    "context-combiner", "orc", "orc-aftermath", "orc-analyze", "orc-analyze-mini",
+    "orc-boundary", "orc-brainstorm", "orc-budget", "orc-challenge", "orc-claude",
+    "orc-diy", "orc-explain", "orc-export", "orc-fast", "orc-grill", "orc-handoff",
+    "orc-learn", "orc-mini", "orc-pact", "orc-poly", "orc-pr-driver", "orc-pr-setup",
+    "orc-quick", "orc-retro", "orc-route", "orc-test", "orc-verify", "orc-wiki",
+  ],
   // v1.0.0 W13 — the build phases. `orc-diy` reads the `composed` layer, which
   // `orc diy compile` stitches; `/orc` reads `full`. Two readers is what moved
   // these out of orc/references/phases/ (design-02 §2, the >=2-lane rule).
@@ -3992,6 +4031,9 @@ const PHASE_ORDER = [
   "analyst-gates",
   "planning",
   "house-rules",
+  // Immediately after the house card, because the card it assembles sits
+  // directly under it in a slice and the order in a slice IS the contract.
+  "rules",
   "wave-grouping",
   "scoring",
   "execution",
@@ -4225,7 +4267,16 @@ function lanePhaseRows(lane) {
             ? "always"
             : "on-phase",
       optional_when: null,
-      calls: id === "preflight" ? laneCallIds.filter((c) => PREFLIGHT_CALL_IDS.has(c)) : [],
+      // v1.7.0 — `rules` names its own call for the same reason `preflight`
+      // does: the phase IS that command, and a phase row reading "none
+      // catalogued" beside a phase whose whole procedure is one CLI call reads
+      // as "this phase makes no calls", which is the opposite of true.
+      calls:
+        id === "preflight"
+          ? laneCallIds.filter((c) => PREFLIGHT_CALL_IDS.has(c))
+          : id === "rules"
+            ? laneCallIds.filter((c) => c === "rules-slice")
+            : [],
     });
   }
   return rows;
@@ -8807,6 +8858,417 @@ function wikiDocRows(claudeDir) {
   return { rows: detail.per_doc, detail, fresh: f, edges, state: s.state, meta: s.meta, paths, code: 0 };
 }
 
+// ── orc wiki resolve | add | refs (v1.7.0 W6) — one doc at a time ──────────
+//
+// Targeted REFRESH has existed since v0.33.0 and is not rebuilt here. What was
+// missing is the other half: ADDING one topic to a wiki that already exists.
+// Until now a new coverage area only appeared as a by-product of the
+// coverage-gap sweep during a delta refresh, so "add the remittance feature to
+// the wiki" had no path that did not re-plan every area in the repo.
+//
+// Three free commands, none of which scans or spawns:
+//
+//   resolve  does a doc already cover this topic?  → refresh it, or add one
+//   add      RESERVE the doc row so a scan-task has a target to write into
+//   refs     the DERIVED-REFERENCE sweep: after ONE doc changes, which of the
+//            surfaces that are derived from the doc set are now stale
+//
+// `orc wiki sync` stays the only writer of wiki-meta.json and INDEX.md. `add`
+// writes a stub, `refs` calls sync. Neither becomes a second manifest writer.
+
+// `positionals()` strips a flag's value only for the flags it knows about, and
+// these three are new. A local reader keeps the wiki half from having to teach
+// the global one about every flag any command ever adds.
+function wikiOpt(name) {
+  for (let i = 0; i < args.length; i++)
+    if (args[i] === name && args[i + 1] !== undefined && !String(args[i + 1]).startsWith("--"))
+      return String(args[i + 1]);
+  return undefined;
+}
+
+const WIKI_STOPWORDS = new Set([
+  "the", "a", "an", "and", "or", "for", "to", "of", "in", "on", "at", "is", "it",
+  "this", "that", "with", "our", "my", "we", "i", "add", "need", "want", "please",
+  "feature", "features", "page", "doc", "docs", "wiki", "about", "new", "some",
+  "how", "what", "where", "why", "can", "you", "me", "us", "thing", "things",
+]);
+
+const wikiTerms = (topic) =>
+  [...new Set(String(topic || "").toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length >= 3 && !WIKI_STOPWORDS.has(w)))];
+
+// A doc is scored on the fields a HUMAN would look at, weighted by how
+// deliberate each one is. `keywords` exist precisely so a request can be
+// matched to a page, so they weigh most; a glob in `covers` is the loosest
+// signal and weighs least.
+function wikiScoreDoc(row, terms) {
+  const hay = {
+    keywords: (row.keywords || []).join(" ").toLowerCase(),
+    title: String(row.title || "").toLowerCase(),
+    area: String(row.area || "").toLowerCase(),
+    file: String(row.file || "").toLowerCase(),
+    covers: (row.covers || []).join(" ").toLowerCase(),
+  };
+  const W = { keywords: 4, title: 3, area: 3, file: 2, covers: 1 };
+  let score = 0;
+  const why = [];
+  for (const t of terms)
+    for (const [field, text] of Object.entries(hay))
+      if (text.includes(t)) {
+        score += W[field];
+        why.push(`${t} in ${field}`);
+        break; // one field per term — a term is evidence once, not five times
+      }
+  return { score, why };
+}
+
+// Cheap, deterministic scope proposal for a NEW doc: paths whose own name
+// carries a topic term. It is a STARTING POINT for the user to correct, never
+// an answer — which is why it is capped and labelled as a proposal.
+function wikiSuggestPaths(root, terms) {
+  if (!terms.length) return [];
+  const raw = gitIn(root, ["ls-files"]);
+  const all = raw ? String(raw).split("\n").map((x) => x.trim()).filter(Boolean) : [];
+  if (!all.length) return [];
+  const dirs = new Map();
+  const files = [];
+  for (const f of all) {
+    const low = f.toLowerCase();
+    if (!terms.some((t) => low.includes(t))) continue;
+    files.push(f);
+    const d = f.split("/").slice(0, -1).join("/");
+    if (d) dirs.set(d, (dirs.get(d) || 0) + 1);
+  }
+  // Prefer a directory that holds several matches over the files themselves:
+  // a coverage area is a place, not a list.
+  const top = [...dirs.entries()].filter(([, n]) => n >= 2).sort((a, b) => b[1] - a[1]).slice(0, 4);
+  const out = top.map(([d, n]) => ({ glob: d + "/**", matches: n }));
+  for (const f of files.slice(0, 6))
+    if (!out.some((o) => f.startsWith(o.glob.replace(/\*\*$/, "")))) out.push({ glob: f, matches: 1 });
+  return out.slice(0, 8);
+}
+
+function wikiResolveCmd(claudeDir) {
+  const asJson = wantsJson();
+  const pos = positionals();
+  const topic = (wikiOpt("--topic") || pos.slice(2).join(" ")).trim();
+  if (!topic) {
+    const hint = 'orc wiki resolve needs a topic: orc wiki resolve "remittance feature"';
+    if (asJson) emitJson({ ok: false, reason: "no-topic", hint }, 2);
+    console.error("❌ " + hint);
+    process.exit(2);
+  }
+  // The doc HEADERS, not the freshness rows: `keywords` and `area` are the two
+  // fields a topic actually matches on, and neither survives into per_doc.
+  const paths = wikiPaths(claudeDir);
+  const st = wikiState(claudeDir);
+  if (st.state === "none" || st.state === "corrupt") {
+    const hint =
+      st.state === "none"
+        ? "no wiki yet — run `/orc-wiki` to build one. `resolve` compares a topic against docs that already exist."
+        : "wiki-meta.json is unreadable — run `orc wiki sync` (free) to rebuild it from the docs.";
+    if (asJson) emitJson({ ok: false, reason: st.state === "none" ? "no-wiki" : "corrupt", state: st.state, topic, hint }, 3);
+    console.log(hint);
+    process.exit(3);
+  }
+  const { docs } = readWikiDocs(paths.wikiDir);
+
+  const terms = wikiTerms(topic);
+  const scored = docs
+    .map((d) => {
+      const row = {
+        file: d.rel,
+        area: d.header.area || null,
+        title: (d.text.match(/^#\s+(.+)$/m) || [])[1] || null,
+        keywords: Array.isArray(d.header.keywords) ? d.header.keywords : [],
+        covers: Array.isArray(d.header.covers) ? d.header.covers : [],
+      };
+      return { ...row, ...wikiScoreDoc(row, terms) };
+    })
+    .filter((r) => r.score > 0)
+    .sort((a, b) => b.score - a.score);
+
+  const top = scored[0] || null;
+  const second = scored[1] || null;
+  // A clear winner needs to beat the runner-up, not merely lead it. Two docs a
+  // point apart is the case where guessing costs a scan of the wrong area.
+  let verdict = "new";
+  if (top && (!second || top.score >= second.score * 1.5 + 1)) verdict = "match";
+  else if (top) verdict = "ambiguous";
+
+  const slug = topic.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40);
+  const payload = {
+    ok: true,
+    topic,
+    terms,
+    verdict,
+    match: verdict === "match" ? top : null,
+    candidates: scored.slice(0, 5),
+    suggested_slug: slug,
+    suggested_covers: verdict === "new" ? wikiSuggestPaths(paths.root, terms) : [],
+    next:
+      verdict === "match"
+        ? `/orc-wiki update ${top.file}`
+        : verdict === "ambiguous"
+          ? "ask which doc this belongs to — two or more cover it about equally"
+          : `/orc-wiki add "${topic}"`,
+    note: "the suggested covers are a STARTING POINT derived from path names, never an answer — the user corrects them before anything is scanned.",
+  };
+  const code = verdict === "match" ? 0 : verdict === "new" ? 1 : 2;
+  if (asJson) emitJson(payload, code);
+
+  console.log(`\norc wiki resolve — "${topic}"\n`);
+  if (!terms.length) console.log(ui.color.gray("  no searchable terms in that topic"));
+  if (verdict === "match")
+    console.log(`  ${ui.color.green("MATCH")}  ${top.file}\n         ${ui.color.gray(top.why.slice(0, 4).join(" · "))}`);
+  else if (verdict === "ambiguous") {
+    console.log(`  ${ui.color.yellow("AMBIGUOUS")} — ${plural(scored.length, "doc")} cover this about equally\n`);
+    for (const c of scored.slice(0, 5)) console.log(`   ${String(c.score).padStart(3)}  ${c.file}  ${ui.color.gray(c.why.slice(0, 3).join(" · "))}`);
+  } else {
+    console.log(`  ${ui.color.cyan("NEW")}  nothing on disk covers this.`);
+    if (payload.suggested_covers.length) {
+      console.log("\n  " + ui.color.gray("a starting point, from path names only — correct it before anything is scanned:"));
+      for (const s of payload.suggested_covers) console.log(`   ${s.glob}  ${ui.color.gray(s.matches + " file(s)")}`);
+    }
+  }
+  console.log("\n  next: " + payload.next + "\n");
+  process.exit(code);
+}
+
+const WIKI_DOC_TYPES = ["feature", "reference", "architecture"];
+
+function wikiAddCmd(claudeDir) {
+  const asJson = wantsJson();
+  const pos = positionals();
+  const slugRaw = String(pos[2] || "").trim();
+  const paths = wikiPaths(claudeDir);
+  const fail = (reason, hint, code = 2) => {
+    if (asJson) emitJson({ ok: false, reason, hint }, code);
+    console.error("❌ " + hint);
+    process.exit(code);
+  };
+  if (!slugRaw) return fail("no-slug", 'orc wiki add needs a slug: orc wiki add remittance --title "Remittance" --covers "src/remittance/**"');
+  const slug = slugRaw.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  if (!slug) return fail("bad-slug", `"${slugRaw}" has no usable characters for a slug.`);
+
+  const type = String(wikiOpt("--type") || "feature").toLowerCase();
+  if (!WIKI_DOC_TYPES.includes(type)) return fail("bad-type", `--type must be one of: ${WIKI_DOC_TYPES.join(", ")}`);
+  const title = String(wikiOpt("--title") || slug.replace(/-/g, " ")).trim();
+
+  // `--covers` may be repeated, or comma-separated. A reservation with no
+  // coverage is a doc nothing can ever mark stale, so it is refused.
+  const covers = [];
+  for (let i = 0; i < args.length; i++)
+    if (args[i] === "--covers" && args[i + 1] && !String(args[i + 1]).startsWith("--"))
+      for (const g of String(args[i + 1]).split(",")) if (g.trim()) covers.push(g.trim());
+  if (!covers.length)
+    return fail("no-covers", 'orc wiki add needs --covers "<glob>" (repeatable). A doc with no coverage can never be marked stale, so it is not a doc.');
+
+  if (!fs.existsSync(paths.wikiDir))
+    return fail("no-wiki", "no wiki/ directory — `orc wiki add` reserves a row in a wiki that exists. Run `/orc-wiki` to build one first.", 3);
+
+  const rel = `wiki/orc-${type}-${slug}${type === "feature" ? "-overview" : ""}.md`;
+  const abs = path.join(paths.root, ...rel.split("/"));
+  if (fs.existsSync(abs))
+    return fail("exists", `${rel} already exists — refresh it instead: /orc-wiki update ${rel}`, 1);
+
+  // A STUB, not a document. It carries `status: reserved` so every consumer can
+  // tell it apart from a scanned doc, and its first prose line becomes the
+  // INDEX.md description — so a sync that lands between the reservation and the
+  // scan says RESERVED rather than showing an empty row that reads as a real
+  // page. A doc that lies is worse than a doc that is missing.
+  const body = [
+    "---",
+    "wiki_schema: 2",
+    `doc_type: ${type}`,
+    `area: ${slug}`,
+    `covers: [${covers.join(", ")}]`,
+    "keywords: []",
+    "status: reserved",
+    "---",
+    "",
+    `# ${title}`,
+    "",
+    "RESERVED by `orc wiki add` — no scan has run yet, so nothing below is evidence.",
+    "",
+    "The scan-task writes this body and replaces `status: reserved` with a real",
+    "`scanned_at` / `scanned_commit` / `covered_files` set. Until then this row is",
+    "a placeholder, and `orc wiki refs` reports it as outstanding.",
+    "",
+  ].join("\n");
+  fs.mkdirSync(path.dirname(abs), { recursive: true });
+  fs.writeFileSync(abs, body);
+
+  const payload = {
+    ok: true,
+    reserved: rel,
+    path: abs,
+    doc_type: type,
+    area: slug,
+    title,
+    covers,
+    next: "scan the area, write the body, then `orc wiki refs` (free) to re-derive every reference",
+    note: "this is a RESERVATION, not a doc. It is registered only when `orc wiki sync` next runs, and it reports as outstanding until a scan replaces the body.",
+  };
+  if (asJson) emitJson(payload, 0);
+  console.log(`\n✓ reserved ${rel}`);
+  console.log(ui.color.gray(`  covers: ${covers.join(", ")}`));
+  console.log(ui.color.gray("  no scan has run — the body is a placeholder until one does"));
+  console.log(ui.color.gray("  next: " + payload.next) + "\n");
+  process.exit(0);
+}
+
+// The DERIVED-REFERENCE sweep. After ONE doc is written, these surfaces are
+// derived from the doc SET and are now behind it. Before this command they were
+// repaired by memory, one at a time, and the ones nobody remembered stayed
+// wrong — which is the failure a single-doc update makes most likely, because
+// the run is small enough that the sweep feels unnecessary.
+function wikiRefsCmd(claudeDir) {
+  const asJson = wantsJson();
+  const checkOnly = flag("--check") === true;
+  const paths = wikiPaths(claudeDir);
+  const st = wikiState(claudeDir);
+  if (st.state === "none") {
+    const hint = "no wiki — nothing is derived from it yet. Run `/orc-wiki` to build one.";
+    if (asJson) emitJson({ ok: false, reason: "no-wiki", state: st.state, hint, items: [] }, 2);
+    console.log(hint);
+    process.exit(2);
+  }
+
+  const items = [];
+  const add = (id, state, what, fix, cost) => items.push({ id, state, what, fix, cost });
+
+  // 1. Registration — the only surface this command REPAIRS, because sync is
+  //    free, derived and already the single writer.
+  let registration = st.state;
+  if (st.state === "registered") add("registration", "clean", "wiki-meta.json and INDEX.md match the docs on disk", null, "free");
+  else if (checkOnly)
+    add("registration", "drifted", `registration is ${st.state.toUpperCase()}`, "orc wiki sync", "free");
+  else {
+    try {
+      const r = buildRegistration(claudeDir);
+      fs.writeFileSync(paths.meta, JSON.stringify(r.meta, null, 2) + "\n");
+      fs.writeFileSync(path.join(paths.wikiDir, "INDEX.md"), r.index);
+      registration = "registered";
+      add("registration", "repaired", `registration was ${st.state.toUpperCase()} — re-derived from the doc headers`, null, "free");
+    } catch (e) {
+      add("registration", "drifted", `registration is ${st.state.toUpperCase()} and could not be rebuilt: ${e.message}`, "orc wiki sync", "free");
+    }
+  }
+
+  const { docs } = readWikiDocs(paths.wikiDir);
+  const meta = readMetaAt(paths.meta).meta || {};
+  const registered = Array.isArray(meta.docs) ? meta.docs : [];
+
+  // 2. Reserved rows — a reservation that never got its scan is the one way
+  //    this new flow can leave the wiki worse than it found it.
+  const reserved = docs.filter((d) => String(d.header.status || "") === "reserved").map((d) => d.rel);
+  if (reserved.length)
+    add("reserved", "outstanding", `${plural(reserved.length, "reserved row")} with no scan behind it: ${reserved.join(", ")}`,
+      `/orc-wiki update ${reserved[0]}`, "money");
+  else add("reserved", "clean", "no reserved rows waiting for a scan", null, "free");
+
+  // 3. Orientation — DERIVED, read first by every consumer, and free to
+  //    regenerate. Stale when any doc was scanned after it was.
+  const newest = docs.reduce((a, d) => {
+    const t = parseScannedAt(d.header.scanned_at);
+    return t && (!a || t > a) ? t : a;
+  }, null);
+  const orient = docs.find((d) => /orc-orientation\.md$/.test(d.rel));
+  if (!orient)
+    add("orientation", "missing", "wiki/orc-orientation.md does not exist — it is the page every consumer reads first",
+      "/orc-wiki refresh wiki/orc-orientation.md", "free");
+  else {
+    const ot = parseScannedAt(orient.header.scanned_at);
+    if (newest && ot && newest > ot)
+      add("orientation", "behind", "wiki/orc-orientation.md is older than the newest doc, so its reading order predates it",
+        "/orc-wiki refresh wiki/orc-orientation.md", "free");
+    else add("orientation", "clean", "wiki/orc-orientation.md is no older than the newest doc", null, "free");
+  }
+
+  // 4. Architecture overview — OPTIONAL output. A small wiki may legitimately
+  //    have none, so its absence is reported as `absent`, never as drift.
+  const archRel = "wiki/orc-architecture-overview.md";
+  const archAbs = path.join(paths.root, ...archRel.split("/"));
+  if (!fs.existsSync(archAbs)) add("architecture", "absent", "no architecture overview — optional, and a small wiki may not need one", null, "free");
+  else {
+    const arch = fs.readFileSync(archAbs, "utf8");
+    const missing = registered
+      .filter((d) => !/orc-orientation\.md$/.test(d.file) && d.file !== archRel)
+      .filter((d) => !arch.includes(d.file) && !(d.area && arch.toLowerCase().includes(String(d.area).toLowerCase())))
+      .map((d) => d.file);
+    if (missing.length)
+      add("architecture", "behind", `${archRel} names neither the file nor the area of: ${missing.join(", ")}`,
+        "/orc-wiki refresh " + archRel, "free");
+    else add("architecture", "clean", `${archRel} names every registered area`, null, "free");
+  }
+
+  // 5. The CLAUDE.md pointer block — it carries a doc COUNT, so a doc added or
+  //    retired makes it say something measurably untrue.
+  const cmAbs = path.join(paths.root, "CLAUDE.md");
+  if (!fs.existsSync(cmAbs)) add("claude-md", "missing", "no CLAUDE.md — future sessions are never told the wiki exists", "/orc-wiki (the pointer-injection step)", "free");
+  else {
+    const cm = fs.readFileSync(cmAbs, "utf8");
+    const m = /<!--\s*ORC-WIKI:START[\s\S]*?<!--\s*ORC-WIKI:END\s*-->/.exec(cm);
+    if (!m) add("claude-md", "missing", "CLAUDE.md has no ORC-WIKI pointer block", "/orc-wiki (the pointer-injection step)", "free");
+    else {
+      const said = /·\s*(\d+)\s*docs?/.exec(m[0]);
+      const n = said ? Number(said[1]) : null;
+      if (n !== null && n !== registered.length)
+        add("claude-md", "behind", `the pointer block says ${plural(n, "doc")}; ${plural(registered.length, "doc")} are registered`,
+          "/orc-wiki (the pointer-injection step)", "free");
+      else add("claude-md", "clean", "the pointer block's doc count matches the registry", null, "free");
+    }
+  }
+
+  // 6. Dead crosslink tags — a tag whose anchor file is gone. NEVER deleted
+  //    here: retiring a tag is a per-tag offer in the lane, and a refresh has
+  //    never been allowed to bulk-delete that folder.
+  const tags = (readCrosslinkProvided(paths).list || []).filter((t) => {
+    const f = String(t.anchor || "").split(":")[0].trim();
+    return f && !fs.existsSync(path.join(paths.root, ...f.split("/")));
+  });
+  if (tags.length)
+    add("crosslink", "dead", `${plural(tags.length, "crosslink tag")} anchored to a file that no longer exists`,
+      "/orc-wiki (the dead-tag sweep — offered per tag, never automatic)", "free");
+  else add("crosslink", "clean", "every crosslink tag's anchor still exists", null, "free");
+
+  const open = items.filter((i) => i.state !== "clean" && i.state !== "absent" && i.state !== "repaired");
+  const repaired = items.filter((i) => i.state === "repaired");
+  const code = open.length ? 1 : repaired.length ? 1 : 0;
+
+  if (asJson)
+    emitJson(
+      {
+        ok: true,
+        mode: checkOnly ? "check" : "repair",
+        registration,
+        items,
+        open: open.map((i) => i.id),
+        repaired: repaired.map((i) => i.id),
+        clean: open.length === 0,
+        note: "only registration is repaired here, because `orc wiki sync` is free and already the single writer of wiki-meta.json and INDEX.md. Everything else is REPORTED with its command — a sweep that silently regenerated prose would be spending money nobody asked it to spend.",
+      },
+      code
+    );
+
+  console.log(`\norc wiki refs — ${checkOnly ? "check" : "repair"}  ${ui.color.gray(plural(registered.length, "registered doc"))}\n`);
+  for (const i of items) {
+    const c = i.state === "clean" || i.state === "repaired" ? ui.color.green : i.state === "absent" ? ui.color.gray : ui.color.yellow;
+    console.log(`  ${c(i.state.padEnd(11))} ${ui.color.cyan(i.id.padEnd(13))} ${i.what}`);
+    if (i.fix) console.log(`  ${"".padEnd(11)} ${ui.color.gray("→ " + i.fix + "  (" + i.cost + ")")}`);
+  }
+  console.log(
+    "\n  " +
+      ui.color.gray(
+        open.length
+          ? `${plural(open.length, "surface")} still to do — every free one first.`
+          : "every derived reference is current."
+      ) +
+      "\n"
+  );
+  process.exit(code);
+}
+
 function wikiDocsCmd(claudeDir) {
   const asJson = wantsJson();
   const d = wikiDocRows(claudeDir);
@@ -9016,6 +9478,18 @@ function wiki() {
     case "show":
       wikiShowCmd(claudeDir, pos[2]);
       break;
+    // v1.7.0 — one doc at a time. `resolve` and `refs` are READS; `add` writes a
+    // RESERVATION stub and nothing else. `orc wiki sync` stays the only writer
+    // of wiki-meta.json and INDEX.md.
+    case "resolve":
+      wikiResolveCmd(claudeDir);
+      break;
+    case "add":
+      wikiAddCmd(claudeDir);
+      break;
+    case "refs":
+      wikiRefsCmd(claudeDir);
+      break;
     case "coverage":
       wikiCoverage(claudeDir);
       break;
@@ -9039,7 +9513,14 @@ function wiki() {
           "       orc wiki show <doc> [--body]  ONE doc: header, coverage, tags, usage, its free repairs\n" +
           "                                     (exit 0 / 2 unreadable / 3 unknown doc)\n" +
           "       orc wiki coverage [--json]    % of tracked files covered by >=1 doc, and the uncovered\n" +
-          "                                     set by directory. A REPORT, never a gate (exit 0 full / 1 gaps)"
+          "                                     set by directory. A REPORT, never a gate (exit 0 full / 1 gaps)\n" +
+          "       orc wiki resolve <topic>      does a doc already cover this? (exit 0 match / 1 new /\n" +
+          "                                     2 ambiguous / 3 no wiki). Free, no scan\n" +
+          "       orc wiki add <slug> --title <t> --covers <glob>   RESERVE a doc row for a new topic.\n" +
+          "                                     Writes a stub, never scans (exit 0 / 1 exists / 2 bad args)\n" +
+          "       orc wiki refs [--check]       the DERIVED-REFERENCE sweep after ONE doc changes:\n" +
+          "                                     registration, reserved rows, orientation, architecture,\n" +
+          "                                     the CLAUDE.md pointer, dead tags (exit 0 clean / 1 work)"
       );
       process.exit(1);
   }
@@ -42391,6 +42872,1111 @@ function slSaveAndCompile(claudeDir, layout, info, skipWrite) {
 }
 
 
+// ── orc rules (v1.7.0) — the anti-slop rule surface ─────────────────────────
+//
+// A SECOND rule surface, beside the code house rules, and the two never mix.
+// It has two halves, written by different people, living in different places:
+//
+//   ORC RULES   templates/skills/_shared/rules/*.md  →  .claude/skills/_shared/rules/
+//               SHIPPED and READ-ONLY. Changes with `orc update`, never with a
+//               command. `orc rules set --pack …` is refused BY NAME, because a
+//               command that silently does nothing is worse than one that says
+//               what replaced it.
+//
+//   USER RULES  .claude/orc/rules.md
+//               The project's own. Plain text, three priority headings, as much
+//               text under each as the user wants — the `orc doc rules` design,
+//               reused without change, because that argument was already had: a
+//               standing instruction is prose, not a form, and nobody's real P0
+//               fits on one line.
+//
+// PRECEDENCE, printed everywhere rather than documented once:
+//
+//   1. project CODE house rules  (_shared/phases/house-rules.md + CLAUDE.md P0)
+//      scope: CODE and agent BEHAVIOUR only. It says nothing about prose, so it
+//      never overrules a writing rule — it does not speak about prose at all.
+//   2. USER rules — they beat the ORC rules OUTRIGHT on any conflict.
+//   3. ORC rules.
+//
+// An override is NEVER silent. The CLI counts the ones a user NAMED by id, and
+// says that is what it counted; a conflict nobody named is found by the agent at
+// dispatch time and comes back as `rules_conflicts[]`. That split is deliberate:
+// THE CLI CANNOT PARSE INTENT, SO IT DOES NOT PRETEND TO — the same decision
+// `orc doc rules` made about its structural boundary, for the same reason. A
+// validator that sometimes works is worse than none.
+//
+// `/orc-doc` reads NONE of this. That lane has its own ledger and its own
+// frozen-per-document mechanic, and the two surfaces stay apart on purpose.
+
+const RULES_DIR_NAME = "rules";
+const USER_RULES_FILE = "rules.md";
+const RULE_PRIORITIES = ["P0", "P1", "P2"];
+const RULE_TIERS = ["HARD", "PURPOSE", "LOCK"];
+// id → pack, so a finding, an override and a slice line all name the same thing
+// forever. The prefix IS the contract; renaming one would orphan every recorded
+// finding that referenced it.
+const RULE_PACKS = [
+  { id: "writing", file: "writing.md", prefix: "OSW", layer: "writing", title: "Writing" },
+  { id: "code", file: "code.md", prefix: "OSC", layer: "code", title: "Code" },
+  { id: "delivery", file: "delivery.md", prefix: "OSD", layer: "core", title: "Delivery" },
+  { id: "ui", file: "ui.md", prefix: "OSU", layer: "ui", title: "UI" },
+];
+const RULE_PACK_IDS = RULE_PACKS.map((p) => p.id);
+
+const RULES_BOUNDARY =
+  "Rules govern WHAT is written and HOW it reads, and WHAT SHAPE of code is " +
+  "acceptable. They can never change how a lane RUNS: the scoring, the wave " +
+  "order, the gates, the dispatch contract, the ship rules, or any lane's " +
+  "structural and safety rules. A rule that asks for one of those comes back as " +
+  "unsupported_request — never a guessed compromise.";
+
+const RULES_PRECEDENCE = [
+  { rank: 1, layer: "house rules", scope: "CODE and agent BEHAVIOUR only", where: "_shared/phases/house-rules.md + the project's CLAUDE.md P0", beats: "everything below it, always" },
+  { rank: 2, layer: "your rules", scope: "everything", where: "<claude>/orc/rules.md", beats: "the ORC rules OUTRIGHT on any conflict" },
+  { rank: 3, layer: "ORC rules", scope: "everything", where: "<claude>/skills/_shared/rules/", beats: "nothing — it is the floor, and yours replaces it" },
+];
+
+// Which packs ride in which lane. `ui` is absent from every row ON PURPOSE: it
+// is added PER TASK by the orchestrator when a task's declared files are
+// front-end. A UI rule in a backend slice is tokens paid on every spawn for a
+// rule that cannot apply.
+//
+// `orc-doc` is absent from the whole table. Excluded means excluded.
+const RULE_LANE_PACKS = {
+  orc: ["writing", "code", "delivery"],
+  "orc-mini": ["writing", "code", "delivery"],
+  "orc-fast": ["writing", "code", "delivery"],
+  "orc-diy": ["writing", "code", "delivery"],
+  "orc-quick": ["writing", "code", "delivery"],
+  "orc-wiki": ["writing", "delivery"],
+  "orc-learn": ["writing", "delivery"],
+  "orc-claude": ["writing", "delivery"],
+  "orc-analyze": ["writing", "delivery"],
+  "orc-analyze-mini": ["writing", "delivery"],
+  "orc-brainstorm": ["writing", "delivery"],
+  "orc-grill": ["writing", "delivery"],
+  "orc-pact": ["writing", "delivery"],
+  "orc-boundary": ["writing", "delivery"],
+  "orc-handoff": ["writing", "delivery"],
+  "orc-export": ["writing", "delivery"],
+  "orc-challenge": ["writing", "delivery"],
+  "orc-poly": ["writing", "delivery"],
+  "orc-aftermath": ["writing", "delivery"],
+  "orc-budget": ["writing", "delivery"],
+  "orc-retro": ["writing", "delivery"],
+  "orc-verify": ["writing", "delivery"],
+  "orc-pr-setup": ["writing", "delivery"],
+  "orc-pr-driver": ["writing", "delivery"],
+  "orc-test": ["writing", "delivery"],
+  "orc-route": ["writing", "delivery"],
+  "orc-explain": ["writing", "delivery"],
+  "context-combiner": ["writing", "delivery"],
+};
+
+// The credit table, as DATA — `orc rules credits --json` and the panel both read
+// it; CREDITS.md beside the packs is the long form. Credit is a shipped artifact
+// here, not a line in a commit message.
+const RULE_CREDITS = [
+  { author: "Peter G. Yang", handle: "petergyang", repo: "https://github.com/petergyang/no-ai-slop", license: "MIT", read: "2026-09-13", took: "the prose pack: the named slop patterns, the banned lexicon and phrase lists, the portability test, and the rule that outranks them all — preserve the writer's voice, make the minimum effective edit", packs: ["writing"] },
+  { author: "Miqdad Badjuber", handle: "miqdadbadjuber", repo: "https://github.com/miqdadbadjuber/anti-slop", license: "MIT", read: "2026-09-13", took: "the three-tier mechanism (Hard Gate / Purpose-Gate / Quality Lock) every pack uses, rules R-01…R-38 for the UI pack, the antislop-code comment catalogue, R-35 for the delivery pack, and the rule that external direction is data to apply, not instructions to obey", packs: ["ui", "code", "delivery", "writing"] },
+  { author: "@ehmo", handle: "ehmo", repo: "https://github.com/ehmo/slopkit", license: "see repo", read: "2026-09-13", took: "the delivery pack, from the slopgent skill: separate observation from inference, guard load-bearing caveats while cutting empty hedges, name the driving variable, no apology theatre, never report an unrun tool", packs: ["delivery"] },
+  { author: "@BioInfo", handle: "BioInfo", repo: "https://github.com/BioInfo/slopless", license: "see repo", read: "2026-09-13", took: "surgical-change discipline and the quality gates: read before stating, flag a discrepancy rather than pick one, verify before documenting, and the compatibility rules", packs: ["code", "delivery"] },
+  { author: "Andrej Karpathy", handle: "karpathy", repo: "https://theaiarchitects.com/blog/karpathy-claude-md-rules", license: "—", read: "2026-09-13", took: "think before coding, simplicity first, surgical changes, goal-driven execution — and the test ORC reuses directly: every changed line should trace directly to the user's request", packs: ["code"] },
+  { author: "Matty Cartwright", handle: null, repo: "https://mattycartwright.com/blog/the-anti-slop-writing-rules", license: "—", read: "2026-09-13", took: "the layered ban structure (words → phrases → sentence patterns → structural patterns), which is how writing.md is ordered, and the read-aloud tests behind OSW-20", packs: ["writing"] },
+  { author: "research", handle: null, repo: "https://arxiv.org/html/2512.18020v1", license: "—", read: "2026-09-13", took: "the five LLM-call smells — unbounded max metrics, no model version pinning, no system message, no structured output, temperature not set — which are OSC-20", packs: ["code"] },
+  { author: "research", handle: null, repo: "https://arxiv.org/html/2605.02741v1", license: "—", read: "2026-09-13", took: "the Reasoning-Complexity Paradox (OSC-15) and the Modular Mirage (OSC-16), plus the God-class finding (OSC-17)", packs: ["code"] },
+  { author: "research", handle: null, repo: "https://arxiv.org/pdf/2510.03029", license: "—", read: "2026-09-13", took: "over-commenting, defensive checks for impossible conditions, and redundant reimplementation — behind OSC-01, OSC-11 and OSC-18", packs: ["code"] },
+];
+
+// The packs are PACKAGE content, so they are read the way `_shared/phases/` is:
+// the INSTALLED copy first, because that is the one the agent will actually
+// open, and the package's own tree as the floor so a global install with no
+// project still answers.
+function rulesRoot(claudeDir) {
+  const installed = path.join(claudeDir, "skills", "_shared", RULES_DIR_NAME);
+  if (fs.existsSync(path.join(installed, "INDEX.md"))) return { dir: installed, source: "installed" };
+  return { dir: path.join(SRC_SKILLS, "_shared", RULES_DIR_NAME), source: "package" };
+}
+
+// `### OSW-01 · HARD · Lead with the point`, then everything until the next
+// heading. The middle dot is the separator because no rule title contains one.
+const RULE_HEAD_RE = /^###[ \t]+(OS[WCDU]-\d{2})[ \t]*[·|][ \t]*(HARD|PURPOSE|LOCK)[ \t]*[·|][ \t]*(.+?)[ \t]*$/;
+
+function rulesParsePack(text, pack) {
+  const rows = [];
+  let cur = null;
+  const flush = () => {
+    if (!cur) return;
+    cur.body = cur.body.join("\n").replace(/^(?:[ \t]*\n)+/, "").replace(/\s+$/, "");
+    rows.push(cur);
+    cur = null;
+  };
+  for (const raw of String(text || "").replace(/\r\n/g, "\n").split("\n")) {
+    const m = RULE_HEAD_RE.exec(raw);
+    if (m) {
+      flush();
+      cur = { id: m[1], tier: m[2], title: m[3], pack: pack.id, prefix: pack.prefix, body: [] };
+      continue;
+    }
+    // A `## ` heading or a horizontal rule ends the rule list — that is the
+    // pack's trailing "Not a ban" section, which is prose ABOUT the rules, not
+    // a rule. Without the `---` case the separator bled into the last rule's
+    // body and rode into every slice.
+    if (/^##[ \t]/.test(raw) || /^-{3,}[ \t]*$/.test(raw)) flush();
+    else if (cur) cur.body.push(raw);
+  }
+  flush();
+  return rows;
+}
+
+function rulesReadPacks(claudeDir) {
+  const root = rulesRoot(claudeDir);
+  const packs = [];
+  let all = [];
+  for (const p of RULE_PACKS) {
+    const file = path.join(root.dir, p.file);
+    let text = null;
+    try {
+      text = fs.readFileSync(file, "utf8");
+    } catch (_) {}
+    const rules = text === null ? [] : rulesParsePack(text, p);
+    packs.push({
+      ...p,
+      file,
+      readable: text !== null,
+      count: rules.length,
+      tiers: RULE_TIERS.reduce((a, t) => ((a[t] = rules.filter((r) => r.tier === t).length), a), {}),
+      rules,
+    });
+    all = all.concat(rules);
+  }
+  return {
+    dir: root.dir,
+    source: root.source,
+    readable: packs.every((p) => p.readable),
+    packs,
+    rules: all,
+    count: all.length,
+    credits_file: path.join(root.dir, "CREDITS.md"),
+  };
+}
+
+// ── the user ledger — the `orc doc rules` file format, reused verbatim ──────
+
+const userRulesPath = (claudeDir) => path.join(claudeDir, "orc", USER_RULES_FILE);
+const userRulesEmpty = () => ({ P0: "", P1: "", P2: "" });
+
+// With or without `#`s, with or without a colon: a config a human types by hand
+// must not fail on a plausible spelling of the only structure it has.
+const USER_RULES_HEAD_RE = /^[ \t]*#{0,6}[ \t]*(P[012])[ \t]*[:.)-]?[ \t]*$/;
+
+const USER_RULES_PREAMBLE = [
+  "# ORC · project rules",
+  "#",
+  "# This project's own standing instructions — about the words ORC writes and",
+  "# the shape of the code it writes. They are read BEFORE ORC's own anti-slop",
+  "# rules, and THEY WIN wherever the two disagree.",
+  "#",
+  "# Put each one under the heading you want it read at — P0 first, then P1,",
+  "# then P2 — in as many lines as you like. There is no one-line rule and no",
+  "# rule count: the whole block is handed to every agent VERBATIM.",
+  "#",
+  "# To switch an ORC rule off, name its id in your own rule:",
+  "#   OSW-13: em dashes are our house voice. Use them freely.",
+  "#",
+  "# Anything above the first `## P0` heading is a note to yourself and is never",
+  "# dispatched. Edit this file directly, or in `orc ui` ▸ Rules.",
+].join("\n");
+
+function userRulesParse(text) {
+  const acc = { P0: [], P1: [], P2: [] };
+  const pre = [];
+  let cur = null;
+  for (const raw of String(text == null ? "" : text).replace(/\r\n/g, "\n").split("\n")) {
+    const m = USER_RULES_HEAD_RE.exec(raw);
+    if (m) {
+      cur = m[1];
+      continue;
+    }
+    if (cur) acc[cur].push(raw);
+    else pre.push(raw);
+  }
+  // VERBATIM inside a block: only the blank lines the headings themselves
+  // introduce are trimmed. A user's indentation, bullets and blank lines are
+  // theirs — the `context.md` rule, applied to a config file.
+  const body = (rows) => rows.join("\n").replace(/^(?:[ \t]*\n)+/, "").replace(/\s+$/, "");
+  return {
+    preamble: pre.join("\n").replace(/\s+$/, ""),
+    blocks: { P0: body(acc.P0), P1: body(acc.P1), P2: body(acc.P2) },
+  };
+}
+
+function userRulesRender(preamble, blocks) {
+  const L = [String(preamble || "").replace(/\s+$/, "") || USER_RULES_PREAMBLE, ""];
+  for (const pr of RULE_PRIORITIES) {
+    L.push("## " + pr, "");
+    const body = String((blocks || {})[pr] || "").replace(/\s+$/, "");
+    if (body) L.push(body, "");
+  }
+  return L.join("\n");
+}
+
+function userRulesRead(claudeDir) {
+  let text = null;
+  try {
+    text = fs.readFileSync(userRulesPath(claudeDir), "utf8");
+  } catch (_) {}
+  const parsed = userRulesParse(text === null ? USER_RULES_PREAMBLE : text);
+  const preamble = parsed.preamble || USER_RULES_PREAMBLE;
+  return {
+    path: userRulesPath(claudeDir),
+    exists: text !== null,
+    preamble,
+    blocks: parsed.blocks,
+    text: userRulesRender(preamble, parsed.blocks),
+    empty: RULE_PRIORITIES.every((k) => !parsed.blocks[k]),
+  };
+}
+
+// ONE WRITER, and it is this function, reached only from `orc rules`.
+function userRulesWrite(claudeDir, preamble, blocks) {
+  const p = userRulesPath(claudeDir);
+  fs.mkdirSync(path.dirname(p), { recursive: true });
+  const text = userRulesRender(preamble, blocks);
+  fs.writeFileSync(p, text);
+  return { path: p, text };
+}
+
+const userRulesCount = (block) => String(block || "").split("\n").filter((l) => l.trim()).length;
+const userRulesCounts = (blocks) =>
+  RULE_PRIORITIES.reduce((a, k) => ((a[k] = userRulesCount((blocks || {})[k])), a), {});
+
+// OVERRIDES, counted the only honest way: an ORC rule id the user NAMED. The
+// CLI cannot read intent, so it never guesses that a sentence contradicts a
+// rule — it reports what was named, says so in the same breath, and leaves the
+// rest to the agent, which returns `rules_conflicts[]` at dispatch time.
+const RULE_ID_RE = /\bOS[WCDU]-\d{2}\b/g;
+
+function rulesOverrides(blocks, packs) {
+  const byId = new Map(packs.rules.map((r) => [r.id, r]));
+  const out = [];
+  const seen = new Set();
+  for (const pr of RULE_PRIORITIES)
+    for (const line of String((blocks || {})[pr] || "").split("\n"))
+      for (const id of line.match(RULE_ID_RE) || []) {
+        if (seen.has(id)) continue;
+        seen.add(id);
+        const r = byId.get(id);
+        out.push({ id, priority: pr, line: line.trim(), known: !!r, tier: r ? r.tier : null, title: r ? r.title : null });
+      }
+  return out;
+}
+
+// The ONE line the preflight prints. A rule set is NEVER silent, and an empty
+// user ledger still gets its half of the line.
+function rulesLine(packs, blocks, overrides) {
+  const c = userRulesCounts(blocks);
+  const total = RULE_PRIORITIES.reduce((a, k) => a + c[k], 0);
+  const packBit = `ORC ${packs.count} (` + packs.packs.map((p) => `${p.prefix[2]} ${p.count}`).join(" · ") + ")";
+  const mine = total
+    ? `yours ${plural(total, "line")} (${RULE_PRIORITIES.filter((k) => c[k]).map((k) => `${k} ${c[k]}`).join(" · ")})`
+    : "yours none";
+  const ov = overrides && overrides.length ? ` · ${plural(overrides.length, "override")}` : "";
+  return `${packBit} · ${mine}${ov}`;
+}
+
+// ── the slice — the ONLY assembler ─────────────────────────────────────────
+//
+// No skill builds this text. One assembler means no two lanes can drift, and it
+// means the token cost is measurable in exactly one place.
+//
+// THE TOKEN RULE: 65 rules would ride on EVERY spawn, so HARD rules carry their
+// body and PURPOSE/LOCK rules carry one line each plus the file to open when one
+// applies. That is the read-ladder discipline this repo already runs on, applied
+// to a standing card.
+function rulesSlice(claudeDir, lane, extraPacks) {
+  const packs = rulesReadPacks(claudeDir);
+  const led = userRulesRead(claudeDir);
+  const overrides = rulesOverrides(led.blocks, packs);
+  const overridden = new Set(overrides.filter((o) => o.known).map((o) => o.id));
+  const want = new Set([...(RULE_LANE_PACKS[lane] || []), ...(extraPacks || [])]);
+  const chosen = packs.packs.filter((p) => want.has(p.id));
+
+  const L = [];
+  if (!led.empty) {
+    L.push("YOUR PROJECT'S RULES — read these FIRST. They WIN over the ORC rules below.", "");
+    for (const pr of RULE_PRIORITIES) {
+      const body = String(led.blocks[pr] || "").replace(/\s+$/, "");
+      if (body) L.push(pr, body, "");
+    }
+  }
+  if (chosen.length) {
+    L.push(
+      `ORC RULES — the anti-slop baseline. Shipped with ORC, read-only. ${packs.count} rules, ${plural(chosen.length, "pack")} in this slice.`,
+      "Source: petergyang/no-ai-slop · miqdadbadjuber/anti-slop · ehmo/slopkit · BioInfo/slopless · Karpathy · Matty Cartwright. Full credits: `orc rules credits`.",
+      "HARD = absolute · PURPOSE = allowed with a written one-line reason · LOCK = consistency, reported never blocking.",
+      ""
+    );
+    for (const p of chosen) {
+      L.push(`[${p.title}]`);
+      for (const r of p.rules) {
+        if (overridden.has(r.id)) continue; // the user replaced it
+        if (r.tier === "HARD") L.push(`${r.id} HARD · ${r.title}`, r.body, "");
+        else L.push(`${r.id} ${r.tier} · ${r.title}`);
+      }
+      const light = p.rules.filter((r) => r.tier !== "HARD" && !overridden.has(r.id)).length;
+      if (light) L.push("", `${plural(light, "rule")} above are one-liners — open ${p.file} when one of them applies.`, "");
+    }
+  }
+  if (overrides.length) {
+    L.push(
+      "OVERRIDDEN — your rules replaced these, so they are NOT in force here:",
+      ...overrides.map((o) => `  ${o.id}${o.known ? " · " + o.title : " (not a known ORC rule id)"} — ${o.line}`),
+      ""
+    );
+  }
+  L.push(
+    RULES_BOUNDARY,
+    "",
+    "Return `rules_applied[]` (the ids you acted on), `rules_conflicts[]` (two rules that disagree — a gap, never a silent choice) and `rules_overridden[]` (an ORC id a project rule replaced)."
+  );
+  return {
+    lane,
+    packs: chosen.map((p) => p.id),
+    text: L.join("\n").replace(/\n{3,}/g, "\n\n").replace(/\s+$/, ""),
+    overrides,
+    line: rulesLine(packs, led.blocks, overrides),
+  };
+}
+
+// ── the command ────────────────────────────────────────────────────────────
+
+const RULES_VALUE_FLAGS = ["--priority", "--text", "--set-file", "--lane", "--pack", "--dir"];
+
+function rulesOpt(name) {
+  for (let i = 0; i < args.length; i++)
+    if (args[i] === name && args[i + 1] !== undefined && !String(args[i + 1]).startsWith("--"))
+      return String(args[i + 1]);
+  return undefined;
+}
+
+function rulesPositionals() {
+  const out = [];
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a === "--global") continue;
+    if (RULES_VALUE_FLAGS.includes(a)) {
+      i++;
+      continue;
+    }
+    if (a.startsWith("-")) continue;
+    out.push(a);
+  }
+  return out;
+}
+
+function rulesCmd() {
+  const claudeDir = resolveClaudeDir();
+  const asJson = wantsJson();
+  const pos = rulesPositionals(); // ["rules", <sub?>, <arg?>]
+  const sub = String(pos[1] || "");
+  const packs = rulesReadPacks(claudeDir);
+  const led = userRulesRead(claudeDir);
+
+  const fail = (reason, hint, code = 2) => {
+    if (asJson) emitJson({ ok: false, reason, hint, boundary: RULES_BOUNDARY }, code);
+    console.error("❌ " + hint);
+    process.exit(code);
+  };
+
+  // ── the writes ───────────────────────────────────────────────────────────
+  // ORC's own packs are REFUSED BY NAME. A command that looks like it should
+  // work and quietly does nothing is worse than one that says what replaced it.
+  if (rulesOpt("--pack") && (sub === "set" || sub === "add" || sub === "clear" || sub === "set-all"))
+    return fail(
+      "read-only",
+      "ORC rules are read-only — they change with `orc update`, never with a command. " +
+        'Write your own instead: orc rules add --priority P0 --text "…" (yours win on any conflict).'
+    );
+
+  const save = (msg, blocks, extra) => {
+    const w = userRulesWrite(claudeDir, led.preamble, blocks);
+    const fresh = userRulesParse(w.text).blocks;
+    const ov = rulesOverrides(fresh, packs);
+    if (asJson)
+      emitJson(
+        {
+          ok: true,
+          ...extra,
+          file: w.path,
+          blocks: fresh,
+          text: w.text,
+          counts: userRulesCounts(fresh),
+          line: rulesLine(packs, fresh, ov),
+          priorities: RULE_PRIORITIES,
+          overrides: ov,
+          boundary: RULES_BOUNDARY,
+        },
+        0
+      );
+    console.log("✓ " + msg);
+    console.log(ui.color.gray("  " + rulesLine(packs, fresh, ov)));
+    console.log(ui.color.gray("  " + w.path));
+    process.exit(0);
+  };
+
+  const priorityOf = () => {
+    const pr = String(rulesOpt("--priority") || "").toUpperCase();
+    return RULE_PRIORITIES.includes(pr) ? pr : null;
+  };
+  const wholeFile = (text, msg, extra) => {
+    const parsed = userRulesParse(text);
+    // A whole-file write brings its own preamble, so the notes a user typed
+    // above `## P0` survive a round trip through the panel.
+    led.preamble = parsed.preamble || led.preamble;
+    return save(msg, parsed.blocks, extra);
+  };
+
+  if (sub === "set" || sub === "add") {
+    const pr = priorityOf();
+    if (!pr) return fail("bad-priority", `--priority must be one of: ${RULE_PRIORITIES.join(", ")}`);
+    const text = rulesOpt("--text");
+    if (!text || !String(text).trim())
+      return fail("no-text", `orc rules ${sub} needs --text "<your rule, in your own words>". As many lines as you like.`);
+    const body = String(text).replace(/\r\n/g, "\n").replace(/\s+$/, "");
+    const blocks = { ...led.blocks };
+    blocks[pr] = sub === "add" && blocks[pr] ? blocks[pr] + "\n" + body : body;
+    return save(`${pr} ${sub === "add" ? "extended" : "set"} — ${plural(userRulesCount(blocks[pr]), "line")}`, blocks, { priority: pr });
+  }
+  if (sub === "clear") {
+    const pr = priorityOf();
+    if (!pr) return fail("bad-priority", `--priority must be one of: ${RULE_PRIORITIES.join(", ")}`);
+    const blocks = { ...led.blocks };
+    blocks[pr] = "";
+    return save(`${pr} cleared`, blocks, { priority: pr, cleared: true });
+  }
+  // The PANEL's write, and the one a script pipes in: the whole file at once.
+  if (sub === "set-all") {
+    const text = rulesOpt("--text");
+    if (text === undefined) return fail("no-text", 'orc rules set-all needs --text "<the whole file>".');
+    return wholeFile(text, "your rules replaced");
+  }
+  const setFile = rulesOpt("--set-file");
+  if (setFile) {
+    const abs = path.isAbsolute(setFile) ? setFile : path.resolve(process.cwd(), setFile);
+    if (!fs.existsSync(abs)) return fail("no-such-file", `no such file: ${setFile}`);
+    return wholeFile(fs.readFileSync(abs, "utf8"), `your rules replaced from ${setFile}`, { from: setFile });
+  }
+  if (flag("--reset") === true) {
+    led.preamble = USER_RULES_PREAMBLE;
+    return save("your rules reset to the empty template", userRulesEmpty(), { reset: true });
+  }
+
+  // ── the reads ────────────────────────────────────────────────────────────
+  // The lint is a read with its own exit-code contract (0 clean / 1 findings /
+  // 2 nothing to lint), so it branches before anything else computes.
+  if (sub === "lint") return rulesLintCmd(claudeDir);
+
+  const overrides = rulesOverrides(led.blocks, packs);
+  const line = rulesLine(packs, led.blocks, overrides);
+
+  if (sub === "credits") {
+    let body = null;
+    try {
+      body = fs.readFileSync(packs.credits_file, "utf8");
+    } catch (_) {}
+    if (asJson)
+      emitJson({ ok: body !== null, file: packs.credits_file, sources: RULE_CREDITS, text: body }, body === null ? 2 : 0);
+    if (body === null) return fail("unreadable", `CREDITS.md is missing from ${packs.dir}. Run \`orc update\`.`);
+    console.log("\n" + body.replace(/^<!--[\s\S]*?-->\n*/, ""));
+    process.exit(0);
+  }
+
+  if (sub === "packs") {
+    if (asJson)
+      emitJson(
+        {
+          ok: packs.readable,
+          dir: packs.dir,
+          source: packs.source,
+          count: packs.count,
+          read_only: true,
+          packs: packs.packs.map(({ rules, ...p }) => p),
+          tiers: RULE_TIERS,
+          line,
+        },
+        packs.readable ? 0 : 2
+      );
+    console.log(`\norc rules — ${packs.count} ORC rules in ${plural(packs.packs.length, "pack")}  ${ui.color.gray("(read-only)")}\n`);
+    for (const p of packs.packs)
+      console.log(
+        `  ${ui.color.cyan(p.prefix.padEnd(5))} ${p.title.padEnd(10)} ${String(p.count).padStart(3)} rules  ` +
+          ui.color.gray(`HARD ${p.tiers.HARD} · PURPOSE ${p.tiers.PURPOSE} · LOCK ${p.tiers.LOCK}  layer=${p.layer}`)
+      );
+    console.log("\n" + ui.color.gray("  " + packs.dir) + "\n");
+    process.exit(packs.readable ? 0 : 2);
+  }
+
+  if (sub === "show") {
+    const want = String(pos[2] || "").toLowerCase();
+    const p = packs.packs.find((x) => x.id === want || x.prefix.toLowerCase() === want);
+    if (!p) return fail("unknown-pack", `unknown pack: ${pos[2] || "(none)"} — one of: ${RULE_PACK_IDS.join(", ")}`);
+    if (asJson) emitJson({ ok: true, ...p, read_only: true, boundary: RULES_BOUNDARY }, 0);
+    console.log(`\n${p.title} (${p.prefix}) — ${p.count} rules  ${ui.color.gray("read-only")}\n`);
+    for (const r of p.rules) console.log(`  ${ui.color.cyan(r.id)}  ${r.tier.padEnd(7)} ${r.title}`);
+    console.log("\n" + ui.color.gray("  " + p.file) + "\n");
+    process.exit(0);
+  }
+
+  if (sub === "user") {
+    if (asJson)
+      emitJson(
+        {
+          ok: true,
+          file: led.path,
+          exists: led.exists,
+          empty: led.empty,
+          preamble: led.preamble,
+          blocks: led.blocks,
+          text: led.text,
+          template: userRulesRender(USER_RULES_PREAMBLE, userRulesEmpty()),
+          counts: userRulesCounts(led.blocks),
+          priorities: RULE_PRIORITIES,
+          overrides,
+          line,
+          boundary: RULES_BOUNDARY,
+        },
+        led.empty ? 1 : 0
+      );
+    console.log("\n" + (led.empty ? "No project rules yet." : led.text) + "\n");
+    console.log(ui.color.gray("  " + led.path));
+    console.log(ui.color.gray("  " + line) + "\n");
+    process.exit(led.empty ? 1 : 0);
+  }
+
+  if (sub === "slice") {
+    const lane = rulesOpt("--lane");
+    if (!lane) return fail("no-lane", "orc rules slice needs --lane <lane>.");
+    if (!RULE_LANE_PACKS[lane])
+      return fail(
+        "no-rules-lane",
+        lane === "orc-doc"
+          ? "`orc-doc` carries no ORC rules by design — that lane has its own ledger: `orc doc rules`."
+          : `lane \`${lane}\` carries no ORC rules. Lanes that do: ${Object.keys(RULE_LANE_PACKS).sort().join(", ")}`
+      );
+    const extra = String(rulesOpt("--pack") || "").split(",").map((s) => s.trim()).filter(Boolean);
+    for (const e of extra)
+      if (!RULE_PACK_IDS.includes(e)) return fail("unknown-pack", `unknown pack: ${e} — one of: ${RULE_PACK_IDS.join(", ")}`);
+    const s = rulesSlice(claudeDir, lane, extra);
+    if (asJson) emitJson({ ok: true, ...s, boundary: RULES_BOUNDARY }, 0);
+    console.log("\n" + s.text + "\n");
+    process.exit(0);
+  }
+
+  if (sub && sub !== "list")
+    return fail(
+      "unknown-subcommand",
+      `Unknown: orc rules ${sub}\n` +
+        "Usage: orc rules [--json]                        both halves + the precedence ladder\n" +
+        "       orc rules packs [--json]                  the pack table (read-only)\n" +
+        "       orc rules show <pack> [--json]            ONE pack, verbatim\n" +
+        "       orc rules user [--json]                   YOUR ledger (exit 1 = none yet, still an answer)\n" +
+        "       orc rules credits [--json]                every source, author and licence\n" +
+        "       orc rules slice --lane <lane> [--pack ui] THE dispatch text — the only assembler\n" +
+        "       orc rules lint <path…|--staged|--diff>    the FREE check (0 clean / 1 findings / 2 none)\n" +
+        '       orc rules set   --priority P0 --text "…"  replace ONE block\n' +
+        '       orc rules add   --priority P0 --text "…"  append to a block\n' +
+        "       orc rules clear --priority P0             empty ONE block\n" +
+        '       orc rules set-all --text "…"              replace the WHOLE file (what `orc ui` writes)\n' +
+        "       orc rules --set-file <path>               replace the whole file from a file\n" +
+        "       orc rules --reset                         back to the bare template"
+    );
+
+  // `orc rules` — both halves, the ladder, the counts.
+  if (asJson)
+    emitJson(
+      {
+        ok: packs.readable,
+        line,
+        orc: {
+          dir: packs.dir,
+          source: packs.source,
+          read_only: true,
+          count: packs.count,
+          packs: packs.packs.map(({ rules, ...p }) => p),
+          rules: packs.rules,
+          credits_file: packs.credits_file,
+          credits: RULE_CREDITS,
+        },
+        user: {
+          file: led.path,
+          exists: led.exists,
+          empty: led.empty,
+          blocks: led.blocks,
+          text: led.text,
+          template: userRulesRender(USER_RULES_PREAMBLE, userRulesEmpty()),
+          counts: userRulesCounts(led.blocks),
+        },
+        priorities: RULE_PRIORITIES,
+        tiers: RULE_TIERS,
+        precedence: RULES_PRECEDENCE,
+        overrides,
+        overrides_note:
+          "counted from ORC rule ids you NAMED in your own rules. A conflict you did not name is found by the agent at dispatch and returned as rules_conflicts[] — the CLI cannot parse intent, so it does not pretend to.",
+        lanes: RULE_LANE_PACKS,
+        excluded: { "orc-doc": "has its own ledger: `orc doc rules`" },
+        boundary: RULES_BOUNDARY,
+      },
+      led.empty ? 1 : 0
+    );
+
+  console.log(`\norc rules — ${line}\n`);
+  console.log(ui.color.bold("  Precedence") + ui.color.gray("   the order never changes"));
+  for (const r of RULES_PRECEDENCE)
+    console.log(
+      `   ${r.rank}. ${ui.color.cyan(r.layer.padEnd(12))} ${ui.color.gray(r.scope)}\n` +
+        `      ${ui.color.gray(r.where)}\n` +
+        `      ${ui.color.gray("beats " + r.beats)}`
+    );
+  console.log("");
+  console.log(ui.color.bold("  ORC rules") + ui.color.gray("   read-only — `orc update` changes them, nothing else"));
+  for (const p of packs.packs)
+    console.log(
+      `   ${ui.color.cyan(p.prefix.padEnd(5))} ${p.title.padEnd(10)} ${String(p.count).padStart(3)}  ` +
+        ui.color.gray(`HARD ${p.tiers.HARD} · PURPOSE ${p.tiers.PURPOSE} · LOCK ${p.tiers.LOCK}`)
+    );
+  console.log(ui.color.gray(`   ${packs.dir}`));
+  console.log("");
+  console.log(ui.color.bold("  Your rules") + ui.color.gray("   they win on any conflict"));
+  if (led.empty) {
+    console.log(ui.color.gray("   none yet"));
+    console.log(ui.color.gray('   add one:  orc rules add --priority P0 --text "…"'));
+  } else {
+    const c = userRulesCounts(led.blocks);
+    for (const pr of RULE_PRIORITIES) if (c[pr]) console.log(`   ${ui.color.cyan(pr)}  ${plural(c[pr], "line")}`);
+  }
+  console.log(ui.color.gray(`   ${led.path}`));
+  if (overrides.length) {
+    console.log("");
+    console.log(ui.color.bold("  Overridden") + ui.color.gray("   ORC rules your rules replaced"));
+    for (const o of overrides)
+      console.log(`   ${ui.color.yellow(o.id)}  ${o.known ? o.title : ui.color.gray("not a known ORC rule id")}`);
+    console.log(ui.color.gray("   counted from ids you named. A conflict you did not name is found by the agent at dispatch."));
+  }
+  console.log("");
+  console.log(ui.color.gray("  " + RULES_BOUNDARY));
+  console.log("");
+  process.exit(led.empty ? 1 : 0);
+}
+
+// ── orc rules lint (v1.7.0 W4) — the free half ─────────────────────────────
+//
+// Deterministic, zero tokens, and DELIBERATELY SMALL. It checks only what a
+// string match can PROVE, and it says — in every mode, including `--json` —
+// how many rules it did not check. That line is not politeness; it is the
+// difference between a lint and a claim. A lint that implied it had graded all
+// 65 rules would let a clean exit stand in for a review that never happened,
+// which is the `orc doc lint` lesson and the reason that command prints its own
+// coverage the same way.
+//
+// The judgement rules — "is this abstraction speculative", "does this comment
+// explain why", "is this sentence portable" — need a reader, not a matcher, and
+// nothing here pretends otherwise.
+//
+// A user rule that NAMES a checkable id suppresses that check, and the
+// suppression is printed. Precedence is not a doc: it runs.
+
+// Which rules this matcher can actually prove. The id is the contract, so a
+// pack edit that renames one breaks the build here rather than silently
+// dropping a check.
+const RULE_LINT_IDS = [
+  "OSW-10", "OSW-11", "OSW-13", "OSW-18",
+  "OSC-02", "OSC-03", "OSC-04", "OSC-05", "OSC-06", "OSC-07", "OSC-21",
+  "OSU-03", "OSU-06",
+];
+
+const LINT_LEXICON = [
+  "delve", "delves", "delving", "leverage", "leverages", "leveraging", "utilize", "utilizes",
+  "utilise", "utilises", "facilitate", "facilitates", "empower", "empowers", "streamline",
+  "streamlines", "robust", "cutting-edge", "paradigm shift", "game changer", "game-changer",
+  "tapestry", "realm", "beacon", "multifaceted", "meticulous", "meticulously", "intricate",
+  "paramount", "transformative", "elevate", "elevates", "embark", "supercharge", "supercharged",
+  "harness", "harnesses", "ever-evolving", "seamless", "seamlessly", "unleash", "unleashes",
+  "pivotal",
+];
+
+const LINT_PHRASES = [
+  "it's worth noting", "it is worth noting", "it's important to note", "it is important to note",
+  "at the end of the day", "when it comes to", "at its core", "in today's world", "in the age of",
+  "in the world of", "the reality is", "the truth is", "in terms of", "with regard to",
+  "going forward", "let's dive in", "in this article",
+];
+
+const LINT_BUZZWORDS = [
+  "ai powered", "ai-powered", "next generation", "next-generation", "revolutionary",
+  "seamless", "cutting edge", "cutting-edge", "intelligent", "ultimate", "powerful",
+  "effortless", "supercharged",
+];
+
+// The whole comment IS the label. Matched against the comment's text with the
+// marker and trailing punctuation stripped, so `// Main logic` is a finding and
+// `// Main logic runs only on the retry path` is not.
+const LINT_EMPTY_LABELS = [
+  "main logic", "core logic", "business logic", "helper function", "helper functions",
+  "helpers", "utils", "utilities", "entry point", "error handling", "imports", "constants",
+  "variables", "initialization", "initialisation", "setup", "cleanup", "configuration",
+  "note this is important", "important please read", "the main function", "main function",
+];
+
+// A TODO that names a feeling instead of a task.
+const LINT_VAGUE_TODO = [
+  "", "improve this", "improve", "improve later", "optimize", "optimise", "optimize this",
+  "future improvements", "future improvement", "additional optimization can be added here",
+  "add more validation", "add more", "more validation", "more tests", "clean this up",
+  "cleanup", "clean up", "refactor", "refactor this", "fix this", "better", "do better",
+  "handle this", "revisit", "revisit this", "later", "tbd",
+];
+
+const EMOJI_RE = /\p{Extended_Pictographic}/u;
+
+const LINT_PROSE_EXT = new Set([".md", ".markdown", ".txt", ".mdx", ".rst"]);
+const LINT_UI_EXT = new Set([".css", ".scss", ".sass", ".less", ".html", ".htm", ".vue", ".svelte", ".jsx", ".tsx"]);
+const LINT_CODE_EXT = new Set([
+  ".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx", ".py", ".rb", ".go", ".rs", ".java", ".kt",
+  ".swift", ".c", ".h", ".cc", ".cpp", ".hpp", ".cs", ".php", ".sh", ".bash", ".zsh", ".sql",
+  ".css", ".scss", ".less", ".vue", ".svelte", ".yml", ".yaml",
+]);
+const LINT_SKIP_DIR = new Set([".git", "node_modules", "dist", "build", "vendor", ".next", "coverage", ".claude"]);
+
+// Strip a line's comment marker and return the comment's own text, or null when
+// the line is not a whole-line comment. Only whole-line comments are linted: a
+// trailing comment after real code is where the genuinely useful one-liners
+// live, and flagging those would make the lint noise.
+function lintCommentText(line) {
+  const t = line.trim();
+  let m = /^(?:\/\/+|#+|--|;;?|\*|\/\*+|<!--)\s?(.*?)(?:\*\/|-->)?\s*$/.exec(t);
+  if (!m) return null;
+  if (!/^(?:\/\/|#|--|;|\*|\/\*|<!--)/.test(t)) return null;
+  return m[1];
+}
+
+const lintNormalise = (s) => String(s || "").toLowerCase().replace(/[.:!?,;*_`]+$/g, "").replace(/\s+/g, " ").trim();
+
+function lintScanFile(abs, rel, opts) {
+  const ext = path.extname(rel).toLowerCase();
+  const base = path.basename(rel);
+  const out = [];
+  const on = (id) => opts.active.has(id);
+  const add = (id, line, evidence, fix) => {
+    const r = opts.byId.get(id);
+    out.push({
+      file: rel,
+      line,
+      rule: id,
+      tier: r ? r.tier : null,
+      pack: r ? r.pack : null,
+      title: r ? r.title : null,
+      evidence,
+      fix,
+    });
+  };
+
+  // OSC-21 is about the file's NAME, so it fires before a byte is read.
+  if (on("OSC-21")) {
+    if (/^(summary|implementation[_-]?notes|changes|notes|readme[_-]new)\.(md|txt)$/i.test(base) ||
+        /[._-](final|v2|new|copy|old|bak|orig)\.[a-z0-9]+$/i.test(base) ||
+        /\.(bak|old|orig)$/i.test(base))
+      add("OSC-21", 1, base, "nobody asked for this file. Report it in the return instead of leaving it behind.");
+  }
+
+  let text;
+  try {
+    text = fs.readFileSync(abs, "utf8");
+  } catch (_) {
+    return out;
+  }
+  if (text.includes(" ")) return out; // binary
+  const lines = text.replace(/\r\n/g, "\n").split("\n");
+
+  // THE CARVE-OUT, and it is not a convenience. A rule that bans a word has to
+  // PRINT that word to define it, so the packs themselves fail their own lint on
+  // every line — and a lint whose loudest findings are its own documentation is
+  // a lint people learn to ignore. anti-slop's R-02 needed the same carve-out
+  // for the same reason.
+  //
+  // Two markers, both explicit, both counted in the summary so an exemption is
+  // never silent:
+  //   <!-- orc-rules:… -->   in the head → this IS a rules pack. Skipped whole.
+  //   orc-rules-ignore-file  in the head → the user's own opt-out. Skipped whole.
+  //   orc-rules-ignore       on a line   → that line only.
+  const head = text.slice(0, 600);
+  if (/<!--\s*orc-rules:/.test(head)) {
+    opts.exempt.packs.push(rel);
+    return out;
+  }
+  if (/orc-rules-ignore-file/.test(head)) {
+    opts.exempt.files.push(rel);
+    return out;
+  }
+
+  const isProse = LINT_PROSE_EXT.has(ext);
+  const isCode = LINT_CODE_EXT.has(ext);
+  const isUi = LINT_UI_EXT.has(ext);
+
+  // Prose rules run on prose files AND on the comments inside code, because a
+  // banned word is a banned word wherever ORC wrote it.
+  for (let i = 0; i < lines.length; i++) {
+    const raw = lines[i];
+    if (raw.includes("orc-rules-ignore")) continue;
+    const n = i + 1;
+    const comment = isCode ? lintCommentText(raw) : null;
+    const prose = isProse ? raw : comment;
+
+    if (prose !== null && prose !== undefined) {
+      const low = prose.toLowerCase();
+      if (on("OSW-10"))
+        for (const w of LINT_LEXICON)
+          if (new RegExp(`\\b${w.replace(/[.*+?^${}()|[\]\\]/g, "\\// ── the `--json` crash envelope (v0.49.2) ───────────────────────────────────")}\\b`, "i").test(low)) {
+            add("OSW-10", n, w, "use the plain word");
+            break; // one finding per line — a list of six is a list nobody reads
+          }
+      if (on("OSW-11"))
+        for (const p of LINT_PHRASES)
+          if (low.includes(p)) {
+            add("OSW-11", n, p, "delete the clause and keep the point");
+            break;
+          }
+    }
+
+    if (isProse && on("OSW-18") && /^#{1,6}\s/.test(raw) && EMOJI_RE.test(raw))
+      add("OSW-18", n, raw.trim().slice(0, 60), "format follows the content; it does not decorate it");
+
+    if (isUi && on("OSU-06")) {
+      const low = raw.toLowerCase();
+      for (const b of LINT_BUZZWORDS)
+        if (low.includes(b)) {
+          add("OSU-06", n, b, "say what it does; show evidence, not adjectives");
+          break;
+        }
+    }
+
+    if (isUi && on("OSU-03") && /outline\s*:\s*(none|0)\b/i.test(raw)) {
+      // HEURISTIC, and the finding says so: a replacement indicator within five
+      // lines either way counts as one. The lint cannot prove a focus ring is
+      // visible; it can prove nobody wrote one nearby.
+      const near = lines.slice(Math.max(0, i - 5), i + 6).join("\n");
+      if (!/:focus-visible|box-shadow|outline-offset|outline\s*:\s*(?!none|0)\S/i.test(near))
+        add("OSU-03", n, raw.trim().slice(0, 60), "replace it with a visible focus indicator, or drop the reset (heuristic: none found within five lines)");
+    }
+
+    if (comment !== null && comment !== undefined) {
+      const c = comment.trim();
+      const norm = lintNormalise(c);
+
+      if (on("OSC-02")) {
+        if (/([=\-*_~#])\1{5,}/.test(c))
+          add("OSC-02", n, c.slice(0, 40), "one plain line, or nothing");
+        else if (c.length > 2 && c.length <= 40 && /^[A-Z0-9 ()\-]+$/.test(c) && /[A-Z]{2,}/.test(c))
+          add("OSC-02", n, c, "sentence case, and only if the label carries a fact");
+      }
+      if (on("OSC-03") && /^(step\s*\d+\b|first|next|then|finally|lastly)\s*[:.\-…]*\s*$/i.test(c.replace(/\.\.\.$/, "")))
+        add("OSC-03", n, c, "the control flow is already visible — delete it");
+      if (on("OSC-03") && /^step\s*\d+\s*[:.\-]/i.test(c))
+        add("OSC-03", n, c.slice(0, 40), "the control flow is already visible — delete it");
+      if (on("OSC-04") && LINT_EMPTY_LABELS.includes(norm))
+        add("OSC-04", n, c, "the label names a category, not a fact — delete it");
+      if (on("OSC-05")) {
+        const t = /^(TODO|FIXME|XXX)\b\s*:?\s*(.*)$/i.exec(c);
+        if (t && LINT_VAGUE_TODO.includes(lintNormalise(t[2])))
+          add("OSC-05", n, c, "name the task and enough context to act on it, or delete it");
+      }
+      if (on("OSC-06") && EMOJI_RE.test(c))
+        add("OSC-06", n, c.slice(0, 40), "plain English, or nothing");
+      if (on("OSC-07") && /^end(\s+(of\s+)?[\w$.]+)?\s*[.]?$/i.test(c))
+        add("OSC-07", n, c, "the closing brace already ends the block");
+    }
+    if (isCode && on("OSC-07") && /[})\]]\s*(?:\/\/|#|--)\s*end\b/i.test(raw))
+      add("OSC-07", n, raw.trim().slice(0, 40), "the closing brace already ends the block");
+  }
+
+  // OSW-13 is a DOSE rule, so it is measured per file, never per occurrence.
+  if (isProse && on("OSW-13")) {
+    const dashes = (text.match(/—/g) || []).length;
+    const words = (text.match(/\S+/g) || []).length;
+    if (dashes) {
+      const short = words < 150;
+      const per1000 = words ? (dashes / words) * 1000 : dashes;
+      if (short)
+        add("OSW-13", 1, `${plural(dashes, "em dash", "em dashes")} in ${plural(words, "word")}`, "short output carries none");
+      else if (per1000 > 2)
+        add("OSW-13", 1, `${dashes} em dashes, ${per1000.toFixed(1)} per 1000 words (cap 2)`, "keep the ones that beat a comma, a period or parentheses; cut the rest");
+    }
+  }
+  return out;
+}
+
+function lintWalk(abs, rel, acc, depth) {
+  let st;
+  try {
+    st = fs.statSync(abs);
+  } catch (_) {
+    return;
+  }
+  if (st.isFile()) {
+    acc.push({ abs, rel });
+    return;
+  }
+  if (!st.isDirectory() || depth > 12) return;
+  for (const e of fs.readdirSync(abs, { withFileTypes: true })) {
+    if (e.isDirectory() && LINT_SKIP_DIR.has(e.name)) continue;
+    if (e.name.startsWith(".") && e.isDirectory()) continue;
+    lintWalk(path.join(abs, e.name), rel ? rel + "/" + e.name : e.name, acc, depth + 1);
+  }
+}
+
+function rulesLintCmd(claudeDir) {
+  const asJson = wantsJson();
+  const pos = rulesPositionals(); // ["rules","lint", …paths]
+  const packs = rulesReadPacks(claudeDir);
+  const led = userRulesRead(claudeDir);
+  const overrides = rulesOverrides(led.blocks, packs);
+  const byId = new Map(packs.rules.map((r) => [r.id, r]));
+
+  const fail = (reason, hint, code = 2) => {
+    if (asJson) emitJson({ ok: false, reason, hint }, code);
+    console.error("❌ " + hint);
+    process.exit(code);
+  };
+
+  // `--pack` narrows the CHECKS, never the files.
+  const wantPacks = String(rulesOpt("--pack") || "")
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean)
+    .map((s) => ({ w: "writing", c: "code", d: "delivery", u: "ui" }[s] || s));
+  for (const p of wantPacks)
+    if (!RULE_PACK_IDS.includes(p)) return fail("unknown-pack", `unknown pack: ${p} — one of: ${RULE_PACK_IDS.join(", ")}`);
+
+  // A user rule that NAMES a checkable id turns that check off, and the run says
+  // so. Precedence that only exists in a document is not precedence.
+  const suppressed = overrides.filter((o) => RULE_LINT_IDS.includes(o.id)).map((o) => o.id);
+  const active = new Set(
+    RULE_LINT_IDS.filter((id) => {
+      if (suppressed.includes(id)) return false;
+      if (!wantPacks.length) return true;
+      const r = byId.get(id);
+      return r && wantPacks.includes(r.pack);
+    })
+  );
+
+  // Targets: explicit paths, or a git selection.
+  const root = process.cwd();
+  const files = [];
+  const gitList = (args) => {
+    const r = require("child_process").spawnSync("git", args, { cwd: root, encoding: "utf8" });
+    return r.status === 0 ? String(r.stdout || "").split("\n").map((s) => s.trim()).filter(Boolean) : null;
+  };
+  let source = "paths";
+  if (flag("--staged") === true) {
+    source = "--staged";
+    const l = gitList(["diff", "--cached", "--name-only"]);
+    if (l === null) return fail("no-git", "not a git repository, so there is nothing staged to lint.");
+    for (const rel of l) files.push({ abs: path.resolve(root, rel), rel });
+  } else if (flag("--diff") === true) {
+    source = "--diff";
+    const l = gitList(["diff", "--name-only", "HEAD"]);
+    if (l === null) return fail("no-git", "not a git repository, so there is no diff to lint.");
+    for (const rel of l) files.push({ abs: path.resolve(root, rel), rel });
+  } else {
+    const paths = pos.slice(2);
+    if (!paths.length)
+      return fail("no-target", "orc rules lint needs a path, or --staged, or --diff.");
+    for (const p of paths) lintWalk(path.resolve(root, p), p.replace(/\\/g, "/"), files, 0);
+  }
+
+  const seen = new Set();
+  const targets = files.filter((f) => {
+    if (seen.has(f.abs) || !fs.existsSync(f.abs)) return false;
+    seen.add(f.abs);
+    const ext = path.extname(f.rel).toLowerCase();
+    return LINT_PROSE_EXT.has(ext) || LINT_CODE_EXT.has(ext) || LINT_UI_EXT.has(ext);
+  });
+
+  if (!targets.length)
+    return fail("nothing-to-lint", `nothing lintable in ${source === "paths" ? pos.slice(2).join(", ") : source}. Prose, source, and stylesheet files only.`);
+
+  const opts = { active, byId, exempt: { packs: [], files: [] } };
+  let findings = [];
+  for (const t of targets) findings = findings.concat(lintScanFile(t.abs, t.rel, opts));
+  findings.sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line || a.rule.localeCompare(b.rule));
+
+  const notChecked = packs.count - active.size;
+  // THE MANDATORY LINE. It prints in every mode, clean or not, and it is the
+  // only honest way to hand back a zero.
+  const coverage = `checked ${plural(active.size, "rule")} of ${packs.count} — not checked here: ${plural(notChecked, "rule")}. They need a reader, not a matcher.`;
+
+  if (asJson)
+    emitJson(
+      {
+        ok: true,
+        source,
+        files: targets.length,
+        findings,
+        count: findings.length,
+        checked: [...active],
+        checked_count: active.size,
+        not_checked_count: notChecked,
+        total_rules: packs.count,
+        coverage,
+        suppressed,
+        suppressed_note: suppressed.length
+          ? "your own rules name these ids, so the check is off here. Precedence runs; it is not only written down."
+          : null,
+        exempt: opts.exempt,
+        exempt_note:
+          "a rules pack has to print a banned word to define it, so the packs are skipped whole. `orc-rules-ignore-file` in a head, or `orc-rules-ignore` on a line, is your own opt-out. Both are counted here rather than being silent.",
+      },
+      findings.length ? 1 : 0
+    );
+
+  console.log(`\norc rules lint — ${plural(targets.length, "file")} (${source})\n`);
+  if (!findings.length) console.log("  " + ui.color.green("clean") + ui.color.gray(" — on the rules a matcher can prove"));
+  let last = "";
+  for (const f of findings) {
+    if (f.file !== last) {
+      console.log("\n  " + ui.color.cyan(f.file));
+      last = f.file;
+    }
+    console.log(
+      `   ${String(f.line).padStart(5)}  ${ui.color.yellow(f.rule)} ${String(f.tier || "").padEnd(7)} ${f.title || ""}`
+    );
+    console.log(`          ${ui.color.gray(f.evidence)}`);
+    console.log(`          ${ui.color.gray("→ " + f.fix)}`);
+  }
+  if (suppressed.length) {
+    console.log("\n  " + ui.color.bold("off here") + ui.color.gray("  your own rules name these ids"));
+    console.log("   " + suppressed.join(" · "));
+  }
+  // An exemption is never silent: a file that was skipped and never said so is
+  // indistinguishable from a file that passed.
+  const ex = opts.exempt.packs.length + opts.exempt.files.length;
+  if (ex)
+    console.log(
+      "\n  " +
+        ui.color.gray(
+          `skipped ${plural(ex, "file")} — ` +
+            [
+              opts.exempt.packs.length ? `${opts.exempt.packs.length} rules pack(s), which must print a banned word to define it` : null,
+              opts.exempt.files.length ? `${opts.exempt.files.length} marked orc-rules-ignore-file` : null,
+            ]
+              .filter(Boolean)
+              .join(" · ")
+        )
+    );
+  console.log("\n  " + ui.color.gray(coverage) + "\n");
+  process.exit(findings.length ? 1 : 0);
+}
+
 // ── the `--json` crash envelope (v0.49.2) ───────────────────────────────────
 // A read asked for JSON must answer in JSON or not at all. Before this, an
 // unexpected throw inside any `--json` route printed a Node stack to stderr and
@@ -42490,6 +44076,13 @@ function jsonCrash(err) {
     // `splice` and `assemble`, which are doc.json's only writers.
     case "doc":
       doc();
+      break;
+    // v1.7.0 — the anti-slop rule surface. Two halves: the SHIPPED read-only
+    // packs and the project's own ledger, which WINS on any conflict. Every
+    // subcommand is a READ except the ledger writers, which are rules.md's only
+    // writer. `orc-doc` is excluded by design — it has `orc doc rules`.
+    case "rules":
+      rulesCmd();
       break;
     // v0.50.0 — dispatch ORC's workers to non-Claude agents. Every subcommand
     // is a READ with an exit-code contract except `add`, `remove` and the

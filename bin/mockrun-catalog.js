@@ -90,6 +90,11 @@ const GROUP_OF = {
   // already lives.
   "extra-slots": "tools",
 
+  // v1.7.0. It sits with the KNOWLEDGE lanes rather than the tools: a rule set
+  // is something you teach ORC about this project, the same shelf as the wiki
+  // and the code patterns — and like both of those it is read on every run.
+  "orc-rules": "knowledge",
+
   "orc-wiki": "knowledge",
   "orc-pattern": "knowledge",
   "orc-learn": "knowledge",

@@ -221,3 +221,11 @@ state words, and **an exit code is an ANSWER wherever that contract says so, not
 a failure**. A call the answer does not name is a call this lane does not make.
 Exit ≠ 0 from the catalogue itself → say the CLI is unavailable and name the
 command you are about to run, out loud, before running it.
+
+## Rules — the anti-slop card (`../_shared/phases/rules.md`)
+
+`orc rules slice --lane orc-handoff --json` is the ONLY assembler; never build
+the card here. It rides under the house rules and above the task —
+**house rules > your project's rules > ORC's own packs** — and its `line` prints
+VERBATIM at preflight. Returns gain `rules_applied[]`, `rules_conflicts[]` (a gap,
+never a silent choice) and `rules_overridden[]`.

@@ -33,6 +33,8 @@ const { exportState, mocks } = require("./maintenance.js");
 const { chGoals, chDims, challengeRoles, challengeCouncil, challengeCycles, challengeList, challengeShow, challengeDiff, challengeDiffMissing, challengeLint } = require("./challenge.js");
 const { docList, docParts, docStatuses, docMapSections, docMap, docLint, docPlan, docShow, docSection, docShipped, docShippedDrifted, docNext, docAudit, docJournalRich, docJournalEmpty, docContext, docRules, docRulesFrozen, docForecast, docCost } = require("./docs.js");
 const { laneList, lanePhases, laneCalls } = require("./lanes.js");
+const { rules, rulesLint } = require("./rules.js");
+const { wikiResolveNew, wikiResolveMatch, wikiResolveAmbiguous, wikiRefs } = require("./wiki-one.js");
 const { diy } = require("./flow.js");
 const { crosslink } = require("./crosslink.js");
 const { mockDetail } = require("./mockrun.js");
@@ -60,6 +62,31 @@ module.exports.get = function get(route, q) {
       return testShows[(q && q.slug) || ""] || testShowToy;
     case "/api/test/ui":
       return testUiTools;
+    // v1.7.0 — the rule surface. One override and a lint with findings in BOTH
+    // prose and code: a clean ledger renders three of the five cards empty, and
+    // an empty card is a card nobody can design.
+    case "/api/rules":
+      return rules;
+    case "/api/rules/user":
+      return Object.assign({ ok: true, line: rules.line, boundary: rules.boundary, priorities: rules.priorities, overrides: rules.overrides }, rules.user);
+    case "/api/rules/packs":
+      return { ok: true, dir: rules.orc.dir, source: rules.orc.source, count: rules.orc.count, read_only: true, packs: rules.orc.packs, tiers: rules.tiers, line: rules.line };
+    case "/api/rules/credits":
+      return { ok: true, file: rules.orc.credits_file, sources: rules.orc.credits, text: null };
+    case "/api/rules/lint":
+      return rulesLint;
+    // v1.7.0 — the wiki's one-doc probes. The topic PICKS the verdict, so all
+    // three are reachable in the panel: type "remittance" for NEW, "invoice"
+    // for AMBIGUOUS, anything else for MATCH. A fixture that only ever returned
+    // one verdict would leave the other two cards designed blind.
+    case "/api/wiki/resolve": {
+      const topic = String((q && q.topic) || "").toLowerCase();
+      if (topic.includes("remittance") || topic.includes("payout")) return wikiResolveNew;
+      if (topic.includes("invoice") || topic.includes("billing")) return wikiResolveAmbiguous;
+      return wikiResolveMatch;
+    }
+    case "/api/wiki/refs":
+      return wikiRefs;
     case "/api/lanes":
       return laneList;
     case "/api/lane/phases":

@@ -52,11 +52,19 @@ in this skill** — one engine, the same rule the wiki tier itself lives under
 ## Targeted refresh
 
 ```
+/orc-wiki update <doc>                   the same thing, under the name people type
+/orc-wiki update "<topic>"               resolved to a doc first — see below
 /orc-wiki refresh <doc>
 /orc-wiki refresh --only api/refunds/**
 /orc-wiki refresh --top 2
 /orc-wiki refresh --all-touched          (today's delta behaviour)
 ```
+
+`update` is an ENTRY, not a second mechanism. A filename goes straight into
+R0–R5 below. A topic goes through `orc wiki resolve "<topic>" --json` first
+(free, no scan): **exit 0** names the doc · **exit 2** is AMBIGUOUS, so ask which
+one rather than scanning a guess · **exit 1** means nothing covers it, and the
+request is really an ADD.
 
 It **skips Phase 0 branch detection and Phase 1 area planning entirely** — the doc
 exists, so its coverage area is already in its own header. That skip is the whole
@@ -76,6 +84,66 @@ task refresh simply never reaches it.
 
 **Crosslink rules are unchanged:** tags publish per scan-task, no refresh path
 bulk-deletes `wiki/crosslink/`, and the dead-tag sweep still runs per point.
+
+## Add ONE topic — `/orc-wiki add "<topic>"`   (v1.7.0)
+
+The other half of "one doc at a time". Targeted refresh answers *this doc has
+moved*; this answers *this topic is not in the wiki at all* — and until v1.7.0 a
+new coverage area only appeared as a by-product of the coverage-gap sweep during
+a delta refresh, so "add the remittance feature" had no path that did not
+re-plan every area in the repo.
+
+Like a targeted refresh it **skips Phase 0 branch detection and Phase 1 area
+planning**. Unlike one, it ends with the **reference sweep**: adding a doc moves
+more derived surfaces than changing one does.
+
+```
+A0  resolve     orc wiki resolve "<topic>" --json                       free
+                exit 0 MATCH      → this is really an UPDATE. Say so, route there.
+                exit 2 AMBIGUOUS  → ask which doc. NEVER scan a guess.
+                exit 1 NEW        → continue.
+                exit 3            → no wiki, or unregistered. Fix that first.
+A1  scope       the resolver returns `suggested_covers` from PATH NAMES ONLY.
+                Show them as a proposal and let the user correct them. ONE turn.
+                A wrong glob is a doc that documents the wrong area forever.
+A2  confirm     slug · title · covers · the resolved TIER · the token + $ estimate.
+                ONE turn. NOTHING spawns before the user says yes.
+A3  reserve     orc wiki add <slug> --title "<t>" --covers "<glob>"      free
+                Writes a STUB with `status: reserved` — a target for the scan,
+                not a document. It is reported as outstanding until a scan
+                replaces the body, so a half-finished add can never look done.
+A4  scan        ONE scan-task, at the tier the ladder resolved
+A5  write       doc body + crosslink tags (the per-scan-task rule, unchanged).
+                Replace `status: reserved` with a real `scanned_at`,
+                `scanned_commit` and `covered_files` set.
+A6  references  orc wiki refs                                            free
+A7  integrity   the existing self-check, scoped to the new doc
+```
+
+### A6 — the reference sweep, and why it is its own step
+
+After ONE doc is written, these surfaces are derived from the doc SET and are
+now behind it. Before v1.7.0 they were repaired from memory, one at a time, and
+the ones nobody remembered stayed wrong — which is likeliest on a SMALL run,
+because the run feels too small to need a sweep.
+
+| Surface | What goes wrong | Repaired by |
+|---|---|---|
+| `wiki-meta.json` + `wiki/INDEX.md` | the new doc is not registered | `orc wiki refs` does it (free) |
+| a reserved row | the reservation never got its scan | reported, with the update command |
+| `wiki/orc-orientation.md` | its reading order predates the new doc | reported — free to regenerate |
+| `wiki/orc-architecture-overview.md` | it names neither the file nor the area | reported — free, and OPTIONAL |
+| the `CLAUDE.md` pointer block | its doc COUNT is now measurably wrong | reported |
+| `wiki/crosslink/**` | a tag anchored to a file that is gone | reported, offered per tag, never bulk-deleted |
+
+`orc wiki refs` **repairs only the registration**, because `orc wiki sync` is
+free and already the single writer of those two files. Everything else is
+REPORTED with its command. A sweep that silently regenerated prose would be
+spending money nobody asked it to spend, which is the same rule the free-repair
+ladder above is built on.
+
+`orc wiki refs --check` reports and repairs nothing. Exit **0** clean · **1**
+work pending or registration repaired · **2** cannot compute.
 
 ## The scan tier ladder (`wiki_scan_tier`, default `ladder`)
 

@@ -55,6 +55,26 @@ never a fifth step before step 2.
   ledger yet, this is a first run"; `orc gotcha status` exit 1 is an empty
   ledger. Say what it means, not that it failed.
 
+## The rules line (v1.7.0) — printed by every lane that runs the `rules` phase
+
+`orc rules slice --lane <lane> --json` returns a `line`. Print it VERBATIM:
+
+```
+rules:    ORC 65 (W 23 · C 22 · D 10 · U 10) · yours 9 lines (P0 4 · P1 2 · P2 3) · 1 override
+rules:    ORC 65 (W 23 · C 22 · D 10 · U 10) · yours none
+```
+
+**Both spellings are mandatory in their state.** `yours none` says the project
+has not written its own rules — a different fact from the CLI failing to look,
+and the line is what keeps the two apart. Never compute the counts here.
+
+Where the lane's preflight prints a REPORT rather than a bare line, the report
+names each override under it. An override the user cannot see is an override
+they cannot audit. The rest of the mechanic is `./rules.md`.
+
+`/orc-doc` prints `house rules: …` instead, from `orc doc rules`. The two
+surfaces are different files and never mix.
+
 ## The usage line (v1.1.0) — printed whenever `usage_gate` is armed
 
 `usage_gate` resolves in step 1 like any other key. When it is anything but

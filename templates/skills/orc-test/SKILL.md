@@ -227,6 +227,13 @@ Tier **Iterative** — one packet per completed cycle. Narration is DISPATCHED,
 never remembered: build the PHASE PACKET and dispatch
 `orc-trace-writer-haiku-4-5`. Canonical: `../_shared/phases/trace.md`.
 
+## Rules — the anti-slop card (`../_shared/phases/rules.md`)
+
+`orc rules slice --lane orc-test --json` is the ONLY assembler; never build
+the card here. It rides under the house rules and above the task —
+**house rules > your project's rules > ORC's own packs** — and its `line` prints
+VERBATIM at preflight. Returns gain `rules_applied[]`, `rules_conflicts[]` (a gap,
+never a silent choice) and `rules_overridden[]`.
 ## Waiting mid-run (`/orc-wait`)
 
 Canonical: `../_shared/wait.md`. **`a lane that waits without a hand-back` has broken this contract.**

@@ -48,6 +48,20 @@ Then detect state and branch:
 - **Wiki checkpoint exists (mid-scan)** → RESUME. Re-anchor from
   state-of-play + checkpoint; show "X of Y areas done, ~Z remaining"; light
   cost note; continue where it stopped.
+- **`/orc-wiki update <doc-or-topic>` (explicit)** → **TARGETED REFRESH**, the
+  same branch as `refresh <doc>` below and the same flow. It exists because
+  `update some-doc.md` is what a user actually types. A FILENAME routes straight
+  to the refresh; a TOPIC ("the remittance feature") goes through
+  `orc wiki resolve "<topic>" --json` first (free): exit 0 names the doc and you
+  refresh it, exit 2 is AMBIGUOUS and you ask which one, exit 1 means nothing
+  covers it and this is really an ADD.
+- **`/orc-wiki add "<topic>"` (explicit)** → **ADD ONE TOPIC**
+  (references/partial-refresh.md, the A0–A7 flow). One new doc in a wiki that
+  already exists, without re-planning a single other area. It skips branch
+  detection and area planning like a targeted refresh does, and it ends with the
+  **reference sweep** (`orc wiki refs`) rather than a bare `orc wiki sync` —
+  adding a doc moves more derived surfaces than changing one does. Never start
+  it without the ONE confirmation turn at A2.
 - **`/orc-wiki refresh <doc> | --only <glob> | --top N | --all-touched`
   (explicit)** → **TARGETED REFRESH** (references/partial-refresh.md). Skips
   branch detection AND area planning — the doc exists, so its coverage area is
@@ -66,6 +80,6 @@ Then detect state and branch:
   re-publishes crosslink tags in the same pass (hard rule 11), preserves the
   folder (rule 12), and ends by regenerating the orientation doc + atlas
   (derived, cheap). A LEGACY wiki with unpublished tags is a backfill, not a
-  refresh — route to CROSSLINK-ONLY.
+  refresh — route to CROSSLINK-ONLY.
 
 <!-- /orc:layer -->

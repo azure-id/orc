@@ -35,7 +35,7 @@ let KN_TAB = "wiki";
 
 async function renderKnowledge(body) {
   body.replaceChildren(skeleton(6));
-  const [wikiRes, impactRes, patRes, gotRes, planRes, debtRes, usageRes, docsRes, covRes] = await Promise.all([
+  const [wikiRes, impactRes, patRes, gotRes, planRes, debtRes, usageRes, docsRes, covRes, refsRes] = await Promise.all([
     read("/api/wiki").catch((e) => ({ data: null, error: e })),
     read("/api/wiki/impact").catch((e) => ({ data: null, error: e })),
     read("/api/patterns").catch((e) => ({ data: null, error: e })),
@@ -45,6 +45,9 @@ async function renderKnowledge(body) {
     read("/api/wiki/usage").catch((e) => ({ data: null, error: e })),
     read("/api/wiki/docs").catch((e) => ({ data: null, error: e })),
     read("/api/wiki/coverage").catch((e) => ({ data: null, error: e })),
+    // v1.7.0 — the derived-reference sweep. `--check`, always: opening a panel
+    // must never write to a repo.
+    read("/api/wiki/refs").catch((e) => ({ data: null, error: e })),
   ]);
   const d = {
     wiki: wikiRes.data || {},
@@ -56,6 +59,7 @@ async function renderKnowledge(body) {
     usage: usageRes.data,
     docs: docsRes.data,
     coverage: covRes.data,
+    refs: refsRes.data,
     // A read that FAILED is not the same as a read that came back empty, and
     // rendering them identically is what turned a truncated 30 KB payload into
     // "this repo has no wiki and no git" (v0.49.4). The server already puts the
@@ -136,6 +140,7 @@ function knowledgeHeaderStrip(d) {
 function knWikiTab(d, body) {
   const out = frag();
   out.append(wikiPlanCard(d.plan, d.debt, body));
+  out.append(wikiOneDocCard(d.refs));
   if (d.usage && d.usage.rows) out.append(wikiUsageCard(d.usage, body));
 
   const w = d.wiki;
@@ -872,6 +877,117 @@ function wikiUsageCard(u, body) {
   }
   c.append(body2);
   c.append(el("div", "note", t("knowledge.usage.note")));
+  return c;
+}
+
+/* ONE DOC AT A TIME (v1.7.0).
+   Two halves of the same question, and neither of them scans.
+
+   The RESOLVER answers "is this topic already in the wiki?" — free, from the
+   doc headers. It is a probe, so the panel runs it; the refresh or the add that
+   follows is a LANE, so the panel prints the command and stops. That is the
+   panel's standing line, visible here rather than implied: a free action gets a
+   button, a paid one gets a command you can copy.
+
+   The SWEEP is `orc wiki refs --check`. It exists because after ONE doc changes,
+   the surfaces DERIVED from the doc set are behind it — and on a small run
+   nobody remembers to look. `--check`, always: opening a panel must never write
+   to a repo. */
+const REFS_STATE_KIND = { clean: "ok", repaired: "ok", absent: "", behind: "warn", outstanding: "warn", missing: "warn", drifted: "bad", dead: "warn" };
+
+function wikiOneDocCard(refs) {
+  const c = card(t("knowledge.one.title"));
+  c.append(el("div", "note", t("knowledge.one.lead")));
+
+  // ── the resolver ──────────────────────────────────────────────────────────
+  const row = el("div", "row-actions");
+  const input = el("input", "text-input kn-one-topic");
+  input.type = "text";
+  input.placeholder = t("knowledge.one.placeholder");
+  input.setAttribute("aria-label", t("knowledge.one.placeholder"));
+  const go = el("button", "btn btn-sm btn-primary", t("knowledge.one.resolve"));
+  go.type = "button";
+  row.append(input, go);
+  c.append(row);
+
+  const out = el("div", "kn-one-out");
+  c.append(out);
+
+  const resolve = async () => {
+    const topic = input.value.trim();
+    if (!topic) return;
+    go.disabled = true;
+    out.replaceChildren(skeleton(1));
+    try {
+      const r = await read("/api/wiki/resolve?topic=" + encodeURIComponent(topic));
+      const d = r.data || {};
+      out.replaceChildren();
+      if (!d.ok) {
+        out.append(el("div", "note warn", d.hint || t("knowledge.one.cannot")));
+        return;
+      }
+      const head = el("div", "row-actions");
+      // The CLI's own verdict word, never a friendlier synonym.
+      head.append(chip(d.verdict, d.verdict === "match" ? "ok" : d.verdict === "ambiguous" ? "warn" : ""));
+      if (d.verdict === "match") head.append(el("span", "mono", d.match.file));
+      out.append(head);
+
+      if (d.verdict === "match") out.append(el("div", "note", d.match.why.slice(0, 4).join(" · ")));
+      // AMBIGUOUS is a question, not a guess: every candidate is listed with its
+      // score, and no command is offered until a human picks one.
+      if (d.verdict === "ambiguous")
+        for (const cand of d.candidates || []) {
+          const cr = el("div", "kn-one-cand");
+          cr.append(el("span", "note mono", String(cand.score)));
+          cr.append(el("span", "mono", cand.file));
+          cr.append(el("span", "note", (cand.why || []).slice(0, 3).join(" · ")));
+          out.append(cr);
+        }
+      if (d.verdict === "new" && (d.suggested_covers || []).length) {
+        out.append(el("div", "note", t("knowledge.one.proposed")));
+        for (const s of d.suggested_covers) {
+          const sr = el("div", "kn-one-cand");
+          sr.append(el("span", "mono", s.glob));
+          sr.append(el("span", "note", tn(s.matches, "knowledge.one.files")));
+          out.append(sr);
+        }
+        // The CLI's own caveat, relayed. A proposal that arrives without it
+        // reads as an answer.
+        out.append(el("div", "note", d.note));
+      }
+      // A LANE costs money, so it is a command to copy, never a button.
+      out.append(laneCommand(d.next, t("knowledge.one.next")));
+    } catch (e) {
+      out.replaceChildren(failBox(e));
+    } finally {
+      go.disabled = false;
+    }
+  };
+  go.addEventListener("click", resolve);
+  input.addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter") resolve();
+  });
+
+  // ── the sweep ─────────────────────────────────────────────────────────────
+  if (refs && refs.items) {
+    const sweep = el("div", "kn-one-sweep");
+    sweep.append(el("div", "checklist-head", t("knowledge.one.sweep")));
+    for (const i of refs.items) {
+      const ir = el("div", "kn-one-ref");
+      ir.append(chip(i.state, REFS_STATE_KIND[i.state] || ""));
+      ir.append(el("span", "mono", i.id));
+      ir.append(el("span", "note", i.what));
+      sweep.append(ir);
+      if (i.fix) sweep.append(el("div", "note kn-one-fix", "→ " + i.fix + "  (" + i.cost + ")"));
+    }
+    // WHY only one surface is ever repaired. Relayed from the CLI, because a
+    // sweep that looked like it fixed everything would be the more dangerous
+    // reading.
+    sweep.append(el("div", "note", refs.note));
+    c.append(sweep);
+  } else if (refs && refs.hint) {
+    c.append(el("div", "note", refs.hint));
+  }
   return c;
 }
 

@@ -192,6 +192,13 @@ documented defaults, out loud. Priorities and families:
 Fast has no config key of its own — command-entry only; wave/scoring/review
 keys never apply, and the tier edges the F0 gate reads arrive resolved.
 
+## Rules — the anti-slop card (`../_shared/phases/rules.md`)
+
+`orc rules slice --lane orc-fast --json` is the ONLY assembler; never build
+the card here. It rides under the house rules and above the task —
+**house rules > your project's rules > ORC's own packs** — and its `line` prints
+VERBATIM at preflight. Returns gain `rules_applied[]`, `rules_conflicts[]` (a gap,
+never a silent choice) and `rules_overridden[]`.
 ## Calls
 
 **ONE catalogue, and it is not you:** `orc lane calls orc-fast --json` names every

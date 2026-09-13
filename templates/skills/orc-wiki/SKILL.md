@@ -143,6 +143,14 @@ v0.41.0 has been recording and never reading. **Usage lives in its own file
 100% doc-header-derived and `orc wiki sync` is its only writer. Render what the
 CLI returns; never compute an order, a tier or an estimate here.
 
+**One doc at a time (v1.7.0).** `/orc-wiki update <doc-or-topic>` is the targeted
+refresh under the name people type; `/orc-wiki add "<topic>"` adds ONE new doc to
+a wiki that already exists, without re-planning any other area. A topic is
+resolved with `orc wiki resolve` (free) before anything is scanned — AMBIGUOUS is
+a question, never a guess — a new row is RESERVED with `orc wiki add`, and the
+run ends with `orc wiki refs`, the derived-reference sweep. Flow: A0–A7 in
+references/partial-refresh.md.
+
 ## Refresh & staleness (references/staleness.md — THE canonical freshness reference)
 
 Freshness is computed on read, never stored: measure `scan_commit` (from
@@ -163,6 +171,13 @@ the CLI is unavailable and fall back to `../_shared/config-precedence.md`'s
 documented defaults, out loud. Priorities and families:
 `../_shared/config-precedence.md`.
 
+## Rules — the anti-slop card (`../_shared/phases/rules.md`)
+
+`orc rules slice --lane orc-wiki --json` is the ONLY assembler; never build
+the card here. It rides under the house rules and above the task —
+**house rules > your project's rules > ORC's own packs** — and its `line` prints
+VERBATIM at preflight. Returns gain `rules_applied[]`, `rules_conflicts[]` (a gap,
+never a silent choice) and `rules_overridden[]`.
 ## Calls
 
 **ONE catalogue, and it is not you:** `orc lane calls orc-wiki --json` names every

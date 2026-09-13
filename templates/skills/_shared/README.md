@@ -6,6 +6,13 @@ follows. A lane's SKILL.md keeps only the contract's trigger line + its
 token(s) + a pointer here; the full procedure lives in exactly one file below,
 loaded on demand when the step fires.
 
+- `rules/` — the **ORC RULES**: the shipped, read-only anti-slop packs
+  (`writing.md` `OSW` · `code.md` `OSC` · `delivery.md` `OSD` · `ui.md` `OSU`),
+  their `INDEX.md` (packs, tiers, the three-layer precedence ladder, the
+  boundary) and `CREDITS.md` (every source, author and licence). Assembled into
+  a slice by `orc rules slice --lane <lane>` and injected by
+  `phases/rules.md`. The user's own half is `.claude/orc/rules.md`, written only
+  by `orc rules`. `/orc-doc` reads none of it — that lane has `orc doc rules`.
 - `return-validation.md` — how every lane validates a subagent return
   (claimed-vs-actual model, evidence, unmet, pattern attestation).
 - `smoke-gate.md` — the read-only build+test ship gate (orc-mini Phase M,

@@ -7,14 +7,14 @@
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
 ![npm](https://img.shields.io/npm/v/%40azure-id%2Forc?style=for-the-badge&color=cb3837&logo=npm)
-![Version](https://img.shields.io/badge/version-1.6.0-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-1.7.0-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
 ![Dependencies](https://img.shields.io/badge/dependencies-zero-lightgrey.svg?style=for-the-badge)
 ![GitHub stars](https://img.shields.io/github/stars/azure-id/orc?style=for-the-badge&color=yellow)
 
-**Latest: v1.6.0** · updated 2026-09-07 · [full changelog](CHANGELOG.md)
+**Latest: v1.7.0** · updated 2026-09-13 · [full changelog](CHANGELOG.md)
 
 **On npm: [`@azure-id/orc`](https://www.npmjs.com/package/@azure-id/orc)** — `npm i -g @azure-id/orc`
 
@@ -303,6 +303,59 @@ ORC have terminal hook to see: Context Window %, 5 Hour usage %, Weekly usage % 
 
 ---
 
+## Rules that keep the slop out
+
+ORC writes a lot of prose and a lot of code. Both come out carrying the same
+recognisable defaults: sentences that say nothing in a confident shape, and code
+that is longer, more defensive and more abstract than the task asked for.
+`orc rules` is the filter, and it has **two halves that never mix**.
+
+| Half | Who writes it | Where | Changes when |
+|---|---|---|---|
+| **ORC rules** | ORC | `.claude/skills/_shared/rules/` | `orc update` |
+| **Your rules** | you | `.claude/orc/rules.md` | you type |
+
+**65 shipped rules, read-only**, in four packs: `OSW` writing (23) · `OSC` code
+(22) · `OSD` delivery (10), which is what an agent reports about its OWN work ·
+`OSU` UI (10), which rides per TASK rather than per lane. Three tiers - **HARD**
+absolute, **PURPOSE** allowed with a written one-line reason, **LOCK** a
+consistency check.
+
+**Your rules are plain text**, three headings, as much under each as you want -
+and **they beat an ORC rule outright**:
+
+```
+house rules  >  your rules  >  ORC rules
+```
+
+The house rules are about CODE and behaviour. They say nothing about the words
+an agent writes, so they never overrule a writing rule. To switch an ORC rule
+off, name its id in a rule of your own; the override is then counted, printed at
+preflight, and stated inside every slice. **It is never silent.**
+
+```bash
+orc rules                                   # both halves, the ladder, the counts
+orc rules add --priority P0 --text "..."    # your own, in your own words
+orc rules lint src/ README.md               # free, zero tokens
+orc rules credits                           # every source, author and licence
+```
+
+`orc rules lint` checks **13 of the 65** - the ones a string match can prove -
+and prints, every time, `not checked here: 52 rules. They need a reader, not a
+matcher.` A clean lint is not a clean review, and it says so.
+
+**The rules are other people's work, and the credit ships with them.** Adapted
+from [`petergyang/no-ai-slop`](https://github.com/petergyang/no-ai-slop) (MIT),
+[`miqdadbadjuber/anti-slop`](https://github.com/miqdadbadjuber/anti-slop) (MIT),
+[`ehmo/slopkit`](https://github.com/ehmo/slopkit),
+[`BioInfo/slopless`](https://github.com/BioInfo/slopless), Andrej Karpathy's
+`CLAUDE.md`, Matty Cartwright's Anti-Slop Writing Rules, and three papers on LLM
+code smells.
+
+**Full detail: [`guides/rules.md`](guides/rules.md).**
+
+---
+
 ## Documents that go somewhere
 
 `/orc-doc` writes the long document — and Markdown is the deliverable because of
@@ -532,6 +585,7 @@ Some lanes ship a full how-to next to the skill, in plain language:
 | [ORC-WIKI](templates/skills/orc-wiki/README.md) | you want the knowledge base, and cross-repo crosslink setup |
 | [ORC-PR-SETUP](templates/skills/orc-pr-setup/README.md) | you want to split a big change into stacked PRs |
 | [ORC-PR-DRIVER](templates/skills/orc-pr-driver/README.md) | you have a stack plan and want to build, submit and merge it |
+| [Rules](guides/rules.md) | you want the 65 anti-slop rules, the precedence ladder and the lint |
 | [Configuration](guides/configuration.md) · [Model selection](guides/model-selection.md) | you want every key, or the scoring bands |
 | [Other AI models](guides/extra-models.md) | you want part of the ladder to run somewhere other than Claude |
 
@@ -576,78 +630,224 @@ a current audit: [EVAL-REPORT.md](EVAL-REPORT.md).
 **Full history: [CHANGELOG.md](CHANGELOG.md)** — or `orc changelog`, which prints
 only what is newer than the version you have.
 
-### v1.6.0 - the rule that can finally say no _(2026-09-07)_
+### v1.7.0 - the rules that keep the slop out _(2026-09-13)_
 
-**Still on the unscoped `orc` package?** Do this once first - your `orc upgrade`
-is the pre-v0.56.0 one and cannot install itself. Full detail in the CAUTION at
-the top of this file.
+ORC writes a lot of prose and a lot of code, and both came out carrying the same
+recognisable defaults: sentences that say nothing in a confident shape, and code
+that is longer, more defensive and more abstract than the task asked for. There
+was one standing card against it - the seven-line house rules - and it is about
+CODE. Nothing said anything about the words.
 
-- **Step 1 - release the command from the old package:** `npm uninstall -g orc`
-- **Step 2 - install the current package:** `npm i -g @azure-id/orc`
-- **Step 3 - re-apply it to your project:** `orc update`
+**`orc rules` is a second rule surface, and it has two halves that never mix.**
 
-**Do not use `npm i -g -f`.** Full detail in v0.56.0 below.
+- **ORC rules** - 65 rules in four packs, shipped, tagged, **read-only**. They
+  change with `orc update` and with nothing else. `orc rules set --pack ...` is
+  refused BY NAME, with the command that replaces it.
+- **Your rules** - `.claude/orc/rules.md`. Plain text, three headings, as much
+  under each as you want. **They beat an ORC rule outright.**
 
+The packs: **`OSW` writing (23)**, **`OSC` code (22)**, **`OSD` delivery (10)** -
+what an agent reports about its OWN work - and **`OSU` UI (10)**, which rides per
+TASK rather than per lane, because a UI rule in a backend slice is tokens paid on
+every spawn for a rule that cannot apply.
 
-ORC's read discipline has always said the same thing in three places: the main
-session reads to **find**, and dispatches an agent to **understand**. It was
-prose in `_shared/read-ladder.md`, in `/orc-doc` hard rule 0, and on line 21 of
-`/orc-quick` - and **nothing checked any of it**.
+Three tiers, taken from `anti-slop`: **HARD** absolute, **PURPOSE** allowed with
+a written one-line reason, **LOCK** a consistency check. The purpose gate is the
+mechanism that matters - a ban list alone leaves a void, and a model fills a void
+with its most generic output.
 
-`orc-read-gate.js` is a `PreToolUse` hook on `Read` that can refuse. It ships
-**off**, and `off` is byte-identical to not having it - asserted by a test, not
-by intention.
+**Credit is a shipped artifact here, not a line in a commit message.** Every pack
+opens with its sources; `orc rules credits` prints author, handle, repository,
+licence, and what ORC took from each. Adapted from
+[`petergyang/no-ai-slop`](https://github.com/petergyang/no-ai-slop) (MIT),
+[`miqdadbadjuber/anti-slop`](https://github.com/miqdadbadjuber/anti-slop) (MIT),
+[`ehmo/slopkit`](https://github.com/ehmo/slopkit),
+[`BioInfo/slopless`](https://github.com/BioInfo/slopless), Andrej Karpathy's
+`CLAUDE.md`, Matty Cartwright's Anti-Slop Writing Rules, and three papers on LLM
+code smells.
 
-**The threshold is ORC's own number, measured.** The pattern this came from uses
-350 lines, derived from a 10-30 second delegation round trip. ORC's round trip
-is nothing like that: a dispatch measured **p50 76s, p90 188s** (n=125), and one
-real read-only dispatch cost **13,276 tokens** to read a four-line file. At the
-measured 55.2 chars/line across 316 sampled reads, break-even is **~1000 lines**.
-Copying 350 would delegate work whose overhead exceeds its saving.
+**Precedence: house rules > your rules > ORC rules.** The house card is CODE and
+BEHAVIOUR only - it says nothing about the words an agent writes, so it never
+overrules a writing rule. A project rule beats an ORC rule OUTRIGHT: the rule is
+removed from the slice and the removal is stated inside it.
 
-**`agent_id` is the only discriminator, and that was MEASURED, not assumed.**
-`PreToolUse` **does** fire inside a dispatched subagent - the assumption that
-hooks are session-level was wrong. `session_id` and `transcript_path` are
-**identical** in both contexts, so a gate written against either would block the
-full read an executor must perform before an `Edit`, and a reconstructed
-`old_string` corrupts files. The gate tests for the **presence** of `agent_id`,
-never for the absence of some other key, which asserts nothing.
+**An override is counted the only honest way.** The CLI counts ORC rule ids you
+NAMED, and says that is what it counted. A conflict you did not name is found by
+the agent at dispatch and comes back as `rules_conflicts[]` - a gap, never a
+silent choice. The CLI cannot parse intent, so it does not pretend to: the same
+decision `orc doc rules` made about its structural boundary, for the same reason.
 
-**Everything it stays silent on, and each one is deliberate:** any read by a
-subagent - outside an open ORC run - a targeted `offset`/`limit` read - a file
-under the threshold - build logs, test results and `.jsonl` that a gate parses
-whole, because a truncated red build reads **green** - and any error at all,
-because **a read gate that throws and blocks a read has broken the tool.**
+**`orc rules lint` is free, deterministic, and small on purpose.** It checks 13
+of the 65 - banned lexicon and phrases, em dash DENSITY (a dose rule, measured
+per file, because ORC's own docs use them), emoji headings, six comment shapes,
+artifact filenames, `outline: none`, UI buzzwords - and it prints, in every mode
+including `--json`: `not checked here: 52 rules. They need a reader, not a
+matcher.` A clean exit that stands in for a review nobody did is the failure that
+line prevents. It skips the rule packs themselves (a rule that bans a word has to
+print that word to define it) and anything marked `orc-rules-ignore`, and counts
+both rather than staying quiet.
 
-**A block always names the cheaper path.** A gate that only refuses is a gate
-people switch off. It names the targeted read, the agent dispatch, and the
-config key that turns it down.
+**Findings are advisory. There is no gate.** A style preference that fails a
+build gets switched off within a week, and then nothing is enforced at all.
 
-**Every `warn` and `block` writes one trace line** (`READ-GATE`), an allow
-writes none. That is affordable here for a structural reason: the gate only acts
-while a run is open, so a trace always exists. `orc doctor` gains
-`read-gate-unwired` and `read-gate-fallback`, both reported **only while the
-feature is armed** - a doctor that warns about the default is one people learn
-to ignore.
+The card rides in every slice of **28 lanes** - every one that writes words or
+code. **`/orc-doc` is excluded by design**; it has `orc doc rules`. One assembler
+(`orc rules slice`), because a card built in twenty-eight spines is
+twenty-eight ideas of the precedence order, and because it is the only place the
+per-spawn token weight can be measured. Measured: **~3 600 tokens** per
+build-lane slice, ~2 200 for a prose lane.
 
-**Two config keys**, both on the `SEED_EMPTY` allowlist with an empty `lanes[]`,
-because a hook has no lane and cannot resolve config: `read_gate`
-(`off`|`warn`|`block`, default `off`) and `read_gate_max_lines` (default 1000).
+**`orc ui` gains a Rules panel** - the ladder, your textarea, the 65 read-only
+rows behind a filter, the credit table, and the lint.
 
-**What this release deliberately does NOT do**, with the reasons recorded so
-nobody re-proposes them: no gate on `Bash` reads (`cat`/`head`/`tail`) - it is
-several times the false-positive surface, and the measurement says the `Read`
-tool is only about 7.5% of the actual read surface here - and no
-`context-reader` slot in `EXTRA_SLOTS`, because at a 1000-line threshold the
-addressable population is five reads across 239 sampled sessions, which is
-infrastructure for nothing.
+---
 
-**An honest note on the measurement.** The audit behind this release found the
-existing prose is largely *working*: median full read is 85 lines, p90 is 288,
-and 46% of reads already use `offset`/`limit` without being told. Oversized
-reads are about **1% of price-weighted main-session ingest** at a generous upper
-bound. This hook is a guardrail on a road most runs already stay on - it is off
-by default for exactly that reason.
+**`orc wiki`, one doc at a time.** Targeted refresh has existed since v0.33.0 and
+is not rebuilt. What was missing is the other half: **adding one topic** to a
+wiki that already exists. Until now a new coverage area only appeared as a
+by-product of the coverage-gap sweep during a delta refresh, so "add the
+remittance feature" had no path that did not re-plan every area in the repo.
+
+- **`/orc-wiki update <doc-or-topic>`** - the targeted refresh, under the name
+  people actually type. A topic resolves to a doc first.
+- **`/orc-wiki add "<topic>"`** - A0-A7: resolve, scope, confirm, reserve, scan,
+  write, sweep, check. Nothing spawns before the one confirmation turn.
+- **`orc wiki resolve <topic>`** - free, no scan. A MATCH must beat the runner-up
+  by half again plus one; anything closer is **AMBIGUOUS and becomes a question**,
+  because two docs a point apart is exactly where guessing costs a scan of the
+  wrong area.
+- **`orc wiki add <slug> --covers ...`** - reserves a stub carrying
+  `status: reserved` and a body that says nothing in it is evidence. A doc that
+  lies is worse than a doc that is missing.
+- **`orc wiki refs [--check]`** - the DERIVED-REFERENCE sweep. After one doc
+  changes, six surfaces are behind it: the registration, reserved rows, the
+  orientation page, the architecture overview, the CLAUDE.md pointer's doc COUNT,
+  and any crosslink tag anchored to a file that is gone. It **repairs only the
+  registration**, because `orc wiki sync` is free and already the single writer.
+  Everything else is reported with its command - a sweep that silently
+  regenerated prose would be spending money nobody asked it to spend.
+
+The Knowledge panel gains a **One doc at a time** card for both halves.
+
+<details>
+<summary><strong>Earlier releases</strong> — 114 of them, titles only. Full text in <a href="CHANGELOG.md">CHANGELOG.md</a>.</summary>
+
+- **v1.6.0** — the rule that can finally say no · _2026-09-07_
+- **v1.5.0** — the lane that runs the test · _2026-09-07_
+- **v1.4.2** — the panel that stops reloading, and the fields you could not read back · _2026-09-05_
+- **v1.4.1** — the board you can actually use · _2026-09-05_
+- **v1.4.0** — the agent panel, and the number that was missing · _2026-09-04_
+- **v1.3.0** — build your own status line · _2026-09-04_
+- **v1.2.1** — the status line says what ORC is doing · _2026-09-04_
+- **v1.2.0** — a retry that cloned the agent, and a window you can watch empty · _2026-09-04_
+- **v1.1.0** — the wait, and a window ORC can finally see · _2026-08-31_
+- **v1.0.0** — config, phases and calls stop being prose · _2026-08-30_
+- **v0.56.1** — a worker that is alive and doing nothing · _2026-08-28_
+- **v0.56.0** — a rename moved the command, and nobody could reach the fix · _2026-08-27_
+- **v0.55.2** — a gate that is never probed is a gate that is always off · _2026-08-27_
+- **v0.55.1** — ORC is on npm · _2026-08-27_
+- **v0.55.0** — a score is what a band needs, and four lanes do not have one · _2026-08-26_
+- **v0.54.0** — a failed dispatch is a POSITION, not a blank page · _2026-08-25_
+- **v0.53.4** — the reload that dropped its own token · _2026-08-24_
+- **v0.53.3** — the key it never sent · _2026-08-24_
+- **v0.53.2** — the cost that was paid and never written down · _2026-08-24_
+- **v0.53.1** — "up to date" now names what it checked · _2026-08-23_
+- **v0.53.0** — the schema the provider rejected, and a routing table you can read · _2026-08-23_
+- **v0.52.0** — the connection that could not be used, and the routing nobody could see · _2026-08-23_
+- **v0.51.0** — the tools you already have, and a connection that proves itself · _2026-08-22_
+- **v0.50.0** — work that runs somewhere else · _2026-08-22_
+- **v0.49.5** — house rules are text, and the hand-back writes itself · _2026-08-21_
+- **v0.49.4** — the panel was being handed half an answer · _2026-08-20_
+- **v0.49.3** — coverage on a large repo · _2026-08-19_
+- **v0.49.2** — house rules, a run map before you pay, and three defects · _2026-08-18_
+- **v0.49.1** — the challenge council, and a `--json` that stops throwing things away · _2026-08-18_
+- **v0.49.0** — the document is a folder, and the file is a build artifact · _2026-08-17_
+- **v0.48.1** — one file per thing, and a document that can be finished · _2026-08-16_
+- **v0.48.0** — a document long enough to end a session, written anyway · _2026-08-13_
+- **v0.47.0** — the lane that refuses to produce · _2026-08-12_
+- **v0.46.1** — see a lane run before you pay for one · _2026-08-12_
+- **v0.46.0** — a lane that remembers, a lane that declines, and a lane that measures · _2026-08-10_
+- **v0.45.0** — `/orc-brainstorm`: for when you do not have the idea yet · _2026-08-10_
+- **v0.44.1** — apply when you say so, and a spotlight that survives a banner · _2026-08-09_
+- **v0.44.0** — the panel stops making you type what it already knows · _2026-08-09_
+- **v0.43.7** — the flow you can see, and a boundary you can read · _2026-08-09_
+- **v0.43.6** — `orc ui` in two languages, and panels that point at the right page · _2026-08-08_
+- **v0.43.5** — the update check works, and the UI teaches itself · _2026-08-08_
+- **v0.43.4** — a warning that finally clears, an Experiment panel, crosslink from the UI · _2026-08-08_
+- **v0.43.3** — `orc ui`: it tells you about updates, and 36 keys stop being a wall · _2026-08-08_
+- **v0.43.2** — `orc ui`: boxes stop colliding, because the container owns the gap · _2026-08-08_
+- **v0.43.1** — the panel's stylesheet and script actually reach the browser · _2026-08-08_
+- **v0.43.0** — `orc ui`: a control panel for everything that is not ai · _2026-08-08_
+- **v0.42.0** — Say what you mean, see what it costs, find your way back · _2026-08-08_
+- **v0.41.0** — A wiki that can tell you it is fresh, and TDD only where it can fail · _2026-08-06_
+- **v0.40.0** — Gotchas: repair memory that outlives the run · _2026-08-06_
+- **v0.39.0** — The read ladder, and foreign input that is evidence rather than instruction · _2026-08-06_
+- **v0.38.1** — `orc doctor --json` + handoff carry-over that says what is re-derived · _2026-08-06_
+- **v0.38.0** — `/orc-quick`: the quick lane, and the gate no config can collapse · _2026-08-05_
+- **v0.37.0** — Stacked pull requests: a measured ship gate + two standalone lanes · _2026-08-03_
+- **v0.36.0** — `opus5_only`: one model for every role, not just executors · _2026-08-02_
+- **v0.35.0** — `opus5_executor_only`: one model, effort as the cost dial · _2026-08-02_
+- **v0.34.8** — `orc pattern status` rejects a language key the payload has never heard of · _2026-08-01_
+- **v0.34.7** — DIY: a usable status contract, and compile docs that match the compiler · _2026-08-01_
+- **v0.34.6** — Analyze: the evidence gate now covers the rows a good analysis produces · _2026-08-01_
+- **v0.34.5** — Wiki: stop losing tags silently, let a delta clear its own delta · _2026-08-01_
+- **v0.34.4** — Planner: scorable facets, and TDD rules scoped to reality · _2026-08-01_
+- **v0.34.3** — Slice boundary: the worktree, not the editor · _2026-08-01_
+- **v0.34.2** — Trace subsystem: the pointer clobber, and a writer contract that holds · _2026-08-01_
+- **v0.34.1** — Install integrity: run state survives `orc update` · _2026-08-01_
+- **v0.34.0** — Opus 5: top scoring band, every core role, medium-effort session tier · _2026-07-25_
+- **v0.33.0** — Knowledge deepening + verification revamp · _2026-07-25_
+- **v0.32.0** — Trace revamp: narration is dispatched, not remembered · _2026-07-24_
+- **v0.31.0** — Execution-integrity revamp: plan handoff, attributable traces, facet scoring · _2026-07-23_
+- **v0.30.0** — Scoring revamp, Fable 5 role override, tier-aware guards, `orc onboarding` · _2026-07-23_
+- **v0.29.0** — Drift-prevention hardening: install manifest + prune, `orc doctor`, a real test suite · _2026-07-22_
+- **v0.28.1** — Defect fixes: package encoding, trace event routing, count/doc drift · _2026-07-22_
+- **v0.28.0** — Run integrity: rich full-lane traces, deterministic wave stop, visible knowledge gates · _2026-07-21_
+- **v0.27.0** — `/orc-poly`: plan one change across two-or-more repos without drift · _2026-07-20_
+- **v0.26.0** — Test-gen output pinned to a visible `test-generator/<change-slug>/` deliverable · _2026-07-19_
+- **v0.25.1** — Eval report: the full 17-lane suite graded against the v0.25.0 payload · _2026-07-18_
+- **v0.25.0** — Deterministic artifact detection: a generated wiki/pattern is never missed · _2026-07-18_
+- **v0.24.0** — Crosslink fused into wiki generation: always-on, per-scan-task, never wiped · _2026-07-18_
+- **v0.23.0** — Trace fix: SPAWN restored on the `Agent` tool, stale runs rotate to fresh files · _2026-07-18_
+- **v0.22.0** — `/orc-learn`: per-feature onboarding docs — learning.md + knowledge.md, wiki-deep, git-ignored · _2026-07-17_
+- **v0.21.0** — Statusline shows live subscription usage: 5h ↔ weekly, official numbers · _2026-07-16_
+- **v0.20.0** — One source of truth: generated executor agents + shared cross-lane contracts · _2026-07-16_
+- **v0.19.0** — Thin spines: skill compaction, budget lint, and a trace that logs every phase · _2026-07-16_
+- **v0.18.0** — `orc wiki sync`: the wiki registers itself — a paused scan is no longer an invisible wiki · _2026-07-15_
+- **v0.17.3** — Trace the wiki consult: Phase 1 now logs whether the run grounded in the wiki (and if it was stale) · _2026-07-14_
+- **v0.17.2** — Behavior-trace logging is permanent + the trace folder is now created deterministically · _2026-07-14_
+- **v0.17.1** — Complete cross-repo crosslink setup guide in the orc-wiki README · _2026-07-14_
+- **v0.17.0** — `orc crosslink`: cross-repo wiki references — advisory boundary contracts · _2026-07-14_
+- **v0.16.1** — Interactive `orc diy` composer + numbered picks in `orc config` · _2026-07-14_
+- **v0.16.0** — `/orc-diy`: build your own lane — CLI-composed flow, compiled, hard-gated · _2026-07-14_
+- **v0.15.0** — Wiki v2: evidence-anchored docs · per-file staleness registry · integrity gate · _2026-07-14_
+- **v0.14.0** — Postgres data-access playbook: cross-cutting query grounding · _2026-07-13_
+- **v0.13.0** — `/orc-claude`: local CLAUDE.md builder — fenced sections, fingerprint refresh, zero questions · _2026-07-12_
+- **v0.12.0** — Lossless context-combiner: conservation gate · overlap taxonomy · evidence freshness · _2026-07-12_
+- **v0.11.0** — `/orc-fast`: knowledge-gated speed lane + wiki freshness infrastructure · _2026-07-12_
+- **v0.10.1** — README: a fuller "Why ORC exists" · _2026-07-12_
+- **v0.10.0** — `/orc-ultra`: max-effort advisor + three judgment gates for ultra-complex work · _2026-07-12_
+- **v0.9.0** — Trust-but-verify the analyst→planner chain: quote-anchored evidence · coverage gate · anchored judgment · _2026-07-12_
+- **v0.8.1** — /orc-retro delivers upstream: PR/issue to the ORC repo, channel-gated · _2026-07-12_
+- **v0.8.0** — Close the loop: grounded intake · scoring anchors · OUTCOME marker · /orc-retro trace miner · eval harness · _2026-07-12_
+- **v0.7.0** — Evidence everywhere: grounded plans · verbatim proof · anchored findings · contract lint · trace fixes · _2026-07-12_
+- **v0.6.0** — P0–P3 ladder · house rules · deep playbooks + wired gates · 3 new languages · FE rule packs · security pass · _2026-07-11_
+- **v0.5.1** — Statusline false-degrade fix · _2026-07-11_
+- v0.5.0 — Code-pattern findings: executors match your house style, invariants always enforced
+- v0.4.5 — Rewrite weak worker descriptions (the real score lever)
+- v0.4.4 — Act on external review: raise sub-70 workers, fix cross-spine paths
+- v0.4.3 — `orc-analyze`: trim description under the 1024-char skill-spec limit
+- v0.4.2 — External-review pass: worked examples + sharper mini-analyst activation
+- v0.4.1 — `orc-mini`: faster, safer fast-lane — smoke gate, opt-in tests, trimmed ceremony
+- v0.4.0 — Opt-in Phase 6.5 Test Authoring (writes test cases, never runs them)
+- v0.3.0 — Opt-in behavior-trace logging + claimed-vs-actual model verification
+- v0.2.4 — `orc-analyze`: gather anchored adjacent-scope context (non-actionable)
+- v0.2.3 — Context Combiner: merge 2+ related analyses into one combined spec
+- v0.2.2 — Config: enforce per-key override-first resolution
+- v0.2.1 — Move config editing into the `orc config` CLI (zero-token); drop `/orc-config`
+- v0.2.0 — Doc-optional evidence-backed analyst + deep mode
+
+</details>
 
 ## Requirements
 

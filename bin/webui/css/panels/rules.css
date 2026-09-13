@@ -1,0 +1,145 @@
+/* panels/rules.css — the anti-slop rule surface.
+   Classes are namespaced `orule-` rather than `rule-`: the Docs panel already
+   owns `.rule-editor` / `.rule-path` / `.rule-boundary` for its own house-rule
+   card, and two panels sharing a class name is a coupling nothing declares. */
+
+/* ── the precedence ladder ────────────────────────────────────────────────── */
+/* First card on the page, always open. Precedence is the one thing people get
+   wrong about this surface, so it is never behind a toggle. */
+.orule-ladder {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin: var(--sp-2) 0;
+}
+.orule-ladder-row {
+  display: flex;
+  gap: var(--sp-2);
+  align-items: flex-start;
+  padding: var(--sp-2);
+  border: 1px solid var(--line-soft);
+  border-radius: 6px;
+  background: var(--bg-soft, transparent);
+}
+.orule-rank {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.orule-ladder-body { flex: 1 1 auto; min-width: 0; }
+.orule-layer { font-weight: 600; }
+.orule-where { word-break: break-all; }
+.orule-house-note {
+  border-left: 2px solid var(--accent);
+  padding-left: var(--sp-2);
+  margin: var(--sp-2) 0;
+}
+.orule-overrides {
+  margin-top: var(--sp-3);
+  border-top: 1px solid var(--line-soft);
+  padding-top: var(--sp-2);
+}
+.orule-override-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1) var(--sp-2);
+  align-items: baseline;
+  padding: 3px 0;
+}
+.orule-boundary {
+  margin-top: var(--sp-3);
+  border-top: 1px solid var(--line-soft);
+  padding-top: var(--sp-2);
+}
+
+/* ── the project's own ledger ─────────────────────────────────────────────── */
+.orule-editor {
+  width: 100%;
+  box-sizing: border-box;
+  margin: var(--sp-2) 0 var(--sp-1);
+  padding: var(--sp-2);
+  font: 12px/1.6 var(--mono);
+  color: var(--fg);
+  background: var(--bg-code, var(--bg-soft));
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  resize: vertical;
+  tab-size: 2;
+}
+.orule-editor::-webkit-scrollbar { width: 9px; }
+.orule-editor::-webkit-scrollbar-track { background: transparent; }
+.orule-editor::-webkit-scrollbar-thumb { background: var(--line); border-radius: 4px; }
+.orule-editor:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.orule-path { word-break: break-all; font-family: var(--mono); }
+
+/* ── the shipped packs ────────────────────────────────────────────────────── */
+.orule-filters { margin: var(--sp-2) 0; gap: var(--sp-2); }
+.orule-search { flex: 1 1 220px; min-width: 0; }
+.orule-tier { flex: 0 0 auto; }
+.orule-list { display: flex; flex-direction: column; gap: var(--sp-3); }
+.orule-group { border-bottom: 1px solid var(--line-soft); }
+.orule-group:last-child { border-bottom: 0; }
+.orule-group-head {
+  display: flex;
+  gap: var(--sp-2);
+  align-items: baseline;
+  font-weight: 600;
+  padding: var(--sp-2) 0;
+  cursor: pointer;
+  list-style: none;
+}
+.orule-group-head::-webkit-details-marker { display: none; }
+/* The marker is drawn rather than inherited, so it points the same way in every
+   browser and stays legible at the small size the rail is set in. */
+.orule-group-head::before {
+  content: "\25B8";
+  display: inline-block;
+  width: 10px;
+  color: var(--fg-dim, var(--line));
+  transition: transform 120ms ease;
+}
+.orule-group[open] > .orule-group-head::before { transform: rotate(90deg); }
+.orule-group-head:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.orule-row {
+  padding: var(--sp-2) 0;
+  border-bottom: 1px solid var(--line-soft);
+}
+.orule-row:last-child { border-bottom: 0; }
+/* A rule the project replaced is SHOWN, dimmed and labelled. Hiding it would
+   make an override invisible in the one place it is explained. */
+.orule-row-off { opacity: 0.55; }
+.orule-row-off .orule-title { text-decoration: line-through; }
+.orule-title { font-weight: 600; }
+.orule-body { white-space: pre-wrap; margin-top: 4px; }
+
+/* ── credits ──────────────────────────────────────────────────────────────── */
+.orule-credit {
+  padding: var(--sp-2) 0;
+  border-bottom: 1px solid var(--line-soft);
+}
+.orule-credit:last-child { border-bottom: 0; }
+.orule-credit-who { font-weight: 600; }
+.orule-credit-link { display: block; word-break: break-all; }
+
+/* ── the lint ─────────────────────────────────────────────────────────────── */
+.orule-lint-path { flex: 1 1 240px; min-width: 0; }
+.orule-lint-out { margin-top: var(--sp-2); display: flex; flex-direction: column; gap: var(--sp-1); }
+.orule-lint-file { margin-top: var(--sp-2); font-weight: 600; word-break: break-all; }
+.orule-lint-row { padding-left: var(--sp-3); }
+/* The coverage line is the point of the card, not a footnote. */
+.orule-lint-coverage {
+  margin-top: var(--sp-3);
+  border-top: 1px solid var(--line-soft);
+  padding-top: var(--sp-2);
+}
+
+@media (max-width: 720px) {
+  .orule-ladder-row { flex-direction: column; }
+  .orule-filters { flex-direction: column; align-items: stretch; }
+}

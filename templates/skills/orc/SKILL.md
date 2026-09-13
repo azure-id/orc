@@ -111,6 +111,13 @@ the CLI is unavailable and fall back to `../_shared/config-precedence.md`'s
 documented defaults, out loud. Priorities and families:
 `../_shared/config-precedence.md`.
 
+## Rules — the anti-slop card (`../_shared/phases/rules.md`)
+
+`orc rules slice --lane orc --json` is the ONLY assembler; never build
+the card here. It rides under the house rules and above the task —
+**house rules > your project's rules > ORC's own packs** — and its `line` prints
+VERBATIM at preflight. Returns gain `rules_applied[]`, `rules_conflicts[]` (a gap,
+never a silent choice) and `rules_overridden[]`.
 ## Calls
 
 **ONE catalogue, and it is not you:** `orc lane calls orc --json` names every

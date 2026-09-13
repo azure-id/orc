@@ -1678,6 +1678,9 @@ const CONTRACTS = [
       "skills/orc-wiki/SKILL.md",
       "skills/orc-wiki/references/phases/phase-2.md",
       "skills/orc-wiki/references/integrity-check.md",
+      // v1.7.0 — the A0–A7 add flow names the fields a scan must write over a
+      // reserved stub, so it carries the contract like any other copy.
+      "skills/orc-wiki/references/partial-refresh.md",
       "skills/orc-wiki/references/staleness.md",
       "skills/orc-wiki/schemas/wiki-doc.md",
         ],
@@ -3503,7 +3506,12 @@ const BUDGETS = [
   // 4 of 31 lanes. The shrinking in this release happens by moving prose to
   // `_shared/phases/` (W11–W13) or to a lane's own `references/phases/`, which
   // is what orc-wiki did this wave: 352 → 172.
-  { file: "skills/orc-mini/SKILL.md", maxLines: 253 },
+  // v1.7.0: deliberate raise 253->260 — the `## Rules` pointer. The anti-slop
+  // card governs EVERY slice this spine builds, and a discipline named only in
+  // a reference the slice-builder never loads is not applied (the hard-rule-13
+  // precedent). Six lines: the assembler, the precedence order, the preflight
+  // line and the three return fields. Everything else is _shared/phases/rules.md.
+  { file: "skills/orc-mini/SKILL.md", maxLines: 260 },
   // v0.39.0: deliberate raises 195→201 / 179→182 — the analyst gains hard rules
   // 2b (a source it did not author is FOREIGN input) and 4a (the read ladder);
   // fast gains the ladder as a slice line. Both are hard rules by nature: they
@@ -3533,7 +3541,12 @@ const BUDGETS = [
   // 4 of 31 lanes. The shrinking in this release happens by moving prose to
   // `_shared/phases/` (W11–W13) or to a lane's own `references/phases/`, which
   // is what orc-wiki did this wave: 352 → 172.
-  { file: "skills/orc-analyze/SKILL.md", maxLines: 255 },
+  // v1.7.0: deliberate raise 255->260 — the `## Rules` pointer. The anti-slop
+  // card governs EVERY slice this spine builds, and a discipline named only in
+  // a reference the slice-builder never loads is not applied (the hard-rule-13
+  // precedent). Six lines: the assembler, the precedence order, the preflight
+  // line and the three return fields. Everything else is _shared/phases/rules.md.
+  { file: "skills/orc-analyze/SKILL.md", maxLines: 260 },
   // v0.40.0: deliberate raise 182→187 — gotchas as an explicit NON-gate. It has
   // to be stated where the two prerequisites are stated, or a later reader adds
   // a third gate and breaks the lane's entire premise.
@@ -3553,7 +3566,12 @@ const BUDGETS = [
   // 4 of 31 lanes. The shrinking in this release happens by moving prose to
   // `_shared/phases/` (W11–W13) or to a lane's own `references/phases/`, which
   // is what orc-wiki did this wave: 352 → 172.
-  { file: "skills/orc-fast/SKILL.md", maxLines: 225 },
+  // v1.7.0: deliberate raise 225->230 — the `## Rules` pointer. The anti-slop
+  // card governs EVERY slice this spine builds, and a discipline named only in
+  // a reference the slice-builder never loads is not applied (the hard-rule-13
+  // precedent). Six lines: the assembler, the precedence order, the preflight
+  // line and the three return fields. Everything else is _shared/phases/rules.md.
+  { file: "skills/orc-fast/SKILL.md", maxLines: 230 },
 ];
 
 function walk(dir, out) {

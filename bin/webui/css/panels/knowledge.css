@@ -84,3 +84,33 @@
 /* --- preview-then-apply --------------------------------------------------- */
 .kn-prune { margin-top: var(--sp-3); display: grid; gap: var(--sp-2); }
 .kn-prune-head { font-weight: 600; font-size: 13px; }
+
+/* ── one doc at a time (v1.7.0) ───────────────────────────────────────────── */
+/* The resolver and the derived-reference sweep. Both are probes, so the card is
+   read-shaped: a row of results, and a command where a lane would have to run. */
+.kn-one-topic { flex: 1 1 260px; min-width: 0; }
+.kn-one-out { margin-top: var(--sp-2); display: flex; flex-direction: column; gap: 4px; }
+.kn-one-cand {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1) var(--sp-2);
+  align-items: baseline;
+  padding-left: var(--sp-2);
+}
+.kn-one-sweep {
+  margin-top: var(--sp-3);
+  border-top: 1px solid var(--line-soft);
+  padding-top: var(--sp-2);
+}
+.kn-one-ref {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1) var(--sp-2);
+  align-items: baseline;
+  padding: 3px 0;
+}
+.kn-one-fix { padding-left: var(--sp-4); }
+
+@media (max-width: 720px) {
+  .kn-one-ref, .kn-one-cand { flex-direction: column; align-items: flex-start; gap: 2px; }
+}

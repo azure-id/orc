@@ -348,9 +348,12 @@ test("lane phases: the exit-code contract — 0 answered, 2 unknown lane, alias,
     const alias = cli(["lane", "phases", "ultra", "--dir", root]);
     assert.strictEqual(alias.status, 2);
     assert.match(alias.stderr, /entry point, not a lane/);
-    // A lane that runs NO shared phase still ANSWERS. /orc-retro mines traces
-    // and writes none (its hard rule 4), so it is in no trace row on purpose.
-    const none = cli(["lane", "phases", "orc-retro", "--dir", root]);
+    // A lane that runs NO shared phase still ANSWERS. `orc-judge` is dispatched
+    // at the three ultra gates and has no command, no trace and no shared phase
+    // of its own. (This was /orc-retro until v1.7.0, when the `rules` phase gave
+    // every lane that WRITES anything a shared row — a retro report is prose,
+    // so it gained one.)
+    const none = cli(["lane", "phases", "orc-judge", "--dir", root]);
     assert.strictEqual(none.status, 0);
     assert.match(none.stdout, /No shared phase/);
     assert.match(none.stdout, /owns no trace/);
