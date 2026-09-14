@@ -58,6 +58,11 @@ Nothing goes above 1. Nothing goes between 2 and 3. The assembler emits 2 and 3
 as one block in that order, so the lane's job is to place that block directly
 under the house card and before the task.
 
+**The slice field is `rules_card`, and it is the `text` field — not the `line`.**
+Run the command at DISPATCH, not only at preflight. The `line` tells the user
+which rules are in force; the `text` is what the agent reads. A lane that prints
+the line and injects only the house card has reported rules that no agent got.
+
 ## Precedence, and the one sentence that gets it wrong
 
 ```

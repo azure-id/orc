@@ -59,6 +59,13 @@ subagent; the orchestrator never runs this itself.
 - house_rules             — the standing behavioral card (injected literally,
                             never a pointer): surgical changes, simplicity-first,
                             no unrequested scope, boring-solution preference
+- rules_card              — the anti-slop card from `orc rules slice`, injected
+                            literally directly under `house_rules`: the project's
+                            rules, then ORC's. A project rule beats an ORC rule;
+                            `house_rules` beat both on code and behaviour only.
+                            Carried → return `rules_applied[]`,
+                            `rules_conflicts[]`, `rules_overridden[]`
+                            (`../../../_shared/return-validation.md` §5c)
 - log_digest              — compacted decisions from prior waves; absorb before working
 - worktree_path           — null unless worktrees mode
 - model, effort           — informational (already applied by the caller)
@@ -74,7 +81,8 @@ subagent; the orchestrator never runs this itself.
    a FULL read before you edit it (an `old_string` rebuilt from an outline is a
    corruption bug), and build/test output is always read whole.
 3. Perform the task within `worktree_path` (or the current tree if null).
-   Obey every `house_rules` line. Follow every constraint. If `pattern` is present, MATCH its conventions,
+   Obey every `house_rules` line, then every `rules_card` rule (two rules that
+   disagree go in `rules_conflicts[]`, never a silent choice). Follow every constraint. If `pattern` is present, MATCH its conventions,
    satisfy every BLOCKING invariant, and satisfy every enforceable
    `validation_gate[]` line (re-read your diff to confirm before returning;
    advisory gate lines are informational — never add tooling to meet one);

@@ -7,14 +7,14 @@
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
 ![npm](https://img.shields.io/npm/v/%40azure-id%2Forc?style=for-the-badge&color=cb3837&logo=npm)
-![Version](https://img.shields.io/badge/version-1.7.0-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-1.7.1-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
 ![Dependencies](https://img.shields.io/badge/dependencies-zero-lightgrey.svg?style=for-the-badge)
 ![GitHub stars](https://img.shields.io/github/stars/azure-id/orc?style=for-the-badge&color=yellow)
 
-**Latest: v1.7.0** · updated 2026-09-13 · [full changelog](CHANGELOG.md)
+**Latest: v1.7.1** · updated 2026-09-14 · [full changelog](CHANGELOG.md)
 
 **On npm: [`@azure-id/orc`](https://www.npmjs.com/package/@azure-id/orc)** — `npm i -g @azure-id/orc`
 
@@ -630,108 +630,36 @@ a current audit: [EVAL-REPORT.md](EVAL-REPORT.md).
 **Full history: [CHANGELOG.md](CHANGELOG.md)** — or `orc changelog`, which prints
 only what is newer than the version you have.
 
-### v1.7.0 - the rules that keep the slop out _(2026-09-13)_
+### v1.7.1 - the rules card now reaches the agent _(2026-09-14)_
 
-ORC writes a lot of prose and a lot of code, and both came out carrying the same
-recognisable defaults: sentences that say nothing in a confident shape, and code
-that is longer, more defensive and more abstract than the task asked for. There
-was one standing card against it - the seven-line house rules - and it is about
-CODE. Nothing said anything about the words.
+In v1.7.0, subagents and the preflight showed the house rules only. Your project
+rules and the ORC rules did not reach the agent.
 
-**`orc rules` is a second rule surface, and it has two halves that never mix.**
+**The cause.** `orc rules slice` built the card correctly, but each place that
+builds an executor slice named only the `house_rules` card. `/orc` Phase 3 also
+did not load `rules.md`, and the `/orc` preflight had no `rules:` row.
 
-- **ORC rules** - 65 rules in four packs, shipped, tagged, **read-only**. They
-  change with `orc update` and with nothing else. `orc rules set --pack ...` is
-  refused BY NAME, with the command that replaces it.
-- **Your rules** - `.claude/orc/rules.md`. Plain text, three headings, as much
-  under each as you want. **They beat an ORC rule outright.**
+**The fix.**
 
-The packs: **`OSW` writing (23)**, **`OSC` code (22)**, **`OSD` delivery (10)** -
-what an agent reports about its OWN work - and **`OSU` UI (10)**, which rides per
-TASK rather than per lane, because a UI rule in a backend slice is tokens paid on
-every spawn for a rule that cannot apply.
+- **A new slice field, `rules_card`** - the `text` of
+  `orc rules slice --lane <lane> --json`, put in verbatim directly under
+  `house_rules` in `/orc`, `/orc-mini`, `/orc-fast`, `/orc-quick` and the
+  Extra foreign dispatch.
+- **The executors read it** and return `rules_applied[]`, `rules_conflicts[]`
+  and `rules_overridden[]`.
+- **The `/orc` preflight prints `rules:`** - the CLI `line`, verbatim.
+- **Guards** - `rules_card` is a registered contract token, and a test checks
+  every dispatch site.
 
-Three tiers, taken from `anti-slop`: **HARD** absolute, **PURPOSE** allowed with
-a written one-line reason, **LOCK** a consistency check. The purpose gate is the
-mechanism that matters - a ban list alone leaves a void, and a model fills a void
-with its most generic output.
-
-**Credit is a shipped artifact here, not a line in a commit message.** Every pack
-opens with its sources; `orc rules credits` prints author, handle, repository,
-licence, and what ORC took from each. Adapted from
-[`petergyang/no-ai-slop`](https://github.com/petergyang/no-ai-slop) (MIT),
-[`miqdadbadjuber/anti-slop`](https://github.com/miqdadbadjuber/anti-slop) (MIT),
-[`ehmo/slopkit`](https://github.com/ehmo/slopkit),
-[`BioInfo/slopless`](https://github.com/BioInfo/slopless), Andrej Karpathy's
-`CLAUDE.md`, Matty Cartwright's Anti-Slop Writing Rules, and three papers on LLM
-code smells.
-
-**Precedence: house rules > your rules > ORC rules.** The house card is CODE and
-BEHAVIOUR only - it says nothing about the words an agent writes, so it never
-overrules a writing rule. A project rule beats an ORC rule OUTRIGHT: the rule is
-removed from the slice and the removal is stated inside it.
-
-**An override is counted the only honest way.** The CLI counts ORC rule ids you
-NAMED, and says that is what it counted. A conflict you did not name is found by
-the agent at dispatch and comes back as `rules_conflicts[]` - a gap, never a
-silent choice. The CLI cannot parse intent, so it does not pretend to: the same
-decision `orc doc rules` made about its structural boundary, for the same reason.
-
-**`orc rules lint` is free, deterministic, and small on purpose.** It checks 13
-of the 65 - banned lexicon and phrases, em dash DENSITY (a dose rule, measured
-per file, because ORC's own docs use them), emoji headings, six comment shapes,
-artifact filenames, `outline: none`, UI buzzwords - and it prints, in every mode
-including `--json`: `not checked here: 52 rules. They need a reader, not a
-matcher.` A clean exit that stands in for a review nobody did is the failure that
-line prevents. It skips the rule packs themselves (a rule that bans a word has to
-print that word to define it) and anything marked `orc-rules-ignore`, and counts
-both rather than staying quiet.
-
-**Findings are advisory. There is no gate.** A style preference that fails a
-build gets switched off within a week, and then nothing is enforced at all.
-
-The card rides in every slice of **28 lanes** - every one that writes words or
-code. **`/orc-doc` is excluded by design**; it has `orc doc rules`. One assembler
-(`orc rules slice`), because a card built in twenty-eight spines is
-twenty-eight ideas of the precedence order, and because it is the only place the
-per-spawn token weight can be measured. Measured: **~3 600 tokens** per
-build-lane slice, ~2 200 for a prose lane.
-
-**`orc ui` gains a Rules panel** - the ladder, your textarea, the 65 read-only
-rows behind a filter, the credit table, and the lint.
-
----
-
-**`orc wiki`, one doc at a time.** Targeted refresh has existed since v0.33.0 and
-is not rebuilt. What was missing is the other half: **adding one topic** to a
-wiki that already exists. Until now a new coverage area only appeared as a
-by-product of the coverage-gap sweep during a delta refresh, so "add the
-remittance feature" had no path that did not re-plan every area in the repo.
-
-- **`/orc-wiki update <doc-or-topic>`** - the targeted refresh, under the name
-  people actually type. A topic resolves to a doc first.
-- **`/orc-wiki add "<topic>"`** - A0-A7: resolve, scope, confirm, reserve, scan,
-  write, sweep, check. Nothing spawns before the one confirmation turn.
-- **`orc wiki resolve <topic>`** - free, no scan. A MATCH must beat the runner-up
-  by half again plus one; anything closer is **AMBIGUOUS and becomes a question**,
-  because two docs a point apart is exactly where guessing costs a scan of the
-  wrong area.
-- **`orc wiki add <slug> --covers ...`** - reserves a stub carrying
-  `status: reserved` and a body that says nothing in it is evidence. A doc that
-  lies is worse than a doc that is missing.
-- **`orc wiki refs [--check]`** - the DERIVED-REFERENCE sweep. After one doc
-  changes, six surfaces are behind it: the registration, reserved rows, the
-  orientation page, the architecture overview, the CLAUDE.md pointer's doc COUNT,
-  and any crosslink tag anchored to a file that is gone. It **repairs only the
-  registration**, because `orc wiki sync` is free and already the single writer.
-  Everything else is reported with its command - a sweep that silently
-  regenerated prose would be spending money nobody asked it to spend.
-
-The Knowledge panel gains a **One doc at a time** card for both halves.
+**How to check it.** Run `orc rules slice --lane orc --json`. When
+`.claude/orc/rules.md` has rules, `line` shows `yours N lines` and `text`
+starts with `YOUR PROJECT'S RULES`. Run `orc update` in your project to get the
+fixed skills.
 
 <details>
-<summary><strong>Earlier releases</strong> — 114 of them, titles only. Full text in <a href="CHANGELOG.md">CHANGELOG.md</a>.</summary>
+<summary><strong>Earlier releases</strong> — 115 of them, titles only. Full text in <a href="CHANGELOG.md">CHANGELOG.md</a>.</summary>
 
+- **v1.7.0** — the rules that keep the slop out · _2026-09-13_
 - **v1.6.0** — the rule that can finally say no · _2026-09-07_
 - **v1.5.0** — the lane that runs the test · _2026-09-07_
 - **v1.4.2** — the panel that stops reloading, and the fields you could not read back · _2026-09-05_

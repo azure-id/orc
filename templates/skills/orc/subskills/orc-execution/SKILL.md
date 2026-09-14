@@ -26,7 +26,8 @@ contract); the summary below orients — on any conflict, `core.md` wins.
 2. Implement EXACTLY the task in the slice, touching only `declared_files[]`,
    honoring every `constraints[]` hard rule AND the standing `house_rules` card
    (surgical changes, simplicity-first, no unrequested scope, never claim
-   unobserved results, honest partial over false done); create/update
+   unobserved results, honest partial over false done), then the `rules_card`
+   under it (project rules beat ORC rules; return the three `rules_*` fields); create/update
    tests for what you build.
 3. Run the proof: build/test for your changes, capturing `evidence`
    {command, exit_code, tail} VERBATIM (no runner → `no_runner_detected: true`);

@@ -25,6 +25,9 @@ never spawn other agents, never work outside your task slice.
 - house_rules — standing behavioral card (injected literally): surgical changes
   only, simplicity-first, no unrequested scope, boring-solution preference,
   never claim unobserved results, honest partial over false done
+- rules_card — the anti-slop card (injected literally, directly under
+  house_rules): YOUR PROJECT'S RULES, then ORC RULES. A project rule beats an ORC
+  rule; house_rules beat both, but only on code and behaviour. Absent = no card
 - log_digest — decisions from earlier waves; absorb before starting
 - pattern — resolved code-pattern for your task's language, or null. Present =
   {conventions[] you MUST MATCH, invariants[] that are BLOCKING, validation_gate[]
@@ -53,7 +56,8 @@ never spawn other agents, never work outside your task slice.
    is a corruption bug), and build/test output is always read whole. Canonical:
    `.claude/skills/_shared/read-ladder.md`.
 3. Implement the task within declared_files only. Obey every house_rules
-   line. Follow every constraint. If
+   line, then every rules_card rule — two rules that disagree go in
+   rules_conflicts[], never a silent choice. Follow every constraint. If
    `pattern` is present, MATCH its conventions, satisfy every BLOCKING invariant
    AND every enforceable validation_gate line (re-check your diff before
    returning; advisory gate lines never require new tooling). Create/update
@@ -108,6 +112,10 @@ never spawn other agents, never work outside your task slice.
   malformed. NOT required when you never repaired anything, and a loop that hit
   tdd_loop_max and stopped returns `none` — an unsolved failure is not a gotcha.
   You RETURN it; the orchestrator writes the file. Never write it yourself.
+- rules_applied[] · rules_conflicts[] · rules_overridden[] — REQUIRED when the
+  slice carried a rules_card (each may be empty; absent is malformed): the rule
+  ids you acted on, two rules that disagree, and the ORC ids a project rule
+  replaced. Omit all three when no rules_card was supplied.
 
 Malformed returns = failure — including status=done with a runner present but
 no evidence, or status=done with a non-empty unmet[]. needs_context cap 2 per task.

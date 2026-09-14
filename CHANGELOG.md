@@ -10,6 +10,48 @@ Format: `### v<version> — <title> _(<date>)_`.
 
 ---
 
+### v1.7.1 - the rules card now reaches the agent _(2026-09-14)_
+
+**Still on the unscoped `orc` package?** Do this once first - your `orc upgrade`
+is the pre-v0.56.0 one and cannot install itself. Full detail in the CAUTION at
+the top of this file.
+
+- **Step 1 - release the command from the old package:** `npm uninstall -g orc`
+- **Step 2 - install the current package:** `npm i -g @azure-id/orc`
+- **Step 3 - re-apply it to your project:** `orc update`
+
+**Do not use `npm i -g -f`.** Full detail in v0.56.0 below.
+
+In v1.7.0, subagents and the preflight showed the house rules only. Your project
+rules and the ORC rules did not reach the agent.
+
+**The cause.** `orc rules slice` built the card correctly. But each place that
+builds an executor slice named only the `house_rules` card: the `/orc` Phase 3
+dispatch step, `/orc-mini`, `/orc-fast`, `/orc-quick`, the Extra foreign
+dispatch, and the executor contract. `/orc` Phase 3 also did not load
+`rules.md`, and the `/orc` preflight template had no `rules:` row.
+
+**The fix.**
+
+- **A new slice field, `rules_card`.** It is the `text` of
+  `orc rules slice --lane <lane> --json`, put in verbatim directly under
+  `house_rules`. A front-end task adds `--pack ui`.
+- **The executors read it.** They obey it after the house rules, and return
+  `rules_applied[]`, `rules_conflicts[]` and `rules_overridden[]`.
+- **The `/orc` preflight prints `rules:`** - the CLI `line`, verbatim.
+- **`rules.md` now says it clearly:** the `line` is the report, the `text` is
+  the card. Printing the line is not the same as sending the card.
+- **Guards.** `rules_card` is a registered contract token, and a new test
+  checks that every dispatch site carries both cards.
+
+**How to check it.** Run `orc rules slice --lane orc --json`. When
+`.claude/orc/rules.md` has rules, `line` shows `yours N lines` and `text` starts
+with `YOUR PROJECT'S RULES`. In a run, look for the `rules:` preflight row and
+the three `rules_*` fields in each executor return. Run `orc update` in your
+project to get the fixed skills.
+
+---
+
 ### v1.7.0 - the rules that keep the slop out _(2026-09-13)_
 
 **Still on the unscoped `orc` package?** Do this once first - your `orc upgrade`

@@ -121,8 +121,8 @@ pinned in the agent file). **Under `opus5_only` it is `orc-executor-opus-5-low`*
 - **the read ladder** (`../_shared/read-ladder.md`): read only as far up as the
   question needs — a file the task will EDIT is read in full first. Precomputed
   knowledge REPLACING exploration is this lane; a directory sweep is not.
-- the standing `house_rules` card (`../_shared/phases/house-rules.md`,
-  injected literally, same as full/mini)
+- the standing `house_rules` card (`../_shared/phases/house-rules.md`, literal,
+  same as full/mini) + the `rules_card` under it (`orc rules slice` → `text`, verbatim)
 - constraints from the intent spec
 - **terse-return rule:** standard contract fields, NO narrative prose — files
   changed, one-line diff summary, smoke-relevant notes only.

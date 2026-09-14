@@ -42,7 +42,9 @@ the codifier); hold resolved patterns in run state.
    `TDD-RED`/`TDD-GREEN` per iteration; cap hit → STOP SEQUENCE + honest red
    report) and the `house_rules` card lines
    (`house-rules.md`, injected LITERALLY — read once per run, never
-   a pointer); FE/BE and `db:postgres` tasks get the resolved `pattern`
+   a pointer) with the `rules_card` directly under it — the `text` of
+   `orc rules slice --lane <lane> --json`, VERBATIM, `--pack ui` added for a
+   front-end task (`rules.md`; the preflight `line` alone is NOT the card); FE/BE and `db:postgres` tasks get the resolved `pattern`
    injected literally (pattern-gate.md), and — with `gotchas: on` — the
    SCOPE-MATCHING gotchas beside it (glob vs this task's `declared_files`, cap 3,
    highest `hits` first; zero matches = NO block, never an empty one — NEVER

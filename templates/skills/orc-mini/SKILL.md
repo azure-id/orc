@@ -52,9 +52,9 @@ Phase 0  intake (Q1–Q4, soft sign-off) + run folder + intent-spec
 Phase 1  planning (dispatch orc-planner-mini; analyst first only on real docs)
          → one-line complexity read (mini-ok? or recommend switch-to-full)
 Phase 3  dispatch ONE executor (orc-executor-sonnet-5-high) — slice carries
-         the standing `house_rules` card (../_shared/phases/house-rules.md,
-         injected literally) + the cached `postgres` pattern on a data-access
-         task (cache HIT only) — collect + validate return
+         the standing `house_rules` card (../_shared/phases/house-rules.md, literal)
+         + the `rules_card` under it (`orc rules slice` → `text`, verbatim) + the
+         cached `postgres` pattern on a data-access task (cache HIT only) — collect + validate return
 Phase M  SMOKE GATE — run build+test → GREEN proceed · RED block ship + surface
 Phase X  MOCK EXAMPLE (config mock_example) — offer/build after a GREEN gate
 Phase T  TEST-AUTHORING ASK (opt-in) — offer to write test cases (never run them)

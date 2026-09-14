@@ -198,7 +198,7 @@ them; they are never dispatched as subagents).
 - Phase 1 wiki grounding → `../_shared/phases/wiki-consult.md` + `references/preflight-report.md`
 - Phase 2 → `references/effort-and-mode.md`; tagging → `references/pattern-gate.md`
 - Phase 3 → `../_shared/phases/wave-grouping.md` + `log-protocol.md` + `../_shared/phases/house-rules.md`
-  + `pattern-gate.md` (resolve gate); workers → `subskills/orc-execution/`;
+  + `../_shared/phases/rules.md` (the `rules_card` rides every slice) + `pattern-gate.md` (resolve gate); workers → `subskills/orc-execution/`;
   stops → `subskills/orc-checkpoint/SKILL.md` + `../_shared/phases/stop-resume.md`
 - Phase 5–6 → `subskills/orc-review-verify/`; FE tasks →
   `../orc-pattern/references/fe-a11y.md` + `fe-perf.md` (as `fe_rules[]`)

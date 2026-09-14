@@ -524,7 +524,7 @@ orc extra dispatch --task <slice.json> --json
 
 **The slice content is IDENTICAL to what a Claude executor would receive** — the
 task's `prompt`, `acceptance[]`, `tdd_spec` tests, the `house_rules` card, the
-resolved pattern, the scope-matched gotchas, `declared_files`, `grounding[]`.
+`rules_card`, the resolved pattern, the scope-matched gotchas, `declared_files`, `grounding[]`.
 Only the transport differs. That is the property that keeps every gate
 downstream engine-blind, and it is why a foreign task needs no second slice
 builder.

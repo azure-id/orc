@@ -21,6 +21,7 @@ pattern:   js cached · ts cached
 gotchas:   12 known · 3 match this change's files
 pact:      11 holding · 2 drifted · 3 uncheckable
 bound:     9 execute · 2 escalate · 1 refuse (2 stale)
+rules:     ORC 65 (W 23 · C 22 · D 10 · U 10) · yours 9 lines (P0 4 · P1 2 · P2 3) · 1 override
 after:     src/payments — 2 shipped files rewritten within 30 days of run store-credit
 crosslink: 2 boundaries (payments-api) — advisory
 extra:     ON — 4 of 9 tasks foreign · deepseek/deepseek-v4-flash via api [0,30)
@@ -60,6 +61,11 @@ waves:     3 planned — will pause after wave 2 (batch_pause_every=2)
   ACTIVE mode is named whenever a verdict is later printed (`boundary_gate: off`
   omits the line). Uncarded areas are `unknown`, never REFUSE. Canonical:
   `../../orc-boundary/references/gate.md`.
+- **rules:** ALWAYS printed — the `line` field from `orc rules slice --lane orc
+  --json`, VERBATIM, never recounted. `yours none` is an answer (the project has
+  no `.claude/orc/rules.md` rules yet), not a failure. Name each override under
+  it. This line is the REPORT; the card itself is the `text` field, injected as
+  `rules_card` into every slice (`../../_shared/phases/rules.md`).
 - **after:** printed **ONLY when the area this run is about to touch has a recent
   churn signal** (`orc aftermath status --json`, exit 1 or 2, intersected with the
   plan's `declared_files`). A clean run prints nothing at all — the whole value of

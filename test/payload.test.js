@@ -106,6 +106,26 @@ test("tdd_spec entries carry a disposition, and both branches of pre-implementat
   assert.match(proof, /regression-guard.*EXPECTED|EXPECTED.*regression-guard/s, "a regression guard passing blocks nothing");
 });
 
+// v1.7.1: the rules card was only a preflight LINE. Every dispatch site named
+// the house card and nothing else, so no agent ever received project or ORC rules.
+test("every executor dispatch site injects the rules_card beside house_rules", () => {
+  for (const f of [
+    "skills/_shared/phases/execution.md",
+    "skills/orc-mini/SKILL.md",
+    "skills/orc-fast/SKILL.md",
+    "skills/orc-quick/SKILL.md",
+    "skills/_shared/extra-dispatch.md",
+    "skills/orc/subskills/orc-execution/core.md",
+    "agents/orc-executor-sonnet-5-high.md",
+  ]) {
+    const t = read(f);
+    assert.ok(t.includes("house_rules"), `${f} still carries house_rules`);
+    assert.ok(t.includes("rules_card"), `${f} injects the rules_card`);
+  }
+  assert.match(read("skills/orc/SKILL.md"), /Phase 3 →[^\n]*\n[^\n]*phases\/rules\.md/, "orc Phase 3 loads rules.md");
+  assert.match(read("agents/orc-executor-sonnet-5-high.md"), /rules_applied\[\]/, "the executor returns the rules fields");
+});
+
 test("the Phase 1 exit gate bounces a tdd_spec / new-tests task collision", () => {
   const gates = read("skills/_shared/phases/analyst-gates.md");
   const exit = gates.slice(gates.indexOf("## Phase 1 exit gate"));
