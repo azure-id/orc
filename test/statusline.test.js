@@ -608,7 +608,10 @@ test("statusline: the graph component is a FLOOR — off, none, fresh, behind �
     git("commit", "-qm", "two");
     assert.match(render(), /\bbehind\b/, "HEAD moved past the commit the index was built at");
 
-    const src = fs.readFileSync(path.join(REPO, "templates", "hooks", "orc-statusline.js"), "utf8");
+    // LF, always — the slice below looks for `\n}\n`, a needle a CRLF checkout
+    // never contains. Without this, indexOf returns -1, the slice runs to the
+    // end of the file, and the guard fails on Windows for the wrong reason.
+    const src = fs.readFileSync(path.join(REPO, "templates", "hooks", "orc-statusline.js"), "utf8").replace(/\r\n/g, "\n");
     const at = src.indexOf("function gitHeadCommit");
     assert.ok(at > 0, "the HEAD reader exists");
     // `RegExp.prototype.exec` is not a subprocess, so the check names the three

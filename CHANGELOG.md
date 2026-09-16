@@ -10,6 +10,48 @@ Format: `### v<version> — <title> _(<date>)_`.
 
 ---
 
+### v1.8.1 — the guard that only failed on Windows _(2026-09-16)_
+
+**Still on the unscoped `orc` package?** Do this once first - your `orc upgrade`
+is the pre-v0.56.0 one and cannot install itself. Full detail in the CAUTION at
+the top of this file.
+
+- **Step 1 - release the command from the old package:** `npm uninstall -g orc`
+- **Step 2 - install the current package:** `npm i -g @azure-id/orc`
+- **Step 3 - re-apply it to your project:** `orc update`
+
+**Do not use `npm i -g -f`.** Full detail in v0.56.0 below.
+
+`npm publish` could not run on Windows. The `prepack` guard reported nine
+drifted executor agents, and `git status` reported no change at all.
+
+**The cause was a line ending, not content.** `.gitattributes` says
+`* text=auto`, so git stores `templates/agents/orc-executor-*.md` with LF and
+checks them out native. A Windows clone therefore holds CRLF. The generator
+read the template as it is on disk, but it injected the `effort:` frontmatter
+line with a hardcoded LF. Every variant that has an effort line came out one
+byte short of the file on disk. `orc-executor-haiku-4-5` is the one variant
+with no effort line, so it was the one that passed — which made the failure
+look like a content bug.
+
+- **`bin/build-agents.js` now takes its line ending from the template**, and
+  `--check` compares LF-normalized text. The guard gives the same result in a
+  CRLF worktree and an LF worktree.
+- **It no longer runs on `require`.** The module exports `VARIANTS`, `render`,
+  `lf` and `eolOf`, and runs the CLI only when it is the entry point.
+- **A test holds the rule.** `test/payload.test.js` renders every variant from
+  an LF template and a CRLF template, and asserts the content is the same and
+  each result keeps one line ending throughout.
+- **One test had the same fault.** `npm test` also runs on `prepack`, and the
+  statusline graph-component test sliced a hook's source to the next `\n}\n` —
+  a needle a CRLF checkout never contains. The slice ran to the end of the file
+  and the guard failed for the wrong reason. It now normalizes the source
+  first, the way `test/cli/upgrade.test.js` already did.
+
+No shipped payload changed. The generated agent files are byte-identical.
+
+---
+
 ### v1.8.0 - the code graph: a map of the code that stays fresh _(2026-09-16)_
 
 **Still on the unscoped `orc` package?** Do this once first - your `orc upgrade`

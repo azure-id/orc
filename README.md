@@ -7,14 +7,14 @@
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
 ![npm](https://img.shields.io/npm/v/%40azure-id%2Forc?style=for-the-badge&color=cb3837&logo=npm)
-![Version](https://img.shields.io/badge/version-1.8.0-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-1.8.1-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
 ![Dependencies](https://img.shields.io/badge/dependencies-zero-lightgrey.svg?style=for-the-badge)
 ![GitHub stars](https://img.shields.io/github/stars/azure-id/orc?style=for-the-badge&color=yellow)
 
-**Latest: v1.8.0** · updated 2026-09-16 · [full changelog](CHANGELOG.md)
+**Latest: v1.8.1** · updated 2026-09-16 · [full changelog](CHANGELOG.md)
 
 **On npm: [`@azure-id/orc`](https://www.npmjs.com/package/@azure-id/orc)** — `npm i -g @azure-id/orc`
 
@@ -683,66 +683,29 @@ a current audit: [EVAL-REPORT.md](EVAL-REPORT.md).
 **Full history: [CHANGELOG.md](CHANGELOG.md)** — or `orc changelog`, which prints
 only what is newer than the version you have.
 
-### v1.8.0 - the code graph: a map of the code that stays fresh _(2026-09-16)_
+### v1.8.1 - the guard that only failed on Windows _(2026-09-16)_
 
-ORC lanes spend most of their tokens on searching: Grep, read a file, Grep
-again. The next agent in the next wave searches for the same things again.
+`npm publish` could not run on Windows. The `prepack` guard reported nine
+drifted executor agents, and `git status` reported no change at all.
 
-**`orc graph` is a local map of how the code is connected.** It is off by
-default: `orc config set code_graph on`.
+**The cause was a line ending, not content.** `.gitattributes` says
+`* text=auto`, so git stores the generated executor agents with LF and checks
+them out native — a Windows clone holds CRLF. The generator read the template
+as it is on disk, but injected the `effort:` frontmatter line with a hardcoded
+LF. `bin/build-agents.js` now takes its line ending from the template, and
+`--check` compares LF-normalized text, so the guard gives the same result in
+either worktree. A test in `test/payload.test.js` holds the rule.
 
-- **Structure is free.** The CLI parses JavaScript, TypeScript, Python, Go, Java,
-  C# and PHP — no model. Python uses its own `ast` parser when Python 3.8+ is
-  installed.
-- **Updates are small.** Only files whose git hash changed are parsed again. On
-  django/django (3,040 source files) a first build takes 12 s and a one-file
-  update takes 2.7 s.
-- **`orc graph ctx | impact | path`** answer with a token budget and a state word
-  on every link. Route handlers are symbols, and a middleware passed by name is a
-  `used by` link. `--format tree` names each column once instead of on every row
-  — 17–21% fewer tokens on a file card, and it falls back to the normal shape
-  when a card is too small to pay for the header.
-- **A stored answer for the expensive half.** Working out who calls a symbol cost
-  437 ms on django/django, every time. It is now written once per update and read
-  back, which takes a file card from 727 ms to 458 ms and `impact` from 631 ms to
-  397 ms. The store is DERIVED: it is used only when it names the current index,
-  and deleting it costs speed and nothing else.
-- **Every answer carries a `generation`**, and every file carries what the parser
-  really saw — `full`, `partial` with the line ranges it could not finish, or
-  `skipped`. `orc graph coverage <files>` asks in one call. **No recorded gap is
-  not proof of completeness.**
-- **Three new read-only answers, all free:** `orc graph changes` (the symbols
-  THIS diff's hunks touched, each with its callers, its tests and a risk word
-  that carries its own reason), `orc graph cochange <file>` (what usually changes
-  WITH it, from git history — never a dependency), and `orc graph coverage`.
-- **Notes are optional** (`code_graph_notes: wave | end`). One Sonnet 4.6 agent
-  writes one sentence per changed function. A note is shown only while the
-  function body is unchanged.
-- **It stays fresh in three ways, and only one needs anyone to remember a step.**
-  A read repairs the files it is about to answer for. An installed hook updates
-  the map when a worker finishes, and hands a worker the anchors it would
-  otherwise search for. And every code lane still builds it at preflight and
-  updates it after each change. `/orc-quick` still reads only `log_dir` — the CLI
-  reads the settings. **Nothing runs on a timer and nothing runs in the
-  background.**
-- **Anything a worker receives from the graph is labelled repository data, never
-  an instruction.** Symbol names come out of your repository, so ORC treats them
-  as text. File contents are never injected — only names, paths and line ranges.
-- **Also:** eight config keys, two `orc doctor` findings, a code graph card in
-  `orc ui`, and a `graph` status line component.
+One test carried the same fault. `npm test` also runs on `prepack`, and the
+statusline graph-component test sliced a hook's source to the next `\n}\n` — a
+needle a CRLF checkout never contains. It now normalizes the source first.
 
-**Limits we know about.** TypeScript is read with pattern matching, not the
-TypeScript compiler. `x = new Service(); x.run()` shows as `AMBIGUOUS`. A caller
-that never names the symbol — an HTTP route test, a job runner — is not a link,
-so read a card as an anchor, not as a blast radius.
-**It is not a token optimisation, and that is measured.** Searches are 0.06% of
-what a session adds to its context; a perfect locator would save 0.1% of a run.
-The map costs no model tokens to build and the read timings above are real —
-turn it on for the cards, not for a saving.
+No shipped payload changed. The generated agent files are byte-identical.
 
 <details>
-<summary><strong>Earlier releases</strong> — 116 of them, titles only. Full text in <a href="CHANGELOG.md">CHANGELOG.md</a>.</summary>
+<summary><strong>Earlier releases</strong> — 117 of them, titles only. Full text in <a href="CHANGELOG.md">CHANGELOG.md</a>.</summary>
 
+- **v1.8.0** — the code graph: a map of the code that stays fresh · _2026-09-16_
 - **v1.7.1** — the rules card now reaches the agent · _2026-09-14_
 - **v1.7.0** — the rules that keep the slop out · _2026-09-13_
 - **v1.6.0** — the rule that can finally say no · _2026-09-07_

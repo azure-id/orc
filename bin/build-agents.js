@@ -49,9 +49,17 @@ const VARIANTS = [
   { name: "orc-executor-opus-4-7-med",   model: "claude-opus-4-7",  effort: "medium", band: "no default band — reachable via rubric_bands_override, orc diy fixed_executor, or extra_fallback_agent" },
 ];
 
+// Line endings are NOT content here: .gitattributes stores these files with LF
+// and checks them out native, so a Windows worktree is CRLF and a Linux one LF.
+// The injected frontmatter line therefore borrows the TEMPLATE's own ending, and
+// --check compares LF-normalized text — otherwise the guard fails on Windows for
+// a difference git itself does not record.
+const eolOf = (s) => (/\r\n/.test(s) ? "\r\n" : "\n");
+const lf = (s) => s.replace(/\r\n/g, "\n");
+
 function render(template, v) {
   const effortDesc = v.effort ? `, ${v.effort} effort` : " (no effort ladder)";
-  const effortFm = v.effort ? `effort: ${v.effort}\n` : "";
+  const effortFm = v.effort ? `effort: ${v.effort}${eolOf(template)}` : "";
   return template
     .replace(/\{\{NAME\}\}/g, v.name)
     .replace(/\{\{MODEL\}\}/g, v.model)
@@ -60,34 +68,42 @@ function render(template, v) {
     .replace(/\{\{BAND\}\}/g, v.band);
 }
 
-const checkMode = process.argv.includes("--check");
-const template = fs.readFileSync(TEMPLATE, "utf8");
-if (/\{\{(?!NAME|MODEL|EFFORT_DESC|EFFORT_FM|BAND)\w/.test(template)) {
-  console.error("❌ build-agents: unknown {{placeholder}} in executor.template.md");
-  process.exit(1);
-}
+function main() {
+  const checkMode = process.argv.includes("--check");
+  const template = fs.readFileSync(TEMPLATE, "utf8");
+  if (/\{\{(?!NAME|MODEL|EFFORT_DESC|EFFORT_FM|BAND)\w/.test(template)) {
+    console.error("❌ build-agents: unknown {{placeholder}} in executor.template.md");
+    process.exit(1);
+  }
 
-let drifted = 0;
-for (const v of VARIANTS) {
-  const out = render(template, v);
-  const dest = path.join(OUT_DIR, v.name + ".md");
-  if (checkMode) {
-    const current = fs.existsSync(dest) ? fs.readFileSync(dest, "utf8") : null;
-    if (current !== out) {
-      drifted++;
-      console.error(
-        `❌ generated agent drifted: templates/agents/${v.name}.md\n` +
-          `   Executor agents are GENERATED — edit agents-src/executor.template.md\n` +
-          `   (or bin/build-agents.js VARIANTS) and run: npm run build:agents`
-      );
+  let drifted = 0;
+  for (const v of VARIANTS) {
+    const out = render(template, v);
+    const dest = path.join(OUT_DIR, v.name + ".md");
+    if (checkMode) {
+      const current = fs.existsSync(dest) ? fs.readFileSync(dest, "utf8") : null;
+      if (current === null || lf(current) !== lf(out)) {
+        drifted++;
+        console.error(
+          `❌ generated agent drifted: templates/agents/${v.name}.md\n` +
+            `   Executor agents are GENERATED — edit agents-src/executor.template.md\n` +
+            `   (or bin/build-agents.js VARIANTS) and run: npm run build:agents`
+        );
+      }
+    } else {
+      fs.writeFileSync(dest, out);
+      console.log(`  gen  templates/agents/${v.name}.md`);
     }
-  } else {
-    fs.writeFileSync(dest, out);
-    console.log(`  gen  templates/agents/${v.name}.md`);
+  }
+
+  if (checkMode) {
+    if (drifted) process.exit(1);
+    console.log(`✅ ORC executor agents OK — ${VARIANTS.length} files match the template.`);
   }
 }
 
-if (checkMode) {
-  if (drifted) process.exit(1);
-  console.log(`✅ ORC executor agents OK — ${VARIANTS.length} files match the template.`);
-}
+// Required by test/payload.test.js, which checks the line-ending rule above
+// without writing to templates/agents/.
+module.exports = { VARIANTS, render, lf, eolOf };
+
+if (require.main === module) main();

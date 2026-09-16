@@ -334,6 +334,36 @@ test("both opus5-only executors are generated from the template and documented",
     assert.ok(mapping.includes(n), `${n} is in MODEL-MAPPING`);
 });
 
+// v1.8.1 — the generated executors survive a CRLF worktree.
+//
+// `.gitattributes` says `* text=auto`, so git STORES these files with LF and
+// checks them out NATIVE: a Windows clone has CRLF in the worktree, a Linux one
+// has LF. The generator used to inject the `effort:` frontmatter line with a
+// hardcoded LF, so on Windows every variant that HAS an effort line came out
+// one byte short of the file on disk, and `--check` reported nine drifted
+// agents that git itself did not record as changed. `orc-executor-haiku-4-5`
+// passed, because it is the one variant with no effort line — which is exactly
+// what makes this look like a content bug instead of a line-ending one.
+test("the executor generator is line-ending agnostic (CRLF worktree)", () => {
+  const build = require(path.join(__dirname, "..", "bin", "build-agents.js"));
+  const src = fs.readFileSync(path.join(__dirname, "..", "agents-src", "executor.template.md"), "utf8");
+  const asLf = build.lf(src);
+  const asCrlf = asLf.replace(/\n/g, "\r\n");
+
+  for (const v of build.VARIANTS) {
+    const lfOut = build.render(asLf, v);
+    const crlfOut = build.render(asCrlf, v);
+
+    // Same content either way — this is what `--check` compares.
+    assert.strictEqual(build.lf(crlfOut), build.lf(lfOut), `${v.name}: same content in both worktrees`);
+
+    // And each rendering keeps ONE ending throughout: no lone LF in the CRLF
+    // output, no stray CR in the LF output.
+    assert.ok(!/(^|[^\r])\n/.test(crlfOut), `${v.name}: CRLF render has no lone LF`);
+    assert.ok(!/\r/.test(lfOut), `${v.name}: LF render has no CR`);
+  }
+});
+
 // ── v0.34.6 analyze: gate coverage + shipped model literals ────────────────
 
 test("no shipped schema template names a model/effort pair that no agent has", () => {
