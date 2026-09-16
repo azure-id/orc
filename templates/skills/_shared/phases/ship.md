@@ -49,7 +49,11 @@ run changed; point at `/orc-wiki`. **Post-ship refresh ask** (BIG runs, /orc +
 wiki now?"**; on "later" print the prominent stale warning and stamp
 `wiki_refresh_declined` in the checkpoint. Then ALWAYS show the completion
 usage report — /usage limits + the full dispatch log (model/effort/score per
-subagent). The user must always know what the run cost. Finally emit
+subagent). The user must always know what the run cost. **Code graph
+(`../code-graph.md` §5–§6):** run `orc graph update --if-enabled` once more —
+fix rounds move code — and emit `GRAPH-UPDATE`; then run `orc graph notes pending
+--files <every path the run changed> --at end --if-enabled` — exit 0 → one noter
+dispatch, exit 3 or 5 → nothing. Finally emit
 `PHASE ship end`, then the one-line `STATS lane=… dispatches=… downgrades=…`
 summary (trace.md — what `orc stats` reads), then `FINISH :: <detail>`,
 and in ONE step delete BOTH `log_dir/.current` and the run's `RESUME.md` (that
@@ -64,6 +68,10 @@ file existing is what marks a run unfinished — stop-resume.md).
 State the current branch and the change summary BEFORE any git action, and
 never ship on a red build (locked rule).
 
+<!-- diy:when code_graph=on -->
+Before the ship action, run `orc graph update --if-enabled` once more — fix rounds
+move code (`.claude/skills/_shared/code-graph.md` §5).
+<!-- /diy:when -->
 <!-- diy:when ship_mode=ask -->
 Ask the user how to ship: commit, PR (via
 `.claude/skills/orc/subskills/orc-pr/SKILL.md`), or leave the working tree

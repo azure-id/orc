@@ -256,6 +256,38 @@ function gitBranch(projectDir) {
   }
 }
 
+// The commit HEAD points at, from .git alone — never a subprocess, because this
+// runs on a surface that re-renders on every keystroke. A loose ref first, then
+// packed-refs, then a detached HEAD. Anything unreadable is null, and null never
+// claims a state.
+function gitHeadCommit(projectDir) {
+  const fs = require("fs");
+  const path = require("path");
+  try {
+    const dot = path.join(projectDir, ".git");
+    let gitDir = dot;
+    if (fs.statSync(dot).isFile()) {
+      const m = /gitdir:\s*(.+)/.exec(fs.readFileSync(dot, "utf8"));
+      if (!m) return null;
+      const g = m[1].trim();
+      gitDir = path.isAbsolute(g) ? g : path.join(projectDir, g);
+    }
+    const head = fs.readFileSync(path.join(gitDir, "HEAD"), "utf8").trim();
+    if (/^[0-9a-f]{40}$/.test(head)) return head;
+    const ref = /^ref:\s*(refs\/.+)$/.exec(head);
+    if (!ref) return null;
+    try {
+      const loose = fs.readFileSync(path.join(gitDir, ...ref[1].split("/")), "utf8").trim();
+      if (/^[0-9a-f]{40}$/.test(loose)) return loose;
+    } catch (_) {}
+    const packed = fs.readFileSync(path.join(gitDir, "packed-refs"), "utf8");
+    const line = packed.split(/\r?\n/).find((l) => l.endsWith(" " + ref[1]));
+    return line ? line.slice(0, 40) : null;
+  } catch (_) {
+    return null;
+  }
+}
+
 // MTok — MAIN TOKEN. The tokens THIS session's own turns consumed, summed from
 // the session transcript's `usage` blocks.
 //
@@ -1312,6 +1344,25 @@ function extendedScan(d, wants, wantsProvider) {
       } catch (_) {
         return null;
       }
+    });
+  }
+  // The code graph (v1.8.0). A FLOOR, exactly like the wiki row: the commit the
+  // index was built at against HEAD, both read from disk with no subprocess.
+  // `behind` means HEAD moved — never that files changed, which only
+  // `orc graph status` can see. The key is read off the raw file, because a hook
+  // has no lane and cannot resolve config (the `statusline_custom` answer).
+  if (wants("graph.state")) {
+    SCAN.graph = cached("graph", TTL.knowledge, () => {
+      let raw = "";
+      try {
+        raw = fs.readFileSync(path.join(projectDir, ".claude", "orc.config.yaml"), "utf8");
+      } catch (_) {}
+      if (!/^[ \t]*code_graph:[ \t]*["']?on["']?[ \t]*\r?$/m.test(raw)) return { state: "off" };
+      const meta = readJson(path.join(orc, "graph", "meta.json"));
+      if (!meta) return { state: "none" };
+      const head = gitHeadCommit(projectDir);
+      if (!head || !meta.head_commit) return null;
+      return { state: head === meta.head_commit ? "fresh" : "behind" };
     });
   }
 

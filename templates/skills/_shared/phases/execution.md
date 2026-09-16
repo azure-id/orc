@@ -37,7 +37,9 @@ the codifier); hold resolved patterns in run state.
 1. Dispatch EVERY task as a spawned subagent (emit `DISPATCH <agent> :: <task>
    expect=<model>/<effort>` BEFORE the Task call; subagent wrapper framing + the
    task's INPUT SLICE per orc-execution/core.md + its scored model). Every
-   slice carries the task's `acceptance[]`, its `tdd_spec` tests (the executor
+   slice carries ONE `orc graph ctx <the task's declared_files> --if-enabled --json`
+   `card` as its `graph` block (`../code-graph.md` §7; exit 3 = off → no block),
+   the task's `acceptance[]`, its `tdd_spec` tests (the executor
    implements to green: implement→test→repair, cap `tdd_loop_max`, emitting
    `TDD-RED`/`TDD-GREEN` per iteration; cap hit → STOP SEQUENCE + honest red
    report) and the `house_rules` card lines
@@ -73,6 +75,14 @@ the codifier); hold resolved patterns in run state.
    `unmet[]` is `partial`.
 4. **Post-wave worktree audit (GATE, `_shared/return-validation.md` §6):** diff `git status --short` before/after the wave — a changed path in NO task's `declared_files`, INCLUDING one that became less modified (the revert signature), blocks the close until named and decided.
    Overlap → `failure_reason: "file-collision:<file> with <agent>"`, requeue later wave.
+4a. **Code graph (`../code-graph.md` §5–§6):** after the audit, run
+   `orc graph update --if-enabled --json` (emit `GRAPH-UPDATE`), then
+   `orc graph notes pending --files <the wave's changed paths> --at wave --if-enabled --json`:
+   exit 0 → dispatch `orc-graph-noter-sonnet-4-6-med` (slice = paths only) in the
+   SAME tool block as the next wave's first dispatch; exit 3 or 5 → nothing, the
+   symbols wait for a later batch. The noter returns ONE line (emit `GRAPH-NOTES`) —
+   never pull its notes into this context. A slice that carried cards gets a
+   `graph:` continuation on its `DISPATCH` line and a `graph_used` return.
 5. Append worker `log_entries` to the decision log; regenerate the digest.
    **Gotcha capture (`gotchas: on`):** a return that CLOSED a repair loop carries
    `gotcha_recorded` (`_shared/return-validation.md` §7) — dedupe on
@@ -132,6 +142,15 @@ delta: `git status --short` before/after each dispatch, any changed path
 outside `declared_files` (a revert included) gates the wave close.
 <!-- /diy:when -->
 
+<!-- diy:when code_graph=on -->
+Code graph cache (never skipped): each slice gets ONE `orc graph ctx <the task's
+declared_files> --if-enabled --json` `card` as its `graph` block, and the return
+carries `graph_used`. After each wave's worktree audit run `orc graph update --if-enabled --json`
+(copy its `trace` verbatim) and one notes batch — `orc graph notes pending --files <the wave's changed paths>
+--at wave --if-enabled`; exit 0 → dispatch `orc-graph-noter-sonnet-4-6-med` paired
+with the next wave's first dispatch, exit 3 or 5 → nothing. Canonical:
+`.claude/skills/_shared/code-graph.md`.
+<!-- /diy:when -->
 <!-- diy:when gotchas=on -->
 Repair memory: probe `orc gotcha status` once at preflight (exit 0 = entries,
 1 = none — never a `find`) and print one line either way. Inject the

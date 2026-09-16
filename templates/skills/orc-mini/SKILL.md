@@ -54,7 +54,7 @@ Phase 1  planning (dispatch orc-planner-mini; analyst first only on real docs)
 Phase 3  dispatch ONE executor (orc-executor-sonnet-5-high) — slice carries
          the standing `house_rules` card (../_shared/phases/house-rules.md, literal)
          + the `rules_card` under it (`orc rules slice` → `text`, verbatim) + the
-         cached `postgres` pattern on a data-access task (cache HIT only) — collect + validate return
+         cached `postgres` pattern on a data-access task (cache HIT only) + `orc graph ctx` cards when the graph is on — collect + validate return
 Phase M  SMOKE GATE — run build+test → GREEN proceed · RED block ship + surface
 Phase X  MOCK EXAMPLE (config mock_example) — offer/build after a GREEN gate
 Phase T  TEST-AUTHORING ASK (opt-in) — offer to write test cases (never run them)
@@ -77,11 +77,19 @@ entries into the Phase 3 slice (cap 3; zero matches = no block, never
 unfiltered), and append a returned `gotcha_recorded` YOURSELF after the return.
 Trimmed mechanics + `.claude/orc/gotchas.md`: `../_shared/gotchas.md` §10.
 
+## Code graph cache — consult, build, use, update (`../_shared/code-graph.md` §0)
+
+Never skipped. Every call carries `--if-enabled`: exit 3 = off → print `graph: off` once, make no other graph call.
+Print each JSON `line` in chat; put each `trace` in the next packet VERBATIM.
+1. **Preflight, with the probes, before the planner:** `orc graph status --if-enabled --heal --json` — it builds or updates the cache itself.
+2. **Phase 3 slice:** ONE `orc graph ctx <declared_files> --if-enabled --json` → its `card` is the `graph` block; the return carries `graph_used`.
+3. **Phase M GREEN:** `orc graph update --if-enabled --json`, then one `orc graph notes pending` batch (§6) — the next run starts from this cache.
+
 ## Phase M — Smoke gate (build + test; blocks ship on red)
 
 After the executor return validates (`../_shared/return-validation.md` —
 including `done` with non-empty `unmet[]` = partial, and §6's worktree delta: a path changed outside `declared_files` is a violation whatever the return said), YOU run the smoke gate
-per `../_shared/smoke-gate.md`: read-only build+test. **GREEN** →
+per `../_shared/smoke-gate.md`: read-only build+test. **GREEN** → code-graph step 3 (above) →
 test-authoring ask, then ship. **RED** → never offer commit/ship; one repair
 re-dispatch, second red → STOP and surface. Docs-only → gate N/A, say so.
 `orc run inflight` FIRST — exit 2 REFUSES, because

@@ -21,7 +21,12 @@ Emit `PHASE review start`. Superpowers path: its review skill incl. tests
 `code_pattern` + its invariants + gate lines for the re-check
 (pattern-gate.md); no resolved pattern → FIRST ask for one (paste/md/none).
 FE tasks in run → pass `fe_rules[]` from `../../orc-pattern/references/` fe-a11y
-+ fe-perf. Findings arrive on the **P0–P3 ladder** (invariant violation or
++ fe-perf. **Code graph (`../code-graph.md` §7):** with the graph on, also pass
+`orc graph changes --if-enabled --json` — the symbols THIS diff's hunks overlap,
+each with its callers, its tests and a risk word that carries its own reason. It
+replaces a whole-file `orc graph impact` here: a file card reports every symbol in
+a touched file, and a symbol nobody edited is not a finding. An unchanged caller of
+a changed signature is a finding candidate, anchored like any other. Findings arrive on the **P0–P3 ladder** (invariant violation or
 unmet gate line = P0; every P0–P2 carries `file:line` + VERBATIM `quote`;
 unanchored → P3). Apply hard rule 5 INCLUDING the quote spot-check: P0 →
 auto-fix once · P1 → ask, then fix once · P2/P3 → record for Phase 7. Emit
@@ -48,6 +53,11 @@ Dispatch the reviewer exactly as the full lane does — follow the review half
 of `.claude/skills/orc/subskills/orc-review-verify/SKILL.md` — but only
 P0/P1 findings gate anything; P2/P3 findings are listed once in the summary
 and never re-offered as fix-up tasks.
+<!-- /diy:when -->
+<!-- diy:when code_graph=on -->
+With the code graph on, the reviewer also gets the callers from
+`orc graph changes --if-enabled --json` — an unchanged caller of a
+changed signature is a finding candidate (`.claude/skills/_shared/code-graph.md` §7).
 <!-- /diy:when -->
 
 <!-- /orc:layer -->

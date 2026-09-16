@@ -30,6 +30,13 @@ task (advisory) and print + emit `CROSSLINK <state> :: boundaries=<n> peers=<nam
 only pre-built needs/cache, never peer source live). **Gotchas (repair memory,
 config `gotchas`):** probe ONCE with `orc gotcha status` (exit 0 = entries exist,
 1 = none — never a `find`); canonical `_shared/gotchas.md`.
+**Code graph (`../code-graph.md` §7):** with the graph on, run
+`orc graph impact <candidate declared_files> --if-enabled --json` and hand its
+callers to the planner — they sharpen `declared_files` and the `fan` and risk
+facets. Also run `orc graph cochange <each candidate file> --if-enabled --json`:
+it answers "what else will I have to touch" from HISTORY, which a static edge
+cannot see. Co-change is a HINT about people, never a dependency — exit 4 means
+this file changes alone, which is an answer. Exit 3 or 4 → plan exactly as before.
 **Pact / boundary / aftermath / wiki debt (v0.46.0 — all CONSUMED here, never
 written here):** probe `orc pact status --json` (`pact_gate`, default `warn`),
 `orc boundary status --json` (`boundary_gate`, default `warn`), `orc wiki debt

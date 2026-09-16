@@ -1,4 +1,18 @@
 {
+  "knowledge.strip.graph": "graf kode",
+  "knowledge.graph.title": "Graf kode",
+  "knowledge.graph.unknown": "Status graf kode tidak tersedia.",
+  "knowledge.graph.unknownHint": "CLI tidak menjawab. Jalankan perintahnya di terminal untuk melihat penyebabnya.",
+  "knowledge.graph.off": "Graf kode mati.",
+  "knowledge.graph.offHint": "Default-nya mati. Jika menyala, lane kode membuat peta kode lokal secara gratis dan menjaganya tetap baru.",
+  "knowledge.graph.none": "Graf menyala, tetapi indeksnya belum ada. Lane kode berikutnya akan membuatnya, atau tekan tombolnya.",
+  "knowledge.graph.files": "File",
+  "knowledge.graph.symbols": "Simbol",
+  "knowledge.graph.updated": "Update terakhir",
+  "knowledge.graph.behind": "Berubah sejak indeks (ditambah · diubah · dihapus)",
+  "knowledge.graph.notes": "Mode catatan",
+  "knowledge.graph.drifted": "Ada file yang berubah setelah update terakhir. Lane memakai graf hanya sebagai petunjuk sampai graf di-update. Update-nya gratis.",
+  "knowledge.graph.locator": "Graf menunjukkan letak kode dan hubungannya. Agent tetap membaca kodenya sebelum bertindak.",
   "knowledge.archive.empty": "Belum ada yang diarsipkan.",
   "knowledge.archive.load": "Tampilkan arsip",
   "knowledge.archive.note": "Tidak ada yang pernah dihapus di sini. Entri yang terdorong keluar oleh batas hanya dipindahkan, dan idnya tetap selamanya.",
@@ -147,5 +161,7 @@
   "knowledge.wiki.noneHint": "Jalankan /orc-wiki di Claude Code untuk membangunnya. Panel ini tidak pernah melakukan scan — itu memakai model.",
   "knowledge.wiki.syncHint": "`orc wiki sync` memperbaikinya seketika: registrasi diturunkan dari dokumen, jadi gratis dan bukan scan ulang.",
   "knowledge.wiki.unregistered": "Wiki berstatus {state} — tidak ada yang bisa membacanya sampai terdaftar.",
-  "knowledge.wiki.why": "sebab: {reason}"
+  "knowledge.wiki.why": "sebab: {reason}",
+  "knowledge.graph.generation": "Generasi",
+  "knowledge.graph.selfheal": "Peta ini memperbarui dirinya: satu pembacaan memperbaiki berkas yang akan dijawabnya, dan hook yang terpasang memperbarui peta saat satu pekerja selesai. Tidak ada yang berjalan dengan pewaktu."
 }

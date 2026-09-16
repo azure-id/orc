@@ -41,6 +41,8 @@ this CLI for every write.
 | `pattern_findings` | `ask` | On a code-pattern cache miss: `ask` prompts, `on` learns automatically, `off` stays language-agnostic. |
 | `gotchas` | `on` | Repair memory: record what went red→green, and inject the matching ones into later slices. |
 | `gotchas_max` | `40` | Live gotchas kept before the least useful are archived (never deleted). |
+| `code_graph` | `off` | Code lanes build and use a local map of the code (`orc graph`). The structure is free — the CLI parses it, no model. |
+| `code_graph_notes` | `off` | One-sentence notes on changed functions: `wave` (one batch per wave) or `end` (one batch per run). The only part of the graph that costs tokens. |
 | `security_review` | `off` | Opt-in Phase 5.5 security pass. Fires only when a task scored ≥ 70. |
 | `run_budget_dispatches` | `0` | Stop before wave 1 if the run is forecast to exceed this many subagents. `0` = off. |
 | `mock_example` | `ask` | After a green verify, offer a runnable mocked example in `mock-examples/<slug>/` (never committed). |
@@ -88,6 +90,11 @@ this CLI for every write.
 | `wiki_delta_full_threshold` | `30` | Percent of touched docs above which a FULL refresh is recommended. |
 | `wiki_refresh_ask_tasks` / `wiki_refresh_ask_files` | `3` / `10` | When the post-ship "refresh the wiki?" question fires. |
 | `orc_wiki_pattern_findings` | `false` | Also learn code patterns during a wiki scan. |
+| `code_graph_notes_min` / `code_graph_notes_cap` | `5` / `40` | Fewest and most functions in one notes batch. Below the minimum nothing is dispatched; the functions wait. |
+| `code_graph_card_budget` | `1200` | Token budget for one `orc graph ctx` card (300–4000). A card never goes over it. |
+| `code_graph_auto_update` | `true` | A code lane's preflight updates a DRIFTED graph itself (free). `false` = hints only until you run `orc graph update`. |
+| `code_graph_heal_ms` | `1500` | How long a READ (`ctx`, `impact`, `coverage`, `changes`) may spend repairing a map that has moved. It never starts a repair it expects to overrun — the last update's own duration is the estimate. Over the cap, the answer comes from the old version and says so. `0` = never repair on a read. |
+| `code_graph_hooks` | `on` | Whether the installed `orc-graph-hook.js` acts. It updates the map when an ORC worker finishes, and hands a worker the anchors it would otherwise search for. It never blocks a tool call and is silent outside an ORC run. `off` = the lane steps are the only update path. |
 | `crosslink_fresh_days` / `crosslink_aging_days` | `10` / `15` | Cross-repo snapshot age edges. Advisory; they never block. |
 | `aftermath_window_days` | `30` | How far back `/orc-aftermath` grades. |
 | `budget_price_table` | *(shipped)* | Your own dated price table. Older than 90 days prints a warning. |

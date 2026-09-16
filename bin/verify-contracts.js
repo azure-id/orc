@@ -27,6 +27,8 @@ const CONTRACTS = [
     token: "actual_model",
     files: [
       "agents/MODEL-MAPPING.md",
+      // v1.8.0 — the graph noter reports its model like every other role.
+      "agents/orc-graph-noter-sonnet-4-6-med.md",
       "agents/orc-advisor-opus-5-xhigh.md",
       "agents/orc-analyze-mini-opus-5-med.md",
       "agents/orc-analyze-mini-sonnet-5-high.md",
@@ -899,6 +901,10 @@ const CONTRACTS = [
       // is open at all. Outside a run it refuses nothing — the gate constrains
       // ORC's own reading, never the user's session.
       "hooks/orc-read-gate.js",
+      // v1.8.0 EW3: the graph hook READS the pointer for the same reason, and
+      // writes its hint counters beside the run it names. A graph hint outside
+      // an ORC run would be context nobody asked ORC for.
+      "hooks/orc-graph-hook.js",
       // v1.2.1: the statusline READS the pointer to decide which run `status:`
       // is about. "The newest file" would be a different, wrong answer during
       // a lane suspend, when two traces are live and only one is the run.
@@ -1797,6 +1803,10 @@ const CONTRACTS = [
     binFiles: ["bin/cli.js"],
     files: [
       "agents/MODEL-MAPPING.md",
+      // v1.8.0 — the graph noter has no Opus 5 variant; under the mode a lane
+      // skips notes. Both the agent and the canonical contract say so.
+      "agents/orc-graph-noter-sonnet-4-6-med.md",
+      "skills/_shared/code-graph.md",
       "agents/orc-analyze-mini-opus-5-med.md",
       "agents/orc-claude-writer-opus-5-med.md",
       "agents/orc-pattern-codifier-opus-5-med.md",
@@ -2642,6 +2652,89 @@ const CONTRACTS = [
       "skills/orc-pr-driver/README.md",
       "skills/orc-pr-setup/README.md",
       "skills/_shared/README.md",
+    ],
+  },
+  // ── v1.8.0 — the code graph ─────────────────────────────────────────────
+  {
+    // The canonical contract and every pointer into it. A rename of the file
+    // must reach every place that sends a lane there.
+    name: "code graph contract (v1.8.0 — _shared/code-graph.md)",
+    token: "code-graph.md",
+    files: [
+      "skills/_shared/README.md",
+      "skills/_shared/code-graph.md",
+      "skills/_shared/opus5-only.md",
+      "skills/_shared/phases/execution.md",
+      "skills/_shared/phases/planning.md",
+      "skills/_shared/phases/preflight.md",
+      "skills/_shared/phases/review.md",
+      "skills/_shared/phases/ship.md",
+      "skills/_shared/phases/trace.md",
+      "skills/_shared/phases/wiki-consult.md",
+      "skills/_shared/read-ladder.md",
+      "skills/_shared/return-validation.md",
+      // W6 — the six code lanes open it (S5: a declared capability no lane
+      // points at is a gate that is always off).
+      "skills/orc-diy/references/flow-schema.md",
+      "skills/orc-fast/SKILL.md",
+      "skills/orc-mini/SKILL.md",
+      "skills/orc-quick/SKILL.md",
+      "skills/orc-quick/references/dispatch-gate.md",
+      "skills/orc-wiki/references/staleness.md",
+      "skills/orc/SKILL.md",
+    ],
+  },
+  {
+    // The graph slots INTO the wiki precedence line without reordering it. The
+    // old `code > fresh wiki` line stays true everywhere it already is; the full
+    // line lives where a reader decides how much to trust a card.
+    name: "graph precedence (v1.8.0 — code > graph structure > fresh wiki > stale wiki > graph notes > priors)",
+    token: "code > graph structure",
+    files: [
+      "skills/_shared/code-graph.md",
+      "skills/_shared/phases/wiki-consult.md",
+      "skills/_shared/read-ladder.md",
+      "skills/orc-wiki/references/staleness.md",
+    ],
+  },
+  {
+    // Proof of use comes back from the agent. The executors carry it via the
+    // generated template.
+    name: "graph attestation (v1.8.0 — graph_used on every return that carried cards)",
+    token: "graph_used",
+    files: [
+      "agents/orc-executor-haiku-4-5.md",
+      "agents/orc-executor-opus-4-7-high.md",
+      "agents/orc-executor-opus-4-7-med.md",
+      "agents/orc-executor-opus-4-8-high.md",
+      "agents/orc-executor-opus-5-high.md",
+      "agents/orc-executor-opus-5-low.md",
+      "agents/orc-executor-opus-5-med.md",
+      "agents/orc-executor-sonnet-4-6-high.md",
+      "agents/orc-executor-sonnet-4-6-med.md",
+      "agents/orc-executor-sonnet-5-high.md",
+      "skills/_shared/code-graph.md",
+      "skills/_shared/phases/execution.md",
+      "skills/_shared/read-ladder.md",
+      "skills/_shared/return-validation.md",
+      // W9: the two single-executor spines name it in their code-graph step.
+      "skills/orc-fast/SKILL.md",
+      "skills/orc-mini/SKILL.md",
+    ],
+  },
+  {
+    // The only notes writer, dispatched BY NAME. An unnamed dispatch cannot
+    // enforce the Sonnet 4.6 pin and is invisible to the trace hook.
+    name: "graph noter (v1.8.0 — dispatched by name, no Opus 5 variant)",
+    token: "orc-graph-noter-sonnet-4-6-med",
+    files: [
+      "agents/MODEL-MAPPING.md",
+      "agents/orc-graph-noter-sonnet-4-6-med.md",
+      "skills/_shared/code-graph.md",
+      "skills/_shared/opus5-only.md",
+      "skills/_shared/phases/execution.md",
+      "skills/orc-quick/SKILL.md",
+      "skills/orc-quick/references/dispatch-gate.md",
     ],
   },
   // ── v0.39.0 — read discipline + instructional trust ─────────────────────
@@ -3537,7 +3630,11 @@ const BUDGETS = [
   // a reference the slice-builder never loads is not applied (the hard-rule-13
   // precedent). Six lines: the assembler, the precedence order, the preflight
   // line and the three return fields. Everything else is _shared/phases/rules.md.
-  { file: "skills/orc-mini/SKILL.md", maxLines: 260 },
+  // v1.8.0 W9: deliberate raise 260→270 — the code-graph cache section. W9 round
+  // 1 measured a mini run with `code_graph: on` that never called `orc graph`:
+  // a pointer at the end of a long probe line was skipped. The three steps now
+  // have their own heading; the mechanics stay in _shared/code-graph.md.
+  { file: "skills/orc-mini/SKILL.md", maxLines: 270 },
   // v0.39.0: deliberate raises 195→201 / 179→182 — the analyst gains hard rules
   // 2b (a source it did not author is FOREIGN input) and 4a (the read ladder);
   // fast gains the ladder as a slice line. Both are hard rules by nature: they
@@ -3597,7 +3694,9 @@ const BUDGETS = [
   // a reference the slice-builder never loads is not applied (the hard-rule-13
   // precedent). Six lines: the assembler, the precedence order, the preflight
   // line and the three return fields. Everything else is _shared/phases/rules.md.
-  { file: "skills/orc-fast/SKILL.md", maxLines: 230 },
+  // v1.8.0 W9: deliberate raise 230→240 — the F0 code-graph step (e.), for the
+  // same measured reason as orc-mini's raise: a lengthened line was skipped.
+  { file: "skills/orc-fast/SKILL.md", maxLines: 240 },
 ];
 
 function walk(dir, out) {
@@ -3803,6 +3902,23 @@ for (const b of BUDGETS) {
     // mediate. An empty lanes[] here is an ANSWER, not a to-do.
     "read_gate",
     "read_gate_max_lines",
+    // v1.8.0 — the CODE GRAPH master key, the `extra_timeout_s` answer: every
+    // code lane calls `orc graph … --if-enabled` and the CLI resolves the key.
+    // No spine reads it — which is exactly how /orc-quick takes part while its
+    // Q0 still reads `log_dir` and nothing else. An empty lanes[] is an ANSWER.
+    "code_graph",
+    // W7 — its operating keys, resolved behind the same `--if-enabled` calls.
+    "code_graph_notes",
+    "code_graph_notes_min",
+    "code_graph_notes_cap",
+    "code_graph_card_budget",
+    "code_graph_auto_update",
+    // EW3/EW4 — operating keys of the HEAL and of the HOOK. `code_graph_heal_ms`
+    // is read by the CLI behind the same `--if-enabled` read calls;
+    // `code_graph_hooks` is read by orc-graph-hook.js off the raw file, exactly
+    // as `statusline_custom` is. Neither can have a lane, and that is an ANSWER.
+    "code_graph_heal_ms",
+    "code_graph_hooks",
   ]);
   for (const e of metaEntries) {
     if (!e.lanes) {

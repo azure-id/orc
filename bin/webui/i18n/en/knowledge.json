@@ -1,4 +1,18 @@
 {
+  "knowledge.strip.graph": "code graph",
+  "knowledge.graph.title": "Code graph",
+  "knowledge.graph.unknown": "The code graph state is not available.",
+  "knowledge.graph.unknownHint": "The CLI did not answer. Run the command in a terminal to see why.",
+  "knowledge.graph.off": "The code graph is off.",
+  "knowledge.graph.offHint": "It is off by default. When it is on, code lanes build a local map of the code for free and keep it current.",
+  "knowledge.graph.none": "The graph is on, but no index exists yet. The next code lane builds it, or press the button.",
+  "knowledge.graph.files": "Files",
+  "knowledge.graph.symbols": "Symbols",
+  "knowledge.graph.updated": "Last update",
+  "knowledge.graph.behind": "Changed since the index (added · changed · deleted)",
+  "knowledge.graph.notes": "Notes mode",
+  "knowledge.graph.drifted": "Files changed after the last update. Lanes use the graph as hints only until it is updated. The update is free.",
+  "knowledge.graph.locator": "The graph shows where code is and how it connects. Agents still read the code before they act on it.",
   "knowledge.archive.empty": "Nothing has been archived yet.",
   "knowledge.archive.load": "Show the archive",
   "knowledge.archive.note": "Nothing is ever deleted here. Entries pushed out by the limit are moved, and they keep their id forever.",
@@ -147,5 +161,7 @@
   "knowledge.wiki.noneHint": "Run /orc-wiki in Claude Code to build one. This panel never scans — that costs a model.",
   "knowledge.wiki.syncHint": "`orc wiki sync` fixes this instantly: registration is derived from the docs, so it is free and never a re-scan.",
   "knowledge.wiki.unregistered": "The wiki is {state} — nothing can read it until it is registered.",
-  "knowledge.wiki.why": "why: {reason}"
+  "knowledge.wiki.why": "why: {reason}",
+  "knowledge.graph.generation": "Generation",
+  "knowledge.graph.selfheal": "It keeps itself current: a read repairs the files it is about to answer for, and the installed hook updates the map when a worker finishes. Nothing runs on a timer."
 }

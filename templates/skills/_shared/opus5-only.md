@@ -58,6 +58,10 @@ exists to prevent. Ladder: `../orc-wiki/references/partial-refresh.md`.
 - **`orc-trace-writer-haiku-4-5` stays Haiku 4.5.** It transcribes a packet the
   orchestrator hands it — no reasoning, no source reads. It is never in the
   roster.
+- **`orc-graph-noter-sonnet-4-6-med` is not dispatched at all.** It has no Opus 5
+  variant: under the mode a code lane skips graph notes and prints
+  `graph notes: skipped (opus5_only)` (`code-graph.md` §6). The graph's structure
+  layer costs no model, so nothing else about the graph changes.
 - **`orc-diy`.** Its score table is compile-owned (`orc diy compile` →
   `flow.lock.json`); a DIY flow dispatches whatever its lock says. Re-compile to
   change it.

@@ -568,6 +568,57 @@ test("statusline: the render engine holds NO catalogue — it resolves nothing",
   assert.match(src, /const BINDINGS = \{/, "the binding table is the engine's only knowledge of the world");
 });
 
+test("statusline: the graph component is a FLOOR — off, none, fresh, behind — read with no subprocess", () => {
+  // v1.8.0. The component reads the raw config key, the index's meta.json and
+  // .git — never `git`, because this surface re-renders on every keystroke.
+  // `behind` means HEAD moved past the index; only `orc graph status` can see
+  // uncommitted edits, and the component never claims to.
+  const { root, claudeDir } = freshInstall();
+  const { spawnSync } = require("child_process");
+  const git = (...a) => spawnSync("git", a, { cwd: root, encoding: "utf8" });
+  const payload = { cwd: root, session_id: "g", model: { id: "claude-opus-5" }, effort: { level: "high" } };
+  // Colour codes stripped: `\x1B[90moff` puts a word character right before the
+  // state word, and a `\b` match would never see it.
+  const render = () =>
+    runHook(claudeDir, "orc-statusline.js", payload, { ORC_STATUSLINE_SCAN_MS: "0" }).stdout.replace(/\x1B\[[0-9;]*m/g, "");
+  try {
+    cli(["statusline", "apply", "minimal", "--dir", root, "--json"]);
+    assert.strictEqual(slj(root, ["set", "1", "1", "graph"]).status, 0, "the graph component can be placed");
+    slj(root, ["compile"]);
+    cli(["config", "set", "statusline_custom", "on", "--dir", root]);
+    const off = render();
+    assert.match(off, /\boff\b/, "code_graph is off by default");
+
+    cli(["config", "set", "code_graph", "on", "--dir", root]);
+    git("init", "-q");
+    git("config", "user.email", "t@t");
+    git("config", "user.name", "t");
+    fs.writeFileSync(path.join(root, "a.js"), "function a() { return 1; }\n");
+    git("add", "a.js");
+    git("commit", "-qm", "one");
+    assert.match(render(), /\bnone\b/, "on, but no index yet");
+
+    assert.strictEqual(cli(["graph", "update", "--dir", root]).status, 0);
+    const fresh = render();
+    assert.match(fresh, /\bfresh\b/);
+    assert.ok(!/\bbehind\b/.test(fresh));
+
+    fs.writeFileSync(path.join(root, "b.js"), "function b() { return 2; }\n");
+    git("add", "b.js");
+    git("commit", "-qm", "two");
+    assert.match(render(), /\bbehind\b/, "HEAD moved past the commit the index was built at");
+
+    const src = fs.readFileSync(path.join(REPO, "templates", "hooks", "orc-statusline.js"), "utf8");
+    const at = src.indexOf("function gitHeadCommit");
+    assert.ok(at > 0, "the HEAD reader exists");
+    // `RegExp.prototype.exec` is not a subprocess, so the check names the three
+    // ways a hook could actually start one.
+    assert.ok(!/execSync|spawnSync|child_process/.test(src.slice(at, src.indexOf("\n}\n", at))), "HEAD is read from .git, never through a subprocess");
+  } finally {
+    rmrf(root);
+  }
+});
+
 test("statusline: the hook falls back — every gate rung, and none of them throws", () => {
   const { root, claudeDir } = freshInstall();
   const orc = path.join(claudeDir, "orc");

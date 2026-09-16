@@ -23,6 +23,10 @@ loaded on demand when the step fires.
 - `detecting-artifacts.md` — the deterministic wiki/pattern existence probes.
 - `read-ladder.md` — the escalating read discipline (locate → outline → range →
   full) for every role that reads code it is not about to edit.
+- `code-graph.md` — the local code graph (`orc graph`): when a code-changing
+  lane consults it, when it updates it, the notes dispatch rule, and the rule
+  that keeps it safe — the graph is a LOCATOR, never the truth. No lane reads
+  its keys; every call carries `--if-enabled`.
 - `_shared/interview.md` — the interview mechanic (design tree → frontier rounds
   → confirmation gate), plus the split that does the work: FACTS are ORC's job
   to look up, DECISIONS are the user's to make and the lane waits for them.

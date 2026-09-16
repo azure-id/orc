@@ -194,6 +194,15 @@ shipped into every slice and read by nobody is the failure mode this field
 exists to make visible, and it is invisible if `none` is quietly dropped. Absent
 on a slice that carried wiki material is malformed. Not required otherwise.
 
+## 5b.1 Graph attestation (when code-graph cards were injected — v1.8.0)
+
+A task whose slice carried `orc graph ctx` cards must return **`graph_used`** —
+`{targets, generation}`: the card targets it ACTUALLY used (or `none`), and the `generation`
+the cards carried. The same honesty rule as `wiki_used`: `none` is informative (the cards did
+not help), absent is malformed, and a lane never drops it. A `generation` lower than the one
+`orc graph status` reports now means the agent acted on an OLD index — record it, do not
+re-run the task for it alone. Canonical: `code-graph.md`.
+
 ## 5c. Rules attestation (when the anti-slop card was injected — v1.7.0)
 
 A slice assembled by `orc rules slice` (`phases/rules.md`) must return three

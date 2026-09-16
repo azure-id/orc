@@ -179,7 +179,7 @@ test("lane config: effective, not_read and stops are answers, including when emp
     assert.deepStrictEqual(adv.keys, []);
     assert.deepStrictEqual(adv.stops, []);
     assert.deepStrictEqual(adv.roles, {});
-    assert.strictEqual(adv.not_read.length, 86, "it reads none of the 86 keys");
+    assert.strictEqual(adv.not_read.length, 94, "it reads none of the 94 keys");
   } finally {
     rmrf(root);
   }
@@ -313,6 +313,13 @@ test("lane calls: a documented exit code is a code the route can really return",
       // 0/1 probe, not an "it answered" route — the catalogue claimed 0 only
       // and this assertion is why we know otherwise.
       ["gotcha-status", ["gotcha", "status"], 1],
+      // v1.8.0 — the graph is OFF on a fresh install, and off is an ANSWER.
+      ["graph-status", ["graph", "status", "--if-enabled"], 3],
+      ["graph-update", ["graph", "update", "--if-enabled"], 3],
+      ["graph-ctx", ["graph", "ctx", "anything", "--if-enabled"], 3],
+      ["graph-impact", ["graph", "impact", "a.js", "--if-enabled"], 3],
+      ["graph-notes-pending", ["graph", "notes", "pending", "--files", "a.js"], 1],
+      ["graph-notes-pending", ["graph", "notes", "pending", "--files", "a.js", "--if-enabled"], 3],
     ];
     for (const [id, argv, code] of probes) {
       assert.ok(byId[id], `${id} is catalogued`);

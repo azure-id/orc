@@ -97,6 +97,20 @@ and again at every gate it suppresses. The rest of the mechanic — the modes, t
 hops, what `stop` and `wait` actually do — is `../wait.md`; this file only says
 that the line is printed and when.
 
+## The graph line (v1.8.0) — code-changing lanes only
+
+`/orc`, `/orc-ultra`, `/orc-diy`, `/orc-mini`, `/orc-fast` and `/orc-quick` run
+`orc graph status --if-enabled --heal --json` in step 3, BEFORE the first
+dispatch — never skipped. `--heal` builds a missing graph and updates a drifted
+one in the same call (it is free), so there is no second call to forget. Print
+its `line` (`off` included) and put its `trace` (`GRAPH-CONSULT …`) in the next
+packet as it is — never as a `GATE` line in your own words. While the graph is
+on, `orc lane config` prints the three graph steps in `announce[]` (`../code-graph.md`
+§0). **The lane reads no `code_graph` key:** `--if-enabled`
+makes the CLI decide, which is how `/orc-quick` takes part while its step 1 still
+reads `log_dir` and nothing else. A graph that cannot be built never stops a run,
+and `/orc-fast` gains no third gate. Every other lane prints nothing.
+
 <!-- /orc:layer -->
 
 <!-- orc:layer full -->

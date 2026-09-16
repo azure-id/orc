@@ -115,6 +115,46 @@
     "default": 1000
   },
   {
+    "key": "code_graph",
+    "tier": "common",
+    "default": "off"
+  },
+  {
+    "key": "code_graph_notes",
+    "tier": "common",
+    "default": "off"
+  },
+  {
+    "key": "code_graph_notes_min",
+    "tier": "advanced",
+    "default": 5
+  },
+  {
+    "key": "code_graph_notes_cap",
+    "tier": "advanced",
+    "default": 40
+  },
+  {
+    "key": "code_graph_card_budget",
+    "tier": "advanced",
+    "default": 1200
+  },
+  {
+    "key": "code_graph_auto_update",
+    "tier": "advanced",
+    "default": true
+  },
+  {
+    "key": "code_graph_heal_ms",
+    "tier": "advanced",
+    "default": 1500
+  },
+  {
+    "key": "code_graph_hooks",
+    "tier": "advanced",
+    "default": "on"
+  },
+  {
     "key": "statusline_custom",
     "tier": "common",
     "default": "off"

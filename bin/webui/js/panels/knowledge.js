@@ -35,7 +35,7 @@ let KN_TAB = "wiki";
 
 async function renderKnowledge(body) {
   body.replaceChildren(skeleton(6));
-  const [wikiRes, impactRes, patRes, gotRes, planRes, debtRes, usageRes, docsRes, covRes, refsRes] = await Promise.all([
+  const [wikiRes, impactRes, patRes, gotRes, planRes, debtRes, usageRes, docsRes, covRes, refsRes, graphRes] = await Promise.all([
     read("/api/wiki").catch((e) => ({ data: null, error: e })),
     read("/api/wiki/impact").catch((e) => ({ data: null, error: e })),
     read("/api/patterns").catch((e) => ({ data: null, error: e })),
@@ -48,6 +48,8 @@ async function renderKnowledge(body) {
     // v1.7.0 — the derived-reference sweep. `--check`, always: opening a panel
     // must never write to a repo.
     read("/api/wiki/refs").catch((e) => ({ data: null, error: e })),
+    // v1.8.0 — the code graph. `graph status` exits 0-3 and every code is DATA.
+    read("/api/graph").catch((e) => ({ data: null, error: e })),
   ]);
   const d = {
     wiki: wikiRes.data || {},
@@ -60,6 +62,7 @@ async function renderKnowledge(body) {
     docs: docsRes.data,
     coverage: covRes.data,
     refs: refsRes.data,
+    graph: graphRes.data,
     // A read that FAILED is not the same as a read that came back empty, and
     // rendering them identically is what turned a truncated 30 KB payload into
     // "this repo has no wiki and no git" (v0.49.4). The server already puts the
@@ -133,7 +136,62 @@ function knowledgeHeaderStrip(d) {
   );
   item(t("knowledge.strip.patterns"), String((d.patterns.patterns || []).length));
   item(t("knowledge.strip.gotchas"), d.gotchas.count === undefined ? "—" : String(d.gotchas.count));
+  // The graph's state word is the CLI's own, upper-cased like the wiki tier.
+  item(t("knowledge.strip.graph"), d.graph && d.graph.state ? String(d.graph.state).toUpperCase() : "—");
   return strip;
+}
+
+/* THE CODE GRAPH CARD (v1.8.0). Every value is `orc graph status --json`'s, and
+   the state word is never replaced by a friendlier synonym. An update is FREE
+   (parser only, no model), so it is a button; an OFF graph shows the one config
+   command that turns it on, because turning a feature on is the user's call. */
+function graphCard(g, body) {
+  const c = card(t("knowledge.graph.title"));
+  if (!g || !g.state) {
+    c.append(empty(t("knowledge.graph.unknown"), t("knowledge.graph.unknownHint")));
+    return c;
+  }
+  if (g.state === "off") {
+    c.append(empty(t("knowledge.graph.off"), t("knowledge.graph.offHint")));
+    c.append(el("pre", "cmd", "orc config set code_graph on"));
+    return c;
+  }
+  const head = el("div", "row-actions");
+  head.append(chip(String(g.state).toUpperCase(), g.state === "fresh" ? "ok" : g.state === "drifted" ? "warn" : "idle", g.state === "drifted"));
+  const upd = el("button", "btn btn-sm", "orc graph update");
+  upd.type = "button";
+  upd.addEventListener("click", async () => {
+    const r = await post("/api/graph/update", {});
+    toast(r.command, r.ok ? "ok" : "bad", r.output);
+    renderKnowledge(body);
+  });
+  head.append(upd);
+  c.append(head);
+  if (g.state === "none") {
+    c.append(el("div", "note", t("knowledge.graph.none")));
+    return c;
+  }
+  const b = g.behind || {};
+  c.append(
+    kvList([
+      [t("knowledge.graph.files"), String(g.files)],
+      [t("knowledge.graph.symbols"), String(g.symbols)],
+      // EW1 — the generation is what a card quotes back, so the panel shows the
+      // one on disk right now. `gen_id` names the CONTENT behind that number.
+      [t("knowledge.graph.generation"), g.generation ? `${g.generation}${g.gen_id ? ` · ${g.gen_id}` : ""}` : "—"],
+      [t("knowledge.graph.updated"), g.updated_at || "—"],
+      [t("knowledge.graph.behind"), g.behind ? `+${b.added || 0} · ~${b.changed || 0} · -${b.deleted || 0}` : "—"],
+      // `code_graph_notes` is a config VALUE — shown, never translated.
+      [t("knowledge.graph.notes"), g.notes || "—"],
+    ])
+  );
+  if (g.state === "drifted") c.append(el("div", "note warn", t("knowledge.graph.drifted")));
+  // EW3/EW4 — two things keep the map fresh without a lane step. A panel that
+  // shows a DRIFTED map without saying that is a panel that invites a needless
+  // click.
+  c.append(el("div", "note", t("knowledge.graph.selfheal")));
+  c.append(el("div", "note", t("knowledge.graph.locator")));
+  return c;
 }
 
 /* ── TAB 1 — WIKI ────────────────────────────────────────────────────────── */
@@ -141,6 +199,7 @@ function knWikiTab(d, body) {
   const out = frag();
   out.append(wikiPlanCard(d.plan, d.debt, body));
   out.append(wikiOneDocCard(d.refs));
+  out.append(graphCard(d.graph, body));
   if (d.usage && d.usage.rows) out.append(wikiUsageCard(d.usage, body));
 
   const w = d.wiki;
