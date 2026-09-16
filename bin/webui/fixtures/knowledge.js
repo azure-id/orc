@@ -288,4 +288,29 @@ const wikiImpact = {
   reasons: ["STRUCTURAL change (gone anchors / blind spot)", "worst doc 47 commits behind on its own covered files > wiki_aging_max 30"],
 };
 
-module.exports = { wiki, wikiDocs, wikiShow, wikiCoverage, wikiCoverageFull, wikiUnregistered, wikiPlan, wikiDebt, wikiUsage, patterns, patternShow, gotchas, gotchasArchived, gotchaPrunePreview, wikiImpact };
+// v1.8.0 — `orc graph status --json`. DRIFTED on purpose: the state the card
+// has to be designed for is the one that offers the free update.
+const graph = {
+  ok: true,
+  enabled: true,
+  exists: true,
+  files: 1920,
+  symbols: 5896,
+  updated_at: "14-09-2026 22:10:04",
+  head_commit: "9f2c41ab8de0",
+  engine: "graph@4",
+  // EW1: every graph answer carries the generation it was computed from.
+  generation: 42,
+  gen_id: "c878981d",
+  state: "drifted",
+  behind: { added: 1, changed: 3, deleted: 0 },
+  engine_stale: false,
+  auto_update: true,
+  notes: "wave",
+  // W9 round 2: every graph --json answer carries the chat line and the trace
+  // line a lane copies. The card renders neither; the key set still matches live.
+  line: "graph: DRIFTED — 4 files behind (1 added · 3 changed · 0 deleted); hints only, code wins (run: orc graph update)",
+  trace: "GRAPH-CONSULT drifted :: files=1920 symbols=5896 gen=42",
+};
+
+module.exports = { wiki, wikiDocs, wikiShow, wikiCoverage, wikiCoverageFull, wikiUnregistered, wikiPlan, wikiDebt, wikiUsage, patterns, patternShow, gotchas, gotchasArchived, gotchaPrunePreview, wikiImpact, graph };

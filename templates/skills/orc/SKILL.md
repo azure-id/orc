@@ -205,6 +205,7 @@ them; they are never dispatched as subagents).
 - Phase 5.5 → `../_shared/phases/security-checklist.md`; 6.5 → `subskills/orc-testgen/`
 - Phase 8 → `subskills/orc-pr/SKILL.md` (template `subskills/orc-pr/pr.md`);
   stack gate → `subskills/orc-pr/stack-gate.md` + `_shared/pr-templates.md`
+- Code graph cache, NEVER skipped (§0 of the contract) — `orc graph status --if-enabled --heal --json` at preflight BEFORE the first dispatch (builds or updates it) · ONE `orc graph ctx <declared files>` call per slice · `orc graph impact` + `orc graph cochange` at planning, `orc graph changes` at review · `orc graph coverage` before you trust a card's silence · `orc graph update` + `orc graph notes` at every wave close and ship · print each JSON `line`, copy each `trace` VERBATIM (CLI-resolved) → `../_shared/code-graph.md`
 - Schemas (you own; pass slices only): `schemas/intent-spec.md`,
   `schemas/planning-output.md`, `schemas/checkpoint.md`
 - Worked example (orient only — never execute from it) → `examples/full-run-mock.md`

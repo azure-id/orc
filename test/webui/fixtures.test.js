@@ -45,6 +45,7 @@ test("fixtures match the live --json shapes for the routes they stand in for", (
       ["/api/doctor", ["doctor"]],
       ["/api/config", ["config", "list"]],
       ["/api/wiki", ["wiki", "status"]],
+      ["/api/graph", ["graph", "status"]],
       ["/api/patterns", ["pattern", "status"]],
       ["/api/gotchas", ["gotcha", "list"]],
       ["/api/stats", ["stats"]],

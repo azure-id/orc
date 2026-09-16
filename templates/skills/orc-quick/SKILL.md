@@ -105,9 +105,15 @@ is a pointer into nothing.
      (`express`, `react`, …), never a file extension.
    - **Both are only helpful extras.** Missing knowledge never stops the run,
      never causes a fallback, and never triggers a scan. Print ONE line each.
-4. **`gh` probe.** `gh auth status`. If it is missing, PR work still works — ask
+4. **Code graph cache — never skipped** (`../_shared/code-graph.md` §0). Run
+   `orc graph status --if-enabled --heal --json`: it builds or updates the cache
+   in the same call. Print its `line`; put its `trace` (`GRAPH-CONSULT …`) in the
+   packet VERBATIM. Exit 3 = off → no other graph call this session. Every graph
+   call carries `--if-enabled`, so the CLI reads the `code_graph` keys —
+   this lane still reads `log_dir` and nothing else.
+5. **`gh` probe.** `gh auth status`. If it is missing, PR work still works — ask
    the user to paste the comments instead.
-5. Emit one `GATE` line per check.
+6. Emit one `GATE` line per check — `GATE graph` included.
 
 ---
 
@@ -148,6 +154,9 @@ ledger: review=yes commit=yes push=yes · test-update=ask · dispatch=ask
   only. Never paste wiki text into a slice. Emit
   `WIKI-CONSULT <tier> :: docs=<paths>`.
 - Pattern cached → keep it for the slice.
+- **Graph first** (unless Q0 said off): ONE `orc graph ctx <symbol|file>… --if-enabled --json`
+  call finds the place BEFORE any Grep. Its `card` goes into the slice as text,
+  its `trace` into the entry packet. It never replaces reading the range it names.
 - Always put this line in every slice, word for word:
   `code > fresh wiki > stale wiki (hints) > model priors`
 
@@ -250,6 +259,14 @@ fix it with a new gated dispatch · the test itself is wrong · accept it · sto
 Never offer commit while tests are red.
 
 ### 3.3 Write the doc — ALWAYS, and BEFORE any offer
+
+**After a request that WROTE code** (never after a read-only one), so the next
+request and the next session start from a current cache: run
+`orc graph update --if-enabled --json` (print its `line`, copy its `trace`), then `orc graph notes pending --files <the
+changed paths> --if-enabled --json`. Exit 0 → dispatch `orc-graph-noter-sonnet-4-6-med`
+in the SAME tool block as this doc write. It is ORC bookkeeping, like the trace
+writer — not a Q2 gate dispatch (`references/dispatch-gate.md` rule 8). Exit 3 or
+5 → nothing.
 
 Append entry N to `orc-quick/<slug>/quick-context.md`. See
 `references/context-doc.md`. Every request gets an entry — including a read-only

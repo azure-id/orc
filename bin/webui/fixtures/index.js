@@ -21,7 +21,7 @@
 // case here; it is never an edit to a 1 700-line module.
 const { PROJECT, doctor, where } = require("./shell.js");
 const { config } = require("./settings.js");
-const { wiki, wikiDocs, wikiShow, wikiCoverage, wikiCoverageFull, wikiUnregistered, wikiPlan, wikiDebt, wikiUsage, patterns, patternShow, gotchas, gotchasArchived, gotchaPrunePreview, wikiImpact } = require("./knowledge.js");
+const { wiki, wikiDocs, wikiShow, wikiCoverage, wikiCoverageFull, wikiUnregistered, wikiPlan, wikiDebt, wikiUsage, patterns, patternShow, gotchas, gotchasArchived, gotchaPrunePreview, wikiImpact, graph } = require("./knowledge.js");
 const { runs, runDetail, runDetailClosed, aftermath } = require("./runs.js");
 const { stats, budgetForecast, budgetRates } = require("./stats.js");
 const { pact } = require("./pact.js");
@@ -306,6 +306,9 @@ module.exports.get = function get(route, q) {
       return wiki;
     case "/api/wiki/impact":
       return wikiImpact;
+    // v1.8.0 — the code graph, DRIFTED (the state the card must be designed for).
+    case "/api/graph":
+      return graph;
     case "/api/patterns":
       return patterns;
     case "/api/gotchas":

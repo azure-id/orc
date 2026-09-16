@@ -221,6 +221,9 @@ const READS = {
   "/api/runs": (q) => ["run", "list", "--limit", String(Math.min(200, Number(q.limit) || 40))],
   "/api/run": (q) => ["run", "show", String(q.slug || "")],
   "/api/wiki": () => ["wiki", "status"],
+  // v1.8.0 — the code graph. A READ whose exit code is DATA (0 fresh · 1 none ·
+  // 2 drifted · 3 off), exactly like `wiki status` above.
+  "/api/graph": () => ["graph", "status"],
   "/api/wiki/impact": () => ["wiki", "impact"],
   // v0.46.0. Every one is a READ with an exit-code contract, so the exit code is
   // DATA here exactly like `pattern status` and `wiki impact` above: pact 0/1/2/3,
@@ -542,6 +545,8 @@ const WRITES = {
   "/api/wait/unblock": (b) => (b.slug ? ["wait", "unblock", String(b.slug)] : ["wait", "unblock"]),
   "/api/wait/cancel": (b) => (b.slug ? ["wait", "cancel", String(b.slug)] : ["wait", "cancel"]),
   "/api/wiki/sync": () => ["wiki", "sync"],
+  // v1.8.0 — FREE (parser only, no model), so it is a button, the `wiki sync` rule.
+  "/api/graph/update": () => ["graph", "update"],
   "/api/wiki/usage/rebuild": () => ["wiki", "usage", "--rebuild"],
   "/api/gotcha/prune": () => ["gotcha", "prune"],
   "/api/pact/check": (b) => (b.id ? ["pact", "check", String(b.id)] : ["pact", "check"]),

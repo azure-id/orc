@@ -197,6 +197,13 @@ per `.claude/skills/_shared/return-validation.md` — including §6's worktree
 delta: `git status --short` before/after each dispatch, any changed path
 outside `declared_files` (a revert included) gates the wave close.
 
+Code graph cache (never skipped): each slice gets ONE `orc graph ctx <the task's
+declared_files> --if-enabled --json` `card` as its `graph` block, and the return
+carries `graph_used`. After each wave's worktree audit run `orc graph update --if-enabled --json`
+(copy its `trace` verbatim) and one notes batch — `orc graph notes pending --files <the wave's changed paths>
+--at wave --if-enabled`; exit 0 → dispatch `orc-graph-noter-sonnet-4-6-med` paired
+with the next wave's first dispatch, exit 3 or 5 → nothing. Canonical:
+`.claude/skills/_shared/code-graph.md`.
 Repair memory: probe `orc gotcha status` once at preflight (exit 0 = entries,
 1 = none — never a `find`) and print one line either way. Inject the
 SCOPE-MATCHING entries into each slice beside `pattern` — glob vs that task's
@@ -213,6 +220,9 @@ Dispatch the reviewer exactly as the full lane does — follow the review half
 of `.claude/skills/orc/subskills/orc-review-verify/SKILL.md` (reviewer agent
 `orc-reviewer-opus-5-med`; findings ride the severity ladder from the
 locked rules, blocking and advisory findings both surfaced).
+With the code graph on, the reviewer also gets the callers from
+`orc graph changes --if-enabled --json` — an unchanged caller of a
+changed signature is a finding candidate (`.claude/skills/_shared/code-graph.md` §7).
 
 ## Phase: Security pass
 
@@ -248,6 +258,8 @@ unresolved report). `mock-examples/` is NEVER staged by the ship phase.
 State the current branch and the change summary BEFORE any git action, and
 never ship on a red build (locked rule).
 
+Before the ship action, run `orc graph update --if-enabled` once more — fix rounds
+move code (`.claude/skills/_shared/code-graph.md` §5).
 Ask the user how to ship: commit, PR (via
 `.claude/skills/orc/subskills/orc-pr/SKILL.md`), or leave the working tree
 as-is. Default when auto-accepted by autonomy: leave as-is and report.

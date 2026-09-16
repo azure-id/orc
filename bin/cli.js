@@ -234,7 +234,10 @@ function installGuards(claudeDir) {
   try {
     fs.writeFileSync(
       path.join(hooksDest, "orc-version.json"),
-      JSON.stringify({ version: currentVersion() }) + "\n"
+      // EW3: the graph hook shells `orc graph update`, and a hook must never
+      // guess at PATH — the installer is the one place that knows for certain
+      // which cli.js this payload came from.
+      JSON.stringify({ version: currentVersion(), cli: path.resolve(__dirname, "cli.js") }) + "\n"
     );
   } catch (_) {}
   // The statusline's phase rail (v1.2.1). Regenerated every install from the
@@ -388,6 +391,33 @@ function installGuards(claudeDir) {
   } else {
     console.log("  upd   settings.json → PreToolUse read gate path");
   }
+
+  // 6) The graph hook (v1.8.0 EW3/EW4) — FOUR events, one file. It updates the
+  // graph when an ORC executor finishes, and hands a subagent the anchors it
+  // would otherwise grep for. Wired even though `code_graph` may be off: the
+  // hook's first act is to read that key and return, so an unarmed hook is
+  // byte-identical to not having it (asserted by a test).
+  const graphHookCmd = nodeCmd(path.join(hooksDest, "orc-graph-hook.js"));
+  const wireGraph = (arrName, matcher) => {
+    settings.hooks[arrName] = settings.hooks[arrName] || [];
+    for (const entry of settings.hooks[arrName]) {
+      for (const h of entry.hooks || []) {
+        if (typeof h.command === "string" && h.command.includes("orc-graph-hook")) {
+          h.command = graphHookCmd; // keep the path current on update
+          if (matcher) entry.matcher = matcher;
+          return;
+        }
+      }
+    }
+    const entry = { hooks: [{ type: "command", command: graphHookCmd }] };
+    if (matcher) entry.matcher = matcher;
+    settings.hooks[arrName].push(entry);
+    console.log(`  add   settings.json → ${arrName} graph hook`);
+  };
+  wireGraph("SubagentStart", null);
+  wireGraph("SubagentStop", null);
+  wireGraph("PreToolUse", "Grep|Glob");
+  wireGraph("PostToolUse", "Read");
 
   fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + "\n");
 }
@@ -1263,6 +1293,10 @@ const CONFIG_FAMILIES = {
   // the gate acts on the MAIN session's reads and `opus5_only` / `extra_*`
   // decide which MODEL runs a dispatched role. Nothing shadows these two.
   read: { contested: false, question: "whether an oversized full read by the main session is refused" },
+  // v1.8.0 — the code graph. UNCONTESTED: no forcing mode reaches it. The
+  // structure costs no model tokens, so nothing about a dispatched model can
+  // shadow whether it is built.
+  graph: { contested: false, question: "whether code lanes build and read a local map of how the repo is connected" },
 };
 
 // Ordered, tiered metadata. Common first, then advanced.
@@ -1321,6 +1355,21 @@ const CONFIG_META = [
   { key: "subagent_line_custom", def: "off", tier: "common", answers: [{ family: "statusline", prio: "P2", mode: "replace" }], lanes: [], validate: vEnum("off", "on"), options: ["off", "on"], desc: "Whether the agent panel renders YOUR composed row for each subagent instead of Claude Code's own. Off is Claude Code's row, unchanged. Compose it in `orc ui` > CLI Hook Interface, on the subagent board. INDEPENDENT of the per-agent token record: ORC writes what the agent panel reports whether this is on or off, because that measurement is handed over either way and throwing it out because a display setting is off would be the wrong trade." },
   { key: "read_gate", def: "off", tier: "common", answers: [{ family: "read", prio: "P2", mode: "replace" }], lanes: [], validate: vEnum("off", "warn", "block"), options: ["off", "warn", "block"], desc: "Whether the PreToolUse read gate acts on an oversized full read by the MAIN session. Off is byte-identical to not having the hook. `warn` allows and says so; `block` refuses and names the cheaper path. It is SILENT on every read a subagent makes (so an executor's read-before-edit is never touched), outside an open ORC run, on a targeted offset/limit read, on output a gate parses, and under `read_gate_max_lines`." },
   { key: "read_gate_max_lines", def: 1000, tier: "advanced", answers: [{ family: "read", prio: "P2", mode: "replace" }], lanes: [], validate: vInt(1), options: [500, 1000, 2000], desc: "Line count at or above which `read_gate` acts. The default 1000 is MEASURED, not borrowed: a read-only dispatch costs ~13k tokens and p50 76s, which at 55.2 chars/line across 316 sampled reads puts break-even near 1000 lines. A lower number delegates work whose overhead exceeds its saving." },
+  // v1.8.0 — `lanes: []` ON PURPOSE, the read_gate answer for a different
+  // reason: no lane reads this key. Every lane calls `orc graph … --if-enabled`
+  // and the CLI resolves it, which is how /orc-quick takes part while its Q0
+  // still reads `log_dir` and nothing else.
+  { key: "code_graph", def: "off", tier: "common", answers: [{ family: "graph", prio: "P2", mode: "replace" }], lanes: [], validate: vEnum("off", "on"), options: ["off", "on"], desc: "Whether code-changing lanes (orc, ultra, diy, mini, fast, quick) build and read a local code graph under .claude/orc/graph/. The structure is extracted by the CLI from git blob SHAs and costs no model tokens; a teammate's change is found and healed at the next preflight. Off means no lane reads or writes it. See `orc graph status`." },
+  // v1.8.0 W7 — the graph's operating keys. All `lanes: []` for the same reason
+  // as `code_graph`: the CLI resolves them behind `--if-enabled`. All gated by
+  // `code_graph`, so turning the graph off makes every one of them INERT, out loud.
+  { key: "code_graph_notes", def: "off", tier: "common", answers: [{ family: "graph", prio: "P2", mode: "replace" }], gated_by: "code_graph", lanes: [], validate: vEnum("off", "wave", "end"), options: ["off", "wave", "end"], desc: "Whether a code lane pays for one-sentence notes on the functions it changed (orc-graph-noter-sonnet-4-6-med). `wave` = one batch per wave (per code-writing request in /orc-quick); `end` = one batch at the end of the run. The structure layer is free either way — notes are the only part of the graph that costs tokens. Inert while code_graph is off." },
+  { key: "code_graph_notes_min", def: 5, tier: "advanced", answers: [{ family: "graph", prio: "P2", mode: "replace" }], gated_by: "code_graph", lanes: [], validate: vInt(1), options: [3, 5, 10], desc: "Fewest changed functions worth a notes dispatch. Below it nothing is dispatched and the functions wait for a later batch: a subagent's fixed start-up cost (~5.7K tokens) makes a one-function batch the most expensive note there is." },
+  { key: "code_graph_notes_cap", def: 40, tier: "advanced", answers: [{ family: "graph", prio: "P2", mode: "replace" }], gated_by: "code_graph", lanes: [], validate: vInt(1), options: [20, 40, 80], desc: "Most functions one notes dispatch covers. The rest wait for the next batch." },
+  { key: "code_graph_card_budget", def: 1200, tier: "advanced", answers: [{ family: "graph", prio: "P2", mode: "replace" }], gated_by: "code_graph", lanes: [], validate: vRange(300, 4000), options: [600, 1200, 2400], desc: "Token budget for one `orc graph ctx` card. A card never exceeds it and always says what it hid — and every card is sent again on each later turn of the agent that received it." },
+  { key: "code_graph_auto_update", def: true, tier: "advanced", answers: [{ family: "graph", prio: "P2", mode: "replace" }], gated_by: "code_graph", lanes: [], validate: vEnum("true", "false"), desc: "Whether a code lane's preflight heals a DRIFTED graph itself (free — parser only, no model). false = the lane prints DRIFTED and treats the graph as hints until you run `orc graph update`." },
+  { key: "code_graph_heal_ms", def: 1500, tier: "advanced", answers: [{ family: "graph", prio: "P2", mode: "replace" }], gated_by: "code_graph", lanes: [], validate: vRange(0, 60000), options: [0, 1500, 5000], desc: "How long a READ (`ctx`, `impact`, `coverage`) may spend healing a graph that has moved. The read never starts a heal it expects to overrun: the last update's own duration is the estimate. Over the cap, or another update holds the lock, the read answers from the old generation and marks every touched card CHANGED. 0 = never heal on a read (the lane steps and the run-end hook still do). Inert while code_graph or code_graph_auto_update is off." },
+  { key: "code_graph_hooks", def: "on", tier: "advanced", answers: [{ family: "graph", prio: "P2", mode: "replace" }], gated_by: "code_graph", lanes: [], validate: vEnum("on", "off"), options: ["on", "off"], desc: "Whether the installed `orc-graph-hook.js` acts. It updates the graph when an ORC executor finishes, so a lane that forgot its own update step cannot leave the map behind. It is silent in the main session, outside an ORC run, when the graph does not exist, and on any error — it never blocks a tool call and never fails one. off = the hook exits immediately and the lane steps are the only update path." },
   { key: "statusline_custom", def: "off", tier: "common", answers: [{ family: "statusline", prio: "P2", mode: "replace" }], lanes: [], validate: vEnum("off", "on"), options: ["off", "on"], desc: "Whether the status line renders YOUR composed layout instead of the shipped two lines. Off is byte-identical to what ships. Compose the layout in `orc ui` > CLI Hook Interface (the CLI half exists so the panel has something to shell). Turning this on with an invalid or missing layout is refused, naming the reason; a layout that later becomes unreadable falls back to the shipped lines silently and is reported by `orc doctor`." },
   { key: "wait_hop_minutes", def: 30, tier: "advanced", answers: [{ family: "wait", prio: "P2", mode: "replace" }], lanes: [], validate: vInt(1), options: [5, 10, 15, 30], desc: "How long ONE detached hop waits before ORC re-reads the window. Short on purpose: each wake-up is session activity, and session activity is the only thing that makes the statusline write a fresh reading. One long sleep wakes into a reading as stale as the sleep was long." },
   { key: "wait_max_hops", def: 5, tier: "advanced", answers: [{ family: "wait", prio: "P2", mode: "replace" }], lanes: [], validate: vInt(1), options: [1, 2, 3, 5, 8, 12], desc: "How many hops before ORC gives up and stops with the hand-back. A wrong reset time must cost you a bounded wait, never a session that never comes back." },
@@ -3104,6 +3153,18 @@ function laneAnnounce(lane, map, claudeDir, families) {
       out.push(`extra: ${bits.join("; ")} — this sends work to a third party`);
     }
   }
+  // v1.8.0 W9 — the code-graph cache. Round 1 of W9 measured /orc-mini and
+  // /orc-quick with `code_graph: on` that never called `orc graph`: the steps
+  // sat in the spine, and the spine was skipped. This line comes from the
+  // resolver every lane already obeys and prints VERBATIM at preflight, so the
+  // three steps are in front of the lane whatever the spine said.
+  const graphOn = String(Object.prototype.hasOwnProperty.call(map, "code_graph") ? map.code_graph : metaFor("code_graph").def) === "on";
+  if (graphOn && LANE_CALLS["graph-status"].lanes.includes(lane))
+    out.push(
+      "graph: on — use the code-graph cache: (1) now: `orc graph status --if-enabled --heal --json` (builds or updates it); " +
+        "(2) every code-writing slice: `orc graph ctx <declared files> --if-enabled --json` cards; " +
+        "(3) after every code change: `orc graph update --if-enabled --json` (keeps it for the next run). Copy each `line` and `trace` verbatim"
+    );
   // A shadowed setting must never be silent, and neither must an inert one.
   const shadowed = [];
   for (const f of Object.values(families))
@@ -3294,6 +3355,106 @@ const LANE_CALLS = {
     canonical: "_shared/gotchas.md",
     never: "never inject the ledger unfiltered — only the entries whose `scope` glob matches the slice",
     lanes: ["orc", "orc-boundary", "orc-brainstorm", "orc-fast", "orc-grill", "orc-mini", "orc-retro", "orc-route"],
+  },
+  // v1.8.0 — the code graph. Every row carries `--if-enabled`: the CLI resolves
+  // `code_graph`, so no lane reads the key (and /orc-quick can take part).
+  "graph-status": {
+    cmd: "orc graph status --if-enabled --heal [--json]",
+    what: "is the local code graph on, built, and fresh — `--heal` builds a missing index or updates a drifted one in the same call",
+    exits: { 0: "FRESH (after a heal, too)", 1: "NONE — no index and it could not be built, or unavailable (not a git repository)", 2: "DRIFTED — and it could not be healed (locked, or `code_graph_auto_update: false`)", 3: "OFF — `code_graph` is off" },
+    states: ["fresh", "none", "drifted", "off", "unavailable"],
+    cost: "free",
+    when: "once, at preflight, in a code-changing lane — BEFORE the first dispatch",
+    on_absent: "exit 3 is an ANSWER — print `graph: off` once and make no other graph call; any other exit never blocks: print its `line`, copy its `trace`, continue",
+    canonical: "_shared/code-graph.md",
+    never: "never read `code_graph` from the config yourself — `--if-enabled` is how a lane takes part without reading a key",
+    lanes: ["orc", "orc-diy", "orc-fast", "orc-mini", "orc-quick"],
+  },
+  "graph-update": {
+    cmd: "orc graph update --if-enabled [--json]",
+    what: "bring the code graph in line with the working tree — parse only the files whose git blob changed",
+    exits: { 0: "built, updated or unchanged", 1: "unavailable — not a git repository, or another update holds the lock", 3: "off — `code_graph` is off" },
+    states: ["built", "updated", "unchanged", "unavailable", "off"],
+    cost: "free",
+    when: "at preflight when status was 1 or 2; after every wave's worktree audit; after a green smoke gate; after a code-writing /orc-quick request; at ship. v1.8.0 EW3 adds two paths that need no lane step: a READ heals what it is about to answer for, and the installed graph hook updates once when an ORC executor finishes",
+    on_absent: "exit 1 never blocks a phase — say it once and continue; the next preflight heals it",
+    canonical: "_shared/code-graph.md",
+    never: "never run it from a WATCHER or a background process — a continuous rebuild is how graph tools freeze a machine. A one-shot update at a discrete event (an executor finishing, a read that found its own target stale) is not that: it takes the same lock, it is bounded by `code_graph_heal_ms`, and a second one that finds the lock held SKIPS rather than queues",
+    lanes: ["orc", "orc-diy", "orc-fast", "orc-mini", "orc-quick"],
+  },
+  "graph-ctx": {
+    cmd: "orc graph ctx <symbol|file[:line]>… --if-enabled [--budget N] [--json]",
+    what: "a budgeted context card: where a symbol is, who calls or uses it, what it calls, its effects, its note — up to 5 targets share one budget",
+    exits: { 0: "found (at least one target)", 1: "no graph index", 3: "off — `code_graph` is off", 4: "not found or ambiguous — nearest names or every candidate listed" },
+    states: null,
+    cost: "free",
+    when: "at slice build (the declared files, one call), in /orc-quick's Q1 look, and by the executor itself — the read ladder's step 0",
+    on_absent: "exit 4 → back to read ladder step 1; an unknown symbol is never a reason to guess",
+    canonical: "_shared/code-graph.md",
+    never: "never act on behaviour from a card alone — read the RANGE it names; a card whose header says CHANGED is hints only",
+    lanes: ["orc", "orc-diy", "orc-fast", "orc-mini", "orc-quick"],
+  },
+  "graph-impact": {
+    cmd: "orc graph impact <file…> --if-enabled [--depth N] [--json]",
+    what: "transitive confident callers of everything in these files, with the tests and wiki docs that reach them",
+    exits: { 0: "answered", 1: "no graph index", 3: "off — `code_graph` is off", 4: "none of the files is in the graph" },
+    states: null,
+    cost: "free",
+    when: "at planning (declared files, fan and risk facets) and at review (unchanged callers of a changed signature)",
+    on_absent: "exit 3 or 4 → plan or review exactly as before; AMBIGUOUS callers are counted, never followed",
+    canonical: "_shared/code-graph.md",
+    never: "never treat an empty impact as proof nothing depends on the change — dynamic dispatch is invisible to the graph",
+    lanes: ["orc", "orc-diy"],
+  },
+  // EW5 — the cheap signals. All three read what is already on disk (the index,
+  // and git's own history), so all three cost zero model tokens.
+  "graph-coverage": {
+    cmd: "orc graph coverage <file…> --if-enabled [--json]",
+    what: "how much of each file the extractor actually saw — `full` · `partial` with the line ranges it did not finish · `skipped:<reason>` · `excluded`",
+    exits: { 0: "answered — ALWAYS, when a graph exists; a gap is an answer, never an error", 1: "no graph index", 3: "off — `code_graph` is off" },
+    states: null,
+    cost: "free",
+    when: "before you trust a card's SILENCE about a file — one batch call for every file in the slice",
+    on_absent: "exit 1 or 3 → read the source, exactly as before the graph existed",
+    canonical: "_shared/code-graph.md",
+    never: "never read `no recorded gap` as proof of completeness — a file marked `full` was fully PARSED, not fully understood",
+    lanes: ["orc", "orc-diy"],
+  },
+  "graph-changes": {
+    cmd: "orc graph changes [--base <ref>] --if-enabled [--json]",
+    what: "the symbols THIS diff's hunks overlap, each with its callers, its tests, and a risk word that carries its own reason",
+    exits: { 0: "answered (an empty answer is an answer)", 1: "no graph index, or not a git repository", 3: "off — `code_graph` is off" },
+    states: null,
+    cost: "free",
+    when: "at review, instead of `impact` on the declared files — and in a verify or ship summary",
+    on_absent: "exit 1 or 3 → review from the diff alone, exactly as before",
+    canonical: "_shared/code-graph.md",
+    never: "never report `risk` without the `why` beside it — a rating nobody can check is a rating nobody should act on",
+    lanes: ["orc", "orc-diy"],
+  },
+  "graph-cochange": {
+    cmd: "orc graph cochange <file> --if-enabled [--json]",
+    what: "the files that historically changed WITH this one — from `git log`, at least 3 times, ignoring commits that touched more than 20 files",
+    exits: { 0: "rows", 1: "not a git repository", 3: "off — `code_graph` is off", 4: "nothing reaches the threshold — this file changes alone (an ANSWER)" },
+    states: null,
+    cost: "free",
+    when: "at planning, to sharpen `declared_files`: it answers \"what else will I have to touch\" from history, which a static edge cannot see",
+    on_absent: "exit 4 is an ANSWER, not a miss — plan exactly as before",
+    canonical: "_shared/code-graph.md",
+    never: "never read a co-change as a DEPENDENCY — it says what people changed together, never what needs what",
+    lanes: ["orc", "orc-diy"],
+  },
+  "graph-notes-pending": {
+    cmd: "orc graph notes pending --files <a,b> [--at wave|end] --if-enabled [--json]",
+    what: "which changed functions have no note for their current body — the input to one notes batch",
+    exits: { 0: "rows to note — dispatch the noter", 1: "no graph index, or no --files", 3: "off — `code_graph` or `code_graph_notes` is off", 5: "none pending, fewer than `code_graph_notes_min`, or deferred to the other `--at` site — dispatch nothing" },
+    states: ["pending", "below-min", "none", "deferred", "off"],
+    cost: "free",
+    when: "after the update that follows a wave, a green smoke gate or a code-writing request — only while notes are on",
+    on_absent: "exit 5 is an ANSWER — the symbols wait for a later batch and nothing is lost",
+    canonical: "_shared/code-graph.md",
+    never: "never paste notes into your own context — the noter pipes them to `orc graph notes apply -` and returns one line",
+    lanes: ["orc", "orc-diy", "orc-fast", "orc-mini", "orc-quick"],
   },
   "gotcha-list": {
     cmd: "orc gotcha list [--archived] [--json]",
@@ -4821,6 +4982,9 @@ const DIY_META = [
   { key: "mock_example", def: "ask", options: ["ask", "on", "off"], validate: vEnum("ask", "on", "off"), desc: "Post-verify mocked example + drift recovery (mock-examples/<slug>/, never committed)." },
   { key: "tdd", def: "on", options: ["on", "off"], validate: vEnum("on", "off"), desc: "TDD-anchored planning: plan-time tdd_spec, Wave-0 red tests, TDD gate in the verify slot." },
   { key: "gotchas", def: "on", options: ["on", "off"], validate: vEnum("on", "off"), desc: "Repair memory: inject scope-matching gotchas into executor slices and record one when a repair loop goes red → green." },
+  // W9: default `on`. The compiled steps all carry `--if-enabled`, so the global
+  // `code_graph` key still decides at run time; `off` is the explicit opt-out.
+  { key: "code_graph", def: "on", options: ["on", "off"], validate: vEnum("on", "off"), desc: "Code-graph steps in this flow: status --heal at preflight, ctx cards in slices, update after every wave and at ship, one notes batch per wave when notes are on. on = compiled in, and the global `code_graph` key decides at run time; off = no graph step, even when `code_graph` is on." },
   { key: "wiki_gate", def: "notice", options: ["notice", "off", "hard"], validate: vEnum("notice", "off", "hard"), desc: "Wiki freshness at preflight: notice | off | hard (stale blocks with an ask)." },
   { key: "post_ship_wiki_ask", def: "on", options: ["on", "off"], validate: vEnum("on", "off"), desc: "Offer a wiki refresh after big shipped runs." },
   { key: "summary", def: "full", options: ["full", "off", "short"], validate: vEnum("full", "off", "short"), desc: "Summary depth." },
@@ -8335,6 +8499,478 @@ function gotchaArchived(claudeDir) {
   for (const e of entries) console.log(gotchaRow(e));
   console.log("\n  Archived, never deleted. Ids are monotonic and never reused.");
   process.exit(0);
+}
+
+// ── orc graph (v1.8.0) — the code graph ─────────────────────────────────────
+// A thin router. The engine is `bin/graph.js`; this function resolves the
+// config (the engine never reads it) and owns the human lines. The exit code is
+// the same on the human path and the `--json` path (S7).
+function graphCmd() {
+  const usage =
+    "Usage: orc graph status [--heal] | update | gc | ctx <symbol|file[:line]>… | impact <file…> | path <from> <to>\n" +
+    "       orc graph coverage <file…> | changes [--base <ref>] | cochange <file>\n" +
+    "       orc graph notes pending --files <a,b> [--cap 40] [--min 5] | notes apply <file|->\n" +
+    "       [--if-enabled] [--depth N] [--budget TOKENS] [--format prose|tree] [--offset N] [--json] [--dir <path>]\n" +
+    "  status   exit 0 FRESH · 1 NONE · 2 DRIFTED · 3 OFF  (--heal builds or updates a NONE/DRIFTED graph first)\n" +
+    "  update   exit 0 done · 1 unavailable or locked · 3 off (with --if-enabled)\n" +
+    "  gc       exit 0 done · 1 no index or locked\n" +
+    "  ctx      exit 0 found · 1 no graph · 3 off (with --if-enabled) · 4 not found or ambiguous\n" +
+    "  impact   exit 0 found · 1 no graph · 3 off (with --if-enabled) · 4 none of the files is in the graph\n" +
+    "  path     exit 0 found · 1 no graph · 3 off (with --if-enabled) · 4 no confident path, or an unknown end\n" +
+    "  coverage exit 0 always when a graph exists (a gap is an answer) · 1 no graph · 3 off (with --if-enabled)\n" +
+    "  changes  exit 0 answered · 1 no graph or no git · 3 off (with --if-enabled)   the symbols THIS diff touched, with risk\n" +
+    "  cochange exit 0 rows · 1 no git · 3 off (with --if-enabled) · 4 nothing reaches the threshold (an ANSWER)\n" +
+    "  notes pending  exit 0 rows · 1 no index or no --files · 5 none, or fewer than --min\n" +
+    "  notes apply    exit 0 all applied · 1 no index, unreadable or locked · 6 one or more rows rejected";
+  if (flag("--global")) {
+    console.error("❌ orc graph is project-scoped — the map is this repo's. Run it from the project (or with --dir <path>).");
+    process.exit(1);
+  }
+  const G = require("./graph.js");
+  const claudeDir = resolveClaudeDir();
+  const root = repoRootOf(claudeDir);
+  const sub = positionals()[1];
+  const asJson = wantsJson();
+  const ovr = readOverride(claudeDir).map;
+  const cfg = (k) => (Object.prototype.hasOwnProperty.call(ovr, k) ? ovr[k] : metaFor(k).def);
+  const enabled = String(cfg("code_graph")) === "on";
+  // W9: every JSON answer carries the chat `line` and the trace `trace` a lane
+  // copies VERBATIM — round 1 measured lanes that paraphrased the graph into a
+  // GATE line, or dropped it. A read card already IS its line, so it is not repeated.
+  // EW1: EVERY graph answer carries the generation it was computed from, so a
+  // card quoted back later can be checked against the index that is on disk now.
+  const metaNow = () => {
+    try {
+      return JSON.parse(fs.readFileSync(G.graphPaths(claudeDir).meta, "utf8"));
+    } catch (_) {
+      return null;
+    }
+  };
+  const finish = (r, line, trace, jsonLine = true) => {
+    const { exit, ...obj } = r;
+    if (obj.generation === undefined) {
+      const m = metaNow();
+      if (m && m.generation) {
+        obj.generation = m.generation;
+        obj.gen_id = m.gen_id || null;
+      }
+    }
+    if (asJson) emitJson({ ...obj, ...(line && jsonLine ? { line } : {}), ...(trace ? { trace } : {}) }, exit);
+    if (line) console.log(line);
+    process.exit(exit);
+  };
+
+  if (sub === "status") {
+    let r = G.graphStatus(claudeDir, root, { enabled });
+    const autoUpdate = String(cfg("code_graph_auto_update")) !== "false";
+    // `--heal` (W9): consult AND build in ONE call. A lane that had to run
+    // status, read the exit code and then run update skipped the second step.
+    let healed = null;
+    if (flag("--heal") === true && enabled && autoUpdate && (r.state === "none" || r.state === "drifted")) {
+      const u = G.graphUpdate(claudeDir, root, { enabled, ifEnabled: true });
+      healed =
+        u.exit === 0
+          ? { state: u.state, added: u.added, changed: u.changed, deleted: u.deleted, parsed: u.parsed, reused: u.reused, engine_upgrade: u.engine_upgrade, ms: u.ms }
+          : { state: u.state, reason: u.reason };
+      if (u.exit === 0) r = G.graphStatus(claudeDir, root, { enabled });
+    }
+    // What the lane does NEXT depends on these two, and the lane reads no key.
+    r.auto_update = autoUpdate;
+    r.notes = String(cfg("code_graph_notes"));
+    if (healed) r.healed = healed;
+    const b = r.behind || {};
+    const lines = {
+      off: "graph: off",
+      none: "graph: none — no index yet (run: orc graph update)",
+      unavailable: `graph: unavailable — ${r.reason}`,
+      fresh: `graph: FRESH — ${plural(r.files, "file")} · ${plural(r.symbols, "symbol")} · gen ${r.generation} (updated ${r.updated_at})`,
+      drifted:
+        `graph: DRIFTED — ${plural((b.added || 0) + (b.changed || 0) + (b.deleted || 0), "file")} behind ` +
+        `(${b.added || 0} added · ${b.changed || 0} changed · ${b.deleted || 0} deleted` +
+        `${r.extractor_stale ? " · extractor upgraded" : ""}); hints only, code wins (run: orc graph update)`,
+    };
+    let line = lines[r.state];
+    let consult = r.state;
+    if (healed && healed.parsed !== undefined) {
+      const moved = healed.added + healed.changed + healed.deleted;
+      const size = `${plural(r.files, "file")} · ${plural(r.symbols, "symbol")}`;
+      consult = healed.state === "built" ? "built" : "updated";
+      line =
+        healed.state === "built"
+          ? `graph: built first index — ${size} (${healed.ms} ms)`
+          : healed.engine_upgrade && !moved
+            ? `graph: index upgraded to the new engine → updated (${healed.ms} ms) — ${size}`
+            : `graph: ${plural(moved, "file")} changed outside ORC → updated (${healed.ms} ms) — ${size}`;
+    } else if (healed) line += ` · could not heal: ${healed.reason}`;
+    return finish(r, line, consult === "off" ? "GRAPH-CONSULT off" : `GRAPH-CONSULT ${consult} :: files=${r.files} symbols=${r.symbols} gen=${r.generation}`);
+  }
+
+  if (sub === "update") {
+    const r = G.graphUpdate(claudeDir, root, {
+      enabled,
+      ifEnabled: flag("--if-enabled") === true,
+      say: asJson ? null : (s) => console.log(s),
+    });
+    let line;
+    if (r.state === "off") line = "graph: off";
+    else if (r.state === "unavailable")
+      line =
+        r.reason === "locked"
+          ? `graph: another update holds the lock (pid ${(r.holder && r.holder.pid) || "?"}) — retry in a moment`
+          : `graph: unavailable — ${r.reason}`;
+    else if (r.state === "unchanged") line = `graph: FRESH — nothing changed · gen ${r.generation} · ${r.ms} ms`;
+    else {
+      const verb = r.state === "built" ? "built first index" : "updated";
+      line =
+        `graph: ${verb} — ${plural(r.files, "file")} (${r.parsed} parsed, ${r.reused} reused, ${r.deleted} deleted` +
+        `${r.skipped ? `, ${r.skipped} skipped` : ""}) · ${r.ms} ms`;
+    }
+    if (r.exit === 0 && !enabled) {
+      line += "\n  note: code_graph is off — lanes will not read this graph (orc config set code_graph on)";
+    }
+    const trace =
+      r.exit === 0
+        ? `GRAPH-UPDATE ${r.state} :: parsed=${r.parsed} reused=${r.reused} deleted=${r.deleted} gen=${r.generation} route=${r.route} ms=${r.ms}`
+        : r.state === "off"
+          ? "GRAPH-UPDATE off"
+          : `GRAPH-UPDATE unavailable :: ${r.reason}`;
+    return finish(r, line, trace);
+  }
+
+  // ── EW3: heal on read ──────────────────────────────────────────────────────
+  // W9 round 2 measured a lane that changed a file and never re-indexed it (R3).
+  // The next READ now repairs that, without a background process and without
+  // making every read pay for a full change scan.
+  //
+  // The plan wanted a cheap whole-repo signature first. EW0 measured that idea
+  // and dropped it: the `git status` it needs IS most of the full scan, and a
+  // full scan on every read (206 ms on django/django) costs more than the EW2
+  // cache saves. So the trigger is the two cheap things a read can afford:
+  //
+  //   · HEAD moved       `git rev-parse HEAD` — 28 ms. A commit, a checkout, a
+  //                      rebase, a pull: everything that moves the tree at once.
+  //   · a TARGET moved   one batched `git hash-object` over the paths this read
+  //                      is actually about. This is the R3 case exactly — an
+  //                      executor edited a file and nobody re-indexed it.
+  //
+  // What it does NOT catch is an edit to a file this read never mentions. That
+  // one is caught by the lane's own update step and by the run-end hook, and
+  // until then the card about THIS file is still right about this file.
+  //
+  // It never starts a heal it expects to overrun: `meta.update_ms` is the last
+  // update's own duration, and the only honest estimate there is, because an
+  // update cannot be stopped half way. Over the cap, or another writer holds
+  // the lock, the read answers from the old generation — and every touched card
+  // already says `CHANGED since index` for itself.
+  const healOnRead = (paths) => {
+    if (!enabled) return null;
+    const autoUpdate = String(cfg("code_graph_auto_update")) !== "false";
+    const capRaw = Number(cfg("code_graph_heal_ms"));
+    const cap = Number.isFinite(capRaw) ? capRaw : 1500;
+    if (!autoUpdate || cap <= 0) return null;
+    const meta = metaNow();
+    if (!meta) return null; // no graph at all — `update` is the answer, not a heal
+    const last = Number(meta.update_ms) || 0;
+    if (last > cap) return { state: "skipped", reason: "over-cap", last_ms: last, cap_ms: cap };
+
+    let moved = null;
+    try {
+      const head = spawnSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" });
+      if (head.status === 0 && meta.head_commit && head.stdout.trim() !== meta.head_commit) moved = "head";
+    } catch (_) {}
+    if (!moved && paths && paths.length) {
+      try {
+        const files = JSON.parse(fs.readFileSync(G.graphPaths(claudeDir).files, "utf8"));
+        const known = paths.filter((x) => files[x]);
+        if (known.length) {
+          const h = spawnSync("git", ["hash-object", "--stdin-paths"], { cwd: root, encoding: "utf8", input: known.join("\n") + "\n" });
+          if (h.status === 0) {
+            const out = h.stdout.split(/\r?\n/).filter(Boolean);
+            known.forEach((rel, i) => {
+              if (!moved && out[i] && out[i] !== files[rel].blob) moved = "target";
+            });
+          }
+        }
+        // A path the index has never heard of is also a reason to look.
+        if (!moved && paths.some((x) => !files[x] && fs.existsSync(path.join(root, ...x.split("/"))))) moved = "new-path";
+      } catch (_) {}
+    }
+    if (!moved) return null;
+
+    const u = G.graphUpdate(claudeDir, root, { enabled, ifEnabled: true });
+    if (u.exit !== 0) return { state: "skipped", reason: u.reason || u.state, trigger: moved };
+    return { state: u.state, trigger: moved, added: u.added, changed: u.changed, deleted: u.deleted, generation: u.generation, ms: u.ms };
+  };
+  // Only the paths a read names can be checked cheaply, so normalise them the
+  // way the store does.
+  const asPaths = (list) => list.map((x) => String(x).split("\\").join("/").replace(/^\.\//, "").replace(/:\d+$/, ""));
+
+  if (sub === "coverage") {
+    if (!enabled && flag("--if-enabled") === true) return finish({ ok: true, enabled: false, state: "off", exit: 3 }, "graph: off");
+    const VALUE_FLAGS = new Set(["--dir"]);
+    const plain = [];
+    for (let i = 0; i < args.length; i++) {
+      if (VALUE_FLAGS.has(args[i])) {
+        i++;
+        continue;
+      }
+      if (!String(args[i]).startsWith("--")) plain.push(args[i]);
+    }
+    const paths = plain.slice(2);
+    if (!paths.length) return finish({ ok: false, reason: "missing-operand", usage, exit: 1 }, usage);
+    const healed = healOnRead(asPaths(paths));
+    const r = G.graphCoverage(claudeDir, root, { paths });
+    if (healed) r.healed = healed;
+    if (r.exit === 1) return finish(r, "graph: none — no index yet (run: orc graph update)");
+    const LABEL = (x) =>
+      x.coverage === "full"
+        ? "full"
+        : x.coverage === "partial"
+          ? `partial ${(x.ranges || []).map((g) => `${g[0]}-${g[1]}`).join(",")}`
+          : x.coverage;
+    const line =
+      `graph coverage (gen ${r.generation}) — ${plural(r.gaps, "gap")} in ${plural(r.rows.length, "path")}\n` +
+      r.rows.map((x) => `  ${x.path}  ${LABEL(x)}${x.changed_since_index && x.changed_since_index !== "current" ? `  [${x.changed_since_index} since index]` : ""}`).join("\n") +
+      "\n  no recorded gap is not proof of completeness — the source is ground truth";
+    return finish(r, line, `GRAPH-COVERAGE ${r.gaps ? "gaps" : "clean"} :: paths=${r.rows.length} gaps=${r.gaps} gen=${r.generation}`);
+  }
+
+  // ── E7: the cheap signals ──────────────────────────────────────────────────
+  if (sub === "changes" || sub === "cochange") {
+    if (!enabled && flag("--if-enabled") === true) return finish({ ok: true, enabled: false, state: "off", exit: 3 }, "graph: off");
+    const VALUE_FLAGS = new Set(["--dir", "--base"]);
+    const plain = [];
+    for (let i = 0; i < args.length; i++) {
+      if (VALUE_FLAGS.has(args[i])) {
+        i++;
+        continue;
+      }
+      if (!String(args[i]).startsWith("--")) plain.push(args[i]);
+    }
+    const SIG = require("./graph-signals.js");
+    if (sub === "changes") {
+      const base = typeof flag("--base") === "string" ? flag("--base") : null;
+      const healed = healOnRead(SIG.changedPaths(root, base));
+      const r = SIG.graphChanges(claudeDir, root, { base });
+      if (healed) r.healed = healed;
+      if (r.exit !== 0) return finish(r, r.reason === "no-index" ? "graph: none — no index yet (run: orc graph update)" : `graph: unavailable — ${r.reason}`);
+      const c = r.counts;
+      const line = r.symbols.length
+        ? `graph changes vs ${r.base} — ${plural(r.symbols.length, "symbol")} in ${plural(r.files.length, "file")} · ${c.high} high · ${c.medium} medium · ${c.low} low\n` +
+          r.symbols.map((x) => `  ${x.risk.padEnd(6)} ${x.qname}  ${x.file}:${x.lines[0]}-${x.lines[1]}  (${x.why.join(" · ")})`).join("\n") +
+          (r.not_in_graph.length ? `\n  not in the graph: ${r.not_in_graph.join(", ")}` : "") +
+          "\n  risk is a HINT with its reason attached — an empty impact is never proof nothing depends on the change"
+        : `graph changes vs ${r.base} — no indexed symbol was touched${r.not_in_graph.length ? ` (changed, but not in the graph: ${r.not_in_graph.join(", ")})` : ""}`;
+      return finish(r, line, `GRAPH-CHANGES ${r.symbols.length ? "found" : "none"} :: symbols=${r.symbols.length} high=${c.high} medium=${c.medium} low=${c.low} gen=${r.generation}`);
+    }
+    const file = plain[2];
+    if (!file) return finish({ ok: false, reason: "missing-operand", usage, exit: 1 }, usage);
+    const r = SIG.graphCochange(claudeDir, root, { file });
+    if (r.exit === 1) return finish(r, r.reason === "missing-operand" ? usage : `graph: unavailable — ${r.reason}`);
+    const line = r.rows.length
+      ? `graph cochange ${r.file} — changed in ${plural(r.commits, "commit")} since ${r.since}; these changed WITH it at least ${r.min} times\n` +
+        r.rows.map((x) => `  ${String(x.together).padStart(3)}×  ${x.file}  (${Math.round(x.share * 100)}% of its commits)`).join("\n") +
+        (r.more ? `\n  ${r.more} more below the shown rows` : "") +
+        "\n  history, not structure — it says what people changed together, never what depends on what"
+      : `graph cochange ${r.file} — nothing changed with it at least ${r.min} times since ${r.since} (it changes alone)`;
+    return finish(r, line, `GRAPH-COCHANGE ${r.rows.length ? "found" : "none"} :: rows=${r.rows.length} commits=${r.commits}`);
+  }
+
+  if (sub === "gc") {
+    const r = G.graphGc(claudeDir);
+    const line =
+      r.exit === 0
+        ? `graph: gc — ${plural(r.removed, "record")} removed, ${r.kept} kept (${Math.round(r.bytes_freed / 1024)} KB freed)` +
+          `${r.notes && r.notes.removed ? ` · ${plural(r.notes.removed, "old note")} compacted` : ""}`
+        : r.reason === "locked"
+          ? "graph: another update holds the lock — retry in a moment"
+          : "graph: none — nothing to collect";
+    return finish(r, line);
+  }
+
+  if (sub === "notes") {
+    const NOTE_VALUE_FLAGS = new Set(["--files", "--cap", "--min", "--at", "--dir"]);
+    const words = [];
+    for (let i = 0; i < args.length; i++) {
+      if (NOTE_VALUE_FLAGS.has(args[i])) {
+        i++;
+        continue;
+      }
+      if (!String(args[i]).startsWith("--")) words.push(args[i]);
+    }
+    const action = words[2];
+    const N = require("./graph-notes.js");
+    if (action === "pending") {
+      const notesMode = String(cfg("code_graph_notes"));
+      const gated = flag("--if-enabled") === true;
+      if (gated && (!enabled || notesMode === "off"))
+        return finish({ ok: true, state: "off", enabled, notes: notesMode, exit: 3 }, enabled ? "graph notes: off" : "graph: off", "GRAPH-NOTES off");
+      // `--at wave|end` names the CALL SITE. A batch the configured mode places at
+      // the other site is DEFERRED — an answer (exit 5), never an error.
+      const at = flag("--at");
+      if (gated && typeof at === "string" && at !== notesMode)
+        return finish(
+          { ok: true, state: "deferred", notes: notesMode, at, exit: 5 },
+          `graph notes: deferred — code_graph_notes is '${notesMode}', and this is the '${at}' batch`,
+          `GRAPH-NOTES deferred :: mode=${notesMode} at=${at}`
+        );
+      const raw = flag("--files");
+      const files = typeof raw === "string" ? raw.split(",").map((s) => s.trim()).filter(Boolean) : [];
+      const r = N.notesPending(claudeDir, {
+        files,
+        cap: flag("--cap") === undefined ? cfg("code_graph_notes_cap") : flag("--cap"),
+        min: flag("--min") === undefined ? cfg("code_graph_notes_min") : flag("--min"),
+      });
+      r.notes = notesMode;
+      let line;
+      if (r.state === "usage") line = usage;
+      else if (r.state === "none" && r.reason === "no-index") line = "graph: none — no index yet (run: orc graph update)";
+      else if (r.state === "none") line = "graph notes: nothing pending for these files";
+      else if (r.state === "below-min")
+        line = `graph notes: ${r.total} pending — below the minimum of ${r.min}; they wait for a later batch (nothing is lost)`;
+      else
+        line =
+          `graph notes: ${r.total} pending — ${r.rows.length} in this batch${r.more ? `, ${r.more} more after it` : ""}\n` +
+          r.rows.map((x) => `  ${x.sym}  :${x.lines[0]}-${x.lines[1]}  ${x.body_hash}`).join("\n");
+      if (r.missing && r.missing.length) line += `\n  not in the graph: ${r.missing.join(", ")}`;
+      // `pending` has no trace here: the noter's ONE-line return is the GRAPH-NOTES line.
+      const trace =
+        r.state === "none" && r.reason !== "no-index"
+          ? "GRAPH-NOTES none :: nothing pending"
+          : r.state === "below-min"
+            ? `GRAPH-NOTES below-min :: ${r.total} pending, min ${r.min}`
+            : null;
+      return finish(r, line, trace);
+    }
+    if (action === "apply") {
+      const src = words[3];
+      if (!src) return finish({ ok: false, reason: "missing-operand", usage, exit: 1 }, usage);
+      let text;
+      try {
+        text = src === "-" ? fs.readFileSync(0, "utf8") : fs.readFileSync(path.resolve(src), "utf8");
+      } catch (e) {
+        return finish({ ok: false, state: "unavailable", reason: "unreadable", source: src, exit: 1 }, `graph notes: cannot read ${src}`);
+      }
+      const r = N.notesApply(claudeDir, text);
+      const reasons = {};
+      for (const x of r.rejected || []) reasons[x.reason] = (reasons[x.reason] || 0) + 1;
+      const why = Object.entries(reasons).map(([k, v]) => `${v} ${k}`).join(", ");
+      const line =
+        r.state === "none"
+          ? "graph: none — no index yet (run: orc graph update)"
+          : r.reason === "locked"
+            ? "graph notes: another update holds the lock — retry in a moment"
+            : r.state === "invalid"
+              ? `graph notes: invalid input (${r.reason})`
+              : `notes: ${r.applied} applied · ${(r.rejected || []).length} rejected${why ? ` · ${why}` : ""}`;
+      return finish(r, line);
+    }
+    return finish({ ok: false, reason: "unknown-subcommand", usage, exit: 1 }, usage);
+  }
+
+  if (sub === "ctx" || sub === "impact" || sub === "path") {
+    if (!enabled && flag("--if-enabled") === true) return finish({ ok: true, enabled: false, state: "off", exit: 3 }, "graph: off");
+    // Positionals after the subcommand, with every value-flag's value removed.
+    const VALUE_FLAGS = new Set(["--depth", "--budget", "--dir", "--format", "--offset"]);
+    const plain = [];
+    for (let i = 0; i < args.length; i++) {
+      if (VALUE_FLAGS.has(args[i])) {
+        i++;
+        continue;
+      }
+      if (!String(args[i]).startsWith("--")) plain.push(args[i]);
+    }
+    const operands = plain.slice(2);
+    // `path` names two symbols, not files, so it has nothing cheap to check —
+    // it reads whatever generation is on disk, like every other command did
+    // before EW3.
+    const healed = sub === "path" ? null : healOnRead(asPaths(operands));
+    const Q = require("./graph-query.js");
+    const model = Q.loadModel(claudeDir, root);
+    if (!model) return finish({ ok: false, state: "none", reason: "no-index", exit: 1 }, "graph: none — no index yet (run: orc graph update)");
+    const wikiDocsFor = (files) => {
+      try {
+        const ws = wikiState(claudeDir);
+        if (ws.state !== "registered" || !ws.meta) return [];
+        return (ws.meta.docs || []).filter((d) => files.some((f) => docCovers(d, f))).map((d) => path.basename(d.file));
+      } catch (_) {
+        return [];
+      }
+    };
+    const opts = {
+      depth: flag("--depth"),
+      budget: flag("--budget") === undefined ? cfg("code_graph_card_budget") : flag("--budget"),
+      // E6: a FORMAT, never a filter — the same rows, the same order, the same
+      // JSON. `prose` is the default because a shorter card that is read wrong
+      // costs more than it saves.
+      format: String(flag("--format") || "prose") === "tree" ? "tree" : "prose",
+      offset: flag("--offset"),
+      wikiDocsFor,
+    };
+    let r;
+    if (sub === "ctx") {
+      if (!operands[0]) return finish({ ok: false, reason: "missing-operand", usage, exit: 1 }, usage);
+      if (operands.length === 1) r = Q.ctx(model, operands[0], opts);
+      else {
+        // Several targets, ONE call, ONE budget (W9): a slice builder that had to
+        // loop over its declared files ran the first and skipped the rest.
+        const list = operands.slice(0, 5);
+        const max = Math.max(100, Math.min(8000, Number(opts.budget) || 1200));
+        const each = Math.max(100, Math.floor(max / list.length));
+        const parts = list.map((q) => ({ query: q, res: Q.ctx(model, q, { ...opts, budget: each }) }));
+        const found = parts.filter((p) => p.res.ok);
+        r = {
+          ok: found.length > 0,
+          state: found.length ? "found" : "not-found",
+          query: list.join(" "),
+          cards: parts.map((p) => ({ query: p.query, state: p.res.state, used: p.res.budget ? p.res.budget.used : 0 })),
+          card: found.map((p) => p.res.card).join("\n\n") || null,
+          budget: { used: found.reduce((a, p) => a + p.res.budget.used, 0), max },
+          exit: found.length ? 0 : 4,
+        };
+      }
+    } else if (sub === "impact") {
+      if (!operands.length) return finish({ ok: false, reason: "missing-operand", usage, exit: 1 }, usage);
+      r = Q.impact(model, operands, opts);
+    } else {
+      if (operands.length < 2) return finish({ ok: false, reason: "missing-operand", usage, exit: 1 }, usage);
+      r = Q.pathBetween(model, operands[0], operands[1]);
+    }
+    let line = r.card;
+    if (!line && r.state === "not-found") {
+      const near = (r.nearest || []).map((s) => `${s.qname} (${s.file}:${s.lines[0]})`);
+      line = r.missing
+        ? `graph: not in the graph — ${r.missing.join(", ")}`
+        : `graph: nothing named "${r.query || operands.join(" ")}"${near.length ? ` — nearest: ${near.join(", ")}` : ""}`;
+      if (sub === "path") line = "graph: path needs two known symbols — " + ((r.candidates || []).length ? `ambiguous: ${r.candidates.map((s) => `${s.qname} (${s.file})`).join(", ")}` : "one end was not found");
+    }
+    if (!line && r.state === "ambiguous-target")
+      line = `graph: "${r.query}" names ${r.candidates.length} symbols — pick one:\n` + r.candidates.map((s) => `  ${s.id}`).join("\n");
+    if (healed) r.healed = healed;
+    // A heal is a real event and it gets ONE line above the card — a card that
+    // silently answers from a different generation than the reader expected is
+    // the confusion this whole wave exists to remove.
+    if (healed && healed.state && healed.state !== "skipped" && healed.state !== "unchanged") {
+      const n = (healed.added || 0) + (healed.changed || 0) + (healed.deleted || 0);
+      line = `graph: ${plural(n, "file")} changed outside ORC → healed on read (${healed.ms} ms) · gen ${healed.generation}
+${line || ""}`;
+    } else if (healed && healed.state === "skipped") {
+      line =
+        `graph: not healed on read (${healed.reason === "over-cap" ? `the last update took ${healed.last_ms} ms, over the ${healed.cap_ms} ms cap` : healed.reason}) — cards are hints where they say CHANGED
+` +
+        (line || "");
+    }
+    const trace =
+      sub === "ctx" && r.exit === 0
+        ? `GRAPH-CONSULT card :: targets=${(r.cards ? r.cards.filter((c) => c.state === "found").map((c) => c.query) : [operands[0]]).join(",")}` +
+          (healed && healed.state && healed.state !== "skipped" ? ` healed=${healed.trigger}` : "")
+        : null;
+    return finish(r, line, trace, !r.card);
+  }
+
+  if (asJson) emitJson({ ok: false, reason: "unknown-subcommand", usage }, 1);
+  console.log(usage);
+  process.exit(1);
 }
 
 function gotcha() {
@@ -33024,6 +33660,45 @@ function doctor() {
     }
   } catch (_) {}
 
+  // 5a-ter) the code graph (v1.8.0). ONE finding, and only while `code_graph` is
+  // on — the read-gate rule. DRIFTED is the only state worth a line: NONE is
+  // built by the next code lane's preflight, and a doctor that warns about a
+  // graph nobody has asked for yet is a doctor people learn to scroll past.
+  try {
+    const cfg = resolvedConfig(claudeDir);
+    if (String(cfg.code_graph || "off") !== "on") ok("code graph off (fine — the default)");
+    else {
+      const gs = require("./graph.js").graphStatus(claudeDir, repoRootOf(claudeDir), { enabled: true });
+      if (gs.state === "drifted") {
+        const b = gs.behind || {};
+        const n = (b.added || 0) + (b.changed || 0) + (b.deleted || 0);
+        warn(
+          "graph-drifted",
+          `code graph is DRIFTED — ${n} file(s) changed since the index${gs.engine_stale ? " (and the extractor was upgraded)" : ""}; lanes treat it as hints until it is updated. Fix: \`orc graph update\` (FREE — parser only, no model)`,
+          { fix: "orc graph update", fix_command: "orc graph update" }
+        );
+      } else ok(`code graph ${gs.state}`);
+      // EW3/EW4 — the delivery and self-update hook. Only ever raised while the
+      // feature is ARMED: a warning about a hook for a feature you switched off
+      // is exactly the noise that teaches people to ignore doctor.
+      if (String(cfg.code_graph_hooks === undefined ? "on" : cfg.code_graph_hooks) === "on") {
+        let hk = {};
+        try {
+          hk = (JSON.parse(fs.readFileSync(path.join(claudeDir, "settings.json"), "utf8")) || {}).hooks || {};
+        } catch (_) {}
+        const wiredOn = (arr) => Array.isArray(arr) && arr.some((e) => (e.hooks || []).some((h) => String(h.command || "").includes("orc-graph-hook")));
+        const wired = ["SubagentStart", "SubagentStop", "PreToolUse", "PostToolUse"].filter((e) => wiredOn(hk[e]));
+        if (wired.length === 4) ok("graph hook wired on all four events");
+        else
+          warn(
+            "graph-hook-unwired",
+            `graph hook wired on ${wired.length} of 4 events (${wired.join(", ") || "none"}) — the graph will not update itself when an executor finishes, and subagents get no anchors; run \`orc update\``,
+            { fixable: true, fix: "orc update", fix_command: "orc update" }
+          );
+      }
+    }
+  } catch (_) {}
+
   // 5b) the wiki (v0.49.1). Exactly TWO findings, and the restraint is the
   // design: a doctor that warns about normal states teaches people to ignore
   // doctor. Both route to the Knowledge panel via FINDING_ROUTE — a caution
@@ -39364,7 +40039,23 @@ Usage:
                                           (exit 0 = entries, 1 = none); list also prints them
     orc gotcha prune                      archive the low-value tail (fewest hits, then oldest)
                                           down to gotchas_max → gotchas-archive.md; never deletes
-  orc mock [--dir <path>]                 mocked runnable examples left by a green verify
+  orc graph [--dir <path>]                the code graph — a local map of how this repo is connected
+                                          (project-scoped; no --global; key code_graph, default off)
+    orc graph status [--json]             is the map fresh against the working tree
+                                          (exit 0 FRESH · 1 NONE · 2 DRIFTED · 3 OFF)
+    orc graph update [--if-enabled]       find changes from git blob SHAs, parse only those
+                                          (exit 0 · 1 unavailable/locked · 3 off with --if-enabled)
+    orc graph gc [--json]                 remove records no file points at
+    orc graph ctx <symbol|file[:line]>    a budgeted context card: callers, calls, effects, wiki, tests
+                                          [--depth 2] [--budget 1200] (exit 4 = not found/ambiguous)
+    orc graph impact <file…>              transitive callers of everything in these files
+                                          [--depth 3] [--budget 1500]
+    orc graph path <from> <to>            the shortest confident call chain (exit 4 = none)
+    orc graph notes pending --files <a,b> symbols whose current body has no note (exit 5 = none
+                                          or below --min 5); never repo-wide
+    orc graph notes apply <file|->        validate + store notes from the noter agent (exit 6 =
+                                          some rows rejected, each named)
+  orc mock [--dir <path>]             mocked runnable examples left by a green verify
                                           (project-scoped; no --global) — read-only, never runs one
     orc mock list [--json]                every mock-examples/<slug>/, newest first
     orc mock show <slug> [--json]         EXAMPLE.md + the file tree for one example
@@ -40842,6 +41533,7 @@ const STATUSLINE_COMPONENTS = [
   slRow({ id: "wiki-distance", group: "D", label: "c", summary: "Commits since the wiki was scanned.", renderers: ["bare", "plain", "label-value", "paren"], defaults: { render: "paren", suffix: "c" }, states: ["fresh", "aging", "stale"], cost: "new-read", binding: "wiki.distance", state_binding: "wiki.tier" }),
   slRow({ id: "wiki-worst", group: "D", label: "worst", summary: "The wiki document deciding its tier.", renderers: ["bare", "plain", "label-value"], defaults: { render: "bare", truncate: "middle", max_len: 24 }, unknown: "hide", cost: "refused", refused_reason: "freshness is COVERAGE-RELATIVE, so finding the worst document means one `git rev-list` PER DOCUMENT against that document's own covered files. `orc wiki status` computes it; a status line cannot afford N subprocesses on a surface that redraws on every keystroke." }),
   slRow({ id: "wiki-coverage", group: "D", label: "cov", summary: "How much of the repo the wiki covers.", renderers: ["plain", "bare", "label-value"], defaults: { render: "plain", format: "percent" }, cost: "refused", refused_reason: "coverage is COMPUTED, not stored: it needs the tracked-file list, which is a `git ls-files` subprocess, and then a match per document. `orc wiki coverage` is where that answer lives. A status line reading a field wiki-meta.json does not have would render a confident number nobody measured." }),
+  slRow({ id: "graph", group: "D", label: "graph", summary: "The local code graph, from its own index. This is the FLOOR: it compares the commit the index was built at with HEAD, read from .git with no subprocess, and never walks the tree — so `behind` means HEAD moved, never that files changed. `orc graph status` is the real check, and it also sees uncommitted edits.", renderers: ["word", "shape", "badge"], defaults: { render: "word" }, states: ["fresh", "behind", "none", "off"], shapes: { fresh: "●", behind: "◐", none: "·", off: "○" }, cost: "new-read", binding: "graph.state", state_binding: "graph.state" }),
   slRow({ id: "wiki-docs", group: "D", label: "docs", summary: "How many wiki documents are registered.", renderers: ["plain", "label-value", "bare"], defaults: { render: "plain" }, cost: "new-read", binding: "wiki.docs" }),
   slRow({ id: "wiki-blindspot", group: "D", label: "blind", summary: "Whether the wiki has a STRUCTURAL blind spot. That is a coverage gap, not doc rot.", renderers: ["plain", "bare"], defaults: { render: "plain" }, unknown: "hide", cost: "refused", refused_reason: "a blind spot is files changed since the floor that NO document covers — the same per-document git walk `wiki-worst` needs. `orc wiki status` reports it, and `orc wiki impact` escalates it, which is the right place for that signal." }),
   slRow({ id: "pattern", group: "D", label: "pattern", summary: "Whether a code pattern is cached for this project.", renderers: ["word", "plain", "label-value", "bare", "shape"], defaults: { render: "plain" }, states: ["cached", "none"], shapes: { cached: "●", none: "○" }, cost: "new-read", binding: "pattern.state", state_binding: "pattern.state" }),
@@ -41374,7 +42066,10 @@ function slCompile(layout) {
   // W3's groups all read files the shipped status line never opens, so they
   // share one gate — the extended scan — and each sub-read inside it carries
   // its own TTL. One gate, many clocks.
-  const EXTENDED = /^(wiki\.(coverage|docs|worst|blindspot)|pattern\.|crosslink\.|gotchas\.|extra\.(profile|provider|spend|tasks|inflight|demoted|passphrase|orphans|reliability)|wait\.|preset\.|run\.(wave|wave_total|resume|open)|pact\.|boundary\.|challenge\.|doc\.|usage\.|config\.)/;
+  // v1.8.0 — `graph.` joins it: the code graph row reads meta.json and .git inside
+  // the extended scan, on the knowledge clock. Without it the lock never names
+  // `scan.extended` and the row renders an em dash forever.
+  const EXTENDED = /^(wiki\.(coverage|docs|worst|blindspot)|pattern\.|crosslink\.|gotchas\.|graph\.|extra\.(profile|provider|spend|tasks|inflight|demoted|passphrase|orphans|reliability)|wait\.|preset\.|run\.(wave|wave_total|resume|open)|pact\.|boundary\.|challenge\.|doc\.|usage\.|config\.)/;
   const note = (comp, item) => {
     // A GROUP'S CHILDREN ARE READS TOO. Without this the read planner would
     // fetch nothing for a group and every child would render an em dash — the
@@ -44034,6 +44729,9 @@ function jsonCrash(err) {
       break;
     case "gotcha":
       gotcha();
+      break;
+    case "graph":
+      graphCmd();
       break;
     case "mock":
       mock();

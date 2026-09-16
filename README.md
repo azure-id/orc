@@ -7,14 +7,14 @@
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
 ![npm](https://img.shields.io/npm/v/%40azure-id%2Forc?style=for-the-badge&color=cb3837&logo=npm)
-![Version](https://img.shields.io/badge/version-1.7.1-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-1.8.0-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
 ![Dependencies](https://img.shields.io/badge/dependencies-zero-lightgrey.svg?style=for-the-badge)
 ![GitHub stars](https://img.shields.io/github/stars/azure-id/orc?style=for-the-badge&color=yellow)
 
-**Latest: v1.7.1** · updated 2026-09-14 · [full changelog](CHANGELOG.md)
+**Latest: v1.8.0** · updated 2026-09-16 · [full changelog](CHANGELOG.md)
 
 **On npm: [`@azure-id/orc`](https://www.npmjs.com/package/@azure-id/orc)** — `npm i -g @azure-id/orc`
 
@@ -381,6 +381,58 @@ and its headings become the outline.
 
 ---
 
+## The code graph — `orc graph`
+
+A local map of how your code is connected. It is **off by default**.
+
+```bash
+orc config set code_graph on          # code lanes build and use the map (free)
+orc config set code_graph_notes wave  # optional: one-sentence notes (costs tokens)
+orc graph ctx OrderService.create     # a card: callers, calls, SQL/HTTP/env effects
+orc graph changes                     # what THIS diff touched, and how risky
+orc graph cochange src/orders.js      # what usually changes with this file
+orc graph coverage src/orders.js      # how much of it the parser really saw
+```
+
+- **Structure is free.** The CLI parses the code. No model, no dependency.
+  Functions, methods, classes and route handlers (`GET /orders/:id`); a
+  middleware passed by name is a `used by` link.
+- **Updates are small.** Git already hashes every file. Only the files whose hash
+  changed are parsed again — a teammate's change heals at the next preflight.
+- **Every link says how sure it is:** `LOCAL`, `IMPORT`, `UNIQUE`, `AMBIGUOUS`
+  (every candidate listed) or `UNRESOLVED`. The graph never guesses.
+- **A card has a token budget.** It never goes over it, and it says what it hid.
+  `--format tree` names each column once instead of on every row, and falls back
+  to the normal shape when a card is too small to pay for the header.
+- **It shows where code is. It does not replace reading it.** Agents still read
+  the line range before they act. A card header says `coverage partial 327-466`
+  when the parser could not finish a file — **no recorded gap is not proof of
+  completeness**. A card also lists only the callers that NAME the symbol: one
+  that reaches it through an HTTP route or a string dispatch is not a link, so
+  **a card's silence is not proof of absence**.
+- **Every answer carries a `generation`** — a number that goes up each time the
+  map changes. A card quoted back later can be placed in time.
+- **It keeps itself current in three ways, and only one of them needs a lane to
+  remember a step.** A read repairs the files it is about to answer for; the
+  installed hook updates the map when a worker finishes; and every code lane
+  — `/orc`, `/orc-ultra`, `/orc-diy`, `/orc-mini`, `/orc-fast`, `/orc-quick` —
+  still builds it at preflight and updates it after each change. Other lanes
+  never call it. **Nothing runs on a timer and nothing runs in the background.**
+- **The hook also hands a worker the anchors it would otherwise search for**, and
+  everything it hands over is labelled repository data, never an instruction.
+  Switch it off with `orc config set code_graph_hooks off`; the map still works.
+
+The contract: `templates/skills/_shared/code-graph.md`. The hook:
+`templates/hooks/README.md`.
+
+> **It does not save tokens, and we measured that rather than guessing.** Across
+> 242 real ORC lane windows, `Grep` and `Glob` results are **0.06%** of what a
+> session adds to its context and every tool result together is 5.5%. A perfect
+> locator — every whole-file read turned into a range read — would save **0.1% of
+> a session**. Turn the map on because you want the cards: what calls what, what
+> a change would touch, where the parser could not finish. Not for a number.
+> The working is in `eval/graph-replay.js`, and it spends no tokens to re-run.
+
 ## `orc ui` — the control panel
 
 A local web page for **everything in ORC that is not ai**. One boundary defines
@@ -558,9 +610,10 @@ templates/
 │                 and _shared/ (cross-lane contract prose)
 ├── commands/     29 slash commands
 ├── hooks/        effort guard (PreToolUse) · statusline warning · behavior trace
-└── agents/       51 model-pinned subagents + MODEL-MAPPING.md
+└── agents/       48 model-pinned subagents + MODEL-MAPPING.md
 bin/cli.js        installer, config editor, flow composer, run-state reader, and
                   the deterministic half of every lane. Every read speaks --json
+bin/graph*.js     the code graph: store, extraction, resolution + its cache, signals, notes
 bin/webui/        `orc ui` — the local control panel: css/ + js/ + i18n/<lang>/ +
                   fixtures/, one file per layer and per panel. Zero deps, no build step
 bin/mockrun-catalog.js   the mocked-run catalogue (derived from the files on disk)
@@ -630,35 +683,67 @@ a current audit: [EVAL-REPORT.md](EVAL-REPORT.md).
 **Full history: [CHANGELOG.md](CHANGELOG.md)** — or `orc changelog`, which prints
 only what is newer than the version you have.
 
-### v1.7.1 - the rules card now reaches the agent _(2026-09-14)_
+### v1.8.0 - the code graph: a map of the code that stays fresh _(2026-09-16)_
 
-In v1.7.0, subagents and the preflight showed the house rules only. Your project
-rules and the ORC rules did not reach the agent.
+ORC lanes spend most of their tokens on searching: Grep, read a file, Grep
+again. The next agent in the next wave searches for the same things again.
 
-**The cause.** `orc rules slice` built the card correctly, but each place that
-builds an executor slice named only the `house_rules` card. `/orc` Phase 3 also
-did not load `rules.md`, and the `/orc` preflight had no `rules:` row.
+**`orc graph` is a local map of how the code is connected.** It is off by
+default: `orc config set code_graph on`.
 
-**The fix.**
+- **Structure is free.** The CLI parses JavaScript, TypeScript, Python, Go, Java,
+  C# and PHP — no model. Python uses its own `ast` parser when Python 3.8+ is
+  installed.
+- **Updates are small.** Only files whose git hash changed are parsed again. On
+  django/django (3,040 source files) a first build takes 12 s and a one-file
+  update takes 2.7 s.
+- **`orc graph ctx | impact | path`** answer with a token budget and a state word
+  on every link. Route handlers are symbols, and a middleware passed by name is a
+  `used by` link. `--format tree` names each column once instead of on every row
+  — 17–21% fewer tokens on a file card, and it falls back to the normal shape
+  when a card is too small to pay for the header.
+- **A stored answer for the expensive half.** Working out who calls a symbol cost
+  437 ms on django/django, every time. It is now written once per update and read
+  back, which takes a file card from 727 ms to 458 ms and `impact` from 631 ms to
+  397 ms. The store is DERIVED: it is used only when it names the current index,
+  and deleting it costs speed and nothing else.
+- **Every answer carries a `generation`**, and every file carries what the parser
+  really saw — `full`, `partial` with the line ranges it could not finish, or
+  `skipped`. `orc graph coverage <files>` asks in one call. **No recorded gap is
+  not proof of completeness.**
+- **Three new read-only answers, all free:** `orc graph changes` (the symbols
+  THIS diff's hunks touched, each with its callers, its tests and a risk word
+  that carries its own reason), `orc graph cochange <file>` (what usually changes
+  WITH it, from git history — never a dependency), and `orc graph coverage`.
+- **Notes are optional** (`code_graph_notes: wave | end`). One Sonnet 4.6 agent
+  writes one sentence per changed function. A note is shown only while the
+  function body is unchanged.
+- **It stays fresh in three ways, and only one needs anyone to remember a step.**
+  A read repairs the files it is about to answer for. An installed hook updates
+  the map when a worker finishes, and hands a worker the anchors it would
+  otherwise search for. And every code lane still builds it at preflight and
+  updates it after each change. `/orc-quick` still reads only `log_dir` — the CLI
+  reads the settings. **Nothing runs on a timer and nothing runs in the
+  background.**
+- **Anything a worker receives from the graph is labelled repository data, never
+  an instruction.** Symbol names come out of your repository, so ORC treats them
+  as text. File contents are never injected — only names, paths and line ranges.
+- **Also:** eight config keys, two `orc doctor` findings, a code graph card in
+  `orc ui`, and a `graph` status line component.
 
-- **A new slice field, `rules_card`** - the `text` of
-  `orc rules slice --lane <lane> --json`, put in verbatim directly under
-  `house_rules` in `/orc`, `/orc-mini`, `/orc-fast`, `/orc-quick` and the
-  Extra foreign dispatch.
-- **The executors read it** and return `rules_applied[]`, `rules_conflicts[]`
-  and `rules_overridden[]`.
-- **The `/orc` preflight prints `rules:`** - the CLI `line`, verbatim.
-- **Guards** - `rules_card` is a registered contract token, and a test checks
-  every dispatch site.
-
-**How to check it.** Run `orc rules slice --lane orc --json`. When
-`.claude/orc/rules.md` has rules, `line` shows `yours N lines` and `text`
-starts with `YOUR PROJECT'S RULES`. Run `orc update` in your project to get the
-fixed skills.
+**Limits we know about.** TypeScript is read with pattern matching, not the
+TypeScript compiler. `x = new Service(); x.run()` shows as `AMBIGUOUS`. A caller
+that never names the symbol — an HTTP route test, a job runner — is not a link,
+so read a card as an anchor, not as a blast radius.
+**It is not a token optimisation, and that is measured.** Searches are 0.06% of
+what a session adds to its context; a perfect locator would save 0.1% of a run.
+The map costs no model tokens to build and the read timings above are real —
+turn it on for the cards, not for a saving.
 
 <details>
-<summary><strong>Earlier releases</strong> — 115 of them, titles only. Full text in <a href="CHANGELOG.md">CHANGELOG.md</a>.</summary>
+<summary><strong>Earlier releases</strong> — 116 of them, titles only. Full text in <a href="CHANGELOG.md">CHANGELOG.md</a>.</summary>
 
+- **v1.7.1** — the rules card now reaches the agent · _2026-09-14_
 - **v1.7.0** — the rules that keep the slop out · _2026-09-13_
 - **v1.6.0** — the rule that can finally say no · _2026-09-07_
 - **v1.5.0** — the lane that runs the test · _2026-09-07_

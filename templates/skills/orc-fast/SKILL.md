@@ -70,7 +70,14 @@ so a missing `postgres-pattern.md` never fails the gate or forces a fallback.
 **Any gate FAILED** → announce which prerequisite failed in one line, then
 hand off to orc-mini via the fallback contract below. Never stop the chat.
 
-**c. Gotchas — NOT a gate.** Two prerequisites stay two: a missing `.claude/orc/gotchas.md` never forces a fallback. Fast READS repair memory (`orc gotcha status`, then inject the SCOPE-MATCHING entries into the F2 slice, cap 3) and never WRITES it — `../_shared/gotchas.md` §10.
+**c. Gotchas — NOT a gate.** Two prerequisites stay two: a missing `.claude/orc/gotchas.md` never forces a fallback. Fast READS repair memory (`orc gotcha status`, then inject the SCOPE-MATCHING entries into the F2 slice, cap 3) and never WRITES it — `../_shared/gotchas.md` §10. The code graph is NOT a gate either (e. below).
+
+**e. Code graph cache — NOT a gate, and never skipped** (`../_shared/code-graph.md` §0). Every call carries
+`--if-enabled`: exit 3 = off → print `graph: off` once, make no other graph call. Print each JSON `line`; put
+each `trace` in the next packet VERBATIM. (1) **Here:** `orc graph status --if-enabled --heal --json` builds or
+updates the cache itself. (2) **F2 slice:** ONE `orc graph ctx <declared files> --if-enabled --json` → its `card`
+is the `graph` block; the return carries `graph_used`. (3) **F3 GREEN:** `orc graph update --if-enabled --json`,
+then one `orc graph notes pending` batch — the next run starts from this cache. A missing graph never falls back.
 
 **d. Extra — a PROBE, not a gate (P0).** Run `orc extra resolve --slot fast-executor --json` (0 = extra, 1 = Claude) — **a gate that is never probed is a gate that is always off**, and without this step the lane silently runs on Claude however `extra_enabled` and `orc extra role` were set. `extra` → print the `extra:` line HERE and carry the answer into F2; `claude` → print nothing, never fall back, never stop.
 
@@ -120,7 +127,7 @@ pinned in the agent file). **Under `opus5_only` it is `orc-executor-opus-5-low`*
   codifies and never falls back on this.
 - **the read ladder** (`../_shared/read-ladder.md`): read only as far up as the
   question needs — a file the task will EDIT is read in full first. Precomputed
-  knowledge REPLACING exploration is this lane; a directory sweep is not.
+  knowledge REPLACING exploration is this lane; a directory sweep is not. With the graph on, `orc graph ctx` cards locate first.
 - the standing `house_rules` card (`../_shared/phases/house-rules.md`, literal,
   same as full/mini) + the `rules_card` under it (`orc rules slice` → `text`, verbatim)
 - constraints from the intent spec
@@ -139,7 +146,7 @@ return = failure (one re-dispatch, then fallback offer).
 Run the gate per `../_shared/smoke-gate.md`, sourcing commands **from
 `wiki-meta.json`'s `commands` block** (recorded at wiki scan — don't
 rediscover tooling; manifest lacks them → detect once and say so). **GREEN**
-→ ship. **RED** → one repair round; second red → STOP and offer: escalate to
+→ code-graph step e.(3) (never a gate) → ship. **RED** → one repair round; second red → STOP and offer: escalate to
 orc-mini (reason `smoke-red-escalation`) / switch to full `/orc` / stop.
 Docs-only → gate N/A, say so.
 

@@ -177,6 +177,14 @@ const required = [
   // them, and an empty catalogue looks like a broken feature rather than a
   // publish that dropped a folder.
   "bin/mockrun-catalog.js",
+  // The code graph engine (v1.8.0). `orc graph` requires it at call time, so a
+  // publish that drops it breaks only that command — silently, until a lane asks.
+  "bin/graph.js",
+  "bin/graph-extract.js",
+  "bin/graph-query.js",
+  "bin/graph-resolve.js",
+  "bin/graph-signals.js",
+  "bin/graph-notes.js",
   // The two DATED data files (v0.50.0). Both ship inside the package and both
   // are load-bearing on absence rather than on content: without the catalog
   // `orc extra providers` is a packaging bug it reports as one, and without the
@@ -402,6 +410,8 @@ const required = [
   "templates/agents/orc-claude-writer-opus-4-8-high.md",
   "templates/agents/orc-learn-writer-opus-5-low.md",
   "templates/agents/orc-trace-writer-haiku-4-5.md",
+  // v1.8.0 — the code graph's notes writer (Layer 2).
+  "templates/agents/orc-graph-noter-sonnet-4-6-med.md",
   // Core non-generated agents — named explicitly so a dropped file is REPORTED
   // by name, not merely absorbed by the count floor. (The 8 executor agents are
   // checked separately by `build-agents.js --check`.)

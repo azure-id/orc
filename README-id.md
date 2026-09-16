@@ -7,13 +7,13 @@
 *Terima permintaan → pahami → rencanakan → beri nilai → kerjakan paralel → periksa → uji → kirim.*
 
 ![npm](https://img.shields.io/npm/v/%40azure-id%2Forc?style=for-the-badge&color=cb3837&logo=npm)
-![Version](https://img.shields.io/badge/version-1.7.0-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-1.8.0-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
 ![Dependencies](https://img.shields.io/badge/dependencies-zero-lightgrey.svg?style=for-the-badge)
 
-**Versi terbaru: v1.7.0** · diperbarui 13-09-2026 · [daftar perubahan lengkap](CHANGELOG.md)
+**Versi terbaru: v1.8.0** · diperbarui 16-09-2026 · [daftar perubahan lengkap](CHANGELOG.md)
 
 **Ada di npm: [`@azure-id/orc`](https://www.npmjs.com/package/@azure-id/orc)** — `npm i -g @azure-id/orc`
 
@@ -404,6 +404,61 @@ Anda juga boleh membawa templat sendiri dan judul-judulnya akan jadi kerangka.
 
 ---
 
+## Graf kode — `orc graph`
+
+Peta lokal tentang bagaimana kode Anda saling terhubung. **Default-nya mati.**
+
+```bash
+orc config set code_graph on          # lane kode membuat dan memakai peta (gratis)
+orc config set code_graph_notes wave  # opsional: catatan satu kalimat (memakai token)
+orc graph ctx OrderService.create     # kartu: pemanggil, yang dipanggil, efek SQL/HTTP/env
+orc graph changes                     # apa yang diubah diff INI, dan seberapa berisiko
+orc graph cochange src/orders.js      # apa yang biasanya berubah bersama berkas ini
+orc graph coverage src/orders.js      # berapa banyak yang benar-benar dibaca parser
+```
+
+- **Strukturnya gratis.** CLI mem-parse kodenya. Tanpa model, tanpa dependency.
+  Fungsi, method, class dan handler route (`GET /orders/:id`); middleware yang
+  dikirim lewat nama menjadi tautan `used by`.
+- **Update-nya kecil.** Git sudah menghitung hash setiap file. Hanya file yang
+  hash-nya berubah yang di-parse ulang — perubahan dari teman satu tim diperbaiki
+  sendiri di preflight berikutnya.
+- **Setiap tautan menyebut seberapa yakin:** `LOCAL`, `IMPORT`, `UNIQUE`,
+  `AMBIGUOUS` (semua kandidat ditulis) atau `UNRESOLVED`. Graf tidak pernah menebak.
+- **Kartu punya batas token.** Kartu tidak pernah melewatinya, dan menyebut apa
+  yang disembunyikan. `--format tree` menulis nama kolom satu kali saja, bukan di
+  setiap baris, dan kembali ke bentuk biasa jika kartunya terlalu kecil.
+- **Graf menunjukkan letak kode. Graf tidak menggantikan membaca kode.** Agent
+  tetap membaca rentang barisnya sebelum bertindak. Kepala kartu menulis
+  `coverage partial 327-466` jika parser tidak selesai membaca satu berkas —
+  **tidak adanya celah yang tercatat bukan bukti bahwa semuanya lengkap.** Kartu
+  juga hanya menulis pemanggil yang MENYEBUT nama simbolnya: pemanggil yang
+  sampai lewat route HTTP atau dispatch lewat string bukan tautan, jadi
+  **diamnya satu kartu bukan bukti bahwa tidak ada apa-apa.**
+- **Setiap jawaban membawa `generation`** — angka yang naik setiap kali peta
+  berubah. Kartu yang dikutip lagi nanti tetap bisa ditempatkan pada waktunya.
+- **Peta tetap segar lewat tiga jalan, dan hanya satu yang perlu diingat orang.**
+  Satu pembacaan memperbaiki berkas yang akan dijawabnya; hook yang terpasang
+  memperbarui peta saat satu pekerja selesai; dan setiap lane kode — `/orc`,
+  `/orc-ultra`, `/orc-diy`, `/orc-mini`, `/orc-fast`, `/orc-quick` — tetap
+  membangunnya di preflight dan memperbaruinya setelah setiap perubahan. Lane
+  lain tidak pernah memanggilnya. **Tidak ada yang berjalan dengan pewaktu dan
+  tidak ada yang berjalan di latar belakang.**
+- **Hook itu juga memberi pekerja titik acuan yang tadinya harus dicari sendiri**,
+  dan semua yang diberikannya ditandai sebagai data repositori, bukan perintah.
+  Matikan dengan `orc config set code_graph_hooks off`; petanya tetap bekerja.
+
+Kontraknya: `templates/skills/_shared/code-graph.md`. Hook-nya:
+`templates/hooks/README.md`.
+
+> **Peta ini tidak menghemat token, dan itu kami ukur, bukan kami tebak.** Di 242
+> jendela lane ORC yang nyata, hasil `Grep` dan `Glob` hanya **0,06%** dari yang
+> ditambahkan satu sesi ke konteksnya, dan semua hasil tool bersama-sama 5,5%.
+> Pencari sempurna — setiap pembacaan berkas penuh menjadi pembacaan rentang —
+> akan menghemat **0,1% dari satu sesi**. Nyalakan peta ini karena Anda ingin
+> kartunya: apa memanggil apa, apa yang akan tersentuh oleh satu perubahan, di
+> mana parser tidak selesai. Bukan demi angka.
+
 ## `orc ui` — panel kendali
 
 Halaman web lokal untuk **semua bagian ORC yang bukan ai**. Satu batas yang
@@ -597,10 +652,11 @@ templates/
 │                 orc-analyze-mini, dan _shared/ (kesepakatan lintas lane)
 ├── commands/     29 perintah garis miring
 ├── hooks/        penjaga effort (PreToolUse) · peringatan statusline · catatan jejak
-└── agents/       51 subagen dengan model terkunci + MODEL-MAPPING.md
+└── agents/       48 subagen dengan model terkunci + MODEL-MAPPING.md
 bin/cli.js        pemasang, penyunting pengaturan, penyusun alur, pembaca status
                   pekerjaan, dan separuh pasti dari setiap lane. Setiap pembacaan
                   bisa menjawab --json
+bin/graph*.js     graf kode: penyimpanan, ekstraksi, resolusi saat dibaca, catatan
 bin/webui/        `orc ui` — panel kendali lokal: css/ + js/ + i18n/<bahasa>/ +
                   fixtures/, satu berkas per lapisan dan per panel. Nol dependensi
 bin/mockrun-catalog.js   katalog contoh jalannya (diturunkan dari berkas di disk)
@@ -676,46 +732,69 @@ Bacalah sebagai catatan putaran itu, bukan sebagai audit terkini:
 **Riwayat lengkap: [CHANGELOG.md](CHANGELOG.md)** — atau `orc changelog`, yang
 hanya mencetak yang lebih baru dari versi yang Anda punya.
 
-### v1.7.0 - aturan yang menahan slop _(13-09-2026)_
+### v1.8.0 - graf kode: peta kode yang selalu baru _(16-09-2026)_
 
-ORC menulis banyak prosa dan banyak kode, dan keduanya keluar membawa bawaan yang
-sama dan mudah dikenali. Selama ini hanya ada satu kartu tetap yang melawannya —
-aturan rumah tujuh baris — dan kartu itu tentang KODE. Tidak ada yang mengatakan
-apa pun tentang kata-katanya.
+Lane ORC menghabiskan sebagian besar tokennya untuk mencari: Grep, baca file,
+Grep lagi. Agent berikutnya di wave berikutnya mencari hal yang sama lagi.
 
-**`orc rules` adalah permukaan aturan kedua, dan punya dua bagian yang tidak
-pernah bercampur.** 65 aturan ORC yang dikirim dan **hanya-baca** (`orc rules set
---pack ...` ditolak dengan menyebut nama perintah penggantinya), dan aturan milik
-proyek Anda di `.claude/orc/rules.md`, yang **menang secara langsung**.
+**`orc graph` adalah peta lokal tentang bagaimana kode saling terhubung.**
+Default-nya mati: `orc config set code_graph on`.
 
-Empat paket: `OSW` penulisan (23), `OSC` kode (22), `OSD` pelaporan (10), dan
-`OSU` antarmuka (10) yang ikut per TUGAS. Tiga tingkat: **HARD**, **PURPOSE**
-(boleh, dengan satu baris alasan tertulis), **LOCK**.
+- **Strukturnya gratis.** CLI mem-parse JavaScript, TypeScript, Python, Go,
+  Java, C# dan PHP — tanpa model. Python memakai parser `ast` miliknya sendiri
+  jika Python 3.8+ terpasang.
+- **Update-nya kecil.** Hanya file yang hash git-nya berubah yang di-parse ulang.
+  Di django/django (3.040 file sumber) build pertama 12 detik, update satu file
+  2,7 detik, dan satu kartu 0,46 detik.
+- **`orc graph ctx | impact | path`** menjawab dengan batas token dan kata status
+  di setiap tautan. Handler route menjadi simbol, dan middleware yang dikirim
+  lewat nama menjadi tautan `used by`. `--format tree` menulis nama kolom satu
+  kali saja — 17–21% lebih sedikit token pada kartu berkas.
+- **Bagian yang mahal kini ditulis sekali.** Mencari siapa yang memanggil satu
+  simbol memakan 437 ms di django/django, setiap kali dibaca. Sekarang dihitung
+  saat peta di-update lalu dibaca kembali: kartu berkas 727 ms → 458 ms, dan
+  `orc graph impact` 631 ms → 397 ms. Simpanan itu TURUNAN — hanya dipakai jika
+  menyebut versi peta yang sekarang, dan menghapusnya hanya menghilangkan
+  kecepatan.
+- **Setiap jawaban membawa `generation`**, dan setiap berkas menyebut berapa
+  banyak yang benar-benar dibaca parser — `full`, `partial` dengan rentang
+  barisnya, atau `skipped`. `orc graph coverage <berkas>` menanyakannya sekaligus.
+- **Tiga jawaban baca-saja yang baru, semuanya gratis:** `orc graph changes`
+  (simbol yang benar-benar disentuh diff ini, dengan pemanggil, test, dan kata
+  risiko yang membawa alasannya sendiri), `orc graph cochange <berkas>` (apa yang
+  biasanya berubah BERSAMA berkas itu, dari riwayat git — bukan ketergantungan),
+  dan `orc graph coverage`.
+- **Catatan bersifat opsional** (`code_graph_notes: wave | end`). Satu agent
+  Sonnet 4.6 menulis satu kalimat per fungsi yang berubah. Catatan hanya
+  ditampilkan selama isi fungsinya tidak berubah.
+- **Peta tetap segar lewat tiga jalan, dan hanya satu yang perlu diingat orang.**
+  Satu pembacaan memperbaiki berkas yang akan dijawabnya. Hook yang terpasang
+  memperbarui peta saat satu pekerja selesai, dan memberi pekerja titik acuan
+  yang tadinya harus dicari sendiri. Dan setiap lane kode tetap membangunnya di
+  preflight. `/orc-quick` tetap hanya membaca `log_dir`. **Tidak ada yang
+  berjalan dengan pewaktu dan tidak ada yang berjalan di latar belakang.**
+- **Semua yang diterima pekerja dari graf ditandai sebagai data repositori, bukan
+  perintah.** Nama simbol berasal dari repositori Anda, jadi ORC memperlakukannya
+  sebagai teks. Isi berkas tidak pernah dikirimkan — hanya nama, path dan
+  rentang baris.
+- **Juga:** delapan kunci pengaturan, dua temuan `orc doctor`, kartu graf kode di
+  `orc ui`, dan komponen status line `graph`.
 
-**Kredit adalah berkas yang ikut dikirim, bukan satu baris di pesan commit.**
-`orc rules credits` menyebut penulis, repositori, lisensi, dan apa yang diambil
-ORC dari masing-masing.
-
-**Urutan kuasa: aturan rumah > aturan Anda > aturan ORC.** Penggantian dihitung
-dari id yang Anda SEBUT, dan perintahnya mengatakan bahwa itulah yang dihitung;
-pertentangan yang tidak Anda sebut ditemukan agen saat bekerja dan kembali
-sebagai celah, bukan pilihan diam-diam. CLI tidak dapat membaca maksud, jadi CLI
-tidak berpura-pura bisa.
-
-**`orc rules lint` gratis dan sengaja kecil**: memeriksa 13 dari 65 dan selalu
-mencetak berapa yang tidak diperiksanya. Temuannya bersifat saran; tidak ada
-gerbang.
-
-**`orc wiki`, satu dokumen sekaligus.** `/orc-wiki update <dokumen-atau-topik>`
-dan `/orc-wiki add "<topik>"` menambah satu dokumen ke wiki yang sudah ada tanpa
-merencanakan ulang area lain. `orc wiki resolve` gratis dan tidak memindai;
-hasil **AMBIGUOUS menjadi pertanyaan, bukan tebakan**. `orc wiki refs` menyapu
-enam rujukan turunan setelah satu dokumen berubah, dan hanya memperbaiki
-pendaftarannya — sisanya dilaporkan beserta perintahnya.
+**Batas yang kami tahu.** TypeScript dibaca dengan pencocokan pola, bukan dengan
+compiler TypeScript. `x = new Service(); x.run()` tampil sebagai `AMBIGUOUS`.
+Pemanggil yang tidak pernah menyebut nama simbolnya — tes route HTTP, penjalan
+job — bukan tautan, jadi baca kartu sebagai titik awal, bukan sebagai daftar
+lengkap yang akan terdampak.
+**Ini bukan optimasi token, dan itu sudah diukur.** Pencarian hanya 0,06% dari
+yang ditambahkan satu sesi ke konteksnya; pencari sempurna pun hanya menghemat
+0,1% dari satu run. Peta ini tidak memakai token model untuk dibangun dan waktu
+baca di atas nyata — nyalakan demi kartunya, bukan demi penghematan.
 
 <details>
-<summary><strong>Rilis sebelumnya</strong> — 114 rilis, hanya judulnya. Teks lengkapnya (dalam bahasa Inggris) ada di <a href="CHANGELOG.md">CHANGELOG.md</a>.</summary>
+<summary><strong>Rilis sebelumnya</strong> — 116 rilis, hanya judulnya. Teks lengkapnya (dalam bahasa Inggris) ada di <a href="CHANGELOG.md">CHANGELOG.md</a>.</summary>
 
+- **v1.7.1** — the rules card now reaches the agent · _2026-09-14_
+- **v1.7.0** — the rules that keep the slop out · _2026-09-13_
 - **v1.6.0** — the rule that can finally say no · _2026-09-07_
 - **v1.5.0** — the lane that runs the test · _2026-09-07_
 - **v1.4.2** — the panel that stops reloading, and the fields you could not read back · _2026-09-05_

@@ -13,6 +13,12 @@ code, the code wins and the doc gets stale-flagged. Never let a confident wiki
 claim override what a file actually shows; never let a model prior override a
 fresh, evidence-anchored wiki claim without reading the code.
 
+With the local code graph on, the order gains two rungs and loses none:
+**code > graph structure (current blob) > fresh wiki > stale wiki (hints) > graph notes > model priors.**
+Graph structure outranks the wiki because it is extracted from the exact current
+bytes; graph notes rank below it because a model wrote them. Canonical:
+`skills/_shared/code-graph.md`.
+
 ## The manifest — `.claude/orc/wiki-meta.json`
 
 Written **ONLY by the `orc wiki sync` CLI** — never by a model, never by a

@@ -64,6 +64,10 @@ const FINDING_ROUTE = {
   // rather than left to DEFAULT_FINDING_ROUTE because the CTA is specific --
   // a reader who sees "lane config drifted" should be told which button.
   "lane-keys-drifted": { panel: "maintenance", cta: "overview.item.laneKeysDrifted.cta" },
+  // v1.8.0. A DRIFTED code graph is cleared by the free `orc graph update`, which
+  // is a button on the Knowledge panel's code graph card — the panel that can
+  // CLEAR it, not the default.
+  "graph-drifted": { panel: "knowledge", cta: "overview.item.graphDrifted.cta" },
   // v1.3.0. The rule again, and cleanly: every one of these is cleared on the
   // CLI Hook Interface panel — the board is where an orphaned component is
   // removed, the caution strip is where an invalid layout is named, and the

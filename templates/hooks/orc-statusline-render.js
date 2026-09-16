@@ -180,6 +180,7 @@ const BINDINGS = {
   // — the throttled scan: knowledge, extra, flow, branch —————————————
   "wiki.tier": (c) => (c.scan.wiki ? c.scan.wiki.tier : null),
   "wiki.distance": (c) => (c.scan.wiki ? num(c.scan.wiki.distance) : null),
+  "graph.state": (c) => (c.scan.graph ? c.scan.graph.state : null),
   "extra.state": (c) => (c.scan.extra_enabled ? "on" : "off"),
   "diy.state": (c) => (c.scan.diy ? c.scan.diy.state : null),
   "diy.name": (c) => (c.scan.diy ? c.scan.diy.name : null),
