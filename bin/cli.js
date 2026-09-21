@@ -392,19 +392,24 @@ function installGuards(claudeDir) {
     console.log("  upd   settings.json → PreToolUse read gate path");
   }
 
-  // 6) The graph hook (v1.8.0 EW3/EW4) — FOUR events, one file. It updates the
+  // 6) The graph hook (v1.8.0 EW3/EW4) — FIVE entries, one file. It updates the
   // graph when an ORC executor finishes, and hands a subagent the anchors it
   // would otherwise grep for. Wired even though `code_graph` may be off: the
   // hook's first act is to read that key and return, so an unarmed hook is
   // byte-identical to not having it (asserted by a test).
+  //
+  // v1.8.2 W3 (D3) adds ONE entry: `PreToolUse` on `Bash|Read`. The match is
+  // made on (event, matcher), so a 1.8.1 settings.json keeps its four entries
+  // byte-for-byte and gains the fifth — re-running `orc update` any number of
+  // times changes nothing after that.
   const graphHookCmd = nodeCmd(path.join(hooksDest, "orc-graph-hook.js"));
   const wireGraph = (arrName, matcher) => {
     settings.hooks[arrName] = settings.hooks[arrName] || [];
     for (const entry of settings.hooks[arrName]) {
+      if ((entry.matcher || null) !== (matcher || null)) continue;
       for (const h of entry.hooks || []) {
         if (typeof h.command === "string" && h.command.includes("orc-graph-hook")) {
           h.command = graphHookCmd; // keep the path current on update
-          if (matcher) entry.matcher = matcher;
           return;
         }
       }
@@ -412,11 +417,12 @@ function installGuards(claudeDir) {
     const entry = { hooks: [{ type: "command", command: graphHookCmd }] };
     if (matcher) entry.matcher = matcher;
     settings.hooks[arrName].push(entry);
-    console.log(`  add   settings.json → ${arrName} graph hook`);
+    console.log(`  add   settings.json → ${arrName} graph hook${matcher ? ` (${matcher})` : ""}`);
   };
   wireGraph("SubagentStart", null);
   wireGraph("SubagentStop", null);
   wireGraph("PreToolUse", "Grep|Glob");
+  wireGraph("PreToolUse", "Bash|Read");
   wireGraph("PostToolUse", "Read");
 
   fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + "\n");
@@ -1124,6 +1130,18 @@ const vPath = tag(
   (raw) => (raw && raw.trim() ? { value: raw } : { err: "must be a non-empty path" }),
   { kind: "path" }
 );
+// v1.8.2 — a comma-separated list of path globs (`vendor/**,gen/*.ts`). Empty
+// is allowed and means "nothing extra": the engine's own skip list still
+// applies. Config values are scalars, so the list is ONE string, split on
+// commas where it is read.
+const vGlobs = tag((raw) => {
+  const s = String(raw == null ? "" : raw).trim();
+  if (!s) return { value: "" };
+  const parts = s.split(",").map((g) => g.trim()).filter(Boolean);
+  const bad = parts.find((g) => /[\s"']/.test(g) || g.startsWith("/") || g.includes(".."));
+  if (bad) return { err: `bad glob "${bad}" — relative, no spaces, no quotes, no ..` };
+  return { value: parts.join(",") };
+}, { kind: "text" });
 // A short free-text value with a SUGGESTED pick-list rather than a closed one —
 // a language tag is not an enum ORC gets to decide, so the menu guides without
 // locking anybody out of the language they actually write in.
@@ -1369,7 +1387,10 @@ const CONFIG_META = [
   { key: "code_graph_card_budget", def: 1200, tier: "advanced", answers: [{ family: "graph", prio: "P2", mode: "replace" }], gated_by: "code_graph", lanes: [], validate: vRange(300, 4000), options: [600, 1200, 2400], desc: "Token budget for one `orc graph ctx` card. A card never exceeds it and always says what it hid — and every card is sent again on each later turn of the agent that received it." },
   { key: "code_graph_auto_update", def: true, tier: "advanced", answers: [{ family: "graph", prio: "P2", mode: "replace" }], gated_by: "code_graph", lanes: [], validate: vEnum("true", "false"), desc: "Whether a code lane's preflight heals a DRIFTED graph itself (free — parser only, no model). false = the lane prints DRIFTED and treats the graph as hints until you run `orc graph update`." },
   { key: "code_graph_heal_ms", def: 1500, tier: "advanced", answers: [{ family: "graph", prio: "P2", mode: "replace" }], gated_by: "code_graph", lanes: [], validate: vRange(0, 60000), options: [0, 1500, 5000], desc: "How long a READ (`ctx`, `impact`, `coverage`) may spend healing a graph that has moved. The read never starts a heal it expects to overrun: the last update's own duration is the estimate. Over the cap, or another update holds the lock, the read answers from the old generation and marks every touched card CHANGED. 0 = never heal on a read (the lane steps and the run-end hook still do). Inert while code_graph or code_graph_auto_update is off." },
-  { key: "code_graph_hooks", def: "on", tier: "advanced", answers: [{ family: "graph", prio: "P2", mode: "replace" }], gated_by: "code_graph", lanes: [], validate: vEnum("on", "off"), options: ["on", "off"], desc: "Whether the installed `orc-graph-hook.js` acts. It updates the graph when an ORC executor finishes, so a lane that forgot its own update step cannot leave the map behind. It is silent in the main session, outside an ORC run, when the graph does not exist, and on any error — it never blocks a tool call and never fails one. off = the hook exits immediately and the lane steps are the only update path." },
+  { key: "code_graph_hooks", def: "on", tier: "advanced", answers: [{ family: "graph", prio: "P2", mode: "replace" }], gated_by: "code_graph", lanes: [], validate: vEnum("on", "on,read", "off"), options: ["on", "on,read", "off"], desc: "Whether the installed `orc-graph-hook.js` acts. It updates the graph when an ORC executor finishes, so a lane that forgot its own update step cannot leave the map behind, and it names where a searched symbol is defined — for a Grep, a Glob, and (v1.8.2) a shell search (grep, rg, git grep, findstr, Select-String, ag, ack). It is silent in the main session, outside an ORC run, when the graph does not exist, and on any error — it never blocks a tool call and never fails one. `on,read` adds one more hint: a whole-file Read of a file with many symbols gets a line naming its six most reached ones and their ranges, so a LATER read can ask for a range. The read itself always runs, and the hook never rewrites it. off = the hook exits immediately and the lane steps are the only update path." },
+  // v1.8.2 W2 (G8) — the key the engine already understood and no config
+  // exposed. Same `lanes: []` reason as every graph key: the CLI reads it.
+  { key: "code_graph_ignore", def: "", tier: "advanced", answers: [{ family: "graph", prio: "P2", mode: "replace" }], gated_by: "code_graph", lanes: [], validate: vGlobs, options: ["", "vendor/**", "generated/**,*.gen.ts"], desc: "Extra paths the graph never indexes, as a comma-separated list of globs relative to the repository root (`vendor/**,generated/**,*.gen.ts`). The engine always skips node_modules, vendor, dist/build at the root, caches, bundles, `.d.ts` and generated files; this adds to that list. A skipped file is reported `excluded` by `orc graph coverage`, never silently. Empty = nothing extra." },
   { key: "statusline_custom", def: "off", tier: "common", answers: [{ family: "statusline", prio: "P2", mode: "replace" }], lanes: [], validate: vEnum("off", "on"), options: ["off", "on"], desc: "Whether the status line renders YOUR composed layout instead of the shipped two lines. Off is byte-identical to what ships. Compose the layout in `orc ui` > CLI Hook Interface (the CLI half exists so the panel has something to shell). Turning this on with an invalid or missing layout is refused, naming the reason; a layout that later becomes unreadable falls back to the shipped lines silently and is reported by `orc doctor`." },
   { key: "wait_hop_minutes", def: 30, tier: "advanced", answers: [{ family: "wait", prio: "P2", mode: "replace" }], lanes: [], validate: vInt(1), options: [5, 10, 15, 30], desc: "How long ONE detached hop waits before ORC re-reads the window. Short on purpose: each wake-up is session activity, and session activity is the only thing that makes the statusline write a fresh reading. One long sleep wakes into a reading as stale as the sleep was long." },
   { key: "wait_max_hops", def: 5, tier: "advanced", answers: [{ family: "wait", prio: "P2", mode: "replace" }], lanes: [], validate: vInt(1), options: [1, 2, 3, 5, 8, 12], desc: "How many hops before ORC gives up and stops with the hand-back. A wrong reset time must cost you a bounded wait, never a session that never comes back." },
@@ -3393,6 +3414,20 @@ const LANE_CALLS = {
     canonical: "_shared/code-graph.md",
     never: "never act on behaviour from a card alone — read the RANGE it names; a card whose header says CHANGED is hints only",
     lanes: ["orc", "orc-diy", "orc-fast", "orc-mini", "orc-quick"],
+  },
+  // D4 (v1.8.2 W7) — the ORIENTATION call. It is the only graph read that needs
+  // no operand, because it answers the question asked before any file is known.
+  "graph-map": {
+    cmd: "orc graph map [--focus <files or names\u2026>] --if-enabled [--budget N] [--json]",
+    what: "the repository's files by RANK \u2014 how much of its own call and import traffic flows through each \u2014 with each file's top symbols and line ranges; --focus re-ranks the whole repository around the files or names the request already mentions",
+    exits: { 0: "answered \u2014 ALWAYS, when a graph exists", 1: "no graph index", 3: "off \u2014 `code_graph` is off" },
+    states: null,
+    cost: "free",
+    when: "ONCE, at the START of planning \u2014 before any Glob and before `impact`, which needs the files already chosen. Planning ONLY: DE-H gated the analyst and /orc-quick on M2 showing 3 or more answerable calls per run and it measured 0.39",
+    on_absent: "exit 1 or 3 \u2192 orient with Glob and Read exactly as before the map existed",
+    canonical: "_shared/code-graph.md",
+    never: "never read RANK as importance to THIS change \u2014 it is a hint about where to look first, computed from the whole repository, and a low-ranked file that the change reaches is still a file you must read",
+    lanes: ["orc", "orc-diy"],
   },
   "graph-impact": {
     cmd: "orc graph impact <file…> --if-enabled [--depth N] [--json]",
@@ -8501,27 +8536,287 @@ function gotchaArchived(claudeDir) {
   process.exit(0);
 }
 
+// D2/D3 (v1.8.2 W3) — NO DOUBLE PAYMENT. A `--for-slice` block already names
+// the symbols that reach the task's declared files. If the executor then greps
+// for one of them, the graph hook would inject the same anchor a second time,
+// into the same run, for the same name. The names go into the hook's OWN seen
+// file (`<run>.graph-hook.json`, the file the hook already dedupes against), so
+// the hint is silent about anything the slice delivered.
+//
+// It is best-effort and it never fails the read: no open run, an unwritable
+// log dir or a damaged counters file simply means the hint may repeat one name.
+function noteGraphNamesSeen(claudeDir, names) {
+  try {
+    const dir = resolveLogDir(claudeDir);
+    const run = fs.readFileSync(path.join(dir, ".current"), "utf8").trim();
+    if (!run) return;
+    const file = path.join(dir, run.replace(/\.txt$/, "") + ".graph-hook.json");
+    let seen = { injected: 0, subagent_start: 0, read_notes: 0, updates: 0, tokens: [] };
+    try {
+      const prev = JSON.parse(fs.readFileSync(file, "utf8"));
+      if (prev && typeof prev === "object") seen = Object.assign(seen, prev);
+    } catch (_) {}
+    if (!Array.isArray(seen.tokens)) seen.tokens = [];
+    for (const n of names || []) {
+      const t = "name:" + String(n);
+      if (!seen.tokens.includes(t)) seen.tokens.push(t);
+    }
+    if (seen.tokens.length > 400) seen.tokens = seen.tokens.slice(-400);
+    seen.for_slice = (seen.for_slice || 0) + 1;
+    fs.writeFileSync(file, JSON.stringify(seen));
+  } catch (_) {}
+}
+
+// K4 (v1.8.2 W4b) — the RECORDED A/B. `orc budget` already joins ORC traces
+// with Claude Code's usage transcripts; this reuses the same corpus for a
+// different question: what did the runs with the graph ON actually DO, against
+// the runs with it OFF, in this project's own history.
+//
+// The trace says which group a run is in — the `GRAPH-CONSULT` line is `off` or
+// a state. Nothing is inferred and nothing is configured.
+//
+// Executor windows and session totals are kept APART on purpose (R4: the main
+// session is 74–80% of a run and the graph never touches it), and the OFF
+// group's own spread is printed beside every delta so nobody reads noise as a
+// result.
+const MEASURE_SEARCH = /^\s*(?:grep|rg|ag|ack|findstr|git\s+grep|select-string|sls)\b/i;
+
+// One pass over the transcripts counting TOOL CALLS, which `readCorpus` does
+// not do (it reads `usage` blocks only). Same files, same cap, same failure
+// answer: a missing corpus is an answer, never an error.
+function readToolCorpus(root) {
+  const dir = transcriptDir(root);
+  let files;
+  try {
+    files = fs
+      .readdirSync(dir)
+      .filter((f) => f.endsWith(".jsonl"))
+      .map((f) => ({ f, at: fs.statSync(path.join(dir, f)).mtimeMs }))
+      .sort((a, b) => b.at - a.at)
+      .slice(0, CORPUS_MAX_FILES);
+  } catch (_) {
+    return { dir, ok: false, rows: [] };
+  }
+  const rows = [];
+  for (const { f } of files) {
+    let text;
+    try {
+      text = fs.readFileSync(path.join(dir, f), "utf8");
+    } catch (_) {
+      continue;
+    }
+    for (const line of text.split(/\r?\n/)) {
+      if (!line || line[0] !== "{") continue;
+      let o;
+      try {
+        o = JSON.parse(line);
+      } catch (_) {
+        continue;
+      }
+      const at = Date.parse(o.timestamp || "") || 0;
+      const sidechain = !!o.isSidechain;
+      const content = o.message && Array.isArray(o.message.content) ? o.message.content : null;
+      if (!content) continue;
+      for (const c of content) {
+        if (c && c.type === "tool_use") {
+          const name = String(c.name || "");
+          const cmd = name === "Bash" ? String((c.input || {}).command || "") : "";
+          rows.push({ at, sidechain, kind: "use", tool: name, search: name === "Bash" && MEASURE_SEARCH.test(cmd) });
+        } else if (c && c.type === "tool_result") {
+          const body = typeof c.content === "string" ? c.content : JSON.stringify(c.content || "");
+          rows.push({ at, sidechain, kind: "result", tokens: Math.ceil(body.length / 4) });
+        }
+      }
+    }
+  }
+  rows.sort((a, b) => a.at - b.at);
+  return { dir, ok: true, rows };
+}
+
+function graphMeasured(claudeDir, root, opts) {
+  const K = require("./graph-gain.js");
+  const o = opts || {};
+  const sinceMs = K.parseSince(o.since);
+  const { runs } = listTraces(claudeDir);
+  const groups = { on: [], off: [] };
+  for (const t of runs) {
+    let text;
+    try {
+      text = fs.readFileSync(t.path, "utf8");
+    } catch (_) {
+      continue;
+    }
+    const m = /GRAPH-CONSULT\s+(\S+)/.exec(text);
+    if (!m) continue; // a run that never consulted is in NEITHER group
+    const meta = readTraceMeta(t.path);
+    if (!meta || meta.start === null) continue;
+    if (sinceMs != null && meta.end < sinceMs) continue;
+    const hintFile = t.path.replace(/\.txt$/, "") + ".graph-hook.json";
+    let hints = 0;
+    try {
+      const h = JSON.parse(fs.readFileSync(hintFile, "utf8"));
+      hints = (h.injected || 0) + (h.read_notes || 0);
+    } catch (_) {}
+    const used = (text.match(/graph_used/g) || []).length;
+    const none = (text.match(/graph_used[^\n]*none/g) || []).length;
+    groups[m[1] === "off" ? "off" : "on"].push({ name: t.name, lane: t.lane, start: meta.start, end: meta.end, hints, graph_used: used, graph_used_none: none });
+  }
+
+  const corpus = readToolCorpus(root);
+  const PAD = 5 * 60000;
+  for (const key of ["on", "off"]) {
+    for (const r of groups[key]) {
+      const inWin = corpus.rows.filter((x) => x.at >= r.start - PAD && x.at <= r.end + PAD);
+      const exec = inWin.filter((x) => x.sidechain);
+      r.exec_retrieval_calls = exec.filter((x) => x.kind === "use" && (x.tool === "Read" || x.tool === "Grep" || x.tool === "Glob")).length;
+      r.exec_bash_searches = exec.filter((x) => x.kind === "use" && x.search).length;
+      r.exec_result_tokens = exec.filter((x) => x.kind === "result").reduce((a, x) => a + x.tokens, 0);
+      r.session_result_tokens = inWin.filter((x) => x.kind === "result").reduce((a, x) => a + x.tokens, 0);
+    }
+  }
+
+  const field = (key, f) => K.summarise(groups[key].map((r) => r[f]).filter((n) => Number.isFinite(n)));
+  const cmp = (f) => {
+    const on = field("on", f);
+    const off = field("off", f);
+    return { on, off, delta_pct: K.deltaPct(on, off), off_spread_pct: K.spreadPct(off) };
+  };
+  const enough = groups.on.length >= K.MEASURED_MIN_RUNS && groups.off.length >= K.MEASURED_MIN_RUNS;
+  return {
+    ok: true,
+    state: enough ? "compared" : "too-few-runs",
+    min_runs: K.MEASURED_MIN_RUNS,
+    corpus: { dir: corpus.dir, ok: corpus.ok },
+    runs: { on: groups.on.length, off: groups.off.length },
+    rows: { on: groups.on, off: groups.off },
+    compare: enough
+      ? {
+          exec_retrieval_calls: cmp("exec_retrieval_calls"),
+          exec_bash_searches: cmp("exec_bash_searches"),
+          exec_result_tokens: cmp("exec_result_tokens"),
+          session_result_tokens: cmp("session_result_tokens"),
+        }
+      : null,
+    note: "executor windows and session totals are kept apart: the main session is 74–80% of a run and the graph never touches it. Every delta is printed beside the OFF group's own spread — a delta smaller than that spread is noise, not a result.",
+    exit: enough || groups.on.length + groups.off.length ? 0 : 1,
+  };
+}
+
+// K2 (v1.8.2 W4b) — the counterfactual, per command. The RULES live in
+// `bin/graph-gain.js` so one file can be checked by hand; this function only
+// picks the rule and hands it the facts the answer already carries.
+//
+// `paid` is EXACT — it is the card this call just printed, counted with the
+// same `tok()` the budget uses. `avoided` is an ESTIMATE and always a range.
+function gainRowFor(sub, Q, model, operands, r, ms, forSlice) {
+  const K = require("./graph-gain.js");
+  const gen = (r && r.generation) || null;
+  const paid = { card: K.tok(r.card || ""), source: 0, hints: 0 };
+  if (r.source && r.source.text) {
+    paid.source = K.tok(r.source.text);
+    paid.card = Math.max(0, paid.card - paid.source);
+  }
+  const base = { cmd: sub, targets: operands.slice(0, 5), gen, ms, paid };
+
+  if (sub === "impact" || (sub === "ctx" && forSlice)) {
+    const files = sub === "impact" ? r.files || [] : r.files || [];
+    const callerFiles = sub === "impact" ? (r.callers || []).map((c) => c.file) : (r.blocks || []).flatMap((b) => (b.callers || []).map((c) => c.file));
+    const symbols = sub === "impact" ? r.symbols || 1 : (r.blocks || []).reduce((a, b) => a + (b.total_callers || 0), 0) || 1;
+    const hits = files.reduce((a, rel) => a + ((model.byFile[rel] || {}).symbols || []).reduce((n, x) => n + (x.kind === "module" ? 0 : Q.nameHits(model, x.name)), 0), 0);
+    const c = K.impactCost(model, files, symbols, hits, callerFiles);
+    return { ...base, cmd: forSlice ? "for-slice" : "impact", ...c };
+  }
+  // D4 (v1.8.2 W7): the map's targets are its FOCUS, and what it replaced is
+  // the orientation read of the files it actually printed.
+  if (sub === "map") return { ...base, ...K.mapCost(model, (r.files || []).map((x) => x.file)) };
+  if (sub === "path") {
+    const ch = r.chain || [];
+    const a = ch[0] && ch[0].file;
+    const b = ch.length > 1 && ch[ch.length - 1].file;
+    if (!a || !b) return { ...base, avoided: { low: 0, high: 0, calls_low: 0, calls_high: 0 }, basis: { files: [], grep_hits: 0 } };
+    return { ...base, ...K.pathCost(model, a, b, Q.nameHits(model, operands[0]) + Q.nameHits(model, operands[1])) };
+  }
+  // `ctx`. A multi-target call has no single target record, so it is priced as
+  // the sum of its cards would be — conservatively, as ONE symbol card.
+  if (r.file) {
+    const c = K.ctxFile(model, r.file);
+    if (r.source) c.avoided = addAvoided(c.avoided, K.sourceAvoided(model, r.source.file, r.source.from, r.source.to));
+    return { ...base, ...c };
+  }
+  if (r.target) {
+    const hits = Q.nameHits(model, r.target.qname);
+    const c = K.ctxSymbol(model, r.target, hits, (r.callers || []).map((x) => x.file));
+    if (r.source) c.avoided = addAvoided(c.avoided, K.sourceAvoided(model, r.source.file, r.source.from, r.source.to));
+    return { ...base, ...c };
+  }
+  return { ...base, avoided: { low: 0, high: 0, calls_low: 0, calls_high: 0 }, basis: { files: [], grep_hits: 0 } };
+}
+
+const addAvoided = (a, b) => ({
+  low: a.low + b.low,
+  high: a.high + b.high,
+  calls_low: a.calls_low + b.calls_low,
+  calls_high: a.calls_high + b.calls_high,
+});
+
+// K1 (v1.8.2 W4b) — one ledger line per read, appended after the answer is
+// computed and never able to fail it. The ledger is what `orc graph gain`
+// aggregates; nothing else reads it and nothing else writes it.
+function graphGainAppend(claudeDir, row) {
+  try {
+    const K = require("./graph-gain.js");
+    let run = null;
+    try {
+      run = fs.readFileSync(path.join(resolveLogDir(claudeDir), ".current"), "utf8").trim() || null;
+    } catch (_) {}
+    let gen = row.gen;
+    if (!gen) {
+      try {
+        gen = JSON.parse(fs.readFileSync(require("./graph.js").graphPaths(claudeDir).meta, "utf8")).generation || null;
+      } catch (_) {}
+    }
+    K.append(claudeDir, {
+      at: require("./graph.js").stamp(new Date()),
+      run,
+      agent: process.env.CLAUDE_AGENT_TYPE || null,
+      ...row,
+      gen,
+    });
+  } catch (_) {}
+}
+
 // ── orc graph (v1.8.0) — the code graph ─────────────────────────────────────
 // A thin router. The engine is `bin/graph.js`; this function resolves the
 // config (the engine never reads it) and owns the human lines. The exit code is
 // the same on the human path and the `--json` path (S7).
 function graphCmd() {
   const usage =
-    "Usage: orc graph status [--heal] | update | gc | ctx <symbol|file[:line]>… | impact <file…> | path <from> <to>\n" +
+    "Usage: orc graph status [--heal] | update [--notes-pending --files <a,b>] | gc\n" +
+    "       orc graph ctx <symbol|file[:line]>… [--source [N]] | ctx --for-slice <file…> | impact <file…> | path <from> <to>\n" +
     "       orc graph coverage <file…> | changes [--base <ref>] | cochange <file>\n" +
-    "       orc graph notes pending --files <a,b> [--cap 40] [--min 5] | notes apply <file|->\n" +
+    "       orc graph map [--focus <file|name,…>] [--budget N]\n" +
+    "       orc graph gain [--run <name>] [--since 7d] [--history [--limit 40]] [--measured] [--reset --yes]\n" +
+    "       orc graph notes pending --files <a,b> [--cap 40] [--min 5] [--with-source] | notes apply <file|->\n" +
     "       [--if-enabled] [--depth N] [--budget TOKENS] [--format prose|tree] [--offset N] [--json] [--dir <path>]\n" +
     "  status   exit 0 FRESH · 1 NONE · 2 DRIFTED · 3 OFF  (--heal builds or updates a NONE/DRIFTED graph first)\n" +
     "  update   exit 0 done · 1 unavailable or locked · 3 off (with --if-enabled)\n" +
+    "           --notes-pending adds the `notes pending` answer to the SAME call (one process, one lock)\n" +
     "  gc       exit 0 done · 1 no index or locked\n" +
     "  ctx      exit 0 found · 1 no graph · 3 off (with --if-enabled) · 4 not found or ambiguous\n" +
+    "           --source [N] appends the target's own lines (default 80, cap 200), charged to the same budget\n" +
+    "           --for-slice prints only the OUTSIDE view of each declared file — no symbol table\n" +
     "  impact   exit 0 found · 1 no graph · 3 off (with --if-enabled) · 4 none of the files is in the graph\n" +
     "  path     exit 0 found · 1 no graph · 3 off (with --if-enabled) · 4 no confident path, or an unknown end\n" +
+    "  map      exit 0 always when a graph exists · 1 no graph · 3 off (with --if-enabled)   the files by RANK, most\n" +
+    "           connected first, each with its top symbols; --focus re-ranks the repository around those files or names\n" +
     "  coverage exit 0 always when a graph exists (a gap is an answer) · 1 no graph · 3 off (with --if-enabled)\n" +
     "  changes  exit 0 answered · 1 no graph or no git · 3 off (with --if-enabled)   the symbols THIS diff touched, with risk\n" +
     "  cochange exit 0 rows · 1 no git · 3 off (with --if-enabled) · 4 nothing reaches the threshold (an ANSWER)\n" +
     "  notes pending  exit 0 rows · 1 no index or no --files · 5 none, or fewer than --min\n" +
-    "  notes apply    exit 0 all applied · 1 no index, unreadable or locked · 6 one or more rows rejected";
+    "                 --with-source adds each row's own lines (≤ 120), so the noter reads nothing\n" +
+    "  notes apply    exit 0 all applied · 1 no index, unreadable or locked · 6 one or more rows rejected\n" +
+    "  gain     exit 0 rows · 1 no ledger or no rows · 3 off (with --if-enabled)   what the graph PUT IN,\n" +
+    "           and an ESTIMATE of the retrieval it kept out. Never a bill, and never one number.";
   if (flag("--global")) {
     console.error("❌ orc graph is project-scoped — the map is this repo's. Run it from the project (or with --dir <path>).");
     process.exit(1);
@@ -8534,6 +8829,69 @@ function graphCmd() {
   const ovr = readOverride(claudeDir).map;
   const cfg = (k) => (Object.prototype.hasOwnProperty.call(ovr, k) ? ovr[k] : metaFor(k).def);
   const enabled = String(cfg("code_graph")) === "on";
+  // v1.8.2 W2 (G8): the extra globs the map must never index. One string,
+  // split here; the engine takes the list.
+  const ignore = String(cfg("code_graph_ignore") || "")
+    .split(",")
+    .map((g) => g.trim())
+    .filter(Boolean);
+  // The `notes pending` computation, shared by `orc graph notes pending` and by
+  // `orc graph update --notes-pending` (D5, v1.8.2 W3). ONE implementation, one
+  // set of exit codes, one set of lines — two call sites, so the one-call form
+  // can never drift from the two-call form it replaces.
+  const notesPendingAnswer = (gated) => {
+    const N = require("./graph-notes.js");
+    const notesMode = String(cfg("code_graph_notes"));
+    if (gated && (!enabled || notesMode === "off"))
+      return { answer: { ok: true, state: "off", enabled, notes: notesMode, exit: 3 }, line: enabled ? "graph notes: off" : "graph: off", trace: "GRAPH-NOTES off" };
+    // `--at wave|end` names the CALL SITE. A batch the configured mode places at
+    // the other site is DEFERRED — an answer (exit 5), never an error.
+    const at = flag("--at");
+    if (gated && typeof at === "string" && at !== notesMode)
+      return {
+        answer: { ok: true, state: "deferred", notes: notesMode, at, exit: 5 },
+        line: `graph notes: deferred — code_graph_notes is '${notesMode}', and this is the '${at}' batch`,
+        trace: `GRAPH-NOTES deferred :: mode=${notesMode} at=${at}`,
+      };
+    const raw = flag("--files");
+    const files = typeof raw === "string" ? raw.split(",").map((s) => s.trim()).filter(Boolean) : [];
+    const r = N.notesPending(
+      claudeDir,
+      {
+        files,
+        cap: flag("--cap") === undefined ? cfg("code_graph_notes_cap") : flag("--cap"),
+        min: flag("--min") === undefined ? cfg("code_graph_notes_min") : flag("--min"),
+        // N2 (v1.8.2 W4): each row with its own lines, so the noter makes ONE
+        // call instead of one `Read` per symbol.
+        withSource: flag("--with-source") !== undefined,
+      },
+      root
+    );
+    r.notes = notesMode;
+    let line;
+    if (r.state === "usage") line = usage;
+    else if (r.state === "none" && r.reason === "no-index") line = "graph: none — no index yet (run: orc graph update)";
+    else if (r.state === "none") line = "graph notes: nothing pending for these files";
+    else if (r.state === "below-min")
+      // N3: the SAME sentence every time a batch rolls forward, so a lane that
+      // says it once per wave and a lane that says it once per run read alike.
+      line = `graph notes: ${r.total} pending, waiting (min ${r.min})`;
+    else
+      line =
+        `graph notes: ${r.total} pending — ${r.rows.length} in this batch${r.more ? `, ${r.more} more after it` : ""}\n` +
+        r.rows.map((x) => `  ${x.sym}  :${x.lines[0]}-${x.lines[1]}  ${x.body_hash}`).join("\n");
+    if (r.documented) line += `\n  ${r.documented} already documented in the source — no note is paid for them`;
+    if (r.missing && r.missing.length) line += `\n  not in the graph: ${r.missing.join(", ")}`;
+    // `pending` has no trace of its own on the happy path: the noter's ONE-line
+    // return is the GRAPH-NOTES line.
+    const trace =
+      r.state === "none" && r.reason !== "no-index"
+        ? "GRAPH-NOTES none :: nothing pending"
+        : r.state === "below-min"
+          ? `GRAPH-NOTES below-min :: ${r.total} pending, min ${r.min}`
+          : null;
+    return { answer: r, line, trace };
+  };
   // W9: every JSON answer carries the chat `line` and the trace `trace` a lane
   // copies VERBATIM — round 1 measured lanes that paraphrased the graph into a
   // GATE line, or dropped it. A read card already IS its line, so it is not repeated.
@@ -8561,18 +8919,18 @@ function graphCmd() {
   };
 
   if (sub === "status") {
-    let r = G.graphStatus(claudeDir, root, { enabled });
+    let r = G.graphStatus(claudeDir, root, { enabled, ignore });
     const autoUpdate = String(cfg("code_graph_auto_update")) !== "false";
     // `--heal` (W9): consult AND build in ONE call. A lane that had to run
     // status, read the exit code and then run update skipped the second step.
     let healed = null;
     if (flag("--heal") === true && enabled && autoUpdate && (r.state === "none" || r.state === "drifted")) {
-      const u = G.graphUpdate(claudeDir, root, { enabled, ifEnabled: true });
+      const u = G.graphUpdate(claudeDir, root, { enabled, ifEnabled: true, ignore });
       healed =
         u.exit === 0
           ? { state: u.state, added: u.added, changed: u.changed, deleted: u.deleted, parsed: u.parsed, reused: u.reused, engine_upgrade: u.engine_upgrade, ms: u.ms }
           : { state: u.state, reason: u.reason };
-      if (u.exit === 0) r = G.graphStatus(claudeDir, root, { enabled });
+      if (u.exit === 0) r = G.graphStatus(claudeDir, root, { enabled, ignore });
     }
     // What the lane does NEXT depends on these two, and the lane reads no key.
     r.auto_update = autoUpdate;
@@ -8609,6 +8967,7 @@ function graphCmd() {
     const r = G.graphUpdate(claudeDir, root, {
       enabled,
       ifEnabled: flag("--if-enabled") === true,
+      ignore,
       say: asJson ? null : (s) => console.log(s),
     });
     let line;
@@ -8634,6 +8993,21 @@ function graphCmd() {
         : r.state === "off"
           ? "GRAPH-UPDATE off"
           : `GRAPH-UPDATE unavailable :: ${r.reason}`;
+    // ── D5 (v1.8.2 W3): one call at a wave close ───────────────────────────
+    // A wave close ran `update` and then `notes pending` — two processes, two
+    // round trips, for one question. `--notes-pending` answers both in this
+    // one, AFTER the update, so the pending rows are computed from the
+    // generation the update just wrote. The two-call form still works exactly
+    // as it did; the lane text uses this one.
+    //
+    // The UPDATE'S exit code is the answer. A batch below `code_graph_notes_min`
+    // is not an update failure, so it never changes the exit — it is reported
+    // in `notes.exit` and in the second chat line.
+    if (flag("--notes-pending") !== undefined) {
+      const n = notesPendingAnswer(flag("--if-enabled") === true);
+      r.notes_pending = n.answer;
+      return finish(r, n.line ? `${line}\n${n.line}` : line, trace);
+    }
     return finish(r, line, trace);
   }
 
@@ -8697,7 +9071,7 @@ function graphCmd() {
     }
     if (!moved) return null;
 
-    const u = G.graphUpdate(claudeDir, root, { enabled, ifEnabled: true });
+    const u = G.graphUpdate(claudeDir, root, { enabled, ifEnabled: true, ignore });
     if (u.exit !== 0) return { state: "skipped", reason: u.reason || u.state, trigger: moved };
     return { state: u.state, trigger: moved, added: u.added, changed: u.changed, deleted: u.deleted, generation: u.generation, ms: u.ms };
   };
@@ -8761,6 +9135,20 @@ function graphCmd() {
           (r.not_in_graph.length ? `\n  not in the graph: ${r.not_in_graph.join(", ")}` : "") +
           "\n  risk is a HINT with its reason attached — an empty impact is never proof nothing depends on the change"
         : `graph changes vs ${r.base} — no indexed symbol was touched${r.not_in_graph.length ? ` (changed, but not in the graph: ${r.not_in_graph.join(", ")})` : ""}`;
+      // K1/K2: `changes` avoids one Grep per touched symbol. The diff itself
+      // is NOT counted — the reviewer reads it either way.
+      if (r.symbols.length) {
+        try {
+          const K = require("./graph-gain.js");
+          const Q = require("./graph-query.js");
+          const m = Q.loadModel(claudeDir, root);
+          if (m) {
+            const hits = r.symbols.reduce((a, x) => a + Q.nameHits(m, x.qname), 0);
+            const callerFiles = r.symbols.flatMap((x) => (x.callers || []).map((cc) => cc.file || cc));
+            graphGainAppend(claudeDir, { cmd: "changes", targets: [r.base], gen: r.generation, ms: r.ms || 0, paid: { card: K.tok(line), source: 0, hints: 0 }, ...K.changesCost(m, r.symbols.length, hits, callerFiles) });
+          }
+        } catch (_) {}
+      }
       return finish(r, line, `GRAPH-CHANGES ${r.symbols.length ? "found" : "none"} :: symbols=${r.symbols.length} high=${c.high} medium=${c.medium} low=${c.low} gen=${r.generation}`);
     }
     const file = plain[2];
@@ -8801,46 +9189,8 @@ function graphCmd() {
     const action = words[2];
     const N = require("./graph-notes.js");
     if (action === "pending") {
-      const notesMode = String(cfg("code_graph_notes"));
-      const gated = flag("--if-enabled") === true;
-      if (gated && (!enabled || notesMode === "off"))
-        return finish({ ok: true, state: "off", enabled, notes: notesMode, exit: 3 }, enabled ? "graph notes: off" : "graph: off", "GRAPH-NOTES off");
-      // `--at wave|end` names the CALL SITE. A batch the configured mode places at
-      // the other site is DEFERRED — an answer (exit 5), never an error.
-      const at = flag("--at");
-      if (gated && typeof at === "string" && at !== notesMode)
-        return finish(
-          { ok: true, state: "deferred", notes: notesMode, at, exit: 5 },
-          `graph notes: deferred — code_graph_notes is '${notesMode}', and this is the '${at}' batch`,
-          `GRAPH-NOTES deferred :: mode=${notesMode} at=${at}`
-        );
-      const raw = flag("--files");
-      const files = typeof raw === "string" ? raw.split(",").map((s) => s.trim()).filter(Boolean) : [];
-      const r = N.notesPending(claudeDir, {
-        files,
-        cap: flag("--cap") === undefined ? cfg("code_graph_notes_cap") : flag("--cap"),
-        min: flag("--min") === undefined ? cfg("code_graph_notes_min") : flag("--min"),
-      });
-      r.notes = notesMode;
-      let line;
-      if (r.state === "usage") line = usage;
-      else if (r.state === "none" && r.reason === "no-index") line = "graph: none — no index yet (run: orc graph update)";
-      else if (r.state === "none") line = "graph notes: nothing pending for these files";
-      else if (r.state === "below-min")
-        line = `graph notes: ${r.total} pending — below the minimum of ${r.min}; they wait for a later batch (nothing is lost)`;
-      else
-        line =
-          `graph notes: ${r.total} pending — ${r.rows.length} in this batch${r.more ? `, ${r.more} more after it` : ""}\n` +
-          r.rows.map((x) => `  ${x.sym}  :${x.lines[0]}-${x.lines[1]}  ${x.body_hash}`).join("\n");
-      if (r.missing && r.missing.length) line += `\n  not in the graph: ${r.missing.join(", ")}`;
-      // `pending` has no trace here: the noter's ONE-line return is the GRAPH-NOTES line.
-      const trace =
-        r.state === "none" && r.reason !== "no-index"
-          ? "GRAPH-NOTES none :: nothing pending"
-          : r.state === "below-min"
-            ? `GRAPH-NOTES below-min :: ${r.total} pending, min ${r.min}`
-            : null;
-      return finish(r, line, trace);
+      const p = notesPendingAnswer(flag("--if-enabled") === true);
+      return finish(p.answer, p.line, p.trace);
     }
     if (action === "apply") {
       const src = words[3];
@@ -8868,10 +9218,100 @@ function graphCmd() {
     return finish({ ok: false, reason: "unknown-subcommand", usage, exit: 1 }, usage);
   }
 
-  if (sub === "ctx" || sub === "impact" || sub === "path") {
+  // ── K3 (v1.8.2 W4b): `orc graph gain` ────────────────────────────────────
+  // What the graph PUT IN, what it probably kept OUT, and — where this project
+  // has the runs to say so — what actually happened. Three different kinds of
+  // knowing, never mixed into one number.
+  if (sub === "gain") {
     if (!enabled && flag("--if-enabled") === true) return finish({ ok: true, enabled: false, state: "off", exit: 3 }, "graph: off");
-    // Positionals after the subcommand, with every value-flag's value removed.
-    const VALUE_FLAGS = new Set(["--depth", "--budget", "--dir", "--format", "--offset"]);
+    const K = require("./graph-gain.js");
+    const U = require("./ui.js");
+    const rng = (a, b) => (a === b ? kTok(a) : `${kTok(a)} – ${kTok(b)}`);
+
+    if (flag("--reset") !== undefined) {
+      if (flag("--yes") === undefined && process.stdin.isTTY)
+        return finish({ ok: false, state: "needs-confirm", exit: 1 }, "graph gain: this empties the ledger and cannot be undone — re-run with --yes");
+      const r = K.reset(claudeDir);
+      return finish(r, r.ok ? "graph gain: ledger emptied" : `graph gain: could not empty the ledger — ${r.reason}`);
+    }
+
+    if (flag("--measured") !== undefined) {
+      const r = graphMeasured(claudeDir, root, { since: typeof flag("--since") === "string" ? flag("--since") : null });
+      if (!r.runs.on && !r.runs.off)
+        return finish({ ...r, exit: 1 }, "graph gain --measured: no run in this project's traces says whether the graph was on");
+      const head = `graph gain — measured · ${r.runs.on} run(s) ON vs ${r.runs.off} OFF${r.since ? ` · ${r.since}` : ""}`;
+      if (r.state === "too-few-runs")
+        return finish(
+          r,
+          `${head}\n  too few runs to compare — ${r.min_runs} in EACH group are needed; the rows are recorded and the comparison waits`,
+          `GRAPH-GAIN measured=too-few on=${r.runs.on} off=${r.runs.off}`
+        );
+      const row = (label, c, unit) =>
+        `  ${label.padEnd(22)} median ${kTok(c.off.median)} → ${kTok(c.on.median)} ${unit} (${c.delta_pct > 0 ? "+" : ""}${c.delta_pct}%)` +
+        `  · N ${c.off.n}/${c.on.n} · OFF spread ±${c.off_spread_pct}%`;
+      const cp = r.compare;
+      const line =
+        `${head}\n` +
+        row("executor retrieval", cp.exec_retrieval_calls, "calls") + "\n" +
+        row("executor shell search", cp.exec_bash_searches, "calls") + "\n" +
+        row("executor tool results", cp.exec_result_tokens, "tokens") + "\n" +
+        row("session tool results", cp.session_result_tokens, "tokens") + "\n" +
+        "  a delta smaller than the OFF spread beside it is NOISE, not a result";
+      return finish(r, line, `GRAPH-GAIN measured on=${r.runs.on} off=${r.runs.off} exec_calls=${cp.exec_retrieval_calls.delta_pct}%`);
+    }
+
+    if (flag("--history") !== undefined) {
+      const r = K.history(claudeDir, { limit: flag("--limit") });
+      if (!r.ok) return finish(r, "graph gain: no calls recorded yet");
+      const line =
+        `graph gain — last ${r.rows.length} of ${r.total} call(s), newest first\n` +
+        r.rows
+          .map(
+            (x) =>
+              `  ${x.at}  ${String(x.cmd).padEnd(10)} ${String((x.targets || []).join(",")).slice(0, 40).padEnd(40)}` +
+              ` paid ${String(x.paid.card + x.paid.source + x.paid.hints).padStart(6)}  avoided ~${rng(x.avoided.low, x.avoided.high)}`
+          )
+          .join("\n") +
+        "\n  `avoided` is an ESTIMATE of retrieval the ladder would have paid for — never a bill";
+      return finish(r, line);
+    }
+
+    const r = K.gain(claudeDir, { run: typeof flag("--run") === "string" ? flag("--run") : null, since: typeof flag("--since") === "string" ? flag("--since") : null });
+    if (!r.ok)
+      return finish(
+        r,
+        r.reason === "no-ledger"
+          ? "graph gain: no calls recorded yet — the first `orc graph ctx` starts the ledger"
+          : `graph gain: nothing recorded${flag("--run") ? ` for run ${flag("--run")}` : ""}${flag("--since") ? ` since ${flag("--since")}` : ""}`
+      );
+    const g = r.generation_range;
+    const byCmd = Object.entries(r.by_command)
+      .sort((a, b) => b[1] - a[1])
+      .map(([k, v]) => `${k} ${v}`)
+      .join(" · ");
+    const scope = r.run ? `run ${r.run}` : r.since ? `last ${r.since}` : "this project";
+    const line =
+      U.header(`graph gain — ${scope} · ${plural(r.calls_recorded, "call")} · ${plural(r.runs, "run")}${g ? ` · gen ${g[0]}${g[1] !== g[0] ? `–${g[1]}` : ""}` : ""}`) +
+      `\n  paid       ${kTok(r.paid.total).padStart(10)} tokens   (cards ${kTok(r.paid.card)} · source ${kTok(r.paid.source)} · hints ${kTok(r.paid.hints)})` +
+      `\n  avoided    ~${rng(r.avoided.low, r.avoided.high)} tokens   (estimate — the read ladder done well … done badly)` +
+      `\n  net        ~${rng(r.net.low, r.net.high)} tokens · ~${r.calls.low} – ${r.calls.high} tool calls` +
+      (byCmd ? `\n  by command ${byCmd}` : "") +
+      `\n  hints      ${r.hints.injected} injected · ${r.hints.read_notes} read notes · ${r.hints.updates} hook updates` +
+      (r.unsized ? `
+  ${plural(r.unsized, "row")} answered from SHARDS, where the size of the search replaced cannot be known — their estimate leaves it out` : "") +
+      "\n  an estimate of avoided RETRIEVAL, never a bill — searches are a fraction of a percent of a session" +
+      "\n  `orc graph gain --measured` compares this project's own ON and OFF runs instead of estimating";
+    return finish(r, line, `GRAPH-GAIN paid=${r.paid.total} low=${r.avoided.low} high=${r.avoided.high} calls=${r.calls_recorded}`);
+  }
+
+  // ── D4 (v1.8.2 W7): `orc graph map` — the ranked repository map ──────────
+  // The one read command that needs no operand: it answers "what is this
+  // repository" before the caller knows a single file name. `--focus` takes
+  // files OR names, comma-separated or as bare words, so a planner can hand it
+  // whatever the request happened to mention.
+  if (sub === "map") {
+    if (!enabled && flag("--if-enabled") === true) return finish({ ok: true, enabled: false, state: "off", exit: 3 }, "graph: off");
+    const VALUE_FLAGS = new Set(["--dir", "--budget", "--focus"]);
     const plain = [];
     for (let i = 0; i < args.length; i++) {
       if (VALUE_FLAGS.has(args[i])) {
@@ -8880,13 +9320,80 @@ function graphCmd() {
       }
       if (!String(args[i]).startsWith("--")) plain.push(args[i]);
     }
+    const focus = [
+      ...String(flag("--focus") || "")
+        .split(",")
+        .map((x) => x.trim())
+        .filter(Boolean),
+      ...plain.slice(2),
+    ];
+    const t0 = Date.now();
+    const Q = require("./graph-query.js");
+    const model = Q.loadModel(claudeDir, root);
+    if (!model) return finish({ ok: false, state: "none", reason: "no-index", exit: 1 }, "graph: none — no index yet (run: orc graph update)");
+    const r = Q.graphMap(claudeDir, model, {
+      focus,
+      budget: flag("--budget") === undefined ? cfg("code_graph_card_budget") : flag("--budget"),
+    });
+    // The caveat is INSIDE the card (`graph-query.js`), so the `--json` reader
+    // gets it too. Appending it here would have shown it only to a human.
+    const line = r.card;
+    const trace = `GRAPH-MAP ${focus.length ? "focused" : "repo"} :: files=${r.shown}/${r.total_files}${focus.length ? ` focus=${r.focus.join(",")}` : ""} gen=${r.generation}`;
+    if (r.exit === 0) graphGainAppend(claudeDir, gainRowFor("map", Q, model, focus, r, Date.now() - t0, false));
+    return finish(r, line, trace, false);
+  }
+
+  if (sub === "ctx" || sub === "impact" || sub === "path") {
+    if (!enabled && flag("--if-enabled") === true) return finish({ ok: true, enabled: false, state: "off", exit: 3 }, "graph: off");
+    // Positionals after the subcommand, with every value-flag's value removed.
+    // D1: `--source` takes an OPTIONAL count, so it only swallows the next word
+    // when that word is a number — otherwise `ctx --source handler` would lose
+    // its target.
+    const VALUE_FLAGS = new Set(["--depth", "--budget", "--dir", "--format", "--offset"]);
+    const srcAt = args.indexOf("--source");
+    const srcTakesValue = srcAt !== -1 && /^\d+$/.test(String(args[srcAt + 1] || ""));
+    const plain = [];
+    for (let i = 0; i < args.length; i++) {
+      if (VALUE_FLAGS.has(args[i]) || (i === srcAt && srcTakesValue)) {
+        i++;
+        continue;
+      }
+      if (!String(args[i]).startsWith("--")) plain.push(args[i]);
+    }
     const operands = plain.slice(2);
+    const sourceLines = srcAt === -1 ? undefined : srcTakesValue ? Number(args[srcAt + 1]) : require("./graph-query.js").SOURCE_DEFAULT;
+    // D2 is a SWITCH, so it is read from `args` — `flag()` would read the first
+    // declared file as its value.
+    const forSlice = args.includes("--for-slice");
     // `path` names two symbols, not files, so it has nothing cheap to check —
     // it reads whatever generation is on disk, like every other command did
     // before EW3.
+    const t0 = Date.now();
     const healed = sub === "path" ? null : healOnRead(asPaths(operands));
     const Q = require("./graph-query.js");
-    const model = Q.loadModel(claudeDir, root);
+    // S1 (v1.8.2 W8): the SHARDED fast path. One `ctx <symbol>` needs a handful
+    // of records, and on django it was opening a 23 MB index and a 15 MB
+    // resolution cache to find them. `fastModel` builds a model from
+    // `names.json`, the target's blob and one shard instead — or returns null,
+    // which is every case where it cannot PROVE the card would be identical.
+    // It is deliberately narrow: one symbol, one query, no `--for-slice`, no
+    // file card, no `--source` count that would change the target.
+    // It runs AFTER `healOnRead`, so it always reads the post-heal store: a heal
+    // that rebuilt the index rewrote the shards in the same locked pass, and a
+    // heal that was skipped changed nothing. Either way the generation it pins
+    // itself to is the one on disk now.
+    let fast = null;
+    if (sub === "ctx" && !forSlice && operands.length === 1) {
+      try {
+        fast = require("./graph-shard.js").fastModel(claudeDir, root, operands[0]);
+      } catch (_) {
+        fast = null;
+      }
+    }
+    // `let`, because a fast path that gives up MID-CARD has to replace it — the
+    // gain ledger and everything else downstream must not go on reading a model
+    // that has already admitted it cannot answer.
+    let model = (fast && fast.model) || Q.loadModel(claudeDir, root);
     if (!model) return finish({ ok: false, state: "none", reason: "no-index", exit: 1 }, "graph: none — no index yet (run: orc graph update)");
     const wikiDocsFor = (files) => {
       try {
@@ -8905,12 +9412,45 @@ function graphCmd() {
       // costs more than it saves.
       format: String(flag("--format") || "prose") === "tree" ? "tree" : "prose",
       offset: flag("--offset"),
+      source: sourceLines,
       wikiDocsFor,
     };
     let r;
     if (sub === "ctx") {
       if (!operands[0]) return finish({ ok: false, reason: "missing-operand", usage, exit: 1 }, usage);
-      if (operands.length === 1) r = Q.ctx(model, operands[0], opts);
+      // S3 (v1.8.2): one git call for every card's freshness, not one per card.
+      // On the fast path the target is already resolved, so the batch is that
+      // one file — `warmBlobs` would otherwise ask `findTarget`, which is the
+      // whole-repository question the fast model exists to avoid.
+      if (fast && fast.model) Q.warmBlobs(model, [fast.sym.file]);
+      else Q.warmBlobs(model, operands.slice(0, forSlice ? 10 : 5));
+      if (forSlice) {
+        // D2 — the OUTSIDE view of the task's declared files. The names it
+        // showed are written into the run's hook counters, so the PreToolUse
+        // hint never pays for the same name twice (D3).
+        r = Q.forSlice(model, operands, opts);
+        if (r.ok) noteGraphNamesSeen(claudeDir, r.names);
+      } else if (operands.length === 1) {
+        if (fast && fast.model) {
+          try {
+            r = Q.ctx(model, fast.sym.id, opts);
+          } catch (e) {
+            // The fast path gave up MID-CARD (an unreadable blob). Start again
+            // with the full model rather than hand back a card with a row
+            // missing — a slower answer is fine, a different one is not.
+            fast = { model: null, reason: String((e && e.message) || e) };
+            model = Q.loadModel(claudeDir, root);
+            if (!model) return finish({ ok: false, state: "none", reason: "no-index", exit: 1 }, "graph: none — no index yet (run: orc graph update)");
+            Q.warmBlobs(model, operands.slice(0, 5));
+            r = Q.ctx(model, operands[0], opts);
+          }
+        } else r = Q.ctx(model, operands[0], opts);
+        // `read` says which store answered. It is not decoration: a fast path
+        // that quietly stopped being fast is otherwise invisible, and `reason`
+        // is the only way to find out why.
+        r.read = fast && fast.model ? "sharded" : "full";
+        if (fast && !fast.model) r.read_fallback = fast.reason;
+      }
       else {
         // Several targets, ONE call, ONE budget (W9): a slice builder that had to
         // loop over its declared files ran the first and skipped the rest.
@@ -8962,9 +9502,18 @@ ${line || ""}`;
     }
     const trace =
       sub === "ctx" && r.exit === 0
-        ? `GRAPH-CONSULT card :: targets=${(r.cards ? r.cards.filter((c) => c.state === "found").map((c) => c.query) : [operands[0]]).join(",")}` +
+        ? `GRAPH-CONSULT ${r.view === "for-slice" ? "slice" : "card"} :: targets=${(r.view === "for-slice" ? r.files : r.cards ? r.cards.filter((c) => c.state === "found").map((c) => c.query) : [operands[0]]).join(",")}` +
           (healed && healed.state && healed.state !== "skipped" ? ` healed=${healed.trigger}` : "")
         : null;
+    if (r.exit === 0) {
+      try {
+        graphGainAppend(claudeDir, gainRowFor(sub, Q, model, operands, r, Date.now() - t0, forSlice));
+      } catch (_) {
+        // K6: the meter is never allowed to fail the read it is measuring. The
+        // append was already fail-quiet; the PRICING was not, because it was an
+        // argument to it.
+      }
+    }
     return finish(r, line, trace, !r.card);
   }
 
@@ -10780,6 +11329,26 @@ function runCmd() {
   );
 }
 
+// K5 (v1.8.2 W4b) — the graph row of `orc stats`. It reads the gain ledger and
+// nothing else, and a missing ledger is `null`, never a zero: a zero saving and
+// no record at all are different facts.
+function statsGraph(claudeDir) {
+  try {
+    const g = require("./graph-gain.js").gain(claudeDir, {});
+    if (!g.ok) return null;
+    return {
+      calls: g.calls_recorded,
+      runs: g.runs,
+      paid: g.paid.total,
+      avoided_low: g.avoided.low,
+      avoided_high: g.avoided.high,
+      estimate: true,
+    };
+  } catch (_) {
+    return null;
+  }
+}
+
 // ── orc stats — deterministic usage counting (no model, no cost) ────────────
 // Source: the trace files that already exist. Their names are DATA
 // (`run-<lane>-<slug>-<DDMMYY>-<HHMMSS>.txt`), so lane and date come from the
@@ -10854,7 +11423,7 @@ function stats() {
   const empty = (msg) => {
     if (asJson)
       emitJson(
-        { log_dir: dir, runs: 0, from: null, to: null, lanes: {}, agents: {}, dispatches: 0, downgrades: 0, unfinished: 0, unknown_lane: 0 },
+        { log_dir: dir, runs: 0, from: null, to: null, lanes: {}, agents: {}, dispatches: 0, downgrades: 0, unfinished: 0, unknown_lane: 0, graph: statsGraph(claudeDir) },
         1
       );
     console.log(msg);
@@ -10931,6 +11500,7 @@ function stats() {
           downgrades,
           unfinished,
           unknown_lane: unknownLane,
+          graph: statsGraph(claudeDir),
         },
         null,
         2
@@ -10956,6 +11526,17 @@ function stats() {
     console.log("\n" + ui.color.bold("Subagents dispatched") + `          ${dispatches} total`);
     for (const [a, n] of agentRows.slice(0, 8))
       console.log(`  ${a.replace(/^orc-/, "").padEnd(28)} ${String(n).padStart(3)}`);
+  }
+  // K5 (v1.8.2 W4b): what the code graph put in, and what it probably kept
+  // out. One row, never a headline — a saving is not a run.
+  const gr = statsGraph(claudeDir);
+  if (gr) {
+    console.log("\n" + ui.color.bold("Code graph"));
+    console.log(ui.kv([
+      ["reads recorded", `${gr.calls}   across ${plural(gr.runs, "run")}`],
+      ["tokens put in", kTok(gr.paid)],
+      ["retrieval probably kept out", `~${kTok(gr.avoided_low)} – ${kTok(gr.avoided_high)}   (an ESTIMATE — see \`orc graph gain\`)`],
+    ]));
   }
   console.log("\n" + ui.color.bold("Health"));
   console.log(ui.kv([
@@ -33681,18 +34262,30 @@ function doctor() {
       // EW3/EW4 — the delivery and self-update hook. Only ever raised while the
       // feature is ARMED: a warning about a hook for a feature you switched off
       // is exactly the noise that teaches people to ignore doctor.
-      if (String(cfg.code_graph_hooks === undefined ? "on" : cfg.code_graph_hooks) === "on") {
+      if (String(cfg.code_graph_hooks === undefined ? "on" : cfg.code_graph_hooks).split(",")[0].trim() === "on") {
         let hk = {};
         try {
           hk = (JSON.parse(fs.readFileSync(path.join(claudeDir, "settings.json"), "utf8")) || {}).hooks || {};
         } catch (_) {}
-        const wiredOn = (arr) => Array.isArray(arr) && arr.some((e) => (e.hooks || []).some((h) => String(h.command || "").includes("orc-graph-hook")));
-        const wired = ["SubagentStart", "SubagentStop", "PreToolUse", "PostToolUse"].filter((e) => wiredOn(hk[e]));
-        if (wired.length === 4) ok("graph hook wired on all four events");
+        // v1.8.2 W3: FIVE entries, not four events — `PreToolUse` carries two
+        // matchers, and a doctor that counts events would call a half-wired
+        // install healthy.
+        const wiredOn = (event, matcher) =>
+          Array.isArray(hk[event]) &&
+          hk[event].some((e) => (e.matcher || null) === (matcher || null) && (e.hooks || []).some((h) => String(h.command || "").includes("orc-graph-hook")));
+        const ENTRIES = [
+          ["SubagentStart", null],
+          ["SubagentStop", null],
+          ["PreToolUse", "Grep|Glob"],
+          ["PreToolUse", "Bash|Read"],
+          ["PostToolUse", "Read"],
+        ];
+        const wired = ENTRIES.filter(([e, m]) => wiredOn(e, m)).map(([e, m]) => (m ? `${e} ${m}` : e));
+        if (wired.length === ENTRIES.length) ok("graph hook wired on all five entries");
         else
           warn(
             "graph-hook-unwired",
-            `graph hook wired on ${wired.length} of 4 events (${wired.join(", ") || "none"}) — the graph will not update itself when an executor finishes, and subagents get no anchors; run \`orc update\``,
+            `graph hook wired on ${wired.length} of 5 entries (${wired.join(", ") || "none"}) — the graph will not update itself when an executor finishes, and subagents get no anchors; run \`orc update\``,
             { fixable: true, fix: "orc update", fix_command: "orc update" }
           );
       }

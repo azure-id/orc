@@ -27,7 +27,7 @@ selector.
 | `mock_example` | `ask` / `on` / `off` | Post-verify mocked example + drift recovery (`mock-examples/<slug>/`, never committed) |
 | `tdd` | `on` / `off` | TDD-anchored planning: plan-time `tdd_spec` (scoped by `disposition`), paired TDD tasks for the red proof, TDD gate in the verify slot |
 | `gotchas` | `on` / `off` | Repair memory: inject scope-matching gotchas into slices, record one when a repair loop goes red → green (`_shared/gotchas.md`) |
-| `code_graph` | `on` (default) / `off` | Code-graph cache steps: `orc graph status --heal` at preflight, `orc graph ctx` cards in slices, `orc graph impact` + `orc graph cochange` at planning, `orc graph changes` at review, `orc graph coverage` on demand, `orc graph update` after every wave and at ship, one `orc graph notes` batch per wave when notes are on. `on` compiles them in and the global `code_graph` key decides at run time (every call carries `--if-enabled`); `off` removes them (`_shared/code-graph.md`) |
+| `code_graph` | `on` (default) / `off` | Code-graph cache steps: `orc graph status --heal` at preflight, `orc graph ctx` cards in slices, `orc graph map` then `orc graph impact` + `orc graph cochange` at planning, `orc graph changes` at review, `orc graph coverage` on demand, `orc graph update` after every wave and at ship, one `orc graph notes` batch per wave when notes are on. `on` compiles them in and the global `code_graph` key decides at run time (every call carries `--if-enabled`); `off` removes them (`_shared/code-graph.md`) |
 | `wiki_gate` | `notice` / `off` / `hard` | Wiki freshness handling at preflight |
 | `post_ship_wiki_ask` | `on` / `off` | Post-ship wiki refresh offer on big runs |
 | `summary` | `full` / `off` / `short` | Summary depth |

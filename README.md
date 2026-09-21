@@ -7,14 +7,14 @@
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
 ![npm](https://img.shields.io/npm/v/%40azure-id%2Forc?style=for-the-badge&color=cb3837&logo=npm)
-![Version](https://img.shields.io/badge/version-1.8.1-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-1.8.2-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
 ![Dependencies](https://img.shields.io/badge/dependencies-zero-lightgrey.svg?style=for-the-badge)
 ![GitHub stars](https://img.shields.io/github/stars/azure-id/orc?style=for-the-badge&color=yellow)
 
-**Latest: v1.8.1** · updated 2026-09-16 · [full changelog](CHANGELOG.md)
+**Latest: v1.8.2** · updated 2026-09-21 · [full changelog](CHANGELOG.md)
 
 **On npm: [`@azure-id/orc`](https://www.npmjs.com/package/@azure-id/orc)** — `npm i -g @azure-id/orc`
 
@@ -388,28 +388,45 @@ A local map of how your code is connected. It is **off by default**.
 ```bash
 orc config set code_graph on          # code lanes build and use the map (free)
 orc config set code_graph_notes wave  # optional: one-sentence notes (costs tokens)
+orc graph map                         # the repository ranked, before you know a file name
 orc graph ctx OrderService.create     # a card: callers, calls, SQL/HTTP/env effects
+orc graph ctx "GET /orders/:id"       # a route is a symbol too
 orc graph changes                     # what THIS diff touched, and how risky
 orc graph cochange src/orders.js      # what usually changes with this file
 orc graph coverage src/orders.js      # how much of it the parser really saw
+orc graph gain                        # what the map put in, and an estimate of what it kept out
 ```
 
 - **Structure is free.** The CLI parses the code. No model, no dependency.
   Functions, methods, classes and route handlers (`GET /orders/:id`); a
   middleware passed by name is a `used by` link.
+- **Languages:** JavaScript, TypeScript, Python, Go, Java, C#, PHP, Ruby, Rust,
+  Kotlin, C / C++, and the `<script>` block of a Vue or Svelte component. Where
+  your project already has the tool, ORC borrows it and the parse is exact —
+  Python's `ast`, your own `node_modules/typescript`, the `go` on PATH. ORC
+  itself still has zero dependencies. `ORC_GRAPH_NO_BORROW=1` turns that off.
+- **A URL is an edge.** A test that calls `request(app).get("/orders/search")`
+  is a caller of that route, and the card says so. So is an instance alias
+  (`const svc = new OrderService(); svc.run()`), an inherited method
+  (`this.ok()` → `Base.ok`) and a name re-exported through a barrel file.
 - **Updates are small.** Git already hashes every file. Only the files whose hash
   changed are parsed again — a teammate's change heals at the next preflight.
-- **Every link says how sure it is:** `LOCAL`, `IMPORT`, `UNIQUE`, `AMBIGUOUS`
-  (every candidate listed) or `UNRESOLVED`. The graph never guesses.
+- **Every link says how sure it is:** `LOCAL`, `IMPORT`, `UNIQUE`, `ROUTE`,
+  `AMBIGUOUS` (every candidate listed) or `UNRESOLVED`. The graph never guesses.
 - **A card has a token budget.** It never goes over it, and it says what it hid.
-  `--format tree` names each column once instead of on every row, and falls back
-  to the normal shape when a card is too small to pay for the header.
+  `--source [N]` adds the target's own lines to the same call. `--for-slice`
+  prints only the OUTSIDE view of a file an agent is about to read in full.
+  `--format tree` names each column once instead of on every row.
+- **`orc graph map` answers "which files matter here"** before you know a file
+  name, inside a budget. `--focus` re-ranks the whole repository around the files
+  or names your request already mentioned. **Rank is a hint about where to look
+  first**, never proof that a file matters to a change.
 - **It shows where code is. It does not replace reading it.** Agents still read
   the line range before they act. A card header says `coverage partial 327-466`
   when the parser could not finish a file — **no recorded gap is not proof of
-  completeness**. A card also lists only the callers that NAME the symbol: one
-  that reaches it through an HTTP route or a string dispatch is not a link, so
-  **a card's silence is not proof of absence**.
+  completeness**. A card lists the callers that NAME the symbol or reach it by a
+  URL; one that reaches it through a job runner or a string dispatch is not a
+  link, so **a card's silence is not proof of absence**.
 - **Every answer carries a `generation`** — a number that goes up each time the
   map changes. A card quoted back later can be placed in time.
 - **It keeps itself current in three ways, and only one of them needs a lane to
@@ -418,8 +435,9 @@ orc graph coverage src/orders.js      # how much of it the parser really saw
   — `/orc`, `/orc-ultra`, `/orc-diy`, `/orc-mini`, `/orc-fast`, `/orc-quick` —
   still builds it at preflight and updates it after each change. Other lanes
   never call it. **Nothing runs on a timer and nothing runs in the background.**
-- **The hook also hands a worker the anchors it would otherwise search for**, and
-  everything it hands over is labelled repository data, never an instruction.
+- **The hook also hands a worker the anchors it would otherwise search for** —
+  for a Grep, a Glob and a shell search (`grep`, `rg`, `git grep`, `findstr`) —
+  and everything it hands over is labelled repository data, never an instruction.
   Switch it off with `orc config set code_graph_hooks off`; the map still works.
 
 The contract: `templates/skills/_shared/code-graph.md`. The hook:
@@ -432,6 +450,10 @@ The contract: `templates/skills/_shared/code-graph.md`. The hook:
 > a session**. Turn the map on because you want the cards: what calls what, what
 > a change would touch, where the parser could not finish. Not for a number.
 > The working is in `eval/graph-replay.js`, and it spends no tokens to re-run.
+> `orc graph gain` reports the same honesty per run: what the map PUT IN is
+> recorded, what it kept out is an **estimate** printed as a range, and a
+> measured figure appears only when your own project has three runs with the map
+> on and three with it off.
 
 ## `orc ui` — the control panel
 
@@ -613,7 +635,8 @@ templates/
 └── agents/       48 model-pinned subagents + MODEL-MAPPING.md
 bin/cli.js        installer, config editor, flow composer, run-state reader, and
                   the deterministic half of every lane. Every read speaks --json
-bin/graph*.js     the code graph: store, extraction, resolution + its cache, signals, notes
+bin/graph*.js     the code graph: store, extraction, resolution + its cache and
+                  shards, signals, notes, the ranked map, the gain meter
 bin/webui/        `orc ui` — the local control panel: css/ + js/ + i18n/<lang>/ +
                   fixtures/, one file per layer and per panel. Zero deps, no build step
 bin/mockrun-catalog.js   the mocked-run catalogue (derived from the files on disk)
@@ -683,28 +706,51 @@ a current audit: [EVAL-REPORT.md](EVAL-REPORT.md).
 **Full history: [CHANGELOG.md](CHANGELOG.md)** — or `orc changelog`, which prints
 only what is newer than the version you have.
 
-### v1.8.1 - the guard that only failed on Windows _(2026-09-16)_
+### v1.8.2 — the map that finds what a grep cannot _(2026-09-21)_
 
-`npm publish` could not run on Windows. The `prepack` guard reported nine
-drifted executor agents, and `git status` reported no change at all.
+v1.8.0 shipped the code graph with a known hole: a card listed every caller that
+NAMES a symbol, so a test reaching a route by its URL was not a caller and the
+card was silent about it. **A URL is now an edge** — and so is an instance alias
+(`const svc = new OrderService(); svc.run()`), an inherited method and a name
+re-exported through a barrel. A bare call no longer resolves to the only method
+in the repository with that name; that guess was an invented edge and it is gone.
+On django, confident edges went 65,379 → 72,955 and `UNIQUE` guesses 23,866 →
+6,442.
 
-**The cause was a line ending, not content.** `.gitattributes` says
-`* text=auto`, so git stores the generated executor agents with LF and checks
-them out native — a Windows clone holds CRLF. The generator read the template
-as it is on disk, but injected the `effort:` frontmatter line with a hardcoded
-LF. `bin/build-agents.js` now takes its line ending from the template, and
-`--check` compares LF-normalized text, so the guard gives the same result in
-either worktree. A test in `test/payload.test.js` holds the rule.
+**Five more languages** — Ruby, Rust, Kotlin, C / C++ and the `<script>` block of
+a Vue or Svelte component. **Borrowed parsers** where your project already has
+the tool: your own `node_modules/typescript` and the `go` on PATH join Python's
+`ast`. ORC still has zero dependencies.
 
-One test carried the same fault. `npm test` also runs on `prepack`, and the
-statusline graph-component test sliced a hook's source to the next `\n}\n` — a
-needle a CRLF checkout never contains. It now normalizes the source first.
+**Fewer round trips.** `ctx --source [N]` adds the target's lines to the card.
+`ctx --for-slice` prints only the outside view of a file an agent is about to
+read in full, 30–51% smaller than the card it replaces. `update --notes-pending`
+answers both in one call. The hook now answers a shell search too, and
+`code_graph_hooks on,read` names a wide file's six most reached symbols so the
+next read can ask for a range.
 
-No shipped payload changed. The generated agent files are byte-identical.
+**`orc graph map`** ranks the repository before you know a file name, inside a
+budget, with `--focus`. Rank is a hint about where to look first, never proof.
+**A one-symbol card is about twice as fast** — the resolution cache is sharded,
+so django goes 881 → 480 ms, and the shards answer exactly what the full index
+answers or they decline (577 cards compared, 0 different).
+
+**`orc graph gain`** reports what the map put in — recorded — and an estimate,
+always a range, of what it kept out. It never prints one number and never claims
+a saving it cannot show.
+
+**`code_graph_ignore`** is a new key: extra globs the graph never indexes.
+
+Two gates in this release were missed and the CHANGELOG says so with the
+numbers: the borrowed parsers ship on the maintainer's call although the
+confident-rate gate measured +1.0 / −0.3 / −0.3, and `orc graph map` is wired to
+planning only because the replay measured 0.39 answerable planning calls per run
+against a gate of three.
 
 <details>
-<summary><strong>Earlier releases</strong> — 117 of them, titles only. Full text in <a href="CHANGELOG.md">CHANGELOG.md</a>.</summary>
+<summary><strong>Earlier releases</strong> — 118 of them, titles only. Full text in <a href="CHANGELOG.md">CHANGELOG.md</a>.</summary>
 
+- **v1.8.1** — the guard that only failed on Windows · _2026-09-16_
 - **v1.8.0** — the code graph: a map of the code that stays fresh · _2026-09-16_
 - **v1.7.1** — the rules card now reaches the agent · _2026-09-14_
 - **v1.7.0** — the rules that keep the slop out · _2026-09-13_

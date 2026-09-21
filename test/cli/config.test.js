@@ -237,7 +237,7 @@ test("config: every key answers a declared family, and the two contested ones ar
   const { root } = freshInstall();
   try {
     const j = JSON.parse(cli(["config", "list", "--json", "--dir", root]).stdout);
-    assert.strictEqual(j.keys.length, 94); // v1.6.0: +read_gate, +read_gate_max_lines · v1.8.0: +code_graph and its seven operating keys
+    assert.strictEqual(j.keys.length, 95); // v1.6.0: +read_gate, +read_gate_max_lines · v1.8.0: +code_graph and its seven operating keys · v1.8.2: +code_graph_ignore
     for (const k of j.keys) {
       assert.ok(k.answers && k.answers.length, k.key + " declares no answers[]");
       for (const a of k.answers) assert.ok(j.families[a.family], k.key + " → unknown family " + a.family);
@@ -385,6 +385,8 @@ test("config: lanes[] is a mechanical seed, and says so by being empty where it 
       // hook, and a hook has no lane.
       "code_graph_heal_ms",
       "code_graph_hooks",
+      // v1.8.2 — the ignore globs, read by the CLI behind the same calls.
+      "code_graph_ignore",
       "statusline_custom",
       // v1.1.0 — the two operating keys of the WAIT. A lane runs `orc wait plan`
       // and the CLI reads these two; no spine reads either, which is the same

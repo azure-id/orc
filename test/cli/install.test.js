@@ -381,3 +381,71 @@ function LANES_WITH_NO_KEYS(root) {
   const zero = (list.lanes || []).find((l) => l.keys === 0);
   return zero ? zero.lane : null;
 }
+
+// ── v1.8.2 W3 (D3) — the graph hook is FIVE entries, and re-wiring is a no-op ─
+
+const GRAPH_ENTRIES = [
+  ["SubagentStart", null],
+  ["SubagentStop", null],
+  ["PreToolUse", "Grep|Glob"],
+  ["PreToolUse", "Bash|Read"],
+  ["PostToolUse", "Read"],
+];
+
+const graphWiring = (claudeDir) => {
+  const hooks = (JSON.parse(fs.readFileSync(path.join(claudeDir, "settings.json"), "utf8")) || {}).hooks || {};
+  const out = [];
+  for (const [event, arr] of Object.entries(hooks)) {
+    for (const entry of arr || []) {
+      for (const h of entry.hooks || []) {
+        if (String(h.command || "").includes("orc-graph-hook")) out.push([event, entry.matcher || null]);
+      }
+    }
+  }
+  return out;
+};
+
+test("install: the graph hook is wired on five entries, and a second update changes nothing", () => {
+  const { claudeDir, root } = freshInstall();
+  assert.deepStrictEqual(graphWiring(claudeDir).sort(), GRAPH_ENTRIES.slice().sort());
+  const before = fs.readFileSync(path.join(claudeDir, "settings.json"), "utf8");
+  assert.equal(cli(["update", "--dir", root]).status, 0);
+  assert.equal(fs.readFileSync(path.join(claudeDir, "settings.json"), "utf8"), before, "re-wiring is idempotent, byte for byte");
+});
+
+test("install: a v1.8.1 settings.json keeps its four graph entries and gains the fifth", () => {
+  const { claudeDir, root } = freshInstall();
+  const settingsPath = path.join(claudeDir, "settings.json");
+  const settings = JSON.parse(fs.readFileSync(settingsPath, "utf8"));
+  // Rewind to the 1.8.1 shape: the `Bash|Read` entry did not exist.
+  settings.hooks.PreToolUse = (settings.hooks.PreToolUse || []).filter((e) => e.matcher !== "Bash|Read");
+  const kept = JSON.stringify(settings.hooks.PreToolUse);
+  fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + "\n");
+  assert.equal(graphWiring(claudeDir).length, 4);
+
+  assert.equal(cli(["update", "--dir", root]).status, 0);
+  const after = JSON.parse(fs.readFileSync(settingsPath, "utf8"));
+  assert.deepStrictEqual(graphWiring(claudeDir).sort(), GRAPH_ENTRIES.slice().sort());
+  assert.ok(JSON.stringify(after.hooks.PreToolUse).includes(kept.slice(1, -1)), "the old entries are kept, not rewritten");
+});
+
+test("doctor: graph-hook-unwired counts five entries, not four events", () => {
+  const { claudeDir, root } = freshInstall();
+  assert.equal(cli(["config", "set", "code_graph", "on", "--dir", root]).status, 0);
+  const healthy = cli(["doctor", "--dir", root, "--json"]);
+  const findings = (JSON.parse(healthy.stdout).findings || []).map((f) => f.id);
+  assert.ok(!findings.includes("graph-hook-unwired"), JSON.stringify(findings));
+
+  // Drop the new entry only: four EVENTS are still present, and the old
+  // event-counting doctor would have called this healthy.
+  const settingsPath = path.join(claudeDir, "settings.json");
+  const settings = JSON.parse(fs.readFileSync(settingsPath, "utf8"));
+  settings.hooks.PreToolUse = settings.hooks.PreToolUse.filter((e) => e.matcher !== "Bash|Read");
+  fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + "\n");
+
+  const broken = JSON.parse(cli(["doctor", "--dir", root, "--json"]).stdout);
+  const f = (broken.findings || []).find((x) => x.id === "graph-hook-unwired");
+  assert.ok(f, JSON.stringify((broken.findings || []).map((x) => x.id)));
+  assert.match(f.message, /wired on 4 of 5 entries/);
+  assert.equal(f.fix_command, "orc update");
+});

@@ -35,7 +35,7 @@ let KN_TAB = "wiki";
 
 async function renderKnowledge(body) {
   body.replaceChildren(skeleton(6));
-  const [wikiRes, impactRes, patRes, gotRes, planRes, debtRes, usageRes, docsRes, covRes, refsRes, graphRes] = await Promise.all([
+  const [wikiRes, impactRes, patRes, gotRes, planRes, debtRes, usageRes, docsRes, covRes, refsRes, graphRes, gainRes] = await Promise.all([
     read("/api/wiki").catch((e) => ({ data: null, error: e })),
     read("/api/wiki/impact").catch((e) => ({ data: null, error: e })),
     read("/api/patterns").catch((e) => ({ data: null, error: e })),
@@ -50,6 +50,9 @@ async function renderKnowledge(body) {
     read("/api/wiki/refs").catch((e) => ({ data: null, error: e })),
     // v1.8.0 — the code graph. `graph status` exits 0-3 and every code is DATA.
     read("/api/graph").catch((e) => ({ data: null, error: e })),
+    // v1.8.2 W4b — the gain meter. Exit 1 (no ledger yet) is DATA, like every
+    // other read on this panel.
+    read("/api/graph/gain").catch((e) => ({ data: null, error: e })),
   ]);
   const d = {
     wiki: wikiRes.data || {},
@@ -63,6 +66,7 @@ async function renderKnowledge(body) {
     coverage: covRes.data,
     refs: refsRes.data,
     graph: graphRes.data,
+    graphGain: gainRes.data,
     // A read that FAILED is not the same as a read that came back empty, and
     // rendering them identically is what turned a truncated 30 KB payload into
     // "this repo has no wiki and no git" (v0.49.4). The server already puts the
@@ -145,7 +149,7 @@ function knowledgeHeaderStrip(d) {
    the state word is never replaced by a friendlier synonym. An update is FREE
    (parser only, no model), so it is a button; an OFF graph shows the one config
    command that turns it on, because turning a feature on is the user's call. */
-function graphCard(g, body) {
+function graphCard(g, body, gain) {
   const c = card(t("knowledge.graph.title"));
   if (!g || !g.state) {
     c.append(empty(t("knowledge.graph.unknown"), t("knowledge.graph.unknownHint")));
@@ -191,7 +195,68 @@ function graphCard(g, body) {
   // click.
   c.append(el("div", "note", t("knowledge.graph.selfheal")));
   c.append(el("div", "note", t("knowledge.graph.locator")));
+  // K5 (v1.8.2 W4b) — the gain strip. It renders exactly the CLI's JSON and
+  // invents nothing: the word "estimate" is part of the string, never a
+  // tooltip, and `avoided` is a RANGE because one number for a counterfactual
+  // is the claim this whole meter refuses to make.
+  gainStrip(c, gain, body);
   return c;
+}
+
+function gainStrip(c, g, body) {
+  if (!g || g.state !== "rows") {
+    c.append(el("div", "note", t("knowledge.gain.none")));
+    return;
+  }
+  c.append(
+    el(
+      "div",
+      "note",
+      t("knowledge.gain.strip")
+        .replace("{paid}", kTokUi(g.paid.total))
+        .replace("{low}", kTokUi(g.avoided.low))
+        .replace("{high}", kTokUi(g.avoided.high))
+        .replace("{calls}", String(g.calls_recorded))
+    )
+  );
+  c.append(
+    kvList([
+      [t("knowledge.gain.paid"), `${kTokUi(g.paid.total)}  (${kTokUi(g.paid.card)} · ${kTokUi(g.paid.source)} · ${kTokUi(g.paid.hints)})`],
+      [t("knowledge.gain.avoided"), `~${kTokUi(g.avoided.low)} – ${kTokUi(g.avoided.high)}`],
+      [t("knowledge.gain.net"), `~${kTokUi(g.net.low)} – ${kTokUi(g.net.high)}  ·  ~${g.calls.low} – ${g.calls.high}`],
+      [t("knowledge.gain.byCommand"), Object.entries(g.by_command).map(([k, v]) => `${k} ${v}`).join(" · ") || "—"],
+      [t("knowledge.gain.hints"), `${g.hints.injected} · ${g.hints.read_notes} · ${g.hints.updates}`],
+    ])
+  );
+  const btn = el("button", "btn btn-sm", t("knowledge.gain.measure"));
+  btn.type = "button";
+  const out = el("div", "note");
+  btn.addEventListener("click", async () => {
+    btn.disabled = true;
+    const r = await read("/api/graph/gain/measured").catch(() => ({ data: null }));
+    btn.disabled = false;
+    out.textContent = measuredText(r && r.data);
+  });
+  c.append(btn);
+  c.append(out);
+  c.append(el("div", "note", t("knowledge.gain.estimate")));
+}
+
+// The A/B in words. Every delta carries its N and the OFF group's own spread,
+// because a delta smaller than that spread is noise and the panel must say so
+// in the same sentence, never in a footnote.
+function measuredText(m) {
+  if (!m || !m.compare) return t("knowledge.gain.measuredFew");
+  const c = m.compare;
+  const row = (label, x, unit) =>
+    `${label} ${x.off.median} → ${x.on.median} ${unit} (${x.delta_pct > 0 ? "+" : ""}${x.delta_pct}%, N ${x.off.n}/${x.on.n}, OFF spread ±${x.off_spread_pct}%)`;
+  return [
+    t("knowledge.gain.measuredHead").replace("{on}", String(m.runs.on)).replace("{off}", String(m.runs.off)),
+    row(t("knowledge.gain.execCalls"), c.exec_retrieval_calls, "calls"),
+    row(t("knowledge.gain.execTokens"), c.exec_result_tokens, "tokens"),
+    row(t("knowledge.gain.sessionTokens"), c.session_result_tokens, "tokens"),
+    t("knowledge.gain.noise"),
+  ].join("  ·  ");
 }
 
 /* ── TAB 1 — WIKI ────────────────────────────────────────────────────────── */
@@ -199,7 +264,7 @@ function knWikiTab(d, body) {
   const out = frag();
   out.append(wikiPlanCard(d.plan, d.debt, body));
   out.append(wikiOneDocCard(d.refs));
-  out.append(graphCard(d.graph, body));
+  out.append(graphCard(d.graph, body, d.graphGain));
   if (d.usage && d.usage.rows) out.append(wikiUsageCard(d.usage, body));
 
   const w = d.wiki;

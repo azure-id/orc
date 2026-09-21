@@ -179,7 +179,7 @@ test("lane config: effective, not_read and stops are answers, including when emp
     assert.deepStrictEqual(adv.keys, []);
     assert.deepStrictEqual(adv.stops, []);
     assert.deepStrictEqual(adv.roles, {});
-    assert.strictEqual(adv.not_read.length, 94, "it reads none of the 94 keys");
+    assert.strictEqual(adv.not_read.length, 95, "it reads none of the 95 keys"); // v1.8.2: +code_graph_ignore
   } finally {
     rmrf(root);
   }

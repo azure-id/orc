@@ -82,19 +82,33 @@ function noteIndex(claudeDir) {
   return { byKey, bySym, rows: rows.length };
 }
 
+// The ONE resolution rule, shared by every reader:
+//
+//   1. a CURRENT model note   — somebody paid for it and it still describes
+//                               this body
+//   2. the DOC note (N1)      — the author's own first sentence, re-extracted
+//                               with the body, so it is never stale on its own
+//   3. a STALE model note     — reported as stale, never repeated as a fact
+//
+// A doc outranks a stale note because a sentence that matches the current
+// bytes beats one that matched a body nobody has any more. It does NOT
+// outrank a current model note: a comment can lie, and the model read the code.
+// That is why the shared precedence line reads `graph notes and doc notes` as
+// ONE rung, below a stale wiki — this function is the code half of it.
 function noteFor(idx, sym) {
-  if (!idx || !sym) return null;
-  const cur = idx.byKey.get(`${sym.id}\0${sym.body_hash}`);
-  if (cur) return { text: cur.note, model: cur.model, at: cur.at, current: true };
-  const any = idx.bySym.get(sym.id);
-  if (any) return { text: null, model: any.model, at: any.at, current: false };
+  if (!sym) return null;
+  const cur = idx && idx.byKey.get(`${sym.id}\0${sym.body_hash}`);
+  if (cur) return { text: cur.note, model: cur.model, at: cur.at, current: true, source: "model" };
+  if (sym.doc) return { text: sym.doc, model: "parser", at: null, current: true, source: "doc" };
+  const any = idx && idx.bySym.get(sym.id);
+  if (any) return { text: null, model: any.model, at: any.at, current: false, source: "model" };
   return null;
 }
 
 const normPath = (f) => String(f).replace(/\\/g, "/").replace(/^\.\//, "");
 
 // exit 0 = rows to note · 1 = no index / no --files · 5 = none, or fewer than --min
-function notesPending(claudeDir, opts) {
+function notesPending(claudeDir, opts, root) {
   const index = readIndex(claudeDir);
   if (!index || !index.by_file) return { ok: false, state: "none", reason: "no-index", exit: 1 };
   const files = [...new Set((opts.files || []).map(normPath).filter(Boolean))];
@@ -104,6 +118,7 @@ function notesPending(claudeDir, opts) {
   const idx = noteIndex(claudeDir);
   const missing = [];
   const rows = [];
+  let documented = 0;
   for (const rel of files) {
     const f = index.by_file[rel];
     if (!f) {
@@ -114,14 +129,40 @@ function notesPending(claudeDir, opts) {
       if (!NOTE_KINDS.has(s.kind)) continue;
       if (s.lines[1] - s.lines[0] + 1 < MIN_LINES) continue;
       if (idx.byKey.has(`${s.id}\0${s.body_hash}`)) continue;
+      // N1 (v1.8.2 W4): the author already wrote the sentence. Paying a
+      // subagent to write it again is the one cost this layer must not have.
+      if (s.doc) {
+        documented++;
+        continue;
+      }
       rows.push({ sym: s.id, file: rel, lines: s.lines, body_hash: s.body_hash, restale: idx.bySym.has(s.id) });
     }
   }
-  const base = { ok: true, files, missing, total: rows.length, cap, min };
+  const base = { ok: true, files, missing, total: rows.length, documented, cap, min };
   if (!rows.length) return { ...base, state: "none", rows: [], more: 0, exit: 5 };
   if (rows.length < min) return { ...base, state: "below-min", rows: [], waiting: rows.map((r) => r.sym), more: 0, exit: 5 };
   const out = rows.slice(0, cap);
-  return { ...base, state: "pending", rows: out, more: rows.length - out.length, exit: 0 };
+  // N2 (v1.8.2 W4) — `--with-source`: the ranges, in the SAME call. The noter
+  // used to open every symbol with a `Read`, so a 40-symbol batch was 40 round
+  // trips before it wrote a word. One call, `SRC_PER_ROW` lines each, and the
+  // noter reads nothing.
+  if (opts.withSource) for (const r of out) r.source = readRange(root, r.file, r.lines);
+  return { ...base, state: "pending", rows: out, more: rows.length - out.length, with_source: !!opts.withSource, exit: 0 };
+}
+
+const SRC_PER_ROW = 120;
+
+function readRange(root, rel, lines) {
+  if (!root) return null;
+  try {
+    const all = require("fs").readFileSync(require("path").join(root, ...rel.split("/")), "utf8").split(/\r?\n/);
+    const from = Math.max(1, lines[0]);
+    const to = Math.min(all.length, Math.min(lines[1], from + SRC_PER_ROW - 1));
+    if (to < from) return null;
+    return { from, to, cut: Math.max(0, lines[1] - to), text: all.slice(from - 1, to).join("\n") };
+  } catch (_) {
+    return null; // a file that moved between the index and now: the noter reads it
+  }
 }
 
 // exit 0 = every row applied · 1 = no index / locked · 6 = one or more rows rejected

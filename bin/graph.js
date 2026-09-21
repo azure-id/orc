@@ -37,15 +37,19 @@ const SCHEMA = 1;
 // older engine is re-extracted, and status reads DRIFTED until it is.
 // @3 (W9): route symbols + `ref` edges — an older index re-extracts once.
 // @4 (EW1): per-file COVERAGE and a GENERATION on the index.
-const ENGINE = "graph@4";
+// @5 (v1.8.2): `urls`, `mounts`, decorator routes with `handler`, `bases`,
+//     aliases, re-exports. A 1.8.1 store reads DRIFTED with `engine_stale` and
+//     the next preflight (`status --heal`) re-extracts every file once.
+const ENGINE = "graph@5";
 const GIT_MAX_BUFFER = 256 * 1024 * 1024;
 const MAX_BYTES = 512 * 1024;
 const LOCK_STALE_MS = 10 * 60 * 1000;
-// Measured after W2 on this machine class: nestjs/nest 1.3 ms per file
-// (heuristic), django/django 3.5 ms per file (Python ast + masking). The
-// estimate uses the slower one — a first build that finishes early is fine, one
-// that overruns its own estimate teaches people to ignore it.
-const EST_MS_PER_FILE = 3.5;
+// Measured on this machine class: nestjs/nest 1.3 ms per file (heuristic),
+// django/django 3.5 ms per file on 1.8.1 and 5.6 ms on 1.8.2 (Python ast +
+// masking + the W1/W2 alias, decorator and re-export passes). The estimate
+// uses the slower one — a first build that finishes early is fine, one that
+// overruns its own estimate teaches people to ignore it.
+const EST_MS_PER_FILE = 5.6;
 const ESTIMATE_ABOVE = 2000;
 
 const LANG_BY_EXT = {
@@ -56,11 +60,26 @@ const LANG_BY_EXT = {
   ".java": "java",
   ".cs": "cs",
   ".php": "php",
+  // v1.8.2 W5 (G6) — the heuristic rung gains Ruby, Rust, Kotlin, the two
+  // single-file component formats, and C/C++.
+  ".rb": "rb", ".rake": "rb",
+  ".rs": "rs",
+  ".kt": "kt", ".kts": "kt",
+  // A single-file component is its `<script>` block, parsed as js or ts. The
+  // rest of the file is blanked, so every line number is the file's own.
+  ".vue": "vue",
+  ".svelte": "svelte",
+  ".c": "c", ".h": "c", ".cc": "c", ".cpp": "c", ".cxx": "c", ".hpp": "c", ".hh": "c",
 };
 
-// Never part of the map, whatever git says: ORC's own tree, installed
-// dependencies (sometimes committed), and minified bundles.
-const ALWAYS_SKIP = /^(\.claude\/|node_modules\/|(.*\/)?node_modules\/)|\.min\.js$/;
+// Never part of the map, whatever git says: ORC's own tree, installed or
+// vendored dependencies (sometimes committed), build output, caches, minified
+// or bundled JS, generated files, and `.d.ts` declarations (v1.8.2 W2 — a
+// declaration file duplicates every symbol of its module and made each one
+// AMBIGUOUS). `dist/` and `build/` are skipped at the ROOT only: `pkg/build/`
+// is a package name in more than one real repository. A skipped path has no
+// record, so `coverage` reports it `excluded`, never silently.
+const ALWAYS_SKIP = /^(\.claude\/|dist\/|build\/|out\/|target\/(debug|release)\/)|(^|\/)(node_modules|vendor|__pycache__|\.next|\.nuxt|\.venv|venv|target\/classes)\/|\.(min|bundle|chunk)\.js$|\.d\.ts$|\.generated\.[A-Za-z]+$|\.pb\.go$|_pb2\.py$/;
 
 function graphPaths(claudeDir) {
   const dir = path.join(claudeDir, "orc", "graph");
@@ -76,13 +95,17 @@ function graphPaths(claudeDir) {
 }
 
 function globRe(g) {
-  const esc = String(g)
+  const raw = String(g).replace(/^\.\//, "");
+  const esc = raw
     .replace(/[.+^${}()|[\]\\]/g, "\\$&")
     .replace(/\*\*/g, "__GLOBSTAR__")
     .replace(/\*/g, "[^/]*")
     .replace(/\?/g, "[^/]")
     .replace(/__GLOBSTAR__/g, ".*");
-  return new RegExp("^" + esc + "(/|$)");
+  // gitignore's rule (W2): a pattern with no slash matches at ANY depth
+  // (`*.gen.ts`, `__snapshots__`); one with a slash is anchored at the root.
+  const anchored = raw.replace(/\/$/, "").includes("/");
+  return new RegExp("^" + (anchored ? "" : "(?:.*/)?") + esc + "(/|$)");
 }
 
 function makeFilter(ignore) {
@@ -358,7 +381,7 @@ function graphUpdate(claudeDir, root, opts) {
     }
 
     // Phase 2 — extract in ONE batch (one Python process for every .py file).
-    const out = X.extractBatch(toExtract);
+    const out = X.extractBatch(toExtract, { root });
     for (const it of toExtract) {
       const r = out.get(it.rel) || { extractor: X.HEURISTIC, imports: [], symbols: [] };
       records.set(it.rel, {
@@ -367,12 +390,14 @@ function graphUpdate(claudeDir, root, opts) {
         blob: it.blob,
         lang: it.lang,
         bytes: it.bytes,
+        lines: r.lines || 0,
         extractor: r.extractor,
         ...(r.error ? { skipped: r.error } : {}),
         coverage: r.error ? "skipped" : r.coverage || "full",
         ...(r.partial ? { partial: r.partial } : {}),
         imports: r.imports,
         symbols: r.symbols,
+        ...(r.reexports ? { reexports: r.reexports } : {}),
       });
     }
     for (const [rel, record] of records) {
@@ -390,16 +415,20 @@ function graphUpdate(claudeDir, root, opts) {
         index.by_file[rel] = {
           blob,
           lang: record.lang,
+          bytes: record.bytes || 0,
+          lines: record.lines || 0,
           ...(record.skipped ? { skipped: record.skipped } : {}),
           ...(record.coverage && record.coverage !== "full" ? { coverage: record.coverage } : {}),
           ...(record.partial ? { partial: record.partial } : {}),
           imports: record.imports,
           symbols: record.symbols,
+          ...(record.reexports ? { reexports: record.reexports } : {}),
         };
         filesOut[rel] = {
           blob,
           lang: record.lang,
           bytes: record.bytes,
+          ...(record.lines ? { lines: record.lines } : {}),
           ...(record.extractor ? { extractor: record.extractor } : {}),
           ...(record.skipped ? { skipped: record.skipped } : {}),
           ...(record.coverage && record.coverage !== "full" ? { coverage: record.coverage } : {}),
@@ -443,9 +472,11 @@ function graphUpdate(claudeDir, root, opts) {
     // meta.json — it reads the generation it must pin itself to. It is an
     // optimisation: a route of `failed` leaves the graph correct and only
     // slower, so it never changes this function's answer.
+    // S2 (v1.8.2 W2): the index is already in memory — `build` must not read
+    // the 21 MB file it just wrote a second time. One parse per update.
     const resolveRoute = unchanged && require("./graph-resolve.js").load(claudeDir, meta)
       ? { route: "unchanged", ms: 0 }
-      : require("./graph-resolve.js").build(claudeDir, root);
+      : require("./graph-resolve.js").build(claudeDir, root, index);
     // EW3: stamp the duration. A second 200-byte write of the same file, not a
     // second commit point — every other field is already the one just written,
     // so a crash between the two leaves a valid meta that only lacks an
@@ -569,6 +600,25 @@ function graphGc(claudeDir) {
         if (!fs.readdirSync(dir).length) fs.rmdirSync(dir);
       } catch (_) {}
     }
+    // S1 (v1.8.2 W8): a shard set from an older generation is never READ — a
+    // reader refuses it on the generation check — but it is still tens of
+    // megabytes nobody will ever open. An update replaces the set wholesale, so
+    // the only way to get here is a crash between two writes.
+    let deadShards = { removed: 0, bytes: 0 };
+    try {
+      const S = require("./graph-shard.js");
+      const dir = S.shardDir(claudeDir);
+      const meta = readJson(p.meta);
+      for (const name of fs.readdirSync(dir)) {
+        const full = path.join(dir, name);
+        const j = readJson(full);
+        if (j && meta && j.generation === meta.generation && j.engine === ENGINE) continue;
+        deadShards.bytes += fs.statSync(full).size;
+        fs.rmSync(full, { force: true });
+        deadShards.removed++;
+      }
+    } catch (_) {}
+
     // A temp file left by a writer that died mid-write.
     for (const name of fs.readdirSync(p.dir)) {
       if (name.endsWith(".tmp")) {
@@ -578,7 +628,10 @@ function graphGc(claudeDir) {
     // Compact the notes ledger in the same locked pass: the latest note per
     // symbol whose body still hashes the same, and nothing else.
     const notes = require("./graph-notes.js").compactNotes(p, readJson(p.index), atomicWrite);
-    return { ok: true, state: "done", removed, kept, bytes_freed: bytes, notes, exit: 0 };
+    // K1 (v1.8.2 W4b): the gain ledger is capped in the same locked pass. It is
+    // append-only between compactions, exactly like the notes ledger.
+    const gain = require("./graph-gain.js").compact(p, atomicWrite);
+    return { ok: true, state: "done", removed, kept, bytes_freed: bytes + deadShards.bytes, shards: deadShards, notes, gain, exit: 0 };
   } finally {
     releaseLock(p);
   }

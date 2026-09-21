@@ -24,6 +24,9 @@ const stats = {
   downgrades: 3,
   unfinished: 2,
   unknown_lane: 1,
+  // v1.8.2 W4b — the code-graph row. `paid` is exact; the avoided pair is an
+  // ESTIMATE and always a RANGE, which is why the panel never shows one number.
+  graph: { calls: 41, runs: 6, paid: 4912, avoided_low: 18900, avoided_high: 71400, estimate: true },
 };
 
 /* ============================================================ v0.46.0 ====== */

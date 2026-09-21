@@ -224,6 +224,12 @@ const READS = {
   // v1.8.0 — the code graph. A READ whose exit code is DATA (0 fresh · 1 none ·
   // 2 drifted · 3 off), exactly like `wiki status` above.
   "/api/graph": () => ["graph", "status"],
+  // v1.8.2 W4b — the gain meter. Two READS, both with exit codes that are DATA
+  // (0 rows · 1 no ledger or no rows · 3 off). `--measured` is its OWN route
+  // because it reads Claude Code's transcripts and takes longer; the panel
+  // asks for it on a button, never on load.
+  "/api/graph/gain": () => ["graph", "gain"],
+  "/api/graph/gain/measured": () => ["graph", "gain", "--measured"],
   "/api/wiki/impact": () => ["wiki", "impact"],
   // v0.46.0. Every one is a READ with an exit-code contract, so the exit code is
   // DATA here exactly like `pattern status` and `wiki impact` above: pact 0/1/2/3,

@@ -155,6 +155,11 @@
     "default": "on"
   },
   {
+    "key": "code_graph_ignore",
+    "tier": "advanced",
+    "default": ""
+  },
+  {
     "key": "statusline_custom",
     "tier": "common",
     "default": "off"

@@ -84,6 +84,16 @@ const BASE = {
   "src/other.js": "import { beta } from './core.js';\nexport function twice(x) { return beta(beta(x)); }\n",
   "src/loose.js": "export function orphan() { return missingThing(); }\n",
   "tests/core.test.js": "import { alpha } from '../src/core.js';\nit('works', () => alpha(1));\n",
+  // v1.8.2 W2: an alias, a base chain, a barrel, a route and a URL — every
+  // new edge kind is under the same byte-identical promise.
+  "src/base.js": "export class Base {\n  log(x) { return x; }\n}\n",
+  "src/repo.js": "import { Base } from './base.js';\nexport class Repo extends Base {\n  save(x) { this.log(x); return super.log(x); }\n}\n",
+  "src/svc.js": "import { Repo } from './repo.js';\nexport class Service {\n  constructor() { this.repo = new Repo(); }\n  run(x) { return this.repo.save(x); }\n}\n",
+  "src/index.js": "export * from './core.js';\nexport { Service } from './svc.js';\n",
+  "src/consumer.js": "import { alpha, Service } from './index.js';\nexport function go() { const s = new Service(); return s.run(alpha(1)); }\n",
+  "src/routes.js": "import { Router } from 'express';\nimport { go } from './consumer.js';\nconst router = Router();\nrouter.get('/go', (req, res) => res.json(go()));\nexport default router;\n",
+  "src/app.js": "import router from './routes.js';\napp.use('/api', router);\n",
+  "tests/api.test.js": "import request from 'supertest';\nit('goes', () => request(app).get('/api/go'));\n",
 };
 
 test("graph resolve — update writes the cache and names.json, and the route says which", () => {
@@ -144,18 +154,35 @@ test("graph resolve — a seeded edit script: every cached answer equals the com
 
   const rand = rng(20260915);
   const pick = (a) => a[Math.floor(rand() * a.length)];
-  const targets = ["src/core.js", "src/use.js", "src/other.js", "src/loose.js"];
+  const targets = ["src/core.js", "src/use.js", "src/other.js", "src/loose.js", "src/consumer.js", "src/repo.js"];
   const deleted = new Map();
   let extra = 0;
+  const toggle = (file, a, b) => {
+    const p = path.join(c.root, ...file.split("/"));
+    const s = fs.readFileSync(p, "utf8");
+    fs.writeFileSync(p, s.includes(a) ? s.replace(a, b) : s.replace(b, a));
+  };
 
   const STEPS = Number(process.env.ORC_GRAPH_RESOLVE_STEPS || 30);
   for (let step = 1; step <= STEPS; step++) {
-    const op = Math.floor(rand() * 7);
+    const op = Math.floor(rand() * 11);
     const rel = pick(targets);
     const abs = path.join(c.root, ...rel.split("/"));
     const live = fs.existsSync(abs);
 
-    if (op === 0 && live) {
+    if (op === 7) {
+      // W2: the alias comes and goes — `new Service()` ↔ a factory nobody defines
+      toggle("src/consumer.js", "const s = new Service();", "const s = makeService();");
+    } else if (op === 8) {
+      // W2: the base chain moves under the subclass
+      toggle("src/repo.js", "extends Base", "extends Other");
+    } else if (op === 9) {
+      // W2: the barrel renames on the way through
+      toggle("src/index.js", "export { Service } from './svc.js';", "export { Service as Svc } from './svc.js';");
+    } else if (op === 10) {
+      // W1: the mount prefix changes, so the URL reaches the route or misses it
+      toggle("src/app.js", "app.use('/api', router);", "app.use('/v2', router);");
+    } else if (op === 0 && live) {
       fs.writeFileSync(abs, fs.readFileSync(abs, "utf8").replace(/return /, `return /* ${step} */ `));
     } else if (op === 1 && live) {
       // rename an exported function — a surface change

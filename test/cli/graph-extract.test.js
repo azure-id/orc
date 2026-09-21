@@ -290,7 +290,7 @@ test("js — a route handler is a symbol; a function passed by name is a ref; a 
   assert.ok(!post.calls.some((c) => c.name === "order"), "a local variable passed along is not a ref");
   assert.ok(!post.calls.some((c) => c.name === "async"), "`async (req, res) =>` is not a call");
   assert.ok(!r.symbols.some((s) => s.qname === "GET /k"), "a get with no handler is not a route");
-  assert.equal(X.HEURISTIC, "heuristic@4");
+  assert.equal(X.HEURISTIC, "heuristic@5");
 });
 
 test("a file the extractor cannot handle is an empty record, never a thrown update", () => {

@@ -86,7 +86,7 @@ themselves at planning time.
 `code > fresh wiki > stale wiki (hints) > model priors`
 
 When the code graph is on, it slots in without changing that order —
-`code > graph structure (current blob) > fresh wiki > stale wiki (hints) > graph notes > model priors`
+`code > graph structure (current blob) > fresh wiki > stale wiki (hints) > graph notes and doc notes > model priors`
 — canonical in `../code-graph.md`. The graph never needs a wiki: an absent wiki
 changes nothing about how the graph is consulted.
 

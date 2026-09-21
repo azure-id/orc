@@ -1,0 +1,11 @@
+{
+  "schema": 1,
+  "engine": "graph@4",
+  "head_commit": "663aa445cc2d3cd1ca629b2f098e4b93e5ce0077",
+  "updated_at": "20-09-2026 00:19:00",
+  "files": 12,
+  "symbols": 19,
+  "generation": 1,
+  "gen_id": "8da0485c",
+  "update_ms": 142
+}

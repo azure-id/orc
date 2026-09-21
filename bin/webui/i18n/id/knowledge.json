@@ -163,5 +163,20 @@
   "knowledge.wiki.unregistered": "Wiki berstatus {state} — tidak ada yang bisa membacanya sampai terdaftar.",
   "knowledge.wiki.why": "sebab: {reason}",
   "knowledge.graph.generation": "Generasi",
-  "knowledge.graph.selfheal": "Peta ini memperbarui dirinya: satu pembacaan memperbaiki berkas yang akan dijawabnya, dan hook yang terpasang memperbarui peta saat satu pekerja selesai. Tidak ada yang berjalan dengan pewaktu."
+  "knowledge.graph.selfheal": "Peta ini memperbarui dirinya: satu pembacaan memperbaiki berkas yang akan dijawabnya, dan hook yang terpasang memperbarui peta saat satu pekerja selesai. Tidak ada yang berjalan dengan pewaktu.",
+  "knowledge.gain.none": "Belum ada pembacaan grafik yang tercatat. `orc graph ctx` pertama memulai catatannya.",
+  "knowledge.gain.strip": "dibayar {paid} · dihindari ~{low}–{high} (perkiraan) · {calls} panggilan",
+  "knowledge.gain.paid": "Token yang dimasukkan (kartu · sumber · petunjuk)",
+  "knowledge.gain.avoided": "Pembacaan yang mungkin dihindari (perkiraan)",
+  "knowledge.gain.net": "Token bersih · panggilan alat bersih",
+  "knowledge.gain.byCommand": "Menurut perintah",
+  "knowledge.gain.hints": "Petunjuk (dikirim · catatan baca · pembaruan)",
+  "knowledge.gain.measure": "Bandingkan proses ON dan OFF saya",
+  "knowledge.gain.estimate": "`dihindari` adalah perkiraan pembacaan yang akan dibayar tangga baca, bukan tagihan. `dibayar` adalah angka pasti.",
+  "knowledge.gain.measuredHead": "{on} proses dengan grafik hidup vs {off} dengan grafik mati",
+  "knowledge.gain.measuredFew": "Terlalu sedikit proses untuk dibandingkan. Perlu tiga proses di tiap kelompok; barisnya tercatat dan perbandingannya menunggu.",
+  "knowledge.gain.execCalls": "pembacaan pekerja",
+  "knowledge.gain.execTokens": "hasil alat pekerja",
+  "knowledge.gain.sessionTokens": "hasil alat sesi",
+  "knowledge.gain.noise": "perubahan yang lebih kecil dari sebarannya adalah derau, bukan hasil"
 }

@@ -2722,6 +2722,144 @@ const CONTRACTS = [
       "skills/orc-mini/SKILL.md",
     ],
   },
+  // ── v1.8.2 W3 — the delivery flags (D1 · D2 · D3 · D5) ────────────────
+  {
+    // The slice call. A rename must reach the contract, the phase file that
+    // makes the call, the hook that dedupes against what it delivered, and the
+    // CLI that answers it.
+    name: "graph slice view (v1.8.2 — ctx --for-slice, the OUTSIDE view of a declared file)",
+    token: "--for-slice",
+    files: ["hooks/orc-graph-hook.js", "skills/_shared/code-graph.md", "skills/_shared/phases/execution.md"],
+    binFiles: ["bin/cli.js", "bin/graph-query.js"],
+  },
+  {
+    // The card and the range in one call. Pinned WITH its argument, because a
+    // bare `--source` is also `orc doc`'s own flag.
+    name: "graph source block (v1.8.2 — ctx --source [N], charged to the same budget)",
+    token: "--source [N]",
+    files: ["skills/_shared/code-graph.md", "skills/_shared/read-ladder.md"],
+    binFiles: ["bin/cli.js"],
+  },
+  {
+    // One call at a wave close. The two-call form still works; the lane text
+    // uses this one, so the flag has to exist wherever the text says it does.
+    name: "graph one-call update (v1.8.2 — update --notes-pending)",
+    token: "--notes-pending",
+    files: ["skills/_shared/code-graph.md", "skills/_shared/phases/execution.md"],
+    binFiles: ["bin/cli.js"],
+  },
+  {
+    // The fourth value of `code_graph_hooks`. It arms the whole-file READ hint
+    // and nothing else, and it is off until somebody types it.
+    name: "graph read hint (v1.8.2 — code_graph_hooks: on,read)",
+    token: "on,read",
+    files: ["hooks/orc-graph-hook.js", "hooks/README.md", "skills/_shared/code-graph.md"],
+    binFiles: ["bin/cli.js"],
+  },
+  // ── v1.8.2 W4 — the paid layer, paid less (N1 · N2) ──────────────────
+  {
+    // The noter's ONE call. The flag lives in the agent that makes it and in
+    // the contract that describes it; the CLI has to answer it.
+    name: "graph noter source (v1.8.2 — notes pending --with-source, so the noter reads nothing)",
+    token: "--with-source",
+    files: ["agents/orc-graph-noter-sonnet-4-6-med.md", "skills/_shared/code-graph.md"],
+    binFiles: ["bin/cli.js", "bin/graph-notes.js"],
+  },
+  {
+    // The doc note, at 0 model tokens. It is a note, not a fact, so it sits
+    // beside graph notes in the precedence line everywhere that line appears.
+    name: "doc notes precedence (v1.8.2 — graph notes AND doc notes, below a stale wiki)",
+    token: "graph notes and doc notes",
+    files: [
+      "skills/_shared/code-graph.md",
+      "skills/_shared/phases/wiki-consult.md",
+      "skills/_shared/read-ladder.md",
+      "skills/orc-wiki/references/staleness.md",
+    ],
+    binFiles: ["bin/graph-notes.js"],
+  },
+  // ── v1.8.2 W5 — the five new languages (G6) ──────────────────────────
+  {
+    // A language the contract claims and the engine cannot read is a promise
+    // the card breaks in silence. The claim and `LANG_BY_EXT` move together.
+    name: "graph languages (v1.8.2 — Ruby, Rust, Kotlin, plus SFC and C/C++)",
+    token: "Ruby, Rust, Kotlin",
+    files: ["skills/_shared/code-graph.md"],
+    binFiles: ["bin/graph.js"],
+  },
+  // ── v1.8.2 W6 — the borrowed toolchains (G7) ─────────────────────────
+  {
+    // The escape hatch. If the contract names it and the engine stops reading
+    // it, a project with a misbehaving toolchain has no way out.
+    name: "graph borrow escape (v1.8.2 — ORC_GRAPH_NO_BORROW forces the heuristic)",
+    token: "ORC_GRAPH_NO_BORROW",
+    files: ["skills/_shared/code-graph.md"],
+    binFiles: ["bin/graph-extract.js"],
+  },
+  // ── v1.8.2 W8 — the sharded read path (S1) ────────────
+  {
+    // The shards are a DERIVED store, and the contract's promise about every
+    // derived store is the one that keeps them safe: generation-pinned, and a
+    // missing one costs time and no answer. If the engine stops writing them,
+    // the sentence that tells a reader they exist has to go with it.
+    name: "graph shards (v1.8.2 — the resolved/ shards a one-symbol ctx reads)",
+    token: "resolved/<ab>.json",
+    files: ["skills/_shared/code-graph.md"],
+    binFiles: ["bin/graph-shard.js"],
+  },
+  // ── v1.8.2 W7 — the ranked map (D4) ──────────────────
+  {
+    // The command itself. Three lanes are told to run it at the START of
+    // planning; if the CLI stops offering it, every one of them opens a run
+    // with a call that does not exist.
+    name: "graph map (v1.8.2 — the ranked repository map, the orientation call)",
+    token: "orc graph map",
+    files: [
+      "skills/_shared/code-graph.md",
+      "skills/_shared/phases/planning.md",
+      "skills/_shared/phases/trace.md",
+      "skills/orc/SKILL.md",
+      "skills/orc-diy/references/flow-schema.md",
+    ],
+    binFiles: ["bin/cli.js", "bin/graph-map.js"],
+  },
+  {
+    // The trace verb. A lane that emits a verb the trace table does not hold
+    // writes a line `/orc-retro` cannot aggregate.
+    name: "graph map trace (v1.8.2 — GRAPH-MAP, one line at the start of planning)",
+    token: "GRAPH-MAP",
+    files: [
+      "skills/_shared/phases/trace.md",
+      "skills/_shared/phases/planning.md",
+    ],
+    binFiles: ["bin/cli.js"],
+  },
+  {
+    // The claim that keeps the map safe to read. It is the map's whole
+    // equivalent of "the graph is a LOCATOR": a rank is where to look first,
+    // never proof that a file matters to this change.
+    name: "graph map rank is a hint (v1.8.2 — never proof a file matters)",
+    token: "a HINT about where to look first",
+    files: ["skills/_shared/code-graph.md", "skills/_shared/phases/planning.md"],
+    binFiles: ["bin/graph-query.js"],
+  },
+  // ── v1.8.2 W4b — the gain meter (K) ─────────────────────────────
+  {
+    // The one line a run prints about what the graph cost and probably saved.
+    // The verb lives in the trace table and in the phase that emits it.
+    name: "graph gain line (v1.8.2 — GRAPH-GAIN, one line at ship, copied verbatim)",
+    token: "GRAPH-GAIN",
+    files: ["skills/_shared/phases/ship.md", "skills/_shared/phases/trace.md"],
+    binFiles: ["bin/cli.js"],
+  },
+  {
+    // `avoided` is a COUNTERFACTUAL. The word has to survive every rewrite of
+    // the contract and of the panel, because it is the claim.
+    name: "graph gain estimate (v1.8.2 — avoided is an estimate, never a bill)",
+    token: "AN ESTIMATE",
+    files: ["skills/_shared/code-graph.md"],
+    binFiles: ["bin/graph-gain.js"],
+  },
   {
     // The only notes writer, dispatched BY NAME. An unnamed dispatch cannot
     // enforce the Sonnet 4.6 pin and is invisible to the trace hook.
@@ -3919,6 +4057,8 @@ for (const b of BUDGETS) {
     // as `statusline_custom` is. Neither can have a lane, and that is an ANSWER.
     "code_graph_heal_ms",
     "code_graph_hooks",
+    // v1.8.2 W2 — the ignore globs, read by the CLI behind the same calls.
+    "code_graph_ignore",
   ]);
   for (const e of metaEntries) {
     if (!e.lanes) {

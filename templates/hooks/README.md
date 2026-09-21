@@ -352,8 +352,9 @@ This is a third hook. It is installed with ORC and it does nothing until you
 turn the code graph on.
 
 ```
-orc config set code_graph on        # the graph, and this hook with it
-orc config set code_graph_hooks off # keep the graph, stop the hook
+orc config set code_graph on            # the graph, and this hook with it
+orc config set code_graph_hooks on,read # one more hint, on a whole-file read
+orc config set code_graph_hooks off     # keep the graph, stop the hook
 ```
 
 ORC keeps a map of this repository: where each function is, and who calls it.
@@ -373,9 +374,18 @@ Four moments, and it is quiet in all the others:
   its own update step can no longer leave the map behind.
 - A worker **starts** → one line saying the map exists and how to ask it.
 - A worker **searches for a name the map knows** → up to five lines saying where
-  that name is, with the line numbers. The search still runs.
+  that name is, with the line numbers. The search still runs. A search in the
+  shell (`grep`, `rg`, `git grep`, `findstr`, `Select-String`, `ag`, `ack`) is
+  the same question, and gets the same answer.
 - A worker **reads a file the parser could not finish** → one line naming the
   lines the parser did not reach, so nobody reads a gap as an absence.
+
+With `code_graph_hooks on,read` there is a fifth: a worker reads a WHOLE file
+that holds many symbols, and gets one line naming the six most reached ones and
+their line ranges. The point is the NEXT read — an agent that has those ranges
+can ask for a range instead of two thousand lines. **The read below it always
+runs.** The hook never blocks a tool call and never rewrites one, and turning a
+read into a range read is not its job: only the read gate may touch a read.
 
 It says each thing once per run. It never speaks to the main session, never
 outside an ORC run, and never when the map does not exist.
