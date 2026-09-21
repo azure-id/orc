@@ -305,6 +305,36 @@ test("trace: context-combiner opens its own PHASE-EDGE (combine), not analysis",
   }
 });
 
+test("trace: an orc-recon-* spawn opens the `recon` family, and it is traced at all", () => {
+  const { root, claudeDir } = freshInstall();
+  try {
+    const spawn = (agent) =>
+      runHook(claudeDir, "orc-trace.js", {
+        hook_event_name: "PreToolUse",
+        tool_name: "Agent",
+        tool_input: { subagent_type: agent, description: "what breaks if I rename this" },
+      });
+    // v1.9.0. /orc-quick's read-only half used to be dispatched ad-hoc by model
+    // name, which the hook cannot see at all: no SPAWN, nothing for
+    // `orc run inflight` to find, nothing for /orc-retro to count.
+    spawn("orc-recon-sonnet-4-6-med");
+    const { texts } = traceFiles(claudeDir);
+    assert.match(texts, /SPAWN orc-recon-sonnet-4-6-med/, "a recon dispatch must be traced");
+    assert.match(texts, /PHASE-EDGE recon :: first=orc-recon-sonnet-4-6-med/);
+    // Recon is NOT analysis. An analyst produces a spec for a planner; recon
+    // answers one question for a person. Folding them together would report a
+    // phase /orc-quick does not have.
+    assert.doesNotMatch(texts, /PHASE-EDGE analysis/, "recon must not be counted as analysis");
+    // The second one is the same family, so it opens no second edge.
+    spawn("orc-recon-opus-5-low");
+    const after = traceFiles(claudeDir).texts;
+    assert.strictEqual((after.match(/PHASE-EDGE recon/g) || []).length, 1, "same family, one edge");
+    assert.match(after, /SPAWN orc-recon-opus-5-low/);
+  } finally {
+    rmrf(root);
+  }
+});
+
 test("payload: every GATE name and lane token used in the payload is a declared member", () => {
   const proto = fs
     .readFileSync(

@@ -26,7 +26,11 @@ inert here, and the gate says so when they are on.
 
 ### Q1 — Look (silent)
 
-ORC reads first and says nothing until it has something to say.
+ORC reads first and says nothing until it has something to say. It asks the
+**code graph** before it greps: one call gives the symbol, who calls it, and
+which tests reach it. The request says a behaviour is wrong, so the entry is
+sorted as a **defect** — which means the bug gets reproduced before it is
+fixed.
 
 ### Q2 — Ask (one turn: questions **and** the agent choice together)
 
@@ -42,12 +46,17 @@ Two questions:
   2  Should the badge colour change too?
 
 And which agent should do it?
-  a  orc-executor-sonnet-4-6-med    (small, one file)
-  b  orc-executor-opus-5-low
-  c  something else — tell me the model and effort
+  a  orc-executor-sonnet-4-6-med    small, one file    → suggested: 1 file, no risk class
+  b  orc-executor-opus-5-low        thinks harder, about 3× the cost
+  c  other — name a model
+
+Your choice — nothing runs until you answer.
 
 > 1 just the missing case. 2 yes, amber. agent a.
 ```
+
+The `→ suggested` marker always carries its reason, and it never pre-selects.
+The menu still waits for you.
 
 ### Q3 — Do
 
@@ -55,8 +64,16 @@ And which agent should do it?
 Dispatch  orc-executor-sonnet-4-6-med
   returned as: claude-sonnet-4-6 / medium     ✓
 
-build   ✓
-tests   ✓  12 passed
+repro red      npm test -- web/refunds/RefundBadge.test.tsx   exit 1
+               → expected "sent to bank", received "pending"
+repro green    npm test -- web/refunds/RefundBadge.test.tsx   exit 0
+
+build          ✓
+tests reached  1 file (call 1) → 3 passed
+suite          ✓  12 passed
+blast radius   1 symbol · callers 2 in 2 files · tests reach 1 · risk none
+graph          gen 18 · 1 file updated
+graph gain     paid 0.9K tokens · avoided an estimated 2–6K · measured: not yet (N=1)
 
 Entry 1 written to orc-quick/refund-badge/quick-context.md
 
@@ -64,6 +81,10 @@ Commit these 2 files?  [yes / no]
 
 > yes
 ```
+
+The red run comes first on purpose. The suite was green before the fix and is
+green after it, so the suite proves nothing about **this** bug. The red run
+does.
 
 Your next request becomes entry 2 in the same file, and so on.
 
@@ -84,6 +105,8 @@ Your next request becomes entry 2 in the same file, and so on.
 **Decided:** add the missing `sent_to_bank` case only; amber colour.
 **Why:** the whole map is fine — one case was never added.
 **Agents:** orc-executor-sonnet-4-6-med (you chose it).
+**repro** red → green · `npm test -- web/refunds/RefundBadge.test.tsx` (before: exit 1 · after: exit 0)
+**blast radius** 1 symbol · callers 2 in 2 files · tests reach 1 · risk none
 **Not done:** the admin list has the same map and was NOT touched.
 ```
 
@@ -103,6 +126,11 @@ Your next request becomes entry 2 in the same file, and so on.
   instructions.
 - **It never undoes your work.** If you stop while things are red, it prints
   the `git` command and leaves your tree alone.
+- **A defect is shown red first.** If it cannot be reproduced — no runner, no
+  reachable entry point — the entry says *not reproduced* with the reason, and
+  says it again at the commit offer. It never invents a reproduction.
+- **A `risk` word never appears without its reason.** The blast-radius line
+  either names why a symbol is risky or does not use the word.
 
 ---
 

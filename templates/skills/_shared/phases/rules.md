@@ -156,4 +156,17 @@ and the only place to pull it is `rulesSlice()` in `bin/cli.js`. **Never by a
 lane deciding to trim its own card** — that is the drift this phase exists to
 prevent, arriving disguised as a saving.
 
+**v1.9.0 — the COMPACT form, and the CLI decides which lanes get it.** The
+lever above is now pulled for **`orc-quick`** and for no one else: every HARD
+rule keeps its id, its title and its first line — the instruction — and the
+worked examples come out, with the pack file named beside them. Measured
+**13 874 → 5 838 chars** (~3 470 → ~1 460 tokens) with every HARD id still
+present. The lane that gets it is the lane with the smallest tasks under the
+largest fixed card, and the card is re-sent on every executor turn.
+
+The answer says which form it is: `compact: true` in the JSON. A reader that
+cannot tell a short card from a stripped one cannot trust either. `line` is
+IDENTICAL in both forms — it counts the rules in force, and compacting changes
+how a rule is written, never whether it applies.
+
 <!-- /orc:layer -->

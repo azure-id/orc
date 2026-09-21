@@ -62,8 +62,8 @@ It never scans your whole repo. It never builds the wiki.
 ## 3. What happens in a run
 
 ```
-Q0  preflight   once per session, silent — checks wiki, pattern, gh
-Q1  LOOK        silent — finds your files, reads PR comments, no questions
+Q0  preflight   once per session, silent — checks wiki, pattern, code graph
+Q1  LOOK        silent — asks the code graph first, then your files
 Q2  ASK         ONE turn — questions + "which agent?" together
 Q3  DO          dispatch → build/tests → write the doc → offer to commit
 ```
@@ -81,14 +81,15 @@ ORC-QUICK · new thread `change-json-payload`
 
 wiki      FRESH (3 commits behind scan) · 14 docs
 pattern   express@v3 cached
-gh        authed
+graph     FRESH · 118 files · 941 symbols
 ```
 
 Those three lines are just information. **Nothing there can stop the run.** If
-you have no wiki and no pattern, it says so and keeps going.
+you have no wiki, no pattern and no code graph, it says so and keeps going.
+There is no `gh` line here: `gh` is only checked when you ask about a PR.
 
 ```
-digging…
+digging… (the code graph first, then your files)
 
 found it — the key is written in two places and read in one:
   src/routes/orders.js:41       res.json({ a: total })
@@ -122,8 +123,12 @@ Which executor?
 dispatching orc-executor-sonnet-4-6-med…
 ✅ returned · 3 files · expect=sonnet-4-6/medium actual=sonnet-4-6/medium
 
-build   npm run build → GREEN
-tests   npm test → 41 passed
+build          npm run build → GREEN
+tests reached  1 file (call 1) → 4 passed
+suite          41 passed
+blast radius   2 symbols · callers 3 in 2 files · tests reach 2 · risk none
+graph          gen 43 · 2 files updated
+graph gain     paid 1.2K tokens · avoided an estimated 3–9K · measured: not yet (N=1)
 
 (test-update not offered — the executor already fixed the spec)
 
@@ -176,15 +181,20 @@ No preflight lines this time — that runs once per session.
 ```
 this needs more reading than I should do myself, so it wants a dispatch.
 
-Entry 2 is a context dig. What should look into it?
+Entry 2 is a context dig. Which agent should look?
 
-  model    claude-sonnet-4-6      (suggested)
-  effort   medium                 (suggested)
+  1. orc-recon-sonnet-4-6-med     finding things, not deciding      → suggested
+  2. orc-recon-opus-5-low         a wide or subtle question
+  3. other — name a model (effort follows your session; not traced by the hook)
 
-  accept / change / cancel
+Your choice — nothing runs until you answer.
 ```
 
-> **You:** `accept`
+Options 1 and 2 are **the same agent with a different model**. You are choosing
+how hard it thinks, nothing else. Option 3 is an escape hatch and it names a
+model only — there is no per-call effort knob, so effort follows your session.
+
+> **You:** `1`
 
 ```
 Tenancy is enforced in three layers, and only one can be bypassed.
@@ -207,6 +217,62 @@ recorded as entry 2. no code changed.
 ```
 
 No test offer. No review offer. No commit offer. There is nothing to ship.
+
+### "What breaks if I change this?"
+
+A question like that gets a **blast radius** answer, and it keeps the four kinds
+of caller apart, because they break in different ways:
+
+```
+streamRows — src/export.js:34
+
+direct      2   src/routes/export.js:12 · src/jobs/nightly.js:40
+route       1   GET /export/orders reaches it — test/export.spec.js:8
+via alias   1   reached through `this.writer` — src/report/writer.js:22
+inherited   0
+
+A card lists every caller that NAMES the symbol. A card's silence is not proof
+of absence.
+```
+
+That last sentence is printed whenever a list rests on the code graph alone. It
+means: the map is good, and a map is not the territory.
+
+---
+
+## 5b. A bug fix — red first, then green
+
+> **You:** `/orc-quick the orders search returns 500 when item=blue, find it and fix it`
+
+This is a **defect**. Before anything is fixed, the bug is made to FAIL in front
+of you:
+
+```
+kind: defect — the fix will be shown red first.
+
+dispatching orc-executor-sonnet-4-6-med…
+✅ returned · 2 files
+
+repro red     npm test -- tests/orders.search.test.js   exit 1
+              → TypeError: Cannot read properties of undefined (reading 'trim')
+repro green   npm test -- tests/orders.search.test.js   exit 0
+              → 3 passed
+
+suite         41 passed
+```
+
+**Why bother?** Without the red run, the fix is only proven against your test
+suite — which was green before, and is green after. With it, the fix is proven
+against **the bug you reported**. It costs one extra run of one command.
+
+If it cannot be reproduced, it says so instead of inventing one:
+
+```
+⚠ not reproduced: no test runner, and the failing path needs a live Stripe webhook
+  the fix is in, but nobody has seen it work. Worth a manual check.
+```
+
+That line is repeated at the commit offer, so you cannot miss it.
 
 ---
 
@@ -392,10 +458,16 @@ You picked a model stronger than your own session. A subagent cannot be stronger
 than the session it runs in, so it quietly ran at your session's model. The lane
 tells you instead of hiding it. Run from a stronger session if it matters.
 
+**"Why did it show me a red run first?"**
+Because you reported a bug. A fix that only turns the suite green proves nothing
+— the suite was green before. A run that goes red, then green, proves the fix
+touched the thing you reported. It is one extra command.
+
 **"Why is my dig marked *untraced-by-hook*?"**
-Read-only agents are dispatched by model name, not by an agent file, so the
-trace hook does not see them. The dispatch and the model check are still
-recorded — only the retro statistics miss it. This is a deliberate trade.
+Because you picked option 3 at the recon gate, which names a model rather than
+an ORC agent, and the trace hook only sees agents whose name starts with `orc-`.
+The dispatch and the model check are still recorded — only the retro statistics
+miss it. Options 1 and 2 are traced in full.
 
 **"Two different jobs ended up in one file."**
 The folder is named from your first request's words. Two requests that sound the

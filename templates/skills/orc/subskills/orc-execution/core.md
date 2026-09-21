@@ -56,6 +56,11 @@ subagent; the orchestrator never runs this itself.
                             Never edit a TDD test to make it pass — a test
                             that looks wrong is a spec bug: return it, don't
                             fix it.
+- repro                   — {required: true, kind: test | command, hint} on a
+                            DEFECT task, else absent. Present = show the bug is
+                            real BEFORE fixing it: `test` when the project has a
+                            runner, `command` when it has none. Absent = this is
+                            not a defect report; never invent a reproduction
 - house_rules             — the standing behavioral card (injected literally,
                             never a pointer): surgical changes, simplicity-first,
                             no unrequested scope, boring-solution preference
@@ -145,6 +150,13 @@ subagent; the orchestrator never runs this itself.
                             in `evidence`); red = cap hit/unresolved (failing tests
                             in unmet[]); null only without a tdd_spec. status=done
                             with red is malformed
+- repro                   — REQUIRED when the slice carried
+                            `repro.required: true`; else absent. {command, before:
+                            {exit_code, tail}, after: {exit_code, tail}} quoted
+                            VERBATIM, or `none` + a one-line reason. status=done
+                            with before.exit_code 0 (never red) or a non-zero
+                            after.exit_code (still red) is malformed. Canonical:
+                            `.claude/skills/_shared/return-validation.md` §5d
 - gotcha_recorded         — REQUIRED when this return CLOSES a repair loop (you
                             drove a tdd_spec test red → green): the entry body
                             {trigger, symptom, cause, fix, scope}, or `none` + a

@@ -231,6 +231,28 @@ A rule the slice could not honour because this lane structurally cannot do it
 comes back as `unsupported_request`, relayed as a gap. **Never a guessed
 compromise.**
 
+## 5d. Reproduce-first attestation (when a `repro` was requested — v1.9.0)
+
+A slice that carried `repro: {required: true, kind, hint}` must come back with a
+`repro` field. Either both runs, quoted verbatim, or an honest `none`:
+
+```
+repro: { command, before: {exit_code, tail}, after: {exit_code, tail} }
+repro: none  — <one line of reason>
+```
+
+Two malformed shapes, and they are the whole point of the field. **`status=done`
+with `before.exit_code` 0** means the "reproduction" never failed, so it proved
+nothing; **`status=done` with a non-zero `after.exit_code`** means the bug is
+still there. Either one is a failure of the return, not a finding about the
+code. A `repro: none` is a valid answer — a defect with no reachable entry point
+and no runner cannot be shown red — and the lane says **not reproduced** out
+loud rather than letting a green suite imply a fixed bug.
+
+`repro` is required ONLY when the slice carried `repro.required: true`. A slice
+that asked for none gets none back, exactly like `tdd_spec`, `wiki_used` and
+`graph_used`.
+
 ## 6. Worktree delta (post-wave, every lane that dispatches executors)
 
 Compare `git status --short` before and after each dispatch. A path that

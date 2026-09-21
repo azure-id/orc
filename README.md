@@ -7,14 +7,14 @@
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
 ![npm](https://img.shields.io/npm/v/%40azure-id%2Forc?style=for-the-badge&color=cb3837&logo=npm)
-![Version](https://img.shields.io/badge/version-1.8.2-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-1.9.0-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
 ![Dependencies](https://img.shields.io/badge/dependencies-zero-lightgrey.svg?style=for-the-badge)
 ![GitHub stars](https://img.shields.io/github/stars/azure-id/orc?style=for-the-badge&color=yellow)
 
-**Latest: v1.8.2** · updated 2026-09-21 · [full changelog](CHANGELOG.md)
+**Latest: v1.9.0** · updated 2026-09-21 · [full changelog](CHANGELOG.md)
 
 **On npm: [`@azure-id/orc`](https://www.npmjs.com/package/@azure-id/orc)** — `npm i -g @azure-id/orc`
 
@@ -251,9 +251,9 @@ ORC have terminal hook to see: Context Window %, 5 Hour usage %, Weekly usage % 
 |---|---|---|
 | **`/orc`** | The full pipeline: intake → plan → scored parallel waves → review → verify → ship. Checkpoints eagerly; resumes in a fresh session. | [see it](mock-run/orc.md) |
 | **`/orc-ultra`** | The same, plus an Opus 5 **xhigh** advisor and three judgment gates. Deep analysis, patterns, tests and security forced on. Costly by design. | [see it](mock-run/orc-ultra.md) |
-| **`/orc-mini`** | One Sonnet 5 executor, a build + test smoke gate, ship. Skips full review and verify. Switches to the full flow mid-run on request. | [see it](templates/skills/orc-mini/examples/mini-run-mock.md) |
+| **`/orc-mini`** | One Sonnet 5 executor, a build + test smoke gate, ship. Skips full review and verify. A one-line **complexity read** with counts behind it offers the full lane when the change is wider than one area. Switches to the full flow mid-run on request. | [see it](templates/skills/orc-mini/examples/mini-run-mock.md) |
 | **`/orc-fast`** | The fastest lane. Needs a fresh wiki **and** a cached code pattern; then it skips the analyst and planner entirely. A missing prerequisite falls back to `/orc-mini` — the chat never stops. | [see it](mock-run/orc-fast.md) |
-| **`/orc-quick`** | Ask for anything: a fix, a question, a defect hunt, a dependency bump, PR comments. Look → ask once → do. **It always asks which agent to dispatch**, and no setting can change that. | [see it](mock-run/orc-quick.md) |
+| **`/orc-quick`** | Ask for anything: a fix, a question, a defect hunt, a dependency bump, PR comments. Look → ask once → do. **It always asks which agent to dispatch**, and no setting can change that. A defect is **reproduced red before it is fixed**. | [see it](mock-run/orc-quick.md) |
 | **`/orc-wait`** | Wall-clock pause without losing the run. You see the window is nearly full, type `/orc-wait 30`, and ORC hands the run back to disk, waits in detached hops that **cost zero tokens**, and picks up where it stopped. Three modes decide how much finishes first: `safe` · `soft` (forces the checkpoint) · `hard` (fastest, can lose an in-flight return). `/orc-wait block <reason>` tells it not to stop you at all. | — |
 | **`/orc-diy`** | Your own lane, composed in the terminal with `orc diy` and compiled. Unconfigured or stale → it refuses and offers plain `/orc`. | [see it](mock-run/orc-diy.md) |
 
@@ -435,6 +435,12 @@ orc graph gain                        # what the map put in, and an estimate of 
   — `/orc`, `/orc-ultra`, `/orc-diy`, `/orc-mini`, `/orc-fast`, `/orc-quick` —
   still builds it at preflight and updates it after each change. Other lanes
   never call it. **Nothing runs on a timer and nothing runs in the background.**
+- **Each lane may ask only the questions its own catalogue names** (`orc lane
+  calls <lane>`), and v1.9.0 widened that for the two lean lanes. `/orc-quick`
+  can now ask `map`, `changes` and `coverage`, so it can say what a change
+  touches and run the affected tests first; `/orc-mini` can ask `map`, `impact`,
+  `changes` and `cochange`, which are the counts behind its complexity line.
+  Until now both could ask only where a symbol is.
 - **The hook also hands a worker the anchors it would otherwise search for** —
   for a Grep, a Glob and a shell search (`grep`, `rg`, `git grep`, `findstr`) —
   and everything it hands over is labelled repository data, never an instruction.
@@ -706,50 +712,61 @@ a current audit: [EVAL-REPORT.md](EVAL-REPORT.md).
 **Full history: [CHANGELOG.md](CHANGELOG.md)** — or `orc changelog`, which prints
 only what is newer than the version you have.
 
-### v1.8.2 — the map that finds what a grep cannot _(2026-09-21)_
+### v1.9.0 — the lean lanes learn to look before they leap _(2026-09-21)_
 
-v1.8.0 shipped the code graph with a known hole: a card listed every caller that
-NAMES a symbol, so a test reaching a route by its URL was not a caller and the
-card was silent about it. **A URL is now an edge** — and so is an instance alias
-(`const svc = new OrderService(); svc.run()`), an inherited method and a name
-re-exported through a barrel. A bare call no longer resolves to the only method
-in the repository with that name; that guess was an invented edge and it is gone.
-On django, confident edges went 65,379 → 72,955 and `UNIQUE` guesses 23,866 →
-6,442.
+`/orc-quick` and `/orc-mini` are the two lanes people reach for most, and both
+were working half blind. The code graph could tell them WHERE a symbol is and
+was forbidden from telling them WHAT BREAKS. A bug fix was never shown failing
+before it was fixed. Read-only work was dispatched by model name, so nothing in
+ORC could see it.
 
-**Five more languages** — Ruby, Rust, Kotlin, C / C++ and the `<script>` block of
-a Vue or Svelte component. **Borrowed parsers** where your project already has
-the tool: your own `node_modules/typescript` and the `go` on PATH join Python's
-`ast`. ORC still has zero dependencies.
+**A bug is now shown RED before it is fixed.** A request like *"the orders page
+returns 500, find it and fix it"* is sorted as a **defect**, and the executor
+writes the reproduction FIRST — a failing test in your own framework, or a
+command — runs it red, implements, and runs it green. Both runs are printed and
+both reach the trace. A reproduction that cannot be written is `repro: none`
+with its reason, and the entry says **not reproduced** — repeated at the commit
+offer. It is never faked. Without the red run a fix is proven against your test
+suite, which was green before and after; with it, the fix is proven against the
+bug you reported.
 
-**Fewer round trips.** `ctx --source [N]` adds the target's lines to the card.
-`ctx --for-slice` prints only the outside view of a file an agent is about to
-read in full, 30–51% smaller than the card it replaces. `update --notes-pending`
-answers both in one call. The hook now answers a shell search too, and
-`code_graph_hooks on,read` names a wide file's six most reached symbols so the
-next read can ask for a range.
+**Both lanes may now ask what breaks.** `/orc-quick` gained `map`, `changes` and
+`coverage`; `/orc-mini` gained `map`, `impact`, `changes` and `cochange`. The
+**affected tests run first** — a test that reaches the change through a URL
+included — and every entry carries a blast-radius line where a `risk` word never
+appears without its reason. A request that names no file now starts with
+`orc graph map --focus` instead of a guess at a filename.
 
-**`orc graph map`** ranks the repository before you know a file name, inside a
-budget, with `--focus`. Rank is a hint about where to look first, never proof.
-**A one-symbol card is about twice as fast** — the resolution cache is sharded,
-so django goes 881 → 480 ms, and the shards answer exactly what the full index
-answers or they decline (577 cards compared, 0 different).
+**`/orc-mini`'s complexity read carries numbers.** It was a sentence of
+judgment; it is now one line with counts and four thresholds that each state why
+that number: callers in 4 or more files outside the plan, 8 or more callers, any
+cited risk class, or a file history says is always touched alongside yours. It
+is an **offer, never a switch**, and continuing writes the numbers into the
+decision log so a later `/orc-retro` can move a threshold.
 
-**`orc graph gain`** reports what the map put in — recorded — and an estimate,
-always a range, of what it kept out. It never prints one number and never claims
-a saving it cannot show.
+**Read-only work is a real agent.** Recon is a pinned pair —
+`orc-recon-sonnet-4-6-med` and `orc-recon-opus-5-low` — with a return contract,
+visible in the trace and in `orc run inflight`. `other — name a model` stays as
+the escape hatch. The gate may now print `suggested` beside one line WITH its
+reason, and it still never chooses: every menu ends with *your choice — nothing
+runs until you answer*.
 
-**`code_graph_ignore`** is a new key: extra globs the graph never indexes.
+**Both lanes cost less to load.** The two descriptions, which every session
+pays for, went 619 → 326 and 493 → 294 characters with every trigger phrase
+kept. The rules card in a `/orc-quick` slice is now a compact form — about 1,460
+tokens instead of 3,469 — that keeps every HARD rule's id, title and instruction
+and loses only the worked examples.
 
-Two gates in this release were missed and the CHANGELOG says so with the
-numbers: the borrowed parsers ship on the maintainer's call although the
-confident-rate gate measured +1.0 / −0.3 / −0.3, and `orc graph map` is wired to
-planning only because the replay measured 0.39 answerable planning calls per run
-against a gate of three.
+**It does not lower your bill**, and this release does not claim it does. The
+claim is correctness, traceability and fewer round trips. **The live-session
+evaluation did not run** — the deterministic half is in the test suite, but the
+three gates that need a person driving a lane are unmet, not passed. The
+CHANGELOG names each one.
 
 <details>
-<summary><strong>Earlier releases</strong> — 118 of them, titles only. Full text in <a href="CHANGELOG.md">CHANGELOG.md</a>.</summary>
+<summary><strong>Earlier releases</strong> — 119 of them, titles only. Full text in <a href="CHANGELOG.md">CHANGELOG.md</a>.</summary>
 
+- **v1.8.2** — the map that finds what a grep cannot · _2026-09-21_
 - **v1.8.1** — the guard that only failed on Windows · _2026-09-16_
 - **v1.8.0** — the code graph: a map of the code that stays fresh · _2026-09-16_
 - **v1.7.1** — the rules card now reaches the agent · _2026-09-14_

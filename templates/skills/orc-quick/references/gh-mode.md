@@ -62,6 +62,27 @@ Which do you want to take?
   3. just [1] and [2] — the nit can wait
 ```
 
+## Locate each thread in the code first
+
+A review comment names a `file:line`. That tells you WHERE the reviewer looked.
+It does not tell you what sits there or what depends on it.
+
+For each thread the user takes, run one call:
+
+```bash
+orc graph ctx <the anchor file:line> --if-enabled --json
+```
+
+It names the symbol the comment sits in, its callers, and the tests that reach
+it — a test that arrives through a URL included. Print one line per thread:
+
+```
+[1] dana · export.js:34 → streamRows (callers 2 · tests 1)
+```
+
+That card goes into the thread's slice. Exit 3 (the graph is off) or exit 4 (not
+found) → skip the line and work from the anchor alone.
+
 ## One gate per thread
 
 Each thread gets its **own** dispatch gate. Three fixes can need three different

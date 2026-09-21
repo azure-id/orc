@@ -271,3 +271,154 @@ test("map.json is generation-pinned — a stale one is never read", () => {
   assert.equal(after.cached_map, false, "the generation did not match, so it was ignored");
   assert.equal(after.card, before.card, "and the answer is unchanged");
 });
+
+// ── v1.9.0 — which lanes may ask which graph question ──────────────────────
+// The catalogue is permission, not documentation: a lane calls what its own
+// `orc lane calls` answer names and nothing else. Until 1.9.0 the lean lanes
+// could ask WHERE something is (`ctx`) and never WHAT BREAKS (`impact`,
+// `changes`, `coverage`, `cochange`) or WHERE TO LOOK FIRST (`map`), so
+// /orc-quick could not state a blast radius and /orc-mini could not measure
+// its own complexity read. These sets are that fix, pinned.
+//
+// The 1.8.2 comment on `graph-map` said "planning ONLY", and DE-H's measured
+// 0.39 answerable calls per run is why. That premise is retired ON PURPOSE and
+// narrowed rather than dropped: the number measured the ANALYST asking for a
+// map after the files were already known. /orc-quick's Q1 with a request that
+// names no file, and /orc-mini's intake before the tiered round, are the same
+// orientation question asked by a lane that has no planner to ask it.
+const laneCalls = (lane) => json(cli(["lane", "calls", lane, "--json"])).calls.map((c) => c.id);
+
+test("the lean lanes may ask what breaks, and where to look first", () => {
+  const quick = laneCalls("orc-quick");
+  for (const id of ["graph-map", "graph-changes", "graph-coverage"])
+    assert.ok(quick.includes(id), "orc-quick cannot call " + id);
+  // Quick has no planner and no declared-file set before the gate, so the two
+  // planning reads stay out of its catalogue.
+  for (const id of ["graph-impact", "graph-cochange"])
+    assert.ok(!quick.includes(id), "orc-quick should not be able to call " + id);
+
+  const mini = laneCalls("orc-mini");
+  for (const id of ["graph-map", "graph-impact", "graph-changes", "graph-cochange"])
+    assert.ok(mini.includes(id), "orc-mini cannot call " + id);
+});
+
+test("every graph row a lean lane gained still points at the one canonical file", () => {
+  const all = json(cli(["lane", "calls", "--all", "--json"])).calls;
+  const byId = Object.fromEntries(all.map((c) => [c.id, c]));
+  for (const id of ["graph-map", "graph-impact", "graph-changes", "graph-coverage", "graph-cochange"]) {
+    const row = byId[id];
+    assert.ok(row, id + " is not catalogued");
+    assert.equal(row.canonical, "_shared/code-graph.md", id + " points somewhere else");
+    // A graph read is free and never blocks: both are contract, not prose.
+    assert.equal(row.cost, "free", id + " is not free");
+    assert.ok(row.never && row.never.length > 10, id + " has no `never`");
+    // Every lane named on a graph row is a lane that touches code.
+    for (const lane of row.lanes)
+      assert.ok(
+        ["orc", "orc-diy", "orc-fast", "orc-mini", "orc-quick"].includes(lane),
+        id + " names " + lane + ", which is not a code lane"
+      );
+  }
+});
+
+// ── v1.9.0 W3/W4 — the two lean lanes, wired ────────────────────────────────
+// The catalogue is permission; these hold that the PAYLOAD actually asks the
+// questions the permission was granted for, and that each lane's detail sits in
+// its own reference rather than growing back into the spine.
+const skill = (lane) =>
+  fs.readFileSync(
+    path.join(__dirname, "..", "..", "templates", "skills", lane, "SKILL.md"),
+    "utf8"
+  );
+const ref = (lane, name) =>
+  fs.readFileSync(
+    path.join(__dirname, "..", "..", "templates", "skills", lane, "references", name),
+    "utf8"
+  );
+
+test("each lean lane's new detail lives in its own reference, not in the spine", () => {
+  // The files exist and the spine POINTS at them. A pointer into nothing is the
+  // failure mode a `read: section` manifest cannot catch on its own.
+  const quick = skill("orc-quick");
+  assert.ok(quick.includes("references/look.md"), "the quick spine does not point at look.md");
+  assert.ok(quick.includes("references/defect.md"), "the quick spine does not point at defect.md");
+  assert.ok(ref("orc-quick", "look.md").length > 500);
+  assert.ok(ref("orc-quick", "defect.md").length > 500);
+
+  const mini = skill("orc-mini");
+  assert.ok(mini.includes("references/complexity.md"), "the mini spine does not point at complexity.md");
+  const complexity = ref("orc-mini", "complexity.md");
+  // The four thresholds are the lane's judgment. Each one carries its NUMBER,
+  // because a threshold with no number cannot be moved by a retro.
+  for (const n of ["4 or more", "8 or more", "3 or more"])
+    assert.ok(complexity.includes(n), "complexity.md lost the threshold: " + n);
+  assert.ok(complexity.includes("graph_facts"), "complexity.md does not hold the planner-slice shape");
+});
+
+test("a defect reproduces red before it is fixed, and never in silence", () => {
+  const quick = skill("orc-quick");
+  const defect = ref("orc-quick", "defect.md");
+  assert.ok(quick.includes("kind: defect"), "the quick spine never sorts a defect");
+  assert.ok(quick.includes("REPRO red"), "the quick spine emits no REPRO verb");
+  // `repro: none` is an HONEST return, so it must be written down rather than
+  // quietly dropped — that is the whole reason the field exists.
+  assert.ok(defect.includes("repro: none"), "defect.md has no not-reproduced path");
+  assert.ok(defect.includes("Never invent a reproduction"), "defect.md does not forbid a fake");
+  // The executor writes it. An orchestrator-written reproduction is a sketch.
+  assert.ok(
+    /EXECUTOR writes the reproduction|executor writes the reproduction/i.test(defect),
+    "defect.md does not pin who writes the reproduction"
+  );
+});
+
+test("the gate suggestion is a recommendation, never a default", () => {
+  const gate = ref("orc-quick", "dispatch-gate.md");
+  assert.ok(gate.includes("## The suggestion"), "dispatch-gate.md has no suggestion section");
+  // Every menu that carries a marker still ends with the line that says nothing
+  // runs on silence. A marker without it reads as a pre-selection.
+  assert.ok(
+    gate.includes("Your choice — nothing runs until you answer."),
+    "the gate menus lost the nothing-runs-until-you-answer line"
+  );
+  assert.ok(
+    /never a pre-selection|never pre-selects/i.test(gate),
+    "dispatch-gate.md does not say the marker is not a pre-selection"
+  );
+  assert.ok(skill("orc-quick").includes("→ suggested"), "the quick spine never names the marker");
+});
+
+test("the gain line is catalogued for the lanes that print it, and only those", () => {
+  const all = json(cli(["lane", "calls", "--all", "--json"])).calls;
+  const row = all.find((c) => c.id === "graph-gain");
+  assert.ok(row, "graph-gain is not catalogued");
+  assert.deepEqual([...row.lanes].sort(), ["orc-mini", "orc-quick"]);
+  assert.equal(row.canonical, "_shared/code-graph.md");
+  assert.equal(row.cost, "free");
+  // The meter may never block a run, and its estimate may never be restated as
+  // a saving. Both are in the row's own `never`, where a lane will read them.
+  assert.ok(/block/i.test(row.never), "graph-gain's `never` does not forbid blocking");
+  assert.ok(/saving/i.test(row.never), "graph-gain's `never` does not forbid the saving claim");
+});
+
+test("mini passes wiki POINTERS, never bodies, and records a `none`", () => {
+  const mini = skill("orc-mini");
+  assert.ok(/select PATHS,\s*\n?never bodies/.test(mini) || mini.includes("select PATHS"), "mini does not select paths");
+  assert.ok(
+    mini.includes("You never read a page\nbody into your own context.") ||
+      /never read a page\s+body into your own context/.test(mini),
+    "mini does not forbid reading a wiki body into the orchestrator"
+  );
+  // A null result is a result. Two runs of it is a signal about the wiki, not
+  // about the run, and it is never dropped for looking empty.
+  assert.ok(mini.includes("wiki_used: none"), "mini does not record wiki_used: none");
+  assert.ok(mini.includes("graph_used: none"), "mini does not record graph_used: none");
+
+  const shared = fs.readFileSync(
+    path.join(__dirname, "..", "..", "templates", "skills", "_shared", "phases", "wiki-consult.md"),
+    "utf8"
+  );
+  assert.ok(
+    shared.includes("orc-fast and orc-mini pass POINTERS"),
+    "the shared lane delta still names only orc-fast"
+  );
+});

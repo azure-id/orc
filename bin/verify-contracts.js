@@ -27,8 +27,6 @@ const CONTRACTS = [
     token: "actual_model",
     files: [
       "agents/MODEL-MAPPING.md",
-      // v1.8.0 — the graph noter reports its model like every other role.
-      "agents/orc-graph-noter-sonnet-4-6-med.md",
       "agents/orc-advisor-opus-5-xhigh.md",
       "agents/orc-analyze-mini-opus-5-med.md",
       "agents/orc-analyze-mini-sonnet-5-high.md",
@@ -62,6 +60,8 @@ const CONTRACTS = [
       "agents/orc-planner-mini-opus-5-med.md",
       "agents/orc-planner-mini-sonnet-5-high.md",
       "agents/orc-planner-opus-5-med.md",
+      "agents/orc-recon-opus-5-low.md",
+      "agents/orc-recon-sonnet-4-6-med.md",
       "agents/orc-retro-opus-5-med.md",
       "agents/orc-retro-sonnet-5-high.md",
       "agents/orc-reviewer-opus-5-med.md",
@@ -76,6 +76,9 @@ const CONTRACTS = [
       "agents/orc-wiki-scanner-sonnet-5-high.md",
       "hooks/orc-trace.js",
       "skills/_shared/extra-dispatch.md",
+      "skills/_shared/phases/execution.md",
+      "skills/_shared/phases/trace.md",
+      "skills/_shared/phases/trace.md",
       "skills/_shared/return-validation.md",
       "skills/orc-advisor/SKILL.md",
       "skills/orc-analyze-mini/SKILL.md",
@@ -88,7 +91,6 @@ const CONTRACTS = [
       "skills/orc-challenge/references/council.md",
       "skills/orc-claude/SKILL.md",
       "skills/orc-claude/examples/claude-run-mock.md",
-      "skills/_shared/phases/trace.md",
       "skills/orc-doc/SKILL.md",
       "skills/orc-doc/examples/orc-doc-prd-run.md",
       "skills/orc-fast/SKILL.md",
@@ -104,7 +106,6 @@ const CONTRACTS = [
       "skills/orc-wiki/references/extra.md",
       "skills/orc/README.md",
       "skills/orc/SKILL.md",
-      "skills/_shared/phases/trace.md",
       "skills/orc/schemas/checkpoint.md",
       "skills/orc/subskills/orc-execution/SKILL.md",
       "skills/orc/subskills/orc-execution/core.md",
@@ -112,7 +113,8 @@ const CONTRACTS = [
       "skills/orc/subskills/orc-review-verify/SKILL.md",
       "skills/orc/subskills/orc-review-verify/core.md",
       "skills/orc/subskills/orc-testgen/core.md",
-      "skills/_shared/phases/execution.md",
+      // v1.8.0 — the graph noter reports its model like every other role.
+      "agents/orc-graph-noter-sonnet-4-6-med.md",
     ],
   },
   {
@@ -440,16 +442,18 @@ const CONTRACTS = [
     token: "orc run inflight",
     binFiles: ["bin/cli.js"],
     files: [
-      "skills/orc-test/SKILL.md",
+      "agents/MODEL-MAPPING.md",
       "hooks/README.md",
-      "skills/_shared/return-validation.md",
       "skills/_shared/phases/execution.md",
-      "skills/orc/SKILL.md",
+      "skills/_shared/return-validation.md",
       "skills/orc-doc/SKILL.md",
-      "skills/orc-wiki/SKILL.md",
-      "skills/orc-quick/SKILL.md",
-      "skills/orc-mini/SKILL.md",
       "skills/orc-fast/SKILL.md",
+      "skills/orc-mini/SKILL.md",
+      "skills/orc-quick/SKILL.md",
+      "skills/orc-quick/references/dispatch-gate.md",
+      "skills/orc-test/SKILL.md",
+      "skills/orc-wiki/SKILL.md",
+      "skills/orc/SKILL.md",
     ],
   },
   {
@@ -624,10 +628,9 @@ const CONTRACTS = [
     files: [
       "agents/orc-analyze-mini-opus-5-med.md",
       "agents/orc-analyze-mini-sonnet-5-high.md",
+      "agents/orc-recon-opus-5-low.md",
+      "agents/orc-recon-sonnet-4-6-med.md",
       "agents/orc-system-analyst-opus-5-high.md",
-      // v0.39.0: the read ladder's anti-chain rule ends in a `searched:` return,
-      // so a rename of the attestation field has to reach it too.
-      "skills/_shared/read-ladder.md",
       "skills/orc-analyze-mini/SKILL.md",
       "skills/orc-analyze/SKILL.md",
       "skills/orc-analyze/references/deep-mode.md",
@@ -635,6 +638,9 @@ const CONTRACTS = [
       "skills/orc-analyze/schemas/report-prose.md",
       "skills/orc-analyze/schemas/report-requirement.md",
       "skills/orc-analyze/schemas/requirement-spec.md",
+      // so a rename of the attestation field has to reach it too.
+      "skills/_shared/read-ladder.md",
+      // v0.39.0: the read ladder's anti-chain rule ends in a `searched:` return,
     ],
   },
   {
@@ -722,29 +728,31 @@ const CONTRACTS = [
     files: [
       "agents/orc-retro-opus-5-med.md",
       "agents/orc-retro-sonnet-5-high.md",
-      "skills/orc-analyze/SKILL.md",
-      "skills/_shared/phases/trace.md",
-      "skills/orc-fast/SKILL.md",
-      "skills/orc-mini/SKILL.md",
-      "skills/orc-poly/SKILL.md",
-      "skills/orc-poly/examples/poly-run-mock.md",
-      "skills/orc-quick/SKILL.md",
-      "skills/orc-retro/SKILL.md",
-      "skills/orc/SKILL.md",
       "skills/_shared/phases/analyst-gates.md",
-      "skills/orc/references/effort-and-mode.md",
+      "skills/_shared/phases/execution.md",
       "skills/_shared/phases/plan-handoff.md",
+      "skills/_shared/phases/planning.md",
+      "skills/_shared/phases/preflight.md",
+      "skills/_shared/phases/ship.md",
       "skills/_shared/phases/stop-resume.md",
       "skills/_shared/phases/trace.md",
-      "skills/orc/references/ultra-mode.md",
+      "skills/_shared/phases/trace.md",
+      "skills/orc-analyze/SKILL.md",
+      "skills/orc-fast/SKILL.md",
+      "skills/orc-mini/SKILL.md",
+      "skills/orc-mini/references/complexity.md",
+      "skills/orc-poly/SKILL.md",
+      "skills/orc-poly/examples/poly-run-mock.md",
       "skills/orc-pr-driver/SKILL.md",
-      "skills/orc/subskills/orc-pr/stack-gate.md",
+      "skills/orc-quick/SKILL.md",
+      "skills/orc-quick/references/look.md",
+      "skills/orc-retro/SKILL.md",
+      "skills/orc/SKILL.md",
       "skills/orc/config.md",
+      "skills/orc/references/effort-and-mode.md",
       "skills/orc/references/preflight-report.md",
-      "skills/_shared/phases/preflight.md",
-      "skills/_shared/phases/execution.md",
-      "skills/_shared/phases/planning.md",
-      "skills/_shared/phases/ship.md",
+      "skills/orc/references/ultra-mode.md",
+      "skills/orc/subskills/orc-pr/stack-gate.md",
     ],
   },
   {
@@ -1161,6 +1169,7 @@ const CONTRACTS = [
       "skills/_shared/README.md",
       "skills/_shared/interview.md",
       "skills/_shared/lane-suspend.md",
+      "skills/_shared/phases/intake.md",
       "skills/orc-boundary/SKILL.md",
       "skills/orc-brainstorm/SKILL.md",
       "skills/orc-challenge/SKILL.md",
@@ -1170,7 +1179,8 @@ const CONTRACTS = [
       "skills/orc-doc/references/gates.md",
       "skills/orc-grill/SKILL.md",
       "skills/orc-pact/SKILL.md",
-      "skills/_shared/phases/intake.md",
+      "skills/orc-quick/SKILL.md",
+      "skills/orc-quick/references/dispatch-gate.md",
     ],
   },
   {
@@ -1893,25 +1903,26 @@ const CONTRACTS = [
       "agents/orc-planner-opus-5-med.md",
       "agents/orc-retro-opus-5-med.md",
       "agents/orc-retro-sonnet-5-high.md",
+      "commands/orc-route.md",
+      "skills/_shared/phases/analyst-gates.md",
+      "skills/_shared/phases/plan-handoff.md",
+      "skills/_shared/phases/planning.md",
+      "skills/_shared/phases/scoring.md",
+      "skills/_shared/phases/trace.md",
+      "skills/_shared/phases/wave-grouping.md",
       "skills/orc-mini/SKILL.md",
+      "skills/orc-mini/references/complexity.md",
       "skills/orc-retro/SKILL.md",
+      "skills/orc-route/SKILL.md",
       "skills/orc/README.md",
       "skills/orc/SKILL.md",
       "skills/orc/config.md",
       "skills/orc/examples/full-run-mock.md",
-      "skills/_shared/phases/analyst-gates.md",
       "skills/orc/references/effort-and-mode.md",
-      "skills/_shared/phases/plan-handoff.md",
-      "skills/_shared/phases/trace.md",
-      "skills/_shared/phases/wave-grouping.md",
+      "skills/orc/references/preflight-report.md",
       "skills/orc/schemas/planning-output.md",
       "skills/orc/subskills/orc-planner-mini/SKILL.md",
       "skills/orc/subskills/orc-planner/SKILL.md",
-      "commands/orc-route.md",
-      "skills/orc-route/SKILL.md",
-      "skills/orc/references/preflight-report.md",
-      "skills/_shared/phases/planning.md",
-      "skills/_shared/phases/scoring.md",
     ],
   },
   {
@@ -2521,23 +2532,24 @@ const CONTRACTS = [
     binFiles: ["bin/cli.js"],
     files: [
       "skills/_shared/fallback-handoff.md",
+      "skills/_shared/phases/intake.md",
+      "skills/_shared/phases/stop-resume.md",
       "skills/_shared/stack-plan.md",
       "skills/orc-diy/references/blocks/header.md",
       "skills/orc-diy/references/locked-blocks.md",
+      "skills/orc-doc/README.md",
+      "skills/orc-doc/references/chunking.md",
+      "skills/orc-doc/references/gates.md",
+      "skills/orc-doc/references/resume-protocol.md",
       "skills/orc-export/SKILL.md",
       "skills/orc-fast/SKILL.md",
       "skills/orc-mini/SKILL.md",
+      "skills/orc-quick/SKILL.md",
       "skills/orc-quick/references/context-doc.md",
       "skills/orc-wiki/SKILL.md",
       "skills/orc/README.md",
       "skills/orc/SKILL.md",
       "skills/orc/config.md",
-      "skills/_shared/phases/intake.md",
-      "skills/_shared/phases/stop-resume.md",
-      "skills/orc-doc/README.md",
-      "skills/orc-doc/references/chunking.md",
-      "skills/orc-doc/references/gates.md",
-      "skills/orc-doc/references/resume-protocol.md",
     ],
   },
   // ── Stacked pull requests (v0.37.0) ──────────────────────────────────────
@@ -2673,15 +2685,16 @@ const CONTRACTS = [
       "skills/_shared/phases/wiki-consult.md",
       "skills/_shared/read-ladder.md",
       "skills/_shared/return-validation.md",
-      // W6 — the six code lanes open it (S5: a declared capability no lane
-      // points at is a gate that is always off).
-      "skills/orc-diy/references/flow-schema.md",
       "skills/orc-fast/SKILL.md",
       "skills/orc-mini/SKILL.md",
       "skills/orc-quick/SKILL.md",
       "skills/orc-quick/references/dispatch-gate.md",
+      "skills/orc-quick/references/look.md",
       "skills/orc-wiki/references/staleness.md",
       "skills/orc/SKILL.md",
+      // W6 — the six code lanes open it (S5: a declared capability no lane
+      // points at is a gate that is always off).
+      "skills/orc-diy/references/flow-schema.md",
     ],
   },
   {
@@ -2691,9 +2704,12 @@ const CONTRACTS = [
     name: "graph precedence (v1.8.0 — code > graph structure > fresh wiki > stale wiki > graph notes > priors)",
     token: "code > graph structure",
     files: [
+      "agents/orc-recon-opus-5-low.md",
+      "agents/orc-recon-sonnet-4-6-med.md",
       "skills/_shared/code-graph.md",
       "skills/_shared/phases/wiki-consult.md",
       "skills/_shared/read-ladder.md",
+      "skills/orc-quick/references/look.md",
       "skills/orc-wiki/references/staleness.md",
     ],
   },
@@ -2713,13 +2729,16 @@ const CONTRACTS = [
       "agents/orc-executor-sonnet-4-6-high.md",
       "agents/orc-executor-sonnet-4-6-med.md",
       "agents/orc-executor-sonnet-5-high.md",
+      "agents/orc-recon-opus-5-low.md",
+      "agents/orc-recon-sonnet-4-6-med.md",
       "skills/_shared/code-graph.md",
       "skills/_shared/phases/execution.md",
       "skills/_shared/read-ladder.md",
       "skills/_shared/return-validation.md",
+      "skills/orc-mini/SKILL.md",
+      "skills/orc-quick/SKILL.md",
       // W9: the two single-executor spines name it in their code-graph step.
       "skills/orc-fast/SKILL.md",
-      "skills/orc-mini/SKILL.md",
     ],
   },
   // ── v1.8.2 W3 — the delivery flags (D1 · D2 · D3 · D5) ────────────────
@@ -2729,7 +2748,15 @@ const CONTRACTS = [
     // CLI that answers it.
     name: "graph slice view (v1.8.2 — ctx --for-slice, the OUTSIDE view of a declared file)",
     token: "--for-slice",
-    files: ["hooks/orc-graph-hook.js", "skills/_shared/code-graph.md", "skills/_shared/phases/execution.md"],
+    files: [
+      "hooks/orc-graph-hook.js",
+      "skills/_shared/code-graph.md",
+      "skills/_shared/phases/execution.md",
+      "skills/orc-mini/SKILL.md",
+      "skills/orc-mini/examples/mini-run-mock.md",
+      "skills/orc-quick/SKILL.md",
+      "skills/orc-quick/references/look.md",
+    ],
     binFiles: ["bin/cli.js", "bin/graph-query.js"],
   },
   {
@@ -2737,7 +2764,51 @@ const CONTRACTS = [
     // bare `--source` is also `orc doc`'s own flag.
     name: "graph source block (v1.8.2 — ctx --source [N], charged to the same budget)",
     token: "--source [N]",
-    files: ["skills/_shared/code-graph.md", "skills/_shared/read-ladder.md"],
+    files: [
+      "agents/orc-recon-opus-5-low.md",
+      "agents/orc-recon-sonnet-4-6-med.md",
+      "skills/_shared/code-graph.md",
+      "skills/_shared/read-ladder.md",
+      "skills/orc-quick/references/look.md",
+    ],
+    binFiles: ["bin/cli.js"],
+  },
+  // ── v1.9.0 — the lean lanes reproduce before they fix ───────────────────
+  {
+    // The slice field that makes a defect entry show the bug RED first. It is
+    // a CONDITIONAL, and the conditional is the contract: `repro` alone also
+    // matches "reproducible" and "reproduce" in files that owe nothing here.
+    // Every executor carries the step, the shared return contract validates it
+    // (§5d), and the full lane's execution core states it once.
+    name: "reproduce-first slice field (v1.9.0 — repro.required)",
+    token: "repro.required: true",
+    files: [
+      "agents/orc-executor-haiku-4-5.md",
+      "agents/orc-executor-opus-4-7-high.md",
+      "agents/orc-executor-opus-4-7-med.md",
+      "agents/orc-executor-opus-4-8-high.md",
+      "agents/orc-executor-opus-5-high.md",
+      "agents/orc-executor-opus-5-low.md",
+      "agents/orc-executor-opus-5-med.md",
+      "agents/orc-executor-sonnet-4-6-high.md",
+      "agents/orc-executor-sonnet-4-6-med.md",
+      "agents/orc-executor-sonnet-5-high.md",
+      "skills/_shared/return-validation.md",
+      "skills/orc/subskills/orc-execution/core.md",
+    ],
+  },
+  {
+    // The trace verb. `/orc-retro` counts a reproduction apart from a TDD
+    // cycle, so the verb is defined in the protocol, emitted by the lane that
+    // asks for it, explained in that lane's reference, and declared in the
+    // CLI's own phase manifest — one place each, pinned together.
+    name: "reproduce-first trace verb (v1.9.0 — REPRO red|green)",
+    token: "REPRO",
+    files: [
+      "skills/_shared/phases/trace.md",
+      "skills/orc-quick/SKILL.md",
+      "skills/orc-quick/references/defect.md",
+    ],
     binFiles: ["bin/cli.js"],
   },
   {
@@ -2745,7 +2816,12 @@ const CONTRACTS = [
     // uses this one, so the flag has to exist wherever the text says it does.
     name: "graph one-call update (v1.8.2 — update --notes-pending)",
     token: "--notes-pending",
-    files: ["skills/_shared/code-graph.md", "skills/_shared/phases/execution.md"],
+    files: [
+      "skills/_shared/code-graph.md",
+      "skills/_shared/phases/execution.md",
+      "skills/orc-mini/SKILL.md",
+      "skills/orc-quick/SKILL.md",
+    ],
     binFiles: ["bin/cli.js"],
   },
   {
@@ -2818,8 +2894,11 @@ const CONTRACTS = [
       "skills/_shared/code-graph.md",
       "skills/_shared/phases/planning.md",
       "skills/_shared/phases/trace.md",
-      "skills/orc/SKILL.md",
       "skills/orc-diy/references/flow-schema.md",
+      "skills/orc-mini/SKILL.md",
+      "skills/orc-quick/SKILL.md",
+      "skills/orc-quick/references/look.md",
+      "skills/orc/SKILL.md",
     ],
     binFiles: ["bin/cli.js", "bin/graph-map.js"],
   },
@@ -2829,8 +2908,9 @@ const CONTRACTS = [
     name: "graph map trace (v1.8.2 — GRAPH-MAP, one line at the start of planning)",
     token: "GRAPH-MAP",
     files: [
-      "skills/_shared/phases/trace.md",
       "skills/_shared/phases/planning.md",
+      "skills/_shared/phases/trace.md",
+      "skills/orc-mini/examples/mini-run-mock.md",
     ],
     binFiles: ["bin/cli.js"],
   },
@@ -2880,12 +2960,6 @@ const CONTRACTS = [
     name: "read ladder (escalating read discipline for read-heavy roles)",
     token: "read-ladder.md",
     files: [
-      // v1.6.0 — the ENFORCEMENT half. The ladder was advisory prose in three
-      // places and enforced in none; this hook is the layer that can refuse.
-      // It cites the ladder by name because its two carve-outs ARE the
-      // ladder's two exceptions — rename the file and the gate's reason text
-      // stops naming anything real.
-      "hooks/orc-read-gate.js",
       "agents/orc-executor-haiku-4-5.md",
       "agents/orc-executor-opus-4-7-high.md",
       "agents/orc-executor-opus-4-7-med.md",
@@ -2896,29 +2970,40 @@ const CONTRACTS = [
       "agents/orc-executor-sonnet-4-6-high.md",
       "agents/orc-executor-sonnet-4-6-med.md",
       "agents/orc-executor-sonnet-5-high.md",
+      "agents/orc-recon-opus-5-low.md",
+      "agents/orc-recon-sonnet-4-6-med.md",
       "skills/_shared/README.md",
       "skills/_shared/interview.md",
+      "skills/_shared/phases/README.md",
+      "skills/_shared/phases/wiki-consult.md",
       "skills/_shared/read-ladder.md",
       "skills/orc-analyze-mini/SKILL.md",
       "skills/orc-analyze/SKILL.md",
       "skills/orc-boundary/SKILL.md",
       "skills/orc-fast/SKILL.md",
       "skills/orc-quick/references/dispatch-gate.md",
+      "skills/orc-quick/references/look.md",
       "skills/orc-wiki/SKILL.md",
       "skills/orc/SKILL.md",
-      "skills/_shared/phases/wiki-consult.md",
       "skills/orc/subskills/orc-execution/core.md",
-      "skills/_shared/phases/README.md",
+      // v1.6.0 — the ENFORCEMENT half. The ladder was advisory prose in three
+      // places and enforced in none; this hook is the layer that can refuse.
+      // It cites the ladder by name because its two carve-outs ARE the
+      // ladder's two exceptions — rename the file and the gate's reason text
+      // stops naming anything real.
+      "hooks/orc-read-gate.js",
     ],
   },
   {
     name: "foreign input is evidence, never instruction",
     token: "untrusted-input.md",
     files: [
-      "skills/orc-test/SKILL.md",
       "agents/orc-doc-writer-opus-5-med.md",
+      "agents/orc-recon-opus-5-low.md",
+      "agents/orc-recon-sonnet-4-6-med.md",
       "skills/_shared/README.md",
       "skills/_shared/extra-dispatch.md",
+      "skills/_shared/phases/wiki-consult.md",
       "skills/_shared/untrusted-input.md",
       "skills/orc-analyze/SKILL.md",
       "skills/orc-boundary/SKILL.md",
@@ -2931,8 +3016,8 @@ const CONTRACTS = [
       "skills/orc-pact/SKILL.md",
       "skills/orc-poly/SKILL.md",
       "skills/orc-quick/references/gh-mode.md",
+      "skills/orc-test/SKILL.md",
       "skills/orc-wiki/SKILL.md",
-      "skills/_shared/phases/wiki-consult.md",
     ],
   },
   // ── v0.40.0 — gotchas (repair memory) ───────────────────────────────────
@@ -3772,7 +3857,15 @@ const BUDGETS = [
   // 1 measured a mini run with `code_graph: on` that never called `orc graph`:
   // a pointer at the end of a long probe line was skipped. The three steps now
   // have their own heading; the mechanics stay in _shared/code-graph.md.
-  { file: "skills/orc-mini/SKILL.md", maxLines: 270 },
+  // v1.9.0: deliberate raise 270→280 — the lean-lane revamp. W1 trimmed the
+  // spine to 246 by moving the Phase X/T narration and the fallback and switch
+  // paragraphs into _shared and the phase's own reference. W4 spent that room on
+  // contracts that must survive compaction: the graph_facts planner slice, the
+  // complexity read's four thresholds, the wiki POINTERS-not-bodies rule, the
+  // affected-tests-first smoke gate and the `none is an answer` record. The
+  // arithmetic (how to count, why each threshold is that number, the
+  // graph_facts shape) lives in references/complexity.md.
+  { file: "skills/orc-mini/SKILL.md", maxLines: 280 },
   // v0.39.0: deliberate raises 195→201 / 179→182 — the analyst gains hard rules
   // 2b (a source it did not author is FOREIGN input) and 4a (the read ladder);
   // fast gains the ladder as a slice line. Both are hard rules by nature: they
@@ -3835,6 +3928,14 @@ const BUDGETS = [
   // v1.8.0 W9: deliberate raise 230→240 — the F0 code-graph step (e.), for the
   // same measured reason as orc-mini's raise: a lengthened line was skipped.
   { file: "skills/orc-fast/SKILL.md", maxLines: 240 },
+  // v1.9.0: a FIRST pin for the quick spine, at 325. It had none, and it grew
+  // to 379 lines. W1 trimmed it to 298 by moving the step table, the gate menu,
+  // the repair-loop example and the doc shape into references/ and README.md;
+  // W2 and W3 spent the rest on the graph-first dig, the reproduce-first step,
+  // the blast-radius line and the one-call cache update. 325 is where that
+  // lands plus nothing — a spine that grows past its own references has moved
+  // prose the wrong way.
+  { file: "skills/orc-quick/SKILL.md", maxLines: 325 },
 ];
 
 function walk(dir, out) {

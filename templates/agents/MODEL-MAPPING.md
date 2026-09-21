@@ -37,6 +37,8 @@ model change, and an agent's model change is always a RENAME.
 | orc-analyze-mini-sonnet-5-high | claude-sonnet-5 | high | mini analysis |
 | orc-planner-mini-sonnet-5-high | claude-sonnet-5 | high | mini planning |
 | orc-scout-sonnet-4-6-high | claude-sonnet-4-6 | high | deep-analysis code scout (read-only) |
+| orc-recon-sonnet-4-6-med | claude-sonnet-4-6 | medium | answer ONE repository question with file:line evidence (/orc-quick read-only entries; never edits, never plans) |
+| orc-recon-opus-5-low | claude-opus-5 | low | the same contract for a WIDE or SUBTLE question — a blast radius across areas, a defect with no obvious anchor |
 | orc-context-combiner-opus-5-high | claude-opus-5 | high | combine 2+ related analyses (full lane) |
 | orc-pattern-codifier-sonnet-5-high | claude-sonnet-5 | high | reconcile per-language playbook vs. project files → cached code-pattern (opt-in) |
 | orc-retro-sonnet-5-high | claude-sonnet-5 | high | mine behavior traces → calibration report (/orc-retro; read-only) |
@@ -104,7 +106,7 @@ agent to spawn before EVERY dispatch, and reuses shipped agents:
 | Dispatch kind | Offered | Hook-traced |
 |---|---|---|
 | writes code | orc-executor-sonnet-4-6-med · orc-executor-opus-5-low | yes |
-| read-only recon | an **ad-hoc model + effort** (e.g. claude-sonnet-4-6 / medium) — no agent file | no |
+| read-only recon | orc-recon-sonnet-4-6-med · orc-recon-opus-5-low · or `other — name a model` | yes · yes · no |
 | review | orc-reviewer-opus-5-med · or ad-hoc | yes / no |
 
 The only dispatch it does not re-ask is build-repair rounds 1–2, which reuse the
@@ -114,10 +116,18 @@ executor the user already chose for that entry; round 3 asks again.
 the one exception to `opus5_only`'s otherwise flat precedence. See
 `skills/_shared/opus5-only.md` and `skills/orc-quick/references/dispatch-gate.md`.
 
-Ad-hoc recon is dispatched by model name, not by an `orc-*` agent file, so the
-trace hook emits no SPAWN/RETURN for it. The lane still writes its own
-`DISPATCH … adhoc=true` / `VERIFY` lines and still runs the downgrade check from
-the agent's self-reported `actual_model`; only `/orc-retro` aggregation misses it.
+**Recon is a pinned PAIR since v1.9.0; `other` is the ad-hoc escape hatch.** The
+pair exists because the trace hook only sees an agent whose name starts with
+`orc-`: an ad-hoc recon wrote no SPAWN/RETURN, was invisible to
+`orc run inflight`, and could not be counted by `/orc-retro`. The two files share
+ONE return contract, so the choice is a model choice and nothing else.
+
+The escape hatch names **a model only**. The Agent tool takes a per-call model
+and has no per-call effort knob, so the old "ad-hoc model + effort" menu offered
+a setting that did not exist; effort follows the session. An `other` dispatch is
+still not hook-traced — the lane writes its own `DISPATCH … adhoc=true` /
+`VERIFY` lines and still runs the downgrade check from the agent's self-reported
+`actual_model`, and only `/orc-retro` aggregation misses it.
 
 The scout is dispatched only in the System Analyst's DEEP mode: the orchestrator
 fans out ≤`config.max_scouts` (default 3) parallel scouts, one per coverage area

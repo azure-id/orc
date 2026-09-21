@@ -7,13 +7,13 @@
 *Terima permintaan → pahami → rencanakan → beri nilai → kerjakan paralel → periksa → uji → kirim.*
 
 ![npm](https://img.shields.io/npm/v/%40azure-id%2Forc?style=for-the-badge&color=cb3837&logo=npm)
-![Version](https://img.shields.io/badge/version-1.8.2-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-1.9.0-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
 ![Dependencies](https://img.shields.io/badge/dependencies-zero-lightgrey.svg?style=for-the-badge)
 
-**Versi terbaru: v1.8.2** · diperbarui 21-09-2026 · [daftar perubahan lengkap](CHANGELOG.md)
+**Versi terbaru: v1.9.0** · diperbarui 21-09-2026 · [daftar perubahan lengkap](CHANGELOG.md)
 
 **Ada di npm: [`@azure-id/orc`](https://www.npmjs.com/package/@azure-id/orc)** — `npm i -g @azure-id/orc`
 
@@ -272,9 +272,9 @@ pemakaian 5 jam, pemakaian mingguan, dan beberapa hal lain.
 |---|---|---|
 | **`/orc`** | Alur penuh: terima → rencana → gelombang paralel bernilai → periksa → uji → kirim. Rajin menyimpan titik simpan; bisa dilanjutkan di sesi baru. | [lihat](mock-run/orc.md) |
 | **`/orc-ultra`** | Sama, ditambah penasihat Opus 5 **xhigh** dan tiga gerbang penilaian. Analisis dalam, pola kode, tes, dan keamanan dipaksa menyala. Memang mahal. | [lihat](mock-run/orc-ultra.md) |
-| **`/orc-mini`** | Satu agen Sonnet 5, satu pemeriksaan build + tes, lalu kirim. Melewati review penuh dan pengujian. Bisa pindah ke alur penuh di tengah jalan kalau diminta. | [lihat](templates/skills/orc-mini/examples/mini-run-mock.md) |
+| **`/orc-mini`** | Satu agen Sonnet 5, satu pemeriksaan build + tes, lalu kirim. Melewati review penuh dan pengujian. Satu baris **pembacaan kompleksitas** berisi angka menawarkan lane penuh kalau perubahannya lebih luas dari satu area. Bisa pindah ke alur penuh di tengah jalan kalau diminta. | [lihat](templates/skills/orc-mini/examples/mini-run-mock.md) |
 | **`/orc-fast`** | Lane tercepat. Butuh wiki yang masih segar **dan** pola kode yang sudah tersimpan; kalau ada, ia melewati tahap analis dan perencana sepenuhnya. Kalau salah satu syarat tidak ada, ia mundur ke `/orc-mini` — obrolan tidak pernah berhenti. | [lihat](mock-run/orc-fast.md) |
-| **`/orc-quick`** | Minta apa saja: perbaikan kecil, pertanyaan, mencari bug, menaikkan versi dependensi, komentar PR. Lihat → tanya sekali → kerjakan. **Selalu bertanya agen mana yang mau dipakai**, dan tidak ada pengaturan yang bisa mengubah itu. | [lihat](mock-run/orc-quick.md) |
+| **`/orc-quick`** | Minta apa saja: perbaikan kecil, pertanyaan, mencari bug, menaikkan versi dependensi, komentar PR. Lihat → tanya sekali → kerjakan. **Selalu bertanya agen mana yang mau dipakai**, dan tidak ada pengaturan yang bisa mengubah itu. Satu **defect direproduksi merah dulu sebelum diperbaiki**. | [lihat](mock-run/orc-quick.md) |
 | **`/orc-diy`** | Lane racikan Anda sendiri, disusun di terminal dengan `orc diy` lalu dikompilasi. Kalau belum disetel atau sudah basi, ia menolak jalan dan menawarkan `/orc` biasa. | [lihat](mock-run/orc-diy.md) |
 
 ### Memikirkan apa yang mau dibuat
@@ -465,6 +465,14 @@ orc graph gain                        # apa yang dimasukkan peta, dan perkiraan 
   membangunnya di preflight dan memperbaruinya setelah setiap perubahan. Lane
   lain tidak pernah memanggilnya. **Tidak ada yang berjalan dengan pewaktu dan
   tidak ada yang berjalan di latar belakang.**
+- **Setiap lane hanya boleh menanyakan pertanyaan yang disebut katalognya
+  sendiri** (`orc lane calls <lane>`), dan v1.9.0 melebarkan itu untuk dua lane
+  ramping. `/orc-quick` sekarang boleh menanyakan `map`, `changes` dan
+  `coverage`, jadi ia bisa menyebut apa yang tersentuh satu perubahan dan
+  menjalankan test yang terdampak lebih dulu; `/orc-mini` boleh menanyakan
+  `map`, `impact`, `changes` dan `cochange`, yang menjadi angka di balik baris
+  kompleksitasnya. Sebelum ini keduanya hanya boleh menanyakan di mana satu
+  simbol berada.
 - **Hook itu juga memberi pekerja titik acuan yang tadinya harus dicari sendiri**
   — untuk Grep, Glob, dan pencarian lewat shell (`grep`, `rg`, `git grep`,
   `findstr`) — dan semua yang diberikannya ditandai sebagai data repositori,
@@ -760,56 +768,66 @@ Bacalah sebagai catatan putaran itu, bukan sebagai audit terkini:
 **Riwayat lengkap: [CHANGELOG.md](CHANGELOG.md)** — atau `orc changelog`, yang
 hanya mencetak yang lebih baru dari versi yang Anda punya.
 
-### v1.8.2 - peta yang menemukan apa yang tidak bisa ditemukan grep _(21-09-2026)_
+### v1.9.0 - lane ramping belajar melihat dulu sebelum melompat _(21-09-2026)_
 
-v1.8.0 merilis graf kode dengan satu lubang yang sudah diketahui: kartu hanya
-menulis pemanggil yang MENYEBUT nama simbolnya, jadi test yang sampai ke satu
-route lewat URL bukan pemanggil dan kartunya diam soal itu. **Sekarang URL
-adalah satu tautan** — begitu juga alias instance
-(`const svc = new OrderService(); svc.run()`), method warisan, dan nama yang
-di-re-export lewat barrel. Panggilan tanpa penerima tidak lagi diarahkan ke
-satu-satunya method di repositori yang namanya sama; tebakan itu adalah tautan
-karangan dan sudah dihapus. Di django, tautan yang pasti naik dari 65.379 ke
-72.955 dan tebakan `UNIQUE` turun dari 23.866 ke 6.442.
+`/orc-quick` dan `/orc-mini` adalah dua lane yang paling sering dipakai orang,
+dan keduanya bekerja setengah buta. Graf kode bisa memberi tahu mereka DI MANA
+satu simbol berada, dan dilarang memberi tahu APA YANG RUSAK. Perbaikan bug
+tidak pernah ditunjukkan gagal lebih dulu. Pekerjaan baca-saja dikirim lewat
+nama model, jadi tidak ada satu pun bagian ORC yang bisa melihatnya.
 
-**Lima bahasa baru** — Ruby, Rust, Kotlin, C / C++ dan blok `<script>` komponen
-Vue atau Svelte. **Parser pinjaman** jika proyek Anda sudah punya alatnya:
-`node_modules/typescript` milik Anda dan `go` di PATH bergabung dengan `ast`
-milik Python. ORC sendiri tetap tanpa dependency.
+**Sekarang bug ditunjukkan MERAH dulu sebelum diperbaiki.** Permintaan seperti
+*"halaman orders mengembalikan 500, cari dan perbaiki"* digolongkan sebagai
+**defect**, dan agen eksekutor menulis reproduksinya LEBIH DULU — satu test yang
+gagal dalam framework Anda sendiri, atau satu perintah — menjalankannya sampai
+merah, memperbaikinya, lalu menjalankannya lagi sampai hijau. Kedua jalannya
+dicetak dan keduanya masuk ke jejak. Reproduksi yang tidak bisa ditulis menjadi
+`repro: none` beserta alasannya, dan catatannya berbunyi **tidak tereproduksi** —
+diulang lagi saat penawaran commit. Itu tidak pernah dikarang. Tanpa jalan merah,
+perbaikan hanya terbukti terhadap test suite Anda, yang sudah hijau sebelum dan
+sesudahnya; dengan jalan merah, perbaikan terbukti terhadap bug yang Anda
+laporkan.
 
-**Lebih sedikit bolak-balik.** `ctx --source [N]` menambahkan baris target ke
-kartunya. `ctx --for-slice` hanya mencetak tampak luar satu berkas yang memang
-akan dibaca penuh oleh agent — 30–51% lebih kecil dari kartu yang digantikannya.
-`update --notes-pending` menjawab keduanya dalam satu panggilan. Hook sekarang
-juga menjawab pencarian lewat shell, dan `code_graph_hooks on,read` menyebut
-enam simbol paling banyak dijangkau di satu berkas besar supaya pembacaan
-berikutnya bisa meminta satu rentang saja.
+**Kedua lane sekarang boleh bertanya apa yang rusak.** `/orc-quick` mendapat
+`map`, `changes` dan `coverage`; `/orc-mini` mendapat `map`, `impact`, `changes`
+dan `cochange`. **Test yang terdampak dijalankan lebih dulu** — termasuk test
+yang sampai ke perubahan lewat URL — dan setiap catatan membawa satu baris
+radius dampak, tempat kata `risk` tidak pernah muncul tanpa alasannya.
+Permintaan yang tidak menyebut satu berkas pun sekarang dimulai dengan
+`orc graph map --focus`, bukan dengan tebakan nama berkas.
 
-**`orc graph map`** memberi peringkat repositori sebelum Anda tahu nama
-berkasnya, di dalam satu batas token, dengan `--focus`. Peringkat adalah
-petunjuk tentang di mana harus melihat lebih dulu, bukan bukti. **Kartu satu
-simbol kira-kira dua kali lebih cepat** — cache resolusinya sekarang dipecah
-menjadi shard, jadi django turun dari 881 ke 480 ms, dan shard menjawab persis
-sama dengan indeks penuh atau menolak menjawab (577 kartu dibandingkan, 0
-berbeda).
+**Pembacaan kompleksitas `/orc-mini` membawa angka.** Dulu itu satu kalimat
+penilaian; sekarang satu baris berisi hitungan dan empat ambang yang
+masing-masing menyebut kenapa angkanya segitu: pemanggil di 4 berkas atau lebih
+di luar rencana, 8 pemanggil atau lebih, kelas risiko apa pun yang dikutip, atau
+satu berkas yang menurut riwayat selalu ikut tersentuh. Itu **tawaran, bukan
+perpindahan**, dan kalau Anda tetap lanjut, angkanya ditulis ke catatan
+keputusan supaya `/orc-retro` nanti bisa menggeser ambangnya.
 
-**`orc graph gain`** melaporkan apa yang dimasukkan peta — tercatat — dan
-perkiraan, selalu sebagai rentang, tentang apa yang ditahannya. Angka tunggal
-tidak pernah dicetak, dan penghematan yang tidak bisa dibuktikan tidak pernah
-diklaim.
+**Pekerjaan baca-saja sekarang agen sungguhan.** Recon adalah sepasang agen
+tetap — `orc-recon-sonnet-4-6-med` dan `orc-recon-opus-5-low` — dengan kontrak
+pengembalian, terlihat di jejak dan di `orc run inflight`. Pilihan
+`other — sebut satu model` tetap ada sebagai jalan keluar. Gerbangnya sekarang
+boleh mencetak `suggested` di samping satu baris BESERTA alasannya, dan ia tetap
+tidak pernah memilih: setiap menu berakhir dengan *pilihan Anda — tidak ada yang
+berjalan sampai Anda menjawab*.
 
-**`code_graph_ignore`** adalah kunci baru: glob tambahan yang tidak pernah
-diindeks graf.
+**Kedua lane lebih murah untuk dimuat.** Dua deskripsi yang dibayar setiap sesi
+turun dari 619 ke 326 dan dari 493 ke 294 karakter, dengan setiap frasa pemicu
+tetap utuh. Kartu aturan dalam potongan `/orc-quick` sekarang berbentuk ringkas —
+sekitar 1.460 token, bukan 3.469 — yang menjaga id, judul dan instruksi setiap
+aturan HARD, dan hanya melepas contoh-contohnya.
 
-Dua gate di rilis ini tidak tercapai, dan CHANGELOG menyebutkannya lengkap
-dengan angkanya: parser pinjaman tetap dirilis atas keputusan pemelihara
-walaupun gate tingkat kepastian mengukur +1,0 / −0,3 / −0,3, dan `orc graph map`
-hanya dihubungkan ke perencanaan karena pengukuran ulang transkrip mendapat 0,39
-panggilan perencanaan yang bisa dijawab per run, terhadap gate tiga.
+**Rilis ini tidak menurunkan tagihan Anda**, dan tidak mengklaim begitu.
+Klaimnya adalah kebenaran, keterlacakan, dan lebih sedikit bolak-balik.
+**Evaluasi sesi langsung tidak dijalankan** — setengah bagian deterministiknya
+ada di test suite, tetapi tiga gate yang butuh orang menjalankan lane tidak
+tercapai, bukan lulus. CHANGELOG menyebutkan satu per satu.
 
 <details>
-<summary><strong>Rilis sebelumnya</strong> — 118 rilis, hanya judulnya. Teks lengkapnya (dalam bahasa Inggris) ada di <a href="CHANGELOG.md">CHANGELOG.md</a>.</summary>
+<summary><strong>Rilis sebelumnya</strong> — 119 rilis, hanya judulnya. Teks lengkapnya (dalam bahasa Inggris) ada di <a href="CHANGELOG.md">CHANGELOG.md</a>.</summary>
 
+- **v1.8.2** — the map that finds what a grep cannot · _2026-09-21_
 - **v1.8.1** — the guard that only failed on Windows · _2026-09-16_
 - **v1.8.0** — the code graph: a map of the code that stays fresh · _2026-09-16_
 - **v1.7.1** — the rules card now reaches the agent · _2026-09-14_

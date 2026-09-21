@@ -949,3 +949,141 @@ test("the two new trace verbs are registered where the lane reads them", () => {
   // Ownership: the CLI composes, the LANE emits the two it alone can know about.
   assert.match(shared, /`EXTRA fallback` and `EXTRA orphan` lines are the \*\*lane's\*\* to emit/);
 });
+
+// ── Skill descriptions (v1.9.0 W1) ─────────────────────────────────────────
+// Every skill's description is loaded into EVERY session, whether or not the
+// skill runs. The whole constellation pays for each one, so the cap is a
+// payload contract, not a style note: 1,024 chars is the Agent Skills spec
+// cap, and the two lean lanes are held far below it because their promise is
+// speed. A description that grows past this has moved contract prose into the
+// one place that is never free.
+function foldedDescription(skillDir) {
+  const md = read(path.join("skills", skillDir, "SKILL.md"));
+  const fm = /^---\n([\s\S]*?)\n---/.exec(md);
+  assert.ok(fm, skillDir + " has no frontmatter");
+  const lines = fm[1].split("\n");
+  const i = lines.findIndex((l) => /^description:/.test(l));
+  assert.ok(i >= 0, skillDir + " has no description");
+  const head = /^description:\s*(>-?|\|-?)?[ \t]*(.*)$/.exec(lines[i]);
+  if (!head[1]) return head[2].trim();
+  const buf = [];
+  for (let j = i + 1; j < lines.length; j++) {
+    if (/^\s+\S/.test(lines[j]) || lines[j].trim() === "") buf.push(lines[j].trim());
+    else break;
+  }
+  return buf.join(" ").trim();
+}
+
+test("no skill description exceeds the spec cap, and the lean lanes stay short", () => {
+  const dirs = fs
+    .readdirSync(path.join(T, "skills"), { withFileTypes: true })
+    .filter((e) => e.isDirectory() && fs.existsSync(path.join(T, "skills", e.name, "SKILL.md")))
+    .map((e) => e.name);
+  assert.ok(dirs.length >= 30, "the skill walk found only " + dirs.length + " skills");
+  for (const d of dirs) {
+    const len = foldedDescription(d).length;
+    assert.ok(len <= 1024, d + ": description is " + len + " chars (cap 1024)");
+  }
+  for (const lane of ["orc-quick", "orc-mini"]) {
+    const len = foldedDescription(lane).length;
+    assert.ok(len <= 350, lane + ": description is " + len + " chars (lean-lane cap 350)");
+  }
+});
+
+test("the lean lanes keep every trigger phrase a user types", () => {
+  const quick = foldedDescription("orc-quick");
+  for (const phrase of [
+    "/orc-quick",
+    "quick fix X",
+    "quickly find out how Y works",
+    "fix the review comments",
+    "on PR N",
+  ])
+    assert.ok(quick.includes(phrase), "orc-quick lost the trigger phrase: " + phrase);
+  const mini = foldedDescription("orc-mini");
+  for (const phrase of ["/orc-mini", "use orc-mini to implement X"])
+    assert.ok(mini.includes(phrase), "orc-mini lost the trigger phrase: " + phrase);
+});
+
+// ── v1.9.0 — the recon pair and reproduce-first ────────────────────────────
+// Both are contracts that live in more than one file, and the contract lint
+// pins the single tokens. What it cannot see is the SHAPE: an agent whose
+// frontmatter disagrees with its own name, a gate menu that offers an agent
+// nobody ships, or a `repro` field asked for in a slice and never owed back.
+test("the recon pair ships as a pair, and each file matches its own name", () => {
+  for (const [name, model, effort] of [
+    ["orc-recon-sonnet-4-6-med", "claude-sonnet-4-6", "medium"],
+    ["orc-recon-opus-5-low", "claude-opus-5", "low"],
+  ]) {
+    const md = read(path.join("agents", name + ".md"));
+    assert.match(md, new RegExp("^name: " + name + "$", "m"), name + ": the name field");
+    assert.match(md, new RegExp("^model: " + model + "$", "m"), name + ": the model field");
+    assert.match(md, new RegExp("^effort: " + effort + "$", "m"), name + ": the effort field");
+    // Read-only, and it says so where a dispatcher reads it.
+    assert.match(md, /^tools: Read, Glob, Grep, Bash$/m, name + ": tools");
+    assert.ok(md.includes("never edits"), name + " never says it is read-only");
+    // The return fields the gate checks.
+    for (const f of ["graph_used", "actual_model", "actual_effort", "absences[]", "searched"])
+      assert.ok(md.includes(f), name + " does not owe " + f);
+    // The cap is the whole reason the return is affordable.
+    assert.match(md, /at most 12 lines/, name + " has no answer cap");
+  }
+  // The gate offers both, and the escape hatch is a MODEL, not an effort.
+  const gate = read("skills/orc-quick/references/dispatch-gate.md");
+  for (const name of ["orc-recon-sonnet-4-6-med", "orc-recon-opus-5-low"])
+    assert.ok(gate.includes(name), "dispatch-gate.md never offers " + name);
+  assert.match(gate, /other — name a model/, "the escape hatch must name a model only");
+  assert.match(gate, /no per-call effort knob/, "the reason the effort option went must be stated");
+  // And MODEL-MAPPING carries a row for each, because that is where a lane looks
+  // a name up instead of reconstructing it.
+  const map = read("agents/MODEL-MAPPING.md");
+  for (const name of ["orc-recon-sonnet-4-6-med", "orc-recon-opus-5-low"])
+    assert.ok(map.includes("| " + name + " |"), "MODEL-MAPPING.md has no row for " + name);
+});
+
+test("a defect slice asks for `repro`, and the return owes it red-then-green", () => {
+  // Every executor, because the orchestrator picks one by score and any of them
+  // can be handed a defect.
+  const executors = fs
+    .readdirSync(path.join(T, "agents"))
+    .filter((f) => /^orc-executor-.*\.md$/.test(f));
+  assert.ok(executors.length >= 8, "found only " + executors.length + " executors");
+  for (const f of executors) {
+    const md = read(path.join("agents", f));
+    assert.ok(md.includes("repro"), f + " never mentions repro");
+    assert.match(md, /REQUIRED when the slice carried `repro\.required: true`/, f + ": the conditional");
+    assert.ok(md.includes("never a fake"), f + " does not forbid a fake reproduction");
+  }
+  // The slice contract the full lane builds.
+  const core = read("skills/orc/subskills/orc-execution/core.md");
+  assert.ok(core.includes("repro"), "the slice contract never carries repro");
+  // The validator, and the two shapes that are malformed.
+  const rv = read("skills/_shared/return-validation.md");
+  assert.match(rv, /## 5d\./, "return-validation.md has no §5d");
+  assert.match(rv, /before\.exit_code` 0/, "§5d never calls a never-red reproduction malformed");
+  assert.match(rv, /after\.exit_code/, "§5d never calls a still-red fix malformed");
+  assert.ok(rv.includes("repro: none"), "§5d never allows the honest answer");
+  // The trace verb, defined where a lane reads the protocol.
+  const proto = read("skills/_shared/phases/trace.md");
+  assert.match(proto, /`REPRO red\\|green :: <cmd> exit=<n>`/, "trace.md has no REPRO row");
+  assert.ok(proto.includes("recon → recon"), "trace.md never lists the recon role family");
+});
+
+// A `read: section` pointer in `orc lane phases` names a HEADING. A renamed
+// heading is a pointer into nothing — the lane reads an empty section and
+// silently runs a phase it never loaded. The manifest and the spine are two
+// files, so only a test can hold them together.
+test("every own-phase heading the manifest names exists byte-for-byte in its spine", () => {
+  const cliSrc = fs.readFileSync(path.join(__dirname, "..", "bin", "cli.js"), "utf8");
+  const block = /const LANE_OWN_PHASES = \{([\s\S]*?)\n\};/.exec(cliSrc);
+  assert.ok(block, "LANE_OWN_PHASES is not where this test looks for it");
+  const rows = [...block[1].matchAll(/file: "([^"]+\.md)", heading: "([^"]+)"/g)];
+  assert.ok(rows.length >= 4, "found only " + rows.length + " heading rows");
+  let quick = 0;
+  for (const [, file, heading] of rows) {
+    const spine = read(path.join("skills", file));
+    assert.ok(spine.includes(heading + "\n"), file + " has no heading: " + heading);
+    if (file.startsWith("orc-quick/")) quick++;
+  }
+  assert.strictEqual(quick, 4, "orc-quick must declare exactly its four Q headings");
+});

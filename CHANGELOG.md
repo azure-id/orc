@@ -10,6 +10,172 @@ Format: `### v<version> — <title> _(<date>)_`.
 
 ---
 
+### v1.9.0 — the lean lanes learn to look before they leap _(2026-09-21)_
+
+**Still on the unscoped `orc` package?** Do this once first - your `orc upgrade`
+is the pre-v0.56.0 one and cannot install itself. Full detail in the CAUTION at
+the top of this file.
+
+- **Step 1 - release the command from the old package:** `npm uninstall -g orc`
+- **Step 2 - install the current package:** `npm i -g @azure-id/orc`
+- **Step 3 - re-apply it to your project:** `orc update`
+
+**Do not use `npm i -g -f`.** Full detail in v0.56.0 below.
+
+`/orc-quick` and `/orc-mini` are the two lanes people reach for most, and both
+were working half blind. The code graph could tell them WHERE a symbol is, and
+was forbidden from telling them WHAT BREAKS. A bug fix was never shown failing
+before it was fixed. Read-only work was dispatched by model name, so nothing in
+ORC could see it. This release fixes those three things and trims what the two
+lanes cost to load.
+
+**Nothing you have to do.** No new config key. No new prerequisite. If the code
+graph is off, every new call says so in one line and the lanes work as before.
+
+**A bug is now shown RED before it is fixed.**
+
+- A request like *"the orders page returns 500, find it and fix it"* is sorted
+  as a **defect**, and the slice carries a `repro` field. The executor writes
+  the reproduction FIRST — a failing test in your own framework, or a command —
+  runs it, captures the red run, implements, and runs it again for the green.
+- Both runs are printed, and the trace carries `REPRO red :: <cmd> exit=1` and
+  `REPRO green :: <cmd> exit=0`. `/orc-retro` counts them apart from a TDD
+  cycle, because a reproduction is not a `tdd_spec`.
+- **A reproduction that cannot be written is `repro: none` with a reason**, and
+  the entry says *not reproduced* — repeated at the commit offer, so a fix
+  nobody has seen work is never quietly shipped as one. It is never faked.
+- A `done` return whose `before` run was green, or whose `after` run is still
+  red, is a malformed return and is treated as a failure.
+
+Why: without the red run, a fix is proven against your test suite — which was
+green before and is green after. With it, the fix is proven against the bug you
+reported. It costs one extra run of one command.
+
+**The two lanes may now ask what breaks.**
+
+- `/orc-quick` gained `orc graph map`, `changes` and `coverage`; `/orc-mini`
+  gained `map`, `impact`, `changes` and `cochange`. Until now both could ask
+  only `ctx`.
+- **Affected tests run first.** After a dispatch that wrote code, `orc graph
+  changes` names the tests that reach the change — a test that arrives through
+  a URL included — and those run before the suite. A runner that takes no file
+  list says so in one line and runs the suite.
+- **Every entry carries a blast-radius line:** `3 symbols touched · callers 7 in
+  4 files · tests reach 2 · risk high: <symbol> (exported, fan-in 4, no test
+  reaches it)`. A `risk` word never appears without its reason. Nothing indexed
+  means it says that instead of a number.
+- **A request that names no file** starts with `orc graph map --focus`, so
+  *"where is the retry logic?"* no longer begins with a guess at a filename.
+
+**`/orc-mini`'s complexity read now carries numbers.**
+
+It used to be a sentence of judgment. It is now one line with counts behind it,
+and four thresholds that each carry their reason:
+
+```
+complexity: recommend /orc — 6 files · callers 27 in 9 files · risk auth (src/routes/orders.js:12) · cochange src/auth.js x3 not in plan
+```
+
+Confident callers in 4 or more files outside the plan · 8 or more confident
+callers · any cited risk class · a file that history says is always touched
+alongside one of yours. `AMBIGUOUS` callers are counted and printed as
+`maybe <n>`; they never trip a threshold alone. **It is an offer, never a
+switch**, and continuing writes the NUMBERS into the decision log so a later
+`/orc-retro` can move a threshold instead of anyone arguing about it. With the
+graph off it says `(graph off)` and decides from the cited risk classes alone —
+it never invents a number.
+
+The mini planner is dispatched WITH those facts (`graph_facts`), so it grounds
+its own file list on them. A file that history says belongs in the change, and
+that the plan does not name, becomes an open question — never a file the planner
+adds in silence.
+
+**Read-only work is a real agent now.**
+
+- `/orc-quick`'s recon is a pinned pair — `orc-recon-sonnet-4-6-med` and
+  `orc-recon-opus-5-low` — with one return contract: a short answer (12 lines at
+  most), evidence with `file:line`, what it searched, what it did NOT find and
+  the queries that prove it, and `graph_used`.
+- They are **traced**. The hook writes `SPAWN` and `RETURN` for them, they show
+  up in `orc run inflight` while they run, and `/orc-retro` can count them. Each
+  is dispatched through the same gate as everything else — the gate still asks
+  every time.
+- A blast-radius answer keeps four kinds of caller APART — a direct caller, one
+  that reaches through a URL, one through an alias, one through a base class —
+  and when a list rests on the map alone it carries the sentence that says so:
+  *A card lists every caller that NAMES the symbol. A card's silence is not
+  proof of absence.*
+- **`other — name a model` stays** as the escape hatch, and it now names a MODEL
+  only. The Agent tool has no per-call effort knob, so the old "effort" option
+  was a setting that did not exist.
+
+**The gate can now recommend, and it still never chooses.**
+
+A menu line may carry an arrow marked `suggested` WITH its reason from the dig —
+8 or more callers, a visible risk class, or more than three files changing. It
+is a recommendation printed beside the option, never a pre-selection, and every
+menu still ends with `Your choice — nothing runs until you answer.`
+
+**Both lanes cost less to load.**
+
+- The two skill descriptions load into **every** session. `/orc-quick`'s went
+  619 to 326 characters and `/orc-mini`'s 493 to 294, with every trigger phrase
+  kept word for word and a test that holds them there. Across all 33 skills that
+  is 492 characters off what every session pays before it does anything.
+- The anti-slop rules card in a `/orc-quick` slice is now a **compact** form:
+  about 1,460 tokens instead of about 3,469, on every dispatch and re-sent every
+  executor turn. Every HARD rule keeps its id, its title and its instruction and
+  loses only the worked examples, the pack file is named beside it, and the JSON
+  says `compact: true` — a reader that cannot tell a short card from a stripped
+  one cannot trust either.
+- `/orc-quick`'s spine went 379 to 325 lines and gained a budget it never had;
+  `/orc-mini`'s went 268 to 280 against a pin raised 270 to 280 with its reason
+  written into the guard. What left both spines is stated once, in the file that
+  owns it.
+
+**Smaller things.**
+
+- `orc graph update --notes-pending` replaces two calls with one in both lanes.
+- One `orc graph gain` line at the close of a code-writing request, copied word
+  for word: what the map put in (recorded) and an estimate, always a range, of
+  what it kept out.
+- `/orc-mini` passes wiki **paths**, not page bodies, to its planner and its
+  executor — the orchestrator's own context is the surface that fills up first.
+- `wiki_used: none` and `graph_used: none` are recorded rather than dropped. Two
+  runs in a row of `wiki_used: none` on fresh pages prints one line suggesting
+  you check those pages' TL;DRs.
+- `/orc-quick`'s `gh` probe is lazy — it runs on the first PR request, not at
+  every preflight.
+- Each `/orc-quick` trace packet is built from a running record with the time
+  each event actually happened, instead of one timestamp for the whole packet.
+
+**What this release does NOT promise.** It does not lower your bill. ORC
+measured that in v1.8.2 and the answer has not changed: search results are a
+fraction of one percent of what a session adds to its context. The claim here is
+correctness, traceability and fewer round trips — a bug proven fixed, a dig that
+shows up in the trace, and the affected tests run before the suite.
+
+**Limits, with the numbers.**
+
+- **The live-session evaluation in `eval/` did not run for this release.** The
+  deterministic half is covered by the suite — the shipped trace hook is driven
+  with a real recon dispatch and asserted to emit `SPAWN` and the `PHASE-EDGE`,
+  the `repro` contract is asserted across all ten executor agents, and the
+  compact rules card is asserted to keep every HARD rule id. What is NOT
+  measured is the part that needs a person driving a lane: whether a defect run
+  shows red then green three times out of three, whether recon's recall on
+  URL-reached callers beats the graph-off run, and whether a request with no
+  filename finds its files in fewer reads than the v1.8.2 baseline. Those are
+  the gates in the plan, and they are unmet, not passed.
+- **`/orc-quick` still cannot call `orc graph impact`.** It has no planner and
+  no declared-file set before the gate, so the two planning reads stay out of
+  its catalogue. Its recon agent calls them instead.
+- The complexity thresholds (4 files · 8 callers · any risk · 3 co-commits) are
+  a starting point chosen with reasons, not measured ones. They are printed in
+  the `GATE complexity` trace line precisely so a retro can move them.
+
+---
+
 ### v1.8.2 — the map that finds what a grep cannot _(2026-09-21)_
 
 **Still on the unscoped `orc` package?** Do this once first - your `orc upgrade`
