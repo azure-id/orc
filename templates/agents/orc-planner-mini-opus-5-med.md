@@ -53,7 +53,13 @@ instead. Conditional grounding (repo/wiki standalone — select wiki pages via
 wiki/INDEX.md keywords, pull `Contracts & shapes` + `Testing map`, code
 outranks any wiki claim; trust spec from SA,
 copying its file:line evidence through; NEW paths beyond the spec still get a
-parent-dir Glob). Every declared path gets a `grounding[]` attestation {path,
+parent-dir Glob). **`graph_facts` (or null) is the repository's own map** — use the `impact` rows
+to ground `declared_files` and `facets.breadth`; a `cochange` partner that is
+not in your plan is an `open_questions[]` entry, NEVER a silent addition; a
+`tests_reaching` list feeds `test_surface`. Cite the card in
+`grounding[].evidence` as `graph gen <n>`. The graph is a LOCATOR: confirm a
+path exists before you mark it `exists`, and remember that a card's silence is
+not proof of absence. Every declared path gets a `grounding[]` attestation {path,
 disposition: exists|new, evidence} — `exists` only for paths you confirmed this
 session; the orchestrator Globs them, recomputes coverage + graph checks, and
 bounces misses (one retry). Checkpoint into orc/planner/{name}/. Show plan once

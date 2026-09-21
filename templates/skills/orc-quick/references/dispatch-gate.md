@@ -11,7 +11,7 @@ what is about to be spent, before it is spent.
 | Kind | Offer | Traced by the hook | Downgrade check |
 |------|-------|--------------------|-----------------|
 | Writes code | `orc-executor-sonnet-4-6-med` · `orc-executor-opus-5-low` · **a third option when a `quick-executor` position is held** | yes | yes (a foreign return has no `actual_model` — §2b) |
-| Read only (recon) | ad-hoc **model + effort** | no | yes (self-report) |
+| Read only (recon) | `orc-recon-sonnet-4-6-med` · `orc-recon-opus-5-low` · **other — name a model** | yes · yes · no | yes |
 | Review | `orc-reviewer-opus-5-med` · or ad-hoc | yes / no | yes |
 | Build repair, round 1–2 | *reused — not asked* | yes | yes |
 | Build repair, round 3 | asked again | yes | yes |
@@ -22,7 +22,9 @@ what is about to be spent, before it is spent.
 Which executor for entry 2 — "add retry header"?
 
   1. orc-executor-sonnet-4-6-med    cheap, fits a 3-file change
-  2. orc-executor-opus-5-low        thinks harder, about 3× the cost
+  2. orc-executor-opus-5-low        thinks harder, about 3× the cost   → suggested: callers 9 in 5 files
+
+Your choice — nothing runs until you answer.
 ```
 
 Give a short reason next to each one, based on what the dig found. The user
@@ -73,34 +75,63 @@ answers.
 
 ### Read-only work (recon)
 
-Suggest a model and an effort. Let the user change either one.
+Recon is a **pinned pair**. Both agents answer ONE question with `file:line`
+evidence and return the same fields, so the user is choosing a model, nothing
+else.
 
 ```
-Entry 3 is a context dig. What should look into it?
+Entry 3 is a context dig. Which agent should look?
 
-  model    claude-sonnet-4-6      (suggested — finding things, not deciding)
-  effort   medium                 (suggested)
+  1. orc-recon-sonnet-4-6-med     finding things, not deciding      → suggested
+  2. orc-recon-opus-5-low         a wide or subtle question
+  3. other — name a model (effort follows your session; not traced by the hook)
 
-  accept / change / cancel
+Your choice — nothing runs until you answer.
 ```
 
-This is an **ad-hoc** dispatch: you name the model and effort directly instead
-of using an agent file. That is on purpose — recon is cheap and varied, and a
-new agent file for every combination is not worth it.
+**Why a pair and not an ad-hoc model.** Ad-hoc was cheap and varied, and the
+price was measured: the trace hook only sees an agent whose name starts with
+`orc-`, so an ad-hoc recon wrote no `SPAWN` or `RETURN` line, `orc run inflight`
+could not see it in flight, and `/orc-retro` could not count it. The pair fixes
+all three at once and gives recon a return contract the gate can check.
 
-**The cost of ad-hoc, and what you do about it.** The trace hook only sees
-agents whose name starts with `orc-`. So it writes no `SPAWN` or `RETURN` line
-for an ad-hoc dispatch. Two of the three signals still work, because YOU write
-them, not the hook:
+**Line 3 is the escape hatch, and it names a MODEL only.** The Agent tool takes
+a per-call model and has no per-call effort knob, so an "effort" option there
+was a setting that did not exist; effort follows your session. An `other`
+dispatch is still untraced by the hook, and two of the three signals still work
+because YOU write them:
 
-- You still emit `DISPATCH model=… effort=… adhoc=true` and `VERIFY` into the
-  trace packet.
-- The downgrade check still works, because the slice tells the agent to report
-  its own `actual_model` and `actual_effort`.
+- You still emit `DISPATCH model=… adhoc=true` and `VERIFY` into the trace packet.
+- The downgrade check still works: the slice tells the agent to report its own
+  `actual_model` and `actual_effort`.
 
-What is truly lost: `/orc-retro` cannot count these runs. That is fine —
-orc-quick has no score bands to tune. Mark the row
-`*(ad-hoc, untraced-by-hook)*` in the doc so a human can see the gap.
+What is truly lost is `/orc-retro` aggregation. Mark the row
+`*(ad-hoc, untraced-by-hook)*` in the doc so a human can see the gap. A dispatch
+of either pinned agent is a normal row with the agent's name.
+
+## The suggestion
+
+One line on a menu MAY carry `→ suggested`. It is a recommendation with its
+reason attached, the same shape every ORC question uses
+(`../../_shared/interview.md`). **It is never a pre-selection and never a
+default**, and the menu still ends with
+`Your choice — nothing runs until you answer.`
+
+The reason comes from the dig, never from a feeling. Suggest
+`orc-executor-opus-5-low` when ANY of these holds:
+
+| Suggest the stronger executor when | Because |
+|---|---|
+| confident callers of the files to change ≥ 8 (from the dig, or from `orc graph changes`) | the change is felt in more places than a cheap pass checks |
+| a risk class is visible: auth · money · migration · security · concurrency · data-integrity | the same six classes the full lane's planner floors to 70 |
+| more than 3 files will really change | the cheap executor's sweet spot is a 1–3 file change |
+| **otherwise** → `orc-executor-sonnet-4-6-med` | the boring choice for a mechanical edit |
+
+**Always print the reason beside the marker.** A marker with no reason is a
+default wearing a recommendation's clothes, and rule 1 forbids it.
+
+For recon, the suggestion is simpler: `orc-recon-sonnet-4-6-med` finds things;
+`orc-recon-opus-5-low` is for a wide or a subtle question.
 
 ## Rules
 

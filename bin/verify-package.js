@@ -434,6 +434,10 @@ const required = [
   "templates/agents/orc-reviewer-opus-5-med.md",
   "templates/agents/orc-verifier-opus-5-med.md",
   "templates/agents/orc-scout-sonnet-4-6-high.md",
+  // v1.9.0 — the /orc-quick recon pair. Both halves must ship: the gate offers
+  // them side by side, so a missing file makes half the menu a dead option.
+  "templates/agents/orc-recon-sonnet-4-6-med.md",
+  "templates/agents/orc-recon-opus-5-low.md",
   "templates/agents/orc-test-author-opus-5-med.md",
   "templates/agents/orc-pattern-codifier-sonnet-5-high.md",
   "templates/agents/orc-retro-sonnet-5-high.md",
@@ -590,8 +594,18 @@ const agentCount = walkCount(path.join(ROOT, "templates/agents"), ".md");
 // by model+effort and earns no agent, the v0.38.0/v0.45.0 precedent, and that
 // limit is stated in the skill: no `SPAWN` line, so `/orc-retro` cannot
 // aggregate it.
+// v1.9.0: +0 skills and +2 agents — the /orc-quick recon PAIR. This reverses
+// the v0.38.0/v0.45.0 precedent for ONE lane, on purpose: recon stayed ad-hoc
+// because it was cheap and varied, and the cost was measured — the trace hook
+// only sees an agent whose name starts with `orc-`, so every read-only entry
+// was invisible to `SPAWN`/`RETURN`, to `orc run inflight` and to /orc-retro,
+// and the gate offered an "effort" the Agent tool has no per-call knob for. Two
+// files, one per model, with one shared return contract. The ad-hoc escape
+// hatch survives on the menu as line 3 (model only). Both names earn an
+// explicit guard entry above and a MODEL-MAPPING row; `opus5_only` adds no
+// pair, because orc-quick is the lane that key is inert in.
 if (skillCount < 39) missing.push(`templates/skills (expected >=39 SKILL.md, found ${skillCount})`);
-if (agentCount < 48) missing.push(`templates/agents (expected >=48 .md, found ${agentCount})`);
+if (agentCount < 50) missing.push(`templates/agents (expected >=50 .md, found ${agentCount})`);
 
 // B4 — encoding/mojibake guard. The OneDrive corruption rule becomes a gate:
 // scan every shipped text file for the U+FFFD replacement char (invalid UTF-8

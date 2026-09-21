@@ -74,12 +74,16 @@ in play.
   whenever the request uses project jargon, `orc-reference-config-env` for
   config/env work.
 
-**Lane delta — orc-fast passes POINTERS, not content:** fast selects 1–3 page
-PATHS from `wiki/INDEX.md` and puts the paths in the executor slice with the
+**Lane delta — orc-fast and orc-mini pass POINTERS, not content:** each selects
+1–3 page PATHS from `wiki/INDEX.md` and puts the paths in its slices with the
 instruction to READ them first (TL;DR for orientation, `Contracts & shapes` for
-specifics). Fast never pastes wiki bodies into a slice (a Sonnet-medium
-orchestrator curating wiki prose defeats the lane). Full/mini read the content
-themselves at planning time.
+specifics). Neither pastes a wiki body into a slice, and neither reads one into
+its OWN context — for fast, a Sonnet-medium orchestrator curating wiki prose
+defeats the lane; for mini (v1.9.0), the orchestrator's context is the surface
+that fills up first, and the planner and the executor can read a page far more
+cheaply than it can carry one. The FULL lane still reads the content itself at
+planning time, because it has a reviewer and a verifier to spend that context
+on.
 
 ## Step 3 — Precedence (everywhere the wiki is consumed)
 

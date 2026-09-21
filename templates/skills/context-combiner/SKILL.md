@@ -11,10 +11,10 @@ description: >
   collapsed, conflicts, ordering) one issue at a time; proves NOTHING WAS LOST
   via a source coverage matrix and a 100% coverage gate before handoff;
   spot-checks inherited evidence and marks stale anchors; writes
-  combined-report.md + combined-requirement-spec.md (the merged spec reuses the
-  requirement-spec schema, so the planner/build pipeline is unchanged). Full
-  lane only (Opus 5 high). The orchestrator DISPATCHES this to a subagent —
-  it never combines itself, and the combiner never builds or spawns subagents.
+  combined-report.md + combined-requirement-spec.md, which reuse the
+  requirement-spec schema, so the planner/build pipeline is unchanged. Full
+  lane only. The orchestrator DISPATCHES this to a subagent — it never
+  combines itself, and the combiner never spawns subagents.
 ---
 
 # CONTEXT-COMBINER

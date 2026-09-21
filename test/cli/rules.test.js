@@ -436,3 +436,46 @@ test("the slash command exists and never tells anyone to edit the ledger by hand
   for (const who of ["petergyang/no-ai-slop", "miqdadbadjuber/anti-slop", "ehmo/slopkit"])
     assert.ok(body.includes(who), who + " must be credited where the user reads it");
 });
+
+// ── v1.9.0 — the compact card, and who decides it ──────────────────────────
+// The card rides on EVERY spawn, and /orc-quick is the lane with the smallest
+// tasks under the largest fixed card. `rules.md` names `rulesSlice()` as the
+// only lever on that cost, so the compact form is the CLI's decision and the
+// lane can neither ask for it nor refuse it. What it may never do is drop a
+// rule: a shorter card that silently stops carrying a HARD id is not a saving,
+// it is a gate that stopped firing.
+test("orc rules slice — the compact form drops examples, never a rule", () => {
+  const dir = tmpdir();
+  const q = json(at(dir, "slice", "--lane", "orc-quick", "--json"));
+  const m = json(at(dir, "slice", "--lane", "orc-mini", "--json"));
+
+  assert.equal(q.compact, true, "orc-quick gets the compact card");
+  assert.equal(m.compact, false, "every other lane gets the full card");
+  assert.ok(q.text.length < m.text.length * 0.6, "compact is not meaningfully shorter");
+  // The measured target the release states. A card over this is the cost this
+  // change exists to cut, quietly back.
+  assert.ok(q.text.length <= 6200, "the compact card is " + q.text.length + " chars");
+
+  // Every HARD id the full card carries is still THERE, with its title.
+  const hardIds = [...m.text.matchAll(/^([A-Z]{3}-\d+) HARD · (.+)$/gm)].map((x) => [x[1], x[2]]);
+  assert.ok(hardIds.length >= 20, "the full card should carry many HARD rules");
+  for (const [id, title] of hardIds) {
+    assert.ok(q.text.includes(id + " HARD · "), "the compact card dropped " + id);
+    assert.ok(q.text.includes(title.split(" — ")[0]), "the compact card dropped " + id + "'s title");
+  }
+  // And every HARD rule is now ONE line: no body paragraph rode along.
+  for (const line of q.text.split("\n"))
+    if (/ HARD · /.test(line)) assert.ok(line.length <= 200, "a compact HARD line is still long: " + line.slice(0, 80));
+
+  // The pack file is NAMED, so nothing is hidden — it is one Read away.
+  for (const pack of ["writing.md", "code.md", "delivery.md"])
+    assert.ok(q.text.includes(pack + " for the body"), "the compact card never names " + pack);
+
+  // `line` counts the rules IN FORCE. Compacting changes how a rule is written,
+  // never whether it applies, so the two lanes must report the same line.
+  assert.equal(q.line, m.line, "the compact card changed the rules-in-force line");
+  // The boundary and the three return fields survive in both.
+  for (const f of ["rules_applied[]", "rules_conflicts[]", "rules_overridden[]"])
+    assert.ok(q.text.includes(f), "the compact card dropped " + f);
+  assert.ok(q.text.includes("unsupported_request"), "the compact card dropped the boundary");
+});

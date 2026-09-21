@@ -3347,7 +3347,10 @@ const LANE_CALLS = {
     on_absent: "`none` means absent; say so in ONE user line and continue — a missing wiki is never a blocker",
     canonical: "_shared/detecting-artifacts.md",
     never: "never second-guess a positive probe with a raw `find` (the wiki lives under a dot-dir), and never compute the tier yourself — this command is its only executor",
-    lanes: ["orc", "orc-boundary", "orc-brainstorm", "orc-fast", "orc-grill", "orc-poly", "orc-quick", "orc-route", "orc-wiki"],
+    // v1.9.0: /orc-mini joins. It always consulted the wiki; it now selects PAGE
+    // PATHS for its slices instead of reading page bodies into its own context,
+    // and the tier this command computes is what that selection rests on.
+    lanes: ["orc", "orc-boundary", "orc-brainstorm", "orc-fast", "orc-grill", "orc-mini", "orc-poly", "orc-quick", "orc-route", "orc-wiki"],
   },
   "pattern-status": {
     cmd: "orc pattern status <lang>",
@@ -3423,11 +3426,11 @@ const LANE_CALLS = {
     exits: { 0: "answered \u2014 ALWAYS, when a graph exists", 1: "no graph index", 3: "off \u2014 `code_graph` is off" },
     states: null,
     cost: "free",
-    when: "ONCE, at the START of planning \u2014 before any Glob and before `impact`, which needs the files already chosen. Planning ONLY: DE-H gated the analyst and /orc-quick on M2 showing 3 or more answerable calls per run and it measured 0.39",
+    when: "ONCE, at the START of planning \u2014 before any Glob and before `impact`, which needs the files already chosen. Planning ONLY, and v1.9.0 widens what counts as planning rather than the rule: /orc-quick's Q1 when the request NAMES NO FILE, and /orc-mini's intake before the tiered round, are the same question asked by a lane with no planner. DE-H's 0.39 answerable calls per run measured the analyst asking it AFTER the files were known, which is the case this row still refuses",
     on_absent: "exit 1 or 3 \u2192 orient with Glob and Read exactly as before the map existed",
     canonical: "_shared/code-graph.md",
-    never: "never read RANK as importance to THIS change \u2014 it is a hint about where to look first, computed from the whole repository, and a low-ranked file that the change reaches is still a file you must read",
-    lanes: ["orc", "orc-diy"],
+    never: "never read RANK as importance to THIS change \u2014 it is a hint about where to look first, computed from the whole repository, and a low-ranked file that the change reaches is still a file you must read. Never call it a SECOND time in one run: the ranking does not move because you read it",
+    lanes: ["orc", "orc-diy", "orc-mini", "orc-quick"],
   },
   "graph-impact": {
     cmd: "orc graph impact <file…> --if-enabled [--depth N] [--json]",
@@ -3439,7 +3442,7 @@ const LANE_CALLS = {
     on_absent: "exit 3 or 4 → plan or review exactly as before; AMBIGUOUS callers are counted, never followed",
     canonical: "_shared/code-graph.md",
     never: "never treat an empty impact as proof nothing depends on the change — dynamic dispatch is invisible to the graph",
-    lanes: ["orc", "orc-diy"],
+    lanes: ["orc", "orc-diy", "orc-mini"],
   },
   // EW5 — the cheap signals. All three read what is already on disk (the index,
   // and git's own history), so all three cost zero model tokens.
@@ -3453,7 +3456,7 @@ const LANE_CALLS = {
     on_absent: "exit 1 or 3 → read the source, exactly as before the graph existed",
     canonical: "_shared/code-graph.md",
     never: "never read `no recorded gap` as proof of completeness — a file marked `full` was fully PARSED, not fully understood",
-    lanes: ["orc", "orc-diy"],
+    lanes: ["orc", "orc-diy", "orc-quick"],
   },
   "graph-changes": {
     cmd: "orc graph changes [--base <ref>] --if-enabled [--json]",
@@ -3465,7 +3468,7 @@ const LANE_CALLS = {
     on_absent: "exit 1 or 3 → review from the diff alone, exactly as before",
     canonical: "_shared/code-graph.md",
     never: "never report `risk` without the `why` beside it — a rating nobody can check is a rating nobody should act on",
-    lanes: ["orc", "orc-diy"],
+    lanes: ["orc", "orc-diy", "orc-mini", "orc-quick"],
   },
   "graph-cochange": {
     cmd: "orc graph cochange <file> --if-enabled [--json]",
@@ -3477,7 +3480,19 @@ const LANE_CALLS = {
     on_absent: "exit 4 is an ANSWER, not a miss — plan exactly as before",
     canonical: "_shared/code-graph.md",
     never: "never read a co-change as a DEPENDENCY — it says what people changed together, never what needs what",
-    lanes: ["orc", "orc-diy"],
+    lanes: ["orc", "orc-diy", "orc-mini"],
+  },
+  "graph-gain": {
+    cmd: "orc graph gain --run <trace name> --if-enabled [--json]",
+    what: "what the graph cost this run and what it plausibly avoided — three halves kept apart: paid (recorded) · avoided (an ESTIMATE, always a range) · measured (silent below three runs per group)",
+    exits: { 0: "a line", 1: "no ledger, or no rows yet", 3: "off" },
+    states: null,
+    cost: "free",
+    when: "ONCE, at the close of a code-writing request (quick) or after a green smoke gate (mini)",
+    on_absent: "exit 1 is an ANSWER — there is nothing to report yet, so report nothing",
+    canonical: "_shared/code-graph.md",
+    never: "never restate the line as a saving, never drop the word estimate or the range, and never let this call block or fail a run",
+    lanes: ["orc-mini", "orc-quick"],
   },
   "graph-notes-pending": {
     cmd: "orc graph notes pending --files <a,b> [--at wave|end] --if-enabled [--json]",
@@ -3489,7 +3504,11 @@ const LANE_CALLS = {
     on_absent: "exit 5 is an ANSWER — the symbols wait for a later batch and nothing is lost",
     canonical: "_shared/code-graph.md",
     never: "never paste notes into your own context — the noter pipes them to `orc graph notes apply -` and returns one line",
-    lanes: ["orc", "orc-diy", "orc-fast", "orc-mini", "orc-quick"],
+    // v1.9.0: /orc-quick and /orc-mini left this row. Neither lost the notes —
+    // both stopped making a SECOND call for them: each now runs
+    // `update --notes-pending`, which answers the update and the pending batch
+    // in one, and still dispatches the noter when the answer has rows.
+    lanes: ["orc", "orc-diy", "orc-fast"],
   },
   "gotcha-list": {
     cmd: "orc gotcha list [--archived] [--json]",
@@ -4415,10 +4434,14 @@ const LANE_OWN_PHASES = {
     { ord: 6, id: "phase-s6", file: "orc-pr-setup/SKILL.md", heading: "## Phase S6 — Emit the plan, then stop", read: "section", trace_verbs: [] },
   ],
   "orc-quick": [
-    { ord: 0, id: "q0", file: "orc-quick/SKILL.md", heading: "## Q0 — Preflight (ONE time per session, silent, nothing can stop the run)", read: "section", trace_verbs: ["GATE"] },
-    { ord: 1, id: "q1", file: "orc-quick/SKILL.md", heading: "## Q1 — LOOK (silent — no questions here)", read: "section", trace_verbs: ["GATE", "WIKI-CONSULT"] },
+    // v1.9.0 — the verbs the lane already owed, plus the graph-first look and
+    // the defect reproduction. The HEADINGS are unchanged: a `read: section`
+    // pointer names a heading byte-for-byte, and a payload test asserts each
+    // one still exists in the spine.
+    { ord: 0, id: "q0", file: "orc-quick/SKILL.md", heading: "## Q0 — Preflight (ONE time per session, silent, nothing can stop the run)", read: "section", trace_verbs: ["GATE", "GRAPH-CONSULT"] },
+    { ord: 1, id: "q1", file: "orc-quick/SKILL.md", heading: "## Q1 — LOOK (silent — no questions here)", read: "section", trace_verbs: ["GATE", "WIKI-CONSULT", "GRAPH-CONSULT", "GRAPH-MAP"] },
     { ord: 2, id: "q2", file: "orc-quick/SKILL.md", heading: "## Q2 — ASK (ONE user turn: questions + the gate together)", read: "section", trace_verbs: [] },
-    { ord: 3, id: "q3", file: "orc-quick/SKILL.md", heading: "## Q3 — DO (dispatch → build/test → write the doc → offer)", read: "section", trace_verbs: ["FINISH", "OUTCOME", "VERIFY"] },
+    { ord: 3, id: "q3", file: "orc-quick/SKILL.md", heading: "## Q3 — DO (dispatch → build/test → write the doc → offer)", read: "section", trace_verbs: ["DISPATCH", "VERIFY", "REPRO", "GRAPH-CHANGES", "GRAPH-UPDATE", "GRAPH-NOTES", "GRAPH-GAIN", "OUTCOME", "FINISH"] },
   ],
   "orc-wiki": [
     { ord: 0, id: "phase-0", file: "orc-wiki/references/phases/phase-0.md", layers: ["full"], trace_verbs: [] },
@@ -4514,6 +4537,9 @@ const PHASE_KIND = {
   combine: "look",
   // waiting on the user
   intake: "ask",
+  // v1.9.0 — /orc-quick's read-only half. It LOOKS: one question, answered
+  // with evidence, and nothing written.
+  recon: "look",
   // deciding what to do and in what order
   planning: "plan",
   "plan-handoff": "plan",
@@ -4593,7 +4619,7 @@ function railKind(row) {
 // This is a MIRROR of that hook's `roleFamily()`, and it is the one new drift
 // surface this feature adds — a golden test compares the two by source text,
 // the way the `OPUS5_BANDS` alias is asserted.
-const TRACE_FAMILIES = ["combine", "analysis", "planning", "execution", "review", "verify", "testgen", "ultra-gate"];
+const TRACE_FAMILIES = ["recon", "combine", "analysis", "planning", "execution", "review", "verify", "testgen", "ultra-gate"];
 
 // The whole object, deterministic from the registries above. `--json is not a
 // summary`: this is what the file holds and what `orc lane rails` prints.
@@ -44482,6 +44508,29 @@ function rulesLine(packs, blocks, overrides) {
 // body and PURPOSE/LOCK rules carry one line each plus the file to open when one
 // applies. That is the read-ladder discipline this repo already runs on, applied
 // to a standing card.
+// v1.9.0 - the COMPACT form, and the CLI decides it, never the lane.
+// `_shared/phases/rules.md` names `rulesSlice()` as the only lever on the
+// card's cost, so a lane that wanted a smaller card had no honest way to ask
+// for one. /orc-quick is the lane with the SMALLEST tasks under the LARGEST
+// fixed card: the full card measured 13,874 chars, re-sent on every executor
+// turn, for a task that often edits one file. Compact keeps every HARD rule's
+// ID and its first line - the instruction - and drops the worked examples,
+// which are what a rule's body is mostly made of. Nothing is hidden: the pack
+// file is named beside the rules, exactly as the light tiers already are.
+const RULES_COMPACT_LANES = new Set(["orc-quick"]);
+
+// One line out of a rule body: the first paragraph, whitespace collapsed, cut
+// at a word boundary. A rule whose instruction does not survive that is a rule
+// whose body is an example, and the pack file is one Read away.
+function rulesOneLine(body, max) {
+  const first = String(body || "").split(/\n[ \t]*\n/)[0] || "";
+  const flat = first.replace(/\s+/g, " ").trim();
+  if (flat.length <= max) return flat;
+  const cut = flat.slice(0, max);
+  const at = cut.lastIndexOf(" ");
+  return (at > max * 0.6 ? cut.slice(0, at) : cut).replace(/[ ,;:.]+$/, "") + " …";
+}
+
 function rulesSlice(claudeDir, lane, extraPacks) {
   const packs = rulesReadPacks(claudeDir);
   const led = userRulesRead(claudeDir);
@@ -44489,6 +44538,7 @@ function rulesSlice(claudeDir, lane, extraPacks) {
   const overridden = new Set(overrides.filter((o) => o.known).map((o) => o.id));
   const want = new Set([...(RULE_LANE_PACKS[lane] || []), ...(extraPacks || [])]);
   const chosen = packs.packs.filter((p) => want.has(p.id));
+  const compact = RULES_COMPACT_LANES.has(lane);
 
   const L = [];
   if (!led.empty) {
@@ -44501,19 +44551,26 @@ function rulesSlice(claudeDir, lane, extraPacks) {
   if (chosen.length) {
     L.push(
       `ORC RULES — the anti-slop baseline. Shipped with ORC, read-only. ${packs.count} rules, ${plural(chosen.length, "pack")} in this slice.`,
-      "Source: petergyang/no-ai-slop · miqdadbadjuber/anti-slop · ehmo/slopkit · BioInfo/slopless · Karpathy · Matty Cartwright. Full credits: `orc rules credits`.",
+      // The credits line is a CREDIT, not an instruction, and `orc rules
+      // credits` prints it in full. It is the one line a compact card can drop
+      // without dropping a rule.
+      ...(compact ? [] : ["Source: petergyang/no-ai-slop · miqdadbadjuber/anti-slop · ehmo/slopkit · BioInfo/slopless · Karpathy · Matty Cartwright. Full credits: `orc rules credits`."]),
       "HARD = absolute · PURPOSE = allowed with a written one-line reason · LOCK = consistency, reported never blocking.",
+      ...(compact ? ["Each line below is a rule ID and its instruction. Credits: `orc rules credits`."] : []),
       ""
     );
     for (const p of chosen) {
       L.push(`[${p.title}]`);
       for (const r of p.rules) {
         if (overridden.has(r.id)) continue; // the user replaced it
-        if (r.tier === "HARD") L.push(`${r.id} HARD · ${r.title}`, r.body, "");
+        if (r.tier === "HARD" && compact) L.push(`${r.id} HARD · ${r.title} — ${rulesOneLine(r.body, 62)}`);
+        else if (r.tier === "HARD") L.push(`${r.id} HARD · ${r.title}`, r.body, "");
         else L.push(`${r.id} ${r.tier} · ${r.title}`);
       }
       const light = p.rules.filter((r) => r.tier !== "HARD" && !overridden.has(r.id)).length;
-      if (light) L.push("", `${plural(light, "rule")} above are one-liners — open ${p.file} when one of them applies.`, "");
+      if (compact)
+        L.push("", `Every rule above is one line — open ${p.file} for the body and the worked examples of any that applies.`, "");
+      else if (light) L.push("", `${plural(light, "rule")} above are one-liners — open ${p.file} when one of them applies.`, "");
     }
   }
   if (overrides.length) {
@@ -44531,6 +44588,9 @@ function rulesSlice(claudeDir, lane, extraPacks) {
   return {
     lane,
     packs: chosen.map((p) => p.id),
+    // `compact` is REPORTED, never asked for. A reader that cannot tell a short
+    // card from a stripped one cannot trust either.
+    compact,
     text: L.join("\n").replace(/\n{3,}/g, "\n\n").replace(/\s+$/, ""),
     overrides,
     line: rulesLine(packs, led.blocks, overrides),

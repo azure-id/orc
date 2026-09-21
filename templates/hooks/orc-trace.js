@@ -210,6 +210,11 @@ function roleFamily(agent) {
   // not analysis — without this the combine lane has no edge at all and is
   // structurally invisible to /orc-retro.
   if (/context-combiner/.test(a)) return "combine";
+  // recon BEFORE analysis: `orc-recon-*` answers ONE question with evidence
+  // for a person, where an analyst produces a requirement spec for a planner.
+  // Counting them together would tell /orc-retro that /orc-quick runs an
+  // analysis phase it does not have (v1.9.0).
+  if (/recon/.test(a)) return "recon";
   if (/analyst|analyze|scout/.test(a)) return "analysis";
   if (/planner/.test(a)) return "planning";
   if (/executor/.test(a)) return "execution";

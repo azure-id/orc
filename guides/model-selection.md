@@ -98,6 +98,14 @@ A position with no row stays on the agent above, and it **keeps its row** in
 `orc extra role` so "I left the checker on Claude on purpose" and "there is no
 checker" never look the same.
 
+**`/orc-quick`'s recon pair is NOT a position, and that is on purpose (v1.9.0).**
+`orc-recon-sonnet-4-6-med` and `orc-recon-opus-5-low` read the repository and
+hand back an answer the dispatch gate is expected to trust. Sending that job to
+a third party is a different question from sending a code edit there: a wrong
+edit fails a build, and a wrong answer is believed. So recon and review stay on
+Claude, `quick-executor` remains the lane's only position, and the menu's third
+line is an escape hatch that names a MODEL, never a routed slot.
+
 `/orc-mini` is the one fixed-executor lane that keeps a band, and that is
 deliberate: mini scores its tasks and then pins one executor over them, so
 reading that agent's band is a question about numbers the run really produced.

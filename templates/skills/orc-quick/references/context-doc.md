@@ -75,10 +75,18 @@ Use as many of these as apply. Leave out what does not fit.
 **dispatches**
 | # | kind | agent / model | expect | actual | result |
 |---|---|---|---|---|---|
-| 1 | recon | claude-sonnet-4-6 / medium *(ad-hoc, untraced-by-hook)* | sonnet-4-6/medium | sonnet-4-6/medium ✅ | what it found |
+| 1 | recon | `orc-recon-sonnet-4-6-med` | sonnet-4-6/medium | sonnet-4-6/medium ✅ | what it found |
 | 2 | executor | `orc-executor-sonnet-4-6-med` | sonnet-4-6/medium | sonnet-4-6/medium ✅ | 3 files |
 
+Only an **other** dispatch keeps the `*(ad-hoc, untraced-by-hook)*` mark. A
+dispatch of either pinned recon agent is a normal row with the agent's name.
+
 **files changed** path · path · path
+
+**repro** red → green · `npm test -- tests/orders.search.test.js` (before: exit 1 · after: exit 0)
+**blast radius** 3 symbols · callers 7 in 4 files · tests reach 2 · risk high: searchByItemPrefix (exported, fan-in 4, no test reaches it)
+**tests** reached 12 passed · suite 41 passed
+**graph** gen 42 · cards 2 · <the `orc graph gain` line, word for word>
 
 **how it was resolved** a short, plain explanation of the fix and WHY this way.
 Say what you did not do, and why. This is the most useful part later.
@@ -101,6 +109,29 @@ For PR work, also add:
 
 **github writes** NONE — no reply, no resolve, no review.
 ```
+
+These four lines are optional and go in that order, after `**files changed**`.
+Leave out the ones that do not apply:
+
+- **`repro`** — only on a defect entry. `repro: none` writes
+  `**repro** not reproduced — <the reason>` instead. Never leave it out to keep
+  the entry tidy: an unreproduced fix is the thing the reader most needs to know.
+- **`blast radius`** — a `risk` word NEVER appears without its `why`. Nothing in
+  the graph → `none indexed (<n> files not in the graph)`.
+- **`graph`** — the gain line is an estimate with a range. Copy it; never turn
+  it into a saving.
+
+## A read-only entry
+
+A dig has no files, no build and no tests. It still gets a full entry:
+
+- **`how it was resolved`** holds the recon `answer`.
+- **`unmet`** holds the recon `unresolved[]`.
+- A blast-radius dig lists the four caller classes apart — `direct`, `route`
+  (reached through a URL), `via_alias`, `inherited` — and, when any list rests
+  on the graph alone, the sentence the agent returned, word for word:
+  *A card lists every caller that NAMES the symbol. A card's silence is not
+  proof of absence.*
 
 ## Writing style for entries
 
