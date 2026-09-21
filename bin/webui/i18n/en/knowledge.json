@@ -163,5 +163,20 @@
   "knowledge.wiki.unregistered": "The wiki is {state} — nothing can read it until it is registered.",
   "knowledge.wiki.why": "why: {reason}",
   "knowledge.graph.generation": "Generation",
-  "knowledge.graph.selfheal": "It keeps itself current: a read repairs the files it is about to answer for, and the installed hook updates the map when a worker finishes. Nothing runs on a timer."
+  "knowledge.graph.selfheal": "It keeps itself current: a read repairs the files it is about to answer for, and the installed hook updates the map when a worker finishes. Nothing runs on a timer.",
+  "knowledge.gain.none": "No graph reads recorded yet. The first `orc graph ctx` starts the ledger.",
+  "knowledge.gain.strip": "paid {paid} · avoided ~{low}–{high} (estimate) · {calls} calls",
+  "knowledge.gain.paid": "Tokens put in (cards · source · hints)",
+  "knowledge.gain.avoided": "Retrieval probably kept out (estimate)",
+  "knowledge.gain.net": "Net tokens · net tool calls",
+  "knowledge.gain.byCommand": "By command",
+  "knowledge.gain.hints": "Hints (injected · read notes · updates)",
+  "knowledge.gain.measure": "Compare my ON and OFF runs",
+  "knowledge.gain.estimate": "`avoided` is an estimate of the retrieval a read ladder would have paid for, never a bill. `paid` is exact.",
+  "knowledge.gain.measuredHead": "{on} runs with the graph on vs {off} with it off",
+  "knowledge.gain.measuredFew": "Too few runs to compare. Three runs in each group are needed; the rows are recorded and the comparison waits.",
+  "knowledge.gain.execCalls": "worker retrieval",
+  "knowledge.gain.execTokens": "worker tool results",
+  "knowledge.gain.sessionTokens": "session tool results",
+  "knowledge.gain.noise": "a change smaller than the spread beside it is noise, not a result"
 }

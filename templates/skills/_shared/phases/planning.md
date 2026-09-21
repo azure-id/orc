@@ -30,7 +30,14 @@ task (advisory) and print + emit `CROSSLINK <state> :: boundaries=<n> peers=<nam
 only pre-built needs/cache, never peer source live). **Gotchas (repair memory,
 config `gotchas`):** probe ONCE with `orc gotcha status` (exit 0 = entries exist,
 1 = none — never a `find`); canonical `_shared/gotchas.md`.
-**Code graph (`../code-graph.md` §7):** with the graph on, run
+**Code graph (`../code-graph.md` §3b and §7):** with the graph on, run
+`orc graph map --focus <every file or symbol the request NAMES> --if-enabled --json`
+**FIRST, once** — before any Glob and before `impact`. It ranks the repository
+around the request and names the files worth reading, which is the question
+`impact` cannot answer because `impact` needs the files already chosen. Print its
+`line` and emit `GRAPH-MAP`. Rank is a HINT about where to look first, never
+proof a file matters — and never a reason to skip reading a range you will edit.
+Exit 1 or 3 → orient exactly as before. Then run
 `orc graph impact <candidate declared_files> --if-enabled --json` and hand its
 callers to the planner — they sharpen `declared_files` and the `fan` and risk
 facets. Also run `orc graph cochange <each candidate file> --if-enabled --json`:

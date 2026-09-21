@@ -10,6 +10,226 @@ Format: `### v<version> — <title> _(<date>)_`.
 
 ---
 
+### v1.8.2 — the map that finds what a grep cannot _(2026-09-21)_
+
+**Still on the unscoped `orc` package?** Do this once first - your `orc upgrade`
+is the pre-v0.56.0 one and cannot install itself. Full detail in the CAUTION at
+the top of this file.
+
+- **Step 1 - release the command from the old package:** `npm uninstall -g orc`
+- **Step 2 - install the current package:** `npm i -g @azure-id/orc`
+- **Step 3 - re-apply it to your project:** `orc update`
+
+**Do not use `npm i -g -f`.** Full detail in v0.56.0 below.
+
+v1.8.0 shipped the code graph with a known hole. A card listed every caller that
+NAMES a symbol, so a test that reaches a route by its URL was not a caller, and
+the card was silent about it. On one real question the graph declared eleven
+route-level tests absent. This release closes that hole and four more like it,
+adds five languages, and makes the map answer faster than it could before.
+
+**Nothing you have to do.** The index upgrades itself. Engine `graph@5` re-reads
+every record the first time you run `orc graph update` after this release; a
+Django-sized repository takes about 14 s once, and every update after that is
+small again. The graph is still **off by default**: `orc config set code_graph on`.
+
+**A URL is now an edge.**
+
+- `request(app).get("/orders/search")`, `client.post("/api/orders/")` and
+  `httptest.NewRequest("GET", "/p")` reach the route they resolve to. The card
+  prints `← reached via GET /orders/search tests/orders.test.js:27 ROUTE`,
+  `orc graph impact` follows it, `orc graph changes` counts it, and the `tests`
+  line names the test file.
+- A decorated handler keeps its own symbol and gains a `<METHOD> <path>` alias,
+  with the class or router prefix folded in — `@Controller("orders")` plus
+  `@Get(":id")` is `GET /orders/:id`. A mount from another file (`app.use`,
+  `include_router`, `register_blueprint`, Django `include`) is applied when the
+  card is read. `ctx "GET /orders/:id"` and `ctx OrdersController.find` both
+  answer.
+- A URL whose prefix is built at run time (`BASE + "/p"`) matches by its tail.
+  Two routes that match one URL are `AMBIGUOUS`, with both listed. **The graph
+  still never guesses.** `ROUTE` is a new state word beside `LOCAL`, `IMPORT`
+  and `UNIQUE`.
+
+**Four more ways the map used to lose a caller.**
+
+- **An instance alias.** `const svc = new OrderService(); svc.run()` now links to
+  `OrderService.run`. An alias head is a class name, so `router.get` with
+  `router = Router()` is `UNRESOLVED (external)` — not a list of every `get` in
+  the repository.
+- **An inherited member.** `this.ok()` in a subclass finds `Base.ok`, and
+  `super.m()` skips the class's own `m`. The edge carries the state the base
+  class resolved with, plus `inherited`.
+- **A barrel re-export.** An import searches the file it names first, then the
+  files that file re-exports, three deep. A barrel that defines the name itself
+  wins over one that passes it on.
+- **A guess we removed.** A bare call with no receiver (`get("/p")`) no longer
+  resolves to the only method in the repository with that name. In v1.8.1 every
+  supertest `.get(...)` was recorded as a caller of some class method. That was
+  an invented edge, and it is gone.
+
+Measured on two real repositories, v1.8.1 to v1.8.2:
+
+| | django/django | nestjs/nest |
+|---|---|---|
+| confident edges | 65,379 → **72,955** | 7,288 → **9,426** |
+| `UNIQUE` guesses | 23,866 → **6,442** | 1,957 → **275** |
+| `AMBIGUOUS` hints | — | 81,485 → **33,906** |
+| routes found | **656** | **344** |
+| first build | 12.5 → 13.7 s | 3.1 → 4.0 s |
+
+**Five more languages.** Ruby, Rust, Kotlin, Vue and Svelte single file
+components (the `<script>` block, at the file's own line numbers) and C / C++.
+The measurement that matters is how much of a real repository the parser could
+not finish: rubocop **2.4%**, tokio **0.3%**, ktor **1.4%**, primevue **0.5%**,
+sveltejs/svelte **0%**, abseil-cpp **1.7%**, redis **4.5%**.
+
+**Borrowed parsers, where your project already has the tool.** Python already
+used the `ast` of a Python on PATH. TypeScript and JavaScript now use your own
+`node_modules/typescript`, and Go uses the `go` on PATH. ORC still has zero
+dependencies, the record names the rung that read it (`extractor:
+typescript@5.9.3`), and a failure falls back file by file. `ORC_GRAPH_NO_BORROW=1`
+forces the heuristic everywhere.
+
+> **This one missed its gate and ships anyway, on the maintainer's call.** The
+> gate was a 10-point rise in the share of calls resolved with confidence. It
+> measured **+1.0** on nestjs/nest, **−0.3** on vuejs/core and **−0.3** on hugo.
+> The gate measured the wrong thing: that share is held down by calls into
+> packages outside the repository, which no parser can resolve. What did move is
+> INVENTED edges — `UNIQUE` guesses fell 36–40% and `IMPORT` facts rose. The
+> borrow is more correct, not more complete. It costs +0.24 s (TypeScript) and
+> +0.70 s (Go) on a one-file update. There is no new config key, on purpose.
+
+**Fewer round trips.**
+
+- **`orc graph ctx … --source [N]`** appends the target's own lines to the card
+  (80 by default, 200 at most), charged to the same budget. The card and the
+  range arrive in one call.
+- **`orc graph ctx --for-slice <files…>`** prints only the OUTSIDE view of each
+  declared file: who calls into it and from which line, who imports it without
+  calling, which routes it answers, which tests cover it. No symbol table. An
+  executor reads its own files in full anyway, so a file card repeated what it
+  was about to read — on every later turn of that agent. The outside view is
+  30–51% smaller than the card it replaces.
+- **`orc graph update --notes-pending`** answers the update and the notes batch
+  in one process and one lock.
+- **A card prints one-letter states with a legend only when that is smaller**
+  than the words. A three-row card keeps the words. Always-short made small
+  cards bigger, which is the opposite of the point.
+- **A card that hid nothing prints no footer.**
+
+**The hook learned two more moments.** A shell search (`grep`, `rg`, `git grep`,
+`findstr`, `Select-String`, `ag`, `ack`) is the same question as a Grep, and now
+gets the same answer. And with `orc config set code_graph_hooks on,read`, a
+whole-file read of a file with many symbols gets one line naming its six most
+reached symbols and their ranges, so the NEXT read can ask for a range. **The
+read always runs.** The hook never blocks a tool call and never rewrites one.
+
+**Doc notes — the author's own sentence, for free.** The parser now takes the
+first sentence of a docstring, a JSDoc block, a `///` run or a `#` block and
+prints it on the card as `doc <sentence> (parser · current)`. It costs no model
+tokens, and it is re-extracted with the body, so it cannot go stale on its own.
+A comment can still lie, so a CURRENT model note outranks it: the order is
+current note → doc → stale note.
+
+> **We expected this to cover most of a repository. It does not.** The plan said
+> more than 60% of symbols would carry a doc. Measured: **19.9%** on django
+> (30.6% of non-test source), **7.1%** on nest (9.0%). The extractor is right —
+> the comments are simply not there. The number in this file is the measured
+> one.
+
+**`orc graph gain` — what the map put in, and an estimate of what it kept out.**
+Every read appends one line to a local ledger. The command adds them up and
+keeps three kinds of knowing apart, because merging them produces a number
+nobody can check:
+
+- **paid** — the tokens the graph put into a context. Recorded, exact.
+- **avoided** — what searching would have cost for the same question. **An
+  estimate**, always a range, never one number.
+- **measured** — `--measured` reads your own runs with the graph on against your
+  runs with it off, and prints nothing until there are three of each.
+
+It never prints a percent of a session, it never blocks a read, and `orc stats`
+reports `graph: null` when there is no ledger — never a confident zero.
+
+**`orc graph map` — the question you ask before you know a file name.** It ranks
+every indexed file by how much of the repository's own call and import traffic
+flows through it, and prints the top files with their most important symbols and
+line ranges, inside a token budget. `--focus src/orders/service.js,createOrder`
+re-ranks the whole repository around those files or names; it never filters it.
+A test file ranks lower (by ten), a file whose every symbol is private ranks
+lower (by half), and an edge is weighted by the square root of its call count, so
+one import used in a loop does not outrank ten separate callers. **Rank is a hint
+about where to look first, never proof that a file matters to this change** — the
+card says so itself.
+
+> **`map` is wired to PLANNING only, and that was a measurement, not a
+> preference.** The gate was three answerable planning calls per run. Replaying
+> real transcripts measured **0.39** (16 sweeps over 41 main windows), so the
+> plan's own fallback applied and the analyst and `/orc-quick` wiring was
+> removed again. The honest caveat: those transcripts drive lanes over a
+> fourteen-file toy app, where a planner has nothing to sweep. It will be
+> re-measured on a real repository.
+
+**A one-symbol card is about twice as fast.** Working out who calls a symbol used
+to mean parsing the whole index. The resolution cache is now also written as
+shards, one file per name prefix, and a one-symbol `ctx` reads only the shards it
+needs. On django: **881 → 480 ms** for the whole command, **361 → 50 ms** for the
+work inside the process. The floor is Node's own start-up, about 300 ms on the
+test machine.
+
+The shards answer exactly what the full index answers, **or they decline**. 577
+cards on django and nest were compared with and without them: **0 different.**
+The fast path steps aside for a path, a URL, a `file:line`, a name that is not
+exactly one symbol, `--for-slice`, a file card and any multi-target call, and
+every answer says which path produced it. The cost is disk: django's shards are
+**30 MB**, taking `.claude/orc/graph` from about 87 MB to about 117 MB. The
+update pays nothing measurable.
+
+**Also in this release**
+
+- **`code_graph_ignore`** — extra paths the graph never indexes, as a
+  comma-separated list of globs (`vendor/**,*.gen.ts`). The engine already
+  skipped `node_modules`, root `dist/` and `build/`, caches, bundles, `.d.ts`
+  and generated files; this adds to that list. A skipped file is reported
+  `excluded` by `orc graph coverage`, never in silence.
+- `code_graph_hooks` gains the value `on,read` (see the hook above). `on` and
+  `off` behave as before.
+- `orc graph gain` also appears on the `orc ui` Knowledge panel and in one ship
+  line, marked an estimate in both places.
+
+**Limits we know about**
+
+- **Fixed since v1.8.1, with its new limit stated:** a caller that reaches a
+  symbol through a URL is now an edge. A caller that reaches it through a job
+  runner, a string dispatch, reflection, or a URL assembled at run time from
+  parts the parser cannot see is still not an edge and never will be. The file
+  still reads as fully parsed, and the card is still silent. **A card's silence
+  is not proof of absence.**
+- TypeScript and Go are exact only where the project has the tool. Everything
+  else is a heuristic, which is why a card can say `coverage partial`.
+- Java, PHP, Swift, Scala and Dart have no borrowed parser. Ruby's own parser
+  (`Prism`) was gated on the heuristic missing more than 5% of a real
+  repository. It missed 2.4%, so it was not built.
+- The status line component compares HEAD with the index. Only
+  `orc graph status` sees uncommitted edits.
+- The graph hook's delivery on `SubagentStart` is confirmed in a live session.
+  The other delivery events are still unconfirmed, and the hook stays silent and
+  free if they never are.
+- **It is still NOT a token optimisation, and that is still measured, not
+  guessed.** `Grep` and `Glob` results are 0.06% of what a session adds to its
+  context, and a perfect locator would save 0.1% of a run. Turn the map on for
+  the cards: what calls what, what a change would touch, where the parser could
+  not finish. `orc graph gain` reports an estimate and says the word "estimate"
+  every time.
+
+**How to check it.** `orc config set code_graph on`, then `orc graph update`,
+then `orc graph map` to see the repository ranked, and
+`orc graph ctx <a route or a function>` to see a card. Run `orc update` in your
+project to get the lane changes.
+
+---
+
 ### v1.8.1 — the guard that only failed on Windows _(2026-09-16)_
 
 **Still on the unscoped `orc` package?** Do this once first - your `orc upgrade`

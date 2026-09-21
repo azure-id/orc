@@ -185,6 +185,20 @@ const required = [
   "bin/graph-resolve.js",
   "bin/graph-signals.js",
   "bin/graph-notes.js",
+
+  // v1.8.2 W4b — the gain meter. Dropping it breaks `orc graph gain` AND the
+  // one ledger line every read appends, so the map would go on working and
+  // quietly stop recording what it cost.
+  "bin/graph-gain.js",
+  // v1.8.2 W7 — the ranked map (D4). Dropping it breaks `orc graph map` AND the
+  // `map.json` every update writes, so planning would silently go back to the
+  // Glob-and-read sweep the map exists to replace.
+  "bin/graph-map.js",
+  // v1.8.2 W8 — the sharded read path (S1). Dropping it does not break a card:
+  // every read falls back to the full model. It breaks the SPEED, silently, on
+  // the one call every lane makes — which is the worst kind of missing file.
+  "bin/graph-shard.js",
+
   // The two DATED data files (v0.50.0). Both ship inside the package and both
   // are load-bearing on absence rather than on content: without the catalog
   // `orc extra providers` is a packaging bug it reports as one, and without the

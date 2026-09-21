@@ -313,4 +313,44 @@ const graph = {
   trace: "GRAPH-CONSULT drifted :: files=1920 symbols=5896 gen=42",
 };
 
-module.exports = { wiki, wikiDocs, wikiShow, wikiCoverage, wikiCoverageFull, wikiUnregistered, wikiPlan, wikiDebt, wikiUsage, patterns, patternShow, gotchas, gotchasArchived, gotchaPrunePreview, wikiImpact, graph };
+// v1.8.2 W4b — `orc graph gain --json`. The fixture carries the ESTIMATE word
+// and a RANGE, because those are the two things the card must never lose.
+const graphGain = {
+  ok: true,
+  state: "rows",
+  scope: "project",
+  run: null,
+  since: null,
+  calls_recorded: 41,
+  runs: 6,
+  generation_range: [38, 42],
+  paid: { card: 4120, source: 610, hints: 182, total: 4912 },
+  avoided: { low: 18900, high: 71400 },
+  calls: { low: 58, high: 113 },
+  net: { low: 13988, high: 66488 },
+  by_command: { ctx: 29, impact: 6, changes: 4, "for-slice": 2 },
+  hints: { injected: 11, read_notes: 3, updates: 9 },
+  estimate: true,
+  carry_note:
+    "a card is re-sent on every later turn of the agent that received it — and so is the read it replaced. Both halves carry the same multiplier, so these are FIRST-ENTRY tokens on both sides (eval/graph-replay.js).",
+};
+
+// The A/B, with enough runs in both groups to print a comparison.
+const graphGainMeasured = {
+  ok: true,
+  state: "compared",
+  min_runs: 3,
+  corpus: { dir: "~/.claude/projects/-home-dev-shop", ok: true },
+  runs: { on: 6, off: 4 },
+  rows: { on: [], off: [] },
+  compare: {
+    exec_retrieval_calls: { on: { n: 6, median: 19, min: 12, max: 27 }, off: { n: 4, median: 31, min: 24, max: 39 }, delta_pct: -39, off_spread_pct: 48 },
+    exec_bash_searches: { on: { n: 6, median: 2, min: 0, max: 5 }, off: { n: 4, median: 3, min: 1, max: 6 }, delta_pct: -33, off_spread_pct: 167 },
+    exec_result_tokens: { on: { n: 6, median: 27900, min: 18200, max: 41800 }, off: { n: 4, median: 41200, min: 29100, max: 60300 }, delta_pct: -32, off_spread_pct: 76 },
+    session_result_tokens: { on: { n: 6, median: 188000, min: 141000, max: 244000 }, off: { n: 4, median: 187000, min: 132000, max: 251000 }, delta_pct: 1, off_spread_pct: 64 },
+  },
+  note:
+    "executor windows and session totals are kept apart: the main session is 74–80% of a run and the graph never touches it. Every delta is printed beside the OFF group's own spread — a delta smaller than that spread is noise, not a result.",
+};
+
+module.exports = { wiki, wikiDocs, wikiShow, wikiCoverage, wikiCoverageFull, wikiUnregistered, wikiPlan, wikiDebt, wikiUsage, patterns, patternShow, gotchas, gotchasArchived, gotchaPrunePreview, wikiImpact, graph, graphGain, graphGainMeasured };

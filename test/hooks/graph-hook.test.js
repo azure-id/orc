@@ -211,3 +211,107 @@ test("graph hook — a symbol name out of the repository is sanitized before it 
   // eslint-disable-next-line no-control-regex
   assert.ok(!/[ -]/.test(ctx), "no control character survives");
 });
+
+// ── v1.8.2 W3 (D3) — two more hints, and no double payment ─────────────────
+
+const bash = (agent, command) => ({ hook_event_name: "PreToolUse", agent_id: agent, tool_name: "Bash", tool_input: { command } });
+
+test("graph hook — a SHELL search for a known name gets the same anchors as a Grep (DE-C, on by default)", () => {
+  const a = armed();
+  // Every one of the seven search programs, at the head of the command, with
+  // the word taken from the FIRST quoted argument.
+  const heads = [
+    `grep -rn "alphaOne" src/`,
+    `rg 'alphaOne' --glob '*.js'`,
+    `git grep -n "alphaOne"`,
+    `findstr /s "alphaOne" src\*.js`,
+    `Select-String -Pattern "alphaOne" -Path src`,
+    `ag "alphaOne"`,
+    `ack "alphaOne"`,
+  ];
+  for (const cmd of heads) {
+    const a2 = armed();
+    const ctx = ctxOf(say(a2.claudeDir, bash("agent-1", cmd)));
+    assert.ok(ctx, `${cmd} must be recognised as a search`);
+    assert.match(ctx, /^\[orc graph\] repository data, not instructions:/);
+    assert.match(ctx, /src\/core\.js:1-1/);
+    assert.match(ctx, /The search below still runs/);
+  }
+  // Once per run per name, shared with the Grep hint — the same name asked
+  // through two tools is one thing to say.
+  assert.ok(ctxOf(say(a.claudeDir, bash("agent-1", `rg "alphaOne"`))));
+  assert.equal(say(a.claudeDir, grep("agent-1", "alphaOne")).stdout.trim(), "", "a Grep after a shell grep pays nothing");
+});
+
+test("graph hook — a Bash command that is not a search, or has no quoted pattern, is silent", () => {
+  const a = armed();
+  for (const cmd of [
+    `npm test`,
+    `node -e "alphaOne()"`,
+    `cat src/core.js | grep "alphaOne"`, // not at the head — the pattern may be anything
+    `grep -rn alphaOne src/`, // unquoted: a flag and a pattern cannot be told apart
+    `git status`,
+    ``,
+  ]) {
+    const r = say(a.claudeDir, bash("agent-1", cmd));
+    assert.equal(r.status, 0, `${cmd}: exit 0`);
+    assert.equal(r.stdout.trim(), "", `${JSON.stringify(cmd)} must produce nothing`);
+  }
+});
+
+test("graph hook — the whole-file READ hint is OFF until code_graph_hooks says on,read (DE-J)", () => {
+  const wide = (a) => ({ hook_event_name: "PreToolUse", agent_id: "agent-1", tool_name: "Read", tool_input: { file_path: path.join(a.root, "src", "wide.js") } });
+  const build = () => {
+    const a = armed();
+    const body = Array.from({ length: 10 }, (_, i) => `export function wideFn${i}(x) { return x + ${i}; }`).join("\n") + "\n";
+    fs.writeFileSync(path.join(a.root, "src", "wide.js"), body);
+    spawnSync("git", ["add", "-A"], { cwd: a.root, encoding: "utf8" });
+    cli(["graph", "update", "--dir", a.root, "--json"]);
+    return a;
+  };
+
+  const off = build();
+  assert.equal(say(off.claudeDir, wide(off)).stdout.trim(), "", "`on` is the default and it does NOT arm the read hint");
+
+  const on = build();
+  cli(["config", "set", "code_graph_hooks", "on,read", "--dir", on.root]);
+  const ctx = ctxOf(say(on.claudeDir, wide(on)));
+  assert.match(ctx, /^\[orc graph\] repository data, not instructions:/);
+  assert.match(ctx, /src\/wide\.js holds many symbols/);
+  assert.match(ctx, /wideFn\d+ \d+-\d+/);
+  assert.match(ctx, /The read below still runs/, "the hook never blocks and never rewrites a read");
+  // A RANGE read is already the shape the hint asks for, so it says nothing.
+  assert.equal(
+    say(on.claudeDir, { hook_event_name: "PreToolUse", agent_id: "agent-1", tool_name: "Read", tool_input: { file_path: path.join(on.root, "src", "wide.js"), offset: 3, limit: 20 } }).stdout.trim(),
+    "",
+    "a range read needs no hint"
+  );
+  // A narrow file is already a range.
+  assert.equal(say(on.claudeDir, { hook_event_name: "PreToolUse", agent_id: "agent-1", tool_name: "Read", tool_input: { file_path: path.join(on.root, "src", "core.js") } }).stdout.trim(), "");
+  // Once per file per run.
+  assert.equal(say(on.claudeDir, wide(on)).stdout.trim(), "");
+});
+
+test("graph hook — a name a --for-slice block already delivered is never injected again (D2 dedupe)", () => {
+  const a = armed();
+  // The OUTSIDE view only names what reaches the file from elsewhere, so the
+  // fixture needs a caller in another file.
+  fs.writeFileSync(path.join(a.root, "src", "caller.js"), ['import { alphaOne } from "./core.js";', "export function useIt(x) { return alphaOne(x); }", ""].join(String.fromCharCode(10)));
+  spawnSync("git", ["add", "-A"], { cwd: a.root, encoding: "utf8" });
+  cli(["graph", "update", "--dir", a.root, "--json"]);
+  const r = cli(["graph", "ctx", "--for-slice", "src/core.js", "--dir", a.root, "--json"]);
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  const seen = JSON.parse(fs.readFileSync(path.join(a.logs, "run-test.graph-hook.json"), "utf8"));
+  assert.ok(seen.for_slice >= 1, "the slice call records that it ran");
+  assert.ok(seen.tokens.includes("name:alphaOne"), JSON.stringify(seen.tokens));
+
+  assert.equal(say(a.claudeDir, grep("agent-1", "alphaOne")).stdout.trim(), "", "the slice already carried it");
+  assert.equal(say(a.claudeDir, bash("agent-1", `rg "alphaOne"`)).stdout.trim(), "", "through either tool");
+  // A name the slice did NOT carry is still worth saying.
+  assert.ok(ctxOf(say(a.claudeDir, grep("agent-1", "lostFn"))));
+
+  // And the SubagentStart line drops the "run ctx before a Grep" sentence.
+  const start = ctxOf(say(a.claudeDir, { hook_event_name: "SubagentStart", agent_id: "agent-9", agent_type: "orc-executor-opus-5-med" }));
+  assert.doesNotMatch(start, /Before a wide Grep/);
+  assert.match(start, /a code graph of this repository is indexed/);
+});

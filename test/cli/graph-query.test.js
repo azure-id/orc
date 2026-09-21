@@ -92,10 +92,14 @@ test("ctx — the route → service → repo → SQL chain, with the state of ev
   const byName = Object.fromEntries(j.calls.filter((c) => c.level === 1 || c.state === "AMBIGUOUS").map((c) => [c.name, c]));
   assert.equal(byName.validateCart.state, "IMPORT");
   assert.equal(byName.validateCart.target.file, "src/cart/validate.js");
-  assert.equal(byName["orderRepo.insert"].state, "UNIQUE");
-  assert.equal(byName["orderRepo.insert"].target.qname, "OrderRepo.insert");
+  // v1.8.2 W2: `this.orderRepo.insert` is an instance ALIAS of the imported
+  // OrderRepo, so the edge is IMPORT (via orderRepo), no longer a UNIQUE guess.
+  assert.equal(byName["OrderRepo.insert"].state, "IMPORT");
+  assert.equal(byName["OrderRepo.insert"].alias, "orderRepo");
+  assert.equal(byName["OrderRepo.insert"].target.qname, "OrderRepo.insert");
   assert.ok(j.effects.some((e) => e.type === "sql" && /INSERT INTO orders/.test(e.text) && e.of.endsWith("#OrderRepo.insert")), "depth 2 reaches the query");
-  assert.ok(j.callers.some((c) => c.file === "src/routes/orders.js" && c.state === "UNIQUE"), "the route calls it");
+  assert.ok(j.callers.some((c) => c.file === "src/routes/orders.js" && c.state === "IMPORT" && c.alias === "orderService"), "the route calls it through its alias");
+  assert.match(j.card, /OrderRepo\.insert {2}src\/orders\/repo\.js:2 {2}IMPORT \(via orderRepo\)/);
   assert.deepStrictEqual(j.tests, ["test/orders.test.js"]);
   assert.equal(j.blob, "current");
   assert.match(j.card, /effect sql {2}"INSERT INTO orders/);

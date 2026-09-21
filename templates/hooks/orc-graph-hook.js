@@ -15,9 +15,20 @@
  *                 that forgot its own update step cannot leave the map behind.
  *   SubagentStart (E4a) one line telling a fresh subagent the graph is there.
  *   PreToolUse    (E4b) a Grep or Glob whose pattern contains a symbol name →
- *                 up to five rows saying where that name is defined.
+ *                 up to five rows saying where that name is defined. v1.8.2 W3
+ *                 (D3) adds a Bash SEARCH (grep, rg, git grep, findstr,
+ *                 Select-String, ag, ack) to the same hint: a shell search is
+ *                 the same question asked through a different tool.
+ *   PreToolUse    (D3, v1.8.2 W3) a whole-file Read of a WIDE file → one line
+ *                 naming its six most important symbols and their ranges, so
+ *                 the NEXT read can be a range read. The read still runs. OFF
+ *                 by default: it is armed with `code_graph_hooks: on,read`.
  *   PostToolUse   (E4c) a Read of a file the extractor did NOT fully see →
  *                 one line naming the lines it missed.
+ *
+ * NO DOUBLE PAYMENT. Every hint dedupes against the run's own counters file,
+ * and `orc graph ctx --for-slice` (D2) writes the names it delivered into that
+ * same file — so a name the slice already carried is never injected again.
  *
  * EVERY ONE OF THESE IS SILENT UNLESS ALL OF THIS IS TRUE:
  *   · an ORC run is open (the trace pointer exists and is fresh)
@@ -44,6 +55,7 @@
  *   hooks.SubagentStart[]  { hooks:[{command:"node <..>/orc-graph-hook.js"}] }
  *   hooks.SubagentStop[]   { hooks:[{command:"node <..>/orc-graph-hook.js"}] }
  *   hooks.PreToolUse[]     { matcher:"Grep|Glob", hooks:[{…}] }
+ *   hooks.PreToolUse[]     { matcher:"Bash|Read", hooks:[{…}] }
  *   hooks.PostToolUse[]    { matcher:"Read", hooks:[{…}] }
  *
  * Wired even though it does nothing until `code_graph` is on — arming the
@@ -69,6 +81,18 @@ const MAX_TEXT = 1200;
 
 const EXECUTOR = /^orc-executor-/i;
 const DELIVER_TO = /^orc-(executor|planner|reviewer|verifier|system-analyst|analyze)/i;
+
+// D3 — a SHELL search is the same question as a Grep. Only these seven, only at
+// the head of the command, and only the first QUOTED argument is read: an
+// unquoted pattern cannot be told apart from a flag or a path, and guessing
+// there would hint about the wrong word.
+const BASH_SEARCH = /^\s*(?:grep|rg|ag|ack|findstr|git\s+grep|select-string|sls)\b/i;
+const FIRST_QUOTED = /(?:'([^']*)'|"([^"]*)")/;
+const WIDE_ROWS = 6;
+// One 80-line range read, at the 40-characters-a-line the ladder assumes. The
+// CLI prices a range from the file's own average; the hook must not open a file
+// to price a hint, so it uses the ladder's own figure.
+const HINT_RANGE_TOKENS = Math.ceil((80 * 40) / 4);
 
 // ── config, the same tolerant scalar read every ORC hook uses ───────────────
 function cfg(key) {
@@ -121,11 +145,17 @@ function readJson(file) {
 // beside the trace and the lane copies them in at each phase close as ONE
 // GRAPH-HINT line — never one line per hint, which is the noise rule the read
 // gate already pays for.
+// The pointer names the trace file WITH its extension, so drop it: the
+// counters sit beside the trace, not inside its name. `orc graph ctx
+// --for-slice` writes to this same file (D2).
+function seenFile(run) {
+  return path.join(logDir(), run.replace(/\.txt$/, "") + ".graph-hook.json");
+}
+
 function bump(run, field, token) {
-  // The pointer names the trace file WITH its extension, so drop it: the
-  // counters sit beside the trace, not inside its name.
-  const file = path.join(logDir(), run.replace(/\.txt$/, "") + ".graph-hook.json");
+  const file = seenFile(run);
   const seen = readJson(file) || { injected: 0, subagent_start: 0, read_notes: 0, updates: 0, tokens: [] };
+  if (!Array.isArray(seen.tokens)) seen.tokens = [];
   if (token) {
     if (seen.tokens.includes(token)) return false; // already said, to this run
     seen.tokens.push(token);
@@ -176,6 +206,43 @@ function emit(event, text) {
   try {
     process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: event, additionalContext: `${PREFIX} ${body}` } }));
   } catch (_) {}
+  return body;
+}
+
+// K1 (v1.8.2 W4b) — the gain ledger. It is appended AFTER the hint is already
+// out, inside the fail-quiet wrapper, so a full disk can slow a Grep and can
+// never block one. A coverage note records PAID ONLY: it adds, it saves
+// nothing (K6).
+function ledger(runName, cmd, body, avoided) {
+  try {
+    fs.appendFileSync(
+      path.join(GRAPH_DIR, "gain.jsonl"),
+      JSON.stringify({
+        at: stampNow(),
+        run: runName,
+        agent: null,
+        cmd,
+        targets: [],
+        gen: null,
+        ms: 0,
+        paid: { card: 0, source: 0, hints: Math.ceil((PREFIX.length + 1 + String(body || "").length) / 4) },
+        avoided: avoided || { low: 0, high: 0, calls_low: 0, calls_high: 0 },
+        basis: { files: [], grep_hits: 0 },
+      }) + "\n"
+    );
+  } catch (_) {}
+}
+
+// The LEDGER stamp, which is ORC's own `DD-MM-YYYY HH:MM:SS` — the same one
+// the CLI writes. (The TRACE stamp above is a different format on purpose: it
+// is the trace's, and it is not this.)
+function stampNow() {
+  const d = new Date();
+  const q = (n) => String(n).padStart(2, "0");
+  return (
+    q(d.getDate()) + "-" + q(d.getMonth() + 1) + "-" + d.getFullYear() + " " +
+    q(d.getHours()) + ":" + q(d.getMinutes()) + ":" + q(d.getSeconds())
+  );
 }
 
 // ── main ───────────────────────────────────────────────────────────────────
@@ -201,7 +268,13 @@ function run() {
   if (!event) return;
 
   if (String(cfg("code_graph") || "off").toLowerCase() !== "on") return;
-  if (String(cfg("code_graph_hooks") || "on").toLowerCase() !== "on") return;
+  // `code_graph_hooks` is `off`, `on`, or `on,read` (D3/DE-J). `on` is every
+  // hint that was on in 1.8.1 PLUS the Bash search (DE-C: a shell grep is a
+  // Grep). The whole-file READ hint is the one that changes how an agent reads,
+  // so it is armed on purpose and never by an upgrade.
+  const mode = String(cfg("code_graph_hooks") || "on").toLowerCase().split(",").map((s) => s.trim()).filter(Boolean);
+  if (!mode.length || mode[0] !== "on") return;
+  const readHint = mode.includes("read");
   const runName = currentRun();
   if (!runName) return;
 
@@ -217,7 +290,11 @@ function run() {
   if (data.agent_id == null) return;
 
   if (event === "SubagentStart") return onSubagentStart(data, runName, meta);
-  if (event === "PreToolUse") return onSearch(data, runName, meta);
+  if (event === "PreToolUse") {
+    const tool = String(data.tool_name || "");
+    if (tool === "Read") return readHint ? onWideRead(data, runName, meta) : undefined;
+    return onSearch(data, runName, meta);
+  }
   if (event === "PostToolUse") return onRead(data, runName, meta);
 }
 
@@ -262,11 +339,18 @@ function onSubagentStart(data, runName, meta) {
   const agent = String(data.agent_type || data.agentType || "");
   if (agent && !DELIVER_TO.test(agent)) return;
   if (!bump(runName, "subagent_start", "start:" + (data.agent_id || agent))) return;
+  // D3 — the "run ctx before a Grep" sentence is dropped when this run already
+  // delivered a `--for-slice` block: the agent has the outside view in its
+  // slice, and saying it again is the double payment this wave removes.
+  const counters = readJson(seenFile(runName)) || {};
+  const advice = counters.for_slice
+    ? ""
+    : ` Before a wide Grep for a symbol, run: orc graph ctx <name|file> --json .`;
   emit(
     "SubagentStart",
-    `a code graph of this repository is indexed (generation ${meta.generation}, ${meta.files} files). ` +
-      `Before a wide Grep for a symbol, run: orc graph ctx <name|file> --json . ` +
-      `A card is a LOCATOR — read the range it names before you rely on behaviour.`
+    `a code graph of this repository is indexed (generation ${meta.generation}, ${meta.files} files).` +
+      advice +
+      ` A card is a LOCATOR — read the range it names before you rely on behaviour.`
   );
 }
 
@@ -275,9 +359,18 @@ function onSubagentStart(data, runName, meta) {
 // is what keeps the hook off the critical path of every Grep.
 function onSearch(data, runName, meta) {
   const tool = String(data.tool_name || "");
-  if (tool !== "Grep" && tool !== "Glob") return;
   const input = data.tool_input || {};
-  const pattern = String(input.pattern || "");
+  let pattern = "";
+  if (tool === "Grep" || tool === "Glob") pattern = String(input.pattern || "");
+  else if (tool === "Bash") {
+    // DE-C — a shell search is a Grep. The command must START with one of the
+    // seven search programs, and the word comes from its first QUOTED argument.
+    const cmd = String(input.command || "");
+    if (!BASH_SEARCH.test(cmd)) return;
+    const q = FIRST_QUOTED.exec(cmd);
+    if (!q) return;
+    pattern = q[1] !== undefined ? q[1] : q[2];
+  } else return;
   if (!pattern) return;
 
   // The longest plain identifier in the pattern. Regex metacharacters are
@@ -300,11 +393,50 @@ function onSearch(data, runName, meta) {
   if (!bump(runName, "injected", "name:" + hit.word)) return;
 
   const rows = hit.rows.slice(0, MAX_ROWS).map((r) => `${clean(r[0], 80)} (${clean(r[1], 20)}) ${clean(r[2], 160)}:${Number(r[3]) || 0}-${Number(r[4]) || 0} fan-in ${Number(r[5]) || 0}`);
-  emit(
+  const body = emit(
     "PreToolUse",
     `"${clean(hit.word, 80)}" is defined at ${rows.join(" · ")}. ` +
       `Read those ranges, or run orc graph ctx ${clean(hit.word, 80)} --json for callers and callees. The search below still runs.`
   );
+  // The search STILL RUNS, so a careful ladder saved nothing here; a careless
+  // one saved the range read the anchor pointed at. Low 0, high one range.
+  ledger(runName, "hint", body, { low: 0, high: HINT_RANGE_TOKENS, calls_low: 0, calls_high: 1 });
+}
+
+// ── D3 (v1.8.2 W3) — a whole-file Read of a WIDE file ──────────────────────
+// OFF by default (`code_graph_hooks: on,read` arms it). The read STILL RUNS —
+// this hook never blocks and never rewrites an input. `updatedInput` exists and
+// this file deliberately never uses it: turning an agent's Read into a range
+// read is the corruption the read ladder's first exception forbids, and the
+// read gate stays the only layer allowed to touch a read.
+//
+// The point is the NEXT read. One line naming the file's six most important
+// symbols and their ranges is what an agent needs to ask for a range instead of
+// 2,000 lines the turn after.
+function onWideRead(data, runName, meta) {
+  const input = data.tool_input || {};
+  if (input.offset !== undefined || input.limit !== undefined) return; // already a range read
+  const abs = String(input.file_path || "");
+  if (!abs) return;
+  let rel;
+  try {
+    rel = path.relative(PROJECT_ROOT, abs).split(path.sep).join("/");
+  } catch (_) {
+    return;
+  }
+  if (!rel || rel.startsWith("..")) return;
+  const wide = readJson(path.join(GRAPH_DIR, "wide.json"));
+  if (!wide || !wide.files || wide.generation !== meta.generation) return;
+  const rows = Object.prototype.hasOwnProperty.call(wide.files, rel) ? wide.files[rel] : null;
+  if (!Array.isArray(rows) || !rows.length) return;
+  if (!bump(runName, "injected", "wide:" + rel)) return;
+  const body = emit(
+    "PreToolUse",
+    `${clean(rel, 160)} holds many symbols; the most reached are ` +
+      rows.slice(0, WIDE_ROWS).map((r) => `${clean(r[0], 80)} ${Number(r[1]) || 0}-${Number(r[2]) || 0}`).join(" · ") +
+      `. The read below still runs; a later read of this file can name a range.`
+  );
+  ledger(runName, "hint", body, { low: 0, high: HINT_RANGE_TOKENS, calls_low: 0, calls_high: 1 });
 }
 
 // ── E4c — a Read of a file the extractor did not fully see ─────────────────
@@ -332,5 +464,8 @@ function onRead(data, runName, meta) {
   }
   if (!note) return;
   if (!bump(runName, "read_notes", "read:" + rel)) return;
-  emit("PostToolUse", `${note}. The source you just read is ground truth; no recorded gap is not proof of completeness.`);
+  const body = emit("PostToolUse", `${note}. The source you just read is ground truth; no recorded gap is not proof of completeness.`);
+  // PAID ONLY. A coverage note tells you what the card cannot show; it replaces
+  // no read and it is never counted as a saving (K6).
+  ledger(runName, "read-note", body, { low: 0, high: 0, calls_low: 0, calls_high: 0 });
 }

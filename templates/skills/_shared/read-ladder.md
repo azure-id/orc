@@ -21,7 +21,7 @@ Escalate one step at a time. Stop at the step that answers the question.
 |------|----|----------------|
 | 1. Locate | `Grep` / `Glob` for the symbol, route, config key, or error string | You only needed to know WHERE it is |
 | 2. Outline | Read the file's declaration lines — imports, exports, top-level signatures | You needed the API surface |
-| 3. Range | Read the ±40 lines around the anchor found in step 1 | You needed one function's behaviour |
+| 3. Range | Read the ±40 lines around the anchor found in step 1 — or let step 0 print them (`--source`) | You needed one function's behaviour |
 | 4. Full | Read the whole file | It is the subject of the task — or you will edit it |
 
 ## Step 0 — ask the graph (always first; the CLI decides if it is on)
@@ -32,6 +32,14 @@ answers step 1 and step 2 together: where the symbol is, its line range, who
 calls or uses it, what it calls, and which effects it has. Then continue at
 step 3 — read the RANGE the card names before you act on behaviour. The graph is
 a locator, never the truth: a card whose header says CHANGED is hints only.
+
+**`--source [N]` answers step 3 in the SAME call** (v1.8.2). `orc graph ctx
+<symbol> --source --if-enabled --json` prints the card and then the target's own
+lines (default 80, hard cap 200), charged against the same `--budget`; the
+footer says how many lines it cut. Use it for the CALLER'S range, the callee's,
+the neighbour you will not touch. **It never replaces exception 1**: a file you
+will EDIT is read IN FULL with `Read` first, because an `old_string` rebuilt
+from a printed range is the same corruption bug as one rebuilt from an outline.
 Exit 3 (off) → skip step 0 for the rest of the task. Exit 1 (no index) or 4 (not
 in the graph) → step 1 as before. Name the card targets you used in
 `graph_used`. Both exceptions below apply unchanged.
@@ -117,7 +125,7 @@ The ladder governs HOW MUCH to read. It never decides WHETHER knowledge exists �
 that is `detecting-artifacts.md` — and it never overrides precedence:
 `code > fresh wiki > stale wiki (hints) > model priors`. With the code graph on,
 the same order gains two rungs and loses none:
-`code > graph structure (current blob) > fresh wiki > stale wiki (hints) > graph notes > model priors`.
+`code > graph structure (current blob) > fresh wiki > stale wiki (hints) > graph notes and doc notes > model priors`.
 
 What a lane INVOKES, and what each exit code means, is not here either: that is
 `orc lane calls <lane> --json`, whose catalogue is the one copy of every call
