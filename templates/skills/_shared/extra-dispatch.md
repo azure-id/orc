@@ -171,7 +171,7 @@ shape, for a stronger reason than cost.
 
 Both wiki slots collapse onto `orc-wiki-scanner-opus-5-med` while `opus5_only` is
 on, which is why this release **adds no agent and no pair**. Two slots and one
-Opus 5 agent is not a contradiction: **a slot names the POSITION, not the model.**
+Opus 5.5 agent is not a contradiction: **a slot names the POSITION, not the model.**
 
 A slot is a **point**, not an interval, so the band table's overlap refusal has
 no analogue here and none is invented. `orc extra role set` on an occupied slot
@@ -264,7 +264,7 @@ never be silent.
 
 **Extra is an OVERLAY, not a replacement.** A score no row covers falls straight
 through to whatever the Claude ladder resolves — including `opus5_only`. That is
-what makes "cheap grunt work goes to DeepSeek, hard work stays on Opus 5" a
+what makes "cheap grunt work goes to DeepSeek, hard work stays on Opus 5.5" a
 two-command setup rather than a full table rewrite.
 
 The shadow is therefore **partial and runs both ways**, and both directions are

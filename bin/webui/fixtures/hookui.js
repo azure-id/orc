@@ -25,17 +25,17 @@ const red = (s) => E + "[31m" + s + R;
 // The rendered bar, in its four forms. Line 3 is deliberately the shortest —
 // the board's third line usually is.
 const previewText =
-  amber("🚀") + " " + dim("ORC ") + "1.3.0 · Opus 5/high · " + dim("context ") + green("38%") + " · " + amber("██████░░░░") + "\n" +
+  amber("🚀") + " " + dim("ORC ") + "1.3.0 · Opus 5.5/high · " + dim("context ") + green("38%") + " · " + amber("██████░░░░") + "\n" +
   "   ▰ " + dim("status ") + "quick · Q3 DO · " + dim("agents ") + " 7 · " + dim("Dur ") + " 48m · main\n" +
   "   " + dim("cache ") + "●" + " " + green("███████▊░░") + " · " + dim("MTok ") + "412K · " + red("—");
 
 const previewNoColor =
-  "🚀 ORC 1.3.0 · Opus 5/high · context 38% · ██████░░░░\n" +
+  "🚀 ORC 1.3.0 · Opus 5.5/high · context 38% · ██████░░░░\n" +
   "   ▰ status quick · Q3 DO · agents  7 · Dur  48m · main\n" +
   "   cache ● ███████▊░░ · MTok 412K · —";
 
 const previewAscii =
-  "++ ORC 1.3.0 - Opus 5/high - context 38% - ######....\n" +
+  "++ ORC 1.3.0 - Opus 5.5/high - context 38% - ######....\n" +
   "   = status quick - Q3 DO - agents  7 - Dur  48m - main\n" +
   "   cache o #######|.. - MTok 412K - -";
 
@@ -288,7 +288,7 @@ const presets = {
   ok: true,
   presets: [
     { name: "orc-default", summary: "Today's two lines, exactly. The byte-identical baseline.", active: false, preview: previewNoColor.split("\n").slice(0, 2).join("\n") },
-    { name: "minimal", summary: "One line, four slots, the dim theme. The support answer for a busy terminal.", active: false, preview: dim("🚀 ORC 1.3.0 · Opus 5/high · ") + amber("███▊      ") + dim(" · main") },
+    { name: "minimal", summary: "One line, four slots, the dim theme. The support answer for a busy terminal.", active: false, preview: dim("🚀 ORC 1.3.0 · Opus 5.5/high · ") + amber("███▊      ") + dim(" · main") },
     { name: "cost-watch", summary: "What this session is spending, in every unit the payload gives for free.", active: true, preview: previewText.split("\n").slice(0, 2).join("\n") },
     { name: "mono", summary: "No colour anywhere — shapes and emphasis only. The right preset for a README screenshot.", active: false, preview: previewNoColor },
   ],
@@ -424,7 +424,7 @@ const subPresets = {
   presets: [
     { name: "agent-default", board: "subagent", summary: "What the agent is, what it is running at, and what it has cost so far.", active: true, preview: "orc-executor-opus-5-low · " + dim("O5/low") + " · 84K · " + dim("for ") + " 17m" },
     { name: "agent-watch", board: "subagent", summary: "For a run you are watching: status, its own context window, and the clock.", active: false, preview: amber("●") + " orc-executor-opus-5-low · " + green("███▎░░░░") + " · " + dim("for ") + " 17m" },
-    { name: "agent-tier", board: "subagent", summary: "The downgrade check, made visible: the model and effort ORC actually got, per agent.", active: false, preview: "orc-executor-opus-5-low · claude-opus-5 · low · " + amber("running") },
+    { name: "agent-tier", board: "subagent", summary: "The downgrade check, made visible: the model and effort ORC actually got, per agent.", active: false, preview: "orc-executor-opus-5-low · claude-opus-5-5 · low · " + amber("running") },
   ],
 };
 

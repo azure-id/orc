@@ -36,8 +36,8 @@ const SECTIONS = [
       "init merges two guards into .claude/settings.json (non-destructively):",
       "  • a PreToolUse effort hard-block (keeps /orc on a capable tier)",
       "  • a statusline model warning (❌ ORC WILL DEGRADE on the wrong tier)",
-      "Run your MAIN session on Opus 4.8 high (or Opus 5 / Fable 5 at medium+) —",
-      "subagents can't exceed it; the top [90,100] band needs an Opus 5 session.",
+      "Run your MAIN session on Opus 4.8 high (or Opus 5.5 / Fable 5 at medium+) —",
+      "subagents can't exceed it; the top [90,100] band needs an Opus 5.5 session.",
     ],
   },
   {
@@ -54,7 +54,7 @@ const SECTIONS = [
       "",
       "Session-tier acceptance (the statusline verdict):",
       "  ✔ ORC-ready     Opus 4.8 high            (the baseline)",
-      "  🚀 ORC-boosted  Opus 4.8 xhigh/max, or   Opus 5 / Fable 5 medium…max",
+      "  🚀 ORC-boosted  Opus 4.8 xhigh/max, or   Opus 5.5 / Fable 5 medium…max",
       "  ✖ WILL DEGRADE  anything below           (wrong model or sub-baseline effort)",
       "",
       "Which one do I type? Start from what you HAVE, not from the lane names:",
@@ -153,7 +153,7 @@ const SECTIONS = [
     title: "⑧ Troubleshooting",
     lines: [
       "  \"/orc blocked — required effort not met\"",
-      "     → switch to high effort (or Opus 5 / Fable 5 at medium+). xhigh/max also pass.",
+      "     → switch to high effort (or Opus 5.5 / Fable 5 at medium+). xhigh/max also pass.",
       "  statusline says \"WILL DEGRADE\"",
       "     → wrong model/effort, or a usage window ≥90%. Move to Opus 4.8 high or Opus 5.",
       "  \"wiki: UNREGISTERED\"",

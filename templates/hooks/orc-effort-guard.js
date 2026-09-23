@@ -5,7 +5,7 @@
  * ORC effort guard — a Claude Code PreToolUse hook.
  *
  * Blocks invocation of the full `orc` orchestrator skill unless the MAIN
- * session is running at HIGH reasoning effort (Opus 5 / Fable 5 clear at
+ * session is running at HIGH reasoning effort (Opus 5.5 / Fable 5 clear at
  * medium+ — see the session-model bridge below). This is the one half of the
  * "run ORC on Opus 4.8 high or better" rule hooks can enforce deterministically:
  * Claude Code exposes `effort.level` (and $CLAUDE_EFFORT) to PreToolUse, but
@@ -48,7 +48,7 @@ const effortsAtOrAbove = (e) => {
 
 // Session-model bridge (written by orc-statusline.js). The guard can't see the
 // model id itself, so it reads it here to grant the medium-effort allowance of
-// the models that are strictly stronger than the Opus 4.8 baseline (Opus 5 and
+// the models that are strictly stronger than the Opus 4.8 baseline (Opus 5.5 and
 // Fable 5). Fail-OPEN: missing / unreadable / stale → null, and the guard
 // behaves exactly as it would without a bridge (never blocks on our own error).
 // Stale = older than this window; a live session re-renders the statusline far
@@ -68,7 +68,7 @@ function readSessionModel(projectDir) {
   }
 }
 // Models that clear /orc at medium effort — strictly stronger than the Opus 4.8
-// baseline, so medium on them beats high on it. Opus 5 (v0.34.0) joins Fable 5.
+// baseline, so medium on them beats high on it. Opus 5.5 (v0.34.0) joins Fable 5.
 // The `\b` after the 5 keeps 4.8 / 4.7 / 5-something-else correctly gated.
 const isMediumOkModel = (id) =>
   /(opus|fable)[\s._-]?5\b/.test(String(id || "").toLowerCase());
@@ -102,12 +102,12 @@ process.stdin.on("end", () => {
   const projectDir = data.cwd || process.cwd();
 
   // Baseline /orc: the session must be at high effort OR stronger (xhigh/max).
-  // Opus 5 and Fable 5 additionally clear at medium — strictly-capable models —
+  // Opus 5.5 and Fable 5 additionally clear at medium — strictly-capable models —
   // detected through the session-model bridge (the guard can't see the model id
   // itself; fail-open when the bridge is missing/stale, i.e. medium stays blocked).
   let requiredEfforts = effortsAtOrAbove("high");
   let requiredLabel =
-    "Opus 4.8 at high effort (Opus 5 / Fable 5 also clear at medium+)";
+    "Opus 4.8 at high effort (Opus 5.5 / Fable 5 also clear at medium+)";
   if (!isDiy && isMediumOkModel(readSessionModel(projectDir))) {
     requiredEfforts = ["medium", ...requiredEfforts];
   }

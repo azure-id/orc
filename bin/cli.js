@@ -1067,6 +1067,8 @@ function upgrade() {
 // ---------------------------------------------------------------------------
 
 const KNOWN_MODELS = [
+  "claude-opus-5-5",
+  // Kept so a config written before v1.9.2 still validates.
   "claude-opus-5",
   "claude-opus-4-8",
   "claude-opus-4-7",
@@ -1253,7 +1255,7 @@ const CONFIG_FAMILIES = {
         // without being a CONFIG_META key, because where it sits in the
         // precedence is a fact even though `orc config set` refuses to write it.
         registry_less: true,
-        shadow_note: "shadowed by {by} — executors use the fixed 2-band Opus 5 ladder",
+        shadow_note: "shadowed by {by} — executors use the fixed 2-band Opus 5.5 ladder",
       },
       { prio: "P3", key: null, terminal: "the shipped score→model table" },
     ],
@@ -1440,7 +1442,7 @@ const CONFIG_META = [
   // decision with a recorded reason (the /orc-pact retirement rule).
   { key: "extra_demote_after", def: 2, tier: "common", answers: [{ family: "extra", prio: "P2", mode: "replace" }], gated_by: "extra_enabled", lanes: [], validate: vInt(0), options: [0, 2, 3, 5], desc: "Consecutive `stalled` dispatches on ONE profile, inside one run, before that profile is DEMOTED to the bottom of the ladder for the rest of the run — so `opus5_only` (or the shipped score table) becomes the effective P0 and the work stays on Claude. Only `stalled` counts: a 401 or a rate limit has its own answer (`extra_on_failure`, the vault, `extra_resume`), and demoting on one would hide a credential problem behind a routing change. A resume of the same stalled attempt is the SAME stall, never a second one. A demotion is RUN state — it never writes your config — it is ANNOUNCED before the next dispatch, and it is never auto-promoted back: `orc extra promote <run> --reason \"<why>\"`. 0 turns this clock off and leaves only extra_demote_stale_min." },
   { key: "extra_demote_stale_min", def: 20, tier: "common", answers: [{ family: "extra", prio: "P2", mode: "replace" }], gated_by: "extra_enabled", lanes: [], validate: vInt(0), options: [0, 10, 20, 45], desc: "Minutes a LIVE foreign attempt may show no observable progress before its profile is demoted. This is a different question from `extra_stall_s`, which stops ONE dispatch after 180s of silence: this clock is about the RUN — two workers in flight, both quiet, and a wave that is going nowhere — so the two have their own budgets and their own off values and neither is a simplification of the other. It reads the journal's own progress file on disk, never a remembered fact. 0 turns this clock off and leaves only extra_demote_after." },
-  { key: "opus5_only", def: false, tier: "common", answers: [{ family: "executor-band", prio: "P1", mode: "replace" }, { family: "fixed-role-model", prio: "P1", mode: "replace" }], lanes: ["orc", "orc-analyze", "orc-challenge", "orc-claude", "orc-diy", "orc-doc", "orc-fast", "orc-mini", "orc-pattern", "orc-quick", "orc-retro", "orc-wiki"], validate: vEnum("true", "false"), options: ["true", "false"], desc: "EVERY dispatched role uses ONE model — Opus 5 — with EFFORT as the cost dial (executors: [0,40) low · [40,80) medium · [80,100] high; each fixed role its own pinned effort). Deep SWE-benchmark work on cost vs efficiency across Claude models finds a single Opus 5 agent with the effort ladder the most efficient setup. It FORCES: while on it outranks a hand-written rubric_bands_override. Needs an Opus 5 main session or EVERY dispatch silently downgrades. Excludes the Haiku trace writer and orc-diy (compile-owned)." },
+  { key: "opus5_only", def: false, tier: "common", answers: [{ family: "executor-band", prio: "P1", mode: "replace" }, { family: "fixed-role-model", prio: "P1", mode: "replace" }], lanes: ["orc", "orc-analyze", "orc-challenge", "orc-claude", "orc-diy", "orc-doc", "orc-fast", "orc-mini", "orc-pattern", "orc-quick", "orc-retro", "orc-wiki"], validate: vEnum("true", "false"), options: ["true", "false"], desc: "EVERY dispatched role uses ONE model — Opus 5.5 — with EFFORT as the cost dial (executors: [0,40) low · [40,80) medium · [80,100] high; each fixed role its own pinned effort). Deep SWE-benchmark work on cost vs efficiency across Claude models finds a single Opus 5.5 agent with the effort ladder the most efficient setup. It FORCES: while on it outranks a hand-written rubric_bands_override. Needs an Opus 5.5 main session or EVERY dispatch silently downgrades. Excludes the Haiku trace writer and orc-diy (compile-owned)." },
   // --- v0.46.0 — the six new lanes ------------------------------------------
   { key: "pact_gate", def: "warn", tier: "common", answers: [{ family: "pact", prio: "P2", mode: "replace" }], lanes: ["orc", "orc-pact"], validate: vEnum("off", "warn"), options: ["off", "warn"], desc: "Invariant ledger at Phase 1 + planning: warn = print the one pact line and inject a DRIFTED/BROKEN promise whose anchors intersect the plan's declared files as a planner constraint; off = nothing. NEVER blocks — a promise is advice with a receipt, not a gate. See /orc-pact." },
   { key: "pact_recheck_on_verify", def: "true", tier: "common", answers: [{ family: "pact", prio: "P2", mode: "replace" }], lanes: ["orc", "orc-pact"], validate: vEnum("true", "false"), options: ["true", "false"], desc: "Phase 6: re-run the cheap checks for ONLY the invariants the change touched (`orc pact check`), so a promise that just leaked is caught in the run that broke it." },
@@ -1523,7 +1525,7 @@ const LEGACY_KEYS = {
 // So `config list` prints them, `config list --json` carries them, and
 // `config set` refuses them BY NAME instead of with a generic unknown-key list.
 const RETIRED_KEYS = {
-  fable5_enabled: { removed_in: "1.0.0", why: "the Fable 5 role override was removed — every role dispatches its shipped Claude agent, or the Opus 5 variant under opus5_only" },
+  fable5_enabled: { removed_in: "1.0.0", why: "the Fable 5 role override was removed — every role dispatches its shipped Claude agent, or the Opus 5.5 variant under opus5_only" },
   fable5_roles: { removed_in: "1.0.0", why: "the Fable 5 role override was removed" },
   fable5_effort: { removed_in: "1.0.0", why: "the Fable 5 role override was removed" },
 };
@@ -2082,7 +2084,7 @@ function shadowReason(key, map, claudeDir) {
 //
 // v1.0.0 W4 — TWO BANDS, not three, and the same 90 edge as the default table's
 // top two rows (D13). That symmetry is the point: once the default table's high
-// end is already Opus 5 with effort as the dial, the forcing mode differs from
+// end is already Opus 5.5 with effort as the dial, the forcing mode differs from
 // it only BELOW 65, so a third band here would be a distinction the default
 // table stopped making.
 //
@@ -2128,7 +2130,7 @@ function scoreTableJson(map, claudeDir) {
   //     > the default 6-band table
   //
   // Extra is an OVERLAY, not a replacement, which is what makes "cheap grunt
-  // work goes to DeepSeek, hard work stays on Opus 5" a two-command setup
+  // work goes to DeepSeek, hard work stays on Opus 5.5" a two-command setup
   // rather than a full table rewrite. `active` can therefore read as a
   // COMPOSITE — because the truth is a composite, and a single word would be
   // a lie about what the next dispatch will do.
@@ -2373,7 +2375,7 @@ function extraLegacyRoleWarn(value) {
 
 // A shadowed setting must never be silent — the v0.36.0 rule, applied to a
 // shadow that runs BOTH WAYS. Turning on opus5_only while route rows exist
-// does not give you the Opus 5 ladder everywhere, and turning on Extra does
+// does not give you the Opus 5.5 ladder everywhere, and turning on Extra does
 // not take the Claude table away; saying either would be wrong. So name the
 // ranges, which is the only statement that is true from both sides.
 function extraShadowNotice(claudeDir) {
@@ -2434,17 +2436,17 @@ function opus5Notice(on, claudeDir) {
   console.log(
     "\n  " + ui.color.bold("Opus-5-only dispatch is now ACTIVE — for EVERY role, not just executors.") + "\n" +
       "\n  Why: deep SWE-benchmark work on cost vs efficiency across Claude models finds a\n" +
-      "  single Opus 5 agent, with the EFFORT ladder as the cost dial, the most efficient\n" +
+      "  single Opus 5.5 agent, with the EFFORT ladder as the cost dial, the most efficient\n" +
       "  configuration. You trade model-class variety for effort variety.\n" +
       "\n  Scored executors (/orc + /orc-ultra):\n\n" +
       ladderTable(OPUS5_SCORE_TABLE) +
       "\n  Fixed roles now dispatched instead of their defaults:\n\n" + roleRows + "\n" +
-      "\n  Already Opus 5, unchanged: analyst · planner · reviewer · verifier · test-author\n" +
+      "\n  Already Opus 5.5, unchanged: analyst · planner · reviewer · verifier · test-author\n" +
       "  · combiner · learn-writer · advisor · judge.\n" +
       "  NEVER forced: orc-trace-writer-haiku-4-5 (it transcribes a packet, no reasoning)\n" +
       "  and orc-diy (its table is compile-owned — re-run `orc diy compile` to change it).\n" +
       "\n  " + ui.mark.warn("Tier requirement — read this one:") + "\n" +
-      "  Today only the [90,100] executor band needs an Opus 5 main session. With this ON,\n" +
+      "  Today only the [90,100] executor band needs an Opus 5.5 main session. With this ON,\n" +
       "  EVERY dispatch does. A subagent can never outrank the main session, so on a lower\n" +
       "  session every role silently falls back to the session model and the tier-honesty\n" +
       "  rule reports a downgrade on EVERY return instead of occasionally. Hooks cannot\n" +
@@ -2860,17 +2862,17 @@ const LANE_INERT = {
     { key: "extra_fallback_agent", reason: "re-opening the gate IS the ask, so a second menu composed from a config key would be the same question twice in different words" },
   ],
   "orc-challenge": [
-    { key: "opus5_only", reason: "every agent in this lane is already claude-opus-5, so this is a no-op — the lane is unaffected, not exempt" },
+    { key: "opus5_only", reason: "every agent in this lane is already claude-opus-5-5, so this is a no-op — the lane is unaffected, not exempt" },
   ],
   "orc-doc": [
-    { key: "opus5_only", reason: "both agents in this lane are already claude-opus-5, so this is a no-op — the lane is unaffected, not exempt" },
+    { key: "opus5_only", reason: "both agents in this lane are already claude-opus-5-5, so this is a no-op — the lane is unaffected, not exempt" },
   ],
-  // v1.5.0 — both agents in this lane ship as claude-opus-5, and the
+  // v1.5.0 — both agents in this lane ship as claude-opus-5-5, and the
   // interpreter's `low` is a MEASUREMENT choice rather than a cost one: a
   // harder-thinking interpreter reasons its way to why a leaked stack trace is
   // probably fine in staging, which is exactly the gap it exists to find.
   "orc-test": [
-    { key: "opus5_only", reason: "both agents in this lane are already claude-opus-5, so this is a no-op — the lane is unaffected, not exempt" },
+    { key: "opus5_only", reason: "both agents in this lane are already claude-opus-5-5, so this is a no-op — the lane is unaffected, not exempt" },
   ],
   // v1.1.0 W2 — this lane DISPATCHES NOTHING. A detached command does the
   // waiting, so every family that answers "which model runs this" has no work
@@ -3145,7 +3147,7 @@ function laneAnnounce(lane, map, claudeDir, families) {
     out.push(
       off
         ? `opus5_only: ON, and INERT in this lane — ${off.reason}`
-        : "opus5_only: ON — every dispatched role uses Opus 5, with effort as the only cost dial"
+        : "opus5_only: ON — every dispatched role uses Opus 5.5, with effort as the only cost dial"
     );
   }
   if (isTrue(map.extra_enabled)) {
@@ -4982,7 +4984,7 @@ const sha256 = (s) => crypto.createHash("sha256").update(s).digest("hex");
 // The tier-clip roster. It must contain EVERY agent the default table names —
 // `diyScoreTable()` looks each row's agent up here, so a table row naming an
 // agent this map does not know is a crash, not a fallback. v1.0.0 W4 added the
-// two Opus 5 rows for exactly that reason.
+// two Opus 5.5 rows for exactly that reason.
 //
 // It also feeds `fixed_executor`'s option list, so every entry here is offerable
 // — which is what keeps the four agents no band names reachable (D14).
@@ -5014,10 +5016,10 @@ const DIY_TIERS = {
   "opus-4-8-high": { model: 5, effort: 2, modelId: "claude-opus-4-8", effortName: "high" },
   "opus-4-8-xhigh": { model: 5, effort: 3, modelId: "claude-opus-4-8", effortName: "xhigh" },
   "opus-4-8-max": { model: 5, effort: 4, modelId: "claude-opus-4-8", effortName: "max" },
-  "opus-5-med": { model: 6, effort: 1, modelId: "claude-opus-5", effortName: "medium" },
-  "opus-5-high": { model: 6, effort: 2, modelId: "claude-opus-5", effortName: "high" },
-  "opus-5-xhigh": { model: 6, effort: 3, modelId: "claude-opus-5", effortName: "xhigh" },
-  "opus-5-max": { model: 6, effort: 4, modelId: "claude-opus-5", effortName: "max" },
+  "opus-5-med": { model: 6, effort: 1, modelId: "claude-opus-5-5", effortName: "medium" },
+  "opus-5-high": { model: 6, effort: 2, modelId: "claude-opus-5-5", effortName: "high" },
+  "opus-5-xhigh": { model: 6, effort: 3, modelId: "claude-opus-5-5", effortName: "xhigh" },
+  "opus-5-max": { model: 6, effort: 4, modelId: "claude-opus-5-5", effortName: "max" },
   "fable-5-med": { model: 7, effort: 1, modelId: "claude-fable-5", effortName: "medium" },
   "fable-5-high": { model: 7, effort: 2, modelId: "claude-fable-5", effortName: "high" },
   "fable-5-xhigh": { model: 7, effort: 3, modelId: "claude-fable-5", effortName: "xhigh" },
@@ -5254,15 +5256,15 @@ function diyValidate(cfg) {
   if (cfg.autonomy === "hands-off" && (cfg.ship_mode === "commit" || cfg.ship_mode === "pr")) {
     warnings.push(`hands-off + ship_mode ${cfg.ship_mode}: git actions will run fully unattended`);
   }
-  // The pinned reviewer/verifier moved to claude-opus-5 (model rank 6) in
+  // The pinned reviewer/verifier moved to claude-opus-5-5 (model rank 6) in
   // v0.34.0 — anything below that tier silently runs them at the session model.
   if (tier && tier.model < 6 && (cfg.review !== "off" || cfg.verify !== "off")) {
     // Careful wording (v0.34.7): `session_tier` is a DECLARATION, not the real
     // session model — a hook cannot read the model, only the effort. On a
-    // session that actually outranks the declared tier the pinned Opus 5 roles
+    // session that actually outranks the declared tier the pinned Opus 5.5 roles
     // run at FULL pin (observed), so asserting they "will" downgrade is a false
     // alarm; what is certain is only that a LOWER real session caps them.
-    warnings.push(`session_tier ${cfg.session_tier} is below the pinned Opus 5 reviewer/verifier: if the REAL session is also below Opus 5 they run capped at it (the tier-honesty rule reports the actual model). A session above this tier runs them at full pin — but your executor table stays clipped to ${cfg.session_tier}; recompile to use the full ladder`);
+    warnings.push(`session_tier ${cfg.session_tier} is below the pinned Opus 5.5 reviewer/verifier: if the REAL session is also below Opus 5.5 they run capped at it (the tier-honesty rule reports the actual model). A session above this tier runs them at full pin — but your executor table stays clipped to ${cfg.session_tier}; recompile to use the full ladder`);
   }
   return { errors, warnings };
 }
@@ -7646,7 +7648,7 @@ const WIKI_TIER_LADDER = [
   { id: "small-delta", tier: "light", why: "small delta, no new surface" },
 ];
 
-// The POSITION each tier resolves to (v0.55.0). Two slots and ONE Opus 5 agent
+// The POSITION each tier resolves to (v0.55.0). Two slots and ONE Opus 5.5 agent
 // is not a contradiction: a slot names the POSITION, not the model, and the
 // ladder already collapses both tiers onto that agent while `opus5_only` is on.
 const WIKI_TIER_SLOT = { deep: "wiki-scanner-deep", light: "wiki-scanner-light" };
@@ -11236,7 +11238,7 @@ function resume() {
 // assumed the opposite, so an interrupted turn produced a SECOND agent on the
 // same task while the first was still working. A graded run put THREE
 // `orc-executor-opus-5-low` agents on one task for 50m19s + 115m22s + 100m53s
-// — 266 minutes of Opus 5 for one authorised dispatch, all editing the same
+// — 266 minutes of Opus 5.5 for one authorised dispatch, all editing the same
 // files. The hook already recorded every one of them; nothing ever READ it.
 //
 // The pending sidecar (`<trace>.pending.json`, written by orc-trace.js on every
@@ -21240,7 +21242,7 @@ function docForecastCmd(claudeDir, slugArg) {
     for (const part of roleParts) {
       const vec = vecFor(part.agent, part.n, pct);
       if (!part.target) {
-        const m = priceVector(claudeDir, vec, "claude-opus-5");
+        const m = priceVector(claudeDir, vec, "claude-opus-5-5");
         if (m.usd === null) priceable = false;
         else total += m.usd;
         continue;
@@ -21264,8 +21266,8 @@ function docForecastCmd(claudeDir, slugArg) {
   };
   const usd50 = usdAt("p50");
   const usd90 = usdAt("p90");
-  const money50 = priceVector(claudeDir, p50, "claude-opus-5");
-  const money90 = priceVector(claudeDir, p90, "claude-opus-5");
+  const money50 = priceVector(claudeDir, p50, "claude-opus-5-5");
+  const money90 = priceVector(claudeDir, p90, "claude-opus-5-5");
   const extraView = {
     resolved: docExtra.resolved,
     why: docExtra.why,
@@ -21484,7 +21486,7 @@ function docCostCmd(claudeDir, slugArg) {
     runRows.push({ trace: r.name, lane: r.lane, date: r.date, tokens: runVec, weighted: weightedTokens(runVec) });
   }
 
-  const money = priceVector(claudeDir, total, "claude-opus-5");
+  const money = priceVector(claudeDir, total, "claude-opus-5-5");
   const sections = Object.values(bySection).map((s) => ({
     id: s.id,
     heading: s.heading,
@@ -21493,7 +21495,7 @@ function docCostCmd(claudeDir, slugArg) {
     joined: s.joined > 0,
     tokens: s.joined ? s.vec : null,
     weighted: s.joined ? weightedTokens(s.vec) : null,
-    usd: s.joined ? priceVector(claudeDir, s.vec, "claude-opus-5").usd : null,
+    usd: s.joined ? priceVector(claudeDir, s.vec, "claude-opus-5-5").usd : null,
   }));
   const unjoined = sections.filter((s) => !s.joined).length;
   const code = joined === 0 ? 3 : unjoined ? 1 : 0;
@@ -25827,8 +25829,8 @@ function extraResolveFor(claudeDir, score, opts) {
 //
 // `claude` is an ARRAY because `quick-executor` has two: a menu is what that
 // lane is. `claude_opus5` is the variant `opus5_only` would have used, derived
-// from the shipped ladders — NULL where the agent is already Opus 5, so two
-// wiki slots collapsing onto one Opus 5 scanner is not a contradiction: the
+// from the shipped ladders — NULL where the agent is already Opus 5.5, so two
+// wiki slots collapsing onto one Opus 5.5 scanner is not a contradiction: the
 // slot names the POSITION, not the model. NO AGENT IS ADDED by this release
 // and no pair is needed (the floor stays 51).
 const EXTRA_SLOTS = [
@@ -43603,7 +43605,7 @@ function slEngine() {
 // panel really hands over — including `tokenCount`, which is the number v1.2.0
 // concluded could not be measured.
 const SL_TASK_FIXTURES = {
-  healthy: { id: "t1", name: "orc-executor-opus-5-low", type: "orc-executor-opus-5-low", description: "wire the retry ladder", status: "running", model: "claude-opus-5", effort: "low", tokenCount: 84000, contextWindowSize: 200000, startTime: 1767225600000 - 17 * 60000 },
+  healthy: { id: "t1", name: "orc-executor-opus-5-low", type: "orc-executor-opus-5-low", description: "wire the retry ladder", status: "running", model: "claude-opus-5-5", effort: "low", tokenCount: 84000, contextWindowSize: 200000, startTime: 1767225600000 - 17 * 60000 },
   degraded: { id: "t2", name: "orc-executor-sonnet-4-6-med", type: "orc-executor-sonnet-4-6-med", description: "rename two files", status: "failed", model: "claude-sonnet-4-6", effort: "medium", tokenCount: 191000, contextWindowSize: 200000, startTime: 1767225600000 - 96 * 60000 },
   empty: { id: "t3" },
 };
@@ -43612,7 +43614,7 @@ const SL_FIXTURES = {
   healthy: {
     label: "a healthy session mid-run",
     payload: {
-      model: { id: "claude-opus-5", display_name: "Opus 5" },
+      model: { id: "claude-opus-5-5", display_name: "Opus 5.5" },
       effort: { level: "high" },
       version: "2.1.80",
       context_window: { used_percentage: 38, remaining_percentage: 62, context_window_size: 200000 },

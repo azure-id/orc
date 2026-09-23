@@ -6,7 +6,7 @@ the ultra deltas. Ultra exists ONLY here — never in orc-mini, never on a plain
 `/orc` run.
 
 Cost stance: ultra is costly by definition. State it once at intake
-("ultra adds an Opus 5 xhigh advisor + up to 3 judge dispatches + revision
+("ultra adds an Opus 5.5 xhigh advisor + up to 3 judge dispatches + revision
 loops"), then never prompt about cost again.
 
 ## Forced overrides (run-scoped — NEVER written to the user's config file)
@@ -20,13 +20,13 @@ Apply at Phase 0, on top of the normal config resolution:
   boundary (65) rise to at least `orc-executor-opus-5-low`. The floor only ever
   raises a band, so the top `[90,100]` band keeps `orc-executor-opus-5-med`.
   **Under `opus5_only` the floor raises EFFORT, not model** (every band is
-  already Opus 5, so there is no model left to raise): the `[0,90)` band rises
+  already Opus 5.5, so there is no model left to raise): the `[0,90)` band rises
   low → medium, which makes both bands medium. It is still a floor — it never
   lowers a band, and it never raises `[90,100]` past medium.
   Show the remapped table with the Phase 2 scoring table.
 
 > Opus-5-only mode: if `opus5_only`, every role this lane dispatches is already
-> Opus 5 (advisor and judge are pinned there by default) and the scouts rise to
+> Opus 5.5 (advisor and judge are pinned there by default) and the scouts rise to
 > `orc-scout-opus-5-low`. It FORCES. See `../../_shared/opus5-only.md`.
 
 ## Phase U0 — Advisor (after intake sign-off, before the analyst)

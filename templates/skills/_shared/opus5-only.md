@@ -22,11 +22,11 @@ mixed-model table:
 | `[90,100]` | `orc-executor-opus-5-med`  |
 
 Two bands, sharing the 90 edge with the default table's top two rows. Since
-v1.0.0 the default table's high end is ALREADY Opus 5 with effort as the dial,
+v1.0.0 the default table's high end is ALREADY Opus 5.5 with effort as the dial,
 so this mode differs from it only below 65 — a third band here would be a
 distinction the default table stopped making.
 
-**Fixed roles** — dispatch the Opus 5 variant **instead of** the default role
+**Fixed roles** — dispatch the Opus 5.5 variant **instead of** the default role
 agent: same task slice, same return contract, same phase.
 
 | Role | Default agent | Opus-5-only variant |
@@ -41,14 +41,14 @@ agent: same task slice, same return contract, same phase.
 | claude write | `orc-claude-writer-opus-4-8-high` | `orc-claude-writer-opus-5-med` |
 | retro mine | `orc-retro-sonnet-5-high` | `orc-retro-opus-5-med` |
 
-The nine roles already pinned to `claude-opus-5` — analyst, planner, reviewer,
+The nine roles already pinned to `claude-opus-5-5` — analyst, planner, reviewer,
 verifier, test-author, combiner, learn-writer, advisor, judge — are already
 compliant and dispatch unchanged (their efforts are NOT rewritten by this mode).
 
 **The wiki scan tier ladder (v0.46.0) adds NO row here, and needs no new pair.**
 Off, the ladder picks deep or light per delta. ON, this mode already forces the
 wiki scanner to `orc-wiki-scanner-opus-5-med` — so **both tiers collapse onto that
-one shipped agent** and the ladder simply stops applying. A cheaper Opus 5 scanner
+one shipped agent** and the ladder simply stops applying. A cheaper Opus 5.5 scanner
 variant for the light tier does not exist and must never be added: a pair for a
 tier that cannot occur while the flag is on is exactly the phantom this table
 exists to prevent. Ladder: `../orc-wiki/references/partial-refresh.md`.
@@ -58,7 +58,7 @@ exists to prevent. Ladder: `../orc-wiki/references/partial-refresh.md`.
 - **`orc-trace-writer-haiku-4-5` stays Haiku 4.5.** It transcribes a packet the
   orchestrator hands it — no reasoning, no source reads. It is never in the
   roster.
-- **`orc-graph-noter-sonnet-4-6-med` is not dispatched at all.** It has no Opus 5
+- **`orc-graph-noter-sonnet-4-6-med` is not dispatched at all.** It has no Opus 5.5
   variant: under the mode a code lane skips graph notes and prints
   `graph notes: skipped (opus5_only)` (`code-graph.md` §6). The graph's structure
   layer costs no model, so nothing else about the graph changes.
@@ -73,7 +73,7 @@ exists to prevent. Ladder: `../orc-wiki/references/partial-refresh.md`.
   the lane SAYS so at the gate (`orc-quick ignores opus5_only — both options are
   live`), because a shadowed setting must never be silent in either direction.
 - **`/orc-challenge` — UNAFFECTED, not exempt.** All three of its agents are
-  already `claude-opus-5` (judge high, advisor medium, reader low), so the mode
+  already `claude-opus-5-5` (judge high, advisor medium, reader low), so the mode
   has nothing to force: zero new pairs, no rename churn, no roster row. The
   reader's `low` effort is a MEASUREMENT choice, not a cost one — a
   harder-thinking cold reader reasons around exactly the gaps D4 exists to find
@@ -102,7 +102,7 @@ mode is neither shadowed nor shadowing — it is simply **NOT CONSULTED** for th
 work extra took:
 
 - **a scored task** — an extra route row covering that score outranks the mode;
-  every score no row covers still resolves on the Opus 5 ladder.
+  every score no row covers still resolves on the Opus 5.5 ladder.
 - **a POSITION** (v0.55.0 — `quick-executor`, `fast-executor`, `doc-writer`,
   `doc-checker`, `wiki-scanner-deep`, `wiki-scanner-light`) — an extra slot row
   holding that position outranks the mode's variant of that slot's agent; **a
@@ -121,7 +121,7 @@ POSITION, not the model.
 ## Tier honesty
 
 A subagent can never outrank the main session. With the mode ON, EVERY dispatch
-needs an Opus 5 main session — not just the top executor band. On a lower
+needs an Opus 5.5 main session — not just the top executor band. On a lower
 session every role silently falls back to the session model and the tier-honesty
 rule (`return-validation.md`) reports a downgrade on **every** return. That is
 correct behavior, not a bug: hooks cannot block on model, only on effort, so the

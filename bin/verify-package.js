@@ -469,7 +469,7 @@ const required = [
   // v0.47.0 — the three /orc-challenge agents. All THREE must ship: a cycle that
   // cannot dispatch the reader silently loses D4, and one that cannot dispatch
   // the advisor turns a FAIL into a list with no order. All three are already
-  // Opus 5, so `opus5_only` needs no twin for any of them.
+  // Opus 5.5, so `opus5_only` needs no twin for any of them.
   "templates/agents/orc-challenge-judge-opus-5-high.md",
   "templates/agents/orc-challenge-advisor-opus-5-med.md",
   "templates/agents/orc-challenge-reader-opus-5-low.md",
@@ -479,7 +479,7 @@ const required = [
   // first-principles thinker disputes the goal itself, and the expansionist is
   // the only lens not looking for a defect. All five must ship: a roster lens
   // that cannot be dispatched is a NOT-RUN row a user paid to select, and rule
-  // 15 makes that loud rather than silent. All five are claude-opus-5, so
+  // 15 makes that loud rather than silent. All five are claude-opus-5-5, so
   // `opus5_only` adds NO pair and the floor moves by exactly five.
   "templates/agents/orc-challenge-contrarian-opus-5-high.md",
   "templates/agents/orc-challenge-outsider-opus-5-low.md",
@@ -489,7 +489,7 @@ const required = [
   // v0.48.0 — the two /orc-doc agents. BOTH must ship: a write wave that cannot
   // dispatch the writer has nothing to assemble, and a check wave that cannot
   // dispatch the checker silently turns the only judgment step into the free
-  // lint. Both are already Opus 5, so `opus5_only` adds no twin for either.
+  // lint. Both are already Opus 5.5, so `opus5_only` adds no twin for either.
   "templates/agents/orc-doc-writer-opus-5-med.md",
   "templates/agents/orc-doc-checker-opus-5-low.md",
   // v1.5.0 - /orc-test's two agents, and they are two INSTRUMENTS rather than
@@ -498,7 +498,7 @@ const required = [
   // interpreter is `low` because a harder-thinking interpreter reasons its way
   // to why a leaked stack trace is probably fine in staging, which is exactly
   // the gap it exists to find. Nothing may ever upgrade the interpreter. Both
-  // are claude-opus-5, so `opus5_only` adds NO pair and the floor moves by two.
+  // are claude-opus-5-5, so `opus5_only` adds NO pair and the floor moves by two.
   "templates/agents/orc-test-designer-opus-5-high.md",
   "templates/agents/orc-test-interpreter-opus-5-low.md",
   // v1.2.1 — the status line explained for the person reading it, in
@@ -569,7 +569,7 @@ const agentCount = walkCount(path.join(ROOT, "templates/agents"), ".md");
 // tier of the same one. The reader is `low` on purpose (a harder-thinking reader
 // papers over exactly the gaps D4 measures), the judge is `high` because D2 is
 // the only dimension no computer can reach, and the advisor is `medium` because
-// grouping findings is pattern work. All three are claude-opus-5, so `opus5_only`
+// grouping findings is pattern work. All three are claude-opus-5-5, so `opus5_only`
 // adds NO pair and the floor moves by exactly three.
 // v0.48.0: +1 skill (orc-doc) and +2 agents. The split follows v0.47.0's rule —
 // an agent exists when it is a DIFFERENT INSTRUMENT, not a tier of the same one.
@@ -577,13 +577,13 @@ const agentCount = walkCount(path.join(ROOT, "templates/agents"), ".md");
 // LINE RANGE and has `Read` only. The checker is `low` on purpose (a
 // harder-thinking checker reasons its way past a gap a real reader would trip
 // on — the challenge cold reader's reasoning), so nothing may upgrade it. Both
-// are claude-opus-5, so `opus5_only` adds NO pair and the floor moves by two.
+// are claude-opus-5-5, so `opus5_only` adds NO pair and the floor moves by two.
 // v0.49.1: +0 skills and +5 agents — THE COUNCIL. Same rule as v0.47.0, applied
 // five times: each of these is a DIFFERENT INSTRUMENT, not a tier of one. The
 // outsider is `low` and the contrarian is `high` for the same class of reason
 // the cold reader is `low` — effort here is a MEASUREMENT choice, not a cost
 // one, and a key that let either be tuned would be a key that let the
-// instrument be broken. All five are claude-opus-5, so `opus5_only` adds NO
+// instrument be broken. All five are claude-opus-5-5, so `opus5_only` adds NO
 // pair and the floor moves by exactly five.
 // v1.0.0 W3: +0 skills and -5 agents — the Fable 5 role override is REMOVED.
 // It is the first time this floor has ever gone DOWN, and the reason it may is

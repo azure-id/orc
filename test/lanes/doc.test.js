@@ -2193,7 +2193,7 @@ test("doc cost: no trace is an ANSWER, and a section nothing joins reads — nev
     fs.writeFileSync(
       path.join(logs, `run-doc-${slug}-180826-120000.txt`),
       "[180826 12:00:00] PHASE write start\n" +
-        `[180826 12:00:01] DISPATCH orc-doc-writer-opus-5-med :: doc write sections=${first} part=sections/${first}.md expect=claude-opus-5/medium\n` +
+        `[180826 12:00:01] DISPATCH orc-doc-writer-opus-5-med :: doc write sections=${first} part=sections/${first}.md expect=claude-opus-5-5/medium\n` +
         "[180826 12:10:00] FINISH :: done\n"
     );
     const c = cli(["doc", "cost", slug, "--json", "--dir", root]);

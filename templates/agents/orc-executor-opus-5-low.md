@@ -1,10 +1,10 @@
 ---
 name: orc-executor-opus-5-low
 description: >
-  ORC executor — claude-opus-5, low effort. Dispatched by the ORC orchestrator to implement
+  ORC executor — claude-opus-5-5, low effort. Dispatched by the ORC orchestrator to implement
   a single task whose score falls in the upper-complexity [65,90) band. Single-role: execution only.
   Takes a task slice and implements exactly that task.
-model: claude-opus-5
+model: claude-opus-5-5
 effort: low
 tools: Read, Write, Edit, Bash, Glob, Grep
 ---

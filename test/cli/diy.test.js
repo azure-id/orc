@@ -35,7 +35,7 @@ test("diy: the DEFAULT tier keeps both opus-5 bands, and an opus-4-8 tier clips 
   try {
     assert.strictEqual(cli(["diy", "init", "--dir", root]).status, 0);
     // D29, answered at v1.0.0 W16: the wizard default moved opus-4-8-high ->
-    // opus-5-high. It matters because W4 made the top TWO bands Opus 5, so the
+    // opus-5-high. It matters because W4 made the top TWO bands Opus 5.5, so the
     // old default handed a wizard-built flow a ladder with a third of it already
     // collapsed — before the user had chosen anything. The default now outranks
     // every band in the table, so nothing is clipped out of the box.
@@ -46,7 +46,7 @@ test("diy: the DEFAULT tier keeps both opus-5 bands, and an opus-4-8 tier clips 
 
     // THE CLIP ITSELF IS STILL THE THING UNDER TEST. Moving a default must not
     // retire the mechanism it stopped triggering: naming a lower tier still
-    // collapses both Opus 5 bands onto the highest allowed agent, and the
+    // collapses both Opus 5.5 bands onto the highest allowed agent, and the
     // compiled flow still SAYS so. Two adjacent rows naming one agent is not a
     // rendering bug — it is what a clip looks like.
     assert.strictEqual(cli(["diy", "set", "session_tier", "opus-4-8-high", "--dir", root]).status, 0);

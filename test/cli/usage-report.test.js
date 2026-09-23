@@ -48,7 +48,7 @@ const fresh = (fh, sd, ctx) => ({
 // Two returns for one agent (12m43s + 9m3s) and one for another (3m19s).
 const TRACE_TEXT = [
   "[030926 19:22:26.727] hook     SPAWN orc-executor-opus-5-low :: Build approval flow",
-  "[030926 19:39:34.533] hook     RETURN orc-executor-opus-5-low :: Build approval flow dur=12m43s model=claude-opus-5",
+  "[030926 19:39:34.533] hook     RETURN orc-executor-opus-5-low :: Build approval flow dur=12m43s model=claude-opus-5-5",
   "[030926 19:49:08.852] hook     SPAWN orc-executor-opus-5-low :: Repair findings",
   "[030926 19:54:28.672] hook     RETURN orc-executor-opus-5-low :: Repair findings dur=9m3s",
   "[030926 20:36:23.220] hook     RETURN ~agent :: unattributed",
@@ -185,7 +185,7 @@ test("the statusline ledger banks consumption and re-baselines a new session", (
     runHook(claudeDir, "orc-statusline.js", {
       session_id: sid,
       workspace: { project_dir: root },
-      model: { id: "claude-opus-5", display_name: "Opus 5" },
+      model: { id: "claude-opus-5-5", display_name: "Opus 5.5" },
       effort: { level: "high" },
       context_window: { used_percentage: 20 },
       rate_limits: {

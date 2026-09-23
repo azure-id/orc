@@ -70,7 +70,7 @@ governs the cold reader and the `/orc-doc` checker, and it now governs two more:
 - **`expansionist` and `executor` are `medium`** — pattern work against a
   concrete artifact, the same class as the advisor.
 
-All seven are `claude-opus-5`, so **`opus5_only` is a no-op for this lane: it is
+All seven are `claude-opus-5-5`, so **`opus5_only` is a no-op for this lane: it is
 unaffected, not exempt.** The agent count rises by exactly five, with no paired
 variants (the v0.47.0 precedent).
 

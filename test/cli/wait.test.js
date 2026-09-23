@@ -593,7 +593,7 @@ test("W4: the statusline hook WRITES the bridge, raw and fail-silent", () => {
   try {
     const payload = {
       workspace: { project_dir: root },
-      model: { id: "claude-opus-5" },
+      model: { id: "claude-opus-5-5" },
       rate_limits: {
         five_hour: { used_percentage: 94.4, resets_at: Math.floor(Date.now() / 1000) + 6420 },
         seven_day: { used_percentage: 41, resets_at: Math.floor(Date.now() / 1000) + 86400 },
@@ -626,7 +626,7 @@ test("W4: a payload with no rate_limits writes no bridge and still renders", () 
   try {
     const res = require("../_helpers.js").runHook(claudeDir, "orc-statusline.js", {
       workspace: { project_dir: root },
-      model: { id: "claude-opus-5" },
+      model: { id: "claude-opus-5-5" },
     });
     assert.equal(res.status, 0);
     assert.ok(res.stdout.length > 0, "the statusline must always render a line");

@@ -44,7 +44,7 @@ comes back, and the whole thing runs again with the carried findings.
 | `orc-challenge-principles-opus-5-high` | high | rebuilding a problem statement from the ground up is the deepest reasoning in the lane |
 | `orc-challenge-expansionist-opus-5-med` | medium | pattern work again, pointed at upside instead of at defect |
 
-All eight are `claude-opus-5`, so **`opus5_only` is a no-op for this lane** —
+All eight are `claude-opus-5-5`, so **`opus5_only` is a no-op for this lane** —
 zero new agent pairs, no `LEGACY_KEYS` entry, no rename churn. The lane is
 unaffected, not exempt.
 

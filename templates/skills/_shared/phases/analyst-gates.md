@@ -54,7 +54,7 @@ lacks `scope_closed: true` (a one-Grep check).
 
 ## Combiner tracking (yours; full lane only)
 
-`context-combiner` (`orc-context-combiner-opus-5-high` — Opus 5 high, v0.34.0)
+`context-combiner` (`orc-context-combiner-opus-5-high` — Opus 5.5 high, v0.34.0)
 merges 2+ RELATED, already-confirmed
 analyses from the same run into ONE combined requirement-spec before build.
 

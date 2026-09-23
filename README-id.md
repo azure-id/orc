@@ -7,13 +7,13 @@
 *Terima permintaan → pahami → rencanakan → beri nilai → kerjakan paralel → periksa → uji → kirim.*
 
 ![npm](https://img.shields.io/npm/v/%40azure-id%2Forc?style=for-the-badge&color=cb3837&logo=npm)
-![Version](https://img.shields.io/badge/version-1.9.1-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-1.9.2-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
 ![Dependencies](https://img.shields.io/badge/dependencies-zero-lightgrey.svg?style=for-the-badge)
 
-**Versi terbaru: v1.9.1** · diperbarui 23-09-2026 · [daftar perubahan lengkap](CHANGELOG.md)
+**Versi terbaru: v1.9.2** · diperbarui 23-09-2026 · [daftar perubahan lengkap](CHANGELOG.md)
 
 **Ada di npm: [`@azure-id/orc`](https://www.npmjs.com/package/@azure-id/orc)** — `npm i -g @azure-id/orc`
 
@@ -271,7 +271,7 @@ pemakaian 5 jam, pemakaian mingguan, dan beberapa hal lain.
 | Perintah | Kegunaannya | Contoh jalannya |
 |---|---|---|
 | **`/orc`** | Alur penuh: terima → rencana → gelombang paralel bernilai → periksa → uji → kirim. Rajin menyimpan titik simpan; bisa dilanjutkan di sesi baru. | [lihat](mock-run/orc.md) |
-| **`/orc-ultra`** | Sama, ditambah penasihat Opus 5 **xhigh** dan tiga gerbang penilaian. Analisis dalam, pola kode, tes, dan keamanan dipaksa menyala. Memang mahal. | [lihat](mock-run/orc-ultra.md) |
+| **`/orc-ultra`** | Sama, ditambah penasihat Opus 5.5 **xhigh** dan tiga gerbang penilaian. Analisis dalam, pola kode, tes, dan keamanan dipaksa menyala. Memang mahal. | [lihat](mock-run/orc-ultra.md) |
 | **`/orc-mini`** | Satu agen Sonnet 5, satu pemeriksaan build + tes, lalu kirim. Melewati review penuh dan pengujian. Satu baris **pembacaan kompleksitas** berisi angka menawarkan lane penuh kalau perubahannya lebih luas dari satu area. Bisa pindah ke alur penuh di tengah jalan kalau diminta. | [lihat](templates/skills/orc-mini/examples/mini-run-mock.md) |
 | **`/orc-fast`** | Lane tercepat. Butuh wiki yang masih segar **dan** pola kode yang sudah tersimpan; kalau ada, ia melewati tahap analis dan perencana sepenuhnya. Kalau salah satu syarat tidak ada, ia mundur ke `/orc-mini` — obrolan tidak pernah berhenti. | [lihat](mock-run/orc-fast.md) |
 | **`/orc-quick`** | Minta apa saja: perbaikan kecil, pertanyaan, mencari bug, menaikkan versi dependensi, komentar PR. Lihat → tanya sekali → kerjakan. **Selalu bertanya agen mana yang mau dipakai**, dan tidak ada pengaturan yang bisa mengubah itu. Satu **defect direproduksi merah dulu sebelum diperbaiki**. | [lihat](mock-run/orc-quick.md) |
@@ -786,45 +786,44 @@ Bacalah sebagai catatan putaran itu, bukan sebagai audit terkini:
 **Riwayat lengkap: [CHANGELOG.md](CHANGELOG.md)** — atau `orc changelog`, yang
 hanya mencetak yang lebih baru dari versi yang Anda punya.
 
-### v1.9.1 - graf yang dibayar tetapi tidak pernah ditanya _(23-09-2026)_
+### v1.9.2 - graf kode mendapat tab sendiri, dan Opus 5 menjadi Opus 5.5 _(23-09-2026)_
 
-Graf kode lebih sering dirawat daripada ditanya, dan bagian yang ditanya lebih
-mahal daripada yang dicatat meterannya. Di satu proyek Vue nyata, 416 dari 429
-berkas `.vue` tidak punya simbol, dan panel menulis `0 hook updates` setelah 35.
+**Graf kode punya tab sendiri.** `orc ui` ▸ Knowledge ▸ **Code graph**
+menggantikan satu kartu di tab Wiki. Tab ini menunjukkan, berurutan:
 
-**Jawaban lebih kecil.** `--brief` menyimpan kartu, baris dan setiap hitungan,
-lalu membuang baris yang tidak pernah dicetak lane: 74 % sampai 87 % lebih
-kecil, dan setiap panggilan lane memakainya. CLI sekarang menghitung baris
-blast-radius `/orc-quick` dan baris kompleksitas `/orc-mini` dalam satu
-panggilan, bukan lane yang menghitung baris-barisnya.
+- **Posisi graf Anda sekarang** — empat status (OFF · NONE · FRESH · DRIFTED)
+  sebagai tangga. Status saat ini menyala, dan satu tindakan yang dibutuhkan
+  ada di bawahnya.
+- **Cara kerja graf kode** — lima langkah beranimasi, dari file Anda sampai
+  kartu singkat yang dibaca agent. Tiga langkah pertama gratis.
+- **Seperti apa graf kode** — contoh graf (bukan kode Anda). Arahkan pointer ke
+  sebuah titik untuk melihat pemanggil dan yang dipanggilnya.
+- **Graf Anda, dalam angka** — file, simbol, kepadatan per bahasa, dan apa yang
+  berubah sejak pembuatan terakhir.
+- **Biaya graf, dan perkiraan hematnya** — dibayar (persis) dan dihindari
+  (perkiraan, digambar sebagai rentang) pada satu skala, dan pertanyaan yang
+  diajukan lane.
+- **Arti setiap kata** — setiap istilah di tab ini, dengan kata sederhana.
 
-**Meterannya jujur.** Pembaruan oleh hook selalu tercatat 0, dan `paid`
-menghitung kartu padahal lane menerima 4 sampai 8 kali lebih banyak. Keduanya
-diperbaiki: baris `hook-update`, dan `paid.envelope` di samping kartu.
-Meterannya juga menulis pembacaan yang belum pernah dilakukan proyek ini.
+Temuan DRIFTED di Overview sekarang membuka tab ini. Reduced motion menghapus
+semua animasi.
 
-**Peta memberi tahu kapan ia tipis, dan kenapa** — `THIN` di `orc graph
-status`, dan `orc graph audit` baru yang menulis berkas kosong per bahasa,
-yang terpanjang lebih dulu.
+**Setiap agent Opus 5 sekarang memakai Opus 5.5.** Model id-nya
+`claude-opus-5-5` (sebelumnya `claude-opus-5`): executor, scout, analis,
+planner, reviewer, verifier, judge, dan setiap agent Opus lainnya. Opus 5.5
+lebih murah: $4 input, $5 cache write, $0,20 cache read, dan $20 output per
+sejuta token. `bin/pricing.json` punya baris baru, dan `orc budget`
+memakainya.
 
-**Parser membaca Vue Options API** (mesin `graph@6`). Komponen, mixin dan modul
-Vuex menjadi class dengan method; `mixins` menjadi basisnya; konstanta yang
-diekspor dan komponen `<script setup>` diberi nama. Store 1.9.0 memperbarui
-dirinya sendiri satu kali, di preflight berikutnya. Tidak ada yang perlu
-dilakukan.
-
-**Pembacaan berbayar membawa isinya:** `ctx --callers-source` (enam baris di
-sekitar setiap titik panggil yang pasti), `lsp_at` untuk language server jika
-kartu menulis `AMBIGUOUS`, dan hitungan pembacaan berkas lebar yang tidak
-diberi petunjuk.
-
-**Tidak diukur di sini:** evaluasi sesi langsung tidak dijalankan, dan gerbang
-Vue (di bawah 20 % berkas `.vue` kosong) diukur di proyek Anda sendiri.
-CHANGELOG menyebut setiap batasnya.
+**Yang harus Anda lakukan:** jalankan `orc update` untuk memasang file agent
+yang baru. NAMA agent tidak berubah, jadi `rubric_bands_override`,
+`fixed_executor` dan `opus5_only` tetap berjalan. Config yang masih menyebut
+`claude-opus-5` tetap valid.
 
 <details>
-<summary><strong>Rilis sebelumnya</strong> — 120 rilis, hanya judulnya. Teks lengkapnya (dalam bahasa Inggris) ada di <a href="CHANGELOG.md">CHANGELOG.md</a>.</summary>
+<summary><strong>Rilis sebelumnya</strong> — 121 rilis, hanya judulnya. Teks lengkapnya (dalam bahasa Inggris) ada di <a href="CHANGELOG.md">CHANGELOG.md</a>.</summary>
 
+- **v1.9.1** — the graph that was paid for and never asked · _2026-09-23_
 - **v1.9.0** — the lean lanes learn to look before they leap · _2026-09-21_
 - **v1.8.2** — the map that finds what a grep cannot · _2026-09-21_
 - **v1.8.1** — the guard that only failed on Windows · _2026-09-16_

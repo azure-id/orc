@@ -53,7 +53,7 @@ function project(configText) {
 // needs a verified profile, so it is frozen next to the fake provider in
 // test/cli/extra-routing.test.js instead of here.
 
-const RUBRIC_SHADOW = "shadowed by opus5_only — executors use the fixed 2-band Opus 5 ladder";
+const RUBRIC_SHADOW = "shadowed by opus5_only — executors use the fixed 2-band Opus 5.5 ladder";
 
 // W3 REMOVED the Fable 5 role override, and with it the three keys this golden
 // used to pin. A golden is deleted only when the behaviour it froze was
@@ -87,7 +87,7 @@ test("GOLDEN: a retired key's sentences, byte for byte", () => {
         key: "fable5_enabled",
         value: "true",
         removed_in: "1.0.0",
-        why: "the Fable 5 role override was removed — every role dispatches its shipped Claude agent, or the Opus 5 variant under opus5_only",
+        why: "the Fable 5 role override was removed — every role dispatches its shipped Claude agent, or the Opus 5.5 variant under opus5_only",
       },
     ]);
 
@@ -95,7 +95,7 @@ test("GOLDEN: a retired key's sentences, byte for byte", () => {
     assert.notStrictEqual(set.status, 0);
     assert.strictEqual(
       set.stderr.trim(),
-      "❌ fable5_enabled was removed in v1.0.0 — the Fable 5 role override was removed — every role dispatches its shipped Claude agent, or the Opus 5 variant under opus5_only.\n" +
+      "❌ fable5_enabled was removed in v1.0.0 — the Fable 5 role override was removed — every role dispatches its shipped Claude agent, or the Opus 5.5 variant under opus5_only.\n" +
         "   Nothing reads it. A line already in orc.config.yaml is left alone; delete it when you like."
     );
   } finally {

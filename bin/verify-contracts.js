@@ -1813,7 +1813,7 @@ const CONTRACTS = [
     binFiles: ["bin/cli.js"],
     files: [
       "agents/MODEL-MAPPING.md",
-      // v1.8.0 — the graph noter has no Opus 5 variant; under the mode a lane
+      // v1.8.0 — the graph noter has no Opus 5.5 variant; under the mode a lane
       // skips notes. Both the agent and the canonical contract say so.
       "agents/orc-graph-noter-sonnet-4-6-med.md",
       "skills/_shared/code-graph.md",
@@ -3049,7 +3049,7 @@ const CONTRACTS = [
   {
     // The only notes writer, dispatched BY NAME. An unnamed dispatch cannot
     // enforce the Sonnet 4.6 pin and is invisible to the trace hook.
-    name: "graph noter (v1.8.0 — dispatched by name, no Opus 5 variant)",
+    name: "graph noter (v1.8.0 — dispatched by name, no Opus 5.5 variant)",
     token: "orc-graph-noter-sonnet-4-6-med",
     files: [
       "agents/MODEL-MAPPING.md",

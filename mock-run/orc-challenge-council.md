@@ -59,7 +59,7 @@ When you open a cycle, question 7 looks like this:
        [ ] expansionist    what upside is being missed?             (never blocks)
 
      Reply with the ones you want (or "all", or "none").
-     Each one is one extra read-only Opus 5 dispatch per iteration.
+     Each one is one extra read-only Opus 5.5 dispatch per iteration.
 ```
 
 Three things about that block:

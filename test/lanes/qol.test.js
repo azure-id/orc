@@ -169,16 +169,16 @@ test("run show: is the only path that opens checkpoint.json", () => {
 
 const TRACE_WITH_STATS = [
   "[080826 12:00:00.000] hook     SPAWN orc-executor-opus-5-med :: T1",
-  "[080826 12:05:00.000] orc      DISPATCH orc-executor-opus-5-med :: T1 expect=claude-opus-5/medium",
+  "[080826 12:05:00.000] orc      DISPATCH orc-executor-opus-5-med :: T1 expect=claude-opus-5-5/medium",
   "[080826 12:06:00.000] orc      STATS lane=orc slug=demo dispatches=17 waves=4 tasks=7 downgrades=2",
   "[080826 12:06:01.000] orc      FINISH :: shipped",
   "",
 ].join("\n");
 
 const LEGACY_TRACE = [
-  "[010726 09:00:00.000] orc      DISPATCH orc-planner-opus-5-med :: plan expect=claude-opus-5/medium",
-  "[010726 09:10:00.000] orc      DISPATCH orc-reviewer-opus-5-med :: review expect=claude-opus-5/medium",
-  "[010726 09:20:00.000] orc      VERIFY T1 actual=claude-sonnet-5/high ⛔ DOWNGRADE expected=claude-opus-5/medium",
+  "[010726 09:00:00.000] orc      DISPATCH orc-planner-opus-5-med :: plan expect=claude-opus-5-5/medium",
+  "[010726 09:10:00.000] orc      DISPATCH orc-reviewer-opus-5-med :: review expect=claude-opus-5-5/medium",
+  "[010726 09:20:00.000] orc      VERIFY T1 actual=claude-sonnet-5/high ⛔ DOWNGRADE expected=claude-opus-5-5/medium",
   "[010726 09:30:00.000] orc      FINISH :: done",
   "",
 ].join("\n");

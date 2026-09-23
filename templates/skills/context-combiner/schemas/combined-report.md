@@ -11,7 +11,7 @@ combined_from: [analysis-A, analysis-B, ...]   # source analysis names
 scope: <the shared scope X these analyses live in>
 combined_at: DDMMYY HH:MM:SS
 combined_against: <git HEAD short sha the evidence spot-check ran against>
-model: opus-5-high        # the RESOLVED model of the combiner that produced
+model: opus-5-5-high      # the RESOLVED model of the combiner that produced
                           #   this — never copied from here
 
 ## Relatedness check

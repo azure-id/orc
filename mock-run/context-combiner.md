@@ -34,7 +34,7 @@ hand off.
 
 ```
 Dispatching orc-context-combiner-opus-5-high …
-returned as: claude-opus-5 / high        ✓
+returned as: claude-opus-5-5 / high        ✓
 
 Phase B — are these really related?
   shared files       api/refunds/ (both), web/refunds/ (both)

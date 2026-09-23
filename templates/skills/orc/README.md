@@ -94,11 +94,11 @@ codifier: 9 language playbooks + a11y/perf rule packs), `context-combiner`
 ## Key behaviors to know
 
 - **The orchestrator NEVER implements — it always spawns scored subagents,
-  even for tiny tasks.** Orchestrator (Opus 4.8 high, or Opus 5 / Fable 5 at
+  even for tiny tasks.** Orchestrator (Opus 4.8 high, or Opus 5.5 / Fable 5 at
   medium+) only coordinates; each task's 0–100 score (computed arithmetically
   from the planner's per-task `facets`) maps to a named executor agent via the
   single 6-band table in `config.md` (`rubric_bands` = report granularity only),
-  Haiku 4.5 [0,30) → Opus 5 low [65,90) → Opus 5 medium [90,100].
+  Haiku 4.5 [0,30) → Opus 5.5 low [65,90) → Opus 5.5 medium [90,100].
 - **Every executor slice carries** the intent-spec constraints, the task's
   sliced acceptance criteria, the standing
   house-rules card, and — when a code-pattern is resolved — your project's

@@ -48,7 +48,7 @@ const STATES = [
     effort: { level: "high" },
   }],
   ["boosted — opus 5 medium", {
-    model: { id: "claude-opus-5", display_name: "Opus 5" },
+    model: { id: "claude-opus-5-5", display_name: "Opus 5.5" },
     effort: { level: "medium" },
   }],
   ["degrade — sonnet 5 high, every reason named", {
@@ -60,12 +60,12 @@ const STATES = [
     effort: { level: "low" },
   }],
   ["context keeps its slot at 0%", {
-    model: { id: "claude-opus-5", display_name: "Opus 5" },
+    model: { id: "claude-opus-5-5", display_name: "Opus 5.5" },
     effort: { level: "high" },
     context_window: { used_percentage: 0 },
   }],
   ["both usage windows", {
-    model: { id: "claude-opus-5", display_name: "Opus 5" },
+    model: { id: "claude-opus-5-5", display_name: "Opus 5.5" },
     effort: { level: "high" },
     context_window: { used_percentage: 34 },
     rate_limits: {
@@ -74,7 +74,7 @@ const STATES = [
     },
   }],
   ["a window at 90% folds into the verdict", {
-    model: { id: "claude-opus-5", display_name: "Opus 5" },
+    model: { id: "claude-opus-5-5", display_name: "Opus 5.5" },
     effort: { level: "high" },
     rate_limits: { five_hour: { used_percentage: 91, resets_at: RESET } },
   }],
@@ -154,7 +154,7 @@ test("statusline: the wiki distance rides INSIDE the throttled scan", () => {
       path.join(claudeDir, "orc", "wiki-meta.json"),
       JSON.stringify({ scan_commit: "HEAD" })
     );
-    const payload = { cwd: root, session_id: "s", model: { id: "claude-opus-5" }, effort: { level: "high" } };
+    const payload = { cwd: root, session_id: "s", model: { id: "claude-opus-5-5" }, effort: { level: "high" } };
     runHook(claudeDir, "orc-statusline.js", payload);
     const led = JSON.parse(
       fs.readFileSync(path.join(claudeDir, "orc", "usage-session.json"), "utf8")

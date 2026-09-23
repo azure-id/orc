@@ -240,13 +240,13 @@ printed a chip over a slug. **It reports and never resumes:** continuing a third
 party's unfinished write without asking is the same class of act as routing off
 Claude without saying so.
 
-### 4b. Knowledge — five tabs (v0.49.1)
+### 4b. Knowledge — six tabs (v0.49.1, Code graph tab v1.9.2)
 
 The Crosslink two-tab precedent. One scrolling column was already six cards long
 and this release roughly tripled the content.
 
 ```
-Knowledge   [ Wiki ] [ Coverage ] [ Code patterns ] [ Memory ] [ Peers ]
+Knowledge   [ Wiki ] [ Coverage ] [ Code patterns ] [ Memory ] [ Peers ] [ Code graph ]
 ```
 
 A **header strip** renders above the tabs on every one of them — tier · docs ·
@@ -262,7 +262,28 @@ never as a guess or a zero.**
 | **Memory** | a row that expands into every field the CLI already emits, headroom against `gotchas_max`, and the archive | **preview-then-apply**: Apply stays disabled until a preview was fetched, and **the preview names every entry** — a count is not consent |
 | **Peers** | linked repos, their state and freshness words as the CLI computed them | read-only, and it **never duplicates Crosslink's editor** — one boundary, one picture |
 
-**v1.8.0 — the code graph card** sits on the Wiki tab under the one-doc card, and
+**v1.9.2 — the Code graph tab.** The code graph card is no longer on the Wiki
+tab. It has its own tab (`knGraphTab`), and the text below about "the card"
+now describes the **All the numbers** card at the foot of that tab. The tab, top
+to bottom:
+
+| card | what it shows | the rule it keeps |
+|---|---|---|
+| **Where your code graph is now** | OFF · NONE · FRESH · DRIFTED as a ladder, the current one lit with a beacon, the action that moves the graph on each connector, and the ONE action for this state | OFF → `orc config set code_graph on` as copy-able text; NONE/DRIFTED → the free `orc graph update` button; FRESH → nothing. The state words are upper-case literals compared with the CLI's word, never a synonym. `line` is shown verbatim |
+| **How the code graph works** | five stations — code · parser · map · questions · short card — with dots running between them, and the optional notes layer with the `code_graph_notes` value | the first three are marked free, the card is marked as what costs context tokens |
+| **What a code graph looks like** | an SVG example graph (files, symbols, calls with a running pulse, refs, imports) and a legend | an EXAMPLE, labelled as one in the title. Hover or Tab to a dot: its edges light up and the caption says what `orc graph ctx` answers |
+| **Your graph, in numbers** | tiles that count up (files · symbols · symbols per file · generation), added · changed · deleted, the density bar and one bar per language | the count RESTS on the CLI's own string; `by_lang` in the CLI's order; THIN is the CLI's boolean |
+| **What the graph cost, and what it probably saved** | paid (four stacked parts) and avoided (solid to low, striped to high) on ONE scale; one row per read in `read_set` | avoided is always a range; a read never asked keeps its slot, muted |
+| **All the numbers, as the CLI sent them** | the card described below, minus the chip/button row | `graphCard(g, body, gain, true)` |
+| **What each word means** | every term on the tab, in four groups | plain words (STE) |
+
+Reduced motion: `.cg-beacon`, `.cg-link-dot` and `.cg-pulse` (the three
+infinite ones) are removed with `display: none` in `04-motion.css`; every
+finite `cg-*` animation is `animation: none`; the tiles skip the count-up. The
+`graph-drifted` finding on Overview opens this tab (`tab: "graph"` on its
+route, applied by `goRoute()`). No new route, file or fixture.
+
+**v1.8.0 — the code graph card** sat on the Wiki tab under the one-doc card, and
 the header strip gains a `graph` value. Both render `orc graph status --json`
 and derive nothing: the state word (`FRESH` · `DRIFTED` · `NONE` · `OFF`) is the
 CLI's, the `notes` row shows the config VALUE of `code_graph_notes` untranslated,

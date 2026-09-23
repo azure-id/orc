@@ -13,7 +13,7 @@ Every value comes from a file on your disk or from data Claude Code gives the
 hook. No value costs model tokens. Nothing here starts a run.
 
 ```
-🚀 ORC v1.2.1 - Opus 5/high · context (34%) · 5h 41% (2h13m) ↔ wk 12% · ucs 6% · wiki: fresh
+🚀 ORC v1.2.1 - Opus 5.5/high · context (34%) · 5h 41% (2h13m) ↔ wk 12% · ucs 6% · wiki: fresh
    ▰ status: quick · Q3 DO · agents 7 (2 running) · orc-extra: on · Dur 48m · MTok 412K · main
 ```
 
@@ -24,7 +24,7 @@ Line 2 answers: **what is this session doing?**
 
 ## Line 1
 
-### 1. The icon and `ORC v1.2.1 - Opus 5/high`
+### 1. The icon and `ORC v1.2.1 - Opus 5.5/high`
 
 The icon is the verdict. The words are the ORC version you have installed and
 the model and effort you are running now.

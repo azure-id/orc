@@ -147,7 +147,7 @@ test("every lens agent is a real shipped file whose frontmatter matches its row"
     const p = path.join(REPO, "templates/agents", l.agent + ".md");
     assert.ok(fs.existsSync(p), `${l.lens} dispatches ${l.agent}, which does not exist`);
     const src = fs.readFileSync(p, "utf8");
-    assert.match(src, /^model: claude-opus-5$/m, `${l.agent} is claude-opus-5 (so opus5_only is a no-op for this lane)`);
+    assert.match(src, /^model: claude-opus-5-5$/m, `${l.agent} is claude-opus-5-5 (so opus5_only is a no-op for this lane)`);
     assert.match(src, new RegExp("^effort: " + l.effort + "$", "m"), `${l.agent}: effort matches the table`);
   }
   // The outsider's slice is the tightest in the lane, and low effort is a

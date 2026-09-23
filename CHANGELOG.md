@@ -10,6 +10,75 @@ Format: `### v<version> — <title> _(<date>)_`.
 
 ---
 
+### v1.9.2 — the code graph gets its own tab, and Opus 5 becomes Opus 5.5 _(2026-09-23)_
+
+**Still on the unscoped `orc` package?** Do this once first - your `orc upgrade`
+is the pre-v0.56.0 one and cannot install itself. Full detail in the CAUTION at
+the top of this file.
+
+- **Step 1 - release the command from the old package:** `npm uninstall -g orc`
+- **Step 2 - install the current package:** `npm i -g @azure-id/orc`
+- **Step 3 - re-apply it to your project:** `orc update`
+
+**Do not use `npm i -g -f`.** Full detail in v0.56.0 below.
+
+**The code graph has its own tab.** Before this release the graph was one card
+on the Knowledge ▸ Wiki tab: fourteen rows of exact numbers and no picture of
+what any of them meant. `orc ui` ▸ Knowledge now has a sixth tab, **Code
+graph**, and the card on the Wiki tab is gone. The tab reads top to bottom:
+
+- **Where your code graph is now.** The four states `OFF` · `NONE` · `FRESH`
+  · `DRIFTED` as a ladder, with the action that moves the graph from one to
+  the next on each connector. The current state is lit and sends a ring
+  outward. Below it is the ONE action that state needs: the config command for
+  OFF (copy-able, never a button), the free `orc graph update` button for NONE
+  and DRIFTED, nothing for FRESH. The line a lane prints into the chat
+  (`line`) is shown verbatim.
+- **How the code graph works.** Five stations — your code, the parser, the
+  map, the questions, the short card — with dots that run between them. The
+  first three are marked free; the card is marked as what costs context tokens.
+  The optional notes layer, the only part that can cost a model, is a separate
+  line with the current `code_graph_notes` value.
+- **What a code graph looks like (an example, not your code).** Four files from
+  a made-up shop drawn as an SVG: files, symbols, calls (a pulse runs caller to
+  callee), refs and imports. Point at a dot, or Tab to it, and its edges light
+  up while a caption says what `orc graph ctx` would answer. A legend names
+  every mark.
+- **Your graph, in numbers.** Files, symbols, symbols per file and generation
+  as tiles that count up to the CLI's own value; the added · changed · deleted
+  counts; and the density as a bar, per language when the CLI sent
+  `density.by_lang`.
+- **What the graph cost, and what it probably saved.** `paid` (four stacked
+  parts) and `avoided` (solid to its low end, striped to its high end) on ONE
+  scale. Every read in `read_set`, in the CLI's order, with its count and one
+  line on what it answers; a read never asked keeps its slot, muted.
+- **All the numbers, as the CLI sent them.** The old card, unchanged, minus the
+  chip and the button the ladder now carries.
+- **What each word means.** Every term on the tab in four groups.
+
+The pictures derive nothing: every number is `orc graph status --json` or
+`orc graph gain --json`, drawn to scale. `prefers-reduced-motion` removes all
+three new infinite animations with `display: none` and every finite one with
+`animation: none`, and the tiles skip their count-up. The `graph-drifted`
+doctor finding on Overview now opens the Code graph tab.
+
+**Every Opus 5 agent now runs Opus 5.5 (`claude-opus-5-5`).** Every agent and
+generated executor that shipped as `model: claude-opus-5` now ships as
+`model: claude-opus-5-5`, and the prose that named "Opus 5" now names
+"Opus 5.5". Opus 5.5 is cheaper than Opus 5, so the same pipeline costs less.
+`bin/pricing.json` gains the `claude-opus-5-5` row ($4 input · $5 cache write
+· $0.20 cache read · $20 output per million tokens, from the Claude pricing
+page), and `orc budget` prices its forecasts against it.
+
+What did NOT change: the agent NAMES (`orc-executor-opus-5-med` and the rest),
+the `opus5_only` key and its "Opus 5-only" mode name. `claude-opus-5` stays
+in the known-model list and keeps its price row, so an existing config and old
+traces still validate and still price.
+
+**What you have to do:** `orc update`, to install the new agent files.
+
+---
+
 ### v1.9.1 — the graph that was paid for and never asked _(2026-09-23)_
 
 **Still on the unscoped `orc` package?** Do this once first - your `orc upgrade`

@@ -61,7 +61,7 @@ DISPATCH orc-doc-writer-opus-5-med  role=digest  source=notes/2026-08-11-finance
 Return, per digest:
 
 ```yaml
-actual_model: "claude-opus-5"
+actual_model: "claude-opus-5-5"
 actual_effort: "medium"
 role: digest
 claims:
@@ -167,7 +167,7 @@ and cross-agent consistency is expensive to check and free to prevent.
 Each writer returns:
 
 ```yaml
-actual_model: "claude-opus-5"
+actual_model: "claude-opus-5-5"
 actual_effort: "medium"
 files_written:
   - sections/01-document-info.md
@@ -230,7 +230,7 @@ lint's findings for that file. It never re-reports one: paying a model to repeat
 a free check is the mistake this ordering exists to prevent.
 
 ```yaml
-actual_model: "claude-opus-5"
+actual_model: "claude-opus-5-5"
 actual_effort: "low"
 file_read: sections/04-goals-and-success-metrics.md
 verdict: FINDINGS

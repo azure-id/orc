@@ -15,7 +15,7 @@ depth: standard | deep
 source: "pasted request"        # the user's own words, verbatim
 scope: <X — the requested scope only>
 analyzed_at: DDMMYY HH:MM:SS
-model: opus-5-high        # the RESOLVED model of the agent that produced this
+model: opus-5-5-high      # the RESOLVED model of the agent that produced this
                           #   (mini writes sonnet-5-high) — never copied from here
 grounding: repo-read | repo-read+scouts   # scouts only in deep mode
 

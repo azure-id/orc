@@ -241,7 +241,7 @@ path would use. An empty result is an ANSWER, so it still returns its object.
 | `doc_language` | `en` | the D4 default, always confirmable per run |
 | `doc_dir` | `orc/orc-doc` | where the folders live |
 
-`opus5_only` is a **no-op** here: both agents are already `claude-opus-5`. The
+`opus5_only` is a **no-op** here: both agents are already `claude-opus-5-5`. The
 lane is *unaffected*, not exempt.
 
 ## Where it sits
