@@ -56,7 +56,7 @@ is a pointer into nothing.
    knowledge never stops the run, never causes a fallback, never triggers a
    scan. Print ONE line each.
 4. **Code graph cache — never skipped** (`../_shared/code-graph.md` §0). Run
-   `orc graph status --if-enabled --heal --json`: it builds or updates the cache
+   `orc graph status --if-enabled --heal --json --brief`: it builds or updates the cache
    in the same call. Print its `line`; put its `trace` (`GRAPH-CONSULT …`) in the
    packet VERBATIM. Exit 3 = off → no other graph call this session. Every graph
    call carries `--if-enabled`, so the CLI reads the `code_graph` keys —
@@ -94,11 +94,11 @@ Print it on ONE line so nothing is skipped in secret:
 
 **The dig — graph first** (`references/look.md`). Ask the graph BEFORE any
 Grep; Grep only for what the graph does not know.
-- Names a file or symbol → `orc graph ctx <targets> --if-enabled --json`, 5 at
+- Names a file or symbol → `orc graph ctx <targets> --if-enabled --json --brief`, 5 at
   most. Names none → `orc graph map --focus "<3–6 words>" --budget 800
-  --if-enabled --json`, then `ctx` on the files it ranks first. Asks what breaks
+  --if-enabled --json --brief`, then `ctx` on the files it ranks first. Asks what breaks
   or who uses something → `ctx <symbol> --depth 2` and `orc graph coverage
-  <files> --if-enabled --json` before you call anything absent. Exit 3 →
+  <files> --if-enabled --json --brief` before you call anything absent. Exit 3 →
   Grep/Glob. Exit 4 → Grep the name, carry EVERY candidate into your question.
   Copy each `line` into chat, each `trace` into the running record. A `map`
   answer is ONE call; a card never replaces reading the range it names.
@@ -155,7 +155,7 @@ Rules:
 
 Put in the slice: the change sketch, the Q2 answers, 2–3 acceptance bullets, the
 `graph` block from `orc graph ctx <declared files> --for-slice --if-enabled
---json` (the OUTSIDE view — `references/look.md` §5), the wiki **paths**, the
+--json --brief` (the OUTSIDE view — `references/look.md` §5), the wiki **paths**, the
 cached pattern (whole text), the `house_rules` card
 (`../_shared/phases/house-rules.md`, whole text), the `rules_card` under it
 (`orc rules slice --lane orc-quick --json` → `text`, whole text), PR comments
@@ -187,12 +187,11 @@ say it once; never invent a build command — take it from `wiki-meta.json`'s
 exit=<n>` then `REPRO green :: <cmd> exit=0`. `repro: none` → say **not
 reproduced** with the reason (`references/defect.md`).
 
-**Affected tests first.** Run `orc graph changes --if-enabled --json`, keep the
-`symbols[]` whose `file` is in the return's `actual_files`, and run the test
-files their `tests[]` name BEFORE the suite — when the runner takes a file list.
-A runner that takes none → one line saying so. Then print the blast radius from
-the same answer, one line, and never a `risk` word without its `why`. Zero
-symbols in the graph → `blast radius   none indexed (<n> files not in the graph)`.
+**Affected tests first.** Run `orc graph changes --files=<actual_files> --if-enabled
+--json --brief`. Print its `tests_line`, run the files its `tests[]` names BEFORE
+the suite — a runner that takes no file list → one line saying so — and append
+` → <n> passed`. Then the suite. Then print its `blast_line` VERBATIM: the CLI
+attaches every `risk` word's `why`, so never restate it. Exit 3 → nothing.
 
 `tests reached  3 files (ROUTE 2 · call 1) → 12 passed` · then the suite · then
 `blast radius   3 symbols · callers 7 in 4 files · tests reach 2 · risk high: <symbol> (exported, fan-in 4, no test reaches it)`
@@ -210,13 +209,13 @@ Never offer commit while tests are red.
 
 **After a request that WROTE code** (never after a read-only one), so the next
 request and the next session start from a current cache, in this order:
-`orc graph update --notes-pending --files <actual_files> --if-enabled --json`
+`orc graph update --notes-pending --files <actual_files> --if-enabled --json --brief`
 — ONE call that answers both (print its `line`, copy its `trace`). Exit 0 on
 `notes` → dispatch `orc-graph-noter-sonnet-4-6-med` in the SAME tool block as
 this doc write. It is ORC bookkeeping, like the trace writer — not a Q2 gate
 dispatch (`references/dispatch-gate.md` rule 8). Exit 3 or 5 → nothing. Then,
 after the entry is appended, `orc graph gain --run <this run> --if-enabled
---json` → print its `line` VERBATIM into chat and the entry. It is an estimate
+--json --brief` → print its `line` VERBATIM into chat and the entry. It is an estimate
 with a range; never restate it as a saving.
 
 Append entry N to `orc-quick/<slug>/quick-context.md`

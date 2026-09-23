@@ -84,7 +84,7 @@ test("upgrade — a 1.8.1 store reads DRIFTED with engine_stale, and its resolut
   assert.equal(Q.ctx(m, "searchByItemPrefix", { budget: 2000 }).state, "found");
 });
 
-test("upgrade — status --heal re-extracts once, says so, and the store is FRESH on graph@5 with every note current", () => {
+test("upgrade — status --heal re-extracts once, says so, and the store is FRESH on the current engine with every note current", () => {
   const c = withOldStore();
   const before = JSON.parse(fs.readFileSync(path.join(c.claudeDir, "orc", "graph", "meta.json"), "utf8"));
   const h = graph(c.root, "status", "--heal", "--json");
@@ -147,4 +147,80 @@ test("upgrade — every read answer on the upgraded store is byte-identical to a
   assert.equal(r.state, "found");
   assert.deepStrictEqual(r.tests, ["tests/orders.test.js"]);
   assert.ok(r.callers.filter((x) => x.state === "ROUTE").length >= 3);
+});
+
+// ── v1.9.1 W5b — a 1.9.0 store (graph@5) meets graph@6 ──────────────────────
+//
+// The golden under `test/goldens/graph-1.9.0/` was written by the graph@5
+// engine on 23-09-2026, BEFORE the extractor changed, on an Options API
+// fixture where graph@5 saw 2 symbols in 7 files. It is never regenerated.
+const GOLD5 = path.join(REPO, "test", "goldens", "graph-1.9.0");
+
+function withStore5() {
+  const root = tmpdir();
+  const files = JSON.parse(fs.readFileSync(path.join(GOLD5, "fixture.json"), "utf8"));
+  for (const [rel, body] of Object.entries(files)) {
+    const f = path.join(root, ...rel.split("/"));
+    fs.mkdirSync(path.dirname(f), { recursive: true });
+    fs.writeFileSync(f, body);
+  }
+  const git = (...a) => spawnSync("git", a, { cwd: root, encoding: "utf8" });
+  git("init", "-q");
+  git("config", "user.email", "t@t");
+  git("config", "user.name", "t");
+  git("config", "core.autocrlf", "false");
+  git("add", "-A");
+  git("commit", "-qm", "fixture");
+  assert.equal(cli(["config", "set", "code_graph", "on", "--dir", root]).status, 0);
+  const claudeDir = path.join(root, ".claude");
+  copyDir(path.join(GOLD5, "store"), path.join(claudeDir, "orc", "graph"));
+  return { root, claudeDir };
+}
+
+test("upgrade @5 → @6 — DRIFTED, one automatic re-extract, the Options API is named, the note survives", () => {
+  const c = withStore5();
+  const s = json(graph(c.root, "status", "--json"));
+  assert.equal(s.engine, "graph@5", "the golden really is a 1.9.0 store");
+  assert.equal(s.state, "drifted");
+  assert.equal(s.engine_stale, true);
+  // Before the heal the old index still answers what it knew. In process: a
+  // CLI read would heal on read (the golden's HEAD is not this repo's HEAD).
+  const m5 = Q.loadModel(c.claudeDir, c.root);
+  assert.equal(Q.ctx(m5, "money", { budget: 2000 }).state, "found");
+  assert.equal(Q.ctx(m5, "CreateFundTransferModal.submit", { budget: 2000 }).state, "not-found", "graph@5 never named it");
+
+  const h = json(graph(c.root, "status", "--heal", "--json"));
+  assert.equal(h.state, "fresh");
+  assert.equal(h.engine, "graph@6");
+  assert.equal(h.healed.engine_upgrade, true);
+  assert.equal(h.healed.parsed, 7, "every file is parsed again");
+  assert.equal(h.healed.reused, 0);
+  assert.equal(h.density.zero_files, 0, "graph@5 read 5 of these 7 files as empty");
+
+  const submit = json(graph(c.root, "ctx", "CreateFundTransferModal.submit", "--json"));
+  assert.equal(submit.state, "found");
+  assert.deepStrictEqual(submit.callers.map((x) => x.qname), ["formMixin.reset"]);
+
+  // A function symbol keeps its id and its body hash, so its note is current.
+  const fmt = json(graph(c.root, "ctx", "fmt", "--json"));
+  assert.ok(fmt.note && fmt.note.current === true, JSON.stringify(fmt.note));
+  assert.equal(fmt.note.text, "golden note for fmt");
+});
+
+test("upgrade @5 → @6 — the healed store answers exactly what a fresh graph@6 build answers", () => {
+  const old = withStore5();
+  assert.equal(graph(old.root, "status", "--heal", "--json").status, 0);
+  const fresh = withStore5();
+  fs.rmSync(path.join(fresh.claudeDir, "orc", "graph"), { recursive: true, force: true });
+  assert.equal(G.graphUpdate(fresh.claudeDir, fresh.root, { enabled: true }).state, "built");
+  fs.copyFileSync(path.join(GOLD5, "store", "notes.jsonl"), G.graphPaths(fresh.claudeDir).notes);
+  const a = Q.loadModel(old.claudeDir, old.root);
+  const b = Q.loadModel(fresh.claudeDir, fresh.root);
+  assert.equal(a.meta.gen_id, b.meta.gen_id);
+  for (const rel of Object.keys(b.byFile).sort()) {
+    assert.deepStrictEqual(Q.ctx(a, rel, { budget: 4000 }), Q.ctx(b, rel, { budget: 4000 }), `ctx ${rel}`);
+    for (const s of (b.byFile[rel].symbols || []).filter((x) => x.kind !== "module")) {
+      assert.deepStrictEqual(Q.ctx(a, s.id, { budget: 4000 }), Q.ctx(b, s.id, { budget: 4000 }), `ctx ${s.id}`);
+    }
+  }
 });

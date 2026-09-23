@@ -1,0 +1,67 @@
+{
+  "args": [
+    "ctx",
+    "searchByItemPrefix",
+    "--json"
+  ],
+  "status": 0,
+  "json": {
+    "ok": true,
+    "state": "found",
+    "target": {
+      "id": "src/stores/orderStore.js#searchByItemPrefix",
+      "qname": "searchByItemPrefix",
+      "kind": "function",
+      "file": "src/stores/orderStore.js",
+      "lines": [
+        26,
+        29
+      ]
+    },
+    "blob": "current",
+    "exported": true,
+    "states": "long",
+    "note": {
+      "text": "Search by the first letters of the item name.",
+      "model": "parser",
+      "at": "<at>",
+      "current": true,
+      "source": "doc"
+    },
+    "callers": [
+      {
+        "item": "caller",
+        "id": "src/reports.js#mugReport",
+        "qname": "mugReport",
+        "file": "src/reports.js",
+        "line": 5,
+        "state": "IMPORT"
+      },
+      {
+        "item": "caller",
+        "id": "src/routes/orders.js#GET /search",
+        "qname": "GET /search",
+        "file": "src/routes/orders.js",
+        "line": 13,
+        "state": "IMPORT"
+      }
+    ],
+    "maybe_callers": 0,
+    "calls": [],
+    "effects": [],
+    "wiki": [],
+    "tests": [],
+    "unresolved": 4,
+    "source": null,
+    "hidden": {},
+    "budget": {
+      "used": 84,
+      "max": 1200
+    },
+    "card": "searchByItemPrefix  src/stores/orderStore.js:26-29  [blob 0f7f479 · current]\n  doc   Search by the first letters of the item name.  (parser · current)\n  ← called by  mugReport  src/reports.js:5  IMPORT\n  ← called by  GET /search  src/routes/orders.js:13  IMPORT\n  budget 70/1200 tokens · 4 unresolved call(s) not shown",
+    "read": "sharded",
+    "generation": 1,
+    "gen_id": "<gen_id>",
+    "trace": "GRAPH-CONSULT card :: targets=searchByItemPrefix"
+  }
+}

@@ -37,7 +37,7 @@ the codifier); hold resolved patterns in run state.
 1. Dispatch EVERY task as a spawned subagent (emit `DISPATCH <agent> :: <task>
    expect=<model>/<effort>` BEFORE the Task call; subagent wrapper framing + the
    task's INPUT SLICE per orc-execution/core.md + its scored model). Every
-   slice carries ONE `orc graph ctx --for-slice <the task's declared_files> --if-enabled --json`
+   slice carries ONE `orc graph ctx --for-slice <the task's declared_files> --if-enabled --json --brief`
    `card` as its `graph` block (`../code-graph.md` §7; exit 3 = off → no block) —
    the OUTSIDE view only, because the executor reads each declared file in full
    itself,
@@ -78,7 +78,7 @@ the codifier); hold resolved patterns in run state.
 4. **Post-wave worktree audit (GATE, `_shared/return-validation.md` §6):** diff `git status --short` before/after the wave — a changed path in NO task's `declared_files`, INCLUDING one that became less modified (the revert signature), blocks the close until named and decided.
    Overlap → `failure_reason: "file-collision:<file> with <agent>"`, requeue later wave.
 4a. **Code graph (`../code-graph.md` §5–§6):** after the audit, ONE call —
-   `orc graph update --notes-pending --files <the wave's changed paths> --at wave --if-enabled --json`
+   `orc graph update --notes-pending --files <the wave's changed paths> --at wave --if-enabled --json --brief`
    (emit `GRAPH-UPDATE`; the answer's `notes_pending` is the notes half):
    `notes_pending.exit` 0 → dispatch `orc-graph-noter-sonnet-4-6-med` (slice = paths only) in the
    SAME tool block as the next wave's first dispatch; 3 or 5 → nothing, the
@@ -146,9 +146,9 @@ outside `declared_files` (a revert included) gates the wave close.
 
 <!-- diy:when code_graph=on -->
 Code graph cache (never skipped): each slice gets ONE `orc graph ctx --for-slice <the task's
-declared_files> --if-enabled --json` `card` as its `graph` block, and the return
+declared_files> --if-enabled --json --brief` `card` as its `graph` block, and the return
 carries `graph_used`. After each wave's worktree audit run ONE call —
-`orc graph update --notes-pending --files <the wave's changed paths> --at wave --if-enabled --json`
+`orc graph update --notes-pending --files <the wave's changed paths> --at wave --if-enabled --json --brief`
 (copy its `trace` verbatim); `notes_pending.exit` 0 → dispatch `orc-graph-noter-sonnet-4-6-med` paired
 with the next wave's first dispatch, exit 3 or 5 → nothing. Canonical:
 `.claude/skills/_shared/code-graph.md`.

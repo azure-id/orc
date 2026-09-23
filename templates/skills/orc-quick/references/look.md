@@ -20,9 +20,9 @@ way round.
 
 | The request | The call |
 |---|---|
-| names a file or a symbol | `orc graph ctx <targets> --if-enabled --json` — 5 targets at most |
-| names none ("where is the retry logic?") | `orc graph map --focus "<3–6 words from the request>" --budget 800 --if-enabled --json`, then `ctx` on the files it ranks first |
-| asks what breaks, or who uses something | `orc graph ctx <symbol> --depth 2 --if-enabled --json`, then `orc graph coverage <files> --if-enabled --json` |
+| names a file or a symbol | `orc graph ctx <targets> --if-enabled --json --brief` — 5 targets at most |
+| names none ("where is the retry logic?") | `orc graph map --focus "<3–6 words from the request>" --budget 800 --if-enabled --json --brief`, then `ctx` on the files it ranks first |
+| asks what breaks, or who uses something | `orc graph ctx <symbol> --depth 2 --if-enabled --json --brief`, then `orc graph coverage <files> --if-enabled --json --brief` |
 
 Exit 3 = the graph is off → Grep and Glob, as before, and make no other graph
 call this session. Exit 1 = no index → the same. **A `map` answer is ONE call**,
@@ -52,7 +52,7 @@ candidate into your Q2 question. Never pick one in silence.
 
 "What breaks if I change this?" · "Who uses this?" · "Is it safe to change?"
 
-Run `orc graph coverage <the files in play> --if-enabled --json` FIRST. A file
+Run `orc graph coverage <the files in play> --if-enabled --json --brief` FIRST. A file
 whose coverage is `partial` is read in the source before you call anything
 absent in it.
 
@@ -75,7 +75,7 @@ sentence, word for word:
 ## 5. What you hand to an executor
 
 ```
-orc graph ctx <declared files> --for-slice --if-enabled --json
+orc graph ctx <declared files> --for-slice --if-enabled --json --brief
 ```
 
 ONE call, 10 files at most. Its `card` becomes the slice's `graph` block. This

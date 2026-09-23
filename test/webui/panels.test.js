@@ -786,6 +786,34 @@ test("knowledge panel: five tabs, and it derives no tier, order or arithmetic", 
   assert.match(js, /gotcha\/prune\/preview/, "and it is a preview endpoint that enables it");
 });
 
+test("knowledge panel: the density row and the THIN warning come from the CLI, never from the browser", () => {
+  const js = panelJs("knowledge");
+  for (const key of ["knowledge.graph.density", "knowledge.graph.thin", "knowledge.gain.never"])
+    assert.ok(js.includes(`"${key}"`), `the key ${key} is written out in full`);
+
+  // The panel renders `thin`; it never decides it. Three thresholds live in
+  // `bin/graph-signals.js` and a browser that re-derived them would drift.
+  assert.match(js, /if \(g\.thin\)/, "the warning is rendered off the CLI's own boolean");
+  assert.ok(!/symbols_per_file\s*[<>]/.test(js), "the panel never compares the density against a threshold");
+  assert.ok(!/zero_share\s*[<>]/.test(js), "nor the empty share");
+
+  // A store built before v1.9.1 carries no density, and the row is then absent
+  // rather than an em dash beside an invented zero.
+  assert.ok(/\.\.\.\(g\.density\s*\n?\s*\?/.test(js), "the row is conditional on the field existing");
+
+  // M3 — the envelope is the fourth half of `paid`, read from the answer.
+  assert.match(js, /kTokUi\(g\.paid\.envelope \|\| 0\)/, "the envelope renders from the CLI's own number");
+  // M2 — `never_called` is a list the CLI computed; the panel joins it and stops.
+  assert.match(js, /g\.never_called\.join\(/);
+  // R2 (W5) — the wide reads no hint named: the CLI's count, and 0 on a ledger
+  // written before 1.9.1 rather than `undefined`.
+  assert.match(js, /\$\{g\.hints\.wide_unhinted \|\| 0\}/);
+  for (const lang of ["en", "id"]) {
+    const dict = JSON.parse(fs.readFileSync(path.join(WEBUI, "i18n", lang, "knowledge.json"), "utf8"));
+    assert.equal(dict["knowledge.gain.hints"].split("·").length, 4, `${lang}: the Hints label names four counts`);
+  }
+});
+
 test("knowledge panel: both new doctor findings route to the panel that can CLEAR them", () => {
   const js = panelJs("overview");
   // `orc wiki sync` is a BUTTON on Knowledge and `orc wiki plan` is the card

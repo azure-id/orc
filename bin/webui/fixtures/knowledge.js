@@ -310,7 +310,20 @@ const graph = {
   // W9 round 2: every graph --json answer carries the chat line and the trace
   // line a lane copies. The card renders neither; the key set still matches live.
   line: "graph: DRIFTED — 4 files behind (1 added · 3 changed · 0 deleted); hints only, code wins (run: orc graph update)",
-  trace: "GRAPH-CONSULT drifted :: files=1920 symbols=5896 gen=42",
+  trace: "GRAPH-CONSULT drifted :: files=1920 symbols=5896 gen=42 density=1.9 thin=1",
+  // v1.9.1 A1 — the density, and THIN. The numbers are the ones measured on a
+  // real front-end project: 1.9 symbols per file, most files read as empty.
+  // The fixture is THIN on purpose, for the same reason it is DRIFTED: the
+  // state the card has to be designed for is the one that carries a warning.
+  density: {
+    symbols_per_file: 1.9,
+    zero_files: 493,
+    zero_share: 0.61,
+    skipped: 2,
+    partial: 14,
+    by_lang: { vue: { files: 429, symbols: 17, zero: 416, partial: 0, skipped: 0 }, js: { files: 378, symbols: 1528, zero: 131, partial: 74, skipped: 2 } },
+  },
+  thin: true,
 };
 
 // v1.8.2 W4b — `orc graph gain --json`. The fixture carries the ESTIMATE word
@@ -324,12 +337,16 @@ const graphGain = {
   calls_recorded: 41,
   runs: 6,
   generation_range: [38, 42],
-  paid: { card: 4120, source: 610, hints: 182, total: 4912 },
+  // v1.9.1 M3 — the ENVELOPE, which on a real ledger is the larger half.
+  paid: { card: 4120, source: 610, hints: 182, envelope: 3890, total: 8802 },
   avoided: { low: 18900, high: 71400 },
   calls: { low: 58, high: 113 },
-  net: { low: 13988, high: 66488 },
+  net: { low: 10098, high: 62598 },
   by_command: { ctx: 29, impact: 6, changes: 4, "for-slice": 2 },
-  hints: { injected: 11, read_notes: 3, updates: 9 },
+  hints: { injected: 11, read_notes: 3, updates: 9, wide_unhinted: 12 },
+  // v1.9.1 M2 — the reads this project never made. A fact, with no advice.
+  read_set: ["ctx", "for-slice", "impact", "map", "changes", "cochange", "coverage", "path"],
+  never_called: ["map", "cochange", "coverage", "path"],
   estimate: true,
   carry_note:
     "a card is re-sent on every later turn of the agent that received it — and so is the read it replaced. Both halves carry the same multiplier, so these are FIRST-ENTRY tokens on both sides (eval/graph-replay.js).",

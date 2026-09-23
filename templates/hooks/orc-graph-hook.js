@@ -24,7 +24,10 @@
  *                 the NEXT read can be a range read. The read still runs. OFF
  *                 by default: it is armed with `code_graph_hooks: on,read`.
  *   PostToolUse   (E4c) a Read of a file the extractor did NOT fully see →
- *                 one line naming the lines it missed.
+ *                 one line naming the lines it missed. (R2, v1.9.1) Under `on`
+ *                 it also COUNTS a whole-file read of a wide file — a ledger
+ *                 row, no context — so the `on,read` default can be decided
+ *                 from data.
  *
  * NO DOUBLE PAYMENT. Every hint dedupes against the run's own counters file,
  * and `orc graph ctx --for-slice` (D2) writes the names it delivered into that
@@ -213,7 +216,8 @@ function emit(event, text) {
 // out, inside the fail-quiet wrapper, so a full disk can slow a Grep and can
 // never block one. A coverage note records PAID ONLY: it adds, it saves
 // nothing (K6).
-function ledger(runName, cmd, body, avoided) {
+function ledger(runName, cmd, body, avoided, row) {
+  const extra = row || {};
   try {
     fs.appendFileSync(
       path.join(GRAPH_DIR, "gain.jsonl"),
@@ -225,7 +229,11 @@ function ledger(runName, cmd, body, avoided) {
         targets: [],
         gen: null,
         ms: 0,
-        paid: { card: 0, source: 0, hints: Math.ceil((PREFIX.length + 1 + String(body || "").length) / 4) },
+        ...extra,
+        // M1 (v1.9.1): a row that put NO tokens into anyone's context needs its
+        // own `paid`. The default counts the hint's own prefix, which is right
+        // for a hint and wrong for a background update that nobody read.
+        paid: extra.paid || { card: 0, source: 0, hints: Math.ceil((PREFIX.length + 1 + String(body || "").length) / 4), envelope: 0 },
         avoided: avoided || { low: 0, high: 0, calls_low: 0, calls_high: 0 },
         basis: { files: [], grep_hits: 0 },
       }) + "\n"
@@ -295,7 +303,7 @@ function run() {
     if (tool === "Read") return readHint ? onWideRead(data, runName, meta) : undefined;
     return onSearch(data, runName, meta);
   }
-  if (event === "PostToolUse") return onRead(data, runName, meta);
+  if (event === "PostToolUse") return onRead(data, runName, meta, readHint);
 }
 
 // ── E5b — an executor finished, so the map is behind ───────────────────────
@@ -326,6 +334,18 @@ function onExecutorStop(data, runName) {
   if (r.error && r.error.code === "ETIMEDOUT") return traceLine(runName, "GRAPH-UPDATE deadline", `agent=${clean(agent, 60)}`);
   if (!out || out.state === "off") return;
   bump(runName, "updates");
+  // M1: the meter showed `0 hook updates` on a project whose hook had run 35 of
+  // them, because the counters file and the ledger are two different files and
+  // only one of them was written. This row is what `orc graph gain` counts. It
+  // is appended in the same fail-quiet path, AFTER the update is done, and it
+  // pays nothing: a background update puts no tokens into any context.
+  ledger(runName, "hook-update", "", { low: 0, high: 0, calls_low: 0, calls_high: 0 }, {
+    agent: clean(agent, 60),
+    targets: [clean(agent, 60)],
+    gen: out.generation || null,
+    ms: Number(out.ms) || 0,
+    paid: { card: 0, source: 0, hints: 0, envelope: 0 },
+  });
   const moved = (out.added || 0) + (out.changed || 0) + (out.deleted || 0);
   traceLine(
     runName,
@@ -430,10 +450,17 @@ function onWideRead(data, runName, meta) {
   const rows = Object.prototype.hasOwnProperty.call(wide.files, rel) ? wide.files[rel] : null;
   if (!Array.isArray(rows) || !rows.length) return;
   if (!bump(runName, "injected", "wide:" + rel)) return;
+  // R3 (v1.9.1): the store ranks by IMPORTANCE, which is the repository's view.
+  // A name this run was already told about — by a search hint or by the slice —
+  // is the TASK's view, so it goes first. A stable sort: every other row keeps
+  // its importance order, and the line text does not change.
+  const told = new Set(((readJson(seenFile(runName)) || {}).tokens || []).filter((t) => typeof t === "string" && t.startsWith("name:")).map((t) => t.slice(5)));
+  const mine = (r) => (told.has(String(r[0])) || told.has(String(r[0]).split(".").pop()) ? 0 : 1);
+  const ordered = told.size ? rows.map((r, i) => ({ r, i })).sort((a, b) => mine(a.r) - mine(b.r) || a.i - b.i).map((x) => x.r) : rows;
   const body = emit(
     "PreToolUse",
     `${clean(rel, 160)} holds many symbols; the most reached are ` +
-      rows.slice(0, WIDE_ROWS).map((r) => `${clean(r[0], 80)} ${Number(r[1]) || 0}-${Number(r[2]) || 0}`).join(" · ") +
+      ordered.slice(0, WIDE_ROWS).map((r) => `${clean(r[0], 80)} ${Number(r[1]) || 0}-${Number(r[2]) || 0}`).join(" · ") +
       `. The read below still runs; a later read of this file can name a range.`
   );
   ledger(runName, "hint", body, { low: 0, high: HINT_RANGE_TOKENS, calls_low: 0, calls_high: 1 });
@@ -442,9 +469,10 @@ function onWideRead(data, runName, meta) {
 // ── E4c — a Read of a file the extractor did not fully see ─────────────────
 // The ONLY case worth a line. A file the graph parsed whole needs no note, and
 // a note on every read would be the noise that gets a hook switched off.
-function onRead(data, runName, meta) {
+function onRead(data, runName, meta, readHint) {
   if (String(data.tool_name || "") !== "Read") return;
-  const abs = String((data.tool_input || {}).file_path || "");
+  const input = data.tool_input || {};
+  const abs = String(input.file_path || "");
   if (!abs) return;
   let rel;
   try {
@@ -453,6 +481,24 @@ function onRead(data, runName, meta) {
     return;
   }
   if (!rel || rel.startsWith("..")) return;
+
+  // R2 (v1.9.1) — COUNT, never say. A whole-file read of a wide file under
+  // `on` is a read the `on,read` hint would have named ranges for. The count is
+  // what the decision to arm that hint by default waits for (DE-8); nothing
+  // flips by itself. Under `on,read` the PreToolUse hint already fired, so the
+  // miss is zero and nothing is counted. Once per file per run, no context, no
+  // trace line.
+  if (!readHint && input.offset === undefined && input.limit === undefined) {
+    const wide = readJson(path.join(GRAPH_DIR, "wide.json"));
+    if (wide && wide.files && wide.generation === meta.generation && Object.prototype.hasOwnProperty.call(wide.files, rel)) {
+      if (bump(runName, "wide_unhinted", "wideu:" + rel))
+        ledger(runName, "wide-unhinted", "", { low: 0, high: 0, calls_low: 0, calls_high: 0 }, {
+          targets: [clean(rel, 160)],
+          gen: meta.generation,
+          paid: { card: 0, source: 0, hints: 0, envelope: 0 },
+        });
+    }
+  }
 
   const files = readJson(path.join(GRAPH_DIR, "files.json"));
   if (!files || !Object.prototype.hasOwnProperty.call(files, rel)) return;

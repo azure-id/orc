@@ -1,0 +1,34 @@
+{
+  "args": [
+    "ctx",
+    "searchByItemPrefix",
+    "requireAuth",
+    "--json"
+  ],
+  "status": 0,
+  "json": {
+    "ok": true,
+    "state": "found",
+    "query": "searchByItemPrefix requireAuth",
+    "cards": [
+      {
+        "query": "searchByItemPrefix",
+        "state": "found",
+        "used": 84
+      },
+      {
+        "query": "requireAuth",
+        "state": "found",
+        "used": 62
+      }
+    ],
+    "card": "searchByItemPrefix  src/stores/orderStore.js:26-29  [blob 0f7f479 · current]\n  doc   Search by the first letters of the item name.  (parser · current)\n  ← called by  mugReport  src/reports.js:5  IMPORT\n  ← called by  GET /search  src/routes/orders.js:13  IMPORT\n  budget 70/600 tokens · 4 unresolved call(s) not shown\n\nrequireAuth  src/auth.js:1-7  [blob 5647cc7 · current]\n  ← used by    POST /  src/routes/orders.js:22  IMPORT\n  → calls      req.get  AMBIGUOUS (1): src/stores/orderStore.js:13\n  budget 48/600 tokens · 3 unresolved call(s) not shown",
+    "budget": {
+      "used": 146,
+      "max": 1200
+    },
+    "generation": 1,
+    "gen_id": "<gen_id>",
+    "trace": "GRAPH-CONSULT card :: targets=searchByItemPrefix,requireAuth"
+  }
+}

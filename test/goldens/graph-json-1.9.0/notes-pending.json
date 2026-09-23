@@ -1,0 +1,72 @@
+{
+  "args": [
+    "notes",
+    "pending",
+    "--files",
+    "src/stores/orderStore.js",
+    "--min",
+    "1",
+    "--json"
+  ],
+  "status": 0,
+  "json": {
+    "ok": true,
+    "files": [
+      "src/stores/orderStore.js"
+    ],
+    "missing": [],
+    "total": 4,
+    "documented": 1,
+    "cap": 40,
+    "min": 1,
+    "state": "pending",
+    "rows": [
+      {
+        "sym": "src/stores/orderStore.js#OrderStore.constructor",
+        "file": "src/stores/orderStore.js",
+        "lines": [
+          4,
+          7
+        ],
+        "body_hash": "ee57bb65c0b5a5d2",
+        "restale": false
+      },
+      {
+        "sym": "src/stores/orderStore.js#OrderStore.list",
+        "file": "src/stores/orderStore.js",
+        "lines": [
+          9,
+          11
+        ],
+        "body_hash": "63cc6337ecb2b003",
+        "restale": false
+      },
+      {
+        "sym": "src/stores/orderStore.js#OrderStore.get",
+        "file": "src/stores/orderStore.js",
+        "lines": [
+          13,
+          15
+        ],
+        "body_hash": "1390ba7216cfc543",
+        "restale": false
+      },
+      {
+        "sym": "src/stores/orderStore.js#OrderStore.insert",
+        "file": "src/stores/orderStore.js",
+        "lines": [
+          17,
+          21
+        ],
+        "body_hash": "b1468509a4680ece",
+        "restale": false
+      }
+    ],
+    "more": 0,
+    "with_source": false,
+    "notes": "off",
+    "generation": 1,
+    "gen_id": "<gen_id>",
+    "line": "graph notes: 4 pending — 4 in this batch\n  src/stores/orderStore.js#OrderStore.constructor  :4-7  ee57bb65c0b5a5d2\n  src/stores/orderStore.js#OrderStore.list  :9-11  63cc6337ecb2b003\n  src/stores/orderStore.js#OrderStore.get  :13-15  1390ba7216cfc543\n  src/stores/orderStore.js#OrderStore.insert  :17-21  b1468509a4680ece\n  1 already documented in the source — no note is paid for them"
+  }
+}

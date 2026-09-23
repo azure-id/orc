@@ -340,6 +340,13 @@ function classSymbol(model, rel, name) {
       const s = ((model.byFile[t.file] || {}).symbols || []).find((x) => x.kind === "class" && x.name === t.name);
       if (s) return { sym: s, state: "IMPORT" };
     }
+    // W5b: a DEFAULT import names the file's default export, whatever the
+    // importer calls it (`import FM from "./formMixin"`). When that file holds
+    // exactly one exported class, it is the one.
+    if (bd.orig === "default") {
+      const only = ((model.byFile[bd.files[0]] || {}).symbols || []).filter((x) => x.kind === "class" && x.exported);
+      if (only.length === 1) return { sym: only[0], state: "IMPORT" };
+    }
   }
   if (f.lang === "go") {
     const s = filesInDir(model, posix.dirname(rel), ".go").flatMap((x) => ((model.byFile[x] || {}).symbols || []).filter((y) => y.kind === "class" && y.name === name));
@@ -840,6 +847,12 @@ function warmBlobs(model, queries) {
     if (t.kind === "symbol") rels.add(t.sym.file);
     else if (t.kind === "file") rels.add(t.rel);
   }
+  warmFiles(model, rels);
+}
+
+// The same batch, for files the caller already knows by path (R1: the caller
+// files a `--callers-source` card reads).
+function warmFiles(model, rels) {
   const onDisk = [...rels].filter((rel) => !model.blobStates.has(rel) && fs.existsSync(path.join(model.root, ...rel.split("/"))));
   for (const rel of rels) if (!fs.existsSync(path.join(model.root, ...rel.split("/")))) model.blobStates.set(rel, "deleted");
   if (!onDisk.length) return;
@@ -879,14 +892,15 @@ const BLOB_LABEL = {
 //   · `tail` is the `--source` block (D1). It is charged against the SAME
 //     budget and it goes LAST, so the rows always win: source takes what the
 //     card left, line by line, and the footer says how many lines it cut.
-function fit(items, budget, footer, tail) {
+function fit(items, budget, footer, tail, blocks) {
   // The reserve is the LONGEST footer this card could print — one hidden
   // count per section present — so the final `used` can never pass the
   // budget, whatever ends up hidden. (W2: a card with five sections overran a
   // 100-token budget by five tokens on the footer alone.)
   const worst = {};
   for (const it of items) if (it.pri > 0) worst[it.section] = 99;
-  const reserve = tok(footer(0, worst, tail ? { kept: 0, want: tail.want, cut: tail.want } : null)) + 2;
+  const worstBlocks = blocks && blocks.length ? { shown: 0, want: blocks.length } : null;
+  const reserve = tok(footer(0, worst, tail ? { kept: 0, want: tail.want, cut: tail.want } : null, worstBlocks)) + 2;
   let used = 0;
   const keep = new Set();
   const hidden = {};
@@ -918,9 +932,32 @@ function fit(items, budget, footer, tail) {
     }
     source = { kept: body.length, want: tail.want, cut: tail.want - body.length };
   }
-  const foot = footer(used, hidden, source);
+  // R1 (v1.9.1): the callers' own lines. They go AFTER the target's source, and
+  // each block is kept WHOLE or not at all — six lines cut to four is a call
+  // site with its arguments missing, which is worse than no call site.
+  let callersShown = null;
+  if (blocks && blocks.length) {
+    const headOf = (n) => `  callers source  ${n < blocks.length ? `${n} of ${blocks.length}` : n} shown (${CALLERS_SOURCE_LINES} lines each${n < blocks.length ? "; raise --budget" : ""})`;
+    let left = budget - used - reserve - tok(headOf(0)) - 1;
+    const out = [];
+    for (const b of blocks) {
+      const open = "  ```" + (b.fence || "");
+      const block = [b.head, open, ...b.lines, "  ```"];
+      const t = block.reduce((a, l) => a + tok(l) + 1, 0);
+      if (t > left) break;
+      left -= t;
+      out.push({ b, block });
+    }
+    if (out.length) {
+      const all = [headOf(out.length), ...out.flatMap((x) => x.block)];
+      used += all.reduce((a, l) => a + tok(l) + 1, 0);
+      lines.push(...all);
+    }
+    callersShown = { shown: out.length, want: blocks.length, kept: out.map((x) => x.b) };
+  }
+  const foot = footer(used, hidden, source, callersShown);
   if (foot) lines.push(foot);
-  return { card: lines.join("\n"), kept: keep, hidden, source, used: used + tok(foot) };
+  return { card: lines.join("\n"), kept: keep, hidden, source, callers: callersShown, used: used + tok(foot) };
 }
 
 // ── E6: the tree format ─────────────────────────────────────────────────────
@@ -1019,6 +1056,97 @@ function sourceTail(model, rel, from, to, want, fresh) {
 
 function sourceText(tail, kept) {
   return tail.lines.slice(0, kept).join("\n");
+}
+
+// ── R1 (v1.9.1): the call sites WITH the card ───────────────────────────────
+// A recon agent asked "who calls this" and then opened every caller file to
+// see HOW it was called. Six lines around each call site answer that in the
+// same call. The limits, and the reason for each:
+//   · CONFIDENT callers only. Source printed for an AMBIGUOUS guess reads as a
+//     fact, and that is the false sentence the R3-C eval found.
+//   · never the target's OWN file. The agent that asks is about to edit that
+//     file, and a file you edit is read in full with `Read` first (the read
+//     ladder's exception 1) — a CLI print of it would be read twice.
+//   · ≤ 5 callers, 6 lines each, charged to the SAME budget, after everything
+//     else. The rows always win.
+const CALLERS_SOURCE_MAX = 5;
+const CALLERS_SOURCE_LINES = 6;
+
+function fileLines(model, rel) {
+  model.textCache = model.textCache || new Map();
+  if (model.textCache.has(rel)) return model.textCache.get(rel);
+  let all = null;
+  try {
+    const text = fs.readFileSync(path.join(model.root, ...rel.split("/")), "utf8");
+    all = text.split(/\r?\n/);
+    if (all.length > 1 && all[all.length - 1] === "") all.pop();
+  } catch (_) {
+    all = null;
+  }
+  model.textCache.set(rel, all);
+  return all;
+}
+
+function callerBlocks(model, sym, confident) {
+  const others = confident.filter((c) => c.sym.file !== sym.file);
+  // One git call for the files the blocks will most likely come from. A caller
+  // past this slice (many call sites in one window) is still checked, one by one.
+  warmFiles(model, new Set(others.slice(0, CALLERS_SOURCE_MAX * 4).map((c) => c.sym.file)));
+  const out = [];
+  for (const c of others) {
+    if (out.length >= CALLERS_SOURCE_MAX) break;
+    const rel = c.sym.file;
+    // Two call sites a line apart are ONE window. Printing it twice is the
+    // same six lines paid twice.
+    if (out.some((b) => b.file === rel && b.from <= c.line && c.line <= b.to)) continue;
+    const fresh = blobState(model, rel);
+    if (fresh === "deleted") continue;
+    const all = fileLines(model, rel);
+    if (!all || !all.length) continue;
+    const at = Math.max(1, Math.min(all.length, Number(c.line) || 1));
+    // Two lines above, three below — shifted, not shortened, at either end of
+    // the file, so every block is six lines when the file has six.
+    const from = Math.max(1, Math.min(at - 2, all.length - CALLERS_SOURCE_LINES + 1));
+    const to = Math.min(all.length, from + CALLERS_SOURCE_LINES - 1);
+    const width = String(to).length;
+    const lines = [];
+    for (let i = from; i <= to; i++) lines.push(`  ${String(i).padStart(width)}  ${all[i - 1]}`);
+    const caller = c.url || c.sym.qname;
+    const changed = fresh !== "current";
+    out.push({
+      head: `  ${rel}:${from}-${to}  ← ${caller}${changed ? "  — CHANGED since index, the range may have moved" : ""}`,
+      fence: FENCE_BY_EXT[posix.extname(rel)] || "",
+      lines,
+      file: rel,
+      from,
+      to,
+      caller,
+      changed,
+    });
+  }
+  return out;
+}
+
+function callersSourceNote(cs) {
+  if (!cs || cs.shown >= cs.want) return "";
+  return cs.shown ? ` · callers source ${cs.want - cs.shown} cut (raise --budget)` : ` · callers source not shown (${cs.want} callers, raise --budget)`;
+}
+
+// ── R4 (v1.9.1): where a language server should be asked ───────────────────
+// The LSP tool takes a file, a line and a 1-based character. The card knows the
+// line; the character is where the NAME sits on it, read from the bytes on disk.
+// `null` whenever that cannot be stated exactly — a guessed column sends the
+// language server to the wrong token, and its answer is then confidently wrong.
+function lspAt(model, sym, fresh) {
+  if (fresh !== "current" || !sym || !sym.name) return null;
+  const all = fileLines(model, sym.file);
+  const line = sym.lines && sym.lines[0];
+  if (!all || !line || line > all.length) return null;
+  const text = all[line - 1];
+  const esc = String(sym.name).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const m = new RegExp(`(^|[^A-Za-z0-9_$])${esc}(?![A-Za-z0-9_$])`).exec(text);
+  if (!m) return null;
+  return { file: sym.file, line, character: m.index + m[1].length + 1 };
 }
 
 function sourceNote(source) {
@@ -1159,19 +1287,27 @@ function ctx(model, query, opts) {
   const short = pickShort(items);
   // The footer is printed ONLY when the card hid something, dropped an
   // unresolved call, or cut the source block (§6).
-  const footer = (used, hidden, source) => {
-    const why = `${unresolved ? ` · ${unresolved} unresolved call(s) not shown` : ""}${hiddenText(hidden)}${sourceNote(source)}`;
+  const footer = (used, hidden, source, cs) => {
+    const why = `${unresolved ? ` · ${unresolved} unresolved call(s) not shown` : ""}${hiddenText(hidden)}${sourceNote(source)}${callersSourceNote(cs)}`;
     return why ? `  budget ${used}/${budget} tokens${why}` : "";
   };
   const tail = opts.source === undefined ? null : sourceTail(model, sym.file, sym.lines[0], sym.lines[1], opts.source, fresh);
-  const f = fit(items, budget, footer, tail);
+  const blocks = opts.callersSource ? callerBlocks(model, sym, callers.confident) : null;
+  const f = fit(items, budget, footer, tail, blocks);
   const kept = items.filter((_, i) => f.kept.has(i)).map((it) => it.data).filter(Boolean);
+  const callersSource = blocks
+    ? {
+        callers_source: (f.callers ? f.callers.kept : []).map((b) => ({ file: b.file, from: b.from, to: b.to, caller: b.caller, text: b.lines.join("\n"), changed: b.changed })),
+        counts: { callers_source_cut: f.callers ? f.callers.want - f.callers.shown : 0 },
+      }
+    : {};
   return {
     ok: true,
     state: "found",
     target: brief(sym),
     blob: fresh,
     exported: sym.exported,
+    lsp_at: lspAt(model, sym, fresh),
     states: short ? "short" : "long",
     note: note || null,
     callers: kept.filter((d) => d.item ==="caller"),
@@ -1182,6 +1318,7 @@ function ctx(model, query, opts) {
     tests,
     unresolved,
     source: tail && f.source && f.source.kept ? { file: tail.file, from: tail.from, to: tail.from + f.source.kept - 1, text: sourceText(tail, f.source.kept), cut: f.source.cut } : null,
+    ...callersSource,
     hidden: f.hidden,
     budget: { used: f.used, max: budget },
     card: f.card,
@@ -1266,8 +1403,11 @@ function fileCard(model, rel, budget, opts) {
   if (fileTests.length) push(4, "tests", `  tests ${fileTests.join(useTree ? " " : ", ")}`, { item: "tests", files: fileTests });
   const wiki = opts.wikiDocsFor ? opts.wikiDocsFor([rel]) : [];
   if (wiki.length) push(5, "wiki", `  wiki ${wiki.join(useTree ? " " : ", ")}`, { item: "wiki", docs: wiki });
+  // R1: `--callers-source` is a SYMBOL card's option. A file card names who
+  // imports the file, not a call line, so there is no six-line window to print.
+  const ignored = opts.callersSource ? " · callers source: symbol cards only" : "";
   const footer = (used, hidden, source) => {
-    const why = `${hiddenText(hidden)}${sourceNote(source)}`;
+    const why = `${hiddenText(hidden)}${sourceNote(source)}${ignored}`;
     return why ? `  budget ${used}/${budget} tokens${why}` : "";
   };
   // D1 on a FILE card is the file's head — the imports, the exports and the
@@ -1420,7 +1560,9 @@ function forSlice(model, files, opts) {
   const each = Math.max(100, Math.floor(budget / known.length));
   const blocks = known.map((rel) => sliceBlock(model, rel, each, opts));
   const body = blocks.map((b) => b.card).join("\n\n");
-  const note = missing.length ? `\n  not in the graph: ${missing.join(", ")}` : "";
+  // R1 / DE-7b: the executor reads its declared files whole, so the outside
+  // view stays rows only — the flag is named as ignored, never silently dropped.
+  const note = (missing.length ? `\n  not in the graph: ${missing.join(", ")}` : "") + (opts.callersSource ? "\n  callers source: symbol cards only" : "");
   // The column header is named ONCE for the whole answer, not once per block —
   // the tree format's own rule, applied one level up.
   return {
@@ -1767,4 +1909,4 @@ function nameHits(model, name) {
   return calls + defs;
 }
 
-module.exports = { loadModel, resolveCall, resolveUrl, routeTable, urlIndex, findTarget, callersOf, nameHits, warmBlobs, ctx, forSlice, impact, graphMap, pathBetween, importsOf, TEST_FILE, SOURCE_DEFAULT, SOURCE_CAP };
+module.exports = { loadModel, resolveCall, resolveUrl, routeTable, urlIndex, findTarget, callersOf, nameHits, warmBlobs, ctx, forSlice, impact, graphMap, pathBetween, importsOf, TEST_FILE, SOURCE_DEFAULT, SOURCE_CAP, CALLERS_SOURCE_MAX, CALLERS_SOURCE_LINES };

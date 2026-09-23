@@ -1,0 +1,22 @@
+{
+  "args": [
+    "cochange",
+    "src/stores/orderStore.js",
+    "--json"
+  ],
+  "status": 4,
+  "json": {
+    "ok": true,
+    "state": "none",
+    "file": "src/stores/orderStore.js",
+    "commits": 1,
+    "since": "6.months",
+    "min": 3,
+    "rows": [],
+    "more": 0,
+    "generation": 1,
+    "gen_id": "<gen_id>",
+    "line": "graph cochange src/stores/orderStore.js — nothing changed with it at least 3 times since 6.months (it changes alone)",
+    "trace": "GRAPH-COCHANGE none :: rows=0 commits=1"
+  }
+}

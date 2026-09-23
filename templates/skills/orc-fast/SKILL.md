@@ -74,9 +74,9 @@ hand off to orc-mini via the fallback contract below. Never stop the chat.
 
 **e. Code graph cache — NOT a gate, and never skipped** (`../_shared/code-graph.md` §0). Every call carries
 `--if-enabled`: exit 3 = off → print `graph: off` once, make no other graph call. Print each JSON `line`; put
-each `trace` in the next packet VERBATIM. (1) **Here:** `orc graph status --if-enabled --heal --json` builds or
-updates the cache itself. (2) **F2 slice:** ONE `orc graph ctx <declared files> --if-enabled --json` → its `card`
-is the `graph` block; the return carries `graph_used`. (3) **F3 GREEN:** `orc graph update --if-enabled --json`,
+each `trace` in the next packet VERBATIM. (1) **Here:** `orc graph status --if-enabled --heal --json --brief` builds or
+updates the cache itself. (2) **F2 slice:** ONE `orc graph ctx <declared files> --if-enabled --json --brief` → its `card`
+is the `graph` block; the return carries `graph_used`. (3) **F3 GREEN:** `orc graph update --if-enabled --json --brief`,
 then one `orc graph notes pending` batch — the next run starts from this cache. A missing graph never falls back.
 
 **d. Extra — a PROBE, not a gate (P0).** Run `orc extra resolve --slot fast-executor --json` (0 = extra, 1 = Claude) — **a gate that is never probed is a gate that is always off**, and without this step the lane silently runs on Claude however `extra_enabled` and `orc extra role` were set. `extra` → print the `extra:` line HERE and carry the answer into F2; `claude` → print nothing, never fall back, never stop.

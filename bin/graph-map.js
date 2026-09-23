@@ -149,7 +149,15 @@ function multiplier(model, rel) {
   let m = 1;
   if (Q.TEST_FILE.test(rel)) m *= 0.1;
   const syms = (model.byFile[rel].symbols || []).filter((s) => s.kind !== "module");
-  if (syms.length && !syms.some((s) => s.exported)) m *= 0.5;
+  // A4 (v1.9.1): a file with NO symbol is as far from "a place behaviour lives"
+  // as one whose symbols are all private, and it is knocked down the same way.
+  // Measured on a real front-end project, 16 of the 26 rows a `--budget 600`
+  // map printed named a file with nothing in it — a ranking that sends a
+  // planner to a file the graph cannot answer a question about.
+  //
+  // It is a READ-TIME rank, not a stored one: `map.json` holds the edges and
+  // the base ranking and is untouched, so nothing is re-extracted for this.
+  if (!syms.length || !syms.some((s) => s.exported)) m *= 0.5;
   return m;
 }
 

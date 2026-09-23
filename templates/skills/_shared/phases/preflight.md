@@ -100,7 +100,7 @@ that the line is printed and when.
 ## The graph line (v1.8.0) — code-changing lanes only
 
 `/orc`, `/orc-ultra`, `/orc-diy`, `/orc-mini`, `/orc-fast` and `/orc-quick` run
-`orc graph status --if-enabled --heal --json` in step 3, BEFORE the first
+`orc graph status --if-enabled --heal --json --brief` in step 3, BEFORE the first
 dispatch — never skipped. `--heal` builds a missing graph and updates a drifted
 one in the same call (it is free), so there is no second call to forget. Print
 its `line` (`off` included) and put its `trace` (`GRAPH-CONSULT …`) in the next

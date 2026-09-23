@@ -198,9 +198,9 @@ delta: `git status --short` before/after each dispatch, any changed path
 outside `declared_files` (a revert included) gates the wave close.
 
 Code graph cache (never skipped): each slice gets ONE `orc graph ctx --for-slice <the task's
-declared_files> --if-enabled --json` `card` as its `graph` block, and the return
+declared_files> --if-enabled --json --brief` `card` as its `graph` block, and the return
 carries `graph_used`. After each wave's worktree audit run ONE call —
-`orc graph update --notes-pending --files <the wave's changed paths> --at wave --if-enabled --json`
+`orc graph update --notes-pending --files <the wave's changed paths> --at wave --if-enabled --json --brief`
 (copy its `trace` verbatim); `notes_pending.exit` 0 → dispatch `orc-graph-noter-sonnet-4-6-med` paired
 with the next wave's first dispatch, exit 3 or 5 → nothing. Canonical:
 `.claude/skills/_shared/code-graph.md`.

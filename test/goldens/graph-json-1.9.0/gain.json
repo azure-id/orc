@@ -1,0 +1,58 @@
+{
+  "args": [
+    "gain",
+    "--json"
+  ],
+  "status": 0,
+  "json": {
+    "ok": true,
+    "state": "rows",
+    "scope": "project",
+    "run": null,
+    "since": null,
+    "calls_recorded": 10,
+    "runs": 0,
+    "generation_range": [
+      1,
+      2
+    ],
+    "paid": {
+      "card": 1340,
+      "source": 49,
+      "hints": 0,
+      "total": 1389
+    },
+    "avoided": {
+      "low": 4975,
+      "high": 7425
+    },
+    "calls": {
+      "low": 35,
+      "high": 51
+    },
+    "net": {
+      "low": 3586,
+      "high": 6036
+    },
+    "by_command": {
+      "ctx": 4,
+      "for-slice": 1,
+      "impact": 1,
+      "map": 2,
+      "path": 1,
+      "changes": 1
+    },
+    "hints": {
+      "injected": 0,
+      "read_notes": 0,
+      "updates": 0
+    },
+    "unsized": 2,
+    "estimate": true,
+    "carry_note": "a card is re-sent on every later turn of the agent that received it — and so is the read it replaced. Both halves carry the same multiplier, so these are FIRST-ENTRY tokens on both sides (eval/graph-replay.js).",
+    "generation": 2,
+    "gen_id": "<gen_id>",
+    "line": "\ngraph gain — this project · 10 calls · 0 runs · gen 1–2\n───────────────────────────────────────────────────────\n  paid               1k tokens   (cards 1k · source 49 · hints 0)\n  avoided    ~5k – 7k tokens   (estimate — the read ladder done well … done badly)\n  net        ~4k – 6k tokens · ~35 – 51 tool calls\n  by command ctx 4 · map 2 · for-slice 1 · impact 1 · path 1 · changes 1\n  hints      0 injected · 0 read notes · 0 hook updates\n  2 rows answered from SHARDS, where the size of the search replaced cannot be known — their estimate leaves it out\n  an estimate of avoided RETRIEVAL, never a bill — searches are a fraction of a percent of a session\n  `orc graph gain --measured` compares this project's own ON and OFF runs instead of estimating",
+    "trace": "GRAPH-GAIN paid=1389 low=4975 high=7425 calls=10"
+  }
+}

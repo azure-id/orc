@@ -1,0 +1,19 @@
+{
+  "args": [
+    "ctx",
+    "noSuchSymbolHere",
+    "--json"
+  ],
+  "status": 4,
+  "json": {
+    "ok": false,
+    "state": "not-found",
+    "query": "noSuchSymbolHere",
+    "nearest": [],
+    "read": "full",
+    "read_fallback": "name-unknown",
+    "generation": 1,
+    "gen_id": "<gen_id>",
+    "line": "graph: nothing named \"noSuchSymbolHere\""
+  }
+}

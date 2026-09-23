@@ -198,6 +198,10 @@ const required = [
   // every read falls back to the full model. It breaks the SPEED, silently, on
   // the one call every lane makes — which is the worst kind of missing file.
   "bin/graph-shard.js",
+  // v1.9.1 W4 — the audit (A2). Dropping it breaks `orc graph audit`, which is
+  // the only answer that says WHY a THIN map is thin. Without it the status
+  // line still says THIN and names a command that is not there.
+  "bin/graph-audit.js",
 
   // The two DATED data files (v0.50.0). Both ship inside the package and both
   // are load-bearing on absence rather than on content: without the catalog

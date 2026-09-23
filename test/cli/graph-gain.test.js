@@ -96,6 +96,44 @@ test("the ledger — every read appends ONE line, and `paid` is the card it just
   assert.equal(ledger(root)[1].cmd, "impact");
 });
 
+// ── B3 (v1.9.1) — the envelope ──────────────────────────────────────────────
+
+test("the envelope — paid records the ANSWER, not the card, and --brief shrinks it", () => {
+  const root = shop();
+  const full = json(graph(root, "ctx", "Store.insert", "--json"));
+  const a = ledger(root)[0];
+  assert.equal(a.paid.card, tok(full.card), "the card half is unchanged");
+  assert.ok(a.paid.envelope > 0, "a --json answer carries rows and scalars BEYOND its card, and they are paid for");
+  assert.ok(a.paid.envelope > a.paid.card * 0.5, "on a real answer the envelope is the larger half — that was the defect");
+
+  const brief = graph(root, "ctx", "Store.insert", "--json", "--brief");
+  assert.equal(brief.status, 0);
+  const b = ledger(root)[1];
+  assert.ok(b.paid.envelope < a.paid.envelope, `--brief must shrink the envelope (${a.paid.envelope} → ${b.paid.envelope})`);
+});
+
+test("the envelope — the human path pays for the line it printed, and no more", () => {
+  const root = shop();
+  graph(root, "ctx", "Store.insert");
+  const r = ledger(root)[0];
+  assert.equal(r.paid.envelope, 0, "the human path prints the card and nothing around it");
+});
+
+test("the envelope — gain sums it, prints it, and a row without one counts as zero", () => {
+  const root = shop();
+  graph(root, "ctx", "Store.insert", "--json");
+  // A row written before 1.9.1: `paid` has three keys, not four.
+  const f = path.join(root, ".claude", "orc", "graph", "gain.jsonl");
+  const old = { at: "01-01-2026 00:00:00", cmd: "ctx", targets: ["old"], gen: 1, ms: 1, paid: { card: 100, source: 0, hints: 0 }, avoided: { low: 1, high: 2, calls_low: 1, calls_high: 1 }, basis: { files: [], grep_hits: 0 } };
+  fs.appendFileSync(f, JSON.stringify(old) + "\n");
+  const g = json(graph(root, "gain", "--json"));
+  const rows = ledger(root);
+  const want = rows.reduce((a, r) => a + (Number(r.paid.envelope) || 0), 0);
+  assert.equal(g.paid.envelope, want, "an old row sums as 0, never as NaN");
+  assert.equal(g.paid.total, g.paid.card + g.paid.source + g.paid.hints + g.paid.envelope);
+  assert.match(graph(root, "gain").stdout, /envelope /, "the line names the fourth half");
+});
+
 test("the counterfactual — the K2 rule for a symbol card reproduces to the token", () => {
   const root = shop();
   graph(root, "ctx", "Store.list", "--json");
@@ -137,6 +175,60 @@ function ledgerOf(root, run) {
   return ledger(root)[before];
 }
 
+// ── M2 (v1.9.1) — the reads nobody made ────────────────────────────────────
+
+test("never_called — the reads this project has not made, with no advice after them", () => {
+  const root = shop();
+  graph(root, "ctx", "Store.insert", "--json");
+  const g = json(graph(root, "gain", "--json"));
+  assert.deepStrictEqual(Object.keys(g.by_command), ["ctx"]);
+  assert.ok(g.read_set.includes("map"), "the set of reads a project COULD make is on the answer");
+  assert.ok(g.never_called.includes("map"));
+  assert.ok(!g.never_called.includes("ctx"), "a read that was made is not a read that was never made");
+  assert.match(graph(root, "gain").stdout, /never called {2}/);
+
+  graph(root, "map", "--json");
+  const after = json(graph(root, "gain", "--json"));
+  assert.ok(!after.never_called.includes("map"), "one call is enough to leave the list");
+});
+
+test("never_called — it is computed for the SCOPE, so a run that made no map call says so", () => {
+  const root = shop();
+  graph(root, "map", "--json");
+  // A row from another run, so the project scope and the run scope differ.
+  const f = path.join(root, ".claude", "orc", "graph", "gain.jsonl");
+  const rows = ledger(root);
+  rows[0].run = "run-a";
+  fs.writeFileSync(f, rows.map((r) => JSON.stringify(r)).join("\n") + "\n");
+  const a = json(graph(root, "gain", "--run", "run-a", "--json"));
+  assert.ok(!a.never_called.includes("map"), "run-a made the map call");
+});
+
+// ── R2 (v1.9.1 W5) — the wide reads no hint named ──────────────────────────
+
+test("wide_unhinted — the hook's rows are counted, priced at zero, and the line appears only when there is one", () => {
+  const root = shop();
+  graph(root, "ctx", "Store.insert", "--json");
+  const g0 = json(graph(root, "gain", "--json"));
+  assert.equal(g0.hints.wide_unhinted, 0, "the key is always there, so a reader never has to guess");
+  assert.doesNotMatch(graph(root, "gain").stdout, /wide reads/, "no count, no line");
+
+  const f = path.join(root, ".claude", "orc", "graph", "gain.jsonl");
+  const zero = { card: 0, source: 0, hints: 0, envelope: 0 };
+  for (const rel of ["src/a.js", "src/b.js", "src/c.js"]) {
+    fs.appendFileSync(f, JSON.stringify({ at: "22-09-2026 10:00:00", run: "r", agent: null, cmd: "wide-unhinted", targets: [rel], gen: 1, ms: 0, paid: zero, avoided: { low: 0, high: 0, calls_low: 0, calls_high: 0 }, basis: { files: [], grep_hits: 0 } }) + "\n");
+  }
+  const g = json(graph(root, "gain", "--json"));
+  assert.equal(g.hints.wide_unhinted, 3);
+  assert.equal(g.paid.total, g0.paid.total, "a count puts no tokens into any context");
+  assert.deepStrictEqual(g.avoided, g0.avoided, "and it avoided nothing");
+  assert.ok(!g.never_called.includes("wide-unhinted") && !g.read_set.includes("wide-unhinted"), "it is a hook row, not a read");
+  assert.match(
+    graph(root, "gain").stdout,
+    /wide reads {3}3 whole-file reads of files with 8\+ symbols were not hinted — `code_graph_hooks: on,read` names their ranges/
+  );
+});
+
 // ── K3 ──────────────────────────────────────────────────────────────────────
 
 test("gain — the totals, the range, and the word `estimate` on the card", () => {
@@ -154,7 +246,7 @@ test("gain — the totals, the range, and the word `estimate` on the card", () =
   assert.equal(j.calls_recorded, 3);
   assert.equal(j.estimate, true);
   const rows = ledger(root);
-  assert.equal(j.paid.total, rows.reduce((a, x) => a + x.paid.card + x.paid.source + x.paid.hints, 0));
+  assert.equal(j.paid.total, rows.reduce((a, x) => a + x.paid.card + x.paid.source + x.paid.hints + (x.paid.envelope || 0), 0));
   assert.equal(j.avoided.low, rows.reduce((a, x) => a + x.avoided.low, 0));
   assert.equal(j.net.low, j.avoided.low - j.paid.total);
   assert.deepStrictEqual(j.by_command, { ctx: 2, impact: 1 });
@@ -278,7 +370,7 @@ test("the meter never counts a coverage note as a saving", () => {
   assert.equal(j.paid.hints, 100, "both are PAID");
   assert.equal(j.avoided.low, 0);
   assert.equal(j.avoided.high, 800, "only the hint could have replaced a read; the coverage note replaced nothing");
-  assert.deepStrictEqual(j.hints, { injected: 1, read_notes: 1, updates: 0 });
+  assert.deepStrictEqual(j.hints, { injected: 1, read_notes: 1, updates: 0, wide_unhinted: 0 });
 });
 
 test("the meter never counts a card the agent said it did not use", () => {

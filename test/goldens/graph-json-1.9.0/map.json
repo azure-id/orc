@@ -1,0 +1,290 @@
+{
+  "args": [
+    "map",
+    "--json"
+  ],
+  "status": 0,
+  "json": {
+    "ok": true,
+    "state": "found",
+    "focus": [],
+    "focus_missing": [],
+    "cached_map": true,
+    "total_files": 12,
+    "edges": 14,
+    "files": [
+      {
+        "item": "file",
+        "file": "src/stores/orderStore.js",
+        "symbols": [
+          {
+            "qname": "OrderStore",
+            "kind": "class",
+            "lines": [
+              3,
+              22
+            ],
+            "exported": true
+          },
+          {
+            "qname": "OrderStore.list",
+            "kind": "method",
+            "lines": [
+              9,
+              11
+            ],
+            "exported": false
+          },
+          {
+            "qname": "OrderStore.get",
+            "kind": "method",
+            "lines": [
+              13,
+              15
+            ],
+            "exported": false
+          },
+          {
+            "qname": "searchByItemPrefix",
+            "kind": "function",
+            "lines": [
+              26,
+              29
+            ],
+            "exported": true
+          }
+        ],
+        "more": 2,
+        "rank": 1
+      },
+      {
+        "item": "file",
+        "file": "src/auth.js",
+        "symbols": [
+          {
+            "qname": "requireAuth",
+            "kind": "function",
+            "lines": [
+              1,
+              7
+            ],
+            "exported": true
+          }
+        ],
+        "more": 0,
+        "rank": 2
+      },
+      {
+        "item": "file",
+        "file": "src/handlers/base.js",
+        "symbols": [
+          {
+            "qname": "BaseHandler",
+            "kind": "class",
+            "lines": [
+              2,
+              10
+            ],
+            "exported": true
+          },
+          {
+            "qname": "BaseHandler.ok",
+            "kind": "method",
+            "lines": [
+              3,
+              5
+            ],
+            "exported": false
+          },
+          {
+            "qname": "BaseHandler.fail",
+            "kind": "method",
+            "lines": [
+              7,
+              9
+            ],
+            "exported": false
+          }
+        ],
+        "more": 0,
+        "rank": 3
+      },
+      {
+        "item": "file",
+        "file": "src/reports.js",
+        "symbols": [
+          {
+            "qname": "mugReport",
+            "kind": "function",
+            "lines": [
+              4,
+              6
+            ],
+            "exported": true
+          }
+        ],
+        "more": 0,
+        "rank": 4
+      },
+      {
+        "item": "file",
+        "file": "src/routes/orders.js",
+        "symbols": [
+          {
+            "qname": "GET /",
+            "kind": "route",
+            "lines": [
+              8,
+              10
+            ],
+            "exported": false
+          },
+          {
+            "qname": "GET /search",
+            "kind": "route",
+            "lines": [
+              12,
+              14
+            ],
+            "exported": false
+          },
+          {
+            "qname": "GET /:id",
+            "kind": "route",
+            "lines": [
+              16,
+              20
+            ],
+            "exported": false
+          },
+          {
+            "qname": "POST /",
+            "kind": "route",
+            "lines": [
+              22,
+              28
+            ],
+            "exported": false
+          }
+        ],
+        "more": 0,
+        "rank": 5
+      },
+      {
+        "item": "file",
+        "file": "src/routes/users.js",
+        "symbols": [
+          {
+            "qname": "GET /",
+            "kind": "route",
+            "lines": [
+              6,
+              8
+            ],
+            "exported": false
+          },
+          {
+            "qname": "GET /:id",
+            "kind": "route",
+            "lines": [
+              10,
+              14
+            ],
+            "exported": false
+          }
+        ],
+        "more": 0,
+        "rank": 6
+      },
+      {
+        "item": "file",
+        "file": "src/handlers/orders.js",
+        "symbols": [
+          {
+            "qname": "OrdersHandler",
+            "kind": "class",
+            "lines": [
+              4,
+              19
+            ],
+            "exported": true
+          },
+          {
+            "qname": "OrdersHandler.constructor",
+            "kind": "method",
+            "lines": [
+              5,
+              8
+            ],
+            "exported": false
+          },
+          {
+            "qname": "OrdersHandler.list",
+            "kind": "method",
+            "lines": [
+              10,
+              12
+            ],
+            "exported": false
+          },
+          {
+            "qname": "OrdersHandler.find",
+            "kind": "method",
+            "lines": [
+              14,
+              18
+            ],
+            "exported": false
+          }
+        ],
+        "more": 0,
+        "rank": 7
+      },
+      {
+        "item": "file",
+        "file": "src/app.js",
+        "symbols": [],
+        "more": 0,
+        "rank": 8
+      },
+      {
+        "item": "file",
+        "file": "src/index.js",
+        "symbols": [],
+        "more": 0,
+        "rank": 9
+      },
+      {
+        "item": "file",
+        "file": "tests/orders.test.js",
+        "symbols": [],
+        "more": 0,
+        "rank": 10
+      },
+      {
+        "item": "file",
+        "file": "tests/store.test.js",
+        "symbols": [],
+        "more": 0,
+        "rank": 11
+      },
+      {
+        "item": "file",
+        "file": "tests/users.test.js",
+        "symbols": [],
+        "more": 0,
+        "rank": 12
+      }
+    ],
+    "shown": 12,
+    "has_more": false,
+    "hidden": {},
+    "budget": {
+      "used": 211,
+      "max": 1200
+    },
+    "card": "graph map (gen 1) — 12 file(s) by rank\n  src/stores/orderStore.js  OrderStore:3-22 E · OrderStore.list:9-11 · OrderStore.get:13-15 · searchByItemPrefix:26-29 E · +2\n  src/auth.js  requireAuth:1-7 E\n  src/handlers/base.js  BaseHandler:2-10 E · BaseHandler.ok:3-5 · BaseHandler.fail:7-9\n  src/reports.js  mugReport:4-6 E\n  src/routes/orders.js  GET /:8-10 · GET /search:12-14 · GET /:id:16-20 · POST /:22-28\n  src/routes/users.js  GET /:6-8 · GET /:id:10-14\n  src/handlers/orders.js  OrdersHandler:4-19 E · OrdersHandler.constructor:5-8 · OrdersHandler.list:10-12 · OrdersHandler.find:14-18\n  src/app.js\n  src/index.js\n  tests/orders.test.js\n  tests/store.test.js\n  tests/users.test.js\n  rank is a HINT about where to look first — it is never proof a file matters to this change",
+    "generation": 1,
+    "trace": "GRAPH-MAP repo :: files=12/12 gen=1"
+  }
+}

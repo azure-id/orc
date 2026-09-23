@@ -2741,6 +2741,75 @@ const CONTRACTS = [
       "skills/orc-fast/SKILL.md",
     ],
   },
+  // ── v1.9.1 W3 — the brief answer, and the lines the CLI now computes ──
+  {
+    // Every `--json` read a lane makes carries it, and the CLI is the only
+    // thing that can answer it. A rename that reached one side and not the
+    // other would leave every lane asking for a flag nothing knows.
+    name: "graph brief answer (v1.9.1 — --brief on every --json read a lane makes)",
+    token: "--brief",
+    files: [
+      "agents/orc-executor-haiku-4-5.md",
+      "agents/orc-executor-opus-4-7-high.md",
+      "agents/orc-executor-opus-4-7-med.md",
+      "agents/orc-executor-opus-4-8-high.md",
+      "agents/orc-executor-opus-5-high.md",
+      "agents/orc-executor-opus-5-low.md",
+      "agents/orc-executor-opus-5-med.md",
+      "agents/orc-executor-sonnet-4-6-high.md",
+      "agents/orc-executor-sonnet-4-6-med.md",
+      "agents/orc-executor-sonnet-5-high.md",
+      "agents/orc-recon-opus-5-low.md",
+      "agents/orc-recon-sonnet-4-6-med.md",
+      "skills/_shared/code-graph.md",
+      "skills/_shared/phases/execution.md",
+      "skills/_shared/phases/planning.md",
+      "skills/_shared/phases/preflight.md",
+      // review.md names it to say where it is deliberately NOT used.
+      "skills/_shared/phases/review.md",
+      "skills/_shared/phases/ship.md",
+      // trace.md names the call each trace verb is copied from.
+      "skills/_shared/phases/trace.md",
+      "skills/_shared/read-ladder.md",
+      "skills/orc/SKILL.md",
+      "skills/orc-fast/SKILL.md",
+      "skills/orc-mini/SKILL.md",
+      "skills/orc-mini/references/complexity.md",
+      "skills/orc-quick/SKILL.md",
+      "skills/orc-quick/references/gh-mode.md",
+      "skills/orc-quick/references/look.md",
+    ],
+    binFiles: ["bin/cli.js"],
+  },
+  {
+    // The blast radius is the CLI's line now. A lane that assembled it by hand
+    // would drift from the CLI's grammar the first time either side moved.
+    name: "graph blast line (v1.9.1 — changes computes the blast radius, the lane prints it)",
+    token: "blast_line",
+    files: ["skills/orc-mini/SKILL.md", "skills/orc-quick/SKILL.md"],
+    binFiles: ["bin/graph-signals.js"],
+  },
+  {
+    // Mini's one call. The flag, the prose that explains it and the engine that
+    // answers it move together or not at all.
+    name: "graph complexity read (v1.9.1 — impact --complexity, one call, one line)",
+    token: "--complexity",
+    files: [
+      "skills/_shared/code-graph.md",
+      "skills/_shared/phases/trace.md",
+      "skills/orc-mini/SKILL.md",
+      "skills/orc-mini/references/complexity.md",
+    ],
+    binFiles: ["bin/cli.js"],
+  },
+  {
+    // The four thresholds live in ONE place. The prose quotes them by NAME, so
+    // a rename that reaches only the engine fails here.
+    name: "graph complexity thresholds (v1.9.1 — the constants the prose quotes)",
+    token: "COMPLEXITY_CALLER_FILES",
+    files: ["skills/orc-mini/references/complexity.md"],
+    binFiles: ["bin/graph-signals.js"],
+  },
   // ── v1.8.2 W3 — the delivery flags (D1 · D2 · D3 · D5) ────────────────
   {
     // The slice call. A rename must reach the contract, the phase file that
@@ -2772,6 +2841,43 @@ const CONTRACTS = [
       "skills/orc-quick/references/look.md",
     ],
     binFiles: ["bin/cli.js"],
+  },
+  // ── v1.9.1 W5 — delivery where the paid reads are (R1 · R4) ─────────────
+  {
+    // The call sites WITH the card. The recon agents ask for it, the ladder
+    // and the contract say what it may never print, and the CLI answers it.
+    name: "graph callers source (v1.9.1 — ctx --callers-source, six lines per confident call site)",
+    token: "--callers-source",
+    files: [
+      "agents/orc-recon-opus-5-low.md",
+      "agents/orc-recon-sonnet-4-6-med.md",
+      "skills/_shared/code-graph.md",
+      "skills/_shared/read-ladder.md",
+    ],
+    binFiles: ["bin/cli.js", "bin/graph-query.js"],
+  },
+  {
+    // Where a language server is asked. Every reader that is told to use it
+    // names the field, and the engine is the only thing that computes it.
+    name: "graph LSP anchor (v1.9.1 — lsp_at on a symbol card: file, line, 1-based character)",
+    token: "lsp_at",
+    files: [
+      "agents/orc-executor-haiku-4-5.md",
+      "agents/orc-executor-opus-4-7-high.md",
+      "agents/orc-executor-opus-4-7-med.md",
+      "agents/orc-executor-opus-4-8-high.md",
+      "agents/orc-executor-opus-5-high.md",
+      "agents/orc-executor-opus-5-low.md",
+      "agents/orc-executor-opus-5-med.md",
+      "agents/orc-executor-sonnet-4-6-high.md",
+      "agents/orc-executor-sonnet-4-6-med.md",
+      "agents/orc-executor-sonnet-5-high.md",
+      "agents/orc-recon-opus-5-low.md",
+      "agents/orc-recon-sonnet-4-6-med.md",
+      "skills/_shared/code-graph.md",
+      "skills/_shared/read-ladder.md",
+    ],
+    binFiles: ["bin/graph-query.js"],
   },
   // ── v1.9.0 — the lean lanes reproduce before they fix ───────────────────
   {
@@ -4562,6 +4668,15 @@ for (const b of BUDGETS) {
   //    one. design-05 §6.3: a call one lane makes belongs to that lane.
   for (const [id, c] of Object.entries(CALLS)) {
     const want = [...(measured[prefixOf(c.cmd)] || new Set())].sort();
+    // v1.9.1: a row with `lanes: []` is a USER command — catalogued so
+    // `orc lane calls --all` documents it, and asserted the OTHER way round:
+    // no lane may name it. `orc graph audit` is the first one. The assertion is
+    // stronger than the >= 2 rule, not an exception to it.
+    if (Array.isArray(c.lanes) && c.lanes.length === 0) {
+      if (want.length)
+        errs.push(`${id}: a user command, and ${want.join(", ")} name it — remove the call, or give the row its lanes`);
+      continue;
+    }
     if (want.length < 2)
       errs.push(
         `${id}: only ${want.length} lane names it — a call one lane makes belongs to that lane and is not catalogued`
