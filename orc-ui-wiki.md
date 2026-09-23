@@ -286,6 +286,35 @@ to make unnecessary. Nothing new is derived and nothing is computed in the
 browser; both values come straight from `orc graph status --json`, which is the
 rule this whole panel is built on.
 
+**v1.9.1 — the density row, and two rows on the gain strip.** The card gains
+**Density** (`density.symbols_per_file` and `density.zero_share`, both from the
+same `orc graph status --json` — no new route), rendered as
+`1.9 symbols/file · 61 % files empty · THIN`. When the CLI says `thin: true` a
+warning note follows it: most files hold no named symbol, so most questions
+asked of the graph will not find one, and `orc graph audit` lists those files by
+language. The row is absent when the answer carries no `density` — a store built
+before v1.9.1 that has not been healed yet. The panel computes neither value and
+never decides THIN for itself: `thin` is the CLI's, from three thresholds in
+`bin/graph-signals.js`.
+
+On the gain strip, **Tokens put in** gains a fourth half — the **envelope**,
+everything a `--json` answer carried beyond its card — so the row reads
+`(cards · source · hints · envelope)`. Before v1.9.1 the meter counted the card
+and called itself exact, and the card is between a quarter and an eighth of what
+a lane actually receives. And **Never called** lists the reads this project has
+never made (`never_called`, from the same `orc graph gain --json`). It is a fact
+with no advice after it, and the row is absent when the list is empty. The
+fixture is THIN and carries all four fields, so `orc ui --fixtures` renders
+every row.
+
+The **Hints** row gains a fourth count — **wide reads not hinted**
+(`hints.wide_unhinted`, from the same `orc graph gain --json`). It counts the
+whole-file reads of a wide file (8 or more symbols) that a subagent made while
+`code_graph_hooks` was `on`, not `on,read`. The `on,read` hint names ranges for
+those reads, so this count is the data for a decision to arm that hint. It is a
+count and nothing more: the panel changes no setting. A ledger written before
+v1.9.1 has no such count, and the row shows 0.
+
 **v1.8.2 — the gain strip** sits at the foot of the same card and renders
 `orc graph gain --json`, exactly, deriving nothing. It says THREE different
 things and never merges them:

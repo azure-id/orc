@@ -315,3 +315,128 @@ test("graph hook — a name a --for-slice block already delivered is never injec
   assert.doesNotMatch(start, /Before a wide Grep/);
   assert.match(start, /a code graph of this repository is indexed/);
 });
+
+// ── M1 (v1.9.1) — the hook's own updates reach the meter ───────────────────
+//
+// The meter showed `0 hook updates` on a project whose hook had run 35 of them:
+// the counters file and the gain ledger are two different files, and only one
+// of them was being written.
+
+const gainRows = (claudeDir) => {
+  const f = path.join(claudeDir, "orc", "graph", "gain.jsonl");
+  if (!fs.existsSync(f)) return [];
+  return fs.readFileSync(f, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
+};
+
+test("graph hook — a successful update appends ONE ledger row, and it pays nothing", () => {
+  const a = armed();
+  fs.writeFileSync(path.join(a.root, "src", "added.js"), "export function freshName() { return 2; }\n");
+  assert.deepStrictEqual(gainRows(a.claudeDir).filter((r) => r.cmd === "hook-update"), []);
+
+  assert.equal(say(a.claudeDir, { hook_event_name: "SubagentStop", agent_type: "orc-executor-opus-5-med" }).status, 0);
+  const rows = gainRows(a.claudeDir).filter((r) => r.cmd === "hook-update");
+  assert.equal(rows.length, 1, "one update, one row");
+  const r = rows[0];
+  assert.deepStrictEqual(r.paid, { card: 0, source: 0, hints: 0, envelope: 0 }, "a background update puts no tokens into any context");
+  assert.deepStrictEqual(r.avoided, { low: 0, high: 0, calls_low: 0, calls_high: 0 }, "and it avoids nothing — it is work, not a read");
+  assert.equal(r.targets[0], "orc-executor-opus-5-med", "--history says who triggered it");
+  assert.ok(r.gen, "the row names the generation it produced");
+});
+
+test("graph hook — the counters file and the ledger agree, whatever happened", () => {
+  const a = armed();
+  fs.writeFileSync(path.join(a.root, "src", "added.js"), "export function freshName() { return 2; }\n");
+  say(a.claudeDir, { hook_event_name: "SubagentStop", agent_type: "orc-executor-opus-5-med" });
+  // A second stop with nothing changed still updates (state `unchanged`) — both
+  // halves count it, or the meter and the phase line say different things.
+  say(a.claudeDir, { hook_event_name: "SubagentStop", agent_type: "orc-executor-opus-5-med" });
+
+  const counters = JSON.parse(fs.readFileSync(path.join(a.logs, "run-test.graph-hook.json"), "utf8"));
+  const rows = gainRows(a.claudeDir).filter((r) => r.cmd === "hook-update");
+  assert.equal(rows.length, counters.updates, `ledger ${rows.length} vs counters ${counters.updates}`);
+});
+
+test("graph hook — a non-executor stop writes neither a counter nor a row", () => {
+  const a = armed();
+  say(a.claudeDir, { hook_event_name: "SubagentStop", agent_type: "orc-reviewer-opus-5-med" });
+  assert.deepStrictEqual(gainRows(a.claudeDir).filter((r) => r.cmd === "hook-update"), []);
+});
+
+// ── R2 · R3 (v1.9.1 W5) — the wide read, counted under `on`, personal under `on,read`
+
+// A project with one WIDE file (10 symbols; the wide list starts at 8).
+function wideArmed() {
+  const a = armed();
+  const body = Array.from({ length: 10 }, (_, i) => `export function wideFn${i}(x) { return x + ${i}; }`).join("\n") + "\n";
+  fs.writeFileSync(path.join(a.root, "src", "wide.js"), body);
+  spawnSync("git", ["add", "-A"], { cwd: a.root, encoding: "utf8" });
+  cli(["graph", "update", "--dir", a.root, "--json"]);
+  return a;
+}
+const postRead = (a, rel, extra) => ({ hook_event_name: "PostToolUse", agent_id: "agent-1", tool_name: "Read", tool_input: { file_path: path.join(a.root, ...rel.split("/")), ...(extra || {}) } });
+const counters = (a) => JSON.parse(fs.readFileSync(path.join(a.logs, "run-test.graph-hook.json"), "utf8"));
+
+test("graph hook — R2: under `on`, a whole-file read of a wide file is COUNTED, once, and says nothing", () => {
+  const a = wideArmed();
+  const r = say(a.claudeDir, postRead(a, "src/wide.js"));
+  assert.equal(r.status, 0);
+  assert.equal(r.stdout.trim(), "", "a count, never a hint");
+  assert.equal(r.stderr.trim(), "");
+  let rows = gainRows(a.claudeDir).filter((x) => x.cmd === "wide-unhinted");
+  assert.equal(rows.length, 1);
+  assert.deepStrictEqual(rows[0].paid, { card: 0, source: 0, hints: 0, envelope: 0 }, "it put nothing into any context");
+  assert.deepStrictEqual(rows[0].avoided, { low: 0, high: 0, calls_low: 0, calls_high: 0 });
+  assert.deepStrictEqual(rows[0].targets, ["src/wide.js"]);
+  assert.equal(counters(a).wide_unhinted, 1);
+  // No trace line: it is a count, not an event.
+  assert.doesNotMatch(fs.readFileSync(path.join(a.logs, "run-test.txt"), "utf8"), /wide/i);
+
+  // Once per file per run.
+  say(a.claudeDir, postRead(a, "src/wide.js"));
+  // A RANGE read is not a miss, and a narrow file is not wide.
+  say(a.claudeDir, postRead(a, "src/wide.js", { offset: 1, limit: 3 }));
+  say(a.claudeDir, postRead(a, "src/core.js"));
+  rows = gainRows(a.claudeDir).filter((x) => x.cmd === "wide-unhinted");
+  assert.equal(rows.length, 1);
+  assert.equal(counters(a).wide_unhinted, 1);
+});
+
+test("graph hook — R2: under `on,read` the hint already fired, so nothing is counted", () => {
+  const a = wideArmed();
+  cli(["config", "set", "code_graph_hooks", "on,read", "--dir", a.root]);
+  assert.ok(ctxOf(say(a.claudeDir, { ...postRead(a, "src/wide.js"), hook_event_name: "PreToolUse" })), "the PreToolUse hint fires");
+  assert.equal(say(a.claudeDir, postRead(a, "src/wide.js")).stdout.trim(), "");
+  assert.deepStrictEqual(gainRows(a.claudeDir).filter((x) => x.cmd === "wide-unhinted"), []);
+  assert.ok(!counters(a).wide_unhinted);
+});
+
+test("graph hook — R2: the main session is never counted", () => {
+  const a = wideArmed();
+  const { agent_id, ...main } = postRead(a, "src/wide.js");
+  assert.equal(say(a.claudeDir, main).stdout.trim(), "");
+  assert.deepStrictEqual(gainRows(a.claudeDir).filter((x) => x.cmd === "wide-unhinted"), []);
+});
+
+test("graph hook — R3: the wide hint names the run's own names first, and keeps the rest in order", () => {
+  const a = wideArmed();
+  cli(["config", "set", "code_graph_hooks", "on,read", "--dir", a.root]);
+  const wide = JSON.parse(fs.readFileSync(path.join(a.claudeDir, "orc", "graph", "wide.json"), "utf8")).files["src/wide.js"];
+  assert.equal(wide.length, 6);
+  const names = wide.map((r) => r[0]);
+  // The run was already told about the LAST of the six (a search hint or a slice).
+  fs.writeFileSync(path.join(a.logs, "run-test.graph-hook.json"), JSON.stringify({ injected: 0, subagent_start: 0, read_notes: 0, updates: 0, tokens: [`name:${names[5]}`] }));
+  const ctx = ctxOf(say(a.claudeDir, { ...postRead(a, "src/wide.js"), hook_event_name: "PreToolUse" }));
+  const shown = [...ctx.matchAll(/(wideFn\d+) \d+-\d+/g)].map((m) => m[1]);
+  assert.deepStrictEqual(shown, [names[5], ...names.slice(0, 5)], "the task's name first, then importance order");
+  // The line text is unchanged.
+  assert.match(ctx, /src\/wide\.js holds many symbols; the most reached are wideFn\d+ \d+-\d+ · /);
+  assert.match(ctx, /\. The read below still runs; a later read of this file can name a range\.$/);
+});
+
+test("graph hook — R3: with no name told yet, the order is the store's importance order", () => {
+  const a = wideArmed();
+  cli(["config", "set", "code_graph_hooks", "on,read", "--dir", a.root]);
+  const names = JSON.parse(fs.readFileSync(path.join(a.claudeDir, "orc", "graph", "wide.json"), "utf8")).files["src/wide.js"].map((r) => r[0]);
+  const ctx = ctxOf(say(a.claudeDir, { ...postRead(a, "src/wide.js"), hook_event_name: "PreToolUse" }));
+  assert.deepStrictEqual([...ctx.matchAll(/(wideFn\d+) \d+-\d+/g)].map((m) => m[1]), names);
+});

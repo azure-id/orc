@@ -26,7 +26,7 @@ Escalate one step at a time. Stop at the step that answers the question.
 
 ## Step 0 — ask the graph (always first; the CLI decides if it is on)
 
-Before step 1, run `orc graph ctx <symbol|file[:line]> --if-enabled --json`
+Before step 1, run `orc graph ctx <symbol|file[:line]> --if-enabled --json --brief`
 yourself. You do not need to know whether the graph is on. Exit 0 → the card
 answers step 1 and step 2 together: where the symbol is, its line range, who
 calls or uses it, what it calls, and which effects it has. Then continue at
@@ -40,6 +40,19 @@ footer says how many lines it cut. Use it for the CALLER'S range, the callee's,
 the neighbour you will not touch. **It never replaces exception 1**: a file you
 will EDIT is read IN FULL with `Read` first, because an `old_string` rebuilt
 from a printed range is the same corruption bug as one rebuilt from an outline.
+**`--callers-source` adds six lines around each confident call site (≤ 5)**
+(v1.9.1), charged against the same `--budget` after everything else. A file you
+will EDIT is still read in full with `Read` first — this is for the callers you
+will not touch.
+
+**Ask a language server when the card cannot be exact** (v1.9.1). If the card
+answers `AMBIGUOUS (n)` for a callee, or `← maybe <n>` for callers, and an `LSP`
+tool is available in this session, run `LSP findReferences` (callers) or
+`goToDefinition` (a callee) at the card's `lsp_at` — file, line, character —
+before any Grep. A language server's answer is EXACT; the card's `AMBIGUOUS` is a
+list of candidates. Without an LSP tool, or with `lsp_at: null`, the ladder
+continues as before.
+
 Exit 3 (off) → skip step 0 for the rest of the task. Exit 1 (no index) or 4 (not
 in the graph) → step 1 as before. Name the card targets you used in
 `graph_used`. Both exceptions below apply unchanged.

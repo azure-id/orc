@@ -1,0 +1,43 @@
+{
+  "args": [
+    "path",
+    "OrdersHandler.list",
+    "OrderStore.list",
+    "--json"
+  ],
+  "status": 0,
+  "json": {
+    "ok": true,
+    "state": "found",
+    "hops": 1,
+    "chain": [
+      {
+        "id": "src/handlers/orders.js#OrdersHandler.list",
+        "qname": "OrdersHandler.list",
+        "kind": "method",
+        "file": "src/handlers/orders.js",
+        "lines": [
+          10,
+          12
+        ],
+        "state": null,
+        "called_at": null
+      },
+      {
+        "id": "src/stores/orderStore.js#OrderStore.list",
+        "qname": "OrderStore.list",
+        "kind": "method",
+        "file": "src/stores/orderStore.js",
+        "lines": [
+          9,
+          11
+        ],
+        "state": "IMPORT",
+        "called_at": "src/handlers/orders.js:11"
+      }
+    ],
+    "card": "OrdersHandler.list  src/handlers/orders.js:10\n  → OrderStore.list  src/stores/orderStore.js:9  IMPORT  (called at src/handlers/orders.js:11)",
+    "generation": 1,
+    "gen_id": "<gen_id>"
+  }
+}

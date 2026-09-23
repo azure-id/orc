@@ -175,7 +175,12 @@ function forwardRow(i, res) {
 const NAMES_PER_KEY = 5;
 const norm = (p) => String(p).split("\\").join("/").replace(/^\.\//, "");
 
-function fastModel(claudeDir, root, query) {
+function fastModel(claudeDir, root, query, opts) {
+  // R1 (v1.9.1): `--callers-source` reads every caller FILE and asks git for
+  // each one's freshness. The fast model holds blobs, not bytes, so the full
+  // model answers — the same decline, for the same reason, as any other read
+  // the fast path cannot prove.
+  if (opts && opts.callersSource) return { model: null, reason: "callers-source" };
   const p = G.graphPaths(claudeDir);
   const meta = readJson(p.meta);
   if (!meta || !meta.generation) return { model: null, reason: "no-meta" };

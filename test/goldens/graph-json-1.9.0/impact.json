@@ -1,0 +1,207 @@
+{
+  "args": [
+    "impact",
+    "src/stores/orderStore.js",
+    "src/auth.js",
+    "src/handlers/base.js",
+    "--json"
+  ],
+  "status": 0,
+  "json": {
+    "ok": true,
+    "state": "found",
+    "format": "prose",
+    "offset": 0,
+    "has_more": false,
+    "files": [
+      "src/stores/orderStore.js",
+      "src/auth.js",
+      "src/handlers/base.js"
+    ],
+    "missing": [],
+    "symbols": 10,
+    "callers": [
+      {
+        "item": "caller",
+        "depth": 1,
+        "id": "src/handlers/orders.js#OrdersHandler.constructor",
+        "qname": "OrdersHandler.constructor",
+        "kind": "method",
+        "file": "src/handlers/orders.js",
+        "lines": [
+          5,
+          8
+        ],
+        "line": 7,
+        "state": "IMPORT",
+        "via": "OrderStore"
+      },
+      {
+        "item": "caller",
+        "depth": 1,
+        "id": "src/handlers/orders.js#OrdersHandler.list",
+        "qname": "OrdersHandler.list",
+        "kind": "method",
+        "file": "src/handlers/orders.js",
+        "lines": [
+          10,
+          12
+        ],
+        "line": 11,
+        "state": "IMPORT",
+        "via": "OrderStore.list"
+      },
+      {
+        "item": "caller",
+        "depth": 1,
+        "id": "src/handlers/orders.js#OrdersHandler.find",
+        "qname": "OrdersHandler.find",
+        "kind": "method",
+        "file": "src/handlers/orders.js",
+        "lines": [
+          14,
+          18
+        ],
+        "line": 15,
+        "state": "IMPORT",
+        "via": "OrderStore.get"
+      },
+      {
+        "item": "caller",
+        "depth": 1,
+        "id": "src/reports.js#mugReport",
+        "qname": "mugReport",
+        "kind": "function",
+        "file": "src/reports.js",
+        "lines": [
+          4,
+          6
+        ],
+        "line": 5,
+        "state": "IMPORT",
+        "via": "searchByItemPrefix"
+      },
+      {
+        "item": "caller",
+        "depth": 1,
+        "id": "src/routes/orders.js#<module>",
+        "qname": "<module>",
+        "kind": "module",
+        "file": "src/routes/orders.js",
+        "lines": [
+          1,
+          31
+        ],
+        "line": 6,
+        "state": "IMPORT",
+        "via": "OrderStore"
+      },
+      {
+        "item": "caller",
+        "depth": 1,
+        "id": "src/routes/orders.js#GET /",
+        "qname": "GET /",
+        "kind": "route",
+        "file": "src/routes/orders.js",
+        "lines": [
+          8,
+          10
+        ],
+        "line": 9,
+        "state": "IMPORT",
+        "via": "OrderStore.list"
+      },
+      {
+        "item": "caller",
+        "depth": 1,
+        "id": "src/routes/orders.js#GET /search",
+        "qname": "GET /search",
+        "kind": "route",
+        "file": "src/routes/orders.js",
+        "lines": [
+          12,
+          14
+        ],
+        "line": 13,
+        "state": "IMPORT",
+        "via": "searchByItemPrefix"
+      },
+      {
+        "item": "caller",
+        "depth": 1,
+        "id": "src/routes/orders.js#GET /:id",
+        "qname": "GET /:id",
+        "kind": "route",
+        "file": "src/routes/orders.js",
+        "lines": [
+          16,
+          20
+        ],
+        "line": 17,
+        "state": "IMPORT",
+        "via": "OrderStore.get"
+      },
+      {
+        "item": "caller",
+        "depth": 1,
+        "id": "src/routes/orders.js#POST /",
+        "qname": "POST /",
+        "kind": "route",
+        "file": "src/routes/orders.js",
+        "lines": [
+          22,
+          28
+        ],
+        "line": 27,
+        "state": "IMPORT",
+        "via": "OrderStore.insert"
+      },
+      {
+        "item": "caller",
+        "depth": 1,
+        "id": "tests/store.test.js#<module>",
+        "qname": "<module>",
+        "kind": "module",
+        "file": "tests/store.test.js",
+        "lines": [
+          1,
+          12
+        ],
+        "line": 6,
+        "state": "IMPORT",
+        "via": "OrderStore"
+      },
+      {
+        "item": "caller",
+        "depth": 2,
+        "id": "tests/orders.test.js#<module>",
+        "qname": "<module>",
+        "kind": "module",
+        "file": "tests/orders.test.js",
+        "lines": [
+          1,
+          47
+        ],
+        "line": 27,
+        "state": "ROUTE",
+        "via": "GET /search ← GET /orders/search?q=mu",
+        "url": "GET /orders/search?q=mu"
+      }
+    ],
+    "total_callers": 11,
+    "maybe_callers": 1,
+    "tests": [
+      "tests/orders.test.js",
+      "tests/store.test.js"
+    ],
+    "wiki": [],
+    "hidden": {},
+    "budget": {
+      "used": 268,
+      "max": 1200
+    },
+    "card": "impact of src/stores/orderStore.js, src/auth.js, src/handlers/base.js — 10 symbols · depth 3\n  d1  OrdersHandler.constructor  src/handlers/orders.js:7  IMPORT  (via OrderStore)\n  d1  OrdersHandler.list  src/handlers/orders.js:11  IMPORT  (via OrderStore.list)\n  d1  OrdersHandler.find  src/handlers/orders.js:15  IMPORT  (via OrderStore.get)\n  d1  mugReport  src/reports.js:5  IMPORT  (via searchByItemPrefix)\n  d1  <module>  src/routes/orders.js:6  IMPORT  (via OrderStore)\n  d1  GET /  src/routes/orders.js:9  IMPORT  (via OrderStore.list)\n  d1  GET /search  src/routes/orders.js:13  IMPORT  (via searchByItemPrefix)\n  d1  GET /:id  src/routes/orders.js:17  IMPORT  (via OrderStore.get)\n  d1  POST /  src/routes/orders.js:27  IMPORT  (via OrderStore.insert)\n  d1  <module>  tests/store.test.js:6  IMPORT  (via OrderStore)\n  d2  <module>  tests/orders.test.js:27  ROUTE  (via GET /search ← GET /orders/search?q=mu)\n  tests  tests/orders.test.js, tests/store.test.js\n  maybe  1 AMBIGUOUS caller(s) not followed",
+    "generation": 1,
+    "gen_id": "<gen_id>"
+  }
+}

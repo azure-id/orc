@@ -73,12 +73,12 @@ returned `gotcha_recorded` YOURSELF. `.claude/orc/gotchas.md` and the mechanics:
 ## Code graph cache — consult, build, use, update (`../_shared/code-graph.md` §0)
 
 Never skipped. Every call carries `--if-enabled`: exit 3 = off → print `graph: off` once, make no other graph call. Print each JSON `line` in chat; put each `trace` in the next packet VERBATIM.
-1. **Preflight, with the probes, before the planner:** `orc graph status --if-enabled --heal --json` — it builds or updates the cache itself.
-2. **Phase 0, before the tiered round:** `orc graph map --focus "<3–6 words from the request>" --budget 800 --if-enabled --json`. Its ranked files pre-fill Q4's `➡️` recommendation. Never ask what the map already answered.
-3. **Phase 1, into `graph_facts` and the complexity line:** `orc graph impact <declared_files> --if-enabled --json` (ONE call) and `orc graph cochange <each declared file> --if-enabled --json` — NUMBERS, never a judgment (`references/complexity.md`).
-4. **Phase 3 slice:** ONE `orc graph ctx <declared_files> --for-slice --if-enabled --json` → its `card` is the `graph` block, the OUTSIDE view. No card when the change stays inside one named file with no signature change (`../_shared/code-graph.md` §7). The return carries `graph_used`.
-5. **Phase M, before the suite:** `orc graph changes --if-enabled --json` names the tests that reach the change; run those first, then the suite. `risk` never prints without its `why`.
-6. **Phase M GREEN:** `orc graph update --notes-pending --files <actual_files> --if-enabled --json` — ONE call for the update AND the notes batch (§6) — then `orc graph gain --run <this run> --if-enabled --json`, `line` copied VERBATIM into the ship summary. It is an estimate with a range; never restate it as a saving.
+1. **Preflight, with the probes, before the planner:** `orc graph status --if-enabled --heal --json --brief` — it builds or updates the cache itself.
+2. **Phase 0, before the tiered round:** `orc graph map --focus "<3–6 words from the request>" --budget 800 --if-enabled --json --brief`. Its ranked files pre-fill Q4's `➡️` recommendation. Never ask what the map already answered.
+3. **Phase 1, ONE call:** `orc graph impact <declared_files> --complexity --risk=<facets.risk[] as class[@file:line],…> --if-enabled --json --brief`. Its `complexity.line` IS the complexity line — print it VERBATIM (`risk not given` → append the classes yourself); its `facts{}` IS `graph_facts` — paste it, then set `facts.map` to the `map --focus` card you already hold. No `complexity` in the answer (an older CLI) → count as `references/complexity.md` §2 says.
+4. **Phase 3 slice:** ONE `orc graph ctx <declared_files> --for-slice --if-enabled --json --brief` → its `card` is the `graph` block, the OUTSIDE view. No card when the change stays inside one named file with no signature change (`../_shared/code-graph.md` §7). The return carries `graph_used`.
+5. **Phase M, before the suite:** `orc graph changes --files=<actual_files> --if-enabled --json --brief` — print its `tests_line`, run the files its `tests[]` names first, then the suite, then its `blast_line` VERBATIM. The CLI attaches every `risk` word's `why`.
+6. **Phase M GREEN:** `orc graph update --notes-pending --files <actual_files> --if-enabled --json --brief` — ONE call for the update AND the notes batch (§6) — then `orc graph gain --run <this run> --if-enabled --json --brief`, `line` copied VERBATIM into the ship summary. It is an estimate with a range; never restate it as a saving.
 
 ## Phase M — Smoke gate (build + test; blocks ship on red)
 
@@ -134,17 +134,13 @@ trace. `OUTCOME … band=mini` per task.
 
 ## Complexity read (replaces the scoring table) — `references/complexity.md`
 
-ONE line before dispatch, carrying its own NUMBERS — never a narrative
-judgment. Counted from `graph_facts` and `facets.risk[]`; how, and why each
-threshold is that number: `references/complexity.md`.
+ONE line before dispatch, carrying its own NUMBERS. **The CLI computes it** —
+`complexity.line` from the Phase 1 call, printed VERBATIM. The four thresholds,
+the `(graph off)` form and why each number is that number: `references/complexity.md`.
 `complexity: mini-ok — 3 files · confident callers 4 in 2 files · tests reach 2 · risk none · cochange none`
-**Recommend the full lane when ANY holds:** confident callers in 4+ files
-outside `declared_files` · 8+ confident callers · any `facets.risk[]` entry · a
-`cochange` partner with 3+ co-commits not in the plan. `AMBIGUOUS` callers print
-as `maybe <n>` and never trip one alone. Graph off → the `(graph off)` form,
-from `facets.risk[]` alone; never invent a number. It is an OFFER: *1. switch to
-/orc (recommended — <the reason>) · 2. continue in mini*. Continuing writes the
-NUMBERS into the decision log. Trace: `GATE complexity :: <the line>`.
+It is an OFFER: *1. switch to /orc (recommended — <the reason>) · 2. continue in
+mini*. Continuing writes the NUMBERS into the decision log, so `/orc-retro` can
+move a threshold instead of anyone arguing about it. Trace: `GATE complexity :: <the line>`.
 
 ## Fallback intake (arriving from orc-fast)
 
@@ -235,7 +231,7 @@ mini-analyst return: evidence spot-check + derivation lint; refuse
 take-into-build on open `UNVERIFIED`/missing `scope_closed`; `git_head` ≠
 HEAD at plan time → re-run the spot-check first. On mini-planner return: confirm
 every `disposition: exists` path with `orc graph ctx <paths> --if-enabled
---json`, FIVE at a time — exit 0 confirms, exit 4 or an unindexed path falls
+--json --brief`, FIVE at a time — exit 0 confirms, exit 4 or an unindexed path falls
 back to a Glob. Then recompute coverage (no orphan requirements), cycle +
 collision checks. Any miss → bounce (one retry, then escalate). At dispatch,
 append the task's `spec_invariants` to the slice's `constraints[]` verbatim.

@@ -54,7 +54,7 @@ subagent). The user must always know what the run cost. **Code graph
 fix rounds move code — and emit `GRAPH-UPDATE`; then run `orc graph notes pending
 --files <every path the run changed> --at end --if-enabled` — exit 0 → one noter
 dispatch, exit 3 or 5 → nothing. Then ONE line, once, copied VERBATIM from
-`orc graph gain --run <this run's trace name> --if-enabled --json` (emit
+`orc graph gain --run <this run's trace name> --if-enabled --json --brief` (emit
 `GRAPH-GAIN`): what the graph put in, and an ESTIMATE of the retrieval it kept
 out. Exit 1 or 3 → no line. **Never restate it as one number** — the range and
 the word "estimate" are the claim. Finally emit

@@ -56,7 +56,7 @@ const { spawnSync } = require("child_process");
 // @3 (W9): route handlers are symbols, and a function passed BY NAME is a `ref`.
 // @4 (EW1): every record says how much of the file the extractor actually saw.
 // @5 (v1.8.2 W1): urls, mounts, decorator routes, `handler` on a route alias.
-const HEURISTIC = "heuristic@5";
+const HEURISTIC = "heuristic@6";
 const MAX_CALLS_PER_SYMBOL = 200;
 const MAX_EFFECTS_PER_SYMBOL = 12;
 const MAX_URLS_PER_SYMBOL = 200;
@@ -1061,6 +1061,288 @@ function basesOf(tail) {
   return [...new Set(out)].slice(0, 8);
 }
 
+// ── W5b (v1.9.1, DE-15): an OBJECT is a declaration too ─────────────────────
+// An Options API component, a mixin and a Vuex module define every function
+// they have as a MEMBER of one default-exported object. The rungs above read
+// declarations at a line start, so on a Vue project 416 of 429 `.vue` files
+// had no symbol at all. This pass runs on the masked source for js/ts (and an
+// SFC's `<script>`), on the heuristic rung AND after the borrowed TypeScript
+// walk — the walker only records a method inside a class, so both were blind in
+// the same place.
+//
+// It adds no new idea to the resolver: the object is a `class`, a member is a
+// `method` named `<Owner>.<name>`, `mixins`/`extends` are its `bases`. So
+// `this.submit()` resolves LOCAL through `classOf`, and a mixin member is
+// reached through `inheritedMember`, exactly as a class method is.
+const OBJ_SECTIONS = new Set(["methods", "computed", "watch", "getters", "mutations", "actions", "filters", "provide"]);
+const DEFAULT_OBJECT = /\bexport[ \t]+default[ \t]+(?:(?:defineComponent|Vue[ \t]*\.[ \t]*extend)[ \t]*\([ \t\r\n]*)?\{/g;
+const IDENT_RE = /^[A-Za-z_$][\w$]*$/;
+// A value that is a function: `function (…)`, `async function`, `(…) =>`,
+// `x =>`. The arrow's parameter list may span lines, so it is matched by pair.
+function fnValueAt(m, v) {
+  const rest = m.slice(v, v + 200);
+  if (/^(?:async[ \t]+)?function\b/.test(rest)) {
+    const p = m.indexOf("(", v);
+    return { paren: p };
+  }
+  if (/^(?:async[ \t]+)?[A-Za-z_$][\w$]*[ \t]*=>/.test(rest) && !/^(?:async[ \t]+)?(?:function|class|new)\b/.test(rest)) return { paren: null };
+  const a = /^(?:async[ \t]*)?\(/.exec(rest);
+  if (a) {
+    const p = v + a[0].length - 1;
+    const pc = matchPairQuiet(m, p, "(", ")");
+    if (pc > 0 && /^\s*(?::[^=\n]+)?=>/.test(m.slice(pc + 1, pc + 200))) return { paren: null };
+  }
+  return null;
+}
+
+// `matchPair` records an unclosed `{` as a coverage gap. A speculative probe
+// for an arrow's parameter list must never do that.
+function matchPairQuiet(s, open, a, b) {
+  let d = 0;
+  for (let k = open; k < s.length; k++) {
+    if (s[k] === a) d++;
+    else if (s[k] === b && --d === 0) return k;
+  }
+  return -1;
+}
+
+// The depth-0 members of an object literal, as [start, end) with the leading
+// whitespace dropped. The mask keeps quotes and blanks what is inside them, so
+// a comma in a string can never split a member.
+function objectMembers(m, open, close) {
+  const out = [];
+  let d = 0;
+  let a = open + 1;
+  for (let k = open + 1; k < close; k++) {
+    const ch = m[k];
+    if (ch === "(" || ch === "[" || ch === "{") d++;
+    else if (ch === ")" || ch === "]" || ch === "}") d--;
+    else if (ch === "," && d === 0) {
+      out.push([a, k]);
+      a = k + 1;
+    }
+  }
+  out.push([a, close]);
+  const kept = [];
+  for (let [x, y] of out) {
+    while (x < y && /\s/.test(m[x])) x++;
+    if (x < y) kept.push([x, y]);
+  }
+  return kept;
+}
+
+const KEY = "([A-Za-z_$][\\w$]*|\\[[ \\t]*[A-Za-z_$][\\w$.]*[ \\t]*\\])";
+const MEM_ACCESSOR = /^(?:get|set)[ \t]+([A-Za-z_$][\w$]*)[ \t]*\(/;
+const MEM_METHOD = new RegExp(`^(?:async[ \\t]+)?\\*?[ \\t]*${KEY}[ \\t]*\\(`);
+const MEM_PAIR = new RegExp(`^${KEY}[ \\t]*:[ \\t\\r\\n]*`);
+const keyName = (k) => (k.startsWith("[") ? k.replace(/[[\]\s]/g, "").split(".").pop() : k);
+
+// What one member IS. `fn` carries the paren of a method shorthand (so the
+// call scanner never reads `submit() {` as a call to `submit`).
+function memberOf(m, a, b) {
+  const seg = m.slice(a, b);
+  if (seg.startsWith("...")) return null;
+  let x = MEM_ACCESSOR.exec(seg);
+  if (x) return { type: "fn", name: x[1], paren: a + x[0].length - 1 };
+  x = MEM_METHOD.exec(seg);
+  if (x && !/^(?:function|async)$/.test(x[1])) return { type: "fn", name: keyName(x[1]), paren: a + x[0].length - 1 };
+  x = MEM_PAIR.exec(seg);
+  if (x) {
+    const name = keyName(x[1]);
+    const v = a + x[0].length;
+    const f = fnValueAt(m, v);
+    // `submit: function submit() {}` — the paren is a declaration's, never a call.
+    if (f) return { type: "fn", name, paren: f.paren, v };
+    if (m[v] === "{") return { type: "obj", name, open: v, close: matchPairQuiet(m, v, "{", "}"), v };
+    if (m[v] === "[") return { type: "arr", name, open: v, close: matchPairQuiet(m, v, "[", "]"), v };
+    return { type: "val", name, v };
+  }
+  if (/^[A-Za-z_$][\w$]*\s*$/.test(seg)) return { type: "short", name: seg.trim() };
+  return null;
+}
+
+// The owner's name when the object has no `name:` — the file stem, or the
+// folder for an `index` file. A kebab-case stem becomes PascalCase, the way a
+// component is named where it is used.
+function ownerStem(rel) {
+  const parts = String(rel).split("/");
+  let base = parts.pop().replace(/\.[^.]*$/, "");
+  if (/^index$/i.test(base) && parts.length) base = parts.pop();
+  if (IDENT_RE.test(base)) return base;
+  let n = base
+    .split(/[^A-Za-z0-9_$]+/)
+    .filter(Boolean)
+    .map((w) => w[0].toUpperCase() + w.slice(1))
+    .join("");
+  if (!n) n = "Component";
+  return /^\d/.test(n) ? "_" + n : n;
+}
+
+// The end of a `const X = …` value: the `;` or the line break at depth 0 that
+// ends the statement. A line that ends on an operator, or a next line that
+// starts with one, continues it.
+function valueEnd(m, v) {
+  let d = 0;
+  for (let k = v; k < m.length; k++) {
+    const ch = m[k];
+    if (ch === "(" || ch === "[" || ch === "{") d++;
+    else if (ch === ")" || ch === "]" || ch === "}") {
+      if (d === 0) return k - 1;
+      d--;
+    } else if (d === 0 && ch === ";") return k - 1;
+    else if (d === 0 && ch === "\n") {
+      let p = k - 1;
+      while (p > v && (m[p] === " " || m[p] === "\t" || m[p] === "\r")) p--;
+      let n = k + 1;
+      while (n < m.length && /\s/.test(m[n])) n++;
+      if (!/[=+\-*/,(?:&|]/.test(m[p]) && !/[.?:+\-*/&|]/.test(m[n] || "")) return p;
+    }
+  }
+  return m.length - 1;
+}
+
+function objectDefs(c, have, sfc) {
+  const { src, m, starts, rel } = c;
+  const defs = [];
+  const defParens = new Set();
+  const taken = new Set(have.map((d) => d.name));
+  const trim = (b) => {
+    let k = b - 1;
+    while (k > 0 && /\s/.test(m[k])) k--;
+    return k;
+  };
+  const add = (d) => {
+    if (!d.name || MEMBER_KW.has(d.name)) return null;
+    d.s = lineOf(starts, d.from);
+    d.e = lineOf(starts, Math.max(d.from, d.to));
+    defs.push(d);
+    return d;
+  };
+  // A top-level `const NAME = …`: where a shorthand key's value is declared.
+  const declOf = (name) => {
+    const re = new RegExp(`^[ \\t]*(?:export[ \\t]+)?(?:const|let|var)[ \\t]+${name.replace(/\$/g, "\\$")}[ \\t]*(?::[^=\\n]+)?=[ \\t]*`, "m");
+    const x = re.exec(m);
+    return x ? { from: x.index, v: x.index + x[0].length } : null;
+  };
+  // A value that is a `require(…)` / `import(…)` is a RE-EXPORT: the name is
+  // defined in the other file, and a constant here would make this barrel look
+  // like its definition (`exports.x = require("./store").x`).
+  const reexport = (v) => /^(?:await[ \t]+)?(?:require|import)[ \t]*\(/.test(m.slice(v, v + 40));
+  const constant = (name, from, to, v) => {
+    if (!IDENT_RE.test(name) || taken.has(name) || (v != null && reexport(v))) return;
+    taken.add(name);
+    add({ name, qname: name, kind: "const", from, to, exported: true });
+  };
+  // E2 for an object whose members are data: each key is a constant. A
+  // function-valued member is a function, not a constant, and is left alone.
+  const constantsOf = (open, close) => {
+    for (const [a, b] of objectMembers(m, open, close)) {
+      const mem = memberOf(m, a, b);
+      if (!mem || mem.type === "fn") continue;
+      if (mem.type === "short") {
+        const d = declOf(mem.name);
+        if (d && !fnValueAt(m, d.v)) constant(mem.name, d.from, valueEnd(m, d.v), d.v);
+        continue;
+      }
+      constant(mem.name, a, trim(b), mem.v);
+    }
+  };
+
+  // ── E1: the default-exported object ──
+  let owner = null;
+  DEFAULT_OBJECT.lastIndex = 0;
+  const dx = DEFAULT_OBJECT.exec(m);
+  if (dx) {
+    const open = dx.index + dx[0].length - 1;
+    const close = matchPairQuiet(m, open, "{", "}");
+    const top = close > open ? objectMembers(m, open, close).map(([a, b]) => ({ a, b, mem: memberOf(m, a, b) })).filter((x) => x.mem) : [];
+    const shaped = top.some(
+      (x) => x.mem.type === "fn" || (OBJ_SECTIONS.has(x.mem.name) && (x.mem.type === "obj" || x.mem.type === "short")) || x.mem.name === "mixins" || x.mem.name === "extends"
+    );
+    if (shaped) {
+      const nameMem = top.find((x) => x.mem.type === "val" && x.mem.name === "name");
+      const named = nameMem ? /^\s*(['"`])([A-Za-z_$][\w$]*)\1/.exec(src.slice(nameMem.mem.v, nameMem.mem.v + 120)) : null;
+      const oname = named ? named[2] : ownerStem(rel);
+      const bases = [];
+      for (const x of top) {
+        if (x.mem.name === "mixins" && x.mem.type === "arr")
+          for (const w of m.slice(x.mem.open + 1, x.mem.close).split(",")) if (IDENT_RE.test(w.trim())) bases.push(w.trim());
+        if (x.mem.name === "extends" && x.mem.type === "val") {
+          const w = m.slice(x.mem.v, x.b).trim();
+          if (IDENT_RE.test(w)) bases.push(w);
+        }
+      }
+      owner = add({ name: oname, qname: oname, kind: "class", from: dx.index, to: close, exported: true, ...(bases.length ? { bases: bases.slice(0, 8) } : {}) });
+      const method = (name, from, to, paren) => {
+        if (paren != null) defParens.add(paren);
+        add({ name, qname: `${oname}.${name}`, kind: "method", from, to, exported: false });
+      };
+      const section = (open2, close2) => {
+        for (const [a, b] of objectMembers(m, open2, close2)) {
+          const mem = memberOf(m, a, b);
+          if (!mem) continue;
+          if (mem.type === "fn") method(mem.name, a, trim(b), mem.paren);
+          else if (mem.type === "obj" && mem.close > mem.open) {
+            // `label: { get() {…}, set(v) {…} }` and a watcher's `{ handler() {…} }`
+            // are ONE member whose behaviour sits in its inner functions.
+            const inner = objectMembers(m, mem.open, mem.close).map(([p, q]) => memberOf(m, p, q)).filter(Boolean);
+            if (inner.some((i) => i.type === "fn" && /^(get|set|handler)$/.test(i.name))) {
+              for (const i of inner) if (i.type === "fn" && i.paren != null) defParens.add(i.paren);
+              method(mem.name, a, trim(b), null);
+            }
+          }
+        }
+      };
+      for (const x of top) {
+        if (x.mem.type === "fn") method(x.mem.name, x.a, trim(x.b), x.mem.paren);
+        else if (OBJ_SECTIONS.has(x.mem.name) && x.mem.type === "obj" && x.mem.close > x.mem.open) section(x.mem.open, x.mem.close);
+        else if (OBJ_SECTIONS.has(x.mem.name) && x.mem.type === "short") {
+          // `const mutations = { … }; export default { mutations }` — the section
+          // is declared above and named here.
+          const d = declOf(x.mem.name);
+          if (d && m[d.v] === "{") section(d.v, matchPairQuiet(m, d.v, "{", "}"));
+        }
+      }
+    } else if (close > open) constantsOf(open, close);
+  }
+
+  // ── E2: exported constants ──
+  const EXPORT_CONST = /^[ \t]*export[ \t]+(?:const|let|var)[ \t]+([A-Za-z_$][\w$]*)[ \t]*(?::[^=\n]+)?=[ \t]*/gm;
+  let x;
+  // A Svelte `export let` is a PROP the parent passes in, not a constant.
+  while (!(sfc && sfc.svelte) && (x = EXPORT_CONST.exec(m))) {
+    const v = x.index + x[0].length;
+    if (fnValueAt(m, v)) continue;
+    constant(x[1], x.index, valueEnd(m, v), v);
+  }
+  const EXPORTS_DOT = /^[ \t]*(?:module[ \t]*\.[ \t]*)?exports[ \t]*\.[ \t]*([A-Za-z_$][\w$]*)[ \t]*=[ \t]*/gm;
+  while ((x = EXPORTS_DOT.exec(m))) {
+    const v = x.index + x[0].length;
+    if (fnValueAt(m, v) || /^[A-Za-z_$][\w$]*[ \t]*[;\n]/.test(m.slice(v, v + 80))) continue;
+    constant(x[1], x.index, valueEnd(m, v), v);
+  }
+  const MODULE_OBJECT = /^[ \t]*module[ \t]*\.[ \t]*exports[ \t]*=[ \t]*\{/gm;
+  while ((x = MODULE_OBJECT.exec(m))) {
+    const open = x.index + x[0].length - 1;
+    const close = matchPairQuiet(m, open, "{", "}");
+    if (close > open) constantsOf(open, close);
+  }
+
+  // ── E3: a component with no object to name ──
+  // `<script setup>`, a Svelte instance script, or no script at all: ONE class
+  // symbol, so the component exists in the map, the names and the hints.
+  if (sfc && !owner && (sfc.setup || sfc.svelte || !sfc.blocks.length)) {
+    const from = sfc.blocks.length ? sfc.blocks[0][0] : 0;
+    const to = sfc.blocks.length ? Math.max(from, sfc.blocks[sfc.blocks.length - 1][1] - 1) : Math.max(0, src.length - 1);
+    const name = ownerStem(rel);
+    // NAME-ONLY: it owns no line. `<script setup>` code is module scope, and
+    // an alias declared there (`const store = new OrderStore()`) must stay
+    // visible to every function below it, exactly as it was before W5b.
+    if (!taken.has(name)) add({ name, qname: name, kind: "class", from, to, exported: true, nameOnly: true });
+  }
+  return { defs, defParens };
+}
+
 // ── declarations: Python (indentation) ──────────────────────────────────────
 function pyDefs(c) {
   const { src, m, starts, strAt } = c;
@@ -2015,7 +2297,13 @@ function finalize(c, lang, defs, calls, imports, exportsSet, extractor) {
 
   const owner = new Int32Array(nLines + 2).fill(-1);
   const order = defs.map((_, i) => i).sort((a, b) => defs[b].e - defs[b].s - (defs[a].e - defs[a].s));
-  for (const i of order) for (let L = defs[i].s; L <= defs[i].e && L <= nLines; L++) owner[L] = i;
+  // W5b (E2): a `const` is a NAME, not a body. A call inside its value (`axios.create(…)`)
+  // stays with whatever holds the constant — the module, most often — so a
+  // constant symbol always carries `calls: []`.
+  for (const i of order) {
+    if (defs[i].kind === "const" || defs[i].nameOnly) continue;
+    for (let L = defs[i].s; L <= defs[i].e && L <= nLines; L++) owner[L] = i;
+  }
 
   // W2 (G2): instance aliases, scoped. `classAt(line)` is the innermost class
   // holding a line; `ownerOf(line)` the innermost symbol (−1 = the module).
@@ -2258,6 +2546,7 @@ function context(item) {
 function sfcSource(src) {
   const out = src.split("");
   let lang = "js";
+  let setup = false;
   const keep = [];
   const lower = src.toLowerCase();
   const RE = /<script\b([^>]*)>/gi;
@@ -2267,6 +2556,9 @@ function sfcSource(src) {
     const close = lower.indexOf("</script>", open);
     const end = close < 0 ? src.length : close;
     if (/lang[ \t]*=[ \t]*["']?(ts|typescript)/i.test(x[1])) lang = "ts";
+    // W5b (E3): `<script setup>` has no object to name, so the component is
+    // named from its file instead.
+    if (/(^|\s)setup(\s|=|$)/i.test(x[1])) setup = true;
     keep.push([open, end]);
     RE.lastIndex = end;
   }
@@ -2279,14 +2571,16 @@ function sfcSource(src) {
     at = b;
   }
   blank(at, src.length);
-  return { src: out.join(""), lang };
+  return { src: out.join(""), lang, blocks: keep, setup };
 }
 
 function extractOne(item, borrowed) {
   let { lang, src } = item;
   resetCoverage();
+  let sfc = null;
   if (lang === "vue" || lang === "svelte") {
     const s = sfcSource(src);
+    sfc = { blocks: s.blocks, setup: s.setup, svelte: lang === "svelte" };
     src = s.src;
     lang = s.lang;
     item = { ...item, src, lang };
@@ -2312,6 +2606,10 @@ function extractOne(item, borrowed) {
       const { defs: rdefs, regParens, exportsSet: hexports } = braceDefs(c, lang);
       resetCoverage();
       for (const d of rdefs) if (d.kind === "route") defs.push({ ...d, s: lineOf(c.starts, d.from), e: lineOf(c.starts, Math.max(d.from, d.to)) });
+      // W5b: the walker records a method only inside a class. An object's
+      // members, the constants and an SFC's component come from the same pass
+      // the heuristic rung runs, so both rungs name the same symbols.
+      if (lang === "js" || lang === "ts") defs.push(...objectDefs(c, defs, sfc).defs);
       for (const p of regParens) reg.add(lineOf(c.starts, p));
       for (const cc of calls) if (reg.has(cc.line) && ARGS_WORTH.test(cc.name)) cc.reg = true;
       defs.sort((a, b) => a.from - b.from);
@@ -2338,6 +2636,13 @@ function extractOne(item, borrowed) {
     return finalize(c, lang, defs, scanCalls(c, defParens, regParens), importsFor(lang, c.src, c.m, c.starts), null, HEURISTIC);
   }
   const { defs, defParens, regParens, exportsSet } = braceDefs(c, lang);
+  if (lang === "js" || lang === "ts") {
+    const o = objectDefs(c, defs, sfc);
+    defs.push(...o.defs);
+    // APPENDED, never sorted in: a file with no object keeps every symbol in
+    // the order 1.9.0 wrote it, so its record is the same bytes.
+    for (const p of o.defParens) defParens.add(p);
+  }
   braceDecorators(c, lang, defs);
   return finalize(c, lang, defs, scanCalls(c, defParens, regParens), importsFor(lang, c.src, c.m, c.starts), exportsSet, HEURISTIC);
 }

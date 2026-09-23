@@ -40,7 +40,12 @@ const SCHEMA = 1;
 // @5 (v1.8.2): `urls`, `mounts`, decorator routes with `handler`, `bases`,
 //     aliases, re-exports. A 1.8.1 store reads DRIFTED with `engine_stale` and
 //     the next preflight (`status --heal`) re-extracts every file once.
-const ENGINE = "graph@5";
+// @6 (v1.9.1 W5b, DE-15): an Options API object is a `class` with `method`
+//     members (`mixins`/`extends` → `bases`), exported constants are `const`
+//     symbols, and a `<script setup>` component is one `class`. No record FIELD
+//     changed: a 1.9.0 store reads DRIFTED and the next `status --heal`
+//     re-extracts once, the same path 1.8.1 → 1.8.2 took.
+const ENGINE = "graph@6";
 const GIT_MAX_BUFFER = 256 * 1024 * 1024;
 const MAX_BYTES = 512 * 1024;
 const LOCK_STALE_MS = 10 * 60 * 1000;
@@ -292,6 +297,56 @@ function coverageOf(entry) {
   return { coverage: "full" };
 }
 
+// ── density (v1.9.1 A1) ─────────────────────────────────────────────────────
+// How many named symbols the parser found per file, and how many files it read
+// as EMPTY. On the user's own project the graph held 1.9 symbols per file and
+// most `ctx` calls answered exit 4 — and nothing said whether the code has no
+// named functions or the parser did not read them. This field is what the
+// status line and `orc graph audit` both answer from.
+//
+// `module` symbols are excluded, exactly as `meta.symbols` excludes them: a
+// file's module record is not a thing anyone looks for.
+function densityOf(index, files) {
+  const byLang = Object.create(null);
+  let symbols = 0;
+  let zero = 0;
+  let partial = 0;
+  let skipped = 0;
+  const entries = Object.entries((index && index.by_file) || {});
+  for (const [rel, v] of entries) {
+    const n = (v.symbols || []).filter((x) => x.kind !== "module").length;
+    const lang = v.lang || LANG_BY_EXT[path.extname(rel).toLowerCase()] || "other";
+    const l = byLang[lang] || (byLang[lang] = { files: 0, symbols: 0, zero: 0, partial: 0, skipped: 0 });
+    l.files++;
+    l.symbols += n;
+    symbols += n;
+    if (n === 0) {
+      l.zero++;
+      zero++;
+    }
+    if (v.coverage === "partial") {
+      l.partial++;
+      partial++;
+    }
+  }
+  for (const [rel, v] of Object.entries(files || {})) {
+    if (!v || !v.skipped) continue;
+    skipped++;
+    const lang = LANG_BY_EXT[path.extname(rel).toLowerCase()] || "other";
+    const l = byLang[lang] || (byLang[lang] = { files: 0, symbols: 0, zero: 0, partial: 0, skipped: 0 });
+    l.skipped++;
+  }
+  const n = entries.length;
+  return {
+    symbols_per_file: n ? Math.round((10 * symbols) / n) / 10 : 0,
+    zero_files: zero,
+    zero_share: n ? Math.round((100 * zero) / n) / 100 : 0,
+    skipped,
+    partial,
+    by_lang: byLang,
+  };
+}
+
 // ── status ──────────────────────────────────────────────────────────────────
 // exit 0 FRESH · 1 NONE (or unavailable) · 2 DRIFTED · 3 OFF
 function graphStatus(claudeDir, root, opts) {
@@ -460,6 +515,9 @@ function graphUpdate(claudeDir, root, opts) {
       // heal uses it as the estimate for the next one — the only honest
       // estimate available, because an update cannot be stopped half way.
       update_ms: unchanged && prevMeta ? prevMeta.update_ms || 0 : 0,
+      // A1: computed from the index this update just built, so it costs one
+      // pass over what is already in memory and no file is opened for it.
+      density: unchanged && prevMeta && prevMeta.density ? prevMeta.density : densityOf(index, filesOut),
     };
     if (!unchanged) {
       index.schema = SCHEMA;
@@ -648,6 +706,7 @@ module.exports = {
   graphUpdate,
   graphCoverage,
   coverageOf,
+  densityOf,
   genId,
   graphGc,
   // shared with graph-notes.js — one lock, one atomic writer, one date format

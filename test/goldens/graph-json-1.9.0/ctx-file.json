@@ -1,0 +1,120 @@
+{
+  "args": [
+    "ctx",
+    "src/stores/orderStore.js",
+    "--json"
+  ],
+  "status": 0,
+  "json": {
+    "ok": true,
+    "state": "found",
+    "format": "prose",
+    "offset": 0,
+    "has_more": false,
+    "total_symbols": 6,
+    "file": "src/stores/orderStore.js",
+    "blob": "current",
+    "symbols": [
+      {
+        "item": "symbol",
+        "id": "src/stores/orderStore.js#OrderStore",
+        "qname": "OrderStore",
+        "kind": "class",
+        "file": "src/stores/orderStore.js",
+        "lines": [
+          3,
+          22
+        ],
+        "fan_in": 3,
+        "importance": 1.732
+      },
+      {
+        "item": "symbol",
+        "id": "src/stores/orderStore.js#searchByItemPrefix",
+        "qname": "searchByItemPrefix",
+        "kind": "function",
+        "file": "src/stores/orderStore.js",
+        "lines": [
+          26,
+          29
+        ],
+        "fan_in": 2,
+        "importance": 1.414
+      },
+      {
+        "item": "symbol",
+        "id": "src/stores/orderStore.js#OrderStore.list",
+        "qname": "OrderStore.list",
+        "kind": "method",
+        "file": "src/stores/orderStore.js",
+        "lines": [
+          9,
+          11
+        ],
+        "fan_in": 5,
+        "importance": 0.224
+      },
+      {
+        "item": "symbol",
+        "id": "src/stores/orderStore.js#OrderStore.get",
+        "qname": "OrderStore.get",
+        "kind": "method",
+        "file": "src/stores/orderStore.js",
+        "lines": [
+          13,
+          15
+        ],
+        "fan_in": 2,
+        "importance": 0.141
+      },
+      {
+        "item": "symbol",
+        "id": "src/stores/orderStore.js#OrderStore.insert",
+        "qname": "OrderStore.insert",
+        "kind": "method",
+        "file": "src/stores/orderStore.js",
+        "lines": [
+          17,
+          21
+        ],
+        "fan_in": 2,
+        "importance": 0.141
+      },
+      {
+        "item": "symbol",
+        "id": "src/stores/orderStore.js#OrderStore.constructor",
+        "qname": "OrderStore.constructor",
+        "kind": "method",
+        "file": "src/stores/orderStore.js",
+        "lines": [
+          4,
+          7
+        ],
+        "fan_in": 0,
+        "importance": 0
+      }
+    ],
+    "tests": [
+      "tests/store.test.js"
+    ],
+    "imports": [],
+    "importers": [
+      "src/handlers/orders.js",
+      "src/routes/orders.js",
+      "tests/store.test.js"
+    ],
+    "wiki": [],
+    "source": null,
+    "hidden": {},
+    "budget": {
+      "used": 126,
+      "max": 1200
+    },
+    "card": "src/stores/orderStore.js  (6 symbols)  [blob 0f7f479 · current]\n  class    OrderStore  :3-22  exported  fan-in 3\n  function searchByItemPrefix  :26-29  exported  fan-in 2\n  method   OrderStore.list  :9-11  fan-in 5\n  method   OrderStore.get  :13-15  fan-in 2\n  method   OrderStore.insert  :17-21  fan-in 2\n  method   OrderStore.constructor  :4-7  fan-in 0\n  imported by src/handlers/orders.js, src/routes/orders.js, tests/store.test.js\n  tests tests/store.test.js",
+    "read": "full",
+    "read_fallback": "path-or-url",
+    "generation": 1,
+    "gen_id": "<gen_id>",
+    "trace": "GRAPH-CONSULT card :: targets=src/stores/orderStore.js"
+  }
+}

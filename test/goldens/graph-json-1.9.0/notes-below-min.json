@@ -1,0 +1,35 @@
+{
+  "args": [
+    "notes",
+    "pending",
+    "--files",
+    "src/stores/orderStore.js",
+    "--json"
+  ],
+  "status": 5,
+  "json": {
+    "ok": true,
+    "files": [
+      "src/stores/orderStore.js"
+    ],
+    "missing": [],
+    "total": 4,
+    "documented": 1,
+    "cap": 40,
+    "min": 5,
+    "state": "below-min",
+    "rows": [],
+    "waiting": [
+      "src/stores/orderStore.js#OrderStore.constructor",
+      "src/stores/orderStore.js#OrderStore.list",
+      "src/stores/orderStore.js#OrderStore.get",
+      "src/stores/orderStore.js#OrderStore.insert"
+    ],
+    "more": 0,
+    "notes": "off",
+    "generation": 1,
+    "gen_id": "<gen_id>",
+    "line": "graph notes: 4 pending, waiting (min 5)\n  1 already documented in the source — no note is paid for them",
+    "trace": "GRAPH-NOTES below-min :: 4 pending, min 5"
+  }
+}

@@ -23,7 +23,9 @@ Emit `PHASE review start`. Superpowers path: its review skill incl. tests
 FE tasks in run → pass `fe_rules[]` from `../../orc-pattern/references/` fe-a11y
 + fe-perf. **Code graph (`../code-graph.md` §7):** with the graph on, also pass
 `orc graph changes --if-enabled --json` — the symbols THIS diff's hunks overlap,
-each with its callers, its tests and a risk word that carries its own reason. It
+each with its callers, its tests and a risk word that carries its own reason.
+**This one read keeps its rows: no `--brief` here**, because the reviewer is
+handed `symbols[].caller_files` and reads them. It
 replaces a whole-file `orc graph impact` here: a file card reports every symbol in
 a touched file, and a symbol nobody edited is not a finding. An unchanged caller of
 a changed signature is a finding candidate, anchored like any other. Findings arrive on the **P0–P3 ladder** (invariant violation or

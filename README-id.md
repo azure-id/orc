@@ -7,13 +7,13 @@
 *Terima permintaan → pahami → rencanakan → beri nilai → kerjakan paralel → periksa → uji → kirim.*
 
 ![npm](https://img.shields.io/npm/v/%40azure-id%2Forc?style=for-the-badge&color=cb3837&logo=npm)
-![Version](https://img.shields.io/badge/version-1.9.0-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-1.9.1-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
 ![Dependencies](https://img.shields.io/badge/dependencies-zero-lightgrey.svg?style=for-the-badge)
 
-**Versi terbaru: v1.9.0** · diperbarui 21-09-2026 · [daftar perubahan lengkap](CHANGELOG.md)
+**Versi terbaru: v1.9.1** · diperbarui 23-09-2026 · [daftar perubahan lengkap](CHANGELOG.md)
 
 **Ada di npm: [`@azure-id/orc`](https://www.npmjs.com/package/@azure-id/orc)** — `npm i -g @azure-id/orc`
 
@@ -478,6 +478,24 @@ orc graph gain                        # apa yang dimasukkan peta, dan perkiraan 
   `findstr`) — dan semua yang diberikannya ditandai sebagai data repositori,
   bukan perintah. Matikan dengan `orc config set code_graph_hooks off`; petanya
   tetap bekerja.
+- **`--brief` adalah jawaban yang dibaca lane** (v1.9.1). Bersama `--json`, ia
+  menyimpan kartu, baris, trace dan setiap hitungan, lalu membuang larik baris
+  yang tidak pernah dicetak lane — 74 % sampai 87 % lebih kecil di repositori
+  ini. Setiap panggilan lane memakainya; tanpa itu, `--json` tidak berubah.
+- **Graf membaca Vue Options API** (v1.9.1, mesin `graph@6`). Komponen, mixin
+  dan modul Vuex menjadi class, setiap fungsi di dalamnya menjadi method, dan
+  `mixins` menjadi basisnya — jadi `this.submit()` adalah tautan, dan `impact`
+  pada satu mixin menyebut setiap komponen yang memakainya. Konstanta yang
+  diekspor dan komponen `<script setup>` juga diberi nama. Store dari versi
+  lama memperbarui dirinya sendiri satu kali, di preflight berikutnya.
+- **Graf memberi tahu kapan petanya tipis, dan kenapa.** `orc graph status`
+  mencetak jumlah simbol per berkas dan `THIN` jika sebagian besar berkas tidak
+  punya simbol. `orc graph audit` menulis berkas-berkas itu per bahasa, yang
+  terpanjang lebih dulu, dengan bentuk masing-masing.
+- **Kartu simbol bisa membawa baris milik pemanggilnya** (`--callers-source`:
+  enam baris di sekitar setiap titik panggil yang pasti) dan menyebut di mana
+  language server harus melihat (`lsp_at`) jika peta hanya bisa bilang
+  `AMBIGUOUS`.
 
 Kontraknya: `templates/skills/_shared/code-graph.md`. Hook-nya:
 `templates/hooks/README.md`.
@@ -768,65 +786,46 @@ Bacalah sebagai catatan putaran itu, bukan sebagai audit terkini:
 **Riwayat lengkap: [CHANGELOG.md](CHANGELOG.md)** — atau `orc changelog`, yang
 hanya mencetak yang lebih baru dari versi yang Anda punya.
 
-### v1.9.0 - lane ramping belajar melihat dulu sebelum melompat _(21-09-2026)_
+### v1.9.1 - graf yang dibayar tetapi tidak pernah ditanya _(23-09-2026)_
 
-`/orc-quick` dan `/orc-mini` adalah dua lane yang paling sering dipakai orang,
-dan keduanya bekerja setengah buta. Graf kode bisa memberi tahu mereka DI MANA
-satu simbol berada, dan dilarang memberi tahu APA YANG RUSAK. Perbaikan bug
-tidak pernah ditunjukkan gagal lebih dulu. Pekerjaan baca-saja dikirim lewat
-nama model, jadi tidak ada satu pun bagian ORC yang bisa melihatnya.
+Graf kode lebih sering dirawat daripada ditanya, dan bagian yang ditanya lebih
+mahal daripada yang dicatat meterannya. Di satu proyek Vue nyata, 416 dari 429
+berkas `.vue` tidak punya simbol, dan panel menulis `0 hook updates` setelah 35.
 
-**Sekarang bug ditunjukkan MERAH dulu sebelum diperbaiki.** Permintaan seperti
-*"halaman orders mengembalikan 500, cari dan perbaiki"* digolongkan sebagai
-**defect**, dan agen eksekutor menulis reproduksinya LEBIH DULU — satu test yang
-gagal dalam framework Anda sendiri, atau satu perintah — menjalankannya sampai
-merah, memperbaikinya, lalu menjalankannya lagi sampai hijau. Kedua jalannya
-dicetak dan keduanya masuk ke jejak. Reproduksi yang tidak bisa ditulis menjadi
-`repro: none` beserta alasannya, dan catatannya berbunyi **tidak tereproduksi** —
-diulang lagi saat penawaran commit. Itu tidak pernah dikarang. Tanpa jalan merah,
-perbaikan hanya terbukti terhadap test suite Anda, yang sudah hijau sebelum dan
-sesudahnya; dengan jalan merah, perbaikan terbukti terhadap bug yang Anda
-laporkan.
+**Jawaban lebih kecil.** `--brief` menyimpan kartu, baris dan setiap hitungan,
+lalu membuang baris yang tidak pernah dicetak lane: 74 % sampai 87 % lebih
+kecil, dan setiap panggilan lane memakainya. CLI sekarang menghitung baris
+blast-radius `/orc-quick` dan baris kompleksitas `/orc-mini` dalam satu
+panggilan, bukan lane yang menghitung baris-barisnya.
 
-**Kedua lane sekarang boleh bertanya apa yang rusak.** `/orc-quick` mendapat
-`map`, `changes` dan `coverage`; `/orc-mini` mendapat `map`, `impact`, `changes`
-dan `cochange`. **Test yang terdampak dijalankan lebih dulu** — termasuk test
-yang sampai ke perubahan lewat URL — dan setiap catatan membawa satu baris
-radius dampak, tempat kata `risk` tidak pernah muncul tanpa alasannya.
-Permintaan yang tidak menyebut satu berkas pun sekarang dimulai dengan
-`orc graph map --focus`, bukan dengan tebakan nama berkas.
+**Meterannya jujur.** Pembaruan oleh hook selalu tercatat 0, dan `paid`
+menghitung kartu padahal lane menerima 4 sampai 8 kali lebih banyak. Keduanya
+diperbaiki: baris `hook-update`, dan `paid.envelope` di samping kartu.
+Meterannya juga menulis pembacaan yang belum pernah dilakukan proyek ini.
 
-**Pembacaan kompleksitas `/orc-mini` membawa angka.** Dulu itu satu kalimat
-penilaian; sekarang satu baris berisi hitungan dan empat ambang yang
-masing-masing menyebut kenapa angkanya segitu: pemanggil di 4 berkas atau lebih
-di luar rencana, 8 pemanggil atau lebih, kelas risiko apa pun yang dikutip, atau
-satu berkas yang menurut riwayat selalu ikut tersentuh. Itu **tawaran, bukan
-perpindahan**, dan kalau Anda tetap lanjut, angkanya ditulis ke catatan
-keputusan supaya `/orc-retro` nanti bisa menggeser ambangnya.
+**Peta memberi tahu kapan ia tipis, dan kenapa** — `THIN` di `orc graph
+status`, dan `orc graph audit` baru yang menulis berkas kosong per bahasa,
+yang terpanjang lebih dulu.
 
-**Pekerjaan baca-saja sekarang agen sungguhan.** Recon adalah sepasang agen
-tetap — `orc-recon-sonnet-4-6-med` dan `orc-recon-opus-5-low` — dengan kontrak
-pengembalian, terlihat di jejak dan di `orc run inflight`. Pilihan
-`other — sebut satu model` tetap ada sebagai jalan keluar. Gerbangnya sekarang
-boleh mencetak `suggested` di samping satu baris BESERTA alasannya, dan ia tetap
-tidak pernah memilih: setiap menu berakhir dengan *pilihan Anda — tidak ada yang
-berjalan sampai Anda menjawab*.
+**Parser membaca Vue Options API** (mesin `graph@6`). Komponen, mixin dan modul
+Vuex menjadi class dengan method; `mixins` menjadi basisnya; konstanta yang
+diekspor dan komponen `<script setup>` diberi nama. Store 1.9.0 memperbarui
+dirinya sendiri satu kali, di preflight berikutnya. Tidak ada yang perlu
+dilakukan.
 
-**Kedua lane lebih murah untuk dimuat.** Dua deskripsi yang dibayar setiap sesi
-turun dari 619 ke 326 dan dari 493 ke 294 karakter, dengan setiap frasa pemicu
-tetap utuh. Kartu aturan dalam potongan `/orc-quick` sekarang berbentuk ringkas —
-sekitar 1.460 token, bukan 3.469 — yang menjaga id, judul dan instruksi setiap
-aturan HARD, dan hanya melepas contoh-contohnya.
+**Pembacaan berbayar membawa isinya:** `ctx --callers-source` (enam baris di
+sekitar setiap titik panggil yang pasti), `lsp_at` untuk language server jika
+kartu menulis `AMBIGUOUS`, dan hitungan pembacaan berkas lebar yang tidak
+diberi petunjuk.
 
-**Rilis ini tidak menurunkan tagihan Anda**, dan tidak mengklaim begitu.
-Klaimnya adalah kebenaran, keterlacakan, dan lebih sedikit bolak-balik.
-**Evaluasi sesi langsung tidak dijalankan** — setengah bagian deterministiknya
-ada di test suite, tetapi tiga gate yang butuh orang menjalankan lane tidak
-tercapai, bukan lulus. CHANGELOG menyebutkan satu per satu.
+**Tidak diukur di sini:** evaluasi sesi langsung tidak dijalankan, dan gerbang
+Vue (di bawah 20 % berkas `.vue` kosong) diukur di proyek Anda sendiri.
+CHANGELOG menyebut setiap batasnya.
 
 <details>
-<summary><strong>Rilis sebelumnya</strong> — 119 rilis, hanya judulnya. Teks lengkapnya (dalam bahasa Inggris) ada di <a href="CHANGELOG.md">CHANGELOG.md</a>.</summary>
+<summary><strong>Rilis sebelumnya</strong> — 120 rilis, hanya judulnya. Teks lengkapnya (dalam bahasa Inggris) ada di <a href="CHANGELOG.md">CHANGELOG.md</a>.</summary>
 
+- **v1.9.0** — the lean lanes learn to look before they leap · _2026-09-21_
 - **v1.8.2** — the map that finds what a grep cannot · _2026-09-21_
 - **v1.8.1** — the guard that only failed on Windows · _2026-09-16_
 - **v1.8.0** — the code graph: a map of the code that stays fresh · _2026-09-16_

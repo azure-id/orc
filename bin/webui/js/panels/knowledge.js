@@ -187,8 +187,20 @@ function graphCard(g, body, gain) {
       [t("knowledge.graph.behind"), g.behind ? `+${b.added || 0} · ~${b.changed || 0} · -${b.deleted || 0}` : "—"],
       // `code_graph_notes` is a config VALUE — shown, never translated.
       [t("knowledge.graph.notes"), g.notes || "—"],
+      // A1 (v1.9.1) — how many named symbols the parser found per file, and how
+      // many files it read as EMPTY. A graph nobody can get an answer out of
+      // looks exactly like a healthy one until this row is on the card.
+      ...(g.density
+        ? [
+            [
+              t("knowledge.graph.density"),
+              `${g.density.symbols_per_file} symbols/file · ${Math.round(g.density.zero_share * 100)} % files empty${g.thin ? " · THIN" : ""}`,
+            ],
+          ]
+        : []),
     ])
   );
+  if (g.thin) c.append(el("div", "note warn", t("knowledge.graph.thin")));
   if (g.state === "drifted") c.append(el("div", "note warn", t("knowledge.graph.drifted")));
   // EW3/EW4 — two things keep the map fresh without a lane step. A panel that
   // shows a DRIFTED map without saying that is a panel that invites a needless
@@ -221,11 +233,18 @@ function gainStrip(c, g, body) {
   );
   c.append(
     kvList([
-      [t("knowledge.gain.paid"), `${kTokUi(g.paid.total)}  (${kTokUi(g.paid.card)} · ${kTokUi(g.paid.source)} · ${kTokUi(g.paid.hints)})`],
+      // M3 (v1.9.1) — the ENVELOPE beside the cards. Until this release `paid`
+      // counted the card and called itself exact, and the card is between a
+      // quarter and an eighth of the answer a lane actually receives.
+      [t("knowledge.gain.paid"), `${kTokUi(g.paid.total)}  (${kTokUi(g.paid.card)} · ${kTokUi(g.paid.source)} · ${kTokUi(g.paid.hints)} · ${kTokUi(g.paid.envelope || 0)})`],
       [t("knowledge.gain.avoided"), `~${kTokUi(g.avoided.low)} – ${kTokUi(g.avoided.high)}`],
       [t("knowledge.gain.net"), `~${kTokUi(g.net.low)} – ${kTokUi(g.net.high)}  ·  ~${g.calls.low} – ${g.calls.high}`],
       [t("knowledge.gain.byCommand"), Object.entries(g.by_command).map(([k, v]) => `${k} ${v}`).join(" · ") || "—"],
-      [t("knowledge.gain.hints"), `${g.hints.injected} · ${g.hints.read_notes} · ${g.hints.updates}`],
+      // R2 (v1.9.1) — the wide whole-file reads no hint named. A ledger written
+      // before 1.9.1 has no such count and reads as 0.
+      [t("knowledge.gain.hints"), `${g.hints.injected} · ${g.hints.read_notes} · ${g.hints.updates} · ${g.hints.wide_unhinted || 0}`],
+      // M2 — the reads this project never made. A fact, with no advice after it.
+      ...(g.never_called && g.never_called.length ? [[t("knowledge.gain.never"), g.never_called.join(" · ")]] : []),
     ])
   );
   const btn = el("button", "btn btn-sm", t("knowledge.gain.measure"));

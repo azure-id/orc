@@ -371,7 +371,10 @@ itself.
 Four moments, and it is quiet in all the others:
 
 - An ORC worker **finishes a job** → the map updates itself. A lane that forgot
-  its own update step can no longer leave the map behind.
+  its own update step can no longer leave the map behind. Each one of those
+  updates is recorded in the gain ledger, so `orc graph gain` and the `orc ui`
+  Knowledge card count the work the hook did (v1.9.1 — before it, both showed
+  `0 hook updates` on a project whose hook had run dozens).
 - A worker **starts** → one line saying the map exists and how to ask it.
 - A worker **searches for a name the map knows** → up to five lines saying where
   that name is, with the line numbers. The search still runs. A search in the
@@ -386,6 +389,13 @@ their line ranges. The point is the NEXT read — an agent that has those ranges
 can ask for a range instead of two thousand lines. **The read below it always
 runs.** The hook never blocks a tool call and never rewrites one, and turning a
 read into a range read is not its job: only the read gate may touch a read.
+Since v1.9.1 the names this run was already told about — by a search hint or by
+the task's own slice — come first in that line.
+
+Under plain `on` the fifth hint is off, and the hook only COUNTS those reads:
+one row in the gain ledger per file per run, no line sent to anyone. `orc graph
+gain` prints the count as `wide reads`. It is the number to look at before you
+turn `on,read` on; nothing turns it on by itself.
 
 It says each thing once per run. It never speaks to the main session, never
 outside an ORC run, and never when the map does not exist.

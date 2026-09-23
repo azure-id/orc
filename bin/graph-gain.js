@@ -254,6 +254,13 @@ function stampMs(at) {
   return null;
 }
 
+// M2 (v1.9.1): the reads a project COULD have made. `never_called` is
+// `READ_SET` minus what the ledger holds, for the scope asked about. It is a
+// fact and it carries no advice: a graph is not wrong for holding an answer
+// nobody asked for, and this file does not tell anyone to start asking.
+// `hint`, `read-note` and `hook-update` are the hook's rows, not reads.
+const READ_SET = ["ctx", "for-slice", "impact", "map", "changes", "cochange", "coverage", "path"];
+
 function gain(claudeDir, opts) {
   const o = opts || {};
   const all = readLedger(claudeDir);
@@ -267,11 +274,19 @@ function gain(claudeDir, opts) {
   });
   if (!rows.length) return { ok: false, state: "none", reason: o.run ? "no-rows-for-run" : "no-rows", exit: 1 };
 
-  const paid = { card: 0, source: 0, hints: 0 };
+  // B3 (v1.9.1): `envelope` is everything a `--json` answer carried BEYOND its
+  // card — the row arrays, the scalars, the punctuation. Measured on this tree
+  // it was 4 to 8 times the card, and until now the meter called the card the
+  // whole cost. A row written before 1.9.1, and every row the hook writes, has
+  // no envelope and sums as 0.
+  const paid = { card: 0, source: 0, hints: 0, envelope: 0 };
   const avoided = { low: 0, high: 0 };
   const calls = { low: 0, high: 0 };
   const byCommand = {};
-  const hints = { injected: 0, read_notes: 0, updates: 0 };
+  // R2 (v1.9.1): `wide_unhinted` is a COUNT of whole-file reads of wide files
+  // that the `on,read` hint would have named ranges for. It put nothing into
+  // any context, so it prices at zero; it is the number DE-8 waits for.
+  const hints = { injected: 0, read_notes: 0, updates: 0, wide_unhinted: 0 };
   // W8: rows the sharded read path could not size. Their estimate omits the
   // search term, so a FALLING estimate can be told apart from a falling saving.
   let unsized = 0;
@@ -283,6 +298,7 @@ function gain(claudeDir, opts) {
     paid.card += Number(r.paid.card) || 0;
     paid.source += Number(r.paid.source) || 0;
     paid.hints += Number(r.paid.hints) || 0;
+    paid.envelope += Number(r.paid.envelope) || 0;
     if (used) {
       avoided.low += Number(r.avoided.low) || 0;
       avoided.high += Number(r.avoided.high) || 0;
@@ -294,10 +310,11 @@ function gain(claudeDir, opts) {
     if (r.cmd === "hint") hints.injected++;
     if (r.cmd === "read-note") hints.read_notes++;
     if (r.cmd === "hook-update") hints.updates++;
+    if (r.cmd === "wide-unhinted") hints.wide_unhinted++;
     if (r.gen) gens.push(Number(r.gen));
     if (r.run) runs.add(r.run);
   }
-  const paidTotal = paid.card + paid.source + paid.hints;
+  const paidTotal = paid.card + paid.source + paid.hints + paid.envelope;
   gens.sort((a, b) => a - b);
   return {
     ok: true,
@@ -313,6 +330,8 @@ function gain(claudeDir, opts) {
     calls,
     net: { low: avoided.low - paidTotal, high: avoided.high - paidTotal },
     by_command: byCommand,
+    read_set: READ_SET,
+    never_called: READ_SET.filter((c) => !Object.prototype.hasOwnProperty.call(byCommand, c)),
     hints,
     unsized,
     estimate: true,
@@ -373,6 +392,7 @@ function deltaPct(on, off) {
 }
 
 module.exports = {
+  READ_SET,
   MEASURED_MIN_RUNS,
   median,
   summarise,

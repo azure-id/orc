@@ -34,15 +34,21 @@ claim anchored to a `file:line`.
 
 ## Procedure
 
-1. **Step 0 — ask the graph.** `orc graph ctx <anchor> --if-enabled --json`, at
+1. **Step 0 — ask the graph.** `orc graph ctx <anchor> --if-enabled --json --brief`, at
    most 5 targets per call. Exit 3 = the graph is off → make no further graph
    call this task. Exit 1 = no index → the same. Exit 4 = not found or
    ambiguous → Grep for the name, and carry EVERY candidate into your answer;
    never pick one silently. `--source [N]` gives you a range's own lines in the
-   same call — use it for a range you are only reading.
-   `blast_radius: true` → also `orc graph ctx <symbol> --depth 2 --if-enabled
-   --json`, `orc graph impact <file> --if-enabled --json` and
-   `orc graph coverage <files> --if-enabled --json`. A file whose coverage is
+   same call — use it for a range you are only reading. The card answers
+   `AMBIGUOUS (n)` for a callee, or `← maybe <n>` for callers, and an `LSP` tool
+   is available → run `LSP findReferences` (callers) or `goToDefinition` (a
+   callee) at the card's `lsp_at` — file, line, character — before any Grep: a
+   language server's answer is EXACT. Without one, or `lsp_at: null`, go on.
+   `blast_radius: true` → also `orc graph ctx <symbol> --depth 2 --callers-source
+   --if-enabled --json --brief` — the call sites arrive WITH the card; open a
+   caller file only when six lines were not enough to answer —
+   `orc graph impact <file> --if-enabled --json --brief` and
+   `orc graph coverage <files> --if-enabled --json --brief`. A file whose coverage is
    `partial` is READ in the source before you call anything absent in it.
 2. **The read ladder** (`.claude/skills/_shared/read-ladder.md`): locate →
    outline → the range the card names → a full read only when the file IS the
@@ -66,6 +72,10 @@ Keep them APART. They break differently and they are found differently:
 | `route` | a test or a client that reaches it through a URL (the graph's `ROUTE` edge) |
 | `via_alias` | reached through an instance or a re-export |
 | `inherited` | reached through a base class member |
+
+Read them off the CARD, never off `callers[]`: every row carries its state
+(`ROUTE`), its `(via <symbol>)` and its `(inherited)` marker, which is what tells
+the four classes apart. That is why every graph read here carries `--brief`.
 
 When ANY of those lists rests on the graph alone — you did not confirm it in the
 source — the `note` carries this sentence, word for word:

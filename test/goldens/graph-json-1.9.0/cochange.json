@@ -1,0 +1,29 @@
+{
+  "args": [
+    "cochange",
+    "src/auth.js",
+    "--json"
+  ],
+  "status": 0,
+  "json": {
+    "ok": true,
+    "state": "found",
+    "file": "src/auth.js",
+    "commits": 4,
+    "since": "6.months",
+    "min": 3,
+    "rows": [
+      {
+        "file": "src/reports.js",
+        "together": 4,
+        "of": 4,
+        "share": 1
+      }
+    ],
+    "more": 0,
+    "generation": 1,
+    "gen_id": "<gen_id>",
+    "line": "graph cochange src/auth.js — changed in 4 commits since 6.months; these changed WITH it at least 3 times\n    4×  src/reports.js  (100% of its commits)\n  history, not structure — it says what people changed together, never what depends on what",
+    "trace": "GRAPH-COCHANGE found :: rows=1 commits=4"
+  }
+}

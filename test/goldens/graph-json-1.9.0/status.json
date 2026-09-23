@@ -1,0 +1,30 @@
+{
+  "args": [
+    "status",
+    "--json"
+  ],
+  "status": 0,
+  "json": {
+    "ok": true,
+    "enabled": true,
+    "exists": true,
+    "files": 12,
+    "symbols": 21,
+    "updated_at": "<updated_at>",
+    "head_commit": "<head_commit>",
+    "engine": "graph@5",
+    "generation": 1,
+    "gen_id": "<gen_id>",
+    "state": "fresh",
+    "behind": {
+      "added": 0,
+      "changed": 0,
+      "deleted": 0
+    },
+    "engine_stale": false,
+    "auto_update": true,
+    "notes": "off",
+    "line": "graph: FRESH — 12 files · 21 symbols · gen 1 (updated <stamp>)",
+    "trace": "GRAPH-CONSULT fresh :: files=12 symbols=21 gen=1"
+  }
+}

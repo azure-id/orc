@@ -7,14 +7,14 @@
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
 ![npm](https://img.shields.io/npm/v/%40azure-id%2Forc?style=for-the-badge&color=cb3837&logo=npm)
-![Version](https://img.shields.io/badge/version-1.9.0-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-1.9.1-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
 ![Dependencies](https://img.shields.io/badge/dependencies-zero-lightgrey.svg?style=for-the-badge)
 ![GitHub stars](https://img.shields.io/github/stars/azure-id/orc?style=for-the-badge&color=yellow)
 
-**Latest: v1.9.0** · updated 2026-09-21 · [full changelog](CHANGELOG.md)
+**Latest: v1.9.1** · updated 2026-09-23 · [full changelog](CHANGELOG.md)
 
 **On npm: [`@azure-id/orc`](https://www.npmjs.com/package/@azure-id/orc)** — `npm i -g @azure-id/orc`
 
@@ -445,6 +445,22 @@ orc graph gain                        # what the map put in, and an estimate of 
   for a Grep, a Glob and a shell search (`grep`, `rg`, `git grep`, `findstr`) —
   and everything it hands over is labelled repository data, never an instruction.
   Switch it off with `orc config set code_graph_hooks off`; the map still works.
+- **`--brief` is the answer a lane reads** (v1.9.1). With `--json` it keeps the
+  card, the line, the trace and every count, and drops the row arrays a lane
+  never prints — 74 % to 87 % smaller on this repository. Every lane call uses
+  it; without it, `--json` is unchanged.
+- **It reads the Vue Options API** (v1.9.1, engine `graph@6`). A component, a
+  mixin and a Vuex module are a class, each function inside them is a method,
+  and `mixins` are its bases — so `this.submit()` is a link, and `impact` on a
+  mixin names every component that uses it. Exported constants and
+  `<script setup>` components are named too. A store built by an older version
+  upgrades itself once, at the next preflight.
+- **It says when the map is thin, and why.** `orc graph status` prints the
+  symbols per file and `THIN` when most files hold none. `orc graph audit` lists
+  those files by language, longest first, with the shape of each one.
+- **A symbol card can carry its callers' own lines** (`--callers-source`: six
+  lines around each confident call site) and says where a language server
+  should look (`lsp_at`) when the map can only say `AMBIGUOUS`.
 
 The contract: `templates/skills/_shared/code-graph.md`. The hook:
 `templates/hooks/README.md`.
@@ -712,60 +728,42 @@ a current audit: [EVAL-REPORT.md](EVAL-REPORT.md).
 **Full history: [CHANGELOG.md](CHANGELOG.md)** — or `orc changelog`, which prints
 only what is newer than the version you have.
 
-### v1.9.0 — the lean lanes learn to look before they leap _(2026-09-21)_
+### v1.9.1 — the graph that was paid for and never asked _(2026-09-23)_
 
-`/orc-quick` and `/orc-mini` are the two lanes people reach for most, and both
-were working half blind. The code graph could tell them WHERE a symbol is and
-was forbidden from telling them WHAT BREAKS. A bug fix was never shown failing
-before it was fixed. Read-only work was dispatched by model name, so nothing in
-ORC could see it.
+The code graph was maintained far more than it was consulted, and the part that
+was consulted cost more than the meter said. On one real Vue project, 416 of
+429 `.vue` files had no symbol, and the panel said `0 hook updates` after 35.
 
-**A bug is now shown RED before it is fixed.** A request like *"the orders page
-returns 500, find it and fix it"* is sorted as a **defect**, and the executor
-writes the reproduction FIRST — a failing test in your own framework, or a
-command — runs it red, implements, and runs it green. Both runs are printed and
-both reach the trace. A reproduction that cannot be written is `repro: none`
-with its reason, and the entry says **not reproduced** — repeated at the commit
-offer. It is never faked. Without the red run a fix is proven against your test
-suite, which was green before and after; with it, the fix is proven against the
-bug you reported.
+**Answers are smaller.** `--brief` keeps the card, the line and every count and
+drops the rows a lane never prints: 74 % to 87 % smaller, and every lane call
+uses it. The CLI now computes `/orc-quick`'s blast-radius line and
+`/orc-mini`'s complexity line in one call, instead of the lane counting rows.
 
-**Both lanes may now ask what breaks.** `/orc-quick` gained `map`, `changes` and
-`coverage`; `/orc-mini` gained `map`, `impact`, `changes` and `cochange`. The
-**affected tests run first** — a test that reaches the change through a URL
-included — and every entry carries a blast-radius line where a `risk` word never
-appears without its reason. A request that names no file now starts with
-`orc graph map --focus` instead of a guess at a filename.
+**The meter tells the truth.** Hook updates were always counted as 0, and
+`paid` counted the card while the lane received 4 to 8 times more. Both are
+fixed: a `hook-update` row, and `paid.envelope` beside the cards. The meter
+also lists the reads this project has never made.
 
-**`/orc-mini`'s complexity read carries numbers.** It was a sentence of
-judgment; it is now one line with counts and four thresholds that each state why
-that number: callers in 4 or more files outside the plan, 8 or more callers, any
-cited risk class, or a file history says is always touched alongside yours. It
-is an **offer, never a switch**, and continuing writes the numbers into the
-decision log so a later `/orc-retro` can move a threshold.
+**The map says when it is thin, and why** — `THIN` on `orc graph status`, and
+a new `orc graph audit` that lists the empty files by language, longest first.
 
-**Read-only work is a real agent.** Recon is a pinned pair —
-`orc-recon-sonnet-4-6-med` and `orc-recon-opus-5-low` — with a return contract,
-visible in the trace and in `orc run inflight`. `other — name a model` stays as
-the escape hatch. The gate may now print `suggested` beside one line WITH its
-reason, and it still never chooses: every menu ends with *your choice — nothing
-runs until you answer*.
+**The parser reads the Vue Options API** (engine `graph@6`). A component, a
+mixin and a Vuex module are a class with methods; `mixins` are its bases;
+exported constants and `<script setup>` components are named. A 1.9.0 store
+upgrades itself once, at the next preflight. Nothing to do.
 
-**Both lanes cost less to load.** The two descriptions, which every session
-pays for, went 619 → 326 and 493 → 294 characters with every trigger phrase
-kept. The rules card in a `/orc-quick` slice is now a compact form — about 1,460
-tokens instead of 3,469 — that keeps every HARD rule's id, title and instruction
-and loses only the worked examples.
+**The paid reads carry what they were paid for:** `ctx --callers-source` (six
+lines around each confident call site), `lsp_at` for a language server when a
+card says `AMBIGUOUS`, and a count of the wide whole-file reads no hint named.
 
-**It does not lower your bill**, and this release does not claim it does. The
-claim is correctness, traceability and fewer round trips. **The live-session
-evaluation did not run** — the deterministic half is in the test suite, but the
-three gates that need a person driving a lane are unmet, not passed. The
-CHANGELOG names each one.
+**Not measured here:** the live-session evaluation did not run, and the Vue gate
+(under 20 % empty `.vue` files) is measured on your own project. The CHANGELOG
+names every limit.
 
 <details>
-<summary><strong>Earlier releases</strong> — 119 of them, titles only. Full text in <a href="CHANGELOG.md">CHANGELOG.md</a>.</summary>
+<summary><strong>Earlier releases</strong> — 120 of them, titles only. Full text in <a href="CHANGELOG.md">CHANGELOG.md</a>.</summary>
 
+- **v1.9.0** — the lean lanes learn to look before they leap · _2026-09-21_
 - **v1.8.2** — the map that finds what a grep cannot · _2026-09-21_
 - **v1.8.1** — the guard that only failed on Windows · _2026-09-16_
 - **v1.8.0** — the code graph: a map of the code that stays fresh · _2026-09-16_

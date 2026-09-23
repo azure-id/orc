@@ -215,16 +215,18 @@ test("graph status --heal — builds or updates in the same call, and carries th
   assert.equal(built.state, "fresh");
   assert.equal(built.healed.state, "built");
   assert.match(built.line, /^graph: built first index — 2 files · 2 symbols/);
-  assert.equal(built.trace, "GRAPH-CONSULT built :: files=2 symbols=2 gen=1");
+  // v1.9.1 A1: the density is appended to the SAME verb, never a line of its own.
+  assert.equal(built.trace, "GRAPH-CONSULT built :: files=2 symbols=2 gen=1 density=1");
   write(root, "src/b.js", "function b() {\n  return 2;\n}\n");
   const upd = json(graph(root, "status", "--if-enabled", "--heal", "--json"));
   assert.equal(upd.state, "fresh");
   assert.equal(upd.healed.state, "updated");
   assert.match(upd.line, /^graph: 1 file changed outside ORC → updated/);
-  assert.equal(upd.trace, "GRAPH-CONSULT updated :: files=2 symbols=2 gen=2");
+  assert.equal(upd.trace, "GRAPH-CONSULT updated :: files=2 symbols=2 gen=2 density=1");
   const again = json(graph(root, "status", "--if-enabled", "--heal", "--json"));
   assert.equal(again.healed, undefined, "a FRESH graph is not rebuilt");
-  assert.equal(again.trace, "GRAPH-CONSULT fresh :: files=2 symbols=2 gen=2");
+  assert.equal(again.trace, "GRAPH-CONSULT fresh :: files=2 symbols=2 gen=2 density=1");
+  assert.equal(again.thin, false, "two files is a small repository, never a thin one");
   const u = json(graph(root, "update", "--if-enabled", "--json"));
   assert.match(u.trace, /^GRAPH-UPDATE unchanged :: parsed=0 reused=0 deleted=0 gen=2 route=unchanged ms=\d+$/);
   assert.equal(cli(["config", "set", "code_graph", "off", "--dir", root]).status, 0);

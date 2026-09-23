@@ -1,0 +1,161 @@
+{
+  "args": [
+    "ctx",
+    "--for-slice",
+    "src/stores/orderStore.js",
+    "src/auth.js",
+    "src/routes/orders.js",
+    "--json"
+  ],
+  "status": 0,
+  "json": {
+    "ok": true,
+    "state": "found",
+    "view": "for-slice",
+    "format": "tree",
+    "files": [
+      "src/stores/orderStore.js",
+      "src/auth.js",
+      "src/routes/orders.js"
+    ],
+    "missing": [],
+    "skipped": [],
+    "blocks": [
+      {
+        "file": "src/stores/orderStore.js",
+        "blob": "current",
+        "callers": [
+          {
+            "item": "caller",
+            "file": "src/handlers/orders.js",
+            "line": 7,
+            "state": "IMPORT",
+            "reaches": [
+              "OrderStore",
+              "list",
+              "get"
+            ]
+          },
+          {
+            "item": "caller",
+            "file": "src/routes/orders.js",
+            "line": 6,
+            "state": "IMPORT",
+            "reaches": [
+              "OrderStore",
+              "searchByItemPrefix",
+              "list",
+              "get",
+              "insert"
+            ]
+          },
+          {
+            "item": "caller",
+            "file": "tests/store.test.js",
+            "line": 6,
+            "state": "IMPORT",
+            "reaches": [
+              "OrderStore",
+              "list",
+              "insert"
+            ]
+          },
+          {
+            "item": "caller",
+            "file": "src/reports.js",
+            "line": 5,
+            "state": "IMPORT",
+            "reaches": [
+              "searchByItemPrefix"
+            ]
+          }
+        ],
+        "total_callers": 4,
+        "importers": [
+          "src/handlers/orders.js",
+          "src/routes/orders.js",
+          "tests/store.test.js"
+        ],
+        "routes": [],
+        "tests": [
+          "tests/store.test.js"
+        ],
+        "hidden": {}
+      },
+      {
+        "file": "src/auth.js",
+        "blob": "current",
+        "callers": [
+          {
+            "item": "caller",
+            "file": "src/routes/orders.js",
+            "line": 22,
+            "state": "IMPORT",
+            "reaches": [
+              "requireAuth"
+            ]
+          }
+        ],
+        "total_callers": 1,
+        "importers": [
+          "src/routes/orders.js"
+        ],
+        "routes": [],
+        "tests": [],
+        "hidden": {}
+      },
+      {
+        "file": "src/routes/orders.js",
+        "blob": "current",
+        "callers": [
+          {
+            "item": "caller",
+            "file": "tests/orders.test.js",
+            "line": 6,
+            "state": "ROUTE",
+            "reaches": [
+              "GET /orders/search",
+              "POST /orders",
+              "GET /orders",
+              "GET /orders/:id"
+            ]
+          }
+        ],
+        "total_callers": 1,
+        "importers": [
+          "src/app.js"
+        ],
+        "routes": [
+          "GET /orders",
+          "GET /orders/search",
+          "GET /orders/:id",
+          "POST /orders"
+        ],
+        "tests": [
+          "tests/orders.test.js"
+        ],
+        "hidden": {}
+      }
+    ],
+    "names": [
+      "OrderStore",
+      "list",
+      "get",
+      "searchByItemPrefix",
+      "insert",
+      "requireAuth",
+      "GET /orders/search",
+      "POST /orders",
+      "GET /orders",
+      "GET /orders/:id"
+    ],
+    "budget": {
+      "used": 144,
+      "max": 1200
+    },
+    "card": "graph outside view — read each file itself before you edit it · rows are  from:line state  reaches\nsrc/stores/orderStore.js  [blob 0f7f479 · current]\n  src/handlers/orders.js:7 I  OrderStore list get\n  src/routes/orders.js:6 I  OrderStore searchByItemPrefix list get insert\n  tests/store.test.js:6 I  OrderStore list insert\n  src/reports.js:5 I  searchByItemPrefix\n\nsrc/auth.js  [blob 5647cc7 · current]\n  src/routes/orders.js:22 I  requireAuth\n\nsrc/routes/orders.js  [blob 176a510 · current]\n  tests/orders.test.js:6 R  GET /orders/search POST /orders GET /orders GET /orders/:id\n  imp src/app.js  (imports it, calls nothing)",
+    "generation": 1,
+    "gen_id": "<gen_id>",
+    "trace": "GRAPH-CONSULT slice :: targets=src/stores/orderStore.js,src/auth.js,src/routes/orders.js"
+  }
+}

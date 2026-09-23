@@ -1,0 +1,28 @@
+{
+  "args": [
+    "update",
+    "--json"
+  ],
+  "status": 0,
+  "json": {
+    "ok": true,
+    "enabled": true,
+    "state": "unchanged",
+    "files": 12,
+    "symbols": 21,
+    "generation": 2,
+    "gen_id": "<gen_id>",
+    "route": "unchanged",
+    "added": 0,
+    "changed": 0,
+    "deleted": 0,
+    "parsed": 0,
+    "reused": 0,
+    "skipped": 0,
+    "engine_upgrade": false,
+    "head_commit": "<head_commit>",
+    "ms": "<ms>",
+    "line": "graph: FRESH — nothing changed · gen 2 · <n> ms",
+    "trace": "GRAPH-UPDATE unchanged :: parsed=0 reused=0 deleted=0 gen=2 route=unchanged ms=<n>"
+  }
+}

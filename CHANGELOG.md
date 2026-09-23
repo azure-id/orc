@@ -10,6 +10,139 @@ Format: `### v<version> — <title> _(<date>)_`.
 
 ---
 
+### v1.9.1 — the graph that was paid for and never asked _(2026-09-23)_
+
+**Still on the unscoped `orc` package?** Do this once first - your `orc upgrade`
+is the pre-v0.56.0 one and cannot install itself. Full detail in the CAUTION at
+the top of this file.
+
+- **Step 1 - release the command from the old package:** `npm uninstall -g orc`
+- **Step 2 - install the current package:** `npm i -g @azure-id/orc`
+- **Step 3 - re-apply it to your project:** `orc update`
+
+**Do not use `npm i -g -f`.** Full detail in v0.56.0 below.
+
+The code graph was maintained far more than it was consulted, and the part that
+WAS consulted cost more than the meter said. On one real Vue project the store
+was at generation 93 with 19 recorded reads, the panel said `0 hook updates`
+after the hook had run 35 of them, and 416 of 429 `.vue` files had no symbol at
+all. This release makes an answer smaller, makes the meter tell the truth, says
+when the map is thin and why, and teaches the parser to read the Vue Options API.
+
+The version number is a patch because that was the release owner's call. The
+release adds flags, one command and an engine change; every one is backward
+compatible.
+
+**What you have to do: nothing.** A store built by 1.9.0 reads `DRIFTED` once,
+and the next preflight (`orc graph status --heal`) re-reads every file
+automatically — measured at about 8 ms a file. Notes and function ids survive.
+No config key changed.
+
+**`--brief`: the answer a lane reads, without the rows it never prints.**
+
+- Every `orc graph … --json` read takes `--brief`. It keeps the card, the line,
+  the trace, every scalar and every count, drops the row arrays, and prints
+  compact JSON. Without `--brief`, `--json` is unchanged — the 1.9.0 answers
+  are frozen as goldens and compared key for key.
+- Measured on this repository (tokens):
+
+  | command | full | brief | card |
+  |---|---|---|---|
+  | `ctx <symbol>` | 2,773 | 734 | 600 |
+  | `ctx <file>` | 1,484 | 369 | 243 |
+  | `ctx --for-slice` (3 files) | 1,818 | 420 | 320 |
+  | `impact` (3 files) | 4,910 | 1,122 | 956 |
+  | `map` | 8,995 | 1,193 | 1,113 |
+  | `changes` | 5,228 | 934 | 681 |
+
+  −74 % to −87 %. Every payload call site now asks for it (46 of them).
+
+**The CLI computes the lines the lanes used to assemble.**
+
+- `orc graph changes` returns `totals`, the affected `tests[]`, a `tests_line`
+  and the `blast_line` `/orc-quick` prints. `--files=a,b` limits it to a set.
+- `orc graph impact --complexity [--risk=<class>[@<file:line>],…]` returns
+  `/orc-mini`'s complexity line, its numbers and the `facts{}` the planner
+  pastes — impact and co-change in ONE process instead of one call per file.
+  The four thresholds are named constants in `bin/graph-signals.js`.
+
+**The map says when it is thin, and why.**
+
+- `orc graph status` prints the density (`1.9 symbols/file`) and `THIN` when a
+  repository of 30+ files has under 3 symbols per file and 40 %+ of its files
+  empty. A 1.9.0 store gets the numbers once, under `--heal`, without a new
+  generation.
+- **`orc graph audit`** (new, never called by a lane): density by language, the
+  files the parser read as EMPTY, longest first, and the shape of each one's
+  first declaration — with the shapes that are a parser gap marked as such.
+- `orc graph map` ranks a file with no symbol below every file that has one. It
+  is a rank, never a filter.
+
+**The meter tells the truth.**
+
+- **Fixed: `hook updates` was always 0.** The hook updated the graph and counted
+  it in the run's counters file, but never wrote the ledger row `orc graph gain`
+  counts. It writes a `hook-update` row now, and that row pays nothing.
+- **Fixed: `paid` counted the card, not the answer.** The orchestrator receives
+  the whole `--json` answer, 4 to 8 times the card, and the meter called the card
+  EXACT. `paid.envelope` is everything beyond the card; the panel's paid row reads
+  `(cards · source · hints · envelope)`.
+- `never_called` lists the reads this project has never made. It is a fact and
+  it carries no advice.
+
+**The paid reads carry what they were paid for.**
+
+- **`ctx <symbol> --callers-source`** adds six lines around each confident call
+  site (at most 5 callers), charged to the same budget after everything else.
+  Never an `AMBIGUOUS` candidate, never the target's own file, and a caller file
+  that changed since the index says so on its head line. The recon agents use it
+  for a blast radius.
+- **`lsp_at`** on every symbol card — `{file, line, character}`, the character
+  1-based. When a card says `AMBIGUOUS (n)` or `maybe <n>` and an `LSP` tool is
+  available, the read ladder, the recon agents and every executor now ask the
+  language server there before any Grep. `null` when it cannot be exact.
+- **`wide reads`**: under `code_graph_hooks: on`, a subagent's whole-file read of
+  a file with 8+ symbols is COUNTED — no context, no trace line — and `orc graph
+  gain` prints the count. It is the number the decision to arm `on,read` by
+  default waits for. The default did not change.
+- Under `on,read`, the wide-file hint names the run's own names first.
+
+**The parser reads the Vue Options API (`graph@6`).**
+
+- `export default {…}`, `defineComponent({…})` and `Vue.extend({…})` are a
+  `class`; every function-valued member at depth 1 and in `methods`, `computed`,
+  `watch`, `getters`, `mutations`, `actions`, `filters` and `provide` is a
+  `method` named `<Owner>.<name>`. `mixins` and `extends` are its bases.
+- So `this.submit()` resolves LOCAL, a component reaches its mixin as
+  `inherited`, and `orc graph impact` on a mixin names every component that
+  mixes it in. The owner is the `name:` property, else the file name.
+- An exported constant (`export const`, `exports.X =`, a key of
+  `module.exports = {…}`) is a `const` symbol with no calls. A `require(…)`
+  value is a re-export and is never one. A `<script setup>` or Svelte component
+  is one `class` named from its file.
+- Both parsers name the same symbols: the heuristic one and the project's own
+  TypeScript, when it has one.
+- Measured on this repository: the only change against the graph@5 parser is
+  189 new constants and 34 new links to them; files with no symbol went 25 → 7.
+
+**Limits, with the numbers.**
+
+- **The live-session evaluation did not run for this release**, and no paid
+  evaluation round was made for `--callers-source` (identical runs flip about 9 %
+  of outcomes, so a small round would not show the effect). The deterministic
+  half is in the suite: 1,202 tests.
+- **The Vue gate is measured on the user's project, not here.** The plan's gate
+  is under 20 % empty `.vue` files and 4+ symbols per file after the upgrade;
+  run the density command again after `orc graph status --heal` to check it.
+- The THIN thresholds (30 files · 3 per file · 40 % empty) are provisional.
+- `/orc-mini`'s spine is 4 lines shorter, not the 8 the plan asked for; the
+  prose that moved was one long line per step.
+- The parser still does not read a `<template>`: `@click="submit"` is not a link.
+
+Verify: 40 skills · 51 agent files · 214 contracts.
+
+---
+
 ### v1.9.0 — the lean lanes learn to look before they leap _(2026-09-21)_
 
 **Still on the unscoped `orc` package?** Do this once first - your `orc upgrade`

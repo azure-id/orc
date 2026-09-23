@@ -1,0 +1,30 @@
+{
+  "args": [
+    "coverage",
+    "src/stores/orderStore.js",
+    "src/auth.js",
+    "--json"
+  ],
+  "status": 0,
+  "json": {
+    "ok": true,
+    "state": "found",
+    "generation": 1,
+    "gen_id": "<gen_id>",
+    "rows": [
+      {
+        "path": "src/stores/orderStore.js",
+        "coverage": "full",
+        "changed_since_index": "current"
+      },
+      {
+        "path": "src/auth.js",
+        "coverage": "full",
+        "changed_since_index": "current"
+      }
+    ],
+    "gaps": 0,
+    "line": "graph coverage (gen 1) — 0 gaps in 2 paths\n  src/stores/orderStore.js  full\n  src/auth.js  full\n  no recorded gap is not proof of completeness — the source is ground truth",
+    "trace": "GRAPH-COVERAGE clean :: paths=2 gaps=0 gen=1"
+  }
+}

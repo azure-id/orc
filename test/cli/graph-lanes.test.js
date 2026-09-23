@@ -298,8 +298,12 @@ test("the lean lanes may ask what breaks, and where to look first", () => {
     assert.ok(!quick.includes(id), "orc-quick should not be able to call " + id);
 
   const mini = laneCalls("orc-mini");
-  for (const id of ["graph-map", "graph-impact", "graph-changes", "graph-cochange"])
+  for (const id of ["graph-map", "graph-impact", "graph-changes"])
     assert.ok(mini.includes(id), "orc-mini cannot call " + id);
+  // v1.9.1: mini LEFT `graph-cochange`. `impact --complexity` answers the same
+  // question inside the same process, against the same per-HEAD cache, so the
+  // lane makes one call where it used to make one per declared file.
+  assert.ok(!mini.includes("graph-cochange"), "orc-mini no longer names cochange on its own");
 });
 
 test("every graph row a lean lane gained still points at the one canonical file", () => {
@@ -421,4 +425,57 @@ test("mini passes wiki POINTERS, never bodies, and records a `none`", () => {
     shared.includes("orc-fast and orc-mini pass POINTERS"),
     "the shared lane delta still names only orc-fast"
   );
+});
+
+// ── v1.9.1 W3 — `--brief` reaches every lane call site ─────────────────────
+//
+// The orchestrator prints the `card`, never the rows, and a `--json` answer is
+// 4 to 8 times its card. Every read a lane makes carries `--brief`; the two
+// exceptions below are the steps that really do read a row array, and each one
+// says so in its own file.
+const PAYLOAD = path.join(__dirname, "..", "..", "templates");
+
+// file → why this call keeps its rows.
+const BRIEF_EXCEPTIONS = {
+  "skills/_shared/phases/review.md": "the reviewer is handed symbols[].caller_files and reads them",
+  "agents/orc-graph-noter-sonnet-4-6-med.md": "the noter needs rows[].source, and `notes apply` is not a read",
+  "skills/_shared/phases/trace.md": "it NAMES the commands a trace verb comes from; it makes no call",
+};
+
+function walkPayload(dir, out) {
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    const p = path.join(dir, e.name);
+    if (e.isDirectory()) walkPayload(p, out);
+    else if (e.name.endsWith(".md")) out.push(p);
+  }
+  return out;
+}
+
+test("every graph --json call a lane makes carries --brief, or is a named exception", () => {
+  const offenders = [];
+  for (const file of walkPayload(PAYLOAD, [])) {
+    const rel = path.relative(PAYLOAD, file).split(path.sep).join("/");
+    if (BRIEF_EXCEPTIONS[rel]) continue;
+    const text = fs.readFileSync(file, "utf8");
+    for (const line of text.split("\n")) {
+      if (!/orc graph .*--json/.test(line)) continue;
+      // `--brief` may sit anywhere after the subcommand; the flags before it
+      // are never reordered.
+      if (line.includes("--brief")) continue;
+      offenders.push(`${rel}: ${line.trim().slice(0, 100)}`);
+    }
+  }
+  assert.deepStrictEqual(offenders, [], "a lane asks for rows it never prints");
+});
+
+test("the exceptions each SAY why, in their own file", () => {
+  const review = fs.readFileSync(path.join(PAYLOAD, "skills", "_shared", "phases", "review.md"), "utf8");
+  assert.match(review, /no `--brief` here/, "review.md does not say why it keeps its rows");
+  const noter = fs.readFileSync(path.join(PAYLOAD, "agents", "orc-graph-noter-sonnet-4-6-med.md"), "utf8");
+  assert.match(noter, /--with-source/, "the noter does not name the flag that gives it rows");
+});
+
+test("the source template carries --brief, so every generated executor does", () => {
+  const src = fs.readFileSync(path.join(__dirname, "..", "..", "agents-src", "executor.template.md"), "utf8");
+  assert.match(src, /orc graph ctx <symbol\|file> --if-enabled --json --brief/);
 });

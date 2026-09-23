@@ -180,8 +180,10 @@ function writeStdoutSync(str) {
 }
 
 // Print the object and (optionally) exit with the human path's code.
-function emitJson(obj, exitCode) {
-  writeStdoutSync(JSON.stringify(obj, null, 2) + "\n");
+// `compact` (v1.9.1 B1) writes the answer with no indentation: a `--brief`
+// answer is read by a model, and the card inside it carries its own newlines.
+function emitJson(obj, exitCode, compact) {
+  writeStdoutSync((compact ? JSON.stringify(obj) : JSON.stringify(obj, null, 2)) + "\n");
   if (exitCode !== undefined) process.exit(exitCode);
 }
 
@@ -3182,9 +3184,10 @@ function laneAnnounce(lane, map, claudeDir, families) {
   const graphOn = String(Object.prototype.hasOwnProperty.call(map, "code_graph") ? map.code_graph : metaFor("code_graph").def) === "on";
   if (graphOn && LANE_CALLS["graph-status"].lanes.includes(lane))
     out.push(
-      "graph: on — use the code-graph cache: (1) now: `orc graph status --if-enabled --heal --json` (builds or updates it); " +
-        "(2) every code-writing slice: `orc graph ctx <declared files> --if-enabled --json` cards; " +
-        "(3) after every code change: `orc graph update --if-enabled --json` (keeps it for the next run). Copy each `line` and `trace` verbatim"
+      "graph: on — use the code-graph cache: (1) now: `orc graph status --if-enabled --heal --json --brief` (builds or updates it); " +
+        "(2) every code-writing slice: `orc graph ctx <declared files> --if-enabled --json --brief` cards; " +
+        "(3) after every code change: `orc graph update --if-enabled --json --brief` (keeps it for the next run). " +
+        "Copy each `line` and `trace` verbatim; `--brief` drops the rows you never print"
     );
   // A shadowed setting must never be silent, and neither must an inert one.
   const shadowed = [];
@@ -3480,7 +3483,24 @@ const LANE_CALLS = {
     on_absent: "exit 4 is an ANSWER, not a miss — plan exactly as before",
     canonical: "_shared/code-graph.md",
     never: "never read a co-change as a DEPENDENCY — it says what people changed together, never what needs what",
-    lanes: ["orc", "orc-diy", "orc-mini"],
+    // v1.9.1: mini no longer calls it. `impact --complexity` answers the same
+    // question inside the SAME process, against the same per-HEAD cache.
+    lanes: ["orc", "orc-diy"],
+  },
+  // v1.9.1 A2 — a USER command. `lanes: []` is the contract: nothing a lane
+  // does is made better by an audit, and a lane that ran one would pay for an
+  // answer about the PARSER in a context that is about the code.
+  "graph-audit": {
+    cmd: "orc graph audit [--top=N] --if-enabled [--json]",
+    what: "WHY the map is thin — density by language, which extractor read each one, the files the parser read as EMPTY longest first, and what their first declaration looks like",
+    exits: { 0: "answered", 1: "no index yet", 3: "off — `code_graph` is off" },
+    states: null,
+    cost: "free",
+    when: "by hand, after `orc graph status` says THIN — never in a lane",
+    on_absent: "exit 1 means there is no graph to audit; build one first",
+    canonical: "_shared/code-graph.md",
+    never: "never read an empty file as a defect — a component with no named function is a file the parser read correctly; only a shape marked `parser gap` is worth an issue",
+    lanes: [],
   },
   "graph-gain": {
     cmd: "orc graph gain --run <trace name> --if-enabled [--json]",
@@ -8742,6 +8762,14 @@ function gainRowFor(sub, Q, model, operands, r, ms, forSlice) {
     paid.source = K.tok(r.source.text);
     paid.card = Math.max(0, paid.card - paid.source);
   }
+  // R1 (v1.9.1): the callers' blocks are source the same way — exactly the
+  // lines a range read of each caller would have returned.
+  const callerBlocks = Array.isArray(r.callers_source) ? r.callers_source : [];
+  if (callerBlocks.length) {
+    const t = callerBlocks.reduce((a, b) => a + K.tok(b.text || ""), 0);
+    paid.source += t;
+    paid.card = Math.max(0, paid.card - t);
+  }
   const base = { cmd: sub, targets: operands.slice(0, 5), gen, ms, paid };
 
   if (sub === "impact" || (sub === "ctx" && forSlice)) {
@@ -8773,6 +8801,7 @@ function gainRowFor(sub, Q, model, operands, r, ms, forSlice) {
     const hits = Q.nameHits(model, r.target.qname);
     const c = K.ctxSymbol(model, r.target, hits, (r.callers || []).map((x) => x.file));
     if (r.source) c.avoided = addAvoided(c.avoided, K.sourceAvoided(model, r.source.file, r.source.from, r.source.to));
+    for (const b of callerBlocks) c.avoided = addAvoided(c.avoided, K.sourceAvoided(model, b.file, b.from, b.to));
     return { ...base, ...c };
   }
   return { ...base, avoided: { low: 0, high: 0, calls_low: 0, calls_high: 0 }, basis: { files: [], grep_hits: 0 } };
@@ -8815,23 +8844,79 @@ function graphGainAppend(claudeDir, row) {
 // A thin router. The engine is `bin/graph.js`; this function resolves the
 // config (the engine never reads it) and owns the human lines. The exit code is
 // the same on the human path and the `--json` path (S7).
+// ── B1 (v1.9.1): the BRIEF answer ─────────────────────────────────────────
+// The orchestrator reads a graph answer on the main-session surface, where it
+// is re-sent on every later turn — and it prints the `card`, never the rows.
+// Measured on this tree the rows are 4 to 8 times the card. `--brief` keeps
+// every fact a lane prints and drops every row array it does not.
+//
+// Two rules, in this order:
+//   1. an array NAMED here is dropped (`calls[]` and `names[]` are strings, and
+//      they are still rows);
+//   2. any other array OF OBJECTS is dropped, unless it IS the answer
+//      (`nearest[]` and `candidates[]` on an exit-4; `cards[]` on a multi-target
+//      `ctx`, whose rows are three scalars each).
+// Every drop leaves its COUNT behind, at the level it was dropped from, except
+// where the answer already carries that count under another name.
+const GRAPH_BRIEF_DROP = new Set(["callers", "calls", "effects", "symbols", "imports", "importers", "blocks", "names", "rows", "chain", "waiting"]);
+const GRAPH_BRIEF_KEEP = new Set(["nearest", "candidates", "cards"]);
+// V2/V3 answers that ARE the answer: `complexity` and `facts` are ten rows at
+// most, and they are the whole reason the call was made. They pass through
+// whole, never walked.
+const GRAPH_BRIEF_WHOLE = new Set(["complexity", "facts"]);
+const GRAPH_BRIEF_NO_COUNT = { impact: ["callers"], map: ["files"], changes: ["symbols"] };
+
+function briefOf(sub, obj) {
+  const noCount = new Set(GRAPH_BRIEF_NO_COUNT[sub] || []);
+  const walk = (o) => {
+    const out = {};
+    const counts = {};
+    for (const [k, v] of Object.entries(o)) {
+      if (Array.isArray(v)) {
+        const rows = GRAPH_BRIEF_DROP.has(k) || (!GRAPH_BRIEF_KEEP.has(k) && v.length > 0 && v[0] !== null && typeof v[0] === "object");
+        if (!rows) out[k] = v;
+        else if (!noCount.has(k)) counts[k] = v.length;
+        continue;
+      }
+      if (k === "source" && v && typeof v === "object") {
+        const from = Number(v.from);
+        const to = Number(v.to);
+        counts.source_lines = Number.isFinite(from) && Number.isFinite(to) ? Math.max(0, to - from + 1) : 0;
+        continue;
+      }
+      out[k] = v && typeof v === "object" && !GRAPH_BRIEF_WHOLE.has(k) ? walk(v) : v;
+    }
+    if (Object.keys(counts).length) out.counts = { ...(out.counts || {}), ...counts };
+    return out;
+  };
+  return walk(obj);
+}
+
 function graphCmd() {
   const usage =
-    "Usage: orc graph status [--heal] | update [--notes-pending --files <a,b>] | gc\n" +
-    "       orc graph ctx <symbol|file[:line]>… [--source [N]] | ctx --for-slice <file…> | impact <file…> | path <from> <to>\n" +
-    "       orc graph coverage <file…> | changes [--base <ref>] | cochange <file>\n" +
+    "Usage: orc graph status [--heal] | update [--notes-pending --files <a,b>] | gc | audit [--top=N]\n" +
+    "       orc graph ctx <symbol|file[:line]>… [--source [N]] [--callers-source] | ctx --for-slice <file…> | impact <file…> | path <from> <to>\n" +
+    "       orc graph coverage <file…> | changes [--base <ref>] [--files=<a,b>] | cochange <file>\n" +
     "       orc graph map [--focus <file|name,…>] [--budget N]\n" +
     "       orc graph gain [--run <name>] [--since 7d] [--history [--limit 40]] [--measured] [--reset --yes]\n" +
     "       orc graph notes pending --files <a,b> [--cap 40] [--min 5] [--with-source] | notes apply <file|->\n" +
-    "       [--if-enabled] [--depth N] [--budget TOKENS] [--format prose|tree] [--offset N] [--json] [--dir <path>]\n" +
+    "       [--if-enabled] [--depth N] [--budget TOKENS] [--format prose|tree] [--offset N] [--json] [--brief] [--dir <path>]\n" +
+    "  --brief  with --json: the card, the line, the trace, every scalar and every count — and none of the row\n" +
+    "           arrays a lane never prints. Compact output. Without --brief, --json is unchanged.\n" +
     "  status   exit 0 FRESH · 1 NONE · 2 DRIFTED · 3 OFF  (--heal builds or updates a NONE/DRIFTED graph first)\n" +
     "  update   exit 0 done · 1 unavailable or locked · 3 off (with --if-enabled)\n" +
     "           --notes-pending adds the `notes pending` answer to the SAME call (one process, one lock)\n" +
     "  gc       exit 0 done · 1 no index or locked\n" +
+    "  audit    exit 0 answered · 1 no index · 3 off (with --if-enabled)   WHY the map is thin: density by language,\n" +
+    "           the files the parser read as EMPTY, longest first, and what their first declaration looks like\n" +
     "  ctx      exit 0 found · 1 no graph · 3 off (with --if-enabled) · 4 not found or ambiguous\n" +
     "           --source [N] appends the target's own lines (default 80, cap 200), charged to the same budget\n" +
+    "           --callers-source appends 6 lines around each CONFIDENT call site (≤ 5, never the target's own\n" +
+    "           file), charged to the same budget after everything else; symbol cards only\n" +
     "           --for-slice prints only the OUTSIDE view of each declared file — no symbol table\n" +
     "  impact   exit 0 found · 1 no graph · 3 off (with --if-enabled) · 4 none of the files is in the graph\n" +
+    "           --complexity [--risk=<class>[@<file:line>],…] adds the ONE line that says whether this change\n" +
+    "           fits one executor, with the numbers behind it — impact and co-change in ONE call\n" +
     "  path     exit 0 found · 1 no graph · 3 off (with --if-enabled) · 4 no confident path, or an unknown end\n" +
     "  map      exit 0 always when a graph exists · 1 no graph · 3 off (with --if-enabled)   the files by RANK, most\n" +
     "           connected first, each with its top symbols; --focus re-ranks the repository around those files or names\n" +
@@ -8852,6 +8937,16 @@ function graphCmd() {
   const root = repoRootOf(claudeDir);
   const sub = positionals()[1];
   const asJson = wantsJson();
+  // B1: a BARE switch, read from `args`. `flag()` reads the next word as a
+  // value, so `--brief` there would swallow the first operand.
+  let briefOn = args.includes("--brief");
+  // Every flag this release adds that carries a VALUE is written
+  // `--name=value`, for the same reason: one word, so a CLI that does not
+  // know the flag skips it whole instead of losing an operand behind it.
+  const eqFlag = (name) => {
+    const hit = args.find((a) => a.startsWith(name + "="));
+    return hit === undefined ? undefined : hit.slice(name.length + 1);
+  };
   const ovr = readOverride(claudeDir).map;
   const cfg = (k) => (Object.prototype.hasOwnProperty.call(ovr, k) ? ovr[k] : metaFor(k).def);
   const enabled = String(cfg("code_graph")) === "on";
@@ -8930,7 +9025,12 @@ function graphCmd() {
       return null;
     }
   };
-  const finish = (r, line, trace, jsonLine = true) => {
+  // B3 (v1.9.1): the ledger append moved INSIDE `finish`, because the one
+  // number the meter called EXACT — the card — was 4 to 8 times too small. The
+  // ENVELOPE is everything the answer carries beyond its card, and it can only
+  // be counted once the text that will be written exists. The append is still
+  // fail-quiet and still happens after the answer is built, never before it.
+  const finish = (r, line, trace, jsonLine = true, gainRow = null) => {
     const { exit, ...obj } = r;
     if (obj.generation === undefined) {
       const m = metaNow();
@@ -8939,7 +9039,19 @@ function graphCmd() {
         obj.gen_id = m.gen_id || null;
       }
     }
-    if (asJson) emitJson({ ...obj, ...(line && jsonLine ? { line } : {}), ...(trace ? { trace } : {}) }, exit);
+    const full = { ...obj, ...(line && jsonLine ? { line } : {}), ...(trace ? { trace } : {}) };
+    const payload = asJson && briefOn ? briefOf(sub, full) : full;
+    if (gainRow) {
+      try {
+        const K = require("./graph-gain.js");
+        const text = asJson ? (briefOn ? JSON.stringify(payload) : JSON.stringify(payload, null, 2)) : String(line || "");
+        if (gainRow.paid) gainRow.paid.envelope = Math.max(0, K.tok(text) - K.tok(obj.card || line || ""));
+        graphGainAppend(claudeDir, gainRow);
+      } catch (_) {
+        // K6: the meter is never allowed to fail the read it is measuring.
+      }
+    }
+    if (asJson) emitJson(payload, exit, briefOn);
     if (line) console.log(line);
     process.exit(exit);
   };
@@ -8962,6 +9074,32 @@ function graphCmd() {
     r.auto_update = autoUpdate;
     r.notes = String(cfg("code_graph_notes"));
     if (healed) r.healed = healed;
+    // A1 (v1.9.1): the density, and the BACKFILL for a store built before
+    // this release. A FRESH store never updates, so waiting for the next real
+    // update would leave a long-lived graph without the line forever. It runs
+    // under `--heal` only, once, and it is bounded by the same cap every heal
+    // obeys — the index did not change, so `generation` and `gen_id` do not.
+    const SIGD = require("./graph-signals.js");
+    let meta = metaNow();
+    if (flag("--heal") === true && enabled && meta && !meta.density && r.exists) {
+      const capMs = Number(cfg("code_graph_heal_ms")) || 0;
+      if (!capMs || !meta.update_ms || meta.update_ms <= capMs) {
+        try {
+          const p = G.graphPaths(claudeDir);
+          const idx = JSON.parse(fs.readFileSync(p.index, "utf8"));
+          const fl = JSON.parse(fs.readFileSync(p.files, "utf8"));
+          meta.density = G.densityOf(idx, fl);
+          G.atomicWrite(p.meta, JSON.stringify(meta, null, 2) + "\n");
+          r.density_backfilled = true;
+        } catch (_) {
+          meta = metaNow();
+        }
+      }
+    }
+    if (meta && meta.density) {
+      r.density = meta.density;
+      r.thin = SIGD.isThin(meta.density, r.files);
+    }
     const b = r.behind || {};
     const lines = {
       off: "graph: off",
@@ -8975,6 +9113,12 @@ function graphCmd() {
     };
     let line = lines[r.state];
     let consult = r.state;
+    // The density rides on the line a lane already prints, never on a line of
+    // its own: a second line is a second thing to skip.
+    const densityText = r.density
+      ? ` · ${r.density.symbols_per_file} symbols/file` +
+        (r.thin ? ` · THIN (${Math.round(r.density.zero_share * 100)} % of files have no symbol) — run: orc graph audit` : "")
+      : "";
     if (healed && healed.parsed !== undefined) {
       const moved = healed.added + healed.changed + healed.deleted;
       const size = `${plural(r.files, "file")} · ${plural(r.symbols, "symbol")}`;
@@ -8986,7 +9130,15 @@ function graphCmd() {
             ? `graph: index upgraded to the new engine → updated (${healed.ms} ms) — ${size}`
             : `graph: ${plural(moved, "file")} changed outside ORC → updated (${healed.ms} ms) — ${size}`;
     } else if (healed) line += ` · could not heal: ${healed.reason}`;
-    return finish(r, line, consult === "off" ? "GRAPH-CONSULT off" : `GRAPH-CONSULT ${consult} :: files=${r.files} symbols=${r.symbols} gen=${r.generation}`);
+    if (densityText && ["fresh", "drifted", "built", "updated"].includes(consult)) line += densityText;
+    return finish(
+      r,
+      line,
+      consult === "off"
+        ? "GRAPH-CONSULT off"
+        : `GRAPH-CONSULT ${consult} :: files=${r.files} symbols=${r.symbols} gen=${r.generation}` +
+          (r.density ? ` density=${r.density.symbols_per_file}${r.thin ? " thin=1" : ""}` : "")
+    );
   }
 
   if (sub === "update") {
@@ -9150,8 +9302,11 @@ function graphCmd() {
     const SIG = require("./graph-signals.js");
     if (sub === "changes") {
       const base = typeof flag("--base") === "string" ? flag("--base") : null;
+      // V1: the lane hands the files it just wrote, and the rows for every
+      // other file never leave this process.
+      const onlyFiles = String(eqFlag("--files") || "").split(",").map((x) => x.trim()).filter(Boolean);
       const healed = healOnRead(SIG.changedPaths(root, base));
-      const r = SIG.graphChanges(claudeDir, root, { base });
+      const r = SIG.graphChanges(claudeDir, root, { base, files: onlyFiles });
       if (healed) r.healed = healed;
       if (r.exit !== 0) return finish(r, r.reason === "no-index" ? "graph: none — no index yet (run: orc graph update)" : `graph: unavailable — ${r.reason}`);
       const c = r.counts;
@@ -9163,6 +9318,7 @@ function graphCmd() {
         : `graph changes vs ${r.base} — no indexed symbol was touched${r.not_in_graph.length ? ` (changed, but not in the graph: ${r.not_in_graph.join(", ")})` : ""}`;
       // K1/K2: `changes` avoids one Grep per touched symbol. The diff itself
       // is NOT counted — the reviewer reads it either way.
+      let gainRow = null;
       if (r.symbols.length) {
         try {
           const K = require("./graph-gain.js");
@@ -9171,11 +9327,11 @@ function graphCmd() {
           if (m) {
             const hits = r.symbols.reduce((a, x) => a + Q.nameHits(m, x.qname), 0);
             const callerFiles = r.symbols.flatMap((x) => (x.callers || []).map((cc) => cc.file || cc));
-            graphGainAppend(claudeDir, { cmd: "changes", targets: [r.base], gen: r.generation, ms: r.ms || 0, paid: { card: K.tok(line), source: 0, hints: 0 }, ...K.changesCost(m, r.symbols.length, hits, callerFiles) });
+            gainRow = { cmd: "changes", targets: [r.base], gen: r.generation, ms: r.ms || 0, paid: { card: K.tok(line), source: 0, hints: 0 }, ...K.changesCost(m, r.symbols.length, hits, callerFiles) };
           }
         } catch (_) {}
       }
-      return finish(r, line, `GRAPH-CHANGES ${r.symbols.length ? "found" : "none"} :: symbols=${r.symbols.length} high=${c.high} medium=${c.medium} low=${c.low} gen=${r.generation}`);
+      return finish(r, line, `GRAPH-CHANGES ${r.symbols.length ? "found" : "none"} :: symbols=${r.symbols.length} high=${c.high} medium=${c.medium} low=${c.low} gen=${r.generation}`, true, gainRow);
     }
     const file = plain[2];
     if (!file) return finish({ ok: false, reason: "missing-operand", usage, exit: 1 }, usage);
@@ -9188,6 +9344,18 @@ function graphCmd() {
         "\n  history, not structure — it says what people changed together, never what depends on what"
       : `graph cochange ${r.file} — nothing changed with it at least ${r.min} times since ${r.since} (it changes alone)`;
     return finish(r, line, `GRAPH-COCHANGE ${r.rows.length ? "found" : "none"} :: rows=${r.rows.length} commits=${r.commits}`);
+  }
+
+  // A2 (v1.9.1) — `orc graph audit`. A THIN line says the map is thin; this
+  // says WHY, and it is a USER command: no lane runs it (`LANE_CALLS` pins
+  // `lanes: []`). It reads the index, the file table and the first lines of
+  // each empty file. It never parses, never writes, and costs no model tokens.
+  if (sub === "audit") {
+    if (!enabled && flag("--if-enabled") === true) return finish({ ok: true, enabled: false, state: "off", exit: 3 }, "graph: off");
+    const A = require("./graph-audit.js");
+    const r = A.audit(claudeDir, root, { top: eqFlag("--top") });
+    if (r.exit === 1) return finish(r, "graph: none — no index yet (run: orc graph update)");
+    return finish(r, r.line, r.trace, false);
   }
 
   if (sub === "gc") {
@@ -9289,16 +9457,21 @@ function graphCmd() {
     if (flag("--history") !== undefined) {
       const r = K.history(claudeDir, { limit: flag("--limit") });
       if (!r.ok) return finish(r, "graph gain: no calls recorded yet");
+      // `--history` IS its rows. Dropping them would leave an answer with
+      // nothing in it, so the switch is refused here — out loud.
+      const briefAsked = briefOn;
+      briefOn = false;
       const line =
         `graph gain — last ${r.rows.length} of ${r.total} call(s), newest first\n` +
         r.rows
           .map(
             (x) =>
               `  ${x.at}  ${String(x.cmd).padEnd(10)} ${String((x.targets || []).join(",")).slice(0, 40).padEnd(40)}` +
-              ` paid ${String(x.paid.card + x.paid.source + x.paid.hints).padStart(6)}  avoided ~${rng(x.avoided.low, x.avoided.high)}`
+              ` paid ${String(x.paid.card + x.paid.source + x.paid.hints + (x.paid.envelope || 0)).padStart(6)}  avoided ~${rng(x.avoided.low, x.avoided.high)}`
           )
           .join("\n") +
-        "\n  `avoided` is an ESTIMATE of retrieval the ladder would have paid for — never a bill";
+        "\n  `avoided` is an ESTIMATE of retrieval the ladder would have paid for — never a bill" +
+        (briefAsked ? " (--brief ignored on --history)" : "");
       return finish(r, line);
     }
 
@@ -9318,11 +9491,21 @@ function graphCmd() {
     const scope = r.run ? `run ${r.run}` : r.since ? `last ${r.since}` : "this project";
     const line =
       U.header(`graph gain — ${scope} · ${plural(r.calls_recorded, "call")} · ${plural(r.runs, "run")}${g ? ` · gen ${g[0]}${g[1] !== g[0] ? `–${g[1]}` : ""}` : ""}`) +
-      `\n  paid       ${kTok(r.paid.total).padStart(10)} tokens   (cards ${kTok(r.paid.card)} · source ${kTok(r.paid.source)} · hints ${kTok(r.paid.hints)})` +
+      `\n  paid       ${kTok(r.paid.total).padStart(10)} tokens   (cards ${kTok(r.paid.card)} · source ${kTok(r.paid.source)} · hints ${kTok(r.paid.hints)} · envelope ${kTok(r.paid.envelope)})` +
       `\n  avoided    ~${rng(r.avoided.low, r.avoided.high)} tokens   (estimate — the read ladder done well … done badly)` +
       `\n  net        ~${rng(r.net.low, r.net.high)} tokens · ~${r.calls.low} – ${r.calls.high} tool calls` +
       (byCmd ? `\n  by command ${byCmd}` : "") +
       `\n  hints      ${r.hints.injected} injected · ${r.hints.read_notes} read notes · ${r.hints.updates} hook updates` +
+      // R2 (v1.9.1): the reads the `on,read` hint would have named ranges for.
+      // A COUNT, printed only when there is one — it is the data DE-8 waits
+      // for, and nothing changes a setting because of it.
+      (r.hints.wide_unhinted
+        ? `\n  wide reads   ${r.hints.wide_unhinted} whole-file reads of files with ${require("./graph-resolve.js").WIDE_MIN}+ symbols were not hinted — \`code_graph_hooks: on,read\` names their ranges`
+        : "") +
+      // M2: a read nobody made is a fact about this project, printed with no
+      // advice after it. The graph is not wrong for holding an answer nobody
+      // asked for, and the meter does not tell anyone to start asking.
+      (r.never_called && r.never_called.length ? `\n  never called  ${r.never_called.join(" · ")}` : "") +
       (r.unsized ? `
   ${plural(r.unsized, "row")} answered from SHARDS, where the size of the search replaced cannot be known — their estimate leaves it out` : "") +
       "\n  an estimate of avoided RETRIEVAL, never a bill — searches are a fraction of a percent of a session" +
@@ -9365,8 +9548,8 @@ function graphCmd() {
     // gets it too. Appending it here would have shown it only to a human.
     const line = r.card;
     const trace = `GRAPH-MAP ${focus.length ? "focused" : "repo"} :: files=${r.shown}/${r.total_files}${focus.length ? ` focus=${r.focus.join(",")}` : ""} gen=${r.generation}`;
-    if (r.exit === 0) graphGainAppend(claudeDir, gainRowFor("map", Q, model, focus, r, Date.now() - t0, false));
-    return finish(r, line, trace, false);
+    const gainRow = r.exit === 0 ? gainRowFor("map", Q, model, focus, r, Date.now() - t0, false) : null;
+    return finish(r, line, trace, false, gainRow);
   }
 
   if (sub === "ctx" || sub === "impact" || sub === "path") {
@@ -9391,6 +9574,8 @@ function graphCmd() {
     // D2 is a SWITCH, so it is read from `args` — `flag()` would read the first
     // declared file as its value.
     const forSlice = args.includes("--for-slice");
+    // R1 (v1.9.1): a SWITCH too — six lines around each confident call site.
+    const callersSource = args.includes("--callers-source");
     // `path` names two symbols, not files, so it has nothing cheap to check —
     // it reads whatever generation is on disk, like every other command did
     // before EW3.
@@ -9411,7 +9596,7 @@ function graphCmd() {
     let fast = null;
     if (sub === "ctx" && !forSlice && operands.length === 1) {
       try {
-        fast = require("./graph-shard.js").fastModel(claudeDir, root, operands[0]);
+        fast = require("./graph-shard.js").fastModel(claudeDir, root, operands[0], { callersSource });
       } catch (_) {
         fast = null;
       }
@@ -9439,6 +9624,7 @@ function graphCmd() {
       format: String(flag("--format") || "prose") === "tree" ? "tree" : "prose",
       offset: flag("--offset"),
       source: sourceLines,
+      callersSource,
       wikiDocsFor,
     };
     let r;
@@ -9498,11 +9684,22 @@ function graphCmd() {
     } else if (sub === "impact") {
       if (!operands.length) return finish({ ok: false, reason: "missing-operand", usage, exit: 1 }, usage);
       r = Q.impact(model, operands, opts);
+      // V2/V3 (v1.9.1): the complexity read, and the `graph_facts` the
+      // planner pastes — computed here, in ONE process, from the model this
+      // call already loaded. Mini used to run `impact` plus one `cochange`
+      // per declared file and count the rows in its own context.
+      if (args.includes("--complexity") && r.exit === 0) {
+        const SIG = require("./graph-signals.js");
+        const cx = SIG.complexityOf(claudeDir, root, model, r.files, { risk: eqFlag("--risk"), tests: r.tests });
+        r.complexity = { verdict: cx.verdict, why: cx.why, numbers: cx.numbers, line: cx.line, thresholds: cx.thresholds };
+        r.facts = cx.facts;
+      }
     } else {
       if (operands.length < 2) return finish({ ok: false, reason: "missing-operand", usage, exit: 1 }, usage);
       r = Q.pathBetween(model, operands[0], operands[1]);
     }
     let line = r.card;
+    if (line && r.complexity) line = `${line}\n  ${r.complexity.line}`;
     if (!line && r.state === "not-found") {
       const near = (r.nearest || []).map((s) => `${s.qname} (${s.file}:${s.lines[0]})`);
       line = r.missing
@@ -9526,21 +9723,26 @@ ${line || ""}`;
 ` +
         (line || "");
     }
+    const cx = r.complexity || null;
     const trace =
-      sub === "ctx" && r.exit === 0
+      cx
+        ? `GRAPH-COMPLEXITY ${cx.verdict} :: files=${cx.numbers.files} callers=${cx.numbers.callers_outside} caller_files=${cx.numbers.caller_files_outside}` +
+          ` maybe=${cx.numbers.maybe} tests=${cx.numbers.tests_reaching} risk=${cx.numbers.risk.length} cochange=${cx.numbers.cochange_missing.length} gen=${r.generation || (r.facts && r.facts.generation) || 0}`
+        : sub === "ctx" && r.exit === 0
         ? `GRAPH-CONSULT ${r.view === "for-slice" ? "slice" : "card"} :: targets=${(r.view === "for-slice" ? r.files : r.cards ? r.cards.filter((c) => c.state === "found").map((c) => c.query) : [operands[0]]).join(",")}` +
           (healed && healed.state && healed.state !== "skipped" ? ` healed=${healed.trigger}` : "")
         : null;
+    let gainRow = null;
     if (r.exit === 0) {
       try {
-        graphGainAppend(claudeDir, gainRowFor(sub, Q, model, operands, r, Date.now() - t0, forSlice));
+        gainRow = gainRowFor(sub, Q, model, operands, r, Date.now() - t0, forSlice);
       } catch (_) {
         // K6: the meter is never allowed to fail the read it is measuring. The
         // append was already fail-quiet; the PRICING was not, because it was an
         // argument to it.
       }
     }
-    return finish(r, line, trace, !r.card);
+    return finish(r, line, trace, !r.card, gainRow);
   }
 
   if (asJson) emitJson({ ok: false, reason: "unknown-subcommand", usage }, 1);

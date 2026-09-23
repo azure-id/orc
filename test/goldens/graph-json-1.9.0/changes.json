@@ -1,0 +1,59 @@
+{
+  "args": [
+    "changes",
+    "--json"
+  ],
+  "status": 0,
+  "json": {
+    "ok": true,
+    "state": "found",
+    "base": "HEAD",
+    "files": [
+      "src/stores/orderStore.js"
+    ],
+    "not_in_graph": [],
+    "symbols": [
+      {
+        "id": "src/stores/orderStore.js#searchByItemPrefix",
+        "qname": "searchByItemPrefix",
+        "kind": "function",
+        "file": "src/stores/orderStore.js",
+        "lines": [
+          26,
+          29
+        ],
+        "exported": true,
+        "fan_in": 2,
+        "maybe_callers": 0,
+        "caller_files": [
+          "src/reports.js",
+          "src/routes/orders.js"
+        ],
+        "tests": [],
+        "risk": "medium",
+        "why": [
+          "exported",
+          "fan-in 2",
+          "no test reaches it"
+        ]
+      }
+    ],
+    "counts": {
+      "high": 0,
+      "medium": 1,
+      "low": 0
+    },
+    "generation": 2,
+    "healed": {
+      "state": "updated",
+      "trigger": "target",
+      "added": 0,
+      "changed": 1,
+      "deleted": 0,
+      "generation": 2,
+      "ms": "<ms>"
+    },
+    "line": "graph changes vs HEAD — 1 symbol in 1 file · 0 high · 1 medium · 0 low\n  medium searchByItemPrefix  src/stores/orderStore.js:26-29  (exported · fan-in 2 · no test reaches it)\n  risk is a HINT with its reason attached — an empty impact is never proof nothing depends on the change",
+    "trace": "GRAPH-CHANGES found :: symbols=1 high=0 medium=1 low=0 gen=2"
+  }
+}

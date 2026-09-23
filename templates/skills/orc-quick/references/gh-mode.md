@@ -70,7 +70,7 @@ It does not tell you what sits there or what depends on it.
 For each thread the user takes, run one call:
 
 ```bash
-orc graph ctx <the anchor file:line> --if-enabled --json
+orc graph ctx <the anchor file:line> --if-enabled --json --brief
 ```
 
 It names the symbol the comment sits in, its callers, and the tests that reach
