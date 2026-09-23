@@ -128,7 +128,9 @@ test("statusline: the rendered bytes are frozen, state by state", () => {
   );
   assert.strictEqual(
     got,
-    fs.readFileSync(GOLDEN, "utf8"),
+    // A Windows checkout (core.autocrlf=true) writes the golden with CRLF; the
+    // renderer writes LF. Line endings are not the bytes this test freezes.
+    fs.readFileSync(GOLDEN, "utf8").replace(/\r\n/g, "\n"),
     "the status line's bytes moved. Accept it by regenerating the golden in the " +
       "SAME commit as the behaviour change, or revert."
   );

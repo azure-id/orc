@@ -1,0 +1,42 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Skill",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"C:/dev/orc/.claude/hooks/orc-effort-guard.js\""
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"C:/dev/orc/.claude/hooks/orc-trace.js\""
+          }
+        ],
+        "matcher": "Task|Agent"
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"C:/dev/orc/.claude/hooks/orc-trace.js\""
+          }
+        ]
+      }
+    ]
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "node \"C:/dev/orc/.claude/hooks/orc-statusline.js\""
+  },
+  "subagentStatusLine": {
+    "type": "command",
+    "command": "node \"C:/dev/orc/.claude/hooks/orc-subagent-line.js\""
+  }
+}

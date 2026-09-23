@@ -1,0 +1,917 @@
+{
+  "fixtures": [
+    {
+      "fixture": "express",
+      "engine": "gen 1",
+      "files": 12,
+      "symbols": 19,
+      "rows": [
+        {
+          "target": "src/stores/orderStore.js#searchByItemPrefix",
+          "ok": true,
+          "missing": [],
+          "wrong": [],
+          "extra": [],
+          "got": [
+            {
+              "file": "src/reports.js",
+              "line": 5,
+              "state": "UNIQUE"
+            },
+            {
+              "file": "src/routes/orders.js",
+              "line": 13,
+              "state": "IMPORT"
+            }
+          ]
+        },
+        {
+          "target": "src/routes/orders.js#GET /search",
+          "ok": false,
+          "missing": [
+            {
+              "file": "tests/orders.test.js",
+              "line": 27,
+              "class": "route"
+            },
+            {
+              "file": "tests/orders.test.js",
+              "line": 33,
+              "class": "route"
+            },
+            {
+              "file": "tests/orders.test.js",
+              "line": 38,
+              "class": "route"
+            }
+          ],
+          "wrong": [],
+          "extra": [],
+          "got": []
+        },
+        {
+          "target": "src/routes/orders.js#GET /:id",
+          "ok": false,
+          "missing": [
+            {
+              "file": "tests/orders.test.js",
+              "line": 43,
+              "class": "route"
+            }
+          ],
+          "wrong": [],
+          "extra": [],
+          "got": []
+        },
+        {
+          "target": "src/routes/orders.js#POST /",
+          "ok": false,
+          "missing": [
+            {
+              "file": "tests/orders.test.js",
+              "line": 12,
+              "class": "route"
+            },
+            {
+              "file": "tests/orders.test.js",
+              "line": 18,
+              "class": "route"
+            },
+            {
+              "file": "tests/orders.test.js",
+              "line": 26,
+              "class": "route"
+            }
+          ],
+          "wrong": [],
+          "extra": [],
+          "got": []
+        },
+        {
+          "target": "src/routes/orders.js#GET /",
+          "ok": false,
+          "missing": [
+            {
+              "file": "tests/orders.test.js",
+              "line": 6,
+              "class": "route"
+            }
+          ],
+          "wrong": [],
+          "extra": [],
+          "got": []
+        },
+        {
+          "target": "src/routes/users.js#GET /:id",
+          "ok": false,
+          "missing": [
+            {
+              "file": "tests/users.test.js",
+              "line": 11,
+              "class": "route"
+            }
+          ],
+          "wrong": [],
+          "extra": [],
+          "got": []
+        },
+        {
+          "target": "src/stores/orderStore.js#OrderStore.list",
+          "ok": false,
+          "reason": "target none",
+          "missing": [
+            {
+              "file": "src/routes/orders.js",
+              "line": 9,
+              "class": "alias"
+            },
+            {
+              "file": "src/routes/orders.js",
+              "line": 13,
+              "class": "alias"
+            },
+            {
+              "file": "src/handlers/orders.js",
+              "line": 11,
+              "class": "alias"
+            },
+            {
+              "file": "tests/store.test.js",
+              "line": 8,
+              "class": "alias"
+            },
+            {
+              "file": "tests/store.test.js",
+              "line": 9,
+              "class": "alias"
+            }
+          ],
+          "extra": [],
+          "wrong": []
+        },
+        {
+          "target": "src/stores/orderStore.js#OrderStore.insert",
+          "ok": false,
+          "missing": [
+            {
+              "file": "src/routes/orders.js",
+              "line": 27,
+              "class": "alias"
+            },
+            {
+              "file": "tests/store.test.js",
+              "line": 7,
+              "class": "alias"
+            }
+          ],
+          "wrong": [],
+          "extra": [],
+          "got": []
+        },
+        {
+          "target": "src/stores/orderStore.js#OrderStore.get",
+          "ok": false,
+          "missing": [
+            {
+              "file": "src/routes/orders.js",
+              "line": 17,
+              "class": "alias"
+            },
+            {
+              "file": "src/handlers/orders.js",
+              "line": 15,
+              "class": "alias"
+            }
+          ],
+          "wrong": [],
+          "extra": [
+            {
+              "file": "tests/orders.test.js",
+              "line": 6,
+              "state": "UNIQUE"
+            },
+            {
+              "file": "tests/orders.test.js",
+              "line": 27,
+              "state": "UNIQUE"
+            },
+            {
+              "file": "tests/orders.test.js",
+              "line": 33,
+              "state": "UNIQUE"
+            },
+            {
+              "file": "tests/orders.test.js",
+              "line": 38,
+              "state": "UNIQUE"
+            },
+            {
+              "file": "tests/orders.test.js",
+              "line": 43,
+              "state": "UNIQUE"
+            },
+            {
+              "file": "tests/users.test.js",
+              "line": 6,
+              "state": "UNIQUE"
+            },
+            {
+              "file": "tests/users.test.js",
+              "line": 11,
+              "state": "UNIQUE"
+            }
+          ],
+          "got": [
+            {
+              "file": "tests/orders.test.js",
+              "line": 6,
+              "state": "UNIQUE"
+            },
+            {
+              "file": "tests/orders.test.js",
+              "line": 27,
+              "state": "UNIQUE"
+            },
+            {
+              "file": "tests/orders.test.js",
+              "line": 33,
+              "state": "UNIQUE"
+            },
+            {
+              "file": "tests/orders.test.js",
+              "line": 38,
+              "state": "UNIQUE"
+            },
+            {
+              "file": "tests/orders.test.js",
+              "line": 43,
+              "state": "UNIQUE"
+            },
+            {
+              "file": "tests/users.test.js",
+              "line": 6,
+              "state": "UNIQUE"
+            },
+            {
+              "file": "tests/users.test.js",
+              "line": 11,
+              "state": "UNIQUE"
+            }
+          ]
+        },
+        {
+          "target": "src/handlers/base.js#BaseHandler.ok",
+          "ok": false,
+          "missing": [],
+          "wrong": [
+            {
+              "file": "src/handlers/orders.js",
+              "line": 11,
+              "class": "inherited",
+              "got": {
+                "file": "src/handlers/orders.js",
+                "line": 11,
+                "state": "UNIQUE"
+              }
+            },
+            {
+              "file": "src/handlers/orders.js",
+              "line": 17,
+              "class": "inherited",
+              "got": {
+                "file": "src/handlers/orders.js",
+                "line": 17,
+                "state": "UNIQUE"
+              }
+            }
+          ],
+          "extra": [],
+          "got": [
+            {
+              "file": "src/handlers/orders.js",
+              "line": 11,
+              "state": "UNIQUE"
+            },
+            {
+              "file": "src/handlers/orders.js",
+              "line": 17,
+              "state": "UNIQUE"
+            }
+          ]
+        },
+        {
+          "target": "src/handlers/base.js#BaseHandler.fail",
+          "ok": false,
+          "missing": [],
+          "wrong": [
+            {
+              "file": "src/handlers/orders.js",
+              "line": 16,
+              "class": "inherited",
+              "got": {
+                "file": "src/handlers/orders.js",
+                "line": 16,
+                "state": "UNIQUE"
+              }
+            }
+          ],
+          "extra": [],
+          "got": [
+            {
+              "file": "src/handlers/orders.js",
+              "line": 16,
+              "state": "UNIQUE"
+            }
+          ]
+        }
+      ],
+      "root": null
+    },
+    {
+      "fixture": "fastapi",
+      "engine": "gen 1",
+      "files": 10,
+      "symbols": 17,
+      "rows": [
+        {
+          "target": "app/routers/orders.py#GET /orders/",
+          "ok": false,
+          "reason": "target none",
+          "missing": [
+            {
+              "file": "tests/test_orders.py",
+              "line": 9,
+              "class": "route"
+            }
+          ],
+          "extra": [],
+          "wrong": []
+        },
+        {
+          "target": "app/routers/orders.py#GET /orders/{order_id}",
+          "ok": false,
+          "reason": "target none",
+          "missing": [
+            {
+              "file": "tests/test_orders.py",
+              "line": 14,
+              "class": "route"
+            },
+            {
+              "file": "tests/test_orders.py",
+              "line": 21,
+              "class": "route"
+            }
+          ],
+          "extra": [],
+          "wrong": []
+        },
+        {
+          "target": "app/routers/orders.py#POST /orders/",
+          "ok": false,
+          "reason": "target none",
+          "missing": [
+            {
+              "file": "tests/test_orders.py",
+              "line": 19,
+              "class": "route"
+            }
+          ],
+          "extra": [],
+          "wrong": []
+        },
+        {
+          "target": "app/main.py#GET /health",
+          "ok": false,
+          "reason": "target none",
+          "missing": [
+            {
+              "file": "tests/test_orders.py",
+              "line": 26,
+              "class": "route"
+            }
+          ],
+          "extra": [],
+          "wrong": []
+        },
+        {
+          "target": "app/services/orders.py#OrderService.list_all",
+          "ok": false,
+          "missing": [
+            {
+              "file": "app/routers/orders.py",
+              "line": 11,
+              "class": "alias"
+            },
+            {
+              "file": "tests/test_service.py",
+              "line": 8,
+              "class": "barrel"
+            }
+          ],
+          "wrong": [],
+          "extra": [],
+          "got": []
+        },
+        {
+          "target": "app/services/orders.py#OrderService.find",
+          "ok": false,
+          "missing": [
+            {
+              "file": "app/routers/orders.py",
+              "line": 16,
+              "class": "alias"
+            },
+            {
+              "file": "tests/test_service.py",
+              "line": 7,
+              "class": "barrel"
+            }
+          ],
+          "wrong": [],
+          "extra": [],
+          "got": []
+        },
+        {
+          "target": "app/services/orders.py#OrderService.create",
+          "ok": false,
+          "missing": [
+            {
+              "file": "app/routers/orders.py",
+              "line": 24,
+              "class": "alias"
+            },
+            {
+              "file": "tests/test_service.py",
+              "line": 6,
+              "class": "barrel"
+            }
+          ],
+          "wrong": [],
+          "extra": [],
+          "got": []
+        },
+        {
+          "target": "app/services/base.py#BaseService.log",
+          "ok": false,
+          "missing": [],
+          "wrong": [
+            {
+              "file": "app/services/orders.py",
+              "line": 12,
+              "class": "inherited",
+              "got": {
+                "file": "app/services/orders.py",
+                "line": 12,
+                "state": "UNIQUE"
+              }
+            },
+            {
+              "file": "app/services/orders.py",
+              "line": 25,
+              "class": "inherited",
+              "got": {
+                "file": "app/services/orders.py",
+                "line": 25,
+                "state": "UNIQUE"
+              }
+            }
+          ],
+          "extra": [],
+          "got": [
+            {
+              "file": "app/services/orders.py",
+              "line": 12,
+              "state": "UNIQUE"
+            },
+            {
+              "file": "app/services/orders.py",
+              "line": 25,
+              "state": "UNIQUE"
+            }
+          ]
+        },
+        {
+          "target": "app/services/base.py#BaseService.not_found",
+          "ok": false,
+          "missing": [],
+          "wrong": [
+            {
+              "file": "app/services/orders.py",
+              "line": 18,
+              "class": "inherited",
+              "got": {
+                "file": "app/services/orders.py",
+                "line": 18,
+                "state": "UNIQUE"
+              }
+            }
+          ],
+          "extra": [],
+          "got": [
+            {
+              "file": "app/services/orders.py",
+              "line": 18,
+              "state": "UNIQUE"
+            }
+          ]
+        }
+      ],
+      "root": null
+    },
+    {
+      "fixture": "go",
+      "engine": "gen 1",
+      "files": 5,
+      "symbols": 18,
+      "rows": [
+        {
+          "target": "routes.go#GET /orders",
+          "ok": false,
+          "reason": "target none",
+          "missing": [
+            {
+              "file": "handlers_test.go",
+              "line": 17,
+              "class": "route"
+            }
+          ],
+          "extra": [],
+          "wrong": []
+        },
+        {
+          "target": "routes.go#GET /orders/{id}",
+          "ok": false,
+          "reason": "target none",
+          "missing": [
+            {
+              "file": "handlers_test.go",
+              "line": 26,
+              "class": "route"
+            }
+          ],
+          "extra": [],
+          "wrong": []
+        },
+        {
+          "target": "routes.go#POST /orders",
+          "ok": false,
+          "reason": "target none",
+          "missing": [
+            {
+              "file": "handlers_test.go",
+              "line": 35,
+              "class": "route"
+            }
+          ],
+          "extra": [],
+          "wrong": []
+        },
+        {
+          "target": "routes.go#ANY /health",
+          "ok": false,
+          "reason": "target none",
+          "missing": [
+            {
+              "file": "handlers_test.go",
+              "line": 45,
+              "class": "route"
+            }
+          ],
+          "extra": [],
+          "wrong": []
+        },
+        {
+          "target": "handlers.go#health",
+          "ok": false,
+          "missing": [
+            {
+              "file": "routes.go",
+              "line": 11,
+              "class": "direct"
+            }
+          ],
+          "wrong": [],
+          "extra": [],
+          "got": [
+            {
+              "file": "handlers_test.go",
+              "line": 45,
+              "state": "UNIQUE"
+            }
+          ]
+        },
+        {
+          "target": "store.go#Store.List",
+          "ok": false,
+          "missing": [
+            {
+              "file": "handlers.go",
+              "line": 32,
+              "class": "alias"
+            },
+            {
+              "file": "handlers_test.go",
+              "line": 54,
+              "class": "alias"
+            }
+          ],
+          "wrong": [
+            {
+              "file": "handlers.go",
+              "line": 12,
+              "class": "alias",
+              "got": {
+                "file": "handlers.go",
+                "line": 12,
+                "state": "UNIQUE"
+              }
+            }
+          ],
+          "extra": [],
+          "got": [
+            {
+              "file": "handlers.go",
+              "line": 12,
+              "state": "UNIQUE"
+            }
+          ]
+        },
+        {
+          "target": "store.go#Store.Insert",
+          "ok": false,
+          "missing": [
+            {
+              "file": "handlers_test.go",
+              "line": 53,
+              "class": "alias"
+            }
+          ],
+          "wrong": [
+            {
+              "file": "handlers.go",
+              "line": 34,
+              "class": "alias",
+              "got": {
+                "file": "handlers.go",
+                "line": 34,
+                "state": "UNIQUE"
+              }
+            }
+          ],
+          "extra": [],
+          "got": [
+            {
+              "file": "handlers.go",
+              "line": 34,
+              "state": "UNIQUE"
+            }
+          ]
+        },
+        {
+          "target": "store.go#Store.Get",
+          "ok": false,
+          "missing": [],
+          "wrong": [
+            {
+              "file": "handlers.go",
+              "line": 17,
+              "class": "alias",
+              "got": {
+                "file": "handlers.go",
+                "line": 17,
+                "state": "UNIQUE"
+              }
+            }
+          ],
+          "extra": [],
+          "got": [
+            {
+              "file": "handlers.go",
+              "line": 17,
+              "state": "UNIQUE"
+            }
+          ]
+        }
+      ],
+      "root": null
+    },
+    {
+      "fixture": "nest",
+      "engine": "gen 1",
+      "files": 9,
+      "symbols": 16,
+      "rows": [
+        {
+          "target": "src/orders/orders.controller.ts#GET /orders/:id",
+          "ok": false,
+          "reason": "target none",
+          "missing": [
+            {
+              "file": "test/orders.e2e-spec.ts",
+              "line": 21,
+              "class": "route"
+            }
+          ],
+          "extra": [],
+          "wrong": []
+        },
+        {
+          "target": "src/orders/orders.controller.ts#GET /orders",
+          "ok": false,
+          "reason": "target none",
+          "missing": [
+            {
+              "file": "test/orders.e2e-spec.ts",
+              "line": 16,
+              "class": "route"
+            }
+          ],
+          "extra": [],
+          "wrong": []
+        },
+        {
+          "target": "src/orders/orders.controller.ts#POST /orders",
+          "ok": false,
+          "reason": "target none",
+          "missing": [
+            {
+              "file": "test/orders.e2e-spec.ts",
+              "line": 26,
+              "class": "route"
+            }
+          ],
+          "extra": [],
+          "wrong": []
+        },
+        {
+          "target": "src/common/base.controller.ts#BaseController.ok",
+          "ok": false,
+          "missing": [],
+          "wrong": [
+            {
+              "file": "src/orders/orders.controller.ts",
+              "line": 13,
+              "class": "inherited",
+              "got": {
+                "file": "src/orders/orders.controller.ts",
+                "line": 13,
+                "state": "UNIQUE"
+              }
+            },
+            {
+              "file": "src/orders/orders.controller.ts",
+              "line": 20,
+              "class": "inherited",
+              "got": {
+                "file": "src/orders/orders.controller.ts",
+                "line": 20,
+                "state": "UNIQUE"
+              }
+            },
+            {
+              "file": "src/orders/orders.controller.ts",
+              "line": 25,
+              "class": "inherited",
+              "got": {
+                "file": "src/orders/orders.controller.ts",
+                "line": 25,
+                "state": "UNIQUE"
+              }
+            }
+          ],
+          "extra": [],
+          "got": [
+            {
+              "file": "src/orders/orders.controller.ts",
+              "line": 13,
+              "state": "UNIQUE"
+            },
+            {
+              "file": "src/orders/orders.controller.ts",
+              "line": 20,
+              "state": "UNIQUE"
+            },
+            {
+              "file": "src/orders/orders.controller.ts",
+              "line": 25,
+              "state": "UNIQUE"
+            }
+          ]
+        },
+        {
+          "target": "src/common/base.controller.ts#BaseController.notFound",
+          "ok": false,
+          "missing": [],
+          "wrong": [
+            {
+              "file": "src/orders/orders.controller.ts",
+              "line": 19,
+              "class": "inherited",
+              "got": {
+                "file": "src/orders/orders.controller.ts",
+                "line": 19,
+                "state": "UNIQUE"
+              }
+            }
+          ],
+          "extra": [],
+          "got": [
+            {
+              "file": "src/orders/orders.controller.ts",
+              "line": 19,
+              "state": "UNIQUE"
+            }
+          ]
+        },
+        {
+          "target": "src/orders/orders.service.ts#OrdersService.findAll",
+          "ok": false,
+          "missing": [
+            {
+              "file": "src/orders/orders.controller.ts",
+              "line": 13,
+              "class": "alias"
+            },
+            {
+              "file": "test/orders.service.spec.ts",
+              "line": 8,
+              "class": "barrel"
+            }
+          ],
+          "wrong": [],
+          "extra": [],
+          "got": []
+        },
+        {
+          "target": "src/orders/orders.service.ts#OrdersService.findOne",
+          "ok": false,
+          "missing": [
+            {
+              "file": "src/orders/orders.controller.ts",
+              "line": 18,
+              "class": "alias"
+            },
+            {
+              "file": "test/orders.service.spec.ts",
+              "line": 7,
+              "class": "barrel"
+            }
+          ],
+          "wrong": [],
+          "extra": [],
+          "got": []
+        },
+        {
+          "target": "src/orders/orders.service.ts#OrdersService.create",
+          "ok": false,
+          "missing": [
+            {
+              "file": "src/orders/orders.controller.ts",
+              "line": 25,
+              "class": "alias"
+            },
+            {
+              "file": "test/orders.service.spec.ts",
+              "line": 6,
+              "class": "barrel"
+            }
+          ],
+          "wrong": [],
+          "extra": [],
+          "got": []
+        },
+        {
+          "target": "src/orders/orders.repository.ts#OrdersRepository.all",
+          "ok": false,
+          "missing": [
+            {
+              "file": "src/orders/orders.service.ts",
+              "line": 9,
+              "class": "alias"
+            }
+          ],
+          "wrong": [],
+          "extra": [],
+          "got": []
+        },
+        {
+          "target": "src/orders/orders.repository.ts#OrdersRepository.insert",
+          "ok": false,
+          "missing": [
+            {
+              "file": "src/orders/orders.service.ts",
+              "line": 20,
+              "class": "alias"
+            }
+          ],
+          "wrong": [],
+          "extra": [],
+          "got": []
+        }
+      ],
+      "root": null
+    }
+  ],
+  "fails": 37
+}
