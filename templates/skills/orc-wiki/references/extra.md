@@ -20,7 +20,7 @@ tier:
 | `wiki-scanner-light` | `orc-wiki-scanner-sonnet-5-high` |
 
 Both collapse onto `orc-wiki-scanner-opus-5-med` while `opus5_only` is on, which
-is why this adds **no agent and no pair**. Two slots and one Opus 5 agent is not
+is why this adds **no agent and no pair**. Two slots and one Opus 5.5 agent is not
 a contradiction: a slot names the POSITION, not the model.
 
 ```

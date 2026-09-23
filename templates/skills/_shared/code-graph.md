@@ -294,7 +294,7 @@ false.
    on every later turn (~100K tokens across a 6-task run).
 4. `code_graph_notes: wave` → once per wave. `end` → once, at the end of the
    run, for every path the run changed.
-5. Under `opus5_only` there is no Opus 5 noter. Print
+5. Under `opus5_only` there is no Opus 5.5 noter. Print
    `graph notes: skipped (opus5_only)` once and dispatch nothing.
 
 ## 7. Slice injection — and when NOT to inject

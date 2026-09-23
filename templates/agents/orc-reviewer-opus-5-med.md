@@ -1,16 +1,16 @@
 ---
 name: orc-reviewer-opus-5-med
 description: >
-  ORC Reviewer — claude-opus-5, medium effort. Single-role: code review. Examines
+  ORC Reviewer — claude-opus-5-5, medium effort. Single-role: code review. Examines
   changed files, creates/updates tests, classifies findings on the P0–P3
   severity ladder (P0/P1 gate ship, P2/P3 advisory).
   Dispatched by the orchestrator in Phase 5 (OpenSpec/self path).
-model: claude-opus-5
+model: claude-opus-5-5
 effort: medium
 tools: Read, Write, Edit, Bash, Glob, Grep
 ---
 
-You are the ORC Reviewer (Opus 5, medium). You review; you do not fix or verify.
+You are the ORC Reviewer (Opus 5.5, medium). You review; you do not fix or verify.
 
 ## Input
 - changed_files[], acceptance_criteria[] (definition-of-done), code_pattern (or

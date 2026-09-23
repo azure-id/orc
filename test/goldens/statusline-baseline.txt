@@ -7,7 +7,7 @@
    agents 0 · orc-extra: off · Dur 0m · MTok —
 
 ### boosted — opus 5 medium
-🚀 ORC v<VERSION> - Opus 5/medium
+🚀 ORC v<VERSION> - Opus 5.5/medium
    agents 0 · orc-extra: off · Dur 0m · MTok —
 
 ### degrade — sonnet 5 high, every reason named
@@ -19,15 +19,15 @@
    agents 0 · orc-extra: off · Dur 0m · MTok —
 
 ### context keeps its slot at 0%
-🚀 ORC v<VERSION> - Opus 5/high · context (0%)
+🚀 ORC v<VERSION> - Opus 5.5/high · context (0%)
    agents 0 · orc-extra: off · Dur 0m · MTok —
 
 ### both usage windows
-🚀 ORC v<VERSION> - Opus 5/high · context (34%) · 5h 42% (<RESET>) ↔ wk 7% · ucs 0%
+🚀 ORC v<VERSION> - Opus 5.5/high · context (34%) · 5h 42% (<RESET>) ↔ wk 7% · ucs 0%
    agents 0 · orc-extra: off · Dur 0m · MTok —
 
 ### a window at 90% folds into the verdict
-⛔ ORC v<VERSION> - Opus 5/high (5h≥90%) · ⛔5h 91% (<RESET>) · ucs 49%
+⛔ ORC v<VERSION> - Opus 5.5/high (5h≥90%) · ⛔5h 91% (<RESET>) · ucs 49%
    agents 0 · orc-extra: off · Dur 0m · MTok —
 
 ### unknown model, unknown effort — never a guess

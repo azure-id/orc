@@ -31,7 +31,7 @@ it were a single analysis — with PROOF that no source requirement was lost.
 ## Hard rules
 
 1. **Dispatched, not self-run.** The orchestrator coordinates; the Combiner
-   subagent (Opus 5 high) reads the specs and reconciles them against each
+   subagent (Opus 5.5 high) reads the specs and reconciles them against each
    other. The combiner NEVER builds and NEVER spawns subagents.
 2. **Related only — verify + challenge.** The user asserted relatedness at the
    Phase F gate, but the combiner MUST verify real overlap (shared files,

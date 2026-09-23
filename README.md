@@ -7,14 +7,14 @@
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
 ![npm](https://img.shields.io/npm/v/%40azure-id%2Forc?style=for-the-badge&color=cb3837&logo=npm)
-![Version](https://img.shields.io/badge/version-1.9.1-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-1.9.2-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
 ![Dependencies](https://img.shields.io/badge/dependencies-zero-lightgrey.svg?style=for-the-badge)
 ![GitHub stars](https://img.shields.io/github/stars/azure-id/orc?style=for-the-badge&color=yellow)
 
-**Latest: v1.9.1** · updated 2026-09-23 · [full changelog](CHANGELOG.md)
+**Latest: v1.9.2** · updated 2026-09-23 · [full changelog](CHANGELOG.md)
 
 **On npm: [`@azure-id/orc`](https://www.npmjs.com/package/@azure-id/orc)** — `npm i -g @azure-id/orc`
 
@@ -250,7 +250,7 @@ ORC have terminal hook to see: Context Window %, 5 Hour usage %, Weekly usage % 
 | Command | What it does | Mocked run |
 |---|---|---|
 | **`/orc`** | The full pipeline: intake → plan → scored parallel waves → review → verify → ship. Checkpoints eagerly; resumes in a fresh session. | [see it](mock-run/orc.md) |
-| **`/orc-ultra`** | The same, plus an Opus 5 **xhigh** advisor and three judgment gates. Deep analysis, patterns, tests and security forced on. Costly by design. | [see it](mock-run/orc-ultra.md) |
+| **`/orc-ultra`** | The same, plus an Opus 5.5 **xhigh** advisor and three judgment gates. Deep analysis, patterns, tests and security forced on. Costly by design. | [see it](mock-run/orc-ultra.md) |
 | **`/orc-mini`** | One Sonnet 5 executor, a build + test smoke gate, ship. Skips full review and verify. A one-line **complexity read** with counts behind it offers the full lane when the change is wider than one area. Switches to the full flow mid-run on request. | [see it](templates/skills/orc-mini/examples/mini-run-mock.md) |
 | **`/orc-fast`** | The fastest lane. Needs a fresh wiki **and** a cached code pattern; then it skips the analyst and planner entirely. A missing prerequisite falls back to `/orc-mini` — the chat never stops. | [see it](mock-run/orc-fast.md) |
 | **`/orc-quick`** | Ask for anything: a fix, a question, a defect hunt, a dependency bump, PR comments. Look → ask once → do. **It always asks which agent to dispatch**, and no setting can change that. A defect is **reproduced red before it is fixed**. | [see it](mock-run/orc-quick.md) |
@@ -728,41 +728,42 @@ a current audit: [EVAL-REPORT.md](EVAL-REPORT.md).
 **Full history: [CHANGELOG.md](CHANGELOG.md)** — or `orc changelog`, which prints
 only what is newer than the version you have.
 
-### v1.9.1 — the graph that was paid for and never asked _(2026-09-23)_
+### v1.9.2 — the code graph gets its own tab, and Opus 5 becomes Opus 5.5 _(2026-09-23)_
 
-The code graph was maintained far more than it was consulted, and the part that
-was consulted cost more than the meter said. On one real Vue project, 416 of
-429 `.vue` files had no symbol, and the panel said `0 hook updates` after 35.
+**The code graph has its own tab.** `orc ui` ▸ Knowledge ▸ **Code graph**
+replaces the one card on the Wiki tab. The tab shows, in this order:
 
-**Answers are smaller.** `--brief` keeps the card, the line and every count and
-drops the rows a lane never prints: 74 % to 87 % smaller, and every lane call
-uses it. The CLI now computes `/orc-quick`'s blast-radius line and
-`/orc-mini`'s complexity line in one call, instead of the lane counting rows.
+- **Where your graph is now** — the four states (OFF · NONE · FRESH · DRIFTED)
+  as a ladder. The current state is lit, and the one action it needs is below.
+- **How the code graph works** — five animated steps, from your files to the
+  short card an agent reads. The first three are free.
+- **What a code graph looks like** — an example graph (not your code). Put the
+  pointer on a dot to see its callers and callees.
+- **Your graph, in numbers** — files, symbols, density per language, and what
+  changed since the last build.
+- **What the graph cost, and what it probably saved** — paid (exact) and
+  avoided (an estimate, drawn as a range) on one scale, and which reads lanes
+  asked.
+- **What each word means** — every term on the tab, in plain words.
 
-**The meter tells the truth.** Hook updates were always counted as 0, and
-`paid` counted the card while the lane received 4 to 8 times more. Both are
-fixed: a `hook-update` row, and `paid.envelope` beside the cards. The meter
-also lists the reads this project has never made.
+A DRIFTED finding on Overview now opens this tab. Reduced motion removes every
+animation.
 
-**The map says when it is thin, and why** — `THIN` on `orc graph status`, and
-a new `orc graph audit` that lists the empty files by language, longest first.
+**Every Opus 5 agent now runs Opus 5.5.** The model id is `claude-opus-5-5`
+(was `claude-opus-5`): executors, scouts, the analyst, the planner, the
+reviewer, the verifier, the judges and every other Opus agent. Opus 5.5 costs
+less: $4 input, $5 cache write, $0.20 cache read and $20 output per million
+tokens. `bin/pricing.json` has the new row, and `orc budget` uses it.
 
-**The parser reads the Vue Options API** (engine `graph@6`). A component, a
-mixin and a Vuex module are a class with methods; `mixins` are its bases;
-exported constants and `<script setup>` components are named. A 1.9.0 store
-upgrades itself once, at the next preflight. Nothing to do.
-
-**The paid reads carry what they were paid for:** `ctx --callers-source` (six
-lines around each confident call site), `lsp_at` for a language server when a
-card says `AMBIGUOUS`, and a count of the wide whole-file reads no hint named.
-
-**Not measured here:** the live-session evaluation did not run, and the Vue gate
-(under 20 % empty `.vue` files) is measured on your own project. The CHANGELOG
-names every limit.
+**What you have to do:** run `orc update` to install the new agent files. The
+agent NAMES did not change, so `rubric_bands_override`, `fixed_executor` and
+`opus5_only` keep working. A config that still names `claude-opus-5` is still
+valid.
 
 <details>
-<summary><strong>Earlier releases</strong> — 120 of them, titles only. Full text in <a href="CHANGELOG.md">CHANGELOG.md</a>.</summary>
+<summary><strong>Earlier releases</strong> — 121 of them, titles only. Full text in <a href="CHANGELOG.md">CHANGELOG.md</a>.</summary>
 
+- **v1.9.1** — the graph that was paid for and never asked · _2026-09-23_
 - **v1.9.0** — the lean lanes learn to look before they leap · _2026-09-21_
 - **v1.8.2** — the map that finds what a grep cannot · _2026-09-21_
 - **v1.8.1** — the guard that only failed on Windows · _2026-09-16_

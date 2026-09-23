@@ -23,7 +23,7 @@ it — the human-onboarding lane. It is NOT the wiki: the wiki grounds the
 
 **Dispatch, don't do.** Whatever model this chat runs on, the skill only picks
 the topic/mode and spawns `orc-learn-writer-opus-5-low` (the pinned
-engine) — the deepening scan + all writes run at Opus 5 low regardless of
+engine) — the deepening scan + all writes run at Opus 5.5 low regardless of
 the caller's tier. The skill's only self-writes are the behavior-trace
 markers around the spawn. Interactivity is DELIBERATELY minimal but non-zero
 (unlike orc-claude): exactly one question per mode — "which feature?" (INIT)

@@ -105,9 +105,9 @@ waves:     3 planned — will pause after wave 2 (batch_pause_every=2)
   table` · `Opus-5-only ladder (opus5_only)` · `custom
   (rubric_bands_override, <n> rows)`. An un-shown table is as unaccountable as
   an un-shown number, and the Opus-5-only ladder in particular means EVERY
-  dispatch needs an Opus 5 main session — the user should see that before the
+  dispatch needs an Opus 5.5 main session — the user should see that before the
   first dispatch, not in a trace full of downgrades. When `opus5_only` is on,
-  append ` · all fixed roles forced to Opus 5` and name any selector it
+  append ` · all fixed roles forced to Opus 5.5` and name any selector it
   shadowed (a `rubric_bands_override` present but INERT) — a setting
   the user tuned and the run then ignored has to be said out loud. With Extra in
   play the table is a COMPOSITE and reads as one (`6-band default table + extra

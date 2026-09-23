@@ -31,7 +31,7 @@ hand-lists the lenses**:
        [ ] executor        can this be started on Monday? where is the first step?
 
      Reply with the ones you want (or "all", or "none").
-     Each one is one extra read-only Opus 5 dispatch per iteration.
+     Each one is one extra read-only Opus 5.5 dispatch per iteration.
 ```
 
 The user replies: **`all`**.

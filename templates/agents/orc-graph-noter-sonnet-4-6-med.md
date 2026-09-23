@@ -9,7 +9,7 @@ description: >
   ONE line. A function whose author already documented it is never in the batch. Dispatched by code-changing lanes
   (orc, ultra, diy, mini, fast, quick) after a wave or a code-writing request,
   only when `code_graph_notes` is on and the batch reaches its minimum. Never
-  dispatched under `opus5_only` (there is no Opus 5 variant — the lane skips
+  dispatched under `opus5_only` (there is no Opus 5.5 variant — the lane skips
   notes and says so).
 model: claude-sonnet-4-6
 effort: medium

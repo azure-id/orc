@@ -24,8 +24,8 @@
  * ICON carries the verdict and the words carry the installed ORC version — but
  * the degrade branch still names every reason, because a warning with no reason
  * is an emoji:
- *   ✅ ORC v1.2.1 - Opus 5/high          Opus 4.8 high (the baseline)
- *   🚀 ORC v1.2.1 - Opus 5/high          Opus 4.8 xhigh/max, or Opus 5 / Fable 5 medium…max
+ *   ✅ ORC v1.2.1 - Opus 5.5/high          Opus 4.8 high (the baseline)
+ *   🚀 ORC v1.2.1 - Opus 5.5/high          Opus 4.8 xhigh/max, or Opus 5.5 / Fable 5 medium…max
  *   ⛔ ORC v1.2.1 - Sonnet 5/high (why)  everything below (wrong model, sub-baseline effort, quota)
  *
  * The two lines, in full (v1.2.1):
@@ -52,7 +52,7 @@
  * This is the ONLY place Claude Code exposes the live model id, so it also
  * writes a fail-silent session-model bridge (.claude/orc/session-model.json)
  * that the PreToolUse effort guard reads — the guard can't see the model id
- * on its own, so the bridge is how the Opus 5 / Fable 5 medium-effort allowance
+ * on its own, so the bridge is how the Opus 5.5 / Fable 5 medium-effort allowance
  * reaches it.
  *
  * Also appends a "newer orc version available" hint from the 24h update cache
@@ -66,7 +66,7 @@
  * over that budget — ORC_STATUSLINE_SCAN_MS — and nothing in ORC ever sets it.
  */
 
-// Opus 4.8 / Opus 5 / Fable 5 are matched by tolerant regexes below (accept
+// Opus 4.8 / Opus 5.5 / Fable 5 are matched by tolerant regexes below (accept
 // dated/suffixed ids and the display name), not strict strings. Effort ranks give
 // the acceptance-matrix tiers (0 = unknown, never treated as a positive downgrade).
 const EFFORT_RANK = { low: 1, medium: 2, high: 3, xhigh: 4, max: 5 };
@@ -526,7 +526,7 @@ process.stdin.on("end", () => {
   // ── Session-model bridge (fail-silent) ─────────────────────────────────────
   // The PreToolUse effort guard cannot see the model id; it can only read
   // effort. Persist {model_id, effort, written_at} here so the guard can grant
-  // the Opus 5 / Fable 5 medium-effort allowance. The statusline re-renders constantly
+  // the Opus 5.5 / Fable 5 medium-effort allowance. The statusline re-renders constantly
   // while a session is active, so written_at stays fresh; the guard treats a
   // stale file (older than its freshness window) as absent and never blocks on
   // it. Any error (no dir, read-only fs) is swallowed — this is a nicety, not a
@@ -674,7 +674,7 @@ process.stdin.on("end", () => {
   const hay = `${model} ${display}`.toLowerCase();
   const isOpus48 = /opus[\s._-]?4[\s._-]?8\b/.test(hay);
   const isFable5 = /fable[\s._-]?5\b/.test(hay);
-  // Opus 5 (v0.34.0) — strictly above the baseline, so it boosts from medium up,
+  // Opus 5.5 (v0.34.0) — strictly above the baseline, so it boosts from medium up,
   // exactly like Fable 5. The `\b` keeps opus 4.8 / 4.7 out of this branch.
   const isOpus5 = /opus[\s._-]?5\b/.test(hay);
   const modelKnown = model !== "" || (display !== "" && display !== "unknown");

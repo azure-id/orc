@@ -66,8 +66,9 @@ const FINDING_ROUTE = {
   "lane-keys-drifted": { panel: "maintenance", cta: "overview.item.laneKeysDrifted.cta" },
   // v1.8.0. A DRIFTED code graph is cleared by the free `orc graph update`, which
   // is a button on the Knowledge panel's code graph card — the panel that can
-  // CLEAR it, not the default.
-  "graph-drifted": { panel: "knowledge", cta: "overview.item.graphDrifted.cta" },
+  // CLEAR it, not the default. Since v1.9.2 it opens the Code graph TAB, where
+  // the state ladder carries that button.
+  "graph-drifted": { panel: "knowledge", tab: "graph", cta: "overview.item.graphDrifted.cta" },
   // v1.3.0. The rule again, and cleanly: every one of these is cleared on the
   // CLI Hook Interface panel — the board is where an orphaned component is
   // removed, the caution strip is where an invalid layout is named, and the
@@ -96,6 +97,13 @@ const FINDING_ROUTE = {
 };
 const DEFAULT_FINDING_ROUTE = { panel: "maintenance", cta: "overview.item.doctor.cta" };
 const findingRoute = (id) => FINDING_ROUTE[id] || DEFAULT_FINDING_ROUTE;
+
+// Go to a panel, and — when the route names one — to its tab. Only Knowledge
+// has a tab a finding can name (KN_TAB, which survives a re-render).
+function goRoute(panel, tab) {
+  if (panel === "knowledge" && tab && typeof KN_TAB !== "undefined") KN_TAB = tab;
+  location.hash = "#/" + panel;
+}
 
 PANELS.overview = function (host) {
   head(host, t("overview.title"), t("overview.sub"));
@@ -317,7 +325,7 @@ PANELS.overview = function (host) {
           if (r.panel) {
             const go = el("button", "btn btn-ghost btn-sm", t(r.cta));
             go.type = "button";
-            go.addEventListener("click", () => (location.hash = "#/" + r.panel));
+            go.addEventListener("click", () => goRoute(r.panel, r.tab));
             detail.append(go);
           } else {
             detail.append(el("div", "note", t("overview.attention.nothingToDo")));
@@ -387,6 +395,7 @@ function attentionCard(d, findings) {
         // as the title beats paraphrasing it into something less exact.
         title: f.message,
         panel: r.panel,
+        tab: r.tab,
         cta: t(r.cta),
       });
     }
@@ -458,7 +467,7 @@ function attentionCard(d, findings) {
     // The CLI's own words for WHY, kept verbatim under our explanation.
     if (it.evidence) mid.append(el("div", "todo-evidence", it.evidence));
     row.append(mid, el("span", "todo-cta", it.cta));
-    row.addEventListener("click", () => (location.hash = "#/" + it.panel));
+    row.addEventListener("click", () => goRoute(it.panel, it.tab));
     list.append(row);
   }
   if (items.length) c.append(list);

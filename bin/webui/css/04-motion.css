@@ -149,4 +149,14 @@ button.hk-pick-row:hover { transform: translateX(3px); }
      request that hung. The wire itself still turns green or red, so the RESULT
      of the test is never carried by motion alone. */
   .ex-wire-dot { display: none; }
+  /* The Knowledge ▸ Code graph tab (v1.9.2). Three INFINITE animations — the
+     state beacon, the pipeline dots and the call-edge pulses — are REMOVED, not
+     capped: a capped one stops half way along its path, which reads as a dot
+     that belongs there. Every finite one is removed too, so each bar is drawn
+     at its final width at once: a bar frozen part-way is a wrong number. The
+     tiles already skip their count-up here (cgStill() in the panel). */
+  .cg-beacon, .cg-link-dot, .cg-pulse { display: none; }
+  .cg-step, .cg-step-line, .cg-station, .cg-file, .cg-sym, .cg-edge-line,
+  .cg-seg, .cg-tile, .cg-bchip, .cg-lang, .cg-read, .cg-gloss-group { animation: none !important; }
+  .cg-station:hover { transform: none !important; }
 }

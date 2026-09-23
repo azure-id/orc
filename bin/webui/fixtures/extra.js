@@ -1950,7 +1950,7 @@ const extraDemotion = {
       note: "The stale clock is about an attempt that has NOT ended. It never merges with the consecutive clock and has its own zero.",
     },
   },
-  ladder: { effective_now: "opus5_only — the 2-band Opus 5 executor ladder" },
+  ladder: { effective_now: "opus5_only — the 2-band Opus 5.5 executor ladder" },
   profiles: [
     {
       profile: "deepseek",

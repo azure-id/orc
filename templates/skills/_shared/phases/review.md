@@ -17,7 +17,7 @@
 ## Review (load ../../orc/subskills/orc-review-verify/, spawned)
 
 Emit `PHASE review start`. Superpowers path: its review skill incl. tests
-(Sonnet 4.6 medium). OpenSpec/self path: review worker (Opus 5 medium). Pass the resolved
+(Sonnet 4.6 medium). OpenSpec/self path: review worker (Opus 5.5 medium). Pass the resolved
 `code_pattern` + its invariants + gate lines for the re-check
 (pattern-gate.md); no resolved pattern → FIRST ask for one (paste/md/none).
 FE tasks in run → pass `fe_rules[]` from `../../orc-pattern/references/` fe-a11y

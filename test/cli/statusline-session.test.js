@@ -32,7 +32,7 @@ function payload(root, sessionId, fivePct) {
   return {
     session_id: sessionId,
     workspace: { project_dir: root },
-    model: { id: "claude-opus-5", display_name: "Opus 5" },
+    model: { id: "claude-opus-5-5", display_name: "Opus 5.5" },
     effort: { level: "high" },
     context_window: { used_percentage: 22 },
     rate_limits: {
@@ -288,7 +288,7 @@ test("no rate_limits at all still yields a second line, never a broken one", () 
   const res = runHook(claudeDir, "orc-statusline.js", {
     session_id: "s5",
     workspace: { project_dir: root },
-    model: { id: "claude-opus-5", display_name: "Opus 5" },
+    model: { id: "claude-opus-5-5", display_name: "Opus 5.5" },
     effort: { level: "high" },
   });
   const out = lines(res);

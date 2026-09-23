@@ -34,7 +34,7 @@ Rina is changing how refunds are calculated. Money code.
 
 ```
 Dispatching orc-advisor-opus-5-xhigh …
-returned as: claude-opus-5 / xhigh          ✓
+returned as: claude-opus-5-5 / xhigh          ✓
 
 ADVISORY BRIEF — partial refunds
 

@@ -43,22 +43,22 @@ The default table has 8 bands (`skills/orc/config.md`):
 | `[65,70)` | `claude-opus-4-7` | medium | `orc-executor-opus-4-7-med` |
 | `[70,80)` | `claude-opus-4-7` | high | `orc-executor-opus-4-7-high` |
 | `[80,90)` | `claude-opus-4-8` | high | `orc-executor-opus-4-8-high` |
-| `[90,100]` | `claude-opus-5` | high | `orc-executor-opus-5-high` |
+| `[90,100]` | `claude-opus-5-5` | high | `orc-executor-opus-5-high` |
 
 `rubric_bands` (2–8) changes **how the report is grouped**, not the table.
 
 ### The alternative table: `opus5_only`
 
-Set `opus5_only: true` and **every dispatched role uses Opus 5**, with effort as
+Set `opus5_only: true` and **every dispatched role uses Opus 5.5**, with effort as
 the cost dial instead of the model:
 
 | Score | Model | Effort |
 |---|---|---|
-| `[0,40)` | `claude-opus-5` | low |
-| `[40,80)` | `claude-opus-5` | medium |
-| `[80,100]` | `claude-opus-5` | high |
+| `[0,40)` | `claude-opus-5-5` | low |
+| `[40,80)` | `claude-opus-5-5` | medium |
+| `[80,100]` | `claude-opus-5-5` | high |
 
-Nine fixed roles switch to an Opus 5 variant too (mini executor, mini analyst,
+Nine fixed roles switch to an Opus 5.5 variant too (mini executor, mini analyst,
 mini planner, scout, pattern codifier, wiki scanner, CLAUDE.md writer, retro
 miner). Two things are **never** forced: the Haiku trace writer (it transcribes
 a packet somebody else wrote) and `/orc-diy` (its executors come from the
@@ -144,7 +144,7 @@ than assumed, so a silent tier downgrade is flagged rather than absorbed.
 
 > **A subagent's model can never be higher than your main session's model.**
 
-Run your main Claude Code session on **Opus 5**. Otherwise every Opus-5-pinned
+Run your main Claude Code session on **Opus 5.5**. Otherwise every Opus-5-pinned
 role (analyst, planner, reviewer, verifier, test author, combiner, ultra
 advisor and judge) plus the top executor band quietly runs on whatever your
 session runs. This is the most common cause of "it used the wrong model".
@@ -157,7 +157,7 @@ See `agents/MODEL-MAPPING.md` in your install for the full list.
 anything you already have:
 
 - **Effort — a hard block.** `hooks/orc-effort-guard.js` (a `PreToolUse` hook)
-  refuses to start `/orc` below **high** effort. `claude-opus-5` and
+  refuses to start `/orc` below **high** effort. `claude-opus-5-5` and
   `claude-fable-5` are cleared from **medium** up, because both outrank the
   Opus 4.8 baseline. This is the half Claude Code lets a hook enforce.
 - **Model — a warning only.** Claude Code does not expose the model id to a

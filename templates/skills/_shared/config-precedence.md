@@ -61,7 +61,7 @@ distinctness is required only where a family is declared contested.
 An `overlay` resolves PARTIALLY, so the honest report is WHICH ranges and WHICH
 positions it took — never a single word. The ranges it did not take fall through
 to the next rank normally. That is what lets "cheap work goes to a foreign
-worker, hard work stays on Opus 5" be two rows rather than a table rewrite.
+worker, hard work stays on Opus 5.5" be two rows rather than a table rewrite.
 
 **The lowest rank of a contested family is TOTAL.** Something must answer when
 nothing above resolved, so that terminal row is the shipped default and it is
@@ -78,7 +78,7 @@ Everything else is uncontested: one question, no competition, every key P2.
 | rank | key | mode | |
 |---|---|---|---|
 | P0 | `extra_enabled` | overlay | a route row covering this score sends it off Claude |
-| P1 | `opus5_only` | replace | the fixed 2-band Opus 5 ladder |
+| P1 | `opus5_only` | replace | the fixed 2-band Opus 5.5 ladder |
 | P2 | `rubric_bands_override` | replace | hand-edited, registry-less by design; resolves on PRESENCE |
 | P3 | — | terminal | the shipped score→model table |
 
@@ -87,7 +87,7 @@ Everything else is uncontested: one question, no competition, every key P2.
 | rank | key | mode | |
 |---|---|---|---|
 | P0 | `extra_enabled` | overlay | a slot row holds that POSITION |
-| P1 | `opus5_only` | replace | the shipped Opus 5 variant of that position's agent |
+| P1 | `opus5_only` | replace | the shipped Opus 5.5 variant of that position's agent |
 | P2 | — | terminal | the agent shipped for that position |
 
 Said once, for both shapes: **extra decides whether a Claude agent runs at all;
@@ -108,7 +108,7 @@ Lane-level inertness is a THIRD thing, with nothing in the config file involved:
 | lane | inert | reason (must not be softened) |
 |---|---|---|
 | `/orc-quick` | `opus5_only`, `rubric_bands_override`, `extra_*` | this lane asks WHICH AGENT before every dispatch — a config that silently answered that question would break the lane's entire premise |
-| `/orc-challenge` | `opus5_only` | every agent in this lane is already `claude-opus-5` — a **no-op; the lane is unaffected, not exempt** |
+| `/orc-challenge` | `opus5_only` | every agent in this lane is already `claude-opus-5-5` — a **no-op; the lane is unaffected, not exempt** |
 | `/orc-doc` | `opus5_only` | the same — unaffected, not exempt |
 
 **"Unaffected, not exempt"** survives verbatim. A generic "not applicable" loses

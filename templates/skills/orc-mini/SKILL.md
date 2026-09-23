@@ -16,7 +16,7 @@ below. Load its references and schemas by path — the HOT-PATH essentials
 (dispatch names, return-contract fields, artifact path) are inlined here so
 nothing is reconstructed from "full minus deltas."
 
-Run as **Opus 4.8 high**, or Opus 5 / Fable 5 at medium+ (as full; never downgrade).
+Run as **Opus 4.8 high**, or Opus 5.5 / Fable 5 at medium+ (as full; never downgrade).
 **You never implement — you spawn.** The one exception is the **smoke gate**: a
 read-only build+test run, not implementation — you still never write code.
 **Worked example** (orient only — never execute from it): `examples/mini-run-mock.md`.
@@ -158,7 +158,7 @@ mini skipped. Record the switch in the decision log.
 
 ## Dispatch via named agents (canonical name-map — dispatch BY these names)
 
-Models pinned in `.claude/agents/`; look one up here, never reconstruct a name (agent = skill-name + model-effort suffix). See `.claude/agents/MODEL-MAPPING.md`. `opus5_only: true` FORCES the right column and needs an Opus 5 main session — mini's cheap-lane premise is off while it is on (`../_shared/opus5-only.md`).
+Models pinned in `.claude/agents/`; look one up here, never reconstruct a name (agent = skill-name + model-effort suffix). See `.claude/agents/MODEL-MAPPING.md`. `opus5_only: true` FORCES the right column and needs an Opus 5.5 main session — mini's cheap-lane premise is off while it is on (`../_shared/opus5-only.md`).
 
 **Extra (`extra_enabled`, `../_shared/extra-dispatch.md`):** mini's ONE executor may run off Claude. It has no score, so resolve the pinned executor's **BAND, both edges, and require them to agree** — a partially covering row keeps the run on Claude and the preflight says so. Print the `extra:` line at intake whenever the gate is on (P0: `a lane that sends work off Claude without saying so`); dispatch via `orc extra dispatch --task <file> --json` with the IDENTICAL slice; validate with `return-validation.md` **§2b, not §2** (⛔ SUBSTITUTION replaces the downgrade check); a failure runs `orc extra reconcile <task_id>` FIRST — a worktree that moved is RESUMED, never re-done — then falls back to the pinned Claude agent, announced. A cited-risk change never leaves Claude (`extra_risk_tasks`, default `off`) — and mini's complexity read is not a substitute for that gate.
 
@@ -167,7 +167,7 @@ Models pinned in `.claude/agents/`; look one up here, never reconstruct a name (
 | mini analysis (docs only) | `orc-analyze-mini-sonnet-5-high` | claude-sonnet-5 / high | `orc-analyze-mini-opus-5-med` |
 | mini planning | `orc-planner-mini-sonnet-5-high` | claude-sonnet-5 / high | `orc-planner-mini-opus-5-med` |
 | mini execution | `orc-executor-sonnet-5-high` | claude-sonnet-5 / high | `orc-executor-opus-5-low` |
-| test authoring (opt-in) | `orc-test-author-opus-5-med` | claude-opus-5 / medium | unchanged |
+| test authoring (opt-in) | `orc-test-author-opus-5-med` | claude-opus-5-5 / medium | unchanged |
 
 ## Config
 

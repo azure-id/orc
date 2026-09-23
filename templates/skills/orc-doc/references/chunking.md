@@ -380,9 +380,9 @@ advisory** and are shown to the user as optional.
 Every `DISPATCH` line this lane writes carries the sections it was for:
 
 ```
-DISPATCH orc-doc-writer-opus-5-med :: doc write sections=03-scope,04-risks part=sections/03-scope.md expect=claude-opus-5/medium
-DISPATCH orc-doc-checker-opus-5-low :: doc check sections=03-scope expect=claude-opus-5/low
-DISPATCH orc-doc-writer-opus-5-med :: doc digest source=<path> expect=claude-opus-5/medium
+DISPATCH orc-doc-writer-opus-5-med :: doc write sections=03-scope,04-risks part=sections/03-scope.md expect=claude-opus-5-5/medium
+DISPATCH orc-doc-checker-opus-5-low :: doc check sections=03-scope expect=claude-opus-5-5/low
+DISPATCH orc-doc-writer-opus-5-med :: doc digest source=<path> expect=claude-opus-5-5/medium
 ```
 
 That is what makes `orc doc cost`'s **per-section** attribution honest instead of

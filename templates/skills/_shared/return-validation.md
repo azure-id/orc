@@ -16,7 +16,7 @@ agent. It does not.
 
 What that costs, measured: one graded `/orc-quick` entry put THREE
 `orc-executor-opus-5-low` agents on the SAME task — 50m19s, 115m22s and
-100m53s, **266 minutes of Opus 5 for one authorised dispatch**, all editing the
+100m53s, **266 minutes of Opus 5.5 for one authorised dispatch**, all editing the
 same files, inside a 2h04m window. The second was dispatched 4m19s after the
 first, while the first was still working. The hook had recorded all three; no
 lane had ever read that record.

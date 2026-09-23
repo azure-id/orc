@@ -670,7 +670,7 @@ test("effort-guard: xhigh and max clear the /orc baseline (exit 0)", () => {
   }
 });
 
-test("effort-guard: medium /orc blocked without bridge, allowed with a fresh Fable 5 / Opus 5 bridge", () => {
+test("effort-guard: medium /orc blocked without bridge, allowed with a fresh Fable 5 / Opus 5.5 bridge", () => {
   const { root, claudeDir } = freshInstall();
   try {
     const payload = {
@@ -688,8 +688,8 @@ test("effort-guard: medium /orc blocked without bridge, allowed with a fresh Fab
     fs.writeFileSync(bridge, JSON.stringify({ model_id: "claude-fable-5", effort: "medium", written_at: Date.now() }));
     assert.strictEqual(runHook(claudeDir, "orc-effort-guard.js", payload).status, 0, "fable-5 medium clears with a fresh bridge");
 
-    // Fresh Opus 5 bridge → medium clears too (v0.34.0).
-    fs.writeFileSync(bridge, JSON.stringify({ model_id: "claude-opus-5", effort: "medium", written_at: Date.now() }));
+    // Fresh Opus 5.5 bridge → medium clears too (v0.34.0).
+    fs.writeFileSync(bridge, JSON.stringify({ model_id: "claude-opus-5-5", effort: "medium", written_at: Date.now() }));
     assert.strictEqual(runHook(claudeDir, "orc-effort-guard.js", payload).status, 0, "opus-5 medium clears with a fresh bridge");
 
     // Opus 4.8 is NOT in the allowance — medium stays blocked on the baseline model.
@@ -722,14 +722,14 @@ test("statusline: verdict matrix — boosted for opus-4.8 xhigh/max and opus-5/f
     assert.match(render("claude-fable-5", "medium"), /^🚀 ORC /, "fable-5/medium = boosted");
     assert.match(render("claude-fable-5", "max"), /^🚀 ORC /, "fable-5/max = boosted");
     assert.match(render("claude-fable-5", "low"), /^⛔ ORC /, "fable-5/low = degrade");
-    assert.match(render("claude-opus-5", "medium"), /^🚀 ORC /, "opus-5/medium = boosted");
-    assert.match(render("claude-opus-5", "max"), /^🚀 ORC /, "opus-5/max = boosted");
-    assert.match(render("claude-opus-5", "low"), /^⛔ ORC /, "opus-5/low = degrade");
+    assert.match(render("claude-opus-5-5", "medium"), /^🚀 ORC /, "opus-5/medium = boosted");
+    assert.match(render("claude-opus-5-5", "max"), /^🚀 ORC /, "opus-5/max = boosted");
+    assert.match(render("claude-opus-5-5", "low"), /^⛔ ORC /, "opus-5/low = degrade");
     assert.match(render("claude-sonnet-5", "high"), /^⛔ ORC /, "sonnet-5/high = degrade");
     assert.match(render("claude-opus-4-7", "high"), /^⛔ ORC /, "opus-4.7 never reads as opus-5");
     // The version is the brand now, and it is the INSTALLED one.
     const v = require("../package.json").version;
-    assert.match(render("claude-opus-5", "high"), new RegExp("ORC v" + v.replace(/\./g, "\\.") + " - "),
+    assert.match(render("claude-opus-5-5", "high"), new RegExp("ORC v" + v.replace(/\./g, "\\.") + " - "),
       "the installed version is the brand");
   } finally {
     rmrf(root);
@@ -806,7 +806,7 @@ test("statusline: a version it cannot read renders `ORC`, never `ORC vnull`", ()
     fs.rmSync(path.join(claudeDir, "hooks", "orc-version.json"), { force: true });
     const r = runHook(claudeDir, "orc-statusline.js", {
       cwd: root,
-      model: { id: "claude-opus-5", display_name: "Opus 5" },
+      model: { id: "claude-opus-5-5", display_name: "Opus 5.5" },
       effort: { level: "high" },
     });
     assert.strictEqual(r.status, 0);

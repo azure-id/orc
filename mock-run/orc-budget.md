@@ -368,7 +368,7 @@ $ orc budget forecast plan.md --json
   ],
   "context_risk": [
     {
-      "task": "T12", "model": "claude-opus-5",
+      "task": "T12", "model": "claude-opus-5-5",
       "est_peak_tokens": 189000, "window": 200000, "pct": 95,
       "slice": { "wiki_docs": 58000, "pattern": 11000, "declared_files": 74000,
                  "plan_contracts": 31000, "pact_boundary": 4000 },

@@ -73,7 +73,7 @@ Four rules on this block:
        [ ] expansionist    what upside is being missed?             (never blocks)
 
      Reply with the ones you want (or "all", or "none").
-     Each one is one extra read-only Opus 5 dispatch per iteration.
+     Each one is one extra read-only Opus 5.5 dispatch per iteration.
 ```
 
 Roles, efforts, the reader/outsider seam and the class split: `council.md`.

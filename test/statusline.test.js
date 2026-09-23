@@ -199,7 +199,7 @@ test("statusline: the HOOK draws six, and counts structural parts the way the va
   // side that reads as "adding a sixth part reset my bar to the default".
   const { root, claudeDir } = freshInstall();
   const orc = path.join(claudeDir, "orc");
-  const payload = { cwd: root, session_id: "s", model: { id: "claude-opus-5" }, effort: { level: "high" } };
+  const payload = { cwd: root, session_id: "s", model: { id: "claude-opus-5-5" }, effort: { level: "high" } };
   try {
     cli(["statusline", "apply", "orc-default", "--dir", root, "--json"]);
     cli(["statusline", "set", "1", "6", "cost-usd", "--dir", root, "--json"]);
@@ -576,7 +576,7 @@ test("statusline: the graph component is a FLOOR — off, none, fresh, behind �
   const { root, claudeDir } = freshInstall();
   const { spawnSync } = require("child_process");
   const git = (...a) => spawnSync("git", a, { cwd: root, encoding: "utf8" });
-  const payload = { cwd: root, session_id: "g", model: { id: "claude-opus-5" }, effort: { level: "high" } };
+  const payload = { cwd: root, session_id: "g", model: { id: "claude-opus-5-5" }, effort: { level: "high" } };
   // Colour codes stripped: `\x1B[90moff` puts a word character right before the
   // state word, and a `\b` match would never see it.
   const render = () =>
@@ -625,7 +625,7 @@ test("statusline: the graph component is a FLOOR — off, none, fresh, behind �
 test("statusline: the hook falls back — every gate rung, and none of them throws", () => {
   const { root, claudeDir } = freshInstall();
   const orc = path.join(claudeDir, "orc");
-  const payload = { cwd: root, session_id: "s", model: { id: "claude-opus-5" }, effort: { level: "high" } };
+  const payload = { cwd: root, session_id: "s", model: { id: "claude-opus-5-5" }, effort: { level: "high" } };
   const state = () => {
     try {
       return JSON.parse(fs.readFileSync(path.join(orc, "statusline-state.json"), "utf8")).finding;
@@ -834,7 +834,7 @@ test("statusline: a layout that names no wiki component performs ZERO wiki reads
   // render is unaffected — a read that did happen would have to notice.
   const { root, claudeDir } = freshInstall();
   const orc = path.join(claudeDir, "orc");
-  const payload = { cwd: root, session_id: "s", model: { id: "claude-opus-5" }, effort: { level: "high" } };
+  const payload = { cwd: root, session_id: "s", model: { id: "claude-opus-5-5" }, effort: { level: "high" } };
   try {
     fs.mkdirSync(orc, { recursive: true });
     // A wiki manifest whose commit does not exist: reading it means shelling
@@ -861,7 +861,7 @@ test("statusline: a layout that names no wiki component performs ZERO wiki reads
 test("statusline: a layout that names no run-state component skips the trace scan", () => {
   const { root, claudeDir } = freshInstall();
   const orc = path.join(claudeDir, "orc");
-  const payload = { cwd: root, session_id: "s", model: { id: "claude-opus-5" }, effort: { level: "high" } };
+  const payload = { cwd: root, session_id: "s", model: { id: "claude-opus-5-5" }, effort: { level: "high" } };
   try {
     cli(["statusline", "apply", "minimal", "--dir", root, "--json"]);
     cli(["config", "set", "statusline_custom", "on", "--dir", root]);
@@ -898,7 +898,7 @@ test("statusline: a sparkline keeps 16 samples, and only for a series something 
   const payload = (pct) => ({
     cwd: root,
     session_id: "s",
-    model: { id: "claude-opus-5" },
+    model: { id: "claude-opus-5-5" },
     effort: { level: "high" },
     rate_limits: { five_hour: { used_percentage: pct } },
   });
@@ -1274,7 +1274,7 @@ test("statusline: THE PREVIEW IS THE HOOK. Same layout, same bytes.", () => {
     // engine the hook loads. A divergence here is a second renderer.
     const now = 1767225600000;
     const payload = {
-      model: { id: "claude-opus-5", display_name: "Opus 5" },
+      model: { id: "claude-opus-5-5", display_name: "Opus 5.5" },
       effort: { level: "high" },
       context_window: { used_percentage: 38 },
       workspace: { project_dir: root },

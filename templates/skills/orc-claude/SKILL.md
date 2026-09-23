@@ -24,7 +24,7 @@ selects the mode and spawns `orc-claude-writer-opus-4-8-high` (the pinned
 engine) — so the scan + writing always run at Opus 4.8 high regardless of the
 caller's tier. When `opus5_only: true` the engine is
 `orc-claude-writer-opus-5-med` instead (that mode FORCES it — see
-`../_shared/opus5-only.md`), and it then needs an Opus 5 main session.
+`../_shared/opus5-only.md`), and it then needs an Opus 5.5 main session.
 The one exception: the skill also writes the
 trace pointer + a few markers around that spawn (behavior-trace logging is
 permanent; see "Behavior trace"); that

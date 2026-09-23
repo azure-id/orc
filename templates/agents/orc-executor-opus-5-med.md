@@ -1,10 +1,10 @@
 ---
 name: orc-executor-opus-5-med
 description: >
-  ORC executor — claude-opus-5, medium effort. Dispatched by the ORC orchestrator to implement
+  ORC executor — claude-opus-5-5, medium effort. Dispatched by the ORC orchestrator to implement
   a single task whose score falls in the highest-complexity [90,100] band. Single-role: execution only.
   Takes a task slice and implements exactly that task.
-model: claude-opus-5
+model: claude-opus-5-5
 effort: medium
 tools: Read, Write, Edit, Bash, Glob, Grep
 ---

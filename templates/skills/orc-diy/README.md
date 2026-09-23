@@ -52,8 +52,8 @@ orc diy validate                # re-check cross-key rules any time
 ```
 
 **`opus5_only` does not reach this lane.** That config forces every other
-lane's roles to Opus 5, but a DIY flow's executors come from `flow.lock.json`,
-which only `orc diy compile` writes. To run this lane on Opus 5, set
+lane's roles to Opus 5.5, but a DIY flow's executors come from `flow.lock.json`,
+which only `orc diy compile` writes. To run this lane on Opus 5.5, set
 `fixed_executor`/`session_tier` here and re-compile.
 
 The full key table lives in `references/flow-schema.md`. Highlights:
@@ -69,7 +69,7 @@ The full key table lives in `references/flow-schema.md`. Highlights:
   `opus-4-8-{med,high,xhigh,max}`, `opus-5-{med,high,xhigh,max}`,
   `fable-5-{med,high,xhigh,max}` (default
   `opus-5-high` — D29 moved it there at v1.0.0 so the wizard's own default
-  does not clip the two Opus 5 bands the score table ships). The effort guard enforces the effort half deterministically
+  does not clip the two Opus 5.5 bands the score table ships). The effort guard enforces the effort half deterministically
   (the compiled effort OR higher on the ladder); the statusline warns on the
   model half. Executor choices above the tier are rejected at validate time; the
   score table is clipped to the tier at compile time.

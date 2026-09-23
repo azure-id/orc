@@ -3,7 +3,8 @@
    What ORC knows about this repo: the wiki, its coverage, the code patterns,
    the repair memory, and what it knows from next door.
 
-   FIVE TABS since v0.49.1, the Crosslink two-tab precedent. This was one
+   SIX TABS since v1.9.2 (the code graph got its own), FIVE since v0.49.1 —
+   the Crosslink two-tab precedent. This was one
    scrolling column of six cards, and the release that made the CLI stop
    discarding what it computes roughly tripled the content — which is not
    survivable as one scroll.
@@ -89,6 +90,7 @@ async function renderKnowledge(body) {
     patterns: () => knPatternsTab(d),
     memory: () => knMemoryTab(d, body),
     peers: () => knPeersTab(d),
+    graph: () => knGraphTab(d, body),
   };
   const select = (which) => {
     KN_TAB = which;
@@ -103,6 +105,8 @@ async function renderKnowledge(body) {
     ["patterns", t("knowledge.tab.patterns")],
     ["memory", t("knowledge.tab.memory")],
     ["peers", t("knowledge.tab.peers")],
+    // v1.9.2 — the code graph moved off the Wiki tab onto its own.
+    ["graph", t("knowledge.tab.graph")],
   ]) {
     const b = el("button", null, label);
     b.type = "button";
@@ -149,8 +153,10 @@ function knowledgeHeaderStrip(d) {
    the state word is never replaced by a friendlier synonym. An update is FREE
    (parser only, no model), so it is a button; an OFF graph shows the one config
    command that turns it on, because turning a feature on is the user's call. */
-function graphCard(g, body, gain) {
-  const c = card(t("knowledge.graph.title"));
+// `exact` (v1.9.2): on the Code graph tab the state ladder above already carries
+// the chip and the update button, so this card is the exact numbers only.
+function graphCard(g, body, gain, exact) {
+  const c = card(exact ? t("knowledge.cg.exact.title") : t("knowledge.graph.title"));
   if (!g || !g.state) {
     c.append(empty(t("knowledge.graph.unknown"), t("knowledge.graph.unknownHint")));
     return c;
@@ -160,6 +166,7 @@ function graphCard(g, body, gain) {
     c.append(el("pre", "cmd", "orc config set code_graph on"));
     return c;
   }
+  if (exact) c.append(el("div", "note", t("knowledge.cg.exact.lead")));
   const head = el("div", "row-actions");
   head.append(chip(String(g.state).toUpperCase(), g.state === "fresh" ? "ok" : g.state === "drifted" ? "warn" : "idle", g.state === "drifted"));
   const upd = el("button", "btn btn-sm", "orc graph update");
@@ -170,7 +177,7 @@ function graphCard(g, body, gain) {
     renderKnowledge(body);
   });
   head.append(upd);
-  c.append(head);
+  if (!exact) c.append(head);
   if (g.state === "none") {
     c.append(el("div", "note", t("knowledge.graph.none")));
     return c;
@@ -205,8 +212,10 @@ function graphCard(g, body, gain) {
   // EW3/EW4 — two things keep the map fresh without a lane step. A panel that
   // shows a DRIFTED map without saying that is a panel that invites a needless
   // click.
-  c.append(el("div", "note", t("knowledge.graph.selfheal")));
-  c.append(el("div", "note", t("knowledge.graph.locator")));
+  if (!exact) {
+    c.append(el("div", "note", t("knowledge.graph.selfheal")));
+    c.append(el("div", "note", t("knowledge.graph.locator")));
+  }
   // K5 (v1.8.2 W4b) — the gain strip. It renders exactly the CLI's JSON and
   // invents nothing: the word "estimate" is part of the string, never a
   // tooltip, and `avoided` is a RANGE because one number for a counterfactual
@@ -283,7 +292,7 @@ function knWikiTab(d, body) {
   const out = frag();
   out.append(wikiPlanCard(d.plan, d.debt, body));
   out.append(wikiOneDocCard(d.refs));
-  out.append(graphCard(d.graph, body, d.graphGain));
+  // v1.9.2 — the code graph card moved to its own tab (knGraphTab).
   if (d.usage && d.usage.rows) out.append(wikiUsageCard(d.usage, body));
 
   const w = d.wiki;
@@ -1146,4 +1155,540 @@ function wikiActions(body, w) {
   });
   wrap.append(sync);
   return wrap;
+}
+
+/* ── TAB 6 — CODE GRAPH (v1.9.2) ──────────────────────────────────────────────
+   The graph used to be one card on the Wiki tab: a list of exact numbers and no
+   picture of what any of them meant. It has its own tab now, in reading order:
+   WHERE THIS GRAPH STANDS (the state ladder and the one action it needs), WHAT
+   IT IS (the pipeline), WHAT A GRAPH LOOKS LIKE (an example, labelled as one),
+   THE NUMBERS (drawn to scale), WHAT IT COST AND SAVED (two bars on one scale),
+   every exact number, and what each word means.
+
+   THE PICTURES DERIVE NOTHING. Every number is `orc graph status --json` or
+   `orc graph gain --json`, drawn to scale and never re-computed into a new
+   claim. The example graph is static prose, and it says so on its face. */
+function knGraphTab(d, body) {
+  const out = frag();
+  const g = d.graph;
+  const live = !!(g && (g.state === "fresh" || g.state === "drifted"));
+  out.append(cgStateCard(g, body));
+  out.append(cgFlowCard(g, live));
+  out.append(cgAnatomyCard());
+  if (live) out.append(cgNumbersCard(g));
+  if (g && g.state && g.state !== "off") out.append(cgGainCard(d.graphGain));
+  if (live) out.append(graphCard(g, body, d.graphGain, true));
+  out.append(cgGlossaryCard());
+  return out;
+}
+
+// Reduced motion means the final number at once — never a count that moves.
+const cgStill = () => !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+
+// Counts a tile up to the CLI's number, then writes the CLI's own string, so the
+// resting value is exactly what `--json` sent.
+function cgCount(node, value, delay) {
+  const final = value === undefined || value === null ? "—" : String(value);
+  const n = Number(value);
+  if (value === undefined || value === null || !Number.isFinite(n) || cgStill()) {
+    node.textContent = final;
+    return;
+  }
+  const dec = Number.isInteger(n) ? 0 : 1;
+  node.textContent = (0).toFixed(dec);
+  const dur = 1100;
+  let start = null;
+  const step = (ts) => {
+    if (start === null) start = ts;
+    const p = Math.min(1, (ts - start) / dur);
+    const eased = 1 - Math.pow(1 - p, 3);
+    node.textContent = p < 1 ? (n * eased).toFixed(dec) : final;
+    if (p < 1) requestAnimationFrame(step);
+  };
+  setTimeout(() => requestAnimationFrame(step), delay || 0);
+}
+
+// A bar segment that grows to its share. The width is set through CSSOM, never a
+// `style` attribute (the panel serves under `style-src 'self'`).
+function cgSeg(cls, share, label) {
+  const s = el("div", "cg-seg " + cls);
+  s.style.setProperty("--w", Math.max(0, Math.min(100, share * 100)).toFixed(2) + "%");
+  if (label) s.title = label;
+  return s;
+}
+
+/* ── 1. the state ladder ─────────────────────────────────────────────────────
+   Four states, in the order a graph lives through them. The word is the CLI's;
+   the sentence under it says what it means, and the connector says what moves
+   the graph to the next one. */
+function cgStateCard(g, body) {
+  const c = card(t("knowledge.cg.state.title"));
+  if (!g || !g.state) {
+    c.append(empty(t("knowledge.graph.unknown"), t("knowledge.graph.unknownHint")));
+    return c;
+  }
+  c.append(el("div", "note", t("knowledge.cg.state.lead")));
+  const ladder = el("div", "cg-ladder");
+  const steps = [
+    ["OFF", t("knowledge.cg.state.off"), t("knowledge.cg.state.toNone")],
+    ["NONE", t("knowledge.cg.state.none"), t("knowledge.cg.state.toFresh")],
+    ["FRESH", t("knowledge.cg.state.fresh"), t("knowledge.cg.state.toDrifted")],
+    ["DRIFTED", t("knowledge.cg.state.drifted"), null],
+  ];
+  // The CLI's state word, upper-cased the way the header strip shows it.
+  const nowWord = String(g.state).toUpperCase();
+  steps.forEach(([word, what, next], i) => {
+    const here = nowWord === word;
+    const s = el("div", "cg-step cg-step-" + word.toLowerCase() + (here ? " cg-step-now" : ""));
+    s.style.setProperty("--i", String(i));
+    const dot = el("span", "cg-step-dot");
+    if (here) dot.append(el("span", "cg-beacon"));
+    s.append(dot);
+    s.append(el("span", "cg-step-word", word));
+    s.append(el("span", "cg-step-what", what));
+    if (here) s.append(el("span", "cg-step-here", t("knowledge.cg.state.here")));
+    ladder.append(s);
+    if (next) {
+      const link = el("div", "cg-step-link");
+      link.style.setProperty("--i", String(i));
+      link.append(el("span", "cg-step-line"));
+      link.append(el("span", "cg-step-next", next));
+      ladder.append(link);
+    }
+  });
+  // The loop back: a DRIFTED graph becomes FRESH again with one free update.
+  c.append(ladder, el("div", "cg-loop", t("knowledge.cg.state.loop")));
+
+  // What to do now — the ONE action this state needs, or none.
+  const now = el("div", "cg-now cg-now-" + g.state);
+  if (g.state === "off") {
+    now.append(el("div", null, t("knowledge.cg.now.off")));
+    now.append(el("pre", "cmd", "orc config set code_graph on"));
+  } else if (g.state === "none" || g.state === "drifted") {
+    now.append(el("div", null, g.state === "none" ? t("knowledge.cg.now.none") : t("knowledge.cg.now.drifted")));
+    const upd = el("button", "btn btn-sm", "orc graph update");
+    upd.type = "button";
+    upd.addEventListener("click", async () => {
+      upd.disabled = true;
+      const r = await post("/api/graph/update", {});
+      toast(r.command, r.ok ? "ok" : "bad", r.output);
+      renderKnowledge(body);
+    });
+    now.append(upd);
+  } else {
+    now.append(el("div", null, t("knowledge.cg.now.fresh")));
+  }
+  c.append(now);
+  // The line a lane prints into the chat, verbatim. It is the CLI's sentence.
+  if (g.line) {
+    c.append(el("div", "note", t("knowledge.cg.state.lineNote")));
+    c.append(el("pre", "cmd cg-line", g.line));
+  }
+  return c;
+}
+
+/* ── 2. the pipeline ─────────────────────────────────────────────────────────
+   Five stations, left to right, with dots running between them. The first
+   three are free (a parser, no model); the card at the end is what a lane
+   pays for in context tokens. */
+function cgFlowCard(g, live) {
+  const c = card(t("knowledge.cg.flow.title"));
+  c.append(el("div", "note", t("knowledge.cg.flow.lead")));
+  const rail = el("div", "cg-flow");
+  const stations = [
+    ["</>", t("knowledge.cg.flow.code"), t("knowledge.cg.flow.codeWhat"), live ? t("knowledge.cg.flow.files", { n: g.files }) : null, "free"],
+    ["f(x)", t("knowledge.cg.flow.parse"), t("knowledge.cg.flow.parseWhat"), t("knowledge.cg.flow.parseCost"), "free"],
+    ["◉─◉", t("knowledge.cg.flow.store"), t("knowledge.cg.flow.storeWhat"), live ? t("knowledge.cg.flow.symbols", { n: g.symbols }) : null, "free"],
+    ["?", t("knowledge.cg.flow.ask"), t("knowledge.cg.flow.askWhat"), "ctx · impact · map", null],
+    ["▤", t("knowledge.cg.flow.card"), t("knowledge.cg.flow.cardWhat"), t("knowledge.cg.flow.cardCost"), "paid"],
+  ];
+  stations.forEach(([glyph, name, what, value, cost], i) => {
+    if (i) {
+      const link = el("div", "cg-link");
+      link.style.setProperty("--i", String(i));
+      for (let k = 0; k < 3; k++) {
+        const dot = el("span", "cg-link-dot");
+        dot.style.setProperty("--k", String(k));
+        link.append(dot);
+      }
+      rail.append(link);
+    }
+    const s = el("div", "cg-station" + (cost ? " cg-cost-" + cost : ""));
+    s.style.setProperty("--i", String(i));
+    s.append(el("span", "cg-station-num", String(i + 1)));
+    s.append(el("span", "cg-station-glyph", glyph));
+    s.append(el("span", "cg-station-name", name));
+    s.append(el("span", "cg-station-what", what));
+    if (value) s.append(el("span", "cg-station-value", value));
+    rail.append(s);
+  });
+  c.append(rail);
+  // The second layer — the only one that can cost a model.
+  const notes = el("div", "cg-notes-layer");
+  notes.append(el("span", "cg-notes-tag", t("knowledge.cg.flow.notesTag")));
+  notes.append(el("span", null, t("knowledge.cg.flow.notes", { mode: g && g.notes ? g.notes : "—" })));
+  c.append(notes);
+  c.append(el("div", "note", t("knowledge.graph.locator")));
+  return c;
+}
+
+/* ── 3. the anatomy — an EXAMPLE graph ───────────────────────────────────────
+   Four small files from a made-up shop, drawn the way the graph sees them.
+   It is never this repo's code, and the card says so in its title. Point at a
+   dot and the caption says what `orc graph ctx` would answer for it. */
+const CG_SAMPLE = {
+  files: [
+    { name: "routes/orders.js", x: 16, y: 34, w: 212, h: 236 },
+    { name: "middleware/auth.js", x: 262, y: 20, w: 184, h: 110 },
+    { name: "services/orders.js", x: 262, y: 162, w: 184, h: 122 },
+    { name: "db/index.js", x: 480, y: 96, w: 184, h: 116 },
+  ],
+  syms: [
+    { id: "route", label: "GET /orders/:id", x: 122, y: 110 },
+    { id: "list", label: "listOrders", x: 122, y: 206 },
+    { id: "auth", label: "requireAuth", x: 354, y: 78 },
+    { id: "find", label: "findOrder", x: 354, y: 226 },
+    { id: "query", label: "query", x: 572, y: 158 },
+  ],
+  // kind: call (solid, a dot runs along it) · ref (dashed) · import (dotted, file to file)
+  edges: [
+    { from: "route", to: "auth", kind: "ref" },
+    { from: "route", to: "find", kind: "call" },
+    { from: "list", to: "find", kind: "call" },
+    { from: "find", to: "query", kind: "call" },
+    { from: "f1", to: "f2", kind: "import", d: "M228 60 L262 60" },
+    { from: "f1", to: "f3", kind: "import", d: "M228 256 L262 256" },
+    { from: "f3", to: "f4", kind: "import", d: "M446 196 L480 184" },
+  ],
+};
+
+// The captions, one per example dot. Keys are written out in full.
+const CG_CAPTION = {
+  route: () => t("knowledge.cg.anatomy.route"),
+  list: () => t("knowledge.cg.anatomy.list"),
+  auth: () => t("knowledge.cg.anatomy.auth"),
+  find: () => t("knowledge.cg.anatomy.find"),
+  query: () => t("knowledge.cg.anatomy.query"),
+};
+
+function cgSvg(tag, attrs) {
+  const node = document.createElementNS("http://www.w3.org/2000/svg", tag);
+  for (const [k, v] of Object.entries(attrs || {})) node.setAttribute(k, String(v));
+  return node;
+}
+
+function cgAnatomyCard() {
+  const c = card(t("knowledge.cg.anatomy.title"));
+  c.append(el("div", "note", t("knowledge.cg.anatomy.lead")));
+  const wrap = el("div", "cg-anatomy");
+  const scroll = el("div", "scroll-x cg-anatomy-scroll");
+  const svg = cgSvg("svg", { class: "cg-svg", viewBox: "0 0 680 300", role: "img", "aria-label": t("knowledge.cg.anatomy.title") });
+  const defs = cgSvg("defs");
+  for (const [id, cls] of [["cg-arrow-call", "cg-head-call"], ["cg-arrow-ref", "cg-head-ref"]]) {
+    const m = cgSvg("marker", { id, viewBox: "0 0 10 10", refX: "9", refY: "5", markerWidth: "7", markerHeight: "7", orient: "auto-start-reverse" });
+    m.append(cgSvg("path", { d: "M0 0 L10 5 L0 10 z", class: cls }));
+    defs.append(m);
+  }
+  svg.append(defs);
+
+  CG_SAMPLE.files.forEach((f, i) => {
+    const gF = cgSvg("g", { class: "cg-file" });
+    gF.style.setProperty("--d", i * 90 + "ms");
+    gF.append(cgSvg("rect", { x: f.x, y: f.y, width: f.w, height: f.h, rx: 10 }));
+    const label = cgSvg("text", { x: f.x + 12, y: f.y + 20, class: "cg-file-name" });
+    label.textContent = f.name;
+    gF.append(label);
+    svg.append(gF);
+  });
+  const pos = {};
+  for (const s of CG_SAMPLE.syms) pos[s.id] = s;
+
+  // Edges first, so the dots sit on top of them.
+  const edgeEls = [];
+  CG_SAMPLE.edges.forEach((e, i) => {
+    let d = e.d;
+    if (!d) {
+      const a = pos[e.from];
+      const b = pos[e.to];
+      const mx = (a.x + b.x) / 2;
+      d = `M${a.x + 10} ${a.y} C${mx} ${a.y} ${mx} ${b.y} ${b.x - 11} ${b.y}`;
+    }
+    const gE = cgSvg("g", { class: "cg-edge cg-edge-" + e.kind });
+    gE.dataset.from = e.from;
+    gE.dataset.to = e.to;
+    gE.style.setProperty("--d", 380 + i * 110 + "ms");
+    const attrs = { d, pathLength: 1, class: "cg-edge-line" };
+    if (e.kind === "call") attrs["marker-end"] = "url(#cg-arrow-call)";
+    if (e.kind === "ref") attrs["marker-end"] = "url(#cg-arrow-ref)";
+    gE.append(cgSvg("path", attrs));
+    if (e.kind === "call") {
+      const p = cgSvg("path", { d, pathLength: 1, class: "cg-pulse" });
+      p.style.setProperty("--d", 1200 + i * 450 + "ms");
+      gE.append(p);
+    }
+    svg.append(gE);
+    edgeEls.push(gE);
+  });
+
+  const caption = el("div", "cg-caption");
+  const setCaption = (id) => {
+    caption.replaceChildren();
+    if (!id) {
+      caption.append(el("span", "cg-caption-hint", t("knowledge.cg.anatomy.hint")));
+      return;
+    }
+    const s = pos[id];
+    caption.append(el("span", "cg-caption-sym mono", s.label));
+    caption.append(el("span", "cg-caption-text", CG_CAPTION[id]()));
+    caption.append(el("span", "cg-caption-cmd mono", "orc graph ctx " + (s.label.includes(" ") ? `"${s.label}"` : s.label)));
+  };
+  const focus = (id) => {
+    wrap.classList.toggle("cg-focus", !!id);
+    for (const gE of edgeEls) gE.classList.toggle("cg-edge-hi", !!id && (gE.dataset.from === id || gE.dataset.to === id));
+    for (const n of svg.querySelectorAll(".cg-sym")) n.classList.toggle("cg-sym-hi", n.dataset.id === id);
+    setCaption(id);
+  };
+
+  CG_SAMPLE.syms.forEach((s, i) => {
+    const gS = cgSvg("g", { class: "cg-sym", tabindex: 0, role: "button", "aria-label": s.label });
+    gS.dataset.id = s.id;
+    gS.style.setProperty("--d", 200 + i * 80 + "ms");
+    gS.append(cgSvg("circle", { cx: s.x, cy: s.y, r: 16, class: "cg-sym-halo" }));
+    gS.append(cgSvg("circle", { cx: s.x, cy: s.y, r: 8, class: "cg-sym-dot" }));
+    const tx = cgSvg("text", { x: s.x, y: s.y - 20, class: "cg-sym-name", "text-anchor": "middle" });
+    tx.textContent = s.label;
+    gS.append(tx);
+    gS.addEventListener("mouseenter", () => focus(s.id));
+    gS.addEventListener("focus", () => focus(s.id));
+    gS.addEventListener("mouseleave", () => focus(null));
+    gS.addEventListener("blur", () => focus(null));
+    svg.append(gS);
+  });
+
+  scroll.append(svg);
+  wrap.append(scroll);
+  setCaption(null);
+  wrap.append(caption);
+
+  // The legend: every mark on the picture, and what it means.
+  const legend = el("div", "cg-legend");
+  for (const [cls, name, what] of [
+    ["cg-lg-file", t("knowledge.cg.legend.file"), t("knowledge.cg.legend.fileWhat")],
+    ["cg-lg-sym", t("knowledge.cg.legend.symbol"), t("knowledge.cg.legend.symbolWhat")],
+    ["cg-lg-call", t("knowledge.cg.legend.call"), t("knowledge.cg.legend.callWhat")],
+    ["cg-lg-ref", t("knowledge.cg.legend.ref"), t("knowledge.cg.legend.refWhat")],
+    ["cg-lg-import", t("knowledge.cg.legend.import"), t("knowledge.cg.legend.importWhat")],
+  ]) {
+    const row = el("div", "cg-legend-row");
+    row.append(el("span", "cg-lg " + cls));
+    const txt = el("div", "cg-legend-text");
+    txt.append(el("strong", null, name));
+    txt.append(el("span", "note", what));
+    row.append(txt);
+    legend.append(row);
+  }
+  wrap.append(legend);
+  c.append(wrap);
+  return c;
+}
+
+/* ── 4. the numbers, drawn ───────────────────────────────────────────────────
+   Tiles that count up to the CLI's own number, the three change counts, and
+   the density as a bar — per language when the CLI sent the split. */
+function cgNumbersCard(g) {
+  const c = card(t("knowledge.cg.num.title"));
+  const tiles = el("div", "cg-tiles");
+  const tile = (label, value, what, i) => {
+    const box = el("div", "cg-tile");
+    box.style.setProperty("--i", String(i));
+    const v = el("span", "cg-tile-value");
+    cgCount(v, value, i * 120);
+    box.append(v, el("span", "cg-tile-label", label), el("span", "cg-tile-what", what));
+    tiles.append(box);
+  };
+  tile(t("knowledge.graph.files"), g.files, t("knowledge.cg.num.filesWhat"), 0);
+  tile(t("knowledge.graph.symbols"), g.symbols, t("knowledge.cg.num.symbolsWhat"), 1);
+  tile(t("knowledge.cg.num.perFile"), g.density ? g.density.symbols_per_file : undefined, t("knowledge.cg.num.perFileWhat"), 2);
+  tile(t("knowledge.graph.generation"), g.generation, t("knowledge.cg.num.generationWhat"), 3);
+  c.append(tiles);
+
+  // What changed since the map was last built. Three counts, the CLI's.
+  if (g.behind) {
+    const b = g.behind;
+    const row = el("div", "cg-behind");
+    row.append(el("span", "cg-behind-label", t("knowledge.cg.num.behind")));
+    for (const [cls, sign, n, label] of [
+      ["cg-b-add", "+", b.added || 0, t("knowledge.cg.num.added")],
+      ["cg-b-chg", "~", b.changed || 0, t("knowledge.cg.num.changed")],
+      ["cg-b-del", "-", b.deleted || 0, t("knowledge.cg.num.deleted")],
+    ]) {
+      const chipEl = el("span", "cg-bchip " + cls + (n ? "" : " cg-b-zero"));
+      chipEl.append(el("strong", null, sign + n), el("span", null, label));
+      row.append(chipEl);
+    }
+    c.append(row);
+  }
+
+  // The density. `zero_share` is the CLI's; the bar only draws it.
+  if (g.density) {
+    const den = g.density;
+    const pctEmpty = Math.round(den.zero_share * 100);
+    c.append(el("div", "cg-sub", t("knowledge.cg.num.densityTitle")));
+    const bar = el("div", "cg-bar");
+    bar.append(cgSeg("cg-seg-ok", 1 - den.zero_share), cgSeg("cg-seg-empty", den.zero_share));
+    c.append(bar);
+    const key = el("div", "cg-bar-key");
+    key.append(el("span", "cg-key cg-key-ok", t("knowledge.cg.num.hasSymbols", { pct: 100 - pctEmpty })));
+    key.append(el("span", "cg-key cg-key-empty", t("knowledge.cg.num.empty", { pct: pctEmpty, n: den.zero_files })));
+    c.append(key);
+    if (den.by_lang && Object.keys(den.by_lang).length) {
+      const langs = el("div", "cg-langs");
+      Object.entries(den.by_lang).forEach(([lang, v], i) => {
+        const r = el("div", "cg-lang");
+        r.style.setProperty("--i", String(i));
+        r.append(el("span", "cg-lang-name mono", lang));
+        const lb = el("div", "cg-bar cg-bar-sm");
+        const share = v.files ? v.zero / v.files : 0;
+        lb.append(cgSeg("cg-seg-ok", 1 - share), cgSeg("cg-seg-empty", share));
+        r.append(lb);
+        r.append(el("span", "cg-lang-nums", t("knowledge.cg.num.lang", { files: v.files, symbols: v.symbols, zero: v.zero })));
+        langs.append(r);
+      });
+      c.append(langs);
+    }
+    c.append(el("div", "note", t("knowledge.cg.num.densityNote")));
+    if (g.thin) c.append(el("div", "note warn", t("knowledge.graph.thin")));
+  }
+  return c;
+}
+
+/* ── 5. what it cost, and what it probably saved ─────────────────────────────
+   Two bars on ONE scale. `paid` is exact and solid; `avoided` is an ESTIMATE
+   and a RANGE, so it is drawn solid to its low end and striped to its high
+   end — a single-number bar for a counterfactual is the claim this meter
+   refuses to make. */
+const CG_READS = {
+  ctx: () => t("knowledge.cg.read.ctx"),
+  "for-slice": () => t("knowledge.cg.read.forSlice"),
+  impact: () => t("knowledge.cg.read.impact"),
+  map: () => t("knowledge.cg.read.map"),
+  changes: () => t("knowledge.cg.read.changes"),
+  cochange: () => t("knowledge.cg.read.cochange"),
+  coverage: () => t("knowledge.cg.read.coverage"),
+  path: () => t("knowledge.cg.read.path"),
+};
+
+function cgGainCard(gain) {
+  const c = card(t("knowledge.cg.gain.title"));
+  if (!gain || gain.state !== "rows") {
+    c.append(empty(t("knowledge.gain.none"), t("knowledge.cg.gain.noneHint")));
+    return c;
+  }
+  c.append(el("div", "note", t("knowledge.cg.gain.lead")));
+  const p = gain.paid || {};
+  const a = gain.avoided || {};
+  const scale = Math.max(1, p.total || 0, a.high || 0);
+
+  const rows = el("div", "cg-gain");
+  const paidRow = el("div", "cg-gain-row");
+  paidRow.append(el("span", "cg-gain-name", t("knowledge.cg.gain.paid")));
+  const paidBar = el("div", "cg-bar cg-bar-lg");
+  for (const [cls, n, label] of [
+    ["cg-seg-card", p.card || 0, t("knowledge.cg.gain.card")],
+    ["cg-seg-source", p.source || 0, t("knowledge.cg.gain.source")],
+    ["cg-seg-hints", p.hints || 0, t("knowledge.cg.gain.hintsPart")],
+    ["cg-seg-env", p.envelope || 0, t("knowledge.cg.gain.envelope")],
+  ])
+    paidBar.append(cgSeg(cls, n / scale, `${label} ${kTokUi(n)}`));
+  paidRow.append(paidBar, el("span", "cg-gain-val", kTokUi(p.total || 0)));
+  rows.append(paidRow);
+  const avRow = el("div", "cg-gain-row");
+  avRow.append(el("span", "cg-gain-name", t("knowledge.cg.gain.avoided")));
+  const avBar = el("div", "cg-bar cg-bar-lg");
+  avBar.append(cgSeg("cg-seg-low", (a.low || 0) / scale), cgSeg("cg-seg-range", ((a.high || 0) - (a.low || 0)) / scale));
+  avRow.append(avBar, el("span", "cg-gain-val", `~${kTokUi(a.low || 0)} – ${kTokUi(a.high || 0)}`));
+  rows.append(avRow);
+  c.append(rows);
+
+  const key = el("div", "cg-bar-key");
+  for (const [cls, label, n] of [
+    ["cg-key-card", t("knowledge.cg.gain.card"), p.card],
+    ["cg-key-source", t("knowledge.cg.gain.source"), p.source],
+    ["cg-key-hints", t("knowledge.cg.gain.hintsPart"), p.hints],
+    ["cg-key-env", t("knowledge.cg.gain.envelope"), p.envelope],
+    ["cg-key-range", t("knowledge.cg.gain.range"), null],
+  ])
+    key.append(el("span", "cg-key " + cls, n === null ? label : `${label} ${kTokUi(n || 0)}`));
+  c.append(key);
+  c.append(el("div", "note", t("knowledge.gain.estimate")));
+
+  // Which reads were asked, in the CLI's own order. A read never asked keeps its
+  // slot, muted — "never asked" and "not a read" are different facts.
+  const names = gain.read_set && gain.read_set.length ? gain.read_set : Object.keys(gain.by_command || {});
+  if (names.length) {
+    c.append(el("div", "cg-sub", t("knowledge.cg.gain.readsTitle", { n: gain.calls_recorded, runs: gain.runs === undefined ? "—" : gain.runs })));
+    const counts = names.map((k) => (gain.by_command && gain.by_command[k]) || 0);
+    const most = Math.max(1, ...counts);
+    const list = el("div", "cg-reads");
+    names.forEach((k, i) => {
+      const n = counts[i];
+      const r = el("div", "cg-read" + (n ? "" : " cg-read-never"));
+      r.style.setProperty("--i", String(i));
+      r.append(el("span", "cg-read-cmd mono", k));
+      const lb = el("div", "cg-bar cg-bar-sm");
+      lb.append(cgSeg("cg-seg-read", n / most));
+      r.append(lb);
+      r.append(el("span", "cg-read-n", n ? String(n) : t("knowledge.cg.gain.never")));
+      r.append(el("span", "cg-read-what", CG_READS[k] ? CG_READS[k]() : ""));
+      list.append(r);
+    });
+    c.append(list);
+  }
+  return c;
+}
+
+/* ── 6. what each word means ─────────────────────────────────────────────────
+   Every word this tab and the exact card use, in four groups. */
+function cgGlossaryCard() {
+  const c = card(t("knowledge.cg.gloss.title"));
+  c.append(el("div", "note", t("knowledge.cg.gloss.lead")));
+  const groups = [
+    [t("knowledge.cg.gloss.gStructure"), [
+      [t("knowledge.cg.legend.file"), t("knowledge.cg.gloss.file")],
+      [t("knowledge.cg.legend.symbol"), t("knowledge.cg.gloss.symbol")],
+      [t("knowledge.cg.legend.call"), t("knowledge.cg.gloss.call")],
+      [t("knowledge.graph.generation"), t("knowledge.cg.gloss.generation")],
+    ]],
+    [t("knowledge.cg.gloss.gFresh"), [
+      ["FRESH · DRIFTED", t("knowledge.cg.gloss.freshDrifted")],
+      ["NONE · OFF", t("knowledge.cg.gloss.noneOff")],
+      [t("knowledge.cg.num.behind"), t("knowledge.cg.gloss.behind")],
+      [t("knowledge.cg.gloss.selfHealTerm"), t("knowledge.graph.selfheal")],
+    ]],
+    [t("knowledge.cg.gloss.gQuality"), [
+      [t("knowledge.cg.num.perFile"), t("knowledge.cg.gloss.density")],
+      ["THIN", t("knowledge.cg.gloss.thin")],
+      [t("knowledge.graph.notes"), t("knowledge.cg.gloss.notes")],
+    ]],
+    [t("knowledge.cg.gloss.gCost"), [
+      [t("knowledge.cg.gain.paid"), t("knowledge.cg.gloss.paid")],
+      [t("knowledge.cg.gain.envelope"), t("knowledge.cg.gloss.envelope")],
+      [t("knowledge.cg.gain.avoided"), t("knowledge.cg.gloss.avoided")],
+      [t("knowledge.cg.gloss.netTerm"), t("knowledge.cg.gloss.net")],
+      [t("knowledge.cg.gloss.hintsTerm"), t("knowledge.cg.gloss.hints")],
+      [t("knowledge.gain.measure"), t("knowledge.cg.gloss.measured")],
+    ]],
+  ];
+  const grid = el("div", "cg-gloss");
+  groups.forEach(([title, terms], gi) => {
+    const box = el("div", "cg-gloss-group");
+    box.style.setProperty("--i", String(gi));
+    box.append(el("div", "cg-gloss-head", title));
+    const dl = el("dl", "cg-gloss-list");
+    for (const [term, meaning] of terms) dl.append(el("dt", null, term), el("dd", null, meaning));
+    box.append(dl);
+    grid.append(box);
+  });
+  c.append(grid);
+  return c;
 }

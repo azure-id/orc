@@ -35,13 +35,13 @@ canonical 6-band table, and dispatches the matching **executor agent**.
 | [30,40)  | claude-sonnet-4-6 | medium | orc-executor-sonnet-4-6-med |
 | [40,55)  | claude-sonnet-4-6 | high   | orc-executor-sonnet-4-6-high |
 | [55,65)  | claude-sonnet-5   | high   | orc-executor-sonnet-5-high |
-| [65,90)  | claude-opus-5     | low    | orc-executor-opus-5-low |
-| [90,100] | claude-opus-5     | medium | orc-executor-opus-5-med |
+| [65,90)  | claude-opus-5-5     | low    | orc-executor-opus-5-low |
+| [90,100] | claude-opus-5-5     | medium | orc-executor-opus-5-med |
 
 (Haiku has no effort ladder — that agent carries no `effort:` field.) The risk
 floor (≥70) lands `orc-executor-opus-5-low` at minimum in THIS table. Above ~65
 the useful dial stopped being the model GENERATION and became the EFFORT, which
-is why the old four Opus rows are two. **Every band from 65 needs an Opus 5 MAIN
+is why the old four Opus rows are two. **Every band from 65 needs an Opus 5.5 MAIN
 session** or it silently falls back to the session model (the tier-honesty rule
 reports the downgrade) — two bands where it used to be one, and that is the cost
 of this table.
@@ -59,15 +59,15 @@ One model, EFFORT as the cost dial. Off by default; nothing changes until set.
 
 | Score | Model | Effort | Executor agent |
 |-------|-------|--------|----------------|
-| [0,90)   | claude-opus-5 | low    | orc-executor-opus-5-low |
-| [90,100] | claude-opus-5 | medium | orc-executor-opus-5-med |
+| [0,90)   | claude-opus-5-5 | low    | orc-executor-opus-5-low |
+| [90,100] | claude-opus-5-5 | medium | orc-executor-opus-5-med |
 
 Two bands, sharing the 90 edge with the default table's top two rows. That
-symmetry is the point: once the default table's high end is already Opus 5 with
+symmetry is the point: once the default table's high end is already Opus 5.5 with
 effort as the dial, this mode differs from it only BELOW 65, so a third band
 would be a distinction the default table stopped making.
 
-**Tier cost:** today TWO bands in six need an Opus 5 main session; with this on,
+**Tier cost:** today TWO bands in six need an Opus 5.5 main session; with this on,
 EVERY dispatch does, so a lower session downgrades every task (warn-only — a
 hook can gate effort, never model). **Scope:** it is NOT executor-only — it also
 forces every fixed role below, across every lane. orc-diy's table
@@ -93,8 +93,8 @@ un-shown number.
 | Ultra advisor (/orc-ultra only) | orc-advisor-opus-5-xhigh |
 | Ultra judge (/orc-ultra only) | orc-judge-opus-5-xhigh |
 
-Under `opus5_only`, every role above that is not already `claude-opus-5`
-dispatches its Opus 5 variant instead — plus the roles owned by other lanes
+Under `opus5_only`, every role above that is not already `claude-opus-5-5`
+dispatches its Opus 5.5 variant instead — plus the roles owned by other lanes
 (scout, wiki scanner, CLAUDE.md writer, retro miner, fast executor).
 
 ## Where each subsystem's rule is written down

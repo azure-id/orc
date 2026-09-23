@@ -35,15 +35,15 @@ const OUT_DIR = path.join(ROOT, "templates", "agents");
 // says so rather than naming a range that no longer exists — a band label that
 // lies is worse than one that admits it is unreachable by default.
 const VARIANTS = [
-  { name: "orc-executor-opus-5-med",     model: "claude-opus-5",     effort: "medium", band: "highest-complexity [90,100]" },
-  { name: "orc-executor-opus-5-low",     model: "claude-opus-5",     effort: "low",    band: "upper-complexity [65,90)" },
+  { name: "orc-executor-opus-5-med",     model: "claude-opus-5-5",     effort: "medium", band: "highest-complexity [90,100]" },
+  { name: "orc-executor-opus-5-low",     model: "claude-opus-5-5",     effort: "low",    band: "upper-complexity [65,90)" },
   { name: "orc-executor-sonnet-5-high",  model: "claude-sonnet-5",  effort: "high",   band: "mid-complexity [55,65)" },
   { name: "orc-executor-sonnet-4-6-high", model: "claude-sonnet-4-6", effort: "high",  band: "low-mid-complexity [40,55)" },
   { name: "orc-executor-sonnet-4-6-med", model: "claude-sonnet-4-6", effort: "medium", band: "low-complexity [30,40)" },
   { name: "orc-executor-haiku-4-5",      model: "claude-haiku-4-5",  effort: null,     band: "lowest-complexity [0,30)" },
   // NAMED BY NO BAND since v1.0.0 W4 (D14) — kept on disk, dispatched only when a
   // user names one explicitly.
-  { name: "orc-executor-opus-5-high",    model: "claude-opus-5",    effort: "high",   band: "no default band — reachable via rubric_bands_override, orc diy fixed_executor, or extra_fallback_agent" },
+  { name: "orc-executor-opus-5-high",    model: "claude-opus-5-5",    effort: "high",   band: "no default band — reachable via rubric_bands_override, orc diy fixed_executor, or extra_fallback_agent" },
   { name: "orc-executor-opus-4-8-high",  model: "claude-opus-4-8",  effort: "high",   band: "no default band — reachable via rubric_bands_override, orc diy fixed_executor, or extra_fallback_agent" },
   { name: "orc-executor-opus-4-7-high",  model: "claude-opus-4-7",  effort: "high",   band: "no default band — reachable via rubric_bands_override, orc diy fixed_executor, or extra_fallback_agent" },
   { name: "orc-executor-opus-4-7-med",   model: "claude-opus-4-7",  effort: "medium", band: "no default band — reachable via rubric_bands_override, orc diy fixed_executor, or extra_fallback_agent" },

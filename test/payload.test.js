@@ -212,7 +212,7 @@ test("the default table is 6 bands, and shares its top edge with the preset", ()
     assert.strictEqual(rows[i].lo, rows[i - 1].hi, `band ${i} starts where band ${i - 1} ends`);
 
   // The two tables agree above 65, which is the whole reason the preset is two
-  // bands and not three: once the default's high end is already Opus 5 with
+  // bands and not three: once the default's high end is already Opus 5.5 with
   // effort as the dial, a third band here would be a distinction the default
   // table stopped making.
   const preset = bandTable(cfg, "### The Opus-5-only ladder");
@@ -272,7 +272,7 @@ test("the opus5-only mapping names only agents that exist, and never the trace w
   assert.ok(named.length >= 18, "both columns of the mapping are present");
   for (const n of named) assert.ok(onDisk.has(n), `${n} is a shipped agent file`);
 
-  // Every right-hand (forced) agent is actually an Opus 5 agent.
+  // Every right-hand (forced) agent is actually an Opus 5.5 agent.
   const forced = [...shared.matchAll(/\|\s*`?(orc-[a-z0-9-]+)`?\s*\|\s*$/gm)].map((m) => m[1]);
   for (const n of forced.filter((x) => x.startsWith("orc-")))
     assert.ok(/-opus-5-(low|med|high)$/.test(n), `${n} is an opus-5 variant`);
@@ -282,7 +282,7 @@ test("the opus5-only mapping names only agents that exist, and never the trace w
   assert.ok(!/orc-trace-writer-opus/.test(shared), "no opus trace-writer variant is promised");
 });
 
-test("every opus5-only variant is pinned to claude-opus-5 and NAMED for its effort", () => {
+test("every opus5-only variant is pinned to claude-opus-5-5 and NAMED for its effort", () => {
   // A trace derives expect=<model>/<effort> from the agent NAME, so a file whose
   // name disagrees with its frontmatter breaks the downgrade check.
   const variants = fs
@@ -292,7 +292,7 @@ test("every opus5-only variant is pinned to claude-opus-5 and NAMED for its effo
   for (const f of variants) {
     const text = read("agents/" + f);
     const base = f.replace(/\.md$/, "");
-    assert.match(text, /^model: claude-opus-5$/m, `${f} is pinned to claude-opus-5`);
+    assert.match(text, /^model: claude-opus-5-5$/m, `${f} is pinned to claude-opus-5-5`);
     assert.match(text, new RegExp("^name: " + base + "$", "m"), `${f} name matches its filename`);
     const effort = base.match(/-(low|med|high)$/)[1];
     const want = { low: "low", med: "medium", high: "high" }[effort];
@@ -747,7 +747,7 @@ test("the challenge reader is deliberately WEAK, and nothing may upgrade it", ()
   // A stronger, harder-thinking cold reader reasons AROUND the gaps D4 exists
   // to find, so a "helpful" model bump here silently breaks the measurement.
   const agent = read("agents/orc-challenge-reader-opus-5-low.md");
-  assert.match(agent, /^model: claude-opus-5$/m);
+  assert.match(agent, /^model: claude-opus-5-5$/m);
   assert.match(agent, /^effort: low$/m);
   assert.match(agent, /^tools: Read$/m, "Read and nothing else — the instrument is defined by what it cannot reach");
   assert.ok(!/Glob|Grep|Bash/.test(agent.split("---")[1] || ""), "no search tool in the frontmatter");
@@ -1013,7 +1013,7 @@ test("the lean lanes keep every trigger phrase a user types", () => {
 test("the recon pair ships as a pair, and each file matches its own name", () => {
   for (const [name, model, effort] of [
     ["orc-recon-sonnet-4-6-med", "claude-sonnet-4-6", "medium"],
-    ["orc-recon-opus-5-low", "claude-opus-5", "low"],
+    ["orc-recon-opus-5-low", "claude-opus-5-5", "low"],
   ]) {
     const md = read(path.join("agents", name + ".md"));
     assert.match(md, new RegExp("^name: " + name + "$", "m"), name + ": the name field");

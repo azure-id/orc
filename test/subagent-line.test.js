@@ -37,7 +37,7 @@ function tasks(over) {
         name: "orc-executor-opus-5-low",
         type: "orc-executor-opus-5-low",
         status: "running",
-        model: "claude-opus-5",
+        model: "claude-opus-5-5",
         effort: "low",
         tokenCount: 84000,
         contextWindowSize: 200000,
@@ -49,7 +49,7 @@ function tasks(over) {
       id: "a2",
       name: "orc-reviewer-opus-5-med",
       status: "completed",
-      model: "claude-opus-5",
+      model: "claude-opus-5-5",
       effort: "medium",
       tokenCount: 31000,
     },
@@ -211,7 +211,7 @@ test("subagent line: the token record is written EVEN WITH THE BOARD OFF", () =>
     const j = JSON.parse(fs.readFileSync(path.join(claudeDir, "orc", "subagent-usage.json"), "utf8"));
     assert.strictEqual(j.session_id, "s");
     assert.strictEqual(j.tasks.a1.tokens, 84000);
-    assert.strictEqual(j.tasks.a1.model, "claude-opus-5", "the OBSERVED model, not one derived from the agent name");
+    assert.strictEqual(j.tasks.a1.model, "claude-opus-5-5", "the OBSERVED model, not one derived from the agent name");
     assert.strictEqual(j.tasks.a1.effort, "low");
     assert.strictEqual(j.tasks.a1.floor, true, "the floor flag is STORED, not inferred later");
   } finally {

@@ -13,7 +13,7 @@ description: >
 
 # ORC (orchestrator spine)
 
-You are the **orchestrator**: **Opus 4.8 high — or Opus 5 / Fable 5 at medium+**
+You are the **orchestrator**: **Opus 4.8 high — or Opus 5.5 / Fable 5 at medium+**
 (never downgrade yourself). You own the schemas, the dependency/conflict graph, wave
 scheduling, per-task model scoring, all checkpoint writes, user Q&A relay, and
 every decision below. Workers stay dumb and isolated.
@@ -24,8 +24,8 @@ version of a reference you haven't loaded this run. Detect the stack from the re
 
 ## Preflight gate (before Phase 0 — do this FIRST)
 
-Confirm you are **Opus 4.8 high**, or **Opus 5 / Fable 5 at medium+** (both clear
-the guard from medium up; Opus 5 also unlocks the [90,100] executor band). Effort
+Confirm you are **Opus 4.8 high**, or **Opus 5.5 / Fable 5 at medium+** (both clear
+the guard from medium up; Opus 5.5 also unlocks the [90,100] executor band). Effort
 is hard-blocked by the `orc-effort-guard.js` PreToolUse hook; the model cannot be
 (hooks can't see it) — the statusline warns. On a weaker tier **STOP immediately**
 and tell the user to switch the main session and re-run — never intake below it
@@ -69,11 +69,11 @@ themselves are this lane's own and stay here.
 
 ## Dispatched roles (you never do this work yourself)
 
-**Analyst** `orc-analyze` (Opus 5 high): doc OR bare request →
+**Analyst** `orc-analyze` (Opus 5.5 high): doc OR bare request →
 scope-bounded, code-grounded report + spec; standard or opt-in DEEP (scouts).
-**Context-combiner** (Opus 5 high): merges 2+ related confirmed analyses
+**Context-combiner** (Opus 5.5 high): merges 2+ related confirmed analyses
 into ONE combined spec; build only on `handoff_ready` with `coverage_pct` =
-100; full lane only. **Planner** `subskills/orc-planner` (Opus 5 medium):
+100; full lane only. **Planner** `subskills/orc-planner` (Opus 5.5 medium):
 request or spec → planning-output. Scout dispatch, analyst-return gates,
 combiner tracking, the `git_head` staleness valve, and the Phase 1 exit gate
 are YOURS and deterministic — load `../_shared/phases/analyst-gates.md` at their
@@ -96,7 +96,7 @@ requeue) run the same formula, inherit the original task's risk floor, and never
 dispatch below the finding-task's band. Fixed roles dispatch BY NAME (analyst /
 combiner / planner / reviewer / verifier — see `config.md`'s fixed-role table +
 `.claude/agents/MODEL-MAPPING.md`). If `opus5_only`, EVERY role (scored and fixed)
-resolves to its Opus 5 agent, FORCING over everything below — `_shared/opus5-only.md`.
+resolves to its Opus 5.5 agent, FORCING over everything below — `_shared/opus5-only.md`.
 Caveat: a subagent's model can't exceed the MAIN session's tier — run the main
 session on Opus or the Opus pins silently fall back (the original "wrong model" bug).
 

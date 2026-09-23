@@ -208,7 +208,7 @@ test("extra stats: --since filters on the FILENAME date, before a file is opened
 
 test("extra stats: a trace with no EXTRA line is skipped without being parsed", () => {
   const p = project();
-  trace(p, "run-orc-f-220826-120000.txt", ["DISPATCH orc-executor-opus-5-med :: T1 expect=claude-opus-5/medium", "FINISH :: shipped"]);
+  trace(p, "run-orc-f-220826-120000.txt", ["DISPATCH orc-executor-opus-5-med :: T1 expect=claude-opus-5-5/medium", "FINISH :: shipped"]);
   const j = json(run(p, ["extra", "stats", "--json"]));
   assert.equal(j.files_scanned, 0, "the pre-filter is what keeps a whole-file scan affordable");
   assert.equal(j.dispatches, 0);
