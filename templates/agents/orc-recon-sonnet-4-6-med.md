@@ -1,14 +1,7 @@
 ---
 name: orc-recon-sonnet-4-6-med
 description: >
-  ORC Recon — claude-sonnet-4-6, medium effort. Read-only. Answers ONE question
-  about the repository with file:line evidence, for /orc-quick's read-only
-  entries: a context dig, a "what breaks if" question, a defect hunt before
-  the fix, "is this safe to run". Asks the code graph first
-  (`orc graph ctx | impact | coverage --if-enabled`), then climbs the read ladder.
-  Returns a short answer, the evidence, what it searched, what it did not find,
-  and graph_used. It never edits, never plans, never spawns. Offered at the
-  /orc-quick dispatch gate beside orc-recon-opus-5-low; the user picks.
+  ORC Recon — claude-sonnet-4-6, medium effort. Dispatched by /orc-quick at the dispatch gate, for a read-only question. It never edits.
 model: claude-sonnet-4-6
 effort: medium
 tools: Read, Glob, Grep, Bash

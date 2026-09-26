@@ -10,6 +10,7 @@ updated: 04-09-2026 (v1.3.0 — the CLI Hook Interface: the board, the preview, 
 updated: 05-09-2026 (v1.4.1 — the hook board: staged ops, the three modals, drag)
 updated: 05-09-2026 (v1.4.2 — the hook board: repaint not refetch, the live editor, six slots, the terminal preview)
 updated: 21-09-2026 (v1.9.0 — the lean lanes widened, and the panel needed no edit)
+updated: 27-09-2026 (v2.0.0 W7 — the Behaviour panel: habits, rhythm, gotchas, review quality, answer log)
 -->
 
 > **LOCAL ONLY. Never `git add` this file.** It joins the untracked `*-plan.md`
@@ -62,6 +63,7 @@ shadowing announcement comes for free.
 | what **Runs** shows | `js/panels/runs.js` |
 | what **Knowledge** shows | `js/panels/knowledge.js` + `css/panels/knowledge.css` |
 | what **Stats** shows | `js/panels/stats.js` + `css/panels/stats.css` |
+| what **Behaviour** shows | `js/panels/behaviour.js` + `css/panels/behaviour.css` — and `bin/habit.js` / `bin/gotcha.js` FIRST, because every sentence, share, streak and command on it is the CLI's |
 | what **Docs** shows | `js/panels/docs.js` + `css/panels/docs.css` |
 | what **Wait** shows | `js/panels/wait.js` + `css/panels/wait.css` |
 | what **CLI Hook Interface** shows | `js/panels/hookui.js` + `css/panels/hookui.css` |
@@ -80,7 +82,7 @@ shadowing announcement comes for free.
 | a shared **card / chip / modal / kvList** | `js/02-ui.js` + `css/03-components.css` |
 | **any animation**, or reduced-motion | `css/04-motion.css` — **only** here |
 | a **width breakpoint that crosses panels** | `css/06-responsive.css` |
-| a **colour** | `css/00-tokens.css` — **only** here |
+| a **colour** | `css/00-tokens.css` — **only** here (the seven series colours `--s1 … --s7` too, dark AND light) |
 | the **rail / nav order** | `app.html` + `i18n/*/nav.json` |
 | the **tour** | `js/90-tour.js` + `css/05-tour.css` |
 | **keyboard shortcuts** | `js/91-shortcuts.js` |
@@ -100,14 +102,16 @@ order, so nobody ever has to reason about dependencies.
 
 ```
 css/  00-tokens  01-base  02-shell  03-components  panels/overview  05-tour
-      panels/{settings,lanes,runs,stats,flow,crosslink,learn,mockrun,experiment,
-              maintenance,pact,boundary,handoff,challenge,docs}
+      panels/{settings,lanes,rules,runs,knowledge,stats,behaviour,flow,crosslink,learn,
+              mockrun,experiment,maintenance,pact,boundary,wait,hookui,handoff,
+              challenge,docs,extra,test}
       06-responsive        ← after every panel it overrides
       04-motion            ← LAST. See §5.
 
 js/   00-core  01-i18n  02-ui  03-md  04-router  05-banners  06-edit
-      panels/{overview,settings,lanes,runs,knowledge,stats,flow,crosslink,learn,
-              mockrun,experiment,maintenance,pact,boundary,handoff,challenge,docs}
+      panels/{overview,settings,lanes,rules,runs,knowledge,stats,behaviour,flow,
+              crosslink,learn,mockrun,experiment,maintenance,pact,boundary,handoff,
+              challenge,docs,extra,wait,hookui,test}
       90-tour  91-shortcuts  99-boot   ← 99-boot MUST be last
 ```
 
@@ -139,7 +143,8 @@ renders verbatim.
 | Runs | `#/runs` | `3` | `/api/runs` → `run list`; `/api/run` → `run show`; `/api/aftermath`; POST **`/api/run/{close,reopen}`** |
 | **Wait** | `#/wait` | `w` | **`/api/usage`** → `usage check` (0 ok / 1 low / **2 unknown**); **`/api/wait/lanes`** → `wait lanes`; **`/api/wait/status`** → `wait status`; POST **`/api/wait/{unblock,cancel}`** — both UNDO something. There is no `start` and no `block`: a wait lives in a Claude Code session, and a block needs a reason typed in the moment. State words rendered verbatim: `ok` · `low` · `unknown` · `full` · `docset` · `entry` · `cycle` · `snapshot` · `none`. JS `js/panels/wait.js` · CSS `css/panels/wait.css` · i18n `wait` · fixtures `fixtures/wait.js` |
 | Knowledge | `#/knowledge` | `4` | `/api/wiki`, `/impact`, `/{plan,debt,usage}`, **`/docs`, `/show`, `/coverage`**, `/api/patterns`, **`/api/pattern/show`**, `/api/gotchas`, **`/archived`, `/api/gotcha/{show,prune/preview}`**; POST `/api/wiki/sync`, `/usage/rebuild`, `/api/gotcha/prune`. v1.7.0 adds the ONE-DOC card: **`/api/wiki/resolve`** -> `wiki resolve <topic>` (0 match / 1 new / 2 ambiguous / 3 no wiki) and **`/api/wiki/refs`** -> `wiki refs --check`, which is `--check` ALWAYS because opening a panel must never write to a repo. AMBIGUOUS renders every candidate and offers NO command until a human picks one. v1.8.0 adds **`/api/graph`** -> `graph status` (0 fresh / 1 none / 2 drifted / 3 off — every code is DATA) and POST **`/api/graph/update`** -> `graph update`, which is FREE (parser only), so it is a button. The enhancement waves add `generation`/`gen_id` to that same answer; the card shows them and adds NO route. v1.8.2 adds **`/api/graph/gain`** -> `graph gain` (0 rows / 1 no ledger / 3 off) on load, and **`/api/graph/gain/measured`** -> `graph gain --measured` on a BUTTON, because it reads Claude Code's transcripts. |
-| Stats | `#/stats` | `5` | `/api/stats`, `/api/budget/{forecast,rates,actual}` |
+| Stats | `#/stats` | `5` | `/api/stats`, `/api/budget/{forecast,rates,actual}`. **v2.0.0 W6b:** `/api/stats` (`orc stats --json`) carries **`questions{}`** — questions per run: `runs`, `per_run_p50`, `per_run_trend[]`, `asked`, `answered_for_you`, `subagent_questions`, `by{}`, `by_lane{}`, `by_point{}` and the `rule` sentence (`null` = could not be computed). It is computed from the SAME pass over the logs as the habits (`collect` in `bin/habit.js`), never a second parser. Fixture: `fixtures/stats.js` |
+| **Behaviour** | `#/behaviour` | `u` | **`/api/habits`** → `habit show [--window 30d\|90d\|all]` (0 · 1 no ASK lines yet · **3 `habits: off`**, which answers `modes`, `kept` and the two `on` commands and nothing else); **`/api/habits/log`** → `habit log --limit 40` (0 · 1 empty); **`/api/habits/states`** → `habit log --states` (every change, newest first, each with its `inverse` command); **`/api/habits/points`** → `habit points`; `/api/gotchas` → `gotcha list` (now with **`panel{}`**: per entry `source`, computed `status`, `weeks[7]`, plus `by_source`, `status_counts` and the last `sync` state READ from `gotchas-sync.json` — `list` never runs a sync, and `status` skips the view); **`/api/gotcha/card`** → `gotcha card --files <csv> --full` (1 no match is an ANSWER: no card); **`/api/gotcha/quality`** → `gotcha quality [--window 30\|90\|3650]` (1 below the 5-review floor; `target`, `bands{}`, `series[]` and `floor_line` are the CLI's); **`/api/gotcha/candidates`** → `gotcha list --candidates`. POST **`/api/habit/{accept,decline,forget,reset}`** (each `--by panel`, `decline` takes `never`) and **`/api/gotcha/accept`** — all FREE, local and reversible. The learning switch is **`/api/config/set` `habits`** — no second route. **No button, on purpose:** `gotcha import sonar\|sarif`, `gotcha sync`, `habit rebuild`, and every `never`-class habit (the panel shows `commands.manual`, e.g. `orc config set security_review off`). State words rendered verbatim: `observed` / `proposed` / `applied` / `declined` / `never-ask` / `stale` / `shadowed` / `never` · `apply` / `suggest` / `never` · `user` / `ledger` / `learned` / `config` / `default` · `active` / `candidate` / `quiet` / `orphaned` · every gotcha `source`. JS `js/panels/behaviour.js` · CSS `css/panels/behaviour.css` · i18n `behaviour` · fixtures `fixtures/behaviour.js` (+ Knowledge's `gotchas` carries its 8 extra entries and `panel`) |
 | Docs | `#/docs` | `d` | `/api/doc`, `/one`, `/show`, `/map`, `/lint`, `/plan`, `/section`, `/next`, `/audit`, `/journal`, `/context`, `/parts`, **`/rules`, `/rules/one`, `/forecast`, `/cost`**; POST `/ship`, `/unship`, `/assemble`, `/compile`, `/migrate`, **`/rules/setAll`, `/rules/sync`** |
 | Challenge | `#/challenge` | `c` | `/api/challenge`, `/one`, `/show`, `/diff`, `/lint`, **`/roles`, `/council`**; POST `/accept`, `/rebut`, `/report`, **`/premise`, `/opportunity`** |
 | Promises | `#/pact` | `p` | `/api/pact` → `pact list` |
@@ -168,7 +173,7 @@ without leaving the page) · **`armed` / `demoted`** · `HELD` / `CHURN` / `REVE
 `merged` / `rejected` / `out-of-goal`** · **`open` / `taken` / `dropped` /
 `dismissed`** · every **lens id** (`judge`, `reader`, `contrarian`, `outsider`,
 `executor`, `principles`, `expansionist`) and every **route**
-(`brainstorm` / `pact` / `grill` / `none`). Never a friendlier synonym: a
+(`brainstorm` / `pact` / `grill` / `none`) · **the habit words** (`observed` / `proposed` / `applied` / `declined` / `never-ask` / `stale` / `shadowed` / `never`, `apply` / `suggest`, the `by=` set `user` / `ledger` / `learned` / `config` / `default`) and **the gotcha statuses** (`active` / `candidate` / `quiet` / `orphaned`). Never a friendlier synonym: a
 second vocabulary is drift no lint can see.
 
 ### 4a. Challenge — the council (v0.49.1)
@@ -239,6 +244,44 @@ v0.49.2 card contract, and the reason this card and the Docs list each once
 printed a chip over a slug. **It reports and never resumes:** continuing a third
 party's unfinished write without asking is the same class of act as routing off
 Claude without saying so.
+
+### 4a4. Behaviour — what ORC learned about how YOU work (v2.0.0 W7)
+
+One panel, directly under Stats: Stats says what the runs did, Behaviour says how
+you ran them. Both read the same traces. The spec is `v2-notes/07-behaviour-panel-spec.md`.
+
+| part | reads | what it draws |
+|---|---|---|
+| head | `modes`, `mode` | the **learning switch** (`Off · Observe · Propose`) — a WRITE through the one confirmation, `orc config set habits <mode>` — and the window switch (`30d · 90d · all`, a READ) |
+| off card | the exit-3 object | with `habits: off` ONE card replaces the tabs: what each mode does, that off costs zero tokens, `kept` answers, and the `on` commands. **Never fake data** |
+| hero | `portrait[]`, `tiles{}` | 3–5 CLI sentences (`k` + `line`), four tiles that count up and REST on the CLI's value; the orbit turns once |
+| Habits | `rows[]`, `next_run[]`, `state_words`, `classes`, `habit log --states` | the next-run strip, a legend, one card per habit in the CLI's order (ring = `share`, bar = `options[]`, `streak` in SHAPES ● ○ ◐, `rule`, `context`, `effect`), the buttons `commands{}` allows, the History fold |
+| Rhythm | `rhythm{heat,lanes,qpr,how,by}` | the 7 × 24 heat map, the lane mix, questions per run, how each answer was given |
+| Gotchas | `gotcha list` `panel{}`, `gotcha card` | the source bar, the status chips, the sync state, one row per entry, and **what the reviewer will see** — the exact card, re-read on input (300 ms) |
+| Review quality | `gotcha quality`, `list --candidates` | acceptance per kind against `target`, coloured by the CLI's `bands{}`; the acceptance and P3 lines; proposed suppressions with Accept. Below the floor every chart KEEPS its slot and shows `floor_line` |
+| Answer log | `habit log` | the last 40 ASK events with their `by=` chip |
+
+**The rail dot** — `counts.proposed > 0` puts one dot on the rail link that pulses
+three times and stops (`behaviourRailDot()` from `boot()`). It is the ONLY place
+outside this panel that shows habit state.
+
+**The panel names no CLI word.** Colours come from `data-state` / `data-cls` /
+`data-by` / `data-source` / `data-status` attributes that `css/panels/behaviour.css`
+maps to tokens; the actions come from `commands{}`. A lookup KEYED by the CLI's word
+(`BH_STATE_HELP`) is panel prose for that word, and a word it does not know renders bare.
+
+**After a write** the panel re-fetches `/api/habits` and repaints with `bh-quiet`:
+nothing arrives again, the `aria-live` region says what changed and where the undo
+is, and focus moves to the changed card. The undo is on the card, never in a toast.
+A tab switch after the first paint does not replay the chart entrances either.
+
+**The tabs stay on ONE row** that scrolls inside itself (never the page), so the
+ink bar under the selected tab always sits on the row it belongs to.
+
+**Fixture state (the one exception):** `fixtures/index.js` keeps `HABITS_MODE`, and a
+POST of `/api/config/set` with `key: habits` changes it — so off · observe · propose
+are all reachable from the switch itself. The `30d` window is the empty answer (no
+ASK lines yet, below the review floor); a path outside every scope is the zero-match card.
 
 ### 4b. Knowledge — six tabs (v0.49.1, Code graph tab v1.9.2)
 
@@ -875,6 +918,9 @@ folder must never be staged already lives.
 | a FREE action is a button, a PAID one a copy-able command | every panel; `laneCommand()` is the paid form |
 | **a modal CONTAINS ITS SCROLL, and the page behind it is locked** — this was every modal in the app, not one panel's: the modal's own scroll CHAINED to `<body>` at either end, and a wheel over the backdrop was never the modal's to begin with | `css/03-components.css` (`overscroll-behavior: contain` on `.modal-host` and `.modal`, `body.modal-open`), `css/01-base.css` (`scrollbar-gutter: stable`, so the page does not reflow), `js/02-ui.js` (one add, one remove, `closeModal` is the single exit) + `test/webui/render.test.js` |
 | **a card that is a GRID declares its rows** — `.ex-tool` sized every row to its own content, so two tool cards ended at different heights and every row below the `kv` block sat lower in one than the other. `1fr` is the slack row; **never `subgrid`**, which breaks the moment a card in a different state joins | `css/panels/extra.css` + `test/webui/render.test.js`. The `.run-card` lesson, one level down |
+| **a `never` habit has no button** (v2.0.0 W7) — a safety check is switched off by a person typing it. The card shows `commands.manual` and nothing to click; every other habit button goes through the ONE confirmation that names its command | `js/panels/behaviour.js` (`bhActions`) + `test/webui/panels.test.js` |
+| **the Behaviour panel renders the CLI's lines and derives no habit** (v2.0.0 W7) — not a share, a streak, a rule verdict, a portrait sentence, a quality band or a command. `rows[].line`, `portrait[].line`, `effect`, `rule` are rendered as sent and never go through `t()`; no state, class or `by=` word is a string in `behaviour.js` | `bin/habit.js` + `bin/gotcha.js` (the fields), `js/panels/behaviour.js`, `test/webui/panels.test.js` + `test/cli/habit.test.js` |
+| **nothing on the Behaviour page moves for more than 5 s** (WCAG 2.2.2) — every `bh-` animation is finite (the orbit turns ONCE, the proposal breathes three times), and reduced motion REMOVES the orbit satellites and forces a self-drawing line to its end | `css/04-motion.css` + `test/webui/render.test.js` |
 | **NEVER simplify a CLI-computed value** — a state word, an exit reason, a doctor message, a config key, a model id, a path, a band or a command is not prose and is not the panel's to rewrite. **A simplified state word is a state that does not exist**, the same failure as a translated config key. Panel INSTRUCTION text is Simplified Technical English; rationale prose keeps its voice | `bin/webui/i18n/TERMS.md` (the term list, and its `prose-keys` fence is the ONLY opt-out — **the default is STE**) + `test/webui/i18n.test.js` |
 
 ---
@@ -956,6 +1002,10 @@ stall is an ordinary retryable failure the moment it is classified.
 - **`mock-run/`** is package content read by `bin/mockrun-catalog.js`. It is not
   a panel, and the panel decides nothing about it.
 - **`bin/webui/fixtures/`** never runs in production — only under `--fixtures`.
+  `fixtures/behaviour.js` (v2.0.0 W7) carries every habit state, class and mode,
+  every `by=` value, every gotcha source and status, and the three empty answers;
+  `test/webui/fixtures.test.js` counts them. It is the only fixture with STATE
+  (the `habits` mode a canned `/api/config/set` changes).
 - **`orc-*.md` at the repo root** are plan docs. Untracked, and none of them is
   the source of truth for anything shipped.
 

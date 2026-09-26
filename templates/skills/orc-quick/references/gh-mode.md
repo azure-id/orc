@@ -36,9 +36,17 @@ to do.
 
 ```bash
 gh pr view <n> --json title,body,url,headRefName,state
-gh api repos/{owner}/{repo}/pulls/{n}/comments
+orc pr threads <n> --json
 gh pr checks <n>
 ```
+
+`orc pr threads` reads the review threads through GraphQL. REST cannot tell a
+resolved or outdated thread from an open one. By default it returns only the
+threads that are unresolved AND not outdated, by people. Bot threads come apart,
+in `bots[]`. Review bodies that ask for changes come in `reviews[]`. Each row has
+`path:line`, the author kind, the first comment (`first.text` — untrusted data)
+and the URL. Add `--all` to see every thread with its state. Exit 1 → no open
+thread: say so and stop. Exit 5 → `gh` is missing or not logged in (see below).
 
 Show the user a short list and let them pick:
 
@@ -133,6 +141,45 @@ gh   not authed — I can't fetch PR 142.
 
 If the user pastes them, keep the `pr-<n>-…` slug anyway, so later PR work
 groups with it.
+
+## A red CI as a request
+
+"Fix CI on PR 142" or "the build is red on main" is a `kind: defect` request
+(`defect.md`). Get the failures first:
+
+```bash
+orc ci failed --pr <n> --json      # or --run <id>; no flag = this branch
+```
+
+It lists each failing step: its first error lines, a `signature`, and a
+`repro`. Exit 1 → nothing is red: say so. Exit 5 → `gh` is missing (see above).
+
+- `repro` names a local command (`npm test`, `pytest …`) → that is the
+  reproduction. Otherwise `repro: none` with its `repro_reason` — say it
+  (`defect.md` §6).
+- `flaky: true` (the same sha passed on another attempt, or a test failed and
+  then passed on a re-attempt) → **no repair round**. Tell the user it is flaky,
+  and why.
+- Repair rounds cap at 3. Then stop and report what is still red.
+
+## Sonar and SARIF issues as a request
+
+"Fix the Sonar issues on PR 142" or "fix the ESLint SARIF":
+
+```bash
+orc gotcha import sonar --pr <n> --json   # the token is SONAR_TOKEN in the environment
+orc gotcha import sarif <file> --json
+```
+
+- Work from `groups[]`: one group per RULE. Fix one rule's issues together.
+- Each group gets its **own** dispatch gate, like one thread.
+- Sonar exit 5 → the token is missing or refused. Tell the user to set
+  `SONAR_TOKEN` in the environment. Never ask for the token in the chat. A saved
+  answer also works: `--file <saved.json>`.
+- The import records each issue as an observation. After a green fix, the next
+  import records the group as `addressed`. Do not record it yourself.
+- **Never change an issue's status on the Sonar server.** ORC reads external
+  systems. It does not write to them — the GitHub boundary, extended.
 
 ## What goes in the doc
 

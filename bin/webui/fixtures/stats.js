@@ -27,6 +27,22 @@ const stats = {
   // v1.8.2 W4b — the code-graph row. `paid` is exact; the avoided pair is an
   // ESTIMATE and always a RANGE, which is why the panel never shows one number.
   graph: { calls: 41, runs: 6, paid: 4912, avoided_low: 18900, avoided_high: 71400, estimate: true },
+  // v2.0.0 W6b (Q7) — questions per run. `null` = could not be computed.
+  questions: {
+    runs: 61,
+    per_run_p50: 2,
+    per_run_trend: [
+      { run: "run-quick-fix-guest-charge-060826-101500.txt", lane: "quick", date: "2026-08-06", asked: 3, answered_for_you: 1 },
+      { run: "run-mini-add-export-070826-140000.txt", lane: "mini", date: "2026-08-07", asked: 0, answered_for_you: 2 },
+    ],
+    asked: 131,
+    answered_for_you: 58,
+    subagent_questions: 12,
+    by: { user: 104, ledger: 31, learned: 15, config: 20, default: 7 },
+    by_lane: { quick: { runs: 17, asked: 44, answered_for_you: 30, per_run_p50: 2 }, mini: { runs: 9, asked: 11, answered_for_you: 6, per_run_p50: 1 } },
+    by_point: { "quick.q3.offer.review": { asked: 12, answered_for_you: 9, lanes: ["quick"] } },
+    rule: "asked = ASK by=user|learned + QUESTION count=<n>; answered for you = ASK by=ledger|config|default",
+  },
 };
 
 /* ============================================================ v0.46.0 ====== */

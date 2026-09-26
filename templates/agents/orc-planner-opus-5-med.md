@@ -1,10 +1,7 @@
 ---
 name: orc-planner-opus-5-med
 description: >
-  ORC Requirement Planner — claude-opus-5-5, medium effort. Single-role:
-  planning only. Turns a detailed request or a System Analyst requirement-spec
-  into ORC planning-output (right-sized tasks, grounded declared files, explicit
-  deps). Dispatched by the orchestrator in Phase 1 or via /orc-plan.
+  ORC Requirement Planner — claude-opus-5-5, medium effort. Dispatched by orc at Phase 1 (planning), or by /orc-plan.
 model: claude-opus-5-5
 effort: medium
 tools: Read, Write, Edit, Bash, Glob, Grep

@@ -1,20 +1,12 @@
 ---
 name: orc-poly
 description: >
-  Poly-repo planning lane — plan ONE change that spans two or more repos
-  (BE endpoint + FE UI, service + its gRPC consumer, etc.) without drift. Use
-  for "/orc-poly", "plan this across both repos", "coordinate a change over
-  these repos". Runs in the HOST repo (where you are); you paste the path of
-  each PEER repo. It peeks at every repo's wiki + crosslink (read-only) — or,
-  when a wiki is missing, asks you which folders/files to dig — gathers the
-  cross-repo context by asking questions until intent is pinned, then writes
-  a source-of-truth doc set (poly-context.md, interface-contract.md,
-  poly-spec.md) into poly-repo-implementation/<slug>/. Each iteration offers:
-  pass to orc-plan (splits ONE plan per repo, each written into its repo,
-  all pinned to the frozen interface contract) · stop & chat · add more
-  context. PEER source is READ-ONLY; the only peer write is the handoff plan.
-  It never builds — it plans the split so each repo's later /orc run stays on
-  contract.
+  Poly-repo planning lane — plan ONE change that spans two or more repos (BE
+  endpoint + FE UI, a service + its gRPC consumer) without drift. Use for
+  "/orc-poly", "plan this across both repos", "coordinate a change over these
+  repos". Runs in the HOST repo; you paste each PEER repo path. Writes the doc
+  set into poly-repo-implementation/<slug>/ and can split ONE plan per repo.
+  PEER source is READ-ONLY. It never builds.
 ---
 
 # ORC-POLY (poly-repo planning)
@@ -61,21 +53,17 @@ conflict, HOST wins — the same rule extended across the repository boundary.
 
 ## Behavior trace (always on)
 
-`../_shared/phases/trace.md` (`core`, at run start; `orc lane phases` names
-the file and the layers). Lane token `poly`, tier **Single-dispatch** —
-exactly ONE end-of-run packet, dispatched solo before `.current` is deleted.
-At run start write `log_dir/.current` = `run-poly-<slug>-<DDMMYY>-<HHMMSS>.txt` AND
-`touch the trace file` of that name in the SAME step.
-Nothing else about the protocol is restated here; a phase that ends with
-`zero new trace lines is a protocol violation`.
+`../_shared/phases/trace.md` (`core`, at run start; `orc lane phases orc-poly --json` →
+`trace_grammar` gives the verbs). Lane token `poly`, tier
+**Single-dispatch**. At run start write `log_dir/.current` =
+`run-poly-<slug>-<DDMMYY>-<HHMMSS>.txt` AND `touch the trace file` of that name
+in the SAME step. A phase that ends with `zero new trace lines is a protocol violation`.
 
 ## Phases
 
-`orc lane phases orc-poly --json` is this lane's pipeline: the ordered list, where
-each phase lives, and how much of it to read. **The CLI owns the order** — never
-derive it from the headings below, and never renumber or rename one without the
-manifest, because a `read: section` pointer names a HEADING and a renamed heading
-is a pointer into nothing.
+`orc lane phases orc-poly --json` is this lane's pipeline. **The CLI owns the order**:
+never derive it from the headings below, and never rename or renumber one
+without the manifest (`../_shared/lane-contract.md` §Phases).
 
 ## Phase P0 — Intake (identify HOST + PEERs + the change)
 
@@ -117,11 +105,10 @@ stops the chat and never falls back to another lane.
 
 - **HOST wiki:** probe existence with `orc wiki status` — the deterministic CLI
   in `../_shared/detecting-artifacts.md`, never an ad-hoc `find` (`.claude` is
-  hidden). Present → compute the tier from `.claude/orc/wiki-meta.json` per
-  `../orc-wiki/references/staleness.md` (FRESH/AGING/STALE).
-- **PEER wiki:** the `orc` CLI is CWD-scoped, so for a peer at another path read
-  its `wiki/INDEX.md` + `wiki-meta.json` **directly at the peer path** (compute
-  the tier the same way). Absent there → treat as no wiki.
+  hidden). Present → read the tier from `orc wiki status --json` → `.tier`
+  (FRESH/AGING/STALE; the CLI computes it — never by hand).
+- **PEER wiki:** the same call with `--dir <peer>`; then read its
+  `wiki/INDEX.md` at the peer path. `state: none` there → treat as no wiki.
 - `WIKI-CONSULT tier=<FRESH|AGING|STALE|none> :: <repo>` on every read (emit
   even for `none`). `GATE knowledge <repo>=<wiki|ask>` per repo.
 
@@ -217,33 +204,17 @@ builds.
 - Reminder: to see usage limits, tell the user to run `/usage` (never invoke it
   programmatically).
 
-## Config
+## Lane contract (`../_shared/lane-contract.md` — read it ONLY when a call exits ≠ 0)
 
-Resolve with `orc lane config orc-poly --json` and obey `effective`. Never merge
-`.claude/orc.config.yaml` yourself, and never re-derive a precedence. Exit ≠ 0 →
-say so and use `../_shared/config-precedence.md`'s documented defaults, out
-loud. Nothing this lane reads is contested, gated or a stop, so it owes no
-preflight line and has no gate to honour.
+- **Calls:** `orc lane calls orc-poly --json` names every call and its exit codes.
+  **An exit code is an ANSWER where it says so, not a failure.** Make no other call.
+- **Config:** `orc lane config orc-poly --json`. Obey `effective`. Never merge
+  `.claude/orc.config.yaml` yourself (`../_shared/config-precedence.md`). Nothing
+  here is contested, gated or a stop: no preflight line, no gate to honour.
+- **Rules:** `orc rules slice --lane orc-poly --json` is the ONLY assembler
+  (`../_shared/phases/rules.md`). Its `line` prints VERBATIM at preflight.
 
-## Calls
-
-**ONE catalogue, and it is not you:** `orc lane calls orc-poly --json` names every
-CLI call this lane makes, each with its exit-code contract, its cost, when to run
-it, and what an EMPTY answer means. Never invent a spelling, never re-word an
-exit code, and never re-derive a state word — the CLI's state words are the only
-state words, and **an exit code is an ANSWER wherever that contract says so, not
-a failure**. A call the answer does not name is a call this lane does not make.
-Exit ≠ 0 from the catalogue itself → say the CLI is unavailable and name the
-command you are about to run, out loud, before running it.
-
-## Rules — the anti-slop card (`../_shared/phases/rules.md`)
-
-`orc rules slice --lane orc-poly --json` is the ONLY assembler; never build
-the card here. It rides under the house rules and above the task —
-**house rules > your project's rules > ORC's own packs** — and its `line` prints
-VERBATIM at preflight. Returns gain `rules_applied[]`, `rules_conflicts[]` (a gap,
-never a silent choice) and `rules_overridden[]`.
 ## Waiting mid-run (`/orc-wait`)
 
 Canonical: `../_shared/wait.md`. **`a lane that waits without a hand-back` has broken this contract.**
-Checkpoint **docset** · safe point **after a per-repo plan is written**. `soft` FORCES that checkpoint and does NOT stop if the write fails; `hard` skips it and can lose an in-flight return. Never begin a wait between a dispatch and its validated return, or before the smoke gate has reported.
+Checkpoint **docset** · safe point **after a per-repo plan is written**.

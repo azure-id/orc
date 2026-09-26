@@ -1,19 +1,12 @@
 ---
 name: orc-analyze-mini
 description: >
-  Fast-lane System Analyst for ORC-MINI (Sonnet 5, high effort). Turns a
-  requirement — a document (PDF by path or pasted) OR a plain-language request —
-  into a scope-bounded, code-grounded requirement report + derived spec: bounds
-  the deliverable to exactly the asked scope (other scopes never become tasks),
-  maps each requirement to real files with quote-anchored file:line evidence —
-  or marks it an ASSUMPTION and turns it into a question — and challenges the
-  user with recommended options. Use for "/orc-analyze-mini", "quickly analyze
-  this doc", "fast doc analysis", "quick requirement check", "fast requirement
-  analysis", or when orc-mini meets a document or an ambiguous requirement.
-  Distinct from /orc-analyze: ALWAYS single-pass — NO deep mode, NO scouts —
-  trading depth for speed and tokens; switch to /orc-analyze (deep) when you
-  need a wider code sweep, verify-every-claim, or alternatives with trade-offs.
-  The orchestrator dispatches this to a subagent — it never analyzes itself.
+  Fast-lane System Analyst for ORC-MINI (Sonnet 5, high effort). Use for
+  "/orc-analyze-mini", "quickly analyze this doc", "fast doc analysis", "quick
+  requirement check", "fast requirement analysis", or when orc-mini meets a
+  document or an ambiguous requirement. Writes a scope-bounded requirement
+  report with file:line evidence. ALWAYS single-pass — NO deep mode, NO scouts;
+  use /orc-analyze for depth.
 ---
 
 # ORC-ANALYZE-MINI
@@ -39,48 +32,37 @@ for the formats; this skill does not duplicate them.
   silently dropped.
 - **No deep mode, no scouts.** Always single-pass.
 - **Concrete escalation thresholds** (recommend the full `/orc-analyze`, Opus
-  4.8 high, and let the user choose — the boundary is not self-assessed vibes):
+  5.5 high, and let the user choose — the boundary is not self-assessed vibes):
   source doc > ~10 pages, OR > 12 in-scope requirements, OR > 3 conflict rows,
   OR audit mode with > 5 stale-premise rows.
 - **Model:** Sonnet 5, high effort.
 
 ## What's identical
 
+The full analyst's **hard rules 2, 3, 3a, 4a, 5 and 6** apply unchanged
+(`../orc-analyze/SKILL.md` §Hard rules): quote-anchored evidence-or-mark with
+`searched:` on absence claims, the read ladder (`../_shared/read-ladder.md`),
+recommended-option challenges, two perimeters with the **Additional context (do
+not build)** section, and a spec derived from the confirmed report (with the Evidence column and the
+Assumptions & Open Questions section). Anchored context is self-read (no
+scouts). Also the same:
+
 - **Doc-optional intake:** auto-detect + confirm mode — prose / audit
-  (documents) or **requirement** (NO doc; the user's request is the source of
-  truth, reconciled against code).
-- **Evidence-or-mark, quote-anchored:** every code claim / interpretation is
-  grounded with `file:line — "verbatim snippet"` (a ref with no quote
-  auto-downgrades to `UNVERIFIED`), OR tagged `ASSUMPTION`/`UNVERIFIED` and
-  turned into a question — never a silent guess. **Absence claims**
-  (missing/buildable) carry `searched:` — the concrete globs/greps run.
-- **The read ladder:** locate → outline → range → full, escalating only as far as
-  the question needs (`../_shared/read-ladder.md`). Trimmed depth is not a lower
-  evidence floor — it is fewer wasted full reads reaching the same anchors.
-- **Recommended-option challenges:** each challenge is a 2–3 option set with one
-  flagged recommended option + reason (blocking one at a time, advisory batched).
-- Two perimeters: the deliverable stays scope X (Y/Z never become tasks), but
-  anchored, non-actionable adjacent context is gathered when an in-scope item
-  depends on it — touchpoint-bounded, self-read (no scouts), each item anchored to
-  the requirement it serves + labeled "do not build". Same **Additional context
-  (do not build)** section in report + spec. Unanchored context is dropped.
-- Two artifacts, spec derived from the confirmed report, same folder
-  `orc/analyzer/{analysis-name}/` (internal; copied out only on report-only),
-  including the Evidence column and Assumptions & Open Questions section. The
-  spec is stamped with `git_head` + `dirty` for plan-time staleness detection.
+  (documents) or **requirement** (NO doc; the request is the source of truth).
+- Same folder `orc/analyzer/{analysis-name}/` (internal; copied out only on
+  report-only). The spec is stamped with `git_head` + `dirty` for plan-time
+  staleness detection.
 - Same branch: report-only, or take into build (hand both files to orc-mini,
-  which continues with the mini planner) — orc-mini runs the same evidence
-  spot-check + derivation lint gates as the full lane before building.
+  which continues with the mini planner and runs the same evidence spot-check +
+  derivation lint gates).
 
 ## Behavior trace (always on)
 
-`../_shared/phases/trace.md` (`core`, at run start; `orc lane phases` names
-the file and the layers). Lane token `analyze`, tier **Single-dispatch** —
-exactly ONE end-of-run packet, dispatched solo before `.current` is deleted.
-At run start write `log_dir/.current` = `run-analyze-<slug>-<DDMMYY>-<HHMMSS>.txt` AND
-`touch the trace file` of that name in the SAME step.
-Nothing else about the protocol is restated here; a phase that ends with
-`zero new trace lines is a protocol violation`.
+`../_shared/phases/trace.md` (`core`, at run start; `orc lane phases orc-analyze-mini --json` →
+`trace_grammar` gives the verbs). Lane token `analyze`, tier
+**Single-dispatch**. At run start write `log_dir/.current` =
+`run-analyze-<slug>-<DDMMYY>-<HHMMSS>.txt` AND `touch the trace file` of that name
+in the SAME step. A phase that ends with `zero new trace lines is a protocol violation`.
 
 ## Workflow checkpoint (gate before deriving the spec)
 
@@ -108,29 +90,12 @@ survived. Return exactly:
 
 Never build or spawn.
 
-## Config
+## Lane contract (`../_shared/lane-contract.md` — read it ONLY when a call exits ≠ 0)
 
-Resolve with `orc lane config orc-analyze-mini --json` and obey `effective`. Never merge
-`.claude/orc.config.yaml` yourself, and never re-derive a precedence. Exit ≠ 0 →
-say so and use `../_shared/config-precedence.md`'s documented defaults, out
-loud. Nothing this lane reads is contested, gated or a stop, so it owes no
-preflight line and has no gate to honour.
-
-## Calls
-
-**ONE catalogue, and it is not you:** `orc lane calls orc-analyze-mini --json` names every
-CLI call this lane makes, each with its exit-code contract, its cost, when to run
-it, and what an EMPTY answer means. Never invent a spelling, never re-word an
-exit code, and never re-derive a state word — the CLI's state words are the only
-state words, and **an exit code is an ANSWER wherever that contract says so, not
-a failure**. A call the answer does not name is a call this lane does not make.
-Exit ≠ 0 from the catalogue itself → say the CLI is unavailable and name the
-command you are about to run, out loud, before running it.
-
-## Rules — the anti-slop card (`../_shared/phases/rules.md`)
-
-`orc rules slice --lane orc-analyze-mini --json` is the ONLY assembler; never build
-the card here. It rides under the house rules and above the task —
-**house rules > your project's rules > ORC's own packs** — and its `line` prints
-VERBATIM at preflight. Returns gain `rules_applied[]`, `rules_conflicts[]` (a gap,
-never a silent choice) and `rules_overridden[]`.
+- **Calls:** `orc lane calls orc-analyze-mini --json` names every call and its exit codes.
+  **An exit code is an ANSWER where it says so, not a failure.** Make no other call.
+- **Config:** `orc lane config orc-analyze-mini --json`. Obey `effective`. Never merge
+  `.claude/orc.config.yaml` yourself (`../_shared/config-precedence.md`). Nothing
+  here is contested, gated or a stop: no preflight line, no gate to honour.
+- **Rules:** `orc rules slice --lane orc-analyze-mini --json` is the ONLY assembler
+  (`../_shared/phases/rules.md`). Its `line` prints VERBATIM at preflight.

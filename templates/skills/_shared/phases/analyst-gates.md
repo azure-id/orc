@@ -1,11 +1,6 @@
 # Phase — Analyst & plan gates   (id: `analyst-gates`)
 
-> **Library file.** Canonical since v1.0.0 W12; it was under the `orc` skill's
-> private `references/`, and other lanes already reached across into it. Read
-> by `orc`, `orc-analyze`, `orc-mini`. Layers declared: `core` only — single-
-> layer because these are the orchestrator-side gates on a returned analysis
-> or plan, and a trimmed lane runs fewer of them rather than different ones.
-> `orc lane phases <lane> --json` names the file and the layers to read.
+> **Library file** (`orc`, `orc-analyze`, `orc-mini`), `core` only: the orchestrator-side gates on a returned analysis or plan — a trimmed lane runs fewer of them, never different ones.
 
 <!-- orc:layer core -->
 ## Reference — Analyst, Combiner & Plan Gates (orchestrator side)
@@ -33,13 +28,8 @@ analyze; you only dispatch and relay.
 
 1. **Evidence spot-check:** Glob every `files[]` path in the spec +
    Grep-verify the quoted snippet on **EVERY quote-anchored ref, whatever its
-   `status`** (v0.34.6). It used to check only `exists|conflict` — but the two
-   statuses a GOOD audit most often produces are `resolved` (a challenged row
-   the user decided) and `buildable` (the actual work), so a correctly-triaged
-   analysis was the one the gate barely checked: a real spec had zero
-   `exists|conflict` rows, so the mandated verification covered 0 of 5 refs and
-   a `file:5` citing a quote that lives at `file:4` went through. It is one
-   Grep per ref, and it is the ONLY mechanical defence against a wrong line
+   `status`** — `resolved` and `buildable` included: they are the rows a GOOD
+   audit produces most. It is one Grep per ref, and it is the ONLY mechanical defence against a wrong line
    number reaching the planner. Note the causal shape: that ref started as a
    line RANGE with no quote (auto-UNVERIFIED per hard rule 2); narrowing it to
    one line + quote was the CORRECT fix and is what introduced the off-by-one —
@@ -54,7 +44,7 @@ lacks `scope_closed: true` (a one-Grep check).
 
 ## Combiner tracking (yours; full lane only)
 
-`context-combiner` (`orc-context-combiner-opus-5-high` — Opus 5.5 high, v0.34.0)
+`context-combiner` (`orc-context-combiner-opus-5-high` — Opus 5.5 high)
 merges 2+ RELATED, already-confirmed
 analyses from the same run into ONE combined requirement-spec before build.
 
@@ -93,7 +83,7 @@ proceed-with-flagged.
    over `declared_files` (two tasks sharing a file need a serializing dep or a
    merge). Both trivial at ≤ 20 tasks — never trust the planner's self-check
    alone.
-4. **TDD/test-task collision (v0.34.4):** a `tdd_spec` entry whose target file
+4. **TDD/test-task collision:** a `tdd_spec` entry whose target file
    is in the `declared_files` of a task whose `facets.test_surface` is
    `new-tests` is a miss. The paired TDD task materializes `tdd_spec` BEFORE the
    task it guards, so that task's planned work is already on disk and
@@ -101,14 +91,14 @@ proceed-with-flagged.
    no-op, silently drop promised coverage, or re-slice mid-run). The planner
    authored both mechanisms and folds them together itself: extend the
    materialized file, never re-author it.
-5. **TDD disposition gate (v0.41.0)** — this gate is what lets TDD be skipped
+5. **TDD disposition gate** — this gate is what lets TDD be skipped
    safely. Skipping a test is cheap to claim and expensive to get wrong, so
    every skip must be checkable, and it is checked in BOTH directions: a rule
    that only ever prevents tests is a rule that deletes coverage.
    - `disposition` outside the closed set
      `new-surface | behavior-change | covered-by-existing | no-behavior | no-runner`
-     → miss. (Absent on a pre-v0.41.0 plan → derive from `kind`; never bounce an
-     old plan — see the legacy exception below.)
+     → miss. (No `disposition` on an entry → derive it from `kind`; never bounce
+     the plan — see the legacy exception below.)
    - `covered-by-existing` **without a resolvable `covered_by`** → miss. Glob the
      cited `path` exactly as check 1 does for `disposition: exists`. "A test
      already covers this" is the one claim that, if false, silently removes
@@ -128,9 +118,8 @@ proceed-with-flagged.
 
 Any miss → the plan is malformed: bounce it back to the planner WITH the miss
 list (one retry), then escalate to the user. **Legacy exception:** a
-pre-v0.7.0 plan resumed from an old checkpoint has no `grounding[]`
-(pre-v0.9.0: no `requirements[]`/`spec_invariants[]`; pre-v0.41.0: no
-`disposition`) — resume it without the
+plan resumed from an old checkpoint may lack `grounding[]`,
+`requirements[]`/`spec_invariants[]` or `disposition` — resume it without the
 missing checks; never bounce an old plan.
 
 <!-- /orc:layer -->

@@ -16,6 +16,12 @@ what is about to be spent, before it is spent.
 | Build repair, round 1–2 | *reused — not asked* | yes | yes |
 | Build repair, round 3 | asked again | yes | yes |
 
+**Review slice.** The review offer builds its slice from
+`../../_shared/review-slice.md` (`--lane orc-quick`): the §1 free check first,
+then the §2 fields, and its §3 after-filter on the return. No disprove pass here.
+A finding the user calls "not a problem here" is a `disputed` outcome; record
+each outcome and the `FINDING-OUTCOME` line (`../../_shared/gotchas.md` §10).
+
 ### Writing code
 
 ```
@@ -37,7 +43,7 @@ Show a third line ONLY when all three are true:
 - `extra_enabled` is true, AND
 - a `quick-executor` position is held (`orc extra role set quick-executor
   <profile>/<model>`), AND
-- `orc extra resolve --slot quick-executor --json` answers `extra`.
+- `probes["extra-slot"]` (Q0 step 1) answers `resolved: extra`.
 
 ```
 Which executor for entry 2 — "add retry header"?
@@ -117,7 +123,8 @@ reason attached, the same shape every ORC question uses
 default**, and the menu still ends with
 `Your choice — nothing runs until you answer.`
 
-The reason comes from the dig, never from a feeling. Suggest
+The reason comes from the dig, or from `habits.suggestions` with the CLI's
+count (`../../_shared/habits.md`), never from a feeling. Suggest
 `orc-executor-opus-5-low` when ANY of these holds:
 
 | Suggest the stronger executor when | Because |
@@ -139,8 +146,11 @@ For recon, the suggestion is simpler: `orc-recon-sonnet-4-6-med` finds things;
 2. **Never sticky.** Do not carry the last answer into the next entry.
 3. **Already answered is not skipped.** If the user wrote "use opus 5 low", the
    gate is satisfied — say which one you are using, in one line.
-4. **No config can ANSWER this menu.** `opus5_only`, `rubric_bands_override`
-   and `extra_resume` are all inert in this lane. If one is on, say so at the gate so the user is not confused:
+4. **No config can ANSWER this menu. Nothing can override this lane.**
+   orc-quick has no config key of its own. `opus5_only`, `rubric_bands_override`,
+   `extra_resume`, `extra_on_failure` and `extra_fallback_agent` are all INERT in
+   this lane (`../../_shared/opus5-only.md` names orc-quick as the one
+   exception). The user always picks the agent. If one is on, say so at the gate so the user is not confused:
    ```
    (orc-quick ignores opus5_only — both options are live)
    ```
@@ -151,7 +161,8 @@ For recon, the suggestion is simpler: `orc-recon-sonnet-4-6-med` finds things;
 
    **`extra_enabled` is the one exception, and it is not an answer — it is an
    option** (v0.55.0, `../../_shared/extra-dispatch.md`). With a `quick-executor`
-   position held it ADDS line 3 to the menu and does nothing else.
+   position held (`orc extra role`) it ADDS line 3 to the menu and does nothing
+   else. Recon and review stay on Claude.
    **It never becomes a default** (rule 1), never sticks (rule 2), and it is
    re-asked after a failure. Say what it is at the gate:
    ```

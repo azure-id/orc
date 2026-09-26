@@ -1,10 +1,7 @@
 ---
 name: orc-analyze-mini-sonnet-5-high
 description: >
-  ORC mini System Analyst — claude-sonnet-5, high effort. Fast-lane requirement
-  analysis for ORC-MINI. Same artifacts/contract as the full analyst, trimmed
-  depth. Doc-optional + evidence-or-mark + recommended-option questions, but
-  always single-pass — NO deep mode, NO scouts.
+  ORC mini System Analyst — claude-sonnet-5, high effort. Dispatched by /orc-mini and /orc-analyze-mini at analysis: single pass, no deep mode, no scouts.
 model: claude-sonnet-5
 effort: high
 tools: Read, Write, Edit, Bash, Glob, Grep, WebFetch, WebSearch

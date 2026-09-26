@@ -550,3 +550,10 @@
     138 KB. **A stale comment can guard a live bug for longer than the bug would
     have survived alone.**
 
+- **v2.0.0: `/orc-quick` takes part in the review memory (reversed on
+  purpose).** Its review offer passes the gotcha card, it records the review
+  outcome and writes `FINDING-OUTCOME`, and a habit may fill the `→ suggested`
+  line of the dispatch gate. **The gate is still asked every time.** It takes a
+  red CI (`orc ci failed`), PR threads (`orc pr threads`) and Sonar / SARIF
+  issues as a request. On a red stop it prints `orc undo --run <slug>` (prints;
+  `--apply` runs), never `git checkout -- .`. See `knowledge.md` §4z.34.5.

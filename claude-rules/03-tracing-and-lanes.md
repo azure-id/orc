@@ -80,3 +80,13 @@
   proves: `state-of-play.md` is written at a STOP, so its absence never means
   "incomplete".
 
+- **v2.0.0: the lane writes its trace through the CLI.** `orc trace write
+  --packet -` writes the `.txt` and the `.jsonl` from ONE packet and checks
+  every verb against `TRACE_VERBS` (unknown verb → exit 2, nothing written).
+  The Haiku trace writer is the FALLBACK on exit ≠ 0 only. A lane gets only its
+  own verbs (`orc lane phases --json` → `trace_grammar`); the full table is
+  `_shared/phases/trace-verbs.md`, on demand. New verbs: `ASK` (one answered
+  question — never the user's words), `FINDING-OUTCOME` (review close) and the
+  `GATE flaky` result; `FINDING` gains `pre=` `suppressed=` `folded=`. A reader
+  that treats the set as closed must learn them. See
+  `claude-rules/11-habits-and-review.md` and `knowledge.md` §4z.34.6.

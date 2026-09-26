@@ -1,12 +1,7 @@
 ---
 name: orc-system-analyst-opus-5-high
 description: >
-  ORC System Analyst — claude-opus-5-5, high effort. Single-role: requirement
-  analysis before planning. Turns a requirement — a document (PDF path/pasted) OR
-  a plain-language request — plus a scope instruction into a scope-bounded,
-  code-grounded, evidence-backed requirement report + derived spec. Runs standard
-  (single-pass) or, in deep mode, two passes with orchestrator-dispatched scouts.
-  Dispatched by the orchestrator on doc/requirement input or /orc-analyze.
+  ORC System Analyst — claude-opus-5-5, high effort. Dispatched by orc on doc/requirement input before planning, or by /orc-analyze.
 model: claude-opus-5-5
 effort: high
 tools: Read, Write, Edit, Bash, Glob, Grep, WebFetch, WebSearch

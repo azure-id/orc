@@ -1951,3 +1951,59 @@ test("test panel: the fixtures carry one of every state, including the ugly ones
   for (const [needle, why] of want)
     assert.ok(fx.includes(needle), `the fixtures must carry ${why} (${needle})`);
 });
+
+// ── v2.0.0 W7 — the Behaviour panel ─────────────────────────────────────────
+// The panel renders the CLI's lines and derives no habit. Every state word,
+// class word and `by=` value arrives from `orc habit show|log --json`; none may
+// be a string the panel compares against or emits. (A lookup table KEYED by the
+// CLI's word — `"never-ask": t(...)` — is prose for that word, not the word.)
+const BH_WORDS = ["observed", "proposed", "applied", "declined", "never-ask", "stale", "shadowed", "never", "apply", "suggest", "user", "ledger", "learned", "config", "default", "active", "candidate", "quiet", "orphaned"];
+
+test("behaviour: the panel renders the CLI's sentences verbatim and names no state, class or by= word", () => {
+  const js = panelJs("behaviour")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/^\s*\/\/.*$/gm, "");
+  for (const w of BH_WORDS) {
+    const re = new RegExp("[\"'`]" + w.replace("-", "\-") + "[\"'`](?!\s*:)");
+    assert.ok(!re.test(js), `behaviour.js holds the literal "${w}" — it must arrive from the CLI`);
+  }
+  // The sentences are rendered as the CLI sent them, never through t().
+  for (const expr of ["p.line", "r.line", "r.effect", "r.rule", "n.line", "r.why"]) {
+    assert.ok(js.includes(expr), `behaviour.js renders ${expr}`);
+    assert.ok(!new RegExp("t\(\s*" + expr.replace(".", "\.") + "\s*\)").test(js), `${expr} is the CLI's sentence — never passed through t()`);
+  }
+  // The sets it iterates are the CLI's lists, not the panel's.
+  for (const src of ["d.state_words", "d.classes", "rh.by", "d.modes", "P.statuses"]) assert.ok(js.includes(src), `the panel iterates ${src} from the CLI`);
+  for (const code of ["en", "id"]) {
+    const table = JSON.parse(fs.readFileSync(path.join(WEBUI, "i18n", code, "behaviour.json"), "utf8"));
+    for (const [k, v] of Object.entries(table))
+      assert.ok(!BH_WORDS.includes(String(v).trim()), `${code}/${k} stores the CLI word "${v}" — the panel renders it, it never translates it`);
+  }
+});
+
+test("behaviour: a never habit renders NO button — only the command a person types", () => {
+  const js = panelJs("behaviour");
+  const fn = /function bhActions\(r, ctx\) \{([\s\S]*?)\n\}/.exec(js);
+  assert.ok(fn, "bhActions exists");
+  const branch = /else if \(cm\.manual\) \{([\s\S]*?)\n  \}/.exec(fn[1]);
+  assert.ok(branch, "the manual branch exists");
+  assert.ok(!/button|B\(/.test(branch[1]), "the manual (never) branch creates no button");
+  assert.match(branch[1], /bhCmd\(cm\.manual\)/, "it shows the exact command instead");
+  // Every button the panel makes goes through the ONE confirmation modal.
+  assert.ok(!/post\("\/api\/habit\//.test(fn[1]), "no habit write runs from a click without the confirmation");
+  assert.match(js, /function bhConfirm\([\s\S]*?modal\(/, "the confirmation is the shared modal()");
+});
+
+test("behaviour: the learning switch is the Settings write, and every Behaviour write is a WRITES route", () => {
+  const js = panelJs("behaviour");
+  assert.match(js, /post\("\/api\/config\/set", \{ key: "habits", value: m \}\)/, "no second route for the learning switch");
+  const api = fs.readFileSync(path.join(WEBUI, "api.js"), "utf8");
+  const writes = api.slice(api.indexOf("const WRITES = {"), api.indexOf("\n};", api.indexOf("const WRITES = {")));
+  for (const r of ["/api/habit/accept", "/api/habit/decline", "/api/habit/forget", "/api/habit/reset", "/api/gotcha/accept"]) {
+    assert.ok(writes.includes(`"${r}"`), `${r} is a POST-only WRITE`);
+    assert.ok(js.includes(`"${r}"`), `the panel uses ${r}`);
+  }
+  // Nothing that reaches outside this machine gets a button.
+  assert.ok(!/gotcha", "import|gotcha", "sync|habit", "rebuild/.test(writes), "no import / sync / rebuild route");
+  assert.ok(!/["']\/api\/gotcha\/(import|sync)/.test(js), "the panel never runs an importer or a sync");
+});

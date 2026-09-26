@@ -1,0 +1,24 @@
+{
+  "total": 5,
+  "p": 1,
+  "ps": 500,
+  "paging": { "pageIndex": 1, "pageSize": 500, "total": 5 },
+  "issues": [
+    { "key": "AX-001", "rule": "javascript:S2068", "severity": "BLOCKER", "component": "shop:src/config/db.js", "project": "shop", "line": 8, "textRange": { "startLine": 8, "endLine": 8 }, "message": "Review this potentially hard-coded password.", "type": "VULNERABILITY", "issueStatus": "FIXED", "status": "CLOSED", "resolution": "FIXED", "impacts": [{ "softwareQuality": "SECURITY", "severity": "HIGH" }], "tags": ["cwe"], "creationDate": "2026-09-01T10:00:00+0000", "updateDate": "2026-09-20T10:00:00+0000" },
+    { "key": "AX-002", "rule": "javascript:S1854", "severity": "MAJOR", "component": "shop:src/orders/list.js", "project": "shop", "line": 30, "textRange": { "startLine": 30, "endLine": 31 }, "message": "Remove this useless assignment to variable \"page\".", "type": "CODE_SMELL", "issueStatus": "FALSE_POSITIVE", "status": "RESOLVED", "resolution": "FALSE-POSITIVE", "impacts": [{ "softwareQuality": "MAINTAINABILITY", "severity": "MEDIUM" }], "creationDate": "2026-09-02T10:00:00+0000", "updateDate": "2026-09-21T10:00:00+0000" },
+    { "key": "AX-003", "rule": "javascript:S1854", "severity": "MAJOR", "component": "shop:src/orders/total.js", "project": "shop", "line": 12, "message": "Remove this useless assignment to variable \"sum\".", "type": "CODE_SMELL", "issueStatus": "ACCEPTED", "impacts": [{ "softwareQuality": "MAINTAINABILITY", "severity": "LOW" }], "creationDate": "2026-09-03T10:00:00+0000", "updateDate": "2026-09-22T10:00:00+0000" },
+    { "key": "AX-004", "rule": "javascript:S3776", "severity": "CRITICAL", "component": "shop:src/orders/total.js", "project": "shop", "line": 50, "message": "Refactor this function to reduce its Cognitive Complexity from 22 to the 15 allowed.", "type": "CODE_SMELL", "issueStatus": "OPEN", "impacts": [{ "softwareQuality": "MAINTAINABILITY", "severity": "HIGH" }], "creationDate": "2026-09-04T10:00:00+0000", "updateDate": "2026-09-23T10:00:00+0000" },
+    { "key": "AX-005", "rule": "javascript:S1854", "severity": "MAJOR", "component": "shop:src/orders/cart.js", "project": "shop", "line": 7, "message": "Remove this useless assignment to variable \"tmp\".", "type": "CODE_SMELL", "issueStatus": "CONFIRMED", "impacts": [{ "softwareQuality": "MAINTAINABILITY", "severity": "MEDIUM" }], "creationDate": "2026-09-05T10:00:00+0000", "updateDate": "2026-09-24T10:00:00+0000" }
+  ],
+  "components": [
+    { "key": "shop:src/config/db.js", "path": "src/config/db.js", "qualifier": "FIL" },
+    { "key": "shop:src/orders/list.js", "path": "src/orders/list.js", "qualifier": "FIL" },
+    { "key": "shop:src/orders/total.js", "path": "src/orders/total.js", "qualifier": "FIL" },
+    { "key": "shop:src/orders/cart.js", "path": "src/orders/cart.js", "qualifier": "FIL" }
+  ],
+  "rules": [
+    { "key": "javascript:S2068", "name": "Hard-coded passwords are security-sensitive", "lang": "js" },
+    { "key": "javascript:S1854", "name": "Unused assignments should be removed", "lang": "js" },
+    { "key": "javascript:S3776", "name": "Cognitive Complexity of functions should not be too high", "lang": "js" }
+  ]
+}

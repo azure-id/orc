@@ -4,13 +4,9 @@ description: >
   Stacked-PR PLANNER. Use for "/orc-pr-setup", "plan the stacked PRs", "split
   this change into stacked pull requests", "where do the PR cut lines go".
   Decides the LAYERING of a big change — ordered layers, each with a purpose, a
-  value class, an explicit file list, a measured LoC/file budget and a
-  dependency reason — and writes stacked-pr/<slug>/stack-plan.md. Runs
-  INDEPENDENTLY (no orchestrator needed) and is also the lane ORC's ship phase
-  hands off to when a change is too big for one PR. It NEVER touches git
-  history: no branches, no commits, no pushes — that is orc-pr-driver's job.
-  P0 HARD GATE: when a boundary is uncertain it STOPS and asks, one decision at
-  a time, and records the answer.
+  file list, a size budget and a dependency reason — and writes
+  stacked-pr/<slug>/stack-plan.md. It never touches git history. When a boundary
+  is uncertain it STOPS and asks.
 ---
 
 # ORC-PR-SETUP (stacked-PR planner)
@@ -62,11 +58,9 @@ how any of this works; never load it to drive the run.
 
 ## Phases
 
-`orc lane phases orc-pr-setup --json` is this lane's pipeline: the ordered list, where
-each phase lives, and how much of it to read. **The CLI owns the order** — never
-derive it from the headings below, and never renumber or rename one without the
-manifest, because a `read: section` pointer names a HEADING and a renamed heading
-is a pointer into nothing.
+`orc lane phases orc-pr-setup --json` is this lane's pipeline. **The CLI owns the order**:
+never derive it from the headings below, and never rename or renumber one
+without the manifest (`../_shared/lane-contract.md` §Phases).
 
 ## Phase S0 — Preflight (probe, never assume)
 
@@ -173,13 +167,11 @@ exceptions`. Then:
 
 ## Behavior trace (always on)
 
-`../_shared/phases/trace.md` (`core`, at run start; `orc lane phases` names
-the file and the layers). Lane token `prsetup`, tier **Single-dispatch** —
-exactly ONE end-of-run packet, dispatched solo before `.current` is deleted.
-At run start write `log_dir/.current` = `run-prsetup-<slug>-<DDMMYY>-<HHMMSS>.txt` AND
-`touch the trace file` of that name in the SAME step.
-Nothing else about the protocol is restated here; a phase that ends with
-`zero new trace lines is a protocol violation`.
+`../_shared/phases/trace.md` (`core`, at run start; `orc lane phases orc-pr-setup --json` →
+`trace_grammar` gives the verbs). Lane token `prsetup`, tier
+**Single-dispatch**. At run start write `log_dir/.current` =
+`run-prsetup-<slug>-<DDMMYY>-<HHMMSS>.txt` AND `touch the trace file` of that name
+in the SAME step. A phase that ends with `zero new trace lines is a protocol violation`.
 
 ## Boundaries
 
@@ -192,29 +184,12 @@ Nothing else about the protocol is restated here; a phase that ends with
 - Reminder: to see usage limits, tell the user to run `/usage` (never invoke it
   programmatically).
 
-## Config
+## Lane contract (`../_shared/lane-contract.md` — read it ONLY when a call exits ≠ 0)
 
-Resolve with `orc lane config orc-pr-setup --json` and obey `effective`. Never merge
-`.claude/orc.config.yaml` yourself, and never re-derive a precedence. Exit ≠ 0 →
-say so and use `../_shared/config-precedence.md`'s documented defaults, out
-loud. Nothing this lane reads is contested, gated or a stop, so it owes no
-preflight line and has no gate to honour.
-
-## Calls
-
-**ONE catalogue, and it is not you:** `orc lane calls orc-pr-setup --json` names every
-CLI call this lane makes, each with its exit-code contract, its cost, when to run
-it, and what an EMPTY answer means. Never invent a spelling, never re-word an
-exit code, and never re-derive a state word — the CLI's state words are the only
-state words, and **an exit code is an ANSWER wherever that contract says so, not
-a failure**. A call the answer does not name is a call this lane does not make.
-Exit ≠ 0 from the catalogue itself → say the CLI is unavailable and name the
-command you are about to run, out loud, before running it.
-
-## Rules — the anti-slop card (`../_shared/phases/rules.md`)
-
-`orc rules slice --lane orc-pr-setup --json` is the ONLY assembler; never build
-the card here. It rides under the house rules and above the task —
-**house rules > your project's rules > ORC's own packs** — and its `line` prints
-VERBATIM at preflight. Returns gain `rules_applied[]`, `rules_conflicts[]` (a gap,
-never a silent choice) and `rules_overridden[]`.
+- **Calls:** `orc lane calls orc-pr-setup --json` names every call and its exit codes.
+  **An exit code is an ANSWER where it says so, not a failure.** Make no other call.
+- **Config:** `orc lane config orc-pr-setup --json`. Obey `effective`. Never merge
+  `.claude/orc.config.yaml` yourself (`../_shared/config-precedence.md`). Nothing
+  here is contested, gated or a stop: no preflight line, no gate to honour.
+- **Rules:** `orc rules slice --lane orc-pr-setup --json` is the ONLY assembler
+  (`../_shared/phases/rules.md`). Its `line` prints VERBATIM at preflight.

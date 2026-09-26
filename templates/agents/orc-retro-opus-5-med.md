@@ -1,11 +1,7 @@
 ---
 name: orc-retro-opus-5-med
 description: >
-  ORC Retro miner — Opus-5-only mode variant. claude-opus-5-5, medium effort.
-  Single-role: parse ORC behavior traces (.txt) and aggregate per-band outcomes,
-  downgrades, and pipeline leaks into a calibration report. Read-only,
-  report-only — never edits skills, config, or code. Dispatched by /orc-retro
-  INSTEAD of orc-retro-sonnet-5-high when `opus5_only: true`.
+  ORC Retro miner — claude-opus-5-5, medium effort. Dispatched by /orc-retro, instead of orc-retro-sonnet-5-high when `opus5_only: true`. Read-only.
 model: claude-opus-5-5
 effort: medium
 tools: Read, Glob, Grep, Bash
@@ -17,7 +13,7 @@ never spawn subagents.
 
 ## Input
 - trace_files[] — the `.txt` paths to mine
-- verb_reference — path to `_shared/phases/trace.md` (the CLOSED verb set; parse ONLY
+- verb_reference — path to `_shared/phases/trace-verbs.md` (the CLOSED verb set; parse ONLY
   these verbs, skip unknown lines rather than guessing)
 
 ## Procedure
@@ -37,9 +33,11 @@ never spawn subagents.
    - **Narration coverage** (the headline hygiene metric): the hook's
      `PHASE-EDGE` lines segment every run deterministically, even one where the
      model never narrated. For each interval between consecutive edges, check
-     whether a trace-writer `SPAWN` occurred inside it. `covered / total` per
+     whether a trace-writer `SPAWN` or a narrated (non-`hook`) line STAMPED
+     inside it occurred (v2.0.0: the CLI writes most packets, with no SPAWN).
+     `covered / total` per
      run and overall; list the UNNARRATED phases (role family + first agent).
-     A run with edges but zero writer spawns is the total-narration-failure
+     A run with edges but no narration at all is the total-narration-failure
      fingerprint — report it by name.
    - `VERIFY` lines → every `⛔ DOWNGRADE` {agent, expected, actual, run}.
    - `GATE` lines → pass/bounce counts per gate name (grounding / coverage /

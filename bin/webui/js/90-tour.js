@@ -393,6 +393,10 @@ const TOUR_STEPS = [
   { panel: "settings", selector: "#ladder-card", title: "tour.4.title", text: "tour.4.text" },
   { panel: "runs", selector: ".run-list, .empty", title: "tour.5.title", text: "tour.5.text" },
   { panel: "knowledge", selector: ".stack", title: "tour.6.title", text: "tour.6.text" },
+  /* v2.0.0 W7 — Behaviour, the panel under Stats. It points at the portrait
+     (the hero), which has a SIZE in every state: with `habits: off` the off
+     card takes the same `.bh-hero` box, so the spotlight never lands on nothing. */
+  { panel: "behaviour", selector: ".bh-hero", title: "tour.16.title", text: "tour.16.text" },
   { panel: "experiment", selector: ".lane-list", title: "tour.7.title", text: "tour.7.text" },
   { panel: "maintenance", selector: ".action", title: "tour.8.title", text: "tour.8.text" },
   /* v0.46.0 — four steps for the four new surfaces. Each MUST point at something

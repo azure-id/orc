@@ -364,6 +364,23 @@ test("the executor generator is line-ending agnostic (CRLF worktree)", () => {
   }
 });
 
+// v2.0.0 T15 — the model twins are generated from ONE body per family. A
+// family with one row is not a twin, and a row whose file is missing is a
+// dispatch of a nonexistent agent.
+test("every model-twin family renders to the files on disk, in any worktree", () => {
+  const build = require(path.join(__dirname, "..", "bin", "build-agents.js"));
+  assert.ok(build.TWINS.length >= 8, "the eight twin families are generated");
+  for (const fam of build.TWINS) {
+    assert.ok(fam.variants.length >= 2, `${fam.family} has a twin`);
+    const src = build.lf(fs.readFileSync(path.join(__dirname, "..", "agents-src", "twins", fam.family + ".template.md"), "utf8"));
+    for (const v of fam.variants) {
+      const disk = fs.readFileSync(path.join(__dirname, "..", "templates", "agents", v.name + ".md"), "utf8");
+      assert.strictEqual(build.lf(disk), build.renderTwin(src, v), `${v.name} matches its template`);
+      assert.strictEqual(build.renderTwin(src.replace(/\n/g, "\r\n"), v), build.renderTwin(src, v).replace(/\n/g, "\r\n"), `${v.name}: CRLF render`);
+    }
+  }
+});
+
 // ── v0.34.6 analyze: gate coverage + shipped model literals ────────────────
 
 test("no shipped schema template names a model/effort pair that no agent has", () => {
@@ -808,8 +825,13 @@ test("every lane that dispatches foreign points at reconcile FIRST — one sente
 test("`extra_resume` is INERT in /orc-quick, and the shadowing is announced on both sides", () => {
   // A shadowed setting must never be silent — and the lane that asks which agent
   // before every dispatch is exactly the lane a resume config would break.
-  const quick = read("skills/orc-quick/SKILL.md");
-  assert.match(quick, /These config keys \*\*do nothing here\*\*/);
+  // v2.0.0 W3 — the INERT list moved from the spine to the gate's own rule 4
+  // (`references/dispatch-gate.md`, read at every gate, which is where it is
+  // announced). The spine keeps the pointer.
+  const spine = read("skills/orc-quick/SKILL.md");
+  assert.match(spine, /Nothing can override this lane\*\* — `references\/dispatch-gate\.md` rule 4/);
+  const quick = spine + "\n" + read("skills/orc-quick/references/dispatch-gate.md");
+  assert.match(quick, /INERT in\s+this lane/);
   for (const k of ["extra_resume", "extra_on_failure", "opus5_only", "rubric_bands_override"])
     assert.ok(quick.includes(k), "/orc-quick's INERT list is missing " + k);
   const shared = read("skills/_shared/extra-dispatch.md");
@@ -933,14 +955,16 @@ test("a resumed return owes `resume_state`, and §6's before-side moves to the j
   const rv = read("skills/_shared/return-validation.md");
   for (const f of ["`resume_state`", "`preexisting_read[]`", "`journal_fidelity`"])
     assert.ok(rv.includes(f), "§2b never mentions " + f);
-  assert.match(rv, /absent on a resume slice is MALFORMED/i);
+  // v2.0.0 T5 — §2b is a stub; the full foreign-return check is extra-dispatch.md's.
+  assert.match(read("skills/_shared/extra-dispatch.md"), /absent on a resume slice is MALFORMED/i);
   // WITHOUT THIS SENTENCE the first resumed wave gates itself on the work it
   // just recovered.
   assert.match(rv, /On a RESUMED task the "before" side of the delta is the JOURNAL\s+BASELINE/);
 });
 
 test("the two new trace verbs are registered where the lane reads them", () => {
-  const proto = read("skills/_shared/phases/trace.md");
+  // v2.0.0 T1 — the verb table moved to the on-demand trace-verbs.md.
+  const proto = read("skills/_shared/phases/trace-verbs.md");
   assert.ok(proto.includes("EXTRA resume task="));
   assert.ok(proto.includes("EXTRA orphan task="));
   assert.match(proto, /A resume that leaves no line cannot be counted/);
@@ -958,7 +982,15 @@ test("the two new trace verbs are registered where the lane reads them", () => {
 // speed. A description that grows past this has moved contract prose into the
 // one place that is never free.
 function foldedDescription(skillDir) {
-  const md = read(path.join("skills", skillDir, "SKILL.md"));
+  return foldedDescriptionAt(path.join("skills", skillDir, "SKILL.md"), skillDir);
+}
+function frontmatterOf(rel) {
+  const fm = /^---\n([\s\S]*?)\n---/.exec(read(rel));
+  assert.ok(fm, rel + " has no frontmatter");
+  return fm[1];
+}
+function foldedDescriptionAt(rel, skillDir) {
+  const md = read(rel);
   const fm = /^---\n([\s\S]*?)\n---/.exec(md);
   assert.ok(fm, skillDir + " has no frontmatter");
   const lines = fm[1].split("\n");
@@ -988,6 +1020,16 @@ test("no skill description exceeds the spec cap, and the lean lanes stay short",
     const len = foldedDescription(lane).length;
     assert.ok(len <= 350, lane + ": description is " + len + " chars (lean-lane cap 350)");
   }
+  // v2.0.0 T2 — every description is listed in EVERY session. The coding lanes
+  // keep a short text; the internal-only three are shorter still.
+  for (const lane of CODING_SKILLS) {
+    const len = foldedDescription(lane).length;
+    assert.ok(len <= 450, lane + ": description is " + len + " chars (coding-lane cap 450)");
+  }
+  for (const lane of INTERNAL_SKILLS) {
+    const len = foldedDescription(lane).length;
+    assert.ok(len <= 220, lane + ": description is " + len + " chars (internal-skill cap 220)");
+  }
 });
 
 test("the lean lanes keep every trigger phrase a user types", () => {
@@ -1003,6 +1045,73 @@ test("the lean lanes keep every trigger phrase a user types", () => {
   const mini = foldedDescription("orc-mini");
   for (const phrase of ["/orc-mini", "use orc-mini to implement X"])
     assert.ok(mini.includes(phrase), "orc-mini lost the trigger phrase: " + phrase);
+});
+
+// v2.0.0 T2 — the trimmed coding lanes keep every phrase a user types.
+const CODING_SKILLS = [
+  "orc", "orc-fast", "orc-verify", "orc-test", "orc-pr-setup", "orc-pr-driver", "orc-analyze",
+  "orc-analyze-mini", "orc-poly", "orc-route", "orc-wait", "orc-diy", "orc-pattern",
+];
+const INTERNAL_SKILLS = ["context-combiner", "orc-advisor", "orc-judge"];
+const CODING_TRIGGERS = {
+  orc: ["orchestrate this", "build this in parallel", "run this with subagents", "use orc"],
+  "orc-fast": ["use orc-fast to implement X", "/orc-fast"],
+  "orc-verify": ["verify my changes", "/orc-verify", "check the modified files"],
+  "orc-test": ["/orc-test", "test my API end to end", "run the endpoints from happy path to security", "test this against staging", "e2e the login flow"],
+  "orc-pr-setup": ["/orc-pr-setup", "plan the stacked PRs", "split this change into stacked pull requests", "where do the PR cut lines go"],
+  "orc-pr-driver": ["/orc-pr-driver", "build the stacked PRs", "submit the stack", "restack / sync / merge my stack"],
+  "orc-analyze": ["/orc-analyze", "analyze this doc for scope X", "analyze this requirement against the code"],
+  "orc-analyze-mini": ["/orc-analyze-mini", "quickly analyze this doc", "fast doc analysis", "quick requirement check", "fast requirement analysis"],
+  "orc-poly": ["/orc-poly", "plan this across both repos", "coordinate a change over these repos"],
+  "orc-route": ["/orc-route", "which lane for this plan?", "is this worth the full orc run?"],
+  "orc-wait": ["/orc-wait", "/orc-wait 30", "/orc-wait 2h hard", "wait for my quota to reset", "pause this until the window resets", "/orc-wait block <reason>"],
+  "orc-diy": ["/orc-diy", "run my custom orc flow", "/orc-diy compile"],
+  "orc-pattern": ["/orc-pattern", "learn my code pattern", "codify conventions"],
+  "context-combiner": ["pass to context-combiner"],
+};
+test("the trimmed coding lanes keep every trigger phrase a user types", () => {
+  for (const [lane, phrases] of Object.entries(CODING_TRIGGERS)) {
+    const desc = foldedDescription(lane);
+    for (const phrase of phrases) assert.ok(desc.includes(phrase), lane + " lost the trigger phrase: " + phrase);
+  }
+});
+
+// v2.0.0 T19 — the three internal-only skills are read by PATH, never by the
+// Skill tool, so they are hidden from the listing. No other skill is hidden.
+test("disable-model-invocation is set on exactly the three internal-only skills", () => {
+  const dirs = fs
+    .readdirSync(path.join(T, "skills"), { withFileTypes: true })
+    .filter((e) => e.isDirectory() && fs.existsSync(path.join(T, "skills", e.name, "SKILL.md")))
+    .map((e) => e.name);
+  const hidden = dirs.filter((d) =>
+    /^disable-model-invocation:\s*true\s*$/m.test(frontmatterOf(path.join("skills", d, "SKILL.md")))
+  );
+  assert.deepStrictEqual(hidden.sort(), INTERNAL_SKILLS.slice().sort());
+});
+
+// v2.0.0 T18 — every subagent description is listed in EVERY session, and ORC
+// dispatches by exact NAME, never by description. A coding agent's description
+// is one line: `ORC <role> — <model id>, <effort> effort. Dispatched by …`.
+// The document-lane agents are outside this rule for now.
+test("every coding agent has a one-line description that names its own model and effort", () => {
+  const DOC_LANE = /^orc-(challenge-|doc-|test-designer-|test-interpreter-)/;
+  const files = fs
+    .readdirSync(path.join(T, "agents"))
+    .filter((f) => /^orc-.*\.md$/.test(f) && !DOC_LANE.test(f));
+  assert.ok(files.length >= 38, "the agent walk found only " + files.length + " coding agents");
+  for (const f of files) {
+    const rel = path.join("agents", f);
+    const fm = frontmatterOf(rel);
+    const model = (/^model:\s*(\S+)/m.exec(fm) || [])[1];
+    const effort = (/^effort:\s*(\S+)/m.exec(fm) || [])[1];
+    assert.ok(model, f + " has no model");
+    const desc = foldedDescriptionAt(rel, f);
+    const tail = effort ? ", " + effort + " effort. " : " (no effort ladder). ";
+    assert.match(desc, /^ORC [^—]+ — /, f + ": description does not start with 'ORC <role> — '");
+    assert.ok(desc.includes(" — " + model + tail), f + ": description does not name '" + model + tail.trim() + "'");
+    assert.ok(desc.includes("Dispatched by "), f + ": description does not say who dispatches it");
+    assert.ok(desc.length <= 180, f + ": description is " + desc.length + " chars (cap 180)");
+  }
 });
 
 // ── v1.9.0 — the recon pair and reproduce-first ────────────────────────────
@@ -1064,9 +1173,10 @@ test("a defect slice asks for `repro`, and the return owes it red-then-green", (
   assert.match(rv, /after\.exit_code/, "§5d never calls a still-red fix malformed");
   assert.ok(rv.includes("repro: none"), "§5d never allows the honest answer");
   // The trace verb, defined where a lane reads the protocol.
-  const proto = read("skills/_shared/phases/trace.md");
-  assert.match(proto, /`REPRO red\\|green :: <cmd> exit=<n>`/, "trace.md has no REPRO row");
-  assert.ok(proto.includes("recon → recon"), "trace.md never lists the recon role family");
+  // v2.0.0 T1 — the verb table is on demand in trace-verbs.md.
+  const proto = read("skills/_shared/phases/trace-verbs.md");
+  assert.match(proto, /`REPRO red\\\|green :: <cmd> exit=<n>/, "trace-verbs.md has no REPRO row");
+  assert.ok(proto.includes("recon → recon"), "trace-verbs.md never lists the recon role family");
 });
 
 // A `read: section` pointer in `orc lane phases` names a HEADING. A renamed
@@ -1086,4 +1196,113 @@ test("every own-phase heading the manifest names exists byte-for-byte in its spi
     if (file.startsWith("orc-quick/")) quick++;
   }
   assert.strictEqual(quick, 4, "orc-quick must declare exactly its four Q headings");
+});
+
+// v2.0.0 T16 — read the SECTION, not the file. A spine that says "read ONLY
+// `## X`" of a reference names a HEADING; a renamed heading is a pointer into
+// nothing, and the lane reads an empty section. Same for the § numbers of
+// return-validation.md, which every lane now reads one section at a time.
+test("every section a spine scopes a reference read to exists, heading for heading", () => {
+  const quick = read("skills/orc-quick/SKILL.md");
+  const scoped = {
+    "skills/orc-quick/references/dispatch-gate.md": ["### Writing code", "### Read-only work (recon)", "## The suggestion", "## The build repair loop"],
+    "skills/orc-quick/references/context-doc.md": ["## Entry shape", "## A read-only entry"],
+  };
+  for (const [file, headings] of Object.entries(scoped)) {
+    const lines = read(file).split("\n");
+    for (const h of headings) {
+      // the spine may name a heading by its title, before a ` — ` subtitle
+      assert.ok(lines.some((l) => l === h || l.startsWith(h + " — ")), file + " has no heading: " + h);
+      assert.ok(quick.includes("`" + h + "`"), "orc-quick/SKILL.md no longer names " + h);
+    }
+  }
+  // return-validation.md: every § the header and the spines name is a real heading.
+  const SEC = /§(\d+[a-z]?(?:\.\d+)?)/g;
+  const rv = read("skills/_shared/return-validation.md");
+  const anchors = new Set(
+    rv.split("\n").map((l) => /^## (\d+[a-z]?(?:\.\d+)?)[. ]/.exec(l)).filter(Boolean).map((m) => m[1])
+  );
+  const named = new Set();
+  const header = rv.slice(rv.indexOf("**Read the SECTION, not the file.**"), rv.indexOf("## 0."));
+  assert.ok(header.length > 40, "return-validation.md lost its read-the-section header");
+  for (const m of header.matchAll(SEC)) named.add(m[1]);
+  for (const rel of ["skills/_shared/phases/execution.md", "skills/orc-mini/SKILL.md", "skills/orc-fast/SKILL.md", "skills/orc-quick/SKILL.md"]) {
+    const md = read(rel);
+    assert.match(md, /return-validation\.md` §1–§3/, rel + " no longer scopes the return read to §1–§3");
+    const lines = md.split("\n");
+    lines.forEach((l, i) => {
+      if (!l.includes("return-validation.md")) return;
+      for (const m of (l + " " + (lines[i + 1] || "") + " " + (lines[i + 2] || "") + " " + (lines[i + 3] || "")).matchAll(SEC)) named.add(m[1]);
+    });
+  }
+  for (const id of ["0", "1", "3", "4", "5", "5b", "5b.1", "5c", "5d", "6", "7"]) assert.ok(named.has(id), "nobody names §" + id);
+  for (const id of named) assert.ok(anchors.has(id), "§" + id + " is named but return-validation.md has no such heading");
+});
+
+test("payload: no spine recomputes the wiki tier by hand — `orc wiki status --json` → `.tier` is the tier", () => {
+  // v2.0.0 Q10. orc-fast and orc-poly ran `git rev-list --count <scan_commit>..HEAD`
+  // themselves; the CLI computes every state (and `--dir <peer>` reaches a peer).
+  const bad = [];
+  for (const d of fs.readdirSync(path.join(T, "skills"))) {
+    const f = path.join(T, "skills", d, "SKILL.md");
+    if (!fs.existsSync(f)) continue;
+    if (/rev-list --count <?scan_commit/.test(fs.readFileSync(f, "utf8"))) bad.push(d);
+  }
+  assert.deepStrictEqual(bad, [], "a spine recomputes the wiki tier — read `orc wiki status --json` → `.tier`");
+  for (const lane of ["orc-fast", "orc-poly"])
+    assert.match(read(`skills/${lane}/SKILL.md`), /orc wiki status --json` → `\.tier`/, lane + " reads the CLI tier");
+});
+
+// ── The ONE review slice (v2.0.0 W5a) ──────────────────────────────────────
+// `_shared/review-slice.md` owns the slice shape. Every file that spells the
+// field set out carries the SAME `Slice fields:` line, and the canonical
+// table agrees with it — a review in quick is the same review as in /orc.
+test("W5 gate: the review slice field set is identical in every pointer file", () => {
+  const fieldsOf = (md, rel) => {
+    const m = md.match(/^Slice fields: (.+)$/m);
+    assert.ok(m, rel + " has no `Slice fields:` line");
+    return m[1].split("·").map((s) => s.trim()).filter(Boolean);
+  };
+  const canonMd = read("skills/_shared/review-slice.md");
+  const canon = fieldsOf(canonMd, "review-slice.md");
+  assert.ok(canon.length >= 15, "the canonical slice lost fields");
+  // The §2 table names exactly the same fields (backticked, first column).
+  const sect = canonMd.slice(canonMd.indexOf("## §2"), canonMd.indexOf("## §3"));
+  const tableFields = [];
+  for (const row of sect.split("\n").filter((l) => /^\| `/.test(l)))
+    for (const m of row.split("|")[1].matchAll(/`([a-z_]+(?:\[\])?)`/g)) tableFields.push(m[1]);
+  assert.deepStrictEqual([...tableFields].sort(), [...canon].sort(), "the §2 table and the Slice fields line disagree");
+  // Every file under templates/ that carries the line carries the same set.
+  const walk = (dir, acc = []) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) walk(p, acc);
+      else if (e.name.endsWith(".md")) acc.push(p);
+    }
+    return acc;
+  };
+  const carriers = [];
+  for (const f of walk(T)) {
+    const rel = path.relative(T, f).split(path.sep).join("/");
+    const md = read(rel);
+    if (!/^Slice fields: /m.test(md)) continue;
+    carriers.push(rel);
+    assert.deepStrictEqual(fieldsOf(md, rel), canon, rel + ": its slice field set differs from _shared/review-slice.md");
+  }
+  for (const must of [
+    "skills/_shared/review-slice.md",
+    "skills/orc/subskills/orc-review-verify/core.md",
+    "agents/orc-reviewer-opus-5-med.md",
+  ])
+    assert.ok(carriers.includes(must), must + " no longer carries the slice field set");
+  // Every review surface points at the one file (reachability).
+  for (const ptr of [
+    "skills/_shared/phases/review.md",
+    "skills/orc/subskills/orc-review-verify/core.md",
+    "skills/orc/references/ultra-mode.md",
+    "skills/orc-mini/SKILL.md",
+    "skills/orc-quick/references/dispatch-gate.md",
+    "skills/orc-pr-driver/references/green-gate.md",
+  ])
+    assert.ok(/review-slice\.md/.test(read(ptr)), ptr + " does not point at _shared/review-slice.md");
 });

@@ -1,9 +1,6 @@
 # Phase — Stop, usage report, resume   (id: `stop-resume`)
 
-> **Library file.** Canonical since v1.0.0 W11; it was
-> the `orc` skill's own `stop-and-resume` reference. Layers declared: `core` only — the stop
-> sequence is identical in every lane that stops, and the lane-specific half
-> (which moments are MANDATORY stops) is already a per-lane rule in the spine.
+> **Library file**, `core` only: the stop sequence is identical in every lane that stops; which moments are MANDATORY stops is a per-lane rule in the spine.
 
 <!-- orc:layer core -->
 
@@ -41,7 +38,7 @@ boundary is not.
 4. **Usage report** (see below).
 5. **Generate the resume block** (see below) — regenerate FRESH at every stop,
    never reuse an old one. It is printed inline AND is the body of `RESUME.md`.
-6. Tell the user: what's done / remaining, then BOTH continue paths:
+6. Tell the user: what's done / remaining, then BOTH continue paths (H `any.stop.where`):
    "Reply **continue** here, or paste the block below in a **fresh session**
    (recommended if this conversation is long — cheaper and cleaner than
    dragging this context forward)."

@@ -98,6 +98,37 @@ installed orc skill, stitches `.claude/orc/diy/FLOW-COMPILED.md`, and stamps
 `orc diy compile`, and offers the regular `/orc` lane for the request at
 hand. `/orc-diy compile` in a session just runs the same CLI compiler.
 
+### Where the compiled flow comes from (maintainer view)
+
+You never read these; `orc diy compile` does, once, and stitches the result
+into `FLOW-COMPILED.md`. The table is here so a maintainer can see the
+provenance of a compiled phase without reading the compiler — `orc lane phases
+orc-diy --json` is the authoritative version and marks every row below
+`when: compile-time`.
+
+Eleven phases come from the shared library, as that file's `composed` LAYER —
+NOT its `full` layer, which is `/orc`'s procedure for the same phase:
+`../_shared/phases/trace.md` · `../_shared/phases/planning.md` ·
+`../_shared/phases/scoring.md` · `../_shared/phases/execution.md` ·
+`../_shared/phases/review.md` · `../_shared/phases/security.md` ·
+`../_shared/phases/verify.md` · `../_shared/phases/testgen.md` ·
+`../_shared/phases/mock-example.md` · `../_shared/phases/ship.md` ·
+`../_shared/phases/summary.md`.
+
+Five have no counterpart anywhere else in the payload and stay this lane's own:
+`references/blocks/header.md` (the tier self-gate), `wiki.md`, `analyze.md`,
+`pattern.md` and `extra.md`. They are composition prose about a decision only a
+composed flow makes, so there is nothing to share them WITH.
+
+Four more are pointed at from inside those stitched layers rather than stitched
+themselves: `../_shared/phases/intake.md`,
+`../_shared/phases/wave-grouping.md`,
+`../_shared/phases/security-checklist.md` and
+`../_shared/phases/stop-resume.md`.
+
+The stitch ORDER is the compiler's `order` array and is documented in
+`references/compile.md`; a golden test holds the three lists together.
+
 ## 4. Run
 
 ```

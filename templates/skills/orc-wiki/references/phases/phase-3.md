@@ -1,11 +1,6 @@
 # Phase — Phase 3 — Assemble & inject   (id: `phase-3`)
 
-> **`/orc-wiki` phase file.** Moved out of `orc-wiki/SKILL.md` at v1.0.0 W14. The
-> spine is loaded IN FULL when the skill activates; this is loaded when the phase
-> fires — and a wiki run reaches FEW of them: Phase 0 auto-branches into fresh /
-> resume / refresh / repair, and Phase 3c is a legacy backfill. ONE consumer, so
-> it stays in this lane (`../../../_shared/phases/README.md`: a file with one
-> consumer stays home). `orc lane phases orc-wiki --json` names the file.
+> **`/orc-wiki` phase file** — read when the phase fires; a wiki run reaches few of them. One consumer, so it stays home. `orc lane phases orc-wiki --json` names the file.
 
 <!-- orc:layer full -->
 

@@ -453,6 +453,22 @@ const READS = {
   "/api/test/ui": () => ["test", "ui", "tools"],
   "/api/patterns": () => ["pattern", "status"],
   "/api/gotchas": () => ["gotcha", "list"],
+  // v2.0.0 W7 — the Behaviour panel. Every one is a CLI read, and every exit
+  // code is DATA: `habit show` 0 · 1 no ASK lines yet · 3 `habits: off`;
+  // `habit log` 0 · 1 empty; `gotcha card` 0 · 1 no match (an ANSWER: no card);
+  // `gotcha quality` 0 · 1 below the 5-review floor. The window is DROPPED
+  // unless it is one of the three the CLI knows — a query string is user input.
+  "/api/habits": (q) => (["30d", "90d", "all"].includes(String(q.window || "")) ? ["habit", "show", "--window", String(q.window)] : ["habit", "show"]),
+  "/api/habits/log": () => ["habit", "log", "--limit", "40"],
+  "/api/habits/states": () => ["habit", "log", "--states"],
+  "/api/habits/points": () => ["habit", "points"],
+  "/api/gotcha/card": (q) => ["gotcha", "card", "--files", String(q.files || ""), "--full"],
+  // The panel window (30d · 90d · all) in the days `gotcha quality --window` takes.
+  "/api/gotcha/quality": (q) => {
+    const days = { "30d": "30", "90d": "90", all: "3650" }[String(q.window || "")];
+    return days ? ["gotcha", "quality", "--window", days] : ["gotcha", "quality"];
+  },
+  "/api/gotcha/candidates": () => ["gotcha", "list", "--candidates"],
   "/api/stats": (q) => (q.since ? ["stats", "--since", String(q.since)] : ["stats"]),
   "/api/diy": () => ["diy", "show"],
   "/api/crosslink": () => ["crosslink", "list"],
@@ -555,6 +571,16 @@ const WRITES = {
   "/api/graph/update": () => ["graph", "update"],
   "/api/wiki/usage/rebuild": () => ["wiki", "usage", "--rebuild"],
   "/api/gotcha/prune": () => ["gotcha", "prune"],
+  // v2.0.0 W7 — the Behaviour panel writes. FREE, local and reversible: each
+  // one changes `.claude/orc/habits-state.json` only (or promotes ONE gotcha
+  // candidate), and each is a person's click on a confirmation that names the
+  // command. `--by panel` is how the history says who made the change. The
+  // learning switch itself is `/api/config/set` — no second route for it.
+  "/api/habit/accept": (b) => ["habit", "accept", String(b.id), "--by", "panel"],
+  "/api/habit/decline": (b) => (b.never ? ["habit", "decline", String(b.id), "--never", "--by", "panel"] : ["habit", "decline", String(b.id), "--by", "panel"]),
+  "/api/habit/forget": (b) => ["habit", "forget", String(b.id), "--by", "panel"],
+  "/api/habit/reset": (b) => ["habit", "reset", String(b.id), "--by", "panel"],
+  "/api/gotcha/accept": (b) => ["gotcha", "accept", String(b.id)],
   "/api/pact/check": (b) => (b.id ? ["pact", "check", String(b.id)] : ["pact", "check"]),
   "/api/pact/sync": () => ["pact", "sync"],
   // The surface id, the key and the value all come from the browser — and all

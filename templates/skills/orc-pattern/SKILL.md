@@ -1,16 +1,13 @@
 ---
 name: orc-pattern
 description: >
-  Learn and cache a project's real code conventions per language so ORC executors
-  write code that MATCHES the existing codebase instead of a generic template.
-  Use for "/orc-pattern", "learn my code pattern", "codify conventions", or when
-  ORC detects frontend/backend work with no cached pattern. Reconciles a generic
-  best-practice playbook against the project's actual most-recently-modified files:
-  the project's CONVENTIONS win, security/correctness INVARIANTS are always kept,
-  conflicts are flagged. Writes .claude/orc/patterns/<lang>-pattern.md, reused by
-  every future run. EXPENSIVE scan → consent-gated inside /orc (config
-  pattern_findings), always allowed on explicit /orc-pattern. The orchestrator
-  dispatches the codifier subagent — it never codifies itself.
+  Learn and cache a project's real code conventions per language, so ORC
+  executors write code that MATCHES the existing codebase. Use for
+  "/orc-pattern", "learn my code pattern", "codify conventions", or when ORC
+  detects frontend/backend work with no cached pattern. The project's
+  CONVENTIONS win; security/correctness INVARIANTS are always kept. Writes
+  .claude/orc/patterns/<lang>-pattern.md. EXPENSIVE scan: consent-gated inside
+  /orc.
 ---
 
 # ORC-PATTERN (code-pattern codifier)
@@ -65,21 +62,17 @@ Reconciliation is therefore cheap: you only ever override the *soft* half.
 
 ## Behavior trace (always on)
 
-`../_shared/phases/trace.md` (`core`, at run start; `orc lane phases` names
-the file and the layers). Lane token `pattern`, tier **Single-dispatch** —
-exactly ONE end-of-run packet, dispatched solo before `.current` is deleted.
-At run start write `log_dir/.current` = `run-pattern-<slug>-<DDMMYY>-<HHMMSS>.txt` AND
-`touch the trace file` of that name in the SAME step.
-Nothing else about the protocol is restated here; a phase that ends with
-`zero new trace lines is a protocol violation`.
+`../_shared/phases/trace.md` (`core`, at run start; `orc lane phases orc-pattern --json` →
+`trace_grammar` gives the verbs). Lane token `pattern`, tier
+**Single-dispatch**. At run start write `log_dir/.current` =
+`run-pattern-<slug>-<DDMMYY>-<HHMMSS>.txt` AND `touch the trace file` of that name
+in the SAME step. A phase that ends with `zero new trace lines is a protocol violation`.
 
 ## Phases
 
-`orc lane phases orc-pattern --json` is this lane's pipeline: the ordered list, where
-each phase lives, and how much of it to read. **The CLI owns the order** — never
-derive it from the headings below, and never renumber or rename one without the
-manifest, because a `read: section` pointer names a HEADING and a renamed heading
-is a pointer into nothing.
+`orc lane phases orc-pattern --json` is this lane's pipeline. **The CLI owns the order**:
+never derive it from the headings below, and never rename or renumber one
+without the manifest (`../_shared/lane-contract.md` §Phases).
 
 ## Phase 0 — Entry & auto-branch (on /orc-pattern)
 
@@ -126,29 +119,15 @@ the executor applies the playbook **invariants** (still blocking) and imitates t
 1–2 neighboring files it already reads for its slice. Cheap by construction,
 persists nothing. See `../orc/config.md`.
 
-## Config
+## Lane contract (`../_shared/lane-contract.md` — read it ONLY when a call exits ≠ 0)
 
-**ONE resolver, and it is not you:** `orc lane config orc-pattern --json`. Obey
-`effective`, print every line in `announce[]` VERBATIM at preflight, and honour
-`stops[]` before wave 1. Never re-derive a value, a precedence or an inertness
-from `.claude/orc.config.yaml` — a key this lane does not read is not in the
-answer, and a key another key shadows comes back already marked. Exit ≠ 0 → say
-the CLI is unavailable and fall back to `../_shared/config-precedence.md`'s
-documented defaults, out loud. Priorities and families:
-`../_shared/config-precedence.md`.
-
-## Calls
-
-**ONE catalogue, and it is not you:** `orc lane calls orc-pattern --json` names every
-CLI call this lane makes, each with its exit-code contract, its cost, when to run
-it, and what an EMPTY answer means. Never invent a spelling, never re-word an
-exit code, and never re-derive a state word — the CLI's state words are the only
-state words, and **an exit code is an ANSWER wherever that contract says so, not
-a failure**. A call the answer does not name is a call this lane does not make.
-Exit ≠ 0 from the catalogue itself → say the CLI is unavailable and name the
-command you are about to run, out loud, before running it.
+- **Calls:** `orc lane calls orc-pattern --json` names every call and its exit codes.
+  **An exit code is an ANSWER where it says so, not a failure.** Make no other call.
+- **Config:** `orc lane config orc-pattern --json`. Obey `effective`, print every line
+  in `announce[]` VERBATIM at preflight, and honour `stops[]` before wave 1.
+  Never merge `.claude/orc.config.yaml` yourself (`../_shared/config-precedence.md`).
 
 ## Waiting mid-run (`/orc-wait`)
 
 Canonical: `../_shared/wait.md`. **`a lane that waits without a hand-back` has broken this contract.**
-Checkpoint **none** · safe point **single dispatch**. Nothing here to checkpoint, so all three modes behave identically — say so rather than asking. Never begin a wait between a dispatch and its validated return, or before the smoke gate has reported.
+Checkpoint **none** · safe point **single dispatch**.

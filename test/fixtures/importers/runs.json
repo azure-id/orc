@@ -1,0 +1,6 @@
+[
+ {"databaseId":9001,"headSha":"a1b2c3d4e5f60718293a4b5c6d7e8f9012345678","headBranch":"feat/order-export","workflowName":"test","conclusion":"failure","status":"completed","attempt":1,"createdAt":"2026-09-25T10:00:00Z","url":"https://github.com/acme/shop/actions/runs/9001","event":"pull_request"},
+ {"databaseId":9002,"headSha":"b1b2c3d4e5f60718293a4b5c6d7e8f9012345678","headBranch":"feat/order-export","workflowName":"e2e","conclusion":"failure","status":"completed","attempt":1,"createdAt":"2026-09-25T11:00:00Z","url":"https://github.com/acme/shop/actions/runs/9002","event":"pull_request"},
+ {"databaseId":9003,"headSha":"b1b2c3d4e5f60718293a4b5c6d7e8f9012345678","headBranch":"feat/order-export","workflowName":"e2e","conclusion":"success","status":"completed","attempt":1,"createdAt":"2026-09-25T10:30:00Z","url":"https://github.com/acme/shop/actions/runs/9003","event":"push"},
+ {"databaseId":8990,"headSha":"c1b2c3d4e5f60718293a4b5c6d7e8f9012345678","headBranch":"feat/order-export","workflowName":"lint","conclusion":"success","status":"completed","attempt":2,"createdAt":"2026-09-24T10:00:00Z","url":"https://github.com/acme/shop/actions/runs/8990","event":"pull_request"}
+]

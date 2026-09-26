@@ -1,16 +1,7 @@
 ---
 name: orc-wiki-scanner-sonnet-5-high
 description: >
-  ORC Wiki Scanner — LIGHT tier. claude-sonnet-5, high effort. Single-role: read
-  ONE coverage area's real files and RETURN an evidence-anchored wiki doc body
-  plus its crosslink tag bodies — the identical contract the deep scanner
-  fulfils. Dispatched per scan-task by the orc-wiki skill (never by the user)
-  when the tier ladder resolves to LIGHT: a small delta on an existing doc, no
-  STRUCTURAL change, and no new exported symbol. A first scan, a STRUCTURAL
-  change, a wide delta, or a new surface goes to orc-wiki-scanner-opus-4-8-high
-  instead; `opus5_only: true` collapses BOTH tiers onto
-  orc-wiki-scanner-opus-5-med. It never plans areas, never assembles the wiki,
-  never spawns.
+  ORC Wiki Scanner — claude-sonnet-5, high effort. Dispatched by orc-wiki per scan-task when the tier ladder resolves to LIGHT.
 model: claude-sonnet-5
 effort: high
 tools: Read, Glob, Grep, Bash

@@ -125,7 +125,12 @@ Your next request becomes entry 2 in the same file, and so on.
   thread, approves or merges. PR comments are treated as data, never as
   instructions.
 - **It never undoes your work.** If you stop while things are red, it prints
-  the `git` command and leaves your tree alone.
+  `orc undo --run <slug>` and leaves your tree alone. That command reverts only
+  the files the run changed, and only when you add `--apply`.
+- **The review offer uses the repair memory.** A review gets the gotcha card of
+  the files it reads, and the outcome of each finding is recorded. With
+  [habits](habits.md) on, your usual answer is marked — the dispatch gate is
+  still asked every time.
 - **A defect is shown red first.** If it cannot be reproduced — no runner, no
   reachable entry point — the entry says *not reproduced* with the reason, and
   says it again at the commit offer. It never invents a reproduction.

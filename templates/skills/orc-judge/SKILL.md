@@ -1,15 +1,10 @@
 ---
 name: orc-judge
 description: >
-  Judgment gates for the ORC ultra lane. One judge skill, one agent
-  (orc-judge-opus-5-xhigh), three dispatch contexts: gate=analysis (after the
-  analyst), gate=plan (after the planner), gate=implementation (after verify —
-  the anti-miss-implementation fidelity + strict-quality gate). Returns a
-  structured verdict (APPROVE | REVISE | ESCALATE) with anchored,
-  consequence-cited findings; REVISE loops the author with a hard 2-loop cap
-  and a convergence rule. Dispatched only from /orc-ultra — no slash command
-  of its own, never in orc or orc-mini. The orchestrator dispatches the judge
-  subagent — it never judges itself.
+  Internal to /orc-ultra: the three judgment gates — analysis, plan,
+  implementation. Returns APPROVE | REVISE | ESCALATE with anchored findings;
+  REVISE has a hard 2-loop cap. No slash command of its own.
+disable-model-invocation: true
 ---
 
 # ORC-JUDGE (ultra-lane judgment gates)

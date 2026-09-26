@@ -1,14 +1,12 @@
 ---
 name: orc-fast
 description: >
-  Fastest ORC lane — knowledge-gated single-executor implementation. Use for
-  "use orc-fast to implement X" or "/orc-fast". Requires TWO prerequisites:
-  a fresh project wiki (orc-wiki) AND a cached code-pattern for the request's
-  language — the precomputed knowledge replaces the analyst/planner entirely.
-  Either missing → falls back to orc-mini (never stops the chat). One
-  Sonnet 4.6 high executor, a build+test smoke gate, one repair round, ship.
-  Orchestrator runs fine at Sonnet medium. The orchestrator never implements —
-  it spawns.
+  Fastest ORC lane — knowledge-gated single-executor implementation, with no
+  analyst and no planner. Use for "use orc-fast to implement X" or "/orc-fast".
+  Requires TWO prerequisites: a fresh project wiki (orc-wiki) AND a cached
+  code-pattern for the request's language. If either is missing, it falls back
+  to orc-mini. One Sonnet 4.6 high executor, a build+test smoke gate, one repair
+  round, ship.
 ---
 
 # ORC-FAST
@@ -32,24 +30,21 @@ fit gate hands it to orc-mini.
 
 ## Phases
 
-`orc lane phases orc-fast --json` is this lane's pipeline: the ordered list, where
-each phase lives, and how much of it to read. **The CLI owns the order** — never
-derive it from the headings below, and never renumber or rename one without the
-manifest, because a `read: section` pointer names a HEADING and a renamed heading
-is a pointer into nothing.
+`orc lane phases orc-fast --json` is this lane's pipeline. **The CLI owns the order**:
+never derive it from the headings below, and never rename or renumber one
+without the manifest (`../_shared/lane-contract.md` §Phases).
 
 ## Phase F0 — Preflight (the two prerequisite gates; no spawn)
 
-Emit a `GATE` trace line per check when logging.
+Emit a `GATE` trace line per check.
 
 **a. Wiki gate.** Decide existence with `orc wiki status` — the deterministic
 probe in `../_shared/detecting-artifacts.md`, never an ad-hoc `find` (`.claude`
-is hidden). `none` = gate FAILED → fallback; else wiki present → compute the
-tier from `.claude/orc/wiki-meta.json` per `../orc-wiki/references/staleness.md`:
-`git rev-list --count <scan_commit>..HEAD` → FRESH / AGING / STALE (manifest
-absent but docs present = STALE; wiki absent/empty = gate FAILED → fallback).
+is hidden). `none` = gate FAILED → fallback; else read the tier from
+`orc wiki status --json` → `.tier` (FRESH / AGING / STALE; the CLI computes
+it — never recompute it by hand).
 - **FRESH** → proceed silently. **AGING** → one-line notice, proceed.
-- **STALE** → the user judges. Ask with exactly these options:
+- **STALE** → the user judges. Ask (H `fast.f0.stale-wiki`) with exactly these options:
   1. **Refresh wiki, then continue fast** *(recommended)* — run orc-wiki's
      incremental refresh (diff since `scan_commit`, re-scan only affected
      docs), then re-enter this preflight.
@@ -134,35 +129,35 @@ pinned in the agent file). **Under `opus5_only` it is `orc-executor-opus-5-low`*
 - **terse-return rule:** standard contract fields, NO narrative prose — files
   changed, one-line diff summary, smoke-relevant notes only.
 
-Validate the return per `../_shared/return-validation.md` — `unmet[]`
+Validate the return per `../_shared/return-validation.md` §1–§3 + the § of
+each field you injected — `unmet[]`
 honesty, `pattern_version` + `invariants_checked` attestation, `actual_model`
 / `actual_effort` downgrade check (emit the `VERIFY` trace line), and §6's worktree delta (`git status --short` before/after; a path changed outside `declared_files` is a violation whatever the return said). Malformed
 return = failure (one re-dispatch, then fallback offer).
 
-**Before any re-dispatch, run `orc run inflight`** (0 clear · 1 in-flight · 2 unknown). A Task error does not kill the agent behind it, and exit 2 REFUSES by default — `a lane that re-dispatches over a live attempt` has broken the contract. Canonical: `../_shared/return-validation.md`.
+**Before any re-dispatch, run `orc run inflight`**. A Task error does not kill the agent behind it, and exit 2 REFUSES by default — `a lane that re-dispatches over a live attempt` has broken the contract. Canonical: `../_shared/return-validation.md`.
 
 ## Phase F3 — Smoke gate (build + test; blocks ship on red)
 
 Run the gate per `../_shared/smoke-gate.md`, sourcing commands **from
 `wiki-meta.json`'s `commands` block** (recorded at wiki scan — don't
 rediscover tooling; manifest lacks them → detect once and say so). **GREEN**
-→ code-graph step e.(3) (never a gate) → ship. **RED** → one repair round; second red → STOP and offer: escalate to
+→ code-graph step e.(3) (never a gate) → ship. **RED** → the flaky check, then one repair round; second red → STOP and offer: escalate to
 orc-mini (reason `smoke-red-escalation`) / switch to full `/orc` / stop.
 Docs-only → gate N/A, say so.
 
 ## Phase F3.5 — Mock example (config `mock_example`, default ask)
 
-Canonical: `../_shared/drift-recovery.md` — load on fire. Only after a GREEN
-F3, before ship: `ask` → MANDATORY offer · `on` → build · `off` → skip.
-Deliverable `mock-examples/<change-slug>/` at project root — **never
-committed/staged**. Drift answer → `DRIFT-FROM` recovery (cap 2 loops, honest
-report on cap). Trace: `PHASE mock-example`, `DRIFT loop=<n>`.
+After a GREEN F3, before ship (H `fast.f3-5.mock`): follow `../_shared/drift-recovery.md` (load on
+fire) — the `mock-examples/<change-slug>/` deliverable, the `DRIFT-FROM` loop and
+its cap. Trace: `PHASE mock-example`, `DRIFT loop=<n>`.
 
 ## Phase F4 — Ship
 
-Offer commit (push if asked; never stage `mock-examples/`). Append the final markers to the checkpoint, emit
+Offer commit (H `fast.f4.ship` · `any.ship.review-before-push`; push if asked; never stage `mock-examples/`). Append the final markers to the checkpoint, emit
 `OUTCOME task=… band=fast model=… retries=… unmet=…` + `FINISH`, show the
-dispatch line (model/effort actually used) + the `/usage` reminder. Fast never
+dispatch line (model/effort actually used) + the `/usage` reminder. Every end — ship
+or a red STOP — prints the card (`../_shared/phases/summary.md` §End-of-run card). Fast never
 triggers the post-ship wiki refresh ask (preflight polices freshness on the
 way in) — the passive stale-flag note still applies to touched covered files.
 
@@ -176,46 +171,26 @@ already in the shared format — no migration.
 
 ## Behavior trace (always on)
 
-`../_shared/phases/trace.md` (`core`, at run start; `orc lane phases` names
-the file and the layers). Lane token `fast`, tier **Build lanes** —
-per phase, batched to **2 packets** (preflight+dispatch · gate+ship), each
-paired with the next phase's first dispatch.
-At run start write `log_dir/.current` = `run-fast-<slug>-<DDMMYY>-<HHMMSS>.txt` AND
-`touch the trace file` of that name in the SAME step.
-Nothing else about the protocol is restated here; a phase that ends with
-`zero new trace lines is a protocol violation`.
+`../_shared/phases/trace.md` (`core`, at run start; `orc lane phases orc-fast --json` →
+`trace_grammar` gives the verbs). Lane token `fast`, tier
+**Build lanes** — batched to **2 packets** (preflight+dispatch ·
+gate+ship) → `orc trace write --packet -`. At run start write `log_dir/.current` =
+`run-fast-<slug>-<DDMMYY>-<HHMMSS>.txt` AND `touch the trace file` of that name
+in the SAME step. A phase that ends with `zero new trace lines is a protocol violation`.
 
-## Config
+## Lane contract (`../_shared/lane-contract.md` — read it ONLY when a call exits ≠ 0)
 
-**ONE resolver, and it is not you:** `orc lane config orc-fast --json`. Obey
-`effective`, print every line in `announce[]` VERBATIM at preflight, and honour
-`stops[]` before wave 1. Never re-derive a value, a precedence or an inertness
-from `.claude/orc.config.yaml` — a key this lane does not read is not in the
-answer, and a key another key shadows comes back already marked. Exit ≠ 0 → say
-the CLI is unavailable and fall back to `../_shared/config-precedence.md`'s
-documented defaults, out loud. Priorities and families:
-`../_shared/config-precedence.md`.
+- **Calls:** `orc lane calls orc-fast --json` names every call and its exit codes.
+  **An exit code is an ANSWER where it says so, not a failure.** Make no other call.
+- **Config:** `orc lane config orc-fast --json`. Obey `effective`, print every line
+  in `announce[]` VERBATIM at preflight, and honour `stops[]` before wave 1.
+  Never merge `.claude/orc.config.yaml` yourself (`../_shared/config-precedence.md`).
+- **Habits:** `habits{}` in that answer → `../_shared/habits.md`; else ignore `(H …)`.
+- **Rules:** `orc rules slice --lane orc-fast --json` is the ONLY assembler
+  (`../_shared/phases/rules.md`). Its `line` prints VERBATIM at preflight.
 
 Fast has no config key of its own — command-entry only; wave/scoring/review
 keys never apply, and the tier edges the F0 gate reads arrive resolved.
-
-## Rules — the anti-slop card (`../_shared/phases/rules.md`)
-
-`orc rules slice --lane orc-fast --json` is the ONLY assembler; never build
-the card here. It rides under the house rules and above the task —
-**house rules > your project's rules > ORC's own packs** — and its `line` prints
-VERBATIM at preflight. Returns gain `rules_applied[]`, `rules_conflicts[]` (a gap,
-never a silent choice) and `rules_overridden[]`.
-## Calls
-
-**ONE catalogue, and it is not you:** `orc lane calls orc-fast --json` names every
-CLI call this lane makes, each with its exit-code contract, its cost, when to run
-it, and what an EMPTY answer means. Never invent a spelling, never re-word an
-exit code, and never re-derive a state word — the CLI's state words are the only
-state words, and **an exit code is an ANSWER wherever that contract says so, not
-a failure**. A call the answer does not name is a call this lane does not make.
-Exit ≠ 0 from the catalogue itself → say the CLI is unavailable and name the
-command you are about to run, out loud, before running it.
 
 ## Checkpoint (minimal, append-only)
 
@@ -223,14 +198,12 @@ One `fast-checkpoint.md` in the run folder: GATE results (+ any
 `wiki_stale_override`), the dispatch, smoke verdicts, OUTCOME — enough for
 /orc-retro mining and fresh-session resume, nothing more.
 
-## What fast still enforces (from the main hard rules)
+## What fast still enforces
 
-Never implement yourself (smoke gate = read-only build+test) · all artifacts
-in the run subfolder, never project root · validate the subagent return
-(malformed = failure) · never offer commit on a red build · report the
-dispatch + remind the user to run `/usage` (never invoke it programmatically).
+All artifacts in the run subfolder, never project root · never offer commit on
+a red build · never invoke `/usage` programmatically.
 
 ## Waiting mid-run (`/orc-wait`)
 
 Canonical: `../_shared/wait.md`. **`a lane that waits without a hand-back` has broken this contract.**
-Checkpoint **full** · safe point **after the executor returns**. `soft` FORCES that checkpoint and does NOT stop if the write fails; `hard` skips it and can lose an in-flight return. Never begin a wait between a dispatch and its validated return, or before the smoke gate has reported.
+Checkpoint **full** · safe point **after the executor returns**.

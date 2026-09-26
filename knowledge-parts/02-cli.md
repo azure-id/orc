@@ -137,6 +137,21 @@ that library. `orc/SKILL.md` went 526 → 238 lines.
   each config value — which no shared phase file contains, because `/orc` has no
   such choice to express. Stitching the library's `full` layer instead would put
   `/orc`'s review procedure into a compiled flow that has review switched OFF.
+- **Where each phase file came from** (the history the file banners carried
+  until v2.0.0 T7 cut each banner to one line). The ten `full`/`composed` phases
+  (execution, mock-example, planning, review, scoring, security, ship, summary,
+  testgen, verify) left `orc/SKILL.md` at W12 and moved into `_shared/phases/`
+  at W13, when `orc-diy` became their second reader. analyst-gates, house-rules,
+  intake, plan-handoff, security-checklist, wave-grouping and wiki-consult were
+  under `orc/references/` and became library files at W12, because other lanes
+  already reached across into them. `stop-resume.md` was `orc`'s own
+  `stop-and-resume` reference until W11. `preflight.md` is new at W11: it was
+  distilled from eleven lane preflight sections that had converged on the same
+  four steps in the same order. `/orc-route` has read `plan-handoff.md` to
+  define a plan since v0.42.0. `rules.md` is new at v1.7.0 W5. The five
+  `orc-wiki/references/phases/` files left `orc-wiki/SKILL.md` at W14; the two
+  `orc/references/phases/` files (intake, integration) left `orc/SKILL.md` at
+  W12 and stay home while they have one consumer.
 
 ### 4z.21.3 Pillar 3 — one call catalogue
 
@@ -520,3 +535,39 @@ test that fails on a busy afternoon.**
   would be worse than none.
 
 ---
+
+---
+
+## 4z.34.1 v2.0.0 — the trim, `probes{}` and `orc trace write`
+
+**The rule: a lane loads only what it uses on every run.** The rest is on
+demand. Failure it prevents: a 60 KB always-loaded lane where 36 KB is a trace
+table the lane uses a few rows of.
+
+- **`TRACE_VERBS`** (39 verbs) in `bin/cli.js` is the registry.
+  `TRACE_ALWAYS_VERBS` = DISPATCH VERIFY NOTE STATS FINISH. Each shared phase
+  carries `trace_verbs` in `PHASE_FILES`; `orc` and `orc-mini` carry
+  `spine_verbs` in `LANE_TRACE`. `orc lane phases --json` → `trace_grammar`
+  gives a lane its own verbs only. `_shared/phases/trace.md` went 36,089 →
+  7,885 B; the full table is `_shared/phases/trace-verbs.md` (on demand).
+  `bin/verify-contracts.js` lints table ↔ registry ↔ manifest both ways.
+- **`when: "always"`** is allowed only for `preflight` and `trace` (and `test`).
+  The on-demand rule is in `_shared/phases/README.md`.
+- **`_shared/lane-contract.md`** is read only when a CLI call exits ≠ 0. It is
+  NOT a manifest row. The 15 coding spines keep a short `## Lane contract` block.
+- **`probes{}`** is the LAST field of `orc lane config --json`, on by default,
+  brief. The set per lane = `PREFLIGHT_CALL_IDS` ∩ the lane's `LANE_CALLS` +
+  graph-status + rules-slice (+ quick's extra-slot). Each entry has the same
+  exit, fields and `line` as the stand-alone command
+  (`test/cli/lane-probes.test.js`). graph status runs WITHOUT `--heal` (a read
+  must not write) and returns `heal_needed`; extra-slot skips the credential
+  sweep. `--probes-full` and `--no-probes` exist. `PROBE_CAPTURE` in `emitJson`
+  captures the answers.
+- **`orc trace write --packet -|<file>`** (`bin/trace-write.js`) writes ONE
+  phase packet to the `.txt` and the `.jsonl` in one append. An unknown verb, a
+  hook verb or a bad `ts` → exit 2, nothing written. No `.current` on a later
+  packet → exit 3. The Haiku trace writer is the FALLBACK on exit ≠ 0. Reason:
+  W0 measured 92.4 % of events in both files (< 95 %); one writer for both files
+  makes it exact by construction.
+- The 1.9.2 fields of `orc lane config --json` are pinned by `FIELDS_192` in
+  `test/cli/habit.test.js`.

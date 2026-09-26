@@ -1,14 +1,7 @@
 ---
 name: orc-claude-writer-opus-5-med
 description: >
-  ORC CLAUDE.md Writer — Opus-5-only mode variant. claude-opus-5-5, medium effort.
-  Single-role: scan the local repo for ground-truth facts and
-  create/update/refresh the repo-root CLAUDE.md per the orc-claude skill contract
-  (meta header, fenced sections, fingerprint refresh, 0.0.1 bumps, DD-MM-YYYY).
-  The engine behind /orc-claude — the skill selects the mode and dispatches; this
-  agent writes. Dispatched INSTEAD of orc-claude-writer-opus-4-8-high when
-  `opus5_only: true`. Fully non-interactive; never trims user content; never
-  touches the wiki block.
+  ORC CLAUDE.md Writer — claude-opus-5-5, medium effort. Dispatched by /orc-claude, instead of orc-claude-writer-opus-4-8-high when `opus5_only: true`.
 model: claude-opus-5-5
 effort: medium
 tools: Read, Write, Edit, Bash, Glob, Grep

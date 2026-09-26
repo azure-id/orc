@@ -449,3 +449,34 @@ test("doctor: graph-hook-unwired counts five entries, not four events", () => {
   assert.match(f.message, /wired on 4 of 5 entries/);
   assert.equal(f.fix_command, "orc update");
 });
+
+// ── v2.0.0 W6c — the session hook is TWO entries (Stop + SessionStart compact)
+test("install: the session hook is wired on Stop and SessionStart compact, idempotent; doctor names a missing one", () => {
+  const { claudeDir, root } = freshInstall();
+  const settingsPath = path.join(claudeDir, "settings.json");
+  const wiring = () => {
+    const hooks = (JSON.parse(fs.readFileSync(settingsPath, "utf8")) || {}).hooks || {};
+    const out = [];
+    for (const [event, arr] of Object.entries(hooks))
+      for (const entry of arr || [])
+        for (const h of entry.hooks || []) if (String(h.command || "").includes("orc-session-hook")) out.push([event, entry.matcher || null]);
+    return out.sort();
+  };
+  assert.deepStrictEqual(wiring(), [["SessionStart", "compact"], ["Stop", null]]);
+  assert.ok(fs.existsSync(path.join(claudeDir, "hooks", "orc-session-hook.js")));
+  const before = fs.readFileSync(settingsPath, "utf8");
+  assert.equal(cli(["update", "--dir", root]).status, 0);
+  assert.equal(fs.readFileSync(settingsPath, "utf8"), before, "re-wiring is idempotent, byte for byte");
+
+  const healthy = JSON.parse(cli(["doctor", "--dir", root, "--json"]).stdout);
+  assert.ok(!(healthy.findings || []).some((f) => f.id === "session-hook-unwired"));
+  const settings = JSON.parse(before);
+  delete settings.hooks.Stop;
+  fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + "\n");
+  assert.equal(cli(["config", "set", "notify", "bell", "--dir", root]).status, 0);
+  const broken = JSON.parse(cli(["doctor", "--dir", root, "--json"]).stdout);
+  const f = (broken.findings || []).find((x) => x.id === "session-hook-unwired");
+  assert.ok(f, JSON.stringify((broken.findings || []).map((x) => x.id)));
+  assert.match(f.message, /not wired on Stop — notify is bell, but the bell never rings/);
+  assert.equal(f.fix_command, "orc update");
+});

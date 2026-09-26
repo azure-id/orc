@@ -1,17 +1,7 @@
 ---
 name: orc-context-combiner-opus-5-high
 description: >
-  ORC Context Combiner — claude-opus-5-5, high effort. Single-role: merge 2+
-  RELATED, already-confirmed analysis requirement-specs into ONE deduped,
-  conflict-resolved combined requirement context before planning. Verifies real
-  overlap and challenges if weak; pools all source requirements and reconciles
-  them (exact/semantic duplicates, partial overlaps split — never collapsed,
-  conflicts, ordering) one at a time; proves nothing was lost via a source
-  coverage matrix (100% coverage gate); spot-checks inherited evidence for
-  staleness; writes combined-report.md + combined-requirement-spec.md.
-  Dispatched by the orchestrator when the user chooses "pass to context-combiner"
-  at orc-analyze's Phase F. Never builds, never re-analyzes the repo, never spawns
-  subagents.
+  ORC Context Combiner — claude-opus-5-5, high effort. Dispatched by orc when the user picks "pass to context-combiner" at orc-analyze's Phase F.
 model: claude-opus-5-5
 effort: high
 tools: Read, Write, Edit, Bash, Glob, Grep

@@ -439,7 +439,8 @@ const PAYLOAD = path.join(__dirname, "..", "..", "templates");
 const BRIEF_EXCEPTIONS = {
   "skills/_shared/phases/review.md": "the reviewer is handed symbols[].caller_files and reads them",
   "agents/orc-graph-noter-sonnet-4-6-med.md": "the noter needs rows[].source, and `notes apply` is not a read",
-  "skills/_shared/phases/trace.md": "it NAMES the commands a trace verb comes from; it makes no call",
+  // v2.0.0 T1 — the verb table left trace.md for the on-demand trace-verbs.md.
+  "skills/_shared/phases/trace-verbs.md": "it NAMES the commands a trace verb comes from; it makes no call",
 };
 
 function walkPayload(dir, out) {

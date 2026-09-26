@@ -100,6 +100,11 @@ const GROUP_OF = {
   "orc-learn": "knowledge",
   "orc-claude": "knowledge",
   "orc-export": "knowledge",
+  // v2.0.0. Both sit with the KNOWLEDGE lanes: a habit is what ORC learns about
+  // how YOU work, and an import teaches the repair memory what this project
+  // already got wrong. Neither is a lane you invoke.
+  habits: "knowledge",
+  "gotcha-import": "knowledge",
 
   // v1.5.0. It sits with the CHECKING lanes rather than the build ones:
   // /orc-test makes nothing. It runs the requests, writes down what came back,

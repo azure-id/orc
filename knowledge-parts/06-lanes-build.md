@@ -685,3 +685,40 @@ examples/mini-run-mock.md}`, `templates/commands/orc-mini.md`,
 `templates/agents/orc-planner-mini-{sonnet-5-high,opus-5-med}.md`,
 `templates/skills/_shared/phases/wiki-consult.md`, `bin/cli.js` (`LANE_CALLS`),
 `bin/verify-contracts.js` (the budget pin), `test/cli/graph-lanes.test.js`.
+
+---
+
+## 4z.34.4 v2.0.0 — the reviewer v2, and what the build lanes gained
+
+**The slice fields have ONE canonical line**, in `_shared/review-slice.md`:
+changed_files[] · diff_ranges[] · acceptance_criteria[] · constraints[] ·
+code_pattern · invariants[] · validation_gate[] · fe_rules[] ·
+security_checklist[] · graph_changes · tool_findings[] · gotcha_card ·
+rules_card · previous_findings[] · mode. Only the carriers (review-slice.md,
+`orc-review-verify/core.md`, the reviewer agent) spell it; every other surface
+points. A payload test checks that every carrier is identical. Failure it
+prevents: a pointer file that drifts to a different field set.
+
+- **The v2 return** (`orc-reviewer-opus-5-med.md`): phase, findings[] {severity,
+  category (11-value closed set), cwe, location, quote, scenario (P0/P1),
+  description, criterion, pre_existing, group, gotcha, confidence}, tests,
+  failure_reason, gotcha_recorded, actual_model/effort. A reviewer that omits a
+  required field is malformed (BREAKING).
+- **R6 disprove** (`/orc` and `/orc-ultra` only): `verdicts[{finding, keep,
+  why}]`. **R9 re-review** gets `previous_findings[]`. Per-group ladder; one fix
+  per group; the `pre_existing` bucket is reported, not fixed.
+- **At review close** the lane records each outcome (`orc gotcha observe`) and
+  writes ONE `FINDING-OUTCOME` line. `gotcha_recorded` → `orc gotcha add -`.
+- **Flaky** (`_shared/smoke-gate.md` §Flaky, `verify.md`): on red, run
+  `orc ci flaky` first. Exit 0 = flaky → `GATE flaky :: <tests>`, NO repair
+  round.
+- **Habits in the build lanes** (`_shared/habits.md` §4): a learned
+  `mini_tdd: on` skips the mini TDD question and says so; a learned
+  `review_before_push: on` makes mini's end-of-run batch and fast's F4 offer a
+  reviewer dispatch first, marked `→ usual`. `fast.f0.stale-wiki` never
+  suggests `continue` (`never_option`). Ultra's forced keys record `by=config`
+  and are never answered by a habit.
+- **DIY.** A flow compiled on 1.x is STALE after the update (the version and
+  the composed layers changed) → `orc diy compile`. The compiled flow emits the
+  same `ASK` lines; a question its `autonomy` answered is `by=default` and never
+  counts.

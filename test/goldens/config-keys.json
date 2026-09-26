@@ -45,6 +45,31 @@
     "default": 40
   },
   {
+    "key": "gotcha_card_budget",
+    "tier": "common",
+    "default": 600
+  },
+  {
+    "key": "gotcha_sync_hours",
+    "tier": "advanced",
+    "default": 6
+  },
+  {
+    "key": "sonar_url",
+    "tier": "advanced",
+    "default": ""
+  },
+  {
+    "key": "sonar_project",
+    "tier": "advanced",
+    "default": ""
+  },
+  {
+    "key": "sonar_org",
+    "tier": "advanced",
+    "default": ""
+  },
+  {
     "key": "security_review",
     "tier": "common",
     "default": "off"
@@ -375,9 +400,39 @@
     "default": "playwright"
   },
   {
+    "key": "habits",
+    "tier": "common",
+    "default": "off"
+  },
+  {
+    "key": "review_before_push",
+    "tier": "common",
+    "default": "ask"
+  },
+  {
+    "key": "mini_tdd",
+    "tier": "common",
+    "default": "ask"
+  },
+  {
+    "key": "quick_update_tests",
+    "tier": "common",
+    "default": "ask"
+  },
+  {
+    "key": "notify",
+    "tier": "common",
+    "default": "off"
+  },
+  {
     "key": "doc_dir",
     "tier": "advanced",
     "default": "orc/orc-doc"
+  },
+  {
+    "key": "rules_card_compact",
+    "tier": "advanced",
+    "default": "off"
   },
   {
     "key": "wiki_scan_tier",

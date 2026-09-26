@@ -1,11 +1,6 @@
 # Phase — House rules   (id: `house-rules`)
 
-> **Library file.** Canonical since v1.0.0 W12; it was under the `orc` skill's
-> private `references/`, and other lanes already reached across into it. Read
-> by `orc`, `orc-mini`, `orc-fast`, `orc-quick`, `orc-doc`. Layers declared:
-> `core` only — single-layer because it is a standing card injected VERBATIM
-> into a slice — a layered card would be a different card. `orc lane phases
-> <lane> --json` names the file and the layers to read.
+> **Library file** (`orc`, `orc-mini`, `orc-fast`, `orc-quick`, `orc-doc`), `core` only: a standing card injected VERBATIM into a slice — a layered card would be a different card.
 
 <!-- orc:layer core -->
 ## ORC House Rules (standing behavioral card)

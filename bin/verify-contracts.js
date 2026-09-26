@@ -107,14 +107,10 @@ const CONTRACTS = [
       "skills/orc/README.md",
       "skills/orc/SKILL.md",
       "skills/orc/schemas/checkpoint.md",
-      "skills/orc/subskills/orc-execution/SKILL.md",
-      "skills/orc/subskills/orc-execution/core.md",
       "skills/orc/subskills/orc-planner-mini/SKILL.md",
-      "skills/orc/subskills/orc-review-verify/SKILL.md",
-      "skills/orc/subskills/orc-review-verify/core.md",
-      "skills/orc/subskills/orc-testgen/core.md",
       // v1.8.0 — the graph noter reports its model like every other role.
       "agents/orc-graph-noter-sonnet-4-6-med.md",
+      "skills/_shared/phases/trace-verbs.md",
     ],
   },
   {
@@ -137,8 +133,6 @@ const CONTRACTS = [
       "skills/orc/README.md",
       "skills/orc/SKILL.md",
       "skills/orc/references/pattern-gate.md",
-      "skills/orc/subskills/orc-execution/SKILL.md",
-      "skills/orc/subskills/orc-execution/core.md",
       "skills/_shared/phases/execution.md",
     ],
   },
@@ -162,7 +156,6 @@ const CONTRACTS = [
       "skills/orc-quick/SKILL.md",
       "skills/_shared/phases/execution.md",
       "skills/_shared/phases/house-rules.md",
-      "skills/orc/subskills/orc-execution/SKILL.md",
       "skills/orc/subskills/orc-execution/core.md",
     ],
   },
@@ -170,6 +163,10 @@ const CONTRACTS = [
     name: "rules_card slice field (v1.7.1 — the anti-slop card rides every dispatch slice, not only the preflight line)",
     token: "rules_card",
     files: [
+      // v2.0.0 W5a — the ONE review slice (`_shared/review-slice.md`).
+      "skills/_shared/review-slice.md",
+      "skills/orc/subskills/orc-review-verify/core.md",
+      "agents/orc-reviewer-opus-5-med.md",
       "agents/orc-executor-haiku-4-5.md",
       "agents/orc-executor-opus-4-7-high.md",
       "agents/orc-executor-opus-4-7-med.md",
@@ -185,7 +182,6 @@ const CONTRACTS = [
       "skills/_shared/phases/rules.md",
       "skills/orc/SKILL.md",
       "skills/orc/references/preflight-report.md",
-      "skills/orc/subskills/orc-execution/SKILL.md",
       "skills/orc/subskills/orc-execution/core.md",
       "skills/orc-fast/SKILL.md",
       "skills/orc-mini/SKILL.md",
@@ -196,6 +192,8 @@ const CONTRACTS = [
     name: "validation_gate[] flow (codify -> slice -> review -> verify)",
     token: "validation_gate",
     files: [
+      // v2.0.0 W5a — the ONE review slice (`_shared/review-slice.md`).
+      "skills/_shared/review-slice.md",
       "agents/orc-executor-haiku-4-5.md",
       "agents/orc-executor-opus-4-7-high.md",
       "agents/orc-executor-opus-4-7-med.md",
@@ -214,9 +212,7 @@ const CONTRACTS = [
       "skills/orc-pattern/schemas/pattern-doc.md",
       "skills/orc/SKILL.md",
       "skills/orc/references/pattern-gate.md",
-      "skills/orc/subskills/orc-execution/SKILL.md",
       "skills/orc/subskills/orc-execution/core.md",
-      "skills/orc/subskills/orc-review-verify/SKILL.md",
       "skills/orc/subskills/orc-review-verify/core.md",
       "skills/_shared/phases/verify.md",
     ],
@@ -237,8 +233,6 @@ const CONTRACTS = [
       "agents/orc-executor-sonnet-5-high.md",
       "skills/_shared/return-validation.md",
       "skills/_shared/phases/execution.md",
-      "skills/orc/subskills/orc-execution/SKILL.md",
-      "skills/orc/subskills/orc-execution/core.md",
     ],
   },
   {
@@ -266,8 +260,6 @@ const CONTRACTS = [
       "skills/orc/README.md",
       "skills/_shared/phases/execution.md",
       "skills/orc/examples/full-run-mock.md",
-      "skills/orc/subskills/orc-execution/SKILL.md",
-      "skills/orc/subskills/orc-execution/core.md",
     ],
   },
   {
@@ -303,7 +295,6 @@ const CONTRACTS = [
     files: [
       "agents/orc-reviewer-opus-5-med.md",
       "agents/orc-verifier-opus-5-med.md",
-      "skills/orc/subskills/orc-review-verify/SKILL.md",
       "skills/orc/subskills/orc-review-verify/core.md",
       "skills/orc-verify/SKILL.md",
     ],
@@ -315,8 +306,6 @@ const CONTRACTS = [
       "agents/orc-reviewer-opus-5-med.md",
       "agents/orc-verifier-opus-5-med.md",
       "skills/orc-quick/SKILL.md",
-      "skills/orc/subskills/orc-review-verify/SKILL.md",
-      "skills/orc/subskills/orc-review-verify/core.md",
     ],
   },
   {
@@ -327,7 +316,7 @@ const CONTRACTS = [
     name: "EXTRA trace verb — substitution continuation (v0.50.0)",
     token: "EXTRA substitution",
     binFiles: ["bin/cli.js"],
-    files: ["skills/_shared/phases/trace.md"],
+    files: ["skills/_shared/phases/trace-verbs.md"],
   },
   {
     // The additive tail on SCORE and DISPATCH. One token, two sides: the
@@ -338,7 +327,7 @@ const CONTRACTS = [
       "hooks/orc-trace.js",
       "skills/_shared/extra-dispatch.md",
       "skills/_shared/phases/execution.md",
-      "skills/_shared/phases/trace.md",
+      "skills/_shared/phases/trace-verbs.md",
       "skills/_shared/phases/scoring.md",
     ],
   },
@@ -356,7 +345,6 @@ const CONTRACTS = [
       "skills/orc-doc/SKILL.md",
       "skills/orc-fast/SKILL.md",
       "skills/orc-quick/references/dispatch-gate.md",
-      "skills/orc-quick/SKILL.md",
       "skills/orc-wiki/references/phases/phase-2.md",
       "skills/orc-wiki/references/extra.md",
     ],
@@ -368,7 +356,7 @@ const CONTRACTS = [
     name: "a slot dispatch's band is `slot:<slot>` (v0.55.0)",
     token: "slot:<slot>",
     binFiles: ["bin/cli.js"],
-    files: ["skills/_shared/extra-dispatch.md", "skills/_shared/phases/trace.md"],
+    files: ["skills/_shared/extra-dispatch.md", "skills/_shared/phases/trace-verbs.md"],
   },
   // ── v0.54.0 — RECOVERY. A failure is a POSITION, not a blank page ────────
   {
@@ -479,7 +467,7 @@ const CONTRACTS = [
     name: "the resume trace verb, composed once (v0.54.0)",
     token: "EXTRA resume",
     binFiles: ["bin/cli.js"],
-    files: ["skills/_shared/extra-dispatch.md", "skills/_shared/phases/trace.md"],
+    files: ["skills/_shared/extra-dispatch.md", "skills/_shared/phases/trace-verbs.md"],
   },
   {
     // v1.0.0 W5 — same shape, same reason: a demotion that leaves no line
@@ -488,7 +476,7 @@ const CONTRACTS = [
     name: "the demotion trace verb, composed once (v1.0.0)",
     token: "EXTRA demote",
     binFiles: ["bin/cli.js"],
-    files: ["skills/_shared/extra-dispatch.md", "skills/_shared/phases/trace.md"],
+    files: ["skills/_shared/extra-dispatch.md", "skills/_shared/phases/trace-verbs.md"],
   },
   {
     // The trigger's own sentence. It is the half a "simplification" would
@@ -686,7 +674,7 @@ const CONTRACTS = [
       "skills/_shared/phases/analyst-gates.md",
       "skills/_shared/phases/plan-handoff.md",
       "skills/orc/references/preflight-report.md",
-      "skills/_shared/phases/trace.md",
+      "skills/_shared/phases/trace-verbs.md",
       "skills/orc/schemas/planning-output.md",
       "skills/orc/subskills/orc-planner-mini/SKILL.md",
       "skills/orc/subskills/orc-planner/SKILL.md",
@@ -726,6 +714,8 @@ const CONTRACTS = [
     name: "GATE trace verb (v0.9.0 — deterministic exit-gate pass/bounce lines)",
     token: "`GATE",
     files: [
+      "skills/_shared/phases/summary.md",
+      "skills/_shared/smoke-gate.md",
       "agents/orc-retro-opus-5-med.md",
       "agents/orc-retro-sonnet-5-high.md",
       "skills/_shared/phases/analyst-gates.md",
@@ -753,6 +743,7 @@ const CONTRACTS = [
       "skills/orc/references/preflight-report.md",
       "skills/orc/references/ultra-mode.md",
       "skills/orc/subskills/orc-pr/stack-gate.md",
+      "skills/_shared/phases/trace-verbs.md",
     ],
   },
   {
@@ -769,6 +760,7 @@ const CONTRACTS = [
       "skills/_shared/phases/trace.md",
       "skills/orc/references/ultra-mode.md",
       "skills/orc/schemas/checkpoint.md",
+      "skills/_shared/phases/trace-verbs.md",
     ],
   },
   {
@@ -913,6 +905,9 @@ const CONTRACTS = [
       // writes its hint counters beside the run it names. A graph hint outside
       // an ORC run would be context nobody asked ORC for.
       "hooks/orc-graph-hook.js",
+      // v2.0.0 W6c: the session hook READS the pointer — the bell and the
+      // compact line both say nothing unless an ORC run is open.
+      "hooks/orc-session-hook.js",
       // v1.2.1: the statusline READS the pointer to decide which run `status:`
       // is about. "The newest file" would be a different, wrong answer during
       // a lane suspend, when two traces are live and only one is the run.
@@ -956,6 +951,7 @@ const CONTRACTS = [
       "skills/orc/subskills/orc-planner/SKILL.md",
       "skills/_shared/phases/preflight.md",
       "skills/_shared/phases/ship.md",
+      "skills/_shared/phases/trace-verbs.md",
     ],
   },
   {
@@ -979,6 +975,28 @@ const CONTRACTS = [
       "skills/orc-pact/references/gate.md",
       "skills/orc/SKILL.md",
       "skills/_shared/phases/trace.md",
+      "skills/_shared/phases/trace-verbs.md",
+    ],
+  },
+  {
+    // v2.0.0 T21 — the CLI holds the trace pen. The command renders the .txt
+    // AND the .jsonl from ONE packet; the Haiku writer above is the fallback on
+    // exit ≠ 0. Pinned to the protocol, its detail, the writer (which names
+    // itself the fallback), the two spines that named the writer, and the CLI.
+    name: "trace write command (v2.0.0 T21 — the CLI writes the trace pair)",
+    token: "orc trace write --packet -",
+    binFiles: ["bin/cli.js", "bin/trace-write.js"],
+    files: [
+      "agents/orc-trace-writer-haiku-4-5.md",
+      "skills/orc/SKILL.md",
+      "skills/orc-test/SKILL.md",
+      // v2.0.0 W3 — quick and mini pipe their packets to the CLI too.
+      "skills/orc-mini/SKILL.md",
+      "skills/orc-quick/SKILL.md",
+      // v2.0.0 W3c — and fast (its two packets carry the `ASK` events).
+      "skills/orc-fast/SKILL.md",
+      "skills/_shared/phases/trace.md",
+      "skills/_shared/phases/trace-verbs.md",
     ],
   },
   {
@@ -1015,6 +1033,7 @@ const CONTRACTS = [
       // only refine it — so a rename of this verb would silently blank the one
       // segment on line 2 that changes minute to minute.
       "hooks/orc-statusline.js",
+      "skills/_shared/phases/trace-verbs.md",
     ],
   },
   {
@@ -1032,6 +1051,7 @@ const CONTRACTS = [
       "skills/_shared/phases/trace.md",
       "skills/orc/schemas/checkpoint.md",
       "skills/_shared/phases/preflight.md",
+      "skills/_shared/phases/trace-verbs.md",
     ],
   },
   {
@@ -1093,14 +1113,16 @@ const CONTRACTS = [
     token: "wiki-meta.json",
     binFiles: ["bin/cli.js"],
     files: [
+      // v2.0.0 W5a — the ONE review slice (`_shared/review-slice.md`).
+      "skills/_shared/review-slice.md",
       "hooks/orc-statusline.js",
       "skills/_shared/detecting-artifacts.md",
       "skills/orc-challenge/references/cycle-state.md",
       "skills/orc-fast/SKILL.md",
       "skills/orc-learn/SKILL.md",
-      "skills/orc-mini/SKILL.md",
+      // v2.0.0 Q10: orc-mini and orc-poly left — they read the tier from
+      // `orc wiki status --json` → `.tier`, never the manifest by hand.
       "skills/orc-pact/SKILL.md",
-      "skills/orc-poly/SKILL.md",
       "skills/orc-poly/examples/poly-run-mock.md",
       "skills/orc-quick/SKILL.md",
       "skills/orc-wiki/README.md",
@@ -1464,7 +1486,7 @@ const CONTRACTS = [
       "skills/orc-challenge/examples/council-full-roster.md",
       "skills/orc-challenge/examples/tsd-two-iterations.md",
       "skills/orc-challenge/references/council.md",
-      "skills/_shared/phases/trace.md",
+      "skills/_shared/phases/trace-verbs.md",
     ],
     binFiles: ["bin/cli.js"],
   },
@@ -1588,7 +1610,7 @@ const CONTRACTS = [
     binFiles: ["bin/cli.js"],
     files: [
       "skills/_shared/phases/ship.md",
-      "skills/_shared/phases/trace.md",
+      "skills/_shared/phases/trace-verbs.md",
     ],
   },
   {
@@ -1602,7 +1624,6 @@ const CONTRACTS = [
       "skills/orc-fast/SKILL.md",
       "skills/orc-learn/SKILL.md",
       "skills/orc-learn/references/refresh.md",
-      "skills/orc-mini/SKILL.md",
       "skills/orc-poly/SKILL.md",
       "skills/orc-poly/examples/poly-run-mock.md",
       "skills/orc-poly/references/gather.md",
@@ -1759,7 +1780,7 @@ const CONTRACTS = [
       "skills/orc-poly/examples/poly-run-mock.md",
       "skills/orc-quick/SKILL.md",
       "skills/orc/SKILL.md",
-      "skills/_shared/phases/trace.md",
+      "skills/_shared/phases/trace-verbs.md",
       "skills/_shared/phases/wiki-consult.md",
       "skills/_shared/phases/planning.md",
     ],
@@ -1773,7 +1794,7 @@ const CONTRACTS = [
     token: "`CROSSLINK ",
     files: [
       "skills/_shared/phases/planning.md",
-      "skills/_shared/phases/trace.md",
+      "skills/_shared/phases/trace-verbs.md",
       "skills/_shared/phases/wiki-consult.md",
     ],
   },
@@ -1793,7 +1814,7 @@ const CONTRACTS = [
       "skills/orc-fast/SKILL.md",
       "skills/orc-mini/SKILL.md",
       "skills/orc-pattern/SKILL.md",
-      "skills/orc-quick/SKILL.md",
+      "skills/orc-quick/references/dispatch-gate.md",
       "skills/orc-retro/SKILL.md",
       "skills/orc-wiki/SKILL.md",
       "skills/orc-wiki/references/partial-refresh.md",
@@ -1824,7 +1845,6 @@ const CONTRACTS = [
       "agents/orc-retro-opus-5-med.md",
       "agents/orc-scout-opus-5-low.md",
       "agents/orc-wiki-scanner-opus-5-med.md",
-      "agents/orc-wiki-scanner-sonnet-5-high.md",
       "commands/orc-pattern.md",
       "skills/_shared/drift-recovery.md",
       "skills/_shared/extra-dispatch.md",
@@ -1842,7 +1862,6 @@ const CONTRACTS = [
       "skills/orc-mini/SKILL.md",
       "skills/orc-pattern/SKILL.md",
       "skills/orc-quick/README.md",
-      "skills/orc-quick/SKILL.md",
       "skills/orc-quick/references/dispatch-gate.md",
       "skills/orc-retro/SKILL.md",
       "skills/orc-wiki/SKILL.md",
@@ -1856,7 +1875,7 @@ const CONTRACTS = [
       "skills/orc/references/effort-and-mode.md",
       "skills/orc/references/pattern-gate.md",
       "skills/orc/references/preflight-report.md",
-      "skills/_shared/phases/trace.md",
+      "skills/_shared/phases/trace-verbs.md",
       "skills/orc/references/ultra-mode.md",
           "skills/_shared/config-precedence.md",
       "skills/_shared/phases/planning.md",
@@ -1867,7 +1886,7 @@ const CONTRACTS = [
     token: "`CONFIG ",
     files: [
       "skills/_shared/phases/planning.md",
-      "skills/_shared/phases/trace.md",
+      "skills/_shared/phases/trace-verbs.md",
     ],
   },
   {
@@ -1908,7 +1927,7 @@ const CONTRACTS = [
       "skills/_shared/phases/plan-handoff.md",
       "skills/_shared/phases/planning.md",
       "skills/_shared/phases/scoring.md",
-      "skills/_shared/phases/trace.md",
+      "skills/_shared/phases/trace-verbs.md",
       "skills/_shared/phases/wave-grouping.md",
       "skills/orc-mini/SKILL.md",
       "skills/orc-mini/references/complexity.md",
@@ -1949,7 +1968,6 @@ const CONTRACTS = [
       "skills/_shared/phases/planning.md",
       "skills/_shared/phases/wiki-consult.md",
       "skills/orc-fast/SKILL.md",
-      "skills/orc-mini/SKILL.md",
       "skills/orc-wiki/references/phases/phase-1.md",
       "skills/orc-wiki/references/crosslink.md",
       "skills/orc-wiki/references/staleness.md",
@@ -2003,11 +2021,12 @@ const CONTRACTS = [
       "hooks/orc-statusline.js",
       "skills/orc-diy/README.md",
       "skills/orc-diy/SKILL.md",
-      // v1.0.0 W13 — read-ladder.md rule 5 names this artifact to explain why
-      // orc-diy reads its phases at `compile-time` and never during a run.
-      "skills/_shared/read-ladder.md",
       "skills/orc-diy/references/compile.md",
       "skills/orc-diy/references/flow-schema.md",
+      // v1.0.0 W13 — the partial-read rule 5 names this artifact to explain why
+      // orc-diy reads its phases at `compile-time` and never during a run.
+      // v2.0.0 T6 — the rule moved from read-ladder.md to phases/README.md.
+      "skills/_shared/phases/README.md",
     ],
   },
   {
@@ -2075,7 +2094,6 @@ const CONTRACTS = [
     token: "crosslink/needs.json",
     files: [
       "skills/orc-fast/SKILL.md",
-      "skills/orc-mini/SKILL.md",
       "skills/orc-wiki/README.md",
       "skills/orc-wiki/SKILL.md",
       "skills/orc-wiki/references/crosslink-compile.md",
@@ -2083,7 +2101,6 @@ const CONTRACTS = [
       "skills/orc-wiki/schemas/crosslink-tag.md",
       "skills/_shared/phases/planning.md",
       "skills/_shared/phases/wiki-consult.md",
-      "skills/orc/subskills/orc-execution/SKILL.md",
       "skills/orc/subskills/orc-execution/core.md",
     ],
   },
@@ -2099,7 +2116,7 @@ const CONTRACTS = [
       "skills/orc-wiki/references/staleness.md",
       "skills/orc-wiki/schemas/crosslink-tag.md",
       "skills/_shared/phases/wiki-consult.md",
-      "skills/orc/subskills/orc-execution/SKILL.md",
+      "skills/orc/subskills/orc-execution/core.md",
     ],
   },
   {
@@ -2356,7 +2373,7 @@ const CONTRACTS = [
       "skills/orc-fast/SKILL.md",
       "skills/orc-mini/SKILL.md",
       "skills/orc/config.md",
-      "skills/_shared/phases/trace.md",
+      "skills/_shared/phases/trace-verbs.md",
       "skills/orc/references/ultra-mode.md",
       "skills/_shared/phases/wave-grouping.md",
       "skills/_shared/phases/ship.md",
@@ -2409,7 +2426,6 @@ const CONTRACTS = [
       "skills/orc/references/preflight-report.md",
       "skills/_shared/phases/wave-grouping.md",
       "skills/orc/schemas/planning-output.md",
-      "skills/orc/subskills/orc-execution/SKILL.md",
       "skills/orc/subskills/orc-execution/core.md",
       "skills/orc/subskills/orc-planner-mini/SKILL.md",
       "skills/orc/subskills/orc-planner/SKILL.md",
@@ -2437,10 +2453,8 @@ const CONTRACTS = [
       "skills/_shared/phases/verify.md",
       "skills/orc-mini/SKILL.md",
       "skills/orc/config.md",
-      "skills/_shared/phases/trace.md",
-      "skills/orc/subskills/orc-execution/SKILL.md",
+      "skills/_shared/phases/trace-verbs.md",
       "skills/orc/subskills/orc-execution/core.md",
-      "skills/orc/subskills/orc-review-verify/SKILL.md",
       "skills/orc/subskills/orc-review-verify/core.md",
     ],
   },
@@ -2461,8 +2475,6 @@ const CONTRACTS = [
       "agents/orc-executor-sonnet-5-high.md",
       "skills/_shared/return-validation.md",
       "skills/_shared/phases/execution.md",
-      "skills/orc/subskills/orc-execution/SKILL.md",
-      "skills/orc/subskills/orc-execution/core.md",
     ],
   },
   {
@@ -2472,7 +2484,6 @@ const CONTRACTS = [
     files: [
       "agents/orc-verifier-opus-5-med.md",
       "skills/_shared/phases/verify.md",
-      "skills/orc/subskills/orc-review-verify/SKILL.md",
       "skills/orc/subskills/orc-review-verify/core.md",
     ],
   },
@@ -2486,7 +2497,7 @@ const CONTRACTS = [
       "skills/orc-mini/SKILL.md",
       "skills/orc-retro/SKILL.md",
       "skills/orc/SKILL.md",
-      "skills/_shared/phases/trace.md",
+      "skills/_shared/phases/trace-verbs.md",
     ],
   },
   {
@@ -2550,6 +2561,8 @@ const CONTRACTS = [
       "skills/orc/README.md",
       "skills/orc/SKILL.md",
       "skills/orc/config.md",
+      // v2.0.0 W6c: the session hook's compact line names the run folder.
+      "hooks/orc-session-hook.js",
     ],
   },
   // ── Stacked pull requests (v0.37.0) ──────────────────────────────────────
@@ -2673,6 +2686,8 @@ const CONTRACTS = [
     name: "code graph contract (v1.8.0 — _shared/code-graph.md)",
     token: "code-graph.md",
     files: [
+      // v2.0.0 W5a — the ONE review slice (`_shared/review-slice.md`).
+      "skills/_shared/review-slice.md",
       "skills/_shared/README.md",
       "skills/_shared/code-graph.md",
       "skills/_shared/opus5-only.md",
@@ -2681,7 +2696,7 @@ const CONTRACTS = [
       "skills/_shared/phases/preflight.md",
       "skills/_shared/phases/review.md",
       "skills/_shared/phases/ship.md",
-      "skills/_shared/phases/trace.md",
+      "skills/_shared/phases/trace-verbs.md",
       "skills/_shared/phases/wiki-consult.md",
       "skills/_shared/read-ladder.md",
       "skills/_shared/return-validation.md",
@@ -2733,6 +2748,8 @@ const CONTRACTS = [
       "agents/orc-recon-sonnet-4-6-med.md",
       "skills/_shared/code-graph.md",
       "skills/_shared/phases/execution.md",
+      // v2.0.0 T11: the mini `none is an answer` paragraph moved here from its spine.
+      "skills/_shared/phases/wiki-consult.md",
       "skills/_shared/read-ladder.md",
       "skills/_shared/return-validation.md",
       "skills/orc-mini/SKILL.md",
@@ -2749,6 +2766,8 @@ const CONTRACTS = [
     name: "graph brief answer (v1.9.1 — --brief on every --json read a lane makes)",
     token: "--brief",
     files: [
+      // v2.0.0 W5a — the ONE review slice (`_shared/review-slice.md`).
+      "skills/_shared/review-slice.md",
       "agents/orc-executor-haiku-4-5.md",
       "agents/orc-executor-opus-4-7-high.md",
       "agents/orc-executor-opus-4-7-med.md",
@@ -2769,7 +2788,7 @@ const CONTRACTS = [
       "skills/_shared/phases/review.md",
       "skills/_shared/phases/ship.md",
       // trace.md names the call each trace verb is copied from.
-      "skills/_shared/phases/trace.md",
+      "skills/_shared/phases/trace-verbs.md",
       "skills/_shared/read-ladder.md",
       "skills/orc/SKILL.md",
       "skills/orc-fast/SKILL.md",
@@ -2786,7 +2805,7 @@ const CONTRACTS = [
     // would drift from the CLI's grammar the first time either side moved.
     name: "graph blast line (v1.9.1 — changes computes the blast radius, the lane prints it)",
     token: "blast_line",
-    files: ["skills/orc-mini/SKILL.md", "skills/orc-quick/SKILL.md"],
+    files: ["skills/_shared/phases/summary.md", "skills/orc-mini/SKILL.md", "skills/orc-quick/SKILL.md"],
     binFiles: ["bin/graph-signals.js"],
   },
   {
@@ -2796,7 +2815,7 @@ const CONTRACTS = [
     token: "--complexity",
     files: [
       "skills/_shared/code-graph.md",
-      "skills/_shared/phases/trace.md",
+      "skills/_shared/phases/trace-verbs.md",
       "skills/orc-mini/SKILL.md",
       "skills/orc-mini/references/complexity.md",
     ],
@@ -2900,7 +2919,6 @@ const CONTRACTS = [
       "agents/orc-executor-sonnet-4-6-med.md",
       "agents/orc-executor-sonnet-5-high.md",
       "skills/_shared/return-validation.md",
-      "skills/orc/subskills/orc-execution/core.md",
     ],
   },
   {
@@ -2911,7 +2929,8 @@ const CONTRACTS = [
     name: "reproduce-first trace verb (v1.9.0 — REPRO red|green)",
     token: "REPRO",
     files: [
-      "skills/_shared/phases/trace.md",
+      "skills/_shared/gotchas.md",
+      "skills/_shared/phases/trace-verbs.md",
       "skills/orc-quick/SKILL.md",
       "skills/orc-quick/references/defect.md",
     ],
@@ -2999,7 +3018,7 @@ const CONTRACTS = [
     files: [
       "skills/_shared/code-graph.md",
       "skills/_shared/phases/planning.md",
-      "skills/_shared/phases/trace.md",
+      "skills/_shared/phases/trace-verbs.md",
       "skills/orc-diy/references/flow-schema.md",
       "skills/orc-mini/SKILL.md",
       "skills/orc-quick/SKILL.md",
@@ -3015,7 +3034,7 @@ const CONTRACTS = [
     token: "GRAPH-MAP",
     files: [
       "skills/_shared/phases/planning.md",
-      "skills/_shared/phases/trace.md",
+      "skills/_shared/phases/trace-verbs.md",
       "skills/orc-mini/examples/mini-run-mock.md",
     ],
     binFiles: ["bin/cli.js"],
@@ -3035,7 +3054,7 @@ const CONTRACTS = [
     // The verb lives in the trace table and in the phase that emits it.
     name: "graph gain line (v1.8.2 — GRAPH-GAIN, one line at ship, copied verbatim)",
     token: "GRAPH-GAIN",
-    files: ["skills/_shared/phases/ship.md", "skills/_shared/phases/trace.md"],
+    files: ["skills/_shared/phases/ship.md", "skills/_shared/phases/trace-verbs.md"],
     binFiles: ["bin/cli.js"],
   },
   {
@@ -3091,7 +3110,6 @@ const CONTRACTS = [
       "skills/orc-quick/references/look.md",
       "skills/orc-wiki/SKILL.md",
       "skills/orc/SKILL.md",
-      "skills/orc/subskills/orc-execution/core.md",
       // v1.6.0 — the ENFORCEMENT half. The ladder was advisory prose in three
       // places and enforced in none; this hook is the layer that can refuse.
       // It cites the ladder by name because its two carve-outs ARE the
@@ -3130,7 +3148,9 @@ const CONTRACTS = [
   {
     name: "gotchas artifact location (repair memory)",
     token: ".claude/orc/gotchas.md",
+    // v2.0.0 Q10: the statusline hook counts `## G-` headings in this file.
     files: [
+      "hooks/orc-statusline.js",
       "skills/_shared/README.md",
       "skills/_shared/gotchas.md",
       "skills/_shared/phases/execution.md",
@@ -3146,6 +3166,8 @@ const CONTRACTS = [
     name: "gotcha_recorded return field (repair-loop capture)",
     token: "gotcha_recorded",
     files: [
+      // v2.0.0 W5a — the ONE review slice (`_shared/review-slice.md`).
+      "skills/_shared/phases/review.md",
       "agents/orc-executor-haiku-4-5.md",
       "agents/orc-executor-opus-4-7-high.md",
       "agents/orc-executor-opus-4-7-med.md",
@@ -3162,8 +3184,6 @@ const CONTRACTS = [
       "skills/_shared/return-validation.md",
       "skills/_shared/phases/execution.md",
       "skills/orc-mini/SKILL.md",
-      "skills/orc/subskills/orc-execution/core.md",
-      "skills/orc/subskills/orc-review-verify/core.md",
     ],
   },
   {
@@ -3457,7 +3477,7 @@ const CONTRACTS = [
       "skills/orc-doc/examples/orc-doc-prd-run.md",
       // v0.49.2 — the doc lane's DISPATCH tail names the section FILE, which is
       // the only thing that makes `orc doc cost` per-section honest.
-      "skills/_shared/phases/trace.md",
+      "skills/_shared/phases/trace-verbs.md",
     ],
     binFiles: ["bin/cli.js"],
   },
@@ -3614,7 +3634,7 @@ const CONTRACTS = [
       "skills/orc-doc/references/chunking.md",
       // The DISPATCH tail that makes per-section attribution honest is defined
       // there, so the command's name has to move with it.
-      "skills/_shared/phases/trace.md",
+      "skills/_shared/phases/trace-verbs.md",
       "skills/orc-doc/README.md",
       "commands/orc-doc.md",
     ],
@@ -3646,8 +3666,12 @@ const CONTRACTS = [
     token: "orc lane calls",
     files: [
       "skills/orc-test/SKILL.md",
-      "skills/_shared/read-ladder.md",
+      // v2.0.0 T3 — the full catalogue rules, read only on exit ≠ 0.
+      "skills/_shared/lane-contract.md",
       "skills/_shared/phases/preflight.md",
+      // v2.0.0 T12 — code-graph.md §3 lists the graph calls and points here
+      // for their exit codes instead of a second copy of LANE_CALLS.
+      "skills/_shared/code-graph.md",
       // v1.0.0 W14 — every lane that makes a catalogued call carries the
       // `## Calls` contract. orc-advisor and orc-judge make none, so they
       // have no block: an empty pointer is worse than no pointer.
@@ -3680,8 +3704,253 @@ const CONTRACTS = [
       "skills/orc-verify/SKILL.md",
       "skills/orc-wiki/SKILL.md",
       "skills/orc/SKILL.md",
+      "skills/_shared/phases/README.md",
     ],
     binFiles: ["bin/cli.js"],
+  },
+  {
+    // v2.0.0 T3 — the six boilerplate blocks of the coding-lane spines (Calls ·
+    // Config · Rules · Behavior trace · Phases · Waiting) hold their COMMON text
+    // once, in `_shared/lane-contract.md`. It is NOT a PHASE_FILES row on
+    // purpose: a lane reads it only when a CLI call exits ≠ 0, which is exactly
+    // when `orc lane phases` cannot tell it where the file is. So the spine names
+    // the file itself, and this row is the reachability check — every coding
+    // spine points at it, and no other spine does until it is converted too.
+    name: "the lane contract is read only on exit ≠ 0 (v2.0.0 T3)",
+    token: "lane-contract.md",
+    files: [
+      "skills/_shared/README.md",
+      "skills/_shared/config-precedence.md",
+      "skills/_shared/lane-contract.md",
+      "skills/context-combiner/SKILL.md",
+      "skills/orc-analyze-mini/SKILL.md",
+      "skills/orc-analyze/SKILL.md",
+      "skills/orc-diy/SKILL.md",
+      "skills/orc-fast/SKILL.md",
+      "skills/orc-mini/SKILL.md",
+      "skills/orc-pattern/SKILL.md",
+      "skills/orc-poly/SKILL.md",
+      "skills/orc-pr-driver/SKILL.md",
+      "skills/orc-pr-setup/SKILL.md",
+      "skills/orc-quick/SKILL.md",
+      "skills/orc-route/SKILL.md",
+      "skills/orc-test/SKILL.md",
+      "skills/orc-verify/SKILL.md",
+      "skills/orc/SKILL.md",
+    ],
+  },
+  {
+    // v2.0.0 W5a — the ONE review slice. Read ON DEMAND, only when a review
+    // dispatch is about to be built; not a PHASE_FILES row, so this row is the
+    // reachability check: every surface that builds a review (or, in
+    // orc-pr-driver, only its gotcha card) points at the one file.
+    name: "the one review slice every lane builds (v2.0.0 W5a)",
+    token: "review-slice.md",
+    files: [
+      "skills/_shared/README.md",
+      "skills/_shared/gotchas.md",
+      "skills/_shared/phases/review.md",
+      "skills/orc/subskills/orc-review-verify/core.md",
+      "skills/orc/references/ultra-mode.md",
+      "skills/orc-mini/SKILL.md",
+      "skills/orc-quick/references/dispatch-gate.md",
+      "skills/orc-pr-driver/references/green-gate.md",
+    ],
+  },
+  // v2.0.0 W5a — the review v2 contract tokens. Each is pinned to the EXACT
+  // files that carry it, so a lane that grows its own copy of a field fails.
+  {
+    name: "gotcha_card — the reviewer / verifier / judge card field (v2.0.0 W5a)",
+    token: "gotcha_card",
+    files: [
+      "agents/orc-judge-opus-5-xhigh.md",
+      "agents/orc-reviewer-opus-5-med.md",
+      "agents/orc-verifier-opus-5-med.md",
+      "skills/_shared/README.md",
+      "skills/_shared/gotchas.md",
+      "skills/_shared/review-slice.md",
+      "skills/orc-pr-driver/references/green-gate.md",
+      "skills/orc/references/ultra-mode.md",
+      "skills/orc/subskills/orc-review-verify/core.md",
+    ],
+  },
+  {
+    name: "tool_findings[] — the R1 free check's output, never re-reported (v2.0.0 W5a)",
+    token: "tool_findings",
+    files: [
+      "agents/orc-judge-opus-5-xhigh.md",
+      "agents/orc-reviewer-opus-5-med.md",
+      "agents/orc-verifier-opus-5-med.md",
+      "skills/_shared/README.md",
+      "skills/_shared/review-slice.md",
+      "skills/orc/references/ultra-mode.md",
+      "skills/orc/subskills/orc-review-verify/core.md",
+    ],
+  },
+  {
+    name: "pre_existing — a finding outside diff_ranges never gates (v2.0.0 W5a)",
+    token: "pre_existing",
+    files: [
+      "agents/orc-reviewer-opus-5-med.md",
+      "skills/_shared/phases/summary.md",
+      "skills/_shared/review-slice.md",
+    ],
+  },
+  {
+    // The line `orc gotcha quality` reads; TRACE_VERBS holds its grammar.
+    name: "FINDING-OUTCOME — the review-close outcome line (v2.0.0 W5a)",
+    token: "FINDING-OUTCOME",
+    files: [
+      "skills/_shared/gotchas.md",
+      "skills/_shared/phases/summary.md",
+      "skills/_shared/phases/trace-verbs.md",
+      "skills/_shared/review-slice.md",
+      "skills/orc-quick/references/dispatch-gate.md",
+    ],
+    binFiles: ["bin/cli.js"],
+  },
+  {
+    name: "orc gotcha card — the reviewer card call (v2.0.0 W5a)",
+    token: "orc gotcha card",
+    files: [
+      "agents/orc-verifier-opus-5-med.md",
+      "skills/_shared/review-slice.md",
+      "skills/orc-pr-driver/references/green-gate.md",
+    ],
+    binFiles: ["bin/gotcha.js"],
+  },
+  {
+    name: "orc gotcha filter — the after-filter call, never removes a P0/P1 (v2.0.0 W5a)",
+    token: "orc gotcha filter",
+    files: ["agents/orc-reviewer-opus-5-med.md", "skills/_shared/review-slice.md"],
+    binFiles: ["bin/gotcha.js"],
+  },
+  {
+    // The one recording call (`_shared/gotchas.md` §10) and the file only the CLI writes.
+    name: "orc gotcha observe — the one recording call (v2.0.0 W5a)",
+    token: "orc gotcha observe",
+    files: ["skills/_shared/gotchas.md"],
+    binFiles: ["bin/gotcha.js"],
+  },
+  // v2.0.0 W6a — the importers, the review-step sync (DE-29) and the two
+  // read-only `gh` reads. Each call is pinned to the exact files that name it.
+  {
+    name: "orc gotcha sync — at every review step, before the card (v2.0.0 W6a, DE-29)",
+    token: "orc gotcha sync",
+    files: ["skills/_shared/review-slice.md", "skills/orc-pr-driver/references/green-gate.md"],
+    binFiles: ["bin/gotcha.js", "bin/gotcha-import.js"],
+  },
+  {
+    name: "orc gotcha import — Sonar / SARIF issues as a quick request (v2.0.0 W6a, Q4)",
+    token: "orc gotcha import",
+    files: ["skills/orc-quick/references/gh-mode.md", "skills/orc-quick/README.md"],
+    binFiles: ["bin/gotcha.js", "bin/gotcha-import.js"],
+  },
+  {
+    // DE-14: the token is read from the environment only — never a config key.
+    name: "SONAR_TOKEN — the Sonar token lives in the environment only (v2.0.0 W6a, DE-14)",
+    token: "SONAR_TOKEN",
+    files: ["skills/orc-quick/references/gh-mode.md", "skills/orc-quick/README.md"],
+    binFiles: ["bin/cli.js", "bin/gotcha-import.js"],
+  },
+  {
+    name: "orc pr threads — the unresolved review threads via GraphQL (v2.0.0 W6a, Q1)",
+    token: "orc pr threads",
+    files: ["skills/orc-quick/references/gh-mode.md", "skills/orc-quick/README.md"],
+    binFiles: ["bin/cli.js", "bin/gotcha-import.js"],
+  },
+  {
+    name: "orc ci failed — failing CI steps, flaky named (v2.0.0 W6a, Q3)",
+    token: "orc ci failed",
+    files: ["skills/orc-quick/references/gh-mode.md", "skills/orc-quick/README.md"],
+    binFiles: ["bin/gotcha-import.js"],
+  },
+  // v2.0.0 W6b — the undo that cannot eat a user edit (Q2), the flaky
+  // classifier (Q5), the one end-of-run card (Q6) and questions per run (Q7).
+  {
+    name: "orc run snapshot — the pre-run tree, at the run-start pointer step (v2.0.0 W6b, Q2)",
+    token: "orc run snapshot --run",
+    files: ["skills/_shared/phases/trace.md"],
+    binFiles: ["bin/cli.js", "bin/run-undo.js"],
+  },
+  {
+    name: "orc undo — PRINTS the revert of ONLY the run's own files, never `git checkout -- .` (v2.0.0 W6b, Q2)",
+    token: "orc undo --run",
+    files: ["skills/_shared/phases/summary.md", "skills/orc-quick/README.md"],
+    binFiles: ["bin/cli.js", "bin/run-undo.js"],
+  },
+  {
+    // 08 Q2 / S6: nothing runs by itself — the undo prints, `--apply` runs it.
+    name: "orc undo --apply — the undo is print-only by default (v2.0.0 W6b, Q2)",
+    token: "`--apply` runs",
+    files: ["skills/_shared/phases/summary.md", "skills/orc-quick/README.md"],
+    binFiles: ["bin/run-undo.js"],
+  },
+  {
+    name: "orc ci flaky — the ONE flaky classifier, before any repair round (v2.0.0 W6b, Q5)",
+    token: "orc ci flaky",
+    files: ["skills/_shared/smoke-gate.md"],
+    binFiles: ["bin/gotcha-import.js"],
+  },
+  {
+    name: "§Flaky — every test step that repairs points at the one rule (v2.0.0 W6b, Q5)",
+    token: "§Flaky",
+    files: ["skills/_shared/smoke-gate.md", "skills/_shared/phases/verify.md", "skills/orc-quick/SKILL.md"],
+  },
+  {
+    name: "GATE flaky — the trace line of a flaky run (v2.0.0 W6b, Q5)",
+    token: "GATE flaky",
+    files: ["skills/_shared/smoke-gate.md", "skills/_shared/phases/summary.md"],
+    binFiles: ["bin/gotcha-import.js"],
+  },
+  {
+    // ONE template (08 Q6). /orc and /orc-diy reach it from the summary phase's
+    // own layers; the three lanes with no summary phase point from the spine.
+    name: "§End-of-run card — every coding lane ends in the one card (v2.0.0 W6b, Q6)",
+    token: "§End-of-run card",
+    files: [
+      "skills/_shared/phases/summary.md",
+      "skills/orc-fast/SKILL.md",
+      "skills/orc-mini/SKILL.md",
+      "skills/orc-quick/SKILL.md",
+    ],
+  },
+  {
+    name: "questions{} — `orc stats` measures the questions per run (v2.0.0 W6b, Q7)",
+    token: "questions{}",
+    files: ["skills/_shared/habits.md"],
+    binFiles: ["bin/habit.js"],
+  },
+  {
+    name: "observations.jsonl — the raw layer, written by the CLI only (v2.0.0 W5a)",
+    token: ".claude/orc/observations.jsonl",
+    files: ["skills/_shared/gotchas.md"],
+    binFiles: ["bin/gotcha.js"],
+  },
+  {
+    // v2.0.0 W3 — the lane side of habits is held ONCE, in `_shared/habits.md`,
+    // and read ON DEMAND: only when `orc lane config` answers with a `habits{}`
+    // block (`habits` is observe or propose). Under `habits: off` (the default)
+    // no lane opens it. Like lane-contract.md it is not a PHASE_FILES row, so
+    // this row is the reachability check: every spine that marks a `(H <qid>)`
+    // question points at it.
+    name: "the habits contract is read only when habits{} is present (v2.0.0 W3)",
+    token: "habits.md",
+    files: [
+      "skills/_shared/README.md",
+      "skills/_shared/habits.md",
+      "skills/orc-mini/SKILL.md",
+      "skills/orc-quick/SKILL.md",
+      "skills/orc-quick/references/dispatch-gate.md",
+      // v2.0.0 W3c — the rest of the lanes that mark a question, and the Phase
+      // 8 completion report that carries the one run-end proposal.
+      "skills/orc/SKILL.md",
+      "skills/orc-fast/SKILL.md",
+      "skills/orc-diy/SKILL.md",
+      "skills/orc-wait/SKILL.md",
+      "skills/orc-analyze/SKILL.md",
+      "skills/_shared/phases/ship.md",
+    ],
   },
   {
     // v1.0.0 W10 — the partial-read discipline. The sentence that stops pillar 2
@@ -3690,7 +3959,6 @@ const CONTRACTS = [
     name: "a pointer declares how much of it to read (v1.0.0 W10)",
     token: "on-phase",
     files: [
-      "skills/_shared/read-ladder.md",
       "skills/_shared/phases/README.md",
       "skills/orc/SKILL.md",
     ],
@@ -3707,6 +3975,10 @@ const CONTRACTS = [
       "skills/orc-test/SKILL.md",
       "skills/_shared/README.md",
       "skills/_shared/config-precedence.md",
+      // v2.0.0 T3 — both config forms and the exit ≠ 0 fallback, once.
+      "skills/_shared/lane-contract.md",
+      // v2.0.0 W3 — the `habits{}` block rides in the same answer.
+      "skills/_shared/habits.md",
       "skills/_shared/extra-dispatch.md",
       "skills/context-combiner/SKILL.md",
       "skills/orc-aftermath/SKILL.md",
@@ -3796,6 +4068,30 @@ const CONTRACTS = [
     files: ["agents/orc-test-interpreter-opus-5-low.md", "skills/_shared/live-target.md"],
     binFiles: ["bin/cli.js"],
   },
+  // v2.0.0 T16 — read the SECTION, not the file. Every lane reads
+  // return-validation.md §1–§3 on a return, then ONLY the § of each field the
+  // slice carried; the spines and the file header name the § numbers. So the
+  // § headings are ANCHORS: a renumbered or renamed one is a pointer into
+  // nothing. One row per anchor, each pinned to the one file that owns it.
+  ...[
+    "## 0. Is the previous attempt still ALIVE?",
+    "## 1. Contract shape",
+    "## 2. Claimed-vs-actual model",
+    "## 2b. A FOREIGN return",
+    "## 3. Honest-status rules",
+    "## 4. Pattern attestation",
+    "## 5. TDD attestation",
+    "## 5b. Wiki attestation",
+    "## 5b.1 Graph attestation",
+    "## 5c. Rules attestation",
+    "## 5d. Reproduce-first attestation",
+    "## 6. Worktree delta",
+    "## 7. Gotcha capture",
+  ].map((token) => ({
+    name: `return-validation.md § anchor (v2.0.0 T16): ${token}`,
+    token,
+    files: ["skills/_shared/return-validation.md"],
+  })),
 ];
 
 // Spine size budgets (v0.19.0). These SKILL.md files are ALWAYS loaded when
@@ -3804,6 +4100,13 @@ const CONTRACTS = [
 // them. Detail belongs in load-on-demand references/ (free until the phase
 // fires). A new feature that would blow a budget lands as a reference + a
 // pointer, not as spine prose. Raising a budget is a deliberate, reviewed act.
+//
+// v2.0.0 (DE-21): `maxBytes` is a second cap, in LF bytes (CRLF counts as LF, so
+// a Windows checkout measures the same). 16 384 B is about 4k tokens: a coding
+// spine at or under it survives compaction WHOLE (the 5 000-token re-attach
+// rule). If a spine cannot fit without losing a rule, move the rule to a
+// reference loaded at its phase — never raise this cap.
+const CODING_SPINE_BYTES = 16384;
 const BUDGETS = [
   // v0.28.0: deliberate raise 335→350 — the run-integrity work adds inline
   // trace imperatives to every phase body (fix for SPAWN/RETURN-only traces),
@@ -3905,7 +4208,11 @@ const BUDGETS = [
   // v1.0.0 W11: 532→535. The preflight section gained the three-line pointer at
   // `_shared/phases/preflight.md`; W12 turns this spine into a manifest and the
   // budget comes down properly then.
-  { file: "skills/orc/SKILL.md", maxLines: 535 },
+  // v2.0.0 W1 (T14): 535→240 — the promised come-down, finally. T3 moved the
+  // lane contract, trace, phases and wait blocks to _shared/lane-contract.md and
+  // the phase files; the spine is 231 lines. The byte cap is DE-21: 16 KB (LF)
+  // per coding spine, so every spine survives compaction whole.
+  { file: "skills/orc/SKILL.md", maxLines: 240, maxBytes: CODING_SPINE_BYTES },
   // v0.33.0: deliberate raises 264→289 / 197→219 / 171→179 — orc-wiki gains the
   // crosslink-compile entry branch, the delta-refresh default (impact probe),
   // and the orientation/atlas assemble steps (detail in references/); mini
@@ -3971,7 +4278,10 @@ const BUDGETS = [
   // affected-tests-first smoke gate and the `none is an answer` record. The
   // arithmetic (how to count, why each threshold is that number, the
   // graph_facts shape) lives in references/complexity.md.
-  { file: "skills/orc-mini/SKILL.md", maxLines: 280 },
+  // v2.0.0 W1 (T11/T14): 280→240 — the mock-example, still-enforces, wiki and
+  // Phase T restatements now point at their one home (_shared/drift-recovery.md,
+  // phases/wiki-consult.md, phases/testgen.md). 235 lines, 16 342 B.
+  { file: "skills/orc-mini/SKILL.md", maxLines: 240, maxBytes: CODING_SPINE_BYTES },
   // v0.39.0: deliberate raises 195→201 / 179→182 — the analyst gains hard rules
   // 2b (a source it did not author is FOREIGN input) and 4a (the read ladder);
   // fast gains the ladder as a slice line. Both are hard rules by nature: they
@@ -4006,7 +4316,9 @@ const BUDGETS = [
   // a reference the slice-builder never loads is not applied (the hard-rule-13
   // precedent). Six lines: the assembler, the precedence order, the preflight
   // line and the three return fields. Everything else is _shared/phases/rules.md.
-  { file: "skills/orc-analyze/SKILL.md", maxLines: 260 },
+  // v2.0.0 W1 (T11/T14): 260→235 — the `Mini variant` restatement is gone
+  // (orc-analyze-mini owns it). 229 lines.
+  { file: "skills/orc-analyze/SKILL.md", maxLines: 235, maxBytes: CODING_SPINE_BYTES },
   // v0.40.0: deliberate raise 182→187 — gotchas as an explicit NON-gate. It has
   // to be stated where the two prerequisites are stated, or a later reader adds
   // a third gate and breaks the lane's entire premise.
@@ -4033,7 +4345,9 @@ const BUDGETS = [
   // line and the three return fields. Everything else is _shared/phases/rules.md.
   // v1.8.0 W9: deliberate raise 230→240 — the F0 code-graph step (e.), for the
   // same measured reason as orc-mini's raise: a lengthened line was skipped.
-  { file: "skills/orc-fast/SKILL.md", maxLines: 240 },
+  // v2.0.0 W1 (T11/T14): 240→215 — mock example and still-enforces point at
+  // their one home. 211 lines.
+  { file: "skills/orc-fast/SKILL.md", maxLines: 215, maxBytes: CODING_SPINE_BYTES },
   // v1.9.0: a FIRST pin for the quick spine, at 325. It had none, and it grew
   // to 379 lines. W1 trimmed it to 298 by moving the step table, the gate menu,
   // the repair-loop example and the doc shape into references/ and README.md;
@@ -4041,7 +4355,24 @@ const BUDGETS = [
   // the blast-radius line and the one-call cache update. 325 is where that
   // lands plus nothing — a spine that grows past its own references has moved
   // prose the wrong way.
-  { file: "skills/orc-quick/SKILL.md", maxLines: 325 },
+  // v2.0.0 W1 (T11/T13/T14): 325→300 — the inert-key paragraph points at
+  // references/dispatch-gate.md rule 4, and the example CLI lines are gone (the
+  // CLI prints them). 296 lines, 16 288 B.
+  { file: "skills/orc-quick/SKILL.md", maxLines: 300, maxBytes: CODING_SPINE_BYTES },
+  // v2.0.0 W1 (T14): FIRST pins, at the line count after the W1 trims + 5.
+  // They had no budget, so nothing stopped them growing. orc-wait is not a
+  // coding spine and carries no byte cap.
+  { file: "skills/orc-test/SKILL.md", maxLines: 228, maxBytes: CODING_SPINE_BYTES },
+  { file: "skills/orc-poly/SKILL.md", maxLines: 235, maxBytes: CODING_SPINE_BYTES },
+  { file: "skills/context-combiner/SKILL.md", maxLines: 209, maxBytes: CODING_SPINE_BYTES },
+  { file: "skills/orc-pr-setup/SKILL.md", maxLines: 205, maxBytes: CODING_SPINE_BYTES },
+  { file: "skills/orc-pr-driver/SKILL.md", maxLines: 188, maxBytes: CODING_SPINE_BYTES },
+  { file: "skills/orc-route/SKILL.md", maxLines: 183, maxBytes: CODING_SPINE_BYTES },
+  { file: "skills/orc-wait/SKILL.md", maxLines: 169 },
+  { file: "skills/orc-pattern/SKILL.md", maxLines: 142, maxBytes: CODING_SPINE_BYTES },
+  { file: "skills/orc-diy/SKILL.md", maxLines: 101, maxBytes: CODING_SPINE_BYTES },
+  { file: "skills/orc-analyze-mini/SKILL.md", maxLines: 114, maxBytes: CODING_SPINE_BYTES },
+  { file: "skills/orc-verify/SKILL.md", maxLines: 100, maxBytes: CODING_SPINE_BYTES },
 ];
 
 function walk(dir, out) {
@@ -4098,9 +4429,11 @@ for (const c of CONTRACTS) {
 
 for (const b of BUDGETS) {
   const p = path.join(ROOT, b.file);
-  let lines;
+  let lines, bytes;
   try {
-    lines = fs.readFileSync(p, "utf8").split("\n").length;
+    const text = fs.readFileSync(p, "utf8");
+    lines = text.split("\n").length;
+    bytes = Buffer.byteLength(text.replace(/\r\n/g, "\n"), "utf8");
   } catch (_) {
     failures++;
     console.error(`\n❌ spine budget: templates/${b.file} is missing.`);
@@ -4113,6 +4446,14 @@ for (const b of BUDGETS) {
         `(budget ${b.maxLines}).\n   Spines stay thin by design — move the ` +
         `new detail into a references/ file loaded at its phase, keep only ` +
         `the trigger + contract tokens + pointer in the spine.`
+    );
+  }
+  if (b.maxBytes && bytes > b.maxBytes) {
+    failures++;
+    console.error(
+      `\n❌ spine byte budget exceeded: templates/${b.file} is ${bytes} bytes (LF) ` +
+        `(budget ${b.maxBytes}).\n   A coding spine must survive compaction whole — ` +
+        `move detail into a references/ file loaded at its phase; never raise the cap.`
     );
   }
 }
@@ -4266,6 +4607,29 @@ for (const b of BUDGETS) {
     "code_graph_hooks",
     // v1.8.2 W2 — the ignore globs, read by the CLI behind the same calls.
     "code_graph_ignore",
+    // v2.0.0 W2 — the habits master key, the `code_graph` answer: `orc lane
+    // config` resolves it and hands a lane its `habits{}` block, so no spine
+    // reads the key. An empty lanes[] here is an ANSWER.
+    "habits",
+    // v2.0.0 W2 — the three offer keys a habit can answer. W3 wires the lanes
+    // that read them (DE-7: orc-mini, orc-fast, orc-quick), and each then LEAVES
+    // this list — the check below fails until it does.
+    "review_before_push",
+    "mini_tdd",
+    "quick_update_tests",
+    // v2.0.0 W4 — operating keys of the gotchas ENGINE, the `code_graph_card_budget`
+    // answer: `orc gotcha card`, `import` and `sync` read them, never a spine.
+    "gotcha_card_budget",
+    "gotcha_sync_hours",
+    "sonar_url",
+    "sonar_project",
+    "sonar_org",
+    // v2.0.0 W6c — `notify` is an operating key of the SESSION HOOK, the
+    // `read_gate` answer: orc-session-hook.js reads the raw key off the file.
+    // `rules_card_compact` is read by `rulesSlice()` behind `orc rules slice`,
+    // never by a spine (a lane never picks its own card). Both are ANSWERS.
+    "notify",
+    "rules_card_compact",
   ]);
   for (const e of metaEntries) {
     if (!e.lanes) {
@@ -4652,7 +5016,7 @@ for (const b of BUDGETS) {
     "orc was updated",
     "orc is installed",
     "orc and orc-mini",
-    "orc lane calls", // the catalogue's own reader, named in read-ladder.md
+    "orc lane calls", // the catalogue's own reader, named in _shared/phases/README.md (v2.0.0 T6)
   ]);
   const catalogued = new Set(Object.values(CALLS).map((c) => prefixOf(c.cmd)));
   for (const [call, lanes] of Object.entries(measured)) {
@@ -4875,6 +5239,23 @@ for (const b of BUDGETS) {
     //    context-combiner point at trace.md to describe it and never run it.
     for (const [id, def] of Object.entries(FILES)) {
       const base = def.file.split("/").pop();
+      // v2.0.0 T1 — an ON-DEMAND file is reached through the phase file named
+      // in `via`, which every one of its readers already reads. So the pointer
+      // must be in THAT file, and every reader must be a reader of it too.
+      if (def.via) {
+        const viaDef = FILES[def.via];
+        if (!viaDef) {
+          errs.push(`phase "${id}" names via "${def.via}", which is not a PHASE_FILES entry`);
+          continue;
+        }
+        const viaAbs = path.join(skillsDir, viaDef.file);
+        if (fs.existsSync(viaAbs) && !fs.readFileSync(viaAbs, "utf8").includes(base))
+          errs.push(`phase "${id}" is reached via ${viaDef.file}, but that file never names ${base}`);
+        for (const lane of PHASES[id] || [])
+          if (!(PHASES[def.via] || []).includes(lane))
+            errs.push(`LANE_PHASES["${id}"] names "${lane}", which does not read "${def.via}" — the only road to ${base}`);
+        continue;
+      }
       for (const lane of PHASES[id] || []) {
         const dir = path.join(skillsDir, lane);
         if (!fs.existsSync(dir)) continue;
@@ -4917,7 +5298,7 @@ for (const b of BUDGETS) {
           if (!r.heading && !r.layers)
             errs.push(`LANE_OWN_PHASES["${lane}"] phase "${r.id}" declares neither a heading nor layers — nothing tells the lane where to read it`);
           if (r.heading) {
-            // /orc-doc rule 2 and read-ladder.md rule 2: a section anchor is a
+            // /orc-doc rule 2 and the partial-read rule 2 (_shared/phases/README.md): a section anchor is a
             // HEADING, never a line number. Assert the heading really is there,
             // verbatim — a renamed heading is a pointer into nothing.
             if (r.read !== "section")
@@ -5002,6 +5383,63 @@ for (const b of BUDGETS) {
             `LANE_TRACE puts "${lane}" in tier "${d.tier}", but that row in _shared/phases/trace.md names neither the lane nor its token \`${d.token}\``
           );
       }
+    }
+  }
+
+  // 2c. v2.0.0 T1 — THE TRACE VERB REGISTRY, three ways. `TRACE_VERBS` in
+  //     bin/cli.js is the data; `_shared/phases/trace-verbs.md` is its table for
+  //     a human; every `trace_verbs` (PHASE_FILES, LANE_OWN_PHASES) and
+  //     `spine_verbs` (LANE_TRACE) entry plus TRACE_ALWAYS_VERBS is a CLAIM that
+  //     a phase emits that verb. A claimed verb the registry lacks FAILS (the
+  //     lane would be handed no grammar for it); a registry verb missing from
+  //     the table FAILS; a table verb missing from the registry FAILS; and a row
+  //     whose grammar, emitter, meaning or owner disagrees FAILS.
+  {
+    let VERBS = null, ALWAYS = null;
+    try {
+      VERBS = new Function("return " + cliText.match(/const TRACE_VERBS = \{[\s\S]*?\n\};/)[0].replace(/^const TRACE_VERBS = /, "").replace(/;$/, ""))();
+      ALWAYS = new Function("return " + cliText.match(/const TRACE_ALWAYS_VERBS = \[[\s\S]*?\];/)[0].replace(/^const TRACE_ALWAYS_VERBS = /, "").replace(/;$/, ""))();
+    } catch (e) {
+      errs.push("could not parse TRACE_VERBS / TRACE_ALWAYS_VERBS from bin/cli.js: " + e.message);
+    }
+    const tablePath = path.join(skillsDir, "_shared", "phases", "trace-verbs.md");
+    if (VERBS && !fs.existsSync(tablePath)) errs.push("_shared/phases/trace-verbs.md is missing — TRACE_VERBS has no human table");
+    if (VERBS && fs.existsSync(tablePath)) {
+      const unesc = (s) => s.replace(/\\\|/g, "|");
+      const table = {};
+      for (const line of fs.readFileSync(tablePath, "utf8").split(/\r?\n/)) {
+        const m = /^\| `(.+?)` \| (.+?) \| (.+) \| `([^`]+)` \|$/.exec(line);
+        if (!m) continue;
+        const grammar = unesc(m[1]);
+        const verb = grammar.split(" ")[0];
+        if (table[verb]) errs.push(`trace-verbs.md has two rows for ${verb}`);
+        table[verb] = { grammar, emitter: m[2], meaning: unesc(m[3]), owner: m[4] };
+      }
+      for (const [v, d] of Object.entries(VERBS)) {
+        const row = table[v];
+        if (!row) {
+          errs.push(`TRACE_VERBS has ${v}, but trace-verbs.md has no row for it`);
+          continue;
+        }
+        for (const k of ["grammar", "emitter", "meaning", "owner"])
+          if (row[k] !== d[k]) errs.push(`trace-verbs.md row ${v}: ${k} ${JSON.stringify(row[k])} ≠ TRACE_VERBS ${JSON.stringify(d[k])}`);
+        if (!d.grammar.startsWith(v + " ") && d.grammar !== v)
+          errs.push(`TRACE_VERBS.${v}.grammar does not start with the verb`);
+        const ownerAbs = path.join(ROOT, d.owner.startsWith("agents/") || d.owner.startsWith("hooks/") ? d.owner : path.join("skills", d.owner));
+        if (!fs.existsSync(ownerAbs)) errs.push(`TRACE_VERBS.${v}.owner names ${d.owner}, which does not exist`);
+      }
+      for (const v of Object.keys(table))
+        if (!VERBS[v]) errs.push(`trace-verbs.md has a row for ${v}, which TRACE_VERBS does not declare — the set is CLOSED`);
+    }
+    if (VERBS) {
+      const claims = [];
+      for (const v of ALWAYS || []) claims.push(["TRACE_ALWAYS_VERBS", v]);
+      for (const [id, def] of Object.entries(FILES || {})) for (const v of def.trace_verbs || []) claims.push([`PHASE_FILES["${id}"].trace_verbs`, v]);
+      for (const [lane, rows] of Object.entries(OWN || {}))
+        for (const r of rows) for (const v of r.trace_verbs || []) claims.push([`LANE_OWN_PHASES["${lane}"] phase "${r.id}"`, v]);
+      for (const [lane, t] of Object.entries(TRACE || {})) for (const v of t.spine_verbs || []) claims.push([`LANE_TRACE["${lane}"].spine_verbs`, v]);
+      for (const [where, v] of claims)
+        if (!VERBS[v]) errs.push(`${where} lists ${v}, which TRACE_VERBS does not declare — a lane would get no grammar for it`);
     }
   }
 

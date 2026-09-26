@@ -58,6 +58,8 @@ All of it uses **easy English**, short sentences, and the same fake project.
 | [orc-learn](../templates/skills/orc-learn/examples/learn-run-mock.md) | `/orc-learn` | Onboarding docs for a human, per feature |
 | [orc-claude](../templates/skills/orc-claude/examples/claude-run-mock.md) | `/orc-claude` | Build or refresh this repo's `CLAUDE.md` from verified facts |
 | [orc-export](orc-export.md) | `/orc-export` | Compile it all into a portable `AGENTS.md` so ORC is not a trap |
+| [habits](habits.md) | `orc habit` | The answers you keep giving, proposed once at the end of a run. Off by default, never applied without your yes |
+| [gotcha-import](gotcha-import.md) | `orc gotcha import` | Teach the repair memory from SARIF, Sonar, PR threads and closed defects |
 
 ## Check what happened
 

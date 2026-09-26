@@ -131,7 +131,7 @@ test("GOLDEN: a hand-edited rubric_bands_override is reported shadowed, and read
 // leaves this golden only when the release that removed it says so — never in
 // passing.
 
-test("GOLDEN: the 95 config keys, their tiers and their defaults", () => {
+test("GOLDEN: the 106 config keys, their tiers and their defaults", () => {
   const { root } = freshInstall();
   try {
     const j = json(cli(["config", "list", "--json", "--dir", root]));
@@ -140,7 +140,7 @@ test("GOLDEN: the 95 config keys, their tiers and their defaults", () => {
     // ORDER is part of it: CONFIG_META's order is the order the human menu
     // walks, and W6 regroups the FILE without reordering the registry.
     assert.deepStrictEqual(now, then);
-    assert.strictEqual(now.length, 95, "the key COUNT is a number the release reports"); // v1.8.2: +code_graph_ignore
+    assert.strictEqual(now.length, 106, "the key COUNT is a number the release reports"); // v1.8.2: +code_graph_ignore · v2.0.0 W2: +habits and the three offer keys · W4: +gotcha_card_budget, gotcha_sync_hours, sonar_url, sonar_project, sonar_org · W6c: +notify, rules_card_compact
   } finally {
     rmrf(root);
   }

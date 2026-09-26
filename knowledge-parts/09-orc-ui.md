@@ -1119,3 +1119,30 @@ The `graph-drifted` finding route carries `tab: "graph"`; `goRoute()` in
 
 i18n: `knowledge.cg.*` and `knowledge.tab.graph`, in both tables. No string may
 carry a `.claude/` path (v046 test) — the store is described, not named.
+
+---
+
+## 4z.34.7 v2.0.0 — `orc ui` ▸ Behaviour
+
+**The panel renders the CLI and derives no habit.** Route `#/behaviour`, key
+`u`, directly under Stats. Files: `js/panels/behaviour.js`,
+`css/panels/behaviour.css`, `fixtures/behaviour.js`,
+`i18n/{en,id}/behaviour.json`. Failure it prevents: a panel that computes a
+share or a verdict the CLI does not agree with.
+
+- **Reads:** `/api/habits`, `/api/habits/log`, `/api/habits/states`,
+  `/api/habits/points`, `/api/gotcha/card`, `/api/gotcha/quality`,
+  `/api/gotcha/candidates`. **Writes:** `/api/habit/{accept,decline,forget,reset}`
+  (with `--by panel`) and `/api/gotcha/accept`; the learning switch reuses
+  `/api/config/set`.
+- Tabs: Habits · Rhythm · Gotchas · Review quality · Answer log, under a hero of
+  CLI `portrait[]` sentences and tiles. With `habits: off`, ONE card replaces the
+  tabs — never fake data.
+- No CLI word is a string in `behaviour.js`: colours come from `data-*`
+  attributes mapped in the CSS, actions from `commands{}`. **A `never` habit has
+  NO button**, only `commands.manual`.
+- Tokens `--s1…--s7` (≥ 4.2:1 in both themes). Motion lives in `04-motion.css`
+  only, finite, ≤ 5 s; reduced motion removes the orbit and ends a drawn line
+  drawn. The rail dot (`behaviourRailDot()`) is the ONLY habit state outside the
+  panel.
+- The full part table is `orc-ui-wiki.md` §4a4.

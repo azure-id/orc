@@ -288,4 +288,10 @@
   from the second paint onward and in the editor on every rebuild, transitions
   untouched, declared in `04-motion.css` after the rules it turns off.
   See `knowledge.md` §4z.27.
-
+- **Behaviour (`#/behaviour`, key `u`, v2.0.0 W7) renders the CLI and derives no
+  habit.** Every sentence, share, streak, band and command comes from `orc habit
+  show|log --json` and `orc gotcha list|card|quality --json`; the panel names no
+  state, class or `by=` word (colours are `data-*` attributes mapped in its CSS,
+  actions are `commands{}`). A `never` habit has NO button, only the command. The
+  learning switch is `/api/config/set habits`. With `habits: off` one card replaces
+  the tabs. Nothing moves for more than 5 s. See `orc-ui-wiki.md` §4a4.

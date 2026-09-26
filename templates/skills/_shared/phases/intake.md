@@ -1,12 +1,6 @@
 # Phase — Intake   (id: `intake`)
 
-> **Library file.** Canonical since v1.0.0 W12; it was under the `orc` skill's
-> private `references/`, and other lanes already reached across into it. Read
-> by `orc`, `orc-mini`, `orc-diy`, `orc-challenge`. Layers: `core` and `full`
-> — `core` is the intake procedure every lane runs; `full` is /orc's own Phase
-> 0, which adds the analyst branch, the poly-spec split-and-STOP and the run-
-> folder open. `orc lane phases <lane> --json` names the file and the layers
-> to read.
+> **Library file** (`orc`, `orc-mini`, `orc-diy`, `orc-challenge`). `core` = the intake every lane runs; `full` = /orc's Phase 0 (adds the analyst branch, the poly-spec split-and-STOP and the run-folder open).
 
 <!-- orc:layer core -->
 ## Reference — Phase 0 Intake

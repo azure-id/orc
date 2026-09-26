@@ -70,7 +70,7 @@ to `orc-retro-opus-5-med` when `opus5_only: true` forces it
    date range from `$ARGUMENTS`). Show the count and ask nothing else.
 2. Dispatch `orc-retro-sonnet-5-high` (or `orc-retro-opus-5-med` under
    `opus5_only`) with the slice: trace file paths + the
-   verb reference (`../_shared/phases/trace.md`). The agent mines the
+   verb reference (`../_shared/phases/trace-verbs.md`). The agent mines the
    `<trace>.jsonl` sidecar first when present (structured — no regex over free
    text) and falls back to `.txt` parsing for pre-v0.32.0 traces, merging the
    hook's `.txt`-only skeleton lines by timestamp. It parses the CLOSED verb set
@@ -94,10 +94,11 @@ to `orc-retro-opus-5-med` when `opus5_only: true` forces it
    - **Trace hygiene → narration coverage:** the hook's `PHASE-EDGE` lines
      segment every run with zero model cooperation, so a missing narration is
      now DETERMINISTICALLY visible: count the phases whose edge-interval
-     contains no trace-writer `SPAWN`. Report `covered/total` + the unnarrated
-     phases. The question is no longer "were rich markers forgotten?" but
-     "which phases never dispatched their writer?" — a run with edges and zero
-     writer spawns is a total narration failure and is named as such.
+     contains no trace-writer `SPAWN` and no narrated (non-`hook`) line STAMPED
+     inside it — the CLI writes most packets, with no SPAWN. Report
+     `covered/total` + the unnarrated phases. The question is "which phases were
+     never narrated?" — a run with edges and no narration at all is a total
+     narration failure and is named as such.
 2a. **Repair memory as calibration input (READ-ONLY).** Probe `orc gotcha status`
    (exit 0 = entries, 1 = none — never a `find`). On a hit, add
    `.claude/orc/gotchas.md` to the agent's slice as one more read-only source:

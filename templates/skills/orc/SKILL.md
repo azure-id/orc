@@ -3,12 +3,10 @@ name: orc
 description: >
   Use when orchestrating a multi-task build through a full pipeline: intake →
   planning → scored parallel execution → review → verify → ship. Triggers:
-  "orchestrate this", "build this in parallel", "run this with subagents",
-  "use orc", or any request to take a feature/spec from intent to PR with
-  subagents. Routes planning to Superpowers, OpenSpec, or its own planner;
-  schedules conflict-free waves; scores each task to pick the cheapest capable
-  model; checkpoints eagerly; survives compaction and fresh-session resume.
-  Stack-agnostic.
+  "orchestrate this", "build this in parallel", "run this with subagents", "use
+  orc", or any request to take a feature/spec from intent to PR with subagents.
+  Scores each task to pick the cheapest capable model, and survives compaction
+  and fresh-session resume. Stack-agnostic.
 ---
 
 # ORC (orchestrator spine)
@@ -81,7 +79,7 @@ trigger points; emit `GATE` trace lines.
 
 ## Dispatch via named agents (not prose)
 
-**`orc run inflight` before ANY re-dispatch** (0 clear · 1 in-flight · 2 unknown).
+**`orc run inflight` before ANY re-dispatch.**
 A Task error does not kill the agent behind it, and exit 2 REFUSES by default —
 `a lane that re-dispatches over a live attempt` has broken the contract. Canonical: `_shared/return-validation.md` §0.
 
@@ -100,59 +98,37 @@ resolves to its Opus 5.5 agent, FORCING over everything below — `_shared/opus5
 Caveat: a subagent's model can't exceed the MAIN session's tier — run the main
 session on Opus or the Opus pins silently fall back (the original "wrong model" bug).
 
-## Config (read at run start)
+## Lane contract (`../_shared/lane-contract.md` — read it ONLY when a call exits ≠ 0)
 
-**ONE resolver, and it is not you:** `orc lane config orc --json`. Obey
-`effective`, print every line in `announce[]` VERBATIM at preflight, and honour
-`stops[]` before wave 1. Never re-derive a value, a precedence or an inertness
-from `.claude/orc.config.yaml` — a key this lane does not read is not in the
-answer, and a key another key shadows comes back already marked. Exit ≠ 0 → say
-the CLI is unavailable and fall back to `../_shared/config-precedence.md`'s
-documented defaults, out loud. Priorities and families:
-`../_shared/config-precedence.md`.
-
-## Rules — the anti-slop card (`../_shared/phases/rules.md`)
-
-`orc rules slice --lane orc --json` is the ONLY assembler; never build
-the card here. It rides under the house rules and above the task —
-**house rules > your project's rules > ORC's own packs** — and its `line` prints
-VERBATIM at preflight. Returns gain `rules_applied[]`, `rules_conflicts[]` (a gap,
-never a silent choice) and `rules_overridden[]`.
-## Calls
-
-**ONE catalogue, and it is not you:** `orc lane calls orc --json` names every
-CLI call this lane makes, each with its exit-code contract, its cost, when to run
-it, and what an EMPTY answer means. Never invent a spelling, never re-word an
-exit code, and never re-derive a state word — the CLI's state words are the only
-state words, and **an exit code is an ANSWER wherever that contract says so, not
-a failure**. A call the answer does not name is a call this lane does not make.
-Exit ≠ 0 from the catalogue itself → say the CLI is unavailable and name the
-command you are about to run, out loud, before running it.
+- **Calls:** `orc lane calls orc --json` names every call and its exit codes.
+  **An exit code is an ANSWER where it says so, not a failure.** Make no other call.
+- **Config:** `orc lane config orc --json`. Obey `effective`, print every line
+  in `announce[]` VERBATIM at preflight, and honour `stops[]` before wave 1.
+  Never merge `.claude/orc.config.yaml` yourself (`../_shared/config-precedence.md`).
+- **Habits:** `habits{}` in the config answer → read `../_shared/habits.md`. No
+  `habits{}` → ignore every `(H …)` mark.
+- **Rules:** `orc rules slice --lane orc --json` is the ONLY assembler
+  (`../_shared/phases/rules.md`). Its `line` prints VERBATIM at preflight.
 
 ## Behavior trace (PERMANENT — always on, no config toggle)
 
-Follow `../_shared/phases/trace.md` (ALWAYS load it at run start). The
-`orc-trace.js` hook writes the `SPAWN`/`RETURN`/`PHASE-EDGE` skeleton
-deterministically; the rich narrative is **dispatched, never remembered** — every
-`emit <VERB>` step below means RECORD that event, with its REAL timestamp, into
-the current **phase packet**; you never append a trace line yourself. Run start:
-create `log_dir`, write `log_dir/.current` = `run-orc-<slug>-<DDMMYY>-<HHMMSS>.txt`
-AND `touch the trace file` of that name in the SAME step; store `trace_path`.
+Follow `../_shared/phases/trace.md` (ALWAYS load it at run start; pairing rule,
+packet shape and run end are there). Lane token `orc`, tier **Build lanes**. The
+`orc-trace.js` hook writes the `SPAWN`/`RETURN`/`PHASE-EDGE` skeleton; the
+narrative is **dispatched, never remembered** — every `emit <VERB>` step below
+means RECORD that event, with its REAL timestamp, into the current **phase packet**. Run start: create `log_dir`, write `log_dir/.current`
+= `run-orc-<slug>-<DDMMYY>-<HHMMSS>.txt` AND `touch the trace file` of that name
+in the SAME step; store `trace_path`.
 **Under `ultra_mode` the lane segment is `ultra`, not `orc`** (`run-ultra-<slug>-…`)
 — the filename IS the per-lane data, so an ultra run named `orc` is counted as a
 plain `/orc` run forever, hiding the costliest lane in every usage report.
-**Phase close = dispatch `orc-trace-writer-haiku-4-5`** with that packet
-(`phase`, `events[]`, and `decisions` — the WHY: scoring rationale, the user's
-answers VERBATIM, what you rejected; `run_meta` on the FIRST packet only).
-**Pairing rule:** issue phase N's writer dispatch in the SAME tool block as phase
-N+1's first dispatch (a phase with no next dispatch sends it solo, before its
-user-facing output); the first packet is solo + synchronous — it repairs a
-hook-bootstrapped filename. `DISPATCH`/`VERIFY` models are derived from the agent
-NAME and checked against each return's `actual_model`/`actual_effort` — surface
-any ⛔ DOWNGRADE to the user, not just into the packet. A phase ending with
-`zero new trace lines is a protocol violation` — build and dispatch its packet
-NOW, with the events' real stamps. Run end (Phase 8 or abort): the `FINISH`
-packet goes out and RETURNS, then delete `log_dir/.current`.
+**Phase close = `orc trace write --packet -`** (exit ≠ 0 → `orc-trace-writer-haiku-4-5`).
+The first packet is solo — it repairs a hook-bootstrap filename.
+`DISPATCH`/`VERIFY` models are derived from the agent NAME and checked against
+each return's `actual_model`/`actual_effort` — surface any ⛔ DOWNGRADE to the
+user, not just into the packet. A phase ending with
+`zero new trace lines is a protocol violation` — build and write its packet
+NOW, with the events' real stamps.
 
 ## Extra — a band that executes OFF Claude (config `extra_enabled`, default false)
 
@@ -175,7 +151,7 @@ review/verify re-check the invariants + `validation_gate[]` lines. Load
 ## Ultra lane (`/orc-ultra`)
 
 `/orc-ultra` sets `ultra_mode: true` RUN-SCOPED (never persisted): full pipeline
-+ Opus 4.8 max Advisor (Phase U0) + three judge gates + forced overrides (deep
++ Opus 5.5 xhigh Advisor (Phase U0) + three judge gates + forced overrides (deep
 analyze, pattern/testgen/security on, executor tier floor); never on plain
 `/orc` or orc-mini. Load `references/ultra-mode.md` at Phase 0 when ultra_mode;
 orc-advisor / orc-judge load at their dispatch points.
@@ -214,10 +190,9 @@ them; they are never dispatched as subagents).
 
 ## Phases
 
-`orc lane phases orc --json` **is** the pipeline — the CLI owns the list and
-its order, and this table is the human index of it. Never derive the order
-from these filenames; a second idea of the pipeline is the drift the manifest
-exists to prevent.
+`orc lane phases orc --json` **is** the pipeline; this table is only its human
+index. **The CLI owns the order**: never derive it from these filenames
+(`../_shared/lane-contract.md` §Phases).
 
 **Read a row when its phase fires, not on activation.** Every row is
 `on-phase` — this spine deliberately carries no `always` phase pointer. **Read
@@ -228,8 +203,7 @@ each row.
 
 W13 gave those ten a second reader (`orc-diy`), so they moved to
 `_shared/phases/`. Intake and Integration have one consumer each and stay home
-— a file with one consumer stays home. W14 (`orc-mini`/`orc-fast`) is what adds
-a `trim` layer beside the `full` one.
+— a file with one consumer stays home.
 
 | # | Phase | File | Read | Trace |
 |---|-------|------|------|-------|
@@ -252,4 +226,4 @@ their config key is resolved by `orc lane config orc --json`, never read raw.
 ## Waiting mid-run (`/orc-wait`)
 
 Canonical: `../_shared/wait.md`. **`a lane that waits without a hand-back` has broken this contract.**
-Checkpoint **full** · safe point **wave or phase edge**. `soft` FORCES that checkpoint and does NOT stop if the write fails; `hard` skips it and can lose an in-flight return. Never begin a wait between a dispatch and its validated return, or before the smoke gate has reported.
+Checkpoint **full** · safe point **wave or phase edge**.

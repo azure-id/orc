@@ -414,6 +414,31 @@ outside an ORC run, and never when the map does not exist.
 
 ---
 
+## The session hook
+
+This is a fourth hook, `orc-session-hook.js`. It has two jobs. Both jobs are
+silent when no ORC run is open.
+
+- **The bell.** A turn of an ORC run ends, and your terminal rings once. This
+  job is off until you turn it on:
+
+  ```
+  orc config set notify bell   # ring when a turn of a run ends
+  orc config set notify off    # silent (the default)
+  ```
+
+  It rings only when the run moved since the last bell. A normal chat never
+  rings. It sends no OS notification and uses no network.
+- **After a compaction.** Claude Code keeps only the start of each skill when it
+  compacts a long session, so a long run can lose its place. When a run is in
+  flight, the hook adds ONE line: the run name, and the `state-of-play.md` file
+  to read first. It costs about 40 tokens, once per compaction.
+
+It never blocks a stop and never writes model text. `orc doctor` tells you
+whether both parts are wired.
+
+---
+
 ## For maintainers
 
 - The hook is `orc-statusline.js`. `orc init` installs it and wires it into

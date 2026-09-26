@@ -1,13 +1,7 @@
 ---
 name: orc-advisor-opus-5-xhigh
 description: >
-  ORC Advisor — claude-opus-5-5, xhigh effort. Ultra lane only. Single-role:
-  pre-analysis advisory. Turns the user's request + read-only repo access into
-  an advisory brief: domain risks, architectural pitfalls, alternatives, a
-  mandatory security-risk section, and a request-specific RUBRIC of what a
-  correct analysis, plan, and implementation must each get right — plus
-  open_questions[] (every ambiguity, each with a proposed default). Dispatched
-  once by the orchestrator at ultra Phase U0, before the analyst.
+  ORC Advisor — claude-opus-5-5, xhigh effort. Dispatched by /orc-ultra at Phase U0, before the analyst: the advisory brief, the security risks and the rubric.
 model: claude-opus-5-5
 effort: xhigh
 tools: Read, Glob, Grep, Bash

@@ -2019,3 +2019,28 @@ line to paste. Nothing in it needs interpreting.
 - **No new agent, no new skill, no new config key.**
 
 ---
+
+---
+
+## 4z.34.5 v2.0.0 — `/orc-quick` joins the review memory
+
+**Reversed on purpose (BREAKING 1).** `_shared/gotchas.md` §10 used to say that
+quick does not take part, not even by reading, and the dispatch gate said never
+to remember an answer for the next entry. Both are rewritten (DE-22):
+
+- The review offer (`references/dispatch-gate.md`) passes the gotcha card and
+  the slice fields; there is NO disprove pass in quick.
+- Quick records review outcomes and writes `FINDING-OUTCOME` at Q3.
+- With `habits{}` in the `lane config` answer, a habit fills ONLY the
+  `→ suggested` line of the gate (Q2b), with the CLI's numbers as the reason.
+  **The gate is still asked every time.** `review_before_push` and
+  `quick_update_tests` touch the offers after the work, never the gate. A
+  `review-first` suggestion merges offers 2 and 3 into ONE offer:
+  *review → then commit · commit without review · stop*.
+- New requests (`references/gh-mode.md`): `orc pr threads <n>`, a red CI as a
+  request (`orc ci failed`), Sonar and SARIF issues as a request.
+- Q0 reads `probes["extra-slot"]`, `probes["pattern-status"].langs` and
+  `probes["graph-status"]` from ONE `lane config` call.
+- On a red stop, §3.4 prints the end-of-run card's `undo` row
+  (`orc undo --run <slug>`, prints; `--apply` runs) instead of
+  `git checkout -- .`.

@@ -20,7 +20,7 @@ Score→executor mapping lives in config.md (one canonical 6-band table;
 **Executors no band names — they still ship.**
 `orc-executor-opus-4-7-med`, `orc-executor-opus-4-7-high`,
 `orc-executor-opus-4-8-high` and `orc-executor-opus-5-high` are still generated
-and still installed. Since v1.0.0 they are reachable only when a user names one
+and still installed. They are reachable only when a user names one
 explicitly: `rubric_bands_override`, `orc diy`'s `fixed_executor`, or
 `extra_fallback_agent`. They are not deleted because a table change is not a
 model change, and an agent's model change is always a RENAME.
@@ -42,7 +42,7 @@ model change, and an agent's model change is always a RENAME.
 | orc-context-combiner-opus-5-high | claude-opus-5-5 | high | combine 2+ related analyses (full lane) |
 | orc-pattern-codifier-sonnet-5-high | claude-sonnet-5 | high | reconcile per-language playbook vs. project files → cached code-pattern (opt-in) |
 | orc-retro-sonnet-5-high | claude-sonnet-5 | high | mine behavior traces → calibration report (/orc-retro; read-only) |
-| orc-wiki-scanner-opus-4-8-high | claude-opus-4-8 | high | scan ONE wiki coverage area → evidence-anchored doc body + crosslink tags (/orc-wiki only; read-only against the project). The DEEP half of the v0.46.0 tier ladder: first scan · STRUCTURAL · wide delta · a new exported symbol |
+| orc-wiki-scanner-opus-4-8-high | claude-opus-4-8 | high | scan ONE wiki coverage area → evidence-anchored doc body + crosslink tags (/orc-wiki only; read-only against the project). The DEEP half of the tier ladder: first scan · STRUCTURAL · wide delta · a new exported symbol |
 | orc-wiki-scanner-sonnet-5-high | claude-sonnet-5 | high | the LIGHT half of the same ladder — an existing doc whose covered files moved by a small, no-new-surface delta. IDENTICAL return contract; it escalates with `needs_context` rather than under-delivering. Never used for a first scan |
 | orc-executor-opus-5-med | claude-opus-5-5 | medium | the `[90,100]` band in BOTH tables |
 | orc-executor-opus-5-low | claude-opus-5-5 | low | the default table's `[65,90)`, `opus5_only`'s `[0,90)`, and the forced mini/fast executor |
@@ -53,7 +53,7 @@ model change, and an agent's model change is always a RENAME.
 | orc-challenge-judge-opus-5-high | claude-opus-5-5 | high | grade ONE finished artifact against a FROZEN goal + template (/orc-challenge only; read-only). It reports findings and can never declare a pass — `orc challenge record` computes that |
 | orc-challenge-advisor-opus-5-med | claude-opus-5-5 | medium | turn a FAILED verdict into a remediation strategy — root-cause groups, an order with reasons, the decisions that are not defects (/orc-challenge only; read-only, no prose, no diffs) |
 | orc-challenge-reader-opus-5-low | claude-opus-5-5 | low | the COLD READ: answer questions from ONE artifact with `Read` and nothing else (/orc-challenge only). LOW ON PURPOSE — a harder-thinking reader reasons around the gaps D4 exists to find, so a stronger configuration is a worse instrument |
-| orc-challenge-contrarian-opus-5-high | claude-opus-5-5 | high | THE COUNCIL (v0.49.1): start from "this has a fatal flaw" and go find it — load-bearing claim, then unhappy path, then second-order (/orc-challenge only; read-only). HIGH IS THE INSTRUMENT: a shallow contrarian returns the three surface complaints the free lint already caught |
+| orc-challenge-contrarian-opus-5-high | claude-opus-5-5 | high | THE COUNCIL: start from "this has a fatal flaw" and go find it — load-bearing claim, then unhappy path, then second-order (/orc-challenge only; read-only). HIGH IS THE INSTRUMENT: a shallow contrarian returns the three surface complaints the free lint already caught |
 | orc-challenge-outsider-opus-5-low | claude-opus-5-5 | low | THE COUNCIL: what does this page assume you already know? The TIGHTEST slice in the lane — the artifact and this protocol, `Read` only, no goal, no audience, no template (/orc-challenge only). LOW IS A MEASUREMENT, NOT A COST CHOICE: a harder-thinking outsider reasons its way around an unexplained acronym and reports the document is fine. NOTHING MAY UPGRADE IT |
 | orc-challenge-executor-opus-5-med | claude-opus-5-5 | medium | THE COUNCIL: can this be started on Monday, and where is the first step? Returns D6/D2 findings plus the literal `monday_morning` list — or the point at which writing it becomes impossible (/orc-challenge only; read-only, `Bash` to CHECK a prerequisite, never to change anything). Not an ORC build executor — it writes nothing |
 | orc-challenge-principles-opus-5-high | claude-opus-5-5 | high | THE COUNCIL: the ONLY role allowed to say the frozen goal is wrong. Returns `premise` objects — no severity, never in findings[], never near the pass gate — and its report NEVER reaches the judge (/orc-challenge only; read-only). HIGH because rebuilding a problem statement from the ground up is the deepest reasoning in the lane |
@@ -116,10 +116,10 @@ executor the user already chose for that entry; round 3 asks again.
 the one exception to `opus5_only`'s otherwise flat precedence. See
 `skills/_shared/opus5-only.md` and `skills/orc-quick/references/dispatch-gate.md`.
 
-**Recon is a pinned PAIR since v1.9.0; `other` is the ad-hoc escape hatch.** The
+**Recon is a pinned PAIR; `other` is the ad-hoc escape hatch.** The
 pair exists because the trace hook only sees an agent whose name starts with
-`orc-`: an ad-hoc recon wrote no SPAWN/RETURN, was invisible to
-`orc run inflight`, and could not be counted by `/orc-retro`. The two files share
+`orc-`: an ad-hoc recon writes no SPAWN/RETURN, is invisible to
+`orc run inflight`, and cannot be counted by `/orc-retro`. The two files share
 ONE return contract, so the choice is a model choice and nothing else.
 
 The escape hatch names **a model only**. The Agent tool takes a per-call model
@@ -157,7 +157,7 @@ roles).
 
 A subagent's model cannot exceed the MAIN session's cost tier — request pricier
 and it silently falls back to the main model. **Run your main Claude Code
-session on Opus** or every opus-* agent downgrades to Sonnet. As of v0.34.0 the
+session on Opus** or every opus-* agent downgrades to Sonnet. The
 [90,100] executor band AND every core fixed role (analyst, planner, reviewer,
 verifier, test author, combiner, learn writer, ultra advisor/judge) are pinned
 to **claude-opus-5-5** — on an Opus 4.8 session they all land on Opus 4.8. Verify by

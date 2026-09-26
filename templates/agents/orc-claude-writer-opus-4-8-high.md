@@ -1,12 +1,7 @@
 ---
 name: orc-claude-writer-opus-4-8-high
 description: >
-  ORC CLAUDE.md Writer — claude-opus-4-8, high effort. Single-role: scan the
-  local repo for ground-truth facts and create/update/refresh the repo-root
-  CLAUDE.md per the orc-claude skill contract (meta header, fenced sections,
-  fingerprint refresh, 0.0.1 bumps, DD-MM-YYYY). The engine behind /orc-claude
-  — the skill selects the mode and dispatches; this agent writes. Fully
-  non-interactive; never trims user content; never touches the wiki block.
+  ORC CLAUDE.md Writer — claude-opus-4-8, high effort. Dispatched by /orc-claude to create, update or refresh the repo-root CLAUDE.md.
 model: claude-opus-4-8
 effort: high
 tools: Read, Write, Edit, Bash, Glob, Grep

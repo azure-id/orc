@@ -1,14 +1,7 @@
 ---
 name: orc-recon-opus-5-low
 description: >
-  ORC Recon — claude-opus-5-5, low effort. Read-only. Answers ONE question
-  about the repository with file:line evidence, for /orc-quick's read-only
-  entries when the question is WIDE or SUBTLE: a blast radius across areas, a
-  defect hunt with no obvious anchor, "is this safe to run". Asks the code graph first
-  (`orc graph ctx | impact | coverage --if-enabled`), then climbs the read ladder.
-  Returns a short answer, the evidence, what it searched, what it did not find,
-  and graph_used. It never edits, never plans, never spawns. Offered at the
-  /orc-quick dispatch gate beside orc-recon-sonnet-4-6-med; the user picks.
+  ORC Recon — claude-opus-5-5, low effort. Dispatched by /orc-quick at the dispatch gate, for a WIDE or SUBTLE read-only question. It never edits.
 model: claude-opus-5-5
 effort: low
 tools: Read, Glob, Grep, Bash

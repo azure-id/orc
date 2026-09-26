@@ -1,7 +1,9 @@
-# orc-execution — Core (mode-neutral)
+# orc-execution — Core (the input slice)
 
-A procedure specification: inputs, steps, outputs. Executed by a spawned
-subagent; the orchestrator never runs this itself.
+The INPUT SLICE the orchestrator builds for ONE executor dispatch. The
+procedure and the return contract live in ONE place: the executor agent file
+(`.claude/agents/orc-executor-*.md`). The caller validates the return against
+`../../../_shared/return-validation.md`. The orchestrator never implements.
 
 ## Input slice (you receive exactly this; you cannot pull more)
 
@@ -31,9 +33,11 @@ subagent; the orchestrator never runs this itself.
 - crosslink               — the cross-repo boundary contract for a call site in
                             this task, or null. Present ONLY when a declared file
                             touches a boundary the orchestrator resolved from
-                            `.claude/orc/crosslink/needs.json` + cache. It is
+                            `.claude/orc/crosslink/needs.json` + the cached tag
+                            contract in `.claude/orc/crosslink/cache/`. It is
                             ADVISORY hints ("cross-repo fresh/aging/stale wiki")
-                            labeled with an effective tier — MATCH the field
+                            labeled with an effective tier + "hints, not
+                            verified" — MATCH the field
                             names/types/errors it states, but it never overrides
                             local code and there is nothing to attest (no return
                             field). Absent on any task with no boundary.
@@ -75,97 +79,6 @@ subagent; the orchestrator never runs this itself.
 - worktree_path           — null unless worktrees mode
 - model, effort           — informational (already applied by the caller)
 
-## Procedure
-
-1. Absorb log_digest — prior DECISIONs/INTERFACEs/ANSWERs bind you.
-2. Read spec_ref if provided.
-2a. **Read on the ladder** (`../../../_shared/read-ladder.md`): locate
-   (Grep/Glob) → outline → the ±40 lines around the anchor → full. Stop at the
-   step that answers the question; two full reads with no answer is
-   `needs_context`, not a third. TWO EXCEPTIONS — every `declared_files` path is
-   a FULL read before you edit it (an `old_string` rebuilt from an outline is a
-   corruption bug), and build/test output is always read whole.
-3. Perform the task within `worktree_path` (or the current tree if null).
-   Obey every `house_rules` line, then every `rules_card` rule (two rules that
-   disagree go in `rules_conflicts[]`, never a silent choice). Follow every constraint. If `pattern` is present, MATCH its conventions,
-   satisfy every BLOCKING invariant, and satisfy every enforceable
-   `validation_gate[]` line (re-read your diff to confirm before returning;
-   advisory gate lines are informational — never add tooling to meet one);
-   if `pattern` is null but carries invariants (agnostic), still satisfy them and
-   imitate the neighboring files you read. Create/update tests for what you build.
-   **UI task + a `frontend-design` skill present in the environment** (check
-   `.claude/skills/frontend-design/` or the plugin dir): read its SKILL.md and
-   apply its guidance to the UI work — skip silently when absent.
-4. **Run the proof, capture the evidence:** if the project has a runnable build
-   or test setup, run it for your changes and capture {command, exit_code, the
-   last ~5 output lines} — QUOTED VERBATIM, never paraphrased, never predicted.
-   No runner → set `no_runner_detected: true` instead. Never claim green you
-   did not observe. With a `tdd_spec`: run ITS tests too — implement → test →
-   repair up to `tdd_loop_max` iterations; still red at the cap → stop and
-   return `tdd_state: red` honestly (the failing tests listed in unmet[]).
-5. **Self-check before returning:** re-read your diff against every
-   `acceptance[]` line and every `constraints[]` rule. Anything you could not
-   satisfy goes in `unmet[]` — and a non-empty `unmet[]` means status `partial`
-   (or `failed`), never `done`. An honest partial beats a false done.
-6. **Milestone pings:** after each declared file completed or logical subtask
-   done, emit a brief progress ping: {percent, files_written[], notes}. These
-   bound what a mid-wave stop can save — do not skip them.
-7. Stay within your task. Discovering needed context outside your slice →
-   emit the needs_context return (below). Do NOT fetch it yourself.
-
-## Return contract (emit EXACTLY this structure; the caller validates)
-
-- task_id
-- actual_model            — the model id quoted VERBATIM from your system prompt
-                            ("The exact model ID is …"); NEVER inferred from priors;
-                            `unknown` if no such line exists. Lets the caller catch
-                            a silent tier downgrade (claimed-vs-actual model check)
-- actual_effort           — the value of $CLAUDE_EFFORT (read via Bash at start)
-- status: done | failed | partial | needs_context
-- actual_files[]          — every file you truly touched (audited vs declared)
-- evidence                — {command, exit_code, tail} of the build/test you ran,
-                            quoted VERBATIM (like actual_model — never invented).
-                            REQUIRED when status=done and the project has a
-                            runnable build/test; null when it has none
-- no_runner_detected      — true ONLY when the project exposes no runnable
-                            build/test (explains a null evidence); else absent
-- unmet[]                 — acceptance[]/constraints[] lines you could NOT
-                            satisfy. MUST be empty when status=done — a
-                            non-empty unmet[] forces partial/failed
-- log_entries[]           — cross-cutting decisions for the decision log,
-                            tagged DECISION | CONSTRAINT | INTERFACE
-- failure_reason          — REQUIRED when status=failed (the why); else null
-- progress                — {percent, files_written[], notes} when partial; else null
-- context_request         — REQUIRED when status=needs_context: what you need
-                            and why (e.g. "needs T1's type enum interface");
-                            else null
-- pattern_version         — the `pattern.pattern_version` you applied; null if no
-                            pattern was supplied
-- invariants_checked      — true ONLY if you verified every BLOCKING invariant in
-                            `pattern` against your diff; false/null if no invariants
-                            were supplied. A pattern task returning false/absent here
-                            is a malformed return
-- tdd_state               — green | red | null. REQUIRED when the slice carried a
-                            `tdd_spec`: green ONLY after its tests pass (run quoted
-                            in `evidence`); red = cap hit/unresolved (failing tests
-                            in unmet[]); null only without a tdd_spec. status=done
-                            with red is malformed
-- repro                   — REQUIRED when the slice carried
-                            `repro.required: true`; else absent. {command, before:
-                            {exit_code, tail}, after: {exit_code, tail}} quoted
-                            VERBATIM, or `none` + a one-line reason. status=done
-                            with before.exit_code 0 (never red) or a non-zero
-                            after.exit_code (still red) is malformed. Canonical:
-                            `.claude/skills/_shared/return-validation.md` §5d
-- gotcha_recorded         — REQUIRED when this return CLOSES a repair loop (you
-                            drove a tdd_spec test red → green): the entry body
-                            {trigger, symptom, cause, fix, scope}, or `none` + a
-                            one-line reason. Absent on a repair-closing return is
-                            malformed; not required when nothing was repaired. A
-                            loop that hit `tdd_loop_max` and STOPPED returns
-                            `none` — an unsolved failure is not a gotcha. You
-                            RETURN it; the caller writes the file
-
-Malformed returns are treated as failure by the caller. needs_context is
-capped at 2 per task — a third means the slice or plan is wrong and escalates
-to the user.
+A task with no boundary carries no `crosslink`. Malformed returns are treated
+as failure by the caller. needs_context is capped at 2 per task — a third means
+the slice or plan is wrong and escalates to the user.

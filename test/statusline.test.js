@@ -622,6 +622,42 @@ test("statusline: the graph component is a FLOOR — off, none, fresh, behind �
   }
 });
 
+test("statusline: the gotchas count reads the ONE ledger file — `## G-` headings in .claude/orc/gotchas.md", () => {
+  // v2.0.0 Q10. The hook read a folder `orc/gotchas/` that no lane ever writes,
+  // so the count was always empty. No file is unknown (an em dash), never 0.
+  const { root, claudeDir } = freshInstall();
+  const payload = { cwd: root, session_id: "q", model: { id: "claude-opus-5-5" }, effort: { level: "high" } };
+  const render = () =>
+    runHook(claudeDir, "orc-statusline.js", payload, { ORC_STATUSLINE_SCAN_MS: "0" }).stdout.replace(/\x1B\[[0-9;]*m/g, "");
+  try {
+    cli(["statusline", "apply", "minimal", "--dir", root, "--json"]);
+    assert.strictEqual(slj(root, ["set", "1", "1", "gotchas", "--render", "label-value"]).status, 0, "the gotchas component can be placed");
+    slj(root, ["compile"]);
+    cli(["config", "set", "statusline_custom", "on", "--dir", root]);
+    const none = render();
+    assert.ok(!/gotchas\W*\d/.test(none), "no ledger file → no number");
+    assert.ok(!/undefined|NaN/.test(none));
+    fs.mkdirSync(path.join(claudeDir, "orc"), { recursive: true });
+    fs.writeFileSync(
+      path.join(claudeDir, "orc", "gotchas.md"),
+      "# Gotchas\n\n## G-001 · js · repair\n- scope: a\n\n## G-002 · py · drift\n- scope: b\n"
+    );
+    assert.match(render(), /gotchas\W*2\b/, "two `## G-` headings → 2");
+    // v2.0.0 W4 — a REAL v2 ledger, written by `orc gotcha add` (optional
+    // `source:` fields, CRLF), still counts one per `## G-` heading.
+    fs.writeFileSync(path.join(claudeDir, "orc", "gotchas.md"), "# Gotchas\r\n");
+    const body = path.join(root, "g.json");
+    for (const [i, source] of ["repair", "sonar", "pr"].entries()) {
+      fs.writeFileSync(body, JSON.stringify({ area: "ts", source, trigger: "t", symptom: `distinct failure ${"abc"[i]} words`, cause: "c", fix: "f", scope: `src/m${i}/**`, origin: "o 12-09-2026", rule: source === "repair" ? undefined : `${source}:r${i}`, category: "test" }));
+      assert.strictEqual(cli(["gotcha", "add", body, "--dir", root]).status, 0);
+    }
+    assert.match(fs.readFileSync(path.join(claudeDir, "orc", "gotchas.md"), "utf8"), /\r\n- source:    sonar\r\n/);
+    assert.match(render(), /gotchas\W*3\b/, "a v2 file: three `## G-` headings → 3");
+  } finally {
+    rmrf(root);
+  }
+});
+
 test("statusline: the hook falls back — every gate rung, and none of them throws", () => {
   const { root, claudeDir } = freshInstall();
   const orc = path.join(claudeDir, "orc");

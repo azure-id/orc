@@ -324,3 +324,33 @@ test("bin/ui.js and bin/webui/ each name the other", () => {
 // The catalogue is DERIVED from the files on disk, so the failure this guards
 // is a doc that exists and is invisible: a walkthrough in mock-run/ that no
 // surface lists is the same as a walkthrough nobody wrote.
+
+// v2.0.0 W7 — the Behaviour panel's motion. Nothing on that page moves for more
+// than 5 s beside other content (WCAG 2.2.2), and nothing moves at all under
+// reduced motion — so the orbit satellites are REMOVED there, and a line that
+// draws itself is forced to its drawn end state.
+test("css: the Behaviour motion lives in 04-motion.css, is finite, and reduced motion stills it", () => {
+  const motion = fs.readFileSync(path.join(WEBUI, "css", "04-motion.css"), "utf8");
+  const block = motion.slice(motion.indexOf("@media (prefers-reduced-motion: reduce)"));
+  assert.match(block, /\.bh-orbit \.sat\s*\{\s*display:\s*none/, "the orbit satellites are removed, not capped");
+  assert.match(block, /\.bh-draw\s*\{\s*stroke-dashoffset:\s*0\s*!important/, "a self-drawing line ends drawn");
+  const panel = panelCss("behaviour");
+  assert.ok(!/prefers-reduced-motion/.test(panel), "no panel CSS holds a media query for motion");
+  assert.ok(!/animation\s*:|@keyframes/.test(panel.replace(/\/\*[\s\S]*?\*\//g, "")), "no animation in the panel CSS — motion is 04-motion.css only");
+  // Every bh- animation is finite: no `infinite`, and each iteration count and
+  // duration keeps the total under 5 s.
+  const bh = motion.slice(motion.indexOf("the Behaviour panel (v2.0.0 W7)"), motion.indexOf("REDUCED MOTION")).replace(/\/\*[\s\S]*?\*\//g, "");
+  assert.ok(bh.length > 200, "the Behaviour motion section exists");
+  assert.ok(!/infinite/.test(bh), "no infinite animation on the Behaviour page");
+  for (const m of bh.matchAll(/animation:\s*([^;]+);/g))
+    for (const part of m[1].split(",")) {
+      const times = [...part.matchAll(/(\d*\.?\d+)(ms|s)\b/g)].map((x) => Number(x[1]) * (x[2] === "s" ? 1000 : 1));
+      const count = Number((/\s(\d+)(?:\s|$)/.exec(part.trim() + " ") || [])[1] || 1);
+      if (!times.length) continue;
+      const [dur, delay = 0] = times;
+      assert.ok(delay + dur * count <= 5000, `"${part.trim()}" moves for more than 5 s`);
+    }
+  // The series tokens: dark AND light, on the token file only.
+  const tokens = fs.readFileSync(path.join(WEBUI, "css", "00-tokens.css"), "utf8");
+  for (let i = 1; i <= 7; i++) assert.strictEqual((tokens.match(new RegExp("--s" + i + ":", "g")) || []).length, 2, `--s${i} has a dark and a light value`);
+});

@@ -1,10 +1,6 @@
 # Phase — Security pass   (id: `security-checklist`)
 
-> **Library file.** Canonical since v1.0.0 W12; it was under the `orc` skill's
-> private `references/`, and another lane already reached across into it. Read
-> by `orc`, `orc-diy`. Layers declared: `core` only — single-layer because an
-> opt-in pass either runs its checklist or does not run. `orc lane phases
-> <lane> --json` names the file and the layers to read.
+> **Library file** (`orc`, `orc-diy`), `core` only: an opt-in pass runs its checklist or does not run.
 
 <!-- orc:layer core -->
 ## Reference — Security-Pass Checklist (Phase 5.5, opt-in)

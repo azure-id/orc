@@ -1,10 +1,7 @@
 ---
 name: orc-planner-mini-opus-5-med
 description: >
-  ORC mini Requirement Planner — Opus-5-only mode variant. claude-opus-5-5, medium
-  effort. Fast-lane planning for ORC-MINI. Same planning-output contract as
-  orc-planner-mini-sonnet-5-high, trimmed depth. Dispatched INSTEAD of
-  orc-planner-mini-sonnet-5-high when `opus5_only: true`.
+  ORC mini Requirement Planner — claude-opus-5-5, medium effort. Dispatched by /orc-mini at planning, instead of orc-planner-mini-sonnet-5-high when `opus5_only: true`.
 model: claude-opus-5-5
 effort: medium
 tools: Read, Write, Edit, Bash, Glob, Grep

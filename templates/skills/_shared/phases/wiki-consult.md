@@ -1,11 +1,6 @@
 # Phase — Wiki consult   (id: `wiki-consult`)
 
-> **Library file.** Canonical since v1.0.0 W12; it was under the `orc` skill's
-> private `references/`, and other lanes already reached across into it. Read
-> by `orc`, `orc-mini`, `orc-fast`, `orc-wiki`. Layers declared: `core` only —
-> single-layer because the precedence ladder (`code > fresh wiki > stale wiki
-> > model priors`) does not bend for a faster lane. `orc lane phases <lane>
-> --json` names the file and the layers to read.
+> **Library file** (`orc`, `orc-mini`, `orc-fast`, `orc-wiki`), `core` only: the ladder `code > fresh wiki > stale wiki > model priors` does not bend for a faster lane.
 
 <!-- orc:layer core -->
 ## Reference — Wiki Consult (shared by orc / orc-mini / orc-fast)
@@ -147,6 +142,15 @@ actually read, or `none`. `none` on a slice that carried docs is a REAL signal
 (the pages were not useful, or were ignored): record it, never quietly drop it.
 It is the only thing that distinguishes a wiki that is working from one that is
 merely being shipped.
+
+**orc-mini only** (moved here from its spine at v2.0.0):
+
+**`none` is an answer — record it, never drop it.** `wiki_used: none` and
+`graph_used: none` from ANY return go into the checkpoint and the ship line
+(`knowledge: wiki 2 pages offered · used none · graph card 2 targets · used
+none`). Two runs in a row with `wiki_used: none` on FRESH pages → one line:
+`wiki: the selected pages were not used in 2 runs — check their TL;DRs
+(/orc-wiki)`. A signal, never a gate, never dropped for looking null.
 
 ## Scoring bonus (full lane, Phase 2)
 

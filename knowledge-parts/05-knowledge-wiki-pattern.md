@@ -870,6 +870,22 @@ with the UI pack, 8 665 for a prose lane. HARD rules carry their body; PURPOSE
 and LOCK carry one line plus the file to open. If it must come down, the lever is
 `rulesSlice()` — never a lane trimming its own card.
 
+**v1.9.0 — the COMPACT form (moved here from `_shared/phases/rules.md` at
+v2.0.0).** The lever is pulled for `orc-quick` only, and the CLI decides it:
+every HARD rule keeps its id, its title and its first line; the worked examples
+come out, with the pack file named beside them. Measured **13 874 → 5 838
+chars** (~3 470 → ~1 460 tokens) with every HARD id still present. It is the
+lane with the smallest tasks under the largest fixed card, and the card is
+re-sent on every executor turn. The answer says `compact: true`; `line` is
+identical in both forms, because compacting changes how a rule is written,
+never whether it applies.
+
+**Do not build a detector for the rules boundary** (a rule that asks to change
+how a lane RUNS comes back as `unsupported_request`). The CLI declares the
+boundary and does not pretend to enforce it — the `orc doc rules` reason: a
+validator that sometimes works is worse than none, because a clean pass then
+means nothing. (Moved here from `_shared/phases/rules.md` at v2.0.0.)
+
 **`ui` rides per TASK**, added at dispatch when a task's declared files are
 front-end. A UI rule in a backend slice is tokens paid on every spawn for a rule
 that cannot apply.
@@ -1575,3 +1591,43 @@ frozen graph@5 golden `test/goldens/graph-1.9.0/`).
 
 Contracts 208 → **214**. Tests 1110 → **1202 passed, 0 failed, 1205 tests, 80
 files**.
+
+---
+
+## 4z.34.3 v2.0.0 — gotchas v2, the importers and sync
+
+**The CLI owns the memory; a lane records and reads.** `bin/gotcha.js`
+(`gotchaCmd`) and `bin/gotcha-import.js`. Failure it prevents: a lane that
+decides by itself what counts as a lesson.
+
+- **Format.** The v1 entry is valid as it is. Nine OPTIONAL fields, in this
+  order: source, rule, category, cwe, severity, polarity, evidence, helpful,
+  harmful. 1.9.2's `GOTCHA_HEAD` regex still parses a v2 file (a test copies it).
+- **ONE writer of `.claude/orc/observations.jsonl`**: `normalizeObservation` +
+  `recordObservations`. `normalizeSig` redacts secrets first.
+- **Dedupe:** key match, or word 3-gram Jaccard ≥ 0.6 (`JACCARD_MIN`).
+- **Promotion (`promotion()`, pure)** counts `addressed` cases only: (a) an
+  in-lane red → green with `reproduced: true`; a `miss: true`; (c) security with
+  a CWE tag or a HIGH/BLOCKER impact, at 1 case; (b) 3 distinct cases in 2 PRs
+  within 90 days. Bot and ORC-reviewer findings are measured, never mined.
+- **The card (`orc gotcha card`) is always on (DE-10).** `gotcha_card_budget`
+  (600, min 200, a lower value refused by name) is a size, never an off switch.
+  An entry that does not fit is COUNTED (`dropped`). `quiet` (`last_seen` > 90
+  days) and `orphaned` leave the card only. `card` never exits 4; `match` still
+  exits 4 under a 1.x `gotchas: off`, so an old config is never overridden in
+  silence (DE-27). `orc config set gotchas off` prints the always-on notice.
+- **`orc gotcha filter`** drops suppressed, folded and noisy advice
+  (≥ 10 findings at < 35 % acceptance). It never removes a P0 or a P1.
+- **`orc gotcha quality`** answers only from 5 reviews (`QUALITY_FLOOR`),
+  target 0.6.
+- **Importers** (read-only on GitHub; a fake `gh` in the tests asserts that no
+  call writes): `import sarif` (SARIF 2.1.0, suppressions honoured),
+  `import sonar` (Bearer from `SONAR_TOKEN` only — the token is never a key;
+  exit 5 auth · 6 network), `import pr <n>` (human threads only),
+  `import issues` (closed defects with a closing PR).
+  **`orc gotcha sync [--force]`** runs every available source, incremental and
+  time-boxed; exit 0 synced · 1 nothing new or not due (`gotcha_sync_hours`,
+  6) · 6 a source failed. State in `.claude/orc/gotchas-sync.json`. A lane
+  treats any failure as "go on".
+- **User data**: `observations.jsonl`, `gotchas-sync.json` — never in the
+  install manifest; they survive `update`, `update --prune`, `doctor --fix`.

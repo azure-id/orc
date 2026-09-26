@@ -4,22 +4,20 @@ Canonical procedure for validating a spawned agent's return. Every ORC lane
 (full, mini, fast, wiki, diy) runs this on EVERY return; a malformed return is
 a failure (requeue/re-dispatch with reason — lane sets the retry cap).
 
+**Read the SECTION, not the file.** Every return: §1–§3. Then ONLY the § of
+each field the slice carried — §4 `pattern`, §5 `tdd_spec`, §5b wiki, §5b.1
+graph cards, §5c the rules card, §5d `repro`. §2b only for a foreign return. §0
+only before a re-dispatch. §6 only after a wave. §7 only on a repair loop. The §
+numbers are anchors: never renumber or rename a § heading.
+
 ## 0. Is the previous attempt still ALIVE? (v1.2.0) — BEFORE anything else
 
 > **`a lane that re-dispatches over a live attempt` has broken this contract.**
 
 **A Task error does not kill the agent behind it.** Claude Code's tool call can
 fail, time out, or be cut off mid-turn while the subagent it started keeps
-running — and keeps writing files. Every rule below this line ends in
-"re-dispatch", and every one of them silently assumed a failed call meant a dead
-agent. It does not.
-
-What that costs, measured: one graded `/orc-quick` entry put THREE
-`orc-executor-opus-5-low` agents on the SAME task — 50m19s, 115m22s and
-100m53s, **266 minutes of Opus 5.5 for one authorised dispatch**, all editing the
-same files, inside a 2h04m window. The second was dispatched 4m19s after the
-first, while the first was still working. The hook had recorded all three; no
-lane had ever read that record.
+running — and keeps writing files. Every rule below ends in "re-dispatch";
+none of them may assume that a failed call means a dead agent.
 
 ### The rule
 
@@ -49,8 +47,7 @@ A usage limit, an API error, a dropped connection or a `Ctrl+C` between a
 dispatch and its return says **nothing** about the agent. Treat it as §0 exit 2
 and ask. A lane that classifies an interruption as a failure re-dispatches into
 a live agent, gets interrupted again sooner because it is now paying twice, and
-the loop tightens on itself — which is exactly how the 266-minute entry
-happened.
+the loop tightens on itself.
 
 ### What refusing looks like
 
@@ -102,64 +99,14 @@ is on the wrong model.)
 
 ## 2b. A FOREIGN return — the SUBSTITUTION check (v0.50.0)
 
-A foreign worker (`orc extra dispatch`, `_shared/extra-dispatch.md`) is not a
-Claude subagent. It has no injected system-prompt model-id line, so **it cannot
-carry `actual_model`** — and §2 must not be faked for it. A foreign return that
-claimed an `actual_model` would be claiming evidence that does not exist.
-
-It carries instead, and every one of these is quoted from the wire rather than
-assumed:
-
-- `engine` (`api` | `claude-shim` | `cli`), `provider`, `profile`
-- `model_requested` — what the route row asked for
-- **`model_reported`** — the `model` field the endpoint echoed back
-- `usage` — the four token kinds, never blended, **or `null`**
-
-**`model_reported != model_requested` is ⛔ SUBSTITUTION**, surfaced to the user
-exactly as ⛔ DOWNGRADE is today and never silently accepted. It is the only
-defence against an aggregator quietly serving something else. `unknown` is a
-valid, honest value and is reported as `unknown` — **never as a match**.
-
-**A clean model check is not a clean answer.** An aggregator's *provider-level*
-fallback is on by default and it PRESERVES the model id, so the substitution
-check reads clean while the code went to a different company. Engine `api`
-records the response's `provider` echo and reports **⚠ REROUTE**; the other two
-engines cannot see it at all, and their `served_by_note` says so. An absent
-measurement is never a pass.
-
-**`usage: null` is not four zeros.** A worker that reported no token counts
-(engine `cli` frequently) returns `null` plus a note. `{0,0,0,0}` would tell
-`/orc-budget` the run was free. Engine `api`'s `cache_write: 0` is the opposite
-case — a real measurement — so the two must never be normalised together.
-
-**The fence is per-engine, and the return says which one it had.** Engine `api`
-ENFORCES `declared_files`; engines `claude-shim` and `cli` ASK. A return
-carrying `fence: {declared_files: false}` means the list was an instruction, not
-a rule — treat §6 below as the only real check, and say so to the user rather
-than reporting a constraint that was never applied.
-
-**A RESUMED foreign dispatch owes three more fields** (v0.54.0). The dispatch
-return sets `resume_expected: true`, so the obligation is never inferred:
-
-- **`resume_state`** — `continued` · `restarted` · `no-op`. Absent on a slice
-  with no `resumed_from` is correct; **absent on a resume slice is MALFORMED.**
-  A return claiming `restarted` while `preexisting[]` was non-empty is a
-  FINDING, not a failure — it is how `/orc-retro` learns which providers ignore
-  a resume preamble, so surface it rather than treating it as a bad return.
-- **`preexisting_read[]`** — which pre-existing files the worker actually
-  opened. Quoted like `wiki_used`: **what it did, never what the dispatcher
-  assumed.** An EMPTY list on a resume whose `preexisting[]` was not empty is an
-  honest and informative return — it says the worker ignored the preamble — and
-  it must be surfaced, never dropped.
-- **`journal_fidelity`** — relayed from the dispatch return (`per-turn` |
-  `streamed-opaque`), so a validator never reports `streamed-opaque` evidence as
-  if it had per-turn tool attribution.
-
-Everything else in this file applies to a foreign return unchanged: the
-honest-status rules, the pattern attestation, the TDD attestation, the wiki
-attestation, and above all **§6, the worktree delta** — which is engine-blind
-because it reads the worktree rather than the return, and is therefore what
-makes a foreign executor safe at all.
+Read this § only when `extra_enabled` and the return came from `orc extra
+dispatch`. A foreign worker has no system-prompt model-id line, so **it cannot
+carry `actual_model`** — never fake §2 for it. **`model_reported !=
+model_requested` is ⛔ SUBSTITUTION**, surfaced exactly as ⛔ DOWNGRADE. A
+RESUMED foreign dispatch also owes `resume_state`, `preexisting_read[]` and
+`journal_fidelity`. The full check — the wire fields, ⚠ REROUTE, `usage: null`,
+the per-engine fence and the resume fields — is `extra-dispatch.md`
+§The return contract delta. Every other § of this file applies unchanged.
 
 ## 3. Honest-status rules (executor returns)
 

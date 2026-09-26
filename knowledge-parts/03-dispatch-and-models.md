@@ -1116,3 +1116,25 @@ price) and adds `claude-opus-5-5`: $4 input · $5 cache write · $0.20 cache rea
 · $20 output per MTok (Claude pricing page, 23-09-2026). `orc budget` prices
 against `claude-opus-5-5`. Both hooks match the family with
 `/(opus|fable)[\s._-]?5\b/`, which matches `claude-opus-5-5` too — no hook change.
+
+---
+
+## 4z.34.2 v2.0.0 — the `learned` rank, and the 16 model twins
+
+**The `learned` rank sits below the config file and above the shipped default.**
+An accepted habit (`bin/habit.js` `learnedFor`) resolves at that rank in
+`laneConfig`, and `orc config list` shows `source: "learned:H-…"` with the state
+word `learned`. `orc config set` always wins. Failure it prevents: a habit that
+silently beats a value the user wrote.
+
+- **Under `habits: off` the rank does not exist.** `LANE_RANK_STATES` is
+  unchanged, `learned` is appended only when on, the four `HABIT_KEYS` leave
+  `not_read`, and the `habits` / `offers` families are dropped. The answer is
+  byte-identical to 1.9.2 with `--no-probes` (DE-16: off = zero bytes).
+- **16 more agent files are GENERATED** from `agents-src/twins/*.template.md`
+  (8 families: analyze-mini, claude-writer, pattern-codifier, planner-mini,
+  recon, retro, scout, wiki-scanner — two model variants each) by `TWINS` +
+  `renderTwin()` in `bin/build-agents.js`. `node bin/build-agents.js --check`
+  (in `npm run verify`) fails on a hand-edited twin, as it does for the 10
+  executors. Edit the template, never the agent file.
+- Agent descriptions are one line: 38 coding agents 15,299 → 5,341 chars.

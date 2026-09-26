@@ -176,3 +176,28 @@
     gap: 6px;
   }
 }
+
+/* The Behaviour panel (v2.0.0 W7) on a phone. No sideways page scroll at 375 px:
+   the orbit goes, the tiles pair up, the rows stack, and the heat map keeps all
+   24 columns but labels every other hour. */
+@media (max-width: 860px) {
+  .bh-orbit { display: none; }
+  .bh-hero { padding: var(--sp-4); }
+  .bh-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .bh-tile { padding: var(--sp-2) var(--sp-3); }
+  .bh-tile-v { font-size: 22px; }
+  .bh-portrait li { flex-direction: column; gap: 0; font-size: 14px; }
+  .bh-portrait .bh-k { min-width: 0; }
+  .bh-tab { padding: 8px 10px; }
+  .bh-habit-body { grid-template-columns: 52px minmax(0, 1fr); }
+  .bh-ring { width: 52px; height: 52px; }
+  .bh-log-row { grid-template-columns: minmax(0, 1fr) auto; row-gap: 2px; }
+  .bh-log-row .t, .bh-log-row .bh-log-q { grid-column: 1 / -1; }
+  .bh-cat { grid-template-columns: minmax(0, 96px) minmax(0, 1fr) 70px; }
+  .bh-lesson { grid-template-columns: 48px minmax(0, 1fr); }
+  .bh-lesson-right { grid-column: 1 / -1; flex-direction: row; justify-content: flex-start; }
+  .bh-heat { grid-template-columns: 26px repeat(24, minmax(0, 1fr)); gap: 2px; }
+  .bh-heat .h:nth-child(odd) { visibility: hidden; }
+  .bh-lesson > .btn { grid-column: 1 / -1; justify-self: start; }
+  .bh-src-bar span { padding: 0; font-size: 0; } /* too narrow to label: the row badges and the title carry the source */
+}

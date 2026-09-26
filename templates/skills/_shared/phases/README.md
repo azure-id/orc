@@ -63,12 +63,71 @@ them, and what varies is DATA (the tier table, the lane token), not prose. Cutti
 them into layers to look symmetrical would be inventing structure the phase does
 not have.
 
-## Pointer discipline
+## Pointer discipline — the partial-read rules (v1.0.0 W10)
 
-Every pointer a spine adds declares `when` and `read` — the partial-read rules in
-`../read-ladder.md`. `on-phase` is the default; `always` must be justified in the
-release's findings; a `read:` names a HEADING and **never a line number**
-(`/orc-doc` rule 2 — a stored line number is a wrong line number one edit later).
+Every pointer a spine adds declares `when` and `read`. `on-phase` is the
+default; `always` must be justified in the release's findings; a `read:` names
+a HEADING and **never a line number** (`/orc-doc` rule 2 — a stored line number
+is a wrong line number one edit later). **Rule of 2.0.0:** every new shared file
+is `on-phase` or `on-demand`, never `always`, and a new CLI answer is brief by
+default (the full rows only on request). This section is for the
+ORCHESTRATOR; an executor or a recon agent reads only `../read-ladder.md`.
+
+### Reading ORC's own payload
+
+The read ladder (`../read-ladder.md`) is about reading the PROJECT. It
+applies unchanged to reading ORC's own files, and it has to: a lane manifest of
+pointers that every lane dutifully reads whole is MORE round-trips than the prose it replaced, for the
+same bytes. Centralizing prose and then reading all of it is a slower payload,
+not a smaller one.
+
+So every pointer a lane carries declares three things.
+
+| Declaration | Values | Means |
+|---|---|---|
+| `when` | `always` · `on-phase` · `on-state` · `on-demand` · `compile-time` | WHETHER to open it at all |
+| `read` | `layer` · `section` · `whole` | HOW MUCH to open |
+| `layers` | `core` · `full` · `trim` · `composed` | WHICH part, when `read: layer` |
+
+#### The five rules that make it honest
+
+1. **`on-phase` is the default, and `always` must be justified.** A file every
+   lane always loads has saved nothing by moving. Each `always` pointer is
+   named in the wave that adds it.
+2. **`read: section` names a HEADING, never a line number.** A stored line
+   number is a wrong line number one edit later; a heading anchor survives an
+   edit above it. This is why a shared file's headings are part of its
+   contract — renaming one breaks every pointer into it.
+3. **A trimmed lane reads `core` plus its OWN layer, and never the `full`
+   layer.** Reading a neighbouring layer "for context" is the bleed this rule
+   exists to stop: the layer boundary is the product promise, not a suggestion.
+4. **The two exceptions of `../read-ladder.md` carry over unchanged.** A file
+   you will EDIT is read in full, first, always; and output a gate parses is read whole.
+5. **`compile-time` is not a run-time read at all.** `orc-diy` is a declared
+   reader of ten shared phases and opens none of them during a run: the `orc
+   diy compile` CLI reads their `composed` layer once and stitches it into
+   `FLOW-COMPILED.md`, which is the only spine that run then follows. Saying
+   `on-phase` there would describe a read that never happens, and a manifest
+   that describes a run nobody performs is the drift it exists to prevent
+   (v1.0.0 W13).
+
+#### The honest limit
+
+A partial read saves round-trips and bytes for the lanes that SKIP a phase. It
+does **not** make a phase cheaper for the lane that runs it — that lane reads
+its layers whole. Any claim otherwise has to show the measurement.
+
+### Why the ladder exists
+
+ORC's cost is dominated by parallel reading, not by thinking: up to `max_scouts`
+scouts at once, a wiki scan that is expensive by design, and every executor in a
+wave opening its declared files. A role that opens a 900-line file to learn one
+function's shape has spent the run's budget on bytes nobody needed. Reading more
+is not understanding more.
+
+What a lane INVOKES, and what each exit code means, is not in this file: that is
+`orc lane calls <lane> --json`, whose catalogue is the one copy of every call
+two or more lanes share.
 
 ## What is here
 

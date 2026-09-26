@@ -179,7 +179,7 @@ test("lane config: effective, not_read and stops are answers, including when emp
     assert.deepStrictEqual(adv.keys, []);
     assert.deepStrictEqual(adv.stops, []);
     assert.deepStrictEqual(adv.roles, {});
-    assert.strictEqual(adv.not_read.length, 95, "it reads none of the 95 keys"); // v1.8.2: +code_graph_ignore
+    assert.strictEqual(adv.not_read.length, 102, "it reads none of the 102 keys"); // v1.8.2: +code_graph_ignore · v2.0.0 W4: +5 gotcha engine keys · W6c: +notify, +rules_card_compact
   } finally {
     rmrf(root);
   }
@@ -379,7 +379,7 @@ test("lane phases: --json is not a summary — every field the human branch prin
     assert.deepStrictEqual(j.layer_set, ["core", "full", "trim", "composed"]);
     const l = j.lanes[0];
     assert.deepStrictEqual(Object.keys(l), [
-      "lane", "trace_tier", "trace_token", "phases", "shared_phase_count",
+      "lane", "trace_tier", "trace_token", "trace_grammar", "phases", "shared_phase_count",
       "own_phases", "own_phases_status",
     ]);
     assert.strictEqual(l.trace_tier, "Build lanes");
@@ -434,6 +434,58 @@ test("lane phases: --json is not a summary — every field the human branch prin
   } finally {
     rmrf(root);
   }
+});
+
+// v2.0.0 T1 — `trace_grammar` is what lets a run skip the verb table. It must
+// be EXACTLY the verbs the lane's phases list (+ the always set), in registry
+// order, with the registry's grammar line — a verb missing here sends the lane
+// to trace-verbs.md; a verb added here that no phase emits is noise it pays for.
+const TRACE_REGISTRY = () => {
+  const src = fs.readFileSync(path.join(__dirname, "..", "..", "bin", "cli.js"), "utf8");
+  const take = (name, open) => new Function("return " + src.match(new RegExp("const " + name + " = (\\" + open + "[\\s\\S]*?\\n\\" + (open === "{" ? "}" : "]") + ");"))[1])();
+  return { VERBS: take("TRACE_VERBS", "{"), ALWAYS: take("TRACE_ALWAYS_VERBS", "[") };
+};
+
+test("lane phases: trace_grammar is the lane's phase verbs plus the always set, from TRACE_VERBS", () => {
+  const { VERBS, ALWAYS } = TRACE_REGISTRY();
+  const all = JSON.parse(cli(["lane", "phases", "--all", "--json"]).stdout);
+  let checked = 0;
+  for (const l of all.lanes) {
+    if (!l.trace_token) {
+      assert.strictEqual(l.trace_grammar, null, l.lane + " owns no trace, so it gets no grammar");
+      continue;
+    }
+    const want = new Set(ALWAYS);
+    for (const p of l.phases) for (const v of all.phase_files[p.id].trace_verbs || []) want.add(v);
+    for (const p of l.own_phases || []) for (const v of p.trace_verbs || []) want.add(v);
+    const src = fs.readFileSync(path.join(__dirname, "..", "..", "bin", "cli.js"), "utf8");
+    const spine = new Function("return " + src.match(/const LANE_TRACE = (\{[\s\S]*?\n\});/)[1])()[l.lane].spine_verbs || [];
+    for (const v of spine) want.add(v);
+    const expected = Object.keys(VERBS).filter((v) => want.has(v) && VERBS[v].emitter !== "hook");
+    assert.deepStrictEqual(Object.keys(l.trace_grammar), expected, l.lane + " trace_grammar verbs");
+    for (const [v, g] of Object.entries(l.trace_grammar)) assert.strictEqual(g, VERBS[v].grammar, l.lane + " " + v + " grammar");
+    for (const v of ALWAYS) assert.ok(l.trace_grammar[v], l.lane + " carries the always verb " + v);
+    checked++;
+  }
+  assert.ok(checked >= 25, "every trace-owning lane was checked");
+  // A hook verb is never handed to a lane — the lane never emits it.
+  const orc = all.lanes.find((l) => l.lane === "orc");
+  for (const v of ["SPAWN", "RETURN", "PHASE-EDGE"]) assert.ok(!(v in orc.trace_grammar), "orc is not handed hook verb " + v);
+  // The human branch says how many verbs, and never less than the JSON.
+  const human = cli(["lane", "phases", "orc-quick"]).stdout;
+  const q = all.lanes.find((l) => l.lane === "orc-quick");
+  assert.ok(human.includes(`${Object.keys(q.trace_grammar).length} verbs`), "the human branch prints the grammar size");
+});
+
+// v2.0.0 T17 (a) — `always` must be justified (_shared/phases/README.md rule 1). Two rows
+// earn it: the preflight and the trace pointer. The verb table is `on-demand`.
+test("lane phases: no manifest row except preflight and trace is `when: always`", () => {
+  const all = JSON.parse(cli(["lane", "phases", "--all", "--json"]).stdout);
+  for (const l of all.lanes)
+    for (const p of l.phases) {
+      if (p.when === "always") assert.ok(["preflight", "trace"].includes(p.id), `${l.lane}/${p.id} is \`always\``);
+      if (p.id === "trace-verbs") assert.strictEqual(p.when, "on-demand", `${l.lane} reads the verb table on demand`);
+    }
 });
 
 // THE BEHAVIOUR TEST. A manifest is only worth reading if what it names is

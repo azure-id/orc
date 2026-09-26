@@ -87,7 +87,7 @@ for people who would rather stop than silently start paying Anthropic rates —
 but `fallback` is the default, and the fallback is **announced**, never quiet.
 
 **And the fallback slice is a RESUME slice whenever the worktree moved.** A
-from-scratch re-dispatch onto a half-written file is the failure v0.54.0 exists
+from-scratch re-dispatch onto a half-written file is the failure the recovery exists
 to remove — see `Recovery — a failure is a POSITION, not a blank page` below.
 
 ---
@@ -120,17 +120,11 @@ decision they will turn off.
 number to resolve with. `/orc-quick`, `/orc-fast`, `/orc-doc` and `/orc-wiki` do
 not — they pin ONE agent to a POSITION.
 
-Until v0.55.0 those lanes resolved the pinned agent's band at both edges, and
-that was **arithmetic on a number nobody chose**. It was also wrong twice and
-dead once: a doc CHECKER resolved against the WRITER's band, and `/orc-wiki`
-asked for a role spelling `extra_roles` refuses by name, so that lane could
-never route however it was configured.
-
-So each of those positions is an explicit **SLOT** — one named position, one
+For those lanes, resolving the pinned agent's band at both edges is
+**arithmetic on a number nobody chose**. So each of those positions is an explicit **SLOT** — one named position, one
 chosen `profile/model`, set with `orc extra role` and resolved with
 `orc extra resolve --slot`. **A row's PRESENCE is the arming.** There is no
-second master gate, no per-lane on/off key and no per-slot model key: zero
-config keys were added by this release.
+second master gate, no per-lane on/off key and no per-slot model key.
 
 **`/orc-mini` keeps the band, and the asymmetry is deliberate.** Mini SCORES its
 tasks and then pins one executor over them, so both edges of that agent's band is
@@ -199,7 +193,7 @@ REPLACES, and says what it replaced.
    preflight` STOPS the run. `extra_on_failure` never covers it: that key is
    about an endpoint that failed, and a deadline you set 30 days ago deserves a
    stop.
-10. **the profile is DEMOTED in this run** (v1.0.0) — claude, named, with the
+10. **the profile is DEMOTED in this run** — claude, named, with the
     promote command. The tenth hold-back and the only one that is about the RUN
     rather than about the row: two consecutive stalls, a 20-minute stale live
     attempt, or a human running `orc extra demote`. The position falls through
@@ -277,7 +271,7 @@ a composite, because the truth is a composite and a single word would be a lie.
 `rubric_bands_override` and `extra_resume` stay INERT there — that lane asks
 *which agent* before every dispatch, so a config that silently answered that
 question, or that silently continued the previous foreign worker's half-finished
-write, would break its entire premise. **`extra_enabled` is no longer inert
+write, would break its entire premise. **`extra_enabled` is NOT inert
 there: with a `quick-executor` row it ADDS AN OPTION and nothing else.** It never
 becomes a default (rule 1), never sticks (rule 2), and a failed foreign dispatch
 RE-OPENS the gate with the two Claude options and the reason — `extra_on_failure`
@@ -577,18 +571,10 @@ wave 1 and prints which:
 
 ### `ORC_EXTRA_KEY` is a FALLBACK, not an override — and it is the KEY
 
-The ordering is fixed and it is not negotiable, because getting it backwards cost
-a release (v0.53.3):
+The ordering is fixed and it is not negotiable:
 
 > **A vault ORC can open always wins. `ORC_EXTRA_KEY` applies only where the
 > vault cannot be opened here.**
-
-Before that, the variable short-circuited the vault on the resolver's first line,
-and only `dispatch` and `conform` passed it. `ping`, `models --test` and
-`preflight` all opened the vault and went **green**, while every wave
-authenticated with whatever that variable happened to hold and died at 401
-quoting the vaulted key it never sent. Four honest checks, each about a path a
-wave does not take.
 
 Two consequences for the lane:
 
@@ -615,8 +601,20 @@ model-id line, so it **cannot carry `actual_model`** — and §2 of
 `_shared/return-validation.md` must not be faked for it. A return claiming an
 `actual_model` would be claiming evidence that does not exist.
 
-**`return-validation.md` §2b is the canonical procedure. Run it; do not restate
-it.** What matters here is why each field exists:
+**This section is the canonical procedure** (`return-validation.md` §2b is a
+stub that points here). A foreign return carries instead, and every one of
+these is quoted from the wire rather than assumed:
+
+- `engine` (`api` | `claude-shim` | `cli`), `provider`, `profile`
+- `model_requested` — what the route row asked for
+- **`model_reported`** — the `model` field the endpoint echoed back
+- `usage` — the four token kinds, never blended, **or `null`**
+
+**A clean model check is not a clean answer.** An aggregator's *provider-level*
+fallback is on by default and it PRESERVES the model id, so the substitution
+check reads clean while the code went to a different company. Engine `api`
+records the response's `provider` echo and reports **⚠ REROUTE**. Why each
+field exists:
 
 - **⛔ SUBSTITUTION** — `model_reported != model_requested`, surfaced exactly as
   ⛔ DOWNGRADE is today. It is the only defence against an aggregator quietly
@@ -630,15 +628,13 @@ it.** What matters here is why each field exists:
   `api`'s `cache_write: 0` is a *measured* zero, which is the opposite fact.
 - **`credential.source`** — which secret this dispatch actually sent: `vault`,
   `env`, `ambient` (`ORC_EXTRA_KEY`), `memory` or `tool`. It reports what
-  happened, **not what the profile declares** — the two disagreed for a release
-  and the return confirmed the wrong story. `credential_override` is present
+  happened, **not what the profile declares**. `credential_override` is present
   whenever it was not the profile's declared source; on an
   `authentication_failed`, `credential_hint` names the source the provider
   rejected. **Relay both.** "Your api key ****w5f7 is invalid" is the provider
   describing what it saw; only ORC knows where that came from.
 
-On a RESUMED dispatch the return carries three more, and `return-validation.md`
-§2b is again the canonical procedure:
+**A RESUMED foreign dispatch owes three more fields**:
 
 - **`resume_state`** — `continued` · `restarted` · `no-op`. Absent on a slice with
   no `resumed_from` is correct; **absent on a resume slice is MALFORMED.** A
@@ -658,7 +654,12 @@ has to infer the obligation from the presence of another field.
 
 Everything else in `return-validation.md` applies unchanged — the honest-status
 rules, the evidence block, the pattern/TDD/wiki attestations, and above all §6,
-the worktree delta. **On a resumed task §6's "before" side is the JOURNAL
+the worktree delta — which is engine-blind because it reads the worktree rather
+than the return, and is therefore what makes a foreign executor safe at all.
+The fence: a return carrying `fence: {declared_files: false}` means the list was
+an instruction, not a rule — treat §6 as the only real check, and say so to the
+user (§The fence is per-engine, and the return says which one it had).
+**On a resumed task §6's "before" side is the JOURNAL
 BASELINE**, not the state at the top of this wave.
 
 ---
@@ -670,15 +671,9 @@ BASELINE**, not the state at the top of this wave.
 object per line, appended, never rewritten. You do not write it, you cannot
 write it, and nothing you do or forget to do changes whether it exists.
 
-This is the fix for a real failure. The `EXTRA` trace line below was, until
-v0.53.2, the *only* record of what a foreign worker cost — and it reached the
-trace by being RELAYED through the orchestrator into a phase packet. A relay
-through a model is remembered-not-dispatched protocol, and it broke both ways on
-two graded runs: one reshaped the line into the trace's own `verb … :: tail`
-shape, one dropped it and folded the token vector into a free-form `VERIFY`
-sentence. Both dispatches succeeded. Both cost real money. `orc extra stats`
-reported **0 dispatches**, `orc extra rates` had nothing to price, and the
-Spending panel read `0 tasks sent`. **A cost report that reads zero when money
+**Why:** a cost RELAYED through the orchestrator into a phase packet is
+remembered-not-dispatched protocol — it gets reshaped or dropped, and the cost
+reports read zero. **A cost report that reads zero when money
 was spent is worse than no report, because a zero gets believed.**
 
 A dispatch whose PARENT WAS KILLED never reached that append at all — it runs
@@ -689,7 +684,7 @@ recovers the journal's running vector and writes it with `recovered: true` and
 is not zero; a recovered vector is a FLOOR and says so** — never sum it into a
 total that reads as measured.
 
-The dispatch return now carries `spend_logged` and `spend_log`, and the human
+The dispatch return carries `spend_logged` and `spend_log`, and the human
 output says which. **If a dispatch comes back `spend_logged: false`, say so to
 the user** — that dispatch is invisible to every cost report there is, and the
 only moment anyone can act on it is now.
@@ -698,10 +693,10 @@ only moment anyone can act on it is now.
 
 ## The trace
 
-The trace line is still yours to relay, and it still matters: it is the
+The trace line is yours to relay, and it matters: it is the
 human-readable narrative of the run, it is what `/orc-retro` reads, and the
-trace-cadence rule in `phases/trace.md` still binds every phase.
-What changed is that the SPEND no longer depends on it.
+trace-cadence rule in `phases/trace.md` binds every phase.
+The SPEND does not depend on it.
 
 One `EXTRA` line per foreign dispatch, plus its continuations. **Copy
 `trace_line` and every entry of `trace_extras[]` from the dispatch return
@@ -796,14 +791,13 @@ judged`, `a lane that picks its own council`, `a lane that reads its own
 document`, and `a lane that sends work off Claude without saying so`.
 
 A worker that wrote five of six lines of a file and then lost its connection has
-left a repository that is **half-changed**. Until v0.54.0 the fallback
-re-dispatched the SAME slice as if the repository were untouched, and the
-replacement executor's three plausible moves were all wrong: `Write` the file
+left a repository that is **half-changed**. A fallback that re-dispatches the
+SAME slice as if the repository were untouched leaves the replacement executor
+three plausible moves, and all are wrong: `Write` the file
 whole and silently discard work you already paid for · `Edit` against a stale
 mental model so `old_string` does not match and it improvises · read first and
 then guess whether what is there is its own earlier work, a teammate's, or
-garbage. Nothing in the slice could have told it. Nothing in the return contract
-could have carried it.
+garbage. Nothing in a from-scratch slice can tell it.
 
 ### The journal is the CLI's, not yours
 
@@ -812,12 +806,8 @@ header, a progress log and a result — by `orc extra dispatch` itself, as it
 runs.** You do not write it, you cannot write it, and nothing you do or forget
 changes whether it exists.
 
-This is the FOURTH time this repo has chosen a written-by-the-CLI fact over a
-relayed one, and it is the same lesson each time: v0.32.0's narration (two fixes
-that bet on the orchestrator appending rich lines both failed under load),
-v0.49.5's CLI-written hand-back page, and v0.53.2's spend log — where two graded runs spent real
-money and `orc extra stats` reported `0 dispatches`. A fact that reaches disk by
-being relayed through a model's memory is a fact this repo has already lost.
+**A fact relayed through a model's memory is a fact this repo has already
+lost** — so the CLI writes it, never the lane.
 
 The header is written **after the credential and the concurrency slot resolve and before the
 first byte leaves the machine**, because that is the only moment at which the
@@ -935,8 +925,7 @@ question — *can this machine reach that host at all* — so **any** HTTP answe
 
 `orc` is deliberately one of the five. This subsystem asks the user to trust a
 report about a third party, and **a report with no way to blame its own author is
-not a report anybody should trust**: v0.53.3 was exactly an ORC bug that presented
-as a bad key.
+not a report anybody should trust**: an ORC bug can present as a bad key.
 
 ### What NEVER changes on a resume
 
@@ -972,10 +961,10 @@ same facts, and the two would drift. Print what `resume-slice` returned.
 A key here would let somebody configure "always resume on the same profile" and
 then wait out `extra_resume_max` × a 401.
 
-That second row is the one that fixes the original bug: **a Claude executor
+The second row is the point: **a Claude executor
 receiving a resume slice gets the same preamble, the same `preexisting[]` table
-and the same instruction not to rewrite finished work.** The Claude fallback stops
-being a from-scratch dispatch, which it should never have been.
+and the same instruction not to rewrite finished work.** The Claude fallback is
+never a from-scratch dispatch.
 
 ### Orphans are REPORTED at preflight and never resumed
 
@@ -992,16 +981,16 @@ supplies it pre-composed in `trace_extras[]`.
 
 ---
 
-## The stall — a worker that is alive and doing nothing (v0.56.1)
+## The stall — a worker that is alive and doing nothing
 
 ### `a lane that waits out a wall clock on a worker that stopped` has broken this contract
 
 A wall clock cannot tell a worker that is thinking hard from a worker that has
-stopped. Both look like fifteen minutes of nothing. So until v0.56.1 an opencode
-session that went quiet mid-task — the thing you fix by hand by typing
-`continue` into its window — burned the whole `extra_timeout_s` budget and then
-reported `timeout`, which is a statement about **ORC's patience** and not about
-what happened. It read as a budget somebody should raise. It was a **position
+stopped. Both look like fifteen minutes of nothing. Under a wall clock alone, an
+opencode session that goes quiet mid-task — the thing you fix by hand by typing
+`continue` into its window — burns the whole `extra_timeout_s` budget and then
+reports `timeout`, which is a statement about **ORC's patience** and not about
+what happened. It reads as a budget somebody should raise. It is a **position
 somebody should resume from**.
 
 ### What the stall clock measures
@@ -1057,7 +1046,7 @@ is the honest reading of a worker that never said anything, never `0`.
 Exit **0** answered · **1** stalled or failed · **2** unknown profile.
 
 It runs the live probe through **the same watchdog a dispatch uses** — not a
-second idea of the path, which is the v0.53.3 rule that a green badge must be
+second idea of the path, by the rule that a green badge must be
 earned by the path a wave actually runs. What it adds over
 `orc extra ping --live` is the timeline and the verdict: `answered` · `stalled` ·
 `timeout` · `failed` · `spawn-failed`, plus the bytes the worker produced, capped
@@ -1070,16 +1059,15 @@ used. A CLI ping is not a cheap ping — say so.
 
 ---
 
-## The demotion — the ladder moves at runtime (v1.0.0)
+## The demotion — the ladder moves at runtime
 
 ### `a lane that keeps paying a provider that stopped working` has broken this contract
 
 `extra_stall_s` stops ONE dispatch. It has nothing to say about the second one,
 or the third. A provider that goes quiet twice in a row is not having a bad
-minute — it is costing you a wave and buying nothing — and ORC used to keep
-handing it the next task anyway, because nothing counted.
+minute — it is costing you a wave and buying nothing — so ORC counts.
 
-So it counts now. **Two consecutive `stalled` dispatches on one profile inside
+**Two consecutive `stalled` dispatches on one profile inside
 one run, or one live attempt with no observable progress for 20 minutes, drop
 that profile to the BOTTOM of its families for the rest of the run.**
 `opus5_only` — or the shipped score→model table — becomes the effective P0, and
@@ -1087,14 +1075,12 @@ the work stays on Claude.
 
 ### It writes no new measurement, and it is never remembered
 
-Every fact the trigger reads already shipped: `EXTRA_FAILURES.stalled` and the
-`timeline` block (v0.56.1), and the extra journal written by `orc extra dispatch`
-itself before the first byte leaves the machine (v0.54.0). The demotion READS
+Every fact the trigger reads already exists: `EXTRA_FAILURES.stalled`, the
+`timeline` block, and the extra journal written by `orc extra dispatch`
+itself before the first byte leaves the machine. The demotion READS
 the journal and decides — **computed by the CLI from disk on every read, never
-stored as a verdict and never carried in your head.** That is the lesson this
-repo has now lost to four times: v0.32.0 narration, v0.49.5 the hand-back,
-v0.53.2 the spend log, v0.54.0 the journal. **A fact relayed through a model's
-memory is a fact this repo has already lost.**
+stored as a verdict and never carried in your head** — the journal's rule
+above.
 
 The only thing written to disk is the HUMAN half — a promote or a manual demote,
 with its reason — under `{run_dir}/{slug}/extra-demotion.json`, beside
@@ -1166,7 +1152,7 @@ next dispatch**. `orc lane config` renders the overlay rank as `state:
 after two stalls"* look identical.
 
 The trace verb is **CLI-composed and copied verbatim**, because **a demotion
-that leaves no line cannot be counted** (the v0.53.2 rule, restated):
+that leaves no line cannot be counted** (the spend-log rule):
 
 ```
 EXTRA demote run=<slug> :: profile=<p> reason=<consecutive-stall|stale-live-attempt|manual> n=<k> → <the ladder that answers now>
@@ -1210,20 +1196,20 @@ which is why there is no third key:
 
 ---
 
-## Who picks the task up — `extra_fallback_agent` (v0.56.1)
+## Who picks the task up — `extra_fallback_agent`
 
-`fallback_to` has always carried the band's (or the slot's) own Claude agent.
+`fallback_to` carries the band's (or the slot's) own Claude agent.
 That is the right default and the only one ORC can compute on its own: **a
 fallback that changes tier is a re-plan nobody asked for.**
 
-What it could not do is let a human choose. A stall costs real minutes before
+`extra_fallback_agent` lets a human choose. A stall costs real minutes before
 anybody hears about it, and by the time the wave stops the user often knows
 something ORC does not — that this slice wants more thinking than its band
 bought, or less.
 
 | `extra_fallback_agent` | what the lane does |
 |---|---|
-| `band` (default) | dispatch `fallback.agent`, which is `fallback_to.agent`. Pre-v0.56.1 behaviour, unchanged. |
+| `band` (default) | dispatch `fallback.agent`, which is `fallback_to.agent`. |
 | `ask` | **STOP and put `fallback.options[]` to the user.** Dispatch what they pick. |
 | any `orc-…` agent name | dispatch that one, and say it overrode the task's own agent. |
 
@@ -1261,13 +1247,12 @@ The combinatorial part — providers × models × bands **× positions** — is 
 **ledger with a CLI and a panel** (`orc extra`), not a YAML block nobody can hold
 in their head.
 
-**v1.0.0 added TWO** — `extra_demote_after` and `extra_demote_stale_min` — and
-both are NUMBERS WITH A DOCUMENTED OFF VALUE rather than a switch, because the
+**`extra_demote_after` and `extra_demote_stale_min`** are NUMBERS WITH A DOCUMENTED OFF VALUE rather than a switch, because the
 two zeros already are the off switch and a master key over them would be a third
 spelling of one thing. Two more were refused and are written down above.
 
-**v0.56.1 added TWO**, and both come from the same observed failure: a foreign
-worker that goes quiet mid-task. Three more were refused and are written down so
+**`extra_stall_s` and `extra_fallback_agent`** both answer a foreign worker
+that goes quiet mid-task. Three more were refused and are written down so
 nobody proposes them again — **a stdin nudge** (`opencode run` is not an
 interactive session, so a keystroke nobody reads is a fake fix, and a fake fix
 looks like the problem was handled), **a per-profile stall budget** (the number
@@ -1275,8 +1260,8 @@ describes ORC's patience, not a provider), and **a key to disable the timeline**
 (the spend-log reasoning verbatim: a record you can switch off is off on the run
 you needed it for).
 
-**v0.55.0 added ZERO keys.** A slot row's presence is its arming, so the four
-that were proposed were all refused: **`extra_slots_enabled`** (a second master
+**Slots add ZERO keys.** A slot row's presence is its arming, so four
+proposed keys are refused: **`extra_slots_enabled`** (a second master
 gate — `extra_enabled` is one), **per-lane on/off keys** (`extra_doc`,
 `extra_wiki`, … — a row you can park is a row you can delete, and `orc extra role
 rm` is one keystroke that leaves a history entry; `/orc-doc` already has the one
@@ -1289,7 +1274,7 @@ of being a string nobody checked).
 | key | default | what it does |
 |---|---|---|
 | `config.extra_enabled` | `false` | Master gate. Nothing changes unless true. |
-| `config.extra_roles` | `[executor]` | Which **SCORED-LANE** roles may go foreign. Executor only by default: an executor's output is checked by four engine-blind gates, while a reviewer you cannot trust launders a finding nobody made. `executor` is the only value anything resolves today — `reviewer`/`verifier`/`analyst`/`planner`/`scout`/`test-author` are declared and nothing dispatches them yet, which `orc extra role list` reports honestly instead of leaving as an undocumented hole. **`doc-writer` and `doc-checker` MOVED to `orc extra role` in v0.55.0** and are kept here for one release as deprecated read+set members (the `LEGACY_KEYS` precedent): a config naming one is accepted, WARNED BY NAME, pointed at the new command, and arms nothing. A renamed mechanism must never be a silent revert. |
+| `config.extra_roles` | `[executor]` | Which **SCORED-LANE** roles may go foreign. Executor only by default: an executor's output is checked by four engine-blind gates, while a reviewer you cannot trust launders a finding nobody made. `executor` is the only value anything resolves today — `reviewer`/`verifier`/`analyst`/`planner`/`scout`/`test-author` are declared and nothing dispatches them yet, which `orc extra role list` reports honestly instead of leaving as an undocumented hole. **`doc-writer` and `doc-checker` MOVED to `orc extra role`** and stay here as deprecated read+set members (the `LEGACY_KEYS` precedent): a config naming one is accepted, WARNED BY NAME, pointed at the new command, and arms nothing. A renamed mechanism must never be a silent revert. |
 | `config.extra_risk_tasks` | `off` | Whether a cited-risk task may leave Claude. |
 | `config.extra_on_failure` | `fallback` | `fallback` \| `stop`. |
 | `config.extra_max_concurrent` | `1` | Foreign dispatches in flight. Per-provider rate limits are undocumented in aggregate, so 1 is the honest default. |
@@ -1302,7 +1287,7 @@ of being a string nobody checked).
 | `config.extra_stall_s` | `180` | Seconds a foreign worker may produce NOTHING before the dispatch is stopped as `stalled`. Reset by observable progress — the worker's stream, its stderr, or a declared file that changed on disk — so it never fires on a worker that is merely slow. `0` disables and the wall clock is the only stop again. **Clamped below `extra_timeout_s`**, because a budget that can never fire is worse than none. Engine `cli` only. |
 | `config.extra_demote_after` | `2` | Consecutive `stalled` dispatches on ONE profile inside one run before that profile is DEMOTED to the bottom of the ladder for the rest of the run. Only `stalled` counts; a resume of the same stall is the same stall; a completed dispatch that was not a stall resets it. Run state — it never writes your config, it is ANNOUNCED, and it is never promoted back on its own. `0` turns this clock off. |
 | `config.extra_demote_stale_min` | `20` | Minutes a LIVE attempt may show no observable progress before its profile is demoted. A different question from `extra_stall_s`, which stops ONE dispatch: this clock is about the RUN. `0` turns this clock off. |
-| `config.extra_fallback_agent` | `band` | WHICH Claude agent picks up a task the foreign worker could not finish. `band` is the pre-v0.56.1 behaviour. `ask` STOPS and puts the menu to the user. Any installed agent name pins one. It changes WHO, never the score, the declared files or the acceptance criteria. INERT in `/orc-quick`. |
+| `config.extra_fallback_agent` | `band` | WHICH Claude agent picks up a task the foreign worker could not finish. `band` is the band's own agent. `ask` STOPS and puts the menu to the user. Any installed agent name pins one. It changes WHO, never the score, the declared files or the acceptance criteria. INERT in `/orc-quick`. |
 
 **Keys deliberately NOT added, and why each one would be a trap:**
 

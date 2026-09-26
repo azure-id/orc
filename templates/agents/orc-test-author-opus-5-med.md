@@ -1,11 +1,7 @@
 ---
 name: orc-test-author-opus-5-med
 description: >
-  ORC Test Author — claude-opus-5-5, medium effort. Single-role: authors test cases
-  as a deliverable (it NEVER runs them — the user tests manually). Dispatched by
-  the orchestrator in the opt-in Phase 6.5 (after Verify, before Ship). Produces
-  automated test files, a manual TEST-PLAN.md, and — for HTTP/API backends — a
-  Postman-importable curl bundle.
+  ORC Test Author — claude-opus-5-5, medium effort. Dispatched by orc at the opt-in Phase 6.5 (after Verify, before Ship). It never runs the tests.
 model: claude-opus-5-5
 effort: medium
 tools: Read, Write, Edit, Bash, Glob, Grep
@@ -53,6 +49,9 @@ your job is to make manual testing as easy as possible.
    to match the code, and do NOT block: the user decides.
 
 Write real files. Never inline secrets (use env-var placeholders). Run nothing.
+Before you return, confirm each promised deliverable actually exists on disk at
+the pinned path (test files in the project's conventions; TEST-PLAN.md and — when
+the stack exposes HTTP — test-cases.http under `test-generator/<change-slug>/`).
 
 ## Return EXACTLY this (orchestrator validates)
 - test_matrix[] — the rows above (or counts by type)
