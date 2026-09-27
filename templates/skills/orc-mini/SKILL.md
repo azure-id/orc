@@ -47,6 +47,7 @@ read-only build+test run, not implementation — you still never write code.
 
 ```
 Phase 0  intake (Q1–Q4, soft sign-off) + run folder + intent-spec
+         · `habits{}` in lane config → print `habits.line`, read ../_shared/habits.md
 Phase 1  planning (dispatch orc-planner-mini; analyst first only on real docs)
          → one-line complexity read (mini-ok? or recommend switch-to-full)
 Phase 3  dispatch ONE executor (orc-executor-sonnet-5-high) — slice carries the
@@ -167,8 +168,6 @@ Models pinned in `.claude/agents/`; look one up here, never reconstruct a name (
   Never merge `.claude/orc.config.yaml` yourself (`../_shared/config-precedence.md`).
 - **Rules:** `orc rules slice --lane orc-mini --json` is the ONLY assembler
   (`../_shared/phases/rules.md`). Its `line` prints VERBATIM at preflight.
-- **Habits:** `habits{}` in the config answer → read `../_shared/habits.md`. No
-  `habits{}` → ignore habits and every `(H …)` mark.
 
 ## TDD (ONE intake question — mini's whole TDD policy)
 

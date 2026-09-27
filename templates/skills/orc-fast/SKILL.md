@@ -185,7 +185,6 @@ in the SAME step. A phase that ends with `zero new trace lines is a protocol vio
 - **Config:** `orc lane config orc-fast --json`. Obey `effective`, print every line
   in `announce[]` VERBATIM at preflight, and honour `stops[]` before wave 1.
   Never merge `.claude/orc.config.yaml` yourself (`../_shared/config-precedence.md`).
-- **Habits:** `habits{}` in that answer → `../_shared/habits.md`; else ignore `(H …)`.
 - **Rules:** `orc rules slice --lane orc-fast --json` is the ONLY assembler
   (`../_shared/phases/rules.md`). Its `line` prints VERBATIM at preflight.
 

@@ -40,7 +40,9 @@ without the manifest (`../_shared/lane-contract.md` §Phases).
    routing in one, so the code-writing menu can offer line 3. Do not call
    `orc extra resolve --slot quick-executor`. **A gate that is never probed is a
    gate that is always off.** Keep the answer for this session; it is an OPTION
-   on a menu, never a default (`references/dispatch-gate.md`).
+   on a menu, never a default (`references/dispatch-gate.md`). **`habits{}` in
+   that answer → print `habits.line`, read `../_shared/habits.md` NOW**; none →
+   ignore every `(H …)` mark.
 2. **Trace + the running record.** Write `log_dir/.current` =
    `run-quick-<slug>-<DDMMYY>-<HHMMSS>.txt` and `touch the trace file` of that
    name in the SAME step. Both, or neither. Create
@@ -276,8 +278,6 @@ every event is a protocol violation. Pipe each packet to
   Never merge `.claude/orc.config.yaml` yourself (`../_shared/config-precedence.md`).
 - **Rules:** `orc rules slice --lane orc-quick --json` is the ONLY assembler
   (`../_shared/phases/rules.md`). Its `line` prints VERBATIM at preflight.
-- **Habits:** `habits{}` in the config answer → read `../_shared/habits.md`. No
-  `habits{}` → ignore habits and every `(H …)` mark.
 
 **Nothing can override this lane** — `references/dispatch-gate.md` rule 4.
 

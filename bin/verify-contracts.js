@@ -3944,12 +3944,12 @@ const CONTRACTS = [
       "skills/orc-quick/references/dispatch-gate.md",
       // v2.0.0 W3c — the rest of the lanes that mark a question, and the Phase
       // 8 completion report that carries the one run-end proposal.
-      "skills/orc/SKILL.md",
-      "skills/orc-fast/SKILL.md",
       "skills/orc-diy/SKILL.md",
       "skills/orc-wait/SKILL.md",
       "skills/orc-analyze/SKILL.md",
       "skills/_shared/phases/ship.md",
+      // eval E2 (27-09-2026): the pointer moved to the step that reads the answer.
+      "skills/_shared/phases/preflight.md",
     ],
   },
   {

@@ -14,7 +14,8 @@ never a fifth step before step 2.
    yourself. Print every line of `announce[]` VERBATIM — *a shadowed setting must
    never be silent*, and a lane that resolves silently cannot tell the user why
    the thing they configured did not happen. Precedence, gates, inertness and the
-   CLI-absent floor are all in `../config-precedence.md`.
+   CLI-absent floor are all in `../config-precedence.md`. **`habits{}` in the
+   answer → print `habits.line` and read `../habits.md` NOW**.
 
 2. **Trace.** Write `log_dir/.current` = `run-<lane>-<slug>-<DDMMYY>-<HHMMSS>.txt`
    AND `touch the trace file` of that name in the SAME step. **Both, or neither.**

@@ -7,14 +7,14 @@
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
 ![npm](https://img.shields.io/npm/v/%40azure-id%2Forc?style=for-the-badge&color=cb3837&logo=npm)
-![Version](https://img.shields.io/badge/version-2.0.0-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-2.0.1-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
 ![Dependencies](https://img.shields.io/badge/dependencies-zero-lightgrey.svg?style=for-the-badge)
 ![GitHub stars](https://img.shields.io/github/stars/azure-id/orc?style=for-the-badge&color=yellow)
 
-**Latest: v2.0.0** · updated 27-09-2026 · [full changelog](CHANGELOG.md)
+**Latest: v2.0.1** · updated 27-09-2026 · [full changelog](CHANGELOG.md)
 
 **On npm: [`@azure-id/orc`](https://www.npmjs.com/package/@azure-id/orc)** — `npm i -g @azure-id/orc`
 
@@ -730,38 +730,23 @@ a current audit: [EVAL-REPORT.md](EVAL-REPORT.md).
 **Full history: [CHANGELOG.md](CHANGELOG.md)** — or `orc changelog`, which prints
 only what is newer than the version you have.
 
-### v2.0.0 — the coding lanes remember what you fixed and how you work _(2026-09-27)_
+### v2.0.1 — the trace keeps the gate name, and the lanes find the habits rule _(2026-09-27)_
 
-**A major version.** Five contracts change: `/orc-quick` now takes part in the
-review memory, the reviewer return has new required fields (`category`,
-`scenario`, `pre_existing`), the trace verb set has `ASK`, `FINDING-OUTCOME` and
-`GATE flaky`, the lane spines have a new shape, and config has a `learned` rank.
-Nothing is removed. The full list is in [CHANGELOG.md](CHANGELOG.md).
+**A patch.** The first live runs of 2.0.0 found four defects, now fixed:
 
-- **The lanes load less.** The always-loaded text of the coding lanes went from
-  722,600 to 313,940 bytes (−57 %). The rules are the same.
-- **Habits (off by default).** `orc config set habits observe` or `propose`.
-  ORC learns the answers you keep giving, and at the end of a run it can ask
-  ONE question: should this be your usual? Nothing is applied without your
-  yes. `orc habit forget <id>` undoes it.
-- **Gotchas v2.** The repair memory learns from reviews, SARIF, Sonar, PR
-  threads and closed defects (`orc gotcha import`, `orc gotcha sync`). The
-  reviewer gets a short card of what this project already got wrong.
-- **The reviewer v2.** Each finding has a category, a scenario and a
-  pre-existing flag. The lane records what became of each finding.
-- **Small tools.** `orc undo` (prints; `--apply` runs it), `orc pr threads`,
-  `orc ci failed`, `orc ci flaky`, an end-of-run card, questions per run in
-  `orc stats`, `notify: bell`, and the run pointer after a compact.
-- **`orc ui` ▸ Behaviour.** Your habits, your rhythm, your gotchas and the
-  review quality, on one panel.
+- **Traces keep the gate name.** `orc trace write` puts each event into the shape of
+  its grammar: `GATE grounding pass :: …`, never `GATE :: …` and never an empty line.
+  An event it cannot repair is refused by name, and the lane uses the writer agent.
+- **The lanes find the habits rule.** With `habits` on, the rule now sits in the
+  step that reads `orc lane config` (quick, mini, and the shared preflight), so the
+  lane records its `ASK` lines.
 
-**What you have to do:** `orc update`. If you use `/orc-diy`, run
-`orc diy compile` after the update: a flow compiled by 1.9.x is STALE. Four
-evals (E1–E4) are prepared and not run yet.
+**What you have to do:** `orc update`.
 
 <details>
-<summary><strong>Earlier releases</strong> — 122 of them, titles only. Full text in <a href="CHANGELOG.md">CHANGELOG.md</a>.</summary>
+<summary><strong>Earlier releases</strong> — 123 of them, titles only. Full text in <a href="CHANGELOG.md">CHANGELOG.md</a>.</summary>
 
+- **v2.0.0** — the coding lanes remember what you fixed and how you work · _2026-09-27_
 - **v1.9.2** — the code graph gets its own tab, and Opus 5 becomes Opus 5.5 · _2026-09-23_
 - **v1.9.1** — the graph that was paid for and never asked · _2026-09-23_
 - **v1.9.0** — the lean lanes learn to look before they leap · _2026-09-21_

@@ -7,13 +7,13 @@
 *Terima permintaan → pahami → rencanakan → beri nilai → kerjakan paralel → periksa → uji → kirim.*
 
 ![npm](https://img.shields.io/npm/v/%40azure-id%2Forc?style=for-the-badge&color=cb3837&logo=npm)
-![Version](https://img.shields.io/badge/version-2.0.0-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-2.0.1-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
 ![Dependencies](https://img.shields.io/badge/dependencies-zero-lightgrey.svg?style=for-the-badge)
 
-**Versi terbaru: v2.0.0** · diperbarui 27-09-2026 · [daftar perubahan lengkap](CHANGELOG.md)
+**Versi terbaru: v2.0.1** · diperbarui 27-09-2026 · [daftar perubahan lengkap](CHANGELOG.md)
 
 **Ada di npm: [`@azure-id/orc`](https://www.npmjs.com/package/@azure-id/orc)** — `npm i -g @azure-id/orc`
 
@@ -786,40 +786,24 @@ Bacalah sebagai catatan putaran itu, bukan sebagai audit terkini:
 **Riwayat lengkap: [CHANGELOG.md](CHANGELOG.md)** — atau `orc changelog`, yang
 hanya mencetak yang lebih baru dari versi yang Anda punya.
 
-### v2.0.0 - lane coding mengingat apa yang Anda perbaiki dan cara Anda bekerja _(27-09-2026)_
+### v2.0.1 - trace tetap menyimpan nama gate, dan lane menemukan aturan habits _(27-09-2026)_
 
-**Versi mayor.** Lima kontrak berubah: `/orc-quick` sekarang ikut memakai memori
-review, hasil reviewer punya field wajib baru (`category`, `scenario`,
-`pre_existing`), set verb trace mendapat `ASK`, `FINDING-OUTCOME` dan
-`GATE flaky`, spine lane punya bentuk baru, dan config punya rank `learned`.
-Tidak ada yang dihapus. Daftar lengkapnya ada di [CHANGELOG.md](CHANGELOG.md).
+**Patch.** Run langsung pertama dari 2.0.0 menemukan empat cacat, dan sekarang sudah diperbaiki:
 
-- **Lane memuat lebih sedikit.** Teks yang selalu dimuat oleh lane coding turun
-  dari 722.600 menjadi 313.940 byte (−57 %). Aturannya tetap sama.
-- **Kebiasaan (mati secara default).** `orc config set habits observe` atau
-  `propose`. ORC mempelajari jawaban yang terus Anda berikan, dan di akhir run
-  ORC bisa mengajukan SATU pertanyaan: jadikan ini kebiasaan Anda? Tidak ada
-  yang diterapkan tanpa persetujuan Anda. `orc habit forget <id>` membatalkannya.
-- **Gotcha v2.** Memori perbaikan belajar dari review, SARIF, Sonar, thread PR
-  dan defect yang sudah ditutup (`orc gotcha import`, `orc gotcha sync`).
-  Reviewer mendapat kartu singkat berisi kesalahan yang sudah pernah terjadi di
-  proyek ini.
-- **Reviewer v2.** Setiap temuan punya kategori, skenario dan tanda
-  `pre_existing`. Lane mencatat apa yang terjadi pada setiap temuan.
-- **Alat kecil.** `orc undo` (hanya mencetak; `--apply` menjalankannya),
-  `orc pr threads`, `orc ci failed`, `orc ci flaky`, kartu akhir run, jumlah
-  pertanyaan per run di `orc stats`, `notify: bell`, dan penunjuk run setelah
-  compact.
-- **`orc ui` ▸ Behaviour.** Kebiasaan, ritme, gotcha, dan kualitas review Anda,
-  dalam satu panel.
+- **Trace tetap menyimpan nama gate.** `orc trace write` menyusun setiap event sesuai
+  grammar-nya: `GATE grounding pass :: …`, tidak pernah `GATE :: …` dan tidak pernah
+  baris kosong. Event yang tidak bisa diperbaiki ditolak dengan namanya, lalu lane
+  memakai agent writer.
+- **Lane menemukan aturan habits.** Saat `habits` menyala, aturannya sekarang ada di
+  langkah yang membaca `orc lane config` (quick, mini, dan preflight bersama),
+  sehingga lane mencatat baris `ASK`-nya.
 
-**Yang harus Anda lakukan:** `orc update`. Jika Anda memakai `/orc-diy`,
-jalankan `orc diy compile` setelah update: flow yang di-compile oleh 1.9.x
-menjadi STALE. Empat eval (E1–E4) sudah disiapkan dan belum dijalankan.
+**Yang harus Anda lakukan:** `orc update`.
 
 <details>
-<summary><strong>Rilis sebelumnya</strong> — 122 rilis, hanya judulnya. Teks lengkapnya (dalam bahasa Inggris) ada di <a href="CHANGELOG.md">CHANGELOG.md</a>.</summary>
+<summary><strong>Rilis sebelumnya</strong> — 123 rilis, hanya judulnya. Teks lengkapnya (dalam bahasa Inggris) ada di <a href="CHANGELOG.md">CHANGELOG.md</a>.</summary>
 
+- **v2.0.0** — the coding lanes remember what you fixed and how you work · _2026-09-27_
 - **v1.9.2** — the code graph gets its own tab, and Opus 5 becomes Opus 5.5 · _2026-09-23_
 - **v1.9.1** — the graph that was paid for and never asked · _2026-09-23_
 - **v1.9.0** — the lean lanes learn to look before they leap · _2026-09-21_

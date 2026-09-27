@@ -789,3 +789,32 @@ set as closed and drops the new lines.
   then it rings once, main session only, only when the run moved (DE-18). The
   compact entry prints the run pointer line while a run is open. `orc doctor`
   reports `session-hook-unwired` with `orc update` as the fix.
+
+## 4z.35 v2.0.1 — the trace keeps the gate name, and the lanes find the habits rule
+
+**Why.** The first live eval runs of 2.0.0 (E1, 27-09-2026) showed that a lane does not
+build the verb head the way the Haiku writer did. It sends `verb: GATE` and puts
+`grounding pass :: detail` in the tail, or uses `note:` instead of `tail:`, or starts
+the tail with `::`. `orc trace write` (T21) wrote what it got, so the trace said
+`GATE :: …` or an empty `GATE`, and `orc stats` / `/orc-retro` lost the gate names.
+
+**The rule.** `bin/trace-write.js` `shapeEvent()` puts every event into the shape of its
+OWN grammar (`headShape()` reads the first form of `TRACE_VERBS[verb].grammar`):
+the tail aliases `note`, `detail`, `text`; a ` :: ` inside `verb` is a split point;
+a leading `::` is dropped; a no-`::` grammar joins a tail-only event to its head; a
+grammar with head arguments repairs `args :: detail` or REFUSES the event by name
+(exit 2, nothing written, so the lane falls back to the writer agent). A verb with no
+grammar (a test registry) is never reshaped. `trace.md` states it once: `verb` = the
+WHOLE head, `tail` = the detail.
+
+**The habits pointer.** With `habits: propose`, a live `/orc-quick` run received
+`habits{}` and still wrote no `ASK`: the pointer sat in the spine's lane-contract
+block, which a lane treats as reference, not as a step. It now sits in the step that
+reads the answer — quick Q0 step 1, mini Phase 0, `_shared/phases/preflight.md`
+step 1 — and the orc / fast spine copies are gone (preflight carries it). The
+contract row `habits.md` pins `preflight.md` in place of those two spines.
+
+**Still open after 2.0.1** (from the same runs): quick takes no `orc run snapshot` at
+Q0 although its card prints `orc undo`; the `lane config` answer (≈ 19.6 KB) plus
+`lane phases` in ONE call crosses Claude Code's tool-output limit, and the lane then
+digs the saved file (≈ 5 extra calls).

@@ -105,8 +105,6 @@ session on Opus or the Opus pins silently fall back (the original "wrong model" 
 - **Config:** `orc lane config orc --json`. Obey `effective`, print every line
   in `announce[]` VERBATIM at preflight, and honour `stops[]` before wave 1.
   Never merge `.claude/orc.config.yaml` yourself (`../_shared/config-precedence.md`).
-- **Habits:** `habits{}` in the config answer → read `../_shared/habits.md`. No
-  `habits{}` → ignore every `(H …)` mark.
 - **Rules:** `orc rules slice --lane orc --json` is the ONLY assembler
   (`../_shared/phases/rules.md`). Its `line` prints VERBATIM at preflight.
 

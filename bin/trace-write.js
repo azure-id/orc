@@ -308,6 +308,41 @@ function kebab(slug) {
     .replace(/-+$/, "");
 }
 
+// The head shape of a verb, read from its grammar in TRACE_VERBS (the first form):
+// `sep` = the grammar has a ` :: ` between head and tail; `args` = it names head
+// arguments after the verb (a `[…]` part is optional and does not count).
+const TAIL_ALIASES = ["note", "detail", "text"];
+function headShape(grammar) {
+  const form = String(grammar || "").split(" · ")[0];
+  const sep = form.includes(" :: ");
+  const head = (sep ? form.slice(0, form.indexOf(" :: ")) : form).replace(/\[[^\]]*\]/g, " ");
+  const rest = head.replace(/<[^>]*>/g, "<x>").trim().split(/\s+/).slice(1).filter(Boolean);
+  return { sep, args: rest.length > 0 };
+}
+
+// Put ONE event into the grammar's shape, or return an error. A lane may hand the
+// detail over as `note`/`detail`/`text`, put ` :: ` inside `verb`, start the tail
+// with `::`, or give a no-`::` verb only a tail — each is repaired, never guessed.
+function shapeEvent(e, word, d) {
+  let verb = oneLine(e.verb == null ? "" : e.verb);
+  let tail = e.tail;
+  let alias = null;
+  if (tail == null || tail === "") for (const k of TAIL_ALIASES) if (e[k] != null && e[k] !== "") { tail = e[k]; alias = k; break; }
+  tail = tail == null ? "" : oneLine(tail);
+  const cut = verb.indexOf("::");
+  if (cut >= 0) { tail = [verb.slice(cut + 2).trim(), tail].filter(Boolean).join(" · "); verb = verb.slice(0, cut).trim(); }
+  tail = tail.replace(/^(?:::\s*)+/, "").trim();
+  const shape = d.grammar ? headShape(d.grammar) : null;
+  const bare = verb === word;
+  if (shape && !shape.sep && bare && tail) { verb = `${word} ${tail}`; tail = ""; }
+  else if (shape && shape.sep && shape.args && bare) {
+    const i = tail.indexOf(" :: ");
+    if (i > 0) { verb = `${word} ${tail.slice(0, i).trim()}`; tail = tail.slice(i + 4).trim(); }
+    else return { error: `${word} needs its head arguments before "::" — grammar: ${d.grammar.split(" · ")[0]} — put the whole head in \`verb\` (e.g. "${d.grammar.split(" :: ")[0].split(" · ")[0]}")` };
+  }
+  return { verb, tail: tail || undefined, alias };
+}
+
 // → { phase, run_meta, events: [{ts, actor, verb, tail, extra}], note } or throws.
 function validatePacket(pk, traceVerbs) {
   if (!pk || typeof pk !== "object" || Array.isArray(pk)) throw new PacketError("the packet is not a map");
@@ -329,12 +364,14 @@ function validatePacket(pk, traceVerbs) {
     if (!TS_RE.test(ts)) errs.push(`${at} (${word}): ts "${ts}" is not DDMMYY HH:MM:SS.mmm — the event's REAL time, never "now"`);
     const actor = e.actor == null || e.actor === "" ? "orc" : String(e.actor).trim();
     if (/\s/.test(actor)) errs.push(`${at} (${word}): actor "${actor}" has a space`);
+    const shaped = shapeEvent(e, word, d);
+    if (shaped.error) return errs.push(`${at}: ${shaped.error}`);
     const extra = {};
     for (const [k, v] of Object.entries(e)) {
-      if (CORE_FIELDS.includes(k) || k === "phase" || v === undefined) continue;
+      if (CORE_FIELDS.includes(k) || k === "phase" || k === shaped.alias || v === undefined) continue;
       extra[k] = typeof v === "string" && /^-?\d+(?:\.\d+)?$/.test(v) ? Number(v) : v;
     }
-    out.push({ ts, actor, verb, tail: e.tail == null ? undefined : oneLine(e.tail), extra });
+    out.push({ ts, actor, verb: shaped.verb, tail: shaped.tail, extra });
   });
   const rm = pk.run_meta;
   if (rm !== undefined && rm !== null) {

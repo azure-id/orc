@@ -249,3 +249,46 @@ test("trace write: the first packet renames a hook-bootstrapped file, and the ho
     rmrf(root);
   }
 });
+
+// The packet shapes a live lane actually sent (eval E1, 27-09-2026): `note:` for the
+// tail, a bare `GATE`, a tail that starts with `::`, and a no-`::` verb with only a tail.
+test("trace write: a live packet's shape is repaired from the grammar, and a bare GATE with no head is refused", () => {
+  const { root, logs } = project();
+  try {
+    fs.writeFileSync(path.join(logs, ".current"), RICH + "\n");
+    fs.writeFileSync(path.join(logs, RICH), "");
+    const live = [
+      "phase: preflight",
+      "events:",
+      '  - {ts: "270926 13:54:23.000", verb: "GATE grounding pass", note: "src/app.js globbed"}',
+      '  - {ts: "270926 13:54:24.000", verb: "GATE", tail: "coverage pass :: 0 orphans"}',
+      '  - {ts: "270926 13:54:25.000", verb: "GATE complexity pass", tail: ":: mini-ok"}',
+      '  - {ts: "270926 13:54:26.000", verb: "OUTCOME", tail: "task=T1 score=12 band=[0,30) model=claude-haiku-4-5 retries=0 requeues=0 needs_context=0 unmet=0"}',
+      '  - {ts: "270926 13:54:27.000", verb: "ASK", tail: "quick.q3.offer.review :: offered=review-first|commit-direct|stop rec=review-first chose=review-first by=user"}',
+      "",
+    ].join("\n");
+    const r = write(root, live, ["--json"]);
+    assert.strictEqual(r.status, 0, r.stderr + r.stdout);
+    const txt = lines(path.join(logs, RICH));
+    assert.deepStrictEqual(txt.map((l) => l.replace(/^\[[^\]]+\]\s+\S+\s+/, "")), [
+      "GATE grounding pass :: src/app.js globbed",
+      "GATE coverage pass :: 0 orphans",
+      "GATE complexity pass :: mini-ok",
+      "OUTCOME task=T1 score=12 band=[0,30) model=claude-haiku-4-5 retries=0 requeues=0 needs_context=0 unmet=0",
+      "ASK quick.q3.offer.review :: offered=review-first|commit-direct|stop rec=review-first chose=review-first by=user",
+    ]);
+    const rows = lines(path.join(logs, RICH + ".jsonl")).map((l) => JSON.parse(l));
+    assert.strictEqual(rows[0].tail, "src/app.js globbed");
+    assert.strictEqual(rows[0].note, undefined, "the alias is not copied a second time");
+    const ask = H.parseAskLine(txt[4].replace(/^\[[^\]]+\]\s+\S+\s+/, ""));
+    assert.ok(ask && ask.ok !== false, "the repaired ASK line parses: " + JSON.stringify(ask));
+    // A GATE with no name and no `args :: detail` split cannot be repaired — refused, nothing written.
+    const before = fs.readFileSync(path.join(logs, RICH), "utf8");
+    const bad = write(root, 'phase: x\nevents:\n  - {ts: "270926 13:55:00.000", verb: "GATE", note: "phase-1 exit ok"}\n', ["--json"]);
+    assert.notStrictEqual(bad.status, 0);
+    assert.match(bad.stdout + bad.stderr, /GATE needs its head arguments/);
+    assert.strictEqual(fs.readFileSync(path.join(logs, RICH), "utf8"), before);
+  } finally {
+    rmrf(root);
+  }
+});

@@ -10,6 +10,47 @@ Format: `### v<version> — <title> _(<date>)_`.
 
 ---
 
+### v2.0.1 — the trace keeps the gate name, and the lanes find the habits rule _(2026-09-27)_
+
+**Still on the unscoped `orc` package?** Do this once first - your `orc upgrade`
+is the pre-v0.56.0 one and cannot install itself. Full detail in the CAUTION at
+the top of this file.
+
+- **Step 1 - release the command from the old package:** `npm uninstall -g orc`
+- **Step 2 - install the current package:** `npm i -g @azure-id/orc`
+- **Step 3 - re-apply it to your project:** `orc update`
+
+**Do not use `npm i -g -f`.** Full detail in v0.56.0 below.
+
+A patch. The first live runs of 2.0.0 in the eval sandbox found four defects. Nothing
+changes for a user who has `habits` off, except that traces are complete again.
+
+- **`orc trace write` keeps the gate name.** A lane often sent `verb: GATE` and put
+  the rest in the tail. The CLI then wrote `GATE :: …`, and the name and the
+  `pass|bounce|escalate` word were lost (`orc stats` and `/orc-retro` read them).
+  The CLI now puts each event into the shape of its own grammar in `TRACE_VERBS`:
+  - `note:`, `detail:` or `text:` is used as the tail when `tail` is missing
+    (before: an EMPTY `.txt` line);
+  - a ` :: ` inside `verb` splits into head and tail, and a tail that starts with
+    `::` loses it (before: `GATE x :: :: …`);
+  - a verb with no ` :: ` in its grammar (`OUTCOME`, `FINDING`, `PHASE` …) that
+    has only a tail is joined to its head;
+  - a verb whose grammar needs head arguments (`GATE <name> pass|…`, `ASK <qid>`,
+    `DISPATCH <agent>`, `SCORE task=…`) is repaired from `args :: detail` in the
+    tail, or REFUSED by name (exit 2, nothing written) — the lane then uses the
+    writer agent.
+  `_shared/phases/trace.md` says it once: `verb` = the WHOLE head, `tail` = the detail.
+- **The lanes find the habits rule.** The `habits{}` pointer sat in each spine's
+  lane-contract block, far from the step that reads the answer, and a live
+  `/orc-quick` run with `habits: propose` never opened `_shared/habits.md` and
+  wrote no `ASK`. The rule now sits IN the step that reads `orc lane config`:
+  `/orc-quick` Q0 step 1, `/orc-mini` Phase 0, and `_shared/phases/preflight.md`
+  step 1 (orc, fast, test, pr-setup). The orc and fast spine copies were removed.
+
+**What you have to do:** `orc update`.
+
+---
+
 ### v2.0.0 — the coding lanes remember what you fixed and how you work _(2026-09-27)_
 
 **Still on the unscoped `orc` package?** Do this once first - your `orc upgrade`

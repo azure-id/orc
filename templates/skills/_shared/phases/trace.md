@@ -37,7 +37,7 @@ run_meta:                 # FIRST packet of the run ONLY; omit thereafter
                           # aftermath | export | challenge | doc | test
   slug: cas-multi-exchange-withdrawal
   trace_path: .claude/orc/logs/run-orc-cas-multi-exchange-withdrawal-240726-002352.txt
-events:                   # each {ts, verb, tail}; verb from `trace_grammar`
+events:                   # each {ts, verb, tail}; verb = the WHOLE head (`GATE grounding pass`), tail = detail only
   - {ts: "240726 00:30:39.881", verb: "VERIFY T2", tail: "actual=claude-sonnet-4-6/high ✅ MATCH"}
 decisions: >              # free text — the WHY layer
   User answered "no new deps" verbatim; rejected the adapter split.

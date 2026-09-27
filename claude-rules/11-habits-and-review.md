@@ -88,3 +88,12 @@ reviewer agent, any `(H <qid>)` mark, or a spine near its byte cap.
 - **The trace verb set is closed** (`TRACE_VERBS`). A new verb is a row in the
   registry, in `trace-verbs.md` and in the lane's `trace_verbs`; the lint
   checks all three.
+
+- **THE HABITS POINTER LIVES IN THE STEP THAT READS `habits{}` (v2.0.1).** A lane
+  treats a lane-contract block as reference, not as a step: a live `/orc-quick` run
+  with `habits: propose` got `habits{}` and wrote no `ASK`. The rule sits in quick
+  Q0 step 1, mini Phase 0 and `_shared/phases/preflight.md` step 1. Never move it
+  back into a reference block. **`orc trace write` shapes each event from its OWN
+  grammar** (`bin/trace-write.js` `shapeEvent()`): tail aliases, the ` :: ` split,
+  the tail-only join, and a refusal by name when a head argument is missing — so a
+  lane can never write `GATE :: …` again.
