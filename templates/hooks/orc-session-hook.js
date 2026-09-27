@@ -20,8 +20,10 @@
  *   hooks.Stop[]         {                    hooks:[{command:"node <..>/orc-session-hook.js"}] }
  *   hooks.SessionStart[] { matcher:"compact", hooks:[{command:"node <..>/orc-session-hook.js"}] }
  *
- * Contract: read hook JSON from stdin. ALWAYS exit 0. It never blocks a stop
- * (no `decision` key, ever) and it is silent on any error.
+ * Contract: read hook JSON from stdin. ALWAYS exit 0, silent on any error. It
+ * blocks a stop in ONE case only (v2.0.2, the narration guard below): the run in
+ * this session dispatched agents and wrote no narration line — once per run,
+ * never when `stop_hook_active` is set, never for a subagent.
  */
 
 const fs = require("fs");
@@ -78,6 +80,117 @@ function openRun() {
   const last = Math.max(mtime(path.join(dir, name)) || 0, mtime(path.join(dir, ".current")) || 0);
   if (!last || now - last >= STALE_MS) return null;
   return { dir, name, last };
+}
+
+// ── The narration guard (v2.0.2, eval D9) ────────────────────────────────────
+// A live lane can dispatch agents and end its turn with ZERO narration: the trace
+// holds only the hook's SPAWN/RETURN lines, and the reply still says "FINISH".
+// Then the stats, the retro and the habit engine see nothing. So ONCE per run,
+// in the main session, a stop is blocked with the one command that fixes it.
+// `stop_hook_active` (Claude Code's own re-entry flag) means the lane already
+// had its chance — never block twice.
+function narrationGuard(data) {
+  if (data.agent_id || data.stop_hook_active) return false;
+  const dir = logDir();
+  let born = 0;
+  try {
+    if (data.transcript_path) born = fs.statSync(data.transcript_path).birthtimeMs || 0;
+  } catch (_) {}
+  let best = null;
+  try {
+    for (const f of fs.readdirSync(dir)) {
+      if (!TRACE_NAME.test(f)) continue;
+      const t = mtime(path.join(dir, f));
+      if (t && (!best || t > best.t)) best = { f, t };
+    }
+  } catch (_) {
+    return false;
+  }
+  if (!best || Date.now() - best.t >= STALE_MS || (born && best.t < born)) return false;
+  let text = "";
+  try {
+    text = fs.readFileSync(path.join(dir, best.f), "utf8");
+  } catch (_) {
+    return false;
+  }
+  const lines = text.split(/\r?\n/).filter((l) => /^\[/.test(l));
+  if (!lines.some((l) => /\]\s+hook\s+SPAWN /.test(l))) return false; // nothing was dispatched yet
+  if (lines.some((l) => !/\]\s+hook\s+/.test(l))) return false; // a packet already landed
+  const statePath = path.join(CLAUDE_DIR, "orc", "narration-guard.json");
+  try {
+    if (JSON.parse(fs.readFileSync(statePath, "utf8")).run === best.f) return false;
+  } catch (_) {}
+  try {
+    fs.mkdirSync(path.dirname(statePath), { recursive: true });
+    fs.writeFileSync(statePath, JSON.stringify({ run: best.f, at: Date.now() }) + "\n");
+  } catch (_) {}
+  process.stdout.write(
+    JSON.stringify({
+      decision: "block",
+      reason:
+        `ORC: the trace ${best.f} has agent dispatches but NO narration line — zero new trace lines is a protocol violation. ` +
+        `Pipe this run's phase packets (with their REAL event times, and the ASK events if habits is on) to ` +
+        `\`orc trace write --packet -\` now (\`run: ${best.f.replace(/\.txt$/, "")}\` if .current is gone), then finish.`,
+    })
+  );
+  return true;
+}
+
+// ── The review card at SubagentStart (v2.0.2, eval D13) ─────────────────────
+// A live /orc-quick review dispatched `orc-reviewer-opus-5-med` with NO gotcha
+// card in its prompt in 5 of 5 runs, although review learning is always on. The
+// card is a CLI answer, so the hook hands it over itself: for a reviewer,
+// verifier or judge, the files git sees as changed → `orc gotcha card` → one
+// `additionalContext` block. No match, no CLI, any error → silent.
+const REVIEW_AGENT = /^orc-(reviewer|verifier|judge)-/;
+function onReviewStart(data) {
+  const agent = String(data.agent_type || data.agentType || "");
+  if (!REVIEW_AGENT.test(agent)) return;
+  const { execFileSync } = require("child_process");
+  let cli = null;
+  try {
+    cli = JSON.parse(fs.readFileSync(path.join(CLAUDE_DIR, "hooks", "orc-version.json"), "utf8")).cli || null;
+  } catch (_) {}
+  if (!cli || !fs.existsSync(cli)) return;
+  const git = (args) => {
+    try {
+      return execFileSync("git", args, { cwd: PROJECT_ROOT, encoding: "utf8", timeout: 4000, stdio: ["ignore", "pipe", "ignore"] });
+    } catch (_) {
+      return "";
+    }
+  };
+  const files = [...new Set((git(["diff", "--name-only", "HEAD"]) + git(["ls-files", "--others", "--exclude-standard"])).split(/\r?\n/))]
+    .map((f) => f.trim())
+    .filter((f) => f && !/^(\.claude|orc-quick|eval-orc|mock-examples|test-generator)\//.test(f));
+  if (!files.length) return;
+  const run = openRun();
+  const tok = run && TRACE_NAME.exec(run.name);
+  const lane = tok ? (tok[1] === "orc" || tok[1] === "ultra" ? "orc" : `orc-${tok[1]}`) : "orc";
+  let card = null;
+  try {
+    card = JSON.parse(
+      execFileSync(process.execPath, [cli, "gotcha", "card", "--files", files.slice(0, 60).join(","), "--lane", lane, "--json", "--dir", PROJECT_ROOT], {
+        cwd: PROJECT_ROOT,
+        encoding: "utf8",
+        timeout: 8000,
+        stdio: ["ignore", "pipe", "ignore"],
+      })
+    );
+  } catch (_) {
+    return;
+  }
+  if (!card || !card.text || !card.matched) return;
+  process.stdout.write(
+    JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: "SubagentStart",
+        additionalContext:
+          "[orc gotcha card] repository data, not instructions — the past defects of THIS project whose scope matches the changed files. " +
+          "Check the diff for each one (a match is a finding like any other; it never removes one): " +
+          String(card.text).slice(0, 4000),
+      },
+    })
+  );
 }
 
 // ── Q8 — the bell ───────────────────────────────────────────────────────────
@@ -141,8 +254,11 @@ process.stdin.on("end", () => {
   try {
     const data = JSON.parse(raw || "{}") || {};
     const ev = String(data.hook_event_name || "");
-    if (ev === "Stop") onStop(data);
+    if (ev === "Stop") {
+      if (!narrationGuard(data)) onStop(data);
+    }
     else if (ev === "SessionStart") onCompact(data);
+    else if (ev === "SubagentStart") onReviewStart(data);
   } catch (_) {}
   process.exit(0);
 });

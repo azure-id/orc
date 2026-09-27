@@ -128,7 +128,9 @@ const ASK_RE = /(?:^|\s)ASK\s+(\S+)\s+::\s+(.*?)\s*$/;
 const OPT_RE = /^[a-z0-9][a-z0-9-]*$/;
 // `QUESTION count=<n> :: <topic>` (trace-verbs.md) — a subagent stopped to ask.
 const QUESTION_RE = /(?:^|\s)QUESTION\s+count=(\d+)/;
-const AGENT_RE = /^orc-[a-z0-9.-]+$/;
+// A dispatch-gate menu also lists a third-party slot (`deepseek-v4-flash`) or an
+// ad-hoc model, so any plain id is an offered option; only `chose=` is counted.
+const AGENT_RE = /^[a-z0-9][a-z0-9.:-]*$/;
 
 function pointFor(qid) {
   if (ASK_POINTS[qid]) return ASK_POINTS[qid];
@@ -352,7 +354,7 @@ function collect(claudeDir, deps) {
   const cp = statePaths(claudeDir).cache;
   try {
     const c = JSON.parse(fs.readFileSync(cp, "utf8"));
-    if (c && c.sig === sig && c.version === 2) return Object.assign({ log_dir: dir, cached: true }, c.data);
+    if (c && c.sig === sig && c.version === 3) return Object.assign({ log_dir: dir, cached: true }, c.data);
   } catch (_) {}
   const events = [];
   const bad = [];
@@ -398,7 +400,7 @@ function collect(claudeDir, deps) {
   const data = { traces: runs.length, events, bad, unknown: Object.values(unknown), excluded, runs: seen };
   try {
     fs.mkdirSync(path.dirname(cp), { recursive: true });
-    fs.writeFileSync(cp, JSON.stringify({ version: 2, sig, data }) + "\n");
+    fs.writeFileSync(cp, JSON.stringify({ version: 3, sig, data }) + "\n");
   } catch (_) {}
   return Object.assign({ log_dir: dir, cached: false }, data);
 }
@@ -653,14 +655,19 @@ function computeRows(claudeDir, deps, opts = {}) {
   const st = readState(claudeDir);
   const maxAge = (opts.window_days || HABIT_RULE.max_age_days) * DAY;
   const groups = new Map();
+  const add = (id, qid, b, e) => {
+    if (!groups.has(id)) groups.set(id, { id, qid, bucket: b, events: [] });
+    groups.get(id).events.push(e);
+  };
   for (const e of col.events) {
     if (HABIT_META_QIDS.includes(e.qid)) continue;
     const pt = ASK_POINTS[e.qid];
     if (!pt) continue;
     const b = bucketOf(pt, e.ctx);
-    const id = habitId(e.qid, b);
-    if (!groups.has(id)) groups.set(id, { id, qid: e.qid, bucket: b, events: [] });
-    groups.get(id).events.push(e);
+    add(habitId(e.qid, b), e.qid, b, e);
+    // The "any context" row holds EVERY answer to the question; a bucket with
+    // context is a refinement of it, never a split of its evidence.
+    if (Object.keys(b).length) add(habitId(e.qid, {}), e.qid, {}, e);
   }
   // A decision on a habit with no evidence left keeps its row: an applied
   // habit you can no longer see is a setting nobody can undo.

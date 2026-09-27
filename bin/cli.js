@@ -462,6 +462,8 @@ function installGuards(claudeDir) {
   };
   wireSession("Stop", null);
   wireSession("SessionStart", "compact");
+  // v2.0.2 (eval D13): the reviewer / verifier / judge get the gotcha card here.
+  wireSession("SubagentStart", null);
 
   fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + "\n");
 }
@@ -1575,7 +1577,7 @@ const CONFIG_META = [
   { key: "doc_dir", def: DOC_DIR_DEFAULT, tier: "advanced", answers: [{ family: "paths", prio: "P2", mode: "replace" }], lanes: ["orc-doc"], validate: vPath, desc: "Where /orc-doc folders live. Project root, not .claude/ — a document is a deliverable a human opens, and the same call /orc-quick, /orc-brainstorm and poly-repo-implementation/ already made." },
   // v2.0.0 W6c — DE-17. The compact rules card for orc-mini / orc-fast executors.
   // OFF until eval E4 passes (eval/results/2.0.0/E4.md); off = today's card, byte for byte.
-  { key: "rules_card_compact", def: "off", tier: "advanced", answers: [{ family: "rules", prio: "P2", mode: "replace" }], lanes: [], validate: vEnum("off", "on"), options: ["off", "on"], desc: "Whether `orc rules slice` builds the COMPACT rules card for the orc-mini and orc-fast lanes too (orc-quick always gets it). The compact card keeps every rule id and the first line of each HARD rule, and drops the worked examples. off = the full card, byte-identical to before (the default). It stays off until eval E4 shows no new unmet[] items, no new rules_conflicts[] and the same smoke-gate first-try count." },
+  { key: "rules_card_compact", def: "on", tier: "advanced", answers: [{ family: "rules", prio: "P2", mode: "replace" }], lanes: [], validate: vEnum("off", "on"), options: ["off", "on"], desc: "Whether `orc rules slice` builds the COMPACT rules card for the orc-mini and orc-fast lanes too (orc-quick always gets it). The compact card keeps every rule id and the first line of each HARD rule, and drops the worked examples. on (the default since v2.0.2 — eval E4 passed: no new unmet[] items, no new rules_conflicts[], the smoke gate green on the first try at least as often). off = the full card, byte-identical to 2.0.0." },
   { key: "wiki_scan_tier", def: "ladder", tier: "advanced", answers: [{ family: "wiki", prio: "P2", mode: "replace" }], lanes: ["orc-wiki"], validate: vEnum("ladder", "always_deep"), desc: "Wiki scan tier: ladder picks light/deep per delta (first scan, STRUCTURAL, wide delta or a new exported symbol → deep; otherwise light), always_deep restores pre-v0.46.0 behaviour. The resolved tier is always printed — a cheaper model is never a quiet substitution." },
   { key: "wiki_tier_deep_files", def: 3, tier: "advanced", answers: [{ family: "wiki", prio: "P2", mode: "replace" }], lanes: ["orc-wiki"], validate: vInt(1), desc: "Covered files touched at or above this count send the refresh to the DEEP scanner." },
   { key: "wiki_refresh_budget", def: 0, tier: "advanced", answers: [{ family: "wiki", prio: "P2", mode: "replace" }], lanes: ["orc-wiki"], validate: vInt(0), desc: "Max scan-tasks per refresh run; 0 = no cap. A capped refresh is a PLANNED stop, not an interrupt: sync has already run, so the wiki is registered and consistent, and the remaining docs are AGING, not broken. Separate from the fixed pause-every-5 rule — do not merge them." },
@@ -35074,7 +35076,7 @@ function doctor() {
     const wiredOn = (event, matcher) =>
       Array.isArray(hk[event]) &&
       hk[event].some((e) => (e.matcher || null) === (matcher || null) && (e.hooks || []).some((h) => String(h.command || "").includes("orc-session-hook")));
-    const missing = [["Stop", null], ["SessionStart", "compact"]].filter(([e, m]) => !wiredOn(e, m)).map(([e, m]) => (m ? `${e} ${m}` : e));
+    const missing = [["Stop", null], ["SessionStart", "compact"], ["SubagentStart", null]].filter(([e, m]) => !wiredOn(e, m)).map(([e, m]) => (m ? `${e} ${m}` : e));
     const bell = String(cfg.notify || "off") === "bell";
     if (missing.length)
       warn(
@@ -35083,13 +35085,14 @@ function doctor() {
           [
             missing.includes("SessionStart compact") ? "a compacted session is not told which run is in flight" : null,
             missing.includes("Stop") ? (bell ? "notify is bell, but the bell never rings" : "the bell cannot ring if notify is set to bell") : null,
+            missing.includes("SubagentStart") ? "a reviewer gets no gotcha card" : null,
           ]
             .filter(Boolean)
             .join("; ") +
           "; run `orc update`",
         { fixable: true, fix: "orc update", fix_command: "orc update" }
       );
-    else ok(`session hook wired (Stop + SessionStart compact) · notify ${bell ? "bell" : "off"}`);
+    else ok(`session hook wired (Stop + SessionStart compact + SubagentStart) · notify ${bell ? "bell" : "off"}`);
   } catch (_) {}
 
   // 5a-ter) the code graph (v1.8.0). ONE finding, and only while `code_graph` is
@@ -45403,7 +45406,7 @@ function rulesSlice(claudeDir, lane, extraPacks) {
     cfgMap = readOverride(claudeDir).map || {};
   } catch (_) {}
   const compact =
-    RULES_COMPACT_LANES.has(lane) || (RULES_COMPACT_OPT_IN.has(lane) && String(cfgMap.rules_card_compact || "off") === "on");
+    RULES_COMPACT_LANES.has(lane) || (RULES_COMPACT_OPT_IN.has(lane) && /^(on|true)$/.test(String(cfgMap.rules_card_compact === undefined || cfgMap.rules_card_compact === null ? "on" : cfgMap.rules_card_compact)));
   // DE-8 — the LEARNED tier. `null` under `habits: off`: then the slice is
   // byte-identical to the release before, and the field is not even present.
   const learned = require("./habit.js").learnedRules(claudeDir, repoRootOf(claudeDir), cfgMap);
@@ -46273,7 +46276,7 @@ function jsonCrash(err) {
     // v2.0.0 T21 — the CLI holds the trace pen: one packet → the .txt + .jsonl
     // pair. The Haiku writer is the fallback when this exits ≠ 0.
     case "trace":
-      require("./trace-write.js").traceCmd({ flag, positionals, emitJson, wantsJson, resolveClaudeDir, resolveLogDir, TRACE_VERBS });
+      require("./trace-write.js").traceCmd({ flag, positionals, emitJson, wantsJson, resolveClaudeDir, resolveLogDir, TRACE_VERBS, readOverride });
       break;
     case "mock":
       mock();

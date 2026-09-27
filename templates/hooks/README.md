@@ -416,7 +416,7 @@ outside an ORC run, and never when the map does not exist.
 
 ## The session hook
 
-This is a fourth hook, `orc-session-hook.js`. It has two jobs. Both jobs are
+This is a fourth hook, `orc-session-hook.js`. It has four jobs. All of them are
 silent when no ORC run is open.
 
 - **The bell.** A turn of an ORC run ends, and your terminal rings once. This
@@ -434,8 +434,17 @@ silent when no ORC run is open.
   flight, the hook adds ONE line: the run name, and the `state-of-play.md` file
   to read first. It costs about 40 tokens, once per compaction.
 
-It never blocks a stop and never writes model text. `orc doctor` tells you
-whether both parts are wired.
+- **The narration guard** (v2.0.2). A run dispatched agents but wrote no trace
+  line of its own. Then the hook stops the turn ONCE and says which command
+  writes the trace. It never stops twice, and never stops a subagent.
+- **The review card** (v2.0.2). When a reviewer, verifier or judge starts, the
+  hook asks `orc gotcha card` for the files git sees as changed and gives the
+  card to that agent. No match → nothing. This is why a review always sees the
+  mistakes this project already made, even if the lane forgot the card.
+
+It never writes model text, and it blocks a stop only for the narration guard.
+`orc doctor` tells you whether all three events are wired (`Stop`,
+`SessionStart compact`, `SubagentStart`).
 
 ---
 

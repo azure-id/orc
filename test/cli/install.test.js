@@ -451,7 +451,7 @@ test("doctor: graph-hook-unwired counts five entries, not four events", () => {
 });
 
 // ── v2.0.0 W6c — the session hook is TWO entries (Stop + SessionStart compact)
-test("install: the session hook is wired on Stop and SessionStart compact, idempotent; doctor names a missing one", () => {
+test("install: the session hook is wired on Stop, SessionStart compact and SubagentStart, idempotent; doctor names a missing one", () => {
   const { claudeDir, root } = freshInstall();
   const settingsPath = path.join(claudeDir, "settings.json");
   const wiring = () => {
@@ -462,7 +462,7 @@ test("install: the session hook is wired on Stop and SessionStart compact, idemp
         for (const h of entry.hooks || []) if (String(h.command || "").includes("orc-session-hook")) out.push([event, entry.matcher || null]);
     return out.sort();
   };
-  assert.deepStrictEqual(wiring(), [["SessionStart", "compact"], ["Stop", null]]);
+  assert.deepStrictEqual(wiring(), [["SessionStart", "compact"], ["Stop", null], ["SubagentStart", null]]);
   assert.ok(fs.existsSync(path.join(claudeDir, "hooks", "orc-session-hook.js")));
   const before = fs.readFileSync(settingsPath, "utf8");
   assert.equal(cli(["update", "--dir", root]).status, 0);

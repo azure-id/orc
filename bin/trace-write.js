@@ -389,6 +389,7 @@ function validatePacket(pk, traceVerbs) {
   const decisions = pk.decisions == null ? "" : oneLine(pk.decisions);
   return {
     phase: pk.phase == null ? undefined : oneLine(pk.phase),
+    run: typeof pk.run === "string" && /^run-[a-z0-9]+-[a-z0-9-]+-\d{6}-\d{6}(\.txt)?$/.test(pk.run) ? pk.run : null,
     run_meta: rm || null,
     events: out,
     note: decisions ? { ts: out[out.length - 1].ts, actor: "writer", verb: "NOTE", tail: decisions, extra: {} } : null,
@@ -491,9 +492,13 @@ function writePacket(claudeDir, logDir, v, block) {
     // (the file then exists); a missing pointer is never invented here.
     if (ptr && !renamed && path.basename(target) !== ptr && path.dirname(path.resolve(target)) === path.resolve(logDir)) repointed = true;
   } else {
-    if (!ptr)
+    // A late packet (the ASK answers after the habits nudge) may arrive after the
+    // lane removed `.current`: its `run:` names an EXISTING trace in log_dir.
+    const late = !ptr && v.run ? path.join(logDir, path.basename(v.run).replace(/(\.txt)?$/, ".txt")) : null;
+    if (late && exists(late)) target = late;
+    else if (!ptr)
       throw new StateError("log_dir/.current is missing and this packet has no run_meta — the FINISH packet must be written BEFORE .current is deleted");
-    target = path.join(logDir, ptr);
+    else target = path.join(logDir, ptr);
   }
   const jsonl = target + ".jsonl";
   const before = [countLines(target), countLines(jsonl)];
@@ -512,6 +517,35 @@ function writePacket(claudeDir, logDir, v, block) {
 const USAGE = "usage: orc trace write --packet -|<file> [--json]   (reads one phase packet; writes the .txt + .jsonl pair)";
 
 // deps: { flag, positionals, emitJson, wantsJson, resolveClaudeDir, resolveLogDir, TRACE_VERBS }
+// The habits capture check (eval E2, 27-09-2026): a live lane read habits.md at
+// preflight and then wrote no ASK at the question it asked minutes later. So at the
+// FINISH packet, with `habits` on and ZERO `ASK` lines in the run, the CLI names
+// this lane's registered questions and asks for ONE more packet with the answers.
+// It never blocks: the packet is already written, the exit stays 0.
+function askNudge(deps, claudeDir, v, r) {
+  if (!deps.readOverride || !v.events.some((e) => e.verb.split(/\s+/)[0] === "FINISH")) return null;
+  let H;
+  try { H = require("./habit.js"); } catch (_) { return null; }
+  let mode = "off";
+  try { mode = H.habitsMode(deps.readOverride(claudeDir).map); } catch (_) {}
+  if (mode === "off") return null;
+  const file = path.join(path.dirname(claudeDir), r.trace_path);
+  let txt = "";
+  try { txt = fs.readFileSync(file, "utf8"); } catch (_) { return null; }
+  // The qids this run already recorded (a VALID ASK line — invalid ones never reach the file).
+  const done = new Set();
+  for (const m of txt.matchAll(/\] \S+\s+ASK (\S+) ::/g)) done.add(m[1]);
+  const tok = (/(?:^|\/)run-([a-z0-9]+)-/.exec(r.trace_path) || [])[1];
+  if (!tok) return null;
+  const lane = tok === "orc" || tok === "ultra" ? "orc" : `orc-${tok}`;
+  const qids = Object.keys(H.ASK_POINTS).filter((q) => (H.ASK_POINTS[q].lanes || []).includes(lane) && !done.has(q));
+  if (!qids.length) return null;
+  return {
+    qids,
+    line: `habits: ${mode} — ${done.size ? `this run recorded ASK for ${[...done].join(", ")} only` : "this run wrote NO ASK line"}. If you asked the user any question below, write ONE more packet now (with \`run: ${path.basename(r.trace_path)}\` — it works even after .current is removed): one ASK event per question you asked the user that is marked (H <qid>) — ${lane}: ${qids.map((q) => { const o = Object.keys(H.ASK_POINTS[q].options || {}); return o.length ? `${q} (${o.join("|")})` : `${q} (the agent names you offered)`; }).join(", ")}. Use THESE option ids exactly. verb "ASK <qid>", tail "offered=<o1|o2|…> rec=<o|none> chose=<o|other> by=<user|ledger|learned|config|default>". A question you did not ask this run → no event.`,
+  };
+}
+
 function traceCmd(deps) {
   const pos = deps.positionals();
   const json = deps.wantsJson();
@@ -536,6 +570,66 @@ function traceCmd(deps) {
     if (!(e instanceof PacketError)) throw e;
     return fail(2, "invalid", `${e.message} — nothing written`, { errors: e.errors || [e.message] });
   }
+  // An ASK is checked against the habit registry AS IT ARRIVES (eval E2): a live lane
+  // wrote its own option names and extra text, and the habit engine then counted
+  // nothing. An invalid ASK is kept OUT of the trace and handed back with the option
+  // ids, so the lane resends it in the same turn; the other events are written.
+  const askRejected = [];
+  let H = null;
+  try { H = require("./habit.js"); } catch (_) {}
+  // The trace so far, to tell a FOLLOW-UP from a new answer: the same qid again
+  // with no new executor SPAWN (the hook writes those, deterministically) since
+  // its last ASK is the same entry's next decision (eval E2: `stop` at the commit
+  // offer after the review, recorded as quick.q3.offer.review).
+  let sofar = "";
+  let sofarName = null;
+  try {
+    const ld = deps.resolveLogDir(deps.resolveClaudeDir());
+    let cur = null;
+    try { cur = fs.readFileSync(path.join(ld, ".current"), "utf8").trim() || null; } catch (_) {}
+    const name = cur || (v.run ? path.basename(v.run).replace(/(\.txt)?$/, ".txt") : null);
+    sofarName = name;
+    if (name) sofar = fs.readFileSync(path.join(ld, name), "utf8");
+  } catch (_) {}
+  const followUp = (qid) => {
+    const lines = sofar.split(/\r?\n/);
+    let last = -1;
+    lines.forEach((l, i) => { if (new RegExp(`\\]\\s+\\S+\\s+ASK ${qid.replace(/\./g, "\\.")} ::`).test(l)) last = i; });
+    if (last < 0) return false;
+    return !lines.slice(last + 1).some((l) => /\]\s+hook\s+SPAWN orc-executor-/.test(l));
+  };
+  if (H) {
+    const seen = new Set();
+    v.events = v.events.filter((e) => {
+      if (e.verb.split(/\s+/)[0] !== "ASK") return true;
+      const p = H.parseAskLine(`${e.verb} :: ${e.tail || ""}`);
+      if (p && p.ok !== false && (followUp(p.qid) || seen.has(p.qid))) {
+        askRejected.push({ qid: p.qid, error: "a follow-up decision in the SAME entry (no new executor dispatch since this question was answered) — record no ASK for it", options: "none" });
+        return false;
+      }
+      // eval E2: a live lane invented `q3-review`, `q-exec` — an id the registry
+      // does not know counts for nothing, so it is refused with the real ids.
+      if (p && p.ok !== false && p.known === false && !(H.HABIT_META_QIDS || []).includes(p.qid)) {
+        const tok = (/(?:^|\/)run-([a-z0-9]+)-/.exec(sofarName || "") || [])[1];
+        const lane = !tok ? null : tok === "orc" || tok === "ultra" ? "orc" : `orc-${tok}`;
+        const ids = Object.keys(H.ASK_POINTS).filter((q) => !lane || (H.ASK_POINTS[q].lanes || []).includes(lane));
+        askRejected.push({ qid: p.qid, error: `unknown question id — use one of: ${ids.join(", ")}`, options: "see the id list" });
+        return false;
+      }
+      if (p && p.ok !== false) { seen.add(p.qid); return true; }
+      const qid = e.verb.split(/\s+/)[1] || "";
+      const pt = H.ASK_POINTS[qid];
+      const o = pt ? Object.keys(pt.options || {}) : [];
+      askRejected.push({ qid, error: (p && p.error) || "not an ASK line", options: o.length ? o.join("|") : "the agent names you offered (plain ids, no spaces)" });
+      return false;
+    });
+  }
+  if (askRejected.length && !v.events.length && !v.note) {
+    const line = `ASK rejected — nothing written. Resend each as verb "ASK <qid>", tail "offered=<a|b> rec=<o> chose=<o> by=user" with these ids: ${askRejected.map((a) => `${a.qid} (${a.options}) — ${a.error}`).join("; ")}`;
+    if (json) return deps.emitJson({ ask_rejected_line: line, ok: true, lines_written: 0, jsonl_written: 0, ask_rejected: askRejected }, 0);
+    console.log(line);
+    return;
+  }
   const claudeDir = deps.resolveClaudeDir();
   let r;
   try {
@@ -544,7 +638,15 @@ function traceCmd(deps) {
     if (!(e instanceof StateError)) return fail(3, "error", `${e.message} — nothing written`);
     return fail(3, "trace-state", `${e.message} — nothing written`);
   }
-  if (json) return deps.emitJson(Object.assign({ ok: true }, r), 0);
+  const nudge = askNudge(deps, claudeDir, v, r);
+  // The messages go FIRST: a lane often pipes the answer through `head`.
+  const rejLine = askRejected.length
+    ? `ASK rejected (the other events were written) — resend each as verb "ASK <qid>", tail "offered=<a|b> rec=<o> chose=<o> by=user" with these ids: ${askRejected.map((a) => `${a.qid} (${a.options}) — ${a.error}`).join("; ")}`
+    : null;
+  const head = Object.assign(rejLine ? { ask_rejected_line: rejLine } : {}, nudge ? { ask_missing_line: nudge.line } : {});
+  if (json) return deps.emitJson(Object.assign(head, { ok: true }, r, rejLine ? { ask_rejected: askRejected } : {}, nudge ? { ask_missing: nudge } : {}), 0);
+  if (rejLine) console.log(rejLine);
+  if (nudge) console.log(nudge.line);
   console.log(
     `trace write: +${r.lines_written} lines, +${r.jsonl_written} jsonl → ${r.trace_path}` +
       (r.renamed ? " (renamed the bootstrap file)" : "") +

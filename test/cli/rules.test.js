@@ -452,10 +452,10 @@ test("the slash command exists and never tells anyone to edit the ledger by hand
 test("orc rules slice — the compact form drops examples, never a rule", () => {
   const dir = tmpdir();
   const q = json(at(dir, "slice", "--lane", "orc-quick", "--json"));
-  const m = json(at(dir, "slice", "--lane", "orc-mini", "--json"));
+  const m = json(at(dir, "slice", "--lane", "orc", "--json"));
 
   assert.equal(q.compact, true, "orc-quick gets the compact card");
-  assert.equal(m.compact, false, "every other lane gets the full card");
+  assert.equal(m.compact, false, "the full lane gets the full card");
   assert.ok(q.text.length < m.text.length * 0.6, "compact is not meaningfully shorter");
   // The measured target the release states. A card over this is the cost this
   // change exists to cut, quietly back.
@@ -486,21 +486,25 @@ test("orc rules slice — the compact form drops examples, never a rule", () => 
 });
 
 // ── v2.0.0 W6c — DE-17: the compact card for orc-mini / orc-fast, behind E4 ─
-// `rules_card_compact` is OFF until eval E4 passes. Off must be byte-identical
-// to the card before the key existed; on gives mini and fast the SAME compact
-// text quick gets, and never touches any other lane.
-test("orc rules slice — rules_card_compact: off is byte-identical, on compacts mini and fast only", () => {
+// `rules_card_compact` is ON by default since v2.0.2 (eval E4 passed). On gives
+// mini and fast the SAME compact text quick gets and never touches any other
+// lane; off must stay byte-identical to the full card.
+test("orc rules slice — rules_card_compact: on (the default) compacts mini and fast only, off is the full card", () => {
   const dir = tmpdir();
   fs.mkdirSync(path.join(dir, ".claude"), { recursive: true });
   const slice = (lane) => json(at(dir, "slice", "--lane", lane, "--json"));
   const before = { mini: slice("orc-mini"), fast: slice("orc-fast"), orc: slice("orc"), quick: slice("orc-quick") };
-  assert.equal(before.mini.compact, false);
+  assert.equal(before.mini.compact, true, "on is the default (v2.0.2, eval E4 passed)");
   assert.ok(!("learned" in before.mini), "habits off: no learned field");
 
   fs.writeFileSync(path.join(dir, ".claude", "orc.config.yaml"), "rules_card_compact: off\n");
-  assert.deepStrictEqual(slice("orc-mini"), before.mini, "explicit off = the default, byte for byte");
+  const full = slice("orc-mini");
+  assert.equal(full.compact, false, "off is the full card");
+  assert.ok(full.text.length > before.mini.text.length, "the full card is longer");
+  assert.equal(full.line, before.mini.line, "the rules-in-force line never changes");
 
   fs.writeFileSync(path.join(dir, ".claude", "orc.config.yaml"), "rules_card_compact: on\n");
+  assert.deepStrictEqual(slice("orc-mini"), before.mini, "explicit on = the default, byte for byte");
   const mini = slice("orc-mini");
   const fast = slice("orc-fast");
   assert.equal(mini.compact, true);

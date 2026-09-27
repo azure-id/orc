@@ -432,7 +432,7 @@
   {
     "key": "rules_card_compact",
     "tier": "advanced",
-    "default": "off"
+    "default": "on"
   },
   {
     "key": "wiki_scan_tier",

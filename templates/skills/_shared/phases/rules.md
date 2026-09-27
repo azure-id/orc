@@ -132,9 +132,9 @@ marked `orc-rules-ignore-file`, and it reports the count of both.
 ## The COMPACT card
 
 `orc-quick` gets the COMPACT form: every HARD rule keeps its id, its title and
-its first line. `rules_card_compact: on` gives it to `orc-mini` and `orc-fast`
-too. That key is OFF until eval E4 passes (DE-17). The CLI decides this, never
-the lane. The answer says `compact: true` in the JSON. `line` is IDENTICAL in
+its first line. `orc-mini` and `orc-fast` get it too, because `rules_card_compact`
+is `on` by default since v2.0.2 (eval E4 passed, DE-17); `off` gives them the full
+card. The CLI decides this, never the lane. The answer says `compact: true` in the JSON. `line` is IDENTICAL in
 both forms.
 
 ## The LEARNED tier

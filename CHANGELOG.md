@@ -10,6 +10,54 @@ Format: `### v<version> — <title> _(<date>)_`.
 
 ---
 
+### v2.0.2 — the lanes record what you answered, and the reviewer always gets the card _(2026-09-28)_
+
+**Still on the unscoped `orc` package?** Do this once first - your `orc upgrade`
+is the pre-v0.56.0 one and cannot install itself. Full detail in the CAUTION at
+the top of this file.
+
+- **Step 1 - release the command from the old package:** `npm uninstall -g orc`
+- **Step 2 - install the current package:** `npm i -g @azure-id/orc`
+- **Step 3 - re-apply it to your project:** `orc update`
+
+**Do not use `npm i -g -f`.** Full detail in v0.56.0 below.
+
+A patch from the live evals of 2.0 (E1–E4 in the eval sandbox). The habits feature did
+not work in live use until this release: the lanes forgot to record answers, used their
+own option and question names, and recorded a follow-up decision as the same question.
+Each fix below is in the CLI or a hook, not in more lane prose.
+
+- **`orc trace write` checks every `ASK` as it arrives.** A wrong option id, an unknown
+  question id, or a repeat of the same question with no new executor dispatch (a
+  follow-up) is kept OUT of the trace and handed back with the real ids, first in the
+  answer. The rest of the packet is written.
+- **The FINISH packet names the questions nobody recorded.** With `habits` on, the answer
+  lists each registered question of the lane that has no `ASK` in the run, with its
+  option ids. A late packet with `run: <trace name>` still lands after `.current` is gone.
+- **Habit evidence is not split by context.** The "any context" row counts every answer;
+  a row with `kind`/`branch` is a refinement. A dispatch-gate answer may list a
+  third-party slot. The habit cache version changed, so a parser change clears it.
+- **The narration guard** (session hook, `Stop`). A run that dispatched agents and wrote
+  NO narration line is stopped ONCE, with the command that fixes it. Never twice, never
+  for a subagent.
+- **The reviewer always gets the gotcha card** (session hook, `SubagentStart`). A live
+  review got no card in 5 of 5 runs. Now every `orc-reviewer-*`, `orc-verifier-*` and
+  `orc-judge-*` receives the card for the files git sees as changed. `orc update` wires
+  the new event; `orc doctor` names it when it is missing.
+- **`/orc-quick` takes the undo snapshot.** Its own start step names
+  `orc run snapshot` (before: 3 of 8 runs took it; after: 6 of 6).
+- **`rules_card_compact` is `on` by default.** Eval E4 (12 runs) passed: no new
+  `unmet[]`, no new `rules_conflicts[]`, the smoke gate green on the first try in 6 of 6
+  runs with the compact card against 3 of 6 without. `off` gives the full card.
+
+**Eval results:** E1 (the trim broke nothing) passed · E2 (habits) passed — 6 answers →
+the offer "5 of 5" → accepted → the next run marks `→ usual` and still asks; with
+`habits: off` zero `ASK` lines · E3 (the gotcha card): E3 (the gotcha card): with the card the reviewer found all 3 recurring defects in 5 of 5 runs (without: 2.4 of 3; the float-money defect 5 of 5 against 2 of 5), ordinary recall was equal (3.0), false positives fell from 2.2 to 1.0 per run. The planned gap of 1.0 could not be reached: without the card the reviewer already finds 2 of the 3, so the most the card could add was 0.6, and it added all of it · E4 passed (above).
+
+**What you have to do:** `orc update`.
+
+---
+
 ### v2.0.1 — the trace keeps the gate name, and the lanes find the habits rule _(2026-09-27)_
 
 **Still on the unscoped `orc` package?** Do this once first - your `orc upgrade`

@@ -4,7 +4,7 @@ const { test } = require("node:test");
 const assert = require("node:assert");
 const fs = require("fs");
 const path = require("path");
-const { runHook, rmrf, freshInstall } = require("./_helpers");
+const { runHook, rmrf, freshInstall, CLI } = require("./_helpers");
 
 // The trace hook writes under <project>/.claude/orc/logs (default). freshInstall
 // gives us <root>/.claude, so PROJECT_ROOT for the installed hook is <root>.
@@ -1106,6 +1106,73 @@ function openRun(claudeDir, slug) {
   fs.writeFileSync(path.join(logs, ".current"), name + "\n");
   return path.join(logs, name);
 }
+
+// eval D13 (28-09-2026): a live review got NO gotcha card in 5 of 5 runs.
+test("session hook: SubagentStart hands the gotcha card to a reviewer, and nothing to an executor", () => {
+  const { root, claudeDir } = freshInstall();
+  try {
+    const { execFileSync } = require("child_process");
+    const g = (...a) => execFileSync("git", a, { cwd: root, stdio: "ignore" });
+    g("init", "-q");
+    g("config", "user.email", "t@t");
+    g("config", "user.name", "t");
+    fs.mkdirSync(path.join(root, "src", "routes"), { recursive: true });
+    fs.writeFileSync(path.join(root, "src", "routes", "users.js"), "module.exports = 1;\n");
+    g("add", "src");
+    g("commit", "-qm", "base");
+    fs.writeFileSync(path.join(root, "src", "routes", "users.js"), "module.exports = 2;\n");
+    fs.mkdirSync(path.join(claudeDir, "orc"), { recursive: true });
+    fs.writeFileSync(
+      path.join(claudeDir, "orc", "gotchas.md"),
+      "# Gotchas\n\n## G-001 · express · review\n- trigger:   a route handler that looks up a record by id\n" +
+        "- symptom:   500 not 404\n- cause:     no null check\n- fix:       return 404 first\n- scope:     src/routes/**/*.js\n" +
+        "- origin:    test · 28-09-2026\n- hits:      1\n- last_seen: 28-09-2026\n"
+    );
+    const vf = path.join(claudeDir, "hooks", "orc-version.json");
+    fs.writeFileSync(vf, JSON.stringify({ version: "t", cli: CLI }) + "\n");
+    const r = runHook(claudeDir, "orc-session-hook.js", { hook_event_name: "SubagentStart", agent_type: "orc-reviewer-opus-5-med" });
+    assert.strictEqual(r.status, 0);
+    const j = JSON.parse(r.stdout);
+    assert.strictEqual(j.hookSpecificOutput.hookEventName, "SubagentStart");
+    assert.match(j.hookSpecificOutput.additionalContext, /orc gotcha card/);
+    assert.match(j.hookSpecificOutput.additionalContext, /G-001/);
+    const ex = runHook(claudeDir, "orc-session-hook.js", { hook_event_name: "SubagentStart", agent_type: "orc-executor-sonnet-4-6-med" });
+    assert.strictEqual(ex.stdout, "", "an executor gets no review card");
+  } finally {
+    rmrf(root);
+  }
+});
+
+// eval D9 (27-09-2026): a live lane dispatched agents and ended with ZERO narration.
+test("session hook: the narration guard blocks ONE stop of a run that dispatched agents and wrote no narration", () => {
+  const { root, claudeDir } = freshInstall();
+  try {
+    const trace = openRun(claudeDir, "t9");
+    const hookOnly = "[270926 17:52:08.332] hook     SPAWN orc-executor-sonnet-4-6-med :: add /time\n" +
+      "[270926 17:52:29.366] hook     RETURN orc-executor-sonnet-4-6-med :: add /time dur=0m21s\n";
+    fs.writeFileSync(trace, hookOnly);
+    const sub = runHook(claudeDir, "orc-session-hook.js", { hook_event_name: "Stop", agent_id: "a1" });
+    assert.strictEqual(sub.stdout, "", "never for a subagent");
+    const first = runHook(claudeDir, "orc-session-hook.js", { hook_event_name: "Stop" });
+    assert.strictEqual(first.status, 0);
+    const j = JSON.parse(first.stdout);
+    assert.strictEqual(j.decision, "block");
+    assert.match(j.reason, /orc trace write --packet -/);
+    const twice = runHook(claudeDir, "orc-session-hook.js", { hook_event_name: "Stop" });
+    assert.strictEqual(twice.stdout, "", "once per run, never twice");
+    const reentry = runHook(claudeDir, "orc-session-hook.js", { hook_event_name: "Stop", stop_hook_active: true });
+    assert.strictEqual(reentry.stdout, "");
+    // A run that already narrated, or that dispatched nothing yet, is never blocked.
+    const t2 = openRun(claudeDir, "t10");
+    fs.writeFileSync(t2, hookOnly + "[270926 17:53:00.000] orc      DISPATCH orc-executor-sonnet-4-6-med :: add /time\n");
+    assert.strictEqual(runHook(claudeDir, "orc-session-hook.js", { hook_event_name: "Stop" }).stdout, "");
+    const t3 = openRun(claudeDir, "t11");
+    fs.writeFileSync(t3, "");
+    assert.strictEqual(runHook(claudeDir, "orc-session-hook.js", { hook_event_name: "Stop" }).stdout, "");
+  } finally {
+    rmrf(root);
+  }
+});
 
 test("session hook: the bell is off by default, and silent outside a run", () => {
   const { root, claudeDir } = freshInstall();

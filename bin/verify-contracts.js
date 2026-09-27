@@ -821,6 +821,8 @@ const CONTRACTS = [
       "skills/orc-challenge/SKILL.md",
       "skills/orc-pattern/SKILL.md",
       "skills/orc/subskills/orc-planner/SKILL.md",
+      // v2.0.2 (eval D9): the session hook's narration guard quotes the rule.
+      "hooks/orc-session-hook.js",
     ],
   },
   {
@@ -997,6 +999,8 @@ const CONTRACTS = [
       "skills/orc-fast/SKILL.md",
       "skills/_shared/phases/trace.md",
       "skills/_shared/phases/trace-verbs.md",
+      // v2.0.2 (eval D9): the narration guard names the command.
+      "hooks/orc-session-hook.js",
     ],
   },
   {
@@ -3816,6 +3820,9 @@ const CONTRACTS = [
       "agents/orc-verifier-opus-5-med.md",
       "skills/_shared/review-slice.md",
       "skills/orc-pr-driver/references/green-gate.md",
+      // v2.0.2 (eval D13): the session hook hands the card to reviewers.
+      "hooks/orc-session-hook.js",
+      "hooks/README.md",
     ],
     binFiles: ["bin/gotcha.js"],
   },
@@ -3870,7 +3877,8 @@ const CONTRACTS = [
   {
     name: "orc run snapshot — the pre-run tree, at the run-start pointer step (v2.0.0 W6b, Q2)",
     token: "orc run snapshot --run",
-    files: ["skills/_shared/phases/trace.md"],
+    // eval E1/E2 (27-09-2026): quick took the snapshot in 3 of 8 runs — its own Q0 step names it.
+    files: ["skills/_shared/phases/trace.md", "skills/orc-quick/SKILL.md"],
     binFiles: ["bin/cli.js", "bin/run-undo.js"],
   },
   {

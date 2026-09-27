@@ -45,7 +45,7 @@ without the manifest (`../_shared/lane-contract.md` §Phases).
    ignore every `(H …)` mark.
 2. **Trace + the running record.** Write `log_dir/.current` =
    `run-quick-<slug>-<DDMMYY>-<HHMMSS>.txt` and `touch the trace file` of that
-   name in the SAME step. Both, or neither. Create
+   name in the SAME step. Both, or neither. Then `orc run snapshot --run <run-slug>`. Create
    `.claude/orc/run/<run-slug>/quick-checkpoint.md` in the same step too: from
    now on append every event to it WITH THE TIME IT HAPPENED (`HH:MM:SS`). Each
    trace packet is built from that file, never stamped "now".
@@ -70,8 +70,7 @@ without the manifest (`../_shared/lane-contract.md` §Phases).
    works; ask the user to paste the comments instead.
 6. Emit one `GATE` line per check — `GATE graph` included.
 
-The SHAPE of these steps is `../_shared/phases/preflight.md` (`core`); the
-probes themselves are this lane's own and stay here.
+Shape: `../_shared/phases/preflight.md` (`core`); the probes stay here.
 
 ## Q1 — LOOK (silent — no questions here)
 

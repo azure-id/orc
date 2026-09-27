@@ -292,3 +292,120 @@ test("trace write: a live packet's shape is repaired from the grammar, and a bar
     rmrf(root);
   }
 });
+
+// eval E2 (27-09-2026): a live lane read habits.md and then wrote no ASK. At the FINISH
+// packet, with habits on and zero ASK lines, the CLI names the lane's questions (exit 0).
+test("trace write: a FINISH with habits on and no ASK line asks for the missing ASKs; none when off or when an ASK exists", () => {
+  const Q = "run-quick-ping-endpoint-270926-152042.txt";
+  const fin = 'phase: FINISH\nevents:\n  - {ts: "270926 15:29:07.002", verb: "FINISH", tail: "done"}\n';
+  const cfg = (root, mode) => fs.writeFileSync(path.join(root, ".claude", "orc.config.yaml"), `habits: ${mode}\n`);
+  const setup = (mode, firstLine) => {
+    const p = project();
+    cfg(p.root, mode);
+    fs.writeFileSync(path.join(p.logs, ".current"), Q + "\n");
+    fs.writeFileSync(path.join(p.logs, Q), firstLine || "");
+    return p;
+  };
+  const a = setup("propose");
+  try {
+    const r = write(a.root, fin, ["--json"]);
+    assert.strictEqual(r.status, 0, r.stderr + r.stdout);
+    const j = JSON.parse(r.stdout);
+    assert.ok(j.ask_missing, "the nudge is in the --json answer");
+    assert.ok(j.ask_missing.qids.includes("quick.q3.offer.review"));
+    assert.match(j.ask_missing.line, /wrote NO ASK line/);
+    assert.strictEqual(Object.keys(j)[0], "ask_missing_line", "the nudge is the FIRST key — a lane pipes through head");
+    const t = write(a.root, fin.replace("15:29:07.002", "15:29:08.000"));
+    assert.match(t.stdout.split("\n")[0], /habits: propose — this run wrote NO ASK line/, "the text form prints it first");
+    // The lane already removed .current: a late packet naming its run still appends.
+    fs.unlinkSync(path.join(a.logs, ".current"));
+    const late = `run: ${Q.replace(/\.txt$/, "")}\nphase: habits\nevents:\n  - {ts: "270926 15:29:09.000", verb: "ASK quick.q3.offer.review", tail: "offered=review-first|commit-direct|stop rec=review-first chose=review-first by=user"}\n`;
+    const lr = write(a.root, late, ["--json"]);
+    assert.strictEqual(lr.status, 0, lr.stderr + lr.stdout);
+    assert.match(fs.readFileSync(path.join(a.logs, Q), "utf8"), /ASK quick\.q3\.offer\.review :: offered=/);
+    assert.strictEqual(write(a.root, late.replace(/run: .*\n/, "run: run-quick-nope-270926-000000\n")).status, 3, "a run that names no existing trace is still refused");
+  } finally { rmrf(a.root); }
+  const b = setup("off");
+  try {
+    const j = JSON.parse(write(b.root, fin, ["--json"]).stdout);
+    assert.strictEqual(j.ask_missing, undefined, "habits off → zero bytes");
+  } finally { rmrf(b.root); }
+  const c = setup("propose", "[270926 15:25:00.000] orc      ASK quick.q3.offer.review :: offered=review-first|commit-direct|stop rec=review-first chose=review-first by=user\n");
+  try {
+    const j = JSON.parse(write(c.root, fin, ["--json"]).stdout);
+    assert.ok(!j.ask_missing.qids.includes("quick.q3.offer.review"), "a recorded question is not asked for again");
+    assert.ok(j.ask_missing.qids.includes("quick.q2.gate.code"), "the others still are");
+    assert.match(j.ask_missing.line, /recorded ASK for quick\.q3\.offer\.review only/);
+  } finally { rmrf(c.root); }
+});
+
+// eval E2: a live lane wrote `chose=orc-reviewer-opus-5-med` for quick.q3.offer.review.
+// An invalid ASK stays OUT of the trace and comes back with the option ids; the
+// packet's other events are still written.
+test("trace write: an ASK with the wrong option ids is rejected with the right ones, the rest of the packet is written", () => {
+  const { root, logs } = project();
+  try {
+    fs.writeFileSync(path.join(logs, ".current"), RICH + "\n");
+    fs.writeFileSync(path.join(logs, RICH), "");
+    const pk = [
+      "phase: q3",
+      "events:",
+      '  - {ts: "270926 17:27:00.000", verb: "GATE review pass", tail: "offer shown"}',
+      '  - {ts: "270926 17:27:01.000", verb: "ASK quick.q3.offer.review", tail: "offered=orc-reviewer-opus-5-med|adhoc rec=orc-reviewer-opus-5-med chose=orc-reviewer-opus-5-med by=user"}',
+      "",
+    ].join("\n");
+    const r = write(root, pk, ["--json"]);
+    assert.strictEqual(r.status, 0, r.stderr + r.stdout);
+    const j = JSON.parse(r.stdout);
+    assert.strictEqual(Object.keys(j)[0], "ask_rejected_line");
+    assert.strictEqual(j.ask_rejected[0].options, "review-first|commit-direct|stop");
+    const txt = fs.readFileSync(path.join(logs, RICH), "utf8");
+    assert.match(txt, /GATE review pass :: offer shown/);
+    assert.doesNotMatch(txt, / ASK /, "the invalid ASK is not written");
+    // An ASK-only packet that is all invalid writes nothing and still exits 0.
+    const only = write(root, 'phase: q3\nevents:\n  - {ts: "270926 17:28:00.000", verb: "ASK quick.q3.offer.review", tail: "offered=a|b rec=a chose=a by=user"}\n', ["--json"]);
+    assert.strictEqual(only.status, 0);
+    assert.strictEqual(JSON.parse(only.stdout).lines_written, 0);
+  } finally {
+    rmrf(root);
+  }
+});
+
+// eval E2: `stop` at the commit offer AFTER the review was recorded as the same
+// qid. A repeat ASK with no new executor SPAWN since the last one is a follow-up.
+test("trace write: a repeat ASK in the same entry is a follow-up and is kept out; a new entry's ASK counts", () => {
+  const { root, logs } = project();
+  try {
+    fs.writeFileSync(path.join(logs, ".current"), RICH + "\n");
+    fs.writeFileSync(path.join(logs, RICH),
+      "[270926 17:40:00.000] hook     SPAWN orc-executor-sonnet-4-6-med :: entry 1\n" +
+      "[270926 17:45:00.000] orc      ASK quick.q3.offer.review :: offered=review-first|commit-direct|stop rec=none chose=review-first by=user\n" +
+      "[270926 17:46:00.000] hook     SPAWN orc-reviewer-opus-5-med :: review entry 1\n");
+    const ask = (ts, chose) => `phase: q3\nevents:\n  - {ts: "${ts}", verb: "ASK quick.q3.offer.review", tail: "offered=review-first|commit-direct|stop rec=none chose=${chose} by=user"}\n`;
+    const r = JSON.parse(write(root, ask("270926 17:48:00.000", "stop"), ["--json"]).stdout);
+    assert.match(r.ask_rejected[0].error, /follow-up/);
+    assert.strictEqual((fs.readFileSync(path.join(logs, RICH), "utf8").match(/ ASK /g) || []).length, 1);
+    fs.appendFileSync(path.join(logs, RICH), "[270926 17:50:00.000] hook     SPAWN orc-executor-sonnet-4-6-med :: entry 2\n");
+    const r2 = JSON.parse(write(root, ask("270926 17:55:00.000", "review-first"), ["--json"]).stdout);
+    assert.strictEqual(r2.ask_rejected, undefined, "a new entry answers again");
+    assert.strictEqual((fs.readFileSync(path.join(logs, RICH), "utf8").match(/ ASK /g) || []).length, 2);
+  } finally {
+    rmrf(root);
+  }
+});
+
+// eval E2: a live lane invented `q3-review`. An unknown qid is refused with the lane's ids.
+test("trace write: an ASK with an unknown question id is refused and the lane's real ids are named", () => {
+  const { root, logs } = project();
+  try {
+    const Q = "run-quick-get-random-270926-191359.txt";
+    fs.writeFileSync(path.join(logs, ".current"), Q + "\n");
+    fs.writeFileSync(path.join(logs, Q), "");
+    const r = JSON.parse(write(root, 'phase: q3\nevents:\n  - {ts: "270926 19:23:00.000", verb: "ASK q3-review", tail: "offered=yes|no rec=none chose=yes by=user"}\n', ["--json"]).stdout);
+    assert.match(r.ask_rejected[0].error, /unknown question id — use one of: .*quick\.q3\.offer\.review/);
+    assert.doesNotMatch(r.ask_rejected[0].error, /orc\.intake\.testgen/, "only this lane's ids");
+    assert.strictEqual(fs.readFileSync(path.join(logs, Q), "utf8"), "");
+  } finally {
+    rmrf(root);
+  }
+});

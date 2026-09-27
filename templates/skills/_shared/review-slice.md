@@ -50,6 +50,8 @@ a changed signature is a finding candidate, anchored like any other.
 - **`gotcha_card` is ALWAYS built** when anything matches — no switch removes it
   (`gotcha_card_budget` is only its size). Exit 1 (no match) → null, the normal
   case. Its header counts what the budget dropped; never cut it silently.
+  The session hook ALSO hands it to every `orc-reviewer-*`, `orc-verifier-*` and
+  `orc-judge-*` at `SubagentStart` (v2.0.2), so a slice that forgot it still has it.
   Before the card, run `orc gotcha sync --json` (it is due at most once per
   `gotcha_sync_hours`); exit 2 (a CLI that has no `sync`) or any failure → go on.
 - **`mode: disprove`** carries only the P0/P1 findings to test and their files.
