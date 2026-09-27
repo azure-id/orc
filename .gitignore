@@ -21,3 +21,12 @@ test/.timings.json
 orc-*-build/
 deepseek-dispatch-failure/
 deepseek-dispatch-failure-report.md
+
+# Process notes and scratch — kept on disk, never in the repo
+*-notes/
+promo-animation/
+knowledge-parts/
+claude-rules/
+/test.md
+/result.md
+/EVAL-REPORT.md
