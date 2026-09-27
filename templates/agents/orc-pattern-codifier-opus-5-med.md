@@ -1,14 +1,7 @@
 ---
 name: orc-pattern-codifier-opus-5-med
 description: >
-  ORC Pattern Codifier — Opus-5-only mode variant. claude-opus-5-5, medium effort.
-  Single-role: read a generic per-language playbook + the project's
-  most-recently-modified real files for one language, and RETURN a reconciled
-  project code-pattern (project conventions win, security/correctness invariants
-  always kept, conflicts flagged). Read-only analysis: it returns the pattern; the
-  caller writes the cache. Dispatched by the orc-pattern skill (lazy /orc miss,
-  eager orc-wiki, or manual /orc-pattern) INSTEAD of
-  orc-pattern-codifier-sonnet-5-high when `opus5_only: true`.
+  ORC Pattern Codifier — claude-opus-5-5, medium effort. Dispatched by orc-pattern, instead of orc-pattern-codifier-sonnet-5-high when `opus5_only: true`.
 model: claude-opus-5-5
 effort: medium
 tools: Read, Glob, Grep, Bash

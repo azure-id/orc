@@ -343,10 +343,14 @@ test("payload: every GATE name and lane token used in the payload is a declared 
     )
     .replace(/\r\n/g, "\n");
 
-  const gateRow = proto.split("\n").find((l) => l.includes("| `GATE <name>"));
-  assert.ok(gateRow, "found the GATE verb row");
+  // v2.0.0 T1 — the verb set is DATA: `TRACE_VERBS` in bin/cli.js (the table in
+  // `_shared/phases/trace-verbs.md` is linted against it both ways).
+  const cliSrc = fs.readFileSync(path.join(__dirname, "..", "bin", "cli.js"), "utf8");
+  const VERBS = new Function("return " + cliSrc.match(/const TRACE_VERBS = (\{[\s\S]*?\n\});/)[1])();
+  assert.ok(VERBS.GATE, "found the GATE verb in TRACE_VERBS");
+  const gateRow = VERBS.GATE.grammar.split(" ")[1];
   for (const name of ["grounding", "coverage", "graph", "evidence", "derivation", "facet", "schema", "judgment", "wave-boundary", "budget"])
-    assert.ok(gateRow.includes(name), `GATE name "${name}" is declared`);
+    assert.ok(gateRow.split(/[<>|]/).includes(name), `GATE name "${name}" is declared`);
 
   const laneRow = proto.match(/lane: orc {2,}#([\s\S]*?)\n\S/);
   assert.ok(laneRow, "found the lane enum");
@@ -1085,6 +1089,85 @@ test("read gate: a gate decision leaves a trace line that can be counted", () =>
     const before = traceOf();
     runHook(claudeDir, "orc-read-gate.js", readPayload(small));
     assert.strictEqual(traceOf(), before, "a pass-through writes nothing");
+  } finally {
+    rmrf(root);
+  }
+});
+
+// ── the session hook (v2.0.0 W6c — Q8 the bell, Q9 the run pointer) ─────────
+// Both halves are SILENT outside an open ORC run. The bell is also silent
+// unless `notify: bell`; the compact line needs a run folder that is not closed.
+
+function openRun(claudeDir, slug) {
+  const logs = path.join(claudeDir, "orc", "logs");
+  fs.mkdirSync(logs, { recursive: true });
+  const name = `run-orc-${slug}-010126-000000.txt`;
+  fs.writeFileSync(path.join(logs, name), "trace\n");
+  fs.writeFileSync(path.join(logs, ".current"), name + "\n");
+  return path.join(logs, name);
+}
+
+test("session hook: the bell is off by default, and silent outside a run", () => {
+  const { root, claudeDir } = freshInstall();
+  try {
+    openRun(claudeDir, "t1");
+    const off = runHook(claudeDir, "orc-session-hook.js", { hook_event_name: "Stop" });
+    assert.strictEqual(off.status, 0);
+    assert.strictEqual(off.stdout, "", "notify off (the default) emits nothing");
+    fs.writeFileSync(path.join(claudeDir, "orc.config.yaml"), "notify: bell\n");
+    fs.rmSync(path.join(claudeDir, "orc", "logs", ".current"));
+    const noRun = runHook(claudeDir, "orc-session-hook.js", { hook_event_name: "Stop" });
+    assert.strictEqual(noRun.stdout, "", "a normal chat never rings");
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("session hook: notify bell rings ONCE per burst of run activity, never in a subagent", () => {
+  const { root, claudeDir } = freshInstall();
+  try {
+    fs.writeFileSync(path.join(claudeDir, "orc.config.yaml"), "notify: bell\n");
+    const trace = openRun(claudeDir, "t2");
+    const sub = runHook(claudeDir, "orc-session-hook.js", { hook_event_name: "Stop", agent_id: "a1" });
+    assert.strictEqual(sub.stdout, "", "a subagent never rings");
+    const first = runHook(claudeDir, "orc-session-hook.js", { hook_event_name: "Stop" });
+    assert.strictEqual(first.status, 0);
+    assert.deepStrictEqual(JSON.parse(first.stdout), { terminalSequence: "\u0007" });
+    assert.ok(!("decision" in JSON.parse(first.stdout)), "it never blocks a stop");
+    const idle = runHook(claudeDir, "orc-session-hook.js", { hook_event_name: "Stop" });
+    assert.strictEqual(idle.stdout, "", "no run activity since the last bell: silent");
+    const later = new Date(Date.now() + 5000);
+    fs.utimesSync(trace, later, later);
+    const again = runHook(claudeDir, "orc-session-hook.js", { hook_event_name: "Stop" });
+    assert.match(again.stdout, /terminalSequence/, "the run moved: it rings again");
+    const garbage = runHook(claudeDir, "orc-session-hook.js", "{not json");
+    assert.strictEqual(garbage.status, 0, "exit 0 on any error");
+  } finally {
+    rmrf(root);
+  }
+});
+
+test("session hook: after a compaction, ONE line names the in-flight run's state-of-play", () => {
+  const { root, claudeDir } = freshInstall();
+  try {
+    const none = runHook(claudeDir, "orc-session-hook.js", { hook_event_name: "SessionStart", source: "compact" });
+    assert.strictEqual(none.stdout, "", "no run open: nothing");
+    openRun(claudeDir, "add-login");
+    const noFolder = runHook(claudeDir, "orc-session-hook.js", { hook_event_name: "SessionStart", source: "compact" });
+    assert.strictEqual(noFolder.stdout, "", "a run the disk cannot find gets no line");
+    const folder = path.join(claudeDir, "orc", "run", "add-login");
+    fs.mkdirSync(folder, { recursive: true });
+    const r = runHook(claudeDir, "orc-session-hook.js", { hook_event_name: "SessionStart", source: "compact" });
+    assert.strictEqual(r.status, 0);
+    assert.strictEqual(
+      r.stdout,
+      "orc: run add-login is in flight — read .claude/orc/run/add-login/state-of-play.md, then the checkpoint (hard rule 2)\n"
+    );
+    const startup = runHook(claudeDir, "orc-session-hook.js", { hook_event_name: "SessionStart", source: "startup" });
+    assert.strictEqual(startup.stdout, "", "only a compaction gets the line");
+    fs.writeFileSync(path.join(folder, "RESUME.closed.md"), "closed\n");
+    const closed = runHook(claudeDir, "orc-session-hook.js", { hook_event_name: "SessionStart", source: "compact" });
+    assert.strictEqual(closed.stdout, "", "a closed run is not in flight");
   } finally {
     rmrf(root);
   }

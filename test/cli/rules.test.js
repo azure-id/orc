@@ -417,9 +417,14 @@ test("the rules phase is ordered immediately after the house card", () => {
 
 test("the preflight and return contracts name the new fields", () => {
   const shared = path.join(__dirname, "..", "..", "templates", "skills", "_shared");
+  // v2.0.0 T10: preflight.md keeps a two-line pointer; the line's two spellings
+  // live in ONE place, the rules phase file.
   const pre = fs.readFileSync(path.join(shared, "phases", "preflight.md"), "utf8");
-  assert.match(pre, /rules: {4}ORC 65/);
-  assert.match(pre, /yours none/);
+  assert.match(pre, /orc rules slice --lane <lane> --json/);
+  assert.match(pre, /\.\/rules\.md/);
+  const rulesPhase = fs.readFileSync(path.join(shared, "phases", "rules.md"), "utf8");
+  assert.match(rulesPhase, /rules: {4}ORC 65/);
+  assert.match(rulesPhase, /yours none/);
   const ret = fs.readFileSync(path.join(shared, "return-validation.md"), "utf8");
   for (const f of ["rules_applied[]", "rules_conflicts[]", "rules_overridden[]"])
     assert.ok(ret.includes(f), "return-validation.md must define " + f);
@@ -478,4 +483,29 @@ test("orc rules slice — the compact form drops examples, never a rule", () => 
   for (const f of ["rules_applied[]", "rules_conflicts[]", "rules_overridden[]"])
     assert.ok(q.text.includes(f), "the compact card dropped " + f);
   assert.ok(q.text.includes("unsupported_request"), "the compact card dropped the boundary");
+});
+
+// ── v2.0.0 W6c — DE-17: the compact card for orc-mini / orc-fast, behind E4 ─
+// `rules_card_compact` is OFF until eval E4 passes. Off must be byte-identical
+// to the card before the key existed; on gives mini and fast the SAME compact
+// text quick gets, and never touches any other lane.
+test("orc rules slice — rules_card_compact: off is byte-identical, on compacts mini and fast only", () => {
+  const dir = tmpdir();
+  fs.mkdirSync(path.join(dir, ".claude"), { recursive: true });
+  const slice = (lane) => json(at(dir, "slice", "--lane", lane, "--json"));
+  const before = { mini: slice("orc-mini"), fast: slice("orc-fast"), orc: slice("orc"), quick: slice("orc-quick") };
+  assert.equal(before.mini.compact, false);
+  assert.ok(!("learned" in before.mini), "habits off: no learned field");
+
+  fs.writeFileSync(path.join(dir, ".claude", "orc.config.yaml"), "rules_card_compact: off\n");
+  assert.deepStrictEqual(slice("orc-mini"), before.mini, "explicit off = the default, byte for byte");
+
+  fs.writeFileSync(path.join(dir, ".claude", "orc.config.yaml"), "rules_card_compact: on\n");
+  const mini = slice("orc-mini");
+  const fast = slice("orc-fast");
+  assert.equal(mini.compact, true);
+  assert.equal(fast.compact, true);
+  assert.equal(mini.text, before.quick.text, "the SAME compact card quick gets (the same three packs)");
+  assert.equal(mini.line, before.mini.line, "the rules-in-force line never changes");
+  assert.deepStrictEqual(slice("orc"), before.orc, "the full lane is never touched");
 });

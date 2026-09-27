@@ -7,7 +7,8 @@ beyond the slice below. Do exactly one task.
 - Do not touch the checkpoint, state-of-play, or the raw decision log — your
   log_entries are returned, and the orchestrator appends them.
 - Emit milestone pings as you progress.
-- When done (or blocked), emit the return structure from `core.md` and STOP.
+- When done (or blocked), emit the return structure your agent file defines
+  and STOP.
   Do not continue past your task.
 
 [Orchestrator: append the input slice here at spawn time.]

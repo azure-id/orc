@@ -12,29 +12,18 @@ description: >
 
 # orc-testgen
 
-One entry point: spawned via the Task tool with `subagent.md` framing + the
-slice, which points to `core.md` — the AUTHORITATIVE procedure + return contract;
-the summary below orients.
+A pointer. The orchestrator spawns `orc-test-author-opus-5-med` via the Task
+tool, prepending `subagent.md` framing + the input slice. It WRITES test cases;
+it never runs them and never gates the ship.
 
-## What the worker does (summary)
-
-1. Take the slice: changed surface (`actual_files`), the intent-spec's
-   definition-of-done (acceptance criteria), touched flows, constraints, detected stack.
-2. Write **automated test files** in the project's framework, covering the changed surface.
-3. Write a manual **TEST-PLAN.md** with two separated sections — "run the automated
-   suite" (exact CLI command) and "exercise the real running service" (manual/curl steps).
-4. For an HTTP/API backend, write a Postman-importable **test-cases.http** curl bundle
-   (env-var placeholders — never real secrets).
-5. Run NOTHING. Advisory `notes[]` may flag a case the code likely won't satisfy.
-
-The manual deliverables (TEST-PLAN.md + test-cases.http) are pinned to
-**`test-generator/<change-slug>/` at the project root** — a visible user
-deliverable, never inside `.claude/` or the run folder (see `core.md`).
-
-**Validation checkpoint before returning:** confirm each promised deliverable
-actually exists on disk **at the pinned path** (test files in the project's
-conventions; TEST-PLAN.md and — when the stack exposes HTTP — test-cases.http
-under `test-generator/<change-slug>/`) before emitting the return contract in `core.md`.
+- **Input slice** (the orchestrator builds it): `core.md`.
+- **Procedure + return contract** (the ONE source): the agent file,
+  `.claude/agents/orc-test-author-opus-5-med.md`. The manual deliverables
+  (TEST-PLAN.md + test-cases.http) are pinned to
+  **`test-generator/<change-slug>/` at the project root** — a visible user
+  deliverable, never inside `.claude/` or the run folder.
+- **Validator** (the caller checks every return against it):
+  `../../../_shared/return-validation.md`.
 
 Fixed model: `orc-test-author-opus-5-med` (Opus 5.5 medium — authoring good
 integration tests is a judgment task). Opt-in: the orchestrator dispatches this

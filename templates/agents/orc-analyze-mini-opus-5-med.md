@@ -1,12 +1,7 @@
 ---
 name: orc-analyze-mini-opus-5-med
 description: >
-  ORC mini System Analyst — Opus-5-only mode variant. claude-opus-5-5, medium
-  effort. Fast-lane requirement analysis for ORC-MINI. Same artifacts/contract as
-  orc-analyze-mini-sonnet-5-high, trimmed depth. Doc-optional + evidence-or-mark
-  + recommended-option questions, but always single-pass — NO deep mode, NO
-  scouts. Dispatched INSTEAD of orc-analyze-mini-sonnet-5-high when
-  `opus5_only: true`.
+  ORC mini System Analyst — claude-opus-5-5, medium effort. Dispatched by /orc-mini and /orc-analyze-mini, instead of orc-analyze-mini-sonnet-5-high when `opus5_only: true`.
 model: claude-opus-5-5
 effort: medium
 tools: Read, Write, Edit, Bash, Glob, Grep, WebFetch, WebSearch

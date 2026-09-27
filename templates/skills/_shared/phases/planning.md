@@ -1,16 +1,6 @@
 # Phase — Planning   (id: `planning`)
 
-> **Shared phase file.** Moved out of `orc/SKILL.md` at v1.0.0 W12, and into
-> this library at W13 when `orc-diy` became its second reader. A spine is loaded
-> IN FULL when its skill activates; this is loaded when the phase fires, and most
-> runs skip most phases.
->
-> **Two layers, and a lane reads exactly one.** `full` is `/orc`'s procedure.
-> `composed` is what `orc diy compile` stitches — the same phase expressed as
-> `<!-- diy:when -->` variants over a composed flow, NOT a second copy of the
-> procedure. Reading the wrong one is the failure `README.md` names: a lane
-> doing a phase its product promise says it does differently.
-> `orc lane phases <lane> --json` names the layer for each lane.
+> **Shared phase file** — read when the phase fires. A lane reads ONE layer: `full` (`/orc`) or `composed` (the `<!-- diy:when -->` variants `orc diy compile` stitches). `orc lane phases <lane> --json` names it.
 
 <!-- orc:layer full -->
 
@@ -21,7 +11,7 @@ resolved values of every config key this run will consume (ALWAYS `opus5_only` �
 proof `/orc-retro` audits that the run honored the config.
 **Wiki consult (load `wiki-consult.md`;
 always report — no tier is silent):** read the FRESH/AGING/STALE tier from
-**`orc wiki status`** (v0.41.0 — deterministic; never hand-compute it from `wiki-meta.json`), pull the relevant pages (incl. cross-cutting maps like `orc-reference-api-surface`), apply
+**`orc wiki status`** (deterministic; never hand-compute it from `wiki-meta.json`), pull the relevant pages (incl. cross-cutting maps like `orc-reference-api-surface`), apply
 `code > fresh wiki > stale wiki (hints) > model priors`, emit
 `WIKI-CONSULT <tier> :: docs=<pages>`, print the one-line tier report (every tier, `absent` included), and attribute per-dispatch too — `wiki:` on the `DISPATCH` line + a `wiki_used` return (wiki-consult.md Step 5). **Crosslink:** per wiki-consult.md, inject
 the cached `.claude/orc/crosslink/needs.json` contract into any boundary-touching
@@ -44,17 +34,17 @@ facets. Also run `orc graph cochange <each candidate file> --if-enabled --json -
 it answers "what else will I have to touch" from HISTORY, which a static edge
 cannot see. Co-change is a HINT about people, never a dependency — exit 4 means
 this file changes alone, which is an answer. Exit 3 or 4 → plan exactly as before.
-**Pact / boundary / aftermath / wiki debt (v0.46.0 — all CONSUMED here, never
+**Pact / boundary / aftermath / wiki debt (all CONSUMED here, never
 written here):** probe `orc pact status --json` (`pact_gate`, default `warn`),
 `orc boundary status --json` (`boundary_gate`, default `warn`), `orc wiki debt
 --json`, and — only to decide whether the preflight's `after:` line fires at all —
 `orc aftermath status --json`. Print each probe's own `line` VERBATIM; never
 recount or re-word one. Gates: `../../orc-pact/references/gate.md` +
-`../../orc-boundary/references/gate.md`. **Challenge (v0.47.0, `challenge_gate`,
+`../../orc-boundary/references/gate.md`. **Challenge (`challenge_gate`,
 default `warn`):** when the run's INPUT DOCUMENT has a cycle, print
 `orc challenge status <slug> --json`'s `preflight_line` verbatim — building from
 a document that has not passed its own review is worth one line. There is no
-`block` mode (the `/orc-pact` precedent). **Extra (v0.50.0, `extra_enabled`) —
+`block` mode (the `/orc-pact` precedent). **Extra (`extra_enabled`) —
 resolved HERE, announced HERE, never silent:** load `../extra-dispatch.md`;
 per task run `orc extra resolve <score> --role executor --risk <n> --json`, and
 before wave 1 settle its two pre-dispatch states, both PRINTED — a `needs_reping`
@@ -63,7 +53,7 @@ profile (re-ping; a STALE profile still routes) and a vaulted credential, which 
 Claude rather than stopping the run. **Preflight:** print the compact block per
 `../../orc/references/preflight-report.md` once wiki + crosslink (+ pattern/waves) resolve.
 
-Ask which planner: **Superpowers / OpenSpec / Requirement Planner / ORC
+Ask which planner (H `orc.phase-1.planner`): **Superpowers / OpenSpec / Requirement Planner / ORC
 (self)**. With an analyst requirement-spec present, the Requirement Planner
 is the natural choice (consumes the spec; does NOT re-question scope); apply
 the `git_head` staleness valve first (analyst-gates.md). Dispatch the planner
@@ -80,7 +70,7 @@ only input that does NOT proceed to Phase 2 (each repo builds later, in its own
 `../../orc/schemas/planning-output.md` (per-task `declared_files` incl. tests,
 `grounding[]`, `acceptance[]`, `requirements[]`, `spec_invariants[]`,
 `depends_on`, `owns_area`, `spec_ref`, + a `coverage` echo, + `tdd_spec` —
-TDD is ALWAYS ON in full orc/ultra but **SCOPED to what can actually fail (v0.41.0)**: a `disposition` per entry (`new-surface | behavior-change | covered-by-existing | no-behavior | no-runner`) DERIVED from the planner's facets — constants/translations/file-splits get NO test, a cited `risk[]` is never scoped out, and a PAIRED task materializes it, never a Wave 0 (schema notes 7-8; gate check 5);
+TDD is ALWAYS ON in full orc/ultra but **SCOPED to what can actually fail**: a `disposition` per entry (`new-surface | behavior-change | covered-by-existing | no-behavior | no-runner`) DERIVED from the planner's facets — constants/translations/file-splits get NO test, a cited `risk[]` is never scoped out, and a PAIRED task materializes it, never a Wave 0 (schema notes 7-8; gate check 5);
 missing declared files → extract and confirm before leaving this phase.
 
 **Phase 1 exit gate** (deterministic — full checks in analyst-gates.md; emit

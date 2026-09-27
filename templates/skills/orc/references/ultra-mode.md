@@ -24,6 +24,8 @@ Apply at Phase 0, on top of the normal config resolution:
   low → medium, which makes both bands medium. It is still a floor — it never
   lowers a band, and it never raises `[90,100]` past medium.
   Show the remapped table with the Phase 2 scoring table.
+- **Habits** (`habits{}` present) never answer a forced key or question here —
+  ultra wins; say so on the habits preflight line. Record those `ASK`s `by=config`.
 
 > Opus-5-only mode: if `opus5_only`, every role this lane dispatches is already
 > Opus 5.5 (advisor and judge are pinned there by default) and the scouts rise to
@@ -83,13 +85,13 @@ author's reasoning or self-assessment.
      evidence`. An R# with an EMPTY diff column is a deterministically caught
      missing implementation — dispatch the fix wave directly, no judge needed
      for that miss.
-  2. **Static analysis**: run the project's own tooling on the changed files
-     when the stack detection found any (linter, sonar-scanner,
-     type-checker) — never install tooling. Inject results into the slice;
-     tool findings on changed lines are blocking input the judge triages.
+  2. **Static analysis**: the shared R1 free check
+     (`../../_shared/review-slice.md` §1) — reuse Phase 5's `tool_findings[]`;
+     re-run it when a fix wave changed files. Never install tooling.
+     Tool findings on changed lines are blocking input the judge triages.
   Slice adds: matrix, changed-file LIST (never an inlined diff — the judge
-  reads matrix-guided via its own Read/Grep), verify report, static-analysis
-  results, the resolved pattern's blocking invariants. REVISE → scored
+  reads matrix-guided via its own Read/Grep), verify report, `tool_findings[]`,
+  `gotcha_card` (§2), the resolved pattern's blocking invariants. REVISE → scored
   executor **fix wave** for only the affected tasks (findings verbatim in
   slices) → re-verify → re-judge. All clear → Phase 7.
 

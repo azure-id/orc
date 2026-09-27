@@ -64,13 +64,11 @@ Verdict: <READY / NEEDS FIXES>
 
 ## Behavior trace (always on)
 
-`../_shared/phases/trace.md` (`core`, at run start; `orc lane phases` names
-the file and the layers). Lane token `verify`, tier **Single-dispatch** —
-exactly ONE end-of-run packet, dispatched solo before `.current` is deleted.
-At run start write `log_dir/.current` = `run-verify-<slug>-<DDMMYY>-<HHMMSS>.txt` AND
-`touch the trace file` of that name in the SAME step.
-Nothing else about the protocol is restated here; a phase that ends with
-`zero new trace lines is a protocol violation`.
+`../_shared/phases/trace.md` (`core`, at run start; `orc lane phases orc-verify --json` →
+`trace_grammar` gives the verbs). Lane token `verify`, tier
+**Single-dispatch**. At run start write `log_dir/.current` =
+`run-verify-<slug>-<DDMMYY>-<HHMMSS>.txt` AND `touch the trace file` of that name
+in the SAME step. A phase that ends with `zero new trace lines is a protocol violation`.
 
 ## Boundaries
 
@@ -80,33 +78,17 @@ Nothing else about the protocol is restated here; a phase that ends with
 - Reminder: to see usage limits, tell the user to run `/usage` (never invoke it
   programmatically).
 
-## Config
+## Lane contract (`../_shared/lane-contract.md` — read it ONLY when a call exits ≠ 0)
 
-Resolve with `orc lane config orc-verify --json` and obey `effective`. Never merge
-`.claude/orc.config.yaml` yourself, and never re-derive a precedence. Exit ≠ 0 →
-say so and use `../_shared/config-precedence.md`'s documented defaults, out
-loud. Nothing this lane reads is contested, gated or a stop, so it owes no
-preflight line and has no gate to honour.
+- **Calls:** `orc lane calls orc-verify --json` names every call and its exit codes.
+  **An exit code is an ANSWER where it says so, not a failure.** Make no other call.
+- **Config:** `orc lane config orc-verify --json`. Obey `effective`. Never merge
+  `.claude/orc.config.yaml` yourself (`../_shared/config-precedence.md`). Nothing
+  here is contested, gated or a stop: no preflight line, no gate to honour.
+- **Rules:** `orc rules slice --lane orc-verify --json` is the ONLY assembler
+  (`../_shared/phases/rules.md`). Its `line` prints VERBATIM at preflight.
 
-## Calls
-
-**ONE catalogue, and it is not you:** `orc lane calls orc-verify --json` names every
-CLI call this lane makes, each with its exit-code contract, its cost, when to run
-it, and what an EMPTY answer means. Never invent a spelling, never re-word an
-exit code, and never re-derive a state word — the CLI's state words are the only
-state words, and **an exit code is an ANSWER wherever that contract says so, not
-a failure**. A call the answer does not name is a call this lane does not make.
-Exit ≠ 0 from the catalogue itself → say the CLI is unavailable and name the
-command you are about to run, out loud, before running it.
-
-## Rules — the anti-slop card (`../_shared/phases/rules.md`)
-
-`orc rules slice --lane orc-verify --json` is the ONLY assembler; never build
-the card here. It rides under the house rules and above the task —
-**house rules > your project's rules > ORC's own packs** — and its `line` prints
-VERBATIM at preflight. Returns gain `rules_applied[]`, `rules_conflicts[]` (a gap,
-never a silent choice) and `rules_overridden[]`.
 ## Waiting mid-run (`/orc-wait`)
 
 Canonical: `../_shared/wait.md`. **`a lane that waits without a hand-back` has broken this contract.**
-Checkpoint **none** · safe point **single dispatch**. Nothing here to checkpoint, so all three modes behave identically — say so rather than asking. Never begin a wait between a dispatch and its validated return, or before the smoke gate has reported.
+Checkpoint **none** · safe point **single dispatch**.

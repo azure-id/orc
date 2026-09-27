@@ -66,3 +66,11 @@
   file whose name disagrees with its frontmatter breaks the downgrade check.
   See `knowledge.md` §4u.
 
+- **Both halves of a model pair are GENERATED from one body (v2.0.0 T15).** The
+  fixed-role pairs (analyze-mini, claude-writer, pattern-codifier, planner-mini,
+  recon, retro, scout, wiki-scanner) come from `agents-src/twins/*.template.md`
+  through the `TWINS` table in `bin/build-agents.js` — 16 files. A model or
+  effort change is a TWINS row edit + `npm run build:agents` (and still a
+  RENAME). Never hand-edit a twin: `node bin/build-agents.js --check` in
+  `npm run verify` fails on it. See `knowledge.md` §4z.34.2.
+

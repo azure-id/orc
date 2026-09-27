@@ -10,6 +10,238 @@ Format: `### v<version> — <title> _(<date>)_`.
 
 ---
 
+### v2.0.0 — the coding lanes remember what you fixed and how you work _(2026-09-27)_
+
+**Still on the unscoped `orc` package?** Do this once first - your `orc upgrade`
+is the pre-v0.56.0 one and cannot install itself. Full detail in the CAUTION at
+the top of this file.
+
+- **Step 1 - release the command from the old package:** `npm uninstall -g orc`
+- **Step 2 - install the current package:** `npm i -g @azure-id/orc`
+- **Step 3 - re-apply it to your project:** `orc update`
+
+**Do not use `npm i -g -f`.** Full detail in v0.56.0 below.
+
+This release does five things. The coding lanes load less than half the text
+they loaded before. ORC can learn the answers you give to its questions, but
+only when you turn that on, and it applies nothing without your yes. The repair
+memory (gotchas) learns from reviews, Sonar, SARIF, PR threads and closed
+defects. The reviewer returns more facts about each finding. And a set of small
+tools: `orc undo`, `orc pr threads`, `orc ci failed`, `orc ci flaky`, an
+end-of-run card, questions per run in `orc stats`, a terminal bell, and the run
+pointer after a compact.
+
+**BREAKING.** This is a major version because five contracts change in a way
+that a 1.9.x user or a fork can see:
+
+1. **`/orc-quick` now takes part in the review memory.** Before, quick did not
+   read gotchas and did not record them, and its dispatch gate said never to
+   remember an answer for the next entry. Now quick reads the gotcha card when
+   it offers a review, records the review outcome, and shows a habit
+   suggestion on its `→ suggested` line (only when `habits` is not `off`). The
+   gate is still asked every time.
+2. **The reviewer return has new REQUIRED fields**: `category` (a closed set of
+   11 values), `scenario` on every P0 and P1, and `pre_existing`. A forked or
+   hand-edited reviewer agent that does not return them fails the return
+   validation, and the orchestrator treats its return as malformed.
+3. **The closed trace verb set is larger**: `ASK` (one answered question),
+   `FINDING-OUTCOME` (what became of each finding at review close) and the
+   `GATE flaky` result. `FINDING` has optional tail fields
+   (`pre=` `suppressed=` `folded=`). A trace reader that treats the verb set as
+   closed must learn them. Old traces parse as before.
+4. **The lane spines have a new shape.** The shared lane contract text moved to
+   `_shared/lane-contract.md`, and worker instructions live in the agent files
+   only. `orc update` overwrites an installed spine as it always did, so a
+   hand patch on a spine is lost.
+5. **Config resolution has a new rank, `learned`,** below your config file and
+   above the shipped default, and a new state word `learned`. Both appear ONLY
+   when `habits` is not `off`.
+
+Nothing is removed: no config key is retired, no command is renamed, and no file
+that you own moves.
+
+**T — the lanes load less.** Each lane reads the same rules from fewer bytes.
+The trace protocol went from 36,089 to 7,885 bytes (the full verb table is now
+on demand, and each lane gets only its own verbs from `orc lane phases`). The
+file banners, history and repeated exit codes left the payload. The coding
+spines have a 16,384-byte cap. Worker instructions have one source, the agent
+file. The descriptions that load in every session went from 11,711 to 6,587
+characters, and three internal skills are hidden from the skill list.
+`orc lane config --json` now carries a `probes{}` block, so a preflight reads
+up to seven probe answers from one call. `orc trace write --packet -` writes
+the `.txt` and the `.jsonl` of a trace from one packet (the Haiku trace writer
+is now the fallback). 16 more agent files are generated from
+`agents-src/twins/`, and `node bin/build-agents.js --check` (part of
+`npm run verify`) covers them.
+
+Always-loaded bytes per lane (`spine + command + when: "always"` references):
+
+| Lane | 1.9.2 | after the trim | 2.0.0 | change |
+|---|---|---|---|---|
+| orc | 60,169 | 29,289 | 29,124 | −52 % |
+| orc-mini | 56,153 | 24,851 | 24,697 | −56 % |
+| orc-fast | 59,142 | 27,793 | 27,750 | −53 % |
+| orc-quick | 61,858 | 30,998 | 30,768 | −50 % |
+| orc-verify | 42,330 | 13,224 | 13,035 | −69 % |
+| orc-test | 61,566 | 28,295 | 27,994 | −55 % |
+| orc-pr-setup | 56,130 | 24,673 | 24,380 | −57 % |
+| orc-pr-driver | 48,456 | 18,071 | 17,882 | −63 % |
+| orc-analyze | 52,351 | 21,514 | 21,339 | −59 % |
+| orc-analyze-mini | 43,792 | 13,401 | 13,212 | −70 % |
+| orc-poly | 51,483 | 20,826 | 20,637 | −60 % |
+| orc-route | 47,454 | 16,923 | 16,734 | −65 % |
+| orc-wait | 7,082 | 6,696 | 6,693 | −5 % |
+| orc-diy | 8,098 | 5,292 | 5,278 | −35 % |
+| context-combiner | 13,193 | 11,472 | 11,472 | −13 % |
+| orc-pattern | 45,748 | 16,249 | 16,060 | −65 % |
+| orc-advisor | 2,916 | 2,605 | 2,605 | −11 % |
+| orc-judge | 4,679 | 4,280 | 4,280 | −9 % |
+| **sum** | **722,600** | **316,452** | **313,940** | **−57 %** |
+
+The habits, gotchas and review work that came after the trim added no byte to
+any lane above its trimmed value: the new text is read on demand.
+
+**H — habits (off by default).** New key `habits`: `off` · `observe` ·
+`propose`.
+
+- `off` (the default) costs zero tokens: `orc lane config --json` has no
+  habits field (with `--no-probes` it is byte-identical to 1.9.2), and no lane
+  writes an `ASK` line.
+- `observe`: each answered question writes one `ASK` line into the trace.
+  `orc habit show` computes your usual answers from those lines. It proposes
+  nothing.
+- `propose`: at the END of a run, at most once, ORC asks whether an answer you
+  keep giving should become your usual one. The rule is fixed in the CLI: at
+  least 5 full-weight answers, a Wilson lower bound of 0.55 or more, and the
+  last 3 answers the same.
+- Nothing is applied without your yes. There is no automatic level, and
+  `auto` is refused by name. An accepted habit is the `learned` rank, below
+  your config file: `orc config set` always wins. `orc habit forget <id>`
+  undoes it.
+- A habit can learn only toward the careful side: `review_before_push: on`,
+  `mini_tdd: on`, `quick_update_tests: on`. A habit to skip a review, to drop
+  TDD or to continue on a stale wiki is never applied. A dispatch gate is
+  asked every time; a habit only orders the offer.
+- 30 question points in the lanes carry an `(H <qid>)` mark.
+  `orc habit points` lists them.
+- Commands: `orc habit show | log | points | why | accept | decline | forget |
+  reset | doctor | export | purge`, and `orc habit repo` for the soft
+  preferences read from git history (commit, branch and test naming).
+- New keys: `review_before_push` (`ask`), `mini_tdd` (`ask`),
+  `quick_update_tests` (`ask`).
+
+**G — gotchas v2, importers and sync.** The repair memory learns from more
+sources, and the reviewer gets a card.
+
+- `orc gotcha add | match | card | filter | observe | accept | quality | why`,
+  `orc gotcha list --candidates` and `orc gotcha export --review-md`.
+- `orc gotcha card` is the reviewer card, sized by `gotcha_card_budget`
+  (600 tokens, minimum 200). It is always on: `gotcha_card_budget` is a size,
+  not an off switch. An entry that does not fit is counted in the card header.
+- Observations go to `.claude/orc/observations.jsonl`. A candidate becomes an
+  entry by a fixed rule: an in-lane red → green with a reproduction, a miss, a
+  security finding with a CWE tag or a HIGH impact, or 3 addressed cases in 2
+  PRs within 90 days. `orc gotcha accept <C-id>` promotes one by hand.
+- `orc gotcha filter` drops suppressed, folded and noisy advice. It never
+  removes a P0 or a P1.
+- Importers: `orc gotcha import sarif <file>`,
+  `orc gotcha import sonar` (the token comes from `SONAR_TOKEN` only),
+  `orc gotcha import pr <n>` (human threads only) and
+  `orc gotcha import issues`. `orc gotcha sync` runs every source that is
+  available, incremental and time-boxed. New keys: `gotcha_card_budget`,
+  `gotcha_sync_hours` (6), `sonar_url`, `sonar_project`, `sonar_org`.
+- A v1 `gotchas.md` stays valid, with no rewrite. The 1.9.2 parser still reads
+  a file that 2.0.0 wrote (a test copies its regex).
+- The status line gotcha count now shows a number. It was always empty.
+
+**R — the reviewer v2.** New `_shared/review-slice.md` names the slice fields
+once. The reviewer gets the diff ranges, the gotcha card, the rules card and
+the tool findings. It returns `category`, `cwe`, `scenario`, `pre_existing`,
+`group` and `confidence` on each finding. `/orc` and `/orc-ultra` can dispatch
+a disprove pass on a P0/P1. A re-review gets the previous findings. At review
+close the lane records each outcome, and `orc gotcha quality` measures the
+acceptance per category.
+
+**Q — quality of life.**
+
+- **`orc undo --run <slug>`** prints the commands that revert ONLY the files the
+  run changed, back to the snapshot taken at run start
+  (`orc run snapshot`). It changes nothing until you add `--apply`. An edit you
+  made before the run stays.
+- **`orc pr threads <n>`** lists the unresolved review threads.
+  **`orc ci failed`** lists the failing CI steps. Both are read-only.
+  `/orc-quick` takes a red CI, or Sonar and SARIF issues, as a request.
+- **`orc ci flaky`** tells a flaky local red from a real one. A flaky re-run
+  does not use a repair round, and the trace gets `GATE flaky`.
+- **The end-of-run card** names what changed and the undo command. Quick
+  prints it in place of `git checkout -- .`.
+- **`orc stats --json`** has `questions{}`: questions per run, per lane and per
+  point.
+- **`notify: bell`** rings the terminal bell once when a turn of an ORC run
+  ends. `off` is the default and is silent.
+- **After a compact**, the session hook prints the run pointer line again.
+- **`rules_card_compact`** (`off`) would give `/orc-mini` and `/orc-fast` the
+  compact rules card. It stays off until eval E4 passes.
+
+**U — `orc ui` ▸ Behaviour.** A new panel under Stats, key `u`. It shows the
+learning switch (Off · Observe · Propose), your habits with their evidence and
+the buttons the CLI allows, the rhythm of your runs, the gotchas and what the
+reviewer will see, review quality per category, and the answer log. It renders
+the CLI's lines and computes no habit. A `never` habit has no button. With
+`habits: off`, one card replaces the tabs. Reduced motion stops all motion.
+
+**Upgrade notes — what a 1.9.2 install keeps, and what changes.**
+
+- `.claude/orc.config.yaml` is read as it is. No key is renamed or retired. The
+  new keys resolve to their defaults: `habits: off`, `review_before_push: ask`,
+  `mini_tdd: ask`, `quick_update_tests: ask`, `gotcha_card_budget: 600`,
+  `gotcha_sync_hours: 6`, `notify: off`, `rules_card_compact: off`, and the
+  `sonar_*` keys empty.
+- `.claude/orc/gotchas.md` and its archive stay valid, with no rewrite. A
+  downgrade to 1.9.2 still parses the file.
+- `gotchas: off` no longer removes the reviewer card, because review learning is
+  always on. `orc config set gotchas off` says so. An old `gotchas: off` still
+  turns off the executor block (`orc gotcha match` exits 4).
+- Old traces are read as they are. They have no `ASK` lines, so the habits start
+  at `none yet`. Nothing is guessed from old `NOTE` lines.
+- Every existing field of `orc lane config --json` and `orc config list --json`
+  is unchanged (a test pins them). `probes{}` is added; `habits{}`, the
+  `learned` source and the `learned` state appear only when `habits` is on.
+- `orc gotcha status | list | show | prune` are unchanged, with the same exit
+  codes.
+- **A DIY flow compiled by 1.9.x is STALE after the update**, because the
+  version and the composed layers changed. Run `orc diy compile` after the
+  update. Until then `orc diy status` exits 1 and `/orc-diy` offers the compile
+  or plain `/orc`.
+- A forked or hand-edited reviewer agent fails the v2 return validation (see
+  BREAKING item 2). Hand-edited installed spines are overwritten, as always.
+- **`orc update` wires the new session hook** (`orc-session-hook.js`) into
+  `.claude/settings.json`: ONE `Stop` entry and ONE `SessionStart` entry with
+  the matcher `compact`. It is always wired. The `Stop` hook reads `notify` first
+  and stays silent unless `notify: bell`. `orc doctor` checks both entries, and
+  when one is missing it names `orc update` as the fix
+  (`session-hook-unwired`).
+- New files are user data: `habits-state.json`, `habits-cache.json`,
+  `observations.jsonl`, `gotchas-sync.json`. They are never in the install
+  manifest, and they survive `update`, `update --prune` and `doctor --fix`.
+- Node ≥ 18 and zero npm dependencies, as before.
+
+**Evals owed.** Four evals are prepared and NOT run. Each needs a live Claude
+Code session in the sandbox:
+
+- **E1** — trace parity before and after the trim.
+- **E2** — six `/orc-quick` requests under `habits: propose` give one proposal,
+  and the seventh shows `→ usual`.
+- **E3** — five reviews with the gotcha card and five without it. The card
+  stays on whatever the result is.
+- **E4** — the compact rules card on `/orc-mini` and `/orc-fast`.
+  `rules_card_compact` stays `off` until E4 passes.
+
+**What you have to do:** `orc update`. Then, if you use `/orc-diy`,
+`orc diy compile`. To try habits, `orc config set habits observe`.
+
+---
+
 ### v1.9.2 — the code graph gets its own tab, and Opus 5 becomes Opus 5.5 _(2026-09-23)_
 
 **Still on the unscoped `orc` package?** Do this once first - your `orc upgrade`

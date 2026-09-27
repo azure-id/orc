@@ -4,11 +4,10 @@ One compact, user-visible block printed ONCE at Phase 1, after the planning
 input is settled (wiki consulted, crosslink probed, waves computed at Phase 2 —
 so print it at the point all inputs exist, typically end of Phase 1 / start of
 Phase 3). This is **presentation only** — no new probes; every value is already
-computed by the wiki consult (Change 3), the crosslink probe (Change 5), the
-pattern resolve gate (Change 4), and wave grouping.
+computed by the wiki consult, the crosslink probe, the pattern resolve gate,
+and wave grouping.
 
-The point is that the four knowledge gates the run used to keep silent are now
-always surfaced: the user always knows whether the run is grounded (wiki),
+The point: the four knowledge gates are ALWAYS surfaced: the user always knows whether the run is grounded (wiki),
 whose house style is in force (pattern), whether peer contracts are in play
 (crosslink), where the trace is, and when the run will pause.
 
@@ -49,7 +48,7 @@ waves:     3 planned — will pause after wave 2 (batch_pause_every=2)
   that the run is not learning from its own repairs, and a user who did not should
   see that it is. Canonical: `../../_shared/gotchas.md`. `.claude/orc/gotchas.md`
   is where the entries live.
-- **wiki, the debt tail (v0.46.0):** append `· <n> docs pending refresh, <tok> /
+- **wiki, the debt tail:** append `· <n> docs pending refresh, <tok> /
   <$>` from `orc wiki debt --json` **only when debt exists** (exit 1). Exit 0
   appends nothing — a tail that says "no debt" on every run is a tail people stop
   reading, and this one has to be legible the time it matters.
@@ -73,7 +72,7 @@ waves:     3 planned — will pause after wave 2 (batch_pause_every=2)
 - **crosslink:** the crosslink line from `wiki-consult.md` when a probe hit
   (`cached` or `configured-no-cache`); omit the whole line when crosslink is
   not in play (state `none`).
-- **extra:** (v0.50.0) printed on **every** run where `config.extra_enabled` is
+- **extra:** printed on **every** run where `config.extra_enabled` is
   true — including a run where nothing routed foreign (`ON — 0 of 9 tasks
   foreign; no route row covers this plan's scores`). This is the P0 line
   (`a lane that sends work off Claude without saying so`), so unlike every other
@@ -115,7 +114,7 @@ waves:     3 planned — will pause after wave 2 (batch_pause_every=2)
   be naming the wrong half for every covered score.
 - **tdd:** ALWAYS printed on a lane whose TDD policy is on — BOTH branches, not
   only the exemption. Counted straight from the plan's `tdd_spec`, broken down
-  by `disposition` so the user sees **what got no test and why** (v0.41.0):
+  by `disposition` so the user sees **what got no test and why**:
 
   ```
   tdd:  3 tasks with tests (T3, T6, T9) · 2 covered-by-existing · 2 no-behavior
@@ -150,10 +149,10 @@ block.
 
 ---
 
-# The `forecast:` block (v0.42.0) — printed EARLIER, and separately
+# The `forecast:` block — printed EARLIER, and separately
 
 A second, shorter block. It is NOT part of the preflight block above and does not
-change it. It answers the one question ORC never answered: **what will this run
+change it. It answers one question: **what will this run
 cost me in time, before it starts?**
 
 ## When

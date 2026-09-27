@@ -25,6 +25,7 @@ const { wiki, wikiDocs, wikiShow, wikiCoverage, wikiCoverageFull, wikiUnregister
 const { runs, runDetail, runDetailClosed, aftermath } = require("./runs.js");
 const { stats, budgetForecast, budgetRates } = require("./stats.js");
 const { pact } = require("./pact.js");
+const B = require("./behaviour.js");
 const { boundary } = require("./boundary.js");
 const { usage, waitLanes, waitStatus } = require("./wait.js");
 const hookui = require("./hookui.js");
@@ -339,6 +340,30 @@ module.exports.get = function get(route, q) {
       return gotchaPrunePreview;
     case "/api/stats":
       return stats;
+    // v2.0.0 W7 — the Behaviour panel. The `habits` mode is the one fixture
+    // with STATE: the learning switch posts `/api/config/set` (below), and
+    // the next read answers in that mode, so off · observe · propose are all
+    // reachable from the panel itself. The 30d window is the EMPTY answer
+    // (no ASK lines yet, and below the review floor) — a window with nothing
+    // in it is exactly where those two states happen on a real machine.
+    case "/api/habits":
+      if (HABITS_MODE.value === "off") return B.habitsOff;
+      if (q && q.window === "30d") return B.habitsEmpty;
+      return HABITS_MODE.value === "observe" ? B.habitsObserve : B.habitsPropose;
+    case "/api/habits/log":
+      return HABITS_MODE.value === "off" ? B.habitLogEmpty : B.habitLog;
+    case "/api/habits/states":
+      return B.habitStates;
+    case "/api/habits/points":
+      return B.habitPoints;
+    // A path under a scope some gotcha holds answers the card; anything else is
+    // the zero-match ANSWER, which is the CLI's exit 1 and "no card".
+    case "/api/gotcha/card":
+      return /src\/routes\/|tests\/|client\/src\/i18n\//.test(String((q && q.files) || "")) ? B.gotchaCard : B.gotchaCardNone;
+    case "/api/gotcha/quality":
+      return q && q.window === "30d" ? B.gotchaQualityLow : B.gotchaQuality;
+    case "/api/gotcha/candidates":
+      return B.gotchaCandidates;
     case "/api/diy":
       return diy;
     case "/api/crosslink":
@@ -549,7 +574,16 @@ module.exports.get = function get(route, q) {
 // outcome is a file on disk, not a state.
 const TEST_ENV = { "api-users": [1, testEnvUnhealthy], "orders-api": [1, testEnvAbsent], "staging-checkout": [2, testEnvRemote] };
 
+// The one piece of fixture STATE: which `habits` mode the Behaviour panel sees.
+// Only the `habits` key is canned — every other config write still answers
+// "nothing ran", because its outcome is a file on disk, not a state.
+const HABITS_MODE = { value: "propose" };
+
 module.exports.post = function post(route, body) {
+  if (route === "/api/config/set" && body && body.key === "habits" && ["off", "observe", "propose"].includes(String(body.value))) {
+    HABITS_MODE.value = String(body.value);
+    return { exit_code: 0, data: { ok: true, key: "habits", value: HABITS_MODE.value } };
+  }
   // `add` answers OK so the CONNECT FLOW can be walked end to end in fixture
   // mode — the add is only the step before the test, and the test's outcome is
   // the state worth designing. Every other write still answers "nothing ran".

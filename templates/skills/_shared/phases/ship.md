@@ -1,16 +1,6 @@
 # Phase — Ship   (id: `ship`)
 
-> **Shared phase file.** Moved out of `orc/SKILL.md` at v1.0.0 W12, and into
-> this library at W13 when `orc-diy` became its second reader. A spine is loaded
-> IN FULL when its skill activates; this is loaded when the phase fires, and most
-> runs skip most phases.
->
-> **Two layers, and a lane reads exactly one.** `full` is `/orc`'s procedure.
-> `composed` is what `orc diy compile` stitches — the same phase expressed as
-> `<!-- diy:when -->` variants over a composed flow, NOT a second copy of the
-> procedure. Reading the wrong one is the failure `README.md` names: a lane
-> doing a phase its product promise says it does differently.
-> `orc lane phases <lane> --json` names the layer for each lane.
+> **Shared phase file** — read when the phase fires. A lane reads ONE layer: `full` (`/orc`) or `composed` (the `<!-- diy:when -->` variants `orc diy compile` stitches). `orc lane phases <lane> --json` names it.
 
 <!-- orc:layer full -->
 
@@ -23,7 +13,7 @@ Emit `PHASE ship start`. Show current branch.
 (`git diff --numstat`, exclusions applied) vs config `stacked_pr_loc`/
 `stacked_pr_files`. Under threshold or `stacked_pr: off` → silent, ship normally
 (`GATE stack-gate pass :: under-threshold`). Tripped → surface report + ONE P0
-question (stack into layers? or one regular PR?) in the SAME round as its two
+question (H `orc.phase-8.stack`: stack into layers? or one regular PR?) in the SAME round as its two
 prerequisites — **a ticket** and a resolved PR template
 (`_shared/pr-templates.md`; none found → recommend three options). No ticket, no
 template, or "no" → **one regular PR, never re-asked**. "Yes" → commit on the
@@ -36,7 +26,7 @@ GREEN surface in `orc handoff surfaces --json`, say so —
 *"2 of these were changes a PM could have made alone — `/orc-handoff` next time."*
 That sentence is how anyone finds out that lane exists.
 
-Then ask together: **commit? push? create PR?** (PR: ticket +
+Then ask together (H `orc.phase-8.ship`): **commit? push? create PR?** (PR: ticket +
 title + target branch; generate from `../../orc/subskills/orc-pr/pr.md`). If Phase 6.5 ran,
 commit `test-generator/<change-slug>/` too (a user deliverable, never gitignored).
 **`mock-examples/` is NEVER staged** (drift-recovery.md; no `.gitignore` edit —
@@ -46,10 +36,11 @@ On success: delete the ephemeral decision log; KEEP checkpoint + dispatch log.
 run changed; point at `/orc-wiki`. **Post-ship refresh ask** (BIG runs, /orc +
 /orc-ultra — the `wiki_refresh_ask_tasks`/`_files` triggers and full rules in
 `../../orc-wiki/references/staleness.md`): upgrade the passive note to **"Refresh
-wiki now?"**; on "later" print the prominent stale warning and stamp
+wiki now?"** (H `orc.phase-8.wiki-refresh`); on "later" print the prominent stale warning and stamp
 `wiki_refresh_declined` in the checkpoint. Then ALWAYS show the completion
 usage report — /usage limits + the full dispatch log (model/effort/score per
-subagent). The user must always know what the run cost. **Code graph
+subagent). The user must always know what the run cost. A `proposal` in
+`habits{}` → its ONE line joins that report (`../habits.md` §3). **Code graph
 (`../code-graph.md` §5–§6):** run `orc graph update --if-enabled` once more —
 fix rounds move code — and emit `GRAPH-UPDATE`; then run `orc graph notes pending
 --files <every path the run changed> --at end --if-enabled` — exit 0 → one noter

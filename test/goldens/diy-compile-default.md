@@ -89,20 +89,20 @@ be the one lane that runs blind.
 `run-diy-<slug>-<DDMMYY>-<HHMMSS>.txt` AND `touch the trace file` of that name
 in the SAME step (a pointer naming a file that does not exist reads as dangling —
 the hook rotates away from it and the run splits across two files), then store
-`trace_path` in the checkpoint. The lane token is `diy`, whatever the flow is
+`trace_path` in the checkpoint and run `orc run snapshot --run <run-slug>`. The lane token is `diy`, whatever the flow is
 named.
 
-**Narration is dispatched, never remembered:** record each event with its REAL
-timestamp into a phase packet (`PHASE`, `DISPATCH`/`VERIFY` per spawn —
+**Narration is written by the CLI, never remembered:** record each event with
+its REAL timestamp into a phase packet (`PHASE`, `DISPATCH`/`VERIFY` per spawn —
 `actual_model`/`actual_effort` vs expected, surface any ⛔ DOWNGRADE to the user
 — `SCORE`, `OUTCOME`, `GATE`, `FINDING`/`VERDICT` for whichever gates this flow
-enabled, `FINISH`, plus `decisions` = the WHY), then dispatch
-`orc-trace-writer-haiku-4-5` with it, PAIRED with the next phase's first
-dispatch. **One packet per ENABLED phase group, minimum 2** — the flow shape is
+enabled, `FINISH`, plus `decisions` = the WHY), then pipe it to
+`orc trace write --packet -` (exit ≠ 0 → `orc-trace-writer-haiku-4-5`), PAIRED
+with the next phase's first dispatch. **One packet per ENABLED phase group, minimum 2** — the flow shape is
 composed, so the packet count is too; a phase this flow turned OFF owes nothing.
 A phase ending with `zero new trace lines is a protocol violation`.
 
-**Run end:** the `FINISH` packet goes out and RETURNS, then delete
+**Run end:** write the `FINISH` packet, then delete
 `log_dir/.current`.
 
 ## Wiki gate
@@ -137,7 +137,7 @@ project → whole-run exemption, stated once at preflight.
 
 ## Phase: Code-pattern findings
 
-On an FE/BE pattern-cache miss at dispatch time, ask the user once: learn the
+On an FE/BE pattern-cache miss at dispatch time, ask the user once (H `orc.phase-3.pattern`): learn the
 house style via the `.claude/skills/orc-pattern/SKILL.md` flow, or proceed
 language-agnostic. Cache hits are used silently.
 
@@ -219,7 +219,8 @@ contract: `.claude/skills/_shared/gotchas.md`.
 Dispatch the reviewer exactly as the full lane does — follow the review half
 of `.claude/skills/orc/subskills/orc-review-verify/SKILL.md` (reviewer agent
 `orc-reviewer-opus-5-med`; findings ride the severity ladder from the
-locked rules, blocking and advisory findings both surfaced).
+locked rules, blocking and advisory findings both surfaced). Build its slice
+from `.claude/skills/_shared/review-slice.md` (§1 free check, §3 after-filter).
 With the code graph on, the reviewer also gets the callers from
 `orc graph changes --if-enabled --json` — an unchanged caller of a
 changed signature is a finding candidate (`.claude/skills/_shared/code-graph.md` §7).
@@ -235,7 +236,8 @@ of `.claude/skills/orc/subskills/orc-review-verify/SKILL.md` (build + tests +
 every acceptance criterion checked against the definition of done).
 TDD gate (rides the verify slot): the verifier slice carries the plan's
 `tdd_suite[]`; green is the definition-of-done for non-exempt requirements,
-red → the repair loop capped at `tdd_loop_max` (cap hit → STOP + honest red
+red → the flaky check
+(`.claude/skills/_shared/smoke-gate.md` §Flaky), then the repair loop capped at `tdd_loop_max` (cap hit → STOP + honest red
 report). The adversarial half of the verify pass applies as the full lane
 defines it.
 
@@ -271,4 +273,5 @@ models used, findings outcomes, verify results, ship action, skipped
 phases, and usage.
 
 Always name the phases this flow skipped by config — the user must never
-mistake a DIY run for a full-lane run.
+mistake a DIY run for a full-lane run. The run ends with the card
+(`.claude/skills/_shared/phases/summary.md` §End-of-run card).

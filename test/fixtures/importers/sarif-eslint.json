@@ -1,0 +1,50 @@
+{
+  "version": "2.1.0",
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "ESLint",
+          "informationUri": "https://eslint.org",
+          "rules": [
+            { "id": "no-unused-vars", "shortDescription": { "text": "Disallow unused variables" }, "defaultConfiguration": { "level": "error" } },
+            { "id": "eqeqeq", "shortDescription": { "text": "Require the use of === and !==" } },
+            { "id": "no-eval", "shortDescription": { "text": "Disallow the use of eval()" }, "messageStrings": { "default": { "text": "eval can be harmful." } } }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "no-unused-vars",
+          "ruleIndex": 0,
+          "message": { "text": "'total' is assigned a value but never used." },
+          "locations": [{ "physicalLocation": { "artifactLocation": { "uri": "src/orders/list.js" }, "region": { "startLine": 12, "startColumn": 7 } } }],
+          "partialFingerprints": { "primaryLocationLineHash": "aaaa1111bbbb2222" }
+        },
+        {
+          "ruleId": "eqeqeq",
+          "ruleIndex": 1,
+          "message": { "text": "Expected '===' and instead saw '=='." },
+          "locations": [{ "physicalLocation": { "artifactLocation": { "uri": "file:///src/orders/total.js" }, "region": { "startLine": 40, "endLine": 41 } } }],
+          "partialFingerprints": { "primaryLocationLineHash": "cccc3333dddd4444" }
+        },
+        {
+          "ruleIndex": 2,
+          "level": "error",
+          "message": { "id": "default" },
+          "locations": [{ "physicalLocation": { "artifactLocation": { "uri": "src/admin/run.js" }, "region": { "startLine": 3 } } }],
+          "partialFingerprints": { "primaryLocationLineHash": "eeee5555ffff6666" }
+        },
+        {
+          "ruleId": "eqeqeq",
+          "level": "note",
+          "message": { "text": "Expected '!==' and instead saw '!='." },
+          "locations": [{ "physicalLocation": { "artifactLocation": { "uri": "src/legacy/old.js" }, "region": { "startLine": 9 } } }],
+          "partialFingerprints": { "primaryLocationLineHash": "1234abcd1234abcd" },
+          "suppressions": [{ "kind": "inSource", "justification": "legacy file, compared against null on purpose" }]
+        }
+      ]
+    }
+  ]
+}

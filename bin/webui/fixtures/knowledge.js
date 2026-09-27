@@ -12,6 +12,7 @@
    fixture is worse than no fixture. */
 
 const { PROJECT } = require("./shell.js");
+const { gotchaExtraEntries, gotchaPanel } = require("./behaviour.js");
 
 const wiki = {
   state: "registered",
@@ -251,7 +252,7 @@ const patterns = {
 
 const gotchas = {
   file: PROJECT + "/.claude/orc/gotchas.md",
-  count: 3,
+  count: 11,
   // v0.49.1: the cap is what makes the count mean anything, and only `prune`
   // used to print it — so "11 of 40" was not renderable from this payload.
   gotchas_max: 40,
@@ -262,7 +263,12 @@ const gotchas = {
     { id: "G-001", area: "express", kind: "repair", hits: 7, last_seen: "05-08-2026", trigger: "Jest suite hangs unless the server handle is closed in afterAll", fields: { trigger: "Jest suite hangs unless the server handle is closed in afterAll", symptom: "`npm test` never exits; CI times out at 10 minutes", fix: "close the http server in afterAll and await it", why: "supertest keeps the listener open, and Jest waits for the handle", first_seen: "14-05-2026", hits: "7", last_seen: "05-08-2026" } },
     { id: "G-002", area: "react", kind: "review", hits: 2, last_seen: "22-07-2026", trigger: "Date pickers must use the tz-aware helper, never new Date(string)", fields: { trigger: "Date pickers must use the tz-aware helper, never new Date(string)", symptom: "bookings land one day early for users west of UTC", fix: "use parseInZone from src/time/zone.ts", why: "new Date(string) parses as UTC and then renders local", first_seen: "02-06-2026", hits: "2", last_seen: "22-07-2026" } },
     { id: "G-003", area: "build", kind: "verify", hits: 0, last_seen: "14-06-2026", trigger: "`npm run build` needs NODE_OPTIONS=--max-old-space-size=4096 on CI", fields: { trigger: "`npm run build` needs NODE_OPTIONS=--max-old-space-size=4096 on CI", symptom: "the CI build is OOM-killed with no error line", fix: "set NODE_OPTIONS in the workflow, not in package.json", why: "the runner has less memory than a dev laptop", first_seen: "14-06-2026", hits: "0", last_seen: "14-06-2026" } },
+    // v2.0.0 W7 — eight more, so every source and status the Behaviour
+    // panel's Gotchas tab draws is designable. They live in behaviour.js.
+    ...gotchaExtraEntries,
   ],
+  // v2.0.0 W7 — the panel view `orc gotcha list --json` carries.
+  panel: gotchaPanel,
 };
 
 // STALE, so the Flow panel's gated state is designable.

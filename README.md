@@ -7,14 +7,14 @@
 *Intake → analyze → plan → score → parallel subagents → review → verify → ship.*
 
 ![npm](https://img.shields.io/npm/v/%40azure-id%2Forc?style=for-the-badge&color=cb3837&logo=npm)
-![Version](https://img.shields.io/badge/version-1.9.2-blue.svg?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-2.0.0-blue.svg?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg?style=for-the-badge)
 ![Claude Code](https://img.shields.io/badge/Claude_Code-Skills-purple.svg?style=for-the-badge)
 ![Dependencies](https://img.shields.io/badge/dependencies-zero-lightgrey.svg?style=for-the-badge)
 ![GitHub stars](https://img.shields.io/github/stars/azure-id/orc?style=for-the-badge&color=yellow)
 
-**Latest: v1.9.2** · updated 2026-09-23 · [full changelog](CHANGELOG.md)
+**Latest: v2.0.0** · updated 27-09-2026 · [full changelog](CHANGELOG.md)
 
 **On npm: [`@azure-id/orc`](https://www.npmjs.com/package/@azure-id/orc)** — `npm i -g @azure-id/orc`
 
@@ -505,7 +505,8 @@ orc ui --stop          # shut this project's server down
 | Settings | every config key, grouped, each with its own control | staged edits, applied together |
 | Runs | run history as an accordion: a row opens in place into state-of-play, resume prompt, checkpoint, trace tail | — |
 | **Knowledge** | **five tabs**: the wiki's tier AND its **contents** (every doc, what it covers, how often it is read), coverage against your tracked files, the code patterns with the conflicts the codifier flagged, repair memory with a **preview-then-apply** prune, and a read-only view of the linked repos | `wiki sync`, `gotcha prune` |
-| Stats | lane and agent usage, downgrades, and a **Cost** tab whose stacked bar keeps cache-read visible | — |
+| Stats | lane and agent usage, downgrades, questions per run, and a **Cost** tab whose stacked bar keeps cache-read visible | — |
+| **Behaviour** | the learning switch (Off · Observe · Propose), your habits with their evidence, the rhythm of your runs, the gotchas and the exact card the reviewer sees, review quality per category, and the answer log | `config set habits`, `habit accept` / `decline` / `forget`, `gotcha accept` |
 | Flow | the compiled DIY flow, its gate, and a stepper of every phase in order | `diy set`, `diy compile`, presets |
 | Crosslink | **Design** (the boundary as a graph) and **Settings** (each peer's freshness) | `crosslink add` / `remove` |
 | Promises · Boundary · Self-serve | the pact ledger, the boundary cards, and the surfaces a non-developer can change | `pact check`, `pact sync`, `handoff set` |
@@ -663,7 +664,7 @@ bin/webui/        `orc ui` — the local control panel: css/ + js/ + i18n/<lang>
                   fixtures/, one file per layer and per panel. Zero deps, no build step
 bin/mockrun-catalog.js   the mocked-run catalogue (derived from the files on disk)
 mock-run/         the mocked runs themselves — start at INDEX.md
-guides/           configuration · model selection · documents · knowledge reads · other AI models
+guides/           configuration · model selection · documents · knowledge reads · other AI models · habits and gotchas
 ```
 
 The `orc` skill is a thin **spine**: it loads a reference or a subskill only when
@@ -685,6 +686,7 @@ Some lanes ship a full how-to next to the skill, in plain language:
 | [ORC-PR-DRIVER](templates/skills/orc-pr-driver/README.md) | you have a stack plan and want to build, submit and merge it |
 | [Rules](guides/rules.md) | you want the 65 anti-slop rules, the precedence ladder and the lint |
 | [Configuration](guides/configuration.md) · [Model selection](guides/model-selection.md) | you want every key, or the scoring bands |
+| [Habits and gotchas](guides/habits-and-gotchas.md) | you want to know how a habit is proposed, how to import Sonar, SARIF or PR history, and how to undo |
 | [Other AI models](guides/extra-models.md) | you want part of the ladder to run somewhere other than Claude |
 
 Every skill also ships its own `SKILL.md` and `references/`. The guides above are
@@ -728,41 +730,39 @@ a current audit: [EVAL-REPORT.md](EVAL-REPORT.md).
 **Full history: [CHANGELOG.md](CHANGELOG.md)** — or `orc changelog`, which prints
 only what is newer than the version you have.
 
-### v1.9.2 — the code graph gets its own tab, and Opus 5 becomes Opus 5.5 _(2026-09-23)_
+### v2.0.0 — the coding lanes remember what you fixed and how you work _(2026-09-27)_
 
-**The code graph has its own tab.** `orc ui` ▸ Knowledge ▸ **Code graph**
-replaces the one card on the Wiki tab. The tab shows, in this order:
+**A major version.** Five contracts change: `/orc-quick` now takes part in the
+review memory, the reviewer return has new required fields (`category`,
+`scenario`, `pre_existing`), the trace verb set has `ASK`, `FINDING-OUTCOME` and
+`GATE flaky`, the lane spines have a new shape, and config has a `learned` rank.
+Nothing is removed. The full list is in [CHANGELOG.md](CHANGELOG.md).
 
-- **Where your graph is now** — the four states (OFF · NONE · FRESH · DRIFTED)
-  as a ladder. The current state is lit, and the one action it needs is below.
-- **How the code graph works** — five animated steps, from your files to the
-  short card an agent reads. The first three are free.
-- **What a code graph looks like** — an example graph (not your code). Put the
-  pointer on a dot to see its callers and callees.
-- **Your graph, in numbers** — files, symbols, density per language, and what
-  changed since the last build.
-- **What the graph cost, and what it probably saved** — paid (exact) and
-  avoided (an estimate, drawn as a range) on one scale, and which reads lanes
-  asked.
-- **What each word means** — every term on the tab, in plain words.
+- **The lanes load less.** The always-loaded text of the coding lanes went from
+  722,600 to 313,940 bytes (−57 %). The rules are the same.
+- **Habits (off by default).** `orc config set habits observe` or `propose`.
+  ORC learns the answers you keep giving, and at the end of a run it can ask
+  ONE question: should this be your usual? Nothing is applied without your
+  yes. `orc habit forget <id>` undoes it.
+- **Gotchas v2.** The repair memory learns from reviews, SARIF, Sonar, PR
+  threads and closed defects (`orc gotcha import`, `orc gotcha sync`). The
+  reviewer gets a short card of what this project already got wrong.
+- **The reviewer v2.** Each finding has a category, a scenario and a
+  pre-existing flag. The lane records what became of each finding.
+- **Small tools.** `orc undo` (prints; `--apply` runs it), `orc pr threads`,
+  `orc ci failed`, `orc ci flaky`, an end-of-run card, questions per run in
+  `orc stats`, `notify: bell`, and the run pointer after a compact.
+- **`orc ui` ▸ Behaviour.** Your habits, your rhythm, your gotchas and the
+  review quality, on one panel.
 
-A DRIFTED finding on Overview now opens this tab. Reduced motion removes every
-animation.
-
-**Every Opus 5 agent now runs Opus 5.5.** The model id is `claude-opus-5-5`
-(was `claude-opus-5`): executors, scouts, the analyst, the planner, the
-reviewer, the verifier, the judges and every other Opus agent. Opus 5.5 costs
-less: $4 input, $5 cache write, $0.20 cache read and $20 output per million
-tokens. `bin/pricing.json` has the new row, and `orc budget` uses it.
-
-**What you have to do:** run `orc update` to install the new agent files. The
-agent NAMES did not change, so `rubric_bands_override`, `fixed_executor` and
-`opus5_only` keep working. A config that still names `claude-opus-5` is still
-valid.
+**What you have to do:** `orc update`. If you use `/orc-diy`, run
+`orc diy compile` after the update: a flow compiled by 1.9.x is STALE. Four
+evals (E1–E4) are prepared and not run yet.
 
 <details>
-<summary><strong>Earlier releases</strong> — 121 of them, titles only. Full text in <a href="CHANGELOG.md">CHANGELOG.md</a>.</summary>
+<summary><strong>Earlier releases</strong> — 122 of them, titles only. Full text in <a href="CHANGELOG.md">CHANGELOG.md</a>.</summary>
 
+- **v1.9.2** — the code graph gets its own tab, and Opus 5 becomes Opus 5.5 · _2026-09-23_
 - **v1.9.1** — the graph that was paid for and never asked · _2026-09-23_
 - **v1.9.0** — the lean lanes learn to look before they leap · _2026-09-21_
 - **v1.8.2** — the map that finds what a grep cannot · _2026-09-21_

@@ -1,12 +1,7 @@
 ---
 name: orc-wiki-scanner-opus-4-8-high
 description: >
-  ORC Wiki Scanner — claude-opus-4-8, high effort. Single-role: read ONE coverage
-  area's real files and RETURN an evidence-anchored wiki doc body plus its
-  crosslink tag bodies. Read-only against the project: it returns the content;
-  the orc-wiki orchestrator writes the doc, writes the tags, and runs
-  `orc wiki sync`. Dispatched per scan-task by the orc-wiki skill (never by the
-  user). It never plans areas, never assembles the wiki, never spawns.
+  ORC Wiki Scanner — claude-opus-4-8, high effort. Dispatched by orc-wiki per scan-task (DEEP tier), ONE coverage area each.
 model: claude-opus-4-8
 effort: high
 tools: Read, Glob, Grep, Bash

@@ -27,6 +27,14 @@ macOS, Go tests that monkey-patch need `GOARCH=amd64 … -gcflags=all=-l`.
 Any rung red → **stop, fix, re-run the whole ladder from rung 1** for that layer.
 Do not proceed to the next layer. Do not push.
 
+**Gotcha card (advice only).** Before rung 1, run `orc gotcha sync --json`
+(due at most once per `gotcha_sync_hours`; any failure → go on), then
+`orc gotcha card --files <this layer's files> --lane orc-pr-driver --json`
+(the `gotcha_card` field of `../../_shared/review-slice.md` §2) and print its
+`text`. It names failures this project already paid for in these files. It
+never turns a rung red: the gate stays build · tests · lint · hooks. A rung that
+went red → green after a lint/seam fix is recorded (`../../_shared/gotchas.md` §10).
+
 ## Attribution — the stacked-specific trap
 
 Many repos pin their linter's "new code" baseline to the trunk (e.g.

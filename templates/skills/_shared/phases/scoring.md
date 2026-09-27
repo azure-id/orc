@@ -1,16 +1,6 @@
 # Phase — Effort & scoring   (id: `scoring`)
 
-> **Shared phase file.** Moved out of `orc/SKILL.md` at v1.0.0 W12, and into
-> this library at W13 when `orc-diy` became its second reader. A spine is loaded
-> IN FULL when its skill activates; this is loaded when the phase fires, and most
-> runs skip most phases.
->
-> **Two layers, and a lane reads exactly one.** `full` is `/orc`'s procedure.
-> `composed` is what `orc diy compile` stitches — the same phase expressed as
-> `<!-- diy:when -->` variants over a composed flow, NOT a second copy of the
-> procedure. Reading the wrong one is the failure `README.md` names: a lane
-> doing a phase its product promise says it does differently.
-> `orc lane phases <lane> --json` names the layer for each lane.
+> **Shared phase file** — read when the phase fires. A lane reads ONE layer: `full` (`/orc`) or `composed` (the `<!-- diy:when -->` variants `orc diy compile` stitches). `orc lane phases <lane> --json` names it.
 
 <!-- orc:layer full -->
 
@@ -18,10 +8,10 @@
 
 Emit `PHASE scoring start`. Refine effort; recommend **sequential** vs
 **parallel** dispatch (worktrees for high-effort independent features) — user
-confirms. Dispatch style is **intra-wave concurrency only**: waves are computed
+confirms (H `orc.phase-2.execution`). Dispatch style is **intra-wave concurrency only**: waves are computed
 regardless of style (sequential runs have waves too, see wave-grouping.md), so
 the batch pause always binds to wave numbers. **Batch-pause schedule (deterministic, not a cadence hint):** the plan
-has K waves — ask "pause after every wave / every 2nd / run straight through?"
+has K waves — ask (H `orc.phase-2.pause`) "pause after every wave / every 2nd / run straight through?"
 and SHOW the resulting stop list ("will pause after waves [list]"); a 2-wave
 plan plainly offers "pause after wave 1". Store it as `pause_schedule`, recompute
 each wave's `is_batch_pause` (last wave never pauses). **Facet-validation gate

@@ -15,7 +15,7 @@ questions, dispatches one agent, and writes down what happened. **Three steps
 per request, one user turn. Fewer than any other lane. Do not add steps.**
 
 **You never implement — you spawn.** You read only to FIND the right files. To
-UNDERSTAND something, you dispatch an agent. This keeps your context small.
+UNDERSTAND something, you dispatch an agent.
 
 **It is open.** Almost any request works (`README.md` §1). For anything else:
 decide if it only READS or also WRITES → pick what to dispatch → **ask the
@@ -28,37 +28,38 @@ waves, no scoring, no acceptance pass (`README.md` §2).
 
 ## Phases
 
-`orc lane phases orc-quick --json` is this lane's pipeline: the ordered list, where
-each phase lives, and how much of it to read. **The CLI owns the order** — never
-derive it from the headings below, and never renumber or rename one without the
-manifest, because a `read: section` pointer names a HEADING and a renamed heading
-is a pointer into nothing.
+`orc lane phases orc-quick --json` is this lane's pipeline. **The CLI owns the order**:
+never derive it from the headings below, and never rename or renumber one
+without the manifest (`../_shared/lane-contract.md` §Phases).
 
 ## Q0 — Preflight (ONE time per session, silent, nothing can stop the run)
 
 1. **Config.** Read `log_dir` only. Read no other key. **One exception, and it
-   is a PROBE, not a key read:** `orc extra resolve --slot quick-executor --json`
-   (0 = extra, 1 = Claude) answers the master gate, the position and the routing
-   in one, so the code-writing menu can offer line 3. **A gate that is never
-   probed is a gate that is always off.** Keep the answer for this session; it is
-   an OPTION on a menu, never a default (`references/dispatch-gate.md`).
+   is a PROBE, not a key read:** `probes["extra-slot"]` in the `orc lane config`
+   answer (`resolved`: extra or claude) answers the master gate, the position and the
+   routing in one, so the code-writing menu can offer line 3. Do not call
+   `orc extra resolve --slot quick-executor`. **A gate that is never probed is a
+   gate that is always off.** Keep the answer for this session; it is an OPTION
+   on a menu, never a default (`references/dispatch-gate.md`).
 2. **Trace + the running record.** Write `log_dir/.current` =
    `run-quick-<slug>-<DDMMYY>-<HHMMSS>.txt` and `touch the trace file` of that
    name in the SAME step. Both, or neither. Create
    `.claude/orc/run/<run-slug>/quick-checkpoint.md` in the same step too: from
    now on append every event to it WITH THE TIME IT HAPPENED (`HH:MM:SS`). Each
    trace packet is built from that file, never stamped "now".
-3. **Knowledge probes** (`../_shared/detecting-artifacts.md`; never a raw `find`
-   — `.claude` is hidden). `orc wiki status` → only `none` means no wiki.
-   `orc pattern status <lang>` → 0 cached, 1 absent, 2 wrong key; `<lang>` is a
-   framework key from `../orc-pattern/references/INDEX.md` (`express`, `react`,
-   …), never a file extension. **Both are helpful extras only:** missing
+3. **Knowledge probes** — from `probes{}` (preflight.md step 3;
+   `../_shared/detecting-artifacts.md`). `orc wiki status` → only `none` means
+   no wiki. `<lang>` is cached when
+   `probes["pattern-status"].langs` names it; `<lang>` is a framework key from
+   `../orc-pattern/references/INDEX.md` (`express`, `react`, …), never a file
+   extension. Call `orc pattern status <lang>` only when you are not sure the
+   key is a framework key. **Both are helpful extras only:** missing
    knowledge never stops the run, never causes a fallback, never triggers a
    scan. Print ONE line each.
-4. **Code graph cache — never skipped** (`../_shared/code-graph.md` §0). Run
-   `orc graph status --if-enabled --heal --json --brief`: it builds or updates the cache
-   in the same call. Print its `line`; put its `trace` (`GRAPH-CONSULT …`) in the
-   packet VERBATIM. Exit 3 = off → no other graph call this session. Every graph
+4. **Code graph cache — never skipped** (`../_shared/code-graph.md` §0). Print
+   `probes["graph-status"].line`; run
+   `orc graph status --if-enabled --heal --json --brief` only when `heal_needed` is true. Put the `trace` (`GRAPH-CONSULT …`) in
+   the packet VERBATIM. Exit 3 = off → no other graph call this session. Every graph
    call carries `--if-enabled`, so the CLI reads the `code_graph` keys —
    this lane still reads `log_dir` and nothing else.
 5. **`gh` probe — only when the request names a PR** (`pr <n>`, `PR <n>`, a
@@ -89,7 +90,7 @@ rule and the never-write-to-GitHub boundary are in `references/gh-mode.md`.
 
 **Intent ledger.** Read the user's message for things they already decided —
 which agent, update tests, review, commit, push. Do not ask those again in Q3.
-Print it on ONE line so nothing is skipped in secret:
+Print it on ONE line:
 `ledger: review=yes commit=yes push=yes · test-update=ask · dispatch=ask`
 
 **The dig — graph first** (`references/look.md`). Ask the graph BEFORE any
@@ -111,7 +112,7 @@ Grep; Grep only for what the graph does not know.
 
 **Cap: 12 files.** If you go over, or you cannot find the right files, or the
 job needs more than about 3 files of real edits: print a `GATE` line, say it
-plainly, and **offer** `/orc-mini` (`../_shared/fallback-handoff.md`, REASON
+plainly, and **offer** `/orc-mini` (H `quick.q1.too-big`; `../_shared/fallback-handoff.md`, REASON
 `dig-inconclusive` or `scope-too-large`). Never keep digging in silence. It is
 an OFFER — the user may still say "keep going".
 
@@ -132,18 +133,20 @@ the job is not quick: offer the Q1 fallback.
 
 ### b. The dispatch gate — HARD, never skip it
 
-**Ask before every single dispatch** — the three kinds are code, read-only
-(recon) and review. **The menu, per kind, is `references/dispatch-gate.md`.**
+**Ask before every single dispatch** (H `quick.q2.gate.code` · `quick.q2.gate.recon`) — the three kinds are code, read-only
+(recon) and review. **The menu: `references/dispatch-gate.md`, only
+`### Writing code` or `### Read-only work (recon)`, `## The suggestion` and `## Rules`.**
 Every menu ends with `Your choice — nothing runs until you answer.`
 
 Rules:
-- Never pick for the user. Never reuse the last answer. Never remember it for
-  the next entry. One line MAY carry `→ suggested` with its reason from the dig
-  (`references/dispatch-gate.md`, "The suggestion") — a recommendation, never a
-  pre-selection.
+- Never pick for the user. Never reuse the last answer by yourself. One line
+  MAY carry `→ suggested` with its reason — from the dig (`## The suggestion`),
+  or from `habits.suggestions` (the CLI's count of your own past picks, printed
+  with its numbers). A suggestion is never a pre-selection; the gate is asked
+  every time.
 - If the user already said it ("use opus 5 low"), the gate is **answered**, not
   skipped. Say which one you are using.
-- No config changes this menu. See `## Config`.
+- No config changes this menu. See `## Lane contract`.
 - If the model asked for is higher than the session model, say so once: the
   subagent will quietly drop to the session model and you will report it.
 
@@ -164,17 +167,17 @@ carries `repro` — the EXECUTOR writes it red, then fixes it green, never you
 (`references/defect.md`). An **ad-hoc** dispatch is also told to report its own
 `actual_model` and `actual_effort`.
 
-Check the return with `../_shared/return-validation.md`: honest `unmet[]`,
-`pattern_version` + `invariants_checked`, `graph_used` (absent on a slice that
-carried a card = malformed), `repro` when the slice asked for it (§5d), and
-`actual_model` / `actual_effort` → emit `VERIFY`, which names
+Check the return with `../_shared/return-validation.md` §1–§3 + each injected
+field's §: honest `unmet[]`, `pattern_version` + `invariants_checked`,
+`graph_used` (absent on a slice that carried a card = malformed), `repro` when
+the slice asked for it, and `actual_model` / `actual_effort` → emit `VERIFY`, which names
 `graph_used=<n> targets gen <n>` and `repro red→green` beside the model match,
-and show a ⛔ DOWNGRADE line if they differ. Also compare `git status --short`
+and show ⛔ DOWNGRADE if they differ. Also compare `git status --short`
 before and after: a file changed outside `declared_files` is a violation. A
 **recon** return adds one check: `answer` ≤ 12 lines. A broken return = a
 failure: re-dispatch once, then offer the fallback.
 
-**Before any re-dispatch, run `orc run inflight`** (0 clear · 1 in-flight · 2 unknown). A Task error does not kill the agent behind it, and exit 2 REFUSES by default — `a lane that re-dispatches over a live attempt` has broken the contract. Canonical: `../_shared/return-validation.md`.
+**Before any re-dispatch, run `orc run inflight`**. A Task error does not kill the agent behind it, and exit 2 REFUSES by default — `a lane that re-dispatches over a live attempt` has broken the contract. Canonical: `return-validation.md` §0.
 
 ### 3.2 Build and tests — there is NO smoke gate
 
@@ -193,15 +196,13 @@ the suite — a runner that takes no file list → one line saying so — and ap
 ` → <n> passed`. Then the suite. Then print its `blast_line` VERBATIM: the CLI
 attaches every `risk` word's `why`, so never restate it. Exit 3 → nothing.
 
-`tests reached  3 files (ROUTE 2 · call 1) → 12 passed` · then the suite · then
-`blast radius   3 symbols · callers 7 in 4 files · tests reach 2 · risk high: <symbol> (exported, fan-in 4, no test reaches it)`
-
 **Build is RED → repair loop.** Rounds 1 and 2 reuse the same executor; round 3
 **asks again**; after 3, ask and show how the errors MOVED, not just "still
 red". Each new batch of 3 works the same way. Shape and wording:
-`references/dispatch-gate.md`. Put every round in the entry's dispatch table.
+its `## The build repair loop`. Put every round in the entry's dispatch table.
 
-**Tests are RED → stop, do NOT loop.** Show the failures. Let the user choose:
+**Tests are RED → the flaky check first** (`../_shared/smoke-gate.md` §Flaky).
+Still red → stop, do NOT loop. Show the failures. Let the user choose:
 fix it with a new gated dispatch · the test itself is wrong · accept it · stop.
 Never offer commit while tests are red.
 
@@ -219,20 +220,22 @@ after the entry is appended, `orc graph gain --run <this run> --if-enabled
 with a range; never restate it as a saving.
 
 Append entry N to `orc-quick/<slug>/quick-context.md`
-(`references/context-doc.md`). Every request gets an entry — a read-only dig
-included, where the answer IS the result.
+(`references/context-doc.md`, only `## Entry shape` or `## A read-only entry`).
+Every request gets an entry — a read-only dig too, where the answer IS the
+result. Then record what it proved (`../_shared/gotchas.md` §10). A code-writing entry
+ends with the card (`../_shared/phases/summary.md` §End-of-run card).
 
 ### 3.4 If the user stops while it is red
 
 **Never undo anything yourself.** Say how many files changed, that nothing is
-committed, and print `git checkout -- .` as the undo.
+committed, and print the card's `undo` row as the undo.
 
 ### 3.5 Offers (skip any the ledger already answered)
 
-1. **Update tests and run them** — only if a test suite exists AND the change
+1. **Update tests and run them** (H `quick.q3.offer.tests`) — only if a test suite exists AND the change
    made a test wrong or left new code untested. If the executor already fixed
    the tests and they pass, **do not ask at all**.
-2. **Code review** — this is a dispatch, so **ask the gate first**. Pattern
+2. **Code review** (H `quick.q3.offer.review`) — this is a dispatch, so **ask the gate first**. Pattern
    cached → review against it. Findings use the `P0|P1|P2|P3` ladder: P0/P1
    block the commit offer and get one repair round; P2/P3 are advice only.
 3. **Commit / push / stop** — stage **only the files the task changed**. Never
@@ -252,72 +255,39 @@ Write the results of these offers back into entry N. **Then:** another request �
 One folder per thread, **one file inside, never a second file**:
 `<projectRoot>/orc-quick/<slug>/quick-context.md`, with a list between
 `<!-- orc-quick:toc -->` markers at the top. **Never read the body** — two
-exceptions: the TOC block on re-open, and when the user asks. Shape:
-`references/context-doc.md`.
+exceptions: the TOC block on re-open, and when the user asks.
 
 ## Behavior trace (always on)
 
-`../_shared/phases/trace.md` (`core`, at run start; `orc lane phases` names the
-file and the layers). Lane token `quick`, tier **Iterative** — ONE packet per
-finished numbered entry, paired with the next entry's first dispatch, plus the
-`FINISH` packet. Each packet is built from `quick-checkpoint.md`, so every event
-carries the time it happened; one time for every event is a protocol violation.
-Nothing else about the protocol is restated here; a phase that
-ends with `zero new trace lines is a protocol violation`. Ad-hoc dispatches are
-not named `orc-*`, so the hook writes no `SPAWN`/`RETURN` for them: you still
-emit `DISPATCH … adhoc=true` and `VERIFY` yourself, and the downgrade check
-still works from the agent's own report.
+`../_shared/phases/trace.md` (`core`, at run start; `orc lane phases orc-quick --json` →
+`trace_grammar` gives the verbs). Lane token `quick`, tier
+**Iterative** — the unit is ONE finished numbered entry. Build each packet from
+`quick-checkpoint.md`, so every event carries the time it happened; one time for
+every event is a protocol violation. Pipe each packet to
+`orc trace write --packet -`. A phase that ends with
+`zero new trace lines is a protocol violation`. Ad-hoc dispatches (no hook `SPAWN`): `references/dispatch-gate.md`, recon line 3.
 
-## Config
+## Lane contract (`../_shared/lane-contract.md` — read it ONLY when a call exits ≠ 0)
 
-**ONE resolver, and it is not you:** `orc lane config orc-quick --json`. Obey
-`effective`, print every line in `announce[]` VERBATIM at preflight, and honour
-`stops[]` before wave 1. Never re-derive a value, a precedence or an inertness
-from `.claude/orc.config.yaml` — a key this lane does not read is not in the
-answer, and a key another key shadows comes back already marked. Exit ≠ 0 → say
-the CLI is unavailable and fall back to `../_shared/config-precedence.md`'s
-documented defaults, out loud. Priorities and families:
-`../_shared/config-precedence.md`.
+- **Calls:** `orc lane calls orc-quick --json` names every call and its exit codes.
+  **An exit code is an ANSWER where it says so, not a failure.** Make no other call.
+- **Config:** `orc lane config orc-quick --json`. Obey `effective`, print every line
+  in `announce[]` VERBATIM at preflight, and honour `stops[]` before wave 1.
+  Never merge `.claude/orc.config.yaml` yourself (`../_shared/config-precedence.md`).
+- **Rules:** `orc rules slice --lane orc-quick --json` is the ONLY assembler
+  (`../_shared/phases/rules.md`). Its `line` prints VERBATIM at preflight.
+- **Habits:** `habits{}` in the config answer → read `../_shared/habits.md`. No
+  `habits{}` → ignore habits and every `(H …)` mark.
 
-**Nothing can override this lane.** orc-quick has no config key of its own.
-These config keys **do nothing here**: `opus5_only` · `rubric_bands_override` ·
-`extra_resume` · `extra_on_failure` · `extra_fallback_agent`. All five come back
-INERT with a reason — say that at the gate so the user is not confused
-(`../_shared/opus5-only.md` names orc-quick as the one exception). The user
-always picks the agent. **`extra_enabled` is the one key that does something
-here, and it is small:** with a `quick-executor` position held
-(`orc extra role`), the code-writing menu gets a THIRD option that sends the
-slice to a third party — never a default, never sticky, asked again after a
-failure. Recon and review stay on Claude. See `references/dispatch-gate.md`
-rule 4 and `../_shared/extra-dispatch.md`.
-
-## Rules — the anti-slop card (`../_shared/phases/rules.md`)
-
-`orc rules slice --lane orc-quick --json` is the ONLY assembler; never build
-the card here. It rides under the house rules and above the task —
-**house rules > your project's rules > ORC's own packs** — and its `line` prints
-VERBATIM at preflight. Returns gain `rules_applied[]`, `rules_conflicts[]` (a gap,
-never a silent choice) and `rules_overridden[]`.
-## Calls
-
-**ONE catalogue, and it is not you:** `orc lane calls orc-quick --json` names every
-CLI call this lane makes, each with its exit-code contract, its cost, when to run
-it, and what an EMPTY answer means. Never invent a spelling, never re-word an
-exit code, and never re-derive a state word — the CLI's state words are the only
-state words, and **an exit code is an ANSWER wherever that contract says so, not
-a failure**. A call the answer does not name is a call this lane does not make.
-Exit ≠ 0 from the catalogue itself → say the CLI is unavailable and name the
-command you are about to run, out loud, before running it.
+**Nothing can override this lane** — `references/dispatch-gate.md` rule 4.
 
 ## Rules this lane always keeps
 
-Never implement yourself · ask the gate before every dispatch · check every
-return (broken = failure) · never offer commit while tests are red · never undo
-the user's files · write the doc before the offers · stage only the task's files
-· never write anything to GitHub · tell the user to run `/usage` (never run it
-yourself).
+Never implement yourself · check every return (broken = failure) · never undo
+the user's files · stage only the task's files · never write anything to GitHub
+· tell the user to run `/usage` (never run it yourself).
 
 ## Waiting mid-run (`/orc-wait`)
 
 Canonical: `../_shared/wait.md`. **`a lane that waits without a hand-back` has broken this contract.**
-Checkpoint **entry** · safe point **after an entry closes**. `soft` FORCES that checkpoint and does NOT stop if the write fails; `hard` skips it and can lose an in-flight return. Never begin a wait between a dispatch and its validated return, or before the smoke gate has reported.
+Checkpoint **entry** · safe point **after an entry closes**.

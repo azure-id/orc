@@ -505,3 +505,29 @@ on a hook that does exactly what it promises.
 both normalize with `.replace(/\r\n/g, "\n")` before slicing. The statusline
 test was written without it. **When lifting source out of a file to inspect it,
 normalize first** — the helper `srcOf` in `upgrade.test.js` is the shape to copy.
+
+---
+
+## 4z.34.8 v2.0.0 — budgets, contracts, and the NUL guard
+
+- **Spine caps.** `BUDGETS`: `orc` 535 → 240 lines, first pins for 11 lanes, and
+  a **16,384-byte LF cap** on the 15 coding spines. Failure it prevents: a
+  spine that grows back after the trim. **No-growth rule:** after W1 no lane's
+  always-loaded total may go above its W1 value; new text goes on demand
+  (`_shared/habits.md`, `_shared/review-slice.md`, `_shared/lane-contract.md`,
+  `_shared/phases/trace-verbs.md`).
+- **Contracts 214 → 252.** New rows include `lane-contract.md`, the 13
+  return-validation § anchors, `orc trace write --packet -`, `review-slice.md`,
+  `gotcha_card`, `tool_findings`, `pre_existing`, `FINDING-OUTCOME`,
+  `orc gotcha card|filter|observe`, `.claude/orc/observations.jsonl`.
+- **The two-way habit registry test** (`test/cli/habit-registry.test.js`):
+  every `(H <qid>)` mark in `templates/**` ↔ `ASK_POINTS`, and each qid's file.
+- **Payload tests** pin the caps, the trigger-phrase map, the three hidden
+  internal skills (`disable-model-invocation: true`), and the one-line agent
+  description shape.
+- **The NUL guard.** `bin/cli.js` and `bin/graph-query.js` held a raw NUL byte,
+  so git stored them as BINARY. The byte is now written as `"\u0000"`, and
+  `bin/verify-package.js` fails on a raw NUL in a shipped text file. With
+  `.gitattributes text=auto` the two files are stored LF at the next commit (a
+  one-time whole-file diff).
+- **Twins**: `node bin/build-agents.js --check` covers 10 executors + 16 twins.

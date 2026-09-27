@@ -1,13 +1,7 @@
 ---
 name: orc-learn-writer-opus-5-low
 description: >
-  ORC Learning-Docs Writer — claude-opus-5-5, low effort. Single-role:
-  deepen ONE feature (function-level map + one full anchored flow) and write
-  its onboarding pair under learning-docs/<slug>/ per the orc-learn skill
-  contract (learning.md pedagogy + FAQ, knowledge.md reference +
-  fingerprint header), then derive learning-docs/INDEX.md. The engine behind
-  /orc-learn — the skill picks the topic and dispatches; this agent scans
-  and writes. Fully non-interactive; targeted scan only, never repo-wide.
+  ORC Learning-Docs Writer — claude-opus-5-5, low effort. Dispatched by /orc-learn to write the learning-docs/<slug>/ pair for ONE feature.
 model: claude-opus-5-5
 effort: low
 tools: Read, Write, Edit, Bash, Glob, Grep

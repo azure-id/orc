@@ -1,23 +1,13 @@
 # Phase — Mock example + drift recovery   (id: `mock-example`)
 
-> **Shared phase file.** Moved out of `orc/SKILL.md` at v1.0.0 W12, and into
-> this library at W13 when `orc-diy` became its second reader. A spine is loaded
-> IN FULL when its skill activates; this is loaded when the phase fires, and most
-> runs skip most phases.
->
-> **Two layers, and a lane reads exactly one.** `full` is `/orc`'s procedure.
-> `composed` is what `orc diy compile` stitches — the same phase expressed as
-> `<!-- diy:when -->` variants over a composed flow, NOT a second copy of the
-> procedure. Reading the wrong one is the failure `README.md` names: a lane
-> doing a phase its product promise says it does differently.
-> `orc lane phases <lane> --json` names the layer for each lane.
+> **Shared phase file** — read when the phase fires. A lane reads ONE layer: `full` (`/orc`) or `composed` (the `<!-- diy:when -->` variants `orc diy compile` stitches). `orc lane phases <lane> --json` names it.
 
 <!-- orc:layer full -->
 
 ## Mock example + drift recovery (config `mock_example`)
 
 Load `../drift-recovery.md` (canonical). Only after a GREEN Phase 6,
-before ship: `ask` (default) → the offer is MANDATORY (never silently skipped,
+before ship: `ask` (default) → the offer (H `orc.phase-6-7.mock`) is MANDATORY (never silently skipped,
 never silently run); `on` → build; `off` → skip. Deliverable:
 `mock-examples/<change-slug>/` at the project root (`EXAMPLE.md` + one minimal
 runnable artifact; mocked inputs only) — **NEVER committed**. After the user

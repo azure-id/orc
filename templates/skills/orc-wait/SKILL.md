@@ -3,15 +3,10 @@ name: orc-wait
 description: >
   Wait for wall-clock time to pass without losing the run you are in. Use for
   "/orc-wait", "/orc-wait 30", "/orc-wait 2h hard", "wait for my quota to
-  reset", "pause this until the window resets". You watched the statusline, you
-  saw the window was almost full, and you decided to stop — this carries that
-  decision out: it writes the hand-back, waits in short detached hops that cost
-  ZERO tokens, and picks the run back up where it left it. Three modes decide
-  how much finishes before it stops: safe (finish the wave), soft (stop now, but
-  force the checkpoint first), hard (stop now, RESUME.md only, can lose work).
-  Also carries the veto — "/orc-wait block <reason>" tells ORC not to stop you
-  at all. It never dispatches an agent, never runs another lane, and never
-  writes your config.
+  reset", "pause this until the window resets". It writes the hand-back, waits
+  in detached hops that cost ZERO tokens, and picks the run back up. Modes: safe
+  (finish the wave), soft (checkpoint, then stop), hard (stop now). "/orc-wait
+  block <reason>" is the veto.
 ---
 
 # ORC — the wait
@@ -85,8 +80,6 @@ ignored reads as a broken command.
 stop sequence, during a file write, or before the smoke gate has reported. That
 holds in every mode, `hard` included.
 
-Never write "immediately". `hard` stops at the first moment ORC can act.
-
 ## W4 — hand back (the step that is never skipped)
 
 | mode | what you write |
@@ -125,7 +118,7 @@ A user who cannot see when a wait ends cannot tell it from a hang.
 Read `context` from `orc usage check --json`.
 
 - **context small** → continue the run here, in one line.
-- **context large** → STOP. Offer both paths, and recommend the fresh session:
+- **context large** → STOP. Offer both paths (H `any.stop.where`), and recommend the fresh session:
 
   ```
   The wait ended.  usage: 5h 9% (4h51m) · context: 81%
@@ -135,8 +128,8 @@ Read `context` from `orc usage check --json`.
     Or reply `continue` to go on here.
   ```
 
-ORC cannot clear its own context — `/clear` is the user's action. Offer the
-swap; never claim to have performed it.
+**Habits:** the run in flight had `habits{}` in its config answer → read
+`../_shared/habits.md`; its next packet takes the `ASK`. No `habits{}` → ignore `(H …)`.
 
 ## The veto — `block` and `unblock`
 

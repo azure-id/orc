@@ -298,3 +298,20 @@ test("wording: a CLI-COMPUTED VALUE is never simplified and never translated", (
     }
   }
 });
+
+// v2.0.0 W7 — the Behaviour namespace: every key in both languages, prefixed
+// `behaviour.`, and no CLI line or CLI word stored as prose (DE-19).
+test("i18n: behaviour.* exists in en and id, and no CLI word or line is translated", () => {
+  const en = JSON.parse(fs.readFileSync(path.join(WEBUI, "i18n", "en", "behaviour.json"), "utf8"));
+  const id = JSON.parse(fs.readFileSync(path.join(WEBUI, "i18n", "id", "behaviour.json"), "utf8"));
+  assert.deepStrictEqual(Object.keys(id).sort(), Object.keys(en).sort(), "the two tables carry the same keys");
+  assert.ok(Object.keys(en).every((k) => k.startsWith("behaviour.")), "every key is in the behaviour. prefix");
+  assert.strictEqual(i18nTable("en")["nav.behaviour"], "Behaviour");
+  assert.strictEqual(i18nTable("id")["nav.behaviour"], "Perilaku");
+  const words = ["observed", "proposed", "applied", "declined", "never-ask", "stale", "shadowed", "never", "apply", "suggest", "user", "ledger", "learned", "config", "default", "off", "observe", "propose"];
+  for (const [code, table] of [["en", en], ["id", id]])
+    for (const [k, v] of Object.entries(table)) {
+      assert.ok(!words.includes(v.trim()), `${code}/${k} is a CLI word`);
+      assert.ok(!/^You chose |^orc (habit|gotcha|config) /.test(v), `${code}/${k} is a CLI sentence or command — the panel renders those as-is`);
+    }
+});

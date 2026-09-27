@@ -7,7 +7,7 @@ Never prompt about patterns. A cached pattern under `.claude/orc/patterns/`
 is still injected if present — cache hits are always silent.
 <!-- /diy:when -->
 <!-- diy:when pattern=ask -->
-On an FE/BE pattern-cache miss at dispatch time, ask the user once: learn the
+On an FE/BE pattern-cache miss at dispatch time, ask the user once (H `orc.phase-3.pattern`): learn the
 house style via the `.claude/skills/orc-pattern/SKILL.md` flow, or proceed
 language-agnostic. Cache hits are used silently.
 <!-- /diy:when -->

@@ -1,16 +1,6 @@
 # Phase — Execution   (id: `execution`)
 
-> **Shared phase file.** Moved out of `orc/SKILL.md` at v1.0.0 W12, and into
-> this library at W13 when `orc-diy` became its second reader. A spine is loaded
-> IN FULL when its skill activates; this is loaded when the phase fires, and most
-> runs skip most phases.
->
-> **Two layers, and a lane reads exactly one.** `full` is `/orc`'s procedure.
-> `composed` is what `orc diy compile` stitches — the same phase expressed as
-> `<!-- diy:when -->` variants over a composed flow, NOT a second copy of the
-> procedure. Reading the wrong one is the failure `README.md` names: a lane
-> doing a phase its product promise says it does differently.
-> `orc lane phases <lane> --json` names the layer for each lane.
+> **Shared phase file** — read when the phase fires. A lane reads ONE layer: `full` (`/orc`) or `composed` (the `<!-- diy:when -->` variants `orc diy compile` stitches). `orc lane phases <lane> --json` names it.
 
 <!-- orc:layer full -->
 
@@ -60,8 +50,12 @@ the codifier); hold resolved patterns in run state.
    `trace_extras[]` entry VERBATIM into the packet — the CLI composes them, and the
    hook emits NO `SPAWN`/`RETURN` for a foreign worker, so they are the whole record.
 2. Record worker milestone pings (they bound what a mid-wave stop can save).
-3. Collect returns; VALIDATE each (emit `VERIFY <task> actual=<model>/<effort>`
-   ✅ MATCH / ⛔ DOWNGRADE per return — surface any downgrade to the user).
+3. Collect returns; VALIDATE each — read `_shared/return-validation.md` §1–§3,
+   then ONLY the § of each field the slice carried (§4 `pattern`, §5 `tdd_spec`,
+   §5b wiki, §5b.1 graph, §5c `rules_card`, §5d `repro`); §0 only before a
+   re-dispatch, §6 only after the wave, §7 only on a repair loop. Emit
+   `VERIFY <task> actual=<model>/<effort>` ✅ MATCH / ⛔ DOWNGRADE per return —
+   surface any downgrade to the user.
    **A FOREIGN return runs `_shared/return-validation.md` §2b INSTEAD of §2** — it
    has no injected model-id line, so it cannot carry `actual_model` and faking one
    claims evidence that does not exist; ⛔ SUBSTITUTION replaces the downgrade
@@ -106,7 +100,7 @@ invalidates a DONE task → re-run once, then set every reverse-`depends_on`
 consumer to `stale_review`. **Worker failure/garbage/timeout:** flag +
 continue the wave; audit and re-dispatch at the next batch checkpoint
 
-**Before any re-dispatch, run `orc run inflight`** (0 clear · 1 in-flight · 2 unknown). A Task error does not kill the agent behind it, and exit 2 REFUSES by default — `a lane that re-dispatches over a live attempt` has broken the contract. Canonical: `../return-validation.md`.
+**Before any re-dispatch, run `orc run inflight`** (0 clear · 1 in-flight · 2 unknown). A Task error does not kill the agent behind it, and exit 2 REFUSES by default — `a lane that re-dispatches over a live attempt` has broken the contract. Canonical: `../return-validation.md` §0.
 (`requeued`, retry_count++). Hard retry cap 2 → STOP and surface.
 
 <!-- /orc:layer -->

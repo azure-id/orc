@@ -92,6 +92,86 @@ button.hk-pick-row:hover { transform: translateX(3px); }
   animation: none;
 }
 
+/* ── the Behaviour panel (v2.0.0 W7) ──────────────────────────────────────── */
+/* Motion is information here, not decoration: the ring filling says "this
+   share", a bar growing says "this proportion", the proposal breathing says
+   "this one needs you". EVERY animation below is FINITE and ends well inside
+   5 s (WCAG 2.2.2), so the reduced-motion cap leaves each one at rest. */
+.bh-portrait li { animation: bh-portrait-in 420ms var(--ease) backwards; }
+@keyframes bh-portrait-in {
+  from { opacity: 0; transform: translateX(-10px); }
+  to   { opacity: 1; transform: none; }
+}
+.bh-grow-x { transform-origin: left center; animation: bh-grow-x 700ms var(--ease) backwards; }
+@keyframes bh-grow-x {
+  from { transform: scaleX(0); }
+  to   { transform: scaleX(1); }
+}
+.bh-grow-y { transform-origin: bottom center; animation: bh-grow-y 600ms var(--ease) backwards; }
+@keyframes bh-grow-y {
+  from { transform: scaleY(0); }
+  to   { transform: scaleY(1); }
+}
+.bh-heat .c { animation: bh-cell-in 360ms var(--ease) backwards; }
+@keyframes bh-cell-in {
+  from { opacity: 0; transform: scale(.4); }
+  to   { opacity: 1; transform: none; }
+}
+/* The line draws itself. --len is set from the path's own length in the panel. */
+.bh-draw { stroke-dasharray: var(--len, 2000); stroke-dashoffset: var(--len, 2000); animation: bh-draw 1100ms var(--ease) forwards; }
+@keyframes bh-draw { to { stroke-dashoffset: 0; } }
+.bh-fade-late { animation: bh-fade 500ms var(--ease) 700ms backwards; }
+@keyframes bh-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.bh-habit, .bh-lesson { animation: block-in 260ms var(--ease) backwards; }
+.bh-habit { transition: border-color var(--dur) var(--ease), transform var(--dur) var(--ease), box-shadow var(--dur-shadow) var(--ease); }
+.bh-habit:hover { transform: translateY(-2px); }
+/* A proposal is the one card that has to be FOUND: it breathes three times
+   and stops — the hk-chip-mark rule. */
+.bh-habit[data-state="proposed"] { animation: block-in 260ms var(--ease) backwards, bh-propose 1400ms var(--ease) 400ms 3; }
+@keyframes bh-propose {
+  0%, 100% { box-shadow: 0 0 0 0 transparent; }
+  50%      { box-shadow: 0 0 0 4px var(--accent-wash), 0 0 28px -6px var(--accent); }
+}
+.bh-log-row { animation: bh-row-in 380ms var(--ease) backwards; }
+@keyframes bh-row-in {
+  from { opacity: 0; transform: translateY(-8px); background: var(--accent-wash); }
+  to   { opacity: 1; transform: none; background: transparent; }
+}
+/* The ring is a TRANSITION, so the reduced-motion cap already makes it instant. */
+.bh-ring .fg { transition: stroke-dashoffset 900ms var(--ease); }
+.bh-tab-ink { transition: left var(--dur-slow) var(--ease), width var(--dur-slow) var(--ease); }
+.bh-seg button { transition: background var(--dur) var(--ease), color var(--dur) var(--ease); }
+/* The rail dot: three pulses, then rest. */
+.bh-dot { animation: bh-dot 1600ms var(--ease) 3; }
+@keyframes bh-dot {
+  0%, 100% { box-shadow: 0 0 0 0 var(--accent-wash); }
+  50%      { box-shadow: 0 0 0 5px transparent; }
+}
+/* The hero orbit: ONE slow turn (≈ 4.6 s), then rest. Never infinite. */
+.bh-orbit .sat { transform-box: view-box; transform-origin: 130px 130px; animation: bh-orbit 4.6s var(--ease) 1 both; }
+.bh-orbit .sat-b { animation-duration: 4.2s; animation-direction: reverse; }
+@keyframes bh-orbit {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+/* NOTHING ARRIVES ON A REPAINT. After a write the panel repaints with
+   `bh-quiet`, and every entrance above is off — the v1.4.2 hk-quiet rule. */
+.bh-quiet > *,
+.bh-quiet .bh-habit,
+.bh-quiet .bh-lesson,
+.bh-quiet .bh-log-row,
+.bh-quiet .bh-portrait li,
+.bh-quiet .bh-grow-x,
+.bh-quiet .bh-grow-y,
+.bh-quiet .bh-heat .c,
+.bh-quiet .bh-fade-late,
+.bh-quiet .bh-orbit .sat {
+  animation: none;
+}
+
 /* ---------------------------------------------------------- REDUCED MOTION */
 /* Non-negotiable: every animation and transition above is off. */
 
@@ -159,4 +239,11 @@ button.hk-pick-row:hover { transform: translateX(3px); }
   .cg-step, .cg-step-line, .cg-station, .cg-file, .cg-sym, .cg-edge-line,
   .cg-seg, .cg-tile, .cg-bchip, .cg-lang, .cg-read, .cg-gloss-group { animation: none !important; }
   .cg-station:hover { transform: none !important; }
+  /* The Behaviour panel (v2.0.0 W7). The orbit satellites are REMOVED, not
+     capped. A line that draws itself ends drawn: a 1 ms cap on a `forwards`
+     fill could still leave it undrawn for a frame, so its end state is forced.
+     The card lift is removed outright, like every other hover nudge. */
+  .bh-orbit .sat { display: none; }
+  .bh-draw { stroke-dashoffset: 0 !important; }
+  .bh-habit:hover { transform: none !important; }
 }

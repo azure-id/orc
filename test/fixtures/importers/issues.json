@@ -1,0 +1,5 @@
+[
+ {"number":501,"title":"Export times out when the orders table is large","labels":[{"name":"bug"}],"stateReason":"COMPLETED","closedAt":"2026-09-18T12:00:00Z","closedByPullRequestsReferences":[{"number":77,"url":"https://github.com/acme/shop/pull/77"}]},
+ {"number":502,"title":"Dark mode colours are wrong on Safari","labels":[{"name":"bug"}],"stateReason":"NOT_PLANNED","closedAt":"2026-09-19T12:00:00Z","closedByPullRequestsReferences":[]},
+ {"number":503,"title":"Cart total is off by one cent","labels":[{"name":"bug"}],"stateReason":"COMPLETED","closedAt":"2026-09-20T12:00:00Z","closedByPullRequestsReferences":[]}
+]

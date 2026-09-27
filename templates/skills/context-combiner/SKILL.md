@@ -1,20 +1,10 @@
 ---
 name: context-combiner
 description: >
-  Combines 2+ RELATED, already-confirmed ORC analyses (from orc-analyze) into
-  ONE merged, deduped, conflict-resolved requirement context before build. Use
-  when the user analyzed multiple related documents within the same scope and
-  chose "pass to context-combiner" at orc-analyze's Phase F. Verifies the source
-  analyses actually overlap (shared files/requirements/scope) and challenges the
-  user if they look unrelated; pools ALL source requirements into one table and
-  reconciles them (exact/semantic duplicates, partial overlaps split — never
-  collapsed, conflicts, ordering) one issue at a time; proves NOTHING WAS LOST
-  via a source coverage matrix and a 100% coverage gate before handoff;
-  spot-checks inherited evidence and marks stale anchors; writes
-  combined-report.md + combined-requirement-spec.md, which reuse the
-  requirement-spec schema, so the planner/build pipeline is unchanged. Full
-  lane only. The orchestrator DISPATCHES this to a subagent — it never
-  combines itself, and the combiner never spawns subagents.
+  Internal to /orc: merges 2+ RELATED, confirmed orc-analyze analyses into ONE
+  deduped, conflict-resolved requirement context. Dispatched when the user picks
+  "pass to context-combiner" at orc-analyze's Phase F.
+disable-model-invocation: true
 ---
 
 # CONTEXT-COMBINER
@@ -80,11 +70,9 @@ it were a single analysis — with PROOF that no source requirement was lost.
 
 ## Phases
 
-`orc lane phases context-combiner --json` is this lane's pipeline: the ordered list, where
-each phase lives, and how much of it to read. **The CLI owns the order** — never
-derive it from the headings below, and never renumber or rename one without the
-manifest, because a `read: section` pointer names a HEADING and a renamed heading
-is a pointer into nothing.
+`orc lane phases context-combiner --json` is this lane's pipeline. **The CLI owns the order**:
+never derive it from the headings below, and never rename or renumber one
+without the manifest (`../_shared/lane-contract.md` §Phases).
 
 ## Phase A — Load sources
 Read every source `requirement-spec.md` (2+) the orchestrator hands you, plus
@@ -194,29 +182,12 @@ withheld until the open conflict is resolved and coverage is complete.
 ## No mini variant
 Full lane only. `orc-analyze-mini` / `orc-mini` do not use the combiner.
 
-## Config
+## Lane contract (`../_shared/lane-contract.md` — read it ONLY when a call exits ≠ 0)
 
-Resolve with `orc lane config context-combiner --json` and obey `effective`. Never merge
-`.claude/orc.config.yaml` yourself, and never re-derive a precedence. Exit ≠ 0 →
-say so and use `../_shared/config-precedence.md`'s documented defaults, out
-loud. Nothing this lane reads is contested, gated or a stop, so it owes no
-preflight line and has no gate to honour.
-
-## Calls
-
-**ONE catalogue, and it is not you:** `orc lane calls context-combiner --json` names every
-CLI call this lane makes, each with its exit-code contract, its cost, when to run
-it, and what an EMPTY answer means. Never invent a spelling, never re-word an
-exit code, and never re-derive a state word — the CLI's state words are the only
-state words, and **an exit code is an ANSWER wherever that contract says so, not
-a failure**. A call the answer does not name is a call this lane does not make.
-Exit ≠ 0 from the catalogue itself → say the CLI is unavailable and name the
-command you are about to run, out loud, before running it.
-
-## Rules — the anti-slop card (`../_shared/phases/rules.md`)
-
-`orc rules slice --lane context-combiner --json` is the ONLY assembler; never build
-the card here. It rides under the house rules and above the task —
-**house rules > your project's rules > ORC's own packs** — and its `line` prints
-VERBATIM at preflight. Returns gain `rules_applied[]`, `rules_conflicts[]` (a gap,
-never a silent choice) and `rules_overridden[]`.
+- **Calls:** `orc lane calls context-combiner --json` names every call and its exit codes.
+  **An exit code is an ANSWER where it says so, not a failure.** Make no other call.
+- **Config:** `orc lane config context-combiner --json`. Obey `effective`. Never merge
+  `.claude/orc.config.yaml` yourself (`../_shared/config-precedence.md`). Nothing
+  here is contested, gated or a stop: no preflight line, no gate to honour.
+- **Rules:** `orc rules slice --lane context-combiner --json` is the ONLY assembler
+  (`../_shared/phases/rules.md`). Its `line` prints VERBATIM at preflight.

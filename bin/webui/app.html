@@ -29,6 +29,7 @@
 <link rel="stylesheet" href="css/panels/runs.css">
 <link rel="stylesheet" href="css/panels/knowledge.css">
 <link rel="stylesheet" href="css/panels/stats.css">
+<link rel="stylesheet" href="css/panels/behaviour.css">
 <link rel="stylesheet" href="css/panels/flow.css">
 <link rel="stylesheet" href="css/panels/crosslink.css">
 <link rel="stylesheet" href="css/panels/learn.css">
@@ -92,6 +93,11 @@
       <li><a href="#/runs"        data-panel="runs"        data-idx="3" data-i18n="nav.runs">Runs</a></li>
       <li><a href="#/knowledge"   data-panel="knowledge"   data-idx="4" data-i18n="nav.knowledge">Knowledge</a></li>
       <li><a href="#/stats"       data-panel="stats"       data-idx="5" data-i18n="nav.stats">Stats</a></li>
+      <!--
+        v2.0.0. Behaviour sits directly under Stats: Stats says what the runs did,
+        Behaviour says how YOU ran them. Both read the same traces. Key `u` ("you").
+      -->
+      <li><a href="#/behaviour"   data-panel="behaviour"   data-idx="u" data-i18n="nav.behaviour">Behaviour</a></li>
       <!--
         v0.46.0. Promises and Boundary sit next to Knowledge because they ARE
         knowledge — derived, coverage-anchored, and stale the same way a wiki doc
@@ -210,6 +216,7 @@
 <script src="js/panels/runs.js"></script>
 <script src="js/panels/knowledge.js"></script>
 <script src="js/panels/stats.js"></script>
+<script src="js/panels/behaviour.js"></script>
 <script src="js/panels/flow.js"></script>
 <script src="js/panels/crosslink.js"></script>
 <script src="js/panels/learn.js"></script>

@@ -4,12 +4,9 @@ description: >
   Run the test against the real running system, and report only what was
   observed. Use for "/orc-test", "test my API end to end", "run the endpoints
   from happy path to security", "test this against staging", "e2e the login
-  flow". It brings the local system up (and STOPS and hands back if it will
-  not come up), finds the surface, digs the repo for the flow from the first
-  request into the target endpoint, expands the case matrix from happy path to
-  edge to abuse to security, RUNS every case, and writes the evidence and the
-  report into orc/orc-test/<slug>/. It never edits the system it is testing,
-  never commits, and never reports a result it did not observe.
+  flow". It brings the system up, expands the cases from happy path to security,
+  RUNS every case, and writes the evidence and the report into
+  orc/orc-test/<slug>/. It never edits the system it tests and never commits.
 ---
 
 # `/orc-test` — the lane that RUNS the test
@@ -172,26 +169,15 @@ Canonical contract: `../_shared/live-target.md`. Read it before phase T1.
   and offer: re-run a tier · widen the surface · `/orc-pact` the invariant this
   run proved · `/orc-challenge` the report. Never proceed on your own.
 
-## Config
+## Lane contract (`../_shared/lane-contract.md` — read it ONLY when a call exits ≠ 0)
 
-**ONE resolver, and it is not you:** `orc lane config orc-test --json`. Obey
-`effective`, print every line in `announce[]` VERBATIM at preflight, and honour
-`stops[]` before the first case runs. Never re-derive a value, a precedence or
-an inertness from `.claude/orc.config.yaml` — a key this lane does not read is
-not in the answer, and a key another key shadows comes back already marked.
-Exit ≠ 0 → say the CLI is unavailable and fall back to
-`../_shared/config-precedence.md`'s documented defaults, out loud. Priorities
-and families: `../_shared/config-precedence.md`.
-
-## Calls
-
-**ONE catalogue, and it is not you:** `orc lane calls orc-test --json` names
-every CLI call this lane makes, each with its exit-code contract, its cost, when
-to run it, and what an EMPTY answer means. Never invent a spelling, never
-re-word an exit code, and never re-derive a state word — the CLI's state words
-are the only state words, and **an exit code is an ANSWER wherever that contract
-says so, not a failure**. A call the answer does not name is a call this lane
-does not make.
+- **Calls:** `orc lane calls orc-test --json` names every call and its exit codes.
+  **An exit code is an ANSWER where it says so, not a failure.** Make no other call.
+- **Config:** `orc lane config orc-test --json`. Obey `effective`, print every line
+  in `announce[]` VERBATIM at preflight, and honour `stops[]` before the first case runs.
+  Never merge `.claude/orc.config.yaml` yourself (`../_shared/config-precedence.md`).
+- **Rules:** `orc rules slice --lane orc-test --json` is the ONLY assembler
+  (`../_shared/phases/rules.md`). Its `line` prints VERBATIM at preflight.
 
 ## Sending work off Claude (`orc extra`)
 
@@ -223,18 +209,11 @@ behind the disk. Keep the `Where it stands:` line at column 0.
 
 ## Trace
 
-Tier **Iterative** — one packet per completed cycle. Narration is DISPATCHED,
-never remembered: build the PHASE PACKET and dispatch
-`orc-trace-writer-haiku-4-5`. Canonical: `../_shared/phases/trace.md`.
+Tier **Iterative** — one packet per completed cycle. Pipe the PHASE PACKET to
+`orc trace write --packet -` (exit ≠ 0 → `orc-trace-writer-haiku-4-5`).
+Canonical: `../_shared/phases/trace.md`.
 
-## Rules — the anti-slop card (`../_shared/phases/rules.md`)
-
-`orc rules slice --lane orc-test --json` is the ONLY assembler; never build
-the card here. It rides under the house rules and above the task —
-**house rules > your project's rules > ORC's own packs** — and its `line` prints
-VERBATIM at preflight. Returns gain `rules_applied[]`, `rules_conflicts[]` (a gap,
-never a silent choice) and `rules_overridden[]`.
 ## Waiting mid-run (`/orc-wait`)
 
 Canonical: `../_shared/wait.md`. **`a lane that waits without a hand-back` has broken this contract.**
-Checkpoint **cycle** · safe point **case boundary**. `soft` FORCES that checkpoint and does NOT stop if the write fails; `hard` skips it and can lose an in-flight return. Never begin a wait mid-request — a long `orc test run` is the first ORC operation that takes minutes with no model in it, and the safe point is BETWEEN cases.
+Checkpoint **cycle** · safe point **case boundary**. Never begin a wait mid-request — a long `orc test run` is the first ORC operation that takes minutes with no model in it, and the safe point is BETWEEN cases.

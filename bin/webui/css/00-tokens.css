@@ -36,6 +36,16 @@
   --idle:          #6b7280;
   --idle-wash:     rgba(107, 114, 128, .12);
 
+  /* seven series colours (v2.0.0 W7) — the Behaviour panel's lane mix, answer
+     sources and gotcha sources. Each is >= 3:1 against --surface (WCAG 1.4.11). */
+  --s1:            #4c9aff;
+  --s2:            #3fb950;
+  --s3:            #d8a01a;
+  --s4:            #b083f0;
+  --s5:            #f0533f;
+  --s6:            #39c5cf;
+  --s7:            #8b949e;
+
   --radius:        10px;
   --radius-sm:     6px;
   --radius-lg:     14px;
@@ -87,6 +97,14 @@
   --bad-wash:      rgba(207, 34, 46, .10);
   --idle:          #6b7280;
   --idle-wash:     rgba(107, 114, 128, .10);
+
+  --s1:            #1f6feb;
+  --s2:            #1a7f37;
+  --s3:            #9a6700;
+  --s4:            #8250df;
+  --s5:            #cf222e;
+  --s6:            #1b7c83;
+  --s7:            #6e7781;
 
   --shadow: 0 10px 30px rgba(16, 24, 40, .12);
 }

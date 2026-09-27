@@ -1,0 +1,1 @@
+[{"id":1,"user":{"login":"dana","type":"User"},"state":"CHANGES_REQUESTED","body":"Two blockers on the export: memory and rate limit.","html_url":"https://github.com/acme/shop/pull/142#pullrequestreview-1"},{"id":2,"user":{"login":"sam","type":"User"},"state":"COMMENTED","body":"","html_url":"https://github.com/acme/shop/pull/142#pullrequestreview-2"}]

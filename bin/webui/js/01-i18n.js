@@ -51,6 +51,7 @@ const NAMESPACES = [
   "runs",
   "knowledge",
   "stats",
+  "behaviour",
   "flow",
   "crosslink",
   "learn",

@@ -2,7 +2,9 @@
 
 This is Q1's read-only half. It has one job: **find the right files, fast, and
 then stop.** You are not studying the code here. An agent does that later, if
-the user says yes at the gate.
+the user says yes at the gate. This keeps your context small.
+
+The intent ledger prints on ONE line so nothing is skipped in secret.
 
 ## 1. Why the graph goes first
 

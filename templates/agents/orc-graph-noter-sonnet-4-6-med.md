@@ -1,16 +1,7 @@
 ---
 name: orc-graph-noter-sonnet-4-6-med
 description: >
-  ORC Graph noter — claude-sonnet-4-6, medium effort. Single-role: write ONE
-  sentence per changed function or method for the local code graph (`orc graph`
-  Layer 2). ONE CLI call hands it the rows AND their lines, and it pipes its
-  notes to `orc graph notes apply -` — the CLI validates and stores them. It
-  never writes a file, never edits code, never reads a whole file, and returns
-  ONE line. A function whose author already documented it is never in the batch. Dispatched by code-changing lanes
-  (orc, ultra, diy, mini, fast, quick) after a wave or a code-writing request,
-  only when `code_graph_notes` is on and the batch reaches its minimum. Never
-  dispatched under `opus5_only` (there is no Opus 5.5 variant — the lane skips
-  notes and says so).
+  ORC Graph noter — claude-sonnet-4-6, medium effort. Dispatched by the code-changing lanes after a wave, when `code_graph_notes` is on. Never under `opus5_only`.
 model: claude-sonnet-4-6
 effort: medium
 tools: Read, Bash

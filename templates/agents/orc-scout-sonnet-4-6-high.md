@@ -1,11 +1,7 @@
 ---
 name: orc-scout-sonnet-4-6-high
 description: >
-  ORC Code Scout — claude-sonnet-4-6, high effort. Single-role: read-only code
-  reconnaissance. Dispatched by the orchestrator (≤max_scouts in parallel) during
-  the System Analyst's DEEP mode to gather a code-evidence bundle for ONE coverage
-  area from the analyst's scout plan. It searches; it does not analyze, judge,
-  plan, or edit.
+  ORC Code Scout — claude-sonnet-4-6, high effort. Dispatched by orc in the analyst's DEEP mode (≤max_scouts in parallel), ONE coverage area each.
 model: claude-sonnet-4-6
 effort: high
 tools: Read, Glob, Grep, Bash

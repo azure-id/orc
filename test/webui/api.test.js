@@ -60,6 +60,14 @@ const JSON_COMMANDS = [
   { argv: ["stats"], exit: 1 }, // no traces
   { argv: ["pr", "stack", "status"], exit: 1 }, // no plan
   { argv: ["mock", "list"], exit: 0 },
+  // v2.0.0 W7 — the Behaviour panel reads. The exit code is DATA for each.
+  { argv: ["habit", "show"], exit: 3 }, // habits: off by default (DE-16)
+  { argv: ["habit", "log", "--limit", "40"], exit: 1 }, // empty
+  { argv: ["habit", "log", "--states"], exit: 1 }, // no decisions yet
+  { argv: ["habit", "points"], exit: 0 },
+  { argv: ["gotcha", "quality"], exit: 1 }, // below the 5-review floor
+  { argv: ["gotcha", "card", "--files", "src/a.js", "--full"], exit: 1 }, // no match — an ANSWER
+  { argv: ["gotcha", "list", "--candidates"], exit: 1 }, // none
 ];
 
 test("--json prints exactly one object and never changes the exit code", () => {

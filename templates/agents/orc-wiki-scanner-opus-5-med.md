@@ -1,14 +1,7 @@
 ---
 name: orc-wiki-scanner-opus-5-med
 description: >
-  ORC Wiki Scanner — Opus-5-only mode variant. claude-opus-5-5, medium effort.
-  Single-role: read ONE coverage area's real files and RETURN an
-  evidence-anchored wiki doc body plus its crosslink tag bodies. Read-only
-  against the project: it returns the content; the orc-wiki orchestrator writes
-  the doc, writes the tags, and runs `orc wiki sync`. Dispatched per scan-task by
-  the orc-wiki skill (never by the user) INSTEAD of
-  orc-wiki-scanner-opus-4-8-high when `opus5_only: true`. It never plans areas,
-  never assembles the wiki, never spawns.
+  ORC Wiki Scanner — claude-opus-5-5, medium effort. Dispatched by orc-wiki per scan-task, for BOTH tiers when `opus5_only: true`.
 model: claude-opus-5-5
 effort: medium
 tools: Read, Glob, Grep, Bash

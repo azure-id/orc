@@ -1,18 +1,6 @@
 # Phase — Rules   (id: `rules`)
 
-> **Library file.** New at v1.7.0 W5. Layers declared: `core` only — single-layer
-> for the same reason `house-rules.md` is: it is a standing card injected
-> VERBATIM into a slice, and a layered card would be a different card. What
-> varies between lanes is DATA (which packs, whether a task is front-end), not
-> prose. `orc lane phases <lane> --json` names the file and the layers to read.
->
-> **What is NOT here:** the rules. They are `../rules/` — four packs, read-only,
-> shipped. This file is the SHAPE: who assembles the card, where it sits in a
-> slice, what comes back, and what the phase must never do.
->
-> **`/orc-doc` does not run this phase.** That lane has its own ledger
-> (`orc doc rules`) and its own frozen-per-document mechanic. Excluded means
-> excluded, and `orc rules slice --lane orc-doc` refuses by name.
+> **Library file**, `core` only (a standing card, like `house-rules.md`). The rules are in `../rules/`; this file is the SHAPE. **`/orc-doc` does not run this phase** — it has `orc doc rules`, and `orc rules slice --lane orc-doc` refuses by name.
 
 <!-- orc:layer core -->
 
@@ -118,11 +106,8 @@ structural and safety rules.
 A rule that asks for one of those comes back as `unsupported_request` and is
 relayed as a gap. **Never a guessed compromise.**
 
-**Do not build a detector for this.** The CLI declares the boundary and does not
-pretend to enforce it, for the reason `orc doc rules` already settled: a
-validator that sometimes works is worse than none, because a clean pass then
-means nothing. The agent is the only reader that can tell a content rule from a
-structural one, so the agent is where the answer comes from.
+The CLI declares this boundary and does not enforce it. The agent is the only
+reader that can tell a content rule from a structural one.
 
 ## The free lint
 
@@ -144,29 +129,20 @@ An exemption is never silent either. The lint skips the rules packs themselves
 (a rule that bans a word has to print that word to define it) and any file
 marked `orc-rules-ignore-file`, and it reports the count of both.
 
-## Cost, and where to cut it
+## The COMPACT card
 
-Measured at v1.7.0: roughly **3 600 tokens** per build-lane slice, **4 300** with
-the UI pack, **2 200** for a prose-only lane. The card already carries HARD rules
-in full and PURPOSE/LOCK rules as one line plus the file to open when one
-applies.
+`orc-quick` gets the COMPACT form: every HARD rule keeps its id, its title and
+its first line. `rules_card_compact: on` gives it to `orc-mini` and `orc-fast`
+too. That key is OFF until eval E4 passes (DE-17). The CLI decides this, never
+the lane. The answer says `compact: true` in the JSON. `line` is IDENTICAL in
+both forms.
 
-If it must come down, the lever is the worked examples inside the HARD bodies,
-and the only place to pull it is `rulesSlice()` in `bin/cli.js`. **Never by a
-lane deciding to trim its own card** — that is the drift this phase exists to
-prevent, arriving disguised as a saving.
+## The LEARNED tier
 
-**v1.9.0 — the COMPACT form, and the CLI decides which lanes get it.** The
-lever above is now pulled for **`orc-quick`** and for no one else: every HARD
-rule keeps its id, its title and its first line — the instruction — and the
-worked examples come out, with the pack file named beside them. Measured
-**13 874 → 5 838 chars** (~3 470 → ~1 460 tokens) with every HARD id still
-present. The lane that gets it is the lane with the smallest tasks under the
-largest fixed card, and the card is re-sent on every executor turn.
-
-The answer says which form it is: `compact: true` in the JSON. A reader that
-cannot tell a short card from a stripped one cannot trust either. `line` is
-IDENTICAL in both forms — it counts the rules in force, and compacting changes
-how a rule is written, never whether it applies.
+With `habits` on, the card can carry **learned preferences** (commit, branch
+and test-file naming, from `orc habit repo`). Each one rides only after your
+yes. They sit BELOW your rules and ABOVE the ORC rules. A preference that no
+longer matches 4 of the last 5 samples is `stale` and leaves the card. Under
+`habits: off` the slice has no `learned` field and no byte of this tier.
 
 <!-- /orc:layer -->

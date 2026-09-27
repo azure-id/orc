@@ -1339,8 +1339,10 @@ function extendedScan(d, wants, wantsProvider) {
   }
   if (wants("gotchas.count")) {
     SCAN.gotchas = cached("gotchas", TTL.knowledge, () => {
+      // The ledger is ONE file, `.claude/orc/gotchas.md`; each entry opens with
+      // a `## G-<id>` heading. No file → null, never 0 (no ledger is not "none").
       try {
-        return fs.readdirSync(path.join(orc, "gotchas")).filter((f) => f.endsWith(".md")).length;
+        return (fs.readFileSync(path.join(orc, "gotchas.md"), "utf8").match(/^##[ \t]+G-\d/gm) || []).length;
       } catch (_) {
         return null;
       }

@@ -237,7 +237,7 @@ test("config: every key answers a declared family, and the two contested ones ar
   const { root } = freshInstall();
   try {
     const j = JSON.parse(cli(["config", "list", "--json", "--dir", root]).stdout);
-    assert.strictEqual(j.keys.length, 95); // v1.6.0: +read_gate, +read_gate_max_lines · v1.8.0: +code_graph and its seven operating keys · v1.8.2: +code_graph_ignore
+    assert.strictEqual(j.keys.length, 106); // v2.0.0 W6c: +notify, +rules_card_compact · v2.0.0 W4: +gotcha_card_budget, +gotcha_sync_hours, +sonar_url, +sonar_project, +sonar_org · v1.6.0: +read_gate, +read_gate_max_lines · v1.8.0: +code_graph and its seven operating keys · v1.8.2: +code_graph_ignore · v2.0.0 W2: +habits, +review_before_push, +mini_tdd, +quick_update_tests
     for (const k of j.keys) {
       assert.ok(k.answers && k.answers.length, k.key + " declares no answers[]");
       for (const a of k.answers) assert.ok(j.families[a.family], k.key + " → unknown family " + a.family);
@@ -360,6 +360,13 @@ test("config: lanes[] is a mechanical seed, and says so by being empty where it 
     // does for `log_dir` and `extra_enabled`.
     const orphans = j.keys.filter((k) => !k.lanes.length).map((k) => k.key);
     assert.deepStrictEqual(orphans, [
+      // v2.0.0 W4 — operating keys of the gotchas ENGINE: `orc gotcha card`,
+      // `import` and `sync` read them, never a spine.
+      "gotcha_card_budget",
+      "gotcha_sync_hours",
+      "sonar_url",
+      "sonar_project",
+      "sonar_org",
       // v1.4.0 — the SECOND board's switch, and the same answer for the same
       // reason: a hook has no lane.
       "subagent_line_custom",
@@ -407,6 +414,17 @@ test("config: lanes[] is a mechanical seed, and says so by being empty where it 
       // `orc test run` and the CLI paces the requests; no spine reads the
       // number, exactly as no spine reads `extra_timeout_s`.
       "test_max_rps",
+      // v2.0.0 W2 — `habits` is resolved by `orc lane config` (the `code_graph`
+      // answer); the three offer keys get their lanes in W3 and leave this list.
+      "habits",
+      "review_before_push",
+      "mini_tdd",
+      "quick_update_tests",
+      // v2.0.0 W6c — `notify` is read off the raw file by the session hook (a
+      // hook has no lane); `rules_card_compact` by `rulesSlice()` (a lane never
+      // picks its own card).
+      "notify",
+      "rules_card_compact",
     ]);
   } finally {
     rmrf(root);

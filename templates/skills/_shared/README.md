@@ -55,6 +55,15 @@ loaded on demand when the step fires.
   their meaning — read a family top-down and stop at the first rank that
   resolves. Also the two contested families, gates vs inertness, the
   `announce[]` boundary, and what a lane does when the CLI cannot answer.
+- `lane-contract.md` — the common text of the six spine blocks (Calls · Config ·
+  Rules · Trace · Phases · Wait), held once. A coding-lane spine keeps a short
+  pointer with its own values and reads this file ONLY when a CLI call exits ≠ 0.
+- `habits.md` — the lane side of habits: the `→ usual` mark, the `ASK` event at
+  each `(H <qid>)` question, and the one run-end proposal. Read ONLY when
+  `orc lane config` answers with a `habits{}` block (never under `habits: off`).
+- `review-slice.md` — the ONE review slice every lane uses: the R1 free check,
+  the fields (`tool_findings[]`, `gotcha_card` …) and the
+  after-filter. Read ONLY when a review dispatch is about to be built.
 
 Human guides live in the skills themselves: `../orc-pr-setup/README.md` (plan the
 layers), `../orc-pr-driver/README.md` (build, submit, merge them), and

@@ -1,14 +1,10 @@
 ---
 name: orc-advisor
 description: >
-  Pre-analysis Advisor for the ORC ultra lane. Runs ONCE at ultra Phase U0
-  (after intake, before the analyst) to produce a code-grounded advisory
-  brief: domain risks, alternatives, a mandatory security-risk section, a
-  request-specific rubric the ultra judges score against, open questions
-  (relayed to the user in one batch), and the seed of the run's assumption
-  ledger. Dispatched only from /orc-ultra — no slash command of its own, never
-  in orc or orc-mini. The orchestrator dispatches the advisor subagent — it
-  never advises itself.
+  Internal to /orc-ultra: the pre-analysis Advisor. Runs ONCE at Phase U0 and
+  writes the advisory brief, the security-risk section and the rubric the ultra
+  judges score against. No slash command of its own.
+disable-model-invocation: true
 ---
 
 # ORC-ADVISOR (ultra-lane advisory brief)

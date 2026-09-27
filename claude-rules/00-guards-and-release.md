@@ -29,10 +29,14 @@
   Runs on `prepack`; add a case when you touch a covered function. Needs Node
   ≥18 (`engines` bumped from `>=16`).
 
-- **The 6 executor agent files are GENERATED — never hand-edit them.** Edit
-  `agents-src/executor.template.md` (or the VARIANTS table in
-  `bin/build-agents.js`) and run `npm run build:agents`; `npm run verify` fails
-  on any hand-edited generated file.
+- **26 agent files are GENERATED — never hand-edit them.** The 10 executor
+  files come from `agents-src/executor.template.md` (+ the VARIANTS table in
+  `bin/build-agents.js`). Since v2.0.0, 16 more model twins come from
+  `agents-src/twins/*.template.md` (+ the TWINS table): analyze-mini,
+  claude-writer, pattern-codifier, planner-mini, recon, retro, scout and
+  wiki-scanner, two variants each. Edit the template and run
+  `npm run build:agents`. `node bin/build-agents.js --check` (the first step of
+  `npm run verify`) fails on any hand-edited executor OR twin.
 
 - **Shared contracts: the lint table is the registry.** Cross-file contract
   tokens and their EXACT file sets live in `bin/verify-contracts.js` — when

@@ -521,3 +521,73 @@ test("the settings fixture resolves its contested families, with the reachable s
   assert.ok(c.keys.some((k) => (k.lanes || []).length === 0), "a key no lane reads must be designable");
   assert.ok(c.keys.some((k) => (k.lanes || []).length > 1), "beside one several lanes read");
 });
+
+// v2.0.0 W7 — the Behaviour panel (`07-behaviour-panel-spec.md` §8). One of
+// EVERY state the panel draws, counted, so a new state cannot ship unseen.
+test("behaviour fixtures carry every habit state, class, mode, by= value, gotcha source and status, and the empty answers", () => {
+  const fixtures = require(path.join(REPO, "bin", "webui", "fixtures", "index.js"));
+  const H = require(path.join(REPO, "bin", "habit.js"));
+  const G = require(path.join(REPO, "bin", "gotcha.js"));
+  const B = require(path.join(REPO, "bin", "webui", "fixtures", "behaviour.js"));
+  const rows = B.habitsPropose.rows;
+  const states = new Set(rows.map((r) => r.state));
+  for (const s of H.STATE_WORDS) assert.ok(states.has(s), `no habit fixture in state ${s}`);
+  const classes = new Set(rows.map((r) => r.effective_class));
+  for (const c of ["apply", "suggest", "never"]) assert.ok(classes.has(c), `no habit fixture of class ${c}`);
+  // Every mode is REACHABLE from the panel: the learning switch posts
+  // /api/config/set, and the next read answers in that mode.
+  const seen = {};
+  for (const m of H.HABIT_MODES) {
+    fixtures.post("/api/config/set", { key: "habits", value: m });
+    seen[m] = fixtures.get("/api/habits", {});
+  }
+  fixtures.post("/api/config/set", { key: "habits", value: "propose" });
+  assert.strictEqual(seen.off.reason, "off", "off answers the exit-3 object");
+  assert.ok(seen.off.kept > 0 && seen.off.on.length === 2, "off says earlier answers are kept, and how to turn it on");
+  assert.strictEqual(seen.observe.mode, "observe");
+  assert.strictEqual(seen.observe.counts.proposed, 0, "observe fills the tabs and proposes nothing");
+  assert.strictEqual(seen.propose.counts.proposed, 1);
+  assert.strictEqual(fixtures.post("/api/config/set", { key: "mock_example", value: "on" }), undefined, "only the habits key is canned");
+  const by = new Set(B.habitLog.events.map((e) => e.by));
+  for (const b of ["user", "ledger", "learned", "config", "default"]) assert.ok(by.has(b), `no answer-log fixture with by=${b}`);
+  const P = fixtures.get("/api/gotchas", {}).panel;
+  const sources = new Set(P.rows.map((r) => r.source));
+  for (const s of Object.keys(G.SOURCE_KIND)) assert.ok(sources.has(s), `no gotcha fixture from source ${s}`);
+  const statuses = new Set(P.rows.map((r) => r.status));
+  for (const s of ["active", "quiet", "orphaned"]) assert.ok(statuses.has(s), `no gotcha fixture in status ${s}`);
+  assert.ok(P.status_counts.candidate > 0 && fixtures.get("/api/gotcha/candidates", {}).candidates.length, "a candidate is designable");
+  assert.strictEqual(fixtures.get("/api/gotchas", {}).count, fixtures.get("/api/gotchas", {}).gotchas.length, "the count matches the entries");
+  // The three empty answers.
+  assert.strictEqual(fixtures.get("/api/habits", { window: "30d" }).answers, 0, "no traces yet (exit 1)");
+  assert.ok(fixtures.get("/api/gotcha/quality", { window: "30d" }).below_floor, "below the 5-review floor");
+  assert.ok(fixtures.get("/api/gotcha/quality", { window: "30d" }).floor_line, "the floor slot carries the CLI's sentence");
+  assert.strictEqual(fixtures.get("/api/gotcha/card", { files: "docs/readme.md" }).matched, 0, "a card with zero matches");
+  assert.ok(fixtures.get("/api/gotcha/card", { files: "src/routes/a.js" }).matched > 0);
+});
+
+test("behaviour fixtures match the live --json key sets of the reads they stand in for", () => {
+  const { root } = freshInstall();
+  try {
+    fs.writeFileSync(path.join(root, ".claude", "orc.config.yaml"), "habits: propose\n");
+    const fixtures = require(path.join(REPO, "bin", "webui", "fixtures", "index.js"));
+    const B = require(path.join(REPO, "bin", "webui", "fixtures", "behaviour.js"));
+    const pairs = [
+      [B.habitsPropose, ["habit", "show"]],
+      [B.habitLogEmpty, ["habit", "log"]],
+      [B.habitPoints, ["habit", "points"]],
+      [B.gotchaQualityLow, ["gotcha", "quality"]],
+      [B.gotchaCardNone, ["gotcha", "card", "--files", "x.js"]],
+      [B.gotchaCandidates, ["gotcha", "list", "--candidates"]],
+    ];
+    for (const [canned, argv] of pairs) {
+      const live = JSON.parse(cli([...argv, "--json", "--dir", root]).stdout);
+      for (const key of Object.keys(live)) assert.ok(key in canned, `fixture for ${argv.join(" ")} is missing the live key "${key}"`);
+    }
+    fs.writeFileSync(path.join(root, ".claude", "orc.config.yaml"), "habits: off\n");
+    const off = JSON.parse(cli(["habit", "show", "--json", "--dir", root]).stdout);
+    for (const key of Object.keys(off)) assert.ok(key in B.habitsOff, `the off fixture is missing the live key "${key}"`);
+    assert.ok(fixtures);
+  } finally {
+    rmrf(root);
+  }
+});

@@ -1,0 +1,38 @@
+{
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "Semgrep OSS",
+          "rules": [
+            {
+              "id": "javascript.express.security.audit.xss.direct-response-write",
+              "shortDescription": { "text": "Direct response write of user input" },
+              "defaultConfiguration": { "level": "warning" },
+              "properties": { "tags": ["CWE-79: Improper Neutralization of Input During Web Page Generation", "security"] }
+            },
+            { "id": "javascript.lang.best-practice.no-console", "shortDescription": { "text": "console.log in production code" } }
+          ]
+        }
+      },
+      "originalUriBaseIds": { "%SRCROOT%": { "uri": "file:///C:/work/shop/" } },
+      "results": [
+        {
+          "ruleId": "javascript.express.security.audit.xss.direct-response-write",
+          "message": { "text": "Detected user input flowing into res.send() without escaping." },
+          "locations": [{ "physicalLocation": { "artifactLocation": { "uri": "src/routes/export.js", "uriBaseId": "%SRCROOT%" }, "region": { "startLine": 34 } } }],
+          "partialFingerprints": { "matchBasedId/v1": "semgrep-xss-0001" },
+          "baselineState": "absent"
+        },
+        {
+          "ruleId": "javascript.lang.best-practice.no-console",
+          "message": { "text": "Remove the console.log call." },
+          "locations": [{ "physicalLocation": { "artifactLocation": { "uri": "file:///C:/work/shop/src/routes/export.js", "uriBaseId": "%SRCROOT%" }, "region": { "startLine": 50 } } }],
+          "partialFingerprints": { "matchBasedId/v1": "semgrep-console-0002" },
+          "baselineState": "new"
+        }
+      ]
+    }
+  ]
+}

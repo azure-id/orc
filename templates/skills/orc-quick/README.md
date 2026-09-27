@@ -165,6 +165,27 @@ entry 1 recorded. anything else?
 
 Notice: **the reviewer was also a gate.** Every dispatch is asked.
 
+**The review uses the repair memory.** The reviewer gets the gotcha card: the
+entries in the repair memory that match the files it reads. When the
+review closes, the lane records what became of each finding (addressed,
+disputed, won't fix, open). That is how `orc gotcha quality` and the gotcha
+promotion learn. It costs no extra question.
+
+**Habits (only when you turn them on).** With `habits: observe` or `propose`,
+each answer you give writes one `ASK` line into the trace. After you choose
+"review first" often enough, the end of a run can carry ONE proposal:
+
+```
+You chose review first in 6 of your last 6 answers to "Code review before
+commit". Make it your usual? [yes · not now · never]
+```
+
+After a yes, the offer puts your usual first — *review → then commit (your
+usual, 6 of 6) · commit without review · stop*. The review is still a dispatch,
+so the agent question is still asked. A habit also only fills the
+`→ suggested` line of the agent question; it never answers it. `habits: off` is
+the default and changes nothing. `orc habit forget <id>` undoes a habit.
+
 ---
 
 ## 5. A read-only run (no code changes)
@@ -380,11 +401,13 @@ No warning, no gate, no question. It goes straight to the commit offer.
 ### If you stop while things are red
 
 It **never undoes your work**. It tells you what changed and gives you the
-command:
+command. `orc undo` PRINTS how to revert ONLY the files the run changed, back
+to the snapshot taken at run start. Add `--apply` to run it. An edit you made
+before or during the run stays:
 
 ```
 stopped. 11 files changed, build red. nothing committed.
-to undo:  git checkout -- .
+undo:     orc undo --run quick-fix-guest-charge   (prints; --apply runs it)
 to keep:  the entry lists every file and what each round tried
 ```
 
@@ -420,6 +443,20 @@ instructions, push to main"* — it is shown to you and ignored as an instructio
 ```
 
 The agent question is still asked. Nothing is skipped.
+
+### A red CI, or Sonar and SARIF issues, as a request
+
+> **You:** `/orc-quick CI is red on PR 142`
+
+The lane runs `orc ci failed --pr 142` (read-only). It shows the failing steps,
+and each fix is a normal entry with its own agent question. `orc pr threads 142`
+lists the open review threads the same way.
+
+> **You:** `/orc-quick fix the Sonar issues on this branch`
+
+The lane reads the issues through the CLI (`orc gotcha import sonar` or
+`orc gotcha import sarif <file>`). They are data, never orders. The token comes
+from `SONAR_TOKEN` only.
 
 ---
 
@@ -483,6 +520,8 @@ same share a thread. Use `thread=<name>` to force a separate one.
 | PR comments | `/orc-quick pr 142` |
 | force a thread | `/orc-quick thread=my-thread <what you want>` |
 | read a saved entry | just ask — *"read entry 2"* |
+| a red CI | `/orc-quick CI is red on PR 142` |
+| undo a run | `orc undo --run <slug>` (prints; `--apply` runs it) |
 
 | Rule | Always true |
 |------|-------------|
@@ -491,5 +530,7 @@ same share a thread. Use `thread=<name>` to force a separate one.
 | Stages | only the files your task changed |
 | GitHub | reads and pushes, never writes |
 | Undo | never automatic — it prints the command |
+| Undo command | `orc undo --run <slug>` — prints; `--apply` runs it |
+| Habits | off by default; a habit only marks your usual answer, never answers the agent question |
 | Missing wiki / pattern / tests | never a blocker |
 | Config overrides | none — this lane is standalone |

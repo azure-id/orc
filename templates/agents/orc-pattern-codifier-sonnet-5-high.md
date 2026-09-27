@@ -1,12 +1,7 @@
 ---
 name: orc-pattern-codifier-sonnet-5-high
 description: >
-  ORC Pattern Codifier — claude-sonnet-5, high effort. Single-role: read a generic
-  per-language playbook + the project's most-recently-modified real files for one
-  language, and RETURN a reconciled project code-pattern (project conventions win,
-  security/correctness invariants always kept, conflicts flagged). Read-only
-  analysis: it returns the pattern; the caller writes the cache. Dispatched by the
-  orc-pattern skill (lazy /orc miss, eager orc-wiki, or manual /orc-pattern).
+  ORC Pattern Codifier — claude-sonnet-5, high effort. Dispatched by orc-pattern (lazy /orc miss, eager orc-wiki, or manual /orc-pattern) for ONE language.
 model: claude-sonnet-5
 effort: high
 tools: Read, Glob, Grep, Bash

@@ -93,7 +93,7 @@ Three parties, and they do not overlap:
 1. **The agent RETURNS the body** in `gotcha_recorded` (see
    `return-validation.md` §7) — either the entry fields or `none` + a one-line
    reason. The agent that did the repair is the only party that knows the cause.
-2. **The ORCHESTRATOR appends it** to `.claude/orc/gotchas.md`, at the same
+2. **The ORCHESTRATOR hands it to `orc gotcha add -`** (§10), at the same
    phase-close point where it dispatches the trace packet. **A subagent never
    writes either gotcha file.**
 3. **The CLI owns counting, capping and archival** (`orc gotcha prune`) —
@@ -101,6 +101,7 @@ Three parties, and they do not overlap:
 
 ## 6. Dedupe (before every append)
 
+`orc gotcha add` does this; the rule is written here so a person can check it.
 Compare the returned `symptom` + `scope` against the live entries. A match:
 increment `hits`, refresh `last_seen`, and **append nothing**. Only a genuinely
 new failure gets a new ID. Without this the file grows one duplicate per run and
@@ -140,16 +141,51 @@ So, plainly: **delete an entry that stopped being true.** Open
 it is deliberately manual — a model deciding which of its own memories to forget
 is a worse failure mode than a stale line a human can read.
 
-## 10. Lane policy
+## 10. Lane policy (v2.0.0 — who reads, who records, and where)
 
-| Lane | Reads | Writes |
-|------|-------|--------|
-| `/orc`, `/orc-ultra` | yes | yes |
-| `/orc-mini` | yes | yes |
-| `/orc-fast` | yes | no |
+| Lane | Reads | Records (an observation; promotion is computed) |
+|------|-------|-------|
+| `/orc`, `/orc-ultra` | match (executors) · card (Phase 5 reviewer, Phase 6 verifier, ultra gate 3) · filter (after Phase 5) | repairs (via `add`) · every Phase 5 finding's outcome · defect repros |
+| `/orc-mini` | match · card (when the risk option dispatches the reviewer) · filter | repairs · a smoke-gate repair round that went green · reviewer outcomes |
+| `/orc-fast` | match | nothing |
+| `/orc-quick` | card for the review offer · match for code dispatches | a defect repro red → green · a PR thread taken and fixed · a Sonar/SARIF item fixed · a CI failure fixed · a review-offer P0/P1 fixed · a finding the user disputed |
+| `/orc-verify` | card (its adversarial pass) | nothing — read-only lane stays read-only |
+| `/orc-pr-driver` | card at the per-layer gate | a green-gate lint/seam fix |
 | `/orc-diy` | compile-owned (`gotchas` flow key) | compile-owned |
-| `/orc-quick` | **no** | **no** |
 | `/orc-retro` | yes | no (read-only by contract) |
+
+The `gotchas` key (`on` | `off`) now gates ONLY the executor block
+(`orc gotcha match` exits 4 under `off`). The reviewer card has no off answer
+(review learning is always on); `gotcha_card_budget` is only its size.
+
+### How a lane records — ONE CLI call, where it already writes
+
+- **An observation:** `orc gotcha observe - --json`, stdin ONE JSON object:
+  `source` (`repair` · `drift` · `review` · `verify` · `defect` · `ci` · `pr` ·
+  `sonar` · `sarif` · `dismissal`), `ref` (unique per event, e.g.
+  `<run> · F3` — the same `ref` REPLACES the earlier line), `outcome`
+  (`addressed` · `disputed` · `wontfix` · `open` · `flaky`), `author` (`orc` ·
+  `human` · `bot`), `rule` or `sig` (the finding text), and when known
+  `category`, `severity`, `path`, `lines`, `run`, `gotcha` (the `G-###` the
+  finding cited). Exit 0 = appended and promotion ran · 2 = malformed: say it
+  once and go on. **It never blocks a run.** The CLI alone writes
+  `.claude/orc/observations.jsonl`; a lane never edits it.
+- **A red → green repair:** the `gotcha_recorded` body goes to
+  `orc gotcha add -` (exit 0 added · 3 bumped an existing entry · 2 malformed).
+  The CLI dedupes, assigns the id and writes the entry. Nobody appends by hand.
+- **The outcome is PROGRAMMATIC**, never a model's opinion: the flagged lines
+  changed before ship = `addressed`; the user said "not a problem here" =
+  `disputed`; declined with no reason = `wontfix`; none of these yet = `open`.
+
+### Review close — the same step in every lane that ran a review
+
+After `review-slice.md` §3 and the fixes: ONE observation per finding
+(`source: review`, `author: orc`, the outcome above, `gotcha` when the finding
+cited one), then ONE trace line:
+`FINDING-OUTCOME addressed=<n> disputed=<n> wontfix=<n> open=<n> pre=<n> suppressed=<n> :: <cat>:<addressed>/<total>,…`.
+Where: `/orc` and `/orc-ultra` at Phase 7 (`phases/summary.md`), `/orc-mini`
+after the risk option's review, `/orc-quick` after the review offer. A review
+with zero findings records nothing and is a HEALTHY answer.
 
 ### Per-lane mechanics (the spines keep the trigger; this is the detail)
 
@@ -157,11 +193,11 @@ is a worse failure mode than a stale line a human can read.
 `orc gotcha status` and print exactly one of `gotchas: <n> known · <m> match` /
 `none yet` / `off` — never silent. Phase 3: inject the scope-matching entries into
 the single executor slice beside the pattern (cap 3, highest `hits` first; zero
-matches = no block, NEVER unfiltered). After the return: dedupe a
-`gotcha_recorded` body on `symptom`+`scope` (a match bumps `hits`/`last_seen`) and
-append it to `.claude/orc/gotchas.md` yourself. A capped-and-stopped loop records
-nothing. Mini has no separate review/verify phase, so its only writer is the
-executor return.
+matches = no block, NEVER unfiltered). After the return: pipe a
+`gotcha_recorded` body to `orc gotcha add -` (a match on `symptom`+`scope`
+bumps `hits`/`last_seen`). A capped-and-stopped loop records nothing. A
+smoke-gate repair round that went green records `source: repair`. When the
+risk option ran the reviewer, record its outcomes as "Review close" says.
 
 **`/orc-fast` — reads only, and gains no third prerequisite.** Its two hard gates
 (a FRESH/AGING wiki + a cached pattern) are its entire design; a missing gotchas
@@ -171,7 +207,22 @@ writes one, because one executor plus one repair round is too little signal to
 attribute a cause — and a lane with no analyst writing repair memory is how that
 memory fills with guesses.
 
-**`/orc-quick` does not participate at all — not even reading.** Its Q0 preflight
-reads `log_dir` and no other config key, by contract. A `gotchas` key read would
-break that guarantee, and the lane's whole premise is fewer steps, not more
-knowledge. This exclusion is intentional and is not an oversight to "fix".
+**`/orc-quick` — reads and records, since 2.0.0 (a deliberate reversal).**
+Record at step 3.3, after entry N is appended, and only for a request with
+programmatic proof: a defect entry with `REPRO red` then `REPRO green`
+(`source: defect`, `reproduced: true`) · a PR thread the request took and fixed
+(`source: pr`) · a Sonar or SARIF item fixed (`source: sonar` / `sarif`) · a CI
+failure fixed (`source: ci`) · a review-offer P0/P1 fixed (`source: review`,
+`addressed`) · a review finding the user called "not a problem here"
+(`source: review`, `disputed`). A plain fix with none of these records nothing.
+Why the reversal: quick is where most of the fixes happen, so a memory that
+skips it never learns; a PR thread is a human's judgement and a red → green
+repro is proof, so the v1 "too little signal" objection does not apply; and the
+card and `observe` are CLI calls — the CLI reads the `gotchas` key, so Q0 still
+reads `log_dir` and no other config key itself.
+
+**`/orc-pr-driver` — the card is advice only.** A rung that went red and then
+green after a lint or seam fix records `source: repair` (`ref`: the layer and
+the rung). The gate itself stays build · tests · lint · hooks.
+
+**`/orc-verify` and `/orc-retro` never record.** Both are read-only by contract.

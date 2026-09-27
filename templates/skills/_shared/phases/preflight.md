@@ -1,14 +1,6 @@
 # Phase — Preflight   (id: `preflight`)
 
-> **Library file.** New at v1.0.0 W11, distilled from the eleven lane preflight
-> sections that had independently converged on the same four steps in the same
-> order. Layers: `core` (every lane with a silent preflight) and `full`
-> (`/orc` and `/orc-ultra`, whose preflight also PRINTS a report).
->
-> **What is NOT here:** the probes themselves. Which artifacts a lane probes, and
-> which config keys it reads, are the lane's own — they are in the lane's spine
-> and in `orc lane config <lane> --json`. This file is the SHAPE: the order, and
-> the four rules that make the shape worth having.
+> **Library file.** `core` = every lane with a silent preflight; `full` = `/orc` and `/orc-ultra`, which also PRINT a report. This file is the SHAPE; the probes and config keys are the lane's own (its spine and `orc lane config <lane> --json`).
 
 <!-- orc:layer core -->
 
@@ -26,13 +18,12 @@ never a fifth step before step 2.
 
 2. **Trace.** Write `log_dir/.current` = `run-<lane>-<slug>-<DDMMYY>-<HHMMSS>.txt`
    AND `touch the trace file` of that name in the SAME step. **Both, or neither.**
-   A pointer naming a file that does not exist is indistinguishable from a
-   dangling one — that split fifteen graded runs across two files each. The rest
-   of the protocol is `trace.md`.
+   The rest of the protocol is `trace.md`.
 
-3. **Probes.** Use `../detecting-artifacts.md` — **never a raw `find`**, because
-   `.claude/` is hidden and a filesystem search false-negatives a real artifact
-   from the wrong CWD. Every probe is a documented exit-code contract, listed
+3. **Probes.** Read each probe's answer from `probes{}` in the step-1 answer.
+   Run a probe yourself only when `probes{}` does not have it or its entry has
+   `error` — by `../detecting-artifacts.md`, **never a raw `find`** (`.claude/`
+   is hidden). Every probe is a documented exit-code contract, listed
    once in `orc lane calls <lane>`. Treat a positive probe as the source of truth
    and never second-guess it.
 
@@ -55,27 +46,12 @@ never a fifth step before step 2.
   ledger yet, this is a first run"; `orc gotcha status` exit 1 is an empty
   ledger. Say what it means, not that it failed.
 
-## The rules line (v1.7.0) — printed by every lane that runs the `rules` phase
+## The rules line — printed by every lane that runs the `rules` phase
 
-`orc rules slice --lane <lane> --json` returns a `line`. Print it VERBATIM:
+Print `probes["rules-slice"].line` (`orc rules slice --lane <lane> --json`) VERBATIM — both spellings and the override names are `./rules.md` §One assembler and §Precedence.
+`/orc-doc` prints `house rules: …` from `orc doc rules` instead; the two surfaces never mix.
 
-```
-rules:    ORC 65 (W 23 · C 22 · D 10 · U 10) · yours 9 lines (P0 4 · P1 2 · P2 3) · 1 override
-rules:    ORC 65 (W 23 · C 22 · D 10 · U 10) · yours none
-```
-
-**Both spellings are mandatory in their state.** `yours none` says the project
-has not written its own rules — a different fact from the CLI failing to look,
-and the line is what keeps the two apart. Never compute the counts here.
-
-Where the lane's preflight prints a REPORT rather than a bare line, the report
-names each override under it. An override the user cannot see is an override
-they cannot audit. The rest of the mechanic is `./rules.md`.
-
-`/orc-doc` prints `house rules: …` instead, from `orc doc rules`. The two
-surfaces are different files and never mix.
-
-## The usage line (v1.1.0) — printed whenever `usage_gate` is armed
+## The usage line — printed whenever `usage_gate` is armed
 
 `usage_gate` resolves in step 1 like any other key. When it is anything but
 `off`, run `orc usage check --json` in step 3 and print ONE line:
@@ -97,14 +73,14 @@ and again at every gate it suppresses. The rest of the mechanic — the modes, t
 hops, what `stop` and `wait` actually do — is `../wait.md`; this file only says
 that the line is printed and when.
 
-## The graph line (v1.8.0) — code-changing lanes only
+## The graph line — code-changing lanes only
 
-`/orc`, `/orc-ultra`, `/orc-diy`, `/orc-mini`, `/orc-fast` and `/orc-quick` run
-`orc graph status --if-enabled --heal --json --brief` in step 3, BEFORE the first
-dispatch — never skipped. `--heal` builds a missing graph and updates a drifted
-one in the same call (it is free), so there is no second call to forget. Print
-its `line` (`off` included) and put its `trace` (`GRAPH-CONSULT …`) in the next
-packet as it is — never as a `GATE` line in your own words. While the graph is
+`/orc`, `/orc-ultra`, `/orc-diy`, `/orc-mini`, `/orc-fast` and `/orc-quick` print
+`probes["graph-status"].line` (`off` included) in step 3, BEFORE the first
+dispatch — never skipped. Run `orc graph status --if-enabled --heal --json --brief`
+only when `heal_needed` is true (it builds or updates the graph, free). Put the
+`trace` (`GRAPH-CONSULT …`) in the next packet as it is — never as a `GATE` line
+in your own words. While the graph is
 on, `orc lane config` prints the three graph steps in `announce[]` (`../code-graph.md`
 §0). **The lane reads no `code_graph` key:** `--if-enabled`
 makes the CLI decide, which is how `/orc-quick` takes part while its step 1 still

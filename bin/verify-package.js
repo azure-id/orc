@@ -46,6 +46,7 @@ const required = [
   "bin/webui/css/panels/mockrun.css",
   "bin/webui/css/panels/maintenance.css",
   "bin/webui/css/panels/pact.css",
+  "bin/webui/css/panels/behaviour.css",
   "bin/webui/css/panels/boundary.css",
   "bin/webui/css/panels/wait.css",
   "bin/webui/css/panels/hookui.css",
@@ -78,6 +79,7 @@ const required = [
   "bin/webui/js/panels/experiment.js",
   "bin/webui/js/panels/maintenance.js",
   "bin/webui/js/panels/pact.js",
+  "bin/webui/js/panels/behaviour.js",
   "bin/webui/js/panels/boundary.js",
   "bin/webui/js/panels/wait.js",
   "bin/webui/js/panels/hookui.js",
@@ -101,6 +103,7 @@ const required = [
   "bin/webui/fixtures/runs.js",
   "bin/webui/fixtures/stats.js",
   "bin/webui/fixtures/pact.js",
+  "bin/webui/fixtures/behaviour.js",
   "bin/webui/fixtures/boundary.js",
   "bin/webui/fixtures/wait.js",
   "bin/webui/fixtures/hookui.js",
@@ -136,6 +139,7 @@ const required = [
   "bin/webui/i18n/en/mockrun.json",
   "bin/webui/i18n/en/maintenance.json",
   "bin/webui/i18n/en/pact.json",
+  "bin/webui/i18n/en/behaviour.json",
   "bin/webui/i18n/en/boundary.json",
   "bin/webui/i18n/en/wait.json",
   "bin/webui/i18n/en/hookui.json",
@@ -162,6 +166,7 @@ const required = [
   "bin/webui/i18n/id/mockrun.json",
   "bin/webui/i18n/id/maintenance.json",
   "bin/webui/i18n/id/pact.json",
+  "bin/webui/i18n/id/behaviour.json",
   "bin/webui/i18n/id/boundary.json",
   "bin/webui/i18n/id/wait.json",
   "bin/webui/i18n/id/hookui.json",
@@ -202,6 +207,22 @@ const required = [
   // the only answer that says WHY a THIN map is thin. Without it the status
   // line still says THIN and names a command that is not there.
   "bin/graph-audit.js",
+  // v2.0.0 W2 — the habit engine. `orc habit` requires it, and so do
+  // `orc lane config` and `orc config list` when `habits` is not off — a publish
+  // that drops it breaks the resolver for every lane that turned habits on.
+  "bin/habit.js",
+  // v2.0.0 W4 / W6a — the gotchas engine and its importers. `orc gotcha` and
+  // `orc lane config` require the first; `import`, `sync`, `orc pr threads`
+  // and `orc ci failed` require the second. A publish that drops the importer
+  // makes every review step's sync fail — silently, because a sync never blocks.
+  "bin/gotcha.js",
+  "bin/gotcha-import.js",
+  // v2.0.0 T21 — the trace pen. `orc trace write` requires it; a publish that
+  // drops it sends every lane to the Haiku fallback on every phase close.
+  "bin/trace-write.js",
+  // v2.0.0 W6b — `orc run snapshot` + `orc undo`. A publish that drops it
+  // leaves every end-of-run card printing an undo command that crashes.
+  "bin/run-undo.js",
 
   // The two DATED data files (v0.50.0). Both ship inside the package and both
   // are load-bearing on absence rather than on content: without the catalog
@@ -368,6 +389,18 @@ const required = [
   // trimmed lane reading a full-lane procedure.
   "templates/skills/_shared/phases/README.md",
   "templates/skills/_shared/phases/trace.md",
+  // v2.0.0 T1 — the CLOSED verb table, split out of trace.md and read on
+  // demand. A publish missing it leaves every lane's fallback for a verb not
+  // in `trace_grammar` pointing at nothing.
+  "templates/skills/_shared/phases/trace-verbs.md",
+  // v2.0.0 T3 — the common text of the coding-lane spine blocks. A publish
+  // missing it leaves every exit ≠ 0 fallback pointing at nothing.
+  "templates/skills/_shared/lane-contract.md",
+  // v2.0.0 W3 — the lane side of habits, read on demand. A publish missing it
+  // leaves every `(H <qid>)` mark pointing at nothing once habits is on.
+  "templates/skills/_shared/habits.md",
+  // v2.0.0 W5a — the one review slice, read on demand at a review dispatch.
+  "templates/skills/_shared/review-slice.md",
   "templates/skills/_shared/phases/preflight.md",
   "templates/skills/_shared/phases/stop-resume.md",
   // v1.0.0 W12 — the seven files that were already SHARED while living in one
@@ -431,8 +464,10 @@ const required = [
   // v1.8.0 — the code graph's notes writer (Layer 2).
   "templates/agents/orc-graph-noter-sonnet-4-6-med.md",
   // Core non-generated agents — named explicitly so a dropped file is REPORTED
-  // by name, not merely absorbed by the count floor. (The 8 executor agents are
-  // checked separately by `build-agents.js --check`.)
+  // by name, not merely absorbed by the count floor. (The 10 executor agents are
+  // checked separately by `build-agents.js --check`. v2.0.0 T15: the 16 model
+  // twins below are GENERATED too — from agents-src/twins/ — and `--check`
+  // guards their content; this list still guards that each one ships.)
   "templates/agents/orc-system-analyst-opus-5-high.md",
   "templates/agents/orc-planner-opus-5-med.md",
   "templates/agents/orc-reviewer-opus-5-med.md",
@@ -522,6 +557,9 @@ const required = [
   // the ORCHESTRATOR. Ships wired but OFF; `read_gate` arms it.
   "templates/hooks/orc-read-gate.js",
   "templates/hooks/orc-trace.js",
+  // v2.0.0 W6c — the session hook: the bell at a run's turn end (Q8, `notify`,
+  // off by default) and the run pointer after a compaction (Q9).
+  "templates/hooks/orc-session-hook.js",
 ];
 
 const missing = [];
@@ -624,13 +662,22 @@ function scanEncoding(dir, hits) {
   if (!fs.existsSync(dir)) return;
   const st = fs.statSync(dir);
   if (st.isFile()) {
-    let text;
+    let buf;
     try {
-      text = fs.readFileSync(dir, "utf8");
+      buf = fs.readFileSync(dir);
     } catch (_) {
       return; // unreadable → not our concern here
     }
     const rel = path.relative(ROOT, dir).replace(/\\/g, "/");
+    // v2.0.0 Q10 — a raw 0x00 byte. Grep and ripgrep then treat the WHOLE file as
+    // binary and stop reporting matches after it, so every agent that greps the
+    // file gets a partial answer. Write the "\u0000" escape instead.
+    const nul = buf.indexOf(0);
+    if (nul >= 0) {
+      hits.push(`${rel} (raw NUL byte at offset ${nul} — write the "\\u0000" escape)`);
+      return;
+    }
+    const text = buf.toString("utf8");
     // Reference U+FFFD via escape, never as a literal, so this scanner does not
     // flag its own source.
     if (text.includes(REPL)) hits.push(`${rel} (U+FFFD replacement char — corrupted bytes)`);

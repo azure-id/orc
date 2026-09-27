@@ -692,7 +692,7 @@ function callersOf(model, target) {
     for (const r of cachedRows) {
       const sym = model.symbols.get(r[0]);
       if (!sym) continue;
-      const k = `${r[0]} ${r[1]}`;
+      const k = `${r[0]}\u0000${r[1]}`;
       if (seen.has(k)) continue;
       seen.add(k);
       confident.push({

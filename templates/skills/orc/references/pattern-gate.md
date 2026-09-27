@@ -37,7 +37,7 @@ visibility only, so the user always knows which house style is in force):
 - **Cache hit, no drift** → no ask, no cost, but print
   `pattern: <lang>-pattern.md applied (cached)`.
 - **Cache miss** → apply config `pattern_findings` (default `ask`):
-  - `ask` → ONE P0 prompt batched across ALL missing languages ("Learn
+  - `ask` → ONE P0 prompt (H `orc.phase-3.pattern`) batched across ALL missing languages ("Learn
     conventions for {…} via orc-pattern, or proceed language-agnostic?");
   - `on` → codify without asking; print `pattern: <lang> — codifying (cache miss)`;
   - `off` → agnostic; print `pattern: <lang> — running language-agnostic (no cached pattern)`.

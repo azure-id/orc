@@ -179,10 +179,19 @@ function writeStdoutSync(str) {
   }
 }
 
+let PROBE_CAPTURE = null;
+
 // Print the object and (optionally) exit with the human path's code.
 // `compact` (v1.9.1 B1) writes the answer with no indentation: a `--brief`
 // answer is read by a model, and the card inside it carries its own newlines.
 function emitJson(obj, exitCode, compact) {
+  // v2.0.0 T20 — an in-process probe (`orc lane config` `probes{}`) takes the
+  // object instead of stdout. Outside a probe this line does nothing.
+  if (PROBE_CAPTURE) {
+    PROBE_CAPTURE.obj = obj;
+    if (exitCode !== undefined) process.exit(exitCode);
+    return;
+  }
   writeStdoutSync((compact ? JSON.stringify(obj) : JSON.stringify(obj, null, 2)) + "\n");
   if (exitCode !== undefined) process.exit(exitCode);
 }
@@ -426,6 +435,33 @@ function installGuards(claudeDir) {
   wireGraph("PreToolUse", "Grep|Glob");
   wireGraph("PreToolUse", "Bash|Read");
   wireGraph("PostToolUse", "Read");
+
+  // 7) The session hook (v2.0.0 Q8/Q9) — TWO entries, one file. `Stop` rings
+  // the terminal bell when a turn of an ORC run ends, and only under
+  // `notify: bell` (default off: the hook reads the key and returns, so an
+  // unarmed bell is byte-identical to not having it — the read-gate rule).
+  // `SessionStart` on `compact` prints ONE line naming the run's
+  // state-of-play.md while a run is in flight. Same (event, matcher) match as
+  // the graph hook, so re-running `orc update` changes nothing.
+  const sessionHookCmd = nodeCmd(path.join(hooksDest, "orc-session-hook.js"));
+  const wireSession = (arrName, matcher) => {
+    settings.hooks[arrName] = settings.hooks[arrName] || [];
+    for (const entry of settings.hooks[arrName]) {
+      if ((entry.matcher || null) !== (matcher || null)) continue;
+      for (const h of entry.hooks || []) {
+        if (typeof h.command === "string" && h.command.includes("orc-session-hook")) {
+          h.command = sessionHookCmd;
+          return;
+        }
+      }
+    }
+    const entry = { hooks: [{ type: "command", command: sessionHookCmd }] };
+    if (matcher) entry.matcher = matcher;
+    settings.hooks[arrName].push(entry);
+    console.log(`  add   settings.json → ${arrName} session hook${matcher ? ` (${matcher})` : ""}`);
+  };
+  wireSession("Stop", null);
+  wireSession("SessionStart", "compact");
 
   fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + "\n");
 }
@@ -1130,6 +1166,15 @@ const vFallbackAgent = tag((raw) => {
       "pinned to one agent — this overrides the score table AND a slot's own pinned agent for every fallback, whatever the task. `band` is what keeps a fallback a change of WHO and not a change of tier.",
   };
 }, { kind: "text", choices: ["band", "ask", "orc-executor-opus-5-med", "orc-executor-opus-5-low", "orc-executor-sonnet-4-6-high"] });
+// v2.0.0 W2 (DE-16) — `auto` is refused BY NAME. It is the one value a reader
+// of the research expects, and ORC does not have it: no habit is ever applied
+// without a yes, so a generic "must be one of" would read as a missing feature.
+const vHabits = tag((raw) => {
+  const v = String(raw || "").trim();
+  if (v === "auto")
+    return { err: "`auto` is not a habits level. ORC never applies a habit without your yes. Use off, observe or propose." };
+  return ["off", "observe", "propose"].includes(v) ? { value: v } : { err: "must be one of: off, observe, propose" };
+}, { kind: "enum", choices: ["off", "observe", "propose"] });
 const vPath = tag(
   (raw) => (raw && raw.trim() ? { value: raw } : { err: "must be a non-empty path" }),
   { kind: "path" }
@@ -1161,6 +1206,26 @@ const vRepo = tag(
       : { err: "must be a GitHub owner/repo (e.g. azure-id/orc)" },
   { kind: "repo" }
 );
+// v2.0.0 W4 — the reviewer card budget. Refused BY NAME below the floor: the
+// budget is a size, and review learning has no off switch (DE-10).
+const vCardBudget = tag((raw) => {
+  const n = Number(raw);
+  if (!Number.isInteger(n)) return { err: "gotcha_card_budget must be an integer >= 200" };
+  if (n < 200)
+    return { err: `gotcha_card_budget must be 200 or more (got ${n}). It is the SIZE of the reviewer card, not an off switch — review learning is always on` };
+  return { value: n };
+}, { kind: "int", min: 200 });
+// An optional one-word value: empty clears it.
+const vOptText = tag((raw) => {
+  const s = String(raw == null ? "" : raw).trim();
+  if (/\s/.test(s)) return { err: "must be one word (no spaces)" };
+  return { value: s };
+}, { kind: "text" });
+const vSonarUrl = tag((raw) => {
+  const s = String(raw == null ? "" : raw).trim().replace(/\/+$/, "");
+  if (s && !/^https?:\/\/[^\s/]+(\/\S*)?$/.test(s)) return { err: "must be an http(s) URL (e.g. https://sonarcloud.io)" };
+  return { value: s };
+}, { kind: "text" });
 
 // Roles `orc extra` may hand to a non-Claude worker. Declared HERE, above
 // CONFIG_META, because CONFIG_META is evaluated at module load and a `const`
@@ -1319,6 +1384,14 @@ const CONFIG_FAMILIES = {
   // structure costs no model tokens, so nothing about a dispatched model can
   // shadow whether it is built.
   graph: { contested: false, question: "whether code lanes build and read a local map of how the repo is connected" },
+  // v2.0.0 W2 — habits. UNCONTESTED: an accepted habit is not a key, it is the
+  // `learned` RANK under your config file (bin/habit.js), so nothing here
+  // competes with anything. `offers` holds the end-of-run offers a habit can
+  // answer; before 2.0.0 no key existed, so nothing could remember them.
+  habits: { contested: false, question: "whether ORC learns your usual answers and proposes them — never applied without your yes" },
+  offers: { contested: false, question: "which offers a lane still asks after the work, and which your setting answers" },
+  notify: { contested: false, question: "whether a turn of an ORC run ends with the terminal bell" },
+  rules: { contested: false, question: "how large the rules card is in an executor slice" },
 };
 
 // Ordered, tiered metadata. Common first, then advanced.
@@ -1348,6 +1421,15 @@ const CONFIG_META = [
   { key: "pattern_findings", def: "ask", tier: "common", answers: [{ family: "patterns", prio: "P2", mode: "replace" }], lanes: ["orc", "orc-pattern", "orc-wiki"], validate: vEnum("ask", "on", "off"), options: ["ask", "on", "off"], desc: "Code-pattern gate on an FE/BE cache miss: ask = prompt, on = auto-codify, off = always agnostic." },
   { key: "gotchas", def: "on", tier: "common", answers: [{ family: "gotchas", prio: "P2", mode: "replace" }], lanes: ["orc", "orc-brainstorm", "orc-claude", "orc-diy", "orc-doc", "orc-fast", "orc-learn", "orc-mini", "orc-retro", "orc-wiki"], validate: vEnum("on", "off"), options: ["on", "off"], desc: "Repair memory: record a gotcha when a repair loop goes red → green, and inject the scope-matching ones into executor slices. Never injected unfiltered; see .claude/orc/gotchas.md." },
   { key: "gotchas_max", def: 40, tier: "common", answers: [{ family: "gotchas", prio: "P2", mode: "replace" }], lanes: ["orc"], validate: vInt(5), options: [20, 40, 60, 100], desc: "Live gotcha entries kept before the lowest-value tail is archived to gotchas-archive.md (never deleted)." },
+  // --- v2.0.0 W4 — the gotchas engine (bin/gotcha.js) ---------------------------
+  // Read by the CLI (`orc gotcha card`, `import`, `sync`), never by a spine,
+  // so each `lanes[]` is empty and each key is on the seed-empty allowlist.
+  // Review learning is ALWAYS ON (DE-10): the budget is a SIZE, never a switch.
+  { key: "gotcha_card_budget", def: 600, tier: "common", answers: [{ family: "gotchas", prio: "P2", mode: "replace" }], lanes: [], validate: vCardBudget, options: [200, 400, 600, 900], desc: "The size of the reviewer card from `orc gotcha card`, in tokens. It is a SIZE, never an off switch: review learning is always on. The minimum is 200; a lower value is refused. Entries that do not fit are COUNTED in the card header, never dropped in silence." },
+  { key: "gotcha_sync_hours", def: 6, tier: "advanced", answers: [{ family: "gotchas", prio: "P2", mode: "replace" }], lanes: [], validate: vInt(1), options: [1, 6, 24], desc: "How old the last `orc gotcha sync` may be before the next review step runs it again." },
+  { key: "sonar_url", def: "", tier: "advanced", answers: [{ family: "gotchas", prio: "P2", mode: "replace" }], lanes: [], validate: vSonarUrl, desc: "The SonarQube / SonarCloud base URL for `orc gotcha import sonar` (e.g. https://sonarcloud.io). The token is NEVER a key: set SONAR_TOKEN in the environment." },
+  { key: "sonar_project", def: "", tier: "advanced", answers: [{ family: "gotchas", prio: "P2", mode: "replace" }], lanes: [], validate: vOptText, desc: "The Sonar project key for `orc gotcha import sonar`, so the import needs no flags." },
+  { key: "sonar_org", def: "", tier: "advanced", answers: [{ family: "gotchas", prio: "P2", mode: "replace" }], lanes: [], validate: vOptText, desc: "The SonarCloud organization for `orc gotcha import sonar` (empty for a self-hosted SonarQube)." },
   { key: "security_review", def: "off", tier: "common", answers: [{ family: "security", prio: "P2", mode: "replace" }], lanes: ["orc"], validate: vEnum("off", "ask", "on"), options: ["off", "ask", "on"], desc: "Opt-in Phase 5.5 security pass on runs with a task scored >= 70 (risk floor). OFF by default." },
   { key: "run_budget_dispatches", def: 0, tier: "common", answers: [{ family: "waves", prio: "P2", mode: "replace" }], lanes: ["orc", "orc-budget"], validate: vInt(0), options: [0, 8, 12, 20, 30], desc: "Subagent budget for one run. The Phase-1 forecast estimates how many subagents the run will dispatch; if that exceeds this number the run STOPS before wave 1 (a hard gate like the batch pause, not a hint) and offers proceed / a cheaper lane / re-plan smaller. 0 = off, nothing changes." },
   { key: "mock_example", def: "ask", tier: "common", answers: [{ family: "mock", prio: "P2", mode: "replace" }], lanes: ["orc", "orc-brainstorm", "orc-diy", "orc-fast", "orc-grill", "orc-mini"], validate: vEnum("ask", "on", "off"), options: ["ask", "on", "off"], desc: "Post-verify mocked runnable example (mock-examples/<slug>/, never committed): ask = offer after a green verify, on = always, off = never." },
@@ -1477,7 +1559,23 @@ const CONFIG_META = [
   { key: "test_max_rps", def: 4, tier: "common", answers: [{ family: "test", prio: "P2", mode: "replace" }], lanes: [], validate: vInt(1), options: [1, 2, 4, 8], desc: "Requests per second the runner is allowed to send, with a fixed small concurrency beside it. The CLI PACES — this is not a suggestion, because ORC's own run must never be the incident. A 429 is a RESULT and not an error: it means rate limiting works, so the runner records it and backs off rather than pushing through." },
   { key: "test_case_budget", def: 200, tier: "common", answers: [{ family: "test", prio: "P2", mode: "replace" }], lanes: ["orc-test"], validate: vInt(1), options: [50, 100, 200, 500], desc: "Cases one run may expand to before it STOPS expanding. A PLANNED stop, not an interrupt (the wiki_refresh_budget shape): the matrix is combinatorial, and a run that silently grows to 4,000 cases against a staging box is a denial of service you wrote yourself. On reaching it the CLI names the targets it did not finish and offers `--budget`." },
   { key: "test_ui_driver", def: "playwright", tier: "common", answers: [{ family: "test", prio: "P2", mode: "replace" }], lanes: ["orc-test"], validate: vEnum("playwright", "none"), options: ["playwright", "none"], desc: "What drives the front-end half. `playwright` authors a journey SCRIPT and runs it — a step an LLM took is not a step you can re-run, and the artifacts (trace.zip, video, HAR) are the evidence. `none` skips the FE half entirely. ORC ships zero dependencies and NEVER installs Playwright into your project: an absent driver is a STATE with a named install command, not a failure." },
+  // --- v2.0.0 W2 — habits (bin/habit.js) -------------------------------------
+  // `habits` is read by the CLI, never by a lane: `orc lane config` resolves it
+  // and hands the lane a `habits{}` block (the `code_graph` answer). The other
+  // three are the offers a habit can answer; W3 wires the lanes that read them,
+  // so their `lanes[]` is empty until then. OFF by default, and off is
+  // specified as ZERO BYTES in `orc lane config` — that is a test.
+  { key: "habits", def: "off", tier: "common", answers: [{ family: "habits", prio: "P2", mode: "replace" }], lanes: [], validate: vHabits, options: ["off", "observe", "propose"], desc: "Whether ORC learns the answers you give to its questions, from the ASK lines in your run traces. off = nothing is read and nothing changes (the default). observe = ORC computes your usual answers and shows them in `orc habit show`, and never proposes one. propose = at the END of a run, at most once, ORC asks whether an answer you keep giving should become your usual. NOTHING is applied without your yes, and there is no automatic level. An accepted habit is the `learned` rank, below your own config file: `orc config set` always wins, and `orc habit forget <id>` undoes it." },
+  { key: "review_before_push", def: "ask", tier: "common", answers: [{ family: "offers", prio: "P2", mode: "replace" }], lanes: [], validate: vEnum("ask", "on", "off"), options: ["ask", "on", "off"], desc: "Whether a lane offers a code review before it pushes. ask = offer it (the default), on = always review first, off = never offer it. A habit can learn only `on`." },
+  { key: "mini_tdd", def: "ask", tier: "common", answers: [{ family: "testing", prio: "P2", mode: "replace" }], lanes: [], validate: vEnum("ask", "on", "off"), options: ["ask", "on", "off"], desc: "Whether /orc-mini asks at intake for a test-driven loop. ask = ask (the default), on = always use it, off = never. A habit can learn only `on`." },
+  { key: "quick_update_tests", def: "ask", tier: "common", answers: [{ family: "offers", prio: "P2", mode: "replace" }], lanes: [], validate: vEnum("ask", "on"), options: ["ask", "on"], desc: "Whether /orc-quick offers to update the tests after a code change. ask = offer it (the default), on = always update them. There is no `off`: tests are the careful side. It affects only the offer after the work, never the dispatch gate." },
+  // v2.0.0 W6c — Q8. The terminal bell when a turn of an ORC run ends. The hook is
+  // wired always and reads this key first, so off is byte-identical to no hook.
+  { key: "notify", def: "off", tier: "common", answers: [{ family: "notify", prio: "P2", mode: "replace" }], lanes: [], validate: vEnum("off", "bell"), options: ["off", "bell"], desc: "Whether the installed session hook rings the terminal bell when a turn of an ORC run ends. off = silent (the default). bell = one bell through the Stop hook, only while an ORC run is open in this session and only when the run moved since the last bell, so a normal chat never rings. No OS notification and no network." },
   { key: "doc_dir", def: DOC_DIR_DEFAULT, tier: "advanced", answers: [{ family: "paths", prio: "P2", mode: "replace" }], lanes: ["orc-doc"], validate: vPath, desc: "Where /orc-doc folders live. Project root, not .claude/ — a document is a deliverable a human opens, and the same call /orc-quick, /orc-brainstorm and poly-repo-implementation/ already made." },
+  // v2.0.0 W6c — DE-17. The compact rules card for orc-mini / orc-fast executors.
+  // OFF until eval E4 passes (eval/results/2.0.0/E4.md); off = today's card, byte for byte.
+  { key: "rules_card_compact", def: "off", tier: "advanced", answers: [{ family: "rules", prio: "P2", mode: "replace" }], lanes: [], validate: vEnum("off", "on"), options: ["off", "on"], desc: "Whether `orc rules slice` builds the COMPACT rules card for the orc-mini and orc-fast lanes too (orc-quick always gets it). The compact card keeps every rule id and the first line of each HARD rule, and drops the worked examples. off = the full card, byte-identical to before (the default). It stays off until eval E4 shows no new unmet[] items, no new rules_conflicts[] and the same smoke-gate first-try count." },
   { key: "wiki_scan_tier", def: "ladder", tier: "advanced", answers: [{ family: "wiki", prio: "P2", mode: "replace" }], lanes: ["orc-wiki"], validate: vEnum("ladder", "always_deep"), desc: "Wiki scan tier: ladder picks light/deep per delta (first scan, STRUCTURAL, wide delta or a new exported symbol → deep; otherwise light), always_deep restores pre-v0.46.0 behaviour. The resolved tier is always printed — a cheaper model is never a quiet substitution." },
   { key: "wiki_tier_deep_files", def: 3, tier: "advanced", answers: [{ family: "wiki", prio: "P2", mode: "replace" }], lanes: ["orc-wiki"], validate: vInt(1), desc: "Covered files touched at or above this count send the refresh to the DEEP scanner." },
   { key: "wiki_refresh_budget", def: 0, tier: "advanced", answers: [{ family: "wiki", prio: "P2", mode: "replace" }], lanes: ["orc-wiki"], validate: vInt(0), desc: "Max scan-tasks per refresh run; 0 = no cap. A capped refresh is a PLANNED stop, not an interrupt: sync has already run, so the wiki is registered and consistent, and the remaining docs are AGING, not broken. Separate from the fixed pause-every-5 rule — do not merge them." },
@@ -1827,7 +1925,7 @@ function groupRule(title) {
 // `not-read`: a higher rank in this key's family resolved, so nobody looked;
 // `inert`: this key's master gate is off, which removes it from the
 // conversation rather than losing it a precedence contest (`design-03` §5).
-function configKeyState(m, map, claudeDir) {
+function configKeyState(m, map, claudeDir, learned) {
   const has = Object.prototype.hasOwnProperty.call(map, m.key);
   if (m.gated_by) {
     const g = metaFor(m.gated_by);
@@ -1841,7 +1939,27 @@ function configKeyState(m, map, claudeDir) {
   }
   const why = shadowReason(m.key, map, claudeDir);
   if (why) return { state: "not-read", reason: why, source: has ? "overridden" : "default" };
+  // v2.0.0 W2 — the `learned` rank: below the file, above the shipped default.
+  const l = !has && learned && learned[m.key];
+  if (l)
+    return {
+      state: "learned",
+      reason: `learned from habit ${l.id} (${l.count} of ${l.total}) — undo: orc habit forget ${l.id}`,
+      source: `learned:${l.id}`,
+      value: l.value,
+    };
   return { state: has ? "overridden" : "default", reason: null, source: has ? "overridden" : "default" };
+}
+
+// The learned values in force project-wide, or {} under `habits: off`.
+function configLearned(map, claudeDir) {
+  const H = require("./habit.js");
+  if (H.habitsMode(map) === "off") return {};
+  try {
+    return H.learnedFor(claudeDir, habitDeps(), map, null);
+  } catch (_) {
+    return {};
+  }
 }
 
 const STATE_PAINT = {
@@ -1849,6 +1967,7 @@ const STATE_PAINT = {
   default: (s) => ui.color.gray(s),
   "not-read": (s) => ui.color.yellow(s),
   inert: (s) => ui.color.yellow(s),
+  learned: (s) => ui.color.cyan(s),
 };
 
 function configList(claudeDir) {
@@ -1863,6 +1982,7 @@ function configList(claudeDir) {
   // UI axis and it still drives the interactive menu, so it rides along as a row
   // marker instead of being the table's spine.
   const families = laneFamilies(null, map, claudeDir);
+  const learned = configLearned(map, claudeDir);
   const byFamily = new Map();
   for (const m of CONFIG_META) {
     const f = m.answers[0].family;
@@ -1891,9 +2011,9 @@ function configList(claudeDir) {
         return (ra === -1 ? 99 : ra) - (rb === -1 ? 99 : rb);
       });
     for (const m of metas) {
-      const st = configKeyState(m, map, claudeDir);
+      const st = configKeyState(m, map, claudeDir, learned);
       const has = Object.prototype.hasOwnProperty.call(map, m.key);
-      const val = has ? map[m.key] : m.def;
+      const val = has ? map[m.key] : st.value !== undefined ? st.value : m.def;
       const src = (STATE_PAINT[st.state] || ((s) => s))(st.state.padEnd(10));
       const opts = m.options ? ` ${ui.color.gray("[options: " + m.options.join(" | ") + "]")}` : "";
       // v0.55.0 — a DEPRECATED member of a live key is marked on the row that
@@ -2195,10 +2315,11 @@ function scoreTableJson(map, claudeDir) {
 function configListJson(claudeDir) {
   const { path: p, map } = readOverride(claudeDir);
   const has = (k) => Object.prototype.hasOwnProperty.call(map, k);
+  const learned = configLearned(map, claudeDir);
   const keys = CONFIG_META.map((m) => {
     const v = m.validate || {};
     const why = shadowReason(m.key, map, claudeDir);
-    const st = configKeyState(m, map, claudeDir);
+    const st = configKeyState(m, map, claudeDir, learned);
     return {
       key: m.key,
       tier: m.tier,
@@ -2217,7 +2338,7 @@ function configListJson(claudeDir) {
       // The master gate that makes this key inert. A gate does not win a
       // precedence contest; it removes its dependants from the conversation.
       gated_by: m.gated_by || null,
-      value: has(m.key) ? map[m.key] : m.def,
+      value: has(m.key) ? map[m.key] : st.value !== undefined ? st.value : m.def,
       default: m.def,
       is_overridden: has(m.key),
       is_shadowed: !!why,
@@ -2228,7 +2349,7 @@ function configListJson(claudeDir) {
       // answers "does anything read it", from `LANE_RANK_STATES`' own words.
       state: st.state,
       state_reason: st.reason,
-      source: has(m.key) ? "overridden" : "default",
+      source: st.source,
       desc: m.desc,
       options: m.options || null,
       control: {
@@ -2292,7 +2413,7 @@ function configListJson(claudeDir) {
     // lane-scoped answer asks `orc lane config <lane> --json`, which is the
     // command that owns it.
     families_resolved: laneFamilies(null, map, claudeDir),
-    rank_states: LANE_RANK_STATES,
+    rank_states: require("./habit.js").habitsMode(map) !== "off" ? LANE_RANK_STATES.concat("learned") : LANE_RANK_STATES,
     // Permanently on and deliberately not a key — say so, or a reader hunts for
     // the switch (only the folder is configurable).
     behavior_trace: { always_on: true, configurable_key: "log_dir" },
@@ -2358,6 +2479,14 @@ function configSet(claudeDir, key, rawValue) {
   // precedent: a renamed mechanism must never be a silent revert.
   if (key === "extra_roles") extraLegacyRoleWarn(res.value);
   if (key === "opus5_only") opus5Notice(String(res.value) === "true", claudeDir);
+  // DE-27 — the v0.40.0 key stays so an existing file is never silently
+  // overridden, but it is not a feature switch any more.
+  if (key === "gotchas" && String(res.value) === "off")
+    console.error(
+      "  ⚠ review learning is designed to stay on. `gotchas: off` is kept for compatibility: it stops the\n" +
+        "    gotcha block in EXECUTOR slices only. The reviewer card (`orc gotcha card`) is always built.\n" +
+        "    To make the card smaller, set gotcha_card_budget (min 200)."
+    );
   if (key === "opus5_only" || key === "extra_enabled") extraShadowNotice(claudeDir);
 }
 
@@ -3234,9 +3363,26 @@ function laneConfig(lane, claudeDir) {
       inert_reason: hit ? hit.reason : gate ? `${m.gated_by} is off, so nothing in its block is consulted` : null,
     };
   });
+  // v2.0.0 W2 — the `learned` rank (bin/habit.js, DE-6). `habits: off` (the
+  // default) adds ZERO BYTES: the habit keys leave `not_read`, no key gains a
+  // field, and there is no `habits` block — the answer is the one 1.9.2 gave.
+  const H = require("./habit.js");
+  const hmode = H.habitsMode(map);
+  let hab = null;
+  if (hmode !== "off") {
+    hab = H.laneBlock(claudeDir, habitDeps(), map, lane);
+    for (const k of keys) {
+      const l = !has(k.key) && hab.learned[k.key];
+      if (l) k.value = l.value;
+      k.source = has(k.key) ? "overridden" : l ? `learned:${l.id}` : "default";
+      k.state = k.is_inert ? "inert" : k.is_shadowed ? "not-read" : l ? "learned" : has(k.key) ? "overridden" : "default";
+    }
+  }
   const effective = {};
   for (const k of keys) effective[k.key] = k.value;
-  return {
+  const announce = laneAnnounce(lane, map, claudeDir, families);
+  if (hab) for (const k of keys) if (k.state === "learned") announce.push(H.announceLine(k.key, hab.learned[k.key]));
+  const out = {
     lane,
     command: (LANES.find((l) => l.lane === lane) || {}).command || null,
     command_note: (LANES.find((l) => l.lane === lane) || {}).note || null,
@@ -3247,16 +3393,31 @@ function laneConfig(lane, claudeDir) {
     effective,
     families,
     roles: laneRoles(lane, map, claudeDir),
-    announce: laneAnnounce(lane, map, claudeDir, families),
+    announce,
     stops: LANE_STOPS.filter((s) => rows.some((m) => m.key === s.key))
       .filter((s) => s.arms(has(s.key) ? map[s.key] : metaFor(s.key).def))
       .map((s) => ({ key: s.key, value: has(s.key) ? map[s.key] : metaFor(s.key).def, when: s.when, action: s.action })),
     // The keys this lane deliberately ignores. An empty answer is an ANSWER
     // (v0.43.0): "this lane does not read doc_language" is information, and it
     // is what makes the two-way lint possible at all.
-    not_read: CONFIG_META.filter((m) => !(m.lanes || []).includes(lane)).map((m) => m.key),
-    rank_states: LANE_RANK_STATES,
+    not_read: CONFIG_META.filter((m) => !(m.lanes || []).includes(lane))
+      .filter((m) => hab || !H.HABIT_KEYS.includes(m.key))
+      .map((m) => m.key),
+    rank_states: hab ? LANE_RANK_STATES.concat("learned") : LANE_RANK_STATES,
   };
+  if (hab) out.habits = hab.block;
+  else for (const f of H.HABIT_FAMILIES) delete out.families[f];
+  return out;
+}
+
+// The helpers `bin/habit.js` borrows, so it REUSES the trace listing and the
+// timestamp parser `orc stats` / `orc run list` already use.
+function runUndoDeps() {
+  return { args, wantsJson, emitJson, resolveClaudeDir, resolveRunDir, ensureRunDir, repoRootOf };
+}
+
+function habitDeps() {
+  return { flag, positionals, emitJson, wantsJson, resolveClaudeDir, readOverride, listTraces, traceTs };
 }
 
 function laneList(claudeDir) {
@@ -3329,6 +3490,19 @@ const LANE_CALLS = {
     canonical: "_shared/return-validation.md",
     never: "never read `clear` as proof that an AD-HOC dispatch finished — the hook writes no SPAWN for one, so no record exists",
     lanes: ["orc", "orc-doc", "orc-fast", "orc-mini", "orc-quick", "orc-test", "orc-wiki"],
+  },
+  // v2.0.0 T21 — the CLI holds the trace pen: one packet → the .txt AND the .jsonl.
+  "trace-write": {
+    cmd: "orc trace write --packet - [--json]",
+    what: "write ONE phase packet (stdin, plain YAML or JSON) into the run's trace pair",
+    exits: { 0: "written", 1: "usage or unreadable input", 2: "invalid packet — unknown verb, bad ts, parse error; nothing written", 3: "trace-file state — no `.current` on a later packet, or a rename target in the way; nothing written" },
+    states: null,
+    cost: "free",
+    when: "at every phase close, in the same tool block as the next phase's first dispatch",
+    on_absent: "exit ≠ 0 → dispatch `orc-trace-writer-haiku-4-5` with the SAME packet (the fallback)",
+    canonical: "_shared/phases/trace.md",
+    never: "never append trace lines by hand, and never retry a refused packet with a \"now\" timestamp",
+    lanes: ["orc", "orc-fast", "orc-mini", "orc-quick", "orc-test"],
   },
   "lane-phases": {
     cmd: "orc lane phases <lane> [--json]",
@@ -3938,7 +4112,7 @@ function laneCallsCmd(lane, claudeDir) {
 //
 // Per phase: \`file\` + \`layers\` (never a line number — /orc-doc rule 2, a
 // stored line number is a wrong line number one edit later), \`when\` and
-// \`read\` (the partial-read declarations registered in \`_shared/read-ladder.md\`
+// \`read\` (the partial-read declarations registered in \`_shared/phases/README.md\`
 // at W10), \`optional_when\` (a config KEY, resolved through the priority ladder
 // by \`orc lane config\`, never read raw), and \`calls\` — catalogue ids from
 // \`LANE_CALLS\`, DERIVED rather than restated, so a lane can ask for one
@@ -3966,9 +4140,25 @@ const PHASE_FILES = {
     why_single_layer: null,
     why_two_layers:
       "every other lane READS the protocol; orc-diy STITCHES a flow-shaped restatement of it into FLOW-COMPILED.md, and a composed flow owes one packet per ENABLED phase group rather than per phase",
+    // v2.0.0 T1 — the verbs are NOT here: every lane owes TRACE_ALWAYS_VERBS,
+    // and the rest arrive with the phase that emits them.
+    trace_verbs: [],
+  },
+  // v2.0.0 T1 — the full human verb table, split out of trace.md so a run
+  // stops reading ~30 KB of grammar it never emits. `when: on-demand`: a lane
+  // opens it only for a verb its `trace_grammar` does not carry. `via` names
+  // the phase file that points at it — the lint accepts that pointer instead
+  // of one per lane spine.
+  "trace-verbs": {
+    file: "_shared/phases/trace-verbs.md",
+    layers: ["core"],
+    via: "trace",
+    why_single_layer: "it is a reference table, and TRACE_VERBS in bin/cli.js is the data behind it; a lane reads its own rows from `trace_grammar`",
+    trace_verbs: [],
   },
   preflight: {
     file: "_shared/phases/preflight.md",
+    trace_verbs: ["GATE", "GRAPH-CONSULT"],
     layers: ["core", "full"],
     // W13 moved this off a hardcoded `lane !== "orc"` branch and onto the same
     // lane->layer map the build phases use — one mechanism, not two.
@@ -3983,6 +4173,7 @@ const PHASE_FILES = {
   },
   "plan-handoff": {
     file: "_shared/phases/plan-handoff.md",
+    trace_verbs: ["PHASE", "GATE"],
     layers: ["core"],
     why_single_layer:
       "executing a plan another session wrote is one procedure, and /orc-route READS it to define what a plan is — a second definition is drift the lint cannot see (v0.42.0)",
@@ -3994,12 +4185,14 @@ const PHASE_FILES = {
   },
   "analyst-gates": {
     file: "_shared/phases/analyst-gates.md",
+    trace_verbs: ["GATE"],
     layers: ["core"],
     why_single_layer:
       "these are the orchestrator-side gates on a returned analysis or plan, and a trimmed lane runs fewer of them rather than different ones",
   },
   "wiki-consult": {
     file: "_shared/phases/wiki-consult.md",
+    trace_verbs: ["WIKI-CONSULT", "CROSSLINK"],
     layers: ["core"],
     why_single_layer: "the precedence ladder (code > fresh wiki > stale wiki > model priors) does not bend for a faster lane",
   },
@@ -4024,6 +4217,7 @@ const PHASE_FILES = {
   },
   "stop-resume": {
     file: "_shared/phases/stop-resume.md",
+    trace_verbs: ["GATE"],
     layers: ["core"],
     why_single_layer:
       "the stop sequence is identical in every lane that stops; which moments are MANDATORY stops is already a per-lane rule in the spine",
@@ -4031,6 +4225,7 @@ const PHASE_FILES = {
 
   "planning": {
     file: "_shared/phases/planning.md",
+    trace_verbs: ["PHASE", "CONFIG", "WIKI-CONSULT", "CROSSLINK", "GRAPH-MAP", "GRAPH-COCHANGE", "GATE", "PACT"],
     layers: ["full", "composed"],
     // v1.0.0 W13 — orc-diy became the second reader, so the phase left
     // orc/references/phases/ for the library. `full` is /orc's procedure;
@@ -4043,6 +4238,7 @@ const PHASE_FILES = {
   },
   "scoring": {
     file: "_shared/phases/scoring.md",
+    trace_verbs: ["PHASE", "SCORE"],
     layers: ["full", "composed"],
     // v1.0.0 W13 — orc-diy became the second reader, so the phase left
     // orc/references/phases/ for the library. `full` is /orc's procedure;
@@ -4055,6 +4251,7 @@ const PHASE_FILES = {
   },
   "execution": {
     file: "_shared/phases/execution.md",
+    trace_verbs: ["PHASE", "GATE", "OUTCOME", "TDD-RED", "TDD-GREEN", "REPRO", "REPLAN", "QUESTION", "CONTEXT-GAP", "BOUNDARY", "EXTRA", "GRAPH-UPDATE", "GRAPH-NOTES", "GRAPH-HINT"],
     layers: ["full", "composed"],
     // v1.0.0 W13 — orc-diy became the second reader, so the phase left
     // orc/references/phases/ for the library. `full` is /orc's procedure;
@@ -4067,6 +4264,7 @@ const PHASE_FILES = {
   },
   "review": {
     file: "_shared/phases/review.md",
+    trace_verbs: ["PHASE", "FINDING", "GRAPH-CHANGES"],
     layers: ["full", "composed"],
     // v1.0.0 W13 — orc-diy became the second reader, so the phase left
     // orc/references/phases/ for the library. `full` is /orc's procedure;
@@ -4091,6 +4289,7 @@ const PHASE_FILES = {
   },
   "verify": {
     file: "_shared/phases/verify.md",
+    trace_verbs: ["PHASE", "VERDICT", "PACT"],
     layers: ["full", "composed"],
     // v1.0.0 W13 — orc-diy became the second reader, so the phase left
     // orc/references/phases/ for the library. `full` is /orc's procedure;
@@ -4115,6 +4314,7 @@ const PHASE_FILES = {
   },
   "mock-example": {
     file: "_shared/phases/mock-example.md",
+    trace_verbs: ["PHASE", "DRIFT"],
     layers: ["full", "composed"],
     // v1.0.0 W13 — orc-diy became the second reader, so the phase left
     // orc/references/phases/ for the library. `full` is /orc's procedure;
@@ -4127,6 +4327,7 @@ const PHASE_FILES = {
   },
   "ship": {
     file: "_shared/phases/ship.md",
+    trace_verbs: ["PHASE", "GATE", "GRAPH-UPDATE", "GRAPH-GAIN"],
     layers: ["full", "composed"],
     // v1.0.0 W13 — orc-diy became the second reader, so the phase left
     // orc/references/phases/ for the library. `full` is /orc's procedure;
@@ -4139,6 +4340,7 @@ const PHASE_FILES = {
   },
   "summary": {
     file: "_shared/phases/summary.md",
+    trace_verbs: ["PHASE", "FINDING-OUTCOME"],
     layers: ["full", "composed"],
     // v1.0.0 W13 — orc-diy became the second reader, so the phase left
     // orc/references/phases/ for the library. `full` is /orc's procedure;
@@ -4169,12 +4371,205 @@ const PREFLIGHT_CALL_IDS = new Set([
   "run-list",
 ]);
 
+// ── v2.0.0 T20 — `probes{}`: one preflight call instead of 4–6 ──────────────
+//
+// W0 counted 2–6 CLI calls at preflight before the first dispatch, each one a
+// round trip that re-sends the whole cached session. `orc lane config` is
+// already the one call every lane makes first, so it now carries the ANSWERS of
+// the probes that lane makes at start.
+//
+// Each probe runs the stand-alone command's OWN code, in this process, with its
+// own argv: the same function, the same exit code, the same fields — so the
+// entry cannot drift from the command. The entry is BRIEF (T17): `exit`, `line`
+// and the fields a lane branches on. `--probes-full` adds the whole stand-alone
+// answer as `full`; `--no-probes` leaves the block out.
+//
+// READ-ONLY, always. `graph status` runs WITHOUT `--heal` (a heal builds or
+// writes the index) — `heal_needed: true` says the lane still makes that one
+// call. `extra resolve` runs without the `orc extra` credential sweep (a
+// delete). A probe that throws or gives no answer is `{exit, error}` — never a
+// thrown error, and never a change to `lane config`'s own exit code.
+//
+// The set per lane is DERIVED: PREFLIGHT_CALL_IDS ∩ the lane's LANE_CALLS rows,
+// plus `graph-status` and `rules-slice` where the lane makes them, plus
+// /orc-quick's slot probe. `challenge-status` needs a slug, so it is not here.
+const PROBE_DEFS = {
+  "wiki-status": {
+    argv: () => ["wiki", "status"],
+    run: () => wiki(),
+    pick: ["state", "tier", "docs", "distance", "last_scan"],
+    line: (j) =>
+      j.state === "none"
+        ? "wiki: none — no wiki yet"
+        : j.state === "registered"
+          ? `wiki: ${j.tier || "tier unknown"}${j.distance === null ? "" : ` (${j.distance}c)`} — ${plural(j.docs, "doc")} · last scan ${j.last_scan || "?"}`
+          : `wiki: ${String(j.state).toUpperCase()} — ${plural(j.docs, "doc")} (run: orc wiki sync)`,
+  },
+  "pattern-status": {
+    argv: () => ["pattern", "status"],
+    run: () => pattern(),
+    pick: ["cached"],
+    derive: (j) => ({ langs: (j.patterns || []).map((p) => p.lang) }),
+    line: (j) => (j.cached ? `pattern: cached — ${(j.patterns || []).map((p) => p.lang).join(", ")}` : "pattern: none cached"),
+  },
+  "gotcha-status": {
+    argv: () => ["gotcha", "status"],
+    run: () => gotcha(),
+    pick: ["count", "gotchas_max"],
+    line: (j) => (j.count ? `gotchas: ${j.count} live (cap ${j.gotchas_max})` : "gotchas: none recorded — nothing to inject"),
+  },
+  "pact-status": {
+    argv: () => ["pact", "status"],
+    run: () => pact(),
+    pick: ["ok", "reason", "entries", "counts"],
+    line: (j) => j.line || "pact: no ledger yet — a first run",
+  },
+  "boundary-status": {
+    argv: () => ["boundary", "status"],
+    run: () => boundary(),
+    pick: ["ok", "reason", "counts", "stale"],
+    line: (j) => j.line || "boundary: no cards yet — every area is UNKNOWN, never assumed safe",
+  },
+  "aftermath-status": {
+    argv: () => ["aftermath", "status"],
+    run: () => aftermath(),
+    pick: ["ok", "reason", "window_days", "counts"],
+    line: (j) =>
+      j.ok
+        ? `aftermath: ${plural((j.runs || []).length, "run")} in the last ${j.window_days} days · ${Object.entries(j.counts || {}).map(([k, v]) => `${v} ${k}`).join(" · ") || "no grade"}`
+        : j.reason === "shallow"
+          ? `aftermath: no runs in the last ${j.window_days} days — too shallow to grade`
+          : `aftermath: ${j.reason}`,
+  },
+  "diy-status": {
+    argv: () => ["diy", "status"],
+    run: () => diy(),
+    pick: ["state", "reason"],
+    line: (j) => `diy: ${j.state}${j.reason ? " — " + j.reason : ""}`,
+  },
+  "run-list": {
+    argv: () => ["run", "list"],
+    run: () => runCmd(),
+    pick: ["total"],
+    line: (j) => `runs: ${j.total}`,
+  },
+  "graph-status": {
+    argv: () => ["graph", "status", "--if-enabled", "--brief"],
+    run: () => graphCmd(),
+    pick: ["state", "enabled", "exists", "files", "symbols", "generation", "auto_update", "notes", "trace"],
+    derive: (j) => ({ heal_needed: !!(j.enabled && j.auto_update && (j.state === "none" || j.state === "drifted")) }),
+    line: (j) => j.line,
+  },
+  "rules-slice": {
+    argv: (lane) => ["rules", "slice", "--lane", lane],
+    run: () => rulesCmd(),
+    pick: ["packs", "overrides"],
+    line: (j) => j.line,
+  },
+  "extra-slot": {
+    argv: () => ["extra", "resolve", "--slot", "quick-executor"],
+    run: () => extraResolveCmd(resolveClaudeDir(), undefined),
+    pick: ["resolved", "via", "slot", "needs_reping", "held_back"],
+    line: (j) => (j.resolved === "extra" ? `extra: ${j.announce}` : `extra: ${j.slot} → claude ${(j.claude && j.claude.agent) || ""}`.trim()),
+  },
+};
+
+function laneProbeIds(lane) {
+  const ids = Object.entries(LANE_CALLS)
+    .filter(([id, c]) => id !== "lane-config" && PREFLIGHT_CALL_IDS.has(id) && c.lanes.includes(lane) && PROBE_DEFS[id])
+    .map(([id]) => id);
+  if (LANE_CALLS["graph-status"].lanes.includes(lane)) ids.push("graph-status");
+  if (LANE_CALLS["rules-slice"].lanes.includes(lane)) ids.push("rules-slice");
+  if (lane === "orc-quick") ids.push("extra-slot");
+  return ids;
+}
+
+// Run ONE stand-alone command in this process and take its answer. The argv is
+// swapped in for the call and put back after it; stdout, stderr and exit are
+// caught, so nothing reaches the terminal and nothing ends this process.
+function runProbe(argv, fn) {
+  const saved = args.slice();
+  const pass = [];
+  const di = saved.indexOf("--dir");
+  if (di !== -1 && saved[di + 1] !== undefined) pass.push("--dir", saved[di + 1]);
+  if (saved.includes("--global")) pass.push("--global");
+  args.splice(0, args.length, ...argv, "--json", ...pass);
+  const cap = { obj: null, text: [], err: [] };
+  const SENT = { probe: true };
+  let code = null;
+  let error = null;
+  const keep = { exit: process.exit, log: console.log, error: console.error, warn: console.warn };
+  process.exit = (c) => {
+    code = c === undefined ? 0 : c;
+    throw SENT;
+  };
+  console.log = (...a) => cap.text.push(a.map(String).join(" "));
+  console.error = console.warn = (...a) => cap.err.push(a.map(String).join(" "));
+  PROBE_CAPTURE = cap;
+  try {
+    fn();
+    if (code === null) code = 0;
+  } catch (e) {
+    if (e !== SENT) {
+      error = String((e && e.message) || e).split("\n")[0];
+      if (code === null) code = 1;
+    }
+  } finally {
+    PROBE_CAPTURE = null;
+    process.exit = keep.exit;
+    console.log = keep.log;
+    console.error = keep.error;
+    console.warn = keep.warn;
+    args.splice(0, args.length, ...saved);
+  }
+  let obj = cap.obj;
+  if (!obj && cap.text.length) {
+    try {
+      obj = JSON.parse(cap.text.join("\n"));
+    } catch (_) {}
+  }
+  if (!obj && !error) error = String(cap.err.find((l) => l.trim()) || "no answer").trim().split("\n")[0];
+  return { exit: code, obj, error };
+}
+
+function laneProbes(lane, full) {
+  const out = {};
+  for (const id of laneProbeIds(lane)) {
+    const def = PROBE_DEFS[id];
+    const r = runProbe(def.argv(lane), def.run);
+    if (r.error || !r.obj) {
+      out[id] = { exit: r.exit, error: r.error };
+      continue;
+    }
+    const j = r.obj;
+    let line;
+    try {
+      line = def.line(j);
+    } catch (e) {
+      line = null;
+    }
+    const e = { exit: r.exit, line };
+    for (const k of def.pick) if (Object.prototype.hasOwnProperty.call(j, k)) e[k] = j[k];
+    if (def.derive) Object.assign(e, def.derive(j));
+    if (full) e.full = j;
+    out[id] = e;
+  }
+  return out;
+}
+
 // tier + packet cadence per trace-owning lane. This is the same data the tier
 // table in \`_shared/phases/trace.md\` renders for a human; the lint asserts the
 // two agree, so a lane cannot be in one and absent from the other.
 const LANE_TRACE = {
-  orc: { tier: "Build lanes", token: "orc" },
-  "orc-mini": { tier: "Build lanes", token: "mini" },
+  // `spine_verbs` (v2.0.0 T1): the verbs a lane's own SPINE emits outside
+  // any declared phase row — orc's ultra gates, and orc-mini, whose pipeline is
+  // still in-spine. They join `trace_grammar` like a phase's `trace_verbs`.
+  orc: { tier: "Build lanes", token: "orc", spine_verbs: ["ADVISE", "JUDGE"] },
+  "orc-mini": {
+    tier: "Build lanes",
+    token: "mini",
+    spine_verbs: ["PHASE", "GATE", "OUTCOME", "DRIFT", "TDD-RED", "TDD-GREEN", "FINDING", "FINDING-OUTCOME", "GRAPH-CONSULT", "GRAPH-UPDATE", "GRAPH-COMPLEXITY", "GRAPH-NOTES"],
+  },
   "orc-fast": { tier: "Build lanes", token: "fast" },
   "orc-wiki": { tier: "Multi-dispatch", token: "wiki" },
   "orc-pr-driver": { tier: "Multi-dispatch", token: "prdriver" },
@@ -4202,12 +4597,96 @@ const LANE_TRACE = {
   "orc-export": { tier: "Single-dispatch", token: "export" },
 };
 
+// v2.0.0 T1 — the CLOSED trace verb set, as DATA (the `LANE_CALLS` shape).
+// `_shared/phases/trace-verbs.md` renders this table for a human, and
+// `bin/verify-contracts.js` holds the two together BOTH ways, plus every
+// `trace_verbs` / `spine_verbs` entry in the phase manifest: a verb a phase
+// lists that this registry lacks FAILS. `orc lane phases <lane> --json` hands a
+// lane `trace_grammar` = the grammar lines of exactly the verbs its phases emit
+// plus TRACE_ALWAYS_VERBS, so a run never reads the whole table.
+//
+// grammar — the line shape; ` · ` separates the sub-forms of one verb.
+// emitter — who produces it: `orc → writer` is a packet event, `hook` needs
+//           no cooperation, `X→orc → writer` is a subagent-returned marker.
+// meaning — ONE line. The detail lives at `owner`.
+const TRACE_VERBS = {
+  PHASE: { grammar: "PHASE <name> start|end", emitter: "orc → writer", meaning: "phase transition", owner: "_shared/phases/trace.md" },
+  "PHASE-EDGE": { grammar: "PHASE-EDGE <role-family> :: first=<agent>", emitter: "hook", meaning: "deterministic phase inference: a SPAWN whose role family differs from the previous one opens an edge", owner: "hooks/orc-trace.js" },
+  CONFIG: { grammar: "CONFIG <key=value …>", emitter: "orc → writer", meaning: "Phase 1 — the resolved config values this run will consume, ALWAYS with opus5_only", owner: "_shared/phases/trace-verbs.md" },
+  "WIKI-CONSULT": { grammar: "WIKI-CONSULT <fresh|aging|stale|absent|empty> :: docs=<list|none>", emitter: "orc → writer", meaning: "project wiki consulted for grounding, with its staleness tier", owner: "_shared/phases/wiki-consult.md" },
+  CROSSLINK: { grammar: "CROSSLINK <cached|configured-no-cache|none> :: boundaries=<n> peers=<names> · CROSSLINK inject task=<id> :: <boundary>", emitter: "orc → writer", meaning: "cross-repo peer-knowledge state at the consult point; `inject` when a slice receives a linked contract", owner: "_shared/phases/wiki-consult.md" },
+  "GRAPH-CONSULT": { grammar: "GRAPH-CONSULT <fresh|updated|built|drifted|none|off> :: files=<n> symbols=<n>[ density=<n>[ thin=1]] · GRAPH-CONSULT card task=<id> :: targets=<…>", emitter: "orc → writer", meaning: "the code graph's preflight state, copied VERBATIM from the CLI `trace` field", owner: "_shared/code-graph.md" },
+  "GRAPH-UPDATE": { grammar: "GRAPH-UPDATE <state> :: parsed=<n> reused=<n> deleted=<n> gen=<n> route=<n> ms=<n>", emitter: "orc → writer", meaning: "one graph update, the `trace` field of `orc graph update --json`, verbatim", owner: "_shared/phases/trace-verbs.md" },
+  "GRAPH-MAP": { grammar: "GRAPH-MAP <repo|focused> :: files=<shown>/<total> [focus=<a,b>] gen=<n>", emitter: "orc → writer", meaning: "ONE line at the start of planning, the `trace` field of `orc graph map --json`, verbatim", owner: "_shared/phases/trace-verbs.md" },
+  "GRAPH-CHANGES": { grammar: "GRAPH-CHANGES <found|none> :: symbols=<n> high=<n> medium=<n> low=<n> gen=<n>", emitter: "orc → writer", meaning: "one line at review, the `trace` field of `orc graph changes --json`, verbatim", owner: "_shared/phases/trace-verbs.md" },
+  "GRAPH-COMPLEXITY": { grammar: "GRAPH-COMPLEXITY <mini-ok|recommend-orc> :: files=<n> callers=<n> caller_files=<n> maybe=<n> tests=<n> risk=<n> cochange=<n> gen=<n>", emitter: "orc → writer", meaning: "one line per /orc-mini run, the `trace` field of the `--complexity` impact call, verbatim", owner: "_shared/phases/trace-verbs.md" },
+  "GRAPH-COCHANGE": { grammar: "GRAPH-COCHANGE <found|none> :: rows=<n> commits=<n>", emitter: "orc → writer", meaning: "one line per planning batch, for the file that produced the widest answer", owner: "_shared/phases/trace-verbs.md" },
+  "GRAPH-HINT": { grammar: "GRAPH-HINT injected=<n> subagent_start=<n> read_notes=<n> updates=<n>", emitter: "orc → writer", meaning: "ONE line per phase close, the graph hook's counters; omitted when the counter file does not exist", owner: "_shared/phases/trace-verbs.md" },
+  "GRAPH-GAIN": { grammar: "GRAPH-GAIN paid=<n> low=<n> high=<n> calls=<n>", emitter: "orc → writer", meaning: "ONE line per run at ship; `paid` is exact, `low`/`high` are an estimate never collapsed into one number", owner: "_shared/phases/trace-verbs.md" },
+  "GRAPH-NOTES": { grammar: "GRAPH-NOTES <applied|below-min|none|deferred|off|skipped> :: <detail>", emitter: "orc → writer", meaning: "one notes batch; `applied` copies the noter's one-line return verbatim", owner: "_shared/phases/trace-verbs.md" },
+  SPAWN: { grammar: "SPAWN <agent>", emitter: "hook", meaning: "an agent dispatch was observed (skeleton)", owner: "hooks/orc-trace.js" },
+  RETURN: { grammar: "RETURN <agent> :: <desc> dur=<m>m<s>s [model=<id>]", emitter: "hook", meaning: "a subagent finished (skeleton) — not an orchestrator obligation; the model check is VERIFY", owner: "hooks/orc-trace.js" },
+  DISPATCH: { grammar: "DISPATCH <agent> :: <task> expect=<model>/<effort>[ via=extra:<profile>]", emitter: "orc → writer", meaning: "orchestrator dispatched a named agent (the claim)", owner: "_shared/phases/trace-verbs.md" },
+  SCORE: { grammar: "SCORE task=<id> score=<n> band=<range> model=<m> facets=<compact-vector>[ via=extra:<profile>] :: <reason>", emitter: "orc → writer", meaning: "scoring decision (tunes the rubric); a fix cycle emits `task=fix-<n>`", owner: "_shared/phases/scoring.md" },
+  VERIFY: { grammar: "VERIFY <task> actual=<model>/<effort> ✅ MATCH · VERIFY <task> actual=<model>/<effort> ⛔ DOWNGRADE expected=<m>/<e>", emitter: "orc → writer", meaning: "claimed-vs-actual model check; surface a downgrade to the user, not just the trace", owner: "_shared/return-validation.md" },
+  ASK: { grammar: "ASK <qid> :: offered=<o1|o2|…> rec=<o|none> chose=<o|other> by=<user|ledger|learned|config|default> [pre=<o>] [ctx=<k=v,…>]", emitter: "orc → writer", meaning: "one answered decision point — what `orc habit` learns from; the free text of an `other` answer is never stored", owner: "_shared/phases/trace-verbs.md" },
+  QUESTION: { grammar: "QUESTION count=<n> :: <topic>", emitter: "subagent→orc → writer", meaning: "stopped to ask the user", owner: "_shared/phases/trace-verbs.md" },
+  "CONTEXT-GAP": { grammar: "CONTEXT-GAP :: <what was already known>", emitter: "subagent→orc → writer", meaning: "asked/re-derived something already in context", owner: "_shared/phases/trace-verbs.md" },
+  REPLAN: { grammar: "REPLAN wave=<n> :: <reason>", emitter: "orc → writer", meaning: "re-planned after a conflict/failure", owner: "_shared/phases/trace-verbs.md" },
+  GATE: { grammar: "GATE <grounding|coverage|graph|evidence|derivation|facet|schema|judgment|wave-boundary|budget|stack-gate|stack-certainty|layer-green> pass|bounce|escalate :: <detail>", emitter: "orc → writer", meaning: "exit-gate result; `escalate` is judgment-only; bounce detail lists the misses", owner: "_shared/phases/trace-verbs.md" },
+  ADVISE: { grammar: "ADVISE :: brief=<path> questions=<n>", emitter: "orc → writer", meaning: "ultra Phase U0 — advisor brief received, clarification round relayed", owner: "orc/references/ultra-mode.md" },
+  JUDGE: { grammar: "JUDGE <analysis|plan|implementation> <verdict> round=<n> blocking=<n> advisory=<n> downgraded=<n>", emitter: "orc → writer", meaning: "ultra judgment verdict", owner: "orc/references/ultra-mode.md" },
+  OUTCOME: { grammar: "OUTCOME task=<id> score=<n> band=<range> model=<m> retries=<n> requeues=<n> needs_context=<n> unmet=<n>", emitter: "orc → writer", meaning: "task closed — links the scoring band to what it actually took", owner: "_shared/phases/execution.md" },
+  FINDING: { grammar: "FINDING p0=<n> p1=<n> p2=<n> p3=<n>[ pre=<n> suppressed=<n> folded=<n>]", emitter: "reviewer→orc → writer", meaning: "review outcome (P0–P3 severity ladder); the tail counts the after-filter's buckets", owner: "_shared/phases/review.md" },
+  "FINDING-OUTCOME": { grammar: "FINDING-OUTCOME addressed=<n> disputed=<n> wontfix=<n> open=<n> pre=<n> suppressed=<n> :: <cat>:<addressed>/<total>,…", emitter: "orc → writer", meaning: "ONE line at review close — what became of each finding; `orc gotcha quality` reads it", owner: "_shared/phases/trace-verbs.md" },
+  VERDICT: { grammar: "VERDICT pass|fail :: <detail>", emitter: "verifier→orc → writer", meaning: "verification outcome", owner: "_shared/phases/verify.md" },
+  DRIFT: { grammar: "DRIFT loop=<n> :: <user description, compressed>", emitter: "orc → writer", meaning: "mock-example drift-recovery loop opened (hard cap 2 loops)", owner: "_shared/drift-recovery.md" },
+  "TDD-RED": { grammar: "TDD-RED task=<id> iter=<n> :: <failing tests>", emitter: "executor→orc → writer", meaning: "TDD repair-loop iteration — the plan's acceptance tests still red", owner: "_shared/phases/trace-verbs.md" },
+  "TDD-GREEN": { grammar: "TDD-GREEN task=<id> iter=<n>", emitter: "executor→orc → writer", meaning: "the task's TDD acceptance tests pass", owner: "_shared/phases/trace-verbs.md" },
+  REPRO: { grammar: "REPRO red|green :: <cmd> exit=<n> · REPRO none :: <reason>", emitter: "executor→orc → writer", meaning: "a DEFECT task's reproduction: RED before the fix, GREEN after", owner: "_shared/return-validation.md" },
+  NOTE: { grammar: "NOTE :: <decisions>", emitter: "writer", meaning: "the packet's `decisions` field — the WHY layer; one line, only when non-empty", owner: "agents/orc-trace-writer-haiku-4-5.md" },
+  STATS: { grammar: "STATS lane=<l> slug=<s> dispatches=<n> waves=<n> tasks=<n> bands=<h:n,m:n,l:n> downgrades=<n> duration_ms=<n>", emitter: "orc → writer", meaning: "ONE summary line per run, in the FINISH packet, immediately BEFORE the FINISH line", owner: "_shared/phases/trace-verbs.md" },
+  PACT: { grammar: "PACT <state> :: <ids> · PACT inject task=<id> :: <PACT-id> · PACT recheck pass|fail :: <ids>", emitter: "orc → writer", meaning: "invariant-ledger state at the Phase-1 probe, a promise injected into a task, the Phase-6 recheck", owner: "orc-pact/references/gate.md" },
+  BOUNDARY: { grammar: "BOUNDARY <EXECUTE|ESCALATE|REFUSE|unknown> task=<id> :: <area> · BOUNDARY lift task=<id> :: <area>", emitter: "orc → writer", meaning: "per-task boundary verdict; an uncarded area is `unknown`, never REFUSE", owner: "orc-boundary/references/gate.md" },
+  CHALLENGE: { grammar: "CHALLENGE iter=<n> findings=P0:<n>/P1:<n>/P2:<n> coverage=<n>% verdict=PASS|FAIL · CHALLENGE accept|rebut :: <id> · CHALLENGE regoal|retemplate :: v<n>", emitter: "orc → writer", meaning: "one line per completed /orc-challenge iteration — `orc challenge record`'s `trace_line`, verbatim", owner: "orc-challenge/SKILL.md" },
+  EXTRA: { grammar: "EXTRA <profile>/<model> engine=<api|claude-shim|cli> task=<id> band=[lo,hi) tok=in/cw/cr/out outcome=<done|partial|failed|fallback> dur=<m>m<s>s · EXTRA fallback task=<id> :: <reason> → <agent> · EXTRA substitution task=<id> :: requested=<m> reported=<m> · EXTRA reroute task=<id> :: <providers> · EXTRA resume task=<id> attempt=<n> :: from=<reason> attribution=<verdict> target=<extra:profile|agent> files_preexisting=<n> · EXTRA orphan task=<id> :: attempt=<n> lease-expired files_changed=<n> state=<state> · EXTRA demote run=<slug> :: profile=<p> reason=<consecutive-stall|stale-live-attempt|manual> n=<k> → <ladder>", emitter: "orc → writer", meaning: "one line per FOREIGN dispatch — `orc extra dispatch`'s `trace_line`, verbatim", owner: "_shared/extra-dispatch.md" },
+  FINISH: { grammar: "FINISH :: <detail>", emitter: "orc → writer", meaning: "run ended — mandatory, even on an abort", owner: "_shared/phases/trace.md" },
+};
+
+// The verbs EVERY trace-owning lane owes, whatever its phases list. Every lane
+// sends at least the ONE end-of-run packet, and trace.md makes each of these
+// part of it: DISPATCH + VERIFY (the main return is dispatched and checked),
+// NOTE (the packet's `decisions`), STATS (every trace-owning lane emits it, not
+// just `orc`) and FINISH (mandatory, even on an abort). PHASE and CONFIG are
+// NOT here: a single-dispatch lane closes no named phase, and CONFIG is the
+// build lanes' Phase-1 line — both come in through the phase rows that emit them.
+const TRACE_ALWAYS_VERBS = ["DISPATCH", "VERIFY", "NOTE", "STATS", "FINISH"];
+
+// `trace_grammar` for one lane: TRACE_VERBS order, hook verbs left out (a lane
+// never emits them), `null` for a lane that owns no trace.
+function laneTraceGrammar(lane) {
+  const t = LANE_TRACE[lane];
+  if (!t) return null;
+  const want = new Set(TRACE_ALWAYS_VERBS);
+  for (const id of LANE_PHASE_ORDER[lane] || PHASE_ORDER)
+    if ((LANE_PHASES[id] || []).includes(lane)) for (const v of PHASE_FILES[id].trace_verbs || []) want.add(v);
+  for (const p of LANE_OWN_PHASES[lane] || []) for (const v of p.trace_verbs || []) want.add(v);
+  for (const v of t.spine_verbs || []) want.add(v);
+  const out = {};
+  for (const [v, d] of Object.entries(TRACE_VERBS)) if (want.has(v) && d.emitter !== "hook") out[v] = d.grammar;
+  return out;
+}
+
 // Which lanes run which SHARED phase. A lane absent from a row does not run
 // that phase — \`/orc-retro\` is in no trace row because it mines traces and
 // writes none (its hard rule 4), and \`context-combiner\` is in none because it
 // is a PHASE of the analyze run, not a lane (v0.42.0).
 const LANE_PHASES = {
   trace: Object.keys(LANE_TRACE),
+  // v2.0.0 T1 — the verb table, ON DEMAND. Every lane that traces may need a
+  // verb its `trace_grammar` does not carry, and it reaches the table through
+  // trace.md (`via` in PHASE_FILES), never through its own spine.
+  "trace-verbs": Object.keys(LANE_TRACE),
   preflight: [
     "orc",
     "orc-boundary",
@@ -4262,6 +4741,7 @@ const LANE_PHASES = {
 const PHASE_ORDER = [
   "preflight",
   "trace",
+  "trace-verbs",
   "intake",
   "plan-handoff",
   "wiki-consult",
@@ -4296,6 +4776,7 @@ const PHASE_ORDER = [
 const LANE_PHASE_ORDER = {
   "orc-diy": [
     "trace",
+    "trace-verbs",
     "intake",
     "planning",
     "wave-grouping",
@@ -4320,7 +4801,7 @@ const LANE_PHASE_ORDER = {
 // A row names a FILE and, when the phase still lives in that lane's spine, the
 // HEADING inside it (plan rule: a manifest names a file, a layer and at most a
 // heading — never a line number, /orc-doc rule 2). `read: "section"` is the
-// partial-read declaration registered in `_shared/read-ladder.md`.
+// partial-read declaration registered in `_shared/phases/README.md`.
 //
 // WHY MOST ROWS NAME A HEADING RATHER THAN A FILE (v1.0.0 W14, measured):
 // moving a phase into its own file pays only when a run does NOT reach it —
@@ -4463,7 +4944,7 @@ const LANE_OWN_PHASES = {
     { ord: 0, id: "q0", file: "orc-quick/SKILL.md", heading: "## Q0 — Preflight (ONE time per session, silent, nothing can stop the run)", read: "section", trace_verbs: ["GATE", "GRAPH-CONSULT"] },
     { ord: 1, id: "q1", file: "orc-quick/SKILL.md", heading: "## Q1 — LOOK (silent — no questions here)", read: "section", trace_verbs: ["GATE", "WIKI-CONSULT", "GRAPH-CONSULT", "GRAPH-MAP"] },
     { ord: 2, id: "q2", file: "orc-quick/SKILL.md", heading: "## Q2 — ASK (ONE user turn: questions + the gate together)", read: "section", trace_verbs: [] },
-    { ord: 3, id: "q3", file: "orc-quick/SKILL.md", heading: "## Q3 — DO (dispatch → build/test → write the doc → offer)", read: "section", trace_verbs: ["DISPATCH", "VERIFY", "REPRO", "GRAPH-CHANGES", "GRAPH-UPDATE", "GRAPH-NOTES", "GRAPH-GAIN", "OUTCOME", "FINISH"] },
+    { ord: 3, id: "q3", file: "orc-quick/SKILL.md", heading: "## Q3 — DO (dispatch → build/test → write the doc → offer)", read: "section", trace_verbs: ["DISPATCH", "VERIFY", "REPRO", "GRAPH-CHANGES", "GRAPH-UPDATE", "GRAPH-NOTES", "GRAPH-GAIN", "OUTCOME", "FINDING", "FINDING-OUTCOME", "FINISH"] },
   ],
   "orc-wiki": [
     { ord: 0, id: "phase-0", file: "orc-wiki/references/phases/phase-0.md", layers: ["full"], trace_verbs: [] },
@@ -4493,20 +4974,22 @@ function lanePhaseRows(lane) {
       file: def.file,
       layers,
       read: "whole",
-      // `always` must be justified (read-ladder.md, W10): a lane reads the
+      // `always` must be justified (phases/README.md, W10): a lane reads the
       // config resolver and opens its trace pointer before it can do anything
       // at all. Every other phase is `on-phase` — most runs skip most phases.
       // `compile-time` is orc-diy and only orc-diy: it opens none of these
       // during a run. `orc diy compile` reads the `composed` layer once and
       // stitches it into FLOW-COMPILED.md, which is the only spine that run
       // follows. Calling that `on-phase` would describe a read that never
-      // happens (read-ladder.md rule 5).
+      // happens (phases/README.md rule 5).
       when:
         lane === "orc-diy" && (PHASE_FILES[id].lane_layers || {})["orc-diy"]
           ? "compile-time"
           : id === "preflight" || id === "trace"
             ? "always"
-            : "on-phase",
+            : PHASE_FILES[id].via
+              ? "on-demand"
+              : "on-phase",
       optional_when: null,
       // v1.7.0 — `rules` names its own call for the same reason `preflight`
       // does: the phase IS that command, and a phase row reading "none
@@ -4654,8 +5137,10 @@ function laneRailsManifest() {
     // is an answer, not a gap.
     if (!t || !t.token) continue;
     const rows = [];
+    // An `on-demand` row is a reference a lane MAY open, never a phase a run
+    // is IN — a rail step for it would be a phase the statusline can never show.
     for (const p of lanePhaseRows(lane))
-      rows.push({ id: p.id, label: railLabel(p), kind: railKind(p), verbs: [] });
+      if (p.when !== "on-demand") rows.push({ id: p.id, label: railLabel(p), kind: railKind(p), verbs: [] });
     for (const p of LANE_OWN_PHASES[lane] || [])
       rows.push({
         id: p.id,
@@ -4700,6 +5185,9 @@ function lanePhasesCmd(lane, claudeDir) {
       lane: l,
       trace_tier: t ? t.tier : null,
       trace_token: t ? t.token : null,
+      // v2.0.0 T1 — the grammar line of every verb this lane's phases emit,
+      // plus TRACE_ALWAYS_VERBS. A verb not here → `_shared/phases/trace-verbs.md`.
+      trace_grammar: laneTraceGrammar(l),
       phases,
       shared_phase_count: phases.length,
       // `null` is NOT `[]`: a lane whose own pipeline is still declared in its
@@ -4730,6 +5218,11 @@ function lanePhasesCmd(lane, claudeDir) {
           ? ui.color.gray(`tier ${r.trace_tier} · lane token \`${r.trace_token}\``)
           : ui.color.gray("this lane owns no trace (it is not a run entry point)"))
     );
+    if (r.trace_grammar)
+      console.log(
+        "  trace grammar  " +
+          ui.color.gray(`${Object.keys(r.trace_grammar).length} verbs: ${Object.keys(r.trace_grammar).join(" · ")}  (--json → trace_grammar)`)
+      );
     if (!r.phases.length) {
       // An empty answer is an ANSWER: this lane runs no SHARED phase yet.
       console.log(
@@ -4800,6 +5293,9 @@ function laneConfigCmd(lane, claudeDir) {
     return 2;
   }
   const d = laneConfig(lane, claudeDir);
+  // v2.0.0 T20 — the preflight probes' answers ride on this one call. LAST, so
+  // every 1.9.2 field keeps its position.
+  if (!args.includes("--no-probes")) d.probes = laneProbes(lane, args.includes("--probes-full"));
   if (wantsJson()) {
     emitJson({ ok: true, ...d });
     return 0;
@@ -4816,6 +5312,31 @@ function laneConfigCmd(lane, claudeDir) {
     console.log("");
   }
 
+  // v2.0.0 T20 — the probes this lane makes at start, one line each.
+  if (d.probes && Object.keys(d.probes).length) {
+    console.log(ui.header("Probes  (the preflight answers — exit code is data)"));
+    const pw = Math.max(...Object.keys(d.probes).map((k) => k.length));
+    for (const [id, p] of Object.entries(d.probes))
+      console.log(`  ${ui.color.cyan(id.padEnd(pw))}  exit ${p.exit}  ${p.error ? ui.color.yellow("error: " + p.error) : p.line}`);
+    console.log("");
+  }
+
+  // v2.0.0 W2 — only when `habits` is not off; off prints nothing new.
+  if (d.habits) {
+    const h = d.habits;
+    console.log(ui.header("Habits"));
+    console.log("  " + h.line);
+    for (const l of h.learned) console.log(`  learned  ${l.key}: ${l.value}  (${l.id}, ${l.count} of ${l.total})  undo: ${l.undo}`);
+    for (const x of h.suggestions) console.log(`  usual    ${x.qid}: ${x.option}  ${x.mark}  (${x.id})`);
+    if (h.proposal) {
+      console.log(`  proposal ${h.proposal.id} (${h.proposal.kind}) — show at the END of the run only:`);
+      console.log("    " + h.proposal.line);
+      console.log(ui.color.gray(`    yes: ${h.proposal.yes}${h.proposal.keep ? "   keep: " + h.proposal.keep : ""}${h.proposal.later ? "   not now: " + h.proposal.later : ""}   never: ${h.proposal.never}`));
+      console.log(ui.color.gray(`    trace: ${h.proposal.trace}`));
+    }
+    console.log("");
+  }
+
   console.log(ui.header(`Keys this lane reads  (${d.keys.length})`));
   if (!d.keys.length) console.log(ui.color.gray("  none — this lane reads no config key."));
   const pad = d.keys.length ? Math.max(...d.keys.map((k) => k.key.length)) : 0;
@@ -4826,7 +5347,9 @@ function laneConfigCmd(lane, claudeDir) {
         ? ui.color.yellow("  shadowed")
         : k.is_overridden
           ? ui.color.green("  overridden")
-          : ui.color.gray("  default");
+          : k.state === "learned"
+            ? ui.color.cyan("  learned") + ui.color.gray(` (${k.source})`)
+            : ui.color.gray("  default");
     console.log(`  ${ui.color.cyan(k.key.padEnd(pad))}  ${String(k.value).padEnd(24)} ${k.prio} ${k.family}${mark}`);
     if (k.inert_reason) console.log(ui.color.gray(`      ↳ ${k.inert_reason}`));
     else if (k.shadow_reason) console.log(ui.color.gray(`      ↳ ${k.shadow_reason}`));
@@ -8404,6 +8927,11 @@ function gotchaStatus(claudeDir, verbose) {
           trigger: e.fields.trigger || null,
           fields: e.fields,
         })),
+        // v2.0.0 W7 — the Behaviour panel's Gotchas tab: source, computed
+        // status and a 7-week hits line per entry, plus the last sync state.
+        // It READS the sync file; it never runs a sync.
+        // `status` (a lane preflight) skips it: only `list` pays for the git call.
+        ...(verbose ? { panel: require("./gotcha.js").panelView(claudeDir, gotchaDeps(), entries) } : {}),
       },
       entries.length ? 0 : 1
     );
@@ -9752,6 +10280,18 @@ ${line || ""}`;
   process.exit(1);
 }
 
+// The helpers `bin/gotcha.js` borrows: the v1 parser and paths stay HERE, so
+// `GOTCHA_HEAD` has one home and a 1.9.2 CLI still reads a 2.0 file.
+function gotchaDeps() {
+  return { args, flag, positionals, emitJson, wantsJson, resolveClaudeDir, readOverride, repoRootOf, parseGotchas, gotchasPath, gotchasArchivePath, GOTCHA_HEAD };
+}
+
+// An async importer that throws: one line, exit 1, never a stack in a lane.
+function asyncFail(e) {
+  console.error("❌ " + ((e && e.message) || String(e)));
+  process.exit(1);
+}
+
 function gotcha() {
   if (flag("--global")) {
     console.error("❌ orc gotcha is project-scoped — the memory is this repo's. Run it from the project (or with --dir <path>).");
@@ -9765,7 +10305,8 @@ function gotcha() {
       gotchaStatus(claudeDir, false);
       break;
     case "list":
-      if (args.includes("--archived")) gotchaArchived(claudeDir);
+      if (args.includes("--candidates")) require("./gotcha.js").gotchaCmd(gotchaDeps(), "list");
+      else if (args.includes("--archived")) gotchaArchived(claudeDir);
       else gotchaStatus(claudeDir, true);
       break;
     case "show":
@@ -9777,13 +10318,35 @@ function gotcha() {
       if (args.includes("--dry-run")) gotchaPruneDryRun(claudeDir);
       else gotchaPrune(claudeDir);
       break;
+    // v2.0.0 W4 — the gotchas engine (bin/gotcha.js): the CLI assigns ids,
+    // dedupes, matches, builds the reviewer card and computes promotion.
+    case "add":
+    case "match":
+    case "card":
+    case "filter":
+    case "observe":
+    case "accept":
+    case "quality":
+    case "why":
+    case "export":
+      require("./gotcha.js").gotchaCmd(gotchaDeps(), pos[1]);
+      break;
+    // v2.0.0 W6a — the importers and the review-step sync (bin/gotcha-import.js).
+    // They FEED `observe`; they never write a gotchas.md entry themselves.
+    case "import":
+      require("./gotcha-import.js").importCmd(gotchaDeps()).catch(asyncFail);
+      break;
+    case "sync":
+      require("./gotcha-import.js").syncCmd(gotchaDeps()).catch(asyncFail);
+      break;
     default:
       console.error(
         `Unknown: orc gotcha ${pos[1]}\n` +
           "Usage: orc gotcha status | list [--archived]   repair memory (exit 0 = entries, 1 = none)\n" +
           "       orc gotcha show <id>                    ONE entry, every field (exit 0 / 3 unknown id)\n" +
           "       orc gotcha prune [--dry-run]            archive the low-value tail down to gotchas_max.\n" +
-          "                                               --dry-run NAMES every entry and writes nothing"
+          "                                               --dry-run NAMES every entry and writes nothing\n" +
+          require("./gotcha.js").USAGE.replace(/^Usage: /, "       ")
       );
       process.exit(1);
   }
@@ -10227,9 +10790,12 @@ function pr(alias) {
   // alias `orc pr-stack-template [<slug>]`.
   if (alias === "pr-stack-template") return stackTemplate(claudeDir, pos[1]);
   if (alias === "pr-stack-status") return stackStatus(claudeDir, pos[1]);
+  // v2.0.0 W6a (Q1) — the unresolved review threads, read-only, via `gh`.
+  if (pos[1] === "threads") return require("./gotcha-import.js").prThreadsCmd(gotchaDeps());
   const usage =
     "Usage: orc pr stack template [<slug>]   write a fill-in stack-plan skeleton\n" +
     "       orc pr stack status [<slug>]     is a plan READY? (exit 0 ready / 1 absent-or-unfilled)\n" +
+    "       orc pr threads <n> [--all]       the unresolved review threads (read-only; exit 0 · 1 none open · 5 gh missing/not authed)\n" +
     "       (aliases: orc pr-stack-template, orc pr-stack-status)";
   if (pos[1] !== "stack") {
     console.error(`Unknown: orc ${pos.slice(1).join(" ") || ""}\n${usage}`);
@@ -11386,6 +11952,9 @@ function runCmd() {
   // Read-only, and the ONE reader of the pending sidecar. 0 clear / 1 in-flight / 2 unknown.
   if (sub === "inflight") return runInflightCmd(claudeDir);
 
+  // v2.0.0 W6b (Q2)  the pre-run tree, so `orc undo` can never eat a user edit.
+  if (sub === "snapshot") return require("./run-undo.js").snapshotCmd(runUndoDeps());
+
   if (sub === "show") {
     const arg = pos[2];
     const pick = /^\d+$/.test(String(arg)) ? runs[Number(arg) - 1] : runs.find((r) => r.slug === arg);
@@ -11473,7 +12042,7 @@ function runCmd() {
   if (sub !== "list") {
     console.error(
       `Unknown subcommand: orc run ${sub}\n` +
-        `Try: orc run list | orc run show <slug|n> | orc run close <slug> --reason "<why>" | orc run reopen <slug>`
+        `Try: orc run list | orc run show <slug|n> | orc run close <slug> --reason "<why>" | orc run reopen <slug> | orc run snapshot --run <slug>`
     );
     process.exit(1);
   }
@@ -11653,7 +12222,7 @@ function stats() {
   const empty = (msg) => {
     if (asJson)
       emitJson(
-        { log_dir: dir, runs: 0, from: null, to: null, lanes: {}, agents: {}, dispatches: 0, downgrades: 0, unfinished: 0, unknown_lane: 0, graph: statsGraph(claudeDir) },
+        { log_dir: dir, runs: 0, from: null, to: null, lanes: {}, agents: {}, dispatches: 0, downgrades: 0, unfinished: 0, unknown_lane: 0, graph: statsGraph(claudeDir), questions: null },
         1
       );
     console.log(msg);
@@ -11715,6 +12284,13 @@ function stats() {
 
   const laneRows = [...lanes.entries()].sort((a, b) => b[1] - a[1]);
   const agentRows = [...agents.entries()].sort((a, b) => b[1] - a[1]);
+  // v2.0.0 W6b (Q7) — questions per run, from the habit engine's ONE pass over
+  // the ASK / QUESTION lines. null = it could not be computed, never a guess.
+  let questions = null;
+  try {
+    const H = require("./habit.js");
+    questions = H.questionStats(H.collect(claudeDir, habitDeps()), { since: typeof since === "string" && since ? since : null });
+  } catch (_) {}
 
   if (asJson) {
     console.log(
@@ -11731,6 +12307,7 @@ function stats() {
           unfinished,
           unknown_lane: unknownLane,
           graph: statsGraph(claudeDir),
+          questions,
         },
         null,
         2
@@ -11767,6 +12344,20 @@ function stats() {
       ["tokens put in", kTok(gr.paid)],
       ["retrieval probably kept out", `~${kTok(gr.avoided_low)} – ${kTok(gr.avoided_high)}   (an ESTIMATE — see \`orc graph gain\`)`],
     ]));
+  }
+  // Q7 — "fewer questions", measured. Every field --json carries is printed.
+  if (questions && questions.runs) {
+    console.log("\n" + ui.color.bold("Questions") + `          ${questions.asked} asked · ${questions.answered_for_you} answered for you`);
+    console.log(ui.kv([
+      ["per run (median)", String(questions.per_run_p50)],
+      ["asked by a subagent", String(questions.subagent_questions)],
+      ["how each was answered", Object.entries(questions.by).map(([k, v]) => `${k} ${v}`).join(" · ")],
+      ["last runs, oldest first", questions.per_run_trend.map((r) => r.asked).join(" ")],
+    ]));
+    for (const [l, r] of Object.entries(questions.by_lane).sort((a, b) => b[1].asked - a[1].asked))
+      console.log(`  /${l.padEnd(18)} ${String(r.asked).padStart(3)} asked in ${plural(r.runs, "run")} · median ${r.per_run_p50} · ${r.answered_for_you} answered for you`);
+    const pts = Object.entries(questions.by_point).sort((a, b) => b[1].asked - a[1].asked);
+    for (const [q, r] of pts) console.log(ui.color.gray(`    ${q.padEnd(34)} ${r.asked} asked · ${r.answered_for_you} answered for you`));
   }
   console.log("\n" + ui.color.bold("Health"));
   console.log(ui.kv([
@@ -34471,6 +35062,36 @@ function doctor() {
     }
   } catch (_) {}
 
+  // 5a-bis2) the session hook (v2.0.0 Q8/Q9). TWO entries: `Stop` (the bell,
+  // armed only by `notify: bell`) and `SessionStart` on `compact` (the run
+  // pointer after a compaction, always armed). One finding when either is missing.
+  try {
+    const cfg = resolvedConfig(claudeDir);
+    let hk = {};
+    try {
+      hk = (JSON.parse(fs.readFileSync(path.join(claudeDir, "settings.json"), "utf8")) || {}).hooks || {};
+    } catch (_) {}
+    const wiredOn = (event, matcher) =>
+      Array.isArray(hk[event]) &&
+      hk[event].some((e) => (e.matcher || null) === (matcher || null) && (e.hooks || []).some((h) => String(h.command || "").includes("orc-session-hook")));
+    const missing = [["Stop", null], ["SessionStart", "compact"]].filter(([e, m]) => !wiredOn(e, m)).map(([e, m]) => (m ? `${e} ${m}` : e));
+    const bell = String(cfg.notify || "off") === "bell";
+    if (missing.length)
+      warn(
+        "session-hook-unwired",
+        `session hook not wired on ${missing.join(", ")} — ` +
+          [
+            missing.includes("SessionStart compact") ? "a compacted session is not told which run is in flight" : null,
+            missing.includes("Stop") ? (bell ? "notify is bell, but the bell never rings" : "the bell cannot ring if notify is set to bell") : null,
+          ]
+            .filter(Boolean)
+            .join("; ") +
+          "; run `orc update`",
+        { fixable: true, fix: "orc update", fix_command: "orc update" }
+      );
+    else ok(`session hook wired (Stop + SessionStart compact) · notify ${bell ? "bell" : "off"}`);
+  } catch (_) {}
+
   // 5a-ter) the code graph (v1.8.0). ONE finding, and only while `code_graph` is
   // on — the read-gate rule. DRIFTED is the only state worth a line: NONE is
   // built by the next code lane's preflight, and a doctor that warns about a
@@ -40906,8 +41527,23 @@ Usage:
       --reason "<why>"                    moves RESUME.md aside (never deletes it) and records why,
                                           so it stops counting as waiting  [--json]
     orc run reopen <slug|n>               put it back — it is waiting again  [--json]
+    orc run snapshot --run <slug>         at run start: what the tree looked like BEFORE the run
+                                          (a git ref + the untracked files), so undo can tell your
+                                          edits from the run's own  [--json]
+  orc undo --run <slug> [--files a,b]     PRINTS the commands that revert ONLY the files this run
+      [--apply]                           changed, back to the snapshot; --apply runs them. Never
+                                          touches a file outside the run, keeps a run file you
+                                          edited later (exit 4)  [--json]
   orc stats [--since YYYY-MM-DD] [--json] how much you actually use each lane and agent, counted
                                           from the trace filenames — no model, instant, free
+  orc habit show|log|points|why|accept|decline|forget|reset|doctor|export|purge   your usual answers,
+                                          learned from the ASK lines in your traces (config key
+                                          \`habits\`, off by default). Never applied without your yes  [--json]
+  orc habit repo [accept|decline|forget <id>]   soft preferences read from git history (commit,
+                                          branch, test-file naming). An accepted one rides in
+                                          \`orc rules slice\` as the LEARNED tier  [--json]
+  orc trace write --packet -|<file>       write ONE phase packet into the run's trace pair (.txt +
+                                          .jsonl). Exit 2 = a bad packet, nothing written  [--json]
   orc wait                                the deterministic half of /orc-wait — a wait costs zero
                                           tokens, because a detached command does it, not a model
     orc wait lanes [--json]               which lanes support a wait, what each one checkpoints,
@@ -44454,6 +45090,22 @@ const RULES_PRECEDENCE = [
   { rank: 3, layer: "ORC rules", scope: "everything", where: "<claude>/skills/_shared/rules/", beats: "nothing — it is the floor, and yours replaces it" },
 ];
 
+// v2.0.0 DE-8 — the LEARNED tier sits between your rules and the ORC rules.
+// It is named ONLY while `habits` is on: off = the ladder of the release before.
+function rulesPrecedence(claudeDir) {
+  let on = false;
+  try {
+    on = require("./habit.js").habitsMode(readOverride(claudeDir).map) !== "off";
+  } catch (_) {}
+  if (!on) return RULES_PRECEDENCE;
+  return [
+    RULES_PRECEDENCE[0],
+    RULES_PRECEDENCE[1],
+    { rank: 3, layer: "learned", scope: "commit, branch and test-file naming", where: "<claude>/orc/habits-state.json (`orc habit repo`)", beats: "the ORC rules — and your rules beat it" },
+    Object.assign({}, RULES_PRECEDENCE[2], { rank: 4 }),
+  ];
+}
+
 // Which packs ride in which lane. `ui` is absent from every row ON PURPOSE: it
 // is added PER TASK by the orchestrator when a task's declared files are
 // front-end. A UI rule in a backend slice is tokens paid on every spawn for a
@@ -44722,6 +45374,10 @@ function rulesLine(packs, blocks, overrides) {
 // which are what a rule's body is mostly made of. Nothing is hidden: the pack
 // file is named beside the rules, exactly as the light tiers already are.
 const RULES_COMPACT_LANES = new Set(["orc-quick"]);
+// v2.0.0 DE-17 — the SAME compact card for orc-mini / orc-fast, behind
+// `rules_card_compact` (default off). It flips only when eval E4 passes
+// (eval/results/2.0.0/E4.md). Off = the full card, byte for byte.
+const RULES_COMPACT_OPT_IN = new Set(["orc-mini", "orc-fast"]);
 
 // One line out of a rule body: the first paragraph, whitespace collapsed, cut
 // at a word boundary. A rule whose instruction does not survive that is a rule
@@ -44742,7 +45398,16 @@ function rulesSlice(claudeDir, lane, extraPacks) {
   const overridden = new Set(overrides.filter((o) => o.known).map((o) => o.id));
   const want = new Set([...(RULE_LANE_PACKS[lane] || []), ...(extraPacks || [])]);
   const chosen = packs.packs.filter((p) => want.has(p.id));
-  const compact = RULES_COMPACT_LANES.has(lane);
+  let cfgMap = {};
+  try {
+    cfgMap = readOverride(claudeDir).map || {};
+  } catch (_) {}
+  const compact =
+    RULES_COMPACT_LANES.has(lane) || (RULES_COMPACT_OPT_IN.has(lane) && String(cfgMap.rules_card_compact || "off") === "on");
+  // DE-8 — the LEARNED tier. `null` under `habits: off`: then the slice is
+  // byte-identical to the release before, and the field is not even present.
+  const learned = require("./habit.js").learnedRules(claudeDir, repoRootOf(claudeDir), cfgMap);
+  const inForce = learned ? learned.filter((r) => r.state === "applied") : [];
 
   const L = [];
   if (!led.empty) {
@@ -44751,6 +45416,13 @@ function rulesSlice(claudeDir, lane, extraPacks) {
       const body = String(led.blocks[pr] || "").replace(/\s+$/, "");
       if (body) L.push(pr, body, "");
     }
+  }
+  if (inForce.length) {
+    L.push(
+      "LEARNED PREFERENCES — computed from this repo's own history, and accepted by you. Your rules above win over these. These win over the ORC rules below.",
+      ...inForce.map((r) => `${r.id} · ${r.rule}`),
+      ""
+    );
   }
   if (chosen.length) {
     L.push(
@@ -44795,6 +45467,9 @@ function rulesSlice(claudeDir, lane, extraPacks) {
     // `compact` is REPORTED, never asked for. A reader that cannot tell a short
     // card from a stripped one cannot trust either.
     compact,
+    // Present ONLY when habits is on (DE-16: off = zero bytes). Stale rows are
+    // listed with their reason and are NOT in `text`.
+    ...(learned ? { learned } : {}),
     text: L.join("\n").replace(/\n{3,}/g, "\n\n").replace(/\s+$/, ""),
     overrides,
     line: rulesLine(packs, led.blocks, overrides),
@@ -45071,7 +45746,7 @@ function rulesCmd() {
         },
         priorities: RULE_PRIORITIES,
         tiers: RULE_TIERS,
-        precedence: RULES_PRECEDENCE,
+        precedence: rulesPrecedence(claudeDir),
         overrides,
         overrides_note:
           "counted from ORC rule ids you NAMED in your own rules. A conflict you did not name is found by the agent at dispatch and returned as rules_conflicts[] — the CLI cannot parse intent, so it does not pretend to.",
@@ -45084,7 +45759,7 @@ function rulesCmd() {
 
   console.log(`\norc rules — ${line}\n`);
   console.log(ui.color.bold("  Precedence") + ui.color.gray("   the order never changes"));
-  for (const r of RULES_PRECEDENCE)
+  for (const r of rulesPrecedence(claudeDir))
     console.log(
       `   ${r.rank}. ${ui.color.cyan(r.layer.padEnd(12))} ${ui.color.gray(r.scope)}\n` +
         `      ${ui.color.gray(r.where)}\n` +
@@ -45247,7 +45922,7 @@ function lintScanFile(abs, rel, opts) {
   } catch (_) {
     return out;
   }
-  if (text.includes(" ")) return out; // binary
+  if (text.includes("\u0000")) return out; // binary
   const lines = text.replace(/\r\n/g, "\n").split("\n");
 
   // THE CARVE-OUT, and it is not a convenience. A rule that bans a word has to
@@ -45590,6 +46265,16 @@ function jsonCrash(err) {
     case "graph":
       graphCmd();
       break;
+    // v2.0.0 W2 — the habit engine. Every subcommand is a READ except accept,
+    // decline, forget, reset and purge, which are habits-state.json's only writers.
+    case "habit":
+      require("./habit.js").habitCmd(habitDeps());
+      break;
+    // v2.0.0 T21 — the CLI holds the trace pen: one packet → the .txt + .jsonl
+    // pair. The Haiku writer is the fallback when this exits ≠ 0.
+    case "trace":
+      require("./trace-write.js").traceCmd({ flag, positionals, emitJson, wantsJson, resolveClaudeDir, resolveLogDir, TRACE_VERBS });
+      break;
     case "mock":
       mock();
       break;
@@ -45679,11 +46364,19 @@ function jsonCrash(err) {
     case "pr-stack-status":
       pr(cmd);
       break;
+    // v2.0.0 W6a (Q3) — the failing CI steps, read-only, flaky re-attempts named.
+    case "ci":
+      require("./gotcha-import.js").ciFailedCmd(gotchaDeps());
+      break;
     case "resume":
       resume();
       break;
     case "run":
       runCmd();
+      break;
+    // v2.0.0 W6b (Q2)  revert ONLY what a run changed, back to its snapshot.
+    case "undo":
+      require("./run-undo.js").undoCmd(runUndoDeps());
       break;
     case "stats":
       stats();

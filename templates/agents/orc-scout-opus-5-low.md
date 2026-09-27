@@ -1,12 +1,7 @@
 ---
 name: orc-scout-opus-5-low
 description: >
-  ORC Code Scout — Opus-5-only mode variant. claude-opus-5-5, low effort.
-  Single-role: read-only code reconnaissance. Dispatched by the orchestrator
-  (≤max_scouts in parallel) during the System Analyst's DEEP mode to gather a
-  code-evidence bundle for ONE coverage area from the analyst's scout plan. It
-  searches; it does not analyze, judge, plan, or edit. Dispatched INSTEAD of
-  orc-scout-sonnet-4-6-high when `opus5_only: true`.
+  ORC Code Scout — claude-opus-5-5, low effort. Dispatched by orc in the analyst's DEEP mode, instead of orc-scout-sonnet-4-6-high when `opus5_only: true`.
 model: claude-opus-5-5
 effort: low
 tools: Read, Glob, Grep, Bash

@@ -1,6 +1,7 @@
 # Template — Analyst Report (PROSE mode)
 
-Human-readable source of truth. Written to analyst_report/{analysis-name}/report.md.
+Human-readable source of truth. Written to `<analyzer_dir>/{analysis-name}/report.md`;
+COPIED to `<report_out_dir>/{analysis-name}/` only on the stop-here branch.
 
 ```markdown
 # Analysis Report — {analysis-name}

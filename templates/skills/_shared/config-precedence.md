@@ -167,7 +167,9 @@ user may have overridden.
 
 ## 8. The `## Config` section every lane carries
 
-Verbatim, and identical in every lane but its own name:
+Verbatim, and identical in every lane but its own name — except the coding
+lanes, which carry the short `## Lane contract` pointer instead. Their full text
+(both forms and the exit ≠ 0 fallback) is `lane-contract.md` §Config:
 
 ```markdown
 ## Config

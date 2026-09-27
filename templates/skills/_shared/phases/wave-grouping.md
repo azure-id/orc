@@ -1,11 +1,6 @@
 # Phase — Wave grouping   (id: `wave-grouping`)
 
-> **Library file.** Canonical since v1.0.0 W12; it was under the `orc` skill's
-> private `references/`, and another lane already reached across into it. Read
-> by `orc`, `orc-diy`. Layers declared: `core` only — single-layer because the
-> conflict graph is arithmetic, and a lane that groups waves at all groups
-> them this way. `orc lane phases <lane> --json` names the file and the layers
-> to read.
+> **Library file** (`orc`, `orc-diy`), `core` only: the conflict graph is arithmetic, and every lane that groups waves groups them this way.
 
 <!-- orc:layer core -->
 ## Reference — Wave Grouping & Conflict Graph

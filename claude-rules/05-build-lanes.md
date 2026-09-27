@@ -195,3 +195,12 @@
   area), registered like any doc, read FIRST by every consumer. See
   `knowledge.md` §4t.
 
+- **v2.0.0 in the build lanes.** A learned `mini_tdd: on` skips the mini TDD
+  question and says so; a learned `review_before_push: on` puts a reviewer
+  dispatch first in mini's end-of-run batch and fast's F4 offer. A habit never
+  answers an ultra forced key (`by=config`) and never suggests `continue` on a
+  stale wiki. On red, the smoke gate runs `orc ci flaky` first; a flaky re-run
+  does not use a repair round. The reviewer slice fields live ONCE in
+  `_shared/review-slice.md`. A DIY flow compiled by 1.x is STALE after the
+  update → `orc diy compile`. See `claude-rules/11-habits-and-review.md` and
+  `knowledge.md` §4z.34.4.

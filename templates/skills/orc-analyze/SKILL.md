@@ -2,16 +2,11 @@
 name: orc-analyze
 description: >
   System Analyst for ORC. Use for "/orc-analyze", "analyze this doc for scope
-  X", or "analyze this requirement against the code" — turning a requirement (a
-  document, PDF by path or pasted, OR a plain-language request) into a precise,
-  code-grounded requirement set BEFORE any planning. Bounds the deliverable to
-  exactly the asked scope, pulls related adjacent scopes in only as anchored
-  "do not build" context, maps each requirement to real files with
-  quote-anchored file:line evidence, and challenges the user with recommended
-  options. Opt-in DEEP mode adds a scout-driven code sweep, verify-every-claim,
-  and alternatives + risks. Also auto-triggers inside /orc on a doc or
-  ambiguous requirement. The orchestrator dispatches this to a subagent — it
-  never analyzes itself.
+  X", or "analyze this requirement against the code". Turns a document (PDF by
+  path or pasted) or a plain-language request into a scope-bounded,
+  code-grounded requirement set with quote-anchored file:line evidence BEFORE
+  any planning, and challenges the user with recommended options. Opt-in DEEP
+  mode adds a scout-driven code sweep. Also auto-triggers inside /orc on a doc.
 ---
 
 # ORC-ANALYZE (System Analyst)
@@ -79,24 +74,20 @@ the user meant.
 
 ## Behavior trace (always on)
 
-`../_shared/phases/trace.md` (`core`, at run start; `orc lane phases` names
-the file and the layers). Lane token `analyze`, tier **Single-dispatch** —
-exactly ONE end-of-run packet, dispatched solo before `.current` is deleted.
-At run start write `log_dir/.current` = `run-analyze-<slug>-<DDMMYY>-<HHMMSS>.txt` AND
-`touch the trace file` of that name in the SAME step.
-Nothing else about the protocol is restated here; a phase that ends with
-`zero new trace lines is a protocol violation`.
+`../_shared/phases/trace.md` (`core`, at run start; `orc lane phases orc-analyze --json` →
+`trace_grammar` gives the verbs). Lane token `analyze`, tier
+**Single-dispatch**. At run start write `log_dir/.current` =
+`run-analyze-<slug>-<DDMMYY>-<HHMMSS>.txt` AND `touch the trace file` of that name
+in the SAME step. A phase that ends with `zero new trace lines is a protocol violation`.
 
 `context-combiner` is a PHASE of this run, not a lane: its `DISPATCH`/`RETURN`,
 its Phase D verdicts and its conservation-gate result fold into THIS packet.
 
 ## Phases
 
-`orc lane phases orc-analyze --json` is this lane's pipeline: the ordered list, where
-each phase lives, and how much of it to read. **The CLI owns the order** — never
-derive it from the headings below, and never renumber or rename one without the
-manifest, because a `read: section` pointer names a HEADING and a renamed heading
-is a pointer into nothing.
+`orc lane phases orc-analyze --json` is this lane's pipeline. **The CLI owns the order**:
+never derive it from the headings below, and never rename or renumber one
+without the manifest (`../_shared/lane-contract.md` §Phases).
 
 ## Phase A — Ingest & detect source mode
 
@@ -133,12 +124,11 @@ offer wording, the auto-consume back here: `references/thin-input.md`.
 
 ## Phase A′ — Standard vs Deep gate (default STANDARD)
 
-Before reconciliation, offer the depth choice (config `default_analysis_depth`
-presets the default; the run still confirms): deep = wider sweep, verify every
-claim, more questions, alternatives with trade-offs, noticeably more tokens;
-standard = faster, verifies the stated floor (hard rule 4). Mention the
-zero-token default switch `orc config set default_analysis_depth deep`. Deep
-requires explicit consent — never auto-escalates — and is **two-pass with
+Before reconciliation, offer the depth choice (H `any.analysis.depth`). Config
+`default_analysis_depth` presets it; mention the free switch `orc config set
+default_analysis_depth deep`. Deep = wider sweep, verify every claim, more
+questions, alternatives, more tokens; standard = faster, the hard rule 4 floor.
+Deep needs explicit consent EVERY run (never auto) and is **two-pass with
 scouts**: load `references/deep-mode.md`. Standard is single-pass.
 
 ## Phase B — Bound scope
@@ -216,44 +206,18 @@ another RELATED doc (multi-analyze loop → combiner once 2+ related analyses
 exist). Menu rules, relatedness gate, combiner handling:
 `references/branching.md`.
 
-## Mini variant
+## Lane contract (`../_shared/lane-contract.md` — read it ONLY when a call exits ≠ 0)
 
-For the fast lane, `orc-analyze-mini` (Sonnet 5 high) does a shallower version
-of the same flow: doc-optional intake, the same evidence-or-mark + floor (a)+(b)
-+ triage rules — but **no deep mode and no scouts** (always single-pass), and
-concrete escalation thresholds to the full analyst. Used by orc-mini. Same
-artifacts, same output contract; trimmed depth. See that skill.
+- **Calls:** `orc lane calls orc-analyze --json` names every call and its exit codes.
+  **An exit code is an ANSWER where it says so, not a failure.** Make no other call.
+- **Config:** `orc lane config orc-analyze --json`. Obey `effective`, print every line
+  in `announce[]` VERBATIM at preflight, and honour `stops[]` before wave 1.
+  Never merge `.claude/orc.config.yaml` yourself (`../_shared/config-precedence.md`).
+- **Habits:** `habits{}` in that answer → `../_shared/habits.md`; else ignore `(H …)`.
+- **Rules:** `orc rules slice --lane orc-analyze --json` is the ONLY assembler
+  (`../_shared/phases/rules.md`). Its `line` prints VERBATIM at preflight.
 
-## Config
-
-**ONE resolver, and it is not you:** `orc lane config orc-analyze --json`. Obey
-`effective`, print every line in `announce[]` VERBATIM at preflight, and honour
-`stops[]` before wave 1. Never re-derive a value, a precedence or an inertness
-from `.claude/orc.config.yaml` — a key this lane does not read is not in the
-answer, and a key another key shadows comes back already marked. Exit ≠ 0 → say
-the CLI is unavailable and fall back to `../_shared/config-precedence.md`'s
-documented defaults, out loud. Priorities and families:
-`../_shared/config-precedence.md`.
-
-## Calls
-
-**ONE catalogue, and it is not you:** `orc lane calls orc-analyze --json` names every
-CLI call this lane makes, each with its exit-code contract, its cost, when to run
-it, and what an EMPTY answer means. Never invent a spelling, never re-word an
-exit code, and never re-derive a state word — the CLI's state words are the only
-state words, and **an exit code is an ANSWER wherever that contract says so, not
-a failure**. A call the answer does not name is a call this lane does not make.
-Exit ≠ 0 from the catalogue itself → say the CLI is unavailable and name the
-command you are about to run, out loud, before running it.
-
-## Rules — the anti-slop card (`../_shared/phases/rules.md`)
-
-`orc rules slice --lane orc-analyze --json` is the ONLY assembler; never build
-the card here. It rides under the house rules and above the task —
-**house rules > your project's rules > ORC's own packs** — and its `line` prints
-VERBATIM at preflight. Returns gain `rules_applied[]`, `rules_conflicts[]` (a gap,
-never a silent choice) and `rules_overridden[]`.
 ## Waiting mid-run (`/orc-wait`)
 
 Canonical: `../_shared/wait.md`. **`a lane that waits without a hand-back` has broken this contract.**
-Checkpoint **full** · safe point **after the analyst returns**. `soft` FORCES that checkpoint and does NOT stop if the write fails; `hard` skips it and can lose an in-flight return. Never begin a wait between a dispatch and its validated return, or before the smoke gate has reported.
+Checkpoint **full** · safe point **after the analyst returns**.

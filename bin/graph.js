@@ -283,7 +283,7 @@ function blobPath(p, blob) {
 // what a card may quote and the number is what a cache may compare.
 function genId(filesOut) {
   const h = crypto.createHash("sha1");
-  for (const rel of Object.keys(filesOut).sort()) h.update(`${rel} ${(filesOut[rel] || {}).blob || ""} `);
+  for (const rel of Object.keys(filesOut).sort()) h.update(`${rel}\u0000${(filesOut[rel] || {}).blob || ""}\u0000`);
   return h.digest("hex").slice(0, 8);
 }
 

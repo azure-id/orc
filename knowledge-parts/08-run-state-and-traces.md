@@ -746,3 +746,46 @@ clauses, and every generated executor carrying the new wording.
   skills / 22 agent files (unchanged — no new skill or agent).
 - Git: branch `main`. Not yet confirmed published to the npm registry; install
   docs favor `github:azure-id/orc`.
+
+---
+
+## 4z.34.6 v2.0.0 — new trace verbs, habits, `orc undo`, the session hook
+
+**Trace verbs added** (the set is closed; `TRACE_VERBS`):
+`ASK <qid> :: offered=… rec=… chose=… by=… [pre=…] [ctx=…]` (one answered
+question; the words of an `other` answer are NEVER stored),
+`FINDING-OUTCOME addressed= disputed= wontfix= open= pre= suppressed= :: …`
+(review close), `GATE flaky`, and `FINDING` gains `[ pre= suppressed= folded=]`.
+Old traces parse as before. Failure it prevents: a reader that treats the verb
+set as closed and drops the new lines.
+
+- **Habits (`bin/habit.js`).** The rule is CLI constants (`HABIT_RULE`), not
+  config: window 30 answers per (qid, bucket), half-life 10 answers, raw n ≥ 5
+  at full weight, Wilson lower bound ≥ 0.55 (z 1.96), the last 3 agree. Weights:
+  user / ledger 1.0, learned / pre-selected 0.25; `config` and `default` answers
+  weigh 0. Stale on 2 overrides in the last 3, or 90 days unused. A declined
+  habit may come back after 10 more answers AND 14 days. ONE threshold,
+  propose — there is no act threshold and no `auto` (DE-4; a test asserts it).
+- **Classes** per point in `ASK_POINTS` (30 points): `apply` (a key can be
+  learned, toward the `careful` side only), `suggest` (the habit only orders the
+  offer), `never` (an unknown point). `never_option` blocks one option.
+- **At most ONE proposal per run**, in the lane's existing end-of-run batch.
+  `observe` never proposes.
+- **Files** (user data, never in the manifest): `habits-state.json`,
+  `habits-cache.json` (keyed by trace name + mtime). `orc habit purge --yes`
+  sets a cutoff and deletes the cache; it never touches traces. No backfill
+  from `NOTE` prose.
+- **`orc stats --json` → `questions{}`** comes from the same pass
+  (`questionStats`), never a second parser.
+- **`orc run snapshot --run <slug>`** (`bin/run-undo.js`): `git stash create` →
+  `refs/orc/runs/<slug>/pre` + the untracked files, wired in `trace.md`'s
+  run-pointer step. The next snapshot removes a ref older than 30 days.
+  **`orc undo --run <slug> [--files] [--apply]` PRINTS by default** (S6);
+  `--apply` runs. A file edited after the run's last write is skipped (exit 4).
+  An edit made before the run survives (`test/cli/run-undo.test.js`).
+- **The session hook** (`templates/hooks/orc-session-hook.js`): `orc update`
+  ALWAYS wires ONE `Stop` entry and ONE `SessionStart` entry (matcher
+  `compact`). `Stop` reads `notify` first and is silent unless `notify: bell`;
+  then it rings once, main session only, only when the run moved (DE-18). The
+  compact entry prints the run pointer line while a run is open. `orc doctor`
+  reports `session-hook-unwired` with `orc update` as the fix.

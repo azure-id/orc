@@ -1,12 +1,6 @@
 # Phase — Plan handoff   (id: `plan-handoff`)
 
-> **Library file.** Canonical since v1.0.0 W12; it was under the `orc` skill's
-> private `references/`, and another lane already reached across into it. Read
-> by `orc`, `orc-route`. Layers declared: `core` only — single-layer because
-> executing a plan another session wrote is the same procedure wherever it is
-> done, and /orc-route reads it to DEFINE what a plan is (v0.42.0 — a second
-> definition is drift the lint cannot see). `orc lane phases <lane> --json`
-> names the file and the layers to read.
+> **Library file** (`orc`, `orc-route`), `core` only: executing another session's plan is one procedure, and /orc-route reads this file to DEFINE a plan — a second definition is drift.
 
 <!-- orc:layer core -->
 ## Reference — Plan Handoff (executing a plan from another session)
